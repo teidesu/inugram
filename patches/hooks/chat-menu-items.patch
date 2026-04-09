@@ -1,0 +1,62 @@
+From fe2a2cb490ddb250c57a79eafbfb2ad3e72715d7 Mon Sep 17 00:00:00 2001
+From: alina sireneva <alina@tei.su>
+Date: Fri, 10 Apr 2026 05:29:50 +0300
+Subject: [PATCH] "save to saved messages" message menu item
+
+---
+ .../src/main/java/org/telegram/ui/ChatActivity.java   | 11 ++++++++---
+ 1 file changed, 8 insertions(+), 3 deletions(-)
+
+diff --git a/TMessagesProj/src/main/java/org/telegram/ui/ChatActivity.java b/TMessagesProj/src/main/java/org/telegram/ui/ChatActivity.java
+index b6c62c861..6b84e5b2b 100644
+--- a/TMessagesProj/src/main/java/org/telegram/ui/ChatActivity.java
++++ b/TMessagesProj/src/main/java/org/telegram/ui/ChatActivity.java
+@@ -630,7 +630,7 @@ public class ChatActivity extends BaseFragment implements
+     private int hashtagSearchSelectedIndex;
+     private int searchLastCount;
+     private int searchLastIndex;
+-    private UndoView undoView;
++    public UndoView undoView;
+     private UndoView topUndoView;
+     private Bulletin pinBulletin;
+     private boolean showPinBulletin;
+@@ -779,7 +779,7 @@ public class ChatActivity extends BaseFragment implements
+     public MessageObject replyingTopMessage;
+     private ReplyQuote replyingQuote;
+     private boolean ignoreDraft;
+-    private MessageObject replyingMessageObject;
++    public MessageObject replyingMessageObject;
+     private int editingMessageObjectReqId;
+     public MessageObject editingMessageObject;
+     private boolean paused = true;
+@@ -10111,7 +10111,7 @@ public class ChatActivity extends BaseFragment implements
+         topPanelLayout.setDebugName(bizBotButton, "bot biz");
+     }
+ 
+-    private void createUndoView() {
++    public void createUndoView() {
+         if (undoView != null || getContext() == null) {
+             return;
+         }
+@@ -33292,6 +33292,10 @@ public class ChatActivity extends BaseFragment implements
+                 }, getResourceProvider(), AlertsCreator.SUGGEST_DATE_PICKER_MODE_EDIT).show(), AmountUtils.Amount.of(suggestedPost != null ? suggestedPost.price : null), !ChatObject.canManageMonoForum(currentAccount, getDialogId()));
+                 break;
+             }
++            default: {
++                ChatHelper.processMenuOption(option, this, selectedObject, selectedObjectGroup);
++                break;
++            }
+         }
+         selectedObject = null;
+         selectedObjectGroup = null;
+@@ -44680,6 +44684,7 @@ public class ChatActivity extends BaseFragment implements
+                     options.add(OPTION_FORWARD);
+                     icons.add(R.drawable.msg_forward);
+                 }
++                ChatHelper.addMenuItems(items, options, icons, this, selectedObject, selectedObjectGroup, dialog_id, noforwards);
+                 if (allowUnpin) {
+                     items.add(LocaleController.getString(R.string.UnpinMessage));
+                     options.add(OPTION_UNPIN);
+-- 
+2.52.0
+

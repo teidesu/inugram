@@ -1,0 +1,46 @@
+From 451f7d1599ab7dd40530ee86a027e4a9146456c8 Mon Sep 17 00:00:00 2001
+From: alina sireneva <alina@tei.su>
+Date: Fri, 10 Apr 2026 04:50:52 +0300
+Subject: [PATCH] configurable defaults for "delete for both/all" checkboxes
+
+---
+ .../java/org/telegram/ui/Components/AlertsCreator.java   | 9 +++++++++
+ 1 file changed, 9 insertions(+)
+
+diff --git a/TMessagesProj/src/main/java/org/telegram/ui/Components/AlertsCreator.java b/TMessagesProj/src/main/java/org/telegram/ui/Components/AlertsCreator.java
+index 495c955cc..ce637f467 100644
+--- a/TMessagesProj/src/main/java/org/telegram/ui/Components/AlertsCreator.java
++++ b/TMessagesProj/src/main/java/org/telegram/ui/Components/AlertsCreator.java
+@@ -2401,6 +2401,9 @@ public class AlertsCreator {
+             if (forceDeleteForAll) {
+                 cell[0].setChecked(deleteForAll[0] = true, false);
+                 updateText.run();
++            } else if (deleteChatForAll ? desu.inugram.InuConfig.DELETE_FOR_BOTH_GROUPS.getValue() : desu.inugram.InuConfig.DELETE_FOR_BOTH_DMS.getValue()) {
++                cell[0].setChecked(deleteForAll[0] = true, false);
++                updateText.run();
+             }
+         }
+ 
+@@ -7613,6 +7616,9 @@ public class AlertsCreator {
+                     deleteForAll[0] = !deleteForAll[0];
+                     cell12.setChecked(deleteForAll[0], true);
+                 });
++                if (desu.inugram.InuConfig.DELETE_FOR_BOTH_MESSAGES.getValue()) {
++                    cell.setChecked(deleteForAll[0] = true, false);
++                }
+                 builder.setView(frameLayout);
+                 builder.setCustomViewOffset(9);
+             }
+@@ -7672,6 +7678,9 @@ public class AlertsCreator {
+                     deleteForAll[0] = !deleteForAll[0];
+                     cell1.setChecked(deleteForAll[0], true);
+                 });
++                if (desu.inugram.InuConfig.DELETE_FOR_BOTH_MESSAGES.getValue()) {
++                    cell.setChecked(deleteForAll[0] = true, false);
++                }
+                 builder.setView(frameLayout);
+                 builder.setCustomViewOffset(9);
+             }
+-- 
+2.52.0
+

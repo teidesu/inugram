@@ -1,0 +1,25 @@
+From ec716c4c989b2f70ab53b133e9d596692c912e9a Mon Sep 17 00:00:00 2001
+From: alina sireneva <alina@tei.su>
+Date: Thu, 9 Apr 2026 04:17:49 +0300
+Subject: [PATCH] disable predictive back
+
+---
+ TMessagesProj/src/main/java/org/telegram/ui/LaunchActivity.java | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/TMessagesProj/src/main/java/org/telegram/ui/LaunchActivity.java b/TMessagesProj/src/main/java/org/telegram/ui/LaunchActivity.java
+index fb71f087e..810dcd7b8 100644
+--- a/TMessagesProj/src/main/java/org/telegram/ui/LaunchActivity.java
++++ b/TMessagesProj/src/main/java/org/telegram/ui/LaunchActivity.java
+@@ -709,7 +709,7 @@ public class LaunchActivity extends BasePermissionsActivity implements INavigati
+         BackupAgent.requestBackup(this);
+ 
+         RestrictedLanguagesSelectActivity.checkRestrictedLanguages(false);
+-        if (Build.VERSION.SDK_INT >= 34) {
++        if (Build.VERSION.SDK_INT >= 34 && !desu.inugram.InuConfig.DISABLE_PREDICTIVE_BACK.getValue()) {
+             if (onBackAnimationCallback == null) {
+                 onBackAnimationCallback =  new OnBackAnimationCallback() {
+                     private boolean started = false;
+-- 
+2.52.0
+

@@ -1,0 +1,43 @@
+From 765b0d38353199a83527591f6c97d012b0c1b805 Mon Sep 17 00:00:00 2001
+From: alina sireneva <alina@tei.su>
+Date: Mon, 13 Apr 2026 01:29:31 +0300
+Subject: [PATCH] allow sending message to discussion group without joining
+
+---
+ .../src/main/java/org/telegram/ui/ChatActivity.java         | 6 +++---
+ 1 file changed, 3 insertions(+), 3 deletions(-)
+
+diff --git a/TMessagesProj/src/main/java/org/telegram/ui/ChatActivity.java b/TMessagesProj/src/main/java/org/telegram/ui/ChatActivity.java
+index f2926868c..426178e0e 100644
+--- a/TMessagesProj/src/main/java/org/telegram/ui/ChatActivity.java
++++ b/TMessagesProj/src/main/java/org/telegram/ui/ChatActivity.java
+@@ -27038,7 +27038,7 @@ public class ChatActivity extends BaseFragment implements
+             long requestedTime = MessagesController.getNotificationsSettings(currentAccount).getLong("dialog_join_requested_time_" + dialog_id, -1);
+             boolean shouldApply = false;
+             if (ChatObject.isChannel(currentChat) && !(currentChat instanceof TLRPC.TL_channelForbidden)) {
+-                if (ChatObject.isNotInChat(currentChat) && !UserObject.isBotForum(currentUser) && (ChatObject.isForum(currentChat) || !isThreadChat() || currentChat.join_to_send)) {
++                if (ChatObject.isNotInChat(currentChat) && !UserObject.isBotForum(currentUser) && (ChatObject.isForum(currentChat) || !isThreadChat() || currentChat.join_to_send) && !ChatHelper.isDiscussionGroup(currentChat, chatInfo)) {
+                     if (getMessagesController().isJoiningChannel(currentChat.id)) {
+                         showBottomOverlayProgress(true, false);
+                     } else {
+@@ -27259,7 +27259,7 @@ public class ChatActivity extends BaseFragment implements
+                 bottomChannelButtonsLayout.setVisibility(View.VISIBLE);
+                 chatActivityEnterView.setVisibility(View.INVISIBLE);
+             } else if (chatMode == MODE_PINNED ||
+-                    currentChat != null && (!ChatObject.isMonoForum(currentChat) || !isSubscriberSuggestions) && ((ChatObject.isNotInChat(currentChat) && !UserObject.isBotForum(currentUser) || !ChatObject.canWriteToChat(currentChat)) && (currentChat.join_to_send || !isThreadChat() || ChatObject.isForum(currentChat)) || forumTopic != null && forumTopic.closed && !ChatObject.canManageTopic(currentAccount, currentChat, forumTopic) || shouldDisplaySwipeToLeftToReplyInForum()) ||
++                    currentChat != null && (!ChatObject.isMonoForum(currentChat) || !isSubscriberSuggestions) && ((ChatObject.isNotInChat(currentChat) && !UserObject.isBotForum(currentUser) || !ChatObject.canWriteToChat(currentChat)) && (currentChat.join_to_send || !isThreadChat() || ChatObject.isForum(currentChat)) && !ChatHelper.isDiscussionGroup(currentChat, chatInfo) || forumTopic != null && forumTopic.closed && !ChatObject.canManageTopic(currentAccount, currentChat, forumTopic) || shouldDisplaySwipeToLeftToReplyInForum()) ||
+                     currentUser != null && (UserObject.isDeleted(currentUser) || userBlocked || UserObject.isReplyUser(currentUser))) {
+                 if (chatActivityEnterView.isEditingMessage()) {
+                     chatActivityEnterView.setVisibility(View.VISIBLE);
+@@ -43792,7 +43792,7 @@ public class ChatActivity extends BaseFragment implements
+             final boolean suggestUpdate = (currentChat != null && currentChat.broadcast_messages_allowed && currentChat.linked_monoforum_id != 0)
+                 != (bottomChannelButtonsLayout != null && bottomChannelButtonsLayout.isButtonVisible(ChatActivityChannelButtonsLayout.BUTTON_DIRECT));
+ 
+-            if (giftUpdate || suggestUpdate) {
++            if (giftUpdate || suggestUpdate || ChatHelper.isDiscussionGroup(currentChat, chatInfo)) {
+                 updateBottomOverlay(true);
+             }
+         }
+-- 
+2.52.0
+

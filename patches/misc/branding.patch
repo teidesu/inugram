@@ -1,0 +1,309 @@
+From d6b1cbcf764f826452056f11009383371db20bef Mon Sep 17 00:00:00 2001
+From: alina sireneva <alina@tei.su>
+Date: Tue, 21 Apr 2026 09:21:29 +0300
+Subject: [PATCH] change app name to Inugram
+
+---
+ .../telegram/messenger/LocaleController.java  |  6 +++---
+ .../java/org/telegram/ui/DialogsActivity.java |  9 ++-------
+ .../ui/Stories/DialogStoriesCell.java         | 20 +++++++++----------
+ .../src/main/res/values-de/strings.xml        |  4 ++--
+ .../src/main/res/values-es/strings.xml        |  6 +++---
+ .../src/main/res/values-it/strings.xml        |  4 ++--
+ .../src/main/res/values-nl/strings.xml        |  2 +-
+ .../src/main/res/values-pt-rBR/strings.xml    |  6 +++---
+ .../src/main/res/values-ru/strings.xml        |  6 +++---
+ .../src/main/res/values-uk/strings.xml        |  6 +++---
+ TMessagesProj/src/main/res/values/strings.xml | 10 +++++-----
+ 11 files changed, 37 insertions(+), 42 deletions(-)
+
+diff --git a/TMessagesProj/src/main/java/org/telegram/messenger/LocaleController.java b/TMessagesProj/src/main/java/org/telegram/messenger/LocaleController.java
+index 2bb253919..a22291e31 100644
+--- a/TMessagesProj/src/main/java/org/telegram/messenger/LocaleController.java
++++ b/TMessagesProj/src/main/java/org/telegram/messenger/LocaleController.java
+@@ -1431,9 +1431,9 @@ public class LocaleController {
+     }
+ 
+     private String getStringInternal(String key, String fallback, int fallbackRes, int res) {
+-        String value = BuildVars.USE_CLOUD_STRINGS ? localeValues.get(key) : null;
++        String value = BuildVars.USE_CLOUD_STRINGS && !desu.inugram.InuHooks.isLocalOnlyString(key) ? localeValues.get(key) : null;
+         if (value == null) {
+-            if (BuildVars.USE_CLOUD_STRINGS && fallback != null) {
++            if (BuildVars.USE_CLOUD_STRINGS && fallback != null && !desu.inugram.InuHooks.isLocalOnlyString(fallback)) {
+                 value = localeValues.get(fallback);
+             }
+             if (value == null) {
+@@ -1456,7 +1456,7 @@ public class LocaleController {
+     }
+ 
+     public static String getServerString(String key) {
+-        String value = getInstance().localeValues.get(key);
++        String value = desu.inugram.InuHooks.isLocalOnlyString(key) ? null : getInstance().localeValues.get(key);
+         if (value == null) {
+             int resourceId = ApplicationLoader.applicationContext.getResources().getIdentifier(key, "string", ApplicationLoader.applicationContext.getPackageName());
+             if (resourceId != 0) {
+diff --git a/TMessagesProj/src/main/java/org/telegram/ui/DialogsActivity.java b/TMessagesProj/src/main/java/org/telegram/ui/DialogsActivity.java
+index fed111c5a..043a7f7b7 100644
+--- a/TMessagesProj/src/main/java/org/telegram/ui/DialogsActivity.java
++++ b/TMessagesProj/src/main/java/org/telegram/ui/DialogsActivity.java
+@@ -3457,12 +3457,7 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
+             } else {
+                 statusDrawable = new AnimatedEmojiDrawable.SwapAnimatedEmojiDrawable(null, dp(26));
+                 statusDrawable.center = true;
+-                logoDrawable = context.getResources().getDrawable(R.drawable.telegram_logo_2).mutate();
+-                logoDrawable.setBounds(0, dp(2), logoDrawable.getIntrinsicWidth(), dp(2) + logoDrawable.getIntrinsicHeight());
+-                logoDrawable.setColorFilter(getThemedColor(Theme.key_telegram_color_dialogsLogo), PorterDuff.Mode.MULTIPLY);
+-                SpannableStringBuilder ssb = new SpannableStringBuilder(getString(R.string.AppName));
+-                ssb.setSpan(new ImageSpan(logoDrawable), 0, ssb.length(), Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);
+-                actionBar.setTitle(ssb, statusDrawable);
++                actionBar.setTitle(getString(R.string.AppName), statusDrawable);
+                 updateStatus(UserConfig.getInstance(currentAccount).getCurrentUser(), false);
+             }
+             if (folderId == 0) {
+@@ -13744,4 +13739,4 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
+             parentLayout.drawHeaderShadow(canvas, shadowAlpha, headerShadowY);
+         }
+     }
+-}
+\ No newline at end of file
++}
+diff --git a/TMessagesProj/src/main/java/org/telegram/ui/Stories/DialogStoriesCell.java b/TMessagesProj/src/main/java/org/telegram/ui/Stories/DialogStoriesCell.java
+index 7f1695b97..ec90d47d3 100644
+--- a/TMessagesProj/src/main/java/org/telegram/ui/Stories/DialogStoriesCell.java
++++ b/TMessagesProj/src/main/java/org/telegram/ui/Stories/DialogStoriesCell.java
+@@ -316,6 +316,8 @@ public class DialogStoriesCell extends FrameLayout implements NotificationCenter
+         addView(recyclerListView, LayoutHelper.createFrame(LayoutHelper.MATCH_PARENT, LayoutHelper.WRAP_CONTENT, 0, 0, FAKE_TOP_PADDING, 0, 0));
+ 
+         titleView = new AnimatedTextView(getContext(), true, true, false);
++        titleView.setAllowCancel(true);
++        titleView.setOnWidthUpdatedListener(this::invalidate);
+         titleView.setGravity(Gravity.LEFT);
+         titleView.setTextColor(getTextLogoColor());
+         titleView.setEllipsizeByGradient(true);
+@@ -615,11 +617,11 @@ public class DialogStoriesCell extends FrameLayout implements NotificationCenter
+                     currentTitle = str;
+                 }
+             } else {
+-                currentTitle = menuItemsOffset < dp(50) ? null :
++                currentTitle = menuItemsOffset < dp(50) ? LocaleController.getString(R.string.AppName) :
+                     LocaleController.getString(R.string.MyStory);
+             }
+         } else {
+-            currentTitle = menuItemsOffset < dp(50) ? null :
++            currentTitle = menuItemsOffset < dp(50) ? LocaleController.getString(R.string.AppName) :
+                 LocaleController.formatPluralString("Stories", totalCount);
+         }
+ 
+@@ -922,7 +924,7 @@ public class DialogStoriesCell extends FrameLayout implements NotificationCenter
+             telegramLogoView.setTranslationX(titleView.getTranslationX() + dp(1));
+             telegramLogoView.setTranslationY(bottomY + dp(14 + FAKE_TOP_PADDING + 4.333f) + translationOffset /*titleView.getTranslationY() + dpf2(37.33f)*/);
+ 
+-            emojiStatusView.setTranslationX(titleView.getTranslationX() - dpf2(3.33f) + telegramLogoView.getMeasuredWidth());
++            emojiStatusView.setTranslationX(titleView.getTranslationX() + titleView.getDrawable().getCurrentWidth() + dpf2(2.66f));
+             emojiStatusView.setTranslationY(bottomY + dp(14 - 11 + FAKE_TOP_PADDING + 4.333f) + translationOffset);
+ 
+             subtitleOverlayContainer.setTranslationX(titleView.getTranslationX());
+@@ -1258,7 +1260,7 @@ public class DialogStoriesCell extends FrameLayout implements NotificationCenter
+             titleView.setText(currentTitle, !LocaleController.isRTL);
+         }
+ 
+-        animatorHasTitleText.setValue(hasOverlayText, true);
++        animatorHasTitleText.setValue(!TextUtils.isEmpty(currentTitle) || hasOverlayText, true);
+         if (hasEllipsizedText) {
+             ellipsizeSpanAnimator.addView(titleView);
+         } else {
+@@ -2164,21 +2166,19 @@ public class DialogStoriesCell extends FrameLayout implements NotificationCenter
+     private void checkUi_titleVisibility() {
+         final float progress = MathUtils.clamp(Math.min(collapsedProgress, collapsedProgress2), 0, 1);
+         final float titleVisibility = animatorHasTitleText.getFloatValue();
+-        final float logoVisibility = 1f - titleVisibility;
+         final float titleAlpha = titleVisibility * progress;
+-        final float logoAlpha = logoVisibility * progress;
+ 
+         if (titleView != null) {
+             titleView.setAlpha(titleAlpha);
+             titleView.setVisibility(titleAlpha > 0 ? VISIBLE : GONE);
+         }
+         if (telegramLogoView != null) {
+-            telegramLogoView.setAlpha(logoAlpha);
+-            telegramLogoView.setVisibility(logoAlpha > 0 ? VISIBLE : GONE);
++            telegramLogoView.setAlpha(0f);
++            telegramLogoView.setVisibility(GONE);
+         }
+         if (emojiStatusView != null) {
+-            emojiStatusView.setAlpha(logoAlpha);
+-            emojiStatusView.setVisibility(logoAlpha > 0 ? VISIBLE : GONE);
++            emojiStatusView.setAlpha(progress);
++            emojiStatusView.setVisibility(progress > 0 ? VISIBLE : GONE);
+         }
+         if (subtitleOverlayContainer != null) {
+             subtitleOverlayContainer.setAlpha(progress);
+diff --git a/TMessagesProj/src/main/res/values-de/strings.xml b/TMessagesProj/src/main/res/values-de/strings.xml
+index 9054784ad..f7c6075c1 100644
+--- a/TMessagesProj/src/main/res/values-de/strings.xml
++++ b/TMessagesProj/src/main/res/values-de/strings.xml
+@@ -1,7 +1,7 @@
+ <?xml version="1.0" encoding="utf-8"?>
+ <resources>
+-    <string name="AppName">Telegram</string>
+-    <string name="AppNameBeta">Telegram Beta</string>
++    <string name="AppName">Inugram</string>
++    <string name="AppNameBeta">Inugram Beta</string>
+     <string name="LanguageName">Deutsch</string>
+     <string name="English">Englisch</string>
+     <string name="LanguageNameInEnglish">German</string>
+diff --git a/TMessagesProj/src/main/res/values-es/strings.xml b/TMessagesProj/src/main/res/values-es/strings.xml
+index 4779808ea..f47768a96 100644
+--- a/TMessagesProj/src/main/res/values-es/strings.xml
++++ b/TMessagesProj/src/main/res/values-es/strings.xml
+@@ -1,7 +1,7 @@
+ <?xml version="1.0" encoding="utf-8"?>
+ <resources>
+-    <string name="AppName">Telegram</string>
+-    <string name="AppNameBeta">Telegram Beta</string>
++    <string name="AppName">Inugram</string>
++    <string name="AppNameBeta">Inugram Beta</string>
+     <string name="LanguageName">Español</string>
+     <string name="English">Inglés</string>
+     <string name="LanguageNameInEnglish">Spanish</string>
+@@ -1258,7 +1258,7 @@
+     <string name="PermissionDrawAboveOtherAppsTitle">Modo imagen en imagen</string>
+     <string name="PermissionDrawAboveOtherAppsGroupCallTitle">Superposición del videochat</string>
+     <!--Intro view-->
+-    <string name="Page1Title">Telegram</string>
++    <string name="Page1Title">Inugram</string>
+     <string name="Page2Title">Rápido</string>
+     <string name="Page3Title">Gratuito</string>
+     <string name="Page4Title">Seguro</string>
+diff --git a/TMessagesProj/src/main/res/values-it/strings.xml b/TMessagesProj/src/main/res/values-it/strings.xml
+index 3e7688d9d..e64650b95 100644
+--- a/TMessagesProj/src/main/res/values-it/strings.xml
++++ b/TMessagesProj/src/main/res/values-it/strings.xml
+@@ -1,7 +1,7 @@
+ <?xml version="1.0" encoding="utf-8"?>
+ <resources>
+-    <string name="AppName">Telegram</string>
+-    <string name="AppNameBeta">Telegram Beta</string>
++    <string name="AppName">Inugram</string>
++    <string name="AppNameBeta">Inugram Beta</string>
+     <string name="LanguageName">Italiano</string>
+     <string name="English">Inglese</string>
+     <string name="LanguageNameInEnglish">Italian</string>
+diff --git a/TMessagesProj/src/main/res/values-nl/strings.xml b/TMessagesProj/src/main/res/values-nl/strings.xml
+index f3df87e85..12cd974c0 100644
+--- a/TMessagesProj/src/main/res/values-nl/strings.xml
++++ b/TMessagesProj/src/main/res/values-nl/strings.xml
+@@ -1,6 +1,6 @@
+ <?xml version="1.0" encoding="utf-8"?>
+ <resources>
+-    <string name="AppName">Telegram</string>
++    <string name="AppName">Inugram</string>
+     <string name="AppNameBeta">Telegram-bèta</string>
+     <string name="LanguageName">Nederlands</string>
+     <string name="English">Engels</string>
+diff --git a/TMessagesProj/src/main/res/values-pt-rBR/strings.xml b/TMessagesProj/src/main/res/values-pt-rBR/strings.xml
+index 03d0ba337..329b1e13b 100644
+--- a/TMessagesProj/src/main/res/values-pt-rBR/strings.xml
++++ b/TMessagesProj/src/main/res/values-pt-rBR/strings.xml
+@@ -1,7 +1,7 @@
+ <?xml version="1.0" encoding="utf-8"?>
+ <resources>
+-    <string name="AppName">Telegram</string>
+-    <string name="AppNameBeta">Telegram Beta</string>
++    <string name="AppName">Inugram</string>
++    <string name="AppNameBeta">Inugram Beta</string>
+     <string name="LanguageName">Português (Brasil)</string>
+     <string name="English">Inglês</string>
+     <string name="LanguageNameInEnglish">Portuguese (Brazil)</string>
+@@ -1192,7 +1192,7 @@
+     <string name="PermissionDrawAboveOtherAppsTitle">Picture-in-Picture</string>
+     <string name="PermissionDrawAboveOtherAppsGroupCallTitle">Chat de vídeo flutuante</string>
+     <!--Intro view-->
+-    <string name="Page1Title">Telegram</string>
++    <string name="Page1Title">Inugram</string>
+     <string name="Page2Title">Rápido</string>
+     <string name="Page3Title">Gratuito</string>
+     <string name="Page4Title">Seguro</string>
+diff --git a/TMessagesProj/src/main/res/values-ru/strings.xml b/TMessagesProj/src/main/res/values-ru/strings.xml
+index 24c562920..8d6171ef6 100644
+--- a/TMessagesProj/src/main/res/values-ru/strings.xml
++++ b/TMessagesProj/src/main/res/values-ru/strings.xml
+@@ -1,7 +1,7 @@
+ <?xml version="1.0" encoding="utf-8"?>
+ <resources>
+-    <string name="AppName">Telegram</string>
+-    <string name="AppNameBeta">Telegram Beta</string>
++    <string name="AppName">Inugram</string>
++    <string name="AppNameBeta">Inugram Beta</string>
+     <string name="LanguageName">Русский</string>
+     <string name="English">Английский</string>
+     <string name="LanguageNameInEnglish">Russian</string>
+@@ -209,7 +209,7 @@
+     <string name="CheckYourNewEmailSubtitle">Введите код, который пришёл на указанный Вами адрес %1$s.</string>
+     <string name="LoginOrSingInWithGoogle">или</string>
+     <!--Intro view-->
+-    <string name="Page1Title">Telegram</string>
++    <string name="Page1Title">Inugram</string>
+     <string name="Page2Title">Быстрый</string>
+     <string name="Page3Title">Бесплатный</string>
+     <string name="Page4Title">Безопасный</string>
+diff --git a/TMessagesProj/src/main/res/values-uk/strings.xml b/TMessagesProj/src/main/res/values-uk/strings.xml
+index d46834430..9b02cfb86 100644
+--- a/TMessagesProj/src/main/res/values-uk/strings.xml
++++ b/TMessagesProj/src/main/res/values-uk/strings.xml
+@@ -1,7 +1,7 @@
+ <?xml version="1.0" encoding="utf-8"?>
+ <resources>
+-    <string name="AppName">Telegram</string>
+-    <string name="AppNameBeta">Telegram Beta</string>
++    <string name="AppName">Inugram</string>
++    <string name="AppNameBeta">Inugram Beta</string>
+     <string name="LanguageName">Українська</string>
+     <string name="English">Англійська</string>
+     <string name="LanguageNameInEnglish">Ukrainian</string>
+@@ -222,7 +222,7 @@
+     <string name="CheckYourNewEmailSubtitle">Введіть код, який ми щойно надіслали на вашу нову е-пошту %1$s.</string>
+     <string name="LoginOrSingInWithGoogle">або</string>
+     <!--Intro view-->
+-    <string name="Page1Title">Telegram</string>
++    <string name="Page1Title">Inugram</string>
+     <string name="Page2Title">Швидкий</string>
+     <string name="Page3Title">Безплатний</string>
+     <string name="Page4Title">Захищений</string>
+diff --git a/TMessagesProj/src/main/res/values/strings.xml b/TMessagesProj/src/main/res/values/strings.xml
+index afb924cc4..44a4c6446 100644
+--- a/TMessagesProj/src/main/res/values/strings.xml
++++ b/TMessagesProj/src/main/res/values/strings.xml
+@@ -1,7 +1,7 @@
+ <?xml version="1.0" encoding="utf-8"?>
+ <resources>
+-    <string name="AppName">Telegram</string>
+-    <string name="AppNameBeta">Telegram Beta</string>
++    <string name="AppName">Inugram</string>
++    <string name="AppNameBeta">Inugram Beta</string>
+     <string name="LanguageName">English</string>
+     <string name="English">English</string>
+     <string name="LanguageNameInEnglish">English</string>
+@@ -2704,8 +2704,8 @@
+     <string name="AuthAnotherClientUrl">This code can be used to allow someone to log in to your Telegram account.\n\nTo confirm Telegram login, please go to Settings &gt; Devices &gt; Scan QR and scan the code.</string>
+     <string name="QRCodePermissionNoCameraWithHint">**Telegram** needs camera access so that you can scan QR codes. Tap Settings -> Permissions, and turn **Camera** on.</string>
+     <string name="SetProfilePhoto">Set Profile Photo</string>
+-    <string name="AppUpdate">Update Telegram</string>
+-    <string name="AppUpdateBeta">Update Telegram Beta</string>
++    <string name="AppUpdate">Update Inugram</string>
++    <string name="AppUpdateBeta">Update Inugram Beta</string>
+     <string name="AppUpdateVersionAndSize">Version %1$s • %2$s</string>
+     <string name="AppBetaUpdateVersion">Version %1$s (%2$s)</string>
+     <string name="AppUpdateDownloading">Downloading %1$d%%...</string>
+@@ -4112,7 +4112,7 @@
+     <string name="ViewMessageStatistic">Message Statistic</string>
+     <string name="ViewMessage">Open Message</string>
+     <!--Intro view-->
+-    <string name="Page1Title">Telegram</string>
++    <string name="Page1Title">Inugram</string>
+     <string name="Page2Title">Fast</string>
+     <string name="Page3Title">Free</string>
+     <string name="Page4Title">Secure</string>
+-- 
+2.52.0
+

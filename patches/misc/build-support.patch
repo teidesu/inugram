@@ -1,0 +1,818 @@
+From a636eb7a7adcddc8c7174eee45bb5bcd2678d293 Mon Sep 17 00:00:00 2001
+From: alina sireneva <alina@tei.su>
+Date: Tue, 21 Apr 2026 07:47:50 +0300
+Subject: [PATCH] build support stuff for fork-specific code: - added kotlin -
+ bumped min sdk to 26, removed desugaring
+
+---
+ TMessagesProj/build.gradle                    |  96 +++--------------
+ TMessagesProj/google-services.json            |  76 +++----------
+ TMessagesProj/proguard-rules.pro              |  11 ++
+ .../org/telegram/messenger/BuildVars.java     |  13 +--
+ .../org/telegram/ui/PaymentFormActivity.java  |  29 +++--
+ .../org/telegram/ui/SettingsActivity.java     |   2 +-
+ TMessagesProj_App/build.gradle                | 102 ++----------------
+ TMessagesProj_App/google-services.json        |  76 +++----------
+ TMessagesProj_AppTests/build.gradle           |   5 +-
+ build.gradle                                  |  10 +-
+ gradle.properties                             |   4 +-
+ settings.gradle                               |   4 -
+ 12 files changed, 93 insertions(+), 335 deletions(-)
+
+diff --git a/TMessagesProj/build.gradle b/TMessagesProj/build.gradle
+index 15e025a39..366f0c5a9 100644
+--- a/TMessagesProj/build.gradle
++++ b/TMessagesProj/build.gradle
+@@ -1,6 +1,7 @@
+ import org.gradle.nativeplatform.platform.internal.DefaultNativePlatform
+ 
+ apply plugin: 'com.android.library'
++apply plugin: 'kotlin-android'
+ 
+ repositories {
+     mavenCentral()
+@@ -42,7 +43,7 @@ dependencies {
+     implementation 'com.google.android.gms:play-services-location:21.0.1'
+     implementation 'com.google.android.gms:play-services-wallet:19.1.0'
+     implementation 'com.googlecode.mp4parser:isoparser:1.0.6'
+-    implementation 'com.stripe:stripe-android:2.0.2'
++    implementation 'com.stripe:stripe-android:11.3.0'
+     implementation 'com.google.mlkit:language-id:17.0.6'
+     implementation 'com.android.billingclient:billing:7.1.1'
+     implementation 'com.google.code.gson:gson:2.11.0'
+@@ -67,8 +68,6 @@ dependencies {
+         }
+     }
+     implementation 'com.google.android.recaptcha:recaptcha:18.7.1'
+-
+-    coreLibraryDesugaring 'com.android.tools:desugar_jdk_libs:2.1.5'
+ }
+ 
+ def isWindows = String.valueOf(DefaultNativePlatform.currentOperatingSystem.toFamilyName() == OperatingSystemFamily.WINDOWS)
+@@ -94,23 +93,21 @@ android {
+     compileOptions {
+         sourceCompatibility JavaVersion.VERSION_1_8
+         targetCompatibility JavaVersion.VERSION_1_8
++    }
+ 
+-        coreLibraryDesugaringEnabled true
++    kotlinOptions {
++        jvmTarget = "1.8"
+     }
+ 
+ 
+     defaultConfig {
+-        minSdkVersion 21
++        minSdkVersion 26
+         targetSdkVersion 35
+ 
+-        vectorDrawables.generatedDensities = ['mdpi', 'hdpi', 'xhdpi', 'xxhdpi']
+-
+-        multiDexEnabled true
+-
+         externalNativeBuild {
+             cmake {
+                 version '3.10.2'
+-                arguments '-DANDROID_STL=c++_static', '-DANDROID_PLATFORM=android-21' //, '-DANDROID_SUPPORT_FLEXIBLE_PAGE_SIZES=ON'
++                arguments '-DANDROID_STL=c++_static', '-DANDROID_PLATFORM=android-26' //, '-DANDROID_SUPPORT_FLEXIBLE_PAGE_SIZES=ON'
+             }
+         }
+     }
+@@ -123,78 +120,12 @@ android {
+             multiDexEnabled true
+             proguardFiles getDefaultProguardFile('proguard-android.txt'), '../TMessagesProj/proguard-rules.pro', '../TMessagesProj/proguard-rules-beta.pro'
+             ndk.debugSymbolLevel = 'FULL'
+-            buildConfigField "String", "BUILD_VERSION_STRING", "\"" + APP_VERSION_NAME + "\""
+-            buildConfigField "String", "APP_CENTER_HASH", "\"\""
+-            buildConfigField "String", "BETA_URL", "\"" + getProps("BETA_PRIVATE_URL") + "\""
+-            buildConfigField "boolean", "DEBUG_VERSION", "true"
+-            buildConfigField "boolean", "DEBUG_PRIVATE_VERSION", "true"
+-            buildConfigField "boolean", "BUNDLE", "false"
+-            buildConfigField "boolean", "BUILD_HOST_IS_WINDOWS", isWindows
+-            buildConfigField "int", "VERSION_NUM", "0"
+-        }
+-
+-        HA_private {
+-            jniDebuggable false
+-            minifyEnabled true
+-            multiDexEnabled true
+-            proguardFiles getDefaultProguardFile('proguard-android.txt'), '../TMessagesProj/proguard-rules.pro', '../TMessagesProj/proguard-rules-beta.pro'
+-            ndk.debugSymbolLevel = 'FULL'
+-            buildConfigField "String", "BUILD_VERSION_STRING", "\"" + APP_VERSION_NAME + "\""
+-            buildConfigField "String", "APP_CENTER_HASH", "\"" + getProps("APP_CENTER_HASH_PRIVATE") + "\""
+-            buildConfigField "String", "BETA_URL", "\"" + getProps("BETA_PRIVATE_URL") + "\""
+-            buildConfigField "boolean", "DEBUG_VERSION", "true"
+-            buildConfigField "boolean", "DEBUG_PRIVATE_VERSION", "true"
+-            buildConfigField "boolean", "BUNDLE", "false"
+-            buildConfigField "boolean", "BUILD_HOST_IS_WINDOWS", isWindows
+-            buildConfigField "int", "VERSION_NUM", "1"
+-        }
+-
+-        HA_public {
+-            jniDebuggable false
+-            minifyEnabled true
+-            multiDexEnabled true
+-            proguardFiles getDefaultProguardFile('proguard-android.txt'), '../TMessagesProj/proguard-rules.pro', '../TMessagesProj/proguard-rules-beta.pro'
+-            ndk.debugSymbolLevel = 'FULL'
+-            buildConfigField "String", "BUILD_VERSION_STRING", "\"" + APP_VERSION_NAME + "\""
+-            buildConfigField "String", "APP_CENTER_HASH", "\"" + getProps("APP_CENTER_HASH_PUBLIC") + "\""
+-            buildConfigField "String", "BETA_URL", "\"" + getProps("BETA_PUBLIC_URL") + "\""
+-            buildConfigField "boolean", "DEBUG_VERSION", "true"
+-            buildConfigField "boolean", "DEBUG_PRIVATE_VERSION", "false"
+-            buildConfigField "boolean", "BUNDLE", "false"
+-            buildConfigField "boolean", "BUILD_HOST_IS_WINDOWS", isWindows
+-            buildConfigField "int", "VERSION_NUM", "4"
+-        }
+-
+-        HA_hardcore {
+-            jniDebuggable false
+-            minifyEnabled true
+-            multiDexEnabled true
+-            proguardFiles getDefaultProguardFile('proguard-android.txt'), '../TMessagesProj/proguard-rules.pro', '../TMessagesProj/proguard-rules-beta.pro'
+-            ndk.debugSymbolLevel = 'FULL'
+-            buildConfigField "String", "BUILD_VERSION_STRING", "\"" + APP_VERSION_NAME + "\""
+-            buildConfigField "String", "APP_CENTER_HASH", "\"" + getProps("APP_CENTER_HASH_HARDCORE") + "\""
+-            buildConfigField "String", "BETA_URL", "\"" + getProps("BETA_HARDCORE_URL") + "\""
++            buildConfigField "String", "BUILD_VERSION_STRING", "\"" + rootProject.ext.verName + "\""
++            buildConfigField "String", "BUILD_DATE", "\"" + rootProject.ext.buildDate + "\""
+             buildConfigField "boolean", "DEBUG_VERSION", "true"
+             buildConfigField "boolean", "DEBUG_PRIVATE_VERSION", "true"
+             buildConfigField "boolean", "BUNDLE", "false"
+             buildConfigField "boolean", "BUILD_HOST_IS_WINDOWS", isWindows
+-            buildConfigField "int", "VERSION_NUM", "5"
+-        }
+-
+-        standalone {
+-            jniDebuggable false
+-            minifyEnabled true
+-            multiDexEnabled true
+-            proguardFiles getDefaultProguardFile('proguard-android.txt'), '../TMessagesProj/proguard-rules.pro'
+-            ndk.debugSymbolLevel = 'FULL'
+-            buildConfigField "String", "BUILD_VERSION_STRING", "\"" + APP_VERSION_NAME + "\""
+-            buildConfigField "String", "APP_CENTER_HASH", "\"\""
+-            buildConfigField "String", "BETA_URL", "\"\""
+-            buildConfigField "boolean", "DEBUG_VERSION", "false"
+-            buildConfigField "boolean", "DEBUG_PRIVATE_VERSION", "false"
+-            buildConfigField "boolean", "BUNDLE", "false"
+-            buildConfigField "boolean", "BUILD_HOST_IS_WINDOWS", isWindows
+-            buildConfigField "int", "VERSION_NUM", "6"
+         }
+ 
+         release {
+@@ -204,14 +135,12 @@ android {
+             multiDexEnabled true
+             proguardFiles getDefaultProguardFile('proguard-android.txt'), '../TMessagesProj/proguard-rules.pro'
+             ndk.debugSymbolLevel = 'FULL'
+-            buildConfigField "String", "BUILD_VERSION_STRING", "\"" + APP_VERSION_NAME + "\""
+-            buildConfigField "String", "APP_CENTER_HASH", "\"\""
+-            buildConfigField "String", "BETA_URL", "\"\""
++            buildConfigField "String", "BUILD_VERSION_STRING", "\"" + rootProject.ext.verName + "\""
++            buildConfigField "String", "BUILD_DATE", "\"" + rootProject.ext.buildDate + "\""
+             buildConfigField "boolean", "DEBUG_VERSION", "false"
+             buildConfigField "boolean", "DEBUG_PRIVATE_VERSION", "false"
+             buildConfigField "boolean", "BUNDLE", "false"
+             buildConfigField "boolean", "BUILD_HOST_IS_WINDOWS", isWindows
+-            buildConfigField "int", "VERSION_NUM", "7"
+         }
+     }
+ 
+@@ -229,7 +158,6 @@ def getProps(String propName) {
+         return "";
+     }
+ }
+-apply plugin: 'com.google.gms.google-services'
+ 
+ task checkVisibility {
+     doFirst {
+@@ -251,4 +179,4 @@ task checkVisibility {
+     }
+ }
+ 
+-preBuild.dependsOn checkVisibility
+\ No newline at end of file
++preBuild.dependsOn checkVisibility
+diff --git a/TMessagesProj/google-services.json b/TMessagesProj/google-services.json
+index 640e841b2..9242e3914 100644
+--- a/TMessagesProj/google-services.json
++++ b/TMessagesProj/google-services.json
+@@ -1,95 +1,45 @@
+ {
+   "project_info": {
+-    "project_number": "760348033671",
+-    "firebase_url": "https://tmessages2.firebaseio.com",
+-    "project_id": "tmessages2",
+-    "storage_bucket": "tmessages2.appspot.com"
++    "project_number": "1058545853294",
++    "project_id": "inugram-5dcad",
++    "storage_bucket": "inugram-5dcad.firebasestorage.app"
+   },
+   "client": [
+     {
+       "client_info": {
+-        "mobilesdk_app_id": "1:760348033671:android:f6afd7b67eae3860",
++        "mobilesdk_app_id": "1:1058545853294:android:fd3a66d8c6bde26b45177f",
+         "android_client_info": {
+-          "package_name": "org.telegram.messenger"
++          "package_name": "desu.inugram"
+         }
+       },
+-      "oauth_client": [
+-        {
+-          "client_id": "760348033671-2hh8ebmuflsnjoc0kldkfells9rhtfni.apps.googleusercontent.com",
+-          "client_type": 3
+-        }
+-      ],
++      "oauth_client": [],
+       "api_key": [
+         {
+-          "current_key": "AIzaSyA-t0jLPjUt2FxrA8VPK2EiYHcYcboIR6k"
++          "current_key": "AIzaSyBUTDbLj-lMgQkor-hY57AIpB2s033xaB0"
+         }
+       ],
+       "services": {
+         "appinvite_service": {
+-          "other_platform_oauth_client": [
+-            {
+-              "client_id": "760348033671-2hh8ebmuflsnjoc0kldkfells9rhtfni.apps.googleusercontent.com",
+-              "client_type": 3
+-            }
+-          ]
++          "other_platform_oauth_client": []
+         }
+       }
+     },
+     {
+       "client_info": {
+-        "mobilesdk_app_id": "1:760348033671:android:dc022572c167a16c",
++        "mobilesdk_app_id": "1:1058545853294:android:d6b70c9beedf100745177f",
+         "android_client_info": {
+-          "package_name": "org.telegram.messenger.beta"
++          "package_name": "desu.inugram.beta"
+         }
+       },
+-      "oauth_client": [
+-        {
+-          "client_id": "760348033671-2hh8ebmuflsnjoc0kldkfells9rhtfni.apps.googleusercontent.com",
+-          "client_type": 3
+-        }
+-      ],
+-      "api_key": [
+-        {
+-          "current_key": "AIzaSyA-t0jLPjUt2FxrA8VPK2EiYHcYcboIR6k"
+-        }
+-      ],
+-      "services": {
+-        "appinvite_service": {
+-          "other_platform_oauth_client": [
+-            {
+-              "client_id": "760348033671-2hh8ebmuflsnjoc0kldkfells9rhtfni.apps.googleusercontent.com",
+-              "client_type": 3
+-            }
+-          ]
+-        }
+-      }
+-    },
+-    {
+-      "client_info": {
+-        "mobilesdk_app_id": "1:760348033671:android:7396e651423888c3f66e22",
+-        "android_client_info": {
+-          "package_name": "org.telegram.messenger.web"
+-        }
+-      },
+-      "oauth_client": [
+-        {
+-          "client_id": "760348033671-2hh8ebmuflsnjoc0kldkfells9rhtfni.apps.googleusercontent.com",
+-          "client_type": 3
+-        }
+-      ],
++      "oauth_client": [],
+       "api_key": [
+         {
+-          "current_key": "AIzaSyA-t0jLPjUt2FxrA8VPK2EiYHcYcboIR6k"
++          "current_key": "AIzaSyBUTDbLj-lMgQkor-hY57AIpB2s033xaB0"
+         }
+       ],
+       "services": {
+         "appinvite_service": {
+-          "other_platform_oauth_client": [
+-            {
+-              "client_id": "760348033671-2hh8ebmuflsnjoc0kldkfells9rhtfni.apps.googleusercontent.com",
+-              "client_type": 3
+-            }
+-          ]
++          "other_platform_oauth_client": []
+         }
+       }
+     }
+diff --git a/TMessagesProj/proguard-rules.pro b/TMessagesProj/proguard-rules.pro
+index eb365859f..99ebfe299 100644
+--- a/TMessagesProj/proguard-rules.pro
++++ b/TMessagesProj/proguard-rules.pro
+@@ -104,6 +104,17 @@
+ -dontwarn org.checkerframework.**
+ -dontwarn javax.annotation.**
+ 
++# inu
++# fixes for some libs
++-dontwarn java.awt.**
++-dontwarn javax.imageio.**
++-dontwarn com.googlecode.mp4parser.authoring.tracks.mjpeg.**
++-dontwarn javax.naming.**
++-dontwarn org.bouncycastle.cert.**
++-dontwarn org.bouncycastle.openssl.**
++-dontwarn org.objectweb.asm.**
++# /inu
++
+ # Use -keep to explicitly keep any other classes shrinking would remove
+ -dontoptimize
+ -dontobfuscate
+\ No newline at end of file
+diff --git a/TMessagesProj/src/main/java/org/telegram/messenger/BuildVars.java b/TMessagesProj/src/main/java/org/telegram/messenger/BuildVars.java
+index 4ed7e6491..6273e21cf 100644
+--- a/TMessagesProj/src/main/java/org/telegram/messenger/BuildVars.java
++++ b/TMessagesProj/src/main/java/org/telegram/messenger/BuildVars.java
+@@ -25,23 +25,24 @@ public class BuildVars {
+     public static boolean CHECK_UPDATES = true;
+     public static boolean NO_SCOPED_STORAGE = Build.VERSION.SDK_INT <= 29;
+     public static String BUILD_VERSION_STRING = BuildConfig.BUILD_VERSION_STRING;
++    public static String BUILD_DATE = BuildConfig.BUILD_DATE;
+ 
+-    public static int APP_ID = 4;
+-    public static String APP_HASH = "014b35b6184100b085b0d0572f9b5103";
++    public static int APP_ID = 24432768;
++    public static String APP_HASH = "081555aafce571f3e4c4b3f9fe653dc1";
+ 
+     // SafetyNet key for Google Identity SDK, set it to empty to disable
+-    public static String SAFETYNET_KEY = "AIzaSyDqt8P-7F7CPCseMkOiVRgb1LY8RN1bvH8";
++    public static String SAFETYNET_KEY = "";
+     public static String PLAYSTORE_APP_URL = "https://play.google.com/store/apps/details?id=org.telegram.messenger";
+     public static String HUAWEI_STORE_URL = "https://appgallery.huawei.com/app/C101184875";
+     public static String GOOGLE_AUTH_CLIENT_ID = "760348033671-81kmi3pi84p11ub8hp9a1funsv0rn2p9.apps.googleusercontent.com";
+ 
+-    public static String HUAWEI_APP_ID = "101184875";
++    public static String HUAWEI_APP_ID = "";
+ 
+     // You can use this flag to disable Google Play Billing (If you're making fork and want it to be in Google Play)
+-    public static boolean IS_BILLING_UNAVAILABLE = false;
++    public static boolean IS_BILLING_UNAVAILABLE = true;
+ 
+     // works only on official app ids, disable on your forks
+-    public static boolean SUPPORTS_PASSKEYS = true;
++    public static boolean SUPPORTS_PASSKEYS = false;
+ 
+     static {
+         if (ApplicationLoader.applicationContext != null) {
+diff --git a/TMessagesProj/src/main/java/org/telegram/ui/PaymentFormActivity.java b/TMessagesProj/src/main/java/org/telegram/ui/PaymentFormActivity.java
+index a4dcff2b8..e5a02833d 100644
+--- a/TMessagesProj/src/main/java/org/telegram/ui/PaymentFormActivity.java
++++ b/TMessagesProj/src/main/java/org/telegram/ui/PaymentFormActivity.java
+@@ -82,14 +82,11 @@ import com.google.android.gms.wallet.PaymentDataRequest;
+ import com.google.android.gms.wallet.PaymentsClient;
+ import com.google.android.gms.wallet.Wallet;
+ import com.google.android.gms.wallet.WalletConstants;
+-import com.stripe.android.Stripe;
+-import com.stripe.android.TokenCallback;
++import com.stripe.android.ApiResultCallback;import com.stripe.android.Stripe;
+ import com.stripe.android.exception.APIConnectionException;
+ import com.stripe.android.exception.APIException;
+ import com.stripe.android.model.Card;
+ import com.stripe.android.model.Token;
+-import com.stripe.android.net.StripeApiHandler;
+-import com.stripe.android.net.TokenParser;
+ 
+ import org.json.JSONArray;
+ import org.json.JSONException;
+@@ -2961,7 +2958,7 @@ public class PaymentFormActivity extends BaseFragment implements NotificationCen
+                             put("parameters", new JSONObject() {{
+                                 put("gateway", "stripe");
+                                 put("stripe:publishableKey", providerApiKey);
+-                                put("stripe:version", StripeApiHandler.VERSION);
++                                put("stripe:version", Stripe.VERSION);
+                             }});
+                         }
+                     }});
+@@ -3396,7 +3393,7 @@ public class PaymentFormActivity extends BaseFragment implements NotificationCen
+                                 cardName = "Android Pay";
+                             }
+                         } else {
+-                            Token t = TokenParser.parseToken(token);
++                            Token t = Token.fromString(token);
+                             paymentJson = String.format(Locale.US, "{\"type\":\"%1$s\", \"id\":\"%2$s\"}", t.getType(), t.getId());
+                             Card card = t.getCard();
+                             cardName = card.getBrand() + " *" + card.getLast4();
+@@ -3858,16 +3855,16 @@ public class PaymentFormActivity extends BaseFragment implements NotificationCen
+             month = null;
+             year = null;
+         }
+-        Card card = new Card(
++        Card card = new Card.Builder(
+                 inputFields[FIELD_CARD].getText().toString(),
+                 month,
+                 year,
+-                inputFields[FIELD_CVV].getText().toString(),
+-                inputFields[FIELD_CARDNAME].getText().toString(),
+-                null, null, null, null,
+-                inputFields[FIELD_CARD_POSTCODE].getText().toString(),
+-                inputFields[FIELD_CARD_COUNTRY].getText().toString(),
+-                null);
++                inputFields[FIELD_CVV].getText().toString()
++            )
++            .name(inputFields[FIELD_CARDNAME].getText().toString())
++            .addressZip(inputFields[FIELD_CARD_POSTCODE].getText().toString())
++            .addressCountry(inputFields[FIELD_CARD_COUNTRY].getText().toString())
++            .build();
+         cardName = card.getBrand() + " *" + card.getLast4();
+ 
+         boolean skipDateCheck = false;
+@@ -3884,7 +3881,7 @@ public class PaymentFormActivity extends BaseFragment implements NotificationCen
+         if (!card.validateNumber()) {
+             shakeField(FIELD_CARD);
+             return false;
+-        } else if (!skipDateCheck && (!card.validateExpMonth() || !card.validateExpYear() || !card.validateExpiryDate())) {
++        } else if (!skipDateCheck && (!card.validateExpMonth() || !card.validateExpYear$stripe_release(Calendar.getInstance()) || !card.validateExpiryDate())) {
+             shakeField(FIELD_EXPIRE_DATE);
+             return false;
+         } else if (need_card_name && inputFields[FIELD_CARDNAME].length() == 0) {
+@@ -3903,8 +3900,8 @@ public class PaymentFormActivity extends BaseFragment implements NotificationCen
+         showEditDoneProgress(true, true);
+         try {
+             if ("stripe".equals(paymentForm.native_provider)) {
+-                Stripe stripe = new Stripe(providerApiKey);
+-                stripe.createToken(card, new TokenCallback() {
++                Stripe stripe = new Stripe(this.getContext(), providerApiKey);
++                stripe.createToken(card, new ApiResultCallback<Token>() {
+                             public void onSuccess(Token token) {
+                                 if (canceled) {
+                                     return;
+diff --git a/TMessagesProj/src/main/java/org/telegram/ui/SettingsActivity.java b/TMessagesProj/src/main/java/org/telegram/ui/SettingsActivity.java
+index c89eee157..92151112d 100644
+--- a/TMessagesProj/src/main/java/org/telegram/ui/SettingsActivity.java
++++ b/TMessagesProj/src/main/java/org/telegram/ui/SettingsActivity.java
+@@ -909,7 +909,7 @@ public class SettingsActivity extends BaseFragment implements NotificationCenter
+                     }
+                     break;
+             }
+-            return formatString(R.string.TelegramVersion, String.format(Locale.US, "v%s (%d)\n%s", pInfo.versionName, code, abi));
++            return formatString(R.string.InuVersion, String.format(Locale.US, "v%s (based on %s, build %s)\nBuilt on %s", pInfo.versionName, pInfo.versionCode / 100, pInfo.versionCode % 100, BuildVars.BUILD_DATE));
+         } catch (Exception e) {
+             FileLog.e(e);
+         }
+diff --git a/TMessagesProj_App/build.gradle b/TMessagesProj_App/build.gradle
+index 68e09135c..06589c515 100644
+--- a/TMessagesProj_App/build.gradle
++++ b/TMessagesProj_App/build.gradle
+@@ -16,7 +16,6 @@ configurations.all {
+ 
+ dependencies {
+     implementation project(':TMessagesProj')
+-    coreLibraryDesugaring 'com.android.tools:desugar_jdk_libs:2.1.5'
+     implementation files('../TMessagesProj/libs/libgsaverification-client.aar')
+ }
+ 
+@@ -37,20 +36,11 @@ android {
+     compileOptions {
+         sourceCompatibility JavaVersion.VERSION_1_8
+         targetCompatibility JavaVersion.VERSION_1_8
+-
+-        coreLibraryDesugaringEnabled true
+     }
+ 
+     signingConfigs {
+-        debug {
+-            storeFile file("../TMessagesProj/config/release.keystore")
+-            storePassword RELEASE_STORE_PASSWORD
+-            keyAlias RELEASE_KEY_ALIAS
+-            keyPassword RELEASE_KEY_PASSWORD
+-        }
+-
+         release {
+-            storeFile file("../TMessagesProj/config/release.keystore")
++            storeFile file(System.getenv('RELEASE_KEYSTORE_PATH') ?: "../TMessagesProj/config/release.keystore")
+             storePassword RELEASE_STORE_PASSWORD
+             keyAlias RELEASE_KEY_ALIAS
+             keyPassword RELEASE_KEY_PASSWORD
+@@ -61,7 +51,7 @@ android {
+         debug {
+             debuggable true
+             jniDebuggable true
+-            signingConfig signingConfigs.debug
++            signingConfig signingConfigs.release
+             applicationIdSuffix ".beta"
+             minifyEnabled false
+             shrinkResources false
+@@ -70,18 +60,6 @@ android {
+             ndk.debugSymbolLevel = 'FULL'
+         }
+ 
+-        standalone {
+-            debuggable false
+-            jniDebuggable false
+-            signingConfig signingConfigs.release
+-            applicationIdSuffix ".web"
+-            minifyEnabled true
+-            shrinkResources false
+-            multiDexEnabled true
+-            proguardFiles getDefaultProguardFile('proguard-android.txt'), '../TMessagesProj/proguard-rules.pro'
+-            ndk.debugSymbolLevel = 'FULL'
+-        }
+-
+         release {
+             debuggable false
+             jniDebuggable false
+@@ -95,95 +73,35 @@ android {
+     }
+ 
+     sourceSets.debug {
+-        manifest.srcFile '../TMessagesProj/config/debug/AndroidManifest.xml'
+-    }
+-
+-    sourceSets.standalone {
+-        manifest.srcFile '../TMessagesProj/config/release/AndroidManifest.xml'
++        manifest.srcFile '../TMessagesProj/config/debug/AndroidManifest_SDK23.xml'
+     }
+ 
+     sourceSets.release {
+-        manifest.srcFile '../TMessagesProj/config/release/AndroidManifest.xml'
+-    }
+-
+-    flavorDimensions "minApi"
+-
+-    productFlavors {
+-        bundleAfat {
+-            ndk {
+-                abiFilters "armeabi-v7a", "arm64-v8a", "x86", "x86_64"
+-            }
+-            ext {
+-                abiVersionCode = 1
+-            }
+-            buildConfigField "boolean", "BUNDLE", "true"
+-        }
+-        bundleAfat_SDK23 {
+-            ndk {
+-                abiFilters "armeabi-v7a", "arm64-v8a", "x86", "x86_64"
+-            }
+-            sourceSets.debug {
+-                manifest.srcFile '../TMessagesProj/config/debug/AndroidManifest_SDK23.xml'
+-            }
+-            sourceSets.release {
+-                manifest.srcFile '../TMessagesProj/config/release/AndroidManifest_SDK23.xml'
+-            }
+-            minSdkVersion 23
+-            ext {
+-                abiVersionCode = 2
+-            }
+-            buildConfigField "boolean", "BUNDLE", "true"
+-        }
+-        afat {
+-            ndk {
+-                abiFilters "armeabi-v7a", "arm64-v8a", "x86", "x86_64"
+-            }
+-            sourceSets.debug {
+-                manifest.srcFile '../TMessagesProj/config/debug/AndroidManifest_SDK23.xml'
+-            }
+-            sourceSets.release {
+-                manifest.srcFile '../TMessagesProj/config/release/AndroidManifest_SDK23.xml'
+-            }
+-            sourceSets.standalone {
+-                manifest.srcFile '../TMessagesProj/config/release/AndroidManifest_standalone.xml'
+-            }
+-            ext {
+-                abiVersionCode = 9
+-            }
+-            buildConfigField "boolean", "BUNDLE", "false"
+-        }
++        manifest.srcFile '../TMessagesProj/config/release/AndroidManifest_SDK23.xml'
+     }
+ 
+-    defaultConfig.versionCode = Integer.parseInt(APP_VERSION_CODE)
++    defaultConfig.versionCode = rootProject.ext.verCode
+ 
+     applicationVariants.all { variant ->
+         variant.outputs.all { output ->
+             outputFileName = "app.apk"
+-            output.versionCodeOverride = defaultConfig.versionCode * 10 + variant.productFlavors.get(0).abiVersionCode
+-        }
+-    }
+-
+-    variantFilter { variant ->
+-        def names = variant.flavors*.name
+-        if (variant.buildType.name != "release" && !names.contains("afat")) {
+-            setIgnore(true)
+         }
+     }
+ 
+     defaultConfig {
+-        minSdkVersion 21
++        minSdkVersion 26
+         targetSdkVersion 35
+         versionName APP_VERSION_NAME
+         ndkVersion "21.4.7075529"
+ 
+-        multiDexEnabled true
+-
+-        vectorDrawables.generatedDensities = ['mdpi', 'hdpi', 'xhdpi', 'xxhdpi']
++        ndk {
++            abiFilters "arm64-v8a"
++        }
+ 
+         externalNativeBuild {
+             cmake {
+                 version '3.10.2'
+-                arguments '-DANDROID_STL=c++_static', '-DANDROID_PLATFORM=android-21' // , '-DANDROID_SUPPORT_FLEXIBLE_PAGE_SIZES=ON'
++                arguments '-DANDROID_STL=c++_static', '-DANDROID_PLATFORM=android-26' // , '-DANDROID_SUPPORT_FLEXIBLE_PAGE_SIZES=ON'
+             }
+         }
+     }
+diff --git a/TMessagesProj_App/google-services.json b/TMessagesProj_App/google-services.json
+index 640e841b2..9242e3914 100644
+--- a/TMessagesProj_App/google-services.json
++++ b/TMessagesProj_App/google-services.json
+@@ -1,95 +1,45 @@
+ {
+   "project_info": {
+-    "project_number": "760348033671",
+-    "firebase_url": "https://tmessages2.firebaseio.com",
+-    "project_id": "tmessages2",
+-    "storage_bucket": "tmessages2.appspot.com"
++    "project_number": "1058545853294",
++    "project_id": "inugram-5dcad",
++    "storage_bucket": "inugram-5dcad.firebasestorage.app"
+   },
+   "client": [
+     {
+       "client_info": {
+-        "mobilesdk_app_id": "1:760348033671:android:f6afd7b67eae3860",
++        "mobilesdk_app_id": "1:1058545853294:android:fd3a66d8c6bde26b45177f",
+         "android_client_info": {
+-          "package_name": "org.telegram.messenger"
++          "package_name": "desu.inugram"
+         }
+       },
+-      "oauth_client": [
+-        {
+-          "client_id": "760348033671-2hh8ebmuflsnjoc0kldkfells9rhtfni.apps.googleusercontent.com",
+-          "client_type": 3
+-        }
+-      ],
++      "oauth_client": [],
+       "api_key": [
+         {
+-          "current_key": "AIzaSyA-t0jLPjUt2FxrA8VPK2EiYHcYcboIR6k"
++          "current_key": "AIzaSyBUTDbLj-lMgQkor-hY57AIpB2s033xaB0"
+         }
+       ],
+       "services": {
+         "appinvite_service": {
+-          "other_platform_oauth_client": [
+-            {
+-              "client_id": "760348033671-2hh8ebmuflsnjoc0kldkfells9rhtfni.apps.googleusercontent.com",
+-              "client_type": 3
+-            }
+-          ]
++          "other_platform_oauth_client": []
+         }
+       }
+     },
+     {
+       "client_info": {
+-        "mobilesdk_app_id": "1:760348033671:android:dc022572c167a16c",
++        "mobilesdk_app_id": "1:1058545853294:android:d6b70c9beedf100745177f",
+         "android_client_info": {
+-          "package_name": "org.telegram.messenger.beta"
++          "package_name": "desu.inugram.beta"
+         }
+       },
+-      "oauth_client": [
+-        {
+-          "client_id": "760348033671-2hh8ebmuflsnjoc0kldkfells9rhtfni.apps.googleusercontent.com",
+-          "client_type": 3
+-        }
+-      ],
+-      "api_key": [
+-        {
+-          "current_key": "AIzaSyA-t0jLPjUt2FxrA8VPK2EiYHcYcboIR6k"
+-        }
+-      ],
+-      "services": {
+-        "appinvite_service": {
+-          "other_platform_oauth_client": [
+-            {
+-              "client_id": "760348033671-2hh8ebmuflsnjoc0kldkfells9rhtfni.apps.googleusercontent.com",
+-              "client_type": 3
+-            }
+-          ]
+-        }
+-      }
+-    },
+-    {
+-      "client_info": {
+-        "mobilesdk_app_id": "1:760348033671:android:7396e651423888c3f66e22",
+-        "android_client_info": {
+-          "package_name": "org.telegram.messenger.web"
+-        }
+-      },
+-      "oauth_client": [
+-        {
+-          "client_id": "760348033671-2hh8ebmuflsnjoc0kldkfells9rhtfni.apps.googleusercontent.com",
+-          "client_type": 3
+-        }
+-      ],
++      "oauth_client": [],
+       "api_key": [
+         {
+-          "current_key": "AIzaSyA-t0jLPjUt2FxrA8VPK2EiYHcYcboIR6k"
++          "current_key": "AIzaSyBUTDbLj-lMgQkor-hY57AIpB2s033xaB0"
+         }
+       ],
+       "services": {
+         "appinvite_service": {
+-          "other_platform_oauth_client": [
+-            {
+-              "client_id": "760348033671-2hh8ebmuflsnjoc0kldkfells9rhtfni.apps.googleusercontent.com",
+-              "client_type": 3
+-            }
+-          ]
++          "other_platform_oauth_client": []
+         }
+       }
+     }
+diff --git a/TMessagesProj_AppTests/build.gradle b/TMessagesProj_AppTests/build.gradle
+index 2b0af1803..7dacc43ee 100644
+--- a/TMessagesProj_AppTests/build.gradle
++++ b/TMessagesProj_AppTests/build.gradle
+@@ -23,8 +23,8 @@ dependencies {
+     androidTestImplementation 'junit:junit:4.13.2'
+     androidTestImplementation 'androidx.test.ext:junit:1.1.5'
+     androidTestImplementation 'androidx.test:runner:1.5.2'
+-    androidTestImplementation "org.jetbrains.kotlin:kotlin-test:1.9.20"
+-    androidTestImplementation "org.jetbrains.kotlin:kotlin-test-junit:1.9.20"
++    androidTestImplementation "org.jetbrains.kotlin:kotlin-test:2.1.20"
++    androidTestImplementation "org.jetbrains.kotlin:kotlin-test-junit:2.1.20"
+     androidTestImplementation "com.appmattus.fixture:fixture:1.2.0"
+ }
+ 
+@@ -162,4 +162,3 @@ android {
+         checkReleaseBuilds false
+     }
+ }
+-
+diff --git a/build.gradle b/build.gradle
+index 528fd746d..c2f536f6d 100644
+--- a/build.gradle
++++ b/build.gradle
+@@ -10,9 +10,17 @@ buildscript {
+         classpath 'com.google.gms:google-services:4.3.15'
+         classpath 'com.huawei.agconnect:agcp:1.9.1.301'
+         classpath 'com.google.firebase:firebase-crashlytics-gradle:2.9.0'
+-        classpath "org.jetbrains.kotlin:kotlin-gradle-plugin:1.9.20"
++        classpath "org.jetbrains.kotlin:kotlin-gradle-plugin:2.1.20"
+     }
+ }
+ repositories {
+     google()
++}
++
++def commitId = System.getenv('COMMIT_ID')
++
++ext {
++  verName = "${APP_VERSION_NAME}${commitId != null ? "-${commitId.take(7)}" : ''}"
++  verCode = Integer.parseInt(APP_VERSION_CODE) * 100 + (Integer.parseInt(System.getenv('INU_BUILD') ?: '0'))
++  buildDate = java.time.LocalDateTime.now().format(java.time.format.DateTimeFormatter.ISO_DATE)
+ }
+\ No newline at end of file
+diff --git a/gradle.properties b/gradle.properties
+index 1f2ee28ee..94a355fcf 100644
+--- a/gradle.properties
++++ b/gradle.properties
+@@ -15,7 +15,7 @@
+ #Sat Mar 12 05:53:50 MSK 2016
+ APP_VERSION_CODE=6666
+ APP_VERSION_NAME=12.6.4
+-APP_PACKAGE=org.telegram.messenger
++APP_PACKAGE=desu.inugram
+ IS_PRIVATE=false
+ RELEASE_KEY_PASSWORD=android
+ RELEASE_KEY_ALIAS=androidkey
+@@ -25,7 +25,7 @@ org.gradle.daemon=true
+ org.gradle.parallel=true
+ org.gradle.configureondemand=false
+ android.useAndroidX=true
+-android.enableJetifier=true
++android.enableJetifier=false
+ android.defaults.buildfeatures.buildconfig=true
+ android.nonTransitiveRClass=false
+ android.nonFinalResIds=false
+diff --git a/settings.gradle b/settings.gradle
+index 2ac4c6de3..3c2e1ff67 100644
+--- a/settings.gradle
++++ b/settings.gradle
+@@ -1,6 +1,2 @@
+ include ':TMessagesProj'
+ include ':TMessagesProj_App'
+-include ':TMessagesProj_AppHuawei'
+-include ':TMessagesProj_AppHockeyApp'
+-include ':TMessagesProj_AppStandalone'
+-include ':TMessagesProj_AppTests'
+-- 
+2.52.0
+

@@ -1,0 +1,26 @@
+From a69fc99befb9ea0780dc8c6e6f7083e7b8a871fe Mon Sep 17 00:00:00 2001
+From: alina sireneva <alina@tei.su>
+Date: Tue, 21 Apr 2026 05:42:07 +0300
+Subject: [PATCH] fix reaction counter shift during long-tap menu
+
+---
+ .../ui/Components/Reactions/ReactionsLayoutInBubble.java       | 3 ++-
+ 1 file changed, 2 insertions(+), 1 deletion(-)
+
+diff --git a/TMessagesProj/src/main/java/org/telegram/ui/Components/Reactions/ReactionsLayoutInBubble.java b/TMessagesProj/src/main/java/org/telegram/ui/Components/Reactions/ReactionsLayoutInBubble.java
+index 590c101a4..d8aa6bf93 100644
+--- a/TMessagesProj/src/main/java/org/telegram/ui/Components/Reactions/ReactionsLayoutInBubble.java
++++ b/TMessagesProj/src/main/java/org/telegram/ui/Components/Reactions/ReactionsLayoutInBubble.java
+@@ -1188,7 +1188,8 @@ public class ReactionsLayoutInBubble {
+             }
+             if (scrimProgress > 0.0f && !isTag && scrimPreviewCounterDrawable != null && avatarsDrawable == null) {
+                 canvas.save();
+-                canvas.translate(x + dp(hasName && !drawTagDot() ? 10 : (hasName ? 9 : 8)) + dp(20) + dp(animatedEmojiDrawable != null ? 5 : 2), y - dp(1));
++                final float counterOffsetX = Math.max(0f, (dp(12) - scrimPreviewCounterDrawable.getCurrentWidth()) / 2f);
++                canvas.translate(x + dp(hasName && !drawTagDot() ? 10 : (hasName ? 9 : 8)) + dp(20) + dp(animatedEmojiDrawable != null ? 5 : 2) + counterOffsetX, y - dp(1));
+                 scrimPreviewCounterDrawable.setBounds(0, 0, width, height);
+                 scrimPreviewCounterDrawable.draw(canvas);
+                 scrimPreviewCounterDrawable.setAlpha((int) (0xFF * alpha));
+-- 
+2.52.0
+

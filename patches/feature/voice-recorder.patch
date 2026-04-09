@@ -1,0 +1,220 @@
+From 697d0c52e1970dfd9fd58fae448e25d4700b5820 Mon Sep 17 00:00:00 2001
+From: alina sireneva <alina@tei.su>
+Date: Sun, 12 Apr 2026 23:42:54 +0300
+Subject: [PATCH] move the voice record button into attachments drawer
+
+---
+ .../ui/Components/ChatActivityEnterView.java  | 67 +++++++++++++++++--
+ .../ui/Components/ChatAttachAlert.java        |  2 +-
+ .../ui/Components/InstantCameraView.java      |  5 +-
+ 3 files changed, 63 insertions(+), 11 deletions(-)
+
+diff --git a/TMessagesProj/src/main/java/org/telegram/ui/Components/ChatActivityEnterView.java b/TMessagesProj/src/main/java/org/telegram/ui/Components/ChatActivityEnterView.java
+index 660214a1f..2a795dd48 100644
+--- a/TMessagesProj/src/main/java/org/telegram/ui/Components/ChatActivityEnterView.java
++++ b/TMessagesProj/src/main/java/org/telegram/ui/Components/ChatActivityEnterView.java
+@@ -216,6 +216,7 @@ import java.util.HashSet;
+ import java.util.List;
+ import java.util.Locale;
+ 
++import desu.inugram.helpers.VoiceRecorderHelper;
+ import me.vkryl.android.animator.BoolAnimator;
+ import me.vkryl.android.animator.FactorAnimator;
+ 
+@@ -872,6 +873,10 @@ public class ChatActivityEnterView extends FrameLayout implements
+             if (delegate == null || parentActivity == null) {
+                 return;
+             }
++            if (VoiceRecorderHelper.interceptForCameraChoice(ChatActivityEnterView.this)) {
++                recordAudioVideoRunnableStarted = false;
++                return;
++            }
+             delegate.onPreAudioVideoRecord();
+             calledRecordRunnable = true;
+             recordAudioVideoRunnableStarted = false;
+@@ -2715,6 +2720,7 @@ public class ChatActivityEnterView extends FrameLayout implements
+             attachLayout.setEnabled(false);
+             attachLayout.setClipChildren(false);
+             messageEditTextContainer.addView(attachLayout, LayoutHelper.createFrame(LayoutHelper.WRAP_CONTENT, DEFAULT_HEIGHT, Gravity.BOTTOM | Gravity.RIGHT, 0, 0, DEFAULT_HEIGHT, 0));
++            attachLayout.setTranslationX(VoiceRecorderHelper.attachTranslationXOffset());
+ 
+             notifyButton = new ImageView(context);
+             notifySilentDrawable = new CrossOutDrawable(context, R.drawable.input_notify_on, Theme.key_glass_defaultIcon);
+@@ -2758,7 +2764,9 @@ public class ChatActivityEnterView extends FrameLayout implements
+             attachButton.setColorFilter(new PorterDuffColorFilter(getThemedColor(Theme.key_glass_defaultIcon), PorterDuff.Mode.MULTIPLY));
+             attachButton.setImageResource(R.drawable.msg_input_attach2);
+             attachButton.setBackground(Theme.createSelectorDrawable(getThemedColor(Theme.key_listSelector)));
+-            messageEditTextContainer.addView(attachButton, LayoutHelper.createFrame(DEFAULT_HEIGHT, DEFAULT_HEIGHT, Gravity.BOTTOM | Gravity.RIGHT));
++            if (!VoiceRecorderHelper.isMovedToAttach()) {
++                messageEditTextContainer.addView(attachButton, LayoutHelper.createFrame(DEFAULT_HEIGHT, DEFAULT_HEIGHT, Gravity.BOTTOM | Gravity.RIGHT));
++            }
+             attachButton.setOnClickListener(v -> {
+                 if (adjustPanLayoutHelper != null && adjustPanLayoutHelper.animationInProgress() || attachLayoutPaddingAlpha == 0f) {
+                     return;
+@@ -2846,15 +2854,32 @@ public class ChatActivityEnterView extends FrameLayout implements
+         };
+         sendButtonContainer.setClipChildren(false);
+         sendButtonContainer.setClipToPadding(false);
+-        textFieldContainer.addView(sendButtonContainer, LayoutHelper.createFrame(100, DEFAULT_HEIGHT, Gravity.BOTTOM | Gravity.RIGHT));
++        textFieldContainer.addView(sendButtonContainer, LayoutHelper.createFrame(VoiceRecorderHelper.isMovedToAttach() ? DEFAULT_HEIGHT : 100, DEFAULT_HEIGHT, Gravity.BOTTOM | Gravity.RIGHT));
++        if (VoiceRecorderHelper.isMovedToAttach() && attachButton != null) {
++            sendButtonContainer.addView(attachButton, LayoutHelper.createFrame(DEFAULT_HEIGHT, DEFAULT_HEIGHT, Gravity.RIGHT | Gravity.BOTTOM));
++        }
+ 
+         audioVideoButtonContainer = new FrameLayout(context) {
+ 
+             @Override
+             public void setVisibility(int visibility) {
++                if (visibility == VISIBLE && VoiceRecorderHelper.isMovedToAttach() && !recordingAudioVideo) {
++                    visibility = GONE;
++                }
+                 super.setVisibility(visibility);
+             }
+ 
++            @Override
++            public void setAlpha(float alpha) {
++                if (VoiceRecorderHelper.isMovedToAttach() && !recordingAudioVideo) {
++                    alpha = 0f;
++                    if (getVisibility() == VISIBLE) {
++                        super.setVisibility(GONE);
++                    }
++                }
++                super.setAlpha(alpha);
++            }
++
+             @Override
+             public boolean onInterceptTouchEvent(MotionEvent ev) {
+                 if (isLiveComment) return false;
+@@ -3124,6 +3149,7 @@ public class ChatActivityEnterView extends FrameLayout implements
+             }
+         };
+         audioVideoButtonContainer.setSoundEffectsEnabled(false);
++        audioVideoButtonContainer.setVisibility(VISIBLE); // trigger inu override for initial state
+         sendButtonContainer.addView(audioVideoButtonContainer, LayoutHelper.createFrame(DEFAULT_HEIGHT, DEFAULT_HEIGHT, Gravity.RIGHT | Gravity.BOTTOM));
+         audioVideoButtonContainer.setFocusable(true);
+         audioVideoButtonContainer.setImportantForAccessibility(View.IMPORTANT_FOR_ACCESSIBILITY_YES);
+@@ -3815,6 +3841,7 @@ public class ChatActivityEnterView extends FrameLayout implements
+         expandStickersButton = new ImageView(getContext()) {
+             @Override
+             public void setAlpha(float alpha) {
++                if (VoiceRecorderHelper.isMovedToAttach()) alpha = 0f;
+                 super.setAlpha(alpha);
+                 if (audioVideoButtonContainer != null) {
+                     audioVideoButtonContainer.invalidate();
+@@ -3823,6 +3850,7 @@ public class ChatActivityEnterView extends FrameLayout implements
+ 
+             @Override
+             public void setVisibility(int visibility) {
++                if (VoiceRecorderHelper.isMovedToAttach()) visibility = GONE;
+                 super.setVisibility(visibility);
+                 if (audioVideoButtonContainer != null) {
+                     audioVideoButtonContainer.invalidate();
+@@ -4471,7 +4499,9 @@ public class ChatActivityEnterView extends FrameLayout implements
+             messageTextTranslationX = offset;
+             updateMessageTextParams();
+         }
+-        attachButton.setTranslationX(attachLayoutPaddingTranslationX + attachLayoutTranslationX + offset);
++        if (!VoiceRecorderHelper.isMovedToAttach()) {
++            attachButton.setTranslationX(attachLayoutPaddingTranslationX + attachLayoutTranslationX + offset);
++        }
+         audioVideoSendButton.setTranslationX(offset);
+         if (botButton != null) {
+             botButton.setTranslationX(offset);
+@@ -5954,6 +5984,29 @@ public class ChatActivityEnterView extends FrameLayout implements
+         updateRecordInterface(RECORD_STATE_CANCEL, true);
+     }
+ 
++    public void inu_toggleVideoMode() {
++        setRecordVideoButtonVisible(!isInVideoMode(), true);
++    }
++
++    public void inu_startRecordingLocked(boolean video) {
++        createRecordCircle();
++        setRecordVideoButtonVisible(video, false);
++        // pre-set locked state so updateRecordInterface skips the slide-to-cancel intro
++        sendButtonVisible = true;
++        snapAnimationProgress = 1f;
++        slideToCancelProgress = 1f;
++        controlsScale = 1f;
++        lastRecordState = RECORD_STATE_PREPARING;
++        recordAudioVideoRunnable.run();
++        if (!recordingAudioVideo) {
++            // recording didn't start (e.g. missing permissions), reset state
++            sendButtonVisible = false;
++            return;
++        }
++        // the container must be visible for send button touch handling
++        audioVideoButtonContainer.setVisibility(VISIBLE);
++    }
++
+     public void showContextProgress(boolean show) {
+         if (progressDrawable == null) {
+             return;
+@@ -7834,7 +7887,7 @@ public class ChatActivityEnterView extends FrameLayout implements
+                 Theme.setSelectorDrawableColor(sendButton.getBackground(), Color.argb(24, Color.red(color), Color.green(color), Color.blue(color)), true);
+             }
+ 
+-            if (audioVideoButtonContainer.getVisibility() == VISIBLE || slowModeButton.getVisibility() == VISIBLE || showBotButton || showSendButton) {
++            if (audioVideoButtonContainer.getVisibility() == VISIBLE || VoiceRecorderHelper.isMovedToAttach() || slowModeButton.getVisibility() == VISIBLE || showBotButton || showSendButton) {
+                 if (animated) {
+                     if (runningAnimationType == 1 && caption == null || runningAnimationType == 3 && caption != null) {
+                         return;
+@@ -14031,7 +14084,7 @@ public class ChatActivityEnterView extends FrameLayout implements
+     private void updateAttachLayoutParams() {
+         updateAttachButtonTranslationX();
+         if (attachLayout != null) {
+-            attachLayout.setTranslationX(attachLayoutPaddingTranslationX + attachLayoutTranslationX);
++            attachLayout.setTranslationX(VoiceRecorderHelper.attachTranslationXOffset() + attachLayoutPaddingTranslationX + attachLayoutTranslationX);
+             attachLayout.setAlpha(attachLayoutAlpha * attachLayoutPaddingAlpha);
+             attachLayout.setVisibility(attachLayout.getAlpha() > 0 ? View.VISIBLE : View.GONE);
+             if (attachButton != null && isStories) {
+@@ -14044,8 +14097,8 @@ public class ChatActivityEnterView extends FrameLayout implements
+     }
+ 
+     private void updateAttachButtonTranslationX() {
+-        if (attachButton == null) return;
+-        attachButton.setTranslationX(attachLayoutPaddingTranslationX + attachLayoutTranslationX + (sendButton != null ? (
++        if (attachButton == null || VoiceRecorderHelper.isMovedToAttach()) return;
++        attachButton.setTranslationX(VoiceRecorderHelper.attachTranslationXOffset() + attachLayoutPaddingTranslationX + attachLayoutTranslationX + (sendButton != null ? (
+             -Math.max(0, sendButton.width() - dp(DEFAULT_HEIGHT + 12)) * sendButton.getAlpha()
+         ) : 0));
+     }
+diff --git a/TMessagesProj/src/main/java/org/telegram/ui/Components/ChatAttachAlert.java b/TMessagesProj/src/main/java/org/telegram/ui/Components/ChatAttachAlert.java
+index 36e4a4ad2..bb0b78f5a 100644
+--- a/TMessagesProj/src/main/java/org/telegram/ui/Components/ChatAttachAlert.java
++++ b/TMessagesProj/src/main/java/org/telegram/ui/Components/ChatAttachAlert.java
+@@ -1051,7 +1051,7 @@ public class ChatAttachAlert extends BottomSheet implements NotificationCenter.N
+     private boolean enterCommentEventSent;
+ 
+     private View bottomFadeView;
+-    protected FrameLayout buttonsRecyclerViewWrapper;
++    public FrameLayout buttonsRecyclerViewWrapper;
+     protected RecyclerListView buttonsRecyclerView;
+ 
+     private LinearLayoutManager buttonsLayoutManager;
+diff --git a/TMessagesProj/src/main/java/org/telegram/ui/Components/InstantCameraView.java b/TMessagesProj/src/main/java/org/telegram/ui/Components/InstantCameraView.java
+index 2e4908c8e..10d8f7004 100644
+--- a/TMessagesProj/src/main/java/org/telegram/ui/Components/InstantCameraView.java
++++ b/TMessagesProj/src/main/java/org/telegram/ui/Components/InstantCameraView.java
+@@ -70,6 +70,7 @@ import androidx.core.graphics.ColorUtils;
+ 
+ import com.google.android.exoplayer2.ExoPlayer;
+ 
++import desu.inugram.helpers.VoiceRecorderHelper;
+ import org.telegram.messenger.AndroidUtilities;
+ import org.telegram.messenger.ApplicationLoader;
+ import org.telegram.messenger.AutoDeleteMediaTask;
+@@ -731,9 +732,7 @@ public class InstantCameraView extends FrameLayout implements NotificationCenter
+         cameraReady = false;
+         selectedCamera = null;
+         if (!fromPaused) {
+-            if (!useCamera2) {
+-                isFrontface = true;
+-            }
++            isFrontface = VoiceRecorderHelper.nextCameraFront;
+             updateFlash();
+             recordedTime = 0;
+             progress = 0;
+-- 
+2.52.0
+

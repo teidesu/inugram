@@ -1,0 +1,574 @@
+From 67b911b863e17bbe5e87133722b1ae61e6a0ca81 Mon Sep 17 00:00:00 2001
+From: alina sireneva <alina@tei.su>
+Date: Thu, 9 Apr 2026 14:01:29 +0300
+Subject: [PATCH] bottom tabs tweaks: compact mode, hiding contacts, hiding it
+ completely
+
+---
+ .../java/org/telegram/ui/CallLogActivity.java | 15 ++--
+ .../ui/Components/BulletinFactory.java        |  9 +++
+ .../ui/Components/glass/GlassTabView.java     | 27 +++++++
+ .../org/telegram/ui/ContactsActivity.java     |  9 +--
+ .../java/org/telegram/ui/DialogsActivity.java | 14 ++--
+ .../org/telegram/ui/MainTabsActivity.java     | 70 +++++++++++++------
+ .../java/org/telegram/ui/ProfileActivity.java |  9 +--
+ .../org/telegram/ui/SettingsActivity.java     |  7 +-
+ .../java/org/telegram/ui/TopicsFragment.java  |  9 +--
+ .../org/telegram/ui/ViewPagerActivity.java    |  2 +-
+ 10 files changed, 122 insertions(+), 49 deletions(-)
+
+diff --git a/TMessagesProj/src/main/java/org/telegram/ui/CallLogActivity.java b/TMessagesProj/src/main/java/org/telegram/ui/CallLogActivity.java
+index 51a2f6b68..422afb9a9 100644
+--- a/TMessagesProj/src/main/java/org/telegram/ui/CallLogActivity.java
++++ b/TMessagesProj/src/main/java/org/telegram/ui/CallLogActivity.java
+@@ -121,6 +121,7 @@ import androidx.core.content.ContextCompat;
+ import androidx.core.view.ViewCompat;
+ import androidx.recyclerview.widget.LinearLayoutManager;
+ import androidx.recyclerview.widget.RecyclerView;
++import desu.inugram.helpers.MainTabsHelper;
+ 
+ public class CallLogActivity extends BaseFragment implements NotificationCenter.NotificationCenterDelegate, MainTabsActivity.TabFragmentDelegate {
+ 	private final int ADDITIONAL_LIST_HEIGHT_DP = Build.VERSION.SDK_INT >= 31 ? 48 : 0;
+@@ -705,8 +706,8 @@ public class CallLogActivity extends BaseFragment implements NotificationCenter.
+ 			hasMainTabs = arguments.getBoolean("hasMainTabs", false);
+ 		}
+ 
+-		additionNavigationBarHeight = hasMainTabs ? dp(DialogsActivity.MAIN_TABS_HEIGHT_WITH_MARGINS) : 0;
+-		additionFloatingButtonOffset = hasMainTabs ? dp(DialogsActivity.MAIN_TABS_HEIGHT + DialogsActivity.MAIN_TABS_MARGIN) : 0;
++		additionNavigationBarHeight = hasMainTabs ? dp(MainTabsHelper.getMainTabsHeightWithMargins()) : 0;
++		additionFloatingButtonOffset = hasMainTabs ? dp(MainTabsHelper.getMainTabsHeight() + MainTabsHelper.getMainTabsMargin()) : 0;
+ 
+ 		return true;
+ 	}
+@@ -954,7 +955,7 @@ public class CallLogActivity extends BaseFragment implements NotificationCenter.
+ 
+ 		if (hasActiveCalls || hasCalls) {
+ 			items.add(UItem.asButton(ID_CREATE_CALL, R.drawable.menu_call_create, getString(R.string.GroupCallCreate2)).accent());
+-			if (!getUserConfig().showCallsTab) {
++			if (!MainTabsHelper.isHidden() && !getUserConfig().showCallsTab) {
+ 				items.add(UItem.asButton(ID_SHOW_IN_MAIN_TABS, R.drawable.menu_add_tab_24, getString(R.string.GroupCallShowInMainTabs)).accent());
+ 			}
+ 			items.add(UItem.asShadow(null));
+@@ -1114,7 +1115,7 @@ public class CallLogActivity extends BaseFragment implements NotificationCenter.
+ 	public void onBecomeFullyVisible() {
+ 		super.onBecomeFullyVisible();
+ 
+-		if (!hideCallTabsHintWasShown && getUserConfig().showCallsTab && MessagesController.getGlobalMainSettings().getInt("hidecallshint", 0) < 2) {
++		if (!hideCallTabsHintWasShown && getUserConfig().showCallsTab && !MainTabsHelper.isHidden() && MessagesController.getGlobalMainSettings().getInt("hidecallshint", 0) < 2) {
+ 			hideCallTabsHintView = new HintView2(getContext(), HintView2.DIRECTION_TOP);
+ 			hideCallTabsHintView.setDuration(3000);
+ 			hideCallTabsHintView.setJoint(1, -(12 + 13));
+@@ -2013,7 +2014,7 @@ public class CallLogActivity extends BaseFragment implements NotificationCenter.
+ 		ItemOptions io = ItemOptions.makeOptions(this, otherItem);
+ 		// io.setColors(getThemedColor(Theme.key_actionBarDefaultTitle), getThemedColor(Theme.key_actionBarDefaultTitle));
+ 		io.setDimAlpha(0x08);
+-		if (getUserConfig().showCallsTab) {
++		if (!MainTabsHelper.isHidden() && getUserConfig().showCallsTab) {
+ 			io.add(R.drawable.msg_archive_hide, getString(R.string.HideCallTab), () -> {
+ 				setCallsTabVisible(false);
+ 				final BulletinFactory factory = hasMainTabs ? BulletinFactory.global() : BulletinFactory.of(CallLogActivity.this);
+@@ -2064,8 +2065,8 @@ public class CallLogActivity extends BaseFragment implements NotificationCenter.
+ 		}
+ 
+ 		final int additionalList = dp(48) + (int) topPanelLayout.getAnimatedHeightWithPadding(dp(7));
+-		final int mainTabBottom = fragmentView.getMeasuredHeight() - navigationBarHeight - dp(DialogsActivity.MAIN_TABS_MARGIN);
+-		final int mainTabTop = mainTabBottom - dp(DialogsActivity.MAIN_TABS_HEIGHT);
++		final int mainTabBottom = fragmentView.getMeasuredHeight() - navigationBarHeight - dp(MainTabsHelper.getMainTabsMargin());
++		final int mainTabTop = mainTabBottom - dp(MainTabsHelper.getMainTabsHeight());
+ 
+ 		iBlur3PositionActionBar.set(0, -additionalList, fragmentView.getMeasuredWidth(), actionBar.getMeasuredHeight() + additionalList);
+ 		iBlur3PositionMainTabs.set(0, mainTabTop, fragmentView.getMeasuredWidth(), mainTabBottom);
+diff --git a/TMessagesProj/src/main/java/org/telegram/ui/Components/BulletinFactory.java b/TMessagesProj/src/main/java/org/telegram/ui/Components/BulletinFactory.java
+index 037518249..bf5f2e8be 100644
+--- a/TMessagesProj/src/main/java/org/telegram/ui/Components/BulletinFactory.java
++++ b/TMessagesProj/src/main/java/org/telegram/ui/Components/BulletinFactory.java
+@@ -58,6 +58,7 @@ import org.telegram.ui.Stories.recorder.HintView2;
+ import java.util.ArrayList;
+ import java.util.Arrays;
+ import java.util.List;
++import desu.inugram.helpers.MainTabsHelper;
+ 
+ public final class BulletinFactory {
+ 
+@@ -1048,6 +1049,10 @@ public final class BulletinFactory {
+ 
+     public Bulletin create(Bulletin.Layout layout, int duration) {
+         if (fragment != null) {
++            FrameLayout containerLayout = MainTabsHelper.resolveBulletinContainer(fragment);
++            if (containerLayout != null) {
++                return Bulletin.make(containerLayout, layout, duration);
++            }
+             return Bulletin.make(fragment, layout, duration);
+         } else {
+             return Bulletin.make(containerLayout, layout, duration);
+@@ -1128,6 +1133,10 @@ public final class BulletinFactory {
+         }
+ 
+         layout.textView.setText(text);
++        FrameLayout containerLayout = MainTabsHelper.resolveBulletinContainer(fragment);
++        if (containerLayout != null) {
++            return Bulletin.make(containerLayout, layout, Bulletin.DURATION_SHORT);
++        }
+         return Bulletin.make(fragment, layout, Bulletin.DURATION_SHORT);
+     }
+ 
+diff --git a/TMessagesProj/src/main/java/org/telegram/ui/Components/glass/GlassTabView.java b/TMessagesProj/src/main/java/org/telegram/ui/Components/glass/GlassTabView.java
+index b25cc5f38..f6d265b3c 100644
+--- a/TMessagesProj/src/main/java/org/telegram/ui/Components/glass/GlassTabView.java
++++ b/TMessagesProj/src/main/java/org/telegram/ui/Components/glass/GlassTabView.java
+@@ -614,4 +614,31 @@ public class GlassTabView extends FrameLayout implements MainTabsLayout.Tab, Fac
+     public void onPreBind() {
+ 
+     }
++
++    public void setMainTabsCompact(boolean compact) {
++        if (textView.getVisibility() == (compact ? GONE : VISIBLE)) {
++            return;
++        }
++
++        textView.setVisibility(compact ? GONE : VISIBLE);
++
++        if (compact) {
++            setContentDescription(textView.getText());
++        } else {
++            setContentDescription(null);
++        }
++
++        if (backupImageView != null) {
++            backupImageView.setLayoutParams(compact ?
++                LayoutHelper.createFrame(22, 22, Gravity.CENTER) :
++                LayoutHelper.createFrame(22, 22, Gravity.CENTER_HORIZONTAL | Gravity.TOP, 0, 5, 0, 0));
++        } else {
++            imageView.setLayoutParams(compact ?
++                LayoutHelper.createFrame(24, 24, Gravity.CENTER) :
++                LayoutHelper.createFrame(24, 24, Gravity.CENTER_HORIZONTAL | Gravity.TOP, 0, 4, 0, 0));
++        }
++
++        requestLayout();
++        invalidate();
++    }
+ }
+\ No newline at end of file
+diff --git a/TMessagesProj/src/main/java/org/telegram/ui/ContactsActivity.java b/TMessagesProj/src/main/java/org/telegram/ui/ContactsActivity.java
+index 8449d943c..0663f5276 100644
+--- a/TMessagesProj/src/main/java/org/telegram/ui/ContactsActivity.java
++++ b/TMessagesProj/src/main/java/org/telegram/ui/ContactsActivity.java
+@@ -113,6 +113,7 @@ import org.telegram.ui.Components.inset.WindowAnimatedInsetsProvider;
+ 
+ import java.util.ArrayList;
+ 
++import desu.inugram.helpers.MainTabsHelper;
+ import me.vkryl.android.animator.BoolAnimator;
+ import me.vkryl.android.animator.FactorAnimator;
+ 
+@@ -251,8 +252,8 @@ public class ContactsActivity extends BaseFragment implements FactorAnimator.Tar
+         getContactsController().checkInviteText();
+         getContactsController().reloadContactsStatusesMaybe(false);
+ 
+-        additionNavigationBarHeight = hasMainTabs ? dp(DialogsActivity.MAIN_TABS_HEIGHT_WITH_MARGINS) : 0;
+-        additionFloatingButtonOffset = hasMainTabs ? dp(DialogsActivity.MAIN_TABS_HEIGHT + DialogsActivity.MAIN_TABS_MARGIN) : 0;
++        additionNavigationBarHeight = hasMainTabs ? dp(MainTabsHelper.getMainTabsHeightWithMargins()) : 0;
++        additionFloatingButtonOffset = hasMainTabs ? dp(MainTabsHelper.getMainTabsHeight() + MainTabsHelper.getMainTabsMargin()) : 0;
+ 
+         return true;
+     }
+@@ -1696,8 +1697,8 @@ public class ContactsActivity extends BaseFragment implements FactorAnimator.Tar
+         final int additionalList = dp(48);
+         final int additionalSearch = dp(DialogsActivity.SEARCH_FIELD_HEIGHT);
+ 
+-        final int mainTabBottom = fragmentView.getMeasuredHeight() - navigationBarHeight - dp(DialogsActivity.MAIN_TABS_MARGIN);
+-        final int mainTabTop = mainTabBottom - dp(DialogsActivity.MAIN_TABS_HEIGHT);
++        final int mainTabBottom = fragmentView.getMeasuredHeight() - navigationBarHeight - dp(MainTabsHelper.getMainTabsMargin());
++        final int mainTabTop = mainTabBottom - dp(MainTabsHelper.getMainTabsHeight());
+ 
+         iBlur3PositionActionBar.set(0, -additionalList, fragmentView.getMeasuredWidth(), actionBar.getMeasuredHeight() + additionalList + additionalSearch );
+         iBlur3PositionMainTabs.set(0, mainTabTop, fragmentView.getMeasuredWidth(), mainTabBottom);
+diff --git a/TMessagesProj/src/main/java/org/telegram/ui/DialogsActivity.java b/TMessagesProj/src/main/java/org/telegram/ui/DialogsActivity.java
+index 043a7f7b7..201d0207d 100644
+--- a/TMessagesProj/src/main/java/org/telegram/ui/DialogsActivity.java
++++ b/TMessagesProj/src/main/java/org/telegram/ui/DialogsActivity.java
+@@ -264,6 +264,8 @@ import java.util.HashSet;
+ import java.util.List;
+ import java.util.concurrent.ConcurrentHashMap;
+ 
++import desu.inugram.InuHooks;
++import desu.inugram.helpers.MainTabsHelper;
+ import me.vkryl.android.animator.BoolAnimator;
+ import me.vkryl.android.animator.FactorAnimator;
+ 
+@@ -2795,7 +2797,7 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
+             allowBots = arguments.getBoolean("allowBots", true);
+             closeFragment = arguments.getBoolean("closeFragment", true);
+             allowGlobalSearch = arguments.getBoolean("allowGlobalSearch", true);
+-            hasMainTabs = arguments.getBoolean("hasMainTabs", false);
++            hasMainTabs = arguments.getBoolean("hasMainTabs", false) && !MainTabsHelper.isHidden();
+ 
+             byte[] requestPeerTypeBytes = arguments.getByteArray("requestPeerType");
+             if (requestPeerTypeBytes != null) {
+@@ -2895,8 +2897,8 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
+         }
+ 
+         BirthdayController.getInstance(currentAccount).check();
+-        additionNavigationBarHeight = hasMainTabs ? dp(MAIN_TABS_HEIGHT_WITH_MARGINS) : 0;
+-        additionFloatingButtonOffset = hasMainTabs ? dp(DialogsActivity.MAIN_TABS_HEIGHT + DialogsActivity.MAIN_TABS_MARGIN) : 0;
++        additionNavigationBarHeight = hasMainTabs ? dp(MainTabsHelper.getMainTabsHeightWithMargins()) : 0;
++        additionFloatingButtonOffset = hasMainTabs ? dp(MainTabsHelper.getMainTabsHeight() + MainTabsHelper.getMainTabsMargin()) : 0;
+ 
+         return true;
+     }
+@@ -13227,6 +13229,8 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
+                     io.add(proxyMenuSubItem);
+                 }
+             }
++
++            InuHooks.addDialogsActivityOptions(this, io);
+         } else {
+             io.add(R.drawable.msg_customize, getString(R.string.ArchiveSettings), () -> presentFragment(new ArchiveSettingsActivity()));
+             io.add(R.drawable.msg_help, getString(R.string.HowDoesItWork), this::showArchiveHelp);
+@@ -13592,8 +13596,8 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
+         }
+ 
+         final int additionalList = dp(48);
+-        final int mainTabBottom = fragmentView.getMeasuredHeight() - navigationBarHeight - dp(DialogsActivity.MAIN_TABS_MARGIN);
+-        final int mainTabTop = mainTabBottom - dp(DialogsActivity.MAIN_TABS_HEIGHT);
++        final int mainTabBottom = fragmentView.getMeasuredHeight() - navigationBarHeight - dp(MainTabsHelper.getMainTabsMargin());
++        final int mainTabTop = mainTabBottom - dp(MainTabsHelper.getMainTabsHeight());
+ 
+         final int actionBarHeight = actionBar.getMeasuredHeight()
+             + dp(DialogsActivity.SEARCH_FIELD_HEIGHT)
+diff --git a/TMessagesProj/src/main/java/org/telegram/ui/MainTabsActivity.java b/TMessagesProj/src/main/java/org/telegram/ui/MainTabsActivity.java
+index 950de5c43..5aaafc37d 100644
+--- a/TMessagesProj/src/main/java/org/telegram/ui/MainTabsActivity.java
++++ b/TMessagesProj/src/main/java/org/telegram/ui/MainTabsActivity.java
+@@ -68,6 +68,7 @@ import org.telegram.ui.Stories.recorder.HintView2;
+ import java.util.ArrayList;
+ import java.util.Collections;
+ 
++import desu.inugram.helpers.MainTabsHelper;
+ import me.vkryl.android.animator.BoolAnimator;
+ import me.vkryl.android.animator.FactorAnimator;
+ 
+@@ -85,7 +86,12 @@ public class MainTabsActivity extends ViewPagerActivity implements NotificationC
+     private static final int INDEX_PROFILE = 4;
+ 
+     private static int indexToPosition(int index) {
+-        return index > 2 ? index - 1 : index;
++        int position = index > 2 ? index - 1 : index;
++        if (MainTabsHelper.isContactsTabHidden()) {
++            if (position == POSITION_CONTACTS) return -1;
++            if (position > POSITION_CONTACTS) position--;
++        }
++        return position;
+     }
+ 
+ 
+@@ -207,7 +213,8 @@ public class MainTabsActivity extends ViewPagerActivity implements NotificationC
+         Bulletin.Delegate delegate = new Bulletin.Delegate() {
+             @Override
+             public int getBottomOffset(int tag) {
+-                return navigationBarHeight + dp(DialogsActivity.MAIN_TABS_HEIGHT + DialogsActivity.MAIN_TABS_MARGIN);
++                if (MainTabsHelper.isHidden()) return navigationBarHeight;
++                return navigationBarHeight + dp(MainTabsHelper.getMainTabsHeight() + MainTabsHelper.getMainTabsMargin());
+             }
+         };
+ 
+@@ -245,9 +252,16 @@ public class MainTabsActivity extends ViewPagerActivity implements NotificationC
+     public View createView(Context context) {
+         super.createView(context);
+ 
++        final boolean compact = MainTabsHelper.isCompact();
++        final int mainTabsMargin = MainTabsHelper.getMainTabsMargin();
++        final boolean hideContacts = MainTabsHelper.isContactsTabHidden();
++        final int tabsViewWidth = MainTabsHelper.getTabsViewWidth();
++
+         tabsView = new MainTabsLayout(context);
+         tabsView.setClipChildren(false);
+-        tabsView.setPadding(dp(DialogsActivity.MAIN_TABS_MARGIN + 4), dp(DialogsActivity.MAIN_TABS_MARGIN + 4), dp(DialogsActivity.MAIN_TABS_MARGIN + 4), dp(DialogsActivity.MAIN_TABS_MARGIN + 4));
++        final int paddingH = dp(mainTabsMargin + 4);
++        final int paddingV = dp(mainTabsMargin + 4);
++        tabsView.setPadding(paddingH, paddingV, paddingH, paddingV);
+ 
+         tabs = new GlassTabView[5];
+         tabs[INDEX_CHATS] = GlassTabView.createMainTab(context, resourceProvider, GlassTabView.TabAnimation.CHATS, R.string.MainTabsChats);
+@@ -259,6 +273,9 @@ public class MainTabsActivity extends ViewPagerActivity implements NotificationC
+             openAccountSelector(v);
+             return true;
+         });
++        for (GlassTabView tab : tabs) {
++            tab.setMainTabsCompact(compact);
++        }
+ 
+         for (int index = 0; index < tabs.length; index++) {
+             final GlassTabView view = tabs[index];
+@@ -285,6 +302,7 @@ public class MainTabsActivity extends ViewPagerActivity implements NotificationC
+             tabsView.setViewVisible(view, true, false);
+         }
+         checkUi_callTabVisible(getUserConfig().showCallsTab, false);
++        tabsView.setViewVisible(tabs[INDEX_CONTACTS], !hideContacts, false);
+ 
+         selectTab(viewPager.getCurrentPosition(), false);
+ 
+@@ -299,8 +317,8 @@ public class MainTabsActivity extends ViewPagerActivity implements NotificationC
+         iBlur3FactoryGlass.setLiquidGlassEffectAllowed(LiteMode.isEnabled(LiteMode.FLAG_LIQUID_GLASS));
+ 
+         tabsViewBackground = iBlur3FactoryGlass.create(tabsView, BlurredBackgroundProviderImpl.mainTabs(resourceProvider));
+-        tabsViewBackground.setRadius(dp(DialogsActivity.MAIN_TABS_HEIGHT / 2f));
+-        tabsViewBackground.setPadding(dp(DialogsActivity.MAIN_TABS_MARGIN - 0.334f));
++        tabsViewBackground.setRadius(dp(MainTabsHelper.getMainTabsHeight() / 2f));
++        tabsViewBackground.setPadding(dp(mainTabsMargin - 0.334f));
+         tabsView.setBackground(tabsViewBackground);
+ 
+         BlurredBackgroundDrawableViewFactory iBlur3FactoryFade = new BlurredBackgroundDrawableViewFactory(iBlur3SourceColor);
+@@ -315,7 +333,7 @@ public class MainTabsActivity extends ViewPagerActivity implements NotificationC
+ 
+         tabsViewWrapper = new FrameLayout(context);
+         tabsViewWrapper.setOnClickListener(v -> {});
+-        tabsViewWrapper.addView(tabsView, LayoutHelper.createFrame(328 + DialogsActivity.MAIN_TABS_MARGIN * 2, DialogsActivity.MAIN_TABS_HEIGHT_WITH_MARGINS, Gravity.BOTTOM | Gravity.CENTER_HORIZONTAL));
++        tabsViewWrapper.addView(tabsView, LayoutHelper.createFrame(tabsViewWidth, MainTabsHelper.getMainTabsHeightWithMargins(), Gravity.BOTTOM | Gravity.CENTER_HORIZONTAL));
+         tabsViewWrapper.setClipToPadding(false);
+         contentView.addView(tabsViewWrapper, LayoutHelper.createFrame(LayoutHelper.MATCH_PARENT, LayoutHelper.WRAP_CONTENT, Gravity.BOTTOM));
+ 
+@@ -477,12 +495,14 @@ public class MainTabsActivity extends ViewPagerActivity implements NotificationC
+ 
+         if (viewPager != null) {
+             final int currentPosition = viewPager.getCurrentPosition();
+-            if (currentPosition != POSITION_CALLS_OR_SETTINGS && dropCallsFragmentAfterPageScroll) {
+-                dropFragmentAtPosition(POSITION_CALLS_OR_SETTINGS);
++            final int callsOrSettings = MainTabsHelper.positionOffset(POSITION_CALLS_OR_SETTINGS);
++            final int profile = MainTabsHelper.positionOffset(POSITION_PROFILE);
++            if (currentPosition != callsOrSettings && dropCallsFragmentAfterPageScroll) {
++                dropFragmentAtPosition(callsOrSettings);
+                 dropCallsFragmentAfterPageScroll = false;
+             }
+-            if (currentPosition != POSITION_PROFILE) {
+-                dropFragmentAtPosition(POSITION_PROFILE);
++            if (currentPosition != profile) {
++                dropFragmentAtPosition(profile);
+             }
+         }
+ 
+@@ -507,7 +527,7 @@ public class MainTabsActivity extends ViewPagerActivity implements NotificationC
+ 
+     @Override
+     protected int getFragmentsCount() {
+-        return TABS_COUNT;
++        return MainTabsHelper.getFragmentsCount();
+     }
+ 
+     @Override
+@@ -546,13 +566,13 @@ public class MainTabsActivity extends ViewPagerActivity implements NotificationC
+ 
+     @Override
+     protected BaseFragment createBaseFragmentAt(int position) {
+-        if (position == POSITION_CONTACTS) {
++        if (!MainTabsHelper.isContactsTabHidden() && position == POSITION_CONTACTS) {
+             Bundle args = new Bundle();
+             args.putBoolean("needPhonebook", true);
+             args.putBoolean("needFinishFragment", false);
+             args.putBoolean("hasMainTabs", true);
+             return new ContactsActivity(args);
+-        } else if (position == POSITION_CALLS_OR_SETTINGS) {
++        } else if (position == MainTabsHelper.positionOffset(POSITION_CALLS_OR_SETTINGS)) {
+             if (getUserConfig().showCallsTab) {
+                 Bundle args = new Bundle();
+                 args.putBoolean("needFinishFragment", false);
+@@ -568,7 +588,7 @@ public class MainTabsActivity extends ViewPagerActivity implements NotificationC
+             dialogsActivity = new DialogsActivity(args);
+             dialogsActivity.setMainTabsActivityController(new MainTabsActivityControllerImpl());
+             return dialogsActivity;
+-        } else if (position == POSITION_PROFILE) {
++        } else if (position == MainTabsHelper.positionOffset(POSITION_PROFILE)) {
+             Bundle args = new Bundle();
+             args.putLong("user_id", UserConfig.getInstance(currentAccount).getClientUserId());
+             args.putBoolean("my_profile", true);
+@@ -631,6 +651,7 @@ public class MainTabsActivity extends ViewPagerActivity implements NotificationC
+     }
+ 
+     private boolean canScrollInternal(MotionEvent ev, boolean forward) {
++        if (MainTabsHelper.isHidden()) return false;
+         final BaseFragment fragment = getCurrentVisibleFragment();
+         if (fragment instanceof TabFragmentDelegate) {
+             final TabFragmentDelegate delegate = (TabFragmentDelegate) fragment;
+@@ -656,7 +677,8 @@ public class MainTabsActivity extends ViewPagerActivity implements NotificationC
+ 
+         ViewGroup.MarginLayoutParams lp;
+         {
+-            final int height = navigationBarHeight + updateLayoutHeight + dp(DialogsActivity.MAIN_TABS_HEIGHT_WITH_MARGINS);
++            int height = navigationBarHeight + updateLayoutHeight;
++            if (!MainTabsHelper.isHidden()) height += dp(MainTabsHelper.getMainTabsHeightWithMargins());
+             lp = (ViewGroup.MarginLayoutParams) fadeView.getLayoutParams();
+             if (lp.height != height) {
+                 lp.height = height;
+@@ -721,12 +743,13 @@ public class MainTabsActivity extends ViewPagerActivity implements NotificationC
+         } else if (id == NotificationCenter.callTabsVisibleToggled) {
+             final boolean callTabsVisible = getUserConfig().showCallsTab;
+             checkUi_callTabVisible(callTabsVisible, true);
+-            if (viewPager != null && viewPager.getCurrentPosition() == POSITION_CALLS_OR_SETTINGS) {
++            final int callsOrSettings = MainTabsHelper.positionOffset(POSITION_CALLS_OR_SETTINGS);
++            if (viewPager != null && viewPager.getCurrentPosition() == callsOrSettings) {
+                 viewPager.scrollToPosition(POSITION_CHATS);
+                 selectTab(POSITION_CHATS, true);
+                 dropCallsFragmentAfterPageScroll = true;
+             } else {
+-                dropFragmentAtPosition(POSITION_CALLS_OR_SETTINGS);
++                dropFragmentAtPosition(callsOrSettings);
+             }
+         } else if (id == NotificationCenter.mainUserInfoChanged) {
+             if (tabs != null && tabs[INDEX_PROFILE] != null) {
+@@ -780,12 +803,12 @@ public class MainTabsActivity extends ViewPagerActivity implements NotificationC
+     }
+ 
+     private void checkUi_fadeView() {
+-        if (viewPager == null || fadeView == null) {
++        if (viewPager == null || fadeView == null || MainTabsHelper.isHidden()) {
+             return;
+         }
+ 
+         final float animatedPosition = viewPager.getPositionAnimated();
+-        final float isProfile = 1f - MathUtils.clamp(Math.abs(POSITION_PROFILE - animatedPosition), 0, 1);
++        final float isProfile = 1f - MathUtils.clamp(Math.abs(MainTabsHelper.positionOffset(POSITION_PROFILE) - animatedPosition), 0, 1);
+         final float hide = 1f - AndroidUtilities.getNavigationBarThirdButtonsFactor(0, 1f, navigationBarHeight);
+         final float alpha = (1f - isProfile * hide) * animatorTabsVisible.getFloatValue();
+ 
+@@ -795,10 +818,15 @@ public class MainTabsActivity extends ViewPagerActivity implements NotificationC
+     }
+ 
+     private void checkUi_tabsPosition() {
++        if (tabsView == null) return;
++        if (MainTabsHelper.isHidden()) {
++            tabsView.setVisibility(View.GONE);
++            return;
++        }
+         final boolean isUpdateLayoutVisible = updateLayoutWrapper.isUpdateLayoutVisible();
+         final int updateLayoutHeight = isUpdateLayoutVisible ? dp(UpdateLayoutWrapper.HEIGHT) : 0;
+         final int normalY = -(updateLayoutHeight);
+-        final int hiddenY = normalY + dp(40);
++        final int hiddenY = normalY + dp(MainTabsHelper.isCompact() ? 30 : 40);
+ 
+         final float factor = animatorTabsVisible.getFloatValue();
+         final float scale = lerp(0.85f, 1f, factor);
+@@ -884,7 +912,7 @@ public class MainTabsActivity extends ViewPagerActivity implements NotificationC
+     private boolean accountSwitchHintShown;
+ 
+     private void showAccountChangeHint() {
+-        if (accountSwitchHintShown) return;
++        if (accountSwitchHintShown || MainTabsHelper.isHidden()) return;
+ 
+         if (accountSwitchHint == null && MessagesController.getGlobalMainSettings().getInt("accountswitchhint", 0) < 2) {
+             AndroidUtilities.runOnUIThread(() -> {
+diff --git a/TMessagesProj/src/main/java/org/telegram/ui/ProfileActivity.java b/TMessagesProj/src/main/java/org/telegram/ui/ProfileActivity.java
+index 9be6be9d6..300ca06c8 100644
+--- a/TMessagesProj/src/main/java/org/telegram/ui/ProfileActivity.java
++++ b/TMessagesProj/src/main/java/org/telegram/ui/ProfileActivity.java
+@@ -334,6 +334,7 @@ import java.util.concurrent.atomic.AtomicReference;
+ import java.util.zip.ZipEntry;
+ import java.util.zip.ZipOutputStream;
+ 
++import desu.inugram.helpers.MainTabsHelper;
+ import me.vkryl.android.animator.BoolAnimator;
+ 
+ public class ProfileActivity extends BaseFragment implements NotificationCenter.NotificationCenterDelegate, DialogsActivity.DialogsActivityDelegate, SharedMediaLayout.SharedMediaPreloaderDelegate, ImageUpdater.ImageUpdaterDelegate, SharedMediaLayout.Delegate, MainTabsActivity.TabFragmentDelegate {
+@@ -2271,8 +2272,8 @@ public class ProfileActivity extends BaseFragment implements NotificationCenter.
+ 
+         setActionsMode();
+ 
+-        additionNavigationBarHeight = hasMainTabs ? dp(DialogsActivity.MAIN_TABS_HEIGHT_WITH_MARGINS) : 0;
+-        additionFloatingButtonOffset = hasMainTabs ? dp(DialogsActivity.MAIN_TABS_HEIGHT + DialogsActivity.MAIN_TABS_MARGIN) : 0;
++        additionNavigationBarHeight = hasMainTabs ? dp(MainTabsHelper.getMainTabsHeightWithMargins()) : 0;
++        additionFloatingButtonOffset = hasMainTabs ? dp(MainTabsHelper.getMainTabsHeight() + MainTabsHelper.getMainTabsMargin()) : 0;
+ 
+         return true;
+     }
+@@ -16668,8 +16669,8 @@ public class ProfileActivity extends BaseFragment implements NotificationCenter.
+         }
+ 
+         final int additionalList = dp(48);
+-        final int mainTabBottom = fragmentView.getMeasuredHeight() - navigationBarHeight - dp(DialogsActivity.MAIN_TABS_MARGIN);
+-        final int mainTabTop = mainTabBottom - dp(DialogsActivity.MAIN_TABS_HEIGHT);
++        final int mainTabBottom = fragmentView.getMeasuredHeight() - navigationBarHeight - dp(MainTabsHelper.getMainTabsMargin());
++        final int mainTabTop = mainTabBottom - dp(MainTabsHelper.getMainTabsHeight());
+ 
+         iBlur3PositionActionBar.set(0, -additionalList, fragmentView.getMeasuredWidth(), actionBar.getMeasuredHeight() + additionalList);
+         iBlur3PositionMainTabs.set(0, mainTabTop, fragmentView.getMeasuredWidth(), mainTabBottom);
+diff --git a/TMessagesProj/src/main/java/org/telegram/ui/SettingsActivity.java b/TMessagesProj/src/main/java/org/telegram/ui/SettingsActivity.java
+index ee2002b40..216ee7ed9 100644
+--- a/TMessagesProj/src/main/java/org/telegram/ui/SettingsActivity.java
++++ b/TMessagesProj/src/main/java/org/telegram/ui/SettingsActivity.java
+@@ -60,6 +60,7 @@ import androidx.core.view.ViewCompat;
+ import androidx.core.view.WindowInsetsCompat;
+ import androidx.recyclerview.widget.RecyclerView;
+ 
++import desu.inugram.helpers.MainTabsHelper;
+ import desu.inugram.ui.InuSettingsActivity;
+ 
+ import org.telegram.PhoneFormat.PhoneFormat;
+@@ -211,7 +212,7 @@ public class SettingsActivity extends BaseFragment implements NotificationCenter
+             hasMainTabs = arguments.getBoolean("hasMainTabs", false);
+         }
+ 
+-        additionNavigationBarHeight = hasMainTabs ? dp(DialogsActivity.MAIN_TABS_HEIGHT_WITH_MARGINS) : 0;
++        additionNavigationBarHeight = hasMainTabs ? dp(MainTabsHelper.getMainTabsHeightWithMargins()) : 0;
+         return super.onFragmentCreate();
+     }
+ 
+@@ -2023,8 +2024,8 @@ public class SettingsActivity extends BaseFragment implements NotificationCenter
+         }
+ 
+         final int additionalList = dp(48);
+-        final int mainTabBottom = fragmentView.getMeasuredHeight() - navigationBarHeight - dp(DialogsActivity.MAIN_TABS_MARGIN);
+-        final int mainTabTop = mainTabBottom - dp(DialogsActivity.MAIN_TABS_HEIGHT);
++        final int mainTabBottom = fragmentView.getMeasuredHeight() - navigationBarHeight - dp(MainTabsHelper.getMainTabsMargin());
++        final int mainTabTop = mainTabBottom - dp(MainTabsHelper.getMainTabsHeight());
+ 
+         iBlur3PositionActionBar.set(0, -additionalList, fragmentView.getMeasuredWidth(), actionBar.getMeasuredHeight() + additionalList);
+         iBlur3PositionMainTabs.set(0, mainTabTop, fragmentView.getMeasuredWidth(), mainTabBottom);
+diff --git a/TMessagesProj/src/main/java/org/telegram/ui/TopicsFragment.java b/TMessagesProj/src/main/java/org/telegram/ui/TopicsFragment.java
+index 44a7dc922..df092618e 100644
+--- a/TMessagesProj/src/main/java/org/telegram/ui/TopicsFragment.java
++++ b/TMessagesProj/src/main/java/org/telegram/ui/TopicsFragment.java
+@@ -144,6 +144,7 @@ import java.util.HashMap;
+ import java.util.HashSet;
+ import java.util.Iterator;
+ import java.util.concurrent.CountDownLatch;
++import desu.inugram.helpers.MainTabsHelper;
+ 
+ public class TopicsFragment extends BaseFragment implements NotificationCenter.NotificationCenterDelegate, ChatActivityInterface, RightSlidingDialogContainer.BaseFragmentWithFullscreen, MainTabsActivity.TabFragmentDelegate {
+ 
+@@ -400,8 +401,8 @@ public class TopicsFragment extends BaseFragment implements NotificationCenter.N
+ 
+     @Override
+     public View createView(Context context) {
+-        additionNavigationBarHeight = parentDialogsActivity != null && parentDialogsActivity.hasMainTabs ? dp(DialogsActivity.MAIN_TABS_HEIGHT_WITH_MARGINS) : 0;
+-        additionFloatingButtonOffset = parentDialogsActivity != null && parentDialogsActivity.hasMainTabs ? dp(DialogsActivity.MAIN_TABS_HEIGHT + DialogsActivity.MAIN_TABS_MARGIN) : 0;
++        additionNavigationBarHeight = parentDialogsActivity != null && parentDialogsActivity.hasMainTabs && !MainTabsHelper.isHidden() ? dp(MainTabsHelper.getMainTabsHeightWithMargins()) : 0;
++        additionFloatingButtonOffset = parentDialogsActivity != null && parentDialogsActivity.hasMainTabs && !MainTabsHelper.isHidden() ? dp(MainTabsHelper.getMainTabsHeight() + MainTabsHelper.getMainTabsMargin()) : 0;
+ 
+         fragmentView = contentView = new SizeNotifierFrameLayout(context) {
+             {
+@@ -4232,8 +4233,8 @@ public class TopicsFragment extends BaseFragment implements NotificationCenter.N
+         final View actionBar = parentDialogsActivity != null ? parentDialogsActivity.getActionBar() : this.actionBar;
+ 
+ 
+-        final int mainTabBottom = fragmentView.getMeasuredHeight() - navigationBarHeight - dp(DialogsActivity.MAIN_TABS_MARGIN);
+-        final int mainTabTop = mainTabBottom - dp(DialogsActivity.MAIN_TABS_HEIGHT);
++        final int mainTabBottom = fragmentView.getMeasuredHeight() - navigationBarHeight - dp(MainTabsHelper.getMainTabsMargin());
++        final int mainTabTop = mainTabBottom - dp(MainTabsHelper.getMainTabsHeight());
+ 
+         iBlur3PositionActionBar.set(0, -additionalList, fragmentView.getMeasuredWidth(), actionBar.getMeasuredHeight() + additionalList + additionalSearch );
+         iBlur3PositionMainTabs.set(0, mainTabTop, fragmentView.getMeasuredWidth(), mainTabBottom);
+diff --git a/TMessagesProj/src/main/java/org/telegram/ui/ViewPagerActivity.java b/TMessagesProj/src/main/java/org/telegram/ui/ViewPagerActivity.java
+index c159a168f..dcc2a1994 100644
+--- a/TMessagesProj/src/main/java/org/telegram/ui/ViewPagerActivity.java
++++ b/TMessagesProj/src/main/java/org/telegram/ui/ViewPagerActivity.java
+@@ -218,7 +218,7 @@ public abstract class ViewPagerActivity extends BaseFragment {
+     @Override
+     public void clearViews() {
+         if (viewPager != null) {
+-            initialFragmentPosition = viewPager.getCurrentPosition();
++            initialFragmentPosition = desu.inugram.helpers.MainTabsHelper.isHidden() ? 0 : viewPager.getCurrentPosition();
+         }
+         for (int a = 0, N = fragmentsArr.size(); a < N; a++) {
+             final FragmentState state = fragmentsArr.valueAt(a);
+-- 
+2.52.0
+

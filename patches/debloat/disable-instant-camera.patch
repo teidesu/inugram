@@ -1,0 +1,112 @@
+From ab56a8744cc2658ae6a4efaefb4bb86144190d0c Mon Sep 17 00:00:00 2001
+From: alina sireneva <alina@tei.su>
+Date: Thu, 9 Apr 2026 04:55:09 +0300
+Subject: [PATCH] disable instant camera in attachment view
+
+---
+ .../ChatAttachAlertPhotoLayout.java           | 21 +++++++++++++------
+ 1 file changed, 15 insertions(+), 6 deletions(-)
+
+diff --git a/TMessagesProj/src/main/java/org/telegram/ui/Components/ChatAttachAlertPhotoLayout.java b/TMessagesProj/src/main/java/org/telegram/ui/Components/ChatAttachAlertPhotoLayout.java
+index b25b69b3e..b70e4383d 100644
+--- a/TMessagesProj/src/main/java/org/telegram/ui/Components/ChatAttachAlertPhotoLayout.java
++++ b/TMessagesProj/src/main/java/org/telegram/ui/Components/ChatAttachAlertPhotoLayout.java
+@@ -124,6 +124,7 @@ import java.util.Collections;
+ import java.util.HashMap;
+ import java.util.List;
+ import java.util.Map;
++import desu.inugram.InuConfig;
+ 
+ @SuppressLint("ViewConstructor")
+ public class ChatAttachAlertPhotoLayout extends ChatAttachAlert.AttachAlertLayout implements NotificationCenter.NotificationCenterDelegate {
+@@ -1527,6 +1528,7 @@ public class ChatAttachAlertPhotoLayout extends ChatAttachAlert.AttachAlertLayou
+ 
+     private void openCameraByClick() {
+         if (SharedConfig.inappCamera) {
++            if (InuConfig.DISABLE_INSTANT_CAMERA.getValue()) showCamera();
+             openCamera(true);
+         } else {
+             if (parentAlert.delegate != null) {
+@@ -2136,7 +2138,7 @@ public class ChatAttachAlertPhotoLayout extends ChatAttachAlert.AttachAlertLayou
+ 
+             @Override
+             public boolean cancelButtonPressed() {
+-                if (cameraOpened && cameraView != null) {
++                if (cameraOpened && cameraView != null && !InuConfig.DISABLE_INSTANT_CAMERA.getValue()) {
+                     AndroidUtilities.runOnUIThread(() -> {
+                         if (cameraView != null && !parentAlert.isDismissed()) {
+                             cameraView.setSystemUiVisibility(View.SYSTEM_UI_FLAG_LAYOUT_FULLSCREEN | View.SYSTEM_UI_FLAG_FULLSCREEN);
+@@ -2426,7 +2428,11 @@ public class ChatAttachAlertPhotoLayout extends ChatAttachAlert.AttachAlertLayou
+         if ((old != deviceHasGoodCamera || old2 != noCameraPermissions) && adapter != null) {
+             adapter.notifyDataSetChanged();
+         }
+-        if (!parentAlert.destroyed && parentAlert.isShowing() && deviceHasGoodCamera && parentAlert.getBackDrawable().getAlpha() != 0 && !cameraOpened) {
++        if (deviceHasGoodCamera && InuConfig.DISABLE_INSTANT_CAMERA.getValue()) {
++            File file = new File(ApplicationLoader.getFilesDirFixed(), "cthumb.jpg");
++            if (file.exists()) file.delete();
++        }
++        if (!parentAlert.destroyed && parentAlert.isShowing() && deviceHasGoodCamera && parentAlert.getBackDrawable().getAlpha() != 0 && !cameraOpened && !InuConfig.DISABLE_INSTANT_CAMERA.getValue()) {
+             showCamera();
+         }
+     }
+@@ -2685,7 +2691,7 @@ public class ChatAttachAlertPhotoLayout extends ChatAttachAlert.AttachAlertLayou
+     }
+ 
+     private void saveLastCameraBitmap() {
+-        if (!canSaveCameraPreview) {
++        if (!canSaveCameraPreview || InuConfig.DISABLE_INSTANT_CAMERA.getValue()) {
+             return;
+         }
+         try {
+@@ -3838,7 +3844,7 @@ public class ChatAttachAlertPhotoLayout extends ChatAttachAlert.AttachAlertLayou
+     }
+ 
+     public void setCheckCameraWhenShown(boolean checkCameraWhenShown) {
+-        this.checkCameraWhenShown = checkCameraWhenShown;
++        this.checkCameraWhenShown = checkCameraWhenShown && !InuConfig.DISABLE_INSTANT_CAMERA.getValue();
+     }
+ 
+     @Override
+@@ -3886,6 +3892,7 @@ public class ChatAttachAlertPhotoLayout extends ChatAttachAlert.AttachAlertLayou
+     }
+ 
+     private void resumeCameraPreview() {
++        if (InuConfig.DISABLE_INSTANT_CAMERA.getValue()) return;
+         try {
+             checkCamera(false);
+             if (cameraView != null) {
+@@ -3927,7 +3934,7 @@ public class ChatAttachAlertPhotoLayout extends ChatAttachAlert.AttachAlertLayou
+ //                    afterCameraInitRunnable = null;
+ //                    isCameraFrontfaceBeforeEnteringEditMode = null;
+ //                };
+-                showCamera();
++                if (!InuConfig.DISABLE_INSTANT_CAMERA.getValue()) showCamera();
+             }
+         }
+     }
+@@ -4052,7 +4059,7 @@ public class ChatAttachAlertPhotoLayout extends ChatAttachAlert.AttachAlertLayou
+ 
+     @Override
+     public void onOpenAnimationEnd() {
+-        checkCamera(parentAlert != null && parentAlert.baseFragment instanceof ChatActivity);
++        checkCamera(parentAlert != null && parentAlert.baseFragment instanceof ChatActivity && !InuConfig.DISABLE_INSTANT_CAMERA.getValue());
+     }
+ 
+     @Override
+@@ -4786,11 +4793,13 @@ public class ChatAttachAlertPhotoLayout extends ChatAttachAlert.AttachAlertLayou
+ 
+         public void updateBitmap() {
+             Bitmap bitmap = null;
++            if (!InuConfig.DISABLE_INSTANT_CAMERA.getValue()) {
+             try {
+                 File file = new File(ApplicationLoader.getFilesDirFixed(), "cthumb.jpg");
+                 bitmap = BitmapFactory.decodeFile(file.getAbsolutePath());
+             } catch (Throwable ignore) {
+ 
++            }
+             }
+             if (bitmap != null) {
+                 placeholderDrawable = new BitmapDrawable(getContext().getResources(), bitmap);
+-- 
+2.52.0
+

@@ -1,0 +1,81 @@
+From aed156e9cb5f9e3c0fa54e8eb70bf398ee6a1047 Mon Sep 17 00:00:00 2001
+From: alina sireneva <alina@tei.su>
+Date: Fri, 10 Apr 2026 01:21:49 +0300
+Subject: [PATCH] disable channel bottom bar (mute and join buttons)
+
+---
+ .../main/java/org/telegram/ui/ChatActivity.java  | 16 ++++++++++++----
+ 1 file changed, 12 insertions(+), 4 deletions(-)
+
+diff --git a/TMessagesProj/src/main/java/org/telegram/ui/ChatActivity.java b/TMessagesProj/src/main/java/org/telegram/ui/ChatActivity.java
+index 0f04cd7e9..87c77a38a 100644
+--- a/TMessagesProj/src/main/java/org/telegram/ui/ChatActivity.java
++++ b/TMessagesProj/src/main/java/org/telegram/ui/ChatActivity.java
+@@ -132,6 +132,9 @@ import androidx.viewpager.widget.ViewPager;
+ import com.google.android.exoplayer2.ui.AspectRatioFrameLayout;
+ import com.google.zxing.common.detector.MathUtils;
+ 
++import desu.inugram.InuConfig;
++import desu.inugram.helpers.ChatHelper;
++import desu.inugram.helpers.DoubleTapActionHelper;
+ import org.telegram.PhoneFormat.PhoneFormat;
+ import org.telegram.messenger.AccountInstance;
+ import org.telegram.messenger.AndroidUtilities;
+@@ -4370,7 +4373,7 @@ public class ChatActivity extends BaseFragment implements
+             }
+             if (currentChat != null) {
+                 headerItem.lazilyAddSubItem(open_direct, R.drawable.msg_markunread, getString(R.string.ChannelOpenDirect));
+-                headerItem.setSubItemShown(open_direct, ChatObject.isChannel(currentChat) && !ChatObject.isMonoForum(currentChat) && currentChat.linked_monoforum_id != 0 && ChatObject.canManageMonoForum(currentAccount, -currentChat.linked_monoforum_id));
++                headerItem.setSubItemShown(open_direct, ChatObject.isChannel(currentChat) && !ChatObject.isMonoForum(currentChat) && currentChat.linked_monoforum_id != 0 && (ChatObject.canManageMonoForum(currentAccount, -currentChat.linked_monoforum_id) || ChatHelper.shouldForceHideBottomBar(currentChat)));
+             }
+             if (currentUser != null && chatMode != MODE_SAVED) {
+                 headerItem.lazilyAddSubItem(call, R.drawable.msg_callback, LocaleController.getString(R.string.Call));
+@@ -8332,6 +8335,7 @@ public class ChatActivity extends BaseFragment implements
+             }
+         });
+         bottomChannelButtonsLayout.setButtonOnFullyVisibleListener(ChatActivityChannelButtonsLayout.BUTTON_GIFT, (v, id, firstTime) -> {
++            if (ChatHelper.shouldForceHideBottomBar(currentChat)) return;
+             if (bottomGiftHintView == null && firstTime && MessagesController.getGlobalMainSettings().getInt("channelgifthint", 0) < 2 && (bottomSuggestHintView == null || !bottomSuggestHintView.shown())) {
+                 AndroidUtilities.runOnUIThread(() -> {
+                     if (getContext() == null) return;
+@@ -8351,6 +8355,7 @@ public class ChatActivity extends BaseFragment implements
+             }
+         });
+         bottomChannelButtonsLayout.setButtonOnFullyVisibleListener(ChatActivityChannelButtonsLayout.BUTTON_DIRECT, (v, id, firstTime) -> {
++            if (ChatHelper.shouldForceHideBottomBar(currentChat)) return;
+             if (bottomSuggestHintView == null && firstTime && MessagesController.getGlobalMainSettings().getInt("channelsuggesthint", 0) < 2) {
+                 AndroidUtilities.runOnUIThread(() -> {
+                     if (getContext() == null) return;
+@@ -21505,7 +21510,7 @@ public class ChatActivity extends BaseFragment implements
+                 updateTopPanel(true);
+             }
+             if (headerItem != null) {
+-                headerItem.setSubItemShown(open_direct, ChatObject.isChannel(currentChat) && !ChatObject.isMonoForum(currentChat) && currentChat.linked_monoforum_id != 0 && ChatObject.canManageMonoForum(currentAccount, -currentChat.linked_monoforum_id));
++                headerItem.setSubItemShown(open_direct, ChatObject.isChannel(currentChat) && !ChatObject.isMonoForum(currentChat) && currentChat.linked_monoforum_id != 0 && (ChatObject.canManageMonoForum(currentAccount, -currentChat.linked_monoforum_id) || ChatHelper.shouldForceHideBottomBar(currentChat)));
+             }
+         } else if (id == NotificationCenter.didReceiveNewMessages) {
+             FileLog.d("ChatActivity didReceiveNewMessages start");
+@@ -26955,7 +26960,10 @@ public class ChatActivity extends BaseFragment implements
+ 
+         boolean accentTextButton = false;
+         boolean forceVisible = false;
+-        boolean forceNoBottom = false;
++        boolean forceNoBottom = ChatHelper.shouldForceHideBottomBar(currentChat, currentUser);
++        if (chatInputViewsContainer != null && chatInputViewsContainer.getFadeView() != null) {
++            chatInputViewsContainer.getFadeView().setVisibility(forceNoBottom ? View.GONE : View.VISIBLE);
++        }
+         boolean showGiftButton = false;
+         boolean showSuggestButton = false;
+         boolean showSearchButton = chatMode == MODE_DEFAULT && ChatObject.isChannelOrGiga(currentChat);
+@@ -44892,7 +44900,7 @@ public class ChatActivity extends BaseFragment implements
+             pollAddVisibility = animatorPollAddAnswerVisibility.getFloatValue();
+         }
+ 
+-        if (!isInsideContainer && !isInPreviewMode()) {
++        if (!isInsideContainer && !isInPreviewMode() && !ChatHelper.shouldForceHideBottomBar(currentChat, currentUser)) {
+             return lerp(Math.max(lerp(defaultIslandHeight, enterViewIslandHeight, enterViewFactor) * visibility, dp(44)), -dp(7), pollAddVisibility);
+         } else {
+             return lerp(defaultIslandHeight, enterViewIslandHeight, enterViewFactor) * visibility;
+-- 
+2.52.0
+

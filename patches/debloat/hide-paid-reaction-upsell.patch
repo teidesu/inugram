@@ -1,0 +1,49 @@
+From 8d28b31e703ceaec12dd7eeca491c5413eb20f6e Mon Sep 17 00:00:00 2001
+From: alina sireneva <alina@tei.su>
+Date: Fri, 10 Apr 2026 04:54:18 +0300
+Subject: [PATCH] hide paid reactions upsell (particles, not showing when
+ empty, reactions menu gradient)
+
+---
+ .../ui/Components/Reactions/ReactionsLayoutInBubble.java      | 2 +-
+ .../org/telegram/ui/Components/ReactionsContainerLayout.java  | 4 ++--
+ 2 files changed, 3 insertions(+), 3 deletions(-)
+
+diff --git a/TMessagesProj/src/main/java/org/telegram/ui/Components/Reactions/ReactionsLayoutInBubble.java b/TMessagesProj/src/main/java/org/telegram/ui/Components/Reactions/ReactionsLayoutInBubble.java
+index 6aaab8046..36a5bdf40 100644
+--- a/TMessagesProj/src/main/java/org/telegram/ui/Components/Reactions/ReactionsLayoutInBubble.java
++++ b/TMessagesProj/src/main/java/org/telegram/ui/Components/Reactions/ReactionsLayoutInBubble.java
+@@ -209,7 +209,7 @@ public class ReactionsLayoutInBubble {
+                             }
+                         }
+                     }
+-                    if (!hasPaidReaction) {
++                    if (!hasPaidReaction && !desu.inugram.InuConfig.HIDE_PAID_REACTION_UPSELL.getValue()) {
+                         includeEmptyStarButton = true;
+                     }
+                 }
+diff --git a/TMessagesProj/src/main/java/org/telegram/ui/Components/ReactionsContainerLayout.java b/TMessagesProj/src/main/java/org/telegram/ui/Components/ReactionsContainerLayout.java
+index 98818a32b..568c2ace5 100644
+--- a/TMessagesProj/src/main/java/org/telegram/ui/Components/ReactionsContainerLayout.java
++++ b/TMessagesProj/src/main/java/org/telegram/ui/Components/ReactionsContainerLayout.java
+@@ -703,7 +703,7 @@ public class ReactionsContainerLayout extends FrameLayout implements Notificatio
+                 canvas.drawRoundRect(rect, radius, radius, bgPaint);
+             }
+ 
+-            if (hasStar) {
++            if (hasStar && !desu.inugram.InuConfig.HIDE_PAID_REACTION_UPSELL.getValue()) {
+                 boolean isStarSelected = false;
+                 for (ReactionsLayoutInBubble.VisibleReaction r : selectedReactions) {
+                     if (r.isStar) {
+@@ -2231,7 +2231,7 @@ public class ReactionsContainerLayout extends FrameLayout implements Notificatio
+                     loopImageView.animatedEmojiDrawable.getImageReceiver().setRoundRadius(selected ? dp(6) : 0);
+                 }
+             }
+-            if (currentReaction != null && currentReaction.isStar && particles != null && LiteMode.isEnabled(LiteMode.FLAG_ANIMATED_EMOJI_REACTIONS) && LiteMode.isEnabled(LiteMode.FLAG_PARTICLES)) {
++            if (currentReaction != null && currentReaction.isStar && particles != null && !desu.inugram.InuConfig.HIDE_PAID_REACTION_UPSELL.getValue() && LiteMode.isEnabled(LiteMode.FLAG_ANIMATED_EMOJI_REACTIONS) && LiteMode.isEnabled(LiteMode.FLAG_PARTICLES)) {
+                 final int sz = (int) (getHeight() * .7f);
+                 AndroidUtilities.rectTmp.set(getWidth() / 2f - sz / 2f, getHeight() / 2f - sz / 2f, getWidth() / 2f + sz / 2f, getHeight() / 2f + sz / 2f);
+                 RLottieDrawable lottieDrawable = enterImageView.getImageReceiver().getLottieAnimation();
+-- 
+2.52.0
+

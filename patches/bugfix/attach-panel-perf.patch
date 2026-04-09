@@ -1,0 +1,103 @@
+From d241c2fdcdb56a217751df558b7ba56b416c48c6 Mon Sep 17 00:00:00 2001
+From: alina sireneva <alina@tei.su>
+Date: Sun, 19 Apr 2026 11:01:40 +0300
+Subject: [PATCH] improve attach sheet performance
+
+---
+ .../ui/Stories/recorder/AlbumButton.java      | 54 ++++++++++++-------
+ 1 file changed, 36 insertions(+), 18 deletions(-)
+
+diff --git a/TMessagesProj/src/main/java/org/telegram/ui/Stories/recorder/AlbumButton.java b/TMessagesProj/src/main/java/org/telegram/ui/Stories/recorder/AlbumButton.java
+index cacaa7bc6..108ffc515 100644
+--- a/TMessagesProj/src/main/java/org/telegram/ui/Stories/recorder/AlbumButton.java
++++ b/TMessagesProj/src/main/java/org/telegram/ui/Stories/recorder/AlbumButton.java
+@@ -36,11 +36,15 @@ public class AlbumButton extends View {
+     private StaticLayout countLayout;
+     private float countLayoutWidth, countLayoutLeft;
+ 
++    private final Paint inu_selectorPaint = new Paint();
++    private final MediaController.PhotoEntry inu_cover;
++    private boolean inu_imageLoaded;
++
+     public AlbumButton(Context context, MediaController.PhotoEntry cover, CharSequence name, int count, Theme.ResourcesProvider resourcesProvider) {
+         super(context);
+ 
+         setPadding(dp(16), 0, dp(16), 0);
+-        setBackground(Theme.getSelectorDrawable(false));
++        inu_selectorPaint.setColor(Theme.getColor(Theme.key_listSelector, resourcesProvider));
+         setMinimumWidth(dp(196));
+         setLayoutParams(new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, 48));
+ 
+@@ -54,29 +58,34 @@ public class AlbumButton extends View {
+         subtitle = "" + count;
+ 
+         imageReceiver.setRoundRadius(dp(4));
+-        final Drawable noPhotosIcon = context.getResources().getDrawable(R.drawable.msg_media_gallery).mutate();
+-        noPhotosIcon.setColorFilter(new PorterDuffColorFilter(0x4dFFFFFF, PorterDuff.Mode.MULTIPLY));
+-        final CombinedDrawable noGalleryDrawable = new CombinedDrawable(Theme.createRoundRectDrawable(dp(6), 0xFF2E2E2F), noPhotosIcon);
+-        noGalleryDrawable.setFullsize(false);
+-        noGalleryDrawable.setIconSize(dp(18), dp(18));
+-        final String filter = imageSize + "_" + imageSize;
+-        if (cover != null && cover.thumbPath != null) {
+-            imageReceiver.setImage(ImageLocation.getForPath(cover.thumbPath), filter, null, null, noGalleryDrawable, null, 0);
+-        } else if (cover != null && cover.path != null) {
+-            if (cover.isVideo) {
+-                imageReceiver.setImage(ImageLocation.getForPath("vthumb://" + cover.imageId + ":" + cover.path), filter, null, null, noGalleryDrawable, null, 0);
+-            } else {
+-                imageReceiver.setImage(ImageLocation.getForPath("thumb://" + cover.imageId + ":" + cover.path), filter, null, null, noGalleryDrawable, null, 0);
+-            }
+-        } else {
+-            imageReceiver.setImageBitmap(noGalleryDrawable);
+-        }
++        inu_cover = cover;
+     }
+ 
+     @Override
+     protected void onAttachedToWindow() {
+         super.onAttachedToWindow();
+         imageReceiver.onAttachedToWindow();
++        if (!inu_imageLoaded) {
++            inu_imageLoaded = true;
++            final Drawable noPhotosIcon = getContext().getResources().getDrawable(R.drawable.msg_media_gallery).mutate();
++            noPhotosIcon.setColorFilter(new PorterDuffColorFilter(0x4dFFFFFF, PorterDuff.Mode.MULTIPLY));
++            final CombinedDrawable noGalleryDrawable = new CombinedDrawable(Theme.createRoundRectDrawable(dp(6), 0xFF2E2E2F), noPhotosIcon);
++            noGalleryDrawable.setFullsize(false);
++            noGalleryDrawable.setIconSize(dp(18), dp(18));
++            final String filter = imageSize + "_" + imageSize;
++            final MediaController.PhotoEntry cover = inu_cover;
++            if (cover != null && cover.thumbPath != null) {
++                imageReceiver.setImage(ImageLocation.getForPath(cover.thumbPath), filter, null, null, noGalleryDrawable, null, 0);
++            } else if (cover != null && cover.path != null) {
++                if (cover.isVideo) {
++                    imageReceiver.setImage(ImageLocation.getForPath("vthumb://" + cover.imageId + ":" + cover.path), filter, null, null, noGalleryDrawable, null, 0);
++                } else {
++                    imageReceiver.setImage(ImageLocation.getForPath("thumb://" + cover.imageId + ":" + cover.path), filter, null, null, noGalleryDrawable, null, 0);
++                }
++            } else {
++                imageReceiver.setImageBitmap(noGalleryDrawable);
++            }
++        }
+     }
+ 
+     @Override
+@@ -112,8 +121,17 @@ public class AlbumButton extends View {
+         }
+     }
+ 
++    @Override
++    protected void drawableStateChanged() {
++        super.drawableStateChanged();
++        invalidate();
++    }
++
+     @Override
+     protected void dispatchDraw(Canvas canvas) {
++        if (isPressed()) {
++            canvas.drawRect(0, 0, getWidth(), getHeight(), inu_selectorPaint);
++        }
+         float x = getPaddingLeft();
+         imageReceiver.setImageCoords(x, (getMeasuredHeight() - dp(imageSize)) / 2f, dp(imageSize), dp(imageSize));
+         imageReceiver.draw(canvas);
+-- 
+2.52.0
+

@@ -1,0 +1,47 @@
+From b7c394eeffa7672089b43111a56260402ee36a50 Mon Sep 17 00:00:00 2001
+From: alina sireneva <alina@tei.su>
+Date: Sun, 12 Apr 2026 17:03:46 +0300
+Subject: [PATCH] customizable double-tap delay
+
+---
+ .../java/org/telegram/ui/Components/GestureDetector2.java     | 2 +-
+ .../telegram/ui/Components/GestureDetectorFixDoubleTap.java   | 4 ++--
+ 2 files changed, 3 insertions(+), 3 deletions(-)
+
+diff --git a/TMessagesProj/src/main/java/org/telegram/ui/Components/GestureDetector2.java b/TMessagesProj/src/main/java/org/telegram/ui/Components/GestureDetector2.java
+index c020b6c66..a20755526 100644
+--- a/TMessagesProj/src/main/java/org/telegram/ui/Components/GestureDetector2.java
++++ b/TMessagesProj/src/main/java/org/telegram/ui/Components/GestureDetector2.java
+@@ -55,7 +55,7 @@ public class GestureDetector2 {
+ 
+     private static final int LONGPRESS_TIMEOUT = ViewConfiguration.getLongPressTimeout();
+     private static final int TAP_TIMEOUT = ViewConfiguration.getTapTimeout();
+-    public static final int DOUBLE_TAP_TIMEOUT = ViewConfiguration.getDoubleTapTimeout();
++    public static int DOUBLE_TAP_TIMEOUT = ViewConfiguration.getDoubleTapTimeout();
+     private static final int DOUBLE_TAP_MIN_TIME = 40;
+ 
+     private static final int SHOW_PRESS = 1;
+diff --git a/TMessagesProj/src/main/java/org/telegram/ui/Components/GestureDetectorFixDoubleTap.java b/TMessagesProj/src/main/java/org/telegram/ui/Components/GestureDetectorFixDoubleTap.java
+index ddf95e6f8..8b4a65f00 100644
+--- a/TMessagesProj/src/main/java/org/telegram/ui/Components/GestureDetectorFixDoubleTap.java
++++ b/TMessagesProj/src/main/java/org/telegram/ui/Components/GestureDetectorFixDoubleTap.java
+@@ -18,14 +18,14 @@ public class GestureDetectorFixDoubleTap {
+         void setOnDoubleTapListener(OnDoubleTapListener listener);
+     }
+ 
+-    static class GestureDetectorCompatImplBase implements GestureDetectorCompatImpl {
++    public static class GestureDetectorCompatImplBase implements GestureDetectorCompatImpl {
+         private int mTouchSlopSquare;
+         private int mDoubleTapSlopSquare;
+         private int mMinimumFlingVelocity;
+         private int mMaximumFlingVelocity;
+ 
+         private static final int TAP_TIMEOUT = ViewConfiguration.getTapTimeout();
+-        private static final int DOUBLE_TAP_TIMEOUT = 220;
++        public static int DOUBLE_TAP_TIMEOUT = 220;
+ 
+         // constants for Message.what used by GestureHandler below
+         private static final int SHOW_PRESS = 1;
+-- 
+2.52.0
+

@@ -1,0 +1,26 @@
+From 36f12892a66ab6adf7f9b59fb4e417b14e9257be Mon Sep 17 00:00:00 2001
+From: alina sireneva <alina@tei.su>
+Date: Thu, 9 Apr 2026 06:16:26 +0300
+Subject: [PATCH] show all recent stickers
+
+---
+ .../main/java/org/telegram/messenger/MediaDataController.java  | 3 ++-
+ 1 file changed, 2 insertions(+), 1 deletion(-)
+
+diff --git a/TMessagesProj/src/main/java/org/telegram/messenger/MediaDataController.java b/TMessagesProj/src/main/java/org/telegram/messenger/MediaDataController.java
+index eccfd16d4..8c1192578 100644
+--- a/TMessagesProj/src/main/java/org/telegram/messenger/MediaDataController.java
++++ b/TMessagesProj/src/main/java/org/telegram/messenger/MediaDataController.java
+@@ -905,7 +905,8 @@ public class MediaDataController extends BaseController {
+         if (type == TYPE_PREMIUM_STICKERS) {
+             return new ArrayList<>(recentStickers[type]);
+         }
+-        ArrayList<TLRPC.Document> result = new ArrayList<>(arrayList.subList(0, Math.min(arrayList.size(), 20)));
++        int limit = desu.inugram.InuConfig.SHOW_ALL_RECENT_STICKERS.getValue() ? arrayList.size() : 20;
++        ArrayList<TLRPC.Document> result = new ArrayList<>(arrayList.subList(0, Math.min(arrayList.size(), limit)));
+         if (firstEmpty && !result.isEmpty() && !StickersAlert.DISABLE_STICKER_EDITOR) {
+             result.add(0, new TLRPC.TL_documentEmpty());
+         }
+-- 
+2.52.0
+

@@ -1,0 +1,66 @@
+From 4c55aacb0189c8260023705872d3555dabc167d8 Mon Sep 17 00:00:00 2001
+From: alina sireneva <alina@tei.su>
+Date: Fri, 10 Apr 2026 03:04:56 +0300
+Subject: [PATCH] increase account limit to 8, disable premium enforcement
+
+---
+ TMessagesProj/jni/tgnet/ConnectionsManager.cpp        | 11 ++++++++++-
+ TMessagesProj/jni/tgnet/Defines.h                     |  2 +-
+ .../main/java/org/telegram/messenger/UserConfig.java  |  4 ++--
+ 3 files changed, 13 insertions(+), 4 deletions(-)
+
+diff --git a/TMessagesProj/jni/tgnet/ConnectionsManager.cpp b/TMessagesProj/jni/tgnet/ConnectionsManager.cpp
+index 32d590e85..4cf998568 100644
+--- a/TMessagesProj/jni/tgnet/ConnectionsManager.cpp
++++ b/TMessagesProj/jni/tgnet/ConnectionsManager.cpp
+@@ -150,9 +150,18 @@ ConnectionsManager& ConnectionsManager::getInstance(int32_t instanceNum) {
+             static ConnectionsManager instance3(3);
+             return instance3;
+         case 4:
+-        default:
+             static ConnectionsManager instance4(4);
+             return instance4;
++        case 5:
++            static ConnectionsManager instance5(5);
++            return instance5;
++        case 6:
++            static ConnectionsManager instance6(6);
++            return instance6;
++        case 7:
++        default:
++            static ConnectionsManager instance7(7);
++            return instance7;
+     }
+ }
+ 
+diff --git a/TMessagesProj/jni/tgnet/Defines.h b/TMessagesProj/jni/tgnet/Defines.h
+index 80c1c2a0e..9886ff2fa 100644
+--- a/TMessagesProj/jni/tgnet/Defines.h
++++ b/TMessagesProj/jni/tgnet/Defines.h
+@@ -27,7 +27,7 @@
+ #define DOWNLOAD_CONNECTIONS_COUNT 2
+ #define UPLOAD_CONNECTIONS_COUNT 4
+ #define CONNECTION_BACKGROUND_KEEP_TIME 10000
+-#define MAX_ACCOUNT_COUNT 5
++#define MAX_ACCOUNT_COUNT 8
+ #define USE_DELEGATE_HOST_RESOLVE
+ 
+ #define USE_IPV4_ONLY 0
+diff --git a/TMessagesProj/src/main/java/org/telegram/messenger/UserConfig.java b/TMessagesProj/src/main/java/org/telegram/messenger/UserConfig.java
+index 414057b94..35f648f08 100644
+--- a/TMessagesProj/src/main/java/org/telegram/messenger/UserConfig.java
++++ b/TMessagesProj/src/main/java/org/telegram/messenger/UserConfig.java
+@@ -24,8 +24,8 @@ import java.util.Arrays;
+ public class UserConfig extends BaseController {
+ 
+     public static int selectedAccount;
+-    public final static int MAX_ACCOUNT_DEFAULT_COUNT = 3;
+-    public final static int MAX_ACCOUNT_COUNT = 4;
++    public final static int MAX_ACCOUNT_DEFAULT_COUNT = 8;
++    public final static int MAX_ACCOUNT_COUNT = 8;
+ 
+     private final Object sync = new Object();
+     private volatile boolean configLoaded;
+-- 
+2.52.0
+

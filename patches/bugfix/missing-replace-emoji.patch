@@ -1,0 +1,194 @@
+From 8b80152e1402b4f3e16359250e1f9b93a3c43e35 Mon Sep 17 00:00:00 2001
+From: alina sireneva <alina@tei.su>
+Date: Sun, 19 Apr 2026 05:33:38 +0300
+Subject: [PATCH] added some missing Emoji.replaceEmoji calls in various places
+
+---
+ .../java/org/telegram/ui/Cells/DialogCell.java   |  1 +
+ .../main/java/org/telegram/ui/ChatActivity.java  | 16 ++++++++--------
+ .../telegram/ui/Components/EditTextEmoji.java    |  2 +-
+ .../ui/Components/MessagePreviewView.java        |  4 ++--
+ .../java/org/telegram/ui/MainTabsActivity.java   |  3 ++-
+ .../java/org/telegram/ui/SettingsActivity.java   |  4 ++--
+ .../Stories/recorder/CaptionContainerView.java   | 13 +++++++++++++
+ 7 files changed, 29 insertions(+), 14 deletions(-)
+
+diff --git a/TMessagesProj/src/main/java/org/telegram/ui/Cells/DialogCell.java b/TMessagesProj/src/main/java/org/telegram/ui/Cells/DialogCell.java
+index 1ce45b710..62587799b 100644
+--- a/TMessagesProj/src/main/java/org/telegram/ui/Cells/DialogCell.java
++++ b/TMessagesProj/src/main/java/org/telegram/ui/Cells/DialogCell.java
+@@ -2525,6 +2525,7 @@ public class DialogCell extends BaseCell implements StoriesListPlaceProvider.Ava
+             }
+         } else if ((useForceThreeLines || SharedConfig.useThreeLinesLayout) && !hasTags() && messageNameString != null && (currentDialogFolderId == 0 || currentDialogFolderDialogsCount == 1)) {
+             try {
++                messageNameString = Emoji.replaceEmoji(messageNameString, Theme.dialogs_messageNamePaint.getFontMetricsInt(), false);
+                 if (message != null && message.hasHighlightedWords()) {
+                     CharSequence s = AndroidUtilities.highlightText(messageNameString, message.highlightedWords, resourcesProvider);
+                     if (s != null) {
+diff --git a/TMessagesProj/src/main/java/org/telegram/ui/ChatActivity.java b/TMessagesProj/src/main/java/org/telegram/ui/ChatActivity.java
+index e7caf65be..42849557e 100644
+--- a/TMessagesProj/src/main/java/org/telegram/ui/ChatActivity.java
++++ b/TMessagesProj/src/main/java/org/telegram/ui/ChatActivity.java
+@@ -15093,11 +15093,11 @@ public class ChatActivity extends BaseFragment implements
+                             }
+                         }
+                         if (userNamesCount == 1) {
+-                            mess = TextUtils.concat(userNames, ": ", mess);
++                            mess = TextUtils.concat(Emoji.replaceEmoji(userNames, replyObjectTextView.getPaint().getFontMetricsInt(), false), ": ", mess);
+                         }
+                         replyObjectTextView.setText(mess);
+                     } else {
+-                        replyObjectTextView.setText(LocaleController.formatString("ForwardingFromNames", R.string.ForwardingFromNames, userNames));
++                        replyObjectTextView.setText(Emoji.replaceEmoji(LocaleController.formatString("ForwardingFromNames", R.string.ForwardingFromNames, userNames), replyObjectTextView.getPaint().getFontMetricsInt(), false));
+                     }
+                 }
+                 replyObjectHintTextView.setText(LocaleController.getString(R.string.TapForForwardingOptions));
+@@ -15120,20 +15120,20 @@ public class ChatActivity extends BaseFragment implements
+                     replyObjectTextView.setText(pendingLinkSearchString);
+                 } else {
+                     if (webPage.site_name != null) {
+-                        replyNameTextView.setText(webPage.site_name);
++                        replyNameTextView.setText(Emoji.replaceEmoji(webPage.site_name, replyObjectTextView.getPaint().getFontMetricsInt(), false));
+                     } else if (webPage.title != null) {
+-                        replyNameTextView.setText(webPage.title);
++                        replyNameTextView.setText(Emoji.replaceEmoji(webPage.title, replyObjectTextView.getPaint().getFontMetricsInt(), false));
+                     } else {
+                         replyNameTextView.setText(LocaleController.getString(R.string.LinkPreview));
+                     }
+                     if (webPage.title != null) {
+-                        replyObjectTextView.setText(webPage.title);
++                        replyObjectTextView.setText(Emoji.replaceEmoji(webPage.title, replyObjectTextView.getPaint().getFontMetricsInt(), false));
+                     } else if (webPage.description != null) {
+-                        replyObjectTextView.setText(webPage.description);
++                        replyObjectTextView.setText(Emoji.replaceEmoji(webPage.description, replyObjectTextView.getPaint().getFontMetricsInt(), false));
+                     } else if (webPage.author != null) {
+-                        replyObjectTextView.setText(webPage.author);
++                        replyObjectTextView.setText(Emoji.replaceEmoji(webPage.author, replyObjectTextView.getPaint().getFontMetricsInt(), false));
+                     } else {
+-                        replyObjectTextView.setText(webPage.display_url);
++                        replyObjectTextView.setText(Emoji.replaceEmoji(webPage.display_url, replyObjectTextView.getPaint().getFontMetricsInt(), false));
+                     }
+                     chatActivityEnterView.setWebPage(webPage, true);
+                 }
+diff --git a/TMessagesProj/src/main/java/org/telegram/ui/Components/EditTextEmoji.java b/TMessagesProj/src/main/java/org/telegram/ui/Components/EditTextEmoji.java
+index f7084bc79..8729e3b92 100644
+--- a/TMessagesProj/src/main/java/org/telegram/ui/Components/EditTextEmoji.java
++++ b/TMessagesProj/src/main/java/org/telegram/ui/Components/EditTextEmoji.java
+@@ -74,7 +74,7 @@ public class EditTextEmoji extends FrameLayout implements NotificationCenter.Not
+     private boolean showKeyboardOnResume;
+     private int lastSizeChangeValue1;
+     private boolean lastSizeChangeValue2;
+-    private int innerTextChange;
++    public int innerTextChange;
+     private boolean allowAnimatedEmoji;
+     public boolean includeNavigationBar;
+     AdjustPanLayoutHelper adjustPanLayoutHelper;
+diff --git a/TMessagesProj/src/main/java/org/telegram/ui/Components/MessagePreviewView.java b/TMessagesProj/src/main/java/org/telegram/ui/Components/MessagePreviewView.java
+index 70c2b05d1..54a213ba1 100644
+--- a/TMessagesProj/src/main/java/org/telegram/ui/Components/MessagePreviewView.java
++++ b/TMessagesProj/src/main/java/org/telegram/ui/Components/MessagePreviewView.java
+@@ -45,7 +45,7 @@ import org.telegram.messenger.BuildVars;
+ import org.telegram.messenger.ChatMessageSharedResources;
+ import org.telegram.messenger.ChatObject;
+ import org.telegram.messenger.ContactsController;
+-import org.telegram.messenger.FileLog;
++import org.telegram.messenger.Emoji;import org.telegram.messenger.FileLog;
+ import org.telegram.messenger.MessagePreviewParams;
+ import org.telegram.messenger.LocaleController;
+ import org.telegram.messenger.MessageObject;
+@@ -2156,7 +2156,7 @@ public class MessagePreviewView extends FrameLayout {
+         }
+ 
+         public void setSubtitle(CharSequence text, boolean animated) {
+-            subtitle.setText(text, animated && !LocaleController.isRTL);
++            subtitle.setText(Emoji.replaceEmoji(text, subtitle.getPaint().getFontMetricsInt(), false), animated && !LocaleController.isRTL);
+         }
+ 
+         @Override
+diff --git a/TMessagesProj/src/main/java/org/telegram/ui/MainTabsActivity.java b/TMessagesProj/src/main/java/org/telegram/ui/MainTabsActivity.java
+index b51937228..8e6633657 100644
+--- a/TMessagesProj/src/main/java/org/telegram/ui/MainTabsActivity.java
++++ b/TMessagesProj/src/main/java/org/telegram/ui/MainTabsActivity.java
+@@ -32,6 +32,7 @@ import org.telegram.messenger.AndroidUtilities;
+ import org.telegram.messenger.ApplicationLoader;
+ import org.telegram.messenger.BuildConfig;
+ import org.telegram.messenger.ContactsController;
++import org.telegram.messenger.Emoji;
+ import org.telegram.messenger.FileLoader;
+ import org.telegram.messenger.LiteMode;
+ import org.telegram.messenger.LocaleController;
+@@ -479,7 +480,7 @@ public class MainTabsActivity extends ViewPagerActivity implements NotificationC
+         final TextView textView = new TextView(getContext());
+         textView.setTextSize(TypedValue.COMPLEX_UNIT_DIP, 16);
+         textView.setTextColor(getThemedColor(Theme.key_dialogTextBlack));
+-        textView.setText(UserObject.getUserName(user));
++        textView.setText(Emoji.replaceEmoji(UserObject.getUserName(user), textView.getPaint().getFontMetricsInt(), false));
+         textView.setMaxLines(2);
+         textView.setEllipsize(TextUtils.TruncateAt.END);
+         btn.addView(textView, LayoutHelper.createLinear(0, LayoutHelper.WRAP_CONTENT, 1f, Gravity.CENTER_VERTICAL, 13, 0, 14, 0));
+diff --git a/TMessagesProj/src/main/java/org/telegram/ui/SettingsActivity.java b/TMessagesProj/src/main/java/org/telegram/ui/SettingsActivity.java
+index fab37b043..2a7cade93 100644
+--- a/TMessagesProj/src/main/java/org/telegram/ui/SettingsActivity.java
++++ b/TMessagesProj/src/main/java/org/telegram/ui/SettingsActivity.java
+@@ -527,7 +527,7 @@ public class SettingsActivity extends BaseFragment implements NotificationCenter
+ 
+         avatarDrawable.setInfo(user);
+         avatarView.setForUserOrChat(user, avatarDrawable);
+-        titleView.setText(UserObject.getUserName(user));
++        titleView.setText(Emoji.replaceEmoji(UserObject.getUserName(user), titleView.getPaint().getFontMetricsInt(), false));
+         final StringBuilder sb = new StringBuilder();
+         if (user != null) {
+             sb.append(PhoneFormat.getInstance().format("+" + user.phone));
+@@ -1034,7 +1034,7 @@ public class SettingsActivity extends BaseFragment implements NotificationCenter
+             avatarDrawable.setInfo(account, user);
+             avatarView.getImageReceiver().setCurrentAccount(account);
+             avatarView.setForUserOrChat(user, avatarDrawable);
+-            textView.setText(UserObject.getUserName(user));
++            textView.setText(Emoji.replaceEmoji(UserObject.getUserName(user), textView.getPaint().getFontMetricsInt(), false));
+ 
+             botDrawable.setCurrentAccount(account);
+             emojiStatusDrawable.setCurrentAccount(account);
+diff --git a/TMessagesProj/src/main/java/org/telegram/ui/Stories/recorder/CaptionContainerView.java b/TMessagesProj/src/main/java/org/telegram/ui/Stories/recorder/CaptionContainerView.java
+index 079353c74..857b504b9 100644
+--- a/TMessagesProj/src/main/java/org/telegram/ui/Stories/recorder/CaptionContainerView.java
++++ b/TMessagesProj/src/main/java/org/telegram/ui/Stories/recorder/CaptionContainerView.java
+@@ -33,6 +33,7 @@ import android.text.Editable;
+ import android.text.SpannableStringBuilder;
+ import android.text.TextPaint;
+ import android.text.TextWatcher;
++import android.text.style.ImageSpan;
+ import android.view.Gravity;
+ import android.view.MotionEvent;
+ import android.view.RoundedCorner;
+@@ -341,6 +342,9 @@ public class CaptionContainerView extends FrameLayout {
+                 if (editText.getEditText().suppressOnTextChanged) {
+                     return;
+                 }
++                if (editText.innerTextChange != 2 && (count - before) > 1) {
++                    processChange = true;
++                }
+                 if (mentionContainer == null) {
+                     createMentionsContainer();
+                 }
+@@ -352,9 +356,18 @@ public class CaptionContainerView extends FrameLayout {
+ 
+             private int lastLength;
+             private boolean lastOverLimit;
++            private boolean processChange;
+ 
+             @Override
+             public void afterTextChanged(Editable s) {
++                if (processChange) {
++                    ImageSpan[] spans = s.getSpans(0, s.length(), ImageSpan.class);
++                    for (int i = 0; i < spans.length; i++) {
++                        s.removeSpan(spans[i]);
++                    }
++                    Emoji.replaceEmoji(s, editText.getEditText().getPaint().getFontMetricsInt(), false, null);
++                    processChange = false;
++                }
+                 codePointCount = Character.codePointCount(s, 0, s.length());
+                 String limitText = null;
+                 final int limit = getCaptionLimit();
+-- 
+2.52.0
+

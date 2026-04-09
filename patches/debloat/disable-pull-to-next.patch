@@ -1,0 +1,25 @@
+From a327f9c3bde5da7fa664d65b90340cf404424983 Mon Sep 17 00:00:00 2001
+From: alina sireneva <alina@tei.su>
+Date: Fri, 10 Apr 2026 00:57:13 +0300
+Subject: [PATCH] disable pull to next channel
+
+---
+ TMessagesProj/src/main/java/org/telegram/ui/ChatActivity.java | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/TMessagesProj/src/main/java/org/telegram/ui/ChatActivity.java b/TMessagesProj/src/main/java/org/telegram/ui/ChatActivity.java
+index 72e080145..87a9cffda 100644
+--- a/TMessagesProj/src/main/java/org/telegram/ui/ChatActivity.java
++++ b/TMessagesProj/src/main/java/org/telegram/ui/ChatActivity.java
+@@ -6554,7 +6554,7 @@ public class ChatActivity extends BaseFragment implements
+                 if (!foundTopView) {
+                     scrolled = super.scrollVerticallyBy(dy, recycler, state);
+                 }
+-                final boolean allowPullingDownScroll = !isInPollAddOptionMode();
++                final boolean allowPullingDownScroll = !InuConfig.DISABLE_PULL_TO_NEXT.getValue() && !isInPollAddOptionMode();
+                 if (allowPullingDownScroll && dy > 0 && scrolled == 0 && (ChatObject.isChannel(currentChat) && !currentChat.megagroup || isTopic && !UserObject.isBotForum(currentUser)) && chatMode != MODE_SAVED && chatMode != MODE_SCHEDULED && chatListView.getScrollState() == RecyclerView.SCROLL_STATE_DRAGGING && !chatListView.isFastScrollAnimationRunning() && !chatListView.isMultiselect() && !isReport()) {
+                     if (pullingDownOffset == 0 && pullingDownDrawable != null) {
+                         if (nextChannels != null && !nextChannels.isEmpty()) {
+-- 
+2.52.0
+

@@ -1,0 +1,66 @@
+From 1b452a0bdef26d2a6ba04d8234608f39127edc96 Mon Sep 17 00:00:00 2001
+From: alina sireneva <alina@tei.su>
+Date: Fri, 10 Apr 2026 03:26:07 +0300
+Subject: [PATCH] add password autofill hints for password managers
+
+---
+ TMessagesProj/src/main/java/org/telegram/ui/LoginActivity.java  | 2 ++
+ .../main/java/org/telegram/ui/TwoStepVerificationActivity.java  | 1 +
+ .../java/org/telegram/ui/TwoStepVerificationSetupActivity.java  | 2 ++
+ 3 files changed, 5 insertions(+)
+
+diff --git a/TMessagesProj/src/main/java/org/telegram/ui/LoginActivity.java b/TMessagesProj/src/main/java/org/telegram/ui/LoginActivity.java
+index 3cad0e63c..fd6deeaea 100644
+--- a/TMessagesProj/src/main/java/org/telegram/ui/LoginActivity.java
++++ b/TMessagesProj/src/main/java/org/telegram/ui/LoginActivity.java
+@@ -5250,6 +5250,7 @@ public class LoginActivity extends BaseFragment implements NotificationCenter.No
+             codeField.setTypeface(Typeface.DEFAULT);
+             codeField.setGravity(LocaleController.isRTL ? Gravity.RIGHT : Gravity.LEFT);
+             codeField.setOnFocusChangeListener((v, hasFocus) -> outlineCodeField.animateSelection(hasFocus ? 1f : 0f));
++            desu.inugram.helpers.InuUtils.setAutofillHint(codeField, View.AUTOFILL_HINT_PASSWORD);
+             outlineCodeField.attachEditText(codeField);
+             outlineCodeField.addView(codeField, LayoutHelper.createFrame(LayoutHelper.MATCH_PARENT, LayoutHelper.WRAP_CONTENT, Gravity.TOP));
+             codeField.setOnEditorActionListener((textView, i, keyEvent) -> {
+@@ -7071,6 +7072,7 @@ public class LoginActivity extends BaseFragment implements NotificationCenter.No
+                 codeField[a].setPadding(padding, padding, padding, padding);
+                 if (stage == 0) {
+                     codeField[a].setInputType(InputType.TYPE_CLASS_TEXT | InputType.TYPE_TEXT_VARIATION_PASSWORD);
++                    desu.inugram.helpers.InuUtils.setAutofillHint(codeField[a], View.AUTOFILL_HINT_PASSWORD);
+                     codeField[a].setTransformationMethod(PasswordTransformationMethod.getInstance());
+                 }
+                 codeField[a].setTypeface(Typeface.DEFAULT);
+diff --git a/TMessagesProj/src/main/java/org/telegram/ui/TwoStepVerificationActivity.java b/TMessagesProj/src/main/java/org/telegram/ui/TwoStepVerificationActivity.java
+index b0de7a349..866e58931 100644
+--- a/TMessagesProj/src/main/java/org/telegram/ui/TwoStepVerificationActivity.java
++++ b/TMessagesProj/src/main/java/org/telegram/ui/TwoStepVerificationActivity.java
+@@ -272,6 +272,7 @@ public class TwoStepVerificationActivity extends BaseFragment implements Notific
+         passwordEditText.setBackground(null);
+         passwordEditText.setSingleLine(true);
+         passwordEditText.setInputType(InputType.TYPE_CLASS_TEXT | InputType.TYPE_TEXT_VARIATION_PASSWORD);
++        desu.inugram.helpers.InuUtils.setAutofillHint(passwordEditText, View.AUTOFILL_HINT_PASSWORD);
+         passwordEditText.setTransformationMethod(PasswordTransformationMethod.getInstance());
+         passwordEditText.setTypeface(Typeface.DEFAULT);
+         passwordEditText.setCursorColor(Theme.getColor(Theme.key_windowBackgroundWhiteInputFieldActivated));
+diff --git a/TMessagesProj/src/main/java/org/telegram/ui/TwoStepVerificationSetupActivity.java b/TMessagesProj/src/main/java/org/telegram/ui/TwoStepVerificationSetupActivity.java
+index 43204077d..7f57622ba 100644
+--- a/TMessagesProj/src/main/java/org/telegram/ui/TwoStepVerificationSetupActivity.java
++++ b/TMessagesProj/src/main/java/org/telegram/ui/TwoStepVerificationSetupActivity.java
+@@ -991,6 +991,7 @@ public class TwoStepVerificationSetupActivity extends BaseFragment {
+                 editTextFirstRow.setContentDescription(LocaleController.getString(R.string.LoginPassword));
+                 editTextFirstRow.setImeOptions(EditorInfo.IME_ACTION_DONE | EditorInfo.IME_FLAG_NO_EXTRACT_UI);
+                 editTextFirstRow.setInputType(InputType.TYPE_CLASS_TEXT | InputType.TYPE_TEXT_VARIATION_PASSWORD);
++                desu.inugram.helpers.InuUtils.setAutofillHint(editTextFirstRow, View.AUTOFILL_HINT_PASSWORD);
+                 editTextFirstRow.setTransformationMethod(PasswordTransformationMethod.getInstance());
+                 editTextFirstRow.setTypeface(Typeface.DEFAULT);
+ 
+@@ -1017,6 +1018,7 @@ public class TwoStepVerificationSetupActivity extends BaseFragment {
+                 editTextFirstRow.setContentDescription(LocaleController.getString(currentType == TYPE_CREATE_PASSWORD_STEP_1 ? R.string.EnterPassword : R.string.ReEnterPassword));
+                 editTextFirstRow.setImeOptions(EditorInfo.IME_ACTION_NEXT | EditorInfo.IME_FLAG_NO_EXTRACT_UI);
+                 editTextFirstRow.setInputType(InputType.TYPE_CLASS_TEXT | InputType.TYPE_TEXT_VARIATION_PASSWORD);
++                desu.inugram.helpers.InuUtils.setAutofillHint(editTextFirstRow, View.AUTOFILL_HINT_PASSWORD);
+                 editTextFirstRow.setTransformationMethod(PasswordTransformationMethod.getInstance());
+                 editTextFirstRow.setTypeface(Typeface.DEFAULT);
+ 
+-- 
+2.52.0
+

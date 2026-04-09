@@ -1,0 +1,107 @@
+From 21721585433bff013e125dbc19169de36ea83bee Mon Sep 17 00:00:00 2001
+From: alina sireneva <alina@tei.su>
+Date: Sun, 19 Apr 2026 09:52:49 +0300
+Subject: [PATCH] added some infra for internal web apps (mostly ported from
+ nekogram)
+
+---
+ .../java/org/telegram/ui/ActionBar/BottomSheetTabs.java  | 1 +
+ .../org/telegram/ui/bots/BotWebViewAttachedSheet.java    | 9 +++++++--
+ .../main/java/org/telegram/ui/bots/BotWebViewSheet.java  | 8 ++++----
+ .../java/org/telegram/ui/bots/WebViewRequestProps.java   | 1 +
+ 4 files changed, 13 insertions(+), 6 deletions(-)
+
+diff --git a/TMessagesProj/src/main/java/org/telegram/ui/ActionBar/BottomSheetTabs.java b/TMessagesProj/src/main/java/org/telegram/ui/ActionBar/BottomSheetTabs.java
+index 5d2840386..5d4611144 100644
+--- a/TMessagesProj/src/main/java/org/telegram/ui/ActionBar/BottomSheetTabs.java
++++ b/TMessagesProj/src/main/java/org/telegram/ui/ActionBar/BottomSheetTabs.java
+@@ -927,6 +927,7 @@ public class BottomSheetTabs extends FrameLayout {
+                 return title;
+             }
+             if (props == null) return "";
++            if (props.inu_internalType != 0) return desu.inugram.helpers.WebAppHelper.getInternalBotName(props);
+             TLRPC.User user = MessagesController.getInstance(props.currentAccount).getUser(props.botId);
+             return UserObject.getUserName(user);
+         }
+diff --git a/TMessagesProj/src/main/java/org/telegram/ui/bots/BotWebViewAttachedSheet.java b/TMessagesProj/src/main/java/org/telegram/ui/bots/BotWebViewAttachedSheet.java
+index 39e2efa28..3a6c2c737 100644
+--- a/TMessagesProj/src/main/java/org/telegram/ui/bots/BotWebViewAttachedSheet.java
++++ b/TMessagesProj/src/main/java/org/telegram/ui/bots/BotWebViewAttachedSheet.java
+@@ -948,7 +948,7 @@ public class BotWebViewAttachedSheet implements NotificationCenter.NotificationC
+         this.currentWebApp = props.app;
+ 
+         TLRPC.User userbot = MessagesController.getInstance(currentAccount).getUser(botId);
+-        CharSequence title = UserObject.getUserName(userbot);
++        CharSequence title = props.inu_internalType > 0 ? desu.inugram.helpers.WebAppHelper.getInternalBotName(props) : UserObject.getUserName(userbot);
+         try {
+             TextPaint tp = new TextPaint();
+             tp.setTextSize(dp(20));
+@@ -1022,12 +1022,17 @@ public class BotWebViewAttachedSheet implements NotificationCenter.NotificationC
+             otherItem.addSubItem(R.id.menu_delete_bot, R.drawable.msg_delete, LocaleController.getString(R.string.BotWebViewDeleteBot));
+         }
+         hasPrivacy(currentAccount, botId, has -> {
+-            if (has) {
++            if (has && props.inu_internalType == 0) {
+                 otherItem.showSubItem(R.id.menu_privacy);
+             } else {
+                 otherItem.hideSubItem(R.id.menu_privacy);
+             }
+         });
++        if (props.inu_internalType != 0) {
++            otherItem.hideSubItem(R.id.menu_open_bot);
++            otherItem.hideSubItem(R.id.menu_share_bot);
++            otherItem.hideSubItem(R.id.menu_tos_bot);
++        }
+ 
+         actionBar.setActionBarMenuOnItemClick(new ActionBar.ActionBarMenuOnItemClick() {
+             @Override
+diff --git a/TMessagesProj/src/main/java/org/telegram/ui/bots/BotWebViewSheet.java b/TMessagesProj/src/main/java/org/telegram/ui/bots/BotWebViewSheet.java
+index 387e9aba9..e04c6dcfa 100644
+--- a/TMessagesProj/src/main/java/org/telegram/ui/bots/BotWebViewSheet.java
++++ b/TMessagesProj/src/main/java/org/telegram/ui/bots/BotWebViewSheet.java
+@@ -1346,7 +1346,7 @@ public class BotWebViewSheet extends Dialog implements NotificationCenter.Notifi
+         this.currentWebApp = props.app;
+ 
+         final TLRPC.User userbot = MessagesController.getInstance(currentAccount).getUser(botId);
+-        CharSequence title = UserObject.getUserName(userbot);
++        CharSequence title = props.inu_internalType > 0 ? desu.inugram.helpers.WebAppHelper.getInternalBotName(props) : UserObject.getUserName(userbot);
+         try {
+             TextPaint tp = new TextPaint();
+             tp.setTextSize(dp(20));
+@@ -1662,7 +1662,7 @@ public class BotWebViewSheet extends Dialog implements NotificationCenter.Notifi
+             o.addGap();
+         }
+         o
+-            .addIf(onVerifiedAge == null, R.drawable.msg_bot, LocaleController.getString(R.string.BotWebViewOpenBot), () -> {
++            .addIf(onVerifiedAge == null && requestProps.inu_internalType == 0, R.drawable.msg_bot, LocaleController.getString(R.string.BotWebViewOpenBot), () -> {
+                 if (parentActivity instanceof LaunchActivity) {
+                     ((LaunchActivity) parentActivity).presentFragment(ChatActivity.of(botId));
+                 }
+@@ -1685,10 +1685,10 @@ public class BotWebViewSheet extends Dialog implements NotificationCenter.Notifi
+                 webViewContainer.loadFlickerAndSettingsItem(currentAccount, botId, null);
+                 webViewContainer.reload();
+             })
+-            .addIf(onVerifiedAge == null && userbot != null && userbot.bot_has_main_app, R.drawable.msg_home, LocaleController.getString(R.string.AddShortcut), () -> {
++            .addIf(onVerifiedAge == null && userbot != null && userbot.bot_has_main_app && requestProps.inu_internalType == 0, R.drawable.msg_home, LocaleController.getString(R.string.AddShortcut), () -> {
+                 MediaDataController.getInstance(currentAccount).installShortcut(botId, MediaDataController.SHORTCUT_TYPE_ATTACHED_BOT);
+             })
+-            .addIf(onVerifiedAge == null, R.drawable.menu_intro, LocaleController.getString(R.string.BotWebViewToS), () -> {
++            .addIf(onVerifiedAge == null && requestProps.inu_internalType == 0, R.drawable.menu_intro, LocaleController.getString(R.string.BotWebViewToS), () -> {
+                 Browser.openUrl(getContext(), LocaleController.getString(R.string.BotWebViewToSLink));
+             })
+             .addIf(onVerifiedAge == null && currentBot != null && (currentBot.show_in_side_menu || currentBot.show_in_attach_menu), R.drawable.msg_delete, LocaleController.getString(R.string.BotWebViewDeleteBot), () -> {
+diff --git a/TMessagesProj/src/main/java/org/telegram/ui/bots/WebViewRequestProps.java b/TMessagesProj/src/main/java/org/telegram/ui/bots/WebViewRequestProps.java
+index d347faf60..d3aafca0e 100644
+--- a/TMessagesProj/src/main/java/org/telegram/ui/bots/WebViewRequestProps.java
++++ b/TMessagesProj/src/main/java/org/telegram/ui/bots/WebViewRequestProps.java
+@@ -28,6 +28,7 @@ public class WebViewRequestProps {
+     public int flags;
+     public boolean compact;
+     public boolean fullscreen;
++    public int inu_internalType;
+ 
+     public TLObject response;
+     public long responseTime;
+-- 
+2.52.0
+

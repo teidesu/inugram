@@ -1,0 +1,85 @@
+From 4f4a2081ac1d9b4f665305031a5403d0c243011f Mon Sep 17 00:00:00 2001
+From: alina sireneva <alina@tei.su>
+Date: Mon, 20 Apr 2026 00:37:37 +0300
+Subject: [PATCH] prevent the app from getting stuck when closing the attach
+ panel before it fully opens
+
+---
+ .../ui/Components/ChatAttachAlert.java        | 39 ++++++++++---------
+ 1 file changed, 21 insertions(+), 18 deletions(-)
+
+diff --git a/TMessagesProj/src/main/java/org/telegram/ui/Components/ChatAttachAlert.java b/TMessagesProj/src/main/java/org/telegram/ui/Components/ChatAttachAlert.java
+index bb0b78f5a..e40b1e162 100644
+--- a/TMessagesProj/src/main/java/org/telegram/ui/Components/ChatAttachAlert.java
++++ b/TMessagesProj/src/main/java/org/telegram/ui/Components/ChatAttachAlert.java
+@@ -5068,46 +5068,49 @@ public class ChatAttachAlert extends BottomSheet implements NotificationCenter.N
+         currentSheetAnimation.setInterpolator(openInterpolator);
+         AnimationNotificationsLocker locker = new AnimationNotificationsLocker();
+         BottomSheetDelegateInterface delegate = super.delegate;
++        final boolean[] finished = { false };
++        final boolean[] wasCancelled = { false };
+         final Runnable onAnimationEnd = () -> {
+-            currentSheetAnimation = null;
+-            appearSpringAnimation = null;
++            // idempotent: rapid dismiss cancels one animator mid-flight; original guards
++            // required both to end naturally, leaking the locker for ~5s. on cancel, leave
++            // currentSheetAnimation/appearSpringAnimation non-null so the outer
++            // cancelSheetAnimation() can still cancel the spring — otherwise it keeps
++            // pulling translation_Y to 0 and the dismiss animator can't visually close.
++            if (finished[0]) return;
++            finished[0] = true;
+             locker.unlock();
+             currentSheetAnimationType = 0;
+-            if (delegate != null) {
+-                delegate.onOpenAnimationEnd();
+-            }
+             if (useHardwareLayer) {
+                 container.setLayerType(View.LAYER_TYPE_NONE, null);
+             }
+-
+             if (isFullscreen) {
+                 WindowManager.LayoutParams params = getWindow().getAttributes();
+                 params.flags &= ~WindowManager.LayoutParams.FLAG_FULLSCREEN;
+                 getWindow().setAttributes(params);
+             }
+             NotificationCenter.getGlobalInstance().postNotificationName(NotificationCenter.startAllHeavyOperations, 512);
++            if (!wasCancelled[0]) {
++                currentSheetAnimation = null;
++                appearSpringAnimation = null;
++                if (delegate != null) {
++                    delegate.onOpenAnimationEnd();
++                }
++            }
+         };
+         appearSpringAnimation.addEndListener((animation, cancelled, value, velocity) -> {
+-            if (currentSheetAnimation != null && !currentSheetAnimation.isRunning()) {
+-                onAnimationEnd.run();
+-            }
++            if (cancelled) wasCancelled[0] = true;
++            onAnimationEnd.run();
+         });
+         currentSheetAnimation.addListener(new AnimatorListenerAdapter() {
+             @Override
+             public void onAnimationEnd(Animator animation) {
+-                if (currentSheetAnimation != null && currentSheetAnimation.equals(animation)) {
+-                    if (appearSpringAnimation != null && !appearSpringAnimation.isRunning()) {
+-                        onAnimationEnd.run();
+-                    }
+-                }
++                onAnimationEnd.run();
+             }
+ 
+             @Override
+             public void onAnimationCancel(Animator animation) {
+-                if (currentSheetAnimation != null && currentSheetAnimation.equals(animation)) {
+-                    currentSheetAnimation = null;
+-                    currentSheetAnimationType = 0;
+-                }
++                wasCancelled[0] = true;
++                onAnimationEnd.run();
+             }
+         });
+         locker.lock();
+-- 
+2.52.0
+

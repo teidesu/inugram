@@ -1,0 +1,67 @@
+From 3a630e27524eb5572105e0e979d31060b51984fb Mon Sep 17 00:00:00 2001
+From: alina sireneva <alina@tei.su>
+Date: Thu, 9 Apr 2026 19:06:23 +0300
+Subject: [PATCH] hide sticker time overlay
+
+---
+ .../org/telegram/ui/Cells/ChatMessageCell.java   | 16 ++++++++++++++--
+ 1 file changed, 14 insertions(+), 2 deletions(-)
+
+diff --git a/TMessagesProj/src/main/java/org/telegram/ui/Cells/ChatMessageCell.java b/TMessagesProj/src/main/java/org/telegram/ui/Cells/ChatMessageCell.java
+index 018179c62..2f3441b40 100644
+--- a/TMessagesProj/src/main/java/org/telegram/ui/Cells/ChatMessageCell.java
++++ b/TMessagesProj/src/main/java/org/telegram/ui/Cells/ChatMessageCell.java
+@@ -18421,6 +18421,11 @@ public class ChatMessageCell extends BaseCell implements SeekBar.SeekBarDelegate
+         } else {
+             signWidth = 0;
+         }
++        if (messageObject.isAnyKindOfSticker() && InuConfig.STICKER_TIME_MODE.isHideTime()) {
++            timeWidth -= timeTextWidth;
++            timeTextWidth = 0;
++            currentTimeString = "";
++        }
+     }
+ 
+     protected boolean shouldDrawSelectionOverlay() {
+@@ -23360,6 +23365,9 @@ public class ChatMessageCell extends BaseCell implements SeekBar.SeekBarDelegate
+         if (!drawFromPinchToZoom && delegate != null && delegate.getPinchToZoomHelper() != null && delegate.getPinchToZoomHelper().isInOverlayModeFor(this) && shouldDrawTimeOnMedia()) {
+             return;
+         }
++        if (currentMessageObject != null && currentMessageObject.isAnyKindOfSticker() && !isDrawSelectionBackground() && (InuConfig.STICKER_TIME_MODE.isHideFull() || !currentMessageObject.isOut() && InuConfig.STICKER_TIME_MODE.isHideIncoming())) {
++            return;
++        }
+         if (currentMessageObject != null && currentMessageObject.type == MessageObject.TYPE_JOINED_CHANNEL) {
+             return;
+         }
+@@ -23437,6 +23445,9 @@ public class ChatMessageCell extends BaseCell implements SeekBar.SeekBarDelegate
+         if ((!drawTime || groupPhotoInvisible) && shouldDrawTimeOnMedia() || timeLayout == null || (currentMessageObject.deleted && currentPosition != null) || currentMessageObject.type == MessageObject.TYPE_PHONE_CALL) {
+             return;
+         }
++        if (shouldDrawTimeOnMedia() && currentMessageObject.isAnyKindOfSticker() && !currentMessageObject.isOutOwner() && timeWidth <= 0) {
++            return;
++        }
+         if (currentMessageObject.type == MessageObject.TYPE_ROUND_VIDEO) {
+             Theme.chat_timePaint.setColor(
+                 ColorUtils.blendARGB(
+@@ -23538,7 +23549,8 @@ public class ChatMessageCell extends BaseCell implements SeekBar.SeekBarDelegate
+             if (effectId != 0) {
+                 timeX -= dp(14 + 4);
+             }
+-            float x1 = timeX - dp(bigRadius ? 6 : 4);
++            boolean compactStickerTime = currentMessageObject != null && currentMessageObject.isAnyKindOfSticker() && InuConfig.STICKER_TIME_MODE.isHideTime();
++            float x1 = timeX - dp(bigRadius ? 6 : compactStickerTime ? 2 : 4);
+             float offsetX = (currentMessageObject != null && currentMessageObject.isAnyKindOfSticker()) ? dp(2) : 0;
+             float timeY;
+             if (documentAttachType == DOCUMENT_ATTACH_TYPE_ROUND && (currentMessageObject == null || !currentMessageObject.isRoundOnce())) {
+@@ -23548,7 +23560,7 @@ public class ChatMessageCell extends BaseCell implements SeekBar.SeekBarDelegate
+             }
+             float y1 = timeY - dp(23);
+             float timeHeight = Math.max(dp(17), Theme.chat_timePaint.getTextSize() + dp(5));
+-            rect.set(x1 - offsetX, y1, offsetX + x1 + timeWidth + dp((bigRadius ? 12 : 8) + (currentMessageObject.isOutOwner() ? 20 + (currentMessageObject.type == MessageObject.TYPE_EMOJIS ? 4 : 0) : 0)), y1 + timeHeight);
++            rect.set(x1 - offsetX, y1, offsetX + x1 + timeWidth + dp((bigRadius ? 12 : compactStickerTime ? 4 : 8) + (currentMessageObject.isOutOwner() ? 20 + (currentMessageObject.type == MessageObject.TYPE_EMOJIS ? 4 : 0) : 0)), y1 + timeHeight);
+ 
+             if (groupMedia != null) {
+                 groupMedia.drawBlurRect(canvas, rect, r, .5f * timeAlpha * alpha);
+-- 
+2.52.0
+

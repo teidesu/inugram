@@ -1,0 +1,46 @@
+From 9206a1d8c5447cf9036fb7411a2d9394a3b52ef2 Mon Sep 17 00:00:00 2001
+From: alina sireneva <alina@tei.su>
+Date: Sun, 12 Apr 2026 16:37:02 +0300
+Subject: [PATCH] confirmation before calling
+
+---
+ .../telegram/ui/Components/voip/VoIPHelper.java  | 16 +++++++++++++++-
+ 1 file changed, 15 insertions(+), 1 deletion(-)
+
+diff --git a/TMessagesProj/src/main/java/org/telegram/ui/Components/voip/VoIPHelper.java b/TMessagesProj/src/main/java/org/telegram/ui/Components/voip/VoIPHelper.java
+index f78fd59d5..fc20e5c4c 100644
+--- a/TMessagesProj/src/main/java/org/telegram/ui/Components/voip/VoIPHelper.java
++++ b/TMessagesProj/src/main/java/org/telegram/ui/Components/voip/VoIPHelper.java
+@@ -73,7 +73,11 @@ public class VoIPHelper {
+ 
+ 	private static final int VOIP_SUPPORT_ID = 4244000;
+ 
+-	public static void startCall(TLRPC.User user, boolean videoCall, boolean canVideoCall, final Activity activity, TLRPC.UserFull userFull, AccountInstance accountInstance) {
++    public static void startCall(TLRPC.User user, boolean videoCall, boolean canVideoCall, final Activity activity, TLRPC.UserFull userFull, AccountInstance accountInstance) {
++        inu_startCall(user, videoCall, canVideoCall, activity, userFull, accountInstance, false);
++    }
++
++	public static void inu_startCall(TLRPC.User user, boolean videoCall, boolean canVideoCall, final Activity activity, TLRPC.UserFull userFull, AccountInstance accountInstance, boolean confirmed) {
+ 		if (accountInstance == null ? MessagesController.getInstance(UserConfig.selectedAccount).isFrozen() : accountInstance.getMessagesController().isFrozen()) {
+ 			AccountFrozenAlert.show(accountInstance == null ? UserConfig.selectedAccount : accountInstance.getCurrentAccount());
+ 			return;
+@@ -102,6 +106,16 @@ public class VoIPHelper {
+ 			return;
+ 		}
+ 
++        if (!confirmed && desu.inugram.InuConfig.CALL_CONFIRMATION.getValue()) {
++            new AlertDialog.Builder(activity)
++                .setTitle(LocaleController.getString(R.string.InuCallConfirmationTitle))
++                .setMessage(AndroidUtilities.replaceTags(LocaleController.formatString(R.string.InuCallConfirmationText, ContactsController.formatName(user.first_name, user.last_name))))
++                .setPositiveButton(LocaleController.getString(R.string.OK), (dialog, which) -> inu_startCall(user, videoCall, canVideoCall, activity, userFull, accountInstance, true))
++                .setNegativeButton(LocaleController.getString(R.string.Cancel), null)
++                .show();
++            return;
++        }
++
+ 		if (Build.VERSION.SDK_INT >= 23) {
+ 			int code;
+ 			ArrayList<String> permissions = new ArrayList<>();
+-- 
+2.52.0
+

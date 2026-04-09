@@ -1,0 +1,60 @@
+From 7bb0319bba23013e1cbac018d5aa9ef973acf2eb Mon Sep 17 00:00:00 2001
+From: alina sireneva <alina@tei.su>
+Date: Wed, 15 Apr 2026 01:39:38 +0300
+Subject: [PATCH] fixed a few visual glitches with the media player inside the
+ shared media view
+
+---
+ .../ui/Components/SharedMediaLayout.java      | 19 ++++++++++++++++---
+ 1 file changed, 16 insertions(+), 3 deletions(-)
+
+diff --git a/TMessagesProj/src/main/java/org/telegram/ui/Components/SharedMediaLayout.java b/TMessagesProj/src/main/java/org/telegram/ui/Components/SharedMediaLayout.java
+index 0cdfd44e7..5a9f9dc01 100644
+--- a/TMessagesProj/src/main/java/org/telegram/ui/Components/SharedMediaLayout.java
++++ b/TMessagesProj/src/main/java/org/telegram/ui/Components/SharedMediaLayout.java
+@@ -3630,10 +3630,19 @@ public class SharedMediaLayout extends FrameLayout implements NotificationCenter
+                                 );
+                                 final int paddingTopNew = page.listView.getPaddingTop();
+                                 final int scroll = paddingTopOld - paddingTopNew;
+-                                AndroidUtilities.doOnLayout(page.listView, () -> page.listView.scrollBy(0, scroll));
++                                AndroidUtilities.doOnLayout(page.listView, () -> { if (page.listView.computeVerticalScrollOffset() > 0) page.listView.scrollBy(0, scroll); });
++                                if (page.progressView != null) {
++                                    final boolean photos = page.selectedType == TAB_PHOTOVIDEO || isAnyStoryPageType(page.selectedType);
++                                    ((FrameLayout.LayoutParams) page.progressView.getLayoutParams()).topMargin = dp(48 + (photos ? 8 : 12)) + topLayoutPadding;
++                                    page.progressView.requestLayout();
++                                }
+                             }
+                         }
+                     }
++                    if (savedMessagesContainer != null && savedMessagesContainer.getParent() instanceof MediaPage) {
++                        ((FrameLayout.LayoutParams) savedMessagesContainer.getLayoutParams()).topMargin = dp(48 + 8) + topLayoutPadding;
++                        savedMessagesContainer.requestLayout();
++                    }
+                     // SharedMediaLayout.this.setPadding(0, , 0, 0);
+                 });
+                 fragmentContextView = new FragmentContextView(context, parent, this, false, resourcesProvider) {
+@@ -7282,7 +7291,9 @@ public class SharedMediaLayout extends FrameLayout implements NotificationCenter
+                 }
+                 if (savedMessagesContainer.getParent() != mediaPages[a]) {
+                     AndroidUtilities.removeFromParent(savedMessagesContainer);
+-                    mediaPages[a].addView(savedMessagesContainer, LayoutHelper.createFrame(LayoutHelper.MATCH_PARENT, LayoutHelper.MATCH_PARENT, Gravity.FILL, 0, 48 + 8, 0, 0));
++                    final FrameLayout.LayoutParams savedLp = LayoutHelper.createFrame(LayoutHelper.MATCH_PARENT, LayoutHelper.MATCH_PARENT, Gravity.FILL, 0, 48 + 8, 0, 0);
++                    savedLp.topMargin += topLayoutPadding;
++                    mediaPages[a].addView(savedMessagesContainer, savedLp);
+                 }
+             } else if (mediaPages[a].selectedType == TAB_BOT_PREVIEWS) {
+                 if (currentAdapter != null) {
+@@ -7305,7 +7316,9 @@ public class SharedMediaLayout extends FrameLayout implements NotificationCenter
+                 }
+             }
+             final boolean photos = mediaPages[a].selectedType == TAB_PHOTOVIDEO || isAnyStoryPageType(mediaPages[a].selectedType);
+-            mediaPages[a].progressView.setLayoutParams(LayoutHelper.createFrame(LayoutHelper.MATCH_PARENT, LayoutHelper.MATCH_PARENT, Gravity.FILL, photos ? 0 : 12, 48 + (photos ? 8 : 12), photos ? 0 : 12, photos ? 0 : 12));
++            final FrameLayout.LayoutParams progressLp = LayoutHelper.createFrame(LayoutHelper.MATCH_PARENT, LayoutHelper.MATCH_PARENT, Gravity.FILL, photos ? 0 : 12, 48 + (photos ? 8 : 12), photos ? 0 : 12, photos ? 0 : 12);
++            progressLp.topMargin += topLayoutPadding;
++            mediaPages[a].progressView.setLayoutParams(progressLp);
+             if (sections) {
+                 mediaPages[a].listView.setSections(false);
+             } else {
+-- 
+2.52.0
+

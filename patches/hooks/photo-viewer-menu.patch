@@ -1,0 +1,119 @@
+From 6a474c85130633b861c777ca84dfaddc4a44ece7 Mon Sep 17 00:00:00 2001
+From: alina sireneva <alina@tei.su>
+Date: Sat, 11 Apr 2026 03:35:42 +0300
+Subject: [PATCH] "copy photo" in photo viewer
+
+---
+ .../java/org/telegram/ui/PhotoViewer.java     | 33 +++++++++++++++++--
+ 1 file changed, 30 insertions(+), 3 deletions(-)
+
+diff --git a/TMessagesProj/src/main/java/org/telegram/ui/PhotoViewer.java b/TMessagesProj/src/main/java/org/telegram/ui/PhotoViewer.java
+index 6d74644cf..bbb65fb71 100644
+--- a/TMessagesProj/src/main/java/org/telegram/ui/PhotoViewer.java
++++ b/TMessagesProj/src/main/java/org/telegram/ui/PhotoViewer.java
+@@ -871,7 +871,7 @@ public class PhotoViewer implements NotificationCenter.NotificationCenterDelegat
+     public BlurringShader.BlurManager blurManager;
+     private BlurringShader.StoryBlurDrawer shadowBlurer;
+     private WindowManager.LayoutParams windowLayoutParams;
+-    private FrameLayoutDrawer containerView;
++    public FrameLayoutDrawer containerView;
+     private PhotoViewerWebView photoViewerWebView;
+     public FrameLayout windowView;
+     private ClippingImageView animatingImageView;
+@@ -881,7 +881,7 @@ public class PhotoViewer implements NotificationCenter.NotificationCenterDelegat
+     private TextView docNameTextView;
+     private TextView docInfoTextView;
+     private TextView doneButtonFullWidth;
+-    private ActionBarMenuItem menuItem;
++    public ActionBarMenuItem menuItem;
+     private ActionBarMenuItem videoItem;
+     private ActionBarMenuSubItem allMediaItem;
+     private ActionBarMenuSlider.SpeedSlider speedItem;
+@@ -4507,7 +4507,7 @@ public class PhotoViewer implements NotificationCenter.NotificationCenterDelegat
+         }
+     }
+ 
+-    private void showDownloadAlert() {
++    public void showDownloadAlert() {
+         AlertDialog.Builder builder = new AlertDialog.Builder(parentActivity, resourcesProvider);
+         builder.setTitle(getString("AppName", R.string.AppName));
+         builder.setPositiveButton(getString("OK", R.string.OK), null);
+@@ -5627,6 +5627,8 @@ public class PhotoViewer implements NotificationCenter.NotificationCenterDelegat
+                     } catch (Exception e) {
+                         FileLog.e(e);
+                     }
++                } else if (desu.inugram.helpers.PhotoViewerHelper.handleMenuClick(id, PhotoViewer.this)) {
++                    // handled by inugram
+                 } else if (id == gallery_menu_masks || id == gallery_menu_masks2) {
+                     if (parentActivity == null || currentMessageObject == null) {
+                         return;
+@@ -5988,6 +5990,7 @@ public class PhotoViewer implements NotificationCenter.NotificationCenterDelegat
+         galleryGap = menuItem.addColoredGap();
+         galleryGap.setColor(0xff181818);
+         menuItem.addSubItem(gallery_menu_openin, R.drawable.msg_openin, getString(R.string.OpenInExternalApp)).setColors(0xfffafafa, 0xfffafafa);
++        desu.inugram.helpers.PhotoViewerHelper.addMenuItems(menuItem);
+         pipItem = menuItem.addSubItem(gallery_menu_pip, R.drawable.menu_video_pip, getString(R.string.PipMinimize)).setColors(0xfffafafa, 0xfffafafa);
+         allMediaItem = menuItem.addSubItem(gallery_menu_showall, R.drawable.msg_media, getString(R.string.ShowAllMedia));
+         allMediaItem.setColors(0xfffafafa, 0xfffafafa);
+@@ -14116,6 +14119,7 @@ public class PhotoViewer implements NotificationCenter.NotificationCenterDelegat
+         menuItem.hideSubItem(gallery_menu_report);
+         menuItem.hideSubItem(gallery_menu_share);
+         menuItem.hideSubItem(gallery_menu_openin);
++        desu.inugram.helpers.PhotoViewerHelper.resetMenuItems(menuItem);
+         menuItem.hideSubItem(gallery_menu_savegif);
+         menuItem.hideSubItem(gallery_menu_masks2);
+         menuItem.hideSubItem(gallery_menu_edit_avatar);
+@@ -14713,6 +14717,7 @@ public class PhotoViewer implements NotificationCenter.NotificationCenterDelegat
+                     menuItem.hideSubItem(gallery_menu_hide_translation);
+                 }
+                 allowShare = !noforwards;
++                desu.inugram.helpers.PhotoViewerHelper.updateMenuItems(menuItem, allowShare, isVideo, newMessageObject.isGif());
+                 if (newMessageObject.isNewGif() && allowShare && !DialogObject.isEncryptedDialog(newMessageObject.getDialogId())) {
+                     menuItem.showSubItem(gallery_menu_savegif);
+                 }
+@@ -14982,6 +14987,7 @@ public class PhotoViewer implements NotificationCenter.NotificationCenterDelegat
+                 galleryGap.setVisibility(View.VISIBLE);
+             }
+             allowShare = !noforwards;
++            desu.inugram.helpers.PhotoViewerHelper.updateMenuItems(menuItem, allowShare, false, false);
+             menuItem.showSubItem(gallery_menu_share);
+             menuItem.checkHideMenuItem();
+             groupedPhotosListView.fillList();
+@@ -15260,6 +15266,7 @@ public class PhotoViewer implements NotificationCenter.NotificationCenterDelegat
+             TLRPC.PageBlock pageBlock = pageBlocksAdapter.get(switchingToIndex);
+             caption = pageBlocksAdapter.getCaption(switchingToIndex);
+             isVideo = pageBlocksAdapter.isVideo(switchingToIndex);
++            desu.inugram.helpers.PhotoViewerHelper.updateMenuItems(menuItem, allowShare, isVideo, false);
+             if (isVideo) {
+                 if (allowShare) {
+                     menuItem.showSubItem(gallery_menu_openin);
+@@ -23444,6 +23451,26 @@ public class PhotoViewer implements NotificationCenter.NotificationCenterDelegat
+         return pipItem != null && pipItem.isEnabled() && isPlaying;
+     }
+ 
++    public File inu_getCurrentPhotoFile() {
++        File f = null;
++        if (currentMessageObject != null) {
++            if (MessageObject.getMedia(currentMessageObject.messageOwner) instanceof TLRPC.TL_messageMediaWebPage && MessageObject.getMedia(currentMessageObject.messageOwner).webpage != null && MessageObject.getMedia(currentMessageObject.messageOwner).webpage.document == null) {
++                TLObject fileLocation = getFileLocation(currentIndex, null);
++                f = FileLoader.getInstance(currentAccount).getPathToAttach(fileLocation, true);
++            } else {
++                f = FileLoader.getInstance(currentAccount).getPathToMessage(currentMessageObject.messageOwner);
++            }
++        } else if (currentFileLocationVideo != null) {
++            f = FileLoader.getInstance(currentAccount).getPathToAttach(getFileLocation(currentFileLocationVideo), getFileLocationExt(currentFileLocationVideo), avatarsDialogId != 0 || isEvent);
++        } else if (pageBlocksAdapter != null) {
++            f = pageBlocksAdapter.getFile(currentIndex);
++        }
++        if (f != null && !f.exists()) {
++            f = new File(FileLoader.getDirectory(FileLoader.MEDIA_DIR_CACHE), f.getName());
++        }
++        return f != null && f.exists() ? f : null;
++    }
++
+     @Override
+     public Bitmap pipCreatePrimaryWindowViewBitmap() {
+         if (videoTextureView != null) {
+-- 
+2.52.0
+

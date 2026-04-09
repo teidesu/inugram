@@ -1,0 +1,45 @@
+From 341823b283df644592a85b8a7c8b02dafe8bb621 Mon Sep 17 00:00:00 2001
+From: alina sireneva <alina@tei.su>
+Date: Thu, 9 Apr 2026 06:24:04 +0300
+Subject: [PATCH] hide trending stickers and emoji packs in egs
+
+---
+ .../main/java/org/telegram/messenger/MediaDataController.java | 4 ++++
+ 1 file changed, 4 insertions(+)
+
+diff --git a/TMessagesProj/src/main/java/org/telegram/messenger/MediaDataController.java b/TMessagesProj/src/main/java/org/telegram/messenger/MediaDataController.java
+index 71c9dcb8d..eccfd16d4 100644
+--- a/TMessagesProj/src/main/java/org/telegram/messenger/MediaDataController.java
++++ b/TMessagesProj/src/main/java/org/telegram/messenger/MediaDataController.java
+@@ -103,6 +103,7 @@ import java.util.concurrent.CountDownLatch;
+ import java.util.concurrent.atomic.AtomicInteger;
+ import java.util.regex.Matcher;
+ import java.util.regex.Pattern;
++import desu.inugram.InuConfig;
+ 
+ @SuppressWarnings("unchecked")
+ public class MediaDataController extends BaseController {
+@@ -1731,10 +1732,12 @@ public class MediaDataController extends BaseController {
+     }
+ 
+     public ArrayList<TLRPC.StickerSetCovered> getFeaturedStickerSets() {
++        if (InuConfig.HIDE_TRENDING_STICKERS.getValue()) return new ArrayList<>();
+         return featuredStickerSets[0];
+     }
+ 
+     public ArrayList<TLRPC.StickerSetCovered> getFeaturedEmojiSets() {
++        if (InuConfig.HIDE_TRENDING_STICKERS.getValue()) return new ArrayList<>();
+         return featuredStickerSets[1];
+     }
+ 
+@@ -2237,6 +2240,7 @@ public class MediaDataController extends BaseController {
+     }
+ 
+     public void loadFeaturedStickers(boolean emoji, boolean cache) {
++        if (InuConfig.HIDE_TRENDING_STICKERS.getValue()) return;
+         if (loadingFeaturedStickers[emoji ? 1 : 0]) {
+             return;
+         }
+-- 
+2.52.0
+

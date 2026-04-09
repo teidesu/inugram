@@ -1,0 +1,100 @@
+From 475716755dc408b09794561cb4ea4478d43bb77c Mon Sep 17 00:00:00 2001
+From: alina sireneva <alina@tei.su>
+Date: Mon, 13 Apr 2026 03:28:49 +0300
+Subject: [PATCH] hdie fade views
+
+---
+ .../main/java/org/telegram/ui/Components/ChatAttachAlert.java | 2 ++
+ .../ui/Components/DialogsActivityTopBubblesFadeView.java      | 1 +
+ .../src/main/java/org/telegram/ui/Components/ShareAlert.java  | 1 +
+ .../telegram/ui/Components/chat/ChatActivityTopFadeView.java  | 1 +
+ .../telegram/ui/Components/chat/ChatInputViewsContainer.java  | 1 +
+ .../src/main/java/org/telegram/ui/MainTabsActivity.java       | 4 ++++
+ 6 files changed, 10 insertions(+)
+
+diff --git a/TMessagesProj/src/main/java/org/telegram/ui/Components/ChatAttachAlert.java b/TMessagesProj/src/main/java/org/telegram/ui/Components/ChatAttachAlert.java
+index 586ef3809..3af5b6e00 100644
+--- a/TMessagesProj/src/main/java/org/telegram/ui/Components/ChatAttachAlert.java
++++ b/TMessagesProj/src/main/java/org/telegram/ui/Components/ChatAttachAlert.java
+@@ -2666,6 +2666,7 @@ public class ChatAttachAlert extends BottomSheet implements NotificationCenter.N
+ 
+             @Override
+             public void draw(@NonNull Canvas canvas) {
++                if (desu.inugram.helpers.ChatHelper.shouldHideFadeView()) return;
+                 super.draw(canvas);
+                 bottomFadeDrawable.draw(canvas);
+             }
+@@ -6841,6 +6842,7 @@ public class ChatAttachAlert extends BottomSheet implements NotificationCenter.N
+ 
+         @Override
+         protected void onDraw(@NonNull Canvas canvas) {
++            if (desu.inugram.helpers.ChatHelper.shouldHideFadeView()) return;
+             gradientProtectionDrawable.setColor(Theme.multAlpha(Theme.getColor(bgKeyColor, resourcesProvider), 0.5f));
+             gradientProtectionDrawable.draw(canvas);
+             gradientProtectionDrawable2.setColor(Theme.multAlpha(Theme.getColor(bgKeyColor, resourcesProvider), 0.95f));
+diff --git a/TMessagesProj/src/main/java/org/telegram/ui/Components/DialogsActivityTopBubblesFadeView.java b/TMessagesProj/src/main/java/org/telegram/ui/Components/DialogsActivityTopBubblesFadeView.java
+index ed13ef074..27d69cd55 100644
+--- a/TMessagesProj/src/main/java/org/telegram/ui/Components/DialogsActivityTopBubblesFadeView.java
++++ b/TMessagesProj/src/main/java/org/telegram/ui/Components/DialogsActivityTopBubblesFadeView.java
+@@ -58,6 +58,7 @@ public class DialogsActivityTopBubblesFadeView extends View {
+ 
+     @Override
+     protected void onDraw(@NonNull Canvas canvas) {
++        if (desu.inugram.helpers.ChatHelper.shouldHideFadeView()) return;
+         canvas.drawRect(0, 0, getMeasuredWidth(), fadeStart + fadeHeight, paint);
+     }
+ }
+diff --git a/TMessagesProj/src/main/java/org/telegram/ui/Components/ShareAlert.java b/TMessagesProj/src/main/java/org/telegram/ui/Components/ShareAlert.java
+index a537a0f36..e13c104f9 100644
+--- a/TMessagesProj/src/main/java/org/telegram/ui/Components/ShareAlert.java
++++ b/TMessagesProj/src/main/java/org/telegram/ui/Components/ShareAlert.java
+@@ -1327,6 +1327,7 @@ public class ShareAlert extends BottomSheet implements NotificationCenter.Notifi
+         bottomFadeView = new View(context) {
+             @Override
+             public void draw(@NonNull Canvas canvas) {
++                if (desu.inugram.helpers.ChatHelper.shouldHideFadeView()) return;
+                 super.draw(canvas);
+                 fadeDrawable.setBounds(0, getMeasuredHeight() - AndroidUtilities.navigationBarHeight - dp(72), getMeasuredWidth(), getMeasuredHeight());
+                 fadeDrawable.draw(canvas);
+diff --git a/TMessagesProj/src/main/java/org/telegram/ui/Components/chat/ChatActivityTopFadeView.java b/TMessagesProj/src/main/java/org/telegram/ui/Components/chat/ChatActivityTopFadeView.java
+index e2aa2fe9e..1365d7018 100644
+--- a/TMessagesProj/src/main/java/org/telegram/ui/Components/chat/ChatActivityTopFadeView.java
++++ b/TMessagesProj/src/main/java/org/telegram/ui/Components/chat/ChatActivityTopFadeView.java
+@@ -43,6 +43,7 @@ public class ChatActivityTopFadeView extends View {
+ 
+     @Override
+     protected void onDraw(@NonNull Canvas canvas) {
++        if (desu.inugram.helpers.ChatHelper.shouldHideFadeView()) return;
+         if (drawable != null) {
+             drawable.draw(canvas);
+         }
+diff --git a/TMessagesProj/src/main/java/org/telegram/ui/Components/chat/ChatInputViewsContainer.java b/TMessagesProj/src/main/java/org/telegram/ui/Components/chat/ChatInputViewsContainer.java
+index 92de3536d..4255534f3 100644
+--- a/TMessagesProj/src/main/java/org/telegram/ui/Components/chat/ChatInputViewsContainer.java
++++ b/TMessagesProj/src/main/java/org/telegram/ui/Components/chat/ChatInputViewsContainer.java
+@@ -55,6 +55,7 @@ public class ChatInputViewsContainer extends FrameLayout {
+         fadeView = new View(context) {
+             @Override
+             protected void dispatchDraw(@NonNull Canvas canvas) {
++                if (desu.inugram.helpers.ChatHelper.shouldHideFadeView()) return;
+                 if (backgroundWithFadeDrawable != null) {
+                     backgroundWithFadeDrawable.draw(canvas);
+                 }
+diff --git a/TMessagesProj/src/main/java/org/telegram/ui/MainTabsActivity.java b/TMessagesProj/src/main/java/org/telegram/ui/MainTabsActivity.java
+index 5aaafc37d..d7b791e66 100644
+--- a/TMessagesProj/src/main/java/org/telegram/ui/MainTabsActivity.java
++++ b/TMessagesProj/src/main/java/org/telegram/ui/MainTabsActivity.java
+@@ -806,6 +806,10 @@ public class MainTabsActivity extends ViewPagerActivity implements NotificationC
+         if (viewPager == null || fadeView == null || MainTabsHelper.isHidden()) {
+             return;
+         }
++        if (desu.inugram.helpers.ChatHelper.shouldHideFadeView()) {
++            fadeView.setVisibility(View.GONE);
++            return;
++        }
+ 
+         final float animatedPosition = viewPager.getPositionAnimated();
+         final float isProfile = 1f - MathUtils.clamp(Math.abs(MainTabsHelper.positionOffset(POSITION_PROFILE) - animatedPosition), 0, 1);
+-- 
+2.52.0
+

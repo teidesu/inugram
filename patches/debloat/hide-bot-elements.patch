@@ -1,0 +1,67 @@
+From bd28db9b51773f31455f71e34a7bb897ec75b09e Mon Sep 17 00:00:00 2001
+From: alina sireneva <alina@tei.su>
+Date: Sat, 11 Apr 2026 03:30:55 +0300
+Subject: [PATCH] hide bot commands menu button and webview button
+
+---
+ .../src/main/java/org/telegram/ui/Cells/DialogCell.java  | 2 +-
+ .../telegram/ui/Components/ChatActivityEnterView.java    | 9 ++++++---
+ 2 files changed, 7 insertions(+), 4 deletions(-)
+
+diff --git a/TMessagesProj/src/main/java/org/telegram/ui/Cells/DialogCell.java b/TMessagesProj/src/main/java/org/telegram/ui/Cells/DialogCell.java
+index 38b04dc4b..def86e7cd 100644
+--- a/TMessagesProj/src/main/java/org/telegram/ui/Cells/DialogCell.java
++++ b/TMessagesProj/src/main/java/org/telegram/ui/Cells/DialogCell.java
+@@ -2466,7 +2466,7 @@ public class DialogCell extends BaseCell implements StoriesListPlaceProvider.Ava
+                     messageNameLeft += w;
+                 }
+             }
+-        } else if (allowBotOpenButton && !isFolderCell() && !isForumCell() && !isDialogFolder() && UserObject.isBot(user) && user.bot_has_main_app) {
++        } else if (allowBotOpenButton && !isFolderCell() && !isForumCell() && !isDialogFolder() && UserObject.isBot(user) && user.bot_has_main_app && !desu.inugram.InuConfig.HIDE_BOT_WEBVIEW_DIALOGS.getValue()) {
+             setOpenBotButton(true);
+             int buttonWidth = (int) (dp(2 * 13) + openButtonText.getCurrentWidth()), p = dp(13);
+             messageWidth -= buttonWidth;
+diff --git a/TMessagesProj/src/main/java/org/telegram/ui/Components/ChatActivityEnterView.java b/TMessagesProj/src/main/java/org/telegram/ui/Components/ChatActivityEnterView.java
+index 4b3d5714f..660214a1f 100644
+--- a/TMessagesProj/src/main/java/org/telegram/ui/Components/ChatActivityEnterView.java
++++ b/TMessagesProj/src/main/java/org/telegram/ui/Components/ChatActivityEnterView.java
+@@ -8,6 +8,8 @@
+ 
+ package org.telegram.ui.Components;
+ 
++import desu.inugram.InuConfig;
++import desu.inugram.helpers.ChatHelper;
+ import static org.telegram.messenger.AndroidUtilities.dp;
+ import static org.telegram.messenger.AndroidUtilities.dpf2;
+ import static org.telegram.messenger.AndroidUtilities.lerp;
+@@ -10629,7 +10631,7 @@ public class ChatActivityEnterView extends FrameLayout implements
+     }
+ 
+     public boolean hasBotWebView() {
+-        return botMenuButtonType == BotMenuButtonType.WEB_VIEW;
++        return botMenuButtonType == BotMenuButtonType.WEB_VIEW && !InuConfig.HIDE_BOT_WEBVIEW_INPUT.getValue();
+     }
+ 
+     private void updateBotButton(boolean animated) {
+@@ -10640,7 +10642,8 @@ public class ChatActivityEnterView extends FrameLayout implements
+             animated = false;
+         }
+         boolean hasBotWebView = hasBotWebView();
+-        boolean canShowBotsMenu = botMenuButtonType != BotMenuButtonType.NO_BUTTON && dialog_id > 0;
++        boolean inu_forceHideCommands = ChatHelper.shouldForceHideBotCommands(parentFragment);
++        boolean canShowBotsMenu = botMenuButtonType != BotMenuButtonType.NO_BUTTON && dialog_id > 0 && (!inu_forceHideCommands || hasBotWebView);
+         boolean wasVisible = botButton != null && botButton.getVisibility() == VISIBLE;
+         if (hasBotWebView || hasBotCommands || hasQuickReplies || botReplyMarkup != null) {
+             if (botReplyMarkup != null) {
+@@ -10658,7 +10661,7 @@ public class ChatActivityEnterView extends FrameLayout implements
+                     botButton.setContentDescription(getString("AccDescrBotKeyboard", R.string.AccDescrBotKeyboard));
+                 }
+             } else {
+-                if (!canShowBotsMenu) {
++                if (!canShowBotsMenu && !inu_forceHideCommands) {
+                     createBotButton();
+                     botButtonDrawable.setIcon(R.drawable.input_bot1, true);
+                     botButton.setContentDescription(getString("AccDescrBotCommands", R.string.AccDescrBotCommands));
+-- 
+2.52.0
+

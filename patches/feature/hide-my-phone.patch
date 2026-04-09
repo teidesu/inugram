@@ -1,0 +1,39 @@
+From ffb670e834a425772dc9b5b66220b44b1734e6db Mon Sep 17 00:00:00 2001
+From: alina sireneva <alina@tei.su>
+Date: Tue, 21 Apr 2026 11:36:42 +0300
+Subject: [PATCH] hide the current user's phone number from the ui
+
+---
+ .../src/main/java/org/telegram/ui/ProfileActivity.java          | 2 +-
+ .../src/main/java/org/telegram/ui/SettingsActivity.java         | 2 +-
+ 2 files changed, 2 insertions(+), 2 deletions(-)
+
+diff --git a/TMessagesProj/src/main/java/org/telegram/ui/ProfileActivity.java b/TMessagesProj/src/main/java/org/telegram/ui/ProfileActivity.java
+index 65259599c..cad501541 100644
+--- a/TMessagesProj/src/main/java/org/telegram/ui/ProfileActivity.java
++++ b/TMessagesProj/src/main/java/org/telegram/ui/ProfileActivity.java
+@@ -13256,7 +13256,7 @@ public class ProfileActivity extends BaseFragment implements NotificationCenter.
+                         if (user != null && !TextUtils.isEmpty(vcardPhone)) {
+                             text = PhoneFormat.getInstance().format("+" + vcardPhone);
+                             phoneNumber = vcardPhone;
+-                        } else if (user != null && !TextUtils.isEmpty(user.phone)) {
++                        } else if (user != null && !TextUtils.isEmpty(user.phone) && !desu.inugram.InuConfig.HIDE_MY_PHONE_NUMBER.getValue()) {
+                             text = PhoneFormat.getInstance().format("+" + user.phone);
+                             phoneNumber = user.phone;
+                         } else {
+diff --git a/TMessagesProj/src/main/java/org/telegram/ui/SettingsActivity.java b/TMessagesProj/src/main/java/org/telegram/ui/SettingsActivity.java
+index 2a7cade93..8a9d5206b 100644
+--- a/TMessagesProj/src/main/java/org/telegram/ui/SettingsActivity.java
++++ b/TMessagesProj/src/main/java/org/telegram/ui/SettingsActivity.java
+@@ -530,7 +530,7 @@ public class SettingsActivity extends BaseFragment implements NotificationCenter
+         titleView.setText(Emoji.replaceEmoji(UserObject.getUserName(user), titleView.getPaint().getFontMetricsInt(), false));
+         final StringBuilder sb = new StringBuilder();
+         if (user != null) {
+-            sb.append(PhoneFormat.getInstance().format("+" + user.phone));
++            sb.append(desu.inugram.InuConfig.HIDE_MY_PHONE_NUMBER.getValue() ? getString(R.string.MobileHidden) : PhoneFormat.getInstance().format("+" + user.phone));
+         }
+         final String username = UserObject.getPublicUsername(user);
+         if (username != null) {
+-- 
+2.52.0
+

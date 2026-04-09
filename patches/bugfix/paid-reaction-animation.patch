@@ -1,0 +1,25 @@
+From b51d1b9192b76d49d4b33fa0cf6523a834da43a7 Mon Sep 17 00:00:00 2001
+From: alina sireneva <alina@tei.su>
+Date: Sun, 19 Apr 2026 04:09:24 +0300
+Subject: [PATCH] disable paid reaction animation via LiteMode flag
+
+---
+ .../org/telegram/ui/Components/ReactionsContainerLayout.java    | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/TMessagesProj/src/main/java/org/telegram/ui/Components/ReactionsContainerLayout.java b/TMessagesProj/src/main/java/org/telegram/ui/Components/ReactionsContainerLayout.java
+index f92a0b855..e99be4c87 100644
+--- a/TMessagesProj/src/main/java/org/telegram/ui/Components/ReactionsContainerLayout.java
++++ b/TMessagesProj/src/main/java/org/telegram/ui/Components/ReactionsContainerLayout.java
+@@ -1976,7 +1976,7 @@ public class ReactionsContainerLayout extends FrameLayout implements Notificatio
+ 
+             resetAnimation();
+             currentReaction = react;
+-            hasEnterAnimation = currentReaction.isStar || (currentReaction.emojicon != null && (showCustomEmojiReaction() || allReactionsIsDefault)) && LiteMode.isEnabled(LiteMode.FLAG_ANIMATED_EMOJI_REACTIONS);
++            hasEnterAnimation = (currentReaction.isStar || (currentReaction.emojicon != null && (showCustomEmojiReaction() || allReactionsIsDefault))) && LiteMode.isEnabled(LiteMode.FLAG_ANIMATED_EMOJI_REACTIONS);
+             if (type == TYPE_STICKER_SET_EMOJI || currentReaction.isEffect) {
+                 hasEnterAnimation = false;
+             }
+-- 
+2.52.0
+

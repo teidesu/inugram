@@ -1,0 +1,37 @@
+From ba6adfe64f640c8831644946d4bbd30df2729c1f Mon Sep 17 00:00:00 2001
+From: alina sireneva <alina@tei.su>
+Date: Fri, 10 Apr 2026 05:40:19 +0300
+Subject: [PATCH] hide server-pushed suggestions throughout the app
+
+---
+ .../src/main/java/org/telegram/messenger/BirthdayController.java | 1 +
+ .../src/main/java/org/telegram/messenger/MessagesController.java | 1 +
+ 2 files changed, 2 insertions(+)
+
+diff --git a/TMessagesProj/src/main/java/org/telegram/messenger/BirthdayController.java b/TMessagesProj/src/main/java/org/telegram/messenger/BirthdayController.java
+index 4441e841c..b66d04409 100644
+--- a/TMessagesProj/src/main/java/org/telegram/messenger/BirthdayController.java
++++ b/TMessagesProj/src/main/java/org/telegram/messenger/BirthdayController.java
+@@ -131,6 +131,7 @@ public class BirthdayController {
+     }
+ 
+     public boolean contains() {
++        if (desu.inugram.InuConfig.HIDE_SUGGESTION_BIRTHDAY_CONTACTS.getValue()) return false;
+         final BirthdayState state = getState();
+         return state != null && !state.isTodayEmpty();
+     }
+diff --git a/TMessagesProj/src/main/java/org/telegram/messenger/MessagesController.java b/TMessagesProj/src/main/java/org/telegram/messenger/MessagesController.java
+index af9c39c11..117231c5c 100644
+--- a/TMessagesProj/src/main/java/org/telegram/messenger/MessagesController.java
++++ b/TMessagesProj/src/main/java/org/telegram/messenger/MessagesController.java
+@@ -10505,6 +10505,7 @@ public class MessagesController extends BaseController implements NotificationCe
+                 noDialog = true;
+             } else if (response instanceof TLRPC.TL_help_promoData) {
+                 TLRPC.TL_help_promoData res = (TLRPC.TL_help_promoData) response;
++                desu.inugram.helpers.SuggestionFilter.filterPromoData(res);
+ 
+                 long did;
+                 if (res.peer == null) {
+-- 
+2.52.0
+

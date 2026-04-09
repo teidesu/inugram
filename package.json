@@ -1,0 +1,23 @@
+{
+  "name": "inugram",
+  "type": "module",
+  "private": true,
+  "scripts": {
+    "setup": "tsx scripts/setup.ts",
+    "export": "tsx scripts/export.ts",
+    "rebase": "tsx scripts/rebase.ts"
+  },
+  "dependencies": {
+    "@antfu/eslint-config": "^8.1.0",
+    "@fuman/utils": "^0.0.19",
+    "@iconify-json/tabler": "^1.2.33",
+    "eslint": "^10.2.0",
+    "tinyglobby": "^0.2.16",
+    "zx": "^8.8.4"
+  },
+  "devDependencies": {
+    "@types/node": "^24.6.1",
+    "tsx": "^4.20.6",
+    "typescript": "^5.9.3"
+  }
+}

@@ -1,0 +1,51 @@
+From de984de931ec83efb8ec86eb2ff7571487ae7916 Mon Sep 17 00:00:00 2001
+From: alina sireneva <alina@tei.su>
+Date: Tue, 14 Apr 2026 03:29:17 +0300
+Subject: [PATCH] fix some glitches with the pull-to-reveal-archive mode in
+ dialogs list
+
+---
+ .../java/org/telegram/ui/DialogsActivity.java  | 18 +++++++++++++-----
+ 1 file changed, 13 insertions(+), 5 deletions(-)
+
+diff --git a/TMessagesProj/src/main/java/org/telegram/ui/DialogsActivity.java b/TMessagesProj/src/main/java/org/telegram/ui/DialogsActivity.java
+index b1dd1ec9a..9166adfab 100644
+--- a/TMessagesProj/src/main/java/org/telegram/ui/DialogsActivity.java
++++ b/TMessagesProj/src/main/java/org/telegram/ui/DialogsActivity.java
+@@ -8855,11 +8855,15 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
+             public void onAnimationEnd(Animator animation) {
+                 super.onAnimationEnd(animation);
+                 actionBarColorAnimator = null;
+-                actionModeFullyShowed = false;
+                 invalidateScrollY = true;
+-                fixScrollYAfterArchiveOpened = true;
+                 fragmentView.invalidate();
+-                scrollAdditionalOffset = -(dp((hasStories ? DialogStoriesCell.HEIGHT_IN_DP : 0) + SEARCH_FIELD_HEIGHT) - finalTranslateListHeight);
++                if (actionModeFullyShowed) {
++                    actionModeFullyShowed = false;
++                    fixScrollYAfterArchiveOpened = true;
++                    scrollAdditionalOffset = -(dp((hasStories ? DialogStoriesCell.HEIGHT_IN_DP : 0) + SEARCH_FIELD_HEIGHT) - finalTranslateListHeight);
++                } else {
++                    scrollAdditionalOffset = 0;
++                }
+                 viewPages[0].setTranslationY(0);
+                 for (int i = 0; i < viewPages.length; i++) {
+                     if (viewPages[i] != null) {
+@@ -9845,8 +9849,12 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
+                     super.onAnimationEnd(animation);
+                     actionBarColorAnimator = null;
+                     actionModeAdditionalHeight = 0;
+-                    actionModeFullyShowed = true;
+-                    scrollAdditionalOffset = dp((hasStories ? DialogStoriesCell.HEIGHT_IN_DP : 0) + SEARCH_FIELD_HEIGHT) - finalTranslateListHeight;
++                    if (finalTranslateListHeight > 0) {
++                        actionModeFullyShowed = true;
++                        scrollAdditionalOffset = dp((hasStories ? DialogStoriesCell.HEIGHT_IN_DP : 0) + SEARCH_FIELD_HEIGHT) - finalTranslateListHeight;
++                    } else {
++                        scrollAdditionalOffset = 0;
++                    }
+                     viewPages[0].setTranslationY(0);
+                     for (int i = 0; i < viewPages.length; i++) {
+                         if (viewPages[i] != null) {
+-- 
+2.52.0
+

@@ -1,0 +1,99 @@
+From 95d129df08542073d05faf31adbad73371ba47d0 Mon Sep 17 00:00:00 2001
+From: alina sireneva <alina@tei.su>
+Date: Sun, 12 Apr 2026 18:08:10 +0300
+Subject: [PATCH] show peer id in profile
+
+---
+ .../main/java/org/telegram/ui/ProfileActivity.java  | 13 ++++++++++++-
+ 1 file changed, 12 insertions(+), 1 deletion(-)
+
+diff --git a/TMessagesProj/src/main/java/org/telegram/ui/ProfileActivity.java b/TMessagesProj/src/main/java/org/telegram/ui/ProfileActivity.java
+index 300ca06c8..352cd289e 100644
+--- a/TMessagesProj/src/main/java/org/telegram/ui/ProfileActivity.java
++++ b/TMessagesProj/src/main/java/org/telegram/ui/ProfileActivity.java
+@@ -335,6 +335,7 @@ import java.util.zip.ZipEntry;
+ import java.util.zip.ZipOutputStream;
+ 
+ import desu.inugram.helpers.MainTabsHelper;
++import desu.inugram.helpers.ProfileHelper;
+ import me.vkryl.android.animator.BoolAnimator;
+ 
+ public class ProfileActivity extends BaseFragment implements NotificationCenter.NotificationCenterDelegate, DialogsActivity.DialogsActivityDelegate, SharedMediaLayout.SharedMediaPreloaderDelegate, ImageUpdater.ImageUpdaterDelegate, SharedMediaLayout.Delegate, MainTabsActivity.TabFragmentDelegate {
+@@ -610,6 +611,7 @@ public class ProfileActivity extends BaseFragment implements NotificationCenter.
+     public int birthdayRow;
+     private int setUsernameRow;
+     private int bioRow;
++    public int inu_idRow;
+     private int phoneSuggestionSectionRow;
+     private int graceSuggestionRow;
+     private int graceSuggestionSectionRow;
+@@ -4387,6 +4389,8 @@ public class ProfileActivity extends BaseFragment implements NotificationCenter.
+                 openAddMember();
+             } else if (position == usernameRow) {
+                 processOnClickOrPress(position, view, x, y);
++            } else if (position == inu_idRow) {
++                ProfileHelper.onIdRowClick(ProfileActivity.this, listView.getClipBackground(view), view, userId, chatId, getAccountInstance());
+             } else if (position == locationRow) {
+                 if (chatInfo.location instanceof TLRPC.TL_channelLocation) {
+                     LocationActivity fragment = new LocationActivity(LocationActivity.LOCATION_TYPE_GROUP_VIEW);
+@@ -10265,6 +10269,7 @@ public class ProfileActivity extends BaseFragment implements NotificationCenter.
+         birthdayRow = -1;
+         setUsernameRow = -1;
+         bioRow = -1;
++        inu_idRow = -1;
+         channelRow = -1;
+         channelDividerRow = -1;
+         phoneSuggestionSectionRow = -1;
+@@ -10426,6 +10431,7 @@ public class ProfileActivity extends BaseFragment implements NotificationCenter.
+                 numberSectionRow = rowCount++;
+                 numberRow = rowCount++;
+                 setUsernameRow = rowCount++;
++                if (ProfileHelper.shouldShowIdRow()) inu_idRow = rowCount++;
+                 bioRow = rowCount++;
+ 
+                 settingsSectionRow = rowCount++;
+@@ -10518,6 +10524,7 @@ public class ProfileActivity extends BaseFragment implements NotificationCenter.
+                 if (user != null && username != null) {
+                     usernameRow = rowCount++;
+                 }
++                if (ProfileHelper.shouldShowIdRow()) inu_idRow = rowCount++;
+                 if (userInfo != null) {
+                     if (userInfo.birthday != null) {
+                         birthdayRow = rowCount++;
+@@ -10665,6 +10672,7 @@ public class ProfileActivity extends BaseFragment implements NotificationCenter.
+                     usernameRow = rowCount++;
+                 }
+             }
++            if (ProfileHelper.shouldShowIdRow()) inu_idRow = rowCount++;
+             if (emptyRow < 0 && emptyRow2 < 0) {
+                 if (hasMusic || peerColor != null || actionsView == null) {
+                     emptyRow2 = rowCount++;
+@@ -13253,6 +13261,8 @@ public class ProfileActivity extends BaseFragment implements NotificationCenter.
+                         }
+                         isFragmentPhoneNumber = phoneNumber != null && phoneNumber.matches("888\\d{8}");
+                         detailCell.setTextAndValue(text, LocaleController.getString(isFragmentPhoneNumber ? R.string.AnonymousNumber : R.string.PhoneMobile), false);
++                    } else if (position == inu_idRow) {
++                        detailCell.setTextAndValue(ProfileHelper.formatId(userId, chatId != 0 ? getMessagesController().getChat(chatId) : null), LocaleController.getString(R.string.InuProfileId), false);
+                     } else if (position == noteRow) {
+                         final TLRPC.UserFull userInfo = getMessagesController().getUserFull(userId);
+                         if (userInfo == null) return;
+@@ -14055,7 +14065,7 @@ public class ProfileActivity extends BaseFragment implements NotificationCenter.
+             if (position == infoHeaderRow || position == membersHeaderRow || position == settingsSectionRow2 ||
+                     position == numberSectionRow || position == helpHeaderRow || position == debugHeaderRow || position == botPermissionsHeader) {
+                 return VIEW_TYPE_HEADER;
+-            } else if (position == phoneRow || position == locationRow || position == numberRow || position == birthdayRow) {
++            } else if (position == phoneRow || position == locationRow || position == numberRow || position == birthdayRow || position == inu_idRow) {
+                 return VIEW_TYPE_TEXT_DETAIL;
+             } else if (position == usernameRow || position == setUsernameRow) {
+                 return VIEW_TYPE_TEXT_DETAIL_MULTILINE;
+@@ -15491,6 +15501,7 @@ public class ProfileActivity extends BaseFragment implements NotificationCenter.
+             put(++pointer, bizHoursRow, sparseIntArray);
+             put(++pointer, bizLocationRow, sparseIntArray);
+             put(++pointer, birthdayRow, sparseIntArray);
++            put(++pointer, inu_idRow, sparseIntArray);
+             put(++pointer, channelRow, sparseIntArray);
+             put(++pointer, botStarsBalanceRow, sparseIntArray);
+             put(++pointer, botTonBalanceRow, sparseIntArray);
+-- 
+2.52.0
+

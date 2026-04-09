@@ -1,0 +1,102 @@
+From a3e3030db05d7e0dff71aa09322f17c649cc811f Mon Sep 17 00:00:00 2001
+From: alina sireneva <alina@tei.su>
+Date: Mon, 20 Apr 2026 12:50:31 +0300
+Subject: [PATCH] support ios-style menu gestures (release to commit) in
+ account switcher
+
+---
+ .../org/telegram/ui/Components/ItemOptions.java | 17 ++++++++++++-----
+ .../java/org/telegram/ui/MainTabsActivity.java  | 10 ++++------
+ 2 files changed, 16 insertions(+), 11 deletions(-)
+
+diff --git a/TMessagesProj/src/main/java/org/telegram/ui/Components/ItemOptions.java b/TMessagesProj/src/main/java/org/telegram/ui/Components/ItemOptions.java
+index a2398dde4..7f8d13957 100644
+--- a/TMessagesProj/src/main/java/org/telegram/ui/Components/ItemOptions.java
++++ b/TMessagesProj/src/main/java/org/telegram/ui/Components/ItemOptions.java
+@@ -141,6 +141,7 @@ public class ItemOptions {
+     }
+ 
+     public ActionBarPopupWindow actionBarPopupWindow;
++    public boolean inu_longPressDragMode;
+     private BlurredBackgroundSourceBitmap scrimBlur3SourceBitmap;
+     private final float[] point = new float[2];
+ 
+@@ -1263,6 +1264,9 @@ public class ItemOptions {
+             };
+             container.getViewTreeObserver().addOnPreDrawListener(preDrawListener);
+             container.addView(dimView, LayoutHelper.createFrame(LayoutHelper.MATCH_PARENT, LayoutHelper.MATCH_PARENT));
++            if (inu_longPressDragMode) {
++                dimView.setOnClickListener(v -> dismiss());
++            }
+             dimView.setProgress(0);
+             if (hideScrimUnder) {
+                 scrimView.setVisibility(View.INVISIBLE);
+@@ -1335,7 +1339,8 @@ public class ItemOptions {
+             }
+         });
+         actionBarPopupWindow.setOutsideTouchable(true);
+-        actionBarPopupWindow.setFocusable(true);
++        actionBarPopupWindow.setFocusable(!inu_longPressDragMode);
++        actionBarPopupWindow.setTouchable(!inu_longPressDragMode);
+         actionBarPopupWindow.setBackgroundDrawable(new ColorDrawable(Color.TRANSPARENT));
+         actionBarPopupWindow.setAnimationStyle(R.style.PopupContextAnimation);
+         if (needsFocus) {
+@@ -1419,10 +1424,12 @@ public class ItemOptions {
+         }
+ 
+         // discard all scrolls/gestures
+-        if (fragment != null && fragment.getFragmentView() != null) {
+-            fragment.getFragmentView().getRootView().dispatchTouchEvent(AndroidUtilities.emptyMotionEvent());
+-        } else if (this.container != null) {
+-            container.dispatchTouchEvent(AndroidUtilities.emptyMotionEvent());
++        if (!inu_longPressDragMode) {
++            if (fragment != null && fragment.getFragmentView() != null) {
++                fragment.getFragmentView().getRootView().dispatchTouchEvent(AndroidUtilities.emptyMotionEvent());
++            } else if (this.container != null) {
++                container.dispatchTouchEvent(AndroidUtilities.emptyMotionEvent());
++            }
+         }
+ 
+         if (blurForMenu && scrimBlur3SourceBitmap != null) {
+diff --git a/TMessagesProj/src/main/java/org/telegram/ui/MainTabsActivity.java b/TMessagesProj/src/main/java/org/telegram/ui/MainTabsActivity.java
+index d7b791e66..a467e5490 100644
+--- a/TMessagesProj/src/main/java/org/telegram/ui/MainTabsActivity.java
++++ b/TMessagesProj/src/main/java/org/telegram/ui/MainTabsActivity.java
+@@ -269,10 +269,7 @@ public class MainTabsActivity extends ViewPagerActivity implements NotificationC
+         tabs[INDEX_SETTINGS] = GlassTabView.createMainTab(context, resourceProvider, GlassTabView.TabAnimation.SETTINGS, R.string.Settings);
+         tabs[INDEX_CALLS] = GlassTabView.createMainTab(context, resourceProvider, GlassTabView.TabAnimation.CALLS, R.string.MainTabsCalls);
+         tabs[INDEX_PROFILE] = GlassTabView.createAvatar(context, resourceProvider, currentAccount, R.string.MainTabsProfile);
+-        tabs[INDEX_PROFILE].setOnLongClickListener(v -> {
+-            openAccountSelector(v);
+-            return true;
+-        });
++        desu.inugram.helpers.LongPressDragMenuHelper.attach(tabs[INDEX_PROFILE], this::openAccountSelector);
+         for (GlassTabView tab : tabs) {
+             tab.setMainTabsCompact(compact);
+         }
+@@ -363,7 +360,7 @@ public class MainTabsActivity extends ViewPagerActivity implements NotificationC
+         }
+     }
+ 
+-    public void openAccountSelector(View button) {
++    public ItemOptions openAccountSelector(View button) {
+         final ArrayList<Integer> accountNumbers = new ArrayList<>();
+ 
+         accountNumbers.clear();
+@@ -432,11 +429,12 @@ public class MainTabsActivity extends ViewPagerActivity implements NotificationC
+         final ShapeDrawable bg = Theme.createRoundRectDrawable(dp(28), getThemedColor(Theme.key_windowBackgroundWhite));
+         bg.getPaint().setShadowLayer(dp(6), 0, dp(1), Theme.multAlpha(0xFF000000, 0.15f));
+         o.setScrimViewBackground(bg);
+-        o.show();
+ 
+         MessagesController.getGlobalMainSettings().edit()
+             .putInt("accountswitchhint", 3)
+             .apply();
++
++        return o;
+     }
+ 
+     public LinearLayout accountView(int account, boolean selected) {
+-- 
+2.52.0
+

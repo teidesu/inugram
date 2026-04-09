@@ -1,0 +1,32 @@
+From 23888d6582e39254c13c105ae0fec42e429acaaf Mon Sep 17 00:00:00 2001
+From: alina sireneva <alina@tei.su>
+Date: Mon, 20 Apr 2026 16:58:47 +0300
+Subject: [PATCH] make area to the left/right of the bottom bar tabs
+ click-through
+
+---
+ .../src/main/java/org/telegram/ui/MainTabsActivity.java   | 8 ++++++--
+ 1 file changed, 6 insertions(+), 2 deletions(-)
+
+diff --git a/TMessagesProj/src/main/java/org/telegram/ui/MainTabsActivity.java b/TMessagesProj/src/main/java/org/telegram/ui/MainTabsActivity.java
+index a467e5490..b51937228 100644
+--- a/TMessagesProj/src/main/java/org/telegram/ui/MainTabsActivity.java
++++ b/TMessagesProj/src/main/java/org/telegram/ui/MainTabsActivity.java
+@@ -328,8 +328,12 @@ public class MainTabsActivity extends ViewPagerActivity implements NotificationC
+ 
+         contentView.addView(fadeView, LayoutHelper.createFrame(LayoutHelper.MATCH_PARENT, 0, Gravity.BOTTOM));
+ 
+-        tabsViewWrapper = new FrameLayout(context);
+-        tabsViewWrapper.setOnClickListener(v -> {});
++        tabsViewWrapper = new FrameLayout(context) {
++            @Override
++            public boolean onTouchEvent(android.view.MotionEvent event) {
++                return false;
++            }
++        };
+         tabsViewWrapper.addView(tabsView, LayoutHelper.createFrame(tabsViewWidth, MainTabsHelper.getMainTabsHeightWithMargins(), Gravity.BOTTOM | Gravity.CENTER_HORIZONTAL));
+         tabsViewWrapper.setClipToPadding(false);
+         contentView.addView(tabsViewWrapper, LayoutHelper.createFrame(LayoutHelper.MATCH_PARENT, LayoutHelper.WRAP_CONTENT, Gravity.BOTTOM));
+-- 
+2.52.0
+

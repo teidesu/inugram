@@ -1,0 +1,34 @@
+From 7ea362f79ff2e2b90089611e795d6d25d8189348 Mon Sep 17 00:00:00 2001
+From: alina sireneva <alina@tei.su>
+Date: Sun, 19 Apr 2026 10:26:32 +0300
+Subject: [PATCH] hook into profile action menu
+
+---
+ .../src/main/java/org/telegram/ui/ProfileActivity.java        | 4 ++++
+ 1 file changed, 4 insertions(+)
+
+diff --git a/TMessagesProj/src/main/java/org/telegram/ui/ProfileActivity.java b/TMessagesProj/src/main/java/org/telegram/ui/ProfileActivity.java
+index 352cd289e..9d0e4c05f 100644
+--- a/TMessagesProj/src/main/java/org/telegram/ui/ProfileActivity.java
++++ b/TMessagesProj/src/main/java/org/telegram/ui/ProfileActivity.java
+@@ -2518,6 +2518,9 @@ public class ProfileActivity extends BaseFragment implements NotificationCenter.
+                 if (getParentActivity() == null) {
+                     return;
+                 }
++                if (desu.inugram.helpers.ProfileHelper.handleMenuClick(id, currentAccount, getDialogId())) {
++                    return;
++                }
+                 if (id == -1) {
+                     if (sharedMediaLayout != null && sharedMediaLayout.scrollSlidingTextTabStrip != null && sharedMediaLayout.scrollSlidingTextTabStrip.isReordering()) {
+                         stopTabsReorder();
+@@ -12112,6 +12115,7 @@ public class ProfileActivity extends BaseFragment implements NotificationCenter.
+             otherItem.hideSubItem(edit_avatar);
+             otherItem.hideSubItem(delete_avatar);
+         }
++        ProfileHelper.addMenuItems(otherItem, currentAccount, getDialogId());
+ 
+         isCallAvailable = callItemVisible;
+ 
+-- 
+2.52.0
+

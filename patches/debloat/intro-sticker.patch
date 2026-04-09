@@ -1,0 +1,51 @@
+From 8b2ea11d0e8fa1a662bc4fcf17d0ae4f63cd365f Mon Sep 17 00:00:00 2001
+From: alina sireneva <alina@tei.su>
+Date: Mon, 13 Apr 2026 02:30:05 +0300
+Subject: [PATCH] hide default random greeting suggestion + make the custom
+ intro sticker non-clickable
+
+---
+ .../src/main/java/org/telegram/ui/ChatActivity.java         | 6 +++++-
+ 1 file changed, 5 insertions(+), 1 deletion(-)
+
+diff --git a/TMessagesProj/src/main/java/org/telegram/ui/ChatActivity.java b/TMessagesProj/src/main/java/org/telegram/ui/ChatActivity.java
+index 87c77a38a..1642bfa3e 100644
+--- a/TMessagesProj/src/main/java/org/telegram/ui/ChatActivity.java
++++ b/TMessagesProj/src/main/java/org/telegram/ui/ChatActivity.java
+@@ -31678,7 +31678,7 @@ public class ChatActivity extends BaseFragment implements
+             businessLinksEmptyView = new BusinessLinksEmptyView(getContext(), this, businessLink, getResourceProvider());
+             businessLinksEmptyView.setBackground(Theme.createServiceDrawable(AndroidUtilities.dp(16), businessLinksEmptyView, contentView, getThemedPaint(Theme.key_paint_chatActionBackground)));
+             emptyViewContainer.addView(businessLinksEmptyView, LayoutHelper.createFrame(LayoutHelper.WRAP_CONTENT, LayoutHelper.WRAP_CONTENT, Gravity.CENTER));
+-        } else if (preloadedGreetingsSticker != null && currentUser != null && !userBlocked || userInfo != null && getDialogId() != getUserConfig().getClientUserId() && (userInfo.contact_require_premium && !getUserConfig().isPremium() || userInfo.send_paid_messages_stars > StarsController.getInstance(currentAccount).getBalance().amount)) {
++        } else if (preloadedGreetingsSticker != null && currentUser != null && !userBlocked && !(InuConfig.DISABLE_INTRO_STICKER.getValue() && (userInfo == null || userInfo.business_intro == null)) || userInfo != null && getDialogId() != getUserConfig().getClientUserId() && (userInfo.contact_require_premium && !getUserConfig().isPremium() || userInfo.send_paid_messages_stars > StarsController.getInstance(currentAccount).getBalance().amount)) {
+             greetingsViewContainer = new ChatGreetingsView(getContext(), currentUser, currentAccount, preloadedGreetingsSticker, themeDelegate) {
+                 @Override
+                 protected void onLayout(boolean changed, int l, int t, int r, int b) {
+@@ -31688,6 +31688,7 @@ public class ChatActivity extends BaseFragment implements
+             };
+             updateGreetingLock();
+             greetingsViewContainer.setListener((sticker) -> {
++                if (InuConfig.DISABLE_INTRO_STICKER.getValue()) return;
+                 animatingDocuments.put(sticker, 0);
+                 SendMessagesHelper.getInstance(currentAccount).sendSticker(sticker, null, dialog_id, null, null, null, replyingQuote, null, true, 0, 0, false, null, quickReplyShortcut, getQuickReplyId(), 0, getSendMonoForumPeerId(), getSendMessageSuggestionParams());
+             });
+@@ -31726,6 +31727,8 @@ public class ChatActivity extends BaseFragment implements
+                     emptyMessage = LocaleController.getString(R.string.GotAQuestion);
+                 } else if (chatMode != MODE_SUGGESTIONS && (currentUser == null || currentUser.self || currentUser.deleted || userBlocked)) {
+                     emptyMessage = LocaleController.getString(R.string.NoMessages);
++                } else if (InuConfig.DISABLE_INTRO_STICKER.getValue() && (userInfo == null || userInfo.business_intro == null)) {
++                    emptyMessage = LocaleController.getString(R.string.NoMessages);
+                 }
+                 if (emptyMessage == null) {
+                     greetingsViewContainer = new ChatGreetingsView(getContext(), currentUser, currentAccount, preloadedGreetingsSticker, themeDelegate) {
+@@ -31737,6 +31740,7 @@ public class ChatActivity extends BaseFragment implements
+                     };
+                     updateGreetingLock();
+                     greetingsViewContainer.setListener((sticker) -> {
++                        if (InuConfig.DISABLE_INTRO_STICKER.getValue()) return;
+                         animatingDocuments.put(sticker, 0);
+                         SendMessagesHelper.getInstance(currentAccount).sendSticker(sticker, null, dialog_id, null, null, null, replyingQuote, null, true, 0, 0, false, null, quickReplyShortcut, getQuickReplyId(), 0, getSendMonoForumPeerId(), getSendMessageSuggestionParams());
+                     });
+-- 
+2.52.0
+

@@ -1,0 +1,33 @@
+From 59cb16245e4d23b4d2fcfcf94a28d56e5b4b617c Mon Sep 17 00:00:00 2001
+From: alina sireneva <alina@tei.su>
+Date: Fri, 17 Apr 2026 04:51:56 +0300
+Subject: [PATCH] disabling animated spoiler in power settings doesn't apply to
+ photos
+
+---
+ .../main/java/org/telegram/ui/Cells/ChatMessageCell.java | 9 +++++++++
+ 1 file changed, 9 insertions(+)
+
+diff --git a/TMessagesProj/src/main/java/org/telegram/ui/Cells/ChatMessageCell.java b/TMessagesProj/src/main/java/org/telegram/ui/Cells/ChatMessageCell.java
+index 2f3441b40..e18fcb1f7 100644
+--- a/TMessagesProj/src/main/java/org/telegram/ui/Cells/ChatMessageCell.java
++++ b/TMessagesProj/src/main/java/org/telegram/ui/Cells/ChatMessageCell.java
+@@ -14962,6 +14962,15 @@ public class ChatMessageCell extends BaseCell implements SeekBar.SeekBarDelegate
+         if (mediaSpoilerEffect2 == null) {
+             return;
+         }
++        if (!LiteMode.isEnabled(LiteMode.FLAG_CHAT_SPOILER)) {
++            if (mediaSpoilerEffect == null) {
++                mediaSpoilerEffect = new SpoilerEffect();
++            }
++            mediaSpoilerEffect.setColor(ColorUtils.setAlphaComponent(Color.WHITE, (int) (255 * 0.5f * photoImage.getAlpha())));
++            mediaSpoilerEffect.setBounds((int) photoImage.getImageX(), (int) photoImage.getImageY(), (int) photoImage.getImageX2(), (int) photoImage.getImageY2());
++            mediaSpoilerEffect.draw(canvas);
++            return;
++        }
+         canvas.save();
+         canvas.translate(photoImage.getImageX(), photoImage.getImageY());
+         mediaSpoilerEffect2.draw(canvas, this, (int) photoImage.getImageWidth(), (int) photoImage.getImageHeight(), photoImage.getAlpha(), drawingToBitmap);
+-- 
+2.52.0
+

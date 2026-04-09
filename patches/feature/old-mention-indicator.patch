@@ -1,0 +1,77 @@
+From ced59c49cc14e725e7b2e0016128e257c7eeaf35 Mon Sep 17 00:00:00 2001
+From: alina sireneva <alina@tei.su>
+Date: Mon, 20 Apr 2026 17:00:30 +0300
+Subject: [PATCH] forward-port of the old (pre-12.6) mention and reaction
+ indicators
+
+---
+ .../org/telegram/ui/Cells/DialogCell.java     | 31 +++++++++++++++++--
+ 1 file changed, 29 insertions(+), 2 deletions(-)
+
+diff --git a/TMessagesProj/src/main/java/org/telegram/ui/Cells/DialogCell.java b/TMessagesProj/src/main/java/org/telegram/ui/Cells/DialogCell.java
+index def86e7cd..1ce45b710 100644
+--- a/TMessagesProj/src/main/java/org/telegram/ui/Cells/DialogCell.java
++++ b/TMessagesProj/src/main/java/org/telegram/ui/Cells/DialogCell.java
+@@ -4347,14 +4347,25 @@ public class DialogCell extends BaseCell implements StoriesListPlaceProvider.Ava
+                         mentionLayout.draw(canvas);
+                         canvas.restore();
+                     } else {
++                        final boolean oldStyle = desu.inugram.InuConfig.OLD_MENTION_INDICATOR.getValue();
++                        if (oldStyle) {
++                            int x = mentionLeft;
++                            rect.set(x, countTop, x + mentionWidth + dp(BADGE_TEXT_PADDING * 2), countTop + dp(BADGE_SIZE));
++                            Paint paint = drawCounterMuted && folderId != 0 ? Theme.dialogs_countGrayPaint : Theme.dialogs_countPaint;
++                            canvas.drawRoundRect(rect, rect.height() / 2f, rect.height() / 2f, paint);
++                        }
+                         final Drawable drawable = Theme.dialogs_mentionDrawable;
++                        if (oldStyle) Theme.setDrawableColorByKey(drawable, Theme.key_chats_mentionIcon);
+ 
+                         drawable.setAlpha((int) ((1.0f - reorderIconProgress) * 255));
+                         DrawableUtils.setBounds(drawable,
+                             mentionLeft + dp(BADGE_DRAWABLE_OFFSET + BADGE_DRAWABLE_SIZE / 2f),
+                             countTop + dp(BADGE_DRAWABLE_OFFSET + BADGE_DRAWABLE_SIZE / 2f),
++                            oldStyle ? dp(BADGE_DRAWABLE_SIZE) : drawable.getIntrinsicWidth(),
++                            oldStyle ? dp(BADGE_DRAWABLE_SIZE) : drawable.getIntrinsicHeight(),
+                             Gravity.CENTER);
+                         drawable.draw(canvas);
++                        if (oldStyle) Theme.setDrawableColorByKey(drawable, Theme.key_chats_unreadCounter);
+                     }
+                 }
+ 
+@@ -4367,15 +4378,31 @@ public class DialogCell extends BaseCell implements StoriesListPlaceProvider.Ava
+                         s = drawReactionMention ? reactionsMentionsChangeProgress : (1f - reactionsMentionsChangeProgress);
+                     }
+ 
+-                    final Drawable drawable = drawCounterMuted ?
++                    final boolean oldStyle = desu.inugram.InuConfig.OLD_MENTION_INDICATOR.getValue();
++                    if (oldStyle) {
++                        int prevColor = Theme.dialogs_countPaint.getColor();
++                        Theme.dialogs_countPaint.setColor(Theme.getColor(Theme.key_dialogReactionMentionBackground));
++                        Theme.dialogs_countPaint.setAlpha((int) ((1.0f - reorderIconProgress) * 255));
++                        canvas.save();
++                        if (s != 1f) canvas.scale(s, s, rect.centerX(), rect.centerY());
++                        canvas.drawRoundRect(rect, rect.height() / 2f, rect.height() / 2f, Theme.dialogs_countPaint);
++                        canvas.restore();
++                        Theme.dialogs_countPaint.setColor(prevColor);
++                    }
++                    final Drawable drawable = !oldStyle && drawCounterMuted ?
+                         Theme.dialogs_reactionsMentionDrawableMuted :
+                         Theme.dialogs_reactionsMentionDrawable;
++                    if (oldStyle) Theme.setDrawableColorByKey(drawable, Theme.key_chats_mentionIcon);
+ 
+                     drawable.setAlpha((int) ((1.0f - reorderIconProgress) * 255));
+                     DrawableUtils.setBounds(drawable,
+                         x + dp(BADGE_DRAWABLE_OFFSET + BADGE_DRAWABLE_SIZE / 2f),
+-                        countTop + dp(BADGE_DRAWABLE_OFFSET + BADGE_DRAWABLE_SIZE / 2f), Gravity.CENTER);
++                        countTop + dp(BADGE_DRAWABLE_OFFSET + BADGE_DRAWABLE_SIZE / 2f) + (oldStyle ? dp(0.5f) : 0),
++                        oldStyle ? dp(14) : drawable.getIntrinsicWidth(),
++                        oldStyle ? dp(14) : drawable.getIntrinsicHeight(),
++                        Gravity.CENTER);
+                     DrawableUtils.drawWithScale(canvas, drawable, s);
++                    if (oldStyle) Theme.setDrawableColorByKey(drawable, Theme.key_dialogReactionMentionBackground);
+                 }
+                 if ((drawPollVotesMention || pollVotesMentionsVisibility > 0) && pollVotesMentionsVisibility != 0) {
+                     int x = pollVotesMentionLeft;
+-- 
+2.52.0
+

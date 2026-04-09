@@ -1,0 +1,46 @@
+From 73f7b6a4d0fe5ce47ed0b1d0b65c0afc2b82b3bd Mon Sep 17 00:00:00 2001
+From: alina sireneva <alina@tei.su>
+Date: Thu, 9 Apr 2026 17:24:31 +0300
+Subject: [PATCH] customizable sticker size
+
+---
+ .../main/java/org/telegram/ui/Cells/ChatMessageCell.java  | 8 ++++++--
+ 1 file changed, 6 insertions(+), 2 deletions(-)
+
+diff --git a/TMessagesProj/src/main/java/org/telegram/ui/Cells/ChatMessageCell.java b/TMessagesProj/src/main/java/org/telegram/ui/Cells/ChatMessageCell.java
+index 3f9f56a63..018179c62 100644
+--- a/TMessagesProj/src/main/java/org/telegram/ui/Cells/ChatMessageCell.java
++++ b/TMessagesProj/src/main/java/org/telegram/ui/Cells/ChatMessageCell.java
+@@ -244,6 +244,7 @@ import java.util.Locale;
+ import java.util.Stack;
+ import java.util.concurrent.atomic.AtomicReference;
+ 
++import desu.inugram.InuConfig;
+ import me.vkryl.android.animator.BoolAnimator;
+ import me.vkryl.android.animator.FactorAnimator;
+ import me.vkryl.core.BitwiseUtils;
+@@ -9458,9 +9459,9 @@ public class ChatMessageCell extends BaseCell implements SeekBar.SeekBarDelegate
+                     float maxHeight;
+                     int maxWidth;
+                     if (AndroidUtilities.isTablet()) {
+-                        maxHeight = maxWidth = (int) (AndroidUtilities.getMinTabletSide() * 0.4f);
++                        maxHeight = maxWidth = (int) (AndroidUtilities.getMinTabletSide() * (0.4f + (InuConfig.STICKER_SIZE.getValue() - 14.0f) / 40));
+                     } else {
+-                        maxHeight = maxWidth = (int) (Math.min(getParentWidth(), AndroidUtilities.displaySize.y) * 0.5f);
++                        maxHeight = maxWidth = (int) (Math.min(getParentWidth(), AndroidUtilities.displaySize.y) * (0.5f + (InuConfig.STICKER_SIZE.getValue() - 14.0f) / 30));
+                     }
+                     String filter;
+                     if (messageObject.isAnimatedEmoji() || messageObject.isDice()) {
+@@ -9575,6 +9576,9 @@ public class ChatMessageCell extends BaseCell implements SeekBar.SeekBarDelegate
+                     } else {
+                         photoImage.setImage(null, null, thumb, null, messageObject, 0);
+                     }
++                    if (messageObject.useCustomPhoto) {
++                        photoImage.setImageBitmap(getResources().getDrawable(R.drawable.sticker));
++                    }
+                     if (!reactionsLayoutInBubble.isSmall) {
+                         reactionsLayoutInBubble.measure(maxWidth + dp(36), currentMessageObject.isOutOwner() && (currentMessageObject.isAnimatedEmoji() || currentMessageObject.isAnyKindOfSticker()) ? Gravity.RIGHT : Gravity.LEFT);
+                         reactionsLayoutInBubble.drawServiceShaderBackground = 1f;
+-- 
+2.52.0
+

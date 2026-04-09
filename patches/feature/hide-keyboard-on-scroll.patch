@@ -1,0 +1,30 @@
+From 572a140f21ab1f25d01bf110edc3293c3de55181 Mon Sep 17 00:00:00 2001
+From: alina sireneva <alina@tei.su>
+Date: Fri, 10 Apr 2026 00:36:18 +0300
+Subject: [PATCH] hide keyboard when scrolling the chat
+
+---
+ .../src/main/java/org/telegram/ui/ChatActivity.java        | 7 +++++++
+ 1 file changed, 7 insertions(+)
+
+diff --git a/TMessagesProj/src/main/java/org/telegram/ui/ChatActivity.java b/TMessagesProj/src/main/java/org/telegram/ui/ChatActivity.java
+index cc1989c33..b6c62c861 100644
+--- a/TMessagesProj/src/main/java/org/telegram/ui/ChatActivity.java
++++ b/TMessagesProj/src/main/java/org/telegram/ui/ChatActivity.java
+@@ -6691,6 +6691,13 @@ public class ChatActivity extends BaseFragment implements
+                         wasManualScroll = true;
+                         scrollingChatListView = true;
+                     } else if (newState == RecyclerView.SCROLL_STATE_DRAGGING) {
++                        if (InuConfig.HIDE_KEYBOARD_ON_SCROLL.getValue()) {
++                            if (isKeyboardVisible()) {
++                                AndroidUtilities.hideKeyboard(getParentActivity().getCurrentFocus());
++                            } else if (chatActivityEnterView != null) {
++                                chatActivityEnterView.hidePopup(true);
++                            }
++                        }
+                         pollHintCell = null;
+                         wasManualScroll = true;
+                         scrollingFloatingDate = true;
+-- 
+2.52.0
+

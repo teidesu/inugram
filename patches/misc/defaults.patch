@@ -1,0 +1,130 @@
+From 8c6eb0e3e7521d463ddfa38e0288a3e682749f1b Mon Sep 17 00:00:00 2001
+From: alina sireneva <alina@tei.su>
+Date: Thu, 9 Apr 2026 04:42:08 +0300
+Subject: [PATCH] improved opinionated defaults
+
+---
+ .../java/org/telegram/messenger/LiteMode.java | 22 +++++--------------
+ .../org/telegram/messenger/SharedConfig.java  |  8 +++----
+ .../java/org/telegram/ui/LoginActivity.java   |  6 ++---
+ 3 files changed, 12 insertions(+), 24 deletions(-)
+
+diff --git a/TMessagesProj/src/main/java/org/telegram/messenger/LiteMode.java b/TMessagesProj/src/main/java/org/telegram/messenger/LiteMode.java
+index 6c37252d4..a340a8e72 100644
+--- a/TMessagesProj/src/main/java/org/telegram/messenger/LiteMode.java
++++ b/TMessagesProj/src/main/java/org/telegram/messenger/LiteMode.java
+@@ -53,35 +53,23 @@ public class LiteMode {
+         FLAG_ANIMATED_EMOJI_CHAT_PREMIUM |
+         FLAG_ANIMATED_EMOJI_KEYBOARD_PREMIUM |
+         FLAG_ANIMATED_EMOJI_REACTIONS_PREMIUM |
+-        FLAG_AUTOPLAY_GIFS |
+-        FLAG_CHAT_THANOS |
+-        FLAG_PARTICLES
++        FLAG_AUTOPLAY_GIFS
+     ); // 198684
+     public static int PRESET_MEDIUM = (
+-        FLAGS_ANIMATED_STICKERS |
++        FLAG_ANIMATED_STICKERS_CHAT |
+         FLAG_ANIMATED_EMOJI_KEYBOARD_PREMIUM |
+         FLAG_ANIMATED_EMOJI_REACTIONS_PREMIUM |
+         FLAG_ANIMATED_EMOJI_CHAT |
+         FLAG_CHAT_FORUM_TWOCOLUMN |
+-        FLAG_CALLS_ANIMATIONS |
+         FLAG_AUTOPLAY_VIDEOS |
+-        FLAG_AUTOPLAY_GIFS |
+-        FLAG_CHAT_THANOS |
+-        FLAG_PARTICLES
++        FLAG_AUTOPLAY_GIFS
+     ); // 204383
+     public static int PRESET_HIGH = (
+-        FLAGS_ANIMATED_STICKERS |
+-        FLAGS_ANIMATED_EMOJI |
+-        FLAG_CHAT_BACKGROUND |
++        FLAG_ANIMATED_STICKERS_CHAT |
+         FLAG_CHAT_FORUM_TWOCOLUMN |
+-        FLAG_CHAT_SPOILER |
+-        FLAG_CHAT_BLUR |
+         FLAG_CHAT_SCALE |
+-        FLAG_CHAT_THANOS |
+-        FLAG_CALLS_ANIMATIONS |
+         FLAG_AUTOPLAY_VIDEOS |
+-        FLAG_AUTOPLAY_GIFS |
+-        FLAG_PARTICLES
++        FLAG_AUTOPLAY_GIFS
+     ); // 262143
+     public static int PRESET_POWER_SAVER = 0;
+ 
+diff --git a/TMessagesProj/src/main/java/org/telegram/messenger/SharedConfig.java b/TMessagesProj/src/main/java/org/telegram/messenger/SharedConfig.java
+index bd13f798a..d7495600e 100644
+--- a/TMessagesProj/src/main/java/org/telegram/messenger/SharedConfig.java
++++ b/TMessagesProj/src/main/java/org/telegram/messenger/SharedConfig.java
+@@ -286,7 +286,7 @@ public class SharedConfig {
+     public static boolean nextMediaTap = true;
+     public static boolean recordViaSco = false;
+     public static boolean customTabs = true;
+-    public static boolean inappBrowser = true;
++    public static boolean inappBrowser = false;
+     public static boolean adaptableColorInBrowser = true;
+     public static boolean onlyLocalInstantView = false;
+     public static boolean directShare = true;
+@@ -594,7 +594,7 @@ public class SharedConfig {
+             nextMediaTap = preferences.getBoolean("next_media_on_tap", true);
+             recordViaSco = preferences.getBoolean("record_via_sco", false);
+             customTabs = preferences.getBoolean("custom_tabs", true);
+-            inappBrowser = preferences.getBoolean("inapp_browser", true);
++            inappBrowser = preferences.getBoolean("inapp_browser", false);
+             adaptableColorInBrowser = preferences.getBoolean("adaptableBrowser", false);
+             onlyLocalInstantView = preferences.getBoolean("onlyLocalInstantView", BuildVars.DEBUG_PRIVATE_VERSION);
+             directShare = preferences.getBoolean("direct_share", true);
+@@ -625,7 +625,7 @@ public class SharedConfig {
+             streamAllVideo = preferences.getBoolean("streamAllVideo", BuildVars.DEBUG_VERSION);
+             streamMkv = preferences.getBoolean("streamMkv", false);
+             suggestStickers = preferences.getInt("suggestStickers", 0);
+-            suggestAnimatedEmoji = preferences.getBoolean("suggestAnimatedEmoji", true);
++            suggestAnimatedEmoji = preferences.getBoolean("suggestAnimatedEmoji", false);
+             overrideDevicePerformanceClass = preferences.getInt("overrideDevicePerformanceClass", -1);
+             devicePerformanceClass = preferences.getInt("devicePerformanceClass", -1);
+             sortContactsByName = preferences.getBoolean("sortContactsByName", false);
+@@ -677,7 +677,7 @@ public class SharedConfig {
+             debugVideoQualities = preferences.getBoolean("debugVideoQualities", false);
+             shadowsInSections = preferences.getBoolean("shadowsInSections", false);
+             debugViewMetrics = preferences.getBoolean("debugViewMetrics", false);
+-            photoHighQualityDefault = preferences.getBoolean("photoHighQualityDefault", false);
++            photoHighQualityDefault = preferences.getBoolean("photoHighQualityDefault", true);
+ 
+             loadDebugConfig(preferences);
+ 
+diff --git a/TMessagesProj/src/main/java/org/telegram/ui/LoginActivity.java b/TMessagesProj/src/main/java/org/telegram/ui/LoginActivity.java
+index 9cc7426b8..3cad0e63c 100644
+--- a/TMessagesProj/src/main/java/org/telegram/ui/LoginActivity.java
++++ b/TMessagesProj/src/main/java/org/telegram/ui/LoginActivity.java
+@@ -318,7 +318,7 @@ public class LoginActivity extends BaseFragment implements NotificationCenter.No
+     private boolean checkPermissions = true;
+     private boolean checkShowPermissions = true;
+     private boolean newAccount;
+-    private boolean syncContacts = true;
++    private boolean syncContacts = false;
+     private boolean testBackend = false;
+ 
+     @ActivityMode
+@@ -683,7 +683,7 @@ public class LoginActivity extends BaseFragment implements NotificationCenter.No
+         }
+         if (savedInstanceState != null) {
+             currentViewNum = savedInstanceState.getInt("currentViewNum", 0);
+-            syncContacts = savedInstanceState.getInt("syncContacts", 1) == 1;
++            syncContacts = false;
+             if (currentViewNum >= VIEW_CODE_MESSAGE && currentViewNum <= VIEW_CODE_CALL) {
+                 int time = savedInstanceState.getInt("open");
+                 if (time != 0 && Math.abs(System.currentTimeMillis() / 1000 - time) >= 24 * 60 * 60) {
+@@ -2345,7 +2345,7 @@ public class LoginActivity extends BaseFragment implements NotificationCenter.No
+                 });
+             }
+ 
+-            final boolean allowTestBackend = (BuildVars.DEBUG_VERSION || TEST_BACKEND_IN_STORE && !BuildConfig.BUNDLE) || getConnectionsManager().isTestBackend();
++            final boolean allowTestBackend = true;
+             if (allowTestBackend && activityMode == MODE_LOGIN) {
+                 testBackendCheckBox = new CheckBoxCell(context, 2);
+                 testBackendCheckBox.setText(getString(R.string.DebugTestBackend), "", testBackend = getConnectionsManager().isTestBackend(), false);
+-- 
+2.52.0
+

@@ -1,0 +1,25 @@
+From bd18cc5d3f3e3432de4e136dbcb4589d8716408e Mon Sep 17 00:00:00 2001
+From: alina sireneva <alina@tei.su>
+Date: Mon, 20 Apr 2026 09:56:20 +0300
+Subject: [PATCH] customizable max chat input lines (+ bumped default)
+
+---
+ .../java/org/telegram/ui/Components/ChatActivityEnterView.java  | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/TMessagesProj/src/main/java/org/telegram/ui/Components/ChatActivityEnterView.java b/TMessagesProj/src/main/java/org/telegram/ui/Components/ChatActivityEnterView.java
+index 359c4e9e6..82cd625cf 100644
+--- a/TMessagesProj/src/main/java/org/telegram/ui/Components/ChatActivityEnterView.java
++++ b/TMessagesProj/src/main/java/org/telegram/ui/Components/ChatActivityEnterView.java
+@@ -5624,7 +5624,7 @@ public class ChatActivityEnterView extends FrameLayout implements
+         messageEditText.setInputType(commonInputType = (messageEditText.getInputType() | EditorInfo.TYPE_TEXT_FLAG_CAP_SENTENCES | EditorInfo.TYPE_TEXT_FLAG_MULTI_LINE));
+         updateFieldHint(false);
+         messageEditText.setSingleLine(false);
+-        messageEditText.setMaxLines(6);
++        messageEditText.setMaxLines(desu.inugram.InuConfig.CHAT_INPUT_MAX_LINES.getValue());
+         messageEditText.setTextSize(TypedValue.COMPLEX_UNIT_DIP, 18);
+         messageEditText.setGravity(Gravity.BOTTOM);
+         messageEditText.setPadding(0, dp(9), 0, dp(10));
+-- 
+2.52.0
+

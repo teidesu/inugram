@@ -1,0 +1,73 @@
+From 1157996a288b238776100627bb626b8c495b5661 Mon Sep 17 00:00:00 2001
+From: alina sireneva <alina@tei.su>
+Date: Fri, 10 Apr 2026 03:52:11 +0300
+Subject: [PATCH] a menu to reset pending login session
+
+---
+ .../java/org/telegram/ui/LoginActivity.java   | 29 +++++++++++++++++--
+ 1 file changed, 27 insertions(+), 2 deletions(-)
+
+diff --git a/TMessagesProj/src/main/java/org/telegram/ui/LoginActivity.java b/TMessagesProj/src/main/java/org/telegram/ui/LoginActivity.java
+index fd6deeaea..ceacdc487 100644
+--- a/TMessagesProj/src/main/java/org/telegram/ui/LoginActivity.java
++++ b/TMessagesProj/src/main/java/org/telegram/ui/LoginActivity.java
+@@ -346,6 +346,7 @@ public class LoginActivity extends BaseFragment implements NotificationCenter.No
+     private RadialProgressView radialProgressView;
+ 
+     private ImageView proxyButtonView;
++    private ImageView resetStorageButton;
+     private ProxyDrawable proxyDrawable;
+ 
+     // Open animation stuff
+@@ -567,6 +568,9 @@ public class LoginActivity extends BaseFragment implements NotificationCenter.No
+                 marginLayoutParams = (MarginLayoutParams) proxyButtonView.getLayoutParams();
+                 marginLayoutParams.topMargin = AndroidUtilities.dp(16) + statusBarHeight;
+ 
++                marginLayoutParams = (MarginLayoutParams) resetStorageButton.getLayoutParams();
++                marginLayoutParams.topMargin = AndroidUtilities.dp(16) + statusBarHeight;
++
+                 marginLayoutParams = (MarginLayoutParams) radialProgressView.getLayoutParams();
+                 marginLayoutParams.topMargin = AndroidUtilities.dp(16) + statusBarHeight;
+ 
+@@ -753,15 +757,36 @@ public class LoginActivity extends BaseFragment implements NotificationCenter.No
+         proxyButtonView.setOnClickListener(v -> presentFragment(new ProxyListActivity()));
+         proxyButtonView.setAlpha(0f);
+         proxyButtonView.setVisibility(View.GONE);
+-        sizeNotifierFrameLayout.addView(proxyButtonView, LayoutHelper.createFrame(32, 32, Gravity.RIGHT | Gravity.TOP, 16, 16, 16, 16));
++        sizeNotifierFrameLayout.addView(proxyButtonView, LayoutHelper.createFrame(32, 32, Gravity.RIGHT | Gravity.TOP, 16, 16, 56, 16));
+         updateProxyButton(false, true);
+ 
++        resetStorageButton = new ImageView(context);
++        resetStorageButton.setImageResource(R.drawable.ic_ab_other);
++        resetStorageButton.setColorFilter(Theme.getColor(Theme.key_windowBackgroundWhiteBlackText));
++        resetStorageButton.setPadding(padding, padding, padding, padding);
++        resetStorageButton.setOnClickListener(v -> {
++            ItemOptions.makeOptions(this, v)
++                .add(R.drawable.msg_delete, getString(R.string.InuResetStorage), () -> {
++                    AlertDialog.Builder b = new AlertDialog.Builder(getParentActivity());
++                    b.setTitle(getString(R.string.InuResetStorage));
++                    b.setMessage(getString(R.string.InuResetStorageConfirm));
++                    b.setPositiveButton(getString(R.string.OK), (d, w) -> {
++                        getMessagesController().performLogout(2);
++                        presentFragment(new LoginActivity(currentAccount), true);
++                    });
++                    b.setNegativeButton(getString(R.string.Cancel), null);
++                    showDialog(b.create());
++                })
++                .show();
++        });
++        sizeNotifierFrameLayout.addView(resetStorageButton, LayoutHelper.createFrame(32, 32, Gravity.RIGHT | Gravity.TOP, 0, 16, 16, 0));
++
+         radialProgressView = new RadialProgressView(context);
+         radialProgressView.setSize(AndroidUtilities.dp(20));
+         radialProgressView.setAlpha(0);
+         radialProgressView.setScaleX(0.1f);
+         radialProgressView.setScaleY(0.1f);
+-        sizeNotifierFrameLayout.addView(radialProgressView, LayoutHelper.createFrame(32, 32, Gravity.RIGHT | Gravity.TOP, 0, 16, 16, 0));
++        sizeNotifierFrameLayout.addView(radialProgressView, LayoutHelper.createFrame(32, 32, Gravity.RIGHT | Gravity.TOP, 0, 16, 32, 0));
+ 
+         floatingButtonIcon = new TransformableLoginButtonView(context);
+         floatingButtonIcon.setTransformType(TransformableLoginButtonView.TRANSFORM_OPEN_ARROW);
+-- 
+2.52.0
+

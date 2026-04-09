@@ -1,0 +1,24 @@
+From bf44eb79470ab6b8d5dcc254cb9e0ecefc14fc21 Mon Sep 17 00:00:00 2001
+From: alina sireneva <alina@tei.su>
+Date: Sun, 12 Apr 2026 21:03:46 +0300
+Subject: [PATCH] replacements for web previews
+
+---
+ TMessagesProj/src/main/java/org/telegram/ui/ChatActivity.java | 1 +
+ 1 file changed, 1 insertion(+)
+
+diff --git a/TMessagesProj/src/main/java/org/telegram/ui/ChatActivity.java b/TMessagesProj/src/main/java/org/telegram/ui/ChatActivity.java
+index 6b84e5b2b..f2926868c 100644
+--- a/TMessagesProj/src/main/java/org/telegram/ui/ChatActivity.java
++++ b/TMessagesProj/src/main/java/org/telegram/ui/ChatActivity.java
+@@ -14046,6 +14046,7 @@ public class ChatActivity extends BaseFragment implements
+             } else {
+                 req.message = textToCheck.toString();
+             }
++            req.message = desu.inugram.helpers.WebPreviewHelper.applyReplacements(req.message);
+             if (foundWebPage != null && req.message.equals(foundWebPage.displayedText)) {
+                 return;
+             }
+-- 
+2.52.0
+

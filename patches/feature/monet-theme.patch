@@ -1,0 +1,163 @@
+From 323b02f7ef550b78f3a7a0c1470216cf3936a304 Mon Sep 17 00:00:00 2001
+From: alina sireneva <alina@tei.su>
+Date: Mon, 20 Apr 2026 10:55:44 +0300
+Subject: [PATCH] monet theme, almost directly ported from NagramX
+
+---
+ .../java/org/telegram/ui/ActionBar/Theme.java | 61 ++++++++++++++++++-
+ .../java/org/telegram/ui/DialogsActivity.java |  3 +
+ .../java/org/telegram/ui/LaunchActivity.java  |  1 +
+ .../org/telegram/ui/SettingsActivity.java     |  6 ++
+ 4 files changed, 69 insertions(+), 2 deletions(-)
+
+diff --git a/TMessagesProj/src/main/java/org/telegram/ui/ActionBar/Theme.java b/TMessagesProj/src/main/java/org/telegram/ui/ActionBar/Theme.java
+index f14a469b4..5c7d547bf 100644
+--- a/TMessagesProj/src/main/java/org/telegram/ui/ActionBar/Theme.java
++++ b/TMessagesProj/src/main/java/org/telegram/ui/ActionBar/Theme.java
+@@ -149,6 +149,7 @@ import java.util.Locale;
+ import java.util.Map;
+ import java.util.Objects;
+ import java.util.concurrent.CountDownLatch;
++import desu.inugram.helpers.MonetHelper;
+ 
+ public class Theme {
+ 
+@@ -2475,13 +2476,33 @@ public class Theme {
+             return defaultAccentCount != 0;
+         }
+ 
++        public boolean inu_isMonet() {
++            return "Monet Dark".equals(name) || "Monet Light".equals(name) || "Monet AMOLED".equals(name);
++        }
++
++        public boolean inu_isMonetLight() {
++            return "Monet Light".equals(name);
++        }
++
++        public boolean inu_isMonetDark() {
++            return "Monet Dark".equals(name);
++        }
++
++        public boolean inu_isMonetAmoled() {
++            return "Monet AMOLED".equals(name);
++        }
++
++        public boolean inu_isMonetNight() {
++            return inu_isMonetDark() || inu_isMonetAmoled();
++        }
++
+         public boolean isDark() {
+             if (isDark != UNKNOWN) {
+                 return isDark == DARK;
+             }
+-            if ("Dark Blue".equals(name) || "Night".equals(name)) {
++            if ("Dark Blue".equals(name) || "Night".equals(name) || "Monet Dark".equals(name) || "Monet AMOLED".equals(name)) {
+                 isDark = DARK;
+-            } else if ("Blue".equals(name) || "Arctic Blue".equals(name) || "Day".equals(name)) {
++            } else if ("Blue".equals(name) || "Arctic Blue".equals(name) || "Day".equals(name) || "Monet Light".equals(name)) {
+                 isDark = LIGHT;
+             }
+             if (isDark == UNKNOWN) {
+@@ -4723,6 +4744,38 @@ public class Theme {
+         themes.add(themeInfo);
+         themesDict.put("Night", themeInfo);
+ 
++        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
++            themeInfo = new ThemeInfo();
++            themeInfo.name = "Monet Light";
++            themeInfo.assetName = "monet_light.attheme";
++            themeInfo.previewBackgroundColor = MonetHelper.getColor("n1_50");
++            themeInfo.previewInColor = MonetHelper.getColor("a2_50");
++            themeInfo.previewOutColor = MonetHelper.getColor("a1_600");
++            themeInfo.sortIndex = 6;
++            themes.add(themeInfo);
++            themesDict.put("Monet Light", themeInfo);
++
++            themeInfo = new ThemeInfo();
++            themeInfo.name = "Monet Dark";
++            themeInfo.assetName = "monet_dark.attheme";
++            themeInfo.previewBackgroundColor = MonetHelper.getColor("n1_900");
++            themeInfo.previewInColor = MonetHelper.getColor("n2_800");
++            themeInfo.previewOutColor = MonetHelper.getColor("a1_100");
++            themeInfo.sortIndex = 7;
++            themes.add(themeInfo);
++            themesDict.put("Monet Dark", themeInfo);
++
++            themeInfo = new ThemeInfo();
++            themeInfo.name = "Monet AMOLED";
++            themeInfo.assetName = "monet_amoled.attheme";
++            themeInfo.previewBackgroundColor = MonetHelper.getColor("n1_1000");
++            themeInfo.previewInColor = MonetHelper.getColor("n2_800");
++            themeInfo.previewOutColor = MonetHelper.getColor("a1_100");
++            themeInfo.sortIndex = 8;
++            themes.add(themeInfo);
++            themesDict.put("Monet AMOLED", themeInfo);
++        }
++
+         String themesString = themeConfig.getString("themes2", null);
+ 
+         int remoteVersion = themeConfig.getInt("remote_version", 0);
+@@ -4955,6 +5008,8 @@ public class Theme {
+                     if (accent != null) {
+                         info.overrideWallpaper = accent.overrideWallpaper;
+                     }
++                } else if (info.inu_isMonet()) {
++                    info.loadWallpapers(themeConfig);
+                 }
+             }
+             if (oldEditor != null) {
+@@ -8162,6 +8217,8 @@ public class Theme {
+                                     } catch (Exception ignore) {
+                                         value = Utilities.parseInt(param);
+                                     }
++                                } else if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S && (param.startsWith("a") || param.startsWith("n") || param.startsWith("monet"))) {
++                                    value = MonetHelper.getColor(param);
+                                 } else {
+                                     value = Utilities.parseInt(param);
+                                 }
+diff --git a/TMessagesProj/src/main/java/org/telegram/ui/DialogsActivity.java b/TMessagesProj/src/main/java/org/telegram/ui/DialogsActivity.java
+index 5d58a85d1..0ad06e4bb 100644
+--- a/TMessagesProj/src/main/java/org/telegram/ui/DialogsActivity.java
++++ b/TMessagesProj/src/main/java/org/telegram/ui/DialogsActivity.java
+@@ -13137,6 +13137,9 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
+     private void showItemOptions() {
+         ItemOptions io = ItemOptions.makeOptions(this, optionsItem);
+         io.setColors(getThemedColor(Theme.key_actionBarDefaultTitle), getThemedColor(Theme.key_actionBarDefaultTitle));
++        if (Theme.getActiveTheme().inu_isMonet()) {
++            io.setSelectorColor(getThemedColor(Theme.key_dialogButtonSelector));
++        }
+         io.setDimAlpha(0x08);
+ 
+         final Activity activity = getParentActivity();
+diff --git a/TMessagesProj/src/main/java/org/telegram/ui/LaunchActivity.java b/TMessagesProj/src/main/java/org/telegram/ui/LaunchActivity.java
+index 810dcd7b8..ac5e41e08 100644
+--- a/TMessagesProj/src/main/java/org/telegram/ui/LaunchActivity.java
++++ b/TMessagesProj/src/main/java/org/telegram/ui/LaunchActivity.java
+@@ -6802,6 +6802,7 @@ public class LaunchActivity extends BasePermissionsActivity implements INavigati
+         if (Theme.selectedAutoNightType == Theme.AUTO_NIGHT_TYPE_SYSTEM) {
+             Theme.checkAutoNightThemeConditions();
+         }
++        desu.inugram.InuHooks.onResume(this);
+         checkWasMutedByAdmin(true);
+         //FileLog.d("UI resume time = " + (SystemClock.elapsedRealtime() - ApplicationLoader.startTime));
+         NotificationCenter.getGlobalInstance().postNotificationName(NotificationCenter.startAllHeavyOperations, 4096);
+diff --git a/TMessagesProj/src/main/java/org/telegram/ui/SettingsActivity.java b/TMessagesProj/src/main/java/org/telegram/ui/SettingsActivity.java
+index 216ee7ed9..fab37b043 100644
+--- a/TMessagesProj/src/main/java/org/telegram/ui/SettingsActivity.java
++++ b/TMessagesProj/src/main/java/org/telegram/ui/SettingsActivity.java
+@@ -1176,6 +1176,12 @@ public class SettingsActivity extends BaseFragment implements NotificationCenter
+             titleView.setTranslationX(icon == 0 ? dp(2) : 0);
+             subtitleView.setTranslationX(icon == 0 ? dp(2) : 0);
+ 
++            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S && Theme.getActiveTheme().inu_isMonet()) {
++                int flatHarmonizedColor = desu.inugram.helpers.MonetHelper.harmonizeAvatarColor(androidx.core.graphics.ColorUtils.blendARGB(iconColorTop, iconColorBottom, 0.5f));
++                iconColorTop = flatHarmonizedColor;
++                iconColorBottom = flatHarmonizedColor;
++            }
++
+             iconBackground.setColor(iconColorTop, iconColorBottom);
+             iconView.setImageResource(icon);
+             titleView.setText(title);
+-- 
+2.52.0
+

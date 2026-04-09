@@ -1,0 +1,55 @@
+From 03338cca4828f3e1a9e58769b115fc1ac868676f Mon Sep 17 00:00:00 2001
+From: alina sireneva <alina@tei.su>
+Date: Mon, 20 Apr 2026 09:36:16 +0300
+Subject: [PATCH] custom formatting ui for rich text fields with better ux
+
+---
+ .../telegram/ui/Components/EditTextBoldCursor.java |  6 ++++--
+ .../telegram/ui/Components/EditTextEffects.java    | 14 +++++++++++++-
+ 2 files changed, 17 insertions(+), 3 deletions(-)
+
+diff --git a/TMessagesProj/src/main/java/org/telegram/ui/Components/EditTextBoldCursor.java b/TMessagesProj/src/main/java/org/telegram/ui/Components/EditTextBoldCursor.java
+index a35bf4711..1306254d2 100644
+--- a/TMessagesProj/src/main/java/org/telegram/ui/Components/EditTextBoldCursor.java
++++ b/TMessagesProj/src/main/java/org/telegram/ui/Components/EditTextBoldCursor.java
+@@ -1170,8 +1170,10 @@ public class EditTextBoldCursor extends EditTextEffects {
+             };
+             callback.onCreateActionMode(floatingActionMode, floatingActionMode.getMenu());
+             extendActionMode(floatingActionMode, floatingActionMode.getMenu());
+-            floatingActionMode.invalidate();
+-            getViewTreeObserver().addOnPreDrawListener(floatingToolbarPreDrawListener);
++            if (!desu.inugram.ui.FormattingPopup.tryHandle(this)) {
++                floatingActionMode.invalidate();
++                getViewTreeObserver().addOnPreDrawListener(floatingToolbarPreDrawListener);
++            }
+             invalidate();
+             return floatingActionMode;
+         } else {
+diff --git a/TMessagesProj/src/main/java/org/telegram/ui/Components/EditTextEffects.java b/TMessagesProj/src/main/java/org/telegram/ui/Components/EditTextEffects.java
+index 4c4f75c97..f28ba4873 100644
+--- a/TMessagesProj/src/main/java/org/telegram/ui/Components/EditTextEffects.java
++++ b/TMessagesProj/src/main/java/org/telegram/ui/Components/EditTextEffects.java
+@@ -439,7 +439,19 @@ public class EditTextEffects extends EditText {
+         invalidateSpoilers();
+     }
+ 
+-    protected void invalidateSpoilers() {
++    public void inu_setSpoilersRevealedNoText(boolean revealed) {
++        isSpoilersRevealed = revealed;
++        Spannable text = getText();
++        if (text != null) {
++            TextStyleSpan[] spans = text.getSpans(0, text.length(), TextStyleSpan.class);
++            for (TextStyleSpan span : spans) {
++                if (span.isSpoiler()) span.setSpoilerRevealed(revealed);
++            }
++        }
++        invalidateSpoilers();
++    }
++
++    public void invalidateSpoilers() {
+         if (spoilers == null) return; // A null-check for super constructor, because it calls onTextChanged
+         spoilersPool.addAll(spoilers);
+         spoilers.clear();
+-- 
+2.52.0
+
