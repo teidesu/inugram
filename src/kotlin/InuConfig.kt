@@ -357,4 +357,7 @@ object InuConfig {
 
     @JvmField
     val MINIMIZE_STICKERS_CREATOR = BoolItem("minimize_stickers_creator", true)
+
+    @JvmField
+    val ANIMATION_SPEED = FloatItem("animation_speed", 1.0f)
 }

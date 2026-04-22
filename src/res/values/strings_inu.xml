@@ -169,6 +169,9 @@
     <string name="InuRoundCameraAsk">Ask every time</string>
 
     <string name="InuNonIslandUI">(Experimental) Non-island UI</string>
+    <string name="InuAnimationSpeed">Animation speed</string>
+    <string name="InuAnimationSpeedInstant">Instant</string>
+    <string name="InuAnimationSpeedInfo">Note: spring-based animations (bottom sheets, popups, some transitions) and some other animations are not affected.</string>
     <string name="InuNonIslandTabBars">Tab bars</string>
     <string name="InuNonIslandGlobalSearch">Global search</string>
     <string name="InuNonIslandChatElements">Chat elements</string>

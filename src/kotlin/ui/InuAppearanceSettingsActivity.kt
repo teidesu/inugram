@@ -2,6 +2,7 @@ package desu.inugram.ui
 
 import android.view.View
 import desu.inugram.InuConfig
+import desu.inugram.InuHooks
 import desu.inugram.helpers.InuUtils
 import org.telegram.messenger.LocaleController
 import org.telegram.messenger.R
@@ -12,6 +13,7 @@ import org.telegram.ui.Components.UniversalAdapter
 
 class InuAppearanceSettingsActivity : InuSettingsPageActivity() {
 
+    private var animationSpeedSlider: SliderCell? = null
 
     override fun getTitle(): CharSequence = LocaleController.getString(R.string.InuGeneral)
 
@@ -50,6 +52,24 @@ class InuAppearanceSettingsActivity : InuSettingsPageActivity() {
             ).setChecked(InuConfig.HIDE_MY_PHONE_NUMBER.value)
         )
         items.add(UItem.asShadow(null))
+
+        if (animationSpeedSlider == null) animationSpeedSlider = SliderCell(
+            this.context, min = 0.5f, max = 2f,
+            defaultValue = InuConfig.ANIMATION_SPEED.default,
+            initialValue = if (InuConfig.ANIMATION_SPEED.value >= 2f) 2f else InuConfig.ANIMATION_SPEED.value,
+            step = 0.05f,
+            format = {
+                if (it >= 2f) LocaleController.getString(R.string.InuAnimationSpeedInstant)
+                else String.format("%.2fx", it)
+            },
+            onChanged = {
+                InuConfig.ANIMATION_SPEED.value = if (it >= 2f) 9999f else it
+                InuHooks.syncAnimationSpeed()
+            },
+        )
+        items.add(UItem.asHeader(LocaleController.getString(R.string.InuAnimationSpeed)))
+        items.add(UItem.asCustom(animationSpeedSlider))
+        items.add(UItem.asShadow(LocaleController.getString(R.string.InuAnimationSpeedInfo)))
 
         items.add(UItem.asHeader(LocaleController.getString(R.string.InuNonIslandUI)))
         items.add(

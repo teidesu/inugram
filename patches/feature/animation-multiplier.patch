@@ -1,0 +1,43 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: alina sireneva <alina@tei.su>
+Date: Wed, 22 Apr 2026 10:42:47 +0300
+Subject: [PATCH] customizable animation speed multiplier for most animations
+
+---
+ .../main/java/org/telegram/ui/ActionBar/ActionBarLayout.java   | 2 +-
+ .../main/java/org/telegram/ui/Components/AnimatedFloat.java    | 3 ++-
+ 2 files changed, 3 insertions(+), 2 deletions(-)
+
+diff --git a/TMessagesProj/src/main/java/org/telegram/ui/ActionBar/ActionBarLayout.java b/TMessagesProj/src/main/java/org/telegram/ui/ActionBar/ActionBarLayout.java
+index 31617bc31..035d3245a 100644
+--- a/TMessagesProj/src/main/java/org/telegram/ui/ActionBar/ActionBarLayout.java
++++ b/TMessagesProj/src/main/java/org/telegram/ui/ActionBar/ActionBarLayout.java
+@@ -1768,7 +1768,7 @@ public class ActionBarLayout extends FrameLayout implements INavigationLayout, F
+                     dt = 18;
+                 }
+                 lastFrameTime = newTime;
+-                float duration = preview && open ? 190.0f : 150.0f;
++                float duration = (preview && open ? 190.0f : 150.0f) / desu.inugram.InuConfig.ANIMATION_SPEED.getValue();
+                 animationProgress += dt / duration;
+                 if (animationProgress > 1.0f) {
+                     animationProgress = 1.0f;
+diff --git a/TMessagesProj/src/main/java/org/telegram/ui/Components/AnimatedFloat.java b/TMessagesProj/src/main/java/org/telegram/ui/Components/AnimatedFloat.java
+index 88c193acb..08bbc4f9a 100644
+--- a/TMessagesProj/src/main/java/org/telegram/ui/Components/AnimatedFloat.java
++++ b/TMessagesProj/src/main/java/org/telegram/ui/Components/AnimatedFloat.java
+@@ -161,10 +161,11 @@ public class AnimatedFloat {
+         return getValue();
+     }
+ 
++    public static float inu_multiplier;
+     public float getValue() {
+         if (transition) {
+             final long now = SystemClock.elapsedRealtime();
+-            final float t = MathUtils.clamp((now - transitionStart - transitionDelay) / (float) transitionDuration, 0, 1);
++            final float t = MathUtils.clamp((now - transitionStart - transitionDelay) / ((float) transitionDuration * inu_multiplier), 0, 1);
+             if (now - transitionStart >= transitionDelay) {
+                 if (transitionInterpolator == null) {
+                     value = AndroidUtilities.lerp(startValue, targetValue, t);
+-- 
+2.52.0
+

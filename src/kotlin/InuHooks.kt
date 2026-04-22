@@ -8,6 +8,7 @@ import desu.inugram.helpers.MonetHelper
 import org.telegram.messenger.LocaleController.getString
 import org.telegram.messenger.R
 import org.telegram.messenger.UserConfig
+import org.telegram.ui.Components.AnimatedFloat
 import org.telegram.ui.Components.GestureDetector2
 import org.telegram.ui.Components.GestureDetectorFixDoubleTap
 import org.telegram.ui.Components.ItemOptions
@@ -23,11 +24,18 @@ object InuHooks {
         InuConfig.load(context)
         syncDoubleTapDelay()
         syncChatBubbles()
+        syncAnimationSpeed()
+    }
+
+    @JvmStatic
+    fun syncAnimationSpeed() {
         try {
             Class.forName("android.animation.ValueAnimator")
                 .getMethod("setDurationScale", Float::class.javaPrimitiveType)
-                .invoke(null, 1f / 1.5f)
-        } catch (_: Throwable) {}
+                .invoke(null, 1f / InuConfig.ANIMATION_SPEED.value)
+        } catch (_: Throwable) {
+        }
+        AnimatedFloat.inu_multiplier = InuConfig.ANIMATION_SPEED.value
     }
 
     @JvmStatic
