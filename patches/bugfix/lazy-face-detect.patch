@@ -1,0 +1,134 @@
+From d690b56f0fa3512d61a17f1195196c372df07734 Mon Sep 17 00:00:00 2001
+From: alina sireneva <alina@tei.su>
+Date: Tue, 21 Apr 2026 20:37:24 +0300
+Subject: [PATCH] avoid running face detect eagerly for every photo, instead do
+ that right when the filters tab is opened, to avoid overhead for the most
+ common case
+
+---
+ .../ui/Components/PhotoFilterView.java        | 25 ++++++++++++++++
+ .../java/org/telegram/ui/PhotoViewer.java     | 30 +++++++++++++++++--
+ 2 files changed, 52 insertions(+), 3 deletions(-)
+
+diff --git a/TMessagesProj/src/main/java/org/telegram/ui/Components/PhotoFilterView.java b/TMessagesProj/src/main/java/org/telegram/ui/Components/PhotoFilterView.java
+index 796cc3fc1..0ee54ce00 100644
+--- a/TMessagesProj/src/main/java/org/telegram/ui/Components/PhotoFilterView.java
++++ b/TMessagesProj/src/main/java/org/telegram/ui/Components/PhotoFilterView.java
+@@ -1218,6 +1218,31 @@ public class PhotoFilterView extends FrameLayout implements FilterShaders.Filter
+         }
+     }
+ 
++    public void inu_enableSoftenSkin() {
++        if (softenSkinTool != -1) {
++            return;
++        }
++        softenSkinTool = 0;
++        enhanceTool++;
++        exposureTool++;
++        contrastTool++;
++        saturationTool++;
++        warmthTool++;
++        fadeTool++;
++        highlightsTool++;
++        shadowsTool++;
++        vignetteTool++;
++        if (grainTool != -1) grainTool++;
++        sharpenTool++;
++        tintShadowsTool++;
++        tintHighlightsTool++;
++        rowsCount++;
++        if (recyclerListView != null && recyclerListView.getAdapter() != null) {
++            recyclerListView.getAdapter().notifyItemInserted(0);
++            recyclerListView.scrollToPosition(0);
++        }
++    }
++
+     public class ToolsAdapter extends RecyclerListView.SelectionAdapter {
+ 
+         private Context mContext;
+diff --git a/TMessagesProj/src/main/java/org/telegram/ui/PhotoViewer.java b/TMessagesProj/src/main/java/org/telegram/ui/PhotoViewer.java
+index 6c30baabe..94b76dbe7 100644
+--- a/TMessagesProj/src/main/java/org/telegram/ui/PhotoViewer.java
++++ b/TMessagesProj/src/main/java/org/telegram/ui/PhotoViewer.java
+@@ -1969,6 +1969,7 @@ public class PhotoViewer implements NotificationCenter.NotificationCenterDelegat
+     }
+ 
+     private int currentImageHasFace;
++    private boolean inu_waitingForFacesOpen;
+     private String currentImageFaceKey;
+     private PaintingOverlay paintingOverlay;
+     private PaintingOverlay leftPaintingOverlay;
+@@ -7846,7 +7847,16 @@ public class PhotoViewer implements NotificationCenter.NotificationCenterDelegat
+                     return;
+                 }
+             }
+-            switchToEditMode(EDIT_MODE_FILTER);
++            if (inu_waitingForFacesOpen) {
++                return;
++            }
++            if (currentImageFaceKey != null && currentImageFaceKey.equals(centerImage.getImageKey())) {
++                switchToEditMode(EDIT_MODE_FILTER);
++                return;
++            }
++            inu_waitingForFacesOpen = true;
++            detectFaces();
++            AndroidUtilities.runOnUIThread(this::inu_openFilterModeIfWaiting, 250);
+         });
+         tuneItem.setContentDescription(getString("AccDescrPhotoAdjust", R.string.AccDescrPhotoAdjust));
+ 
+@@ -7931,7 +7941,6 @@ public class PhotoViewer implements NotificationCenter.NotificationCenterDelegat
+                 if (paintingOverlay.getVisibility() == View.VISIBLE) {
+                     containerView.requestLayout();
+                 }
+-                detectFaces();
+             }
+             if (imageReceiver == centerImage && set && placeProvider != null && placeProvider.scaleToFill() && !ignoreDidSetImage && sendPhotoType != SELECT_TYPE_AVATAR && sendPhotoType != SELECT_TYPE_STICKER) {
+                 if (!wasLayout) {
+@@ -12001,6 +12010,14 @@ public class PhotoViewer implements NotificationCenter.NotificationCenterDelegat
+         }
+     }
+ 
++    private void inu_openFilterModeIfWaiting() {
++        if (!inu_waitingForFacesOpen) {
++            return;
++        }
++        inu_waitingForFacesOpen = false;
++        switchToEditMode(EDIT_MODE_FILTER);
++    }
++
+     private void detectFaces() {
+         if (centerImage.getAnimation() != null || imagesArrLocals.isEmpty() || sendPhotoType == SELECT_TYPE_AVATAR) {
+             return;
+@@ -12034,6 +12051,10 @@ public class PhotoViewer implements NotificationCenter.NotificationCenterDelegat
+                         if (key.equals(imageKey)) {
+                             currentImageHasFace = hasFaces ? 1 : 0;
+                             currentImageFaceKey = key;
++                            if (hasFaces && photoFilterView != null) {
++                                photoFilterView.inu_enableSoftenSkin();
++                            }
++                            inu_openFilterModeIfWaiting();
+                         }
+                     });
+                 } else {
+@@ -12047,6 +12068,7 @@ public class PhotoViewer implements NotificationCenter.NotificationCenterDelegat
+                             currentImageHasFace = 2;
+                             currentImageFaceKey = key;
+                         }
++                        inu_openFilterModeIfWaiting();
+                     });
+                 }
+             } catch (Exception e) {
+@@ -16162,7 +16184,9 @@ public class PhotoViewer implements NotificationCenter.NotificationCenterDelegat
+                 videoFrameBitmap = null;
+             }
+         }
+-        detectFaces();
++        currentImageHasFace = 0;
++        currentImageFaceKey = null;
++        inu_waitingForFacesOpen = false;
+         if (captionEdit != null) {
+             long dialogId = 0;
+             if (placeProvider != null)
+-- 
+2.52.0
+

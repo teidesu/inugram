@@ -1,0 +1,116 @@
+From fe4204ee97d4d5b3bf26e6d4858ff29d942f1ebd Mon Sep 17 00:00:00 2001
+From: alina sireneva <alina@tei.su>
+Date: Tue, 21 Apr 2026 19:53:22 +0300
+Subject: [PATCH] photo viewer ui elements not respecting LiteMode blur
+
+---
+ .../org/telegram/messenger/SharedConfig.java  |  4 ++++
+ .../java/org/telegram/ui/PhotoViewer.java     | 21 ++++++++++++-------
+ 2 files changed, 18 insertions(+), 7 deletions(-)
+
+diff --git a/TMessagesProj/src/main/java/org/telegram/messenger/SharedConfig.java b/TMessagesProj/src/main/java/org/telegram/messenger/SharedConfig.java
+index f03150ec6..b63a8dcce 100644
+--- a/TMessagesProj/src/main/java/org/telegram/messenger/SharedConfig.java
++++ b/TMessagesProj/src/main/java/org/telegram/messenger/SharedConfig.java
+@@ -1773,6 +1773,10 @@ public class SharedConfig {
+         return canBlurChat() && LiteMode.isEnabled(LiteMode.FLAG_CHAT_BLUR);
+     }
+ 
++    public static boolean photoViewerBlurEnabled() {
++        return photoViewerBlur && LiteMode.isEnabled(LiteMode.FLAG_CHAT_BLUR);
++    }
++
+     public static class BackgroundActivityPrefs {
+         private static SharedPreferences prefs;
+ 
+diff --git a/TMessagesProj/src/main/java/org/telegram/ui/PhotoViewer.java b/TMessagesProj/src/main/java/org/telegram/ui/PhotoViewer.java
+index 374d3c604..6c30baabe 100644
+--- a/TMessagesProj/src/main/java/org/telegram/ui/PhotoViewer.java
++++ b/TMessagesProj/src/main/java/org/telegram/ui/PhotoViewer.java
+@@ -6414,7 +6414,7 @@ public class PhotoViewer implements NotificationCenter.NotificationCenterDelegat
+ 
+             @Override
+             public void invalidate() {
+-                if (SharedConfig.photoViewerBlur && (animationInProgress == 1 || animationInProgress == 2 || animationInProgress == 3)) {
++                if (SharedConfig.photoViewerBlurEnabled() && (animationInProgress == 1 || animationInProgress == 2 || animationInProgress == 3)) {
+                     return;
+                 }
+                 super.invalidate();
+@@ -6964,7 +6964,7 @@ public class PhotoViewer implements NotificationCenter.NotificationCenterDelegat
+ 
+             @Override
+             public void invalidate() {
+-                if (SharedConfig.photoViewerBlur && (animationInProgress == 1 || animationInProgress == 2 || animationInProgress == 3)) {
++                if (SharedConfig.photoViewerBlurEnabled() && (animationInProgress == 1 || animationInProgress == 2 || animationInProgress == 3)) {
+                     return;
+                 }
+                 super.invalidate();
+@@ -7074,7 +7074,7 @@ public class PhotoViewer implements NotificationCenter.NotificationCenterDelegat
+ 
+             @Override
+             public void invalidate() {
+-                if (SharedConfig.photoViewerBlur && (animationInProgress == 1 || animationInProgress == 2 || animationInProgress == 3)) {
++                if (SharedConfig.photoViewerBlurEnabled() && (animationInProgress == 1 || animationInProgress == 2 || animationInProgress == 3)) {
+                     return;
+                 }
+                 super.invalidate();
+@@ -20381,7 +20381,7 @@ public class PhotoViewer implements NotificationCenter.NotificationCenterDelegat
+         if (!fancyShadows) {
+             return;
+         }
+-        float maxAlpha = !SharedConfig.photoViewerBlur ? 1f : blurAlpha.set(animationInProgress == 0 || animationInProgress == 2 || animationInProgress == 3);
++        float maxAlpha = !SharedConfig.photoViewerBlurEnabled() ? 1f : blurAlpha.set(animationInProgress == 0 || animationInProgress == 2 || animationInProgress == 3);
+         if (maxAlpha <= 0) {
+             return;
+         }
+@@ -21994,7 +21994,8 @@ public class PhotoViewer implements NotificationCenter.NotificationCenterDelegat
+             && Build.VERSION.SDK_INT >= Build.VERSION_CODES.S
+             && SharedConfig.useNewBlur
+             && SharedConfig.getDevicePerformanceClass() >= SharedConfig.PERFORMANCE_CLASS_HIGH
+-            && !AndroidUtilities.makingGlobalBlurBitmap;
++            && !AndroidUtilities.makingGlobalBlurBitmap
++            && LiteMode.isEnabled(LiteMode.FLAG_CHAT_BLUR);
+     }
+ 
+ 
+@@ -22069,6 +22070,9 @@ public class PhotoViewer implements NotificationCenter.NotificationCenterDelegat
+     }
+ 
+     public void drawCaptionBlur(Canvas canvas, BlurringShader.StoryBlurDrawer drawer, int bgColor, int overlayColor, boolean clip, boolean allowTransparent, boolean allowCrossfade, boolean glass) {
++        if (!SharedConfig.photoViewerBlurEnabled()) {
++            bgColor = Theme.multAlpha(bgColor, 0.75f);
++        }
+         if (BLUR_RENDERNODE()) {
+             final RenderNode renderNode = getRenderNodeColorMatrix(drawer.colorMatrix, glass);
+             final int mBgColor = AndroidUtilities.applyColorMatrix(bgColor, drawer.colorMatrix);
+@@ -22087,7 +22091,7 @@ public class PhotoViewer implements NotificationCenter.NotificationCenterDelegat
+             }
+             return;
+         }
+-        float maxAlpha = !SharedConfig.photoViewerBlur ? 1f : blurAlpha.set(animationInProgress == 0 || animationInProgress == 2 || animationInProgress == 3);
++        float maxAlpha = !SharedConfig.photoViewerBlurEnabled() ? 1f : blurAlpha.set(animationInProgress == 0 || animationInProgress == 2 || animationInProgress == 3);
+ 
+         drawer.paint.setShader(null);
+         if (bgColor != 0) {
+@@ -22096,7 +22100,7 @@ public class PhotoViewer implements NotificationCenter.NotificationCenterDelegat
+             canvas.drawPaint(drawer.paint);
+         }
+ 
+-        if (!SharedConfig.photoViewerBlur || animationInProgress != 0) {
++        if (!SharedConfig.photoViewerBlurEnabled() || animationInProgress != 0) {
+             blurAlpha.set(0, true);
+             if (overlayColor != 0) {
+                 drawer.paint.setColor(overlayColor);
+@@ -22651,6 +22655,9 @@ public class PhotoViewer implements NotificationCenter.NotificationCenterDelegat
+         if (stickerMakerView != null && stickerMakerView.isThanosInProgress) {
+             return;
+         }
++        if (!BLUR_RENDERNODE() && !SharedConfig.photoViewerBlurEnabled()) {
++            return;
++        }
+ //        if (animationInProgress != 0) {
+ //            return;
+ //        }
+-- 
+2.52.0
+

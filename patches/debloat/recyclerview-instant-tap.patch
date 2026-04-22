@@ -1,0 +1,25 @@
+From b09bbbeed806579cbfb7edfb892aae2ceb8c8774 Mon Sep 17 00:00:00 2001
+From: alina sireneva <alina@tei.su>
+Date: Wed, 22 Apr 2026 07:55:37 +0300
+Subject: [PATCH] enable "instant tap" mode in recyclerlistview by default
+
+---
+ .../main/java/org/telegram/ui/Components/RecyclerListView.java  | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/TMessagesProj/src/main/java/org/telegram/ui/Components/RecyclerListView.java b/TMessagesProj/src/main/java/org/telegram/ui/Components/RecyclerListView.java
+index 6709597da..31140bed0 100644
+--- a/TMessagesProj/src/main/java/org/telegram/ui/Components/RecyclerListView.java
++++ b/TMessagesProj/src/main/java/org/telegram/ui/Components/RecyclerListView.java
+@@ -177,7 +177,7 @@ public class RecyclerListView extends RecyclerView implements IBlur3Capture {
+     private boolean interceptedByChild;
+     private boolean wasPressed;
+     private boolean disallowInterceptTouchEvents;
+-    private boolean instantClick;
++    private boolean instantClick = true;
+     private Runnable clickRunnable;
+     private boolean ignoreOnScroll;
+ 
+-- 
+2.52.0
+

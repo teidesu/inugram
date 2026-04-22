@@ -76,3 +76,7 @@ bugfix/message-send-ime-jump.patch
 feature/seen-view-below.patch
 bugfix/formatting-regular.patch
 feature/custom-formatting-ui.patch
+bugfix/photo-viewer-blur.patch
+bugfix/lazy-face-detect.patch
+bugfix/lazy-chromecast.patch
+debloat/recyclerview-instant-tap.patch

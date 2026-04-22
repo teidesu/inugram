@@ -1,0 +1,66 @@
+From 2df97d063d9ca0084668acb2bd861b9fc58b7bf8 Mon Sep 17 00:00:00 2001
+From: alina sireneva <alina@tei.su>
+Date: Tue, 21 Apr 2026 21:27:33 +0300
+Subject: [PATCH] lazy chromecast init in photoviewer
+
+---
+ .../java/org/telegram/ui/PhotoViewer.java     | 28 ++++++++++---------
+ 1 file changed, 15 insertions(+), 13 deletions(-)
+
+diff --git a/TMessagesProj/src/main/java/org/telegram/ui/PhotoViewer.java b/TMessagesProj/src/main/java/org/telegram/ui/PhotoViewer.java
+index 94b76dbe7..3f10a6cc9 100644
+--- a/TMessagesProj/src/main/java/org/telegram/ui/PhotoViewer.java
++++ b/TMessagesProj/src/main/java/org/telegram/ui/PhotoViewer.java
+@@ -900,6 +900,7 @@ public class PhotoViewer implements NotificationCenter.NotificationCenterDelegat
+     private ActionBarMenuItem deleteItem;
+     private ActionBarMenuSubItem castItem;
+     private CastMediaRouteButton castItemButton;
++    private boolean inu_castInitialized;
+     private LinearLayout itemsLayout;
+     private SpeedButtonsLayout chooseSpeedLayout;
+     private ChooseDownloadQualityLayout chooseDownloadQualityLayout;
+@@ -5198,6 +5199,16 @@ public class PhotoViewer implements NotificationCenter.NotificationCenterDelegat
+                         dialog.setTextColor(getThemedColor(Theme.key_voipgroup_actionBarItems));
+                     }
+                 } else if (id == gallery_menu_chromecast) {
++                    if (!inu_castInitialized) {
++                        try {
++                            castItemButton.setRouteSelector(CastContext.getSharedInstance(activityContext).getMergedSelector());
++                            inu_castInitialized = true;
++                        } catch (Exception e) {
++                            FileLog.e(e);
++                            android.widget.Toast.makeText(activityContext, "Chromecast failed: " + e.getLocalizedMessage(), android.widget.Toast.LENGTH_SHORT);
++                            return;
++                        }
++                    }
+                     ChromecastController.getInstance().setCurrentMediaAndCastIfNeeded(getCurrentChromecastMedia());
+                     castItemButton.performClick();
+                 } else if (id == gallery_menu_showall) {
+@@ -5919,20 +5930,11 @@ public class PhotoViewer implements NotificationCenter.NotificationCenterDelegat
+                 }
+             }
+         };
+-        boolean castAvailable = true;
+-        try {
+-            castItemButton.setRouteSelector(CastContext.getSharedInstance(activityContext).getMergedSelector());
+-        } catch (Exception e) {
+-            FileLog.e(e);
+-            castAvailable = false;
+-        }
+         castItemButton.setVisibility(View.INVISIBLE);
+-        if (castAvailable) {
+-            castItem = videoItem.addSubItem(gallery_menu_chromecast, R.drawable.menu_video_chromecast, getString(R.string.VideoPlayerChromecast));
+-            castItem.setEnabledByColor(false, 0xFFFFFFFF, 0xFF73B4EC);
+-            castItem.setSelectorColor(0x0fffffff);
+-            castItem.addView(castItemButton, 0, LayoutHelper.createFrame(LayoutHelper.MATCH_PARENT, LayoutHelper.MATCH_PARENT));
+-        }
++        castItem = videoItem.addSubItem(gallery_menu_chromecast, R.drawable.menu_video_chromecast, getString(R.string.VideoPlayerChromecast));
++        castItem.setEnabledByColor(false, 0xFFFFFFFF, 0xFF73B4EC);
++        castItem.setSelectorColor(0x0fffffff);
++        castItem.addView(castItemButton, 0, LayoutHelper.createFrame(LayoutHelper.MATCH_PARENT, LayoutHelper.MATCH_PARENT));
+ 
+         videoItem.redrawPopup(0xf9222222);
+         videoItem.setOnMenuDismiss(byClick -> checkProgress(0, false, false));
+-- 
+2.52.0
+
