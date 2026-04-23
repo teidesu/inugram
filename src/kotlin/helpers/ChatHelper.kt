@@ -22,6 +22,7 @@ object ChatHelper {
     const val OPTION_DETAILS = 502
     const val OPTION_REPLY_IN = 503
     const val ACTION_OPEN_IN_DISCUSSION = 504
+    const val OPTION_SHOW_IN_CHAT = 505
 
     private fun removeWallpaperKey(currentAccount: Int, dialogId: Long) = "remove_wallpaper:$currentAccount:$dialogId"
     private fun removeThemeKey(currentAccount: Int, dialogId: Long) = "remove_theme:$currentAccount:$dialogId"
@@ -90,6 +91,12 @@ object ChatHelper {
         items.add(LocaleController.getString(R.string.InuMessageDetails))
         options.add(OPTION_DETAILS)
         icons.add(R.drawable.msg_info)
+
+        if (activity.isFiltered) {
+            items.add(LocaleController.getString(R.string.InuShowInChat))
+            options.add(OPTION_SHOW_IN_CHAT)
+            icons.add(R.drawable.msg_openin)
+        }
     }
 
     /** @return true if the option was handled */
@@ -159,6 +166,19 @@ object ChatHelper {
 
             OPTION_DETAILS -> {
                 activity.presentFragment(MessageDetailsActivity(selectedObject, selectedObjectGroup))
+            }
+
+            OPTION_SHOW_IN_CHAT -> {
+                val args = Bundle()
+                val peerId = activity.dialogId
+                if (peerId > 0) {
+                    args.putLong("user_id", peerId)
+                } else {
+                    args.putLong("chat_id", -peerId)
+                }
+                args.putInt("message_id", selectedObject.id)
+                args.putBoolean("need_remove_previous_same_chat_activity", false)
+                activity.presentFragment(ChatActivity(args))
             }
 
             else -> return false

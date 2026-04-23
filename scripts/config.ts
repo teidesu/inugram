@@ -1,4 +1,5 @@
 import type { IconifyJSON } from '@iconify-json/tabler'
+import type { SvgToDrawableOptions } from './svg-to-vector.js'
 import { dirname, join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { icons as tablerIcons } from '@iconify-json/tabler'
@@ -53,9 +54,10 @@ export const forkSyncFiles: ForkSyncFile[] = [
   },
 ]
 
-export const ICON_SELECTION: { pack: IconifyJSON, icons: string[] }[] = [
+export const ICON_SELECTION: { pack: IconifyJSON, icons: string[], options?: SvgToDrawableOptions }[] = [
   {
     pack: tablerIcons,
+    options: { overrideStrokeWidth: 1.67, paddingInset: 2 }, // to match Telegram
     icons: [
       'copy',
       'clipboard',
@@ -70,6 +72,7 @@ export const ICON_SELECTION: { pack: IconifyJSON, icons: string[] }[] = [
       'link',
       'select-all',
       'clear-formatting',
+      'filter',
     ],
   },
 ]

@@ -213,4 +213,16 @@
     <string name="InuFormattingPopupDivider">——————</string>
     <string name="InuCut">Cut</string>
     <string name="InuVersion">Inugram %1$s</string>
+
+    <string name="InuSearchFilter">Filter by media</string>
+    <string name="InuSearchFilterPhotos">Photos</string>
+    <string name="InuSearchFilterVideos">Videos</string>
+    <string name="InuSearchFilterFiles">Files</string>
+    <string name="InuSearchFilterVoice">Voice</string>
+    <string name="InuSearchFilterRound">Round</string>
+    <string name="InuSearchFilterMusic">Music</string>
+    <string name="InuSearchFilterGifs">GIFs</string>
+    <string name="InuSearchFilterPoll">Polls</string>
+    <string name="InuSearchFilterOnlyMatches">Only matches</string>
+    <string name="InuShowInChat">Show in chat</string>
 </resources>

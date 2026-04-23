@@ -148,16 +148,26 @@ function resolveStrokeColor(value: string | undefined): string | null {
   return normalizeSvgColor(value)
 }
 
-export function svgBodyToVectorDrawable(body: string, width: number, height: number): string {
+export interface SvgToDrawableOptions {
+  overrideStrokeWidth?: number
+  paddingInset?: number
+}
+
+export function svgBodyToVectorDrawable(body: string, width: number, height: number, options?: SvgToDrawableOptions): string {
   const shapes = parseSvgBody(body)
+  const inset = options?.paddingInset ?? 0
+  const vpW = width - 2 * inset
+  const vpH = height - 2 * inset
+  const strokeScale = vpW / width
   const paths = shapes.map(shape => {
     const attrs: string[] = [`android:pathData="${shape.d}"`]
     const fill = resolveFillColor(shape.fill)
     const stroke = resolveStrokeColor(shape.stroke)
     if (fill) attrs.push(`android:fillColor="${fill}"`)
     if (stroke) {
+      const baseStroke = options?.overrideStrokeWidth ?? Number(shape.strokeWidth ?? 1)
       attrs.push(`android:strokeColor="${stroke}"`)
-      attrs.push(`android:strokeWidth="${shape.strokeWidth ?? '1'}"`)
+      attrs.push(`android:strokeWidth="${fmtNum(baseStroke * strokeScale)}"`)
       if (shape.strokeLineCap) attrs.push(`android:strokeLineCap="${shape.strokeLineCap}"`)
       if (shape.strokeLineJoin) attrs.push(`android:strokeLineJoin="${shape.strokeLineJoin}"`)
     }
@@ -167,9 +177,13 @@ export function svgBodyToVectorDrawable(body: string, width: number, height: num
 <vector xmlns:android="http://schemas.android.com/apk/res/android"
     android:width="${width}dp"
     android:height="${height}dp"
-    android:viewportWidth="${width}"
-    android:viewportHeight="${height}">
+    android:viewportWidth="${fmtNum(vpW)}"
+    android:viewportHeight="${fmtNum(vpH)}">
+    <group
+        android:translateX="${fmtNum(-inset)}"
+        android:translateY="${fmtNum(-inset)}">
 ${paths.join('\n')}
+    </group>
 </vector>
 `
 }

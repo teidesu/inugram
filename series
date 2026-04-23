@@ -83,3 +83,4 @@ debloat/opt-in-motion-photos.patch
 feature/long-press-reply-in-replies.patch
 debloat/chat-hide-bottom-bar.patch
 feature/animation-multiplier.patch
+feature/search-media-type-filter.patch

@@ -14,7 +14,9 @@
 - Prefer data-layer patches over UI-layer patches.
 - Edit the worktree directly — never touch patch files.
 
-When you'd add fields/methods to stock classes: first try exposing `private` fields instead. If you must add them, prefix with `inu_` (including overloads, e.g. `inu_addTab`).
+When you'd add fields/methods to stock classes: first try exposing `private` fields instead. Do not be afraid to do so,
+this is cleaner than writing a large chunk of logic inside the patch.
+If you must add them, prefix with `inu_` (including overloads, e.g. `inu_addTab`).
 
 When stock logic needs mode-dependent behavior (e.g. width calc), prefer making an if/else wrapper with no indentation for easier rebasing.
 
