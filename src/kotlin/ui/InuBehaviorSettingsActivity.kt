@@ -90,6 +90,14 @@ class InuBehaviorSettingsActivity : InuSettingsPageActivity() {
         )
         items.add(
             mkTwoLineCheckItem(
+                TOGGLE_DISABLE_DRAFT_UPLOAD,
+                R.string.InuDisableDraftUpload,
+                R.string.InuDisableDraftUploadInfo,
+                InuConfig.DISABLE_DRAFT_UPLOAD.value
+            )
+        )
+        items.add(
+            mkTwoLineCheckItem(
                 TOGGLE_DISABLE_PREDICTIVE_BACK,
                 R.string.InuDisablePredictiveBack,
                 R.string.InuDisablePredictiveBackInfo,
@@ -201,6 +209,11 @@ class InuBehaviorSettingsActivity : InuSettingsPageActivity() {
                 (view as? TextCheckCell)?.isChecked = new
             }
 
+            TOGGLE_DISABLE_DRAFT_UPLOAD -> {
+                val new = InuConfig.DISABLE_DRAFT_UPLOAD.toggle()
+                (view as? NotificationsCheckCell)?.isChecked = new
+            }
+
             TOGGLE_DISABLE_PREDICTIVE_BACK -> {
                 val new = InuConfig.DISABLE_PREDICTIVE_BACK.toggle()
                 (view as? NotificationsCheckCell)?.isChecked = new
@@ -298,6 +311,7 @@ class InuBehaviorSettingsActivity : InuSettingsPageActivity() {
         private val TOGGLE_DISABLE_CHAT_BUBBLES = InuUtils.generateId()
         private val BUTTON_WEB_PREVIEW_REPLACEMENTS = InuUtils.generateId()
         private val TOGGLE_DISABLE_INTRO_STICKER = InuUtils.generateId()
+        private val TOGGLE_DISABLE_DRAFT_UPLOAD = InuUtils.generateId()
         private val TOGGLE_DISABLE_PREDICTIVE_BACK = InuUtils.generateId()
         private val BUTTON_ROUND_DEFAULT_CAMERA = InuUtils.generateId()
         private val BUTTON_TEXT_CLASSIFIER_MODE = InuUtils.generateId()

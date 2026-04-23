@@ -117,6 +117,8 @@
     <string name="InuPhotoCopied">Photo copied to clipboard</string>
     <string name="InuCopyFrame">Copy Frame</string>
     <string name="InuFrameCopied">Frame copied to clipboard</string>
+    <string name="InuDisableDraftUpload">Disable uploading drafts</string>
+    <string name="InuDisableDraftUploadInfo">Drafts will only be saved locally and not synced across devices</string>
     <string name="InuCallConfirmation">Ask before calling</string>
     <string name="InuCallConfirmationTitle">Confirm calling</string>
     <string name="InuCallConfirmationText">Call **%1$s**?</string>

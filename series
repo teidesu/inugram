@@ -87,3 +87,4 @@ feature/voice-recorder.patch
 hooks/admin-logs.patch
 feature/hide-pinned-panel.patch
 bugfix/missing-replace-emoji.patch
+debloat/cloud-drafts.patch
