@@ -227,4 +227,5 @@
     <string name="InuSearchFilterOnlyMatches">Only matches</string>
     <string name="InuShowInChat">Show in chat</string>
     <string name="InuEventLogMediaBeforeEdit">Media before the edit:</string>
+    <string name="InuEventLogBanConfirm">Ban **%1$s**?</string>
 </resources>

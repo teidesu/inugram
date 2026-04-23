@@ -4,9 +4,9 @@ Date: Thu, 23 Apr 2026 18:09:31 +0300
 Subject: [PATCH] hooks inside admin logs activity
 
 ---
- .../src/main/java/org/telegram/messenger/MessageObject.java   | 1 +
- .../main/java/org/telegram/ui/ChannelAdminLogActivity.java    | 4 ++++
- 2 files changed, 5 insertions(+)
+ .../main/java/org/telegram/messenger/MessageObject.java   | 1 +
+ .../java/org/telegram/ui/ChannelAdminLogActivity.java     | 8 ++++++--
+ 2 files changed, 7 insertions(+), 2 deletions(-)
 
 diff --git a/TMessagesProj/src/main/java/org/telegram/messenger/MessageObject.java b/TMessagesProj/src/main/java/org/telegram/messenger/MessageObject.java
 index 0000000..0000000 100644
@@ -24,6 +24,15 @@ diff --git a/TMessagesProj/src/main/java/org/telegram/ui/ChannelAdminLogActivity
 index 0000000..0000000 100644
 --- a/TMessagesProj/src/main/java/org/telegram/ui/ChannelAdminLogActivity.java
 +++ b/TMessagesProj/src/main/java/org/telegram/ui/ChannelAdminLogActivity.java
+@@ -1576,7 +1576,7 @@ public class ChannelAdminLogActivity extends BaseFragment implements Notificatio
+     private final static int OPTION_CALL = 17;
+     private final static int OPTION_RESTRICT = 33;
+     private final static int OPTION_REPORT_FALSE_POSITIVE = 34;
+-    private final static int OPTION_BAN = 35;
++    public final static int OPTION_BAN = 35;
+ 
+     private boolean createMenu(View v) {
+         return createMenu(v, 0, 0);
 @@ -1790,6 +1790,7 @@ public class ChannelAdminLogActivity extends BaseFragment implements Notificatio
                  options.add(OPTION_CALL);
              }
@@ -32,7 +41,13 @@ index 0000000..0000000 100644
  
          boolean callbackSent = false;
  
-@@ -2091,6 +2092,9 @@ public class ChannelAdminLogActivity extends BaseFragment implements Notificatio
+@@ -2086,11 +2087,14 @@ public class ChannelAdminLogActivity extends BaseFragment implements Notificatio
+         }
+     }
+ 
+-    private void processSelectedOption(int option) {
++    public void processSelectedOption(int option) {
+         closeMenu();
          if (selectedObject == null) {
              return;
          }

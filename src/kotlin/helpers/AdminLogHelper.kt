@@ -1,12 +1,19 @@
 package desu.inugram.helpers
 
+import android.content.DialogInterface
+import android.widget.TextView
+import desu.inugram.ui.MessageDetailsActivity
+import org.telegram.messenger.AndroidUtilities
+import org.telegram.messenger.ContactsController
+import org.telegram.messenger.Emoji
 import org.telegram.messenger.LocaleController
 import org.telegram.messenger.MediaController
 import org.telegram.messenger.MessageObject
 import org.telegram.messenger.R
-import desu.inugram.ui.MessageDetailsActivity
 import org.telegram.tgnet.TLRPC
-import org.telegram.ui.ActionBar.BaseFragment
+import org.telegram.ui.ActionBar.AlertDialog
+import org.telegram.ui.ActionBar.Theme
+import org.telegram.ui.ChannelAdminLogActivity
 
 object AdminLogHelper {
     const val OPTION_DETAILS = 510
@@ -24,10 +31,50 @@ object AdminLogHelper {
         icons.add(R.drawable.msg_info)
     }
 
+    private var approvedBanForMessage: MessageObject? = null
+
     @JvmStatic
-    fun processMenuOption(option: Int, fragment: BaseFragment, selected: MessageObject): Boolean {
+    fun processMenuOption(option: Int, fragment: ChannelAdminLogActivity, selected: MessageObject): Boolean {
         when (option) {
             OPTION_DETAILS -> fragment.presentFragment(MessageDetailsActivity(selected, null))
+            ChannelAdminLogActivity.OPTION_BAN -> {
+                if (selected == approvedBanForMessage) return false; // continue to default impl
+
+                val name = when (val from = selected.messageOwner.from_id) {
+                    is TLRPC.TL_peerUser -> ContactsController.formatName(
+                        fragment.messagesController.getUser(from.user_id) ?: return true
+                    )
+
+                    is TLRPC.TL_peerChannel, is TLRPC.TL_peerChat -> fragment.messagesController.getChat(from.user_id)?.title
+                        ?: return true
+
+                    else -> return true
+                }
+
+                val dialog = AlertDialog.Builder(fragment.context)
+                    .setTitle(LocaleController.getString(R.string.KickFromGroup))
+                    .setMessage(
+                        AndroidUtilities.replaceTags(
+                            LocaleController.formatString(
+                                R.string.InuEventLogBanConfirm,
+                                name
+                            )
+                        )
+                    )
+                    .setPositiveButton(LocaleController.getString(R.string.Remove)) { _: DialogInterface, _: Int ->
+                        approvedBanForMessage = selected
+                        fragment.processSelectedOption(option)
+                    }
+                    .setNegativeButton(LocaleController.getString(R.string.Cancel), null)
+                    .create()
+
+                fragment.showDialog(dialog)
+
+                dialog.messageTextView.text =
+                    Emoji.replaceEmoji(dialog.messageTextView.text, dialog.messageTextView.paint.fontMetricsInt, false)
+                (dialog.getButton(DialogInterface.BUTTON_POSITIVE) as TextView).setTextColor(Theme.getColor(Theme.key_text_RedBold))
+            }
+
             else -> return false
         }
         return true
