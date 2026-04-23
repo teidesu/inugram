@@ -4,17 +4,41 @@ Date: Sun, 19 Apr 2026 05:33:38 +0300
 Subject: [PATCH] added some missing Emoji.replaceEmoji calls in various places
 
 ---
- .../java/org/telegram/ui/Cells/DialogCell.java   |  1 +
- .../org/telegram/ui/ChannelAdminLogActivity.java |  3 ++-
- .../main/java/org/telegram/ui/ChatActivity.java  | 16 ++++++++--------
- .../telegram/ui/Components/EditTextEmoji.java    |  2 +-
- .../ui/Components/MessagePreviewView.java        |  4 ++--
- .../java/org/telegram/ui/MainTabsActivity.java   |  3 ++-
- .../java/org/telegram/ui/MessageSeenView.java    |  3 ++-
- .../java/org/telegram/ui/SettingsActivity.java   |  4 ++--
- .../Stories/recorder/CaptionContainerView.java   | 13 +++++++++++++
- 9 files changed, 33 insertions(+), 16 deletions(-)
+ .../org/telegram/ui/Cells/AudioPlayerCell.java  |  4 ++--
+ .../java/org/telegram/ui/Cells/DialogCell.java  |  1 +
+ .../telegram/ui/ChannelAdminLogActivity.java    |  3 ++-
+ .../main/java/org/telegram/ui/ChatActivity.java | 17 +++++++++--------
+ .../ui/Components/AudioPlayerAlert.java         |  2 ++
+ .../telegram/ui/Components/EditTextEmoji.java   |  2 +-
+ .../ui/Components/MessagePreviewView.java       |  4 ++--
+ .../java/org/telegram/ui/MainTabsActivity.java  |  3 ++-
+ .../java/org/telegram/ui/MessageSeenView.java   |  5 +++--
+ .../java/org/telegram/ui/SettingsActivity.java  |  4 ++--
+ .../Stories/recorder/CaptionContainerView.java  | 13 +++++++++++++
+ 11 files changed, 39 insertions(+), 19 deletions(-)
 
+diff --git a/TMessagesProj/src/main/java/org/telegram/ui/Cells/AudioPlayerCell.java b/TMessagesProj/src/main/java/org/telegram/ui/Cells/AudioPlayerCell.java
+index 0000000..0000000 100644
+--- a/TMessagesProj/src/main/java/org/telegram/ui/Cells/AudioPlayerCell.java
++++ b/TMessagesProj/src/main/java/org/telegram/ui/Cells/AudioPlayerCell.java
+@@ -30,7 +30,7 @@ import android.widget.ImageView;
+ 
+ import org.telegram.messenger.AndroidUtilities;
+ import org.telegram.messenger.DownloadController;
+-import org.telegram.messenger.FileLoader;
++import org.telegram.messenger.Emoji;import org.telegram.messenger.FileLoader;
+ import org.telegram.messenger.FileLog;
+ import org.telegram.messenger.ImageLoader;
+ import org.telegram.messenger.LocaleController;
+@@ -144,7 +144,7 @@ public class AudioPlayerCell extends FrameLayout implements DownloadController.F
+             CharSequence authorFinal = TextUtils.ellipsize(author, Theme.chat_contextResult_descriptionTextPaint, maxWidth, TextUtils.TruncateAt.END);
+             CharSequence authorFinalH = AndroidUtilities.highlightText(authorFinal, currentMessageObject.highlightedWords, resourcesProvider);
+             if (authorFinalH == null) authorFinalH = authorFinal;
+-            descriptionLayout = new StaticLayout(authorFinalH, Theme.chat_contextResult_descriptionTextPaint, maxWidth + dp(4), Layout.Alignment.ALIGN_NORMAL, 1.0f, 0.0f, false);
++            descriptionLayout = new StaticLayout(Emoji.replaceEmoji(authorFinalH, Theme.chat_contextResult_descriptionTextPaint.getFontMetricsInt(), false), Theme.chat_contextResult_descriptionTextPaint, maxWidth + dp(4), Layout.Alignment.ALIGN_NORMAL, 1.0f, 0.0f, false);
+             descriptionLayoutEmojis = AnimatedEmojiSpan.update(AnimatedEmojiDrawable.CACHE_TYPE_MESSAGES, this, descriptionLayoutEmojis, descriptionLayout);
+         } catch (Exception e) {
+             FileLog.e(e);
 diff --git a/TMessagesProj/src/main/java/org/telegram/ui/Cells/DialogCell.java b/TMessagesProj/src/main/java/org/telegram/ui/Cells/DialogCell.java
 index 0000000..0000000 100644
 --- a/TMessagesProj/src/main/java/org/telegram/ui/Cells/DialogCell.java
@@ -52,7 +76,7 @@ diff --git a/TMessagesProj/src/main/java/org/telegram/ui/ChatActivity.java b/TMe
 index 0000000..0000000 100644
 --- a/TMessagesProj/src/main/java/org/telegram/ui/ChatActivity.java
 +++ b/TMessagesProj/src/main/java/org/telegram/ui/ChatActivity.java
-@@ -15111,11 +15111,11 @@ public class ChatActivity extends BaseFragment implements
+@@ -15119,11 +15119,11 @@ public class ChatActivity extends BaseFragment implements
                              }
                          }
                          if (userNamesCount == 1) {
@@ -66,7 +90,7 @@ index 0000000..0000000 100644
                      }
                  }
                  replyObjectHintTextView.setText(LocaleController.getString(R.string.TapForForwardingOptions));
-@@ -15138,20 +15138,20 @@ public class ChatActivity extends BaseFragment implements
+@@ -15146,20 +15146,20 @@ public class ChatActivity extends BaseFragment implements
                      replyObjectTextView.setText(pendingLinkSearchString);
                  } else {
                      if (webPage.site_name != null) {
@@ -93,6 +117,34 @@ index 0000000..0000000 100644
                      }
                      chatActivityEnterView.setWebPage(webPage, true);
                  }
+@@ -27954,6 +27954,7 @@ public class ChatActivity extends BaseFragment implements
+                 pinnedMessageObject.updateTranslation(false);
+                 if (pinnedMessageObject.type == MessageObject.TYPE_MUSIC) {
+                     pinnedText = String.format("%s - %s", pinnedMessageObject.getMusicAuthor(), pinnedMessageObject.getMusicTitle());
++                    pinnedText = Emoji.replaceEmoji(pinnedText, messageTextView.getPaint().getFontMetricsInt(), false);
+                 } else if (pinnedMessageObject.type == MessageObject.TYPE_POLL) {
+                     if (pinnedMessageObject.messageOwner.media instanceof TLRPC.TL_messageMediaPoll) {
+                         TLRPC.TL_messageMediaPoll poll = (TLRPC.TL_messageMediaPoll) pinnedMessageObject.messageOwner.media;
+diff --git a/TMessagesProj/src/main/java/org/telegram/ui/Components/AudioPlayerAlert.java b/TMessagesProj/src/main/java/org/telegram/ui/Components/AudioPlayerAlert.java
+index 0000000..0000000 100644
+--- a/TMessagesProj/src/main/java/org/telegram/ui/Components/AudioPlayerAlert.java
++++ b/TMessagesProj/src/main/java/org/telegram/ui/Components/AudioPlayerAlert.java
+@@ -76,6 +76,7 @@ import org.telegram.messenger.BuildVars;
+ import org.telegram.messenger.ContactsController;
+ import org.telegram.messenger.DialogObject;
+ import org.telegram.messenger.DownloadController;
++import org.telegram.messenger.Emoji;
+ import org.telegram.messenger.FileLoader;
+ import org.telegram.messenger.FileLog;
+ import org.telegram.messenger.FileRefController;
+@@ -3437,6 +3438,7 @@ public class AudioPlayerAlert extends BottomSheet implements NotificationCenter.
+         }
+ 
+         public void setText(CharSequence text, boolean animated) {
++            text = Emoji.replaceEmoji(text, textViews[activeIndex].getPaint().getFontMetricsInt(), false);
+             final CharSequence currentText = textViews[activeIndex].getText();
+ 
+             if (TextUtils.isEmpty(currentText) || !animated) {
 diff --git a/TMessagesProj/src/main/java/org/telegram/ui/Components/EditTextEmoji.java b/TMessagesProj/src/main/java/org/telegram/ui/Components/EditTextEmoji.java
 index 0000000..0000000 100644
 --- a/TMessagesProj/src/main/java/org/telegram/ui/Components/EditTextEmoji.java
@@ -161,6 +213,15 @@ index 0000000..0000000 100644
  import org.telegram.messenger.ImageLocation;
  import org.telegram.messenger.LocaleController;
  import org.telegram.messenger.MessageObject;
+@@ -269,7 +270,7 @@ public class MessageSeenView extends FrameLayout {
+ 
+         avatarsImageView.commitTransition(false);
+         if (peerIds.size() == 1 && users.get(0) != null) {
+-            titleView.setText(ContactsController.formatName(users.get(0)));
++            titleView.setText(Emoji.replaceEmoji(ContactsController.formatName(users.get(0)), titleView.getPaint().getFontMetricsInt(), false));
+         } else {
+             if (peerIds.size() == 0) {
+                 titleView.setText(LocaleController.getString(R.string.NobodyViewed));
 @@ -415,7 +416,7 @@ public class MessageSeenView extends FrameLayout {
                  avatarDrawable.setInfo(currentAccount, object);
                  ImageLocation imageLocation = ImageLocation.getForUserOrChat(object, ImageLocation.TYPE_SMALL);

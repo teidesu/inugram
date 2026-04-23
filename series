@@ -84,6 +84,6 @@ feature/search-media-type-filter.patch
 debloat/disable-bg-parallax.patch
 feature/no-join-discuss.patch
 feature/voice-recorder.patch
-bugfix/missing-replace-emoji.patch
 hooks/admin-logs.patch
 feature/hide-pinned-panel.patch
+bugfix/missing-replace-emoji.patch

@@ -24,7 +24,7 @@ diff --git a/TMessagesProj/src/main/java/org/telegram/ui/ChannelAdminLogActivity
 index 0000000..0000000 100644
 --- a/TMessagesProj/src/main/java/org/telegram/ui/ChannelAdminLogActivity.java
 +++ b/TMessagesProj/src/main/java/org/telegram/ui/ChannelAdminLogActivity.java
-@@ -1576,7 +1576,7 @@ public class ChannelAdminLogActivity extends BaseFragment implements Notificatio
+@@ -1575,7 +1575,7 @@ public class ChannelAdminLogActivity extends BaseFragment implements Notificatio
      private final static int OPTION_CALL = 17;
      private final static int OPTION_RESTRICT = 33;
      private final static int OPTION_REPORT_FALSE_POSITIVE = 34;
@@ -33,7 +33,7 @@ index 0000000..0000000 100644
  
      private boolean createMenu(View v) {
          return createMenu(v, 0, 0);
-@@ -1790,6 +1790,7 @@ public class ChannelAdminLogActivity extends BaseFragment implements Notificatio
+@@ -1789,6 +1789,7 @@ public class ChannelAdminLogActivity extends BaseFragment implements Notificatio
                  options.add(OPTION_CALL);
              }
          }
@@ -41,7 +41,7 @@ index 0000000..0000000 100644
  
          boolean callbackSent = false;
  
-@@ -2086,11 +2087,14 @@ public class ChannelAdminLogActivity extends BaseFragment implements Notificatio
+@@ -2085,11 +2086,14 @@ public class ChannelAdminLogActivity extends BaseFragment implements Notificatio
          }
      }
  
