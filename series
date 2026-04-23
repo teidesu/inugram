@@ -85,3 +85,4 @@ debloat/disable-bg-parallax.patch
 feature/no-join-discuss.patch
 feature/voice-recorder.patch
 bugfix/missing-replace-emoji.patch
+feature/prev-media-in-admin-logs.patch
