@@ -128,6 +128,8 @@
     <string name="InuMutualContact">Mutual contact</string>
     <string name="InuMutualContactDescription">This contact is a mutual contact</string>
     <string name="InuDisableChatTitlePhone">Never show phone number in title</string>
+    <string name="InuDisableChatPreviewExpand">Disable tap-to-expand in chat preview</string>
+    <string name="InuDisableChatPreviewExpandInfo">Tap on the long-press chat preview won\'t open the chat in full screen</string>
     <string name="InuHideMyPhoneNumber">Hide my phone number</string>
     <string name="InuFullWidthChannelBubbles">Full-width channel bubbles</string>
     <string name="InuProfileIdMode">Show ID in profile</string>

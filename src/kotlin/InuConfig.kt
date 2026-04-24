@@ -341,6 +341,9 @@ object InuConfig {
     val OLD_MENTION_INDICATOR = BoolItem("old_mention_indicator", true)
 
     @JvmField
+    val DISABLE_CHAT_PREVIEW_EXPAND = BoolItem("disable_chat_preview_expand", true)
+
+    @JvmField
     val FORMATTING_POPUP = BoolItem("formatting_popup", true)
 
     class TextClassifierModeItem : IntItem("text_classifier_mode", IMPROVED) {

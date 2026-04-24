@@ -56,6 +56,14 @@ class InuDialogsSettingsActivity : InuSettingsPageActivity() {
             UItem.asCheck(TOGGLE_BOT_WEBVIEW_BUTTON, LocaleController.getString(R.string.InuHideBotWebView))
                 .setChecked(InuConfig.HIDE_BOT_WEBVIEW_INPUT.value)
         )
+        items.add(
+            mkTwoLineCheckItem(
+                TOGGLE_DISABLE_CHAT_PREVIEW_EXPAND,
+                R.string.InuDisableChatPreviewExpand,
+                R.string.InuDisableChatPreviewExpandInfo,
+                InuConfig.DISABLE_CHAT_PREVIEW_EXPAND.value
+            )
+        )
         items.add(UItem.asShadow(null))
         // end chat list section
 
@@ -185,6 +193,11 @@ class InuDialogsSettingsActivity : InuSettingsPageActivity() {
                 showRestartBulletin()
             }
 
+            TOGGLE_DISABLE_CHAT_PREVIEW_EXPAND -> {
+                val new = InuConfig.DISABLE_CHAT_PREVIEW_EXPAND.toggle()
+                (view as? NotificationsCheckCell)?.isChecked = new
+            }
+
             TOGGLE_BOTTOM_TABS_HIDE -> {
                 val new = InuConfig.BOTTOM_TABS_HIDE.toggle()
                 (view as? NotificationsCheckCell)?.isChecked = new
@@ -268,5 +281,6 @@ class InuDialogsSettingsActivity : InuSettingsPageActivity() {
         private val TOGGLE_FAB_HIDE_ON_SCROLL = InuUtils.generateId()
         private val TOGGLE_FAB_OFFSET_FOR_BOTTOM_BAR = InuUtils.generateId()
         private val TOGGLE_FAB_LEFT_SIDE = InuUtils.generateId()
+        private val TOGGLE_DISABLE_CHAT_PREVIEW_EXPAND = InuUtils.generateId()
     }
 }
