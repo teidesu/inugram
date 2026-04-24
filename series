@@ -42,7 +42,6 @@ debloat/hide-stories.patch
 bugfix/dialogs-list-scrolling.patch
 bugfix/shared-media-player.patch
 debloat/hide-reactions-entry.patch
-bugfix/photo-spoiler-power-saving.patch
 debloat/simple-attachalert-anim.patch
 debloat/hide-suggestions.patch
 feature/double-tap-action.patch
@@ -90,3 +89,4 @@ debloat/cloud-drafts.patch
 bugfix/media-loading-perf.patch
 feature/hide-my-phone.patch
 debloat/tap-to-open-preview.patch
+bugfix/photo-spoiler-power-saving.patch

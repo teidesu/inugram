@@ -5,29 +5,50 @@ Subject: [PATCH] disabling animated spoiler in power settings doesn't apply to
  photos
 
 ---
- .../main/java/org/telegram/ui/Cells/ChatMessageCell.java | 9 +++++++++
- 1 file changed, 9 insertions(+)
+ .../main/java/org/telegram/ui/Cells/ChatMessageCell.java  | 8 ++++++++
+ .../telegram/ui/Components/spoilers/SpoilerEffect2.java   | 3 ++-
+ 2 files changed, 10 insertions(+), 1 deletion(-)
 
 diff --git a/TMessagesProj/src/main/java/org/telegram/ui/Cells/ChatMessageCell.java b/TMessagesProj/src/main/java/org/telegram/ui/Cells/ChatMessageCell.java
 index 0000000..0000000 100644
 --- a/TMessagesProj/src/main/java/org/telegram/ui/Cells/ChatMessageCell.java
 +++ b/TMessagesProj/src/main/java/org/telegram/ui/Cells/ChatMessageCell.java
-@@ -14962,6 +14962,15 @@ public class ChatMessageCell extends BaseCell implements SeekBar.SeekBarDelegate
+@@ -14960,6 +14960,14 @@ public class ChatMessageCell extends BaseCell implements SeekBar.SeekBarDelegate
+ 
+     public void drawBlurredPhotoParticles(Canvas canvas) {
          if (mediaSpoilerEffect2 == null) {
++            if (!LiteMode.isEnabled(LiteMode.FLAG_CHAT_SPOILER)) {
++                if (mediaSpoilerEffect == null) {
++                    mediaSpoilerEffect = new SpoilerEffect();
++                }
++                mediaSpoilerEffect.setColor(ColorUtils.setAlphaComponent(Color.WHITE, (int) (255 * 0.5f * photoImage.getAlpha())));
++                mediaSpoilerEffect.setBounds((int) photoImage.getImageX(), (int) photoImage.getImageY(), (int) photoImage.getImageX2(), (int) photoImage.getImageY2());
++                mediaSpoilerEffect.draw(canvas);
++            }
              return;
          }
-+        if (!LiteMode.isEnabled(LiteMode.FLAG_CHAT_SPOILER)) {
-+            if (mediaSpoilerEffect == null) {
-+                mediaSpoilerEffect = new SpoilerEffect();
-+            }
-+            mediaSpoilerEffect.setColor(ColorUtils.setAlphaComponent(Color.WHITE, (int) (255 * 0.5f * photoImage.getAlpha())));
-+            mediaSpoilerEffect.setBounds((int) photoImage.getImageX(), (int) photoImage.getImageY(), (int) photoImage.getImageX2(), (int) photoImage.getImageY2());
-+            mediaSpoilerEffect.draw(canvas);
-+            return;
-+        }
          canvas.save();
-         canvas.translate(photoImage.getImageX(), photoImage.getImageY());
-         mediaSpoilerEffect2.draw(canvas, this, (int) photoImage.getImageWidth(), (int) photoImage.getImageHeight(), photoImage.getAlpha(), drawingToBitmap);
+diff --git a/TMessagesProj/src/main/java/org/telegram/ui/Components/spoilers/SpoilerEffect2.java b/TMessagesProj/src/main/java/org/telegram/ui/Components/spoilers/SpoilerEffect2.java
+index 0000000..0000000 100644
+--- a/TMessagesProj/src/main/java/org/telegram/ui/Components/spoilers/SpoilerEffect2.java
++++ b/TMessagesProj/src/main/java/org/telegram/ui/Components/spoilers/SpoilerEffect2.java
+@@ -20,6 +20,7 @@ import androidx.annotation.NonNull;
+ 
+ import org.telegram.messenger.AndroidUtilities;
+ import org.telegram.messenger.FileLog;
++import org.telegram.messenger.LiteMode;
+ import org.telegram.messenger.R;
+ import org.telegram.messenger.SharedConfig;
+ import org.telegram.messenger.Utilities;
+@@ -58,7 +59,7 @@ public class SpoilerEffect2 {
+     }
+ 
+     public static SpoilerEffect2 getInstance(int type, View view, ViewGroup rootView) {
+-        if (view == null || !supports()) {
++        if (view == null || !supports() || !LiteMode.isEnabled(LiteMode.FLAG_CHAT_SPOILER)) {
+             return null;
+         }
+         if (instance == null) {
 -- 
 2.52.0
 
