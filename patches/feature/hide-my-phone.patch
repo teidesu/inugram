@@ -17,7 +17,7 @@ index 0000000..0000000 100644
                              text = PhoneFormat.getInstance().format("+" + vcardPhone);
                              phoneNumber = vcardPhone;
 -                        } else if (user != null && !TextUtils.isEmpty(user.phone)) {
-+                        } else if (user != null && !TextUtils.isEmpty(user.phone) && !desu.inugram.InuConfig.HIDE_MY_PHONE_NUMBER.getValue()) {
++                        } else if (user != null && !TextUtils.isEmpty(user.phone) && !(user.self && desu.inugram.InuConfig.HIDE_MY_PHONE_NUMBER.getValue())) {
                              text = PhoneFormat.getInstance().format("+" + user.phone);
                              phoneNumber = user.phone;
                          } else {
@@ -26,7 +26,7 @@ index 0000000..0000000 100644
 --- a/TMessagesProj/src/main/java/org/telegram/ui/SettingsActivity.java
 +++ b/TMessagesProj/src/main/java/org/telegram/ui/SettingsActivity.java
 @@ -530,7 +530,7 @@ public class SettingsActivity extends BaseFragment implements NotificationCenter
-         titleView.setText(UserObject.getUserName(user));
+         titleView.setText(Emoji.replaceEmoji(UserObject.getUserName(user), titleView.getPaint().getFontMetricsInt(), false));
          final StringBuilder sb = new StringBuilder();
          if (user != null) {
 -            sb.append(PhoneFormat.getInstance().format("+" + user.phone));

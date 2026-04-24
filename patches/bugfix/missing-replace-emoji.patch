@@ -243,7 +243,7 @@ index 0000000..0000000 100644
 +        titleView.setText(Emoji.replaceEmoji(UserObject.getUserName(user), titleView.getPaint().getFontMetricsInt(), false));
          final StringBuilder sb = new StringBuilder();
          if (user != null) {
-             sb.append(desu.inugram.InuConfig.HIDE_MY_PHONE_NUMBER.getValue() ? getString(R.string.MobileHidden) : PhoneFormat.getInstance().format("+" + user.phone));
+             sb.append(PhoneFormat.getInstance().format("+" + user.phone));
 @@ -1034,7 +1034,7 @@ public class SettingsActivity extends BaseFragment implements NotificationCenter
              avatarDrawable.setInfo(account, user);
              avatarView.getImageReceiver().setCurrentAccount(account);
