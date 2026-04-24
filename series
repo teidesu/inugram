@@ -88,3 +88,4 @@ hooks/admin-logs.patch
 feature/hide-pinned-panel.patch
 bugfix/missing-replace-emoji.patch
 debloat/cloud-drafts.patch
+bugfix/media-loading-perf.patch

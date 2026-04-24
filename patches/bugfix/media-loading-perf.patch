@@ -1,0 +1,187 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: alina sireneva <alina@tei.su>
+Date: Fri, 24 Apr 2026 13:06:22 +0300
+Subject: [PATCH] a very experimental patch that might actually break a lot and
+ might not actually be that much worth it, but theoretically should reduce
+ background cpu usage
+
+---
+ .../org/telegram/DispatchQueuePriority.java   |  2 +-
+ .../telegram/messenger/FileLoadOperation.java | 18 ++++++++--
+ .../org/telegram/messenger/ImageLoader.java   | 34 ++++++++++++++-----
+ 3 files changed, 42 insertions(+), 12 deletions(-)
+
+diff --git a/TMessagesProj/src/main/java/org/telegram/DispatchQueuePriority.java b/TMessagesProj/src/main/java/org/telegram/DispatchQueuePriority.java
+index 0000000..0000000 100644
+--- a/TMessagesProj/src/main/java/org/telegram/DispatchQueuePriority.java
++++ b/TMessagesProj/src/main/java/org/telegram/DispatchQueuePriority.java
+@@ -10,7 +10,7 @@ import java.util.concurrent.TimeUnit;
+ 
+ public class DispatchQueuePriority {
+ 
+-    ThreadPoolExecutor threadPoolExecutor = new ThreadPoolExecutor(1, 1, 60, TimeUnit.SECONDS, new PriorityBlockingQueue<>(10, new Comparator<Runnable>() {
++    ThreadPoolExecutor threadPoolExecutor = new ThreadPoolExecutor(2, 2, 60, TimeUnit.SECONDS, new PriorityBlockingQueue<>(10, new Comparator<Runnable>() {
+ 
+         @Override
+         public int compare(Runnable o1, Runnable o2) {
+diff --git a/TMessagesProj/src/main/java/org/telegram/messenger/FileLoadOperation.java b/TMessagesProj/src/main/java/org/telegram/messenger/FileLoadOperation.java
+index 0000000..0000000 100644
+--- a/TMessagesProj/src/main/java/org/telegram/messenger/FileLoadOperation.java
++++ b/TMessagesProj/src/main/java/org/telegram/messenger/FileLoadOperation.java
+@@ -631,6 +631,11 @@ public class FileLoadOperation {
+                             filePartsStream.write(filesQueueByteBuffer.buf, 0, bufferSize);
+                             writingToFilePartsStream = false;
+                             if (closeFilePartsStreamOnWriteEnd) {
++                                try {
++                                    filePartsStream.getFD().sync();
++                                } catch (Exception e) {
++                                    FileLog.e(e);
++                                }
+                                 try {
+                                     filePartsStream.getChannel().close();
+                                 } catch (Exception e) {
+@@ -1141,7 +1146,7 @@ public class FileLoadOperation {
+                     cacheFileParts.delete();
+                 }
+                 try {
+-                    filePartsStream = new RandomAccessFile(cacheFileParts, "rws");
++                    filePartsStream = new RandomAccessFile(cacheFileParts, "rw");
+                     long len = filePartsStream.length();
+                     if (len % 8 == 4) {
+                         len -= 4;
+@@ -1207,7 +1212,7 @@ public class FileLoadOperation {
+             if (fileNameIv != null) {
+                 cacheIvTemp = new File(tempPath, fileNameIv);
+                 try {
+-                    fiv = new RandomAccessFile(cacheIvTemp, "rws");
++                    fiv = new RandomAccessFile(cacheIvTemp, "rw");
+                     if (downloadedBytes != 0 && !newKeyGenerated) {
+                         long len = cacheIvTemp.length();
+                         if (len > 0 && len % 64 == 0) {
+@@ -1234,7 +1239,7 @@ public class FileLoadOperation {
+             }
+             updateProgress();
+             try {
+-                fileOutputStream = new RandomAccessFile(cacheFileTemp, "rws");
++                fileOutputStream = new RandomAccessFile(cacheFileTemp, "rw");
+                 if (downloadedBytes != 0) {
+                     fileOutputStream.seek(downloadedBytes);
+                 }
+@@ -1493,6 +1498,11 @@ public class FileLoadOperation {
+             if (filePartsStream != null) {
+                 synchronized (FileLoadOperation.this) {
+                     if (!writingToFilePartsStream) {
++                        try {
++                            filePartsStream.getFD().sync();
++                        } catch (Exception e) {
++                            FileLog.e(e);
++                        }
+                         try {
+                             filePartsStream.getChannel().close();
+                         } catch (Exception e) {
+@@ -1943,6 +1953,7 @@ public class FileLoadOperation {
+                     }
+                     FileChannel channel = fileOutputStream.getChannel();
+                     channel.write(bytes.buffer);
++                    channel.force(false);
+                     addPart(notLoadedBytesRanges, requestInfo.offset, requestInfo.offset + currentBytesSize, true);
+                     if (BuildVars.LOGS_ENABLED && FULL_LOGS) {
+                         FileLog.d(fileName + " add part " + requestInfo.offset + " " + (requestInfo.offset + currentBytesSize));
+@@ -2006,6 +2017,7 @@ public class FileLoadOperation {
+                     if (fiv != null) {
+                         fiv.seek(0);
+                         fiv.write(iv);
++                        fiv.getChannel().force(false);
+                     }
+                     if (totalBytesCount > 0 && state == stateDownloading) {
+                         copyNotLoadedRanges();
+diff --git a/TMessagesProj/src/main/java/org/telegram/messenger/ImageLoader.java b/TMessagesProj/src/main/java/org/telegram/messenger/ImageLoader.java
+index 0000000..0000000 100644
+--- a/TMessagesProj/src/main/java/org/telegram/messenger/ImageLoader.java
++++ b/TMessagesProj/src/main/java/org/telegram/messenger/ImageLoader.java
+@@ -42,6 +42,7 @@ import androidx.core.graphics.ColorUtils;
+ import org.json.JSONArray;
+ import org.json.JSONObject;
+ import org.telegram.DispatchQueuePriority;
++import desu.inugram.helpers.BitmapPool;
+ import org.telegram.messenger.secretmedia.EncryptedFileInputStream;
+ import org.telegram.messenger.utils.BitmapsCache;
+ import org.telegram.messenger.wallpaper.WallpaperGiftBitmapDrawable;
+@@ -135,8 +136,6 @@ public class ImageLoader {
+     private HashMap<String, Integer> forceLoadingImages = new HashMap<>();
+     private static ThreadLocal<byte[]> bytesLocal = new ThreadLocal<>();
+     private static ThreadLocal<byte[]> bytesThumbLocal = new ThreadLocal<>();
+-    private static byte[] header = new byte[12];
+-    private static byte[] headerThumb = new byte[12];
+     private int currentHttpTasksCount = 0;
+     private int currentArtworkTasksCount = 0;
+     private boolean canForce8888;
+@@ -171,11 +170,24 @@ public class ImageLoader {
+         return false;
+     }
+ 
++    private static final android.util.LruCache<Integer, BitmapDrawable> inu_strippedCache = new android.util.LruCache<>(64);
++
+     public static Drawable createStripedBitmap(ArrayList<TLRPC.PhotoSize> thumbs) {
+         for (int i = 0; i < thumbs.size(); i++) {
+             if (thumbs.get(i) instanceof TLRPC.TL_photoStrippedSize) {
+                 TLRPC.TL_photoStrippedSize size = (TLRPC.TL_photoStrippedSize) thumbs.get(i);
+-                return new BitmapDrawable(ApplicationLoader.applicationContext.getResources(), getStrippedPhotoBitmap(size.bytes, "b"));
++                int key = Arrays.hashCode(size.bytes);
++                BitmapDrawable cached = inu_strippedCache.get(key);
++                if (cached != null) {
++                    return cached;
++                }
++                Bitmap bitmap = getStrippedPhotoBitmap(size.bytes, "b");
++                if (bitmap == null) {
++                    return null;
++                }
++                BitmapDrawable drawable = new BitmapDrawable(ApplicationLoader.applicationContext.getResources(), bitmap);
++                inu_strippedCache.put(key, drawable);
++                return drawable;
+             }
+         }
+         return null;
+@@ -853,6 +865,8 @@ public class ImageLoader {
+     private class CacheOutTask implements Runnable {
+         private Thread runningThread;
+         private final Object sync = new Object();
++        private byte[] header = new byte[12];
++        private byte[] headerThumb = new byte[12];
+ 
+         private CacheImage cacheImage;
+         private boolean isCancelled;
+@@ -1456,6 +1470,10 @@ public class ImageLoader {
+                         }
+ 
+                         opts.inDither = false;
++                        if (opts.outWidth > 0 && opts.outHeight > 0 && !opts.inPurgeable && secureDocumentKey == null) {
++                            opts.inMutable = true;
++                            BitmapPool.tryAcquire(opts, opts.inPreferredConfig);
++                        }
+                         if (mediaId != null && mediaThumbPath == null) {
+                             if (mediaIsVideo) {
+                                 if (mediaId == 0) {
+@@ -2060,14 +2078,14 @@ public class ImageLoader {
+         int memoryClass = ((ActivityManager) ApplicationLoader.applicationContext.getSystemService(Context.ACTIVITY_SERVICE)).getMemoryClass();
+         int maxSize;
+         if (canForce8888 = memoryClass >= 192) {
+-            maxSize = 30;
++            maxSize = 80;
+         } else {
+-            maxSize = 15;
++            maxSize = 30;
+         }
+-        int cacheSize = DEBUG_MODE ? 1 : Math.min(maxSize, memoryClass / 7) * 1024 * 1024;
++        int cacheSize = DEBUG_MODE ? 1 : Math.min(maxSize, memoryClass / 6) * 1024 * 1024;
+ 
+-        int commonCacheSize =  DEBUG_MODE ? 1 : (int) (cacheSize * 0.8f);
+-        int smallImagesCacheSize =   DEBUG_MODE ? 1 : (int) (cacheSize * 0.2f);
++        int commonCacheSize =  DEBUG_MODE ? 1 : (int) (cacheSize * 0.7f);
++        int smallImagesCacheSize =   DEBUG_MODE ? 1 : (int) (cacheSize * 0.3f);
+ 
+         memCache = new LruCache<BitmapDrawable>(commonCacheSize) {
+             @Override
+-- 
+2.52.0
+
