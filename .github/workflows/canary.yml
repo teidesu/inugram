@@ -1,0 +1,49 @@
+name: canary
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+concurrency:
+  group: canary-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    uses: ./.github/workflows/_build.yml
+    secrets: inherit
+    with:
+      mode: canary
+      artifact-name: inugram-canary-${{ github.sha }}
+
+  upload:
+    needs: build
+    if: github.event_name == 'push' && github.repository == 'teidesu/inugram'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: pnpm
+
+      - run: pnpm install --frozen-lockfile
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: inugram-canary-${{ github.sha }}
+          path: out
+
+      - name: upload to telegram
+        env:
+          TELEGRAM_API_ID: ${{ secrets.TELEGRAM_API_ID }}
+          TELEGRAM_API_HASH: ${{ secrets.TELEGRAM_API_HASH }}
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHANNEL: ${{ vars.TELEGRAM_CHANNEL || 'InugramCI' }}
+          MTPROTO_SESSION: ${{ secrets.MTPROTO_SESSION }}
+          GH_VARS_TOKEN: ${{ secrets.INU_VARS_TOKEN }}
+        run: pnpm tsx scripts/ci/upload.ts out

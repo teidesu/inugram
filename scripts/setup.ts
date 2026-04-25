@@ -155,21 +155,37 @@ async function forceReimportPatches(seriesEntries: string[]) {
   await importSeries(seriesEntries)
 }
 
-const force = process.argv.slice(2).includes('--force')
+const args = process.argv.slice(2)
+const force = args.includes('--force')
+const noStgit = args.includes('--no-stgit')
 
 const commit = await readPinnedUpstreamCommit()
 const seriesEntries = await readSeries()
-const expectedPatches = seriesEntries.map(patchNameFromSeriesEntry)
 
-await ensureWorktree(commit)
-const branchExisted = await ensureBranch(commit)
-await ensureStgitStack(commit, branchExisted)
-if (force) {
-  await forceReimportPatches(seriesEntries)
+if (noStgit) {
+  if (hasGitRepo(worktreeDir)) {
+    throw new Error(`--no-stgit needs a fresh worktree (${worktreeDir} already exists)`)
+  }
+  await cloneUpstream(worktreeDir, commit)
+  const repo = cd(worktreeDir)
+  for (const entry of seriesEntries) {
+    step(`Applying ${entry}`)
+    await repo`git apply ${join(patchesDir, entry)}`
+  }
+  await linkForkSource(worktreeDir)
+  await generateIconDrawables(worktreeDir)
+  success('Flat setup complete')
 } else {
-  await ensurePatches(expectedPatches, seriesEntries)
+  const expectedPatches = seriesEntries.map(patchNameFromSeriesEntry)
+  await ensureWorktree(commit)
+  const branchExisted = await ensureBranch(commit)
+  await ensureStgitStack(commit, branchExisted)
+  if (force) {
+    await forceReimportPatches(seriesEntries)
+  } else {
+    await ensurePatches(expectedPatches, seriesEntries)
+  }
+  const linkedAny = await linkForkSource(worktreeDir)
+  const generatedAny = await generateIconDrawables(worktreeDir)
+  success(linkedAny || generatedAny ? 'Setup complete' : 'Up to date')
 }
-const linkedAny = await linkForkSource(worktreeDir)
-const generatedAny = await generateIconDrawables(worktreeDir)
-
-success(linkedAny || generatedAny ? 'Setup complete' : 'Up to date')

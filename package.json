@@ -2,6 +2,7 @@
   "name": "inugram",
   "type": "module",
   "private": true,
+  "packageManager": "pnpm@10.33.2+sha512.a90faf6feeab71ad6c6e57f94e0fe1a12f5dcc22cd754db40ae9593eb6a3e0b6b12e3540218bb37ae083404b1f2ce6db2a4121e979829b4aff94b99f49da1cf8",
   "scripts": {
     "setup": "tsx scripts/setup.ts",
     "export": "tsx scripts/export.ts",
@@ -11,6 +12,7 @@
     "@antfu/eslint-config": "^8.1.0",
     "@fuman/utils": "^0.0.19",
     "@iconify-json/tabler": "^1.2.33",
+    "@mtcute/node": "^0.29.6",
     "eslint": "^10.2.0",
     "tinyglobby": "^0.2.16",
     "zx": "^8.8.4"

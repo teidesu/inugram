@@ -1,0 +1,68 @@
+name: release
+
+on:
+  workflow_dispatch:
+
+concurrency:
+  group: release
+  cancel-in-progress: false
+
+jobs:
+  build:
+    if: github.ref == 'refs/heads/main' && github.repository == 'teidesu/inugram'
+    uses: ./.github/workflows/_build.yml
+    secrets: inherit
+    with:
+      mode: release
+      artifact-name: inugram-release-${{ github.sha }}
+
+  publish:
+    needs: build
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: pnpm
+
+      - run: pnpm install --frozen-lockfile
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: inugram-release-${{ github.sha }}
+          path: out
+
+      - name: create github release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          tag='${{ needs.build.outputs.tag }}'
+          apk='${{ needs.build.outputs.apk-name }}'
+          gh release create "$tag" \
+            --target "$GITHUB_SHA" \
+            --title "$tag" \
+            --generate-notes \
+            "out/$apk"
+
+      - name: upload to telegram
+        env:
+          TELEGRAM_API_ID: ${{ secrets.TELEGRAM_API_ID }}
+          TELEGRAM_API_HASH: ${{ secrets.TELEGRAM_API_HASH }}
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHANNEL: ${{ vars.TELEGRAM_CHANNEL || 'InugramCI' }}
+          MTPROTO_SESSION: ${{ secrets.MTPROTO_SESSION }}
+          GH_VARS_TOKEN: ${{ secrets.INU_VARS_TOKEN }}
+        run: pnpm tsx scripts/ci/upload.ts out
+
+      - name: bump INU_BUILD variable
+        env:
+          GH_TOKEN: ${{ secrets.INU_VARS_TOKEN }}
+        run: |
+          next=$((${{ needs.build.outputs.build-num }} + 1))
+          gh variable set INU_BUILD --body "$next"

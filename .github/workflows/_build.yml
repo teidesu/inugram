@@ -1,0 +1,167 @@
+name: _build
+
+on:
+  workflow_call:
+    inputs:
+      mode:
+        required: true
+        type: string
+      artifact-name:
+        required: true
+        type: string
+    outputs:
+      apk-name:
+        value: ${{ jobs.build.outputs.apk-name }}
+      ver-name:
+        value: ${{ jobs.build.outputs.ver-name }}
+      ver-code:
+        value: ${{ jobs.build.outputs.ver-code }}
+      build-num:
+        value: ${{ jobs.build.outputs.build-num }}
+      tag:
+        value: ${{ jobs.build.outputs.tag }}
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 180
+    outputs:
+      apk-name: ${{ steps.info.outputs.apk-name }}
+      ver-name: ${{ steps.info.outputs.ver-name }}
+      ver-code: ${{ steps.info.outputs.ver-code }}
+      build-num: ${{ steps.info.outputs.build-num }}
+      tag: ${{ steps.info.outputs.tag }}
+    steps:
+      - name: free disk space
+        uses: jlumbroso/free-disk-space@main
+        with:
+          tool-cache: false
+          android: false
+          dotnet: true
+          haskell: true
+          large-packages: false
+          swap-storage: true
+
+      - uses: actions/checkout@v4
+
+      - name: configure git identity
+        run: |
+          git config --global user.email ci@inugram
+          git config --global user.name 'inugram ci'
+
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: pnpm
+
+      - run: pnpm install --frozen-lockfile
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 21
+
+      - name: set up ccache
+        uses: hendrikmuhs/ccache-action@v1.2
+        with:
+          append-timestamp: false
+          key: ccache-${{ inputs.mode }}
+          restore-keys: |
+            ccache-${{ inputs.mode }}
+            ccache-
+          max-size: 2G
+
+      - name: set up worktree
+        run: pnpm run setup -- --no-stgit
+
+      - name: compute build info
+        id: info
+        env:
+          INU_BUILD: ${{ vars.INU_BUILD || '1' }}
+        run: pnpm tsx scripts/ci/version.ts ${{ inputs.mode }}
+
+      - name: resolve keystore
+        id: keystore
+        env:
+          KEYSTORE_BASE64: ${{ secrets.KEYSTORE_BASE64 }}
+          KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
+          KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
+        run: |
+          mkdir -p worktree/TMessagesProj/config
+          ks=worktree/TMessagesProj/config/release.keystore
+          if [ -z "$KEYSTORE_BASE64" ]; then
+            echo "::error::KEYSTORE_BASE64 secret missing"
+            exit 1
+          fi
+          echo "$KEYSTORE_BASE64" | base64 -d > "$ks"
+          echo "store_password=$KEYSTORE_PASSWORD" >> "$GITHUB_OUTPUT"
+          echo "key_password=$KEY_PASSWORD" >> "$GITHUB_OUTPUT"
+
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-home-cache-cleanup: true
+
+      - name: cache android sdk components
+        uses: actions/cache@v4
+        with:
+          path: |
+            ${{ env.ANDROID_HOME }}/ndk/21.4.7075529
+            ${{ env.ANDROID_HOME }}/cmake/3.10.2.4988404
+            ${{ env.ANDROID_HOME }}/platforms/android-35
+            ${{ env.ANDROID_HOME }}/build-tools/35.0.0
+          key: android-sdk-ndk21.4.7075529-cmake3.10.2-platform35-bt35
+
+      - uses: android-actions/setup-android@v3
+        with:
+          packages: >-
+            platforms;android-35
+            build-tools;35.0.0
+            cmake;3.10.2.4988404
+            ndk;21.4.7075529
+
+      - name: tune gradle jvm args
+        run: |
+          MEMORY_KB=$(awk '/MemTotal/ {print $2}' /proc/meminfo)
+          MEMORY_GB=$((MEMORY_KB / 1024 / 1024))
+          echo "detected memory: ${MEMORY_GB}GB"
+          if [ $MEMORY_GB -ge 12 ]; then
+            sed -i '/^org\.gradle\.jvmargs=/d' gradle.properties
+            echo "org.gradle.jvmargs=-Xmx8G -XX:MaxMetaspaceSize=2G -XX:+UseParallelGC -XX:+HeapDumpOnOutOfMemoryError -Dfile.encoding=UTF-8" >> gradle.properties
+          fi
+
+      - name: build
+        working-directory: worktree
+        env:
+          COMMIT_ID: ${{ github.sha }}
+          INU_BUILD: ${{ steps.info.outputs.build-num }}
+          ORG_GRADLE_PROJECT_RELEASE_STORE_PASSWORD: ${{ steps.keystore.outputs.store_password }}
+          ORG_GRADLE_PROJECT_RELEASE_KEY_ALIAS: inugram
+          ORG_GRADLE_PROJECT_RELEASE_KEY_PASSWORD: ${{ steps.keystore.outputs.key_password }}
+        run: ./gradlew --no-daemon :TMessagesProj_App:assembleRelease
+
+      - name: stage artifacts
+        run: |
+          mkdir -p out
+          apk='${{ steps.info.outputs.apk-name }}'
+          cp worktree/TMessagesProj_App/build/outputs/apk/release/app.apk "out/$apk"
+          commit_msg=$(git log -1 --pretty=%s)
+          jq -n \
+            --arg verName '${{ steps.info.outputs.ver-name }}' \
+            --argjson verCode '${{ steps.info.outputs.ver-code }}' \
+            --argjson buildNum '${{ steps.info.outputs.build-num }}' \
+            --arg apkFile "$apk" \
+            --arg commitSha "$GITHUB_SHA" \
+            --arg commitMessage "$commit_msg" \
+            --arg repo "$GITHUB_REPOSITORY" \
+            --arg kind '${{ inputs.mode }}' \
+            --arg tag '${{ steps.info.outputs.tag }}' \
+            '{verName:$verName,verCode:$verCode,buildNum:$buildNum,apkFile:$apkFile,commitSha:$commitSha,commitMessage:$commitMessage,repo:$repo,kind:$kind,tag:$tag}' \
+            > out/build-info.json
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ${{ inputs.artifact-name }}
+          path: out/*
+          if-no-files-found: error
+          retention-days: 30

@@ -2,22 +2,22 @@ From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
 From: alina sireneva <alina@tei.su>
 Date: Tue, 21 Apr 2026 07:47:50 +0300
 Subject: [PATCH] build support stuff for fork-specific code: - added kotlin -
- bumped min sdk to 26, removed desugaring
+ bumped min sdk to 26, removed desugaring - versioning
 
 ---
- TMessagesProj/build.gradle                    |  96 +++--------------
+ TMessagesProj/build.gradle                    | 101 +++--------------
  TMessagesProj/google-services.json            |  76 +++----------
  TMessagesProj/proguard-rules.pro              |  11 ++
- .../org/telegram/messenger/BuildVars.java     |  13 +--
+ .../org/telegram/messenger/BuildVars.java     |  14 ++-
  .../org/telegram/ui/PaymentFormActivity.java  |  28 +++--
  .../org/telegram/ui/SettingsActivity.java     |   2 +-
- TMessagesProj_App/build.gradle                | 102 ++----------------
+ TMessagesProj_App/build.gradle                | 105 +++---------------
  TMessagesProj_App/google-services.json        |  76 +++----------
  TMessagesProj_AppTests/build.gradle           |   5 +-
- build.gradle                                  |  10 +-
+ build.gradle                                  |  12 +-
  gradle.properties                             |   4 +-
  settings.gradle                               |   4 -
- 12 files changed, 93 insertions(+), 334 deletions(-)
+ 12 files changed, 104 insertions(+), 334 deletions(-)
 
 diff --git a/TMessagesProj/build.gradle b/TMessagesProj/build.gradle
 index 0000000..0000000 100644
@@ -49,7 +49,7 @@ index 0000000..0000000 100644
  }
  
  def isWindows = String.valueOf(DefaultNativePlatform.currentOperatingSystem.toFamilyName() == OperatingSystemFamily.WINDOWS)
-@@ -94,23 +93,21 @@ android {
+@@ -94,23 +93,24 @@ android {
      compileOptions {
          sourceCompatibility JavaVersion.VERSION_1_8
          targetCompatibility JavaVersion.VERSION_1_8
@@ -75,10 +75,13 @@ index 0000000..0000000 100644
                  version '3.10.2'
 -                arguments '-DANDROID_STL=c++_static', '-DANDROID_PLATFORM=android-21' //, '-DANDROID_SUPPORT_FLEXIBLE_PAGE_SIZES=ON'
 +                arguments '-DANDROID_STL=c++_static', '-DANDROID_PLATFORM=android-26' //, '-DANDROID_SUPPORT_FLEXIBLE_PAGE_SIZES=ON'
++                if (rootProject.ext.ccachePath) {
++                    arguments += ["-DCMAKE_C_COMPILER_LAUNCHER=${rootProject.ext.ccachePath}", "-DCMAKE_CXX_COMPILER_LAUNCHER=${rootProject.ext.ccachePath}"]
++                }
              }
          }
      }
-@@ -123,78 +120,12 @@ android {
+@@ -123,78 +123,13 @@ android {
              multiDexEnabled true
              proguardFiles getDefaultProguardFile('proguard-android.txt'), '../TMessagesProj/proguard-rules.pro', '../TMessagesProj/proguard-rules-beta.pro'
              ndk.debugSymbolLevel = 'FULL'
@@ -135,6 +138,7 @@ index 0000000..0000000 100644
 -            buildConfigField "String", "BETA_URL", "\"" + getProps("BETA_HARDCORE_URL") + "\""
 +            buildConfigField "String", "BUILD_VERSION_STRING", "\"" + rootProject.ext.verName + "\""
 +            buildConfigField "String", "BUILD_DATE", "\"" + rootProject.ext.buildDate + "\""
++            buildConfigField "int", "STOCK_VERSION_CODE", String.valueOf(rootProject.ext.stockVerCode)
              buildConfigField "boolean", "DEBUG_VERSION", "true"
              buildConfigField "boolean", "DEBUG_PRIVATE_VERSION", "true"
              buildConfigField "boolean", "BUNDLE", "false"
@@ -159,7 +163,7 @@ index 0000000..0000000 100644
          }
  
          release {
-@@ -204,14 +135,12 @@ android {
+@@ -204,14 +139,13 @@ android {
              multiDexEnabled true
              proguardFiles getDefaultProguardFile('proguard-android.txt'), '../TMessagesProj/proguard-rules.pro'
              ndk.debugSymbolLevel = 'FULL'
@@ -168,6 +172,7 @@ index 0000000..0000000 100644
 -            buildConfigField "String", "BETA_URL", "\"\""
 +            buildConfigField "String", "BUILD_VERSION_STRING", "\"" + rootProject.ext.verName + "\""
 +            buildConfigField "String", "BUILD_DATE", "\"" + rootProject.ext.buildDate + "\""
++            buildConfigField "int", "STOCK_VERSION_CODE", String.valueOf(rootProject.ext.stockVerCode)
              buildConfigField "boolean", "DEBUG_VERSION", "false"
              buildConfigField "boolean", "DEBUG_PRIVATE_VERSION", "false"
              buildConfigField "boolean", "BUNDLE", "false"
@@ -176,7 +181,7 @@ index 0000000..0000000 100644
          }
      }
  
-@@ -229,7 +158,6 @@ def getProps(String propName) {
+@@ -229,7 +163,6 @@ def getProps(String propName) {
          return "";
      }
  }
@@ -184,7 +189,7 @@ index 0000000..0000000 100644
  
  task checkVisibility {
      doFirst {
-@@ -251,4 +179,4 @@ task checkVisibility {
+@@ -251,4 +184,4 @@ task checkVisibility {
      }
  }
  
@@ -331,11 +336,12 @@ diff --git a/TMessagesProj/src/main/java/org/telegram/messenger/BuildVars.java b
 index 0000000..0000000 100644
 --- a/TMessagesProj/src/main/java/org/telegram/messenger/BuildVars.java
 +++ b/TMessagesProj/src/main/java/org/telegram/messenger/BuildVars.java
-@@ -25,23 +25,24 @@ public class BuildVars {
+@@ -25,23 +25,25 @@ public class BuildVars {
      public static boolean CHECK_UPDATES = true;
      public static boolean NO_SCOPED_STORAGE = Build.VERSION.SDK_INT <= 29;
      public static String BUILD_VERSION_STRING = BuildConfig.BUILD_VERSION_STRING;
 +    public static String BUILD_DATE = BuildConfig.BUILD_DATE;
++    public static int STOCK_VERSION_CODE = BuildConfig.STOCK_VERSION_CODE;
  
 -    public static int APP_ID = 4;
 -    public static String APP_HASH = "014b35b6184100b085b0d0572f9b5103";
@@ -453,7 +459,7 @@ index 0000000..0000000 100644
                      break;
              }
 -            return formatString(R.string.TelegramVersion, String.format(Locale.US, "v%s (%d)\n%s", pInfo.versionName, code, abi));
-+            return formatString(R.string.InuVersion, String.format(Locale.US, "v%s (based on %s, build %s)\nBuilt on %s", pInfo.versionName, pInfo.versionCode / 100, pInfo.versionCode % 100, BuildVars.BUILD_DATE));
++            return formatString(R.string.InuVersion, String.format(Locale.US, "v%s (based on %d, build %d)\nBuilt on %s", pInfo.versionName, BuildVars.STOCK_VERSION_CODE, pInfo.versionCode, BuildVars.BUILD_DATE));
          } catch (Exception e) {
              FileLog.e(e);
          }
@@ -519,7 +525,7 @@ index 0000000..0000000 100644
          release {
              debuggable false
              jniDebuggable false
-@@ -95,95 +73,35 @@ android {
+@@ -95,95 +73,38 @@ android {
      }
  
      sourceSets.debug {
@@ -620,6 +626,9 @@ index 0000000..0000000 100644
                  version '3.10.2'
 -                arguments '-DANDROID_STL=c++_static', '-DANDROID_PLATFORM=android-21' // , '-DANDROID_SUPPORT_FLEXIBLE_PAGE_SIZES=ON'
 +                arguments '-DANDROID_STL=c++_static', '-DANDROID_PLATFORM=android-26' // , '-DANDROID_SUPPORT_FLEXIBLE_PAGE_SIZES=ON'
++                if (rootProject.ext.ccachePath) {
++                    arguments += ["-DCMAKE_C_COMPILER_LAUNCHER=${rootProject.ext.ccachePath}", "-DCMAKE_CXX_COMPILER_LAUNCHER=${rootProject.ext.ccachePath}"]
++                }
              }
          }
      }
@@ -760,7 +769,7 @@ diff --git a/build.gradle b/build.gradle
 index 0000000..0000000 100644
 --- a/build.gradle
 +++ b/build.gradle
-@@ -10,9 +10,17 @@ buildscript {
+@@ -10,9 +10,19 @@ buildscript {
          classpath 'com.google.gms:google-services:4.3.15'
          classpath 'com.huawei.agconnect:agcp:1.9.1.301'
          classpath 'com.google.firebase:firebase-crashlytics-gradle:2.9.0'
@@ -776,8 +785,10 @@ index 0000000..0000000 100644
 +
 +ext {
 +  verName = "${APP_VERSION_NAME}${commitId != null ? "-${commitId.take(7)}" : ''}"
-+  verCode = Integer.parseInt(APP_VERSION_CODE) * 100 + (Integer.parseInt(System.getenv('INU_BUILD') ?: '0'))
++  verCode = Integer.parseInt(System.getenv('INU_BUILD') ?: '10000')
++  stockVerCode = Integer.parseInt(APP_VERSION_CODE)
 +  buildDate = java.time.LocalDateTime.now().format(java.time.format.DateTimeFormatter.ISO_DATE)
++  ccachePath = ['sh', '-c', 'command -v ccache'].execute().text.trim() ?: null
  }
 \ No newline at end of file
 diff --git a/gradle.properties b/gradle.properties
