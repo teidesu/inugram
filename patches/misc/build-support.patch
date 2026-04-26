@@ -5,9 +5,9 @@ Subject: [PATCH] build support stuff for fork-specific code: - added kotlin -
  bumped min sdk to 26, removed desugaring - versioning
 
 ---
- TMessagesProj/build.gradle                    | 101 +++--------------
+ TMessagesProj/build.gradle                    | 103 ++++-------------
  TMessagesProj/google-services.json            |  76 +++----------
- TMessagesProj/proguard-rules.pro              |  11 ++
+ TMessagesProj/proguard-rules.pro              |  12 ++
  .../org/telegram/messenger/BuildVars.java     |  14 ++-
  .../org/telegram/ui/PaymentFormActivity.java  |  28 +++--
  .../org/telegram/ui/SettingsActivity.java     |   2 +-
@@ -17,7 +17,7 @@ Subject: [PATCH] build support stuff for fork-specific code: - added kotlin -
  build.gradle                                  |  12 +-
  gradle.properties                             |   4 +-
  settings.gradle                               |   4 -
- 12 files changed, 104 insertions(+), 334 deletions(-)
+ 12 files changed, 108 insertions(+), 333 deletions(-)
 
 diff --git a/TMessagesProj/build.gradle b/TMessagesProj/build.gradle
 index 0000000..0000000 100644
@@ -49,7 +49,7 @@ index 0000000..0000000 100644
  }
  
  def isWindows = String.valueOf(DefaultNativePlatform.currentOperatingSystem.toFamilyName() == OperatingSystemFamily.WINDOWS)
-@@ -94,23 +93,24 @@ android {
+@@ -94,23 +93,28 @@ android {
      compileOptions {
          sourceCompatibility JavaVersion.VERSION_1_8
          targetCompatibility JavaVersion.VERSION_1_8
@@ -69,7 +69,10 @@ index 0000000..0000000 100644
 -        vectorDrawables.generatedDensities = ['mdpi', 'hdpi', 'xhdpi', 'xxhdpi']
 -
 -        multiDexEnabled true
--
++        ndk {
++            abiFilters "arm64-v8a"
++        }
+ 
          externalNativeBuild {
              cmake {
                  version '3.10.2'
@@ -81,7 +84,7 @@ index 0000000..0000000 100644
              }
          }
      }
-@@ -123,78 +123,13 @@ android {
+@@ -123,78 +127,13 @@ android {
              multiDexEnabled true
              proguardFiles getDefaultProguardFile('proguard-android.txt'), '../TMessagesProj/proguard-rules.pro', '../TMessagesProj/proguard-rules-beta.pro'
              ndk.debugSymbolLevel = 'FULL'
@@ -163,7 +166,7 @@ index 0000000..0000000 100644
          }
  
          release {
-@@ -204,14 +139,13 @@ android {
+@@ -204,14 +143,13 @@ android {
              multiDexEnabled true
              proguardFiles getDefaultProguardFile('proguard-android.txt'), '../TMessagesProj/proguard-rules.pro'
              ndk.debugSymbolLevel = 'FULL'
@@ -181,7 +184,7 @@ index 0000000..0000000 100644
          }
      }
  
-@@ -229,7 +163,6 @@ def getProps(String propName) {
+@@ -229,7 +167,6 @@ def getProps(String propName) {
          return "";
      }
  }
@@ -189,7 +192,7 @@ index 0000000..0000000 100644
  
  task checkVisibility {
      doFirst {
-@@ -251,4 +184,4 @@ task checkVisibility {
+@@ -251,4 +188,4 @@ task checkVisibility {
      }
  }
  
@@ -313,7 +316,7 @@ diff --git a/TMessagesProj/proguard-rules.pro b/TMessagesProj/proguard-rules.pro
 index 0000000..0000000 100644
 --- a/TMessagesProj/proguard-rules.pro
 +++ b/TMessagesProj/proguard-rules.pro
-@@ -104,6 +104,17 @@
+@@ -104,6 +104,18 @@
  -dontwarn org.checkerframework.**
  -dontwarn javax.annotation.**
  
@@ -326,6 +329,7 @@ index 0000000..0000000 100644
 +-dontwarn org.bouncycastle.cert.**
 +-dontwarn org.bouncycastle.openssl.**
 +-dontwarn org.objectweb.asm.**
++-dontwarn com.google.crypto.tink.**
 +# /inu
 +
  # Use -keep to explicitly keep any other classes shrinking would remove
