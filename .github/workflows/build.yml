@@ -91,7 +91,8 @@ jobs:
           restore-keys: |
             ccache-${{ env.MODE }}
             ccache-
-          max-size: 2G
+          max-size: 5G
+          verbose: 2
           save: ${{ github.event_name != 'pull_request' }}
 
       - name: set up worktree
@@ -107,16 +108,6 @@ jobs:
         with:
           gradle-home-cache-cleanup: true
           cache-read-only: ${{ github.event_name == 'pull_request' }}
-
-      - name: cache android sdk components
-        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
-        with:
-          path: |
-            ${{ env.ANDROID_HOME }}/ndk/21.4.7075529
-            ${{ env.ANDROID_HOME }}/cmake/3.10.2.4988404
-            ${{ env.ANDROID_HOME }}/platforms/android-35
-            ${{ env.ANDROID_HOME }}/build-tools/35.0.0
-          key: android-sdk-ndk21.4.7075529-cmake3.10.2-platform35-bt35
 
       - uses: android-actions/setup-android@9fc6c4e9069bf8d3d10b2204b1fb8f6ef7065407 # v3
         with:
@@ -139,6 +130,9 @@ jobs:
           COMMIT_ID: ${{ github.sha }}
           INU_BUILD: ${{ steps.info.outputs.build-num }}
           INU_BUILD_TYPE: ${{ env.MODE == 'release' && 'stable' || 'canary' }}
+          CCACHE_COMPILERCHECK: content
+          CCACHE_SLOPPINESS: time_macros,file_macro,include_file_mtime,include_file_ctime,locale,system_headers
+          CCACHE_BASEDIR: ${{ github.workspace }}/worktree
         run: ./gradlew --no-daemon :TMessagesProj_App:assembleRelease
 
       - name: stage artifacts
