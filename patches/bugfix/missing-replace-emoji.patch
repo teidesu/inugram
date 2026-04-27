@@ -242,7 +242,7 @@ index 0000000..0000000 100644
          final StringBuilder sb = new StringBuilder();
          if (user != null) {
              sb.append(PhoneFormat.getInstance().format("+" + user.phone));
-@@ -1034,7 +1034,7 @@ public class SettingsActivity extends BaseFragment implements NotificationCenter
+@@ -1012,7 +1012,7 @@ public class SettingsActivity extends BaseFragment implements NotificationCenter
              avatarDrawable.setInfo(account, user);
              avatarView.getImageReceiver().setCurrentAccount(account);
              avatarView.setForUserOrChat(user, avatarDrawable);

@@ -138,6 +138,7 @@ jobs:
         env:
           COMMIT_ID: ${{ github.sha }}
           INU_BUILD: ${{ steps.info.outputs.build-num }}
+          INU_BUILD_TYPE: ${{ env.MODE == 'release' && 'stable' || 'canary' }}
         run: ./gradlew --no-daemon :TMessagesProj_App:assembleRelease
 
       - name: stage artifacts

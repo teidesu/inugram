@@ -17,6 +17,11 @@ jobs:
   build:
     uses: ./.github/workflows/build.yml
     secrets: inherit
+    permissions:
+      contents: read
+      id-token: write
+      attestations: write
+      artifact-metadata: write
     with:
       mode: canary
       artifact-name: inugram-canary-${{ github.sha }}

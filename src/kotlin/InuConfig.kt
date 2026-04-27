@@ -4,6 +4,7 @@ import android.content.Context
 import android.content.SharedPreferences
 import androidx.core.content.edit
 import desu.inugram.helpers.FormattingPopupConfig
+import org.telegram.messenger.BuildConfig
 
 object InuConfig {
     private const val PREFS_NAME = "inugram"
@@ -73,6 +74,13 @@ object InuConfig {
         override fun read(prefs: SharedPreferences): String = prefs.getString(key, default) ?: default
         override fun SharedPreferences.Editor.write() {
             putString(key, value)
+        }
+    }
+
+    class LongItem(key: String, default: Long) : Item<Long>(key, default) {
+        override fun read(prefs: SharedPreferences): Long = prefs.getLong(key, default)
+        override fun SharedPreferences.Editor.write() {
+            putLong(key, value)
         }
     }
 
@@ -369,4 +377,25 @@ object InuConfig {
 
     @JvmField
     val ANIMATION_SPEED = FloatItem("animation_speed", 1.0f)
+
+    class UpdateChannelItem : IntItem("update_channel", STABLE) {
+        companion object {
+            const val DISABLED = 0
+            const val STABLE = 1
+            const val CANARY = 2
+        }
+
+        override fun read(prefs: SharedPreferences): Int {
+            if (!prefs.contains(key)) {
+                return if (BuildConfig.INU_BUILD_TYPE == "canary") CANARY else STABLE
+            }
+            return prefs.getInt(key, default)
+        }
+    }
+
+    @JvmField
+    val UPDATE_CHANNEL = UpdateChannelItem()
+
+    @JvmField
+    val UPDATE_LAST_CHECK_MS = LongItem("update_last_check_ms", 0L)
 }

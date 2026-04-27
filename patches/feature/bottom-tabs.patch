@@ -511,7 +511,7 @@ index 0000000..0000000 100644
          return super.onFragmentCreate();
      }
  
-@@ -2023,8 +2024,8 @@ public class SettingsActivity extends BaseFragment implements NotificationCenter
+@@ -2001,8 +2002,8 @@ public class SettingsActivity extends BaseFragment implements NotificationCenter
          }
  
          final int additionalList = dp(48);

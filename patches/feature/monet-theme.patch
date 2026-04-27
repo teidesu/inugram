@@ -145,7 +145,7 @@ diff --git a/TMessagesProj/src/main/java/org/telegram/ui/SettingsActivity.java b
 index 0000000..0000000 100644
 --- a/TMessagesProj/src/main/java/org/telegram/ui/SettingsActivity.java
 +++ b/TMessagesProj/src/main/java/org/telegram/ui/SettingsActivity.java
-@@ -1176,6 +1176,12 @@ public class SettingsActivity extends BaseFragment implements NotificationCenter
+@@ -1154,6 +1154,12 @@ public class SettingsActivity extends BaseFragment implements NotificationCenter
              titleView.setTranslationX(icon == 0 ? dp(2) : 0);
              subtitleView.setTranslationX(icon == 0 ? dp(2) : 0);
  

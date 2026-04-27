@@ -5,19 +5,19 @@ Subject: [PATCH] build support stuff for fork-specific code: - added kotlin -
  bumped min sdk to 26, removed desugaring - versioning
 
 ---
- TMessagesProj/build.gradle                    | 103 ++++-------------
- TMessagesProj/google-services.json            |  76 +++----------
+ TMessagesProj/build.gradle                    | 105 ++++------------
+ TMessagesProj/google-services.json            |  76 ++----------
  TMessagesProj/proguard-rules.pro              |  12 ++
  .../org/telegram/messenger/BuildVars.java     |  14 ++-
- .../org/telegram/ui/PaymentFormActivity.java  |  28 +++--
- .../org/telegram/ui/SettingsActivity.java     |   2 +-
- TMessagesProj_App/build.gradle                | 106 +++---------------
- TMessagesProj_App/google-services.json        |  76 +++----------
+ .../org/telegram/ui/PaymentFormActivity.java  |  28 ++---
+ .../org/telegram/ui/SettingsActivity.java     |  24 +---
+ TMessagesProj_App/build.gradle                | 113 ++++--------------
+ TMessagesProj_App/google-services.json        |  76 ++----------
  TMessagesProj_AppTests/build.gradle           |   5 +-
  build.gradle                                  |  12 +-
  gradle.properties                             |   4 +-
  settings.gradle                               |   4 -
- 12 files changed, 109 insertions(+), 333 deletions(-)
+ 12 files changed, 117 insertions(+), 356 deletions(-)
 
 diff --git a/TMessagesProj/build.gradle b/TMessagesProj/build.gradle
 index 0000000..0000000 100644
@@ -84,7 +84,7 @@ index 0000000..0000000 100644
              }
          }
      }
-@@ -123,78 +127,13 @@ android {
+@@ -123,78 +127,14 @@ android {
              multiDexEnabled true
              proguardFiles getDefaultProguardFile('proguard-android.txt'), '../TMessagesProj/proguard-rules.pro', '../TMessagesProj/proguard-rules-beta.pro'
              ndk.debugSymbolLevel = 'FULL'
@@ -141,6 +141,7 @@ index 0000000..0000000 100644
 -            buildConfigField "String", "BETA_URL", "\"" + getProps("BETA_HARDCORE_URL") + "\""
 +            buildConfigField "String", "BUILD_VERSION_STRING", "\"" + rootProject.ext.verName + "\""
 +            buildConfigField "String", "BUILD_DATE", "\"" + rootProject.ext.buildDate + "\""
++            buildConfigField "String", "INU_BUILD_TYPE", "\"" + (System.getenv('INU_BUILD_TYPE') ?: 'debug') + "\""
 +            buildConfigField "int", "STOCK_VERSION_CODE", String.valueOf(rootProject.ext.stockVerCode)
              buildConfigField "boolean", "DEBUG_VERSION", "true"
              buildConfigField "boolean", "DEBUG_PRIVATE_VERSION", "true"
@@ -166,7 +167,7 @@ index 0000000..0000000 100644
          }
  
          release {
-@@ -204,14 +143,13 @@ android {
+@@ -204,14 +144,14 @@ android {
              multiDexEnabled true
              proguardFiles getDefaultProguardFile('proguard-android.txt'), '../TMessagesProj/proguard-rules.pro'
              ndk.debugSymbolLevel = 'FULL'
@@ -175,6 +176,7 @@ index 0000000..0000000 100644
 -            buildConfigField "String", "BETA_URL", "\"\""
 +            buildConfigField "String", "BUILD_VERSION_STRING", "\"" + rootProject.ext.verName + "\""
 +            buildConfigField "String", "BUILD_DATE", "\"" + rootProject.ext.buildDate + "\""
++            buildConfigField "String", "INU_BUILD_TYPE", "\"" + (System.getenv('INU_BUILD_TYPE') ?: 'debug') + "\""
 +            buildConfigField "int", "STOCK_VERSION_CODE", String.valueOf(rootProject.ext.stockVerCode)
              buildConfigField "boolean", "DEBUG_VERSION", "false"
              buildConfigField "boolean", "DEBUG_PRIVATE_VERSION", "false"
@@ -184,7 +186,7 @@ index 0000000..0000000 100644
          }
      }
  
-@@ -229,7 +167,6 @@ def getProps(String propName) {
+@@ -229,7 +169,6 @@ def getProps(String propName) {
          return "";
      }
  }
@@ -192,7 +194,7 @@ index 0000000..0000000 100644
  
  task checkVisibility {
      doFirst {
-@@ -251,4 +188,4 @@ task checkVisibility {
+@@ -251,4 +190,4 @@ task checkVisibility {
      }
  }
  
@@ -458,15 +460,37 @@ diff --git a/TMessagesProj/src/main/java/org/telegram/ui/SettingsActivity.java b
 index 0000000..0000000 100644
 --- a/TMessagesProj/src/main/java/org/telegram/ui/SettingsActivity.java
 +++ b/TMessagesProj/src/main/java/org/telegram/ui/SettingsActivity.java
-@@ -909,7 +909,7 @@ public class SettingsActivity extends BaseFragment implements NotificationCenter
-                     }
-                     break;
-             }
+@@ -891,29 +891,7 @@ public class SettingsActivity extends BaseFragment implements NotificationCenter
+     }
+ 
+     public String getVersionName() {
+-        try {
+-            PackageInfo pInfo = ApplicationLoader.applicationContext.getPackageManager().getPackageInfo(ApplicationLoader.applicationContext.getPackageName(), 0);
+-            int code = pInfo.versionCode / 10;
+-            String abi = "";
+-            switch (pInfo.versionCode % 10) {
+-                case 1:
+-                case 2:
+-                    abi = "store bundled " + Build.CPU_ABI + " " + Build.CPU_ABI2;
+-                    break;
+-                default:
+-                case 9:
+-                    if (ApplicationLoader.isStandaloneBuild()) {
+-                        abi = "direct " + Build.CPU_ABI + " " + Build.CPU_ABI2;
+-                    } else {
+-                        abi = "universal " + Build.CPU_ABI + " " + Build.CPU_ABI2;
+-                    }
+-                    break;
+-            }
 -            return formatString(R.string.TelegramVersion, String.format(Locale.US, "v%s (%d)\n%s", pInfo.versionName, code, abi));
-+            return formatString(R.string.InuVersion, String.format(Locale.US, "v%s (based on %d, build %d)\nBuilt on %s", pInfo.versionName, BuildVars.STOCK_VERSION_CODE, pInfo.versionCode, BuildVars.BUILD_DATE));
-         } catch (Exception e) {
-             FileLog.e(e);
-         }
+-        } catch (Exception e) {
+-            FileLog.e(e);
+-        }
+-        return null;
++        return desu.inugram.helpers.UpdateHelper.getVersionInfoString() + "\nBuilt on: " + BuildVars.BUILD_DATE;
+     }
+ 
+     @Override
 diff --git a/TMessagesProj_App/build.gradle b/TMessagesProj_App/build.gradle
 index 0000000..0000000 100644
 --- a/TMessagesProj_App/build.gradle
@@ -477,15 +501,17 @@ index 0000000..0000000 100644
  
  repositories {
      mavenCentral()
-@@ -16,7 +17,6 @@ configurations.all {
+@@ -16,8 +17,8 @@ configurations.all {
  
  dependencies {
      implementation project(':TMessagesProj')
 -    coreLibraryDesugaring 'com.android.tools:desugar_jdk_libs:2.1.5'
      implementation files('../TMessagesProj/libs/libgsaverification-client.aar')
++    implementation 'androidx.core:core:1.16.0'
  }
  
-@@ -37,20 +37,11 @@ android {
+ android {
+@@ -37,20 +38,11 @@ android {
      compileOptions {
          sourceCompatibility JavaVersion.VERSION_1_8
          targetCompatibility JavaVersion.VERSION_1_8
@@ -507,7 +533,7 @@ index 0000000..0000000 100644
              storePassword RELEASE_STORE_PASSWORD
              keyAlias RELEASE_KEY_ALIAS
              keyPassword RELEASE_KEY_PASSWORD
-@@ -61,7 +52,7 @@ android {
+@@ -61,7 +53,7 @@ android {
          debug {
              debuggable true
              jniDebuggable true
@@ -516,7 +542,7 @@ index 0000000..0000000 100644
              applicationIdSuffix ".beta"
              minifyEnabled false
              shrinkResources false
-@@ -70,18 +61,6 @@ android {
+@@ -70,18 +62,6 @@ android {
              ndk.debugSymbolLevel = 'FULL'
          }
  
@@ -535,7 +561,7 @@ index 0000000..0000000 100644
          release {
              debuggable false
              jniDebuggable false
-@@ -95,95 +74,38 @@ android {
+@@ -95,95 +75,38 @@ android {
      }
  
      sourceSets.debug {
@@ -621,7 +647,8 @@ index 0000000..0000000 100644
 -        minSdkVersion 21
 +        minSdkVersion 26
          targetSdkVersion 35
-         versionName APP_VERSION_NAME
+-        versionName APP_VERSION_NAME
++        versionName rootProject.ext.verName
          ndkVersion "21.4.7075529"
  
 -        multiDexEnabled true
@@ -642,6 +669,17 @@ index 0000000..0000000 100644
              }
          }
      }
+@@ -196,6 +119,10 @@ android {
+     lintOptions {
+         checkReleaseBuilds false
+     }
++
++    kotlinOptions {
++        jvmTarget = "1.8"
++    }
+ }
+ 
+ apply plugin: 'com.google.gms.google-services'
 diff --git a/TMessagesProj_App/google-services.json b/TMessagesProj_App/google-services.json
 index 0000000..0000000 100644
 --- a/TMessagesProj_App/google-services.json

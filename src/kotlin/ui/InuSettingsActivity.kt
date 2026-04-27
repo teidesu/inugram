@@ -50,6 +50,13 @@ class InuSettingsActivity : InuSettingsPageActivity() {
                 LocaleController.getString(R.string.InuBehavior)
             )
         )
+        items.add(
+            UItem.asButton(
+                BUTTON_ABOUT,
+                R.drawable.msg_info,
+                LocaleController.getString(R.string.InuAbout)
+            )
+        )
         items.add(UItem.asShadow(null))
     }
 
@@ -60,6 +67,7 @@ class InuSettingsActivity : InuSettingsPageActivity() {
             BUTTON_DIALOGS -> presentFragment(InuDialogsSettingsActivity())
             BUTTON_ANNOYANCES -> presentFragment(InuAnnoyancesSettingsActivity())
             BUTTON_BEHAVIOR -> presentFragment(InuBehaviorSettingsActivity())
+            BUTTON_ABOUT -> presentFragment(InuAboutActivity())
         }
     }
 
@@ -69,5 +77,6 @@ class InuSettingsActivity : InuSettingsPageActivity() {
         private val BUTTON_DIALOGS = InuUtils.generateId()
         private val BUTTON_ANNOYANCES = InuUtils.generateId()
         private val BUTTON_BEHAVIOR = InuUtils.generateId()
+        private val BUTTON_ABOUT = InuUtils.generateId()
     }
 }

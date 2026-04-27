@@ -278,10 +278,8 @@ pnpm run export
 
 ### Modify existing patch (stable order)
 ```bash
-stg goto feature__my-patch
-# ...edit...
-stg refresh
-stg push -a      # return to top
+# ...edit worktree/ files...
+pnpm run append-to-patch feature__my-patch # add --index to only append staged changes
 pnpm run export
 ```
 

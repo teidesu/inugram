@@ -86,11 +86,16 @@ pnpm run export # to export stgit into patches/
 ### modifying an existing patch
 
 ```bash
-# option 1: edit the patch without re-ordering
-stg goto misc__my-patch
+# option 1: edit the patch in-place via helper script
 # ...do whatever you need in worktree/...
+pnpm run append-to-patch misc__my-patch # --index to only append staged changes
+pnpm run export
+
+# *pretty much* same as above, but manually
+# ...do whatever you need in worktree/...
+stg new tmp-patch
 stg refresh
-stg push -a # go back to the topmost patch
+stg rebase -i # move tmp1 below the patch you want to edit, and replace "edit" with "s"
 pnpm run export
 
 # option 2: push the patch to the top of the stack
@@ -100,7 +105,7 @@ stg refresh
 pnpm run export
 ```
 
-for non-trivial changes the latter is preferred, since it reduces the chance of conflicts later on, and also lets you test your changes next to everything else.
+as a rule of thumb: prefer the former, but if you get a lot of merge conflicts, try `float`-ing instead.
 
 ## acknowledgements
 

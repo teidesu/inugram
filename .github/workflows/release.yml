@@ -12,6 +12,11 @@ jobs:
     if: github.ref == 'refs/heads/main' && github.repository == 'teidesu/inugram'
     uses: ./.github/workflows/build.yml
     secrets: inherit
+    permissions:
+      contents: read
+      id-token: write
+      attestations: write
+      artifact-metadata: write
     with:
       mode: release
       artifact-name: inugram-release-${{ github.sha }}

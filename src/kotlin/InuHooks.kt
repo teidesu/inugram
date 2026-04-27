@@ -69,7 +69,9 @@ object InuHooks {
         if (key == null) return false
         return key.startsWith("Inu") ||
             key == "AppName" ||
-            key == "AppNameBeta"
+            key == "AppNameBeta" ||
+            key == "AppUpdate" ||
+            key == "AppUpdateBeta"
     }
 
     @JvmStatic

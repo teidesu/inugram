@@ -95,4 +95,9 @@ const entries = await parallelMap(patchNames, async (patchName) => {
 
 await writeSeries(entries)
 
+// warn again because it might get lost in logs
+if (dirty) {
+  warn(`Worktree has uncommitted changes:\n${dirty}`)
+}
+
 success(`Exported ${entries.length} ${entries.length === 1 ? 'patch' : 'patches'}`)
