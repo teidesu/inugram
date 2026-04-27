@@ -5,10 +5,10 @@ Subject: [PATCH] dialog folders display mode customizations
 
 ---
  .../messenger/MessagesController.java         |  1 +
- .../telegram/messenger/MessagesStorage.java   | 26 ++++++
+ .../telegram/messenger/MessagesStorage.java   | 25 ++++++
  .../ui/Components/FilterTabsView.java         | 86 +++++++++++++------
  .../java/org/telegram/ui/DialogsActivity.java | 15 +++-
- 4 files changed, 99 insertions(+), 29 deletions(-)
+ 4 files changed, 98 insertions(+), 29 deletions(-)
 
 diff --git a/TMessagesProj/src/main/java/org/telegram/messenger/MessagesController.java b/TMessagesProj/src/main/java/org/telegram/messenger/MessagesController.java
 index 0000000..0000000 100644
@@ -84,16 +84,15 @@ index 0000000..0000000 100644
                          filter.color = (newFilter.flags & 134217728) != 0 ? newFilter.color : -1;
                          filter.pendingUnreadCount = -1;
                          for (int c = 0; c < 2; c++) {
-@@ -3477,6 +3493,8 @@ public class MessagesStorage extends BaseController {
-                     }
-                 }
- 
-+                FolderHelper.saveMeta(MessagesStorage.this, dialogFilters);
-+
-                 TLRPC.messages_Dialogs dialogs;
-                 if (!dialogsToLoad.isEmpty()) {
-                     dialogs = loadDialogsByIds(TextUtils.join(",", dialogsToLoad), usersToLoad, chatsToLoad, new ArrayList<>());
-@@ -5907,6 +5925,9 @@ public class MessagesStorage extends BaseController {
+@@ -3544,6 +3560,7 @@ public class MessagesStorage extends BaseController {
+             saveDialogFilterInternal(filtersToSave.get(a), false, true);
+             anythingChanged = true;
+         }
++        FolderHelper.saveMeta(MessagesStorage.this, dialogFilters);
+         boolean orderChanged = false;
+         for (int a = 0, N = dialogFilters.size(); a < N; a++) {
+             MessagesController.DialogFilter filter = dialogFilters.get(a);
+@@ -5907,6 +5924,9 @@ public class MessagesStorage extends BaseController {
                      continue;
                  }
                  long did = array.keyAt(a);
@@ -103,7 +102,7 @@ index 0000000..0000000 100644
                  if (read) {
                      if (b == 0) {
                          dialogsWithUnread.remove(did);
-@@ -5972,6 +5993,11 @@ public class MessagesStorage extends BaseController {
+@@ -5972,6 +5992,11 @@ public class MessagesStorage extends BaseController {
              getUsersInternal(usersToLoad, users);
              for (int a = 0, N = users.size(); a < N; a++) {
                  TLRPC.User user = users.get(a);
