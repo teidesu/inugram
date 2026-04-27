@@ -93,3 +93,4 @@ bugfix/photo-spoiler-power-saving.patch
 bugfix/shared-media-spoiler.patch
 debloat/notification-bubbles.patch
 hooks/app-loader.patch
+bugfix/nav-stack-lockup.patch
