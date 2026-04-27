@@ -201,7 +201,6 @@ class InuBehaviorSettingsActivity : InuSettingsPageActivity() {
             TOGGLE_DISABLE_CHAT_BUBBLES -> {
                 val new = InuConfig.DISABLE_CHAT_BUBBLES.toggle()
                 (view as? TextCheckCell)?.isChecked = new
-                InuHooks.syncChatBubbles()
             }
 
             TOGGLE_DISABLE_INTRO_STICKER -> {

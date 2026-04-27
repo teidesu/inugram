@@ -1,0 +1,25 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: alina sireneva <alina@tei.su>
+Date: Mon, 27 Apr 2026 09:05:59 +0300
+Subject: [PATCH] disable notification bubbling
+
+---
+ .../java/org/telegram/messenger/NotificationsController.java    | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/TMessagesProj/src/main/java/org/telegram/messenger/NotificationsController.java b/TMessagesProj/src/main/java/org/telegram/messenger/NotificationsController.java
+index 0000000..0000000 100644
+--- a/TMessagesProj/src/main/java/org/telegram/messenger/NotificationsController.java
++++ b/TMessagesProj/src/main/java/org/telegram/messenger/NotificationsController.java
+@@ -3595,7 +3595,7 @@ public class NotificationsController extends BaseController {
+             } else {
+                 icon = IconCompat.createWithResource(ApplicationLoader.applicationContext, R.drawable.book_group);
+             }
+-            if (supportsBubble) {
++            if (supportsBubble && !desu.inugram.InuConfig.DISABLE_CHAT_BUBBLES.getValue()) {
+                 NotificationCompat.BubbleMetadata.Builder bubbleBuilder =
+                         new NotificationCompat.BubbleMetadata.Builder(
+                                 PendingIntent.getActivity(ApplicationLoader.applicationContext, 0, intent, PendingIntent.FLAG_MUTABLE | PendingIntent.FLAG_UPDATE_CURRENT),
+-- 
+2.52.0
+

@@ -91,3 +91,4 @@ feature/hide-my-phone.patch
 debloat/tap-to-open-preview.patch
 bugfix/photo-spoiler-power-saving.patch
 bugfix/shared-media-spoiler.patch
+debloat/notification-bubbles.patch

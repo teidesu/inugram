@@ -25,7 +25,6 @@ object InuHooks {
     fun init(context: Context) {
         InuConfig.load(context)
         syncDoubleTapDelay()
-        syncChatBubbles()
         syncAnimationSpeed()
     }
 
@@ -44,13 +43,6 @@ object InuHooks {
     fun onResume(launchActivity: LaunchActivity) {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
             MonetHelper.refreshMonetThemeIfChanged()
-        }
-    }
-
-    @JvmStatic
-    fun syncChatBubbles() {
-        if (InuConfig.DISABLE_CHAT_BUBBLES.value) {
-            org.telegram.messenger.SharedConfig.chatBubbles = false
         }
     }
 
