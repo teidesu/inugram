@@ -5,9 +5,11 @@ Subject: [PATCH] disabling animated spoiler in power settings doesn't apply to
  photos
 
 ---
- .../main/java/org/telegram/ui/Cells/ChatMessageCell.java  | 8 ++++++++
- .../telegram/ui/Components/spoilers/SpoilerEffect2.java   | 3 ++-
- 2 files changed, 10 insertions(+), 1 deletion(-)
+ .../org/telegram/ui/Cells/ChatMessageCell.java   |  8 ++++++++
+ .../java/org/telegram/ui/Cells/GroupMedia.java   | 13 ++++++++++++-
+ .../ChatAttachAlertPhotoLayoutPreview.java       | 16 +++++++++++++++-
+ .../ui/Components/spoilers/SpoilerEffect2.java   |  3 ++-
+ 4 files changed, 37 insertions(+), 3 deletions(-)
 
 diff --git a/TMessagesProj/src/main/java/org/telegram/ui/Cells/ChatMessageCell.java b/TMessagesProj/src/main/java/org/telegram/ui/Cells/ChatMessageCell.java
 index 0000000..0000000 100644
@@ -28,6 +30,86 @@ index 0000000..0000000 100644
              return;
          }
          canvas.save();
+diff --git a/TMessagesProj/src/main/java/org/telegram/ui/Cells/GroupMedia.java b/TMessagesProj/src/main/java/org/telegram/ui/Cells/GroupMedia.java
+index 0000000..0000000 100644
+--- a/TMessagesProj/src/main/java/org/telegram/ui/Cells/GroupMedia.java
++++ b/TMessagesProj/src/main/java/org/telegram/ui/Cells/GroupMedia.java
+@@ -55,6 +55,7 @@ import org.telegram.ui.Components.Point;
+ import org.telegram.ui.Components.RadialProgress2;
+ import org.telegram.ui.Components.RecyclerListView;
+ import org.telegram.ui.Components.Text;
++import org.telegram.ui.Components.spoilers.SpoilerEffect;
+ import org.telegram.ui.Components.spoilers.SpoilerEffect2;
+ import org.telegram.ui.Stars.StarsIntroActivity;
+ 
+@@ -80,6 +81,7 @@ public class GroupMedia {
+     private LoadingDrawable loadingDrawable;
+ 
+     SpoilerEffect2 spoilerEffect;
++    SpoilerEffect spoilerEffectFallback;
+ 
+     public GroupMedia(@NonNull ChatMessageCell cell) {
+         this.cell = cell;
+@@ -619,7 +621,16 @@ public class GroupMedia {
+             canvas.clipPath(clipPath2);
+             canvas.translate(l, t);
+             canvas.saveLayerAlpha(0, 0, (int) (r - l), (int) (b - t), (int) (0xFF * hiddenAlpha), Canvas.ALL_SAVE_FLAG);
+-            spoilerEffect.draw(canvas, cell, (int) (r - l), (int) (b - t), 1f, cell.drawingToBitmap);
++            if (spoilerEffect != null) {
++                spoilerEffect.draw(canvas, cell, (int) (r - l), (int) (b - t), 1f, cell.drawingToBitmap);
++            } else {
++                if (spoilerEffectFallback == null) {
++                    spoilerEffectFallback = new SpoilerEffect();
++                    spoilerEffectFallback.setColor(Color.WHITE);
++                }
++                spoilerEffectFallback.setBounds(0, 0, (int) (r - l), (int) (b - t));
++                spoilerEffectFallback.draw(canvas);
++            }
+             canvas.restore();
+             canvas.restore();
+             cell.invalidate();
+diff --git a/TMessagesProj/src/main/java/org/telegram/ui/Components/ChatAttachAlertPhotoLayoutPreview.java b/TMessagesProj/src/main/java/org/telegram/ui/Components/ChatAttachAlertPhotoLayoutPreview.java
+index 0000000..0000000 100644
+--- a/TMessagesProj/src/main/java/org/telegram/ui/Components/ChatAttachAlertPhotoLayoutPreview.java
++++ b/TMessagesProj/src/main/java/org/telegram/ui/Components/ChatAttachAlertPhotoLayoutPreview.java
+@@ -59,7 +59,11 @@ import org.telegram.ui.ActionBar.BaseFragment;
+ import org.telegram.ui.ActionBar.Theme;
+ import org.telegram.ui.Cells.ChatActionCell;
+ import org.telegram.ui.ChatActivity;
++import org.telegram.ui.Components.spoilers.SpoilerEffect;
+ import org.telegram.ui.Components.spoilers.SpoilerEffect2;
++
++import android.graphics.Color;
++import androidx.core.graphics.ColorUtils;
+ import org.telegram.ui.LaunchActivity;
+ import org.telegram.ui.PhotoViewer;
+ import org.telegram.ui.Stars.StarsIntroActivity;
+@@ -1950,6 +1954,7 @@ public class ChatAttachAlertPhotoLayoutPreview extends ChatAttachAlert.AttachAle
+                 private String videoDurationText = null;
+ 
+                 private SpoilerEffect2 spoilerEffect;
++                private SpoilerEffect spoilerEffectFallback;
+                 private Path path = new Path();
+                 private float[] radii = new float[8];
+ 
+@@ -2380,7 +2385,16 @@ public class ChatAttachAlertPhotoLayoutPreview extends ChatAttachAlert.AttachAle
+                         if (spoilerEffect == null) {
+                             spoilerEffect = SpoilerEffect2.getInstance(PreviewGroupsView.this);
+                         }
+-                        spoilerEffect.draw(canvas, PreviewGroupsView.this, getWidth(), getHeight());
++                        if (spoilerEffect != null) {
++                            spoilerEffect.draw(canvas, PreviewGroupsView.this, getWidth(), getHeight());
++                        } else {
++                            if (spoilerEffectFallback == null) {
++                                spoilerEffectFallback = new SpoilerEffect();
++                                spoilerEffectFallback.setColor(ColorUtils.setAlphaComponent(Color.WHITE, (int) (Color.alpha(Color.WHITE) * 0.325f)));
++                            }
++                            spoilerEffectFallback.setBounds(0, 0, getWidth(), getHeight());
++                            spoilerEffectFallback.draw(canvas);
++                        }
+                         canvas.restore();
+ 
+                         invalidate();
 diff --git a/TMessagesProj/src/main/java/org/telegram/ui/Components/spoilers/SpoilerEffect2.java b/TMessagesProj/src/main/java/org/telegram/ui/Components/spoilers/SpoilerEffect2.java
 index 0000000..0000000 100644
 --- a/TMessagesProj/src/main/java/org/telegram/ui/Components/spoilers/SpoilerEffect2.java
