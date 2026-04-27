@@ -4,12 +4,12 @@ Date: Sun, 19 Apr 2026 01:00:39 +0300
 Subject: [PATCH] visual tweaks for the reactions bar in the message menu
 
 ---
- .../java/org/telegram/ui/ChatActivity.java    | 26 +++++++++++++++----
- .../ChatScrimPopupContainerLayout.java        | 13 +++++++---
- .../Reactions/CustomEmojiReactionsWindow.java | 13 +++++++---
- .../Components/ReactionsContainerLayout.java  | 21 ++++++++++++---
- .../ui/SelectAnimatedEmojiDialog.java         | 10 ++++---
- 5 files changed, 65 insertions(+), 18 deletions(-)
+ .../java/org/telegram/ui/ChatActivity.java    | 29 +++++++++++++++----
+ .../ChatScrimPopupContainerLayout.java        | 18 +++++++++---
+ .../Reactions/CustomEmojiReactionsWindow.java | 13 +++++++--
+ .../Components/ReactionsContainerLayout.java  | 21 +++++++++++---
+ .../ui/SelectAnimatedEmojiDialog.java         | 10 +++++--
+ 5 files changed, 72 insertions(+), 19 deletions(-)
 
 diff --git a/TMessagesProj/src/main/java/org/telegram/ui/ChatActivity.java b/TMessagesProj/src/main/java/org/telegram/ui/ChatActivity.java
 index 0000000..0000000 100644
@@ -76,11 +76,21 @@ index 0000000..0000000 100644
                      scrimPopupContainerLayout.applyViewBottom(fl);
                  }
  
+@@ -31503,6 +31519,9 @@ public class ChatActivity extends BaseFragment implements
+             }
+             scrimPopupWindow.setFocusable(true);
+             scrimPopupContainerLayout.measure(View.MeasureSpec.makeMeasureSpec(AndroidUtilities.dp(1000), View.MeasureSpec.AT_MOST), View.MeasureSpec.makeMeasureSpec(AndroidUtilities.dp(1000), View.MeasureSpec.AT_MOST));
++            if (inu_viewsAtBottom && popupLayout.getSwipeBack() != null) {
++                popupLayout.getSwipeBack().setMinimumHeight(popupLayout.getSwipeBack().getMeasuredHeight());
++            }
+             scrimPopupWindow.setInputMethodMode(ActionBarPopupWindow.INPUT_METHOD_NOT_NEEDED);
+             scrimPopupWindow.setSoftInputMode(WindowManager.LayoutParams.SOFT_INPUT_ADJUST_NOTHING);
+             scrimPopupWindow.getContentView().setFocusableInTouchMode(true);
 diff --git a/TMessagesProj/src/main/java/org/telegram/ui/Components/ChatScrimPopupContainerLayout.java b/TMessagesProj/src/main/java/org/telegram/ui/Components/ChatScrimPopupContainerLayout.java
 index 0000000..0000000 100644
 --- a/TMessagesProj/src/main/java/org/telegram/ui/Components/ChatScrimPopupContainerLayout.java
 +++ b/TMessagesProj/src/main/java/org/telegram/ui/Components/ChatScrimPopupContainerLayout.java
-@@ -163,8 +163,15 @@ public class ChatScrimPopupContainerLayout extends LinearLayout {
+@@ -163,9 +163,19 @@ public class ChatScrimPopupContainerLayout extends LinearLayout {
          }
      }
  
@@ -90,14 +100,19 @@ index 0000000..0000000 100644
 +
      private void updateBottomViewPosition() {
 -        if (bottomView != null) {
+-            bottomView.setTranslationY(bottomViewYOffset + expandSize + bottomViewReactionsOffset);
 +        if (bottomView == null) return;
++        boolean inu_shownFromBottom = popupWindowLayout != null && popupWindowLayout.shownFromBottom;
 +        if (inu_isBelow()) {
-+            bottomView.setTranslationY(-(expandSize + bottomViewReactionsOffset));
++            float emptyAbove = inu_shownFromBottom ? -bottomViewYOffset : 0;
++            bottomView.setTranslationY(-(expandSize + bottomViewReactionsOffset) + emptyAbove);
 +        } else {
-             bottomView.setTranslationY(bottomViewYOffset + expandSize + bottomViewReactionsOffset);
++            float emptyBelow = inu_shownFromBottom ? 0 : bottomViewYOffset;
++            bottomView.setTranslationY(emptyBelow + expandSize + bottomViewReactionsOffset);
          }
      }
-@@ -174,7 +181,7 @@ public class ChatScrimPopupContainerLayout extends LinearLayout {
+ 
+@@ -174,7 +184,7 @@ public class ChatScrimPopupContainerLayout extends LinearLayout {
      }
  
      public void setExpandSize(float expandSize) {
@@ -106,7 +121,7 @@ index 0000000..0000000 100644
          this.expandSize = expandSize;
          updateBottomViewPosition();
      }
-@@ -192,7 +199,7 @@ public class ChatScrimPopupContainerLayout extends LinearLayout {
+@@ -192,7 +202,7 @@ public class ChatScrimPopupContainerLayout extends LinearLayout {
              bottomView.setAlpha(v);
              float scale = 0.5f + v * 0.5f;
              bottomView.setPivotX(bottomView.getMeasuredWidth());

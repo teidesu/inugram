@@ -246,7 +246,7 @@ index 0000000..0000000 100644
                  } else if (child == gifHintTextView || child == voiceHintTextView || child == mediaBanTooltip || child == emojiHintTextView) {
                      childTop -= inputFieldHeight;
                  } else if (child == chatListView || child == chatListThanosEffect || child == floatingDateView || child == floatingTopicSeparator || child == infoTopView) {
-@@ -44896,7 +44914,7 @@ public class ChatActivity extends BaseFragment implements
+@@ -44899,7 +44917,7 @@ public class ChatActivity extends BaseFragment implements
          }
  
          final float margin = windowInsetsStateHolder.getAnimatedMaxBottomInset() +
@@ -255,7 +255,7 @@ index 0000000..0000000 100644
  
          topicsTabs.setSideMenuBackgroundMarginBottom(margin);
      }
-@@ -44904,13 +44922,13 @@ public class ChatActivity extends BaseFragment implements
+@@ -44907,13 +44925,13 @@ public class ChatActivity extends BaseFragment implements
      private void checkUi_botMenuPosition() {
          final float margin = windowInsetsStateHolder.getAnimatedMaxBottomInset()
              + getTopicTabsSideSize(TopicsTabsView.Position.BOTTOM)
@@ -271,7 +271,7 @@ index 0000000..0000000 100644
          }
      }
  
-@@ -44964,10 +44982,15 @@ public class ChatActivity extends BaseFragment implements
+@@ -44967,10 +44985,15 @@ public class ChatActivity extends BaseFragment implements
              return;
          }
  
@@ -287,7 +287,7 @@ index 0000000..0000000 100644
          updatePagedownButtonsPosition();
          updateBotforumTabsBottomMargin();
          checkUi_botMenuPosition();
-@@ -45008,6 +45031,10 @@ public class ChatActivity extends BaseFragment implements
+@@ -45011,6 +45034,10 @@ public class ChatActivity extends BaseFragment implements
          if (topPanelLayoutFade == null) {
              return;
          }
@@ -298,7 +298,7 @@ index 0000000..0000000 100644
  
          float fadeHeight = 0;
          float fadeAlphaInv = 1;
-@@ -45495,7 +45522,7 @@ public class ChatActivity extends BaseFragment implements
+@@ -45498,7 +45525,7 @@ public class ChatActivity extends BaseFragment implements
      }
  
      private float getTopicTabsSideSize(TopicsTabsView.Position position) {
