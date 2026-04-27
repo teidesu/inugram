@@ -238,6 +238,9 @@ object InuConfig {
     @JvmField
     val STICKER_SIZE = FloatItem("sticker_size", 14.0f)
 
+    @JvmField
+    val NO_STICKER_EXTRA_PADDING = BoolItem("no_sticker_extra_padding", true)
+
     class FoldersDisplayModeItem : IntItem("folders_display_mode", TITLES) {
         companion object {
             const val TITLES = 1

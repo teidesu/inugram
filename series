@@ -94,3 +94,4 @@ bugfix/shared-media-spoiler.patch
 debloat/notification-bubbles.patch
 hooks/app-loader.patch
 bugfix/nav-stack-lockup.patch
+feature/no-sticker-extra-padding.patch

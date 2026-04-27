@@ -22,6 +22,9 @@ if (positional.length !== 1) {
 const target = await resolvePatchName(worktreeDir, positional[0])
 const repo = cd(worktreeDir)
 
+const targetCommit = await getPatchCommitId(worktreeDir, target)
+const targetMessage = (await repo`git log -1 --format=%B ${targetCommit}`).stdout.replace(/\n+$/, '')
+
 const tempName = `_append_${Date.now()}`
 step(`Creating temp patch ${tempName}`)
 await repo`stg new --message ${`append to ${target}`} ${tempName}`
@@ -34,9 +37,6 @@ if (refresh.exitCode !== 0) {
   console.error(refresh.stderr.trim() || refresh.stdout.trim())
   throw new Error('stg refresh failed')
 }
-
-const targetCommit = await getPatchCommitId(worktreeDir, target)
-const targetMessage = (await repo`git log -1 --format=%B ${targetCommit}`).stdout.replace(/\n+$/, '')
 
 step(`Squashing ${tempName} into ${target}`)
 const squash = await $({ cwd: worktreeDir, nothrow: true, stdio: 'inherit' })`stg squash --name ${target} --message ${targetMessage} ${target} ${tempName}`

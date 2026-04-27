@@ -78,6 +78,12 @@ class InuChatsSettingsActivity : InuSettingsPageActivity() {
                 LocaleController.getString(R.string.InuShowAllRecentStickers),
             ).setChecked(InuConfig.SHOW_ALL_RECENT_STICKERS.value)
         )
+        items.add(
+            UItem.asCheck(
+                TOGGLE_NO_STICKER_EXTRA_PADDING,
+                LocaleController.getString(R.string.InuNoStickerExtraPadding),
+            ).setChecked(InuConfig.NO_STICKER_EXTRA_PADDING.value)
+        )
         items.add(UItem.asShadow(null))
         // end stickers section
 
@@ -225,6 +231,12 @@ class InuChatsSettingsActivity : InuSettingsPageActivity() {
                 (view as? TextCheckCell)?.isChecked = new
             }
 
+            TOGGLE_NO_STICKER_EXTRA_PADDING -> {
+                val new = InuConfig.NO_STICKER_EXTRA_PADDING.toggle()
+                (view as? TextCheckCell)?.isChecked = new
+                stickerSizePreview?.invalidate()
+            }
+
             TOGGLE_DISABLE_INSTANT_CAMERA -> {
                 val new = InuConfig.DISABLE_INSTANT_CAMERA.toggle()
                 (view as? NotificationsCheckCell)?.isChecked = new
@@ -283,6 +295,7 @@ class InuChatsSettingsActivity : InuSettingsPageActivity() {
     companion object {
         private val BUTTON_STICKER_TIME_MODE = InuUtils.generateId()
         private val TOGGLE_SHOW_ALL_RECENT_STICKERS = InuUtils.generateId()
+        private val TOGGLE_NO_STICKER_EXTRA_PADDING = InuUtils.generateId()
         private val TOGGLE_DISABLE_INSTANT_CAMERA = InuUtils.generateId()
         private val TOGGLE_CHAT_VOICE_IN_ATTACH = InuUtils.generateId()
         private val BUTTON_FORMATTING_POPUP = InuUtils.generateId()

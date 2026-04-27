@@ -1,0 +1,35 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: alina sireneva <alina@tei.su>
+Date: Mon, 27 Apr 2026 18:50:38 +0300
+Subject: [PATCH] remove extra bottom padding from sticker bubbles
+
+---
+ .../src/main/java/org/telegram/ui/Cells/ChatMessageCell.java | 5 ++++-
+ 1 file changed, 4 insertions(+), 1 deletion(-)
+
+diff --git a/TMessagesProj/src/main/java/org/telegram/ui/Cells/ChatMessageCell.java b/TMessagesProj/src/main/java/org/telegram/ui/Cells/ChatMessageCell.java
+index 0000000..0000000 100644
+--- a/TMessagesProj/src/main/java/org/telegram/ui/Cells/ChatMessageCell.java
++++ b/TMessagesProj/src/main/java/org/telegram/ui/Cells/ChatMessageCell.java
+@@ -10291,6 +10291,9 @@ public class ChatMessageCell extends BaseCell implements SeekBar.SeekBarDelegate
+                     totalHeight += dp(21);
+                     additionalTimeOffsetY = dp(21);
+                 }
++                if (InuConfig.NO_STICKER_EXTRA_PADDING.getValue() && currentMessageObject.isAnyKindOfSticker()) {
++                    totalHeight -= dp(8);
++                }
+ 
+                 int additionalTop = 0;
+                 if (currentPosition != null && !currentMessageObject.isDocument()) {
+@@ -10751,7 +10754,7 @@ public class ChatMessageCell extends BaseCell implements SeekBar.SeekBarDelegate
+                     totalHeight -= dp(1);
+                 }
+             }
+-            if (messageObject.type != MessageObject.TYPE_EMOJIS) {
++            if (!InuConfig.NO_STICKER_EXTRA_PADDING.getValue() && messageObject.type != MessageObject.TYPE_EMOJIS) {
+                 if (messageObject.isAnyKindOfSticker() && totalHeight < dp(70)) {
+                     additionalTimeOffsetY = dp(70) - totalHeight;
+                     totalHeight += additionalTimeOffsetY;
+-- 
+2.52.0
+

@@ -26,6 +26,7 @@
     <string name="InuDisableInstantCamera">Disable instant camera</string>
     <string name="InuDisableInstantCameraInfo">Prevents camera from starting when opening the attachment panel</string>
     <string name="InuShowAllRecentStickers">Show all recent stickers</string>
+    <string name="InuNoStickerExtraPadding">Remove extra bottom padding</string>
     <string name="InuHideKeyboardOnScroll">Hide keyboard on scroll</string>
     <string name="InuDisablePullToNext">Disable pull to next channel</string>
     <string name="InuDisableSensitive">Disable sensitive filter</string>
