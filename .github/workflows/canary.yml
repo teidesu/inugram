@@ -3,6 +3,10 @@ name: canary
 on:
   push:
     branches: [main]
+    paths-ignore:
+      - '**.md'
+      - '.github/**'
+      - '!.github/workflows/build.yml'
   workflow_dispatch:
 
 concurrency:
@@ -11,7 +15,7 @@ concurrency:
 
 jobs:
   build:
-    uses: ./.github/workflows/_build.yml
+    uses: ./.github/workflows/build.yml
     secrets: inherit
     with:
       mode: canary
@@ -19,21 +23,24 @@ jobs:
 
   upload:
     needs: build
-    if: github.event_name == 'push' && github.repository == 'teidesu/inugram'
+    if: |
+      github.event_name == 'push'
+      && github.repository == 'teidesu/inugram'
+      && !contains(github.event.head_commit.message, 'nocanary')
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
 
-      - uses: pnpm/action-setup@v4
-      - uses: actions/setup-node@v4
+      - uses: pnpm/action-setup@f40ffcd9367d9f12939873eb1018b921a783ffaa # v4
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
         with:
           node-version: 20
           cache: pnpm
 
       - run: pnpm install --frozen-lockfile
 
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
         with:
           name: inugram-canary-${{ github.sha }}
           path: out
@@ -47,3 +54,8 @@ jobs:
           MTPROTO_SESSION: ${{ secrets.MTPROTO_SESSION }}
           GH_VARS_TOKEN: ${{ secrets.INU_VARS_TOKEN }}
         run: pnpm tsx scripts/ci/upload.ts out
+
+      - name: bump LAST_CANARY_SHA variable
+        env:
+          GH_TOKEN: ${{ secrets.INU_VARS_TOKEN }}
+        run: gh variable set LAST_CANARY_SHA --body "$GITHUB_SHA"

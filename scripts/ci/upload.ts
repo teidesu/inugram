@@ -1,15 +1,17 @@
 import { spawn } from 'node:child_process'
 import fs from 'node:fs/promises'
 import { join, resolve } from 'node:path'
-import { MemoryStorage, TelegramClient, thtml } from '@mtcute/node'
+import { html, MemoryStorage, TelegramClient } from '@mtcute/node'
+import { joinTextWithEntities } from '@mtcute/node/utils.js'
 
 interface BuildInfo {
   verName: string
   verCode: number
+  appVerCode: number
   buildNum: number
   apkFile: string
   commitSha: string
-  commitMessage: string
+  commits: { sha: string, message: string }[]
   repo: string
   kind: 'canary' | 'release'
   tag?: string
@@ -64,14 +66,28 @@ async function persistSession(session: string) {
 
 try {
   const hashtag = info.kind === 'release' ? '#release' : '#canary'
-  const shortSha = info.commitSha.slice(0, 7)
-  const linkUrl = info.kind === 'release' && info.tag
+  const headerUrl = info.kind === 'release' && info.tag
     ? `https://github.com/${info.repo}/releases/tag/${info.tag}`
     : `https://github.com/${info.repo}/commit/${info.commitSha}`
-  const linkLabel = info.kind === 'release' && info.tag ? info.tag : shortSha
-  const caption = thtml`${hashtag}
-<b>v${info.verName}</b> (build ${info.buildNum}, code ${info.verCode})
-<a href="${linkUrl}">${linkLabel}</a>: ${info.commitMessage}`
+  const headerLabel = info.kind === 'release' && info.tag
+    ? info.tag
+    : info.commitSha.slice(0, 7)
+  const commitLines = joinTextWithEntities(
+    info.commits.map(c => html`<a href="https://github.com/${info.repo}/commit/${c.sha}">${c.sha.slice(0, 7)}</a>: ${c.message}`),
+    '\n',
+  )
+
+  const caption = html`
+    ${hashtag}
+    <br/>
+    <b>v${info.verName}</b> (build ${info.buildNum}, based on ${info.appVerCode})
+    <br/>
+    <a href="${headerUrl}">${headerLabel}</a>
+    <br/><br/>
+    <blockquote expandable>
+      ${commitLines}
+    </blockquote>
+  `
 
   await tg.sendMedia(channel, {
     type: 'document',

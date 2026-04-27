@@ -8,6 +8,8 @@ if (mode !== 'canary' && mode !== 'release') {
 const props = await fs.readFile('worktree/gradle.properties', 'utf8')
 const appVerName = /^APP_VERSION_NAME=(.+)$/m.exec(props)?.[1]
 if (!appVerName) throw new Error('failed to read APP_VERSION_NAME')
+const appVerCode = /^APP_VERSION_CODE=(\d+)$/m.exec(props)?.[1]
+if (!appVerCode) throw new Error('failed to read APP_VERSION_CODE')
 
 const buildNum = Number(process.env.INU_BUILD ?? '1')
 if (!Number.isInteger(buildNum) || buildNum < 1) {
@@ -23,6 +25,7 @@ const tag = mode === 'release' ? `v${appVerName}-${buildNum}` : ''
 
 const out = {
   'app-ver-name': appVerName,
+  'app-ver-code': appVerCode,
   'build-num': String(buildNum),
   'ver-name': verName,
   'ver-code': String(verCode),

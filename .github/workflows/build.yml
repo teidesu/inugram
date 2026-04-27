@@ -1,0 +1,262 @@
+name: build
+
+on:
+  workflow_call:
+    inputs:
+      mode:
+        required: true
+        type: string
+      artifact-name:
+        required: true
+        type: string
+    outputs:
+      apk-name:
+        value: ${{ jobs.build.outputs.apk-name }}
+      ver-name:
+        value: ${{ jobs.build.outputs.ver-name }}
+      ver-code:
+        value: ${{ jobs.build.outputs.ver-code }}
+      app-ver-code:
+        value: ${{ jobs.build.outputs.app-ver-code }}
+      build-num:
+        value: ${{ jobs.build.outputs.build-num }}
+      tag:
+        value: ${{ jobs.build.outputs.tag }}
+  pull_request:
+    paths-ignore:
+      - '**.md'
+      - '.github/**'
+      - '!.github/workflows/build.yml'
+  workflow_dispatch:
+
+concurrency:
+  group: build-${{ github.event.pull_request.number || github.run_id }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+permissions: {}
+
+env:
+  MODE: ${{ inputs.mode || 'canary' }}
+  ARTIFACT_NAME: ${{ inputs.artifact-name || format('inugram-build-{0}', github.run_id) }}
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 180
+    outputs:
+      apk-name: ${{ steps.info.outputs.apk-name }}
+      ver-name: ${{ steps.info.outputs.ver-name }}
+      ver-code: ${{ steps.info.outputs.ver-code }}
+      app-ver-code: ${{ steps.info.outputs.app-ver-code }}
+      build-num: ${{ steps.info.outputs.build-num }}
+      tag: ${{ steps.info.outputs.tag }}
+    steps:
+      - name: free disk space
+        uses: jlumbroso/free-disk-space@54081f138730dfa15788a46383842cd2f914a1be # main
+        with:
+          tool-cache: false
+          android: false
+          dotnet: true
+          haskell: true
+          large-packages: false
+          swap-storage: true
+
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+        with:
+          fetch-depth: 0
+
+      - name: configure git identity
+        run: |
+          git config --global user.email ci@inugram
+          git config --global user.name 'inugram ci'
+
+      - uses: pnpm/action-setup@f40ffcd9367d9f12939873eb1018b921a783ffaa # v4
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: 20
+          cache: pnpm
+
+      - run: pnpm install --frozen-lockfile
+
+      - uses: actions/setup-java@c1e323688fd81a25caa38c78aa6df2d33d3e20d9 # v4
+        with:
+          distribution: temurin
+          java-version: 21
+
+      - name: set up ccache
+        uses: hendrikmuhs/ccache-action@e42e6681d2906409c5dde4a315af6214eaa890ee # v1.2
+        with:
+          append-timestamp: false
+          key: ccache-${{ env.MODE }}
+          restore-keys: |
+            ccache-${{ env.MODE }}
+            ccache-
+          max-size: 2G
+          save: ${{ github.event_name != 'pull_request' }}
+
+      - name: set up worktree
+        run: pnpm run setup -- --no-stgit
+
+      - name: compute build info
+        id: info
+        env:
+          INU_BUILD: ${{ vars.INU_BUILD || '1' }}
+        run: pnpm tsx scripts/ci/version.ts ${{ env.MODE }}
+
+      - uses: gradle/actions/setup-gradle@0b6dd653ba04f4f93bf581ec31e66cbd7dcb644d # v4
+        with:
+          gradle-home-cache-cleanup: true
+          cache-read-only: ${{ github.event_name == 'pull_request' }}
+
+      - name: cache android sdk components
+        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
+        with:
+          path: |
+            ${{ env.ANDROID_HOME }}/ndk/21.4.7075529
+            ${{ env.ANDROID_HOME }}/cmake/3.10.2.4988404
+            ${{ env.ANDROID_HOME }}/platforms/android-35
+            ${{ env.ANDROID_HOME }}/build-tools/35.0.0
+          key: android-sdk-ndk21.4.7075529-cmake3.10.2-platform35-bt35
+
+      - uses: android-actions/setup-android@9fc6c4e9069bf8d3d10b2204b1fb8f6ef7065407 # v3
+        with:
+          packages: >-
+            platforms;android-35
+            build-tools;35.0.0
+            cmake;3.10.2.4988404
+            ndk;21.4.7075529
+
+      - name: tune gradle
+        run: |
+          echo 'org.gradle.caching=true' >> ~/.gradle/gradle.properties
+          echo 'org.gradle.parallel=true' >> ~/.gradle/gradle.properties
+          echo 'org.gradle.jvmargs=-Xmx8192m -Dfile.encoding=UTF-8 -XX:+UseParallelGC' >> ~/.gradle/gradle.properties
+          echo 'android.native.buildOutput=verbose' >> ~/.gradle/gradle.properties
+
+      - name: build (unsigned, debug-keyed)
+        working-directory: worktree
+        env:
+          COMMIT_ID: ${{ github.sha }}
+          INU_BUILD: ${{ steps.info.outputs.build-num }}
+        run: ./gradlew --no-daemon :TMessagesProj_App:assembleRelease
+
+      - name: stage artifacts
+        env:
+          LAST_UPLOADED_SHA: ${{ env.MODE == 'release' && vars.LAST_RELEASE_SHA || vars.LAST_CANARY_SHA }}
+          PUSH_BEFORE: ${{ github.event.before }}
+        run: |
+          mkdir -p out
+          apk='${{ steps.info.outputs.apk-name }}'
+          cp worktree/TMessagesProj_App/build/outputs/apk/release/app.apk "out/$apk"
+
+          base="$LAST_UPLOADED_SHA"
+          if [ -n "$base" ] && ! git cat-file -e "$base^{commit}" 2>/dev/null; then
+            echo "::warning::last uploaded sha $base not in history, falling back"
+            base=
+          fi
+          if [ -z "$base" ] && [ -n "$PUSH_BEFORE" ] && [ "$PUSH_BEFORE" != "0000000000000000000000000000000000000000" ]; then
+            if git cat-file -e "$PUSH_BEFORE^{commit}" 2>/dev/null; then
+              base="$PUSH_BEFORE"
+            fi
+          fi
+          if [ -n "$base" ] && [ "$base" != "$GITHUB_SHA" ]; then
+            git log --pretty='%H %s' "$base..$GITHUB_SHA" > out/commits.txt
+          else
+            git log -1 --pretty='%H %s' "$GITHUB_SHA" > out/commits.txt
+          fi
+
+          commits_json=$(jq -R -n '
+            [inputs | capture("^(?<sha>[0-9a-f]+) (?<message>.*)$")]
+          ' out/commits.txt)
+          rm out/commits.txt
+
+          jq -n \
+            --arg verName '${{ steps.info.outputs.ver-name }}' \
+            --argjson verCode '${{ steps.info.outputs.ver-code }}' \
+            --argjson appVerCode '${{ steps.info.outputs.app-ver-code }}' \
+            --argjson buildNum '${{ steps.info.outputs.build-num }}' \
+            --arg apkFile "$apk" \
+            --arg commitSha "$GITHUB_SHA" \
+            --argjson commits "$commits_json" \
+            --arg repo "$GITHUB_REPOSITORY" \
+            --arg kind '${{ env.MODE }}' \
+            --arg tag '${{ steps.info.outputs.tag }}' \
+            '{verName:$verName,verCode:$verCode,appVerCode:$appVerCode,buildNum:$buildNum,apkFile:$apkFile,commitSha:$commitSha,commits:$commits,repo:$repo,kind:$kind,tag:$tag}' \
+            > out/build-info.json
+
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: ${{ env.ARTIFACT_NAME }}-unsigned
+          path: out/*
+          if-no-files-found: error
+          retention-days: 1
+
+  sign:
+    needs: build
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    environment: signing
+    permissions:
+      id-token: write
+      attestations: write
+      artifact-metadata: write
+      contents: read
+    if: github.event_name != 'pull_request'
+    steps:
+      - uses: actions/setup-java@c1e323688fd81a25caa38c78aa6df2d33d3e20d9 # v4
+        with:
+          distribution: temurin
+          java-version: 21
+
+      - uses: android-actions/setup-android@9fc6c4e9069bf8d3d10b2204b1fb8f6ef7065407 # v3
+        with:
+          packages: build-tools;35.0.0
+
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          name: ${{ env.ARTIFACT_NAME }}-unsigned
+          path: out
+
+      - name: decode keystore
+        env:
+          KEYSTORE_BASE64: ${{ secrets.KEYSTORE_BASE64 }}
+        run: |
+          if [ -z "$KEYSTORE_BASE64" ]; then
+            echo "::error::KEYSTORE_BASE64 secret missing"
+            exit 1
+          fi
+          umask 077
+          echo "$KEYSTORE_BASE64" | base64 -d > "$RUNNER_TEMP/release.keystore"
+
+      - name: apksigner sign
+        env:
+          KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
+          KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
+        run: |
+          apk='${{ needs.build.outputs.apk-name }}'
+          apksigner=$ANDROID_HOME/build-tools/35.0.0/apksigner
+          "$apksigner" sign \
+            --ks "$RUNNER_TEMP/release.keystore" \
+            --ks-key-alias inugram \
+            --ks-pass "pass:$KEYSTORE_PASSWORD" \
+            --key-pass "pass:$KEY_PASSWORD" \
+            --in "out/$apk" \
+            --out "out/$apk.signed"
+          "$apksigner" verify --print-certs "out/$apk.signed"
+          mv "out/$apk.signed" "out/$apk"
+
+      - name: wipe keystore
+        if: always()
+        run: rm -f "$RUNNER_TEMP/release.keystore"
+
+      - name: attest signed apk
+        uses: actions/attest@281a49d4cbb0a72c9575a50d18f6deb515a11deb # v4
+        with:
+          subject-path: out/${{ needs.build.outputs.apk-name }}
+
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: ${{ env.ARTIFACT_NAME }}
+          path: out/*
+          if-no-files-found: error
+          retention-days: 30
