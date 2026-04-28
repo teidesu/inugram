@@ -1,8 +1,7 @@
 From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
 From: alina sireneva <alina@tei.su>
 Date: Tue, 21 Apr 2026 19:11:39 +0300
-Subject: fix for "Regular" option in formatting popup not properly handling
- cases when the selection does not match one specific span
+Subject: fix for "Regular" option in formatting popup not properly handling cases when the selection does not match one specific span
 
 ---
  .../ui/Components/EditTextCaption.java        | 60 ++++++++++++++++++-

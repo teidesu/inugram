@@ -1,8 +1,7 @@
 From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
 From: alina sireneva <alina@tei.su>
 Date: Tue, 14 Apr 2026 03:29:17 +0300
-Subject: fix some glitches with the pull-to-reveal-archive mode in dialogs
- list
+Subject: fix some glitches with the pull-to-reveal-archive mode in dialogs list
 
 ---
  .../java/org/telegram/ui/DialogsActivity.java  | 18 +++++++++++++-----

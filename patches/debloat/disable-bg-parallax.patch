@@ -1,8 +1,7 @@
 From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
 From: alina sireneva <alina@tei.su>
 Date: Thu, 23 Apr 2026 09:25:42 +0300
-Subject: Add a toggle to disable wallpaper parallax (gyro-driven background
- motion)
+Subject: Add a toggle to disable wallpaper parallax (gyro-driven background motion)
 
 ---
  .../org/telegram/ui/Components/SizeNotifierFrameLayout.java     | 2 +-

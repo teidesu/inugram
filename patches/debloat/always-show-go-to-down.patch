@@ -1,8 +1,7 @@
 From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
 From: alina sireneva <alina@tei.su>
 Date: Fri, 10 Apr 2026 05:03:51 +0300
-Subject: disable the "only show go to bottom button when scrolling up"
- behavior in chat
+Subject: disable the "only show go to bottom button when scrolling up" behavior in chat
 
 ---
  .../src/main/java/org/telegram/ui/ChatActivity.java       | 8 +++++++-

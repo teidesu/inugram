@@ -1,8 +1,7 @@
 From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
 From: alina sireneva <alina@tei.su>
 Date: Fri, 10 Apr 2026 04:54:18 +0300
-Subject: hide paid reactions upsell (particles, not showing when empty,
- reactions menu gradient)
+Subject: hide paid reactions upsell (particles, not showing when empty, reactions menu gradient)
 
 ---
  .../ui/Components/Reactions/ReactionsLayoutInBubble.java      | 2 +-

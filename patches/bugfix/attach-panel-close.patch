@@ -1,8 +1,7 @@
 From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
 From: alina sireneva <alina@tei.su>
 Date: Mon, 20 Apr 2026 00:37:37 +0300
-Subject: prevent the app from getting stuck when closing the attach panel
- before it fully opens
+Subject: prevent the app from getting stuck when closing the attach panel before it fully opens
 
 ---
  .../ui/Components/ChatAttachAlert.java        | 39 ++++++++++---------

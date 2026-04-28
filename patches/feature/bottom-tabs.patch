@@ -1,8 +1,7 @@
 From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
 From: alina sireneva <alina@tei.su>
 Date: Thu, 9 Apr 2026 14:01:29 +0300
-Subject: bottom tabs tweaks: compact mode, hiding contacts, hiding it
- completely
+Subject: bottom tabs tweaks: compact mode, hiding contacts, hiding it completely
 
 ---
  .../java/org/telegram/ui/CallLogActivity.java | 15 ++--

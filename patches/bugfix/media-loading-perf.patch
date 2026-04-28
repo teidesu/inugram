@@ -1,9 +1,7 @@
 From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
 From: alina sireneva <alina@tei.su>
 Date: Fri, 24 Apr 2026 13:06:22 +0300
-Subject: a very experimental patch that might actually break a lot and might
- not actually be that much worth it, but theoretically should reduce
- background cpu usage
+Subject: a very experimental patch that might actually break a lot and might not actually be that much worth it, but theoretically should reduce background cpu usage
 
 ---
  .../org/telegram/DispatchQueuePriority.java   |  2 +-

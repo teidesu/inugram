@@ -1,8 +1,7 @@
 From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
 From: alina sireneva <alina@tei.su>
 Date: Fri, 10 Apr 2026 06:49:47 +0300
-Subject: stock incorrectly handles double-taps in RecyclerListView by not
- checking if the second tap came from the same view, this patch fixes that
+Subject: stock incorrectly handles double-taps in RecyclerListView by not checking if the second tap came from the same view, this patch fixes that
 
 ---
  .../main/java/org/telegram/ui/Components/RecyclerListView.java | 3 ++-
