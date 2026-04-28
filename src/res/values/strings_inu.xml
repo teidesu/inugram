@@ -251,6 +251,7 @@
     <string name="InuAppIconStock">Stock</string>
     <string name="InuAppIconLicenseInugram">Placeholder icon, feel free to contribute a better one</string>
     <string name="InuAppIconLicenseTelegram">Icon by **Telegram**. All rights reserved.</string>
+    <string name="InuJumpToBeginning">Jump to the beginning</string>
 
     <string name="InuAbout">About</string>
     <string name="InuAboutGitHub">GitHub</string>

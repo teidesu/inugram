@@ -97,3 +97,4 @@ feature/no-sticker-extra-padding.patch
 feature/static-pinned-reactions.patch
 hooks/icon-replacement.patch
 debloat/chat-hide-bottom-bar.patch
+feature/jump-to-beginning.patch

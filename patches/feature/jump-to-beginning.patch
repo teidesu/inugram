@@ -1,0 +1,30 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: alina sireneva <alina@tei.su>
+Date: Tue, 28 Apr 2026 23:11:31 +0300
+Subject: "jump to the beginning" button in calendar popup
+
+---
+ .../java/org/telegram/ui/Components/AlertsCreator.java | 10 ++++++++++
+ 1 file changed, 10 insertions(+)
+
+diff --git a/TMessagesProj/src/main/java/org/telegram/ui/Components/AlertsCreator.java b/TMessagesProj/src/main/java/org/telegram/ui/Components/AlertsCreator.java
+index 0000000..0000000 100644
+--- a/TMessagesProj/src/main/java/org/telegram/ui/Components/AlertsCreator.java
++++ b/TMessagesProj/src/main/java/org/telegram/ui/Components/AlertsCreator.java
+@@ -6025,6 +6025,16 @@ public class AlertsCreator {
+         titleLayout.addView(titleView, LayoutHelper.createFrame(LayoutHelper.WRAP_CONTENT, LayoutHelper.WRAP_CONTENT, Gravity.LEFT | Gravity.TOP, 0, 12, 0, 0));
+         titleView.setOnTouchListener((v, event) -> true);
+ 
++        ActionBarMenuItem inu_goUpButton = new ActionBarMenuItem(context, null, 0, Theme.getColor(Theme.key_dialogTextBlack, resourcesProvider));
++        inu_goUpButton.setIcon(R.drawable.msg_go_up);
++        inu_goUpButton.setBackground(Theme.createSelectorDrawable(Theme.getColor(Theme.key_player_actionBarSelector, resourcesProvider), 1));
++        inu_goUpButton.setOnClickListener(v -> {
++            callback.run((int) (minDate / 1000L));
++            builder.getDismissRunnable().run();
++        });
++        inu_goUpButton.setContentDescription(LocaleController.getString(R.string.InuJumpToBeginning));
++        titleLayout.addView(inu_goUpButton, LayoutHelper.createFrame(40, 40, Gravity.TOP | Gravity.RIGHT, 0, 8, 5, 0));
++
+         LinearLayout linearLayout = new LinearLayout(context);
+         linearLayout.setOrientation(LinearLayout.HORIZONTAL);
+         linearLayout.setWeightSum(1.0f);
