@@ -141,6 +141,9 @@
     <string name="InuProfileIdCopied">ID copied to clipboard</string>
     <string name="InuMessageInput">Message input</string>
     <string name="InuAttachmentSheet">Attachment sheet</string>
+    <string name="InuIconReplacement">Icon pack</string>
+    <string name="InuIconReplacementOff">Default</string>
+    <string name="InuIconReplacementSolar">Solar by @Design480</string>
 
     <string name="InuReplyIn">Reply in…</string>
     <string name="InuMessageDetails">Details</string>

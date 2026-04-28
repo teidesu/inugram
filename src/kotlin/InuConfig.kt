@@ -408,4 +408,14 @@ object InuConfig {
 
     @JvmField
     val UPDATE_LAST_CHECK_MS = LongItem("update_last_check_ms", 0L)
+
+    class IconReplacementItem : IntItem("icon_replacement", OFF) {
+        companion object {
+            const val OFF = 0
+            const val SOLAR = 1
+        }
+    }
+
+    @JvmField
+    val ICON_REPLACEMENT = IconReplacementItem()
 }

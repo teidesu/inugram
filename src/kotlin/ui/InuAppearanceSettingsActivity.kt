@@ -51,6 +51,16 @@ class InuAppearanceSettingsActivity : InuSettingsPageActivity() {
                 LocaleController.getString(R.string.InuHideMyPhoneNumber)
             ).setChecked(InuConfig.HIDE_MY_PHONE_NUMBER.value)
         )
+        items.add(
+            UItem.asButton(
+                BUTTON_ICON_REPLACEMENT,
+                LocaleController.getString(R.string.InuIconReplacement),
+                when (InuConfig.ICON_REPLACEMENT.value) {
+                    InuConfig.IconReplacementItem.SOLAR -> LocaleController.getString(R.string.InuIconReplacementSolar)
+                    else -> LocaleController.getString(R.string.InuIconReplacementOff)
+                }
+            )
+        )
         items.add(UItem.asShadow(null))
 
         if (animationSpeedSlider == null) animationSpeedSlider = SliderCell(
@@ -125,6 +135,24 @@ class InuAppearanceSettingsActivity : InuSettingsPageActivity() {
                     .create()
             )
 
+            BUTTON_ICON_REPLACEMENT -> showDialog(
+                RadioDialogBuilder(context, getResourceProvider())
+                    .setTitle(LocaleController.getString(R.string.InuIconReplacement))
+                    .setItems(
+                        arrayOf(
+                            LocaleController.getString(R.string.InuIconReplacementOff),
+                            LocaleController.getString(R.string.InuIconReplacementSolar),
+                        ),
+                        InuConfig.ICON_REPLACEMENT.value,
+                    ) { _, which ->
+                        if (which == InuConfig.ICON_REPLACEMENT.value) return@setItems
+                        InuConfig.ICON_REPLACEMENT.value = which
+                        listView.adapter.update(true)
+                        showRestartBulletin()
+                    }
+                    .create()
+            )
+
             TOGGLE_SHOW_SECONDS -> {
                 val new = InuConfig.SHOW_SECONDS.toggle()
                 (view as? TextCheckCell)?.isChecked = new
@@ -168,5 +196,6 @@ class InuAppearanceSettingsActivity : InuSettingsPageActivity() {
         private val TOGGLE_SHOW_SECONDS = InuUtils.generateId()
         private val TOGGLE_DISABLE_ROUNDING = InuUtils.generateId()
         private val TOGGLE_HIDE_MY_PHONE_NUMBER = InuUtils.generateId()
+        private val BUTTON_ICON_REPLACEMENT = InuUtils.generateId()
     }
 }
