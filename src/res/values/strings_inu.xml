@@ -268,4 +268,8 @@
     <string name="InuUpdateInstallingHint">App will relaunch after installation</string>
     <string name="InuUpdateFailedToInstall">Install failed (%1$d)</string>
     <string name="InuRefetchWebPreview">Refetch web preview</string>
+    <string name="InuSendStickers">Send stickers</string>
+    <string name="InuSendGifs">Send GIFs</string>
+    <string name="InuSendGames">Send games</string>
+    <string name="InuSendInline">Use inline bots</string>
 </resources>
