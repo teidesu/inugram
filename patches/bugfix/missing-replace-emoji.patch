@@ -4,24 +4,24 @@ Date: Sun, 19 Apr 2026 05:33:38 +0300
 Subject: added some missing Emoji.replaceEmoji calls in various places
 
 ---
- .../org/telegram/ui/Cells/AudioPlayerCell.java  |  3 ++-
- .../java/org/telegram/ui/Cells/DialogCell.java  |  1 +
- .../telegram/ui/ChannelAdminLogActivity.java    |  3 ++-
- .../main/java/org/telegram/ui/ChatActivity.java | 17 +++++++++--------
- .../ui/Components/AudioPlayerAlert.java         |  2 ++
- .../telegram/ui/Components/EditTextEmoji.java   |  2 +-
- .../ui/Components/MessagePreviewView.java       |  3 ++-
- .../java/org/telegram/ui/MainTabsActivity.java  |  3 ++-
- .../java/org/telegram/ui/MessageSeenView.java   |  5 +++--
- .../java/org/telegram/ui/SettingsActivity.java  |  4 ++--
- .../Stories/recorder/CaptionContainerView.java  | 13 +++++++++++++
- 11 files changed, 39 insertions(+), 17 deletions(-)
+ .../telegram/ui/Cells/AudioPlayerCell.java    |  5 ++++-
+ .../org/telegram/ui/Cells/DialogCell.java     |  1 +
+ .../telegram/ui/ChannelAdminLogActivity.java  |  3 ++-
+ .../java/org/telegram/ui/ChatActivity.java    | 20 +++++++++++--------
+ .../ui/Components/AudioPlayerAlert.java       |  3 +++
+ .../telegram/ui/Components/EditTextEmoji.java |  2 +-
+ .../ui/Components/MessagePreviewView.java     |  4 +++-
+ .../org/telegram/ui/MainTabsActivity.java     |  4 +++-
+ .../java/org/telegram/ui/MessageSeenView.java |  7 +++++--
+ .../org/telegram/ui/SettingsActivity.java     |  6 ++++--
+ .../recorder/CaptionContainerView.java        | 13 ++++++++++++
+ 11 files changed, 51 insertions(+), 17 deletions(-)
 
 diff --git a/TMessagesProj/src/main/java/org/telegram/ui/Cells/AudioPlayerCell.java b/TMessagesProj/src/main/java/org/telegram/ui/Cells/AudioPlayerCell.java
 index 0000000..0000000 100644
 --- a/TMessagesProj/src/main/java/org/telegram/ui/Cells/AudioPlayerCell.java
 +++ b/TMessagesProj/src/main/java/org/telegram/ui/Cells/AudioPlayerCell.java
-@@ -30,6 +30,7 @@ import android.widget.ImageView;
+@@ -30,12 +30,14 @@ import android.widget.ImageView;
  
  import org.telegram.messenger.AndroidUtilities;
  import org.telegram.messenger.DownloadController;
@@ -29,7 +29,22 @@ index 0000000..0000000 100644
  import org.telegram.messenger.FileLoader;
  import org.telegram.messenger.FileLog;
  import org.telegram.messenger.ImageLoader;
-@@ -144,7 +145,7 @@ public class AudioPlayerCell extends FrameLayout implements DownloadController.F
+ import org.telegram.messenger.LocaleController;
+ import org.telegram.messenger.MediaController;
+ import org.telegram.messenger.MessageObject;
++import org.telegram.messenger.NotificationCenter;
+ import org.telegram.messenger.R;
+ import org.telegram.messenger.SharedConfig;
+ import org.telegram.messenger.UserConfig;
+@@ -93,6 +95,7 @@ public class AudioPlayerCell extends FrameLayout implements DownloadController.F
+         this.setWillNotDraw(false);
+         this.resourcesProvider = resourcesProvider;
+         this.viewType = viewType;
++        NotificationCenter.listenEmojiLoading(this);
+ 
+         optionsButton = new ImageView(context);
+         optionsButton.setScaleType(ImageView.ScaleType.CENTER);
+@@ -144,7 +147,7 @@ public class AudioPlayerCell extends FrameLayout implements DownloadController.F
              CharSequence authorFinal = TextUtils.ellipsize(author, Theme.chat_contextResult_descriptionTextPaint, maxWidth, TextUtils.TruncateAt.END);
              CharSequence authorFinalH = AndroidUtilities.highlightText(authorFinal, currentMessageObject.highlightedWords, resourcesProvider);
              if (authorFinalH == null) authorFinalH = authorFinal;
@@ -116,7 +131,17 @@ index 0000000..0000000 100644
                      }
                      chatActivityEnterView.setWebPage(webPage, true);
                  }
-@@ -27953,6 +27953,7 @@ public class ChatActivity extends BaseFragment implements
+@@ -21464,6 +21464,9 @@ public class ChatActivity extends BaseFragment implements
+             if (replyObjectTextView != null) {
+                 replyObjectTextView.invalidate();
+             }
++            if (replyNameTextView != null) {
++                replyNameTextView.invalidate();
++            }
+             if (alertTextView != null) {
+                 alertTextView.invalidate();
+             }
+@@ -27953,6 +27956,7 @@ public class ChatActivity extends BaseFragment implements
                  pinnedMessageObject.updateTranslation(false);
                  if (pinnedMessageObject.type == MessageObject.TYPE_MUSIC) {
                      pinnedText = String.format("%s - %s", pinnedMessageObject.getMusicAuthor(), pinnedMessageObject.getMusicTitle());
@@ -136,7 +161,15 @@ index 0000000..0000000 100644
  import org.telegram.messenger.FileLoader;
  import org.telegram.messenger.FileLog;
  import org.telegram.messenger.FileRefController;
-@@ -3437,6 +3438,7 @@ public class AudioPlayerAlert extends BottomSheet implements NotificationCenter.
+@@ -3334,6 +3335,7 @@ public class AudioPlayerAlert extends BottomSheet implements NotificationCenter.
+                     textViews[i].setAlpha(0f);
+                     textViews[i].setVisibility(GONE);
+                 }
++                NotificationCenter.listenEmojiLoading(textViews[i]);
+                 addView(textViews[i], LayoutHelper.createFrame(LayoutHelper.WRAP_CONTENT, LayoutHelper.MATCH_PARENT));
+             }
+             gradientMatrix = new Matrix();
+@@ -3437,6 +3439,7 @@ public class AudioPlayerAlert extends BottomSheet implements NotificationCenter.
          }
  
          public void setText(CharSequence text, boolean animated) {
@@ -169,7 +202,15 @@ index 0000000..0000000 100644
  import org.telegram.messenger.FileLog;
  import org.telegram.messenger.MessagePreviewParams;
  import org.telegram.messenger.LocaleController;
-@@ -2156,7 +2157,7 @@ public class MessagePreviewView extends FrameLayout {
+@@ -2144,6 +2145,7 @@ public class MessagePreviewView extends FrameLayout {
+             subtitle.setEllipsizeByGradient(!LocaleController.isRTL);
+             subtitle.setCallback(this);
+             subtitle.setOverrideFullWidth(AndroidUtilities.displaySize.x);
++            NotificationCenter.listenEmojiLoading(this);
+         }
+ 
+         public void setAnimationForward(boolean forward) {
+@@ -2156,7 +2158,7 @@ public class MessagePreviewView extends FrameLayout {
          }
  
          public void setSubtitle(CharSequence text, boolean animated) {
@@ -190,7 +231,7 @@ index 0000000..0000000 100644
  import org.telegram.messenger.FileLoader;
  import org.telegram.messenger.LiteMode;
  import org.telegram.messenger.LocaleController;
-@@ -479,7 +480,7 @@ public class MainTabsActivity extends ViewPagerActivity implements NotificationC
+@@ -479,9 +480,10 @@ public class MainTabsActivity extends ViewPagerActivity implements NotificationC
          final TextView textView = new TextView(getContext());
          textView.setTextSize(TypedValue.COMPLEX_UNIT_DIP, 16);
          textView.setTextColor(getThemedColor(Theme.key_dialogTextBlack));
@@ -198,7 +239,10 @@ index 0000000..0000000 100644
 +        textView.setText(Emoji.replaceEmoji(UserObject.getUserName(user), textView.getPaint().getFontMetricsInt(), false));
          textView.setMaxLines(2);
          textView.setEllipsize(TextUtils.TruncateAt.END);
++        NotificationCenter.listenEmojiLoading(textView);
          btn.addView(textView, LayoutHelper.createLinear(0, LayoutHelper.WRAP_CONTENT, 1f, Gravity.CENTER_VERTICAL, 13, 0, 14, 0));
+ 
+         return btn;
 diff --git a/TMessagesProj/src/main/java/org/telegram/ui/MessageSeenView.java b/TMessagesProj/src/main/java/org/telegram/ui/MessageSeenView.java
 index 0000000..0000000 100644
 --- a/TMessagesProj/src/main/java/org/telegram/ui/MessageSeenView.java
@@ -211,7 +255,15 @@ index 0000000..0000000 100644
  import org.telegram.messenger.ImageLocation;
  import org.telegram.messenger.LocaleController;
  import org.telegram.messenger.MessageObject;
-@@ -269,7 +270,7 @@ public class MessageSeenView extends FrameLayout {
+@@ -78,6 +79,7 @@ public class MessageSeenView extends FrameLayout {
+         titleView.setTextSize(16);
+         titleView.setEllipsizeByGradient(true);
+         titleView.setRightPadding(AndroidUtilities.dp(62));
++        NotificationCenter.listenEmojiLoading(titleView);
+ 
+         addView(titleView, LayoutHelper.createFrame(0, LayoutHelper.WRAP_CONTENT, Gravity.LEFT | Gravity.CENTER_VERTICAL, 40, 0, 0, 0));
+ 
+@@ -269,7 +271,7 @@ public class MessageSeenView extends FrameLayout {
  
          avatarsImageView.commitTransition(false);
          if (peerIds.size() == 1 && users.get(0) != null) {
@@ -220,7 +272,15 @@ index 0000000..0000000 100644
          } else {
              if (peerIds.size() == 0) {
                  titleView.setText(LocaleController.getString(R.string.NobodyViewed));
-@@ -415,7 +416,7 @@ public class MessageSeenView extends FrameLayout {
+@@ -375,6 +377,7 @@ public class MessageSeenView extends FrameLayout {
+             nameView.setImportantForAccessibility(View.IMPORTANT_FOR_ACCESSIBILITY_NO);
+             nameView.setTextColor(Theme.getColor(Theme.key_actionBarDefaultSubmenuItem));
+             nameView.setGravity(LocaleController.isRTL ? Gravity.RIGHT : Gravity.LEFT);
++            NotificationCenter.listenEmojiLoading(nameView);
+ 
+             statusBadgeComponent = new StatusBadgeComponent(this);
+             nameView.setDrawablePadding(AndroidUtilities.dp(3));
+@@ -415,7 +418,7 @@ public class MessageSeenView extends FrameLayout {
                  avatarDrawable.setInfo(currentAccount, object);
                  ImageLocation imageLocation = ImageLocation.getForUserOrChat(object, ImageLocation.TYPE_SMALL);
                  avatarImageView.setImage(imageLocation, "50_50", avatarDrawable, object);
@@ -233,7 +293,15 @@ diff --git a/TMessagesProj/src/main/java/org/telegram/ui/SettingsActivity.java b
 index 0000000..0000000 100644
 --- a/TMessagesProj/src/main/java/org/telegram/ui/SettingsActivity.java
 +++ b/TMessagesProj/src/main/java/org/telegram/ui/SettingsActivity.java
-@@ -527,7 +527,7 @@ public class SettingsActivity extends BaseFragment implements NotificationCenter
+@@ -451,6 +451,7 @@ public class SettingsActivity extends BaseFragment implements NotificationCenter
+         titleView.setGravity(Gravity.CENTER);
+         titleView.setSingleLine();
+         titleView.setEllipsize(TextUtils.TruncateAt.END);
++        NotificationCenter.listenEmojiLoading(titleView);
+         topView.addView(titleView, LayoutHelper.createFrame(LayoutHelper.MATCH_PARENT, LayoutHelper.WRAP_CONTENT, Gravity.CENTER_HORIZONTAL | Gravity.TOP, 16, 138.333f - 12, 16, 0));
+ 
+         subtitleView = new TextView(context);
+@@ -527,7 +528,7 @@ public class SettingsActivity extends BaseFragment implements NotificationCenter
  
          avatarDrawable.setInfo(user);
          avatarView.setForUserOrChat(user, avatarDrawable);
@@ -242,7 +310,15 @@ index 0000000..0000000 100644
          final StringBuilder sb = new StringBuilder();
          if (user != null) {
              sb.append(PhoneFormat.getInstance().format("+" + user.phone));
-@@ -1012,7 +1012,7 @@ public class SettingsActivity extends BaseFragment implements NotificationCenter
+@@ -950,6 +951,7 @@ public class SettingsActivity extends BaseFragment implements NotificationCenter
+             textView.setTextSize(15);
+             textView.setTypeface(AndroidUtilities.bold());
+             textView.setTextColor(Theme.getColor(Theme.key_windowBackgroundWhiteBlackText, resourcesProvider));
++            NotificationCenter.listenEmojiLoading(textView);
+ 
+             botDrawable = new AnimatedEmojiDrawable.SwapAnimatedEmojiDrawable(textView, dp(24), AnimatedEmojiDrawable.CACHE_TYPE_EMOJI_STATUS);
+             emojiStatusDrawable = new AnimatedEmojiDrawable.SwapAnimatedEmojiDrawable(textView, dp(24), AnimatedEmojiDrawable.CACHE_TYPE_EMOJI_STATUS);
+@@ -1012,7 +1014,7 @@ public class SettingsActivity extends BaseFragment implements NotificationCenter
              avatarDrawable.setInfo(account, user);
              avatarView.getImageReceiver().setCurrentAccount(account);
              avatarView.setForUserOrChat(user, avatarDrawable);
