@@ -1,7 +1,7 @@
 From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
 From: alina sireneva <alina@tei.su>
 Date: Fri, 10 Apr 2026 05:29:50 +0300
-Subject: [PATCH] "save to saved messages" message menu item
+Subject: "save to saved messages" message menu item
 
 ---
  .../src/main/java/org/telegram/ui/ChatActivity.java   | 11 ++++++++---
@@ -57,6 +57,3 @@ index 0000000..0000000 100644
                  if (allowUnpin) {
                      items.add(LocaleController.getString(R.string.UnpinMessage));
                      options.add(OPTION_UNPIN);
--- 
-2.52.0
-

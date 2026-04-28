@@ -1,7 +1,7 @@
 From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
 From: alina sireneva <alina@tei.su>
 Date: Thu, 9 Apr 2026 14:01:29 +0300
-Subject: [PATCH] bottom tabs tweaks: compact mode, hiding contacts, hiding it
+Subject: bottom tabs tweaks: compact mode, hiding contacts, hiding it
  completely
 
 ---
@@ -569,6 +569,3 @@ index 0000000..0000000 100644
          }
          for (int a = 0, N = fragmentsArr.size(); a < N; a++) {
              final FragmentState state = fragmentsArr.valueAt(a);
--- 
-2.52.0
-

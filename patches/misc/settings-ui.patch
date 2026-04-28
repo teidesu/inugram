@@ -1,7 +1,7 @@
 From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
 From: alina sireneva <alina@tei.su>
 Date: Thu, 9 Apr 2026 03:23:55 +0300
-Subject: [PATCH] settings ui
+Subject: settings ui
 
 ---
  .../java/org/telegram/messenger/ApplicationLoader.java   | 2 ++
@@ -55,6 +55,3 @@ index 0000000..0000000 100644
          }
      }
  
--- 
-2.52.0
-

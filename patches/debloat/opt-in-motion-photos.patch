@@ -1,7 +1,7 @@
 From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
 From: alina sireneva <alina@tei.su>
 Date: Wed, 22 Apr 2026 08:10:29 +0300
-Subject: [PATCH] disable "motion photos" in attach picker by default
+Subject: disable "motion photos" in attach picker by default
 
 ---
  .../src/main/java/org/telegram/messenger/MediaController.java    | 1 +
@@ -19,6 +19,3 @@ index 0000000..0000000 100644
  
                                          photoEntry.livePhotoVideoOffset = videoStart;
                                          photoEntry.livePhotoTimestampUs = motionPhoto.photoPresentationTimestampUs;
--- 
-2.52.0
-

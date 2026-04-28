@@ -1,7 +1,7 @@
 From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
 From: alina sireneva <alina@tei.su>
 Date: Sun, 12 Apr 2026 18:08:10 +0300
-Subject: [PATCH] show peer id in profile
+Subject: show peer id in profile
 
 ---
  .../main/java/org/telegram/ui/ProfileActivity.java  | 13 ++++++++++++-
@@ -94,6 +94,3 @@ index 0000000..0000000 100644
              put(++pointer, channelRow, sparseIntArray);
              put(++pointer, botStarsBalanceRow, sparseIntArray);
              put(++pointer, botTonBalanceRow, sparseIntArray);
--- 
-2.52.0
-

@@ -1,7 +1,7 @@
 From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
 From: alina sireneva <alina@tei.su>
 Date: Thu, 9 Apr 2026 19:06:23 +0300
-Subject: [PATCH] hide sticker time overlay
+Subject: hide sticker time overlay
 
 ---
  .../org/telegram/ui/Cells/ChatMessageCell.java   | 16 ++++++++++++++--
@@ -62,6 +62,3 @@ index 0000000..0000000 100644
  
              if (groupMedia != null) {
                  groupMedia.drawBlurRect(canvas, rect, r, .5f * timeAlpha * alpha);
--- 
-2.52.0
-

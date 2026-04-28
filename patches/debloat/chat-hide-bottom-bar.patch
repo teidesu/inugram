@@ -1,7 +1,7 @@
 From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
 From: alina sireneva <alina@tei.su>
 Date: Fri, 10 Apr 2026 01:21:49 +0300
-Subject: [PATCH] disable channel bottom bar (mute and join buttons)
+Subject: disable channel bottom bar (mute and join buttons)
 
 ---
  .../src/main/java/org/telegram/ui/ChatActivity.java | 13 +++++++++----
@@ -82,6 +82,3 @@ index 0000000..0000000 100644
              tmpRect.top += dp(14);
              tmpRect.bottom = getMeasuredHeight();
              tmpRect.left = 0;
--- 
-2.52.0
-

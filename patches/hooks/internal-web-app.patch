@@ -1,8 +1,7 @@
 From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
 From: alina sireneva <alina@tei.su>
 Date: Sun, 19 Apr 2026 09:52:49 +0300
-Subject: [PATCH] added some infra for internal web apps (mostly ported from
- nekogram)
+Subject: added some infra for internal web apps (mostly ported from nekogram)
 
 ---
  .../java/org/telegram/ui/ActionBar/BottomSheetTabs.java  | 1 +
@@ -102,6 +101,3 @@ index 0000000..0000000 100644
  
      public TLObject response;
      public long responseTime;
--- 
-2.52.0
-

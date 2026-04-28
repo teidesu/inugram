@@ -1,7 +1,7 @@
 From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
 From: alina sireneva <alina@tei.su>
 Date: Sun, 12 Apr 2026 23:42:54 +0300
-Subject: [PATCH] move the voice record button into attachments drawer
+Subject: move the voice record button into attachments drawer
 
 ---
  .../java/org/telegram/ui/ChatActivity.java    | 43 ++++++-----
@@ -321,6 +321,3 @@ index 0000000..0000000 100644
              updateFlash();
              recordedTime = 0;
              progress = 0;
--- 
-2.52.0
-

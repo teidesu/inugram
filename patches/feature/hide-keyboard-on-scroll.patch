@@ -1,7 +1,7 @@
 From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
 From: alina sireneva <alina@tei.su>
 Date: Fri, 10 Apr 2026 00:36:18 +0300
-Subject: [PATCH] hide keyboard when scrolling the chat
+Subject: hide keyboard when scrolling the chat
 
 ---
  .../src/main/java/org/telegram/ui/ChatActivity.java        | 7 +++++++
@@ -25,6 +25,3 @@ index 0000000..0000000 100644
                          pollHintCell = null;
                          wasManualScroll = true;
                          scrollingFloatingDate = true;
--- 
-2.52.0
-

@@ -1,7 +1,7 @@
 From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
 From: alina sireneva <alina@tei.su>
 Date: Thu, 9 Apr 2026 17:24:31 +0300
-Subject: [PATCH] customizable sticker size
+Subject: customizable sticker size
 
 ---
  .../main/java/org/telegram/ui/Cells/ChatMessageCell.java  | 8 ++++++--
@@ -41,6 +41,3 @@ index 0000000..0000000 100644
                      if (!reactionsLayoutInBubble.isSmall) {
                          reactionsLayoutInBubble.measure(maxWidth + dp(36), currentMessageObject.isOutOwner() && (currentMessageObject.isAnimatedEmoji() || currentMessageObject.isAnyKindOfSticker()) ? Gravity.RIGHT : Gravity.LEFT);
                          reactionsLayoutInBubble.drawServiceShaderBackground = 1f;
--- 
-2.52.0
-

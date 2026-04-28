@@ -1,7 +1,7 @@
 From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
 From: alina sireneva <alina@tei.su>
 Date: Thu, 23 Apr 2026 21:52:54 +0300
-Subject: [PATCH] disable uploading drafts to cloud
+Subject: disable uploading drafts to cloud
 
 ---
  .../main/java/org/telegram/messenger/MediaDataController.java   | 2 +-
@@ -20,6 +20,3 @@ index 0000000..0000000 100644
                  TLRPC.TL_messages_saveDraft req = new TLRPC.TL_messages_saveDraft();
                  req.peer = getMessagesController().getInputPeer(dialogId);
                  if (req.peer == null) {
--- 
-2.52.0
-

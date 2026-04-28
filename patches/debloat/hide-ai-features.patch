@@ -1,7 +1,7 @@
 From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
 From: alina sireneva <alina@tei.su>
 Date: Thu, 9 Apr 2026 16:14:57 +0300
-Subject: [PATCH] hide ai features
+Subject: hide ai features
 
 ---
  TMessagesProj/src/main/java/org/telegram/ui/ArticleViewer.java  | 1 +
@@ -47,6 +47,3 @@ index 0000000..0000000 100644
  
          if (shownAiButton == show) return;
          shownAiButton = show;
--- 
-2.52.0
-

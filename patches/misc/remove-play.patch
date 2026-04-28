@@ -1,7 +1,7 @@
 From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
 From: alina sireneva <alina@tei.su>
 Date: Tue, 21 Apr 2026 08:54:19 +0300
-Subject: [PATCH] remove play services stuff only available for official apps
+Subject: remove play services stuff only available for official apps
 
 ---
  TMessagesProj/build.gradle                    |   3 -
@@ -775,6 +775,3 @@ index 0000000..0000000 100644
              for (int i = 0; i < codeFieldContainer.codeField.length; i++) {
                  int finalI = i;
                  codeFieldContainer.postDelayed(()-> codeFieldContainer.codeField[finalI].animateSuccessProgress(1f), i * 75L);
--- 
-2.52.0
-

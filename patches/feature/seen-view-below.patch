@@ -1,7 +1,7 @@
 From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
 From: alina sireneva <alina@tei.su>
 Date: Tue, 21 Apr 2026 14:53:27 +0300
-Subject: [PATCH] move the "seen by" menu item to the bottom of the menu
+Subject: move the "seen by" menu item to the bottom of the menu
 
 ---
  .../java/org/telegram/ui/ChatActivity.java    | 79 +++++++++++++++----
@@ -242,6 +242,3 @@ index 0000000..0000000 100644
                      outRect.bottom = AndroidUtilities.dp(4);
                  }
              }
--- 
-2.52.0
-

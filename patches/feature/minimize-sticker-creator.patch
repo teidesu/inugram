@@ -1,8 +1,7 @@
 From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
 From: alina sireneva <alina@tei.su>
 Date: Thu, 9 Apr 2026 16:08:08 +0300
-Subject: [PATCH] toggle minimizing of the sticker creator button in recent
- stickers
+Subject: toggle minimizing of the sticker creator button in recent stickers
 
 ---
  .../telegram/messenger/MediaDataController.java |  2 +-
@@ -83,6 +82,3 @@ index 0000000..0000000 100644
                          } else if (object == favouriteStickers) {
                              cell.setText(getString(R.string.FavoriteStickers), 0);
                          } else if (object == premiumStickers) {
--- 
-2.52.0
-
