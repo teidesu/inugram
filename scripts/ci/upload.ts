@@ -66,28 +66,25 @@ async function persistSession(session: string) {
 
 try {
   const hashtag = info.kind === 'release' ? '#release' : '#canary'
-  const headerUrl = info.kind === 'release' && info.tag
-    ? `https://github.com/${info.repo}/releases/tag/${info.tag}`
-    : `https://github.com/${info.repo}/commit/${info.commitSha}`
-  const headerLabel = info.kind === 'release' && info.tag
-    ? info.tag
-    : info.commitSha.slice(0, 7)
-  const commitLines = joinTextWithEntities(
-    info.commits.map(c => html`<a href="https://github.com/${info.repo}/commit/${c.sha}">${c.sha.slice(0, 7)}</a>: ${c.message}`),
-    '\n',
-  )
-
-  const caption = html`
+  const commits = info.commits.slice().reverse()
+  const buildCaption = (cs: typeof commits) => html`
     ${hashtag}
     <br/>
     <b>v${info.verName}</b> (build ${info.buildNum}, based on ${info.appVerCode})
-    <br/>
-    <a href="${headerUrl}">${headerLabel}</a>
     <br/><br/>
     <blockquote expandable>
-      ${commitLines}
+      ${joinTextWithEntities(
+        cs.map(c => html`<a href="https://github.com/${info.repo}/commit/${c.sha}">${c.sha.slice(0, 7)}</a>: ${c.message}`),
+        '\n',
+      )}
     </blockquote>
   `
+
+  let caption = buildCaption(commits)
+  while (caption.text.length > 4096 && commits.length > 1) {
+    commits.pop()
+    caption = buildCaption(commits)
+  }
 
   await tg.sendMedia(channel, {
     type: 'document',
