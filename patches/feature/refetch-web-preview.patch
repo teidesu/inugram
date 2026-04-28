@@ -1,0 +1,75 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: alina sireneva <alina@tei.su>
+Date: Tue, 28 Apr 2026 23:48:18 +0300
+Subject: menu option to refetch web preview in message input
+
+---
+ .../java/org/telegram/ui/ChatActivity.java    | 25 +++++++++++++++++++
+ .../ui/Components/ChatActivityEnterView.java  | 18 +++++++++++++
+ 2 files changed, 43 insertions(+)
+
+diff --git a/TMessagesProj/src/main/java/org/telegram/ui/ChatActivity.java b/TMessagesProj/src/main/java/org/telegram/ui/ChatActivity.java
+index 0000000..0000000 100644
+--- a/TMessagesProj/src/main/java/org/telegram/ui/ChatActivity.java
++++ b/TMessagesProj/src/main/java/org/telegram/ui/ChatActivity.java
+@@ -14160,6 +14160,31 @@ public class ChatActivity extends BaseFragment implements
+ 
+     private HashMap<String, TLRPC.WebPage> lastLinkPreviewResults;
+ 
++    public void inu_refetchWebPreview() {
++        if (chatActivityEnterView == null) return;
++        CharSequence text = chatActivityEnterView.getFieldText();
++        if (TextUtils.isEmpty(text)) return;
++        foundWebPage = null;
++        foundUrls = null;
++        if (lastLinkPreviewResults != null) {
++            lastLinkPreviewResults.clear();
++        }
++        chatActivityEnterView.setWebPage(null, true);
++        String firstUrl = null;
++        try {
++            Matcher m = AndroidUtilities.WEB_URL.matcher(text);
++            if (m.find()) firstUrl = text.subSequence(m.start(), m.end()).toString();
++        } catch (Exception ignore) {}
++        if (firstUrl != null) {
++            TLRPC.TL_webPagePending pending = new TLRPC.TL_webPagePending();
++            pending.url = firstUrl;
++            pending.display_url = firstUrl;
++            pendingLinkSearchString = firstUrl;
++            showFieldPanelForWebPage(true, pending, false);
++        }
++        searchLinks(text, true);
++    }
++
+     private void requestLinkPreviewCached(TL_account.getWebPagePreview req, Utilities.Callback2<Boolean, TLRPC.WebPage> done) {
+         if (lastLinkPreviewResults == null) {
+             lastLinkPreviewResults = new HashMap<>();
+diff --git a/TMessagesProj/src/main/java/org/telegram/ui/Components/ChatActivityEnterView.java b/TMessagesProj/src/main/java/org/telegram/ui/Components/ChatActivityEnterView.java
+index 0000000..0000000 100644
+--- a/TMessagesProj/src/main/java/org/telegram/ui/Components/ChatActivityEnterView.java
++++ b/TMessagesProj/src/main/java/org/telegram/ui/Components/ChatActivityEnterView.java
+@@ -5007,6 +5007,24 @@ public class ChatActivityEnterView extends FrameLayout implements
+                 }
+             });
+         }
++        if (containsSendMessage && parentFragment != null && messageEditText != null) {
++            CharSequence inu_text = messageEditText.getText();
++            boolean inu_hasUrl = false;
++            try {
++                inu_hasUrl = inu_text != null && AndroidUtilities.WEB_URL.matcher(inu_text).find();
++            } catch (Exception ignore) {}
++            if (inu_hasUrl) {
++                options.add(R.drawable.msg_retry, getString(R.string.InuRefetchWebPreview), () -> {
++                    if (messageSendPreview != null) {
++                        messageSendPreview.dismiss(false);
++                        messageSendPreview = null;
++                    }
++                    if (parentFragment != null) {
++                        parentFragment.inu_refetchWebPreview();
++                    }
++                });
++            }
++        }
+         options.setupSelectors();
+         if (sendWhenOnlineButton != null) {
+             TLRPC.User user = parentFragment == null ? null : parentFragment.getCurrentUser();

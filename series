@@ -98,3 +98,4 @@ feature/static-pinned-reactions.patch
 hooks/icon-replacement.patch
 debloat/chat-hide-bottom-bar.patch
 feature/jump-to-beginning.patch
+feature/refetch-web-preview.patch

@@ -267,4 +267,5 @@
     <string name="InuUpdateInstalling">Installing update</string>
     <string name="InuUpdateInstallingHint">App will relaunch after installation</string>
     <string name="InuUpdateFailedToInstall">Install failed (%1$d)</string>
+    <string name="InuRefetchWebPreview">Refetch web preview</string>
 </resources>
