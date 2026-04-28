@@ -15,7 +15,7 @@ index 0000000..0000000 100644
                      totalHeight += dp(21);
                      additionalTimeOffsetY = dp(21);
                  }
-+                if (InuConfig.NO_STICKER_EXTRA_PADDING.getValue() && currentMessageObject.isAnyKindOfSticker()) {
++                if (InuConfig.NO_STICKER_EXTRA_PADDING.getValue() && currentMessageObject.isAnyKindOfSticker() && !currentMessageObject.hasReactions()) {
 +                    totalHeight -= dp(8);
 +                }
  
