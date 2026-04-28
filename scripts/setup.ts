@@ -113,14 +113,27 @@ async function importSeries(seriesEntries: string[]) {
   }
 }
 
+function isPrefix(prefix: string[], full: string[]) {
+  return prefix.length <= full.length && prefix.every((name, i) => name === full[i])
+}
+
 async function ensurePatches(expected: string[], seriesEntries: string[]) {
   const repo = cd(worktreeDir)
   const existing = await getAllPatchNames(worktreeDir)
 
   if (existing.length === 0) {
     await importSeries(seriesEntries)
-  } else if (!sameOrder(existing, expected)) {
-    throw new Error('Existing StGit stack does not match series (use --force to reset)')
+  } else if (sameOrder(existing, expected)) {
+    // up to date
+  } else if (isPrefix(existing, expected)) {
+    const applied = await getAppliedPatchNames(worktreeDir)
+    if (!sameOrder(applied, existing)) {
+      step('Pushing existing patches before import')
+      await repo`stg push -a`
+    }
+    await importSeries(seriesEntries.slice(existing.length))
+  } else {
+    throw new Error('Existing StGit stack diverges from series (use --force to reset)')
   }
 
   const applied = await getAppliedPatchNames(worktreeDir)
