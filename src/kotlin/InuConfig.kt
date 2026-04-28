@@ -168,6 +168,9 @@ object InuConfig {
     val HIDE_BOTTOM_BAR_REPLIES = BoolItem("hide_bottom_bar_replies", false)
 
     @JvmField
+    val HIDE_BOTTOM_BAR_PINNED = BoolItem("hide_bottom_bar_pinned", false)
+
+    @JvmField
     val HIDE_BOT_SLASH_GROUPS = BoolItem("hide_bot_slash_groups", true)
 
     @JvmField

@@ -24,6 +24,7 @@ object ChatHelper {
     const val ACTION_OPEN_IN_DISCUSSION = 504
     const val OPTION_SHOW_IN_CHAT = 505
     const val ACTION_SHOW_PINNED_PANEL = 506
+    const val ACTION_PINNED_UNPIN_ALL = 507
 
     private fun removeWallpaperKey(currentAccount: Int, dialogId: Long) = "remove_wallpaper:$currentAccount:$dialogId"
     private fun removeThemeKey(currentAccount: Int, dialogId: Long) = "remove_theme:$currentAccount:$dialogId"
@@ -237,7 +238,9 @@ object ChatHelper {
 
     @JvmStatic
     @JvmOverloads
-    fun shouldForceHideBottomBar(chat: TLRPC.Chat?, user: TLRPC.User? = null): Boolean {
+    fun shouldForceHideBottomBar(chat: TLRPC.Chat?, user: TLRPC.User? = null, chatMode: Int = ChatActivity.MODE_DEFAULT): Boolean {
+        if (chatMode == ChatActivity.MODE_PINNED) return InuConfig.HIDE_BOTTOM_BAR_PINNED.value
+
         if (user != null && UserObject.isReplyUser(user) && InuConfig.HIDE_BOTTOM_BAR_REPLIES.value) return true
 
         if (chat == null) return false

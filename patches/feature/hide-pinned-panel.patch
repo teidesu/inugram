@@ -49,7 +49,7 @@ index 0000000..0000000 100644
          menu.setVisibility(inMenuMode ? View.GONE : View.VISIBLE);
  
          updateTitle(false);
-@@ -11409,6 +11415,7 @@ public class ChatActivity extends BaseFragment implements
+@@ -11407,6 +11413,7 @@ public class ChatActivity extends BaseFragment implements
          pinnedListButton.setBackgroundDrawable(Theme.createSelectorDrawable(getThemedColor(Theme.key_inappPlayerClose) & 0x19ffffff));
          pinnedMessageView.addView(pinnedListButton, LayoutHelper.createFrame(36, 48, Gravity.RIGHT | Gravity.TOP, 0, 0, 7, 0));
          pinnedListButton.setOnClickListener(v -> openPinnedMessagesList(false));
@@ -57,7 +57,7 @@ index 0000000..0000000 100644
  
          closePinned = new ImageView(getContext());
          closePinned.setImageResource(R.drawable.miniplayer_close);
-@@ -11461,6 +11468,7 @@ public class ChatActivity extends BaseFragment implements
+@@ -11459,6 +11466,7 @@ public class ChatActivity extends BaseFragment implements
                  updatePinnedMessageView(true);
              }
          });
@@ -65,7 +65,7 @@ index 0000000..0000000 100644
  
          updatePinnedListButton(false);
      }
-@@ -27541,7 +27549,7 @@ public class ChatActivity extends BaseFragment implements
+@@ -27536,7 +27544,7 @@ public class ChatActivity extends BaseFragment implements
          return false;
      }
  
@@ -74,7 +74,7 @@ index 0000000..0000000 100644
          updatePinnedMessageView(animated, 0);
      }
  
-@@ -27659,6 +27667,11 @@ public class ChatActivity extends BaseFragment implements
+@@ -27654,6 +27662,11 @@ public class ChatActivity extends BaseFragment implements
          if (currentEncryptedChat != null || chatMode != 0) {
              return;
          }

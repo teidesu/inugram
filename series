@@ -76,7 +76,6 @@ bugfix/lazy-chromecast.patch
 debloat/recyclerview-instant-tap.patch
 debloat/opt-in-motion-photos.patch
 feature/long-press-reply-in-replies.patch
-debloat/chat-hide-bottom-bar.patch
 feature/animation-multiplier.patch
 feature/search-media-type-filter.patch
 debloat/disable-bg-parallax.patch
@@ -97,3 +96,4 @@ bugfix/nav-stack-lockup.patch
 feature/no-sticker-extra-padding.patch
 feature/static-pinned-reactions.patch
 hooks/icon-replacement.patch
+debloat/chat-hide-bottom-bar.patch

@@ -44,6 +44,7 @@
     <string name="InuHideBottomBarJoined">Joined channels</string>
     <string name="InuHideBottomBarNonJoined">Non-joined channels</string>
     <string name="InuHideBottomBarReplies">Replies</string>
+    <string name="InuHideBottomBarPinned">Pinned messages</string>
     <string name="InuHideBotSlash">Hide bot command menu button</string>
     <string name="InuHideBotSlashGroups">In group chats</string>
     <string name="InuHideBotSlashBots">In chats with bots</string>
