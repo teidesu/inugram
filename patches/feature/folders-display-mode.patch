@@ -8,7 +8,8 @@ Subject: dialog folders display mode customizations
  .../telegram/messenger/MessagesStorage.java   | 25 ++++++
  .../ui/Components/FilterTabsView.java         | 86 +++++++++++++------
  .../java/org/telegram/ui/DialogsActivity.java | 15 +++-
- 4 files changed, 98 insertions(+), 29 deletions(-)
+ .../org/telegram/ui/FilterCreateActivity.java |  4 +
+ 5 files changed, 102 insertions(+), 29 deletions(-)
 
 diff --git a/TMessagesProj/src/main/java/org/telegram/messenger/MessagesController.java b/TMessagesProj/src/main/java/org/telegram/messenger/MessagesController.java
 index 0000000..0000000 100644
@@ -38,7 +39,7 @@ index 0000000..0000000 100644
                      return 0;
                  });
  
-+                FolderHelper.loadMeta(MessagesStorage.this, dialogFilters);
++                FolderHelper.loadMeta(MessagesStorage.this, currentAccount, dialogFilters);
 +
                  if (updateCounters) {
                      calcUnreadCounters(true);
@@ -448,3 +449,18 @@ index 0000000..0000000 100644
                      }
                  }
                  if (stableId >= 0) {
+diff --git a/TMessagesProj/src/main/java/org/telegram/ui/FilterCreateActivity.java b/TMessagesProj/src/main/java/org/telegram/ui/FilterCreateActivity.java
+index 0000000..0000000 100644
+--- a/TMessagesProj/src/main/java/org/telegram/ui/FilterCreateActivity.java
++++ b/TMessagesProj/src/main/java/org/telegram/ui/FilterCreateActivity.java
+@@ -1148,6 +1148,10 @@ public class FilterCreateActivity extends BaseFragment {
+             req.filter.flags |= 134217728;
+             req.filter.color = newFilterColor;
+         }
++        if (filter.inu_emoticon != null && !filter.inu_emoticon.isEmpty()) {
++            req.filter.flags |= 1 << 25;
++            req.filter.emoticon = filter.inu_emoticon;
++        }
+         MessagesController messagesController = fragment.getMessagesController();
+         ArrayList<Long> pinArray = new ArrayList<>();
+         if (newPinned.size() != 0) {

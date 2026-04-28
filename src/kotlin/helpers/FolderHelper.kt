@@ -5,6 +5,7 @@ import android.graphics.ColorFilter
 import android.graphics.drawable.Drawable
 import android.text.TextPaint
 import android.util.Pair
+import androidx.core.content.edit
 import androidx.core.graphics.withSave
 import desu.inugram.InuConfig
 import org.telegram.messenger.AndroidUtilities
@@ -12,6 +13,7 @@ import org.telegram.messenger.LocaleController.getString
 import org.telegram.messenger.MessagesController
 import org.telegram.messenger.MessagesStorage
 import org.telegram.messenger.R
+import org.telegram.messenger.UserConfig
 import org.telegram.tgnet.TLRPC
 import org.telegram.ui.Components.FilterTabsView
 import org.telegram.ui.Stories.recorder.HintView2
@@ -60,18 +62,16 @@ object FolderHelper {
         db.executeFast("DELETE FROM inu_folder_meta").stepThis().dispose()
         val state = db.executeFast("REPLACE INTO inu_folder_meta VALUES(?, ?)")
         for (filter in filters) {
-            val emoticon = filter.inu_emoticon
-            if (emoticon.isNullOrEmpty()) continue
             state.requery()
             state.bindInteger(1, filter.id)
-            state.bindString(2, emoticon)
+            state.bindString(2, filter.inu_emoticon ?: "")
             state.step()
         }
         state.dispose()
     }
 
     @JvmStatic
-    fun loadMeta(storage: MessagesStorage, filters: List<MessagesController.DialogFilter>) {
+    fun loadMeta(storage: MessagesStorage, account: Int, filters: List<MessagesController.DialogFilter>) {
         val db = storage.database ?: return
         val map = HashMap<Int, String>()
         val cursor = db.queryFinalized("SELECT filter_id, emoticon FROM inu_folder_meta")
@@ -79,8 +79,16 @@ object FolderHelper {
             map[cursor.intValue(0)] = cursor.stringValue(1)
         }
         cursor.dispose()
+        var hasMissing = false
         for (filter in filters) {
-            filter.inu_emoticon = map[filter.id]
+            val cached = map[filter.id]
+            if (cached == null) hasMissing = true
+            filter.inu_emoticon = if (cached.isNullOrEmpty()) null else cached
+        }
+        if (hasMissing) {
+            val userConfig = UserConfig.getInstance(account)
+            userConfig.filtersLoaded = false
+            userConfig.preferences.edit { putBoolean("filtersLoaded", false) }
         }
     }
 
