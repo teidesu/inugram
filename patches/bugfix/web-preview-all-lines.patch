@@ -1,0 +1,22 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: alina sireneva <alina@tei.su>
+Date: Wed, 29 Apr 2026 16:13:41 +0300
+Subject: prevent web preview from being limited to 6 lines for twitter-like websites
+
+---
+ .../src/main/java/org/telegram/ui/Cells/ChatMessageCell.java    | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/TMessagesProj/src/main/java/org/telegram/ui/Cells/ChatMessageCell.java b/TMessagesProj/src/main/java/org/telegram/ui/Cells/ChatMessageCell.java
+index 0000000..0000000 100644
+--- a/TMessagesProj/src/main/java/org/telegram/ui/Cells/ChatMessageCell.java
++++ b/TMessagesProj/src/main/java/org/telegram/ui/Cells/ChatMessageCell.java
+@@ -7966,7 +7966,7 @@ public class ChatMessageCell extends BaseCell implements SeekBar.SeekBarDelegate
+                                 totalHeight += dp(2);
+                             }
+                             int restLines = 0;
+-                            boolean allowAllLines = site_name != null && site_name.toString().toLowerCase().equals("twitter");
++                            boolean allowAllLines = desu.inugram.helpers.WebPreviewHelper.shouldShowAllLines(webpage);
+                             CharSequence text = overrideDescrption != null ? overrideDescrption : messageObject.linkDescription;
+                             boolean isRTL = AndroidUtilities.isRTL(text);
+                             int maxLines = allowAllLines ? 100 : (currentMessageObject.isRepostPreview ? 3 : 6);

@@ -100,3 +100,4 @@ debloat/chat-hide-bottom-bar.patch
 feature/jump-to-beginning.patch
 feature/refetch-web-preview.patch
 feature/chat-editor.patch
+bugfix/web-preview-all-lines.patch

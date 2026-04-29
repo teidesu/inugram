@@ -4,6 +4,7 @@ import android.util.Log
 import desu.inugram.InuConfig
 import org.json.JSONArray
 import org.json.JSONObject
+import org.telegram.tgnet.TLRPC
 
 object WebPreviewHelper {
     data class Replacement(val pattern: String, val replacement: String)
@@ -46,6 +47,31 @@ object WebPreviewHelper {
 
     fun resetToDefault() {
         InuConfig.WEB_PREVIEW_REPLACEMENTS.value = ""
+    }
+
+    @JvmStatic
+    fun shouldShowAllLines(webPage: TLRPC.WebPage): Boolean {
+        // stock only checks for site_name.lower() == "twitter", which is the old name that no longer applies
+        // fix + expand it a bit
+        val siteName = webPage.site_name.lowercase()
+        if (siteName == "twitter" || siteName == "x (formerly twitter)") return true
+        if (
+            siteName == "bluesky social"
+            || siteName == "witchsky"
+            || siteName == "blacksky"
+            || siteName == "deer.social"
+            || siteName == "anartia"
+        ) return true
+
+        if (webPage.cached_page == null) {
+            // also apply to fixupx and friends without instant view (i.e. non-threads)
+            return siteName.contains("fixupx")
+                || siteName.contains("fxtwitter")
+                || siteName.contains("stupidpenisx")
+                || siteName.contains("girlcockx")
+        }
+
+        return false;
     }
 
     @JvmStatic
