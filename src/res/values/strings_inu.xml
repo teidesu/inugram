@@ -92,6 +92,8 @@
     <string name="InuDeleteForBothGroups">Group chats</string>
     <string name="InuSimpleAttachPopupAnimation">Simple attach popup animation</string>
     <string name="InuHidePaidReactionUpsell">Hide paid reaction upsell</string>
+    <string name="InuDisableProfileScrollSnap">Disable profile scroll snap</string>
+    <string name="InuDisableProfileScrollSnapInfo">Don\'t snap the profile header to fixed positions when scrolling</string>
     <string name="InuOptInMotionPhotos">Opt-in motion photos</string>
     <string name="InuOptInMotionPhotosInfo">Disable sending photos as "live" by default</string>
     <string name="InuChatAlwaysShowDown">Always show "go to bottom"</string>

@@ -1,0 +1,22 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: alina sireneva <alina@tei.su>
+Date: Wed, 29 Apr 2026 18:48:53 +0300
+Subject: disable scroll snapping in profile
+
+---
+ .../src/main/java/org/telegram/ui/ProfileActivity.java          | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/TMessagesProj/src/main/java/org/telegram/ui/ProfileActivity.java b/TMessagesProj/src/main/java/org/telegram/ui/ProfileActivity.java
+index 0000000..0000000 100644
+--- a/TMessagesProj/src/main/java/org/telegram/ui/ProfileActivity.java
++++ b/TMessagesProj/src/main/java/org/telegram/ui/ProfileActivity.java
+@@ -4147,7 +4147,7 @@ public class ProfileActivity extends BaseFragment implements NotificationCenter.
+                             } else {
+                                 listView.smoothScrollBy(0, view.getTop() - getHeaderExtraHeight(), CubicBezierInterpolator.EASE_OUT_QUINT);
+                             }
+-                        } else {
++                        } else if (!desu.inugram.InuConfig.DISABLE_PROFILE_SCROLL_SNAP.getValue()) {
+                             final boolean hasActions = getActionsExtraHeight() > 0;
+                             if (hasActions && extraHeight > 0 && (extraHeight < getHeaderExtraHeight() * 0.6f || listViewVelocityY < -1000f) && extraHeight > getActionsExtraHeight() * .6f) {
+                                 listView.smoothScrollBy(0, (int) (extraHeight - getActionsExtraHeight()), CubicBezierInterpolator.EASE_OUT_QUINT);

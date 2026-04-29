@@ -198,6 +198,9 @@ object InuConfig {
     val HIDE_PAID_REACTION_UPSELL = BoolItem("hide_paid_reaction_upsell", true)
 
     @JvmField
+    val DISABLE_PROFILE_SCROLL_SNAP = BoolItem("disable_profile_scroll_snap", true)
+
+    @JvmField
     val OPT_IN_MOTION_PHOTOS = BoolItem("opt_in_motion_photos", true)
 
     @JvmField
