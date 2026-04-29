@@ -52,6 +52,14 @@ class InuAppearanceSettingsActivity : InuSettingsPageActivity() {
             ).setChecked(InuConfig.HIDE_MY_PHONE_NUMBER.value)
         )
         items.add(
+            mkTwoLineCheckItem(
+                TOGGLE_DISABLE_SCRIM_BLUR,
+                R.string.InuDisableScrimBlur,
+                R.string.InuDisableScrimBlurInfo,
+                InuConfig.DISABLE_SCRIM_BLUR.value
+            )
+        )
+        items.add(
             UItem.asButton(
                 BUTTON_ICON_REPLACEMENT,
                 LocaleController.getString(R.string.InuIconReplacement),
@@ -168,6 +176,11 @@ class InuAppearanceSettingsActivity : InuSettingsPageActivity() {
                 (view as? TextCheckCell)?.isChecked = new
             }
 
+            TOGGLE_DISABLE_SCRIM_BLUR -> {
+                val new = InuConfig.DISABLE_SCRIM_BLUR.toggle()
+                (view as? NotificationsCheckCell)?.isChecked = new
+            }
+
             TOGGLE_NON_ISLAND_TAB_BARS -> {
                 val new = InuConfig.NON_ISLAND_TAB_BARS.toggle()
                 (view as? TextCheckCell)?.isChecked = new
@@ -196,6 +209,7 @@ class InuAppearanceSettingsActivity : InuSettingsPageActivity() {
         private val TOGGLE_SHOW_SECONDS = InuUtils.generateId()
         private val TOGGLE_DISABLE_ROUNDING = InuUtils.generateId()
         private val TOGGLE_HIDE_MY_PHONE_NUMBER = InuUtils.generateId()
+        private val TOGGLE_DISABLE_SCRIM_BLUR = InuUtils.generateId()
         private val BUTTON_ICON_REPLACEMENT = InuUtils.generateId()
     }
 }

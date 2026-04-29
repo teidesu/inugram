@@ -329,6 +329,9 @@ object InuConfig {
     val HIDE_FADE_VIEW = BoolItem("hide_fade_view", false)
 
     @JvmField
+    val DISABLE_SCRIM_BLUR = BoolItem("disable_scrim_blur", false)
+
+    @JvmField
     val SIMPLE_ATTACH_POPUP_ANIMATION = BoolItem("simple_attach_popup_animation", false)
 
     @JvmField

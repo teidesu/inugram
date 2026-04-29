@@ -1,0 +1,128 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: alina sireneva <alina@tei.su>
+Date: Wed, 29 Apr 2026 17:59:48 +0300
+Subject: option to disable scrim blur throughout the app
+
+---
+ .../org/telegram/messenger/AndroidUtilities.java  |  7 +++++++
+ .../ui/Components/BlurBehindDrawable.java         | 15 +++++++++++++++
+ .../org/telegram/ui/Components/ScrimOptions.java  |  8 ++++++++
+ .../java/org/telegram/ui/DialogsActivity.java     | 10 ++++++++++
+ .../java/org/telegram/ui/MessageSendPreview.java  |  8 +++++---
+ 5 files changed, 45 insertions(+), 3 deletions(-)
+
+diff --git a/TMessagesProj/src/main/java/org/telegram/messenger/AndroidUtilities.java b/TMessagesProj/src/main/java/org/telegram/messenger/AndroidUtilities.java
+index 0000000..0000000 100644
+--- a/TMessagesProj/src/main/java/org/telegram/messenger/AndroidUtilities.java
++++ b/TMessagesProj/src/main/java/org/telegram/messenger/AndroidUtilities.java
+@@ -6070,6 +6070,13 @@ public class AndroidUtilities {
+             return;
+         }
+ 
++        if (desu.inugram.InuConfig.DISABLE_SCRIM_BLUR.getValue()) {
++            Bitmap stub = Bitmap.createBitmap(2, 2, Bitmap.Config.ARGB_8888);
++            stub.eraseColor(0x60000000);
++            onBitmapDone.run(stub);
++            return;
++        }
++
+         List<View> views = allGlobalViews();
+ 
+         if (views == null) {
+diff --git a/TMessagesProj/src/main/java/org/telegram/ui/Components/BlurBehindDrawable.java b/TMessagesProj/src/main/java/org/telegram/ui/Components/BlurBehindDrawable.java
+index 0000000..0000000 100644
+--- a/TMessagesProj/src/main/java/org/telegram/ui/Components/BlurBehindDrawable.java
++++ b/TMessagesProj/src/main/java/org/telegram/ui/Components/BlurBehindDrawable.java
+@@ -73,6 +73,21 @@ public class BlurBehindDrawable {
+         if (parentView == null || parentView.getMeasuredHeight() == 0 && parentView.getMeasuredWidth() == 0) {
+             return;
+         }
++        if (desu.inugram.InuConfig.DISABLE_SCRIM_BLUR.getValue()) {
++            if (animateAlpha) {
++                if (show && blurAlpha != 1f) {
++                    blurAlpha = Math.min(1f, blurAlpha + 0.09f);
++                    parentView.invalidate();
++                } else if (!show && blurAlpha != 0f) {
++                    blurAlpha = Math.max(0f, blurAlpha - 0.09f);
++                    parentView.invalidate();
++                }
++            }
++            float a = animateAlpha ? blurAlpha : 1f;
++            errorBlackoutPaint.setAlpha((int) (0x60 * a));
++            canvas.drawPaint(errorBlackoutPaint);
++            return;
++        }
+         if (type == 1 && !wasDraw && !animateAlpha) {
+             generateBlurredBitmaps();
+             invalidate = false;
+diff --git a/TMessagesProj/src/main/java/org/telegram/ui/Components/ScrimOptions.java b/TMessagesProj/src/main/java/org/telegram/ui/Components/ScrimOptions.java
+index 0000000..0000000 100644
+--- a/TMessagesProj/src/main/java/org/telegram/ui/Components/ScrimOptions.java
++++ b/TMessagesProj/src/main/java/org/telegram/ui/Components/ScrimOptions.java
+@@ -348,6 +348,14 @@ public class ScrimOptions extends Dialog {
+     }
+ 
+     public static void makeGlobalBlurBitmaps(Utilities.Callback2<Bitmap, Bitmap> bitmaps) {
++        if (desu.inugram.InuConfig.DISABLE_SCRIM_BLUR.getValue()) {
++            Bitmap stubBg = Bitmap.createBitmap(2, 2, Bitmap.Config.ARGB_8888);
++            stubBg.eraseColor(0x60000000);
++            Bitmap stubOptions = Bitmap.createBitmap(2, 2, Bitmap.Config.ARGB_8888);
++            stubOptions.eraseColor(Theme.getColor(Theme.key_actionBarDefaultSubmenuBackground) | 0xFF000000);
++            bitmaps.run(stubBg, stubOptions);
++            return;
++        }
+         AndroidUtilities.makeGlobalBlurBitmap(bitmap -> {
+             final ColorMatrix colorMatrixBg = new ColorMatrix();
+             AndroidUtilities.adjustSaturationColorMatrix(colorMatrixBg, Theme.isCurrentThemeDark() ? .04f : +.25f);
+diff --git a/TMessagesProj/src/main/java/org/telegram/ui/DialogsActivity.java b/TMessagesProj/src/main/java/org/telegram/ui/DialogsActivity.java
+index 0000000..0000000 100644
+--- a/TMessagesProj/src/main/java/org/telegram/ui/DialogsActivity.java
++++ b/TMessagesProj/src/main/java/org/telegram/ui/DialogsActivity.java
+@@ -8806,6 +8806,16 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
+         if (blurredView == null) {
+             return;
+         }
++        if (desu.inugram.InuConfig.DISABLE_SCRIM_BLUR.getValue()) {
++            blurredView.setBackgroundColor(0x60000000);
++            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
++                blurredView.setForeground(null);
++            }
++            blurredView.setAlpha(0.0f);
++            blurredView.setVisibility(View.VISIBLE);
++            checkUi_mainTabsVisible();
++            return;
++        }
+         int w = (int) (fragmentView.getMeasuredWidth() / 9.0f);
+         int h = (int) (fragmentView.getMeasuredHeight() / 9.0f);
+         Bitmap bitmap = Bitmap.createBitmap(w, h, Bitmap.Config.ARGB_8888);
+diff --git a/TMessagesProj/src/main/java/org/telegram/ui/MessageSendPreview.java b/TMessagesProj/src/main/java/org/telegram/ui/MessageSendPreview.java
+index 0000000..0000000 100644
+--- a/TMessagesProj/src/main/java/org/telegram/ui/MessageSendPreview.java
++++ b/TMessagesProj/src/main/java/org/telegram/ui/MessageSendPreview.java
+@@ -1134,7 +1134,9 @@ public class MessageSendPreview extends Dialog implements NotificationCenter.Not
+                     WindowManager.LayoutParams.FLAG_TRANSLUCENT_NAVIGATION |
+                     WindowManager.LayoutParams.FLAG_TRANSLUCENT_STATUS;
+         }
+-        params.flags |= WindowManager.LayoutParams.FLAG_FULLSCREEN;
++        if (!desu.inugram.InuConfig.DISABLE_SCRIM_BLUR.getValue()) {
++            params.flags |= WindowManager.LayoutParams.FLAG_FULLSCREEN;
++        }
+         params.flags |= WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON;
+         if (Build.VERSION.SDK_INT >= 28) {
+             params.layoutInDisplayCutoutMode = WindowManager.LayoutParams.LAYOUT_IN_DISPLAY_CUTOUT_MODE_SHORT_EDGES;
+@@ -1723,13 +1725,13 @@ public class MessageSendPreview extends Dialog implements NotificationCenter.Not
+                     closing = false;
+                 }
+                 if (editText != null) {
+-                    editText.setAlpha(1f);
++                    editText.setAlpha(open && desu.inugram.InuConfig.DISABLE_SCRIM_BLUR.getValue() ? 0f : 1f);
+                 }
+                 if (destCell != null) {
+                     destCell.setVisibility(View.VISIBLE);
+                 }
+                 if (anchorSendButton != null && !sent) {
+-                    anchorSendButton.setAlpha(1f);
++                    anchorSendButton.setAlpha(open && desu.inugram.InuConfig.DISABLE_SCRIM_BLUR.getValue() ? 0f : 1f);
+                 }
+                 if (!open && sendButton != null) {
+                     sendButton.setAlpha(0f);

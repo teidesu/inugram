@@ -178,6 +178,9 @@
     <string name="InuRoundCameraRear">Rear</string>
     <string name="InuRoundCameraAsk">Ask every time</string>
 
+    <string name="InuDisableScrimBlur">Disable scrim blur</string>
+    <string name="InuDisableScrimBlurInfo">Replaces the blurred backdrop behind context menus and previews with a flat dim. Enabling may reduce lag.</string>
+
     <string name="InuNonIslandUI">(Experimental) Non-island UI</string>
     <string name="InuAnimationSpeed">Animation speed</string>
     <string name="InuAnimationSpeedInstant">Instant</string>

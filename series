@@ -102,3 +102,4 @@ feature/refetch-web-preview.patch
 feature/chat-editor.patch
 bugfix/web-preview-all-lines.patch
 feature/chats-long-tap-folders.patch
+debloat/disable-scrim-blur.patch
