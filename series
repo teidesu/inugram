@@ -101,3 +101,4 @@ feature/jump-to-beginning.patch
 feature/refetch-web-preview.patch
 feature/chat-editor.patch
 bugfix/web-preview-all-lines.patch
+feature/chats-long-tap-folders.patch

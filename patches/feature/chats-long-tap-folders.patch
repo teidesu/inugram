@@ -1,0 +1,59 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: alina sireneva <alina@tei.su>
+Date: Wed, 29 Apr 2026 16:53:25 +0300
+Subject: show folders as a menu when long-tapping the "Chats" tab in the main page
+
+---
+ .../main/java/org/telegram/ui/DialogsActivity.java    |  9 +++++++++
+ .../main/java/org/telegram/ui/MainTabsActivity.java   | 11 +++++++++++
+ 2 files changed, 20 insertions(+)
+
+diff --git a/TMessagesProj/src/main/java/org/telegram/ui/DialogsActivity.java b/TMessagesProj/src/main/java/org/telegram/ui/DialogsActivity.java
+index 0000000..0000000 100644
+--- a/TMessagesProj/src/main/java/org/telegram/ui/DialogsActivity.java
++++ b/TMessagesProj/src/main/java/org/telegram/ui/DialogsActivity.java
+@@ -6729,6 +6729,15 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
+         }
+     }
+ 
++    public void inu_setActiveFilter(int filterIndex) {
++        if (filterTabsView == null || viewPages == null) return;
++        if (filterIndex < 0 || filterIndex >= getMessagesController().getDialogFilters().size()) return;
++        if (viewPages[0].selectedType == filterIndex) return;
++        viewPages[0].selectedType = filterIndex;
++        filterTabsView.selectTabWithId(filterIndex, 1f);
++        switchToCurrentSelectedMode(false);
++    }
++
+     public void switchToCurrentSelectedMode(boolean animated) {
+         for (int a = 0; a < viewPages.length; a++) {
+             viewPages[a].listView.stopScroll();
+diff --git a/TMessagesProj/src/main/java/org/telegram/ui/MainTabsActivity.java b/TMessagesProj/src/main/java/org/telegram/ui/MainTabsActivity.java
+index 0000000..0000000 100644
+--- a/TMessagesProj/src/main/java/org/telegram/ui/MainTabsActivity.java
++++ b/TMessagesProj/src/main/java/org/telegram/ui/MainTabsActivity.java
+@@ -271,6 +271,7 @@ public class MainTabsActivity extends ViewPagerActivity implements NotificationC
+         tabs[INDEX_CALLS] = GlassTabView.createMainTab(context, resourceProvider, GlassTabView.TabAnimation.CALLS, R.string.MainTabsCalls);
+         tabs[INDEX_PROFILE] = GlassTabView.createAvatar(context, resourceProvider, currentAccount, R.string.MainTabsProfile);
+         desu.inugram.helpers.LongPressDragMenuHelper.attach(tabs[INDEX_PROFILE], this::openAccountSelector);
++        desu.inugram.helpers.LongPressDragMenuHelper.attach(tabs[INDEX_CHATS], v -> desu.inugram.helpers.MainTabsHelper.openChatsLongPressMenu(this, v));
+         for (GlassTabView tab : tabs) {
+             tab.setMainTabsCompact(compact);
+         }
+@@ -618,6 +619,16 @@ public class MainTabsActivity extends ViewPagerActivity implements NotificationC
+         }
+     }
+ 
++    public void inu_openChatsAtFilter(int filterIndex) {
++        if (viewPager.getCurrentPosition() != POSITION_CHATS) {
++            selectTab(POSITION_CHATS, true);
++            viewPager.scrollToPosition(POSITION_CHATS);
++        }
++        if (dialogsActivity != null) {
++            dialogsActivity.inu_setActiveFilter(filterIndex);
++        }
++    }
++
+     public void setGestureSelectedOverride(float animatedPosition, boolean allow) {
+         for (int index = 0; index < tabs.length; index++) {
+             final int position = indexToPosition(index);
