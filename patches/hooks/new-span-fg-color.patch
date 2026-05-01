@@ -4,32 +4,40 @@ Date: Thu, 30 Apr 2026 03:43:13 +0300
 Subject: add ability to change foreground color for FilterCreateActivity.NewSpan
 
 ---
- .../main/java/org/telegram/ui/FilterCreateActivity.java  | 9 ++++++++-
- 1 file changed, 8 insertions(+), 1 deletion(-)
+ .../java/org/telegram/ui/FilterCreateActivity.java     | 10 +++++++++-
+ 1 file changed, 9 insertions(+), 1 deletion(-)
 
 diff --git a/TMessagesProj/src/main/java/org/telegram/ui/FilterCreateActivity.java b/TMessagesProj/src/main/java/org/telegram/ui/FilterCreateActivity.java
 index 0000000..0000000 100644
 --- a/TMessagesProj/src/main/java/org/telegram/ui/FilterCreateActivity.java
 +++ b/TMessagesProj/src/main/java/org/telegram/ui/FilterCreateActivity.java
-@@ -2254,6 +2254,11 @@ public class FilterCreateActivity extends BaseFragment {
+@@ -105,6 +105,7 @@ import org.telegram.ui.Components.spoilers.SpoilersTextView;
+ 
+ import java.util.ArrayList;
+ import java.util.Collections;
++import java.util.Optional;
+ 
+ public class FilterCreateActivity extends BaseFragment {
+ 
+@@ -2254,6 +2255,11 @@ public class FilterCreateActivity extends BaseFragment {
              this.color = color;
          }
  
-+        private int fgColor = -1;
-+        public void setFgColor(int fgColor) {
-+            this.fgColor = fgColor;
++        private Optional<Integer> inu_fgColor = Optional.empty();
++        public void inu_setFgColor(Optional<Integer> fgColor) {
++            this.inu_fgColor = fgColor;
 +        }
 +
          private CharSequence text = "NEW";
          public void setText(CharSequence text) {
              this.text = text;
-@@ -2290,7 +2295,9 @@ public class FilterCreateActivity extends BaseFragment {
+@@ -2290,7 +2296,9 @@ public class FilterCreateActivity extends BaseFragment {
                  color = paint.getColor();
              }
              bgPaint.setColor(color);
 -            if (outline) {
-+            if (fgColor != -1) {
-+                textPaint.setColor(fgColor);
++            if (inu_fgColor.isPresent()) {
++                textPaint.setColor(inu_fgColor.get());
 +            } else if (outline) {
                  textPaint.setColor(color);
              } else {

@@ -14,6 +14,7 @@ import org.telegram.ui.Components.BulletinFactory
 import org.telegram.ui.Components.UItem
 import org.telegram.ui.Components.UniversalFragment
 import org.telegram.ui.FilterCreateActivity.NewSpan
+import java.util.Optional
 import kotlin.system.exitProcess
 
 abstract class InuSettingsPageActivity : UniversalFragment() {
@@ -93,7 +94,7 @@ abstract class InuSettingsPageActivity : UniversalFragment() {
 
         val tagSpan = NewSpan(false)
         tagSpan.setColor(Theme.getColor(Theme.key_chat_serviceBackground))
-        tagSpan.setFgColor(Theme.getColor(Theme.key_chat_serviceText))
+        tagSpan.inu_setFgColor(Optional.of(Theme.getColor(Theme.key_chat_serviceText)))
         tagSpan.setText(tag)
 
         val tagText = SpannableString(tag)
