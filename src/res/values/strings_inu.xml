@@ -277,4 +277,15 @@
     <string name="InuSendGifs">Send GIFs</string>
     <string name="InuSendGames">Send games</string>
     <string name="InuSendInline">Use inline bots</string>
+    <string name="InuBackupExport">Export settings</string>
+    <string name="InuBackupImport">Import settings</string>
+    <string name="InuBackupExportError">Failed to export settings: %1$s</string>
+    <string name="InuBackupImportSuccess">Imported %1$d settings</string>
+    <string name="InuBackupImportBadFormat">File is not a valid settings backup</string>
+    <string name="InuBackupImportSheetTitle">Are you sure you want to apply these settings?</string>
+    <string name="InuBackupImportNoChanges">This file matches your current settings</string>
+    <string name="InuBackupImportSheetChanges_one">**%1$d** change will be applied to the current settings.</string>
+    <string name="InuBackupImportSheetChanges_other">**%1$d** changes will be applied to the current settings.</string>
+    <string name="InuBackupImportSheetApply">Yes, apply</string>
+    <string name="InuBackupImportSheetCancel">No, leave as is</string>
 </resources>

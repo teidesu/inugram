@@ -1,11 +1,11 @@
 From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
 From: alina sireneva <alina@tei.su>
 Date: Fri, 10 Apr 2026 05:29:50 +0300
-Subject: "save to saved messages" message menu item
+Subject: hooks into various places inside ChatActivity
 
 ---
- .../src/main/java/org/telegram/ui/ChatActivity.java   | 11 ++++++++---
- 1 file changed, 8 insertions(+), 3 deletions(-)
+ .../src/main/java/org/telegram/ui/ChatActivity.java  | 12 +++++++++---
+ 1 file changed, 9 insertions(+), 3 deletions(-)
 
 diff --git a/TMessagesProj/src/main/java/org/telegram/ui/ChatActivity.java b/TMessagesProj/src/main/java/org/telegram/ui/ChatActivity.java
 index 0000000..0000000 100644
@@ -49,7 +49,15 @@ index 0000000..0000000 100644
          }
          selectedObject = null;
          selectedObjectGroup = null;
-@@ -44680,6 +44684,7 @@ public class ChatActivity extends BaseFragment implements
+@@ -40250,6 +40254,7 @@ public class ChatActivity extends BaseFragment implements
+                     presentFragment(fragment);
+                 }
+             } else if (message.type == MessageObject.TYPE_FILE || message.type == MessageObject.TYPE_TEXT) {
++                if (ChatHelper.maybeHandleFileClick(ChatActivity.this, message)) return;
+                 if (message.getDocumentName().toLowerCase().endsWith("attheme")) {
+                     File locFile = null;
+                     if (message.messageOwner.attachPath != null && message.messageOwner.attachPath.length() != 0) {
+@@ -44680,6 +44685,7 @@ public class ChatActivity extends BaseFragment implements
                      options.add(OPTION_FORWARD);
                      icons.add(R.drawable.msg_forward);
                  }

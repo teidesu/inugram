@@ -11,14 +11,15 @@ object InuConfig {
     private const val PREFS_NAME = "inugram"
 
     lateinit var prefs: SharedPreferences
-    private val items = mutableListOf<Item<*>>()
+    private val _items = mutableListOf<Item<*>>()
+    val items: List<Item<*>> get() = _items
 
     fun load(context: Context) {
         prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
-        for (item in items) item.load(prefs)
+        for (item in _items) item.load(prefs)
     }
 
-    abstract class Item<T>(val key: String, val default: T) {
+    abstract class Item<T>(val key: String, val default: T, val exportable: Boolean = true) {
         private var currentValue: T = default
 
         open var value: T
@@ -29,7 +30,7 @@ object InuConfig {
             }
 
         init {
-            items.add(this)
+            _items.add(this)
         }
 
         fun load(prefs: SharedPreferences) {
@@ -44,7 +45,8 @@ object InuConfig {
         protected abstract fun SharedPreferences.Editor.write()
     }
 
-    class BoolItem(key: String, default: Boolean) : Item<Boolean>(key, default) {
+    class BoolItem(key: String, default: Boolean, exportable: Boolean = true) :
+        Item<Boolean>(key, default, exportable) {
         override fun read(prefs: SharedPreferences): Boolean = prefs.getBoolean(key, default)
         override fun SharedPreferences.Editor.write() {
             putBoolean(key, value)
@@ -57,28 +59,29 @@ object InuConfig {
         }
     }
 
-    open class IntItem(key: String, default: Int) : Item<Int>(key, default) {
+    open class IntItem(key: String, default: Int, exportable: Boolean = true) : Item<Int>(key, default, exportable) {
         override fun read(prefs: SharedPreferences): Int = prefs.getInt(key, default)
         override fun SharedPreferences.Editor.write() {
             putInt(key, value)
         }
     }
 
-    class FloatItem(key: String, default: Float) : Item<Float>(key, default) {
+    class FloatItem(key: String, default: Float, exportable: Boolean = true) : Item<Float>(key, default, exportable) {
         override fun read(prefs: SharedPreferences): Float = prefs.getFloat(key, default)
         override fun SharedPreferences.Editor.write() {
             putFloat(key, value)
         }
     }
 
-    class StringItem(key: String, default: String) : Item<String>(key, default) {
+    class StringItem(key: String, default: String, exportable: Boolean = true) :
+        Item<String>(key, default, exportable) {
         override fun read(prefs: SharedPreferences): String = prefs.getString(key, default) ?: default
         override fun SharedPreferences.Editor.write() {
             putString(key, value)
         }
     }
 
-    class LongItem(key: String, default: Long) : Item<Long>(key, default) {
+    class LongItem(key: String, default: Long, exportable: Boolean = true) : Item<Long>(key, default, exportable) {
         override fun read(prefs: SharedPreferences): Long = prefs.getLong(key, default)
         override fun SharedPreferences.Editor.write() {
             putLong(key, value)
@@ -387,17 +390,20 @@ object InuConfig {
     @JvmField
     val FORMATTING_POPUP_ITEMS = FormattingPopupConfig("formatting_popup_items")
 
-    // internal state
-    @JvmField
-    val VOICE_HINT_SHOWN = BoolItem("voice_hint_shown", false)
-
-    @JvmField
-    val MINIMIZE_STICKERS_CREATOR = BoolItem("minimize_stickers_creator", true)
-
     @JvmField
     val ANIMATION_SPEED = FloatItem("animation_speed", 1.0f)
 
-    class UpdateChannelItem : IntItem("update_channel", STABLE) {
+    class IconReplacementItem : IntItem("icon_replacement", OFF) {
+        companion object {
+            const val OFF = 0
+            const val SOLAR = 1
+        }
+    }
+
+    @JvmField
+    val ICON_REPLACEMENT = IconReplacementItem()
+
+    class UpdateChannelItem : IntItem("update_channel", STABLE, exportable = false) {
         companion object {
             const val DISABLED = 0
             const val STABLE = 1
@@ -415,16 +421,13 @@ object InuConfig {
     @JvmField
     val UPDATE_CHANNEL = UpdateChannelItem()
 
+    // internal state
     @JvmField
-    val UPDATE_LAST_CHECK_MS = LongItem("update_last_check_ms", 0L)
-
-    class IconReplacementItem : IntItem("icon_replacement", OFF) {
-        companion object {
-            const val OFF = 0
-            const val SOLAR = 1
-        }
-    }
+    val VOICE_HINT_SHOWN = BoolItem("voice_hint_shown", false, exportable = false)
 
     @JvmField
-    val ICON_REPLACEMENT = IconReplacementItem()
+    val MINIMIZE_STICKERS_CREATOR = BoolItem("minimize_stickers_creator", true, exportable = false)
+
+    @JvmField
+    val UPDATE_LAST_CHECK_MS = LongItem("update_last_check_ms", 0L, exportable = false)
 }

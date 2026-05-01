@@ -57,7 +57,7 @@ index 0000000..0000000 100644
          }
  
          sideControlsButtonsLayout.showButton(ChatActivitySideControlsButtonsLayout.BUTTON_PAGE_DOWN, show, animated);
-@@ -45256,6 +45267,12 @@ public class ChatActivity extends BaseFragment implements
+@@ -45257,6 +45268,12 @@ public class ChatActivity extends BaseFragment implements
      }
  
      private boolean onSideControlButtonOnLongClick(int buttonId, View view) {

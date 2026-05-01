@@ -6,6 +6,7 @@ import desu.inugram.InuConfig
 import desu.inugram.ui.MessageDetailsActivity
 import org.telegram.messenger.ChatObject
 import org.telegram.messenger.DialogObject
+import org.telegram.messenger.FileLoader
 import org.telegram.messenger.LocaleController
 import org.telegram.messenger.MessageObject
 import org.telegram.messenger.R
@@ -16,6 +17,7 @@ import org.telegram.tgnet.TLRPC
 import org.telegram.ui.ChatActivity
 import org.telegram.ui.Components.UndoView
 import org.telegram.ui.DialogsActivity
+import java.io.File
 
 object ChatHelper {
     const val OPTION_SAVE = 501
@@ -238,7 +240,11 @@ object ChatHelper {
 
     @JvmStatic
     @JvmOverloads
-    fun shouldForceHideBottomBar(chat: TLRPC.Chat?, user: TLRPC.User? = null, chatMode: Int = ChatActivity.MODE_DEFAULT): Boolean {
+    fun shouldForceHideBottomBar(
+        chat: TLRPC.Chat?,
+        user: TLRPC.User? = null,
+        chatMode: Int = ChatActivity.MODE_DEFAULT
+    ): Boolean {
         if (chatMode == ChatActivity.MODE_PINNED) return InuConfig.HIDE_BOTTOM_BAR_PINNED.value
 
         if (user != null && UserObject.isReplyUser(user) && InuConfig.HIDE_BOTTOM_BAR_REPLIES.value) return true
@@ -252,6 +258,19 @@ object ChatHelper {
         if (!member && InuConfig.HIDE_BOTTOM_BAR_NON_JOINED.value) return true
 
         return false
+    }
+
+    @JvmStatic
+    fun maybeHandleFileClick(activity: ChatActivity, message: MessageObject): Boolean {
+        val name = message.documentName ?: return false
+        if (!name.endsWith(SettingsBackupHelper.FILENAME_SUFFIX)) return false
+        val attach = message.messageOwner?.attachPath?.takeIf { it.isNotEmpty() }?.let { File(it) }
+        val file = attach?.takeIf { it.exists() }
+            ?: FileLoader.getInstance(activity.currentAccount).getPathToMessage(message.messageOwner)
+                ?.takeIf { it.exists() }
+            ?: return false
+        SettingsBackupHelper.startImportFromFile(activity, file)
+        return true
     }
 
     @JvmStatic

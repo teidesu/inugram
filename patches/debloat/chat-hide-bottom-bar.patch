@@ -90,7 +90,7 @@ index 0000000..0000000 100644
              showBottomOverlayProgress(false, false);
          } else if (currentUser != null && currentUser.id == UserObject.VERIFY) {
              if (!getMessagesController().isDialogMuted(dialog_id, getTopicId())) {
-@@ -45058,7 +45074,7 @@ public class ChatActivity extends BaseFragment implements
+@@ -45059,7 +45075,7 @@ public class ChatActivity extends BaseFragment implements
              pollAddVisibility = animatorPollAddAnswerVisibility.getFloatValue();
          }
  

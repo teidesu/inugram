@@ -219,7 +219,7 @@ index 0000000..0000000 100644
                  searchingUserMessages = null;
                  searchingChatMessages = null;
              }
-@@ -43092,7 +43107,7 @@ public class ChatActivity extends BaseFragment implements
+@@ -43093,7 +43108,7 @@ public class ChatActivity extends BaseFragment implements
          int lastBottom;
      }
  
@@ -228,7 +228,7 @@ index 0000000..0000000 100644
          public RecyclerListViewInternal(Context context, ThemeDelegate themeDelegate) {
              super(context, themeDelegate);
          }
-@@ -45715,7 +45730,7 @@ public class ChatActivity extends BaseFragment implements
+@@ -45716,7 +45731,7 @@ public class ChatActivity extends BaseFragment implements
          }
      }
  

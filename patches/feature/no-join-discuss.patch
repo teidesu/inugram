@@ -65,7 +65,7 @@ index 0000000..0000000 100644
                      MessageObject messageObject = selectedObject;
                      if (messageObject.getGroupId() != 0) {
                          MessageObject.GroupedMessages group = getGroup(messageObject.getGroupId());
-@@ -43937,7 +43937,7 @@ public class ChatActivity extends BaseFragment implements
+@@ -43938,7 +43938,7 @@ public class ChatActivity extends BaseFragment implements
              final boolean suggestUpdate = (currentChat != null && currentChat.broadcast_messages_allowed && currentChat.linked_monoforum_id != 0)
                  != (bottomChannelButtonsLayout != null && bottomChannelButtonsLayout.isButtonVisible(ChatActivityChannelButtonsLayout.BUTTON_DIRECT));
  
@@ -74,7 +74,7 @@ index 0000000..0000000 100644
                  updateBottomOverlay(true);
              }
          }
-@@ -44436,7 +44436,7 @@ public class ChatActivity extends BaseFragment implements
+@@ -44437,7 +44437,7 @@ public class ChatActivity extends BaseFragment implements
              allowChatActions = false;
          }
  

@@ -33,7 +33,7 @@ debloat/hide-bot-elements.patch
 feature/call-confirmation.patch
 feature/double-tap-delay.patch
 feature/mutual-contact-icon.patch
-hooks/chat-menu-items.patch
+hooks/chat-activity.patch
 feature/web-preview-replacements.patch
 feature/jump-to-discussion.patch
 debloat/intro-sticker.patch
