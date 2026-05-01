@@ -3,6 +3,7 @@
     <string name="InuOpenInDiscussion">Open in discussion</string>
     <string name="InuSettings">Inugram Settings</string>
     <string name="InuSettingsInfo">what the dog doin?</string>
+    <string name="InuExperimental">Experimental</string>
     <string name="InuGeneral">General</string>
     <string name="InuMiscellaneous">Miscellaneous</string>
     <string name="InuAppearance">Appearance</string>
@@ -169,8 +170,8 @@
     <string name="InuMsgDetailMedia">Media</string>
     <string name="InuShowJson">Show JSON</string>
 
-    <string name="InuChatVoiceInAttach">Move voice button into attach drawer</string>
-    <string name="InuChatVoiceInAttachInfo">(Experimental!) Moves the voice/video record button from the input bar into the attachment sheet</string>
+    <string name="InuChatVoiceInAttach">Recordings as attachments</string>
+    <string name="InuChatVoiceInAttachInfo">Moves the voice/video record button from the input bar into the attachment sheet</string>
 
     <string name="InuDisableIntroSticker">Don\'t send intro sticker</string>
     <string name="InuDisableIntroStickerInfo">…and hide greeting sticker suggestions</string>
@@ -183,7 +184,7 @@
     <string name="InuDisableScrimBlur">Disable scrim blur</string>
     <string name="InuDisableScrimBlurInfo">Replaces the blurred backdrop behind context menus and previews with a flat dim. Enabling may reduce lag.</string>
 
-    <string name="InuNonIslandUI">(Experimental) Non-island UI</string>
+    <string name="InuNonIslandUI">Non-island UI</string>
     <string name="InuAnimationSpeed">Animation speed</string>
     <string name="InuAnimationSpeedInstant">Instant</string>
     <string name="InuAnimationSpeedInfo">Note: spring-based animations (bottom sheets, popups, some transitions) and some other animations are not affected.</string>
@@ -206,9 +207,9 @@
     <string name="InuReactionsInRow">Reactions in a row</string>
     <string name="InuChatInputMaxLines">Chat input max lines</string>
     <string name="InuReactionBarBelow">Reachable reactions bar</string>
-    <string name="InuReactionBarBelowInfo">(Experimental!) Move reactions bar below the menu</string>
+    <string name="InuReactionBarBelowInfo">Move reactions bar below the menu</string>
     <string name="InuChatViewsBottom">Reachable views list</string>
-    <string name="InuChatViewsBottomInfo">(Experimental!) Move message views/reactions list item to the bottom</string>
+    <string name="InuChatViewsBottomInfo">Move message views/reactions list item to the bottom</string>
 
     <string name="InuPinnedReactions">Pinned reactions</string>
     <string name="InuPinnedReactionsInfo">Pin reactions at the start of the reactions bar.</string>
@@ -230,7 +231,7 @@
     <string name="InuTextClassifierModeOffInfo">Disabling text classifier improves text selection responsiveness</string>
 
     <string name="InuFormattingPopup">Custom formatting popup</string>
-    <string name="InuFormattingPopupInfo">(Experimental!) Replaces the stock rich text formatting menu with an interactive popup.\nClick to customize…</string>
+    <string name="InuFormattingPopupInfo">Replaces the stock rich text formatting menu with an interactive popup.\nClick to customize…</string>
     <string name="InuFormattingPopupItems">Popup buttons</string>
     <string name="InuFormattingPopupItemsInfo">Long-press to reorder. Tap to toggle visibility.</string>
     <string name="InuFormattingPopupReset">Reset to defaults</string>

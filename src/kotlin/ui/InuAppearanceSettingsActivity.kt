@@ -89,7 +89,9 @@ class InuAppearanceSettingsActivity : InuSettingsPageActivity() {
         items.add(UItem.asCustom(animationSpeedSlider))
         items.add(UItem.asShadow(LocaleController.getString(R.string.InuAnimationSpeedInfo)))
 
-        items.add(UItem.asHeader(LocaleController.getString(R.string.InuNonIslandUI)))
+        items.add(
+            UItem.asHeader(taggedExperimental(LocaleController.getString(R.string.InuNonIslandUI)))
+        )
         items.add(
             UItem.asCheck(
                 TOGGLE_NON_ISLAND_TAB_BARS,

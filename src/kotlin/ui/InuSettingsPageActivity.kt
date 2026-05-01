@@ -1,14 +1,19 @@
 package desu.inugram.ui
 
 import android.content.Context
+import android.text.SpannableString
+import android.text.SpannableStringBuilder
+import android.text.Spanned
 import android.view.View
 import org.telegram.messenger.LocaleController
 import org.telegram.messenger.R
 import org.telegram.messenger.Utilities
+import org.telegram.ui.ActionBar.Theme
 import org.telegram.ui.Cells.NotificationsCheckCell
 import org.telegram.ui.Components.BulletinFactory
 import org.telegram.ui.Components.UItem
 import org.telegram.ui.Components.UniversalFragment
+import org.telegram.ui.FilterCreateActivity.NewSpan
 import kotlin.system.exitProcess
 
 abstract class InuSettingsPageActivity : UniversalFragment() {
@@ -43,8 +48,9 @@ abstract class InuSettingsPageActivity : UniversalFragment() {
             .show()
     }
 
-    protected fun mkTwoLineCheckItem(id: Int, textRes: Int, infoRes: Int, checked: Boolean): UItem {
-        val text = LocaleController.getString(textRes)
+    protected fun mkTwoLineCheckItem(id: Int, textRes: Int, infoRes: Int, checked: Boolean, experimental: Boolean = false): UItem {
+        val rawText = LocaleController.getString(textRes)
+        val text = if (experimental) taggedExperimental(rawText) else rawText
         val subtext = if (infoRes == 0) null else LocaleController.getString(infoRes)
         return UItem.asButtonCheck(id, text, subtext).also {
             it.checked = checked
@@ -62,8 +68,9 @@ abstract class InuSettingsPageActivity : UniversalFragment() {
         }
     }
 
-    protected fun mkSplitCheckItem(id: Int, textRes: Int, infoRes: Int, checked: Boolean): UItem {
-        val text = LocaleController.getString(textRes)
+    protected fun mkSplitCheckItem(id: Int, textRes: Int, infoRes: Int, checked: Boolean, experimental: Boolean = false): UItem {
+        val rawText = LocaleController.getString(textRes)
+        val text = if (experimental) taggedExperimental(rawText) else rawText
         val subtext = if (infoRes == 0) null else LocaleController.getString(infoRes)
         return UItem.asButtonCheck(id, text, subtext).also {
             it.checked = checked
@@ -79,6 +86,23 @@ abstract class InuSettingsPageActivity : UniversalFragment() {
                 (view as? NotificationsCheckCell)?.setDrawLine(true)
             }
         }
+    }
+
+    protected fun taggedExperimental(string: CharSequence): CharSequence {
+        val tag = LocaleController.getString(R.string.InuExperimental)
+
+        val tagSpan = NewSpan(false)
+        tagSpan.setColor(Theme.getColor(Theme.key_chat_serviceBackground))
+        tagSpan.setFgColor(Theme.getColor(Theme.key_chat_serviceText))
+        tagSpan.setText(tag)
+
+        val tagText = SpannableString(tag)
+        tagText.setSpan(tagSpan, 0, tagText.length, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
+
+        val text = SpannableStringBuilder(string)
+        text.append("  ")
+        text.append(tagText)
+        return text
     }
 
     override fun onLongClick(item: UItem, view: View, position: Int, x: Float, y: Float) = false

@@ -105,3 +105,4 @@ feature/chats-long-tap-folders.patch
 debloat/disable-scrim-blur.patch
 debloat/profile-scroll-snap.patch
 feature/deeplink-in-search.patch
+hooks/new-span-fg-color.patch
