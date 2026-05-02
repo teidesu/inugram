@@ -4,15 +4,25 @@ Date: Thu, 23 Apr 2026 18:09:31 +0300
 Subject: hooks inside admin logs activity
 
 ---
- .../main/java/org/telegram/messenger/MessageObject.java   | 1 +
- .../java/org/telegram/ui/ChannelAdminLogActivity.java     | 8 ++++++--
- 2 files changed, 7 insertions(+), 2 deletions(-)
+ .../org/telegram/messenger/MessageObject.java |  4 ++
+ .../telegram/ui/ChannelAdminLogActivity.java  | 40 ++++++++++++++++++-
+ 2 files changed, 42 insertions(+), 2 deletions(-)
 
 diff --git a/TMessagesProj/src/main/java/org/telegram/messenger/MessageObject.java b/TMessagesProj/src/main/java/org/telegram/messenger/MessageObject.java
 index 0000000..0000000 100644
 --- a/TMessagesProj/src/main/java/org/telegram/messenger/MessageObject.java
 +++ b/TMessagesProj/src/main/java/org/telegram/messenger/MessageObject.java
-@@ -3444,6 +3444,7 @@ public class MessageObject {
+@@ -2865,6 +2865,9 @@ public class MessageObject {
+                 message.media.webpage.display_url = "";
+                 message.media.webpage.url = "";
+             }
++            if (desu.inugram.helpers.AdminLogHelper.applyEditDiff(message, oldMessage, newMessage)) {
++                webPageDescriptionEntities = null;
++            }
+         } else if (event.action instanceof TLRPC.TL_channelAdminLogEventActionChangeEmojiStickerSet) {
+             TLRPC.InputStickerSet newPack = ((TLRPC.TL_channelAdminLogEventActionChangeEmojiStickerSet) event.action).new_stickerset;
+             TLRPC.InputStickerSet oldPack = ((TLRPC.TL_channelAdminLogEventActionChangeEmojiStickerSet) event.action).new_stickerset;
+@@ -3444,6 +3447,7 @@ public class MessageObject {
                  messageObject.linkDescription = null;
                  messageObject.generateLinkDescription();
              }
@@ -24,7 +34,68 @@ diff --git a/TMessagesProj/src/main/java/org/telegram/ui/ChannelAdminLogActivity
 index 0000000..0000000 100644
 --- a/TMessagesProj/src/main/java/org/telegram/ui/ChannelAdminLogActivity.java
 +++ b/TMessagesProj/src/main/java/org/telegram/ui/ChannelAdminLogActivity.java
-@@ -1575,7 +1575,7 @@ public class ChannelAdminLogActivity extends BaseFragment implements Notificatio
+@@ -153,6 +153,7 @@ import java.io.FileWriter;
+ import java.util.ArrayList;
+ import java.util.HashMap;
+ import java.util.HashSet;
++import desu.inugram.helpers.AdminLogHelper;
+ 
+ public class ChannelAdminLogActivity extends BaseFragment implements NotificationCenter.NotificationCenterDelegate {
+ 
+@@ -443,6 +444,34 @@ public class ChannelAdminLogActivity extends BaseFragment implements Notificatio
+         });
+     }
+ 
++    public void inu_rebuildEvents() {
++        java.util.LinkedHashMap<Long, TLRPC.TL_channelAdminLogEvent> events = new java.util.LinkedHashMap<>();
++        for (MessageObject mo : messages) {
++            if (mo.currentEvent != null && !events.containsKey(mo.currentEvent.id)) {
++                events.put(mo.currentEvent.id, mo.currentEvent);
++            }
++        }
++        messages.clear();
++        messagesDict.clear();
++        messagesByDays.clear();
++        realMessagesDict.clear();
++        mid[0] = 2;
++        for (TLRPC.TL_channelAdminLogEvent event : events.values()) {
++            MessageObject mo = new MessageObject(currentAccount, event, messages, messagesByDays, currentChat, mid, false);
++            if (mo.contentType < 0) continue;
++            messagesDict.put(event.id, mo);
++        }
++        for (MessageObject mo : messages) {
++            if (mo.contentType != 0 && mo.getRealId() >= 0) {
++                realMessagesDict.put(mo.getRealId(), mo);
++            }
++        }
++        filterDeletedMessages();
++        if (chatAdapter != null) {
++            chatAdapter.notifyDataSetChanged();
++        }
++    }
++
+     private void loadMessages(boolean reset) {
+         if (loading) {
+             return;
+@@ -859,7 +888,9 @@ public class ChannelAdminLogActivity extends BaseFragment implements Notificatio
+             public void onItemClick(final int id) {
+                 if (id == -1) {
+                     finishFragment();
++                    return;
+                 }
++                AdminLogHelper.processActionBarMenuItem(id, ChannelAdminLogActivity.this);
+             }
+         });
+ 
+@@ -900,6 +931,7 @@ public class ChannelAdminLogActivity extends BaseFragment implements Notificatio
+             }
+         });
+         searchItem.setSearchFieldHint(getString("Search", R.string.Search));
++        AdminLogHelper.setupHeader(menu);
+ 
+         avatarContainer.setEnabled(false);
+ 
+@@ -1575,7 +1607,7 @@ public class ChannelAdminLogActivity extends BaseFragment implements Notificatio
      private final static int OPTION_CALL = 17;
      private final static int OPTION_RESTRICT = 33;
      private final static int OPTION_REPORT_FALSE_POSITIVE = 34;
@@ -33,15 +104,15 @@ index 0000000..0000000 100644
  
      private boolean createMenu(View v) {
          return createMenu(v, 0, 0);
-@@ -1789,6 +1789,7 @@ public class ChannelAdminLogActivity extends BaseFragment implements Notificatio
+@@ -1789,6 +1821,7 @@ public class ChannelAdminLogActivity extends BaseFragment implements Notificatio
                  options.add(OPTION_CALL);
              }
          }
-+        desu.inugram.helpers.AdminLogHelper.addMenuItems(items, options, icons, selectedObject);
++        AdminLogHelper.addMenuItems(items, options, icons, selectedObject);
  
          boolean callbackSent = false;
  
-@@ -2085,11 +2086,14 @@ public class ChannelAdminLogActivity extends BaseFragment implements Notificatio
+@@ -2085,11 +2118,14 @@ public class ChannelAdminLogActivity extends BaseFragment implements Notificatio
          }
      }
  
@@ -51,7 +122,7 @@ index 0000000..0000000 100644
          if (selectedObject == null) {
              return;
          }
-+        if (desu.inugram.helpers.AdminLogHelper.processMenuOption(option, this, selectedObject)) {
++        if (AdminLogHelper.processMenuOption(option, this, selectedObject)) {
 +            return;
 +        }
          switch (option) {

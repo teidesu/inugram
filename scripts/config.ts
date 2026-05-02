@@ -31,6 +31,11 @@ export const forkSyncFiles: ForkSyncFile[] = [
     directory: true,
   },
   {
+    source: 'src/core',
+    target: 'InuCore',
+    directory: true,
+  },
+  {
     source: 'src/java/google_material',
     target: 'TMessagesProj/src/main/java/google_material',
     directory: true,
@@ -83,6 +88,7 @@ export const ICON_SELECTION: { pack: IconifyJSON, icons: string[], options?: Svg
       'clear-formatting',
       'filter',
       'cloud',
+      'file-diff',
     ],
   },
 ]

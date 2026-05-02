@@ -4,6 +4,8 @@ import android.util.Log
 import desu.inugram.InuConfig
 import org.json.JSONArray
 import org.json.JSONObject
+import org.telegram.messenger.LocaleController
+import org.telegram.messenger.R
 import org.telegram.tgnet.TLRPC
 
 object WebPreviewHelper {
@@ -51,6 +53,9 @@ object WebPreviewHelper {
 
     @JvmStatic
     fun shouldShowAllLines(webPage: TLRPC.WebPage): Boolean {
+        // crutch to make the admin log "original message" (which is a fake web preview lol) to show all lines
+        if (webPage.site_name == LocaleController.getString(R.string.EventLogOriginalMessages)) return true;
+
         // stock only checks for site_name.lower() == "twitter", which is the old name that no longer applies
         // fix + expand it a bit
         val siteName = webPage.site_name.lowercase()

@@ -77,7 +77,7 @@ index 0000000..0000000 100644
  import org.telegram.messenger.FileLoader;
  import org.telegram.messenger.FileLog;
  import org.telegram.messenger.ImageLocation;
-@@ -688,7 +689,7 @@ public class ChannelAdminLogActivity extends BaseFragment implements Notificatio
+@@ -717,7 +718,7 @@ public class ChannelAdminLogActivity extends BaseFragment implements Notificatio
              ssb.append(" S");
              ssb.setSpan(new ColoredImageSpan(drawable), ssb.length() - 1, ssb.length(), Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);
          }

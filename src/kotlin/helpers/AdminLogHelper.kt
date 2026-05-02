@@ -2,6 +2,9 @@ package desu.inugram.helpers
 
 import android.content.DialogInterface
 import android.widget.TextView
+import desu.inugram.InuConfig
+import desu.inugram.core.diff.DiffKind
+import desu.inugram.core.diff.WordDiff
 import desu.inugram.ui.MessageDetailsActivity
 import org.telegram.messenger.AndroidUtilities
 import org.telegram.messenger.ContactsController
@@ -10,13 +13,18 @@ import org.telegram.messenger.LocaleController
 import org.telegram.messenger.MediaController
 import org.telegram.messenger.MessageObject
 import org.telegram.messenger.R
+import org.telegram.tgnet.NativeByteBuffer
 import org.telegram.tgnet.TLRPC
+import org.telegram.ui.ActionBar.ActionBarMenu
+import org.telegram.ui.ActionBar.ActionBarMenuSubItem
 import org.telegram.ui.ActionBar.AlertDialog
 import org.telegram.ui.ActionBar.Theme
 import org.telegram.ui.ChannelAdminLogActivity
 
 object AdminLogHelper {
     const val OPTION_DETAILS = 510
+
+    private const val MENU_TOGGLE_DIFF = 100
 
     @JvmStatic
     fun addMenuItems(
@@ -150,6 +158,135 @@ object AdminLogHelper {
         } else {
             messageObjects.add(messageObjects.size - 1, label)
             messageObjects.add(messageObjects.size - 1, mo)
+        }
+    }
+
+    private var toggleDiffItem: ActionBarMenuSubItem? = null
+
+    @JvmStatic
+    fun setupHeader(menu: ActionBarMenu) {
+        val headerItem = menu.addItem(0, R.drawable.ic_ab_other)
+        headerItem.contentDescription = LocaleController.getString(R.string.AccDescrMoreOptions)
+        toggleDiffItem = headerItem.addSubItem(
+            MENU_TOGGLE_DIFF,
+            R.drawable.inu_tabler_file_diff,
+            LocaleController.getString(R.string.InuEventLogShowDiff),
+            false,
+        ).apply {
+            makeCheckView(2)
+            // makeCheckView clobbers textView padding; restore the icon-side gap
+            val pad = AndroidUtilities.dp(43f)
+            textView.setPadding(
+                if (LocaleController.isRTL) pad else pad,
+                0,
+                if (LocaleController.isRTL) pad else pad,
+                0
+            )
+            setChecked(InuConfig.EVENT_LOG_CHAR_DIFF.value)
+        }
+    }
+
+    @JvmStatic
+    fun processActionBarMenuItem(id: Int, fragment: ChannelAdminLogActivity): Boolean {
+        if (id != MENU_TOGGLE_DIFF) return false
+        InuConfig.EVENT_LOG_CHAR_DIFF.toggle()
+        toggleDiffItem?.setChecked(InuConfig.EVENT_LOG_CHAR_DIFF.value)
+        fragment.inu_rebuildEvents()
+        return true
+    }
+
+    @JvmStatic
+    fun applyEditDiff(message: TLRPC.Message, oldMessage: TLRPC.Message?, newMessage: TLRPC.Message?): Boolean {
+        if (!InuConfig.EVENT_LOG_CHAR_DIFF.value) return false
+        if (oldMessage == null || newMessage == null) return false
+        val oldText = oldMessage.message ?: ""
+        val newText = newMessage.message ?: ""
+        if (oldText == newText) return false
+
+        val (combined, entities) = computeInlineDiff(oldText, newText, oldMessage.entities, newMessage.entities)
+        message.message = combined
+        message.entities = entities
+
+        if (message.media is TLRPC.TL_messageMediaWebPage) {
+            message.media = TLRPC.TL_messageMediaEmpty()
+        } else {
+            message.media?.webpage = null
+        }
+        return true
+    }
+
+    private fun computeInlineDiff(
+        oldText: String,
+        newText: String,
+        oldEntities: List<TLRPC.MessageEntity>?,
+        newEntities: List<TLRPC.MessageEntity>?,
+    ): Pair<String, ArrayList<TLRPC.MessageEntity>> {
+        val ops = WordDiff.compute(oldText, newText)
+        val sb = StringBuilder(oldText.length + newText.length)
+        val entities = ArrayList<TLRPC.MessageEntity>()
+        for (op in ops) {
+            val combinedStart = sb.length
+            when (op.kind) {
+                DiffKind.EQUAL -> {
+                    sb.append(oldText, op.oldStart, op.oldStart + op.length)
+                    appendRemapped(entities, newEntities, op.newStart, op.length, combinedStart)
+                }
+
+                DiffKind.DELETE -> {
+                    sb.append(oldText, op.oldStart, op.oldStart + op.length)
+                    entities.add(TLRPC.TL_messageEntityDiffDelete().apply {
+                        offset = combinedStart
+                        length = op.length
+                    })
+                    appendRemapped(entities, oldEntities, op.oldStart, op.length, combinedStart)
+                }
+
+                DiffKind.INSERT -> {
+                    sb.append(newText, op.newStart, op.newStart + op.length)
+                    entities.add(TLRPC.TL_messageEntityDiffInsert().apply {
+                        offset = combinedStart
+                        length = op.length
+                    })
+                    appendRemapped(entities, newEntities, op.newStart, op.length, combinedStart)
+                }
+            }
+        }
+        return sb.toString() to entities
+    }
+
+    private fun appendRemapped(
+        out: MutableList<TLRPC.MessageEntity>,
+        sourceEnts: List<TLRPC.MessageEntity>?,
+        sourceStart: Int,
+        length: Int,
+        combinedStart: Int,
+    ) {
+        if (sourceEnts.isNullOrEmpty()) return
+        val sourceEnd = sourceStart + length
+        for (e in sourceEnts) {
+            val eStart = maxOf(e.offset, sourceStart)
+            val eEnd = minOf(e.offset + e.length, sourceEnd)
+            if (eEnd <= eStart) continue
+            val cloned = cloneEntity(e) ?: continue
+            cloned.offset = combinedStart + (eStart - sourceStart)
+            cloned.length = eEnd - eStart
+            out.add(cloned)
+        }
+    }
+
+    private fun cloneEntity(e: TLRPC.MessageEntity): TLRPC.MessageEntity? {
+        return try {
+            val buf = NativeByteBuffer(e.objectSize)
+            try {
+                e.serializeToStream(buf)
+                buf.position(0)
+                val constructor = buf.readInt32(false)
+                TLRPC.MessageEntity.TLdeserialize(buf, constructor, false)
+            } finally {
+                buf.reuse()
+            }
+        } catch (_: Exception) {
+            null
         }
     }
 }

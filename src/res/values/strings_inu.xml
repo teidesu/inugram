@@ -252,6 +252,7 @@
     <string name="InuShowInChat">Show in chat</string>
     <string name="InuEventLogMediaBeforeEdit">Media before the edit:</string>
     <string name="InuEventLogBanConfirm">Ban **%1$s**?</string>
+    <string name="InuEventLogShowDiff">Show as diff</string>
     <string name="InuShowPinnedPanel">Show pinned messages</string>
     <string name="InuAppIconStock">Stock</string>
     <string name="InuAppIconLicenseInugram">Placeholder icon, feel free to contribute a better one</string>
