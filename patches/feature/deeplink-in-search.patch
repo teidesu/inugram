@@ -1,0 +1,130 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: alina sireneva <alina@tei.su>
+Date: Sat, 2 May 2026 17:52:16 +0200
+Subject: quickly open deeplinks or usernames from the global search
+
+---
+ .../ui/Adapters/DialogsSearchAdapter.java     | 34 +++++++++++++++++++
+ .../java/org/telegram/ui/DialogsActivity.java |  4 +++
+ 2 files changed, 38 insertions(+)
+
+diff --git a/TMessagesProj/src/main/java/org/telegram/ui/Adapters/DialogsSearchAdapter.java b/TMessagesProj/src/main/java/org/telegram/ui/Adapters/DialogsSearchAdapter.java
+index 0000000..0000000 100644
+--- a/TMessagesProj/src/main/java/org/telegram/ui/Adapters/DialogsSearchAdapter.java
++++ b/TMessagesProj/src/main/java/org/telegram/ui/Adapters/DialogsSearchAdapter.java
+@@ -131,6 +131,7 @@ public class DialogsSearchAdapter extends RecyclerListView.SelectionAdapter {
+     private final ArrayList<String> searchResultHashtags = new ArrayList<>();
+     public final ArrayList<TLRPC.TL_sponsoredPeer> sponsoredPeers = new ArrayList<>();
+     private final HashSet<byte[]> seenSponsoredPeers = new HashSet<>();
++    private desu.inugram.helpers.SearchTopAction inu_topAction;
+     private String lastSearchText;
+     private boolean searchWas;
+     private int reqId = 0;
+@@ -1120,6 +1121,7 @@ public class DialogsSearchAdapter extends RecyclerListView.SelectionAdapter {
+         } else {
+             query = null;
+         }
++        inu_topAction = desu.inugram.helpers.SearchTopAction.parse(query);
+         filterRecent(query);
+         if (!TextUtils.equals(sponsoredQuery, query)) {
+             sponsoredQuery = query;
+@@ -1420,10 +1422,17 @@ public class DialogsSearchAdapter extends RecyclerListView.SelectionAdapter {
+         if (localMessagesSearchEndReached) {
+             localMessagesLoadingRow = count;
+         }
++        if (inu_topAction != null) {
++            count++;
++        }
+         return currentItemCount = count;
+     }
+ 
+     public Object getItem(int i) {
++        if (inu_topAction != null) {
++            if (i == 0) return inu_topAction;
++            i--;
++        }
+         if (!publicPosts.isEmpty()) {
+             if (i > 0 && i - 1 < publicPosts.size()) {
+                 return publicPosts.get(i - 1);
+@@ -1530,6 +1539,10 @@ public class DialogsSearchAdapter extends RecyclerListView.SelectionAdapter {
+         if (!searchWas) {
+             return false;
+         }
++        if (inu_topAction != null) {
++            if (i == 0) return false;
++            i--;
++        }
+         if (!searchResultHashtags.isEmpty()) {
+             return false;
+         }
+@@ -1703,6 +1716,9 @@ public class DialogsSearchAdapter extends RecyclerListView.SelectionAdapter {
+                 });
+                 messagesEmptyLayout.setQuery(lastMessagesSearchString);
+                 break;
++            case desu.inugram.helpers.SearchTopAction.VIEW_TYPE:
++                view = new TextCell(mContext, 23, false, false, resourcesProvider);
++                break;
+             case VIEW_TYPE_ADD_BY_PHONE:
+             default:
+                 view = new TextCell(mContext, 16, false);
+@@ -1774,6 +1790,9 @@ public class DialogsSearchAdapter extends RecyclerListView.SelectionAdapter {
+                     user = MessagesController.getInstance(currentAccount).getUser(encryptedChat.user_id);
+                 }
+ 
++                if (inu_topAction != null) {
++                    position--;
++                }
+                 if (!publicPosts.isEmpty()) {
+                     position -= publicPosts.size() + 1;
+                 }
+@@ -1933,6 +1952,9 @@ public class DialogsSearchAdapter extends RecyclerListView.SelectionAdapter {
+             }
+             case VIEW_TYPE_GRAY_SECTION: {
+                 final GraySectionCell cell = (GraySectionCell) holder.itemView;
++                if (inu_topAction != null) {
++                    position--;
++                }
+                 if (!searchResultHashtags.isEmpty()) {
+                     cell.setText(LocaleController.getString(R.string.Hashtags), LocaleController.getString(R.string.ClearButton), v -> {
+                         if (delegate != null) {
+@@ -2177,6 +2199,14 @@ public class DialogsSearchAdapter extends RecyclerListView.SelectionAdapter {
+                 profileSearchCell.setData(contact, null, ContactsController.formatName(contact.first_name, contact.last_name), PhoneFormat.getInstance().format("+" + contact.shortPhones.get(0)), false, false);
+                 break;
+             }
++            case desu.inugram.helpers.SearchTopAction.VIEW_TYPE: {
++                TextCell cell = (TextCell) holder.itemView;
++                desu.inugram.helpers.SearchTopAction action = inu_topAction;
++                if (action != null) {
++                    cell.setTextAndIcon(action.getLabel(), R.drawable.msg_link2, false);
++                }
++                break;
++            }
+         }
+     }
+ 
+@@ -2196,6 +2226,10 @@ public class DialogsSearchAdapter extends RecyclerListView.SelectionAdapter {
+ 
+     @Override
+     public int getItemViewType(int i) {
++        if (inu_topAction != null) {
++            if (i == 0) return desu.inugram.helpers.SearchTopAction.VIEW_TYPE;
++            i--;
++        }
+         if (!searchResultHashtags.isEmpty()) {
+             return i == 0 ? VIEW_TYPE_GRAY_SECTION : VIEW_TYPE_HASHTAG_CELL;
+         }
+diff --git a/TMessagesProj/src/main/java/org/telegram/ui/DialogsActivity.java b/TMessagesProj/src/main/java/org/telegram/ui/DialogsActivity.java
+index 0000000..0000000 100644
+--- a/TMessagesProj/src/main/java/org/telegram/ui/DialogsActivity.java
++++ b/TMessagesProj/src/main/java/org/telegram/ui/DialogsActivity.java
+@@ -12801,6 +12801,10 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
+         });
+         searchViewPager.searchListView.setOnItemClickListener((view, position, x, y) -> {
+             Object item = searchViewPager.dialogsSearchAdapter.getItem(position);
++            if (item instanceof desu.inugram.helpers.SearchTopAction) {
++                ((desu.inugram.helpers.SearchTopAction) item).execute(this);
++                return;
++            }
+             if (item instanceof TLRPC.TL_sponsoredPeer) {
+                 final TLRPC.TL_sponsoredPeer peer = (TLRPC.TL_sponsoredPeer) item;
+                 final long did = DialogObject.getPeerDialogId(peer.peer);
