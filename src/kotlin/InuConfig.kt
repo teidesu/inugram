@@ -430,4 +430,13 @@ object InuConfig {
 
     @JvmField
     val UPDATE_LAST_CHECK_MS = LongItem("update_last_check_ms", 0L, exportable = false)
+
+    @JvmField
+    val CLOUD_SYNC_ACCOUNT_ID = LongItem("cloud_sync_account_id", 0L, exportable = false)
+
+    @JvmField
+    val CLOUD_SYNC_AUTO = BoolItem("cloud_sync_auto", false)
+
+    @JvmField
+    val CLOUD_SYNC_AUTO_USER_SET = BoolItem("cloud_sync_auto_user_set", false, exportable = false)
 }

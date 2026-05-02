@@ -22,8 +22,8 @@ object SettingsBackupHelper {
 
     // curated allowlist of stock mainconfig keys worth roundtripping.
     // values are typed at runtime via prefs.all; long/float distinguished with key suffix.
-    private const val STOCK_PREF_NAME = "mainconfig"
-    private val STOCK_KEYS: Set<String> = setOf(
+    internal const val STOCK_PREF_NAME = "mainconfig"
+    internal val STOCK_KEYS: Set<String> = setOf(
         "saveToGallery", "autoplayGifs", "autoplayVideo", "customTabs", "directShare",
         "inappCamera", "fontSize", "bubbleRadius", "ivFontSize", "allowBigEmoji",
         "streamMedia", "saveStreamMedia", "pauseMusicOnRecord", "streamAllVideo", "streamMkv",
@@ -33,7 +33,7 @@ object SettingsBackupHelper {
         "repeatMode", "shuffleMusic", "playOrderReversed", "raiseToSpeak",
     )
 
-    private fun stockPrefs() =
+    internal fun stockPrefs() =
         ApplicationLoader.applicationContext.getSharedPreferences(STOCK_PREF_NAME, Context.MODE_PRIVATE)
 
     private fun typedKey(key: String, value: Any?): String = when (value) {
@@ -137,46 +137,51 @@ object SettingsBackupHelper {
     }
 
     fun apply(parsed: ParseResult.Ok): Int {
-        val root = parsed.root
-        val values = root.optJSONObject("values") ?: return 0
+        CloudSettingsHelper.restoring = true
+        try {
+            val root = parsed.root
+            val values = root.optJSONObject("values") ?: return 0
 
-        val byKey = InuConfig.items.filter { it.exportable }.associateBy { it.key }
-        var applied = 0
-        InuConfig.prefs.edit {
-            for (key in values.keys()) {
-                val item = byKey[key] ?: continue
-                val raw = values.get(key)
-                val ok = when {
-                    item is InuConfig.BoolItem && raw is Boolean -> { putBoolean(key, raw); true }
-                    item is InuConfig.IntItem && raw is Number -> { putInt(key, raw.toInt()); true }
-                    item is InuConfig.LongItem && raw is Number -> { putLong(key, raw.toLong()); true }
-                    item is InuConfig.FloatItem && raw is Number -> { putFloat(key, raw.toFloat()); true }
-                    item is InuConfig.StringItem && raw is String -> { putString(key, raw); true }
-                    else -> false
+            val byKey = InuConfig.items.filter { it.exportable }.associateBy { it.key }
+            var applied = 0
+            InuConfig.prefs.edit {
+                for (key in values.keys()) {
+                    val item = byKey[key] ?: continue
+                    val raw = values.get(key)
+                    val ok = when {
+                        item is InuConfig.BoolItem && raw is Boolean -> { putBoolean(key, raw); true }
+                        item is InuConfig.IntItem && raw is Number -> { putInt(key, raw.toInt()); true }
+                        item is InuConfig.LongItem && raw is Number -> { putLong(key, raw.toLong()); true }
+                        item is InuConfig.FloatItem && raw is Number -> { putFloat(key, raw.toFloat()); true }
+                        item is InuConfig.StringItem && raw is String -> { putString(key, raw); true }
+                        else -> false
+                    }
+                    if (ok) applied++
                 }
-                if (ok) applied++
             }
-        }
-        for (item in InuConfig.items) item.load(InuConfig.prefs)
+            for (item in InuConfig.items) item.load(InuConfig.prefs)
 
-        val sub = root.optJSONObject("stock")?.optJSONObject(STOCK_PREF_NAME) ?: return applied
-        stockPrefs().edit {
-            for (rawKey in sub.keys()) {
-                val (key, type) = stripTypeSuffix(rawKey)
-                if (key !in STOCK_KEYS) continue
-                val raw = sub.get(rawKey)
-                val ok = when {
-                    raw is Boolean -> { putBoolean(key, raw); true }
-                    raw is Number && type == "long" -> { putLong(key, raw.toLong()); true }
-                    raw is Number && type == "float" -> { putFloat(key, raw.toFloat()); true }
-                    raw is Number -> { putInt(key, raw.toInt()); true }
-                    raw is String -> { putString(key, raw); true }
-                    else -> false
+            val sub = root.optJSONObject("stock")?.optJSONObject(STOCK_PREF_NAME) ?: return applied
+            stockPrefs().edit {
+                for (rawKey in sub.keys()) {
+                    val (key, type) = stripTypeSuffix(rawKey)
+                    if (key !in STOCK_KEYS) continue
+                    val raw = sub.get(rawKey)
+                    val ok = when {
+                        raw is Boolean -> { putBoolean(key, raw); true }
+                        raw is Number && type == "long" -> { putLong(key, raw.toLong()); true }
+                        raw is Number && type == "float" -> { putFloat(key, raw.toFloat()); true }
+                        raw is Number -> { putInt(key, raw.toInt()); true }
+                        raw is String -> { putString(key, raw); true }
+                        else -> false
+                    }
+                    if (ok) applied++
                 }
-                if (ok) applied++
             }
+            return applied
+        } finally {
+            CloudSettingsHelper.restoring = false
         }
-        return applied
     }
 
     const val FILENAME_SUFFIX = ".inu-settings.json"
@@ -222,7 +227,7 @@ object SettingsBackupHelper {
         }
     }
 
-    private fun applyAndPromptRestart(fragment: BaseFragment, parsed: ParseResult.Ok) {
+    fun applyAndPromptRestart(fragment: BaseFragment, parsed: ParseResult.Ok) {
         val applied = apply(parsed)
         BulletinFactory.of(fragment).createSimpleBulletin(
             R.raw.chats_infotip,

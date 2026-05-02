@@ -2,11 +2,11 @@ package desu.inugram.ui
 
 import android.app.Activity
 import android.content.Intent
-import android.view.View
 import android.os.Bundle
+import android.view.View
+import androidx.collection.LongSparseArray
 import desu.inugram.helpers.InuUtils
 import desu.inugram.helpers.SettingsBackupHelper
-import androidx.collection.LongSparseArray
 import org.telegram.messenger.AndroidUtilities
 import org.telegram.messenger.DialogObject
 import org.telegram.messenger.LocaleController
@@ -85,6 +85,13 @@ class InuSettingsActivity : InuSettingsPageActivity() {
         )
         items.add(
             UItem.asButton(
+                BUTTON_CLOUD_SYNC,
+                R.drawable.inu_tabler_cloud,
+                LocaleController.getString(R.string.InuCloudSync)
+            )
+        )
+        items.add(
+            UItem.asButton(
                 BUTTON_ABOUT,
                 R.drawable.msg_info,
                 LocaleController.getString(R.string.InuAbout)
@@ -103,6 +110,7 @@ class InuSettingsActivity : InuSettingsPageActivity() {
             BUTTON_ABOUT -> presentFragment(InuAboutActivity())
             BUTTON_EXPORT -> launchExport()
             BUTTON_IMPORT -> launchImport()
+            BUTTON_CLOUD_SYNC -> presentFragment(InuCloudSyncActivity())
         }
     }
 
@@ -114,7 +122,9 @@ class InuSettingsActivity : InuSettingsPageActivity() {
                 file.parentFile?.mkdirs()
                 file.writeText(SettingsBackupHelper.export(), Charsets.UTF_8)
                 null
-            } catch (e: Exception) { e.message ?: e.javaClass.simpleName }
+            } catch (e: Exception) {
+                e.message ?: e.javaClass.simpleName
+            }
             AndroidUtilities.runOnUIThread {
                 if (err != null) {
                     BulletinFactory.of(this).createErrorBulletin(
@@ -131,7 +141,12 @@ class InuSettingsActivity : InuSettingsPageActivity() {
         val ctx = parentActivity ?: return
         val account = accountInstance
         val sheet = object : ShareAlert(ctx, null, null, false, null, false) {
-            override fun onSend(dids: LongSparseArray<TLRPC.Dialog>, count: Int, topic: TLRPC.TL_forumTopic?, showToast: Boolean) {
+            override fun onSend(
+                dids: LongSparseArray<TLRPC.Dialog>,
+                count: Int,
+                topic: TLRPC.TL_forumTopic?,
+                showToast: Boolean
+            ) {
                 for (i in 0 until dids.size()) {
                     val did = dids.keyAt(i)
                     SendMessagesHelper.prepareSendingDocument(
@@ -182,7 +197,9 @@ class InuSettingsActivity : InuSettingsPageActivity() {
             Utilities.globalQueue.postRunnable {
                 val text = try {
                     ctx.contentResolver.openInputStream(uri)?.use { it.readBytes().toString(Charsets.UTF_8) }
-                } catch (_: Exception) { null }
+                } catch (_: Exception) {
+                    null
+                }
                 AndroidUtilities.runOnUIThread {
                     if (text == null) {
                         BulletinFactory.of(this).createErrorBulletin(
@@ -205,6 +222,7 @@ class InuSettingsActivity : InuSettingsPageActivity() {
         private val BUTTON_ABOUT = InuUtils.generateId()
         private val BUTTON_EXPORT = InuUtils.generateId()
         private val BUTTON_IMPORT = InuUtils.generateId()
+        private val BUTTON_CLOUD_SYNC = InuUtils.generateId()
 
         private const val REQ_IMPORT = 31002
     }

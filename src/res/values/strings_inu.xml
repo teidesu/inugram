@@ -288,4 +288,21 @@
     <string name="InuBackupImportSheetChanges_other">**%1$d** changes will be applied to the current settings.</string>
     <string name="InuBackupImportSheetApply">Yes, apply</string>
     <string name="InuBackupImportSheetCancel">No, leave as is</string>
+    <string name="InuCloudSync">Sync settings</string>
+    <string name="InuCloudSyncDesc">Back up your Inugram settings to Telegram cloud and restore on another device.\n\nUses [CloudStorage API](https://core.telegram.org/bots/webapps#cloudstorage), your data is never sent to our servers.</string>
+    <string name="InuCloudSyncNow">Sync now</string>
+    <string name="InuCloudSyncing">Syncing…</string>
+    <string name="InuCloudRestore">Restore from cloud</string>
+    <string name="InuCloudDelete">Delete cloud backup</string>
+    <string name="InuCloudSyncFailed">Sync failed</string>
+    <string name="InuCloudRestoreFailed">Restore failed</string>
+    <string name="InuCloudDeleteFailed">Delete failed</string>
+    <string name="InuCloudDeleteSuccess">Cloud backup deleted</string>
+    <string name="InuCloudNoBackup">No cloud backup found</string>
+    <string name="InuCloudSyncDate">Last cloud backup: %1$s</string>
+    <string name="InuCloudSyncDateNever">never</string>
+    <string name="InuCloudSyncAccount">Sync account</string>
+    <string name="InuCloudSyncAccountPick">Choose sync account</string>
+    <string name="InuCloudSyncAccountInactive">Account no longer signed in. Pick another to resume sync.</string>
+    <string name="InuCloudSyncAuto">Auto-upload</string>
 </resources>

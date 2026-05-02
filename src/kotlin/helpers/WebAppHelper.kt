@@ -17,9 +17,9 @@ import org.telegram.ui.bots.WebViewRequestProps
 
 
 object WebAppHelper {
-    // seems to be the the easiest way to force
+    // using a bot seems to be the the easiest way to force a webview
     const val HELPER_BOT_USERNAME = "inu_helper_bot"
-    const val HELPER_BOT_ID = 8589894659;
+    const val HELPER_BOT_ID = 8589894659L
     const val TYPE_TLV = 1;
 
     @JvmStatic

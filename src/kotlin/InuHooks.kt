@@ -3,6 +3,7 @@ package desu.inugram
 import android.content.Context
 import android.os.Build
 import android.os.Bundle
+import desu.inugram.helpers.CloudSettingsHelper
 import desu.inugram.helpers.MainTabsHelper
 import desu.inugram.helpers.MonetHelper
 import desu.inugram.helpers.UpdateHelper
@@ -28,6 +29,7 @@ object InuHooks {
         syncDoubleTapDelay()
         syncAnimationSpeed()
         UpdateHelper.clearPendingIfInstalled()
+        CloudSettingsHelper.attachAutoSyncListener()
     }
 
     @JvmStatic

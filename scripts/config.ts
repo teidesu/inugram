@@ -82,6 +82,7 @@ export const ICON_SELECTION: { pack: IconifyJSON, icons: string[], options?: Svg
       'select-all',
       'clear-formatting',
       'filter',
+      'cloud',
     ],
   },
 ]
