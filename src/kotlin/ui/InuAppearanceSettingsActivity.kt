@@ -90,7 +90,7 @@ class InuAppearanceSettingsActivity : InuSettingsPageActivity() {
         items.add(UItem.asShadow(LocaleController.getString(R.string.InuAnimationSpeedInfo)))
 
         items.add(
-            UItem.asHeader(taggedExperimental(LocaleController.getString(R.string.InuNonIslandUI)))
+            UItem.asHeader(addExperimentalSpan(LocaleController.getString(R.string.InuNonIslandUI)))
         )
         items.add(
             UItem.asCheck(
