@@ -103,7 +103,8 @@ class InuChatsSettingsActivity : InuSettingsPageActivity() {
                 TOGGLE_CHAT_VOICE_IN_ATTACH,
                 R.string.InuChatVoiceInAttach,
                 R.string.InuChatVoiceInAttachInfo,
-                InuConfig.CHAT_VOICE_IN_ATTACH.value
+                InuConfig.CHAT_VOICE_IN_ATTACH.value,
+                experimental = true
             )
         )
         items.add(
@@ -122,7 +123,8 @@ class InuChatsSettingsActivity : InuSettingsPageActivity() {
                 BUTTON_FORMATTING_POPUP,
                 R.string.InuFormattingPopup,
                 R.string.InuFormattingPopupInfo,
-                InuConfig.FORMATTING_POPUP.value
+                InuConfig.FORMATTING_POPUP.value,
+                experimental = true
             )
         )
         if (chatInputMaxLinesSlider == null) chatInputMaxLinesSlider = SliderCell(
@@ -173,7 +175,8 @@ class InuChatsSettingsActivity : InuSettingsPageActivity() {
                 TOGGLE_REACTION_BAR_BELOW,
                 R.string.InuReactionBarBelow,
                 R.string.InuReactionBarBelowInfo,
-                InuConfig.REACTION_BAR_BELOW.value
+                InuConfig.REACTION_BAR_BELOW.value,
+                experimental = true
             )
         )
         items.add(
@@ -181,7 +184,8 @@ class InuChatsSettingsActivity : InuSettingsPageActivity() {
                 TOGGLE_CHAT_VIEWS_BOTTOM,
                 R.string.InuChatViewsBottom,
                 R.string.InuChatViewsBottomInfo,
-                InuConfig.CHAT_VIEWS_BOTTOM.value
+                InuConfig.CHAT_VIEWS_BOTTOM.value,
+                experimental = true
             )
         )
         items.add(
