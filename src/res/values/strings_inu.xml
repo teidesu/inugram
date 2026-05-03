@@ -170,7 +170,7 @@
     <string name="InuMsgDetailMedia">Media</string>
     <string name="InuShowJson">Show JSON</string>
 
-    <string name="InuChatVoiceInAttach">Recordings as attachments</string>
+    <string name="InuChatVoiceInAttach">Recorder in attachments</string>
     <string name="InuChatVoiceInAttachInfo">Moves the voice/video record button from the input bar into the attachment sheet</string>
 
     <string name="InuDisableIntroSticker">Don\'t send intro sticker</string>
