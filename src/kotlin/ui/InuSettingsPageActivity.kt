@@ -116,7 +116,6 @@ abstract class InuSettingsPageActivity : UniversalFragment() {
         var height: Float = 0f
 
         var color = 0
-        var fgColor = 0
 
         constructor() {
             textPaint.setTypeface(AndroidUtilities.bold())
@@ -159,9 +158,9 @@ abstract class InuSettingsPageActivity : UniversalFragment() {
             makeLayout()
 
             bgPaint.setColor(color)
-            textPaint.setColor(fgColor)
-            bgPaint.setAlpha(bgPaint.alpha)
-            textPaint.setAlpha(textPaint.alpha)
+            textPaint.setColor(color)
+            bgPaint.setAlpha(16)
+            textPaint.setAlpha(255)
 
             val x = _x + AndroidUtilities.dp(2f)
             val y = _y - height + AndroidUtilities.dp(1f)
@@ -183,8 +182,7 @@ abstract class InuSettingsPageActivity : UniversalFragment() {
         val tag = LocaleController.getString(R.string.InuExperimental)
 
         val tagSpan = ExperimentalSpan()
-        tagSpan.color = Theme.getColor(Theme.key_chat_serviceBackground)
-        tagSpan.fgColor = Theme.getColor(Theme.key_chat_serviceText)
+        tagSpan.color = Theme.getColor(Theme.key_windowBackgroundWhiteBlueHeader)
         tagSpan.setText(tag)
 
         val tagText = SpannableString(tag)
