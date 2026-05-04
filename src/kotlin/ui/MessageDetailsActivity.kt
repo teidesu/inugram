@@ -380,25 +380,29 @@ class MessageDetailsActivity(
         val fwd = messageObject.messageOwner.fwd_from ?: return@buildString
         if (fwd.from_id == null) {
             append(fwd.from_name)
-            return@buildString
-        }
-        when {
-            fwd.from_id.channel_id != 0L -> {
-                val chat = messagesController.getChat(fwd.from_id.channel_id)
-                if (chat != null) append(formatEntityInfo(chat.title, chat.username, chat.id))
-            }
+        } else {
+            when {
+                fwd.from_id.channel_id != 0L -> {
+                    val chat = messagesController.getChat(fwd.from_id.channel_id)
+                    if (chat != null) append(formatEntityInfo(chat.title, chat.username, chat.id))
+                }
 
-            fwd.from_id.user_id != 0L -> {
-                val user = messagesController.getUser(fwd.from_id.user_id)
-                if (user != null) append(
-                    formatEntityInfo(
-                        ContactsController.formatName(user.first_name, user.last_name),
-                        user.username, user.id
+                fwd.from_id.user_id != 0L -> {
+                    val user = messagesController.getUser(fwd.from_id.user_id)
+                    if (user != null) append(
+                        formatEntityInfo(
+                            ContactsController.formatName(user.first_name, user.last_name),
+                            user.username, user.id
+                        )
                     )
-                )
-            }
+                }
 
-            !fwd.from_name.isNullOrEmpty() -> append(fwd.from_name)
+                !fwd.from_name.isNullOrEmpty() -> append(fwd.from_name)
+            }
+        }
+        if (fwd.date != 0) {
+            if (isNotEmpty()) append('\n')
+            append(formatDate(fwd.date))
         }
     }
 
