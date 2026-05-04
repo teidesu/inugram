@@ -5,6 +5,7 @@ import desu.inugram.InuConfig
 import desu.inugram.InuConfig.UpdateChannelItem
 import org.telegram.messenger.AndroidUtilities
 import org.telegram.messenger.ApplicationLoader
+import org.telegram.messenger.BetaUpdate
 import org.telegram.messenger.BuildConfig
 import org.telegram.messenger.LocaleController
 import org.telegram.messenger.MessagesController
@@ -51,7 +52,7 @@ object UpdateHelper {
     private var inflightSince = 0L
 
     @Volatile
-    var pendingBetaUpdate: InuBetaUpdate? = null
+    var pendingBetaUpdate: BetaUpdate? = null
         private set
 
     fun checkForCustomUpdate(force: Boolean, whenDone: Runnable?) {
@@ -73,7 +74,7 @@ object UpdateHelper {
     fun clearPendingIfInstalled() {
         val pending = SharedConfig.pendingAppUpdate ?: return
         val current = currentBuild()
-        if (pending.version == current.shortSha || pending.version == current.versionCode.toString()) {
+        if (pending.version == current.versionCode.toString()) {
             clearPending()
         }
     }
@@ -123,7 +124,7 @@ object UpdateHelper {
                     extractApkInfo(msg)?.let { msg to it }
                 }
                 val current = currentBuild()
-                if (match == null || !isNewer(isCanary, match.second, current)) {
+                if (match == null || !isNewer(match.second, current)) {
                     clearPending()
                     finish(callback, CheckResult.UpToDate)
                     return@runOnUIThread
@@ -131,7 +132,7 @@ object UpdateHelper {
                 val (msg, info) = match
                 val updateObj = TLRPC.TL_help_appUpdate().apply {
                     flags = flags or 2
-                    version = if (isCanary) info.shortSha else info.verCode.toString()
+                    version = info.verCode.toString()
                     text = msg.message ?: ""
                     entities = msg.entities
                     document = info.document
@@ -161,7 +162,7 @@ object UpdateHelper {
                 SharedConfig.pendingAppUpdate = updateObj
                 SharedConfig.pendingAppUpdateBuildVersion = current.versionCode
                 SharedConfig.saveConfig()
-                pendingBetaUpdate = InuBetaUpdate(info.appVerName, info.verCode, updateObj.text, info.shortSha)
+                pendingBetaUpdate = BetaUpdate(info.appVerName, info.verCode, updateObj.text)
                 NotificationCenter.getGlobalInstance().postNotificationName(NotificationCenter.appUpdateAvailable)
                 finish(callback, CheckResult.Updated(updateObj))
             }
@@ -179,9 +180,7 @@ object UpdateHelper {
         val pkg = ctx.packageManager.getPackageInfo(ctx.packageName, 0)
 
         @Suppress("DEPRECATION")
-        val versionCode = pkg.versionCode
-        val sha = SHORT_SHA_RE.find(pkg.versionName.orEmpty())?.groupValues?.get(1)
-        return CurrentBuild(versionCode, sha)
+        return CurrentBuild(pkg.versionCode)
     }
 
     private fun extractApkInfo(msg: TLRPC.Message): ApkInfo? {
@@ -193,16 +192,11 @@ object UpdateHelper {
         val verName = match.groupValues[1]
         val verCode = match.groupValues[2].toIntOrNull() ?: return null
         val appVerName = verName.replace(SHORT_SHA_RE, "")
-        val sha = SHORT_SHA_RE.find(verName)?.groupValues?.get(1)
-        return ApkInfo(verCode, appVerName, sha, doc)
+        return ApkInfo(verCode, appVerName, doc)
     }
 
-    private fun isNewer(isCanary: Boolean, remote: ApkInfo, current: CurrentBuild): Boolean {
-        return if (isCanary) {
-            remote.shortSha != null && remote.shortSha != current.shortSha
-        } else {
-            remote.verCode > current.versionCode
-        }
+    private fun isNewer(remote: ApkInfo, current: CurrentBuild): Boolean {
+        return remote.verCode > current.versionCode
     }
 
     sealed class CheckResult {
@@ -215,12 +209,10 @@ object UpdateHelper {
     private data class ApkInfo(
         val verCode: Int,
         val appVerName: String,
-        val shortSha: String?,
         val document: TLRPC.Document,
     )
 
     private data class CurrentBuild(
         val versionCode: Int,
-        val shortSha: String?,
     )
 }
