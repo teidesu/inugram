@@ -53,6 +53,10 @@ class InuDialogsSettingsActivity : InuSettingsPageActivity() {
             ).setChecked(InuConfig.OLD_MENTION_INDICATOR.value)
         )
         items.add(
+            UItem.asCheck(TOGGLE_OPEN_ARCHIVE_ON_PULL, LocaleController.getString(R.string.InuOpenArchiveOnPull))
+                .setChecked(InuConfig.OPEN_ARCHIVE_ON_PULL.value)
+        )
+        items.add(
             UItem.asCheck(TOGGLE_BOT_WEBVIEW_BUTTON, LocaleController.getString(R.string.InuHideBotWebView))
                 .setChecked(InuConfig.HIDE_BOT_WEBVIEW_INPUT.value)
         )
@@ -193,6 +197,11 @@ class InuDialogsSettingsActivity : InuSettingsPageActivity() {
                 showRestartBulletin()
             }
 
+            TOGGLE_OPEN_ARCHIVE_ON_PULL -> {
+                val new = InuConfig.OPEN_ARCHIVE_ON_PULL.toggle()
+                (view as? TextCheckCell)?.isChecked = new
+            }
+
             TOGGLE_DISABLE_CHAT_PREVIEW_EXPAND -> {
                 val new = InuConfig.DISABLE_CHAT_PREVIEW_EXPAND.toggle()
                 (view as? NotificationsCheckCell)?.isChecked = new
@@ -273,6 +282,7 @@ class InuDialogsSettingsActivity : InuSettingsPageActivity() {
         private val BUTTON_FOLDERS_UNREAD_COUNTER_MODE = InuUtils.generateId()
         private val TOGGLE_BOT_WEBVIEW_BUTTON = InuUtils.generateId()
         private val TOGGLE_OLD_MENTION_INDICATOR = InuUtils.generateId()
+        private val TOGGLE_OPEN_ARCHIVE_ON_PULL = InuUtils.generateId()
         private val TOGGLE_BOTTOM_TABS_HIDE = InuUtils.generateId()
         private val TOGGLE_HIDE_CONTACTS_TAB = InuUtils.generateId()
         private val TOGGLE_COMPACT_MODE = InuUtils.generateId()

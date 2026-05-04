@@ -1,0 +1,46 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Iaroslav Belozerov <me@tarakoshka.tech>
+Date: Mon, 4 May 2026 16:10:25 +0200
+Subject: add option to open archive on pull-down
+
+---
+ .../main/java/org/telegram/ui/DialogsActivity.java   | 12 ++++++++++++
+ 1 file changed, 12 insertions(+)
+
+diff --git a/TMessagesProj/src/main/java/org/telegram/ui/DialogsActivity.java b/TMessagesProj/src/main/java/org/telegram/ui/DialogsActivity.java
+index 0000000..0000000 100644
+--- a/TMessagesProj/src/main/java/org/telegram/ui/DialogsActivity.java
++++ b/TMessagesProj/src/main/java/org/telegram/ui/DialogsActivity.java
+@@ -264,6 +264,7 @@ import java.util.HashSet;
+ import java.util.List;
+ import java.util.concurrent.ConcurrentHashMap;
+ 
++import desu.inugram.InuConfig;
+ import desu.inugram.InuHooks;
+ import desu.inugram.helpers.DialogsFabHelper;
+ import desu.inugram.helpers.FolderHelper;
+@@ -2230,6 +2231,16 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
+                                 }
+                                 ((DialogCell) view).startOutAnimation();
+                                 parentPage.archivePullViewState = ARCHIVE_ITEM_STATE_SHOWED;
++                                if (InuConfig.OPEN_ARCHIVE_ON_PULL.getValue()) {
++                                    AndroidUtilities.runOnUIThread(() -> {
++                                        Bundle args = new Bundle();
++                                        args.putInt("folderId", 1);
++                                        args.putBoolean("onlySelect", onlySelect);
++                                        DialogsActivity activity = new DialogsActivity(args);
++                                        activity.setDelegate(delegate);
++                                        presentFragment(activity, onlySelect);
++                                    }, 150);
++                                }
+                                 if (AndroidUtilities.isAccessibilityScreenReaderEnabled()) {
+                                     AndroidUtilities.makeAccessibilityAnnouncement(LocaleController.getString(R.string.AccDescrArchivedChatsShown));
+                                 }
+@@ -4280,6 +4291,7 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
+                                     }
+                                 }
+                             }
++
+                             if (viewPage.archivePullViewState == ARCHIVE_ITEM_STATE_HIDDEN && measuredDy - usedDy != 0 && dy < 0 && isDragging) {
+                                 float ty;
+                                 float tk = (viewPage.listView.getViewOffset() / PullForegroundDrawable.getMaxOverscroll());
