@@ -441,5 +441,5 @@ object InuConfig {
     val CLOUD_SYNC_AUTO_USER_SET = BoolItem("cloud_sync_auto_user_set", false, exportable = false)
 
     @JvmField
-    val EVENT_LOG_CHAR_DIFF = BoolItem("event_log_char_diff", false)
+    val EVENT_LOG_CHAR_DIFF = BoolItem("event_log_char_diff", true)
 }
