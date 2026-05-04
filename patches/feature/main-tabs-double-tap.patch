@@ -1,0 +1,25 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: alina sireneva <alina@tei.su>
+Date: Mon, 4 May 2026 22:21:21 +0200
+Subject: double-tap the account tab to quickly switch account to the next one
+
+---
+ .../src/main/java/org/telegram/ui/MainTabsActivity.java       | 4 ++++
+ 1 file changed, 4 insertions(+)
+
+diff --git a/TMessagesProj/src/main/java/org/telegram/ui/MainTabsActivity.java b/TMessagesProj/src/main/java/org/telegram/ui/MainTabsActivity.java
+index 0000000..0000000 100644
+--- a/TMessagesProj/src/main/java/org/telegram/ui/MainTabsActivity.java
++++ b/TMessagesProj/src/main/java/org/telegram/ui/MainTabsActivity.java
+@@ -280,7 +280,11 @@ public class MainTabsActivity extends ViewPagerActivity implements NotificationC
+             final GlassTabView view = tabs[index];
+ 
+             final int position = indexToPosition(index);
++            final int tabIndex = index;
+             tabs[index].setOnClickListener(v -> {
++                if (tabIndex == INDEX_PROFILE && MainTabsHelper.onProfileTabTap()) {
++                    return;
++                }
+                 if (viewPager.isManualScrolling() || viewPager.isTouch()) {
+                     return;
+                 }

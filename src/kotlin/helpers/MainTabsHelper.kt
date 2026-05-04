@@ -10,11 +10,13 @@ import org.telegram.messenger.AndroidUtilities.dp
 import org.telegram.messenger.LocaleController.getString
 import org.telegram.messenger.MessagesController
 import org.telegram.messenger.R
+import org.telegram.messenger.UserConfig
 import org.telegram.ui.ActionBar.BaseFragment
 import org.telegram.ui.ActionBar.Theme
 import org.telegram.ui.Components.Bulletin
 import org.telegram.ui.Components.ItemOptions
 import org.telegram.ui.DialogsActivity
+import org.telegram.ui.LaunchActivity
 import org.telegram.ui.MainTabsActivity
 
 
@@ -112,6 +114,32 @@ object MainTabsHelper {
     private fun scaledIcon(context: android.content.Context, resId: Int): Drawable? {
         val src = ContextCompat.getDrawable(context, resId) ?: return null
         return ScaledIconDrawable(src, dp(MENU_ICON_SIZE_DP.toFloat()))
+    }
+
+    private var lastProfileTapMs = 0L
+
+    @JvmStatic
+    fun onProfileTabTap(): Boolean {
+        val now = android.os.SystemClock.uptimeMillis()
+        val isDoubleTap = now - lastProfileTapMs < 500
+        lastProfileTapMs = now
+        return isDoubleTap && switchToNextAccount()
+    }
+
+    @JvmStatic
+    fun switchToNextAccount(): Boolean {
+        val current = UserConfig.selectedAccount
+        val accounts = mutableListOf<Int>()
+        for (a in 0 until UserConfig.MAX_ACCOUNT_COUNT) {
+            if (UserConfig.getInstance(a).isClientActivated) accounts.add(a)
+        }
+        if (accounts.size < 2) return false
+        AccountOrderHelper.sort(accounts)
+        val idx = accounts.indexOf(current)
+        val target = accounts[(idx + 1) % accounts.size]
+        if (target == current) return false
+        LaunchActivity.instance?.switchToAccount(target, true) ?: return false
+        return true
     }
 
     @JvmStatic

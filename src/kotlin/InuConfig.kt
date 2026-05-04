@@ -442,4 +442,7 @@ object InuConfig {
 
     @JvmField
     val EVENT_LOG_CHAR_DIFF = BoolItem("event_log_char_diff", true)
+
+    @JvmField
+    val ACCOUNT_ORDER = StringItem("account_order", "", exportable = false)
 }

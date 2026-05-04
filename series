@@ -105,3 +105,5 @@ feature/chats-long-tap-folders.patch
 debloat/disable-scrim-blur.patch
 debloat/profile-scroll-snap.patch
 feature/deeplink-in-search.patch
+feature/main-tabs-double-tap.patch
+feature/reorder-accounts.patch
