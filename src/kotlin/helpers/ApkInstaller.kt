@@ -1,5 +1,6 @@
 package desu.inugram.helpers
 
+import android.Manifest
 import android.annotation.SuppressLint
 import android.app.Activity
 import android.app.PendingIntent
@@ -11,11 +12,16 @@ import android.content.pm.ActivityInfo
 import android.content.pm.PackageInstaller
 import android.content.pm.PackageManager
 import android.os.Build
+import android.provider.Settings
 import android.text.TextUtils
 import android.util.TypedValue
 import android.view.Gravity
 import android.widget.LinearLayout
 import android.widget.TextView
+import androidx.core.app.ActivityCompat
+import androidx.core.app.NotificationChannelCompat
+import androidx.core.app.NotificationCompat
+import androidx.core.app.NotificationManagerCompat
 import androidx.core.content.ContextCompat
 import org.telegram.messenger.AndroidUtilities
 import org.telegram.messenger.ApplicationLoader
@@ -44,6 +50,7 @@ object ApkInstaller {
     @SuppressLint("StaticFieldLeak")
     @Volatile
     private var dialog: AlertDialog? = null
+
     @Volatile
     private var brokenInstaller: Boolean? = null
 
@@ -174,7 +181,13 @@ object ApkInstaller {
         val subtitle = TextView(context).apply {
             setTextSize(TypedValue.COMPLEX_UNIT_DIP, 12f)
             setTextColor(Theme.getColor(Theme.key_dialogTextGray))
-            text = LocaleController.getString(R.string.InuUpdateInstallingHint)
+            text = LocaleController.getString(
+                if (Build.VERSION.SDK_INT < Build.VERSION_CODES.Q || Settings.canDrawOverlays(context)) {
+                    R.string.InuUpdateInstallingHint
+                } else {
+                    R.string.InuUpdateInstallingNotificationHint
+                }
+            )
         }
         container.addView(
             subtitle,
@@ -197,8 +210,10 @@ object ApkInstaller {
         private val onDone: Runnable,
     ) : BroadcastReceiver() {
         private val latch = CountDownLatch(1)
+
         @Volatile
         private var pendingIntent: Intent? = null
+
         @Volatile
         private var unregistered = false
 
@@ -237,6 +252,7 @@ object ApkInstaller {
             PackageInstaller.STATUS_FAILURE_INCOMPATIBLE,
             PackageInstaller.STATUS_FAILURE_INVALID,
             PackageInstaller.STATUS_FAILURE_STORAGE -> true
+
             else -> false
         }
 
@@ -268,6 +284,54 @@ object ApkInstaller {
             if (unregistered) return
             unregistered = true
             runCatching { context.unregisterReceiver(this) }
+        }
+    }
+
+    class UpdateReceiver : BroadcastReceiver() {
+        override fun onReceive(context: Context, intent: Intent) {
+            if (intent.action != Intent.ACTION_MY_PACKAGE_REPLACED) return
+            val pkg = context.packageName
+            if (pkg != context.packageManager.getInstallerPackageName(pkg)) return
+
+            val launch = Intent(context, LaunchActivity::class.java)
+                .setFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+
+            if (Build.VERSION.SDK_INT < Build.VERSION_CODES.Q || Settings.canDrawOverlays(context)) {
+                context.startActivity(launch)
+                return
+            }
+
+            val nm = NotificationManagerCompat.from(context)
+            nm.createNotificationChannel(
+                NotificationChannelCompat.Builder(CHANNEL_ID, NotificationManagerCompat.IMPORTANCE_HIGH)
+                    .setName(LocaleController.getString(R.string.InuUpdateNotificationChannel))
+                    .setLightsEnabled(false)
+                    .setVibrationEnabled(false)
+                    .setSound(null, null)
+                    .build(),
+            )
+            val pi = PendingIntent.getActivity(
+                context, 0, launch,
+                PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
+            )
+            if (ActivityCompat.checkSelfPermission(context, Manifest.permission.POST_NOTIFICATIONS) == PackageManager.PERMISSION_GRANTED) {
+                nm.notify(
+                    NOTIFICATION_ID,
+                    NotificationCompat.Builder(context, CHANNEL_ID)
+                        .setSmallIcon(R.drawable.notification)
+                        .setShowWhen(false)
+                        .setContentText(LocaleController.getString(R.string.InuUpdateInstalledNotification))
+                        .setCategory(NotificationCompat.CATEGORY_STATUS)
+                        .setContentIntent(pi)
+                        .setAutoCancel(true)
+                        .build(),
+                )
+            }
+        }
+
+        companion object {
+            private const val CHANNEL_ID = "inu_updated"
+            private const val NOTIFICATION_ID = 1337
         }
     }
 }

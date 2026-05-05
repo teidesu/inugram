@@ -7,7 +7,7 @@ Subject: build support stuff for fork-specific code: - added kotlin - bumped min
  TMessagesProj/build.gradle                    | 106 ++++------------
  TMessagesProj/google-services.json            |  76 ++----------
  TMessagesProj/proguard-rules.pro              |  12 ++
- TMessagesProj/src/main/AndroidManifest.xml    |   1 +
+ TMessagesProj/src/main/AndroidManifest.xml    |   7 ++
  .../org/telegram/messenger/BuildVars.java     |  14 ++-
  .../org/telegram/ui/PaymentFormActivity.java  |  28 ++---
  .../org/telegram/ui/SettingsActivity.java     |  24 +---
@@ -17,7 +17,7 @@ Subject: build support stuff for fork-specific code: - added kotlin - bumped min
  build.gradle                                  |  12 +-
  gradle.properties                             |   4 +-
  settings.gradle                               |   5 +-
- 13 files changed, 120 insertions(+), 356 deletions(-)
+ 13 files changed, 126 insertions(+), 356 deletions(-)
 
 diff --git a/TMessagesProj/build.gradle b/TMessagesProj/build.gradle
 index 0000000..0000000 100644
@@ -358,6 +358,19 @@ index 0000000..0000000 100644
      <uses-permission android:name="android.permission.READ_PHONE_NUMBERS" />
      <uses-permission android:name="android.permission.POST_NOTIFICATIONS"/>
  
+@@ -590,6 +591,12 @@
+ 
+         <receiver android:name=".NotificationDismissReceiver" android:exported="false"/>
+ 
++        <receiver android:name="desu.inugram.helpers.ApkInstaller$UpdateReceiver" android:exported="false">
++            <intent-filter>
++                <action android:name="android.intent.action.MY_PACKAGE_REPLACED" />
++            </intent-filter>
++        </receiver>
++
+         <receiver android:name=".voip.VoIPActionsReceiver" android:exported="false"/>
+ 
+         <receiver android:name=".ShortcutResultReceiver" android:exported="false"/>
 diff --git a/TMessagesProj/src/main/java/org/telegram/messenger/BuildVars.java b/TMessagesProj/src/main/java/org/telegram/messenger/BuildVars.java
 index 0000000..0000000 100644
 --- a/TMessagesProj/src/main/java/org/telegram/messenger/BuildVars.java
