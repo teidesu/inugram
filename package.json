@@ -7,7 +7,8 @@
     "setup": "tsx scripts/setup.ts",
     "export": "tsx scripts/export.ts",
     "rebase": "tsx scripts/rebase.ts",
-    "append-to-patch": "tsx scripts/append-to-patch.ts"
+    "append-to-patch": "tsx scripts/append-to-patch.ts",
+    "prepare": "husky"
   },
   "dependencies": {
     "@antfu/eslint-config": "^8.1.0",
@@ -20,6 +21,7 @@
   },
   "devDependencies": {
     "@types/node": "^24.6.1",
+    "husky": "^9.1.7",
     "tsx": "^4.20.6",
     "typescript": "^5.9.3"
   }

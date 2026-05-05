@@ -27,6 +27,12 @@ on:
       - '**.md'
       - '.github/**'
       - '!.github/workflows/build.yml'
+  push:
+    branches: [next]
+    paths-ignore:
+      - '**.md'
+      - '.github/**'
+      - '!.github/workflows/build.yml'
   workflow_dispatch:
 
 concurrency:
@@ -196,7 +202,7 @@ jobs:
       attestations: write
       artifact-metadata: write
       contents: read
-    if: github.event_name != 'pull_request'
+    if: github.event_name != 'pull_request' && (github.event_name != 'push' || github.ref == 'refs/heads/main')
     steps:
       - uses: actions/setup-java@c1e323688fd81a25caa38c78aa6df2d33d3e20d9 # v4
         with:

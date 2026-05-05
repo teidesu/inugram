@@ -5,27 +5,16 @@ import { patchesDir, rootDir, worktreeDir } from './config.js'
 import {
   cd,
   ensureDir,
+  generateStablePatchFromCommit,
+  getAllPatchCommitIds,
   getAppliedPatchNames,
-  getPatchCommitId,
+  parsePatchName,
   resolveFromRoot,
   step,
   success,
   warn,
   writeSeries,
 } from './lib.js'
-
-function parsePatchName(patchName: string) {
-  const parts = patchName.split('__').map(part => part.trim()).filter(Boolean)
-  if (parts.length !== 2) {
-    throw new Error(`Patch name must use "group__name": ${patchName}`)
-  }
-  const [group, name] = parts
-  return {
-    group,
-    name,
-    seriesEntry: `${group}/${name}.patch`,
-  }
-}
 
 async function listFilesRecursive(dir: string): Promise<string[]> {
   const entries = await fs.readdir(dir, { withFileTypes: true }).catch(() => [])
@@ -51,8 +40,7 @@ async function clearExportedPatchFiles() {
   }
 }
 
-async function exportPatchFile(repoDir: string, patchName: string) {
-  const commitId = await getPatchCommitId(repoDir, patchName)
+async function exportPatchFile(repoDir: string, patchName: string, commitId: string) {
   const parsed = parsePatchName(patchName)
   const git = cd(repoDir)
 
@@ -71,10 +59,7 @@ async function exportPatchFile(repoDir: string, patchName: string) {
   await ensureDir(targetDir)
 
   step(`Exporting ${patchName} -> ${relative(rootDir, targetFile)}`)
-  const patch = await git`git format-patch --stdout --zero-commit --no-signature --subject-prefix= -1 ${commitId}`
-  const stable = patch.stdout
-    .replace(/^index [0-9a-f]+\.\.[0-9a-f]+( \d+)?$/gm, 'index 0000000..0000000$1')
-    .replace(/^Subject:.*(?:\n[ \t].*)+/m, m => m.replace(/\n[ \t]+/g, ' '))
+  const stable = await generateStablePatchFromCommit(repoDir, commitId)
   await fs.writeFile(targetFile, stable)
 
   return parsed
@@ -87,11 +72,16 @@ if (dirty) {
   warn(`Worktree has uncommitted changes:\n${dirty}`)
 }
 
-const patchNames = await getAppliedPatchNames(repoDir)
+const [patchNames, commitIds] = await Promise.all([
+  getAppliedPatchNames(repoDir),
+  getAllPatchCommitIds(repoDir),
+])
 await clearExportedPatchFiles()
 
 const entries = await parallelMap(patchNames, async (patchName) => {
-  const patch = await exportPatchFile(repoDir, patchName)
+  const commitId = commitIds.get(patchName)
+  if (!commitId) throw new Error(`No commit id for applied patch ${patchName}`)
+  const patch = await exportPatchFile(repoDir, patchName, commitId)
   return patch.seriesEntry
 })
 

@@ -280,6 +280,42 @@ export async function getPatchSubject(repoDir: string, patchName: string) {
   return (await cd(repoDir)`git log -1 --format=%s ${commitId}`).stdout.trim()
 }
 
+export async function generateStablePatchFromCommit(repoDir: string, commitId: string) {
+  const patch = await cd(repoDir)`git format-patch --stdout --zero-commit --no-signature --subject-prefix= -1 ${commitId}`
+  return patch.stdout
+    .replace(/^index [0-9a-f]+\.\.[0-9a-f]+( \d+)?$/gm, 'index 0000000..0000000$1')
+    .replace(/^Subject:.*(?:\n[ \t].*)+/m, m => m.replace(/\n[ \t]+/g, ' '))
+}
+
+export async function getAllPatchCommitIds(repoDir: string) {
+  const branch = (await cd(repoDir)`git symbolic-ref --short HEAD`).stdout.trim()
+  const format = '%(refname) %(objectname)'
+  const out = await cd(repoDir)`git for-each-ref --format=${format} refs/patches/${branch}/`
+  const prefix = `refs/patches/${branch}/`
+  const map = new Map<string, string>()
+  for (const line of out.stdout.split(/\r?\n/)) {
+    const trimmed = line.trim()
+    if (!trimmed) continue
+    const [ref, sha] = trimmed.split(' ')
+    if (!ref.startsWith(prefix)) continue
+    map.set(ref.slice(prefix.length), sha)
+  }
+  return map
+}
+
+export function parsePatchName(patchName: string) {
+  const parts = patchName.split('__').map(part => part.trim()).filter(Boolean)
+  if (parts.length !== 2) {
+    throw new Error(`Patch name must use "group__name": ${patchName}`)
+  }
+  const [group, name] = parts
+  return {
+    group,
+    name,
+    seriesEntry: `${group}/${name}.patch`,
+  }
+}
+
 export async function writeSeries(entries: string[]) {
   await fs.writeFile(seriesFile, entries.length > 0 ? `${entries.join('\n')}\n` : '')
   step(`Wrote ${entries.length} ${entries.length === 1 ? 'entry' : 'entries'} to series`)
