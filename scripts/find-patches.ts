@@ -3,8 +3,8 @@ import { chalk } from 'zx'
 import { worktreeDir } from './config.js'
 import {
   cd,
+  getAllPatchCommitIds,
   getAppliedPatchNames,
-  getPatchCommitId,
 } from './lib.js'
 
 const input = process.argv[2]
@@ -19,7 +19,10 @@ if (!repoRelative || repoRelative.startsWith('..')) {
 }
 
 const git = cd(worktreeDir)
-const patches = await getAppliedPatchNames(worktreeDir)
+const [patches, allCommitIds] = await Promise.all([
+  getAppliedPatchNames(worktreeDir),
+  getAllPatchCommitIds(worktreeDir),
+])
 
 interface Hit {
   patch: string
@@ -27,17 +30,31 @@ interface Hit {
   deleted: number
 }
 
-const hits: Hit[] = []
+const shaToPatch = new Map<string, string>()
+const commits: string[] = []
 for (const patch of patches) {
-  const commit = await getPatchCommitId(worktreeDir, patch)
-  const out = (await git`git show --numstat --format= ${commit} -- ${repoRelative}`).stdout.trim()
-  if (!out) continue
+  const sha = allCommitIds.get(patch)
+  if (!sha) continue
+  shaToPatch.set(sha, patch)
+  commits.push(sha)
+}
 
+const hits: Hit[] = []
+if (commits.length > 0) {
+  const range = `${commits[0]}^..${commits[commits.length - 1]}`
+  const out = (await git`git log --numstat --format=%H ${range} -- ${repoRelative}`).stdout
+  let currentPatch: string | null = null
   for (const line of out.split(/\r?\n/)) {
+    if (!line) continue
+    if (/^[0-9a-f]{40}$/.test(line)) {
+      currentPatch = shaToPatch.get(line) ?? null
+      continue
+    }
+    if (!currentPatch) continue
     const [addRaw, delRaw] = line.split('\t')
     const added = addRaw === '-' ? 0 : Number.parseInt(addRaw, 10) || 0
     const deleted = delRaw === '-' ? 0 : Number.parseInt(delRaw, 10) || 0
-    hits.push({ patch, added, deleted })
+    hits.push({ patch: currentPatch, added, deleted })
   }
 }
 
