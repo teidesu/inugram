@@ -156,6 +156,9 @@ object InuConfig {
     val DISABLE_SWIPE_TO_UNARCHIVE = BoolItem("disable_swipe_to_unarchive", true)
 
     @JvmField
+    val OPEN_ARCHIVE_ON_PULL = BoolItem("open_archive_on_pull", false)
+
+    @JvmField
     val CHAT_ALWAYS_SHOW_DOWN = BoolItem("chat_always_show_down", true)
 
     @JvmField
