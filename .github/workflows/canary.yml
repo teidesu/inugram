@@ -60,7 +60,10 @@ jobs:
           GH_VARS_TOKEN: ${{ secrets.INU_VARS_TOKEN }}
         run: pnpm tsx scripts/ci/upload.ts out
 
-      - name: bump LAST_CANARY_SHA variable
+      - name: bump INU_BUILD and LAST_CANARY_SHA variables
         env:
           GH_TOKEN: ${{ secrets.INU_VARS_TOKEN }}
-        run: gh variable set LAST_CANARY_SHA --body "$GITHUB_SHA"
+        run: |
+          next=$((${{ needs.build.outputs.build-num }} + 1))
+          gh variable set INU_BUILD --body "$next"
+          gh variable set LAST_CANARY_SHA --body "$GITHUB_SHA"

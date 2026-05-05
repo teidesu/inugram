@@ -87,7 +87,7 @@ bugfix/missing-replace-emoji.patch
 debloat/cloud-drafts.patch
 bugfix/media-loading-perf.patch
 feature/hide-my-phone.patch
-debloat/tap-to-open-preview.patch
+feaure/interactive-chat-preview.patch
 bugfix/photo-spoiler-power-saving.patch
 bugfix/shared-media-spoiler.patch
 debloat/notification-bubbles.patch
@@ -105,4 +105,6 @@ feature/chats-long-tap-folders.patch
 debloat/disable-scrim-blur.patch
 debloat/profile-scroll-snap.patch
 feature/deeplink-in-search.patch
+feature/main-tabs-double-tap.patch
+feature/reorder-accounts.patch
 feature/open-archive-on-pull.patch
