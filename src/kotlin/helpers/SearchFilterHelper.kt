@@ -68,6 +68,9 @@ class SearchFilterHelper(
         )
         b.contentDescription = LocaleController.getString(R.string.InuSearchFilter)
         b.setOnClickListener { showMenu(b) }
+        if (fragment.chatMode == ChatActivity.MODE_SEARCH) {
+            b.visibility = View.GONE
+        }
         searchContainer.addView(
             b,
             LayoutHelper.createFrame(44, 44f, Gravity.LEFT or Gravity.TOP, leftDp, 0f, 0f, 0f),
