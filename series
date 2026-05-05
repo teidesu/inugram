@@ -107,3 +107,4 @@ debloat/profile-scroll-snap.patch
 feature/deeplink-in-search.patch
 feature/main-tabs-double-tap.patch
 feature/reorder-accounts.patch
+feature/create-as-supergroup.patch
