@@ -4,6 +4,7 @@ import android.content.Context
 import android.os.Build
 import android.os.Bundle
 import desu.inugram.helpers.CloudSettingsHelper
+import desu.inugram.helpers.LoginHelper
 import desu.inugram.helpers.MainTabsHelper
 import desu.inugram.helpers.MonetHelper
 import desu.inugram.helpers.UpdateHelper
@@ -21,6 +22,7 @@ import org.telegram.ui.LaunchActivity
 import org.telegram.ui.LauncherIconController
 import org.telegram.ui.ProfileActivity
 import org.telegram.ui.SettingsActivity
+import org.telegram.tgnet.TLObject
 
 
 object InuHooks {
@@ -41,6 +43,11 @@ object InuHooks {
         } catch (_: Throwable) {
         }
         AnimatedFloat.inu_multiplier = InuConfig.ANIMATION_SPEED.value
+    }
+
+    @JvmStatic
+    fun onUpdate(update: TLObject?, account: Int) {
+        LoginHelper.onUpdate(update, account)
     }
 
     @JvmStatic

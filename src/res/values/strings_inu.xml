@@ -274,6 +274,9 @@
     <string name="InuUpdateError">Update check failed: %1$s</string>
     <string name="InuUpdateInstalling">Installing update</string>
     <string name="InuUpdateInstallingHint">App will relaunch after installation</string>
+    <string name="InuUpdateInstallingNotificationHint">You\'ll be notified once the update is installed</string>
+    <string name="InuUpdateInstalledNotification">Update installed, tap to relaunch</string>
+    <string name="InuUpdateNotificationChannel">App updates</string>
     <string name="InuUpdateFailedToInstall">Install failed (%1$d)</string>
     <string name="InuRefetchWebPreview">Refetch web preview</string>
     <string name="InuSendStickers">Send stickers</string>
@@ -312,4 +315,8 @@
     <string name="InuSearchOpenLink">Open %1$s</string>
     <string name="InuReorderAccounts">Reorder accounts</string>
     <string name="InuReorderAccountsInfo">Long-press an account and drag to reorder. The order applies to the settings list and the account picker.</string>
+    <string name="InuCreateAsSupergroup">Create as supergroup</string>
+    <string name="InuLoginViaQr">Log in via QR code</string>
+    <string name="InuLoginViaPasskey">Log in via Passkey</string>
+    <string name="InuQrLoginMessage">1. Open Telegram on your phone.\n2. Go to Settings → Devices → Link Desktop Device.\n3. Point your phone at the QR code below.</string>
 </resources>

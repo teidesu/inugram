@@ -1,5 +1,8 @@
 # Inugram Agent Guide
 
+`FEATURES.md` is the user-facing list of fork features/bugfixes. Keep it in sync — when
+adding, removing or meaningfully changing a patch, update `FEATURES.md` in the same change.
+
 ## Rules
 
 - Fork logic lives in `src/kotlin`, fork-owned resources in `src/res`.

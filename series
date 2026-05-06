@@ -19,7 +19,6 @@ debloat/disable-sensitive.patch
 debloat/disable-swipe-to-unarchive.patch
 feature/multi-account.patch
 feature/autofill-hints.patch
-feature/reset-pending-login.patch
 bugfix/keyboard-image-paste.patch
 feature/default-delete-for-both.patch
 debloat/hide-paid-reaction-upsell.patch
@@ -108,3 +107,7 @@ feature/deeplink-in-search.patch
 feature/main-tabs-double-tap.patch
 feature/reorder-accounts.patch
 feature/open-archive-on-pull.patch
+feature/create-as-supergroup.patch
+bugfix/profile-scroll-jump.patch
+hooks/loginactivity.patch
+feature/login-options.patch

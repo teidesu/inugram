@@ -127,7 +127,7 @@ index 0000000..0000000 100644
          PlaceProviderObject getPlaceForPhoto(MessageObject messageObject, TLRPC.FileLocation fileLocation, int index, boolean needPreview, boolean closing);
          ImageReceiver.BitmapHolder getThumbForPhoto(MessageObject messageObject, TLRPC.FileLocation fileLocation, int index);
          void willSwitchFromPhoto(MessageObject messageObject, TLRPC.FileLocation fileLocation, int index);
-@@ -7502,12 +7503,15 @@ public class PhotoViewer implements NotificationCenter.NotificationCenterDelegat
+@@ -7503,12 +7504,15 @@ public class PhotoViewer implements NotificationCenter.NotificationCenterDelegat
              sendPopupLayout.setShownFromBottom(false);
              sendPopupLayout.setBackgroundColor(0xf9222222);
  
@@ -146,7 +146,7 @@ index 0000000..0000000 100644
                      continue;
                  }
                  if (a != 1 && canEdit && !canReplace) {
-@@ -7544,6 +7548,8 @@ public class PhotoViewer implements NotificationCenter.NotificationCenterDelegat
+@@ -7545,6 +7549,8 @@ public class PhotoViewer implements NotificationCenter.NotificationCenterDelegat
                      continue;
                  } else if (a == 4 && (isCurrentVideo || captionEdit.hasTimer())) {
                      continue;
@@ -155,7 +155,7 @@ index 0000000..0000000 100644
                  }
                  final ActionBarMenuSubItem cell = new ActionBarMenuSubItem(parentActivity, a == 0, a == 3, resourcesProvider);
                  if (a == 0) {
-@@ -7564,6 +7570,9 @@ public class PhotoViewer implements NotificationCenter.NotificationCenterDelegat
+@@ -7565,6 +7571,9 @@ public class PhotoViewer implements NotificationCenter.NotificationCenterDelegat
                      } else {
                          cell.setTextAndIcon(getString(R.string.SendAsFile), R.drawable.msg_sendfile);
                      }
@@ -165,7 +165,7 @@ index 0000000..0000000 100644
                  }
                  cell.setMinimumWidth(dp(196));
                  cell.setColors(0xffffffff, 0xffffffff);
-@@ -7582,6 +7591,13 @@ public class PhotoViewer implements NotificationCenter.NotificationCenterDelegat
+@@ -7583,6 +7592,13 @@ public class PhotoViewer implements NotificationCenter.NotificationCenterDelegat
                          sendPressed(true, 0, 0);
                      } else if (a == 4) {
                          sendPressed(true, 0, 0, false, true, false);

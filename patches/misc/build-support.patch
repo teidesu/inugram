@@ -7,8 +7,8 @@ Subject: build support stuff for fork-specific code: - added kotlin - bumped min
  TMessagesProj/build.gradle                    | 106 ++++------------
  TMessagesProj/google-services.json            |  76 ++----------
  TMessagesProj/proguard-rules.pro              |  12 ++
- TMessagesProj/src/main/AndroidManifest.xml    |   1 +
- .../org/telegram/messenger/BuildVars.java     |  14 ++-
+ TMessagesProj/src/main/AndroidManifest.xml    |   7 ++
+ .../org/telegram/messenger/BuildVars.java     |  12 +-
  .../org/telegram/ui/PaymentFormActivity.java  |  28 ++---
  .../org/telegram/ui/SettingsActivity.java     |  24 +---
  TMessagesProj_App/build.gradle                | 113 ++++--------------
@@ -17,7 +17,7 @@ Subject: build support stuff for fork-specific code: - added kotlin - bumped min
  build.gradle                                  |  12 +-
  gradle.properties                             |   4 +-
  settings.gradle                               |   5 +-
- 13 files changed, 120 insertions(+), 356 deletions(-)
+ 13 files changed, 125 insertions(+), 355 deletions(-)
 
 diff --git a/TMessagesProj/build.gradle b/TMessagesProj/build.gradle
 index 0000000..0000000 100644
@@ -358,11 +358,24 @@ index 0000000..0000000 100644
      <uses-permission android:name="android.permission.READ_PHONE_NUMBERS" />
      <uses-permission android:name="android.permission.POST_NOTIFICATIONS"/>
  
+@@ -590,6 +591,12 @@
+ 
+         <receiver android:name=".NotificationDismissReceiver" android:exported="false"/>
+ 
++        <receiver android:name="desu.inugram.helpers.ApkInstaller$UpdateReceiver" android:exported="false">
++            <intent-filter>
++                <action android:name="android.intent.action.MY_PACKAGE_REPLACED" />
++            </intent-filter>
++        </receiver>
++
+         <receiver android:name=".voip.VoIPActionsReceiver" android:exported="false"/>
+ 
+         <receiver android:name=".ShortcutResultReceiver" android:exported="false"/>
 diff --git a/TMessagesProj/src/main/java/org/telegram/messenger/BuildVars.java b/TMessagesProj/src/main/java/org/telegram/messenger/BuildVars.java
 index 0000000..0000000 100644
 --- a/TMessagesProj/src/main/java/org/telegram/messenger/BuildVars.java
 +++ b/TMessagesProj/src/main/java/org/telegram/messenger/BuildVars.java
-@@ -25,23 +25,25 @@ public class BuildVars {
+@@ -25,20 +25,22 @@ public class BuildVars {
      public static boolean CHECK_UPDATES = true;
      public static boolean NO_SCOPED_STORAGE = Build.VERSION.SDK_INT <= 29;
      public static String BUILD_VERSION_STRING = BuildConfig.BUILD_VERSION_STRING;
@@ -389,11 +402,7 @@ index 0000000..0000000 100644
 +    public static boolean IS_BILLING_UNAVAILABLE = true;
  
      // works only on official app ids, disable on your forks
--    public static boolean SUPPORTS_PASSKEYS = true;
-+    public static boolean SUPPORTS_PASSKEYS = false;
- 
-     static {
-         if (ApplicationLoader.applicationContext != null) {
+     public static boolean SUPPORTS_PASSKEYS = true;
 diff --git a/TMessagesProj/src/main/java/org/telegram/ui/PaymentFormActivity.java b/TMessagesProj/src/main/java/org/telegram/ui/PaymentFormActivity.java
 index 0000000..0000000 100644
 --- a/TMessagesProj/src/main/java/org/telegram/ui/PaymentFormActivity.java

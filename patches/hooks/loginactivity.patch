@@ -1,35 +1,52 @@
 From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
 From: alina sireneva <alina@tei.su>
-Date: Fri, 10 Apr 2026 03:52:11 +0300
-Subject: a menu to reset pending login session
+Date: Tue, 5 May 2026 17:49:14 +0200
+Subject: hooks inside LoginActivity
 
 ---
- .../java/org/telegram/ui/LoginActivity.java   | 29 +++++++++++++++++--
- 1 file changed, 27 insertions(+), 2 deletions(-)
+ .../java/org/telegram/ui/LoginActivity.java    | 18 +++++++++++-------
+ 1 file changed, 11 insertions(+), 7 deletions(-)
 
 diff --git a/TMessagesProj/src/main/java/org/telegram/ui/LoginActivity.java b/TMessagesProj/src/main/java/org/telegram/ui/LoginActivity.java
 index 0000000..0000000 100644
 --- a/TMessagesProj/src/main/java/org/telegram/ui/LoginActivity.java
 +++ b/TMessagesProj/src/main/java/org/telegram/ui/LoginActivity.java
-@@ -346,6 +346,7 @@ public class LoginActivity extends BaseFragment implements NotificationCenter.No
+@@ -126,6 +126,7 @@ import org.telegram.messenger.MessagesStorage;
+ import org.telegram.messenger.NotificationCenter;
+ import org.telegram.messenger.PasskeysController;
+ import org.telegram.messenger.PushListenerController;
++import desu.inugram.helpers.LoginHelper;
+ import org.telegram.messenger.R;
+ import org.telegram.messenger.SRPHelper;
+ import org.telegram.messenger.SharedConfig;
+@@ -225,7 +226,7 @@ public class LoginActivity extends BaseFragment implements NotificationCenter.No
+             MODE_CHANGE_PHONE_NUMBER = 2,
+             MODE_CHANGE_LOGIN_EMAIL = 3;
+ 
+-    private final static int VIEW_PHONE_INPUT = 0,
++    public final static int VIEW_PHONE_INPUT = 0,
+             VIEW_CODE_MESSAGE = 1,
+             VIEW_CODE_SMS = 2,
+             VIEW_CODE_FLASH_CALL = 3,
+@@ -346,6 +347,7 @@ public class LoginActivity extends BaseFragment implements NotificationCenter.No
      private RadialProgressView radialProgressView;
  
      private ImageView proxyButtonView;
-+    private ImageView resetStorageButton;
++    private ImageView menuButton;
      private ProxyDrawable proxyDrawable;
  
      // Open animation stuff
-@@ -567,6 +568,9 @@ public class LoginActivity extends BaseFragment implements NotificationCenter.No
+@@ -567,6 +569,9 @@ public class LoginActivity extends BaseFragment implements NotificationCenter.No
                  marginLayoutParams = (MarginLayoutParams) proxyButtonView.getLayoutParams();
                  marginLayoutParams.topMargin = AndroidUtilities.dp(16) + statusBarHeight;
  
-+                marginLayoutParams = (MarginLayoutParams) resetStorageButton.getLayoutParams();
++                marginLayoutParams = (MarginLayoutParams) menuButton.getLayoutParams();
 +                marginLayoutParams.topMargin = AndroidUtilities.dp(16) + statusBarHeight;
 +
                  marginLayoutParams = (MarginLayoutParams) radialProgressView.getLayoutParams();
                  marginLayoutParams.topMargin = AndroidUtilities.dp(16) + statusBarHeight;
  
-@@ -753,15 +757,36 @@ public class LoginActivity extends BaseFragment implements NotificationCenter.No
+@@ -753,15 +758,17 @@ public class LoginActivity extends BaseFragment implements NotificationCenter.No
          proxyButtonView.setOnClickListener(v -> presentFragment(new ProxyListActivity()));
          proxyButtonView.setAlpha(0f);
          proxyButtonView.setVisibility(View.GONE);
@@ -37,26 +54,7 @@ index 0000000..0000000 100644
 +        sizeNotifierFrameLayout.addView(proxyButtonView, LayoutHelper.createFrame(32, 32, Gravity.RIGHT | Gravity.TOP, 16, 16, 56, 16));
          updateProxyButton(false, true);
  
-+        resetStorageButton = new ImageView(context);
-+        resetStorageButton.setImageResource(R.drawable.ic_ab_other);
-+        resetStorageButton.setColorFilter(Theme.getColor(Theme.key_windowBackgroundWhiteBlackText));
-+        resetStorageButton.setPadding(padding, padding, padding, padding);
-+        resetStorageButton.setOnClickListener(v -> {
-+            ItemOptions.makeOptions(this, v)
-+                .add(R.drawable.msg_delete, getString(R.string.InuResetStorage), () -> {
-+                    AlertDialog.Builder b = new AlertDialog.Builder(getParentActivity());
-+                    b.setTitle(getString(R.string.InuResetStorage));
-+                    b.setMessage(getString(R.string.InuResetStorageConfirm));
-+                    b.setPositiveButton(getString(R.string.OK), (d, w) -> {
-+                        getMessagesController().performLogout(2);
-+                        presentFragment(new LoginActivity(currentAccount), true);
-+                    });
-+                    b.setNegativeButton(getString(R.string.Cancel), null);
-+                    showDialog(b.create());
-+                })
-+                .show();
-+        });
-+        sizeNotifierFrameLayout.addView(resetStorageButton, LayoutHelper.createFrame(32, 32, Gravity.RIGHT | Gravity.TOP, 0, 16, 16, 0));
++        menuButton = LoginHelper.addMenuButton(sizeNotifierFrameLayout, this, currentAccount, () -> activityMode == MODE_LOGIN && currentViewNum == VIEW_PHONE_INPUT);
 +
          radialProgressView = new RadialProgressView(context);
          radialProgressView.setSize(AndroidUtilities.dp(20));
@@ -68,3 +66,22 @@ index 0000000..0000000 100644
  
          floatingButtonIcon = new TransformableLoginButtonView(context);
          floatingButtonIcon.setTransformType(TransformableLoginButtonView.TRANSFORM_OPEN_ARROW);
+@@ -1626,7 +1633,7 @@ public class LoginActivity extends BaseFragment implements NotificationCenter.No
+         onAuthSuccess(res);
+     }
+ 
+-    private void onAuthSuccess(TLRPC.TL_auth_authorization res) {
++    public void onAuthSuccess(TLRPC.TL_auth_authorization res) {
+         onAuthSuccess(res, false);
+     }
+ 
+@@ -3260,9 +3267,6 @@ public class LoginActivity extends BaseFragment implements NotificationCenter.No
+                         }
+                     }
+                 }
+-                if (activityMode == MODE_LOGIN) {
+-                    requestPasskey(false);
+-                }
+             }, SHOW_DELAY);
+         }
+ 

@@ -1,0 +1,120 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: alina sireneva <alina@tei.su>
+Date: Tue, 5 May 2026 17:49:44 +0200
+Subject: support patch for passkey and qr login
+
+---
+ TMessagesProj/src/main/AndroidManifest.xml    |  1 +
+ .../messenger/MessagesController.java         |  1 +
+ .../messenger/PasskeysController.java         | 22 +++++++++++++++----
+ 3 files changed, 20 insertions(+), 4 deletions(-)
+
+diff --git a/TMessagesProj/src/main/AndroidManifest.xml b/TMessagesProj/src/main/AndroidManifest.xml
+index 0000000..0000000 100644
+--- a/TMessagesProj/src/main/AndroidManifest.xml
++++ b/TMessagesProj/src/main/AndroidManifest.xml
+@@ -20,6 +20,7 @@
+     <uses-feature android:name="android.hardware.sensor.proximity" android:required="false" />
+ 
+     <uses-permission android:name="android.permission.READ_CLIPBOARD"/>
++    <uses-permission android:name="android.permission.CREDENTIAL_MANAGER_SET_ORIGIN" />
+     <uses-permission android:name="android.permission.BLUETOOTH_CONNECT" />
+     <uses-permission android:name="android.permission.INTERNET" />
+     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+diff --git a/TMessagesProj/src/main/java/org/telegram/messenger/MessagesController.java b/TMessagesProj/src/main/java/org/telegram/messenger/MessagesController.java
+index 0000000..0000000 100644
+--- a/TMessagesProj/src/main/java/org/telegram/messenger/MessagesController.java
++++ b/TMessagesProj/src/main/java/org/telegram/messenger/MessagesController.java
+@@ -17688,6 +17688,7 @@ public class MessagesController extends BaseController implements NotificationCe
+             if (BuildVars.LOGS_ENABLED && baseUpdate != null) {
+                 FileLog.d("process update " + baseUpdate.getClass().getSimpleName());
+             }
++            desu.inugram.InuHooks.onUpdate(baseUpdate, currentAccount);
+             if (baseUpdate instanceof TLRPC.TL_updateNewMessage || baseUpdate instanceof TLRPC.TL_updateNewChannelMessage || baseUpdate instanceof TLRPC.TL_updateNewScheduledMessage) {
+                 TLRPC.Message message;
+                 if (baseUpdate instanceof TLRPC.TL_updateNewMessage) {
+diff --git a/TMessagesProj/src/main/java/org/telegram/messenger/PasskeysController.java b/TMessagesProj/src/main/java/org/telegram/messenger/PasskeysController.java
+index 0000000..0000000 100644
+--- a/TMessagesProj/src/main/java/org/telegram/messenger/PasskeysController.java
++++ b/TMessagesProj/src/main/java/org/telegram/messenger/PasskeysController.java
+@@ -26,6 +26,7 @@ import androidx.credentials.exceptions.GetCredentialException;
+ import androidx.credentials.exceptions.GetCredentialInterruptedException;
+ import androidx.credentials.exceptions.NoCredentialException;
+ 
++import desu.inugram.helpers.LoginHelper;
+ import org.json.JSONObject;
+ import org.json.JSONStringer;
+ import org.telegram.messenger.browser.Browser;
+@@ -74,10 +75,16 @@ public class PasskeysController {
+                 }
+ 
+                 final String requestJson;
++                final String rpId;
++                final String clientDataJSON;
++                final byte[] clientDataHash;
+                 try {
+                     final JSONObject obj = new JSONObject(res.options.data);
+                     final JSONObject publicKeyObj = obj.getJSONObject("publicKey");
+                     requestJson = publicKeyObj.toString();
++                    rpId = "https://" + publicKeyObj.getJSONObject("rp").getString("id");
++                    clientDataJSON = LoginHelper.makeClientDataJSON(false, publicKeyObj.getString("challenge"), rpId);
++                    clientDataHash = LoginHelper.sha256(clientDataJSON);
+                 } catch (Exception e) {
+                     FileLog.e(e);
+                     done.run(null, e.getMessage());
+@@ -85,7 +92,7 @@ public class PasskeysController {
+                 }
+ 
+                 final CreatePublicKeyCredentialRequest credentialRequest =
+-                    new CreatePublicKeyCredentialRequest(requestJson);
++                    new CreatePublicKeyCredentialRequest(requestJson, clientDataHash, false, rpId);
+ 
+                 try {
+                     credentialManager.createCredential(context, credentialRequest, ktxCallback((res2, err2) -> {
+@@ -120,7 +127,7 @@ public class PasskeysController {
+                             final JSONObject response = json.getJSONObject("response");
+                             final TL_account.inputPasskeyResponseRegister passkeyResponse = new TL_account.inputPasskeyResponseRegister();
+                             passkeyResponse.client_data = new TLRPC.TL_dataJSON();
+-                            passkeyResponse.client_data.data = new String(Base64.decode(response.getString("clientDataJSON"), Base64.URL_SAFE));
++                            passkeyResponse.client_data.data = clientDataJSON;
+                             passkeyResponse.attestation_object = Base64.decode(response.getString("attestationObject"), Base64.URL_SAFE);
+ 
+                             FileLog.d("AAGUID: " + bytesToHex(Arrays.copyOfRange(passkeyResponse.attestation_object, 67, 67 + 16)));
+@@ -181,20 +188,27 @@ public class PasskeysController {
+             }
+ 
+             final String requestJson;
++            final String rpId;
++            final String clientDataJSON;
++            final byte[] clientDataHash;
+             try {
+                 final JSONObject obj = new JSONObject(res.options.data);
+                 final JSONObject publicKeyObj = obj.getJSONObject("publicKey");
+                 requestJson = publicKeyObj.toString();
++                rpId = "https://" + publicKeyObj.getString("rpId");
++                clientDataJSON = LoginHelper.makeClientDataJSON(true, publicKeyObj.getString("challenge"), rpId);
++                clientDataHash = LoginHelper.sha256(clientDataJSON);
+             } catch (Exception e) {
+                 FileLog.e(e);
+                 done.run(0L, null, e.getMessage());
+                 return;
+             }
+ 
+-            final GetPublicKeyCredentialOption passkeyOption = new GetPublicKeyCredentialOption(requestJson);
++            final GetPublicKeyCredentialOption passkeyOption = new GetPublicKeyCredentialOption(requestJson, clientDataHash);
+             final GetCredentialRequest request = new GetCredentialRequest.Builder()
+                     .addCredentialOption(passkeyOption)
+                     .setPreferImmediatelyAvailableCredentials(!clickedButton)
++                    .setOrigin(rpId)
+                     .build();
+ 
+             try {
+@@ -220,7 +234,7 @@ public class PasskeysController {
+                             final JSONObject response = json.getJSONObject("response");
+                             final TL_account.inputPasskeyResponseLogin passkeyResponse = new TL_account.inputPasskeyResponseLogin();
+                             passkeyResponse.client_data = new TLRPC.TL_dataJSON();
+-                            passkeyResponse.client_data.data = new String(Base64.decode(response.getString("clientDataJSON"), Base64.URL_SAFE));
++                            passkeyResponse.client_data.data = clientDataJSON;
+ 
+                             passkeyResponse.authenticator_data = Base64.decode(response.getString("authenticatorData"), Base64.URL_SAFE);
+                             passkeyResponse.signature = Base64.decode(response.getString("signature"), Base64.URL_SAFE);

@@ -16,6 +16,8 @@ you can expect:
 
 all that while still allowing users to disable our custom tweaks to (mostly) achieve the stock experience (but why?)
 
+see [FEATURES.md](FEATURES.md) for a non-exhaustive list of what's added/tweaked/fixed (kept in sync as patches land).
+
 ### why should i use this over whatevergram?
 
 i don't know. maybe you shouldn't.
@@ -110,7 +112,7 @@ as a rule of thumb: prefer the former, but if you get a lot of merge conflicts, 
 ## acknowledgements
 
 - the original [Telegram Android](https://github.com/DrKLO/Telegram) - the basis for this fork
-- a bunch of features were ported from [Nekogram](https://github.com/Nekogram/Nekogram) and [NagramX](https://github.com/risin42/NagramX)
+- a bunch of features were ported from [Nekogram](https://github.com/Nekogram/Nekogram), [NagramX](https://github.com/risin42/NagramX), [materialgram](https://github.com/kukuruzka165/materialgram)
 - `src/res/drawable/icplaceholder.jpg` is a blurred version of [this artwork by Chobles](https://www.pixiv.net/en/artworks/128756420)
 - Tabler icons by [Tabler Team](https://tabler.io/icons)
 - Solar icon pack by [480 Design](https://t.me/Design480)

@@ -66,7 +66,7 @@ async function persistSession(session: string) {
 
 try {
   const hashtag = info.kind === 'release' ? '#release' : '#canary'
-  const commits = info.commits.slice().reverse()
+  const commits = info.commits.filter(c => !c.message.startsWith('infra:')).reverse()
   const buildCaption = (cs: typeof commits) => html`
     ${hashtag}
     <br/>

@@ -4,8 +4,8 @@ Date: Sat, 11 Apr 2026 03:35:42 +0300
 Subject: "copy photo" in photo viewer
 
 ---
- .../java/org/telegram/ui/PhotoViewer.java     | 33 +++++++++++++++++--
- 1 file changed, 30 insertions(+), 3 deletions(-)
+ .../java/org/telegram/ui/PhotoViewer.java     | 36 +++++++++++++++++--
+ 1 file changed, 33 insertions(+), 3 deletions(-)
 
 diff --git a/TMessagesProj/src/main/java/org/telegram/ui/PhotoViewer.java b/TMessagesProj/src/main/java/org/telegram/ui/PhotoViewer.java
 index 0000000..0000000 100644
@@ -55,7 +55,15 @@ index 0000000..0000000 100644
          pipItem = menuItem.addSubItem(gallery_menu_pip, R.drawable.menu_video_pip, getString(R.string.PipMinimize)).setColors(0xfffafafa, 0xfffafafa);
          allMediaItem = menuItem.addSubItem(gallery_menu_showall, R.drawable.msg_media, getString(R.string.ShowAllMedia));
          allMediaItem.setColors(0xfffafafa, 0xfffafafa);
-@@ -14116,6 +14119,7 @@ public class PhotoViewer implements NotificationCenter.NotificationCenterDelegat
+@@ -6004,6 +6007,7 @@ public class PhotoViewer implements NotificationCenter.NotificationCenterDelegat
+         menuItem.addSubItem(gallery_menu_hide_translation, R.drawable.msg_translate, getString(R.string.HideTranslation)).setColors(0xfffafafa, 0xfffafafa);
+         menuItem.addSubItem(gallery_menu_delete, R.drawable.msg_delete, getString(R.string.Delete)).setColors(0xfffafafa, 0xfffafafa);
+         menuItem.addSubItem(gallery_menu_cancel_loading, R.drawable.msg_cancel, getString(R.string.StopDownload)).setColors(0xfffafafa, 0xfffafafa);
++        desu.inugram.helpers.PhotoViewerHelper.addFooter(menuItem);
+         menuItem.redrawPopup(0xf9222222);
+         menuItem.hideSubItem(gallery_menu_translate);
+         menuItem.hideSubItem(gallery_menu_hide_translation);
+@@ -14116,6 +14120,7 @@ public class PhotoViewer implements NotificationCenter.NotificationCenterDelegat
          menuItem.hideSubItem(gallery_menu_report);
          menuItem.hideSubItem(gallery_menu_share);
          menuItem.hideSubItem(gallery_menu_openin);
@@ -63,7 +71,15 @@ index 0000000..0000000 100644
          menuItem.hideSubItem(gallery_menu_savegif);
          menuItem.hideSubItem(gallery_menu_masks2);
          menuItem.hideSubItem(gallery_menu_edit_avatar);
-@@ -14713,6 +14717,7 @@ public class PhotoViewer implements NotificationCenter.NotificationCenterDelegat
+@@ -14653,6 +14658,7 @@ public class PhotoViewer implements NotificationCenter.NotificationCenterDelegat
+                 subtitle = LocaleController.formatDateAudio(newMessageObject.messageOwner.date, false);
+             }
+             actionBarContainer.setSubtitle(subtitle, animated);
++            desu.inugram.helpers.PhotoViewerHelper.setFooter(newMessageObject);
+ 
+             boolean isInvoice = newMessageObject.isInvoice();
+             boolean noforwards = MessagesController.getInstance(currentAccount).isPeerNoForwards(newMessageObject.getDialogId()) || (newMessageObject.messageOwner != null && newMessageObject.messageOwner.noforwards) || newMessageObject.hasRevealedExtendedMedia();
+@@ -14713,6 +14719,7 @@ public class PhotoViewer implements NotificationCenter.NotificationCenterDelegat
                      menuItem.hideSubItem(gallery_menu_hide_translation);
                  }
                  allowShare = !noforwards;
@@ -71,7 +87,15 @@ index 0000000..0000000 100644
                  if (newMessageObject.isNewGif() && allowShare && !DialogObject.isEncryptedDialog(newMessageObject.getDialogId())) {
                      menuItem.showSubItem(gallery_menu_savegif);
                  }
-@@ -14982,6 +14987,7 @@ public class PhotoViewer implements NotificationCenter.NotificationCenterDelegat
+@@ -14955,6 +14962,7 @@ public class PhotoViewer implements NotificationCenter.NotificationCenterDelegat
+                 ImageLocation imageLocation = imagesArrLocations.get(index);
+                 if (imageLocation != null && imageLocation.photo != null) {
+                     actionBarContainer.setSubtitle(LocaleController.formatDateTime(imageLocation.photo.date, true), animated);
++                    desu.inugram.helpers.PhotoViewerHelper.setFooter(imageLocation, currentAccount);
+                 } else {
+                     actionBarContainer.setSubtitle("", animated);
+                 }
+@@ -14982,6 +14990,7 @@ public class PhotoViewer implements NotificationCenter.NotificationCenterDelegat
                  galleryGap.setVisibility(View.VISIBLE);
              }
              allowShare = !noforwards;
@@ -79,7 +103,7 @@ index 0000000..0000000 100644
              menuItem.showSubItem(gallery_menu_share);
              menuItem.checkHideMenuItem();
              groupedPhotosListView.fillList();
-@@ -15260,6 +15266,7 @@ public class PhotoViewer implements NotificationCenter.NotificationCenterDelegat
+@@ -15260,6 +15269,7 @@ public class PhotoViewer implements NotificationCenter.NotificationCenterDelegat
              TLRPC.PageBlock pageBlock = pageBlocksAdapter.get(switchingToIndex);
              caption = pageBlocksAdapter.getCaption(switchingToIndex);
              isVideo = pageBlocksAdapter.isVideo(switchingToIndex);
@@ -87,7 +111,7 @@ index 0000000..0000000 100644
              if (isVideo) {
                  if (allowShare) {
                      menuItem.showSubItem(gallery_menu_openin);
-@@ -23444,6 +23451,26 @@ public class PhotoViewer implements NotificationCenter.NotificationCenterDelegat
+@@ -23444,6 +23454,26 @@ public class PhotoViewer implements NotificationCenter.NotificationCenterDelegat
          return pipItem != null && pipItem.isEnabled() && isPlaying;
      }
  
