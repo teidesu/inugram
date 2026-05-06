@@ -4,8 +4,8 @@ Date: Sun, 12 Apr 2026 18:08:10 +0300
 Subject: show peer id in profile
 
 ---
- .../main/java/org/telegram/ui/ProfileActivity.java  | 13 ++++++++++++-
- 1 file changed, 12 insertions(+), 1 deletion(-)
+ .../java/org/telegram/ui/ProfileActivity.java    | 16 +++++++++++++++-
+ 1 file changed, 15 insertions(+), 1 deletion(-)
 
 diff --git a/TMessagesProj/src/main/java/org/telegram/ui/ProfileActivity.java b/TMessagesProj/src/main/java/org/telegram/ui/ProfileActivity.java
 index 0000000..0000000 100644
@@ -36,7 +36,17 @@ index 0000000..0000000 100644
              } else if (position == locationRow) {
                  if (chatInfo.location instanceof TLRPC.TL_channelLocation) {
                      LocationActivity fragment = new LocationActivity(LocationActivity.LOCATION_TYPE_GROUP_VIEW);
-@@ -10265,6 +10269,7 @@ public class ProfileActivity extends BaseFragment implements NotificationCenter.
+@@ -4937,6 +4941,9 @@ public class ProfileActivity extends BaseFragment implements NotificationCenter.
+                 } else if (position == noteRow) {
+                     editNotes(view, position);
+                     return true;
++                } else if (position == inu_idRow) {
++                    ProfileHelper.onIdRowClick(ProfileActivity.this, listView.getClipBackground(view), view, userId, chatId, getAccountInstance());
++                    return true;
+                 } else {
+                     if (editRow(view, position)) return true;
+                     return processOnClickOrPress(position, view, view.getWidth() / 2f, (int) (view.getHeight() * .75f));
+@@ -10265,6 +10272,7 @@ public class ProfileActivity extends BaseFragment implements NotificationCenter.
          birthdayRow = -1;
          setUsernameRow = -1;
          bioRow = -1;
@@ -44,7 +54,7 @@ index 0000000..0000000 100644
          channelRow = -1;
          channelDividerRow = -1;
          phoneSuggestionSectionRow = -1;
-@@ -10426,6 +10431,7 @@ public class ProfileActivity extends BaseFragment implements NotificationCenter.
+@@ -10426,6 +10434,7 @@ public class ProfileActivity extends BaseFragment implements NotificationCenter.
                  numberSectionRow = rowCount++;
                  numberRow = rowCount++;
                  setUsernameRow = rowCount++;
@@ -52,7 +62,7 @@ index 0000000..0000000 100644
                  bioRow = rowCount++;
  
                  settingsSectionRow = rowCount++;
-@@ -10518,6 +10524,7 @@ public class ProfileActivity extends BaseFragment implements NotificationCenter.
+@@ -10518,6 +10527,7 @@ public class ProfileActivity extends BaseFragment implements NotificationCenter.
                  if (user != null && username != null) {
                      usernameRow = rowCount++;
                  }
@@ -60,7 +70,7 @@ index 0000000..0000000 100644
                  if (userInfo != null) {
                      if (userInfo.birthday != null) {
                          birthdayRow = rowCount++;
-@@ -10665,6 +10672,7 @@ public class ProfileActivity extends BaseFragment implements NotificationCenter.
+@@ -10665,6 +10675,7 @@ public class ProfileActivity extends BaseFragment implements NotificationCenter.
                      usernameRow = rowCount++;
                  }
              }
@@ -68,7 +78,7 @@ index 0000000..0000000 100644
              if (emptyRow < 0 && emptyRow2 < 0) {
                  if (hasMusic || peerColor != null || actionsView == null) {
                      emptyRow2 = rowCount++;
-@@ -13253,6 +13261,8 @@ public class ProfileActivity extends BaseFragment implements NotificationCenter.
+@@ -13253,6 +13264,8 @@ public class ProfileActivity extends BaseFragment implements NotificationCenter.
                          }
                          isFragmentPhoneNumber = phoneNumber != null && phoneNumber.matches("888\\d{8}");
                          detailCell.setTextAndValue(text, LocaleController.getString(isFragmentPhoneNumber ? R.string.AnonymousNumber : R.string.PhoneMobile), false);
@@ -77,7 +87,7 @@ index 0000000..0000000 100644
                      } else if (position == noteRow) {
                          final TLRPC.UserFull userInfo = getMessagesController().getUserFull(userId);
                          if (userInfo == null) return;
-@@ -14055,7 +14065,7 @@ public class ProfileActivity extends BaseFragment implements NotificationCenter.
+@@ -14055,7 +14068,7 @@ public class ProfileActivity extends BaseFragment implements NotificationCenter.
              if (position == infoHeaderRow || position == membersHeaderRow || position == settingsSectionRow2 ||
                      position == numberSectionRow || position == helpHeaderRow || position == debugHeaderRow || position == botPermissionsHeader) {
                  return VIEW_TYPE_HEADER;
@@ -86,7 +96,7 @@ index 0000000..0000000 100644
                  return VIEW_TYPE_TEXT_DETAIL;
              } else if (position == usernameRow || position == setUsernameRow) {
                  return VIEW_TYPE_TEXT_DETAIL_MULTILINE;
-@@ -15491,6 +15501,7 @@ public class ProfileActivity extends BaseFragment implements NotificationCenter.
+@@ -15491,6 +15504,7 @@ public class ProfileActivity extends BaseFragment implements NotificationCenter.
              put(++pointer, bizHoursRow, sparseIntArray);
              put(++pointer, bizLocationRow, sparseIntArray);
              put(++pointer, birthdayRow, sparseIntArray);

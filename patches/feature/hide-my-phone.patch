@@ -12,7 +12,7 @@ diff --git a/TMessagesProj/src/main/java/org/telegram/ui/ProfileActivity.java b/
 index 0000000..0000000 100644
 --- a/TMessagesProj/src/main/java/org/telegram/ui/ProfileActivity.java
 +++ b/TMessagesProj/src/main/java/org/telegram/ui/ProfileActivity.java
-@@ -13256,7 +13256,7 @@ public class ProfileActivity extends BaseFragment implements NotificationCenter.
+@@ -13259,7 +13259,7 @@ public class ProfileActivity extends BaseFragment implements NotificationCenter.
                          if (user != null && !TextUtils.isEmpty(vcardPhone)) {
                              text = PhoneFormat.getInstance().format("+" + vcardPhone);
                              phoneNumber = vcardPhone;

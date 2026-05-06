@@ -11,7 +11,7 @@ diff --git a/TMessagesProj/src/main/java/org/telegram/ui/ProfileActivity.java b/
 index 0000000..0000000 100644
 --- a/TMessagesProj/src/main/java/org/telegram/ui/ProfileActivity.java
 +++ b/TMessagesProj/src/main/java/org/telegram/ui/ProfileActivity.java
-@@ -15241,8 +15241,8 @@ public class ProfileActivity extends BaseFragment implements NotificationCenter.
+@@ -15244,8 +15244,8 @@ public class ProfileActivity extends BaseFragment implements NotificationCenter.
              if (view != null) {
                  savedScrollPosition = position;
                  savedScrollOffset = view.getTop();
