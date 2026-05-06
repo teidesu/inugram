@@ -12,6 +12,7 @@
     <string name="InuOther">Other</string>
     <string name="InuMainPage">Main page</string>
     <string name="InuChatList">Chat list</string>
+    <string name="InuOpenArchiveOnPull">Open archive on pull</string>
     <string name="InuDoubleTapActions">Double tap actions</string>
     <string name="InuDoubleTapDelay">Double tap delay</string>
     <string name="InuIncomingMessages">Incoming messages</string>

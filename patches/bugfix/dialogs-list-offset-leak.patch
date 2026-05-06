@@ -1,0 +1,34 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: alina sireneva <alina@tei.su>
+Date: Wed, 6 May 2026 14:59:48 +0200
+Subject: makes DialogsActivity.viewOffset non-static, preventing leakage between instances
+
+---
+ .../src/main/java/org/telegram/ui/DialogsActivity.java       | 5 ++---
+ 1 file changed, 2 insertions(+), 3 deletions(-)
+
+diff --git a/TMessagesProj/src/main/java/org/telegram/ui/DialogsActivity.java b/TMessagesProj/src/main/java/org/telegram/ui/DialogsActivity.java
+index 0000000..0000000 100644
+--- a/TMessagesProj/src/main/java/org/telegram/ui/DialogsActivity.java
++++ b/TMessagesProj/src/main/java/org/telegram/ui/DialogsActivity.java
+@@ -1659,10 +1659,9 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
+         }
+     }
+ 
+-    public static float viewOffset = 0.0f;
+-
+     public class DialogsRecyclerView extends BlurredRecyclerView implements StoriesListPlaceProvider.ClippedView {
+ 
++        public float viewOffset = 0.0f;
+         public boolean updateDialogsOnNextDraw;
+         private boolean firstLayout = true;
+         private boolean ignoreLayout;
+@@ -1702,7 +1701,7 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
+         }
+ 
+         public void setViewsOffset(float viewOffset) {
+-            DialogsActivity.viewOffset = viewOffset;
++            this.viewOffset = viewOffset;
+             int n = getChildCount();
+             for (int i = 0; i < n; i++) {
+                 getChildAt(i).setTranslationY(viewOffset);

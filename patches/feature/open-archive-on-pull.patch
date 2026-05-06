@@ -1,0 +1,37 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: alina sireneva <alina@tei.su>
+Date: Wed, 6 May 2026 15:34:00 +0200
+Subject: open archive when pulling up in the dialogs list
+
+---
+ .../java/org/telegram/ui/DialogsActivity.java   | 17 +++++++++++++++++
+ 1 file changed, 17 insertions(+)
+
+diff --git a/TMessagesProj/src/main/java/org/telegram/ui/DialogsActivity.java b/TMessagesProj/src/main/java/org/telegram/ui/DialogsActivity.java
+index 0000000..0000000 100644
+--- a/TMessagesProj/src/main/java/org/telegram/ui/DialogsActivity.java
++++ b/TMessagesProj/src/main/java/org/telegram/ui/DialogsActivity.java
+@@ -2212,6 +2212,23 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
+                             disableActionBarScrolling = true;
+                             smoothScrollBy(0, diff, CubicBezierInterpolator.EASE_OUT_QUINT);
+                             parentPage.archivePullViewState = ARCHIVE_ITEM_STATE_HIDDEN;
++                        } else if (desu.inugram.InuConfig.OPEN_ARCHIVE_ON_PULL.getValue() && !onlySelect) {
++                            Bundle args = new Bundle();
++                            args.putInt("folderId", view.getCurrentDialogFolderId());
++                            presentFragment(new DialogsActivity(args));
++                            AndroidUtilities.runOnUIThread(() -> {
++                                parentPage.layoutManager.scrollToPositionWithOffset(1, (int) scrollYOffset);
++                                parentPage.archivePullViewState = ARCHIVE_ITEM_STATE_HIDDEN;
++                                setViewsOffset(0);
++                                startArchivePullingTime = 0;
++                                canShowHiddenArchive = false;
++                                if (parentPage.pullForegroundDrawable != null) {
++                                    parentPage.pullForegroundDrawable.colorize(false);
++                                    parentPage.pullForegroundDrawable.resetText();
++                                    parentPage.pullForegroundDrawable.setPullProgress(0f);
++                                }
++                            }, 300);
++                            return result;
+                         } else {
+                             if (parentPage.archivePullViewState != ARCHIVE_ITEM_STATE_SHOWED) {
+                                 if (getViewOffset() == 0) {

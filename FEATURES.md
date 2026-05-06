@@ -35,6 +35,7 @@ most things are toggleable in `Settings → Inugram`, with sensible opinionated 
 - 🐶 "create as supergroup" toggle in group creation
 - 🐶 deeplink / username quick-open from global search
 - mutual contact icon in contacts list
+- open archive directly on pull-down (🐶 done right, without revealing the cell)
 
 ## chats
 
