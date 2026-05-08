@@ -55,6 +55,7 @@ most things are toggleable in `Settings → Inugram`, with sensible opinionated 
 - hide channel and replies (🐶) bottom bar (mute/join/etc)
 - send message to discussion group without joining
 - 🐶 search: media-type filter + "show only matches"
+- 🐶 "from user" picker in search also finds users not in chat (like tdesktop)
 - static pinned reactions in the reaction bar
 - 🐶 reachable reactions bar (moved to the bottom of message menu)
 - 🐶 reachable "seen by" (moved to bottom of message menu)

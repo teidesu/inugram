@@ -208,6 +208,14 @@ class InuChatsSettingsActivity : InuSettingsPageActivity() {
                 LocaleController.getString(R.string.InuDisableChatTitlePhone)
             ).setChecked(InuConfig.DISABLE_CHAT_TITLE_PHONE.value)
         )
+        items.add(
+            mkTwoLineCheckItem(
+                TOGGLE_SEARCH_FROM_GLOBAL,
+                R.string.InuSearchFromGlobal,
+                R.string.InuSearchFromGlobalInfo,
+                InuConfig.SEARCH_FROM_GLOBAL.value,
+            )
+        )
         // end misc section
     }
 
@@ -302,6 +310,11 @@ class InuChatsSettingsActivity : InuSettingsPageActivity() {
                 val new = InuConfig.CHAT_VIEWS_BOTTOM.toggle()
                 (view as? NotificationsCheckCell)?.isChecked = new
             }
+
+            TOGGLE_SEARCH_FROM_GLOBAL -> {
+                val new = InuConfig.SEARCH_FROM_GLOBAL.toggle()
+                (view as? NotificationsCheckCell)?.isChecked = new
+            }
         }
     }
 
@@ -319,6 +332,7 @@ class InuChatsSettingsActivity : InuSettingsPageActivity() {
         private val TOGGLE_HIDE_REACTION_ENTRY = InuUtils.generateId()
         private val TOGGLE_CHAT_VIEWS_BOTTOM = InuUtils.generateId()
         private val BUTTON_PINNED_REACTIONS = InuUtils.generateId()
+        private val TOGGLE_SEARCH_FROM_GLOBAL = InuUtils.generateId()
 
     }
 }

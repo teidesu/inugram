@@ -353,6 +353,9 @@ object InuConfig {
     val DISABLE_CHAT_TITLE_PHONE = BoolItem("disable_chat_title_phone", true)
 
     @JvmField
+    val SEARCH_FROM_GLOBAL = BoolItem("search_from_global", true)
+
+    @JvmField
     val HIDE_MY_PHONE_NUMBER = BoolItem("hide_my_phone_number", true)
 
     @JvmField

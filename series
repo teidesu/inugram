@@ -114,3 +114,4 @@ feature/open-archive-on-pull.patch
 hooks/messagescontroller.patch
 feature/maps.patch
 feature/translator.patch
+feature/global-from-user-search.patch

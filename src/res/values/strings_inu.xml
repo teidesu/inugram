@@ -140,6 +140,8 @@
     <string name="InuMutualContact">Mutual contact</string>
     <string name="InuMutualContactDescription">This contact is a mutual contact</string>
     <string name="InuDisableChatTitlePhone">Never show phone number in title</string>
+    <string name="InuSearchFromGlobal">Pick from-user globally</string>
+    <string name="InuSearchFromGlobalInfo">When filtering chat search by sender, also include users matched globally — not just chat members</string>
     <string name="InuDisableChatPreviewExpand">Interactive chat preview</string>
     <string name="InuDisableChatPreviewExpandInfo">Disable tap-to-expand, and make the bubbles interactive instead</string>
     <string name="InuHideMyPhoneNumber">Hide my phone number</string>

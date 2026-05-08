@@ -1,0 +1,49 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: alina sireneva <alina@tei.su>
+Date: Fri, 8 May 2026 20:45:46 +0200
+Subject: also use global contacts.search for "from user" picker in search
+
+---
+ .../java/org/telegram/ui/Adapters/MentionsAdapter.java    | 8 ++++++--
+ 1 file changed, 6 insertions(+), 2 deletions(-)
+
+diff --git a/TMessagesProj/src/main/java/org/telegram/ui/Adapters/MentionsAdapter.java b/TMessagesProj/src/main/java/org/telegram/ui/Adapters/MentionsAdapter.java
+index 0000000..0000000 100644
+--- a/TMessagesProj/src/main/java/org/telegram/ui/Adapters/MentionsAdapter.java
++++ b/TMessagesProj/src/main/java/org/telegram/ui/Adapters/MentionsAdapter.java
+@@ -101,7 +101,7 @@ public class MentionsAdapter extends RecyclerListView.SelectionAdapter implement
+     private final boolean stories;
+     private TLRPC.ChatFull info;
+     private SearchAdapterHelper searchAdapterHelper;
+-    private ArrayList<TLObject> searchResultUsernames;
++    public ArrayList<TLObject> searchResultUsernames;
+     private LongSparseArray<TLObject> searchResultUsernamesMap;
+     private Runnable searchGlobalRunnable;
+     private String hintHashtag;
+@@ -119,7 +119,7 @@ public class MentionsAdapter extends RecyclerListView.SelectionAdapter implement
+     private long searchResultBotContextSwitchUserId;
+     private TLRPC.TL_inlineBotSwitchPM searchResultBotContextSwitch;
+     private TLRPC.TL_inlineBotWebView searchResultBotWebViewSwitch;
+-    private MentionsAdapterDelegate delegate;
++    public MentionsAdapterDelegate delegate;
+     private LongSparseArray<TL_bots.BotInfo> botInfo;
+     private int resultStartPosition;
+     private int resultLength;
+@@ -949,6 +949,7 @@ public class MentionsAdapter extends RecyclerListView.SelectionAdapter implement
+             AndroidUtilities.cancelRunOnUIThread(searchGlobalRunnable);
+             searchGlobalRunnable = null;
+         }
++        desu.inugram.helpers.SearchFromHelper.cancel();
+         if (checkAgainRunnable != null) {
+             AndroidUtilities.cancelRunOnUIThread(checkAgainRunnable);
+             checkAgainRunnable = null;
+@@ -1500,6 +1501,9 @@ public class MentionsAdapter extends RecyclerListView.SelectionAdapter implement
+             } else {
+                 showUsersResult(newResult, newMap, true);
+             }
++            if (forSearch && desu.inugram.InuConfig.SEARCH_FROM_GLOBAL.getValue()) {
++                desu.inugram.helpers.SearchFromHelper.queryAndMerge(this, currentAccount, usernameString);
++            }
+         } else if (foundType == 1) {
+             ArrayList<String> newResult = new ArrayList<>();
+             String hashtagString = result.toString().toLowerCase();
