@@ -149,7 +149,19 @@ object ChatHelper {
         options.add(OPTION_DETAILS)
         icons.add(R.drawable.msg_info)
 
-        if (TranslateHelper.isManualTranslated(selectedObject, selectedObjectGroup)) {
+        if (
+            !options.contains(ChatActivity.OPTION_TRANSLATE) &&
+            !TranslateHelper.isManuallyAffected(selectedObject, selectedObjectGroup) &&
+            TranslateHelper.hasTranslatableWebPage(selectedObject)
+        ) {
+            val pinIdx = options.indexOf(ChatActivity.OPTION_PIN)
+            val insertIdx = if (pinIdx >= 0) pinIdx + 1 else options.size
+            items.add(insertIdx, LocaleController.getString(R.string.TranslateMessage))
+            options.add(insertIdx, ChatActivity.OPTION_TRANSLATE)
+            icons.add(insertIdx, R.drawable.msg_translate)
+        }
+
+        if (TranslateHelper.isManuallyAffected(selectedObject, selectedObjectGroup)) {
             val idx = options.indexOf(ChatActivity.OPTION_TRANSLATE)
             if (idx >= 0) {
                 items.removeAt(idx)

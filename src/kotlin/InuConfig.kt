@@ -473,5 +473,8 @@ object InuConfig {
     val IN_PLACE_TRANSLATION = BoolItem("in_place_translation", true)
 
     @JvmField
+    val TRANSLATE_WEB_PREVIEWS = BoolItem("translate_web_previews", true)
+
+    @JvmField
     val ACCOUNT_ORDER = StringItem("account_order", "", exportable = false)
 }

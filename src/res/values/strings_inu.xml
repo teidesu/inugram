@@ -130,6 +130,8 @@
     <string name="InuCallConfirmationText">Call **%1$s**?</string>
     <string name="InuDisableChatBubbles">Disable conversation bubbles</string>
     <string name="InuInPlaceTranslation">In-place translation</string>
+    <string name="InuTranslateWebPreviews">Translate web previews</string>
+    <string name="InuTranslateWebPreviewsInfo">Also translate link preview title/description. Translated independently from the message body, so it works even when the message language is in Do Not Translate.</string>
     <string name="InuTranslator">Translator</string>
     <string name="InuTranslationTarget">Target language</string>
     <string name="InuTranslationTargetFollowApp">Follow app</string>

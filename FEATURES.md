@@ -72,7 +72,7 @@ most things are toggleable in `Settings → Inugram`, with sensible opinionated 
 - show id in profile, show user json
 - long-tap inline callback button to copy text or callback data
 - "select between messages" (🐶 done right, with proper capping)
-- in-place message translation
+- in-place message translation, with optional web preview translation
 
 ## message input / formatting
 
@@ -116,6 +116,7 @@ most things are toggleable in `Settings → Inugram`, with sensible opinionated 
 - 🐶 disable scroll-snap in profile
 - 🐶 recyclerlistview instant-tap
 - ios-style menu gesture (release-to-commit) in bottom menu tabs
+- translate menu respects DNT uniformly (drops stock ru/uk forwards/public override)
 
 ## annoyances
 

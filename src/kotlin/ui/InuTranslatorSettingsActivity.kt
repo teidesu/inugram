@@ -57,13 +57,24 @@ class InuTranslatorSettingsActivity : InuSettingsPageActivity() {
                 LocaleController.getString(R.string.InuInPlaceTranslation),
             ).setChecked(InuConfig.IN_PLACE_TRANSLATION.value)
         )
-        items.add(UItem.asShadow(null))
+        items.add(
+            UItem.asCheck(
+                TOGGLE_TRANSLATE_WEB_PREVIEWS,
+                LocaleController.getString(R.string.InuTranslateWebPreviews),
+            ).setChecked(InuConfig.TRANSLATE_WEB_PREVIEWS.value)
+        )
+        items.add(UItem.asShadow(LocaleController.getString(R.string.InuTranslateWebPreviewsInfo)))
     }
 
     override fun onClick(item: UItem, view: View, position: Int, x: Float, y: Float) {
         when (item.id) {
             TOGGLE_IN_PLACE_TRANSLATION -> {
                 val new = InuConfig.IN_PLACE_TRANSLATION.toggle()
+                (view as? TextCheckCell)?.isChecked = new
+            }
+
+            TOGGLE_TRANSLATE_WEB_PREVIEWS -> {
+                val new = InuConfig.TRANSLATE_WEB_PREVIEWS.toggle()
                 (view as? TextCheckCell)?.isChecked = new
             }
 
@@ -108,6 +119,7 @@ class InuTranslatorSettingsActivity : InuSettingsPageActivity() {
 
     companion object {
         private val TOGGLE_IN_PLACE_TRANSLATION = InuUtils.generateId()
+        private val TOGGLE_TRANSLATE_WEB_PREVIEWS = InuUtils.generateId()
         private val TOGGLE_SHOW_TRANSLATE_BUTTON = InuUtils.generateId()
         private val TOGGLE_SHOW_TRANSLATE_CHAT_BUTTON = InuUtils.generateId()
         private val BUTTON_DO_NOT_TRANSLATE = InuUtils.generateId()
