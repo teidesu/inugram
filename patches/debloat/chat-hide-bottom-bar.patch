@@ -4,9 +4,9 @@ Date: Fri, 10 Apr 2026 01:21:49 +0300
 Subject: disable channel bottom bar (mute and join buttons)
 
 ---
- .../java/org/telegram/ui/ChatActivity.java    | 24 +++++++++++++++----
- .../chat/ChatInputViewsContainer.java         |  4 +++-
- 2 files changed, 23 insertions(+), 5 deletions(-)
+ .../java/org/telegram/ui/ChatActivity.java    | 28 +++++++++++++++----
+ .../chat/ChatInputViewsContainer.java         |  4 ++-
+ 2 files changed, 26 insertions(+), 6 deletions(-)
 
 diff --git a/TMessagesProj/src/main/java/org/telegram/ui/ChatActivity.java b/TMessagesProj/src/main/java/org/telegram/ui/ChatActivity.java
 index 0000000..0000000 100644
@@ -57,7 +57,32 @@ index 0000000..0000000 100644
              if (bottomSuggestHintView == null && firstTime && MessagesController.getGlobalMainSettings().getInt("channelsuggesthint", 0) < 2) {
                  AndroidUtilities.runOnUIThread(() -> {
                      if (getContext() == null) return;
-@@ -21582,7 +21590,7 @@ public class ChatActivity extends BaseFragment implements
+@@ -17467,7 +17475,7 @@ public class ChatActivity extends BaseFragment implements
+             float canvasOffsetX = chatListView.getLeft() + cell.getX();
+             float canvasOffsetY = chatListView.getY() + cell.getY() + cell.getPaddingTop();
+             float alpha = cell.shouldDrawAlphaLayer() ? cell.getAlpha() : 1f;
+-            canvas.clipRect(chatListView.getLeft(), listTop, chatListView.getRight(), chatListView.getY() + chatListView.getMeasuredHeight() - blurredViewBottomOffset - windowInsetsStateHolder.getCurrentMaxBottomInset() - inputIslandHeightCurrent - dp(NonIslandHelper.chatElements() ? 2 : 9));
++            canvas.clipRect(chatListView.getLeft(), listTop, chatListView.getRight(), chatListView.getY() + chatListView.getMeasuredHeight() - blurredViewBottomOffset - inputIslandHeightCurrent - (ChatHelper.shouldForceHideBottomBar(currentChat, currentUser, chatMode) ? 0 : windowInsetsStateHolder.getCurrentMaxBottomInset() + dp(NonIslandHelper.chatElements() ? 2 : 9)));
+             canvas.translate(canvasOffsetX, canvasOffsetY);
+             cell.setInvalidatesParent(true);
+             if (type == 0) {
+@@ -17688,6 +17696,7 @@ public class ChatActivity extends BaseFragment implements
+                                     - inputIslandHeightCurrent
+                                     - dp(NonIslandHelper.chatElements() ? 2 : 9)
+                                     - (mentionContainer != null ? mentionContainer.clipBottom() : 0);
++                            if (ChatHelper.shouldForceHideBottomBar(currentChat, currentUser, chatMode)) viewClipBottom2 += windowInsetsStateHolder.getCurrentMaxBottomInset() + dp(2);
+ 
+                             canvas.clipRect(0, listTop + (mentionContainer != null ? mentionContainer.clipTop() : 0), getMeasuredWidth(), viewClipBottom2);
+                             canvas.translate(0, chatListView.getY());
+@@ -17707,6 +17716,7 @@ public class ChatActivity extends BaseFragment implements
+                             - windowInsetsStateHolder.getCurrentMaxBottomInset()
+                             - inputIslandHeightCurrent
+                             - dp(NonIslandHelper.chatElements() ? 2 : 9);
++                        if (ChatHelper.shouldForceHideBottomBar(currentChat, currentUser, chatMode)) viewClipBottom += windowInsetsStateHolder.getCurrentMaxBottomInset() + dp(2);
+ 
+                         float clipTop = 0, clipBottom = 0;
+                         if (mentionContainer != null) {
+@@ -21582,7 +21592,7 @@ public class ChatActivity extends BaseFragment implements
                  updateTopPanel(true);
              }
              if (headerItem != null) {
@@ -66,7 +91,7 @@ index 0000000..0000000 100644
              }
          } else if (id == NotificationCenter.didReceiveNewMessages) {
              FileLog.d("ChatActivity didReceiveNewMessages start");
-@@ -27032,7 +27040,10 @@ public class ChatActivity extends BaseFragment implements
+@@ -27032,7 +27042,10 @@ public class ChatActivity extends BaseFragment implements
  
          boolean accentTextButton = false;
          boolean forceVisible = false;
@@ -78,7 +103,7 @@ index 0000000..0000000 100644
          boolean showGiftButton = false;
          boolean showSuggestButton = false;
          boolean showSearchButton = chatMode == MODE_DEFAULT && ChatObject.isChannelOrGiga(currentChat);
-@@ -27108,6 +27119,11 @@ public class ChatActivity extends BaseFragment implements
+@@ -27108,6 +27121,11 @@ public class ChatActivity extends BaseFragment implements
                  bottomOverlayChatText.setTag(null);
                  bottomOverlayChatText.setText(LocaleController.getString(R.string.HidePinnedMessagesNoCaps));
              }
@@ -90,7 +115,7 @@ index 0000000..0000000 100644
              showBottomOverlayProgress(false, false);
          } else if (currentUser != null && currentUser.id == UserObject.VERIFY) {
              if (!getMessagesController().isDialogMuted(dialog_id, getTopicId())) {
-@@ -45070,7 +45086,7 @@ public class ChatActivity extends BaseFragment implements
+@@ -45070,7 +45088,7 @@ public class ChatActivity extends BaseFragment implements
              pollAddVisibility = animatorPollAddAnswerVisibility.getFloatValue();
          }
  

@@ -5,7 +5,7 @@ Subject: non-island ui in various parts of the app
 
 ---
  .../ui/Cells/SharedPhotoVideoCell2.java       |   4 +-
- .../java/org/telegram/ui/ChatActivity.java    |  67 +++++++---
+ .../java/org/telegram/ui/ChatActivity.java    |  73 ++++++----
  .../ui/Components/ChatActivityEnterView.java  |   4 +-
  .../ChatActivityTopPanelLayout.java           |  16 ++-
  .../ui/Components/ChatAttachAlert.java        |  16 +++
@@ -30,7 +30,7 @@ Subject: non-island ui in various parts of the app
  .../java/org/telegram/ui/bots/BotAdView.java  |   2 +-
  .../ui/bots/BotCommandsMenuContainer.java     |   4 +-
  .../bots/ChatAttachAlertBotWebViewLayout.java |   5 +-
- 26 files changed, 331 insertions(+), 152 deletions(-)
+ 26 files changed, 334 insertions(+), 155 deletions(-)
 
 diff --git a/TMessagesProj/src/main/java/org/telegram/ui/Cells/SharedPhotoVideoCell2.java b/TMessagesProj/src/main/java/org/telegram/ui/Cells/SharedPhotoVideoCell2.java
 index 0000000..0000000 100644
@@ -228,6 +228,33 @@ index 0000000..0000000 100644
              }
              return result;
          }
+@@ -17423,7 +17441,7 @@ public class ChatActivity extends BaseFragment implements
+             float canvasOffsetX = chatListView.getLeft() + cell.getX();
+             float canvasOffsetY = chatListView.getY() + cell.getY() + cell.getPaddingTop();
+             float alpha = cell.shouldDrawAlphaLayer() ? cell.getAlpha() : 1f;
+-            canvas.clipRect(chatListView.getLeft(), listTop, chatListView.getRight(), chatListView.getY() + chatListView.getMeasuredHeight() - blurredViewBottomOffset - windowInsetsStateHolder.getCurrentMaxBottomInset() - inputIslandHeightCurrent - dp(9));
++            canvas.clipRect(chatListView.getLeft(), listTop, chatListView.getRight(), chatListView.getY() + chatListView.getMeasuredHeight() - blurredViewBottomOffset - windowInsetsStateHolder.getCurrentMaxBottomInset() - inputIslandHeightCurrent - dp(NonIslandHelper.chatElements() ? 2 : 9));
+             canvas.translate(canvasOffsetX, canvasOffsetY);
+             cell.setInvalidatesParent(true);
+             if (type == 0) {
+@@ -17642,7 +17660,7 @@ public class ChatActivity extends BaseFragment implements
+                             float viewClipBottom2 = getMeasuredHeight()
+                                     - windowInsetsStateHolder.getCurrentMaxBottomInset()
+                                     - inputIslandHeightCurrent
+-                                    - dp(9)
++                                    - dp(NonIslandHelper.chatElements() ? 2 : 9)
+                                     - (mentionContainer != null ? mentionContainer.clipBottom() : 0);
+ 
+                             canvas.clipRect(0, listTop + (mentionContainer != null ? mentionContainer.clipTop() : 0), getMeasuredWidth(), viewClipBottom2);
+@@ -17662,7 +17680,7 @@ public class ChatActivity extends BaseFragment implements
+                         float viewClipBottom = getMeasuredHeight()
+                             - windowInsetsStateHolder.getCurrentMaxBottomInset()
+                             - inputIslandHeightCurrent
+-                            - dp(9);
++                            - dp(NonIslandHelper.chatElements() ? 2 : 9);
+ 
+                         float clipTop = 0, clipBottom = 0;
+                         if (mentionContainer != null) {
 @@ -18165,7 +18183,7 @@ public class ChatActivity extends BaseFragment implements
                      int contentWidthSpec = View.MeasureSpec.makeMeasureSpec(widthSize, View.MeasureSpec.EXACTLY);
                      int contentHeightSpec = View.MeasureSpec.makeMeasureSpec(allHeight

@@ -170,7 +170,7 @@ index 0000000..0000000 100644
      }
  
      private Animator infoTopViewAnimator;
-@@ -24256,16 +24256,19 @@ public class ChatActivity extends BaseFragment implements
+@@ -24258,16 +24258,19 @@ public class ChatActivity extends BaseFragment implements
                  boolean update = false;
                  if (cellMessageObject.getId() == messageObject.getId()) {
                      cellMessageObject.messageOwner.translatedText = messageObject.messageOwner.translatedText;
@@ -196,7 +196,7 @@ index 0000000..0000000 100644
                      }
                  }
                  MessageObject.GroupedMessages group = groupedMessagesMap.get(messageObject.getGroupId());
-@@ -24288,12 +24291,16 @@ public class ChatActivity extends BaseFragment implements
+@@ -24290,12 +24293,16 @@ public class ChatActivity extends BaseFragment implements
                      }
                  }
                  if (update) {
@@ -213,7 +213,7 @@ index 0000000..0000000 100644
                      cell.setMessageObject(cellMessageObject, cell.getCurrentMessagesGroup(), cell.isPinnedBottom(), cell.isPinnedTop(), cell.isFirstInChat(), cell.isLastInChatList());
                      if (group != null) {
                          if (chatListItemAnimator != null) {
-@@ -31201,10 +31208,9 @@ public class ChatActivity extends BaseFragment implements
+@@ -31203,10 +31210,9 @@ public class ChatActivity extends BaseFragment implements
                              waitForLangDetection.set(false);
                              String fromLang = selectedObject.messageOwner.originalLanguage;
                              cell.setVisibility(
@@ -227,7 +227,7 @@ index 0000000..0000000 100644
                              );
                              cell.setOnClickListener(e -> {
                                  if (selectedObject == null || i >= options.size() || getParentActivity() == null) {
-@@ -31213,8 +31219,10 @@ public class ChatActivity extends BaseFragment implements
+@@ -31215,8 +31221,10 @@ public class ChatActivity extends BaseFragment implements
  
                                  String toLangValue = fromLang != null && fromLang.equals(toLang) ? toLangDefault : toLang;
                                  ArrayList<TLRPC.MessageEntity> entities = selectedObject != null && selectedObject.messageOwner != null ? selectedObject.messageOwner.entities : null;
@@ -238,7 +238,7 @@ index 0000000..0000000 100644
                                  closeMenu(false);
                                  
  //                                final TranslateAlert3 alert =
-@@ -31244,10 +31252,9 @@ public class ChatActivity extends BaseFragment implements
+@@ -31246,10 +31254,9 @@ public class ChatActivity extends BaseFragment implements
                                  finalMessageText.toString(),
                                  (String lang) -> {
                                      fromLang[0] = lang;
@@ -252,7 +252,7 @@ index 0000000..0000000 100644
                                          cell.setVisibility(View.VISIBLE);
                                      }
                                      waitForLangDetection.set(false);
-@@ -31271,8 +31278,10 @@ public class ChatActivity extends BaseFragment implements
+@@ -31273,8 +31280,10 @@ public class ChatActivity extends BaseFragment implements
                                  }
                                  String toLangValue = fromLang[0] != null && fromLang[0].equals(toLang) ? toLangDefault : toLang;
                                  ArrayList<TLRPC.MessageEntity> entities = selectedObject != null && selectedObject.messageOwner != null ? selectedObject.messageOwner.entities : null;
@@ -263,7 +263,7 @@ index 0000000..0000000 100644
                                  closeMenu(false);
  
  //                                final TranslateAlert3 alert =
-@@ -31305,8 +31314,10 @@ public class ChatActivity extends BaseFragment implements
+@@ -31307,8 +31316,10 @@ public class ChatActivity extends BaseFragment implements
                                      return;
                                  }
  
@@ -274,7 +274,7 @@ index 0000000..0000000 100644
                                  closeMenu(false);
  
  //                                final TranslateAlert3 alert = new TranslateAlert3(getContext(), getResourceProvider())
-@@ -31329,6 +31340,9 @@ public class ChatActivity extends BaseFragment implements
+@@ -31331,6 +31342,9 @@ public class ChatActivity extends BaseFragment implements
                          } else {
                              cell.setVisibility(View.GONE);
                          }
