@@ -25,7 +25,7 @@ index 0000000..0000000 100644
              otherItem.hideSubItem(edit_avatar);
              otherItem.hideSubItem(delete_avatar);
          }
-+        ProfileHelper.addMenuItems(otherItem, currentAccount, getDialogId());
++        ProfileHelper.addMenuItems(otherItem, currentAccount, getDialogId(), getResourceProvider());
  
          isCallAvailable = callItemVisible;
  

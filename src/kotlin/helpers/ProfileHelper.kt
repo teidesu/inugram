@@ -9,10 +9,12 @@ import org.telegram.messenger.ChatObject
 import org.telegram.messenger.LocaleController
 import org.telegram.messenger.MessagesController
 import org.telegram.messenger.R
+import org.telegram.messenger.UserConfig
 import org.telegram.tgnet.TLObject
 import org.telegram.tgnet.TLRPC
 import org.telegram.ui.ActionBar.ActionBarMenuItem
 import org.telegram.ui.ActionBar.BaseFragment
+import org.telegram.ui.ActionBar.Theme
 import org.telegram.ui.Components.BulletinFactory
 import org.telegram.ui.Components.ItemOptions
 
@@ -39,7 +41,7 @@ object ProfileHelper {
     }
 
     @JvmStatic
-    fun addMenuItems(otherItem: ActionBarMenuItem?, currentAccount: Int, dialogId: Long) {
+    fun addMenuItems(otherItem: ActionBarMenuItem?, currentAccount: Int, dialogId: Long, resourcesProvider: Theme.ResourcesProvider?) {
         if (otherItem == null) return
         if (!InuConfig.DISABLE_CHAT_BACKGROUNDS.value && getRawDialogWallpaper(currentAccount, dialogId) != null) {
             val hidden = ChatHelper.isRemoveWallpaperSetForDialog(currentAccount, dialogId)
@@ -58,6 +60,9 @@ object ProfileHelper {
                 R.drawable.msg_theme,
                 LocaleController.getString(label),
             )
+        }
+        if (dialogId > 0 && dialogId != UserConfig.getInstance(currentAccount).clientUserId) {
+            TypingDraftHelper.addSwipeBackMenuItem(otherItem, currentAccount, dialogId, resourcesProvider)
         }
     }
 

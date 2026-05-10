@@ -342,4 +342,10 @@
     <string name="InuCopyButtonText">Copy \"%1$s\"</string>
     <string name="InuCopyCallbackData">Copy callback data</string>
     <string name="InuCallbackDataCopied">Callback data copied</string>
+    <string name="InuLiveDraftMenu">Live drafts</string>
+    <string name="InuLiveDraftModeDisabled">Off</string>
+    <string name="InuLiveDraftModeEmpty">Empty</string>
+    <string name="InuLiveDraftModeSizeOnly">Size-only</string>
+    <string name="InuLiveDraftModeFull">Full text</string>
+    <string name="InuLiveDraftFooter">(Experimental!) Stream drafts as you type the message, via **Live response streaming API**, for shits and giggles</string>
 </resources>
