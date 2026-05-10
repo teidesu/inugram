@@ -5,10 +5,11 @@ Subject: add "hide with spoiler" action to toggle spoiler inside photo viewer
 
 ---
  .../messenger/SendMessagesHelper.java         |  6 +++--
+ .../java/org/telegram/ui/ChatActivity.java    |  1 +
  .../ui/Components/ChatActivityEnterView.java  |  3 ++-
  .../ChatAttachAlertPhotoLayout.java           | 12 +++++++---
  .../java/org/telegram/ui/PhotoViewer.java     | 22 ++++++++++++++++---
- 4 files changed, 34 insertions(+), 9 deletions(-)
+ 5 files changed, 35 insertions(+), 9 deletions(-)
 
 diff --git a/TMessagesProj/src/main/java/org/telegram/messenger/SendMessagesHelper.java b/TMessagesProj/src/main/java/org/telegram/messenger/SendMessagesHelper.java
 index 0000000..0000000 100644
@@ -43,6 +44,18 @@ index 0000000..0000000 100644
              sendMessage(sendMessageParams);
          }
      }
+diff --git a/TMessagesProj/src/main/java/org/telegram/ui/ChatActivity.java b/TMessagesProj/src/main/java/org/telegram/ui/ChatActivity.java
+index 0000000..0000000 100644
+--- a/TMessagesProj/src/main/java/org/telegram/ui/ChatActivity.java
++++ b/TMessagesProj/src/main/java/org/telegram/ui/ChatActivity.java
+@@ -19625,6 +19625,7 @@ public class ChatActivity extends BaseFragment implements
+                 info.entities = entry.entities;
+                 info.masks = entry.stickers;
+                 info.ttl = entry.ttl;
++                info.hasMediaSpoilers = entry.hasSpoiler;
+                 info.videoEditedInfo = entry.editedInfo;
+                 info.canDeleteAfter = entry.canDeleteAfter;
+                 photos.add(info);
 diff --git a/TMessagesProj/src/main/java/org/telegram/ui/Components/ChatActivityEnterView.java b/TMessagesProj/src/main/java/org/telegram/ui/Components/ChatActivityEnterView.java
 index 0000000..0000000 100644
 --- a/TMessagesProj/src/main/java/org/telegram/ui/Components/ChatActivityEnterView.java

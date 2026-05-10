@@ -15,7 +15,7 @@ diff --git a/TMessagesProj/src/main/java/org/telegram/ui/ChatActivity.java b/TMe
 index 0000000..0000000 100644
 --- a/TMessagesProj/src/main/java/org/telegram/ui/ChatActivity.java
 +++ b/TMessagesProj/src/main/java/org/telegram/ui/ChatActivity.java
-@@ -31276,7 +31276,9 @@ public class ChatActivity extends BaseFragment implements
+@@ -31277,7 +31277,9 @@ public class ChatActivity extends BaseFragment implements
                  if (isReactionsAvailable && (!tags || !getMessagesController().premiumFeaturesBlocked())) {
                      int pad = 22;
                      int sPad = 24;
@@ -26,7 +26,7 @@ index 0000000..0000000 100644
  
                      ReactionsContainerLayout finalReactionsLayout = reactionsLayout;
                      reactionsLayout.setDelegate(new ReactionsContainerLayout.ReactionsContainerDelegate() {
-@@ -31313,8 +31315,11 @@ public class ChatActivity extends BaseFragment implements
+@@ -31314,8 +31316,11 @@ public class ChatActivity extends BaseFragment implements
                          }
                      });
  
@@ -40,7 +40,7 @@ index 0000000..0000000 100644
                      scrimPopupContainerLayout.setReactionsLayout(reactionsLayout);
                      scrimPopupContainerLayout.setClipChildren(false);
                      MessageObject messageWithReactions = message;
-@@ -31348,6 +31353,9 @@ public class ChatActivity extends BaseFragment implements
+@@ -31349,6 +31354,9 @@ public class ChatActivity extends BaseFragment implements
  
                  boolean showNoForwards = (isPeerNoForwards() || message.messageOwner.noforwards && currentUser != null && currentUser.bot) && message.messageOwner.action == null && message.isSent() && !message.isEditing() && chatMode != MODE_SCHEDULED && chatMode != MODE_SAVED && getDialogId() != UserObject.VERIFY;
                  scrimPopupContainerLayout.addView(popupLayout, LayoutHelper.createLinearRelatively(LayoutHelper.WRAP_CONTENT, LayoutHelper.WRAP_CONTENT, Gravity.LEFT, isReactionsAvailable ? 16 : 0, 0, isReactionsAvailable ? 36 : 0, 0));
@@ -50,7 +50,7 @@ index 0000000..0000000 100644
                  scrimPopupContainerLayout.setPopupWindowLayout(popupLayout);
                  if (showNoForwards) {
                      popupLayout.measure(View.MeasureSpec.makeMeasureSpec(0, View.MeasureSpec.UNSPECIFIED), View.MeasureSpec.makeMeasureSpec(0, View.MeasureSpec.UNSPECIFIED));
-@@ -31381,7 +31389,11 @@ public class ChatActivity extends BaseFragment implements
+@@ -31382,7 +31390,11 @@ public class ChatActivity extends BaseFragment implements
                      FrameLayout fl = new FrameLayout(contentView.getContext());
                      fl.setBackground(shadowDrawable2);
                      fl.addView(tv, LayoutHelper.createFrame(LayoutHelper.MATCH_PARENT, LayoutHelper.WRAP_CONTENT, 0, 11, 11, 11, 11));
@@ -63,7 +63,7 @@ index 0000000..0000000 100644
                      scrimPopupContainerLayout.applyViewBottom(fl);
                  }
  
-@@ -31404,7 +31416,11 @@ public class ChatActivity extends BaseFragment implements
+@@ -31405,7 +31417,11 @@ public class ChatActivity extends BaseFragment implements
                      FrameLayout fl = new FrameLayout(contentView.getContext());
                      fl.setBackground(shadowDrawable2);
                      fl.addView(tv, LayoutHelper.createFrame(LayoutHelper.MATCH_PARENT, LayoutHelper.WRAP_CONTENT, 0, 11, 11, 11, 11));
@@ -76,7 +76,7 @@ index 0000000..0000000 100644
                      scrimPopupContainerLayout.applyViewBottom(fl);
                  }
  
-@@ -31512,6 +31528,9 @@ public class ChatActivity extends BaseFragment implements
+@@ -31513,6 +31529,9 @@ public class ChatActivity extends BaseFragment implements
              }
              scrimPopupWindow.setFocusable(true);
              scrimPopupContainerLayout.measure(View.MeasureSpec.makeMeasureSpec(AndroidUtilities.dp(1000), View.MeasureSpec.AT_MOST), View.MeasureSpec.makeMeasureSpec(AndroidUtilities.dp(1000), View.MeasureSpec.AT_MOST));

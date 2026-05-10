@@ -11,7 +11,7 @@ diff --git a/TMessagesProj/src/main/java/org/telegram/ui/ChatActivity.java b/TMe
 index 0000000..0000000 100644
 --- a/TMessagesProj/src/main/java/org/telegram/ui/ChatActivity.java
 +++ b/TMessagesProj/src/main/java/org/telegram/ui/ChatActivity.java
-@@ -25034,7 +25034,7 @@ public class ChatActivity extends BaseFragment implements
+@@ -25035,7 +25035,7 @@ public class ChatActivity extends BaseFragment implements
          if (!arr.isEmpty()) {
              if ((chatMode == MODE_SCHEDULED || chatMode == MODE_QUICK_REPLIES)) {
                  replaceMessageObjects(arr, 0, true);
@@ -20,7 +20,7 @@ index 0000000..0000000 100644
                  replaceMessageObjects(arr, 0, false);
              }
          }
-@@ -26054,7 +26054,7 @@ public class ChatActivity extends BaseFragment implements
+@@ -26055,7 +26055,7 @@ public class ChatActivity extends BaseFragment implements
                  pinnedMessageObjects.put(messageObject.getId(), messageObject);
              }
              MessageObject old = messagesDict[loadIndex].get(messageObject.getId());

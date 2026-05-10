@@ -82,7 +82,7 @@ index 0000000..0000000 100644
  
                          float clipTop = 0, clipBottom = 0;
                          if (mentionContainer != null) {
-@@ -21582,7 +21592,7 @@ public class ChatActivity extends BaseFragment implements
+@@ -21583,7 +21593,7 @@ public class ChatActivity extends BaseFragment implements
                  updateTopPanel(true);
              }
              if (headerItem != null) {
@@ -91,7 +91,7 @@ index 0000000..0000000 100644
              }
          } else if (id == NotificationCenter.didReceiveNewMessages) {
              FileLog.d("ChatActivity didReceiveNewMessages start");
-@@ -27032,7 +27042,10 @@ public class ChatActivity extends BaseFragment implements
+@@ -27033,7 +27043,10 @@ public class ChatActivity extends BaseFragment implements
  
          boolean accentTextButton = false;
          boolean forceVisible = false;
@@ -103,7 +103,7 @@ index 0000000..0000000 100644
          boolean showGiftButton = false;
          boolean showSuggestButton = false;
          boolean showSearchButton = chatMode == MODE_DEFAULT && ChatObject.isChannelOrGiga(currentChat);
-@@ -27108,6 +27121,11 @@ public class ChatActivity extends BaseFragment implements
+@@ -27109,6 +27122,11 @@ public class ChatActivity extends BaseFragment implements
                  bottomOverlayChatText.setTag(null);
                  bottomOverlayChatText.setText(LocaleController.getString(R.string.HidePinnedMessagesNoCaps));
              }
@@ -115,7 +115,7 @@ index 0000000..0000000 100644
              showBottomOverlayProgress(false, false);
          } else if (currentUser != null && currentUser.id == UserObject.VERIFY) {
              if (!getMessagesController().isDialogMuted(dialog_id, getTopicId())) {
-@@ -45070,7 +45088,7 @@ public class ChatActivity extends BaseFragment implements
+@@ -45071,7 +45089,7 @@ public class ChatActivity extends BaseFragment implements
              pollAddVisibility = animatorPollAddAnswerVisibility.getFloatValue();
          }
  
