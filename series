@@ -115,4 +115,5 @@ hooks/messagescontroller.patch
 feature/maps.patch
 feature/translator.patch
 feature/global-from-user-search.patch
+bugfix/non-bot-drafts.patch
 feature/live-typing-draft.patch
