@@ -1,10 +1,5 @@
 import fs from 'node:fs/promises'
 
-const mode = process.argv[2]
-if (mode !== 'canary' && mode !== 'release') {
-  throw new Error(`usage: version.ts canary|release (got ${mode})`)
-}
-
 const props = await fs.readFile('worktree/gradle.properties', 'utf8')
 const appVerName = /^APP_VERSION_NAME=(.+)$/m.exec(props)?.[1]
 if (!appVerName) throw new Error('failed to read APP_VERSION_NAME')
@@ -21,7 +16,7 @@ const shortSha = sha.slice(0, 7)
 const verName = `${appVerName}-${shortSha}`
 const verCode = buildNum
 const apkName = `inugram-${verName}-${verCode}.apk`
-const tag = mode === 'release' ? `v${appVerName}-${buildNum}` : ''
+const tag = `v${appVerName}-${buildNum}`
 
 const out = {
   'app-ver-name': appVerName,

@@ -2,7 +2,6 @@ package desu.inugram.helpers
 
 import android.content.pm.PackageInfo
 import desu.inugram.InuConfig
-import desu.inugram.InuConfig.UpdateChannelItem
 import org.telegram.messenger.AndroidUtilities
 import org.telegram.messenger.ApplicationLoader
 import org.telegram.messenger.BetaUpdate
@@ -35,7 +34,7 @@ object UpdateHelper {
         }
 
         return LocaleController.formatString(
-            if (BuildConfig.INU_BUILD_TYPE === "canary") R.string.InuVersionCanary else R.string.InuVersion,
+            R.string.InuVersion,
             pInfo!!.versionCode,
             pInfo!!.versionName?.replace(Regex("-[0-9a-f]{7}$"), "") ?: "",
             BuildConfig.STOCK_VERSION_CODE
@@ -56,6 +55,10 @@ object UpdateHelper {
         private set
 
     fun checkForCustomUpdate(force: Boolean, whenDone: Runnable?) {
+        if (!InuConfig.UPDATES_ENABLED.value) {
+            whenDone?.run()
+            return
+        }
         if (!force && System.currentTimeMillis() - InuConfig.UPDATE_LAST_CHECK_MS.value < CHECK_INTERVAL_MS) {
             whenDone?.run()
             return
@@ -85,7 +88,7 @@ object UpdateHelper {
             callback?.invoke(CheckResult.Error("Not logged in"))
             return
         }
-        if (BuildConfig.INU_BUILD_TYPE == "debug" || InuConfig.UPDATE_CHANNEL.value == UpdateChannelItem.DISABLED) {
+        if (BuildConfig.INU_BUILD_TYPE == "debug") {
             callback?.invoke(CheckResult.UpToDate)
             return
         }
@@ -107,10 +110,9 @@ object UpdateHelper {
 
     private fun performSearch(account: Int, peerId: Long, callback: ((CheckResult) -> Unit)?) {
         val mc = MessagesController.getInstance(account)
-        val isCanary = InuConfig.UPDATE_CHANNEL.value == UpdateChannelItem.CANARY
         val req = TLRPC.TL_messages_search().apply {
             peer = mc.getInputPeer(peerId)
-            q = if (isCanary) "#canary" else "#release"
+            q = "#release"
             filter = TLRPC.TL_inputMessagesFilterDocument()
             limit = 10
         }

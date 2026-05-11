@@ -13,8 +13,6 @@ interface BuildInfo {
   commitSha: string
   commits: { sha: string, message: string }[]
   repo: string
-  kind: 'canary' | 'release'
-  tag?: string
 }
 
 const artifactDir = resolve(process.argv[2] ?? 'out')
@@ -65,10 +63,9 @@ async function persistSession(session: string) {
 }
 
 try {
-  const hashtag = info.kind === 'release' ? '#release' : '#canary'
   const commits = info.commits.filter(c => !c.message.startsWith('infra:')).reverse()
   const buildCaption = (cs: typeof commits) => html`
-    ${hashtag}
+    #release
     <br/>
     <b>v${info.verName}</b> (build ${info.buildNum}, based on ${info.appVerCode})
     <br/><br/>

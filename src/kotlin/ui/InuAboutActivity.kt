@@ -2,7 +2,6 @@ package desu.inugram.ui
 
 import android.view.View
 import desu.inugram.InuConfig
-import desu.inugram.InuConfig.UpdateChannelItem
 import desu.inugram.helpers.InuUtils
 import desu.inugram.helpers.UpdateHelper
 import org.telegram.messenger.AndroidUtilities
@@ -11,6 +10,7 @@ import org.telegram.messenger.LocaleController
 import org.telegram.messenger.R
 import org.telegram.messenger.UserConfig
 import org.telegram.messenger.browser.Browser
+import org.telegram.ui.Cells.TextCheckCell
 import org.telegram.ui.Components.BulletinFactory
 import org.telegram.ui.Components.UItem
 import org.telegram.ui.Components.UniversalAdapter
@@ -40,32 +40,28 @@ class InuAboutActivity : InuSettingsPageActivity() {
 
         items.add(UItem.asHeader(LocaleController.getString(R.string.InuUpdates)))
         items.add(
+            UItem.asCheck(
+                TOGGLE_UPDATES_ENABLED,
+                LocaleController.getString(R.string.InuUpdatesEnabled),
+            ).setChecked(InuConfig.UPDATES_ENABLED.value)
+        )
+        items.add(
             UItem.asButton(
-                BUTTON_UPDATE_CHANNEL,
-                LocaleController.getString(R.string.InuUpdateChannel),
-                channelLabel(InuConfig.UPDATE_CHANNEL.value),
+                BUTTON_CHECK_NOW,
+                LocaleController.getString(R.string.InuUpdateCheckNow),
             )
         )
-        if (InuConfig.UPDATE_CHANNEL.value != UpdateChannelItem.DISABLED) {
-            items.add(
-                UItem.asButton(
-                    BUTTON_CHECK_NOW,
-                    LocaleController.getString(R.string.InuUpdateCheckNow),
-                )
-            )
-            items.add(UItem.asShadow(lastCheckLabel()))
-        }
+        items.add(UItem.asShadow(lastCheckLabel()))
     }
 
-    var isChecking = false;
+    var isChecking = false
     private fun lastCheckLabel(): String {
-        val text = run {
-            if (isChecking) LocaleController.getString(R.string.Checking)
-            val ms = InuConfig.UPDATE_LAST_CHECK_MS.value
-            if (ms == 0L) LocaleController.getString(R.string.MessageScheduledRepeatOptionNever)
-            LocaleController.formatDateTime(ms / 1000, true)
+        val ms = InuConfig.UPDATE_LAST_CHECK_MS.value
+        val text = when {
+            isChecking -> LocaleController.getString(R.string.Checking)
+            ms == 0L -> LocaleController.getString(R.string.MessageScheduledRepeatOptionNever)
+            else -> LocaleController.formatDateTime(ms / 1000, true)
         }
-
         return LocaleController.formatString(R.string.InuUpdateLastChecked, text)
     }
 
@@ -74,34 +70,13 @@ class InuAboutActivity : InuSettingsPageActivity() {
         when (item.id) {
             BUTTON_GITHUB -> Browser.openUrl(ctx, "https://github.com/teidesu/inugram")
             BUTTON_CHANNEL_LINK -> Browser.openUrl(ctx, "https://t.me/" + UpdateHelper.USERNAME)
-            BUTTON_UPDATE_CHANNEL -> showChannelSelector()
+            TOGGLE_UPDATES_ENABLED -> {
+                val new = InuConfig.UPDATES_ENABLED.toggle()
+                (view as? TextCheckCell)?.isChecked = new
+                if (!new) UpdateHelper.clearPending()
+            }
             BUTTON_CHECK_NOW -> runManualCheck()
         }
-    }
-
-    private fun showChannelSelector() {
-        val values = intArrayOf(
-            UpdateChannelItem.STABLE,
-            UpdateChannelItem.CANARY,
-            UpdateChannelItem.DISABLED,
-        )
-        val labels = arrayOf<CharSequence>(
-            LocaleController.getString(R.string.InuUpdateChannelStable),
-            LocaleController.getString(R.string.InuUpdateChannelCanary),
-            LocaleController.getString(R.string.Disable),
-        )
-        val current = values.indexOf(InuConfig.UPDATE_CHANNEL.value).coerceAtLeast(0)
-        showDialog(
-            RadioDialogBuilder(context, getResourceProvider())
-                .setTitle(LocaleController.getString(R.string.InuUpdateChannel))
-                .setItems(labels, current) { _, which ->
-                    val newValue = values[which]
-                    if (InuConfig.UPDATE_CHANNEL.value == newValue) return@setItems
-                    InuConfig.UPDATE_CHANNEL.value = newValue
-                    UpdateHelper.clearPending()
-                    listView.adapter.update(true)
-                }.create()
-        )
     }
 
     private fun runManualCheck() {
@@ -137,13 +112,7 @@ class InuAboutActivity : InuSettingsPageActivity() {
     companion object {
         private val BUTTON_GITHUB = InuUtils.generateId()
         private val BUTTON_CHANNEL_LINK = InuUtils.generateId()
-        private val BUTTON_UPDATE_CHANNEL = InuUtils.generateId()
+        private val TOGGLE_UPDATES_ENABLED = InuUtils.generateId()
         private val BUTTON_CHECK_NOW = InuUtils.generateId()
-
-        fun channelLabel(value: Int): String = when (value) {
-            UpdateChannelItem.DISABLED -> LocaleController.getString(R.string.Disable)
-            UpdateChannelItem.CANARY -> LocaleController.getString(R.string.InuUpdateChannelCanary)
-            else -> LocaleController.getString(R.string.InuUpdateChannelStable)
-        }
     }
 }

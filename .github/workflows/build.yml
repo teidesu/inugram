@@ -3,9 +3,6 @@ name: build
 on:
   workflow_call:
     inputs:
-      mode:
-        required: true
-        type: string
       artifact-name:
         required: true
         type: string
@@ -42,7 +39,6 @@ concurrency:
 permissions: {}
 
 env:
-  MODE: ${{ inputs.mode || 'canary' }}
   ARTIFACT_NAME: ${{ inputs.artifact-name || format('inugram-build-{0}', github.run_id) }}
 
 jobs:
@@ -93,9 +89,9 @@ jobs:
         uses: hendrikmuhs/ccache-action@e42e6681d2906409c5dde4a315af6214eaa890ee # v1.2
         with:
           append-timestamp: false
-          key: ccache-${{ env.MODE }}
+          key: ccache-release
           restore-keys: |
-            ccache-${{ env.MODE }}
+            ccache-release
             ccache-
           max-size: 5G
           verbose: 2
@@ -108,7 +104,7 @@ jobs:
         id: info
         env:
           INU_BUILD: ${{ vars.INU_BUILD || '1' }}
-        run: pnpm tsx scripts/ci/version.ts ${{ env.MODE }}
+        run: pnpm tsx scripts/ci/version.ts
 
       - uses: gradle/actions/setup-gradle@0b6dd653ba04f4f93bf581ec31e66cbd7dcb644d # v4
         with:
@@ -135,7 +131,7 @@ jobs:
         env:
           COMMIT_ID: ${{ github.sha }}
           INU_BUILD: ${{ steps.info.outputs.build-num }}
-          INU_BUILD_TYPE: ${{ env.MODE == 'release' && 'stable' || 'canary' }}
+          INU_BUILD_TYPE: release
           CCACHE_COMPILERCHECK: content
           CCACHE_SLOPPINESS: time_macros,file_macro,include_file_mtime,include_file_ctime,locale,system_headers
           CCACHE_BASEDIR: ${{ github.workspace }}/worktree
@@ -143,7 +139,7 @@ jobs:
 
       - name: stage artifacts
         env:
-          LAST_UPLOADED_SHA: ${{ env.MODE == 'release' && vars.LAST_RELEASE_SHA || vars.LAST_CANARY_SHA }}
+          LAST_UPLOADED_SHA: ${{ vars.LAST_RELEASE_SHA }}
           PUSH_BEFORE: ${{ github.event.before }}
         run: |
           mkdir -p out
@@ -180,9 +176,7 @@ jobs:
             --arg commitSha "$GITHUB_SHA" \
             --argjson commits "$commits_json" \
             --arg repo "$GITHUB_REPOSITORY" \
-            --arg kind '${{ env.MODE }}' \
-            --arg tag '${{ steps.info.outputs.tag }}' \
-            '{verName:$verName,verCode:$verCode,appVerCode:$appVerCode,buildNum:$buildNum,apkFile:$apkFile,commitSha:$commitSha,commits:$commits,repo:$repo,kind:$kind,tag:$tag}' \
+            '{verName:$verName,verCode:$verCode,appVerCode:$appVerCode,buildNum:$buildNum,apkFile:$apkFile,commitSha:$commitSha,commits:$commits,repo:$repo}' \
             > out/build-info.json
 
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4

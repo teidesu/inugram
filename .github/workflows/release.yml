@@ -1,15 +1,20 @@
 name: release
 
 on:
+  push:
+    branches: [main]
+    paths-ignore:
+      - '**.md'
+      - '.github/**'
+      - '!.github/workflows/build.yml'
   workflow_dispatch:
 
 concurrency:
-  group: release
-  cancel-in-progress: false
+  group: release-${{ github.ref }}
+  cancel-in-progress: true
 
 jobs:
   build:
-    if: github.ref == 'refs/heads/main' && github.repository == 'teidesu/inugram'
     uses: ./.github/workflows/build.yml
     secrets: inherit
     permissions:
@@ -18,11 +23,14 @@ jobs:
       attestations: write
       artifact-metadata: write
     with:
-      mode: release
-      artifact-name: inugram-release-${{ github.sha }}
+      artifact-name: inugram-${{ github.sha }}
 
-  publish:
+  upload:
     needs: build
+    if: |
+      github.event_name == 'push'
+      && github.repository == 'teidesu/inugram'
+      && !contains(github.event.head_commit.message, 'norelease')
     runs-on: ubuntu-latest
     timeout-minutes: 15
     permissions:
@@ -40,7 +48,7 @@ jobs:
 
       - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
         with:
-          name: inugram-release-${{ github.sha }}
+          name: inugram-${{ github.sha }}
           path: out
 
       - name: create github release

@@ -5,7 +5,6 @@ import android.content.SharedPreferences
 import androidx.core.content.edit
 import desu.inugram.helpers.FormattingPopupConfig
 import desu.inugram.helpers.PinnedReactionsHelper
-import org.telegram.messenger.BuildConfig
 
 object InuConfig {
     private const val PREFS_NAME = "inugram"
@@ -45,7 +44,7 @@ object InuConfig {
         protected abstract fun SharedPreferences.Editor.write()
     }
 
-    class BoolItem(key: String, default: Boolean, exportable: Boolean = true) :
+    open class BoolItem(key: String, default: Boolean, exportable: Boolean = true) :
         Item<Boolean>(key, default, exportable) {
         override fun read(prefs: SharedPreferences): Boolean = prefs.getBoolean(key, default)
         override fun SharedPreferences.Editor.write() {
@@ -435,23 +434,20 @@ object InuConfig {
     @JvmField
     val MAP_PREVIEW_PROVIDER = MapPreviewProviderItem()
 
-    class UpdateChannelItem : IntItem("update_channel", STABLE, exportable = false) {
-        companion object {
-            const val DISABLED = 0
-            const val STABLE = 1
-            const val CANARY = 2
-        }
-
-        override fun read(prefs: SharedPreferences): Int {
-            if (!prefs.contains(key)) {
-                return if (BuildConfig.INU_BUILD_TYPE == "canary") CANARY else STABLE
+    class UpdatesEnabledItem : BoolItem("updates_enabled", true, exportable = false) {
+        override fun read(prefs: SharedPreferences): Boolean {
+            // compat, remove after a few months
+            if (!prefs.contains(key) && prefs.contains("update_channel")) {
+                val value = prefs.getInt("update_channel", 1) != 0
+                prefs.edit { putBoolean(key, value) }
+                return value
             }
-            return prefs.getInt(key, default)
+            return prefs.getBoolean(key, default)
         }
     }
 
     @JvmField
-    val UPDATE_CHANNEL = UpdateChannelItem()
+    val UPDATES_ENABLED = UpdatesEnabledItem()
 
     // internal state
     @JvmField

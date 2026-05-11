@@ -264,7 +264,6 @@
     <string name="InuFormattingPopupDivider">——————</string>
     <string name="InuCut">Cut</string>
     <string name="InuVersion">Inugram v%1$s (based on %2$s, build %3$s)</string>
-    <string name="InuVersionCanary">Inugram v%1$s (Canary, based on %2$s, build %3$s)</string>
 
     <string name="InuSearchFilter">Filter by media</string>
     <string name="InuSearchFilterPhotos">Photos</string>
@@ -292,10 +291,8 @@
     <string name="InuAboutGitHub">GitHub</string>
     <string name="InuAboutChannel">Updates channel</string>
     <string name="InuUpdates">Updates</string>
-    <string name="InuUpdateChannel">Update channel</string>
-    <string name="InuUpdateChannelStable">Stable</string>
-    <string name="InuUpdateChannelCanary">Canary</string>
-    <string name="InuUpdateCheckNow">Check for updates</string>
+    <string name="InuUpdatesEnabled">Check for updates</string>
+    <string name="InuUpdateCheckNow">Check now</string>
     <string name="InuUpdateLastChecked">Last checked: %1$s</string>
     <string name="InuUpdateUpToDate">You are on the latest version</string>
     <string name="InuUpdateError">Update check failed: %1$s</string>
