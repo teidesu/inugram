@@ -58,7 +58,7 @@ class InuDialogsSettingsActivity : InuSettingsPageActivity() {
         )
         items.add(
             UItem.asCheck(TOGGLE_BOT_WEBVIEW_BUTTON, LocaleController.getString(R.string.InuHideBotWebView))
-                .setChecked(InuConfig.HIDE_BOT_WEBVIEW_INPUT.value)
+                .setChecked(InuConfig.HIDE_BOT_WEBVIEW_DIALOGS.value)
         )
         items.add(
             mkTwoLineCheckItem(
