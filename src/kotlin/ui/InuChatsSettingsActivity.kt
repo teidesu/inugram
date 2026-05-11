@@ -216,6 +216,12 @@ class InuChatsSettingsActivity : InuSettingsPageActivity() {
                 InuConfig.SEARCH_FROM_GLOBAL.value,
             )
         )
+        items.add(
+            UItem.asCheck(
+                TOGGLE_SHOW_FORWARD_TIME,
+                LocaleController.getString(R.string.InuShowForwardTime),
+            ).setChecked(InuConfig.SHOW_FORWARD_TIME.value)
+        )
         // end misc section
     }
 
@@ -315,6 +321,11 @@ class InuChatsSettingsActivity : InuSettingsPageActivity() {
                 val new = InuConfig.SEARCH_FROM_GLOBAL.toggle()
                 (view as? NotificationsCheckCell)?.isChecked = new
             }
+
+            TOGGLE_SHOW_FORWARD_TIME -> {
+                val new = InuConfig.SHOW_FORWARD_TIME.toggle()
+                (view as? TextCheckCell)?.isChecked = new
+            }
         }
     }
 
@@ -333,6 +344,7 @@ class InuChatsSettingsActivity : InuSettingsPageActivity() {
         private val TOGGLE_CHAT_VIEWS_BOTTOM = InuUtils.generateId()
         private val BUTTON_PINNED_REACTIONS = InuUtils.generateId()
         private val TOGGLE_SEARCH_FROM_GLOBAL = InuUtils.generateId()
+        private val TOGGLE_SHOW_FORWARD_TIME = InuUtils.generateId()
 
     }
 }

@@ -75,6 +75,7 @@ most things are toggleable in `Settings → Inugram`, with sensible opinionated 
 - "select between messages" (🐶 done right, with proper capping)
 - in-place message translation, with optional web preview translation
 - instant view pages translator
+- 🐶 show original time/date in "forwarded from" header
 
 ## message input / formatting
 

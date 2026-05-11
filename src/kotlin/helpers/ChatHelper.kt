@@ -27,6 +27,7 @@ import org.telegram.ui.Components.ItemOptions
 import org.telegram.ui.Components.UndoView
 import org.telegram.ui.DialogsActivity
 import java.io.File
+import java.util.Calendar
 
 object ChatHelper {
     const val OPTION_SAVE = 501
@@ -495,6 +496,30 @@ object ChatHelper {
         BulletinFactory.of(activity)
             .createSimpleBulletin(R.raw.error, LocaleController.formatString(R.string.InuSelectRangeLimit, 100))
             .show()
+    }
+
+    @JvmStatic
+    fun maybeAppendForwardTime(forwardedString: String, messageObject: MessageObject): String {
+        if (!InuConfig.SHOW_FORWARD_TIME.value) return forwardedString
+        val fwd = messageObject.messageOwner.fwd_from ?: return forwardedString
+        if (fwd.date == 0) return forwardedString
+
+        val origMs = fwd.date * 1000L
+        val msgMs = messageObject.messageOwner.date * 1000L
+        val time = LocaleController.getInstance().formatterDay.format(origMs)
+        val suffix = if (isSameDay(origMs, msgMs)) {
+            time
+        } else {
+            "${LocaleController.getInstance().formatterYearMax.format(origMs)} $time"
+        }
+        return "$forwardedString • $suffix"
+    }
+
+    private fun isSameDay(a: Long, b: Long): Boolean {
+        val ca = Calendar.getInstance().apply { timeInMillis = a }
+        val cb = Calendar.getInstance().apply { timeInMillis = b }
+        return ca.get(Calendar.YEAR) == cb.get(Calendar.YEAR) &&
+            ca.get(Calendar.DAY_OF_YEAR) == cb.get(Calendar.DAY_OF_YEAR)
     }
 
     @JvmStatic

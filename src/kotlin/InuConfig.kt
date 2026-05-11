@@ -377,6 +377,9 @@ object InuConfig {
     val OLD_MENTION_INDICATOR = BoolItem("old_mention_indicator", true)
 
     @JvmField
+    val SHOW_FORWARD_TIME = BoolItem("show_forward_time", true)
+
+    @JvmField
     val DISABLE_CHAT_PREVIEW_EXPAND = BoolItem("disable_chat_preview_expand", true)
 
     @JvmField

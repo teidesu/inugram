@@ -246,6 +246,8 @@
 
     <string name="InuOldMentionIndicator">Pre-12.6 mention indicator</string>
 
+    <string name="InuShowForwardTime">Show forward time</string>
+
     <string name="InuTextClassifierMode">Text classifier mode</string>
     <string name="InuTextClassifierModeInfo">Text classifier is a system component that auto-expands selection when double-tapping text</string>
     <string name="InuTextClassifierModeNative">Native</string>

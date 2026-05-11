@@ -1,0 +1,21 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: alina sireneva <alina@tei.su>
+Date: Mon, 11 May 2026 17:40:37 +0200
+Subject: show forwarded time inline
+
+---
+ .../src/main/java/org/telegram/ui/Cells/ChatMessageCell.java     | 1 +
+ 1 file changed, 1 insertion(+)
+
+diff --git a/TMessagesProj/src/main/java/org/telegram/ui/Cells/ChatMessageCell.java b/TMessagesProj/src/main/java/org/telegram/ui/Cells/ChatMessageCell.java
+index 0000000..0000000 100644
+--- a/TMessagesProj/src/main/java/org/telegram/ui/Cells/ChatMessageCell.java
++++ b/TMessagesProj/src/main/java/org/telegram/ui/Cells/ChatMessageCell.java
+@@ -18894,6 +18894,7 @@ public class ChatMessageCell extends BaseCell implements SeekBar.SeekBarDelegate
+ 
+                     forwardedNameWidth = getMaxNameWidth();
+                     forwardedString = getForwardedMessageText(messageObject);
++                    forwardedString = desu.inugram.helpers.ChatHelper.maybeAppendForwardTime(forwardedString, messageObject);
+                     if (hasPsaHint) {
+                         forwardedNameWidth -= dp(36);
+                     }
