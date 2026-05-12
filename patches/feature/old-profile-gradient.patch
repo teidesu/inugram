@@ -3,57 +3,31 @@ From: alina sireneva <alina@tei.su>
 Date: Tue, 12 May 2026 00:00:00 +0000
 Subject: Restore linear gradient on profile TopView when old layout is enabled
 
-Replaces the 12.x RadialGradient (centered radial blob) with the
-pre-12.0 LinearGradient (simple top-to-bottom gradient) when
-InuConfig.OLD_LAYOUT is on.
-
 ---
- .../java/org/telegram/ui/ProfileActivity.java |  16 +++-
- 1 file changed, 15 insertions(+), 1 deletion(-)
-
 diff --git a/TMessagesProj/src/main/java/org/telegram/ui/ProfileActivity.java b/TMessagesProj/src/main/java/org/telegram/ui/ProfileActivity.java
 index 0000000..0000000 100644
 --- a/TMessagesProj/src/main/java/org/telegram/ui/ProfileActivity.java
 +++ b/TMessagesProj/src/main/java/org/telegram/ui/ProfileActivity.java
-@@ -1,3 +1,5 @@
-+import android.graphics.LinearGradient;
-+import desu.inugram.InuConfig;
- 
-@@ -XX,10 +XX,22 @@
-         private void updateBackgroundPaint() {
-             final int color1 = color1Animated.set(this.color1);
-             final int color2 = color2Animated.set(this.color2);
-             if (actionsView != null) {
-                 actionsView.setActionsColor(btnColor, hasColorById);
+@@ -1301,6 +1301,14 @@
              }
  
              int gradientX = getWidth() / 2;
--            if (backgroundGradient == null || backgroundGradientColor1 != color1 || backgroundGradientColor2 != color2 || backgroundGradientX != gradientX) {
--                backgroundGradientRadius = dp(96) * 2;
--                backgroundGradientY = (actionBar.getOccupyStatusBar() ? AndroidUtilities.statusBarHeight : 0)
--                        + ActionBar.getCurrentActionBarHeight()
--                        - 21 * AndroidUtilities.density
--                        + actionBar.getTranslationY();
--                backgroundGradient = new RadialGradient(backgroundGradientX = gradientX, backgroundGradientY + backgroundGradientRadius / 2f, backgroundGradientRadius, new int[]{backgroundGradientColor2 = color2, backgroundGradientColor1 = color1}, new float[]{0, 1}, Shader.TileMode.CLAMP);
--                backgroundGradient.setLocalMatrix(backgroundGradientMatrix);
--                backgroundPaint.setShader(backgroundGradient);
-+            if (InuConfig.OLD_LAYOUT.getValue()) {
++            if (desu.inugram.InuConfig.OLD_LAYOUT.getValue()) {
 +                if (backgroundGradient == null || backgroundGradientColor1 != color1 || backgroundGradientColor2 != color2) {
 +                    int gradientHeight = AndroidUtilities.statusBarHeight + AndroidUtilities.dp(144);
-+                    backgroundGradient = new LinearGradient(0, 0, 0, gradientHeight, new int[]{backgroundGradientColor2 = color2, backgroundGradientColor1 = color1}, new float[]{0, 1}, Shader.TileMode.CLAMP);
++                    backgroundGradient = new android.graphics.LinearGradient(0, 0, 0, gradientHeight, new int[]{backgroundGradientColor2 = color2, backgroundGradientColor1 = color1}, new float[]{0, 1}, Shader.TileMode.CLAMP);
 +                    backgroundPaint.setShader(backgroundGradient);
 +                    backgroundGradientX = gradientX;
 +                }
 +            } else {
-+            if (backgroundGradient == null || backgroundGradientColor1 != color1 || backgroundGradientColor2 != color2 || backgroundGradientX != gradientX) {
-+                backgroundGradientRadius = dp(96) * 2;
-+                backgroundGradientY = (actionBar.getOccupyStatusBar() ? AndroidUtilities.statusBarHeight : 0)
-+                        + ActionBar.getCurrentActionBarHeight()
-+                        - 21 * AndroidUtilities.density
-+                        + actionBar.getTranslationY();
-+                backgroundGradient = new RadialGradient(backgroundGradientX = gradientX, backgroundGradientY + backgroundGradientRadius / 2f, backgroundGradientRadius, new int[]{backgroundGradientColor2 = color2, backgroundGradientColor1 = color1}, new float[]{0, 1}, Shader.TileMode.CLAMP);
-+                backgroundGradient.setLocalMatrix(backgroundGradientMatrix);
-+                backgroundPaint.setShader(backgroundGradient);
-+            }
+             if (backgroundGradient == null || backgroundGradientColor1 != color1 || backgroundGradientColor2 != color2 || backgroundGradientX != gradientX) {
+                 backgroundGradientRadius = dp(96) * 2;
+                 backgroundGradientY = (actionBar.getOccupyStatusBar() ? AndroidUtilities.statusBarHeight : 0)
+@@ -1311,6 +1319,7 @@
+                 backgroundGradient.setLocalMatrix(backgroundGradientMatrix);
+                 backgroundPaint.setShader(backgroundGradient);
              }
++            }
          }
+ 
+         @Override
