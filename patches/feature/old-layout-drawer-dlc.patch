@@ -4,26 +4,25 @@ Date: Tue, 12 May 2026 00:00:00 +0000
 Subject: Restore hamburger side drawer for old layout mode (DrawerLayoutContainer)
 
 ---
+
 diff --git a/TMessagesProj/src/main/java/org/telegram/ui/ActionBar/DrawerLayoutContainer.java b/TMessagesProj/src/main/java/org/telegram/ui/ActionBar/DrawerLayoutContainer.java
 index 0000000..0000000 100644
 --- a/TMessagesProj/src/main/java/org/telegram/ui/ActionBar/DrawerLayoutContainer.java
 +++ b/TMessagesProj/src/main/java/org/telegram/ui/ActionBar/DrawerLayoutContainer.java
-@@ -27,6 +27,9 @@
+@@ -27,6 +27,7 @@
  import org.telegram.messenger.AndroidUtilities;
  import org.telegram.messenger.BuildVars;
  import org.telegram.messenger.FileLog;
-+import org.telegram.messenger.R;
-+import android.graphics.drawable.Drawable;
 +import android.view.VelocityTracker;
  
  public class DrawerLayoutContainer extends FrameLayout {
  
-@@ -101,13 +104,175 @@
+@@ -101,13 +102,171 @@
          return false;
      }
  
 +
-+    // inu_ drawer fields — only active when InuConfig.OLD_LAYOUT is on
++    // inu_ drawer fields
 +    public FrameLayout inu_drawerLayout;
 +    private View inu_drawerListView;
 +    private float inu_drawerPosition;
@@ -40,16 +39,12 @@ index 0000000..0000000 100644
 +    private android.animation.AnimatorSet inu_currentAnimation;
 +    private float inu_scrimOpacity;
 +    private final Paint inu_scrimPaint = new Paint();
-+    private Drawable inu_shadowLeft;
 +
 +    public void inu_setDrawerLayout(FrameLayout layout, View listView, FrameLayout.LayoutParams lp) {
 +        inu_drawerLayout = layout;
 +        inu_drawerListView = listView;
 +        addView(inu_drawerLayout, lp);
 +        inu_drawerLayout.setVisibility(INVISIBLE);
-+        if (inu_shadowLeft == null) {
-+            inu_shadowLeft = getResources().getDrawable(R.drawable.menu_empty);
-+        }
 +    }
 +
 +    @androidx.annotation.Keep
@@ -195,7 +190,7 @@ index 0000000..0000000 100644
      }
  
      @Override
-@@ -123,7 +288,11 @@
+@@ -123,7 +282,11 @@
  
              final LayoutParams lp = (LayoutParams) child.getLayoutParams();
              try {
@@ -208,7 +203,7 @@ index 0000000..0000000 100644
              } catch (Exception e) {
                  FileLog.e(e);
                  if (BuildVars.DEBUG_VERSION) {
-@@ -165,7 +334,12 @@
+@@ -165,7 +328,12 @@
  
              final LayoutParams lp = (LayoutParams) child.getLayoutParams();
  
@@ -222,7 +217,7 @@ index 0000000..0000000 100644
              final int contentHeightSpec;
              if (lp.height > 0) {
                  contentHeightSpec = MeasureSpec.makeMeasureSpec(lp.height, MeasureSpec.EXACTLY);
-@@ -193,7 +367,12 @@
+@@ -193,7 +361,12 @@
          if (!allowDrawContent) {
              return false;
          }
