@@ -29,12 +29,12 @@ index 0000000..0000000 100644
          return getValue();
      }
  
-+    public static float inu_multiplier;
++    public static float inu_multiplier = 1f;
      public float getValue() {
          if (transition) {
              final long now = SystemClock.elapsedRealtime();
 -            final float t = MathUtils.clamp((now - transitionStart - transitionDelay) / (float) transitionDuration, 0, 1);
-+            final float t = MathUtils.clamp((now - transitionStart - transitionDelay) / ((float) transitionDuration * inu_multiplier), 0, 1);
++            final float t = MathUtils.clamp((now - transitionStart - transitionDelay) / ((float) transitionDuration / inu_multiplier), 0, 1);
              if (now - transitionStart >= transitionDelay) {
                  if (transitionInterpolator == null) {
                      value = AndroidUtilities.lerp(startValue, targetValue, t);
