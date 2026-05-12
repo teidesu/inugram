@@ -120,3 +120,4 @@ feature/live-typing-draft.patch
 feature/forwarded-time-inline.patch
 debloat/profile-photo-blur.patch
 bugfix/reaction-sending-race.patch
+feature/custom-emoji-after-regular.patch

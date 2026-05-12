@@ -258,6 +258,9 @@
     <string name="InuTextClassifierModeOff">Off</string>
     <string name="InuTextClassifierModeOffInfo">Disabling text classifier improves text selection responsiveness</string>
 
+    <string name="InuSuggestCustomEmojiAfter">Suggest custom emoji after regular</string>
+    <string name="InuSuggestCustomEmojiAfterInfo">In the \":shortcode\" suggestion popup, show animated/custom emoji after the regular ones instead of before</string>
+
     <string name="InuFormattingPopup">Custom formatting popup</string>
     <string name="InuFormattingPopupInfo">Replaces the stock rich text formatting menu with an interactive popup.\nClick to customize…</string>
     <string name="InuFormattingPopupItems">Popup buttons</string>

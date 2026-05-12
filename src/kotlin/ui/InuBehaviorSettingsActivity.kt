@@ -90,6 +90,14 @@ class InuBehaviorSettingsActivity : InuSettingsPageActivity() {
         )
         items.add(
             mkTwoLineCheckItem(
+                TOGGLE_SUGGEST_CUSTOM_EMOJI_AFTER,
+                R.string.InuSuggestCustomEmojiAfter,
+                R.string.InuSuggestCustomEmojiAfterInfo,
+                InuConfig.SUGGEST_CUSTOM_EMOJI_AFTER.value,
+            )
+        )
+        items.add(
+            mkTwoLineCheckItem(
                 TOGGLE_DISABLE_DRAFT_UPLOAD,
                 R.string.InuDisableDraftUpload,
                 R.string.InuDisableDraftUploadInfo,
@@ -208,6 +216,11 @@ class InuBehaviorSettingsActivity : InuSettingsPageActivity() {
                 (view as? NotificationsCheckCell)?.isChecked = new
             }
 
+            TOGGLE_SUGGEST_CUSTOM_EMOJI_AFTER -> {
+                val new = InuConfig.SUGGEST_CUSTOM_EMOJI_AFTER.toggle()
+                (view as? NotificationsCheckCell)?.isChecked = new
+            }
+
             TOGGLE_DISABLE_DRAFT_UPLOAD -> {
                 val new = InuConfig.DISABLE_DRAFT_UPLOAD.toggle()
                 (view as? NotificationsCheckCell)?.isChecked = new
@@ -310,6 +323,7 @@ class InuBehaviorSettingsActivity : InuSettingsPageActivity() {
         private val TOGGLE_DISABLE_CHAT_BUBBLES = InuUtils.generateId()
         private val BUTTON_WEB_PREVIEW_REPLACEMENTS = InuUtils.generateId()
         private val TOGGLE_DISABLE_INTRO_STICKER = InuUtils.generateId()
+        private val TOGGLE_SUGGEST_CUSTOM_EMOJI_AFTER = InuUtils.generateId()
         private val TOGGLE_DISABLE_DRAFT_UPLOAD = InuUtils.generateId()
         private val TOGGLE_DISABLE_PREDICTIVE_BACK = InuUtils.generateId()
         private val BUTTON_ROUND_DEFAULT_CAMERA = InuUtils.generateId()

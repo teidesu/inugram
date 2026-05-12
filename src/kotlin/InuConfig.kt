@@ -387,6 +387,9 @@ object InuConfig {
     @JvmField
     val FORMATTING_POPUP = BoolItem("formatting_popup", true)
 
+    @JvmField
+    val SUGGEST_CUSTOM_EMOJI_AFTER = BoolItem("suggest_custom_emoji_after", true)
+
     class TextClassifierModeItem : IntItem("text_classifier_mode", IMPROVED) {
         companion object {
             const val NATIVE = 1

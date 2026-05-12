@@ -85,6 +85,7 @@ most things are toggleable in `Settings → Inugram`, with sensible opinionated 
 - 🐶 voice recorder moved into attachments drawer
 - 🐶 custom formatting popup ui (better ux for span manipulation)
 - 🐶 customizable text classifier (native / improved / off) - reduces false positive expansions
+- show custom emoji *after* regular ones in `:smile` emoji suggestion popup
 - "delete for both/all" default checkbox state
 
 ## photo viewer
