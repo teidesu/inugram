@@ -8,7 +8,7 @@ diff --git a/TMessagesProj/src/main/java/org/telegram/ui/LaunchActivity.java b/T
 index 0000000..0000000 100644
 --- a/TMessagesProj/src/main/java/org/telegram/ui/LaunchActivity.java
 +++ b/TMessagesProj/src/main/java/org/telegram/ui/LaunchActivity.java
-@@ -562,8 +562,8 @@
+@@ -562,8 +562,9 @@
              if (!UserConfig.getInstance(currentAccount).isClientActivated()) {
                  actionBarLayout.addFragmentToStack(getClientNotActivatedFragment());
              } else {
@@ -16,10 +16,11 @@ index 0000000..0000000 100644
 -                actionBarLayout.addFragmentToStack(mainTabsActivity);
 +                org.telegram.ui.ActionBar.BaseFragment mainFragment = desu.inugram.InuHooks.createMainFragment();
 +                actionBarLayout.addFragmentToStack(mainFragment);
++                if (desu.inugram.InuConfig.OLD_LAYOUT.getValue()) desu.inugram.helpers.DrawerHelper.INSTANCE.setup(this, drawerLayoutContainer, actionBarLayout);
              }
  
              try {
-@@ -1155,7 +1155,7 @@
+@@ -1155,7 +1156,7 @@
  
      private boolean switchingAccount;
      public void switchToAccount(int account, boolean removeAll) {
@@ -28,7 +29,7 @@ index 0000000..0000000 100644
      }
  
      public void switchToAccount(int account, boolean removeAll, GenericProvider<Void, MainTabsActivity> dialogsActivityProvider) {
-@@ -3246,12 +3246,14 @@
+@@ -3246,12 +3247,14 @@
                      }
                  } else {
                      if (actionBarLayout.getFragmentStack().isEmpty()) {
@@ -48,7 +49,7 @@ index 0000000..0000000 100644
                      }
                  }
              } else {
-@@ -3259,12 +3261,14 @@
+@@ -3259,12 +3262,14 @@
                      if (!UserConfig.getInstance(currentAccount).isClientActivated()) {
                          actionBarLayout.addFragmentToStack(getClientNotActivatedFragment(), INavigationLayout.FORCE_NOT_ATTACH_VIEW);
                      } else {

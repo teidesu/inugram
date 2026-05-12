@@ -42,7 +42,3 @@ index 0000000..0000000 100644
                      if (rightSlidingDialogContainer != null && rightSlidingDialogContainer.hasFragment()) {
                          if (actionBar.isActionModeShowed()) {
                              if (searchViewPager != null && searchViewPager.getVisibility() == View.VISIBLE && searchViewPager.actionModeShowing()) {
-diff --git a/TMessagesProj/src/main/java/org/telegram/ui/LaunchActivity.java b/TMessagesProj/src/main/java/org/telegram/ui/LaunchActivity.java
-index 0000000..0000000 100644
---- a/TMessagesProj/src/main/java/org/telegram/ui/LaunchActivity.java
-+++ b/TMessagesProj/src/main/java/org/telegram/ui/LaunchActivity.java
