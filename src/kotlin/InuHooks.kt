@@ -15,6 +15,7 @@ import org.telegram.messenger.MessagesController
 import org.telegram.messenger.R
 import org.telegram.messenger.UserConfig
 import org.telegram.tgnet.TLObject
+import org.telegram.ui.ActionBar.BaseFragment
 import org.telegram.ui.Components.AnimatedFloat
 import org.telegram.ui.Components.GestureDetector2
 import org.telegram.ui.Components.GestureDetectorFixDoubleTap
@@ -23,6 +24,7 @@ import org.telegram.ui.ContactsActivity
 import org.telegram.ui.DialogsActivity
 import org.telegram.ui.LaunchActivity
 import org.telegram.ui.LauncherIconController
+import org.telegram.ui.MainTabsActivity
 import org.telegram.ui.ProfileActivity
 import org.telegram.ui.SettingsActivity
 
@@ -92,6 +94,10 @@ object InuHooks {
             key == "AppUpdate" ||
             key == "AppUpdateBeta"
     }
+
+    @JvmStatic
+    fun createMainFragment(): BaseFragment =
+        if (InuConfig.OLD_LAYOUT.value) DialogsActivity(null) else MainTabsActivity()
 
     @JvmStatic
     fun addDialogsActivityOptions(instance: DialogsActivity, io: ItemOptions): Unit {

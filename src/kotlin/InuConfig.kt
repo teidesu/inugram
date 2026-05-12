@@ -110,6 +110,9 @@ object InuConfig {
     val HIDE_TRENDING_STICKERS = BoolItem("hide_trending_stickers", true)
 
     @JvmField
+    val OLD_LAYOUT = BoolItem("old_layout", false)
+
+    @JvmField
     val BOTTOM_TABS_HIDE = BoolItem("bottom_tabs_hide", false)
 
     @JvmField
