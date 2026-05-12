@@ -17,6 +17,7 @@ most things are toggleable in `Settings → Inugram`, with sensible opinionated 
 - show peer id in profile (telegram id / bot api id)
 - estimated registration date in profile - *ported & datapoints from [NagramX](https://github.com/risin42/NagramX)*
 - hide own phone number from ui
+- force system font
 - 🐶 hide fade views
 - 🐶 old (pre-12.6) mention/reaction indicator
 - 🐶 toggleable scrim blur

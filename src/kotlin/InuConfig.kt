@@ -361,6 +361,9 @@ object InuConfig {
     val HIDE_MY_PHONE_NUMBER = BoolItem("hide_my_phone_number", true)
 
     @JvmField
+    val USE_SYSTEM_FONT = BoolItem("use_system_font", false)
+
+    @JvmField
     val REACTIONS_IN_ROW = IntItem("reactions_in_row", 8)
 
     @JvmField

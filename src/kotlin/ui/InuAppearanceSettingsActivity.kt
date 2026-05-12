@@ -54,6 +54,14 @@ class InuAppearanceSettingsActivity : InuSettingsPageActivity() {
         )
         items.add(
             mkTwoLineCheckItem(
+                TOGGLE_USE_SYSTEM_FONT,
+                R.string.InuUseSystemFont,
+                R.string.InuUseSystemFontInfo,
+                InuConfig.USE_SYSTEM_FONT.value
+            )
+        )
+        items.add(
+            mkTwoLineCheckItem(
                 TOGGLE_DISABLE_SCRIM_BLUR,
                 R.string.InuDisableScrimBlur,
                 R.string.InuDisableScrimBlurInfo,
@@ -226,6 +234,12 @@ class InuAppearanceSettingsActivity : InuSettingsPageActivity() {
                 (view as? TextCheckCell)?.isChecked = new
             }
 
+            TOGGLE_USE_SYSTEM_FONT -> {
+                val new = InuConfig.USE_SYSTEM_FONT.toggle()
+                (view as? NotificationsCheckCell)?.isChecked = new
+                showRestartBulletin()
+            }
+
             TOGGLE_DISABLE_SCRIM_BLUR -> {
                 val new = InuConfig.DISABLE_SCRIM_BLUR.toggle()
                 (view as? NotificationsCheckCell)?.isChecked = new
@@ -264,6 +278,7 @@ class InuAppearanceSettingsActivity : InuSettingsPageActivity() {
         private val TOGGLE_SHOW_SECONDS = InuUtils.generateId()
         private val TOGGLE_DISABLE_ROUNDING = InuUtils.generateId()
         private val TOGGLE_HIDE_MY_PHONE_NUMBER = InuUtils.generateId()
+        private val TOGGLE_USE_SYSTEM_FONT = InuUtils.generateId()
         private val TOGGLE_DISABLE_SCRIM_BLUR = InuUtils.generateId()
         private val TOGGLE_PROFILE_PHOTO_GRADIENT_FADE = InuUtils.generateId()
         private val BUTTON_ICON_REPLACEMENT = InuUtils.generateId()

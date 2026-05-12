@@ -150,6 +150,8 @@
     <string name="InuDisableChatPreviewExpand">Interactive chat preview</string>
     <string name="InuDisableChatPreviewExpandInfo">Disable tap-to-expand, and make the bubbles interactive instead</string>
     <string name="InuHideMyPhoneNumber">Hide my phone number</string>
+    <string name="InuUseSystemFont">Use system font</string>
+    <string name="InuUseSystemFontInfo">Replace bundled Roboto faces with the system font</string>
     <string name="InuFullWidthChannelBubbles">Full-width channel bubbles</string>
     <string name="InuProfileIdMode">Show ID in profile</string>
     <string name="InuProfileIdModeOff">Off</string>
