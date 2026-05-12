@@ -2,7 +2,7 @@
 <resources>
     <string name="InuOpenInDiscussion">Открыть в обсуждении</string>
     <string name="InuSettings">Настройки Inugram</string>
-    <string name="InuSettingsInfo">что это?</string>
+    <string name="InuSettingsInfo">Что делает эта собачёнка?</string>
     <string name="InuExperimental">Экспериментальное</string>
     <string name="InuGeneral">Основные</string>
     <string name="InuMiscellaneous">Прочее</string>
@@ -12,7 +12,7 @@
     <string name="InuOther">Другое</string>
     <string name="InuMainPage">Главный экран</string>
     <string name="InuChatList">Список чатов</string>
-    <string name="InuOpenArchiveOnPull">Открывать архив по оттягиванию</string>
+    <string name="InuOpenArchiveOnPull">Открывать архив при вытягивании</string>
     <string name="InuDoubleTapActions">Действия двойного касания</string>
     <string name="InuDoubleTapDelay">Задержка двойного касания</string>
     <string name="InuIncomingMessages">Входящие сообщения</string>
@@ -56,7 +56,7 @@
     <string name="InuBottomTabs">Нижние вкладки</string>
     <string name="InuBottomTabsHide">Скрыть нижние вкладки</string>
     <string name="InuBottomTabsHideInfo">Пункты перемещаются в гамбургер-меню главного экрана</string>
-    <string name="InuHideContactsTab">Скрыть вкладку контактов</string>
+    <string name="InuHideContactsTab">Скрыть вкладку «Контакты»</string>
     <string name="InuCompactMode">Компактный режим</string>
     <string name="InuCompactModeInfo">Скрывает названия и уменьшает вкладки</string>
     <string name="InuDialogsFab">Кнопка действия</string>
@@ -152,7 +152,7 @@
     <string name="InuHideMyPhoneNumber">Скрыть мой номер телефона</string>
     <string name="InuFullWidthChannelBubbles">Пузыри каналов во всю ширину</string>
     <string name="InuProfileIdMode">Показывать ID в профиле</string>
-    <string name="InuProfileIdModeOff">Откл.</string>
+    <string name="InuProfileIdModeOff">Выкл.</string>
     <string name="InuProfileIdModeTelegram">Telegram ID</string>
     <string name="InuProfileIdModeBotApi">Bot API ID</string>
     <string name="InuProfileId">ID</string>
@@ -202,8 +202,8 @@
 
     <string name="InuRoundDefaultCamera">Камера для кружочков по умолчанию</string>
     <string name="InuRoundCameraFront">Фронтальная</string>
-    <string name="InuRoundCameraRear">Задняя</string>
-    <string name="InuRoundCameraAsk">Спрашивать каждый раз</string>
+    <string name="InuRoundCameraRear">Основная</string>
+    <string name="InuRoundCameraAsk">Спрашивать</string>
 
     <string name="InuDisableScrimBlur">Отключить размытие подложки</string>
     <string name="InuDisableScrimBlurInfo">Заменяет размытие за контекстными меню и превью на плоское затемнение. Может уменьшить лаги.</string>
@@ -255,7 +255,7 @@
     <string name="InuTextClassifierModeNative">Системный</string>
     <string name="InuTextClassifierModeImproved">Улучшенный</string>
     <string name="InuTextClassifierModeImprovedInfo">Обрабатывать только часть сущностей, чтобы уменьшить ложные срабатывания</string>
-    <string name="InuTextClassifierModeOff">Откл.</string>
+    <string name="InuTextClassifierModeOff">Выкл.</string>
     <string name="InuTextClassifierModeOffInfo">Отключение классификатора улучшает отзывчивость выделения текста</string>
 
     <string name="InuFormattingPopup">Своё меню форматирования</string>
@@ -314,7 +314,7 @@
     <string name="InuBackupExportError">Не удалось экспортировать настройки: %1$s</string>
     <string name="InuBackupImportSuccess">Импортировано настроек: %1$d</string>
     <string name="InuBackupImportBadFormat">Файл не является корректной резервной копией настроек</string>
-    <string name="InuBackupImportSheetTitle">Применить эти настройки?</string>
+    <string name="InuBackupImportSheetTitle">Вы уверены, что хотите применить эти настройки?</string>
     <string name="InuBackupImportNoChanges">Этот файл совпадает с вашими текущими настройками</string>
     <string name="InuBackupImportSheetChanges_one">Будет применено **%1$d** изменение к текущим настройкам.</string>
     <string name="InuBackupImportSheetChanges_few">Будет применено **%1$d** изменения к текущим настройкам.</string>
@@ -348,10 +348,10 @@
     <string name="InuLoginViaPasskey">Войти через Passkey</string>
     <string name="InuQrLoginMessage">1. Откройте Telegram на телефоне.\n2. Перейдите в Настройки → Устройства → Подключить десктоп.\n3. Наведите телефон на QR-код ниже.</string>
     <string name="InuCopyButtonText">Копировать «%1$s»</string>
-    <string name="InuCopyCallbackData">Копировать callback-данные</string>
+    <string name="InuCopyCallbackData">Копировать Callback-данные</string>
     <string name="InuCallbackDataCopied">Callback-данные скопированы</string>
     <string name="InuLiveDraftMenu">Живые черновики</string>
-    <string name="InuLiveDraftModeDisabled">Откл.</string>
+    <string name="InuLiveDraftModeDisabled">Выкл.</string>
     <string name="InuLiveDraftModeEmpty">Пустой</string>
     <string name="InuLiveDraftModeSizeOnly">Только размер</string>
     <string name="InuLiveDraftModeFull">Полный текст</string>
