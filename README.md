@@ -117,11 +117,6 @@ as a rule of thumb: prefer the former, but if you get a lot of merge conflicts, 
 - Tabler icons by [Tabler Team](https://tabler.io/icons)
 - Solar icon pack by [480 Design](https://t.me/Design480)
 
-this project is llm-assisted: a bunch of the code and the patches were (and will be) written by claude. this doesn't mean it's "ai slop", i still review all the code myself,
-but im not an android dev by any means so it might not be perfect. ai-assisted contributions are welcome as long as you disclose that in the pr.
-
-if you have an issue with that - go make your own fork.
-
 ## license
 
 abolish copyright law tbh, but let's just say the repo is licensed under MIT
