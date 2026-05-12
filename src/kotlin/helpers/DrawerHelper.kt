@@ -14,6 +14,7 @@ import org.telegram.ui.ActionBar.Theme
 import desu.inugram.ui.drawer.DrawerLayoutAdapter
 import org.telegram.ui.Components.RecyclerListView
 import desu.inugram.ui.drawer.SideMenultItemAnimator
+import org.telegram.ui.CallLogActivity
 import org.telegram.ui.ContactsActivity
 import org.telegram.ui.ProfileActivity
 import org.telegram.ui.SettingsActivity
