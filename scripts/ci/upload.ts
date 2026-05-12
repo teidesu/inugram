@@ -78,7 +78,7 @@ try {
   `
 
   let caption = buildCaption(commits)
-  while (caption.text.length > 4096 && commits.length > 1) {
+  while (caption.text.length > 1024 && commits.length > 0) {
     commits.pop()
     caption = buildCaption(commits)
   }
