@@ -135,7 +135,7 @@ index 0000000..0000000 100644
              final int color2 = color2Animated.set(this.color2);
              if (actionsView != null) {
 -                actionsView.setActionsColor(btnColor, hasColorById);
-+                actionsView.setActionsColor(ProfileHelper.adjustChipColor(btnColor, getThemedColor(Theme.key_windowBackgroundWhite), currentExpandAnimatorValue), hasColorById);
++                actionsView.setActionsColor(ProfileHelper.adjustChipColor(btnColor, getThemedColor(Theme.key_windowBackgroundWhite), ProfileHelper.effectiveChipExpand(playProfileAnimation, avatarAnimationProgress, currentExpandAnimatorValue)), hasColorById);
              }
  
              int gradientX = getWidth() / 2;

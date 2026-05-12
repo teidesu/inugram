@@ -108,6 +108,12 @@ class InuAnnoyancesSettingsActivity : InuSettingsPageActivity() {
             )
         )
         items.add(
+            UItem.asCheck(
+                TOGGLE_REDUCE_PROFILE_MOTION,
+                LocaleController.getString(R.string.InuReduceProfileMotion),
+            ).setChecked(InuConfig.REDUCE_PROFILE_MOTION.value)
+        )
+        items.add(
             mkTwoLineCheckItem(
                 TOGGLE_OPT_IN_MOTION_PHOTOS,
                 R.string.InuOptInMotionPhotos,
@@ -174,6 +180,11 @@ class InuAnnoyancesSettingsActivity : InuSettingsPageActivity() {
             TOGGLE_DISABLE_PROFILE_SCROLL_SNAP -> {
                 val new = InuConfig.DISABLE_PROFILE_SCROLL_SNAP.toggle()
                 (view as? NotificationsCheckCell)?.isChecked = new
+            }
+
+            TOGGLE_REDUCE_PROFILE_MOTION -> {
+                val new = InuConfig.REDUCE_PROFILE_MOTION.toggle()
+                (view as? TextCheckCell)?.isChecked = new
             }
 
             TOGGLE_OPT_IN_MOTION_PHOTOS -> {
@@ -262,6 +273,7 @@ class InuAnnoyancesSettingsActivity : InuSettingsPageActivity() {
         private val TOGGLE_DISABLE_BG_PARALLAX = InuUtils.generateId()
         private val TOGGLE_HIDE_PAID_REACTION_UPSELL = InuUtils.generateId()
         private val TOGGLE_DISABLE_PROFILE_SCROLL_SNAP = InuUtils.generateId()
+        private val TOGGLE_REDUCE_PROFILE_MOTION = InuUtils.generateId()
         private val TOGGLE_OPT_IN_MOTION_PHOTOS = InuUtils.generateId()
         private val BUTTON_CLEAR_HINTS = InuUtils.generateId()
     }

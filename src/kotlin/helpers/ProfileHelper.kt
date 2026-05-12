@@ -9,6 +9,7 @@ import android.graphics.drawable.Drawable
 import android.view.View
 import android.widget.Toast
 import androidx.core.graphics.ColorUtils
+import androidx.recyclerview.widget.RecyclerView
 import desu.inugram.InuConfig
 import org.telegram.messenger.AccountInstance
 import org.telegram.messenger.AndroidUtilities
@@ -29,6 +30,7 @@ import org.telegram.ui.Components.BulletinFactory
 import org.telegram.ui.Components.ItemOptions
 import org.telegram.ui.Components.ProfileGalleryBlurView
 import org.telegram.ui.Components.ProfileGalleryView
+import org.telegram.ui.Gifts.GiftSheet
 
 object ProfileHelper {
     const val ACTION_TOGGLE_HIDE_WALLPAPER = 505
@@ -45,6 +47,29 @@ object ProfileHelper {
     fun useProfilePhotoGradientFade(): Boolean = InuConfig.PROFILE_PHOTO_GRADIENT_FADE.value
 
     @JvmStatic
+    fun reduceMotion(): Boolean = InuConfig.REDUCE_PROFILE_MOTION.value
+
+    @JvmStatic
+    fun applyReduceMotionAlpha(openAnimationInProgress: Boolean, diff: Float, vararg views: View?) {
+        if (!reduceMotion() || openAnimationInProgress) return
+        val fade = diff.coerceIn(0f, 1f)
+        for (v in views) v?.alpha = fade
+    }
+
+    @JvmStatic
+    fun disableGiftLottieAutoplay(listView: RecyclerView) {
+        if (!reduceMotion()) return
+        listView.addOnChildAttachStateChangeListener(object : RecyclerView.OnChildAttachStateChangeListener {
+            override fun onChildViewAttachedToWindow(view: View) {
+                if (view is GiftSheet.GiftCell) {
+                    view.imageView.imageReceiver.setAllowStartLottieAnimation(false)
+                }
+            }
+            override fun onChildViewDetachedFromWindow(view: View) {}
+        })
+    }
+
+    @JvmStatic
     fun notifyBlurExpandProgress(pager: ProfileGalleryView?, value: Float) {
         val b = pager?.blurDrawer ?: return
         b.inu_expandProgress = value
@@ -52,14 +77,16 @@ object ProfileHelper {
     }
 
     @JvmStatic
+    fun effectiveChipExpand(playProfileAnimation: Int, avatarAnimationProgress: Float, currentExpandAnimatorValue: Float): Float = when {
+        playProfileAnimation == 2 -> 1f
+        avatarAnimationProgress >= 1f || playProfileAnimation == 0 -> currentExpandAnimatorValue.coerceIn(0f, 1f)
+        else -> 0f
+    }
+
+    @JvmStatic
     fun expandedActionsOffset(playProfileAnimation: Int, avatarAnimationProgress: Float, currentExpandAnimatorValue: Float): Float {
         if (!useProfilePhotoGradientFade()) return 0f
-        val expand = when {
-            playProfileAnimation == 2 -> 1f
-            avatarAnimationProgress >= 1f || playProfileAnimation == 0 -> currentExpandAnimatorValue.coerceIn(0f, 1f)
-            else -> 0f
-        }
-        return AndroidUtilities.dpf2(8f) * expand
+        return AndroidUtilities.dpf2(8f) * effectiveChipExpand(playProfileAnimation, avatarAnimationProgress, currentExpandAnimatorValue)
     }
 
     @JvmStatic

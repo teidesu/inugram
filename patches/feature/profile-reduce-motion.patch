@@ -1,0 +1,178 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: alina sireneva <alina@tei.su>
+Date: Tue, 12 May 2026 19:57:59 +0200
+Subject: reduce motion in profile
+
+---
+ .../ui/Components/ProfileActionsView.java     |  4 ++++
+ .../ui/Gifts/ProfileGiftsContainer.java       |  1 +
+ .../java/org/telegram/ui/ProfileActivity.java | 24 ++++++++++++-------
+ .../telegram/ui/Stars/ProfileGiftsView.java   |  8 ++++---
+ 4 files changed, 26 insertions(+), 11 deletions(-)
+
+diff --git a/TMessagesProj/src/main/java/org/telegram/ui/Components/ProfileActionsView.java b/TMessagesProj/src/main/java/org/telegram/ui/Components/ProfileActionsView.java
+index 0000000..0000000 100644
+--- a/TMessagesProj/src/main/java/org/telegram/ui/Components/ProfileActionsView.java
++++ b/TMessagesProj/src/main/java/org/telegram/ui/Components/ProfileActionsView.java
+@@ -291,6 +291,10 @@ public class ProfileActionsView extends View {
+ 
+         float fraction = Utilities.clamp01(height / targetHeight);
+         float alphaFraction1 = Utilities.clamp01((fraction - 0.2f) / 0.8f);
++        if (desu.inugram.helpers.ProfileHelper.reduceMotion()) {
++            fraction = 1f;
++            alphaFraction1 = 1f;
++        }
+         if (alphaFraction1 <= 0f) {
+             return;
+         }
+diff --git a/TMessagesProj/src/main/java/org/telegram/ui/Gifts/ProfileGiftsContainer.java b/TMessagesProj/src/main/java/org/telegram/ui/Gifts/ProfileGiftsContainer.java
+index 0000000..0000000 100644
+--- a/TMessagesProj/src/main/java/org/telegram/ui/Gifts/ProfileGiftsContainer.java
++++ b/TMessagesProj/src/main/java/org/telegram/ui/Gifts/ProfileGiftsContainer.java
+@@ -241,6 +241,7 @@ public class ProfileGiftsContainer extends FrameLayout implements NotificationCe
+                     parent.updateTabsY();
+                 }
+             });
++            desu.inugram.helpers.ProfileHelper.disableGiftLottieAutoplay(listView);
+             DefaultItemAnimator itemAnimator = new DefaultItemAnimator() {
+                 @Override
+                 protected void onMoveAnimationUpdate(RecyclerView.ViewHolder holder) {
+diff --git a/TMessagesProj/src/main/java/org/telegram/ui/ProfileActivity.java b/TMessagesProj/src/main/java/org/telegram/ui/ProfileActivity.java
+index 0000000..0000000 100644
+--- a/TMessagesProj/src/main/java/org/telegram/ui/ProfileActivity.java
++++ b/TMessagesProj/src/main/java/org/telegram/ui/ProfileActivity.java
+@@ -1355,7 +1355,8 @@ public class ProfileActivity extends BaseFragment implements NotificationCenter.
+                         canvas.clipRect(0, 0, getMeasuredWidth(), y1);
+                         float atop = actionBar.getOccupyStatusBar() ? AndroidUtilities.statusBarHeight : 0;
+                         float maxExpand = getHeaderOnlyExtraHeight() + atop + (actionBar.getHeight() - atop) / 2f;
+-                        StarGiftPatterns.drawProfileAnimatedPattern(canvas, emoji, getMeasuredWidth(), maxExpand, calculateHeaderExtraDiff(), avatarContainer, 1.0f);
++                        final boolean inuReduceMotionPattern = ProfileHelper.reduceMotion() && isFragmentOpened;
++                        StarGiftPatterns.drawProfileAnimatedPattern(canvas, emoji, getMeasuredWidth(), maxExpand, inuReduceMotionPattern ? 1f : calculateHeaderExtraDiff(), avatarContainer, inuReduceMotionPattern && !openAnimationInProgress ? Math.max(0f, calculateHeaderExtraDiff()) : 1f);
+                         canvas.restore();
+                     }
+                 }
+@@ -4223,7 +4224,7 @@ public class ProfileActivity extends BaseFragment implements NotificationCenter.
+                 updateBottomButtonY();
+             }
+         };
+-        listView.setItemAnimator(defaultItemAnimator);
++        listView.setItemAnimator(ProfileHelper.reduceMotion() ? null : defaultItemAnimator);
+         defaultItemAnimator.setMoveDelay(0);
+         defaultItemAnimator.setMoveDuration(320);
+         defaultItemAnimator.setRemoveDuration(320);
+@@ -5943,8 +5944,8 @@ public class ProfileActivity extends BaseFragment implements NotificationCenter.
+             avatarGooey.setGooeyEnabled(false);
+         } else {
+             avatarGooey.setPullProgress(pullUpProgress);
+-            avatarGooey.setBlurIntensity(Math.min((MathUtils.clamp(pullUpProgress, 0.2f, 0.7f) - 0.2f) / 0.5f, 0.75f));
+-            avatarGooey.setGooeyEnabled(pullUpProgress > 0 && pullUpProgress < 1);
++            avatarGooey.setBlurIntensity(ProfileHelper.reduceMotion() ? 0f : Math.min((MathUtils.clamp(pullUpProgress, 0.2f, 0.7f) - 0.2f) / 0.5f, 0.75f));
++            avatarGooey.setGooeyEnabled(!ProfileHelper.reduceMotion() && pullUpProgress > 0 && pullUpProgress < 1);
+         }
+         if (storyView != null && playProfileAnimation != 2) {
+             storyView.setAlpha(pullUpProgress > 0 ? lerp(1.0f, 0.0f, ilerp(pullUpProgress, 0, 0.5f)) : 1.0f);
+@@ -8308,7 +8309,7 @@ public class ProfileActivity extends BaseFragment implements NotificationCenter.
+                         + ActionBar.getCurrentActionBarHeight()
+                         - dp(21)
+                         + actionBar.getTranslationY();
+-                avatarY = lerp(endY, startY, diff);
++                avatarY = ProfileHelper.reduceMotion() ? startY - Math.max(0f, headerExtraHeight - extraHeight) : lerp(endY, startY, diff);
+             } else {
+                 avatarY = endNameY;
+             }
+@@ -8589,6 +8590,10 @@ public class ProfileActivity extends BaseFragment implements NotificationCenter.
+                     avatarScale = lerp(intoSize, 96, diff) / 100f;
+                     pullUpProgress = 1.0f - diff;
+                 }
++                if (ProfileHelper.reduceMotion() && !openAnimationInProgress) {
++                    avatarScale = 96f / 100f;
++                    pullUpProgress = 0.0f;
++                }
+ 
+                 if (actionsView != null) {
+                     if (openAnimationInProgress) {
+@@ -8602,7 +8607,7 @@ public class ProfileActivity extends BaseFragment implements NotificationCenter.
+                     storyView.invalidate();
+                 }
+                 if (giftsView != null) {
+-                    giftsView.setCollapseProgress(diff, openAnimationInProgress);
++                    giftsView.setCollapseProgress(ProfileHelper.reduceMotion() ? 1f : diff, openAnimationInProgress);
+                 }
+                 final float nameScale = 1.0f + 0.12f * diff;
+                 if (expandAnimator == null || !expandAnimator.isRunning()) {
+@@ -8683,6 +8688,7 @@ public class ProfileActivity extends BaseFragment implements NotificationCenter.
+         if (diff >= 1f) {
+             avatarImage.setAlpha(1f);
+         }
++        ProfileHelper.applyReduceMotionAlpha(openAnimationInProgress, diff, avatarContainer, giftsView, storyView);
+     }
+ 
+     private void updateExtraViews(float newTop) {
+@@ -8693,7 +8699,7 @@ public class ProfileActivity extends BaseFragment implements NotificationCenter.
+             overlaysView.requestLayout();
+         }
+         if (topView != null) {
+-            topView.backgroundGradientMatrix.setTranslate(0f, avatarY - topView.backgroundGradientY);
++            topView.backgroundGradientMatrix.setTranslate(0f, ProfileHelper.reduceMotion() && openAnimationInProgress ? 0f : avatarY - topView.backgroundGradientY);
+             if (topView.backgroundGradient != null) {
+                 topView.backgroundGradient.setLocalMatrix(topView.backgroundGradientMatrix);
+             }
+@@ -11004,7 +11010,7 @@ public class ProfileActivity extends BaseFragment implements NotificationCenter.
+             return;
+         }
+         final int newTop = ActionBar.getCurrentActionBarHeight() + (actionBar.getOccupyStatusBar() ? AndroidUtilities.statusBarHeight : 0);
+-        actionsView.isOpeningLayout = openAnimationInProgress;
++        actionsView.isOpeningLayout = openAnimationInProgress || ProfileHelper.reduceMotion();
+ 
+         if (openAnimationInProgress && playProfileAnimation == 2 && avatarContainer != null) {
+             float vh = avatarContainer.getHeight() * avatarContainer.getScaleY();
+@@ -16376,7 +16382,9 @@ public class ProfileActivity extends BaseFragment implements NotificationCenter.
+             collectibleHint = new HintView2(getContext(), HintView2.DIRECTION_BOTTOM);
+             collectibleHintBackgroundColor = Theme.blendOver(status.center_color | 0xFF000000, Theme.multAlpha(status.pattern_color | 0xFF000000, .5f));
+             collectibleHint.setPadding(dp(4), 0, dp(4), dp(2));
++            if (!ProfileHelper.reduceMotion()) {
+             collectibleHint.setFlicker(.66f, Theme.multAlpha(status.text_color | 0xFF000000, 0.5f));
++            }
+             avatarContainer2.addView(collectibleHint, LayoutHelper.createFrame(LayoutHelper.MATCH_PARENT, 24));
+             collectibleHint.setTextSize(9.33f);
+             collectibleHint.setTextTypeface(AndroidUtilities.bold());
+diff --git a/TMessagesProj/src/main/java/org/telegram/ui/Stars/ProfileGiftsView.java b/TMessagesProj/src/main/java/org/telegram/ui/Stars/ProfileGiftsView.java
+index 0000000..0000000 100644
+--- a/TMessagesProj/src/main/java/org/telegram/ui/Stars/ProfileGiftsView.java
++++ b/TMessagesProj/src/main/java/org/telegram/ui/Stars/ProfileGiftsView.java
+@@ -20,6 +20,8 @@ import android.view.animation.LinearInterpolator;
+ 
+ import androidx.annotation.NonNull;
+ 
++import desu.inugram.helpers.ProfileHelper;
++
+ import org.telegram.messenger.AndroidUtilities;
+ import org.telegram.messenger.MessagesController;
+ import org.telegram.messenger.NotificationCenter;
+@@ -323,7 +325,7 @@ public class ProfileGiftsView extends View implements NotificationCenter.Notific
+                 } else {
+                     g.emojiDrawable = AnimatedEmojiDrawable.make(currentAccount, AnimatedEmojiDrawable.CACHE_TYPE_MESSAGES, g.documentId);
+                 }
+-                g.animatedFloat = new AnimatedFloat(this, 0, 320, null);
++                g.animatedFloat = new AnimatedFloat(this, 0, ProfileHelper.reduceMotion() ? 160 : 320, null);
+                 g.animatedFloat.force(0.0f);
+                 if (isAttachedToWindow()) {
+                     g.emojiDrawable.addView(this);
+@@ -402,7 +404,7 @@ public class ProfileGiftsView extends View implements NotificationCenter.Notific
+         for (int i = 0; i < gifts.size(); ++i) {
+             final Gift gift = gifts.get(i);
+             final float enter = gift.animatedFloat.set(1.0f);
+-            float scale = lerp(0.5f, 1.0f, enter);
++            float scale = ProfileHelper.reduceMotion() ? 1f : lerp(0.5f, 1.0f, enter);
+             final float alpha = enter * (1.0f - expandProgress) * (1.0f - actionBarProgress) * (closedAlpha);
+ 
+             float gx, gy;
+@@ -442,7 +444,7 @@ public class ProfileGiftsView extends View implements NotificationCenter.Notific
+             }
+ 
+             final float collapseProgressWithEnter;
+-            if (isOpening || enter >= 1f) {
++            if (ProfileHelper.reduceMotion() || isOpening || enter >= 1f) {
+                 collapseProgressWithEnter = collapseProgress;
+             } else {
+                 collapseProgressWithEnter = Math.min(enter, collapseProgress);

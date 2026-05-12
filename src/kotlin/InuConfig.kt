@@ -5,6 +5,7 @@ import android.content.SharedPreferences
 import androidx.core.content.edit
 import desu.inugram.helpers.FormattingPopupConfig
 import desu.inugram.helpers.PinnedReactionsHelper
+import org.telegram.messenger.AndroidUtilities
 
 object InuConfig {
     private const val PREFS_NAME = "inugram"
@@ -204,6 +205,14 @@ object InuConfig {
 
     @JvmField
     val DISABLE_PROFILE_SCROLL_SNAP = BoolItem("disable_profile_scroll_snap", true)
+
+    @JvmField
+    val REDUCE_PROFILE_MOTION = object : BoolItem("reduce_profile_motion", false) {
+        override fun read(prefs: SharedPreferences): Boolean {
+            return if (prefs.contains(key)) prefs.getBoolean(key, false)
+            else AndroidUtilities.getAnimatorDurationScale() <= 0f
+        }
+    }
 
     @JvmField
     val OPT_IN_MOTION_PHOTOS = BoolItem("opt_in_motion_photos", true)
