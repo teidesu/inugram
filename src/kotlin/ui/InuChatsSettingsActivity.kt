@@ -230,26 +230,19 @@ class InuChatsSettingsActivity : InuSettingsPageActivity() {
         if (hideBottomBarGroup.handleClick(item, view) { listView.adapter.update(true) }) return
 
         when (item.id) {
-            BUTTON_STICKER_TIME_MODE -> showDialog(
-                RadioDialogBuilder(context, getResourceProvider())
-                    .setTitle(LocaleController.getString(R.string.InuStickerTimeMode))
-                    .setItems(
-                        arrayOf(
-                            LocaleController.getString(R.string.InuStickerTimeModeShow),
-                            LocaleController.getString(R.string.InuStickerTimeModeHideTime),
-                            LocaleController.getString(R.string.InuStickerTimeModeHideIncoming),
-                            LocaleController.getString(R.string.InuStickerTimeModeHideCompletely),
-                        ),
-                        InuConfig.STICKER_TIME_MODE.value - 1,
-                    ) { _, which ->
-                        val mode = which + 1
-                        if (mode == InuConfig.STICKER_TIME_MODE.value) return@setItems
-                        InuConfig.STICKER_TIME_MODE.value = mode
-                        listView.adapter.update(true)
-                        stickerSizePreview?.invalidate()
-                    }
-                    .create()
-            )
+            BUTTON_STICKER_TIME_MODE -> RadioItemOptions.show(
+                this, view,
+                listOf(
+                    LocaleController.getString(R.string.InuStickerTimeModeShow),
+                    LocaleController.getString(R.string.InuStickerTimeModeHideTime),
+                    LocaleController.getString(R.string.InuStickerTimeModeHideIncoming),
+                    LocaleController.getString(R.string.InuStickerTimeModeHideCompletely),
+                ),
+                InuConfig.STICKER_TIME_MODE.value - 1,
+            ) { which ->
+                InuConfig.STICKER_TIME_MODE.value = which + 1
+                stickerSizePreview?.invalidate()
+            }
 
             TOGGLE_SHOW_ALL_RECENT_STICKERS -> {
                 val new = InuConfig.SHOW_ALL_RECENT_STICKERS.toggle()

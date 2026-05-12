@@ -147,50 +147,37 @@ class InuDialogsSettingsActivity : InuSettingsPageActivity() {
 
     override fun onClick(item: UItem, view: View, position: Int, x: Float, y: Float) {
         when (item.id) {
-            BUTTON_FOLDERS_DISPLAY_MODE -> showDialog(
-                RadioDialogBuilder(context, getResourceProvider())
-                    .setTitle(LocaleController.getString(R.string.InuFoldersDisplayMode))
-                    .setItems(
-                        arrayOf(
-                            LocaleController.getString(R.string.InuFoldersDisplayModeTitles),
-                            LocaleController.getString(R.string.InuFoldersDisplayModeTitlesAndIcons),
-                            LocaleController.getString(R.string.InuFoldersDisplayModeIconsOnly),
-                        ),
-                        InuConfig.FOLDERS_DISPLAY_MODE.value - 1,
-                    ) { _, which ->
-                        val mode = which + 1
-                        if (mode == InuConfig.FOLDERS_DISPLAY_MODE.value) return@setItems
-                        InuConfig.FOLDERS_DISPLAY_MODE.value = mode
-                        listView.adapter.update(true)
-                        softRebuild()
-                    }
-                    .create()
-            )
+            BUTTON_FOLDERS_DISPLAY_MODE -> RadioItemOptions.show(
+                this, view,
+                listOf(
+                    LocaleController.getString(R.string.InuFoldersDisplayModeTitles),
+                    LocaleController.getString(R.string.InuFoldersDisplayModeTitlesAndIcons),
+                    LocaleController.getString(R.string.InuFoldersDisplayModeIconsOnly),
+                ),
+                InuConfig.FOLDERS_DISPLAY_MODE.value - 1,
+            ) { which ->
+                InuConfig.FOLDERS_DISPLAY_MODE.value = which + 1
+                softRebuild()
+            }
 
-            BUTTON_FOLDERS_UNREAD_COUNTER_MODE -> showDialog(
-                RadioDialogBuilder(context, getResourceProvider())
-                    .setTitle(LocaleController.getString(R.string.InuFoldersUnreadCounter))
-                    .setItems(
-                        arrayOf(
-                            LocaleController.getString(R.string.InuFoldersUnreadCounterHide),
-                            LocaleController.getString(R.string.InuFoldersUnreadCounterRegular),
-                            LocaleController.getString(R.string.InuFoldersUnreadCounterExcludeMuted),
-                            LocaleController.getString(R.string.InuFoldersUnreadCounterExcludeMutedNonDms),
-                        ),
-                        InuConfig.FOLDERS_UNREAD_COUNTER_MODE.value,
-                    ) { _, which ->
-                        if (which == InuConfig.FOLDERS_UNREAD_COUNTER_MODE.value) return@setItems
-                        InuConfig.FOLDERS_UNREAD_COUNTER_MODE.value = which
-                        listView.adapter.update(true)
-                        // resetAllUnreadCounters dispatches updateInterfaces; DialogsActivity/MainTabsActivity listen.
-                        for (i in 0 until UserConfig.MAX_ACCOUNT_COUNT) {
-                            if (!UserConfig.getInstance(i).isClientActivated) continue
-                            val storage = MessagesStorage.getInstance(i)
-                            storage.storageQueue.postRunnable { storage.resetAllUnreadCounters(false) }
-                        }
-                    }
-                    .create()
-            )
+            BUTTON_FOLDERS_UNREAD_COUNTER_MODE -> RadioItemOptions.show(
+                this, view,
+                listOf(
+                    LocaleController.getString(R.string.InuFoldersUnreadCounterHide),
+                    LocaleController.getString(R.string.InuFoldersUnreadCounterRegular),
+                    LocaleController.getString(R.string.InuFoldersUnreadCounterExcludeMuted),
+                    LocaleController.getString(R.string.InuFoldersUnreadCounterExcludeMutedNonDms),
+                ),
+                InuConfig.FOLDERS_UNREAD_COUNTER_MODE.value,
+            ) { which ->
+                InuConfig.FOLDERS_UNREAD_COUNTER_MODE.value = which
+                // resetAllUnreadCounters dispatches updateInterfaces; DialogsActivity/MainTabsActivity listen.
+                for (i in 0 until UserConfig.MAX_ACCOUNT_COUNT) {
+                    if (!UserConfig.getInstance(i).isClientActivated) continue
+                    val storage = MessagesStorage.getInstance(i)
+                    storage.storageQueue.postRunnable { storage.resetAllUnreadCounters(false) }
+                }
+            }
 
             TOGGLE_BOT_WEBVIEW_BUTTON -> {
                 val new = InuConfig.HIDE_BOT_WEBVIEW_DIALOGS.toggle()
@@ -233,15 +220,8 @@ class InuDialogsSettingsActivity : InuSettingsPageActivity() {
                 softRebuild()
             }
 
-            BUTTON_FAB_MAIN_ACTION -> showFabActionDialog(
-                R.string.InuDialogsFabMainAction,
-                InuConfig.DIALOGS_FAB_MAIN_ACTION,
-            )
-
-            BUTTON_FAB_SECONDARY_ACTION -> showFabActionDialog(
-                R.string.InuDialogsFabSecondaryAction,
-                InuConfig.DIALOGS_FAB_SECONDARY_ACTION,
-            )
+            BUTTON_FAB_MAIN_ACTION -> showFabActionDialog(view, InuConfig.DIALOGS_FAB_MAIN_ACTION)
+            BUTTON_FAB_SECONDARY_ACTION -> showFabActionDialog(view, InuConfig.DIALOGS_FAB_SECONDARY_ACTION)
 
             TOGGLE_FAB_HIDE_ON_SCROLL -> {
                 val new = InuConfig.DIALOGS_FAB_HIDE_ON_SCROLL.toggle()
@@ -262,25 +242,17 @@ class InuDialogsSettingsActivity : InuSettingsPageActivity() {
         }
     }
 
-    private fun showFabActionDialog(
-        titleRes: Int,
-        item: InuConfig.IntItem,
-    ) {
+    private fun showFabActionDialog(anchor: View, item: InuConfig.IntItem) {
         val options = DialogsFabHelper.Action.entries
-        val labels = options.map { it.label() }.toTypedArray()
         val current = options.indexOfFirst { it.value == item.value }.coerceAtLeast(0)
-        showDialog(
-            RadioDialogBuilder(context, getResourceProvider())
-                .setTitle(LocaleController.getString(titleRes))
-                .setItems(labels, current) { _, which ->
-                    val newValue = options[which].value
-                    if (newValue == item.value) return@setItems
-                    item.value = newValue
-                    listView.adapter.update(true)
-                    softRebuild()
-                }
-                .create()
-        )
+        RadioItemOptions.show(
+            this, anchor,
+            options.map { it.label() },
+            current,
+        ) { which ->
+            item.value = options[which].value
+            softRebuild()
+        }
     }
 
     companion object {

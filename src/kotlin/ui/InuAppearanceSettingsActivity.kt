@@ -160,80 +160,56 @@ class InuAppearanceSettingsActivity : InuSettingsPageActivity() {
                 softRebuild()
             }
 
-            BUTTON_PROFILE_ID_MODE -> showDialog(
-                RadioDialogBuilder(context, getResourceProvider())
-                    .setTitle(LocaleController.getString(R.string.InuProfileIdMode))
-                    .setItems(
-                        arrayOf(
-                            LocaleController.getString(R.string.InuProfileIdModeOff),
-                            LocaleController.getString(R.string.InuProfileIdModeTelegram),
-                            LocaleController.getString(R.string.InuProfileIdModeBotApi),
-                        ),
-                        InuConfig.PROFILE_ID_MODE.value,
-                    ) { _, which ->
-                        if (which == InuConfig.PROFILE_ID_MODE.value) return@setItems
-                        InuConfig.PROFILE_ID_MODE.value = which
-                        listView.adapter.update(true)
-                    }
-                    .create()
-            )
+            BUTTON_PROFILE_ID_MODE -> RadioItemOptions.show(
+                this, view,
+                listOf(
+                    LocaleController.getString(R.string.InuProfileIdModeOff),
+                    LocaleController.getString(R.string.InuProfileIdModeTelegram),
+                    LocaleController.getString(R.string.InuProfileIdModeBotApi),
+                ),
+                InuConfig.PROFILE_ID_MODE.value,
+            ) { which ->
+                InuConfig.PROFILE_ID_MODE.value = which
+            }
 
-            BUTTON_MAP_PROVIDER -> showDialog(
-                RadioDialogBuilder(context, getResourceProvider())
-                    .setTitle(LocaleController.getString(R.string.InuMapProvider))
-                    .setItems(
-                        arrayOf(
-                            LocaleController.getString(R.string.InuMapProviderGoogle),
-                            LocaleController.getString(R.string.InuMapProviderOsm),
-                        ),
-                        InuConfig.MAP_PROVIDER.value,
-                    ) { _, which ->
-                        if (which == InuConfig.MAP_PROVIDER.value) return@setItems
-                        InuConfig.MAP_PROVIDER.value = which
-                        listView.adapter.update(true)
-                        showRestartBulletin()
-                    }
-                    .create()
-            )
+            BUTTON_MAP_PROVIDER -> RadioItemOptions.show(
+                this, view,
+                listOf(
+                    LocaleController.getString(R.string.InuMapProviderGoogle),
+                    LocaleController.getString(R.string.InuMapProviderOsm),
+                ),
+                InuConfig.MAP_PROVIDER.value,
+            ) { which ->
+                InuConfig.MAP_PROVIDER.value = which
+                showRestartBulletin()
+            }
 
-            BUTTON_MAP_PREVIEW_PROVIDER -> showDialog(
-                RadioDialogBuilder(context, getResourceProvider())
-                    .setTitle(LocaleController.getString(R.string.InuMapPreviewProvider))
-                    .setItems(
-                        arrayOf(
-                            LocaleController.getString(R.string.Default),
-                            LocaleController.getString(R.string.InuMapPreviewProviderTelegram),
-                            LocaleController.getString(R.string.InuMapPreviewProviderGoogle),
-                            LocaleController.getString(R.string.InuMapPreviewProviderYandex),
-                            LocaleController.getString(R.string.Disable),
-                        ),
-                        InuConfig.MAP_PREVIEW_PROVIDER.value,
-                    ) { _, which ->
-                        if (which == InuConfig.MAP_PREVIEW_PROVIDER.value) return@setItems
-                        InuConfig.MAP_PREVIEW_PROVIDER.value = which
-                        listView.adapter.update(true)
-                        MapsHelper.syncMapProvider(messagesController)
-                    }
-                    .create()
-            )
+            BUTTON_MAP_PREVIEW_PROVIDER -> RadioItemOptions.show(
+                this, view,
+                listOf(
+                    LocaleController.getString(R.string.Default),
+                    LocaleController.getString(R.string.InuMapPreviewProviderTelegram),
+                    LocaleController.getString(R.string.InuMapPreviewProviderGoogle),
+                    LocaleController.getString(R.string.InuMapPreviewProviderYandex),
+                    LocaleController.getString(R.string.Disable),
+                ),
+                InuConfig.MAP_PREVIEW_PROVIDER.value,
+            ) { which ->
+                InuConfig.MAP_PREVIEW_PROVIDER.value = which
+                MapsHelper.syncMapProvider(messagesController)
+            }
 
-            BUTTON_ICON_REPLACEMENT -> showDialog(
-                RadioDialogBuilder(context, getResourceProvider())
-                    .setTitle(LocaleController.getString(R.string.InuIconReplacement))
-                    .setItems(
-                        arrayOf(
-                            LocaleController.getString(R.string.InuIconReplacementOff),
-                            LocaleController.getString(R.string.InuIconReplacementSolar),
-                        ),
-                        InuConfig.ICON_REPLACEMENT.value,
-                    ) { _, which ->
-                        if (which == InuConfig.ICON_REPLACEMENT.value) return@setItems
-                        InuConfig.ICON_REPLACEMENT.value = which
-                        listView.adapter.update(true)
-                        showRestartBulletin()
-                    }
-                    .create()
-            )
+            BUTTON_ICON_REPLACEMENT -> RadioItemOptions.show(
+                this, view,
+                listOf(
+                    LocaleController.getString(R.string.InuIconReplacementOff),
+                    LocaleController.getString(R.string.InuIconReplacementSolar),
+                ),
+                InuConfig.ICON_REPLACEMENT.value,
+            ) { which ->
+                InuConfig.ICON_REPLACEMENT.value = which
+                showRestartBulletin()
+            }
 
             TOGGLE_SHOW_SECONDS -> {
                 val new = InuConfig.SHOW_SECONDS.toggle()

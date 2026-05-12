@@ -232,31 +232,26 @@ class InuBehaviorSettingsActivity : InuSettingsPageActivity() {
                 showRestartBulletin()
             }
 
-            BUTTON_ROUND_DEFAULT_CAMERA -> showRoundCameraSelector()
+            BUTTON_ROUND_DEFAULT_CAMERA -> showRoundCameraSelector(view)
             BUTTON_TEXT_CLASSIFIER_MODE -> showTextClassifierModeSelector()
             BUTTON_WEB_PREVIEW_REPLACEMENTS -> presentFragment(InuWebPreviewReplacementsActivity())
-            BUTTON_DOUBLE_TAP_INCOMING -> showDoubleTapSelector(false)
-            BUTTON_DOUBLE_TAP_OUTGOING -> showDoubleTapSelector(true)
+            BUTTON_DOUBLE_TAP_INCOMING -> showDoubleTapSelector(view, false)
+            BUTTON_DOUBLE_TAP_OUTGOING -> showDoubleTapSelector(view, true)
         }
     }
 
-    private fun showRoundCameraSelector() {
-        val context = context ?: return
-        val labels = arrayOf<CharSequence>(
-            LocaleController.getString(R.string.InuRoundCameraFront),
-            LocaleController.getString(R.string.InuRoundCameraRear),
-            LocaleController.getString(R.string.InuRoundCameraAsk),
-        )
-        showDialog(
-            RadioDialogBuilder(context, getResourceProvider())
-                .setTitle(LocaleController.getString(R.string.InuRoundDefaultCamera))
-                .setItems(labels, (InuConfig.ROUND_DEFAULT_CAMERA.value - 1).coerceIn(0, 2)) { _, which ->
-                    val newValue = which + 1
-                    if (InuConfig.ROUND_DEFAULT_CAMERA.value == newValue) return@setItems
-                    InuConfig.ROUND_DEFAULT_CAMERA.value = newValue
-                    listView.adapter.update(true)
-                }.create()
-        )
+    private fun showRoundCameraSelector(anchor: View) {
+        RadioItemOptions.show(
+            this, anchor,
+            listOf(
+                LocaleController.getString(R.string.InuRoundCameraFront),
+                LocaleController.getString(R.string.InuRoundCameraRear),
+                LocaleController.getString(R.string.InuRoundCameraAsk),
+            ),
+            (InuConfig.ROUND_DEFAULT_CAMERA.value - 1).coerceIn(0, 2),
+        ) { which ->
+            InuConfig.ROUND_DEFAULT_CAMERA.value = which + 1
+        }
     }
 
     private fun showTextClassifierModeSelector() {
@@ -291,24 +286,17 @@ class InuBehaviorSettingsActivity : InuSettingsPageActivity() {
         )
     }
 
-    private fun showDoubleTapSelector(outgoing: Boolean) {
-        val context = context ?: return
+    private fun showDoubleTapSelector(anchor: View, outgoing: Boolean) {
         val actions = DoubleTapAction.available(outgoing)
         val config = if (outgoing) InuConfig.DOUBLE_TAP_ACTION_OUTGOING else InuConfig.DOUBLE_TAP_ACTION_INCOMING
-        showDialog(
-            RadioDialogBuilder(
-                context, getResourceProvider()
-            ).setTitle(LocaleController.getString(if (outgoing) R.string.InuOutgoingMessages else R.string.InuIncomingMessages))
-                .setItems(
-                    actions.map { it.label() }.toTypedArray(),
-                    actions.indexOfFirst { it.value == config.value }.coerceAtLeast(0),
-                ) { _, which ->
-                    val action = actions.getOrNull(which) ?: return@setItems
-                    if (config.value == action.value) return@setItems
-                    config.value = action.value
-                    listView.adapter.update(true)
-                }.create()
-        )
+        RadioItemOptions.show(
+            this, anchor,
+            actions.map { it.label() },
+            actions.indexOfFirst { it.value == config.value }.coerceAtLeast(0),
+        ) { which ->
+            val action = actions.getOrNull(which) ?: return@show
+            config.value = action.value
+        }
     }
 
     companion object {
