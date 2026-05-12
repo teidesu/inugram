@@ -8,6 +8,15 @@ diff --git a/TMessagesProj/src/main/java/org/telegram/ui/ProfileActivity.java b/
 index 0000000..0000000 100644
 --- a/TMessagesProj/src/main/java/org/telegram/ui/ProfileActivity.java
 +++ b/TMessagesProj/src/main/java/org/telegram/ui/ProfileActivity.java
+@@ -1207,7 +1207,7 @@
+ 
+         private int backgroundGradientColor1, backgroundGradientColor2, backgroundGradientX;
+         public float backgroundGradientRadius, backgroundGradientY;
+-        public RadialGradient backgroundGradient;
++        public android.graphics.Shader backgroundGradient;
+         public final Matrix backgroundGradientMatrix = new Matrix();
+         private final Paint backgroundPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
+ 
 @@ -1301,6 +1301,14 @@
              }
  

@@ -18,7 +18,7 @@ index 0000000..0000000 100644
  
  public class DrawerLayoutContainer extends FrameLayout {
  
-@@ -101,13 +104,180 @@
+@@ -101,13 +104,175 @@
          return false;
      }
  
@@ -37,7 +37,7 @@ index 0000000..0000000 100644
 +    private int inu_startedTrackingPointerId;
 +    private VelocityTracker inu_velocityTracker;
 +    private boolean inu_beginTrackingSent;
-+    private AnimatorSet inu_currentAnimation;
++    private android.animation.AnimatorSet inu_currentAnimation;
 +    private float inu_scrimOpacity;
 +    private final Paint inu_scrimPaint = new Paint();
 +    private Drawable inu_shadowLeft;
@@ -48,7 +48,7 @@ index 0000000..0000000 100644
 +        addView(inu_drawerLayout, lp);
 +        inu_drawerLayout.setVisibility(INVISIBLE);
 +        if (inu_shadowLeft == null) {
-+            inu_shadowLeft = getResources().getDrawable(R.drawable.menu_shadow);
++            inu_shadowLeft = getResources().getDrawable(R.drawable.menu_empty);
 +        }
 +    }
 +
@@ -61,10 +61,6 @@ index 0000000..0000000 100644
 +            inu_drawerListView.setVisibility(VISIBLE);
 +        }
 +        inu_drawerLayout.setVisibility(inu_drawerPosition > 0 ? VISIBLE : INVISIBLE);
-+        if (!parentActionBarLayout.getFragmentStack().isEmpty()) {
-+            BaseFragment f = parentActionBarLayout.getFragmentStack().get(0);
-+            f.setProgressToDrawerOpened(inu_drawerPosition / inu_drawerLayout.getMeasuredWidth());
-+        }
 +        inu_scrimOpacity = inu_drawerPosition / (float) inu_drawerLayout.getMeasuredWidth();
 +        invalidate();
 +    }
@@ -130,8 +126,7 @@ index 0000000..0000000 100644
 +                return true;
 +            }
 +            if ((inu_allowOpenDrawerBySwipe || inu_drawerOpened) && inu_allowOpenDrawer
-+                    && parentActionBarLayout.getFragmentStack().size() == 1
-+                    && parentActionBarLayout.allowSwipe()) {
++                    && parentActionBarLayout.getFragmentStack().size() == 1) {
 +                if (ev != null && (ev.getAction() == MotionEvent.ACTION_DOWN || ev.getAction() == MotionEvent.ACTION_MOVE)
 +                        && !inu_startedTracking && !inu_maybeStartTracking) {
 +                    inu_startedTrackingX = (int) ev.getX();
@@ -200,7 +195,7 @@ index 0000000..0000000 100644
      }
  
      @Override
-@@ -123,7 +293,11 @@
+@@ -123,7 +288,11 @@
  
              final LayoutParams lp = (LayoutParams) child.getLayoutParams();
              try {
@@ -213,7 +208,7 @@ index 0000000..0000000 100644
              } catch (Exception e) {
                  FileLog.e(e);
                  if (BuildVars.DEBUG_VERSION) {
-@@ -165,7 +339,12 @@
+@@ -165,7 +334,12 @@
  
              final LayoutParams lp = (LayoutParams) child.getLayoutParams();
  
@@ -227,22 +222,15 @@ index 0000000..0000000 100644
              final int contentHeightSpec;
              if (lp.height > 0) {
                  contentHeightSpec = MeasureSpec.makeMeasureSpec(lp.height, MeasureSpec.EXACTLY);
-@@ -193,7 +372,19 @@
+@@ -193,7 +367,12 @@
          if (!allowDrawContent) {
              return false;
          }
 -        return super.drawChild(canvas, child, drawingTime);
 +        final boolean result = super.drawChild(canvas, child, drawingTime);
-+        if (inu_drawerLayout != null && child != inu_drawerLayout) {
-+            if (inu_scrimOpacity > 0) {
-+                inu_scrimPaint.setColor((int) (0x99 * inu_scrimOpacity) << 24);
-+                canvas.drawRect(0, 0, getWidth(), getHeight(), inu_scrimPaint);
-+            } else if (inu_shadowLeft != null && inu_drawerPosition > 0) {
-+                float alpha = Math.min(inu_drawerPosition / AndroidUtilities.dp(20), 1f);
-+                inu_shadowLeft.setBounds((int) inu_drawerPosition, child.getTop(), (int) inu_drawerPosition + inu_shadowLeft.getIntrinsicWidth(), child.getBottom());
-+                inu_shadowLeft.setAlpha((int) (0xff * alpha));
-+                inu_shadowLeft.draw(canvas);
-+            }
++        if (inu_drawerLayout != null && child != inu_drawerLayout && inu_scrimOpacity > 0) {
++            inu_scrimPaint.setColor((int) (0x99 * inu_scrimOpacity) << 24);
++            canvas.drawRect(0, 0, getWidth(), getHeight(), inu_scrimPaint);
 +        }
 +        return result;
      }
