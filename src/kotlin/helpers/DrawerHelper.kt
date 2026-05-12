@@ -11,10 +11,9 @@ import org.telegram.messenger.UserConfig
 import org.telegram.ui.ActionBar.DrawerLayoutContainer
 import org.telegram.ui.ActionBar.INavigationLayout
 import org.telegram.ui.ActionBar.Theme
-import org.telegram.ui.Adapters.DrawerLayoutAdapter
-import org.telegram.ui.CallLogActivity
+import desu.inugram.ui.drawer.DrawerLayoutAdapter
 import org.telegram.ui.Components.RecyclerListView
-import org.telegram.ui.Components.SideMenultItemAnimator
+import desu.inugram.ui.drawer.SideMenultItemAnimator
 import org.telegram.ui.ContactsActivity
 import org.telegram.ui.ProfileActivity
 import org.telegram.ui.SettingsActivity

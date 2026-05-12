@@ -6,7 +6,7 @@
  * Copyright Nikolai Kudashov, 2013-2018.
  */
 
-package org.telegram.ui.Adapters;
+package desu.inugram.ui.drawer;
 
 import android.content.Context;
 import android.content.pm.PackageManager;
@@ -27,13 +27,13 @@ import org.telegram.tgnet.TLRPC;
 import org.telegram.ui.ActionBar.DrawerLayoutContainer;
 import org.telegram.ui.ActionBar.Theme;
 import org.telegram.ui.Cells.DividerCell;
-import org.telegram.ui.Cells.DrawerActionCell;
-import org.telegram.ui.Cells.DrawerAddCell;
-import org.telegram.ui.Cells.DrawerProfileCell;
-import org.telegram.ui.Cells.DrawerUserCell;
+import desu.inugram.ui.drawer.DrawerActionCell;
+import desu.inugram.ui.drawer.DrawerAddCell;
+import desu.inugram.ui.drawer.DrawerProfileCell;
+import desu.inugram.ui.drawer.DrawerUserCell;
 import org.telegram.ui.Cells.EmptyCell;
 import org.telegram.ui.Components.RecyclerListView;
-import org.telegram.ui.Components.SideMenultItemAnimator;
+import desu.inugram.ui.drawer.SideMenultItemAnimator;
 
 import java.util.ArrayList;
 import java.util.Collections;

@@ -1,4 +1,4 @@
-package org.telegram.ui.Components;
+package desu.inugram.ui.drawer;
 
 import android.animation.Animator;
 import android.animation.AnimatorListenerAdapter;
@@ -12,6 +12,7 @@ import java.util.List;
 
 import androidx.recyclerview.widget.RecyclerView;
 import androidx.recyclerview.widget.SimpleItemAnimator;
+import org.telegram.ui.Components.RecyclerListView;
 
 public class SideMenultItemAnimator extends SimpleItemAnimator {
 

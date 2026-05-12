@@ -6,7 +6,7 @@
  * Copyright Nikolai Kudashov, 2013-2018.
  */
 
-package org.telegram.ui.Cells;
+package desu.inugram.ui.drawer;
 
 import android.app.Activity;
 import android.content.Context;
