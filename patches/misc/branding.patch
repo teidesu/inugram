@@ -10,6 +10,7 @@ Subject: change app name to Inugram
  .../telegram/ui/LauncherIconController.java   |  3 ++-
  .../ui/Stories/DialogStoriesCell.java         | 20 +++++++++----------
  .../java/org/telegram/ui/ThemeActivity.java   | 12 +++++++++--
+ .../org/telegram/ui/UpdateLayoutWrapper.java  | 14 ++-----------
  .../res/mipmap-anydpi-v26/ic_launcher.xml     |  6 +++---
  .../mipmap-anydpi-v26/ic_launcher_round.xml   |  6 +++---
  .../mipmap-anydpi-v26/ic_launcher_stock.xml   |  6 ++++++
@@ -22,7 +23,7 @@ Subject: change app name to Inugram
  .../src/main/res/values-ru/strings.xml        |  6 +++---
  .../src/main/res/values-uk/strings.xml        |  6 +++---
  TMessagesProj/src/main/res/values/strings.xml | 10 +++++-----
- 18 files changed, 83 insertions(+), 51 deletions(-)
+ 19 files changed, 85 insertions(+), 63 deletions(-)
  create mode 100644 TMessagesProj/src/main/res/mipmap-anydpi-v26/ic_launcher_stock.xml
  create mode 100644 TMessagesProj/src/main/res/mipmap-anydpi-v26/ic_launcher_stock_round.xml
 
@@ -242,6 +243,31 @@ index 0000000..0000000 100644
                      position == mediaSoundSectionRow || position == otherSectionRow) {
                  return TYPE_SHADOW;
              } else if (position == nightDisabledRow || position == nightScheduledRow || position == nightAutomaticRow || position == nightSystemDefaultRow) {
+diff --git a/TMessagesProj/src/main/java/org/telegram/ui/UpdateLayoutWrapper.java b/TMessagesProj/src/main/java/org/telegram/ui/UpdateLayoutWrapper.java
+index 0000000..0000000 100644
+--- a/TMessagesProj/src/main/java/org/telegram/ui/UpdateLayoutWrapper.java
++++ b/TMessagesProj/src/main/java/org/telegram/ui/UpdateLayoutWrapper.java
+@@ -78,18 +78,8 @@ public class UpdateLayoutWrapper extends ViewGroup {
+ 
+     @Override
+     protected void dispatchDraw(@NonNull Canvas canvas) {
+-        final int navigationHeight = getPaddingBottom();
+-        final float alpha = AndroidUtilities.getNavigationBarThirdButtonsFactor(0.1f, 0.75f, navigationHeight);
+-
+-        final int backgroundColor = Theme.getColor(Theme.key_featuredStickers_addButton);
+-        final int navigationColor = ColorUtils.compositeColors(Theme.multAlpha(Theme.getColor(Theme.key_windowBackgroundWhite), alpha), backgroundColor);
+-
+-
+-        paint.setColor(backgroundColor);
+-        canvas.drawRect(0, 0, getMeasuredWidth(), getMeasuredHeight() - navigationHeight, paint);
+-
+-        paint.setColor(navigationColor);
+-        canvas.drawRect(0, getMeasuredHeight() - navigationHeight, getMeasuredWidth(), getMeasuredHeight(), paint);
++        paint.setColor(Theme.getColor(Theme.key_featuredStickers_addButton));
++        canvas.drawRect(0, 0, getMeasuredWidth(), getMeasuredHeight(), paint);
+ 
+         super.dispatchDraw(canvas);
+     }
 diff --git a/TMessagesProj/src/main/res/mipmap-anydpi-v26/ic_launcher.xml b/TMessagesProj/src/main/res/mipmap-anydpi-v26/ic_launcher.xml
 index 0000000..0000000 100644
 --- a/TMessagesProj/src/main/res/mipmap-anydpi-v26/ic_launcher.xml
