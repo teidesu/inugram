@@ -7,9 +7,10 @@ Subject: reduce motion in profile
  .../ui/Components/ProfileActionsView.java     |  4 +++
  .../ui/Components/SharedMediaLayout.java      |  3 ++
  .../java/org/telegram/ui/Gifts/GiftSheet.java |  4 +++
- .../java/org/telegram/ui/ProfileActivity.java | 28 ++++++++++++-------
+ .../java/org/telegram/ui/ProfileActivity.java | 28 +++++++++++--------
  .../telegram/ui/Stars/ProfileGiftsView.java   |  8 ++++--
- 5 files changed, 34 insertions(+), 13 deletions(-)
+ .../ui/Stories/ProfileStoriesView.java        |  5 ++--
+ 6 files changed, 36 insertions(+), 16 deletions(-)
 
 diff --git a/TMessagesProj/src/main/java/org/telegram/ui/Components/ProfileActionsView.java b/TMessagesProj/src/main/java/org/telegram/ui/Components/ProfileActionsView.java
 index 0000000..0000000 100644
@@ -158,16 +159,15 @@ index 0000000..0000000 100644
                      } else {
                          nameTextView[a].setRightDrawable(null);
                      }
-@@ -16380,7 +16386,9 @@ public class ProfileActivity extends BaseFragment implements NotificationCenter.
+@@ -16375,7 +16381,7 @@ public class ProfileActivity extends BaseFragment implements NotificationCenter.
+         if (collectibleHint != null) {
+             collectibleHint.hide();
+         }
+-        if (status != null && !TextUtils.isEmpty(status.slug)) {
++        if (status != null && !TextUtils.isEmpty(status.slug) && !ProfileHelper.reduceMotion()) {
+             collectibleHintVisible = null;
              collectibleHint = new HintView2(getContext(), HintView2.DIRECTION_BOTTOM);
              collectibleHintBackgroundColor = Theme.blendOver(status.center_color | 0xFF000000, Theme.multAlpha(status.pattern_color | 0xFF000000, .5f));
-             collectibleHint.setPadding(dp(4), 0, dp(4), dp(2));
-+            if (!ProfileHelper.reduceMotion()) {
-             collectibleHint.setFlicker(.66f, Theme.multAlpha(status.text_color | 0xFF000000, 0.5f));
-+            }
-             avatarContainer2.addView(collectibleHint, LayoutHelper.createFrame(LayoutHelper.MATCH_PARENT, 24));
-             collectibleHint.setTextSize(9.33f);
-             collectibleHint.setTextTypeface(AndroidUtilities.bold());
 diff --git a/TMessagesProj/src/main/java/org/telegram/ui/Stars/ProfileGiftsView.java b/TMessagesProj/src/main/java/org/telegram/ui/Stars/ProfileGiftsView.java
 index 0000000..0000000 100644
 --- a/TMessagesProj/src/main/java/org/telegram/ui/Stars/ProfileGiftsView.java
@@ -208,3 +208,26 @@ index 0000000..0000000 100644
                  collapseProgressWithEnter = collapseProgress;
              } else {
                  collapseProgressWithEnter = Math.min(enter, collapseProgress);
+diff --git a/TMessagesProj/src/main/java/org/telegram/ui/Stories/ProfileStoriesView.java b/TMessagesProj/src/main/java/org/telegram/ui/Stories/ProfileStoriesView.java
+index 0000000..0000000 100644
+--- a/TMessagesProj/src/main/java/org/telegram/ui/Stories/ProfileStoriesView.java
++++ b/TMessagesProj/src/main/java/org/telegram/ui/Stories/ProfileStoriesView.java
+@@ -460,6 +460,7 @@ public class ProfileStoriesView extends View implements NotificationCenter.Notif
+     }
+ 
+     public void animateNewStory() {
++        if (desu.inugram.helpers.ProfileHelper.reduceMotion()) return;
+         if (newStoryBounce != null) {
+             newStoryBounce.cancel();
+         }
+@@ -596,8 +597,8 @@ public class ProfileStoriesView extends View implements NotificationCenter.Notif
+         }
+         if (progressToUploading < 1f) {
+             segmentsAlpha = clamp(1f - expandProgress / 0.2f, 1, 0) * (1f - progressToUploading);
+-            final float segmentsCount = segmentsCountAnimated.set(count);
+-            final float segmentsUnreadCount = segmentsUnreadCountAnimated.set(unreadCount);
++            final float segmentsCount = segmentsCountAnimated.set(count, desu.inugram.helpers.ProfileHelper.reduceMotion());
++            final float segmentsUnreadCount = segmentsUnreadCountAnimated.set(unreadCount, desu.inugram.helpers.ProfileHelper.reduceMotion());
+ 
+             if (isFailed) {
+                 rect2.set(rect1);
