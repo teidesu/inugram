@@ -4,8 +4,8 @@ Date: Tue, 12 May 2026 21:30:08 +0200
 Subject: prefer media tab in profile shared media
 
 ---
- .../org/telegram/ui/Components/SharedMediaLayout.java    | 9 ++++++---
- 1 file changed, 6 insertions(+), 3 deletions(-)
+ .../telegram/ui/Components/SharedMediaLayout.java   | 13 ++++++++-----
+ 1 file changed, 8 insertions(+), 5 deletions(-)
 
 diff --git a/TMessagesProj/src/main/java/org/telegram/ui/Components/SharedMediaLayout.java b/TMessagesProj/src/main/java/org/telegram/ui/Components/SharedMediaLayout.java
 index 0000000..0000000 100644
@@ -42,3 +42,21 @@ index 0000000..0000000 100644
              this.initialTab = TAB_GIFTS;
          } else if (initialTab != -1 && topicId == 0) {
              this.initialTab = initialTab;
+@@ -6689,7 +6692,7 @@ public class SharedMediaLayout extends FrameLayout implements NotificationCenter
+             }
+         }
+         if (info != null && (stories_pinned_available != info.stories_pinned_available)) {
+-            if (scrollSlidingTextTabStrip != null) {
++            if (scrollSlidingTextTabStrip != null && !desu.inugram.helpers.ProfileHelper.preferMediaTab()) {
+                 scrollSlidingTextTabStrip.setInitialTabId(isArchivedOnlyStoriesView() ? TAB_ARCHIVED_STORIES : TAB_STORIES);
+             }
+             updateTabs(true);
+@@ -6701,7 +6704,7 @@ public class SharedMediaLayout extends FrameLayout implements NotificationCenter
+         boolean stories_pinned_available = this.userInfo != null && this.userInfo.stories_pinned_available;
+         this.userInfo = userInfo;
+         updateTabs(true);
+-        if (userInfo != null && (stories_pinned_available != userInfo.stories_pinned_available)) {
++        if (userInfo != null && (stories_pinned_available != userInfo.stories_pinned_available) && !desu.inugram.helpers.ProfileHelper.preferMediaTab()) {
+             scrollToPage(TAB_STORIES);
+         }
+     }
