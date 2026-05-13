@@ -74,6 +74,12 @@ class InuUserProfileSettingsActivity : InuSettingsPageActivity() {
 
         items.add(
             UItem.asCheck(
+                TOGGLE_HIDE_CALL_ACTION_BUTTON,
+                LocaleController.getString(R.string.InuHideCallActionButton),
+            ).setChecked(InuConfig.HIDE_CALL_ACTION_BUTTON.value)
+        )
+        items.add(
+            UItem.asCheck(
                 TOGGLE_CALL_CONFIRMATION,
                 LocaleController.getString(R.string.InuCallConfirmation),
             ).setChecked(InuConfig.CALL_CONFIRMATION.value)
@@ -128,6 +134,11 @@ class InuUserProfileSettingsActivity : InuSettingsPageActivity() {
                 val new = InuConfig.CALL_CONFIRMATION.toggle()
                 (view as? TextCheckCell)?.isChecked = new
             }
+
+            TOGGLE_HIDE_CALL_ACTION_BUTTON -> {
+                val new = InuConfig.HIDE_CALL_ACTION_BUTTON.toggle()
+                (view as? TextCheckCell)?.isChecked = new
+            }
         }
     }
 
@@ -140,5 +151,6 @@ class InuUserProfileSettingsActivity : InuSettingsPageActivity() {
         private val TOGGLE_HIDE_MY_PHONE_NUMBER = InuUtils.generateId()
         private val TOGGLE_DISABLE_CHAT_TITLE_PHONE = InuUtils.generateId()
         private val TOGGLE_CALL_CONFIRMATION = InuUtils.generateId()
+        private val TOGGLE_HIDE_CALL_ACTION_BUTTON = InuUtils.generateId()
     }
 }

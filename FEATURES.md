@@ -140,6 +140,7 @@ most things are toggleable in `Settings → Inugram`, with sensible opinionated 
 - hide intro greeting + non-clickable custom intro sticker
 - 🐶 hide server-pushed suggestions
 - disable phone number in chat title
+- hide call button in chat title (still in overflow menu)
 - hide reactions send animation
 - 🐶 simple (non-bouncy) attach panel animation
 - disable notification bubbles

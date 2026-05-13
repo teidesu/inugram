@@ -304,6 +304,9 @@ object InuConfig {
     @JvmField
     val CALL_CONFIRMATION = BoolItem("call_confirmation", true)
 
+    @JvmField
+    val HIDE_CALL_ACTION_BUTTON = BoolItem("hide_call_action_button", true)
+
     class ProfileIdModeItem : IntItem("profile_id_mode", BOT_API_ID) {
         companion object {
             const val OFF = 0

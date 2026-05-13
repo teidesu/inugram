@@ -127,3 +127,4 @@ bugfix/profile-black-bar.patch
 feature/prefer-media-tab.patch
 bugfix/ignore-xmp-errors.patch
 feature/hide-send-as.patch
+feature/hide-call-action.patch
