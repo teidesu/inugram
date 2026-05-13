@@ -127,6 +127,8 @@
     <string name="InuFoldersUnreadCounterRegular">Regular</string>
     <string name="InuFoldersUnreadCounterExcludeMuted">Exclude muted</string>
     <string name="InuFoldersUnreadCounterExcludeMutedNonDms">Exclude muted non-DMs</string>
+    <string name="InuHideAllChatsTab">Hide "All Chats" tab</string>
+    <string name="InuHideAllChatsTabInfo">Removes the "All Chats" tab from the folders bar. Requires at least one user folder.</string>
     <string name="InuCopyPhoto">Copy Photo</string>
     <string name="InuPhotoCopied">Photo copied to clipboard</string>
     <string name="InuCopyFrame">Copy Frame</string>

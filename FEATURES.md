@@ -36,6 +36,7 @@ most things are toggleable in `Settings → Inugram`, with sensible opinionated 
 - long-tap "chats" tab to pick folder from menu
 - folder display modes: titles / titles+icons / icons-only
 - folder unread counter modes: hide / regular / exclude muted / 🐶 exclude muted non-dms
+- hide the "all chats" tab from the folders bar
 - 🐶 dialogs fab customization: main + secondary actions, hide-on-scroll, left-side
 - 🐶 "create as supergroup" toggle in group creation
 - 🐶 deeplink / username quick-open from global search

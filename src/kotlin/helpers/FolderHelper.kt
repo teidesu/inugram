@@ -12,6 +12,7 @@ import org.telegram.messenger.AndroidUtilities
 import org.telegram.messenger.LocaleController.getString
 import org.telegram.messenger.MessagesController
 import org.telegram.messenger.MessagesStorage
+import org.telegram.messenger.NotificationCenter
 import org.telegram.messenger.R
 import org.telegram.messenger.UserConfig
 import org.telegram.tgnet.TLRPC
@@ -233,5 +234,34 @@ object FolderHelper {
         if (isIconsOnly()) return FilterTabsView.TAB_INTERNAL_PADDING / 2f
         if (InuConfig.FOLDERS_DISPLAY_MODE.value == InuConfig.FoldersDisplayModeItem.TITLES_AND_ICONS) return 8f
         return FilterTabsView.TAB_INTERNAL_PADDING
+    }
+
+    /** whether the "All chats" (default) tab should be hidden from the folders bar. */
+    @JvmStatic
+    fun shouldHideAllChatsTab(filters: List<MessagesController.DialogFilter>): Boolean {
+        if (!InuConfig.HIDE_ALL_CHATS_TAB.value) return false
+        // keep showing the default tab if it is the only filter, otherwise the bar would be empty
+        return filters.any { !it.isDefault }
+    }
+
+    /** if user is currently sitting on the default filter and it's about to be hidden,
+     *  bounce them to the first non-default filter; otherwise leave the index untouched. */
+    @JvmStatic
+    fun adjustSelectedTypeForHide(filters: List<MessagesController.DialogFilter>, selectedType: Int): Int {
+        if (!shouldHideAllChatsTab(filters)) return selectedType
+        if (selectedType < 0 || selectedType >= filters.size) return selectedType
+        if (!filters[selectedType].isDefault) return selectedType
+        return filters.indexOfFirst { !it.isDefault }.coerceAtLeast(0)
+    }
+
+    /** flip the "hide all chats tab" toggle and notify dialog activities to rebuild the folders bar. */
+    @JvmStatic
+    fun toggleHideAllChatsTab(): Boolean {
+        val new = InuConfig.HIDE_ALL_CHATS_TAB.toggle()
+        for (i in 0 until UserConfig.MAX_ACCOUNT_COUNT) {
+            if (!UserConfig.getInstance(i).isClientActivated) continue
+            NotificationCenter.getInstance(i).postNotificationName(NotificationCenter.dialogFiltersUpdated)
+        }
+        return new
     }
 }

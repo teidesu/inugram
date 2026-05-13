@@ -127,6 +127,8 @@
     <string name="InuFoldersUnreadCounterRegular">Обычный</string>
     <string name="InuFoldersUnreadCounterExcludeMuted">Кроме мутов</string>
     <string name="InuFoldersUnreadCounterExcludeMutedNonDms">Кроме мутов и не из ЛС</string>
+    <string name="InuHideAllChatsTab">Скрыть вкладку «Все чаты»</string>
+    <string name="InuHideAllChatsTabInfo">Убирает вкладку «Все чаты» с панели папок. Должна быть хотя бы одна своя папка.</string>
     <string name="InuCopyPhoto">Копировать фото</string>
     <string name="InuPhotoCopied">Фото скопировано в буфер обмена</string>
     <string name="InuCopyFrame">Копировать кадр</string>

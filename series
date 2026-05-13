@@ -132,3 +132,4 @@ feature/hide-call-action.patch
 bugfix/top-peers-unread-counter.patch
 bugfix/stale-unread-mention.patch
 feature/forward-options.patch
+feature/hide-all-chats-tab.patch

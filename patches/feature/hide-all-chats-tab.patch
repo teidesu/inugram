@@ -1,0 +1,106 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Devin AI <158243242+devin-ai-integration[bot]@users.noreply.github.com>
+Date: Wed, 13 May 2026 19:20:36 +0000
+Subject: add a "hide all chats tab" toggle to the chat folders settings page
+
+---
+ .../java/org/telegram/ui/DialogsActivity.java | 10 ++++++++++
+ .../org/telegram/ui/FiltersSetupActivity.java | 20 +++++++++++++++++++
+ 2 files changed, 30 insertions(+)
+
+diff --git a/TMessagesProj/src/main/java/org/telegram/ui/DialogsActivity.java b/TMessagesProj/src/main/java/org/telegram/ui/DialogsActivity.java
+index 0000000..0000000 100644
+--- a/TMessagesProj/src/main/java/org/telegram/ui/DialogsActivity.java
++++ b/TMessagesProj/src/main/java/org/telegram/ui/DialogsActivity.java
+@@ -6826,8 +6826,13 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
+                     selectWithStableId = true;
+                 }
+                 filterTabsView.removeTabs();
++                boolean inu_hideAllChatsTab = FolderHelper.shouldHideAllChatsTab(filters);
++                if (inu_hideAllChatsTab) {
++                    filterTabsView.resetTabId();
++                }
+                 for (int a = 0, N = filters.size(); a < N; a++) {
+                     if (filters.get(a).isDefault()) {
++                        if (inu_hideAllChatsTab) continue;
+                         filterTabsView.inu_addTab(a, 0, LocaleController.getString(R.string.FilterAllChats), null, false, true, filters.get(a).locked, "\uD83D\uDCAC");
+                     } else {
+                         final MessagesController.DialogFilter filter = filters.get(a);
+@@ -6855,6 +6860,11 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
+                     if (viewPages[a].selectedType >= filters.size()) {
+                         viewPages[a].selectedType = filters.size() - 1;
+                     }
++                    int inu_adjusted = FolderHelper.adjustSelectedTypeForHide(filters, viewPages[a].selectedType);
++                    if (inu_adjusted != viewPages[a].selectedType) {
++                        viewPages[a].selectedType = inu_adjusted;
++                        if (a == 0) updateCurrentTab = true;
++                    }
+                     viewPages[a].listView.setScrollingTouchSlop(RecyclerView.TOUCH_SLOP_PAGING);
+                 }
+                 filterTabsView.finishAddingTabs(animatedUpdateItems);
+diff --git a/TMessagesProj/src/main/java/org/telegram/ui/FiltersSetupActivity.java b/TMessagesProj/src/main/java/org/telegram/ui/FiltersSetupActivity.java
+index 0000000..0000000 100644
+--- a/TMessagesProj/src/main/java/org/telegram/ui/FiltersSetupActivity.java
++++ b/TMessagesProj/src/main/java/org/telegram/ui/FiltersSetupActivity.java
+@@ -70,6 +70,8 @@ import org.telegram.ui.Components.UndoView;
+ 
+ import java.util.ArrayList;
+ 
++import desu.inugram.helpers.FolderHelper;
++
+ public class FiltersSetupActivity extends BaseFragment implements NotificationCenter.NotificationCenterDelegate {
+ 
+     private RecyclerListView listView;
+@@ -589,6 +591,8 @@ public class FiltersSetupActivity extends BaseFragment implements NotificationCe
+         items.add(ItemInner.asShadow(!getUserConfig().isPremium() ? AndroidUtilities.replaceSingleTag(LocaleController.getString(R.string.FolderShowTagsInfoPremium), Theme.key_windowBackgroundWhiteBlueHeader, AndroidUtilities.REPLACING_TAG_TYPE_LINKBOLD, () -> {
+             presentFragment(new PremiumPreviewFragment("settings"));
+         }) : LocaleController.getString(R.string.FolderShowTagsInfo)));
++        items.add(ItemInner.inu_asHideAllChatsCheck());
++        items.add(ItemInner.asShadow(LocaleController.getString(R.string.InuHideAllChatsTabInfo)));
+ 
+         if (adapter != null) {
+             if (animated) {
+@@ -672,6 +676,10 @@ public class FiltersSetupActivity extends BaseFragment implements NotificationCe
+                 return;
+             }
+             if (item.viewType == VIEW_TYPE_CHECK) {
++                if (item.inu_hideAllChatsCheck) {
++                    ((TextCheckCell) view).setChecked(FolderHelper.toggleHideAllChatsTab());
++                    return;
++                }
+                 if (!getUserConfig().isPremium()) {
+                     showDialog(new PremiumFeatureBottomSheet(this, PremiumPreviewFragment.PREMIUM_FEATURE_FOLDER_TAGS, true));
+                     return;
+@@ -780,6 +788,7 @@ public class FiltersSetupActivity extends BaseFragment implements NotificationCe
+         MessagesController.DialogFilter filter;
+         int filterColor;
+         TLRPC.TL_dialogFilterSuggested suggested;
++        boolean inu_hideAllChatsCheck;
+ 
+         public static ItemInner asHeader(CharSequence text) {
+             ItemInner i = new ItemInner(VIEW_TYPE_HEADER);
+@@ -815,6 +824,12 @@ public class FiltersSetupActivity extends BaseFragment implements NotificationCe
+             i.text = text;
+             return i;
+         }
++        public static ItemInner inu_asHideAllChatsCheck() {
++            ItemInner i = new ItemInner(VIEW_TYPE_CHECK);
++            i.text = LocaleController.getString(R.string.InuHideAllChatsTab);
++            i.inu_hideAllChatsCheck = true;
++            return i;
++        }
+ 
+         @Override
+         public boolean equals(Object obj) {
+@@ -1070,6 +1085,11 @@ public class FiltersSetupActivity extends BaseFragment implements NotificationCe
+                 }
+                 case VIEW_TYPE_CHECK: {
+                     TextCheckCell cell = (TextCheckCell) holder.itemView;
++                    if (item.inu_hideAllChatsCheck) {
++                        cell.setTextAndCheck(item.text, desu.inugram.InuConfig.HIDE_ALL_CHATS_TAB.getValue(), divider);
++                        cell.setCheckBoxIcon(0);
++                        break;
++                    }
+                     cell.setTextAndCheck(item.text, getMessagesController().folderTags, divider);
+                     cell.setCheckBoxIcon(!getUserConfig().isPremium() ? R.drawable.permission_locked : 0);
+                     break;

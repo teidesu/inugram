@@ -285,6 +285,9 @@ object InuConfig {
     @JvmField
     val FOLDERS_UNREAD_COUNTER_MODE = FoldersUnreadCounterModeItem()
 
+    @JvmField
+    val HIDE_ALL_CHATS_TAB = BoolItem("hide_all_chats_tab", false)
+
     class StickerTimeModeItem : IntItem("sticker_time_mode", SHOW) {
         companion object {
             const val SHOW = 1;
