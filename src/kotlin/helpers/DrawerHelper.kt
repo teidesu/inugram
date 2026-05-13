@@ -29,12 +29,11 @@ object DrawerHelper {
         drawerLayoutContainer: DrawerLayoutContainer,
         actionBarLayout: INavigationLayout,
     ) {
-        val itemAnimator = SideMenultItemAnimator(null)
-        val newAdapter = DrawerLayoutAdapter(context, itemAnimator, drawerLayoutContainer)
-        adapter = newAdapter
-
         val sideMenu = RecyclerListView(context)
         sideMenu.layoutManager = LinearLayoutManager(context)
+        val itemAnimator = SideMenultItemAnimator(sideMenu)
+        val newAdapter = DrawerLayoutAdapter(context, itemAnimator, drawerLayoutContainer)
+        adapter = newAdapter
         sideMenu.setItemAnimator(itemAnimator)
         sideMenu.adapter = newAdapter
         sideMenu.setVerticalScrollBarEnabled(false)
