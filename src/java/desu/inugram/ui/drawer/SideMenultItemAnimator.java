@@ -13,8 +13,15 @@ import java.util.List;
 import androidx.recyclerview.widget.RecyclerView;
 import androidx.recyclerview.widget.SimpleItemAnimator;
 import org.telegram.ui.Components.RecyclerListView;
+import org.telegram.ui.Components.CubicBezierInterpolator;
 
 public class SideMenultItemAnimator extends SimpleItemAnimator {
+
+    @Override
+    public void listenToAnimationUpdates(Runnable listener) {
+        // adapted for 12.x androidx: 11.14 had no such hook; no-op preserves old behavior
+    }
+
 
     private static TimeInterpolator sDefaultInterpolator;
 

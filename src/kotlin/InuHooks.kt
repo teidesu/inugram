@@ -99,6 +99,14 @@ object InuHooks {
     fun createMainFragment(): BaseFragment =
         if (InuConfig.OLD_LAYOUT.value) DialogsActivity(null) else MainTabsActivity()
 
+    /**
+     * Adapted from 11.14.1 `ApplicationLoader.applicationLoaderInstance.extendDrawer(items)`
+     * which no longer exists in 12.x. Extension point preserved for future custom
+     * drawer items; returns false (no extra items added) by default.
+     */
+    @JvmStatic
+    fun extendDrawer(items: MutableList<Any?>): Boolean = false
+
     @JvmStatic
     fun addDialogsActivityOptions(instance: DialogsActivity, io: ItemOptions): Unit {
         val bottomTabsHidden = MainTabsHelper.isHidden;

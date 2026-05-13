@@ -55,6 +55,9 @@ import org.telegram.tgnet.TLRPC;
 import org.telegram.ui.ActionBar.DrawerLayoutContainer;
 import org.telegram.ui.ActionBar.SimpleTextView;
 import org.telegram.ui.ActionBar.Theme;
+import org.telegram.ui.ActionBar.BaseFragment;
+import org.telegram.ui.Components.Bulletin;
+import org.telegram.ui.Components.BulletinFactory;
 import org.telegram.ui.Components.AnimatedEmojiDrawable;
 import org.telegram.ui.Components.AvatarDrawable;
 import org.telegram.ui.Components.BackupImageView;
@@ -262,12 +265,18 @@ public class DrawerProfileCell extends FrameLayout implements NotificationCenter
             darkThemeView.playAnimation();
             switchTheme(themeInfo, toDark);
 
-            if (drawerLayoutContainer != null ) {
-                FrameLayout layout = drawerLayoutContainer.getParent() instanceof FrameLayout ? (FrameLayout) drawerLayoutContainer.getParent() : null;
-                Theme.turnOffAutoNight(layout, () -> {
+            if (drawerLayoutContainer != null) {
+                // Adapted from 11.14.1: 12.x turnOffAutoNight takes BulletinFactory instead of a host FrameLayout.
+                // Build a BulletinFactory from the currently-presented fragment so the bulletin shows on the host.
+                Runnable openSettings = () -> {
                     drawerLayoutContainer.inu_closeDrawer(false);
                     drawerLayoutContainer.parentActionBarLayout.presentFragment(new ThemeActivity(ThemeActivity.THEME_TYPE_NIGHT));
-                });
+                };
+                BaseFragment lastFragment = drawerLayoutContainer.parentActionBarLayout != null
+                        ? drawerLayoutContainer.parentActionBarLayout.getLastFragment()
+                        : null;
+                BulletinFactory bf = lastFragment != null ? BulletinFactory.of(lastFragment) : null;
+                Theme.turnOffAutoNight(bf, openSettings);
             }
         });
         darkThemeView.setOnLongClickListener(e -> {
