@@ -26,15 +26,17 @@ index 0000000..0000000 100644
              }
              if (folderId != 0) {
                  actionBar.setTitle(getString(R.string.ArchivedChats));
-@@ -3822,6 +3826,15 @@
+@@ -3822,6 +3826,17 @@
                      return;
                  }
                  if (id == -1) {
++                    org.telegram.messenger.FileLog.d("[inu] DialogsActivity back hit: hasMainTabs=" + hasMainTabs + " OLD_LAYOUT=" + desu.inugram.InuConfig.OLD_LAYOUT.getValue() + " folderId=" + folderId + " searchString=" + searchString + " parentLayout=" + parentLayout + " dlc=" + (parentLayout == null ? "n/a" : parentLayout.getDrawerLayoutContainer()));
 +                    if (!hasMainTabs && desu.inugram.InuConfig.OLD_LAYOUT.getValue()
 +                            && folderId == 0 && searchString == null
 +                            && parentLayout != null
 +                            && parentLayout.getDrawerLayoutContainer() != null) {
 +                        org.telegram.ui.ActionBar.DrawerLayoutContainer dlc = parentLayout.getDrawerLayoutContainer();
++                        org.telegram.messenger.FileLog.d("[inu] DialogsActivity opening drawer; drawerLayout=" + dlc.inu_drawerLayout + " allowOpen=true");
 +                        if (dlc.inu_isDrawerOpened()) dlc.inu_closeDrawer(false);
 +                        else dlc.inu_openDrawer(false);
 +                        return;

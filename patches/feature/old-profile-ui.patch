@@ -8,31 +8,22 @@ diff --git a/TMessagesProj/src/main/java/org/telegram/ui/ProfileActivity.java b/
 index 0000000..0000000 100644
 --- a/TMessagesProj/src/main/java/org/telegram/ui/ProfileActivity.java
 +++ b/TMessagesProj/src/main/java/org/telegram/ui/ProfileActivity.java
-@@ -3833,14 +3833,16 @@
+@@ -3833,6 +3833,7 @@
                  }
              });
  
--            actionsView = new ProfileActionsView(context, dp(74)) {
--                @Override
--                public void setTranslationY(float translationY) {
--                    super.setTranslationY(translationY);
--                }
--            };
--            setActionsMode();
--            updateNotifications(false);
 +            if (!desu.inugram.InuConfig.OLD_LAYOUT.getValue()) {
-+                actionsView = new ProfileActionsView(context, dp(74)) {
-+                    @Override
-+                    public void setTranslationY(float translationY) {
-+                        super.setTranslationY(translationY);
-+                    }
-+                };
-+                setActionsMode();
-+                updateNotifications(false);
+             actionsView = new ProfileActionsView(context, dp(74)) {
+                 @Override
+                 public void setTranslationY(float translationY) {
+@@ -3935,6 +3936,7 @@
+                         break;
+                 }
+             });
 +            }
+         }
  
-             actionsView.setOnActionClickListener((key, x, y) -> {
-                 switch (key) {
+         ActionBarMenu menu = actionBar.createMenu();
 @@ -5950,6 +5952,7 @@
          return getActionsExtraHeight(true);
      }
