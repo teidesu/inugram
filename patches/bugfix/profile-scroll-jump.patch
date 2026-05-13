@@ -4,8 +4,8 @@ Date: Tue, 5 May 2026 15:32:29 +0200
 Subject: fix profile scroll position jumping when opening uncached user
 
 ---
- .../java/org/telegram/ui/ProfileActivity.java | 36 ++++++++++++++++---
- 1 file changed, 31 insertions(+), 5 deletions(-)
+ .../java/org/telegram/ui/ProfileActivity.java | 42 ++++++++++++++++---
+ 1 file changed, 37 insertions(+), 5 deletions(-)
 
 diff --git a/TMessagesProj/src/main/java/org/telegram/ui/ProfileActivity.java b/TMessagesProj/src/main/java/org/telegram/ui/ProfileActivity.java
 index 0000000..0000000 100644
@@ -35,7 +35,20 @@ index 0000000..0000000 100644
                                  top = getHeaderExtraHeight();
                              }
                              layoutManager.scrollToPositionWithOffset(pos, top - paddingTop);
-@@ -15218,34 +15223,55 @@ public class ProfileActivity extends BaseFragment implements NotificationCenter.
+@@ -10856,6 +10861,12 @@ public class ProfileActivity extends BaseFragment implements NotificationCenter.
+             }
+             musicView.setVisibility(hasMusic ? View.VISIBLE : View.GONE);
+         }
++        if (avatarsBlurView != null) {
++            avatarsBlurView.setSize(getActionsExtraHeight());
++        }
++        if (avatarsViewPager != null) {
++            avatarsViewPager.setPadding(0, 0, 0, getActionsExtraHeight());
++        }
+     }
+ 
+     private Drawable getScamDrawable(int type) {
+@@ -15218,34 +15229,55 @@ public class ProfileActivity extends BaseFragment implements NotificationCenter.
              listAdapter.notifyDataSetChanged();
          }
          if (savedScrollPosition >= 0) {

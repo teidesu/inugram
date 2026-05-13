@@ -136,7 +136,7 @@ index 0000000..0000000 100644
              if (topView.backgroundGradient != null) {
                  topView.backgroundGradient.setLocalMatrix(topView.backgroundGradientMatrix);
              }
-@@ -11008,7 +11014,7 @@ public class ProfileActivity extends BaseFragment implements NotificationCenter.
+@@ -11014,7 +11020,7 @@ public class ProfileActivity extends BaseFragment implements NotificationCenter.
              return;
          }
          final int newTop = ActionBar.getCurrentActionBarHeight() + (actionBar.getOccupyStatusBar() ? AndroidUtilities.statusBarHeight : 0);
@@ -145,7 +145,7 @@ index 0000000..0000000 100644
  
          if (openAnimationInProgress && playProfileAnimation == 2 && avatarContainer != null) {
              float vh = avatarContainer.getHeight() * avatarContainer.getScaleY();
-@@ -11292,11 +11298,11 @@ public class ProfileActivity extends BaseFragment implements NotificationCenter.
+@@ -11298,11 +11304,11 @@ public class ProfileActivity extends BaseFragment implements NotificationCenter.
                      if (/*!getMessagesController().premiumFeaturesBlocked() && */user != null && !MessagesController.isSupportUser(user) && DialogObject.getEmojiStatusDocumentId(user.emoji_status) != 0) {
                          rightIconIsStatus = true;
                          rightIconIsPremium = false;
@@ -159,7 +159,7 @@ index 0000000..0000000 100644
                      } else {
                          nameTextView[a].setRightDrawable(null);
                      }
-@@ -16375,7 +16381,7 @@ public class ProfileActivity extends BaseFragment implements NotificationCenter.
+@@ -16381,7 +16387,7 @@ public class ProfileActivity extends BaseFragment implements NotificationCenter.
          if (collectibleHint != null) {
              collectibleHint.hide();
          }
