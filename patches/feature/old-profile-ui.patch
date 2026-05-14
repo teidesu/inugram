@@ -46,7 +46,28 @@ index 0000000..0000000 100644
          if (userId != 0 && imageUpdater != null && !myProfile)
              return 0;
          return dp(74 + (withMusic && hasMusic ? 25 : 0));
-@@ -8181,7 +8189,7 @@
+@@ -6308,12 +6316,14 @@
+ 
+         avatarImage.setForegroundAlpha(value);
+ 
+-        final FrameLayout.LayoutParams params = (FrameLayout.LayoutParams) avatarContainer.getLayoutParams();
+-        params.width = (int) lerp(dpf2(100), listView.getMeasuredWidth() / avatarScale, value);
+-        params.height = (int) lerp(dpf2(100), (extraHeight + newTop) / avatarScale, value);
+-        params.leftMargin = (int) lerp(dpf2(64f), 0f, value);
+-        fixAvatarImageInCenter();
+-        avatarContainer.requestLayout();
++        if (!desu.inugram.InuConfig.OLD_LAYOUT.getValue()) {
++            final FrameLayout.LayoutParams params = (FrameLayout.LayoutParams) avatarContainer.getLayoutParams();
++            params.width = (int) lerp(dpf2(100), listView.getMeasuredWidth() / avatarScale, value);
++            params.height = (int) lerp(dpf2(100), (extraHeight + newTop) / avatarScale, value);
++            params.leftMargin = (int) lerp(dpf2(64f), 0f, value);
++            fixAvatarImageInCenter();
++            avatarContainer.requestLayout();
++        }
+ 
+         if (giftsView != null) {
+             giftsView.setExpandProgress(value);
+@@ -8181,7 +8191,7 @@
          if (writeButton != null && writeButton.getVisibility() != View.GONE) {
              writeButton.setTranslationY((actionBar.getOccupyStatusBar() ? AndroidUtilities.statusBarHeight : 0) + ActionBar.getCurrentActionBarHeight() + extraHeight + searchTransitionOffset - AndroidUtilities.dp(29.5f));
  
@@ -55,7 +76,7 @@ index 0000000..0000000 100644
              if (writeButtonVisible && chatId != 0) {
                  writeButtonVisible = ChatObject.isChannel(currentChat) && !currentChat.megagroup && chatInfo != null && chatInfo.linked_chat_id != 0 && (infoHeaderRow != -1 || infoHeaderRowEmpty != -1);
              }
-@@ -8242,6 +8250,10 @@
+@@ -8242,6 +8252,10 @@
      }
  
      private void needLayout(boolean animated) {
@@ -66,19 +87,16 @@ index 0000000..0000000 100644
          final int newTop = (actionBar.getOccupyStatusBar() ? AndroidUtilities.statusBarHeight : 0) + ActionBar.getCurrentActionBarHeight();
          final float diff = calculateHeaderExtraDiff();
          boolean textMeasured = false;
-@@ -8672,6 +8684,315 @@
+@@ -8672,6 +8686,314 @@
          }
      }
  
 +    // ============================================================
 +    // Old layout (11.14.1) needLayout port.
-+    // Resizes avatarContainer to 42dp once, then runs the canonical
-+    // 11.14 layout math. Uses 12.x-only hooks (titleAnimationsYDiff,
-+    // updateActionsPosition, updateMusicPosition) where they exist
-+    // so the music view from 12.x still works.
++    // Pins avatarContainer to 42dp on every call (12.x's
++    // setAvatarExpandProgress otherwise stomps it back), then runs
++    // the canonical 11.14 layout math.
 +    // ============================================================
-+    private boolean inu_didResizeAvatarFor11x = false;
-+
 +    private void inu_needLayoutOldStyle(boolean animated) {
 +        final int newTop = (actionBar.getOccupyStatusBar() ? AndroidUtilities.statusBarHeight : 0) + ActionBar.getCurrentActionBarHeight();
 +
@@ -92,14 +110,16 @@ index 0000000..0000000 100644
 +        }
 +
 +        if (avatarContainer != null) {
-+            // Resize avatarContainer to 11.14 dimensions (42x42, leftMargin 64) once.
-+            if (!inu_didResizeAvatarFor11x) {
-+                final FrameLayout.LayoutParams alp = (FrameLayout.LayoutParams) avatarContainer.getLayoutParams();
-+                alp.width = AndroidUtilities.dp(42);
-+                alp.height = AndroidUtilities.dp(42);
-+                alp.leftMargin = AndroidUtilities.dp(64);
++            // Always force avatar layout params to 11.14 dimensions; 12.x's
++            // setAvatarExpandProgress otherwise stomps these back to 100x100.
++            final FrameLayout.LayoutParams alp = (FrameLayout.LayoutParams) avatarContainer.getLayoutParams();
++            final int target42 = AndroidUtilities.dp(42);
++            final int target64 = AndroidUtilities.dp(64);
++            if (alp.width != target42 || alp.height != target42 || alp.leftMargin != target64) {
++                alp.width = target42;
++                alp.height = target42;
++                alp.leftMargin = target64;
 +                avatarContainer.requestLayout();
-+                inu_didResizeAvatarFor11x = true;
 +            }
 +
 +            final float diff = Math.min(1f, extraHeight / AndroidUtilities.dp(88f));
