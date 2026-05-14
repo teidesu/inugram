@@ -46,7 +46,7 @@ index 0000000..0000000 100644
          if (userId != 0 && imageUpdater != null && !myProfile)
              return 0;
          return dp(74 + (withMusic && hasMusic ? 25 : 0));
-@@ -6239,44 +6247,73 @@
+@@ -6239,44 +6247,85 @@
  
          updateEmojiStatusDrawableColor(value);
  
@@ -84,6 +84,18 @@ index 0000000..0000000 100644
 +        float nameX, onlineX;
 +        final float nameTextViewX, nameTextViewY, onlineTextViewX, onlineTextViewY;
 +        if (desu.inugram.InuConfig.OLD_LAYOUT.getValue()) {
++            // 11.14: refresh nameX/Y/onlineX/Y in the partial-pull-down zone so
++            // the bezier source point tracks the live avatarScale instead of
++            // remaining stuck at the value last written by needLayout. nameX and
++            // onlineX are shadowed by locals later in this method, so use this.
++            if (extraHeight > AndroidUtilities.dp(88f) && expandProgress < 0.33f) {
++                final float k0 = (42f + 18f) / 42f;
++                this.nameX = AndroidUtilities.dp(-21f) + avatarContainer.getMeasuredWidth() * (avatarScale - k0);
++                this.onlineX = AndroidUtilities.dp(-21f) + avatarContainer.getMeasuredWidth() * (avatarScale - k0);
++                nameY = (float) Math.floor(avatarY) + AndroidUtilities.dp(1.3f) + AndroidUtilities.dp(7f) + avatarContainer.getMeasuredHeight() * (avatarScale - k0) / 2f;
++                onlineY = (float) Math.floor(avatarY) + AndroidUtilities.dp(24) + (float) Math.floor(11 * AndroidUtilities.density) + avatarContainer.getMeasuredHeight() * (avatarScale - k0) / 2f;
++            }
++
 +            // 11.14 bezier: 38dp/18dp anchors, no min clamp, no diff-based slide.
 +            nameX = this.nameX;
 +            onlineX = this.onlineX;
@@ -157,7 +169,7 @@ index 0000000..0000000 100644
  
          updateActionsPosition();
          updateMusicPosition();
-@@ -6293,8 +6330,13 @@
+@@ -6293,8 +6342,13 @@
          onlineTextView[1].setTextColor(ColorUtils.blendARGB(applyPeerColor(statusColor, true, online), 0xB3FFFFFF, value));
          if (extraHeight > getHeaderOnlyExtraHeight()) {
              nameTextView[1].setPivotY(AndroidUtilities.lerp(0, nameTextView[1].getMeasuredHeight(), value));
@@ -173,7 +185,7 @@ index 0000000..0000000 100644
          }
          needLayoutText(Math.min(1f, diff));
  
-@@ -6308,12 +6350,22 @@
+@@ -6308,12 +6362,22 @@
  
          avatarImage.setForegroundAlpha(value);
  
@@ -202,7 +214,7 @@ index 0000000..0000000 100644
  
          if (giftsView != null) {
              giftsView.setExpandProgress(value);
-@@ -8181,7 +8233,7 @@
+@@ -8181,7 +8245,7 @@
          if (writeButton != null && writeButton.getVisibility() != View.GONE) {
              writeButton.setTranslationY((actionBar.getOccupyStatusBar() ? AndroidUtilities.statusBarHeight : 0) + ActionBar.getCurrentActionBarHeight() + extraHeight + searchTransitionOffset - AndroidUtilities.dp(29.5f));
  
@@ -211,7 +223,7 @@ index 0000000..0000000 100644
              if (writeButtonVisible && chatId != 0) {
                  writeButtonVisible = ChatObject.isChannel(currentChat) && !currentChat.megagroup && chatInfo != null && chatInfo.linked_chat_id != 0 && (infoHeaderRow != -1 || infoHeaderRowEmpty != -1);
              }
-@@ -8242,6 +8294,10 @@
+@@ -8242,6 +8306,10 @@
      }
  
      private void needLayout(boolean animated) {
@@ -222,7 +234,7 @@ index 0000000..0000000 100644
          final int newTop = (actionBar.getOccupyStatusBar() ? AndroidUtilities.statusBarHeight : 0) + ActionBar.getCurrentActionBarHeight();
          final float diff = calculateHeaderExtraDiff();
          boolean textMeasured = false;
-@@ -8672,6 +8728,314 @@
+@@ -8672,6 +8740,314 @@
          }
      }
  

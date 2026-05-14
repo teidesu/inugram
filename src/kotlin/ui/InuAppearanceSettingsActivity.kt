@@ -26,7 +26,8 @@ class InuAppearanceSettingsActivity : InuSettingsPageActivity() {
                 TOGGLE_OLD_LAYOUT,
                 R.string.InuOldLayout,
                 R.string.InuOldLayoutInfo,
-                InuConfig.OLD_LAYOUT.value
+                InuConfig.OLD_LAYOUT.value,
+                experimental = true,
             )
         )
         items.add(
