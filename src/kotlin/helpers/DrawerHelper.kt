@@ -5,23 +5,32 @@ import android.os.Bundle
 import android.view.ViewGroup
 import android.widget.FrameLayout
 import androidx.recyclerview.widget.LinearLayoutManager
-import desu.inugram.InuConfig
+import desu.inugram.ui.drawer.DrawerAddCell
+import desu.inugram.ui.drawer.DrawerLayoutAdapter
+import desu.inugram.ui.drawer.DrawerProfileCell
+import desu.inugram.ui.drawer.DrawerUserCell
+import desu.inugram.ui.drawer.SideMenultItemAnimator
 import org.telegram.messenger.AndroidUtilities.dp
+import org.telegram.messenger.NotificationCenter
 import org.telegram.messenger.UserConfig
 import org.telegram.ui.ActionBar.DrawerLayoutContainer
 import org.telegram.ui.ActionBar.INavigationLayout
 import org.telegram.ui.ActionBar.Theme
-import desu.inugram.ui.drawer.DrawerLayoutAdapter
-import org.telegram.ui.Components.RecyclerListView
-import desu.inugram.ui.drawer.SideMenultItemAnimator
 import org.telegram.ui.CallLogActivity
 import org.telegram.ui.ContactsActivity
+import org.telegram.ui.LaunchActivity
+import org.telegram.ui.LoginActivity
 import org.telegram.ui.ProfileActivity
 import org.telegram.ui.SettingsActivity
+import org.telegram.ui.Components.RecyclerListView
 
 object DrawerHelper {
 
     private var adapter: DrawerLayoutAdapter? = null
+    private var sideMenu: RecyclerListView? = null
+    private var sideMenuContainer: FrameLayout? = null
+    private var themeObserverInstalled = false
+    private var themeObserver: NotificationCenter.NotificationCenterDelegate? = null
 
     @JvmStatic
     fun setup(
@@ -29,24 +38,26 @@ object DrawerHelper {
         drawerLayoutContainer: DrawerLayoutContainer,
         actionBarLayout: INavigationLayout,
     ) {
-        val sideMenu = RecyclerListView(context)
-        sideMenu.layoutManager = LinearLayoutManager(context)
-        val itemAnimator = SideMenultItemAnimator(sideMenu)
+        val sm = RecyclerListView(context)
+        sm.layoutManager = LinearLayoutManager(context)
+        val itemAnimator = SideMenultItemAnimator(sm)
         val newAdapter = DrawerLayoutAdapter(context, itemAnimator, drawerLayoutContainer)
         adapter = newAdapter
-        sideMenu.setItemAnimator(itemAnimator)
-        sideMenu.adapter = newAdapter
-        sideMenu.setVerticalScrollBarEnabled(false)
-        sideMenu.clipToPadding = false
+        sideMenu = sm
+        sm.setItemAnimator(itemAnimator)
+        sm.adapter = newAdapter
+        sm.setVerticalScrollBarEnabled(false)
+        sm.clipToPadding = false
+        applySideMenuColors(sm)
 
-        sideMenu.setOnItemClickListener { view, position ->
-            val id = newAdapter.getId(position)
-            handleItemClick(id, position, view, drawerLayoutContainer, actionBarLayout, newAdapter)
+        sm.setOnItemClickListener { view, position ->
+            handleItemClick(position, view, drawerLayoutContainer, actionBarLayout, newAdapter)
         }
 
-        val sideMenuContainer = FrameLayout(context)
-        sideMenuContainer.setBackgroundColor(Theme.getColor(Theme.key_chats_menuBackground))
-        sideMenuContainer.addView(sideMenu, FrameLayout.LayoutParams(
+        val container = FrameLayout(context)
+        sideMenuContainer = container
+        container.setBackgroundColor(Theme.getColor(Theme.key_chats_menuBackground))
+        container.addView(sm, FrameLayout.LayoutParams(
             ViewGroup.LayoutParams.MATCH_PARENT,
             ViewGroup.LayoutParams.MATCH_PARENT,
         ))
@@ -60,13 +71,40 @@ object DrawerHelper {
         )
 
         val lp = FrameLayout.LayoutParams(width, ViewGroup.LayoutParams.MATCH_PARENT)
-        drawerLayoutContainer.inu_setDrawerLayout(sideMenuContainer, sideMenu, lp)
+        drawerLayoutContainer.inu_setDrawerLayout(container, sm, lp)
         drawerLayoutContainer.inu_setAllowOpenDrawer(true, false)
+
+        installThemeObserver()
+    }
+
+    private fun applySideMenuColors(sm: RecyclerListView) {
+        val bg = Theme.getColor(Theme.key_chats_menuBackground)
+        sm.setBackgroundColor(bg)
+        sm.setGlowColor(bg)
+        sm.setListSelectorColor(Theme.getColor(Theme.key_listSelector))
+    }
+
+    private fun installThemeObserver() {
+        if (themeObserverInstalled) return
+        val obs = NotificationCenter.NotificationCenterDelegate { id, _, _ ->
+            if (id == NotificationCenter.didSetNewTheme || id == NotificationCenter.reloadInterface) {
+                refreshTheme()
+            }
+        }
+        themeObserver = obs
+        NotificationCenter.getGlobalInstance().addObserver(obs, NotificationCenter.didSetNewTheme)
+        NotificationCenter.getGlobalInstance().addObserver(obs, NotificationCenter.reloadInterface)
+        themeObserverInstalled = true
+    }
+
+    private fun refreshTheme() {
+        sideMenuContainer?.setBackgroundColor(Theme.getColor(Theme.key_chats_menuBackground))
+        sideMenu?.let { applySideMenuColors(it) }
+        adapter?.notifyDataSetChanged()
     }
 
     @JvmStatic
     fun handleItemClick(
-        id: Int,
         position: Int,
         view: android.view.View,
         drawerLayoutContainer: DrawerLayoutContainer,
@@ -75,16 +113,54 @@ object DrawerHelper {
     ) {
         val account = UserConfig.selectedAccount
 
-        // Account row taps
-        val firstAccount = adapter.firstAccountPosition
-        val lastAccount = adapter.lastAccountPosition
-        if (firstAccount != androidx.recyclerview.widget.RecyclerView.NO_POSITION
-            && position in firstAccount..lastAccount) {
+        // Profile cell (position 0): toggle accounts list. The arrow is purely
+        // a rotation indicator — clicks come in on the whole cell.
+        if (position == 0) {
+            if (view is DrawerProfileCell) {
+                adapter.setAccountsShown(!adapter.isAccountsShown(), true)
+            }
+            return
+        }
+
+        // Account row tap: switch to that account.
+        if (view is DrawerUserCell) {
+            val accountNumber = view.accountNumber
+            LaunchActivity.instance?.switchToAccount(accountNumber, true)
             drawerLayoutContainer.inu_closeDrawer(false)
             return
         }
 
-        when (id) {
+        // "Add account" row.
+        if (view is DrawerAddCell) {
+            var availableAccount: Int? = null
+            for (a in UserConfig.MAX_ACCOUNT_COUNT - 1 downTo 0) {
+                if (!UserConfig.getInstance(a).isClientActivated) {
+                    availableAccount = a
+                    break
+                }
+            }
+            if (availableAccount != null) {
+                nav.presentFragment(LoginActivity(availableAccount))
+                drawerLayoutContainer.inu_closeDrawer(false)
+            }
+            return
+        }
+
+        // Bot/extension item with custom listener (handled by adapter).
+        if (adapter.click(view, position)) {
+            drawerLayoutContainer.inu_closeDrawer(false)
+            return
+        }
+
+        // Side-menu attach bot.
+        adapter.getAttachMenuBot(position)?.let { bot ->
+            val activity = LaunchActivity.instance ?: return
+            LaunchActivity.showAttachMenuBot(activity, account, bot, null, true)
+            drawerLayoutContainer.inu_closeDrawer(false)
+            return
+        }
+
+        when (val id = adapter.getId(position)) {
             16 -> { // My Profile
                 val args = Bundle()
                 args.putLong("user_id", UserConfig.getInstance(account).getClientUserId())
@@ -110,9 +186,9 @@ object DrawerHelper {
                 nav.presentFragment(CallLogActivity())
                 drawerLayoutContainer.inu_closeDrawer(false)
             }
-            11 -> { // Saved Messages
+            11 -> { // Saved Messages: ChatActivity expects user_id, not dialog_id.
                 val args = Bundle()
-                args.putLong("dialog_id", UserConfig.getInstance(account).getClientUserId())
+                args.putLong("user_id", UserConfig.getInstance(account).getClientUserId())
                 nav.presentFragment(org.telegram.ui.ChatActivity(args))
                 drawerLayoutContainer.inu_closeDrawer(false)
             }
@@ -121,10 +197,8 @@ object DrawerHelper {
                 drawerLayoutContainer.inu_closeDrawer(false)
             }
             else -> {
-                // bot items, emoji status, etc — handled by adapter click
-                if (adapter.click(view, position)) {
-                    drawerLayoutContainer.inu_closeDrawer(false)
-                }
+                // Unknown id — close drawer to avoid getting stuck.
+                drawerLayoutContainer.inu_closeDrawer(false)
             }
         }
     }
