@@ -66,7 +66,7 @@ index 0000000..0000000 100644
          final int newTop = (actionBar.getOccupyStatusBar() ? AndroidUtilities.statusBarHeight : 0) + ActionBar.getCurrentActionBarHeight();
          final float diff = calculateHeaderExtraDiff();
          boolean textMeasured = false;
-@@ -8672,6 +8684,322 @@
+@@ -8672,6 +8684,315 @@
          }
      }
  
@@ -161,23 +161,16 @@ index 0000000..0000000 100644
 +                        }
 +                    }
 +
-+                    if (qrItem != null) {
-+                        updateQrItemVisibility(animated);
-+                        if (!animated) {
-+                            float translation = AndroidUtilities.dp(48) * qrItem.getAlpha();
-+                            qrItem.setTranslationX(translation);
-+                            if (avatarsViewPagerIndicatorView != null) {
-+                                avatarsViewPagerIndicatorView.setTranslationX(translation - AndroidUtilities.dp(48));
-+                            }
-+                        }
-+                    }
++                    // qrItem was removed in 12.x; nothing to do here.
 +                }
 +
++                // 12.x: storyView keeps the (width, writeBtnVisible, y) signature;
++                // giftsView only takes the y offset.
 +                if (storyView != null) {
 +                    storyView.setExpandCoords(avatarContainer2.getMeasuredWidth() - AndroidUtilities.dp(40), writeButtonVisible, (actionBar.getOccupyStatusBar() ? AndroidUtilities.statusBarHeight : 0) + ActionBar.getCurrentActionBarHeight() + extraHeight + searchTransitionOffset);
 +                }
 +                if (giftsView != null) {
-+                    giftsView.setExpandCoords(avatarContainer2.getMeasuredWidth() - AndroidUtilities.dp(40), writeButtonVisible, (actionBar.getOccupyStatusBar() ? AndroidUtilities.statusBarHeight : 0) + ActionBar.getCurrentActionBarHeight() + extraHeight + searchTransitionOffset);
++                    giftsView.setExpandCoords((actionBar.getOccupyStatusBar() ? AndroidUtilities.statusBarHeight : 0) + ActionBar.getCurrentActionBarHeight() + extraHeight + searchTransitionOffset);
 +                }
 +            }
 +
