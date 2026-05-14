@@ -46,7 +46,134 @@ index 0000000..0000000 100644
          if (userId != 0 && imageUpdater != null && !myProfile)
              return 0;
          return dp(74 + (withMusic && hasMusic ? 25 : 0));
-@@ -6308,12 +6316,14 @@
+@@ -6239,44 +6247,73 @@
+ 
+         updateEmojiStatusDrawableColor(value);
+ 
+-        float nameX = this.nameX;
+-        float onlineX = this.onlineX;
+-
+-        if (diff < 1f) {
+-            nameX = AndroidUtilities.lerp(-dpf2(42 + 21), nameX, diff);
+-            onlineX = AndroidUtilities.lerp(-dpf2(42 + 21), onlineX, diff);
+-        }
+-        final float kx = dpf2(8);
+-        final float ky = isPulledDown ? dpf2(8) : dpf2(-24);
+-
+-        final float nameTextViewXEnd = AndroidUtilities.dpf2(18f) - ((FrameLayout.LayoutParams) nameTextView[1].getLayoutParams()).leftMargin;
+-        final float nameTextViewYEnd = newTop + extraHeight - getActionsExtraHeight() - AndroidUtilities.dpf2(30f) - nameTextView[1].getBottom();
+-        final float nameTextViewCx = kx + nameX + (nameTextViewXEnd - nameX) / 2f;
+-        final float nameTextViewCy = ky + nameY + (nameTextViewYEnd - nameY) / 2f;
+-        final float nameTextViewX = (1 - value) * (1 - value) * nameX + 2 * (1 - value) * value * nameTextViewCx + value * value * nameTextViewXEnd;
+-        final float nameTextViewY = (1 - value) * (1 - value) * nameY + 2 * (1 - value) * value * nameTextViewCy + value * value * nameTextViewYEnd;
+-
+-        final float onlineTextViewXEnd = AndroidUtilities.dpf2(16f) - ((FrameLayout.LayoutParams) onlineTextView[1].getLayoutParams()).leftMargin;
+-        final float onlineTextViewYEnd = newTop + extraHeight - getActionsExtraHeight() - AndroidUtilities.dpf2(10f) - onlineTextView[1].getBottom();
+-        final float onlineTextViewCx = kx + onlineX + (onlineTextViewXEnd - onlineX) / 2f;
+-        final float onlineTextViewCy = ky + onlineY + (onlineTextViewYEnd - onlineY) / 2f;
+-        final float onlineTextViewX = (1 - value) * (1 - value) * onlineX + 2 * (1 - value) * value * onlineTextViewCx + value * value * onlineTextViewXEnd;
+-        final float onlineTextViewY = (1 - value) * (1 - value) * onlineY + 2 * (1 - value) * value * onlineTextViewCy + value * value * onlineTextViewYEnd;
+-
+-        final float minEndNameY = (actionBar.getOccupyStatusBar() ? AndroidUtilities.statusBarHeight : 0)
+-                + ActionBar.getCurrentActionBarHeight() / 2f
+-                - 21 * AndroidUtilities.density
+-                + actionBar.getTranslationY();
+-
+-        final float minNameY = (float) Math.floor(minEndNameY) + AndroidUtilities.dp(1.3f);
+-        final float minOnlineY = minNameY + AndroidUtilities.dpf2(22.7f);
++        float nameX, onlineX;
++        final float nameTextViewX, nameTextViewY, onlineTextViewX, onlineTextViewY;
++        if (desu.inugram.InuConfig.OLD_LAYOUT.getValue()) {
++            // 11.14 bezier: 38dp/18dp anchors, no min clamp, no diff-based slide.
++            nameX = this.nameX;
++            onlineX = this.onlineX;
++            final float k = AndroidUtilities.dpf2(8f);
++            final float nameTextViewXEnd = AndroidUtilities.dpf2(18f) - nameTextView[1].getLeft();
++            final float nameTextViewYEnd = newTop + extraHeight - AndroidUtilities.dpf2(38f) - nameTextView[1].getBottom();
++            final float nameTextViewCx = k + nameX + (nameTextViewXEnd - nameX) / 2f;
++            final float nameTextViewCy = k + nameY + (nameTextViewYEnd - nameY) / 2f;
++            nameTextViewX = (1 - value) * (1 - value) * nameX + 2 * (1 - value) * value * nameTextViewCx + value * value * nameTextViewXEnd;
++            nameTextViewY = (1 - value) * (1 - value) * nameY + 2 * (1 - value) * value * nameTextViewCy + value * value * nameTextViewYEnd;
++
++            final float onlineTextViewXEnd = AndroidUtilities.dpf2(16f) - onlineTextView[1].getLeft();
++            final float onlineTextViewYEnd = newTop + extraHeight - AndroidUtilities.dpf2(18f) - onlineTextView[1].getBottom();
++            final float onlineTextViewCx = k + onlineX + (onlineTextViewXEnd - onlineX) / 2f;
++            final float onlineTextViewCy = k + onlineY + (onlineTextViewYEnd - onlineY) / 2f;
++            onlineTextViewX = (1 - value) * (1 - value) * onlineX + 2 * (1 - value) * value * onlineTextViewCx + value * value * onlineTextViewXEnd;
++            onlineTextViewY = (1 - value) * (1 - value) * onlineY + 2 * (1 - value) * value * onlineTextViewCy + value * value * onlineTextViewYEnd;
++
++            nameTextView[1].setTranslationX(nameTextViewX);
++            nameTextView[1].setTranslationY(nameTextViewY);
++            onlineTextView[1].setTranslationX(getOnlineTextViewTranslationXWithOffsets(onlineTextViewX));
++            onlineTextView[1].setTranslationY(getOnlineTextViewTranslationYWithOffsets(onlineTextViewY));
++            mediaCounterTextView.setTranslationX(onlineTextViewX);
++            mediaCounterTextView.setTranslationY(onlineTextViewY);
++        } else {
++            nameX = this.nameX;
++            onlineX = this.onlineX;
+ 
+-        nameTextView[1].setTranslationX(nameTextViewX);
+-        nameTextView[1].setTranslationY(Math.max(minNameY, nameTextViewY));
+-        onlineTextView[1].setTranslationX(getOnlineTextViewTranslationXWithOffsets(onlineTextViewX));
+-        onlineTextView[1].setTranslationY(getOnlineTextViewTranslationYWithOffsets(Math.max(minOnlineY, onlineTextViewY)));
+-        mediaCounterTextView.setTranslationX(onlineTextViewX);
+-        mediaCounterTextView.setTranslationY(Math.max(minOnlineY, onlineTextViewY));
++            if (diff < 1f) {
++                nameX = AndroidUtilities.lerp(-dpf2(42 + 21), nameX, diff);
++                onlineX = AndroidUtilities.lerp(-dpf2(42 + 21), onlineX, diff);
++            }
++            final float kx = dpf2(8);
++            final float ky = isPulledDown ? dpf2(8) : dpf2(-24);
++
++            final float nameTextViewXEnd = AndroidUtilities.dpf2(18f) - ((FrameLayout.LayoutParams) nameTextView[1].getLayoutParams()).leftMargin;
++            final float nameTextViewYEnd = newTop + extraHeight - getActionsExtraHeight() - AndroidUtilities.dpf2(30f) - nameTextView[1].getBottom();
++            final float nameTextViewCx = kx + nameX + (nameTextViewXEnd - nameX) / 2f;
++            final float nameTextViewCy = ky + nameY + (nameTextViewYEnd - nameY) / 2f;
++            nameTextViewX = (1 - value) * (1 - value) * nameX + 2 * (1 - value) * value * nameTextViewCx + value * value * nameTextViewXEnd;
++            nameTextViewY = (1 - value) * (1 - value) * nameY + 2 * (1 - value) * value * nameTextViewCy + value * value * nameTextViewYEnd;
++
++            final float onlineTextViewXEnd = AndroidUtilities.dpf2(16f) - ((FrameLayout.LayoutParams) onlineTextView[1].getLayoutParams()).leftMargin;
++            final float onlineTextViewYEnd = newTop + extraHeight - getActionsExtraHeight() - AndroidUtilities.dpf2(10f) - onlineTextView[1].getBottom();
++            final float onlineTextViewCx = kx + onlineX + (onlineTextViewXEnd - onlineX) / 2f;
++            final float onlineTextViewCy = ky + onlineY + (onlineTextViewYEnd - onlineY) / 2f;
++            onlineTextViewX = (1 - value) * (1 - value) * onlineX + 2 * (1 - value) * value * onlineTextViewCx + value * value * onlineTextViewXEnd;
++            onlineTextViewY = (1 - value) * (1 - value) * onlineY + 2 * (1 - value) * value * onlineTextViewCy + value * value * onlineTextViewYEnd;
++
++            final float minEndNameY = (actionBar.getOccupyStatusBar() ? AndroidUtilities.statusBarHeight : 0)
++                    + ActionBar.getCurrentActionBarHeight() / 2f
++                    - 21 * AndroidUtilities.density
++                    + actionBar.getTranslationY();
++
++            final float minNameY = (float) Math.floor(minEndNameY) + AndroidUtilities.dp(1.3f);
++            final float minOnlineY = minNameY + AndroidUtilities.dpf2(22.7f);
++
++            nameTextView[1].setTranslationX(nameTextViewX);
++            nameTextView[1].setTranslationY(Math.max(minNameY, nameTextViewY));
++            onlineTextView[1].setTranslationX(getOnlineTextViewTranslationXWithOffsets(onlineTextViewX));
++            onlineTextView[1].setTranslationY(getOnlineTextViewTranslationYWithOffsets(Math.max(minOnlineY, onlineTextViewY)));
++            mediaCounterTextView.setTranslationX(onlineTextViewX);
++            mediaCounterTextView.setTranslationY(Math.max(minOnlineY, onlineTextViewY));
++        }
+ 
+         updateActionsPosition();
+         updateMusicPosition();
+@@ -6293,8 +6330,13 @@
+         onlineTextView[1].setTextColor(ColorUtils.blendARGB(applyPeerColor(statusColor, true, online), 0xB3FFFFFF, value));
+         if (extraHeight > getHeaderOnlyExtraHeight()) {
+             nameTextView[1].setPivotY(AndroidUtilities.lerp(0, nameTextView[1].getMeasuredHeight(), value));
+-            nameTextView[1].setScaleX(AndroidUtilities.lerp(1f + 0.12f * diff, 1.38f, value));
+-            nameTextView[1].setScaleY(AndroidUtilities.lerp(1f + 0.12f * diff, 1.38f, value));
++            if (desu.inugram.InuConfig.OLD_LAYOUT.getValue()) {
++                nameTextView[1].setScaleX(AndroidUtilities.lerp(1.12f, 1.67f, value));
++                nameTextView[1].setScaleY(AndroidUtilities.lerp(1.12f, 1.67f, value));
++            } else {
++                nameTextView[1].setScaleX(AndroidUtilities.lerp(1f + 0.12f * diff, 1.38f, value));
++                nameTextView[1].setScaleY(AndroidUtilities.lerp(1f + 0.12f * diff, 1.38f, value));
++            }
+         }
+         needLayoutText(Math.min(1f, diff));
+ 
+@@ -6308,12 +6350,22 @@
  
          avatarImage.setForegroundAlpha(value);
  
@@ -56,7 +183,15 @@ index 0000000..0000000 100644
 -        params.leftMargin = (int) lerp(dpf2(64f), 0f, value);
 -        fixAvatarImageInCenter();
 -        avatarContainer.requestLayout();
-+        if (!desu.inugram.InuConfig.OLD_LAYOUT.getValue()) {
++        if (desu.inugram.InuConfig.OLD_LAYOUT.getValue()) {
++            // 11.14: animate translationX (avatarX -> 0) and lerp lp from 42dp.
++            avatarContainer.setTranslationX(AndroidUtilities.lerp(avatarX, 0f, value));
++            final FrameLayout.LayoutParams params = (FrameLayout.LayoutParams) avatarContainer.getLayoutParams();
++            params.width = (int) AndroidUtilities.lerp(AndroidUtilities.dpf2(42f), listView.getMeasuredWidth() / avatarScale, value);
++            params.height = (int) AndroidUtilities.lerp(AndroidUtilities.dpf2(42f), (extraHeight + newTop) / avatarScale, value);
++            params.leftMargin = (int) AndroidUtilities.lerp(AndroidUtilities.dpf2(64f), 0f, value);
++            avatarContainer.requestLayout();
++        } else {
 +            final FrameLayout.LayoutParams params = (FrameLayout.LayoutParams) avatarContainer.getLayoutParams();
 +            params.width = (int) lerp(dpf2(100), listView.getMeasuredWidth() / avatarScale, value);
 +            params.height = (int) lerp(dpf2(100), (extraHeight + newTop) / avatarScale, value);
@@ -67,7 +202,7 @@ index 0000000..0000000 100644
  
          if (giftsView != null) {
              giftsView.setExpandProgress(value);
-@@ -8181,7 +8191,7 @@
+@@ -8181,7 +8233,7 @@
          if (writeButton != null && writeButton.getVisibility() != View.GONE) {
              writeButton.setTranslationY((actionBar.getOccupyStatusBar() ? AndroidUtilities.statusBarHeight : 0) + ActionBar.getCurrentActionBarHeight() + extraHeight + searchTransitionOffset - AndroidUtilities.dp(29.5f));
  
@@ -76,7 +211,7 @@ index 0000000..0000000 100644
              if (writeButtonVisible && chatId != 0) {
                  writeButtonVisible = ChatObject.isChannel(currentChat) && !currentChat.megagroup && chatInfo != null && chatInfo.linked_chat_id != 0 && (infoHeaderRow != -1 || infoHeaderRowEmpty != -1);
              }
-@@ -8242,6 +8252,10 @@
+@@ -8242,6 +8294,10 @@
      }
  
      private void needLayout(boolean animated) {
@@ -87,7 +222,7 @@ index 0000000..0000000 100644
          final int newTop = (actionBar.getOccupyStatusBar() ? AndroidUtilities.statusBarHeight : 0) + ActionBar.getCurrentActionBarHeight();
          final float diff = calculateHeaderExtraDiff();
          boolean textMeasured = false;
-@@ -8672,6 +8686,314 @@
+@@ -8672,6 +8728,314 @@
          }
      }
  
