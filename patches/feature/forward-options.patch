@@ -1,0 +1,49 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: alina sireneva <alina@tei.su>
+Date: Wed, 13 May 2026 18:52:11 +0200
+Subject: Long-tap forward in message menu to forward without sender or caption
+
+---
+ .../src/main/java/org/telegram/ui/ChatActivity.java        | 7 +++++--
+ 1 file changed, 5 insertions(+), 2 deletions(-)
+
+diff --git a/TMessagesProj/src/main/java/org/telegram/ui/ChatActivity.java b/TMessagesProj/src/main/java/org/telegram/ui/ChatActivity.java
+index 0000000..0000000 100644
+--- a/TMessagesProj/src/main/java/org/telegram/ui/ChatActivity.java
++++ b/TMessagesProj/src/main/java/org/telegram/ui/ChatActivity.java
+@@ -15008,6 +15008,7 @@ public class ChatActivity extends BaseFragment implements
+                     messagePreviewParams.attach(forwardingPreviewView);
+                 }
+                 messagePreviewParams.updateForward(messageObjectsToForward, dialog_id);
++                ChatHelper.applyForwardOptionsToPreview(messagePreviewParams);
+                 if (messagePreviewParams.isEmpty() && editingMessageObject == null) {
+                     messagePreviewParams = null;
+                 }
+@@ -30437,7 +30438,7 @@ public class ChatActivity extends BaseFragment implements
+             final boolean showSponsorInfo = !suggestEdit && selectedObject != null && selectedObject.isSponsored() && (selectedObject.sponsoredInfo != null || selectedObject.sponsoredAdditionalInfo != null || selectedObject.sponsoredUrl != null && !selectedObject.sponsoredUrl.startsWith("https://" + getMessagesController().linkPrefix));
+             final boolean isReactionsAvailableFinal = !suggestEdit && isReactionsAvailable;
+ 
+-            int flags = 0;
++            int flags = ActionBarPopupWindow.ActionBarPopupWindowLayout.FLAG_USE_SWIPEBACK;
+             if (isReactionsViewAvailable || showMessageSeen || showSponsorInfo) {
+                 flags |= ActionBarPopupWindow.ActionBarPopupWindowLayout.FLAG_USE_SWIPEBACK;
+             }
+@@ -32664,6 +32665,7 @@ public class ChatActivity extends BaseFragment implements
+                 break;
+             }
+             case OPTION_FORWARD: {
++                ChatHelper.clearForwardFlags();
+                 if (getMessagesController().isFrozen()) {
+                     AccountFrozenAlert.show(currentAccount);
+                     selectedObject = null;
+@@ -33671,8 +33673,9 @@ public class ChatActivity extends BaseFragment implements
+                         params.suggestionParams = messageSuggestionParams;
+                         getSendMessagesHelper().sendMessage(params);
+                     }
+-                    getSendMessagesHelper().sendMessage(fmessages, did, false, false, notify, scheduleDate, scheduleRepeatPeriod, null, -1, price == null ? 0 : price, getSendMonoForumPeerId(), getSendMessageSuggestionParams());
++                    getSendMessagesHelper().sendMessage(fmessages, did, ChatHelper.pendingHideAuthor, ChatHelper.pendingHideCaption, notify, scheduleDate, scheduleRepeatPeriod, null, -1, price == null ? 0 : price, getSendMonoForumPeerId(), getSendMessageSuggestionParams());
+                 }
++                ChatHelper.clearForwardFlags();
+                 fragment.finishFragment();
+                 createUndoView();
+                 if (undoView != null) {

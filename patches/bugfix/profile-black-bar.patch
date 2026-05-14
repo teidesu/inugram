@@ -1,0 +1,33 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: alina sireneva <alina@tei.su>
+Date: Tue, 12 May 2026 20:36:20 +0200
+Subject: fix black bar glitch in profiles with peercolor
+
+---
+ .../src/main/java/org/telegram/ui/ProfileActivity.java        | 4 +++-
+ 1 file changed, 3 insertions(+), 1 deletion(-)
+
+diff --git a/TMessagesProj/src/main/java/org/telegram/ui/ProfileActivity.java b/TMessagesProj/src/main/java/org/telegram/ui/ProfileActivity.java
+index 0000000..0000000 100644
+--- a/TMessagesProj/src/main/java/org/telegram/ui/ProfileActivity.java
++++ b/TMessagesProj/src/main/java/org/telegram/ui/ProfileActivity.java
+@@ -1216,6 +1216,7 @@ public class ProfileActivity extends BaseFragment implements NotificationCenter.
+         private final Paint backgroundPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
+ 
+         public void setBackgroundColorId(MessagesController.PeerColor peerColor, boolean animated) {
++            final boolean wasHasColorById = hasColorById;
+             if (peerColor != null) {
+                 hasColorById = true;
+                 color1 = peerColor.getBgColor1(Theme.isCurrentThemeDark());
+@@ -1242,9 +1243,10 @@ public class ProfileActivity extends BaseFragment implements NotificationCenter.
+                     btnColor = Theme.multAlpha(PeerColorActivity.adaptProfileEmojiColor(getThemedColor(Theme.key_actionBarDefault)), .15f);
+                 }
+             }
+-            if (!animated) {
++            if (!animated || hasColorById != wasHasColorById) {
+                 color1Animated.set(color1, true);
+                 color2Animated.set(color2, true);
++                hasColorAnimated.set(hasColorById ? 1f : 0f, true);
+             }
+             backgroundGradientY = (actionBar.getOccupyStatusBar() ? AndroidUtilities.statusBarHeight : 0)
+                     + ActionBar.getCurrentActionBarHeight()

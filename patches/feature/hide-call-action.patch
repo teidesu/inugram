@@ -1,0 +1,40 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: alina sireneva <alina@tei.su>
+Date: Wed, 13 May 2026 16:47:39 +0200
+Subject: hide the "call" button from the chat header
+
+---
+ .../src/main/java/org/telegram/ui/ChatActivity.java         | 6 +++---
+ 1 file changed, 3 insertions(+), 3 deletions(-)
+
+diff --git a/TMessagesProj/src/main/java/org/telegram/ui/ChatActivity.java b/TMessagesProj/src/main/java/org/telegram/ui/ChatActivity.java
+index 0000000..0000000 100644
+--- a/TMessagesProj/src/main/java/org/telegram/ui/ChatActivity.java
++++ b/TMessagesProj/src/main/java/org/telegram/ui/ChatActivity.java
+@@ -4285,7 +4285,7 @@ public class ChatActivity extends BaseFragment implements
+                 audioCallIconItem = menu.lazilyAddItem(call, R.drawable.ic_call, themeDelegate);
+                 audioCallIconItem.setContentDescription(LocaleController.getString(R.string.Call));
+                 userFull = getMessagesController().getUserFull(currentUser.id);
+-                if (userFull != null && userFull.phone_calls_available) {
++                if (userFull != null && userFull.phone_calls_available && !desu.inugram.InuConfig.HIDE_CALL_ACTION_BUTTON.getValue()) {
+                     showAudioCallAsIcon = !inPreviewMode;
+                     audioCallIconItem.setVisibility(View.VISIBLE);
+                 } else {
+@@ -23580,7 +23580,7 @@ public class ChatActivity extends BaseFragment implements
+                     }
+                 }
+                 if (headerItem != null) {
+-                    showAudioCallAsIcon = userInfo.phone_calls_available && !inPreviewMode;
++                    showAudioCallAsIcon = userInfo.phone_calls_available && !inPreviewMode && !desu.inugram.InuConfig.HIDE_CALL_ACTION_BUTTON.getValue();
+                     if (avatarContainer != null) {
+                         avatarContainer.setTitleExpand(showAudioCallAsIcon);
+                     }
+@@ -29091,7 +29091,7 @@ public class ChatActivity extends BaseFragment implements
+         super.setInPreviewMode(value);
+         if (currentUser != null && audioCallIconItem != null) {
+             TLRPC.UserFull userFull = getMessagesController().getUserFull(currentUser.id);
+-            if (userFull != null && userFull.phone_calls_available) {
++            if (userFull != null && userFull.phone_calls_available && !desu.inugram.InuConfig.HIDE_CALL_ACTION_BUTTON.getValue()) {
+                 showAudioCallAsIcon = !inPreviewMode;
+                 audioCallIconItem.setVisibility(View.VISIBLE);
+             } else {

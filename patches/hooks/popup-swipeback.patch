@@ -1,0 +1,114 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: alina sireneva <alina@tei.su>
+Date: Wed, 13 May 2026 18:49:11 +0200
+Subject: Expose foreground translation and unified touch coords on swipeback popup
+
+---
+ .../ui/ActionBar/ActionBarPopupWindow.java    |  2 ++
+ .../ui/Components/PopupSwipeBackLayout.java   | 24 +++++++++++++++++--
+ 2 files changed, 24 insertions(+), 2 deletions(-)
+
+diff --git a/TMessagesProj/src/main/java/org/telegram/ui/ActionBar/ActionBarPopupWindow.java b/TMessagesProj/src/main/java/org/telegram/ui/ActionBar/ActionBarPopupWindow.java
+index 0000000..0000000 100644
+--- a/TMessagesProj/src/main/java/org/telegram/ui/ActionBar/ActionBarPopupWindow.java
++++ b/TMessagesProj/src/main/java/org/telegram/ui/ActionBar/ActionBarPopupWindow.java
+@@ -112,6 +112,7 @@ public class ActionBarPopupWindow extends PopupWindow {
+         private OnDispatchKeyEventListener mOnDispatchKeyEventListener;
+         private float backScaleX = 1;
+         private float backScaleY = 1;
++        public float inu_backOffsetY = 0;
+         private boolean startAnimationPending = false;
+         private int backAlpha = 255;
+         private int lastStartedChild = 0;
+@@ -528,6 +529,7 @@ public class ActionBarPopupWindow extends PopupWindow {
+                         rect.set(AndroidUtilities.rectTmp2.right, AndroidUtilities.rectTmp2.top, AndroidUtilities.rectTmp2.right, AndroidUtilities.rectTmp2.top);
+                         AndroidUtilities.lerp(rect, AndroidUtilities.rectTmp2, reactionsEnterProgress, AndroidUtilities.rectTmp2);
+                     }
++                    AndroidUtilities.rectTmp2.offset(0, (int) inu_backOffsetY);
+                     backgroundDrawable.setBounds(AndroidUtilities.rectTmp2);
+                     backgroundDrawable.draw(canvas);
+                     if (clipChildren) {
+diff --git a/TMessagesProj/src/main/java/org/telegram/ui/Components/PopupSwipeBackLayout.java b/TMessagesProj/src/main/java/org/telegram/ui/Components/PopupSwipeBackLayout.java
+index 0000000..0000000 100644
+--- a/TMessagesProj/src/main/java/org/telegram/ui/Components/PopupSwipeBackLayout.java
++++ b/TMessagesProj/src/main/java/org/telegram/ui/Components/PopupSwipeBackLayout.java
+@@ -54,6 +54,9 @@ public class PopupSwipeBackLayout extends FrameLayout {
+     private float overrideForegroundHeight;
+     private ValueAnimator foregroundAnimator;
+ 
++    private final SparseIntArray inu_foregroundOffsetIndex = new SparseIntArray();
++    private int inu_foregroundOffsetY = 0;
++
+     private int currentForegroundIndex = -1;
+     private AnimationNotificationsLocker notificationsLocker = new AnimationNotificationsLocker();
+     Theme.ResourcesProvider resourcesProvider;
+@@ -178,8 +181,10 @@ public class PopupSwipeBackLayout extends FrameLayout {
+         float bSc = 0.95f + (1f - transitionProgress) * 0.05f;
+         backgroundView.setScaleX(bSc);
+         backgroundView.setScaleY(bSc);
++        float inu_curOffsetY = inu_foregroundOffsetY * transitionProgress;
+         if (foregroundView != null) {
+             foregroundView.setTranslationX((1f - transitionProgress) * getWidth());
++            foregroundView.setTranslationY(inu_curOffsetY);
+         }
+         invalidateVisibility();
+ 
+@@ -204,6 +209,7 @@ public class PopupSwipeBackLayout extends FrameLayout {
+         if (applyBackScaleY) {
+             p.setBackScaleY(Math.min(1, h / p.getMeasuredHeight()));
+         }
++        p.inu_backOffsetY = inu_curOffsetY;
+         p.updateAnimation = true;
+ 
+         for (int i = 0; i < getChildCount(); i++) {
+@@ -241,7 +247,10 @@ public class PopupSwipeBackLayout extends FrameLayout {
+         View bv = getChildAt(0);
+         View fv = getChildAt(currentForegroundIndex);
+ 
+-        boolean b = (transitionProgress > 0.5f ? fv : bv).dispatchTouchEvent(ev);
++        View inu_target = (transitionProgress > 0.5f ? fv : bv);
++        ev.offsetLocation(-inu_target.getX(), -inu_target.getY());
++        boolean b = inu_target.dispatchTouchEvent(ev);
++        ev.offsetLocation(inu_target.getX(), inu_target.getY());
+         if (!b && act == MotionEvent.ACTION_DOWN) {
+             return true;
+         }
+@@ -345,9 +354,18 @@ public class PopupSwipeBackLayout extends FrameLayout {
+         }
+         currentForegroundIndex = viewIndex;
+         overrideForegroundHeight = overrideHeightIndex.get(viewIndex);
++        inu_foregroundOffsetY = inu_foregroundOffsetIndex.get(viewIndex);
+         animateToState(1, 0);
+     }
+ 
++    public void inu_setForegroundOffsetY(int viewIndex, int offsetY) {
++        inu_foregroundOffsetIndex.put(viewIndex, offsetY);
++        if (viewIndex == currentForegroundIndex) {
++            inu_foregroundOffsetY = offsetY;
++            invalidateTransforms();
++        }
++    }
++
+     public void closeForeground() {
+         closeForeground(true);
+     }
+@@ -412,9 +430,10 @@ public class PopupSwipeBackLayout extends FrameLayout {
+             h = fH;
+         } else {
+             View foregroundView = getChildAt(currentForegroundIndex);
+-            float tY = foregroundView.getTop();
+             float tW = foregroundView.getMeasuredWidth();
+             float tH = overrideForegroundHeight != 0 ? overrideForegroundHeight : foregroundView.getMeasuredHeight();
++            boolean inu_fgBottom = foregroundView.getLayoutParams() instanceof FrameLayout.LayoutParams && ((LayoutParams) foregroundView.getLayoutParams()).gravity == Gravity.BOTTOM;
++            float tY = inu_fgBottom ? foregroundView.getBottom() - tH : foregroundView.getTop();
+             if (backgroundView.getMeasuredWidth() == 0 || backgroundView.getMeasuredHeight() == 0 || foregroundView.getMeasuredWidth() == 0 || foregroundView.getMeasuredHeight() == 0) {
+                 y = fY;
+                 w = fW;
+@@ -429,6 +448,7 @@ public class PopupSwipeBackLayout extends FrameLayout {
+         int s = canvas.save();
+         mPath.rewind();
+         int rad = AndroidUtilities.dp(12);
++        y += inu_foregroundOffsetY * transitionProgress;
+         if (stickToRight) {
+             mRect.set(getWidth() - w, y, getWidth(), y + h);
+         } else {

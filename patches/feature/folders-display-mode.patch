@@ -5,11 +5,11 @@ Subject: dialog folders display mode customizations
 
 ---
  .../messenger/MessagesController.java         |  1 +
- .../telegram/messenger/MessagesStorage.java   | 25 ++++++
+ .../telegram/messenger/MessagesStorage.java   | 26 ++++++
  .../ui/Components/FilterTabsView.java         | 86 +++++++++++++------
- .../java/org/telegram/ui/DialogsActivity.java | 15 +++-
+ .../java/org/telegram/ui/DialogsActivity.java |  9 +-
  .../org/telegram/ui/FilterCreateActivity.java |  4 +
- 5 files changed, 102 insertions(+), 29 deletions(-)
+ 5 files changed, 97 insertions(+), 29 deletions(-)
 
 diff --git a/TMessagesProj/src/main/java/org/telegram/messenger/MessagesController.java b/TMessagesProj/src/main/java/org/telegram/messenger/MessagesController.java
 index 0000000..0000000 100644
@@ -115,6 +115,14 @@ index 0000000..0000000 100644
                  boolean muted = getMessagesController().isDialogMuted(user.id, 0);
                  Integer folderId = dialogsByFolders.get(user.id);
                  int idx1 = folderId == null || folderId < 0 || folderId > 1 ? 0 : folderId;
+@@ -16894,6 +16919,7 @@ public class MessagesStorage extends BaseController {
+     }
+ 
+     public void resetAllUnreadCounters(boolean muted) {
++        if (muted && FolderHelper.isMuteFilteringActive()) muted = false;
+         for (int a = 0, N = dialogFilters.size(); a < N; a++) {
+             MessagesController.DialogFilter filter = dialogFilters.get(a);
+             if (muted) {
 diff --git a/TMessagesProj/src/main/java/org/telegram/ui/Components/FilterTabsView.java b/TMessagesProj/src/main/java/org/telegram/ui/Components/FilterTabsView.java
 index 0000000..0000000 100644
 --- a/TMessagesProj/src/main/java/org/telegram/ui/Components/FilterTabsView.java
@@ -429,7 +437,7 @@ index 0000000..0000000 100644
                      if (tabId == filterTabsView.getDefaultTabId()) {
                          return getMessagesStorage().getMainUnreadCount();
                      }
-@@ -6763,10 +6767,17 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
+@@ -6763,10 +6767,11 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
                  filterTabsView.removeTabs();
                  for (int a = 0, N = filters.size(); a < N; a++) {
                      if (filters.get(a).isDefault()) {
@@ -438,14 +446,8 @@ index 0000000..0000000 100644
                      } else {
                          final MessagesController.DialogFilter filter = filters.get(a);
 -                        filterTabsView.addTab(a, filter.localId, filter.name, filter.entities, filter.title_noanimate, false, filters.get(a).locked);
-+                        String emoticon = filter.inu_emoticon;
-+                        String name = filter.name;
-+                        if (emoticon == null || emoticon.isEmpty()) {
-+                            android.util.Pair<String, String> defaults = FolderHelper.getDefaultsFromFlags(filter.flags);
-+                            emoticon = defaults.second;
-+                            if (name == null || name.isEmpty()) name = defaults.first;
-+                        }
-+                        filterTabsView.inu_addTab(a, filter.localId, name, filter.entities, filter.title_noanimate, false, filters.get(a).locked, emoticon);
++                        android.util.Pair<String, String> info = FolderHelper.getTabInfo(filter);
++                        filterTabsView.inu_addTab(a, filter.localId, info.first, filter.entities, filter.title_noanimate, false, filters.get(a).locked, info.second);
                      }
                  }
                  if (stableId >= 0) {

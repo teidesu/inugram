@@ -5,9 +5,8 @@ Subject: move the "seen by" menu item to the bottom of the menu
 
 ---
  .../java/org/telegram/ui/ChatActivity.java    | 79 +++++++++++++++----
- .../ui/Components/PopupSwipeBackLayout.java   |  8 +-
  .../java/org/telegram/ui/MessageSeenView.java |  9 ++-
- 3 files changed, 75 insertions(+), 21 deletions(-)
+ 2 files changed, 69 insertions(+), 19 deletions(-)
 
 diff --git a/TMessagesProj/src/main/java/org/telegram/ui/ChatActivity.java b/TMessagesProj/src/main/java/org/telegram/ui/ChatActivity.java
 index 0000000..0000000 100644
@@ -176,7 +175,7 @@ index 0000000..0000000 100644
                  } else if (showPrivateMessageSeen) {
                      MessagePrivateSeenView messagePrivateSeenView = new MessagePrivateSeenView(getContext(), MessagePrivateSeenView.TYPE_SEEN, message, () -> {
                          closeMenu(true);
-@@ -31243,6 +31284,10 @@ public class ChatActivity extends BaseFragment implements
+@@ -31244,6 +31285,10 @@ public class ChatActivity extends BaseFragment implements
                      layout.addView(infoText, LayoutHelper.createFrame(LayoutHelper.WRAP_CONTENT, LayoutHelper.WRAP_CONTENT, Gravity.FILL));
                      popupLayout.addView(layout);
                  }
@@ -187,34 +186,6 @@ index 0000000..0000000 100644
              }
  
              ChatScrimPopupContainerLayout scrimPopupContainerLayout = new ChatScrimPopupContainerLayout(contentView.getContext()) {
-diff --git a/TMessagesProj/src/main/java/org/telegram/ui/Components/PopupSwipeBackLayout.java b/TMessagesProj/src/main/java/org/telegram/ui/Components/PopupSwipeBackLayout.java
-index 0000000..0000000 100644
---- a/TMessagesProj/src/main/java/org/telegram/ui/Components/PopupSwipeBackLayout.java
-+++ b/TMessagesProj/src/main/java/org/telegram/ui/Components/PopupSwipeBackLayout.java
-@@ -241,7 +241,10 @@ public class PopupSwipeBackLayout extends FrameLayout {
-         View bv = getChildAt(0);
-         View fv = getChildAt(currentForegroundIndex);
- 
--        boolean b = (transitionProgress > 0.5f ? fv : bv).dispatchTouchEvent(ev);
-+        View inu_target = (transitionProgress > 0.5f ? fv : bv);
-+        ev.offsetLocation(-inu_target.getLeft(), -inu_target.getTop());
-+        boolean b = inu_target.dispatchTouchEvent(ev);
-+        ev.offsetLocation(inu_target.getLeft(), inu_target.getTop());
-         if (!b && act == MotionEvent.ACTION_DOWN) {
-             return true;
-         }
-@@ -412,9 +415,10 @@ public class PopupSwipeBackLayout extends FrameLayout {
-             h = fH;
-         } else {
-             View foregroundView = getChildAt(currentForegroundIndex);
--            float tY = foregroundView.getTop();
-             float tW = foregroundView.getMeasuredWidth();
-             float tH = overrideForegroundHeight != 0 ? overrideForegroundHeight : foregroundView.getMeasuredHeight();
-+            boolean inu_fgBottom = foregroundView.getLayoutParams() instanceof FrameLayout.LayoutParams && ((LayoutParams) foregroundView.getLayoutParams()).gravity == Gravity.BOTTOM;
-+            float tY = inu_fgBottom ? foregroundView.getBottom() - tH : foregroundView.getTop();
-             if (backgroundView.getMeasuredWidth() == 0 || backgroundView.getMeasuredHeight() == 0 || foregroundView.getMeasuredWidth() == 0 || foregroundView.getMeasuredHeight() == 0) {
-                 y = fY;
-                 w = fW;
 diff --git a/TMessagesProj/src/main/java/org/telegram/ui/MessageSeenView.java b/TMessagesProj/src/main/java/org/telegram/ui/MessageSeenView.java
 index 0000000..0000000 100644
 --- a/TMessagesProj/src/main/java/org/telegram/ui/MessageSeenView.java

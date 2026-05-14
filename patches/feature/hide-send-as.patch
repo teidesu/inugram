@@ -1,0 +1,45 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: alina sireneva <alina@tei.su>
+Date: Wed, 13 May 2026 16:01:53 +0200
+Subject: hide "send as" behind long-tapping the stickers button
+
+---
+ .../telegram/ui/Components/ChatActivityEnterView.java | 11 ++++++++++-
+ 1 file changed, 10 insertions(+), 1 deletion(-)
+
+diff --git a/TMessagesProj/src/main/java/org/telegram/ui/Components/ChatActivityEnterView.java b/TMessagesProj/src/main/java/org/telegram/ui/Components/ChatActivityEnterView.java
+index 0000000..0000000 100644
+--- a/TMessagesProj/src/main/java/org/telegram/ui/Components/ChatActivityEnterView.java
++++ b/TMessagesProj/src/main/java/org/telegram/ui/Components/ChatActivityEnterView.java
+@@ -461,6 +461,7 @@ public class ChatActivityEnterView extends FrameLayout implements
+     private Runnable onEmojiSearchClosed;
+     private int popupX, popupY;
+     private Runnable onKeyboardClosed;
++    private boolean inu_sendAsForcedVisible = false;
+ 
+     private ValueAnimator searchAnimator;
+     private float searchToOpenProgress;
+@@ -2705,6 +2706,13 @@ public class ChatActivityEnterView extends FrameLayout implements
+                 }
+             }
+         });
++        if (InuConfig.HIDE_SEND_AS_PICKER.getValue()) {
++            emojiButton.setOnLongClickListener(v -> {
++                inu_sendAsForcedVisible = !inu_sendAsForcedVisible;
++                updateSendAsButton(false, true);
++                return true;
++            });
++        }
+         messageEditTextContainer.addView(emojiButton, LayoutHelper.createFrame(DEFAULT_HEIGHT, DEFAULT_HEIGHT, Gravity.BOTTOM | Gravity.LEFT, 2, 0, 0, 0));
+         setEmojiButtonImage(false, false);
+ 
+@@ -10566,7 +10574,8 @@ public class ChatActivityEnterView extends FrameLayout implements
+         }
+         boolean isVisible = !forceHide && defPeer != null && (delegate.getSendAsPeers() == null || delegate.getSendAsPeers().peers.size() > 1) &&
+             !isEditingMessage() && !isRecordingAudioVideo() && (recordedAudioPanel == null || recordedAudioPanel.getVisibility() != View.VISIBLE) &&
+-            (isLiveComment || (!ChatObject.isChannelAndNotMegaGroup(chat) || ChatObject.canSendAsPeers(chat)) && !ChatObject.isMonoForum(chat));
++            (isLiveComment || (!ChatObject.isChannelAndNotMegaGroup(chat) || ChatObject.canSendAsPeers(chat)) && !ChatObject.isMonoForum(chat)) &&
++            (!InuConfig.HIDE_SEND_AS_PICKER.getValue() || inu_sendAsForcedVisible);
+         if (isVisible) {
+             createSenderSelectView();
+         }

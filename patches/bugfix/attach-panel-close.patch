@@ -4,8 +4,8 @@ Date: Mon, 20 Apr 2026 00:37:37 +0300
 Subject: prevent the app from getting stuck when closing the attach panel before it fully opens
 
 ---
- .../ui/Components/ChatAttachAlert.java        | 39 ++++++++++---------
- 1 file changed, 21 insertions(+), 18 deletions(-)
+ .../ui/Components/ChatAttachAlert.java        | 41 ++++++++++---------
+ 1 file changed, 22 insertions(+), 19 deletions(-)
 
 diff --git a/TMessagesProj/src/main/java/org/telegram/ui/Components/ChatAttachAlert.java b/TMessagesProj/src/main/java/org/telegram/ui/Components/ChatAttachAlert.java
 index 0000000..0000000 100644
@@ -28,7 +28,7 @@ index 0000000..0000000 100644
 +            if (finished[0]) return;
 +            finished[0] = true;
              locker.unlock();
-             currentSheetAnimationType = 0;
+-            currentSheetAnimationType = 0;
 -            if (delegate != null) {
 -                delegate.onOpenAnimationEnd();
 -            }
@@ -55,6 +55,7 @@ index 0000000..0000000 100644
 -                onAnimationEnd.run();
 -            }
 +            if (cancelled) wasCancelled[0] = true;
++            currentSheetAnimationType = 0;
 +            onAnimationEnd.run();
          });
          currentSheetAnimation.addListener(new AnimatorListenerAdapter() {

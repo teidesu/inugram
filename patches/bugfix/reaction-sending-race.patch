@@ -1,0 +1,34 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: alina sireneva <alina@tei.su>
+Date: Tue, 12 May 2026 11:05:37 +0200
+Subject: fix reactions silently disappearing right after being sent
+
+---
+ .../src/main/java/org/telegram/messenger/MessageObject.java      | 1 +
+ .../src/main/java/org/telegram/messenger/SendMessagesHelper.java | 1 +
+ 2 files changed, 2 insertions(+)
+
+diff --git a/TMessagesProj/src/main/java/org/telegram/messenger/MessageObject.java b/TMessagesProj/src/main/java/org/telegram/messenger/MessageObject.java
+index 0000000..0000000 100644
+--- a/TMessagesProj/src/main/java/org/telegram/messenger/MessageObject.java
++++ b/TMessagesProj/src/main/java/org/telegram/messenger/MessageObject.java
+@@ -752,6 +752,7 @@ public class MessageObject {
+         messageOwner.premiumEffectWasPlayed = old.messageOwner.premiumEffectWasPlayed;
+         forcePlayEffect = old.forcePlayEffect;
+         wasJustSent = old.wasJustSent;
++        reactionsLastCheckTime = old.reactionsLastCheckTime;
+         if (messageOwner.reactions != null && messageOwner.reactions.results != null && !messageOwner.reactions.results.isEmpty() && old.messageOwner.reactions != null && old.messageOwner.reactions.results != null) {
+             for (int i = 0; i < messageOwner.reactions.results.size(); i++) {
+                 TLRPC.ReactionCount reactionCount = messageOwner.reactions.results.get(i);
+diff --git a/TMessagesProj/src/main/java/org/telegram/messenger/SendMessagesHelper.java b/TMessagesProj/src/main/java/org/telegram/messenger/SendMessagesHelper.java
+index 0000000..0000000 100644
+--- a/TMessagesProj/src/main/java/org/telegram/messenger/SendMessagesHelper.java
++++ b/TMessagesProj/src/main/java/org/telegram/messenger/SendMessagesHelper.java
+@@ -3602,6 +3602,7 @@ public class SendMessagesHelper extends BaseController implements NotificationCe
+         if (messageObject == null || parentFragment == null) {
+             return;
+         }
++        messageObject.reactionsLastCheckTime = System.currentTimeMillis();
+         TLRPC.TL_messages_sendReaction req = new TLRPC.TL_messages_sendReaction();
+         if (messageObject.messageOwner.isThreadMessage && messageObject.messageOwner.fwd_from != null) {
+             req.peer = getMessagesController().getInputPeer(messageObject.getFromChatId());

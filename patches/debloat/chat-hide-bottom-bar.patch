@@ -61,24 +61,24 @@ index 0000000..0000000 100644
              float canvasOffsetX = chatListView.getLeft() + cell.getX();
              float canvasOffsetY = chatListView.getY() + cell.getY() + cell.getPaddingTop();
              float alpha = cell.shouldDrawAlphaLayer() ? cell.getAlpha() : 1f;
--            canvas.clipRect(chatListView.getLeft(), listTop, chatListView.getRight(), chatListView.getY() + chatListView.getMeasuredHeight() - blurredViewBottomOffset - windowInsetsStateHolder.getCurrentMaxBottomInset() - inputIslandHeightCurrent - dp(NonIslandHelper.chatElements() ? 2 : 9));
-+            canvas.clipRect(chatListView.getLeft(), listTop, chatListView.getRight(), chatListView.getY() + chatListView.getMeasuredHeight() - blurredViewBottomOffset - inputIslandHeightCurrent - (ChatHelper.shouldForceHideBottomBar(currentChat, currentUser, chatMode) ? 0 : windowInsetsStateHolder.getCurrentMaxBottomInset() + dp(NonIslandHelper.chatElements() ? 2 : 9)));
+-            canvas.clipRect(chatListView.getLeft(), listTop, chatListView.getRight(), chatListView.getY() + chatListView.getMeasuredHeight() - blurredViewBottomOffset - windowInsetsStateHolder.getCurrentMaxBottomInset() - inputIslandHeightCurrent - dp(NonIslandHelper.chatElements() ? 0 : 9));
++            canvas.clipRect(chatListView.getLeft(), listTop, chatListView.getRight(), chatListView.getY() + chatListView.getMeasuredHeight() - blurredViewBottomOffset - inputIslandHeightCurrent - (ChatHelper.shouldForceHideBottomBar(currentChat, currentUser, chatMode) ? 0 : windowInsetsStateHolder.getCurrentMaxBottomInset() + dp(NonIslandHelper.chatElements() ? 0 : 9)));
              canvas.translate(canvasOffsetX, canvasOffsetY);
              cell.setInvalidatesParent(true);
              if (type == 0) {
 @@ -17688,6 +17696,7 @@ public class ChatActivity extends BaseFragment implements
                                      - inputIslandHeightCurrent
-                                     - dp(NonIslandHelper.chatElements() ? 2 : 9)
+                                     - dp(NonIslandHelper.chatElements() ? 0 : 9)
                                      - (mentionContainer != null ? mentionContainer.clipBottom() : 0);
-+                            if (ChatHelper.shouldForceHideBottomBar(currentChat, currentUser, chatMode)) viewClipBottom2 += windowInsetsStateHolder.getCurrentMaxBottomInset() + dp(2);
++                            if (ChatHelper.shouldForceHideBottomBar(currentChat, currentUser, chatMode)) viewClipBottom2 += windowInsetsStateHolder.getCurrentMaxBottomInset();
  
                              canvas.clipRect(0, listTop + (mentionContainer != null ? mentionContainer.clipTop() : 0), getMeasuredWidth(), viewClipBottom2);
                              canvas.translate(0, chatListView.getY());
 @@ -17707,6 +17716,7 @@ public class ChatActivity extends BaseFragment implements
                              - windowInsetsStateHolder.getCurrentMaxBottomInset()
                              - inputIslandHeightCurrent
-                             - dp(NonIslandHelper.chatElements() ? 2 : 9);
-+                        if (ChatHelper.shouldForceHideBottomBar(currentChat, currentUser, chatMode)) viewClipBottom += windowInsetsStateHolder.getCurrentMaxBottomInset() + dp(2);
+                             - dp(NonIslandHelper.chatElements() ? 0 : 9);
++                        if (ChatHelper.shouldForceHideBottomBar(currentChat, currentUser, chatMode)) viewClipBottom += windowInsetsStateHolder.getCurrentMaxBottomInset();
  
                          float clipTop = 0, clipBottom = 0;
                          if (mentionContainer != null) {
@@ -115,7 +115,7 @@ index 0000000..0000000 100644
              showBottomOverlayProgress(false, false);
          } else if (currentUser != null && currentUser.id == UserObject.VERIFY) {
              if (!getMessagesController().isDialogMuted(dialog_id, getTopicId())) {
-@@ -45071,7 +45089,7 @@ public class ChatActivity extends BaseFragment implements
+@@ -45072,7 +45090,7 @@ public class ChatActivity extends BaseFragment implements
              pollAddVisibility = animatorPollAddAnswerVisibility.getFloatValue();
          }
  
@@ -136,6 +136,6 @@ index 0000000..0000000 100644
 +        final boolean nonIsland = desu.inugram.helpers.NonIslandHelper.chatElements();
 +        final boolean hasBar = inputBubbleHeight > 0;
 +        if (nonIsland && hasBar) {
-             tmpRect.top += dp(14);
+             tmpRect.top += dp(16);
              tmpRect.bottom = getMeasuredHeight();
              tmpRect.left = 0;

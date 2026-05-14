@@ -188,6 +188,9 @@ object InuConfig {
     val HIDE_BOT_WEBVIEW_INPUT = BoolItem("hide_bot_webview_input", false)
 
     @JvmField
+    val HIDE_SEND_AS_PICKER = BoolItem("hide_send_as_picker", false)
+
+    @JvmField
     val HIDE_BOT_WEBVIEW_DIALOGS = BoolItem("hide_bot_webview_dialogs", true)
 
     @JvmField
@@ -207,6 +210,12 @@ object InuConfig {
 
     @JvmField
     val DISABLE_PROFILE_SCROLL_SNAP = BoolItem("disable_profile_scroll_snap", true)
+
+    @JvmField
+    val REDUCE_PROFILE_MOTION = BoolItem("reduce_profile_motion", true)
+
+    @JvmField
+    val PROFILE_PREFER_MEDIA_TAB = BoolItem("profile_prefer_media_tab", true)
 
     @JvmField
     val OPT_IN_MOTION_PHOTOS = BoolItem("opt_in_motion_photos", true)
@@ -298,6 +307,9 @@ object InuConfig {
     @JvmField
     val CALL_CONFIRMATION = BoolItem("call_confirmation", true)
 
+    @JvmField
+    val HIDE_CALL_ACTION_BUTTON = BoolItem("hide_call_action_button", true)
+
     class ProfileIdModeItem : IntItem("profile_id_mode", BOT_API_ID) {
         companion object {
             const val OFF = 0
@@ -364,6 +376,9 @@ object InuConfig {
     val HIDE_MY_PHONE_NUMBER = BoolItem("hide_my_phone_number", true)
 
     @JvmField
+    val USE_SYSTEM_FONT = BoolItem("use_system_font", false)
+
+    @JvmField
     val REACTIONS_IN_ROW = IntItem("reactions_in_row", 8)
 
     @JvmField
@@ -385,10 +400,13 @@ object InuConfig {
     val SHOW_FORWARD_TIME = BoolItem("show_forward_time", true)
 
     @JvmField
-    val DISABLE_CHAT_PREVIEW_EXPAND = BoolItem("disable_chat_preview_expand", true)
+    val INTERACTIVE_CHAT_PREVIEW = BoolItem("disable_chat_preview_expand", true)
 
     @JvmField
     val FORMATTING_POPUP = BoolItem("formatting_popup", true)
+
+    @JvmField
+    val SUGGEST_CUSTOM_EMOJI_AFTER = BoolItem("suggest_custom_emoji_after", true)
 
     class TextClassifierModeItem : IntItem("text_classifier_mode", IMPROVED) {
         companion object {

@@ -8,7 +8,6 @@ import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
 import android.content.IntentFilter
-import android.content.pm.ActivityInfo
 import android.content.pm.PackageInstaller
 import android.content.pm.PackageManager
 import android.os.Build
@@ -51,11 +50,8 @@ object ApkInstaller {
     @Volatile
     private var dialog: AlertDialog? = null
 
-    @Volatile
-    private var brokenInstaller: Boolean? = null
-
     fun installUpdate(activity: Activity, document: TLRPC.Document) {
-        if (hasBrokenPackageInstaller(activity)) {
+        if (hasBrokenPackageInstaller()) {
             AndroidUtilities.openForView(document, false, activity)
             return
         }
@@ -94,6 +90,15 @@ object ApkInstaller {
             val intent = receiver.waitIntent()
             if (intent != null) {
                 AndroidUtilities.runOnUIThread { activity.startActivity(intent) }
+            } else {
+                // commit succeeded but no status broadcast within timeout — likely silently
+                // blocked by OEM. Drop the receiver and let the user install via system UI.
+                runCatching { activity.unregisterReceiver(receiver) }
+                AndroidUtilities.runOnUIThread {
+                    dialog?.dismiss()
+                    dialog = null
+                    AndroidUtilities.openForView(document, false, activity)
+                }
             }
         }
     }
@@ -125,26 +130,9 @@ object ApkInstaller {
         return receiver
     }
 
-    fun hasBrokenPackageInstaller(context: Context): Boolean {
-        if (!XiaomiUtilities.isMIUI()) return false
-        brokenInstaller?.let { return it }
-        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.S) {
-            brokenInstaller = true
-            return true
-        }
-        val intent = Intent("android.content.pm.action.CONFIRM_INSTALL")
-        val resolved = context.packageManager.resolveActivity(intent, PackageManager.MATCH_DEFAULT_ONLY)
-        if (resolved == null) {
-            brokenInstaller = true
-            return true
-        }
-        val pkg = resolved.activityInfo.packageName ?: ""
-        FileLog.d("current package installer: $pkg")
-        val broken = pkg.startsWith("com.miui") &&
-            resolved.activityInfo.launchMode != ActivityInfo.LAUNCH_SINGLE_INSTANCE
-        brokenInstaller = broken
-        return broken
-    }
+    // MIUI silently blocks PackageInstaller.commit() (broadcast never fires) regardless of which
+    // installer is set as default, so always fall back to Intent.ACTION_VIEW there.
+    fun hasBrokenPackageInstaller(): Boolean = XiaomiUtilities.isMIUI()
 
     private fun buildProgressDialog(context: Context): AlertDialog {
         val container = LinearLayout(context).apply {

@@ -153,7 +153,7 @@ object LoginHelper {
             }
             when {
                 err?.contains("SESSION_PASSWORD_NEEDED") == true -> fetchAndShowPasswordPage(loginActivity, currentAccount)
-                err != null -> if (BuildVars.DEBUG_VERSION) BulletinFactory.of(loginActivity).showForError(err)
+                err != null -> BulletinFactory.of(loginActivity).showForError(err)
                 authObject is TLRPC.TL_auth_authorization -> loginActivity.onAuthSuccess(authObject)
             }
         }
@@ -299,7 +299,7 @@ object LoginHelper {
             finish()
             if (text.contains("SESSION_PASSWORD_NEEDED")) {
                 fetchAndShowPasswordPage(loginActivity, currentAccount)
-            } else if (BuildVars.DEBUG_VERSION) {
+            } else {
                 BulletinFactory.of(loginActivity).showForError(text)
             }
         }

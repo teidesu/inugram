@@ -5,7 +5,9 @@ import desu.inugram.InuConfig
 import desu.inugram.helpers.DialogsFabHelper
 import desu.inugram.helpers.InuUtils
 import org.telegram.messenger.LocaleController
+import org.telegram.messenger.MessagesStorage
 import org.telegram.messenger.R
+import org.telegram.messenger.UserConfig
 import org.telegram.ui.Cells.NotificationsCheckCell
 import org.telegram.ui.Cells.TextCheckCell
 import org.telegram.ui.Components.UItem
@@ -62,10 +64,10 @@ class InuDialogsSettingsActivity : InuSettingsPageActivity() {
         )
         items.add(
             mkTwoLineCheckItem(
-                TOGGLE_DISABLE_CHAT_PREVIEW_EXPAND,
+                TOGGLE_INTERACTIVE_CHAT_PREVIEW,
                 R.string.InuDisableChatPreviewExpand,
                 R.string.InuDisableChatPreviewExpandInfo,
-                InuConfig.DISABLE_CHAT_PREVIEW_EXPAND.value
+                InuConfig.INTERACTIVE_CHAT_PREVIEW.value
             )
         )
         items.add(UItem.asShadow(null))
@@ -145,56 +147,48 @@ class InuDialogsSettingsActivity : InuSettingsPageActivity() {
 
     override fun onClick(item: UItem, view: View, position: Int, x: Float, y: Float) {
         when (item.id) {
-            BUTTON_FOLDERS_DISPLAY_MODE -> showDialog(
-                RadioDialogBuilder(context, getResourceProvider())
-                    .setTitle(LocaleController.getString(R.string.InuFoldersDisplayMode))
-                    .setItems(
-                        arrayOf(
-                            LocaleController.getString(R.string.InuFoldersDisplayModeTitles),
-                            LocaleController.getString(R.string.InuFoldersDisplayModeTitlesAndIcons),
-                            LocaleController.getString(R.string.InuFoldersDisplayModeIconsOnly),
-                        ),
-                        InuConfig.FOLDERS_DISPLAY_MODE.value - 1,
-                    ) { _, which ->
-                        val mode = which + 1
-                        if (mode == InuConfig.FOLDERS_DISPLAY_MODE.value) return@setItems
-                        InuConfig.FOLDERS_DISPLAY_MODE.value = mode
-                        listView.adapter.update(true)
-                        showRestartBulletin()
-                    }
-                    .create()
-            )
+            BUTTON_FOLDERS_DISPLAY_MODE -> RadioItemOptions.show(
+                this, view,
+                listOf(
+                    LocaleController.getString(R.string.InuFoldersDisplayModeTitles),
+                    LocaleController.getString(R.string.InuFoldersDisplayModeTitlesAndIcons),
+                    LocaleController.getString(R.string.InuFoldersDisplayModeIconsOnly),
+                ),
+                InuConfig.FOLDERS_DISPLAY_MODE.value - 1,
+            ) { which ->
+                InuConfig.FOLDERS_DISPLAY_MODE.value = which + 1
+                softRebuild()
+            }
 
-            BUTTON_FOLDERS_UNREAD_COUNTER_MODE -> showDialog(
-                RadioDialogBuilder(context, getResourceProvider())
-                    .setTitle(LocaleController.getString(R.string.InuFoldersUnreadCounter))
-                    .setItems(
-                        arrayOf(
-                            LocaleController.getString(R.string.InuFoldersUnreadCounterHide),
-                            LocaleController.getString(R.string.InuFoldersUnreadCounterRegular),
-                            LocaleController.getString(R.string.InuFoldersUnreadCounterExcludeMuted),
-                            LocaleController.getString(R.string.InuFoldersUnreadCounterExcludeMutedNonDms),
-                        ),
-                        InuConfig.FOLDERS_UNREAD_COUNTER_MODE.value,
-                    ) { _, which ->
-                        if (which == InuConfig.FOLDERS_UNREAD_COUNTER_MODE.value) return@setItems
-                        InuConfig.FOLDERS_UNREAD_COUNTER_MODE.value = which
-                        listView.adapter.update(true)
-                        showRestartBulletin()
-                    }
-                    .create()
-            )
+            BUTTON_FOLDERS_UNREAD_COUNTER_MODE -> RadioItemOptions.show(
+                this, view,
+                listOf(
+                    LocaleController.getString(R.string.InuFoldersUnreadCounterHide),
+                    LocaleController.getString(R.string.InuFoldersUnreadCounterRegular),
+                    LocaleController.getString(R.string.InuFoldersUnreadCounterExcludeMuted),
+                    LocaleController.getString(R.string.InuFoldersUnreadCounterExcludeMutedNonDms),
+                ),
+                InuConfig.FOLDERS_UNREAD_COUNTER_MODE.value,
+            ) { which ->
+                InuConfig.FOLDERS_UNREAD_COUNTER_MODE.value = which
+                // resetAllUnreadCounters dispatches updateInterfaces; DialogsActivity/MainTabsActivity listen.
+                for (i in 0 until UserConfig.MAX_ACCOUNT_COUNT) {
+                    if (!UserConfig.getInstance(i).isClientActivated) continue
+                    val storage = MessagesStorage.getInstance(i)
+                    storage.storageQueue.postRunnable { storage.resetAllUnreadCounters(false) }
+                }
+            }
 
             TOGGLE_BOT_WEBVIEW_BUTTON -> {
                 val new = InuConfig.HIDE_BOT_WEBVIEW_DIALOGS.toggle()
                 (view as? TextCheckCell)?.isChecked = new
-                showRestartBulletin()
+                softRebuild()
             }
 
             TOGGLE_OLD_MENTION_INDICATOR -> {
                 val new = InuConfig.OLD_MENTION_INDICATOR.toggle()
                 (view as? TextCheckCell)?.isChecked = new
-                showRestartBulletin()
+                softRebuild()
             }
 
             TOGGLE_OPEN_ARCHIVE_ON_PULL -> {
@@ -202,8 +196,8 @@ class InuDialogsSettingsActivity : InuSettingsPageActivity() {
                 (view as? TextCheckCell)?.isChecked = new
             }
 
-            TOGGLE_DISABLE_CHAT_PREVIEW_EXPAND -> {
-                val new = InuConfig.DISABLE_CHAT_PREVIEW_EXPAND.toggle()
+            TOGGLE_INTERACTIVE_CHAT_PREVIEW -> {
+                val new = InuConfig.INTERACTIVE_CHAT_PREVIEW.toggle()
                 (view as? NotificationsCheckCell)?.isChecked = new
             }
 
@@ -211,7 +205,7 @@ class InuDialogsSettingsActivity : InuSettingsPageActivity() {
                 val new = InuConfig.BOTTOM_TABS_HIDE.toggle()
                 (view as? NotificationsCheckCell)?.isChecked = new
                 listView.adapter.update(true)
-                showRestartBulletin()
+                softRebuild()
             }
 
             TOGGLE_HIDE_CONTACTS_TAB -> {
@@ -223,58 +217,42 @@ class InuDialogsSettingsActivity : InuSettingsPageActivity() {
             TOGGLE_COMPACT_MODE -> {
                 val new = InuConfig.BOTTOM_TABS_COMPACT_MODE.toggle()
                 (view as? NotificationsCheckCell)?.isChecked = new
-                showRestartBulletin()
+                softRebuild()
             }
 
-            BUTTON_FAB_MAIN_ACTION -> showFabActionDialog(
-                R.string.InuDialogsFabMainAction,
-                InuConfig.DIALOGS_FAB_MAIN_ACTION,
-            )
-
-            BUTTON_FAB_SECONDARY_ACTION -> showFabActionDialog(
-                R.string.InuDialogsFabSecondaryAction,
-                InuConfig.DIALOGS_FAB_SECONDARY_ACTION,
-            )
+            BUTTON_FAB_MAIN_ACTION -> showFabActionDialog(view, InuConfig.DIALOGS_FAB_MAIN_ACTION)
+            BUTTON_FAB_SECONDARY_ACTION -> showFabActionDialog(view, InuConfig.DIALOGS_FAB_SECONDARY_ACTION)
 
             TOGGLE_FAB_HIDE_ON_SCROLL -> {
                 val new = InuConfig.DIALOGS_FAB_HIDE_ON_SCROLL.toggle()
                 (view as? TextCheckCell)?.isChecked = new
-                showRestartBulletin()
             }
 
             TOGGLE_FAB_OFFSET_FOR_BOTTOM_BAR -> {
                 val new = InuConfig.DIALOGS_FAB_OFFSET_FOR_BOTTOM_BAR.toggle()
                 (view as? NotificationsCheckCell)?.isChecked = new
-                showRestartBulletin()
+                softRebuild()
             }
 
             TOGGLE_FAB_LEFT_SIDE -> {
                 val new = InuConfig.DIALOGS_FAB_LEFT_SIDE.toggle()
                 (view as? TextCheckCell)?.isChecked = new
-                showRestartBulletin()
+                softRebuild()
             }
         }
     }
 
-    private fun showFabActionDialog(
-        titleRes: Int,
-        item: InuConfig.IntItem,
-    ) {
+    private fun showFabActionDialog(anchor: View, item: InuConfig.IntItem) {
         val options = DialogsFabHelper.Action.entries
-        val labels = options.map { it.label() }.toTypedArray()
         val current = options.indexOfFirst { it.value == item.value }.coerceAtLeast(0)
-        showDialog(
-            RadioDialogBuilder(context, getResourceProvider())
-                .setTitle(LocaleController.getString(titleRes))
-                .setItems(labels, current) { _, which ->
-                    val newValue = options[which].value
-                    if (newValue == item.value) return@setItems
-                    item.value = newValue
-                    listView.adapter.update(true)
-                    showRestartBulletin()
-                }
-                .create()
-        )
+        RadioItemOptions.show(
+            this, anchor,
+            options.map { it.label() },
+            current,
+        ) { which ->
+            item.value = options[which].value
+            softRebuild()
+        }
     }
 
     companion object {
@@ -291,6 +269,6 @@ class InuDialogsSettingsActivity : InuSettingsPageActivity() {
         private val TOGGLE_FAB_HIDE_ON_SCROLL = InuUtils.generateId()
         private val TOGGLE_FAB_OFFSET_FOR_BOTTOM_BAR = InuUtils.generateId()
         private val TOGGLE_FAB_LEFT_SIDE = InuUtils.generateId()
-        private val TOGGLE_DISABLE_CHAT_PREVIEW_EXPAND = InuUtils.generateId()
+        private val TOGGLE_INTERACTIVE_CHAT_PREVIEW = InuUtils.generateId()
     }
 }

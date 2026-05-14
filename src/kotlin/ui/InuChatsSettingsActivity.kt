@@ -146,6 +146,14 @@ class InuChatsSettingsActivity : InuSettingsPageActivity() {
             UItem.asCheck(TOGGLE_BOT_WEBVIEW_BUTTON, LocaleController.getString(R.string.InuHideBotWebView))
                 .setChecked(InuConfig.HIDE_BOT_WEBVIEW_INPUT.value)
         )
+        items.add(
+            mkTwoLineCheckItem(
+                TOGGLE_HIDE_SEND_AS_PICKER,
+                R.string.InuHideSendAsPicker,
+                R.string.InuHideSendAsPickerInfo,
+                InuConfig.HIDE_SEND_AS_PICKER.value
+            )
+        )
         items.add(UItem.asShadow(null))
         // end message input section
 
@@ -203,12 +211,6 @@ class InuChatsSettingsActivity : InuSettingsPageActivity() {
         items.add(UItem.asHeader(LocaleController.getString(R.string.InuMiscellaneous)))
         hideBottomBarGroup.addTo(items) { listView.adapter.update(true) }
         items.add(
-            UItem.asCheck(
-                TOGGLE_DISABLE_CHAT_TITLE_PHONE,
-                LocaleController.getString(R.string.InuDisableChatTitlePhone)
-            ).setChecked(InuConfig.DISABLE_CHAT_TITLE_PHONE.value)
-        )
-        items.add(
             mkTwoLineCheckItem(
                 TOGGLE_SEARCH_FROM_GLOBAL,
                 R.string.InuSearchFromGlobal,
@@ -230,26 +232,19 @@ class InuChatsSettingsActivity : InuSettingsPageActivity() {
         if (hideBottomBarGroup.handleClick(item, view) { listView.adapter.update(true) }) return
 
         when (item.id) {
-            BUTTON_STICKER_TIME_MODE -> showDialog(
-                RadioDialogBuilder(context, getResourceProvider())
-                    .setTitle(LocaleController.getString(R.string.InuStickerTimeMode))
-                    .setItems(
-                        arrayOf(
-                            LocaleController.getString(R.string.InuStickerTimeModeShow),
-                            LocaleController.getString(R.string.InuStickerTimeModeHideTime),
-                            LocaleController.getString(R.string.InuStickerTimeModeHideIncoming),
-                            LocaleController.getString(R.string.InuStickerTimeModeHideCompletely),
-                        ),
-                        InuConfig.STICKER_TIME_MODE.value - 1,
-                    ) { _, which ->
-                        val mode = which + 1
-                        if (mode == InuConfig.STICKER_TIME_MODE.value) return@setItems
-                        InuConfig.STICKER_TIME_MODE.value = mode
-                        listView.adapter.update(true)
-                        stickerSizePreview?.invalidate()
-                    }
-                    .create()
-            )
+            BUTTON_STICKER_TIME_MODE -> RadioItemOptions.show(
+                this, view,
+                listOf(
+                    LocaleController.getString(R.string.InuStickerTimeModeShow),
+                    LocaleController.getString(R.string.InuStickerTimeModeHideTime),
+                    LocaleController.getString(R.string.InuStickerTimeModeHideIncoming),
+                    LocaleController.getString(R.string.InuStickerTimeModeHideCompletely),
+                ),
+                InuConfig.STICKER_TIME_MODE.value - 1,
+            ) { which ->
+                InuConfig.STICKER_TIME_MODE.value = which + 1
+                stickerSizePreview?.invalidate()
+            }
 
             TOGGLE_SHOW_ALL_RECENT_STICKERS -> {
                 val new = InuConfig.SHOW_ALL_RECENT_STICKERS.toggle()
@@ -277,6 +272,11 @@ class InuChatsSettingsActivity : InuSettingsPageActivity() {
                 (view as? TextCheckCell)?.isChecked = new
             }
 
+            TOGGLE_HIDE_SEND_AS_PICKER -> {
+                val new = InuConfig.HIDE_SEND_AS_PICKER.toggle()
+                (view as? NotificationsCheckCell)?.isChecked = new
+            }
+
             BUTTON_FORMATTING_POPUP -> {
                 val isSwitch = if (LocaleController.isRTL)
                     x < AndroidUtilities.dp(76f)
@@ -300,11 +300,6 @@ class InuChatsSettingsActivity : InuSettingsPageActivity() {
             TOGGLE_SIMPLE_ATTACH_POPUP_ANIMATION -> {
                 val new = InuConfig.SIMPLE_ATTACH_POPUP_ANIMATION.toggle()
                 (view as? TextCheckCell)?.isChecked = new
-            }
-
-            TOGGLE_DISABLE_CHAT_TITLE_PHONE -> {
-                val new = InuConfig.DISABLE_CHAT_TITLE_PHONE.toggle()
-                (view as? NotificationsCheckCell)?.isChecked = new
             }
 
             TOGGLE_HIDE_REACTION_ENTRY -> {
@@ -337,9 +332,9 @@ class InuChatsSettingsActivity : InuSettingsPageActivity() {
         private val TOGGLE_CHAT_VOICE_IN_ATTACH = InuUtils.generateId()
         private val BUTTON_FORMATTING_POPUP = InuUtils.generateId()
         private val TOGGLE_BOT_WEBVIEW_BUTTON = InuUtils.generateId()
+        private val TOGGLE_HIDE_SEND_AS_PICKER = InuUtils.generateId()
         private val TOGGLE_REACTION_BAR_BELOW = InuUtils.generateId()
         private val TOGGLE_SIMPLE_ATTACH_POPUP_ANIMATION = InuUtils.generateId()
-        private val TOGGLE_DISABLE_CHAT_TITLE_PHONE = InuUtils.generateId()
         private val TOGGLE_HIDE_REACTION_ENTRY = InuUtils.generateId()
         private val TOGGLE_CHAT_VIEWS_BOTTOM = InuUtils.generateId()
         private val BUTTON_PINNED_REACTIONS = InuUtils.generateId()

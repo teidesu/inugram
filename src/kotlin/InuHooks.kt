@@ -1,6 +1,7 @@
 package desu.inugram
 
 import android.content.Context
+import android.graphics.Typeface
 import android.os.Build
 import android.os.Bundle
 import desu.inugram.helpers.CloudSettingsHelper
@@ -27,6 +28,7 @@ import org.telegram.ui.LauncherIconController
 import org.telegram.ui.MainTabsActivity
 import org.telegram.ui.ProfileActivity
 import org.telegram.ui.SettingsActivity
+import java.util.Hashtable
 
 
 object InuHooks {
@@ -83,6 +85,23 @@ object InuHooks {
             else -> R.string.InuAppIconLicenseTelegram
         }
         return AndroidUtilities.replaceTags(getString(resId))
+    }
+
+    @JvmStatic
+    fun onGetTypeface(cache: Hashtable<String, Typeface>, assetPath: String): Typeface? {
+        if (!InuConfig.USE_SYSTEM_FONT.value) return null
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.P) return null
+        val key = "inu:$assetPath"
+        return cache.getOrElse(key) {
+            when (assetPath) {
+                AndroidUtilities.TYPEFACE_ROBOTO_MEDIUM -> Typeface.create(null, 500, false)
+                AndroidUtilities.TYPEFACE_ROBOTO_EXTRA_BOLD -> Typeface.create(null, 800, false)
+                AndroidUtilities.TYPEFACE_ROBOTO_MEDIUM_ITALIC -> Typeface.create(null, 500, true)
+                "fonts/ritalic.ttf" -> Typeface.create(null, 400, true)
+                "fonts/rcondensedbold.ttf" -> Typeface.create(null, 700, false)
+                else -> null
+            }?.let { cache.put(key, it) }
+        }
     }
 
     @JvmStatic

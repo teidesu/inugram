@@ -38,8 +38,8 @@ object InuDatabaseHelper {
 
     fun writeKv(db: SQLiteDatabase, key: String, value: String): Unit {
         val query = db.executeFast("INSERT OR REPLACE INTO inu_kv VALUES(?, ?)");
-        query.bindString(0, key)
-        query.bindString(1, value)
+        query.bindString(1, key)
+        query.bindString(2, value)
         query.step()
         query.dispose()
     }

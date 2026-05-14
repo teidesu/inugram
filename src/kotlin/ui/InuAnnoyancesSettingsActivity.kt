@@ -6,6 +6,7 @@ import desu.inugram.InuConfig
 import desu.inugram.helpers.InuUtils
 import org.telegram.messenger.LocaleController
 import org.telegram.messenger.MessagesController
+import org.telegram.messenger.NotificationCenter
 import org.telegram.messenger.R
 import org.telegram.messenger.SharedConfig
 import org.telegram.ui.Cells.NotificationsCheckCell
@@ -100,14 +101,6 @@ class InuAnnoyancesSettingsActivity : InuSettingsPageActivity() {
         )
         items.add(
             mkTwoLineCheckItem(
-                TOGGLE_DISABLE_PROFILE_SCROLL_SNAP,
-                R.string.InuDisableProfileScrollSnap,
-                R.string.InuDisableProfileScrollSnapInfo,
-                InuConfig.DISABLE_PROFILE_SCROLL_SNAP.value
-            )
-        )
-        items.add(
-            mkTwoLineCheckItem(
                 TOGGLE_OPT_IN_MOTION_PHOTOS,
                 R.string.InuOptInMotionPhotos,
                 R.string.InuOptInMotionPhotosInfo,
@@ -131,6 +124,7 @@ class InuAnnoyancesSettingsActivity : InuSettingsPageActivity() {
             TOGGLE_HIDE_STORIES -> {
                 val new = InuConfig.HIDE_STORIES.toggle()
                 (view as? NotificationsCheckCell)?.isChecked = new
+                postNotificationForAllAccounts(NotificationCenter.storiesUpdated)
             }
 
             TOGGLE_HIDE_TRENDING_STICKERS -> {
@@ -167,11 +161,6 @@ class InuAnnoyancesSettingsActivity : InuSettingsPageActivity() {
             TOGGLE_HIDE_PAID_REACTION_UPSELL -> {
                 val new = InuConfig.HIDE_PAID_REACTION_UPSELL.toggle()
                 (view as? TextCheckCell)?.isChecked = new
-            }
-
-            TOGGLE_DISABLE_PROFILE_SCROLL_SNAP -> {
-                val new = InuConfig.DISABLE_PROFILE_SCROLL_SNAP.toggle()
-                (view as? NotificationsCheckCell)?.isChecked = new
             }
 
             TOGGLE_OPT_IN_MOTION_PHOTOS -> {
@@ -259,7 +248,6 @@ class InuAnnoyancesSettingsActivity : InuSettingsPageActivity() {
         private val TOGGLE_DISABLE_CHAT_THEMES = InuUtils.generateId()
         private val TOGGLE_DISABLE_BG_PARALLAX = InuUtils.generateId()
         private val TOGGLE_HIDE_PAID_REACTION_UPSELL = InuUtils.generateId()
-        private val TOGGLE_DISABLE_PROFILE_SCROLL_SNAP = InuUtils.generateId()
         private val TOGGLE_OPT_IN_MOTION_PHOTOS = InuUtils.generateId()
         private val BUTTON_CLEAR_HINTS = InuUtils.generateId()
     }

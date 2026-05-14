@@ -12,7 +12,10 @@
     <string name="InuBehavior">Behavior</string>
     <string name="InuAnnoyances">Annoyances</string>
     <string name="InuOther">Other</string>
-    <string name="InuMainPage">Main page</string>
+    <string name="InuMainPage">Dialogs list</string>
+    <string name="InuUserProfile">User profile</string>
+    <string name="InuUserProfileHeader">Header</string>
+    <string name="InuUserProfileInformation">Information</string>
     <string name="InuChatList">Chat list</string>
     <string name="InuOpenArchiveOnPull">Open archive on pull</string>
     <string name="InuDoubleTapActions">Double tap actions</string>
@@ -53,6 +56,8 @@
     <string name="InuHideBotSlashGroups">In group chats</string>
     <string name="InuHideBotSlashBots">In chats with bots</string>
     <string name="InuHideBotWebView">Hide bot Web App</string>
+    <string name="InuHideSendAsPicker">Hide \"Send as\" picker</string>
+    <string name="InuHideSendAsPickerInfo">Long-press the emoji button to temporarily reveal it</string>
     <string name="InuHideRepostToStory">Hide \"Repost to Story\"</string>
     <string name="InuHideTrendingStickers">Hide trending stickers</string>
     <string name="InuBottomTabs">Bottom tabs</string>
@@ -98,6 +103,9 @@
     <string name="InuHidePaidReactionUpsell">Hide paid reaction upsell</string>
     <string name="InuDisableProfileScrollSnap">Disable profile scroll snap</string>
     <string name="InuDisableProfileScrollSnapInfo">Don\'t snap the profile header to fixed positions when scrolling</string>
+    <string name="InuReduceProfileMotion">Reduce profile motion</string>
+    <string name="InuProfilePreferMediaTab">Prefer \"Media\" tab</string>
+    <string name="InuProfilePreferMediaTabInfo">…over Gifts and Posts tabs</string>
     <string name="InuOptInMotionPhotos">Opt-in motion photos</string>
     <string name="InuOptInMotionPhotosInfo">Disable sending photos as "live" by default</string>
     <string name="InuChatAlwaysShowDown">Always show "go to bottom"</string>
@@ -127,6 +135,7 @@
     <string name="InuFrameCopied">Frame copied to clipboard</string>
     <string name="InuDisableDraftUpload">Disable uploading drafts</string>
     <string name="InuDisableDraftUploadInfo">Drafts will only be saved locally and not synced across devices</string>
+    <string name="InuHideCallActionButton">Hide call button in title</string>
     <string name="InuCallConfirmation">Ask before calling</string>
     <string name="InuCallConfirmationTitle">Confirm calling</string>
     <string name="InuCallConfirmationText">Call **%1$s**?</string>
@@ -152,7 +161,8 @@
     <string name="InuDisableChatPreviewExpand">Interactive chat preview</string>
     <string name="InuDisableChatPreviewExpandInfo">Disable tap-to-expand, and make the bubbles interactive instead</string>
     <string name="InuHideMyPhoneNumber">Hide my phone number</string>
-    <string name="InuFullWidthChannelBubbles">Full-width channel bubbles</string>
+    <string name="InuUseSystemFont">Use system font</string>
+    <string name="InuUseSystemFontInfo">Replace bundled Roboto faces with the system font</string>
     <string name="InuProfileIdMode">Show ID in profile</string>
     <string name="InuProfileIdModeOff">Off</string>
     <string name="InuProfileIdModeTelegram">Telegram ID</string>
@@ -252,6 +262,9 @@
 
     <string name="InuShowForwardTime">Show forward time</string>
 
+    <string name="InuForwardWithoutAuthor">Without author</string>
+    <string name="InuForwardWithoutCaption">Without caption</string>
+
     <string name="InuTextClassifierMode">Text classifier mode</string>
     <string name="InuTextClassifierModeInfo">Text classifier is a system component that auto-expands selection when double-tapping text</string>
     <string name="InuTextClassifierModeNative">Native</string>
@@ -259,6 +272,9 @@
     <string name="InuTextClassifierModeImprovedInfo">Only handle a subset of entities to reduce false positives</string>
     <string name="InuTextClassifierModeOff">Off</string>
     <string name="InuTextClassifierModeOffInfo">Disabling text classifier improves text selection responsiveness</string>
+
+    <string name="InuSuggestCustomEmojiAfter">Suggest custom emoji after regular</string>
+    <string name="InuSuggestCustomEmojiAfterInfo">In the \":shortcode\" suggestion popup, show animated/custom emoji after the regular ones instead of before</string>
 
     <string name="InuFormattingPopup">Custom formatting popup</string>
     <string name="InuFormattingPopupInfo">Replaces the stock rich text formatting menu with an interactive popup.\nClick to customize…</string>

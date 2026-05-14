@@ -5,9 +5,9 @@ adding, removing or meaningfully changing a patch, update `FEATURES.md` in the s
 
 ## Rules
 
-- Fork logic lives in `src/kotlin`, fork-owned resources in `src/res`.
+- Fork logic lives in `src/kotlin`, fork-owned resources in `src/res`. Both are symlinked into the `worktree/` directory.
 - Stock patches: minimal. No renames. Prefer one-line hooks into `desu.inugram`.
-- Never add fork Kotlin files to stock patches.
+- Never add fork Kotlin files to stock patches. Our custom Kotlin logic never ends up in stgit patches, nor in `patches/`. When working with stgit, keep that in mind.
 - Never remove stock imports (except `desu.inugram.*`).
 - `patches/` and `series` are export targets, not source of truth. Do not hand-edit.
 - Patch commit subject = plain human-readable explanation.
@@ -16,6 +16,7 @@ adding, removing or meaningfully changing a patch, update `FEATURES.md` in the s
 - If a requested feature is already in stock (even partially), notify the user first.
 - Prefer data-layer patches over UI-layer patches.
 - Edit the worktree directly — never touch patch files.
+- This project has no LSP. Do not try to use LSP tools, and do not try to compile the project yourself.
 
 When you'd add fields/methods to stock classes: first try exposing `private` fields instead. Do not be afraid to do so,
 this is cleaner than writing a large chunk of logic inside the patch.

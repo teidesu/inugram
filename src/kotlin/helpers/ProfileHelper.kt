@@ -7,13 +7,17 @@ import android.graphics.Paint
 import android.graphics.Shader
 import android.graphics.drawable.Drawable
 import android.view.View
+import android.widget.Toast
 import androidx.core.graphics.ColorUtils
 import desu.inugram.InuConfig
 import org.telegram.messenger.AccountInstance
 import org.telegram.messenger.AndroidUtilities
+import org.telegram.messenger.ApplicationLoader
+import org.telegram.messenger.BuildVars
 import org.telegram.messenger.ChatObject
 import org.telegram.messenger.LocaleController
 import org.telegram.messenger.MessagesController
+import org.telegram.messenger.MessagesStorage
 import org.telegram.messenger.R
 import org.telegram.messenger.UserConfig
 import org.telegram.tgnet.TLObject
@@ -25,10 +29,12 @@ import org.telegram.ui.Components.BulletinFactory
 import org.telegram.ui.Components.ItemOptions
 import org.telegram.ui.Components.ProfileGalleryBlurView
 import org.telegram.ui.Components.ProfileGalleryView
+import org.telegram.ui.Stories.StoriesController
 
 object ProfileHelper {
     const val ACTION_TOGGLE_HIDE_WALLPAPER = 505
     const val ACTION_TOGGLE_HIDE_THEME = 506
+    const val ACTION_DEBUG_CLEAR_CACHE = 599
 
     private const val GRADIENT_FADE_DARK = 0x80000000.toInt()
     private val fadePaint = Paint(Paint.ANTI_ALIAS_FLAG)
@@ -40,6 +46,19 @@ object ProfileHelper {
     fun useProfilePhotoGradientFade(): Boolean = InuConfig.PROFILE_PHOTO_GRADIENT_FADE.value
 
     @JvmStatic
+    fun reduceMotion(): Boolean = InuConfig.REDUCE_PROFILE_MOTION.value
+
+    @JvmStatic
+    fun preferMediaTab(): Boolean = InuConfig.PROFILE_PREFER_MEDIA_TAB.value
+
+    @JvmStatic
+    fun applyReduceMotionAlpha(openAnimationInProgress: Boolean, diff: Float, vararg views: View?) {
+        if (!reduceMotion() || openAnimationInProgress) return
+        val fade = diff.coerceIn(0f, 1f)
+        for (v in views) v?.alpha = fade
+    }
+
+    @JvmStatic
     fun notifyBlurExpandProgress(pager: ProfileGalleryView?, value: Float) {
         val b = pager?.blurDrawer ?: return
         b.inu_expandProgress = value
@@ -47,14 +66,16 @@ object ProfileHelper {
     }
 
     @JvmStatic
+    fun effectiveChipExpand(playProfileAnimation: Int, avatarAnimationProgress: Float, currentExpandAnimatorValue: Float): Float = when {
+        playProfileAnimation == 2 -> 1f
+        avatarAnimationProgress >= 1f || playProfileAnimation == 0 -> currentExpandAnimatorValue.coerceIn(0f, 1f)
+        else -> 0f
+    }
+
+    @JvmStatic
     fun expandedActionsOffset(playProfileAnimation: Int, avatarAnimationProgress: Float, currentExpandAnimatorValue: Float): Float {
         if (!useProfilePhotoGradientFade()) return 0f
-        val expand = when {
-            playProfileAnimation == 2 -> 1f
-            avatarAnimationProgress >= 1f || playProfileAnimation == 0 -> currentExpandAnimatorValue.coerceIn(0f, 1f)
-            else -> 0f
-        }
-        return AndroidUtilities.dpf2(8f) * expand
+        return AndroidUtilities.dpf2(8f) * effectiveChipExpand(playProfileAnimation, avatarAnimationProgress, currentExpandAnimatorValue)
     }
 
     @JvmStatic
@@ -175,6 +196,13 @@ object ProfileHelper {
         if (dialogId > 0 && dialogId != UserConfig.getInstance(currentAccount).clientUserId) {
             TypingDraftHelper.addSwipeBackMenuItem(otherItem, currentAccount, dialogId, resourcesProvider)
         }
+        if (BuildVars.DEBUG_PRIVATE_VERSION) {
+            otherItem.addSubItem(
+                ACTION_DEBUG_CLEAR_CACHE,
+                R.drawable.msg_delete,
+                "Debug: clear profile cache",
+            )
+        }
     }
 
     @JvmStatic
@@ -182,9 +210,71 @@ object ProfileHelper {
         when (id) {
             ACTION_TOGGLE_HIDE_WALLPAPER -> ChatHelper.toggleRemoveWallpaper(currentAccount, dialogId)
             ACTION_TOGGLE_HIDE_THEME -> ChatHelper.toggleRemoveTheme(currentAccount, dialogId)
+            ACTION_DEBUG_CLEAR_CACHE -> debugClearProfileCache(currentAccount, dialogId)
             else -> return false
         }
         return true
+    }
+
+    private fun debugClearProfileCache(currentAccount: Int, dialogId: Long) {
+        val mc = MessagesController.getInstance(currentAccount)
+        val mcCls = MessagesController::class.java
+        val isUser = dialogId > 0
+        val keyAbs = if (isUser) dialogId else -dialogId
+
+        runCatching {
+            val mapName = if (isUser) "fullUsers" else "fullChats"
+            val loadedName = if (isUser) "loadedFullUsers" else "loadedFullChats"
+
+            mcCls.getDeclaredField(mapName).apply { isAccessible = true }.let { f ->
+                val map = f.get(mc) as androidx.collection.LongSparseArray<*>
+                map.remove(keyAbs)
+            }
+            mcCls.getDeclaredField(loadedName).apply { isAccessible = true }.let { f ->
+                val arr = f.get(mc) as org.telegram.messenger.support.LongSparseLongArray
+                arr.delete(keyAbs)
+            }
+        }.onFailure { it.printStackTrace() }
+
+        runCatching {
+            mcCls.getDeclaredField("dialogPhotos").apply { isAccessible = true }.let { f ->
+                val map = f.get(mc) as androidx.collection.LongSparseArray<*>
+                map.remove(dialogId)
+            }
+        }.onFailure { it.printStackTrace() }
+
+        runCatching {
+            val sc = mc.storiesController
+            StoriesController::class.java.getDeclaredField("allStoriesMap").apply { isAccessible = true }.let { f ->
+                val map = f.get(sc) as androidx.collection.LongSparseArray<*>
+                map.remove(dialogId)
+            }
+            sc.dialogIdToMaxReadId.delete(dialogId)
+        }.onFailure { it.printStackTrace() }
+
+        runCatching {
+            org.telegram.ui.Stars.StarsController.getInstance(currentAccount).invalidateProfileGifts(dialogId)
+        }.onFailure { it.printStackTrace() }
+
+        val storage = MessagesStorage.getInstance(currentAccount)
+        storage.storageQueue.postRunnable {
+            runCatching {
+                val db = storage.database
+                val settingsTable = if (isUser) "user_settings" else "chat_settings_v2"
+                db.executeFast("DELETE FROM $settingsTable WHERE uid = $keyAbs").stepThis().dispose()
+                db.executeFast("DELETE FROM media_v4 WHERE uid = $dialogId").stepThis().dispose()
+                db.executeFast("DELETE FROM media_counts_v2 WHERE uid = $dialogId").stepThis().dispose()
+                db.executeFast("DELETE FROM dialog_photos WHERE uid = $dialogId").stepThis().dispose()
+                db.executeFast("DELETE FROM dialog_photos_count WHERE uid = $dialogId").stepThis().dispose()
+                db.executeFast("DELETE FROM stories WHERE dialog_id = $dialogId").stepThis().dispose()
+                db.executeFast("DELETE FROM stories_counter WHERE dialog_id = $dialogId").stepThis().dispose()
+                db.executeFast("DELETE FROM profile_stories WHERE dialog_id = $dialogId").stepThis().dispose()
+                db.executeFast("DELETE FROM profile_stories_albums WHERE dialog_id = $dialogId").stepThis().dispose()
+                db.executeFast("DELETE FROM profile_stories_albums_links WHERE dialog_id = $dialogId").stepThis().dispose()
+            }.onFailure { it.printStackTrace() }
+        }
+
+        Toast.makeText(ApplicationLoader.applicationContext, "Profile cache cleared — close & reopen profile", Toast.LENGTH_LONG).show()
     }
 
     @JvmStatic

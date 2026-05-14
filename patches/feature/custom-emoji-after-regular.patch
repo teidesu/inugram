@@ -1,0 +1,25 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: alina sireneva <alina@tei.su>
+Date: Tue, 12 May 2026 13:21:08 +0200
+Subject: show custom emoji after regular in :shortcode emoji suggestion popup
+
+---
+ .../main/java/org/telegram/messenger/MediaDataController.java | 4 ++++
+ 1 file changed, 4 insertions(+)
+
+diff --git a/TMessagesProj/src/main/java/org/telegram/messenger/MediaDataController.java b/TMessagesProj/src/main/java/org/telegram/messenger/MediaDataController.java
+index 0000000..0000000 100644
+--- a/TMessagesProj/src/main/java/org/telegram/messenger/MediaDataController.java
++++ b/TMessagesProj/src/main/java/org/telegram/messenger/MediaDataController.java
+@@ -9128,7 +9128,11 @@ public class MediaDataController extends BaseController {
+                     }
+                 }
+             }
++            if (desu.inugram.InuConfig.SUGGEST_CUSTOM_EMOJI_AFTER.getValue()) {
++            result.addAll(animatedResult);
++            } else {
+             result.addAll(0, animatedResult);
++            }
+             if (onDone != null) {
+                 onDone.run();
+             }

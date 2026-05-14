@@ -18,6 +18,7 @@ most things are toggleable in `Settings → Inugram`, with sensible opinionated 
 - show peer id in profile (telegram id / bot api id)
 - estimated registration date in profile - *ported & datapoints from [NagramX](https://github.com/risin42/NagramX)*
 - hide own phone number from ui
+- force system font
 - 🐶 hide fade views
 - 🐶 old (pre-12.6) mention/reaction indicator
 - 🐶 toggleable scrim blur
@@ -41,6 +42,7 @@ most things are toggleable in `Settings → Inugram`, with sensible opinionated 
 - 🐶 deeplink / username quick-open from global search
 - mutual contact icon in contacts list
 - open archive directly on pull-down (🐶 done right, without revealing the cell)
+- interactive chat preview (long-tap avatar): tappable bubbles, no tap-to-expand
 
 ## chats
 
@@ -78,6 +80,7 @@ most things are toggleable in `Settings → Inugram`, with sensible opinionated 
 - in-place message translation, with optional web preview translation
 - instant view pages translator
 - show original time/date in "forwarded from" header
+- long-tap "forward" in message menu to forward without sender's name or caption
 
 ## message input / formatting
 
@@ -86,7 +89,9 @@ most things are toggleable in `Settings → Inugram`, with sensible opinionated 
 - 🐶 voice recorder moved into attachments drawer
 - 🐶 custom formatting popup ui (better ux for span manipulation)
 - 🐶 customizable text classifier (native / improved / off) - reduces false positive expansions
+- show custom emoji *after* regular ones in `:smile` emoji suggestion popup
 - "delete for both/all" default checkbox state
+- hide "send as" picker (long-tap stickers button to reveal)
 
 ## photo viewer
 
@@ -120,6 +125,8 @@ most things are toggleable in `Settings → Inugram`, with sensible opinionated 
 - 🐶 disable cloud drafts upload
 - 🐶 disable wallpaper parallax
 - 🐶 disable scroll-snap in profile
+- 🐶 reduce profile motion (skip various enter animations, disable avatar scale-on-scroll effect)
+- 🐶 prefer "Media" tab in profile over Gifts/Posts
 - 🐶 recyclerlistview instant-tap
 - ios-style menu gesture (release-to-commit) in bottom menu tabs
 
@@ -135,6 +142,7 @@ most things are toggleable in `Settings → Inugram`, with sensible opinionated 
 - hide intro greeting + non-clickable custom intro sticker
 - 🐶 hide server-pushed suggestions
 - disable phone number in chat title
+- hide call button in chat title (still in overflow menu)
 - hide reactions send animation
 - 🐶 simple (non-bouncy) attach panel animation
 - disable notification bubbles
@@ -148,6 +156,7 @@ most things are toggleable in `Settings → Inugram`, with sensible opinionated 
 - attach panel: better perf, safe close before fully open
 - paid reaction animation respects litemode
 - reaction counter shift during long-tap menu
+- reactions silently disappearing right after being sent (stale server read race)
 - bubble jump when ime height changes mid send-animation
 - "regular" formatting option with mixed-span selections
 - photo viewer ui respects litemode blur
@@ -160,3 +169,5 @@ most things are toggleable in `Settings → Inugram`, with sensible opinionated 
 - nav stack lockup after rapid back swipes
 - click-through area to the left/right of bottom bar tabs
 - profile scroll jump when opening uncached user
+- stale unread badges on global-search top peers
+- stale unread mention pointer after reading mention on another device (mention button jumping to old message)

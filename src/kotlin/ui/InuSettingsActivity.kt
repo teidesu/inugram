@@ -46,8 +46,15 @@ class InuSettingsActivity : InuSettingsPageActivity() {
         items.add(
             UItem.asButton(
                 BUTTON_DIALOGS,
-                R.drawable.msg_folders,
+                R.drawable.tabs_chats_24,
                 LocaleController.getString(R.string.InuMainPage)
+            )
+        )
+        items.add(
+            UItem.asButton(
+                BUTTON_USER_PROFILE,
+                R.drawable.msg_openprofile,
+                LocaleController.getString(R.string.InuUserProfile)
             )
         )
         items.add(
@@ -112,6 +119,7 @@ class InuSettingsActivity : InuSettingsPageActivity() {
             BUTTON_GENERAL -> presentFragment(InuAppearanceSettingsActivity())
             BUTTON_CHATS -> presentFragment(InuChatsSettingsActivity())
             BUTTON_DIALOGS -> presentFragment(InuDialogsSettingsActivity())
+            BUTTON_USER_PROFILE -> presentFragment(InuUserProfileSettingsActivity())
             BUTTON_ANNOYANCES -> presentFragment(InuAnnoyancesSettingsActivity())
             BUTTON_BEHAVIOR -> presentFragment(InuBehaviorSettingsActivity())
             BUTTON_TRANSLATOR -> presentFragment(InuTranslatorSettingsActivity())
@@ -225,6 +233,7 @@ class InuSettingsActivity : InuSettingsPageActivity() {
         private val BUTTON_GENERAL = InuUtils.generateId()
         private val BUTTON_CHATS = InuUtils.generateId()
         private val BUTTON_DIALOGS = InuUtils.generateId()
+        private val BUTTON_USER_PROFILE = InuUtils.generateId()
         private val BUTTON_ANNOYANCES = InuUtils.generateId()
         private val BUTTON_BEHAVIOR = InuUtils.generateId()
         private val BUTTON_TRANSLATOR = InuUtils.generateId()

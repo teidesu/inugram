@@ -32,7 +32,7 @@ diff --git a/TMessagesProj/src/main/java/org/telegram/ui/Components/ChatActivity
 index 0000000..0000000 100644
 --- a/TMessagesProj/src/main/java/org/telegram/ui/Components/ChatActivityEnterView.java
 +++ b/TMessagesProj/src/main/java/org/telegram/ui/Components/ChatActivityEnterView.java
-@@ -5789,7 +5789,7 @@ public class ChatActivityEnterView extends FrameLayout implements
+@@ -5790,7 +5790,7 @@ public class ChatActivityEnterView extends FrameLayout implements
                  if (innerTextChange != 2 && (count - before) > 1) {
                      processChange = true;
                  }

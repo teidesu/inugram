@@ -153,17 +153,14 @@ async function forceReimportPatches(seriesEntries: string[]) {
 
   const existing = await getAllPatchNames(worktreeDir)
   const applied = await getAppliedPatchNames(worktreeDir)
-  if (applied.length !== existing.length) {
-    throw new Error(`Refusing to force-reimport: ${existing.length - applied.length} patch(es) above top not applied`)
-  }
 
-  if (existing.length > 0) {
+  if (applied.length > 0) {
     step(`Popping ${existing.length} patch(es)`)
     await repo`stg pop -a`
-    for (const name of existing) {
-      step(`Deleting ${name}`)
-      await repo`stg delete ${name}`
-    }
+  }
+  for (const name of existing.reverse()) {
+    step(`Deleting ${name}`)
+    await repo`stg delete ${name}`
   }
 
   await importSeries(seriesEntries)

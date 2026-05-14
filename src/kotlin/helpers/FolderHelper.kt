@@ -126,6 +126,15 @@ object FolderHelper {
         return Pair.create("", "")
     }
 
+    /** resolve (name, emoticon) for a non-default filter, with flag-based fallbacks */
+    @JvmStatic
+    fun getTabInfo(filter: MessagesController.DialogFilter): Pair<String, String> {
+        val defaults = getDefaultsFromFlags(filter.flags)
+        val name = filter.name?.takeIf { it.isNotEmpty() } ?: defaults.first
+        val emoticon = filter.inu_emoticon?.takeIf { it.isNotEmpty() } ?: defaults.second
+        return Pair.create(name, emoticon)
+    }
+
     @JvmStatic
     fun getTabIcon(emoticon: String?): Int {
         if (emoticon != null) {
@@ -195,6 +204,13 @@ object FolderHelper {
     fun getTabPadding(): Float {
         if (isIconsOnly()) return 16f
         return FilterTabsView.TAB_PADDING_WIDTH
+    }
+
+    @JvmStatic
+    fun isMuteFilteringActive(): Boolean {
+        val mode = InuConfig.FOLDERS_UNREAD_COUNTER_MODE.value
+        return mode == InuConfig.FoldersUnreadCounterModeItem.EXCLUDE_MUTED ||
+            mode == InuConfig.FoldersUnreadCounterModeItem.EXCLUDE_MUTED_NON_DMS
     }
 
     @JvmStatic

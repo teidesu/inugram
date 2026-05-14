@@ -56,12 +56,6 @@ class InuBehaviorSettingsActivity : InuSettingsPageActivity() {
         )
         items.add(
             UItem.asCheck(
-                TOGGLE_CALL_CONFIRMATION,
-                LocaleController.getString(R.string.InuCallConfirmation),
-            ).setChecked(InuConfig.CALL_CONFIRMATION.value)
-        )
-        items.add(
-            UItem.asCheck(
                 TOGGLE_DISABLE_CHAT_BUBBLES,
                 LocaleController.getString(R.string.InuDisableChatBubbles),
             ).setChecked(InuConfig.DISABLE_CHAT_BUBBLES.value)
@@ -86,6 +80,14 @@ class InuBehaviorSettingsActivity : InuSettingsPageActivity() {
                 R.string.InuDisableIntroSticker,
                 R.string.InuDisableIntroStickerInfo,
                 InuConfig.DISABLE_INTRO_STICKER.value
+            )
+        )
+        items.add(
+            mkTwoLineCheckItem(
+                TOGGLE_SUGGEST_CUSTOM_EMOJI_AFTER,
+                R.string.InuSuggestCustomEmojiAfter,
+                R.string.InuSuggestCustomEmojiAfterInfo,
+                InuConfig.SUGGEST_CUSTOM_EMOJI_AFTER.value,
             )
         )
         items.add(
@@ -193,11 +195,6 @@ class InuBehaviorSettingsActivity : InuSettingsPageActivity() {
                 (view as? TextCheckCell)?.isChecked = new
             }
 
-            TOGGLE_CALL_CONFIRMATION -> {
-                val new = InuConfig.CALL_CONFIRMATION.toggle()
-                (view as? TextCheckCell)?.isChecked = new
-            }
-
             TOGGLE_DISABLE_CHAT_BUBBLES -> {
                 val new = InuConfig.DISABLE_CHAT_BUBBLES.toggle()
                 (view as? TextCheckCell)?.isChecked = new
@@ -205,6 +202,11 @@ class InuBehaviorSettingsActivity : InuSettingsPageActivity() {
 
             TOGGLE_DISABLE_INTRO_STICKER -> {
                 val new = InuConfig.DISABLE_INTRO_STICKER.toggle()
+                (view as? NotificationsCheckCell)?.isChecked = new
+            }
+
+            TOGGLE_SUGGEST_CUSTOM_EMOJI_AFTER -> {
+                val new = InuConfig.SUGGEST_CUSTOM_EMOJI_AFTER.toggle()
                 (view as? NotificationsCheckCell)?.isChecked = new
             }
 
@@ -219,31 +221,26 @@ class InuBehaviorSettingsActivity : InuSettingsPageActivity() {
                 showRestartBulletin()
             }
 
-            BUTTON_ROUND_DEFAULT_CAMERA -> showRoundCameraSelector()
+            BUTTON_ROUND_DEFAULT_CAMERA -> showRoundCameraSelector(view)
             BUTTON_TEXT_CLASSIFIER_MODE -> showTextClassifierModeSelector()
             BUTTON_WEB_PREVIEW_REPLACEMENTS -> presentFragment(InuWebPreviewReplacementsActivity())
-            BUTTON_DOUBLE_TAP_INCOMING -> showDoubleTapSelector(false)
-            BUTTON_DOUBLE_TAP_OUTGOING -> showDoubleTapSelector(true)
+            BUTTON_DOUBLE_TAP_INCOMING -> showDoubleTapSelector(view, false)
+            BUTTON_DOUBLE_TAP_OUTGOING -> showDoubleTapSelector(view, true)
         }
     }
 
-    private fun showRoundCameraSelector() {
-        val context = context ?: return
-        val labels = arrayOf<CharSequence>(
-            LocaleController.getString(R.string.InuRoundCameraFront),
-            LocaleController.getString(R.string.InuRoundCameraRear),
-            LocaleController.getString(R.string.InuRoundCameraAsk),
-        )
-        showDialog(
-            RadioDialogBuilder(context, getResourceProvider())
-                .setTitle(LocaleController.getString(R.string.InuRoundDefaultCamera))
-                .setItems(labels, (InuConfig.ROUND_DEFAULT_CAMERA.value - 1).coerceIn(0, 2)) { _, which ->
-                    val newValue = which + 1
-                    if (InuConfig.ROUND_DEFAULT_CAMERA.value == newValue) return@setItems
-                    InuConfig.ROUND_DEFAULT_CAMERA.value = newValue
-                    listView.adapter.update(true)
-                }.create()
-        )
+    private fun showRoundCameraSelector(anchor: View) {
+        RadioItemOptions.show(
+            this, anchor,
+            listOf(
+                LocaleController.getString(R.string.InuRoundCameraFront),
+                LocaleController.getString(R.string.InuRoundCameraRear),
+                LocaleController.getString(R.string.InuRoundCameraAsk),
+            ),
+            (InuConfig.ROUND_DEFAULT_CAMERA.value - 1).coerceIn(0, 2),
+        ) { which ->
+            InuConfig.ROUND_DEFAULT_CAMERA.value = which + 1
+        }
     }
 
     private fun showTextClassifierModeSelector() {
@@ -278,24 +275,17 @@ class InuBehaviorSettingsActivity : InuSettingsPageActivity() {
         )
     }
 
-    private fun showDoubleTapSelector(outgoing: Boolean) {
-        val context = context ?: return
+    private fun showDoubleTapSelector(anchor: View, outgoing: Boolean) {
         val actions = DoubleTapAction.available(outgoing)
         val config = if (outgoing) InuConfig.DOUBLE_TAP_ACTION_OUTGOING else InuConfig.DOUBLE_TAP_ACTION_INCOMING
-        showDialog(
-            RadioDialogBuilder(
-                context, getResourceProvider()
-            ).setTitle(LocaleController.getString(if (outgoing) R.string.InuOutgoingMessages else R.string.InuIncomingMessages))
-                .setItems(
-                    actions.map { it.label() }.toTypedArray(),
-                    actions.indexOfFirst { it.value == config.value }.coerceAtLeast(0),
-                ) { _, which ->
-                    val action = actions.getOrNull(which) ?: return@setItems
-                    if (config.value == action.value) return@setItems
-                    config.value = action.value
-                    listView.adapter.update(true)
-                }.create()
-        )
+        RadioItemOptions.show(
+            this, anchor,
+            actions.map { it.label() },
+            actions.indexOfFirst { it.value == config.value }.coerceAtLeast(0),
+        ) { which ->
+            val action = actions.getOrNull(which) ?: return@show
+            config.value = action.value
+        }
     }
 
     companion object {
@@ -306,10 +296,10 @@ class InuBehaviorSettingsActivity : InuSettingsPageActivity() {
         private val TOGGLE_DISABLE_SWIPE_TO_UNARCHIVE = InuUtils.generateId()
         private val TOGGLE_CHAT_ALWAYS_SHOW_DOWN = InuUtils.generateId()
         private val TOGGLE_CHAT_REMEMBER_ALL_REPLIES = InuUtils.generateId()
-        private val TOGGLE_CALL_CONFIRMATION = InuUtils.generateId()
         private val TOGGLE_DISABLE_CHAT_BUBBLES = InuUtils.generateId()
         private val BUTTON_WEB_PREVIEW_REPLACEMENTS = InuUtils.generateId()
         private val TOGGLE_DISABLE_INTRO_STICKER = InuUtils.generateId()
+        private val TOGGLE_SUGGEST_CUSTOM_EMOJI_AFTER = InuUtils.generateId()
         private val TOGGLE_DISABLE_DRAFT_UPLOAD = InuUtils.generateId()
         private val TOGGLE_DISABLE_PREDICTIVE_BACK = InuUtils.generateId()
         private val BUTTON_ROUND_DEFAULT_CAMERA = InuUtils.generateId()

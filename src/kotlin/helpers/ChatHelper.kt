@@ -3,6 +3,8 @@ package desu.inugram.helpers
 import android.os.Bundle
 import android.view.HapticFeedbackConstants
 import android.view.View
+import android.view.View.MeasureSpec
+import android.widget.ScrollView
 import androidx.core.content.edit
 import desu.inugram.InuConfig
 import desu.inugram.ui.MessageDetailsActivity
@@ -12,18 +14,21 @@ import org.telegram.messenger.DialogObject
 import org.telegram.messenger.FileLoader
 import org.telegram.messenger.LocaleController
 import org.telegram.messenger.MessageObject
+import org.telegram.messenger.MessagePreviewParams
 import org.telegram.messenger.R
 import org.telegram.messenger.SendMessagesHelper
 import org.telegram.messenger.UserConfig
 import org.telegram.messenger.UserObject
 import org.telegram.tgnet.TLRPC
 import org.telegram.ui.ActionBar.ActionBarMenu
+import org.telegram.ui.ActionBar.ActionBarPopupWindow
 import org.telegram.ui.ActionBar.BottomSheet
 import org.telegram.ui.Cells.ChatMessageCell
 import org.telegram.ui.ChatActivity
 import org.telegram.ui.Components.BulletinFactory
 import org.telegram.ui.Components.EditTextCaption
 import org.telegram.ui.Components.ItemOptions
+import org.telegram.ui.Components.RLottieDrawable
 import org.telegram.ui.Components.UndoView
 import org.telegram.ui.DialogsActivity
 import java.io.File
@@ -540,6 +545,101 @@ object ChatHelper {
     fun onFragmentDestroy(activity: ChatActivity) {
         TranslateHelper.resetForDialog(activity.dialogId)
         TypingDraftHelper.forget(activity.currentAccount, activity.dialogId, activity.threadMessageId)
+    }
+
+    @JvmField
+    var pendingHideAuthor: Boolean = false
+
+    @JvmField
+    var pendingHideCaption: Boolean = false
+
+    @JvmStatic
+    fun clearForwardFlags() {
+        pendingHideAuthor = false
+        pendingHideCaption = false
+    }
+
+    @JvmStatic
+    fun applyForwardOptionsToPreview(params: MessagePreviewParams?) {
+        if (params == null) return
+        if (pendingHideCaption || pendingHideAuthor) params.hideForwardSendersName = true
+        if (pendingHideCaption) params.hideCaption = true
+        clearForwardFlags()
+    }
+
+    @JvmStatic
+    fun onMenuOptionLongClick(
+        activity: ChatActivity,
+        popupLayout: ActionBarPopupWindow.ActionBarPopupWindowLayout,
+        cell: View,
+        options: List<Int>,
+        index: Int,
+        selectedObject: MessageObject?,
+        selectedObjectGroup: MessageObject.GroupedMessages?,
+    ): Boolean {
+        if (selectedObject == null || index >= options.size) return false
+        return when (options[index]) {
+            ChatActivity.OPTION_FORWARD -> openForwardSubmenu(activity, popupLayout, cell, selectedObject, selectedObjectGroup)
+            else -> false
+        }
+    }
+
+    private fun openForwardSubmenu(
+        activity: ChatActivity,
+        popupLayout: ActionBarPopupWindow.ActionBarPopupWindowLayout,
+        anchorCell: View,
+        selected: MessageObject,
+        group: MessageObject.GroupedMessages?,
+    ): Boolean {
+        val swipeBack = popupLayout.swipeBack ?: return false
+        val rp = activity.resourceProvider
+        val swb = ItemOptions.swipeback(popupLayout, rp)
+        val foregroundIndex = popupLayout.addViewToSwipeBack(swb.linearLayout)
+
+        swb.add(R.drawable.ic_ab_back, LocaleController.getString(R.string.Back)) { swipeBack.closeForeground() }
+        swb.addGap()
+        swb.add(R.drawable.msg_forward, LocaleController.getString(R.string.Forward)) {
+            activity.processSelectedOption(ChatActivity.OPTION_FORWARD)
+        }
+        swb.add(lottieIcon(R.raw.name_hide), LocaleController.getString(R.string.InuForwardWithoutAuthor)) {
+            activity.processSelectedOption(ChatActivity.OPTION_FORWARD)
+            pendingHideAuthor = true
+        }
+        val hasCaption = group?.messages?.any { !it.caption.isNullOrEmpty() } ?: !selected.caption.isNullOrEmpty()
+        if (hasCaption) {
+            swb.add(lottieIcon(R.raw.caption_hide), LocaleController.getString(R.string.InuForwardWithoutCaption)) {
+                activity.processSelectedOption(ChatActivity.OPTION_FORWARD)
+                pendingHideCaption = true
+            }
+        }
+
+        swipeBack.inu_setForegroundOffsetY(foregroundIndex, run {
+            var anchorY = 0f
+            var v: View = anchorCell
+            while (v !== popupLayout) {
+                anchorY += v.y
+                if (v is ScrollView) anchorY -= v.scrollY
+                v = v.parent as? View ?: return@run 0
+            }
+            val spec = MeasureSpec.makeMeasureSpec(AndroidUtilities.dp(1000f), MeasureSpec.AT_MOST)
+            swb.linearLayout.measure(spec, spec)
+            val slack = (popupLayout.measuredHeight - swb.linearLayout.measuredHeight).coerceAtLeast(0)
+
+            if (popupLayout.shownFromBottom) {
+                (anchorY.toInt() - slack).coerceIn(-slack, 0)
+            } else {
+                anchorY.toInt().coerceIn(0, slack)
+            }
+        })
+        swipeBack.openForeground(foregroundIndex)
+        return true
+    }
+
+    private fun lottieIcon(rawRes: Int): RLottieDrawable {
+        val size = AndroidUtilities.dp(24f)
+        return RLottieDrawable(rawRes, rawRes.toString(), size, size).apply {
+            setCurrentFrame(0)
+        }
     }
 
     @JvmStatic

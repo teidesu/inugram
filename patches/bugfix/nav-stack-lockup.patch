@@ -36,8 +36,8 @@ index 0000000..0000000 100644
 +        if (fragment == null || checkTransitionAnimation() || animationInProgress || startedTracking || delegate != null && check && !delegate.needPresentFragment(this, params) || !fragment.onFragmentCreate()) {
              return false;
          }
-         final boolean isSupportEdgeToEdge = fragment.isSupportEdgeToEdge();
-@@ -2462,7 +2471,7 @@ public class ActionBarLayout extends FrameLayout implements INavigationLayout, F
+         if (inPreviewMode && !preview && desu.inugram.InuConfig.INTERACTIVE_CHAT_PREVIEW.getValue()) {
+@@ -2470,7 +2479,7 @@ public class ActionBarLayout extends FrameLayout implements INavigationLayout, F
          if (fragment != null && fragment.closeLastFragment()) {
              return;
          }

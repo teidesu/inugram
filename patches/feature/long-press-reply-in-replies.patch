@@ -11,7 +11,7 @@ diff --git a/TMessagesProj/src/main/java/org/telegram/ui/ChatActivity.java b/TMe
 index 0000000..0000000 100644
 --- a/TMessagesProj/src/main/java/org/telegram/ui/ChatActivity.java
 +++ b/TMessagesProj/src/main/java/org/telegram/ui/ChatActivity.java
-@@ -39726,7 +39726,11 @@ public class ChatActivity extends BaseFragment implements
+@@ -39727,7 +39727,11 @@ public class ChatActivity extends BaseFragment implements
                  }
              }
              if (UserObject.isReplyUser(currentUser)) {

@@ -1,0 +1,21 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: alina sireneva <alina@tei.su>
+Date: Wed, 13 May 2026 17:51:19 +0200
+Subject: fix stale unread mention from breaking "jump to mention" button
+
+---
+ .../src/main/java/org/telegram/messenger/MessagesStorage.java    | 1 +
+ 1 file changed, 1 insertion(+)
+
+diff --git a/TMessagesProj/src/main/java/org/telegram/messenger/MessagesStorage.java b/TMessagesProj/src/main/java/org/telegram/messenger/MessagesStorage.java
+index 0000000..0000000 100644
+--- a/TMessagesProj/src/main/java/org/telegram/messenger/MessagesStorage.java
++++ b/TMessagesProj/src/main/java/org/telegram/messenger/MessagesStorage.java
+@@ -13383,6 +13383,7 @@ public class MessagesStorage extends BaseController {
+                     long key = inbox.keyAt(b);
+                     int messageId = inbox.get(key);
+                     database.executeFast(String.format(Locale.US, "UPDATE messages_v2 SET read_state = read_state | 1 WHERE uid = %d AND mid > 0 AND mid <= %d AND read_state IN(0,2) AND out = 0", key, messageId)).stepThis().dispose();
++                    database.executeFast(String.format(Locale.US, "UPDATE messages_v2 SET read_state = read_state | 2 WHERE uid = %d AND mid > 0 AND mid <= %d AND mention = 1 AND read_state IN(0,1) AND out = 0", key, messageId)).stepThis().dispose();
+ 
+                     state.requery();
+                     state.bindLong(1, key);

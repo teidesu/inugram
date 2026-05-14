@@ -4,8 +4,8 @@ Date: Fri, 10 Apr 2026 05:29:50 +0300
 Subject: hooks into various places inside ChatActivity
 
 ---
- .../java/org/telegram/ui/ChatActivity.java    | 32 ++++++++++++++-----
- 1 file changed, 24 insertions(+), 8 deletions(-)
+ .../java/org/telegram/ui/ChatActivity.java    | 33 ++++++++++++++-----
+ 1 file changed, 25 insertions(+), 8 deletions(-)
 
 diff --git a/TMessagesProj/src/main/java/org/telegram/ui/ChatActivity.java b/TMessagesProj/src/main/java/org/telegram/ui/ChatActivity.java
 index 0000000..0000000 100644
@@ -126,7 +126,15 @@ index 0000000..0000000 100644
          if (!isReport()) {
              if (!actionBar.isActionModeShowed()) {
                  return;
-@@ -33292,6 +33301,10 @@ public class ChatActivity extends BaseFragment implements
+@@ -31006,6 +31015,7 @@ public class ChatActivity extends BaseFragment implements
+                         }
+                         processSelectedOption(options.get(i));
+                     });
++                    cell.setOnLongClickListener(v1 -> ChatHelper.onMenuOptionLongClick(this, popupLayout, cell, options, i, selectedObject, selectedObjectGroup));
+                     if (option == OPTION_TRANSLATE) {
+                         final boolean translateEnabled = getMessagesController().getTranslateController().isContextTranslateEnabled();
+                         String toLangDefault = LocaleController.getInstance().getCurrentLocale().getLanguage();
+@@ -33292,6 +33302,10 @@ public class ChatActivity extends BaseFragment implements
                  }, getResourceProvider(), AlertsCreator.SUGGEST_DATE_PICKER_MODE_EDIT).show(), AmountUtils.Amount.of(suggestedPost != null ? suggestedPost.price : null), !ChatObject.canManageMonoForum(currentAccount, getDialogId()));
                  break;
              }
@@ -137,7 +145,7 @@ index 0000000..0000000 100644
          }
          selectedObject = null;
          selectedObjectGroup = null;
-@@ -38892,6 +38905,7 @@ public class ChatActivity extends BaseFragment implements
+@@ -38892,6 +38906,7 @@ public class ChatActivity extends BaseFragment implements
                      !(button instanceof TLRPC.TL_keyboardButtonUserProfile) && !(button instanceof TLRPC.TL_keyboardButtonCopy)) {
                  return;
              }
@@ -145,7 +153,7 @@ index 0000000..0000000 100644
              if (button instanceof TLRPC.TL_keyboardButtonCopy) {
                  didLongPressCopyButton(((TLRPC.TL_keyboardButtonCopy) button).copy_text);
                  return;
-@@ -40250,6 +40264,7 @@ public class ChatActivity extends BaseFragment implements
+@@ -40250,6 +40265,7 @@ public class ChatActivity extends BaseFragment implements
                      presentFragment(fragment);
                  }
              } else if (message.type == MessageObject.TYPE_FILE || message.type == MessageObject.TYPE_TEXT) {
@@ -153,7 +161,7 @@ index 0000000..0000000 100644
                  if (message.getDocumentName().toLowerCase().endsWith("attheme")) {
                      File locFile = null;
                      if (message.messageOwner.attachPath != null && message.messageOwner.attachPath.length() != 0) {
-@@ -44821,6 +44836,7 @@ public class ChatActivity extends BaseFragment implements
+@@ -44821,6 +44837,7 @@ public class ChatActivity extends BaseFragment implements
                  options.add(OPTION_DELETE);
                  icons.add(deleteIconRes);
              }

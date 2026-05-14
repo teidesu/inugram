@@ -65,6 +65,7 @@ feature/non-island-ui.patch
 bugfix/reaction-counter-jump.patch
 feature/customize-text-classifier.patch
 bugfix/message-send-ime-jump.patch
+hooks/popup-swipeback.patch
 feature/seen-view-below.patch
 bugfix/formatting-regular.patch
 feature/custom-formatting-ui.patch
@@ -125,3 +126,15 @@ feature/old-layout-drawer-da.patch
 feature/old-profile-ui.patch
 feature/old-profile-gooey.patch
 feature/old-profile-gradient.patch
+bugfix/reaction-sending-race.patch
+feature/custom-emoji-after-regular.patch
+feature/force-system-font.patch
+feature/profile-reduce-motion.patch
+bugfix/profile-black-bar.patch
+feature/prefer-media-tab.patch
+bugfix/ignore-xmp-errors.patch
+feature/hide-send-as.patch
+feature/hide-call-action.patch
+bugfix/top-peers-unread-counter.patch
+bugfix/stale-unread-mention.patch
+feature/forward-options.patch

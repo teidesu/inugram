@@ -1,0 +1,28 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: alina sireneva <alina@tei.su>
+Date: Wed, 13 May 2026 17:10:01 +0200
+Subject: fix top peers unread counter from going stale
+
+---
+ .../main/java/org/telegram/ui/Cells/HintDialogCell.java   | 8 ++++++++
+ 1 file changed, 8 insertions(+)
+
+diff --git a/TMessagesProj/src/main/java/org/telegram/ui/Cells/HintDialogCell.java b/TMessagesProj/src/main/java/org/telegram/ui/Cells/HintDialogCell.java
+index 0000000..0000000 100644
+--- a/TMessagesProj/src/main/java/org/telegram/ui/Cells/HintDialogCell.java
++++ b/TMessagesProj/src/main/java/org/telegram/ui/Cells/HintDialogCell.java
+@@ -119,6 +119,14 @@ public class HintDialogCell extends FrameLayout {
+             checkBox.setChecked(false, false);
+             setWillNotDraw(false);
+         }
++
++        NotificationCenter.getInstance(currentAccount).listen(this, NotificationCenter.updateInterfaces, args -> update((Integer) args[0]));
++    }
++
++    @Override
++    protected void onAttachedToWindow() {
++        super.onAttachedToWindow();
++        update(0);
+     }
+ 
+     public void showPremiumBlocked() {

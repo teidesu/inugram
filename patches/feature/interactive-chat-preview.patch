@@ -4,26 +4,46 @@ Date: Fri, 24 Apr 2026 13:35:21 +0300
 Subject: prevent tapping the chat preview from expanding it to avoid accidentally opening it, and also make the bubbles interactive while we're at it
 
 ---
- TMessagesProj/src/main/java/org/telegram/ui/ChatActivity.java | 4 ++--
- .../src/main/java/org/telegram/ui/DialogsActivity.java        | 2 +-
- 2 files changed, 3 insertions(+), 3 deletions(-)
+ .../org/telegram/ui/ActionBar/ActionBarLayout.java |  8 ++++++++
+ .../main/java/org/telegram/ui/ChatActivity.java    |  4 ++--
+ .../main/java/org/telegram/ui/DialogsActivity.java | 14 +++++++++++++-
+ 3 files changed, 23 insertions(+), 3 deletions(-)
 
+diff --git a/TMessagesProj/src/main/java/org/telegram/ui/ActionBar/ActionBarLayout.java b/TMessagesProj/src/main/java/org/telegram/ui/ActionBar/ActionBarLayout.java
+index 0000000..0000000 100644
+--- a/TMessagesProj/src/main/java/org/telegram/ui/ActionBar/ActionBarLayout.java
++++ b/TMessagesProj/src/main/java/org/telegram/ui/ActionBar/ActionBarLayout.java
+@@ -1893,6 +1893,14 @@ public class ActionBarLayout extends FrameLayout implements INavigationLayout, F
+         if (fragment == null || checkTransitionAnimation() || delegate != null && check && !delegate.needPresentFragment(this, params) || !fragment.onFragmentCreate()) {
+             return false;
+         }
++        if (inPreviewMode && !preview && desu.inugram.InuConfig.INTERACTIVE_CHAT_PREVIEW.getValue()) {
++            final NavigationParams deferred = params;
++            finishPreviewFragment();
++            AndroidUtilities.runOnUIThread(() -> {
++                if (!inPreviewMode) presentFragment(deferred);
++            }, 250);
++            return false;
++        }
+         final boolean isSupportEdgeToEdge = fragment.isSupportEdgeToEdge();
+         final boolean drawNavigationBar = fragment.drawEdgeNavigationBar();
+ 
 diff --git a/TMessagesProj/src/main/java/org/telegram/ui/ChatActivity.java b/TMessagesProj/src/main/java/org/telegram/ui/ChatActivity.java
 index 0000000..0000000 100644
 --- a/TMessagesProj/src/main/java/org/telegram/ui/ChatActivity.java
 +++ b/TMessagesProj/src/main/java/org/telegram/ui/ChatActivity.java
-@@ -39520,12 +39520,12 @@ public class ChatActivity extends BaseFragment implements
+@@ -39521,12 +39521,12 @@ public class ChatActivity extends BaseFragment implements
  
          @Override
          public boolean canPerformActions() {
 -            return actionBar != null && !actionBar.isActionModeShowed() && !isReport() && !inPreviewMode;
-+            return actionBar != null && !actionBar.isActionModeShowed() && !isReport() && (!inPreviewMode || InuConfig.DISABLE_CHAT_PREVIEW_EXPAND.getValue());
++            return actionBar != null && !actionBar.isActionModeShowed() && !isReport() && (!inPreviewMode || InuConfig.INTERACTIVE_CHAT_PREVIEW.getValue());
          }
  
          @Override
          public boolean canPerformReply() {
 -            return !isReport() && !inPreviewMode;
-+            return !isReport() && (!inPreviewMode || InuConfig.DISABLE_CHAT_PREVIEW_EXPAND.getValue());
++            return !isReport() && (!inPreviewMode || InuConfig.INTERACTIVE_CHAT_PREVIEW.getValue());
          }
  
          @Override
@@ -31,12 +51,31 @@ diff --git a/TMessagesProj/src/main/java/org/telegram/ui/DialogsActivity.java b/
 index 0000000..0000000 100644
 --- a/TMessagesProj/src/main/java/org/telegram/ui/DialogsActivity.java
 +++ b/TMessagesProj/src/main/java/org/telegram/ui/DialogsActivity.java
-@@ -8679,7 +8679,7 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
+@@ -8492,6 +8492,18 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
+             });
+         }
+ 
++        if (desu.inugram.InuConfig.INTERACTIVE_CHAT_PREVIEW.getValue()) {
++            ActionBarMenuSubItem openChatItem = new ActionBarMenuSubItem(getParentActivity(), true, false);
++            openChatItem.setTextAndIcon(LocaleController.getString(R.string.SavedOpenChatNoCaps), R.drawable.msg_discussion);
++            openChatItem.setMinimumWidth(160);
++            openChatItem.setOnClickListener(e -> {
++                if (chatActivity[0] != null && chatActivity[0].getParentLayout() != null) {
++                    chatActivity[0].getParentLayout().expandPreviewFragment();
++                }
++            });
++            previewMenu[0].addView(openChatItem);
++        }
++
+         ActionBarMenuSubItem markAsUnreadItem = new ActionBarMenuSubItem(getParentActivity(), true, false);
+         if (cell.getHasUnread()) {
+             markAsUnreadItem.setTextAndIcon(LocaleController.getString(R.string.MarkAsRead), R.drawable.msg_markread);
+@@ -8673,7 +8685,7 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
              } else {
                  presentFragmentAsPreviewWithMenu(chatActivity[0] = new ChatActivity(args), previewMenu[0]);
                  if (chatActivity[0] != null) {
 -                    chatActivity[0].allowExpandPreviewByClick = true;
-+                    chatActivity[0].allowExpandPreviewByClick = !desu.inugram.InuConfig.DISABLE_CHAT_PREVIEW_EXPAND.getValue();
++                    chatActivity[0].allowExpandPreviewByClick = !desu.inugram.InuConfig.INTERACTIVE_CHAT_PREVIEW.getValue();
                      try {
                          chatActivity[0].getAvatarContainer().getAvatarImageView().performAccessibilityAction(AccessibilityNodeInfo.ACTION_ACCESSIBILITY_FOCUS, null);
                      } catch (Exception ignore) {

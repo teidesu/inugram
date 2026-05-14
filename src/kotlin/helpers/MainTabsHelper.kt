@@ -84,9 +84,9 @@ object MainTabsHelper {
                 name = getString(R.string.FilterAllChats)
                 emoticon = "💬"
             } else {
-                val defaults = FolderHelper.getDefaultsFromFlags(filter.flags)
-                name = filter.name?.takeIf { it.isNotEmpty() } ?: defaults.first
-                emoticon = filter.inu_emoticon?.takeIf { it.isNotEmpty() } ?: defaults.second
+                val info = FolderHelper.getTabInfo(filter)
+                name = info.first
+                emoticon = info.second
             }
             val index = i
             val icon = scaledIcon(context, FolderHelper.getTabIcon(emoticon)) ?: continue

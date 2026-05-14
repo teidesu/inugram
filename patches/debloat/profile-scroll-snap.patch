@@ -4,14 +4,29 @@ Date: Wed, 29 Apr 2026 18:48:53 +0300
 Subject: disable scroll snapping in profile
 
 ---
- .../src/main/java/org/telegram/ui/ProfileActivity.java          | 2 +-
- 1 file changed, 1 insertion(+), 1 deletion(-)
+ .../src/main/java/org/telegram/ui/ProfileActivity.java | 10 +++++++++-
+ 1 file changed, 9 insertions(+), 1 deletion(-)
 
 diff --git a/TMessagesProj/src/main/java/org/telegram/ui/ProfileActivity.java b/TMessagesProj/src/main/java/org/telegram/ui/ProfileActivity.java
 index 0000000..0000000 100644
 --- a/TMessagesProj/src/main/java/org/telegram/ui/ProfileActivity.java
 +++ b/TMessagesProj/src/main/java/org/telegram/ui/ProfileActivity.java
-@@ -4147,7 +4147,7 @@ public class ProfileActivity extends BaseFragment implements NotificationCenter.
+@@ -4044,6 +4044,14 @@ public class ProfileActivity extends BaseFragment implements NotificationCenter.
+ 
+             private VelocityTracker velocityTracker;
+ 
++            @Override
++            public boolean requestChildRectangleOnScreen(View child, android.graphics.Rect rect, boolean immediate) {
++                if (child == sharedMediaLayout && desu.inugram.InuConfig.DISABLE_PROFILE_SCROLL_SNAP.getValue()) {
++                    return false;
++                }
++                return super.requestChildRectangleOnScreen(child, rect, immediate);
++            }
++
+             @Override
+             protected boolean canHighlightChildAt(View child, float x, float y) {
+                 return !(child instanceof AboutLinkCell);
+@@ -4147,7 +4155,7 @@ public class ProfileActivity extends BaseFragment implements NotificationCenter.
                              } else {
                                  listView.smoothScrollBy(0, view.getTop() - getHeaderExtraHeight(), CubicBezierInterpolator.EASE_OUT_QUINT);
                              }

@@ -56,10 +56,12 @@ class InuAppearanceSettingsActivity : InuSettingsPageActivity() {
             )
         )
         items.add(
-            UItem.asCheck(
-                TOGGLE_HIDE_MY_PHONE_NUMBER,
-                LocaleController.getString(R.string.InuHideMyPhoneNumber)
-            ).setChecked(InuConfig.HIDE_MY_PHONE_NUMBER.value)
+            mkTwoLineCheckItem(
+                TOGGLE_USE_SYSTEM_FONT,
+                R.string.InuUseSystemFont,
+                R.string.InuUseSystemFontInfo,
+                InuConfig.USE_SYSTEM_FONT.value
+            )
         )
         items.add(
             mkTwoLineCheckItem(
@@ -68,12 +70,6 @@ class InuAppearanceSettingsActivity : InuSettingsPageActivity() {
                 R.string.InuDisableScrimBlurInfo,
                 InuConfig.DISABLE_SCRIM_BLUR.value
             )
-        )
-        items.add(
-            UItem.asCheck(
-                TOGGLE_PROFILE_PHOTO_GRADIENT_FADE,
-                LocaleController.getString(R.string.InuProfilePhotoGradientFade)
-            ).setChecked(InuConfig.PROFILE_PHOTO_GRADIENT_FADE.value)
         )
         items.add(
             UItem.asButton(
@@ -172,83 +168,47 @@ class InuAppearanceSettingsActivity : InuSettingsPageActivity() {
             TOGGLE_HIDE_FADE_VIEW -> {
                 val new = InuConfig.HIDE_FADE_VIEW.toggle()
                 (view as? TextCheckCell)?.isChecked = new
+                softRebuild()
+            }
+
+            BUTTON_MAP_PROVIDER -> RadioItemOptions.show(
+                this, view,
+                listOf(
+                    LocaleController.getString(R.string.InuMapProviderGoogle),
+                    LocaleController.getString(R.string.InuMapProviderOsm),
+                ),
+                InuConfig.MAP_PROVIDER.value,
+            ) { which ->
+                InuConfig.MAP_PROVIDER.value = which
                 showRestartBulletin()
             }
 
-            BUTTON_PROFILE_ID_MODE -> showDialog(
-                RadioDialogBuilder(context, getResourceProvider())
-                    .setTitle(LocaleController.getString(R.string.InuProfileIdMode))
-                    .setItems(
-                        arrayOf(
-                            LocaleController.getString(R.string.InuProfileIdModeOff),
-                            LocaleController.getString(R.string.InuProfileIdModeTelegram),
-                            LocaleController.getString(R.string.InuProfileIdModeBotApi),
-                        ),
-                        InuConfig.PROFILE_ID_MODE.value,
-                    ) { _, which ->
-                        if (which == InuConfig.PROFILE_ID_MODE.value) return@setItems
-                        InuConfig.PROFILE_ID_MODE.value = which
-                        listView.adapter.update(true)
-                    }
-                    .create()
-            )
+            BUTTON_MAP_PREVIEW_PROVIDER -> RadioItemOptions.show(
+                this, view,
+                listOf(
+                    LocaleController.getString(R.string.Default),
+                    LocaleController.getString(R.string.InuMapPreviewProviderTelegram),
+                    LocaleController.getString(R.string.InuMapPreviewProviderGoogle),
+                    LocaleController.getString(R.string.InuMapPreviewProviderYandex),
+                    LocaleController.getString(R.string.Disable),
+                ),
+                InuConfig.MAP_PREVIEW_PROVIDER.value,
+            ) { which ->
+                InuConfig.MAP_PREVIEW_PROVIDER.value = which
+                MapsHelper.syncMapProvider(messagesController)
+            }
 
-            BUTTON_MAP_PROVIDER -> showDialog(
-                RadioDialogBuilder(context, getResourceProvider())
-                    .setTitle(LocaleController.getString(R.string.InuMapProvider))
-                    .setItems(
-                        arrayOf(
-                            LocaleController.getString(R.string.InuMapProviderGoogle),
-                            LocaleController.getString(R.string.InuMapProviderOsm),
-                        ),
-                        InuConfig.MAP_PROVIDER.value,
-                    ) { _, which ->
-                        if (which == InuConfig.MAP_PROVIDER.value) return@setItems
-                        InuConfig.MAP_PROVIDER.value = which
-                        listView.adapter.update(true)
-                        showRestartBulletin()
-                    }
-                    .create()
-            )
-
-            BUTTON_MAP_PREVIEW_PROVIDER -> showDialog(
-                RadioDialogBuilder(context, getResourceProvider())
-                    .setTitle(LocaleController.getString(R.string.InuMapPreviewProvider))
-                    .setItems(
-                        arrayOf(
-                            LocaleController.getString(R.string.Default),
-                            LocaleController.getString(R.string.InuMapPreviewProviderTelegram),
-                            LocaleController.getString(R.string.InuMapPreviewProviderGoogle),
-                            LocaleController.getString(R.string.InuMapPreviewProviderYandex),
-                            LocaleController.getString(R.string.Disable),
-                        ),
-                        InuConfig.MAP_PREVIEW_PROVIDER.value,
-                    ) { _, which ->
-                        if (which == InuConfig.MAP_PREVIEW_PROVIDER.value) return@setItems
-                        InuConfig.MAP_PREVIEW_PROVIDER.value = which
-                        listView.adapter.update(true)
-                        MapsHelper.syncMapProvider(messagesController)
-                    }
-                    .create()
-            )
-
-            BUTTON_ICON_REPLACEMENT -> showDialog(
-                RadioDialogBuilder(context, getResourceProvider())
-                    .setTitle(LocaleController.getString(R.string.InuIconReplacement))
-                    .setItems(
-                        arrayOf(
-                            LocaleController.getString(R.string.InuIconReplacementOff),
-                            LocaleController.getString(R.string.InuIconReplacementSolar),
-                        ),
-                        InuConfig.ICON_REPLACEMENT.value,
-                    ) { _, which ->
-                        if (which == InuConfig.ICON_REPLACEMENT.value) return@setItems
-                        InuConfig.ICON_REPLACEMENT.value = which
-                        listView.adapter.update(true)
-                        showRestartBulletin()
-                    }
-                    .create()
-            )
+            BUTTON_ICON_REPLACEMENT -> RadioItemOptions.show(
+                this, view,
+                listOf(
+                    LocaleController.getString(R.string.InuIconReplacementOff),
+                    LocaleController.getString(R.string.InuIconReplacementSolar),
+                ),
+                InuConfig.ICON_REPLACEMENT.value,
+            ) { which ->
+                InuConfig.ICON_REPLACEMENT.value = which
+                showRestartBulletin()
+            }
 
             TOGGLE_SHOW_SECONDS -> {
                 val new = InuConfig.SHOW_SECONDS.toggle()
@@ -260,9 +220,10 @@ class InuAppearanceSettingsActivity : InuSettingsPageActivity() {
                 (view as? NotificationsCheckCell)?.isChecked = new
             }
 
-            TOGGLE_HIDE_MY_PHONE_NUMBER -> {
-                val new = InuConfig.HIDE_MY_PHONE_NUMBER.toggle()
-                (view as? TextCheckCell)?.isChecked = new
+            TOGGLE_USE_SYSTEM_FONT -> {
+                val new = InuConfig.USE_SYSTEM_FONT.toggle()
+                (view as? NotificationsCheckCell)?.isChecked = new
+                showRestartBulletin()
             }
 
             TOGGLE_DISABLE_SCRIM_BLUR -> {
@@ -270,21 +231,16 @@ class InuAppearanceSettingsActivity : InuSettingsPageActivity() {
                 (view as? NotificationsCheckCell)?.isChecked = new
             }
 
-            TOGGLE_PROFILE_PHOTO_GRADIENT_FADE -> {
-                val new = InuConfig.PROFILE_PHOTO_GRADIENT_FADE.toggle()
-                (view as? TextCheckCell)?.isChecked = new
-            }
-
             TOGGLE_NON_ISLAND_TAB_BARS -> {
                 val new = InuConfig.NON_ISLAND_TAB_BARS.toggle()
                 (view as? TextCheckCell)?.isChecked = new
-                showRestartBulletin()
+                softRebuild()
             }
 
             TOGGLE_NON_ISLAND_GLOBAL_SEARCH -> {
                 val new = InuConfig.NON_ISLAND_GLOBAL_SEARCH.toggle()
                 (view as? TextCheckCell)?.isChecked = new
-                showRestartBulletin()
+                softRebuild()
             }
 
             TOGGLE_NON_ISLAND_CHAT_ELEMENTS -> {
@@ -303,9 +259,8 @@ class InuAppearanceSettingsActivity : InuSettingsPageActivity() {
         private val TOGGLE_NON_ISLAND_CHAT_ELEMENTS = InuUtils.generateId()
         private val TOGGLE_SHOW_SECONDS = InuUtils.generateId()
         private val TOGGLE_DISABLE_ROUNDING = InuUtils.generateId()
-        private val TOGGLE_HIDE_MY_PHONE_NUMBER = InuUtils.generateId()
+        private val TOGGLE_USE_SYSTEM_FONT = InuUtils.generateId()
         private val TOGGLE_DISABLE_SCRIM_BLUR = InuUtils.generateId()
-        private val TOGGLE_PROFILE_PHOTO_GRADIENT_FADE = InuUtils.generateId()
         private val BUTTON_ICON_REPLACEMENT = InuUtils.generateId()
         private val BUTTON_MAP_PROVIDER = InuUtils.generateId()
         private val BUTTON_MAP_PREVIEW_PROVIDER = InuUtils.generateId()
