@@ -1,9 +1,11 @@
 From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
 From: alina sireneva <alina@tei.su>
 Date: Tue, 12 May 2026 00:00:00 +0000
-Subject: Restore 11.14 profile header sizing and write FAB when old layout is enabled
+Subject: Restore 11.14 profile layout (avatar pos/scale, name/lastseen pos, music view)
+ when old layout is enabled
 
 ---
+
 diff --git a/TMessagesProj/src/main/java/org/telegram/ui/ProfileActivity.java b/TMessagesProj/src/main/java/org/telegram/ui/ProfileActivity.java
 index 0000000..0000000 100644
 --- a/TMessagesProj/src/main/java/org/telegram/ui/ProfileActivity.java
@@ -34,15 +36,17 @@ index 0000000..0000000 100644
          if (getActionsExtraHeight() == 0) {
              return dp(168f);
          }
-@@ -5950,6 +5955,7 @@
+@@ -5950,6 +5955,9 @@
          return getActionsExtraHeight(true);
      }
      private int getActionsExtraHeight(boolean withMusic) {
-+        if (desu.inugram.InuConfig.OLD_LAYOUT.getValue()) return 0;
++        if (desu.inugram.InuConfig.OLD_LAYOUT.getValue()) {
++            return (withMusic && hasMusic) ? dp(25) : 0;
++        }
          if (userId != 0 && imageUpdater != null && !myProfile)
              return 0;
          return dp(74 + (withMusic && hasMusic ? 25 : 0));
-@@ -8181,7 +8187,7 @@
+@@ -8181,7 +8189,7 @@
          if (writeButton != null && writeButton.getVisibility() != View.GONE) {
              writeButton.setTranslationY((actionBar.getOccupyStatusBar() ? AndroidUtilities.statusBarHeight : 0) + ActionBar.getCurrentActionBarHeight() + extraHeight + searchTransitionOffset - AndroidUtilities.dp(29.5f));
  
@@ -51,3 +55,337 @@ index 0000000..0000000 100644
              if (writeButtonVisible && chatId != 0) {
                  writeButtonVisible = ChatObject.isChannel(currentChat) && !currentChat.megagroup && chatInfo != null && chatInfo.linked_chat_id != 0 && (infoHeaderRow != -1 || infoHeaderRowEmpty != -1);
              }
+@@ -8242,6 +8250,10 @@
+     }
+ 
+     private void needLayout(boolean animated) {
++        if (desu.inugram.InuConfig.OLD_LAYOUT.getValue()) {
++            inu_needLayoutOldStyle(animated);
++            return;
++        }
+         final int newTop = (actionBar.getOccupyStatusBar() ? AndroidUtilities.statusBarHeight : 0) + ActionBar.getCurrentActionBarHeight();
+         final float diff = calculateHeaderExtraDiff();
+         boolean textMeasured = false;
+@@ -8672,6 +8684,322 @@
+         }
+     }
+ 
++    // ============================================================
++    // Old layout (11.14.1) needLayout port.
++    // Resizes avatarContainer to 42dp once, then runs the canonical
++    // 11.14 layout math. Uses 12.x-only hooks (titleAnimationsYDiff,
++    // updateActionsPosition, updateMusicPosition) where they exist
++    // so the music view from 12.x still works.
++    // ============================================================
++    private boolean inu_didResizeAvatarFor11x = false;
++
++    private void inu_needLayoutOldStyle(boolean animated) {
++        final int newTop = (actionBar.getOccupyStatusBar() ? AndroidUtilities.statusBarHeight : 0) + ActionBar.getCurrentActionBarHeight();
++
++        FrameLayout.LayoutParams layoutParams;
++        if (listView != null && !openAnimationInProgress) {
++            layoutParams = (FrameLayout.LayoutParams) listView.getLayoutParams();
++            if (layoutParams.topMargin != newTop) {
++                layoutParams.topMargin = newTop;
++                listView.setLayoutParams(layoutParams);
++            }
++        }
++
++        if (avatarContainer != null) {
++            // Resize avatarContainer to 11.14 dimensions (42x42, leftMargin 64) once.
++            if (!inu_didResizeAvatarFor11x) {
++                final FrameLayout.LayoutParams alp = (FrameLayout.LayoutParams) avatarContainer.getLayoutParams();
++                alp.width = AndroidUtilities.dp(42);
++                alp.height = AndroidUtilities.dp(42);
++                alp.leftMargin = AndroidUtilities.dp(64);
++                avatarContainer.requestLayout();
++                inu_didResizeAvatarFor11x = true;
++            }
++
++            final float diff = Math.min(1f, extraHeight / AndroidUtilities.dp(88f));
++
++            listView.setTopGlowOffset((int) extraHeight);
++            listView.setOverScrollMode(extraHeight > AndroidUtilities.dp(88f) && extraHeight < listView.getMeasuredWidth() - newTop ? View.OVER_SCROLL_NEVER : View.OVER_SCROLL_ALWAYS);
++
++            if (writeButton != null) {
++                writeButton.setTranslationY((actionBar.getOccupyStatusBar() ? AndroidUtilities.statusBarHeight : 0) + ActionBar.getCurrentActionBarHeight() + extraHeight + searchTransitionOffset - AndroidUtilities.dp(29.5f));
++
++                boolean writeButtonVisible = diff > 0.2f && !searchMode && (imageUpdater == null || setAvatarRow == -1);
++                if (writeButtonVisible && chatId != 0) {
++                    writeButtonVisible = ChatObject.isChannel(currentChat) && !currentChat.megagroup && chatInfo != null && chatInfo.linked_chat_id != 0 && infoHeaderRow != -1;
++                }
++                if (!openAnimationInProgress) {
++                    boolean currentVisible = writeButton.getTag() == null;
++                    if (writeButtonVisible != currentVisible) {
++                        if (writeButtonVisible) {
++                            writeButton.setTag(null);
++                        } else {
++                            writeButton.setTag(0);
++                        }
++                        if (writeButtonAnimation != null) {
++                            AnimatorSet old = writeButtonAnimation;
++                            writeButtonAnimation = null;
++                            old.cancel();
++                        }
++                        if (animated) {
++                            writeButtonAnimation = new AnimatorSet();
++                            if (writeButtonVisible) {
++                                writeButtonAnimation.setInterpolator(new DecelerateInterpolator());
++                                writeButtonAnimation.playTogether(
++                                        ObjectAnimator.ofFloat(writeButton, View.SCALE_X, 1.0f),
++                                        ObjectAnimator.ofFloat(writeButton, View.SCALE_Y, 1.0f),
++                                        ObjectAnimator.ofFloat(writeButton, View.ALPHA, 1.0f)
++                                );
++                            } else {
++                                writeButtonAnimation.setInterpolator(new AccelerateInterpolator());
++                                writeButtonAnimation.playTogether(
++                                        ObjectAnimator.ofFloat(writeButton, View.SCALE_X, 0.2f),
++                                        ObjectAnimator.ofFloat(writeButton, View.SCALE_Y, 0.2f),
++                                        ObjectAnimator.ofFloat(writeButton, View.ALPHA, 0.0f)
++                                );
++                            }
++                            writeButtonAnimation.setDuration(150);
++                            writeButtonAnimation.addListener(new AnimatorListenerAdapter() {
++                                @Override
++                                public void onAnimationEnd(Animator animation) {
++                                    if (writeButtonAnimation != null && writeButtonAnimation.equals(animation)) {
++                                        writeButtonAnimation = null;
++                                    }
++                                }
++                            });
++                            writeButtonAnimation.start();
++                        } else {
++                            writeButton.setScaleX(writeButtonVisible ? 1.0f : 0.2f);
++                            writeButton.setScaleY(writeButtonVisible ? 1.0f : 0.2f);
++                            writeButton.setAlpha(writeButtonVisible ? 1.0f : 0.0f);
++                        }
++                    }
++
++                    if (qrItem != null) {
++                        updateQrItemVisibility(animated);
++                        if (!animated) {
++                            float translation = AndroidUtilities.dp(48) * qrItem.getAlpha();
++                            qrItem.setTranslationX(translation);
++                            if (avatarsViewPagerIndicatorView != null) {
++                                avatarsViewPagerIndicatorView.setTranslationX(translation - AndroidUtilities.dp(48));
++                            }
++                        }
++                    }
++                }
++
++                if (storyView != null) {
++                    storyView.setExpandCoords(avatarContainer2.getMeasuredWidth() - AndroidUtilities.dp(40), writeButtonVisible, (actionBar.getOccupyStatusBar() ? AndroidUtilities.statusBarHeight : 0) + ActionBar.getCurrentActionBarHeight() + extraHeight + searchTransitionOffset);
++                }
++                if (giftsView != null) {
++                    giftsView.setExpandCoords(avatarContainer2.getMeasuredWidth() - AndroidUtilities.dp(40), writeButtonVisible, (actionBar.getOccupyStatusBar() ? AndroidUtilities.statusBarHeight : 0) + ActionBar.getCurrentActionBarHeight() + extraHeight + searchTransitionOffset);
++                }
++            }
++
++            avatarX = -AndroidUtilities.dpf2(47f) * diff;
++            avatarY = (actionBar.getOccupyStatusBar() ? AndroidUtilities.statusBarHeight : 0) + ActionBar.getCurrentActionBarHeight() / 2.0f * (1.0f + diff) - 21 * AndroidUtilities.density + 27 * AndroidUtilities.density * diff + actionBar.getTranslationY();
++
++            float h = openAnimationInProgress ? initialAnimationExtraHeight : extraHeight;
++            if (h > AndroidUtilities.dp(88f) || isPulledDown) {
++                expandProgress = Math.max(0f, Math.min(1f, (h - AndroidUtilities.dp(88f)) / (listView.getMeasuredWidth() - newTop - AndroidUtilities.dp(88f))));
++                avatarScale = AndroidUtilities.lerp((42f + 18f) / 42f, (42f + 42f + 18f) / 42f, Math.min(1f, expandProgress * 3f));
++                if (storyView != null) storyView.invalidate();
++                if (giftsView != null) giftsView.invalidate();
++
++                final float durationFactor = Math.min(AndroidUtilities.dpf2(2000f), Math.max(AndroidUtilities.dpf2(1100f), Math.abs(listViewVelocityY))) / AndroidUtilities.dpf2(1100f);
++
++                if (allowPullingDown && (openingAvatar || expandProgress >= 0.33f)) {
++                    if (!isPulledDown) {
++                        if (otherItem != null) {
++                            if (!isPeerNoForwards()) {
++                                otherItem.showSubItem(gallery_menu_save);
++                            } else {
++                                otherItem.hideSubItem(gallery_menu_save);
++                            }
++                            if (imageUpdater != null) {
++                                otherItem.showSubItem(add_photo);
++                                otherItem.showSubItem(edit_avatar);
++                                otherItem.showSubItem(delete_avatar);
++                                otherItem.hideSubItem(set_as_main);
++                                otherItem.hideSubItem(logout);
++                            }
++                        }
++                        if (searchItem != null) searchItem.setEnabled(false);
++                        isPulledDown = true;
++                        NotificationCenter.getGlobalInstance().postNotificationName(NotificationCenter.needCheckSystemBarColors, true);
++                        overlaysView.setOverlaysVisible(true, durationFactor);
++                        avatarsViewPagerIndicatorView.refreshVisibility(durationFactor);
++                        avatarsViewPager.setCreateThumbFromParent(true);
++                        avatarsViewPager.getAdapter().notifyDataSetChanged();
++                        expandAnimator.cancel();
++                        float value = AndroidUtilities.lerp(expandAnimatorValues, currentExpanAnimatorFracture);
++                        expandAnimatorValues[0] = value;
++                        expandAnimatorValues[1] = 1f;
++                        if (storyView != null && !storyView.isEmpty()) {
++                            expandAnimator.setInterpolator(new FastOutSlowInInterpolator());
++                            expandAnimator.setDuration((long) ((1f - value) * 1.3f * 250f / durationFactor));
++                        } else {
++                            expandAnimator.setInterpolator(CubicBezierInterpolator.EASE_BOTH);
++                            expandAnimator.setDuration((long) ((1f - value) * 250f / durationFactor));
++                        }
++                        expandAnimator.addListener(new AnimatorListenerAdapter() {
++                            @Override
++                            public void onAnimationStart(Animator animation) {
++                                setForegroundImage(false);
++                                avatarsViewPager.setAnimatedFileMaybe(avatarImage.getImageReceiver().getAnimation());
++                                avatarsViewPager.resetCurrentItem();
++                            }
++
++                            @Override
++                            public void onAnimationEnd(Animator animation) {
++                                expandAnimator.removeListener(this);
++                                topView.setBackgroundColor(Color.BLACK);
++                                avatarContainer.setVisibility(View.GONE);
++                                avatarsViewPager.setVisibility(View.VISIBLE);
++                            }
++                        });
++                        expandAnimator.start();
++                    }
++                    ViewGroup.LayoutParams params = avatarsViewPager.getLayoutParams();
++                    params.width = listView.getMeasuredWidth();
++                    params.height = (int) (h + newTop);
++                    avatarsViewPager.requestLayout();
++                    if (!expandAnimator.isRunning()) {
++                        float additionalTranslationY = 0;
++                        if (openAnimationInProgress && playProfileAnimation == 2) {
++                            additionalTranslationY = -(1.0f - avatarAnimationProgress) * AndroidUtilities.dp(50);
++                        }
++                        onlineX = AndroidUtilities.dpf2(16f) - onlineTextView[1].getLeft();
++                        nameTextView[1].setTranslationX(AndroidUtilities.dpf2(18f) - nameTextView[1].getLeft());
++                        nameTextView[1].setTranslationY(newTop + h - AndroidUtilities.dpf2(38f) - nameTextView[1].getBottom() + additionalTranslationY);
++                        onlineTextView[1].setTranslationX(getOnlineTextViewTranslationXWithOffsets(onlineX));
++                        onlineTextView[1].setTranslationY(getOnlineTextViewTranslationYWithOffsets(newTop + h - AndroidUtilities.dpf2(18f) - onlineTextView[1].getBottom() + additionalTranslationY));
++                        mediaCounterTextView.setTranslationX(onlineTextView[1].getTranslationX());
++                        mediaCounterTextView.setTranslationY(onlineTextView[1].getTranslationY());
++                        updateCollectibleHint();
++                    }
++                } else {
++                    if (isPulledDown) {
++                        isPulledDown = false;
++                        NotificationCenter.getGlobalInstance().postNotificationName(NotificationCenter.needCheckSystemBarColors, true);
++                        if (otherItem != null) {
++                            otherItem.hideSubItem(gallery_menu_save);
++                            if (imageUpdater != null) {
++                                otherItem.hideSubItem(set_as_main);
++                                otherItem.hideSubItem(edit_avatar);
++                                otherItem.hideSubItem(delete_avatar);
++                                otherItem.showSubItem(add_photo);
++                                otherItem.showSubItem(logout);
++                            }
++                        }
++                        if (searchItem != null) searchItem.setEnabled(!scrolling);
++                        overlaysView.setOverlaysVisible(false, durationFactor);
++                        avatarsViewPagerIndicatorView.refreshVisibility(durationFactor);
++                        expandAnimator.cancel();
++                        avatarImage.getImageReceiver().setAllowStartAnimation(true);
++                        avatarImage.getImageReceiver().startAnimation();
++
++                        float value = AndroidUtilities.lerp(expandAnimatorValues, currentExpanAnimatorFracture);
++                        expandAnimatorValues[0] = value;
++                        expandAnimatorValues[1] = 0f;
++                        expandAnimator.setInterpolator(CubicBezierInterpolator.EASE_BOTH);
++                        if (!isInLandscapeMode) {
++                            expandAnimator.setDuration((long) (value * 250f / durationFactor));
++                        } else {
++                            expandAnimator.setDuration(0);
++                        }
++                        topView.setBackgroundColor(getThemedColor(Theme.key_avatar_backgroundActionBarBlue));
++
++                        if (!doNotSetForeground) {
++                            BackupImageView imageView = avatarsViewPager.getCurrentItemView();
++                            if (imageView != null) {
++                                if (imageView.getImageReceiver().getDrawable() instanceof VectorAvatarThumbDrawable) {
++                                    avatarImage.drawForeground(false);
++                                } else {
++                                    avatarImage.drawForeground(true);
++                                    avatarImage.setForegroundImageDrawable(imageView.getImageReceiver().getDrawableSafe());
++                                }
++                            }
++                        }
++                        avatarImage.setForegroundAlpha(1f);
++                        avatarContainer.setVisibility(View.VISIBLE);
++                        avatarsViewPager.setVisibility(View.GONE);
++                        expandAnimator.start();
++                    }
++
++                    avatarContainer.setScaleX(avatarScale);
++                    avatarContainer.setScaleY(avatarScale);
++
++                    if (expandAnimator == null || !expandAnimator.isRunning()) {
++                        // 11.14: refreshNameAndOnlineXY
++                        nameX = AndroidUtilities.dp(-21f) + avatarContainer.getMeasuredWidth() * (avatarScale - (42f + 18f) / 42f);
++                        nameY = (float) Math.floor(avatarY) + AndroidUtilities.dp(1.3f) + AndroidUtilities.dp(7f) + avatarContainer.getMeasuredHeight() * (avatarScale - (42f + 18f) / 42f) / 2f;
++                        onlineX = AndroidUtilities.dp(-21f) + avatarContainer.getMeasuredWidth() * (avatarScale - (42f + 18f) / 42f);
++                        onlineY = (float) Math.floor(avatarY) + AndroidUtilities.dp(24) + (float) Math.floor(11 * AndroidUtilities.density) + avatarContainer.getMeasuredHeight() * (avatarScale - (42f + 18f) / 42f) / 2f;
++                        nameTextView[1].setTranslationX(nameX);
++                        nameTextView[1].setTranslationY(nameY);
++                        onlineTextView[1].setTranslationX(getOnlineTextViewTranslationXWithOffsets(onlineX));
++                        onlineTextView[1].setTranslationY(getOnlineTextViewTranslationYWithOffsets(onlineY));
++                        mediaCounterTextView.setTranslationX(onlineX);
++                        mediaCounterTextView.setTranslationY(onlineY);
++                        updateCollectibleHint();
++                    }
++                }
++            } else if (extraHeight <= AndroidUtilities.dp(88f)) {
++                avatarScale = (42 + 18 * diff) / 42.0f;
++                if (storyView != null) storyView.invalidate();
++                if (giftsView != null) giftsView.invalidate();
++                float nameScale = 1.0f + 0.12f * diff;
++                if (expandAnimator == null || !expandAnimator.isRunning()) {
++                    avatarContainer.setScaleX(avatarScale);
++                    avatarContainer.setScaleY(avatarScale);
++                    avatarContainer.setTranslationX(avatarX);
++                    avatarContainer.setTranslationY((float) Math.ceil(avatarY));
++                    float extra = AndroidUtilities.dp(42) * avatarScale - AndroidUtilities.dp(42);
++                    timeItem.setTranslationX(avatarContainer.getX() + AndroidUtilities.dp(16) + extra);
++                    timeItem.setTranslationY(avatarContainer.getY() + AndroidUtilities.dp(15) + extra);
++                    starBgItem.setTranslationX(avatarContainer.getX() + AndroidUtilities.dp(28) + extra);
++                    starBgItem.setTranslationY(avatarContainer.getY() + AndroidUtilities.dp(24) + extra);
++                    starFgItem.setTranslationX(avatarContainer.getX() + AndroidUtilities.dp(28) + extra);
++                    starFgItem.setTranslationY(avatarContainer.getY() + AndroidUtilities.dp(24) + extra);
++                }
++                nameX = -21 * AndroidUtilities.density * diff;
++                nameY = (float) Math.floor(avatarY) + AndroidUtilities.dp(1.3f) + AndroidUtilities.dp(7) * diff + titleAnimationsYDiff * (1f - avatarAnimationProgress);
++                onlineX = -21 * AndroidUtilities.density * diff;
++                onlineY = (float) Math.floor(avatarY) + AndroidUtilities.dp(24) + (float) Math.floor(11 * AndroidUtilities.density) * diff;
++                if (showStatusButton != null) {
++                    showStatusButton.setAlpha((int) (0xFF * diff));
++                }
++                for (int a = 0; a < nameTextView.length; a++) {
++                    if (nameTextView[a] == null) continue;
++                    if (expandAnimator == null || !expandAnimator.isRunning()) {
++                        nameTextView[a].setTranslationX(nameX);
++                        nameTextView[a].setTranslationY(nameY);
++                        onlineTextView[a].setTranslationX(getOnlineTextViewTranslationXWithOffsets(onlineX));
++                        onlineTextView[a].setTranslationY(getOnlineTextViewTranslationYWithOffsets(onlineY));
++                        if (a == 1) {
++                            mediaCounterTextView.setTranslationX(onlineX);
++                            mediaCounterTextView.setTranslationY(onlineY);
++                        }
++                    }
++                    nameTextView[a].setScaleX(nameScale);
++                    nameTextView[a].setScaleY(nameScale);
++                }
++                updateCollectibleHint();
++            }
++
++            if (!openAnimationInProgress && (expandAnimator == null || !expandAnimator.isRunning())) {
++                needLayoutText(diff);
++            }
++        }
++
++        // 12.x extras the original needLayout calls at the end.
++        updateExtraViews(newTop);
++        if (avatarContainer != null) {
++            final float diff = Math.min(1f, extraHeight / AndroidUtilities.dp(88f));
++            if (diff >= 1f) avatarImage.setAlpha(1f);
++        }
++    }
++
+     private void updateExtraViews(float newTop) {
+         if (isPulledDown || (overlaysView != null && overlaysView.animator != null && overlaysView.animator.isRunning())) {
+             final ViewGroup.LayoutParams overlaysLp = overlaysView.getLayoutParams();
