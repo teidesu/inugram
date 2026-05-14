@@ -234,8 +234,8 @@ index 0000000..0000000 100644
          final int newTop = (actionBar.getOccupyStatusBar() ? AndroidUtilities.statusBarHeight : 0) + ActionBar.getCurrentActionBarHeight();
          final float diff = calculateHeaderExtraDiff();
          boolean textMeasured = false;
-@@ -8672,6 +8740,314 @@
-         }
+@@ -8691,6 +8759,314 @@
+         updateMusicPosition();
      }
  
 +    // ============================================================
@@ -546,6 +546,6 @@ index 0000000..0000000 100644
 +        }
 +    }
 +
-     private void updateExtraViews(float newTop) {
-         if (isPulledDown || (overlaysView != null && overlaysView.animator != null && overlaysView.animator.isRunning())) {
-             final ViewGroup.LayoutParams overlaysLp = overlaysView.getLayoutParams();
+     public void calculatePositionsOnFirstLoad() {
+         float endNameY =
+             (actionBar.getOccupyStatusBar() ? AndroidUtilities.statusBarHeight : 0)
