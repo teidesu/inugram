@@ -19,7 +19,7 @@ Subject: non-island ui in various parts of the app
  .../ui/Components/TopicsTabsView.java         |  28 ++--
  .../ui/Components/TranslateButton.java        |   4 +-
  .../impl/BlurredBackgroundProviderImpl.java   |  15 ++-
- .../chat/ChatInputViewsContainer.java         |  25 +++-
+ .../chat/ChatInputViewsContainer.java         |  28 +++-
  .../chat/ChatListViewPaddingsAnimator.java    |   9 +-
  .../ChatActivityBlurredRoundButton.java       |   6 +-
  .../ChatActivityChannelButtonsLayout.java     |   4 +
@@ -30,7 +30,7 @@ Subject: non-island ui in various parts of the app
  .../java/org/telegram/ui/bots/BotAdView.java  |   2 +-
  .../ui/bots/BotCommandsMenuContainer.java     |   4 +-
  .../bots/ChatAttachAlertBotWebViewLayout.java |   5 +-
- 26 files changed, 348 insertions(+), 166 deletions(-)
+ 26 files changed, 351 insertions(+), 166 deletions(-)
 
 diff --git a/TMessagesProj/src/main/java/org/telegram/ui/Cells/SharedPhotoVideoCell2.java b/TMessagesProj/src/main/java/org/telegram/ui/Cells/SharedPhotoVideoCell2.java
 index 0000000..0000000 100644
@@ -1142,15 +1142,18 @@ diff --git a/TMessagesProj/src/main/java/org/telegram/ui/Components/chat/ChatInp
 index 0000000..0000000 100644
 --- a/TMessagesProj/src/main/java/org/telegram/ui/Components/chat/ChatInputViewsContainer.java
 +++ b/TMessagesProj/src/main/java/org/telegram/ui/Components/chat/ChatInputViewsContainer.java
-@@ -78,6 +78,7 @@ public class ChatInputViewsContainer extends FrameLayout {
+@@ -78,6 +78,10 @@ public class ChatInputViewsContainer extends FrameLayout {
      private BlurredBackgroundDrawable underKeyboardBackgroundDrawable;
      public void setInputIslandBubbleDrawable(BlurredBackgroundDrawable drawable) {
          blurredBackgroundDrawable = drawable;
-+        if (desu.inugram.helpers.NonIslandHelper.chatElements()) return;
++        if (desu.inugram.helpers.NonIslandHelper.chatElements()) {
++            blurredBackgroundDrawable.setStrokeWidth(0, 0);
++            return;
++        };
          blurredBackgroundDrawable.setPadding(dp(7));
          blurredBackgroundDrawable.setRadius(dp(INPUT_BUBBLE_RADIUS));
      }
-@@ -85,7 +86,8 @@ public class ChatInputViewsContainer extends FrameLayout {
+@@ -85,7 +89,8 @@ public class ChatInputViewsContainer extends FrameLayout {
      public void setUnderKeyboardBackgroundDrawable(BlurredBackgroundDrawable drawable) {
          underKeyboardBackgroundDrawable = drawable;
          underKeyboardBackgroundDrawable.enableInAppKeyboardOptimization();
@@ -1160,7 +1163,7 @@ index 0000000..0000000 100644
          underKeyboardBackgroundDrawable.setThickness(dp(32));
          underKeyboardBackgroundDrawable.setIntensity(0.4f);
      }
-@@ -177,7 +179,8 @@ public class ChatInputViewsContainer extends FrameLayout {
+@@ -177,7 +182,8 @@ public class ChatInputViewsContainer extends FrameLayout {
                      rightBottomRadius = bottomRight == null ? 0 : bottomRight.getRadius();
                  }
              }
@@ -1170,7 +1173,7 @@ index 0000000..0000000 100644
          }
      }
  
-@@ -267,11 +270,23 @@ public class ChatInputViewsContainer extends FrameLayout {
+@@ -267,11 +273,23 @@ public class ChatInputViewsContainer extends FrameLayout {
          );
          tmpRect.inset(0, -dp(7));
          tmpRect.offset(0, blurTop + (int) bubbleInputTranlationY);
