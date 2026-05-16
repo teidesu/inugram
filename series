@@ -134,3 +134,4 @@ feature/forward-options.patch
 debloat/hashtag-suggestions.patch
 feature/faster-file-load.patch
 bugfix/faster-gallery.patch
+bugfix/sticker-over-side-controls.patch
