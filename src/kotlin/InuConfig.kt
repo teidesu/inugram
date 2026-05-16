@@ -506,4 +506,10 @@ object InuConfig {
 
     @JvmField
     val ACCOUNT_ORDER = StringItem("account_order", "", exportable = false)
+
+    @JvmField
+    val FASTER_DOWNLOADS = BoolItem("faster_downloads", true)
+
+    @JvmField
+    val FASTER_UPLOADS = BoolItem("faster_uploads", true)
 }

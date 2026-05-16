@@ -129,6 +129,7 @@ most things are toggleable in `Settings → Inugram`, with sensible opinionated 
 - 🐶 prefer "Media" tab in profile over Gifts/Posts
 - 🐶 recyclerlistview instant-tap
 - ios-style menu gesture (release-to-commit) in bottom menu tabs
+- faster downloads/uploads
 
 ## annoyances
 

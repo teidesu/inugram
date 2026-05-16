@@ -137,6 +137,23 @@ class InuBehaviorSettingsActivity : InuSettingsPageActivity() {
         )
         items.add(UItem.asShadow(null))
 
+        items.add(
+            UItem.asHeader(addExperimentalSpan(LocaleController.getString(R.string.InuNetwork)))
+        )
+        items.add(
+            UItem.asCheck(
+                TOGGLE_FASTER_DOWNLOADS,
+                LocaleController.getString(R.string.InuFasterDownloads),
+            ).setChecked(InuConfig.FASTER_DOWNLOADS.value)
+        )
+        items.add(
+            UItem.asCheck(
+                TOGGLE_FASTER_UPLOADS,
+                LocaleController.getString(R.string.InuFasterUploads),
+            ).setChecked(InuConfig.FASTER_UPLOADS.value)
+        )
+        items.add(UItem.asShadow(LocaleController.getString(R.string.InuFasterTransfersInfo)))
+
         items.add(UItem.asHeader(LocaleController.getString(R.string.InuDoubleTapActions)))
         items.add(
             UItem.asButton(
@@ -226,6 +243,16 @@ class InuBehaviorSettingsActivity : InuSettingsPageActivity() {
             BUTTON_WEB_PREVIEW_REPLACEMENTS -> presentFragment(InuWebPreviewReplacementsActivity())
             BUTTON_DOUBLE_TAP_INCOMING -> showDoubleTapSelector(view, false)
             BUTTON_DOUBLE_TAP_OUTGOING -> showDoubleTapSelector(view, true)
+
+            TOGGLE_FASTER_DOWNLOADS -> {
+                val new = InuConfig.FASTER_DOWNLOADS.toggle()
+                (view as? TextCheckCell)?.isChecked = new
+            }
+
+            TOGGLE_FASTER_UPLOADS -> {
+                val new = InuConfig.FASTER_UPLOADS.toggle()
+                (view as? TextCheckCell)?.isChecked = new
+            }
         }
     }
 
@@ -304,6 +331,8 @@ class InuBehaviorSettingsActivity : InuSettingsPageActivity() {
         private val TOGGLE_DISABLE_PREDICTIVE_BACK = InuUtils.generateId()
         private val BUTTON_ROUND_DEFAULT_CAMERA = InuUtils.generateId()
         private val BUTTON_TEXT_CLASSIFIER_MODE = InuUtils.generateId()
+        private val TOGGLE_FASTER_DOWNLOADS = InuUtils.generateId()
+        private val TOGGLE_FASTER_UPLOADS = InuUtils.generateId()
 
         private fun roundCameraLabel(value: Int): String = when (value) {
             2 -> LocaleController.getString(R.string.InuRoundCameraRear)

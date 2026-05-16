@@ -133,3 +133,4 @@ bugfix/top-peers-unread-counter.patch
 bugfix/stale-unread-mention.patch
 feature/forward-options.patch
 debloat/hashtag-suggestions.patch
+feature/faster-file-load.patch
