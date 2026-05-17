@@ -2,17 +2,23 @@ package desu.inugram.ui
 
 import android.os.Build
 import android.view.View
+import android.widget.EditText
 import desu.inugram.InuConfig
 import desu.inugram.InuHooks
 import desu.inugram.helpers.DoubleTapAction
 import desu.inugram.helpers.InuUtils
+import desu.inugram.helpers.UnifiedPushHelper
 import desu.inugram.helpers.WebPreviewHelper
+import org.telegram.messenger.ApplicationLoader
 import org.telegram.messenger.LocaleController
 import org.telegram.messenger.R
+import org.telegram.ui.ActionBar.AlertDialog
+import org.telegram.ui.ActionBar.Theme
 import org.telegram.ui.Cells.NotificationsCheckCell
 import org.telegram.ui.Cells.TextCheckCell
 import org.telegram.ui.Components.UItem
 import org.telegram.ui.Components.UniversalAdapter
+import org.unifiedpush.android.connector.UnifiedPush
 
 class InuBehaviorSettingsActivity : InuSettingsPageActivity() {
 
@@ -154,6 +160,38 @@ class InuBehaviorSettingsActivity : InuSettingsPageActivity() {
         )
         items.add(UItem.asShadow(LocaleController.getString(R.string.InuFasterTransfersInfo)))
 
+        items.add(UItem.asHeader(LocaleController.getString(R.string.InuUnifiedPush)))
+        items.add(
+            mkTwoLineCheckItem(
+                TOGGLE_UNIFIED_PUSH,
+                R.string.InuUnifiedPush,
+                R.string.InuUnifiedPushInfo,
+                InuConfig.UNIFIED_PUSH_ENABLED.value,
+            )
+        )
+        if (InuConfig.UNIFIED_PUSH_ENABLED.value) {
+            val ctx = context ?: ApplicationLoader.applicationContext
+            val distributors = UnifiedPushHelper.getDistributors(ctx)
+            val current = UnifiedPushHelper.getActiveDistributor(ctx)
+            items.add(
+                UItem.asButton(
+                    BUTTON_UNIFIED_PUSH_DISTRIBUTOR,
+                    LocaleController.getString(R.string.InuUnifiedPushDistributor),
+                    current?.let { getAppLabel(it) }
+                        ?: if (distributors.isEmpty()) LocaleController.getString(R.string.InuUnifiedPushNone)
+                        else distributors.firstOrNull()?.let { getAppLabel(it) } ?: "",
+                )
+            )
+            items.add(
+                UItem.asButton(
+                    BUTTON_UNIFIED_PUSH_GATEWAY,
+                    LocaleController.getString(R.string.InuUnifiedPushGateway),
+                    InuConfig.UNIFIED_PUSH_GATEWAY.value.ifBlank { "default" },
+                )
+            )
+        }
+        items.add(UItem.asShadow(null))
+
         items.add(UItem.asHeader(LocaleController.getString(R.string.InuDoubleTapActions)))
         items.add(
             UItem.asButton(
@@ -253,6 +291,16 @@ class InuBehaviorSettingsActivity : InuSettingsPageActivity() {
                 val new = InuConfig.FASTER_UPLOADS.toggle()
                 (view as? TextCheckCell)?.isChecked = new
             }
+
+            TOGGLE_UNIFIED_PUSH -> {
+                val new = InuConfig.UNIFIED_PUSH_ENABLED.toggle()
+                (view as? NotificationsCheckCell)?.isChecked = new
+                listView.adapter.update(true)
+                showRestartBulletin()
+            }
+
+            BUTTON_UNIFIED_PUSH_DISTRIBUTOR -> showDistributorSelector()
+            BUTTON_UNIFIED_PUSH_GATEWAY -> showGatewayEditor()
         }
     }
 
@@ -302,6 +350,58 @@ class InuBehaviorSettingsActivity : InuSettingsPageActivity() {
         )
     }
 
+    private fun showDistributorSelector() {
+        val ctx = context ?: return
+        val distributors = UnifiedPushHelper.getDistributors(ctx)
+        if (distributors.isEmpty()) return
+        val current = UnifiedPushHelper.getActiveDistributor(ctx)
+        val labels = distributors.map { RadioDialogBuilder.Item(getAppLabel(it)) }
+        val selected = distributors.indexOf(current).coerceAtLeast(0)
+        showDialog(
+            RadioDialogBuilder(ctx, getResourceProvider())
+                .setTitle(LocaleController.getString(R.string.InuUnifiedPushDistributor))
+                .setItems(labels, selected) { _, which ->
+                    val chosen = distributors.getOrNull(which) ?: return@setItems
+                    UnifiedPush.saveDistributor(ctx, chosen)
+                    UnifiedPush.register(ctx, "default", "Telegram Simple Push")
+                    listView.adapter.update(true)
+                }.create()
+        )
+    }
+
+    private fun showGatewayEditor() {
+        val ctx = context ?: return
+        val input = EditText(ctx)
+        input.setText(InuConfig.UNIFIED_PUSH_GATEWAY.value)
+        input.setTextColor(Theme.getColor(Theme.key_windowBackgroundWhiteBlackText))
+        input.setHintTextColor(Theme.getColor(Theme.key_windowBackgroundWhiteGrayText))
+        input.hint = "https://p2p.belloworld.it/"
+        showDialog(
+            AlertDialog.Builder(ctx)
+                .setTitle(LocaleController.getString(R.string.InuUnifiedPushGateway))
+                .setMessage(LocaleController.getString(R.string.InuUnifiedPushGatewayInfo))
+                .setView(input)
+                .setPositiveButton(LocaleController.getString(R.string.OK)) { _, _ ->
+                    var value = input.text.toString().trim()
+                    if (value.isNotEmpty() && !value.endsWith("/")) value += "/"
+                    InuConfig.UNIFIED_PUSH_GATEWAY.value = value
+                    listView.adapter.update(true)
+                }
+                .setNegativeButton(LocaleController.getString(R.string.Cancel), null)
+                .create()
+        )
+    }
+
+    private fun getAppLabel(packageName: String): String {
+        return try {
+            val pm = (context ?: ApplicationLoader.applicationContext).packageManager
+            val info = pm.getApplicationInfo(packageName, 0)
+            pm.getApplicationLabel(info).toString()
+        } catch (_: Throwable) {
+            packageName.substringAfterLast('.')
+        }
+    }
+
     private fun showDoubleTapSelector(anchor: View, outgoing: Boolean) {
         val actions = DoubleTapAction.available(outgoing)
         val config = if (outgoing) InuConfig.DOUBLE_TAP_ACTION_OUTGOING else InuConfig.DOUBLE_TAP_ACTION_INCOMING
@@ -333,6 +433,9 @@ class InuBehaviorSettingsActivity : InuSettingsPageActivity() {
         private val BUTTON_TEXT_CLASSIFIER_MODE = InuUtils.generateId()
         private val TOGGLE_FASTER_DOWNLOADS = InuUtils.generateId()
         private val TOGGLE_FASTER_UPLOADS = InuUtils.generateId()
+        private val TOGGLE_UNIFIED_PUSH = InuUtils.generateId()
+        private val BUTTON_UNIFIED_PUSH_DISTRIBUTOR = InuUtils.generateId()
+        private val BUTTON_UNIFIED_PUSH_GATEWAY = InuUtils.generateId()
 
         private fun roundCameraLabel(value: Int): String = when (value) {
             2 -> LocaleController.getString(R.string.InuRoundCameraRear)

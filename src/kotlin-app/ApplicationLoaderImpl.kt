@@ -4,9 +4,11 @@ import android.app.Activity
 import android.content.Context
 import android.view.ViewGroup
 import desu.inugram.helpers.ApkInstaller
+import desu.inugram.helpers.UnifiedPushHelper
 import desu.inugram.helpers.UpdateHelper
 import desu.inugram.helpers.maplibre.MapLibreMapsProvider
 import org.telegram.messenger.ApplicationLoader
+import org.telegram.messenger.PushListenerController
 import org.telegram.messenger.BetaUpdate
 import org.telegram.messenger.FileLoader
 import org.telegram.messenger.FileLog
@@ -60,6 +62,13 @@ class ApplicationLoaderImpl : org.telegram.messenger.ApplicationLoaderImpl() {
 
     override fun takeUpdateLayout(activity: Activity, sideMenuContainer: ViewGroup): IUpdateLayout {
         return UpdateLayout(activity, sideMenuContainer)
+    }
+
+    override fun onCreatePushProvider(): PushListenerController.IPushListenerServiceProvider {
+        return if (InuConfig.UNIFIED_PUSH_ENABLED.value && UnifiedPushHelper.hasDistributors(applicationContext))
+            UnifiedPushHelper.PROVIDER
+        else
+            PushListenerController.GooglePushListenerServiceProvider.INSTANCE
     }
 
     override fun onCreateMapsProvider(): IMapsProvider? {

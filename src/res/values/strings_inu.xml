@@ -382,6 +382,12 @@
     <string name="InuFasterDownloads">Faster downloads</string>
     <string name="InuFasterUploads">Faster uploads</string>
     <string name="InuFasterTransfersInfo">Bumps chunk size and parallel request count. May improve throughput, but may also cause the adverse effect (especially for non-Premium users)</string>
+    <string name="InuUnifiedPush">UnifiedPush</string>
+    <string name="InuUnifiedPushInfo">Use a UnifiedPush-compatible distributor instead of Firebase for push notifications</string>
+    <string name="InuUnifiedPushDistributor">Distributor</string>
+    <string name="InuUnifiedPushGateway">Push gateway</string>
+    <string name="InuUnifiedPushGatewayInfo">Rewrite proxy URL for non-ntfy distributors. Leave default unless you run your own.</string>
+    <string name="InuUnifiedPushNone">Not available</string>
     <string name="InuMentionInsertTitle">Insert mention</string>
     <string name="InuPasscode">Passcode</string>
     <string name="InuPasscodeNeeded">Set up a Telegram passcode first.</string>
