@@ -136,3 +136,4 @@ feature/faster-file-load.patch
 bugfix/faster-gallery.patch
 bugfix/sticker-over-side-controls.patch
 feature/cycle-forward-mode.patch
+feature/long-tap-mention-name.patch
