@@ -1,0 +1,37 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: alina sireneva <alina@tei.su>
+Date: Sun, 17 May 2026 15:35:30 +0400
+Subject: long-tap user in mentions suggestions for a custom name-mention
+
+---
+ .../src/main/java/org/telegram/ui/ChatActivity.java    | 10 +++++++++-
+ 1 file changed, 9 insertions(+), 1 deletion(-)
+
+diff --git a/TMessagesProj/src/main/java/org/telegram/ui/ChatActivity.java b/TMessagesProj/src/main/java/org/telegram/ui/ChatActivity.java
+index 0000000..0000000 100644
+--- a/TMessagesProj/src/main/java/org/telegram/ui/ChatActivity.java
++++ b/TMessagesProj/src/main/java/org/telegram/ui/ChatActivity.java
+@@ -7386,7 +7386,7 @@ public class ChatActivity extends BaseFragment implements
+             }
+         });
+         mentionContainer.getListView().setOnItemLongClickListener((view, position) -> {
+-            if (getParentActivity() == null || !mentionContainer.getAdapter().isLongClickEnabled()) {
++            if (getParentActivity() == null) {
+                 return false;
+             }
+             if (position == 0 || mentionContainer.getAdapter().isBannedInline()) {
+@@ -7394,6 +7394,14 @@ public class ChatActivity extends BaseFragment implements
+             }
+             position--;
+             Object object = mentionContainer.getAdapter().getItem(position);
++            if (object instanceof TLRPC.User) {
++                int start = mentionContainer.getAdapter().getResultStartPosition();
++                int len = mentionContainer.getAdapter().getResultLength();
++                return ChatHelper.maybeHandleMentionLongTap(this, chatActivityEnterView, (TLRPC.User) object, start, len);
++            }
++            if (!mentionContainer.getAdapter().isLongClickEnabled()) {
++                return false;
++            }
+             if (object instanceof String) {
+                 if (mentionContainer.getAdapter().isBotCommands()) {
+                     if (URLSpanBotCommand.enabled) {

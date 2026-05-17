@@ -1,9 +1,17 @@
 package desu.inugram.helpers
 
+import android.content.DialogInterface
 import android.os.Bundle
+import android.text.InputType
+import android.text.SpannableString
+import android.text.Spanned
+import android.util.TypedValue
+import android.view.Gravity
 import android.view.HapticFeedbackConstants
 import android.view.View
 import android.view.View.MeasureSpec
+import android.view.inputmethod.EditorInfo
+import android.widget.LinearLayout
 import android.widget.ScrollView
 import androidx.core.content.edit
 import desu.inugram.InuConfig
@@ -22,17 +30,24 @@ import org.telegram.messenger.UserObject
 import org.telegram.tgnet.TLRPC
 import org.telegram.ui.ActionBar.ActionBarMenu
 import org.telegram.ui.ActionBar.ActionBarPopupWindow
+import org.telegram.ui.ActionBar.AlertDialog
 import org.telegram.ui.ActionBar.BottomSheet
+import org.telegram.ui.ActionBar.Theme
 import org.telegram.ui.Cells.ChatMessageCell
 import org.telegram.ui.ChatActivity
 import org.telegram.ui.Components.BulletinFactory
+import org.telegram.ui.Components.ChatActivityEnterView
+import org.telegram.ui.Components.EditTextBoldCursor
 import org.telegram.ui.Components.EditTextCaption
 import org.telegram.ui.Components.ItemOptions
+import org.telegram.ui.Components.LayoutHelper
 import org.telegram.ui.Components.RLottieDrawable
+import org.telegram.ui.Components.URLSpanUserMention
 import org.telegram.ui.Components.UndoView
 import org.telegram.ui.DialogsActivity
 import java.io.File
 import java.util.Calendar
+import kotlin.math.roundToInt
 
 object ChatHelper {
     const val OPTION_SAVE = 501
@@ -370,6 +385,90 @@ object ChatHelper {
     }
 
     @JvmStatic
+    fun maybeHandleMentionLongTap(
+        activity: ChatActivity,
+        enterView: ChatActivityEnterView?,
+        user: TLRPC.User,
+        start: Int,
+        len: Int,
+    ): Boolean {
+        val ctx = activity.parentActivity ?: return false
+        if (enterView == null) return false
+        if (enterView.editField == null) return false
+        if (user.bot_inline_placeholder != null) return false
+        val userId = user.id
+
+        val editText = EditTextBoldCursor(ctx).apply {
+            background = null
+            setLineColors(
+                Theme.getColor(Theme.key_dialogInputField),
+                Theme.getColor(Theme.key_dialogInputFieldActivated),
+                Theme.getColor(Theme.key_text_RedBold),
+            )
+            setTextSize(TypedValue.COMPLEX_UNIT_DIP, 16f)
+            setTextColor(Theme.getColor(Theme.key_dialogTextBlack))
+            maxLines = 1
+            setLines(1)
+            inputType = InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_FLAG_CAP_SENTENCES
+            gravity = Gravity.LEFT or Gravity.TOP
+            setSingleLine(true)
+            imeOptions = EditorInfo.IME_ACTION_DONE
+            setCursorColor(Theme.getColor(Theme.key_windowBackgroundWhiteBlackText))
+            setCursorSize(AndroidUtilities.dp(20f))
+            setCursorWidth(1.5f)
+            setPadding(0, AndroidUtilities.dp(4f), 0, 0)
+            val defaultName = UserObject.getUserName(user)
+            setText(defaultName)
+            setSelection(0, defaultName.length)
+        }
+        val container = LinearLayout(ctx).apply {
+            orientation = LinearLayout.VERTICAL
+            addView(
+                editText,
+                LayoutHelper.createLinear(LayoutHelper.MATCH_PARENT, 36, Gravity.TOP or Gravity.LEFT, 24, 6, 24, 0),
+            )
+        }
+
+        val onSubmit = onSubmit@{
+            val text = editText.text?.toString()?.trim().orEmpty()
+            if (text.isEmpty()) {
+                AndroidUtilities.shakeView(editText)
+                return@onSubmit false
+            }
+            val spannable = SpannableString("$text ")
+            spannable.setSpan(
+                URLSpanUserMention("" + userId, 3),
+                0, text.length,
+                Spanned.SPAN_EXCLUSIVE_EXCLUSIVE,
+            )
+            enterView.replaceWithText(start, len, spannable, false)
+            true
+        }
+
+        val dialog = AlertDialog.Builder(ctx, activity.themeDelegate)
+            .setTitle(LocaleController.getString(R.string.InuMentionInsertTitle))
+            .setView(container)
+            .setNegativeButton(LocaleController.getString(R.string.Cancel), null)
+            .setPositiveButton(LocaleController.getString(R.string.OK)) { _, _ -> }
+            .create()
+        editText.setOnEditorActionListener { _, _, _ ->
+            if (onSubmit()) dialog.dismiss()
+            true
+        }
+        dialog.setOnShowListener {
+            AndroidUtilities.runOnUIThread {
+                editText.requestFocus()
+                AndroidUtilities.showKeyboard(editText)
+            }
+        }
+        activity.showDialog(dialog)
+        dialog.getButton(DialogInterface.BUTTON_POSITIVE)?.setOnClickListener {
+            if (onSubmit()) dialog.dismiss()
+        }
+        return true
+    }
+
+    @JvmStatic
     fun addActionModeItems(activity: ChatActivity, actionMode: ActionBarMenu, anchorAfterId: Int) {
         val item = actionMode.addItemWithWidth(
             ACTION_SELECT_RANGE,
@@ -580,6 +679,7 @@ object ChatHelper {
                 params.hideForwardSendersName = true
                 params.hideCaption = false
             }
+
             hideAuthor && !hideCaption -> {
                 if (params.hasCaption) {
                     params.hideForwardSendersName = true
@@ -589,6 +689,7 @@ object ChatHelper {
                     params.hideCaption = false
                 }
             }
+
             else -> {
                 params.hideForwardSendersName = false
                 params.hideCaption = false
@@ -626,7 +727,9 @@ object ChatHelper {
         val rp = activity.resourceProvider
         val swb = ItemOptions.swipeback(popupLayout, rp)
         val foregroundIndex = popupLayout.addViewToSwipeBack(swb.linearLayout)
+        swipeBack.inu_pinnedScrimForegroundIndex = foregroundIndex
 
+        swb.setMinWidth((anchorCell.width / AndroidUtilities.density).roundToInt())
         swb.add(R.drawable.ic_ab_back, LocaleController.getString(R.string.Back)) { swipeBack.closeForeground() }
         swb.addGap()
         swb.add(R.drawable.msg_forward, LocaleController.getString(R.string.Forward)) {
@@ -655,11 +758,16 @@ object ChatHelper {
             val spec = MeasureSpec.makeMeasureSpec(AndroidUtilities.dp(1000f), MeasureSpec.AT_MOST)
             swb.linearLayout.measure(spec, spec)
             val slack = (popupLayout.measuredHeight - swb.linearLayout.measuredHeight).coerceAtLeast(0)
+            var headerHeight = 0
+            for (i in 0 until 2.coerceAtMost(swb.linearLayout.childCount)) {
+                headerHeight += swb.linearLayout.getChildAt(i).measuredHeight
+            }
+            val adjustedAnchorY = anchorY.toInt() - headerHeight
 
             if (popupLayout.shownFromBottom) {
-                (anchorY.toInt() - slack).coerceIn(-slack, 0)
+                (adjustedAnchorY - slack).coerceIn(-slack, 0)
             } else {
-                anchorY.toInt().coerceIn(0, slack)
+                adjustedAnchorY.coerceIn(0, slack)
             }
         })
         swipeBack.openForeground(foregroundIndex)

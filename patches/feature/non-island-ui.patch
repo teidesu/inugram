@@ -5,7 +5,7 @@ Subject: non-island ui in various parts of the app
 
 ---
  .../ui/Cells/SharedPhotoVideoCell2.java       |   4 +-
- .../java/org/telegram/ui/ChatActivity.java    |  85 ++++++++----
+ .../java/org/telegram/ui/ChatActivity.java    |  91 ++++++++-----
  .../ui/Components/ChatActivityEnterView.java  |  17 ++-
  .../ChatActivityTopPanelLayout.java           |  16 ++-
  .../ui/Components/ChatAttachAlert.java        |  16 +++
@@ -30,7 +30,7 @@ Subject: non-island ui in various parts of the app
  .../java/org/telegram/ui/bots/BotAdView.java  |   2 +-
  .../ui/bots/BotCommandsMenuContainer.java     |   4 +-
  .../bots/ChatAttachAlertBotWebViewLayout.java |   5 +-
- 26 files changed, 351 insertions(+), 166 deletions(-)
+ 26 files changed, 354 insertions(+), 169 deletions(-)
 
 diff --git a/TMessagesProj/src/main/java/org/telegram/ui/Cells/SharedPhotoVideoCell2.java b/TMessagesProj/src/main/java/org/telegram/ui/Cells/SharedPhotoVideoCell2.java
 index 0000000..0000000 100644
@@ -81,6 +81,15 @@ index 0000000..0000000 100644
                  glassBackgroundSourceRenderNode = new BlurredBackgroundSourceRenderNode(navbarContentSourceWallpaper);
                  glassBackgroundSourceRenderNode.setOnDrawablesRelativePositionChangeListener(this::invalidateMergedVisibleBlurredPositionsAndSourcesPositions);
                  glassBackgroundSourceRenderNode.setScrollableNoiseSuppressor(scrollableViewNoiseSuppressor, DownscaleScrollableNoiseSuppressor.DRAW_GLASS);
+@@ -5377,7 +5381,7 @@ public class ChatActivity extends BaseFragment implements
+                             j++;
+                         }
+ 
+-                        lastTop = messageSkeletons.isEmpty() ? getHeight() - blurredViewBottomOffset : messageSkeletons.get(0).lastBottom + AndroidUtilities.dp(3f);
++                        lastTop = messageSkeletons.isEmpty() ? getHeight() - blurredViewBottomOffset + (NonIslandHelper.chatElements() ? dp(16) : 0) : messageSkeletons.get(0).lastBottom + AndroidUtilities.dp(3f);
+                         int left = dp(noAvatar ? 3 : 51);
+                         if (isSideMenued()) {
+                             left = lerp(left, dp(SIDE_MENU_WIDTH), getSideMenuAlpha());
 @@ -7438,8 +7442,8 @@ public class ChatActivity extends BaseFragment implements
          messagesSearchListContainer = new FrameLayout(context);
  
@@ -235,6 +244,15 @@ index 0000000..0000000 100644
                  + inputIslandHeightCurrent
                  + getTopicTabsSideSize(TopicsTabsView.Position.BOTTOM)
                  + windowInsetsStateHolder.getAnimatedMaxBottomInset();
+@@ -11926,7 +11940,7 @@ public class ChatActivity extends BaseFragment implements
+         //}
+         if (undoView != null) {
+             undoView.setAdditionalTranslationY(
+-                windowInsetsStateHolder.getAnimatedMaxBottomInset() + dp(9 + 7)
++                windowInsetsStateHolder.getAnimatedMaxBottomInset() + dp(9 + 7 - (NonIslandHelper.chatElements() ? 16 : 0))
+                     + chatInputViewsContainer.getInputBubbleHeight() + getTopicTabsSideSize(TopicsTabsView.Position.BOTTOM));
+         }
+         if (messagesSearchListContainer != null) {
 @@ -16807,6 +16821,10 @@ public class ChatActivity extends BaseFragment implements
      private boolean shouldHaveLightNavigationBarIcons;
  
@@ -308,6 +326,15 @@ index 0000000..0000000 100644
                  } else if (child == gifHintTextView || child == voiceHintTextView || child == mediaBanTooltip || child == emojiHintTextView) {
                      childTop -= inputFieldHeight;
                  } else if (child == chatListView || child == chatListThanosEffect || child == floatingDateView || child == floatingTopicSeparator || child == infoTopView) {
+@@ -29096,7 +29114,7 @@ public class ChatActivity extends BaseFragment implements
+ 
+                 return Math.round(windowInsetsStateHolder.getAnimatedMaxBottomInset()
+                     + getTopicTabsSideSize(TopicsTabsView.Position.BOTTOM)
+-                    + (chatInputViewsContainer.getInputBubbleHeight() + dp(9 + 7)));
++                    + (chatInputViewsContainer.getInputBubbleHeight() + dp(9 + 7 - (NonIslandHelper.chatElements() ? 16 : 0))));
+             }
+ 
+             @Override
 @@ -44912,7 +44930,7 @@ public class ChatActivity extends BaseFragment implements
          }
  

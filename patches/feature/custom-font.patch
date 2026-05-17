@@ -5,8 +5,13 @@ Subject: force system font for ui
 
 ---
  .../org/telegram/messenger/AndroidUtilities.java     |  6 ++++++
+ .../org/telegram/ui/ActionBar/SimpleTextView.java    |  1 +
+ .../main/java/org/telegram/ui/ActionBar/Theme.java   |  3 +++
+ .../org/telegram/ui/Cells/ProfileSearchCell.java     |  1 +
+ .../telegram/ui/Components/AnimatedEmojiSpan.java    |  1 +
+ .../org/telegram/ui/Components/AnimatedTextView.java |  1 +
  .../telegram/ui/Components/Paint/PaintTypeface.java  | 12 ++++++------
- 2 files changed, 12 insertions(+), 6 deletions(-)
+ 7 files changed, 19 insertions(+), 6 deletions(-)
 
 diff --git a/TMessagesProj/src/main/java/org/telegram/messenger/AndroidUtilities.java b/TMessagesProj/src/main/java/org/telegram/messenger/AndroidUtilities.java
 index 0000000..0000000 100644
@@ -26,6 +31,82 @@ index 0000000..0000000 100644
              if (!typefaceCache.containsKey(assetPath)) {
                  try {
                      Typeface t;
+diff --git a/TMessagesProj/src/main/java/org/telegram/ui/ActionBar/SimpleTextView.java b/TMessagesProj/src/main/java/org/telegram/ui/ActionBar/SimpleTextView.java
+index 0000000..0000000 100644
+--- a/TMessagesProj/src/main/java/org/telegram/ui/ActionBar/SimpleTextView.java
++++ b/TMessagesProj/src/main/java/org/telegram/ui/ActionBar/SimpleTextView.java
+@@ -145,6 +145,7 @@ public class SimpleTextView extends View implements Drawable.Callback {
+     public SimpleTextView(Context context) {
+         super(context);
+         textPaint = new TextPaint(Paint.ANTI_ALIAS_FLAG);
++        desu.inugram.InuHooks.applyDefaultFont(textPaint);
+         setImportantForAccessibility(IMPORTANT_FOR_ACCESSIBILITY_YES);
+     }
+ 
+diff --git a/TMessagesProj/src/main/java/org/telegram/ui/ActionBar/Theme.java b/TMessagesProj/src/main/java/org/telegram/ui/ActionBar/Theme.java
+index 0000000..0000000 100644
+--- a/TMessagesProj/src/main/java/org/telegram/ui/ActionBar/Theme.java
++++ b/TMessagesProj/src/main/java/org/telegram/ui/ActionBar/Theme.java
+@@ -8525,6 +8525,7 @@ public class Theme {
+         dialogs_tagTextPaint.setTextSize(dp(10));
+         dialogs_searchNamePaint.setTextSize(dp(16));
+         dialogs_searchNameEncryptedPaint.setTextSize(dp(16));
++        desu.inugram.InuHooks.onThemePaintsCreated();
+     }
+ 
+     public static void applyDialogsTheme() {
+@@ -8772,6 +8773,7 @@ public class Theme {
+             addChatPaint(key_paint_chatComposeBackground, chat_composeBackgroundPaint, key_chat_messagePanelBackground);
+             addChatPaint(key_paint_chatTimeBackground, chat_timeBackgroundPaint, key_chat_mediaTimeBackground);
+         }
++        desu.inugram.InuHooks.onThemePaintsCreated();
+     }
+ 
+     public static void createChatResources(Context context, boolean fontsOnly) {
+@@ -9478,6 +9480,7 @@ public class Theme {
+         }
+ 
+         profile_aboutTextPaint.setTextSize(dp(16));
++        desu.inugram.InuHooks.onThemePaintsCreated();
+     }
+ 
+     private static ColorFilter currentShareColorFilter;
+diff --git a/TMessagesProj/src/main/java/org/telegram/ui/Cells/ProfileSearchCell.java b/TMessagesProj/src/main/java/org/telegram/ui/Cells/ProfileSearchCell.java
+index 0000000..0000000 100644
+--- a/TMessagesProj/src/main/java/org/telegram/ui/Cells/ProfileSearchCell.java
++++ b/TMessagesProj/src/main/java/org/telegram/ui/Cells/ProfileSearchCell.java
+@@ -696,6 +696,7 @@ public class ProfileSearchCell extends BaseCell implements NotificationCenter.No
+         if (customPaints) {
+             if (statusPaint == null) {
+                 statusPaint = new TextPaint(Paint.ANTI_ALIAS_FLAG);
++                desu.inugram.InuHooks.applyDefaultFont(statusPaint);
+             }
+             statusPaint.setTextSize(dp(callCellStyle ? 13f : 15));
+             if (currentStatusPaint == Theme.dialogs_offlinePaint) {
+diff --git a/TMessagesProj/src/main/java/org/telegram/ui/Components/AnimatedEmojiSpan.java b/TMessagesProj/src/main/java/org/telegram/ui/Components/AnimatedEmojiSpan.java
+index 0000000..0000000 100644
+--- a/TMessagesProj/src/main/java/org/telegram/ui/Components/AnimatedEmojiSpan.java
++++ b/TMessagesProj/src/main/java/org/telegram/ui/Components/AnimatedEmojiSpan.java
+@@ -1061,6 +1061,7 @@ public class AnimatedEmojiSpan extends ReplacementSpan {
+         private int cacheType = AnimatedEmojiDrawable.CACHE_TYPE_MESSAGES;
+         public TextViewEmojis(Context context) {
+             super(context);
++            desu.inugram.InuHooks.applyDefaultFont(this);
+         }
+ 
+         private ColorFilter emojiColorFilter;
+diff --git a/TMessagesProj/src/main/java/org/telegram/ui/Components/AnimatedTextView.java b/TMessagesProj/src/main/java/org/telegram/ui/Components/AnimatedTextView.java
+index 0000000..0000000 100644
+--- a/TMessagesProj/src/main/java/org/telegram/ui/Components/AnimatedTextView.java
++++ b/TMessagesProj/src/main/java/org/telegram/ui/Components/AnimatedTextView.java
+@@ -174,6 +174,7 @@ public class AnimatedTextView extends View {
+             this.preserveIndex = preserveIndex;
+             this.startFromEnd = startFromEnd;
+             this.enforceByLetter = enforceByLetter;
++            desu.inugram.InuHooks.applyDefaultFont(textPaint);
+         }
+ 
+         public void setAllowCancel(boolean allowCancel) {
 diff --git a/TMessagesProj/src/main/java/org/telegram/ui/Components/Paint/PaintTypeface.java b/TMessagesProj/src/main/java/org/telegram/ui/Components/Paint/PaintTypeface.java
 index 0000000..0000000 100644
 --- a/TMessagesProj/src/main/java/org/telegram/ui/Components/Paint/PaintTypeface.java

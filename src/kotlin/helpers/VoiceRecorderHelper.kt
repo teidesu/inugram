@@ -178,14 +178,24 @@ object VoiceRecorderHelper {
             val wrapperVisible = buttonsWrapper.isVisible && buttonsWrapper.alpha > 0.01f
             val target = if (wrapperVisible) View.VISIBLE else View.GONE
             if (fab.visibility != target) fab.visibility = target
-            if (wrapperVisible) {
-                fab.alpha = buttonsWrapper.alpha
-                fab.translationY = buttonsWrapper.translationY
+            fab.alpha = buttonsWrapper.alpha
+            fab.translationY = buttonsWrapper.translationY
+        }
+        val preDraw = android.view.ViewTreeObserver.OnPreDrawListener { sync.run(); true }
+        // VTO is window-scoped; rebind on each attach so reused alert instances stay synced
+        buttonsWrapper.addOnAttachStateChangeListener(object : View.OnAttachStateChangeListener {
+            override fun onViewAttachedToWindow(v: View) {
+                v.viewTreeObserver.addOnPreDrawListener(preDraw)
+                sync.run()
             }
+            override fun onViewDetachedFromWindow(v: View) {
+                v.viewTreeObserver.removeOnPreDrawListener(preDraw)
+            }
+        })
+        if (buttonsWrapper.isAttachedToWindow) {
+            buttonsWrapper.viewTreeObserver.addOnPreDrawListener(preDraw)
         }
         sync.run()
-        // listener is window-VTO-scoped, so it fires for any draw in the alert regardless of fab state
-        buttonsWrapper.viewTreeObserver.addOnPreDrawListener { sync.run(); true }
     }
 
     private fun dismissAndRecord(alert: ChatAttachAlert, enterView: ChatActivityEnterView, video: Boolean) {

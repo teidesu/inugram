@@ -1,0 +1,180 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: alina sireneva <alina@tei.su>
+Date: Sun, 17 May 2026 19:22:29 +0400
+Subject: passcode-related features (per-account pin, panic pin, hidden accounts)
+
+---
+ .../org/telegram/messenger/NotificationsController.java     | 2 +-
+ .../main/java/org/telegram/ui/Components/AlertsCreator.java | 2 +-
+ .../main/java/org/telegram/ui/Components/PasscodeView.java  | 4 ++--
+ .../src/main/java/org/telegram/ui/DialogsActivity.java      | 2 +-
+ .../src/main/java/org/telegram/ui/LaunchActivity.java       | 1 +
+ .../src/main/java/org/telegram/ui/LoginActivity.java        | 1 +
+ .../src/main/java/org/telegram/ui/MainTabsActivity.java     | 2 +-
+ .../src/main/java/org/telegram/ui/PasscodeActivity.java     | 6 +++++-
+ .../src/main/java/org/telegram/ui/SettingsActivity.java     | 2 +-
+ .../src/main/java/org/telegram/ui/UserInfoActivity.java     | 2 +-
+ 10 files changed, 15 insertions(+), 9 deletions(-)
+
+diff --git a/TMessagesProj/src/main/java/org/telegram/messenger/NotificationsController.java b/TMessagesProj/src/main/java/org/telegram/messenger/NotificationsController.java
+index 0000000..0000000 100644
+--- a/TMessagesProj/src/main/java/org/telegram/messenger/NotificationsController.java
++++ b/TMessagesProj/src/main/java/org/telegram/messenger/NotificationsController.java
+@@ -4049,7 +4049,7 @@ public class NotificationsController extends BaseController {
+     }
+ 
+     private void showOrUpdateNotification(boolean notifyAboutLast) {
+-        if (!getUserConfig().isClientActivated() || pushMessages.isEmpty() && storyPushMessages.isEmpty() || !SharedConfig.showNotificationsForAllAccounts && currentAccount != UserConfig.selectedAccount) {
++        if (!getUserConfig().isClientActivated() || pushMessages.isEmpty() && storyPushMessages.isEmpty() || desu.inugram.helpers.PasscodeHelper.isAccountHidden(currentAccount) || !SharedConfig.showNotificationsForAllAccounts && currentAccount != UserConfig.selectedAccount) {
+             dismissNotification();
+             return;
+         }
+diff --git a/TMessagesProj/src/main/java/org/telegram/ui/Components/AlertsCreator.java b/TMessagesProj/src/main/java/org/telegram/ui/Components/AlertsCreator.java
+index 0000000..0000000 100644
+--- a/TMessagesProj/src/main/java/org/telegram/ui/Components/AlertsCreator.java
++++ b/TMessagesProj/src/main/java/org/telegram/ui/Components/AlertsCreator.java
+@@ -7280,7 +7280,7 @@ public class AlertsCreator {
+         linearLayout.setOrientation(LinearLayout.VERTICAL);
+         for (int a = 0; a < UserConfig.MAX_ACCOUNT_COUNT; a++) {
+             TLRPC.User u = UserConfig.getInstance(a).getCurrentUser();
+-            if (u != null) {
++            if (u != null && !desu.inugram.helpers.PasscodeHelper.isAccountHidden(a)) {
+                 AccountSelectCell cell = new AccountSelectCell(parentActivity, false);
+                 cell.setAccount(a, false);
+                 cell.setPadding(dp(14), 0, dp(14), 0);
+diff --git a/TMessagesProj/src/main/java/org/telegram/ui/Components/PasscodeView.java b/TMessagesProj/src/main/java/org/telegram/ui/Components/PasscodeView.java
+index 0000000..0000000 100644
+--- a/TMessagesProj/src/main/java/org/telegram/ui/Components/PasscodeView.java
++++ b/TMessagesProj/src/main/java/org/telegram/ui/Components/PasscodeView.java
+@@ -948,7 +948,7 @@ public class PasscodeView extends FrameLayout implements NotificationCenter.Noti
+                 onPasscodeError();
+                 return;
+             }
+-            if (!SharedConfig.checkPasscode(password)) {
++            if (!desu.inugram.helpers.PasscodeHelper.check(getContext(), password)) {
+                 SharedConfig.increaseBadPasscodeTries();
+                 if (SharedConfig.passcodeRetryInMs > 0) {
+                     checkRetryTextView();
+@@ -1181,7 +1181,7 @@ public class PasscodeView extends FrameLayout implements NotificationCenter.Noti
+     }
+ 
+     private void checkFingerprint() {
+-        if (Build.VERSION.SDK_INT < 23) {
++        if (Build.VERSION.SDK_INT < 23 || !SharedConfig.appLocked) {
+             return;
+         }
+         Activity parentActivity = AndroidUtilities.findActivity(getContext());
+diff --git a/TMessagesProj/src/main/java/org/telegram/ui/DialogsActivity.java b/TMessagesProj/src/main/java/org/telegram/ui/DialogsActivity.java
+index 0000000..0000000 100644
+--- a/TMessagesProj/src/main/java/org/telegram/ui/DialogsActivity.java
++++ b/TMessagesProj/src/main/java/org/telegram/ui/DialogsActivity.java
+@@ -3839,7 +3839,7 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
+ 
+             for (int a = 0; a < UserConfig.MAX_ACCOUNT_COUNT; a++) {
+                 TLRPC.User u = AccountInstance.getInstance(a).getUserConfig().getCurrentUser();
+-                if (u != null) {
++                if (u != null && !desu.inugram.helpers.PasscodeHelper.isAccountHidden(a)) {
+                     AccountSelectCell cell = new AccountSelectCell(context, false);
+                     cell.setAccount(a, true);
+                     switchItem.addSubItem(10 + a, cell, dp(230), dp(48));
+diff --git a/TMessagesProj/src/main/java/org/telegram/ui/LaunchActivity.java b/TMessagesProj/src/main/java/org/telegram/ui/LaunchActivity.java
+index 0000000..0000000 100644
+--- a/TMessagesProj/src/main/java/org/telegram/ui/LaunchActivity.java
++++ b/TMessagesProj/src/main/java/org/telegram/ui/LaunchActivity.java
+@@ -1498,6 +1498,7 @@ public class LaunchActivity extends BasePermissionsActivity implements INavigati
+         if (GiftInfoBottomSheet.handleIntent(intent, progress)) {
+             return true;
+         }
++        if (desu.inugram.InuHooks.onDeepLink(this, intent)) return true;
+         if (UserSelectorBottomSheet.handleIntent(intent, progress)) {
+             return true;
+         }
+diff --git a/TMessagesProj/src/main/java/org/telegram/ui/LoginActivity.java b/TMessagesProj/src/main/java/org/telegram/ui/LoginActivity.java
+index 0000000..0000000 100644
+--- a/TMessagesProj/src/main/java/org/telegram/ui/LoginActivity.java
++++ b/TMessagesProj/src/main/java/org/telegram/ui/LoginActivity.java
+@@ -1640,6 +1640,7 @@ public class LoginActivity extends BaseFragment implements NotificationCenter.No
+     private boolean pendingSwitchingAccount;
+ 
+     private void onAuthSuccess(TLRPC.TL_auth_authorization res, boolean afterSignup) {
++        desu.inugram.InuHooks.onAuthSuccess(currentAccount);
+         MessagesController.getInstance(currentAccount).cleanup();
+         ConnectionsManager.getInstance(currentAccount).setUserId(res.user.id);
+         UserConfig.getInstance(currentAccount).clearConfig();
+diff --git a/TMessagesProj/src/main/java/org/telegram/ui/MainTabsActivity.java b/TMessagesProj/src/main/java/org/telegram/ui/MainTabsActivity.java
+index 0000000..0000000 100644
+--- a/TMessagesProj/src/main/java/org/telegram/ui/MainTabsActivity.java
++++ b/TMessagesProj/src/main/java/org/telegram/ui/MainTabsActivity.java
+@@ -377,7 +377,7 @@ public class MainTabsActivity extends ViewPagerActivity implements NotificationC
+ 
+         accountNumbers.clear();
+         for (int a = 0; a < UserConfig.MAX_ACCOUNT_COUNT; a++) {
+-            if (UserConfig.getInstance(a).isClientActivated()) {
++            if (UserConfig.getInstance(a).isClientActivated() && !desu.inugram.helpers.PasscodeHelper.isAccountHidden(a)) {
+                 accountNumbers.add(a);
+             }
+         }
+diff --git a/TMessagesProj/src/main/java/org/telegram/ui/PasscodeActivity.java b/TMessagesProj/src/main/java/org/telegram/ui/PasscodeActivity.java
+index 0000000..0000000 100644
+--- a/TMessagesProj/src/main/java/org/telegram/ui/PasscodeActivity.java
++++ b/TMessagesProj/src/main/java/org/telegram/ui/PasscodeActivity.java
+@@ -163,6 +163,8 @@ public class PasscodeActivity extends BaseFragment implements NotificationCenter
+         this.type = type;
+     }
+ 
++    public int inu_account = -1;
++
+     @Override
+     public boolean onFragmentCreate() {
+         super.onFragmentCreate();
+@@ -280,6 +282,7 @@ public class PasscodeActivity extends BaseFragment implements NotificationCenter
+                                 .setMessage(LocaleController.getString(R.string.DisablePasscodeConfirmMessage))
+                                 .setNegativeButton(LocaleController.getString(R.string.Cancel), null)
+                                 .setPositiveButton(LocaleController.getString(R.string.DisablePasscodeTurnOff), (dialog, which) -> {
++                                    desu.inugram.helpers.PasscodeHelper.clearAll();
+                                     SharedConfig.passcodeHash = "";
+                                     SharedConfig.appLocked = false;
+                                     SharedConfig.saveConfig();
+@@ -944,6 +947,7 @@ public class PasscodeActivity extends BaseFragment implements NotificationCenter
+                 return;
+             }
+ 
++            if (desu.inugram.helpers.PasscodeHelper.handleSetupSubmit(this, firstPassword)) return;
+             boolean isFirst = SharedConfig.passcodeHash.isEmpty();
+             try {
+                 SharedConfig.passcodeSalt = new byte[16];
+@@ -997,7 +1001,7 @@ public class PasscodeActivity extends BaseFragment implements NotificationCenter
+                 onPasscodeError();
+                 return;
+             }
+-            if (!SharedConfig.checkPasscode(password)) {
++            if (!desu.inugram.helpers.PasscodeHelper.check(getParentActivity(), password)) {
+                 SharedConfig.increaseBadPasscodeTries();
+                 passwordEditText.setText("");
+                 for (CodeNumberField f : codeFieldContainer.codeField) {
+diff --git a/TMessagesProj/src/main/java/org/telegram/ui/SettingsActivity.java b/TMessagesProj/src/main/java/org/telegram/ui/SettingsActivity.java
+index 0000000..0000000 100644
+--- a/TMessagesProj/src/main/java/org/telegram/ui/SettingsActivity.java
++++ b/TMessagesProj/src/main/java/org/telegram/ui/SettingsActivity.java
+@@ -631,7 +631,7 @@ public class SettingsActivity extends BaseFragment implements NotificationCenter
+ 
+         accountNumbers.clear();
+         for (int a = 0; a < UserConfig.MAX_ACCOUNT_COUNT; a++) {
+-            if (UserConfig.getInstance(a).isClientActivated() && currentAccount != a) {
++            if (UserConfig.getInstance(a).isClientActivated() && currentAccount != a && !desu.inugram.helpers.PasscodeHelper.isAccountHidden(a)) {
+                 accountNumbers.add(a);
+             }
+         }
+diff --git a/TMessagesProj/src/main/java/org/telegram/ui/UserInfoActivity.java b/TMessagesProj/src/main/java/org/telegram/ui/UserInfoActivity.java
+index 0000000..0000000 100644
+--- a/TMessagesProj/src/main/java/org/telegram/ui/UserInfoActivity.java
++++ b/TMessagesProj/src/main/java/org/telegram/ui/UserInfoActivity.java
+@@ -179,7 +179,7 @@ public class UserInfoActivity extends UniversalFragment implements NotificationC
+     private void updateAccounts() {
+         accountNumbers.clear();
+         for (int a = 0; a < UserConfig.MAX_ACCOUNT_COUNT; a++) {
+-            if (UserConfig.getInstance(a).isClientActivated() && currentAccount != a) {
++            if (UserConfig.getInstance(a).isClientActivated() && currentAccount != a && !desu.inugram.helpers.PasscodeHelper.isAccountHidden(a)) {
+                 accountNumbers.add(a);
+             }
+         }

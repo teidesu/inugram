@@ -18,7 +18,7 @@ most things are toggleable in `Settings → Inugram`, with sensible opinionated 
 - show peer id in profile (telegram id / bot api id)
 - estimated registration date in profile - *ported & datapoints from [NagramX](https://github.com/risin42/NagramX)*
 - hide own phone number from ui
-- force system font
+- ui font: force system or user-provided TTF/OTF/TTC pack
 - 🐶 hide fade views
 - 🐶 old (pre-12.6) mention/reaction indicator
 - 🐶 toggleable scrim blur
@@ -83,10 +83,12 @@ most things are toggleable in `Settings → Inugram`, with sensible opinionated 
 - show original time/date in "forwarded from" header
 - long-tap "forward" in message menu to forward without sender's name or caption
 - long-tap forward bar (above input) to cycle between regular / without sender / without caption
+- long-tap a mention in a message to insert a name-mention into the input with custom text
 
 ## message input / formatting
 
 - 🐶 customizable max input lines (and bumped default)
+- 🐶 reduce message input motion (snap input height on line count change)
 - 🐶 per-chat live draft streaming (dm-only) for shits and giggles
 - 🐶 voice recorder moved into attachments drawer
 - 🐶 custom formatting popup ui (better ux for span manipulation)
@@ -114,6 +116,7 @@ most things are toggleable in `Settings → Inugram`, with sensible opinionated 
 - password autofill hints in login (for password managers)
 - account limit raised to 8 (premium gating disabled)
 - 🐶 customizable account order
+- per-account passcodes, hidden accounts, panic code, hidden settings deeplink - *ported from [Nekogram](https://github.com/Nekogram/Nekogram)*
 
 ## behavior
 
@@ -176,3 +179,4 @@ most things are toggleable in `Settings → Inugram`, with sensible opinionated 
 - stale unread badges on global-search top peers
 - stale unread mention pointer after reading mention on another device (mention button jumping to old message)
 - photo/video gallery performance improvements
+- messages consisting of only 2 or 3 emojis are huge in chat search results

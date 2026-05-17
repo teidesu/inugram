@@ -381,14 +381,24 @@ object InuConfig {
     @JvmField
     val HIDE_MY_PHONE_NUMBER = BoolItem("hide_my_phone_number", true)
 
+    // 0=bundled (stock), 1=system, 2=user-provided pack
     @JvmField
-    val USE_SYSTEM_FONT = BoolItem("use_system_font", false)
+    val FONT_MODE = object : IntItem("font_mode", 0) {
+        override fun read(prefs: SharedPreferences): Int {
+            if (prefs.contains(key)) return super.read(prefs)
+            // migration: legacy use_system_font bool
+            return if (prefs.getBoolean("use_system_font", false)) 1 else 0
+        }
+    }
 
     @JvmField
     val REACTIONS_IN_ROW = IntItem("reactions_in_row", 8)
 
     @JvmField
     val CHAT_INPUT_MAX_LINES = IntItem("chat_input_max_lines", 8)
+
+    @JvmField
+    val REDUCE_CHAT_INPUT_MOTION = BoolItem("reduce_chat_input_motion", true)
 
     @JvmField
     val REACTION_BAR_BELOW = BoolItem("reaction_bar_below", false)

@@ -1,0 +1,59 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: flexagoon <code@fxgn.dev>
+Date: Fri, 15 May 2026 21:26:00 +0200
+Subject: Fix emoji-only message size in search results
+
+---
+ .../java/org/telegram/messenger/HashtagSearchController.java  | 2 +-
+ .../main/java/org/telegram/messenger/MediaDataController.java | 2 +-
+ .../src/main/java/org/telegram/messenger/MessagesStorage.java | 4 ++--
+ 3 files changed, 4 insertions(+), 4 deletions(-)
+
+diff --git a/TMessagesProj/src/main/java/org/telegram/messenger/HashtagSearchController.java b/TMessagesProj/src/main/java/org/telegram/messenger/HashtagSearchController.java
+index 0000000..0000000 100644
+--- a/TMessagesProj/src/main/java/org/telegram/messenger/HashtagSearchController.java
++++ b/TMessagesProj/src/main/java/org/telegram/messenger/HashtagSearchController.java
+@@ -238,7 +238,7 @@ public class HashtagSearchController {
+                 TLRPC.messages_Messages messages = (TLRPC.messages_Messages) res;
+                 ArrayList<MessageObject> messageObjects = new ArrayList<>();
+                 for (TLRPC.Message msg : messages.messages) {
+-                    MessageObject obj = new MessageObject(currentAccount, msg, null, null, null, null, null, true, true, 0, false, false, false, searchType);
++                    MessageObject obj = new MessageObject(currentAccount, msg, null, null, null, null, null, false, true, 0, false, false, false, searchType);
+                     if (obj.hasValidGroupId()) {
+                         obj.isPrimaryGroupMessage = true;
+                     }
+diff --git a/TMessagesProj/src/main/java/org/telegram/messenger/MediaDataController.java b/TMessagesProj/src/main/java/org/telegram/messenger/MediaDataController.java
+index 0000000..0000000 100644
+--- a/TMessagesProj/src/main/java/org/telegram/messenger/MediaDataController.java
++++ b/TMessagesProj/src/main/java/org/telegram/messenger/MediaDataController.java
+@@ -4006,7 +4006,7 @@ public class MediaDataController extends BaseController {
+                 int N = Math.min(res.messages.size(), req.limit - 1);
+                 for (int a = 0; a < N; a++) {
+                     TLRPC.Message message = res.messages.get(a);
+-                    MessageObject messageObject = new MessageObject(currentAccount, message, null, null, null, null, null, true, true, 0, false, false, isSaved);
++                    MessageObject messageObject = new MessageObject(currentAccount, message, null, null, null, null, null, false, true, 0, false, false, isSaved);
+                     if (messageObject.hasValidGroupId()) {
+                         messageObject.isPrimaryGroupMessage = true;
+                     }
+diff --git a/TMessagesProj/src/main/java/org/telegram/messenger/MessagesStorage.java b/TMessagesProj/src/main/java/org/telegram/messenger/MessagesStorage.java
+index 0000000..0000000 100644
+--- a/TMessagesProj/src/main/java/org/telegram/messenger/MessagesStorage.java
++++ b/TMessagesProj/src/main/java/org/telegram/messenger/MessagesStorage.java
+@@ -5045,7 +5045,7 @@ public class MessagesStorage extends BaseController {
+                             groupmessage.readAttachPath(data, selfId);
+                             data.reuse();
+                             addUsersAndChatsFromMessage(groupmessage, usersToLoad, chatsToLoad, animatedEmojiToLoad);
+-                            MessageObject messageObject = new MessageObject(currentAccount, groupmessage, null, null, null, null, null, true, true, 0, false, false, true);
++                            MessageObject messageObject = new MessageObject(currentAccount, groupmessage, null, null, null, null, null, false, true, 0, false, false, true);
+                             if (groupmessage.reactions != null) {
+                                 messageObject.isPrimaryGroupMessage = true;
+                             }
+@@ -5074,7 +5074,7 @@ public class MessagesStorage extends BaseController {
+                                     }
+                                 }
+                             }
+-                            MessageObject messageObject = new MessageObject(currentAccount, message, null, null, null, null, null, true, true, 0, false, false, true);
++                            MessageObject messageObject = new MessageObject(currentAccount, message, null, null, null, null, null, false, true, 0, false, false, true);
+                             messageObjects.add(messageObject);
+                         }
+                     }

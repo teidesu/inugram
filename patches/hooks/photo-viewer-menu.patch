@@ -87,14 +87,14 @@ index 0000000..0000000 100644
                  if (newMessageObject.isNewGif() && allowShare && !DialogObject.isEncryptedDialog(newMessageObject.getDialogId())) {
                      menuItem.showSubItem(gallery_menu_savegif);
                  }
-@@ -14955,6 +14962,7 @@ public class PhotoViewer implements NotificationCenter.NotificationCenterDelegat
-                 ImageLocation imageLocation = imagesArrLocations.get(index);
-                 if (imageLocation != null && imageLocation.photo != null) {
-                     actionBarContainer.setSubtitle(LocaleController.formatDateTime(imageLocation.photo.date, true), animated);
-+                    desu.inugram.helpers.PhotoViewerHelper.setFooter(imageLocation, currentAccount);
+@@ -14958,6 +14965,7 @@ public class PhotoViewer implements NotificationCenter.NotificationCenterDelegat
                  } else {
                      actionBarContainer.setSubtitle("", animated);
                  }
++                desu.inugram.helpers.PhotoViewerHelper.setFooter(imageLocation, currentAccount);
+                 menuItem.showSubItem(gallery_menu_report);
+             }
+ 
 @@ -14982,6 +14990,7 @@ public class PhotoViewer implements NotificationCenter.NotificationCenterDelegat
                  galleryGap.setVisibility(View.VISIBLE);
              }

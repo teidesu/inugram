@@ -4,9 +4,9 @@ Date: Fri, 10 Apr 2026 01:21:49 +0300
 Subject: disable channel bottom bar (mute and join buttons)
 
 ---
- .../java/org/telegram/ui/ChatActivity.java    | 28 +++++++++++++++----
+ .../java/org/telegram/ui/ChatActivity.java    | 30 +++++++++++++++----
  .../chat/ChatInputViewsContainer.java         |  4 ++-
- 2 files changed, 26 insertions(+), 6 deletions(-)
+ 2 files changed, 27 insertions(+), 7 deletions(-)
 
 diff --git a/TMessagesProj/src/main/java/org/telegram/ui/ChatActivity.java b/TMessagesProj/src/main/java/org/telegram/ui/ChatActivity.java
 index 0000000..0000000 100644
@@ -41,6 +41,15 @@ index 0000000..0000000 100644
              }
              if (currentUser != null && chatMode != MODE_SAVED) {
                  headerItem.lazilyAddSubItem(call, R.drawable.msg_callback, LocaleController.getString(R.string.Call));
+@@ -5256,7 +5262,7 @@ public class ChatActivity extends BaseFragment implements
+                     updateSkeletonColors();
+                     updateSkeletonGradient();
+ 
+-                    int lastTop = getHeight() - blurredViewBottomOffset - (int) (windowInsetsStateHolder.getAnimatedMaxBottomInset() + getTopicTabsSideSize(TopicsTabsView.Position.BOTTOM)) - dp(44 + 7 + 9 - 3);
++                    int lastTop = getHeight() - blurredViewBottomOffset - (int) (windowInsetsStateHolder.getAnimatedMaxBottomInset() + getTopicTabsSideSize(TopicsTabsView.Position.BOTTOM)) - (ChatHelper.shouldForceHideBottomBar(currentChat, currentUser, chatMode) ? 0 : dp(44 + 7 + 9 - 3));
+                     int j = 0;
+ 
+                     int childMaxTop = Integer.MAX_VALUE;
 @@ -8357,6 +8363,7 @@ public class ChatActivity extends BaseFragment implements
              }
          });

@@ -4,6 +4,7 @@ Date: Sun, 19 Apr 2026 05:33:38 +0300
 Subject: added some missing Emoji.replaceEmoji calls in various places
 
 ---
+ .../ui/ActionBar/ActionBarMenuItem.java       | 16 +++++++++++-
  .../telegram/ui/Cells/AudioPlayerCell.java    |  5 +++-
  .../org/telegram/ui/Cells/DialogCell.java     |  1 +
  .../ui/Cells/GroupCallInvitedCell.java        |  5 +++-
@@ -25,8 +26,60 @@ Subject: added some missing Emoji.replaceEmoji calls in various places
  .../java/org/telegram/ui/MessageSeenView.java |  7 ++++--
  .../org/telegram/ui/SettingsActivity.java     |  6 +++--
  .../recorder/CaptionContainerView.java        | 13 ++++++++++
- 21 files changed, 99 insertions(+), 36 deletions(-)
+ 22 files changed, 114 insertions(+), 37 deletions(-)
 
+diff --git a/TMessagesProj/src/main/java/org/telegram/ui/ActionBar/ActionBarMenuItem.java b/TMessagesProj/src/main/java/org/telegram/ui/ActionBar/ActionBarMenuItem.java
+index 0000000..0000000 100644
+--- a/TMessagesProj/src/main/java/org/telegram/ui/ActionBar/ActionBarMenuItem.java
++++ b/TMessagesProj/src/main/java/org/telegram/ui/ActionBar/ActionBarMenuItem.java
+@@ -28,6 +28,7 @@ import android.text.Editable;
+ import android.text.TextUtils;
+ import android.text.TextWatcher;
+ import android.text.method.LinkMovementMethod;
++import android.text.style.ImageSpan;
+ import android.transition.ChangeBounds;
+ import android.transition.Transition;
+ import android.transition.TransitionManager;
+@@ -62,6 +63,7 @@ import androidx.core.graphics.ColorUtils;
+ 
+ import org.telegram.messenger.AndroidUtilities;
+ import org.telegram.messenger.AnimationNotificationsLocker;
++import org.telegram.messenger.Emoji;
+ import org.telegram.messenger.LocaleController;
+ import org.telegram.messenger.R;
+ import org.telegram.messenger.UserConfig;
+@@ -1519,6 +1521,8 @@ public class ActionBarMenuItem extends FrameLayout {
+                 return false;
+             });
+             searchField.addTextChangedListener(new TextWatcher() {
++                private boolean processChange;
++
+                 @Override
+                 public void beforeTextChanged(CharSequence s, int start, int count, int after) {
+ 
+@@ -1540,11 +1544,21 @@ public class ActionBarMenuItem extends FrameLayout {
+                             onFiltersChanged();
+                         }
+                     }
++                    if ((count - before) > 1) {
++                        processChange = true;
++                    }
+                 }
+ 
+                 @Override
+                 public void afterTextChanged(Editable s) {
+-
++                    if (processChange) {
++                        ImageSpan[] spans = s.getSpans(0, s.length(), ImageSpan.class);
++                        for (int i = 0; i < spans.length; i++) {
++                            s.removeSpan(spans[i]);
++                        }
++                        Emoji.replaceEmoji(s, searchField.getPaint().getFontMetricsInt(), false, null);
++                        processChange = false;
++                    }
+                 }
+             });
+ 
 diff --git a/TMessagesProj/src/main/java/org/telegram/ui/Cells/AudioPlayerCell.java b/TMessagesProj/src/main/java/org/telegram/ui/Cells/AudioPlayerCell.java
 index 0000000..0000000 100644
 --- a/TMessagesProj/src/main/java/org/telegram/ui/Cells/AudioPlayerCell.java

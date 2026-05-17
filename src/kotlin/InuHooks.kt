@@ -1,14 +1,17 @@
 package desu.inugram
 
 import android.content.Context
+import android.content.Intent
 import android.graphics.Typeface
 import android.os.Build
 import android.os.Bundle
 import desu.inugram.helpers.CloudSettingsHelper
+import desu.inugram.helpers.FontHelper
 import desu.inugram.helpers.LoginHelper
 import desu.inugram.helpers.MainTabsHelper
 import desu.inugram.helpers.MapsHelper
 import desu.inugram.helpers.MonetHelper
+import desu.inugram.helpers.PasscodeHelper
 import desu.inugram.helpers.UpdateHelper
 import org.telegram.messenger.AndroidUtilities
 import org.telegram.messenger.LocaleController.getString
@@ -34,6 +37,10 @@ import java.util.Hashtable
 object InuHooks {
     fun init(context: Context) {
         InuConfig.load(context)
+        FontHelper.init(context)
+        if (InuConfig.FONT_MODE.value == 2 && Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
+            FontHelper.installAsDefault()
+        }
         syncDoubleTapDelay()
         syncAnimationSpeed()
         UpdateHelper.clearPendingIfInstalled()
@@ -63,6 +70,16 @@ object InuHooks {
     }
 
     @JvmStatic
+    fun onDeepLink(activity: LaunchActivity, intent: Intent?): Boolean {
+        return PasscodeHelper.tryHandleDeepLink(activity, intent)
+    }
+
+    @JvmStatic
+    fun onAuthSuccess(account: Int) {
+        PasscodeHelper.removeForAccount(account)
+    }
+
+    @JvmStatic
     fun onResume(launchActivity: LaunchActivity) {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
             MonetHelper.refreshMonetThemeIfChanged()
@@ -88,20 +105,70 @@ object InuHooks {
     }
 
     @JvmStatic
-    fun onGetTypeface(cache: Hashtable<String, Typeface>, assetPath: String): Typeface? {
-        if (!InuConfig.USE_SYSTEM_FONT.value) return null
-        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.P) return null
-        val key = "inu:$assetPath"
-        return cache.getOrElse(key) {
-            when (assetPath) {
-                AndroidUtilities.TYPEFACE_ROBOTO_MEDIUM -> Typeface.create(null, 500, false)
-                AndroidUtilities.TYPEFACE_ROBOTO_EXTRA_BOLD -> Typeface.create(null, 800, false)
-                AndroidUtilities.TYPEFACE_ROBOTO_MEDIUM_ITALIC -> Typeface.create(null, 500, true)
-                "fonts/ritalic.ttf" -> Typeface.create(null, 400, true)
-                "fonts/rcondensedbold.ttf" -> Typeface.create(null, 700, false)
-                else -> null
-            }?.let { cache.put(key, it) }
+    fun applyDefaultFont(paint: android.text.TextPaint?) {
+        if (paint == null || paint.typeface != null) return
+        if (InuConfig.FONT_MODE.value != 2) return
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.P) return
+        FontHelper.resolve(400, false)?.let { paint.typeface = it }
+    }
+
+    @JvmStatic
+    fun applyDefaultFont(view: android.widget.TextView?) {
+        if (view == null) return
+        if (InuConfig.FONT_MODE.value != 2) return
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.P) return
+        FontHelper.resolve(400, false)?.let { view.typeface = it }
+    }
+
+    /**
+     * Stock creates many `chat_*Paint`/`dialogs_*Paint`/`profile_*Paint` `TextPaint`s in
+     * [org.telegram.ui.ActionBar.Theme] without an explicit typeface. Sweep them after creation
+     * so message bubble text, dialog cell previews, profile bio, etc. pick up the custom font.
+     */
+    @JvmStatic
+    fun onThemePaintsCreated() {
+        if (InuConfig.FONT_MODE.value != 2) return
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.P) return
+        val tf = FontHelper.resolve(400, false) ?: return
+        try {
+            for (field in org.telegram.ui.ActionBar.Theme::class.java.declaredFields) {
+                val name = field.name
+                if (!name.endsWith("Paint")) continue
+                if (!(name.startsWith("chat_") || name.startsWith("dialogs_") || name.startsWith("profile_"))) continue
+                val value = field.get(null) ?: continue
+                when (value) {
+                    is android.text.TextPaint -> if (value.typeface == null) value.typeface = tf
+                    is Array<*> -> for (item in value) {
+                        if (item is android.text.TextPaint && item.typeface == null) item.typeface = tf
+                    }
+                }
+            }
+        } catch (_: Throwable) {
         }
+    }
+
+    @JvmStatic
+    fun onGetTypeface(cache: Hashtable<String, Typeface>, assetPath: String): Typeface? {
+        val mode = InuConfig.FONT_MODE.value
+        if (mode == 0) return null
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.P) return null
+        val key = "inu:m$mode:$assetPath"
+        cache[key]?.let { return it }
+        val (weight, italic) = when (assetPath) {
+            AndroidUtilities.TYPEFACE_ROBOTO_MEDIUM -> 500 to false
+            AndroidUtilities.TYPEFACE_ROBOTO_EXTRA_BOLD -> 800 to false
+            AndroidUtilities.TYPEFACE_ROBOTO_MEDIUM_ITALIC -> 500 to true
+            "fonts/ritalic.ttf" -> 400 to true
+            "fonts/rcondensedbold.ttf" -> 700 to false
+            else -> return null
+        }
+        val tf = when (mode) {
+            1 -> Typeface.create(null as Typeface?, weight, italic)
+            2 -> FontHelper.resolve(weight, italic)
+            else -> null
+        } ?: return null
+        cache[key] = tf
+        return tf
     }
 
     @JvmStatic
