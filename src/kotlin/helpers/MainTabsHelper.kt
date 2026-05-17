@@ -15,6 +15,7 @@ import org.telegram.ui.ActionBar.BaseFragment
 import org.telegram.ui.ActionBar.Theme
 import org.telegram.ui.Components.Bulletin
 import org.telegram.ui.Components.ItemOptions
+import org.telegram.ui.ChatActivity
 import org.telegram.ui.DialogsActivity
 import org.telegram.ui.LaunchActivity
 import org.telegram.ui.MainTabsActivity
@@ -96,6 +97,11 @@ object MainTabsHelper {
         }
 
         o.addGap()
+        o.add(R.drawable.msg_saved, getString(R.string.SavedMessages)) {
+            val args = Bundle()
+            args.putLong("user_id", UserConfig.getInstance(fragment.currentAccount).clientUserId)
+            fragment.presentFragment(ChatActivity(args))
+        }
         o.add(R.drawable.msg_archive, getString(R.string.ArchivedChats)) {
             val args = Bundle()
             args.putInt("folderId", 1)

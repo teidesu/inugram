@@ -368,4 +368,7 @@
     <string name="InuLiveDraftModeSizeOnly">Только размер</string>
     <string name="InuLiveDraftModeFull">Полный текст</string>
     <string name="InuLiveDraftFooter">(Экспериментально!) Стримит черновик прямо во время набора через **Live response streaming API** — ради прикола</string>
+    <string name="InuNetwork">Сеть</string>
+    <string name="InuFasterDownloads">Ускорение скачивания</string>
+    <string name="InuFasterUploads">Ускорение выгрузка</string>
 </resources>

@@ -206,6 +206,28 @@ object FolderHelper {
         return FilterTabsView.TAB_PADDING_WIDTH
     }
 
+    /** skip adding default "All Chats" tab when toggle is on AND user has other filters */
+    @JvmStatic
+    fun shouldSkipDefaultTab(totalFilters: Int): Boolean {
+        return InuConfig.HIDE_ALL_CHATS_TAB.value && totalFilters > 1
+    }
+
+    /** if selectedType lands on the (now hidden) default filter, return first non-default index */
+    @JvmStatic
+    fun snapOffDefault(filters: List<MessagesController.DialogFilter>, selectedType: Int): Int {
+        if (!shouldSkipDefaultTab(filters.size)) return selectedType
+        if (selectedType !in filters.indices || !filters[selectedType].isDefault) return selectedType
+        return filters.indexOfFirst { !it.isDefault }.takeIf { it >= 0 } ?: selectedType
+    }
+
+    /** after a rebuild that skipped the default tab, refresh selectedTabId + currentPosition */
+    @JvmStatic
+    fun refreshSelectedTab(filterTabsView: FilterTabsView, selectedType: Int, filtersSize: Int) {
+        if (!InuConfig.HIDE_ALL_CHATS_TAB.value) return
+        if (selectedType < 0 || selectedType >= filtersSize) return
+        filterTabsView.selectTabWithId(selectedType, 1f)
+    }
+
     @JvmStatic
     fun isMuteFilteringActive(): Boolean {
         val mode = InuConfig.FOLDERS_UNREAD_COUNTER_MODE.value

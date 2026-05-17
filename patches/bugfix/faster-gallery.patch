@@ -1,0 +1,86 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: alina sireneva <alina@tei.su>
+Date: Sat, 16 May 2026 17:07:55 +0400
+Subject: faster gallery handling in attach sheet
+
+---
+ .../telegram/messenger/MediaController.java   | 31 +++++++++++++++----
+ 1 file changed, 25 insertions(+), 6 deletions(-)
+
+diff --git a/TMessagesProj/src/main/java/org/telegram/messenger/MediaController.java b/TMessagesProj/src/main/java/org/telegram/messenger/MediaController.java
+index 0000000..0000000 100644
+--- a/TMessagesProj/src/main/java/org/telegram/messenger/MediaController.java
++++ b/TMessagesProj/src/main/java/org/telegram/messenger/MediaController.java
+@@ -75,7 +75,6 @@ import com.google.android.exoplayer2.C;
+ import com.google.android.exoplayer2.ExoPlayer;
+ import com.google.android.exoplayer2.Player;
+ import com.google.android.exoplayer2.extractor.jpeg.MotionPhotoDescription;
+-import com.google.android.exoplayer2.extractor.jpeg.XmpMotionPhotoDescriptionParser;
+ import com.google.android.exoplayer2.ui.AspectRatioFrameLayout;
+ import com.google.android.gms.cast.MediaMetadata;
+ import com.google.android.gms.common.images.WebImage;
+@@ -1198,8 +1197,10 @@ public class MediaController implements AudioManager.OnAudioFocusChangeListener,
+                     return;
+                 }
+                 refreshGalleryRunnable = null;
+-                loadGalleryPhotosAlbums(0);
+-            }, 2000);
++                if (!desu.inugram.helpers.GalleryHelper.tryConsumeIncremental(0)) {
++                    loadGalleryPhotosAlbums(0);
++                }
++            }, 200);
+         }
+ 
+         @Override
+@@ -1210,6 +1211,12 @@ public class MediaController implements AudioManager.OnAudioFocusChangeListener,
+             }
+             scheduleReloadRunnable();
+         }
++
++        @Override
++        public void onChange(boolean selfChange, Uri uri, int flags) {
++            desu.inugram.helpers.GalleryHelper.recordEvent(uri, flags);
++            super.onChange(selfChange, uri, flags);
++        }
+     }
+ 
+     private static class GalleryObserverExternal extends ContentObserver {
+@@ -1225,8 +1232,16 @@ public class MediaController implements AudioManager.OnAudioFocusChangeListener,
+             }
+             AndroidUtilities.runOnUIThread(refreshGalleryRunnable = () -> {
+                 refreshGalleryRunnable = null;
+-                loadGalleryPhotosAlbums(0);
+-            }, 2000);
++                if (!desu.inugram.helpers.GalleryHelper.tryConsumeIncremental(0)) {
++                    loadGalleryPhotosAlbums(0);
++                }
++            }, 200);
++        }
++
++        @Override
++        public void onChange(boolean selfChange, Uri uri, int flags) {
++            desu.inugram.helpers.GalleryHelper.recordEvent(uri, flags);
++            super.onChange(selfChange, uri, flags);
+         }
+     }
+ 
+@@ -5865,7 +5880,10 @@ public class MediaController implements AudioManager.OnAudioFocusChangeListener,
+                             MotionPhotoDescription motionPhoto = null;
+                             if (xmpColumn >= 0) {
+                                 try {
+-                                    motionPhoto = XmpMotionPhotoDescriptionParser.parse(new String(cursor.getBlob(xmpColumn)));
++                                    byte[] xmpBlob = cursor.getBlob(xmpColumn);
++                                    if (xmpBlob != null && xmpBlob.length > 0) {
++                                        motionPhoto = desu.inugram.helpers.GalleryHelper.lookupXmp(imageId, dateTaken, xmpBlob);
++                                    }
+                                 } catch (Exception e) {
+                                     FileLog.e(e);
+                                 }
+@@ -6071,6 +6089,7 @@ public class MediaController implements AudioManager.OnAudioFocusChangeListener,
+             allPhotosAlbumEntry = allPhotosAlbumFinal;
+             allMediaAlbumEntry = allMediaAlbumFinal;
+             allVideosAlbumEntry = allVideosAlbumFinal;
++            desu.inugram.helpers.GalleryHelper.markFullScanComplete(cameraAlbumIdFinal);
+             NotificationCenter.getGlobalInstance().postNotificationName(NotificationCenter.albumsDidLoad, guid, mediaAlbumsSorted, photoAlbumsSorted, cameraAlbumIdFinal);
+         }, delay);
+     }

@@ -100,6 +100,12 @@ class InuAnnoyancesSettingsActivity : InuSettingsPageActivity() {
             ).setChecked(InuConfig.HIDE_PAID_REACTION_UPSELL.value)
         )
         items.add(
+            UItem.asCheck(
+                TOGGLE_HIDE_HASHTAG_SUGGESTIONS,
+                LocaleController.getString(R.string.InuHideHashtagSuggestions),
+            ).setChecked(InuConfig.HIDE_HASHTAG_SUGGESTIONS.value)
+        )
+        items.add(
             mkTwoLineCheckItem(
                 TOGGLE_OPT_IN_MOTION_PHOTOS,
                 R.string.InuOptInMotionPhotos,
@@ -160,6 +166,11 @@ class InuAnnoyancesSettingsActivity : InuSettingsPageActivity() {
 
             TOGGLE_HIDE_PAID_REACTION_UPSELL -> {
                 val new = InuConfig.HIDE_PAID_REACTION_UPSELL.toggle()
+                (view as? TextCheckCell)?.isChecked = new
+            }
+
+            TOGGLE_HIDE_HASHTAG_SUGGESTIONS -> {
+                val new = InuConfig.HIDE_HASHTAG_SUGGESTIONS.toggle()
                 (view as? TextCheckCell)?.isChecked = new
             }
 
@@ -248,6 +259,7 @@ class InuAnnoyancesSettingsActivity : InuSettingsPageActivity() {
         private val TOGGLE_DISABLE_CHAT_THEMES = InuUtils.generateId()
         private val TOGGLE_DISABLE_BG_PARALLAX = InuUtils.generateId()
         private val TOGGLE_HIDE_PAID_REACTION_UPSELL = InuUtils.generateId()
+        private val TOGGLE_HIDE_HASHTAG_SUGGESTIONS = InuUtils.generateId()
         private val TOGGLE_OPT_IN_MOTION_PHOTOS = InuUtils.generateId()
         private val BUTTON_CLEAR_HINTS = InuUtils.generateId()
     }

@@ -9,7 +9,8 @@ Subject: option to disable scrim blur throughout the app
  .../org/telegram/ui/Components/ScrimOptions.java  |  8 ++++++++
  .../java/org/telegram/ui/DialogsActivity.java     | 10 ++++++++++
  .../java/org/telegram/ui/MessageSendPreview.java  |  8 +++++---
- 5 files changed, 45 insertions(+), 3 deletions(-)
+ .../main/java/org/telegram/ui/TopicsFragment.java | 12 ++++++++++++
+ 6 files changed, 57 insertions(+), 3 deletions(-)
 
 diff --git a/TMessagesProj/src/main/java/org/telegram/messenger/AndroidUtilities.java b/TMessagesProj/src/main/java/org/telegram/messenger/AndroidUtilities.java
 index 0000000..0000000 100644
@@ -78,7 +79,7 @@ diff --git a/TMessagesProj/src/main/java/org/telegram/ui/DialogsActivity.java b/
 index 0000000..0000000 100644
 --- a/TMessagesProj/src/main/java/org/telegram/ui/DialogsActivity.java
 +++ b/TMessagesProj/src/main/java/org/telegram/ui/DialogsActivity.java
-@@ -8812,6 +8812,16 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
+@@ -8820,6 +8820,16 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
          if (blurredView == null) {
              return;
          }
@@ -126,3 +127,26 @@ index 0000000..0000000 100644
                  }
                  if (!open && sendButton != null) {
                      sendButton.setAlpha(0f);
+diff --git a/TMessagesProj/src/main/java/org/telegram/ui/TopicsFragment.java b/TMessagesProj/src/main/java/org/telegram/ui/TopicsFragment.java
+index 0000000..0000000 100644
+--- a/TMessagesProj/src/main/java/org/telegram/ui/TopicsFragment.java
++++ b/TMessagesProj/src/main/java/org/telegram/ui/TopicsFragment.java
+@@ -4028,6 +4028,18 @@ public class TopicsFragment extends BaseFragment implements NotificationCenter.N
+         if (blurredView == null || parentLayout == null) {
+             return;
+         }
++        if (desu.inugram.InuConfig.DISABLE_SCRIM_BLUR.getValue()) {
++            blurredView.setBackgroundColor(0x60000000);
++            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
++                blurredView.setForeground(null);
++            }
++            blurredView.setAlpha(0.0f);
++            if (blurredView.getParent() != null) {
++                ((ViewGroup) blurredView.getParent()).removeView(blurredView);
++            }
++            parentLayout.getOverlayContainerView().addView(blurredView, LayoutHelper.createFrame(LayoutHelper.MATCH_PARENT, LayoutHelper.MATCH_PARENT));
++            return;
++        }
+         int w = (int) (fragmentView.getMeasuredWidth() / 6.0f);
+         int h = (int) (fragmentView.getMeasuredHeight() / 6.0f);
+         Bitmap bitmap = Bitmap.createBitmap(w, h, Bitmap.Config.ARGB_8888);

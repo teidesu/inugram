@@ -6,6 +6,7 @@ import desu.inugram.helpers.DialogsFabHelper
 import desu.inugram.helpers.InuUtils
 import org.telegram.messenger.LocaleController
 import org.telegram.messenger.MessagesStorage
+import org.telegram.messenger.NotificationCenter
 import org.telegram.messenger.R
 import org.telegram.messenger.UserConfig
 import org.telegram.ui.Cells.NotificationsCheckCell
@@ -42,6 +43,12 @@ class InuDialogsSettingsActivity : InuSettingsPageActivity() {
                     else -> LocaleController.getString(R.string.InuFoldersUnreadCounterRegular)
                 }
             )
+        )
+        items.add(
+            UItem.asCheck(
+                TOGGLE_HIDE_ALL_CHATS_TAB,
+                LocaleController.getString(R.string.InuHideAllChatsTab),
+            ).setChecked(InuConfig.HIDE_ALL_CHATS_TAB.value)
         )
         items.add(UItem.asShadow(null))
         // end folders section
@@ -179,6 +186,12 @@ class InuDialogsSettingsActivity : InuSettingsPageActivity() {
                 }
             }
 
+            TOGGLE_HIDE_ALL_CHATS_TAB -> {
+                val new = InuConfig.HIDE_ALL_CHATS_TAB.toggle()
+                (view as? TextCheckCell)?.isChecked = new
+                postNotificationForAllAccounts(NotificationCenter.dialogFiltersUpdated)
+            }
+
             TOGGLE_BOT_WEBVIEW_BUTTON -> {
                 val new = InuConfig.HIDE_BOT_WEBVIEW_DIALOGS.toggle()
                 (view as? TextCheckCell)?.isChecked = new
@@ -270,5 +283,6 @@ class InuDialogsSettingsActivity : InuSettingsPageActivity() {
         private val TOGGLE_FAB_OFFSET_FOR_BOTTOM_BAR = InuUtils.generateId()
         private val TOGGLE_FAB_LEFT_SIDE = InuUtils.generateId()
         private val TOGGLE_INTERACTIVE_CHAT_PREVIEW = InuUtils.generateId()
+        private val TOGGLE_HIDE_ALL_CHATS_TAB = InuUtils.generateId()
     }
 }

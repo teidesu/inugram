@@ -1,0 +1,23 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: alina sireneva <alina@tei.su>
+Date: Sat, 16 May 2026 17:18:03 +0400
+Subject: fix sticker send animation drawing on top of the side controls
+
+---
+ TMessagesProj/src/main/java/org/telegram/ui/ChatActivity.java | 3 +++
+ 1 file changed, 3 insertions(+)
+
+diff --git a/TMessagesProj/src/main/java/org/telegram/ui/ChatActivity.java b/TMessagesProj/src/main/java/org/telegram/ui/ChatActivity.java
+index 0000000..0000000 100644
+--- a/TMessagesProj/src/main/java/org/telegram/ui/ChatActivity.java
++++ b/TMessagesProj/src/main/java/org/telegram/ui/ChatActivity.java
+@@ -17619,6 +17619,9 @@ public class ChatActivity extends BaseFragment implements
+                     canvas.restore();
+                 }
+             }
++            if (!animateSendingViews.isEmpty()) {
++                super.drawChild(canvas, sideControlsButtonsLayout, SystemClock.uptimeMillis());
++            }
+             if (scrimViewReaction == null || scrimView == null) {
+                 if (scrimBlurBitmapPaint != null) {
+                     scrimBlurMatrix.reset();

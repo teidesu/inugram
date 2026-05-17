@@ -1,0 +1,22 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: alina sireneva <alina@tei.su>
+Date: Fri, 15 May 2026 22:13:46 +0300
+Subject: disable hashtag suggestions in message input
+
+---
+ .../src/main/java/org/telegram/ui/Adapters/MentionsAdapter.java | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/TMessagesProj/src/main/java/org/telegram/ui/Adapters/MentionsAdapter.java b/TMessagesProj/src/main/java/org/telegram/ui/Adapters/MentionsAdapter.java
+index 0000000..0000000 100644
+--- a/TMessagesProj/src/main/java/org/telegram/ui/Adapters/MentionsAdapter.java
++++ b/TMessagesProj/src/main/java/org/telegram/ui/Adapters/MentionsAdapter.java
+@@ -1177,7 +1177,7 @@ public class MentionsAdapter extends RecyclerListView.SelectionAdapter implement
+                             resultLength = result.length() + 1;
+                             break;
+                         }
+-                    } else if (ch == '#') {
++                    } else if (ch == '#' && !desu.inugram.InuConfig.HIDE_HASHTAG_SUGGESTIONS.getValue()) {
+                         if (ChatObject.isChannelAndNotMegaGroup(currentChat) && !TextUtils.isEmpty(ChatObject.getPublicUsername(currentChat))) {
+                             hintHashtag = text.substring(a);
+                             if (hintHashtag.length() < 4 || !hintHashtag.matches("^[#$][\\p{L}_-]+$"))

@@ -66,7 +66,7 @@ index 0000000..0000000 100644
              }
          });
  
-@@ -8651,12 +8657,15 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
+@@ -8659,12 +8665,15 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
  
      private void updateFloatingButtonVisibility(boolean animated) {
          final boolean isVisible = !(onlySelect && initialDialogsType != 10 || folderId != 0 || inPreviewMode || (searching && !onlySelect) || floatingButtonHidden);
@@ -84,7 +84,7 @@ index 0000000..0000000 100644
          }
      }
  
-@@ -8695,8 +8704,9 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
+@@ -8703,8 +8712,9 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
              floatingButton3.setImageResource(R.drawable.floating_check);
              floatingButton3.setContentDescription(LocaleController.getString(R.string.Done));
          } else {
@@ -96,7 +96,7 @@ index 0000000..0000000 100644
          }
      }
  
-@@ -12999,13 +13009,13 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
+@@ -13007,13 +13017,13 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
          }, 0);
      }
  
@@ -112,7 +112,7 @@ index 0000000..0000000 100644
          if (!storiesEnabled) {
              if (storyPremiumHint != null) {
                  if (storyPremiumHint.shown()) {
-@@ -13187,10 +13197,12 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
+@@ -13195,10 +13205,12 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
                  });
              });
              io.addGap();

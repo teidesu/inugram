@@ -128,7 +128,7 @@ diff --git a/TMessagesProj/src/main/java/org/telegram/ui/Components/chat/ChatInp
 index 0000000..0000000 100644
 --- a/TMessagesProj/src/main/java/org/telegram/ui/Components/chat/ChatInputViewsContainer.java
 +++ b/TMessagesProj/src/main/java/org/telegram/ui/Components/chat/ChatInputViewsContainer.java
-@@ -270,7 +270,9 @@ public class ChatInputViewsContainer extends FrameLayout {
+@@ -273,7 +273,9 @@ public class ChatInputViewsContainer extends FrameLayout {
          );
          tmpRect.inset(0, -dp(7));
          tmpRect.offset(0, blurTop + (int) bubbleInputTranlationY);

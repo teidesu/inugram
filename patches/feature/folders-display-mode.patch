@@ -4,12 +4,12 @@ Date: Fri, 10 Apr 2026 06:58:12 +0300
 Subject: dialog folders display mode customizations
 
 ---
- .../messenger/MessagesController.java         |  1 +
- .../telegram/messenger/MessagesStorage.java   | 26 ++++++
- .../ui/Components/FilterTabsView.java         | 86 +++++++++++++------
- .../java/org/telegram/ui/DialogsActivity.java |  9 +-
- .../org/telegram/ui/FilterCreateActivity.java |  4 +
- 5 files changed, 97 insertions(+), 29 deletions(-)
+ .../messenger/MessagesController.java         |   1 +
+ .../telegram/messenger/MessagesStorage.java   |  26 +++++
+ .../ui/Components/FilterTabsView.java         | 100 ++++++++++++------
+ .../java/org/telegram/ui/DialogsActivity.java |  17 ++-
+ .../org/telegram/ui/FilterCreateActivity.java |   4 +
+ 5 files changed, 114 insertions(+), 34 deletions(-)
 
 diff --git a/TMessagesProj/src/main/java/org/telegram/messenger/MessagesController.java b/TMessagesProj/src/main/java/org/telegram/messenger/MessagesController.java
 index 0000000..0000000 100644
@@ -397,18 +397,52 @@ index 0000000..0000000 100644
              selectorDrawable.setAlpha(31);
              selectorDrawable.draw(canvas);
              canvas.restore();
-@@ -1718,7 +1750,7 @@ public class FilterTabsView extends FrameLayout {
+@@ -1544,12 +1576,15 @@ public class FilterTabsView extends FrameLayout {
+         if (!tabs.isEmpty()) {
+             final int width = MeasureSpec.getSize(widthMeasureSpec) - listViewPaddingH * 2;
+             Tab firstTab = findDefaultTab();
++            int trueTabsWidth;
+             if (firstTab != null) {
+                 firstTab.setTitle(LocaleController.getString(R.string.FilterAllChats), null, false);
+                 int tabWidth = firstTab.getWidth(false);
+                 firstTab.setTitle(allTabsWidth > width ? LocaleController.getString(R.string.FilterAllChatsShort) : LocaleController.getString(R.string.FilterAllChats), null, false);
+-                int trueTabsWidth = allTabsWidth - tabWidth;
+-                trueTabsWidth += firstTab.getWidth(false);
++                trueTabsWidth = allTabsWidth - tabWidth + firstTab.getWidth(false);
++            } else {
++                trueTabsWidth = allTabsWidth;
++            }
+                 int prevWidth = additionalTabWidth;
+                 additionalTabWidth = trueTabsWidth < width ? (width - trueTabsWidth) / tabs.size() : 0;
+                 if (prevWidth != additionalTabWidth) {
+@@ -1562,7 +1597,6 @@ public class FilterTabsView extends FrameLayout {
+                 }
+                 updateTabsWidths();
+                 invalidated = false;
+-            }
+         }
+         super.onMeasure(widthMeasureSpec, heightMeasureSpec);
+     }
+@@ -1716,9 +1750,10 @@ public class FilterTabsView extends FrameLayout {
+                 invalidated = true;
+                 requestLayout();
                  allTabsWidth = 0;
-                 findDefaultTab().setTitle(LocaleController.getString(R.string.FilterAllChats), null, false);
+-                findDefaultTab().setTitle(LocaleController.getString(R.string.FilterAllChats), null, false);
++                Tab defTab = findDefaultTab();
++                if (defTab != null) defTab.setTitle(LocaleController.getString(R.string.FilterAllChats), null, false);
                  for (int b = 0; b < N; b++) {
 -                    allTabsWidth += tabs.get(b).getWidth(true) + dp(TAB_PADDING_WIDTH);
 +                    allTabsWidth += tabs.get(b).getWidth(true) + dp(FolderHelper.getTabPadding());
                  }
                  break;
              }
-@@ -1749,7 +1781,7 @@ public class FilterTabsView extends FrameLayout {
+@@ -1747,9 +1782,10 @@ public class FilterTabsView extends FrameLayout {
+             listView.setItemAnimator(itemAnimator);
+             adapter.notifyDataSetChanged();
              allTabsWidth = 0;
-             findDefaultTab().setTitle(LocaleController.getString(R.string.FilterAllChats), null, false);
+-            findDefaultTab().setTitle(LocaleController.getString(R.string.FilterAllChats), null, false);
++            Tab defTab = findDefaultTab();
++            if (defTab != null) defTab.setTitle(LocaleController.getString(R.string.FilterAllChats), null, false);
              for (int b = 0, N = tabs.size(); b < N; b++) {
 -                allTabsWidth += tabs.get(b).getWidth(true) + dp(TAB_PADDING_WIDTH);
 +                allTabsWidth += tabs.get(b).getWidth(true) + dp(FolderHelper.getTabPadding());
@@ -437,11 +471,15 @@ index 0000000..0000000 100644
                      if (tabId == filterTabsView.getDefaultTabId()) {
                          return getMessagesStorage().getMainUnreadCount();
                      }
-@@ -6763,10 +6767,11 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
+@@ -6761,12 +6765,15 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
+                     selectWithStableId = true;
+                 }
                  filterTabsView.removeTabs();
++                boolean skipDefault = FolderHelper.shouldSkipDefaultTab(filters.size());
                  for (int a = 0, N = filters.size(); a < N; a++) {
                      if (filters.get(a).isDefault()) {
 -                        filterTabsView.addTab(a, 0, LocaleController.getString(R.string.FilterAllChats), null, false, true, filters.get(a).locked);
++                        if (skipDefault) continue;
 +                        filterTabsView.inu_addTab(a, 0, LocaleController.getString(R.string.FilterAllChats), null, false, true, filters.get(a).locked, "\uD83D\uDCAC");
                      } else {
                          final MessagesController.DialogFilter filter = filters.get(a);
@@ -451,6 +489,22 @@ index 0000000..0000000 100644
                      }
                  }
                  if (stableId >= 0) {
+@@ -6789,9 +6796,15 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
+                     if (viewPages[a].selectedType >= filters.size()) {
+                         viewPages[a].selectedType = filters.size() - 1;
+                     }
++                    int snapped = FolderHelper.snapOffDefault(filters, viewPages[a].selectedType);
++                    if (snapped != viewPages[a].selectedType) {
++                        viewPages[a].selectedType = snapped;
++                        if (a == 0) updateCurrentTab = true;
++                    }
+                     viewPages[a].listView.setScrollingTouchSlop(RecyclerView.TOUCH_SLOP_PAGING);
+                 }
+                 filterTabsView.finishAddingTabs(animatedUpdateItems);
++                FolderHelper.refreshSelectedTab(filterTabsView, viewPages[0].selectedType, filters.size());
+                 if (updateCurrentTab) {
+                     switchToCurrentSelectedMode(false);
+                 }
 diff --git a/TMessagesProj/src/main/java/org/telegram/ui/FilterCreateActivity.java b/TMessagesProj/src/main/java/org/telegram/ui/FilterCreateActivity.java
 index 0000000..0000000 100644
 --- a/TMessagesProj/src/main/java/org/telegram/ui/FilterCreateActivity.java

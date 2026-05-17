@@ -117,7 +117,7 @@ diff --git a/TMessagesProj/src/main/java/org/telegram/ui/DialogsActivity.java b/
 index 0000000..0000000 100644
 --- a/TMessagesProj/src/main/java/org/telegram/ui/DialogsActivity.java
 +++ b/TMessagesProj/src/main/java/org/telegram/ui/DialogsActivity.java
-@@ -12807,6 +12807,10 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
+@@ -12815,6 +12815,10 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
          });
          searchViewPager.searchListView.setOnItemClickListener((view, position, x, y) -> {
              Object item = searchViewPager.dialogsSearchAdapter.getItem(position);

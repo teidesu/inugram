@@ -101,6 +101,7 @@
     <string name="InuDeleteForBothGroups">Group chats</string>
     <string name="InuSimpleAttachPopupAnimation">Simple attach popup animation</string>
     <string name="InuHidePaidReactionUpsell">Hide paid reaction upsell</string>
+    <string name="InuHideHashtagSuggestions">Hide hashtag suggestions</string>
     <string name="InuDisableProfileScrollSnap">Disable profile scroll snap</string>
     <string name="InuDisableProfileScrollSnapInfo">Don\'t snap the profile header to fixed positions when scrolling</string>
     <string name="InuReduceProfileMotion">Reduce profile motion</string>
@@ -129,6 +130,7 @@
     <string name="InuFoldersUnreadCounterRegular">Regular</string>
     <string name="InuFoldersUnreadCounterExcludeMuted">Exclude muted</string>
     <string name="InuFoldersUnreadCounterExcludeMutedNonDms">Exclude muted non-DMs</string>
+    <string name="InuHideAllChatsTab">Hide \"All Chats\" tab</string>
     <string name="InuCopyPhoto">Copy Photo</string>
     <string name="InuPhotoCopied">Photo copied to clipboard</string>
     <string name="InuCopyFrame">Copy Frame</string>
@@ -264,6 +266,7 @@
 
     <string name="InuForwardWithoutAuthor">Without author</string>
     <string name="InuForwardWithoutCaption">Without caption</string>
+    <string name="InuHiddenCaptionDescription">Captions removed</string>
 
     <string name="InuTextClassifierMode">Text classifier mode</string>
     <string name="InuTextClassifierModeInfo">Text classifier is a system component that auto-expands selection when double-tapping text</string>
@@ -372,4 +375,8 @@
     <string name="InuLiveDraftModeSizeOnly">Size-only</string>
     <string name="InuLiveDraftModeFull">Full text</string>
     <string name="InuLiveDraftFooter">(Experimental!) Stream drafts as you type the message, via **Live response streaming API**, for shits and giggles</string>
+    <string name="InuNetwork">Network</string>
+    <string name="InuFasterDownloads">Faster downloads</string>
+    <string name="InuFasterUploads">Faster uploads</string>
+    <string name="InuFasterTransfersInfo">Bumps chunk size and parallel request count. May improve throughput, but may also cause the adverse effect (especially for non-Premium users)</string>
 </resources>

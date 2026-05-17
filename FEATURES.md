@@ -37,6 +37,7 @@ most things are toggleable in `Settings → Inugram`, with sensible opinionated 
 - long-tap "chats" tab to pick folder from menu
 - folder display modes: titles / titles+icons / icons-only
 - folder unread counter modes: hide / regular / exclude muted / 🐶 exclude muted non-dms
+- hide "all chats" folder tab
 - 🐶 dialogs fab customization: main + secondary actions, hide-on-scroll, left-side
 - 🐶 "create as supergroup" toggle in group creation
 - 🐶 deeplink / username quick-open from global search
@@ -81,6 +82,7 @@ most things are toggleable in `Settings → Inugram`, with sensible opinionated 
 - instant view pages translator
 - show original time/date in "forwarded from" header
 - long-tap "forward" in message menu to forward without sender's name or caption
+- long-tap forward bar (above input) to cycle between regular / without sender / without caption
 
 ## message input / formatting
 
@@ -129,6 +131,7 @@ most things are toggleable in `Settings → Inugram`, with sensible opinionated 
 - 🐶 prefer "Media" tab in profile over Gifts/Posts
 - 🐶 recyclerlistview instant-tap
 - ios-style menu gesture (release-to-commit) in bottom menu tabs
+- faster downloads/uploads
 
 ## annoyances
 
@@ -137,6 +140,7 @@ most things are toggleable in `Settings → Inugram`, with sensible opinionated 
 - hide stories
 - hide voice hint
 - hide paid reaction upsell
+- hide hashtag suggestions in chat input
 - hide repost to story
 - 🐶 hide bot commands and webview buttons
 - hide intro greeting + non-clickable custom intro sticker
@@ -171,3 +175,4 @@ most things are toggleable in `Settings → Inugram`, with sensible opinionated 
 - profile scroll jump when opening uncached user
 - stale unread badges on global-search top peers
 - stale unread mention pointer after reading mention on another device (mention button jumping to old message)
+- photo/video gallery performance improvements

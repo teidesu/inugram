@@ -4,18 +4,56 @@ Date: Wed, 13 May 2026 17:51:19 +0200
 Subject: fix stale unread mention from breaking "jump to mention" button
 
 ---
- .../src/main/java/org/telegram/messenger/MessagesStorage.java    | 1 +
- 1 file changed, 1 insertion(+)
+ .../telegram/messenger/MessagesStorage.java    | 18 ++++++++++++++++++
+ 1 file changed, 18 insertions(+)
 
 diff --git a/TMessagesProj/src/main/java/org/telegram/messenger/MessagesStorage.java b/TMessagesProj/src/main/java/org/telegram/messenger/MessagesStorage.java
 index 0000000..0000000 100644
 --- a/TMessagesProj/src/main/java/org/telegram/messenger/MessagesStorage.java
 +++ b/TMessagesProj/src/main/java/org/telegram/messenger/MessagesStorage.java
-@@ -13383,6 +13383,7 @@ public class MessagesStorage extends BaseController {
+@@ -13376,13 +13376,24 @@ public class MessagesStorage extends BaseController {
+ 
+     private void markMessagesAsReadInternal(LongSparseIntArray inbox, LongSparseIntArray outbox, SparseIntArray encryptedMessages) {
+         SQLitePreparedStatement state = null;
++        SQLiteCursor cursor = null;
+         try {
+             if (!isEmpty(inbox)) {
+                 state = database.executeFast("DELETE FROM unread_push_messages WHERE uid = ? AND mid <= ?");
++                LongSparseIntArray mentionsUpdate = null;
+                 for (int b = 0; b < inbox.size(); b++) {
                      long key = inbox.keyAt(b);
                      int messageId = inbox.get(key);
                      database.executeFast(String.format(Locale.US, "UPDATE messages_v2 SET read_state = read_state | 1 WHERE uid = %d AND mid > 0 AND mid <= %d AND read_state IN(0,2) AND out = 0", key, messageId)).stepThis().dispose();
 +                    database.executeFast(String.format(Locale.US, "UPDATE messages_v2 SET read_state = read_state | 2 WHERE uid = %d AND mid > 0 AND mid <= %d AND mention = 1 AND read_state IN(0,1) AND out = 0", key, messageId)).stepThis().dispose();
++                    int newMentions = 0;
++                    cursor = database.queryFinalized(String.format(Locale.US, "SELECT count(mid) FROM messages_v2 WHERE uid = %d AND mention = 1 AND read_state IN(0,1) AND out = 0", key));
++                    if (cursor.next()) newMentions = cursor.intValue(0);
++                    cursor.dispose();
++                    cursor = null;
++                    database.executeFast(String.format(Locale.US, "UPDATE dialogs SET unread_count_i = %d WHERE did = %d AND unread_count_i > %d", newMentions, key, newMentions)).stepThis().dispose();
++                    if (mentionsUpdate == null) mentionsUpdate = new LongSparseIntArray();
++                    mentionsUpdate.put(key, newMentions);
  
                      state.requery();
                      state.bindLong(1, key);
+@@ -13391,6 +13402,10 @@ public class MessagesStorage extends BaseController {
+                 }
+                 state.dispose();
+                 state = null;
++                if (mentionsUpdate != null) {
++                    getMessagesController().processDialogsUpdateRead(null, mentionsUpdate);
++                    updateFiltersReadCounter(null, mentionsUpdate, true);
++                }
+             }
+             if (!isEmpty(outbox)) {
+                 for (int b = 0; b < outbox.size(); b++) {
+@@ -13418,6 +13433,9 @@ public class MessagesStorage extends BaseController {
+             if (state != null) {
+                 state.dispose();
+             }
++            if (cursor != null) {
++                cursor.dispose();
++            }
+         }
+     }
+ 

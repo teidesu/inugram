@@ -568,6 +568,37 @@ object ChatHelper {
     }
 
     @JvmStatic
+    fun cycleForwardModeOnBar(activity: ChatActivity): Boolean {
+        val params = activity.messagePreviewParams ?: return false
+        val messages = params.forwardMessages?.messages ?: return false
+        if (messages.isEmpty()) return false
+
+        val hideAuthor = params.hideForwardSendersName
+        val hideCaption = params.hideCaption
+        when {
+            !hideAuthor && !hideCaption -> {
+                params.hideForwardSendersName = true
+                params.hideCaption = false
+            }
+            hideAuthor && !hideCaption -> {
+                if (params.hasCaption) {
+                    params.hideForwardSendersName = true
+                    params.hideCaption = true
+                } else {
+                    params.hideForwardSendersName = false
+                    params.hideCaption = false
+                }
+            }
+            else -> {
+                params.hideForwardSendersName = false
+                params.hideCaption = false
+            }
+        }
+        activity.showFieldPanelForForward(true, messages)
+        return true
+    }
+
+    @JvmStatic
     fun onMenuOptionLongClick(
         activity: ChatActivity,
         popupLayout: ActionBarPopupWindow.ActionBarPopupWindowLayout,

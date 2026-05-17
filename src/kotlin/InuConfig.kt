@@ -209,6 +209,9 @@ object InuConfig {
     val HIDE_PAID_REACTION_UPSELL = BoolItem("hide_paid_reaction_upsell", true)
 
     @JvmField
+    val HIDE_HASHTAG_SUGGESTIONS = BoolItem("hide_hashtag_suggestions", true)
+
+    @JvmField
     val DISABLE_PROFILE_SCROLL_SNAP = BoolItem("disable_profile_scroll_snap", true)
 
     @JvmField
@@ -287,6 +290,9 @@ object InuConfig {
 
     @JvmField
     val FOLDERS_UNREAD_COUNTER_MODE = FoldersUnreadCounterModeItem()
+
+    @JvmField
+    val HIDE_ALL_CHATS_TAB = BoolItem("hide_all_chats_tab", false)
 
     class StickerTimeModeItem : IntItem("sticker_time_mode", SHOW) {
         companion object {
@@ -503,4 +509,10 @@ object InuConfig {
 
     @JvmField
     val ACCOUNT_ORDER = StringItem("account_order", "", exportable = false)
+
+    @JvmField
+    val FASTER_DOWNLOADS = BoolItem("faster_downloads", true)
+
+    @JvmField
+    val FASTER_UPLOADS = BoolItem("faster_uploads", true)
 }

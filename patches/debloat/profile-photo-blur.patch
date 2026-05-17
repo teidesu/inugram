@@ -4,12 +4,12 @@ Date: Mon, 11 May 2026 20:53:33 +0200
 Subject: disable profile photo blur, replacing it with a simple fade gradient
 
 ---
- .../telegram/ui/Components/ProfileActionsView.java  |  2 +-
- .../ui/Components/ProfileGalleryBlurView.java       |  6 +++++-
- .../telegram/ui/Components/ProfileGalleryView.java  |  2 +-
- .../telegram/ui/Components/ProfileMusicView.java    |  9 ++++++---
- .../main/java/org/telegram/ui/ProfileActivity.java  | 13 +++++++------
- 5 files changed, 20 insertions(+), 12 deletions(-)
+ .../ui/Components/ProfileActionsView.java       |  2 +-
+ .../ui/Components/ProfileGalleryBlurView.java   |  6 +++++-
+ .../ui/Components/ProfileGalleryView.java       |  2 +-
+ .../ui/Components/ProfileMusicView.java         |  9 ++++++---
+ .../java/org/telegram/ui/ProfileActivity.java   | 17 +++++++++++------
+ 5 files changed, 24 insertions(+), 12 deletions(-)
 
 diff --git a/TMessagesProj/src/main/java/org/telegram/ui/Components/ProfileActionsView.java b/TMessagesProj/src/main/java/org/telegram/ui/Components/ProfileActionsView.java
 index 0000000..0000000 100644
@@ -36,7 +36,7 @@ index 0000000..0000000 100644
  
      private final Runnable blurTask = this::doBlur;
      private final Runnable invalidateTask = this::updateContent;
-@@ -421,7 +422,8 @@ public class ProfileGalleryBlurView extends View {
+@@ -422,7 +423,8 @@ public class ProfileGalleryBlurView extends View {
  
      @Override
      protected void onDraw(Canvas canvas) {
@@ -46,7 +46,7 @@ index 0000000..0000000 100644
      }
  
      public void draw(Canvas canvas, ProfileActivity.AvatarImageView avatarImageView, float width, float height, boolean translate, float fraction, float alpha) {
-@@ -429,6 +431,8 @@ public class ProfileGalleryBlurView extends View {
+@@ -430,6 +432,8 @@ public class ProfileGalleryBlurView extends View {
              return;
          }
  
@@ -151,7 +151,18 @@ index 0000000..0000000 100644
  
              int count = avatarsViewPager.getRealCount();
              selectedPosition = avatarsViewPager.getRealPosition();
-@@ -11032,7 +11033,7 @@ public class ProfileActivity extends BaseFragment implements NotificationCenter.
+@@ -3102,6 +3103,10 @@ public class ProfileActivity extends BaseFragment implements NotificationCenter.
+                         if (giftsView != null) {
+                             giftsView.setExpandProgress(1f);
+                         }
++                        desu.inugram.helpers.ProfileHelper.notifyBlurExpandProgress(avatarsViewPager, 1f);
++                        if (musicView != null) {
++                            musicView.setParentExpanded(1f);
++                        }
+                         expandPhoto = false;
+                         updateCollectibleHint();
+                     }
+@@ -11050,7 +11055,7 @@ public class ProfileActivity extends BaseFragment implements NotificationCenter.
              actionsView.clipHeight = -1;
              float bottom = extraHeight + newTop - dp(hasMusic ? 25 : 0);
              float height = Math.min(dp(74), bottom - newTop);
@@ -160,7 +171,7 @@ index 0000000..0000000 100644
          }
  
          if (callToActionItem != null && callToActionItem.getTag() != null) {
-@@ -11062,7 +11063,7 @@ public class ProfileActivity extends BaseFragment implements NotificationCenter.
+@@ -11080,7 +11085,7 @@ public class ProfileActivity extends BaseFragment implements NotificationCenter.
  //            musicView.clipHeight = -1;
              float bottom = extraHeight + newTop + dp(74);
              float height = Math.min(getActionsExtraHeight(), bottom - newTop);
