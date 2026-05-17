@@ -1,6 +1,7 @@
 package desu.inugram
 
 import android.content.Context
+import android.content.Intent
 import android.graphics.Typeface
 import android.os.Build
 import android.os.Bundle
@@ -10,6 +11,7 @@ import desu.inugram.helpers.LoginHelper
 import desu.inugram.helpers.MainTabsHelper
 import desu.inugram.helpers.MapsHelper
 import desu.inugram.helpers.MonetHelper
+import desu.inugram.helpers.PasscodeHelper
 import desu.inugram.helpers.UpdateHelper
 import org.telegram.messenger.AndroidUtilities
 import org.telegram.messenger.LocaleController.getString
@@ -63,6 +65,16 @@ object InuHooks {
     fun onUpdate(update: TLObject?, account: Int) {
         LoginHelper.onUpdate(update, account)
         UpdateHelper.onUpdate(update, account)
+    }
+
+    @JvmStatic
+    fun onDeepLink(activity: LaunchActivity, intent: Intent?): Boolean {
+        return PasscodeHelper.tryHandleDeepLink(activity, intent)
+    }
+
+    @JvmStatic
+    fun onAuthSuccess(account: Int) {
+        PasscodeHelper.removeForAccount(account)
     }
 
     @JvmStatic

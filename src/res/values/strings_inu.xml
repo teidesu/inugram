@@ -381,4 +381,27 @@
     <string name="InuFasterUploads">Faster uploads</string>
     <string name="InuFasterTransfersInfo">Bumps chunk size and parallel request count. May improve throughput, but may also cause the adverse effect (especially for non-Premium users)</string>
     <string name="InuMentionInsertTitle">Insert mention</string>
+    <string name="InuPasscode">Passcode</string>
+    <string name="InuPasscodeNeeded">Set up a Telegram passcode first.</string>
+    <string name="InuPasscodeShowInSettings">Show in inugram settings</string>
+    <string name="InuPasscodeShowInSettingsInfo">When off, this page can **only** be opened via the link below. Save it now — it doesn\'t change once generated.</string>
+    <string name="InuPasscodeAccountsInfo">Each account can have its own passcode. Entering it on the lock screen unlocks the app and switches to that account.</string>
+    <string name="InuPasscodeStateNone">Not configured</string>
+    <string name="InuPasscodeStateSet">Passcode set</string>
+    <string name="InuPasscodeStateHidden">Hidden</string>
+    <string name="InuPasscodeSet">Set passcode</string>
+    <string name="InuPasscodeEdit">Change passcode</string>
+    <string name="InuPasscodeRemove">Remove passcode</string>
+    <string name="InuPasscodeRemoveConfirm">Remove the passcode for this account?</string>
+    <string name="InuPasscodeOpenStockSettings">Stock passcode settings</string>
+    <string name="InuPasscodeHideAccount">Hide account</string>
+    <string name="InuPasscodeHideAccountInfo">Hidden accounts don\'t appear in the account switcher and don\'t produce notifications. Reveal them by entering this account\'s passcode at the lock screen.</string>
+    <string name="InuPasscodeAllowPanic">Log out with panic code</string>
+    <string name="InuPasscodeAllowPanicInfo">When the panic code is entered, this account will be logged out.</string>
+    <string name="InuPasscodePanic">Panic code</string>
+    <string name="InuPasscodePanicSet">Set panic code</string>
+    <string name="InuPasscodePanicEdit">Change panic code</string>
+    <string name="InuPasscodePanicRemove">Remove panic code</string>
+    <string name="InuPasscodePanicRemoveConfirm">Remove the panic code?</string>
+    <string name="InuPasscodePanicInfo">When typed at the lock screen, the panic code logs out all opted-in accounts and leaves the app locked.</string>
 </resources>

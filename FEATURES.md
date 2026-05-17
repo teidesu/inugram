@@ -114,6 +114,7 @@ most things are toggleable in `Settings → Inugram`, with sensible opinionated 
 - password autofill hints in login (for password managers)
 - account limit raised to 8 (premium gating disabled)
 - 🐶 customizable account order
+- per-account passcodes, hidden accounts, panic code, hidden settings deeplink - *ported from [Nekogram](https://github.com/Nekogram/Nekogram)*
 
 ## behavior
 

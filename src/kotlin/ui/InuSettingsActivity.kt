@@ -81,6 +81,15 @@ class InuSettingsActivity : InuSettingsPageActivity() {
                 LocaleController.getString(R.string.InuTranslator)
             )
         )
+        if (!desu.inugram.helpers.PasscodeHelper.isSettingsHidden()) {
+            items.add(
+                UItem.asButton(
+                    BUTTON_PASSCODE,
+                    R.drawable.msg_permissions,
+                    LocaleController.getString(R.string.InuPasscode)
+                )
+            )
+        }
         items.add(UItem.asShadow(null))
 
         items.add(
@@ -123,6 +132,7 @@ class InuSettingsActivity : InuSettingsPageActivity() {
             BUTTON_ANNOYANCES -> presentFragment(InuAnnoyancesSettingsActivity())
             BUTTON_BEHAVIOR -> presentFragment(InuBehaviorSettingsActivity())
             BUTTON_TRANSLATOR -> presentFragment(InuTranslatorSettingsActivity())
+            BUTTON_PASSCODE -> presentFragment(InuPasscodeSettingsActivity())
             BUTTON_ABOUT -> presentFragment(InuAboutActivity())
             BUTTON_EXPORT -> launchExport()
             BUTTON_IMPORT -> launchImport()
@@ -237,6 +247,7 @@ class InuSettingsActivity : InuSettingsPageActivity() {
         private val BUTTON_ANNOYANCES = InuUtils.generateId()
         private val BUTTON_BEHAVIOR = InuUtils.generateId()
         private val BUTTON_TRANSLATOR = InuUtils.generateId()
+        private val BUTTON_PASSCODE = InuUtils.generateId()
         private val BUTTON_ABOUT = InuUtils.generateId()
         private val BUTTON_EXPORT = InuUtils.generateId()
         private val BUTTON_IMPORT = InuUtils.generateId()
