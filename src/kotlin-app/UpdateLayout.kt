@@ -46,7 +46,7 @@ class UpdateLayout(
             val totalSize = (args.getOrNull(2) as? Long) ?: return
             val loadProgress = loadedSize / totalSize.toFloat()
             updateLayoutIcon?.setProgress(loadProgress, true)
-            tv.setText(LocaleController.formatString(R.string.AppUpdateDownloading, (loadProgress * 100).toInt()))
+            tv.text = LocaleController.formatString(R.string.AppUpdateDownloading, (loadProgress * 100).toInt())
         }
     }
 
@@ -71,16 +71,23 @@ class UpdateLayout(
                     )
                     updateAppUpdateViews(currentAccount, true)
                 }
+
                 MediaActionDrawable.ICON_CANCEL -> {
                     FileLoader.getInstance(currentAccount).cancelLoadFile(SharedConfig.pendingAppUpdate.document)
                     updateAppUpdateViews(currentAccount, true)
                 }
+
                 else -> {
                     ApplicationLoader.applicationLoaderInstance?.openApkInstall(
                         activity, SharedConfig.pendingAppUpdate.document,
                     )
                 }
             }
+        }
+        layout.setOnLongClickListener {
+            if (!SharedConfig.isAppUpdateAvailable()) return@setOnLongClickListener false
+            UpdateAppAlertDialog(activity, SharedConfig.pendingAppUpdate, currentAccount).show()
+            true
         }
 
         val tv = object : AnimatedTextView(activity, true, true, true) {
