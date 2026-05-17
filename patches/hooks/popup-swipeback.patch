@@ -5,8 +5,9 @@ Subject: Expose foreground translation and unified touch coords on swipeback pop
 
 ---
  .../ui/ActionBar/ActionBarPopupWindow.java    |  2 ++
- .../ui/Components/PopupSwipeBackLayout.java   | 24 +++++++++++++++++--
- 2 files changed, 24 insertions(+), 2 deletions(-)
+ .../ChatScrimPopupContainerLayout.java        |  3 +-
+ .../ui/Components/PopupSwipeBackLayout.java   | 29 +++++++++++++++++--
+ 3 files changed, 31 insertions(+), 3 deletions(-)
 
 diff --git a/TMessagesProj/src/main/java/org/telegram/ui/ActionBar/ActionBarPopupWindow.java b/TMessagesProj/src/main/java/org/telegram/ui/ActionBar/ActionBarPopupWindow.java
 index 0000000..0000000 100644
@@ -28,21 +29,40 @@ index 0000000..0000000 100644
                      backgroundDrawable.setBounds(AndroidUtilities.rectTmp2);
                      backgroundDrawable.draw(canvas);
                      if (clipChildren) {
+diff --git a/TMessagesProj/src/main/java/org/telegram/ui/Components/ChatScrimPopupContainerLayout.java b/TMessagesProj/src/main/java/org/telegram/ui/Components/ChatScrimPopupContainerLayout.java
+index 0000000..0000000 100644
+--- a/TMessagesProj/src/main/java/org/telegram/ui/Components/ChatScrimPopupContainerLayout.java
++++ b/TMessagesProj/src/main/java/org/telegram/ui/Components/ChatScrimPopupContainerLayout.java
+@@ -126,7 +126,8 @@ public class ChatScrimPopupContainerLayout extends LinearLayout {
+     }
+ 
+     private void updatePopupTranslation() {
+-        float x = (1f - progressToSwipeBack) * popupLayoutLeftOffset;
++        boolean inu_pin = popupWindowLayout != null && popupWindowLayout.getSwipeBack() != null && popupWindowLayout.getSwipeBack().inu_isCurrentForegroundPinningScrim();
++        float x = (1f - (inu_pin ? 0f : progressToSwipeBack)) * popupLayoutLeftOffset;
+         popupWindowLayout.setTranslationX(x);
+         if (bottomView != null) {
+             bottomView.setTranslationX(x);
 diff --git a/TMessagesProj/src/main/java/org/telegram/ui/Components/PopupSwipeBackLayout.java b/TMessagesProj/src/main/java/org/telegram/ui/Components/PopupSwipeBackLayout.java
 index 0000000..0000000 100644
 --- a/TMessagesProj/src/main/java/org/telegram/ui/Components/PopupSwipeBackLayout.java
 +++ b/TMessagesProj/src/main/java/org/telegram/ui/Components/PopupSwipeBackLayout.java
-@@ -54,6 +54,9 @@ public class PopupSwipeBackLayout extends FrameLayout {
+@@ -54,6 +54,14 @@ public class PopupSwipeBackLayout extends FrameLayout {
      private float overrideForegroundHeight;
      private ValueAnimator foregroundAnimator;
  
 +    private final SparseIntArray inu_foregroundOffsetIndex = new SparseIntArray();
 +    private int inu_foregroundOffsetY = 0;
++    public int inu_pinnedScrimForegroundIndex = -1;
++
++    public boolean inu_isCurrentForegroundPinningScrim() {
++        return currentForegroundIndex >= 0 && currentForegroundIndex == inu_pinnedScrimForegroundIndex;
++    }
 +
      private int currentForegroundIndex = -1;
      private AnimationNotificationsLocker notificationsLocker = new AnimationNotificationsLocker();
      Theme.ResourcesProvider resourcesProvider;
-@@ -178,8 +181,10 @@ public class PopupSwipeBackLayout extends FrameLayout {
+@@ -178,8 +186,10 @@ public class PopupSwipeBackLayout extends FrameLayout {
          float bSc = 0.95f + (1f - transitionProgress) * 0.05f;
          backgroundView.setScaleX(bSc);
          backgroundView.setScaleY(bSc);
@@ -53,7 +73,7 @@ index 0000000..0000000 100644
          }
          invalidateVisibility();
  
-@@ -204,6 +209,7 @@ public class PopupSwipeBackLayout extends FrameLayout {
+@@ -204,6 +214,7 @@ public class PopupSwipeBackLayout extends FrameLayout {
          if (applyBackScaleY) {
              p.setBackScaleY(Math.min(1, h / p.getMeasuredHeight()));
          }
@@ -61,7 +81,7 @@ index 0000000..0000000 100644
          p.updateAnimation = true;
  
          for (int i = 0; i < getChildCount(); i++) {
-@@ -241,7 +247,10 @@ public class PopupSwipeBackLayout extends FrameLayout {
+@@ -241,7 +252,10 @@ public class PopupSwipeBackLayout extends FrameLayout {
          View bv = getChildAt(0);
          View fv = getChildAt(currentForegroundIndex);
  
@@ -73,7 +93,7 @@ index 0000000..0000000 100644
          if (!b && act == MotionEvent.ACTION_DOWN) {
              return true;
          }
-@@ -345,9 +354,18 @@ public class PopupSwipeBackLayout extends FrameLayout {
+@@ -345,9 +359,18 @@ public class PopupSwipeBackLayout extends FrameLayout {
          }
          currentForegroundIndex = viewIndex;
          overrideForegroundHeight = overrideHeightIndex.get(viewIndex);
@@ -92,7 +112,7 @@ index 0000000..0000000 100644
      public void closeForeground() {
          closeForeground(true);
      }
-@@ -412,9 +430,10 @@ public class PopupSwipeBackLayout extends FrameLayout {
+@@ -412,9 +435,10 @@ public class PopupSwipeBackLayout extends FrameLayout {
              h = fH;
          } else {
              View foregroundView = getChildAt(currentForegroundIndex);
@@ -104,7 +124,7 @@ index 0000000..0000000 100644
              if (backgroundView.getMeasuredWidth() == 0 || backgroundView.getMeasuredHeight() == 0 || foregroundView.getMeasuredWidth() == 0 || foregroundView.getMeasuredHeight() == 0) {
                  y = fY;
                  w = fW;
-@@ -429,6 +448,7 @@ public class PopupSwipeBackLayout extends FrameLayout {
+@@ -429,6 +453,7 @@ public class PopupSwipeBackLayout extends FrameLayout {
          int s = canvas.save();
          mPath.rewind();
          int rad = AndroidUtilities.dp(12);

@@ -47,6 +47,7 @@ import org.telegram.ui.Components.UndoView
 import org.telegram.ui.DialogsActivity
 import java.io.File
 import java.util.Calendar
+import kotlin.math.roundToInt
 
 object ChatHelper {
     const val OPTION_SAVE = 501
@@ -726,7 +727,9 @@ object ChatHelper {
         val rp = activity.resourceProvider
         val swb = ItemOptions.swipeback(popupLayout, rp)
         val foregroundIndex = popupLayout.addViewToSwipeBack(swb.linearLayout)
+        swipeBack.inu_pinnedScrimForegroundIndex = foregroundIndex
 
+        swb.setMinWidth((anchorCell.width / AndroidUtilities.density).roundToInt())
         swb.add(R.drawable.ic_ab_back, LocaleController.getString(R.string.Back)) { swipeBack.closeForeground() }
         swb.addGap()
         swb.add(R.drawable.msg_forward, LocaleController.getString(R.string.Forward)) {
@@ -755,11 +758,16 @@ object ChatHelper {
             val spec = MeasureSpec.makeMeasureSpec(AndroidUtilities.dp(1000f), MeasureSpec.AT_MOST)
             swb.linearLayout.measure(spec, spec)
             val slack = (popupLayout.measuredHeight - swb.linearLayout.measuredHeight).coerceAtLeast(0)
+            var headerHeight = 0
+            for (i in 0 until 2.coerceAtMost(swb.linearLayout.childCount)) {
+                headerHeight += swb.linearLayout.getChildAt(i).measuredHeight
+            }
+            val adjustedAnchorY = anchorY.toInt() - headerHeight
 
             if (popupLayout.shownFromBottom) {
-                (anchorY.toInt() - slack).coerceIn(-slack, 0)
+                (adjustedAnchorY - slack).coerceIn(-slack, 0)
             } else {
-                anchorY.toInt().coerceIn(0, slack)
+                adjustedAnchorY.coerceIn(0, slack)
             }
         })
         swipeBack.openForeground(foregroundIndex)
