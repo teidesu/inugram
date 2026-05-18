@@ -38,8 +38,6 @@ class AppearanceSettingsActivity : SettingsPageActivity() {
                 experimental = true,
             )
         )
-        items.add(UItem.asHeader(LocaleController.getString(R.string.InuMiscellaneous)))
-        items.add(
             UItem.asCheck(
                 TOGGLE_SHOW_SECONDS,
                 LocaleController.getString(R.string.InuShowSeconds)
