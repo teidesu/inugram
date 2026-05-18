@@ -164,6 +164,9 @@ object InuConfig {
     val CHAT_ALWAYS_SHOW_DOWN = BoolItem("chat_always_show_down", true)
 
     @JvmField
+    val CHAT_TWO_FINGER_SELECT = BoolItem("chat_two_finger_select", true)
+
+    @JvmField
     val CHAT_REMEMBER_ALL_REPLIES = BoolItem("chat_remember_all_replies", true)
 
     @JvmField
@@ -221,7 +224,7 @@ object InuConfig {
     val PROFILE_PREFER_MEDIA_TAB = BoolItem("profile_prefer_media_tab", true)
 
     @JvmField
-    val OPT_IN_MOTION_PHOTOS = BoolItem("opt_in_motion_photos", true)
+    val DISABLE_MOTION_PHOTOS = BoolItem("disable_motion_photos", true)
 
     @JvmField
     val HIDE_REACTIONS_ENTRY = BoolItem("hide_reactions_entry", false)
@@ -337,6 +340,9 @@ object InuConfig {
     val WEB_PREVIEW_REPLACEMENTS = StringItem("web_preview_replacements", "")
 
     @JvmField
+    val STRIP_TRACKING_PARAMS = BoolItem("strip_tracking_params", true)
+
+    @JvmField
     val DISABLE_INTRO_STICKER = BoolItem("disable_intro_sticker", true)
 
     @JvmField
@@ -396,9 +402,6 @@ object InuConfig {
 
     @JvmField
     val CHAT_INPUT_MAX_LINES = IntItem("chat_input_max_lines", 8)
-
-    @JvmField
-    val REDUCE_CHAT_INPUT_MOTION = BoolItem("reduce_chat_input_motion", true)
 
     @JvmField
     val REACTION_BAR_BELOW = BoolItem("reaction_bar_below", false)

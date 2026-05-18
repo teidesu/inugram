@@ -4,7 +4,7 @@ import android.content.Context
 import android.content.SharedPreferences
 import androidx.core.content.edit
 import desu.inugram.InuConfig
-import desu.inugram.ui.SettingsImportConfirmSheet
+import desu.inugram.ui.settings.SettingsImportConfirmSheet
 import org.json.JSONObject
 import org.telegram.messenger.AndroidUtilities
 import org.telegram.messenger.ApplicationLoader

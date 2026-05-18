@@ -14,10 +14,10 @@ import org.telegram.messenger.MessagesController
 import org.telegram.messenger.MessagesStorage
 import org.telegram.messenger.NotificationCenter
 import org.telegram.messenger.R
+import org.telegram.messenger.UserConfig
 import org.telegram.tgnet.ConnectionsManager
 import org.telegram.tgnet.NativeByteBuffer
 import org.telegram.tgnet.TLRPC
-import org.telegram.messenger.UserConfig
 import org.telegram.ui.Cells.TextSelectionHelper
 import org.telegram.ui.ChatActivity
 import org.telegram.ui.Components.BulletinFactory
@@ -86,12 +86,9 @@ object TranslateHelper {
 
     @JvmStatic
     fun installSelectionTranslate(helper: TextSelectionHelper<*>) {
+        val account = UserConfig.selectedAccount
+        if (!MessagesController.getInstance(account).translateController.isContextTranslateEnabled) return
         helper.setOnTranslate { text, fromLang, toLang, onDismiss ->
-            val account = UserConfig.selectedAccount
-            if (!MessagesController.getInstance(account).translateController.isContextTranslateEnabled) {
-                onDismiss?.run()
-                return@setOnTranslate
-            }
             val fragment = LaunchActivity.getLastFragment()
             val context = fragment?.parentActivity ?: LaunchActivity.instance ?: return@setOnTranslate
             TranslateAlert2.showAlert(

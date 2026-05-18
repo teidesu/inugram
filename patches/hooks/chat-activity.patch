@@ -4,8 +4,8 @@ Date: Fri, 10 Apr 2026 05:29:50 +0300
 Subject: hooks into various places inside ChatActivity
 
 ---
- .../java/org/telegram/ui/ChatActivity.java    | 33 ++++++++++++++-----
- 1 file changed, 25 insertions(+), 8 deletions(-)
+ .../java/org/telegram/ui/ChatActivity.java    | 37 ++++++++++++++-----
+ 1 file changed, 27 insertions(+), 10 deletions(-)
 
 diff --git a/TMessagesProj/src/main/java/org/telegram/ui/ChatActivity.java b/TMessagesProj/src/main/java/org/telegram/ui/ChatActivity.java
 index 0000000..0000000 100644
@@ -72,6 +72,15 @@ index 0000000..0000000 100644
          if (undoView != null || getContext() == null) {
              return;
          }
+@@ -10125,7 +10127,7 @@ public class ChatActivity extends BaseFragment implements
+         return INavigationLayout.BackButtonState.BACK;
+     }
+ 
+-    private void createActionMode() {
++    public void createActionMode() {
+         if (selectedMessagesCountTextView != null || getContext() == null) {
+             return;
+         }
 @@ -10158,12 +10160,14 @@ public class ChatActivity extends BaseFragment implements
              actionModeViews.add(actionMode.addItemWithWidth(copy, R.drawable.msg_copy, AndroidUtilities.dp(54), LocaleController.getString(R.string.Copy)));
              actionModeViews.add(actionMode.addItemWithWidth(delete, R.drawable.msg_delete, AndroidUtilities.dp(54), LocaleController.getString(R.string.Delete)));
@@ -117,6 +126,15 @@ index 0000000..0000000 100644
                      if (copyVisible != newCopyVisible || starVisible != newStarVisible) {
                          if (newEditVisibility == View.VISIBLE) {
                              editItem.setAlpha(1.0f);
+@@ -19169,7 +19178,7 @@ public class ChatActivity extends BaseFragment implements
+         }
+     }
+ 
+-    private void processRowSelect(View view, boolean outside, float touchX, float touchY) {
++    public void processRowSelect(View view, boolean outside, float touchX, float touchY) {
+         MessageObject message = null;
+         if (view instanceof ChatMessageCell) {
+             ChatMessageCell cell = (ChatMessageCell) view;
 @@ -19195,7 +19204,7 @@ public class ChatActivity extends BaseFragment implements
          updateVisibleRows();
      }

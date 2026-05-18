@@ -183,7 +183,7 @@ index 0000000..0000000 100644
                      if (chatAdapter.isFiltered) {
                          updateFilteredMessages(true);
                      } else {
-@@ -34343,6 +34350,7 @@ public class ChatActivity extends BaseFragment implements
+@@ -34347,6 +34354,7 @@ public class ChatActivity extends BaseFragment implements
              if (searchUserButton != null) {
                  searchUserButton.setVisibility(View.GONE);
              }
@@ -191,7 +191,7 @@ index 0000000..0000000 100644
          }
          if (searchItem != null) {
              preventReopenSearchWithText = true;
-@@ -34399,6 +34407,7 @@ public class ChatActivity extends BaseFragment implements
+@@ -34403,6 +34411,7 @@ public class ChatActivity extends BaseFragment implements
              if (searchUserButton != null) {
                  searchUserButton.setVisibility(View.GONE);
              }
@@ -199,7 +199,7 @@ index 0000000..0000000 100644
          }
          if (searchItem != null) {
              preventReopenSearchWithText = true;
-@@ -37481,6 +37490,11 @@ public class ChatActivity extends BaseFragment implements
+@@ -37485,6 +37494,11 @@ public class ChatActivity extends BaseFragment implements
              if (searchUserButton != null) {
                  searchUserButton.setVisibility(View.VISIBLE);
              }
@@ -211,7 +211,7 @@ index 0000000..0000000 100644
              if (searchingForUser) {
                  mentionContainer.getAdapter().searchUsernameOrHashtag(null, 0, null, false, true);
                  searchingForUser = false;
-@@ -37775,6 +37789,7 @@ public class ChatActivity extends BaseFragment implements
+@@ -37779,6 +37793,7 @@ public class ChatActivity extends BaseFragment implements
                  if (searchUserButton != null) {
                      searchUserButton.setVisibility(View.VISIBLE);
                  }
@@ -219,7 +219,7 @@ index 0000000..0000000 100644
                  searchingUserMessages = null;
                  searchingChatMessages = null;
              }
-@@ -43105,7 +43120,7 @@ public class ChatActivity extends BaseFragment implements
+@@ -43109,7 +43124,7 @@ public class ChatActivity extends BaseFragment implements
          int lastBottom;
      }
  
@@ -228,7 +228,7 @@ index 0000000..0000000 100644
          public RecyclerListViewInternal(Context context, ThemeDelegate themeDelegate) {
              super(context, themeDelegate);
          }
-@@ -45728,7 +45743,7 @@ public class ChatActivity extends BaseFragment implements
+@@ -45732,7 +45747,7 @@ public class ChatActivity extends BaseFragment implements
          }
      }
  

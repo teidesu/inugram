@@ -9,8 +9,9 @@
     <string name="InuAppearance">Внешний вид</string>
     <string name="InuBehavior">Поведение</string>
     <string name="InuAnnoyances">Раздражители</string>
+    <string name="InuMessages">Сообщения</string>
     <string name="InuOther">Другое</string>
-    <string name="InuMainPage">Главный экран</string>
+    <string name="InuMainPage">Список диалогов</string>
     <string name="InuUserProfile">Профиль пользователя</string>
     <string name="InuUserProfileHeader">Шапка</string>
     <string name="InuUserProfileInformation">Информация</string>
@@ -99,15 +100,20 @@
     <string name="InuDeleteForBothGroups">Групповые чаты</string>
     <string name="InuSimpleAttachPopupAnimation">Простая анимация панели вложений</string>
     <string name="InuHidePaidReactionUpsell">Скрыть продвижение платных реакций</string>
+    <string name="InuHideHashtagSuggestions">Скрыть подсказки хэштегов</string>
+    <string name="InuHideAllChatsTab">Скрыть вкладку «Все чаты»</string>
+    <string name="InuHideCallActionButton">Скрыть кнопку звонка в заголовке</string>
     <string name="InuDisableProfileScrollSnap">Отключить прилипание прокрутки профиля</string>
     <string name="InuDisableProfileScrollSnapInfo">Не привязывать шапку профиля к фиксированным позициям при прокрутке</string>
     <string name="InuReduceProfileMotion">Уменьшить анимацию профиля</string>
     <string name="InuProfilePreferMediaTab">Открывать вкладку «Медиа»</string>
     <string name="InuProfilePreferMediaTabInfo">…вместо вкладок «Подарки» и «Истории»</string>
-    <string name="InuOptInMotionPhotos">Живые фото по запросу</string>
-    <string name="InuOptInMotionPhotosInfo">Не отправлять фото как «живые» по умолчанию</string>
+    <string name="InuDisableMotionPhotos">Отключить живые фото</string>
+    <string name="InuDisableMotionPhotosInfo">Не определять и не показывать живые фото ни в выборщике, ни в сообщениях</string>
     <string name="InuChatAlwaysShowDown">Всегда показывать кнопку «вниз»</string>
     <string name="InuChatAlwaysShowDownInfo">Даже при прокрутке вверх</string>
+    <string name="InuChatTwoFingerSelect">Выделение свайпом двумя пальцами</string>
+    <string name="InuChatTwoFingerSelectInfo">Проведите двумя пальцами по сообщениям, чтобы выделить/снять выделение (как в iOS)</string>
     <string name="InuChatRememberAllReplies">Запоминать все нажатые ответы</string>
     <string name="InuSaveToSavedMessages">Сохранить</string>
     <string name="InuHideSuggestions">Скрыть предложения</string>
@@ -139,7 +145,6 @@
     <string name="InuDisableChatBubbles">Отключить пузыри сообщений</string>
     <string name="InuInPlaceTranslation">Перевод на месте</string>
     <string name="InuTranslateWebPreviews">Переводить превью ссылок</string>
-    <string name="InuTranslateWebPreviewsInfo">Также переводить заголовок/описание превью ссылки. Переводится независимо от тела сообщения, поэтому работает даже если язык сообщения находится в списке «Не переводить».</string>
     <string name="InuTranslateInstantView">Перевести страницу</string>
     <string name="InuInstantViewShowOriginal">Показать оригинал</string>
     <string name="InuTranslating">Перевод…</string>
@@ -158,8 +163,11 @@
     <string name="InuDisableChatPreviewExpand">Интерактивное превью чата</string>
     <string name="InuDisableChatPreviewExpandInfo">Отключить разворачивание по нажатию и сделать пузыри интерактивными</string>
     <string name="InuHideMyPhoneNumber">Скрыть мой номер телефона</string>
-    <string name="InuUseSystemFont">Системный шрифт</string>
-    <string name="InuUseSystemFontInfo">Заменить встроенный Roboto на системный шрифт</string>
+    <string name="InuFont">Шрифт интерфейса</string>
+    <string name="InuFontDefault">По умолчанию</string>
+    <string name="InuFontSystem">Системный</string>
+    <string name="InuFontCustom">Свой…</string>
+    <string name="InuFontImportFailed">Не удалось импортировать шрифт. Убедитесь, что это файл TTF/OTF/TTC.</string>
     <string name="InuProfileIdMode">Показывать ID в профиле</string>
     <string name="InuProfileIdModeOff">Выкл.</string>
     <string name="InuProfileIdModeTelegram">Telegram ID</string>
@@ -230,6 +238,14 @@
 
     <string name="InuHideFadeView">Скрыть градиенты затухания</string>
 
+    <string name="InuStripTrackingParams">Удалять параметры трекинга</string>
+    <string name="InuStripTrackingParamsSource">Фильтр URL Tracking от AdGuard, обновлён %1$s</string>
+    <string name="InuStripTrackingParamsUpdate">Обновить правила из AdGuard</string>
+    <string name="InuStripTrackingParamsRevert">Откатить ко встроенным правилам</string>
+    <string name="InuStripTrackingParamsUpdated">Правила обновлены</string>
+    <string name="InuStripTrackingParamsAlreadyLatest">Уже актуальная версия правил</string>
+    <string name="InuStripTrackingParamsUpdateFailed">Не удалось обновить правила</string>
+
     <string name="InuWebPreviewReplacements">Замены для превью ссылок</string>
     <string name="InuWebPreviewEnabled">Включить замены</string>
     <string name="InuWebPreviewReplacementsInfo">Замены по регулярным выражениям, применяемые к URL при получении превью ссылок. Долгое нажатие — удалить.</string>
@@ -249,7 +265,7 @@
     <string name="InuPinnedReactions">Закреплённые реакции</string>
     <string name="InuPinnedReactionsInfo">Закреплять реакции в начале панели реакций.</string>
     <string name="InuPinnedReactionsHeader">Закреплённые реакции</string>
-    <string name="InuPinnedReactionsLimitInfo">До 10 закреплённых реакций. Долгое нажатие — перетащить и изменить порядок.</string>
+    <string name="InuPinnedReactionsLimitInfo">До 20 закреплённых реакций. Долгое нажатие — перетащить и изменить порядок.</string>
     <string name="InuPinnedReactionsCopyServer">Скопировать с сервера</string>
     <string name="InuPinnedReactionsCopyServerConfirm">Это заменит ваши текущие закреплённые реакции на топ-реакции с сервера. Продолжить?</string>
     <string name="InuPinnedReactionsRemoveAll">Удалить все</string>
@@ -258,6 +274,10 @@
     <string name="InuOldMentionIndicator">Индикатор упоминаний как до 12.6</string>
 
     <string name="InuShowForwardTime">Показывать время пересылки</string>
+
+    <string name="InuForwardWithoutAuthor">Без автора</string>
+    <string name="InuForwardWithoutCaption">Без подписи</string>
+    <string name="InuHiddenCaptionDescription">Подписи удалены</string>
 
     <string name="InuTextClassifierMode">Режим текстового классификатора</string>
     <string name="InuTextClassifierModeInfo">Текстовый классификатор — это системный компонент, который автоматически расширяет выделение при двойном касании текста</string>
@@ -370,5 +390,32 @@
     <string name="InuLiveDraftFooter">(Экспериментально!) Стримит черновик прямо во время набора через **Live response streaming API** — ради прикола</string>
     <string name="InuNetwork">Сеть</string>
     <string name="InuFasterDownloads">Ускорение скачивания</string>
-    <string name="InuFasterUploads">Ускорение выгрузка</string>
+    <string name="InuFasterUploads">Ускорение выгрузки</string>
+    <string name="InuFasterTransfersInfo">Увеличивает размер чанка и количество параллельных запросов. Может улучшить скорость, но может и навредить (особенно для пользователей без Premium)</string>
+
+    <string name="InuMentionInsertTitle">Вставить упоминание</string>
+
+    <string name="InuPasscode">Код-пароль</string>
+    <string name="InuPasscodeNeeded">Сначала настройте код-пароль Telegram.</string>
+    <string name="InuPasscodeShowInSettings">Показывать в настройках inugram</string>
+    <string name="InuPasscodeShowInSettingsInfo">Когда выключено, эту страницу можно открыть **только** по ссылке ниже. Сохраните её сейчас — после создания она не меняется.</string>
+    <string name="InuPasscodeAccountsInfo">У каждого аккаунта может быть свой код-пароль. Ввод его на экране блокировки разблокирует приложение и переключит на этот аккаунт.</string>
+    <string name="InuPasscodeStateNone">Не настроен</string>
+    <string name="InuPasscodeStateSet">Код-пароль установлен</string>
+    <string name="InuPasscodeStateHidden">Скрыт</string>
+    <string name="InuPasscodeSet">Установить код-пароль</string>
+    <string name="InuPasscodeEdit">Изменить код-пароль</string>
+    <string name="InuPasscodeRemove">Удалить код-пароль</string>
+    <string name="InuPasscodeRemoveConfirm">Удалить код-пароль для этого аккаунта?</string>
+    <string name="InuPasscodeOpenStockSettings">Стандартные настройки код-пароля</string>
+    <string name="InuPasscodeHideAccount">Скрыть аккаунт</string>
+    <string name="InuPasscodeHideAccountInfo">Скрытые аккаунты не отображаются в переключателе и не присылают уведомлений. Откройте их, введя код-пароль этого аккаунта на экране блокировки.</string>
+    <string name="InuPasscodeAllowPanic">Выходить по паник-коду</string>
+    <string name="InuPasscodeAllowPanicInfo">При вводе паник-кода этот аккаунт будет разлогинен.</string>
+    <string name="InuPasscodePanic">Паник-код</string>
+    <string name="InuPasscodePanicSet">Установить паник-код</string>
+    <string name="InuPasscodePanicEdit">Изменить паник-код</string>
+    <string name="InuPasscodePanicRemove">Удалить паник-код</string>
+    <string name="InuPasscodePanicRemoveConfirm">Удалить паник-код?</string>
+    <string name="InuPasscodePanicInfo">Когда введён на экране блокировки, паник-код разлогинивает все согласившиеся аккаунты и оставляет приложение заблокированным.</string>
 </resources>

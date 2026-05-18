@@ -1,6 +1,6 @@
 import fs from 'node:fs/promises'
 import { join } from 'node:path'
-import { ICON_SELECTION, patchesDir, worktreeDir } from './config.js'
+import { ICON_SELECTION, patchesDir, rootDir, worktreeDir } from './config.js'
 import { generateLauncherIcon } from './launcher-icons.js'
 import {
   cd,
@@ -104,6 +104,18 @@ async function generateIconDrawables(repoDir: string) {
   return dirty
 }
 
+async function ensureAdGuardFilter() {
+  // AdGuard URL Tracking filter (list 17). Bundled as an asset; gitignored.
+  const target = join(rootDir, 'src/res/assets/adguard_url_tracking.txt')
+  if (await fs.stat(target).then(() => true, () => false)) return
+  const url = 'https://filters.adtidy.org/extension/ublock/filters/17.txt'
+  step(`Downloading AdGuard URL Tracking filter -> ${target}`)
+  const res = await fetch(url)
+  if (!res.ok) throw new Error(`Failed to download ${url}: ${res.status} ${res.statusText}`)
+  await ensureDir(join(rootDir, 'src/res/assets'))
+  await fs.writeFile(target, await res.text())
+}
+
 async function importSeries(seriesEntries: string[]) {
   const repo = cd(worktreeDir)
   for (const entry of seriesEntries) {
@@ -183,6 +195,7 @@ if (noStgit) {
     step(`Applying ${entry}`)
     await repo`git apply ${join(patchesDir, entry)}`
   }
+  await ensureAdGuardFilter()
   await linkForkSource(worktreeDir)
   await generateIconDrawables(worktreeDir)
   await generateLauncherIcon(worktreeDir)
@@ -197,6 +210,7 @@ if (noStgit) {
   } else {
     await ensurePatches(expectedPatches, seriesEntries)
   }
+  await ensureAdGuardFilter()
   const linkedAny = await linkForkSource(worktreeDir)
   const generatedAny = await generateIconDrawables(worktreeDir)
   const launcherAny = await generateLauncherIcon(worktreeDir)

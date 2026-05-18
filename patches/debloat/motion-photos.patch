@@ -1,0 +1,53 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: alina sireneva <alina@tei.su>
+Date: Wed, 22 Apr 2026 08:10:29 +0300
+Subject: disable "motion photos" throughout the app, both sending and rendering
+
+---
+ .../src/main/java/org/telegram/messenger/MediaController.java | 3 ++-
+ .../src/main/java/org/telegram/messenger/MessageObject.java   | 4 ++++
+ 2 files changed, 6 insertions(+), 1 deletion(-)
+
+diff --git a/TMessagesProj/src/main/java/org/telegram/messenger/MediaController.java b/TMessagesProj/src/main/java/org/telegram/messenger/MediaController.java
+index 0000000..0000000 100644
+--- a/TMessagesProj/src/main/java/org/telegram/messenger/MediaController.java
++++ b/TMessagesProj/src/main/java/org/telegram/messenger/MediaController.java
+@@ -5863,7 +5863,7 @@ public class MediaController implements AudioManager.OnAudioFocusChangeListener,
+                             int height = cursor.getInt(heightColumn);
+                             long size = cursor.getLong(sizeColumn);
+                             MotionPhotoDescription motionPhoto = null;
+-                            if (xmpColumn >= 0) {
++                            if (xmpColumn >= 0 && !desu.inugram.InuConfig.DISABLE_MOTION_PHOTOS.getValue()) {
+                                 try {
+                                     motionPhoto = XmpMotionPhotoDescriptionParser.parse(new String(cursor.getBlob(xmpColumn)));
+                                 } catch (Exception e) {
+@@ -5889,6 +5889,7 @@ public class MediaController implements AudioManager.OnAudioFocusChangeListener,
+ 
+                                         photoEntry.isVideo = true;
+                                         photoEntry.isLivePhoto = true;
++                                        photoEntry.discardLivePhoto = true;
+ 
+                                         photoEntry.livePhotoVideoOffset = videoStart;
+                                         photoEntry.livePhotoTimestampUs = motionPhoto.photoPresentationTimestampUs;
+diff --git a/TMessagesProj/src/main/java/org/telegram/messenger/MessageObject.java b/TMessagesProj/src/main/java/org/telegram/messenger/MessageObject.java
+index 0000000..0000000 100644
+--- a/TMessagesProj/src/main/java/org/telegram/messenger/MessageObject.java
++++ b/TMessagesProj/src/main/java/org/telegram/messenger/MessageObject.java
+@@ -10060,6 +10060,9 @@ public class MessageObject {
+         if (getMedia(message) instanceof TLRPC.TL_messageMediaWebPage) {
+             return isVideoDocument(getMedia(message).webpage.document);
+         }
++        if (getMedia(message) instanceof TLRPC.TL_messageMediaPhoto && getMedia(message).live_photo && desu.inugram.InuConfig.DISABLE_MOTION_PHOTOS.getValue()) {
++            return false;
++        }
+         return getMedia(message) != null && isVideoDocument(getMedia(message).document);
+     }
+ 
+@@ -10592,6 +10595,7 @@ public class MessageObject {
+     }
+ 
+     public boolean isLivePhoto() {
++        if (desu.inugram.InuConfig.DISABLE_MOTION_PHOTOS.getValue()) return false;
+         final TLRPC.MessageMedia media = getMedia(this);
+         return media != null && media.live_photo;
+     }

@@ -1,0 +1,28 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: alina sireneva <alina@tei.su>
+Date: Tue, 19 May 2026 00:23:40 +0400
+Subject: swipe with two fingers to select messages
+
+---
+ .../src/main/java/org/telegram/ui/ChatActivity.java       | 8 ++++++++
+ 1 file changed, 8 insertions(+)
+
+diff --git a/TMessagesProj/src/main/java/org/telegram/ui/ChatActivity.java b/TMessagesProj/src/main/java/org/telegram/ui/ChatActivity.java
+index 0000000..0000000 100644
+--- a/TMessagesProj/src/main/java/org/telegram/ui/ChatActivity.java
++++ b/TMessagesProj/src/main/java/org/telegram/ui/ChatActivity.java
+@@ -5064,6 +5064,14 @@ public class ChatActivity extends BaseFragment implements
+                 }
+             }
+ 
++            private final desu.inugram.helpers.TwoFingerSelectHelper.State inu_twoFingerSelect = desu.inugram.helpers.TwoFingerSelectHelper.newState(ChatActivity.this, this);
++
++            @Override
++            public boolean dispatchTouchEvent(MotionEvent ev) {
++                if (inu_twoFingerSelect.dispatch(ev)) return true;
++                return super.dispatchTouchEvent(ev);
++            }
++
+             @Override
+             public boolean onTouchEvent(MotionEvent e) {
+                 textSelectionHelper.checkSelectionCancel(e);

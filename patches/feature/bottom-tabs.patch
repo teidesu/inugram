@@ -11,10 +11,10 @@ Subject: bottom tabs tweaks: compact mode, hiding contacts, hiding it completely
  .../java/org/telegram/ui/DialogsActivity.java | 14 ++--
  .../org/telegram/ui/MainTabsActivity.java     | 70 +++++++++++++------
  .../java/org/telegram/ui/ProfileActivity.java |  9 +--
- .../org/telegram/ui/SettingsActivity.java     |  7 +-
+ .../org/telegram/ui/SettingsActivity.java     |  8 ++-
  .../java/org/telegram/ui/TopicsFragment.java  |  9 +--
  .../org/telegram/ui/ViewPagerActivity.java    |  2 +-
- 10 files changed, 122 insertions(+), 49 deletions(-)
+ 10 files changed, 123 insertions(+), 49 deletions(-)
 
 diff --git a/TMessagesProj/src/main/java/org/telegram/ui/CallLogActivity.java b/TMessagesProj/src/main/java/org/telegram/ui/CallLogActivity.java
 index 0000000..0000000 100644
@@ -493,15 +493,16 @@ diff --git a/TMessagesProj/src/main/java/org/telegram/ui/SettingsActivity.java b
 index 0000000..0000000 100644
 --- a/TMessagesProj/src/main/java/org/telegram/ui/SettingsActivity.java
 +++ b/TMessagesProj/src/main/java/org/telegram/ui/SettingsActivity.java
-@@ -60,6 +60,7 @@ import androidx.core.view.ViewCompat;
+@@ -60,6 +60,8 @@ import androidx.core.view.ViewCompat;
  import androidx.core.view.WindowInsetsCompat;
  import androidx.recyclerview.widget.RecyclerView;
  
 +import desu.inugram.helpers.MainTabsHelper;
- import desu.inugram.ui.InuSettingsActivity;
- 
++
  import org.telegram.PhoneFormat.PhoneFormat;
-@@ -211,7 +212,7 @@ public class SettingsActivity extends BaseFragment implements NotificationCenter
+ import org.telegram.messenger.AndroidUtilities;
+ import org.telegram.messenger.ApplicationLoader;
+@@ -209,7 +211,7 @@ public class SettingsActivity extends BaseFragment implements NotificationCenter
              hasMainTabs = arguments.getBoolean("hasMainTabs", false);
          }
  
@@ -510,7 +511,7 @@ index 0000000..0000000 100644
          return super.onFragmentCreate();
      }
  
-@@ -2001,8 +2002,8 @@ public class SettingsActivity extends BaseFragment implements NotificationCenter
+@@ -1999,8 +2001,8 @@ public class SettingsActivity extends BaseFragment implements NotificationCenter
          }
  
          final int additionalList = dp(48);

@@ -4,9 +4,9 @@ Date: Tue, 21 Apr 2026 14:53:27 +0300
 Subject: move the "seen by" menu item to the bottom of the menu
 
 ---
- .../java/org/telegram/ui/ChatActivity.java    | 79 +++++++++++++++----
- .../java/org/telegram/ui/MessageSeenView.java |  9 ++-
- 2 files changed, 69 insertions(+), 19 deletions(-)
+ .../java/org/telegram/ui/ChatActivity.java    | 85 +++++++++++++++----
+ .../java/org/telegram/ui/MessageSeenView.java |  9 +-
+ 2 files changed, 74 insertions(+), 20 deletions(-)
 
 diff --git a/TMessagesProj/src/main/java/org/telegram/ui/ChatActivity.java b/TMessagesProj/src/main/java/org/telegram/ui/ChatActivity.java
 index 0000000..0000000 100644
@@ -153,7 +153,20 @@ index 0000000..0000000 100644
                      backContainer.setOnClickListener(new View.OnClickListener() {
                          @Override
                          public void onClick(View view) {
-@@ -30717,10 +30749,19 @@ public class ChatActivity extends BaseFragment implements
+@@ -30699,7 +30731,11 @@ public class ChatActivity extends BaseFragment implements
+                             popupLayout.getSwipeBack().openForeground(foregroundIndex[0]);
+                         }
+                     });
+-                    linearLayout.addView(listView2, LayoutHelper.createLinear(LayoutHelper.MATCH_PARENT, LayoutHelper.WRAP_CONTENT));
++                    if (inu_viewsAtBottom) {
++                        linearLayout.addView(listView2, LayoutHelper.createLinear(LayoutHelper.MATCH_PARENT, 0, 1f));
++                    } else {
++                        linearLayout.addView(listView2, LayoutHelper.createLinear(LayoutHelper.MATCH_PARENT, LayoutHelper.WRAP_CONTENT));
++                    }
+ 
+                     listView2.setOnItemClickListener((view1, position) -> {
+                         TLObject object = finalMessageSeenView.users.get(position);
+@@ -30717,10 +30753,19 @@ public class ChatActivity extends BaseFragment implements
                          presentFragment(fragment);
                      });
  
@@ -175,7 +188,7 @@ index 0000000..0000000 100644
                  } else if (showPrivateMessageSeen) {
                      MessagePrivateSeenView messagePrivateSeenView = new MessagePrivateSeenView(getContext(), MessagePrivateSeenView.TYPE_SEEN, message, () -> {
                          closeMenu(true);
-@@ -31244,6 +31285,10 @@ public class ChatActivity extends BaseFragment implements
+@@ -31244,6 +31289,10 @@ public class ChatActivity extends BaseFragment implements
                      layout.addView(infoText, LayoutHelper.createFrame(LayoutHelper.WRAP_CONTENT, LayoutHelper.WRAP_CONTENT, Gravity.FILL));
                      popupLayout.addView(layout);
                  }

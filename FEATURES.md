@@ -68,6 +68,7 @@ most things are toggleable in `Settings → Inugram`, with sensible opinionated 
 - hide keyboard on scroll
 - always show go-to-bottom button (don't hide on scroll-down)
 - web preview: replacements (e.g. twitter→fixupx)
+- 🐶 strip tracking params (utm_*, fbclid, si, erid, …) from links before opening — *rules from AdGuard URL Tracking filter*
 - 🐶 web preview refetch from menu
 - 🐶 disable web preview limit on twitter-like websites
 - message details from menu (+ show json)
@@ -78,6 +79,7 @@ most things are toggleable in `Settings → Inugram`, with sensible opinionated 
 - show id in profile, show user json
 - long-tap inline callback button to copy text or callback data
 - "select between messages" (🐶 done right, with proper capping)
+- 🐶 two-finger swipe over messages to select/deselect them
 - in-place message translation, with optional web preview translation
 - instant view pages translator
 - show original time/date in "forwarded from" header
@@ -88,7 +90,6 @@ most things are toggleable in `Settings → Inugram`, with sensible opinionated 
 ## message input / formatting
 
 - 🐶 customizable max input lines (and bumped default)
-- 🐶 reduce message input motion (snap input height on line count change)
 - 🐶 per-chat live draft streaming (dm-only) for shits and giggles
 - 🐶 voice recorder moved into attachments drawer
 - 🐶 custom formatting popup ui (better ux for span manipulation)
@@ -125,7 +126,7 @@ most things are toggleable in `Settings → Inugram`, with sensible opinionated 
 - disable pull-to-next-channel
 - disable swipe-to-unarchive
 - disable instant camera in attachments
-- disable motion photos by default
+- disable motion photos (rendering + detection, in picker and in messages)
 - disable notification chat bubbles
 - 🐶 disable cloud drafts upload
 - 🐶 disable wallpaper parallax

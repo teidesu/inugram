@@ -11,6 +11,7 @@
     <string name="InuAppearance">Appearance</string>
     <string name="InuBehavior">Behavior</string>
     <string name="InuAnnoyances">Annoyances</string>
+    <string name="InuMessages">Messages</string>
     <string name="InuOther">Other</string>
     <string name="InuMainPage">Dialogs list</string>
     <string name="InuUserProfile">User profile</string>
@@ -58,8 +59,6 @@
     <string name="InuHideBotWebView">Hide bot Web App</string>
     <string name="InuHideSendAsPicker">Hide \"Send as\" picker</string>
     <string name="InuHideSendAsPickerInfo">Long-press the emoji button to temporarily reveal it</string>
-    <string name="InuReduceChatInputMotion">Reduce message input motion</string>
-    <string name="InuReduceChatInputMotionInfo">Snap the height when line count changes</string>
     <string name="InuHideRepostToStory">Hide \"Repost to Story\"</string>
     <string name="InuHideTrendingStickers">Hide trending stickers</string>
     <string name="InuBottomTabs">Bottom tabs</string>
@@ -109,10 +108,12 @@
     <string name="InuReduceProfileMotion">Reduce profile motion</string>
     <string name="InuProfilePreferMediaTab">Prefer \"Media\" tab</string>
     <string name="InuProfilePreferMediaTabInfo">…over Gifts and Posts tabs</string>
-    <string name="InuOptInMotionPhotos">Opt-in motion photos</string>
-    <string name="InuOptInMotionPhotosInfo">Disable sending photos as "live" by default</string>
+    <string name="InuDisableMotionPhotos">Disable motion photos</string>
+    <string name="InuDisableMotionPhotosInfo">Don\'t detect or render motion photos, in picker and in messages</string>
     <string name="InuChatAlwaysShowDown">Always show "go to bottom"</string>
     <string name="InuChatAlwaysShowDownInfo">Even when scrolling upwards</string>
+    <string name="InuChatTwoFingerSelect">Two-finger swipe to select</string>
+    <string name="InuChatTwoFingerSelectInfo">Drag with two fingers over messages to select/deselect them (like on iOS)</string>
     <string name="InuChatRememberAllReplies">Remember all clicked replies</string>
     <string name="InuSaveToSavedMessages">Save</string>
     <string name="InuHideSuggestions">Hide suggestions</string>
@@ -146,7 +147,6 @@
     <string name="InuDisableChatBubbles">Disable conversation bubbles</string>
     <string name="InuInPlaceTranslation">In-place translation</string>
     <string name="InuTranslateWebPreviews">Translate web previews</string>
-    <string name="InuTranslateWebPreviewsInfo">Also translate link preview title/description. Translated independently from the message body, so it works even when the message language is in Do Not Translate.</string>
     <string name="InuTranslateInstantView">Translate page</string>
     <string name="InuInstantViewShowOriginal">Show original</string>
     <string name="InuTranslating">Translating…</string>
@@ -240,6 +240,14 @@
 
     <string name="InuHideFadeView">Hide fade views</string>
 
+    <string name="InuStripTrackingParams">Strip tracking parameters</string>
+    <string name="InuStripTrackingParamsSource">AdGuard URL Tracking filter, updated %1$s</string>
+    <string name="InuStripTrackingParamsUpdate">Update rules from AdGuard</string>
+    <string name="InuStripTrackingParamsRevert">Revert to bundled rules</string>
+    <string name="InuStripTrackingParamsUpdated">Rules updated</string>
+    <string name="InuStripTrackingParamsAlreadyLatest">Already on the latest ruleset</string>
+    <string name="InuStripTrackingParamsUpdateFailed">Failed to update rules</string>
+
     <string name="InuWebPreviewReplacements">Web preview replacements</string>
     <string name="InuWebPreviewEnabled">Enable replacements</string>
     <string name="InuWebPreviewReplacementsInfo">Regex replacements applied to URLs when fetching web previews. Long-press to delete.</string>
@@ -259,7 +267,7 @@
     <string name="InuPinnedReactions">Pinned reactions</string>
     <string name="InuPinnedReactionsInfo">Pin reactions at the start of the reactions bar.</string>
     <string name="InuPinnedReactionsHeader">Pinned reactions</string>
-    <string name="InuPinnedReactionsLimitInfo">Up to 10 pinned reactions. Long-press to drag and reorder.</string>
+    <string name="InuPinnedReactionsLimitInfo">Up to 20 pinned reactions. Long-press to drag and reorder.</string>
     <string name="InuPinnedReactionsCopyServer">Copy from server</string>
     <string name="InuPinnedReactionsCopyServerConfirm">This will replace your current pinned reactions with the server-provided top reactions. Continue?</string>
     <string name="InuPinnedReactionsRemoveAll">Remove all</string>

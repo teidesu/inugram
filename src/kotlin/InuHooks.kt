@@ -13,11 +13,13 @@ import desu.inugram.helpers.MapsHelper
 import desu.inugram.helpers.MonetHelper
 import desu.inugram.helpers.PasscodeHelper
 import desu.inugram.helpers.UpdateHelper
+import desu.inugram.helpers.UrlCleanerHelper
 import org.telegram.messenger.AndroidUtilities
 import org.telegram.messenger.LocaleController.getString
 import org.telegram.messenger.MessagesController
 import org.telegram.messenger.R
 import org.telegram.messenger.UserConfig
+import org.telegram.messenger.Utilities
 import org.telegram.tgnet.TLObject
 import org.telegram.ui.ActionBar.BaseFragment
 import org.telegram.ui.Components.AnimatedFloat
@@ -35,6 +37,7 @@ import java.util.Hashtable
 
 
 object InuHooks {
+    @JvmStatic
     fun init(context: Context) {
         InuConfig.load(context)
         FontHelper.init(context)
@@ -45,6 +48,7 @@ object InuHooks {
         syncAnimationSpeed()
         UpdateHelper.clearPendingIfInstalled()
         CloudSettingsHelper.attachAutoSyncListener()
+        Utilities.globalQueue.postRunnable { UrlCleanerHelper.preload() }
     }
 
     @JvmStatic

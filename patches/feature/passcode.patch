@@ -33,7 +33,7 @@ diff --git a/TMessagesProj/src/main/java/org/telegram/ui/Components/AlertsCreato
 index 0000000..0000000 100644
 --- a/TMessagesProj/src/main/java/org/telegram/ui/Components/AlertsCreator.java
 +++ b/TMessagesProj/src/main/java/org/telegram/ui/Components/AlertsCreator.java
-@@ -7280,7 +7280,7 @@ public class AlertsCreator {
+@@ -7279,7 +7279,7 @@ public class AlertsCreator {
          linearLayout.setOrientation(LinearLayout.VERTICAL);
          for (int a = 0; a < UserConfig.MAX_ACCOUNT_COUNT; a++) {
              TLRPC.User u = UserConfig.getInstance(a).getCurrentUser();
@@ -156,7 +156,7 @@ diff --git a/TMessagesProj/src/main/java/org/telegram/ui/SettingsActivity.java b
 index 0000000..0000000 100644
 --- a/TMessagesProj/src/main/java/org/telegram/ui/SettingsActivity.java
 +++ b/TMessagesProj/src/main/java/org/telegram/ui/SettingsActivity.java
-@@ -631,7 +631,7 @@ public class SettingsActivity extends BaseFragment implements NotificationCenter
+@@ -630,7 +630,7 @@ public class SettingsActivity extends BaseFragment implements NotificationCenter
  
          accountNumbers.clear();
          for (int a = 0; a < UserConfig.MAX_ACCOUNT_COUNT; a++) {

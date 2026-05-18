@@ -148,7 +148,7 @@ object PasscodeHelper {
             else -> return false
         }
         if (host != "inusettings" || key.isNullOrEmpty() || key != getSettingsKey()) return false
-        activity.actionBarLayout.presentFragment(desu.inugram.ui.InuPasscodeSettingsActivity())
+        activity.actionBarLayout.presentFragment(desu.inugram.ui.settings.PasscodeSettingsActivity())
         return true
     }
 }

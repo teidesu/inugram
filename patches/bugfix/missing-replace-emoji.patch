@@ -398,7 +398,7 @@ index 0000000..0000000 100644
                  } else if (pinnedMessageObject.type == MessageObject.TYPE_POLL) {
                      if (pinnedMessageObject.messageOwner.media instanceof TLRPC.TL_messageMediaPoll) {
                          TLRPC.TL_messageMediaPoll poll = (TLRPC.TL_messageMediaPoll) pinnedMessageObject.messageOwner.media;
-@@ -39183,15 +39187,16 @@ public class ChatActivity extends BaseFragment implements
+@@ -39187,15 +39191,16 @@ public class ChatActivity extends BaseFragment implements
                  userButton.addView(imageView, LayoutHelper.createFrame(34, 34, Gravity.LEFT | Gravity.CENTER_VERTICAL, 13, 0, 0, 0));
  
                  final TextView titleText = new TextView(getContext());
@@ -729,7 +729,7 @@ diff --git a/TMessagesProj/src/main/java/org/telegram/ui/SettingsActivity.java b
 index 0000000..0000000 100644
 --- a/TMessagesProj/src/main/java/org/telegram/ui/SettingsActivity.java
 +++ b/TMessagesProj/src/main/java/org/telegram/ui/SettingsActivity.java
-@@ -451,6 +451,7 @@ public class SettingsActivity extends BaseFragment implements NotificationCenter
+@@ -450,6 +450,7 @@ public class SettingsActivity extends BaseFragment implements NotificationCenter
          titleView.setGravity(Gravity.CENTER);
          titleView.setSingleLine();
          titleView.setEllipsize(TextUtils.TruncateAt.END);
@@ -737,7 +737,7 @@ index 0000000..0000000 100644
          topView.addView(titleView, LayoutHelper.createFrame(LayoutHelper.MATCH_PARENT, LayoutHelper.WRAP_CONTENT, Gravity.CENTER_HORIZONTAL | Gravity.TOP, 16, 138.333f - 12, 16, 0));
  
          subtitleView = new TextView(context);
-@@ -527,7 +528,7 @@ public class SettingsActivity extends BaseFragment implements NotificationCenter
+@@ -526,7 +527,7 @@ public class SettingsActivity extends BaseFragment implements NotificationCenter
  
          avatarDrawable.setInfo(user);
          avatarView.setForUserOrChat(user, avatarDrawable);
@@ -746,7 +746,7 @@ index 0000000..0000000 100644
          final StringBuilder sb = new StringBuilder();
          if (user != null) {
              sb.append(PhoneFormat.getInstance().format("+" + user.phone));
-@@ -950,6 +951,7 @@ public class SettingsActivity extends BaseFragment implements NotificationCenter
+@@ -949,6 +950,7 @@ public class SettingsActivity extends BaseFragment implements NotificationCenter
              textView.setTextSize(15);
              textView.setTypeface(AndroidUtilities.bold());
              textView.setTextColor(Theme.getColor(Theme.key_windowBackgroundWhiteBlackText, resourcesProvider));
@@ -754,7 +754,7 @@ index 0000000..0000000 100644
  
              botDrawable = new AnimatedEmojiDrawable.SwapAnimatedEmojiDrawable(textView, dp(24), AnimatedEmojiDrawable.CACHE_TYPE_EMOJI_STATUS);
              emojiStatusDrawable = new AnimatedEmojiDrawable.SwapAnimatedEmojiDrawable(textView, dp(24), AnimatedEmojiDrawable.CACHE_TYPE_EMOJI_STATUS);
-@@ -1012,7 +1014,7 @@ public class SettingsActivity extends BaseFragment implements NotificationCenter
+@@ -1011,7 +1013,7 @@ public class SettingsActivity extends BaseFragment implements NotificationCenter
              avatarDrawable.setInfo(account, user);
              avatarView.getImageReceiver().setCurrentAccount(account);
              avatarView.setForUserOrChat(user, avatarDrawable);

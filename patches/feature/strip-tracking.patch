@@ -1,0 +1,21 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: alina sireneva <alina@tei.su>
+Date: Mon, 18 May 2026 21:24:46 +0400
+Subject: strip tracking parameters from urls
+
+---
+ .../src/main/java/org/telegram/messenger/browser/Browser.java    | 1 +
+ 1 file changed, 1 insertion(+)
+
+diff --git a/TMessagesProj/src/main/java/org/telegram/messenger/browser/Browser.java b/TMessagesProj/src/main/java/org/telegram/messenger/browser/Browser.java
+index 0000000..0000000 100644
+--- a/TMessagesProj/src/main/java/org/telegram/messenger/browser/Browser.java
++++ b/TMessagesProj/src/main/java/org/telegram/messenger/browser/Browser.java
+@@ -295,6 +295,7 @@ public class Browser {
+         if (context == null || uri == null) {
+             return;
+         }
++        uri = desu.inugram.helpers.UrlCleanerHelper.clean(uri);
+         final int currentAccount = UserConfig.selectedAccount;
+         boolean[] forceBrowser = new boolean[]{false};
+         boolean internalUri = isInternalUri(uri, forceBrowser);

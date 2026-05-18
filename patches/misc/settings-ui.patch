@@ -4,9 +4,9 @@ Date: Thu, 9 Apr 2026 03:23:55 +0300
 Subject: settings ui
 
 ---
- .../java/org/telegram/messenger/ApplicationLoader.java   | 2 ++
- .../src/main/java/org/telegram/ui/SettingsActivity.java  | 9 +++++++++
- 2 files changed, 11 insertions(+)
+ .../java/org/telegram/messenger/ApplicationLoader.java     | 2 ++
+ .../src/main/java/org/telegram/ui/SettingsActivity.java    | 7 +++++++
+ 2 files changed, 9 insertions(+)
 
 diff --git a/TMessagesProj/src/main/java/org/telegram/messenger/ApplicationLoader.java b/TMessagesProj/src/main/java/org/telegram/messenger/ApplicationLoader.java
 index 0000000..0000000 100644
@@ -16,7 +16,7 @@ index 0000000..0000000 100644
  
          super.onCreate();
  
-+        desu.inugram.InuHooks.INSTANCE.init(this);
++        desu.inugram.InuHooks.init(this);
 +
          if (BuildVars.LOGS_ENABLED) {
              FileLog.d("app start time = " + (startTime = SystemClock.elapsedRealtime()));
@@ -25,16 +25,7 @@ diff --git a/TMessagesProj/src/main/java/org/telegram/ui/SettingsActivity.java b
 index 0000000..0000000 100644
 --- a/TMessagesProj/src/main/java/org/telegram/ui/SettingsActivity.java
 +++ b/TMessagesProj/src/main/java/org/telegram/ui/SettingsActivity.java
-@@ -60,6 +60,8 @@ import androidx.core.view.ViewCompat;
- import androidx.core.view.WindowInsetsCompat;
- import androidx.recyclerview.widget.RecyclerView;
- 
-+import desu.inugram.ui.InuSettingsActivity;
-+
- import org.telegram.PhoneFormat.PhoneFormat;
- import org.telegram.messenger.AndroidUtilities;
- import org.telegram.messenger.ApplicationLoader;
-@@ -679,6 +681,9 @@ public class SettingsActivity extends BaseFragment implements NotificationCenter
+@@ -679,6 +679,9 @@ public class SettingsActivity extends BaseFragment implements NotificationCenter
              items.add(UItem.asShadow(null));
          }
  
@@ -44,13 +35,13 @@ index 0000000..0000000 100644
          items.add(SettingCell.Factory.of(1, IconBackgroundColors.BLUE.top, IconBackgroundColors.BLUE.bottom, R.drawable.settings_account, getString(R.string.SettingsAccount), getString(R.string.SettingsAccountInfo)));
          items.add(SettingCell.Factory.of(2, IconBackgroundColors.ORANGE.top, IconBackgroundColors.ORANGE.bottom, R.drawable.settings_chat, getString(R.string.SettingsChat), getString(R.string.SettingsChatInfo)));
          items.add(SettingCell.Factory.of(3, IconBackgroundColors.GREEN.top, IconBackgroundColors.GREEN.bottom, R.drawable.settings_privacy, getString(R.string.SettingsPrivacySecurity), getString(R.string.SettingsPrivacySecurityInfo)));
-@@ -856,6 +861,10 @@ public class SettingsActivity extends BaseFragment implements NotificationCenter
+@@ -856,6 +859,10 @@ public class SettingsActivity extends BaseFragment implements NotificationCenter
                  }
                  break;
              }
 +
 +            case 99:
-+                presentFragment(new InuSettingsActivity());
++                presentFragment(new desu.inugram.ui.settings.InuSettingsActivity());
 +                break;
          }
      }

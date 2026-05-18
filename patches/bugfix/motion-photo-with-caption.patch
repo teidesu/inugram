@@ -1,0 +1,21 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: alina sireneva <alina@tei.su>
+Date: Mon, 18 May 2026 14:01:41 +0400
+Subject: correctly handle sending motion photos with caption
+
+---
+ .../src/main/java/org/telegram/messenger/MediaController.java    | 1 +
+ 1 file changed, 1 insertion(+)
+
+diff --git a/TMessagesProj/src/main/java/org/telegram/messenger/MediaController.java b/TMessagesProj/src/main/java/org/telegram/messenger/MediaController.java
+index 0000000..0000000 100644
+--- a/TMessagesProj/src/main/java/org/telegram/messenger/MediaController.java
++++ b/TMessagesProj/src/main/java/org/telegram/messenger/MediaController.java
+@@ -658,6 +658,7 @@ public class MediaController implements AudioManager.OnAudioFocusChangeListener,
+             this.hasSpoiler = state instanceof PhotoEntry && ((PhotoEntry) state).hasSpoiler;
+             this.starsAmount = state instanceof PhotoEntry ? ((PhotoEntry) state).starsAmount : 0;
+             this.isLivePhoto = state instanceof PhotoEntry && ((PhotoEntry) state).isLivePhoto;
++            this.discardLivePhoto = state instanceof PhotoEntry && ((PhotoEntry) state).discardLivePhoto;
+             this.livePhotoVideoOffset = state instanceof PhotoEntry ? ((PhotoEntry) state).livePhotoVideoOffset : 0;
+             this.livePhotoTimestampUs = state instanceof PhotoEntry ? ((PhotoEntry) state).livePhotoTimestampUs : 0;
+         }

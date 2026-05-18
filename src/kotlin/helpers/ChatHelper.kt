@@ -23,11 +23,15 @@ import org.telegram.messenger.FileLoader
 import org.telegram.messenger.LocaleController
 import org.telegram.messenger.MessageObject
 import org.telegram.messenger.MessagePreviewParams
+import org.telegram.messenger.MessagesController
+import org.telegram.messenger.MessagesStorage
 import org.telegram.messenger.R
 import org.telegram.messenger.SendMessagesHelper
 import org.telegram.messenger.UserConfig
 import org.telegram.messenger.UserObject
+import org.telegram.tgnet.ConnectionsManager
 import org.telegram.tgnet.TLRPC
+import org.telegram.ui.LaunchActivity
 import org.telegram.ui.ActionBar.ActionBarMenu
 import org.telegram.ui.ActionBar.ActionBarPopupWindow
 import org.telegram.ui.ActionBar.AlertDialog
@@ -638,6 +642,38 @@ object ChatHelper {
         if (chat != null && !ChatObject.isChannelAndNotMegaGroup(chat) && InuConfig.HIDE_BOT_SLASH_GROUPS.value) return true
         if (user != null && UserObject.isBot(user) && InuConfig.HIDE_BOT_SLASH_BOTS.value) return true
         return false
+    }
+
+    @JvmStatic
+    fun handleCalendarJumpToBeginning(fallback: MessagesStorage.IntCallback, dismiss: Runnable) {
+        dismiss.run()
+        val activity = LaunchActivity.getLastFragment() as? ChatActivity
+        if (activity == null) {
+            // non-ChatActivity callsites (e.g. admin log) ignore the date in their callback anyway
+            fallback.run(0)
+            return
+        }
+        if (activity.isThreadChat || activity.isTopic) {
+            activity.scrollToMessageId(activity.threadMessageId.toInt(), 0, false, 0, true, 0)
+            return
+        }
+        if (DialogObject.isEncryptedDialog(activity.dialogId)) return
+
+        val account = activity.currentAccount
+        val peer = MessagesController.getInstance(account).getInputPeer(activity.dialogId) ?: return
+        val req = TLRPC.TL_messages_getHistory().apply {
+            this.peer = peer
+            offset_id = 1
+            add_offset = -1
+            limit = 1
+        }
+        ConnectionsManager.getInstance(account).sendRequest(req) { response, _ ->
+            val res = response as? TLRPC.messages_Messages ?: return@sendRequest
+            val first = res.messages.minByOrNull { it.id } ?: return@sendRequest
+            AndroidUtilities.runOnUIThread {
+                activity.scrollToMessageId(first.id, 0, false, 0, true, 0)
+            }
+        }
     }
 
     @JvmStatic
