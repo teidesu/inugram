@@ -1,0 +1,91 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Radik Islamov <mail@vizqq.cc>
+Date: Mon, 18 May 2026 03:54:54 +0500
+Subject: Support UnifiedPush as alternative push provider
+
+---
+ TMessagesProj/build.gradle                             |  1 +
+ .../java/org/telegram/messenger/ApplicationLoader.java |  1 +
+ .../org/telegram/messenger/PushListenerController.java | 10 ++++++----
+ TMessagesProj_App/src/main/AndroidManifest.xml         |  5 +++++
+ 4 files changed, 13 insertions(+), 4 deletions(-)
+
+diff --git a/TMessagesProj/build.gradle b/TMessagesProj/build.gradle
+index 0000000..0000000 100644
+--- a/TMessagesProj/build.gradle
++++ b/TMessagesProj/build.gradle
+@@ -33,6 +33,7 @@ dependencies {
+ 
+     compileOnly 'org.checkerframework:checker-qual:2.5.2'
+     compileOnly 'org.checkerframework:checker-compat-qual:2.5.0'
++    implementation 'org.unifiedpush.android:connector:3.1.2'
+     implementation 'com.google.firebase:firebase-messaging:22.0.0'
+     implementation 'com.google.firebase:firebase-config:21.0.1'
+     implementation 'com.google.firebase:firebase-datatransport:18.1.0'
+diff --git a/TMessagesProj/src/main/java/org/telegram/messenger/ApplicationLoader.java b/TMessagesProj/src/main/java/org/telegram/messenger/ApplicationLoader.java
+index 0000000..0000000 100644
+--- a/TMessagesProj/src/main/java/org/telegram/messenger/ApplicationLoader.java
++++ b/TMessagesProj/src/main/java/org/telegram/messenger/ApplicationLoader.java
+@@ -349,6 +349,7 @@ public class ApplicationLoader extends Application {
+     }
+ 
+     public static void startPushService() {
++        if (desu.inugram.helpers.UnifiedPushHelper.isEnabled() && desu.inugram.helpers.UnifiedPushHelper.hasDistributors(applicationContext)) return;
+         SharedPreferences preferences = MessagesController.getGlobalNotificationsSettings();
+         boolean enabled;
+         if (preferences.contains("pushService")) {
+diff --git a/TMessagesProj/src/main/java/org/telegram/messenger/PushListenerController.java b/TMessagesProj/src/main/java/org/telegram/messenger/PushListenerController.java
+index 0000000..0000000 100644
+--- a/TMessagesProj/src/main/java/org/telegram/messenger/PushListenerController.java
++++ b/TMessagesProj/src/main/java/org/telegram/messenger/PushListenerController.java
+@@ -35,12 +35,14 @@ import java.util.concurrent.CountDownLatch;
+ @Keep
+ public class PushListenerController {
+     public static final int PUSH_TYPE_FIREBASE = 2,
+-        PUSH_TYPE_HUAWEI = 13;
++        PUSH_TYPE_HUAWEI = 13,
++        PUSH_TYPE_SIMPLE = 4;
+ 
+     @Retention(RetentionPolicy.SOURCE)
+     @IntDef({
+             PUSH_TYPE_FIREBASE,
+-            PUSH_TYPE_HUAWEI
++            PUSH_TYPE_HUAWEI,
++            PUSH_TYPE_SIMPLE
+     })
+     public @interface PushType {}
+ 
+@@ -67,7 +69,7 @@ public class PushListenerController {
+                 if (userConfig.getClientUserId() != 0) {
+                     final int currentAccount = a;
+                     if (sendStat) {
+-                        String tag = pushType == PUSH_TYPE_FIREBASE ? "fcm" : "hcm";
++                        String tag = pushType == PUSH_TYPE_FIREBASE ? "fcm" : (pushType == PUSH_TYPE_HUAWEI ? "hcm" : "up");
+                         TLRPC.TL_help_saveAppLog req = new TLRPC.TL_help_saveAppLog();
+                         TLRPC.TL_inputAppEvent event = new TLRPC.TL_inputAppEvent();
+                         event.time = SharedConfig.pushStringGetTimeStart;
+@@ -95,7 +97,7 @@ public class PushListenerController {
+     }
+ 
+     public static void processRemoteMessage(@PushType int pushType, String data, long time) {
+-        String tag = pushType == PUSH_TYPE_FIREBASE ? "FCM" : "HCM";
++        String tag = pushType == PUSH_TYPE_FIREBASE ? "FCM" : (pushType == PUSH_TYPE_HUAWEI ? "HCM" : "UP");
+         if (BuildVars.LOGS_ENABLED) {
+             FileLog.d(tag + " PRE START PROCESSING");
+         }
+diff --git a/TMessagesProj_App/src/main/AndroidManifest.xml b/TMessagesProj_App/src/main/AndroidManifest.xml
+index 0000000..0000000 100644
+--- a/TMessagesProj_App/src/main/AndroidManifest.xml
++++ b/TMessagesProj_App/src/main/AndroidManifest.xml
+@@ -4,6 +4,11 @@
+     android:installLocation="auto">
+ 
+     <application android:name="desu.inugram.ApplicationLoaderImpl" tools:replace="name">
++        <service android:exported="false" android:name="desu.inugram.UnifiedPushService">
++            <intent-filter>
++                <action android:name="org.unifiedpush.android.connector.PUSH_EVENT"/>
++            </intent-filter>
++        </service>
+         <service
+             android:name="org.telegram.messenger.GoogleVoiceClientService"
+             android:exported="true"

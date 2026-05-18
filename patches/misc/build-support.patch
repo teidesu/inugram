@@ -285,13 +285,15 @@ index 0000000..0000000 100644
 -          "client_type": 3
 -        }
 -      ],
--      "api_key": [
--        {
++      "oauth_client": [],
+       "api_key": [
+         {
 -          "current_key": "AIzaSyA-t0jLPjUt2FxrA8VPK2EiYHcYcboIR6k"
--        }
--      ],
--      "services": {
--        "appinvite_service": {
++          "current_key": "AIzaSyBUTDbLj-lMgQkor-hY57AIpB2s033xaB0"
+         }
+       ],
+       "services": {
+         "appinvite_service": {
 -          "other_platform_oauth_client": [
 -            {
 -              "client_id": "760348033671-2hh8ebmuflsnjoc0kldkfells9rhtfni.apps.googleusercontent.com",
@@ -314,15 +316,13 @@ index 0000000..0000000 100644
 -          "client_type": 3
 -        }
 -      ],
-+      "oauth_client": [],
-       "api_key": [
-         {
+-      "api_key": [
+-        {
 -          "current_key": "AIzaSyA-t0jLPjUt2FxrA8VPK2EiYHcYcboIR6k"
-+          "current_key": "AIzaSyBUTDbLj-lMgQkor-hY57AIpB2s033xaB0"
-         }
-       ],
-       "services": {
-         "appinvite_service": {
+-        }
+-      ],
+-      "services": {
+-        "appinvite_service": {
 -          "other_platform_oauth_client": [
 -            {
 -              "client_id": "760348033671-2hh8ebmuflsnjoc0kldkfells9rhtfni.apps.googleusercontent.com",
@@ -615,8 +615,9 @@ index 0000000..0000000 100644
  
      sourceSets.release {
 -        manifest.srcFile '../TMessagesProj/config/release/AndroidManifest.xml'
--    }
--
++        manifest.srcFile '../TMessagesProj/config/release/AndroidManifest_SDK23.xml'
+     }
+ 
 -    flavorDimensions "minApi"
 -
 -    productFlavors {
@@ -663,9 +664,8 @@ index 0000000..0000000 100644
 -            }
 -            buildConfigField "boolean", "BUNDLE", "false"
 -        }
-+        manifest.srcFile '../TMessagesProj/config/release/AndroidManifest_SDK23.xml'
-     }
- 
+-    }
+-
 -    defaultConfig.versionCode = Integer.parseInt(APP_VERSION_CODE)
 +    defaultConfig.versionCode = rootProject.ext.verCode
  
@@ -785,13 +785,15 @@ index 0000000..0000000 100644
 -          "client_type": 3
 -        }
 -      ],
--      "api_key": [
--        {
++      "oauth_client": [],
+       "api_key": [
+         {
 -          "current_key": "AIzaSyA-t0jLPjUt2FxrA8VPK2EiYHcYcboIR6k"
--        }
--      ],
--      "services": {
--        "appinvite_service": {
++          "current_key": "AIzaSyBUTDbLj-lMgQkor-hY57AIpB2s033xaB0"
+         }
+       ],
+       "services": {
+         "appinvite_service": {
 -          "other_platform_oauth_client": [
 -            {
 -              "client_id": "760348033671-2hh8ebmuflsnjoc0kldkfells9rhtfni.apps.googleusercontent.com",
@@ -814,15 +816,13 @@ index 0000000..0000000 100644
 -          "client_type": 3
 -        }
 -      ],
-+      "oauth_client": [],
-       "api_key": [
-         {
+-      "api_key": [
+-        {
 -          "current_key": "AIzaSyA-t0jLPjUt2FxrA8VPK2EiYHcYcboIR6k"
-+          "current_key": "AIzaSyBUTDbLj-lMgQkor-hY57AIpB2s033xaB0"
-         }
-       ],
-       "services": {
-         "appinvite_service": {
+-        }
+-      ],
+-      "services": {
+-        "appinvite_service": {
 -          "other_platform_oauth_client": [
 -            {
 -              "client_id": "760348033671-2hh8ebmuflsnjoc0kldkfells9rhtfni.apps.googleusercontent.com",

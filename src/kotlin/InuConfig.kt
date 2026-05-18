@@ -522,4 +522,10 @@ object InuConfig {
 
     @JvmField
     val FASTER_UPLOADS = BoolItem("faster_uploads", true)
+
+    @JvmField
+    val UNIFIED_PUSH_ENABLED = BoolItem("unified_push_enabled", false)
+
+    @JvmField
+    val UNIFIED_PUSH_GATEWAY = StringItem("unified_push_gateway", "https://p2p.belloworld.it/")
 }

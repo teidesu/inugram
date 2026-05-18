@@ -134,6 +134,7 @@ most things are toggleable in `Settings → Inugram`, with sensible opinionated 
 - 🐶 recyclerlistview instant-tap
 - ios-style menu gesture (release-to-commit) in bottom menu tabs
 - faster downloads/uploads
+- unifiedpush support (google-free push notifications via ntfy, nextpush, etc.) - *ported from [Forkgram](https://github.com/forkgram/TelegramAndroid)*
 
 ## annoyances
 

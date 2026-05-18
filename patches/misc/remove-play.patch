@@ -8,8 +8,8 @@ Subject: remove play services stuff only available for official apps
  .../telegram/messenger/CaptchaController.java | 114 ------
  .../messenger/MessagesController.java         |  12 -
  .../telegram/tgnet/ConnectionsManager.java    |  43 +--
- .../java/org/telegram/ui/LoginActivity.java   | 345 +-----------------
- 5 files changed, 13 insertions(+), 504 deletions(-)
+ .../java/org/telegram/ui/LoginActivity.java   | 343 +-----------------
+ 5 files changed, 12 insertions(+), 503 deletions(-)
  delete mode 100644 TMessagesProj/src/main/java/org/telegram/messenger/CaptchaController.java
 
 diff --git a/TMessagesProj/build.gradle b/TMessagesProj/build.gradle
@@ -274,9 +274,8 @@ index 0000000..0000000 100644
 -import com.google.android.play.core.integrity.IntegrityManagerFactory;
 -import com.google.android.play.core.integrity.IntegrityTokenRequest;
 -import com.google.android.play.core.integrity.IntegrityTokenResponse;
--
+ 
 -import org.json.JSONException;
-+
  import org.json.JSONObject;
  import org.telegram.PhoneFormat.PhoneFormat;
  import org.telegram.messenger.AccountInstance;
