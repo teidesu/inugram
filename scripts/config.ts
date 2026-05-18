@@ -40,6 +40,11 @@ export const forkSyncFiles: ForkSyncFile[] = [
     target: 'TMessagesProj/src/main/java/google_material',
     directory: true,
   },
+  {
+    source: 'src/java/desu',
+    target: 'TMessagesProj/src/main/java/desu',
+    directory: true,
+  },
   // assets
   {
     source: 'src/res/values/strings_inu.xml',

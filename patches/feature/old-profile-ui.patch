@@ -1,0 +1,551 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: alina sireneva <alina@tei.su>
+Date: Tue, 12 May 2026 00:00:00 +0000
+Subject: Restore 11.14 profile layout (avatar pos/scale, name/lastseen pos, music view)
+ when old layout is enabled
+
+---
+
+diff --git a/TMessagesProj/src/main/java/org/telegram/ui/ProfileActivity.java b/TMessagesProj/src/main/java/org/telegram/ui/ProfileActivity.java
+index 0000000..0000000 100644
+--- a/TMessagesProj/src/main/java/org/telegram/ui/ProfileActivity.java
++++ b/TMessagesProj/src/main/java/org/telegram/ui/ProfileActivity.java
+@@ -3833,6 +3833,7 @@
+                 }
+             });
+ 
++            if (!desu.inugram.InuConfig.OLD_LAYOUT.getValue()) {
+             actionsView = new ProfileActionsView(context, dp(74)) {
+                 @Override
+                 public void setTranslationY(float translationY) {
+@@ -3935,6 +3936,7 @@
+                         break;
+                 }
+             });
++            }
+         }
+ 
+         ActionBarMenu menu = actionBar.createMenu();
+@@ -5940,6 +5942,9 @@
+     }
+ 
+     private int getHeaderOnlyExtraHeight() {
++        if (desu.inugram.InuConfig.OLD_LAYOUT.getValue()) {
++            return dp(88f);
++        }
+         if (getActionsExtraHeight() == 0) {
+             return dp(168f);
+         }
+@@ -5950,6 +5955,9 @@
+         return getActionsExtraHeight(true);
+     }
+     private int getActionsExtraHeight(boolean withMusic) {
++        if (desu.inugram.InuConfig.OLD_LAYOUT.getValue()) {
++            return (withMusic && hasMusic) ? dp(25) : 0;
++        }
+         if (userId != 0 && imageUpdater != null && !myProfile)
+             return 0;
+         return dp(74 + (withMusic && hasMusic ? 25 : 0));
+@@ -6239,44 +6247,85 @@
+ 
+         updateEmojiStatusDrawableColor(value);
+ 
+-        float nameX = this.nameX;
+-        float onlineX = this.onlineX;
+-
+-        if (diff < 1f) {
+-            nameX = AndroidUtilities.lerp(-dpf2(42 + 21), nameX, diff);
+-            onlineX = AndroidUtilities.lerp(-dpf2(42 + 21), onlineX, diff);
+-        }
+-        final float kx = dpf2(8);
+-        final float ky = isPulledDown ? dpf2(8) : dpf2(-24);
+-
+-        final float nameTextViewXEnd = AndroidUtilities.dpf2(18f) - ((FrameLayout.LayoutParams) nameTextView[1].getLayoutParams()).leftMargin;
+-        final float nameTextViewYEnd = newTop + extraHeight - getActionsExtraHeight() - AndroidUtilities.dpf2(30f) - nameTextView[1].getBottom();
+-        final float nameTextViewCx = kx + nameX + (nameTextViewXEnd - nameX) / 2f;
+-        final float nameTextViewCy = ky + nameY + (nameTextViewYEnd - nameY) / 2f;
+-        final float nameTextViewX = (1 - value) * (1 - value) * nameX + 2 * (1 - value) * value * nameTextViewCx + value * value * nameTextViewXEnd;
+-        final float nameTextViewY = (1 - value) * (1 - value) * nameY + 2 * (1 - value) * value * nameTextViewCy + value * value * nameTextViewYEnd;
+-
+-        final float onlineTextViewXEnd = AndroidUtilities.dpf2(16f) - ((FrameLayout.LayoutParams) onlineTextView[1].getLayoutParams()).leftMargin;
+-        final float onlineTextViewYEnd = newTop + extraHeight - getActionsExtraHeight() - AndroidUtilities.dpf2(10f) - onlineTextView[1].getBottom();
+-        final float onlineTextViewCx = kx + onlineX + (onlineTextViewXEnd - onlineX) / 2f;
+-        final float onlineTextViewCy = ky + onlineY + (onlineTextViewYEnd - onlineY) / 2f;
+-        final float onlineTextViewX = (1 - value) * (1 - value) * onlineX + 2 * (1 - value) * value * onlineTextViewCx + value * value * onlineTextViewXEnd;
+-        final float onlineTextViewY = (1 - value) * (1 - value) * onlineY + 2 * (1 - value) * value * onlineTextViewCy + value * value * onlineTextViewYEnd;
+-
+-        final float minEndNameY = (actionBar.getOccupyStatusBar() ? AndroidUtilities.statusBarHeight : 0)
+-                + ActionBar.getCurrentActionBarHeight() / 2f
+-                - 21 * AndroidUtilities.density
+-                + actionBar.getTranslationY();
+-
+-        final float minNameY = (float) Math.floor(minEndNameY) + AndroidUtilities.dp(1.3f);
+-        final float minOnlineY = minNameY + AndroidUtilities.dpf2(22.7f);
++        float nameX, onlineX;
++        final float nameTextViewX, nameTextViewY, onlineTextViewX, onlineTextViewY;
++        if (desu.inugram.InuConfig.OLD_LAYOUT.getValue()) {
++            // 11.14: refresh nameX/Y/onlineX/Y in the partial-pull-down zone so
++            // the bezier source point tracks the live avatarScale instead of
++            // remaining stuck at the value last written by needLayout. nameX and
++            // onlineX are shadowed by locals later in this method, so use this.
++            if (extraHeight > AndroidUtilities.dp(88f) && expandProgress < 0.33f) {
++                final float k0 = (42f + 18f) / 42f;
++                this.nameX = AndroidUtilities.dp(-21f) + avatarContainer.getMeasuredWidth() * (avatarScale - k0);
++                this.onlineX = AndroidUtilities.dp(-21f) + avatarContainer.getMeasuredWidth() * (avatarScale - k0);
++                nameY = (float) Math.floor(avatarY) + AndroidUtilities.dp(1.3f) + AndroidUtilities.dp(7f) + avatarContainer.getMeasuredHeight() * (avatarScale - k0) / 2f;
++                onlineY = (float) Math.floor(avatarY) + AndroidUtilities.dp(24) + (float) Math.floor(11 * AndroidUtilities.density) + avatarContainer.getMeasuredHeight() * (avatarScale - k0) / 2f;
++            }
++
++            // 11.14 bezier: 38dp/18dp anchors, no min clamp, no diff-based slide.
++            nameX = this.nameX;
++            onlineX = this.onlineX;
++            final float k = AndroidUtilities.dpf2(8f);
++            final float nameTextViewXEnd = AndroidUtilities.dpf2(18f) - nameTextView[1].getLeft();
++            final float nameTextViewYEnd = newTop + extraHeight - AndroidUtilities.dpf2(38f) - nameTextView[1].getBottom();
++            final float nameTextViewCx = k + nameX + (nameTextViewXEnd - nameX) / 2f;
++            final float nameTextViewCy = k + nameY + (nameTextViewYEnd - nameY) / 2f;
++            nameTextViewX = (1 - value) * (1 - value) * nameX + 2 * (1 - value) * value * nameTextViewCx + value * value * nameTextViewXEnd;
++            nameTextViewY = (1 - value) * (1 - value) * nameY + 2 * (1 - value) * value * nameTextViewCy + value * value * nameTextViewYEnd;
++
++            final float onlineTextViewXEnd = AndroidUtilities.dpf2(16f) - onlineTextView[1].getLeft();
++            final float onlineTextViewYEnd = newTop + extraHeight - AndroidUtilities.dpf2(18f) - onlineTextView[1].getBottom();
++            final float onlineTextViewCx = k + onlineX + (onlineTextViewXEnd - onlineX) / 2f;
++            final float onlineTextViewCy = k + onlineY + (onlineTextViewYEnd - onlineY) / 2f;
++            onlineTextViewX = (1 - value) * (1 - value) * onlineX + 2 * (1 - value) * value * onlineTextViewCx + value * value * onlineTextViewXEnd;
++            onlineTextViewY = (1 - value) * (1 - value) * onlineY + 2 * (1 - value) * value * onlineTextViewCy + value * value * onlineTextViewYEnd;
++
++            nameTextView[1].setTranslationX(nameTextViewX);
++            nameTextView[1].setTranslationY(nameTextViewY);
++            onlineTextView[1].setTranslationX(getOnlineTextViewTranslationXWithOffsets(onlineTextViewX));
++            onlineTextView[1].setTranslationY(getOnlineTextViewTranslationYWithOffsets(onlineTextViewY));
++            mediaCounterTextView.setTranslationX(onlineTextViewX);
++            mediaCounterTextView.setTranslationY(onlineTextViewY);
++        } else {
++            nameX = this.nameX;
++            onlineX = this.onlineX;
+ 
+-        nameTextView[1].setTranslationX(nameTextViewX);
+-        nameTextView[1].setTranslationY(Math.max(minNameY, nameTextViewY));
+-        onlineTextView[1].setTranslationX(getOnlineTextViewTranslationXWithOffsets(onlineTextViewX));
+-        onlineTextView[1].setTranslationY(getOnlineTextViewTranslationYWithOffsets(Math.max(minOnlineY, onlineTextViewY)));
+-        mediaCounterTextView.setTranslationX(onlineTextViewX);
+-        mediaCounterTextView.setTranslationY(Math.max(minOnlineY, onlineTextViewY));
++            if (diff < 1f) {
++                nameX = AndroidUtilities.lerp(-dpf2(42 + 21), nameX, diff);
++                onlineX = AndroidUtilities.lerp(-dpf2(42 + 21), onlineX, diff);
++            }
++            final float kx = dpf2(8);
++            final float ky = isPulledDown ? dpf2(8) : dpf2(-24);
++
++            final float nameTextViewXEnd = AndroidUtilities.dpf2(18f) - ((FrameLayout.LayoutParams) nameTextView[1].getLayoutParams()).leftMargin;
++            final float nameTextViewYEnd = newTop + extraHeight - getActionsExtraHeight() - AndroidUtilities.dpf2(30f) - nameTextView[1].getBottom();
++            final float nameTextViewCx = kx + nameX + (nameTextViewXEnd - nameX) / 2f;
++            final float nameTextViewCy = ky + nameY + (nameTextViewYEnd - nameY) / 2f;
++            nameTextViewX = (1 - value) * (1 - value) * nameX + 2 * (1 - value) * value * nameTextViewCx + value * value * nameTextViewXEnd;
++            nameTextViewY = (1 - value) * (1 - value) * nameY + 2 * (1 - value) * value * nameTextViewCy + value * value * nameTextViewYEnd;
++
++            final float onlineTextViewXEnd = AndroidUtilities.dpf2(16f) - ((FrameLayout.LayoutParams) onlineTextView[1].getLayoutParams()).leftMargin;
++            final float onlineTextViewYEnd = newTop + extraHeight - getActionsExtraHeight() - AndroidUtilities.dpf2(10f) - onlineTextView[1].getBottom();
++            final float onlineTextViewCx = kx + onlineX + (onlineTextViewXEnd - onlineX) / 2f;
++            final float onlineTextViewCy = ky + onlineY + (onlineTextViewYEnd - onlineY) / 2f;
++            onlineTextViewX = (1 - value) * (1 - value) * onlineX + 2 * (1 - value) * value * onlineTextViewCx + value * value * onlineTextViewXEnd;
++            onlineTextViewY = (1 - value) * (1 - value) * onlineY + 2 * (1 - value) * value * onlineTextViewCy + value * value * onlineTextViewYEnd;
++
++            final float minEndNameY = (actionBar.getOccupyStatusBar() ? AndroidUtilities.statusBarHeight : 0)
++                    + ActionBar.getCurrentActionBarHeight() / 2f
++                    - 21 * AndroidUtilities.density
++                    + actionBar.getTranslationY();
++
++            final float minNameY = (float) Math.floor(minEndNameY) + AndroidUtilities.dp(1.3f);
++            final float minOnlineY = minNameY + AndroidUtilities.dpf2(22.7f);
++
++            nameTextView[1].setTranslationX(nameTextViewX);
++            nameTextView[1].setTranslationY(Math.max(minNameY, nameTextViewY));
++            onlineTextView[1].setTranslationX(getOnlineTextViewTranslationXWithOffsets(onlineTextViewX));
++            onlineTextView[1].setTranslationY(getOnlineTextViewTranslationYWithOffsets(Math.max(minOnlineY, onlineTextViewY)));
++            mediaCounterTextView.setTranslationX(onlineTextViewX);
++            mediaCounterTextView.setTranslationY(Math.max(minOnlineY, onlineTextViewY));
++        }
+ 
+         updateActionsPosition();
+         updateMusicPosition();
+@@ -6293,8 +6342,13 @@
+         onlineTextView[1].setTextColor(ColorUtils.blendARGB(applyPeerColor(statusColor, true, online), 0xB3FFFFFF, value));
+         if (extraHeight > getHeaderOnlyExtraHeight()) {
+             nameTextView[1].setPivotY(AndroidUtilities.lerp(0, nameTextView[1].getMeasuredHeight(), value));
+-            nameTextView[1].setScaleX(AndroidUtilities.lerp(1f + 0.12f * diff, 1.38f, value));
+-            nameTextView[1].setScaleY(AndroidUtilities.lerp(1f + 0.12f * diff, 1.38f, value));
++            if (desu.inugram.InuConfig.OLD_LAYOUT.getValue()) {
++                nameTextView[1].setScaleX(AndroidUtilities.lerp(1.12f, 1.67f, value));
++                nameTextView[1].setScaleY(AndroidUtilities.lerp(1.12f, 1.67f, value));
++            } else {
++                nameTextView[1].setScaleX(AndroidUtilities.lerp(1f + 0.12f * diff, 1.38f, value));
++                nameTextView[1].setScaleY(AndroidUtilities.lerp(1f + 0.12f * diff, 1.38f, value));
++            }
+         }
+         needLayoutText(Math.min(1f, diff));
+ 
+@@ -6308,12 +6362,22 @@
+ 
+         avatarImage.setForegroundAlpha(value);
+ 
+-        final FrameLayout.LayoutParams params = (FrameLayout.LayoutParams) avatarContainer.getLayoutParams();
+-        params.width = (int) lerp(dpf2(100), listView.getMeasuredWidth() / avatarScale, value);
+-        params.height = (int) lerp(dpf2(100), (extraHeight + newTop) / avatarScale, value);
+-        params.leftMargin = (int) lerp(dpf2(64f), 0f, value);
+-        fixAvatarImageInCenter();
+-        avatarContainer.requestLayout();
++        if (desu.inugram.InuConfig.OLD_LAYOUT.getValue()) {
++            // 11.14: animate translationX (avatarX -> 0) and lerp lp from 42dp.
++            avatarContainer.setTranslationX(AndroidUtilities.lerp(avatarX, 0f, value));
++            final FrameLayout.LayoutParams params = (FrameLayout.LayoutParams) avatarContainer.getLayoutParams();
++            params.width = (int) AndroidUtilities.lerp(AndroidUtilities.dpf2(42f), listView.getMeasuredWidth() / avatarScale, value);
++            params.height = (int) AndroidUtilities.lerp(AndroidUtilities.dpf2(42f), (extraHeight + newTop) / avatarScale, value);
++            params.leftMargin = (int) AndroidUtilities.lerp(AndroidUtilities.dpf2(64f), 0f, value);
++            avatarContainer.requestLayout();
++        } else {
++            final FrameLayout.LayoutParams params = (FrameLayout.LayoutParams) avatarContainer.getLayoutParams();
++            params.width = (int) lerp(dpf2(100), listView.getMeasuredWidth() / avatarScale, value);
++            params.height = (int) lerp(dpf2(100), (extraHeight + newTop) / avatarScale, value);
++            params.leftMargin = (int) lerp(dpf2(64f), 0f, value);
++            fixAvatarImageInCenter();
++            avatarContainer.requestLayout();
++        }
+ 
+         if (giftsView != null) {
+             giftsView.setExpandProgress(value);
+@@ -8181,7 +8245,7 @@
+         if (writeButton != null && writeButton.getVisibility() != View.GONE) {
+             writeButton.setTranslationY((actionBar.getOccupyStatusBar() ? AndroidUtilities.statusBarHeight : 0) + ActionBar.getCurrentActionBarHeight() + extraHeight + searchTransitionOffset - AndroidUtilities.dp(29.5f));
+ 
+-            writeButtonVisible = diff > 0.2f && !searchMode && !myProfile && (imageUpdater == null || setAvatarRow == -1);
++            writeButtonVisible = diff > 0.2f && !searchMode && (desu.inugram.InuConfig.OLD_LAYOUT.getValue() || !myProfile) && (imageUpdater == null || setAvatarRow == -1);
+             if (writeButtonVisible && chatId != 0) {
+                 writeButtonVisible = ChatObject.isChannel(currentChat) && !currentChat.megagroup && chatInfo != null && chatInfo.linked_chat_id != 0 && (infoHeaderRow != -1 || infoHeaderRowEmpty != -1);
+             }
+@@ -8242,6 +8306,10 @@
+     }
+ 
+     private void needLayout(boolean animated) {
++        if (desu.inugram.InuConfig.OLD_LAYOUT.getValue()) {
++            inu_needLayoutOldStyle(animated);
++            return;
++        }
+         final int newTop = (actionBar.getOccupyStatusBar() ? AndroidUtilities.statusBarHeight : 0) + ActionBar.getCurrentActionBarHeight();
+         final float diff = calculateHeaderExtraDiff();
+         boolean textMeasured = false;
+@@ -8691,6 +8759,314 @@
+         updateMusicPosition();
+     }
+ 
++    // ============================================================
++    // Old layout (11.14.1) needLayout port.
++    // Pins avatarContainer to 42dp on every call (12.x's
++    // setAvatarExpandProgress otherwise stomps it back), then runs
++    // the canonical 11.14 layout math.
++    // ============================================================
++    private void inu_needLayoutOldStyle(boolean animated) {
++        final int newTop = (actionBar.getOccupyStatusBar() ? AndroidUtilities.statusBarHeight : 0) + ActionBar.getCurrentActionBarHeight();
++
++        FrameLayout.LayoutParams layoutParams;
++        if (listView != null && !openAnimationInProgress) {
++            layoutParams = (FrameLayout.LayoutParams) listView.getLayoutParams();
++            if (layoutParams.topMargin != newTop) {
++                layoutParams.topMargin = newTop;
++                listView.setLayoutParams(layoutParams);
++            }
++        }
++
++        if (avatarContainer != null) {
++            // Always force avatar layout params to 11.14 dimensions; 12.x's
++            // setAvatarExpandProgress otherwise stomps these back to 100x100.
++            final FrameLayout.LayoutParams alp = (FrameLayout.LayoutParams) avatarContainer.getLayoutParams();
++            final int target42 = AndroidUtilities.dp(42);
++            final int target64 = AndroidUtilities.dp(64);
++            if (alp.width != target42 || alp.height != target42 || alp.leftMargin != target64) {
++                alp.width = target42;
++                alp.height = target42;
++                alp.leftMargin = target64;
++                avatarContainer.requestLayout();
++            }
++
++            final float diff = Math.min(1f, extraHeight / AndroidUtilities.dp(88f));
++
++            listView.setTopGlowOffset((int) extraHeight);
++            listView.setOverScrollMode(extraHeight > AndroidUtilities.dp(88f) && extraHeight < listView.getMeasuredWidth() - newTop ? View.OVER_SCROLL_NEVER : View.OVER_SCROLL_ALWAYS);
++
++            if (writeButton != null) {
++                writeButton.setTranslationY((actionBar.getOccupyStatusBar() ? AndroidUtilities.statusBarHeight : 0) + ActionBar.getCurrentActionBarHeight() + extraHeight + searchTransitionOffset - AndroidUtilities.dp(29.5f));
++
++                boolean writeButtonVisible = diff > 0.2f && !searchMode && (imageUpdater == null || setAvatarRow == -1);
++                if (writeButtonVisible && chatId != 0) {
++                    writeButtonVisible = ChatObject.isChannel(currentChat) && !currentChat.megagroup && chatInfo != null && chatInfo.linked_chat_id != 0 && infoHeaderRow != -1;
++                }
++                if (!openAnimationInProgress) {
++                    boolean currentVisible = writeButton.getTag() == null;
++                    if (writeButtonVisible != currentVisible) {
++                        if (writeButtonVisible) {
++                            writeButton.setTag(null);
++                        } else {
++                            writeButton.setTag(0);
++                        }
++                        if (writeButtonAnimation != null) {
++                            AnimatorSet old = writeButtonAnimation;
++                            writeButtonAnimation = null;
++                            old.cancel();
++                        }
++                        if (animated) {
++                            writeButtonAnimation = new AnimatorSet();
++                            if (writeButtonVisible) {
++                                writeButtonAnimation.setInterpolator(new DecelerateInterpolator());
++                                writeButtonAnimation.playTogether(
++                                        ObjectAnimator.ofFloat(writeButton, View.SCALE_X, 1.0f),
++                                        ObjectAnimator.ofFloat(writeButton, View.SCALE_Y, 1.0f),
++                                        ObjectAnimator.ofFloat(writeButton, View.ALPHA, 1.0f)
++                                );
++                            } else {
++                                writeButtonAnimation.setInterpolator(new AccelerateInterpolator());
++                                writeButtonAnimation.playTogether(
++                                        ObjectAnimator.ofFloat(writeButton, View.SCALE_X, 0.2f),
++                                        ObjectAnimator.ofFloat(writeButton, View.SCALE_Y, 0.2f),
++                                        ObjectAnimator.ofFloat(writeButton, View.ALPHA, 0.0f)
++                                );
++                            }
++                            writeButtonAnimation.setDuration(150);
++                            writeButtonAnimation.addListener(new AnimatorListenerAdapter() {
++                                @Override
++                                public void onAnimationEnd(Animator animation) {
++                                    if (writeButtonAnimation != null && writeButtonAnimation.equals(animation)) {
++                                        writeButtonAnimation = null;
++                                    }
++                                }
++                            });
++                            writeButtonAnimation.start();
++                        } else {
++                            writeButton.setScaleX(writeButtonVisible ? 1.0f : 0.2f);
++                            writeButton.setScaleY(writeButtonVisible ? 1.0f : 0.2f);
++                            writeButton.setAlpha(writeButtonVisible ? 1.0f : 0.0f);
++                        }
++                    }
++
++                    // qrItem was removed in 12.x; nothing to do here.
++                }
++
++                // 12.x: storyView keeps the (width, writeBtnVisible, y) signature;
++                // giftsView only takes the y offset.
++                if (storyView != null) {
++                    storyView.setExpandCoords(avatarContainer2.getMeasuredWidth() - AndroidUtilities.dp(40), writeButtonVisible, (actionBar.getOccupyStatusBar() ? AndroidUtilities.statusBarHeight : 0) + ActionBar.getCurrentActionBarHeight() + extraHeight + searchTransitionOffset);
++                }
++                if (giftsView != null) {
++                    giftsView.setExpandCoords((actionBar.getOccupyStatusBar() ? AndroidUtilities.statusBarHeight : 0) + ActionBar.getCurrentActionBarHeight() + extraHeight + searchTransitionOffset);
++                }
++            }
++
++            avatarX = -AndroidUtilities.dpf2(47f) * diff;
++            avatarY = (actionBar.getOccupyStatusBar() ? AndroidUtilities.statusBarHeight : 0) + ActionBar.getCurrentActionBarHeight() / 2.0f * (1.0f + diff) - 21 * AndroidUtilities.density + 27 * AndroidUtilities.density * diff + actionBar.getTranslationY();
++
++            float h = openAnimationInProgress ? initialAnimationExtraHeight : extraHeight;
++            if (h > AndroidUtilities.dp(88f) || isPulledDown) {
++                expandProgress = Math.max(0f, Math.min(1f, (h - AndroidUtilities.dp(88f)) / (listView.getMeasuredWidth() - newTop - AndroidUtilities.dp(88f))));
++                avatarScale = AndroidUtilities.lerp((42f + 18f) / 42f, (42f + 42f + 18f) / 42f, Math.min(1f, expandProgress * 3f));
++                if (storyView != null) storyView.invalidate();
++                if (giftsView != null) giftsView.invalidate();
++
++                final float durationFactor = Math.min(AndroidUtilities.dpf2(2000f), Math.max(AndroidUtilities.dpf2(1100f), Math.abs(listViewVelocityY))) / AndroidUtilities.dpf2(1100f);
++
++                if (allowPullingDown && (openingAvatar || expandProgress >= 0.33f)) {
++                    if (!isPulledDown) {
++                        if (otherItem != null) {
++                            if (!isPeerNoForwards()) {
++                                otherItem.showSubItem(gallery_menu_save);
++                            } else {
++                                otherItem.hideSubItem(gallery_menu_save);
++                            }
++                            if (imageUpdater != null) {
++                                otherItem.showSubItem(add_photo);
++                                otherItem.showSubItem(edit_avatar);
++                                otherItem.showSubItem(delete_avatar);
++                                otherItem.hideSubItem(set_as_main);
++                                otherItem.hideSubItem(logout);
++                            }
++                        }
++                        if (searchItem != null) searchItem.setEnabled(false);
++                        isPulledDown = true;
++                        NotificationCenter.getGlobalInstance().postNotificationName(NotificationCenter.needCheckSystemBarColors, true);
++                        overlaysView.setOverlaysVisible(true, durationFactor);
++                        avatarsViewPagerIndicatorView.refreshVisibility(durationFactor);
++                        avatarsViewPager.setCreateThumbFromParent(true);
++                        avatarsViewPager.getAdapter().notifyDataSetChanged();
++                        expandAnimator.cancel();
++                        float value = AndroidUtilities.lerp(expandAnimatorValues, currentExpanAnimatorFracture);
++                        expandAnimatorValues[0] = value;
++                        expandAnimatorValues[1] = 1f;
++                        if (storyView != null && !storyView.isEmpty()) {
++                            expandAnimator.setInterpolator(new FastOutSlowInInterpolator());
++                            expandAnimator.setDuration((long) ((1f - value) * 1.3f * 250f / durationFactor));
++                        } else {
++                            expandAnimator.setInterpolator(CubicBezierInterpolator.EASE_BOTH);
++                            expandAnimator.setDuration((long) ((1f - value) * 250f / durationFactor));
++                        }
++                        expandAnimator.addListener(new AnimatorListenerAdapter() {
++                            @Override
++                            public void onAnimationStart(Animator animation) {
++                                setForegroundImage(false);
++                                avatarsViewPager.setAnimatedFileMaybe(avatarImage.getImageReceiver().getAnimation());
++                                avatarsViewPager.resetCurrentItem();
++                            }
++
++                            @Override
++                            public void onAnimationEnd(Animator animation) {
++                                expandAnimator.removeListener(this);
++                                topView.setBackgroundColor(Color.BLACK);
++                                avatarContainer.setVisibility(View.GONE);
++                                avatarsViewPager.setVisibility(View.VISIBLE);
++                            }
++                        });
++                        expandAnimator.start();
++                    }
++                    ViewGroup.LayoutParams params = avatarsViewPager.getLayoutParams();
++                    params.width = listView.getMeasuredWidth();
++                    params.height = (int) (h + newTop);
++                    avatarsViewPager.requestLayout();
++                    if (!expandAnimator.isRunning()) {
++                        float additionalTranslationY = 0;
++                        if (openAnimationInProgress && playProfileAnimation == 2) {
++                            additionalTranslationY = -(1.0f - avatarAnimationProgress) * AndroidUtilities.dp(50);
++                        }
++                        onlineX = AndroidUtilities.dpf2(16f) - onlineTextView[1].getLeft();
++                        nameTextView[1].setTranslationX(AndroidUtilities.dpf2(18f) - nameTextView[1].getLeft());
++                        nameTextView[1].setTranslationY(newTop + h - AndroidUtilities.dpf2(38f) - nameTextView[1].getBottom() + additionalTranslationY);
++                        onlineTextView[1].setTranslationX(getOnlineTextViewTranslationXWithOffsets(onlineX));
++                        onlineTextView[1].setTranslationY(getOnlineTextViewTranslationYWithOffsets(newTop + h - AndroidUtilities.dpf2(18f) - onlineTextView[1].getBottom() + additionalTranslationY));
++                        mediaCounterTextView.setTranslationX(onlineTextView[1].getTranslationX());
++                        mediaCounterTextView.setTranslationY(onlineTextView[1].getTranslationY());
++                        updateCollectibleHint();
++                    }
++                } else {
++                    if (isPulledDown) {
++                        isPulledDown = false;
++                        NotificationCenter.getGlobalInstance().postNotificationName(NotificationCenter.needCheckSystemBarColors, true);
++                        if (otherItem != null) {
++                            otherItem.hideSubItem(gallery_menu_save);
++                            if (imageUpdater != null) {
++                                otherItem.hideSubItem(set_as_main);
++                                otherItem.hideSubItem(edit_avatar);
++                                otherItem.hideSubItem(delete_avatar);
++                                otherItem.showSubItem(add_photo);
++                                otherItem.showSubItem(logout);
++                            }
++                        }
++                        if (searchItem != null) searchItem.setEnabled(!scrolling);
++                        overlaysView.setOverlaysVisible(false, durationFactor);
++                        avatarsViewPagerIndicatorView.refreshVisibility(durationFactor);
++                        expandAnimator.cancel();
++                        avatarImage.getImageReceiver().setAllowStartAnimation(true);
++                        avatarImage.getImageReceiver().startAnimation();
++
++                        float value = AndroidUtilities.lerp(expandAnimatorValues, currentExpanAnimatorFracture);
++                        expandAnimatorValues[0] = value;
++                        expandAnimatorValues[1] = 0f;
++                        expandAnimator.setInterpolator(CubicBezierInterpolator.EASE_BOTH);
++                        if (!isInLandscapeMode) {
++                            expandAnimator.setDuration((long) (value * 250f / durationFactor));
++                        } else {
++                            expandAnimator.setDuration(0);
++                        }
++                        topView.setBackgroundColor(getThemedColor(Theme.key_avatar_backgroundActionBarBlue));
++
++                        if (!doNotSetForeground) {
++                            BackupImageView imageView = avatarsViewPager.getCurrentItemView();
++                            if (imageView != null) {
++                                if (imageView.getImageReceiver().getDrawable() instanceof VectorAvatarThumbDrawable) {
++                                    avatarImage.drawForeground(false);
++                                } else {
++                                    avatarImage.drawForeground(true);
++                                    avatarImage.setForegroundImageDrawable(imageView.getImageReceiver().getDrawableSafe());
++                                }
++                            }
++                        }
++                        avatarImage.setForegroundAlpha(1f);
++                        avatarContainer.setVisibility(View.VISIBLE);
++                        avatarsViewPager.setVisibility(View.GONE);
++                        expandAnimator.start();
++                    }
++
++                    avatarContainer.setScaleX(avatarScale);
++                    avatarContainer.setScaleY(avatarScale);
++
++                    if (expandAnimator == null || !expandAnimator.isRunning()) {
++                        // 11.14: refreshNameAndOnlineXY
++                        nameX = AndroidUtilities.dp(-21f) + avatarContainer.getMeasuredWidth() * (avatarScale - (42f + 18f) / 42f);
++                        nameY = (float) Math.floor(avatarY) + AndroidUtilities.dp(1.3f) + AndroidUtilities.dp(7f) + avatarContainer.getMeasuredHeight() * (avatarScale - (42f + 18f) / 42f) / 2f;
++                        onlineX = AndroidUtilities.dp(-21f) + avatarContainer.getMeasuredWidth() * (avatarScale - (42f + 18f) / 42f);
++                        onlineY = (float) Math.floor(avatarY) + AndroidUtilities.dp(24) + (float) Math.floor(11 * AndroidUtilities.density) + avatarContainer.getMeasuredHeight() * (avatarScale - (42f + 18f) / 42f) / 2f;
++                        nameTextView[1].setTranslationX(nameX);
++                        nameTextView[1].setTranslationY(nameY);
++                        onlineTextView[1].setTranslationX(getOnlineTextViewTranslationXWithOffsets(onlineX));
++                        onlineTextView[1].setTranslationY(getOnlineTextViewTranslationYWithOffsets(onlineY));
++                        mediaCounterTextView.setTranslationX(onlineX);
++                        mediaCounterTextView.setTranslationY(onlineY);
++                        updateCollectibleHint();
++                    }
++                }
++            } else if (extraHeight <= AndroidUtilities.dp(88f)) {
++                avatarScale = (42 + 18 * diff) / 42.0f;
++                if (storyView != null) storyView.invalidate();
++                if (giftsView != null) giftsView.invalidate();
++                float nameScale = 1.0f + 0.12f * diff;
++                if (expandAnimator == null || !expandAnimator.isRunning()) {
++                    avatarContainer.setScaleX(avatarScale);
++                    avatarContainer.setScaleY(avatarScale);
++                    avatarContainer.setTranslationX(avatarX);
++                    avatarContainer.setTranslationY((float) Math.ceil(avatarY));
++                    float extra = AndroidUtilities.dp(42) * avatarScale - AndroidUtilities.dp(42);
++                    timeItem.setTranslationX(avatarContainer.getX() + AndroidUtilities.dp(16) + extra);
++                    timeItem.setTranslationY(avatarContainer.getY() + AndroidUtilities.dp(15) + extra);
++                    starBgItem.setTranslationX(avatarContainer.getX() + AndroidUtilities.dp(28) + extra);
++                    starBgItem.setTranslationY(avatarContainer.getY() + AndroidUtilities.dp(24) + extra);
++                    starFgItem.setTranslationX(avatarContainer.getX() + AndroidUtilities.dp(28) + extra);
++                    starFgItem.setTranslationY(avatarContainer.getY() + AndroidUtilities.dp(24) + extra);
++                }
++                nameX = -21 * AndroidUtilities.density * diff;
++                nameY = (float) Math.floor(avatarY) + AndroidUtilities.dp(1.3f) + AndroidUtilities.dp(7) * diff + titleAnimationsYDiff * (1f - avatarAnimationProgress);
++                onlineX = -21 * AndroidUtilities.density * diff;
++                onlineY = (float) Math.floor(avatarY) + AndroidUtilities.dp(24) + (float) Math.floor(11 * AndroidUtilities.density) * diff;
++                if (showStatusButton != null) {
++                    showStatusButton.setAlpha((int) (0xFF * diff));
++                }
++                for (int a = 0; a < nameTextView.length; a++) {
++                    if (nameTextView[a] == null) continue;
++                    if (expandAnimator == null || !expandAnimator.isRunning()) {
++                        nameTextView[a].setTranslationX(nameX);
++                        nameTextView[a].setTranslationY(nameY);
++                        onlineTextView[a].setTranslationX(getOnlineTextViewTranslationXWithOffsets(onlineX));
++                        onlineTextView[a].setTranslationY(getOnlineTextViewTranslationYWithOffsets(onlineY));
++                        if (a == 1) {
++                            mediaCounterTextView.setTranslationX(onlineX);
++                            mediaCounterTextView.setTranslationY(onlineY);
++                        }
++                    }
++                    nameTextView[a].setScaleX(nameScale);
++                    nameTextView[a].setScaleY(nameScale);
++                }
++                updateCollectibleHint();
++            }
++
++            if (!openAnimationInProgress && (expandAnimator == null || !expandAnimator.isRunning())) {
++                needLayoutText(diff);
++            }
++        }
++
++        // 12.x extras the original needLayout calls at the end.
++        updateExtraViews(newTop);
++        if (avatarContainer != null) {
++            final float diff = Math.min(1f, extraHeight / AndroidUtilities.dp(88f));
++            if (diff >= 1f) avatarImage.setAlpha(1f);
++        }
++    }
++
+     public void calculatePositionsOnFirstLoad() {
+         float endNameY =
+             (actionBar.getOccupyStatusBar() ? AndroidUtilities.statusBarHeight : 0)

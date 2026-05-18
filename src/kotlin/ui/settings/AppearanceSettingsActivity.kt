@@ -30,6 +30,15 @@ class AppearanceSettingsActivity : SettingsPageActivity() {
     override fun fillItems(items: ArrayList<UItem>, adapter: UniversalAdapter) {
         items.add(UItem.asHeader(LocaleController.getString(R.string.InuMiscellaneous)))
         items.add(
+            mkTwoLineCheckItem(
+                TOGGLE_OLD_LAYOUT,
+                R.string.InuOldLayout,
+                R.string.InuOldLayoutInfo,
+                InuConfig.OLD_LAYOUT.value,
+                experimental = true,
+            )
+        )
+        items.add(
             UItem.asCheck(
                 TOGGLE_SHOW_SECONDS,
                 LocaleController.getString(R.string.InuShowSeconds)
@@ -150,6 +159,11 @@ class AppearanceSettingsActivity : SettingsPageActivity() {
 
     override fun onClick(item: UItem, view: View, position: Int, x: Float, y: Float) {
         when (item.id) {
+            TOGGLE_OLD_LAYOUT -> {
+                val new = InuConfig.OLD_LAYOUT.toggle()
+                (view as? NotificationsCheckCell)?.isChecked = new
+                showRestartBulletin()
+            }
             TOGGLE_HIDE_FADE_VIEW -> {
                 val new = InuConfig.HIDE_FADE_VIEW.toggle()
                 (view as? TextCheckCell)?.isChecked = new
@@ -313,6 +327,7 @@ class AppearanceSettingsActivity : SettingsPageActivity() {
     }
 
     companion object {
+        private val TOGGLE_OLD_LAYOUT = InuUtils.generateId()
         private val TOGGLE_HIDE_FADE_VIEW = InuUtils.generateId()
         private val TOGGLE_NON_ISLAND_TAB_BARS = InuUtils.generateId()
         private val TOGGLE_NON_ISLAND_GLOBAL_SEARCH = InuUtils.generateId()

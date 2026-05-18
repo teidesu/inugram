@@ -120,6 +120,12 @@ bugfix/non-bot-drafts.patch
 feature/live-typing-draft.patch
 feature/forwarded-time-inline.patch
 debloat/profile-photo-blur.patch
+feature/old-layout-nav.patch
+feature/old-layout-drawer-dlc.patch
+feature/old-layout-drawer-da.patch
+feature/old-profile-ui.patch
+feature/old-profile-gooey.patch
+feature/old-profile-gradient.patch
 bugfix/reaction-sending-race.patch
 feature/custom-emoji-after-regular.patch
 feature/custom-font.patch

@@ -1,0 +1,71 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: alina sireneva <alina@tei.su>
+Date: Tue, 12 May 2026 00:00:00 +0000
+Subject: Use DialogsActivity as root fragment when old layout is enabled
+
+---
+diff --git a/TMessagesProj/src/main/java/org/telegram/ui/LaunchActivity.java b/TMessagesProj/src/main/java/org/telegram/ui/LaunchActivity.java
+index 0000000..0000000 100644
+--- a/TMessagesProj/src/main/java/org/telegram/ui/LaunchActivity.java
++++ b/TMessagesProj/src/main/java/org/telegram/ui/LaunchActivity.java
+@@ -562,8 +562,9 @@
+             if (!UserConfig.getInstance(currentAccount).isClientActivated()) {
+                 actionBarLayout.addFragmentToStack(getClientNotActivatedFragment());
+             } else {
+-                MainTabsActivity mainTabsActivity = new MainTabsActivity();
+-                actionBarLayout.addFragmentToStack(mainTabsActivity);
++                org.telegram.ui.ActionBar.BaseFragment mainFragment = desu.inugram.InuHooks.createMainFragment();
++                actionBarLayout.addFragmentToStack(mainFragment);
++                if (desu.inugram.InuConfig.OLD_LAYOUT.getValue()) desu.inugram.helpers.DrawerHelper.INSTANCE.setup(this, drawerLayoutContainer, actionBarLayout);
+             }
+ 
+             try {
+@@ -1155,7 +1156,7 @@
+ 
+     private boolean switchingAccount;
+     public void switchToAccount(int account, boolean removeAll) {
+-        switchToAccount(account, removeAll, obj -> new MainTabsActivity());
++        switchToAccount(account, removeAll, obj -> (MainTabsActivity) desu.inugram.InuHooks.createMainFragment());
+     }
+ 
+     public void switchToAccount(int account, boolean removeAll, GenericProvider<Void, MainTabsActivity> dialogsActivityProvider) {
+@@ -3246,12 +3247,14 @@
+                     }
+                 } else {
+                     if (actionBarLayout.getFragmentStack().isEmpty()) {
+-                        MainTabsActivity mainTabsActivity = new MainTabsActivity();
+-                        DialogsActivity dialogsActivity = mainTabsActivity.prepareDialogsActivity(null);
+-                        if (searchQuery != null) {
+-                            dialogsActivity.setInitialSearchString(searchQuery);
++                        org.telegram.ui.ActionBar.BaseFragment mainFragment = desu.inugram.InuHooks.createMainFragment();
++                        if (mainFragment instanceof MainTabsActivity) {
++                            DialogsActivity dialogsActivity = ((MainTabsActivity) mainFragment).prepareDialogsActivity(null);
++                            if (searchQuery != null) {
++                                dialogsActivity.setInitialSearchString(searchQuery);
++                            }
+                         }
+-                        actionBarLayout.addFragmentToStack(mainTabsActivity, INavigationLayout.FORCE_NOT_ATTACH_VIEW);
++                        actionBarLayout.addFragmentToStack(mainFragment, INavigationLayout.FORCE_NOT_ATTACH_VIEW);
+                     }
+                 }
+             } else {
+@@ -3259,12 +3262,14 @@
+                     if (!UserConfig.getInstance(currentAccount).isClientActivated()) {
+                         actionBarLayout.addFragmentToStack(getClientNotActivatedFragment(), INavigationLayout.FORCE_NOT_ATTACH_VIEW);
+                     } else {
+-                        MainTabsActivity mainTabsActivity = new MainTabsActivity();
+-                        DialogsActivity dialogsActivity = mainTabsActivity.prepareDialogsActivity(null);
+-                        if (searchQuery != null) {
+-                            dialogsActivity.setInitialSearchString(searchQuery);
++                        org.telegram.ui.ActionBar.BaseFragment mainFragment2 = desu.inugram.InuHooks.createMainFragment();
++                        if (mainFragment2 instanceof MainTabsActivity) {
++                            DialogsActivity dialogsActivity2 = ((MainTabsActivity) mainFragment2).prepareDialogsActivity(null);
++                            if (searchQuery != null) {
++                                dialogsActivity2.setInitialSearchString(searchQuery);
++                            }
+                         }
+-                        actionBarLayout.addFragmentToStack(mainTabsActivity, INavigationLayout.FORCE_NOT_ATTACH_VIEW);
++                        actionBarLayout.addFragmentToStack(mainFragment2, INavigationLayout.FORCE_NOT_ATTACH_VIEW);
+                     }
+                 }
+             }

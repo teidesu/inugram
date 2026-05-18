@@ -20,13 +20,13 @@ import org.telegram.ui.SearchTabsAndFiltersLayout
 
 object NonIslandHelper {
     @JvmStatic
-    fun tabBars(): Boolean = InuConfig.NON_ISLAND_TAB_BARS.value
+    fun tabBars(): Boolean = InuConfig.NON_ISLAND_TAB_BARS.value || InuConfig.OLD_LAYOUT.value
 
     @JvmStatic
-    fun globalSearch(): Boolean = InuConfig.NON_ISLAND_GLOBAL_SEARCH.value
+    fun globalSearch(): Boolean = InuConfig.NON_ISLAND_GLOBAL_SEARCH.value || InuConfig.OLD_LAYOUT.value
 
     @JvmStatic
-    fun chatElements(): Boolean = InuConfig.NON_ISLAND_CHAT_ELEMENTS.value
+    fun chatElements(): Boolean = InuConfig.NON_ISLAND_CHAT_ELEMENTS.value || InuConfig.OLD_LAYOUT.value
 
     // ChatActivity.java
     @JvmStatic

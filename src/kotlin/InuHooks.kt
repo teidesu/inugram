@@ -21,6 +21,7 @@ import org.telegram.messenger.R
 import org.telegram.messenger.UserConfig
 import org.telegram.messenger.Utilities
 import org.telegram.tgnet.TLObject
+import org.telegram.ui.ActionBar.BaseFragment
 import org.telegram.ui.Components.AnimatedFloat
 import org.telegram.ui.Components.GestureDetector2
 import org.telegram.ui.Components.GestureDetectorFixDoubleTap
@@ -29,6 +30,7 @@ import org.telegram.ui.ContactsActivity
 import org.telegram.ui.DialogsActivity
 import org.telegram.ui.LaunchActivity
 import org.telegram.ui.LauncherIconController
+import org.telegram.ui.MainTabsActivity
 import org.telegram.ui.ProfileActivity
 import org.telegram.ui.SettingsActivity
 import java.util.Hashtable
@@ -182,6 +184,18 @@ object InuHooks {
             key == "AppUpdate" ||
             key == "AppUpdateBeta"
     }
+
+    @JvmStatic
+    fun createMainFragment(): BaseFragment =
+        if (InuConfig.OLD_LAYOUT.value) DialogsActivity(null) else MainTabsActivity()
+
+    /**
+     * Adapted from 11.14.1 `ApplicationLoader.applicationLoaderInstance.extendDrawer(items)`
+     * which no longer exists in 12.x. Extension point preserved for future custom
+     * drawer items; returns false (no extra items added) by default.
+     */
+    @JvmStatic
+    fun extendDrawer(items: MutableList<Any?>): Boolean = false
 
     @JvmStatic
     fun addDialogsActivityOptions(instance: DialogsActivity, io: ItemOptions): Unit {

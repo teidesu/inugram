@@ -9,6 +9,7 @@ most things are toggleable in `Settings → Inugram`, with sensible opinionated 
 
 ## appearance & general
 
+- 🐶 old layout mode (experimental): pre-12.0 flat design (no glass pill nav, no floating islands, hamburger drawer, old profile layout); requires app restart after toggling
 - monet (material you) theme support - *ported from [NagramX](https://github.com/risin42/NagramX)*
 - 🐶 non-island ui mode for tab bars, global search and chat elements
 - icon replacement (currently: solar pack, [480 Design](https://t.me/Design480)) - *ported from [NagramX](https://github.com/risin42/NagramX)*
