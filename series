@@ -139,4 +139,3 @@ feature/cycle-forward-mode.patch
 feature/long-tap-mention-name.patch
 bugfix/search-emoji-size.patch
 feature/passcode.patch
-debloat/reduce-message-input-motion.patch

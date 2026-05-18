@@ -56,8 +56,6 @@
     <string name="InuHideBotWebView">Hide bot Web App</string>
     <string name="InuHideSendAsPicker">Hide \"Send as\" picker</string>
     <string name="InuHideSendAsPickerInfo">Long-press the emoji button to temporarily reveal it</string>
-    <string name="InuReduceChatInputMotion">Reduce message input motion</string>
-    <string name="InuReduceChatInputMotionInfo">Snap the height when line count changes</string>
     <string name="InuHideRepostToStory">Hide \"Repost to Story\"</string>
     <string name="InuHideTrendingStickers">Hide trending stickers</string>
     <string name="InuBottomTabs">Bottom tabs</string>

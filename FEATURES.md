@@ -87,7 +87,6 @@ most things are toggleable in `Settings → Inugram`, with sensible opinionated 
 ## message input / formatting
 
 - 🐶 customizable max input lines (and bumped default)
-- 🐶 reduce message input motion (snap input height on line count change)
 - 🐶 per-chat live draft streaming (dm-only) for shits and giggles
 - 🐶 voice recorder moved into attachments drawer
 - 🐶 custom formatting popup ui (better ux for span manipulation)

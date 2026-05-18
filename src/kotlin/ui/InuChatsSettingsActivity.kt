@@ -141,14 +141,6 @@ class InuChatsSettingsActivity : InuSettingsPageActivity() {
         )
         items.add(UItem.asHeader(LocaleController.getString(R.string.InuChatInputMaxLines)))
         items.add(UItem.asCustom(chatInputMaxLinesSlider))
-        items.add(
-            mkTwoLineCheckItem(
-                TOGGLE_REDUCE_CHAT_INPUT_MOTION,
-                R.string.InuReduceChatInputMotion,
-                R.string.InuReduceChatInputMotionInfo,
-                InuConfig.REDUCE_CHAT_INPUT_MOTION.value
-            )
-        )
         hideBotSlashGroup.addTo(items) { listView.adapter.update(true) }
         items.add(
             UItem.asCheck(TOGGLE_BOT_WEBVIEW_BUTTON, LocaleController.getString(R.string.InuHideBotWebView))
@@ -285,11 +277,6 @@ class InuChatsSettingsActivity : InuSettingsPageActivity() {
                 (view as? NotificationsCheckCell)?.isChecked = new
             }
 
-            TOGGLE_REDUCE_CHAT_INPUT_MOTION -> {
-                val new = InuConfig.REDUCE_CHAT_INPUT_MOTION.toggle()
-                (view as? NotificationsCheckCell)?.isChecked = new
-            }
-
             BUTTON_FORMATTING_POPUP -> {
                 val isSwitch = if (LocaleController.isRTL)
                     x < AndroidUtilities.dp(76f)
@@ -346,7 +333,6 @@ class InuChatsSettingsActivity : InuSettingsPageActivity() {
         private val BUTTON_FORMATTING_POPUP = InuUtils.generateId()
         private val TOGGLE_BOT_WEBVIEW_BUTTON = InuUtils.generateId()
         private val TOGGLE_HIDE_SEND_AS_PICKER = InuUtils.generateId()
-        private val TOGGLE_REDUCE_CHAT_INPUT_MOTION = InuUtils.generateId()
         private val TOGGLE_REACTION_BAR_BELOW = InuUtils.generateId()
         private val TOGGLE_SIMPLE_ATTACH_POPUP_ANIMATION = InuUtils.generateId()
         private val TOGGLE_HIDE_REACTION_ENTRY = InuUtils.generateId()

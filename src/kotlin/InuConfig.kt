@@ -395,9 +395,6 @@ object InuConfig {
     val CHAT_INPUT_MAX_LINES = IntItem("chat_input_max_lines", 8)
 
     @JvmField
-    val REDUCE_CHAT_INPUT_MOTION = BoolItem("reduce_chat_input_motion", true)
-
-    @JvmField
     val REACTION_BAR_BELOW = BoolItem("reaction_bar_below", false)
 
     @JvmField
