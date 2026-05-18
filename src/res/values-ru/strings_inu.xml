@@ -104,8 +104,8 @@
     <string name="InuReduceProfileMotion">Уменьшить анимацию профиля</string>
     <string name="InuProfilePreferMediaTab">Открывать вкладку «Медиа»</string>
     <string name="InuProfilePreferMediaTabInfo">…вместо вкладок «Подарки» и «Истории»</string>
-    <string name="InuOptInMotionPhotos">Живые фото по запросу</string>
-    <string name="InuOptInMotionPhotosInfo">Не отправлять фото как «живые» по умолчанию</string>
+    <string name="InuDisableMotionPhotos">Отключить живые фото</string>
+    <string name="InuDisableMotionPhotosInfo">Не определять и не показывать живые фото ни в выборщике, ни в сообщениях</string>
     <string name="InuChatAlwaysShowDown">Всегда показывать кнопку «вниз»</string>
     <string name="InuChatAlwaysShowDownInfo">Даже при прокрутке вверх</string>
     <string name="InuChatRememberAllReplies">Запоминать все нажатые ответы</string>

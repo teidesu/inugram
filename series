@@ -73,7 +73,7 @@ bugfix/photo-viewer-blur.patch
 bugfix/lazy-face-detect.patch
 bugfix/lazy-chromecast.patch
 debloat/recyclerview-instant-tap.patch
-debloat/opt-in-motion-photos.patch
+debloat/motion-photos.patch
 feature/long-press-reply-in-replies.patch
 feature/animation-multiplier.patch
 feature/search-media-type-filter.patch
@@ -139,3 +139,4 @@ feature/cycle-forward-mode.patch
 feature/long-tap-mention-name.patch
 bugfix/search-emoji-size.patch
 feature/passcode.patch
+bugfix/motion-photo-with-caption.patch

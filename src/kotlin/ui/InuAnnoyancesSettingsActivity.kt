@@ -107,10 +107,10 @@ class InuAnnoyancesSettingsActivity : InuSettingsPageActivity() {
         )
         items.add(
             mkTwoLineCheckItem(
-                TOGGLE_OPT_IN_MOTION_PHOTOS,
-                R.string.InuOptInMotionPhotos,
-                R.string.InuOptInMotionPhotosInfo,
-                InuConfig.OPT_IN_MOTION_PHOTOS.value
+                TOGGLE_DISABLE_MOTION_PHOTOS,
+                R.string.InuDisableMotionPhotos,
+                R.string.InuDisableMotionPhotosInfo,
+                InuConfig.DISABLE_MOTION_PHOTOS.value
             )
         )
         items.add(UItem.asShadow(null))
@@ -174,8 +174,8 @@ class InuAnnoyancesSettingsActivity : InuSettingsPageActivity() {
                 (view as? TextCheckCell)?.isChecked = new
             }
 
-            TOGGLE_OPT_IN_MOTION_PHOTOS -> {
-                val new = InuConfig.OPT_IN_MOTION_PHOTOS.toggle()
+            TOGGLE_DISABLE_MOTION_PHOTOS -> {
+                val new = InuConfig.DISABLE_MOTION_PHOTOS.toggle()
                 (view as? NotificationsCheckCell)?.isChecked = new
             }
 
@@ -260,7 +260,7 @@ class InuAnnoyancesSettingsActivity : InuSettingsPageActivity() {
         private val TOGGLE_DISABLE_BG_PARALLAX = InuUtils.generateId()
         private val TOGGLE_HIDE_PAID_REACTION_UPSELL = InuUtils.generateId()
         private val TOGGLE_HIDE_HASHTAG_SUGGESTIONS = InuUtils.generateId()
-        private val TOGGLE_OPT_IN_MOTION_PHOTOS = InuUtils.generateId()
+        private val TOGGLE_DISABLE_MOTION_PHOTOS = InuUtils.generateId()
         private val BUTTON_CLEAR_HINTS = InuUtils.generateId()
     }
 }

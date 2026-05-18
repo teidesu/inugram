@@ -218,7 +218,7 @@ object InuConfig {
     val PROFILE_PREFER_MEDIA_TAB = BoolItem("profile_prefer_media_tab", true)
 
     @JvmField
-    val OPT_IN_MOTION_PHOTOS = BoolItem("opt_in_motion_photos", true)
+    val DISABLE_MOTION_PHOTOS = BoolItem("disable_motion_photos", true)
 
     @JvmField
     val HIDE_REACTIONS_ENTRY = BoolItem("hide_reactions_entry", false)

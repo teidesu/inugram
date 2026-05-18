@@ -123,7 +123,7 @@ most things are toggleable in `Settings → Inugram`, with sensible opinionated 
 - disable pull-to-next-channel
 - disable swipe-to-unarchive
 - disable instant camera in attachments
-- disable motion photos by default
+- disable motion photos (rendering + detection, in picker and in messages)
 - disable notification chat bubbles
 - 🐶 disable cloud drafts upload
 - 🐶 disable wallpaper parallax

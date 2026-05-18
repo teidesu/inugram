@@ -237,7 +237,7 @@ object GalleryHelper {
                 val size = c.getLong(sizeCol)
 
                 var motionPhoto: MotionPhotoDescription? = null
-                if (xmpCol >= 0) {
+                if (xmpCol >= 0 && !InuConfig.DISABLE_MOTION_PHOTOS.value) {
                     try {
                         val blob = c.getBlob(xmpCol)
                         if (blob != null && blob.isNotEmpty()) {
@@ -263,7 +263,7 @@ object GalleryHelper {
                             val videoStart = wholeFile.length() - videoItem.length
                             entry.isVideo = true
                             entry.isLivePhoto = true
-                            entry.discardLivePhoto = InuConfig.OPT_IN_MOTION_PHOTOS.value
+                            entry.discardLivePhoto = true
                             entry.livePhotoVideoOffset = videoStart
                             entry.livePhotoTimestampUs = motionPhoto.photoPresentationTimestampUs
                         } catch (e: Exception) {

@@ -66,7 +66,7 @@ index 0000000..0000000 100644
  
 @@ -5865,7 +5880,10 @@ public class MediaController implements AudioManager.OnAudioFocusChangeListener,
                              MotionPhotoDescription motionPhoto = null;
-                             if (xmpColumn >= 0) {
+                             if (xmpColumn >= 0 && !desu.inugram.InuConfig.DISABLE_MOTION_PHOTOS.getValue()) {
                                  try {
 -                                    motionPhoto = XmpMotionPhotoDescriptionParser.parse(new String(cursor.getBlob(xmpColumn)));
 +                                    byte[] xmpBlob = cursor.getBlob(xmpColumn);

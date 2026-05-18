@@ -105,8 +105,8 @@
     <string name="InuReduceProfileMotion">Reduce profile motion</string>
     <string name="InuProfilePreferMediaTab">Prefer \"Media\" tab</string>
     <string name="InuProfilePreferMediaTabInfo">…over Gifts and Posts tabs</string>
-    <string name="InuOptInMotionPhotos">Opt-in motion photos</string>
-    <string name="InuOptInMotionPhotosInfo">Disable sending photos as "live" by default</string>
+    <string name="InuDisableMotionPhotos">Disable motion photos</string>
+    <string name="InuDisableMotionPhotosInfo">Don\'t detect or render motion photos, in picker and in messages</string>
     <string name="InuChatAlwaysShowDown">Always show "go to bottom"</string>
     <string name="InuChatAlwaysShowDownInfo">Even when scrolling upwards</string>
     <string name="InuChatRememberAllReplies">Remember all clicked replies</string>
