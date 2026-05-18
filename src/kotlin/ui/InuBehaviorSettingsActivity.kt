@@ -186,7 +186,7 @@ class InuBehaviorSettingsActivity : InuSettingsPageActivity() {
                 UItem.asButton(
                     BUTTON_UNIFIED_PUSH_GATEWAY,
                     LocaleController.getString(R.string.InuUnifiedPushGateway),
-                    InuConfig.UNIFIED_PUSH_GATEWAY.value.ifBlank { "default" },
+                    InuConfig.UNIFIED_PUSH_GATEWAY.value.ifBlank { UnifiedPushHelper.getGateway() },
                 )
             )
         }
@@ -295,6 +295,9 @@ class InuBehaviorSettingsActivity : InuSettingsPageActivity() {
             TOGGLE_UNIFIED_PUSH -> {
                 val new = InuConfig.UNIFIED_PUSH_ENABLED.toggle()
                 (view as? NotificationsCheckCell)?.isChecked = new
+                if (!new) {
+                    UnifiedPushHelper.unregister(context ?: ApplicationLoader.applicationContext)
+                }
                 listView.adapter.update(true)
                 showRestartBulletin()
             }
@@ -363,7 +366,7 @@ class InuBehaviorSettingsActivity : InuSettingsPageActivity() {
                 .setItems(labels, selected) { _, which ->
                     val chosen = distributors.getOrNull(which) ?: return@setItems
                     UnifiedPush.saveDistributor(ctx, chosen)
-                    UnifiedPush.register(ctx, "default", "Telegram Simple Push")
+                    UnifiedPushHelper.register(ctx)
                     listView.adapter.update(true)
                 }.create()
         )

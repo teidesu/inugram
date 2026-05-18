@@ -8,10 +8,12 @@ import org.unifiedpush.android.connector.data.PushMessage
 
 class UnifiedPushService : PushService() {
     override fun onNewEndpoint(endpoint: PushEndpoint, instance: String) {
+        if (!UnifiedPushHelper.isEnabled()) return
         UnifiedPushHelper.onNewEndpoint(endpoint.url, this)
     }
 
     override fun onMessage(message: PushMessage, instance: String) {
+        if (!UnifiedPushHelper.isEnabled()) return
         UnifiedPushHelper.onPushReceived()
     }
 

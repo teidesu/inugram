@@ -29,12 +29,20 @@ object UnifiedPushHelper {
 
     @JvmStatic
     fun hasDistributors(context: Context): Boolean {
-        return UnifiedPush.getDistributors(context).isNotEmpty()
+        return try {
+            UnifiedPush.getDistributors(context).isNotEmpty()
+        } catch (_: Throwable) {
+            false
+        }
     }
 
     @JvmStatic
     fun getDistributors(context: Context): List<String> {
-        return UnifiedPush.getDistributors(context)
+        return try {
+            UnifiedPush.getDistributors(context)
+        } catch (_: Throwable) {
+            emptyList()
+        }
     }
 
     @JvmStatic
@@ -111,7 +119,7 @@ object UnifiedPushHelper {
             }
         }
         Utilities.globalQueue.postRunnable {
-            try { latch.await() } catch (_: Throwable) {}
+            try { latch.await(10, java.util.concurrent.TimeUnit.SECONDS) } catch (_: Throwable) {}
         }
     }
 

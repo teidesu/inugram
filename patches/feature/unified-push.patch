@@ -30,7 +30,7 @@ index 0000000..0000000 100644
      }
  
      public static void startPushService() {
-+        if (desu.inugram.helpers.UnifiedPushHelper.isEnabled()) return;
++        if (desu.inugram.helpers.UnifiedPushHelper.isEnabled() && desu.inugram.helpers.UnifiedPushHelper.hasDistributors(applicationContext)) return;
          SharedPreferences preferences = MessagesController.getGlobalNotificationsSettings();
          boolean enabled;
          if (preferences.contains("pushService")) {
