@@ -78,8 +78,11 @@
     <string name="InuDialogsFabActionNewStory">New story</string>
     <string name="InuDialogsFabActionOpenSearch">Open search</string>
     <string name="InuDialogsFabActionSavedMessages">Saved messages</string>
-    <string name="InuDisablePredictiveBack">Disable predictive back</string>
-    <string name="InuDisablePredictiveBackInfo">Disables the Android 14+ predictive back gesture animations. Requires app restart.</string>
+    <string name="InuPredictiveBack">Predictive back</string>
+    <string name="InuPredictiveBackInfo">Animation shown while swiping back or pressing the back button. Android 14+. Requires app restart.</string>
+    <string name="InuPredictiveBackOff">Off</string>
+    <string name="InuPredictiveBackStock">Stock</string>
+    <string name="InuPredictiveBackMaterial3">Material 3</string>
     <string name="InuHideAiFeatures">Hide AI features</string>
     <string name="InuHideAiEditor">AI editor button</string>
     <string name="InuHideMessageSummary">Message summary button</string>
@@ -227,6 +230,9 @@
     <string name="InuDisableScrimBlur">Disable scrim blur</string>
     <string name="InuDisableScrimBlurInfo">Replaces the blurred backdrop behind context menus and previews with a flat dim. Enabling may reduce lag.</string>
 
+    <string name="InuReduceMenuMotion">Reduce menu motion</string>
+    <string name="InuReduceMenuMotionInfo">Skip context menu stagger and simplify message menu animations</string>
+
     <string name="InuProfilePhotoGradientFade">Disable profile photo blur</string>
 
     <string name="InuNonIslandUI">Non-island UI</string>
@@ -277,8 +283,14 @@
 
     <string name="InuShowForwardTime">Show forward time</string>
 
+    <string name="InuAddToStickersGifs">Add to Stickers/GIFs</string>
+    <string name="InuLongTapAction">Long-tap action</string>
     <string name="InuForwardWithoutAuthor">Without author</string>
     <string name="InuForwardWithoutCaption">Without caption</string>
+    <string name="InuForwardLongTapOff">Off</string>
+    <string name="InuLongTapChooseMode">Ask every time</string>
+    <string name="InuForwardNoQuote">No-Quote forward</string>
+    <string name="InuReplyInDms">Reply in DMs</string>
     <string name="InuHiddenCaptionDescription">Captions removed</string>
 
     <string name="InuTextClassifierMode">Text classifier mode</string>
@@ -382,12 +394,6 @@
     <string name="InuCopyButtonText">Copy \"%1$s\"</string>
     <string name="InuCopyCallbackData">Copy callback data</string>
     <string name="InuCallbackDataCopied">Callback data copied</string>
-    <string name="InuLiveDraftMenu">Live drafts</string>
-    <string name="InuLiveDraftModeDisabled">Off</string>
-    <string name="InuLiveDraftModeEmpty">Empty</string>
-    <string name="InuLiveDraftModeSizeOnly">Size-only</string>
-    <string name="InuLiveDraftModeFull">Full text</string>
-    <string name="InuLiveDraftFooter">(Experimental!) Stream drafts as you type the message, via **Live response streaming API**, for shits and giggles</string>
     <string name="InuNetwork">Network</string>
     <string name="InuFasterDownloads">Faster downloads</string>
     <string name="InuFasterUploads">Faster uploads</string>
@@ -416,4 +422,8 @@
     <string name="InuPasscodePanicRemove">Remove panic code</string>
     <string name="InuPasscodePanicRemoveConfirm">Remove the panic code?</string>
     <string name="InuPasscodePanicInfo">When typed at the lock screen, the panic code logs out all opted-in accounts and leaves the app locked.</string>
+    <string name="InuMessageMenuOrder">Message menu</string>
+    <string name="InuMessageMenuItems">Items</string>
+    <string name="InuMessageMenuOrderInfo">Reorder or hide items in the message context menu. Drag the handle to rearrange, toggle the switch to hide.</string>
+    <string name="InuMessageMenuReset">Reset to default</string>
 </resources>

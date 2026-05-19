@@ -6,7 +6,7 @@ Subject: build support stuff for fork-specific code: - added kotlin - bumped min
 ---
  TMessagesProj/build.gradle                    | 110 +++++------------
  TMessagesProj/google-services.json            |  76 ++----------
- TMessagesProj/proguard-rules.pro              |  12 ++
+ TMessagesProj/proguard-rules.pro              |  13 ++
  TMessagesProj/src/main/AndroidManifest.xml    |   7 ++
  .../org/telegram/messenger/BuildVars.java     |  12 +-
  .../org/telegram/ui/PaymentFormActivity.java  |  28 ++---
@@ -17,7 +17,7 @@ Subject: build support stuff for fork-specific code: - added kotlin - bumped min
  build.gradle                                  |  12 +-
  gradle.properties                             |   4 +-
  settings.gradle                               |   5 +-
- 13 files changed, 129 insertions(+), 355 deletions(-)
+ 13 files changed, 130 insertions(+), 355 deletions(-)
 
 diff --git a/TMessagesProj/build.gradle b/TMessagesProj/build.gradle
 index 0000000..0000000 100644
@@ -337,7 +337,7 @@ diff --git a/TMessagesProj/proguard-rules.pro b/TMessagesProj/proguard-rules.pro
 index 0000000..0000000 100644
 --- a/TMessagesProj/proguard-rules.pro
 +++ b/TMessagesProj/proguard-rules.pro
-@@ -104,6 +104,18 @@
+@@ -104,6 +104,19 @@
  -dontwarn org.checkerframework.**
  -dontwarn javax.annotation.**
  
@@ -351,6 +351,7 @@ index 0000000..0000000 100644
 +-dontwarn org.bouncycastle.openssl.**
 +-dontwarn org.objectweb.asm.**
 +-dontwarn com.google.crypto.tink.**
++-keep class desu.inugram.** { *; }
 +# /inu
 +
  # Use -keep to explicitly keep any other classes shrinking would remove

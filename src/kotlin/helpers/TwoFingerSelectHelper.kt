@@ -42,12 +42,15 @@ object TwoFingerSelectHelper {
             }
             when (ev.actionMasked) {
                 MotionEvent.ACTION_POINTER_DOWN,
-                MotionEvent.ACTION_MOVE -> {
+                MotionEvent.ACTION_MOVE -> if (ev.pointerCount >= 2) {
                     snapshot(ev)
                     applyRange()
                     updateAutoScroll()
                 }
-                MotionEvent.ACTION_POINTER_UP -> if (ev.pointerCount <= 2) end()
+                MotionEvent.ACTION_POINTER_UP -> if (ev.pointerCount <= 2) {
+                    listView.removeCallbacks(scrollRunnable)
+                    scrollDirection = 0
+                }
                 MotionEvent.ACTION_UP,
                 MotionEvent.ACTION_CANCEL -> end()
             }

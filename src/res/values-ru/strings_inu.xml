@@ -76,8 +76,11 @@
     <string name="InuDialogsFabActionNewStory">Новая история</string>
     <string name="InuDialogsFabActionOpenSearch">Открыть поиск</string>
     <string name="InuDialogsFabActionSavedMessages">Избранное</string>
-    <string name="InuDisablePredictiveBack">Отключить жест «назад»</string>
-    <string name="InuDisablePredictiveBackInfo">Отключает анимации предиктивного жеста «назад» Android 14+. Требуется перезапуск приложения.</string>
+    <string name="InuPredictiveBack">Жест «назад»</string>
+    <string name="InuPredictiveBackInfo">Анимация при свайпе назад или нажатии кнопки «назад». Android 14+. Требуется перезапуск приложения.</string>
+    <string name="InuPredictiveBackOff">Откл.</string>
+    <string name="InuPredictiveBackStock">Стандартная</string>
+    <string name="InuPredictiveBackMaterial3">Material 3</string>
     <string name="InuHideAiFeatures">Скрыть ИИ функции</string>
     <string name="InuHideAiEditor">Кнопка ИИ-редактора</string>
     <string name="InuHideMessageSummary">Кнопка пересказа сообщения</string>
@@ -225,6 +228,9 @@
     <string name="InuDisableScrimBlur">Отключить размытие подложки</string>
     <string name="InuDisableScrimBlurInfo">Заменяет размытие за контекстными меню и превью на плоское затемнение. Может уменьшить лаги.</string>
 
+    <string name="InuReduceMenuMotion">Уменьшить анимации меню</string>
+    <string name="InuReduceMenuMotionInfo">Пропускать поэтапное появление контекстного меню и упрощать анимации меню сообщения</string>
+
     <string name="InuProfilePhotoGradientFade">Отключить размытие фото профиля</string>
 
     <string name="InuNonIslandUI">Не-«островной» интерфейс</string>
@@ -275,8 +281,14 @@
 
     <string name="InuShowForwardTime">Показывать время пересылки</string>
 
+    <string name="InuAddToStickersGifs">Добавить в стикеры/GIF</string>
+    <string name="InuLongTapAction">Действие по долгому тапу</string>
     <string name="InuForwardWithoutAuthor">Без автора</string>
     <string name="InuForwardWithoutCaption">Без подписи</string>
+    <string name="InuForwardLongTapOff">Выкл.</string>
+    <string name="InuLongTapChooseMode">Спрашивать каждый раз</string>
+    <string name="InuForwardNoQuote">Переслать без цитаты</string>
+    <string name="InuReplyInDms">Ответить в ЛС</string>
     <string name="InuHiddenCaptionDescription">Подписи удалены</string>
 
     <string name="InuTextClassifierMode">Режим текстового классификатора</string>
@@ -382,12 +394,6 @@
     <string name="InuCopyButtonText">Копировать «%1$s»</string>
     <string name="InuCopyCallbackData">Копировать Callback-данные</string>
     <string name="InuCallbackDataCopied">Callback-данные скопированы</string>
-    <string name="InuLiveDraftMenu">Живые черновики</string>
-    <string name="InuLiveDraftModeDisabled">Выкл.</string>
-    <string name="InuLiveDraftModeEmpty">Пустой</string>
-    <string name="InuLiveDraftModeSizeOnly">Только размер</string>
-    <string name="InuLiveDraftModeFull">Полный текст</string>
-    <string name="InuLiveDraftFooter">(Экспериментально!) Стримит черновик прямо во время набора через **Live response streaming API** — ради прикола</string>
     <string name="InuNetwork">Сеть</string>
     <string name="InuFasterDownloads">Ускорение скачивания</string>
     <string name="InuFasterUploads">Ускорение выгрузки</string>
@@ -418,4 +424,8 @@
     <string name="InuPasscodePanicRemove">Удалить паник-код</string>
     <string name="InuPasscodePanicRemoveConfirm">Удалить паник-код?</string>
     <string name="InuPasscodePanicInfo">Когда введён на экране блокировки, паник-код разлогинивает все согласившиеся аккаунты и оставляет приложение заблокированным.</string>
+    <string name="InuMessageMenuOrder">Меню сообщения</string>
+    <string name="InuMessageMenuItems">Пункты</string>
+    <string name="InuMessageMenuOrderInfo">Переставь или скрой пункты в контекстном меню сообщения. Перетаскивай ручку для перестановки, используй переключатель чтобы скрыть.</string>
+    <string name="InuMessageMenuReset">Сбросить по умолчанию</string>
 </resources>

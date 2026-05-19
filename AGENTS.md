@@ -90,10 +90,18 @@ stg new feature__double-tap-to-edit -m 'Allow editing by double tapping a messag
 
 ### Settings UI
 
-- Extend `desu.inugram.ui.InuSettingsPageActivity` (wraps `UniversalFragment` with edge-to-edge + insets + `showRestartBulletin()` helper). Register the page in `InuSettingsActivity`.
+- Extend `desu.inugram.ui.settings.SettingsPageActivity` (wraps `UniversalFragment` with edge-to-edge + insets + `showRestartBulletin()` helper). Register the page in `InuSettingsActivity`.
 - Existing category pages: `InuAppearance`, `InuBehavior`, `InuChats`, `InuDialogs`, `InuAnnoyances` settings activities. Prefer adding items to an existing page over making a new one.
 - Call `showRestartBulletin()` after toggling anything that needs a restart.
 - Custom cells: `SliderCell`, `ExpandableBoolGroup`, `RadioDialogBuilder`, `StickerSizePreviewMessagesCell`.
+
+### Settings search & deeplinks
+
+- `desu.inugram.SearchRegistry` ties fork pages into stock settings search (`ProfileActivity.SearchAdapter`) and routes `tg://settings/inu/<slug>` deeplinks.
+- Each searchable `*SettingsActivity` declares a `@JvmField val PAGE = SearchRegistry.Page(...)` in its companion: page `slug`, title res, icon res, factory, and a list of `SearchRegistry.Entry(slug, titleRes, itemId)` — one per searchable `UItem`. The `itemId` reuses the page's existing `InuUtils.generateId()` constant (also used as the `UItem.id`).
+- Register the page in `SearchRegistry.pages`. Slugs are the persistent identity (deeplinks + recents) and must be globally unique — uniqueness is asserted at first access.
+- New page → new slug. Renaming a slug breaks deeplinks and clears its recents entry. Treat as a breaking change.
+- Row highlight on open is handled by `SettingsPageActivity.withHighlight(itemId)` + the existing `onTransitionAnimationEnd` hook; no extra wiring per page.
 
 ### Strings
 

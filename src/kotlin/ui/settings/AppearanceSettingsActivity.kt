@@ -3,9 +3,11 @@ package desu.inugram.ui.settings
 import android.app.Activity
 import android.content.Intent
 import android.net.Uri
+import android.os.Build
 import android.view.View
 import desu.inugram.InuConfig
 import desu.inugram.InuHooks
+import desu.inugram.SearchRegistry
 import desu.inugram.helpers.FontHelper
 import desu.inugram.helpers.InuUtils
 import desu.inugram.helpers.MapsHelper
@@ -58,6 +60,14 @@ class AppearanceSettingsActivity : SettingsPageActivity() {
                 R.string.InuDisableScrimBlur,
                 R.string.InuDisableScrimBlurInfo,
                 InuConfig.DISABLE_SCRIM_BLUR.value
+            )
+        )
+        items.add(
+            mkTwoLineCheckItem(
+                TOGGLE_REDUCE_MENU_MOTION,
+                R.string.InuReduceMenuMotion,
+                R.string.InuReduceMenuMotionInfo,
+                InuConfig.REDUCE_MENU_MOTION.value
             )
         )
         items.add(
@@ -126,6 +136,17 @@ class AppearanceSettingsActivity : SettingsPageActivity() {
         items.add(UItem.asHeader(LocaleController.getString(R.string.InuAnimationSpeed)))
         items.add(UItem.asCustom(animationSpeedSlider))
         items.add(UItem.asShadow(LocaleController.getString(R.string.InuAnimationSpeedInfo)))
+
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
+            items.add(
+                UItem.asButton(
+                    BUTTON_PREDICTIVE_BACK_MODE,
+                    LocaleController.getString(R.string.InuPredictiveBack),
+                    predictiveBackModeLabel(InuConfig.PREDICTIVE_BACK_MODE.value),
+                )
+            )
+            items.add(UItem.asShadow(LocaleController.getString(R.string.InuPredictiveBackInfo)))
+        }
 
         items.add(
             UItem.asHeader(addExperimentalSpan(LocaleController.getString(R.string.InuNonIslandUI)))
@@ -252,6 +273,11 @@ class AppearanceSettingsActivity : SettingsPageActivity() {
                 (view as? NotificationsCheckCell)?.isChecked = new
             }
 
+            TOGGLE_REDUCE_MENU_MOTION -> {
+                val new = InuConfig.REDUCE_MENU_MOTION.toggle()
+                (view as? NotificationsCheckCell)?.isChecked = new
+            }
+
             TOGGLE_NON_ISLAND_TAB_BARS -> {
                 val new = InuConfig.NON_ISLAND_TAB_BARS.toggle()
                 (view as? TextCheckCell)?.isChecked = new
@@ -267,6 +293,20 @@ class AppearanceSettingsActivity : SettingsPageActivity() {
             TOGGLE_NON_ISLAND_CHAT_ELEMENTS -> {
                 val new = InuConfig.NON_ISLAND_CHAT_ELEMENTS.toggle()
                 (view as? TextCheckCell)?.isChecked = new
+            }
+
+            BUTTON_PREDICTIVE_BACK_MODE -> RadioItemOptions.show(
+                this, view,
+                listOf(
+                    LocaleController.getString(R.string.InuPredictiveBackOff),
+                    LocaleController.getString(R.string.InuPredictiveBackStock),
+                    LocaleController.getString(R.string.InuPredictiveBackMaterial3),
+                ),
+                InuConfig.PREDICTIVE_BACK_MODE.value,
+            ) { which ->
+                if (InuConfig.PREDICTIVE_BACK_MODE.value == which) return@show
+                InuConfig.PREDICTIVE_BACK_MODE.value = which
+                showRestartBulletin()
             }
         }
     }
@@ -337,8 +377,38 @@ class AppearanceSettingsActivity : SettingsPageActivity() {
         private val BUTTON_FONT_MODE = InuUtils.generateId()
         private const val REQ_PICK_FONT = 31010
         private val TOGGLE_DISABLE_SCRIM_BLUR = InuUtils.generateId()
+        private val TOGGLE_REDUCE_MENU_MOTION = InuUtils.generateId()
         private val BUTTON_ICON_REPLACEMENT = InuUtils.generateId()
         private val BUTTON_MAP_PROVIDER = InuUtils.generateId()
         private val BUTTON_MAP_PREVIEW_PROVIDER = InuUtils.generateId()
+        private val BUTTON_PREDICTIVE_BACK_MODE = InuUtils.generateId()
+
+        private fun predictiveBackModeLabel(value: Int): String = when (value) {
+            InuConfig.PredictiveBackModeItem.OFF -> LocaleController.getString(R.string.InuPredictiveBackOff)
+            InuConfig.PredictiveBackModeItem.STOCK -> LocaleController.getString(R.string.InuPredictiveBackStock)
+            else -> LocaleController.getString(R.string.InuPredictiveBackMaterial3)
+        }
+
+        @JvmField val PAGE = SearchRegistry.Page(
+            slug = "appearance",
+            titleRes = R.string.InuGeneral,
+            iconRes = R.drawable.msg_settings_old,
+            factory = ::AppearanceSettingsActivity,
+            entries = listOf(
+                SearchRegistry.Entry("show-seconds", R.string.InuShowSeconds, TOGGLE_SHOW_SECONDS),
+                SearchRegistry.Entry("disable-rounding", R.string.InuDisableRounding, TOGGLE_DISABLE_ROUNDING),
+                SearchRegistry.Entry("disable-scrim-blur", R.string.InuDisableScrimBlur, TOGGLE_DISABLE_SCRIM_BLUR),
+                SearchRegistry.Entry("reduce-menu-motion", R.string.InuReduceMenuMotion, TOGGLE_REDUCE_MENU_MOTION),
+                SearchRegistry.Entry("icon-replacement", R.string.InuIconReplacement, BUTTON_ICON_REPLACEMENT),
+                SearchRegistry.Entry("font", R.string.InuFont, BUTTON_FONT_MODE),
+                SearchRegistry.Entry("map-provider", R.string.InuMapProvider, BUTTON_MAP_PROVIDER),
+                SearchRegistry.Entry("map-preview-provider", R.string.InuMapPreviewProvider, BUTTON_MAP_PREVIEW_PROVIDER),
+                SearchRegistry.Entry("predictive-back-mode", R.string.InuPredictiveBack, BUTTON_PREDICTIVE_BACK_MODE),
+                SearchRegistry.Entry("non-island-tab-bars", R.string.InuNonIslandTabBars, TOGGLE_NON_ISLAND_TAB_BARS),
+                SearchRegistry.Entry("non-island-global-search", R.string.InuNonIslandGlobalSearch, TOGGLE_NON_ISLAND_GLOBAL_SEARCH),
+                SearchRegistry.Entry("non-island-chat-elements", R.string.InuNonIslandChatElements, TOGGLE_NON_ISLAND_CHAT_ELEMENTS),
+                SearchRegistry.Entry("hide-fade-view", R.string.InuHideFadeView, TOGGLE_HIDE_FADE_VIEW),
+            ),
+        )
     }
 }

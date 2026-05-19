@@ -22,10 +22,12 @@ most things are toggleable in `Settings → Inugram`, with sensible opinionated 
 - 🐶 hide fade views
 - 🐶 old (pre-12.6) mention/reaction indicator
 - 🐶 toggleable scrim blur
+- 🐶 reduce menu motion: skip context menu stagger and reaction bar slide-in/scale animations
 - 🐶 toggle to replace profile photo bottom blur with a plain gradient fade
 - disable number rounding
 - export/import settings to/from json file
 - cloud sync of settings via web app storage api
+- search and deeplinks for fork settings
 - MapLibre-based map view
 - customizable map preview provider
 - in-app updater - *ported from [Nekogram](https://github.com/Nekogram/Nekogram)*
@@ -73,6 +75,7 @@ most things are toggleable in `Settings → Inugram`, with sensible opinionated 
 - 🐶 disable web preview limit on twitter-like websites
 - message details from menu (+ show json)
 - per-message statistics from message menu
+- customizable message context menu - reorder and hide items + long-tap forward/reply items
 - 🐶 disable custom wallpaper and theme per chat
 - read-only chat "admin" page for non-admins
 - split media restriction toggles for stickers / gifs / games / inline
@@ -83,14 +86,12 @@ most things are toggleable in `Settings → Inugram`, with sensible opinionated 
 - in-place message translation, with optional web preview translation
 - instant view pages translator
 - show original time/date in "forwarded from" header
-- long-tap "forward" in message menu to forward without sender's name or caption
 - long-tap forward bar (above input) to cycle between regular / without sender / without caption
 - long-tap a mention in a message to insert a name-mention into the input with custom text
 
 ## message input / formatting
 
 - 🐶 customizable max input lines (and bumped default)
-- 🐶 per-chat live draft streaming (dm-only) for shits and giggles
 - 🐶 voice recorder moved into attachments drawer
 - 🐶 custom formatting popup ui (better ux for span manipulation)
 - 🐶 customizable text classifier (native / improved / off) - reduces false positive expansions
@@ -122,7 +123,7 @@ most things are toggleable in `Settings → Inugram`, with sensible opinionated 
 ## behavior
 
 - call confirmation
-- disable predictive back
+- predictive back mode selector (off / stock / 🐶 Material 3)
 - disable pull-to-next-channel
 - disable swipe-to-unarchive
 - disable instant camera in attachments

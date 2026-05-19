@@ -3,6 +3,7 @@ package desu.inugram.ui.settings
 import android.view.View
 import androidx.core.content.edit
 import desu.inugram.InuConfig
+import desu.inugram.SearchRegistry
 import desu.inugram.helpers.InuUtils
 import org.telegram.messenger.LocaleController
 import org.telegram.messenger.MessagesController
@@ -276,5 +277,26 @@ class AnnoyancesSettingsActivity : SettingsPageActivity() {
         private val TOGGLE_DISABLE_MOTION_PHOTOS = InuUtils.generateId()
         private val TOGGLE_DISABLE_INTRO_STICKER = InuUtils.generateId()
         private val BUTTON_CLEAR_HINTS = InuUtils.generateId()
+
+        @JvmField val PAGE = SearchRegistry.Page(
+            slug = "annoyances",
+            titleRes = R.string.InuAnnoyances,
+            iconRes = R.drawable.menu_hide_gift,
+            factory = ::AnnoyancesSettingsActivity,
+            entries = listOf(
+                SearchRegistry.Entry("hide-stories", R.string.InuHideStories, TOGGLE_HIDE_STORIES),
+                SearchRegistry.Entry("hide-repost-to-story", R.string.InuHideRepostToStory, TOGGLE_HIDE_REPOST_TO_STORY),
+                SearchRegistry.Entry("hide-trending-stickers", R.string.InuHideTrendingStickers, TOGGLE_HIDE_TRENDING_STICKERS),
+                SearchRegistry.Entry("disable-sensitive", R.string.InuDisableSensitive, TOGGLE_DISABLE_SENSITIVE),
+                SearchRegistry.Entry("disable-chat-backgrounds", R.string.InuDisableChatBackgrounds, TOGGLE_DISABLE_CHAT_BACKGROUNDS),
+                SearchRegistry.Entry("disable-chat-themes", R.string.InuDisableChatThemes, TOGGLE_DISABLE_CHAT_THEMES),
+                SearchRegistry.Entry("disable-bg-parallax", R.string.InuDisableBgParallax, TOGGLE_DISABLE_BG_PARALLAX),
+                SearchRegistry.Entry("hide-paid-reaction-upsell", R.string.InuHidePaidReactionUpsell, TOGGLE_HIDE_PAID_REACTION_UPSELL),
+                SearchRegistry.Entry("hide-hashtag-suggestions", R.string.InuHideHashtagSuggestions, TOGGLE_HIDE_HASHTAG_SUGGESTIONS),
+                SearchRegistry.Entry("disable-motion-photos", R.string.InuDisableMotionPhotos, TOGGLE_DISABLE_MOTION_PHOTOS),
+                SearchRegistry.Entry("disable-intro-sticker", R.string.InuDisableIntroSticker, TOGGLE_DISABLE_INTRO_STICKER),
+                SearchRegistry.Entry("clear-hints", R.string.InuClearHints, BUTTON_CLEAR_HINTS),
+            ),
+        )
     }
 }

@@ -3,6 +3,7 @@ package desu.inugram.ui.settings
 import android.os.Build
 import android.view.View
 import desu.inugram.InuConfig
+import desu.inugram.SearchRegistry
 import desu.inugram.helpers.InuUtils
 import desu.inugram.helpers.UrlCleanerHelper
 import desu.inugram.helpers.WebPreviewHelper
@@ -42,14 +43,6 @@ class BehaviorSettingsActivity : SettingsPageActivity() {
                 TOGGLE_DISABLE_CHAT_BUBBLES,
                 LocaleController.getString(R.string.InuDisableChatBubbles),
             ).setChecked(InuConfig.DISABLE_CHAT_BUBBLES.value)
-        )
-        items.add(
-            mkTwoLineCheckItem(
-                TOGGLE_DISABLE_PREDICTIVE_BACK,
-                R.string.InuDisablePredictiveBack,
-                R.string.InuDisablePredictiveBackInfo,
-                InuConfig.DISABLE_PREDICTIVE_BACK.value
-            )
         )
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
             items.add(
@@ -108,12 +101,6 @@ class BehaviorSettingsActivity : SettingsPageActivity() {
                 (view as? TextCheckCell)?.isChecked = new
             }
 
-            TOGGLE_DISABLE_PREDICTIVE_BACK -> {
-                val new = InuConfig.DISABLE_PREDICTIVE_BACK.toggle()
-                (view as? NotificationsCheckCell)?.isChecked = new
-                showRestartBulletin()
-            }
-
             BUTTON_TEXT_CLASSIFIER_MODE -> showTextClassifierModeSelector()
             BUTTON_WEB_PREVIEW_REPLACEMENTS -> presentFragment(WebPreviewReplacementsActivity())
 
@@ -158,13 +145,13 @@ class BehaviorSettingsActivity : SettingsPageActivity() {
 
     override fun onLongClick(item: UItem, view: View, position: Int, x: Float, y: Float): Boolean {
         if (item.id == TOGGLE_STRIP_TRACKING_PARAMS) {
-            showStripTrackingParamsOptions(view)
+            showStripTrackingParamsOptions(item, view)
             return true
         }
         return super.onLongClick(item, view, position, x, y)
     }
 
-    private fun showStripTrackingParamsOptions(anchor: View) {
+    private fun showStripTrackingParamsOptions(item: UItem, anchor: View) {
         val opts = ItemOptions.makeOptions(this, anchor)
             .add(R.drawable.msg_download, LocaleController.getString(R.string.InuStripTrackingParamsUpdate)) {
                 fetchLatestStripTrackingParams()
@@ -178,6 +165,7 @@ class BehaviorSettingsActivity : SettingsPageActivity() {
                 }
             }
         }
+        addCopyLinkOption(opts, item)
         opts.show()
     }
 
@@ -240,7 +228,6 @@ class BehaviorSettingsActivity : SettingsPageActivity() {
 
     companion object {
         private val TOGGLE_DISABLE_CHAT_BUBBLES = InuUtils.generateId()
-        private val TOGGLE_DISABLE_PREDICTIVE_BACK = InuUtils.generateId()
         private val BUTTON_TEXT_CLASSIFIER_MODE = InuUtils.generateId()
         private val TOGGLE_CALL_CONFIRMATION = InuUtils.generateId()
         private val TOGGLE_STRIP_TRACKING_PARAMS = InuUtils.generateId()
@@ -253,5 +240,21 @@ class BehaviorSettingsActivity : SettingsPageActivity() {
             InuConfig.TextClassifierModeItem.OFF -> LocaleController.getString(R.string.InuTextClassifierModeOff)
             else -> LocaleController.getString(R.string.InuTextClassifierModeImproved)
         }
+
+        @JvmField val PAGE = SearchRegistry.Page(
+            slug = "behavior",
+            titleRes = R.string.InuBehavior,
+            iconRes = R.drawable.avd_speed,
+            factory = ::BehaviorSettingsActivity,
+            entries = listOf(
+                SearchRegistry.Entry("disable-chat-bubbles", R.string.InuDisableChatBubbles, TOGGLE_DISABLE_CHAT_BUBBLES),
+                SearchRegistry.Entry("text-classifier-mode", R.string.InuTextClassifierMode, BUTTON_TEXT_CLASSIFIER_MODE),
+                SearchRegistry.Entry("call-confirmation", R.string.InuCallConfirmation, TOGGLE_CALL_CONFIRMATION),
+                SearchRegistry.Entry("strip-tracking-params", R.string.InuStripTrackingParams, TOGGLE_STRIP_TRACKING_PARAMS),
+                SearchRegistry.Entry("web-preview-replacements", R.string.InuWebPreviewReplacements, BUTTON_WEB_PREVIEW_REPLACEMENTS),
+                SearchRegistry.Entry("faster-downloads", R.string.InuFasterDownloads, TOGGLE_FASTER_DOWNLOADS),
+                SearchRegistry.Entry("faster-uploads", R.string.InuFasterUploads, TOGGLE_FASTER_UPLOADS),
+            ),
+        )
     }
 }

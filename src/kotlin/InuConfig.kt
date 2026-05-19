@@ -4,6 +4,7 @@ import android.content.Context
 import android.content.SharedPreferences
 import androidx.core.content.edit
 import desu.inugram.helpers.FormattingPopupConfig
+import desu.inugram.helpers.MessageMenuConfig
 import desu.inugram.helpers.PinnedReactionsHelper
 
 object InuConfig {
@@ -97,8 +98,16 @@ object InuConfig {
     @JvmField
     val DISABLE_ROUNDING = BoolItem("disable_rounding", false)
 
+    class PredictiveBackModeItem : IntItem("predictive_back_mode", OFF) {
+        companion object {
+            const val OFF = 0
+            const val STOCK = 1
+            const val MATERIAL3 = 2
+        }
+    }
+
     @JvmField
-    val DISABLE_PREDICTIVE_BACK = BoolItem("disable_predictive_back", true)
+    val PREDICTIVE_BACK_MODE = PredictiveBackModeItem()
 
     @JvmField
     val DISABLE_INSTANT_CAMERA = BoolItem("disable_instant_camera", true)
@@ -367,6 +376,9 @@ object InuConfig {
     val DISABLE_SCRIM_BLUR = BoolItem("disable_scrim_blur", false)
 
     @JvmField
+    val REDUCE_MENU_MOTION = BoolItem("reduce_menu_motion", true)
+
+    @JvmField
     val PROFILE_PHOTO_GRADIENT_FADE = BoolItem("profile_photo_gradient_fade", false)
 
     @JvmField
@@ -440,6 +452,33 @@ object InuConfig {
 
     @JvmField
     val FORMATTING_POPUP_ITEMS = FormattingPopupConfig("formatting_popup_items")
+
+    @JvmField
+    val MESSAGE_MENU_ITEMS = MessageMenuConfig("message_menu_items")
+
+    class ForwardLongTapItem : IntItem("forward_long_tap_action", CHOOSE_MODE) {
+        companion object {
+            const val OFF = 0
+            const val CHOOSE_MODE = 1
+            const val WITHOUT_AUTHOR = 2
+            const val WITHOUT_CAPTION = 3
+        }
+    }
+
+    @JvmField
+    val FORWARD_LONG_TAP_ACTION = ForwardLongTapItem()
+
+    class ReplyLongTapItem : IntItem("reply_long_tap_action", OFF) {
+        companion object {
+            const val OFF = 0
+            const val CHOOSE_MODE = 1
+            const val REPLY_IN = 2
+            const val REPLY_IN_DMS = 3
+        }
+    }
+
+    @JvmField
+    val REPLY_LONG_TAP_ACTION = ReplyLongTapItem()
 
     @JvmField
     val ANIMATION_SPEED = FloatItem("animation_speed", 1.0f)

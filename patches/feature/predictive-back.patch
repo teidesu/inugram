@@ -1,0 +1,90 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: alina sireneva <alina@tei.su>
+Date: Thu, 9 Apr 2026 04:17:49 +0300
+Subject: disable predictive back, or opt into material3-style one
+
+---
+ .../ui/ActionBar/ActionBarLayout.java         | 10 ++++++---
+ .../java/org/telegram/ui/LaunchActivity.java  | 22 ++++++++++++++++++-
+ 2 files changed, 28 insertions(+), 4 deletions(-)
+
+diff --git a/TMessagesProj/src/main/java/org/telegram/ui/ActionBar/ActionBarLayout.java b/TMessagesProj/src/main/java/org/telegram/ui/ActionBar/ActionBarLayout.java
+index 0000000..0000000 100644
+--- a/TMessagesProj/src/main/java/org/telegram/ui/ActionBar/ActionBarLayout.java
++++ b/TMessagesProj/src/main/java/org/telegram/ui/ActionBar/ActionBarLayout.java
+@@ -987,11 +987,13 @@ public class ActionBarLayout extends FrameLayout implements INavigationLayout, F
+         int clipRight = width + getPaddingLeft();
+         int backOffset = 0;
+ 
++        if (!inu_m3PredictiveActive) {
+         if (child == containerViewBack) {
+             clipRight = translationX + dp(1);
+         } else if (child == containerView) {
+             clipLeft = translationX;
+         }
++        }
+ 
+         final int restoreCount2 = canvas.save();
+         if (child != bottomSheetTabs && bottomSheetTabsClip != null) {
+@@ -1230,7 +1232,7 @@ public class ActionBarLayout extends FrameLayout implements INavigationLayout, F
+         delegate = INavigationLayoutDelegate;
+     }
+ 
+-    private void onSlideAnimationEnd(final boolean backAnimation) {
++    public void onSlideAnimationEnd(final boolean backAnimation) {
+         if (!backAnimation) {
+             if (fragmentsStack.size() < 2) {
+                 checkBlackScreen("onSlideAnimationEnd exit");
+@@ -1460,8 +1462,8 @@ public class ActionBarLayout extends FrameLayout implements INavigationLayout, F
+         return false;
+     }
+ 
+-    private boolean predictiveInput;
+-    private boolean predictiveBackInProgress;
++    public boolean predictiveInput;
++    public boolean predictiveBackInProgress;
+     private boolean predictiveBackHasProgress;
+     private float predictiveBackY;
+     private boolean predictiveBackLeft;
+@@ -1533,6 +1535,8 @@ public class ActionBarLayout extends FrameLayout implements INavigationLayout, F
+         return predictiveBackInProgress && predictiveBackHasProgress;
+     }
+ 
++    public boolean inu_m3PredictiveActive;
++
+     private boolean backAnimatorIsBack;
+     private AnimatorSet backAnimator;
+     private void animateBackEndAnimation(boolean backAnimation) {
+diff --git a/TMessagesProj/src/main/java/org/telegram/ui/LaunchActivity.java b/TMessagesProj/src/main/java/org/telegram/ui/LaunchActivity.java
+index 0000000..0000000 100644
+--- a/TMessagesProj/src/main/java/org/telegram/ui/LaunchActivity.java
++++ b/TMessagesProj/src/main/java/org/telegram/ui/LaunchActivity.java
+@@ -709,7 +709,27 @@ public class LaunchActivity extends BasePermissionsActivity implements INavigati
+         BackupAgent.requestBackup(this);
+ 
+         RestrictedLanguagesSelectActivity.checkRestrictedLanguages(false);
+-        if (Build.VERSION.SDK_INT >= 34) {
++        final int inuPredictiveMode = desu.inugram.InuConfig.PREDICTIVE_BACK_MODE.getValue();
++        if (Build.VERSION.SDK_INT >= 34 && inuPredictiveMode == desu.inugram.InuConfig.PredictiveBackModeItem.MATERIAL3 && actionBarLayout != null) {
++            if (onBackAnimationCallback == null) {
++                onBackAnimationCallback = desu.inugram.helpers.Material3PredictiveBack.createCallback(
++                    this,
++                    actionBarLayout,
++                    () -> {
++                        if (AndroidUtilities.isTablet()) {
++                            onBackPressed();
++                            return;
++                        }
++                        if (!onBackPressed(true)) return;
++                        onBackPressed();
++                    }
++                );
++            }
++            getOnBackInvokedDispatcher().registerOnBackInvokedCallback(
++                OnBackInvokedDispatcher.PRIORITY_DEFAULT,
++                (OnBackAnimationCallback) onBackAnimationCallback
++            );
++        } else if (Build.VERSION.SDK_INT >= 34 && inuPredictiveMode == desu.inugram.InuConfig.PredictiveBackModeItem.STOCK) {
+             if (onBackAnimationCallback == null) {
+                 onBackAnimationCallback =  new OnBackAnimationCallback() {
+                     private boolean started = false;

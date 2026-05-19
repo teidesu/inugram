@@ -2,6 +2,7 @@ package desu.inugram.ui.settings
 
 import android.view.View
 import desu.inugram.InuConfig
+import desu.inugram.SearchRegistry
 import desu.inugram.helpers.InuUtils
 import desu.inugram.ui.settings.TranslationTargetActivity
 import org.telegram.messenger.LocaleController
@@ -124,5 +125,20 @@ class TranslatorSettingsActivity : SettingsPageActivity() {
         private val TOGGLE_SHOW_TRANSLATE_CHAT_BUTTON = InuUtils.generateId()
         private val BUTTON_DO_NOT_TRANSLATE = InuUtils.generateId()
         private val BUTTON_TARGET_LANG = InuUtils.generateId()
+
+        @JvmField val PAGE = SearchRegistry.Page(
+            slug = "translator",
+            titleRes = R.string.InuTranslator,
+            iconRes = R.drawable.msg_translate,
+            factory = ::TranslatorSettingsActivity,
+            entries = listOf(
+                SearchRegistry.Entry("show-translate-button", R.string.ShowTranslateButton, TOGGLE_SHOW_TRANSLATE_BUTTON),
+                SearchRegistry.Entry("show-translate-chat-button", R.string.ShowTranslateChatButton, TOGGLE_SHOW_TRANSLATE_CHAT_BUTTON),
+                SearchRegistry.Entry("translation-target", R.string.InuTranslationTarget, BUTTON_TARGET_LANG),
+                SearchRegistry.Entry("do-not-translate", R.string.DoNotTranslate, BUTTON_DO_NOT_TRANSLATE),
+                SearchRegistry.Entry("in-place-translation", R.string.InuInPlaceTranslation, TOGGLE_IN_PLACE_TRANSLATION),
+                SearchRegistry.Entry("translate-web-previews", R.string.InuTranslateWebPreviews, TOGGLE_TRANSLATE_WEB_PREVIEWS),
+            ),
+        )
     }
 }

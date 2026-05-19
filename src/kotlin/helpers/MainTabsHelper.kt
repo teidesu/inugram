@@ -129,7 +129,10 @@ object MainTabsHelper {
         val now = android.os.SystemClock.uptimeMillis()
         val isDoubleTap = now - lastProfileTapMs < 500
         lastProfileTapMs = now
-        return isDoubleTap && switchToNextAccount()
+        if (!isDoubleTap) return false
+        if (!switchToNextAccount()) return false
+        lastProfileTapMs = 0L
+        return true
     }
 
     @JvmStatic

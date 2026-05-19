@@ -1,0 +1,114 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: alina sireneva <alina@tei.su>
+Date: Tue, 19 May 2026 19:38:54 +0400
+Subject: reduce menu motion (disable stagger in some menus, simplify chat context menu animation)
+
+---
+ .../telegram/ui/ActionBar/ActionBarPopupWindow.java | 13 +++++++++++++
+ .../src/main/java/org/telegram/ui/ChatActivity.java |  2 +-
+ .../ui/Components/ReactionsContainerLayout.java     | 10 ++++++++--
+ 3 files changed, 22 insertions(+), 3 deletions(-)
+
+diff --git a/TMessagesProj/src/main/java/org/telegram/ui/ActionBar/ActionBarPopupWindow.java b/TMessagesProj/src/main/java/org/telegram/ui/ActionBar/ActionBarPopupWindow.java
+index 0000000..0000000 100644
+--- a/TMessagesProj/src/main/java/org/telegram/ui/ActionBar/ActionBarPopupWindow.java
++++ b/TMessagesProj/src/main/java/org/telegram/ui/ActionBar/ActionBarPopupWindow.java
+@@ -380,6 +380,10 @@ public class ActionBarPopupWindow extends PopupWindow {
+ 
+         private void startChildAnimation(View child) {
+             if (animationEnabled) {
++                if (desu.inugram.helpers.MenuMotionHelper.getEnabled()) {
++                    desu.inugram.helpers.MenuMotionHelper.applyShown(child);
++                    return;
++                }
+                 AnimatorSet animatorSet = new AnimatorSet();
+                 animatorSet.playTogether(
+                         ObjectAnimator.ofFloat(child, View.ALPHA, 0f, child.isEnabled() ? 1f : 0.5f),
+@@ -678,6 +682,7 @@ public class ActionBarPopupWindow extends PopupWindow {
+         }
+ 
+         public void setReactionsTransitionProgress(float transitionEnterProgress) {
++            if (desu.inugram.helpers.MenuMotionHelper.getEnabled()) transitionEnterProgress = 1f;
+             this.reactionsEnterProgress = transitionEnterProgress;
+             invalidate();
+         }
+@@ -891,12 +896,16 @@ public class ActionBarPopupWindow extends PopupWindow {
+         });
+         content.updateAnimation = false;
+         content.clipChildren = true;
++        if (desu.inugram.helpers.MenuMotionHelper.getEnabled()) {
++            windowAnimatorSet = desu.inugram.helpers.MenuMotionHelper.buildEnter(content, content, finalScaleY);
++        } else {
+         windowAnimatorSet.playTogether(
+                 ObjectAnimator.ofFloat(content, "backScaleY", 0.0f, finalScaleY),
+                 ObjectAnimator.ofInt(content, "backAlpha", 0, 255),
+                 childtranslations
+         );
+         windowAnimatorSet.setDuration(150 + 16 * visibleCount);
++        }
+         windowAnimatorSet.addListener(new AnimatorListenerAdapter() {
+             @Override
+             public void onAnimationEnd(Animator animation) {
+@@ -962,10 +971,14 @@ public class ActionBarPopupWindow extends PopupWindow {
+                 finalScaleY = content.backScaleY;
+             }
+             windowAnimatorSet = new AnimatorSet();
++            if (desu.inugram.helpers.MenuMotionHelper.getEnabled()) {
++                windowAnimatorSet = desu.inugram.helpers.MenuMotionHelper.buildEnter(content, viewGroup, finalScaleY);
++            } else {
+             windowAnimatorSet.playTogether(
+                     ObjectAnimator.ofFloat(content, "backScaleY", 0.0f, finalScaleY),
+                     ObjectAnimator.ofInt(content, "backAlpha", 0, 255));
+             windowAnimatorSet.setDuration(150 + 16 * visibleCount);
++            }
+             windowAnimatorSet.addListener(new AnimatorListenerAdapter() {
+                 @Override
+                 public void onAnimationEnd(Animator animation) {
+diff --git a/TMessagesProj/src/main/java/org/telegram/ui/ChatActivity.java b/TMessagesProj/src/main/java/org/telegram/ui/ChatActivity.java
+index 0000000..0000000 100644
+--- a/TMessagesProj/src/main/java/org/telegram/ui/ChatActivity.java
++++ b/TMessagesProj/src/main/java/org/telegram/ui/ChatActivity.java
+@@ -31725,7 +31725,7 @@ public class ChatActivity extends BaseFragment implements
+             scrimPopupWindow.setDismissAnimationDuration(220);
+             scrimPopupWindow.setOutsideTouchable(true);
+             scrimPopupWindow.setClippingEnabled(true);
+-            if (!isReactionsAvailable || reactionsLayout == null || !ReactionsContainerLayout.allowSmoothEnterTransition()) {
++            if (!isReactionsAvailable || reactionsLayout == null || !ReactionsContainerLayout.allowSmoothEnterTransition() || desu.inugram.helpers.MenuMotionHelper.getEnabled()) {
+                 scrimPopupWindow.setAnimationStyle(R.style.PopupContextAnimation);
+             } else {
+                 scrimPopupWindow.setAnimationStyle(0);
+diff --git a/TMessagesProj/src/main/java/org/telegram/ui/Components/ReactionsContainerLayout.java b/TMessagesProj/src/main/java/org/telegram/ui/Components/ReactionsContainerLayout.java
+index 0000000..0000000 100644
+--- a/TMessagesProj/src/main/java/org/telegram/ui/Components/ReactionsContainerLayout.java
++++ b/TMessagesProj/src/main/java/org/telegram/ui/Components/ReactionsContainerLayout.java
+@@ -770,7 +770,7 @@ public class ReactionsContainerLayout extends FrameLayout implements Notificatio
+                 } else {
+                     if (child == premiumLockContainer) {
+                         if (child.getX() + child.getMeasuredWidth() / 2f > 0 && child.getX() + child.getMeasuredWidth() / 2f < recyclerListView.getWidth()) {
+-                            if (!lastVisibleViewsTmp.contains(child)) {
++                            if (!lastVisibleViewsTmp.contains(child) && !desu.inugram.helpers.MenuMotionHelper.getEnabled()) {
+                                 if (transitionProgress != 1f) {
+                                     premiumLockIconView.resetAnimation();
+                                 }
+@@ -784,7 +784,7 @@ public class ReactionsContainerLayout extends FrameLayout implements Notificatio
+                     }
+                     if (child == customReactionsContainer) {
+                         if (child.getX() + child.getMeasuredWidth() / 2f > 0 && child.getX() + child.getMeasuredWidth() / 2f < recyclerListView.getWidth()) {
+-                            if (!lastVisibleViewsTmp.contains(child)) {
++                            if (!lastVisibleViewsTmp.contains(child) && !desu.inugram.helpers.MenuMotionHelper.getEnabled()) {
+                                 if (transitionProgress != 1f) {
+                                     customEmojiReactionsIconView.resetAnimation();
+                                 }
+@@ -1443,6 +1443,12 @@ public class ReactionsContainerLayout extends FrameLayout implements Notificatio
+ 
+     public void startEnterAnimation(boolean animatePopup) {
+         this.animatePopup = animatePopup;
++        if (desu.inugram.helpers.MenuMotionHelper.getEnabled()) {
++            skipEnterAnimation = true;
++            setTransitionProgress(1f);
++            setAlpha(1f);
++            return;
++        }
+         setTransitionProgress(0);
+         setAlpha(1f);
+         notificationsLocker.lock();

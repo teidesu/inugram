@@ -1,5 +1,7 @@
 package desu.inugram.ui.settings
 
+import android.content.ClipData
+import android.content.ClipboardManager
 import android.content.Context
 import android.graphics.Canvas
 import android.graphics.Paint
@@ -13,7 +15,9 @@ import android.text.TextPaint
 import android.text.style.ReplacementSpan
 import android.view.View
 import androidx.core.graphics.withTranslation
+import desu.inugram.SearchRegistry
 import org.telegram.messenger.AndroidUtilities
+import org.telegram.messenger.ApplicationLoader
 import org.telegram.messenger.LocaleController
 import org.telegram.messenger.NotificationCenter
 import org.telegram.messenger.R
@@ -22,19 +26,49 @@ import org.telegram.messenger.Utilities
 import org.telegram.ui.ActionBar.Theme
 import org.telegram.ui.Cells.NotificationsCheckCell
 import org.telegram.ui.Components.BulletinFactory
+import org.telegram.ui.Components.ItemOptions
 import org.telegram.ui.Components.UItem
 import org.telegram.ui.Components.UniversalFragment
+import org.telegram.ui.Components.UniversalRecyclerView
 import org.telegram.ui.LaunchActivity
 import kotlin.system.exitProcess
 
 abstract class SettingsPageActivity : UniversalFragment() {
     override fun isSupportEdgeToEdge(): Boolean = true
 
+    private var highlightItemId: Int = -1
+
+    fun withHighlight(itemId: Int) = apply { highlightItemId = itemId }
+
     override fun createView(context: Context): View {
         return super.createView(context).also {
             listView.setSections()
             actionBar.setAdaptiveBackground(listView)
             listView.clipToPadding = false
+            // pre-scroll before first layout so the row is on-screen at open, no jump after transition.
+            if (highlightItemId != -1) {
+                val index = indexOfItem(listView, highlightItemId)
+                if (index >= 0) {
+                    listView.layoutManager.scrollToPositionWithOffset(index, AndroidUtilities.dp(60f))
+                }
+            }
+        }
+    }
+
+    override fun onTransitionAnimationEnd(isOpen: Boolean, backward: Boolean) {
+        super.onTransitionAnimationEnd(isOpen, backward)
+        if (!isOpen || backward || highlightItemId == -1) return
+        val index = indexOfItem(listView, highlightItemId)
+        highlightItemId = -1
+        if (index >= 0) listView.highlightRow { index }
+    }
+
+    private fun indexOfItem(lv: UniversalRecyclerView, target: Int): Int {
+        var i = 0
+        while (true) {
+            val item = lv.adapter.getItem(i) ?: return -1
+            if (item.id == target) return i
+            i++
         }
     }
 
@@ -210,5 +244,21 @@ abstract class SettingsPageActivity : UniversalFragment() {
         return text
     }
 
-    override fun onLongClick(item: UItem, view: View, position: Int, x: Float, y: Float) = false
+    override fun onLongClick(item: UItem, view: View, position: Int, x: Float, y: Float): Boolean {
+        val opts = ItemOptions.makeOptions(this, view)
+        if (!addCopyLinkOption(opts, item)) return false
+        opts.show()
+        return true
+    }
+
+    protected fun addCopyLinkOption(opts: ItemOptions, item: UItem): Boolean {
+        val link = SearchRegistry.deepLinkForItemId(item.id) ?: return false
+        opts.add(R.drawable.msg_link, LocaleController.getString(R.string.CopyLink)) {
+            val cm = ApplicationLoader.applicationContext
+                .getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
+            cm.setPrimaryClip(ClipData.newPlainText("label", link))
+            BulletinFactory.of(this).createCopyLinkBulletin().show()
+        }
+        return true
+    }
 }

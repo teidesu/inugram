@@ -76,6 +76,7 @@ object InuHooks {
     @JvmStatic
     fun onDeepLink(activity: LaunchActivity, intent: Intent?): Boolean {
         return PasscodeHelper.tryHandleDeepLink(activity, intent)
+            || SearchRegistry.tryHandleDeepLink(activity, intent)
     }
 
     @JvmStatic

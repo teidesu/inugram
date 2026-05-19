@@ -5,8 +5,9 @@ Subject: custom formatting ui for rich text fields with better ux
 
 ---
  .../telegram/ui/Components/EditTextBoldCursor.java |  6 ++++--
+ .../telegram/ui/Components/EditTextCaption.java    |  3 ++-
  .../telegram/ui/Components/EditTextEffects.java    | 14 +++++++++++++-
- 2 files changed, 17 insertions(+), 3 deletions(-)
+ 3 files changed, 19 insertions(+), 4 deletions(-)
 
 diff --git a/TMessagesProj/src/main/java/org/telegram/ui/Components/EditTextBoldCursor.java b/TMessagesProj/src/main/java/org/telegram/ui/Components/EditTextBoldCursor.java
 index 0000000..0000000 100644
@@ -25,6 +26,20 @@ index 0000000..0000000 100644
              invalidate();
              return floatingActionMode;
          } else {
+diff --git a/TMessagesProj/src/main/java/org/telegram/ui/Components/EditTextCaption.java b/TMessagesProj/src/main/java/org/telegram/ui/Components/EditTextCaption.java
+index 0000000..0000000 100644
+--- a/TMessagesProj/src/main/java/org/telegram/ui/Components/EditTextCaption.java
++++ b/TMessagesProj/src/main/java/org/telegram/ui/Components/EditTextCaption.java
+@@ -198,7 +198,8 @@ public class EditTextCaption extends EditTextBoldCursor {
+         }
+         final int setSelection = QuoteSpan.putQuoteToEditable(getText(), start, end, collapse);
+         if (setSelection >= 0) {
+-            setSelection(setSelection);
++            // length filter may swallow the inserted '\n', leaving setSelection past length
++            setSelection(Math.min(setSelection, length()));
+             resetFontMetricsCache();
+         }
+         invalidateQuotes(true);
 diff --git a/TMessagesProj/src/main/java/org/telegram/ui/Components/EditTextEffects.java b/TMessagesProj/src/main/java/org/telegram/ui/Components/EditTextEffects.java
 index 0000000..0000000 100644
 --- a/TMessagesProj/src/main/java/org/telegram/ui/Components/EditTextEffects.java

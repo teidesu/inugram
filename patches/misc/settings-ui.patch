@@ -5,8 +5,9 @@ Subject: settings ui
 
 ---
  .../java/org/telegram/messenger/ApplicationLoader.java     | 2 ++
+ .../src/main/java/org/telegram/ui/ProfileActivity.java     | 4 ++--
  .../src/main/java/org/telegram/ui/SettingsActivity.java    | 7 +++++++
- 2 files changed, 9 insertions(+)
+ 3 files changed, 11 insertions(+), 2 deletions(-)
 
 diff --git a/TMessagesProj/src/main/java/org/telegram/messenger/ApplicationLoader.java b/TMessagesProj/src/main/java/org/telegram/messenger/ApplicationLoader.java
 index 0000000..0000000 100644
@@ -21,6 +22,28 @@ index 0000000..0000000 100644
          if (BuildVars.LOGS_ENABLED) {
              FileLog.d("app start time = " + (startTime = SystemClock.elapsedRealtime()));
              try {
+diff --git a/TMessagesProj/src/main/java/org/telegram/ui/ProfileActivity.java b/TMessagesProj/src/main/java/org/telegram/ui/ProfileActivity.java
+index 0000000..0000000 100644
+--- a/TMessagesProj/src/main/java/org/telegram/ui/ProfileActivity.java
++++ b/TMessagesProj/src/main/java/org/telegram/ui/ProfileActivity.java
+@@ -14278,7 +14278,7 @@ public class ProfileActivity extends BaseFragment implements NotificationCenter.
+         private static SearchResult[] onCreateSearchArray(final BaseFragment f) {
+             final int currentAccount = f.getCurrentAccount();
+             final Theme.ResourcesProvider resourcesProvider = f.getResourceProvider();
+-            return new SearchResult[]{
++            return desu.inugram.SearchRegistry.extendSearchArray(new SearchResult[]{
+                     new SearchResult(500, getString(R.string.EditName), 0, () -> f.presentFragment(new ChangeNameActivity(resourcesProvider))),
+                     new SearchResult(501, getString(R.string.ChangePhoneNumber), 0, () -> f.presentFragment(new ActionIntroActivity(ActionIntroActivity.ACTION_TYPE_CHANGE_PHONE_NUMBER))).withLink("tg://settings/edit/change-number"),
+                     new SearchResult(502, getString(R.string.AddAnotherAccount), 0, () -> {
+@@ -14536,7 +14536,7 @@ public class ProfileActivity extends BaseFragment implements NotificationCenter.
+                     new SearchResult(402, getString(R.string.AskAQuestion), getString(R.string.SettingsHelp), R.drawable.msg2_help, () -> f.showDialog(AlertsCreator.createSupportAlert(f, null))).withLink("tg://settings/ask-question"),
+                     new SearchResult(403, getString(R.string.TelegramFAQ), getString(R.string.SettingsHelp), R.drawable.msg2_help, () -> Browser.openUrl(f.getParentActivity(), getString(R.string.TelegramFaqUrl))).withLink("tg://settings/faq"),
+                     new SearchResult(404, getString(R.string.PrivacyPolicy), getString(R.string.SettingsHelp), R.drawable.msg2_help, () -> Browser.openUrl(f.getParentActivity(), getString(R.string.PrivacyPolicyUrl))).withLink("tg://settings/privacy-policy"),
+-            };
++            }, f);
+         }
+ 
+         private static boolean isPremiumFeatureAvailable(int currentAccount, int feature) {
 diff --git a/TMessagesProj/src/main/java/org/telegram/ui/SettingsActivity.java b/TMessagesProj/src/main/java/org/telegram/ui/SettingsActivity.java
 index 0000000..0000000 100644
 --- a/TMessagesProj/src/main/java/org/telegram/ui/SettingsActivity.java

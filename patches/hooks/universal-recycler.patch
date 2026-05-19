@@ -1,0 +1,31 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: alina sireneva <alina@tei.su>
+Date: Tue, 19 May 2026 16:00:27 +0400
+Subject: few extra features in UniversalRecyclerView, used by settings pages
+
+---
+ .../org/telegram/ui/Components/UniversalRecyclerView.java     | 4 +++-
+ 1 file changed, 3 insertions(+), 1 deletion(-)
+
+diff --git a/TMessagesProj/src/main/java/org/telegram/ui/Components/UniversalRecyclerView.java b/TMessagesProj/src/main/java/org/telegram/ui/Components/UniversalRecyclerView.java
+index 0000000..0000000 100644
+--- a/TMessagesProj/src/main/java/org/telegram/ui/Components/UniversalRecyclerView.java
++++ b/TMessagesProj/src/main/java/org/telegram/ui/Components/UniversalRecyclerView.java
+@@ -37,6 +37,8 @@ public class UniversalRecyclerView extends RecyclerListView {
+     public final UniversalAdapter adapter;
+     public ItemTouchHelper itemTouchHelper;
+ 
++    public boolean inu_longPressDragEnabled = true;
++
+     private boolean doNotDetachViews;
+     public void doNotDetachViews() {
+         doNotDetachViews = true;
+@@ -311,7 +313,7 @@ public class UniversalRecyclerView extends RecyclerListView {
+     private class TouchHelperCallback extends ItemTouchHelper.Callback {
+         @Override
+         public boolean isLongPressDragEnabled() {
+-            return reorderingAllowed;
++            return reorderingAllowed && inu_longPressDragEnabled;
+         }
+ 
+         @Override

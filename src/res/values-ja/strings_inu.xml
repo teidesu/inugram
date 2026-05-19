@@ -76,8 +76,11 @@
     <string name="InuDialogsFabActionNewStory">新規ストーリー</string>
     <string name="InuDialogsFabActionOpenSearch">検索を開く</string>
     <string name="InuDialogsFabActionSavedMessages">保存メッセージ</string>
-    <string name="InuDisablePredictiveBack">予測的「戻る」を無効化</string>
-    <string name="InuDisablePredictiveBackInfo">Android 14+ の予測的バックジェスチャーのアニメーションを無効化します。アプリの再起動が必要です。</string>
+    <string name="InuPredictiveBack">予測的「戻る」</string>
+    <string name="InuPredictiveBackInfo">戻るスワイプや戻るボタン押下時のアニメーション。Android 14+。アプリの再起動が必要です。</string>
+    <string name="InuPredictiveBackOff">オフ</string>
+    <string name="InuPredictiveBackStock">標準</string>
+    <string name="InuPredictiveBackMaterial3">Material 3</string>
     <string name="InuHideAiFeatures">AI 機能を非表示</string>
     <string name="InuHideAiEditor">AI エディターボタン</string>
     <string name="InuHideMessageSummary">メッセージ要約ボタン</string>
@@ -225,6 +228,9 @@
     <string name="InuDisableScrimBlur">スクリムのぼかしを無効化</string>
     <string name="InuDisableScrimBlurInfo">コンテキストメニューやプレビューの背景のぼかしを単純な暗転に置き換えます。ラグが減ることがあります。</string>
 
+    <string name="InuReduceMenuMotion">メニューのモーションを軽減</string>
+    <string name="InuReduceMenuMotionInfo">コンテキストメニューのスタッガー表示をスキップし、メッセージメニューのアニメーションを簡素化します</string>
+
     <string name="InuProfilePhotoGradientFade">プロフィール写真のぼかしを無効化</string>
 
     <string name="InuNonIslandUI">非アイランド UI</string>
@@ -275,8 +281,14 @@
 
     <string name="InuShowForwardTime">転送時刻を表示</string>
 
+    <string name="InuAddToStickersGifs">ステッカー/GIFに追加</string>
+    <string name="InuLongTapAction">長押し動作</string>
     <string name="InuForwardWithoutAuthor">投稿者なし</string>
     <string name="InuForwardWithoutCaption">キャプションなし</string>
+    <string name="InuForwardLongTapOff">オフ</string>
+    <string name="InuLongTapChooseMode">毎回確認</string>
+    <string name="InuForwardNoQuote">引用なしで転送</string>
+    <string name="InuReplyInDms">DMで返信</string>
     <string name="InuHiddenCaptionDescription">キャプションを削除しました</string>
 
     <string name="InuTextClassifierMode">テキスト分類モード</string>
@@ -380,12 +392,6 @@
     <string name="InuCopyButtonText">「%1$s」をコピー</string>
     <string name="InuCopyCallbackData">コールバックデータをコピー</string>
     <string name="InuCallbackDataCopied">コールバックデータをコピーしました</string>
-    <string name="InuLiveDraftMenu">ライブ下書き</string>
-    <string name="InuLiveDraftModeDisabled">オフ</string>
-    <string name="InuLiveDraftModeEmpty">空</string>
-    <string name="InuLiveDraftModeSizeOnly">サイズのみ</string>
-    <string name="InuLiveDraftModeFull">全文</string>
-    <string name="InuLiveDraftFooter">(実験的！) 入力中の下書きを **Live response streaming API** で配信します — 遊び心</string>
     <string name="InuNetwork">ネットワーク</string>
     <string name="InuFasterDownloads">ダウンロード高速化</string>
     <string name="InuFasterUploads">アップロード高速化</string>
@@ -414,4 +420,8 @@
     <string name="InuPasscodePanicRemove">パニックコードを削除</string>
     <string name="InuPasscodePanicRemoveConfirm">パニックコードを削除しますか？</string>
     <string name="InuPasscodePanicInfo">ロック画面で入力されると、パニックコードはオプトインしたすべてのアカウントをログアウトし、アプリをロックされた状態にします。</string>
+    <string name="InuMessageMenuOrder">メッセージメニュー</string>
+    <string name="InuMessageMenuItems">項目</string>
+    <string name="InuMessageMenuOrderInfo">メッセージのコンテキストメニューの項目を並べ替えたり非表示にできます。ハンドルをドラッグして並べ替え、スイッチで非表示を切り替えます。</string>
+    <string name="InuMessageMenuReset">デフォルトに戻す</string>
 </resources>

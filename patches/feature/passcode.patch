@@ -81,7 +81,7 @@ diff --git a/TMessagesProj/src/main/java/org/telegram/ui/LaunchActivity.java b/T
 index 0000000..0000000 100644
 --- a/TMessagesProj/src/main/java/org/telegram/ui/LaunchActivity.java
 +++ b/TMessagesProj/src/main/java/org/telegram/ui/LaunchActivity.java
-@@ -1498,6 +1498,7 @@ public class LaunchActivity extends BasePermissionsActivity implements INavigati
+@@ -1518,6 +1518,7 @@ public class LaunchActivity extends BasePermissionsActivity implements INavigati
          if (GiftInfoBottomSheet.handleIntent(intent, progress)) {
              return true;
          }

@@ -31,7 +31,6 @@ import org.telegram.messenger.UserConfig
 import org.telegram.messenger.UserObject
 import org.telegram.tgnet.ConnectionsManager
 import org.telegram.tgnet.TLRPC
-import org.telegram.ui.LaunchActivity
 import org.telegram.ui.ActionBar.ActionBarMenu
 import org.telegram.ui.ActionBar.ActionBarPopupWindow
 import org.telegram.ui.ActionBar.AlertDialog
@@ -45,10 +44,12 @@ import org.telegram.ui.Components.EditTextBoldCursor
 import org.telegram.ui.Components.EditTextCaption
 import org.telegram.ui.Components.ItemOptions
 import org.telegram.ui.Components.LayoutHelper
+import org.telegram.ui.Components.PopupSwipeBackLayout
 import org.telegram.ui.Components.RLottieDrawable
 import org.telegram.ui.Components.URLSpanUserMention
 import org.telegram.ui.Components.UndoView
 import org.telegram.ui.DialogsActivity
+import org.telegram.ui.LaunchActivity
 import java.io.File
 import java.util.Calendar
 import kotlin.math.roundToInt
@@ -63,6 +64,8 @@ object ChatHelper {
     const val ACTION_PINNED_UNPIN_ALL = 507
     const val ACTION_SELECT_RANGE = 1500
     const val OPTION_TRANSLATE_REVERT = 508
+    const val OPTION_FORWARD_NO_QUOTE = 509
+    const val OPTION_REPLY_IN_DMS = 510
 
     private fun removeWallpaperKey(currentAccount: Int, dialogId: Long) = "remove_wallpaper:$currentAccount:$dialogId"
     private fun removeThemeKey(currentAccount: Int, dialogId: Long) = "remove_theme:$currentAccount:$dialogId"
@@ -143,20 +146,39 @@ object ChatHelper {
         dialogId: Long,
         noforwards: Boolean
     ) {
-        if (!noforwards && dialogId != UserConfig.getInstance(activity.currentAccount).clientUserId) {
-            val forwardIdx = options.indexOf(ChatActivity.OPTION_FORWARD)
-            val insertIdx = if (forwardIdx >= 0) forwardIdx + 1 else items.size
-            items.add(insertIdx, LocaleController.getString(R.string.InuSaveToSavedMessages))
-            options.add(insertIdx, OPTION_SAVE)
-            icons.add(insertIdx, R.drawable.msg_saved)
+        if (!noforwards && activity.currentChat != null && !ChatObject.isChannelAndNotMegaGroup(activity.currentChat)) {
+            items.add(LocaleController.getString(R.string.InuReplyIn))
+            options.add(OPTION_REPLY_IN)
+            icons.add(R.drawable.menu_reply)
         }
 
-        if (!noforwards && activity.currentChat != null && !ChatObject.isChannelAndNotMegaGroup(activity.currentChat)) {
-            val replyIdx = options.indexOf(ChatActivity.OPTION_REPLY)
-            val insertIdx = if (replyIdx >= 0) replyIdx + 1 else items.size
-            items.add(insertIdx, LocaleController.getString(R.string.InuReplyIn))
-            options.add(insertIdx, OPTION_REPLY_IN)
-            icons.add(insertIdx, R.drawable.menu_reply)
+        if (TranslateHelper.isManuallyAffected(selectedObject, selectedObjectGroup)) {
+            val idx = options.indexOf(ChatActivity.OPTION_TRANSLATE)
+            if (idx >= 0) {
+                items.removeAt(idx); options.removeAt(idx); icons.removeAt(idx)
+            }
+            items.add(LocaleController.getString(R.string.ShowOriginalButton))
+            options.add(OPTION_TRANSLATE_REVERT)
+            icons.add(R.drawable.msg_translate)
+        } else if (
+            !options.contains(ChatActivity.OPTION_TRANSLATE) &&
+            TranslateHelper.hasTranslatableWebPage(selectedObject)
+        ) {
+            items.add(LocaleController.getString(R.string.TranslateMessage))
+            options.add(ChatActivity.OPTION_TRANSLATE)
+            icons.add(R.drawable.msg_translate)
+        }
+
+        if (!noforwards && dialogId != UserConfig.getInstance(activity.currentAccount).clientUserId) {
+            items.add(LocaleController.getString(R.string.InuSaveToSavedMessages))
+            options.add(OPTION_SAVE)
+            icons.add(R.drawable.msg_saved)
+        }
+
+        if (options.contains(ChatActivity.OPTION_FORWARD)) {
+            items.add(LocaleController.getString(R.string.InuForwardNoQuote))
+            options.add(OPTION_FORWARD_NO_QUOTE)
+            icons.add(R.drawable.msg_forward)
         }
 
         val chatInfo = activity.currentChatInfo
@@ -176,32 +198,49 @@ object ChatHelper {
         options.add(OPTION_DETAILS)
         icons.add(R.drawable.msg_info)
 
-        if (
-            !options.contains(ChatActivity.OPTION_TRANSLATE) &&
-            !TranslateHelper.isManuallyAffected(selectedObject, selectedObjectGroup) &&
-            TranslateHelper.hasTranslatableWebPage(selectedObject)
-        ) {
-            val pinIdx = options.indexOf(ChatActivity.OPTION_PIN)
-            val insertIdx = if (pinIdx >= 0) pinIdx + 1 else options.size
-            items.add(insertIdx, LocaleController.getString(R.string.TranslateMessage))
-            options.add(insertIdx, ChatActivity.OPTION_TRANSLATE)
-            icons.add(insertIdx, R.drawable.msg_translate)
+        applyMessageMenuOrder(items, options, icons)
+    }
+
+    private fun applyMessageMenuOrder(
+        items: ArrayList<CharSequence>,
+        options: ArrayList<Int>,
+        icons: ArrayList<Int>,
+    ) {
+        data class Row(val label: CharSequence, val option: Int, val icon: Int)
+
+        val byItem = HashMap<MessageMenuConfig.Item, ArrayList<Row>>()
+        // unknown rows attached to the closest preceding known Item (null = head)
+        val unknownAfter = HashMap<MessageMenuConfig.Item?, ArrayList<Row>>()
+        var lastKnown: MessageMenuConfig.Item? = null
+        for (i in options.indices) {
+            val row = Row(items[i], options[i], icons[i])
+            val cfgItem = MessageMenuConfig.Item.forOption(options[i])
+            if (cfgItem != null) {
+                byItem.getOrPut(cfgItem) { ArrayList() }.add(row)
+                lastKnown = cfgItem
+            } else {
+                unknownAfter.getOrPut(lastKnown) { ArrayList() }.add(row)
+            }
         }
 
-        if (TranslateHelper.isManuallyAffected(selectedObject, selectedObjectGroup)) {
-            val idx = options.indexOf(ChatActivity.OPTION_TRANSLATE)
-            if (idx >= 0) {
-                items.removeAt(idx)
-                options.removeAt(idx)
-                icons.removeAt(idx)
-            }
-            val insertIdx = if (idx >= 0) idx else {
-                val pinIdx = options.indexOf(ChatActivity.OPTION_PIN)
-                if (pinIdx >= 0) pinIdx + 1 else options.size
-            }
-            items.add(insertIdx, LocaleController.getString(R.string.ShowOriginalButton))
-            options.add(insertIdx, OPTION_TRANSLATE_REVERT)
-            icons.add(insertIdx, R.drawable.msg_translate)
+        val ordered = ArrayList<Row>(items.size)
+        unknownAfter.remove(null)?.let { ordered.addAll(it) }
+        for (entry in InuConfig.MESSAGE_MENU_ITEMS.value) {
+            val rows = byItem.remove(entry.item)
+            if (rows != null && entry.enabled) ordered.addAll(rows)
+            unknownAfter.remove(entry.item)?.let { ordered.addAll(it) }
+        }
+        // items absent from saved order (e.g. enum extended after save) — append at end
+        for ((item, rows) in byItem) {
+            ordered.addAll(rows)
+            unknownAfter.remove(item)?.let { ordered.addAll(it) }
+        }
+        // unknowns anchored to a disabled-and-missing item (shouldn't happen, but safe): append
+        for ((_, rows) in unknownAfter) ordered.addAll(rows)
+
+        items.clear(); options.clear(); icons.clear()
+        for (r in ordered) {
+            items.add(r.label); options.add(r.option); icons.add(r.icon)
         }
     }
 
@@ -272,6 +311,17 @@ object ChatHelper {
 
             OPTION_DETAILS -> {
                 activity.presentFragment(MessageDetailsActivity(selectedObject, selectedObjectGroup))
+            }
+
+            OPTION_FORWARD_NO_QUOTE -> {
+                activity.processSelectedOption(ChatActivity.OPTION_FORWARD)
+                pendingHideAuthor = true
+            }
+
+            OPTION_REPLY_IN_DMS -> {
+                if (!replyInDms(activity, selectedObject)) {
+                    processMenuOption(OPTION_REPLY_IN, activity, selectedObject, selectedObjectGroup)
+                }
             }
 
             OPTION_TRANSLATE_REVERT -> TranslateHelper.revert(activity, selectedObjectGroup?.captionMessage ?: selectedObject)
@@ -679,7 +729,6 @@ object ChatHelper {
     @JvmStatic
     fun onFragmentDestroy(activity: ChatActivity) {
         TranslateHelper.resetForDialog(activity.dialogId)
-        TypingDraftHelper.forget(activity.currentAccount, activity.dialogId, activity.threadMessageId)
     }
 
     @JvmField
@@ -747,9 +796,57 @@ object ChatHelper {
     ): Boolean {
         if (selectedObject == null || index >= options.size) return false
         return when (options[index]) {
-            ChatActivity.OPTION_FORWARD -> openForwardSubmenu(activity, popupLayout, cell, selectedObject, selectedObjectGroup)
+            ChatActivity.OPTION_FORWARD -> handleForwardLongTap(activity, popupLayout, cell, selectedObject, selectedObjectGroup)
+            ChatActivity.OPTION_REPLY -> handleReplyLongTap(activity, popupLayout, cell, selectedObject, selectedObjectGroup)
             else -> false
         }
+    }
+
+    private fun handleReplyLongTap(
+        activity: ChatActivity,
+        popupLayout: ActionBarPopupWindow.ActionBarPopupWindowLayout,
+        cell: View,
+        selected: MessageObject,
+        group: MessageObject.GroupedMessages?,
+    ): Boolean = when (InuConfig.REPLY_LONG_TAP_ACTION.value) {
+        InuConfig.ReplyLongTapItem.OFF -> false
+        InuConfig.ReplyLongTapItem.CHOOSE_MODE -> openReplySubmenu(activity, popupLayout, cell, selected)
+        InuConfig.ReplyLongTapItem.REPLY_IN -> {
+            activity.processSelectedOption(OPTION_REPLY_IN)
+            true
+        }
+
+        InuConfig.ReplyLongTapItem.REPLY_IN_DMS -> {
+            val target = if (canReplyInDms(activity, selected)) OPTION_REPLY_IN_DMS else OPTION_REPLY_IN
+            activity.processSelectedOption(target)
+            true
+        }
+
+        else -> false
+    }
+
+    private fun handleForwardLongTap(
+        activity: ChatActivity,
+        popupLayout: ActionBarPopupWindow.ActionBarPopupWindowLayout,
+        cell: View,
+        selected: MessageObject,
+        group: MessageObject.GroupedMessages?,
+    ): Boolean = when (InuConfig.FORWARD_LONG_TAP_ACTION.value) {
+        InuConfig.ForwardLongTapItem.OFF -> false
+        InuConfig.ForwardLongTapItem.CHOOSE_MODE -> openForwardSubmenu(activity, popupLayout, cell, selected, group)
+        InuConfig.ForwardLongTapItem.WITHOUT_AUTHOR -> {
+            activity.processSelectedOption(ChatActivity.OPTION_FORWARD)
+            pendingHideAuthor = true
+            true
+        }
+
+        InuConfig.ForwardLongTapItem.WITHOUT_CAPTION -> {
+            activity.processSelectedOption(ChatActivity.OPTION_FORWARD)
+            if (hasCaption(selected, group)) pendingHideCaption = true else pendingHideAuthor = true
+            true
+        }
+
+        else -> false
     }
 
     private fun openForwardSubmenu(
@@ -758,16 +855,7 @@ object ChatHelper {
         anchorCell: View,
         selected: MessageObject,
         group: MessageObject.GroupedMessages?,
-    ): Boolean {
-        val swipeBack = popupLayout.swipeBack ?: return false
-        val rp = activity.resourceProvider
-        val swb = ItemOptions.swipeback(popupLayout, rp)
-        val foregroundIndex = popupLayout.addViewToSwipeBack(swb.linearLayout)
-        swipeBack.inu_pinnedScrimForegroundIndex = foregroundIndex
-
-        swb.setMinWidth((anchorCell.width / AndroidUtilities.density).roundToInt())
-        swb.add(R.drawable.ic_ab_back, LocaleController.getString(R.string.Back)) { swipeBack.closeForeground() }
-        swb.addGap()
+    ): Boolean = openLongTapSubmenu(activity, popupLayout, anchorCell) { swb ->
         swb.add(R.drawable.msg_forward, LocaleController.getString(R.string.Forward)) {
             activity.processSelectedOption(ChatActivity.OPTION_FORWARD)
         }
@@ -775,38 +863,105 @@ object ChatHelper {
             activity.processSelectedOption(ChatActivity.OPTION_FORWARD)
             pendingHideAuthor = true
         }
-        val hasCaption = group?.messages?.any { !it.caption.isNullOrEmpty() } ?: !selected.caption.isNullOrEmpty()
-        if (hasCaption) {
+        if (hasCaption(selected, group)) {
             swb.add(lottieIcon(R.raw.caption_hide), LocaleController.getString(R.string.InuForwardWithoutCaption)) {
                 activity.processSelectedOption(ChatActivity.OPTION_FORWARD)
                 pendingHideCaption = true
             }
         }
+    }
 
-        swipeBack.inu_setForegroundOffsetY(foregroundIndex, run {
-            var anchorY = 0f
-            var v: View = anchorCell
-            while (v !== popupLayout) {
-                anchorY += v.y
-                if (v is ScrollView) anchorY -= v.scrollY
-                v = v.parent as? View ?: return@run 0
+    private fun openReplySubmenu(
+        activity: ChatActivity,
+        popupLayout: ActionBarPopupWindow.ActionBarPopupWindowLayout,
+        anchorCell: View,
+        selected: MessageObject,
+    ): Boolean = openLongTapSubmenu(activity, popupLayout, anchorCell) { swb ->
+        swb.add(R.drawable.menu_reply, LocaleController.getString(R.string.Reply)) {
+            activity.processSelectedOption(ChatActivity.OPTION_REPLY)
+        }
+        swb.add(R.drawable.menu_reply, LocaleController.getString(R.string.InuReplyIn)) {
+            activity.processSelectedOption(OPTION_REPLY_IN)
+        }
+        if (canReplyInDms(activity, selected)) {
+            swb.add(R.drawable.msg_mention, LocaleController.getString(R.string.InuReplyInDms)) {
+                activity.processSelectedOption(OPTION_REPLY_IN_DMS)
             }
-            val spec = MeasureSpec.makeMeasureSpec(AndroidUtilities.dp(1000f), MeasureSpec.AT_MOST)
-            swb.linearLayout.measure(spec, spec)
-            val slack = (popupLayout.measuredHeight - swb.linearLayout.measuredHeight).coerceAtLeast(0)
-            var headerHeight = 0
-            for (i in 0 until 2.coerceAtMost(swb.linearLayout.childCount)) {
-                headerHeight += swb.linearLayout.getChildAt(i).measuredHeight
-            }
-            val adjustedAnchorY = anchorY.toInt() - headerHeight
+        }
+    }
 
-            if (popupLayout.shownFromBottom) {
-                (adjustedAnchorY - slack).coerceIn(-slack, 0)
-            } else {
-                adjustedAnchorY.coerceIn(0, slack)
-            }
-        })
+    private inline fun openLongTapSubmenu(
+        activity: ChatActivity,
+        popupLayout: ActionBarPopupWindow.ActionBarPopupWindowLayout,
+        anchorCell: View,
+        fill: (ItemOptions) -> Unit,
+    ): Boolean {
+        val swipeBack = popupLayout.swipeBack ?: return false
+        val rp = activity.resourceProvider
+        val swb = ItemOptions.swipeback(popupLayout, rp)
+        val foregroundIndex = popupLayout.addViewToSwipeBack(swb.linearLayout)
+        (swb.linearLayout.layoutParams as? android.widget.FrameLayout.LayoutParams)?.gravity = Gravity.TOP
+        swipeBack.inu_pinnedScrimForegroundIndex = foregroundIndex
+
+        swb.setMinWidth((anchorCell.width / AndroidUtilities.density).roundToInt())
+        swb.add(R.drawable.ic_ab_back, LocaleController.getString(R.string.Back)) { swipeBack.closeForeground() }
+        swb.addGap()
+        fill(swb)
+
+        swipeBack.inu_setForegroundOffsetY(foregroundIndex, computeSubmenuOffsetY(swipeBack, anchorCell, swb.linearLayout))
         swipeBack.openForeground(foregroundIndex)
+        return true
+    }
+
+    private fun computeSubmenuOffsetY(
+        swipeBack: PopupSwipeBackLayout,
+        anchorCell: View,
+        submenu: LinearLayout,
+    ): Int {
+        var anchorY = 0f
+        var v: View = anchorCell
+        while (v !== swipeBack) {
+            anchorY += v.y
+            if (v is ScrollView) anchorY -= v.scrollY
+            v = v.parent as? View ?: return 0
+        }
+        val spec = MeasureSpec.makeMeasureSpec(AndroidUtilities.dp(1000f), MeasureSpec.AT_MOST)
+        submenu.measure(spec, spec)
+        val slack = (swipeBack.measuredHeight - submenu.measuredHeight).coerceAtLeast(0)
+        var headerHeight = 0
+        for (i in 0 until 2.coerceAtMost(submenu.childCount)) {
+            headerHeight += submenu.getChildAt(i).measuredHeight
+        }
+        return (anchorY.toInt() - headerHeight).coerceIn(0, slack)
+    }
+
+    private fun hasCaption(selected: MessageObject, group: MessageObject.GroupedMessages?): Boolean =
+        group?.messages?.any { !it.caption.isNullOrEmpty() } ?: !selected.caption.isNullOrEmpty()
+
+    private fun canReplyInDms(activity: ChatActivity, selected: MessageObject): Boolean {
+        val authorId = DialogObject.getPeerDialogId(selected.fromPeer)
+        if (authorId <= 0) return false
+        val selfId = UserConfig.getInstance(activity.currentAccount).clientUserId
+        if (authorId == selfId) return false
+        if (authorId == activity.dialogId) return false
+        return activity.currentChat != null
+    }
+
+    private fun replyInDms(activity: ChatActivity, selected: MessageObject): Boolean {
+        val authorId = DialogObject.getPeerDialogId(selected.fromPeer)
+        if (authorId <= 0) return false
+        val selfId = UserConfig.getInstance(activity.currentAccount).clientUserId
+        if (authorId == selfId) return false
+
+        val replyTarget = if (selected.groupId != 0L) {
+            activity.getGroup(selected.groupId)?.captionMessage ?: selected
+        } else selected
+
+        val args = Bundle().apply { putLong("user_id", authorId) }
+        val chat = ChatActivity(args)
+        if (!activity.presentFragment(chat, false)) return false
+        chat.replyingMessageObject = replyTarget
+        chat.showFieldPanelForReply(replyTarget)
         return true
     }
 

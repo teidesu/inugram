@@ -4,7 +4,7 @@ misc/remove-play.patch
 misc/settings-ui.patch
 misc/defaults.patch
 debloat/hide-trending-stickers.patch
-debloat/disable-predictive-back.patch
+feature/predictive-back.patch
 debloat/disable-instant-camera.patch
 feature/show-seconds.patch
 debloat/disable-rounding.patch
@@ -116,8 +116,6 @@ hooks/messagescontroller.patch
 feature/maps.patch
 feature/translator.patch
 feature/global-from-user-search.patch
-bugfix/non-bot-drafts.patch
-feature/live-typing-draft.patch
 feature/forwarded-time-inline.patch
 debloat/profile-photo-blur.patch
 feature/old-layout-nav.patch
@@ -148,3 +146,5 @@ feature/passcode.patch
 bugfix/motion-photo-with-caption.patch
 feature/strip-tracking.patch
 feature/two-finger-select.patch
+hooks/universal-recycler.patch
+debloat/reduce-menu-motion.patch

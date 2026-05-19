@@ -193,9 +193,6 @@ object ProfileHelper {
                 LocaleController.getString(label),
             )
         }
-        if (dialogId > 0 && dialogId != UserConfig.getInstance(currentAccount).clientUserId) {
-            TypingDraftHelper.addSwipeBackMenuItem(otherItem, currentAccount, dialogId, resourcesProvider)
-        }
         if (BuildVars.DEBUG_PRIVATE_VERSION) {
             otherItem.addSubItem(
                 ACTION_DEBUG_CLEAR_CACHE,

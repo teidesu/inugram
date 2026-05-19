@@ -4,10 +4,10 @@ Date: Wed, 13 May 2026 18:49:11 +0200
 Subject: Expose foreground translation and unified touch coords on swipeback popup
 
 ---
- .../ui/ActionBar/ActionBarPopupWindow.java    |  2 ++
+ .../ui/ActionBar/ActionBarPopupWindow.java    |  5 +++-
  .../ChatScrimPopupContainerLayout.java        |  3 +-
  .../ui/Components/PopupSwipeBackLayout.java   | 29 +++++++++++++++++--
- 3 files changed, 31 insertions(+), 3 deletions(-)
+ 3 files changed, 33 insertions(+), 4 deletions(-)
 
 diff --git a/TMessagesProj/src/main/java/org/telegram/ui/ActionBar/ActionBarPopupWindow.java b/TMessagesProj/src/main/java/org/telegram/ui/ActionBar/ActionBarPopupWindow.java
 index 0000000..0000000 100644
@@ -21,7 +21,17 @@ index 0000000..0000000 100644
          private boolean startAnimationPending = false;
          private int backAlpha = 255;
          private int lastStartedChild = 0;
-@@ -528,6 +529,7 @@ public class ActionBarPopupWindow extends PopupWindow {
+@@ -488,7 +489,8 @@ public class ActionBarPopupWindow extends PopupWindow {
+                         canvas.clipRect(0, bgPaddings.top, getMeasuredWidth(), getMeasuredHeight());
+                     }
+                     backgroundDrawable.setAlpha(applyAlpha ? backAlpha : 255);
+-                    if (shownFromBottom) {
++                    boolean inu_pinning = swipeBackLayout != null && swipeBackLayout.inu_isCurrentForegroundPinningScrim();
++                    if (shownFromBottom && !inu_pinning) {
+                         final int height = getMeasuredHeight();
+                         AndroidUtilities.rectTmp2.set(0, (int) (height * (1.0f - backScaleY)), (int) (getMeasuredWidth() * backScaleX), height);
+                     } else {
+@@ -528,6 +530,7 @@ public class ActionBarPopupWindow extends PopupWindow {
                          rect.set(AndroidUtilities.rectTmp2.right, AndroidUtilities.rectTmp2.top, AndroidUtilities.rectTmp2.right, AndroidUtilities.rectTmp2.top);
                          AndroidUtilities.lerp(rect, AndroidUtilities.rectTmp2, reactionsEnterProgress, AndroidUtilities.rectTmp2);
                      }

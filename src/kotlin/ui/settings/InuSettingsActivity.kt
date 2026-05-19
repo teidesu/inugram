@@ -5,6 +5,7 @@ import android.content.Intent
 import android.os.Bundle
 import android.view.View
 import androidx.collection.LongSparseArray
+import desu.inugram.SearchRegistry
 import desu.inugram.helpers.InuUtils
 import desu.inugram.helpers.SettingsBackupHelper
 import org.telegram.messenger.AndroidUtilities
@@ -40,7 +41,7 @@ class InuSettingsActivity : SettingsPageActivity() {
             UItem.asButton(
                 BUTTON_CHATS,
                 R.drawable.msg_discussion,
-                LocaleController.getString(R.string.Chats)
+                LocaleController.getString(R.string.MainTabsChats)
             )
         )
         items.add(
@@ -263,5 +264,19 @@ class InuSettingsActivity : SettingsPageActivity() {
         private val BUTTON_CLOUD_SYNC = InuUtils.generateId()
 
         private const val REQ_IMPORT = 31002
+
+        @JvmField
+        val PAGE = SearchRegistry.Page(
+            slug = "root",
+            titleRes = R.string.InuSettings,
+            iconRes = R.drawable.msg_settings,
+            factory = ::InuSettingsActivity,
+            entries = listOf(
+                SearchRegistry.Entry("about", R.string.InuAbout, BUTTON_ABOUT),
+                SearchRegistry.Entry("backup-export", R.string.InuBackupExport, BUTTON_EXPORT),
+                SearchRegistry.Entry("backup-import", R.string.InuBackupImport, BUTTON_IMPORT),
+                SearchRegistry.Entry("cloud-sync", R.string.InuCloudSync, BUTTON_CLOUD_SYNC),
+            ),
+        )
     }
 }

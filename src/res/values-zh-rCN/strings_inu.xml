@@ -76,8 +76,11 @@
     <string name="InuDialogsFabActionNewStory">新快拍</string>
     <string name="InuDialogsFabActionOpenSearch">打开搜索</string>
     <string name="InuDialogsFabActionSavedMessages">已保存消息</string>
-    <string name="InuDisablePredictiveBack">禁用预测式返回</string>
-    <string name="InuDisablePredictiveBackInfo">禁用 Android 14+ 的预测式返回手势动画。需重启应用。</string>
+    <string name="InuPredictiveBack">预测式返回</string>
+    <string name="InuPredictiveBackInfo">向后滑动或按下返回键时显示的动画。Android 14+。需重启应用。</string>
+    <string name="InuPredictiveBackOff">关闭</string>
+    <string name="InuPredictiveBackStock">原版</string>
+    <string name="InuPredictiveBackMaterial3">Material 3</string>
     <string name="InuHideAiFeatures">隐藏 AI 功能</string>
     <string name="InuHideAiEditor">AI 编辑器按钮</string>
     <string name="InuHideMessageSummary">消息摘要按钮</string>
@@ -225,6 +228,9 @@
     <string name="InuDisableScrimBlur">禁用遮罩模糊</string>
     <string name="InuDisableScrimBlurInfo">将上下文菜单和预览背后的模糊替换为纯色压暗。可能减轻卡顿。</string>
 
+    <string name="InuReduceMenuMotion">减少菜单动画</string>
+    <string name="InuReduceMenuMotionInfo">跳过上下文菜单的逐项延迟出现，简化消息菜单动画</string>
+
     <string name="InuProfilePhotoGradientFade">禁用资料头像模糊</string>
 
     <string name="InuNonIslandUI">非「岛」界面</string>
@@ -275,8 +281,14 @@
 
     <string name="InuShowForwardTime">显示转发时间</string>
 
+    <string name="InuAddToStickersGifs">添加到贴纸/GIF</string>
+    <string name="InuLongTapAction">长按操作</string>
     <string name="InuForwardWithoutAuthor">不带作者</string>
     <string name="InuForwardWithoutCaption">不带说明</string>
+    <string name="InuForwardLongTapOff">关闭</string>
+    <string name="InuLongTapChooseMode">每次询问</string>
+    <string name="InuForwardNoQuote">无引用转发</string>
+    <string name="InuReplyInDms">在私信中回复</string>
     <string name="InuHiddenCaptionDescription">说明已移除</string>
 
     <string name="InuTextClassifierMode">文本分类器模式</string>
@@ -380,12 +392,6 @@
     <string name="InuCopyButtonText">复制「%1$s」</string>
     <string name="InuCopyCallbackData">复制回调数据</string>
     <string name="InuCallbackDataCopied">回调数据已复制</string>
-    <string name="InuLiveDraftMenu">实时草稿</string>
-    <string name="InuLiveDraftModeDisabled">关闭</string>
-    <string name="InuLiveDraftModeEmpty">空</string>
-    <string name="InuLiveDraftModeSizeOnly">仅大小</string>
-    <string name="InuLiveDraftModeFull">完整文本</string>
-    <string name="InuLiveDraftFooter">(实验性！) 边输入边通过 **Live response streaming API** 流式发送草稿 —— 纯属好玩</string>
     <string name="InuNetwork">网络</string>
     <string name="InuFasterDownloads">加速下载</string>
     <string name="InuFasterUploads">加速上传</string>
@@ -414,4 +420,8 @@
     <string name="InuPasscodePanicRemove">移除紧急密码</string>
     <string name="InuPasscodePanicRemoveConfirm">移除紧急密码？</string>
     <string name="InuPasscodePanicInfo">在锁屏输入紧急密码时，会登出所有选择参与的账号并让应用保持锁定。</string>
+    <string name="InuMessageMenuOrder">消息菜单</string>
+    <string name="InuMessageMenuItems">项目</string>
+    <string name="InuMessageMenuOrderInfo">重新排序或隐藏消息上下文菜单中的项目。拖动手柄进行排序，使用开关进行隐藏。</string>
+    <string name="InuMessageMenuReset">重置为默认</string>
 </resources>
