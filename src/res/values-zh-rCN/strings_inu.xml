@@ -76,8 +76,11 @@
     <string name="InuDialogsFabActionNewStory">新快拍</string>
     <string name="InuDialogsFabActionOpenSearch">打开搜索</string>
     <string name="InuDialogsFabActionSavedMessages">已保存消息</string>
-    <string name="InuDisablePredictiveBack">禁用预测式返回</string>
-    <string name="InuDisablePredictiveBackInfo">禁用 Android 14+ 的预测式返回手势动画。需重启应用。</string>
+    <string name="InuPredictiveBack">预测式返回</string>
+    <string name="InuPredictiveBackInfo">向后滑动或按下返回键时显示的动画。Android 14+。需重启应用。</string>
+    <string name="InuPredictiveBackOff">关闭</string>
+    <string name="InuPredictiveBackStock">原版</string>
+    <string name="InuPredictiveBackMaterial3">Material 3</string>
     <string name="InuHideAiFeatures">隐藏 AI 功能</string>
     <string name="InuHideAiEditor">AI 编辑器按钮</string>
     <string name="InuHideMessageSummary">消息摘要按钮</string>
@@ -224,6 +227,9 @@
 
     <string name="InuDisableScrimBlur">禁用遮罩模糊</string>
     <string name="InuDisableScrimBlurInfo">将上下文菜单和预览背后的模糊替换为纯色压暗。可能减轻卡顿。</string>
+
+    <string name="InuReduceMenuMotion">减少菜单动画</string>
+    <string name="InuReduceMenuMotionInfo">跳过上下文菜单的逐项延迟出现，简化消息菜单动画</string>
 
     <string name="InuProfilePhotoGradientFade">禁用资料头像模糊</string>
 

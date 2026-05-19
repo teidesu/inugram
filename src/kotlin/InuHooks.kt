@@ -175,16 +175,6 @@ object InuHooks {
     }
 
     @JvmStatic
-    fun isLocalOnlyString(key: String?): Boolean {
-        if (key == null) return false
-        return key.startsWith("Inu") ||
-            key == "AppName" ||
-            key == "AppNameBeta" ||
-            key == "AppUpdate" ||
-            key == "AppUpdateBeta"
-    }
-
-    @JvmStatic
     fun addDialogsActivityOptions(instance: DialogsActivity, io: ItemOptions): Unit {
         val bottomTabsHidden = MainTabsHelper.isHidden;
 

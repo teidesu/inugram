@@ -41,7 +41,7 @@ class InuSettingsActivity : SettingsPageActivity() {
             UItem.asButton(
                 BUTTON_CHATS,
                 R.drawable.msg_discussion,
-                LocaleController.getString(R.string.Chats)
+                LocaleController.getString(R.string.MainTabsChats)
             )
         )
         items.add(
@@ -265,7 +265,8 @@ class InuSettingsActivity : SettingsPageActivity() {
 
         private const val REQ_IMPORT = 31002
 
-        @JvmField val PAGE = SearchRegistry.Page(
+        @JvmField
+        val PAGE = SearchRegistry.Page(
             slug = "root",
             titleRes = R.string.InuSettings,
             iconRes = R.drawable.msg_settings,

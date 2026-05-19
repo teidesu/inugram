@@ -76,8 +76,11 @@
     <string name="InuDialogsFabActionNewStory">新規ストーリー</string>
     <string name="InuDialogsFabActionOpenSearch">検索を開く</string>
     <string name="InuDialogsFabActionSavedMessages">保存メッセージ</string>
-    <string name="InuDisablePredictiveBack">予測的「戻る」を無効化</string>
-    <string name="InuDisablePredictiveBackInfo">Android 14+ の予測的バックジェスチャーのアニメーションを無効化します。アプリの再起動が必要です。</string>
+    <string name="InuPredictiveBack">予測的「戻る」</string>
+    <string name="InuPredictiveBackInfo">戻るスワイプや戻るボタン押下時のアニメーション。Android 14+。アプリの再起動が必要です。</string>
+    <string name="InuPredictiveBackOff">オフ</string>
+    <string name="InuPredictiveBackStock">標準</string>
+    <string name="InuPredictiveBackMaterial3">Material 3</string>
     <string name="InuHideAiFeatures">AI 機能を非表示</string>
     <string name="InuHideAiEditor">AI エディターボタン</string>
     <string name="InuHideMessageSummary">メッセージ要約ボタン</string>
@@ -224,6 +227,9 @@
 
     <string name="InuDisableScrimBlur">スクリムのぼかしを無効化</string>
     <string name="InuDisableScrimBlurInfo">コンテキストメニューやプレビューの背景のぼかしを単純な暗転に置き換えます。ラグが減ることがあります。</string>
+
+    <string name="InuReduceMenuMotion">メニューのモーションを軽減</string>
+    <string name="InuReduceMenuMotionInfo">コンテキストメニューのスタッガー表示をスキップし、メッセージメニューのアニメーションを簡素化します</string>
 
     <string name="InuProfilePhotoGradientFade">プロフィール写真のぼかしを無効化</string>
 
