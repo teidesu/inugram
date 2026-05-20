@@ -95,7 +95,7 @@ index 0000000..0000000 100644
 +                TextCell cell = (TextCell) holder.itemView;
 +                desu.inugram.helpers.SearchTopAction action = inu_topAction;
 +                if (action != null) {
-+                    cell.setTextAndIcon(action.getLabel(), R.drawable.msg_link2, false);
++                    cell.setTextAndIcon(action.getLabel(), action.getIconRes(), false);
 +                }
 +                break;
 +            }

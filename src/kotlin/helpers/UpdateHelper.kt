@@ -1,11 +1,12 @@
 package desu.inugram.helpers
 
-import android.content.pm.PackageInfo
+import android.os.Build
 import desu.inugram.InuConfig
 import org.telegram.messenger.AndroidUtilities
 import org.telegram.messenger.ApplicationLoader
 import org.telegram.messenger.BetaUpdate
 import org.telegram.messenger.BuildConfig
+import org.telegram.messenger.BuildVars
 import org.telegram.messenger.LocaleController
 import org.telegram.messenger.MessagesController
 import org.telegram.messenger.NotificationCenter
@@ -24,23 +25,31 @@ object UpdateHelper {
     private const val CHECK_INTERVAL_MS = 4L * 60 * 60 * 1000
     private const val INFLIGHT_TIMEOUT_MS = 60L * 1000
 
-    private var pInfo: PackageInfo? = null;
+    private val pInfo by lazy {
+        ApplicationLoader.applicationContext.packageManager.getPackageInfo(
+            ApplicationLoader.applicationContext.packageName,
+            0
+        )
+    }
+    private val stockVersionName by lazy {
+        pInfo.versionName?.replace(Regex("-[0-9a-f]{7}$"), "") ?: ""
+    }
 
-    @JvmStatic
     fun getVersionInfoString(): String {
-        if (pInfo == null) {
-            pInfo = ApplicationLoader.applicationContext.packageManager.getPackageInfo(
-                ApplicationLoader.applicationContext.packageName,
-                0
-            )
-        }
-
         return LocaleController.formatString(
             R.string.InuVersion,
-            pInfo!!.versionCode,
-            pInfo!!.versionName?.replace(Regex("-[0-9a-f]{7}$"), "") ?: "",
+            pInfo.versionCode,
+            stockVersionName,
             BuildConfig.STOCK_VERSION_CODE
         )
+    }
+
+    @JvmStatic
+    fun getFullVersionInfo(): String {
+        if (ParanoiaHelper.isDisguised()) {
+            return "Telegram for Android v${stockVersionName} (${BuildConfig.STOCK_VERSION_CODE})\ndirect ${Build.CPU_ABI} ${Build.CPU_ABI2}"
+        }
+        return "${getVersionInfoString()}\nBuilt on: ${BuildVars.BUILD_DATE}"
     }
 
     private val APK_RE = Regex("^inugram-(.+)-(\\d+)\\.apk$")
@@ -201,13 +210,8 @@ object UpdateHelper {
         callback?.invoke(result)
     }
 
-    private fun currentBuild(): CurrentBuild {
-        val ctx = ApplicationLoader.applicationContext
-        val pkg = ctx.packageManager.getPackageInfo(ctx.packageName, 0)
-
-        @Suppress("DEPRECATION")
-        return CurrentBuild(pkg.versionCode)
-    }
+    @Suppress("DEPRECATION")
+    private fun currentBuild(): CurrentBuild = CurrentBuild(pInfo.versionCode)
 
     private fun extractApkInfo(msg: TLRPC.Message): ApkInfo? {
         val media = msg.media as? TLRPC.TL_messageMediaDocument ?: return null

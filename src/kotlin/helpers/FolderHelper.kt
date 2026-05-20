@@ -238,6 +238,7 @@ object FolderHelper {
     @JvmStatic
     @JvmOverloads
     fun shouldExcludeFromCounter(currentAccount: Int, dialogId: Long, user: TLRPC.User? = null): Boolean {
+        if (ParanoiaHelper.isHidden(currentAccount, dialogId)) return true
         val mode = InuConfig.FOLDERS_UNREAD_COUNTER_MODE.value
         if (mode == InuConfig.FoldersUnreadCounterModeItem.EXCLUDE_MUTED_NON_DMS && dialogId > 0) {
             // human DM → never excluded; bot → excluded if muted; user info missing → defer to a later call

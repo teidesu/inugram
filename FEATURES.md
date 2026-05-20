@@ -118,6 +118,11 @@ most things are toggleable in `Settings → Inugram`, with sensible opinionated 
 - account limit raised to 8 (premium gating disabled)
 - 🐶 customizable account order
 - per-account passcodes, hidden accounts, panic code, hidden settings deeplink - *ported from [Nekogram](https://github.com/Nekogram/Nekogram)*
+- 🐶 paranoia mode: pick chats to hide everywhere; all secret chats hidden too; exit by typing a custom code in chat search
+  - optionally hide the Inugram settings entirely when enabled
+  - optionally disguise as stock Telegram when enabled
+  - optionally silence all notifications while enabled
+  - optionally hide all other accounts while enabled
 
 ## behavior
 

@@ -1,6 +1,7 @@
 package desu.inugram
 
 import android.content.Intent
+import desu.inugram.helpers.ParanoiaHelper
 import desu.inugram.ui.settings.AnnoyancesSettingsActivity
 import desu.inugram.ui.settings.AppearanceSettingsActivity
 import desu.inugram.ui.settings.BehaviorSettingsActivity
@@ -8,7 +9,6 @@ import desu.inugram.ui.settings.ChatsSettingsActivity
 import desu.inugram.ui.settings.DialogsSettingsActivity
 import desu.inugram.ui.settings.InuSettingsActivity
 import desu.inugram.ui.settings.MessagesSettingsActivity
-import desu.inugram.ui.settings.PasscodeSettingsActivity
 import desu.inugram.ui.settings.SettingsPageActivity
 import desu.inugram.ui.settings.TranslatorSettingsActivity
 import desu.inugram.ui.settings.UserProfileSettingsActivity
@@ -76,6 +76,7 @@ object SearchRegistry {
         stock: Array<ProfileActivity.SearchAdapter.SearchResult>,
         f: BaseFragment,
     ): Array<ProfileActivity.SearchAdapter.SearchResult> {
+        if (ParanoiaHelper.shouldHideSettings()) return stock
         val extra = ArrayList<ProfileActivity.SearchAdapter.SearchResult>()
         for (page in pages) {
             val pageTitle = LocaleController.getString(page.titleRes)
@@ -107,6 +108,7 @@ object SearchRegistry {
 
     @JvmStatic
     fun tryHandleDeepLink(activity: LaunchActivity, intent: Intent?): Boolean {
+        if (ParanoiaHelper.shouldHideSettings()) return false
         val uri = intent?.data ?: return false
         if (uri.scheme != "tg") return false
         // accept both `tg://settings/inu/<slug>` (host=settings) and `tg:settings/inu/<slug>` (opaque)
@@ -115,6 +117,7 @@ object SearchRegistry {
             null -> uri.schemeSpecificPart?.removePrefix("//")
                 ?.removePrefix("settings/")?.split('/')
                 ?: return false
+
             else -> return false
         }
         if (segs.size < 2 || segs[0] != "inu") return false

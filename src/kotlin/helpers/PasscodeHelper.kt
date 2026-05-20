@@ -6,14 +6,12 @@ import android.util.Base64
 import androidx.core.content.edit
 import org.telegram.messenger.AndroidUtilities
 import org.telegram.messenger.ApplicationLoader
-import org.telegram.messenger.FileLog
 import org.telegram.messenger.MessagesController
 import org.telegram.messenger.SharedConfig
 import org.telegram.messenger.UserConfig
 import org.telegram.messenger.Utilities
 import org.telegram.ui.LaunchActivity
 import org.telegram.ui.PasscodeActivity
-import java.nio.charset.StandardCharsets
 
 object PasscodeHelper {
     const val PANIC_ACCOUNT = Int.MAX_VALUE
@@ -44,22 +42,8 @@ object PasscodeHelper {
         return SharedConfig.checkPasscode(passcode)
     }
 
-    private fun verify(account: Int, passcode: String): Boolean = try {
-        val saltB64 = prefs.getString("passcodeSalt$account", "") ?: ""
-        val salt = if (saltB64.isNotEmpty()) Base64.decode(saltB64, Base64.DEFAULT) else ByteArray(0)
-        prefs.getString("passcodeHash$account", "") == hash(passcode, salt)
-    } catch (e: Exception) {
-        FileLog.e(e); false
-    }
-
-    private fun hash(passcode: String, salt: ByteArray): String {
-        val pwd = passcode.toByteArray(StandardCharsets.UTF_8)
-        val bytes = ByteArray(32 + pwd.size)
-        System.arraycopy(salt, 0, bytes, 0, 16)
-        System.arraycopy(pwd, 0, bytes, 16, pwd.size)
-        System.arraycopy(salt, 0, bytes, pwd.size + 16, 16)
-        return Utilities.bytesToHex(Utilities.computeSHA256(bytes, 0, bytes.size.toLong()))
-    }
+    private fun verify(account: Int, passcode: String): Boolean =
+        SecretHash.verify(prefs, "passcodeHash$account", "passcodeSalt$account", passcode)
 
     @JvmStatic
     fun handleSetupSubmit(activity: PasscodeActivity, passcode: String): Boolean {
@@ -72,15 +56,7 @@ object PasscodeHelper {
 
     @JvmStatic
     fun setForAccount(passcode: String, account: Int) {
-        try {
-            val salt = ByteArray(16).also { Utilities.random.nextBytes(it) }
-            prefs.edit {
-                putString("passcodeHash$account", hash(passcode, salt))
-                putString("passcodeSalt$account", Base64.encodeToString(salt, Base64.DEFAULT))
-            }
-        } catch (e: Exception) {
-            FileLog.e(e)
-        }
+        SecretHash.store(prefs, "passcodeHash$account", "passcodeSalt$account", passcode)
     }
 
     @JvmStatic
@@ -102,9 +78,16 @@ object PasscodeHelper {
     fun hasPasscodeForAccount(account: Int): Boolean =
         prefs.contains("passcodeHash$account") && prefs.contains("passcodeSalt$account")
 
-    @JvmStatic
-    fun isAccountHidden(account: Int): Boolean =
+    // raw per-account passcode "hide" state, independent of paranoia. used by the passcode
+    // settings UI so the toggle reflects the actual stored pref, not a paranoia override.
+    fun isAccountHiddenByPasscode(account: Int): Boolean =
         hasPasscodeForAccount(account) && prefs.getBoolean("hide$account", false)
+
+    @JvmStatic
+    fun isAccountHidden(account: Int): Boolean {
+        if (ParanoiaHelper.hidesOtherAccounts() && account != UserConfig.selectedAccount) return true
+        return isAccountHiddenByPasscode(account)
+    }
 
     fun setAccountHidden(account: Int, hide: Boolean) {
         prefs.edit { putBoolean("hide$account", hide) }

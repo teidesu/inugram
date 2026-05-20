@@ -1,7 +1,9 @@
 package desu.inugram.helpers
 
+import android.app.Activity
 import android.os.Build
 import android.view.View
+import kotlin.system.exitProcess
 
 public object InuUtils {
     private var _nextId = 1;
@@ -15,5 +17,13 @@ public object InuUtils {
             view.setAutofillHints(hint)
             view.importantForAutofill = View.IMPORTANT_FOR_AUTOFILL_YES
         }
+    }
+
+    @JvmStatic
+    fun restartApp(activity: Activity) {
+        val intent = activity.packageManager.getLaunchIntentForPackage(activity.packageName)
+        activity.finishAffinity()
+        activity.startActivity(intent)
+        exitProcess(0)
     }
 }

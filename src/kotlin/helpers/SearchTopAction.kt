@@ -9,7 +9,18 @@ import org.telegram.ui.ActionBar.BaseFragment
 
 sealed class SearchTopAction {
     abstract val label: CharSequence
+    open val iconRes: Int = R.drawable.msg_link2
     abstract fun execute(fragment: BaseFragment)
+
+    class ExitParanoia : SearchTopAction() {
+        override val label: CharSequence
+            get() = LocaleController.getString(R.string.InuParanoiaExit)
+        override val iconRes: Int = R.drawable.msg_permissions
+
+        override fun execute(fragment: BaseFragment) {
+            ParanoiaHelper.disableParanoia(fragment)
+        }
+    }
 
     class Username(val name: String) : SearchTopAction() {
         override val label: CharSequence
@@ -41,6 +52,7 @@ sealed class SearchTopAction {
         @JvmStatic
         fun parse(query: String?): SearchTopAction? {
             if (query.isNullOrEmpty()) return null
+            if (ParanoiaHelper.matchesExitCode(query)) return ExitParanoia()
             USERNAME.matchEntire(query)?.let { return Username(it.groupValues[1]) }
             if (TG_LINK.matches(query)) return Link(query, query)
             TME_LINK.matchEntire(query)?.let {

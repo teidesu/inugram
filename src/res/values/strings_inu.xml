@@ -424,4 +424,28 @@
     <string name="InuMessageMenuItems">Items</string>
     <string name="InuMessageMenuOrderInfo">Reorder or hide items in the message context menu. Drag the handle to rearrange, toggle the switch to hide.</string>
     <string name="InuMessageMenuReset">Reset to default</string>
+    <string name="InuPrivacySecurity">Privacy &amp; Security</string>
+    <string name="InuPerAccountPasscode">Per-account passcode</string>
+    <string name="InuHideInugramSettings">Hide Inugram settings</string>
+    <string name="InuParanoiaDisableNotifications">Disable notifications</string>
+    <string name="InuParanoiaHideOtherAccounts">Hide other accounts</string>
+    <string name="InuParanoiaDisguise">Disguise as Telegram</string>
+    <string name="InuParanoiaDisguiseInfo">Only the launcher icon and name change. Notifications and the in-app name still show \"Inugram\", due to Android limitations.</string>
+    <string name="InuDisguiseName" translatable="false">Telegram</string>
+    <string name="InuParanoiaMode">Paranoia mode</string>
+    <string name="InuParanoiaModeInfo">Paranoia mode lets you \"prepare\" for someone else checking your phone, by hiding any \"dangerous\" chats, and optionally disguising as the stock app.</string>
+    <string name="InuParanoiaSelect">Chats to hide</string>
+    <string name="InuParanoiaSelectInfo">Secret chats are always hidden</string>
+    <string name="InuParanoiaCount">%1$d chats</string>
+    <string name="InuParanoiaExitCode">Exit code</string>
+    <string name="InuParanoiaExitCodeSet">Set exit code</string>
+    <string name="InuParanoiaExitCodeChange">Change exit code</string>
+    <string name="InuParanoiaExitCodeHint">Exit code</string>
+    <string name="InuParanoiaExitCodeInfo">Type this code into the global search to exit paranoia mode</string>
+    <string name="InuParanoiaExitCodeSaved">Exit code saved</string>
+    <string name="InuParanoiaExitCodeEmpty">Enter an exit code</string>
+    <string name="InuParanoiaEnable">Enter paranoia mode</string>
+    <string name="InuParanoiaEnableConfirm">Enter paranoia mode and restart? This entry will disappear — the only way back is typing the exit code in chat search, or reinstalling the app!</string>
+    <string name="InuParanoiaNeedSetup">Set an exit code and pick at least one chat first.</string>
+    <string name="InuParanoiaExit">Exit paranoia mode</string>
 </resources>
