@@ -8,7 +8,8 @@ Subject: non-island ui in various parts of the app
  .../ui/Cells/SharedPhotoVideoCell2.java       |   4 +-
  .../telegram/ui/ChannelAdminLogActivity.java  |  23 +++-
  .../java/org/telegram/ui/ChatActivity.java    |  93 ++++++++-----
- .../ui/Components/ChatActivityEnterView.java  |  17 ++-
+ .../ui/Components/ChatActivityEnterView.java  |  27 ++--
+ ...ChatActivityEnterViewAnimatedIconView.java |  17 ++-
  .../ChatActivityTopPanelLayout.java           |  16 ++-
  .../ui/Components/ChatAttachAlert.java        |  16 +++
  .../DialogsActivityTopPanelLayout.java        |   9 +-
@@ -31,7 +32,7 @@ Subject: non-island ui in various parts of the app
  .../java/org/telegram/ui/bots/BotAdView.java  |   2 +-
  .../ui/bots/BotCommandsMenuContainer.java     |   4 +-
  .../bots/ChatAttachAlertBotWebViewLayout.java |   5 +-
- 27 files changed, 397 insertions(+), 180 deletions(-)
+ 28 files changed, 416 insertions(+), 188 deletions(-)
 
 diff --git a/TMessagesProj/src/main/java/org/telegram/ui/ActionBar/ActionBar.java b/TMessagesProj/src/main/java/org/telegram/ui/ActionBar/ActionBar.java
 index 0000000..0000000 100644
@@ -480,7 +481,36 @@ diff --git a/TMessagesProj/src/main/java/org/telegram/ui/Components/ChatActivity
 index 0000000..0000000 100644
 --- a/TMessagesProj/src/main/java/org/telegram/ui/Components/ChatActivityEnterView.java
 +++ b/TMessagesProj/src/main/java/org/telegram/ui/Components/ChatActivityEnterView.java
-@@ -4569,7 +4569,8 @@ public class ChatActivityEnterView extends FrameLayout implements
+@@ -3122,7 +3122,9 @@ public class ChatActivityEnterView extends FrameLayout implements
+ 
+                     canvas.save();
+                     canvas.scale(s, s, backgroundRect.centerX(), backgroundRect.centerY());
+-                    canvas.drawRoundRect(backgroundRect, r, r, paint);
++                    if (!desu.inugram.helpers.NonIslandHelper.chatElements()) {
++                        canvas.drawRoundRect(backgroundRect, r, r, paint);
++                    }
+                     canvas.restore();
+                 }
+                 super.dispatchDraw(canvas);
+@@ -3307,7 +3309,7 @@ public class ChatActivityEnterView extends FrameLayout implements
+         cameraOutline = getResources().getDrawable(R.drawable.input_video).mutate();
+         cameraOutline.setColorFilter(new PorterDuffColorFilter(getThemedColor(Theme.key_glass_defaultIcon), PorterDuff.Mode.MULTIPLY));
+ 
+-        audioVideoSendButton = new ChatActivityEnterViewAnimatedIconView(context, 24) {
++        audioVideoSendButton = new ChatActivityEnterViewAnimatedIconView(context, desu.inugram.helpers.NonIslandHelper.chatElements() ? 32 : 24) {
+             private final Rect tmpRectF = new Rect();
+             @Override
+             public void draw(@NonNull Canvas canvas) {
+@@ -3325,7 +3327,7 @@ public class ChatActivityEnterView extends FrameLayout implements
+         audioVideoSendButton.setImportantForAccessibility(View.IMPORTANT_FOR_ACCESSIBILITY_NO);
+ //        audioVideoSendButton.setFocusable(true);
+ //        audioVideoSendButton.setAccessibilityDelegate(mediaMessageButtonsDelegate);
+-        padding = dp(10f);
++        padding = dp(desu.inugram.helpers.NonIslandHelper.chatElements() ? 7.5f : 10f);
+         audioVideoSendButton.setPadding(padding, padding, padding, padding);
+         audioVideoButtonContainer.addView(audioVideoSendButton, LayoutHelper.createFrame(DEFAULT_HEIGHT, DEFAULT_HEIGHT));
+ 
+@@ -4569,7 +4571,8 @@ public class ChatActivityEnterView extends FrameLayout implements
                  canvas.clipRect(0, separatorY, getMeasuredWidth(), getMeasuredHeight());
              }
              if (child == topView) {
@@ -490,7 +520,7 @@ index 0000000..0000000 100644
              }
          }
          boolean result = super.drawChild(canvas, child, drawingTime);
-@@ -6242,7 +6243,7 @@ public class ChatActivityEnterView extends FrameLayout implements
+@@ -6242,7 +6245,7 @@ public class ChatActivityEnterView extends FrameLayout implements
  
          LayoutParams layoutParams = (LayoutParams) textFieldContainer.getLayoutParams();
          layoutParams.topMargin = (show ? topView.getLayoutParams().height : 0);
@@ -499,7 +529,16 @@ index 0000000..0000000 100644
          textFieldContainer.setLayoutParams(layoutParams);
  
          resizeForTopViewLastShow = show;
-@@ -8932,8 +8933,8 @@ public class ChatActivityEnterView extends FrameLayout implements
+@@ -6340,7 +6343,7 @@ public class ChatActivityEnterView extends FrameLayout implements
+ 
+         audioVideoButtonContainer.setAlpha(audioVideoButtonContainerForbidden ? 0.5f : 1.0f);
+         audioVideoButtonContainer.invalidate();
+-        audioVideoSendButton.setColorFilter(new PorterDuffColorFilter(audioVideoButtonContainerForbidden ?
++        audioVideoSendButton.setColorFilter(new PorterDuffColorFilter(audioVideoButtonContainerForbidden || desu.inugram.helpers.NonIslandHelper.chatElements() ?
+             getThemedColor(Theme.key_glass_defaultIcon) : Color.WHITE, PorterDuff.Mode.SRC_IN));
+         audioVideoSendButton.invalidate();
+         updateFieldHint(false);
+@@ -8932,8 +8935,8 @@ public class ChatActivityEnterView extends FrameLayout implements
  
                      FrameLayout.LayoutParams newLayoutParams = new FrameLayout.LayoutParams(parent.getMeasuredWidth() - (editingMessageObject == null ? Math.max(0, sendButton.width() - dp(DEFAULT_HEIGHT)) : 0), dp(DEFAULT_HEIGHT));
                      newLayoutParams.gravity = Gravity.BOTTOM;
@@ -510,7 +549,7 @@ index 0000000..0000000 100644
                      sizeNotifierLayout.addView(recordedAudioPanel, newLayoutParams);
                      videoTimelineView.setVisibility(GONE);
                  } else {
-@@ -14844,9 +14845,11 @@ public class ChatActivityEnterView extends FrameLayout implements
+@@ -14844,9 +14847,11 @@ public class ChatActivityEnterView extends FrameLayout implements
          final float visibility = animatorTopViewVisibility.getFloatValue();
  
          if (topView != null) {
@@ -525,6 +564,57 @@ index 0000000..0000000 100644
              topView.setVisibility(visibility > 0 ? VISIBLE : GONE);
          }
  
+diff --git a/TMessagesProj/src/main/java/org/telegram/ui/Components/ChatActivityEnterViewAnimatedIconView.java b/TMessagesProj/src/main/java/org/telegram/ui/Components/ChatActivityEnterViewAnimatedIconView.java
+index 0000000..0000000 100644
+--- a/TMessagesProj/src/main/java/org/telegram/ui/Components/ChatActivityEnterViewAnimatedIconView.java
++++ b/TMessagesProj/src/main/java/org/telegram/ui/Components/ChatActivityEnterViewAnimatedIconView.java
+@@ -15,6 +15,15 @@ public class ChatActivityEnterViewAnimatedIconView extends RLottieImageView {
+     private State currentState;
+     private TransitState animatingState;
+     private final int sizeDp;
++    public boolean inu_legacy = desu.inugram.helpers.NonIslandHelper.chatElements();
++
++    private int inu_resource(TransitState state) {
++        if (inu_legacy) {
++            if (state == TransitState.VOICE_TO_VIDEO) return R.raw.inu_voice_to_video;
++            if (state == TransitState.VIDEO_TO_VOICE) return R.raw.inu_video_to_voice;
++        }
++        return state.resource;
++    }
+ 
+     private Map<TransitState, RLottieDrawable> stateMap = new HashMap<TransitState, RLottieDrawable>() {
+         @Nullable
+@@ -23,7 +32,7 @@ public class ChatActivityEnterViewAnimatedIconView extends RLottieImageView {
+             RLottieDrawable obj = super.get(key);
+             if (obj == null) {
+                 TransitState state = (TransitState) key;
+-                int res = state.resource;
++                int res = inu_resource(state);
+                 return new RLottieDrawable(res, String.valueOf(res), AndroidUtilities.dp(sizeDp), AndroidUtilities.dp(sizeDp));
+             }
+             return obj;
+@@ -49,7 +58,7 @@ public class ChatActivityEnterViewAnimatedIconView extends RLottieImageView {
+             RLottieDrawable drawable = stateMap.get(getAnyState(currentState));
+             drawable.stop();
+ 
+-            drawable.setProgress(state == State.VOICE ? 0.5f : 0, false);
++            drawable.setProgress(!inu_legacy && state == State.VOICE ? 0.5f : 0, false);
+             setAnimation(drawable);
+         } else {
+             TransitState transitState = getState(fromState, currentState);
+@@ -60,10 +69,10 @@ public class ChatActivityEnterViewAnimatedIconView extends RLottieImageView {
+             animatingState = transitState;
+             RLottieDrawable drawable = stateMap.get(transitState);
+             drawable.stop();
+-            if (transitState == TransitState.VIDEO_TO_VOICE) {
++            if (!inu_legacy && transitState == TransitState.VIDEO_TO_VOICE) {
+                 drawable.setCustomEndFrame(30);
+                 drawable.setProgress(0, false);
+-            } else if (transitState == TransitState.VOICE_TO_VIDEO) {
++            } else if (!inu_legacy && transitState == TransitState.VOICE_TO_VIDEO) {
+                 drawable.setCustomEndFrame(60);
+                 drawable.setProgress(0.5f, false);
+             } else {
 diff --git a/TMessagesProj/src/main/java/org/telegram/ui/Components/ChatActivityTopPanelLayout.java b/TMessagesProj/src/main/java/org/telegram/ui/Components/ChatActivityTopPanelLayout.java
 index 0000000..0000000 100644
 --- a/TMessagesProj/src/main/java/org/telegram/ui/Components/ChatActivityTopPanelLayout.java

@@ -78,6 +78,10 @@ export const forkSyncFiles: ForkSyncFile[] = [
     source: 'src/res/assets/*',
     target: 'TMessagesProj/src/main/assets',
   },
+  {
+    source: 'src/res/raw/*',
+    target: 'TMessagesProj/src/main/res/raw',
+  },
 ]
 
 export const ICON_SELECTION: { pack: IconifyJSON, icons: string[], options?: SvgToDrawableOptions }[] = [

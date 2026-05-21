@@ -91,6 +91,7 @@ object VoiceRecorderHelper {
             private var runnableStarted = false
 
             private val iconView = ChatActivityEnterViewAnimatedIconView(context, 24).apply {
+                inu_legacy = false // fab keeps the stock filled icon regardless of non-island mode
                 colorFilter = PorterDuffColorFilter(Color.WHITE, PorterDuff.Mode.SRC_IN)
                 scaleType = ImageView.ScaleType.CENTER
             }
