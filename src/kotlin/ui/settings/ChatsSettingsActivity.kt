@@ -174,14 +174,6 @@ class ChatsSettingsActivity : SettingsPageActivity() {
             )
         )
         items.add(
-            mkTwoLineCheckItem(
-                TOGGLE_DISABLE_DRAFT_UPLOAD,
-                R.string.InuDisableDraftUpload,
-                R.string.InuDisableDraftUploadInfo,
-                InuConfig.DISABLE_DRAFT_UPLOAD.value
-            )
-        )
-        items.add(
             UItem.asCheck(
                 TOGGLE_HIDE_CALL_ACTION_BUTTON,
                 LocaleController.getString(R.string.InuHideCallActionButton),
@@ -251,11 +243,6 @@ class ChatsSettingsActivity : SettingsPageActivity() {
                 (view as? NotificationsCheckCell)?.isChecked = new
             }
 
-            TOGGLE_DISABLE_DRAFT_UPLOAD -> {
-                val new = InuConfig.DISABLE_DRAFT_UPLOAD.toggle()
-                (view as? NotificationsCheckCell)?.isChecked = new
-            }
-
             BUTTON_FORMATTING_POPUP -> {
                 val isSwitch = if (LocaleController.isRTL)
                     x < AndroidUtilities.dp(76f)
@@ -309,7 +296,6 @@ class ChatsSettingsActivity : SettingsPageActivity() {
         private val TOGGLE_BOT_WEBVIEW_BUTTON = InuUtils.generateId()
         private val TOGGLE_HIDE_SEND_AS_PICKER = InuUtils.generateId()
         private val TOGGLE_SUGGEST_CUSTOM_EMOJI_AFTER = InuUtils.generateId()
-        private val TOGGLE_DISABLE_DRAFT_UPLOAD = InuUtils.generateId()
         private val TOGGLE_SEARCH_FROM_GLOBAL = InuUtils.generateId()
         private val TOGGLE_HIDE_CALL_ACTION_BUTTON = InuUtils.generateId()
 
@@ -339,7 +325,6 @@ class ChatsSettingsActivity : SettingsPageActivity() {
                 SearchRegistry.Entry("show-all-recent-stickers", R.string.InuShowAllRecentStickers, TOGGLE_SHOW_ALL_RECENT_STICKERS),
                 SearchRegistry.Entry("suggest-custom-emoji-after", R.string.InuSuggestCustomEmojiAfter, TOGGLE_SUGGEST_CUSTOM_EMOJI_AFTER),
                 SearchRegistry.Entry("search-from-global", R.string.InuSearchFromGlobal, TOGGLE_SEARCH_FROM_GLOBAL),
-                SearchRegistry.Entry("disable-draft-upload", R.string.InuDisableDraftUpload, TOGGLE_DISABLE_DRAFT_UPLOAD),
                 SearchRegistry.Entry("hide-call-action-button", R.string.InuHideCallActionButton, TOGGLE_HIDE_CALL_ACTION_BUTTON),
             ),
         )

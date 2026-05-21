@@ -4,26 +4,26 @@ Date: Tue, 21 Apr 2026 09:21:29 +0300
 Subject: change app name to Inugram
 
 ---
- TMessagesProj/src/main/AndroidManifest.xml    | 16 +++++++++++++++
- .../telegram/messenger/LocaleController.java  | 10 ++++++----
- .../java/org/telegram/ui/DialogsActivity.java |  9 ++-------
- .../telegram/ui/LauncherIconController.java   |  3 ++-
- .../ui/Stories/DialogStoriesCell.java         | 20 +++++++++----------
- .../java/org/telegram/ui/ThemeActivity.java   | 12 +++++++++--
- .../org/telegram/ui/UpdateLayoutWrapper.java  | 14 ++-----------
- .../res/mipmap-anydpi-v26/ic_launcher.xml     |  6 +++---
- .../mipmap-anydpi-v26/ic_launcher_round.xml   |  6 +++---
- .../mipmap-anydpi-v26/ic_launcher_stock.xml   |  6 ++++++
- .../ic_launcher_stock_round.xml               |  6 ++++++
- .../src/main/res/values-de/strings.xml        |  4 ++--
- .../src/main/res/values-es/strings.xml        |  6 +++---
- .../src/main/res/values-it/strings.xml        |  4 ++--
+ TMessagesProj/src/main/AndroidManifest.xml    | 33 +++++++++++++++++++
+ .../telegram/messenger/LocaleController.java  | 10 +++---
+ .../java/org/telegram/ui/DialogsActivity.java |  9 ++---
+ .../telegram/ui/LauncherIconController.java   |  6 ++--
+ .../ui/Stories/DialogStoriesCell.java         | 20 +++++------
+ .../java/org/telegram/ui/ThemeActivity.java   | 12 +++++--
+ .../org/telegram/ui/UpdateLayoutWrapper.java  | 14 ++------
+ .../res/mipmap-anydpi-v26/ic_launcher.xml     |  6 ++--
+ .../mipmap-anydpi-v26/ic_launcher_round.xml   |  6 ++--
+ .../mipmap-anydpi-v26/ic_launcher_stock.xml   |  6 ++++
+ .../ic_launcher_stock_round.xml               |  6 ++++
+ .../src/main/res/values-de/strings.xml        |  4 +--
+ .../src/main/res/values-es/strings.xml        |  6 ++--
+ .../src/main/res/values-it/strings.xml        |  4 +--
  .../src/main/res/values-nl/strings.xml        |  2 +-
- .../src/main/res/values-pt-rBR/strings.xml    |  6 +++---
- .../src/main/res/values-ru/strings.xml        |  6 +++---
- .../src/main/res/values-uk/strings.xml        |  6 +++---
- TMessagesProj/src/main/res/values/strings.xml | 10 +++++-----
- 19 files changed, 88 insertions(+), 64 deletions(-)
+ .../src/main/res/values-pt-rBR/strings.xml    |  6 ++--
+ .../src/main/res/values-ru/strings.xml        |  6 ++--
+ .../src/main/res/values-uk/strings.xml        |  6 ++--
+ TMessagesProj/src/main/res/values/strings.xml | 10 +++---
+ 19 files changed, 107 insertions(+), 65 deletions(-)
  create mode 100644 TMessagesProj/src/main/res/mipmap-anydpi-v26/ic_launcher_stock.xml
  create mode 100644 TMessagesProj/src/main/res/mipmap-anydpi-v26/ic_launcher_stock_round.xml
 
@@ -31,7 +31,7 @@ diff --git a/TMessagesProj/src/main/AndroidManifest.xml b/TMessagesProj/src/main
 index 0000000..0000000 100644
 --- a/TMessagesProj/src/main/AndroidManifest.xml
 +++ b/TMessagesProj/src/main/AndroidManifest.xml
-@@ -128,6 +128,22 @@
+@@ -128,6 +128,39 @@
              <meta-data android:name="android.app.shortcuts" android:resource="@xml/shortcuts" />
          </activity-alias>
  
@@ -39,6 +39,23 @@ index 0000000..0000000 100644
 +            android:enabled="false"
 +            android:name="org.telegram.messenger.StockIcon"
 +            android:targetActivity="org.telegram.ui.LaunchActivity"
++            android:icon="@mipmap/ic_launcher_stock"
++            android:roundIcon="@mipmap/ic_launcher_stock_round"
++            android:exported="true">
++
++            <intent-filter>
++                <action android:name="android.intent.action.MAIN" />
++                <category android:name="android.intent.category.LAUNCHER" />
++                <category android:name="android.intent.category.MULTIWINDOW_LAUNCHER" />
++            </intent-filter>
++            <meta-data android:name="android.app.shortcuts" android:resource="@xml/shortcuts" />
++        </activity-alias>
++
++        <activity-alias
++            android:enabled="false"
++            android:name="org.telegram.messenger.DisguiseIcon"
++            android:targetActivity="org.telegram.ui.LaunchActivity"
++            android:label="@string/InuDisguiseName"
 +            android:icon="@mipmap/ic_launcher_stock"
 +            android:roundIcon="@mipmap/ic_launcher_stock_round"
 +            android:exported="true">
@@ -116,7 +133,7 @@ diff --git a/TMessagesProj/src/main/java/org/telegram/ui/LauncherIconController.
 index 0000000..0000000 100644
 --- a/TMessagesProj/src/main/java/org/telegram/ui/LauncherIconController.java
 +++ b/TMessagesProj/src/main/java/org/telegram/ui/LauncherIconController.java
-@@ -34,7 +34,8 @@ public class LauncherIconController {
+@@ -34,12 +34,14 @@ public class LauncherIconController {
      }
  
      public enum LauncherIcon {
@@ -126,6 +143,13 @@ index 0000000..0000000 100644
          VINTAGE("VintageIcon", R.drawable.icon_6_background_sa, R.mipmap.icon_6_foreground_sa, R.string.AppIconVintage),
          AQUA("AquaIcon", R.drawable.icon_4_background_sa, R.mipmap.icon_foreground_sa, R.string.AppIconAqua),
          PREMIUM("PremiumIcon", R.drawable.icon_3_background_sa, R.mipmap.icon_3_foreground_sa, R.string.AppIconPremium, true),
+         TURBO("TurboIcon", R.drawable.icon_5_background_sa, R.mipmap.icon_5_foreground_sa, R.string.AppIconTurbo, true),
+-        NOX("NoxIcon", R.mipmap.icon_2_background_sa, R.mipmap.icon_foreground_sa, R.string.AppIconNox, true);
++        NOX("NoxIcon", R.mipmap.icon_2_background_sa, R.mipmap.icon_foreground_sa, R.string.AppIconNox, true),
++        DISGUISE("DisguiseIcon", R.drawable.icon_background_sa, R.mipmap.icon_foreground_sa, R.string.AppIconDefault);
+ 
+         public final String key;
+         public final int background;
 diff --git a/TMessagesProj/src/main/java/org/telegram/ui/Stories/DialogStoriesCell.java b/TMessagesProj/src/main/java/org/telegram/ui/Stories/DialogStoriesCell.java
 index 0000000..0000000 100644
 --- a/TMessagesProj/src/main/java/org/telegram/ui/Stories/DialogStoriesCell.java

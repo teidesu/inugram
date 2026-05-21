@@ -13,7 +13,10 @@ import android.text.Spanned
 import android.text.StaticLayout
 import android.text.TextPaint
 import android.text.style.ReplacementSpan
+import android.view.Gravity
 import android.view.View
+import android.view.ViewGroup
+import android.widget.FrameLayout
 import androidx.core.graphics.withTranslation
 import desu.inugram.SearchRegistry
 import org.telegram.messenger.AndroidUtilities
@@ -25,13 +28,14 @@ import org.telegram.messenger.UserConfig
 import org.telegram.messenger.Utilities
 import org.telegram.ui.ActionBar.Theme
 import org.telegram.ui.Cells.NotificationsCheckCell
+import org.telegram.ui.Components.Bulletin
 import org.telegram.ui.Components.BulletinFactory
 import org.telegram.ui.Components.ItemOptions
+import org.telegram.ui.Components.LayoutHelper
 import org.telegram.ui.Components.UItem
 import org.telegram.ui.Components.UniversalFragment
 import org.telegram.ui.Components.UniversalRecyclerView
 import org.telegram.ui.LaunchActivity
-import kotlin.system.exitProcess
 
 abstract class SettingsPageActivity : UniversalFragment() {
     override fun isSupportEdgeToEdge(): Boolean = true
@@ -74,8 +78,43 @@ abstract class SettingsPageActivity : UniversalFragment() {
 
     override fun onInsets(left: Int, top: Int, right: Int, bottom: Int) {
         val lv = listView ?: return
-        lv.setPadding(lv.paddingLeft, lv.paddingTop, lv.paddingRight, bottom)
+        val container = stickyButtonContainer
+        if (container != null) {
+            lv.setPadding(0, 0, 0, bottom + dp(STICKY_BUTTON_HEIGHT))
+            container.setPadding(dp(16), dp(8), dp(16), dp(8) + bottom)
+        } else {
+            lv.setPadding(lv.paddingLeft, lv.paddingTop, lv.paddingRight, bottom)
+        }
     }
+
+    override fun onFragmentDestroy() {
+        if (stickyButtonContainer != null) Bulletin.removeDelegate(this)
+        super.onFragmentDestroy()
+    }
+
+    private var stickyButtonContainer: FrameLayout? = null
+
+    // Sticky bottom button bar (à la CloudSyncActivity): wraps `button` in a windowBackgroundWhite
+    // bar, reserves matching list padding, and offsets bulletins above it. Call from createView
+    // after super.createView. Cleanup is handled in onFragmentDestroy.
+    protected fun attachStickyButton(rootView: View, button: View) {
+        val container = FrameLayout(rootView.context).apply {
+            setBackgroundColor(Theme.getColor(Theme.key_windowBackgroundWhite))
+            setPadding(dp(16), dp(8), dp(16), dp(8))
+            addView(button, LayoutHelper.createFrame(LayoutHelper.MATCH_PARENT, 48f))
+        }
+        stickyButtonContainer = container
+        (rootView as FrameLayout).addView(
+            container,
+            LayoutHelper.createFrame(LayoutHelper.MATCH_PARENT, LayoutHelper.WRAP_CONTENT, Gravity.BOTTOM)
+        )
+        listView.setPadding(0, 0, 0, dp(STICKY_BUTTON_HEIGHT))
+        Bulletin.addDelegate(this, object : Bulletin.Delegate {
+            override fun getBottomOffset(tag: Int): Int = stickyButtonContainer?.height ?: 0
+        })
+    }
+
+    private fun dp(v: Int) = AndroidUtilities.dp(v.toFloat())
 
     protected fun postNotificationForAllAccounts(id: Int, vararg args: Any?) {
         for (i in 0 until UserConfig.MAX_ACCOUNT_COUNT) {
@@ -90,6 +129,16 @@ abstract class SettingsPageActivity : UniversalFragment() {
         LaunchActivity.instance?.rebuildAllFragments(false)
     }
 
+    // redraws all visible rows; softRebuild skips the current page, so toggles that change how
+    // cells draw (e.g. material 3 switches) need this to take effect live.
+    protected fun invalidateVisibleRows() {
+        fun walk(view: View) {
+            view.invalidate()
+            if (view is ViewGroup) for (i in 0 until view.childCount) walk(view.getChildAt(i))
+        }
+        walk(listView ?: return)
+    }
+
     protected fun showRestartBulletin() {
         BulletinFactory.of(this)
             .createSimpleBulletin(
@@ -98,10 +147,7 @@ abstract class SettingsPageActivity : UniversalFragment() {
                 LocaleController.getString(R.string.InuRestartNow)
             ) {
                 val activity = parentActivity ?: return@createSimpleBulletin
-                val intent = activity.packageManager.getLaunchIntentForPackage(activity.packageName)
-                activity.finishAffinity()
-                activity.startActivity(intent)
-                exitProcess(0)
+                desu.inugram.helpers.InuUtils.restartApp(activity)
             }
             .show()
     }
@@ -260,5 +306,9 @@ abstract class SettingsPageActivity : UniversalFragment() {
             BulletinFactory.of(this).createCopyLinkBulletin().show()
         }
         return true
+    }
+
+    companion object {
+        private const val STICKY_BUTTON_HEIGHT = 64
     }
 }

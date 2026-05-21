@@ -11,6 +11,7 @@ most things are toggleable in `Settings → Inugram`, with sensible opinionated 
 
 - 🐶 old layout mode (experimental): pre-12.0 flat design (no glass pill nav, no floating islands, hamburger drawer, old profile layout); requires app restart after toggling
 - monet (material you) theme support - *ported from [NagramX](https://github.com/risin42/NagramX)*
+- monet (material you) theme support - *ported from [NagramX](https://github.com/risin42/NagramX)*, plus a quick switcher in appearance settings (light/dark/amoled/auto)
 - 🐶 non-island ui mode for tab bars, global search and chat elements
 - icon replacement (currently: solar pack, [480 Design](https://t.me/Design480)) - *ported from [NagramX](https://github.com/risin42/NagramX)*
 - show seconds in timestamps
@@ -23,6 +24,7 @@ most things are toggleable in `Settings → Inugram`, with sensible opinionated 
 - 🐶 old (pre-12.6) mention/reaction indicator
 - 🐶 toggleable scrim blur
 - 🐶 reduce menu motion: skip context menu stagger and reaction bar slide-in/scale animations
+- material 3 switches
 - 🐶 toggle to replace profile photo bottom blur with a plain gradient fade
 - disable number rounding
 - export/import settings to/from json file
@@ -119,6 +121,11 @@ most things are toggleable in `Settings → Inugram`, with sensible opinionated 
 - account limit raised to 8 (premium gating disabled)
 - 🐶 customizable account order
 - per-account passcodes, hidden accounts, panic code, hidden settings deeplink - *ported from [Nekogram](https://github.com/Nekogram/Nekogram)*
+- 🐶 paranoia mode: pick chats to hide everywhere; all secret chats hidden too; exit by typing a custom code in chat search
+  - optionally hide the Inugram settings entirely when enabled
+  - optionally disguise as stock Telegram when enabled
+  - optionally silence all notifications while enabled
+  - optionally hide all other accounts while enabled
 
 ## behavior
 

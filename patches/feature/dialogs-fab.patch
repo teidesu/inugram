@@ -4,8 +4,8 @@ Date: Mon, 20 Apr 2026 17:00:53 +0300
 Subject: tweaks for the dialogs list fab
 
 ---
- .../java/org/telegram/ui/DialogsActivity.java | 38 ++++++++++++-------
- 1 file changed, 25 insertions(+), 13 deletions(-)
+ .../java/org/telegram/ui/DialogsActivity.java | 39 ++++++++++++-------
+ 1 file changed, 26 insertions(+), 13 deletions(-)
 
 diff --git a/TMessagesProj/src/main/java/org/telegram/ui/DialogsActivity.java b/TMessagesProj/src/main/java/org/telegram/ui/DialogsActivity.java
 index 0000000..0000000 100644
@@ -19,15 +19,7 @@ index 0000000..0000000 100644
  import desu.inugram.helpers.FolderHelper;
  import desu.inugram.helpers.MainTabsHelper;
  import me.vkryl.android.animator.BoolAnimator;
-@@ -2903,6 +2904,7 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
-         BirthdayController.getInstance(currentAccount).check();
-         additionNavigationBarHeight = hasMainTabs ? dp(MainTabsHelper.getMainTabsHeightWithMargins()) : 0;
-         additionFloatingButtonOffset = hasMainTabs ? dp(MainTabsHelper.getMainTabsHeight() + MainTabsHelper.getMainTabsMargin()) : 0;
-+        if (hasMainTabs && !DialogsFabHelper.offsetForBottomBar()) additionFloatingButtonOffset = -dp(10);
- 
-         return true;
-     }
-@@ -4507,7 +4509,7 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
+@@ -4507,7 +4508,7 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
                                  } else {
                                      goingDown = firstVisiblePosition > prevPosition;
                                  }
@@ -36,9 +28,12 @@ index 0000000..0000000 100644
                                      hideFloatingButton(goingDown);
                                  }
                                  prevPosition = firstVisiblePosition;
-@@ -4699,12 +4701,16 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
+@@ -4698,13 +4699,19 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
+         });
          searchTabsAndFiltersLayout.addView(filtersView, LayoutHelper.createFrame(LayoutHelper.MATCH_PARENT, LayoutHelper.MATCH_PARENT, Gravity.TOP));
  
++        additionFloatingButtonOffset = DialogsFabHelper.floatingButtonOffset(hasMainTabs);
++
          floatingButtonStories = new FragmentFloatingButton(context, resourceProvider, true);
 -        floatingButtonStories.setImageResource(R.drawable.outline_fab_story_24);
 -        floatingButtonStories.setOnClickListener(v -> openStoriesRecorder());
@@ -57,7 +52,7 @@ index 0000000..0000000 100644
          floatingButton3.setOnClickListener(v -> {
              if (parentLayout != null && parentLayout.isInPreviewMode()) {
                  finishPreviewFragment();
-@@ -4724,7 +4730,7 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
+@@ -4724,7 +4731,7 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
                      AccountFrozenAlert.show(currentAccount);
                      return;
                  }
@@ -66,7 +61,7 @@ index 0000000..0000000 100644
              }
          });
  
-@@ -8659,12 +8665,15 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
+@@ -8659,12 +8666,15 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
  
      private void updateFloatingButtonVisibility(boolean animated) {
          final boolean isVisible = !(onlySelect && initialDialogsType != 10 || folderId != 0 || inPreviewMode || (searching && !onlySelect) || floatingButtonHidden);
@@ -84,7 +79,7 @@ index 0000000..0000000 100644
          }
      }
  
-@@ -8703,8 +8712,9 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
+@@ -8703,8 +8713,9 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
              floatingButton3.setImageResource(R.drawable.floating_check);
              floatingButton3.setContentDescription(LocaleController.getString(R.string.Done));
          } else {
@@ -96,7 +91,7 @@ index 0000000..0000000 100644
          }
      }
  
-@@ -13007,13 +13017,13 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
+@@ -13007,13 +13018,13 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
          }, 0);
      }
  
@@ -112,7 +107,7 @@ index 0000000..0000000 100644
          if (!storiesEnabled) {
              if (storyPremiumHint != null) {
                  if (storyPremiumHint.shown()) {
-@@ -13195,10 +13205,12 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
+@@ -13195,10 +13206,12 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
                  });
              });
              io.addGap();

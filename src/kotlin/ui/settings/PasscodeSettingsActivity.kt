@@ -161,7 +161,7 @@ class PasscodeSettingsActivity : SettingsPageActivity() {
         val name = Emoji.replaceEmoji(rawName, nameFm, false)
         val status = LocaleController.getString(
             when {
-                PasscodeHelper.isAccountHidden(account) -> R.string.InuPasscodeStateHidden
+                PasscodeHelper.isAccountHiddenByPasscode(account) -> R.string.InuPasscodeStateHidden
                 PasscodeHelper.hasPasscodeForAccount(account) -> R.string.InuPasscodeStateSet
                 else -> R.string.InuPasscodeStateNone
             }

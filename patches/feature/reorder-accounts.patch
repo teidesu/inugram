@@ -47,7 +47,7 @@ index 0000000..0000000 100644
          searchItem.setSearchFieldHint(getString(R.string.Search));
  
          otherItem = menu.addItem(1, R.drawable.ic_ab_other);
-+        if (UserConfig.getActivatedAccountsCount() > 1) {
++        if (UserConfig.getActivatedAccountsCount() > 1 && !desu.inugram.helpers.ParanoiaHelper.hidesOtherAccounts()) {
 +            otherItem.addSubItem(98, R.drawable.tabs_reorder, getString(R.string.InuReorderAccounts));
 +        }
          otherItem.addSubItem(2, R.drawable.msg_leave, getString(R.string.LogOut));

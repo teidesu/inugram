@@ -31,6 +31,15 @@
     <string name="InuShowSeconds">Show seconds</string>
     <string name="InuDisableRounding">Disable number rounding</string>
     <string name="InuDisableRoundingInfo">1.2K -> 1,234</string>
+    <string name="InuMaterial3">Material Design 3</string>
+    <string name="InuMaterial3Switches">Switches</string>
+    <string name="InuMonetTheme">Monet theme</string>
+    <string name="InuMonetThemeDisabled">Disabled</string>
+    <string name="InuMonetThemeLight">Light</string>
+    <string name="InuMonetThemeDark">Dark</string>
+    <string name="InuMonetThemeAmoled">AMOLED</string>
+    <string name="InuMonetThemeAuto">Auto</string>
+    <string name="InuMonetThemeAutoAmoled">Auto (AMOLED)</string>
     <string name="InuDisableInstantCamera">Disable instant camera</string>
     <string name="InuDisableInstantCameraInfo">Prevents camera from starting when opening the attachment panel</string>
     <string name="InuShowAllRecentStickers">Show all recent stickers</string>
@@ -79,7 +88,6 @@
     <string name="InuDialogsFabActionOpenSearch">Open search</string>
     <string name="InuDialogsFabActionSavedMessages">Saved messages</string>
     <string name="InuPredictiveBack">Predictive back</string>
-    <string name="InuPredictiveBackInfo">Animation shown while swiping back or pressing the back button. Android 14+. Requires app restart.</string>
     <string name="InuPredictiveBackOff">Off</string>
     <string name="InuPredictiveBackStock">Stock</string>
     <string name="InuPredictiveBackMaterial3">Material 3</string>
@@ -147,7 +155,7 @@
     <string name="InuCallConfirmation">Ask before calling</string>
     <string name="InuCallConfirmationTitle">Confirm calling</string>
     <string name="InuCallConfirmationText">Call **%1$s**?</string>
-    <string name="InuDisableChatBubbles">Disable conversation bubbles</string>
+    <string name="InuDisableChatBubbles">Disable Android notification bubbles</string>
     <string name="InuInPlaceTranslation">In-place translation</string>
     <string name="InuTranslateWebPreviews">Translate web previews</string>
     <string name="InuTranslateInstantView">Translate page</string>
@@ -186,7 +194,7 @@
     <string name="InuIconReplacementSolar">Solar by @Design480</string>
 
     <string name="InuMapsHeader">Maps</string>
-    <string name="InuMapProvider">Map provider</string>
+    <string name="InuMapProvider">Map view provider</string>
     <string name="InuMapProviderGoogle">Google Maps</string>
     <string name="InuMapProviderOsm">OpenStreetMap</string>
     <string name="InuMapPreviewProvider">Map preview provider</string>
@@ -242,7 +250,7 @@
     <string name="InuNonIslandTabBars">Tab bars</string>
     <string name="InuNonIslandGlobalSearch">Global search</string>
     <string name="InuNonIslandChatElements">Chat elements</string>
-    <string name="InuNonIslandHint">In non-island UI mode, we try to tweak the elements to more closely match pre-12.5 UI. For best experience, either enable or disable them all.\nThere are probably a bunch of visual bugs, so be advised.</string>
+    <string name="InuNonIslandHint">In non-island UI mode, we try to tweak the elements to more closely match old UI. For best experience, either enable or disable them all.\nThere are probably a bunch of visual bugs, so be advised.</string>
 
     <string name="InuHideFadeView">Hide fade views</string>
 
@@ -279,7 +287,7 @@
     <string name="InuPinnedReactionsRemoveAll">Remove all</string>
     <string name="InuPinnedReactionsRemoveAllConfirm">Remove all pinned reactions?</string>
 
-    <string name="InuOldMentionIndicator">Pre-12.6 mention indicator</string>
+    <string name="InuOldMentionIndicator">Legacy mention indicator</string>
 
     <string name="InuShowForwardTime">Show forward time</string>
 
@@ -426,4 +434,28 @@
     <string name="InuMessageMenuItems">Items</string>
     <string name="InuMessageMenuOrderInfo">Reorder or hide items in the message context menu. Drag the handle to rearrange, toggle the switch to hide.</string>
     <string name="InuMessageMenuReset">Reset to default</string>
+    <string name="InuPrivacySecurity">Privacy &amp; Security</string>
+    <string name="InuPerAccountPasscode">Per-account passcode</string>
+    <string name="InuHideInugramSettings">Hide Inugram settings</string>
+    <string name="InuParanoiaDisableNotifications">Disable notifications</string>
+    <string name="InuParanoiaHideOtherAccounts">Hide other accounts</string>
+    <string name="InuParanoiaDisguise">Disguise as Telegram</string>
+    <string name="InuParanoiaDisguiseInfo">Only the launcher icon and name change. Notifications and the in-app name still show \"Inugram\", due to Android limitations.</string>
+    <string name="InuDisguiseName" translatable="false">Telegram</string>
+    <string name="InuParanoiaMode">Paranoia mode</string>
+    <string name="InuParanoiaModeInfo">Paranoia mode lets you \"prepare\" for someone else checking your phone, by hiding any \"dangerous\" chats, and optionally disguising as the stock app.</string>
+    <string name="InuParanoiaSelect">Chats to hide</string>
+    <string name="InuParanoiaSelectInfo">Secret chats are always hidden</string>
+    <string name="InuParanoiaCount">%1$d chats</string>
+    <string name="InuParanoiaExitCode">Exit code</string>
+    <string name="InuParanoiaExitCodeSet">Set exit code</string>
+    <string name="InuParanoiaExitCodeChange">Change exit code</string>
+    <string name="InuParanoiaExitCodeHint">Exit code</string>
+    <string name="InuParanoiaExitCodeInfo">Type this code into the global search to exit paranoia mode</string>
+    <string name="InuParanoiaExitCodeSaved">Exit code saved</string>
+    <string name="InuParanoiaExitCodeEmpty">Enter an exit code</string>
+    <string name="InuParanoiaEnable">Enter paranoia mode</string>
+    <string name="InuParanoiaEnableConfirm">Enter paranoia mode and restart? This entry will disappear — the only way back is typing the exit code in chat search, or reinstalling the app!</string>
+    <string name="InuParanoiaNeedSetup">Set an exit code and pick at least one chat first.</string>
+    <string name="InuParanoiaExit">Exit paranoia mode</string>
 </resources>

@@ -528,7 +528,7 @@ index 0000000..0000000 100644
 -            FileLog.e(e);
 -        }
 -        return null;
-+        return desu.inugram.helpers.UpdateHelper.getVersionInfoString() + "\nBuilt on: " + BuildVars.BUILD_DATE;
++        return desu.inugram.helpers.UpdateHelper.getFullVersionInfo();
      }
  
      @Override

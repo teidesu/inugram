@@ -4,6 +4,7 @@ import android.graphics.Color
 import android.os.Build
 import androidx.annotation.RequiresApi
 import androidx.core.graphics.ColorUtils
+import desu.inugram.InuConfig
 import google_material.Blend
 import org.telegram.messenger.ApplicationLoader
 import org.telegram.messenger.FileLog
@@ -239,5 +240,79 @@ object MonetHelper {
         )
 
         lastMonetColor = currentColor
+    }
+
+    enum class ThemeMode { DISABLED, LIGHT, DARK, AMOLED, AUTO, AUTO_AMOLED }
+
+    fun getThemeMode(): ThemeMode {
+        if (Theme.selectedAutoNightType == Theme.AUTO_NIGHT_TYPE_SYSTEM &&
+            Theme.getCurrentTheme()?.inu_isMonetLight() == true
+        ) {
+            val night = Theme.getCurrentNightTheme()
+            if (night?.inu_isMonetDark() == true) return ThemeMode.AUTO
+            if (night?.inu_isMonetAmoled() == true) return ThemeMode.AUTO_AMOLED
+        }
+        if (Theme.selectedAutoNightType == Theme.AUTO_NIGHT_TYPE_NONE) {
+            val active = Theme.getActiveTheme()
+            if (active?.inu_isMonetLight() == true) return ThemeMode.LIGHT
+            if (active?.inu_isMonetDark() == true) return ThemeMode.DARK
+            if (active?.inu_isMonetAmoled() == true) return ThemeMode.AMOLED
+        }
+        return ThemeMode.DISABLED
+    }
+
+    fun setThemeMode(mode: ThemeMode) {
+        val current = getThemeMode()
+        if (current == mode) return
+
+        // entering Monet from a non-Monet state: snapshot so DISABLED can restore it
+        if (current == ThemeMode.DISABLED) {
+            InuConfig.MONET_PREV.value = listOf(
+                Theme.getCurrentTheme()?.key.orEmpty(),
+                Theme.getCurrentNightTheme()?.key.orEmpty(),
+                Theme.selectedAutoNightType,
+            ).joinToString("|")
+        }
+
+        when (mode) {
+            ThemeMode.DISABLED -> restorePrevious()
+            ThemeMode.LIGHT -> applySingle("Monet Light")
+            ThemeMode.DARK -> applySingle("Monet Dark")
+            ThemeMode.AMOLED -> applySingle("Monet AMOLED")
+            ThemeMode.AUTO -> applyAuto("Monet Dark")
+            ThemeMode.AUTO_AMOLED -> applyAuto("Monet AMOLED")
+        }
+    }
+
+    private fun applySingle(name: String) {
+        Theme.selectedAutoNightType = Theme.AUTO_NIGHT_TYPE_NONE
+        Theme.saveAutoNightThemeConfig()
+        applyDayTheme(Theme.getTheme(name))
+    }
+
+    private fun applyAuto(nightName: String) {
+        Theme.getTheme(nightName)?.let { Theme.setCurrentNightTheme(it) }
+        applyDayTheme(Theme.getTheme("Monet Light"))
+        Theme.selectedAutoNightType = Theme.AUTO_NIGHT_TYPE_SYSTEM
+        Theme.saveAutoNightThemeConfig()
+        Theme.checkAutoNightThemeConditions(true)
+    }
+
+    private fun restorePrevious() {
+        val snapshot = InuConfig.MONET_PREV.value.split("|")
+        val dayTheme = Theme.getTheme(snapshot.getOrNull(0).orEmpty()) ?: Theme.getTheme("Blue")
+        Theme.getTheme(snapshot.getOrNull(1).orEmpty())?.let { Theme.setCurrentNightTheme(it) }
+        Theme.selectedAutoNightType = snapshot.getOrNull(2)?.toIntOrNull() ?: Theme.AUTO_NIGHT_TYPE_NONE
+        applyDayTheme(dayTheme)
+        Theme.saveAutoNightThemeConfig()
+        Theme.checkAutoNightThemeConditions(true)
+        InuConfig.MONET_PREV.value = ""
+    }
+
+    private fun applyDayTheme(theme: Theme.ThemeInfo?) {
+        if (theme == null) return
+        NotificationCenter.getGlobalInstance().postNotificationName(
+            NotificationCenter.needSetDayNightTheme, theme, false, null, -1
+        )
     }
 }

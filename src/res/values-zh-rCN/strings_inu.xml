@@ -145,7 +145,7 @@
     <string name="InuCallConfirmation">通话前询问</string>
     <string name="InuCallConfirmationTitle">确认通话</string>
     <string name="InuCallConfirmationText">呼叫 **%1$s**？</string>
-    <string name="InuDisableChatBubbles">禁用对话气泡</string>
+    <string name="InuDisableChatBubbles">禁用 Android 通知气泡</string>
     <string name="InuInPlaceTranslation">就地翻译</string>
     <string name="InuTranslateWebPreviews">翻译网页预览</string>
     <string name="InuTranslateInstantView">翻译页面</string>
@@ -240,7 +240,7 @@
     <string name="InuNonIslandTabBars">标签栏</string>
     <string name="InuNonIslandGlobalSearch">全局搜索</string>
     <string name="InuNonIslandChatElements">聊天元素</string>
-    <string name="InuNonIslandHint">在非「岛」界面模式下，会尝试调整元素以更接近 12.5 之前的界面。为获得最佳体验，请整体启用或整体禁用。\n可能仍有视觉缺陷，请知悉。</string>
+    <string name="InuNonIslandHint">在非「岛」界面模式下，会尝试调整元素以更接近旧版界面。为获得最佳体验，请整体启用或整体禁用。\n可能仍有视觉缺陷，请知悉。</string>
 
     <string name="InuHideFadeView">隐藏渐隐视图</string>
 
@@ -277,7 +277,7 @@
     <string name="InuPinnedReactionsRemoveAll">全部移除</string>
     <string name="InuPinnedReactionsRemoveAllConfirm">移除所有置顶回应？</string>
 
-    <string name="InuOldMentionIndicator">12.6 之前的提及指示器</string>
+    <string name="InuOldMentionIndicator">旧版提及指示器</string>
 
     <string name="InuShowForwardTime">显示转发时间</string>
 
@@ -424,4 +424,27 @@
     <string name="InuMessageMenuItems">项目</string>
     <string name="InuMessageMenuOrderInfo">重新排序或隐藏消息上下文菜单中的项目。拖动手柄进行排序，使用开关进行隐藏。</string>
     <string name="InuMessageMenuReset">重置为默认</string>
+    <string name="InuPrivacySecurity">隐私与安全</string>
+    <string name="InuPerAccountPasscode">每个账号独立密码</string>
+    <string name="InuHideInugramSettings">隐藏 inugram 设置</string>
+    <string name="InuParanoiaDisableNotifications">禁用通知</string>
+    <string name="InuParanoiaHideOtherAccounts">隐藏其他账号</string>
+    <string name="InuParanoiaDisguise">伪装成 Telegram</string>
+    <string name="InuParanoiaDisguiseInfo">仅更改启动器图标和名称。由于 Android 限制，通知和应用内名称仍显示「Inugram」。</string>
+    <string name="InuParanoiaMode">偏执模式</string>
+    <string name="InuParanoiaModeInfo">偏执模式让你为他人查看手机做好「准备」：隐藏任何「危险」聊天，并可选择伪装成原版应用。</string>
+    <string name="InuParanoiaSelect">要隐藏的聊天</string>
+    <string name="InuParanoiaSelectInfo">私密聊天始终隐藏</string>
+    <string name="InuParanoiaCount">%1$d 个聊天</string>
+    <string name="InuParanoiaExitCode">退出码</string>
+    <string name="InuParanoiaExitCodeSet">设置退出码</string>
+    <string name="InuParanoiaExitCodeChange">修改退出码</string>
+    <string name="InuParanoiaExitCodeHint">退出码</string>
+    <string name="InuParanoiaExitCodeInfo">在全局搜索中输入此码即可退出偏执模式</string>
+    <string name="InuParanoiaExitCodeSaved">退出码已保存</string>
+    <string name="InuParanoiaExitCodeEmpty">请输入退出码</string>
+    <string name="InuParanoiaEnable">进入偏执模式</string>
+    <string name="InuParanoiaEnableConfirm">进入偏执模式并重启？此项将消失 —— 唯一的返回方式是在聊天搜索中输入退出码，或重新安装应用！</string>
+    <string name="InuParanoiaNeedSetup">请先设置退出码并至少选择一个聊天。</string>
+    <string name="InuParanoiaExit">退出偏执模式</string>
 </resources>

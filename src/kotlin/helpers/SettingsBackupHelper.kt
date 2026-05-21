@@ -15,7 +15,6 @@ import org.telegram.messenger.Utilities
 import org.telegram.ui.ActionBar.BaseFragment
 import org.telegram.ui.Components.BulletinFactory
 import java.io.File
-import kotlin.system.exitProcess
 
 object SettingsBackupHelper {
     const val FORMAT_VERSION = 1
@@ -235,10 +234,7 @@ object SettingsBackupHelper {
             LocaleController.getString(R.string.InuRestartNow)
         ) {
             val activity = fragment.parentActivity ?: return@createSimpleBulletin
-            val intent = activity.packageManager.getLaunchIntentForPackage(activity.packageName)
-            activity.finishAffinity()
-            activity.startActivity(intent)
-            exitProcess(0)
+            InuUtils.restartApp(activity)
         }.show()
     }
 }

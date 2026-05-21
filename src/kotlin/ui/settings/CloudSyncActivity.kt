@@ -26,7 +26,6 @@ import org.telegram.ui.ActionBar.Theme
 import org.telegram.ui.Cells.TextCheckCell
 import org.telegram.ui.Components.AvatarDrawable
 import org.telegram.ui.Components.BackupImageView
-import org.telegram.ui.Components.Bulletin
 import org.telegram.ui.Components.BulletinFactory
 import org.telegram.ui.Components.ItemOptions
 import org.telegram.ui.Components.LayoutHelper
@@ -45,7 +44,6 @@ class CloudSyncActivity : SettingsPageActivity() {
     private var loading: Boolean = false
     private var hasBackup: Boolean = false
 
-    private var syncButtonContainer: FrameLayout? = null
     private var syncButton: ButtonWithCounterView? = null
     private var headerView: View? = null
 
@@ -58,27 +56,10 @@ class CloudSyncActivity : SettingsPageActivity() {
             InuConfig.CLOUD_SYNC_ACCOUNT_ID.value = stored
         }
         syncAccount = resolveAccount(stored)
-        val view = super.createView(context) as FrameLayout
-        view.addView(
-            buildSyncButton(context),
-            LayoutHelper.createFrame(LayoutHelper.MATCH_PARENT, LayoutHelper.WRAP_CONTENT, Gravity.BOTTOM)
-        )
-        listView.setPadding(0, 0, 0, dp(STICKY_HEIGHT_DP))
-        Bulletin.addDelegate(this, object : Bulletin.Delegate {
-            override fun getBottomOffset(tag: Int): Int = syncButtonContainer?.height ?: 0
-        })
+        val view = super.createView(context)
+        attachStickyButton(view, buildSyncButton(context))
         reloadFromCloud()
         return view
-    }
-
-    override fun onFragmentDestroy() {
-        Bulletin.removeDelegate(this)
-        super.onFragmentDestroy()
-    }
-
-    override fun onInsets(left: Int, top: Int, right: Int, bottom: Int) {
-        listView?.setPadding(0, 0, 0, bottom + dp(STICKY_HEIGHT_DP))
-        syncButtonContainer?.setPadding(dp(16), dp(8), dp(16), dp(8) + bottom)
     }
 
     private fun resolveAccount(userId: Long): Int {
@@ -256,20 +237,14 @@ class CloudSyncActivity : SettingsPageActivity() {
         return frame
     }
 
-    private fun buildSyncButton(ctx: Context): FrameLayout {
+    private fun buildSyncButton(ctx: Context): View {
         val btn = ButtonWithCounterView(ctx, true, resourceProvider).setRound().apply {
             setText(LocaleController.getString(R.string.InuCloudSyncNow), false)
             setOnClickListener { onSyncClick() }
         }
-        val container = FrameLayout(ctx).apply {
-            setBackgroundColor(Theme.getColor(Theme.key_windowBackgroundWhite))
-            setPadding(dp(16), dp(8), dp(16), dp(8))
-            addView(btn, LayoutHelper.createFrame(LayoutHelper.MATCH_PARENT, 48f))
-        }
         syncButton = btn
-        syncButtonContainer = container
         updateSyncButtonEnabled()
-        return container
+        return btn
     }
 
     private fun updateSyncButtonEnabled() {
@@ -401,14 +376,10 @@ class CloudSyncActivity : SettingsPageActivity() {
         b.show()
     }
 
-    private fun dp(v: Int) = AndroidUtilities.dp(v.toFloat())
-
     companion object {
         private val BUTTON_SYNC_ACCOUNT = InuUtils.generateId()
         private val BUTTON_RESTORE = InuUtils.generateId()
         private val BUTTON_DELETE = InuUtils.generateId()
         private val TOGGLE_AUTO = InuUtils.generateId()
-
-        private const val STICKY_HEIGHT_DP = 64
     }
 }

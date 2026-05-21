@@ -51,7 +51,7 @@ class PasscodeAccountSettingsActivity(private val account: Int) : SettingsPageAc
         if (hasCode) {
             items.add(
                 UItem.asCheck(HIDE, LocaleController.getString(R.string.InuPasscodeHideAccount))
-                    .setChecked(PasscodeHelper.isAccountHidden(account))
+                    .setChecked(PasscodeHelper.isAccountHiddenByPasscode(account))
             )
             items.add(UItem.asShadow(LocaleController.getString(R.string.InuPasscodeHideAccountInfo)))
         }
@@ -72,7 +72,7 @@ class PasscodeAccountSettingsActivity(private val account: Int) : SettingsPageAc
             }
             REMOVE -> confirmRemove()
             HIDE -> {
-                val hide = !PasscodeHelper.isAccountHidden(account)
+                val hide = !PasscodeHelper.isAccountHiddenByPasscode(account)
                 PasscodeHelper.setAccountHidden(account, hide)
                 (view as? TextCheckCell)?.isChecked = hide
                 postNotificationForAllAccounts(NotificationCenter.mainUserInfoChanged)
@@ -92,7 +92,7 @@ class PasscodeAccountSettingsActivity(private val account: Int) : SettingsPageAc
             .setMessage(LocaleController.getString(R.string.InuPasscodeRemoveConfirm))
             .setNegativeButton(LocaleController.getString(R.string.Cancel), null)
             .setPositiveButton(LocaleController.getString(R.string.DisablePasscodeTurnOff)) { _, _ ->
-                val wasHidden = PasscodeHelper.isAccountHidden(account)
+                val wasHidden = PasscodeHelper.isAccountHiddenByPasscode(account)
                 PasscodeHelper.removeForAccount(account)
                 if (wasHidden) postNotificationForAllAccounts(NotificationCenter.mainUserInfoChanged)
                 listView.adapter.update(true)

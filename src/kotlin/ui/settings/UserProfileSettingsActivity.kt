@@ -61,12 +61,6 @@ class UserProfileSettingsActivity : SettingsPageActivity() {
         )
         items.add(
             UItem.asCheck(
-                TOGGLE_HIDE_MY_PHONE_NUMBER,
-                LocaleController.getString(R.string.InuHideMyPhoneNumber)
-            ).setChecked(InuConfig.HIDE_MY_PHONE_NUMBER.value)
-        )
-        items.add(
-            UItem.asCheck(
                 TOGGLE_DISABLE_CHAT_TITLE_PHONE,
                 LocaleController.getString(R.string.InuDisableChatTitlePhone)
             ).setChecked(InuConfig.DISABLE_CHAT_TITLE_PHONE.value)
@@ -107,11 +101,6 @@ class UserProfileSettingsActivity : SettingsPageActivity() {
                 InuConfig.PROFILE_ID_MODE.value = which
             }
 
-            TOGGLE_HIDE_MY_PHONE_NUMBER -> {
-                val new = InuConfig.HIDE_MY_PHONE_NUMBER.toggle()
-                (view as? TextCheckCell)?.isChecked = new
-            }
-
             TOGGLE_DISABLE_CHAT_TITLE_PHONE -> {
                 val new = InuConfig.DISABLE_CHAT_TITLE_PHONE.toggle()
                 (view as? TextCheckCell)?.isChecked = new
@@ -125,7 +114,6 @@ class UserProfileSettingsActivity : SettingsPageActivity() {
         private val TOGGLE_DISABLE_PROFILE_SCROLL_SNAP = InuUtils.generateId()
         private val TOGGLE_PROFILE_PREFER_MEDIA_TAB = InuUtils.generateId()
         private val BUTTON_PROFILE_ID_MODE = InuUtils.generateId()
-        private val TOGGLE_HIDE_MY_PHONE_NUMBER = InuUtils.generateId()
         private val TOGGLE_DISABLE_CHAT_TITLE_PHONE = InuUtils.generateId()
 
         @JvmField val PAGE = SearchRegistry.Page(
@@ -139,7 +127,6 @@ class UserProfileSettingsActivity : SettingsPageActivity() {
                 SearchRegistry.Entry("disable-profile-scroll-snap", R.string.InuDisableProfileScrollSnap, TOGGLE_DISABLE_PROFILE_SCROLL_SNAP),
                 SearchRegistry.Entry("profile-prefer-media-tab", R.string.InuProfilePreferMediaTab, TOGGLE_PROFILE_PREFER_MEDIA_TAB),
                 SearchRegistry.Entry("profile-id-mode", R.string.InuProfileIdMode, BUTTON_PROFILE_ID_MODE),
-                SearchRegistry.Entry("hide-my-phone-number", R.string.InuHideMyPhoneNumber, TOGGLE_HIDE_MY_PHONE_NUMBER),
                 SearchRegistry.Entry("disable-chat-title-phone", R.string.InuDisableChatTitlePhone, TOGGLE_DISABLE_CHAT_TITLE_PHONE),
             ),
         )

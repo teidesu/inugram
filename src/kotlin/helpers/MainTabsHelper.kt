@@ -140,7 +140,7 @@ object MainTabsHelper {
         val current = UserConfig.selectedAccount
         val accounts = mutableListOf<Int>()
         for (a in 0 until UserConfig.MAX_ACCOUNT_COUNT) {
-            if (UserConfig.getInstance(a).isClientActivated) accounts.add(a)
+            if (UserConfig.getInstance(a).isClientActivated && (a == current || !PasscodeHelper.isAccountHidden(a))) accounts.add(a)
         }
         if (accounts.size < 2) return false
         AccountOrderHelper.sort(accounts)

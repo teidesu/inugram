@@ -5,17 +5,10 @@ import android.view.View
 import desu.inugram.InuConfig
 import desu.inugram.SearchRegistry
 import desu.inugram.helpers.InuUtils
-import desu.inugram.helpers.UrlCleanerHelper
 import desu.inugram.helpers.WebPreviewHelper
-import desu.inugram.ui.settings.WebPreviewReplacementsActivity
-import org.telegram.messenger.AndroidUtilities
 import org.telegram.messenger.LocaleController
 import org.telegram.messenger.R
-import org.telegram.messenger.Utilities
-import org.telegram.ui.Cells.NotificationsCheckCell
 import org.telegram.ui.Cells.TextCheckCell
-import org.telegram.ui.Components.BulletinFactory
-import org.telegram.ui.Components.ItemOptions
 import org.telegram.ui.Components.UItem
 import org.telegram.ui.Components.UniversalAdapter
 
@@ -62,7 +55,6 @@ class BehaviorSettingsActivity : SettingsPageActivity() {
         deleteForBothGroup.addTo(items) { listView.adapter.update(true) }
         items.add(UItem.asShadow(null))
 
-        items.add(stripTrackingParamsItem())
         items.add(
             UItem.asButton(
                 BUTTON_WEB_PREVIEW_REPLACEMENTS,
@@ -109,11 +101,6 @@ class BehaviorSettingsActivity : SettingsPageActivity() {
                 (view as? TextCheckCell)?.isChecked = new
             }
 
-            TOGGLE_STRIP_TRACKING_PARAMS -> {
-                val new = InuConfig.STRIP_TRACKING_PARAMS.toggle()
-                (view as? NotificationsCheckCell)?.isChecked = new
-            }
-
             TOGGLE_FASTER_DOWNLOADS -> {
                 val new = InuConfig.FASTER_DOWNLOADS.toggle()
                 (view as? TextCheckCell)?.isChecked = new
@@ -122,74 +109,6 @@ class BehaviorSettingsActivity : SettingsPageActivity() {
             TOGGLE_FASTER_UPLOADS -> {
                 val new = InuConfig.FASTER_UPLOADS.toggle()
                 (view as? TextCheckCell)?.isChecked = new
-            }
-        }
-    }
-
-    private fun stripTrackingParamsItem(): UItem {
-        val title = LocaleController.getString(R.string.InuStripTrackingParams)
-        val subtitle = LocaleController.formatString(
-            R.string.InuStripTrackingParamsSource, UrlCleanerHelper.lastUpdated ?: "?",
-        )
-        val checked = InuConfig.STRIP_TRACKING_PARAMS.value
-        return UItem.asButtonCheck(TOGGLE_STRIP_TRACKING_PARAMS, title, subtitle).also {
-            it.checked = checked
-            it.bind = Utilities.Callback { view ->
-                (view as? NotificationsCheckCell)?.apply {
-                    setTextAndValueAndCheck(title, subtitle, checked, 0, true, true)
-                    setDrawLine(false)
-                }
-            }
-        }
-    }
-
-    override fun onLongClick(item: UItem, view: View, position: Int, x: Float, y: Float): Boolean {
-        if (item.id == TOGGLE_STRIP_TRACKING_PARAMS) {
-            showStripTrackingParamsOptions(item, view)
-            return true
-        }
-        return super.onLongClick(item, view, position, x, y)
-    }
-
-    private fun showStripTrackingParamsOptions(item: UItem, anchor: View) {
-        val opts = ItemOptions.makeOptions(this, anchor)
-            .add(R.drawable.msg_download, LocaleController.getString(R.string.InuStripTrackingParamsUpdate)) {
-                fetchLatestStripTrackingParams()
-            }
-        if (UrlCleanerHelper.isUsingOverride) {
-            opts.add(R.drawable.msg_delete, LocaleController.getString(R.string.InuStripTrackingParamsRevert)) {
-                UrlCleanerHelper.resetToBundled()
-                Utilities.globalQueue.postRunnable {
-                    UrlCleanerHelper.preload()
-                    AndroidUtilities.runOnUIThread { listView?.adapter?.update(true) }
-                }
-            }
-        }
-        addCopyLinkOption(opts, item)
-        opts.show()
-    }
-
-    private fun fetchLatestStripTrackingParams() {
-        Utilities.globalQueue.postRunnable {
-            val result = runCatching { UrlCleanerHelper.fetchLatest() }
-            UrlCleanerHelper.preload()
-            AndroidUtilities.runOnUIThread {
-                listView?.adapter?.update(true)
-                val bulletin = BulletinFactory.of(this)
-                result.fold(
-                    onSuccess = { updated ->
-                        val msg = if (updated) R.string.InuStripTrackingParamsUpdated
-                        else R.string.InuStripTrackingParamsAlreadyLatest
-                        bulletin.createSimpleBulletin(R.raw.contact_check, LocaleController.getString(msg)).show()
-                    },
-                    onFailure = { err ->
-                        bulletin.createSimpleBulletin(
-                            R.raw.error,
-                            LocaleController.getString(R.string.InuStripTrackingParamsUpdateFailed),
-                            err.message ?: "",
-                        ).show()
-                    },
-                )
             }
         }
     }
@@ -230,7 +149,6 @@ class BehaviorSettingsActivity : SettingsPageActivity() {
         private val TOGGLE_DISABLE_CHAT_BUBBLES = InuUtils.generateId()
         private val BUTTON_TEXT_CLASSIFIER_MODE = InuUtils.generateId()
         private val TOGGLE_CALL_CONFIRMATION = InuUtils.generateId()
-        private val TOGGLE_STRIP_TRACKING_PARAMS = InuUtils.generateId()
         private val BUTTON_WEB_PREVIEW_REPLACEMENTS = InuUtils.generateId()
         private val TOGGLE_FASTER_DOWNLOADS = InuUtils.generateId()
         private val TOGGLE_FASTER_UPLOADS = InuUtils.generateId()
@@ -250,7 +168,6 @@ class BehaviorSettingsActivity : SettingsPageActivity() {
                 SearchRegistry.Entry("disable-chat-bubbles", R.string.InuDisableChatBubbles, TOGGLE_DISABLE_CHAT_BUBBLES),
                 SearchRegistry.Entry("text-classifier-mode", R.string.InuTextClassifierMode, BUTTON_TEXT_CLASSIFIER_MODE),
                 SearchRegistry.Entry("call-confirmation", R.string.InuCallConfirmation, TOGGLE_CALL_CONFIRMATION),
-                SearchRegistry.Entry("strip-tracking-params", R.string.InuStripTrackingParams, TOGGLE_STRIP_TRACKING_PARAMS),
                 SearchRegistry.Entry("web-preview-replacements", R.string.InuWebPreviewReplacements, BUTTON_WEB_PREVIEW_REPLACEMENTS),
                 SearchRegistry.Entry("faster-downloads", R.string.InuFasterDownloads, TOGGLE_FASTER_DOWNLOADS),
                 SearchRegistry.Entry("faster-uploads", R.string.InuFasterUploads, TOGGLE_FASTER_UPLOADS),

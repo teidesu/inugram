@@ -95,7 +95,7 @@ index 0000000..0000000 100644
 +                TextCell cell = (TextCell) holder.itemView;
 +                desu.inugram.helpers.SearchTopAction action = inu_topAction;
 +                if (action != null) {
-+                    cell.setTextAndIcon(action.getLabel(), R.drawable.msg_link2, false);
++                    cell.setTextAndIcon(action.getLabel(), action.getIconRes(), false);
 +                }
 +                break;
 +            }
@@ -117,7 +117,7 @@ diff --git a/TMessagesProj/src/main/java/org/telegram/ui/DialogsActivity.java b/
 index 0000000..0000000 100644
 --- a/TMessagesProj/src/main/java/org/telegram/ui/DialogsActivity.java
 +++ b/TMessagesProj/src/main/java/org/telegram/ui/DialogsActivity.java
-@@ -12815,6 +12815,10 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
+@@ -12816,6 +12816,10 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
          });
          searchViewPager.searchListView.setOnItemClickListener((view, position, x, y) -> {
              Object item = searchViewPager.dialogsSearchAdapter.getItem(position);

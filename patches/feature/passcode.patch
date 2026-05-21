@@ -68,7 +68,7 @@ diff --git a/TMessagesProj/src/main/java/org/telegram/ui/DialogsActivity.java b/
 index 0000000..0000000 100644
 --- a/TMessagesProj/src/main/java/org/telegram/ui/DialogsActivity.java
 +++ b/TMessagesProj/src/main/java/org/telegram/ui/DialogsActivity.java
-@@ -3839,7 +3839,7 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
+@@ -3838,7 +3838,7 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
  
              for (int a = 0; a < UserConfig.MAX_ACCOUNT_COUNT; a++) {
                  TLRPC.User u = AccountInstance.getInstance(a).getUserConfig().getCurrentUser();

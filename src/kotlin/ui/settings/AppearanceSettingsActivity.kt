@@ -5,12 +5,14 @@ import android.content.Intent
 import android.net.Uri
 import android.os.Build
 import android.view.View
+import androidx.annotation.RequiresApi
 import desu.inugram.InuConfig
 import desu.inugram.InuHooks
 import desu.inugram.SearchRegistry
 import desu.inugram.helpers.FontHelper
 import desu.inugram.helpers.InuUtils
 import desu.inugram.helpers.MapsHelper
+import desu.inugram.helpers.MonetHelper
 import org.telegram.messenger.AndroidUtilities
 import org.telegram.messenger.FileLog
 import org.telegram.messenger.LocaleController
@@ -120,23 +122,36 @@ class AppearanceSettingsActivity : SettingsPageActivity() {
         items.add(UItem.asShadow(null))
 
         if (animationSpeedSlider == null) animationSpeedSlider = SliderCell(
-            this.context, min = 0.5f, max = 2f,
+            this.context, min = 0.5f, max = 3f,
             defaultValue = InuConfig.ANIMATION_SPEED.default,
-            initialValue = if (InuConfig.ANIMATION_SPEED.value >= 2f) 2f else InuConfig.ANIMATION_SPEED.value,
+            initialValue = if (InuConfig.ANIMATION_SPEED.value >= 3f) 3f else InuConfig.ANIMATION_SPEED.value,
             step = 0.05f,
             format = {
-                if (it >= 2f) LocaleController.getString(R.string.InuAnimationSpeedInstant)
+                if (it >= 3f) LocaleController.getString(R.string.InuAnimationSpeedInstant)
                 else String.format("%.2fx", it)
             },
             onChanged = {
-                InuConfig.ANIMATION_SPEED.value = if (it >= 2f) 9999f else it
+                InuConfig.ANIMATION_SPEED.value = if (it >= 3f) 9999f else it
                 InuHooks.syncAnimationSpeed()
             },
         )
-        items.add(UItem.asHeader(LocaleController.getString(R.string.InuAnimationSpeed)))
-        items.add(UItem.asCustom(animationSpeedSlider))
-        items.add(UItem.asShadow(LocaleController.getString(R.string.InuAnimationSpeedInfo)))
 
+        items.add(UItem.asHeader(addExperimentalSpan(LocaleController.getString(R.string.InuMaterial3))))
+        items.add(
+            UItem.asCheck(
+                TOGGLE_MATERIAL3_SWITCHES,
+                LocaleController.getString(R.string.InuMaterial3Switches)
+            ).setChecked(InuConfig.MATERIAL3_SWITCHES.value)
+        )
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+            items.add(
+                UItem.asButton(
+                    BUTTON_MONET_THEME,
+                    LocaleController.getString(R.string.InuMonetTheme),
+                    monetThemeModeLabel(MonetHelper.getThemeMode()),
+                )
+            )
+        }
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
             items.add(
                 UItem.asButton(
@@ -145,8 +160,8 @@ class AppearanceSettingsActivity : SettingsPageActivity() {
                     predictiveBackModeLabel(InuConfig.PREDICTIVE_BACK_MODE.value),
                 )
             )
-            items.add(UItem.asShadow(LocaleController.getString(R.string.InuPredictiveBackInfo)))
         }
+        items.add(UItem.asShadow(null))
 
         items.add(
             UItem.asHeader(addExperimentalSpan(LocaleController.getString(R.string.InuNonIslandUI)))
@@ -176,6 +191,10 @@ class AppearanceSettingsActivity : SettingsPageActivity() {
             ).setChecked(InuConfig.HIDE_FADE_VIEW.value)
         )
         items.add(UItem.asShadow(LocaleController.getString(R.string.InuNonIslandHint)))
+
+        items.add(UItem.asHeader(LocaleController.getString(R.string.InuAnimationSpeed)))
+        items.add(UItem.asCustom(animationSpeedSlider))
+        items.add(UItem.asShadow(LocaleController.getString(R.string.InuAnimationSpeedInfo)))
     }
 
     override fun onClick(item: UItem, view: View, position: Int, x: Float, y: Float) {
@@ -278,6 +297,13 @@ class AppearanceSettingsActivity : SettingsPageActivity() {
                 (view as? NotificationsCheckCell)?.isChecked = new
             }
 
+            TOGGLE_MATERIAL3_SWITCHES -> {
+                val new = InuConfig.MATERIAL3_SWITCHES.toggle()
+                (view as? TextCheckCell)?.isChecked = new
+                invalidateVisibleRows()
+                softRebuild()
+            }
+
             TOGGLE_NON_ISLAND_TAB_BARS -> {
                 val new = InuConfig.NON_ISLAND_TAB_BARS.toggle()
                 (view as? TextCheckCell)?.isChecked = new
@@ -293,6 +319,21 @@ class AppearanceSettingsActivity : SettingsPageActivity() {
             TOGGLE_NON_ISLAND_CHAT_ELEMENTS -> {
                 val new = InuConfig.NON_ISLAND_CHAT_ELEMENTS.toggle()
                 (view as? TextCheckCell)?.isChecked = new
+            }
+
+            BUTTON_MONET_THEME -> if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) RadioItemOptions.show(
+                this, view,
+                listOf(
+                    LocaleController.getString(R.string.InuMonetThemeDisabled),
+                    LocaleController.getString(R.string.InuMonetThemeLight),
+                    LocaleController.getString(R.string.InuMonetThemeDark),
+                    LocaleController.getString(R.string.InuMonetThemeAmoled),
+                    LocaleController.getString(R.string.InuMonetThemeAuto),
+                    LocaleController.getString(R.string.InuMonetThemeAutoAmoled),
+                ),
+                MonetHelper.getThemeMode().ordinal,
+            ) { which ->
+                MonetHelper.setThemeMode(MonetHelper.ThemeMode.entries[which])
             }
 
             BUTTON_PREDICTIVE_BACK_MODE -> RadioItemOptions.show(
@@ -378,10 +419,22 @@ class AppearanceSettingsActivity : SettingsPageActivity() {
         private const val REQ_PICK_FONT = 31010
         private val TOGGLE_DISABLE_SCRIM_BLUR = InuUtils.generateId()
         private val TOGGLE_REDUCE_MENU_MOTION = InuUtils.generateId()
+        private val TOGGLE_MATERIAL3_SWITCHES = InuUtils.generateId()
         private val BUTTON_ICON_REPLACEMENT = InuUtils.generateId()
         private val BUTTON_MAP_PROVIDER = InuUtils.generateId()
         private val BUTTON_MAP_PREVIEW_PROVIDER = InuUtils.generateId()
         private val BUTTON_PREDICTIVE_BACK_MODE = InuUtils.generateId()
+        private val BUTTON_MONET_THEME = InuUtils.generateId()
+
+        @RequiresApi(Build.VERSION_CODES.S)
+        private fun monetThemeModeLabel(mode: MonetHelper.ThemeMode): String = when (mode) {
+            MonetHelper.ThemeMode.LIGHT -> LocaleController.getString(R.string.InuMonetThemeLight)
+            MonetHelper.ThemeMode.DARK -> LocaleController.getString(R.string.InuMonetThemeDark)
+            MonetHelper.ThemeMode.AMOLED -> LocaleController.getString(R.string.InuMonetThemeAmoled)
+            MonetHelper.ThemeMode.AUTO -> LocaleController.getString(R.string.InuMonetThemeAuto)
+            MonetHelper.ThemeMode.AUTO_AMOLED -> LocaleController.getString(R.string.InuMonetThemeAutoAmoled)
+            else -> LocaleController.getString(R.string.InuMonetThemeDisabled)
+        }
 
         private fun predictiveBackModeLabel(value: Int): String = when (value) {
             InuConfig.PredictiveBackModeItem.OFF -> LocaleController.getString(R.string.InuPredictiveBackOff)
@@ -389,7 +442,8 @@ class AppearanceSettingsActivity : SettingsPageActivity() {
             else -> LocaleController.getString(R.string.InuPredictiveBackMaterial3)
         }
 
-        @JvmField val PAGE = SearchRegistry.Page(
+        @JvmField
+        val PAGE = SearchRegistry.Page(
             slug = "appearance",
             titleRes = R.string.InuGeneral,
             iconRes = R.drawable.msg_settings_old,
@@ -399,6 +453,8 @@ class AppearanceSettingsActivity : SettingsPageActivity() {
                 SearchRegistry.Entry("disable-rounding", R.string.InuDisableRounding, TOGGLE_DISABLE_ROUNDING),
                 SearchRegistry.Entry("disable-scrim-blur", R.string.InuDisableScrimBlur, TOGGLE_DISABLE_SCRIM_BLUR),
                 SearchRegistry.Entry("reduce-menu-motion", R.string.InuReduceMenuMotion, TOGGLE_REDUCE_MENU_MOTION),
+                SearchRegistry.Entry("material3-switches", R.string.InuMaterial3Switches, TOGGLE_MATERIAL3_SWITCHES),
+                SearchRegistry.Entry("monet-theme", R.string.InuMonetTheme, BUTTON_MONET_THEME),
                 SearchRegistry.Entry("icon-replacement", R.string.InuIconReplacement, BUTTON_ICON_REPLACEMENT),
                 SearchRegistry.Entry("font", R.string.InuFont, BUTTON_FONT_MODE),
                 SearchRegistry.Entry("map-provider", R.string.InuMapProvider, BUTTON_MAP_PROVIDER),

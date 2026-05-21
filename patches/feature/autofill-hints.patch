@@ -4,11 +4,24 @@ Date: Fri, 10 Apr 2026 03:26:07 +0300
 Subject: add password autofill hints for password managers
 
 ---
+ .../java/org/telegram/ui/Components/EditTextBoldCursor.java     | 1 +
  TMessagesProj/src/main/java/org/telegram/ui/LoginActivity.java  | 2 ++
  .../main/java/org/telegram/ui/TwoStepVerificationActivity.java  | 1 +
  .../java/org/telegram/ui/TwoStepVerificationSetupActivity.java  | 2 ++
- 3 files changed, 5 insertions(+)
+ 4 files changed, 6 insertions(+)
 
+diff --git a/TMessagesProj/src/main/java/org/telegram/ui/Components/EditTextBoldCursor.java b/TMessagesProj/src/main/java/org/telegram/ui/Components/EditTextBoldCursor.java
+index 0000000..0000000 100644
+--- a/TMessagesProj/src/main/java/org/telegram/ui/Components/EditTextBoldCursor.java
++++ b/TMessagesProj/src/main/java/org/telegram/ui/Components/EditTextBoldCursor.java
+@@ -335,6 +335,7 @@ public class EditTextBoldCursor extends EditTextEffects {
+     @TargetApi(Build.VERSION_CODES.O)
+     @Override
+     public int getAutofillType() {
++        if (getAutofillHints() != null) return super.getAutofillType();
+         return AUTOFILL_TYPE_NONE;
+     }
+ 
 diff --git a/TMessagesProj/src/main/java/org/telegram/ui/LoginActivity.java b/TMessagesProj/src/main/java/org/telegram/ui/LoginActivity.java
 index 0000000..0000000 100644
 --- a/TMessagesProj/src/main/java/org/telegram/ui/LoginActivity.java

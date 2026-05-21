@@ -145,7 +145,7 @@
     <string name="InuCallConfirmation">通話前に確認</string>
     <string name="InuCallConfirmationTitle">通話の確認</string>
     <string name="InuCallConfirmationText">**%1$s** に発信しますか？</string>
-    <string name="InuDisableChatBubbles">会話バブルを無効化</string>
+    <string name="InuDisableChatBubbles">Android の通知バブルを無効化</string>
     <string name="InuInPlaceTranslation">その場で翻訳</string>
     <string name="InuTranslateWebPreviews">ウェブプレビューを翻訳</string>
     <string name="InuTranslateInstantView">ページを翻訳</string>
@@ -240,7 +240,7 @@
     <string name="InuNonIslandTabBars">タブバー</string>
     <string name="InuNonIslandGlobalSearch">グローバル検索</string>
     <string name="InuNonIslandChatElements">チャット要素</string>
-    <string name="InuNonIslandHint">非アイランド UI モードでは、要素を 12.5 以前の UI に近づけようとします。最良の体験には、すべて有効か無効に揃えてください。\n視覚的なバグが残っている可能性があるのでご注意ください。</string>
+    <string name="InuNonIslandHint">非アイランド UI モードでは、要素を旧 UI に近づけようとします。最良の体験には、すべて有効か無効に揃えてください。\n視覚的なバグが残っている可能性があるのでご注意ください。</string>
 
     <string name="InuHideFadeView">フェードビューを非表示</string>
 
@@ -277,7 +277,7 @@
     <string name="InuPinnedReactionsRemoveAll">すべて削除</string>
     <string name="InuPinnedReactionsRemoveAllConfirm">ピン留めリアクションをすべて削除しますか？</string>
 
-    <string name="InuOldMentionIndicator">12.6 以前のメンション表示</string>
+    <string name="InuOldMentionIndicator">従来のメンション表示</string>
 
     <string name="InuShowForwardTime">転送時刻を表示</string>
 
@@ -424,4 +424,27 @@
     <string name="InuMessageMenuItems">項目</string>
     <string name="InuMessageMenuOrderInfo">メッセージのコンテキストメニューの項目を並べ替えたり非表示にできます。ハンドルをドラッグして並べ替え、スイッチで非表示を切り替えます。</string>
     <string name="InuMessageMenuReset">デフォルトに戻す</string>
+    <string name="InuPrivacySecurity">プライバシーとセキュリティ</string>
+    <string name="InuPerAccountPasscode">アカウントごとのパスコード</string>
+    <string name="InuHideInugramSettings">inugram の設定を非表示</string>
+    <string name="InuParanoiaDisableNotifications">通知を無効化</string>
+    <string name="InuParanoiaHideOtherAccounts">他のアカウントを非表示</string>
+    <string name="InuParanoiaDisguise">Telegram に偽装</string>
+    <string name="InuParanoiaDisguiseInfo">ランチャーのアイコンと名前のみが変わります。Android の制限により、通知やアプリ内の名前は引き続き「Inugram」と表示されます。</string>
+    <string name="InuParanoiaMode">パラノイアモード</string>
+    <string name="InuParanoiaModeInfo">パラノイアモードでは、「危険な」チャットを隠し、必要に応じて標準アプリに偽装することで、誰かに端末を見られる事態に「備える」ことができます。</string>
+    <string name="InuParanoiaSelect">隠すチャット</string>
+    <string name="InuParanoiaSelectInfo">シークレットチャットは常に隠されます</string>
+    <string name="InuParanoiaCount">%1$d 件のチャット</string>
+    <string name="InuParanoiaExitCode">解除コード</string>
+    <string name="InuParanoiaExitCodeSet">解除コードを設定</string>
+    <string name="InuParanoiaExitCodeChange">解除コードを変更</string>
+    <string name="InuParanoiaExitCodeHint">解除コード</string>
+    <string name="InuParanoiaExitCodeInfo">グローバル検索にこのコードを入力するとパラノイアモードを解除します</string>
+    <string name="InuParanoiaExitCodeSaved">解除コードを保存しました</string>
+    <string name="InuParanoiaExitCodeEmpty">解除コードを入力してください</string>
+    <string name="InuParanoiaEnable">パラノイアモードに入る</string>
+    <string name="InuParanoiaEnableConfirm">パラノイアモードに入って再起動しますか？この項目は消えます — 戻るにはチャット検索で解除コードを入力するか、アプリを再インストールするしかありません！</string>
+    <string name="InuParanoiaNeedSetup">先に解除コードを設定し、チャットを少なくとも1つ選んでください。</string>
+    <string name="InuParanoiaExit">パラノイアモードを解除</string>
 </resources>

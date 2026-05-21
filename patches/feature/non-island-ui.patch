@@ -1513,7 +1513,7 @@ index 0000000..0000000 100644
              iBlur3FactoryBlur = new BlurredBackgroundDrawableViewFactory(iBlur3SourceGlassFrosted);
          } else {
              scrollableViewNoiseSuppressor = null;
-@@ -4176,13 +4188,13 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
+@@ -4175,13 +4187,13 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
                                      viewsH += viewPage.dialogsAdapter.getItemHeight(i);
                                  }
                                  int canScrollDy = -(view.getTop() - pTop) + viewsH;
@@ -1529,7 +1529,7 @@ index 0000000..0000000 100644
                                      canScrollDy += dp(SEARCH_FIELD_HEIGHT);
                                  }
                                  int positiveDy = Math.abs(dy);
-@@ -4690,6 +4702,7 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
+@@ -4689,6 +4701,7 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
          searchTabsViewBackground.setPadding(dp(6.666f));
          searchTabsAndFiltersLayout.setPadding(0, dp(7), 0, dp(7));
          searchTabsAndFiltersLayout.setBlurredBackground(searchTabsViewBackground);
@@ -1537,7 +1537,7 @@ index 0000000..0000000 100644
  
          filtersView = new FiltersView(getParentActivity(), null);
          filtersView.setPadding(0, dp(3), 0, dp(3));
-@@ -4777,10 +4790,14 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
+@@ -4778,10 +4791,14 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
                  BlurredBackgroundProviderImpl.topPanel(resourceProvider));
  
  
@@ -1552,7 +1552,7 @@ index 0000000..0000000 100644
  
              fragmentLocationContextViewWrapper = new FrameLayout(context);
              topPanelLayout.addView(fragmentLocationContextViewWrapper);
-@@ -5099,6 +5116,7 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
+@@ -5100,6 +5117,7 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
              filterTabsView.setPadding(0, dp(7), 0, dp(7));
              filterTabsView.setBlurredBackground(filterTabsViewBackground);
              contentView.addView(filterTabsView, LayoutHelper.createFrame(LayoutHelper.MATCH_PARENT, 36 + 7 + 7, Gravity.TOP, 4, 0, 4, 0));
@@ -1560,7 +1560,7 @@ index 0000000..0000000 100644
          }
  
          if (fragmentSearchField != null) {
-@@ -5284,6 +5302,7 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
+@@ -5285,6 +5303,7 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
          }
          if (fragmentSearchField != null) {
              contentView.addView(fragmentSearchField, LayoutHelper.createFrame(LayoutHelper.MATCH_PARENT, 48, Gravity.TOP, 7, -2, 7, 0));
@@ -1568,7 +1568,7 @@ index 0000000..0000000 100644
          }
  
  
-@@ -5358,7 +5377,7 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
+@@ -5359,7 +5378,7 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
              fragmentSearchField.editText.setText(initialSearchString);
              fragmentSearchField.editText.setSelection(initialSearchString.length());
              initialSearchString = null;
@@ -1577,7 +1577,7 @@ index 0000000..0000000 100644
                  fragmentSearchField.setTranslationY(-dp(FILTER_TABS_HEIGHT) + getSearchFieldAdditionOffset());
              }
          } else {
-@@ -5540,7 +5559,7 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
+@@ -5541,7 +5560,7 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
          // contentView.addView(dialogsActivityStatusLayout, LayoutHelper.createFrame(LayoutHelper.MATCH_PARENT, LayoutHelper.WRAP_CONTENT, Gravity.TOP));
  
          if (topPanelLayout != null) {
@@ -1586,7 +1586,7 @@ index 0000000..0000000 100644
          }
  
          updateStoriesVisibility(false);
-@@ -5667,6 +5686,9 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
+@@ -5668,6 +5687,9 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
      }
  
      private int getMaxScrollYOffset() {
@@ -1596,7 +1596,7 @@ index 0000000..0000000 100644
          if (hasStories) {
              return dp(DialogStoriesCell.HEIGHT_IN_DP) + dp(SEARCH_FIELD_HEIGHT);
          } else {
-@@ -6233,7 +6255,7 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
+@@ -6234,7 +6256,7 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
              dialogsHintCellVisible = false;
          }
  
@@ -1605,7 +1605,7 @@ index 0000000..0000000 100644
              dialogsHintCellVisible = false;
          }
  
-@@ -6252,7 +6274,7 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
+@@ -6253,7 +6275,7 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
              && folderId == 0 && initialDialogsType == DIALOGS_TYPE_DEFAULT
              && !getMessagesController().getUnconfirmedAuthController().auths.isEmpty()
              && (rightSlidingDialogContainer == null || !rightSlidingDialogContainer.hasFragment())
@@ -1614,7 +1614,7 @@ index 0000000..0000000 100644
  
          if (isVisible) {
              if (authHintCell == null) {
-@@ -6275,7 +6297,7 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
+@@ -6276,7 +6298,7 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
              && folderId == 0 && initialDialogsType == DIALOGS_TYPE_DEFAULT
              && getGiftAuctionsController().hasActiveAuctions()
              && (rightSlidingDialogContainer == null || !rightSlidingDialogContainer.hasFragment())
@@ -1623,7 +1623,7 @@ index 0000000..0000000 100644
  
          if (isVisible && activeGiftAuctionsHintCell == null) {
              activeGiftAuctionsHintCell = new ActiveGiftAuctionsHintCell(getContext(), currentAccount);
-@@ -6474,13 +6496,14 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
+@@ -6475,13 +6497,14 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
              storiesHeight = dp(DialogStoriesCell.HEIGHT_IN_DP);
          }
          float totalOffset;
@@ -1641,7 +1641,7 @@ index 0000000..0000000 100644
          }
          totalOffset += storiesOverscroll;
  
-@@ -6501,15 +6524,22 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
+@@ -6502,15 +6525,22 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
          if (filterTabsView != null) {
              filterTabsView.setTranslationY(totalOffset - searchOffset);
              filtersTabVisibility = filterTabsView.getAlpha();
@@ -1669,7 +1669,7 @@ index 0000000..0000000 100644
              topPanelsVisibility = topPanelLayout.getMetadata().getTotalVisibility();
              topPanelsHeight = topPanelLayout.getAnimatedHeightWithPadding(0);
          }
-@@ -7091,7 +7121,7 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
+@@ -7092,7 +7122,7 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
                      (filterTabsView != null && filterTabsView.getVisibility() == View.VISIBLE ? filterTabsView.getMeasuredHeight() : 0) +
                      (topPanelLayout != null ? topPanelLayout.getHeight() : 0) +
                      (dialogStoriesCell != null && dialogStoriesCellVisible ? (int) ((1f - dialogStoriesCell.getCollapsedProgress()) * dp(DialogStoriesCell.HEIGHT_IN_DP)) : 0) +
@@ -1678,7 +1678,7 @@ index 0000000..0000000 100644
                  );
              }
  
-@@ -7462,7 +7492,7 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
+@@ -7463,7 +7493,7 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
              }
              if (searchViewPager != null) {
                  animators.add(ObjectAnimator.ofFloat(searchViewPager, View.ALPHA, show ? 1.0f : 0.0f));
@@ -1687,7 +1687,7 @@ index 0000000..0000000 100644
                      float translationY = dp(DialogStoriesCell.HEIGHT_IN_DP) + scrollYOffset + dp(SEARCH_FIELD_HEIGHT);
                      animators.add(ObjectAnimator.ofFloat(searchViewPager, SEARCH_TRANSLATION_Y, show ? translationY : 0, show ? 0 : translationY));
                  }
-@@ -7583,7 +7613,7 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
+@@ -7584,7 +7614,7 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
                  }
                  searchViewPager.setVisibility(show ? View.VISIBLE : View.GONE);
              }
@@ -1696,7 +1696,7 @@ index 0000000..0000000 100644
                  fragmentSearchField.setTranslationY((show ? -dp(FILTER_TABS_HEIGHT) : 0) + getSearchFieldAdditionOffset());
              }
              if (dialogStoriesCell != null) {
-@@ -8856,7 +8886,7 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
+@@ -8857,7 +8887,7 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
                  viewPages[i].listView.cancelClickRunnables(true);
              }
          }
@@ -1705,7 +1705,7 @@ index 0000000..0000000 100644
          float finalTranslateListHeight = translateListHeight;
          actionBarColorAnimator = ValueAnimator.ofFloat(progressToActionMode, 0);
          actionBarColorAnimator.addUpdateListener(valueAnimator -> {
-@@ -8883,7 +8913,7 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
+@@ -8884,7 +8914,7 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
                  if (actionModeFullyShowed) {
                      actionModeFullyShowed = false;
                      fixScrollYAfterArchiveOpened = true;
@@ -1714,7 +1714,7 @@ index 0000000..0000000 100644
                  } else {
                      scrollAdditionalOffset = 0;
                  }
-@@ -9846,7 +9876,7 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
+@@ -9847,7 +9877,7 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
                      viewPages[i].listView.cancelClickRunnables(true);
                  }
              }
@@ -1723,7 +1723,7 @@ index 0000000..0000000 100644
              if (translateListHeight != 0) {
                  actionModeAdditionalHeight = (int) translateListHeight;
                  fragmentView.requestLayout();
-@@ -9874,7 +9904,7 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
+@@ -9875,7 +9905,7 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
                      actionModeAdditionalHeight = 0;
                      if (finalTranslateListHeight > 0) {
                          actionModeFullyShowed = true;
@@ -1732,7 +1732,7 @@ index 0000000..0000000 100644
                      } else {
                          scrollAdditionalOffset = 0;
                      }
-@@ -12486,7 +12516,7 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
+@@ -12487,7 +12517,7 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
              @Override
              public void setTranslationY(float translationY) {
                  super.setTranslationY(translationY);
@@ -1741,7 +1741,7 @@ index 0000000..0000000 100644
                      searchTabsAndFiltersLayout.setTranslationY(translationY);
                  }
              }
-@@ -12503,7 +12533,7 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
+@@ -12504,7 +12534,7 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
              @Override
              protected void dispatchDraw(@NonNull Canvas canvas) {
                  super.dispatchDraw(canvas);
@@ -1750,7 +1750,7 @@ index 0000000..0000000 100644
                      final int t = actionBar.getMeasuredHeight()
                          + dp(ADDITIONAL_LIST_HEIGHT_DP)
                          - dp(2)
-@@ -13442,7 +13472,7 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
+@@ -13443,7 +13473,7 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
      private void checkUi_topPanelVisible() {
          //final float factor1 = 1f - animatorSearchVisible.getFloatValue();
          // final float factor2 = 1f - getRightSlidingProgress();
@@ -1759,7 +1759,7 @@ index 0000000..0000000 100644
  
          if (topPanelLayout != null) {
              final float s = lerp(0.98f, 1f, factor);
-@@ -13459,8 +13489,8 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
+@@ -13460,8 +13490,8 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
              final int bottom = AndroidUtilities.navigationBarHeight;
              final int top = dp(ADDITIONAL_LIST_HEIGHT_DP)
                  + actionBar.getMeasuredHeight()
@@ -1770,7 +1770,7 @@ index 0000000..0000000 100644
  
              searchViewPager.setPagesPadding(top, bottom, doNotRequestLayout);
          }
-@@ -13504,7 +13534,7 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
+@@ -13505,7 +13535,7 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
          }
  
          final int maxScrollWithoutSearch = getMaxScrollYOffsetWithoutSearch();
@@ -1779,7 +1779,7 @@ index 0000000..0000000 100644
  
          final float actionModeVisible = Math.max(progressToActionMode, animatorActionModeVisible.getFloatValue());
          final float searchFieldVisible = animatorSearchVisible.getFloatValue();
-@@ -13517,7 +13547,7 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
+@@ -13518,7 +13548,7 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
  
          fragmentSearchField.setAlpha(alpha);
          fragmentSearchField.setVisibility(alpha > 0 ? View.VISIBLE : View.GONE);

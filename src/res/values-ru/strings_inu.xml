@@ -145,7 +145,7 @@
     <string name="InuCallConfirmation">Спрашивать перед звонком</string>
     <string name="InuCallConfirmationTitle">Подтверждение звонка</string>
     <string name="InuCallConfirmationText">Позвонить **%1$s**?</string>
-    <string name="InuDisableChatBubbles">Отключить пузыри сообщений</string>
+    <string name="InuDisableChatBubbles">Отключить пузыри уведомлений Android</string>
     <string name="InuInPlaceTranslation">Перевод на месте</string>
     <string name="InuTranslateWebPreviews">Переводить превью ссылок</string>
     <string name="InuTranslateInstantView">Перевести страницу</string>
@@ -240,7 +240,7 @@
     <string name="InuNonIslandTabBars">Панели вкладок</string>
     <string name="InuNonIslandGlobalSearch">Глобальный поиск</string>
     <string name="InuNonIslandChatElements">Элементы чата</string>
-    <string name="InuNonIslandHint">В режиме не-«островного» интерфейса элементы подгоняются под стиль до 12.5. Для лучшего результата включайте или отключайте всё вместе.\nВероятно, остались визуальные баги — имейте в виду.</string>
+    <string name="InuNonIslandHint">В режиме не-«островного» интерфейса элементы подгоняются под старый стиль. Для лучшего результата включайте или отключайте всё вместе.\nВероятно, остались визуальные баги — имейте в виду.</string>
 
     <string name="InuHideFadeView">Скрыть градиенты затухания</string>
 
@@ -277,7 +277,7 @@
     <string name="InuPinnedReactionsRemoveAll">Удалить все</string>
     <string name="InuPinnedReactionsRemoveAllConfirm">Удалить все закреплённые реакции?</string>
 
-    <string name="InuOldMentionIndicator">Индикатор упоминаний как до 12.6</string>
+    <string name="InuOldMentionIndicator">Старый индикатор упоминаний</string>
 
     <string name="InuShowForwardTime">Показывать время пересылки</string>
 
@@ -428,4 +428,27 @@
     <string name="InuMessageMenuItems">Пункты</string>
     <string name="InuMessageMenuOrderInfo">Переставь или скрой пункты в контекстном меню сообщения. Перетаскивай ручку для перестановки, используй переключатель чтобы скрыть.</string>
     <string name="InuMessageMenuReset">Сбросить по умолчанию</string>
+    <string name="InuPrivacySecurity">Конфиденциальность и безопасность</string>
+    <string name="InuPerAccountPasscode">Код-пароль для каждого аккаунта</string>
+    <string name="InuHideInugramSettings">Скрыть настройки inugram</string>
+    <string name="InuParanoiaDisableNotifications">Отключить уведомления</string>
+    <string name="InuParanoiaHideOtherAccounts">Скрыть другие аккаунты</string>
+    <string name="InuParanoiaDisguise">Маскировка под Telegram</string>
+    <string name="InuParanoiaDisguiseInfo">Меняются только иконка и имя в лаунчере. Из-за ограничений Android уведомления и имя внутри приложения по-прежнему показывают «Inugram».</string>
+    <string name="InuParanoiaMode">Режим паранойи</string>
+    <string name="InuParanoiaModeInfo">Режим паранойи позволяет «подготовиться» к тому, что кто-то заглянет в ваш телефон: он скрывает любые «опасные» чаты и при желании маскирует приложение под стандартное.</string>
+    <string name="InuParanoiaSelect">Чаты для скрытия</string>
+    <string name="InuParanoiaSelectInfo">Секретные чаты скрываются всегда</string>
+    <string name="InuParanoiaCount">%1$d чатов</string>
+    <string name="InuParanoiaExitCode">Код выхода</string>
+    <string name="InuParanoiaExitCodeSet">Задать код выхода</string>
+    <string name="InuParanoiaExitCodeChange">Изменить код выхода</string>
+    <string name="InuParanoiaExitCodeHint">Код выхода</string>
+    <string name="InuParanoiaExitCodeInfo">Введите этот код в глобальном поиске, чтобы выйти из режима паранойи</string>
+    <string name="InuParanoiaExitCodeSaved">Код выхода сохранён</string>
+    <string name="InuParanoiaExitCodeEmpty">Введите код выхода</string>
+    <string name="InuParanoiaEnable">Войти в режим паранойи</string>
+    <string name="InuParanoiaEnableConfirm">Войти в режим паранойи и перезапустить? Этот пункт исчезнет — вернуться можно только введя код выхода в поиске по чатам или переустановив приложение!</string>
+    <string name="InuParanoiaNeedSetup">Сначала задайте код выхода и выберите хотя бы один чат.</string>
+    <string name="InuParanoiaExit">Выйти из режима паранойи</string>
 </resources>
