@@ -89,6 +89,16 @@
     <string name="InuPredictiveBackOff">Off</string>
     <string name="InuPredictiveBackStock">Stock</string>
     <string name="InuPredictiveBackMaterial3">Material 3</string>
+    <string name="InuTextSpoilerMode">Text spoiler style</string>
+    <string name="InuTextSpoilerModeDefault">Telegram</string>
+    <string name="InuTextSpoilerModeSimple">Simple</string>
+    <string name="InuTextSpoilerModeEpstein">Epstein</string>
+    <string name="InuSpoilerExtendToLineEnd">Extend spoilers to line end</string>
+    <string name="InuSpoilerExtendToLineEndInfo">Stretches spoiler blocks to the edge of the line when text ends just short of it</string>
+    <string name="InuMediaSpoilerLabel">Spoiler</string>
+    <string name="InuSimpleMediaSpoilers">Simple media spoilers</string>
+    <string name="InuSimpleMediaSpoilersInfo">Replaces the animated particle effect on photo and video spoilers with a static blur and a label inside a pill</string>
+    <string name="InuSpoilers">Spoilers</string>
     <string name="InuHideAiFeatures">Hide AI features</string>
     <string name="InuHideAiEditor">AI editor button</string>
     <string name="InuHideMessageSummary">Message summary button</string>

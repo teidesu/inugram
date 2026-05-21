@@ -152,3 +152,4 @@ bugfix/photo-viewer-crop-dismiss.patch
 bugfix/photo-viewer-rotate-crop.patch
 debloat/volume-keys-videos.patch
 bugfix/chat-preview-reactions-read.patch
+feature/better-spoilers.patch
