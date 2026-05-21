@@ -6,12 +6,12 @@ Subject: paranoia mode (hide chats, accounts, disguise as stock app)
 ---
  .../java/org/telegram/messenger/MediaDataController.java  | 2 ++
  .../java/org/telegram/messenger/MessagesController.java   | 3 +++
- .../main/java/org/telegram/messenger/MessagesStorage.java | 4 ++++
+ .../main/java/org/telegram/messenger/MessagesStorage.java | 7 +++++++
  .../org/telegram/messenger/NotificationsController.java   | 6 +++++-
  .../org/telegram/ui/Adapters/DialogsSearchAdapter.java    | 5 +++++
  .../org/telegram/ui/Adapters/SearchAdapterHelper.java     | 8 ++++----
  .../java/org/telegram/ui/Cells/AppIconsSelectorCell.java  | 1 +
- 7 files changed, 24 insertions(+), 5 deletions(-)
+ 7 files changed, 27 insertions(+), 5 deletions(-)
 
 diff --git a/TMessagesProj/src/main/java/org/telegram/messenger/MediaDataController.java b/TMessagesProj/src/main/java/org/telegram/messenger/MediaDataController.java
 index 0000000..0000000 100644
@@ -97,6 +97,16 @@ index 0000000..0000000 100644
                  DialogsSearchAdapter.DialogSearchResult dialogSearchResult = new DialogsSearchAdapter.DialogSearchResult();
                  dialogSearchResult.date = cursor.intValue(1);
                  dialogsResult.put(id, dialogSearchResult);
+@@ -17675,6 +17679,9 @@ public class MessagesStorage extends BaseController {
+                 cursor = getDatabase().queryFinalized("SELECT u.data, u.status, u.name, u.uid FROM users as u INNER JOIN contacts as c ON u.uid = c.uid");
+                 while (cursor.next()) {
+                     long uid = cursor.longValue(3);
++                    if (desu.inugram.helpers.ParanoiaHelper.isHidden(currentAccount, uid)) {
++                        continue;
++                    }
+                     if (dialogsResult.indexOfKey(uid) >= 0) {
+                         continue;
+                     }
 diff --git a/TMessagesProj/src/main/java/org/telegram/messenger/NotificationsController.java b/TMessagesProj/src/main/java/org/telegram/messenger/NotificationsController.java
 index 0000000..0000000 100644
 --- a/TMessagesProj/src/main/java/org/telegram/messenger/NotificationsController.java
@@ -146,21 +156,15 @@ diff --git a/TMessagesProj/src/main/java/org/telegram/ui/Adapters/DialogsSearchA
 index 0000000..0000000 100644
 --- a/TMessagesProj/src/main/java/org/telegram/ui/Adapters/DialogsSearchAdapter.java
 +++ b/TMessagesProj/src/main/java/org/telegram/ui/Adapters/DialogsSearchAdapter.java
-@@ -289,12 +289,14 @@ public class DialogsSearchAdapter extends RecyclerListView.SelectionAdapter {
+@@ -284,6 +284,8 @@ public class DialogsSearchAdapter extends RecyclerListView.SelectionAdapter {
+     }
+ 
+     private boolean filter(Object obj) {
++        if (obj instanceof TLRPC.User && desu.inugram.helpers.ParanoiaHelper.isHidden(currentAccount, ((TLRPC.User) obj).id)) return false;
++        if (obj instanceof TLRPC.Chat && desu.inugram.helpers.ParanoiaHelper.isHidden(currentAccount, -((TLRPC.Chat) obj).id)) return false;
+         if (dialogsType != DialogsActivity.DIALOGS_TYPE_START_ATTACH_BOT) {
+             return true;
          }
-         // add more filters if needed
-         if (obj instanceof TLRPC.User) {
-+            if (desu.inugram.helpers.ParanoiaHelper.isHidden(currentAccount, ((TLRPC.User) obj).id)) return false;
-             if (((TLRPC.User) obj).bot) {
-                 return dialogsActivity.allowBots;
-             }
-             return dialogsActivity.allowUsers;
-         } else if (obj instanceof TLRPC.Chat) {
-             TLRPC.Chat chat = (TLRPC.Chat) obj;
-+            if (desu.inugram.helpers.ParanoiaHelper.isHidden(currentAccount, -chat.id)) return false;
-             if (ChatObject.isChannel(chat)) {
-                 return dialogsActivity.allowChannels;
-             } else if (ChatObject.isMegagroup(chat)) {
 @@ -467,6 +469,7 @@ public class DialogsSearchAdapter extends RecyclerListView.SelectionAdapter {
                          for (int a = 0; a < res.messages.size(); a++) {
                              TLRPC.Message message = res.messages.get(a);
