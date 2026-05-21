@@ -172,7 +172,6 @@ object AdminLogHelper {
         // this "more options" item sits next to search; the ActionBar doesn't subtract menu
         // width for the custom title view, so reserve room for both items (+ the -9 menu shift)
         (activity.avatarContainer.layoutParams as FrameLayout.LayoutParams).rightMargin = AndroidUtilities.dp(48f + 48f + 9f)
-
         toggleDiffItem = headerItem.addSubItem(
             MENU_TOGGLE_DIFF,
             R.drawable.inu_tabler_file_diff,

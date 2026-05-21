@@ -785,6 +785,18 @@ object ChatHelper {
     }
 
     @JvmStatic
+    fun forwardBarTitle(params: MessagePreviewParams?, fallback: CharSequence): CharSequence {
+        if (params == null) return fallback
+        val res = when {
+            params.hideForwardSendersName && params.hideCaption -> R.string.InuHiddenSendersAndCaptionDescription
+            params.hideCaption -> R.string.InuHiddenCaptionDescription
+            params.hideForwardSendersName -> R.string.HiddenSendersNameDescription
+            else -> return fallback
+        }
+        return LocaleController.getString(res)
+    }
+
+    @JvmStatic
     fun onMenuOptionLongClick(
         activity: ChatActivity,
         popupLayout: ActionBarPopupWindow.ActionBarPopupWindowLayout,
