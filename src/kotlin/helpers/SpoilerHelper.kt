@@ -7,8 +7,6 @@ import android.graphics.Path
 import android.graphics.RectF
 import android.graphics.Typeface
 import android.view.View
-import androidx.core.graphics.ColorUtils
-import androidx.core.graphics.alpha
 import desu.inugram.InuConfig
 import org.telegram.messenger.AndroidUtilities.dp
 import org.telegram.messenger.LocaleController
@@ -133,6 +131,28 @@ object SpoilerHelper {
 
     @JvmStatic
     fun linkNeighbors(spoilers: List<SpoilerEffect>) {
+        // getSelectionPath emits an extra trailing-whitespace rect per line; the
+        // line-extension then stretches the main rect over it, causing duplicate
+        // overdraw with the solid styles. Zero any rect strictly contained in another
+        // on the same y-span before linking — so it draws nothing and isn't a neighbor.
+        for (i in spoilers.indices) {
+            val a = spoilers[i]
+            if (!a.inu_isTextSpoiler || a.bounds.isEmpty) continue
+            val ab = a.bounds
+            for (j in spoilers.indices) {
+                if (i == j) continue
+                val b = spoilers[j]
+                if (!b.inu_isTextSpoiler) continue
+                val bb = b.bounds
+                if (ab.top == bb.top && ab.bottom == bb.bottom
+                    && ab.left >= bb.left && ab.right <= bb.right
+                    && (ab.left > bb.left || ab.right < bb.right)
+                ) {
+                    a.setBounds(0, 0, 0, 0)
+                    break
+                }
+            }
+        }
         for (s in spoilers) {
             if (!s.inu_isTextSpoiler) continue
             s.inu_prevLeft = Float.NaN
