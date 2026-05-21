@@ -239,7 +239,8 @@ class MessageMenuOrderRow(context: Context) : android.widget.LinearLayout(contex
         }
         main.addView(
             switch,
-            LayoutHelper.createFrame(37, 20f, (if (rtl) Gravity.LEFT else Gravity.RIGHT) or Gravity.CENTER_VERTICAL, 22f, 0f, 22f, 0f)
+            // 24dp tall so the MD3 switch track (~22dp) fits without clipping
+            LayoutHelper.createFrame(37, 24f, (if (rtl) Gravity.LEFT else Gravity.RIGHT) or Gravity.CENTER_VERTICAL, 22f, 0f, 22f, 0f)
         )
     }
 

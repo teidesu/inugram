@@ -201,6 +201,7 @@
     <string name="InuMapPreviewProviderYandex">Yandex</string>
 
     <string name="InuReplyIn">Reply in…</string>
+    <string name="InuSummarize">Summarize</string>
     <string name="InuMessageDetails">Details</string>
     <string name="InuMsgDetailScheduled">Scheduled</string>
     <string name="InuMsgDetailScheduledDate">Scheduled date</string>

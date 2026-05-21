@@ -27,6 +27,7 @@ import org.telegram.messenger.MessagesController
 import org.telegram.messenger.MessagesStorage
 import org.telegram.messenger.R
 import org.telegram.messenger.SendMessagesHelper
+import org.telegram.messenger.TranslateController
 import org.telegram.messenger.UserConfig
 import org.telegram.messenger.UserObject
 import org.telegram.tgnet.ConnectionsManager
@@ -66,6 +67,7 @@ object ChatHelper {
     const val OPTION_TRANSLATE_REVERT = 508
     const val OPTION_FORWARD_NO_QUOTE = 509
     const val OPTION_REPLY_IN_DMS = 510
+    const val OPTION_SUMMARIZE = 511
 
     private fun removeWallpaperKey(currentAccount: Int, dialogId: Long) = "remove_wallpaper:$currentAccount:$dialogId"
     private fun removeThemeKey(currentAccount: Int, dialogId: Long) = "remove_theme:$currentAccount:$dialogId"
@@ -167,6 +169,12 @@ object ChatHelper {
             items.add(LocaleController.getString(R.string.TranslateMessage))
             options.add(ChatActivity.OPTION_TRANSLATE)
             icons.add(R.drawable.msg_translate)
+        }
+
+        if (!selectedObject.messageOwner.summarizedOpen && InuConfig.HIDE_MESSAGE_SUMMARY.value && TranslateController.isSummarizable(selectedObject)) {
+            items.add(LocaleController.getString(R.string.InuSummarize))
+            options.add(OPTION_SUMMARIZE)
+            icons.add(R.drawable.magic_stick_solar)
         }
 
         if (!noforwards && dialogId != UserConfig.getInstance(activity.currentAccount).clientUserId) {
@@ -325,6 +333,11 @@ object ChatHelper {
             }
 
             OPTION_TRANSLATE_REVERT -> TranslateHelper.revert(activity, selectedObjectGroup?.captionMessage ?: selectedObject)
+
+            OPTION_SUMMARIZE -> {
+                val cell = activity.findMessageCell(selectedObject.id, false) as? ChatMessageCell ?: return true
+                cell.delegate?.didPressSummarize(cell, false)
+            }
 
             OPTION_SHOW_IN_CHAT -> {
                 val args = Bundle()

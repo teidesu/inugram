@@ -46,6 +46,7 @@ class MessageMenuConfig(key: String) : InuConfig.Item<List<MessageMenuConfig.Ent
             R.string.TranslateMessage,
             R.drawable.msg_translate
         ),
+        SUMMARIZE("summarize", listOf(ChatHelper.OPTION_SUMMARIZE), R.string.InuSummarize, R.drawable.magic_stick_solar),
         EDIT("edit", listOf(ChatActivity.OPTION_EDIT), R.string.Edit, R.drawable.msg_edit),
         REPORT("report", listOf(ChatActivity.OPTION_REPORT_CHAT), R.string.ReportChat, R.drawable.msg_report),
         SHARE("share", listOf(ChatActivity.OPTION_SHARE), R.string.ShareFile, R.drawable.msg_share),
@@ -106,7 +107,7 @@ class MessageMenuConfig(key: String) : InuConfig.Item<List<MessageMenuConfig.Ent
     }
 
     companion object {
-        private val OFF_BY_DEFAULT = setOf(Item.REPLY_IN, Item.DETAILS, Item.FORWARD_NO_QUOTE)
+        private val OFF_BY_DEFAULT = setOf(Item.REPLY_IN, Item.DETAILS, Item.FORWARD_NO_QUOTE, Item.SUMMARIZE)
         val DEFAULT: List<Entry> = Item.entries.map { Entry(it, it !in OFF_BY_DEFAULT) }
     }
 }
