@@ -181,6 +181,7 @@ most things are toggleable in `Settings → Inugram`, with sensible opinionated 
 - animated photo spoilers respect power-saving setting
 - shared media spoiler positioning
 - nav stack lockup after rapid back swipes
+- back-invoked callback leak on android 13 (sdk 33)
 - click-through area to the left/right of bottom bar tabs
 - profile scroll jump when opening uncached user
 - stale unread badges on global-search top peers

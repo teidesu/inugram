@@ -121,7 +121,16 @@ object Material3PredictiveBack {
                 runningAnim = null
                 finalizeStock(finishCancel)
             }
-            if (attached) finalizeStock(cancel = true)
+            if (attached) {
+                finalizeStock(cancel = true)
+            } else if (layout.predictiveInput) {
+                // Previous gesture set stock prep (we call layout.onBackStarted eagerly, before
+                // LAZY_START) but was preempted in the invisible phase — the system never delivered
+                // its cancel/invoke, so neither runningAnim nor attached reflects it. Left as-is,
+                // stock's onBackStarted below bails on the stale predictiveInput and strands
+                // startedTracking → nav locks up. Roll it back as a cancel.
+                undoStockPrep()
+            }
             invoked = false
             startTouchY = backEvent.touchY
             swipeEdge = backEvent.swipeEdge
