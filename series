@@ -148,3 +148,5 @@ bugfix/universal-fragment-theme-change.patch
 bugfix/sdk33-callback-leak.patch
 bugfix/admin-logs-scroll.patch
 feature/clickable-web-preview-photos.patch
+bugfix/photo-viewer-crop-dismiss.patch
+bugfix/photo-viewer-rotate-crop.patch

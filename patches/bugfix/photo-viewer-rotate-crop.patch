@@ -1,0 +1,189 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: alina sireneva <alina@tei.su>
+Date: Thu, 21 May 2026 23:14:02 +0400
+Subject: persist crop when rotating the image in PhotoViewer
+
+---
+ .../telegram/ui/Components/Crop/CropView.java | 78 +++++++++++++++++++
+ .../telegram/ui/Components/PhotoCropView.java |  7 ++
+ .../java/org/telegram/ui/PhotoViewer.java     | 28 +++++--
+ 3 files changed, 106 insertions(+), 7 deletions(-)
+
+diff --git a/TMessagesProj/src/main/java/org/telegram/ui/Components/Crop/CropView.java b/TMessagesProj/src/main/java/org/telegram/ui/Components/Crop/CropView.java
+index 0000000..0000000 100644
+--- a/TMessagesProj/src/main/java/org/telegram/ui/Components/Crop/CropView.java
++++ b/TMessagesProj/src/main/java/org/telegram/ui/Components/Crop/CropView.java
+@@ -900,6 +900,84 @@ public class CropView extends FrameLayout implements CropAreaView.AreaViewListen
+         return state.getOrientationOnly() != 0;
+     }
+ 
++    public boolean inu_rotateKeepingCrop(float angle) {
++        if (state == null) {
++            return false;
++        }
++        areaView.resetAnimator();
++        resetRotationStartScale();
++
++        MediaController.CropState s = new MediaController.CropState();
++        applyToCropState(s);
++
++        int steps = (((int) (angle / 90) % 4) + 4) % 4;
++        s.transformRotation = ((s.transformRotation + (int) angle) % 360 + 360) % 360;
++        s.cropRotate = 0;
++        if (steps == 1 || steps == 3) {
++            float pw = s.cropPw; s.cropPw = s.cropPh; s.cropPh = pw;
++            float px = s.cropPx;
++            s.cropPx = steps == 1 ? -s.cropPy : s.cropPy;
++            s.cropPy = steps == 1 ? px : -px;
++            if (s.lockedAspectRatio > 0.0001f) {
++                s.lockedAspectRatio = 1.0f / s.lockedAspectRatio;
++            }
++        } else if (steps == 2) {
++            s.cropPx = -s.cropPx;
++            s.cropPy = -s.cropPy;
++        }
++
++        reset();
++
++        if (s.lockedAspectRatio > 0.0001f) {
++            areaView.setLockedAspectRatio(s.lockedAspectRatio);
++            if (listener != null) {
++                listener.onAspectLock(true);
++            }
++        }
++        setFreeform(s.freeform);
++
++        int w = getCurrentWidth();
++        int h = getCurrentHeight();
++        float aspect = areaView.getAspectRatio();
++        float stateWidth;
++        float stateHeight;
++        int rotatedW;
++        int rotatedH;
++        if (s.transformRotation == 90 || s.transformRotation == 270) {
++            aspect = 1.0f / aspect;
++            stateWidth = state.height;
++            stateHeight = state.width;
++            rotatedW = h;
++            rotatedH = w;
++        } else {
++            stateWidth = state.width;
++            stateHeight = state.height;
++            rotatedW = w;
++            rotatedH = h;
++        }
++
++        if (freeform && areaView.getLockAspectRatio() > 0) {
++            areaView.setLockedAspectRatio(1.0f / areaView.getLockAspectRatio());
++            areaView.setActualRect(areaView.getLockAspectRatio());
++        } else {
++            areaView.setBitmap(getCurrentWidth(), getCurrentHeight(), (s.transformRotation + state.getBaseRotation()) % 180 != 0, freeform);
++        }
++        state.reset(s.transformRotation);
++
++        areaView.setActualRect(aspect * s.cropPw / s.cropPh);
++        state.mirrored = s.mirrored;
++        state.rotate(s.cropRotate, 0, 0);
++        state.translate(s.cropPx * rotatedW * state.minimumScale, s.cropPy * rotatedH * state.minimumScale);
++        float ts = Math.max(areaView.getCropWidth() / stateWidth, areaView.getCropHeight() / stateHeight) / state.minimumScale;
++        state.scale(s.cropScale * ts, 0, 0);
++        updateMatrix();
++
++        if (listener != null) {
++            listener.onChange(false);
++        }
++        return state.getOrientationOnly() != 0;
++    }
++
+     @Override
+     public boolean onTouchEvent(MotionEvent event) {
+         if (animating) {
+diff --git a/TMessagesProj/src/main/java/org/telegram/ui/Components/PhotoCropView.java b/TMessagesProj/src/main/java/org/telegram/ui/Components/PhotoCropView.java
+index 0000000..0000000 100644
+--- a/TMessagesProj/src/main/java/org/telegram/ui/Components/PhotoCropView.java
++++ b/TMessagesProj/src/main/java/org/telegram/ui/Components/PhotoCropView.java
+@@ -240,6 +240,13 @@ public class PhotoCropView extends FrameLayout {
+         return cropView.rotate(diff);
+     }
+ 
++    public boolean inu_rotateKeepingCrop(float diff) {
++        if (wheelView != null) {
++            wheelView.reset(false);
++        }
++        return cropView.inu_rotateKeepingCrop(diff);
++    }
++
+     public boolean mirror() {
+         return cropView.mirror();
+     }
+diff --git a/TMessagesProj/src/main/java/org/telegram/ui/PhotoViewer.java b/TMessagesProj/src/main/java/org/telegram/ui/PhotoViewer.java
+index 0000000..0000000 100644
+--- a/TMessagesProj/src/main/java/org/telegram/ui/PhotoViewer.java
++++ b/TMessagesProj/src/main/java/org/telegram/ui/PhotoViewer.java
+@@ -9455,7 +9455,7 @@ public class PhotoViewer implements NotificationCenter.NotificationCenterDelegat
+     }
+ 
+     private boolean cropRotate(float diff) {
+-        return cropRotate(diff, false, null);
++        return inu_cropRotate(diff, false, null, true);
+     }
+ 
+     private float scale1() {
+@@ -9493,13 +9493,19 @@ public class PhotoViewer implements NotificationCenter.NotificationCenterDelegat
+     }
+ 
+     private boolean cropRotate(final float diff, boolean restoreMirror, Runnable onEnd) {
++        return inu_cropRotate(diff, restoreMirror, onEnd, false);
++    }
++
++    private boolean inu_cropRotate(final float diff, boolean restoreMirror, Runnable onEnd, boolean keepCrop) {
+         if (imageMoveAnimation != null) {
+             return false;
+         }
+         if (photoCropView == null) {
+             return false;
+         }
+-        photoCropView.cropView.maximize(true);
++        if (!keepCrop) {
++            photoCropView.cropView.maximize(true);
++        }
+         rotate = 0;
+         animateToRotate = rotate + diff;
+         if (restoreMirror) {
+@@ -9517,9 +9523,14 @@ public class PhotoViewer implements NotificationCenter.NotificationCenterDelegat
+                 bitmapWidth = bitmapHeight;
+                 bitmapHeight = temp;
+             }
+-            if (editState.cropState != null) {
+-                bitmapWidth *= editState.cropState.cropPw;
+-                bitmapHeight *= editState.cropState.cropPh;
++            MediaController.CropState scaleCrop = editState.cropState;
++            if (keepCrop && photoCropView.cropView.state != null) {
++                scaleCrop = new MediaController.CropState();
++                photoCropView.cropView.applyToCropState(scaleCrop);
++            }
++            if (scaleCrop != null) {
++                bitmapWidth *= scaleCrop.cropPw;
++                bitmapHeight *= scaleCrop.cropPh;
+             }
+             float oldScale = Math.min(getContainerViewWidth(EDIT_MODE_CROP) / (float) bitmapWidth, getContainerViewHeight(EDIT_MODE_CROP) / (float) bitmapHeight);
+             float newScale = oldScale;
+@@ -9555,13 +9566,16 @@ public class PhotoViewer implements NotificationCenter.NotificationCenterDelegat
+                 photoCropView.cropView.areaView.setRotationScaleTranslation(0, scale1(false), 0, 0);
+                 photoCropView.wheelView.setRotated(false);
+                 if (Math.abs(diff) > 0) {
+-                    if (photoCropView.rotate(diff)) {
++                    if (keepCrop ? photoCropView.inu_rotateKeepingCrop(diff) : photoCropView.rotate(diff)) {
+                         rotateItem.setColorFilter(new PorterDuffColorFilter(getThemedColor(Theme.key_chat_editMediaButton), PorterDuff.Mode.MULTIPLY));
+                     } else {
+                         rotateItem.setColorFilter(null);
+                     }
+                 }
+-                if (editState.cropState != null) {
++                // keepCrop: don't touch editState.cropState here — it aliases the persistent
++                // entry.cropState, so writing the rotated crop would prematurely commit it and
++                // survive a cancel/system-back. "done" reads the live crop view via makeCrop anyway.
++                if (!keepCrop && editState.cropState != null) {
+                     editState.cropState.cropPx = editState.cropState.cropPy = 0;
+                     editState.cropState.cropPw = editState.cropState.cropPh = 1;
+                 }

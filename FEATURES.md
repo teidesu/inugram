@@ -190,3 +190,5 @@ most things are toggleable in `Settings → Inugram`, with sensible opinionated 
 - photo/video gallery performance improvements
 - messages consisting of only 2 or 3 emojis are huge in chat search results
 - admin logs scroll jumping when loading events
+- fix glitch when quickly dismissing photo editor after cropping
+- persist crop when rotating photo in photo editor
