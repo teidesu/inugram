@@ -11,7 +11,7 @@ diff --git a/TMessagesProj/src/main/java/org/telegram/ui/PhotoViewer.java b/TMes
 index 0000000..0000000 100644
 --- a/TMessagesProj/src/main/java/org/telegram/ui/PhotoViewer.java
 +++ b/TMessagesProj/src/main/java/org/telegram/ui/PhotoViewer.java
-@@ -900,6 +900,7 @@ public class PhotoViewer implements NotificationCenter.NotificationCenterDelegat
+@@ -911,6 +911,7 @@ public class PhotoViewer implements NotificationCenter.NotificationCenterDelegat
      private ActionBarMenuItem deleteItem;
      private ActionBarMenuSubItem castItem;
      private CastMediaRouteButton castItemButton;
@@ -19,7 +19,7 @@ index 0000000..0000000 100644
      private LinearLayout itemsLayout;
      private SpeedButtonsLayout chooseSpeedLayout;
      private ChooseDownloadQualityLayout chooseDownloadQualityLayout;
-@@ -5198,6 +5199,16 @@ public class PhotoViewer implements NotificationCenter.NotificationCenterDelegat
+@@ -5305,6 +5306,16 @@ public class PhotoViewer implements NotificationCenter.NotificationCenterDelegat
                          dialog.setTextColor(getThemedColor(Theme.key_voipgroup_actionBarItems));
                      }
                  } else if (id == gallery_menu_chromecast) {
@@ -36,7 +36,7 @@ index 0000000..0000000 100644
                      ChromecastController.getInstance().setCurrentMediaAndCastIfNeeded(getCurrentChromecastMedia());
                      castItemButton.performClick();
                  } else if (id == gallery_menu_showall) {
-@@ -5919,20 +5930,11 @@ public class PhotoViewer implements NotificationCenter.NotificationCenterDelegat
+@@ -6026,20 +6037,11 @@ public class PhotoViewer implements NotificationCenter.NotificationCenterDelegat
                  }
              }
          };

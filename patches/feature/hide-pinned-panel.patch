@@ -11,7 +11,7 @@ diff --git a/TMessagesProj/src/main/java/org/telegram/ui/ChatActivity.java b/TMe
 index 0000000..0000000 100644
 --- a/TMessagesProj/src/main/java/org/telegram/ui/ChatActivity.java
 +++ b/TMessagesProj/src/main/java/org/telegram/ui/ChatActivity.java
-@@ -423,7 +423,7 @@ public class ChatActivity extends BaseFragment implements
+@@ -426,7 +426,7 @@ public class ChatActivity extends BaseFragment implements
      private ComposeDrawable otherIcon;
      private ActionBarMenu.LazyItem attachItem;
      private ActionBarMenuItem.Item savedChatsItem, savedChatsGap;;
@@ -20,7 +20,7 @@ index 0000000..0000000 100644
      private ActionBarMenu.LazyItem editTextItem;
      protected ActionBarMenuItem searchItem;
      protected ActionBarMenuItem topicCreateItem;
-@@ -722,7 +722,7 @@ public class ChatActivity extends BaseFragment implements
+@@ -720,7 +720,7 @@ public class ChatActivity extends BaseFragment implements
  
      private Runnable checkPaddingsRunnable;
  
@@ -29,7 +29,7 @@ index 0000000..0000000 100644
      private boolean fixPaddingsInLayout;
      private boolean globalIgnoreLayout;
  
-@@ -3737,6 +3737,8 @@ public class ChatActivity extends BaseFragment implements
+@@ -3649,6 +3649,8 @@ public class ChatActivity extends BaseFragment implements
                      }
                  } else if (id == ChatHelper.ACTION_OPEN_IN_DISCUSSION) {
                      ChatHelper.openInDiscussionGroup(ChatActivity.this);
@@ -38,7 +38,7 @@ index 0000000..0000000 100644
                  } else if (id == view_as_topics) {
                      if (getUserConfig().getClientUserId() == dialog_id) {
                          getMessagesController().setSavedViewAs(true);
-@@ -4505,6 +4507,10 @@ public class ChatActivity extends BaseFragment implements
+@@ -4418,6 +4420,10 @@ public class ChatActivity extends BaseFragment implements
              closeTopicItem = headerItem.lazilyAddSubItem(topic_close, R.drawable.msg_topic_close, LocaleController.getString(R.string.CloseTopic));
              closeTopicItem.setVisibility(currentChat != null && ChatObject.canManageTopic(currentAccount, currentChat, forumTopic) && forumTopic != null && !forumTopic.closed ? View.VISIBLE : View.GONE);
          }
@@ -49,7 +49,7 @@ index 0000000..0000000 100644
          menu.setVisibility(inMenuMode ? View.GONE : View.VISIBLE);
  
          updateTitle(false);
-@@ -11411,6 +11417,7 @@ public class ChatActivity extends BaseFragment implements
+@@ -11306,6 +11312,7 @@ public class ChatActivity extends BaseFragment implements
          pinnedListButton.setBackgroundDrawable(Theme.createSelectorDrawable(getThemedColor(Theme.key_inappPlayerClose) & 0x19ffffff));
          pinnedMessageView.addView(pinnedListButton, LayoutHelper.createFrame(36, 48, Gravity.RIGHT | Gravity.TOP, 0, 0, 7, 0));
          pinnedListButton.setOnClickListener(v -> openPinnedMessagesList(false));
@@ -57,7 +57,7 @@ index 0000000..0000000 100644
  
          closePinned = new ImageView(getContext());
          closePinned.setImageResource(R.drawable.miniplayer_close);
-@@ -11463,6 +11470,7 @@ public class ChatActivity extends BaseFragment implements
+@@ -11358,6 +11365,7 @@ public class ChatActivity extends BaseFragment implements
                  updatePinnedMessageView(true);
              }
          });
@@ -65,7 +65,7 @@ index 0000000..0000000 100644
  
          updatePinnedListButton(false);
      }
-@@ -27546,7 +27554,7 @@ public class ChatActivity extends BaseFragment implements
+@@ -27643,7 +27651,7 @@ public class ChatActivity extends BaseFragment implements
          return false;
      }
  
@@ -74,7 +74,7 @@ index 0000000..0000000 100644
          updatePinnedMessageView(animated, 0);
      }
  
-@@ -27664,6 +27672,11 @@ public class ChatActivity extends BaseFragment implements
+@@ -27761,6 +27769,11 @@ public class ChatActivity extends BaseFragment implements
          if (currentEncryptedChat != null || chatMode != 0) {
              return;
          }

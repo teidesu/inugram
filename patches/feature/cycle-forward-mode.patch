@@ -4,14 +4,14 @@ Date: Sat, 16 May 2026 18:28:00 +0400
 Subject: cycle forward mode by long-tapping the bar (similar to rmb in tdesktop)
 
 ---
- .../src/main/java/org/telegram/ui/ChatActivity.java         | 6 +++++-
- 1 file changed, 5 insertions(+), 1 deletion(-)
+ .../src/main/java/org/telegram/ui/ChatActivity.java       | 8 ++++----
+ 1 file changed, 4 insertions(+), 4 deletions(-)
 
 diff --git a/TMessagesProj/src/main/java/org/telegram/ui/ChatActivity.java b/TMessagesProj/src/main/java/org/telegram/ui/ChatActivity.java
 index 0000000..0000000 100644
 --- a/TMessagesProj/src/main/java/org/telegram/ui/ChatActivity.java
 +++ b/TMessagesProj/src/main/java/org/telegram/ui/ChatActivity.java
-@@ -8140,6 +8140,8 @@ public class ChatActivity extends BaseFragment implements
+@@ -8074,6 +8074,8 @@ public class ChatActivity extends BaseFragment implements
                          scrollToMessageId(replyingMessageObject.getId(), 0, true, 0, true, 0);
                          return true;
                      }
@@ -20,14 +20,17 @@ index 0000000..0000000 100644
                  }
              }
              return false;
-@@ -15145,7 +15147,9 @@ public class ChatActivity extends BaseFragment implements
+@@ -15077,11 +15079,9 @@ public class ChatActivity extends BaseFragment implements
+                         text = LocaleController.formatPluralString("Stories", messageObjectsToForward.size());
+                     }
                  }
-                 replyNameTextView.setText(text);
+-                replyNameTextView.setText(text);
++                replyNameTextView.setText(desu.inugram.helpers.ChatHelper.forwardBarTitle(messagePreviewParams, text));
  
 -                if (messagePreviewParams != null && messagePreviewParams.hideForwardSendersName) {
-+                if (messagePreviewParams != null && messagePreviewParams.hideCaption) {
-+                    replyObjectTextView.setText(LocaleController.getString(R.string.InuHiddenCaptionDescription));
-+                } else if (messagePreviewParams != null && messagePreviewParams.hideForwardSendersName) {
-                     replyObjectTextView.setText(LocaleController.getString(R.string.HiddenSendersNameDescription));
-                 } else {
+-                    replyObjectTextView.setText(LocaleController.getString(R.string.HiddenSendersNameDescription));
+-                } else {
++                {
                      if ((type == -1 || type == MessageObject.TYPE_TEXT || type == MessageObject.TYPE_DATE || type == MessageObject.TYPE_ACTION_PHOTO || type == MessageObject.TYPE_EMOJIS) && (messageObjectsToForward.size() == 1 && messageObjectsToForward.get(0).messageText != null)) {
+                         MessageObject messageObject = messageObjectsToForward.get(0);
+                         CharSequence mess = new SpannableStringBuilder(messageObject.messageText.toString());

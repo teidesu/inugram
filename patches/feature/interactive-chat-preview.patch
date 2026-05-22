@@ -13,7 +13,7 @@ diff --git a/TMessagesProj/src/main/java/org/telegram/ui/ActionBar/ActionBarLayo
 index 0000000..0000000 100644
 --- a/TMessagesProj/src/main/java/org/telegram/ui/ActionBar/ActionBarLayout.java
 +++ b/TMessagesProj/src/main/java/org/telegram/ui/ActionBar/ActionBarLayout.java
-@@ -1897,6 +1897,14 @@ public class ActionBarLayout extends FrameLayout implements INavigationLayout, F
+@@ -1937,6 +1937,14 @@ public class ActionBarLayout extends FrameLayout implements INavigationLayout, F
          if (fragment == null || checkTransitionAnimation() || delegate != null && check && !delegate.needPresentFragment(this, params) || !fragment.onFragmentCreate()) {
              return false;
          }
@@ -32,7 +32,7 @@ diff --git a/TMessagesProj/src/main/java/org/telegram/ui/ChatActivity.java b/TMe
 index 0000000..0000000 100644
 --- a/TMessagesProj/src/main/java/org/telegram/ui/ChatActivity.java
 +++ b/TMessagesProj/src/main/java/org/telegram/ui/ChatActivity.java
-@@ -39525,12 +39525,12 @@ public class ChatActivity extends BaseFragment implements
+@@ -39866,12 +39866,12 @@ public class ChatActivity extends BaseFragment implements
  
          @Override
          public boolean canPerformActions() {
@@ -51,7 +51,7 @@ diff --git a/TMessagesProj/src/main/java/org/telegram/ui/DialogsActivity.java b/
 index 0000000..0000000 100644
 --- a/TMessagesProj/src/main/java/org/telegram/ui/DialogsActivity.java
 +++ b/TMessagesProj/src/main/java/org/telegram/ui/DialogsActivity.java
-@@ -8501,6 +8501,18 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
+@@ -8506,6 +8506,18 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
              });
          }
  
@@ -70,7 +70,7 @@ index 0000000..0000000 100644
          ActionBarMenuSubItem markAsUnreadItem = new ActionBarMenuSubItem(getParentActivity(), true, false);
          if (cell.getHasUnread()) {
              markAsUnreadItem.setTextAndIcon(LocaleController.getString(R.string.MarkAsRead), R.drawable.msg_markread);
-@@ -8682,7 +8694,7 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
+@@ -8687,7 +8699,7 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
              } else {
                  presentFragmentAsPreviewWithMenu(chatActivity[0] = new ChatActivity(args), previewMenu[0]);
                  if (chatActivity[0] != null) {

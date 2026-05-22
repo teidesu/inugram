@@ -13,7 +13,7 @@ diff --git a/TMessagesProj/src/main/java/org/telegram/ui/ArticleViewer.java b/TM
 index 0000000..0000000 100644
 --- a/TMessagesProj/src/main/java/org/telegram/ui/ArticleViewer.java
 +++ b/TMessagesProj/src/main/java/org/telegram/ui/ArticleViewer.java
-@@ -1779,6 +1779,7 @@ public class ArticleViewer implements NotificationCenter.NotificationCenterDeleg
+@@ -1879,6 +1879,7 @@ public class ArticleViewer implements NotificationCenter.NotificationCenterDeleg
              int count = webPage.cached_page.blocks.size();
              for (int a = 0; a < count; a++) {
                  TLRPC.PageBlock block = webPage.cached_page.blocks.get(a);
@@ -25,7 +25,7 @@ diff --git a/TMessagesProj/src/main/java/org/telegram/ui/Cells/ChatMessageCell.j
 index 0000000..0000000 100644
 --- a/TMessagesProj/src/main/java/org/telegram/ui/Cells/ChatMessageCell.java
 +++ b/TMessagesProj/src/main/java/org/telegram/ui/Cells/ChatMessageCell.java
-@@ -6805,7 +6805,7 @@ public class ChatMessageCell extends BaseCell implements SeekBar.SeekBarDelegate
+@@ -6833,7 +6833,7 @@ public class ChatMessageCell extends BaseCell implements SeekBar.SeekBarDelegate
                      drawSideButton = 2;
                  }
              }
@@ -38,7 +38,7 @@ diff --git a/TMessagesProj/src/main/java/org/telegram/ui/Components/ChatActivity
 index 0000000..0000000 100644
 --- a/TMessagesProj/src/main/java/org/telegram/ui/Components/ChatActivityEnterView.java
 +++ b/TMessagesProj/src/main/java/org/telegram/ui/Components/ChatActivityEnterView.java
-@@ -5846,7 +5846,7 @@ public class ChatActivityEnterView extends FrameLayout implements
+@@ -5858,7 +5858,7 @@ public class ChatActivityEnterView extends FrameLayout implements
  
      private boolean shownAiButton;
      private void showAiButton(boolean show_) {
@@ -46,4 +46,4 @@ index 0000000..0000000 100644
 +        final boolean show = show_ && parentFragment != null && !parentFragment.isSecretChat() && !desu.inugram.InuConfig.HIDE_AI_EDITOR.getValue();
  
          if (shownAiButton == show) return;
-         shownAiButton = show;
+         if (show) {

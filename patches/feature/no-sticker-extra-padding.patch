@@ -11,7 +11,7 @@ diff --git a/TMessagesProj/src/main/java/org/telegram/ui/Cells/ChatMessageCell.j
 index 0000000..0000000 100644
 --- a/TMessagesProj/src/main/java/org/telegram/ui/Cells/ChatMessageCell.java
 +++ b/TMessagesProj/src/main/java/org/telegram/ui/Cells/ChatMessageCell.java
-@@ -10291,6 +10291,9 @@ public class ChatMessageCell extends BaseCell implements SeekBar.SeekBarDelegate
+@@ -10334,6 +10334,9 @@ public class ChatMessageCell extends BaseCell implements SeekBar.SeekBarDelegate
                      totalHeight += dp(21);
                      additionalTimeOffsetY = dp(21);
                  }
@@ -21,7 +21,7 @@ index 0000000..0000000 100644
  
                  int additionalTop = 0;
                  if (currentPosition != null && !currentMessageObject.isDocument()) {
-@@ -10751,7 +10754,7 @@ public class ChatMessageCell extends BaseCell implements SeekBar.SeekBarDelegate
+@@ -10794,7 +10797,7 @@ public class ChatMessageCell extends BaseCell implements SeekBar.SeekBarDelegate
                      totalHeight -= dp(1);
                  }
              }

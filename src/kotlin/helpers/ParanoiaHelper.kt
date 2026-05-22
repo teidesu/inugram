@@ -82,8 +82,13 @@ object ParanoiaHelper {
         get() = prefs.getBoolean("disguiseIcon", false)
         set(value) = prefs.edit { putBoolean("disguiseIcon", value) }
 
-    // opt-in: while armed, masquerade as stock Telegram (icon + launcher name).
-    fun isDisguised(): Boolean = isParanoia() && disguiseIcon
+    @Volatile
+    private var disguisedCache: Boolean? = null
+
+    // opt-in: while armed, masquerade as stock Telegram (icon + launcher name + in-app branding).
+    // constant per process (toggling restarts the app), so cache it for animation hot-path callers.
+    @JvmStatic
+    fun isDisguised(): Boolean = disguisedCache ?: (isParanoia() && disguiseIcon).also { disguisedCache = it }
 
     @JvmStatic
     fun filterLauncherIcons(icons: MutableList<LauncherIcon>) {

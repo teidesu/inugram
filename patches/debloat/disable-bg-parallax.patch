@@ -11,7 +11,7 @@ diff --git a/TMessagesProj/src/main/java/org/telegram/ui/Components/SizeNotifier
 index 0000000..0000000 100644
 --- a/TMessagesProj/src/main/java/org/telegram/ui/Components/SizeNotifierFrameLayout.java
 +++ b/TMessagesProj/src/main/java/org/telegram/ui/Components/SizeNotifierFrameLayout.java
-@@ -397,7 +397,7 @@ public class SizeNotifierFrameLayout extends FrameLayout implements Theme.Colora
+@@ -392,7 +392,7 @@ public class SizeNotifierFrameLayout extends FrameLayout implements Theme.Colora
      }
  
      private void checkMotion() {

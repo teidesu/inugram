@@ -48,7 +48,7 @@ diff --git a/TMessagesProj/src/main/java/org/telegram/ui/PhotoViewer.java b/TMes
 index 0000000..0000000 100644
 --- a/TMessagesProj/src/main/java/org/telegram/ui/PhotoViewer.java
 +++ b/TMessagesProj/src/main/java/org/telegram/ui/PhotoViewer.java
-@@ -1969,6 +1969,7 @@ public class PhotoViewer implements NotificationCenter.NotificationCenterDelegat
+@@ -1988,6 +1988,7 @@ public class PhotoViewer implements NotificationCenter.NotificationCenterDelegat
      }
  
      private int currentImageHasFace;
@@ -56,7 +56,7 @@ index 0000000..0000000 100644
      private String currentImageFaceKey;
      private PaintingOverlay paintingOverlay;
      private PaintingOverlay leftPaintingOverlay;
-@@ -7847,7 +7848,16 @@ public class PhotoViewer implements NotificationCenter.NotificationCenterDelegat
+@@ -7883,7 +7884,16 @@ public class PhotoViewer implements NotificationCenter.NotificationCenterDelegat
                      return;
                  }
              }
@@ -74,7 +74,7 @@ index 0000000..0000000 100644
          });
          tuneItem.setContentDescription(getString("AccDescrPhotoAdjust", R.string.AccDescrPhotoAdjust));
  
-@@ -7932,7 +7942,6 @@ public class PhotoViewer implements NotificationCenter.NotificationCenterDelegat
+@@ -7968,7 +7978,6 @@ public class PhotoViewer implements NotificationCenter.NotificationCenterDelegat
                  if (paintingOverlay.getVisibility() == View.VISIBLE) {
                      containerView.requestLayout();
                  }
@@ -82,7 +82,7 @@ index 0000000..0000000 100644
              }
              if (imageReceiver == centerImage && set && placeProvider != null && placeProvider.scaleToFill() && !ignoreDidSetImage && sendPhotoType != SELECT_TYPE_AVATAR && sendPhotoType != SELECT_TYPE_STICKER) {
                  if (!wasLayout) {
-@@ -12002,6 +12011,14 @@ public class PhotoViewer implements NotificationCenter.NotificationCenterDelegat
+@@ -12052,6 +12061,14 @@ public class PhotoViewer implements NotificationCenter.NotificationCenterDelegat
          }
      }
  
@@ -97,7 +97,7 @@ index 0000000..0000000 100644
      private void detectFaces() {
          if (centerImage.getAnimation() != null || imagesArrLocals.isEmpty() || sendPhotoType == SELECT_TYPE_AVATAR) {
              return;
-@@ -12035,6 +12052,10 @@ public class PhotoViewer implements NotificationCenter.NotificationCenterDelegat
+@@ -12085,6 +12102,10 @@ public class PhotoViewer implements NotificationCenter.NotificationCenterDelegat
                          if (key.equals(imageKey)) {
                              currentImageHasFace = hasFaces ? 1 : 0;
                              currentImageFaceKey = key;
@@ -108,7 +108,7 @@ index 0000000..0000000 100644
                          }
                      });
                  } else {
-@@ -12048,6 +12069,7 @@ public class PhotoViewer implements NotificationCenter.NotificationCenterDelegat
+@@ -12098,6 +12119,7 @@ public class PhotoViewer implements NotificationCenter.NotificationCenterDelegat
                              currentImageHasFace = 2;
                              currentImageFaceKey = key;
                          }
@@ -116,7 +116,7 @@ index 0000000..0000000 100644
                      });
                  }
              } catch (Exception e) {
-@@ -16165,7 +16187,9 @@ public class PhotoViewer implements NotificationCenter.NotificationCenterDelegat
+@@ -16228,7 +16250,9 @@ public class PhotoViewer implements NotificationCenter.NotificationCenterDelegat
                  videoFrameBitmap = null;
              }
          }

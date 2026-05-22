@@ -5,14 +5,14 @@ Subject: hooks inside admin logs activity
 
 ---
  .../org/telegram/messenger/MessageObject.java |  4 ++
- .../telegram/ui/ChannelAdminLogActivity.java  | 40 ++++++++++++++++++-
- 2 files changed, 42 insertions(+), 2 deletions(-)
+ .../telegram/ui/ChannelAdminLogActivity.java  | 42 +++++++++++++++++--
+ 2 files changed, 43 insertions(+), 3 deletions(-)
 
 diff --git a/TMessagesProj/src/main/java/org/telegram/messenger/MessageObject.java b/TMessagesProj/src/main/java/org/telegram/messenger/MessageObject.java
 index 0000000..0000000 100644
 --- a/TMessagesProj/src/main/java/org/telegram/messenger/MessageObject.java
 +++ b/TMessagesProj/src/main/java/org/telegram/messenger/MessageObject.java
-@@ -2865,6 +2865,9 @@ public class MessageObject {
+@@ -2883,6 +2883,9 @@ public class MessageObject {
                  message.media.webpage.display_url = "";
                  message.media.webpage.url = "";
              }
@@ -22,7 +22,7 @@ index 0000000..0000000 100644
          } else if (event.action instanceof TLRPC.TL_channelAdminLogEventActionChangeEmojiStickerSet) {
              TLRPC.InputStickerSet newPack = ((TLRPC.TL_channelAdminLogEventActionChangeEmojiStickerSet) event.action).new_stickerset;
              TLRPC.InputStickerSet oldPack = ((TLRPC.TL_channelAdminLogEventActionChangeEmojiStickerSet) event.action).new_stickerset;
-@@ -3444,6 +3447,7 @@ public class MessageObject {
+@@ -3462,6 +3465,7 @@ public class MessageObject {
                  messageObject.linkDescription = null;
                  messageObject.generateLinkDescription();
              }
@@ -34,15 +34,24 @@ diff --git a/TMessagesProj/src/main/java/org/telegram/ui/ChannelAdminLogActivity
 index 0000000..0000000 100644
 --- a/TMessagesProj/src/main/java/org/telegram/ui/ChannelAdminLogActivity.java
 +++ b/TMessagesProj/src/main/java/org/telegram/ui/ChannelAdminLogActivity.java
-@@ -153,6 +153,7 @@ import java.io.FileWriter;
- import java.util.ArrayList;
- import java.util.HashMap;
+@@ -172,6 +172,7 @@ import java.util.HashMap;
  import java.util.HashSet;
+ import java.util.List;
+ 
 +import desu.inugram.helpers.AdminLogHelper;
+ import me.vkryl.core.BitwiseUtils;
+ import me.vkryl.core.reference.ReferenceList;
  
- public class ChannelAdminLogActivity extends BaseFragment implements NotificationCenter.NotificationCenterDelegate {
- 
-@@ -443,6 +444,34 @@ public class ChannelAdminLogActivity extends BaseFragment implements Notificatio
+@@ -206,7 +207,7 @@ public class ChannelAdminLogActivity extends BaseFragment implements Notificatio
+     private TextView bottomOverlayChatText;
+     private ChatActivityChannelButtonsLayout bottomOverlayChat2;
+     private FrameLayout emptyViewContainer;
+-    private ChatAvatarContainer avatarContainer;
++    public ChatAvatarContainer avatarContainer;
+     private LinearLayout emptyLayoutView;
+     private ImageView emptyImageView;
+     private TextView emptyView;
+@@ -519,6 +520,34 @@ public class ChannelAdminLogActivity extends BaseFragment implements Notificatio
          });
      }
  
@@ -77,7 +86,7 @@ index 0000000..0000000 100644
      private void loadMessages(boolean reset) {
          if (loading) {
              return;
-@@ -859,7 +888,9 @@ public class ChannelAdminLogActivity extends BaseFragment implements Notificatio
+@@ -931,7 +960,9 @@ public class ChannelAdminLogActivity extends BaseFragment implements Notificatio
              public void onItemClick(final int id) {
                  if (id == -1) {
                      finishFragment();
@@ -87,15 +96,15 @@ index 0000000..0000000 100644
              }
          });
  
-@@ -900,6 +931,7 @@ public class ChannelAdminLogActivity extends BaseFragment implements Notificatio
+@@ -972,6 +1003,7 @@ public class ChannelAdminLogActivity extends BaseFragment implements Notificatio
              }
          });
-         searchItem.setSearchFieldHint(getString("Search", R.string.Search));
-+        AdminLogHelper.setupHeader(menu);
+         searchItem.setSearchFieldHint(getString(R.string.Search));
++        AdminLogHelper.setupHeader(this, menu);
  
-         avatarContainer.setEnabled(false);
- 
-@@ -1575,7 +1607,7 @@ public class ChannelAdminLogActivity extends BaseFragment implements Notificatio
+         actionBar.getBackButton().setTranslationX(dp(6));
+         actionBar.menu.setTranslationX(-dp(9));
+@@ -1648,7 +1680,7 @@ public class ChannelAdminLogActivity extends BaseFragment implements Notificatio
      private final static int OPTION_CALL = 17;
      private final static int OPTION_RESTRICT = 33;
      private final static int OPTION_REPORT_FALSE_POSITIVE = 34;
@@ -104,7 +113,7 @@ index 0000000..0000000 100644
  
      private boolean createMenu(View v) {
          return createMenu(v, 0, 0);
-@@ -1789,6 +1821,7 @@ public class ChannelAdminLogActivity extends BaseFragment implements Notificatio
+@@ -1862,6 +1894,7 @@ public class ChannelAdminLogActivity extends BaseFragment implements Notificatio
                  options.add(OPTION_CALL);
              }
          }
@@ -112,8 +121,8 @@ index 0000000..0000000 100644
  
          boolean callbackSent = false;
  
-@@ -2085,11 +2118,14 @@ public class ChannelAdminLogActivity extends BaseFragment implements Notificatio
-         }
+@@ -2118,11 +2151,14 @@ public class ChannelAdminLogActivity extends BaseFragment implements Notificatio
+         roundVideoContainer.setVisibility(View.INVISIBLE);
      }
  
 -    private void processSelectedOption(int option) {

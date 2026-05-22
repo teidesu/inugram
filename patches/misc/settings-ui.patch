@@ -26,7 +26,7 @@ diff --git a/TMessagesProj/src/main/java/org/telegram/ui/ProfileActivity.java b/
 index 0000000..0000000 100644
 --- a/TMessagesProj/src/main/java/org/telegram/ui/ProfileActivity.java
 +++ b/TMessagesProj/src/main/java/org/telegram/ui/ProfileActivity.java
-@@ -14278,7 +14278,7 @@ public class ProfileActivity extends BaseFragment implements NotificationCenter.
+@@ -14401,7 +14401,7 @@ public class ProfileActivity extends BaseFragment implements NotificationCenter.
          private static SearchResult[] onCreateSearchArray(final BaseFragment f) {
              final int currentAccount = f.getCurrentAccount();
              final Theme.ResourcesProvider resourcesProvider = f.getResourceProvider();
@@ -35,7 +35,7 @@ index 0000000..0000000 100644
                      new SearchResult(500, getString(R.string.EditName), 0, () -> f.presentFragment(new ChangeNameActivity(resourcesProvider))),
                      new SearchResult(501, getString(R.string.ChangePhoneNumber), 0, () -> f.presentFragment(new ActionIntroActivity(ActionIntroActivity.ACTION_TYPE_CHANGE_PHONE_NUMBER))).withLink("tg://settings/edit/change-number"),
                      new SearchResult(502, getString(R.string.AddAnotherAccount), 0, () -> {
-@@ -14536,7 +14536,7 @@ public class ProfileActivity extends BaseFragment implements NotificationCenter.
+@@ -14659,7 +14659,7 @@ public class ProfileActivity extends BaseFragment implements NotificationCenter.
                      new SearchResult(402, getString(R.string.AskAQuestion), getString(R.string.SettingsHelp), R.drawable.msg2_help, () -> f.showDialog(AlertsCreator.createSupportAlert(f, null))).withLink("tg://settings/ask-question"),
                      new SearchResult(403, getString(R.string.TelegramFAQ), getString(R.string.SettingsHelp), R.drawable.msg2_help, () -> Browser.openUrl(f.getParentActivity(), getString(R.string.TelegramFaqUrl))).withLink("tg://settings/faq"),
                      new SearchResult(404, getString(R.string.PrivacyPolicy), getString(R.string.SettingsHelp), R.drawable.msg2_help, () -> Browser.openUrl(f.getParentActivity(), getString(R.string.PrivacyPolicyUrl))).withLink("tg://settings/privacy-policy"),
@@ -48,12 +48,12 @@ diff --git a/TMessagesProj/src/main/java/org/telegram/ui/SettingsActivity.java b
 index 0000000..0000000 100644
 --- a/TMessagesProj/src/main/java/org/telegram/ui/SettingsActivity.java
 +++ b/TMessagesProj/src/main/java/org/telegram/ui/SettingsActivity.java
-@@ -679,6 +679,11 @@ public class SettingsActivity extends BaseFragment implements NotificationCenter
+@@ -680,6 +680,11 @@ public class SettingsActivity extends BaseFragment implements NotificationCenter
              items.add(UItem.asShadow(null));
          }
  
 +        if (!desu.inugram.helpers.ParanoiaHelper.shouldHideSettings()) {
-+            items.add(SettingCell.Factory.of(99, IconBackgroundColors.BLUE_ALT.top, IconBackgroundColors.BLUE_ALT.bottom, R.drawable.settings_features, getString(R.string.InuSettings), getString(R.string.InuSettingsInfo)));
++            items.add(SettingCell.Factory.of(99, IconBackgroundColors.PURPLE.top, IconBackgroundColors.PURPLE.bottom, R.drawable.icon_settings_inu, getString(R.string.InuSettings), getString(R.string.InuSettingsInfo)));
 +            items.add(UItem.asShadow(null));
 +        }
 +

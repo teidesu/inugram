@@ -12,7 +12,7 @@ diff --git a/TMessagesProj/src/main/java/org/telegram/messenger/SharedConfig.jav
 index 0000000..0000000 100644
 --- a/TMessagesProj/src/main/java/org/telegram/messenger/SharedConfig.java
 +++ b/TMessagesProj/src/main/java/org/telegram/messenger/SharedConfig.java
-@@ -1773,6 +1773,10 @@ public class SharedConfig {
+@@ -1775,6 +1775,10 @@ public class SharedConfig {
          return canBlurChat() && LiteMode.isEnabled(LiteMode.FLAG_CHAT_BLUR);
      }
  
@@ -27,7 +27,7 @@ diff --git a/TMessagesProj/src/main/java/org/telegram/ui/PhotoViewer.java b/TMes
 index 0000000..0000000 100644
 --- a/TMessagesProj/src/main/java/org/telegram/ui/PhotoViewer.java
 +++ b/TMessagesProj/src/main/java/org/telegram/ui/PhotoViewer.java
-@@ -6415,7 +6415,7 @@ public class PhotoViewer implements NotificationCenter.NotificationCenterDelegat
+@@ -6522,7 +6522,7 @@ public class PhotoViewer implements NotificationCenter.NotificationCenterDelegat
  
              @Override
              public void invalidate() {
@@ -36,7 +36,7 @@ index 0000000..0000000 100644
                      return;
                  }
                  super.invalidate();
-@@ -6965,7 +6965,7 @@ public class PhotoViewer implements NotificationCenter.NotificationCenterDelegat
+@@ -7073,7 +7073,7 @@ public class PhotoViewer implements NotificationCenter.NotificationCenterDelegat
  
              @Override
              public void invalidate() {
@@ -45,7 +45,7 @@ index 0000000..0000000 100644
                      return;
                  }
                  super.invalidate();
-@@ -7075,7 +7075,7 @@ public class PhotoViewer implements NotificationCenter.NotificationCenterDelegat
+@@ -7183,7 +7183,7 @@ public class PhotoViewer implements NotificationCenter.NotificationCenterDelegat
  
              @Override
              public void invalidate() {
@@ -54,7 +54,7 @@ index 0000000..0000000 100644
                      return;
                  }
                  super.invalidate();
-@@ -20384,7 +20384,7 @@ public class PhotoViewer implements NotificationCenter.NotificationCenterDelegat
+@@ -20467,7 +20467,7 @@ public class PhotoViewer implements NotificationCenter.NotificationCenterDelegat
          if (!fancyShadows) {
              return;
          }
@@ -63,7 +63,7 @@ index 0000000..0000000 100644
          if (maxAlpha <= 0) {
              return;
          }
-@@ -21997,7 +21997,8 @@ public class PhotoViewer implements NotificationCenter.NotificationCenterDelegat
+@@ -22123,7 +22123,8 @@ public class PhotoViewer implements NotificationCenter.NotificationCenterDelegat
              && Build.VERSION.SDK_INT >= Build.VERSION_CODES.S
              && SharedConfig.useNewBlur
              && SharedConfig.getDevicePerformanceClass() >= SharedConfig.PERFORMANCE_CLASS_HIGH
@@ -73,7 +73,7 @@ index 0000000..0000000 100644
      }
  
  
-@@ -22072,6 +22073,9 @@ public class PhotoViewer implements NotificationCenter.NotificationCenterDelegat
+@@ -22198,6 +22199,9 @@ public class PhotoViewer implements NotificationCenter.NotificationCenterDelegat
      }
  
      public void drawCaptionBlur(Canvas canvas, BlurringShader.StoryBlurDrawer drawer, int bgColor, int overlayColor, boolean clip, boolean allowTransparent, boolean allowCrossfade, boolean glass) {
@@ -83,7 +83,7 @@ index 0000000..0000000 100644
          if (BLUR_RENDERNODE()) {
              final RenderNode renderNode = getRenderNodeColorMatrix(drawer.colorMatrix, glass);
              final int mBgColor = AndroidUtilities.applyColorMatrix(bgColor, drawer.colorMatrix);
-@@ -22090,7 +22094,7 @@ public class PhotoViewer implements NotificationCenter.NotificationCenterDelegat
+@@ -22216,7 +22220,7 @@ public class PhotoViewer implements NotificationCenter.NotificationCenterDelegat
              }
              return;
          }
@@ -92,7 +92,7 @@ index 0000000..0000000 100644
  
          drawer.paint.setShader(null);
          if (bgColor != 0) {
-@@ -22099,7 +22103,7 @@ public class PhotoViewer implements NotificationCenter.NotificationCenterDelegat
+@@ -22225,7 +22229,7 @@ public class PhotoViewer implements NotificationCenter.NotificationCenterDelegat
              canvas.drawPaint(drawer.paint);
          }
  
@@ -101,7 +101,7 @@ index 0000000..0000000 100644
              blurAlpha.set(0, true);
              if (overlayColor != 0) {
                  drawer.paint.setColor(overlayColor);
-@@ -22654,6 +22658,9 @@ public class PhotoViewer implements NotificationCenter.NotificationCenterDelegat
+@@ -22780,6 +22784,9 @@ public class PhotoViewer implements NotificationCenter.NotificationCenterDelegat
          if (stickerMakerView != null && stickerMakerView.isThanosInProgress) {
              return;
          }

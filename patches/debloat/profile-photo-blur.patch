@@ -4,12 +4,12 @@ Date: Mon, 11 May 2026 20:53:33 +0200
 Subject: disable profile photo blur, replacing it with a simple fade gradient
 
 ---
- .../ui/Components/ProfileActionsView.java       |  2 +-
- .../ui/Components/ProfileGalleryBlurView.java   |  6 +++++-
- .../ui/Components/ProfileGalleryView.java       |  2 +-
- .../ui/Components/ProfileMusicView.java         |  9 ++++++---
- .../java/org/telegram/ui/ProfileActivity.java   | 17 +++++++++++------
- 5 files changed, 24 insertions(+), 12 deletions(-)
+ .../telegram/ui/Components/ProfileActionsView.java |  2 +-
+ .../ui/Components/ProfileGalleryBlurView.java      |  6 +++++-
+ .../telegram/ui/Components/ProfileGalleryView.java |  2 +-
+ .../telegram/ui/Components/ProfileMusicView.java   |  9 ++++++---
+ .../main/java/org/telegram/ui/ProfileActivity.java | 14 ++++++++------
+ 5 files changed, 21 insertions(+), 12 deletions(-)
 
 diff --git a/TMessagesProj/src/main/java/org/telegram/ui/Components/ProfileActionsView.java b/TMessagesProj/src/main/java/org/telegram/ui/Components/ProfileActionsView.java
 index 0000000..0000000 100644
@@ -113,7 +113,7 @@ diff --git a/TMessagesProj/src/main/java/org/telegram/ui/ProfileActivity.java b/
 index 0000000..0000000 100644
 --- a/TMessagesProj/src/main/java/org/telegram/ui/ProfileActivity.java
 +++ b/TMessagesProj/src/main/java/org/telegram/ui/ProfileActivity.java
-@@ -1000,6 +1000,7 @@ public class ProfileActivity extends BaseFragment implements NotificationCenter.
+@@ -1024,6 +1024,7 @@ public class ProfileActivity extends BaseFragment implements NotificationCenter.
              blurSizeFraction = value;
              this.avatarScale = avatarScale;
              this.isPulledDown = isPulledDown;
@@ -121,7 +121,7 @@ index 0000000..0000000 100644
          }
  
          public void setRoundRadiusCollapse(int roundRadiusCollapse) {
-@@ -1102,7 +1103,7 @@ public class ProfileActivity extends BaseFragment implements NotificationCenter.
+@@ -1126,7 +1127,7 @@ public class ProfileActivity extends BaseFragment implements NotificationCenter.
                  }
              }
  
@@ -130,7 +130,7 @@ index 0000000..0000000 100644
                  canvas.translate(inset, inset + thisHeight);
                  float fraction = !isPulledDown && !blurView.isUsingRenderNode() && avatarsViewPager.getRealPosition() != 0 ? 1f : (1f - blurSizeFraction);
                  blurView.draw(canvas, this, thisWidth - inset * 2f, thisHeight - inset * 2f, true, fraction, alpha);
-@@ -1304,7 +1305,7 @@ public class ProfileActivity extends BaseFragment implements NotificationCenter.
+@@ -1328,7 +1329,7 @@ public class ProfileActivity extends BaseFragment implements NotificationCenter.
              final int color1 = color1Animated.set(this.color1);
              final int color2 = color2Animated.set(this.color2);
              if (actionsView != null) {
@@ -139,7 +139,7 @@ index 0000000..0000000 100644
              }
  
              int gradientX = getWidth() / 2;
-@@ -1532,9 +1533,9 @@ public class ProfileActivity extends BaseFragment implements NotificationCenter.
+@@ -1556,9 +1557,9 @@ public class ProfileActivity extends BaseFragment implements NotificationCenter.
              }
  
              topOverlayGradient.draw(canvas);
@@ -151,18 +151,15 @@ index 0000000..0000000 100644
  
              int count = avatarsViewPager.getRealCount();
              selectedPosition = avatarsViewPager.getRealPosition();
-@@ -3102,6 +3103,10 @@ public class ProfileActivity extends BaseFragment implements NotificationCenter.
+@@ -3128,6 +3129,7 @@ public class ProfileActivity extends BaseFragment implements NotificationCenter.
                          if (giftsView != null) {
                              giftsView.setExpandProgress(1f);
                          }
 +                        desu.inugram.helpers.ProfileHelper.notifyBlurExpandProgress(avatarsViewPager, 1f);
-+                        if (musicView != null) {
-+                            musicView.setParentExpanded(1f);
-+                        }
-                         expandPhoto = false;
-                         updateCollectibleHint();
-                     }
-@@ -11050,7 +11055,7 @@ public class ProfileActivity extends BaseFragment implements NotificationCenter.
+                         if (actionsView != null) {
+                             actionsView.setParentExpanded(1f);
+                         }
+@@ -11169,7 +11171,7 @@ public class ProfileActivity extends BaseFragment implements NotificationCenter.
              actionsView.clipHeight = -1;
              float bottom = extraHeight + newTop - dp(hasMusic ? 25 : 0);
              float height = Math.min(dp(74), bottom - newTop);
@@ -171,7 +168,7 @@ index 0000000..0000000 100644
          }
  
          if (callToActionItem != null && callToActionItem.getTag() != null) {
-@@ -11080,7 +11085,7 @@ public class ProfileActivity extends BaseFragment implements NotificationCenter.
+@@ -11199,7 +11201,7 @@ public class ProfileActivity extends BaseFragment implements NotificationCenter.
  //            musicView.clipHeight = -1;
              float bottom = extraHeight + newTop + dp(74);
              float height = Math.min(getActionsExtraHeight(), bottom - newTop);

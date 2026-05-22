@@ -1,0 +1,22 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: alina sireneva <alina@tei.su>
+Date: Thu, 21 May 2026 23:52:10 +0400
+Subject: prevent videos from playing with sound when pressing volume keys
+
+---
+ TMessagesProj/src/main/java/org/telegram/ui/LaunchActivity.java | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/TMessagesProj/src/main/java/org/telegram/ui/LaunchActivity.java b/TMessagesProj/src/main/java/org/telegram/ui/LaunchActivity.java
+index 0000000..0000000 100644
+--- a/TMessagesProj/src/main/java/org/telegram/ui/LaunchActivity.java
++++ b/TMessagesProj/src/main/java/org/telegram/ui/LaunchActivity.java
+@@ -8448,7 +8448,7 @@ public class LaunchActivity extends BasePermissionsActivity implements INavigati
+                         showVoiceChatTooltip(mute ? UndoView.ACTION_VOIP_SOUND_MUTED : UndoView.ACTION_VOIP_SOUND_UNMUTED);
+                     }
+                 }
+-            } else if (!mainFragmentsStack.isEmpty() && (!PhotoViewer.hasInstance() || !PhotoViewer.getInstance().isVisible()) && event.getRepeatCount() == 0) {
++            } else if (!desu.inugram.InuConfig.DISABLE_VOLUME_PLAY_VIDEO.getValue() && !mainFragmentsStack.isEmpty() && (!PhotoViewer.hasInstance() || !PhotoViewer.getInstance().isVisible()) && event.getRepeatCount() == 0) {
+                 BaseFragment fragment = mainFragmentsStack.get(mainFragmentsStack.size() - 1);
+                 if (fragment instanceof ChatActivity && !BaseFragment.hasSheets(fragment)) {
+                     if (((ChatActivity) fragment).maybePlayVisibleVideo()) {

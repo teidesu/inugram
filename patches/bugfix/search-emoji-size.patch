@@ -26,7 +26,7 @@ diff --git a/TMessagesProj/src/main/java/org/telegram/messenger/MediaDataControl
 index 0000000..0000000 100644
 --- a/TMessagesProj/src/main/java/org/telegram/messenger/MediaDataController.java
 +++ b/TMessagesProj/src/main/java/org/telegram/messenger/MediaDataController.java
-@@ -4006,7 +4006,7 @@ public class MediaDataController extends BaseController {
+@@ -4049,7 +4049,7 @@ public class MediaDataController extends BaseController {
                  int N = Math.min(res.messages.size(), req.limit - 1);
                  for (int a = 0; a < N; a++) {
                      TLRPC.Message message = res.messages.get(a);
@@ -39,7 +39,7 @@ diff --git a/TMessagesProj/src/main/java/org/telegram/messenger/MessagesStorage.
 index 0000000..0000000 100644
 --- a/TMessagesProj/src/main/java/org/telegram/messenger/MessagesStorage.java
 +++ b/TMessagesProj/src/main/java/org/telegram/messenger/MessagesStorage.java
-@@ -5045,7 +5045,7 @@ public class MessagesStorage extends BaseController {
+@@ -5165,7 +5165,7 @@ public class MessagesStorage extends BaseController {
                              groupmessage.readAttachPath(data, selfId);
                              data.reuse();
                              addUsersAndChatsFromMessage(groupmessage, usersToLoad, chatsToLoad, animatedEmojiToLoad);
@@ -48,7 +48,7 @@ index 0000000..0000000 100644
                              if (groupmessage.reactions != null) {
                                  messageObject.isPrimaryGroupMessage = true;
                              }
-@@ -5074,7 +5074,7 @@ public class MessagesStorage extends BaseController {
+@@ -5194,7 +5194,7 @@ public class MessagesStorage extends BaseController {
                                      }
                                  }
                              }

@@ -12,7 +12,7 @@ diff --git a/TMessagesProj/src/main/java/org/telegram/ui/ChatActivity.java b/TMe
 index 0000000..0000000 100644
 --- a/TMessagesProj/src/main/java/org/telegram/ui/ChatActivity.java
 +++ b/TMessagesProj/src/main/java/org/telegram/ui/ChatActivity.java
-@@ -766,9 +766,9 @@ public class ChatActivity extends BaseFragment implements
+@@ -764,9 +764,9 @@ public class ChatActivity extends BaseFragment implements
      private AnimatorSet runningAnimation;
      private int runningAnimationIndex = -1;
  
@@ -25,7 +25,7 @@ index 0000000..0000000 100644
      private boolean forbidForwardingWithDismiss;
      public MessagePreviewParams messagePreviewParams;
      public MessageSuggestionParams messageSuggestionParams;
-@@ -1619,6 +1619,10 @@ public class ChatActivity extends BaseFragment implements
+@@ -1618,6 +1618,10 @@ public class ChatActivity extends BaseFragment implements
              if (textSelectionHelper.isTryingSelect() || textSelectionHelper.isInSelectionMode() || inPreviewMode || isInsideContainer) {
                  return false;
              }
@@ -36,7 +36,7 @@ index 0000000..0000000 100644
              wasManualScroll = true;
              boolean result = true;
              boolean showMenu = true;
-@@ -1812,6 +1816,11 @@ public class ChatActivity extends BaseFragment implements
+@@ -1811,6 +1815,11 @@ public class ChatActivity extends BaseFragment implements
  
          @Override
          public boolean hasDoubleTap(View view, int position) {
@@ -48,7 +48,7 @@ index 0000000..0000000 100644
              if (chatMode == MODE_QUICK_REPLIES) return false;
              String reactionStringSetting = getMediaDataController().getDoubleTapReaction();
              TLRPC.TL_availableReaction reaction = getMediaDataController().getReactionsMap().get(reactionStringSetting);
-@@ -1838,6 +1847,7 @@ public class ChatActivity extends BaseFragment implements
+@@ -1837,6 +1846,7 @@ public class ChatActivity extends BaseFragment implements
  
          @Override
          public void onDoubleTap(View view, int position, float x, float y) {
@@ -56,7 +56,7 @@ index 0000000..0000000 100644
              if (getParentActivity() == null || isSecretChat() || isInScheduleMode() || isInPreviewMode() || chatMode == MODE_QUICK_REPLIES) {
                  return;
              }
-@@ -29947,6 +29957,12 @@ public class ChatActivity extends BaseFragment implements
+@@ -30035,6 +30045,12 @@ public class ChatActivity extends BaseFragment implements
          return createMenu(v, single, listView, x, y, searchGroup, longpress, false);
      }
  
@@ -69,7 +69,7 @@ index 0000000..0000000 100644
      @SuppressLint("ClickableViewAccessibility")
      private boolean createMenu(View v, boolean single, boolean listView, float x, float y, boolean searchGroup, boolean longpress, boolean suggestEdit) {
          if (actionBar.isActionModeShowed() || isReport()) {
-@@ -31246,6 +31262,7 @@ public class ChatActivity extends BaseFragment implements
+@@ -31410,6 +31426,7 @@ public class ChatActivity extends BaseFragment implements
              } else {
                  final boolean tags = getUserConfig().getClientUserId() == getDialogId();
                  reactionsLayout = new ReactionsContainerLayout(tags ? ReactionsContainerLayout.TYPE_TAGS : ReactionsContainerLayout.TYPE_DEFAULT, ChatActivity.this, contentView.getContext(), currentAccount, getResourceProvider());
@@ -77,7 +77,7 @@ index 0000000..0000000 100644
                  if (tags) {
                      reactionsLayout.setHint(getUserConfig().isPremium() ? LocaleController.getString(R.string.SavedTagReactionsHint2) : AndroidUtilities.replaceSingleTag(LocaleController.getString(R.string.SavedTagReactionsPremiumHint), Theme.key_windowBackgroundWhiteBlueText2, 0, () -> {
                          closeMenu(false);
-@@ -32408,7 +32425,7 @@ public class ChatActivity extends BaseFragment implements
+@@ -32596,7 +32613,7 @@ public class ChatActivity extends BaseFragment implements
          MediaController.saveFile(path, getParentActivity(), messageObject.isVideo() ? 1 : 0, null, null);
      }
  

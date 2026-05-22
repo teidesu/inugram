@@ -1,97 +1,108 @@
 From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
 From: alina sireneva <alina@tei.su>
 Date: Mon, 20 Apr 2026 12:50:31 +0300
-Subject: support ios-style menu gestures (release to commit) in account switcher
+Subject: improved ios-style release-to-activate gestures: plain backgrounds, gesture detection
 
 ---
- .../org/telegram/ui/Components/ItemOptions.java | 17 ++++++++++++-----
- .../java/org/telegram/ui/MainTabsActivity.java  | 10 ++++------
- 2 files changed, 16 insertions(+), 11 deletions(-)
+ .../telegram/ui/Components/ItemOptions.java   | 21 ++++++-------------
+ .../org/telegram/ui/MainTabsActivity.java     |  7 +++----
+ 2 files changed, 9 insertions(+), 19 deletions(-)
 
 diff --git a/TMessagesProj/src/main/java/org/telegram/ui/Components/ItemOptions.java b/TMessagesProj/src/main/java/org/telegram/ui/Components/ItemOptions.java
 index 0000000..0000000 100644
 --- a/TMessagesProj/src/main/java/org/telegram/ui/Components/ItemOptions.java
 +++ b/TMessagesProj/src/main/java/org/telegram/ui/Components/ItemOptions.java
-@@ -141,6 +141,7 @@ public class ItemOptions {
-     }
- 
-     public ActionBarPopupWindow actionBarPopupWindow;
-+    public boolean inu_longPressDragMode;
-     private BlurredBackgroundSourceBitmap scrimBlur3SourceBitmap;
-     private final float[] point = new float[2];
- 
-@@ -1263,6 +1264,9 @@ public class ItemOptions {
-             };
-             container.getViewTreeObserver().addOnPreDrawListener(preDrawListener);
-             container.addView(dimView, LayoutHelper.createFrame(LayoutHelper.MATCH_PARENT, LayoutHelper.MATCH_PARENT));
-+            if (inu_longPressDragMode) {
-+                dimView.setOnClickListener(v -> dismiss());
-+            }
-             dimView.setProgress(0);
-             if (hideScrimUnder) {
-                 scrimView.setVisibility(View.INVISIBLE);
-@@ -1335,7 +1339,8 @@ public class ItemOptions {
+@@ -1422,12 +1422,8 @@ public class ItemOptions {
              }
-         });
-         actionBarPopupWindow.setOutsideTouchable(true);
--        actionBarPopupWindow.setFocusable(true);
-+        actionBarPopupWindow.setFocusable(!inu_longPressDragMode);
-+        actionBarPopupWindow.setTouchable(!inu_longPressDragMode);
-         actionBarPopupWindow.setBackgroundDrawable(new ColorDrawable(Color.TRANSPARENT));
-         actionBarPopupWindow.setAnimationStyle(R.style.PopupContextAnimation);
-         if (needsFocus) {
-@@ -1419,10 +1424,12 @@ public class ItemOptions {
          }
  
-         // discard all scrolls/gestures
--        if (fragment != null && fragment.getFragmentView() != null) {
--            fragment.getFragmentView().getRootView().dispatchTouchEvent(AndroidUtilities.emptyMotionEvent());
--        } else if (this.container != null) {
--            container.dispatchTouchEvent(AndroidUtilities.emptyMotionEvent());
-+        if (!inu_longPressDragMode) {
-+            if (fragment != null && fragment.getFragmentView() != null) {
-+                fragment.getFragmentView().getRootView().dispatchTouchEvent(AndroidUtilities.emptyMotionEvent());
-+            } else if (this.container != null) {
-+                container.dispatchTouchEvent(AndroidUtilities.emptyMotionEvent());
-+            }
-         }
+-//        // discard all scrolls/gestures
+-//        if (fragment != null && fragment.getFragmentView() != null) {
+-//            fragment.getFragmentView().getRootView().dispatchTouchEvent(AndroidUtilities.emptyMotionEvent());
+-//        } else if (this.container != null) {
+-//            container.dispatchTouchEvent(AndroidUtilities.emptyMotionEvent());
+-//        }
++        // stock discarded the in-flight gesture here, but that cancels the press-hold-drag-release
++        // started by installHoverReleaseListener() — keep the gesture alive instead
  
          if (blurForMenu && scrimBlur3SourceBitmap != null) {
+             setGapBackgroundColor(Theme.multAlpha(Theme.getColor(Theme.key_actionBarDefaultSubmenuItem, resourcesProvider), 0.06f));
+@@ -1614,7 +1610,6 @@ public class ItemOptions {
+ 
+     private View.OnTouchListener hoverReleaseListener;
+     private View hoveredItem;
+-    private final int[] hoverLoc = new int[2];
+ 
+     private void installHoverReleaseListener() {
+         if (scrimView == null) return;
+@@ -1659,17 +1654,13 @@ public class ItemOptions {
+         View hit = findItemAt(layout, rawX, rawY);
+         if (hit != hoveredItem) {
+             if (hoveredItem != null) {
+-                hoveredItem.setPressed(false);
++                desu.inugram.helpers.LongPressDragMenuHelper.setHover(hoveredItem, false);
+             }
+             hoveredItem = hit;
+             if (hoveredItem != null) {
+-                hoveredItem.setPressed(true);
++                desu.inugram.helpers.LongPressDragMenuHelper.setHover(hoveredItem, true);
+             }
+         }
+-        if (hoveredItem != null) {
+-            hoveredItem.getLocationOnScreen(hoverLoc);
+-            hoveredItem.drawableHotspotChanged(rawX - hoverLoc[0], rawY - hoverLoc[1]);
+-        }
+     }
+ 
+     private void releaseHover(int rawX, int rawY) {
+@@ -1677,14 +1668,14 @@ public class ItemOptions {
+         if (hoveredItem != null) {
+             View target = hoveredItem;
+             hoveredItem = null;
+-            target.setPressed(false);
++            desu.inugram.helpers.LongPressDragMenuHelper.setHover(target, false);
+             target.performClick();
+         }
+     }
+ 
+     private void cancelHover() {
+         if (hoveredItem != null) {
+-            hoveredItem.setPressed(false);
++            desu.inugram.helpers.LongPressDragMenuHelper.setHover(hoveredItem, false);
+             hoveredItem = null;
+         }
+     }
 diff --git a/TMessagesProj/src/main/java/org/telegram/ui/MainTabsActivity.java b/TMessagesProj/src/main/java/org/telegram/ui/MainTabsActivity.java
 index 0000000..0000000 100644
 --- a/TMessagesProj/src/main/java/org/telegram/ui/MainTabsActivity.java
 +++ b/TMessagesProj/src/main/java/org/telegram/ui/MainTabsActivity.java
-@@ -269,10 +269,7 @@ public class MainTabsActivity extends ViewPagerActivity implements NotificationC
-         tabs[INDEX_SETTINGS] = GlassTabView.createMainTab(context, resourceProvider, GlassTabView.TabAnimation.SETTINGS, R.string.Settings);
-         tabs[INDEX_CALLS] = GlassTabView.createMainTab(context, resourceProvider, GlassTabView.TabAnimation.CALLS, R.string.MainTabsCalls);
-         tabs[INDEX_PROFILE] = GlassTabView.createAvatar(context, resourceProvider, currentAccount, R.string.MainTabsProfile);
--        tabs[INDEX_PROFILE].setOnLongClickListener(v -> {
--            openAccountSelector(v);
--            return true;
--        });
+@@ -280,7 +280,7 @@ public class MainTabsActivity extends ViewPagerActivity implements NotificationC
+         tabs[INDEX_CHATS].setOnLongClickListener(this::openFoldersSelector);
+         tabs[INDEX_CONTACTS].setOnLongClickListener(this::openContactsSelector);
+         tabs[INDEX_CALLS].setOnLongClickListener(this::openCallsSelector);
+-        tabs[INDEX_PROFILE].setOnLongClickListener(this::openAccountSelector);
 +        desu.inugram.helpers.LongPressDragMenuHelper.attach(tabs[INDEX_PROFILE], this::openAccountSelector);
-         for (GlassTabView tab : tabs) {
-             tab.setMainTabsCompact(compact);
-         }
-@@ -369,7 +366,7 @@ public class MainTabsActivity extends ViewPagerActivity implements NotificationC
+ 
+         tabsView.addTabToIgnoreClick(tabs[INDEX_CHATS]);
+         tabsView.addTabToIgnoreClick(tabs[INDEX_CONTACTS]);
+@@ -483,7 +483,7 @@ public class MainTabsActivity extends ViewPagerActivity implements NotificationC
          }
      }
  
--    public void openAccountSelector(View button) {
+-    public boolean openAccountSelector(View button) {
 +    public ItemOptions openAccountSelector(View button) {
          final ArrayList<Integer> accountNumbers = new ArrayList<>();
  
          accountNumbers.clear();
-@@ -438,11 +435,12 @@ public class MainTabsActivity extends ViewPagerActivity implements NotificationC
+@@ -552,11 +552,10 @@ public class MainTabsActivity extends ViewPagerActivity implements NotificationC
          final ShapeDrawable bg = Theme.createRoundRectDrawable(dp(28), getThemedColor(Theme.key_windowBackgroundWhite));
          bg.getPaint().setShadowLayer(dp(6), 0, dp(1), Theme.multAlpha(0xFF000000, 0.15f));
          o.setScrimViewBackground(bg);
 -        o.show();
  
-         MessagesController.getGlobalMainSettings().edit()
-             .putInt("accountswitchhint", 3)
-             .apply();
-+
+         HintsController.Hint.AccountSwitchHint.doNotShowAgain();
+ 
+-        return true;
 +        return o;
      }
  

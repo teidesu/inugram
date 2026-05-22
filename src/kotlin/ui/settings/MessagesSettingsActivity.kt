@@ -113,6 +113,32 @@ class MessagesSettingsActivity : SettingsPageActivity() {
         )
         items.add(UItem.asShadow(null))
 
+        items.add(UItem.asHeader(LocaleController.getString(R.string.InuSpoilers)))
+        items.add(
+            UItem.asButton(
+                BUTTON_TEXT_SPOILER_MODE,
+                LocaleController.getString(R.string.InuTextSpoilerMode),
+                textSpoilerModeLabel(InuConfig.TEXT_SPOILER_MODE.value),
+            )
+        )
+        items.add(
+            mkTwoLineCheckItem(
+                TOGGLE_SIMPLE_MEDIA_SPOILERS,
+                R.string.InuSimpleMediaSpoilers,
+                R.string.InuSimpleMediaSpoilersInfo,
+                InuConfig.SIMPLE_MEDIA_SPOILERS.value,
+            )
+        )
+        items.add(
+            mkTwoLineCheckItem(
+                TOGGLE_SPOILER_EXTEND_TO_LINE_END,
+                R.string.InuSpoilerExtendToLineEnd,
+                R.string.InuSpoilerExtendToLineEndInfo,
+                InuConfig.SPOILER_EXTEND_TO_LINE_END.value,
+            )
+        )
+        items.add(UItem.asShadow(null))
+
         items.add(UItem.asHeader(LocaleController.getString(R.string.InuMiscellaneous)))
         items.add(
             UItem.asButton(
@@ -211,6 +237,29 @@ class MessagesSettingsActivity : SettingsPageActivity() {
                 (view as? TextCheckCell)?.isChecked = new
             }
 
+            TOGGLE_SPOILER_EXTEND_TO_LINE_END -> {
+                val new = InuConfig.SPOILER_EXTEND_TO_LINE_END.toggle()
+                (view as? NotificationsCheckCell)?.isChecked = new
+            }
+
+            TOGGLE_SIMPLE_MEDIA_SPOILERS -> {
+                val new = InuConfig.SIMPLE_MEDIA_SPOILERS.toggle()
+                (view as? NotificationsCheckCell)?.isChecked = new
+            }
+
+            BUTTON_TEXT_SPOILER_MODE -> RadioItemOptions.show(
+                this, view,
+                listOf(
+                    LocaleController.getString(R.string.InuTextSpoilerModeDefault),
+                    LocaleController.getString(R.string.InuTextSpoilerModeSimple),
+                    LocaleController.getString(R.string.InuTextSpoilerModeEpstein),
+                ),
+                InuConfig.TEXT_SPOILER_MODE.value,
+            ) { which ->
+                if (InuConfig.TEXT_SPOILER_MODE.value == which) return@show
+                InuConfig.TEXT_SPOILER_MODE.value = which
+            }
+
             BUTTON_PINNED_REACTIONS -> presentFragment(PinnedReactionsActivity())
 
             BUTTON_MESSAGE_MENU_ORDER -> presentFragment(MessageMenuOrderActivity())
@@ -245,6 +294,15 @@ class MessagesSettingsActivity : SettingsPageActivity() {
         private val TOGGLE_SHOW_FORWARD_TIME = InuUtils.generateId()
         private val BUTTON_DOUBLE_TAP_INCOMING = InuUtils.generateId()
         private val BUTTON_DOUBLE_TAP_OUTGOING = InuUtils.generateId()
+        private val BUTTON_TEXT_SPOILER_MODE = InuUtils.generateId()
+        private val TOGGLE_SPOILER_EXTEND_TO_LINE_END = InuUtils.generateId()
+        private val TOGGLE_SIMPLE_MEDIA_SPOILERS = InuUtils.generateId()
+
+        private fun textSpoilerModeLabel(value: Int): String = when (value) {
+            InuConfig.TextSpoilerModeItem.SIMPLE -> LocaleController.getString(R.string.InuTextSpoilerModeSimple)
+            InuConfig.TextSpoilerModeItem.EPSTEIN -> LocaleController.getString(R.string.InuTextSpoilerModeEpstein)
+            else -> LocaleController.getString(R.string.InuTextSpoilerModeDefault)
+        }
 
         @JvmField val PAGE = SearchRegistry.Page(
             slug = "messages",
@@ -263,6 +321,9 @@ class MessagesSettingsActivity : SettingsPageActivity() {
                 SearchRegistry.Entry("show-forward-time", R.string.InuShowForwardTime, TOGGLE_SHOW_FORWARD_TIME),
                 SearchRegistry.Entry("double-tap-incoming", R.string.InuIncomingMessages, BUTTON_DOUBLE_TAP_INCOMING),
                 SearchRegistry.Entry("double-tap-outgoing", R.string.InuOutgoingMessages, BUTTON_DOUBLE_TAP_OUTGOING),
+                SearchRegistry.Entry("text-spoiler-mode", R.string.InuTextSpoilerMode, BUTTON_TEXT_SPOILER_MODE),
+                SearchRegistry.Entry("spoiler-extend-to-line-end", R.string.InuSpoilerExtendToLineEnd, TOGGLE_SPOILER_EXTEND_TO_LINE_END),
+                SearchRegistry.Entry("simple-media-spoilers", R.string.InuSimpleMediaSpoilers, TOGGLE_SIMPLE_MEDIA_SPOILERS),
             ),
         )
     }

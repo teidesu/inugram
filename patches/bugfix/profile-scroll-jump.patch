@@ -24,7 +24,7 @@ diff --git a/TMessagesProj/src/main/java/org/telegram/ui/ProfileActivity.java b/
 index 0000000..0000000 100644
 --- a/TMessagesProj/src/main/java/org/telegram/ui/ProfileActivity.java
 +++ b/TMessagesProj/src/main/java/org/telegram/ui/ProfileActivity.java
-@@ -1245,6 +1245,10 @@ public class ProfileActivity extends BaseFragment implements NotificationCenter.
+@@ -1269,6 +1269,10 @@ public class ProfileActivity extends BaseFragment implements NotificationCenter.
                  color1Animated.set(color1, true);
                  color2Animated.set(color2, true);
              }
@@ -35,7 +35,7 @@ index 0000000..0000000 100644
              invalidate();
          }
  
-@@ -3195,12 +3199,21 @@ public class ProfileActivity extends BaseFragment implements NotificationCenter.
+@@ -3230,12 +3234,21 @@ public class ProfileActivity extends BaseFragment implements NotificationCenter.
                          layout = true;
                      } else if (invalidateScroll || currentPaddingTop != paddingTop) {
                          if (savedScrollPosition >= 0) {
@@ -60,7 +60,7 @@ index 0000000..0000000 100644
                              layout = true;
                          } else {
                              layoutManager.scrollToPositionWithOffset(0, getHeaderExtraHeight() - paddingTop);
-@@ -4251,7 +4264,7 @@ public class ProfileActivity extends BaseFragment implements NotificationCenter.
+@@ -4286,7 +4299,7 @@ public class ProfileActivity extends BaseFragment implements NotificationCenter.
              public int scrollVerticallyBy(int dy, RecyclerView.Recycler recycler, RecyclerView.State state) {
                  final View view = layoutManager.findViewByPosition(0);
                  if (view != null && !openingAvatar) {
@@ -69,7 +69,7 @@ index 0000000..0000000 100644
                      if (!allowPullingDown && canScroll > dy) {
                          dy = canScroll;
                          if (avatarsViewPager.hasImages() && avatarImage.getImageReceiver().hasNotThumb() && !AndroidUtilities.isAccessibilityScreenReaderEnabled() && (!isInLandscapeMode && !AndroidUtilities.isTablet() || hasMainTabs)) {
-@@ -7917,7 +7930,7 @@ public class ProfileActivity extends BaseFragment implements NotificationCenter.
+@@ -8027,7 +8040,7 @@ public class ProfileActivity extends BaseFragment implements NotificationCenter.
              }
          }
          RecyclerListView.Holder holder = child == null ? null : (RecyclerListView.Holder) listView.findContainingViewHolder(child);
@@ -78,7 +78,7 @@ index 0000000..0000000 100644
          int adapterPosition = holder != null ? holder.getAdapterPosition() : RecyclerView.NO_POSITION;
          if (top >= 0 && adapterPosition == 0) {
              newOffset = top;
-@@ -10864,6 +10877,22 @@ public class ProfileActivity extends BaseFragment implements NotificationCenter.
+@@ -10983,6 +10996,22 @@ public class ProfileActivity extends BaseFragment implements NotificationCenter.
              }
              musicView.setVisibility(hasMusic ? View.VISIBLE : View.GONE);
          }
@@ -101,7 +101,7 @@ index 0000000..0000000 100644
      }
  
      private Drawable getScamDrawable(int type) {
-@@ -15226,37 +15255,58 @@ public class ProfileActivity extends BaseFragment implements NotificationCenter.
+@@ -15349,37 +15378,58 @@ public class ProfileActivity extends BaseFragment implements NotificationCenter.
              listAdapter.notifyDataSetChanged();
          }
          if (savedScrollPosition >= 0) {

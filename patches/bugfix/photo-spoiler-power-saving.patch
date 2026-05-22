@@ -14,7 +14,7 @@ diff --git a/TMessagesProj/src/main/java/org/telegram/ui/Cells/ChatMessageCell.j
 index 0000000..0000000 100644
 --- a/TMessagesProj/src/main/java/org/telegram/ui/Cells/ChatMessageCell.java
 +++ b/TMessagesProj/src/main/java/org/telegram/ui/Cells/ChatMessageCell.java
-@@ -14960,6 +14960,14 @@ public class ChatMessageCell extends BaseCell implements SeekBar.SeekBarDelegate
+@@ -15024,6 +15024,14 @@ public class ChatMessageCell extends BaseCell implements SeekBar.SeekBarDelegate
  
      public void drawBlurredPhotoParticles(Canvas canvas) {
          if (mediaSpoilerEffect2 == null) {
@@ -33,15 +33,15 @@ diff --git a/TMessagesProj/src/main/java/org/telegram/ui/Cells/GroupMedia.java b
 index 0000000..0000000 100644
 --- a/TMessagesProj/src/main/java/org/telegram/ui/Cells/GroupMedia.java
 +++ b/TMessagesProj/src/main/java/org/telegram/ui/Cells/GroupMedia.java
-@@ -55,6 +55,7 @@ import org.telegram.ui.Components.Point;
+@@ -41,6 +41,7 @@ import org.telegram.ui.Components.LoadingDrawable;
+ import org.telegram.ui.Components.MediaActionDrawable;
  import org.telegram.ui.Components.RadialProgress2;
- import org.telegram.ui.Components.RecyclerListView;
  import org.telegram.ui.Components.Text;
 +import org.telegram.ui.Components.spoilers.SpoilerEffect;
  import org.telegram.ui.Components.spoilers.SpoilerEffect2;
  import org.telegram.ui.Stars.StarsIntroActivity;
  
-@@ -80,6 +81,7 @@ public class GroupMedia {
+@@ -66,6 +67,7 @@ public class GroupMedia {
      private LoadingDrawable loadingDrawable;
  
      SpoilerEffect2 spoilerEffect;
@@ -49,7 +49,7 @@ index 0000000..0000000 100644
  
      public GroupMedia(@NonNull ChatMessageCell cell) {
          this.cell = cell;
-@@ -619,7 +621,16 @@ public class GroupMedia {
+@@ -605,7 +607,16 @@ public class GroupMedia {
              canvas.clipPath(clipPath2);
              canvas.translate(l, t);
              canvas.saveLayerAlpha(0, 0, (int) (r - l), (int) (b - t), (int) (0xFF * hiddenAlpha), Canvas.ALL_SAVE_FLAG);
@@ -71,7 +71,7 @@ diff --git a/TMessagesProj/src/main/java/org/telegram/ui/Components/ChatAttachAl
 index 0000000..0000000 100644
 --- a/TMessagesProj/src/main/java/org/telegram/ui/Components/ChatAttachAlertPhotoLayoutPreview.java
 +++ b/TMessagesProj/src/main/java/org/telegram/ui/Components/ChatAttachAlertPhotoLayoutPreview.java
-@@ -59,7 +59,11 @@ import org.telegram.ui.ActionBar.BaseFragment;
+@@ -60,7 +60,11 @@ import org.telegram.ui.ActionBar.BaseFragment;
  import org.telegram.ui.ActionBar.Theme;
  import org.telegram.ui.Cells.ChatActionCell;
  import org.telegram.ui.ChatActivity;
@@ -83,7 +83,7 @@ index 0000000..0000000 100644
  import org.telegram.ui.LaunchActivity;
  import org.telegram.ui.PhotoViewer;
  import org.telegram.ui.Stars.StarsIntroActivity;
-@@ -1950,6 +1954,7 @@ public class ChatAttachAlertPhotoLayoutPreview extends ChatAttachAlert.AttachAle
+@@ -1951,6 +1955,7 @@ public class ChatAttachAlertPhotoLayoutPreview extends ChatAttachAlert.AttachAle
                  private String videoDurationText = null;
  
                  private SpoilerEffect2 spoilerEffect;
@@ -91,7 +91,7 @@ index 0000000..0000000 100644
                  private Path path = new Path();
                  private float[] radii = new float[8];
  
-@@ -2380,7 +2385,16 @@ public class ChatAttachAlertPhotoLayoutPreview extends ChatAttachAlert.AttachAle
+@@ -2381,7 +2386,16 @@ public class ChatAttachAlertPhotoLayoutPreview extends ChatAttachAlert.AttachAle
                          if (spoilerEffect == null) {
                              spoilerEffect = SpoilerEffect2.getInstance(PreviewGroupsView.this);
                          }
@@ -113,7 +113,7 @@ diff --git a/TMessagesProj/src/main/java/org/telegram/ui/Components/spoilers/Spo
 index 0000000..0000000 100644
 --- a/TMessagesProj/src/main/java/org/telegram/ui/Components/spoilers/SpoilerEffect2.java
 +++ b/TMessagesProj/src/main/java/org/telegram/ui/Components/spoilers/SpoilerEffect2.java
-@@ -20,6 +20,7 @@ import androidx.annotation.NonNull;
+@@ -19,6 +19,7 @@ import androidx.annotation.NonNull;
  
  import org.telegram.messenger.AndroidUtilities;
  import org.telegram.messenger.FileLog;
@@ -121,7 +121,7 @@ index 0000000..0000000 100644
  import org.telegram.messenger.R;
  import org.telegram.messenger.SharedConfig;
  import org.telegram.messenger.Utilities;
-@@ -58,7 +59,7 @@ public class SpoilerEffect2 {
+@@ -57,7 +58,7 @@ public class SpoilerEffect2 {
      }
  
      public static SpoilerEffect2 getInstance(int type, View view, ViewGroup rootView) {

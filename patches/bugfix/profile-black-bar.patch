@@ -11,7 +11,7 @@ diff --git a/TMessagesProj/src/main/java/org/telegram/ui/ProfileActivity.java b/
 index 0000000..0000000 100644
 --- a/TMessagesProj/src/main/java/org/telegram/ui/ProfileActivity.java
 +++ b/TMessagesProj/src/main/java/org/telegram/ui/ProfileActivity.java
-@@ -1216,6 +1216,7 @@ public class ProfileActivity extends BaseFragment implements NotificationCenter.
+@@ -1240,6 +1240,7 @@ public class ProfileActivity extends BaseFragment implements NotificationCenter.
          private final Paint backgroundPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
  
          public void setBackgroundColorId(MessagesController.PeerColor peerColor, boolean animated) {
@@ -19,7 +19,7 @@ index 0000000..0000000 100644
              if (peerColor != null) {
                  hasColorById = true;
                  color1 = peerColor.getBgColor1(Theme.isCurrentThemeDark());
-@@ -1242,9 +1243,10 @@ public class ProfileActivity extends BaseFragment implements NotificationCenter.
+@@ -1266,9 +1267,10 @@ public class ProfileActivity extends BaseFragment implements NotificationCenter.
                      btnColor = Theme.multAlpha(PeerColorActivity.adaptProfileEmojiColor(getThemedColor(Theme.key_actionBarDefault)), .15f);
                  }
              }

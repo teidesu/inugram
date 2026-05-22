@@ -1,0 +1,71 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: polina4096 <polina4096@icloud.com>
+Date: Fri, 22 May 2026 00:16:18 +0400
+Subject: Configurable text + media spoiler styles, with line-extension toggle
+
+---
+ .../org/telegram/ui/Cells/ChatMessageCell.java    |  3 +++
+ .../ui/Components/spoilers/SpoilerEffect.java     | 15 +++++++++++++++
+ 2 files changed, 18 insertions(+)
+
+diff --git a/TMessagesProj/src/main/java/org/telegram/ui/Cells/ChatMessageCell.java b/TMessagesProj/src/main/java/org/telegram/ui/Cells/ChatMessageCell.java
+index 0000000..0000000 100644
+--- a/TMessagesProj/src/main/java/org/telegram/ui/Cells/ChatMessageCell.java
++++ b/TMessagesProj/src/main/java/org/telegram/ui/Cells/ChatMessageCell.java
+@@ -15053,6 +15053,9 @@ public class ChatMessageCell extends BaseCell implements SeekBar.SeekBarDelegate
+     }
+ 
+     public void drawBlurredPhotoParticles(Canvas canvas) {
++        if (desu.inugram.helpers.SpoilerHelper.drawMediaSpoilerIfOverridden(canvas, photoImage.getImageX(), photoImage.getImageY(), photoImage.getImageX2(), photoImage.getImageY2(), photoImage.getAlpha())) {
++            return;
++        }
+         if (mediaSpoilerEffect2 == null) {
+             if (!LiteMode.isEnabled(LiteMode.FLAG_CHAT_SPOILER)) {
+                 if (mediaSpoilerEffect == null) {
+diff --git a/TMessagesProj/src/main/java/org/telegram/ui/Components/spoilers/SpoilerEffect.java b/TMessagesProj/src/main/java/org/telegram/ui/Components/spoilers/SpoilerEffect.java
+index 0000000..0000000 100644
+--- a/TMessagesProj/src/main/java/org/telegram/ui/Components/spoilers/SpoilerEffect.java
++++ b/TMessagesProj/src/main/java/org/telegram/ui/Components/spoilers/SpoilerEffect.java
+@@ -109,6 +109,10 @@ public class SpoilerEffect extends Drawable {
+ 
+     public boolean insideQuote;
+ 
++    public boolean inu_isTextSpoiler;
++    public float inu_prevLeft = Float.NaN, inu_prevRight = Float.NaN;
++    public float inu_nextLeft = Float.NaN, inu_nextRight = Float.NaN;
++
+     private static int measureParticlesPerCharacter() {
+         switch (SharedConfig.getDevicePerformanceClass()) {
+             default:
+@@ -307,6 +311,9 @@ public class SpoilerEffect extends Drawable {
+     @Override
+     public void draw(@NonNull Canvas canvas) {
+         final Rect bounds = getBounds();
++        if (inu_isTextSpoiler && desu.inugram.helpers.SpoilerHelper.drawSolidIfOverridden(canvas, this, mParent, lastColor, mAlpha)) {
++            return;
++        }
+         if (bounds.isEmpty()) {
+             return;
+         }
+@@ -693,6 +700,7 @@ public class SpoilerEffect extends Drawable {
+                 addSpoilerRangesInternal(v, textLayout, left, right, start, end, spoilersPool, spoilers, quoteBlocks);
+             }
+         }
++        desu.inugram.helpers.SpoilerHelper.linkNeighbors(spoilers);
+         if (v instanceof TextView && spoilersPool != null) {
+             spoilersPool.clear();
+         }
+@@ -709,6 +717,13 @@ public class SpoilerEffect extends Drawable {
+ 
+     private static void addSpoilerRangeInternal(@Nullable View v, @NonNull Layout textLayout, float left, float top, float right, float bottom, @Nullable Stack<SpoilerEffect> spoilersPool, List<SpoilerEffect> spoilers, int mostleft, int mostright, ArrayList<QuoteSpan.Block> quote) {
+         SpoilerEffect spoilerEffect = spoilersPool == null || spoilersPool.isEmpty() ? new SpoilerEffect() : spoilersPool.remove(0);
++        spoilerEffect.inu_isTextSpoiler = true;
++        if (desu.inugram.InuConfig.SPOILER_EXTEND_TO_LINE_END.getValue() && mostright > 0) {
++            int inu_line = textLayout.getLineForVertical((int) ((top + bottom) / 2f));
++            if (right >= textLayout.getLineRight(inu_line) - dp(2)) {
++                right = mostright;
++            }
++        }
+         spoilerEffect.insideQuote = false;
+         if (quote != null) {
+             final float cy = (top + bottom) / 2f;

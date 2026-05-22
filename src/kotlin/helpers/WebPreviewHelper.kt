@@ -72,7 +72,7 @@ object WebPreviewHelper {
             // also apply to fixupx and friends without instant view (i.e. non-threads)
             return siteName.contains("fixupx")
                 || siteName.contains("fxtwitter")
-                || siteName.contains("stupidpenisx")
+                || siteName.contains("vxtwitter")
                 || siteName.contains("girlcockx")
         }
 

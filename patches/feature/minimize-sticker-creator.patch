@@ -13,7 +13,7 @@ diff --git a/TMessagesProj/src/main/java/org/telegram/messenger/MediaDataControl
 index 0000000..0000000 100644
 --- a/TMessagesProj/src/main/java/org/telegram/messenger/MediaDataController.java
 +++ b/TMessagesProj/src/main/java/org/telegram/messenger/MediaDataController.java
-@@ -907,7 +907,7 @@ public class MediaDataController extends BaseController {
+@@ -913,7 +913,7 @@ public class MediaDataController extends BaseController {
          }
          int limit = desu.inugram.InuConfig.SHOW_ALL_RECENT_STICKERS.getValue() ? arrayList.size() : 20;
          ArrayList<TLRPC.Document> result = new ArrayList<>(arrayList.subList(0, Math.min(arrayList.size(), limit)));
@@ -44,15 +44,15 @@ diff --git a/TMessagesProj/src/main/java/org/telegram/ui/Components/EmojiView.ja
 index 0000000..0000000 100644
 --- a/TMessagesProj/src/main/java/org/telegram/ui/Components/EmojiView.java
 +++ b/TMessagesProj/src/main/java/org/telegram/ui/Components/EmojiView.java
-@@ -157,6 +157,7 @@ import java.util.List;
+@@ -167,6 +167,7 @@ import java.util.List;
  import java.util.Map;
  import java.util.Objects;
  
 +import desu.inugram.InuConfig;
  import me.vkryl.android.animator.BoolAnimator;
+ import me.vkryl.android.animator.FactorAnimator;
  
- public class EmojiView extends FrameLayout implements NotificationCenter.NotificationCenterDelegate, InAppKeyboardInsetView {
-@@ -6742,6 +6743,11 @@ public class EmojiView extends FrameLayout implements NotificationCenter.Notific
+@@ -6865,6 +6866,11 @@ public class EmojiView extends FrameLayout implements
                              ((ChatActivity) fragment).openAttachMenuForCreatingSticker();
                          }
                      });
@@ -64,7 +64,7 @@ index 0000000..0000000 100644
  
                      final ImageView icon = new ImageView(context);
                      icon.setImageResource(R.drawable.menu_sticker_add);
-@@ -6836,6 +6842,17 @@ public class EmojiView extends FrameLayout implements NotificationCenter.Notific
+@@ -6959,6 +6965,17 @@ public class EmojiView extends FrameLayout implements
                              }
                          } else if (object == recentStickers) {
                              cell.setText(getString(R.string.RecentStickers), R.drawable.msg_close, getString(R.string.ClearRecentStickersAlertTitle));

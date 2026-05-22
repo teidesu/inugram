@@ -151,3 +151,11 @@ debloat/reduce-menu-motion.patch
 feature/paranoia.patch
 feature/md3-switches.patch
 bugfix/universal-fragment-theme-change.patch
+bugfix/sdk33-callback-leak.patch
+bugfix/admin-logs-scroll.patch
+feature/clickable-web-preview-photos.patch
+bugfix/photo-viewer-crop-dismiss.patch
+bugfix/photo-viewer-rotate-crop.patch
+debloat/volume-keys-videos.patch
+bugfix/chat-preview-reactions-read.patch
+feature/better-spoilers.patch

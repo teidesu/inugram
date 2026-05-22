@@ -1,6 +1,9 @@
 package desu.inugram.helpers
 
+import android.Manifest
 import android.content.DialogInterface
+import android.content.pm.PackageManager
+import android.os.Build
 import android.os.Bundle
 import android.text.InputType
 import android.text.SpannableString
@@ -17,6 +20,7 @@ import androidx.core.content.edit
 import desu.inugram.InuConfig
 import desu.inugram.ui.MessageDetailsActivity
 import org.telegram.messenger.AndroidUtilities
+import org.telegram.messenger.BuildVars
 import org.telegram.messenger.ChatObject
 import org.telegram.messenger.DialogObject
 import org.telegram.messenger.FileLoader
@@ -27,15 +31,18 @@ import org.telegram.messenger.MessagesController
 import org.telegram.messenger.MessagesStorage
 import org.telegram.messenger.R
 import org.telegram.messenger.SendMessagesHelper
+import org.telegram.messenger.TranslateController
 import org.telegram.messenger.UserConfig
 import org.telegram.messenger.UserObject
 import org.telegram.tgnet.ConnectionsManager
 import org.telegram.tgnet.TLRPC
 import org.telegram.ui.ActionBar.ActionBarMenu
+import org.telegram.ui.ActionBar.ActionBarMenuItem
 import org.telegram.ui.ActionBar.ActionBarPopupWindow
 import org.telegram.ui.ActionBar.AlertDialog
 import org.telegram.ui.ActionBar.BottomSheet
 import org.telegram.ui.ActionBar.Theme
+import org.telegram.ui.BasePermissionsActivity
 import org.telegram.ui.Cells.ChatMessageCell
 import org.telegram.ui.ChatActivity
 import org.telegram.ui.Components.BulletinFactory
@@ -46,10 +53,12 @@ import org.telegram.ui.Components.ItemOptions
 import org.telegram.ui.Components.LayoutHelper
 import org.telegram.ui.Components.PopupSwipeBackLayout
 import org.telegram.ui.Components.RLottieDrawable
+import org.telegram.ui.Components.TranslateAlert2
 import org.telegram.ui.Components.URLSpanUserMention
 import org.telegram.ui.Components.UndoView
 import org.telegram.ui.DialogsActivity
 import org.telegram.ui.LaunchActivity
+import org.telegram.ui.RestrictedLanguagesSelectActivity
 import java.io.File
 import java.util.Calendar
 import kotlin.math.roundToInt
@@ -63,9 +72,14 @@ object ChatHelper {
     const val ACTION_SHOW_PINNED_PANEL = 506
     const val ACTION_PINNED_UNPIN_ALL = 507
     const val ACTION_SELECT_RANGE = 1500
+    const val ACTION_SELECTION_MENU = 1501
+    const val ACTION_SEL_SAVE = 1502
+    const val ACTION_SEL_TRANSLATE = 1503
+    const val ACTION_SEL_GALLERY = 1504
     const val OPTION_TRANSLATE_REVERT = 508
     const val OPTION_FORWARD_NO_QUOTE = 509
     const val OPTION_REPLY_IN_DMS = 510
+    const val OPTION_SUMMARIZE = 511
 
     private fun removeWallpaperKey(currentAccount: Int, dialogId: Long) = "remove_wallpaper:$currentAccount:$dialogId"
     private fun removeThemeKey(currentAccount: Int, dialogId: Long) = "remove_theme:$currentAccount:$dialogId"
@@ -169,6 +183,12 @@ object ChatHelper {
             icons.add(R.drawable.msg_translate)
         }
 
+        if (!selectedObject.messageOwner.summarizedOpen && InuConfig.HIDE_MESSAGE_SUMMARY.value && TranslateController.isSummarizable(selectedObject)) {
+            items.add(LocaleController.getString(R.string.InuSummarize))
+            options.add(OPTION_SUMMARIZE)
+            icons.add(R.drawable.magic_stick_solar)
+        }
+
         if (!noforwards && dialogId != UserConfig.getInstance(activity.currentAccount).clientUserId) {
             items.add(LocaleController.getString(R.string.InuSaveToSavedMessages))
             options.add(OPTION_SAVE)
@@ -260,11 +280,7 @@ object ChatHelper {
                 } else {
                     messages.add(selectedObject)
                 }
-                val selfId = UserConfig.getInstance(activity.currentAccount).clientUserId
-                SendMessagesHelper.getInstance(activity.currentAccount)
-                    .sendMessage(messages, selfId, false, false, true, 0, 0, null, -1, 0, 0, null)
-                activity.createUndoView()
-                activity.undoView.showWithAction(selfId, UndoView.ACTION_FWD_MESSAGES, messages.size)
+                forwardToSavedMessages(activity, messages)
             }
 
             OPTION_REPLY_IN -> {
@@ -325,6 +341,11 @@ object ChatHelper {
             }
 
             OPTION_TRANSLATE_REVERT -> TranslateHelper.revert(activity, selectedObjectGroup?.captionMessage ?: selectedObject)
+
+            OPTION_SUMMARIZE -> {
+                val cell = activity.findMessageCell(selectedObject.id, false) as? ChatMessageCell ?: return true
+                cell.delegate?.didPressSummarize(cell, false)
+            }
 
             OPTION_SHOW_IN_CHAT -> {
                 val args = Bundle()
@@ -537,6 +558,29 @@ object ChatHelper {
             actionMode.addView(item, targetIndex)
         }
         activity.actionModeViews.add(item)
+
+        val overflow = actionMode.addItemWithWidth(
+            ACTION_SELECTION_MENU,
+            R.drawable.ic_ab_other,
+            AndroidUtilities.dp(54f),
+            LocaleController.getString(R.string.AccDescrMoreOptions),
+        )
+        overflow.addSubItem(
+            ACTION_SEL_SAVE,
+            R.drawable.msg_saved,
+            LocaleController.getString(R.string.InuSaveToSavedMessages),
+        )
+        overflow.addSubItem(
+            ACTION_SEL_TRANSLATE,
+            R.drawable.msg_translate,
+            LocaleController.getString(R.string.TranslateMessage),
+        )
+        overflow.addSubItem(
+            ACTION_SEL_GALLERY,
+            R.drawable.msg_download,
+            LocaleController.getString(R.string.SaveToGallery),
+        )
+        activity.actionModeViews.add(overflow)
     }
 
     @JvmStatic
@@ -552,13 +596,134 @@ object ChatHelper {
             ACTION_SELECT_RANGE,
             if (hasUnselectedGap(activity)) View.VISIBLE else View.GONE,
         )
+
+        val overflow = actionMode.getItem(ACTION_SELECTION_MENU) as? ActionBarMenuItem ?: return
+        var any = false
+        var hasText = false
+        var hasMedia = false
+        var allForwardable = true
+        forEachSelectedMessage(activity) { msg ->
+            any = true
+            if (!msg.messageOwner?.message.isNullOrEmpty()) hasText = true
+            if (msg.isPhoto || msg.isVideo) hasMedia = true
+            if (!msg.canForwardMessage()) allForwardable = false
+        }
+        val selfId = UserConfig.getInstance(activity.currentAccount).clientUserId
+        val canSave = any && allForwardable && !activity.isPeerNoForwards && activity.dialogId != selfId
+        val canTranslate = any && hasText && InuConfig.IN_PLACE_TRANSLATION.value
+        overflow.setSubItemShown(ACTION_SEL_SAVE, canSave)
+        overflow.setSubItemShown(ACTION_SEL_TRANSLATE, canTranslate)
+        overflow.setSubItemShown(ACTION_SEL_GALLERY, hasMedia)
+        actionMode.setItemVisibility(
+            ACTION_SELECTION_MENU,
+            if (canSave || canTranslate || hasMedia) View.VISIBLE else View.GONE,
+        )
     }
 
     @JvmStatic
     fun handleActionModeClick(id: Int, activity: ChatActivity): Boolean {
-        if (id != ACTION_SELECT_RANGE) return false
-        fillSelectionGaps(activity)
+        when (id) {
+            ACTION_SELECT_RANGE -> fillSelectionGaps(activity)
+            ACTION_SEL_SAVE -> saveSelectionToSavedMessages(activity)
+            ACTION_SEL_TRANSLATE -> translateSelection(activity)
+            ACTION_SEL_GALLERY -> saveSelectionToGallery(activity)
+            else -> return false
+        }
         return true
+    }
+
+    private inline fun forEachSelectedMessage(activity: ChatActivity, action: (MessageObject) -> Unit) {
+        // index 1 (merged dialog) first, then 0; SparseArray iteration is id-ascending within each
+        for (a in 1 downTo 0) {
+            val arr = activity.selectedMessagesIds[a]
+            for (i in 0 until arr.size()) action(arr.valueAt(i))
+        }
+    }
+
+    private fun collectSelected(activity: ChatActivity): ArrayList<MessageObject> {
+        val out = ArrayList<MessageObject>()
+        forEachSelectedMessage(activity) { out.add(it) }
+        return out
+    }
+
+    private fun forwardToSavedMessages(activity: ChatActivity, messages: ArrayList<MessageObject>) {
+        if (messages.isEmpty()) return
+        val selfId = UserConfig.getInstance(activity.currentAccount).clientUserId
+        SendMessagesHelper.getInstance(activity.currentAccount)
+            .sendMessage(messages, selfId, false, false, true, 0, 0L)
+        activity.createUndoView()
+        activity.undoView.showWithAction(selfId, UndoView.ACTION_FWD_MESSAGES, messages.size)
+    }
+
+    private fun saveSelectionToSavedMessages(activity: ChatActivity) {
+        forwardToSavedMessages(activity, collectSelected(activity))
+        activity.clearSelectionMode()
+    }
+
+    private fun translateSelection(activity: ChatActivity) {
+        if (!InuConfig.IN_PLACE_TRANSLATION.value) return
+        val toLang = TranslateAlert2.getToLanguage()
+        val toLangDefault = LocaleController.getInstance().currentLocale.language
+        val restricted = RestrictedLanguagesSelectActivity.getRestrictedLanguages()
+        val seenGroups = HashSet<Long>()
+        var anyStarted = false
+        for (msg in collectSelected(activity)) {
+            val groupId = msg.groupId
+            val group = if (groupId != 0L) {
+                if (!seenGroups.add(groupId)) continue
+                activity.getGroup(groupId)
+            } else {
+                null
+            }
+            val target = group?.captionMessage?.takeIf { !it.messageOwner?.message.isNullOrEmpty() } ?: msg
+            val fromLang = target.messageOwner?.originalLanguage
+            if (fromLang != null && restricted.contains(fromLang)) continue
+            // mirror the message menu: a message already in the target language is translated to the app locale
+            val toLangValue = if (fromLang == toLang) toLangDefault else toLang
+            if (fromLang != null && fromLang == toLangValue) continue
+            if (TranslateHelper.startTranslate(activity, msg, group, fromLang, toLangValue)) {
+                anyStarted = true
+            }
+        }
+        activity.clearSelectionMode()
+        if (!anyStarted) {
+            BulletinFactory.of(activity)
+                .createErrorBulletin(LocaleController.getString(R.string.InuNothingToTranslate))
+                .show()
+        }
+    }
+
+    private fun saveSelectionToGallery(activity: ChatActivity) {
+        val parent = activity.parentActivity ?: return
+        if (Build.VERSION.SDK_INT >= 23 && (Build.VERSION.SDK_INT <= 28 || BuildVars.NO_SCOPED_STORAGE) &&
+            parent.checkSelfPermission(Manifest.permission.WRITE_EXTERNAL_STORAGE) != PackageManager.PERMISSION_GRANTED
+        ) {
+            parent.requestPermissions(
+                arrayOf(Manifest.permission.WRITE_EXTERNAL_STORAGE),
+                BasePermissionsActivity.REQUEST_CODE_EXTERNAL_STORAGE,
+            )
+            return
+        }
+        var photos = 0
+        var videos = 0
+        for (msg in collectSelected(activity)) {
+            when {
+                msg.isPhoto -> photos++
+                msg.isVideo -> videos++
+                else -> continue
+            }
+            activity.saveMessageToGallery(msg)
+        }
+        val count = photos + videos
+        if (count > 0) {
+            val type = when {
+                videos == 0 -> BulletinFactory.FileType.PHOTOS
+                photos == 0 -> BulletinFactory.FileType.VIDEOS
+                else -> BulletinFactory.FileType.MEDIA
+            }
+            BulletinFactory.of(activity).createDownloadBulletin(type, count, activity.resourceProvider).show()
+        }
+        activity.clearSelectionMode()
     }
 
     private data class GapInfo(val targetIndex: Int, val minId: Int, val maxId: Int)
@@ -782,6 +947,18 @@ object ChatHelper {
         }
         activity.showFieldPanelForForward(true, messages)
         return true
+    }
+
+    @JvmStatic
+    fun forwardBarTitle(params: MessagePreviewParams?, fallback: CharSequence): CharSequence {
+        if (params == null) return fallback
+        val res = when {
+            params.hideForwardSendersName && params.hideCaption -> R.string.InuHiddenSendersAndCaptionDescription
+            params.hideCaption -> R.string.InuHiddenCaptionDescription
+            params.hideForwardSendersName -> R.string.HiddenSendersNameDescription
+            else -> return fallback
+        }
+        return LocaleController.getString(res)
     }
 
     @JvmStatic

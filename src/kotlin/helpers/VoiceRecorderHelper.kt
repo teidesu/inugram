@@ -91,6 +91,7 @@ object VoiceRecorderHelper {
             private var runnableStarted = false
 
             private val iconView = ChatActivityEnterViewAnimatedIconView(context, 24).apply {
+                inu_legacy = false // fab keeps the stock filled icon regardless of non-island mode
                 colorFilter = PorterDuffColorFilter(Color.WHITE, PorterDuff.Mode.SRC_IN)
                 scaleType = ImageView.ScaleType.CENTER
             }
@@ -188,6 +189,7 @@ object VoiceRecorderHelper {
                 v.viewTreeObserver.addOnPreDrawListener(preDraw)
                 sync.run()
             }
+
             override fun onViewDetachedFromWindow(v: View) {
                 v.viewTreeObserver.removeOnPreDrawListener(preDraw)
             }
@@ -215,6 +217,7 @@ object VoiceRecorderHelper {
 
     private fun showCameraPicker(options: ItemOptions, onChoice: (front: Boolean) -> Unit) {
         options
+            .forceTop(true)
             .setMinWidth(160)
             .add(
                 scaleDrawable(options.context, R.drawable.menu_camera_retake, 24),

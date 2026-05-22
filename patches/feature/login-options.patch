@@ -25,7 +25,7 @@ diff --git a/TMessagesProj/src/main/java/org/telegram/messenger/MessagesControll
 index 0000000..0000000 100644
 --- a/TMessagesProj/src/main/java/org/telegram/messenger/MessagesController.java
 +++ b/TMessagesProj/src/main/java/org/telegram/messenger/MessagesController.java
-@@ -17688,6 +17688,7 @@ public class MessagesController extends BaseController implements NotificationCe
+@@ -17839,6 +17839,7 @@ public class MessagesController extends BaseController implements NotificationCe
              if (BuildVars.LOGS_ENABLED && baseUpdate != null) {
                  FileLog.d("process update " + baseUpdate.getClass().getSimpleName());
              }

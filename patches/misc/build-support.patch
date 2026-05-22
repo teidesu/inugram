@@ -4,20 +4,20 @@ Date: Tue, 21 Apr 2026 07:47:50 +0300
 Subject: build support stuff for fork-specific code: - added kotlin - bumped min sdk to 26, removed desugaring - versioning
 
 ---
- TMessagesProj/build.gradle                    | 110 +++++------------
- TMessagesProj/google-services.json            |  76 ++----------
+ TMessagesProj/build.gradle                    | 110 ++++------------
+ TMessagesProj/google-services.json            |  76 ++---------
  TMessagesProj/proguard-rules.pro              |  13 ++
  TMessagesProj/src/main/AndroidManifest.xml    |   7 ++
  .../org/telegram/messenger/BuildVars.java     |  12 +-
  .../org/telegram/ui/PaymentFormActivity.java  |  28 ++---
  .../org/telegram/ui/SettingsActivity.java     |  24 +---
- TMessagesProj_App/build.gradle                | 113 ++++--------------
- TMessagesProj_App/google-services.json        |  76 ++----------
+ TMessagesProj_App/build.gradle                | 119 ++++--------------
+ TMessagesProj_App/google-services.json        |  76 ++---------
  TMessagesProj_AppTests/build.gradle           |   5 +-
  build.gradle                                  |  12 +-
  gradle.properties                             |   4 +-
  settings.gradle                               |   5 +-
- 13 files changed, 130 insertions(+), 355 deletions(-)
+ 13 files changed, 136 insertions(+), 355 deletions(-)
 
 diff --git a/TMessagesProj/build.gradle b/TMessagesProj/build.gradle
 index 0000000..0000000 100644
@@ -48,9 +48,9 @@ index 0000000..0000000 100644
      implementation 'com.google.mlkit:language-id:17.0.6'
      implementation 'com.android.billingclient:billing:7.1.1'
      implementation 'com.google.code.gson:gson:2.11.0'
-@@ -56,6 +58,10 @@ dependencies {
-     implementation "androidx.credentials:credentials:1.6.0-alpha04"
-     implementation "androidx.credentials:credentials-play-services-auth:1.6.0-alpha04"
+@@ -63,6 +65,10 @@ dependencies {
+     implementation "io.noties.markwon:inline-parser:4.6.2"
+     implementation "io.noties.markwon:ext-latex:4.6.2"
  
 +    // inu
 +    implementation 'org.maplibre.gl:android-sdk:13.1.0'
@@ -59,7 +59,7 @@ index 0000000..0000000 100644
  //    implementation 'com.google.mlkit:translate:17.0.3'
  
      constraints {
-@@ -67,8 +73,6 @@ dependencies {
+@@ -74,8 +80,6 @@ dependencies {
          }
      }
      implementation 'com.google.android.recaptcha:recaptcha:18.7.1'
@@ -68,7 +68,7 @@ index 0000000..0000000 100644
  }
  
  def isWindows = String.valueOf(DefaultNativePlatform.currentOperatingSystem.toFamilyName() == OperatingSystemFamily.WINDOWS)
-@@ -94,23 +98,28 @@ android {
+@@ -101,23 +105,28 @@ android {
      compileOptions {
          sourceCompatibility JavaVersion.VERSION_1_8
          targetCompatibility JavaVersion.VERSION_1_8
@@ -103,7 +103,7 @@ index 0000000..0000000 100644
              }
          }
      }
-@@ -123,78 +132,14 @@ android {
+@@ -130,78 +139,14 @@ android {
              multiDexEnabled true
              proguardFiles getDefaultProguardFile('proguard-android.txt'), '../TMessagesProj/proguard-rules.pro', '../TMessagesProj/proguard-rules-beta.pro'
              ndk.debugSymbolLevel = 'FULL'
@@ -186,7 +186,7 @@ index 0000000..0000000 100644
          }
  
          release {
-@@ -204,14 +149,14 @@ android {
+@@ -211,14 +156,14 @@ android {
              multiDexEnabled true
              proguardFiles getDefaultProguardFile('proguard-android.txt'), '../TMessagesProj/proguard-rules.pro'
              ndk.debugSymbolLevel = 'FULL'
@@ -205,7 +205,7 @@ index 0000000..0000000 100644
          }
      }
  
-@@ -229,7 +174,6 @@ def getProps(String propName) {
+@@ -236,7 +181,6 @@ def getProps(String propName) {
          return "";
      }
  }
@@ -213,7 +213,7 @@ index 0000000..0000000 100644
  
  task checkVisibility {
      doFirst {
-@@ -251,4 +195,4 @@ task checkVisibility {
+@@ -258,4 +202,4 @@ task checkVisibility {
      }
  }
  
@@ -337,9 +337,9 @@ diff --git a/TMessagesProj/proguard-rules.pro b/TMessagesProj/proguard-rules.pro
 index 0000000..0000000 100644
 --- a/TMessagesProj/proguard-rules.pro
 +++ b/TMessagesProj/proguard-rules.pro
-@@ -104,6 +104,19 @@
- -dontwarn org.checkerframework.**
- -dontwarn javax.annotation.**
+@@ -111,6 +111,19 @@
+ -keep class ru.noties.jlatexmath.** { *; }
+ -dontwarn org.scilab.forge.jlatexmath.**
  
 +# inu
 +# fixes for some libs
@@ -552,7 +552,20 @@ index 0000000..0000000 100644
  }
  
  android {
-@@ -37,20 +38,11 @@ android {
+@@ -28,6 +29,12 @@ android {
+ 
+     sourceSets.main.jniLibs.srcDirs = ['../TMessagesProj/jni/']
+ 
++    packaging {
++        jniLibs {
++            useLegacyPackaging = true
++        }
++    }
++
+     lintOptions {
+         disable 'MissingTranslation'
+         disable 'ExtraTranslation'
+@@ -37,20 +44,11 @@ android {
      compileOptions {
          sourceCompatibility JavaVersion.VERSION_1_8
          targetCompatibility JavaVersion.VERSION_1_8
@@ -574,7 +587,7 @@ index 0000000..0000000 100644
              storePassword RELEASE_STORE_PASSWORD
              keyAlias RELEASE_KEY_ALIAS
              keyPassword RELEASE_KEY_PASSWORD
-@@ -61,7 +53,7 @@ android {
+@@ -61,7 +59,7 @@ android {
          debug {
              debuggable true
              jniDebuggable true
@@ -583,7 +596,7 @@ index 0000000..0000000 100644
              applicationIdSuffix ".beta"
              minifyEnabled false
              shrinkResources false
-@@ -70,18 +62,6 @@ android {
+@@ -70,18 +68,6 @@ android {
              ndk.debugSymbolLevel = 'FULL'
          }
  
@@ -602,7 +615,7 @@ index 0000000..0000000 100644
          release {
              debuggable false
              jniDebuggable false
-@@ -95,95 +75,38 @@ android {
+@@ -95,95 +81,38 @@ android {
      }
  
      sourceSets.debug {
@@ -616,8 +629,9 @@ index 0000000..0000000 100644
  
      sourceSets.release {
 -        manifest.srcFile '../TMessagesProj/config/release/AndroidManifest.xml'
--    }
--
++        manifest.srcFile '../TMessagesProj/config/release/AndroidManifest_SDK23.xml'
+     }
+ 
 -    flavorDimensions "minApi"
 -
 -    productFlavors {
@@ -664,9 +678,8 @@ index 0000000..0000000 100644
 -            }
 -            buildConfigField "boolean", "BUNDLE", "false"
 -        }
-+        manifest.srcFile '../TMessagesProj/config/release/AndroidManifest_SDK23.xml'
-     }
- 
+-    }
+-
 -    defaultConfig.versionCode = Integer.parseInt(APP_VERSION_CODE)
 +    defaultConfig.versionCode = rootProject.ext.verCode
  
@@ -690,7 +703,7 @@ index 0000000..0000000 100644
          targetSdkVersion 35
 -        versionName APP_VERSION_NAME
 +        versionName rootProject.ext.verName
-         ndkVersion "21.4.7075529"
+         ndkVersion "27.2.12479018"
  
 -        multiDexEnabled true
 -
@@ -710,7 +723,7 @@ index 0000000..0000000 100644
              }
          }
      }
-@@ -196,6 +119,10 @@ android {
+@@ -196,6 +125,10 @@ android {
      lintOptions {
          checkReleaseBuilds false
      }
@@ -886,8 +899,8 @@ index 0000000..0000000 100644
 +++ b/gradle.properties
 @@ -15,7 +15,7 @@
  #Sat Mar 12 05:53:50 MSK 2016
- APP_VERSION_CODE=6666
- APP_VERSION_NAME=12.6.4
+ APP_VERSION_CODE=6750
+ APP_VERSION_NAME=12.7.3
 -APP_PACKAGE=org.telegram.messenger
 +APP_PACKAGE=desu.inugram
  IS_PRIVATE=false

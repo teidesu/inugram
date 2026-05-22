@@ -15,7 +15,7 @@ diff --git a/TMessagesProj/src/main/java/org/telegram/ui/ChatActivity.java b/TMe
 index 0000000..0000000 100644
 --- a/TMessagesProj/src/main/java/org/telegram/ui/ChatActivity.java
 +++ b/TMessagesProj/src/main/java/org/telegram/ui/ChatActivity.java
-@@ -31278,7 +31278,9 @@ public class ChatActivity extends BaseFragment implements
+@@ -31442,7 +31442,9 @@ public class ChatActivity extends BaseFragment implements
                  if (isReactionsAvailable && (!tags || !getMessagesController().premiumFeaturesBlocked())) {
                      int pad = 22;
                      int sPad = 24;
@@ -26,7 +26,7 @@ index 0000000..0000000 100644
  
                      ReactionsContainerLayout finalReactionsLayout = reactionsLayout;
                      reactionsLayout.setDelegate(new ReactionsContainerLayout.ReactionsContainerDelegate() {
-@@ -31315,8 +31317,11 @@ public class ChatActivity extends BaseFragment implements
+@@ -31479,8 +31481,11 @@ public class ChatActivity extends BaseFragment implements
                          }
                      });
  
@@ -40,7 +40,7 @@ index 0000000..0000000 100644
                      scrimPopupContainerLayout.setReactionsLayout(reactionsLayout);
                      scrimPopupContainerLayout.setClipChildren(false);
                      MessageObject messageWithReactions = message;
-@@ -31350,6 +31355,9 @@ public class ChatActivity extends BaseFragment implements
+@@ -31514,6 +31519,9 @@ public class ChatActivity extends BaseFragment implements
  
                  boolean showNoForwards = (isPeerNoForwards() || message.messageOwner.noforwards && currentUser != null && currentUser.bot) && message.messageOwner.action == null && message.isSent() && !message.isEditing() && chatMode != MODE_SCHEDULED && chatMode != MODE_SAVED && getDialogId() != UserObject.VERIFY;
                  scrimPopupContainerLayout.addView(popupLayout, LayoutHelper.createLinearRelatively(LayoutHelper.WRAP_CONTENT, LayoutHelper.WRAP_CONTENT, Gravity.LEFT, isReactionsAvailable ? 16 : 0, 0, isReactionsAvailable ? 36 : 0, 0));
@@ -50,7 +50,7 @@ index 0000000..0000000 100644
                  scrimPopupContainerLayout.setPopupWindowLayout(popupLayout);
                  if (showNoForwards) {
                      popupLayout.measure(View.MeasureSpec.makeMeasureSpec(0, View.MeasureSpec.UNSPECIFIED), View.MeasureSpec.makeMeasureSpec(0, View.MeasureSpec.UNSPECIFIED));
-@@ -31383,7 +31391,11 @@ public class ChatActivity extends BaseFragment implements
+@@ -31547,7 +31555,11 @@ public class ChatActivity extends BaseFragment implements
                      FrameLayout fl = new FrameLayout(contentView.getContext());
                      fl.setBackground(shadowDrawable2);
                      fl.addView(tv, LayoutHelper.createFrame(LayoutHelper.MATCH_PARENT, LayoutHelper.WRAP_CONTENT, 0, 11, 11, 11, 11));
@@ -63,7 +63,7 @@ index 0000000..0000000 100644
                      scrimPopupContainerLayout.applyViewBottom(fl);
                  }
  
-@@ -31406,7 +31418,11 @@ public class ChatActivity extends BaseFragment implements
+@@ -31570,7 +31582,11 @@ public class ChatActivity extends BaseFragment implements
                      FrameLayout fl = new FrameLayout(contentView.getContext());
                      fl.setBackground(shadowDrawable2);
                      fl.addView(tv, LayoutHelper.createFrame(LayoutHelper.MATCH_PARENT, LayoutHelper.WRAP_CONTENT, 0, 11, 11, 11, 11));
@@ -76,7 +76,7 @@ index 0000000..0000000 100644
                      scrimPopupContainerLayout.applyViewBottom(fl);
                  }
  
-@@ -31514,6 +31530,9 @@ public class ChatActivity extends BaseFragment implements
+@@ -31678,6 +31694,9 @@ public class ChatActivity extends BaseFragment implements
              }
              scrimPopupWindow.setFocusable(true);
              scrimPopupContainerLayout.measure(View.MeasureSpec.makeMeasureSpec(AndroidUtilities.dp(1000), View.MeasureSpec.AT_MOST), View.MeasureSpec.makeMeasureSpec(AndroidUtilities.dp(1000), View.MeasureSpec.AT_MOST));
@@ -134,7 +134,7 @@ diff --git a/TMessagesProj/src/main/java/org/telegram/ui/Components/Reactions/Cu
 index 0000000..0000000 100644
 --- a/TMessagesProj/src/main/java/org/telegram/ui/Components/Reactions/CustomEmojiReactionsWindow.java
 +++ b/TMessagesProj/src/main/java/org/telegram/ui/Components/Reactions/CustomEmojiReactionsWindow.java
-@@ -374,7 +374,13 @@ public class CustomEmojiReactionsWindow {
+@@ -376,7 +376,13 @@ public class CustomEmojiReactionsWindow {
              reactionsContainerLayout.getLocationOnScreen(location);
          }
          windowView.getLocationOnScreen(windowLocation);
@@ -149,7 +149,7 @@ index 0000000..0000000 100644
  
          if (reactionsContainerLayout.showExpandableReactions()) {
              y = location[1] - windowLocation[1] - dp(12);
-@@ -785,6 +791,7 @@ public class CustomEmojiReactionsWindow {
+@@ -802,6 +808,7 @@ public class CustomEmojiReactionsWindow {
  
          @Override
          protected void onMeasure(int widthMeasureSpec, int heightMeasureSpec) {
@@ -157,7 +157,7 @@ index 0000000..0000000 100644
              int size;
              if (type == TYPE_STORY || type == TYPE_STORY_LIKES || type == TYPE_STICKER_SET_EMOJI) {
                  size = reactionsContainerLayout.getMeasuredWidth();
-@@ -792,7 +799,7 @@ public class CustomEmojiReactionsWindow {
+@@ -809,7 +816,7 @@ public class CustomEmojiReactionsWindow {
                  size = dp(36) * 8 + dp(12);
              } else {
                  size = Math.min(MeasureSpec.getSize(widthMeasureSpec), MeasureSpec.getSize(heightMeasureSpec));
@@ -166,7 +166,7 @@ index 0000000..0000000 100644
                  if (measuredSize < size) {
                      size = measuredSize;
                  }
-@@ -801,7 +808,7 @@ public class CustomEmojiReactionsWindow {
+@@ -818,7 +825,7 @@ public class CustomEmojiReactionsWindow {
              if (type == TYPE_STICKER_SET_EMOJI) {
                  height = dp(36) * 8 - dp(8);
              } else if (reactionsContainerLayout.showExpandableReactions()) {
@@ -239,8 +239,8 @@ diff --git a/TMessagesProj/src/main/java/org/telegram/ui/SelectAnimatedEmojiDial
 index 0000000..0000000 100644
 --- a/TMessagesProj/src/main/java/org/telegram/ui/SelectAnimatedEmojiDialog.java
 +++ b/TMessagesProj/src/main/java/org/telegram/ui/SelectAnimatedEmojiDialog.java
-@@ -163,9 +163,9 @@ public class SelectAnimatedEmojiDialog extends FrameLayout implements Notificati
-         return type == TYPE_SET_REPLY_ICON || type == TYPE_EMOJI_STATUS_CHANNEL_TOP || type == TYPE_EMOJI_STATUS_TOP;
+@@ -165,9 +165,9 @@ public class SelectAnimatedEmojiDialog extends FrameLayout implements Notificati
+         return type == TYPE_SET_REPLY_ICON || type == TYPE_EMOJI_STATUS_CHANNEL_TOP || type == TYPE_EMOJI_STATUS_TOP || type == TYPE_AI_STYLE_ICON;
      }
  
 -    private final int SPAN_COUNT_FOR_EMOJI = 8;
@@ -251,7 +251,7 @@ index 0000000..0000000 100644
  
      private final int RECENT_MAX_LINES = 5;
      private final int EXPAND_MAX_LINES = 3;
-@@ -491,6 +491,10 @@ public class SelectAnimatedEmojiDialog extends FrameLayout implements Notificati
+@@ -493,6 +493,10 @@ public class SelectAnimatedEmojiDialog extends FrameLayout implements Notificati
          super(context);
          this.resourcesProvider = resourcesProvider;
          this.type = type;
@@ -262,7 +262,7 @@ index 0000000..0000000 100644
          this.includeEmpty = includeEmpty;
          this.baseFragment = baseFragment;
          this.includeHint = MessagesController.getGlobalMainSettings().getInt("emoji" + (type == TYPE_EMOJI_STATUS || type == TYPE_EMOJI_STATUS_TOP || type == TYPE_EMOJI_STATUS_CHANNEL || type == TYPE_EMOJI_STATUS_CHANNEL_TOP ? "status" : "reaction") + "usehint", 0) < 3;
-@@ -808,7 +812,7 @@ public class SelectAnimatedEmojiDialog extends FrameLayout implements Notificati
+@@ -811,7 +815,7 @@ public class SelectAnimatedEmojiDialog extends FrameLayout implements Notificati
                  } else if (position >= stickersStartRow && position < stickersEndRow) {
                      return 8;
                  } else {

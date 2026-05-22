@@ -1,6 +1,7 @@
 package desu.inugram.helpers
 
 import android.content.DialogInterface
+import android.widget.FrameLayout
 import android.widget.TextView
 import desu.inugram.InuConfig
 import desu.inugram.core.diff.DiffKind
@@ -164,9 +165,13 @@ object AdminLogHelper {
     private var toggleDiffItem: ActionBarMenuSubItem? = null
 
     @JvmStatic
-    fun setupHeader(menu: ActionBarMenu) {
+    fun setupHeader(activity: ChannelAdminLogActivity, menu: ActionBarMenu) {
         val headerItem = menu.addItem(0, R.drawable.ic_ab_other)
         headerItem.contentDescription = LocaleController.getString(R.string.AccDescrMoreOptions)
+
+        // this "more options" item sits next to search; the ActionBar doesn't subtract menu
+        // width for the custom title view, so reserve room for both items (+ the -9 menu shift)
+        (activity.avatarContainer.layoutParams as FrameLayout.LayoutParams).rightMargin = AndroidUtilities.dp(48f + 48f + 9f)
         toggleDiffItem = headerItem.addSubItem(
             MENU_TOGGLE_DIFF,
             R.drawable.inu_tabler_file_diff,

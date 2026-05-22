@@ -4,20 +4,20 @@ Date: Tue, 12 May 2026 14:58:17 +0200
 Subject: force system font for ui
 
 ---
- .../org/telegram/messenger/AndroidUtilities.java     |  6 ++++++
- .../org/telegram/ui/ActionBar/SimpleTextView.java    |  1 +
- .../main/java/org/telegram/ui/ActionBar/Theme.java   |  3 +++
- .../org/telegram/ui/Cells/ProfileSearchCell.java     |  1 +
- .../telegram/ui/Components/AnimatedEmojiSpan.java    |  1 +
- .../org/telegram/ui/Components/AnimatedTextView.java |  1 +
- .../telegram/ui/Components/Paint/PaintTypeface.java  | 12 ++++++------
- 7 files changed, 19 insertions(+), 6 deletions(-)
+ .../java/org/telegram/messenger/AndroidUtilities.java  |  6 ++++++
+ .../java/org/telegram/ui/ActionBar/SimpleTextView.java |  1 +
+ .../src/main/java/org/telegram/ui/ActionBar/Theme.java |  3 +++
+ .../java/org/telegram/ui/Cells/ProfileSearchCell.java  |  1 +
+ .../org/telegram/ui/Components/AnimatedEmojiSpan.java  |  1 +
+ .../org/telegram/ui/Components/AnimatedTextView.java   |  1 +
+ .../telegram/ui/Components/Paint/PaintTypeface.java    | 10 +++++-----
+ 7 files changed, 18 insertions(+), 5 deletions(-)
 
 diff --git a/TMessagesProj/src/main/java/org/telegram/messenger/AndroidUtilities.java b/TMessagesProj/src/main/java/org/telegram/messenger/AndroidUtilities.java
 index 0000000..0000000 100644
 --- a/TMessagesProj/src/main/java/org/telegram/messenger/AndroidUtilities.java
 +++ b/TMessagesProj/src/main/java/org/telegram/messenger/AndroidUtilities.java
-@@ -2400,7 +2400,13 @@ public class AndroidUtilities {
+@@ -2401,7 +2401,13 @@ public class AndroidUtilities {
      }
  
      public static Typeface getTypeface(String assetPath) {
@@ -47,7 +47,7 @@ diff --git a/TMessagesProj/src/main/java/org/telegram/ui/ActionBar/Theme.java b/
 index 0000000..0000000 100644
 --- a/TMessagesProj/src/main/java/org/telegram/ui/ActionBar/Theme.java
 +++ b/TMessagesProj/src/main/java/org/telegram/ui/ActionBar/Theme.java
-@@ -8525,6 +8525,7 @@ public class Theme {
+@@ -8524,6 +8524,7 @@ public class Theme {
          dialogs_tagTextPaint.setTextSize(dp(10));
          dialogs_searchNamePaint.setTextSize(dp(16));
          dialogs_searchNameEncryptedPaint.setTextSize(dp(16));
@@ -55,7 +55,7 @@ index 0000000..0000000 100644
      }
  
      public static void applyDialogsTheme() {
-@@ -8772,6 +8773,7 @@ public class Theme {
+@@ -8771,6 +8772,7 @@ public class Theme {
              addChatPaint(key_paint_chatComposeBackground, chat_composeBackgroundPaint, key_chat_messagePanelBackground);
              addChatPaint(key_paint_chatTimeBackground, chat_timeBackgroundPaint, key_chat_mediaTimeBackground);
          }
@@ -63,7 +63,7 @@ index 0000000..0000000 100644
      }
  
      public static void createChatResources(Context context, boolean fontsOnly) {
-@@ -9478,6 +9480,7 @@ public class Theme {
+@@ -9477,6 +9479,7 @@ public class Theme {
          }
  
          profile_aboutTextPaint.setTextSize(dp(16));
@@ -111,7 +111,7 @@ diff --git a/TMessagesProj/src/main/java/org/telegram/ui/Components/Paint/PaintT
 index 0000000..0000000 100644
 --- a/TMessagesProj/src/main/java/org/telegram/ui/Components/Paint/PaintTypeface.java
 +++ b/TMessagesProj/src/main/java/org/telegram/ui/Components/Paint/PaintTypeface.java
-@@ -33,13 +33,13 @@ import java.util.Set;
+@@ -33,12 +33,12 @@ import java.util.Set;
  public class PaintTypeface {
      private final static boolean SYSTEM_FONTS_ENABLED = true;
  
@@ -123,11 +123,9 @@ index 0000000..0000000 100644
 -    public static final PaintTypeface ROBOTO_CONDENSED = new PaintTypeface("condensed", "PhotoEditorTypefaceCondensed", new LazyTypeface(() -> AndroidUtilities.getTypeface("fonts/rcondensedbold.ttf")));
 -    public static final PaintTypeface ROBOTO_MONO = new PaintTypeface ("mono", "PhotoEditorTypefaceMono", new LazyTypeface(() -> AndroidUtilities.getTypeface(AndroidUtilities.TYPEFACE_ROBOTO_MONO)));
 -    public static final PaintTypeface MW_BOLD = new PaintTypeface("mw_bold", "PhotoEditorTypefaceMerriweather", new LazyTypeface(() -> AndroidUtilities.getTypeface(AndroidUtilities.TYPEFACE_MERRIWEATHER_BOLD)));
--    public static final PaintTypeface COURIER_NEW_BOLD = new PaintTypeface("courier_new_bold", "PhotoEditorTypefaceCourierNew", new LazyTypeface(() -> AndroidUtilities.getTypeface(AndroidUtilities.TYPEFACE_COURIER_NEW_BOLD)));
 +    public static final PaintTypeface ROBOTO_CONDENSED = new PaintTypeface("condensed", "PhotoEditorTypefaceCondensed", new LazyTypeface(() -> AndroidUtilities.getTypeface("fonts/rcondensedbold.ttf", true)));
 +    public static final PaintTypeface ROBOTO_MONO = new PaintTypeface ("mono", "PhotoEditorTypefaceMono", new LazyTypeface(() -> AndroidUtilities.getTypeface(AndroidUtilities.TYPEFACE_ROBOTO_MONO, true)));
 +    public static final PaintTypeface MW_BOLD = new PaintTypeface("mw_bold", "PhotoEditorTypefaceMerriweather", new LazyTypeface(() -> AndroidUtilities.getTypeface(AndroidUtilities.TYPEFACE_MERRIWEATHER_BOLD, true)));
-+    public static final PaintTypeface COURIER_NEW_BOLD = new PaintTypeface("courier_new_bold", "PhotoEditorTypefaceCourierNew", new LazyTypeface(() -> AndroidUtilities.getTypeface(AndroidUtilities.TYPEFACE_COURIER_NEW_BOLD, true)));
  
-     public final static List<PaintTypeface> BUILT_IN_FONTS = Arrays.asList(ROBOTO_MEDIUM, ROBOTO_ITALIC, ROBOTO_SERIF, ROBOTO_CONDENSED, ROBOTO_MONO, MW_BOLD, COURIER_NEW_BOLD);
+     public final static List<PaintTypeface> BUILT_IN_FONTS = Arrays.asList(ROBOTO_MEDIUM, ROBOTO_ITALIC, ROBOTO_SERIF, ROBOTO_CONDENSED, ROBOTO_MONO, MW_BOLD);
  

@@ -11,7 +11,7 @@ diff --git a/TMessagesProj/src/main/java/org/telegram/ui/ProfileActivity.java b/
 index 0000000..0000000 100644
 --- a/TMessagesProj/src/main/java/org/telegram/ui/ProfileActivity.java
 +++ b/TMessagesProj/src/main/java/org/telegram/ui/ProfileActivity.java
-@@ -2518,6 +2518,9 @@ public class ProfileActivity extends BaseFragment implements NotificationCenter.
+@@ -2544,6 +2544,9 @@ public class ProfileActivity extends BaseFragment implements NotificationCenter.
                  if (getParentActivity() == null) {
                      return;
                  }
@@ -21,7 +21,7 @@ index 0000000..0000000 100644
                  if (id == -1) {
                      if (sharedMediaLayout != null && sharedMediaLayout.scrollSlidingTextTabStrip != null && sharedMediaLayout.scrollSlidingTextTabStrip.isReordering()) {
                          stopTabsReorder();
-@@ -12115,6 +12118,7 @@ public class ProfileActivity extends BaseFragment implements NotificationCenter.
+@@ -12236,6 +12239,7 @@ public class ProfileActivity extends BaseFragment implements NotificationCenter.
              otherItem.hideSubItem(edit_avatar);
              otherItem.hideSubItem(delete_avatar);
          }

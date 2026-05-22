@@ -2,7 +2,7 @@
 <resources>
     <string name="InuOpenInDiscussion">Открыть в обсуждении</string>
     <string name="InuSettings">Настройки Inugram</string>
-    <string name="InuSettingsInfo">Что делает эта собачёнка?</string>
+    <string name="InuSettingsInfo">Что делает эта собачонка?</string>
     <string name="InuExperimental">Экспериментальное</string>
     <string name="InuGeneral">Основные</string>
     <string name="InuMiscellaneous">Прочее</string>

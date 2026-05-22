@@ -4,19 +4,19 @@ Date: Wed, 29 Apr 2026 17:59:48 +0300
 Subject: option to disable scrim blur throughout the app
 
 ---
- .../org/telegram/messenger/AndroidUtilities.java  |  7 +++++++
- .../ui/Components/BlurBehindDrawable.java         | 15 +++++++++++++++
- .../org/telegram/ui/Components/ScrimOptions.java  |  8 ++++++++
- .../java/org/telegram/ui/DialogsActivity.java     | 10 ++++++++++
- .../java/org/telegram/ui/MessageSendPreview.java  |  8 +++++---
- .../main/java/org/telegram/ui/TopicsFragment.java | 12 ++++++++++++
- 6 files changed, 57 insertions(+), 3 deletions(-)
+ .../telegram/messenger/AndroidUtilities.java    |  7 +++++++
+ .../ui/Components/BlurBehindDrawable.java       | 15 +++++++++++++++
+ .../telegram/ui/Components/ScrimOptions.java    |  8 ++++++++
+ .../java/org/telegram/ui/DialogsActivity.java   | 10 ++++++++++
+ .../org/telegram/ui/MessageSendPreview.java     | 17 ++++++++++++++---
+ .../java/org/telegram/ui/TopicsFragment.java    | 12 ++++++++++++
+ 6 files changed, 66 insertions(+), 3 deletions(-)
 
 diff --git a/TMessagesProj/src/main/java/org/telegram/messenger/AndroidUtilities.java b/TMessagesProj/src/main/java/org/telegram/messenger/AndroidUtilities.java
 index 0000000..0000000 100644
 --- a/TMessagesProj/src/main/java/org/telegram/messenger/AndroidUtilities.java
 +++ b/TMessagesProj/src/main/java/org/telegram/messenger/AndroidUtilities.java
-@@ -6070,6 +6070,13 @@ public class AndroidUtilities {
+@@ -6071,6 +6071,13 @@ public class AndroidUtilities {
              return;
          }
  
@@ -79,7 +79,7 @@ diff --git a/TMessagesProj/src/main/java/org/telegram/ui/DialogsActivity.java b/
 index 0000000..0000000 100644
 --- a/TMessagesProj/src/main/java/org/telegram/ui/DialogsActivity.java
 +++ b/TMessagesProj/src/main/java/org/telegram/ui/DialogsActivity.java
-@@ -8821,6 +8821,16 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
+@@ -8826,6 +8826,16 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
          if (blurredView == null) {
              return;
          }
@@ -100,10 +100,10 @@ diff --git a/TMessagesProj/src/main/java/org/telegram/ui/MessageSendPreview.java
 index 0000000..0000000 100644
 --- a/TMessagesProj/src/main/java/org/telegram/ui/MessageSendPreview.java
 +++ b/TMessagesProj/src/main/java/org/telegram/ui/MessageSendPreview.java
-@@ -1134,7 +1134,9 @@ public class MessageSendPreview extends Dialog implements NotificationCenter.Not
-                     WindowManager.LayoutParams.FLAG_TRANSLUCENT_NAVIGATION |
-                     WindowManager.LayoutParams.FLAG_TRANSLUCENT_STATUS;
-         }
+@@ -1165,7 +1165,9 @@ public class MessageSendPreview extends Dialog implements NotificationCenter.Not
+                 WindowManager.LayoutParams.FLAG_DRAWS_SYSTEM_BAR_BACKGROUNDS |
+                 WindowManager.LayoutParams.FLAG_TRANSLUCENT_NAVIGATION |
+                 WindowManager.LayoutParams.FLAG_TRANSLUCENT_STATUS;
 -        params.flags |= WindowManager.LayoutParams.FLAG_FULLSCREEN;
 +        if (!desu.inugram.InuConfig.DISABLE_SCRIM_BLUR.getValue()) {
 +            params.flags |= WindowManager.LayoutParams.FLAG_FULLSCREEN;
@@ -111,7 +111,23 @@ index 0000000..0000000 100644
          params.flags |= WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON;
          if (Build.VERSION.SDK_INT >= 28) {
              params.layoutInDisplayCutoutMode = WindowManager.LayoutParams.LAYOUT_IN_DISPLAY_CUTOUT_MODE_SHORT_EDGES;
-@@ -1723,13 +1725,13 @@ public class MessageSendPreview extends Dialog implements NotificationCenter.Not
+@@ -1680,6 +1682,15 @@ public class MessageSendPreview extends Dialog implements NotificationCenter.Not
+         if (dismissing) return;
+         dismissing = true;
+ 
++        if (desu.inugram.InuConfig.DISABLE_SCRIM_BLUR.getValue()) {
++            if (editText != null) {
++                editText.setAlpha(1f);
++            }
++            if (anchorSendButton != null && !sent) {
++                anchorSendButton.setAlpha(1f);
++            }
++        }
++
+         SpoilerEffect2.pause(SpoilerEffect2.TYPE_DEFAULT, false);
+         if (spoilerEffect2 != null) {
+             spoilerEffect2.detach(windowView);
+@@ -1754,13 +1765,13 @@ public class MessageSendPreview extends Dialog implements NotificationCenter.Not
                      closing = false;
                  }
                  if (editText != null) {
@@ -131,7 +147,7 @@ diff --git a/TMessagesProj/src/main/java/org/telegram/ui/TopicsFragment.java b/T
 index 0000000..0000000 100644
 --- a/TMessagesProj/src/main/java/org/telegram/ui/TopicsFragment.java
 +++ b/TMessagesProj/src/main/java/org/telegram/ui/TopicsFragment.java
-@@ -4028,6 +4028,18 @@ public class TopicsFragment extends BaseFragment implements NotificationCenter.N
+@@ -4033,6 +4033,18 @@ public class TopicsFragment extends BaseFragment implements NotificationCenter.N
          if (blurredView == null || parentLayout == null) {
              return;
          }

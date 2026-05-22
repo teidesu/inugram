@@ -11,7 +11,7 @@ diff --git a/TMessagesProj/src/main/java/org/telegram/ui/Stories/recorder/AlbumB
 index 0000000..0000000 100644
 --- a/TMessagesProj/src/main/java/org/telegram/ui/Stories/recorder/AlbumButton.java
 +++ b/TMessagesProj/src/main/java/org/telegram/ui/Stories/recorder/AlbumButton.java
-@@ -36,11 +36,15 @@ public class AlbumButton extends View {
+@@ -37,11 +37,15 @@ public class AlbumButton extends View {
      private StaticLayout countLayout;
      private float countLayoutWidth, countLayoutLeft;
  
@@ -28,7 +28,7 @@ index 0000000..0000000 100644
          setMinimumWidth(dp(196));
          setLayoutParams(new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, 48));
  
-@@ -54,29 +58,34 @@ public class AlbumButton extends View {
+@@ -55,23 +59,7 @@ public class AlbumButton extends View {
          subtitle = "" + count;
  
          imageReceiver.setRoundRadius(dp(4));
@@ -50,9 +50,10 @@ index 0000000..0000000 100644
 -            imageReceiver.setImageBitmap(noGalleryDrawable);
 -        }
 +        inu_cover = cover;
-     }
  
-     @Override
+         setContentDescription(title + (count > 0 ? " " + LocaleController.formatPluralStringComma("Media", count) : ""));
+     }
+@@ -80,6 +68,27 @@ public class AlbumButton extends View {
      protected void onAttachedToWindow() {
          super.onAttachedToWindow();
          imageReceiver.onAttachedToWindow();
@@ -80,7 +81,7 @@ index 0000000..0000000 100644
      }
  
      @Override
-@@ -112,8 +121,17 @@ public class AlbumButton extends View {
+@@ -115,8 +124,17 @@ public class AlbumButton extends View {
          }
      }
  

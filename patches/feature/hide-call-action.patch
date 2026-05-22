@@ -11,8 +11,8 @@ diff --git a/TMessagesProj/src/main/java/org/telegram/ui/ChatActivity.java b/TMe
 index 0000000..0000000 100644
 --- a/TMessagesProj/src/main/java/org/telegram/ui/ChatActivity.java
 +++ b/TMessagesProj/src/main/java/org/telegram/ui/ChatActivity.java
-@@ -4283,7 +4283,7 @@ public class ChatActivity extends BaseFragment implements
-                 audioCallIconItem = menu.lazilyAddItem(call, R.drawable.ic_call, themeDelegate);
+@@ -4195,7 +4195,7 @@ public class ChatActivity extends BaseFragment implements
+                 audioCallIconItem = menu.lazilyAddItem(call, R.drawable.call, themeDelegate);
                  audioCallIconItem.setContentDescription(LocaleController.getString(R.string.Call));
                  userFull = getMessagesController().getUserFull(currentUser.id);
 -                if (userFull != null && userFull.phone_calls_available) {
@@ -20,7 +20,7 @@ index 0000000..0000000 100644
                      showAudioCallAsIcon = !inPreviewMode;
                      audioCallIconItem.setVisibility(View.VISIBLE);
                  } else {
-@@ -23578,7 +23578,7 @@ public class ChatActivity extends BaseFragment implements
+@@ -23555,7 +23555,7 @@ public class ChatActivity extends BaseFragment implements
                      }
                  }
                  if (headerItem != null) {
@@ -29,7 +29,7 @@ index 0000000..0000000 100644
                      if (avatarContainer != null) {
                          avatarContainer.setTitleExpand(showAudioCallAsIcon);
                      }
-@@ -29089,7 +29089,7 @@ public class ChatActivity extends BaseFragment implements
+@@ -29178,7 +29178,7 @@ public class ChatActivity extends BaseFragment implements
          super.setInPreviewMode(value);
          if (currentUser != null && audioCallIconItem != null) {
              TLRPC.UserFull userFull = getMessagesController().getUserFull(currentUser.id);

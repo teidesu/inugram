@@ -11,7 +11,7 @@ diff --git a/TMessagesProj/src/main/java/org/telegram/ui/DialogsActivity.java b/
 index 0000000..0000000 100644
 --- a/TMessagesProj/src/main/java/org/telegram/ui/DialogsActivity.java
 +++ b/TMessagesProj/src/main/java/org/telegram/ui/DialogsActivity.java
-@@ -1999,7 +1999,7 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
+@@ -2012,7 +2012,7 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
                  RecyclerView.ViewHolder holder = parentPage.listView.findViewHolderForAdapterPosition(pos);
                  if (holder != null) {
                      int top = holder.itemView.getTop();
@@ -20,7 +20,7 @@ index 0000000..0000000 100644
                          pos = Math.max(1, pos);
                      }
                      ignoreLayout = true;
-@@ -8855,11 +8855,15 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
+@@ -8859,11 +8859,15 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
              public void onAnimationEnd(Animator animation) {
                  super.onAnimationEnd(animation);
                  actionBarColorAnimator = null;
@@ -39,7 +39,7 @@ index 0000000..0000000 100644
                  viewPages[0].setTranslationY(0);
                  for (int i = 0; i < viewPages.length; i++) {
                      if (viewPages[i] != null) {
-@@ -9845,8 +9849,12 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
+@@ -9849,8 +9853,12 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
                      super.onAnimationEnd(animation);
                      actionBarColorAnimator = null;
                      actionModeAdditionalHeight = 0;

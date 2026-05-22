@@ -1,7 +1,6 @@
 import fs from 'node:fs/promises'
 import { join } from 'node:path'
 import { ICON_SELECTION, patchesDir, rootDir, worktreeDir } from './config.js'
-import { generateLauncherIcon } from './launcher-icons.js'
 import {
   cd,
   cloneUpstream,
@@ -198,7 +197,6 @@ if (noStgit) {
   await ensureAdGuardFilter()
   await linkForkSource(worktreeDir)
   await generateIconDrawables(worktreeDir)
-  await generateLauncherIcon(worktreeDir)
   success('Flat setup complete')
 } else {
   const expectedPatches = seriesEntries.map(patchNameFromSeriesEntry)
@@ -213,6 +211,5 @@ if (noStgit) {
   await ensureAdGuardFilter()
   const linkedAny = await linkForkSource(worktreeDir)
   const generatedAny = await generateIconDrawables(worktreeDir)
-  const launcherAny = await generateLauncherIcon(worktreeDir)
-  success(linkedAny || generatedAny || launcherAny ? 'Setup complete' : 'Up to date')
+  success(linkedAny || generatedAny ? 'Setup complete' : 'Up to date')
 }

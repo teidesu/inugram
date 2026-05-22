@@ -12,7 +12,7 @@ diff --git a/TMessagesProj/src/main/java/org/telegram/messenger/MessageObject.ja
 index 0000000..0000000 100644
 --- a/TMessagesProj/src/main/java/org/telegram/messenger/MessageObject.java
 +++ b/TMessagesProj/src/main/java/org/telegram/messenger/MessageObject.java
-@@ -752,6 +752,7 @@ public class MessageObject {
+@@ -756,6 +756,7 @@ public class MessageObject {
          messageOwner.premiumEffectWasPlayed = old.messageOwner.premiumEffectWasPlayed;
          forcePlayEffect = old.forcePlayEffect;
          wasJustSent = old.wasJustSent;
@@ -24,7 +24,7 @@ diff --git a/TMessagesProj/src/main/java/org/telegram/messenger/SendMessagesHelp
 index 0000000..0000000 100644
 --- a/TMessagesProj/src/main/java/org/telegram/messenger/SendMessagesHelper.java
 +++ b/TMessagesProj/src/main/java/org/telegram/messenger/SendMessagesHelper.java
-@@ -3602,6 +3602,7 @@ public class SendMessagesHelper extends BaseController implements NotificationCe
+@@ -3617,6 +3617,7 @@ public class SendMessagesHelper extends BaseController implements NotificationCe
          if (messageObject == null || parentFragment == null) {
              return;
          }

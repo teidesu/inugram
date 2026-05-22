@@ -11,11 +11,11 @@ diff --git a/TMessagesProj/src/main/java/org/telegram/messenger/MediaController.
 index 0000000..0000000 100644
 --- a/TMessagesProj/src/main/java/org/telegram/messenger/MediaController.java
 +++ b/TMessagesProj/src/main/java/org/telegram/messenger/MediaController.java
-@@ -658,6 +658,7 @@ public class MediaController implements AudioManager.OnAudioFocusChangeListener,
-             this.hasSpoiler = state instanceof PhotoEntry && ((PhotoEntry) state).hasSpoiler;
+@@ -705,6 +705,7 @@ public class MediaController implements AudioManager.OnAudioFocusChangeListener,
              this.starsAmount = state instanceof PhotoEntry ? ((PhotoEntry) state).starsAmount : 0;
+             this.parsedXmp = state instanceof PhotoEntry && ((PhotoEntry) state).parsedXmp;
              this.isLivePhoto = state instanceof PhotoEntry && ((PhotoEntry) state).isLivePhoto;
-+            this.discardLivePhoto = state instanceof PhotoEntry && ((PhotoEntry) state).discardLivePhoto;
++            this.discardLivePhoto = state instanceof PhotoEntry ? ((PhotoEntry) state).discardLivePhoto : null;
              this.livePhotoVideoOffset = state instanceof PhotoEntry ? ((PhotoEntry) state).livePhotoVideoOffset : 0;
              this.livePhotoTimestampUs = state instanceof PhotoEntry ? ((PhotoEntry) state).livePhotoTimestampUs : 0;
          }

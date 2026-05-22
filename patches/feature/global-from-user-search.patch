@@ -29,7 +29,7 @@ index 0000000..0000000 100644
      private LongSparseArray<TL_bots.BotInfo> botInfo;
      private int resultStartPosition;
      private int resultLength;
-@@ -949,6 +949,7 @@ public class MentionsAdapter extends RecyclerListView.SelectionAdapter implement
+@@ -964,6 +964,7 @@ public class MentionsAdapter extends RecyclerListView.SelectionAdapter implement
              AndroidUtilities.cancelRunOnUIThread(searchGlobalRunnable);
              searchGlobalRunnable = null;
          }
@@ -37,7 +37,7 @@ index 0000000..0000000 100644
          if (checkAgainRunnable != null) {
              AndroidUtilities.cancelRunOnUIThread(checkAgainRunnable);
              checkAgainRunnable = null;
-@@ -1500,6 +1501,9 @@ public class MentionsAdapter extends RecyclerListView.SelectionAdapter implement
+@@ -1523,6 +1524,9 @@ public class MentionsAdapter extends RecyclerListView.SelectionAdapter implement
              } else {
                  showUsersResult(newResult, newMap, true);
              }

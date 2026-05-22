@@ -1,0 +1,69 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: alina sireneva <alina@tei.su>
+Date: Thu, 21 May 2026 23:12:41 +0400
+Subject: fix glitch when quickly dismissing editor after cropping
+
+---
+ .../main/java/org/telegram/ui/Components/Crop/CropView.java  | 5 ++++-
+ TMessagesProj/src/main/java/org/telegram/ui/PhotoViewer.java | 4 ++++
+ 2 files changed, 8 insertions(+), 1 deletion(-)
+
+diff --git a/TMessagesProj/src/main/java/org/telegram/ui/Components/Crop/CropView.java b/TMessagesProj/src/main/java/org/telegram/ui/Components/Crop/CropView.java
+index 0000000..0000000 100644
+--- a/TMessagesProj/src/main/java/org/telegram/ui/Components/Crop/CropView.java
++++ b/TMessagesProj/src/main/java/org/telegram/ui/Components/Crop/CropView.java
+@@ -46,6 +46,7 @@ public class CropView extends FrameLayout implements CropAreaView.AreaViewListen
+     private PaintingOverlay paintingOverlay;
+     private VideoEditTextureView videoEditTextureView;
+     private CropTransform cropTransform;
++    public boolean inu_dismissing;
+ 
+     private RectF previousAreaRect;
+     private RectF initialAreaRect;
+@@ -304,6 +305,7 @@ public class CropView extends FrameLayout implements CropAreaView.AreaViewListen
+         paintingOverlay = null;
+         videoEditTextureView = null;
+         cropTransform = transform;
++        inu_dismissing = false;
+         bitmapRotation = rotation;
+         bitmap = null;
+         areaView.setIsVideo(videoEditTextureView != null);
+@@ -379,6 +381,7 @@ public class CropView extends FrameLayout implements CropAreaView.AreaViewListen
+         paintingOverlay = overlay;
+         videoEditTextureView = videoView;
+         cropTransform = transform;
++        inu_dismissing = false;
+         bitmapRotation = rotation;
+         bitmap = b;
+         areaView.setIsVideo(videoEditTextureView != null);
+@@ -1111,7 +1114,7 @@ public class CropView extends FrameLayout implements CropAreaView.AreaViewListen
+     RectF sizeRect = new RectF(0, 0, RESULT_SIDE, RESULT_SIDE);
+ 
+     private void updateCropTransform() {
+-        if (cropTransform == null || state == null) {
++        if (cropTransform == null || state == null || inu_dismissing) {
+             return;
+         }
+         areaView.getCropRect(cropRect);
+diff --git a/TMessagesProj/src/main/java/org/telegram/ui/PhotoViewer.java b/TMessagesProj/src/main/java/org/telegram/ui/PhotoViewer.java
+index 0000000..0000000 100644
+--- a/TMessagesProj/src/main/java/org/telegram/ui/PhotoViewer.java
++++ b/TMessagesProj/src/main/java/org/telegram/ui/PhotoViewer.java
+@@ -7909,6 +7909,7 @@ public class PhotoViewer implements NotificationCenter.NotificationCenterDelegat
+                 return;
+             }
+             Runnable onEnd = () -> {
++                photoCropView.cropView.inu_dismissing = true;
+                 cropTransform.setViewTransform(previousHasTransform, previousCropPx, previousCropPy, previousCropRotation, previousCropOrientation, previousCropScale, scale1(), scale1(), previousCropPw, previousCropPh, 0, 0, previousCropMirrored);
+ //                if (previousHasTransform) {
+ //                    editState.cropState = new MediaController.CropState();
+@@ -18271,6 +18272,9 @@ public class PhotoViewer implements NotificationCenter.NotificationCenterDelegat
+                 return;
+             }
+             if (currentEditMode == EDIT_MODE_CROP) {
++                if (photoCropView != null) {
++                    photoCropView.cropView.inu_dismissing = true;
++                }
+                 cropTransform.setViewTransform(previousHasTransform, previousCropPx, previousCropPy, previousCropRotation, previousCropOrientation, previousCropScale, 1.0f, 1.0f, previousCropPw, previousCropPh, 0, 0, previousCropMirrored);
+             }
+             if (currentEditMode == EDIT_MODE_STICKER_MASK) {

@@ -28,16 +28,30 @@ object LocaleHelper {
     @JvmStatic
     fun getLocalString(key: String?, res: Int): String? {
         if (!isLocalOnlyString(key)) return null
+        disguiseName(key)?.let { return it }
         return resolve(res)
     }
 
     @JvmStatic
     fun getLocalString(key: String?): String? {
         if (!isLocalOnlyString(key)) return null
+        disguiseName(key)?.let { return it }
         val ctx = ApplicationLoader.applicationContext ?: return null
         val id = ctx.resources.getIdentifier(key, "string", ctx.packageName)
         if (id == 0) return null
         return resolve(id)
+    }
+
+    // when disguised, the app name must read as stock Telegram regardless of locale.
+    private fun disguiseName(key: String?): String? {
+        if (!ParanoiaHelper.isDisguised()) return null
+        return when (key) {
+            "AppName" -> "Telegram"
+            "AppNameBeta" -> "Telegram Beta"
+            "AppUpdate" -> "Update Telegram"
+            "AppUpdateBeta" -> "Update Telegram Beta"
+            else -> null
+        }
     }
 
     private fun resolve(res: Int): String? {

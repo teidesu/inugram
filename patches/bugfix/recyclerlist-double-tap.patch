@@ -11,7 +11,7 @@ diff --git a/TMessagesProj/src/main/java/org/telegram/ui/Components/RecyclerList
 index 0000000..0000000 100644
 --- a/TMessagesProj/src/main/java/org/telegram/ui/Components/RecyclerListView.java
 +++ b/TMessagesProj/src/main/java/org/telegram/ui/Components/RecyclerListView.java
-@@ -172,6 +172,7 @@ public class RecyclerListView extends RecyclerView implements IBlur3Capture {
+@@ -173,6 +173,7 @@ public class RecyclerListView extends RecyclerView implements IBlur3Capture {
  
      private GestureDetectorFixDoubleTap gestureDetector;
      private View currentChildView;
@@ -19,7 +19,7 @@ index 0000000..0000000 100644
      private int currentChildPosition;
      private boolean interceptedByChild;
      private boolean wasPressed;
-@@ -1112,7 +1113,7 @@ public class RecyclerListView extends RecyclerView implements IBlur3Capture {
+@@ -1113,7 +1114,7 @@ public class RecyclerListView extends RecyclerView implements IBlur3Capture {
  
                  @Override
                  public boolean onDoubleTap(MotionEvent e) {

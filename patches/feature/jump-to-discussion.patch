@@ -11,7 +11,7 @@ diff --git a/TMessagesProj/src/main/java/org/telegram/ui/ChatActivity.java b/TMe
 index 0000000..0000000 100644
 --- a/TMessagesProj/src/main/java/org/telegram/ui/ChatActivity.java
 +++ b/TMessagesProj/src/main/java/org/telegram/ui/ChatActivity.java
-@@ -3718,6 +3718,8 @@ public class ChatActivity extends BaseFragment implements
+@@ -3630,6 +3630,8 @@ public class ChatActivity extends BaseFragment implements
                              finishFragment();
                          }
                      }
@@ -20,7 +20,7 @@ index 0000000..0000000 100644
                  } else if (id == view_as_topics) {
                      if (getUserConfig().getClientUserId() == dialog_id) {
                          getMessagesController().setSavedViewAs(true);
-@@ -4245,6 +4247,11 @@ public class ChatActivity extends BaseFragment implements
+@@ -4157,6 +4159,11 @@ public class ChatActivity extends BaseFragment implements
              searchItemVisible = false;
          }
  

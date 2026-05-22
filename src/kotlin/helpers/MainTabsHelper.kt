@@ -2,6 +2,7 @@ package desu.inugram.helpers
 
 import android.graphics.drawable.Drawable
 import android.os.Bundle
+import android.view.Gravity
 import android.view.View
 import android.widget.FrameLayout
 import androidx.core.content.ContextCompat
@@ -13,9 +14,9 @@ import org.telegram.messenger.R
 import org.telegram.messenger.UserConfig
 import org.telegram.ui.ActionBar.BaseFragment
 import org.telegram.ui.ActionBar.Theme
+import org.telegram.ui.ChatActivity
 import org.telegram.ui.Components.Bulletin
 import org.telegram.ui.Components.ItemOptions
-import org.telegram.ui.ChatActivity
 import org.telegram.ui.DialogsActivity
 import org.telegram.ui.LaunchActivity
 import org.telegram.ui.MainTabsActivity
@@ -110,6 +111,7 @@ object MainTabsHelper {
 
         o.setBlur(true)
         o.translate(0f, -dp(4f).toFloat())
+        o.setGravity(Gravity.CENTER_HORIZONTAL)
         val bg = Theme.createRoundRectDrawable(dp(28f), fragment.getThemedColor(Theme.key_windowBackgroundWhite))
         bg.paint.setShadowLayer(dp(6f).toFloat(), 0f, dp(1f).toFloat(), Theme.multAlpha(0xFF000000.toInt(), 0.15f))
         o.setScrimViewBackground(bg)

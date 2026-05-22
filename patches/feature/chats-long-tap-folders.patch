@@ -4,15 +4,15 @@ Date: Wed, 29 Apr 2026 16:53:25 +0300
 Subject: show folders as a menu when long-tapping the "Chats" tab in the main page
 
 ---
- .../main/java/org/telegram/ui/DialogsActivity.java    |  9 +++++++++
- .../main/java/org/telegram/ui/MainTabsActivity.java   | 11 +++++++++++
- 2 files changed, 20 insertions(+)
+ .../main/java/org/telegram/ui/DialogsActivity.java  |  9 +++++++++
+ .../main/java/org/telegram/ui/MainTabsActivity.java | 13 +++++++++++--
+ 2 files changed, 20 insertions(+), 2 deletions(-)
 
 diff --git a/TMessagesProj/src/main/java/org/telegram/ui/DialogsActivity.java b/TMessagesProj/src/main/java/org/telegram/ui/DialogsActivity.java
 index 0000000..0000000 100644
 --- a/TMessagesProj/src/main/java/org/telegram/ui/DialogsActivity.java
 +++ b/TMessagesProj/src/main/java/org/telegram/ui/DialogsActivity.java
-@@ -6730,6 +6730,15 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
+@@ -6721,6 +6721,15 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
          }
      }
  
@@ -32,15 +32,25 @@ diff --git a/TMessagesProj/src/main/java/org/telegram/ui/MainTabsActivity.java b
 index 0000000..0000000 100644
 --- a/TMessagesProj/src/main/java/org/telegram/ui/MainTabsActivity.java
 +++ b/TMessagesProj/src/main/java/org/telegram/ui/MainTabsActivity.java
-@@ -271,6 +271,7 @@ public class MainTabsActivity extends ViewPagerActivity implements NotificationC
+@@ -277,16 +277,15 @@ public class MainTabsActivity extends ViewPagerActivity implements NotificationC
+         tabs[INDEX_SETTINGS] = GlassTabView.createMainTab(context, resourceProvider, GlassTabView.TabAnimation.SETTINGS, R.string.Settings);
          tabs[INDEX_CALLS] = GlassTabView.createMainTab(context, resourceProvider, GlassTabView.TabAnimation.CALLS, R.string.MainTabsCalls);
          tabs[INDEX_PROFILE] = GlassTabView.createAvatar(context, resourceProvider, currentAccount, R.string.MainTabsProfile);
+-        tabs[INDEX_CHATS].setOnLongClickListener(this::openFoldersSelector);
+         tabs[INDEX_CONTACTS].setOnLongClickListener(this::openContactsSelector);
+         tabs[INDEX_CALLS].setOnLongClickListener(this::openCallsSelector);
          desu.inugram.helpers.LongPressDragMenuHelper.attach(tabs[INDEX_PROFILE], this::openAccountSelector);
 +        desu.inugram.helpers.LongPressDragMenuHelper.attach(tabs[INDEX_CHATS], v -> desu.inugram.helpers.MainTabsHelper.openChatsLongPressMenu(this, v));
+ 
+         tabsView.addTabToIgnoreClick(tabs[INDEX_CHATS]);
+         tabsView.addTabToIgnoreClick(tabs[INDEX_CONTACTS]);
+         tabsView.addTabToIgnoreClick(tabs[INDEX_PROFILE]);
+         tabsView.addTabToIgnoreClick(tabs[INDEX_CALLS]);
+-
          for (GlassTabView tab : tabs) {
              tab.setMainTabsCompact(compact);
          }
-@@ -620,6 +621,16 @@ public class MainTabsActivity extends ViewPagerActivity implements NotificationC
+@@ -738,6 +737,16 @@ public class MainTabsActivity extends ViewPagerActivity implements NotificationC
          }
      }
  

@@ -75,6 +75,7 @@ most things are toggleable in `Settings → Inugram`, with sensible opinionated 
 - 🐶 strip tracking params (utm_*, fbclid, si, erid, …) from links before opening — *rules from AdGuard URL Tracking filter*
 - 🐶 web preview refetch from menu
 - 🐶 disable web preview limit on twitter-like websites
+- tap a web preview photo to open it in the photo viewer
 - message details from menu (+ show json)
 - per-message statistics from message menu
 - customizable message context menu - reorder and hide items + long-tap forward/reply items
@@ -85,6 +86,7 @@ most things are toggleable in `Settings → Inugram`, with sensible opinionated 
 - long-tap inline callback button to copy text or callback data
 - "select between messages" (🐶 done right, with proper capping)
 - 🐶 two-finger swipe over messages to select/deselect them
+- more bulk actions in message selection mode
 - in-place message translation, with optional web preview translation
 - instant view pages translator
 - show original time/date in "forwarded from" header
@@ -142,7 +144,7 @@ most things are toggleable in `Settings → Inugram`, with sensible opinionated 
 - 🐶 reduce profile motion (skip various enter animations, disable avatar scale-on-scroll effect)
 - 🐶 prefer "Media" tab in profile over Gifts/Posts
 - 🐶 recyclerlistview instant-tap
-- ios-style menu gesture (release-to-commit) in bottom menu tabs
+- open bottom-tab menus early by swiping up; flat highlight (not ripple) on menu hover
 - faster downloads/uploads
 
 ## annoyances
@@ -162,6 +164,7 @@ most things are toggleable in `Settings → Inugram`, with sensible opinionated 
 - hide reactions send animation
 - 🐶 simple (non-bouncy) attach panel animation
 - disable notification bubbles
+- disable volume keys playing visible video with sound in chat
 
 ## 🐶 bugfixes (vs stock)
 
@@ -183,9 +186,14 @@ most things are toggleable in `Settings → Inugram`, with sensible opinionated 
 - animated photo spoilers respect power-saving setting
 - shared media spoiler positioning
 - nav stack lockup after rapid back swipes
+- back-invoked callback leak on android 13 (sdk 33)
 - click-through area to the left/right of bottom bar tabs
 - profile scroll jump when opening uncached user
 - stale unread badges on global-search top peers
 - stale unread mention pointer after reading mention on another device (mention button jumping to old message)
 - photo/video gallery performance improvements
 - messages consisting of only 2 or 3 emojis are huge in chat search results
+- admin logs scroll jumping when loading events
+- fix glitch when quickly dismissing photo editor after cropping
+- persist crop when rotating photo in photo editor
+- chat preview no longer marks visible reactions/poll votes as read

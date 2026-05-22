@@ -11,7 +11,7 @@ diff --git a/TMessagesProj/src/main/java/org/telegram/ui/MainTabsActivity.java b
 index 0000000..0000000 100644
 --- a/TMessagesProj/src/main/java/org/telegram/ui/MainTabsActivity.java
 +++ b/TMessagesProj/src/main/java/org/telegram/ui/MainTabsActivity.java
-@@ -280,7 +280,11 @@ public class MainTabsActivity extends ViewPagerActivity implements NotificationC
+@@ -294,7 +294,11 @@ public class MainTabsActivity extends ViewPagerActivity implements NotificationC
              final GlassTabView view = tabs[index];
  
              final int position = indexToPosition(index);

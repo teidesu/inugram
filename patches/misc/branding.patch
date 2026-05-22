@@ -5,10 +5,12 @@ Subject: change app name to Inugram
 
 ---
  TMessagesProj/src/main/AndroidManifest.xml    | 33 +++++++++++++++++++
+ .../telegram/messenger/AndroidUtilities.java  |  2 +-
  .../telegram/messenger/LocaleController.java  | 10 +++---
- .../java/org/telegram/ui/DialogsActivity.java |  9 ++---
+ .../telegram/messenger/MediaController.java   | 22 ++++++-------
+ .../java/org/telegram/ui/DialogsActivity.java |  6 +++-
  .../telegram/ui/LauncherIconController.java   |  6 ++--
- .../ui/Stories/DialogStoriesCell.java         | 20 +++++------
+ .../ui/Stories/DialogStoriesCell.java         | 23 ++++++++-----
  .../java/org/telegram/ui/ThemeActivity.java   | 12 +++++--
  .../org/telegram/ui/UpdateLayoutWrapper.java  | 14 ++------
  .../res/mipmap-anydpi-v26/ic_launcher.xml     |  6 ++--
@@ -23,7 +25,7 @@ Subject: change app name to Inugram
  .../src/main/res/values-ru/strings.xml        |  6 ++--
  .../src/main/res/values-uk/strings.xml        |  6 ++--
  TMessagesProj/src/main/res/values/strings.xml | 10 +++---
- 19 files changed, 107 insertions(+), 65 deletions(-)
+ 21 files changed, 127 insertions(+), 69 deletions(-)
  create mode 100644 TMessagesProj/src/main/res/mipmap-anydpi-v26/ic_launcher_stock.xml
  create mode 100644 TMessagesProj/src/main/res/mipmap-anydpi-v26/ic_launcher_stock_round.xml
 
@@ -71,6 +73,19 @@ index 0000000..0000000 100644
          <activity-alias
              android:enabled="false"
              android:name="org.telegram.messenger.VintageIcon"
+diff --git a/TMessagesProj/src/main/java/org/telegram/messenger/AndroidUtilities.java b/TMessagesProj/src/main/java/org/telegram/messenger/AndroidUtilities.java
+index 0000000..0000000 100644
+--- a/TMessagesProj/src/main/java/org/telegram/messenger/AndroidUtilities.java
++++ b/TMessagesProj/src/main/java/org/telegram/messenger/AndroidUtilities.java
+@@ -3660,7 +3660,7 @@ public class AndroidUtilities {
+         }
+         File storageDir = null;
+         if (Environment.MEDIA_MOUNTED.equals(Environment.getExternalStorageState())) {
+-            storageDir = new File(Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_PICTURES), "Telegram");
++            storageDir = new File(Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_PICTURES), "Inugram");
+             if (!storageDir.mkdirs()) {
+                 if (!storageDir.exists()) {
+                     if (BuildVars.LOGS_ENABLED) {
 diff --git a/TMessagesProj/src/main/java/org/telegram/messenger/LocaleController.java b/TMessagesProj/src/main/java/org/telegram/messenger/LocaleController.java
 index 0000000..0000000 100644
 --- a/TMessagesProj/src/main/java/org/telegram/messenger/LocaleController.java
@@ -104,28 +119,130 @@ index 0000000..0000000 100644
          if (value == null) {
              int resourceId = ApplicationLoader.applicationContext.getResources().getIdentifier(key, "string", ApplicationLoader.applicationContext.getPackageName());
              if (resourceId != 0) {
+diff --git a/TMessagesProj/src/main/java/org/telegram/messenger/MediaController.java b/TMessagesProj/src/main/java/org/telegram/messenger/MediaController.java
+index 0000000..0000000 100644
+--- a/TMessagesProj/src/main/java/org/telegram/messenger/MediaController.java
++++ b/TMessagesProj/src/main/java/org/telegram/messenger/MediaController.java
+@@ -5293,7 +5293,7 @@ public class MediaController implements AudioManager.OnAudioFocusChangeListener,
+             if (Build.VERSION.SDK_INT >= 29) {
+                 final ContentValues cv = new ContentValues();
+                 final Uri uriToInsert = MediaStore.Downloads.getContentUri(MediaStore.VOLUME_EXTERNAL_PRIMARY);
+-                final File dirDest = new File(Environment.DIRECTORY_DOWNLOADS, "Telegram");
++                final File dirDest = new File(Environment.DIRECTORY_DOWNLOADS, "Inugram");
+                 cv.put(MediaStore.MediaColumns.RELATIVE_PATH, dirDest + File.separator);
+                 cv.put(MediaStore.Downloads.DISPLAY_NAME, filename);
+                 cv.put(MediaStore.MediaColumns.MIME_TYPE, outputMime);
+@@ -5315,7 +5315,7 @@ public class MediaController implements AudioManager.OnAudioFocusChangeListener,
+                     }
+                 }
+             } else {
+-                final File destDir = new File(Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS), "Telegram");
++                final File destDir = new File(Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS), "Inugram");
+                 destDir.mkdirs();
+                 File destFile = new File(destDir, filename);
+                 if (!destFile.exists()) {
+@@ -5535,11 +5535,11 @@ public class MediaController implements AudioManager.OnAudioFocusChangeListener,
+                     } else {
+                         File destFile;
+                         if (type == 0) {
+-                            destFile = new File(Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_PICTURES), "Telegram");
++                            destFile = new File(Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_PICTURES), "Inugram");
+                             destFile.mkdirs();
+                             destFile = new File(destFile, AndroidUtilities.generateFileName(0, FileLoader.getFileExtension(sourceFile)));
+                         } else if (type == 1) {
+-                            destFile = new File(Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_MOVIES), "Telegram");
++                            destFile = new File(Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_MOVIES), "Inugram");
+                             destFile.mkdirs();
+                             destFile = new File(destFile, AndroidUtilities.generateFileName(1, FileLoader.getFileExtension(sourceFile)));
+                         } else {
+@@ -5549,7 +5549,7 @@ public class MediaController implements AudioManager.OnAudioFocusChangeListener,
+                             } else {
+                                 dir = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_MUSIC);
+                             }
+-                            dir = new File(dir, "Telegram");
++                            dir = new File(dir, "Inugram");
+                             dir.mkdirs();
+                             destFile = new File(dir, name);
+                             if (destFile.exists()) {
+@@ -5694,7 +5694,7 @@ public class MediaController implements AudioManager.OnAudioFocusChangeListener,
+                     final String filename = AndroidUtilities.generateFileName(0, "jpg");
+                     final ContentValues cv = new ContentValues();
+                     final Uri uriToInsert = MediaStore.Images.Media.getContentUri(MediaStore.VOLUME_EXTERNAL_PRIMARY);
+-                    final File dirDest = new File(Environment.DIRECTORY_PICTURES, "Telegram");
++                    final File dirDest = new File(Environment.DIRECTORY_PICTURES, "Inugram");
+                     cv.put(MediaStore.MediaColumns.RELATIVE_PATH, dirDest + File.separator);
+                     cv.put(MediaStore.Images.Media.DISPLAY_NAME, filename);
+                     cv.put(MediaStore.Images.Media.MIME_TYPE, "image/jpeg");
+@@ -5716,7 +5716,7 @@ public class MediaController implements AudioManager.OnAudioFocusChangeListener,
+                         }
+                     }
+                 } else {
+-                    final File destDir = new File(Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_PICTURES), "Telegram");
++                    final File destDir = new File(Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_PICTURES), "Inugram");
+                     destDir.mkdirs();
+                     File destFile = new File(destDir, AndroidUtilities.generateFileName(0, "jpg"));
+                     if (!destFile.exists()) {
+@@ -5847,7 +5847,7 @@ public class MediaController implements AudioManager.OnAudioFocusChangeListener,
+                     filename = AndroidUtilities.generateFileName(0, extension);
+                 }
+                 uriToInsert = MediaStore.Images.Media.getContentUri(MediaStore.VOLUME_EXTERNAL_PRIMARY);
+-                File dirDest = new File(Environment.DIRECTORY_PICTURES, "Telegram");
++                File dirDest = new File(Environment.DIRECTORY_PICTURES, "Inugram");
+                 contentValues.put(MediaStore.MediaColumns.RELATIVE_PATH, dirDest + File.separator);
+                 contentValues.put(MediaStore.Images.Media.DISPLAY_NAME, filename);
+                 contentValues.put(MediaStore.Images.Media.MIME_TYPE, mimeType);
+@@ -5855,7 +5855,7 @@ public class MediaController implements AudioManager.OnAudioFocusChangeListener,
+                 if (filename == null) {
+                     filename = AndroidUtilities.generateFileName(1, extension);
+                 }
+-                File dirDest = new File(Environment.DIRECTORY_MOVIES, "Telegram");
++                File dirDest = new File(Environment.DIRECTORY_MOVIES, "Inugram");
+                 contentValues.put(MediaStore.MediaColumns.RELATIVE_PATH, dirDest + File.separator);
+                 uriToInsert = MediaStore.Video.Media.getContentUri(MediaStore.VOLUME_EXTERNAL_PRIMARY);
+                 contentValues.put(MediaStore.Video.Media.DISPLAY_NAME, filename);
+@@ -5863,7 +5863,7 @@ public class MediaController implements AudioManager.OnAudioFocusChangeListener,
+                 if (filename == null) {
+                     filename = sourceFile.getName();
+                 }
+-                File dirDest = new File(Environment.DIRECTORY_DOWNLOADS, "Telegram");
++                File dirDest = new File(Environment.DIRECTORY_DOWNLOADS, "Inugram");
+                 contentValues.put(MediaStore.MediaColumns.RELATIVE_PATH, dirDest + File.separator);
+                 uriToInsert = MediaStore.Downloads.getContentUri(MediaStore.VOLUME_EXTERNAL_PRIMARY);
+                 contentValues.put(MediaStore.Downloads.DISPLAY_NAME, filename);
+@@ -5871,7 +5871,7 @@ public class MediaController implements AudioManager.OnAudioFocusChangeListener,
+                 if (filename == null) {
+                     filename = sourceFile.getName();
+                 }
+-                File dirDest = new File(Environment.DIRECTORY_MUSIC, "Telegram");
++                File dirDest = new File(Environment.DIRECTORY_MUSIC, "Inugram");
+                 contentValues.put(MediaStore.MediaColumns.RELATIVE_PATH, dirDest + File.separator);
+                 uriToInsert = MediaStore.Audio.Media.getContentUri(MediaStore.VOLUME_EXTERNAL_PRIMARY);
+                 contentValues.put(MediaStore.Audio.Media.DISPLAY_NAME, filename);
 diff --git a/TMessagesProj/src/main/java/org/telegram/ui/DialogsActivity.java b/TMessagesProj/src/main/java/org/telegram/ui/DialogsActivity.java
 index 0000000..0000000 100644
 --- a/TMessagesProj/src/main/java/org/telegram/ui/DialogsActivity.java
 +++ b/TMessagesProj/src/main/java/org/telegram/ui/DialogsActivity.java
-@@ -3457,12 +3457,7 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
+@@ -3443,12 +3443,16 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
              } else {
                  statusDrawable = new AnimatedEmojiDrawable.SwapAnimatedEmojiDrawable(null, dp(26));
                  statusDrawable.center = true;
--                logoDrawable = context.getResources().getDrawable(R.drawable.telegram_logo_2).mutate();
--                logoDrawable.setBounds(0, dp(2), logoDrawable.getIntrinsicWidth(), dp(2) + logoDrawable.getIntrinsicHeight());
--                logoDrawable.setColorFilter(getThemedColor(Theme.key_telegram_color_dialogsLogo), PorterDuff.Mode.MULTIPLY);
--                SpannableStringBuilder ssb = new SpannableStringBuilder(getString(R.string.AppName));
--                ssb.setSpan(new ImageSpan(logoDrawable), 0, ssb.length(), Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);
--                actionBar.setTitle(ssb, statusDrawable);
-+                actionBar.setTitle(getString(R.string.AppName), statusDrawable);
++                if (desu.inugram.helpers.ParanoiaHelper.isDisguised()) {
+                 logoDrawable = context.getResources().getDrawable(R.drawable.telegram_logo_2).mutate();
+                 logoDrawable.setBounds(0, dp(2), logoDrawable.getIntrinsicWidth(), dp(2) + logoDrawable.getIntrinsicHeight());
+                 logoDrawable.setColorFilter(getThemedColor(Theme.key_telegram_color_dialogsLogo), PorterDuff.Mode.MULTIPLY);
+                 SpannableStringBuilder ssb = new SpannableStringBuilder(getString(R.string.AppName));
+                 ssb.setSpan(new ImageSpan(logoDrawable), 0, ssb.length(), Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);
+                 actionBar.setTitle(ssb, statusDrawable);
++                } else {
++                    actionBar.setTitle(getString(R.string.AppName), statusDrawable);
++                }
                  updateStatus(UserConfig.getInstance(currentAccount).getCurrentUser(), false);
              }
              if (folderId == 0) {
-@@ -13744,4 +13739,4 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
-             parentLayout.drawHeaderShadow(canvas, shadowAlpha, headerShadowY);
-         }
+@@ -14075,4 +14079,4 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
+         return true;
      }
+ 
 -}
 \ No newline at end of file
 +}
@@ -154,7 +271,7 @@ diff --git a/TMessagesProj/src/main/java/org/telegram/ui/Stories/DialogStoriesCe
 index 0000000..0000000 100644
 --- a/TMessagesProj/src/main/java/org/telegram/ui/Stories/DialogStoriesCell.java
 +++ b/TMessagesProj/src/main/java/org/telegram/ui/Stories/DialogStoriesCell.java
-@@ -316,6 +316,8 @@ public class DialogStoriesCell extends FrameLayout implements NotificationCenter
+@@ -323,6 +323,8 @@ public class DialogStoriesCell extends FrameLayout implements NotificationCenter
          addView(recyclerListView, LayoutHelper.createFrame(LayoutHelper.MATCH_PARENT, LayoutHelper.WRAP_CONTENT, 0, 0, FAKE_TOP_PADDING, 0, 0));
  
          titleView = new AnimatedTextView(getContext(), true, true, false);
@@ -162,31 +279,35 @@ index 0000000..0000000 100644
 +        titleView.setOnWidthUpdatedListener(this::invalidate);
          titleView.setGravity(Gravity.LEFT);
          titleView.setTextColor(getTextLogoColor());
-         titleView.setEllipsizeByGradient(true);
-@@ -615,11 +617,11 @@ public class DialogStoriesCell extends FrameLayout implements NotificationCenter
+         titleView.setTypeface(AndroidUtilities.bold());
+@@ -626,11 +628,11 @@ public class DialogStoriesCell extends FrameLayout implements NotificationCenter
                      currentTitle = str;
                  }
              } else {
 -                currentTitle = menuItemsOffset < dp(50) ? null :
-+                currentTitle = menuItemsOffset < dp(50) ? LocaleController.getString(R.string.AppName) :
++                currentTitle = menuItemsOffset < dp(50) ? (desu.inugram.helpers.ParanoiaHelper.isDisguised() ? null : LocaleController.getString(R.string.AppName)) :
                      LocaleController.getString(R.string.MyStory);
              }
          } else {
 -            currentTitle = menuItemsOffset < dp(50) ? null :
-+            currentTitle = menuItemsOffset < dp(50) ? LocaleController.getString(R.string.AppName) :
++            currentTitle = menuItemsOffset < dp(50) ? (desu.inugram.helpers.ParanoiaHelper.isDisguised() ? null : LocaleController.getString(R.string.AppName)) :
                  LocaleController.formatPluralString("Stories", totalCount);
          }
  
-@@ -922,7 +924,7 @@ public class DialogStoriesCell extends FrameLayout implements NotificationCenter
+@@ -944,7 +946,11 @@ public class DialogStoriesCell extends FrameLayout implements NotificationCenter
              telegramLogoView.setTranslationX(titleView.getTranslationX() + dp(1));
              telegramLogoView.setTranslationY(bottomY + dp(14 + FAKE_TOP_PADDING + 4.333f) + translationOffset /*titleView.getTranslationY() + dpf2(37.33f)*/);
  
 -            emojiStatusView.setTranslationX(titleView.getTranslationX() - dpf2(3.33f) + telegramLogoView.getMeasuredWidth());
-+            emojiStatusView.setTranslationX(titleView.getTranslationX() + titleView.getDrawable().getCurrentWidth() + dpf2(2.66f));
++            if (desu.inugram.helpers.ParanoiaHelper.isDisguised()) {
++                emojiStatusView.setTranslationX(titleView.getTranslationX() - dpf2(3.33f) + telegramLogoView.getMeasuredWidth());
++            } else {
++                emojiStatusView.setTranslationX(titleView.getTranslationX() + titleView.getDrawable().getCurrentWidth() + dpf2(2.66f));
++            }
              emojiStatusView.setTranslationY(bottomY + dp(14 - 11 + FAKE_TOP_PADDING + 4.333f) + translationOffset);
  
              subtitleOverlayContainer.setTranslationX(titleView.getTranslationX());
-@@ -1258,7 +1260,7 @@ public class DialogStoriesCell extends FrameLayout implements NotificationCenter
+@@ -1302,7 +1308,7 @@ public class DialogStoriesCell extends FrameLayout implements NotificationCenter
              titleView.setText(currentTitle, !LocaleController.isRTL);
          }
  
@@ -195,13 +316,11 @@ index 0000000..0000000 100644
          if (hasEllipsizedText) {
              ellipsizeSpanAnimator.addView(titleView);
          } else {
-@@ -2164,21 +2166,19 @@ public class DialogStoriesCell extends FrameLayout implements NotificationCenter
-     private void checkUi_titleVisibility() {
-         final float progress = MathUtils.clamp(Math.min(collapsedProgress, collapsedProgress2), 0, 1);
-         final float titleVisibility = animatorHasTitleText.getFloatValue();
--        final float logoVisibility = 1f - titleVisibility;
+@@ -2211,18 +2217,19 @@ public class DialogStoriesCell extends FrameLayout implements NotificationCenter
+         final float logoVisibility = 1f - titleVisibility;
          final float titleAlpha = titleVisibility * progress;
--        final float logoAlpha = logoVisibility * progress;
+         final float logoAlpha = logoVisibility * progress;
++        final boolean inu_disguised = desu.inugram.helpers.ParanoiaHelper.isDisguised();
  
          if (titleView != null) {
              titleView.setAlpha(titleAlpha);
@@ -210,14 +329,14 @@ index 0000000..0000000 100644
          if (telegramLogoView != null) {
 -            telegramLogoView.setAlpha(logoAlpha);
 -            telegramLogoView.setVisibility(logoAlpha > 0 ? VISIBLE : GONE);
-+            telegramLogoView.setAlpha(0f);
-+            telegramLogoView.setVisibility(GONE);
++            telegramLogoView.setAlpha(inu_disguised ? logoAlpha : 0f);
++            telegramLogoView.setVisibility(inu_disguised && logoAlpha > 0 ? VISIBLE : GONE);
          }
          if (emojiStatusView != null) {
 -            emojiStatusView.setAlpha(logoAlpha);
 -            emojiStatusView.setVisibility(logoAlpha > 0 ? VISIBLE : GONE);
-+            emojiStatusView.setAlpha(progress);
-+            emojiStatusView.setVisibility(progress > 0 ? VISIBLE : GONE);
++            emojiStatusView.setAlpha(inu_disguised ? logoAlpha : progress);
++            emojiStatusView.setVisibility((inu_disguised ? logoAlpha > 0 : progress > 0) ? VISIBLE : GONE);
          }
          if (subtitleOverlayContainer != null) {
              subtitleOverlayContainer.setAlpha(progress);
@@ -499,7 +618,7 @@ index 0000000..0000000 100644
      <string name="LanguageName">English</string>
      <string name="English">English</string>
      <string name="LanguageNameInEnglish">English</string>
-@@ -2704,8 +2704,8 @@
+@@ -2748,8 +2748,8 @@
      <string name="AuthAnotherClientUrl">This code can be used to allow someone to log in to your Telegram account.\n\nTo confirm Telegram login, please go to Settings &gt; Devices &gt; Scan QR and scan the code.</string>
      <string name="QRCodePermissionNoCameraWithHint">**Telegram** needs camera access so that you can scan QR codes. Tap Settings -> Permissions, and turn **Camera** on.</string>
      <string name="SetProfilePhoto">Set Profile Photo</string>
@@ -510,7 +629,7 @@ index 0000000..0000000 100644
      <string name="AppUpdateVersionAndSize">Version %1$s • %2$s</string>
      <string name="AppBetaUpdateVersion">Version %1$s (%2$s)</string>
      <string name="AppUpdateDownloading">Downloading %1$d%%...</string>
-@@ -4112,7 +4112,7 @@
+@@ -4159,7 +4159,7 @@
      <string name="ViewMessageStatistic">Message Statistic</string>
      <string name="ViewMessage">Open Message</string>
      <!--Intro view-->

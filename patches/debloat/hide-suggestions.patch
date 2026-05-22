@@ -24,7 +24,7 @@ diff --git a/TMessagesProj/src/main/java/org/telegram/messenger/MessagesControll
 index 0000000..0000000 100644
 --- a/TMessagesProj/src/main/java/org/telegram/messenger/MessagesController.java
 +++ b/TMessagesProj/src/main/java/org/telegram/messenger/MessagesController.java
-@@ -10505,6 +10505,7 @@ public class MessagesController extends BaseController implements NotificationCe
+@@ -10591,6 +10591,7 @@ public class MessagesController extends BaseController implements NotificationCe
                  noDialog = true;
              } else if (response instanceof TLRPC.TL_help_promoData) {
                  TLRPC.TL_help_promoData res = (TLRPC.TL_help_promoData) response;

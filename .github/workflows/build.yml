@@ -117,7 +117,7 @@ jobs:
             platforms;android-35
             build-tools;35.0.0
             cmake;3.10.2.4988404
-            ndk;21.4.7075529
+            ndk;27.2.12479018
 
       - name: tune gradle
         run: |

@@ -11,7 +11,7 @@ diff --git a/TMessagesProj/src/main/java/org/telegram/ui/ChatActivity.java b/TMe
 index 0000000..0000000 100644
 --- a/TMessagesProj/src/main/java/org/telegram/ui/ChatActivity.java
 +++ b/TMessagesProj/src/main/java/org/telegram/ui/ChatActivity.java
-@@ -317,6 +317,7 @@ import java.io.FileWriter;
+@@ -320,6 +320,7 @@ import java.io.FileWriter;
  import java.io.InputStream;
  import java.io.InputStreamReader;
  import java.net.URLDecoder;
@@ -19,7 +19,7 @@ index 0000000..0000000 100644
  import java.util.ArrayList;
  import java.util.Arrays;
  import java.util.Calendar;
-@@ -933,6 +934,7 @@ public class ChatActivity extends BaseFragment implements
+@@ -930,6 +931,7 @@ public class ChatActivity extends BaseFragment implements
      private boolean needSelectFromMessageId;
      private int returnToMessageId;
      private int returnToLoadIndex;
@@ -27,7 +27,7 @@ index 0000000..0000000 100644
      private int createUnreadMessageAfterId;
      private boolean createUnreadMessageAfterIdLoading;
      private boolean loadingFromOldPosition;
-@@ -10486,6 +10488,11 @@ public class ChatActivity extends BaseFragment implements
+@@ -10380,6 +10382,11 @@ public class ChatActivity extends BaseFragment implements
          final Runnable inCaseLoading = () -> {
              sideControlsButtonsLayout.setButtonLoading(ChatActivitySideControlsButtonsLayout.BUTTON_PAGE_DOWN, true, true);
          };
@@ -39,7 +39,7 @@ index 0000000..0000000 100644
          if (createUnreadMessageAfterId != 0) {
              scrollToMessageId(createUnreadMessageAfterId, 0, false, returnToLoadIndex, true, 0, null, inCaseLoading);
          } else if (returnToMessageId > 0) {
-@@ -16721,6 +16728,9 @@ public class ChatActivity extends BaseFragment implements
+@@ -16686,6 +16693,9 @@ public class ChatActivity extends BaseFragment implements
                  showFloatingTopicView(false);
              }
          }
@@ -49,7 +49,7 @@ index 0000000..0000000 100644
          returnToMessageId = fromMessageId;
          returnToLoadIndex = loadIndex;
          needSelectFromMessageId = select;
-@@ -16758,6 +16768,7 @@ public class ChatActivity extends BaseFragment implements
+@@ -16723,6 +16733,7 @@ public class ChatActivity extends BaseFragment implements
          } else {
              returnToMessageId = 0;
              newUnreadMessageCount = 0;
@@ -57,7 +57,7 @@ index 0000000..0000000 100644
          }
  
          sideControlsButtonsLayout.showButton(ChatActivitySideControlsButtonsLayout.BUTTON_PAGE_DOWN, show, animated);
-@@ -45269,6 +45280,12 @@ public class ChatActivity extends BaseFragment implements
+@@ -45686,6 +45697,12 @@ public class ChatActivity extends BaseFragment implements
      }
  
      private boolean onSideControlButtonOnLongClick(int buttonId, View view) {

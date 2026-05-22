@@ -298,10 +298,11 @@ class DialogsSettingsActivity : SettingsPageActivity() {
         private val TOGGLE_INTERACTIVE_CHAT_PREVIEW = InuUtils.generateId()
         private val TOGGLE_HIDE_ALL_CHATS_TAB = InuUtils.generateId()
 
-        @JvmField val PAGE = SearchRegistry.Page(
+        @JvmField
+        val PAGE = SearchRegistry.Page(
             slug = "dialogs",
             titleRes = R.string.InuMainPage,
-            iconRes = R.drawable.tabs_chats_24,
+            iconRes = R.drawable.msg_viewchats,
             factory = ::DialogsSettingsActivity,
             entries = listOf(
                 SearchRegistry.Entry("folders-display-mode", R.string.InuFoldersDisplayMode, BUTTON_FOLDERS_DISPLAY_MODE),

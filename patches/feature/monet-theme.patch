@@ -22,7 +22,7 @@ index 0000000..0000000 100644
  
  public class Theme {
  
-@@ -2475,13 +2476,33 @@ public class Theme {
+@@ -2470,13 +2471,33 @@ public class Theme {
              return defaultAccentCount != 0;
          }
  
@@ -58,7 +58,7 @@ index 0000000..0000000 100644
                  isDark = LIGHT;
              }
              if (isDark == UNKNOWN) {
-@@ -4723,6 +4744,38 @@ public class Theme {
+@@ -4718,6 +4739,38 @@ public class Theme {
          themes.add(themeInfo);
          themesDict.put("Night", themeInfo);
  
@@ -97,7 +97,7 @@ index 0000000..0000000 100644
          String themesString = themeConfig.getString("themes2", null);
  
          int remoteVersion = themeConfig.getInt("remote_version", 0);
-@@ -4955,6 +5008,8 @@ public class Theme {
+@@ -4950,6 +5003,8 @@ public class Theme {
                      if (accent != null) {
                          info.overrideWallpaper = accent.overrideWallpaper;
                      }
@@ -106,7 +106,7 @@ index 0000000..0000000 100644
                  }
              }
              if (oldEditor != null) {
-@@ -8162,6 +8217,8 @@ public class Theme {
+@@ -8161,6 +8216,8 @@ public class Theme {
                                      } catch (Exception ignore) {
                                          value = Utilities.parseInt(param);
                                      }
@@ -119,7 +119,7 @@ diff --git a/TMessagesProj/src/main/java/org/telegram/ui/DialogsActivity.java b/
 index 0000000..0000000 100644
 --- a/TMessagesProj/src/main/java/org/telegram/ui/DialogsActivity.java
 +++ b/TMessagesProj/src/main/java/org/telegram/ui/DialogsActivity.java
-@@ -13139,6 +13139,9 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
+@@ -13367,6 +13367,9 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
      private void showItemOptions() {
          ItemOptions io = ItemOptions.makeOptions(this, optionsItem);
          io.setColors(getThemedColor(Theme.key_actionBarDefaultTitle), getThemedColor(Theme.key_actionBarDefaultTitle));
@@ -133,7 +133,7 @@ diff --git a/TMessagesProj/src/main/java/org/telegram/ui/LaunchActivity.java b/T
 index 0000000..0000000 100644
 --- a/TMessagesProj/src/main/java/org/telegram/ui/LaunchActivity.java
 +++ b/TMessagesProj/src/main/java/org/telegram/ui/LaunchActivity.java
-@@ -6822,6 +6822,7 @@ public class LaunchActivity extends BasePermissionsActivity implements INavigati
+@@ -6985,6 +6985,7 @@ public class LaunchActivity extends BasePermissionsActivity implements INavigati
          if (Theme.selectedAutoNightType == Theme.AUTO_NIGHT_TYPE_SYSTEM) {
              Theme.checkAutoNightThemeConditions();
          }
@@ -145,7 +145,7 @@ diff --git a/TMessagesProj/src/main/java/org/telegram/ui/SettingsActivity.java b
 index 0000000..0000000 100644
 --- a/TMessagesProj/src/main/java/org/telegram/ui/SettingsActivity.java
 +++ b/TMessagesProj/src/main/java/org/telegram/ui/SettingsActivity.java
-@@ -1155,6 +1155,12 @@ public class SettingsActivity extends BaseFragment implements NotificationCenter
+@@ -1159,6 +1159,12 @@ public class SettingsActivity extends BaseFragment implements NotificationCenter
              titleView.setTranslationX(icon == 0 ? dp(2) : 0);
              subtitleView.setTranslationX(icon == 0 ? dp(2) : 0);
  

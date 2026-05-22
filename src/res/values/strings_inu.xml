@@ -91,6 +91,16 @@
     <string name="InuPredictiveBackOff">Off</string>
     <string name="InuPredictiveBackStock">Stock</string>
     <string name="InuPredictiveBackMaterial3">Material 3</string>
+    <string name="InuTextSpoilerMode">Text spoiler style</string>
+    <string name="InuTextSpoilerModeDefault">Telegram</string>
+    <string name="InuTextSpoilerModeSimple">Simple</string>
+    <string name="InuTextSpoilerModeEpstein">Epstein</string>
+    <string name="InuSpoilerExtendToLineEnd">Extend spoilers to line end</string>
+    <string name="InuSpoilerExtendToLineEndInfo">Stretches spoiler blocks to the edge of the line when text ends just short of it</string>
+    <string name="InuMediaSpoilerLabel">Spoiler</string>
+    <string name="InuSimpleMediaSpoilers">Simple media spoilers</string>
+    <string name="InuSimpleMediaSpoilersInfo">Replaces the animated particle effect on photo and video spoilers with a static blur and a label inside a pill</string>
+    <string name="InuSpoilers">Spoilers</string>
     <string name="InuHideAiFeatures">Hide AI features</string>
     <string name="InuHideAiEditor">AI editor button</string>
     <string name="InuHideMessageSummary">Message summary button</string>
@@ -121,6 +131,8 @@
     <string name="InuProfilePreferMediaTabInfo">…over Gifts and Posts tabs</string>
     <string name="InuDisableMotionPhotos">Disable motion photos</string>
     <string name="InuDisableMotionPhotosInfo">Don\'t detect or render motion photos, in picker and in messages</string>
+    <string name="InuDisableVolumePlayVideo">Disable volume keys playing videos</string>
+    <string name="InuDisableVolumePlayVideoInfo">Don\'t start a visible video with sound when pressing volume keys in chat</string>
     <string name="InuChatAlwaysShowDown">Always show "go to bottom"</string>
     <string name="InuChatAlwaysShowDownInfo">Even when scrolling upwards</string>
     <string name="InuChatTwoFingerSelect">Two-finger swipe to select</string>
@@ -161,6 +173,7 @@
     <string name="InuTranslateInstantView">Translate page</string>
     <string name="InuInstantViewShowOriginal">Show original</string>
     <string name="InuTranslating">Translating…</string>
+    <string name="InuNothingToTranslate">No translatable messages selected.</string>
     <string name="InuTranslateInstantViewSkipped">Source language is in your Do Not Translate list.</string>
     <string name="InuTranslateInstantViewPartial">Some sections could not be translated.</string>
     <string name="InuTranslator">Translator</string>
@@ -203,6 +216,7 @@
     <string name="InuMapPreviewProviderYandex">Yandex</string>
 
     <string name="InuReplyIn">Reply in…</string>
+    <string name="InuSummarize">Summarize</string>
     <string name="InuMessageDetails">Details</string>
     <string name="InuMsgDetailScheduled">Scheduled</string>
     <string name="InuMsgDetailScheduledDate">Scheduled date</string>
@@ -300,6 +314,7 @@
     <string name="InuForwardNoQuote">No-Quote forward</string>
     <string name="InuReplyInDms">Reply in DMs</string>
     <string name="InuHiddenCaptionDescription">Captions removed</string>
+    <string name="InuHiddenSendersAndCaptionDescription">Sender names and captions removed</string>
 
     <string name="InuTextClassifierMode">Text classifier mode</string>
     <string name="InuTextClassifierModeInfo">Text classifier is a system component that auto-expands selection when double-tapping text</string>

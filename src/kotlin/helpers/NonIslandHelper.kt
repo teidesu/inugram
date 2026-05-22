@@ -84,17 +84,33 @@ object NonIslandHelper {
     @JvmStatic
     fun applyGlobalSearchBar(field: FragmentSearchField, contentView: SizeNotifierFrameLayout) {
         if (!globalSearch()) return
-        // extra padding to cover with blur the area above the search bar
-        val extraTopPadding = AndroidUtilities.statusBarHeight + dp(8f)
-        field.translationY =
-            (-dp(DialogsActivity.SEARCH_FIELD_HEIGHT.toFloat() + 4) - extraTopPadding).toFloat()
         field.setupBlurredBackground(null)
         field.inu_blurHelper = BlurBehindHelper(field, contentView, Theme.key_windowBackgroundWhite)
+        val lp = field.layoutParams as? FrameLayout.LayoutParams
+        if (lp != null) {
+            lp.leftMargin = 0
+            lp.rightMargin = 0
+        }
+        updateGlobalSearchBarInsets(field)
+    }
+
+    // statusBarHeight is 0 at createView under the non-legacy inset system (only the live
+    // window insets fill it in, after createView). The field's top padding pushes the input
+    // below the status bar while the blur covers the area above it; the per-draw translationY
+    // subtracts the same statusBarHeight. Baking a stale (0) value here leaves the bar
+    // statusBarHeight too high once insets land, so re-apply on every inset change.
+    @JvmStatic
+    fun updateGlobalSearchBarInsets(field: FragmentSearchField) {
+        if (!globalSearch()) return
+        // extra padding to cover with blur the area above the search bar
+        val extraTopPadding = AndroidUtilities.statusBarHeight + dp(8f)
         field.setPadding(0, extraTopPadding, 0, 0)
         val lp = field.layoutParams as? FrameLayout.LayoutParams ?: return
-        lp.height += extraTopPadding
-        lp.leftMargin = 0
-        lp.rightMargin = 0
+        val height = dp(DialogsActivity.SEARCH_FIELD_HEIGHT.toFloat()) + extraTopPadding
+        if (lp.height != height) {
+            lp.height = height
+            field.requestLayout()
+        }
     }
 
     @JvmStatic

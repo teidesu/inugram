@@ -31,7 +31,7 @@ diff --git a/TMessagesProj/src/main/java/org/telegram/ui/Components/SharedMediaL
 index 0000000..0000000 100644
 --- a/TMessagesProj/src/main/java/org/telegram/ui/Components/SharedMediaLayout.java
 +++ b/TMessagesProj/src/main/java/org/telegram/ui/Components/SharedMediaLayout.java
-@@ -6792,6 +6792,9 @@ public class SharedMediaLayout extends FrameLayout implements NotificationCenter
+@@ -6875,6 +6875,9 @@ public class SharedMediaLayout extends FrameLayout implements NotificationCenter
          if (!delegate.isFragmentOpened()) {
              animated = false;
          }
@@ -45,7 +45,7 @@ diff --git a/TMessagesProj/src/main/java/org/telegram/ui/Gifts/GiftSheet.java b/
 index 0000000..0000000 100644
 --- a/TMessagesProj/src/main/java/org/telegram/ui/Gifts/GiftSheet.java
 +++ b/TMessagesProj/src/main/java/org/telegram/ui/Gifts/GiftSheet.java
-@@ -1096,6 +1096,10 @@ public class GiftSheet extends BottomSheetWithRecyclerListView implements Notifi
+@@ -1099,6 +1099,10 @@ public class GiftSheet extends BottomSheetWithRecyclerListView implements Notifi
  
              imageView = new BackupImageView(context);
              imageView.getImageReceiver().setAutoRepeat(0);
@@ -60,7 +60,7 @@ diff --git a/TMessagesProj/src/main/java/org/telegram/ui/ProfileActivity.java b/
 index 0000000..0000000 100644
 --- a/TMessagesProj/src/main/java/org/telegram/ui/ProfileActivity.java
 +++ b/TMessagesProj/src/main/java/org/telegram/ui/ProfileActivity.java
-@@ -1359,7 +1359,8 @@ public class ProfileActivity extends BaseFragment implements NotificationCenter.
+@@ -1383,7 +1383,8 @@ public class ProfileActivity extends BaseFragment implements NotificationCenter.
                          canvas.clipRect(0, 0, getMeasuredWidth(), y1);
                          float atop = actionBar.getOccupyStatusBar() ? AndroidUtilities.statusBarHeight : 0;
                          float maxExpand = getHeaderOnlyExtraHeight() + atop + (actionBar.getHeight() - atop) / 2f;
@@ -70,7 +70,7 @@ index 0000000..0000000 100644
                          canvas.restore();
                      }
                  }
-@@ -4247,7 +4248,7 @@ public class ProfileActivity extends BaseFragment implements NotificationCenter.
+@@ -4279,7 +4280,7 @@ public class ProfileActivity extends BaseFragment implements NotificationCenter.
                  updateBottomButtonY();
              }
          };
@@ -79,7 +79,7 @@ index 0000000..0000000 100644
          defaultItemAnimator.setMoveDelay(0);
          defaultItemAnimator.setMoveDuration(320);
          defaultItemAnimator.setRemoveDuration(320);
-@@ -5967,8 +5968,8 @@ public class ProfileActivity extends BaseFragment implements NotificationCenter.
+@@ -6038,8 +6039,8 @@ public class ProfileActivity extends BaseFragment implements NotificationCenter.
              avatarGooey.setGooeyEnabled(false);
          } else {
              avatarGooey.setPullProgress(pullUpProgress);
@@ -90,7 +90,7 @@ index 0000000..0000000 100644
          }
          if (storyView != null && playProfileAnimation != 2) {
              storyView.setAlpha(pullUpProgress > 0 ? lerp(1.0f, 0.0f, ilerp(pullUpProgress, 0, 0.5f)) : 1.0f);
-@@ -8332,7 +8333,7 @@ public class ProfileActivity extends BaseFragment implements NotificationCenter.
+@@ -8439,7 +8440,7 @@ public class ProfileActivity extends BaseFragment implements NotificationCenter.
                          + ActionBar.getCurrentActionBarHeight()
                          - dp(21)
                          + actionBar.getTranslationY();
@@ -99,7 +99,7 @@ index 0000000..0000000 100644
              } else {
                  avatarY = endNameY;
              }
-@@ -8613,6 +8614,10 @@ public class ProfileActivity extends BaseFragment implements NotificationCenter.
+@@ -8720,6 +8721,10 @@ public class ProfileActivity extends BaseFragment implements NotificationCenter.
                      avatarScale = lerp(intoSize, 96, diff) / 100f;
                      pullUpProgress = 1.0f - diff;
                  }
@@ -110,7 +110,7 @@ index 0000000..0000000 100644
  
                  if (actionsView != null) {
                      if (openAnimationInProgress) {
-@@ -8626,7 +8631,7 @@ public class ProfileActivity extends BaseFragment implements NotificationCenter.
+@@ -8733,7 +8738,7 @@ public class ProfileActivity extends BaseFragment implements NotificationCenter.
                      storyView.invalidate();
                  }
                  if (giftsView != null) {
@@ -119,7 +119,7 @@ index 0000000..0000000 100644
                  }
                  final float nameScale = 1.0f + 0.12f * diff;
                  if (expandAnimator == null || !expandAnimator.isRunning()) {
-@@ -8707,6 +8712,7 @@ public class ProfileActivity extends BaseFragment implements NotificationCenter.
+@@ -8814,6 +8819,7 @@ public class ProfileActivity extends BaseFragment implements NotificationCenter.
          if (diff >= 1f) {
              avatarImage.setAlpha(1f);
          }
@@ -127,7 +127,7 @@ index 0000000..0000000 100644
      }
  
      private void updateExtraViews(float newTop) {
-@@ -8717,7 +8723,7 @@ public class ProfileActivity extends BaseFragment implements NotificationCenter.
+@@ -8824,7 +8830,7 @@ public class ProfileActivity extends BaseFragment implements NotificationCenter.
              overlaysView.requestLayout();
          }
          if (topView != null) {
@@ -136,7 +136,7 @@ index 0000000..0000000 100644
              if (topView.backgroundGradient != null) {
                  topView.backgroundGradient.setLocalMatrix(topView.backgroundGradientMatrix);
              }
-@@ -11044,7 +11050,7 @@ public class ProfileActivity extends BaseFragment implements NotificationCenter.
+@@ -11160,7 +11166,7 @@ public class ProfileActivity extends BaseFragment implements NotificationCenter.
              return;
          }
          final int newTop = ActionBar.getCurrentActionBarHeight() + (actionBar.getOccupyStatusBar() ? AndroidUtilities.statusBarHeight : 0);
@@ -145,7 +145,7 @@ index 0000000..0000000 100644
  
          if (openAnimationInProgress && playProfileAnimation == 2 && avatarContainer != null) {
              float vh = avatarContainer.getHeight() * avatarContainer.getScaleY();
-@@ -11328,11 +11334,11 @@ public class ProfileActivity extends BaseFragment implements NotificationCenter.
+@@ -11444,11 +11450,11 @@ public class ProfileActivity extends BaseFragment implements NotificationCenter.
                      if (/*!getMessagesController().premiumFeaturesBlocked() && */user != null && !MessagesController.isSupportUser(user) && DialogObject.getEmojiStatusDocumentId(user.emoji_status) != 0) {
                          rightIconIsStatus = true;
                          rightIconIsPremium = false;
@@ -159,7 +159,7 @@ index 0000000..0000000 100644
                      } else {
                          nameTextView[a].setRightDrawable(null);
                      }
-@@ -16411,7 +16417,7 @@ public class ProfileActivity extends BaseFragment implements NotificationCenter.
+@@ -16532,7 +16538,7 @@ public class ProfileActivity extends BaseFragment implements NotificationCenter.
          if (collectibleHint != null) {
              collectibleHint.hide();
          }
@@ -220,7 +220,7 @@ index 0000000..0000000 100644
          if (newStoryBounce != null) {
              newStoryBounce.cancel();
          }
-@@ -596,8 +597,8 @@ public class ProfileStoriesView extends View implements NotificationCenter.Notif
+@@ -598,8 +599,8 @@ public class ProfileStoriesView extends View implements NotificationCenter.Notif
          }
          if (progressToUploading < 1f) {
              segmentsAlpha = clamp(1f - expandProgress / 0.2f, 1, 0) * (1f - progressToUploading);

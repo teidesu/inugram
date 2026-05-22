@@ -12,7 +12,7 @@ diff --git a/TMessagesProj/src/main/java/org/telegram/ui/ChatActivity.java b/TMe
 index 0000000..0000000 100644
 --- a/TMessagesProj/src/main/java/org/telegram/ui/ChatActivity.java
 +++ b/TMessagesProj/src/main/java/org/telegram/ui/ChatActivity.java
-@@ -3739,6 +3739,8 @@ public class ChatActivity extends BaseFragment implements
+@@ -3651,6 +3651,8 @@ public class ChatActivity extends BaseFragment implements
                      ChatHelper.openInDiscussionGroup(ChatActivity.this);
                  } else if (id == ChatHelper.ACTION_SHOW_PINNED_PANEL) {
                      ChatHelper.showPinnedPanel(ChatActivity.this);
@@ -21,7 +21,7 @@ index 0000000..0000000 100644
                  } else if (id == view_as_topics) {
                      if (getUserConfig().getClientUserId() == dialog_id) {
                          getMessagesController().setSavedViewAs(true);
-@@ -4247,6 +4249,10 @@ public class ChatActivity extends BaseFragment implements
+@@ -4159,6 +4161,10 @@ public class ChatActivity extends BaseFragment implements
              menu.addItem(edit_quick_reply, R.drawable.group_edit).setContentDescription(LocaleController.getString(R.string.Edit));
          }
  
@@ -29,10 +29,10 @@ index 0000000..0000000 100644
 +            menu.addItem(ChatHelper.ACTION_PINNED_UNPIN_ALL, R.drawable.msg_unpin).setVisibility(View.GONE);
 +        }
 +
-         if (UserObject.isBotForumWithEditableTopics(currentUser)) {
+         if (UserObject.isBotForumWithEditableTopics(currentUser) && chatMode == 0) {
              topicCreateItem = menu.addItem(chat_menu_topic_create, R.drawable.menu_topic_add_30);
          }
-@@ -4391,7 +4397,7 @@ public class ChatActivity extends BaseFragment implements
+@@ -4303,7 +4309,7 @@ public class ChatActivity extends BaseFragment implements
              }
              if (currentChat != null) {
                  headerItem.lazilyAddSubItem(open_direct, R.drawable.msg_markunread, getString(R.string.ChannelOpenDirect));
@@ -41,7 +41,7 @@ index 0000000..0000000 100644
              }
              if (currentUser != null && chatMode != MODE_SAVED) {
                  headerItem.lazilyAddSubItem(call, R.drawable.msg_callback, LocaleController.getString(R.string.Call));
-@@ -5256,7 +5262,7 @@ public class ChatActivity extends BaseFragment implements
+@@ -5199,7 +5205,7 @@ public class ChatActivity extends BaseFragment implements
                      updateSkeletonColors();
                      updateSkeletonGradient();
  
@@ -50,23 +50,23 @@ index 0000000..0000000 100644
                      int j = 0;
  
                      int childMaxTop = Integer.MAX_VALUE;
-@@ -8357,6 +8363,7 @@ public class ChatActivity extends BaseFragment implements
+@@ -8238,6 +8244,7 @@ public class ChatActivity extends BaseFragment implements
              }
          });
          bottomChannelButtonsLayout.setButtonOnFullyVisibleListener(ChatActivityChannelButtonsLayout.BUTTON_GIFT, (v, id, firstTime) -> {
 +            if (ChatHelper.shouldForceHideBottomBar(currentChat)) return;
-             if (bottomGiftHintView == null && firstTime && MessagesController.getGlobalMainSettings().getInt("channelgifthint", 0) < 2 && (bottomSuggestHintView == null || !bottomSuggestHintView.shown())) {
+             if (bottomGiftHintView == null && firstTime && (bottomSuggestHintView == null || !bottomSuggestHintView.shown()) && HintsController.Hint.ChannelGiftHint.show()) {
                  AndroidUtilities.runOnUIThread(() -> {
                      if (getContext() == null) return;
-@@ -8376,6 +8383,7 @@ public class ChatActivity extends BaseFragment implements
+@@ -8257,6 +8264,7 @@ public class ChatActivity extends BaseFragment implements
              }
          });
          bottomChannelButtonsLayout.setButtonOnFullyVisibleListener(ChatActivityChannelButtonsLayout.BUTTON_DIRECT, (v, id, firstTime) -> {
 +            if (ChatHelper.shouldForceHideBottomBar(currentChat)) return;
-             if (bottomSuggestHintView == null && firstTime && MessagesController.getGlobalMainSettings().getInt("channelsuggesthint", 0) < 2) {
+             if (bottomSuggestHintView == null && firstTime && HintsController.Hint.ChannelSuggestHint.show()) {
                  AndroidUtilities.runOnUIThread(() -> {
                      if (getContext() == null) return;
-@@ -17467,7 +17475,7 @@ public class ChatActivity extends BaseFragment implements
+@@ -17432,7 +17440,7 @@ public class ChatActivity extends BaseFragment implements
              float canvasOffsetX = chatListView.getLeft() + cell.getX();
              float canvasOffsetY = chatListView.getY() + cell.getY() + cell.getPaddingTop();
              float alpha = cell.shouldDrawAlphaLayer() ? cell.getAlpha() : 1f;
@@ -75,7 +75,7 @@ index 0000000..0000000 100644
              canvas.translate(canvasOffsetX, canvasOffsetY);
              cell.setInvalidatesParent(true);
              if (type == 0) {
-@@ -17688,6 +17696,7 @@ public class ChatActivity extends BaseFragment implements
+@@ -17653,6 +17661,7 @@ public class ChatActivity extends BaseFragment implements
                                      - inputIslandHeightCurrent
                                      - dp(NonIslandHelper.chatElements() ? 0 : 9)
                                      - (mentionContainer != null ? mentionContainer.clipBottom() : 0);
@@ -83,15 +83,15 @@ index 0000000..0000000 100644
  
                              canvas.clipRect(0, listTop + (mentionContainer != null ? mentionContainer.clipTop() : 0), getMeasuredWidth(), viewClipBottom2);
                              canvas.translate(0, chatListView.getY());
-@@ -17707,6 +17716,7 @@ public class ChatActivity extends BaseFragment implements
-                             - windowInsetsStateHolder.getCurrentMaxBottomInset()
+@@ -17673,6 +17682,7 @@ public class ChatActivity extends BaseFragment implements
                              - inputIslandHeightCurrent
+                             - getTopicTabsSideSize(TopicsTabsView.Position.BOTTOM)
                              - dp(NonIslandHelper.chatElements() ? 0 : 9);
 +                        if (ChatHelper.shouldForceHideBottomBar(currentChat, currentUser, chatMode)) viewClipBottom += windowInsetsStateHolder.getCurrentMaxBottomInset();
  
                          float clipTop = 0, clipBottom = 0;
                          if (mentionContainer != null) {
-@@ -21583,7 +21593,7 @@ public class ChatActivity extends BaseFragment implements
+@@ -21554,7 +21564,7 @@ public class ChatActivity extends BaseFragment implements
                  updateTopPanel(true);
              }
              if (headerItem != null) {
@@ -100,7 +100,7 @@ index 0000000..0000000 100644
              }
          } else if (id == NotificationCenter.didReceiveNewMessages) {
              FileLog.d("ChatActivity didReceiveNewMessages start");
-@@ -27033,7 +27043,10 @@ public class ChatActivity extends BaseFragment implements
+@@ -27131,7 +27141,10 @@ public class ChatActivity extends BaseFragment implements
  
          boolean accentTextButton = false;
          boolean forceVisible = false;
@@ -112,7 +112,7 @@ index 0000000..0000000 100644
          boolean showGiftButton = false;
          boolean showSuggestButton = false;
          boolean showSearchButton = chatMode == MODE_DEFAULT && ChatObject.isChannelOrGiga(currentChat);
-@@ -27109,6 +27122,11 @@ public class ChatActivity extends BaseFragment implements
+@@ -27207,6 +27220,11 @@ public class ChatActivity extends BaseFragment implements
                  bottomOverlayChatText.setTag(null);
                  bottomOverlayChatText.setText(LocaleController.getString(R.string.HidePinnedMessagesNoCaps));
              }
@@ -124,7 +124,7 @@ index 0000000..0000000 100644
              showBottomOverlayProgress(false, false);
          } else if (currentUser != null && currentUser.id == UserObject.VERIFY) {
              if (!getMessagesController().isDialogMuted(dialog_id, getTopicId())) {
-@@ -45076,7 +45094,7 @@ public class ChatActivity extends BaseFragment implements
+@@ -45479,7 +45497,7 @@ public class ChatActivity extends BaseFragment implements
              pollAddVisibility = animatorPollAddAnswerVisibility.getFloatValue();
          }
  

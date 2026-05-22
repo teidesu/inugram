@@ -12,7 +12,7 @@ diff --git a/TMessagesProj/src/main/java/org/telegram/ui/ChatActivity.java b/TMe
 index 0000000..0000000 100644
 --- a/TMessagesProj/src/main/java/org/telegram/ui/ChatActivity.java
 +++ b/TMessagesProj/src/main/java/org/telegram/ui/ChatActivity.java
-@@ -13982,7 +13982,11 @@ public class ChatActivity extends BaseFragment implements
+@@ -13887,7 +13887,11 @@ public class ChatActivity extends BaseFragment implements
      }
  
      public void searchLinks(final CharSequence charSequence, final boolean force) {
@@ -25,7 +25,7 @@ index 0000000..0000000 100644
              return;
          }
          if (currentChat != null && !ChatObject.canSendEmbed(currentChat)) {
-@@ -14164,6 +14168,34 @@ public class ChatActivity extends BaseFragment implements
+@@ -14069,6 +14073,34 @@ public class ChatActivity extends BaseFragment implements
  
      private HashMap<String, TLRPC.WebPage> lastLinkPreviewResults;
  
@@ -64,7 +64,7 @@ diff --git a/TMessagesProj/src/main/java/org/telegram/ui/Components/ChatActivity
 index 0000000..0000000 100644
 --- a/TMessagesProj/src/main/java/org/telegram/ui/Components/ChatActivityEnterView.java
 +++ b/TMessagesProj/src/main/java/org/telegram/ui/Components/ChatActivityEnterView.java
-@@ -5008,6 +5008,24 @@ public class ChatActivityEnterView extends FrameLayout implements
+@@ -5022,6 +5022,24 @@ public class ChatActivityEnterView extends FrameLayout implements
                  }
              });
          }
@@ -89,7 +89,7 @@ index 0000000..0000000 100644
          options.setupSelectors();
          if (sendWhenOnlineButton != null) {
              TLRPC.User user = parentFragment == null ? null : parentFragment.getCurrentUser();
-@@ -9703,6 +9721,7 @@ public class ChatActivityEnterView extends FrameLayout implements
+@@ -9721,6 +9739,7 @@ public class ChatActivityEnterView extends FrameLayout implements
              }
  
              doneButton.setOnLongClickListener(v -> {
@@ -97,7 +97,7 @@ index 0000000..0000000 100644
                  if (messageObject.isMediaEmpty()) return false;
                  if (messageEditText == null || TextUtils.isEmpty(messageEditText.getTextToUse())) return false;
                  if (groupedMessages != null && (!groupedMessages.hasCaption || groupedMessages.isDocuments)) return false;
-@@ -9796,7 +9815,7 @@ public class ChatActivityEnterView extends FrameLayout implements
+@@ -9814,7 +9833,7 @@ public class ChatActivityEnterView extends FrameLayout implements
                  draftMessage = messageEditText != null && messageEditText.length() > 0 ? messageEditText.getText() : null;
                  draftSearchWebpage = messageWebPageSearch;
              }

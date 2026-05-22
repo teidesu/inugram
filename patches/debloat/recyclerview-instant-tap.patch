@@ -11,7 +11,7 @@ diff --git a/TMessagesProj/src/main/java/org/telegram/ui/Components/RecyclerList
 index 0000000..0000000 100644
 --- a/TMessagesProj/src/main/java/org/telegram/ui/Components/RecyclerListView.java
 +++ b/TMessagesProj/src/main/java/org/telegram/ui/Components/RecyclerListView.java
-@@ -177,7 +177,7 @@ public class RecyclerListView extends RecyclerView implements IBlur3Capture {
+@@ -178,7 +178,7 @@ public class RecyclerListView extends RecyclerView implements IBlur3Capture {
      private boolean interceptedByChild;
      private boolean wasPressed;
      private boolean disallowInterceptTouchEvents;

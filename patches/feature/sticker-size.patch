@@ -11,7 +11,7 @@ diff --git a/TMessagesProj/src/main/java/org/telegram/ui/Cells/ChatMessageCell.j
 index 0000000..0000000 100644
 --- a/TMessagesProj/src/main/java/org/telegram/ui/Cells/ChatMessageCell.java
 +++ b/TMessagesProj/src/main/java/org/telegram/ui/Cells/ChatMessageCell.java
-@@ -244,6 +244,7 @@ import java.util.Locale;
+@@ -248,6 +248,7 @@ import java.util.Locale;
  import java.util.Stack;
  import java.util.concurrent.atomic.AtomicReference;
  
@@ -19,7 +19,7 @@ index 0000000..0000000 100644
  import me.vkryl.android.animator.BoolAnimator;
  import me.vkryl.android.animator.FactorAnimator;
  import me.vkryl.core.BitwiseUtils;
-@@ -9458,9 +9459,9 @@ public class ChatMessageCell extends BaseCell implements SeekBar.SeekBarDelegate
+@@ -9502,9 +9503,9 @@ public class ChatMessageCell extends BaseCell implements SeekBar.SeekBarDelegate
                      float maxHeight;
                      int maxWidth;
                      if (AndroidUtilities.isTablet()) {
@@ -31,7 +31,7 @@ index 0000000..0000000 100644
                      }
                      String filter;
                      if (messageObject.isAnimatedEmoji() || messageObject.isDice()) {
-@@ -9575,6 +9576,9 @@ public class ChatMessageCell extends BaseCell implements SeekBar.SeekBarDelegate
+@@ -9619,6 +9620,9 @@ public class ChatMessageCell extends BaseCell implements SeekBar.SeekBarDelegate
                      } else {
                          photoImage.setImage(null, null, thumb, null, messageObject, 0);
                      }

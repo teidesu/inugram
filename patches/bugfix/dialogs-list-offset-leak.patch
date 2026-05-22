@@ -11,7 +11,7 @@ diff --git a/TMessagesProj/src/main/java/org/telegram/ui/DialogsActivity.java b/
 index 0000000..0000000 100644
 --- a/TMessagesProj/src/main/java/org/telegram/ui/DialogsActivity.java
 +++ b/TMessagesProj/src/main/java/org/telegram/ui/DialogsActivity.java
-@@ -1659,10 +1659,9 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
+@@ -1672,10 +1672,9 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
          }
      }
  
@@ -23,7 +23,7 @@ index 0000000..0000000 100644
          public boolean updateDialogsOnNextDraw;
          private boolean firstLayout = true;
          private boolean ignoreLayout;
-@@ -1702,7 +1701,7 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
+@@ -1715,7 +1714,7 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
          }
  
          public void setViewsOffset(float viewOffset) {

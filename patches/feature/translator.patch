@@ -17,7 +17,7 @@ diff --git a/TMessagesProj/src/main/java/org/telegram/messenger/MessageObject.ja
 index 0000000..0000000 100644
 --- a/TMessagesProj/src/main/java/org/telegram/messenger/MessageObject.java
 +++ b/TMessagesProj/src/main/java/org/telegram/messenger/MessageObject.java
-@@ -3645,6 +3645,7 @@ public class MessageObject {
+@@ -3663,6 +3663,7 @@ public class MessageObject {
              generateCaption();
              return replyUpdated || true;
          } else if (
@@ -25,7 +25,7 @@ index 0000000..0000000 100644
              messageOwner != null &&
              TranslateController.isTranslatable(this) &&
              translateController.isTranslatingDialog(getDialogId()) &&
-@@ -7038,7 +7039,7 @@ public class MessageObject {
+@@ -7076,7 +7077,7 @@ public class MessageObject {
          }
          if (linkDescription == null) {
              if (getMedia(messageOwner) instanceof TLRPC.TL_messageMediaWebPage && getMedia(messageOwner).webpage instanceof TLRPC.TL_webPage && getMedia(messageOwner).webpage.description != null) {
@@ -77,7 +77,7 @@ diff --git a/TMessagesProj/src/main/java/org/telegram/ui/ArticleViewer.java b/TM
 index 0000000..0000000 100644
 --- a/TMessagesProj/src/main/java/org/telegram/ui/ArticleViewer.java
 +++ b/TMessagesProj/src/main/java/org/telegram/ui/ArticleViewer.java
-@@ -264,7 +264,7 @@ public class ArticleViewer implements NotificationCenter.NotificationCenterDeleg
+@@ -274,7 +274,7 @@ public class ArticleViewer implements NotificationCenter.NotificationCenterDeleg
      private boolean collapsed;
      private boolean attachedToWindow;
  
@@ -86,7 +86,7 @@ index 0000000..0000000 100644
  
      private int lastBlockNum = 1;
  
-@@ -283,7 +283,7 @@ public class ArticleViewer implements NotificationCenter.NotificationCenterDeleg
+@@ -298,7 +298,7 @@ public class ArticleViewer implements NotificationCenter.NotificationCenterDeleg
      private WindowManager.LayoutParams windowLayoutParams;
      private WindowView windowView;
      private FrameLayout containerView;
@@ -95,7 +95,7 @@ index 0000000..0000000 100644
      private AddressBarList addressBarList;
  //    private FrameLayout headerView;
  //    private SimpleTextView titleTextView;
-@@ -1774,6 +1774,7 @@ public class ArticleViewer implements NotificationCenter.NotificationCenterDeleg
+@@ -1874,6 +1874,7 @@ public class ArticleViewer implements NotificationCenter.NotificationCenterDeleg
              pages[index].setType(PageLayout.TYPE_ARTICLE);
              adapter.isRtl = webPage.cached_page.rtl;
              adapter.currentPage = webPage;
@@ -103,7 +103,7 @@ index 0000000..0000000 100644
  
              int numBlocks = 0;
              int count = webPage.cached_page.blocks.size();
-@@ -2502,6 +2503,10 @@ public class ArticleViewer implements NotificationCenter.NotificationCenterDeleg
+@@ -2612,6 +2613,10 @@ public class ArticleViewer implements NotificationCenter.NotificationCenterDeleg
          if (richText == null) {
              return null;
          }
@@ -114,7 +114,7 @@ index 0000000..0000000 100644
          if (richText instanceof TLRPC.TL_textFixed) {
              return getText(page, parentView, parentRichText, ((TLRPC.TL_textFixed) richText).text, parentBlock, maxWidth);
          } else if (richText instanceof TLRPC.TL_textItalic) {
-@@ -2976,7 +2981,7 @@ public class ArticleViewer implements NotificationCenter.NotificationCenterDeleg
+@@ -3096,7 +3101,7 @@ public class ArticleViewer implements NotificationCenter.NotificationCenterDeleg
  
          CharSequence text;
          if (plainText != null) {
@@ -123,7 +123,7 @@ index 0000000..0000000 100644
          } else {
              text = getText(parentAdapter, parentView, richText, richText, parentBlock, width);
          }
-@@ -3869,6 +3874,10 @@ public class ArticleViewer implements NotificationCenter.NotificationCenterDeleg
+@@ -3975,6 +3980,10 @@ public class ArticleViewer implements NotificationCenter.NotificationCenterDeleg
          headerProgressPaint.setColor(0xff242426);
          navigationBarPaint.setColor(Color.BLACK);
          actionBar = new WebActionBar(activity, getResourcesProvider()) {
@@ -134,16 +134,16 @@ index 0000000..0000000 100644
              @Override
              protected void onOpenedMenu() {
                  pages[0].listView.stopScroll();
-@@ -4314,6 +4323,8 @@ public class ArticleViewer implements NotificationCenter.NotificationCenterDeleg
-             }
+@@ -4421,6 +4430,8 @@ public class ArticleViewer implements NotificationCenter.NotificationCenterDeleg
              if (id == WebActionBar.search_item) {
+                 actionBar.setHeight(currentHeaderHeight = dp(56));
                  actionBar.showSearch(true, true);
 +            } else if (id == desu.inugram.helpers.InstantViewTranslateHelper.MENU_ITEM_ID) {
 +                desu.inugram.helpers.InstantViewTranslateHelper.onClick(this);
              } else if (id == WebActionBar.share_item) {
                  String url;
                  if (pages[0].isWeb()) {
-@@ -5795,7 +5806,7 @@ public class ArticleViewer implements NotificationCenter.NotificationCenterDeleg
+@@ -5924,7 +5935,7 @@ public class ArticleViewer implements NotificationCenter.NotificationCenterDeleg
  
      private LongSparseArray<BlockVideoCellState> videoStates = new LongSparseArray<>();
  
@@ -152,7 +152,7 @@ index 0000000..0000000 100644
  
          private Context context;
          private ArrayList<TLRPC.PageBlock> localBlocks = new ArrayList<>();
-@@ -5810,7 +5821,7 @@ public class ArticleViewer implements NotificationCenter.NotificationCenterDeleg
+@@ -5939,7 +5950,7 @@ public class ArticleViewer implements NotificationCenter.NotificationCenterDeleg
          private ArrayList<Object> textBlocks = new ArrayList<>();
          private HashMap<String, Integer> searchTextOffset = new HashMap<>();
  
@@ -165,7 +165,7 @@ diff --git a/TMessagesProj/src/main/java/org/telegram/ui/Cells/ChatMessageCell.j
 index 0000000..0000000 100644
 --- a/TMessagesProj/src/main/java/org/telegram/ui/Cells/ChatMessageCell.java
 +++ b/TMessagesProj/src/main/java/org/telegram/ui/Cells/ChatMessageCell.java
-@@ -1011,6 +1011,8 @@ public class ChatMessageCell extends BaseCell implements SeekBar.SeekBarDelegate
+@@ -1025,6 +1025,8 @@ public class ChatMessageCell extends BaseCell implements SeekBar.SeekBarDelegate
      public int textX;
      private int unmovedTextX;
      private int linkPreviewY;
@@ -174,7 +174,7 @@ index 0000000..0000000 100644
      private int factCheckY;
      public int textY;
      public int totalHeight;
-@@ -7689,7 +7691,7 @@ public class ChatMessageCell extends BaseCell implements SeekBar.SeekBarDelegate
+@@ -7723,7 +7725,7 @@ public class ChatMessageCell extends BaseCell implements SeekBar.SeekBarDelegate
                          isSmallImage = false;
                          linkPreviewAbove = currentMessageObject.messageOwner != null && currentMessageObject.messageOwner.invert_media;
                      } else if (hasLinkPreview) {
@@ -183,7 +183,7 @@ index 0000000..0000000 100644
                          site_name = webPage.site_name;
                          title = drawInstantViewType != 6 && drawInstantViewType != 7 ? webPage.title : null;
                          if (instantViewTypeIsGiftAuction != null) {
-@@ -12223,6 +12225,27 @@ public class ChatMessageCell extends BaseCell implements SeekBar.SeekBarDelegate
+@@ -12271,6 +12273,27 @@ public class ChatMessageCell extends BaseCell implements SeekBar.SeekBarDelegate
          }
      }
  
@@ -211,7 +211,7 @@ index 0000000..0000000 100644
      @Override
      public void invalidate() {
          if (currentMessageObject == null) {
-@@ -15239,7 +15262,7 @@ public class ChatMessageCell extends BaseCell implements SeekBar.SeekBarDelegate
+@@ -15303,7 +15326,7 @@ public class ChatMessageCell extends BaseCell implements SeekBar.SeekBarDelegate
              restore = true;
  
              AndroidUtilities.rectTmp.set(linkX, linkPreviewY - dp(6), linkX + width, linkPreviewY + linkPreviewHeight + (drawInstantButtonInside && drawInstantView ? dp(42) : 0));
@@ -220,7 +220,7 @@ index 0000000..0000000 100644
              float rad = (float) Math.floor(SharedConfig.bubbleRadius / (currentMessageObject.isSponsored() ? 2f : 3f));
              linkLine
                  .offsetEmoji(0, drawPhotoImageBefore ? (1f - isSmallImage()) * (dp(18) + photoImage.getImageHeight() + (siteNameLayout != null ? siteNameLayout.getLineBottom(siteNameLayout.getLineCount() - 1) : 0)) : 0)
-@@ -15614,7 +15637,7 @@ public class ChatMessageCell extends BaseCell implements SeekBar.SeekBarDelegate
+@@ -15678,7 +15701,7 @@ public class ChatMessageCell extends BaseCell implements SeekBar.SeekBarDelegate
                  photoImage.setImageY(smallImageStartY);
              } else {
                  photoImage.setImageX(linkX + (hasInvoicePreview ? -dp(6.3f) : dp(10)));
@@ -229,7 +229,7 @@ index 0000000..0000000 100644
              }
              if (transitionParams != null && transitionParams.animateSmallImage) {
                  if (!isSmallImage && documentAttachType != DOCUMENT_ATTACH_TYPE_DOCUMENT) {
-@@ -16609,7 +16632,7 @@ public class ChatMessageCell extends BaseCell implements SeekBar.SeekBarDelegate
+@@ -16678,7 +16701,7 @@ public class ChatMessageCell extends BaseCell implements SeekBar.SeekBarDelegate
  
          final TranslateController translateController = MessagesController.getInstance(currentAccount).getTranslateController();
          final boolean translating = translateController.isTranslating(currentMessageObject);
@@ -238,7 +238,7 @@ index 0000000..0000000 100644
          final boolean shouldSummarize = currentMessageObject != null && currentMessageObject.messageOwner.summarizedOpen;
          final boolean isFinal = shouldTranslate == (currentMessageObject != null && currentMessageObject.translated) && shouldSummarize == (currentMessageObject != null && currentMessageObject.summarized);
          if (origin == !isFinal) {
-@@ -18336,7 +18359,8 @@ public class ChatMessageCell extends BaseCell implements SeekBar.SeekBarDelegate
+@@ -18408,7 +18431,8 @@ public class ChatMessageCell extends BaseCell implements SeekBar.SeekBarDelegate
                  currentTimeString = TextUtils.concat(formatString(R.string.MessageScheduledRepeatSeconds, period), ", ", currentTimeString);
              }
          }
@@ -264,7 +264,7 @@ diff --git a/TMessagesProj/src/main/java/org/telegram/ui/ChatActivity.java b/TMe
 index 0000000..0000000 100644
 --- a/TMessagesProj/src/main/java/org/telegram/ui/ChatActivity.java
 +++ b/TMessagesProj/src/main/java/org/telegram/ui/ChatActivity.java
-@@ -11135,7 +11135,7 @@ public class ChatActivity extends BaseFragment implements
+@@ -11030,7 +11030,7 @@ public class ChatActivity extends BaseFragment implements
          if (translateItem == null) {
              return;
          }
@@ -273,7 +273,7 @@ index 0000000..0000000 100644
      }
  
      private Animator infoTopViewAnimator;
-@@ -24212,6 +24212,10 @@ public class ChatActivity extends BaseFragment implements
+@@ -24239,6 +24239,10 @@ public class ChatActivity extends BaseFragment implements
      }
  
      private void saveGeneralScroll() {
@@ -284,7 +284,7 @@ index 0000000..0000000 100644
          int scrollByCellHeight = 0;
          ChatMessageCell scrollByCell = null;
          for (int i = 0; i < chatListView.getChildCount(); ++i) {
-@@ -24266,16 +24270,19 @@ public class ChatActivity extends BaseFragment implements
+@@ -24293,16 +24297,19 @@ public class ChatActivity extends BaseFragment implements
                  boolean update = false;
                  if (cellMessageObject.getId() == messageObject.getId()) {
                      cellMessageObject.messageOwner.translatedText = messageObject.messageOwner.translatedText;
@@ -310,7 +310,7 @@ index 0000000..0000000 100644
                      }
                  }
                  MessageObject.GroupedMessages group = groupedMessagesMap.get(messageObject.getGroupId());
-@@ -24304,6 +24311,7 @@ public class ChatActivity extends BaseFragment implements
+@@ -24331,6 +24338,7 @@ public class ChatActivity extends BaseFragment implements
                          saveGeneralScroll();
                      }
                      cellMessageObject.forceUpdate = true;
@@ -318,7 +318,7 @@ index 0000000..0000000 100644
                      cell.setMessageObject(cellMessageObject, cell.getCurrentMessagesGroup(), cell.isPinnedBottom(), cell.isPinnedTop(), cell.isFirstInChat(), cell.isLastInChatList());
                      if (group != null) {
                          if (chatListItemAnimator != null) {
-@@ -31216,10 +31224,9 @@ public class ChatActivity extends BaseFragment implements
+@@ -31381,10 +31389,9 @@ public class ChatActivity extends BaseFragment implements
                              waitForLangDetection.set(false);
                              String fromLang = selectedObject.messageOwner.originalLanguage;
                              cell.setVisibility(
@@ -332,7 +332,7 @@ index 0000000..0000000 100644
                              );
                              cell.setOnClickListener(e -> {
                                  if (selectedObject == null || i >= options.size() || getParentActivity() == null) {
-@@ -31228,8 +31235,10 @@ public class ChatActivity extends BaseFragment implements
+@@ -31393,8 +31400,10 @@ public class ChatActivity extends BaseFragment implements
  
                                  String toLangValue = fromLang != null && fromLang.equals(toLang) ? toLangDefault : toLang;
                                  ArrayList<TLRPC.MessageEntity> entities = selectedObject != null && selectedObject.messageOwner != null ? selectedObject.messageOwner.entities : null;
@@ -343,7 +343,7 @@ index 0000000..0000000 100644
                                  closeMenu(false);
                                  
  //                                final TranslateAlert3 alert =
-@@ -31259,10 +31268,9 @@ public class ChatActivity extends BaseFragment implements
+@@ -31424,10 +31433,9 @@ public class ChatActivity extends BaseFragment implements
                                  finalMessageText.toString(),
                                  (String lang) -> {
                                      fromLang[0] = lang;
@@ -357,7 +357,7 @@ index 0000000..0000000 100644
                                          cell.setVisibility(View.VISIBLE);
                                      }
                                      waitForLangDetection.set(false);
-@@ -31286,8 +31294,10 @@ public class ChatActivity extends BaseFragment implements
+@@ -31451,8 +31459,10 @@ public class ChatActivity extends BaseFragment implements
                                  }
                                  String toLangValue = fromLang[0] != null && fromLang[0].equals(toLang) ? toLangDefault : toLang;
                                  ArrayList<TLRPC.MessageEntity> entities = selectedObject != null && selectedObject.messageOwner != null ? selectedObject.messageOwner.entities : null;
@@ -368,7 +368,7 @@ index 0000000..0000000 100644
                                  closeMenu(false);
  
  //                                final TranslateAlert3 alert =
-@@ -31320,8 +31330,10 @@ public class ChatActivity extends BaseFragment implements
+@@ -31485,8 +31495,10 @@ public class ChatActivity extends BaseFragment implements
                                      return;
                                  }
  
@@ -379,7 +379,7 @@ index 0000000..0000000 100644
                                  closeMenu(false);
  
  //                                final TranslateAlert3 alert = new TranslateAlert3(getContext(), getResourceProvider())
-@@ -31344,6 +31356,9 @@ public class ChatActivity extends BaseFragment implements
+@@ -31509,6 +31521,9 @@ public class ChatActivity extends BaseFragment implements
                          } else {
                              cell.setVisibility(View.GONE);
                          }
@@ -402,10 +402,10 @@ index 0000000..0000000 100644
      public WebActionBar(Context context, Theme.ResourcesProvider resourcesProvider) {
          super(context);
          this.resourcesProvider = resourcesProvider;
-@@ -210,6 +212,7 @@ public class WebActionBar extends FrameLayout {
+@@ -217,6 +219,7 @@ public class WebActionBar extends FrameLayout {
                  o.add(R.drawable.msg_openin, getString(R.string.OpenInExternalApp), click.run(open_item));
                  o.add(R.drawable.msg_search, getString(R.string.Search), click.run(search_item));
-                 o.add(R.drawable.msg_share, getString(R.string.ShareFile), click.run(share_item));
+                 o.addIf(!isLocal, R.drawable.msg_share, getString(R.string.ShareFile), click.run(share_item));
 +                desu.inugram.helpers.InstantViewTranslateHelper.addMenuItem(o, click.run(desu.inugram.helpers.InstantViewTranslateHelper.MENU_ITEM_ID), inu_getOwnerArticleViewer());
                  o.add(R.drawable.msg_settings_old, getString(R.string.Settings), click.run(settings_item));
              } else if (menuType == ArticleViewer.PageLayout.TYPE_WEB) {

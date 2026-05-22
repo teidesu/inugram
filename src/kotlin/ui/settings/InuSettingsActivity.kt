@@ -54,7 +54,7 @@ class InuSettingsActivity : SettingsPageActivity() {
         items.add(
             UItem.asButton(
                 BUTTON_DIALOGS,
-                R.drawable.tabs_chats_24,
+                R.drawable.msg_viewchats,
                 LocaleController.getString(R.string.InuMainPage)
             )
         )

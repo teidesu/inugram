@@ -11,7 +11,7 @@ diff --git a/TMessagesProj/src/main/java/org/telegram/ui/ActionBar/ActionBarLayo
 index 0000000..0000000 100644
 --- a/TMessagesProj/src/main/java/org/telegram/ui/ActionBar/ActionBarLayout.java
 +++ b/TMessagesProj/src/main/java/org/telegram/ui/ActionBar/ActionBarLayout.java
-@@ -1235,7 +1235,16 @@ public class ActionBarLayout extends FrameLayout implements INavigationLayout, F
+@@ -1274,7 +1274,16 @@ public class ActionBarLayout extends FrameLayout implements INavigationLayout, F
      public void onSlideAnimationEnd(final boolean backAnimation) {
          if (!backAnimation) {
              if (fragmentsStack.size() < 2) {
@@ -28,7 +28,7 @@ index 0000000..0000000 100644
                  return;
              }
              BaseFragment lastFragment = fragmentsStack.get(fragmentsStack.size() - 1);
-@@ -1894,7 +1903,7 @@ public class ActionBarLayout extends FrameLayout implements INavigationLayout, F
+@@ -1934,7 +1943,7 @@ public class ActionBarLayout extends FrameLayout implements INavigationLayout, F
          boolean preview = params.preview;
          ActionBarPopupWindow.ActionBarPopupWindowLayout menu = params.menuView;
  
@@ -37,7 +37,7 @@ index 0000000..0000000 100644
              return false;
          }
          if (inPreviewMode && !preview && desu.inugram.InuConfig.INTERACTIVE_CHAT_PREVIEW.getValue()) {
-@@ -2474,7 +2483,7 @@ public class ActionBarLayout extends FrameLayout implements INavigationLayout, F
+@@ -2514,7 +2523,7 @@ public class ActionBarLayout extends FrameLayout implements INavigationLayout, F
          if (fragment != null && fragment.closeLastFragment()) {
              return;
          }

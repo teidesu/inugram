@@ -83,6 +83,19 @@ export const forkSyncFiles: ForkSyncFile[] = [
     source: 'src/res/assets/*',
     target: 'TMessagesProj/src/main/assets',
   },
+  {
+    source: 'src/res/raw/*',
+    target: 'TMessagesProj/src/main/res/raw',
+  },
+  // launcher icons, produced by `pnpm run generate-icons`
+  {
+    source: 'src/res/launcher/generated/drawable/*',
+    target: 'TMessagesProj/src/main/res/drawable',
+  },
+  {
+    source: 'src/res/launcher/generated/mipmap-debug/*',
+    target: 'TMessagesProj_App/src/debug/res/mipmap-anydpi-v26',
+  },
 ]
 
 export const ICON_SELECTION: { pack: IconifyJSON, icons: string[], options?: SvgToDrawableOptions }[] = [

@@ -4,17 +4,17 @@ Date: Thu, 21 May 2026 02:21:56 +0400
 Subject: support patch for material 3 switches
 
 ---
- .../java/org/telegram/ui/Cells/AvailableReactionCell.java    | 2 +-
- .../main/java/org/telegram/ui/Cells/CheckBoxUserCell.java    | 2 +-
- .../src/main/java/org/telegram/ui/Cells/TextCell.java        | 2 +-
- .../src/main/java/org/telegram/ui/Components/Switch.java     | 5 +++++
- 4 files changed, 8 insertions(+), 3 deletions(-)
+ .../java/org/telegram/ui/Cells/AvailableReactionCell.java | 2 +-
+ .../main/java/org/telegram/ui/Cells/CheckBoxUserCell.java | 2 +-
+ .../src/main/java/org/telegram/ui/Cells/TextCell.java     | 2 +-
+ .../src/main/java/org/telegram/ui/Components/Switch.java  | 8 ++++++++
+ 4 files changed, 11 insertions(+), 3 deletions(-)
 
 diff --git a/TMessagesProj/src/main/java/org/telegram/ui/Cells/AvailableReactionCell.java b/TMessagesProj/src/main/java/org/telegram/ui/Cells/AvailableReactionCell.java
 index 0000000..0000000 100644
 --- a/TMessagesProj/src/main/java/org/telegram/ui/Cells/AvailableReactionCell.java
 +++ b/TMessagesProj/src/main/java/org/telegram/ui/Cells/AvailableReactionCell.java
-@@ -66,7 +66,7 @@ public class AvailableReactionCell extends FrameLayout {
+@@ -69,7 +69,7 @@ public class AvailableReactionCell extends FrameLayout {
          } else {
              switchView = new Switch(context);
              switchView.setColors(Theme.key_switchTrack, Theme.key_switchTrackChecked, Theme.key_switchTrackBlueThumb, Theme.key_switchTrackBlueThumbChecked);
@@ -53,12 +53,22 @@ diff --git a/TMessagesProj/src/main/java/org/telegram/ui/Components/Switch.java 
 index 0000000..0000000 100644
 --- a/TMessagesProj/src/main/java/org/telegram/ui/Components/Switch.java
 +++ b/TMessagesProj/src/main/java/org/telegram/ui/Components/Switch.java
-@@ -377,6 +377,11 @@ public class Switch extends View {
+@@ -236,6 +236,9 @@ public class Switch extends View {
+     private void animateToCheckedState(boolean newCheckedState) {
+         checkAnimator = ObjectAnimator.ofFloat(this, "progress", newCheckedState ? 1 : 0);
+         checkAnimator.setDuration(200);
++        if (desu.inugram.InuConfig.MATERIAL3_SWITCHES.getValue()) {
++            checkAnimator.setInterpolator(new android.view.animation.OvershootInterpolator(1.4f));
++        }
+         checkAnimator.addListener(new AnimatorListenerAdapter() {
+             @Override
+             public void onAnimationEnd(Animator animation) {
+@@ -377,6 +380,11 @@ public class Switch extends View {
              return;
          }
  
 +        if (overrideColorProgress == 0 && desu.inugram.InuConfig.MATERIAL3_SWITCHES.getValue()) {
-+            desu.inugram.helpers.M3SwitchHelper.draw(getMeasuredWidth(), getMeasuredHeight(), progress, drawIconType, iconProgress, iconDrawable, animatorIconVisibility.getFloatValue(), trackColorKey, trackCheckedColorKey, thumbCheckedColorKey, resourcesProvider, canvas);
++            desu.inugram.helpers.M3SwitchHelper.draw(getMeasuredWidth(), getMeasuredHeight(), progress, isChecked, drawIconType, iconProgress, iconDrawable, animatorIconVisibility.getFloatValue(), trackColorKey, trackCheckedColorKey, thumbCheckedColorKey, resourcesProvider, canvas);
 +            return;
 +        }
 +

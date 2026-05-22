@@ -11,7 +11,7 @@ diff --git a/TMessagesProj/src/main/java/org/telegram/messenger/MediaDataControl
 index 0000000..0000000 100644
 --- a/TMessagesProj/src/main/java/org/telegram/messenger/MediaDataController.java
 +++ b/TMessagesProj/src/main/java/org/telegram/messenger/MediaDataController.java
-@@ -7699,7 +7699,7 @@ public class MediaDataController extends BaseController {
+@@ -7774,7 +7774,7 @@ public class MediaDataController extends BaseController {
          saveDraft(dialogId, threadId, draftMessage, replyToMessage, false);
  
          if (threadId == 0 || ChatObject.isForum(chat) || ChatObject.isMonoForum(chat)) {

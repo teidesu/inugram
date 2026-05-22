@@ -1,0 +1,24 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: alina sireneva <alina@tei.su>
+Date: Thu, 21 May 2026 23:00:51 +0400
+Subject: click to open photos in webpage preview
+
+---
+ .../src/main/java/org/telegram/ui/Cells/ChatMessageCell.java  | 4 ++++
+ 1 file changed, 4 insertions(+)
+
+diff --git a/TMessagesProj/src/main/java/org/telegram/ui/Cells/ChatMessageCell.java b/TMessagesProj/src/main/java/org/telegram/ui/Cells/ChatMessageCell.java
+index 0000000..0000000 100644
+--- a/TMessagesProj/src/main/java/org/telegram/ui/Cells/ChatMessageCell.java
++++ b/TMessagesProj/src/main/java/org/telegram/ui/Cells/ChatMessageCell.java
+@@ -3129,6 +3129,10 @@ public class ChatMessageCell extends BaseCell implements SeekBar.SeekBarDelegate
+                         } else {
+                             MediaController.getInstance().pauseMessage(currentMessageObject);
+                         }
++                    } else if (drawPhotoImage && documentAttachType == DOCUMENT_ATTACH_TYPE_NONE && photoImage.isInsideImage(lastTouchX, lastTouchY) && currentMessageObject != null && !currentMessageObject.preview && MessageObject.getMedia(currentMessageObject.messageOwner).webpage != null && TextUtils.isEmpty(MessageObject.getMedia(currentMessageObject.messageOwner).webpage.embed_url)) {
++                        if (delegate != null) {
++                            delegate.didPressImage(this, lastTouchX, lastTouchY, false);
++                        }
+                     } else if (drawInstantView || currentMessageObject != null && currentMessageObject.currentEvent != null && currentMessageObject.currentEvent.action instanceof TLRPC.TL_channelAdminLogEventActionEditMessage) {
+                         if (delegate != null) {
+                             delegate.didPressInstantButton(this, drawInstantViewType);
