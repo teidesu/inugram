@@ -9,7 +9,7 @@ most things are toggleable in `Settings → Inugram`, with sensible opinionated 
 
 ## appearance & general
 
-- 🐶 navigation drawer (experimental): replaces the bottom tab bar with the pre-12.0 hamburger side drawer; requires app restart after toggling
+- navigation drawer instead of bottom tabs, like in older Telegram versions
 - monet (material you) theme support - *ported from [NagramX](https://github.com/risin42/NagramX)*, plus a quick switcher in appearance settings (light/dark/amoled/auto)
 - 🐶 non-island ui mode for tab bars, global search and chat elements
 - icon replacement (currently: solar pack, [480 Design](https://t.me/Design480)) - *ported from [NagramX](https://github.com/risin42/NagramX)*

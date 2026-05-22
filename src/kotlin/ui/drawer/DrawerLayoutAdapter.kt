@@ -30,7 +30,8 @@ class DrawerLayoutAdapter(
     private val accountNumbers = ArrayList<Int>()
     private var accountsShown: Boolean
 
-    @JvmField var profileCell: DrawerProfileCell? = null
+    @JvmField
+    var profileCell: DrawerProfileCell? = null
 
     init {
         accountsShown = UserConfig.getActivatedAccountsCount() > 1 &&
@@ -107,6 +108,7 @@ class DrawerLayoutAdapter(
                     accountsShown
                 )
             }
+
             3 -> {
                 val cell = holder.itemView as DrawerActionCell
                 var pos = position - 2
@@ -114,6 +116,7 @@ class DrawerLayoutAdapter(
                 items[pos]!!.bind(cell)
                 cell.setPadding(0, 0, 0, 0)
             }
+
             4 -> {
                 val cell = holder.itemView as DrawerUserCell
                 cell.setAccount(accountNumbers[position - 2])
@@ -157,7 +160,8 @@ class DrawerLayoutAdapter(
         accountNumbers.clear()
         for (a in 0 until UserConfig.MAX_ACCOUNT_COUNT) {
             if (UserConfig.getInstance(a).isClientActivated()
-                && (a == UserConfig.selectedAccount || !PasscodeHelper.isAccountHidden(a))) {
+                && (a == UserConfig.selectedAccount || !PasscodeHelper.isAccountHidden(a))
+            ) {
                 accountNumbers.add(a)
             }
         }
@@ -165,43 +169,6 @@ class DrawerLayoutAdapter(
 
         items.clear()
         if (!UserConfig.getInstance(UserConfig.selectedAccount).isClientActivated()) return
-
-        val eventType = Theme.getEventType()
-        val newGroupIcon: Int
-        val contactsIcon: Int
-        val callsIcon: Int
-        val savedIcon: Int
-        val settingsIcon: Int
-        when (eventType) {
-            0 -> {
-                newGroupIcon = R.drawable.msg_groups_ny
-                contactsIcon = R.drawable.msg_contacts_ny
-                callsIcon = R.drawable.msg_calls_ny
-                savedIcon = R.drawable.msg_saved_ny
-                settingsIcon = R.drawable.msg_settings_ny
-            }
-            1 -> {
-                newGroupIcon = R.drawable.msg_groups_14
-                contactsIcon = R.drawable.msg_contacts_14
-                callsIcon = R.drawable.msg_calls_14
-                savedIcon = R.drawable.msg_saved_14
-                settingsIcon = R.drawable.msg_settings_14
-            }
-            2 -> {
-                newGroupIcon = R.drawable.msg_groups_hw
-                contactsIcon = R.drawable.msg_contacts_hw
-                callsIcon = R.drawable.msg_calls_hw
-                savedIcon = R.drawable.msg_saved_hw
-                settingsIcon = R.drawable.msg_settings_hw
-            }
-            else -> {
-                newGroupIcon = R.drawable.msg_groups
-                contactsIcon = R.drawable.msg_contacts
-                callsIcon = R.drawable.msg_calls
-                savedIcon = R.drawable.msg_saved
-                settingsIcon = R.drawable.msg_settings_old
-            }
-        }
 
         items.add(Item(16, LocaleController.getString(R.string.MyProfile), R.drawable.left_status_profile))
         val menuBots = MediaDataController.getInstance(UserConfig.selectedAccount).getAttachMenuBots()
@@ -217,12 +184,12 @@ class DrawerLayoutAdapter(
         if (DialogsFabHelper.hasNewMessage()) {
             items.add(Item(17, LocaleController.getString(R.string.NewMessageTitle), R.drawable.menu_topic_add))
         } else {
-            items.add(Item(2, LocaleController.getString(R.string.NewGroup), newGroupIcon))
+            items.add(Item(2, LocaleController.getString(R.string.NewGroup), R.drawable.msg_groups))
         }
-        items.add(Item(6, LocaleController.getString(R.string.Contacts), contactsIcon))
-        items.add(Item(10, LocaleController.getString(R.string.Calls), callsIcon))
-        items.add(Item(11, LocaleController.getString(R.string.SavedMessages), savedIcon))
-        items.add(Item(8, LocaleController.getString(R.string.Settings), settingsIcon))
+        items.add(Item(6, LocaleController.getString(R.string.Contacts), R.drawable.msg_contacts))
+        items.add(Item(10, LocaleController.getString(R.string.Calls), R.drawable.msg_calls))
+        items.add(Item(11, LocaleController.getString(R.string.SavedMessages), R.drawable.msg_saved))
+        items.add(Item(8, LocaleController.getString(R.string.Settings), R.drawable.msg_settings_old))
     }
 
     class Item private constructor(

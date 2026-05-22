@@ -51,7 +51,10 @@ class DrawerSwipeController(private val host: DrawerLayoutContainer) {
         host.addView(drawerLayout, lp)
         drawerLayout!!.visibility = View.INVISIBLE
         if (shadowLeft == null) {
-            try { shadowLeft = host.resources.getDrawable(R.drawable.menu_shadow) } catch (_: Exception) {}
+            try {
+                shadowLeft = host.resources.getDrawable(R.drawable.header_shadow)
+            } catch (_: Exception) {
+            }
         }
     }
 
@@ -60,8 +63,9 @@ class DrawerSwipeController(private val host: DrawerLayoutContainer) {
     fun setAllowOpenDrawer(value: Boolean, animated: Boolean) {
         allowOpenDrawer = value
         if (!allowOpenDrawer && drawerPosition != 0f) {
-            if (!animated) { setDrawerPosition(0f); onDrawerAnimationEnd(false) }
-            else closeDrawer(true)
+            if (!animated) {
+                setDrawerPosition(0f); onDrawerAnimationEnd(false)
+            } else closeDrawer(true)
         }
     }
 
@@ -87,7 +91,9 @@ class DrawerSwipeController(private val host: DrawerLayoutContainer) {
         animatorSet.interpolator = DecelerateInterpolator()
         animatorSet.duration = if (fast) maxOf((200f / layout.measuredWidth * (layout.measuredWidth - drawerPosition)).toInt(), 50).toLong() else 250L
         animatorSet.addListener(object : AnimatorListenerAdapter() {
-            override fun onAnimationEnd(a: Animator) { onDrawerAnimationEnd(true) }
+            override fun onAnimationEnd(a: Animator) {
+                onDrawerAnimationEnd(true)
+            }
         })
         animatorSet.start()
         currentAnimation = animatorSet
@@ -101,7 +107,9 @@ class DrawerSwipeController(private val host: DrawerLayoutContainer) {
         animatorSet.interpolator = DecelerateInterpolator()
         animatorSet.duration = if (fast) maxOf((200f / layout.measuredWidth * drawerPosition).toInt(), 50).toLong() else 250L
         animatorSet.addListener(object : AnimatorListenerAdapter() {
-            override fun onAnimationEnd(a: Animator) { onDrawerAnimationEnd(false) }
+            override fun onAnimationEnd(a: Animator) {
+                onDrawerAnimationEnd(false)
+            }
         })
         animatorSet.start()
         currentAnimation = animatorSet
@@ -164,7 +172,8 @@ class DrawerSwipeController(private val host: DrawerLayoutContainer) {
         }
         if (allowOpenDrawer && canTrackGesture()) {
             if (ev != null && (ev.action == MotionEvent.ACTION_DOWN || ev.action == MotionEvent.ACTION_MOVE)
-                    && !startedTracking && !maybeStartTracking) {
+                && !startedTracking && !maybeStartTracking
+            ) {
                 startedTrackingX = ev.x.toInt()
                 startedTrackingY = ev.y.toInt()
                 startedTrackingPointerId = ev.getPointerId(0)
@@ -172,36 +181,41 @@ class DrawerSwipeController(private val host: DrawerLayoutContainer) {
                 cancelCurrentAnimation()
                 velocityTracker?.clear()
             } else if (ev != null && ev.action == MotionEvent.ACTION_MOVE
-                    && ev.getPointerId(0) == startedTrackingPointerId) {
+                && ev.getPointerId(0) == startedTrackingPointerId
+            ) {
                 if (velocityTracker == null) velocityTracker = VelocityTracker.obtain()
                 val dx = ev.x - startedTrackingX
                 val dy = Math.abs(ev.y - startedTrackingY)
                 velocityTracker!!.addMovement(ev)
                 if (maybeStartTracking && !startedTracking
-                        && (dx > 0 && dx / 3f > dy && Math.abs(dx) >= AndroidUtilities.getPixelsInCM(0.2f, true)
-                            || drawerOpened && dx < 0 && Math.abs(dx) >= dy && Math.abs(dx) >= AndroidUtilities.getPixelsInCM(0.4f, true))) {
+                    && (dx > 0 && dx / 3f > dy && Math.abs(dx) >= AndroidUtilities.getPixelsInCM(0.2f, true)
+                        || drawerOpened && dx < 0 && Math.abs(dx) >= dy && Math.abs(dx) >= AndroidUtilities.getPixelsInCM(0.4f, true))
+                ) {
                     maybeStartTracking = false
                     startedTracking = true
                     startedTrackingX = ev.x.toInt()
                     beginTrackingSent = false
                     host.requestDisallowInterceptTouchEvent(true)
                 } else if (startedTracking) {
-                    if (!beginTrackingSent) { beginTrackingSent = true }
+                    if (!beginTrackingSent) {
+                        beginTrackingSent = true
+                    }
                     setDrawerPosition(drawerPosition + dx)
                     startedTrackingX = ev.x.toInt()
                 }
             } else if (ev == null || ev.getPointerId(0) == startedTrackingPointerId
-                    && (ev.action == MotionEvent.ACTION_CANCEL
-                        || ev.action == MotionEvent.ACTION_UP
-                        || ev.action == MotionEvent.ACTION_POINTER_UP)) {
+                && (ev.action == MotionEvent.ACTION_CANCEL
+                    || ev.action == MotionEvent.ACTION_UP
+                    || ev.action == MotionEvent.ACTION_POINTER_UP)
+            ) {
                 if (velocityTracker == null) velocityTracker = VelocityTracker.obtain()
                 velocityTracker!!.computeCurrentVelocity(1000)
                 if (startedTracking || (drawerPosition != 0f && drawerPosition != layout.measuredWidth.toFloat())) {
                     val velX = velocityTracker!!.xVelocity
                     val velY = velocityTracker!!.yVelocity
                     val back = drawerPosition < layout.measuredWidth / 2f
-                            && (velX < 3500 || Math.abs(velX) < Math.abs(velY))
-                            || velX < 0 && Math.abs(velX) >= 3500
+                        && (velX < 3500 || Math.abs(velX) < Math.abs(velY))
+                        || velX < 0 && Math.abs(velX) >= 3500
                     if (!back) openDrawer(!drawerOpened && Math.abs(velX) >= 3500)
                     else closeDrawer(drawerOpened && Math.abs(velX) >= 3500)
                 }
@@ -212,9 +226,10 @@ class DrawerSwipeController(private val host: DrawerLayoutContainer) {
             }
         } else {
             if (ev == null || ev.getPointerId(0) == startedTrackingPointerId
-                    && (ev.action == MotionEvent.ACTION_CANCEL
-                        || ev.action == MotionEvent.ACTION_UP
-                        || ev.action == MotionEvent.ACTION_POINTER_UP)) {
+                && (ev.action == MotionEvent.ACTION_CANCEL
+                    || ev.action == MotionEvent.ACTION_UP
+                    || ev.action == MotionEvent.ACTION_POINTER_UP)
+            ) {
                 startedTracking = false
                 maybeStartTracking = false
                 velocityTracker?.recycle()
@@ -278,7 +293,9 @@ class DrawerSwipeController(private val host: DrawerLayoutContainer) {
         val DRAWER_POSITION: Property<DrawerSwipeController, Float> =
             object : Property<DrawerSwipeController, Float>(Float::class.java, "drawerPosition") {
                 override fun get(o: DrawerSwipeController): Float = o.drawerPosition
-                override fun set(o: DrawerSwipeController, v: Float) { o.setDrawerPosition(v) }
+                override fun set(o: DrawerSwipeController, v: Float) {
+                    o.setDrawerPosition(v)
+                }
             }
     }
 }
