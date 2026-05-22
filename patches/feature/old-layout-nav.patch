@@ -8,9 +8,9 @@ Restore hamburger side drawer for old layout mode (DrawerLayoutContainer)
 Restore hamburger side drawer for old layout mode (DialogsActivity)
 ---
  .../ui/ActionBar/DrawerLayoutContainer.java   | 27 ++++++++++++++++---
- .../java/org/telegram/ui/DialogsActivity.java | 11 +++++++-
+ .../java/org/telegram/ui/DialogsActivity.java | 13 +++++++--
  .../java/org/telegram/ui/LaunchActivity.java  | 24 +++++------------
- 3 files changed, 40 insertions(+), 22 deletions(-)
+ 3 files changed, 41 insertions(+), 23 deletions(-)
 
 diff --git a/TMessagesProj/src/main/java/org/telegram/ui/ActionBar/DrawerLayoutContainer.java b/TMessagesProj/src/main/java/org/telegram/ui/ActionBar/DrawerLayoutContainer.java
 index 0000000..0000000 100644
@@ -97,6 +97,15 @@ index 0000000..0000000 100644
      private boolean askingForPermissions;
      private int searchViewPagerIndex;
      @Nullable
+@@ -3411,7 +3411,7 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
+         });
+         fragmentSearchFieldWatcher.setDoNotCloseAfterFieldEmpty();
+ 
+-        if (initialDialogsType == DIALOGS_TYPE_DEFAULT) {
++        if (initialDialogsType == DIALOGS_TYPE_DEFAULT && !(desu.inugram.InuConfig.NAVIGATION_DRAWER.getValue() && !isArchive())) {
+             optionsItem = menu.addItem(4, R.drawable.ic_ab_other);
+             optionsItem.setContentDescription(LocaleController.getString(R.string.AccDescrMoreOptions));
+             optionsItem.setOnClickListener(v -> {
 @@ -3472,6 +3472,10 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
          } else {
              if (searchString != null || folderId != 0) {
