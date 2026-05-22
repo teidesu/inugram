@@ -1,0 +1,277 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: alina sireneva <alina@tei.su>
+Date: Tue, 12 May 2026 00:00:00 +0000
+Subject: Use DialogsActivity as root fragment when old layout is enabled
+
+Restore hamburger side drawer for old layout mode (DrawerLayoutContainer)
+
+Restore hamburger side drawer for old layout mode (DialogsActivity)
+---
+ .../ui/ActionBar/DrawerLayoutContainer.java   | 27 ++++++++++++++++---
+ .../java/org/telegram/ui/DialogsActivity.java | 13 +++++++--
+ .../java/org/telegram/ui/LaunchActivity.java  | 24 +++++------------
+ .../java/org/telegram/ui/LoginActivity.java   |  9 +++----
+ .../ui/TwoStepVerificationActivity.java       |  5 ++--
+ .../ui/TwoStepVerificationSetupActivity.java  | 10 +++----
+ 6 files changed, 50 insertions(+), 38 deletions(-)
+
+diff --git a/TMessagesProj/src/main/java/org/telegram/ui/ActionBar/DrawerLayoutContainer.java b/TMessagesProj/src/main/java/org/telegram/ui/ActionBar/DrawerLayoutContainer.java
+index 0000000..0000000 100644
+--- a/TMessagesProj/src/main/java/org/telegram/ui/ActionBar/DrawerLayoutContainer.java
++++ b/TMessagesProj/src/main/java/org/telegram/ui/ActionBar/DrawerLayoutContainer.java
+@@ -30,7 +30,7 @@ import org.telegram.messenger.FileLog;
+ 
+ public class DrawerLayoutContainer extends FrameLayout {
+ 
+-    private INavigationLayout parentActionBarLayout;
++    public INavigationLayout parentActionBarLayout;
+ 
+     private final Paint backgroundPaint = new Paint();
+ 
+@@ -98,13 +98,20 @@ public class DrawerLayoutContainer extends FrameLayout {
+         return false;
+     }
+ 
++    public desu.inugram.ui.drawer.DrawerSwipeController inu_drawer;
++
++    public boolean inu_superDrawChild(@NonNull Canvas canvas, View child, long drawingTime) {
++        return super.drawChild(canvas, child, drawingTime);
++    }
++
+     public boolean onTouchEvent(MotionEvent ev) {
++        if (inu_drawer != null) return inu_drawer.onTouchEvent(ev);
+         return false;
+     }
+ 
+     @Override
+     public boolean onInterceptTouchEvent(MotionEvent ev) {
+-        return parentActionBarLayout.checkTransitionAnimation();
++        return parentActionBarLayout.checkTransitionAnimation() || onTouchEvent(ev);
+     }
+ 
+     @Override
+@@ -120,7 +127,11 @@ public class DrawerLayoutContainer extends FrameLayout {
+ 
+             final LayoutParams lp = (LayoutParams) child.getLayoutParams();
+             try {
+-                child.layout(lp.leftMargin, lp.topMargin + getPaddingTop(), lp.leftMargin + child.getMeasuredWidth(), lp.topMargin + child.getMeasuredHeight() + getPaddingTop());
++                if (inu_drawer != null && inu_drawer.isDrawerChild(child)) {
++                    child.layout(-child.getMeasuredWidth(), lp.topMargin + getPaddingTop(), 0, lp.topMargin + child.getMeasuredHeight() + getPaddingTop());
++                } else {
++                    child.layout(lp.leftMargin, lp.topMargin + getPaddingTop(), lp.leftMargin + child.getMeasuredWidth(), lp.topMargin + child.getMeasuredHeight() + getPaddingTop());
++                }
+             } catch (Exception e) {
+                 FileLog.e(e);
+                 if (BuildVars.DEBUG_VERSION) {
+@@ -172,7 +183,12 @@ public class DrawerLayoutContainer extends FrameLayout {
+ 
+             final LayoutParams lp = (LayoutParams) child.getLayoutParams();
+ 
+-            final int contentWidthSpec = MeasureSpec.makeMeasureSpec(widthSize - lp.leftMargin - lp.rightMargin, MeasureSpec.EXACTLY);
++            final int contentWidthSpec;
++            if (inu_drawer != null && inu_drawer.isDrawerChild(child)) {
++                contentWidthSpec = MeasureSpec.makeMeasureSpec(lp.width > 0 ? lp.width : widthSize - lp.leftMargin - lp.rightMargin, MeasureSpec.EXACTLY);
++            } else {
++                contentWidthSpec = MeasureSpec.makeMeasureSpec(widthSize - lp.leftMargin - lp.rightMargin, MeasureSpec.EXACTLY);
++            }
+             final int contentHeightSpec;
+             if (lp.height > 0) {
+                 contentHeightSpec = MeasureSpec.makeMeasureSpec(lp.height, MeasureSpec.EXACTLY);
+@@ -200,6 +216,9 @@ public class DrawerLayoutContainer extends FrameLayout {
+         if (!allowDrawContent) {
+             return false;
+         }
++        if (inu_drawer != null) {
++            return inu_drawer.drawChild(canvas, child, drawingTime);
++        }
+         return super.drawChild(canvas, child, drawingTime);
+     }
+ 
+diff --git a/TMessagesProj/src/main/java/org/telegram/ui/DialogsActivity.java b/TMessagesProj/src/main/java/org/telegram/ui/DialogsActivity.java
+index 0000000..0000000 100644
+--- a/TMessagesProj/src/main/java/org/telegram/ui/DialogsActivity.java
++++ b/TMessagesProj/src/main/java/org/telegram/ui/DialogsActivity.java
+@@ -515,7 +515,7 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
+     private ChatAvatarContainer avatarContainer;
+     private int undoViewIndex;
+     private UndoView[] undoView = new UndoView[2];
+-    private FilterTabsView filterTabsView;
++    public FilterTabsView filterTabsView;
+     private boolean askingForPermissions;
+     private int searchViewPagerIndex;
+     @Nullable
+@@ -3411,7 +3411,7 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
+         });
+         fragmentSearchFieldWatcher.setDoNotCloseAfterFieldEmpty();
+ 
+-        if (initialDialogsType == DIALOGS_TYPE_DEFAULT) {
++        if (initialDialogsType == DIALOGS_TYPE_DEFAULT && !(desu.inugram.InuConfig.NAVIGATION_DRAWER.getValue() && !isArchive())) {
+             optionsItem = menu.addItem(4, R.drawable.ic_ab_other);
+             optionsItem.setContentDescription(LocaleController.getString(R.string.AccDescrMoreOptions));
+             optionsItem.setOnClickListener(v -> {
+@@ -3472,6 +3472,10 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
+         } else {
+             if (searchString != null || folderId != 0) {
+                 actionBar.setBackButtonDrawable(backDrawable = new BackDrawable(false));
++            } else if (!hasMainTabs && desu.inugram.InuConfig.NAVIGATION_DRAWER.getValue()) {
++                org.telegram.ui.ActionBar.MenuDrawable menuDrawable = new org.telegram.ui.ActionBar.MenuDrawable();
++                menuDrawable.setRoundCap();
++                actionBar.setBackButtonDrawable(menuDrawable);
+             }
+             if (folderId != 0) {
+                 actionBar.setTitle(getString(R.string.ArchivedChats));
+@@ -3851,6 +3855,11 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
+                     return;
+                 }
+                 if (id == -1) {
++                    if (!hasMainTabs && desu.inugram.InuConfig.NAVIGATION_DRAWER.getValue()
++                            && folderId == 0 && searchString == null
++                            && desu.inugram.helpers.DrawerHelper.INSTANCE.toggleDrawer(parentLayout)) {
++                        return;
++                    }
+                     if (rightSlidingDialogContainer != null && rightSlidingDialogContainer.hasFragment()) {
+                         if (actionBar.isActionModeShowed()) {
+                             if (searchViewPager != null && searchViewPager.getVisibility() == View.VISIBLE && searchViewPager.actionModeShowing()) {
+diff --git a/TMessagesProj/src/main/java/org/telegram/ui/LaunchActivity.java b/TMessagesProj/src/main/java/org/telegram/ui/LaunchActivity.java
+index 0000000..0000000 100644
+--- a/TMessagesProj/src/main/java/org/telegram/ui/LaunchActivity.java
++++ b/TMessagesProj/src/main/java/org/telegram/ui/LaunchActivity.java
+@@ -588,8 +588,7 @@ public class LaunchActivity extends BasePermissionsActivity implements INavigati
+             if (!UserConfig.getInstance(currentAccount).isClientActivated()) {
+                 actionBarLayout.addFragmentToStack(getClientNotActivatedFragment());
+             } else {
+-                MainTabsActivity mainTabsActivity = new MainTabsActivity();
+-                actionBarLayout.addFragmentToStack(mainTabsActivity);
++                desu.inugram.helpers.DrawerHelper.setupMainFragment(this, actionBarLayout, drawerLayoutContainer);
+             }
+ 
+             try {
+@@ -1216,10 +1215,10 @@ public class LaunchActivity extends BasePermissionsActivity implements INavigati
+ 
+     private boolean switchingAccount;
+     public void switchToAccount(int account, boolean removeAll) {
+-        switchToAccount(account, removeAll, obj -> new MainTabsActivity());
++        switchToAccount(account, removeAll, obj -> desu.inugram.helpers.DrawerHelper.createMainFragment());
+     }
+ 
+-    public void switchToAccount(int account, boolean removeAll, GenericProvider<Void, MainTabsActivity> dialogsActivityProvider) {
++    public void switchToAccount(int account, boolean removeAll, GenericProvider<Void, org.telegram.ui.ActionBar.BaseFragment> dialogsActivityProvider) {
+         if (account == UserConfig.selectedAccount || !UserConfig.isValidAccount(account)) {
+             return;
+         }
+@@ -1247,7 +1246,7 @@ public class LaunchActivity extends BasePermissionsActivity implements INavigati
+         } else {
+             actionBarLayout.removeFragmentFromStack(0);
+         }
+-        MainTabsActivity mainTabsActivity = dialogsActivityProvider.provide(null);
++        org.telegram.ui.ActionBar.BaseFragment mainTabsActivity = dialogsActivityProvider.provide(null);
+         actionBarLayout.addFragmentToStack(mainTabsActivity, INavigationLayout.FORCE_ATTACH_VIEW_AS_FIRST);
+         actionBarLayout.rebuildFragments(INavigationLayout.REBUILD_FLAG_REBUILD_LAST);
+         if (AndroidUtilities.isTablet()) {
+@@ -1261,6 +1260,7 @@ public class LaunchActivity extends BasePermissionsActivity implements INavigati
+             showTosActivity(account, UserConfig.getInstance(account).unacceptedTermsOfService);
+         }
+         updateCurrentConnectionState(currentAccount);
++        desu.inugram.helpers.DrawerHelper.notifyDataChanged();
+ 
+         switchingAccount = false;
+     }
+@@ -3324,12 +3324,7 @@ public class LaunchActivity extends BasePermissionsActivity implements INavigati
+                     }
+                 } else {
+                     if (actionBarLayout.getFragmentStack().isEmpty()) {
+-                        MainTabsActivity mainTabsActivity = new MainTabsActivity();
+-                        DialogsActivity dialogsActivity = mainTabsActivity.prepareDialogsActivity(null);
+-                        if (searchQuery != null) {
+-                            dialogsActivity.setInitialSearchString(searchQuery);
+-                        }
+-                        actionBarLayout.addFragmentToStack(mainTabsActivity, INavigationLayout.FORCE_NOT_ATTACH_VIEW);
++                        desu.inugram.helpers.DrawerHelper.addMainFragmentToStack(actionBarLayout, searchQuery);
+                     }
+                 }
+             } else {
+@@ -3337,12 +3332,7 @@ public class LaunchActivity extends BasePermissionsActivity implements INavigati
+                     if (!UserConfig.getInstance(currentAccount).isClientActivated()) {
+                         actionBarLayout.addFragmentToStack(getClientNotActivatedFragment(), INavigationLayout.FORCE_NOT_ATTACH_VIEW);
+                     } else {
+-                        MainTabsActivity mainTabsActivity = new MainTabsActivity();
+-                        DialogsActivity dialogsActivity = mainTabsActivity.prepareDialogsActivity(null);
+-                        if (searchQuery != null) {
+-                            dialogsActivity.setInitialSearchString(searchQuery);
+-                        }
+-                        actionBarLayout.addFragmentToStack(mainTabsActivity, INavigationLayout.FORCE_NOT_ATTACH_VIEW);
++                        desu.inugram.helpers.DrawerHelper.addMainFragmentToStack(actionBarLayout, searchQuery);
+                     }
+                 }
+             }
+diff --git a/TMessagesProj/src/main/java/org/telegram/ui/LoginActivity.java b/TMessagesProj/src/main/java/org/telegram/ui/LoginActivity.java
+index 0000000..0000000 100644
+--- a/TMessagesProj/src/main/java/org/telegram/ui/LoginActivity.java
++++ b/TMessagesProj/src/main/java/org/telegram/ui/LoginActivity.java
+@@ -1599,9 +1599,7 @@ public class LoginActivity extends BaseFragment implements NotificationCenter.No
+                 ((LaunchActivity) getParentActivity()).switchToAccount(currentAccount, true, obj -> {
+                     Bundle args = new Bundle();
+                     args.putBoolean("afterSignup", afterSignup);
+-                    MainTabsActivity mainTabsActivity = new MainTabsActivity();
+-                    mainTabsActivity.prepareDialogsActivity(args);
+-                    return mainTabsActivity;
++                    return desu.inugram.helpers.DrawerHelper.createMainFragment(args);
+                 });
+                 pendingSwitchingAccount = false;
+                 finishFragment();
+@@ -1614,9 +1612,8 @@ public class LoginActivity extends BaseFragment implements NotificationCenter.No
+                 } else {
+                     Bundle args = new Bundle();
+                     args.putBoolean("afterSignup", afterSignup);
+-                    MainTabsActivity mainTabsActivity = new MainTabsActivity();
+-                    mainTabsActivity.prepareDialogsActivity(args);
+-                    presentFragment(mainTabsActivity, true);
++                    desu.inugram.helpers.DrawerHelper.ensureSetup(getParentLayout());
++                    presentFragment(desu.inugram.helpers.DrawerHelper.createMainFragment(args), true);
+                 }
+ 
+                 NotificationCenter.getInstance(currentAccount).postNotificationName(NotificationCenter.mainUserInfoChanged);
+diff --git a/TMessagesProj/src/main/java/org/telegram/ui/TwoStepVerificationActivity.java b/TMessagesProj/src/main/java/org/telegram/ui/TwoStepVerificationActivity.java
+index 0000000..0000000 100644
+--- a/TMessagesProj/src/main/java/org/telegram/ui/TwoStepVerificationActivity.java
++++ b/TMessagesProj/src/main/java/org/telegram/ui/TwoStepVerificationActivity.java
+@@ -1298,9 +1298,8 @@ public class TwoStepVerificationActivity extends BaseFragment implements Notific
+         if (otherwiseReloginDays >= 0) {
+             final Bundle args = new Bundle();
+             args.putBoolean("afterSignup", true);
+-            MainTabsActivity mainTabsActivity = new MainTabsActivity();
+-            mainTabsActivity.prepareDialogsActivity(args);
+-            presentFragment(mainTabsActivity, true);
++            desu.inugram.helpers.DrawerHelper.ensureSetup(getParentLayout());
++            presentFragment(desu.inugram.helpers.DrawerHelper.createMainFragment(args), true);
+         } else {
+             super.finishFragment();
+         }
+diff --git a/TMessagesProj/src/main/java/org/telegram/ui/TwoStepVerificationSetupActivity.java b/TMessagesProj/src/main/java/org/telegram/ui/TwoStepVerificationSetupActivity.java
+index 0000000..0000000 100644
+--- a/TMessagesProj/src/main/java/org/telegram/ui/TwoStepVerificationSetupActivity.java
++++ b/TMessagesProj/src/main/java/org/telegram/ui/TwoStepVerificationSetupActivity.java
+@@ -1315,9 +1315,8 @@ public class TwoStepVerificationSetupActivity extends BaseFragment {
+                 } else if (fromRegistration) {
+                     final Bundle args = new Bundle();
+                     args.putBoolean("afterSignup", true);
+-                    MainTabsActivity mainTabsActivity = new MainTabsActivity();
+-                    mainTabsActivity.prepareDialogsActivity(args);
+-                    presentFragment(mainTabsActivity, true);
++                    desu.inugram.helpers.DrawerHelper.ensureSetup(getParentLayout());
++                    presentFragment(desu.inugram.helpers.DrawerHelper.createMainFragment(args), true);
+                 } else {
+                     TwoStepVerificationActivity fragment = new TwoStepVerificationActivity();
+                     fragment.setCurrentPasswordParams(currentPassword, currentPasswordHash, currentSecretId, currentSecret);
+@@ -2154,9 +2153,8 @@ public class TwoStepVerificationSetupActivity extends BaseFragment {
+         if (otherwiseReloginDays >= 0 && parentLayout.getFragmentStack().size() == 1) {
+             final Bundle args = new Bundle();
+             args.putBoolean("afterSignup", true);
+-            MainTabsActivity mainTabsActivity = new MainTabsActivity();
+-            mainTabsActivity.prepareDialogsActivity(args);
+-            presentFragment(mainTabsActivity, true);
++            desu.inugram.helpers.DrawerHelper.ensureSetup(getParentLayout());
++            presentFragment(desu.inugram.helpers.DrawerHelper.createMainFragment(args), true);
+         } else {
+             super.finishFragment();
+         }
