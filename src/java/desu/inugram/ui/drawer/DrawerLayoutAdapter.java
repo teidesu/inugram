@@ -19,7 +19,6 @@ import androidx.recyclerview.widget.RecyclerView;
 import org.telegram.messenger.AndroidUtilities;
 import org.telegram.messenger.ApplicationLoader;
 import org.telegram.messenger.LocaleController;
-import desu.inugram.InuHooks;
 import org.telegram.messenger.MediaDataController;
 import org.telegram.messenger.MessagesController;
 import org.telegram.messenger.R;
@@ -289,11 +288,6 @@ public class DrawerLayoutAdapter extends RecyclerListView.SelectionAdapter {
 //            showDivider = true;
 //        }
         showDivider = true;
-        // Adapted from 11.14.1: ApplicationLoader.extendDrawer no longer exists in 12.x.
-        // Routed through InuHooks.extendDrawer so the extension point is preserved.
-        if (InuHooks.extendDrawer((java.util.List) items)) {
-            showDivider = true;
-        }
         TLRPC.TL_attachMenuBots menuBots = MediaDataController.getInstance(UserConfig.selectedAccount).getAttachMenuBots();
         if (menuBots != null && menuBots.bots != null) {
             for (int i = 0; i < menuBots.bots.size(); i++) {

@@ -6,7 +6,6 @@ import android.graphics.Typeface
 import android.os.Build
 import android.os.Bundle
 import desu.inugram.helpers.CloudSettingsHelper
-import desu.inugram.helpers.DrawerHelper
 import desu.inugram.helpers.FontHelper
 import desu.inugram.helpers.LoginHelper
 import desu.inugram.helpers.MainTabsHelper
@@ -22,9 +21,6 @@ import org.telegram.messenger.R
 import org.telegram.messenger.UserConfig
 import org.telegram.messenger.Utilities
 import org.telegram.tgnet.TLObject
-import org.telegram.ui.ActionBar.BaseFragment
-import org.telegram.ui.ActionBar.DrawerLayoutContainer
-import org.telegram.ui.ActionBar.INavigationLayout
 import org.telegram.ui.Components.AnimatedFloat
 import org.telegram.ui.Components.GestureDetector2
 import org.telegram.ui.Components.GestureDetectorFixDoubleTap
@@ -33,7 +29,6 @@ import org.telegram.ui.ContactsActivity
 import org.telegram.ui.DialogsActivity
 import org.telegram.ui.LaunchActivity
 import org.telegram.ui.LauncherIconController
-import org.telegram.ui.MainTabsActivity
 import org.telegram.ui.ProfileActivity
 import org.telegram.ui.SettingsActivity
 import java.util.Hashtable
@@ -188,36 +183,6 @@ object InuHooks {
             key == "AppUpdate" ||
             key == "AppUpdateBeta"
     }
-
-    @JvmStatic
-    fun createMainFragment(): BaseFragment =
-        if (InuConfig.NAVIGATION_DRAWER.value) DialogsActivity(null) else MainTabsActivity()
-
-    /** Root fragment on startup: stock `addFragmentToStack` + Old Layout drawer wiring. */
-    @JvmStatic
-    fun setupMainFragment(activity: LaunchActivity, layout: INavigationLayout, dlc: DrawerLayoutContainer) {
-        layout.addFragmentToStack(createMainFragment())
-        if (InuConfig.NAVIGATION_DRAWER.value) DrawerHelper.setup(activity, dlc, layout)
-    }
-
-    /** Push the main fragment, forwarding a pending search query when tabs are present. */
-    @JvmStatic
-    fun addMainFragmentToStack(layout: INavigationLayout, searchQuery: String?) {
-        val main = createMainFragment()
-        if (main is MainTabsActivity) {
-            val dialogs = main.prepareDialogsActivity(null)
-            if (searchQuery != null) dialogs.setInitialSearchString(searchQuery)
-        }
-        layout.addFragmentToStack(main, INavigationLayout.FORCE_NOT_ATTACH_VIEW)
-    }
-
-    /**
-     * Adapted from 11.14.1 `ApplicationLoader.applicationLoaderInstance.extendDrawer(items)`
-     * which no longer exists in 12.x. Extension point preserved for future custom
-     * drawer items; returns false (no extra items added) by default.
-     */
-    @JvmStatic
-    fun extendDrawer(items: MutableList<Any?>): Boolean = false
 
     @JvmStatic
     fun addDialogsActivityOptions(instance: DialogsActivity, io: ItemOptions): Unit {

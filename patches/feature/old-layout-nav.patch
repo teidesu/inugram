@@ -139,7 +139,7 @@ index 0000000..0000000 100644
              } else {
 -                MainTabsActivity mainTabsActivity = new MainTabsActivity();
 -                actionBarLayout.addFragmentToStack(mainTabsActivity);
-+                desu.inugram.InuHooks.setupMainFragment(this, actionBarLayout, drawerLayoutContainer);
++                desu.inugram.helpers.DrawerHelper.setupMainFragment(this, actionBarLayout, drawerLayoutContainer);
              }
  
              try {
@@ -148,7 +148,7 @@ index 0000000..0000000 100644
      private boolean switchingAccount;
      public void switchToAccount(int account, boolean removeAll) {
 -        switchToAccount(account, removeAll, obj -> new MainTabsActivity());
-+        switchToAccount(account, removeAll, obj -> desu.inugram.InuHooks.createMainFragment());
++        switchToAccount(account, removeAll, obj -> desu.inugram.helpers.DrawerHelper.createMainFragment());
      }
  
 -    public void switchToAccount(int account, boolean removeAll, GenericProvider<Void, MainTabsActivity> dialogsActivityProvider) {
@@ -183,7 +183,7 @@ index 0000000..0000000 100644
 -                            dialogsActivity.setInitialSearchString(searchQuery);
 -                        }
 -                        actionBarLayout.addFragmentToStack(mainTabsActivity, INavigationLayout.FORCE_NOT_ATTACH_VIEW);
-+                        desu.inugram.InuHooks.addMainFragmentToStack(actionBarLayout, searchQuery);
++                        desu.inugram.helpers.DrawerHelper.addMainFragmentToStack(actionBarLayout, searchQuery);
                      }
                  }
              } else {
@@ -197,7 +197,7 @@ index 0000000..0000000 100644
 -                            dialogsActivity.setInitialSearchString(searchQuery);
 -                        }
 -                        actionBarLayout.addFragmentToStack(mainTabsActivity, INavigationLayout.FORCE_NOT_ATTACH_VIEW);
-+                        desu.inugram.InuHooks.addMainFragmentToStack(actionBarLayout, searchQuery);
++                        desu.inugram.helpers.DrawerHelper.addMainFragmentToStack(actionBarLayout, searchQuery);
                      }
                  }
              }

@@ -5,6 +5,7 @@ import android.os.Bundle
 import android.view.ViewGroup
 import android.widget.FrameLayout
 import androidx.recyclerview.widget.LinearLayoutManager
+import desu.inugram.InuConfig
 import desu.inugram.ui.drawer.DrawerAddCell
 import desu.inugram.ui.drawer.DrawerLayoutAdapter
 import desu.inugram.ui.drawer.DrawerProfileCell
@@ -16,14 +17,17 @@ import org.telegram.messenger.MessagesController
 import org.telegram.messenger.NotificationCenter
 import org.telegram.messenger.UserConfig
 import org.telegram.ui.AccountFrozenAlert
+import org.telegram.ui.ActionBar.BaseFragment
 import org.telegram.ui.ActionBar.DrawerLayoutContainer
 import org.telegram.ui.ActionBar.INavigationLayout
 import org.telegram.ui.ActionBar.Theme
 import org.telegram.ui.CallLogActivity
 import org.telegram.ui.ContactsActivity
+import org.telegram.ui.DialogsActivity
 import org.telegram.ui.GroupCreateActivity
 import org.telegram.ui.LaunchActivity
 import org.telegram.ui.LoginActivity
+import org.telegram.ui.MainTabsActivity
 import org.telegram.ui.ProfileActivity
 import org.telegram.ui.SettingsActivity
 import org.telegram.ui.Components.RecyclerListView
@@ -35,6 +39,28 @@ object DrawerHelper {
     private var sideMenuContainer: FrameLayout? = null
     private var themeObserverInstalled = false
     private var themeObserver: NotificationCenter.NotificationCenterDelegate? = null
+
+    @JvmStatic
+    fun createMainFragment(): BaseFragment =
+        if (InuConfig.NAVIGATION_DRAWER.value) DialogsActivity(null) else MainTabsActivity()
+
+    /** Root fragment on startup: stock `addFragmentToStack` + navigation drawer wiring. */
+    @JvmStatic
+    fun setupMainFragment(activity: LaunchActivity, layout: INavigationLayout, dlc: DrawerLayoutContainer) {
+        layout.addFragmentToStack(createMainFragment())
+        if (InuConfig.NAVIGATION_DRAWER.value) setup(activity, dlc, layout)
+    }
+
+    /** Push the main fragment, forwarding a pending search query when tabs are present. */
+    @JvmStatic
+    fun addMainFragmentToStack(layout: INavigationLayout, searchQuery: String?) {
+        val main = createMainFragment()
+        if (main is MainTabsActivity) {
+            val dialogs = main.prepareDialogsActivity(null)
+            if (searchQuery != null) dialogs.setInitialSearchString(searchQuery)
+        }
+        layout.addFragmentToStack(main, INavigationLayout.FORCE_NOT_ATTACH_VIEW)
+    }
 
     @JvmStatic
     fun setup(
