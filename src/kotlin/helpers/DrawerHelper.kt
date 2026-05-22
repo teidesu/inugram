@@ -199,12 +199,6 @@ object DrawerHelper {
             return
         }
 
-        // Bot/extension item with custom listener (handled by adapter).
-        if (adapter.click(view, position)) {
-            close()
-            return
-        }
-
         // Side-menu attach bot.
         adapter.getAttachMenuBot(position)?.let { bot ->
             val activity = LaunchActivity.instance ?: return
@@ -229,6 +223,11 @@ object DrawerHelper {
                     nav.presentFragment(GroupCreateActivity(Bundle()))
                     close()
                 }
+            }
+
+            17 -> { // New Message — swapped in for New Group when a compose draft is pending.
+                (nav.lastFragment as? DialogsActivity)?.openWriteContacts()
+                close()
             }
 
             6 -> { // Contacts
