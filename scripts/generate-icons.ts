@@ -31,18 +31,22 @@ const DEBUG_MARK_COLOR = BG_GRADIENT_FROM
 // β glyph from Material Design Icons (Apache-2.0), viewBox 0 0 24 24
 const BETA_PATH = 'M9.23 17.59v5.53H6.88V6.72c0-1.45.43-2.59 1.28-3.44C9 2.43 10.17 2 11.61 2c1.39 0 2.46.34 3.26 1c.79.68 1.18 1.62 1.18 2.81c0 .82-.26 1.59-.78 2.3s-1.19 1.2-2.02 1.47v.04c1.25.2 2.22.65 2.88 1.38c.66.71.99 1.62.99 2.74c0 1.32-.46 2.4-1.37 3.23c-.92.83-2.12 1.24-3.62 1.24c-1.06 0-2.03-.21-2.9-.62m1.49-6.84V8.83c.87-.11 1.58-.43 2.15-.97c.56-.55.84-1.16.84-1.86c0-1.38-.71-2.08-2.11-2.08c-.76 0-1.35.24-1.76.73s-.61 1.17-.61 2.06v8.79c.91.53 1.8.79 2.66.79c.84 0 1.5-.22 1.97-.65c.47-.44.7-1.06.7-1.85c0-1.79-1.28-2.79-3.84-3.04'
 const GLYPH_VIEWBOX = 24
+// the β path isn't centered in its 24x24 viewBox — its ink box leans toward
+// the bottom-right, so the badge centers on the box, not the viewBox
+const BETA_BBOX = { x: 6.88, y: 2, width: 10.24, height: 21.12 }
 
 // debug badge geometry, in the 108dp adaptive-icon viewport
-const BADGE_SIZE = 24
-// keep the badge's outer corner this far from the viewport edge, so it stays
-// inside the launcher's circular icon mask (~54dp radius from the center)
-const BADGE_INSET = 19
-const BADGE_CORNER_RADIUS = 7
+const BADGE_SIZE = 26
+const BADGE_CORNER_RADIUS = 12
 // gap between the badge edge and the β glyph box
-const BADGE_PADDING = 1.5
+const BADGE_PADDING = 5
 // bg-coloured frame; the stroke is centered on the edge, so ~half shows outside
 const BADGE_OUTLINE_WIDTH = 4
-const BADGE_FAR = ADAPTIVE_SIZE - BADGE_INSET
+// pin the badge's outer corner onto the launcher's circular icon mask (the
+// inscribed circle of the viewport) so it sits flush in the bottom-right
+// corner; the frame's outer tip clips against the mask, which is harmless
+const MASK_RADIUS = ADAPTIVE_SIZE / 2
+const BADGE_FAR = ADAPTIVE_SIZE / 2 + MASK_RADIUS / Math.SQRT2
 const BADGE_NEAR = BADGE_FAR - BADGE_SIZE
 
 // committed under src/res, synced into the worktree by forkSyncFiles
@@ -71,17 +75,20 @@ function buildDebugBadge(): string {
     + ` H${fmtNum(BADGE_FAR)} V${fmtNum(BADGE_FAR)} H${fmtNum(BADGE_NEAR)}`
     + ` V${fmtNum(BADGE_NEAR + r)} A${fmtNum(r)},${fmtNum(r)} 0 0 1`
     + ` ${fmtNum(BADGE_NEAR + r)},${fmtNum(BADGE_NEAR)} Z`
-  // β: scale the 24x24 glyph viewBox into the padded badge interior
+  // β: scale the 24x24 glyph viewBox to the padded badge interior, then center
+  // the glyph's ink box (not the viewBox) on the badge
   const scale = (BADGE_SIZE - 2 * BADGE_PADDING) / GLYPH_VIEWBOX
-  const offset = BADGE_NEAR + BADGE_PADDING
+  const badgeCenter = (BADGE_NEAR + BADGE_FAR) / 2
+  const offsetX = badgeCenter - (BETA_BBOX.x + BETA_BBOX.width / 2) * scale
+  const offsetY = badgeCenter - (BETA_BBOX.y + BETA_BBOX.height / 2) * scale
   return `\n    <path
         android:pathData="${badge}"
         android:fillColor="${DEBUG_BADGE_COLOR}"
         android:strokeColor="${DEBUG_MARK_COLOR}"
         android:strokeWidth="${fmtNum(BADGE_OUTLINE_WIDTH)}" />
     <group
-        android:translateX="${fmtNum(offset)}"
-        android:translateY="${fmtNum(offset)}"
+        android:translateX="${fmtNum(offsetX)}"
+        android:translateY="${fmtNum(offsetY)}"
         android:scaleX="${fmtNum(scale)}"
         android:scaleY="${fmtNum(scale)}">
         <path

@@ -62,7 +62,7 @@ index 0000000..0000000 100644
 +        spoilerEffect.inu_isTextSpoiler = true;
 +        if (desu.inugram.InuConfig.SPOILER_EXTEND_TO_LINE_END.getValue() && mostright > 0) {
 +            int inu_line = textLayout.getLineForVertical((int) ((top + bottom) / 2f));
-+            if (right >= textLayout.getLineRight(inu_line) - dp(2)) {
++            if (inu_line < textLayout.getLineCount() - 1 && right >= textLayout.getLineRight(inu_line) - dp(2)) {
 +                right = mostright;
 +            }
 +        }

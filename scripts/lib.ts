@@ -105,8 +105,10 @@ export function hasGitRepo(repoDir: string) {
   return existsSync(join(repoDir, '.git'))
 }
 
-export function hasStgitStack(repoDir: string, branch: string) {
-  return existsSync(join(repoDir, '.git', 'refs', 'stacks', branch))
+export async function hasStgitStack(repoDir: string, branch: string) {
+  // resolve via git: the stack ref may be packed in .git/packed-refs
+  const result = await $({ cwd: repoDir, nothrow: true })`git show-ref --verify --quiet refs/stacks/${branch}`
+  return result.exitCode === 0
 }
 
 export async function getCurrentBranch(repoDir: string) {

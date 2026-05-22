@@ -7,7 +7,9 @@ import org.telegram.messenger.ApplicationLoader
 import org.telegram.messenger.BetaUpdate
 import org.telegram.messenger.BuildConfig
 import org.telegram.messenger.BuildVars
+import org.telegram.messenger.FileLoader
 import org.telegram.messenger.LocaleController
+import org.telegram.messenger.MessageObject
 import org.telegram.messenger.MessagesController
 import org.telegram.messenger.NotificationCenter
 import org.telegram.messenger.R
@@ -93,6 +95,51 @@ object UpdateHelper {
         }
     }
 
+    fun startDownload(account: Int) {
+        val update = SharedConfig.pendingAppUpdate ?: return
+        val doc = update.document ?: return
+        // need message for file refs
+        val messageId = update.id
+        if (messageId <= 0) {
+            // pending update persisted before the source message id was tracked
+            beginLoad(account, doc, "update")
+            return
+        }
+        val mc = MessagesController.getInstance(account)
+        // resolve first so the channel (with access_hash) is cached for getInputChannel
+        mc.userNameResolver.resolve(USERNAME) { peerId ->
+            AndroidUtilities.runOnUIThread {
+                if (peerId == null || peerId == 0L || peerId == Long.MAX_VALUE) {
+                    beginLoad(account, doc, "update")
+                    return@runOnUIThread
+                }
+                val req = TLRPC.TL_channels_getMessages().apply {
+                    channel = mc.getInputChannel(CHANNEL_ID)
+                    id.add(messageId)
+                }
+                ConnectionsManager.getInstance(account).sendRequest(req) { resp, _ ->
+                    AndroidUtilities.runOnUIThread {
+                        val msg = (resp as? TLRPC.messages_Messages)?.messages
+                            ?.firstOrNull { it.id == messageId }
+                        val freshDoc = msg?.let { extractApkInfo(it)?.document }
+                        if (msg == null || freshDoc == null) {
+                            beginLoad(account, doc, "update")
+                        } else {
+                            beginLoad(account, freshDoc, MessageObject(account, msg, false, false))
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    // appUpdateLoading is posted so the update row flips to the downloading state:
+    // stock relied on loadFile being synchronous, but startDownload resolves async.
+    private fun beginLoad(account: Int, document: TLRPC.Document, parent: Any) {
+        FileLoader.getInstance(account).loadFile(document, parent, FileLoader.PRIORITY_NORMAL, 1)
+        NotificationCenter.getGlobalInstance().postNotificationName(NotificationCenter.appUpdateLoading)
+    }
+
     fun check(callback: ((CheckResult) -> Unit)?) {
         val account = UserConfig.selectedAccount
         if (!UserConfig.getInstance(account).isClientActivated) {
@@ -169,6 +216,8 @@ object UpdateHelper {
     private fun applyUpdate(msg: TLRPC.Message, info: ApkInfo, current: CurrentBuild): TLRPC.TL_help_appUpdate {
         val updateObj = TLRPC.TL_help_appUpdate().apply {
             flags = flags or 2
+            // stash the source channel message id in the otherwise-unused `id` field
+            id = msg.id
             version = info.verCode.toString()
             text = msg.message ?: ""
             entities = msg.entities

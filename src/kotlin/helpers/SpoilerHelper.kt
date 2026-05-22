@@ -47,7 +47,7 @@ object SpoilerHelper {
         // overlay to avoid stark contrast.
         val alphaScale = if (isOutgoingBubble(parent)) 0.45f else 0.25f
         solidPaint.color = lastColor
-        solidPaint.alpha = (Color.alpha(lastColor) * mAlpha / 0xFF * alphaScale).toInt().coerceIn(0, 0xFF)
+        solidPaint.alpha = (Color.alpha(lastColor) * alphaScale).toInt().coerceIn(0, 0xFF)
 
         val r = dp(4f).toFloat()
         val tlR = if (effect.inu_prevLeft <= bounds.left) 0f else r
@@ -98,7 +98,7 @@ object SpoilerHelper {
             solidPaint.alpha = (95 * clampedAlpha).toInt().coerceIn(0, 255)
             tempRect.set(cx - pillW / 2f, cy - pillH / 2f, cx + pillW / 2f, cy + pillH / 2f)
             canvas.drawRoundRect(tempRect, pillH / 2f, pillH / 2f, solidPaint)
-            labelPaint.alpha = (210 * clampedAlpha).toInt().coerceIn(0, 255)
+            labelPaint.alpha = (230 * clampedAlpha).toInt().coerceIn(0, 255)
             canvas.drawText(label, cx, cy - (fm.ascent + fm.descent) / 2f, labelPaint)
         }
         return true
@@ -131,10 +131,11 @@ object SpoilerHelper {
 
     @JvmStatic
     fun linkNeighbors(spoilers: List<SpoilerEffect>) {
-        // getSelectionPath emits an extra trailing-whitespace rect per line; the
-        // line-extension then stretches the main rect over it, causing duplicate
-        // overdraw with the solid styles. Zero any rect strictly contained in another
-        // on the same y-span before linking — so it draws nothing and isn't a neighbor.
+        // getSelectionPath emits an extra trailing-whitespace rect per line
+        // sometimes this overlaps the main rect (visible duplicate overdraw);
+        // without it the two rects are adjacent and create a visible seam in SIMPLE
+        // mode. Merge any two rects on the same y-span that touch or overlap on x —
+        // drop the narrower one and extend the wider one to cover the union.
         for (i in spoilers.indices) {
             val a = spoilers[i]
             if (!a.inu_isTextSpoiler || a.bounds.isEmpty) continue
@@ -142,15 +143,14 @@ object SpoilerHelper {
             for (j in spoilers.indices) {
                 if (i == j) continue
                 val b = spoilers[j]
-                if (!b.inu_isTextSpoiler) continue
+                if (!b.inu_isTextSpoiler || b.bounds.isEmpty) continue
                 val bb = b.bounds
-                if (ab.top == bb.top && ab.bottom == bb.bottom
-                    && ab.left >= bb.left && ab.right <= bb.right
-                    && (ab.left > bb.left || ab.right < bb.right)
-                ) {
-                    a.setBounds(0, 0, 0, 0)
-                    break
-                }
+                if (ab.top != bb.top || ab.bottom != bb.bottom) continue
+                if (ab.right < bb.left || ab.left > bb.right) continue
+                if (ab.width() >= bb.width()) continue
+                b.setBounds(min(ab.left, bb.left), bb.top, max(ab.right, bb.right), bb.bottom)
+                a.setBounds(0, 0, 0, 0)
+                break
             }
         }
         for (s in spoilers) {

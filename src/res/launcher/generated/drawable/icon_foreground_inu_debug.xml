@@ -14,15 +14,15 @@
             android:fillColor="#FFFFFFFF" />
     </group>
     <path
-        android:pathData="M72,65 H89 V89 H65 V72 A7,7 0 0 1 72,65 Z"
+        android:pathData="M78.1838,66.1838 H92.1838 V92.1838 H66.1838 V78.1838 A12,12 0 0 1 78.1838,66.1838 Z"
         android:fillColor="#FFFFFFFF"
         android:strokeColor="#FFD4A3FF"
         android:strokeWidth="4" />
     <group
-        android:translateX="66.5"
-        android:translateY="66.5"
-        android:scaleX="0.875"
-        android:scaleY="0.875">
+        android:translateX="71.1838"
+        android:translateY="70.8104"
+        android:scaleX="0.6667"
+        android:scaleY="0.6667">
         <path
             android:pathData="M9.23 17.59v5.53H6.88V6.72c0-1.45.43-2.59 1.28-3.44C9 2.43 10.17 2 11.61 2c1.39 0 2.46.34 3.26 1c.79.68 1.18 1.62 1.18 2.81c0 .82-.26 1.59-.78 2.3s-1.19 1.2-2.02 1.47v.04c1.25.2 2.22.65 2.88 1.38c.66.71.99 1.62.99 2.74c0 1.32-.46 2.4-1.37 3.23c-.92.83-2.12 1.24-3.62 1.24c-1.06 0-2.03-.21-2.9-.62m1.49-6.84V8.83c.87-.11 1.58-.43 2.15-.97c.56-.55.84-1.16.84-1.86c0-1.38-.71-2.08-2.11-2.08c-.76 0-1.35.24-1.76.73s-.61 1.17-.61 2.06v8.79c.91.53 1.8.79 2.66.79c.84 0 1.5-.22 1.97-.65c.47-.44.7-1.06.7-1.85c0-1.79-1.28-2.79-3.84-3.04"
             android:fillColor="#FFD4A3FF" />

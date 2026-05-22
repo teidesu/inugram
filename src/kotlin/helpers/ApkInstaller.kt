@@ -10,12 +10,16 @@ import android.content.Intent
 import android.content.IntentFilter
 import android.content.pm.PackageInstaller
 import android.content.pm.PackageManager
+import android.content.res.ColorStateList
 import android.os.Build
+import android.os.Handler
+import android.os.Looper
 import android.provider.Settings
 import android.text.TextUtils
 import android.util.TypedValue
 import android.view.Gravity
 import android.widget.LinearLayout
+import android.widget.ProgressBar
 import android.widget.TextView
 import androidx.core.app.ActivityCompat
 import androidx.core.app.NotificationChannelCompat
@@ -40,8 +44,6 @@ import org.telegram.ui.Components.RLottieImageView
 import org.telegram.ui.LaunchActivity
 import java.io.File
 import java.io.IOException
-import java.util.concurrent.CountDownLatch
-import java.util.concurrent.TimeUnit
 
 object ApkInstaller {
     private const val ACTION = "desu.inugram.helpers.ApkInstaller.STATUS"
@@ -62,7 +64,8 @@ object ApkInstaller {
         }
         if (dialog?.isShowing == true) return
 
-        dialog = buildProgressDialog(activity).also { it.show() }
+        val progressBar = buildProgressBar(activity)
+        dialog = buildProgressDialog(activity, progressBar).also { it.show() }
 
         Utilities.globalQueue.postRunnable {
             val receiver = registerStatusReceiver(activity) {
@@ -72,39 +75,53 @@ object ApkInstaller {
                 }
             }
             val started = runCatching { commitSession(activity, apk) }
-            if (started.isFailure) {
-                val err = started.exceptionOrNull()
+            val sessionId = started.getOrElse { err ->
                 FileLog.e(err)
                 AndroidUtilities.runOnUIThread {
                     dialog?.dismiss()
                     dialog = null
                     AlertsCreator.createSimpleAlert(
                         activity,
-                        LocaleController.getString(R.string.ErrorOccurred) + "\n" + (err?.localizedMessage ?: ""),
+                        LocaleController.getString(R.string.ErrorOccurred) + "\n" + (err.localizedMessage ?: ""),
                     ).show()
                     AndroidUtilities.openForView(document, false, activity)
                 }
                 runCatching { activity.unregisterReceiver(receiver) }
                 return@postRunnable
             }
-            val intent = receiver.waitIntent()
-            if (intent != null) {
-                AndroidUtilities.runOnUIThread { activity.startActivity(intent) }
-            } else {
-                // commit succeeded but no status broadcast within timeout — likely silently
-                // blocked by OEM. Drop the receiver and let the user install via system UI.
-                runCatching { activity.unregisterReceiver(receiver) }
-                AndroidUtilities.runOnUIThread {
-                    dialog?.dismiss()
-                    dialog = null
-                    AndroidUtilities.openForView(document, false, activity)
-                }
-            }
+            registerProgressCallback(activity, sessionId, progressBar)
+        }
+    }
+
+    // Drives the dialog progress bar off the system's install progress. Some OEMs/ROMs
+    // never emit progress events — the bar then stays indeterminate for the whole install.
+    private fun registerProgressCallback(context: Context, sessionId: Int, progressBar: ProgressBar) {
+        val installer = context.packageManager.packageInstaller
+        runCatching {
+            installer.registerSessionCallback(
+                object : PackageInstaller.SessionCallback() {
+                    override fun onCreated(id: Int) = Unit
+                    override fun onBadgingChanged(id: Int) = Unit
+                    override fun onActiveChanged(id: Int, active: Boolean) = Unit
+
+                    override fun onProgressChanged(id: Int, progress: Float) {
+                        if (id != sessionId) return
+                        if (progressBar.isIndeterminate) progressBar.isIndeterminate = false
+                        progressBar.progress = (progress.coerceIn(0f, 1f) * progressBar.max).toInt()
+                    }
+
+                    override fun onFinished(id: Int, success: Boolean) {
+                        if (id != sessionId) return
+                        runCatching { installer.unregisterSessionCallback(this) }
+                    }
+                },
+                Handler(Looper.getMainLooper()),
+            )
         }
     }
 
     @Throws(IOException::class)
-    private fun commitSession(activity: Activity, apk: File) {
+    private fun commitSession(activity: Activity, apk: File): Int {
         val flags = PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_MUTABLE
         val intent = Intent(ACTION).setPackage(activity.packageName)
         val pending = PendingIntent.getBroadcast(activity, 0, intent, flags)
@@ -114,12 +131,14 @@ object ApkInstaller {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
             params.setRequireUserAction(PackageInstaller.SessionParams.USER_ACTION_NOT_REQUIRED)
         }
-        installer.openSession(installer.createSession(params)).use { session ->
+        val sessionId = installer.createSession(params)
+        installer.openSession(sessionId).use { session ->
             session.openWrite(apk.name, 0, apk.length()).use { out ->
                 apk.inputStream().use { it.copyTo(out) }
             }
             session.commit(pending.intentSender)
         }
+        return sessionId
     }
 
     private fun registerStatusReceiver(activity: Activity, onDone: Runnable): InstallReceiver {
@@ -134,7 +153,19 @@ object ApkInstaller {
     // installer is set as default, so always fall back to Intent.ACTION_VIEW there.
     fun hasBrokenPackageInstaller(): Boolean = XiaomiUtilities.isMIUI()
 
-    private fun buildProgressDialog(context: Context): AlertDialog {
+    private fun buildProgressBar(context: Context): ProgressBar {
+        val accent = ColorStateList.valueOf(Theme.getColor(Theme.key_dialogLineProgress))
+        return ProgressBar(context, null, android.R.attr.progressBarStyleHorizontal).apply {
+            isIndeterminate = true
+            max = 1000
+            progressTintList = accent
+            indeterminateTintList = accent
+            progressBackgroundTintList =
+                ColorStateList.valueOf(Theme.getColor(Theme.key_dialogLineProgressBackground))
+        }
+    }
+
+    private fun buildProgressDialog(context: Context, progressBar: ProgressBar): AlertDialog {
         val container = LinearLayout(context).apply {
             orientation = LinearLayout.VERTICAL
             layoutParams = LayoutHelper.createFrame(
@@ -181,7 +212,14 @@ object ApkInstaller {
             subtitle,
             LayoutHelper.createLinear(
                 LayoutHelper.WRAP_CONTENT, LayoutHelper.WRAP_CONTENT,
-                Gravity.CENTER_HORIZONTAL or Gravity.TOP, 17, 4, 17, 24,
+                Gravity.CENTER_HORIZONTAL or Gravity.TOP, 17, 4, 17, 14,
+            ),
+        )
+        container.addView(
+            progressBar,
+            LayoutHelper.createLinear(
+                LayoutHelper.MATCH_PARENT, LayoutHelper.WRAP_CONTENT,
+                Gravity.CENTER_HORIZONTAL or Gravity.TOP, 21, 0, 21, 24,
             ),
         )
         val builder = AlertDialog.Builder(context)
@@ -197,11 +235,6 @@ object ApkInstaller {
         private val packageName: String,
         private val onDone: Runnable,
     ) : BroadcastReceiver() {
-        private val latch = CountDownLatch(1)
-
-        @Volatile
-        private var pendingIntent: Intent? = null
-
         @Volatile
         private var unregistered = false
 
@@ -218,19 +251,25 @@ object ApkInstaller {
                 PackageInstaller.STATUS_FAILURE_INVALID,
             )
             if (status == PackageInstaller.STATUS_PENDING_USER_ACTION) {
+                // system wants the user to confirm — hand off to its installer UI,
+                // stay registered for the follow-up terminal status.
                 @Suppress("DEPRECATION")
-                pendingIntent = i.getParcelableExtra(Intent.EXTRA_INTENT)
-            } else {
-                if (isFailure(status)) {
-                    abandonSession(i.getIntExtra(PackageInstaller.EXTRA_SESSION_ID, 0))
-                    showInstallError(status)
-                } else if (status == PackageInstaller.STATUS_SUCCESS) {
-                    UpdateHelper.clearPending()
+                val confirm = i.getParcelableExtra<Intent>(Intent.EXTRA_INTENT)
+                if (confirm != null && runCatching { context.startActivity(confirm) }.isSuccess) {
+                    return
                 }
-                onDone.run()
-                safeUnregister()
+                // handoff failed (missing intent / no activity) — abandon the session
+                // and fall through so the non-cancelable progress dialog isn't stuck.
+                abandonSession(i.getIntExtra(PackageInstaller.EXTRA_SESSION_ID, 0))
             }
-            latch.countDown()
+            if (isFailure(status)) {
+                abandonSession(i.getIntExtra(PackageInstaller.EXTRA_SESSION_ID, 0))
+                showInstallError(status)
+            } else if (status == PackageInstaller.STATUS_SUCCESS) {
+                UpdateHelper.clearPending()
+            }
+            onDone.run()
+            safeUnregister()
         }
 
         private fun isFailure(status: Int) = when (status) {
@@ -261,11 +300,6 @@ object ApkInstaller {
                     )
                 }
             }
-        }
-
-        fun waitIntent(): Intent? {
-            runCatching { latch.await(5, TimeUnit.SECONDS) }
-            return pendingIntent
         }
 
         private fun safeUnregister() {

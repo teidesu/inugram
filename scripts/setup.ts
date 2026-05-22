@@ -51,21 +51,38 @@ async function ensureBranch(commit: string) {
   return existed
 }
 
-async function ensureStgitStack(commit: string, branchExisted: boolean) {
+async function assertCleanWorktree(action: string) {
+  const repo = cd(worktreeDir)
+  const dirty = (await repo`git status --porcelain`).stdout.trim()
+  if (dirty) {
+    throw new Error(`Refusing to ${action}: worktree is dirty: ${dirty}`)
+  }
+}
+
+async function ensureStgitStack(commit: string, branchExisted: boolean, force: boolean) {
   const repo = cd(worktreeDir)
   await repo`git config stgit.namelength 120`
   await repo`git config commit.gpgsign false`
   await repo`git config tag.gpgsign false`
 
-  if (hasStgitStack(worktreeDir, BRANCH)) {
+  if (await hasStgitStack(worktreeDir, BRANCH)) {
     step('Stgit stack already initialized')
+    // reconcile metadata in case the branch was moved by a plain git op
+    if (force) await repo`stg repair`
     return
   }
 
   if (branchExisted) {
     const head = (await repo`git rev-parse HEAD`).stdout.trim()
     if (head !== commit) {
-      throw new Error(`Branch ${BRANCH} exists without StGit metadata and is not at ${commit}`)
+      if (!force) {
+        throw new Error(
+          `Branch ${BRANCH} exists without StGit metadata and is not at ${commit} (re-run with --force to reset it)`,
+        )
+      }
+      await assertCleanWorktree(`reset ${BRANCH}`)
+      step(`Resetting ${BRANCH} to ${commit}`)
+      await repo`git reset --hard ${commit}`
     }
   }
 
@@ -157,10 +174,7 @@ async function ensurePatches(expected: string[], seriesEntries: string[]) {
 async function forceReimportPatches(seriesEntries: string[]) {
   const repo = cd(worktreeDir)
 
-  const dirty = (await repo`git status --porcelain`).stdout.trim()
-  if (dirty) {
-    throw new Error(`Refusing to force-reimport: worktree is dirty: ${dirty}`)
-  }
+  await assertCleanWorktree('force-reimport')
 
   const existing = await getAllPatchNames(worktreeDir)
   const applied = await getAppliedPatchNames(worktreeDir)
@@ -202,7 +216,7 @@ if (noStgit) {
   const expectedPatches = seriesEntries.map(patchNameFromSeriesEntry)
   await ensureWorktree(commit)
   const branchExisted = await ensureBranch(commit)
-  await ensureStgitStack(commit, branchExisted)
+  await ensureStgitStack(commit, branchExisted, force)
   if (force) {
     await forceReimportPatches(seriesEntries)
   } else {

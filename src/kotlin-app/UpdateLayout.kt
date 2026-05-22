@@ -9,6 +9,7 @@ import android.view.Gravity
 import android.view.View
 import android.view.ViewGroup
 import android.widget.FrameLayout
+import desu.inugram.helpers.UpdateHelper
 import org.telegram.messenger.AndroidUtilities
 import org.telegram.messenger.AndroidUtilities.dp
 import org.telegram.messenger.ApplicationLoader
@@ -66,9 +67,7 @@ class UpdateLayout(
             if (!SharedConfig.isAppUpdateAvailable()) return@setOnClickListener
             when (updateLayoutIcon?.icon) {
                 MediaActionDrawable.ICON_DOWNLOAD -> {
-                    FileLoader.getInstance(currentAccount).loadFile(
-                        SharedConfig.pendingAppUpdate.document, "update", FileLoader.PRIORITY_NORMAL, 1,
-                    )
+                    UpdateHelper.startDownload(currentAccount)
                     updateAppUpdateViews(currentAccount, true)
                 }
 
