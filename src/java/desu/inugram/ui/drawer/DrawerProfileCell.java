@@ -113,7 +113,7 @@ public class DrawerProfileCell extends FrameLayout implements NotificationCenter
         shadowView = new ImageView(context);
         shadowView.setVisibility(INVISIBLE);
         shadowView.setScaleType(ImageView.ScaleType.FIT_XY);
-        shadowView.setImageResource(R.drawable.bottom_shadow);
+        shadowView.setImageResource(R.drawable.compose_panel_shadow);
         addView(shadowView, LayoutHelper.createFrame(LayoutHelper.MATCH_PARENT, 70, Gravity.LEFT | Gravity.BOTTOM));
 
         avatarImageView = new BackupImageView(context);

@@ -300,17 +300,8 @@ public class DrawerLayoutAdapter extends RecyclerListView.SelectionAdapter {
             inviteIcon = R.drawable.msg_invite;
             helpIcon = R.drawable.msg_help;
         }
-        UserConfig me = UserConfig.getInstance(UserConfig.selectedAccount);
         boolean showDivider = false;
         items.add(new Item(16, LocaleController.getString(R.string.MyProfile), R.drawable.left_status_profile));
-        if (me != null && me.isPremium()) {
-            if (me.getEmojiStatus() != null) {
-                items.add(new Item(15, LocaleController.getString(R.string.ChangeEmojiStatus), R.drawable.msg_status_edit));
-            } else {
-                items.add(new Item(15, LocaleController.getString(R.string.SetEmojiStatus), R.drawable.msg_status_set));
-            }
-            showDivider = true;
-        }
 //        if (MessagesController.getInstance(UserConfig.selectedAccount).storiesEnabled()) {
 //            items.add(new Item(17, LocaleController.getString(R.string.ProfileStories), R.drawable.msg_menu_stories));
 //            showDivider = true;
