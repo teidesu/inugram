@@ -8,9 +8,9 @@ Restore hamburger side drawer for old layout mode (DrawerLayoutContainer)
 Restore hamburger side drawer for old layout mode (DialogsActivity)
 ---
  .../ui/ActionBar/DrawerLayoutContainer.java   | 27 ++++++++++++++++---
- .../java/org/telegram/ui/DialogsActivity.java |  9 +++++++
- .../java/org/telegram/ui/LaunchActivity.java  | 23 +++++-----------
- 3 files changed, 38 insertions(+), 21 deletions(-)
+ .../java/org/telegram/ui/DialogsActivity.java | 11 +++++++-
+ .../java/org/telegram/ui/LaunchActivity.java  | 24 +++++------------
+ 3 files changed, 40 insertions(+), 22 deletions(-)
 
 diff --git a/TMessagesProj/src/main/java/org/telegram/ui/ActionBar/DrawerLayoutContainer.java b/TMessagesProj/src/main/java/org/telegram/ui/ActionBar/DrawerLayoutContainer.java
 index 0000000..0000000 100644
@@ -88,6 +88,15 @@ diff --git a/TMessagesProj/src/main/java/org/telegram/ui/DialogsActivity.java b/
 index 0000000..0000000 100644
 --- a/TMessagesProj/src/main/java/org/telegram/ui/DialogsActivity.java
 +++ b/TMessagesProj/src/main/java/org/telegram/ui/DialogsActivity.java
+@@ -515,7 +515,7 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
+     private ChatAvatarContainer avatarContainer;
+     private int undoViewIndex;
+     private UndoView[] undoView = new UndoView[2];
+-    private FilterTabsView filterTabsView;
++    public FilterTabsView filterTabsView;
+     private boolean askingForPermissions;
+     private int searchViewPagerIndex;
+     @Nullable
 @@ -3472,6 +3472,10 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
          } else {
              if (searchString != null || folderId != 0) {
@@ -147,7 +156,15 @@ index 0000000..0000000 100644
          actionBarLayout.addFragmentToStack(mainTabsActivity, INavigationLayout.FORCE_ATTACH_VIEW_AS_FIRST);
          actionBarLayout.rebuildFragments(INavigationLayout.REBUILD_FLAG_REBUILD_LAST);
          if (AndroidUtilities.isTablet()) {
-@@ -3324,12 +3323,7 @@ public class LaunchActivity extends BasePermissionsActivity implements INavigati
+@@ -1261,6 +1260,7 @@ public class LaunchActivity extends BasePermissionsActivity implements INavigati
+             showTosActivity(account, UserConfig.getInstance(account).unacceptedTermsOfService);
+         }
+         updateCurrentConnectionState(currentAccount);
++        desu.inugram.helpers.DrawerHelper.notifyDataChanged();
+ 
+         switchingAccount = false;
+     }
+@@ -3324,12 +3324,7 @@ public class LaunchActivity extends BasePermissionsActivity implements INavigati
                      }
                  } else {
                      if (actionBarLayout.getFragmentStack().isEmpty()) {
@@ -161,7 +178,7 @@ index 0000000..0000000 100644
                      }
                  }
              } else {
-@@ -3337,12 +3331,7 @@ public class LaunchActivity extends BasePermissionsActivity implements INavigati
+@@ -3337,12 +3332,7 @@ public class LaunchActivity extends BasePermissionsActivity implements INavigati
                      if (!UserConfig.getInstance(currentAccount).isClientActivated()) {
                          actionBarLayout.addFragmentToStack(getClientNotActivatedFragment(), INavigationLayout.FORCE_NOT_ATTACH_VIEW);
                      } else {

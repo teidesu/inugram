@@ -134,6 +134,22 @@ public class DrawerSwipeController {
         host.sendAccessibilityEvent(AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED);
     }
 
+    /**
+     * Once the drawer is open (or mid-drag) gestures must keep working to close it.
+     * Otherwise only start tracking when the top fragment allows it — a DialogsActivity
+     * on a non-first folder tab owns the horizontal swipe for tab paging.
+     */
+    private boolean canTrackGesture() {
+        if (host.parentActionBarLayout.getFragmentStack().size() != 1) return false;
+        if (drawerOpened || drawerPosition > 0) return true;
+        org.telegram.ui.ActionBar.BaseFragment top = host.parentActionBarLayout.getLastFragment();
+        if (top instanceof org.telegram.ui.DialogsActivity) {
+            org.telegram.ui.Components.FilterTabsView tabs = ((org.telegram.ui.DialogsActivity) top).filterTabsView;
+            return tabs == null || tabs.getVisibility() != View.VISIBLE || tabs.isFirstTabSelected();
+        }
+        return true;
+    }
+
     public boolean onTouchEvent(MotionEvent ev) {
         if (drawerLayout == null || host.parentActionBarLayout.checkTransitionAnimation()) {
             return false;
@@ -142,7 +158,7 @@ public class DrawerSwipeController {
             if (ev.getAction() == MotionEvent.ACTION_UP) closeDrawer(false);
             return true;
         }
-        if (allowOpenDrawer && host.parentActionBarLayout.getFragmentStack().size() == 1) {
+        if (allowOpenDrawer && canTrackGesture()) {
             if (ev != null && (ev.getAction() == MotionEvent.ACTION_DOWN || ev.getAction() == MotionEvent.ACTION_MOVE)
                     && !startedTracking && !maybeStartTracking) {
                 startedTrackingX = (int) ev.getX();

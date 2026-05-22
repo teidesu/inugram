@@ -71,6 +71,7 @@ import org.telegram.ui.Components.Reactions.AnimatedEmojiEffect;
 import org.telegram.ui.Components.Reactions.HwEmojis;
 import org.telegram.ui.Components.Reactions.ReactionsLayoutInBubble;
 import org.telegram.ui.Components.SnowflakesEffect;
+import org.telegram.ui.DialogsActivity;
 import org.telegram.ui.ThemeActivity;
 
 import java.util.ArrayList;
@@ -98,7 +99,6 @@ public class DrawerProfileCell extends FrameLayout implements NotificationCenter
     private SnowflakesEffect snowflakesEffect;
     private boolean accountsShown;
     private int darkThemeBackgroundColor;
-    public static boolean switchingTheme;
     public boolean drawPremium;
     public float drawPremiumProgress;
 
@@ -232,10 +232,10 @@ public class DrawerProfileCell extends FrameLayout implements NotificationCenter
             darkThemeView.playAnimation();
         }
         darkThemeView.setOnClickListener(v -> {
-            if (switchingTheme) {
+            if (DialogsActivity.switchingTheme) {
                 return;
             }
-            switchingTheme = true;
+            DialogsActivity.switchingTheme = true;
             SharedPreferences preferences = ApplicationLoader.applicationContext.getSharedPreferences("themeconfig", Activity.MODE_PRIVATE);
             String dayThemeName = preferences.getString("lastDayTheme", "Blue");
             if (Theme.getTheme(dayThemeName) == null || Theme.getTheme(dayThemeName).isDark()) {

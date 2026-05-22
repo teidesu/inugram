@@ -230,20 +230,12 @@ public class DrawerLayoutAdapter extends RecyclerListView.SelectionAdapter {
     private void resetItems() {
         accountNumbers.clear();
         for (int a = 0; a < UserConfig.MAX_ACCOUNT_COUNT; a++) {
-            if (UserConfig.getInstance(a).isClientActivated()) {
+            if (UserConfig.getInstance(a).isClientActivated()
+                    && (a == UserConfig.selectedAccount || !desu.inugram.helpers.PasscodeHelper.isAccountHidden(a))) {
                 accountNumbers.add(a);
             }
         }
-        Collections.sort(accountNumbers, (o1, o2) -> {
-            long l1 = UserConfig.getInstance(o1).loginTime;
-            long l2 = UserConfig.getInstance(o2).loginTime;
-            if (l1 > l2) {
-                return 1;
-            } else if (l1 < l2) {
-                return -1;
-            }
-            return 0;
-        });
+        desu.inugram.helpers.AccountOrderHelper.sort(accountNumbers);
 
         items.clear();
         if (!UserConfig.getInstance(UserConfig.selectedAccount).isClientActivated()) {
