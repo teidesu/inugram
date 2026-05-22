@@ -6,6 +6,7 @@ import android.graphics.Typeface
 import android.os.Build
 import android.os.Bundle
 import desu.inugram.helpers.CloudSettingsHelper
+import desu.inugram.helpers.DrawerHelper
 import desu.inugram.helpers.FontHelper
 import desu.inugram.helpers.LoginHelper
 import desu.inugram.helpers.MainTabsHelper
@@ -22,6 +23,8 @@ import org.telegram.messenger.UserConfig
 import org.telegram.messenger.Utilities
 import org.telegram.tgnet.TLObject
 import org.telegram.ui.ActionBar.BaseFragment
+import org.telegram.ui.ActionBar.DrawerLayoutContainer
+import org.telegram.ui.ActionBar.INavigationLayout
 import org.telegram.ui.Components.AnimatedFloat
 import org.telegram.ui.Components.GestureDetector2
 import org.telegram.ui.Components.GestureDetectorFixDoubleTap
@@ -189,6 +192,24 @@ object InuHooks {
     @JvmStatic
     fun createMainFragment(): BaseFragment =
         if (InuConfig.OLD_LAYOUT.value) DialogsActivity(null) else MainTabsActivity()
+
+    /** Root fragment on startup: stock `addFragmentToStack` + Old Layout drawer wiring. */
+    @JvmStatic
+    fun setupMainFragment(activity: LaunchActivity, layout: INavigationLayout, dlc: DrawerLayoutContainer) {
+        layout.addFragmentToStack(createMainFragment())
+        if (InuConfig.OLD_LAYOUT.value) DrawerHelper.setup(activity, dlc, layout)
+    }
+
+    /** Push the main fragment, forwarding a pending search query when tabs are present. */
+    @JvmStatic
+    fun addMainFragmentToStack(layout: INavigationLayout, searchQuery: String?) {
+        val main = createMainFragment()
+        if (main is MainTabsActivity) {
+            val dialogs = main.prepareDialogsActivity(null)
+            if (searchQuery != null) dialogs.setInitialSearchString(searchQuery)
+        }
+        layout.addFragmentToStack(main, INavigationLayout.FORCE_NOT_ATTACH_VIEW)
+    }
 
     /**
      * Adapted from 11.14.1 `ApplicationLoader.applicationLoaderInstance.extendDrawer(items)`

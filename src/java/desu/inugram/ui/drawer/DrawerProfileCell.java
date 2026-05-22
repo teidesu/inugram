@@ -269,7 +269,7 @@ public class DrawerProfileCell extends FrameLayout implements NotificationCenter
                 // Adapted from 11.14.1: 12.x turnOffAutoNight takes BulletinFactory instead of a host FrameLayout.
                 // Build a BulletinFactory from the currently-presented fragment so the bulletin shows on the host.
                 Runnable openSettings = () -> {
-                    drawerLayoutContainer.inu_closeDrawer(false);
+                    if (drawerLayoutContainer.inu_drawer != null) drawerLayoutContainer.inu_drawer.closeDrawer(false);
                     drawerLayoutContainer.parentActionBarLayout.presentFragment(new ThemeActivity(ThemeActivity.THEME_TYPE_NIGHT));
                 };
                 BaseFragment lastFragment = drawerLayoutContainer.parentActionBarLayout != null

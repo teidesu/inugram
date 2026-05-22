@@ -8,6 +8,7 @@ import androidx.recyclerview.widget.LinearLayoutManager
 import desu.inugram.ui.drawer.DrawerAddCell
 import desu.inugram.ui.drawer.DrawerLayoutAdapter
 import desu.inugram.ui.drawer.DrawerProfileCell
+import desu.inugram.ui.drawer.DrawerSwipeController
 import desu.inugram.ui.drawer.DrawerUserCell
 import desu.inugram.ui.drawer.SideMenultItemAnimator
 import org.telegram.messenger.AndroidUtilities.dp
@@ -71,8 +72,10 @@ object DrawerHelper {
         )
 
         val lp = FrameLayout.LayoutParams(width, ViewGroup.LayoutParams.MATCH_PARENT)
-        drawerLayoutContainer.inu_setDrawerLayout(container, sm, lp)
-        drawerLayoutContainer.inu_setAllowOpenDrawer(true, false)
+        val controller = DrawerSwipeController(drawerLayoutContainer)
+        drawerLayoutContainer.inu_drawer = controller
+        controller.setDrawerLayout(container, sm, lp)
+        controller.setAllowOpenDrawer(true, false)
 
         installThemeObserver()
     }
@@ -126,7 +129,7 @@ object DrawerHelper {
         if (view is DrawerUserCell) {
             val accountNumber = view.accountNumber
             LaunchActivity.instance?.switchToAccount(accountNumber, true)
-            drawerLayoutContainer.inu_closeDrawer(false)
+            drawerLayoutContainer.inu_drawer?.closeDrawer(false)
             return
         }
 
@@ -141,14 +144,14 @@ object DrawerHelper {
             }
             if (availableAccount != null) {
                 nav.presentFragment(LoginActivity(availableAccount))
-                drawerLayoutContainer.inu_closeDrawer(false)
+                drawerLayoutContainer.inu_drawer?.closeDrawer(false)
             }
             return
         }
 
         // Bot/extension item with custom listener (handled by adapter).
         if (adapter.click(view, position)) {
-            drawerLayoutContainer.inu_closeDrawer(false)
+            drawerLayoutContainer.inu_drawer?.closeDrawer(false)
             return
         }
 
@@ -156,7 +159,7 @@ object DrawerHelper {
         adapter.getAttachMenuBot(position)?.let { bot ->
             val activity = LaunchActivity.instance ?: return
             LaunchActivity.showAttachMenuBot(activity, account, bot, null, true)
-            drawerLayoutContainer.inu_closeDrawer(false)
+            drawerLayoutContainer.inu_drawer?.closeDrawer(false)
             return
         }
 
@@ -166,7 +169,7 @@ object DrawerHelper {
                 args.putLong("user_id", UserConfig.getInstance(account).getClientUserId())
                 args.putBoolean("my_profile", true)
                 nav.presentFragment(ProfileActivity(args))
-                drawerLayoutContainer.inu_closeDrawer(false)
+                drawerLayoutContainer.inu_drawer?.closeDrawer(false)
             }
             2 -> { // New Group
                 val args = Bundle()
@@ -174,31 +177,31 @@ object DrawerHelper {
                 args.putBoolean("destroyAfterSelect", true)
                 args.putBoolean("createGroupAfter", true)
                 nav.presentFragment(ContactsActivity(args))
-                drawerLayoutContainer.inu_closeDrawer(false)
+                drawerLayoutContainer.inu_drawer?.closeDrawer(false)
             }
             6 -> { // Contacts
                 val args = Bundle()
                 args.putBoolean("needPhonebook", true)
                 nav.presentFragment(ContactsActivity(args))
-                drawerLayoutContainer.inu_closeDrawer(false)
+                drawerLayoutContainer.inu_drawer?.closeDrawer(false)
             }
             10 -> { // Calls
                 nav.presentFragment(CallLogActivity())
-                drawerLayoutContainer.inu_closeDrawer(false)
+                drawerLayoutContainer.inu_drawer?.closeDrawer(false)
             }
             11 -> { // Saved Messages: ChatActivity expects user_id, not dialog_id.
                 val args = Bundle()
                 args.putLong("user_id", UserConfig.getInstance(account).getClientUserId())
                 nav.presentFragment(org.telegram.ui.ChatActivity(args))
-                drawerLayoutContainer.inu_closeDrawer(false)
+                drawerLayoutContainer.inu_drawer?.closeDrawer(false)
             }
             8 -> { // Settings
                 nav.presentFragment(SettingsActivity())
-                drawerLayoutContainer.inu_closeDrawer(false)
+                drawerLayoutContainer.inu_drawer?.closeDrawer(false)
             }
             else -> {
                 // Unknown id — close drawer to avoid getting stuck.
-                drawerLayoutContainer.inu_closeDrawer(false)
+                drawerLayoutContainer.inu_drawer?.closeDrawer(false)
             }
         }
     }
@@ -206,5 +209,13 @@ object DrawerHelper {
     @JvmStatic
     fun notifyDataChanged() {
         adapter?.notifyDataSetChanged()
+    }
+
+    /** Old Layout back-button hook: toggles the side drawer. Returns false if unavailable. */
+    @JvmStatic
+    fun toggleDrawer(parentLayout: INavigationLayout?): Boolean {
+        val controller = parentLayout?.drawerLayoutContainer?.inu_drawer ?: return false
+        if (controller.isDrawerOpened) controller.closeDrawer(false) else controller.openDrawer(false)
+        return true
     }
 }

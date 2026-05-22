@@ -3,33 +3,151 @@ From: alina sireneva <alina@tei.su>
 Date: Tue, 12 May 2026 00:00:00 +0000
 Subject: Use DialogsActivity as root fragment when old layout is enabled
 
+Restore hamburger side drawer for old layout mode (DrawerLayoutContainer)
+
+Restore hamburger side drawer for old layout mode (DialogsActivity)
 ---
+ .../ui/ActionBar/DrawerLayoutContainer.java   | 27 ++++++++++++++++---
+ .../java/org/telegram/ui/DialogsActivity.java |  9 +++++++
+ .../java/org/telegram/ui/LaunchActivity.java  | 23 +++++-----------
+ 3 files changed, 38 insertions(+), 21 deletions(-)
+
+diff --git a/TMessagesProj/src/main/java/org/telegram/ui/ActionBar/DrawerLayoutContainer.java b/TMessagesProj/src/main/java/org/telegram/ui/ActionBar/DrawerLayoutContainer.java
+index 0000000..0000000 100644
+--- a/TMessagesProj/src/main/java/org/telegram/ui/ActionBar/DrawerLayoutContainer.java
++++ b/TMessagesProj/src/main/java/org/telegram/ui/ActionBar/DrawerLayoutContainer.java
+@@ -30,7 +30,7 @@ import org.telegram.messenger.FileLog;
+ 
+ public class DrawerLayoutContainer extends FrameLayout {
+ 
+-    private INavigationLayout parentActionBarLayout;
++    public INavigationLayout parentActionBarLayout;
+ 
+     private final Paint backgroundPaint = new Paint();
+ 
+@@ -98,13 +98,20 @@ public class DrawerLayoutContainer extends FrameLayout {
+         return false;
+     }
+ 
++    public desu.inugram.ui.drawer.DrawerSwipeController inu_drawer;
++
++    public boolean inu_superDrawChild(@NonNull Canvas canvas, View child, long drawingTime) {
++        return super.drawChild(canvas, child, drawingTime);
++    }
++
+     public boolean onTouchEvent(MotionEvent ev) {
++        if (inu_drawer != null) return inu_drawer.onTouchEvent(ev);
+         return false;
+     }
+ 
+     @Override
+     public boolean onInterceptTouchEvent(MotionEvent ev) {
+-        return parentActionBarLayout.checkTransitionAnimation();
++        return parentActionBarLayout.checkTransitionAnimation() || onTouchEvent(ev);
+     }
+ 
+     @Override
+@@ -120,7 +127,11 @@ public class DrawerLayoutContainer extends FrameLayout {
+ 
+             final LayoutParams lp = (LayoutParams) child.getLayoutParams();
+             try {
+-                child.layout(lp.leftMargin, lp.topMargin + getPaddingTop(), lp.leftMargin + child.getMeasuredWidth(), lp.topMargin + child.getMeasuredHeight() + getPaddingTop());
++                if (inu_drawer != null && inu_drawer.isDrawerChild(child)) {
++                    child.layout(-child.getMeasuredWidth(), lp.topMargin + getPaddingTop(), 0, lp.topMargin + child.getMeasuredHeight() + getPaddingTop());
++                } else {
++                    child.layout(lp.leftMargin, lp.topMargin + getPaddingTop(), lp.leftMargin + child.getMeasuredWidth(), lp.topMargin + child.getMeasuredHeight() + getPaddingTop());
++                }
+             } catch (Exception e) {
+                 FileLog.e(e);
+                 if (BuildVars.DEBUG_VERSION) {
+@@ -172,7 +183,12 @@ public class DrawerLayoutContainer extends FrameLayout {
+ 
+             final LayoutParams lp = (LayoutParams) child.getLayoutParams();
+ 
+-            final int contentWidthSpec = MeasureSpec.makeMeasureSpec(widthSize - lp.leftMargin - lp.rightMargin, MeasureSpec.EXACTLY);
++            final int contentWidthSpec;
++            if (inu_drawer != null && inu_drawer.isDrawerChild(child)) {
++                contentWidthSpec = MeasureSpec.makeMeasureSpec(lp.width > 0 ? lp.width : widthSize - lp.leftMargin - lp.rightMargin, MeasureSpec.EXACTLY);
++            } else {
++                contentWidthSpec = MeasureSpec.makeMeasureSpec(widthSize - lp.leftMargin - lp.rightMargin, MeasureSpec.EXACTLY);
++            }
+             final int contentHeightSpec;
+             if (lp.height > 0) {
+                 contentHeightSpec = MeasureSpec.makeMeasureSpec(lp.height, MeasureSpec.EXACTLY);
+@@ -200,6 +216,9 @@ public class DrawerLayoutContainer extends FrameLayout {
+         if (!allowDrawContent) {
+             return false;
+         }
++        if (inu_drawer != null) {
++            return inu_drawer.drawChild(canvas, child, drawingTime);
++        }
+         return super.drawChild(canvas, child, drawingTime);
+     }
+ 
+diff --git a/TMessagesProj/src/main/java/org/telegram/ui/DialogsActivity.java b/TMessagesProj/src/main/java/org/telegram/ui/DialogsActivity.java
+index 0000000..0000000 100644
+--- a/TMessagesProj/src/main/java/org/telegram/ui/DialogsActivity.java
++++ b/TMessagesProj/src/main/java/org/telegram/ui/DialogsActivity.java
+@@ -3472,6 +3472,10 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
+         } else {
+             if (searchString != null || folderId != 0) {
+                 actionBar.setBackButtonDrawable(backDrawable = new BackDrawable(false));
++            } else if (!hasMainTabs && desu.inugram.InuConfig.OLD_LAYOUT.getValue()) {
++                org.telegram.ui.ActionBar.MenuDrawable menuDrawable = new org.telegram.ui.ActionBar.MenuDrawable();
++                menuDrawable.setRoundCap();
++                actionBar.setBackButtonDrawable(menuDrawable);
+             }
+             if (folderId != 0) {
+                 actionBar.setTitle(getString(R.string.ArchivedChats));
+@@ -3851,6 +3855,11 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
+                     return;
+                 }
+                 if (id == -1) {
++                    if (!hasMainTabs && desu.inugram.InuConfig.OLD_LAYOUT.getValue()
++                            && folderId == 0 && searchString == null
++                            && desu.inugram.helpers.DrawerHelper.INSTANCE.toggleDrawer(parentLayout)) {
++                        return;
++                    }
+                     if (rightSlidingDialogContainer != null && rightSlidingDialogContainer.hasFragment()) {
+                         if (actionBar.isActionModeShowed()) {
+                             if (searchViewPager != null && searchViewPager.getVisibility() == View.VISIBLE && searchViewPager.actionModeShowing()) {
 diff --git a/TMessagesProj/src/main/java/org/telegram/ui/LaunchActivity.java b/TMessagesProj/src/main/java/org/telegram/ui/LaunchActivity.java
 index 0000000..0000000 100644
 --- a/TMessagesProj/src/main/java/org/telegram/ui/LaunchActivity.java
 +++ b/TMessagesProj/src/main/java/org/telegram/ui/LaunchActivity.java
-@@ -562,8 +562,9 @@
+@@ -588,8 +588,7 @@ public class LaunchActivity extends BasePermissionsActivity implements INavigati
              if (!UserConfig.getInstance(currentAccount).isClientActivated()) {
                  actionBarLayout.addFragmentToStack(getClientNotActivatedFragment());
              } else {
 -                MainTabsActivity mainTabsActivity = new MainTabsActivity();
 -                actionBarLayout.addFragmentToStack(mainTabsActivity);
-+                org.telegram.ui.ActionBar.BaseFragment mainFragment = desu.inugram.InuHooks.createMainFragment();
-+                actionBarLayout.addFragmentToStack(mainFragment);
-+                if (desu.inugram.InuConfig.OLD_LAYOUT.getValue()) desu.inugram.helpers.DrawerHelper.INSTANCE.setup(this, drawerLayoutContainer, actionBarLayout);
++                desu.inugram.InuHooks.setupMainFragment(this, actionBarLayout, drawerLayoutContainer);
              }
  
              try {
-@@ -1155,7 +1156,7 @@
+@@ -1216,10 +1215,10 @@ public class LaunchActivity extends BasePermissionsActivity implements INavigati
  
      private boolean switchingAccount;
      public void switchToAccount(int account, boolean removeAll) {
 -        switchToAccount(account, removeAll, obj -> new MainTabsActivity());
-+        switchToAccount(account, removeAll, obj -> (MainTabsActivity) desu.inugram.InuHooks.createMainFragment());
++        switchToAccount(account, removeAll, obj -> desu.inugram.InuHooks.createMainFragment());
      }
  
-     public void switchToAccount(int account, boolean removeAll, GenericProvider<Void, MainTabsActivity> dialogsActivityProvider) {
-@@ -3246,12 +3247,14 @@
+-    public void switchToAccount(int account, boolean removeAll, GenericProvider<Void, MainTabsActivity> dialogsActivityProvider) {
++    public void switchToAccount(int account, boolean removeAll, GenericProvider<Void, org.telegram.ui.ActionBar.BaseFragment> dialogsActivityProvider) {
+         if (account == UserConfig.selectedAccount || !UserConfig.isValidAccount(account)) {
+             return;
+         }
+@@ -1247,7 +1246,7 @@ public class LaunchActivity extends BasePermissionsActivity implements INavigati
+         } else {
+             actionBarLayout.removeFragmentFromStack(0);
+         }
+-        MainTabsActivity mainTabsActivity = dialogsActivityProvider.provide(null);
++        org.telegram.ui.ActionBar.BaseFragment mainTabsActivity = dialogsActivityProvider.provide(null);
+         actionBarLayout.addFragmentToStack(mainTabsActivity, INavigationLayout.FORCE_ATTACH_VIEW_AS_FIRST);
+         actionBarLayout.rebuildFragments(INavigationLayout.REBUILD_FLAG_REBUILD_LAST);
+         if (AndroidUtilities.isTablet()) {
+@@ -3324,12 +3323,7 @@ public class LaunchActivity extends BasePermissionsActivity implements INavigati
                      }
                  } else {
                      if (actionBarLayout.getFragmentStack().isEmpty()) {
@@ -37,19 +155,13 @@ index 0000000..0000000 100644
 -                        DialogsActivity dialogsActivity = mainTabsActivity.prepareDialogsActivity(null);
 -                        if (searchQuery != null) {
 -                            dialogsActivity.setInitialSearchString(searchQuery);
-+                        org.telegram.ui.ActionBar.BaseFragment mainFragment = desu.inugram.InuHooks.createMainFragment();
-+                        if (mainFragment instanceof MainTabsActivity) {
-+                            DialogsActivity dialogsActivity = ((MainTabsActivity) mainFragment).prepareDialogsActivity(null);
-+                            if (searchQuery != null) {
-+                                dialogsActivity.setInitialSearchString(searchQuery);
-+                            }
-                         }
+-                        }
 -                        actionBarLayout.addFragmentToStack(mainTabsActivity, INavigationLayout.FORCE_NOT_ATTACH_VIEW);
-+                        actionBarLayout.addFragmentToStack(mainFragment, INavigationLayout.FORCE_NOT_ATTACH_VIEW);
++                        desu.inugram.InuHooks.addMainFragmentToStack(actionBarLayout, searchQuery);
                      }
                  }
              } else {
-@@ -3259,12 +3262,14 @@
+@@ -3337,12 +3331,7 @@ public class LaunchActivity extends BasePermissionsActivity implements INavigati
                      if (!UserConfig.getInstance(currentAccount).isClientActivated()) {
                          actionBarLayout.addFragmentToStack(getClientNotActivatedFragment(), INavigationLayout.FORCE_NOT_ATTACH_VIEW);
                      } else {
@@ -57,15 +169,9 @@ index 0000000..0000000 100644
 -                        DialogsActivity dialogsActivity = mainTabsActivity.prepareDialogsActivity(null);
 -                        if (searchQuery != null) {
 -                            dialogsActivity.setInitialSearchString(searchQuery);
-+                        org.telegram.ui.ActionBar.BaseFragment mainFragment2 = desu.inugram.InuHooks.createMainFragment();
-+                        if (mainFragment2 instanceof MainTabsActivity) {
-+                            DialogsActivity dialogsActivity2 = ((MainTabsActivity) mainFragment2).prepareDialogsActivity(null);
-+                            if (searchQuery != null) {
-+                                dialogsActivity2.setInitialSearchString(searchQuery);
-+                            }
-                         }
+-                        }
 -                        actionBarLayout.addFragmentToStack(mainTabsActivity, INavigationLayout.FORCE_NOT_ATTACH_VIEW);
-+                        actionBarLayout.addFragmentToStack(mainFragment2, INavigationLayout.FORCE_NOT_ATTACH_VIEW);
++                        desu.inugram.InuHooks.addMainFragmentToStack(actionBarLayout, searchQuery);
                      }
                  }
              }
