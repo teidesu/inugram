@@ -140,7 +140,6 @@ public class DrawerSwipeController {
      * on a non-first folder tab owns the horizontal swipe for tab paging.
      */
     private boolean canTrackGesture() {
-        // Once open/mid-drag, gestures must keep working to close it regardless of stack.
         if (drawerOpened || drawerPosition > 0) return true;
         if (host.parentActionBarLayout.getFragmentStack().size() != 1) return false;
         org.telegram.ui.ActionBar.BaseFragment top = host.parentActionBarLayout.getLastFragment();

@@ -7,7 +7,6 @@ import android.view.ViewGroup
 import android.widget.FrameLayout
 import androidx.recyclerview.widget.LinearLayoutManager
 import desu.inugram.InuConfig
-import desu.inugram.helpers.DrawerHelper.setupMainFragment
 import desu.inugram.ui.drawer.DrawerAddCell
 import desu.inugram.ui.drawer.DrawerLayoutAdapter
 import desu.inugram.ui.drawer.DrawerProfileCell
@@ -171,6 +170,7 @@ object DrawerHelper {
         adapter: DrawerLayoutAdapter,
     ) {
         val account = UserConfig.selectedAccount
+        val close = { drawerLayoutContainer.inu_drawer?.closeDrawer(false) }
 
         // Profile cell (position 0): toggle accounts list. The arrow is purely
         // a rotation indicator — clicks come in on the whole cell.
@@ -183,31 +183,25 @@ object DrawerHelper {
 
         // Account row tap: switch to that account.
         if (view is DrawerUserCell) {
-            val accountNumber = view.accountNumber
-            LaunchActivity.instance?.switchToAccount(accountNumber, true)
-            drawerLayoutContainer.inu_drawer?.closeDrawer(false)
+            LaunchActivity.instance?.switchToAccount(view.accountNumber, true)
+            close()
             return
         }
 
         // "Add account" row.
         if (view is DrawerAddCell) {
-            var availableAccount: Int? = null
-            for (a in UserConfig.MAX_ACCOUNT_COUNT - 1 downTo 0) {
-                if (!UserConfig.getInstance(a).isClientActivated) {
-                    availableAccount = a
-                    break
-                }
-            }
+            val availableAccount = (UserConfig.MAX_ACCOUNT_COUNT - 1 downTo 0)
+                .firstOrNull { !UserConfig.getInstance(it).isClientActivated }
             if (availableAccount != null) {
                 nav.presentFragment(LoginActivity(availableAccount))
-                drawerLayoutContainer.inu_drawer?.closeDrawer(false)
+                close()
             }
             return
         }
 
         // Bot/extension item with custom listener (handled by adapter).
         if (adapter.click(view, position)) {
-            drawerLayoutContainer.inu_drawer?.closeDrawer(false)
+            close()
             return
         }
 
@@ -215,7 +209,7 @@ object DrawerHelper {
         adapter.getAttachMenuBot(position)?.let { bot ->
             val activity = LaunchActivity.instance ?: return
             LaunchActivity.showAttachMenuBot(activity, account, bot, null, true)
-            drawerLayoutContainer.inu_drawer?.closeDrawer(false)
+            close()
             return
         }
 
@@ -225,7 +219,7 @@ object DrawerHelper {
                 args.putLong("user_id", UserConfig.getInstance(account).getClientUserId())
                 args.putBoolean("my_profile", true)
                 nav.presentFragment(ProfileActivity(args))
-                drawerLayoutContainer.inu_drawer?.closeDrawer(false)
+                close()
             }
 
             2 -> { // New Group — mirrors the "New Group" row in ContactsActivity.
@@ -233,7 +227,7 @@ object DrawerHelper {
                     AccountFrozenAlert.show(account)
                 } else {
                     nav.presentFragment(GroupCreateActivity(Bundle()))
-                    drawerLayoutContainer.inu_drawer?.closeDrawer(false)
+                    close()
                 }
             }
 
@@ -241,30 +235,27 @@ object DrawerHelper {
                 val args = Bundle()
                 args.putBoolean("needPhonebook", true)
                 nav.presentFragment(ContactsActivity(args))
-                drawerLayoutContainer.inu_drawer?.closeDrawer(false)
+                close()
             }
 
             10 -> { // Calls
                 nav.presentFragment(CallLogActivity())
-                drawerLayoutContainer.inu_drawer?.closeDrawer(false)
+                close()
             }
 
             11 -> { // Saved Messages: ChatActivity expects user_id, not dialog_id.
                 val args = Bundle()
                 args.putLong("user_id", UserConfig.getInstance(account).getClientUserId())
                 nav.presentFragment(org.telegram.ui.ChatActivity(args))
-                drawerLayoutContainer.inu_drawer?.closeDrawer(false)
+                close()
             }
 
             8 -> { // Settings
                 nav.presentFragment(SettingsActivity())
-                drawerLayoutContainer.inu_drawer?.closeDrawer(false)
+                close()
             }
 
-            else -> {
-                // Unknown id — close drawer to avoid getting stuck.
-                drawerLayoutContainer.inu_drawer?.closeDrawer(false)
-            }
+            else -> close() // Unknown id — avoid getting stuck.
         }
     }
 

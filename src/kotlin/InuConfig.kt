@@ -146,9 +146,6 @@ object InuConfig {
     val NAVIGATION_DRAWER = BoolItem("navigation_drawer", false)
 
     @JvmField
-    val LEGACY_PROFILE = BoolItem("legacy_profile", false)
-
-    @JvmField
     val BOTTOM_TABS_HIDE = BoolItem("bottom_tabs_hide", false)
 
     @JvmField
