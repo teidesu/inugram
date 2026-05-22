@@ -327,6 +327,9 @@
     <string name="InuSuggestCustomEmojiAfter">Suggest custom emoji after regular</string>
     <string name="InuSuggestCustomEmojiAfterInfo">In the \":shortcode\" suggestion popup, show animated/custom emoji after the regular ones instead of before</string>
 
+    <string name="InuEmojiPanelKeywordSearch">Search emoji by keyword</string>
+    <string name="InuEmojiPanelKeywordSearchInfo">In the emoji panel search, show matching regular emoji (not just custom ones) when typing a word</string>
+
     <string name="InuFormattingPopup">Custom formatting popup</string>
     <string name="InuFormattingPopupInfo">Replaces the stock rich text formatting menu with an interactive popup.\nClick to customize…</string>
     <string name="InuFormattingPopupItems">Popup buttons</string>

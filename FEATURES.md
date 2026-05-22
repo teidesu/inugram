@@ -99,6 +99,7 @@ most things are toggleable in `Settings → Inugram`, with sensible opinionated 
 - 🐶 custom formatting popup ui (better ux for span manipulation)
 - 🐶 customizable text classifier (native / improved / off) - reduces false positive expansions
 - show custom emoji *after* regular ones in `:smile` emoji suggestion popup
+- search regular emoji by keyword in the emoji panel (not just custom emoji)
 - "delete for both/all" default checkbox state
 - hide "send as" picker (long-tap stickers button to reveal)
 

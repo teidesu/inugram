@@ -154,3 +154,4 @@ debloat/volume-keys-videos.patch
 bugfix/chat-preview-reactions-read.patch
 feature/better-spoilers.patch
 feature/old-layout-nav.patch
+feature/emoji-panel-keywords.patch

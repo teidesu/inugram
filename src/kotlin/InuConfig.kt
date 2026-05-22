@@ -466,6 +466,9 @@ object InuConfig {
     @JvmField
     val SUGGEST_CUSTOM_EMOJI_AFTER = BoolItem("suggest_custom_emoji_after", true)
 
+    @JvmField
+    val EMOJI_PANEL_KEYWORD_SEARCH = BoolItem("emoji_panel_keyword_search", true)
+
     class TextClassifierModeItem : IntItem("text_classifier_mode", IMPROVED) {
         companion object {
             const val NATIVE = 1

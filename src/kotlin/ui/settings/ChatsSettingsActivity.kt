@@ -161,6 +161,14 @@ class ChatsSettingsActivity : SettingsPageActivity() {
                 InuConfig.SUGGEST_CUSTOM_EMOJI_AFTER.value,
             )
         )
+        items.add(
+            mkTwoLineCheckItem(
+                TOGGLE_EMOJI_PANEL_KEYWORD_SEARCH,
+                R.string.InuEmojiPanelKeywordSearch,
+                R.string.InuEmojiPanelKeywordSearchInfo,
+                InuConfig.EMOJI_PANEL_KEYWORD_SEARCH.value,
+            )
+        )
         items.add(UItem.asShadow(null))
 
         items.add(UItem.asHeader(LocaleController.getString(R.string.InuMiscellaneous)))
@@ -243,6 +251,11 @@ class ChatsSettingsActivity : SettingsPageActivity() {
                 (view as? NotificationsCheckCell)?.isChecked = new
             }
 
+            TOGGLE_EMOJI_PANEL_KEYWORD_SEARCH -> {
+                val new = InuConfig.EMOJI_PANEL_KEYWORD_SEARCH.toggle()
+                (view as? NotificationsCheckCell)?.isChecked = new
+            }
+
             BUTTON_FORMATTING_POPUP -> {
                 val isSwitch = if (LocaleController.isRTL)
                     x < AndroidUtilities.dp(76f)
@@ -296,6 +309,7 @@ class ChatsSettingsActivity : SettingsPageActivity() {
         private val TOGGLE_BOT_WEBVIEW_BUTTON = InuUtils.generateId()
         private val TOGGLE_HIDE_SEND_AS_PICKER = InuUtils.generateId()
         private val TOGGLE_SUGGEST_CUSTOM_EMOJI_AFTER = InuUtils.generateId()
+        private val TOGGLE_EMOJI_PANEL_KEYWORD_SEARCH = InuUtils.generateId()
         private val TOGGLE_SEARCH_FROM_GLOBAL = InuUtils.generateId()
         private val TOGGLE_HIDE_CALL_ACTION_BUTTON = InuUtils.generateId()
 
@@ -324,6 +338,7 @@ class ChatsSettingsActivity : SettingsPageActivity() {
                 SearchRegistry.Entry("hide-send-as-picker", R.string.InuHideSendAsPicker, TOGGLE_HIDE_SEND_AS_PICKER),
                 SearchRegistry.Entry("show-all-recent-stickers", R.string.InuShowAllRecentStickers, TOGGLE_SHOW_ALL_RECENT_STICKERS),
                 SearchRegistry.Entry("suggest-custom-emoji-after", R.string.InuSuggestCustomEmojiAfter, TOGGLE_SUGGEST_CUSTOM_EMOJI_AFTER),
+                SearchRegistry.Entry("emoji-panel-keyword-search", R.string.InuEmojiPanelKeywordSearch, TOGGLE_EMOJI_PANEL_KEYWORD_SEARCH),
                 SearchRegistry.Entry("search-from-global", R.string.InuSearchFromGlobal, TOGGLE_SEARCH_FROM_GLOBAL),
                 SearchRegistry.Entry("hide-call-action-button", R.string.InuHideCallActionButton, TOGGLE_HIDE_CALL_ACTION_BUTTON),
             ),

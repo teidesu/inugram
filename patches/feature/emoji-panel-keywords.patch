@@ -1,0 +1,32 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: alina sireneva <alina@tei.su>
+Date: Fri, 22 May 2026 18:25:49 +0400
+Subject: search by keywords in emoji panel
+
+---
+ .../main/java/org/telegram/ui/Components/EmojiView.java    | 7 ++++++-
+ 1 file changed, 6 insertions(+), 1 deletion(-)
+
+diff --git a/TMessagesProj/src/main/java/org/telegram/ui/Components/EmojiView.java b/TMessagesProj/src/main/java/org/telegram/ui/Components/EmojiView.java
+index 0000000..0000000 100644
+--- a/TMessagesProj/src/main/java/org/telegram/ui/Components/EmojiView.java
++++ b/TMessagesProj/src/main/java/org/telegram/ui/Components/EmojiView.java
+@@ -8329,12 +8329,17 @@ public class EmojiView extends FrameLayout implements
+                                         });
+                                     },
+                                 next -> {
+-                                    if (Emoji.fullyConsistsOfEmojis(query)) {
++                                    if (Emoji.fullyConsistsOfEmojis(query) || desu.inugram.InuConfig.EMOJI_PANEL_KEYWORD_SEARCH.getValue()) {
+                                         MediaDataController.getInstance(currentAccount).getEmojiSuggestions(lastSearchKeyboardLanguage, lastSearchEmojiString, false, (param, alias) -> {
+                                             if (!query.equals(lastSearchEmojiString)) {
+                                                 return;
+                                             }
+                                             lastSearchAlias = alias;
++                                            if (desu.inugram.InuConfig.EMOJI_PANEL_KEYWORD_SEARCH.getValue()) {
++                                                Collections.sort(param, (e1, e2) -> Boolean.compare(
++                                                        e1.emoji != null && e1.emoji.startsWith("animated_"),
++                                                        e2.emoji != null && e2.emoji.startsWith("animated_")));
++                                            }
+                                             resultPre.addAll(param);
+ 
+                                             next.run();
