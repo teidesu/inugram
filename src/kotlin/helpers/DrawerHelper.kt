@@ -1,17 +1,20 @@
 package desu.inugram.helpers
 
+import android.annotation.SuppressLint
 import android.content.Context
 import android.os.Bundle
 import android.view.ViewGroup
 import android.widget.FrameLayout
 import androidx.recyclerview.widget.LinearLayoutManager
 import desu.inugram.InuConfig
+import desu.inugram.helpers.DrawerHelper.setupMainFragment
 import desu.inugram.ui.drawer.DrawerAddCell
 import desu.inugram.ui.drawer.DrawerLayoutAdapter
 import desu.inugram.ui.drawer.DrawerProfileCell
 import desu.inugram.ui.drawer.DrawerSwipeController
 import desu.inugram.ui.drawer.DrawerUserCell
 import desu.inugram.ui.drawer.SideMenultItemAnimator
+import org.telegram.messenger.AndroidUtilities
 import org.telegram.messenger.AndroidUtilities.dp
 import org.telegram.messenger.MessagesController
 import org.telegram.messenger.NotificationCenter
@@ -22,6 +25,7 @@ import org.telegram.ui.ActionBar.DrawerLayoutContainer
 import org.telegram.ui.ActionBar.INavigationLayout
 import org.telegram.ui.ActionBar.Theme
 import org.telegram.ui.CallLogActivity
+import org.telegram.ui.Components.RecyclerListView
 import org.telegram.ui.ContactsActivity
 import org.telegram.ui.DialogsActivity
 import org.telegram.ui.GroupCreateActivity
@@ -30,8 +34,8 @@ import org.telegram.ui.LoginActivity
 import org.telegram.ui.MainTabsActivity
 import org.telegram.ui.ProfileActivity
 import org.telegram.ui.SettingsActivity
-import org.telegram.ui.Components.RecyclerListView
 
+@SuppressLint("StaticFieldLeak")
 object DrawerHelper {
 
     private var adapter: DrawerLayoutAdapter? = null
@@ -41,8 +45,13 @@ object DrawerHelper {
     private var themeObserver: NotificationCenter.NotificationCenterDelegate? = null
 
     @JvmStatic
-    fun createMainFragment(): BaseFragment =
-        if (InuConfig.NAVIGATION_DRAWER.value) DialogsActivity(null) else MainTabsActivity()
+    @JvmOverloads
+    fun createMainFragment(args: Bundle? = null): BaseFragment {
+        if (InuConfig.NAVIGATION_DRAWER.value) return DialogsActivity(args)
+        val main = MainTabsActivity()
+        if (args != null) main.prepareDialogsActivity(args)
+        return main
+    }
 
     /** Root fragment on startup: stock `addFragmentToStack` + navigation drawer wiring. */
     @JvmStatic
@@ -55,11 +64,27 @@ object DrawerHelper {
     @JvmStatic
     fun addMainFragmentToStack(layout: INavigationLayout, searchQuery: String?) {
         val main = createMainFragment()
-        if (main is MainTabsActivity) {
-            val dialogs = main.prepareDialogsActivity(null)
-            if (searchQuery != null) dialogs.setInitialSearchString(searchQuery)
-        }
+        val dialogs = if (main is MainTabsActivity) main.prepareDialogsActivity(null) else main as DialogsActivity
+        if (searchQuery != null) dialogs.setInitialSearchString(searchQuery)
         layout.addFragmentToStack(main, INavigationLayout.FORCE_NOT_ATTACH_VIEW)
+        ensureSetup(layout)
+    }
+
+    /**
+     * Wire the side drawer onto the activity's container once (idempotent), or
+     * refresh its contents if already wired. Needed for login/relogin flows that
+     * present the main fragment outside [setupMainFragment] — without this the
+     * post-login `DialogsActivity` has no drawer.
+     */
+    @JvmStatic
+    fun ensureSetup(layout: INavigationLayout?) {
+        if (!InuConfig.NAVIGATION_DRAWER.value || layout == null) return
+        val dlc = layout.drawerLayoutContainer ?: return
+        if (dlc.inu_drawer == null) {
+            setup(dlc.context, dlc, layout)
+        } else {
+            notifyDataChanged()
+        }
     }
 
     @JvmStatic
@@ -87,17 +112,16 @@ object DrawerHelper {
         val container = FrameLayout(context)
         sideMenuContainer = container
         container.setBackgroundColor(Theme.getColor(Theme.key_chats_menuBackground))
-        container.addView(sm, FrameLayout.LayoutParams(
-            ViewGroup.LayoutParams.MATCH_PARENT,
-            ViewGroup.LayoutParams.MATCH_PARENT,
-        ))
+        container.addView(
+            sm, FrameLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT,
+                ViewGroup.LayoutParams.MATCH_PARENT,
+            )
+        )
 
         val width = minOf(
             dp(320f),
-            android.util.DisplayMetrics().also {
-                (context.getSystemService(Context.WINDOW_SERVICE) as android.view.WindowManager)
-                    .defaultDisplay.getMetrics(it)
-            }.let { minOf(it.widthPixels, it.heightPixels) } - dp(56f)
+            minOf(AndroidUtilities.displaySize.x, AndroidUtilities.displaySize.y) - dp(56f)
         )
 
         val lp = FrameLayout.LayoutParams(width, ViewGroup.LayoutParams.MATCH_PARENT)
@@ -133,6 +157,9 @@ object DrawerHelper {
         sideMenuContainer?.setBackgroundColor(Theme.getColor(Theme.key_chats_menuBackground))
         sideMenu?.let { applySideMenuColors(it) }
         adapter?.notifyDataSetChanged()
+        // Static sunDrawable persists across theme changes; notifyDataSetChanged
+        // rebinds the cell but never re-syncs the day/night frame.
+        adapter?.profileCell?.updateSunDrawable(Theme.isCurrentThemeDark())
     }
 
     @JvmStatic
@@ -200,6 +227,7 @@ object DrawerHelper {
                 nav.presentFragment(ProfileActivity(args))
                 drawerLayoutContainer.inu_drawer?.closeDrawer(false)
             }
+
             2 -> { // New Group — mirrors the "New Group" row in ContactsActivity.
                 if (MessagesController.getInstance(account).isFrozen) {
                     AccountFrozenAlert.show(account)
@@ -208,26 +236,31 @@ object DrawerHelper {
                     drawerLayoutContainer.inu_drawer?.closeDrawer(false)
                 }
             }
+
             6 -> { // Contacts
                 val args = Bundle()
                 args.putBoolean("needPhonebook", true)
                 nav.presentFragment(ContactsActivity(args))
                 drawerLayoutContainer.inu_drawer?.closeDrawer(false)
             }
+
             10 -> { // Calls
                 nav.presentFragment(CallLogActivity())
                 drawerLayoutContainer.inu_drawer?.closeDrawer(false)
             }
+
             11 -> { // Saved Messages: ChatActivity expects user_id, not dialog_id.
                 val args = Bundle()
                 args.putLong("user_id", UserConfig.getInstance(account).getClientUserId())
                 nav.presentFragment(org.telegram.ui.ChatActivity(args))
                 drawerLayoutContainer.inu_drawer?.closeDrawer(false)
             }
+
             8 -> { // Settings
                 nav.presentFragment(SettingsActivity())
                 drawerLayoutContainer.inu_drawer?.closeDrawer(false)
             }
+
             else -> {
                 // Unknown id — close drawer to avoid getting stuck.
                 drawerLayoutContainer.inu_drawer?.closeDrawer(false)

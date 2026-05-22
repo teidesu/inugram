@@ -11,7 +11,6 @@ most things are toggleable in `Settings → Inugram`, with sensible opinionated 
 
 - 🐶 navigation drawer (experimental): replaces the bottom tab bar with the pre-12.0 hamburger side drawer; requires app restart after toggling
 - 🐶 legacy profile layout (experimental): restores the pre-12.0 profile layout (centered avatar, old action button); requires app restart after toggling
-- monet (material you) theme support - *ported from [NagramX](https://github.com/risin42/NagramX)*
 - monet (material you) theme support - *ported from [NagramX](https://github.com/risin42/NagramX)*, plus a quick switcher in appearance settings (light/dark/amoled/auto)
 - 🐶 non-island ui mode for tab bars, global search and chat elements
 - icon replacement (currently: solar pack, [480 Design](https://t.me/Design480)) - *ported from [NagramX](https://github.com/risin42/NagramX)*

@@ -59,10 +59,16 @@ public class DrawerLayoutAdapter extends RecyclerListView.SelectionAdapter {
 
     private int getAccountRowsCount() {
         int count = accountNumbers.size() + 1;
-        if (accountNumbers.size() < UserConfig.MAX_ACCOUNT_COUNT) {
+        if (canAddAccount()) {
             count++;
         }
         return count;
+    }
+
+    // accountNumbers excludes hidden accounts, so it can't gate the add-account
+    // row — use the real activated count against the hard cap instead.
+    private boolean canAddAccount() {
+        return UserConfig.getActivatedAccountsCount() < UserConfig.MAX_ACCOUNT_COUNT;
     }
 
     @Override
@@ -189,7 +195,7 @@ public class DrawerLayoutAdapter extends RecyclerListView.SelectionAdapter {
             if (i < accountNumbers.size()) {
                 return 4;
             } else {
-                if (accountNumbers.size() < UserConfig.MAX_ACCOUNT_COUNT) {
+                if (canAddAccount()) {
                     if (i == accountNumbers.size()){
                         return 5;
                     } else if (i == accountNumbers.size() + 1) {

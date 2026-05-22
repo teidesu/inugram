@@ -140,8 +140,9 @@ public class DrawerSwipeController {
      * on a non-first folder tab owns the horizontal swipe for tab paging.
      */
     private boolean canTrackGesture() {
-        if (host.parentActionBarLayout.getFragmentStack().size() != 1) return false;
+        // Once open/mid-drag, gestures must keep working to close it regardless of stack.
         if (drawerOpened || drawerPosition > 0) return true;
+        if (host.parentActionBarLayout.getFragmentStack().size() != 1) return false;
         org.telegram.ui.ActionBar.BaseFragment top = host.parentActionBarLayout.getLastFragment();
         if (top instanceof org.telegram.ui.DialogsActivity) {
             org.telegram.ui.Components.FilterTabsView tabs = ((org.telegram.ui.DialogsActivity) top).filterTabsView;
@@ -152,6 +153,13 @@ public class DrawerSwipeController {
 
     public boolean onTouchEvent(MotionEvent ev) {
         if (drawerLayout == null || host.parentActionBarLayout.checkTransitionAnimation()) {
+            // A fragment transition mid-drag aborts the gesture; drop the stale
+            // tracking state so the next gesture doesn't resume from it.
+            if (startedTracking || maybeStartTracking) {
+                startedTracking = false;
+                maybeStartTracking = false;
+                if (velocityTracker != null) { velocityTracker.recycle(); velocityTracker = null; }
+            }
             return false;
         }
         if (drawerOpened && ev != null && ev.getX() > drawerPosition && !startedTracking) {

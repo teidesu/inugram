@@ -10,8 +10,8 @@ Suppress ProfileGooeyView morph when old layout is enabled
 Restore linear gradient on profile TopView when old layout is enabled
 ---
  .../ui/Components/ProfileGooeyView.java       |   1 +
- .../java/org/telegram/ui/ProfileActivity.java | 299 +++++++++++-------
- 2 files changed, 189 insertions(+), 111 deletions(-)
+ .../java/org/telegram/ui/ProfileActivity.java | 301 +++++++++++-------
+ 2 files changed, 190 insertions(+), 112 deletions(-)
 
 diff --git a/TMessagesProj/src/main/java/org/telegram/ui/Components/ProfileGooeyView.java b/TMessagesProj/src/main/java/org/telegram/ui/Components/ProfileGooeyView.java
 index 0000000..0000000 100644
@@ -268,15 +268,17 @@ index 0000000..0000000 100644
      private int setAvatarSectionRow;
      private int channelRow;
      private int channelDividerRow;
-@@ -645,7 +645,7 @@ public class ProfileActivity extends BaseFragment implements NotificationCenter.
+@@ -645,8 +645,8 @@ public class ProfileActivity extends BaseFragment implements NotificationCenter.
      private int emptyRow;
      private int emptyRow2;
      private int bottomPaddingRow;
 -    private int infoHeaderRow;
+-    private int infoHeaderRowEmpty;
 +    public int infoHeaderRow;
-     private int infoHeaderRowEmpty;
++    public int infoHeaderRowEmpty;
      private int infoEndRowEmpty;
      private int phoneRow;
+     private int noteRow;
 @@ -849,7 +849,7 @@ public class ProfileActivity extends BaseFragment implements NotificationCenter.
      };
      private boolean fragmentOpened;

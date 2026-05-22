@@ -72,7 +72,7 @@ public final class OldProfileHelper {
 
                 boolean writeButtonVisible = diff > 0.2f && !p.searchMode && (p.imageUpdater == null || p.setAvatarRow == -1);
                 if (writeButtonVisible && p.chatId != 0) {
-                    writeButtonVisible = ChatObject.isChannel(p.currentChat) && !p.currentChat.megagroup && p.chatInfo != null && p.chatInfo.linked_chat_id != 0 && p.infoHeaderRow != -1;
+                    writeButtonVisible = ChatObject.isChannel(p.currentChat) && !p.currentChat.megagroup && p.chatInfo != null && p.chatInfo.linked_chat_id != 0 && (p.infoHeaderRow != -1 || p.infoHeaderRowEmpty != -1);
                 }
                 if (!p.openAnimationInProgress) {
                     boolean currentVisible = p.writeButton.getTag() == null;
