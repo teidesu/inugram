@@ -116,7 +116,7 @@ object InuConfig {
     @JvmField
     val PREDICTIVE_BACK_MODE = PredictiveBackModeItem()
 
-    class TextSpoilerModeItem : IntItem("text_spoiler_mode", DEFAULT) {
+    class TextSpoilerModeItem : IntItem("text_spoiler_mode", SIMPLE) {
         companion object {
             const val DEFAULT = 0
             const val SIMPLE = 1
@@ -128,7 +128,7 @@ object InuConfig {
     val TEXT_SPOILER_MODE = TextSpoilerModeItem()
 
     @JvmField
-    val SPOILER_EXTEND_TO_LINE_END = BoolItem("spoiler_extend_to_line_end", true)
+    val SPOILER_EXTEND_TO_LINE_END = BoolItem("spoiler_extend_to_line_end", false)
 
     @JvmField
     val SIMPLE_MEDIA_SPOILERS = BoolItem("simple_media_spoilers", true)
