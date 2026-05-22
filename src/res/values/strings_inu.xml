@@ -1,8 +1,10 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <string name="InuOpenInDiscussion">Open in discussion</string>
-    <string name="InuOldLayout">Old layout</string>
-    <string name="InuOldLayoutInfo">Restores the pre-12.0 flat design: no glass bottom tabs, no floating islands in chats or dialogs, hamburger drawer navigation, old profile action button. Requires restart.</string>
+    <string name="InuNavigationDrawer">Navigation drawer</string>
+    <string name="InuNavigationDrawerInfo">Replaces the bottom tab bar with the pre-12.0 hamburger side drawer. Requires restart.</string>
+    <string name="InuLegacyProfile">Legacy profile layout</string>
+    <string name="InuLegacyProfileInfo">Restores the pre-12.0 profile layout with the centered avatar and old action button. Requires restart.</string>
     <string name="InuSettings">Inugram Settings</string>
     <string name="InuSettingsInfo">what the dog doin?</string>
     <string name="InuExperimental">Experimental</string>

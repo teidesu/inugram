@@ -21,7 +21,7 @@ index 0000000..0000000 100644
      }
  
      public void setGooeyEnabled(boolean enabled) {
-+        if (desu.inugram.InuConfig.OLD_LAYOUT.getValue()) return;
++        if (desu.inugram.InuConfig.LEGACY_PROFILE.getValue()) return;
          if (this.enabled == enabled) {
              return;
          }
@@ -308,7 +308,7 @@ index 0000000..0000000 100644
              }
  
              int gradientX = getWidth() / 2;
-+            if (desu.inugram.InuConfig.OLD_LAYOUT.getValue()) {
++            if (desu.inugram.InuConfig.LEGACY_PROFILE.getValue()) {
 +                if (backgroundGradient == null || backgroundGradientColor1 != color1 || backgroundGradientColor2 != color2) {
 +                    int gradientHeight = AndroidUtilities.statusBarHeight + AndroidUtilities.dp(144);
 +                    backgroundGradient = new android.graphics.LinearGradient(0, 0, 0, gradientHeight, new int[]{backgroundGradientColor2 = color2, backgroundGradientColor1 = color1}, new float[]{0, 1}, Shader.TileMode.CLAMP);
@@ -349,7 +349,7 @@ index 0000000..0000000 100644
                  }
              });
  
-+            if (!desu.inugram.InuConfig.OLD_LAYOUT.getValue()) {
++            if (!desu.inugram.InuConfig.LEGACY_PROFILE.getValue()) {
              actionsView = new ProfileActionsView(context, dp(74)) {
                  @Override
                  public void setTranslationY(float translationY) {
@@ -365,7 +365,7 @@ index 0000000..0000000 100644
      }
  
      private int getHeaderOnlyExtraHeight() {
-+        if (desu.inugram.InuConfig.OLD_LAYOUT.getValue()) {
++        if (desu.inugram.InuConfig.LEGACY_PROFILE.getValue()) {
 +            return dp(88f);
 +        }
          if (getActionsExtraHeight() == 0) {
@@ -375,7 +375,7 @@ index 0000000..0000000 100644
          return getActionsExtraHeight(true);
      }
      private int getActionsExtraHeight(boolean withMusic) {
-+        if (desu.inugram.InuConfig.OLD_LAYOUT.getValue()) {
++        if (desu.inugram.InuConfig.LEGACY_PROFILE.getValue()) {
 +            return (withMusic && hasMusic) ? dp(25) : 0;
 +        }
          if (userId != 0 && imageUpdater != null && !myProfile)
@@ -415,7 +415,7 @@ index 0000000..0000000 100644
 -                + actionBar.getTranslationY();
 +        float nameX, onlineX;
 +        final float nameTextViewX, nameTextViewY, onlineTextViewX, onlineTextViewY;
-+        if (desu.inugram.InuConfig.OLD_LAYOUT.getValue()) {
++        if (desu.inugram.InuConfig.LEGACY_PROFILE.getValue()) {
 +            // 11.14: refresh nameX/Y/onlineX/Y in the partial-pull-down zone so
 +            // the bezier source point tracks the live avatarScale instead of
 +            // remaining stuck at the value last written by needLayout. nameX and
@@ -509,7 +509,7 @@ index 0000000..0000000 100644
              nameTextView[1].setPivotY(AndroidUtilities.lerp(0, nameTextView[1].getMeasuredHeight(), value));
 -            nameTextView[1].setScaleX(AndroidUtilities.lerp(1f + 0.12f * diff, 1.38f, value));
 -            nameTextView[1].setScaleY(AndroidUtilities.lerp(1f + 0.12f * diff, 1.38f, value));
-+            if (desu.inugram.InuConfig.OLD_LAYOUT.getValue()) {
++            if (desu.inugram.InuConfig.LEGACY_PROFILE.getValue()) {
 +                nameTextView[1].setScaleX(AndroidUtilities.lerp(1.12f, 1.67f, value));
 +                nameTextView[1].setScaleY(AndroidUtilities.lerp(1.12f, 1.67f, value));
 +            } else {
@@ -529,7 +529,7 @@ index 0000000..0000000 100644
 -        params.leftMargin = (int) lerp(dpf2(64f), 0f, value);
 -        fixAvatarImageInCenter();
 -        avatarContainer.requestLayout();
-+        if (desu.inugram.InuConfig.OLD_LAYOUT.getValue()) {
++        if (desu.inugram.InuConfig.LEGACY_PROFILE.getValue()) {
 +            // 11.14: animate translationX (avatarX -> 0) and lerp lp from 42dp.
 +            avatarContainer.setTranslationX(AndroidUtilities.lerp(avatarX, 0f, value));
 +            final FrameLayout.LayoutParams params = (FrameLayout.LayoutParams) avatarContainer.getLayoutParams();
@@ -553,7 +553,7 @@ index 0000000..0000000 100644
              writeButton.setTranslationY((actionBar.getOccupyStatusBar() ? AndroidUtilities.statusBarHeight : 0) + ActionBar.getCurrentActionBarHeight() + extraHeight + searchTransitionOffset - AndroidUtilities.dp(29.5f));
  
 -            writeButtonVisible = diff > 0.2f && !searchMode && !myProfile && (imageUpdater == null || setAvatarRow == -1);
-+            writeButtonVisible = diff > 0.2f && !searchMode && (desu.inugram.InuConfig.OLD_LAYOUT.getValue() || !myProfile) && (imageUpdater == null || setAvatarRow == -1);
++            writeButtonVisible = diff > 0.2f && !searchMode && (desu.inugram.InuConfig.LEGACY_PROFILE.getValue() || !myProfile) && (imageUpdater == null || setAvatarRow == -1);
              if (writeButtonVisible && chatId != 0) {
                  writeButtonVisible = ChatObject.isChannel(currentChat) && !currentChat.megagroup && chatInfo != null && chatInfo.linked_chat_id != 0 && (infoHeaderRow != -1 || infoHeaderRowEmpty != -1);
              }
@@ -561,7 +561,7 @@ index 0000000..0000000 100644
      }
  
      private void needLayout(boolean animated) {
-+        if (desu.inugram.InuConfig.OLD_LAYOUT.getValue()) {
++        if (desu.inugram.InuConfig.LEGACY_PROFILE.getValue()) {
 +            desu.inugram.helpers.OldProfileHelper.needLayout(this, animated);
 +            return;
 +        }

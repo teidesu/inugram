@@ -12,13 +12,16 @@ import desu.inugram.ui.drawer.DrawerSwipeController
 import desu.inugram.ui.drawer.DrawerUserCell
 import desu.inugram.ui.drawer.SideMenultItemAnimator
 import org.telegram.messenger.AndroidUtilities.dp
+import org.telegram.messenger.MessagesController
 import org.telegram.messenger.NotificationCenter
 import org.telegram.messenger.UserConfig
+import org.telegram.ui.AccountFrozenAlert
 import org.telegram.ui.ActionBar.DrawerLayoutContainer
 import org.telegram.ui.ActionBar.INavigationLayout
 import org.telegram.ui.ActionBar.Theme
 import org.telegram.ui.CallLogActivity
 import org.telegram.ui.ContactsActivity
+import org.telegram.ui.GroupCreateActivity
 import org.telegram.ui.LaunchActivity
 import org.telegram.ui.LoginActivity
 import org.telegram.ui.ProfileActivity
@@ -171,13 +174,13 @@ object DrawerHelper {
                 nav.presentFragment(ProfileActivity(args))
                 drawerLayoutContainer.inu_drawer?.closeDrawer(false)
             }
-            2 -> { // New Group
-                val args = Bundle()
-                args.putBoolean("onlyUsers", true)
-                args.putBoolean("destroyAfterSelect", true)
-                args.putBoolean("createGroupAfter", true)
-                nav.presentFragment(ContactsActivity(args))
-                drawerLayoutContainer.inu_drawer?.closeDrawer(false)
+            2 -> { // New Group — mirrors the "New Group" row in ContactsActivity.
+                if (MessagesController.getInstance(account).isFrozen) {
+                    AccountFrozenAlert.show(account)
+                } else {
+                    nav.presentFragment(GroupCreateActivity(Bundle()))
+                    drawerLayoutContainer.inu_drawer?.closeDrawer(false)
+                }
             }
             6 -> { // Contacts
                 val args = Bundle()

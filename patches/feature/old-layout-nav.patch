@@ -101,7 +101,7 @@ index 0000000..0000000 100644
          } else {
              if (searchString != null || folderId != 0) {
                  actionBar.setBackButtonDrawable(backDrawable = new BackDrawable(false));
-+            } else if (!hasMainTabs && desu.inugram.InuConfig.OLD_LAYOUT.getValue()) {
++            } else if (!hasMainTabs && desu.inugram.InuConfig.NAVIGATION_DRAWER.getValue()) {
 +                org.telegram.ui.ActionBar.MenuDrawable menuDrawable = new org.telegram.ui.ActionBar.MenuDrawable();
 +                menuDrawable.setRoundCap();
 +                actionBar.setBackButtonDrawable(menuDrawable);
@@ -112,7 +112,7 @@ index 0000000..0000000 100644
                      return;
                  }
                  if (id == -1) {
-+                    if (!hasMainTabs && desu.inugram.InuConfig.OLD_LAYOUT.getValue()
++                    if (!hasMainTabs && desu.inugram.InuConfig.NAVIGATION_DRAWER.getValue()
 +                            && folderId == 0 && searchString == null
 +                            && desu.inugram.helpers.DrawerHelper.INSTANCE.toggleDrawer(parentLayout)) {
 +                        return;

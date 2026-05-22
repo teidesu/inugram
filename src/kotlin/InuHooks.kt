@@ -191,13 +191,13 @@ object InuHooks {
 
     @JvmStatic
     fun createMainFragment(): BaseFragment =
-        if (InuConfig.OLD_LAYOUT.value) DialogsActivity(null) else MainTabsActivity()
+        if (InuConfig.NAVIGATION_DRAWER.value) DialogsActivity(null) else MainTabsActivity()
 
     /** Root fragment on startup: stock `addFragmentToStack` + Old Layout drawer wiring. */
     @JvmStatic
     fun setupMainFragment(activity: LaunchActivity, layout: INavigationLayout, dlc: DrawerLayoutContainer) {
         layout.addFragmentToStack(createMainFragment())
-        if (InuConfig.OLD_LAYOUT.value) DrawerHelper.setup(activity, dlc, layout)
+        if (InuConfig.NAVIGATION_DRAWER.value) DrawerHelper.setup(activity, dlc, layout)
     }
 
     /** Push the main fragment, forwarding a pending search query when tabs are present. */

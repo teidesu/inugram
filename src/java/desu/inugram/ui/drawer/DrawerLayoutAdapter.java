@@ -249,8 +249,6 @@ public class DrawerLayoutAdapter extends RecyclerListView.SelectionAdapter {
         int callsIcon;
         int savedIcon;
         int settingsIcon;
-        int inviteIcon;
-        int helpIcon;
         if (eventType == 0) {
             newGroupIcon = R.drawable.msg_groups_ny;
             //newSecretIcon = R.drawable.msg_secret_ny;
@@ -259,8 +257,6 @@ public class DrawerLayoutAdapter extends RecyclerListView.SelectionAdapter {
             callsIcon = R.drawable.msg_calls_ny;
             savedIcon = R.drawable.msg_saved_ny;
             settingsIcon = R.drawable.msg_settings_ny;
-            inviteIcon = R.drawable.msg_invite_ny;
-            helpIcon = R.drawable.msg_help_ny;
         } else if (eventType == 1) {
             newGroupIcon = R.drawable.msg_groups_14;
             //newSecretIcon = R.drawable.msg_secret_14;
@@ -269,8 +265,6 @@ public class DrawerLayoutAdapter extends RecyclerListView.SelectionAdapter {
             callsIcon = R.drawable.msg_calls_14;
             savedIcon = R.drawable.msg_saved_14;
             settingsIcon = R.drawable.msg_settings_14;
-            inviteIcon = R.drawable.msg_secret_ny;
-            helpIcon = R.drawable.msg_help;
         } else if (eventType == 2) {
             newGroupIcon = R.drawable.msg_groups_hw;
             //newSecretIcon = R.drawable.msg_secret_hw;
@@ -279,8 +273,6 @@ public class DrawerLayoutAdapter extends RecyclerListView.SelectionAdapter {
             callsIcon = R.drawable.msg_calls_hw;
             savedIcon = R.drawable.msg_saved_hw;
             settingsIcon = R.drawable.msg_settings_hw;
-            inviteIcon = R.drawable.msg_invite_hw;
-            helpIcon = R.drawable.msg_help_hw;
         } else {
             newGroupIcon = R.drawable.msg_groups;
             //newSecretIcon = R.drawable.msg_secret;
@@ -289,8 +281,6 @@ public class DrawerLayoutAdapter extends RecyclerListView.SelectionAdapter {
             callsIcon = R.drawable.msg_calls;
             savedIcon = R.drawable.msg_saved;
             settingsIcon = R.drawable.msg_settings_old;
-            inviteIcon = R.drawable.msg_invite;
-            helpIcon = R.drawable.msg_help;
         }
         boolean showDivider = false;
         items.add(new Item(16, LocaleController.getString(R.string.MyProfile), R.drawable.left_status_profile));
@@ -324,9 +314,6 @@ public class DrawerLayoutAdapter extends RecyclerListView.SelectionAdapter {
         items.add(new Item(10, LocaleController.getString(R.string.Calls), callsIcon));
         items.add(new Item(11, LocaleController.getString(R.string.SavedMessages), savedIcon));
         items.add(new Item(8, LocaleController.getString(R.string.Settings), settingsIcon));
-        items.add(null); // divider
-        items.add(new Item(7, LocaleController.getString(R.string.InviteFriends), inviteIcon));
-        items.add(new Item(13, LocaleController.getString(R.string.TelegramFeatures), helpIcon));
     }
 
     public boolean click(View view, int position) {

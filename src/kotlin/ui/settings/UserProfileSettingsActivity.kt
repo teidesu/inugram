@@ -18,6 +18,15 @@ class UserProfileSettingsActivity : SettingsPageActivity() {
     override fun fillItems(items: ArrayList<UItem>, adapter: UniversalAdapter) {
         items.add(UItem.asHeader(LocaleController.getString(R.string.InuUserProfileHeader)))
         items.add(
+            mkTwoLineCheckItem(
+                TOGGLE_LEGACY_PROFILE,
+                R.string.InuLegacyProfile,
+                R.string.InuLegacyProfileInfo,
+                InuConfig.LEGACY_PROFILE.value,
+                experimental = true,
+            )
+        )
+        items.add(
             UItem.asCheck(
                 TOGGLE_PROFILE_PHOTO_GRADIENT_FADE,
                 LocaleController.getString(R.string.InuProfilePhotoGradientFade)
@@ -69,6 +78,12 @@ class UserProfileSettingsActivity : SettingsPageActivity() {
 
     override fun onClick(item: UItem, view: View, position: Int, x: Float, y: Float) {
         when (item.id) {
+            TOGGLE_LEGACY_PROFILE -> {
+                val new = InuConfig.LEGACY_PROFILE.toggle()
+                (view as? NotificationsCheckCell)?.isChecked = new
+                showRestartBulletin()
+            }
+
             TOGGLE_PROFILE_PHOTO_GRADIENT_FADE -> {
                 val new = InuConfig.PROFILE_PHOTO_GRADIENT_FADE.toggle()
                 (view as? TextCheckCell)?.isChecked = new
@@ -109,6 +124,7 @@ class UserProfileSettingsActivity : SettingsPageActivity() {
     }
 
     companion object {
+        private val TOGGLE_LEGACY_PROFILE = InuUtils.generateId()
         private val TOGGLE_PROFILE_PHOTO_GRADIENT_FADE = InuUtils.generateId()
         private val TOGGLE_REDUCE_PROFILE_MOTION = InuUtils.generateId()
         private val TOGGLE_DISABLE_PROFILE_SCROLL_SNAP = InuUtils.generateId()
@@ -122,6 +138,7 @@ class UserProfileSettingsActivity : SettingsPageActivity() {
             iconRes = R.drawable.msg_openprofile,
             factory = ::UserProfileSettingsActivity,
             entries = listOf(
+                SearchRegistry.Entry("legacy-profile", R.string.InuLegacyProfile, TOGGLE_LEGACY_PROFILE),
                 SearchRegistry.Entry("profile-photo-gradient-fade", R.string.InuProfilePhotoGradientFade, TOGGLE_PROFILE_PHOTO_GRADIENT_FADE),
                 SearchRegistry.Entry("reduce-profile-motion", R.string.InuReduceProfileMotion, TOGGLE_REDUCE_PROFILE_MOTION),
                 SearchRegistry.Entry("disable-profile-scroll-snap", R.string.InuDisableProfileScrollSnap, TOGGLE_DISABLE_PROFILE_SCROLL_SNAP),
