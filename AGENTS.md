@@ -18,6 +18,7 @@ adding, removing or meaningfully changing a patch, update `FEATURES.md` in the s
 - Edit the worktree directly — never touch patch files.
 - This project has no LSP. Do not try to use LSP tools, and do not try to compile the project yourself.
 - When adding instrumentation debug logs, use `android.util.Log.d` instead of `FileLog`
+- When implementing features, avoid using `_solar` icons when there's a non-solar  alternative.
 
 When you'd add fields/methods to stock classes: first try exposing `private` fields instead. Do not be afraid to do so,
 this is cleaner than writing a large chunk of logic inside the patch.

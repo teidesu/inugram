@@ -350,6 +350,8 @@
     <string name="InuSearchFilterPoll">Polls</string>
     <string name="InuSearchFilterOnlyMatches">Only matches</string>
     <string name="InuShowInChat">Show in chat</string>
+    <string name="InuRemoveFromCache">Remove from cache</string>
+    <string name="InuCacheRemoved">File removed from cache</string>
     <string name="InuSelectRange">Select range</string>
     <string name="InuSelectRangeLimit">Selection capped at %1$d messages</string>
     <string name="InuEventLogMediaBeforeEdit">Media before the edit:</string>

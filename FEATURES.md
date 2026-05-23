@@ -77,6 +77,7 @@ most things are toggleable in `Settings → Inugram`, with sensible opinionated 
 - tap a web preview photo to open it in the photo viewer
 - message details from menu (+ show json)
 - per-message statistics from message menu
+- remove single message's file from cache from the message menu
 - customizable message context menu - reorder and hide items + long-tap forward/reply items
 - 🐶 disable custom wallpaper and theme per chat
 - read-only chat "admin" page for non-admins

@@ -34,6 +34,7 @@ import org.telegram.messenger.SendMessagesHelper
 import org.telegram.messenger.TranslateController
 import org.telegram.messenger.UserConfig
 import org.telegram.messenger.UserObject
+import org.telegram.messenger.Utilities
 import org.telegram.tgnet.ConnectionsManager
 import org.telegram.tgnet.TLRPC
 import org.telegram.ui.ActionBar.ActionBarMenu
@@ -80,6 +81,7 @@ object ChatHelper {
     const val OPTION_FORWARD_NO_QUOTE = 509
     const val OPTION_REPLY_IN_DMS = 510
     const val OPTION_SUMMARIZE = 511
+    const val OPTION_REMOVE_FROM_CACHE = 512
 
     private fun removeWallpaperKey(currentAccount: Int, dialogId: Long) = "remove_wallpaper:$currentAccount:$dialogId"
     private fun removeThemeKey(currentAccount: Int, dialogId: Long) = "remove_theme:$currentAccount:$dialogId"
@@ -212,6 +214,14 @@ object ChatHelper {
             items.add(LocaleController.getString(R.string.InuShowInChat))
             options.add(OPTION_SHOW_IN_CHAT)
             icons.add(R.drawable.msg_openin)
+        }
+
+        if (isMenuItemEnabled(MessageMenuConfig.Item.REMOVE_FROM_CACHE) &&
+            hasCachedFile(selectedObject, selectedObjectGroup)
+        ) {
+            items.add(LocaleController.getString(R.string.InuRemoveFromCache))
+            options.add(OPTION_REMOVE_FROM_CACHE)
+            icons.add(R.drawable.msg_clear_solar)
         }
 
         items.add(LocaleController.getString(R.string.InuMessageDetails))
@@ -347,6 +357,22 @@ object ChatHelper {
                 cell.delegate?.didPressSummarize(cell, false)
             }
 
+            OPTION_REMOVE_FROM_CACHE -> {
+                val parent = activity.parentActivity
+                if (parent != null && Build.VERSION.SDK_INT >= 23 &&
+                    (Build.VERSION.SDK_INT <= 28 || BuildVars.NO_SCOPED_STORAGE) &&
+                    parent.checkSelfPermission(Manifest.permission.WRITE_EXTERNAL_STORAGE) != PackageManager.PERMISSION_GRANTED
+                ) {
+                    parent.requestPermissions(
+                        arrayOf(Manifest.permission.WRITE_EXTERNAL_STORAGE),
+                        BasePermissionsActivity.REQUEST_CODE_EXTERNAL_STORAGE,
+                    )
+                    return true
+                }
+                val targets = if (selectedObjectGroup != null) ArrayList(selectedObjectGroup.messages) else listOf(selectedObject)
+                clearMessageCaches(activity, targets)
+            }
+
             OPTION_SHOW_IN_CHAT -> {
                 val args = Bundle()
                 val peerId = activity.dialogId
@@ -404,6 +430,86 @@ object ChatHelper {
         if (!member && InuConfig.HIDE_BOTTOM_BAR_NON_JOINED.value) return true
 
         return false
+    }
+
+    private fun isMenuItemEnabled(item: MessageMenuConfig.Item): Boolean =
+        InuConfig.MESSAGE_MENU_ITEMS.value.any { it.item == item && it.enabled }
+
+    private fun messageDocuments(message: MessageObject): List<TLRPC.Document> {
+        val out = ArrayList<TLRPC.Document>(2)
+        message.getDocument()?.let { out.add(it) }
+        message.messageOwner?.media?.alt_documents?.let { out.addAll(it) }
+        return out
+    }
+
+    private fun partialDownloadFiles(doc: TLRPC.Document): List<File> {
+        val cacheDir = FileLoader.getDirectory(FileLoader.MEDIA_DIR_CACHE) ?: return emptyList()
+        val base = "${doc.dc_id}_${doc.id}"
+        return listOf(
+            File(cacheDir, "${base}.temp"),
+            File(cacheDir, "${base}.temp.enc"),
+            File(cacheDir, "${base}_64.pt"),
+            File(cacheDir, "${base}_64.preload"),
+            File(cacheDir, "${base}_64.iv"),
+            File(cacheDir, "${base}_64.iv.enc"),
+        )
+    }
+
+    private fun hasPartialDownload(message: MessageObject): Boolean {
+        val cacheDir = FileLoader.getDirectory(FileLoader.MEDIA_DIR_CACHE) ?: return false
+        return messageDocuments(message).any { doc ->
+            val base = "${doc.dc_id}_${doc.id}"
+            File(cacheDir, "$base.temp").exists() || File(cacheDir, "$base.temp.enc").exists()
+        }
+    }
+
+    private fun hasCachedFile(selected: MessageObject, group: MessageObject.GroupedMessages?): Boolean {
+        val list = group?.messages ?: listOf(selected)
+        return list.any { it.mediaExists || it.attachPathExists || hasPartialDownload(it) }
+    }
+
+    private fun cachedFilesForMessage(currentAccount: Int, message: MessageObject): List<File> {
+        val owner = message.messageOwner ?: return emptyList()
+        val loader = FileLoader.getInstance(currentAccount)
+        val out = ArrayList<File>(8)
+        owner.attachPath?.takeIf { it.isNotEmpty() }?.let { out.add(File(it)) }
+        loader.getPathToMessage(owner)?.let { out.add(it) }
+        for (doc in messageDocuments(message)) {
+            loader.getPathToAttach(doc, false)?.let { out.add(it) }
+            loader.getPathToAttach(doc, true)?.let { out.add(it) }
+            out.addAll(partialDownloadFiles(doc))
+        }
+        return out
+    }
+
+    private fun clearMessageCaches(activity: ChatActivity, messages: List<MessageObject>) {
+        val account = activity.currentAccount
+        val loader = FileLoader.getInstance(account)
+        // cancel in-progress downloads on the UI thread (cheap) so the loader doesn't race the delete
+        for (msg in messages) {
+            msg.getDocument()?.let { loader.cancelLoadFile(it, true) }
+            FileLoader.getClosestPhotoSizeWithSize(msg.photoThumbs, AndroidUtilities.getPhotoSize(true))
+                ?.let { loader.cancelLoadFile(it, true) }
+        }
+        Utilities.globalQueue.postRunnable {
+            for (msg in messages) {
+                for (file in cachedFilesForMessage(account, msg)) {
+                    runCatching {
+                        if (file.exists() && !file.delete()) file.deleteOnExit()
+                    }
+                }
+                msg.checkMediaExistance()
+            }
+            AndroidUtilities.runOnUIThread {
+                for (msg in messages) {
+                    val cell = activity.findMessageCell(msg.id, false) as? ChatMessageCell ?: continue
+                    cell.updateButtonState(false, true, false)
+                }
+                BulletinFactory.of(activity)
+                    .createSimpleBulletin(R.raw.ic_delete, LocaleController.getString(R.string.InuCacheRemoved))
+                    .show()
+            }
+        }
     }
 
     @JvmStatic

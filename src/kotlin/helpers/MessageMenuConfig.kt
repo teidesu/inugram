@@ -52,6 +52,7 @@ class MessageMenuConfig(key: String) : InuConfig.Item<List<MessageMenuConfig.Ent
         SHARE("share", listOf(ChatActivity.OPTION_SHARE), R.string.ShareFile, R.drawable.msg_share),
         STATISTICS("statistics", listOf(ChatActivity.OPTION_STATISTICS), R.string.Statistics, R.drawable.msg_stats),
         SHOW_IN_CHAT("show_in_chat", listOf(ChatHelper.OPTION_SHOW_IN_CHAT), R.string.InuShowInChat, R.drawable.msg_openin),
+        REMOVE_FROM_CACHE("remove_from_cache", listOf(ChatHelper.OPTION_REMOVE_FROM_CACHE), R.string.InuRemoveFromCache, R.drawable.msg_clear),
         DELETE("delete", listOf(ChatActivity.OPTION_DELETE), R.string.Delete, R.drawable.msg_delete),
         DETAILS("details", listOf(ChatHelper.OPTION_DETAILS), R.string.InuMessageDetails, R.drawable.msg_info);
 
@@ -107,7 +108,7 @@ class MessageMenuConfig(key: String) : InuConfig.Item<List<MessageMenuConfig.Ent
     }
 
     companion object {
-        private val OFF_BY_DEFAULT = setOf(Item.REPLY_IN, Item.DETAILS, Item.FORWARD_NO_QUOTE, Item.SUMMARIZE)
+        private val OFF_BY_DEFAULT = setOf(Item.REPLY_IN, Item.DETAILS, Item.FORWARD_NO_QUOTE, Item.SUMMARIZE, Item.REMOVE_FROM_CACHE)
         val DEFAULT: List<Entry> = Item.entries.map { Entry(it, it !in OFF_BY_DEFAULT) }
     }
 }
