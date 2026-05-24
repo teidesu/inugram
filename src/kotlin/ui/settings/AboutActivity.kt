@@ -1,9 +1,16 @@
 package desu.inugram.ui.settings
 
 import android.content.Context
+import android.graphics.Outline
+import android.graphics.drawable.LayerDrawable
+import android.util.TypedValue
 import android.view.Gravity
 import android.view.View
+import android.view.ViewOutlineProvider
 import android.widget.FrameLayout
+import android.widget.ImageView
+import android.widget.LinearLayout
+import android.widget.TextView
 import desu.inugram.InuConfig
 import desu.inugram.helpers.InuUtils
 import desu.inugram.helpers.UpdateHelper
@@ -17,6 +24,7 @@ import org.telegram.messenger.R
 import org.telegram.messenger.SharedConfig
 import org.telegram.messenger.UserConfig
 import org.telegram.messenger.browser.Browser
+import org.telegram.ui.ActionBar.Theme
 import org.telegram.ui.Cells.TextCheckCell
 import org.telegram.ui.Components.BulletinFactory
 import org.telegram.ui.Components.LayoutHelper
@@ -33,9 +41,7 @@ class AboutActivity : SettingsPageActivity(), NotificationCenter.NotificationCen
     private var bottomInset: Int = 0
 
     override fun fillItems(items: ArrayList<UItem>, adapter: UniversalAdapter) {
-        items.add(
-            UItem.asHeader(UpdateHelper.getVersionInfoString())
-        )
+        items.add(UItem.asCustomShadow(getOrCreateLogoHeader()))
         items.add(
             UItem.asButton(
                 BUTTON_GITHUB,
@@ -203,6 +209,54 @@ class AboutActivity : SettingsPageActivity(), NotificationCenter.NotificationCen
                 }
             }
         }
+    }
+
+    private var logoHeader: View? = null
+    private fun getOrCreateLogoHeader(): View {
+        logoHeader?.let { return it }
+        val ctx = context!!
+        val container = LinearLayout(ctx).apply {
+            orientation = LinearLayout.VERTICAL
+            gravity = Gravity.CENTER_HORIZONTAL
+            setPadding(0, dp(20f), 0, dp(16f))
+        }
+
+        // Layer the background + foreground manually to bypass the AdaptiveIconDrawable
+        // system mask, which would otherwise force a circle/squircle shape regardless
+        // of our outline clip. Negative inset scales the foreground glyph up beyond the
+        // adaptive-icon safe zone; the outline clip trims the overflow.
+        val bg = ctx.getDrawable(R.drawable.icon_background_inu)
+        val fg = ctx.getDrawable(R.drawable.icon_foreground_inu)
+        val layered = LayerDrawable(arrayOf(bg, fg))
+        val fgOverscan = -dp(18f)
+        layered.setLayerInset(1, fgOverscan, fgOverscan, fgOverscan, fgOverscan)
+        val icon = ImageView(ctx).apply {
+            setImageDrawable(layered)
+            clipToOutline = true
+            outlineProvider = object : ViewOutlineProvider() {
+                override fun getOutline(view: View, outline: Outline) {
+                    outline.setRoundRect(0, 0, view.width, view.height, dp(28f).toFloat())
+                }
+            }
+        }
+        container.addView(icon, LinearLayout.LayoutParams(dp(120f), dp(120f)).apply {
+            gravity = Gravity.CENTER_HORIZONTAL
+            bottomMargin = dp(14f)
+        })
+        val version = TextView(ctx).apply {
+            text = UpdateHelper.getVersionInfoString()
+            setTextSize(TypedValue.COMPLEX_UNIT_DIP, 14f)
+            gravity = Gravity.CENTER
+            setTextColor(Theme.getColor(Theme.key_windowBackgroundWhiteGrayText4))
+        }
+        container.addView(version, LinearLayout.LayoutParams(
+            LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT
+        ).apply {
+            leftMargin = dp(48f)
+            rightMargin = dp(48f)
+        })
+        logoHeader = container
+        return container
     }
 
     companion object {
