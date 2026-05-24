@@ -5,9 +5,9 @@ Subject: improved opinionated defaults
 
 ---
  .../java/org/telegram/messenger/LiteMode.java | 22 +++++--------------
- .../org/telegram/messenger/SharedConfig.java  |  6 ++---
+ .../org/telegram/messenger/SharedConfig.java  |  8 +++----
  .../java/org/telegram/ui/LoginActivity.java   |  6 ++---
- 3 files changed, 11 insertions(+), 23 deletions(-)
+ 3 files changed, 12 insertions(+), 24 deletions(-)
 
 diff --git a/TMessagesProj/src/main/java/org/telegram/messenger/LiteMode.java b/TMessagesProj/src/main/java/org/telegram/messenger/LiteMode.java
 index 0000000..0000000 100644
@@ -85,6 +85,15 @@ index 0000000..0000000 100644
              photoLiveDefault = preferences.getBoolean("photoLiveDefault", false);
  
              loadDebugConfig(preferences);
+@@ -1844,7 +1844,7 @@ public class SharedConfig {
+     }
+ 
+     public static boolean isUsingCamera2(int currentAccount) {
+-        return useCamera2Force == null ? !MessagesController.getInstance(currentAccount).androidDisableRoundCamera2 : useCamera2Force;
++        return useCamera2Force == null || useCamera2Force;
+     }
+ 
+     public static void toggleUseCamera2(int currentAccount) {
 diff --git a/TMessagesProj/src/main/java/org/telegram/ui/LoginActivity.java b/TMessagesProj/src/main/java/org/telegram/ui/LoginActivity.java
 index 0000000..0000000 100644
 --- a/TMessagesProj/src/main/java/org/telegram/ui/LoginActivity.java
