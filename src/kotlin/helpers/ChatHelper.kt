@@ -512,6 +512,7 @@ object ChatHelper {
             }
             AndroidUtilities.runOnUIThread {
                 for (msg in messages) {
+                    msg.loadingCancelled = true
                     val cell = activity.findMessageCell(msg.id, false) as? ChatMessageCell ?: continue
                     cell.updateButtonState(false, true, false)
                 }
