@@ -1,0 +1,45 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: alina sireneva <alina@tei.su>
+Date: Sun, 24 May 2026 23:42:07 +0400
+Subject: hopefully fix phantom video seekbar on photos
+
+---
+ .../main/java/org/telegram/ui/PhotoViewer.java  | 17 +++++++++++++++++
+ 1 file changed, 17 insertions(+)
+
+diff --git a/TMessagesProj/src/main/java/org/telegram/ui/PhotoViewer.java b/TMessagesProj/src/main/java/org/telegram/ui/PhotoViewer.java
+index 0000000..0000000 100644
+--- a/TMessagesProj/src/main/java/org/telegram/ui/PhotoViewer.java
++++ b/TMessagesProj/src/main/java/org/telegram/ui/PhotoViewer.java
+@@ -9807,7 +9807,18 @@ public class PhotoViewer implements NotificationCenter.NotificationCenterDelegat
+     }
+ 
+     private void createVideoControlsInterface() {
++        // setParentActivity rebuilds the view tree when the host activity changes, but
++        // videoPlayerControlVisible (object-scoped) carries over. If it's already false,
++        // setVideoPlayerControlVisible(false) short-circuits and the new frame — born VISIBLE
++        // by View default — is never hidden, leaking a stale-looking seekbar onto photos.
++        if (videoPlayerControlAnimator != null) {
++            videoPlayerControlAnimator.cancel();
++            videoPlayerControlAnimator = null;
++        }
++        videoPlayerControlVisible = false;
+         videoPlayerControlFrameLayout = new VideoPlayerControlFrameLayout(containerView.getContext());
++        videoPlayerControlFrameLayout.setVisibility(View.GONE);
++        videoPlayerControlFrameLayout.setAlpha(0f);
+         containerView.addView(videoPlayerControlFrameLayout, LayoutHelper.createFrame(LayoutHelper.MATCH_PARENT, 48, Gravity.BOTTOM | Gravity.LEFT));
+ 
+         final VideoPlayerSeekBar.SeekBarDelegate seekBarDelegate = new VideoPlayerSeekBar.SeekBarDelegate() {
+@@ -11282,6 +11293,12 @@ public class PhotoViewer implements NotificationCenter.NotificationCenterDelegat
+                 anim.addListener(new AnimatorListenerAdapter() {
+                     @Override
+                     public void onAnimationEnd(Animator animation) {
++                        // matches actionBarAnimator's guard — without it, a cancelled hide's
++                        // onAnimationEnd still GONEs a frame that a later show just made VISIBLE.
++                        if (videoPlayerControlAnimator != animation) {
++                            return;
++                        }
++                        videoPlayerControlAnimator = null;
+                         if (!visible) {
+                             videoPlayerControlFrameLayout.setVisibility(View.GONE);
+                         }
