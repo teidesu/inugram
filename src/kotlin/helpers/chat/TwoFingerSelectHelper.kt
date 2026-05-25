@@ -238,13 +238,19 @@ object TwoFingerSelectHelper {
             listView.findChildViewUnder(x, y) as? ChatMessageCell
 
         // true only when the finger lands on the actual drawn photo (where pinch-to-zoom lives),
-        // not the blank margins/caption around it
+        // not the blank margins/caption around it. text messages also reach here for link-preview
+        // images, which reuse photoImage and engage the same pinch helper.
         private fun pointerOnImage(ev: MotionEvent, i: Int): Boolean {
             val x = ev.getX(i)
             val y = ev.getY(i)
             val cell = cellUnder(x, y) ?: return false
             val t = cell.messageObject?.type ?: return false
-            if (t != MessageObject.TYPE_PHOTO && t != MessageObject.TYPE_VIDEO && t != MessageObject.TYPE_GIF) return false
+            val swipable = when (t) {
+                MessageObject.TYPE_PHOTO, MessageObject.TYPE_VIDEO, MessageObject.TYPE_GIF -> true
+                MessageObject.TYPE_TEXT, MessageObject.TYPE_STORY_MENTION -> cell.drawPhotoImage
+                else -> false
+            }
+            if (!swipable) return false
             val img = cell.photoImage ?: return false
             if (!img.hasNotThumb()) return false
             return img.isInsideImage(x - cell.x, y - cell.y)
