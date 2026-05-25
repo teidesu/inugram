@@ -360,6 +360,9 @@ object InuConfig {
     val CALL_CONFIRMATION = BoolItem("call_confirmation", true)
 
     @JvmField
+    val CONFIRM_REACTION_NON_MEMBER = BoolItem("confirm_reaction_non_member", false)
+
+    @JvmField
     val HIDE_CALL_ACTION_BUTTON = BoolItem("hide_call_action_button", true)
 
     class ProfileIdModeItem : IntItem("profile_id_mode", BOT_API_ID) {

@@ -16,8 +16,10 @@ import android.widget.LinearLayout
 import android.widget.ScrollView
 import androidx.core.content.edit
 import desu.inugram.InuConfig
+import desu.inugram.helpers.cloud.SettingsBackupHelper
 import desu.inugram.helpers.menu.MessageMenuConfig
 import desu.inugram.helpers.menu.reorderByMenu
+import desu.inugram.helpers.translate.TranslateHelper
 import desu.inugram.ui.MessageDetailsActivity
 import desu.inugram.ui.showInputDialog
 import org.telegram.messenger.AndroidUtilities
@@ -36,19 +38,21 @@ import org.telegram.messenger.UserConfig
 import org.telegram.messenger.UserObject
 import org.telegram.messenger.Utilities
 import org.telegram.tgnet.TLRPC
-import org.telegram.ui.ActionBar.ActionBarMenuItem
 import org.telegram.ui.ActionBar.ActionBarPopupWindow
+import org.telegram.ui.ActionBar.AlertDialog
 import org.telegram.ui.ActionBar.BottomSheet
-import org.telegram.ui.ActionBar.Theme
 import org.telegram.ui.BasePermissionsActivity
 import org.telegram.ui.Cells.ChatMessageCell
 import org.telegram.ui.ChatActivity
+import org.telegram.ui.Components.AnimatedEmojiSpan
 import org.telegram.ui.Components.BulletinFactory
 import org.telegram.ui.Components.ChatActivityEnterView
 import org.telegram.ui.Components.EditTextCaption
 import org.telegram.ui.Components.ItemOptions
 import org.telegram.ui.Components.PopupSwipeBackLayout
 import org.telegram.ui.Components.RLottieDrawable
+import org.telegram.ui.Components.Reactions.ReactionsLayoutInBubble
+import org.telegram.ui.Components.ReactionsContainerLayout
 import org.telegram.ui.Components.URLSpanUserMention
 import org.telegram.ui.Components.UndoView
 import org.telegram.ui.DialogsActivity
@@ -56,10 +60,10 @@ import org.telegram.ui.LaunchActivity
 import java.io.File
 import java.util.Calendar
 import kotlin.math.roundToInt
-import desu.inugram.helpers.cloud.SettingsBackupHelper
-import desu.inugram.helpers.translate.TranslateHelper
 
 object ChatHelper {
+    private var skipNextReactionConfirm = false
+
     const val OPTION_SAVE = 501
     const val OPTION_DETAILS = 502
     const val OPTION_REPLY_IN = 503
@@ -332,6 +336,74 @@ object ChatHelper {
 
             else -> return false
         }
+        return true
+    }
+
+    @JvmStatic
+    fun maybeConfirmReaction(
+        fragment: ChatActivity,
+        cell: View?,
+        message: MessageObject,
+        reactionsLayout: ReactionsContainerLayout?,
+        fromView: View?,
+        x: Float,
+        y: Float,
+        visibleReaction: ReactionsLayoutInBubble.VisibleReaction,
+        fromDoubleTap: Boolean,
+        bigEmoji: Boolean,
+        addToRecent: Boolean,
+        withoutAnimation: Boolean,
+    ): Boolean {
+        if (!InuConfig.CONFIRM_REACTION_NON_MEMBER.value) return false
+        if (skipNextReactionConfirm) {
+            skipNextReactionConfirm = false
+            return false
+        }
+
+        val chat = fragment.currentChat ?: return false
+        if (!ChatObject.isNotInChat(chat)) return false
+        if (message.hasChosenReaction(visibleReaction)) return false
+        // skip for auto-forwarded messages
+        if (message.messageOwner?.fwd_from?.channel_post != null && message.messageOwner?.fwd_from?.saved_from_msg_id != null) return false
+
+        AlertDialog.Builder(fragment.context)
+            .setTitle(LocaleController.getString(R.string.InuConfirmReactionTitle))
+            .setMessage(run {
+                val emojiToken = "🐶" // placeholder, replaced by AnimatedEmojiSpan for custom emojis
+                val emojiText = visibleReaction.emojicon ?: emojiToken
+                val raw = LocaleController.formatString(R.string.InuConfirmReactionText, emojiText, chat.title ?: "")
+                val text = AndroidUtilities.replaceTags(raw)
+                if (visibleReaction.emojicon == null && visibleReaction.documentId != 0L) {
+                    val idx = text.toString().indexOf(emojiToken)
+                    if (idx >= 0) {
+                        text.setSpan(
+                            AnimatedEmojiSpan(visibleReaction.documentId, null),
+                            idx,
+                            idx + emojiToken.length,
+                            Spanned.SPAN_EXCLUSIVE_EXCLUSIVE,
+                        )
+                    }
+                }
+                text
+            })
+            .setPositiveButton(LocaleController.getString(R.string.OK)) { _, _ ->
+                skipNextReactionConfirm = true
+                fragment.selectReaction(
+                    cell,
+                    message,
+                    reactionsLayout,
+                    fromView,
+                    x,
+                    y,
+                    visibleReaction,
+                    fromDoubleTap,
+                    bigEmoji,
+                    addToRecent,
+                    withoutAnimation
+                )
+            }
+            .setNegativeButton(LocaleController.getString(R.string.Cancel), null)
+            .show()
         return true
     }
 

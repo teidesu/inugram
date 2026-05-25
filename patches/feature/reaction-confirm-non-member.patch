@@ -1,0 +1,22 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: alina sireneva <alina@tei.su>
+Date: Tue, 26 May 2026 00:31:00 +0400
+Subject: confirm sending reactions when not a member
+
+---
+ TMessagesProj/src/main/java/org/telegram/ui/ChatActivity.java | 2 ++
+ 1 file changed, 2 insertions(+)
+
+diff --git a/TMessagesProj/src/main/java/org/telegram/ui/ChatActivity.java b/TMessagesProj/src/main/java/org/telegram/ui/ChatActivity.java
+index 0000000..0000000 100644
+--- a/TMessagesProj/src/main/java/org/telegram/ui/ChatActivity.java
++++ b/TMessagesProj/src/main/java/org/telegram/ui/ChatActivity.java
+@@ -32416,6 +32416,8 @@ public class ChatActivity extends BaseFragment implements
+             return;
+         }
+ 
++        if (desu.inugram.helpers.chat.ChatHelper.maybeConfirmReaction(this, cell, primaryMessage, reactionsLayout, fromView, x, y, visibleReaction, fromDoubleTap, bigEmoji, addToRecent, withoutAnimation)) return;
++
+         ReactionsEffectOverlay.removeCurrent(false);
+         final int currentChosenReactions = primaryMessage.getChoosenReactions().size();
+         final boolean added = primaryMessage.selectReaction(visibleReaction, bigEmoji, fromDoubleTap);

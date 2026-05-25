@@ -111,6 +111,14 @@ class MessagesSettingsActivity : SettingsPageActivity() {
                 InuConfig.HIDE_REACTIONS_ENTRY.value
             )
         )
+        items.add(
+            mkTwoLineCheckItem(
+                TOGGLE_CONFIRM_REACTION_NON_MEMBER,
+                R.string.InuConfirmReactionNonMember,
+                R.string.InuConfirmReactionNonMemberInfo,
+                InuConfig.CONFIRM_REACTION_NON_MEMBER.value,
+            )
+        )
         items.add(UItem.asShadow(null))
 
         items.add(UItem.asHeader(LocaleController.getString(R.string.InuSpoilers)))
@@ -227,6 +235,11 @@ class MessagesSettingsActivity : SettingsPageActivity() {
                 (view as? NotificationsCheckCell)?.isChecked = new
             }
 
+            TOGGLE_CONFIRM_REACTION_NON_MEMBER -> {
+                val new = InuConfig.CONFIRM_REACTION_NON_MEMBER.toggle()
+                (view as? NotificationsCheckCell)?.isChecked = new
+            }
+
             TOGGLE_CHAT_REMEMBER_ALL_REPLIES -> {
                 val new = InuConfig.CHAT_REMEMBER_ALL_REPLIES.toggle()
                 (view as? TextCheckCell)?.isChecked = new
@@ -290,6 +303,7 @@ class MessagesSettingsActivity : SettingsPageActivity() {
         private val TOGGLE_REACTION_BAR_BELOW = InuUtils.generateId()
         private val TOGGLE_CHAT_VIEWS_BOTTOM = InuUtils.generateId()
         private val TOGGLE_HIDE_REACTION_ENTRY = InuUtils.generateId()
+        private val TOGGLE_CONFIRM_REACTION_NON_MEMBER = InuUtils.generateId()
         private val TOGGLE_CHAT_REMEMBER_ALL_REPLIES = InuUtils.generateId()
         private val TOGGLE_SHOW_FORWARD_TIME = InuUtils.generateId()
         private val BUTTON_DOUBLE_TAP_INCOMING = InuUtils.generateId()
@@ -316,6 +330,7 @@ class MessagesSettingsActivity : SettingsPageActivity() {
                 SearchRegistry.Entry("reaction-bar-below", R.string.InuReactionBarBelow, TOGGLE_REACTION_BAR_BELOW),
                 SearchRegistry.Entry("chat-views-bottom", R.string.InuChatViewsBottom, TOGGLE_CHAT_VIEWS_BOTTOM),
                 SearchRegistry.Entry("hide-reaction-entry", R.string.InuHideReactionEntry, TOGGLE_HIDE_REACTION_ENTRY),
+                SearchRegistry.Entry("confirm-reaction-non-member", R.string.InuConfirmReactionNonMember, TOGGLE_CONFIRM_REACTION_NON_MEMBER),
                 SearchRegistry.Entry("message-menu-order", R.string.InuMessageMenuOrder, BUTTON_MESSAGE_MENU_ORDER),
                 SearchRegistry.Entry("chat-remember-all-replies", R.string.InuChatRememberAllReplies, TOGGLE_CHAT_REMEMBER_ALL_REPLIES),
                 SearchRegistry.Entry("show-forward-time", R.string.InuShowForwardTime, TOGGLE_SHOW_FORWARD_TIME),

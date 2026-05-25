@@ -177,6 +177,10 @@
     <string name="InuCallConfirmation">Ask before calling</string>
     <string name="InuCallConfirmationTitle">Confirm calling</string>
     <string name="InuCallConfirmationText">Call **%1$s**?</string>
+    <string name="InuConfirmReactionNonMember">Confirm reactions in non-joined chats</string>
+    <string name="InuConfirmReactionNonMemberInfo">Ask before sending a reaction in a chat you haven\'t joined</string>
+    <string name="InuConfirmReactionTitle">Confirm reaction</string>
+    <string name="InuConfirmReactionText">Send %1$s reaction in **%2$s**?</string>
     <string name="InuNotificationIcon">Notification icon</string>
     <string name="InuNotificationIconTelegram">Telegram</string>
     <string name="InuNotificationIconInugram">Inugram</string>
