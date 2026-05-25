@@ -484,7 +484,11 @@
     <string name="InuDisguiseName" translatable="false">Telegram</string>
     <string name="InuParanoiaMode">Paranoia mode</string>
     <string name="InuParanoiaModeInfo">Paranoia mode lets you \"prepare\" for someone else checking your phone, by hiding any \"dangerous\" chats, and optionally disguising as the stock app.</string>
+    <string name="InuParanoiaFilteringMode">Filtering mode</string>
+    <string name="InuParanoiaFilteringModeBlacklist">Blacklist</string>
+    <string name="InuParanoiaFilteringModeWhitelist">Whitelist</string>
     <string name="InuParanoiaSelect">Chats to hide</string>
+    <string name="InuParanoiaSelectShow">Chats to show</string>
     <string name="InuParanoiaSelectInfo">Secret chats are always hidden</string>
     <string name="InuParanoiaCount">%1$d chats</string>
     <string name="InuParanoiaExitCode">Exit code</string>

@@ -433,7 +433,11 @@
     <string name="InuParanoiaDisguiseInfo">仅更改启动器图标和名称。由于 Android 限制，通知和应用内名称仍显示「Inugram」。</string>
     <string name="InuParanoiaMode">偏执模式</string>
     <string name="InuParanoiaModeInfo">偏执模式让你为他人查看手机做好「准备」：隐藏任何「危险」聊天，并可选择伪装成原版应用。</string>
+    <string name="InuParanoiaFilteringMode">过滤模式</string>
+    <string name="InuParanoiaFilteringModeBlacklist">黑名单</string>
+    <string name="InuParanoiaFilteringModeWhitelist">白名单</string>
     <string name="InuParanoiaSelect">要隐藏的聊天</string>
+    <string name="InuParanoiaSelectShow">要显示的聊天</string>
     <string name="InuParanoiaSelectInfo">私密聊天始终隐藏</string>
     <string name="InuParanoiaCount">%1$d 个聊天</string>
     <string name="InuParanoiaExitCode">退出码</string>

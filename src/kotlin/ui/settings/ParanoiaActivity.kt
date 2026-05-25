@@ -28,7 +28,6 @@ class ParanoiaActivity : SettingsPageActivity() {
     override fun fillItems(items: ArrayList<UItem>, adapter: UniversalAdapter) {
         items.add(UItem.asShadow(LocaleController.getString(R.string.InuParanoiaModeInfo)))
 
-        val count = ParanoiaHelper.getHidden(currentAccount).size
         items.add(
             UItem.asButton(
                 SET_CODE,
@@ -41,12 +40,24 @@ class ParanoiaActivity : SettingsPageActivity() {
         )
         items.add(UItem.asShadow(LocaleController.getString(R.string.InuParanoiaExitCodeInfo)))
 
-
+        val whitelist = ParanoiaHelper.isWhitelistMode
+        val count = ParanoiaHelper.getActiveList(currentAccount).size
+        items.add(
+            UItem.asButton(
+                FILTERING_MODE,
+                R.drawable.inu_tabler_filter,
+                LocaleController.getString(R.string.InuParanoiaFilteringMode),
+                filteringModeLabel(whitelist),
+            )
+        )
         items.add(
             UItem.asButton(
                 SELECT_CHATS,
                 R.drawable.menu_hide_gift,
-                LocaleController.getString(R.string.InuParanoiaSelect),
+                LocaleController.getString(
+                    if (whitelist) R.string.InuParanoiaSelectShow
+                    else R.string.InuParanoiaSelect
+                ),
                 LocaleController.formatString(R.string.InuParanoiaCount, count)
             )
         )
@@ -83,6 +94,17 @@ class ParanoiaActivity : SettingsPageActivity() {
         when (item.id) {
             SELECT_CHATS -> openPicker()
             SET_CODE -> showCodeDialog()
+            FILTERING_MODE -> RadioItemOptions.show(
+                this, view,
+                listOf(
+                    LocaleController.getString(R.string.InuParanoiaFilteringModeBlacklist),
+                    LocaleController.getString(R.string.InuParanoiaFilteringModeWhitelist),
+                ),
+                if (ParanoiaHelper.isWhitelistMode) 1 else 0,
+            ) { which ->
+                ParanoiaHelper.isWhitelistMode = which == 1
+                listView.adapter.update(true)
+            }
             TOGGLE_DISGUISE -> toggleCheck(view, ParanoiaHelper.disguiseIcon) { ParanoiaHelper.disguiseIcon = it }
             TOGGLE_HIDE_OTHER_ACCOUNTS -> toggleCheck(view, ParanoiaHelper.hideOtherAccounts) { ParanoiaHelper.hideOtherAccounts = it }
             TOGGLE_DISABLE_NOTIFICATIONS -> toggleCheck(view, ParanoiaHelper.disableNotifications) { ParanoiaHelper.disableNotifications = it }
@@ -104,13 +126,17 @@ class ParanoiaActivity : SettingsPageActivity() {
 
     private fun openPicker() {
         val args = Bundle().apply {
-            putBoolean("isNeverShare", true)
+            if (ParanoiaHelper.isWhitelistMode) {
+                putBoolean("isAlwaysShare", true)
+            } else {
+                putBoolean("isNeverShare", true)
+            }
             putInt("chatAddType", 2)
         }
         val fragment = GroupCreateActivity(args)
-        fragment.select(ArrayList(ParanoiaHelper.getHidden(currentAccount)), false, false)
+        fragment.select(ArrayList(ParanoiaHelper.getActiveList(currentAccount)), false, false)
         fragment.setDelegate { _, _, ids ->
-            ParanoiaHelper.setHidden(currentAccount, ids)
+            ParanoiaHelper.setActiveList(currentAccount, ids)
             listView.adapter.update(true)
         }
         presentFragment(fragment)
@@ -138,7 +164,7 @@ class ParanoiaActivity : SettingsPageActivity() {
     }
 
     private fun tryEnableParanoia() {
-        if (!ParanoiaHelper.hasExitCode() || ParanoiaHelper.getHidden(currentAccount).isEmpty()) {
+        if (!ParanoiaHelper.hasExitCode() || ParanoiaHelper.getActiveList(currentAccount).isEmpty()) {
             BulletinFactory.of(this)
                 .createErrorBulletin(LocaleController.getString(R.string.InuParanoiaNeedSetup))
                 .show()
@@ -159,9 +185,15 @@ class ParanoiaActivity : SettingsPageActivity() {
     companion object {
         private val SELECT_CHATS = InuUtils.generateId()
         private val SET_CODE = InuUtils.generateId()
+        private val FILTERING_MODE = InuUtils.generateId()
         private val TOGGLE_DISGUISE = InuUtils.generateId()
         private val TOGGLE_HIDE_OTHER_ACCOUNTS = InuUtils.generateId()
         private val TOGGLE_DISABLE_NOTIFICATIONS = InuUtils.generateId()
         private val TOGGLE_HIDE_SETTINGS = InuUtils.generateId()
+
+        private fun filteringModeLabel(whitelist: Boolean): String = LocaleController.getString(
+            if (whitelist) R.string.InuParanoiaFilteringModeWhitelist
+            else R.string.InuParanoiaFilteringModeBlacklist
+        )
     }
 }

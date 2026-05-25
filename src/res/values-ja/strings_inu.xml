@@ -433,7 +433,11 @@
     <string name="InuParanoiaDisguiseInfo">ランチャーのアイコンと名前のみが変わります。Android の制限により、通知やアプリ内の名前は引き続き「Inugram」と表示されます。</string>
     <string name="InuParanoiaMode">パラノイアモード</string>
     <string name="InuParanoiaModeInfo">パラノイアモードでは、「危険な」チャットを隠し、必要に応じて標準アプリに偽装することで、誰かに端末を見られる事態に「備える」ことができます。</string>
+    <string name="InuParanoiaFilteringMode">フィルタリングモード</string>
+    <string name="InuParanoiaFilteringModeBlacklist">ブラックリスト</string>
+    <string name="InuParanoiaFilteringModeWhitelist">ホワイトリスト</string>
     <string name="InuParanoiaSelect">隠すチャット</string>
+    <string name="InuParanoiaSelectShow">表示するチャット</string>
     <string name="InuParanoiaSelectInfo">シークレットチャットは常に隠されます</string>
     <string name="InuParanoiaCount">%1$d 件のチャット</string>
     <string name="InuParanoiaExitCode">解除コード</string>

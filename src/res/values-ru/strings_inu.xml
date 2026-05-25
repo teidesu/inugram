@@ -437,7 +437,11 @@
     <string name="InuParanoiaDisguiseInfo">Меняются только иконка и имя в лаунчере. Из-за ограничений Android уведомления и имя внутри приложения по-прежнему показывают «Inugram».</string>
     <string name="InuParanoiaMode">Режим паранойи</string>
     <string name="InuParanoiaModeInfo">Режим паранойи позволяет «подготовиться» к тому, что кто-то заглянет в ваш телефон: он скрывает любые «опасные» чаты и при желании маскирует приложение под стандартное.</string>
+    <string name="InuParanoiaFilteringMode">Режим фильтрации</string>
+    <string name="InuParanoiaFilteringModeBlacklist">Чёрный список</string>
+    <string name="InuParanoiaFilteringModeWhitelist">Белый список</string>
     <string name="InuParanoiaSelect">Чаты для скрытия</string>
+    <string name="InuParanoiaSelectShow">Чаты для показа</string>
     <string name="InuParanoiaSelectInfo">Секретные чаты скрываются всегда</string>
     <string name="InuParanoiaCount">%1$d чатов</string>
     <string name="InuParanoiaExitCode">Код выхода</string>

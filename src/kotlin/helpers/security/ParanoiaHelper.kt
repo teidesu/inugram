@@ -26,6 +26,23 @@ object ParanoiaHelper {
     @Volatile
     private var hiddenCache: Map<Int, Set<Long>>? = null
 
+    @Volatile
+    private var visibleCache: Map<Int, Set<Long>>? = null
+
+    @Volatile
+    private var whitelistModeCache: Boolean? = null
+
+    private const val MODE_BLACKLIST = 0
+    private const val MODE_WHITELIST = 1
+
+    var isWhitelistMode: Boolean
+        get() = whitelistModeCache
+            ?: (prefs.getInt("filteringMode", MODE_BLACKLIST) == MODE_WHITELIST).also { whitelistModeCache = it }
+        set(value) {
+            prefs.edit { putInt("filteringMode", if (value) MODE_WHITELIST else MODE_BLACKLIST) }
+            whitelistModeCache = value
+        }
+
     fun isParanoia(): Boolean =
         paranoiaCache ?: prefs.getBoolean("paranoia", false).also { paranoiaCache = it }
 
@@ -33,26 +50,47 @@ object ParanoiaHelper {
     fun isHidden(account: Int, dialogId: Long): Boolean {
         if (!isParanoia()) return false
         if (DialogObject.isEncryptedDialog(dialogId)) return true
-        return getHidden(account).contains(dialogId)
+        return if (isWhitelistMode) {
+            !getVisible(account).contains(dialogId)
+        } else {
+            getHidden(account).contains(dialogId)
+        }
     }
 
     fun getHidden(account: Int): Set<Long> {
-        val cache = hiddenCache ?: loadAll().also { hiddenCache = it }
+        val cache = hiddenCache ?: loadAll("hiddenChats").also { hiddenCache = it }
         return cache[account] ?: emptySet()
-    }
-
-    private fun loadAll(): Map<Int, Set<Long>> {
-        val map = HashMap<Int, Set<Long>>()
-        for (a in 0 until UserConfig.MAX_ACCOUNT_COUNT) {
-            val stored = prefs.getStringSet("hiddenChats$a", null) ?: continue
-            map[a] = stored.mapNotNull { it.toLongOrNull() }.toHashSet()
-        }
-        return map
     }
 
     fun setHidden(account: Int, ids: Collection<Long>) {
         prefs.edit { putStringSet("hiddenChats$account", ids.map(Long::toString).toHashSet()) }
         hiddenCache = null
+    }
+
+    fun getVisible(account: Int): Set<Long> {
+        val cache = visibleCache ?: loadAll("visibleChats").also { visibleCache = it }
+        return cache[account] ?: emptySet()
+    }
+
+    fun setVisible(account: Int, ids: Collection<Long>) {
+        prefs.edit { putStringSet("visibleChats$account", ids.map(Long::toString).toHashSet()) }
+        visibleCache = null
+    }
+
+    fun getActiveList(account: Int): Set<Long> =
+        if (isWhitelistMode) getVisible(account) else getHidden(account)
+
+    fun setActiveList(account: Int, ids: Collection<Long>) {
+        if (isWhitelistMode) setVisible(account, ids) else setHidden(account, ids)
+    }
+
+    private fun loadAll(prefix: String): Map<Int, Set<Long>> {
+        val map = HashMap<Int, Set<Long>>()
+        for (a in 0 until UserConfig.MAX_ACCOUNT_COUNT) {
+            val stored = prefs.getStringSet("$prefix$a", null) ?: continue
+            map[a] = stored.mapNotNull { it.toLongOrNull() }.toHashSet()
+        }
+        return map
     }
 
     var hideSettings: Boolean
