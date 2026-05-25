@@ -1,7 +1,9 @@
 package desu.inugram.ui.settings
 
 import android.content.Context
+import android.graphics.Canvas
 import android.graphics.Outline
+import android.graphics.PorterDuff
 import android.graphics.drawable.LayerDrawable
 import android.util.TypedValue
 import android.view.Gravity
@@ -13,24 +15,30 @@ import android.widget.LinearLayout
 import android.widget.TextView
 import desu.inugram.InuConfig
 import desu.inugram.helpers.InuUtils
+import desu.inugram.helpers.LogsHelper
+import desu.inugram.helpers.SystemInfo
 import desu.inugram.helpers.update.UpdateHelper
 import org.telegram.messenger.AndroidUtilities
 import org.telegram.messenger.AndroidUtilities.dp
 import org.telegram.messenger.ApplicationLoader
 import org.telegram.messenger.FileLoader
+import org.telegram.messenger.FileLog
 import org.telegram.messenger.LocaleController
 import org.telegram.messenger.NotificationCenter
 import org.telegram.messenger.R
 import org.telegram.messenger.SharedConfig
 import org.telegram.messenger.UserConfig
+import org.telegram.messenger.Utilities
 import org.telegram.messenger.browser.Browser
 import org.telegram.ui.ActionBar.Theme
 import org.telegram.ui.Cells.TextCheckCell
 import org.telegram.ui.Components.BulletinFactory
+import org.telegram.ui.Components.ItemOptions
 import org.telegram.ui.Components.LayoutHelper
 import org.telegram.ui.Components.UItem
 import org.telegram.ui.Components.UniversalAdapter
 import org.telegram.ui.IUpdateLayout
+import org.telegram.ui.LaunchActivity
 import org.telegram.ui.UpdateLayoutWrapper
 
 class AboutActivity : SettingsPageActivity(), NotificationCenter.NotificationCenterDelegate {
@@ -72,6 +80,19 @@ class AboutActivity : SettingsPageActivity(), NotificationCenter.NotificationCen
             )
         )
         items.add(UItem.asShadow(lastCheckLabel()))
+
+        items.add(UItem.asHeader(LocaleController.getString(R.string.InuLogs)))
+        items.add(
+            UItem.asCheck(
+                TOGGLE_LOGS_ENABLED,
+                LocaleController.getString(R.string.InuLogsEnabled),
+            ).setChecked(LogsHelper.isEnabled())
+        )
+        if (LogsHelper.isEnabled()) {
+            items.add(UItem.asCustom(getOrCreateLogsRow()))
+        }
+        items.add(UItem.asButton(BUTTON_COPY_SYSINFO, LocaleController.getString(R.string.InuLogsCopySystemInfo)))
+        items.add(UItem.asShadow(null))
     }
 
     override fun createView(context: Context): View {
@@ -128,7 +149,22 @@ class AboutActivity : SettingsPageActivity(), NotificationCenter.NotificationCen
                 (view as? TextCheckCell)?.isChecked = new
                 if (!new) UpdateHelper.clearPending()
             }
+
             BUTTON_CHECK_NOW -> runManualCheck()
+            TOGGLE_LOGS_ENABLED -> {
+                val new = !LogsHelper.isEnabled()
+                LogsHelper.setEnabled(new)
+                (view as? TextCheckCell)?.isChecked = new
+                if (new) refreshLogsSize()
+                listView?.adapter?.update(true)
+            }
+
+            BUTTON_COPY_SYSINFO -> {
+                AndroidUtilities.addToClipboard(SystemInfo.build())
+                BulletinFactory.of(this).createCopyBulletin(
+                    LocaleController.getString(R.string.InuLogsSystemInfoCopied)
+                ).show()
+            }
         }
     }
 
@@ -194,19 +230,120 @@ class AboutActivity : SettingsPageActivity(), NotificationCenter.NotificationCen
                 ul.updateAppUpdateViews(acct, animated)
                 applyListPadding()
             }
+
             NotificationCenter.appUpdateLoading -> {
                 ul.updateFileProgress(null)
                 ul.updateAppUpdateViews(acct, true)
             }
+
             NotificationCenter.fileLoadProgressChanged -> {
                 ul.updateFileProgress(args)
             }
+
             NotificationCenter.fileLoaded, NotificationCenter.fileLoadFailed -> {
                 val name = args.getOrNull(0) as? String ?: return
                 val doc = SharedConfig.pendingAppUpdate?.document ?: return
                 if (name == FileLoader.getAttachFileName(doc)) {
                     ul.updateAppUpdateViews(acct, true)
                 }
+            }
+        }
+    }
+
+    private var logsRow: View? = null
+    private var logsSizeText: TextView? = null
+    private var logsSize: Long = -1L
+
+    private fun getOrCreateLogsRow(): View {
+        logsRow?.let { return it }
+        val ctx = context!!
+        val row = object : LinearLayout(ctx) {
+            override fun dispatchDraw(canvas: Canvas) {
+                super.dispatchDraw(canvas)
+                canvas.drawLine(
+                    dp(20f).toFloat(),
+                    height - 1f,
+                    width.toFloat(),
+                    height.toFloat(),
+                    Theme.dividerPaint,
+                )
+            }
+        }.apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+            minimumHeight = dp(50f)
+            setBackgroundColor(Theme.getColor(Theme.key_windowBackgroundWhite))
+            setPadding(dp(21f), 0, dp(8f), 0)
+        }
+        val size = TextView(ctx).apply {
+            setTextColor(Theme.getColor(Theme.key_windowBackgroundWhiteBlackText))
+            setTextSize(TypedValue.COMPLEX_UNIT_DIP, 16f)
+            text = logsSizeLabel(logsSize)
+        }
+        logsSizeText = size
+        row.addView(size, LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f))
+        row.addView(buildLogsIconButton(ctx, R.drawable.msg_clear, R.string.InuLogsClear) {
+            FileLog.cleanupLogs()
+            refreshLogsSize()
+            BulletinFactory.of(this).createSimpleBulletin(
+                R.raw.chats_infotip,
+                LocaleController.getString(R.string.InuLogsCleared),
+            ).show()
+        })
+        row.addView(buildLogsIconButton(ctx, R.drawable.msg_shareout, R.string.InuLogsShare) { anchor ->
+            showShareMenu(anchor)
+        })
+        logsRow = row
+        refreshLogsSize()
+        return row
+    }
+
+    private fun buildLogsIconButton(
+        ctx: Context, iconRes: Int, contentDescRes: Int, onClick: (anchor: View) -> Unit,
+    ): ImageView = ImageView(ctx).apply {
+        setImageResource(iconRes)
+        setColorFilter(Theme.getColor(Theme.key_windowBackgroundWhiteGrayIcon), PorterDuff.Mode.MULTIPLY)
+        background = Theme.createSelectorDrawable(
+            Theme.getColor(Theme.key_listSelector), Theme.RIPPLE_MASK_CIRCLE_20DP,
+        )
+        scaleType = ImageView.ScaleType.CENTER_INSIDE
+        contentDescription = LocaleController.getString(contentDescRes)
+        layoutParams = LinearLayout.LayoutParams(dp(44f), dp(44f))
+        setOnClickListener { onClick(this) }
+    }
+
+    private fun showShareMenu(anchor: View) {
+        val opts = ItemOptions.makeOptions(this, anchor)
+        opts.add(R.drawable.msg_archive, LocaleController.getString(R.string.InuLogsShareZip)) {
+            val activity = parentActivity as? LaunchActivity ?: return@add
+            LogsHelper.shareZip(activity, ::onShareDone)
+        }
+        opts.add(R.drawable.msg_log, LocaleController.getString(R.string.InuLogsShareCurrent)) {
+            val activity = parentActivity as? LaunchActivity ?: return@add
+            LogsHelper.shareCurrent(activity, ::onShareDone)
+        }
+        opts.setGravity(Gravity.END).show()
+    }
+
+    private fun onShareDone(ok: Boolean) {
+        if (!ok) BulletinFactory.of(this).createErrorBulletin(
+            LocaleController.getString(R.string.InuLogsShareError)
+        ).show()
+    }
+
+    private fun logsSizeLabel(size: Long): String = LocaleController.formatString(
+        R.string.InuLogsSize,
+        if (size < 0) "…" else AndroidUtilities.formatFileSize(size),
+    )
+
+    private fun refreshLogsSize() {
+        logsSize = -1L
+        logsSizeText?.text = logsSizeLabel(-1L)
+        Utilities.globalQueue.postRunnable {
+            val size = LogsHelper.computeSize()
+            AndroidUtilities.runOnUIThread {
+                logsSize = size
+                logsSizeText?.text = logsSizeLabel(size)
             }
         }
     }
@@ -249,12 +386,13 @@ class AboutActivity : SettingsPageActivity(), NotificationCenter.NotificationCen
             gravity = Gravity.CENTER
             setTextColor(Theme.getColor(Theme.key_windowBackgroundWhiteGrayText4))
         }
-        container.addView(version, LinearLayout.LayoutParams(
-            LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT
-        ).apply {
-            leftMargin = dp(48f)
-            rightMargin = dp(48f)
-        })
+        container.addView(
+            version, LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT
+            ).apply {
+                leftMargin = dp(48f)
+                rightMargin = dp(48f)
+            })
         logoHeader = container
         return container
     }
@@ -264,5 +402,7 @@ class AboutActivity : SettingsPageActivity(), NotificationCenter.NotificationCen
         private val BUTTON_CHANNEL_LINK = InuUtils.generateId()
         private val TOGGLE_UPDATES_ENABLED = InuUtils.generateId()
         private val BUTTON_CHECK_NOW = InuUtils.generateId()
+        private val TOGGLE_LOGS_ENABLED = InuUtils.generateId()
+        private val BUTTON_COPY_SYSINFO = InuUtils.generateId()
     }
 }

@@ -3,6 +3,7 @@ package desu.inugram
 import android.content.Context
 import android.content.Intent
 import android.os.Build
+import desu.inugram.helpers.CrashReporter
 import desu.inugram.helpers.LoginHelper
 import desu.inugram.helpers.UrlCleanerHelper
 import desu.inugram.helpers.cloud.CloudSettingsHelper
@@ -10,6 +11,7 @@ import desu.inugram.helpers.font.FontHelper
 import desu.inugram.helpers.maps.MapsHelper
 import desu.inugram.helpers.security.PasscodeHelper
 import desu.inugram.helpers.theme.MonetHelper
+import desu.inugram.helpers.update.ApkInstaller
 import desu.inugram.helpers.update.UpdateHelper
 import org.telegram.messenger.AndroidUtilities
 import org.telegram.messenger.LocaleController.getString
@@ -27,6 +29,7 @@ import org.telegram.ui.LauncherIconController
 object InuHooks {
     @JvmStatic
     fun init(context: Context) {
+        CrashReporter.install()
         InuConfig.load(context)
         FontHelper.init(context)
         if (InuConfig.FONT_MODE.value == 2 && Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
@@ -78,6 +81,7 @@ object InuHooks {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
             MonetHelper.refreshMonetThemeIfChanged()
         }
+        CrashReporter.maybeShowReportSheet(launchActivity)
     }
 
     @JvmStatic

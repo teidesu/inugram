@@ -498,4 +498,24 @@
 
     <string name="InuBotSettings">Bot Settings</string>
     <string name="InuBotHelp">Bot Help</string>
+
+    <string name="InuCrashTitle">Inugram crashed last time</string>
+    <string name="InuCrashDesc">Sorry about that. You can share the crash log with the developer to help fix it.</string>
+    <string name="InuCrashShare">Share crash log</string>
+    <string name="InuCrashDiscard">Discard</string>
+    <string name="InuCrashChannel">Crash recovery</string>
+    <string name="InuCrashNotifTitle">Inugram crashed</string>
+    <string name="InuCrashNotifText">Tap to restart</string>
+
+    <string name="InuLogs">Logs</string>
+    <string name="InuLogsEnabled">Enable logs</string>
+    <string name="InuLogsSize">Size: %1$s</string>
+    <string name="InuLogsShare">Share logs</string>
+    <string name="InuLogsShareZip">All logs (.zip)</string>
+    <string name="InuLogsShareCurrent">Current log (.txt)</string>
+    <string name="InuLogsClear">Clear logs</string>
+    <string name="InuLogsCleared">Old logs cleared</string>
+    <string name="InuLogsShareError">Failed to package logs</string>
+    <string name="InuLogsCopySystemInfo">Copy system info</string>
+    <string name="InuLogsSystemInfoCopied">System info copied to clipboard</string>
 </resources>
