@@ -293,6 +293,7 @@ abstract class SettingsPageActivity : UniversalFragment() {
 
     override fun onLongClick(item: UItem, view: View, position: Int, x: Float, y: Float): Boolean {
         val opts = ItemOptions.makeOptions(this, view)
+        (view.parent as? UniversalRecyclerView)?.getClipBackground(view)?.let(opts::setScrimViewBackground)
         if (!addCopyLinkOption(opts, item)) return false
         opts.show()
         return true
