@@ -16,6 +16,7 @@ import org.telegram.messenger.BuildVars
 import org.telegram.messenger.ChatObject
 import org.telegram.messenger.LocaleController
 import org.telegram.messenger.MessageObject
+import org.telegram.messenger.MessagesController
 import org.telegram.messenger.R
 import org.telegram.messenger.UserConfig
 import org.telegram.tgnet.TLRPC
@@ -138,29 +139,31 @@ object ChatActionsHelper {
     }
 
     // --- pinned panel ---
+    // reuses stock's "pin_<dialogId>" key in notifications settings: panel hides
+    // when the stored id matches the top pin, so a new pin reopens it automatically.
 
-    private fun hidePinnedPanelKey(currentAccount: Int, dialogId: Long) =
-        "hide_pinned_panel:$currentAccount:$dialogId"
-
-    @JvmStatic
-    fun isPinnedPanelHidden(currentAccount: Int, dialogId: Long): Boolean =
-        InuConfig.prefs.getBoolean(hidePinnedPanelKey(currentAccount, dialogId), false)
+    private fun stockPinKey(dialogId: Long) = "pin_$dialogId"
 
     @JvmStatic
     fun onPinnedPanelLongPressed(activity: ChatActivity): Boolean {
-        val key = hidePinnedPanelKey(activity.currentAccount, activity.dialogId)
-        val newValue = !InuConfig.prefs.getBoolean(key, false)
-        InuConfig.prefs.edit { putBoolean(key, newValue) }
+        if (activity.pinnedMessageIds.isEmpty()) return false
+        val prefs = MessagesController.getNotificationsSettings(activity.currentAccount)
+        prefs.edit { putInt(stockPinKey(activity.dialogId), activity.pinnedMessageIds[0]) }
         activity.wasManualScroll = true
         activity.updatePinnedMessageView(true)
+        BulletinFactory.createUnpinAllMessagesBulletin(
+            activity, 0, true,
+            { showPinnedPanel(activity) },
+            null,
+            activity.resourceProvider,
+        )?.show()
         return true
     }
 
     @JvmStatic
     fun showPinnedPanel(activity: ChatActivity) {
-        val key = hidePinnedPanelKey(activity.currentAccount, activity.dialogId)
-        if (!InuConfig.prefs.getBoolean(key, false)) return
-        InuConfig.prefs.edit { remove(key) }
+        val prefs = MessagesController.getNotificationsSettings(activity.currentAccount)
+        prefs.edit { remove(stockPinKey(activity.dialogId)) }
         activity.wasManualScroll = true
         activity.updatePinnedMessageView(true)
     }
@@ -168,8 +171,13 @@ object ChatActionsHelper {
     @JvmStatic
     fun updateShowPinnedMenuItem(activity: ChatActivity, hasPinnedMessages: Boolean) {
         val headerItem = activity.headerItem ?: return
-        val shouldShow = hasPinnedMessages && isPinnedPanelHidden(activity.currentAccount, activity.dialogId)
-        headerItem.setSubItemShown(ACTION_SHOW_PINNED_PANEL, shouldShow)
+        if (!hasPinnedMessages) {
+            headerItem.setSubItemShown(ACTION_SHOW_PINNED_PANEL, false)
+            return
+        }
+        val prefs = MessagesController.getNotificationsSettings(activity.currentAccount)
+        val hidden = prefs.getInt(stockPinKey(activity.dialogId), 0) == activity.pinnedMessageIds[0]
+        headerItem.setSubItemShown(ACTION_SHOW_PINNED_PANEL, hidden)
     }
 
     // --- selection action mode ---

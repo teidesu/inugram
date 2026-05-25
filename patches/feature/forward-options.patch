@@ -19,7 +19,7 @@ index 0000000..0000000 100644
                  if (messagePreviewParams.isEmpty() && editingMessageObject == null) {
                      messagePreviewParams = null;
                  }
-@@ -30547,7 +30548,7 @@ public class ChatActivity extends BaseFragment implements
+@@ -30543,7 +30544,7 @@ public class ChatActivity extends BaseFragment implements
              final boolean showSponsorInfo = !suggestEdit && selectedObject != null && selectedObject.isSponsored() && (selectedObject.sponsoredInfo != null || selectedObject.sponsoredAdditionalInfo != null || selectedObject.sponsoredUrl != null && !selectedObject.sponsoredUrl.startsWith("https://" + getMessagesController().linkPrefix));
              final boolean isReactionsAvailableFinal = !suggestEdit && isReactionsAvailable;
  
@@ -28,7 +28,7 @@ index 0000000..0000000 100644
              if (isReactionsViewAvailable || showMessageSeen || showSponsorInfo) {
                  flags |= ActionBarPopupWindow.ActionBarPopupWindowLayout.FLAG_USE_SWIPEBACK;
              }
-@@ -32857,6 +32858,7 @@ public class ChatActivity extends BaseFragment implements
+@@ -32853,6 +32854,7 @@ public class ChatActivity extends BaseFragment implements
                  break;
              }
              case OPTION_FORWARD: {
@@ -36,7 +36,7 @@ index 0000000..0000000 100644
                  if (getMessagesController().isFrozen()) {
                      AccountFrozenAlert.show(currentAccount);
                      selectedObject = null;
-@@ -33925,8 +33927,9 @@ public class ChatActivity extends BaseFragment implements
+@@ -33921,8 +33923,9 @@ public class ChatActivity extends BaseFragment implements
                          params.suggestionParams = messageSuggestionParams;
                          getSendMessagesHelper().sendMessage(params);
                      }

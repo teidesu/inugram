@@ -29,7 +29,7 @@ index 0000000..0000000 100644
                      if (avatarContainer != null) {
                          avatarContainer.setTitleExpand(showAudioCallAsIcon);
                      }
-@@ -29180,7 +29180,7 @@ public class ChatActivity extends BaseFragment implements
+@@ -29176,7 +29176,7 @@ public class ChatActivity extends BaseFragment implements
          super.setInPreviewMode(value);
          if (currentUser != null && audioCallIconItem != null) {
              TLRPC.UserFull userFull = getMessagesController().getUserFull(currentUser.id);

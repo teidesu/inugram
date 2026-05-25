@@ -32,7 +32,7 @@ diff --git a/TMessagesProj/src/main/java/org/telegram/ui/ChatActivity.java b/TMe
 index 0000000..0000000 100644
 --- a/TMessagesProj/src/main/java/org/telegram/ui/ChatActivity.java
 +++ b/TMessagesProj/src/main/java/org/telegram/ui/ChatActivity.java
-@@ -39902,12 +39902,12 @@ public class ChatActivity extends BaseFragment implements
+@@ -39898,12 +39898,12 @@ public class ChatActivity extends BaseFragment implements
  
          @Override
          public boolean canPerformActions() {
