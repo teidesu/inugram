@@ -10,8 +10,10 @@ import org.telegram.messenger.AndroidUtilities
 import org.telegram.messenger.LocaleController
 import org.telegram.messenger.R
 import org.telegram.messenger.Utilities
+import org.telegram.ui.ActionBar.Theme
 import org.telegram.ui.Cells.NotificationsCheckCell
 import org.telegram.ui.Cells.TextCheckCell
+import org.telegram.ui.Cells.TextDetailSettingsCell
 import org.telegram.ui.Components.BulletinFactory
 import org.telegram.ui.Components.ItemOptions
 import org.telegram.ui.Components.UItem
@@ -19,6 +21,8 @@ import org.telegram.ui.Components.UniversalAdapter
 
 class PrivacySecurityActivity : SettingsPageActivity() {
     override fun getTitle(): CharSequence = LocaleController.getString(R.string.InuPrivacySecurity)
+
+    private var sourceRow: TextDetailSettingsCell? = null
 
     override fun fillItems(items: ArrayList<UItem>, adapter: UniversalAdapter) {
         items.add(
@@ -46,7 +50,6 @@ class PrivacySecurityActivity : SettingsPageActivity() {
                 LocaleController.getString(R.string.InuHideMyPhoneNumber)
             ).setChecked(InuConfig.HIDE_MY_PHONE_NUMBER.value)
         )
-        items.add(stripTrackingParamsItem())
         items.add(
             mkTwoLineCheckItem(
                 TOGGLE_DISABLE_DRAFT_UPLOAD,
@@ -55,6 +58,22 @@ class PrivacySecurityActivity : SettingsPageActivity() {
                 InuConfig.DISABLE_DRAFT_UPLOAD.value
             )
         )
+        items.add(UItem.asShadow(null))
+
+        items.add(UItem.asHeader(LocaleController.getString(R.string.InuStripTrackingParams)))
+        items.add(
+            UItem.asCheck(
+                TOGGLE_STRIP_TRACKING_PARAMS_ON_OPEN,
+                LocaleController.getString(R.string.InuStripTrackingParamsOnOpen)
+            ).setChecked(InuConfig.STRIP_TRACKING_PARAMS_ON_OPEN.value)
+        )
+        items.add(
+            UItem.asCheck(
+                TOGGLE_STRIP_TRACKING_PARAMS_ON_PASTE,
+                LocaleController.getString(R.string.InuStripTrackingParamsOnPaste)
+            ).setChecked(InuConfig.STRIP_TRACKING_PARAMS_ON_PASTE.value)
+        )
+        items.add(UItem.asCustom(BUTTON_STRIP_TRACKING_PARAMS_SOURCE, getOrCreateSourceRow()))
         items.add(UItem.asShadow(null))
     }
 
@@ -68,9 +87,14 @@ class PrivacySecurityActivity : SettingsPageActivity() {
                 (view as? TextCheckCell)?.isChecked = new
             }
 
-            TOGGLE_STRIP_TRACKING_PARAMS -> {
-                val new = InuConfig.STRIP_TRACKING_PARAMS.toggle()
-                (view as? NotificationsCheckCell)?.isChecked = new
+            TOGGLE_STRIP_TRACKING_PARAMS_ON_OPEN -> {
+                val new = InuConfig.STRIP_TRACKING_PARAMS_ON_OPEN.toggle()
+                (view as? TextCheckCell)?.isChecked = new
+            }
+
+            TOGGLE_STRIP_TRACKING_PARAMS_ON_PASTE -> {
+                val new = InuConfig.STRIP_TRACKING_PARAMS_ON_PASTE.toggle()
+                (view as? TextCheckCell)?.isChecked = new
             }
 
             TOGGLE_DISABLE_DRAFT_UPLOAD -> {
@@ -80,32 +104,30 @@ class PrivacySecurityActivity : SettingsPageActivity() {
         }
     }
 
-    override fun onLongClick(item: UItem, view: View, position: Int, x: Float, y: Float): Boolean {
-        if (item.id == TOGGLE_STRIP_TRACKING_PARAMS) {
-            showStripTrackingParamsOptions(item, view)
-            return true
-        }
-        return super.onLongClick(item, view, position, x, y)
+    private fun getOrCreateSourceRow(): TextDetailSettingsCell {
+        sourceRow?.let { return it }
+        val cell = TextDetailSettingsCell(context!!)
+        cell.setBackground(Theme.createSelectorWithBackgroundDrawable(
+            Theme.getColor(Theme.key_windowBackgroundWhite),
+            Theme.getColor(Theme.key_listSelector),
+        ))
+        cell.setOnClickListener { showStripTrackingParamsOptions(it) }
+        cell.setOnLongClickListener { showStripTrackingParamsOptions(it); true }
+        sourceRow = cell
+        refreshSourceRow()
+        return cell
     }
 
-    private fun stripTrackingParamsItem(): UItem {
-        val title = LocaleController.getString(R.string.InuStripTrackingParams)
+    private fun refreshSourceRow() {
+        val cell = sourceRow ?: return
+        val title = LocaleController.getString(R.string.InuStripTrackingParamsSourceRow)
         val subtitle = LocaleController.formatString(
             R.string.InuStripTrackingParamsSource, UrlCleanerHelper.lastUpdated ?: "?",
         )
-        val checked = InuConfig.STRIP_TRACKING_PARAMS.value
-        return UItem.asButtonCheck(TOGGLE_STRIP_TRACKING_PARAMS, title, subtitle).also {
-            it.checked = checked
-            it.bind = Utilities.Callback { view ->
-                (view as? NotificationsCheckCell)?.apply {
-                    setTextAndValueAndCheck(title, subtitle, checked, 0, true, true)
-                    setDrawLine(false)
-                }
-            }
-        }
+        cell.setTextAndValue(title, subtitle, false)
     }
 
-    private fun showStripTrackingParamsOptions(item: UItem, anchor: View) {
+    private fun showStripTrackingParamsOptions(anchor: View) {
         val opts = ItemOptions.makeOptions(this, anchor)
             .add(R.drawable.msg_download, LocaleController.getString(R.string.InuStripTrackingParamsUpdate)) {
                 fetchLatestStripTrackingParams()
@@ -115,11 +137,10 @@ class PrivacySecurityActivity : SettingsPageActivity() {
                 UrlCleanerHelper.resetToBundled()
                 Utilities.globalQueue.postRunnable {
                     UrlCleanerHelper.preload()
-                    AndroidUtilities.runOnUIThread { listView?.adapter?.update(true) }
+                    AndroidUtilities.runOnUIThread { refreshSourceRow() }
                 }
             }
         }
-        addCopyLinkOption(opts, item)
         opts.show()
     }
 
@@ -128,7 +149,7 @@ class PrivacySecurityActivity : SettingsPageActivity() {
             val result = runCatching { UrlCleanerHelper.fetchLatest() }
             UrlCleanerHelper.preload()
             AndroidUtilities.runOnUIThread {
-                listView?.adapter?.update(true)
+                refreshSourceRow()
                 val bulletin = BulletinFactory.of(this)
                 result.fold(
                     onSuccess = { updated ->
@@ -152,7 +173,9 @@ class PrivacySecurityActivity : SettingsPageActivity() {
         private val BUTTON_PASSCODE = InuUtils.generateId()
         private val BUTTON_PARANOIA = InuUtils.generateId()
         private val TOGGLE_HIDE_MY_PHONE_NUMBER = InuUtils.generateId()
-        private val TOGGLE_STRIP_TRACKING_PARAMS = InuUtils.generateId()
+        private val TOGGLE_STRIP_TRACKING_PARAMS_ON_OPEN = InuUtils.generateId()
+        private val TOGGLE_STRIP_TRACKING_PARAMS_ON_PASTE = InuUtils.generateId()
+        private val BUTTON_STRIP_TRACKING_PARAMS_SOURCE = InuUtils.generateId()
         private val TOGGLE_DISABLE_DRAFT_UPLOAD = InuUtils.generateId()
 
         @JvmField val PAGE = SearchRegistry.Page(
@@ -162,7 +185,8 @@ class PrivacySecurityActivity : SettingsPageActivity() {
             factory = ::PrivacySecurityActivity,
             entries = listOf(
                 SearchRegistry.Entry("hide-my-phone-number", R.string.InuHideMyPhoneNumber, TOGGLE_HIDE_MY_PHONE_NUMBER),
-                SearchRegistry.Entry("strip-tracking-params", R.string.InuStripTrackingParams, TOGGLE_STRIP_TRACKING_PARAMS),
+                SearchRegistry.Entry("strip-tracking-params", R.string.InuStripTrackingParamsOnOpen, TOGGLE_STRIP_TRACKING_PARAMS_ON_OPEN),
+                SearchRegistry.Entry("strip-tracking-params-paste", R.string.InuStripTrackingParamsOnPaste, TOGGLE_STRIP_TRACKING_PARAMS_ON_PASTE),
                 SearchRegistry.Entry("disable-draft-upload", R.string.InuDisableDraftUpload, TOGGLE_DISABLE_DRAFT_UPLOAD),
             ),
         )

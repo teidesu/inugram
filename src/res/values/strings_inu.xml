@@ -293,7 +293,10 @@
     <string name="InuHideFadeView">Hide fade views</string>
 
     <string name="InuStripTrackingParams">Strip tracking parameters</string>
+    <string name="InuStripTrackingParamsOnOpen">When opening links</string>
+    <string name="InuStripTrackingParamsOnPaste">When pasting</string>
     <string name="InuStripTrackingParamsSource">AdGuard URL Tracking filter, updated %1$s</string>
+    <string name="InuStripTrackingParamsSourceRow">Filter source</string>
     <string name="InuStripTrackingParamsUpdate">Update rules from AdGuard</string>
     <string name="InuStripTrackingParamsRevert">Revert to bundled rules</string>
     <string name="InuStripTrackingParamsUpdated">Rules updated</string>
