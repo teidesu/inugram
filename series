@@ -164,3 +164,4 @@ bugfix/hq-stickers-editor.patch
 feature/no-selection-cap.patch
 feature/seekable-gifs.patch
 feature/disable-browser-collapse.patch
+bugfix/pause-on-media-transient.patch

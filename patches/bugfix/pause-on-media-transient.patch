@@ -1,0 +1,22 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: alina sireneva <alina@tei.su>
+Date: Tue, 26 May 2026 22:58:30 +0400
+Subject: use AUDIOFOCUS_GAIN_TRANSIENT for voice/round when "pause music on media" is set
+
+---
+ .../src/main/java/org/telegram/messenger/MediaController.java   | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/TMessagesProj/src/main/java/org/telegram/messenger/MediaController.java b/TMessagesProj/src/main/java/org/telegram/messenger/MediaController.java
+index 0000000..0000000 100644
+--- a/TMessagesProj/src/main/java/org/telegram/messenger/MediaController.java
++++ b/TMessagesProj/src/main/java/org/telegram/messenger/MediaController.java
+@@ -3175,7 +3175,7 @@ public class MediaController implements AudioManager.OnAudioFocusChangeListener,
+             if (neededAudioFocus == 3) {
+                 result = NotificationsController.audioManager.requestAudioFocus(this, AudioManager.STREAM_VOICE_CALL, AudioManager.AUDIOFOCUS_GAIN);
+             } else {
+-                result = NotificationsController.audioManager.requestAudioFocus(this, AudioManager.STREAM_MUSIC, neededAudioFocus == 2 && !SharedConfig.pauseMusicOnMedia ? AudioManager.AUDIOFOCUS_GAIN_TRANSIENT_MAY_DUCK : AudioManager.AUDIOFOCUS_GAIN);
++                result = NotificationsController.audioManager.requestAudioFocus(this, AudioManager.STREAM_MUSIC, neededAudioFocus == 2 ? (SharedConfig.pauseMusicOnMedia ? AudioManager.AUDIOFOCUS_GAIN_TRANSIENT : AudioManager.AUDIOFOCUS_GAIN_TRANSIENT_MAY_DUCK) : AudioManager.AUDIOFOCUS_GAIN);
+             }
+             if (result == AudioManager.AUDIOFOCUS_REQUEST_GRANTED) {
+                 audioFocus = AUDIO_FOCUSED;
