@@ -94,13 +94,17 @@ object SpoilerHelper {
     }
 
     @JvmStatic
-    fun drawMediaSpoilerIfOverridden(canvas: Canvas, left: Float, top: Float, right: Float, bottom: Float, alpha: Float): Boolean {
+    fun drawMediaSpoilerIfOverridden(canvas: Canvas, left: Float, top: Float, right: Float, bottom: Float, alpha: Float, isSelfDestruct: Boolean): Boolean {
         if (!InuConfig.SIMPLE_MEDIA_SPOILERS.value) return false
         val clampedAlpha = alpha.coerceIn(0f, 1f)
 
         solidPaint.color = Color.BLACK
         solidPaint.alpha = (110 * clampedAlpha).toInt().coerceIn(0, 255)
         canvas.drawRect(left, top, right, bottom, solidPaint)
+
+        // Self-destruct media (view-once / timed) already carries its own stock indicator;
+        // the "MEDIA SPOILER" pill would be redundant, so keep just the overlay.
+        if (isSelfDestruct) return true
 
         val label = LocaleController.getString(R.string.InuMediaSpoilerLabel).uppercase()
         val padH = dp(16f).toFloat()
