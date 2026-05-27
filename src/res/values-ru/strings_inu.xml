@@ -478,8 +478,10 @@
     <string name="InuSpoilerExtendToLineEnd">Растягивать спойлеры до конца строки</string>
     <string name="InuSpoilerExtendToLineEndInfo">Растягивает блоки спойлеров до края строки, когда текст немного не дотягивает</string>
     <string name="InuMediaSpoilerLabel">Спойлер</string>
-    <string name="InuSimpleMediaSpoilers">Простые медиа-спойлеры</string>
-    <string name="InuSimpleMediaSpoilersInfo">Заменяет анимированный эффект частиц на фото и видео спойлерах статичным размытием и надписью в плашке</string>
+    <string name="InuMediaSpoilerMode">Стиль медиа-спойлеров</string>
+    <string name="InuMediaSpoilerModeTelegram">Telegram</string>
+    <string name="InuMediaSpoilerModePill">Плашка</string>
+    <string name="InuMediaSpoilerModeCircle">Кружок</string>
     <string name="InuSpoilers">Спойлеры</string>
     <string name="InuDisableVolumePlayVideo">Отключить запуск видео клавишами громкости</string>
     <string name="InuDisableVolumePlayVideoInfo">Не запускать видимое видео со звуком при нажатии клавиш громкости в чате</string>

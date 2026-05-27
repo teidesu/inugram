@@ -130,11 +130,10 @@ class MessagesSettingsActivity : SettingsPageActivity() {
             )
         )
         items.add(
-            mkTwoLineCheckItem(
-                TOGGLE_SIMPLE_MEDIA_SPOILERS,
-                R.string.InuSimpleMediaSpoilers,
-                R.string.InuSimpleMediaSpoilersInfo,
-                InuConfig.SIMPLE_MEDIA_SPOILERS.value,
+            UItem.asButton(
+                BUTTON_MEDIA_SPOILER_MODE,
+                LocaleController.getString(R.string.InuMediaSpoilerMode),
+                mediaSpoilerModeLabel(InuConfig.MEDIA_SPOILER_MODE.value),
             )
         )
         items.add(
@@ -255,9 +254,17 @@ class MessagesSettingsActivity : SettingsPageActivity() {
                 (view as? NotificationsCheckCell)?.isChecked = new
             }
 
-            TOGGLE_SIMPLE_MEDIA_SPOILERS -> {
-                val new = InuConfig.SIMPLE_MEDIA_SPOILERS.toggle()
-                (view as? NotificationsCheckCell)?.isChecked = new
+            BUTTON_MEDIA_SPOILER_MODE -> RadioItemOptions.show(
+                this, view,
+                listOf(
+                    LocaleController.getString(R.string.InuMediaSpoilerModeTelegram),
+                    LocaleController.getString(R.string.InuMediaSpoilerModePill),
+                    LocaleController.getString(R.string.InuMediaSpoilerModeCircle),
+                ),
+                InuConfig.MEDIA_SPOILER_MODE.value,
+            ) { which ->
+                if (InuConfig.MEDIA_SPOILER_MODE.value == which) return@show
+                InuConfig.MEDIA_SPOILER_MODE.value = which
             }
 
             BUTTON_TEXT_SPOILER_MODE -> RadioItemOptions.show(
@@ -310,12 +317,18 @@ class MessagesSettingsActivity : SettingsPageActivity() {
         private val BUTTON_DOUBLE_TAP_OUTGOING = InuUtils.generateId()
         private val BUTTON_TEXT_SPOILER_MODE = InuUtils.generateId()
         private val TOGGLE_SPOILER_EXTEND_TO_LINE_END = InuUtils.generateId()
-        private val TOGGLE_SIMPLE_MEDIA_SPOILERS = InuUtils.generateId()
+        private val BUTTON_MEDIA_SPOILER_MODE = InuUtils.generateId()
 
         private fun textSpoilerModeLabel(value: Int): String = when (value) {
             InuConfig.TextSpoilerModeItem.SIMPLE -> LocaleController.getString(R.string.InuTextSpoilerModeSimple)
             InuConfig.TextSpoilerModeItem.EPSTEIN -> LocaleController.getString(R.string.InuTextSpoilerModeEpstein)
             else -> LocaleController.getString(R.string.InuTextSpoilerModeDefault)
+        }
+
+        private fun mediaSpoilerModeLabel(value: Int): String = when (value) {
+            InuConfig.MediaSpoilerModeItem.PILL -> LocaleController.getString(R.string.InuMediaSpoilerModePill)
+            InuConfig.MediaSpoilerModeItem.CIRCLE -> LocaleController.getString(R.string.InuMediaSpoilerModeCircle)
+            else -> LocaleController.getString(R.string.InuMediaSpoilerModeTelegram)
         }
 
         @JvmField val PAGE = SearchRegistry.Page(
@@ -338,7 +351,7 @@ class MessagesSettingsActivity : SettingsPageActivity() {
                 SearchRegistry.Entry("double-tap-outgoing", R.string.InuOutgoingMessages, BUTTON_DOUBLE_TAP_OUTGOING),
                 SearchRegistry.Entry("text-spoiler-mode", R.string.InuTextSpoilerMode, BUTTON_TEXT_SPOILER_MODE),
                 SearchRegistry.Entry("spoiler-extend-to-line-end", R.string.InuSpoilerExtendToLineEnd, TOGGLE_SPOILER_EXTEND_TO_LINE_END),
-                SearchRegistry.Entry("simple-media-spoilers", R.string.InuSimpleMediaSpoilers, TOGGLE_SIMPLE_MEDIA_SPOILERS),
+                SearchRegistry.Entry("media-spoiler-mode", R.string.InuMediaSpoilerMode, BUTTON_MEDIA_SPOILER_MODE),
             ),
         )
     }

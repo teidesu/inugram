@@ -474,8 +474,10 @@
     <string name="InuSpoilerExtendToLineEnd">スポイラーを行末まで伸ばす</string>
     <string name="InuSpoilerExtendToLineEndInfo">テキストが行末まで届かないとき、スポイラーブロックを行の端まで伸ばします</string>
     <string name="InuMediaSpoilerLabel">スポイラー</string>
-    <string name="InuSimpleMediaSpoilers">シンプルなメディアスポイラー</string>
-    <string name="InuSimpleMediaSpoilersInfo">写真と動画のスポイラーのアニメーションパーティクル効果を、静的なぼかしとピル内のラベルに置き換えます</string>
+    <string name="InuMediaSpoilerMode">メディアスポイラーのスタイル</string>
+    <string name="InuMediaSpoilerModeTelegram">Telegram</string>
+    <string name="InuMediaSpoilerModePill">ピル</string>
+    <string name="InuMediaSpoilerModeCircle">円形インジケーター</string>
     <string name="InuSpoilers">スポイラー</string>
     <string name="InuDisableVolumePlayVideo">音量キーで動画再生を無効化</string>
     <string name="InuDisableVolumePlayVideoInfo">チャットで音量キーを押したときに表示中の動画を音付きで再生しない</string>

@@ -474,8 +474,10 @@
     <string name="InuSpoilerExtendToLineEnd">剧透延伸到行末</string>
     <string name="InuSpoilerExtendToLineEndInfo">当文本接近但未达行末时，将剧透块拉伸到行边缘</string>
     <string name="InuMediaSpoilerLabel">剧透</string>
-    <string name="InuSimpleMediaSpoilers">简化媒体剧透</string>
-    <string name="InuSimpleMediaSpoilersInfo">将照片和视频剧透的动态粒子效果替换为静态模糊和胶囊形标签</string>
+    <string name="InuMediaSpoilerMode">媒体剧透样式</string>
+    <string name="InuMediaSpoilerModeTelegram">Telegram</string>
+    <string name="InuMediaSpoilerModePill">胶囊</string>
+    <string name="InuMediaSpoilerModeCircle">圆形指示器</string>
     <string name="InuSpoilers">剧透</string>
     <string name="InuDisableVolumePlayVideo">禁用音量键播放视频</string>
     <string name="InuDisableVolumePlayVideoInfo">在聊天中按音量键时不让可见视频开始有声播放</string>

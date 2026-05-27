@@ -109,8 +109,10 @@
     <string name="InuSpoilerExtendToLineEnd">Extend spoilers to line end</string>
     <string name="InuSpoilerExtendToLineEndInfo">Stretches spoiler blocks to the edge of the line when text ends just short of it</string>
     <string name="InuMediaSpoilerLabel">Spoiler</string>
-    <string name="InuSimpleMediaSpoilers">Simple media spoilers</string>
-    <string name="InuSimpleMediaSpoilersInfo">Replaces the animated particle effect on photo and video spoilers with a static blur and a label inside a pill</string>
+    <string name="InuMediaSpoilerMode">Media spoiler style</string>
+    <string name="InuMediaSpoilerModeTelegram">Telegram</string>
+    <string name="InuMediaSpoilerModePill">Pill</string>
+    <string name="InuMediaSpoilerModeCircle">Circle</string>
     <string name="InuSpoilers">Spoilers</string>
     <string name="InuHideAiFeatures">Hide AI features</string>
     <string name="InuHideAiEditor">AI editor button</string>

@@ -134,8 +134,25 @@ object InuConfig {
     @JvmField
     val SPOILER_EXTEND_TO_LINE_END = BoolItem("spoiler_extend_to_line_end", false)
 
+    class MediaSpoilerModeItem : IntItem("media_spoiler_mode", PILL) {
+        // Migrate the old `simple_media_spoilers` boolean toggle: on → pill, off → telegram.
+        override fun read(prefs: SharedPreferences): Int {
+            if (prefs.contains(key)) return prefs.getInt(key, default)
+            if (prefs.contains("simple_media_spoilers")) {
+                return if (prefs.getBoolean("simple_media_spoilers", true)) PILL else TELEGRAM
+            }
+            return default
+        }
+
+        companion object {
+            const val TELEGRAM = 0
+            const val PILL = 1
+            const val CIRCLE = 2
+        }
+    }
+
     @JvmField
-    val SIMPLE_MEDIA_SPOILERS = BoolItem("simple_media_spoilers", true)
+    val MEDIA_SPOILER_MODE = MediaSpoilerModeItem()
 
     @JvmField
     val DISABLE_INSTANT_CAMERA = BoolItem("disable_instant_camera", true)
