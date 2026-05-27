@@ -16,7 +16,7 @@ index 0000000..0000000 100644
      }
  
      public void drawBlurredPhotoParticles(Canvas canvas) {
-+        if (desu.inugram.helpers.chat.SpoilerHelper.drawMediaSpoilerIfOverridden(canvas, photoImage.getImageX(), photoImage.getImageY(), photoImage.getImageX2(), photoImage.getImageY2(), photoImage.getAlpha(), currentMessageObject != null && currentMessageObject.needDrawBluredPreview(), buttonState == 0 || buttonState == 1)) {
++        if (desu.inugram.helpers.chat.SpoilerHelper.drawMediaSpoilerIfOverridden(canvas, photoImage.getImageX(), photoImage.getImageY(), photoImage.getImageX2(), photoImage.getImageY2(), photoImage.getAlpha(), currentMessageObject != null && currentMessageObject.needDrawBluredPreview(), buttonState == 0 || buttonState == 1, resourcesProvider)) {
 +            return;
 +        }
          if (mediaSpoilerEffect2 == null) {

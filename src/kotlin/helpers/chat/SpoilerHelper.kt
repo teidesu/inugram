@@ -11,6 +11,7 @@ import desu.inugram.InuConfig
 import org.telegram.messenger.AndroidUtilities.dp
 import org.telegram.messenger.LocaleController
 import org.telegram.messenger.R
+import org.telegram.ui.ActionBar.Theme
 import org.telegram.ui.Cells.ChatMessageCell
 import org.telegram.ui.Components.spoilers.SpoilerEffect
 import java.util.WeakHashMap
@@ -94,7 +95,7 @@ object SpoilerHelper {
     }
 
     @JvmStatic
-    fun drawMediaSpoilerIfOverridden(canvas: Canvas, left: Float, top: Float, right: Float, bottom: Float, alpha: Float, isSelfDestruct: Boolean, isNotLoaded: Boolean): Boolean {
+    fun drawMediaSpoilerIfOverridden(canvas: Canvas, left: Float, top: Float, right: Float, bottom: Float, alpha: Float, isSelfDestruct: Boolean, isNotLoaded: Boolean, resourcesProvider: Theme.ResourcesProvider?): Boolean {
         if (!InuConfig.SIMPLE_MEDIA_SPOILERS.value) return false
         val clampedAlpha = alpha.coerceIn(0f, 1f)
 
@@ -119,11 +120,15 @@ object SpoilerHelper {
         if (right - left >= pillW + pad && bottom - top >= pillH + pad) {
             val cx = (left + right) / 2f
             val cy = (top + bottom) / 2f
-            solidPaint.color = Color.BLACK
-            solidPaint.alpha = (95 * clampedAlpha).toInt().coerceIn(0, 255)
+            // Match the stock media preloader: pill = loader circle color, label = its icon color.
+            val loaderColor = Theme.getColor(Theme.key_chat_mediaLoaderPhoto, resourcesProvider)
+            val iconColor = Theme.getColor(Theme.key_chat_mediaLoaderPhotoIcon, resourcesProvider)
+            solidPaint.color = loaderColor
+            solidPaint.alpha = (Color.alpha(loaderColor) * clampedAlpha).toInt().coerceIn(0, 255)
             tempRect.set(cx - pillW / 2f, cy - pillH / 2f, cx + pillW / 2f, cy + pillH / 2f)
             canvas.drawRoundRect(tempRect, pillH / 2f, pillH / 2f, solidPaint)
-            labelPaint.alpha = (230 * clampedAlpha).toInt().coerceIn(0, 255)
+            labelPaint.color = iconColor
+            labelPaint.alpha = (Color.alpha(iconColor) * clampedAlpha).toInt().coerceIn(0, 255)
             canvas.drawText(label, cx, cy - (fm.ascent + fm.descent) / 2f, labelPaint)
         }
         return true
