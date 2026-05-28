@@ -30,7 +30,7 @@ class WebPreviewReplacementsActivity : SettingsPageActivity() {
 
     override fun fillItems(items: ArrayList<UItem>, adapter: UniversalAdapter) {
         items.add(
-            UItem.asRippleCheck(TOGGLE_ENABLED, LocaleController.getString(R.string.Enable))
+            UItem.asRippleCheck(TOGGLE_ENABLED, LocaleController.getString(R.string.InuWebPreviewEnabled))
                 .setChecked(InuConfig.WEB_PREVIEW_REPLACEMENTS_ENABLED.value)
         )
         items.add(UItem.asShadow(LocaleController.getString(R.string.InuWebPreviewReplacementsInfo)))

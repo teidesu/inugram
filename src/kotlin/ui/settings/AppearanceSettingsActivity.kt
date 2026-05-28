@@ -9,9 +9,8 @@ import androidx.annotation.RequiresApi
 import desu.inugram.InuConfig
 import desu.inugram.InuHooks
 import desu.inugram.SearchRegistry
-import desu.inugram.helpers.font.FontHelper
 import desu.inugram.helpers.InuUtils
-import desu.inugram.helpers.maps.MapsHelper
+import desu.inugram.helpers.font.FontHelper
 import desu.inugram.helpers.theme.MonetHelper
 import org.telegram.messenger.AndroidUtilities
 import org.telegram.messenger.FileLog
@@ -28,39 +27,20 @@ class AppearanceSettingsActivity : SettingsPageActivity() {
 
     private var animationSpeedSlider: SliderCell? = null
 
-    override fun getTitle(): CharSequence = LocaleController.getString(R.string.InuGeneral)
+    override fun getTitle(): CharSequence = LocaleController.getString(R.string.InuLookAndFeel)
 
 
     override fun fillItems(items: ArrayList<UItem>, adapter: UniversalAdapter) {
-        items.add(UItem.asHeader(LocaleController.getString(R.string.InuMiscellaneous)))
+        items.add(UItem.asHeader(LocaleController.getString(R.string.InuTypographyAndIcons)))
         items.add(
-            UItem.asCheck(
-                TOGGLE_SHOW_SECONDS,
-                LocaleController.getString(R.string.InuShowSeconds)
-            ).setChecked(InuConfig.SHOW_SECONDS.value)
-        )
-        items.add(
-            mkTwoLineCheckItem(
-                TOGGLE_DISABLE_ROUNDING,
-                R.string.InuDisableRounding,
-                R.string.InuDisableRoundingInfo,
-                InuConfig.DISABLE_ROUNDING.value
-            )
-        )
-        items.add(
-            mkTwoLineCheckItem(
-                TOGGLE_DISABLE_SCRIM_BLUR,
-                R.string.InuDisableScrimBlur,
-                R.string.InuDisableScrimBlurInfo,
-                InuConfig.DISABLE_SCRIM_BLUR.value
-            )
-        )
-        items.add(
-            mkTwoLineCheckItem(
-                TOGGLE_REDUCE_MENU_MOTION,
-                R.string.InuReduceMenuMotion,
-                R.string.InuReduceMenuMotionInfo,
-                InuConfig.REDUCE_MENU_MOTION.value
+            UItem.asButton(
+                BUTTON_FONT_MODE,
+                LocaleController.getString(R.string.InuFont),
+                when (InuConfig.FONT_MODE.value) {
+                    1 -> LocaleController.getString(R.string.InuFontSystem)
+                    2 -> FontHelper.familyName ?: LocaleController.getString(R.string.InuFontCustom)
+                    else -> LocaleController.getString(R.string.InuFontDefault)
+                }
             )
         )
         items.add(
@@ -83,59 +63,7 @@ class AppearanceSettingsActivity : SettingsPageActivity() {
                 }
             )
         )
-        items.add(
-            UItem.asButton(
-                BUTTON_FONT_MODE,
-                LocaleController.getString(R.string.InuFont),
-                when (InuConfig.FONT_MODE.value) {
-                    1 -> LocaleController.getString(R.string.InuFontSystem)
-                    2 -> FontHelper.familyName ?: LocaleController.getString(R.string.InuFontCustom)
-                    else -> LocaleController.getString(R.string.InuFontDefault)
-                }
-            )
-        )
         items.add(UItem.asShadow(null))
-
-        items.add(UItem.asHeader(LocaleController.getString(R.string.InuMapsHeader)))
-        items.add(
-            UItem.asButton(
-                BUTTON_MAP_PROVIDER,
-                LocaleController.getString(R.string.InuMapProvider),
-                when (InuConfig.MAP_PROVIDER.value) {
-                    InuConfig.MapProviderItem.OSM -> LocaleController.getString(R.string.InuMapProviderOsm)
-                    else -> LocaleController.getString(R.string.InuMapProviderGoogle)
-                }
-            )
-        )
-        items.add(
-            UItem.asButton(
-                BUTTON_MAP_PREVIEW_PROVIDER,
-                LocaleController.getString(R.string.InuMapPreviewProvider),
-                when (InuConfig.MAP_PREVIEW_PROVIDER.value) {
-                    InuConfig.MapPreviewProviderItem.TELEGRAM -> LocaleController.getString(R.string.InuMapPreviewProviderTelegram)
-                    InuConfig.MapPreviewProviderItem.GOOGLE -> LocaleController.getString(R.string.InuMapPreviewProviderGoogle)
-                    InuConfig.MapPreviewProviderItem.YANDEX -> LocaleController.getString(R.string.InuMapPreviewProviderYandex)
-                    InuConfig.MapPreviewProviderItem.DISABLED -> LocaleController.getString(R.string.Disable)
-                    else -> LocaleController.getString(R.string.Default)
-                }
-            )
-        )
-        items.add(UItem.asShadow(null))
-
-        if (animationSpeedSlider == null) animationSpeedSlider = SliderCell(
-            this.context, min = 0.5f, max = 3f,
-            defaultValue = InuConfig.ANIMATION_SPEED.default,
-            initialValue = if (InuConfig.ANIMATION_SPEED.value >= 3f) 3f else InuConfig.ANIMATION_SPEED.value,
-            step = 0.05f,
-            format = {
-                if (it >= 3f) LocaleController.getString(R.string.InuAnimationSpeedInstant)
-                else String.format("%.2fx", it)
-            },
-            onChanged = {
-                InuConfig.ANIMATION_SPEED.value = if (it >= 3f) 9999f else it
-                InuHooks.syncAnimationSpeed()
-            },
-        )
 
         items.add(UItem.asHeader(addExperimentalSpan(LocaleController.getString(R.string.InuMaterial3))))
         items.add(
@@ -197,9 +125,41 @@ class AppearanceSettingsActivity : SettingsPageActivity() {
                 LocaleController.getString(R.string.InuHideFadeView),
             ).setChecked(InuConfig.HIDE_FADE_VIEW.value)
         )
+        items.add(
+            mkTwoLineCheckItem(
+                TOGGLE_DISABLE_SCRIM_BLUR,
+                R.string.InuDisableScrimBlur,
+                R.string.InuDisableScrimBlurInfo,
+                InuConfig.DISABLE_SCRIM_BLUR.value
+            )
+        )
         items.add(UItem.asShadow(LocaleController.getString(R.string.InuNonIslandHint)))
 
-        items.add(UItem.asHeader(LocaleController.getString(R.string.InuAnimationSpeed)))
+        if (animationSpeedSlider == null) animationSpeedSlider = SliderCell(
+            this.context, min = 0.5f, max = 3f,
+            defaultValue = InuConfig.ANIMATION_SPEED.default,
+            initialValue = if (InuConfig.ANIMATION_SPEED.value >= 3f) 3f else InuConfig.ANIMATION_SPEED.value,
+            step = 0.05f,
+            title = LocaleController.getString(R.string.InuAnimationSpeed),
+            format = {
+                if (it >= 3f) LocaleController.getString(R.string.InuAnimationSpeedInstant)
+                else String.format("%.2fx", it)
+            },
+            onChanged = {
+                InuConfig.ANIMATION_SPEED.value = if (it >= 3f) 9999f else it
+                InuHooks.syncAnimationSpeed()
+            },
+        )
+
+        items.add(UItem.asHeader(LocaleController.getString(R.string.InuMotion)))
+        items.add(
+            mkTwoLineCheckItem(
+                TOGGLE_REDUCE_MENU_MOTION,
+                R.string.InuReduceMenuMotion,
+                R.string.InuReduceMenuMotionInfo,
+                InuConfig.REDUCE_MENU_MOTION.value
+            )
+        )
         items.add(UItem.asCustom(animationSpeedSlider))
         items.add(UItem.asShadow(LocaleController.getString(R.string.InuAnimationSpeedInfo)))
     }
@@ -210,33 +170,6 @@ class AppearanceSettingsActivity : SettingsPageActivity() {
                 val new = InuConfig.HIDE_FADE_VIEW.toggle()
                 (view as? TextCheckCell)?.isChecked = new
                 softRebuild()
-            }
-
-            BUTTON_MAP_PROVIDER -> RadioItemOptions.show(
-                this, view,
-                listOf(
-                    LocaleController.getString(R.string.InuMapProviderGoogle),
-                    LocaleController.getString(R.string.InuMapProviderOsm),
-                ),
-                InuConfig.MAP_PROVIDER.value,
-            ) { which ->
-                InuConfig.MAP_PROVIDER.value = which
-                showRestartBulletin()
-            }
-
-            BUTTON_MAP_PREVIEW_PROVIDER -> RadioItemOptions.show(
-                this, view,
-                listOf(
-                    LocaleController.getString(R.string.Default),
-                    LocaleController.getString(R.string.InuMapPreviewProviderTelegram),
-                    LocaleController.getString(R.string.InuMapPreviewProviderGoogle),
-                    LocaleController.getString(R.string.InuMapPreviewProviderYandex),
-                    LocaleController.getString(R.string.Disable),
-                ),
-                InuConfig.MAP_PREVIEW_PROVIDER.value,
-            ) { which ->
-                InuConfig.MAP_PREVIEW_PROVIDER.value = which
-                MapsHelper.syncMapProvider(messagesController)
             }
 
             BUTTON_ICON_REPLACEMENT -> RadioItemOptions.show(
@@ -260,16 +193,6 @@ class AppearanceSettingsActivity : SettingsPageActivity() {
                 InuConfig.NOTIFICATION_ICON.value,
             ) { which ->
                 InuConfig.NOTIFICATION_ICON.value = which
-            }
-
-            TOGGLE_SHOW_SECONDS -> {
-                val new = InuConfig.SHOW_SECONDS.toggle()
-                (view as? TextCheckCell)?.isChecked = new
-            }
-
-            TOGGLE_DISABLE_ROUNDING -> {
-                val new = InuConfig.DISABLE_ROUNDING.toggle()
-                (view as? NotificationsCheckCell)?.isChecked = new
             }
 
             BUTTON_FONT_MODE -> {
@@ -431,8 +354,6 @@ class AppearanceSettingsActivity : SettingsPageActivity() {
         private val TOGGLE_NON_ISLAND_TAB_BARS = InuUtils.generateId()
         private val TOGGLE_NON_ISLAND_GLOBAL_SEARCH = InuUtils.generateId()
         private val TOGGLE_NON_ISLAND_CHAT_ELEMENTS = InuUtils.generateId()
-        private val TOGGLE_SHOW_SECONDS = InuUtils.generateId()
-        private val TOGGLE_DISABLE_ROUNDING = InuUtils.generateId()
         private val BUTTON_FONT_MODE = InuUtils.generateId()
         private const val REQ_PICK_FONT = 31010
         private val TOGGLE_DISABLE_SCRIM_BLUR = InuUtils.generateId()
@@ -441,8 +362,6 @@ class AppearanceSettingsActivity : SettingsPageActivity() {
         private val TOGGLE_MATERIAL3_FABS = InuUtils.generateId()
         private val BUTTON_ICON_REPLACEMENT = InuUtils.generateId()
         private val BUTTON_NOTIFICATION_ICON = InuUtils.generateId()
-        private val BUTTON_MAP_PROVIDER = InuUtils.generateId()
-        private val BUTTON_MAP_PREVIEW_PROVIDER = InuUtils.generateId()
         private val BUTTON_PREDICTIVE_BACK_MODE = InuUtils.generateId()
         private val BUTTON_MONET_THEME = InuUtils.generateId()
 
@@ -465,12 +384,10 @@ class AppearanceSettingsActivity : SettingsPageActivity() {
         @JvmField
         val PAGE = SearchRegistry.Page(
             slug = "appearance",
-            titleRes = R.string.InuGeneral,
+            titleRes = R.string.InuLookAndFeel,
             iconRes = R.drawable.msg_settings_old,
             factory = ::AppearanceSettingsActivity,
             entries = listOf(
-                SearchRegistry.Entry("show-seconds", R.string.InuShowSeconds, TOGGLE_SHOW_SECONDS),
-                SearchRegistry.Entry("disable-rounding", R.string.InuDisableRounding, TOGGLE_DISABLE_ROUNDING),
                 SearchRegistry.Entry("disable-scrim-blur", R.string.InuDisableScrimBlur, TOGGLE_DISABLE_SCRIM_BLUR),
                 SearchRegistry.Entry("reduce-menu-motion", R.string.InuReduceMenuMotion, TOGGLE_REDUCE_MENU_MOTION),
                 SearchRegistry.Entry("material3-switches", R.string.InuMaterial3Switches, TOGGLE_MATERIAL3_SWITCHES),
@@ -479,8 +396,6 @@ class AppearanceSettingsActivity : SettingsPageActivity() {
                 SearchRegistry.Entry("icon-replacement", R.string.InuIconReplacement, BUTTON_ICON_REPLACEMENT),
                 SearchRegistry.Entry("notification-icon", R.string.InuNotificationIcon, BUTTON_NOTIFICATION_ICON),
                 SearchRegistry.Entry("font", R.string.InuFont, BUTTON_FONT_MODE),
-                SearchRegistry.Entry("map-provider", R.string.InuMapProvider, BUTTON_MAP_PROVIDER),
-                SearchRegistry.Entry("map-preview-provider", R.string.InuMapPreviewProvider, BUTTON_MAP_PREVIEW_PROVIDER),
                 SearchRegistry.Entry("predictive-back-mode", R.string.InuPredictiveBack, BUTTON_PREDICTIVE_BACK_MODE),
                 SearchRegistry.Entry("non-island-tab-bars", R.string.InuNonIslandTabBars, TOGGLE_NON_ISLAND_TAB_BARS),
                 SearchRegistry.Entry("non-island-global-search", R.string.InuNonIslandGlobalSearch, TOGGLE_NON_ISLAND_GLOBAL_SEARCH),

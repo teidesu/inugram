@@ -4,9 +4,8 @@ import android.view.View
 import desu.inugram.InuConfig
 import desu.inugram.InuHooks
 import desu.inugram.SearchRegistry
-import desu.inugram.helpers.chat.DoubleTapAction
 import desu.inugram.helpers.InuUtils
-import desu.inugram.ui.settings.PinnedReactionsActivity
+import desu.inugram.helpers.chat.DoubleTapAction
 import org.telegram.messenger.LocaleController
 import org.telegram.messenger.R
 import org.telegram.ui.Cells.NotificationsCheckCell
@@ -36,15 +35,16 @@ class MessagesSettingsActivity : SettingsPageActivity() {
             max = 20f,
             defaultValue = InuConfig.STICKER_SIZE.default,
             initialValue = InuConfig.STICKER_SIZE.value,
+            title = LocaleController.getString(R.string.InuStickerSize),
             format = { "%.1f".format(it) },
             onChanged = {
                 InuConfig.STICKER_SIZE.value = it
                 stickerSizePreview?.invalidate()
             },
         )
-        items.add(UItem.asHeader(LocaleController.getString(R.string.InuStickerSize)))
-        items.add(UItem.asCustom(stickerSizeSlider))
+        items.add(UItem.asHeader(LocaleController.getString(R.string.InuStickers)))
         items.add(UItem.asCustom(stickerSizePreview))
+        items.add(UItem.asCustom(stickerSizeSlider))
         items.add(
             UItem.asButton(
                 BUTTON_STICKER_TIME_MODE,
@@ -72,19 +72,20 @@ class MessagesSettingsActivity : SettingsPageActivity() {
             defaultValue = InuConfig.REACTIONS_IN_ROW.default.toFloat(),
             initialValue = InuConfig.REACTIONS_IN_ROW.value.toFloat(),
             step = 1f,
+            title = LocaleController.getString(R.string.InuReactionsInRow),
             format = { it.toInt().toString() },
             onChanged = {
                 InuConfig.REACTIONS_IN_ROW.value = it.toInt()
             },
         )
-        items.add(UItem.asHeader(LocaleController.getString(R.string.InuReactionsInRow)))
-        items.add(UItem.asCustom(reactionsInRowSlider))
+        items.add(UItem.asHeader(LocaleController.getString(R.string.InuReactions)))
         items.add(
-            UItem.asButton(
+            mkSubPageButton(
                 BUTTON_PINNED_REACTIONS,
                 LocaleController.getString(R.string.InuPinnedReactions),
             )
         )
+        items.add(UItem.asCustom(reactionsInRowSlider))
         items.add(
             mkTwoLineCheckItem(
                 TOGGLE_REACTION_BAR_BELOW,
@@ -149,7 +150,7 @@ class MessagesSettingsActivity : SettingsPageActivity() {
 
         items.add(UItem.asHeader(LocaleController.getString(R.string.InuMiscellaneous)))
         items.add(
-            UItem.asButton(
+            mkSubPageButton(
                 BUTTON_MESSAGE_MENU_ORDER,
                 LocaleController.getString(R.string.InuMessageMenuOrder),
             )
@@ -187,13 +188,13 @@ class MessagesSettingsActivity : SettingsPageActivity() {
             this.context, min = 75f, max = 300f,
             defaultValue = InuConfig.DOUBLE_TAP_DELAY.default.toFloat(),
             initialValue = InuConfig.DOUBLE_TAP_DELAY.value.toFloat(),
+            title = LocaleController.getString(R.string.InuDelay),
             format = { "${it.toInt()} ms" },
             onChanged = {
                 InuConfig.DOUBLE_TAP_DELAY.value = it.toInt()
                 InuHooks.syncDoubleTapDelay()
             },
         )
-        items.add(UItem.asHeader(LocaleController.getString(R.string.InuDoubleTapDelay)))
         items.add(UItem.asCustom(doubleTapDelaySlider))
         items.add(UItem.asShadow(LocaleController.getString(R.string.InuDoubleTapInfo)))
     }
@@ -318,7 +319,8 @@ class MessagesSettingsActivity : SettingsPageActivity() {
             else -> LocaleController.getString(R.string.InuTextSpoilerModeDefault)
         }
 
-        @JvmField val PAGE = SearchRegistry.Page(
+        @JvmField
+        val PAGE = SearchRegistry.Page(
             slug = "messages",
             titleRes = R.string.InuMessages,
             iconRes = R.drawable.msg_discuss,

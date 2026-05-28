@@ -6,6 +6,7 @@ import desu.inugram.InuConfig
 import desu.inugram.SearchRegistry
 import desu.inugram.helpers.InuUtils
 import desu.inugram.helpers.chat.WebPreviewHelper
+import desu.inugram.helpers.maps.MapsHelper
 import org.telegram.messenger.LocaleController
 import org.telegram.messenger.R
 import org.telegram.ui.Cells.NotificationsCheckCell
@@ -33,11 +34,55 @@ class BehaviorSettingsActivity : SettingsPageActivity() {
     }
 
     override fun fillItems(items: ArrayList<UItem>, adapter: UniversalAdapter) {
+        items.add(UItem.asHeader(LocaleController.getString(R.string.InuFormatting)))
+        items.add(
+            UItem.asCheck(
+                TOGGLE_SHOW_SECONDS,
+                LocaleController.getString(R.string.InuShowSeconds)
+            ).setChecked(InuConfig.SHOW_SECONDS.value)
+        )
+        items.add(
+            mkTwoLineCheckItem(
+                TOGGLE_DISABLE_ROUNDING,
+                R.string.InuDisableRounding,
+                R.string.InuDisableRoundingInfo,
+                InuConfig.DISABLE_ROUNDING.value
+            )
+        )
+        items.add(UItem.asShadow(null))
+
+        items.add(UItem.asHeader(LocaleController.getString(R.string.InuChatActions)))
+        items.add(
+            UItem.asCheck(
+                TOGGLE_CALL_CONFIRMATION,
+                LocaleController.getString(R.string.InuCallConfirmation),
+            ).setChecked(InuConfig.CALL_CONFIRMATION.value)
+        )
+        deleteForBothGroup.addTo(items) { listView.adapter.update(true) }
         items.add(
             UItem.asCheck(
                 TOGGLE_DISABLE_CHAT_BUBBLES,
                 LocaleController.getString(R.string.InuDisableChatBubbles),
             ).setChecked(InuConfig.DISABLE_CHAT_BUBBLES.value)
+        )
+        items.add(
+            mkTwoLineCheckItem(
+                TOGGLE_GIF_SEEKBAR,
+                R.string.InuGifSeekbar,
+                R.string.InuGifSeekbarInfo,
+                InuConfig.GIF_SEEKBAR.value,
+            )
+        )
+        items.add(UItem.asShadow(null))
+
+        items.add(UItem.asHeader(LocaleController.getString(R.string.InuLinksAndBrowser)))
+        items.add(
+            mkTwoLineCheckItem(
+                TOGGLE_CONFIRM_INTERNAL_LINKS,
+                R.string.InuConfirmInternalLinks,
+                R.string.InuConfirmInternalLinksInfo,
+                InuConfig.CONFIRM_INTERNAL_LINKS.value,
+            )
         )
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
             items.add(
@@ -48,32 +93,6 @@ class BehaviorSettingsActivity : SettingsPageActivity() {
                 )
             )
         }
-        items.add(
-            UItem.asCheck(
-                TOGGLE_CALL_CONFIRMATION,
-                LocaleController.getString(R.string.InuCallConfirmation),
-            ).setChecked(InuConfig.CALL_CONFIRMATION.value)
-        )
-        items.add(
-            mkTwoLineCheckItem(
-                TOGGLE_GIF_SEEKBAR,
-                R.string.InuGifSeekbar,
-                R.string.InuGifSeekbarInfo,
-                InuConfig.GIF_SEEKBAR.value,
-            )
-        )
-        deleteForBothGroup.addTo(items) { listView.adapter.update(true) }
-        items.add(UItem.asShadow(null))
-
-
-        items.add(
-            mkTwoLineCheckItem(
-                TOGGLE_CONFIRM_INTERNAL_LINKS,
-                R.string.InuConfirmInternalLinks,
-                R.string.InuConfirmInternalLinksInfo,
-                InuConfig.CONFIRM_INTERNAL_LINKS.value,
-            )
-        )
         items.add(
             UItem.asCheck(
                 TOGGLE_DISABLE_BROWSER_SWIPE_COLLAPSE,
@@ -108,6 +127,32 @@ class BehaviorSettingsActivity : SettingsPageActivity() {
             ).setChecked(InuConfig.FASTER_UPLOADS.value)
         )
         items.add(UItem.asShadow(LocaleController.getString(R.string.InuFasterTransfersInfo)))
+
+        items.add(UItem.asHeader(LocaleController.getString(R.string.InuMapsHeader)))
+        items.add(
+            UItem.asButton(
+                BUTTON_MAP_PROVIDER,
+                LocaleController.getString(R.string.InuMapProvider),
+                when (InuConfig.MAP_PROVIDER.value) {
+                    InuConfig.MapProviderItem.OSM -> LocaleController.getString(R.string.InuMapProviderOsm)
+                    else -> LocaleController.getString(R.string.InuMapProviderGoogle)
+                }
+            )
+        )
+        items.add(
+            UItem.asButton(
+                BUTTON_MAP_PREVIEW_PROVIDER,
+                LocaleController.getString(R.string.InuMapPreviewProvider),
+                when (InuConfig.MAP_PREVIEW_PROVIDER.value) {
+                    InuConfig.MapPreviewProviderItem.TELEGRAM -> LocaleController.getString(R.string.InuMapPreviewProviderTelegram)
+                    InuConfig.MapPreviewProviderItem.GOOGLE -> LocaleController.getString(R.string.InuMapPreviewProviderGoogle)
+                    InuConfig.MapPreviewProviderItem.YANDEX -> LocaleController.getString(R.string.InuMapPreviewProviderYandex)
+                    InuConfig.MapPreviewProviderItem.DISABLED -> LocaleController.getString(R.string.Disable)
+                    else -> LocaleController.getString(R.string.Default)
+                }
+            )
+        )
+        items.add(UItem.asShadow(null))
     }
 
     override fun onClick(item: UItem, view: View, position: Int, x: Float, y: Float) {
@@ -149,6 +194,43 @@ class BehaviorSettingsActivity : SettingsPageActivity() {
             TOGGLE_FASTER_UPLOADS -> {
                 val new = InuConfig.FASTER_UPLOADS.toggle()
                 (view as? TextCheckCell)?.isChecked = new
+            }
+
+            TOGGLE_SHOW_SECONDS -> {
+                val new = InuConfig.SHOW_SECONDS.toggle()
+                (view as? TextCheckCell)?.isChecked = new
+            }
+
+            TOGGLE_DISABLE_ROUNDING -> {
+                val new = InuConfig.DISABLE_ROUNDING.toggle()
+                (view as? NotificationsCheckCell)?.isChecked = new
+            }
+
+            BUTTON_MAP_PROVIDER -> RadioItemOptions.show(
+                this, view,
+                listOf(
+                    LocaleController.getString(R.string.InuMapProviderGoogle),
+                    LocaleController.getString(R.string.InuMapProviderOsm),
+                ),
+                InuConfig.MAP_PROVIDER.value,
+            ) { which ->
+                InuConfig.MAP_PROVIDER.value = which
+                showRestartBulletin()
+            }
+
+            BUTTON_MAP_PREVIEW_PROVIDER -> RadioItemOptions.show(
+                this, view,
+                listOf(
+                    LocaleController.getString(R.string.Default),
+                    LocaleController.getString(R.string.InuMapPreviewProviderTelegram),
+                    LocaleController.getString(R.string.InuMapPreviewProviderGoogle),
+                    LocaleController.getString(R.string.InuMapPreviewProviderYandex),
+                    LocaleController.getString(R.string.Disable),
+                ),
+                InuConfig.MAP_PREVIEW_PROVIDER.value,
+            ) { which ->
+                InuConfig.MAP_PREVIEW_PROVIDER.value = which
+                MapsHelper.syncMapProvider(messagesController)
             }
         }
     }
@@ -196,6 +278,10 @@ class BehaviorSettingsActivity : SettingsPageActivity() {
         private val TOGGLE_FASTER_DOWNLOADS = InuUtils.generateId()
         private val TOGGLE_FASTER_UPLOADS = InuUtils.generateId()
         private val SECTION_DELETE_FOR_BOTH = InuUtils.generateId()
+        private val BUTTON_MAP_PROVIDER = InuUtils.generateId()
+        private val BUTTON_MAP_PREVIEW_PROVIDER = InuUtils.generateId()
+        private val TOGGLE_SHOW_SECONDS = InuUtils.generateId()
+        private val TOGGLE_DISABLE_ROUNDING = InuUtils.generateId()
 
         private fun textClassifierModeLabel(value: Int): String = when (value) {
             InuConfig.TextClassifierModeItem.NATIVE -> LocaleController.getString(R.string.InuTextClassifierModeNative)
@@ -219,6 +305,10 @@ class BehaviorSettingsActivity : SettingsPageActivity() {
                 SearchRegistry.Entry("faster-downloads", R.string.InuFasterDownloads, TOGGLE_FASTER_DOWNLOADS),
                 SearchRegistry.Entry("faster-uploads", R.string.InuFasterUploads, TOGGLE_FASTER_UPLOADS),
                 SearchRegistry.Entry("delete-for-both", R.string.InuDeleteForBoth, SECTION_DELETE_FOR_BOTH),
+                SearchRegistry.Entry("map-provider", R.string.InuMapProvider, BUTTON_MAP_PROVIDER),
+                SearchRegistry.Entry("map-preview-provider", R.string.InuMapPreviewProvider, BUTTON_MAP_PREVIEW_PROVIDER),
+                SearchRegistry.Entry("show-seconds", R.string.InuShowSeconds, TOGGLE_SHOW_SECONDS),
+                SearchRegistry.Entry("disable-rounding", R.string.InuDisableRounding, TOGGLE_DISABLE_ROUNDING),
             ),
         )
     }

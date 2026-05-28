@@ -6,6 +6,8 @@ import android.content.Context
 import android.graphics.Canvas
 import android.graphics.Paint
 import android.graphics.Paint.FontMetricsInt
+import android.graphics.PorterDuff
+import android.graphics.PorterDuffColorFilter
 import android.text.Layout
 import android.text.SpannableString
 import android.text.SpannableStringBuilder
@@ -18,6 +20,7 @@ import android.view.View
 import android.view.ViewGroup
 import android.widget.FrameLayout
 import androidx.core.graphics.withTranslation
+import desu.inugram.InuConfig
 import desu.inugram.SearchRegistry
 import desu.inugram.helpers.InuUtils
 import org.telegram.messenger.AndroidUtilities
@@ -29,6 +32,7 @@ import org.telegram.messenger.UserConfig
 import org.telegram.messenger.Utilities
 import org.telegram.ui.ActionBar.Theme
 import org.telegram.ui.Cells.NotificationsCheckCell
+import org.telegram.ui.Cells.TextCell
 import org.telegram.ui.Components.Bulletin
 import org.telegram.ui.Components.BulletinFactory
 import org.telegram.ui.Components.ItemOptions
@@ -172,9 +176,24 @@ abstract class SettingsPageActivity : UniversalFragment() {
                     checked,
                     0,
                     subtext != null,
-                    true
+                    !InuConfig.M3_SECTIONS_STYLE.value
                 )
                 (view as? NotificationsCheckCell)?.setDrawLine(false)
+            }
+        }
+    }
+
+    protected fun mkSubPageButton(id: Int, text: CharSequence): UItem {
+        return UItem.asButton(id, text).also {
+            it.bind = Utilities.Callback { view ->
+                val cell = view as? TextCell ?: return@Callback
+                val iv = cell.valueImageView
+                iv.setImageResource(R.drawable.msg_arrowright)
+                iv.colorFilter = PorterDuffColorFilter(
+                    Theme.getColor(Theme.key_windowBackgroundWhiteGrayIcon),
+                    PorterDuff.Mode.MULTIPLY,
+                )
+                iv.visibility = View.VISIBLE
             }
         }
     }
@@ -198,7 +217,7 @@ abstract class SettingsPageActivity : UniversalFragment() {
                     checked,
                     0,
                     subtext != null,
-                    true
+                    !InuConfig.M3_SECTIONS_STYLE.value
                 )
                 (view as? NotificationsCheckCell)?.setDrawLine(true)
             }

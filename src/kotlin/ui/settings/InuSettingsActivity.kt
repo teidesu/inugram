@@ -34,8 +34,8 @@ class InuSettingsActivity : SettingsPageActivity() {
         items.add(
             UItem.asButton(
                 BUTTON_GENERAL,
-                R.drawable.msg_settings_old,
-                LocaleController.getString(R.string.InuGeneral)
+                R.drawable.msg_palette,
+                LocaleController.getString(R.string.InuLookAndFeel)
             )
         )
         items.add(

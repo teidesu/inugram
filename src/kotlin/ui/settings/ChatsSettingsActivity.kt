@@ -224,7 +224,7 @@ class ChatsSettingsActivity : SettingsPageActivity() {
 
         items.add(UItem.asHeader(LocaleController.getString(R.string.InuMiscellaneous)))
         items.add(
-            UItem.asButton(
+            mkSubPageButton(
                 BUTTON_CHAT_MENU_ORDER,
                 LocaleController.getString(R.string.InuChatMenuOrder),
             )

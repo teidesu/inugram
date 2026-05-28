@@ -78,7 +78,7 @@ class PasscodeSettingsActivity : SettingsPageActivity() {
 
         items.add(UItem.asHeader(LocaleController.getString(R.string.InuPasscodePanic)))
         items.add(
-            UItem.asButton(
+            mkSubPageButton(
                 SET_PANIC,
                 LocaleController.getString(
                     if (PasscodeHelper.hasPanicCode()) R.string.InuPasscodePanicEdit

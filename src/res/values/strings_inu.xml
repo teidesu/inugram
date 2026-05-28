@@ -11,6 +11,7 @@
     <string name="InuGeneral">General</string>
     <string name="InuMiscellaneous">Miscellaneous</string>
     <string name="InuAppearance">Appearance</string>
+    <string name="InuLookAndFeel">Look &amp; Feel</string>
     <string name="InuBehavior">Behavior</string>
     <string name="InuAnnoyances">Annoyances</string>
     <string name="InuMessages">Messages</string>
@@ -282,6 +283,14 @@
     <string name="InuProfilePhotoGradientFade">Disable profile photo blur</string>
 
     <string name="InuNonIslandUI">Non-island UI</string>
+    <string name="InuTypographyAndIcons">Typography &amp; icons</string>
+    <string name="InuMotion">Motion</string>
+    <string name="InuFormatting">Formatting</string>
+    <string name="InuChatActions">Chat actions</string>
+    <string name="InuLinksAndBrowser">Links &amp; browser</string>
+    <string name="InuStickers">Stickers</string>
+    <string name="InuReactions">Reactions</string>
+    <string name="InuDelay">Delay</string>
     <string name="InuAnimationSpeed">Animation speed</string>
     <string name="InuAnimationSpeedInstant">Instant</string>
     <string name="InuAnimationSpeedInfo">Note: spring-based animations (bottom sheets, popups, some transitions) and some other animations are not affected.</string>
