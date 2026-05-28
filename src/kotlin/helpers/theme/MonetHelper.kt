@@ -1,8 +1,10 @@
 package desu.inugram.helpers.theme
 
+import android.content.Context
 import android.graphics.Color
 import android.os.Build
 import androidx.annotation.RequiresApi
+import androidx.core.content.edit
 import androidx.core.graphics.ColorUtils
 import androidx.core.graphics.toColorInt
 import desu.inugram.InuConfig
@@ -375,31 +377,37 @@ object MonetHelper {
 
         // entering Monet from a non-Monet state: snapshot so DISABLED can restore it
         if (current == ThemeMode.DISABLED) {
+            val themeConfig = themeConfigPrefs()
             InuConfig.MONET_PREV.value = listOf(
                 Theme.getCurrentTheme()?.key.orEmpty(),
                 Theme.getCurrentNightTheme()?.key.orEmpty(),
                 Theme.selectedAutoNightType,
+                themeConfig.getString("lastDayTheme", "").orEmpty(),
+                themeConfig.getString("lastDarkTheme", "").orEmpty(),
             ).joinToString("|")
         }
 
         when (mode) {
             ThemeMode.DISABLED -> restorePrevious()
-            ThemeMode.LIGHT -> applySingle("Monet Light")
-            ThemeMode.DARK -> applySingle("Monet Dark")
-            ThemeMode.AMOLED -> applySingle("Monet AMOLED")
+            ThemeMode.LIGHT -> applySingle("Monet Light", dark = false)
+            ThemeMode.DARK -> applySingle("Monet Dark", dark = true)
+            ThemeMode.AMOLED -> applySingle("Monet AMOLED", dark = true)
             ThemeMode.AUTO -> applyAuto("Monet Dark")
             ThemeMode.AUTO_AMOLED -> applyAuto("Monet AMOLED")
         }
     }
 
-    private fun applySingle(name: String) {
+    private fun applySingle(name: String, dark: Boolean) {
         Theme.selectedAutoNightType = Theme.AUTO_NIGHT_TYPE_NONE
         Theme.saveAutoNightThemeConfig()
+        rememberLastTheme(name, dark = dark)
         applyDayTheme(Theme.getTheme(name))
     }
 
     private fun applyAuto(nightName: String) {
         Theme.getTheme(nightName)?.let { Theme.setCurrentNightTheme(it) }
+        rememberLastTheme("Monet Light", dark = false)
+        rememberLastTheme(nightName, dark = true)
         applyDayTheme(Theme.getTheme("Monet Light"))
         Theme.selectedAutoNightType = Theme.AUTO_NIGHT_TYPE_SYSTEM
         Theme.saveAutoNightThemeConfig()
@@ -411,10 +419,27 @@ object MonetHelper {
         val dayTheme = Theme.getTheme(snapshot.getOrNull(0).orEmpty()) ?: Theme.getTheme("Blue")
         Theme.getTheme(snapshot.getOrNull(1).orEmpty())?.let { Theme.setCurrentNightTheme(it) }
         Theme.selectedAutoNightType = snapshot.getOrNull(2)?.toIntOrNull() ?: Theme.AUTO_NIGHT_TYPE_NONE
+        restoreLastTheme("lastDayTheme", snapshot.getOrNull(3))
+        restoreLastTheme("lastDarkTheme", snapshot.getOrNull(4))
         applyDayTheme(dayTheme)
         Theme.saveAutoNightThemeConfig()
         Theme.checkAutoNightThemeConditions(true)
         InuConfig.MONET_PREV.value = ""
+    }
+
+    private fun themeConfigPrefs() =
+        ApplicationLoader.applicationContext.getSharedPreferences("themeconfig", Context.MODE_PRIVATE)
+
+    private fun rememberLastTheme(name: String, dark: Boolean) {
+        themeConfigPrefs().edit {
+            putString(if (dark) "lastDarkTheme" else "lastDayTheme", name)
+        }
+    }
+
+    private fun restoreLastTheme(key: String, value: String?) {
+        themeConfigPrefs().edit {
+            if (value.isNullOrEmpty()) remove(key) else putString(key, value)
+        }
     }
 
     private fun applyDayTheme(theme: Theme.ThemeInfo?) {
