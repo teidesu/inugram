@@ -128,7 +128,9 @@ class PrivacySecurityActivity : SettingsPageActivity() {
     }
 
     private fun showStripTrackingParamsOptions(anchor: View) {
-        val opts = ItemOptions.makeOptions(this, anchor)
+        // scrim on the asCustom FrameLayout parent so ItemOptions picks up the section clip bg
+        val scrim = (anchor.parent as? View) ?: anchor
+        val opts = ItemOptions.makeOptions(this, scrim)
             .add(R.drawable.msg_download, LocaleController.getString(R.string.InuStripTrackingParamsUpdate)) {
                 fetchLatestStripTrackingParams()
             }

@@ -5,9 +5,9 @@ Subject: monet theme, almost directly ported from NagramX
 
 ---
  .../java/org/telegram/ui/ActionBar/Theme.java | 61 ++++++++++++++++++-
- .../java/org/telegram/ui/DialogsActivity.java |  3 +
+ .../java/org/telegram/ui/DialogsActivity.java |  4 ++
  .../java/org/telegram/ui/LaunchActivity.java  |  1 +
- 3 files changed, 63 insertions(+), 2 deletions(-)
+ 3 files changed, 64 insertions(+), 2 deletions(-)
 
 diff --git a/TMessagesProj/src/main/java/org/telegram/ui/ActionBar/Theme.java b/TMessagesProj/src/main/java/org/telegram/ui/ActionBar/Theme.java
 index 0000000..0000000 100644
@@ -118,11 +118,12 @@ diff --git a/TMessagesProj/src/main/java/org/telegram/ui/DialogsActivity.java b/
 index 0000000..0000000 100644
 --- a/TMessagesProj/src/main/java/org/telegram/ui/DialogsActivity.java
 +++ b/TMessagesProj/src/main/java/org/telegram/ui/DialogsActivity.java
-@@ -13366,6 +13366,9 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
+@@ -13366,6 +13366,10 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
      private void showItemOptions() {
          ItemOptions io = ItemOptions.makeOptions(this, optionsItem);
          io.setColors(getThemedColor(Theme.key_actionBarDefaultTitle), getThemedColor(Theme.key_actionBarDefaultTitle));
 +        if (Theme.getActiveTheme().inu_isMonet()) {
++            io.setColors(getThemedColor(Theme.key_actionBarDefaultSubmenuItem), getThemedColor(Theme.key_actionBarDefaultSubmenuItemIcon));
 +            io.setSelectorColor(getThemedColor(Theme.key_dialogButtonSelector));
 +        }
          io.setDimAlpha(0x08);

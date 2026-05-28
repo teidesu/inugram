@@ -46,6 +46,10 @@ export const forkSyncFiles: ForkSyncFile[] = [
     target: 'TMessagesProj/src/main/res/values',
   },
   {
+    source: 'src/res/values/ids_inu.xml',
+    target: 'TMessagesProj/src/main/res/values',
+  },
+  {
     source: 'src/res/values-ru/strings_inu.xml',
     target: 'TMessagesProj/src/main/res/values-ru',
   },

@@ -37,6 +37,7 @@
     <string name="InuMaterial3">Material Design 3</string>
     <string name="InuMaterial3Switches">Switches</string>
     <string name="InuMaterial3Fabs">Floating buttons</string>
+    <string name="InuMaterial3Sections">List items</string>
     <string name="InuMonetTheme">Monet theme</string>
     <string name="InuMonetThemeDisabled">Disabled</string>
     <string name="InuMonetThemeLight">Light</string>

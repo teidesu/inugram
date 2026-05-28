@@ -22,9 +22,12 @@ object M3SwitchHelper {
     // MDC spec in track-viewport units (52x32); everything is multiplied by `scale` to fit the view.
     private const val TRACK_W = 52f
     private const val TRACK_H = 32f
-    // Rendered track width in dp; height follows from the MDC ratio. Kept <= the narrowest switch
-    // frame (37dp) so it never clips horizontally — don't raise without widening those frames.
+    // Default rendered track width in dp; height follows from the MDC ratio. Kept <= the narrowest
+    // switch frame (37dp) so it never clips. When the host frame is wide enough (≥52dp), the helper
+    // grows the track to the full MDC spec (`TRACK_W`) so callers that opt in (e.g. the ripple-check
+    // pill) get a proper MD3-sized switch.
     private const val TARGET_TRACK_W = 36f
+    private const val FULL_TRACK_W = TRACK_W
     private const val RADIUS = 16f
     private const val THUMB_R_OFF = 8f
     private const val THUMB_R_ON = 12f
@@ -76,10 +79,13 @@ object M3SwitchHelper {
         val onColor = Theme.getColor(trackCheckedColorKey, resourcesProvider)
         val thumbOnColor = Theme.getColor(thumbCheckedColorKey, resourcesProvider)
 
-        // Fixed size, centered in the host frame. Width is constant; height follows the MDC 52:32
-        // ratio. Frames shorter than `h` clip the overflow (parent clipChildren) — acceptable, the
-        // overrun is ~1dp on the track caps and the thumb always fits.
-        val scale = AndroidUtilities.dpf2(TARGET_TRACK_W) / TRACK_W
+        // Centered in the host frame. Track grows to fill the frame (with a 1dp horizontal buffer
+        // so round caps never clip), clamped to [TARGET_TRACK_W, FULL_TRACK_W]. Default 37dp stock
+        // frames stay at `TARGET_TRACK_W` (36dp); wider frames (e.g. the ripple-check pill at
+        // 46–52dp) grow toward the full MDC spec.
+        val frameWidthDp = measuredWidth / AndroidUtilities.density
+        val targetW = (frameWidthDp - 1f).coerceIn(TARGET_TRACK_W, FULL_TRACK_W)
+        val scale = AndroidUtilities.dpf2(targetW) / TRACK_W
         val trackW = TRACK_W * scale
         val h = TRACK_H * scale
         val left = (measuredWidth - trackW) / 2f
