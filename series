@@ -169,3 +169,4 @@ feature/md3-sections.patch
 debloat/quick-share.patch
 bugfix/apply-style-overlapping-spans.patch
 bugfix/painter-pan-bounds.patch
+feature/linked-channel-in-profile.patch

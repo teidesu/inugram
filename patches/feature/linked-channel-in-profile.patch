@@ -1,0 +1,149 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: alina sireneva <alina@tei.su>
+Date: Fri, 29 May 2026 02:57:41 +0400
+Subject: show linked channel in discussion group profile similar to personal channel
+
+---
+ .../telegram/ui/Cells/ProfileChannelCell.java | 25 +++++++---
+ .../java/org/telegram/ui/ProfileActivity.java | 49 +++++++++++++++++--
+ 2 files changed, 63 insertions(+), 11 deletions(-)
+
+diff --git a/TMessagesProj/src/main/java/org/telegram/ui/Cells/ProfileChannelCell.java b/TMessagesProj/src/main/java/org/telegram/ui/Cells/ProfileChannelCell.java
+index 0000000..0000000 100644
+--- a/TMessagesProj/src/main/java/org/telegram/ui/Cells/ProfileChannelCell.java
++++ b/TMessagesProj/src/main/java/org/telegram/ui/Cells/ProfileChannelCell.java
+@@ -47,7 +47,7 @@ public class ProfileChannelCell extends FrameLayout implements Theme.Colorable {
+ 
+     private final Theme.ResourcesProvider resourcesProvider;
+ 
+-    private final TextView headerView;
++    public final TextView headerView;
+     private final AnimatedTextView subscribersView;
+ 
+     public final DialogCell dialogCell;
+@@ -340,12 +340,23 @@ public class ProfileChannelCell extends FrameLayout implements Theme.Colorable {
+                         }
+                     }
+ 
+-                    final TLRPC.TL_channels_getMessages req = new TLRPC.TL_channels_getMessages();
+-                    req.channel = MessagesController.getInstance(currentAccount).getInputChannel(channel_id);
+-                    for (int i = 10; i >= 0; --i) {
+-                        final int id = message_id - i;
+-                        if (id >= 0)
+-                            req.id.add(id);
++                    final org.telegram.tgnet.TLObject req;
++                    if (message_id <= 0) {
++                        // inu: caller wants latest message; channels.getMessages can't pick "latest"
++                        final TLRPC.TL_messages_getHistory historyReq = new TLRPC.TL_messages_getHistory();
++                        historyReq.peer = MessagesController.getInstance(currentAccount).getInputPeer(-channel_id);
++                        historyReq.limit = 10;
++                        req = historyReq;
++                    } else {
++                        // stock
++                        final TLRPC.TL_channels_getMessages getMessagesReq = new TLRPC.TL_channels_getMessages();
++                        getMessagesReq.channel = MessagesController.getInstance(currentAccount).getInputChannel(channel_id);
++                        for (int i = 10; i >= 0; --i) {
++                            final int id = message_id - i;
++                            if (id >= 0)
++                                getMessagesReq.id.add(id);
++                        }
++                        req = getMessagesReq;
+                     }
+                     ConnectionsManager.getInstance(currentAccount).sendRequest(req, (response, err) -> AndroidUtilities.runOnUIThread(() -> {
+                         if (response instanceof TLRPC.messages_Messages) {
+diff --git a/TMessagesProj/src/main/java/org/telegram/ui/ProfileActivity.java b/TMessagesProj/src/main/java/org/telegram/ui/ProfileActivity.java
+index 0000000..0000000 100644
+--- a/TMessagesProj/src/main/java/org/telegram/ui/ProfileActivity.java
++++ b/TMessagesProj/src/main/java/org/telegram/ui/ProfileActivity.java
+@@ -4640,9 +4640,12 @@ public class ProfileActivity extends BaseFragment implements NotificationCenter.
+             } else if (position == bizLocationRow) {
+                 openLocation(false);
+             } else if (position == channelRow) {
+-                if (userInfo == null) return;
++                final long inu_openChannelId = userInfo != null
++                        ? userInfo.personal_channel_id
++                        : (chatInfo != null ? chatInfo.linked_chat_id : 0);
++                if (inu_openChannelId == 0) return;
+                 Bundle args = new Bundle();
+-                args.putLong("chat_id", userInfo.personal_channel_id);
++                args.putLong("chat_id", inu_openChannelId);
+                 presentFragment(new ChatActivity(args));
+             } else if (position == birthdayRow) {
+                 if (birthdayEffect != null && birthdayEffect.start()) {
+@@ -9191,6 +9194,7 @@ public class ProfileActivity extends BaseFragment implements NotificationCenter.
+                     getMediaDataController().getMediaCount(mergeDialogId, topicId, MediaDataController.MEDIA_PHOTOVIDEO, classGuid, true);
+                 }
+                 fetchUsersFromChannelInfo();
++                inu_fetchLinkedChannelMessage();
+                 if (avatarsViewPager != null && !isTopic) {
+                     avatarsViewPager.setChatInfo(chatInfo);
+                 }
+@@ -10297,6 +10301,7 @@ public class ProfileActivity extends BaseFragment implements NotificationCenter.
+             avatarImage.setHasStories(needInsetForStories());
+         }
+         fetchUsersFromChannelInfo();
++        inu_fetchLinkedChannelMessage();
+         if (chatId != 0) {
+             boolean gift = !BuildVars.IS_BILLING_UNAVAILABLE && !getMessagesController().premiumPurchaseBlocked() && chatInfo != null && chatInfo.stargifts_available;
+             otherItem.setSubItemShown(gift_premium, gift);
+@@ -10306,6 +10311,15 @@ public class ProfileActivity extends BaseFragment implements NotificationCenter.
+         }
+     }
+ 
++    private void inu_fetchLinkedChannelMessage() {
++        if (chatInfo == null || chatInfo.linked_chat_id == 0 || currentChat == null || !currentChat.megagroup) return;
++        if (profileChannelMessageFetcher == null) {
++            profileChannelMessageFetcher = new ProfileChannelCell.ChannelMessageFetcher(currentAccount);
++            profileChannelMessageFetcher.subscribe(() -> updateListAnimated(false));
++        }
++        profileChannelMessageFetcher.fetch(chatInfo.linked_chat_id, 0);
++    }
++
+     private boolean needInsetForStories() {
+         return getMessagesController().getStoriesController().hasStories(getDialogId()) && !isTopic;
+     }
+@@ -10804,6 +10818,26 @@ public class ProfileActivity extends BaseFragment implements NotificationCenter.
+                 sharedMediaRow = rowCount++;
+             }
+         } else if (chatId != 0) {
++            TLRPC.Chat inu_linkedChannel = null;
++            if (currentChat != null && currentChat.megagroup && chatInfo != null && chatInfo.linked_chat_id != 0) {
++                final TLRPC.Chat candidate = getMessagesController().getChat(chatInfo.linked_chat_id);
++                if (candidate != null && (ChatObject.isPublic(candidate) || !ChatObject.isNotInChat(candidate))) {
++                    if (profileChannelMessageFetcher == null || !profileChannelMessageFetcher.loaded || !profileChannelMessageFetcher.messageObjects.isEmpty()) {
++                        inu_linkedChannel = candidate;
++                    }
++                }
++            }
++            if (inu_linkedChannel != null) {
++                if (emptyRow < 0 && emptyRow2 < 0) {
++                    if (hasMusic || peerColor != null || actionsView == null) {
++                        emptyRow2 = rowCount++;
++                    } else {
++                        emptyRow = rowCount++;
++                    }
++                }
++                channelRow = rowCount++;
++                channelDividerRow = rowCount++;
++            }
+             if (chatInfo != null && (!TextUtils.isEmpty(chatInfo.about) || chatInfo.location instanceof TLRPC.TL_channelLocation) || ChatObject.isPublic(currentChat)) {
+                 if (emptyRow < 0 && emptyRow2 < 0) {
+                     if (hasMusic || peerColor != null || actionsView == null) {
+@@ -14090,8 +14124,15 @@ public class ProfileActivity extends BaseFragment implements NotificationCenter.
+                     hoursCell.set(userInfo != null ? userInfo.business_work_hours : null, hoursExpanded, hoursShownMine, notificationsDividerRow < 0 && !myProfile || bizLocationRow >= 0);
+                     break;
+                 case VIEW_TYPE_CHANNEL:
+-                    ((ProfileChannelCell) holder.itemView).set(
+-                        getMessagesController().getChat(userInfo.personal_channel_id),
++                    final ProfileChannelCell channelCell = (ProfileChannelCell) holder.itemView;
++                    final long inu_channelId = userInfo != null
++                            ? userInfo.personal_channel_id
++                            : (chatInfo != null ? chatInfo.linked_chat_id : 0);
++                    channelCell.headerView.setText(LocaleController.getString(
++                            userInfo != null ? R.string.ProfileChannel : R.string.LinkedChannel
++                    ));
++                    channelCell.set(
++                        getMessagesController().getChat(inu_channelId),
+                         profileChannelMessageFetcher != null ? profileChannelMessageFetcher.messageObjects : null
+                     );
+                     break;

@@ -18,6 +18,7 @@ most things are toggleable in `Settings → Inugram`, with sensible opinionated 
 - 🐶 customizable animation speed multiplier (incl. instant)
 - show peer id in profile (telegram id / bot api id)
 - estimated registration date in profile - *ported & datapoints from [NagramX](https://github.com/risin42/NagramX)*
+- show linked channel in discussion group profile similar to personal channel
 - hide own phone number from ui
 - ui font: force system or user-provided TTF/OTF/TTC pack
 - 🐶 hide fade views
