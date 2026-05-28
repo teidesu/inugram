@@ -1,7 +1,6 @@
 package desu.inugram.ui.drawer
 
 import android.animation.Animator
-import androidx.annotation.Keep
 import android.animation.AnimatorListenerAdapter
 import android.animation.AnimatorSet
 import android.animation.ObjectAnimator
@@ -15,6 +14,7 @@ import android.view.View
 import android.view.accessibility.AccessibilityEvent
 import android.view.animation.DecelerateInterpolator
 import android.widget.FrameLayout
+import androidx.annotation.Keep
 import org.telegram.messenger.AndroidUtilities
 import org.telegram.messenger.R
 import org.telegram.ui.ActionBar.DrawerLayoutContainer
@@ -131,8 +131,9 @@ class DrawerSwipeController(private val host: DrawerLayoutContainer) {
 
     /**
      * Once the drawer is open (or mid-drag) gestures must keep working to close it.
-     * Otherwise only start tracking when the top fragment allows it — a DialogsActivity
-     * on a non-first folder tab owns the horizontal swipe for tab paging.
+     * Forum (right-sliding container) owns the left-edge swipe to close itself —
+     * yield fully there. Non-first folder tab owns horizontal swipe for tab paging,
+     * but we still allow drawer from a thin edge zone — see [tabsOwnHorizontalSwipe].
      */
     private fun canTrackGesture(): Boolean {
         if (drawerOpened || drawerPosition > 0) return true
@@ -140,10 +141,15 @@ class DrawerSwipeController(private val host: DrawerLayoutContainer) {
         val top = host.parentActionBarLayout.lastFragment
         if (top is DialogsActivity) {
             if (top.searchIsShowed) return false
-            val tabs = top.filterTabsView
-            return tabs == null || tabs.visibility != View.VISIBLE || tabs.isFirstTabSelected
+            if (top.rightSlidingDialogContainer?.hasFragment() == true) return false
         }
         return true
+    }
+
+    private fun tabsOwnHorizontalSwipe(): Boolean {
+        val top = host.parentActionBarLayout.lastFragment as? DialogsActivity ?: return false
+        val tabs = top.filterTabsView ?: return false
+        return tabs.visibility == View.VISIBLE && !tabs.isFirstTabSelected
     }
 
     fun onTouchEvent(ev: MotionEvent?): Boolean {
@@ -182,22 +188,35 @@ class DrawerSwipeController(private val host: DrawerLayoutContainer) {
                 startedTrackingPointerId = ev.getPointerId(0)
                 maybeStartTracking = true
                 cancelCurrentAnimation()
-                velocityTracker?.clear()
+                // Seed velocity tracker from DOWN — otherwise a short fast fling
+                // (DOWN → 1 MOVE → UP) computes ~0 velocity and the drawer snaps back.
+                if (velocityTracker == null) velocityTracker = VelocityTracker.obtain()
+                else velocityTracker!!.clear()
+                velocityTracker!!.addMovement(ev)
             } else if (ev != null && ev.action == MotionEvent.ACTION_MOVE
                 && ev.getPointerId(0) == startedTrackingPointerId
             ) {
                 if (velocityTracker == null) velocityTracker = VelocityTracker.obtain()
+                velocityTracker!!.addMovement(ev)
                 val dx = ev.x - startedTrackingX
                 val dy = Math.abs(ev.y - startedTrackingY)
-                velocityTracker!!.addMovement(ev)
-                if (maybeStartTracking && !startedTracking
-                    && (dx > 0 && dx / 3f > dy && Math.abs(dx) >= AndroidUtilities.getPixelsInCM(0.2f, true)
-                        || drawerOpened && dx < 0 && Math.abs(dx) >= dy && Math.abs(dx) >= AndroidUtilities.getPixelsInCM(0.4f, true))
-                ) {
+                val inEdgeZone = startedTrackingX <= AndroidUtilities.dp(EDGE_SAFE_ZONE_DP.toFloat())
+                // Edge-zone swipes skip the angle check entirely (gesture-nav swipes
+                // come at any angle); mid-screen keeps stock strict ~18° so vertical
+                // scrolls with rightward drift aren't hijacked.
+                val openAngleOk = inEdgeZone || dx / 3f > dy
+                val openSwipe = dx > 0 && openAngleOk && Math.abs(dx) >= AndroidUtilities.getPixelsInCM(0.2f, true)
+                    && (!tabsOwnHorizontalSwipe() || inEdgeZone)
+                val closeSwipe = drawerOpened && dx < 0 && Math.abs(dx) >= dy && Math.abs(dx) >= AndroidUtilities.getPixelsInCM(0.4f, true)
+                if (maybeStartTracking && !startedTracking && (openSwipe || closeSwipe)) {
                     maybeStartTracking = false
                     startedTracking = true
-                    startedTrackingX = ev.x.toInt()
                     beginTrackingSent = false
+                    // Apply accumulated dx in-line — a fast fling that crosses the
+                    // threshold in one MOVE otherwise wouldn't move the drawer at
+                    // all before UP arrives.
+                    setDrawerPosition(drawerPosition + dx)
+                    startedTrackingX = ev.x.toInt()
                     host.requestDisallowInterceptTouchEvent(true)
                 } else if (startedTracking) {
                     if (!beginTrackingSent) {
@@ -212,6 +231,7 @@ class DrawerSwipeController(private val host: DrawerLayoutContainer) {
                     || ev.action == MotionEvent.ACTION_POINTER_UP)
             ) {
                 if (velocityTracker == null) velocityTracker = VelocityTracker.obtain()
+                if (ev != null) velocityTracker!!.addMovement(ev)
                 velocityTracker!!.computeCurrentVelocity(1000)
                 if (startedTracking || (drawerPosition != 0f && drawerPosition != layout.measuredWidth.toFloat())) {
                     val velX = velocityTracker!!.xVelocity
@@ -290,6 +310,8 @@ class DrawerSwipeController(private val host: DrawerLayoutContainer) {
     }
 
     companion object {
+        private const val EDGE_SAFE_ZONE_DP = 25
+
         // ObjectAnimator with a string property name uses JavaBeans naming; an
         // explicit Property bypasses that.
         @JvmField
