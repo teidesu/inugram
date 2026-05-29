@@ -1,5 +1,7 @@
 package desu.inugram.ui.drawer
 
+import android.animation.ArgbEvaluator
+import android.animation.ValueAnimator
 import android.app.Activity
 import android.content.Context
 import android.graphics.Bitmap
@@ -16,10 +18,13 @@ import android.graphics.drawable.RippleDrawable
 import android.os.Build
 import android.util.TypedValue
 import android.view.Gravity
+import android.view.View
 import android.view.accessibility.AccessibilityNodeInfo
 import android.widget.FrameLayout
 import android.widget.ImageView
 import android.widget.TextView
+import androidx.core.graphics.ColorUtils
+import desu.inugram.InuConfig
 import org.telegram.PhoneFormat.PhoneFormat
 import org.telegram.messenger.AndroidUtilities
 import org.telegram.messenger.ApplicationLoader
@@ -63,7 +68,9 @@ class DrawerProfileCell(context: Context, drawerLayoutContainer: DrawerLayoutCon
     private val destRect = Rect()
     private val paint = Paint()
     private var currentColor: Int? = null
-    private var currentMoonColor: Int? = null
+    private var currentIconColor: Int? = null
+    private var iconColorAnimator: ValueAnimator? = null
+    private var pendingCrossfadeFrom: Int? = null
     private var snowflakesEffect: SnowflakesEffect? = null
     private var accountsShown = false
 
@@ -117,7 +124,18 @@ class DrawerProfileCell(context: Context, drawerLayoutContainer: DrawerLayoutCon
         nameTextView.setGravity(Gravity.LEFT or Gravity.CENTER_VERTICAL)
         nameTextView.setEllipsizeByGradient(true)
         nameTextView.setRightDrawableOutside(true)
-        addView(nameTextView, LayoutHelper.createFrame(LayoutHelper.MATCH_PARENT, LayoutHelper.WRAP_CONTENT.toFloat(), Gravity.LEFT or Gravity.BOTTOM, 16f, 0f, 52f, 28f))
+        addView(
+            nameTextView,
+            LayoutHelper.createFrame(
+                LayoutHelper.MATCH_PARENT,
+                LayoutHelper.WRAP_CONTENT.toFloat(),
+                Gravity.LEFT or Gravity.BOTTOM,
+                16f,
+                0f,
+                52f,
+                28f
+            )
+        )
 
         phoneTextView = TextView(context)
         phoneTextView.setTextSize(TypedValue.COMPLEX_UNIT_DIP, 13f)
@@ -125,11 +143,15 @@ class DrawerProfileCell(context: Context, drawerLayoutContainer: DrawerLayoutCon
         phoneTextView.maxLines = 1
         phoneTextView.isSingleLine = true
         phoneTextView.gravity = Gravity.LEFT
-        addView(phoneTextView, LayoutHelper.createFrame(LayoutHelper.MATCH_PARENT, LayoutHelper.WRAP_CONTENT.toFloat(), Gravity.LEFT or Gravity.BOTTOM, 16f, 0f, 52f, 9f))
+        addView(
+            phoneTextView,
+            LayoutHelper.createFrame(LayoutHelper.MATCH_PARENT, LayoutHelper.WRAP_CONTENT.toFloat(), Gravity.LEFT or Gravity.BOTTOM, 16f, 0f, 52f, 9f)
+        )
 
         arrowView = ImageView(context)
         arrowView.scaleType = ImageView.ScaleType.CENTER
         arrowView.setImageResource(R.drawable.msg_expand)
+        arrowView.setColorFilter(PorterDuffColorFilter(Theme.getColor(Theme.key_chats_menuName), PorterDuff.Mode.SRC_IN))
         addView(arrowView, LayoutHelper.createFrame(59, 59, Gravity.RIGHT or Gravity.BOTTOM))
         setArrowState(false)
 
@@ -157,13 +179,7 @@ class DrawerProfileCell(context: Context, drawerLayoutContainer: DrawerLayoutCon
         }
         darkThemeView.isFocusable = true
         darkThemeView.background = Theme.createCircleSelectorDrawable(Theme.getColor(Theme.key_dialogButtonSelector), 0, 0)
-        sunDrawable!!.beginApplyLayerColors()
-        val sunColor = Theme.getColor(Theme.key_chats_menuName)
-        sunDrawable!!.setLayerColor("Sunny.**", sunColor)
-        sunDrawable!!.setLayerColor("Path 6.**", sunColor)
-        sunDrawable!!.setLayerColor("Path.**", sunColor)
-        sunDrawable!!.setLayerColor("Path 5.**", sunColor)
-        sunDrawable!!.commitApplyLayerColors()
+        sunDrawable!!.colorFilter = PorterDuffColorFilter(Theme.getColor(Theme.key_chats_menuName), PorterDuff.Mode.SRC_IN)
         darkThemeView.scaleType = ImageView.ScaleType.CENTER
         darkThemeView.setAnimation(sunDrawable)
         if (Build.VERSION.SDK_INT >= 21) {
@@ -203,8 +219,26 @@ class DrawerProfileCell(context: Context, drawerLayoutContainer: DrawerLayoutCon
                 themeInfo = Theme.getTheme(dayThemeName)
                 sunDrawable!!.setCustomEndFrame(0)
             }
-            darkThemeView.playAnimation()
-            switchTheme(themeInfo, toDark)
+            if (!toDark) {
+                // dark→light: hide icon and wait for a composed frame before snapshot, otherwise
+                // PixelCopy reads the prior surfaceflinger buffer and old sun bleeds through.
+                // Floating sun overlay (sourceView path in LaunchActivity) renders the morph on top.
+                val fromColor = currentIconColor
+                pendingCrossfadeFrom = fromColor
+                if (fromColor != null) {
+                    sunDrawable!!.colorFilter = PorterDuffColorFilter(fromColor, PorterDuff.Mode.SRC_IN)
+                }
+                darkThemeView.visibility = INVISIBLE
+                android.view.Choreographer.getInstance().postFrameCallback {
+                    android.view.Choreographer.getInstance().postFrameCallback {
+                        darkThemeView.playAnimation()
+                        switchTheme(themeInfo, toDark)
+                    }
+                }
+            } else {
+                darkThemeView.playAnimation()
+                switchTheme(themeInfo, toDark)
+            }
 
             // Adapted from 11.14.1: 12.x turnOffAutoNight takes BulletinFactory instead of a host FrameLayout.
             // Build a BulletinFactory from the currently-presented fragment so the bulletin shows on the host.
@@ -231,12 +265,32 @@ class DrawerProfileCell(context: Context, drawerLayoutContainer: DrawerLayoutCon
         nameTextView.setRightDrawable(status)
     }
 
-    private fun switchTheme(themeInfo: Theme.ThemeInfo, toDark: Boolean) {
+    private fun startIconColorCrossfade(from: Int, to: Int) {
+        iconColorAnimator?.cancel()
+        sunDrawable?.colorFilter = PorterDuffColorFilter(from, PorterDuff.Mode.SRC_IN)
+        iconColorAnimator = ValueAnimator.ofObject(ArgbEvaluator(), from, to).apply {
+            duration = 400
+            addUpdateListener {
+                val c = it.animatedValue as Int
+                sunDrawable?.colorFilter = PorterDuffColorFilter(c, PorterDuff.Mode.SRC_IN)
+            }
+            addListener(object : android.animation.AnimatorListenerAdapter() {
+                override fun onAnimationEnd(a: android.animation.Animator) {
+                    if (iconColorAnimator === a) iconColorAnimator = null
+                    sunDrawable?.colorFilter = PorterDuffColorFilter(to, PorterDuff.Mode.SRC_IN)
+                }
+            })
+            start()
+        }
+    }
+
+    private fun switchTheme(themeInfo: Theme.ThemeInfo, toDark: Boolean, sourceView: RLottieImageView? = darkThemeView) {
         val pos = IntArray(2)
         darkThemeView.getLocationInWindow(pos)
         pos[0] += darkThemeView.measuredWidth / 2
         pos[1] += darkThemeView.measuredHeight / 2
-        NotificationCenter.getGlobalInstance().postNotificationName(NotificationCenter.needSetDayNightTheme, themeInfo, false, pos, -1, toDark, darkThemeView)
+        NotificationCenter.getGlobalInstance()
+            .postNotificationName(NotificationCenter.needSetDayNightTheme, themeInfo, false, pos, -1, toDark, sourceView)
     }
 
     override fun onAttachedToWindow() {
@@ -244,6 +298,7 @@ class DrawerProfileCell(context: Context, drawerLayoutContainer: DrawerLayoutCon
         status.attach()
         updateColors()
         NotificationCenter.getGlobalInstance().addObserver(this, NotificationCenter.emojiLoaded)
+        NotificationCenter.getGlobalInstance().addObserver(this, NotificationCenter.needSetDayNightTheme)
         for (i in 0 until UserConfig.MAX_ACCOUNT_COUNT) {
             NotificationCenter.getInstance(i).addObserver(this, NotificationCenter.currentUserPremiumStatusChanged)
         }
@@ -253,6 +308,7 @@ class DrawerProfileCell(context: Context, drawerLayoutContainer: DrawerLayoutCon
         super.onDetachedFromWindow()
         status.detach()
         NotificationCenter.getGlobalInstance().removeObserver(this, NotificationCenter.emojiLoaded)
+        NotificationCenter.getGlobalInstance().removeObserver(this, NotificationCenter.needSetDayNightTheme)
         for (i in 0 until UserConfig.MAX_ACCOUNT_COUNT) {
             NotificationCenter.getInstance(i).removeObserver(this, NotificationCenter.currentUserPremiumStatusChanged)
         }
@@ -312,15 +368,18 @@ class DrawerProfileCell(context: Context, drawerLayoutContainer: DrawerLayoutCon
             currentColor = shadowColor
             shadowView.drawable.setColorFilter(PorterDuffColorFilter(shadowColor, PorterDuff.Mode.MULTIPLY))
         }
-        val moonColor = Theme.getColor(Theme.key_chats_menuName)
-        if (currentMoonColor == null || currentMoonColor != moonColor) {
-            currentMoonColor = moonColor
-            sunDrawable!!.beginApplyLayerColors()
-            sunDrawable!!.setLayerColor("Sunny.**", moonColor)
-            sunDrawable!!.setLayerColor("Path 6.**", moonColor)
-            sunDrawable!!.setLayerColor("Path.**", moonColor)
-            sunDrawable!!.setLayerColor("Path 5.**", moonColor)
-            sunDrawable!!.commitApplyLayerColors()
+        val iconColor = pickIconColor(backgroundKey, useImageBackground)
+        if (currentIconColor == null || currentIconColor != iconColor) {
+            val prev = currentIconColor
+            currentIconColor = iconColor
+            val crossfadeFrom = pendingCrossfadeFrom ?: prev
+            if (pendingCrossfadeFrom != null && crossfadeFrom != null && crossfadeFrom != iconColor) {
+                pendingCrossfadeFrom = null
+                startIconColorCrossfade(crossfadeFrom, iconColor)
+            } else if (iconColorAnimator == null && pendingCrossfadeFrom == null) {
+                sunDrawable!!.colorFilter = PorterDuffColorFilter(iconColor, PorterDuff.Mode.SRC_IN)
+            }
+            arrowView.setColorFilter(PorterDuffColorFilter(iconColor, PorterDuff.Mode.SRC_IN))
         }
         nameTextView.setTextColor(Theme.getColor(Theme.key_chats_menuName))
         if (useImageBackground) {
@@ -382,7 +441,8 @@ class DrawerProfileCell(context: Context, drawerLayoutContainer: DrawerLayoutCon
         var text: CharSequence = UserObject.getUserName(user)
         try {
             text = Emoji.replaceEmoji(text, nameTextView.paint.fontMetricsInt, false)
-        } catch (ignore: Exception) {}
+        } catch (ignore: Exception) {
+        }
 
         nameTextView.setText(text)
         val emojiStatusId = UserObject.getEmojiStatusDocumentId(user)
@@ -404,11 +464,27 @@ class DrawerProfileCell(context: Context, drawerLayoutContainer: DrawerLayoutCon
             status.setParticles(false, true)
         }
         status.setColor(Theme.getColor(if (Theme.isCurrentThemeDark()) Theme.key_chats_verifiedBackground else Theme.key_chats_menuPhoneCats))
-        phoneTextView.text = PhoneFormat.getInstance().format("+" + user.phone)
+        phoneTextView.text = if (InuConfig.HIDE_MY_PHONE_NUMBER.value) {
+            LocaleController.getString(R.string.MobileHidden)
+        } else {
+            PhoneFormat.getInstance().format("+" + user.phone)
+        }
         val avatarDrawable = AvatarDrawable(user)
         avatarDrawable.setColor(Theme.getColor(Theme.key_avatar_backgroundInProfileBlue))
         avatarImageView.setForUserOrChat(user, avatarDrawable)
         applyBackground(true)
+    }
+
+    // Stock uses key_chats_menuName for the sun/arrow which is white on dark themes
+    // but also lands on header backgrounds that are nearly white (e.g. Monet Light).
+    // Fall back to the dark drawer-item icon color when the header is bright.
+    private fun pickIconColor(backgroundKey: Int, useImageBackground: Boolean): Int {
+        val nameColor = Theme.getColor(Theme.key_chats_menuName)
+        if (useImageBackground) return nameColor
+        val bgColor = Theme.getColor(backgroundKey)
+        val bgLight = ColorUtils.calculateLuminance(bgColor) > 0.5
+        val nameLight = ColorUtils.calculateLuminance(nameColor) > 0.5
+        return if (bgLight && nameLight) Theme.getColor(Theme.key_chats_menuItemIcon) else nameColor
     }
 
     fun applyBackground(force: Boolean): Int {
@@ -446,15 +522,28 @@ class DrawerProfileCell(context: Context, drawerLayoutContainer: DrawerLayoutCon
     override fun didReceivedNotification(id: Int, account: Int, vararg args: Any?) {
         when (id) {
             NotificationCenter.emojiLoaded -> nameTextView.invalidate()
+            NotificationCenter.needSetDayNightTheme -> {
+                currentColor = null
+                currentIconColor = null
+                applyBackground(true)
+                updateColors()
+                invalidate()
+            }
+
             NotificationCenter.userEmojiStatusUpdated -> setUser(args[0] as TLRPC.User, accountsShown)
-            NotificationCenter.currentUserPremiumStatusChanged -> setUser(UserConfig.getInstance(UserConfig.selectedAccount).currentUser, accountsShown)
+            NotificationCenter.currentUserPremiumStatusChanged -> setUser(
+                UserConfig.getInstance(UserConfig.selectedAccount).currentUser,
+                accountsShown
+            )
+
             NotificationCenter.updateInterfaces -> {
                 val flags = args[0] as Int
                 if (flags and MessagesController.UPDATE_MASK_NAME != 0 ||
                     flags and MessagesController.UPDATE_MASK_AVATAR != 0 ||
                     flags and MessagesController.UPDATE_MASK_STATUS != 0 ||
                     flags and MessagesController.UPDATE_MASK_PHONE != 0 ||
-                    flags and MessagesController.UPDATE_MASK_EMOJI_STATUS != 0) {
+                    flags and MessagesController.UPDATE_MASK_EMOJI_STATUS != 0
+                ) {
                     setUser(UserConfig.getInstance(UserConfig.selectedAccount).currentUser, accountsShown)
                 }
             }

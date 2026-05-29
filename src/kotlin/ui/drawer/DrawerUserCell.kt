@@ -135,6 +135,7 @@ class DrawerUserCell(context: Context) : FrameLayout(context), NotificationCente
 
     fun setAccount(account: Int) {
         accountNumber = account
+        setBackgroundColor(Theme.getColor(Theme.key_chats_menuBackground))
         val user = UserConfig.getInstance(accountNumber).currentUser ?: return
         avatarDrawable.setInfo(account, user)
         var text: CharSequence = ContactsController.formatName(user.first_name, user.last_name)

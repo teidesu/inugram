@@ -27,7 +27,7 @@ class DrawerLayoutAdapter(
 ) : RecyclerListView.SelectionAdapter() {
 
     private val items = ArrayList<Item?>(11)
-    private val accountNumbers = ArrayList<Int>()
+    public val accountNumbers = ArrayList<Int>()
     private var accountsShown: Boolean
 
     @JvmField
@@ -154,6 +154,17 @@ class DrawerLayoutAdapter(
         if (accountsShown) pos -= getAccountRowsCount()
         if (pos < 0 || pos >= items.size) return null
         return items[pos]?.bot
+    }
+
+    fun swapAccounts(fromPosition: Int, toPosition: Int): Boolean {
+        val from = fromPosition - 2
+        val to = toPosition - 2
+        if (from < 0 || to < 0 || from >= accountNumbers.size || to >= accountNumbers.size) return false
+        val tmp = accountNumbers[from]
+        accountNumbers[from] = accountNumbers[to]
+        accountNumbers[to] = tmp
+        notifyItemMoved(fromPosition, toPosition)
+        return true
     }
 
     private fun resetItems() {

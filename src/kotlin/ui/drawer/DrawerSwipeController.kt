@@ -15,10 +15,13 @@ import android.view.accessibility.AccessibilityEvent
 import android.view.animation.DecelerateInterpolator
 import android.widget.FrameLayout
 import androidx.annotation.Keep
+import androidx.core.graphics.ColorUtils
 import org.telegram.messenger.AndroidUtilities
 import org.telegram.messenger.R
 import org.telegram.ui.ActionBar.DrawerLayoutContainer
+import org.telegram.ui.ActionBar.Theme
 import org.telegram.ui.DialogsActivity
+import org.telegram.ui.LaunchActivity
 
 /**
  * Old Layout side drawer mechanics for [DrawerLayoutContainer]: swipe
@@ -127,6 +130,22 @@ class DrawerSwipeController(private val host: DrawerLayoutContainer) {
         currentAnimation = null
         drawerOpened = opened
         host.sendAccessibilityEvent(AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED)
+        syncStatusBar(opened)
+    }
+
+    private fun syncStatusBar(opened: Boolean) {
+        val activity = host.context as? LaunchActivity ?: return
+        if (opened) {
+            val bgKey = if (Theme.hasThemeKey(Theme.key_chats_menuTopBackground) &&
+                Theme.getColor(Theme.key_chats_menuTopBackground) != 0
+            ) Theme.key_chats_menuTopBackground else Theme.key_chats_menuTopBackgroundCats
+            AndroidUtilities.setLightStatusBar(
+                activity.window,
+                ColorUtils.calculateLuminance(Theme.getColor(bgKey)) > 0.7,
+            )
+        } else {
+            activity.checkSystemBarColors(false, true, false)
+        }
     }
 
     /**

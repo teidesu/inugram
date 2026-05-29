@@ -8,8 +8,12 @@ import android.view.Gravity
 import android.view.View
 import android.view.ViewGroup
 import android.widget.FrameLayout
+import androidx.recyclerview.widget.ItemTouchHelper
 import androidx.recyclerview.widget.LinearLayoutManager
+import androidx.recyclerview.widget.RecyclerView
 import desu.inugram.InuConfig
+import desu.inugram.helpers.dialogs.DrawerHelper.setupMainFragment
+import desu.inugram.helpers.update.UpdateHelper
 import desu.inugram.ui.drawer.DrawerAddCell
 import desu.inugram.ui.drawer.DrawerLayoutAdapter
 import desu.inugram.ui.drawer.DrawerProfileCell
@@ -21,18 +25,21 @@ import org.telegram.messenger.AndroidUtilities.dp
 import org.telegram.messenger.ApplicationLoader
 import org.telegram.messenger.FileLoader
 import org.telegram.messenger.ImageLoader
+import org.telegram.messenger.LocaleController.getString
 import org.telegram.messenger.MessagesController
 import org.telegram.messenger.NotificationCenter
+import org.telegram.messenger.R
 import org.telegram.messenger.SharedConfig
 import org.telegram.messenger.UserConfig
 import org.telegram.ui.AccountFrozenAlert
-import org.telegram.ui.ChatActivity
 import org.telegram.ui.ActionBar.BaseFragment
 import org.telegram.ui.ActionBar.DrawerLayoutContainer
 import org.telegram.ui.ActionBar.INavigationLayout
 import org.telegram.ui.ActionBar.MenuDrawable
 import org.telegram.ui.ActionBar.Theme
 import org.telegram.ui.CallLogActivity
+import org.telegram.ui.ChatActivity
+import org.telegram.ui.Components.ItemOptions
 import org.telegram.ui.Components.RecyclerListView
 import org.telegram.ui.ContactsActivity
 import org.telegram.ui.DialogsActivity
@@ -44,10 +51,6 @@ import org.telegram.ui.MainTabsActivity
 import org.telegram.ui.ProfileActivity
 import org.telegram.ui.SettingsActivity
 import org.telegram.ui.UpdateLayoutWrapper
-import desu.inugram.helpers.update.UpdateHelper
-import org.telegram.messenger.LocaleController.getString
-import org.telegram.messenger.R
-import org.telegram.ui.Components.ItemOptions
 
 @SuppressLint("StaticFieldLeak")
 object DrawerHelper {
@@ -130,6 +133,8 @@ object DrawerHelper {
             handleItemClick(position, view, drawerLayoutContainer, actionBarLayout, newAdapter)
         }
 
+        attachAccountReorder(sm, newAdapter)
+
         val container = FrameLayout(context)
         sideMenuContainer = container
         container.setBackgroundColor(Theme.getColor(Theme.key_chats_menuBackground))
@@ -153,6 +158,39 @@ object DrawerHelper {
 
         installThemeObserver()
         installUpdateLayout(context as? Activity, container, sm)
+    }
+
+    private fun attachAccountReorder(sm: RecyclerListView, adapter: DrawerLayoutAdapter) {
+        val callback = object : ItemTouchHelper.Callback() {
+            override fun isLongPressDragEnabled() = true
+
+            override fun getMovementFlags(rv: RecyclerView, vh: RecyclerView.ViewHolder): Int {
+                val dirs = if (vh.itemView is DrawerUserCell) ItemTouchHelper.UP or ItemTouchHelper.DOWN else 0
+                return makeMovementFlags(dirs, 0)
+            }
+
+            override fun onMove(rv: RecyclerView, source: RecyclerView.ViewHolder, target: RecyclerView.ViewHolder): Boolean {
+                if (target.itemView !is DrawerUserCell) return false
+                return adapter.swapAccounts(source.adapterPosition, target.adapterPosition)
+            }
+
+            override fun onSwiped(vh: RecyclerView.ViewHolder, direction: Int) {}
+
+            override fun onSelectedChanged(vh: RecyclerView.ViewHolder?, actionState: Int) {
+                super.onSelectedChanged(vh, actionState)
+                if (actionState == ItemTouchHelper.ACTION_STATE_DRAG) {
+                    sm.cancelClickRunnables(false)
+                    vh?.itemView?.isPressed = true
+                }
+            }
+
+            override fun clearView(rv: RecyclerView, vh: RecyclerView.ViewHolder) {
+                super.clearView(rv, vh)
+                vh.itemView.isPressed = false
+                AccountOrderHelper.setVisibleOrder(adapter.accountNumbers)
+            }
+        }
+        ItemTouchHelper(callback).attachToRecyclerView(sm)
     }
 
     private fun installUpdateLayout(
