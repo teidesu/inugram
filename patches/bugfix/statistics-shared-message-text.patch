@@ -1,0 +1,22 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: alina sireneva <alina@tei.su>
+Date: Fri, 29 May 2026 04:40:12 +0400
+Subject: large emoji shrinking after opening message statistics
+
+---
+ .../src/main/java/org/telegram/ui/MessageStatisticActivity.java | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/TMessagesProj/src/main/java/org/telegram/ui/MessageStatisticActivity.java b/TMessagesProj/src/main/java/org/telegram/ui/MessageStatisticActivity.java
+index 0000000..0000000 100644
+--- a/TMessagesProj/src/main/java/org/telegram/ui/MessageStatisticActivity.java
++++ b/TMessagesProj/src/main/java/org/telegram/ui/MessageStatisticActivity.java
+@@ -496,7 +496,7 @@ public class MessageStatisticActivity extends BaseFragment implements Notificati
+                 if (message.length() > 150) {
+                     message = message.subSequence(0, 150);
+                 }
+-                message = Emoji.replaceEmoji(message, avatarContainer.getSubtitlePaint().getFontMetricsInt(), false);
++                message = Emoji.replaceEmoji(message, avatarContainer.getSubtitlePaint().getFontMetricsInt(), true);
+             } else {
+                 message = messageObject.messageText;
+             }
