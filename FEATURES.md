@@ -41,6 +41,7 @@ most things are toggleable in `Settings → Inugram`, with sensible opinionated 
 - in-app updater - *ported from [Nekogram](https://github.com/Nekogram/Nekogram)*
 - 🐶 crash report sheet: catches uncaught exceptions, offers to share the log on next launch, posts a tap-to-restart notification
 - 🐶 logs management in About: toggle FileLog on/off, share zipped logs (with system info) via in-app picker, copy system info to clipboard. Replaces the stock Debug section under Settings.
+- keep search query after picking a result in peer selection screens
 
 ## dialogs list / main page
 

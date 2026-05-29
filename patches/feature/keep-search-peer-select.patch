@@ -1,0 +1,30 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: alina sireneva <alina@tei.su>
+Date: Fri, 29 May 2026 05:01:30 +0400
+Subject: keep search in peer selection screen (GroupCreateActivity)
+
+---
+ .../src/main/java/org/telegram/ui/GroupCreateActivity.java    | 4 +---
+ 1 file changed, 1 insertion(+), 3 deletions(-)
+
+diff --git a/TMessagesProj/src/main/java/org/telegram/ui/GroupCreateActivity.java b/TMessagesProj/src/main/java/org/telegram/ui/GroupCreateActivity.java
+index 0000000..0000000 100644
+--- a/TMessagesProj/src/main/java/org/telegram/ui/GroupCreateActivity.java
++++ b/TMessagesProj/src/main/java/org/telegram/ui/GroupCreateActivity.java
+@@ -624,15 +624,13 @@ public class GroupCreateActivity extends BaseFragment implements NotificationCen
+                     spansContainer.addSpan(span);
+                     span.setOnClickListener(GroupCreateActivity.this);
+                 }
++                cell.setChecked(selectedContacts.indexOfKey(id) >= 0, true);
+                 updateHint();
+                 if (searching || searchWas) {
+                     AndroidUtilities.showKeyboard(searchField.editText);
+                 } else {
+                     checkVisibleRows();
+                 }
+-                if (searchField.editText.length() > 0) {
+-                    searchField.editText.setText(null);
+-                }
+             }
+         });
+         listView.setOnScrollListener(new RecyclerView.OnScrollListener() {
