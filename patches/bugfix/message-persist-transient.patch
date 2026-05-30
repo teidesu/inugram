@@ -1,0 +1,23 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: alina sireneva <alina@tei.su>
+Date: Sat, 30 May 2026 18:47:05 +0400
+Subject: persist transient state on the message so that revealed quotes stay
+
+---
+ .../src/main/java/org/telegram/messenger/MessageObject.java    | 3 +++
+ 1 file changed, 3 insertions(+)
+
+diff --git a/TMessagesProj/src/main/java/org/telegram/messenger/MessageObject.java b/TMessagesProj/src/main/java/org/telegram/messenger/MessageObject.java
+index 0000000..0000000 100644
+--- a/TMessagesProj/src/main/java/org/telegram/messenger/MessageObject.java
++++ b/TMessagesProj/src/main/java/org/telegram/messenger/MessageObject.java
+@@ -770,6 +770,9 @@ public class MessageObject {
+         }
+         isSpoilersRevealed = old.isSpoilersRevealed;
+         isMediaSpoilersRevealed = old.isMediaSpoilersRevealed;
++        expandedQuotes = old.expandedQuotes;
++        expandedExplanation = old.expandedExplanation;
++        factCheckExpanded = old.factCheckExpanded;
+         messageOwner.replyStory = old.messageOwner.replyStory;
+         if (messageOwner.media != null && old.messageOwner.media != null) {
+             messageOwner.media.storyItem = old.messageOwner.media.storyItem;
