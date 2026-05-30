@@ -8,12 +8,12 @@ Restore hamburger side drawer for old layout mode (DrawerLayoutContainer)
 Restore hamburger side drawer for old layout mode (DialogsActivity)
 ---
  .../ui/ActionBar/DrawerLayoutContainer.java   | 27 ++++++++++++++++---
- .../java/org/telegram/ui/DialogsActivity.java | 18 ++++++++++---
+ .../java/org/telegram/ui/DialogsActivity.java | 22 ++++++++++++---
  .../java/org/telegram/ui/LaunchActivity.java  | 24 +++++------------
  .../java/org/telegram/ui/LoginActivity.java   |  9 +++----
  .../ui/TwoStepVerificationActivity.java       |  5 ++--
  .../ui/TwoStepVerificationSetupActivity.java  | 10 +++----
- 6 files changed, 53 insertions(+), 40 deletions(-)
+ 6 files changed, 57 insertions(+), 40 deletions(-)
 
 diff --git a/TMessagesProj/src/main/java/org/telegram/ui/ActionBar/DrawerLayoutContainer.java b/TMessagesProj/src/main/java/org/telegram/ui/ActionBar/DrawerLayoutContainer.java
 index 0000000..0000000 100644
@@ -134,7 +134,7 @@ index 0000000..0000000 100644
                      return;
                  }
                  if (id == -1) {
-+                    if (!hasMainTabs && desu.inugram.InuConfig.NAVIGATION_DRAWER.getValue()
++                    if (!hasMainTabs && !actionBar.isActionModeShowed() && desu.inugram.InuConfig.NAVIGATION_DRAWER.getValue()
 +                            && folderId == 0 && searchString == null
 +                            && desu.inugram.helpers.dialogs.DrawerHelper.INSTANCE.toggleDrawer(parentLayout)) {
 +                        return;
@@ -151,6 +151,24 @@ index 0000000..0000000 100644
          dialogStoriesCell.allowGlobalUpdates = false;
          dialogStoriesCell.setVisibility(View.GONE);
          animateToHasStories = false;
+@@ -8921,6 +8931,8 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
+         selectedDialogs.clear();
+         if (backDrawable != null) {
+             backDrawable.setRotation(0, true);
++        } else if (actionBar.getBackButton() != null && actionBar.getBackButton().getDrawable() instanceof MenuDrawable) {
++            ((MenuDrawable) actionBar.getBackButton().getDrawable()).setRotation(0, true);
+         }
+         if (filterTabsView != null) {
+             filterTabsView.animateColorsTo(Theme.key_actionBarTabLine, Theme.key_actionBarTabActiveText, Theme.key_actionBarTabUnactiveText, Theme.key_actionBarTabSelector, Theme.key_windowBackgroundWhite);
+@@ -9980,6 +9992,8 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
+             }
+             if (backDrawable != null) {
+                 backDrawable.setRotation(1, true);
++            } else if (actionBar.getBackButton() != null && actionBar.getBackButton().getDrawable() instanceof MenuDrawable) {
++                ((MenuDrawable) actionBar.getBackButton().getDrawable()).setRotation(1, true);
+             }
+         }
+         updateCounters(false);
 diff --git a/TMessagesProj/src/main/java/org/telegram/ui/LaunchActivity.java b/TMessagesProj/src/main/java/org/telegram/ui/LaunchActivity.java
 index 0000000..0000000 100644
 --- a/TMessagesProj/src/main/java/org/telegram/ui/LaunchActivity.java
