@@ -188,7 +188,7 @@ object MonetHelper {
     private val customColors: HashMap<String?, Int?> = object : HashMap<String?, Int?>() {
         init {
             put("monetAvatarRed", -0x7ba2)
-            put("monetAvatarOrange", -0x144a5)
+            put("monetAvatarOrange", -0x158d6)
             put("monetAvatarViolet", -0x496b07)
             put("monetAvatarGreen", -0x652e9c)
             put("monetAvatarCyan", -0xa4341d)
