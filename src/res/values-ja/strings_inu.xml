@@ -166,10 +166,8 @@
     <string name="InuDisableChatPreviewExpand">インタラクティブなチャットプレビュー</string>
     <string name="InuDisableChatPreviewExpandInfo">タップで展開する動作を無効化し、代わりにバブルを操作可能にする</string>
     <string name="InuHideMyPhoneNumber">自分の電話番号を非表示</string>
-    <string name="InuFont">UI フォント</string>
     <string name="InuFontDefault">デフォルト</string>
     <string name="InuFontSystem">システム</string>
-    <string name="InuFontCustom">カスタム…</string>
     <string name="InuFontImportFailed">フォントをインポートできませんでした。TTF/OTF/TTC ファイルか確認してください。</string>
     <string name="InuProfileIdMode">プロフィールに ID を表示</string>
     <string name="InuProfileIdModeOff">オフ</string>

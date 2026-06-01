@@ -20,6 +20,7 @@ public object InuUtils {
         return _nextId++
     }
 
+
     @JvmStatic
     fun setAutofillHint(view: View, hint: String) {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {

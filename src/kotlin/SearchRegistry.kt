@@ -13,6 +13,8 @@ import desu.inugram.ui.settings.PrivacySecurityActivity
 import desu.inugram.ui.settings.SettingsPageActivity
 import desu.inugram.ui.settings.TranslatorSettingsActivity
 import desu.inugram.ui.settings.UserProfileSettingsActivity
+import desu.inugram.ui.settings.fonts.FontStackActivity
+import desu.inugram.ui.settings.fonts.FontsSettingsActivity
 import org.telegram.messenger.LocaleController
 import org.telegram.messenger.R
 import org.telegram.ui.ActionBar.BaseFragment
@@ -37,6 +39,8 @@ object SearchRegistry {
         listOf(
             InuSettingsActivity.PAGE,
             AppearanceSettingsActivity.PAGE,
+            FontsSettingsActivity.PAGE,
+            FontStackActivity.PAGE,
             ChatsSettingsActivity.PAGE,
             MessagesSettingsActivity.PAGE,
             DialogsSettingsActivity.PAGE,

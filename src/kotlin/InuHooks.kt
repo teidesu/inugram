@@ -7,6 +7,7 @@ import desu.inugram.helpers.CrashReporter
 import desu.inugram.helpers.LoginHelper
 import desu.inugram.helpers.UrlCleanerHelper
 import desu.inugram.helpers.cloud.CloudSettingsHelper
+import desu.inugram.helpers.font.FontConfig
 import desu.inugram.helpers.font.FontHelper
 import desu.inugram.helpers.maps.MapsHelper
 import desu.inugram.helpers.security.PasscodeHelper
@@ -34,8 +35,8 @@ object InuHooks {
         CrashReporter.install()
         InuConfig.load(context)
         FontHelper.init(context)
-        if (InuConfig.FONT_MODE.value == 2 && Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
-            FontHelper.installAsDefault()
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
+            FontHelper.installGlobal()
         }
         syncDoubleTapDelay()
         syncAnimationSpeed()

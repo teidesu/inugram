@@ -1,245 +1,263 @@
 package desu.inugram.helpers.font
 
+import android.annotation.SuppressLint
 import android.content.Context
 import android.graphics.Typeface
-import android.net.Uri
+import android.graphics.fonts.FontFamily
+import android.graphics.fonts.FontStyle
 import android.os.Build
 import android.text.TextPaint
 import android.widget.TextView
 import androidx.annotation.RequiresApi
-import desu.inugram.InuConfig
-import org.json.JSONArray
-import org.json.JSONObject
+import desu.inugram.helpers.font.FontConfig.FontMode
 import org.telegram.messenger.AndroidUtilities
 import org.telegram.ui.ActionBar.Theme
-import java.io.File
-import java.io.FileOutputStream
+import java.lang.reflect.Field
 import java.util.Hashtable
 
 object FontHelper {
-    private const val MANIFEST = "pack.json"
+    // "real" default/mono fonts captured before they are replaced with reflection
+    val stockDefault: Typeface = Typeface.DEFAULT
+    val stockMonospace: Typeface = Typeface.MONOSPACE
 
-    private data class Face(
-        val file: String,
-        val ttcIndex: Int,
-        val weight: Int,
-        val italic: Boolean,
-        val variable: Boolean,
-        val wghtMin: Int,
-        val wghtMax: Int,
-    )
-
-    private var packDir: File? = null
-    private var faces: List<Face> = emptyList()
-    private val cache = HashMap<String, Typeface>()
-
-    var familyName: String? = null
-        private set
+    private val typefaceDefaultField = Typeface::class.java.getDeclaredField("DEFAULT")
+    private val typefaceDefaultBoldField = Typeface::class.java.getDeclaredField("DEFAULT_BOLD")
+    private val typefaceMonospaceField = Typeface::class.java.getDeclaredField("MONOSPACE")
+    private val typefaceSansSerifField = Typeface::class.java.getDeclaredField("SANS_SERIF")
 
     fun init(context: Context) {
-        packDir = File(context.filesDir, "inu_fonts").apply { mkdirs() }
-        loadManifest()
-    }
+        FontLibrary.loadStorage(context)
+        validateActiveAppFont()
 
-    val hasPack: Boolean get() = faces.isNotEmpty()
-
-    private fun loadManifest() {
-        faces = emptyList()
-        familyName = null
-        val dir = packDir ?: return
-        val mf = File(dir, MANIFEST)
-        if (!mf.isFile) return
         try {
-            val root = JSONObject(mf.readText())
-            familyName = root.optString("family", "").takeIf { it.isNotEmpty() }
-            val arr = root.getJSONArray("faces")
-            faces = (0 until arr.length()).map { i ->
-                val o = arr.getJSONObject(i)
-                Face(
-                    file = o.getString("file"),
-                    ttcIndex = o.optInt("ttcIndex", 0),
-                    weight = o.optInt("weight", 400),
-                    italic = o.optBoolean("italic", false),
-                    variable = o.optBoolean("variable", false),
-                    wghtMin = o.optInt("wghtMin", 400),
-                    wghtMax = o.optInt("wghtMax", 400),
-                )
-            }
-        } catch (e: Throwable) {
-            faces = emptyList()
-            familyName = null
+            typefaceDefaultField.isAccessible = true
+            typefaceDefaultBoldField.isAccessible = true
+            typefaceMonospaceField.isAccessible = true
+            typefaceSansSerifField.isAccessible = true
+        } catch (_: Exception) {
         }
-    }
-
-    private fun saveManifest(list: List<Face>, family: String?) {
-        val dir = packDir ?: return
-        val arr = JSONArray()
-        for (f in list) {
-            arr.put(JSONObject().apply {
-                put("file", f.file)
-                put("ttcIndex", f.ttcIndex)
-                put("weight", f.weight)
-                put("italic", f.italic)
-                put("variable", f.variable)
-                put("wghtMin", f.wghtMin)
-                put("wghtMax", f.wghtMax)
-            })
-        }
-        val root = JSONObject().apply {
-            if (family != null) put("family", family)
-            put("faces", arr)
-        }
-        File(dir, MANIFEST).writeText(root.toString())
-    }
-
-    fun clear() {
-        val dir = packDir ?: return
-        dir.listFiles()?.forEach { it.delete() }
-        faces = emptyList()
-        familyName = null
-        cache.clear()
-    }
-
-    /** Replaces the current pack with the given URIs. Returns number of face entries discovered. */
-    fun importFromUris(context: Context, uris: List<Uri>): Int {
-        val dir = packDir ?: return 0
-        clear()
-        val out = mutableListOf<Face>()
-        val familyVotes = HashMap<String, Int>()
-        val cr = context.contentResolver
-        for ((i, uri) in uris.withIndex()) {
-            val name = "f${i}_${System.currentTimeMillis()}.bin"
-            val dst = File(dir, name)
-            try {
-                cr.openInputStream(uri)?.use { ins ->
-                    FileOutputStream(dst).use { os -> ins.copyTo(os) }
-                } ?: continue
-            } catch (e: Throwable) {
-                continue
-            }
-            val raws = SfntParser.parse(dst)
-            if (raws.isEmpty()) {
-                dst.delete()
-                continue
-            }
-            for (r in raws) {
-                out.add(Face(name, r.ttcIndex, r.weight, r.italic, r.variable, r.wghtMin, r.wghtMax))
-                r.family?.let { familyVotes.merge(it, 1, Int::plus) }
-            }
-        }
-        faces = out
-        familyName = familyVotes.entries.maxByOrNull { it.value }?.key
-        if (out.isNotEmpty()) saveManifest(out, familyName) else clear()
-        cache.clear()
-        return out.size
-    }
-
-    @RequiresApi(Build.VERSION_CODES.O)
-    fun resolve(targetWeight: Int, targetItalic: Boolean): Typeface? {
-        if (faces.isEmpty()) return null
-        val cacheKey = "$targetWeight/$targetItalic"
-        cache[cacheKey]?.let { return it }
-
-        val pick = pickBestFace(targetWeight, targetItalic) ?: return null
-        val dir = packDir ?: return null
-        val file = File(dir, pick.file)
-        if (!file.isFile) return null
-
-        val base: Typeface = try {
-            val builder = Typeface.Builder(file).setTtcIndex(pick.ttcIndex)
-            if (pick.variable && pick.wghtMin != pick.wghtMax) {
-                val w = targetWeight.coerceIn(pick.wghtMin, pick.wghtMax)
-                builder.setFontVariationSettings("'wght' $w")
-            }
-            builder.build()
-        } catch (e: Throwable) {
-            return null
-        } ?: return null
-
-        // synthesize italic / weight tweaks when picked face doesn't match exactly
-        val needSynth = (targetItalic && !pick.italic) ||
-            (!pick.variable && pick.weight != targetWeight)
-        val finalTf = if (needSynth && Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
-            try { Typeface.create(base, targetWeight, targetItalic) } catch (e: Throwable) { base }
-        } else base
-
-        cache[cacheKey] = finalTf
-        return finalTf
     }
 
     /**
-     * Best-effort: swap [Typeface.DEFAULT] / [Typeface.DEFAULT_BOLD] and the entries in
-     * `Typeface.sSystemFontMap` for `sans-serif*` so that UI widgets which don't go through
-     * [android.graphics.Typeface.create] from an asset path (TextView default, chat_msgTextPaint…)
-     * also pick up the custom font.
-     *
-     * Reflection. Wrapped in try/catch — failures are non-fatal.
+     * Reverts the app font to the bundled default when the active custom selection no longer resolves.
+     * Only imported families can be the app font; built-in / system fonts are editor-roster-only.
      */
-    @RequiresApi(Build.VERSION_CODES.P)
-    fun installAsDefault() {
-        if (faces.isEmpty()) return
-        val regular = resolve(400, false) ?: return
-        val bold = resolve(700, false) ?: regular
-        try {
-            val cls = Typeface::class.java
-            replaceStatic(cls, "DEFAULT", regular)
-            replaceStatic(cls, "DEFAULT_BOLD", bold)
-            replaceStatic(cls, "SANS_SERIF", regular)
-            try {
-                @Suppress("UNCHECKED_CAST")
-                val map = cls.getDeclaredField("sSystemFontMap").apply { isAccessible = true }
-                    .get(null) as? MutableMap<String, Typeface> ?: return
-                for (k in arrayOf("sans-serif", "sans-serif-light", "sans-serif-thin",
-                    "sans-serif-condensed", "sans-serif-condensed-light")) {
-                    map[k] = regular
-                }
-                for (k in arrayOf("sans-serif-medium", "sans-serif-black")) {
-                    map[k] = bold
-                }
-            } catch (_: Throwable) {
-                // hidden API blocked on some firmware; DEFAULT swap alone still covers most cases
+    fun validateActiveAppFont() {
+        val m = FontConfig.FONT.value as? FontMode.Custom ?: return
+        val id = m.fontId as? FontId.Family ?: return resetAppFont()
+        // a Family with an empty id is the legacy "first family" marker → valid as long as any family exists
+        if (if (id.id.isEmpty()) !FontLibrary.hasAnyFamily() else !FontLibrary.containsFamily(id.id)) resetAppFont()
+    }
+
+    fun resetAppFont() {
+        FontConfig.FONT.value = FontMode.Bundled
+    }
+
+    fun isActiveCustomFont(id: FontId): Boolean {
+        val m = FontConfig.FONT.value as? FontMode.Custom ?: return false
+        return maybeResolveLegacyEmpty(m.fontId) == id
+    }
+
+    /** resolve the legacy font id marker (empty string) to the first available family */
+    fun maybeResolveLegacyEmpty(fontId: FontId): FontId? {
+        if (fontId is FontId.Family && fontId.id.isEmpty()) {
+            return FontLibrary.firstFamilyId()?.let { FontId.Family(it) }
+        }
+        return fontId
+    }
+
+    /** Ordered fallbacks of the active custom stack (empty for bundled / system). */
+    fun getActiveFallbackIds(): List<FontId> =
+        (FontConfig.FONT.value as? FontMode.Custom)?.fallbacks ?: emptyList()
+
+    // ---- app UI font resolution ------------------------------------------------------------
+
+    private fun resolve(targetWeight: Int, targetItalic: Boolean): Typeface? {
+        val m = FontConfig.FONT.value as? FontMode.Custom ?: return null
+        val primary = maybeResolveLegacyEmpty(m.fontId) ?: return null
+        // composite (primary + fallbacks) needs the FontFamily APIs (Q+); below that, single typeface.
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+            composite(primary, m.fallbacks, targetWeight, targetItalic)?.let { return it }
+        }
+        return singleTokenTypeface(primary, targetWeight, targetItalic)
+    }
+
+    /** Single imported-family weighted typeface; the below-Q & no-fallback path. */
+    private fun singleTokenTypeface(token: FontId?, weight: Int, italic: Boolean): Typeface? {
+        return FontLibrary.getFamilyTypeface(token ?: return null, weight, italic)
+    }
+
+    /** A single imported family as a [FontFamily] at the requested style, for stack composition (Q+). */
+    @RequiresApi(Build.VERSION_CODES.Q)
+    private fun fontFamilyForToken(token: FontId, weight: Int, italic: Boolean): FontFamily? {
+        val font = FontLibrary.getFont(token, weight, italic) ?: return null
+        return try {
+            FontFamily.Builder(font).build()
+        } catch (_: Throwable) {
+            null
+        }
+    }
+
+    /**
+     * Composes [primary] + [fallbacks] into one typeface via [Typeface.CustomFallbackBuilder]; the builder's
+     * implicit final fallback is whatever [Typeface.DEFAULT] points at when [build][Typeface.CustomFallbackBuilder.build]
+     * runs. Returns null when the primary is a single face with no fallbacks (the cheaper single-typeface
+     * path suffices) or it can't be built (caller falls back).
+     *
+     * [forceSystemFallback] keeps the builder even for that single-face case, so the implicit fallback is
+     * present to render missing glyphs (e.g. Cyrillic in a Latin-only font). For the editor preview that
+     * implicit fallback must be the *genuine* system font, not the applied app font our `installGlobal`
+     * swap repointed [Typeface.DEFAULT] at — [buildPreviewTypefaces] restores the genuine default around the build.
+     */
+    @RequiresApi(Build.VERSION_CODES.Q)
+    private fun composite(
+        primary: FontId,
+        fallbacks: List<FontId>,
+        weight: Int,
+        italic: Boolean,
+        forceSystemFallback: Boolean = false,
+    ): Typeface? {
+        if (!forceSystemFallback && fallbacks.isEmpty()) return null
+        val primaryFamily = fontFamilyForToken(primary, weight, italic) ?: return null
+        return try {
+            val b = Typeface.CustomFallbackBuilder(primaryFamily)
+            for (tok in fallbacks) {
+                if (tok == primary) continue
+                val fam = fontFamilyForToken(tok, weight, italic) ?: continue
+                try {
+                    b.addCustomFallback(fam)
+                } catch (_: Throwable) {
+                    break
+                } // 64-family cap
+            }
+            b.setStyle(FontStyle(weight.coerceIn(1, 1000), if (italic) FontStyle.FONT_SLANT_ITALIC else FontStyle.FONT_SLANT_UPRIGHT))
+            val tf = b.build()
+
+            // setStyle won't fake-bold a medium-ish request (see Family.resolve) — force it when the
+            // primary has no face that heavy, else "bold" in the stack would render like regular.
+            val primaryLacksWeight = weight >= 500 &&
+                (FontLibrary.getFontFamily(primary)?.lacksWeight(weight, italic) ?: false)
+            if (primaryLacksWeight) {
+                Typeface.create(tf, if (italic) Typeface.BOLD_ITALIC else Typeface.BOLD)
+            } else {
+                tf
             }
         } catch (_: Throwable) {
+            null
         }
     }
 
-    private fun replaceStatic(cls: Class<*>, name: String, value: Typeface) {
+    // ---- stack preview (draft state, not config) -------------------------------------------
+
+    /**
+     * Builds a typeface for an arbitrary draft stack: [primary] is null (bundled default → caller uses
+     * [Typeface.DEFAULT]), [FontConfig.SYSTEM_STACK_ID] (device default), or a roster token. Used by the stack editor.
+     */
+    @RequiresApi(Build.VERSION_CODES.P)
+    fun getPreviewTypeface(primary: String?, fallbacks: List<String>, weight: Int, italic: Boolean): Typeface? {
+        primary ?: return null
+        if (primary == FontConfig.SYSTEM_STACK_ID) return Typeface.create(null as Typeface?, weight, italic)
+        val primaryId = FontId.parse(primary)
+        val fallbackIds = fallbacks.filter { it != FontConfig.SYSTEM_STACK_ID }.map { FontId.parse(it) }
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+            // forceSystemFallback: preview missing glyphs in the genuine system font, not the applied one
+            composite(primaryId, fallbackIds, weight, italic, forceSystemFallback = true)?.let { return it }
+        }
+        return singleTokenTypeface(primaryId, weight, italic)
+    }
+
+    /** Draft-stack typefaces for the settings preview: regular / bold / italic spans + the mono override. */
+    class PreviewTypefaces(
+        val regular: Typeface,
+        val bold: Typeface,
+        val italic: Typeface,
+        val mono: Typeface,
+    )
+
+    /**
+     * Builds the draft stack's typefaces for the (span-rendered) settings preview. [Typeface.DEFAULT] is
+     * restored to the genuine system default around the build so a composite's implicit fallback renders
+     * missing glyphs in the real system font, not whatever `installGlobal` may have applied app-wide.
+     * UI thread only.
+     */
+    @RequiresApi(Build.VERSION_CODES.P)
+    fun buildPreviewTypefaces(primary: String?, fallbacks: List<String>, monoToken: String): PreviewTypefaces {
+        val savedDefault = Typeface.DEFAULT
+        trySetStatic(typefaceDefaultField, stockDefault)
         try {
-            val f = cls.getDeclaredField(name)
-            f.isAccessible = true
-            f.set(null, value)
-        } catch (_: Throwable) {
+            fun tf(weight: Int, italic: Boolean): Typeface =
+                (if (primary != null) getPreviewTypeface(primary, fallbacks, weight, italic) else null)
+                    ?: Typeface.create(stockDefault, weight, italic)
+            return PreviewTypefaces(
+                tf(400, false), tf(700, false), tf(400, true),
+                FontLibrary.getTypefaceFor(monoToken) ?: stockMonospace,
+            )
+        } finally {
+            trySetStatic(typefaceDefaultField, savedDefault)
         }
     }
 
-    private fun pickBestFace(targetWeight: Int, targetItalic: Boolean): Face? {
-        val sameItalic = faces.filter { it.italic == targetItalic }
-        val pool = if (sameItalic.isNotEmpty()) sameItalic else faces
-        if (pool.isEmpty()) return null
+    private fun styleForAsset(assetPath: String): Pair<Int, Boolean>? = when (assetPath) {
+        AndroidUtilities.TYPEFACE_ROBOTO_MEDIUM -> 500 to false
+        AndroidUtilities.TYPEFACE_ROBOTO_EXTRA_BOLD -> 800 to false
+        AndroidUtilities.TYPEFACE_ROBOTO_MEDIUM_ITALIC -> 500 to true
+        "fonts/ritalic.ttf" -> 400 to true
+        "fonts/rcondensedbold.ttf" -> 700 to false
+        else -> null
+    }
 
-        pool.firstOrNull { it.variable && targetWeight in it.wghtMin..it.wghtMax }
-            ?.let { return it }
+    /**
+     * Installs the configured app + monospace fonts process-wide by swapping the global [Typeface] statics
+     * ([Typeface.DEFAULT]/[Typeface.DEFAULT_BOLD]/[Typeface.SANS_SERIF]/[Typeface.MONOSPACE]) and the
+     * matching `sSystemFontMap` entries, so UI widgets that don't go through [Typeface.create] from an asset
+     * path (TextView default, chat_msgTextPaint, code spans…) also pick them up.
+     *
+     * Reflection, best-effort — failures are non-fatal (a blocked `sSystemFontMap` still leaves the static
+     * swaps, which cover most cases). Run before the Theme paints are created (from [InuHooks.init]) so they
+     * capture the swapped values.
+     */
+    @Suppress("UNCHECKED_CAST")
+    @SuppressLint("DiscouragedPrivateApi")
+    @RequiresApi(Build.VERSION_CODES.P)
+    fun installGlobal() {
+        val map = try {
+            Typeface::class.java.getDeclaredField("sSystemFontMap").apply { isAccessible = true }
+                .get(null) as? MutableMap<String, Typeface>
+        } catch (_: Throwable) {
+            null
+        }
 
-        // css font-matching algorithm by weight
-        val sorted = pool.sortedBy { it.weight }
-        return when {
-            targetWeight in 400..500 ->
-                sorted.firstOrNull { it.weight in targetWeight..500 }
-                    ?: sorted.lastOrNull { it.weight < targetWeight }
-                    ?: sorted.firstOrNull { it.weight > 500 }
-            targetWeight < 400 ->
-                sorted.lastOrNull { it.weight <= targetWeight }
-                    ?: sorted.firstOrNull { it.weight > targetWeight }
-            else ->
-                sorted.firstOrNull { it.weight >= targetWeight }
-                    ?: sorted.lastOrNull { it.weight < targetWeight }
+        // app UI font (sans-serif*) — only when a custom font is selected
+        val regular = (FontConfig.FONT.value as? FontMode.Custom)?.let { resolve(400, false) }
+        if (regular != null) {
+            val bold = resolve(700, false) ?: regular
+            trySetStatic(typefaceDefaultField, regular)
+            trySetStatic(typefaceDefaultBoldField, bold)
+            trySetStatic(typefaceSansSerifField, regular)
+            for (k in arrayOf(
+                "sans-serif", "sans-serif-light", "sans-serif-thin",
+                "sans-serif-condensed", "sans-serif-condensed-light"
+            )) map?.put(k, regular)
+            for (k in arrayOf("sans-serif-medium", "sans-serif-black")) map?.put(k, bold)
+        }
+        // monospace font (inline code + blocks) — no-op when unset
+        FontLibrary.getTypefaceFor(FontConfig.MONO_FONT.value)?.let { mono ->
+            trySetStatic(typefaceMonospaceField, mono)
+            map?.put("monospace", mono)
+        }
+    }
+
+    private fun trySetStatic(field: Field, value: Any) {
+        try {
+            field.set(null, value)
+        } catch (_: Throwable) {
         }
     }
 
     @JvmStatic
     fun applyDefaultFont(paint: TextPaint?) {
         if (paint == null || paint.typeface != null) return
-        if (InuConfig.FONT_MODE.value != 2) return
+        if (FontConfig.FONT.value !is FontMode.Custom) return
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.P) return
         resolve(400, false)?.let { paint.typeface = it }
     }
@@ -247,7 +265,7 @@ object FontHelper {
     @JvmStatic
     fun applyDefaultFont(view: TextView?) {
         if (view == null) return
-        if (InuConfig.FONT_MODE.value != 2) return
+        if (FontConfig.FONT.value !is FontMode.Custom) return
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.P) return
         resolve(400, false)?.let { view.typeface = it }
     }
@@ -259,7 +277,7 @@ object FontHelper {
      */
     @JvmStatic
     fun onThemePaintsCreated() {
-        if (InuConfig.FONT_MODE.value != 2) return
+        if (FontConfig.FONT.value !is FontMode.Custom) return
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.P) return
         val tf = resolve(400, false) ?: return
         try {
@@ -281,22 +299,20 @@ object FontHelper {
 
     @JvmStatic
     fun onGetTypeface(cache: Hashtable<String, Typeface>, assetPath: String): Typeface? {
-        val mode = InuConfig.FONT_MODE.value
-        if (mode == 0) return null
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.P) return null
-        val key = "inu:m$mode:$assetPath"
-        cache[key]?.let { return it }
-        val (weight, italic) = when (assetPath) {
-            AndroidUtilities.TYPEFACE_ROBOTO_MEDIUM -> 500 to false
-            AndroidUtilities.TYPEFACE_ROBOTO_EXTRA_BOLD -> 800 to false
-            AndroidUtilities.TYPEFACE_ROBOTO_MEDIUM_ITALIC -> 500 to true
-            "fonts/ritalic.ttf" -> 400 to true
-            "fonts/rcondensedbold.ttf" -> 700 to false
-            else -> return null
+        // cheap filter first: only a handful of asset paths carry a style — the rest skip the key build
+        val (weight, italic) = styleForAsset(assetPath) ?: return null
+        val mode = FontConfig.FONT.value
+        val keyPart = when (mode) {
+            FontMode.Bundled -> return null
+            FontMode.System -> "sys"
+            is FontMode.Custom -> "c:${mode.fontId.token()}:${mode.fallbacks.joinToString(",") { it.token() }}"
         }
+        val key = "inu:$keyPart:$assetPath"
+        cache[key]?.let { return it }
         val tf = when (mode) {
-            1 -> Typeface.create(null as Typeface?, weight, italic)
-            2 -> resolve(weight, italic)
+            FontMode.System -> Typeface.create(null as Typeface?, weight, italic)
+            is FontMode.Custom -> resolve(weight, italic)
             else -> null
         } ?: return null
         cache[key] = tf

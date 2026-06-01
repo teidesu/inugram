@@ -3,10 +3,11 @@ package desu.inugram
 import android.content.Context
 import android.content.SharedPreferences
 import androidx.core.content.edit
-import desu.inugram.ui.FormattingPopupConfig
-import desu.inugram.helpers.menu.MessageMenuConfig
-import desu.inugram.helpers.menu.ChatMenuConfig
 import desu.inugram.helpers.chat.PinnedReactionsHelper
+import desu.inugram.helpers.font.FontConfig
+import desu.inugram.helpers.menu.ChatMenuConfig
+import desu.inugram.helpers.menu.MessageMenuConfig
+import desu.inugram.ui.FormattingPopupConfig
 
 object InuConfig {
     private const val PREFS_NAME = "inugram"
@@ -17,6 +18,7 @@ object InuConfig {
 
     fun load(context: Context) {
         prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+        FontConfig.register() // force-init so its items join _items before we load them
         for (item in _items) item.load(prefs)
     }
 
@@ -40,6 +42,13 @@ object InuConfig {
 
         fun save() {
             prefs.edit { write() }
+        }
+
+        // batched write: set currentValue and stage it onto [editor] (call inside a prefs.edit {} block,
+        // passing that block's editor, to commit several items in one transaction)
+        fun unsafeSet(value: T, editor: SharedPreferences.Editor) {
+            currentValue = value
+            editor.write()
         }
 
         protected abstract fun read(prefs: SharedPreferences): T
@@ -505,16 +514,6 @@ object InuConfig {
 
     @JvmField
     val HIDE_MY_PHONE_NUMBER = BoolItem("hide_my_phone_number", true)
-
-    // 0=bundled (stock), 1=system, 2=user-provided pack
-    @JvmField
-    val FONT_MODE = object : IntItem("font_mode", 0) {
-        override fun read(prefs: SharedPreferences): Int {
-            if (prefs.contains(key)) return super.read(prefs)
-            // migration: legacy use_system_font bool
-            return if (prefs.getBoolean("use_system_font", false)) 1 else 0
-        }
-    }
 
     @JvmField
     val REACTIONS_IN_ROW = IntItem("reactions_in_row", 8)

@@ -4,14 +4,14 @@ Date: Tue, 12 May 2026 14:58:17 +0200
 Subject: force system font for ui
 
 ---
- .../java/org/telegram/messenger/AndroidUtilities.java  |  6 ++++++
- .../java/org/telegram/ui/ActionBar/SimpleTextView.java |  1 +
- .../src/main/java/org/telegram/ui/ActionBar/Theme.java |  3 +++
- .../java/org/telegram/ui/Cells/ProfileSearchCell.java  |  1 +
- .../org/telegram/ui/Components/AnimatedEmojiSpan.java  |  1 +
- .../org/telegram/ui/Components/AnimatedTextView.java   |  1 +
- .../telegram/ui/Components/Paint/PaintTypeface.java    | 10 +++++-----
- 7 files changed, 18 insertions(+), 5 deletions(-)
+ .../telegram/messenger/AndroidUtilities.java  |  6 ++
+ .../telegram/ui/ActionBar/SimpleTextView.java |  1 +
+ .../java/org/telegram/ui/ActionBar/Theme.java |  3 +
+ .../telegram/ui/Cells/ProfileSearchCell.java  |  1 +
+ .../ui/Components/AnimatedEmojiSpan.java      |  1 +
+ .../ui/Components/AnimatedTextView.java       |  1 +
+ .../ui/Components/Paint/PaintTypeface.java    | 63 +++++++------------
+ 7 files changed, 35 insertions(+), 41 deletions(-)
 
 diff --git a/TMessagesProj/src/main/java/org/telegram/messenger/AndroidUtilities.java b/TMessagesProj/src/main/java/org/telegram/messenger/AndroidUtilities.java
 index 0000000..0000000 100644
@@ -21,10 +21,10 @@ index 0000000..0000000 100644
      }
  
      public static Typeface getTypeface(String assetPath) {
-+        return getTypeface(assetPath, false);
++        return inu_getTypeface(assetPath, false);
 +    }
 +
-+    public static Typeface getTypeface(String assetPath, boolean inu_forPaint) {
++    public static Typeface inu_getTypeface(String assetPath, boolean inu_forPaint) {
          synchronized (typefaceCache) {
 +            Typeface inu_override = inu_forPaint ? null : desu.inugram.helpers.font.FontHelper.onGetTypeface(typefaceCache, assetPath);
 +            if (inu_override != null) return inu_override;
@@ -111,21 +111,106 @@ diff --git a/TMessagesProj/src/main/java/org/telegram/ui/Components/Paint/PaintT
 index 0000000..0000000 100644
 --- a/TMessagesProj/src/main/java/org/telegram/ui/Components/Paint/PaintTypeface.java
 +++ b/TMessagesProj/src/main/java/org/telegram/ui/Components/Paint/PaintTypeface.java
-@@ -33,12 +33,12 @@ import java.util.Set;
+@@ -33,16 +33,16 @@ import java.util.Set;
  public class PaintTypeface {
      private final static boolean SYSTEM_FONTS_ENABLED = true;
  
 -    public static final PaintTypeface ROBOTO_MEDIUM = new PaintTypeface("roboto", "PhotoEditorTypefaceRoboto", new LazyTypeface(() -> AndroidUtilities.getTypeface(AndroidUtilities.TYPEFACE_ROBOTO_MEDIUM)));
 -    public static final PaintTypeface ROBOTO_ITALIC = new PaintTypeface("italic", "PhotoEditorTypefaceItalic", new LazyTypeface(() -> AndroidUtilities.getTypeface(AndroidUtilities.TYPEFACE_ROBOTO_MEDIUM_ITALIC)));
-+    public static final PaintTypeface ROBOTO_MEDIUM = new PaintTypeface("roboto", "PhotoEditorTypefaceRoboto", new LazyTypeface(() -> AndroidUtilities.getTypeface(AndroidUtilities.TYPEFACE_ROBOTO_MEDIUM, true)));
-+    public static final PaintTypeface ROBOTO_ITALIC = new PaintTypeface("italic", "PhotoEditorTypefaceItalic", new LazyTypeface(() -> AndroidUtilities.getTypeface(AndroidUtilities.TYPEFACE_ROBOTO_MEDIUM_ITALIC, true)));
++    public static final PaintTypeface ROBOTO_MEDIUM = new PaintTypeface("roboto", "PhotoEditorTypefaceRoboto", new LazyTypeface(() -> AndroidUtilities.inu_getTypeface(AndroidUtilities.TYPEFACE_ROBOTO_MEDIUM, true)));
++    public static final PaintTypeface ROBOTO_ITALIC = new PaintTypeface("italic", "PhotoEditorTypefaceItalic", new LazyTypeface(() -> AndroidUtilities.inu_getTypeface(AndroidUtilities.TYPEFACE_ROBOTO_MEDIUM_ITALIC, true)));
      public static final PaintTypeface ROBOTO_SERIF = new PaintTypeface("serif", "PhotoEditorTypefaceSerif", new LazyTypeface(() -> Typeface.create("serif", Typeface.BOLD)));
 -    public static final PaintTypeface ROBOTO_CONDENSED = new PaintTypeface("condensed", "PhotoEditorTypefaceCondensed", new LazyTypeface(() -> AndroidUtilities.getTypeface("fonts/rcondensedbold.ttf")));
 -    public static final PaintTypeface ROBOTO_MONO = new PaintTypeface ("mono", "PhotoEditorTypefaceMono", new LazyTypeface(() -> AndroidUtilities.getTypeface(AndroidUtilities.TYPEFACE_ROBOTO_MONO)));
 -    public static final PaintTypeface MW_BOLD = new PaintTypeface("mw_bold", "PhotoEditorTypefaceMerriweather", new LazyTypeface(() -> AndroidUtilities.getTypeface(AndroidUtilities.TYPEFACE_MERRIWEATHER_BOLD)));
-+    public static final PaintTypeface ROBOTO_CONDENSED = new PaintTypeface("condensed", "PhotoEditorTypefaceCondensed", new LazyTypeface(() -> AndroidUtilities.getTypeface("fonts/rcondensedbold.ttf", true)));
-+    public static final PaintTypeface ROBOTO_MONO = new PaintTypeface ("mono", "PhotoEditorTypefaceMono", new LazyTypeface(() -> AndroidUtilities.getTypeface(AndroidUtilities.TYPEFACE_ROBOTO_MONO, true)));
-+    public static final PaintTypeface MW_BOLD = new PaintTypeface("mw_bold", "PhotoEditorTypefaceMerriweather", new LazyTypeface(() -> AndroidUtilities.getTypeface(AndroidUtilities.TYPEFACE_MERRIWEATHER_BOLD, true)));
++    public static final PaintTypeface ROBOTO_CONDENSED = new PaintTypeface("condensed", "PhotoEditorTypefaceCondensed", new LazyTypeface(() -> AndroidUtilities.inu_getTypeface("fonts/rcondensedbold.ttf", true)));
++    public static final PaintTypeface ROBOTO_MONO = new PaintTypeface ("mono", "PhotoEditorTypefaceMono", new LazyTypeface(() -> AndroidUtilities.inu_getTypeface(AndroidUtilities.TYPEFACE_ROBOTO_MONO, true)));
++    public static final PaintTypeface MW_BOLD = new PaintTypeface("mw_bold", "PhotoEditorTypefaceMerriweather", new LazyTypeface(() -> AndroidUtilities.inu_getTypeface(AndroidUtilities.TYPEFACE_MERRIWEATHER_BOLD, true)));
  
      public final static List<PaintTypeface> BUILT_IN_FONTS = Arrays.asList(ROBOTO_MEDIUM, ROBOTO_ITALIC, ROBOTO_SERIF, ROBOTO_CONDENSED, ROBOTO_MONO, MW_BOLD);
  
+-    private static final List<String> preferable = Arrays.asList(
++    public static final List<String> preferable = Arrays.asList(
+         "Google Sans",
+         "Dancing Script",
+         "Carrois Gothic SC",
+@@ -59,7 +59,7 @@ public class PaintTypeface {
+     private final Font font;
+     private Paint paint;
+ 
+-    private static class LazyTypeface {
++    public static class LazyTypeface {
+         public interface LazyTypefaceLoader {
+             Typeface load();
+         }
+@@ -87,6 +87,15 @@ public class PaintTypeface {
+         this.font = null;
+     }
+ 
++    public PaintTypeface(LazyTypeface lazyTypeface, String key, String name) {
++        this.key = key;
++        this.name = name;
++        this.nameKey = null;
++        this.typeface = null;
++        this.lazyTypeface = lazyTypeface;
++        this.font = null;
++    }
++
+     PaintTypeface(String key, String nameKey, LazyTypeface lazyTypeface) {
+         this.key = key;
+         this.nameKey = nameKey;
+@@ -140,7 +149,7 @@ public class PaintTypeface {
+         return LocaleController.getString(nameKey);
+     }
+ 
+-    private static List<PaintTypeface> typefaces;
++    public static List<PaintTypeface> typefaces;
+     public static boolean loadingTypefaces;
+ 
+     private static void load() {
+@@ -149,40 +158,12 @@ public class PaintTypeface {
+         }
+         loadingTypefaces = true;
+         Utilities.themeQueue.postRunnable(() -> {
+-            ArrayList<PaintTypeface> typefaces = new ArrayList<PaintTypeface>(BUILT_IN_FONTS);
+-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q && SYSTEM_FONTS_ENABLED) {
+-                Set<Font> fonts = SystemFonts.getAvailableFonts();
+-                Iterator<Font> i = fonts.iterator();
+-                HashMap<String, Family> families = new HashMap<>();
+-                while (i.hasNext()) {
+-                    Font font = i.next();
+-                    if (font.getFile().getName().contains("Noto"))
+-                        continue;
+-                    FontData data = parseFont(font);
+-                    if (data != null) {
+-                        Family family = families.get(data.family);
+-                        if (family == null) {
+-                            family = new Family();
+-                            families.put(family.family = data.family, family);
+-                        }
+-                        family.fonts.add(data);
+-                    }
+-                }
+-
+-                for (String familyName : preferable) {
+-                    Family family = families.get(familyName);
+-                    if (family != null) {
+-                        FontData font = family.getBold();
+-                        if (font == null) {
+-                            font = family.getRegular();
+-                        }
+-                        if (font != null) {
+-                            typefaces.add(new PaintTypeface(font.font, font.getName()));
+-                        }
+-                    }
+-                }
+-            }
++            ArrayList<PaintTypeface> typefaces = new ArrayList<PaintTypeface>();
++            final int inu_gen = desu.inugram.helpers.font.FontLibrary.buildEditorRoster(typefaces);
+             AndroidUtilities.runOnUIThread(() -> {
++                if (!desu.inugram.helpers.font.FontLibrary.isRosterCurrent(inu_gen)) {
++                    return;
++                }
+                 PaintTypeface.typefaces = typefaces;
+                 loadingTypefaces = false;
+                 NotificationCenter.getGlobalInstance().postNotificationName(NotificationCenter.customTypefacesLoaded);
