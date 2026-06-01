@@ -1,0 +1,22 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: alina sireneva <alina@tei.su>
+Date: Mon, 1 Jun 2026 18:10:09 +0400
+Subject: fix not enough padding at the end of reply layout when title is longer than subtitle
+
+---
+ .../src/main/java/org/telegram/ui/Cells/ChatMessageCell.java    | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/TMessagesProj/src/main/java/org/telegram/ui/Cells/ChatMessageCell.java b/TMessagesProj/src/main/java/org/telegram/ui/Cells/ChatMessageCell.java
+index 0000000..0000000 100644
+--- a/TMessagesProj/src/main/java/org/telegram/ui/Cells/ChatMessageCell.java
++++ b/TMessagesProj/src/main/java/org/telegram/ui/Cells/ChatMessageCell.java
+@@ -19541,7 +19541,7 @@ public class ChatMessageCell extends BaseCell implements SeekBar.SeekBarDelegate
+                         animatedEmojiReplyStack = AnimatedEmojiSpan.update(AnimatedEmojiDrawable.CACHE_TYPE_MESSAGES, this, false, animatedEmojiReplyStack, replyTextLayout);
+                     }
+                     if (replyNameWidth > replyTextWidth) {
+-                        replyNameWidth += dp(Math.max(2, SharedConfig.bubbleRadius / 4f));
++                        replyNameWidth += dp(11);
+                     }
+                 } catch (Exception e) {
+                     FileLog.e(e);

@@ -69,6 +69,7 @@ most things are toggleable in `Settings → Inugram`, with sensible opinionated 
 - jump-to-beginning button in calendar popup - *ported from [Nekogram](https://github.com/Nekogram/Nekogram)*
 - remember all clicked replies when jumping back via the down-button
 - 🐶 long-press reply panel in "Replies" chat opens discussion group
+- show a "Deleted message" placeholder + message ID in the reply box when the replied-to message was deleted; tapping it scrolls to roughly where that message used to be
 - hide pinned panel
 - hide channel, group preview (🐶) and replies (🐶) bottom bar (mute/join/etc)
 - send message to discussion group without joining
@@ -235,3 +236,4 @@ most things are toggleable in `Settings → Inugram`, with sensible opinionated 
 - phantom empty dialog rows after peeking a non-joined channel / discuss group
 - expand emoji tabs when there's enough space to fit without scrolling
 - "pause music on media" now lets external players auto-resume (transient focus instead of indefinite)
+- reply box right padding when the sender-name line is wider than the message text line

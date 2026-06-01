@@ -1,0 +1,111 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: alina sireneva <alina@tei.su>
+Date: Mon, 1 Jun 2026 18:05:49 +0400
+Subject: show deleted replies like tdesktop + click to go near
+
+---
+ .../org/telegram/messenger/MessageObject.java  | 10 ++++++++++
+ .../org/telegram/ui/Cells/ChatMessageCell.java | 18 +++++++++++++++---
+ .../java/org/telegram/ui/ChatActivity.java     |  4 ++++
+ 3 files changed, 29 insertions(+), 3 deletions(-)
+
+diff --git a/TMessagesProj/src/main/java/org/telegram/messenger/MessageObject.java b/TMessagesProj/src/main/java/org/telegram/messenger/MessageObject.java
+index 0000000..0000000 100644
+--- a/TMessagesProj/src/main/java/org/telegram/messenger/MessageObject.java
++++ b/TMessagesProj/src/main/java/org/telegram/messenger/MessageObject.java
+@@ -3771,6 +3771,16 @@ public class MessageObject {
+         return !(replyMessageObject == null || replyMessageObject.messageOwner instanceof TLRPC.TL_messageEmpty || replyMessageObject.messageOwner.action instanceof TLRPC.TL_messageActionHistoryClear || replyMessageObject.messageOwner.action instanceof TLRPC.TL_messageActionTopicCreate);
+     }
+ 
++    public boolean inu_isReplyToDeletedMessage() {
++        if (messageOwner == null || messageOwner.reply_to == null || messageOwner.reply_to.reply_to_msg_id == 0) {
++            return false;
++        }
++        if (messageOwner.reply_to.forum_topic && messageOwner.reply_to.reply_to_msg_id == messageOwner.reply_to.reply_to_top_id) {
++            return false;
++        }
++        return replyMessageObject != null && replyMessageObject.messageOwner instanceof TLRPC.TL_messageEmpty;
++    }
++
+     @Deprecated
+     public void generateSuggestionApprovalMessageText() {
+         /*
+diff --git a/TMessagesProj/src/main/java/org/telegram/ui/Cells/ChatMessageCell.java b/TMessagesProj/src/main/java/org/telegram/ui/Cells/ChatMessageCell.java
+index 0000000..0000000 100644
+--- a/TMessagesProj/src/main/java/org/telegram/ui/Cells/ChatMessageCell.java
++++ b/TMessagesProj/src/main/java/org/telegram/ui/Cells/ChatMessageCell.java
+@@ -4810,7 +4810,7 @@ public class ChatMessageCell extends BaseCell implements SeekBar.SeekBarDelegate
+                         }
+                     }
+                 } else {
+-                    if (delegate != null && (currentMessageObject.hasValidReplyMessageObject() || currentMessageObject.isReplyToStory() || hasReplyQuote || currentMessageObject.messageOwner != null && currentMessageObject.messageOwner.reply_to != null && currentMessageObject.messageOwner.reply_to.reply_from != null)) {
++                    if (delegate != null && (currentMessageObject.hasValidReplyMessageObject() || currentMessageObject.isReplyToStory() || hasReplyQuote || currentMessageObject.messageOwner != null && currentMessageObject.messageOwner.reply_to != null && currentMessageObject.messageOwner.reply_to.reply_from != null || currentMessageObject.inu_isReplyToDeletedMessage())) {
+                         delegate.didPressReplyMessage(this, currentMessageObject.getReplyMsgId(), x, y, false);
+                     }
+                 }
+@@ -19050,7 +19050,7 @@ public class ChatMessageCell extends BaseCell implements SeekBar.SeekBarDelegate
+             }
+         }
+ 
+-        if ((!messageObject.isGiveawayResults() && (!isThreadChat || messageObject.isQuickReply() || isSavedChat || messageObject.getReplyTopMsgId(isForum) != 0 || isForumGeneral || isMonoForum) && messageObject.hasValidReplyMessageObject() || messageObject.messageOwner.fwd_from != null && messageObject.isDice() || (messageObject.messageOwner.reply_to != null && (messageObject.messageOwner.reply_to.story_id != 0 || !TextUtils.isEmpty(messageObject.messageOwner.reply_to.quote_text) || messageObject.messageOwner.reply_to.reply_from != null))) && !messageObject.isRepostPreview) {
++        if ((!messageObject.isGiveawayResults() && (!isThreadChat || messageObject.isQuickReply() || isSavedChat || messageObject.getReplyTopMsgId(isForum) != 0 || isForumGeneral || isMonoForum) && (messageObject.hasValidReplyMessageObject() || messageObject.inu_isReplyToDeletedMessage()) || messageObject.messageOwner.fwd_from != null && messageObject.isDice() || (messageObject.messageOwner.reply_to != null && (messageObject.messageOwner.reply_to.story_id != 0 || !TextUtils.isEmpty(messageObject.messageOwner.reply_to.quote_text) || messageObject.messageOwner.reply_to.reply_from != null))) && !messageObject.isRepostPreview) {
+             if (currentPosition == null || currentPosition.minY == 0) {
+                 if (isSideMenued && !drawBackground || !messageObject.isAnyKindOfSticker() && messageObject.type != MessageObject.TYPE_ROUND_VIDEO || messageObject.type == MessageObject.TYPE_EMOJIS) {
+                     namesOffset += dp(20) + (Theme.chat_replyTextPaint.getTextSize() + Theme.chat_replyNamePaint.getTextSize());
+@@ -19100,7 +19100,7 @@ public class ChatMessageCell extends BaseCell implements SeekBar.SeekBarDelegate
+                         stringFinalText = StoriesUtilities.createReplyStoryString();
+                         maxWidth -= dp(16) + (textPaint.getTextSize() + Theme.chat_replyNamePaint.getTextSize());
+                     }
+-                } else if ((!isThreadChat || isMonoForum || messageObject.isQuickReply() || isSavedChat || messageObject.getReplyTopMsgId(isForum) != 0 || isForumGeneral) && messageObject.hasValidReplyMessageObject() || hasReplyQuote || messageObject.messageOwner.reply_to != null && messageObject.messageOwner.reply_to.reply_from != null) {
++                } else if ((!isThreadChat || isMonoForum || messageObject.isQuickReply() || isSavedChat || messageObject.getReplyTopMsgId(isForum) != 0 || isForumGeneral) && (messageObject.hasValidReplyMessageObject() || messageObject.inu_isReplyToDeletedMessage()) || hasReplyQuote || messageObject.messageOwner.reply_to != null && messageObject.messageOwner.reply_to.reply_from != null) {
+                     lastReplyMessage = messageObject.replyMessageObject == null ? null : messageObject.replyMessageObject.messageOwner;
+                     int cacheType = 1;
+                     int size = 0;
+@@ -19258,6 +19258,9 @@ public class ChatMessageCell extends BaseCell implements SeekBar.SeekBarDelegate
+                     }
+ 
+                     final boolean hadName = name != null;
++                    if (messageObject.inu_isReplyToDeletedMessage()) {
++                        name = getString(R.string.InuDeletedMessage);
++                    }
+                     if (name == null) {
+                         name = getString("Loading", R.string.Loading);
+                     }
+@@ -19366,6 +19369,15 @@ public class ChatMessageCell extends BaseCell implements SeekBar.SeekBarDelegate
+                             MediaDataController.addTextStyleRuns(messageObject.replyMessageObject, (Spannable) stringFinalText);
+                             stringFinalText = TextUtils.ellipsize(stringFinalText, textPaint, maxWidth, TextUtils.TruncateAt.END);
+                         }
++                    } else if (messageObject.inu_isReplyToDeletedMessage()) {
++                        SpannableStringBuilder sb = new SpannableStringBuilder(LocaleController.formatString(R.string.InuDeletedMessageIdFormat, messageObject.messageOwner.reply_to.reply_to_msg_id));
++                        sb.setSpan(new CharacterStyle() {
++                            @Override
++                            public void updateDrawState(TextPaint tp) {
++                                tp.setAlpha((int) (tp.getAlpha() * 0.6f));
++                            }
++                        }, 0, sb.length(), Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);
++                        stringFinalText = sb;
+                     }
+                 } else {
+                     replyImageReceiver.setImageBitmap((Drawable) null);
+diff --git a/TMessagesProj/src/main/java/org/telegram/ui/ChatActivity.java b/TMessagesProj/src/main/java/org/telegram/ui/ChatActivity.java
+index 0000000..0000000 100644
+--- a/TMessagesProj/src/main/java/org/telegram/ui/ChatActivity.java
++++ b/TMessagesProj/src/main/java/org/telegram/ui/ChatActivity.java
+@@ -40303,6 +40303,7 @@ public class ChatActivity extends BaseFragment implements
+                     }
+                     final Integer finalTaskId = task_id;
+                     final byte[] finalPollOptionId = option_id;
++                    final boolean inu_isDeletedReply = messageObject.inu_isReplyToDeletedMessage();
+                     Runnable scroll = () -> {
+                         scrollToMessageId(id, messageObject.getId(), true, messageObject.getDialogId() == mergeDialogId ? 1 : 0, true, 0, finalTaskId, finalPollOptionId, () -> {
+                             progressDialogAtMessageId = messageObject.getId();
+@@ -40316,6 +40317,9 @@ public class ChatActivity extends BaseFragment implements
+                     } else {
+                         scroll.run();
+                     }
++                    if (inu_isDeletedReply) {
++                        BulletinFactory.of(ChatActivity.this).createSimpleBulletin(R.raw.chats_infotip, LocaleController.getString(R.string.InuClosestToDeletedReply)).show();
++                    }
+                 }
+             }
+         }

@@ -179,3 +179,5 @@ bugfix/audio-alert-search.patch
 bugfix/music-bar-dismiss-scroll-jump.patch
 bugfix/photo-viewer-apply-caption.patch
 feature/hide-blocked-messages.patch
+feature/show-deleted-replies.patch
+bugfix/reply-name-end-padding.patch
