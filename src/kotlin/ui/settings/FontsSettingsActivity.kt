@@ -157,8 +157,10 @@ class FontsSettingsActivity : SettingsPageActivity() {
 
     private fun setHidden(token: String, hidden: Boolean) {
         FontHelper.setHidden(token, hidden)
-        // hiding the active app font reverts it to the default
-        if (hidden && token.startsWith("font:") && isActiveFamily(token.removePrefix("font:"))) {
+        // hiding the active app font (family or built-in) reverts it to the default — otherwise the
+        // editor would hide it while the app keeps rendering everything in it.
+        val activeId = if (token.startsWith("font:")) token.removePrefix("font:") else token
+        if (hidden && isActiveFont(activeId)) {
             InuConfig.FONT_MODE.value = 0
             InuConfig.ACTIVE_FONT_ID.value = ""
             showRestartBulletin()
@@ -169,7 +171,7 @@ class FontsSettingsActivity : SettingsPageActivity() {
 
     private fun removeFont(token: String) {
         val id = token.removePrefix("font:")
-        val wasActive = isActiveFamily(id)
+        val wasActive = isActiveFont(id)
         FontHelper.removeFamily(id)
         rows.remove(token)
         if (wasActive) {
@@ -198,7 +200,7 @@ class FontsSettingsActivity : SettingsPageActivity() {
         }
     }
 
-    private fun isActiveFamily(id: String): Boolean {
+    private fun isActiveFont(id: String): Boolean {
         if (InuConfig.FONT_MODE.value != 2) return false
         val active = InuConfig.ACTIVE_FONT_ID.value
         if (active.isNotEmpty()) return active == id
@@ -208,36 +210,55 @@ class FontsSettingsActivity : SettingsPageActivity() {
 
     private fun showAppFontPicker(anchor: View) {
         val choices = FontHelper.familyChoices()
+        val activeId = InuConfig.ACTIVE_FONT_ID.value
+        // when the current app font is a built-in (which lives in the editor list, not the family
+        // list) prepend it as a picker choice so the user can see what's selected and stay on it.
+        val activeBuiltin = if (InuConfig.FONT_MODE.value == 2 && FontHelper.isBuiltinKey(activeId)) activeId else null
         val labels = mutableListOf<CharSequence>(
             LocaleController.getString(R.string.InuFontDefault),
             LocaleController.getString(R.string.InuFontSystem),
         )
+        if (activeBuiltin != null) {
+            val tf = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P)
+                FontHelper.builtinTypeface(activeBuiltin, 400, false) else null
+            labels.add(fontLabel(FontHelper.builtinName(activeBuiltin) ?: activeBuiltin, tf))
+        }
         choices.forEach { (id, name) -> labels.add(fontLabel(name, FontHelper.editorTypeface(id))) }
+        val builtinOffset = if (activeBuiltin != null) 1 else 0
         val selected = when (InuConfig.FONT_MODE.value) {
             1 -> 1
-            2 -> {
-                val active = InuConfig.ACTIVE_FONT_ID.value.ifEmpty { choices.firstOrNull()?.first ?: "" }
-                val idx = choices.indexOfFirst { it.first == active }
-                if (idx >= 0) 2 + idx else -1 // -1 when a built-in font is the app font (not in this list)
+            2 -> when {
+                activeBuiltin != null -> 2
+                else -> {
+                    val active = activeId.ifEmpty { choices.firstOrNull()?.first ?: "" }
+                    val idx = choices.indexOfFirst { it.first == active }
+                    if (idx >= 0) 2 + idx else -1
+                }
             }
             else -> 0
         }
         RadioItemOptions.show(this, anchor, labels, selected) { which ->
-            when (which) {
-                0 -> {
+            val changed = when {
+                which == 0 -> {
+                    val c = InuConfig.FONT_MODE.value != 0
                     InuConfig.FONT_MODE.value = 0
                     InuConfig.ACTIVE_FONT_ID.value = ""
+                    c
                 }
-                1 -> {
+                which == 1 -> {
+                    val c = InuConfig.FONT_MODE.value != 1
                     InuConfig.FONT_MODE.value = 1
                     InuConfig.ACTIVE_FONT_ID.value = ""
+                    c
                 }
+                activeBuiltin != null && which == 2 -> false // "keep current built-in" — no-op
                 else -> {
                     InuConfig.FONT_MODE.value = 2
-                    InuConfig.ACTIVE_FONT_ID.value = choices[which - 2].first
+                    InuConfig.ACTIVE_FONT_ID.value = choices[which - 2 - builtinOffset].first
+                    true
                 }
             }
-            showRestartBulletin()
+            if (changed) showRestartBulletin()
         }
     }
 
