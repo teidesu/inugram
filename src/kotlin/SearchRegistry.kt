@@ -7,6 +7,7 @@ import desu.inugram.ui.settings.AppearanceSettingsActivity
 import desu.inugram.ui.settings.BehaviorSettingsActivity
 import desu.inugram.ui.settings.ChatsSettingsActivity
 import desu.inugram.ui.settings.DialogsSettingsActivity
+import desu.inugram.ui.settings.FontsSettingsActivity
 import desu.inugram.ui.settings.InuSettingsActivity
 import desu.inugram.ui.settings.MessagesSettingsActivity
 import desu.inugram.ui.settings.PrivacySecurityActivity
@@ -37,6 +38,7 @@ object SearchRegistry {
         listOf(
             InuSettingsActivity.PAGE,
             AppearanceSettingsActivity.PAGE,
+            FontsSettingsActivity.PAGE,
             ChatsSettingsActivity.PAGE,
             MessagesSettingsActivity.PAGE,
             DialogsSettingsActivity.PAGE,

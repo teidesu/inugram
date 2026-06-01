@@ -19,7 +19,7 @@ most things are toggleable in `Settings → Inugram`, with sensible opinionated 
 - estimated registration date in profile - *ported & datapoints from [NagramX](https://github.com/risin42/NagramX)*
 - show linked channel in discussion group profile similar to personal channel
 - hide own phone number from ui
-- ui font: force system or user-provided TTF/OTF/TTC pack
+- fonts: manage a list of fonts (add/remove/reorder) — pick one as the app font (system or user-provided TTF/OTF/TTC), and use any in the media editor text tool
 - 🐶 hide fade views
 - 🐶 old (pre-12.6) mention/reaction indicator
 - 🐶 toggleable scrim blur

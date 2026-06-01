@@ -4,14 +4,14 @@ Date: Tue, 12 May 2026 14:58:17 +0200
 Subject: force system font for ui
 
 ---
- .../java/org/telegram/messenger/AndroidUtilities.java  |  6 ++++++
- .../java/org/telegram/ui/ActionBar/SimpleTextView.java |  1 +
- .../src/main/java/org/telegram/ui/ActionBar/Theme.java |  3 +++
- .../java/org/telegram/ui/Cells/ProfileSearchCell.java  |  1 +
- .../org/telegram/ui/Components/AnimatedEmojiSpan.java  |  1 +
- .../org/telegram/ui/Components/AnimatedTextView.java   |  1 +
- .../telegram/ui/Components/Paint/PaintTypeface.java    | 10 +++++-----
- 7 files changed, 18 insertions(+), 5 deletions(-)
+ .../telegram/messenger/AndroidUtilities.java  |  6 ++
+ .../telegram/ui/ActionBar/SimpleTextView.java |  1 +
+ .../java/org/telegram/ui/ActionBar/Theme.java |  3 +
+ .../telegram/ui/Cells/ProfileSearchCell.java  |  1 +
+ .../ui/Components/AnimatedEmojiSpan.java      |  1 +
+ .../ui/Components/AnimatedTextView.java       |  1 +
+ .../ui/Components/Paint/PaintTypeface.java    | 70 +++++++++++++++++--
+ 7 files changed, 77 insertions(+), 6 deletions(-)
 
 diff --git a/TMessagesProj/src/main/java/org/telegram/messenger/AndroidUtilities.java b/TMessagesProj/src/main/java/org/telegram/messenger/AndroidUtilities.java
 index 0000000..0000000 100644
@@ -111,7 +111,15 @@ diff --git a/TMessagesProj/src/main/java/org/telegram/ui/Components/Paint/PaintT
 index 0000000..0000000 100644
 --- a/TMessagesProj/src/main/java/org/telegram/ui/Components/Paint/PaintTypeface.java
 +++ b/TMessagesProj/src/main/java/org/telegram/ui/Components/Paint/PaintTypeface.java
-@@ -33,12 +33,12 @@ import java.util.Set;
+@@ -26,6 +26,7 @@ import java.nio.charset.StandardCharsets;
+ import java.util.ArrayList;
+ import java.util.Arrays;
+ import java.util.HashMap;
++import java.util.HashSet;
+ import java.util.Iterator;
+ import java.util.List;
+ import java.util.Set;
+@@ -33,12 +34,12 @@ import java.util.Set;
  public class PaintTypeface {
      private final static boolean SYSTEM_FONTS_ENABLED = true;
  
@@ -129,3 +137,83 @@ index 0000000..0000000 100644
  
      public final static List<PaintTypeface> BUILT_IN_FONTS = Arrays.asList(ROBOTO_MEDIUM, ROBOTO_ITALIC, ROBOTO_SERIF, ROBOTO_CONDENSED, ROBOTO_MONO, MW_BOLD);
  
+@@ -87,6 +88,15 @@ public class PaintTypeface {
+         this.font = null;
+     }
+ 
++    PaintTypeface(Typeface typeface, String key, String name) {
++        this.key = key;
++        this.name = name;
++        this.nameKey = null;
++        this.typeface = typeface;
++        this.lazyTypeface = null;
++        this.font = null;
++    }
++
+     PaintTypeface(String key, String nameKey, LazyTypeface lazyTypeface) {
+         this.key = key;
+         this.nameKey = nameKey;
+@@ -149,7 +159,8 @@ public class PaintTypeface {
+         }
+         loadingTypefaces = true;
+         Utilities.themeQueue.postRunnable(() -> {
+-            ArrayList<PaintTypeface> typefaces = new ArrayList<PaintTypeface>(BUILT_IN_FONTS);
++            ArrayList<PaintTypeface> typefaces = new ArrayList<PaintTypeface>();
++            inu_buildRoster(typefaces);
+             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q && SYSTEM_FONTS_ENABLED) {
+                 Set<Font> fonts = SystemFonts.getAvailableFonts();
+                 Iterator<Font> i = fonts.iterator();
+@@ -190,6 +201,53 @@ public class PaintTypeface {
+         });
+     }
+ 
++    // Builds the editor font list from the user-managed roster (built-in keys + font:<id> tokens),
++    // appending any built-ins missing from the roster. Falls back to the stock built-ins when empty.
++    private static void inu_buildRoster(ArrayList<PaintTypeface> out) {
++        String[] roster = desu.inugram.helpers.font.FontHelper.editorRoster();
++        if (roster.length == 0) {
++            out.addAll(BUILT_IN_FONTS);
++            return;
++        }
++        HashMap<String, PaintTypeface> byKey = new HashMap<>();
++        for (PaintTypeface t : BUILT_IN_FONTS) {
++            byKey.put(t.key, t);
++        }
++        HashSet<String> usedBuiltIn = new HashSet<>();
++        for (String token : roster) {
++            if (token.startsWith("font:")) {
++                String id = token.substring(5);
++                Typeface tf = desu.inugram.helpers.font.FontHelper.editorTypeface(id);
++                if (tf != null) {
++                    out.add(new PaintTypeface(tf, "inu_font_" + id, desu.inugram.helpers.font.FontHelper.editorName(id)));
++                }
++            } else {
++                PaintTypeface b = byKey.get(token);
++                if (b != null && usedBuiltIn.add(token)) {
++                    out.add(b);
++                }
++            }
++        }
++        // FontHelper keeps every current built-in in the roster (added/hidden there), so the roster is
++        // authoritative — nothing is appended here, which is what lets a built-in be hidden.
++    }
++
++    // Built-in font keys, authoritative for FontHelper's roster reconciliation.
++    public static String[] inu_builtinKeys() {
++        String[] keys = new String[BUILT_IN_FONTS.size()];
++        for (int i = 0; i < keys.length; i++) {
++            keys[i] = BUILT_IN_FONTS.get(i).key;
++        }
++        return keys;
++    }
++
++    // Drops the cached list so the next get() rebuilds from the roster; lets an open editor refresh live.
++    public static void inu_invalidate() {
++        typefaces = null;
++        loadingTypefaces = false;
++        NotificationCenter.getGlobalInstance().postNotificationName(NotificationCenter.customTypefacesLoaded);
++    }
++
+     public static List<PaintTypeface> get() {
+         if (typefaces == null) {
+             load();
