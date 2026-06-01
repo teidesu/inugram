@@ -1,8 +1,5 @@
 package desu.inugram.ui.settings
 
-import android.app.Activity
-import android.content.Intent
-import android.net.Uri
 import android.os.Build
 import android.view.View
 import androidx.annotation.RequiresApi
@@ -10,16 +7,11 @@ import desu.inugram.InuConfig
 import desu.inugram.InuHooks
 import desu.inugram.SearchRegistry
 import desu.inugram.helpers.InuUtils
-import desu.inugram.helpers.font.FontHelper
 import desu.inugram.helpers.theme.MonetHelper
-import org.telegram.messenger.AndroidUtilities
-import org.telegram.messenger.FileLog
 import org.telegram.messenger.LocaleController
 import org.telegram.messenger.R
-import org.telegram.messenger.Utilities
 import org.telegram.ui.Cells.NotificationsCheckCell
 import org.telegram.ui.Cells.TextCheckCell
-import org.telegram.ui.Components.BulletinFactory
 import org.telegram.ui.Components.UItem
 import org.telegram.ui.Components.UniversalAdapter
 
@@ -32,17 +24,7 @@ class AppearanceSettingsActivity : SettingsPageActivity() {
 
     override fun fillItems(items: ArrayList<UItem>, adapter: UniversalAdapter) {
         items.add(UItem.asHeader(LocaleController.getString(R.string.InuTypographyAndIcons)))
-        items.add(
-            UItem.asButton(
-                BUTTON_FONT_MODE,
-                LocaleController.getString(R.string.InuFont),
-                when (InuConfig.FONT_MODE.value) {
-                    1 -> LocaleController.getString(R.string.InuFontSystem)
-                    2 -> FontHelper.familyName ?: LocaleController.getString(R.string.InuFontCustom)
-                    else -> LocaleController.getString(R.string.InuFontDefault)
-                }
-            )
-        )
+        items.add(mkSubPageButton(BUTTON_FONTS, LocaleController.getString(R.string.InuFonts)))
         items.add(
             UItem.asButton(
                 BUTTON_ICON_REPLACEMENT,
@@ -207,33 +189,7 @@ class AppearanceSettingsActivity : SettingsPageActivity() {
                 InuConfig.NOTIFICATION_ICON.value = which
             }
 
-            BUTTON_FONT_MODE -> {
-                val labels = mutableListOf(
-                    LocaleController.getString(R.string.InuFontDefault),
-                    LocaleController.getString(R.string.InuFontSystem),
-                )
-                val hasPack = FontHelper.hasPack
-                if (hasPack) {
-                    labels.add(FontHelper.familyName ?: LocaleController.getString(R.string.InuFontCustom))
-                }
-                val pickerIndex = labels.size
-                labels.add(LocaleController.getString(R.string.InuFontCustom))
-                val selected = when {
-                    InuConfig.FONT_MODE.value == 2 && hasPack -> 2
-                    InuConfig.FONT_MODE.value == 2 -> pickerIndex
-                    else -> InuConfig.FONT_MODE.value
-                }
-                RadioItemOptions.show(this, view, labels, selected) { which ->
-                    when (which) {
-                        pickerIndex -> launchFontPicker()
-                        else -> {
-                            // 0/1 = default/system; 2 (only when hasPack) = custom
-                            InuConfig.FONT_MODE.value = which
-                            showRestartBulletin()
-                        }
-                    }
-                }
-            }
+            BUTTON_FONTS -> presentFragment(FontsSettingsActivity())
 
             TOGGLE_DISABLE_SCRIM_BLUR -> {
                 val new = InuConfig.DISABLE_SCRIM_BLUR.toggle()
@@ -318,68 +274,12 @@ class AppearanceSettingsActivity : SettingsPageActivity() {
         }
     }
 
-    private fun launchFontPicker() {
-        try {
-            val intent = Intent(Intent.ACTION_OPEN_DOCUMENT).apply {
-                addCategory(Intent.CATEGORY_OPENABLE)
-                putExtra(Intent.EXTRA_ALLOW_MULTIPLE, true)
-                type = "*/*"
-                putExtra(
-                    Intent.EXTRA_MIME_TYPES,
-                    arrayOf(
-                        "font/ttf", "font/otf", "font/collection", "font/sfnt",
-                        "application/font-sfnt", "application/x-font-ttf",
-                        "application/x-font-opentype", "application/octet-stream",
-                    )
-                )
-            }
-            startActivityForResult(intent, REQ_PICK_FONT)
-        } catch (e: Exception) {
-            FileLog.e(e)
-            BulletinFactory.of(this).createErrorBulletin(e.message ?: "").show()
-        }
-    }
-
-    override fun onActivityResultFragment(requestCode: Int, resultCode: Int, data: Intent?) {
-        if (requestCode != REQ_PICK_FONT) return
-        if (resultCode != Activity.RESULT_OK || data == null) {
-            // RadioItemOptions optimistically updated the TextCell value to "Custom…"; resync.
-            listView.adapter.update(false)
-            return
-        }
-        val uris = mutableListOf<Uri>()
-        data.clipData?.let { cd ->
-            for (i in 0 until cd.itemCount) uris.add(cd.getItemAt(i).uri)
-        } ?: data.data?.let { uris.add(it) }
-        if (uris.isEmpty()) {
-            listView.adapter.update(false)
-            return
-        }
-        val ctx = parentActivity ?: context ?: return
-        Utilities.globalQueue.postRunnable {
-            val n = FontHelper.importFromUris(ctx, uris)
-            AndroidUtilities.runOnUIThread {
-                if (n > 0) {
-                    InuConfig.FONT_MODE.value = 2
-                    softRebuild()
-                    showRestartBulletin()
-                } else {
-                    BulletinFactory.of(this).createErrorBulletin(
-                        LocaleController.getString(R.string.InuFontImportFailed)
-                    ).show()
-                }
-                listView.adapter.update(false)
-            }
-        }
-    }
-
     companion object {
         private val TOGGLE_HIDE_FADE_VIEW = InuUtils.generateId()
         private val TOGGLE_NON_ISLAND_TAB_BARS = InuUtils.generateId()
         private val TOGGLE_NON_ISLAND_GLOBAL_SEARCH = InuUtils.generateId()
         private val TOGGLE_NON_ISLAND_CHAT_ELEMENTS = InuUtils.generateId()
-        private val BUTTON_FONT_MODE = InuUtils.generateId()
-        private const val REQ_PICK_FONT = 31010
+        private val BUTTON_FONTS = InuUtils.generateId()
         private val TOGGLE_DISABLE_SCRIM_BLUR = InuUtils.generateId()
         private val TOGGLE_DISABLE_GLASS_GLARE = InuUtils.generateId()
         private val TOGGLE_REDUCE_MENU_MOTION = InuUtils.generateId()
@@ -423,7 +323,7 @@ class AppearanceSettingsActivity : SettingsPageActivity() {
                 SearchRegistry.Entry("monet-theme", R.string.InuMonetTheme, BUTTON_MONET_THEME),
                 SearchRegistry.Entry("icon-replacement", R.string.InuIconReplacement, BUTTON_ICON_REPLACEMENT),
                 SearchRegistry.Entry("notification-icon", R.string.InuNotificationIcon, BUTTON_NOTIFICATION_ICON),
-                SearchRegistry.Entry("font", R.string.InuFont, BUTTON_FONT_MODE),
+                SearchRegistry.Entry("font", R.string.InuFonts, BUTTON_FONTS),
                 SearchRegistry.Entry("predictive-back-mode", R.string.InuPredictiveBack, BUTTON_PREDICTIVE_BACK_MODE),
                 SearchRegistry.Entry("non-island-tab-bars", R.string.InuNonIslandTabBars, TOGGLE_NON_ISLAND_TAB_BARS),
                 SearchRegistry.Entry("non-island-global-search", R.string.InuNonIslandGlobalSearch, TOGGLE_NON_ISLAND_GLOBAL_SEARCH),

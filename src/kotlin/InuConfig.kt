@@ -506,7 +506,7 @@ object InuConfig {
     @JvmField
     val HIDE_MY_PHONE_NUMBER = BoolItem("hide_my_phone_number", true)
 
-    // 0=bundled (stock), 1=system, 2=user-provided pack
+    // 0=bundled (stock), 1=system, 2=user-provided family (which one = ACTIVE_FONT_ID)
     @JvmField
     val FONT_MODE = object : IntItem("font_mode", 0) {
         override fun read(prefs: SharedPreferences): Int {
@@ -515,6 +515,10 @@ object InuConfig {
             return if (prefs.getBoolean("use_system_font", false)) 1 else 0
         }
     }
+
+    // id of the imported font family used as the app font when FONT_MODE == 2 ("" = legacy single pack)
+    @JvmField
+    val ACTIVE_FONT_ID = StringItem("active_font_id", "")
 
     @JvmField
     val REACTIONS_IN_ROW = IntItem("reactions_in_row", 8)
