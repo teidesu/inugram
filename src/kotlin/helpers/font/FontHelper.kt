@@ -180,7 +180,7 @@ object FontHelper {
             readFamily(sub)?.let { discovered[it.id] = it }
         }
 
-        val builtinKeys = PaintTypeface.inu_builtinKeys().toList()
+        val builtinKeys = builtinKeys()
         val (saved, savedHidden) = readIndex()
         val roster: MutableList<String> = saved ?: builtinKeys.toMutableList()
 
@@ -363,7 +363,7 @@ object FontHelper {
      */
     fun resetOrder() {
         synchronized(lock) {
-            val builtins = PaintTypeface.inu_builtinKeys().toList()
+            val builtins = builtinKeys()
             val familyIds = families.keys.sorted()
             rosterTokens = (builtins + familyIds.map { "font:$it" }).toMutableList()
             val reordered = LinkedHashMap<String, Family>()
@@ -532,8 +532,10 @@ object FontHelper {
         return resolve(400, false)
     }
 
+    private fun builtinKeys(): List<String> = PaintTypeface.BUILT_IN_FONTS.map { it.key }
+
     fun isBuiltinKey(key: String): Boolean =
-        key.isNotEmpty() && key in PaintTypeface.inu_builtinKeys()
+        key.isNotEmpty() && PaintTypeface.BUILT_IN_FONTS.any { it.key == key }
 
     fun builtinName(key: String): String? =
         if (isBuiltinKey(key)) PaintTypeface.find(key)?.name else null
@@ -555,24 +557,46 @@ object FontHelper {
 
     // ---- media editor ----------------------------------------------------------------------
 
-    @JvmStatic
-    fun editorRoster(): Array<String> = synchronized(lock) {
-        rosterTokens.filter { it !in hiddenTokens }.toTypedArray()
-    }
-
-    @JvmStatic
     fun editorName(id: String): String {
         val name = synchronized(lock) { families[id]?.name }
         return name ?: LocaleController.getString(R.string.InuFontUnnamed)
     }
 
-    @JvmStatic
     fun editorTypeface(id: String): Typeface? {
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.P) return null
         // pull the Family out under lock, then resolve outside (Family.resolve has its own lock and
         // does file I/O — holding the outer lock here would serialize unrelated readers).
         val family = synchronized(lock) { families[id] } ?: return null
         return family.resolve(400, false)
+    }
+
+    // Builds the editor's PaintTypeface list from the roster. `load()` prunes `font:$id` tokens whose
+    // family is gone, so by the time we read them here every imported entry resolves; Typeface
+    // construction is deferred to LazyTypeface so opening the editor doesn't read every font file.
+    @JvmStatic
+    fun buildEditorRoster(out: ArrayList<PaintTypeface>) {
+        // snapshot tokens + names atomically so a concurrent removeFamily doesn't desync them
+        val (tokens, names) = synchronized(lock) {
+            rosterTokens.filter { it !in hiddenTokens } to families.mapValues { it.value.name }
+        }
+        if (tokens.isEmpty()) {
+            out.addAll(PaintTypeface.BUILT_IN_FONTS)
+            return
+        }
+        val byKey = PaintTypeface.BUILT_IN_FONTS.associateBy { it.key }
+        for (token in tokens) {
+            if (token.startsWith("font:")) {
+                val id = token.removePrefix("font:")
+                val name = names[id] ?: LocaleController.getString(R.string.InuFontUnnamed)
+                out.add(PaintTypeface(
+                    PaintTypeface.LazyTypeface { editorTypeface(id) },
+                    "inu_font_$id",
+                    name,
+                ))
+            } else {
+                byKey[token]?.let { out.add(it) }
+            }
+        }
     }
 
     /**
