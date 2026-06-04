@@ -133,8 +133,7 @@ object UpdateHelper {
 
         val messageId = update.id
         if (messageId <= 0) {
-            // pending update persisted before the source message id was tracked
-            beginLoad(account, doc, "update")
+            refreshPendingAndStart(account)
             return
         }
         val mc = MessagesController.getInstance(account)
@@ -143,7 +142,7 @@ object UpdateHelper {
             AndroidUtilities.runOnUIThread {
                 if (!isPendingStart) return@runOnUIThread
                 if (peerId == null || peerId == 0L || peerId == Long.MAX_VALUE) {
-                    beginLoad(account, doc, "update")
+                    stopPendingStart()
                     return@runOnUIThread
                 }
                 val req = TLRPC.TL_channels_getMessages().apply {
@@ -157,7 +156,7 @@ object UpdateHelper {
                             ?.firstOrNull { it.id == messageId }
                         val freshDoc = msg?.let { extractApkInfo(it)?.document }
                         if (msg == null || freshDoc == null) {
-                            beginLoad(account, doc, "update")
+                            beginLoad(account, doc, sourceMessageParent(messageId))
                         } else {
                             pendingSourceMessage = msg
                             beginLoad(account, freshDoc, MessageObject(account, msg, false, false))
@@ -176,6 +175,26 @@ object UpdateHelper {
                 FileLoader.getInstance(account).cancelLoadFile(it)
             }
         }
+        NotificationCenter.getGlobalInstance().postNotificationName(NotificationCenter.appUpdateLoading)
+    }
+
+    private fun refreshPendingAndStart(account: Int) {
+        check {
+            AndroidUtilities.runOnUIThread {
+                if (!isPendingStart) return@runOnUIThread
+                if ((SharedConfig.pendingAppUpdate?.id ?: 0) > 0) {
+                    startDownload(account)
+                } else {
+                    stopPendingStart()
+                }
+            }
+        }
+    }
+
+    private fun sourceMessageParent(messageId: Int) = "sent_${CHANNEL_ID}_${messageId}"
+
+    private fun stopPendingStart() {
+        isPendingStart = false
         NotificationCenter.getGlobalInstance().postNotificationName(NotificationCenter.appUpdateLoading)
     }
 
