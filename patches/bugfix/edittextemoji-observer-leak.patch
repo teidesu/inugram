@@ -1,0 +1,45 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: alina sireneva <alina@tei.su>
+Date: Sun, 7 Jun 2026 02:05:57 +0300
+Subject: fix NotificationCenter observer leak in EditTextEmoji
+
+---
+ .../telegram/ui/Components/EditTextEmoji.java  | 18 +++++++++++++++++-
+ 1 file changed, 17 insertions(+), 1 deletion(-)
+
+diff --git a/TMessagesProj/src/main/java/org/telegram/ui/Components/EditTextEmoji.java b/TMessagesProj/src/main/java/org/telegram/ui/Components/EditTextEmoji.java
+index 0000000..0000000 100644
+--- a/TMessagesProj/src/main/java/org/telegram/ui/Components/EditTextEmoji.java
++++ b/TMessagesProj/src/main/java/org/telegram/ui/Components/EditTextEmoji.java
+@@ -143,7 +143,6 @@ public class EditTextEmoji extends FrameLayout implements NotificationCenter.Not
+         this.resourcesProvider = resourcesProvider;
+         currentStyle = style;
+ 
+-        NotificationCenter.getGlobalInstance().addObserver(this, NotificationCenter.emojiLoaded);
+         parentFragment = fragment;
+         sizeNotifierLayout = parent;
+         sizeNotifierLayout.addDelegate(this);
+@@ -466,6 +465,23 @@ public class EditTextEmoji extends FrameLayout implements NotificationCenter.Not
+         delegate = editTextEmojiDelegate;
+     }
+ 
++    // emojiLoaded is a global observer; stock added it in the ctor and only dropped it in onDestroy(),
++    // which owners (e.g. PhotoViewer's caption editor) never call, leaking this view + its
++    // resourcesProvider. scope it to the window instead so it clears whenever the view detaches.
++    @Override
++    protected void onAttachedToWindow() {
++        super.onAttachedToWindow();
++        if (!destroyed) {
++            NotificationCenter.getGlobalInstance().addObserver(this, NotificationCenter.emojiLoaded);
++        }
++    }
++
++    @Override
++    protected void onDetachedFromWindow() {
++        super.onDetachedFromWindow();
++        NotificationCenter.getGlobalInstance().removeObserver(this, NotificationCenter.emojiLoaded);
++    }
++
+     public void onPause() {
+         isPaused = true;
+         closeKeyboard();

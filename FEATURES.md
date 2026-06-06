@@ -220,7 +220,6 @@ most things are toggleable in `Settings → Inugram`, with sensible opinionated 
 - animated photo spoilers respect power-saving setting
 - shared media spoiler positioning
 - nav stack lockup after rapid back swipes
-- back-invoked callback leak on android 13 (sdk 33)
 - click-through area to the left/right of bottom bar tabs
 - profile scroll jump when opening uncached user
 - stale unread badges on global-search top peers
@@ -236,6 +235,6 @@ most things are toggleable in `Settings → Inugram`, with sensible opinionated 
 - phantom empty dialog rows after peeking a non-joined channel / discuss group
 - expand emoji tabs when there's enough space to fit without scrolling
 - "pause music on media" now lets external players auto-resume (transient focus instead of indefinite)
-- chat title avatar observer leak
 - reply box right padding when the sender-name line is wider than the message text line
 - fix lingering webpage when quickly sending
+- a bunch of stock memory/resource leaks

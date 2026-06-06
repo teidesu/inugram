@@ -184,3 +184,6 @@ bugfix/reply-name-end-padding.patch
 bugfix/image-loader-leak.patch
 bugfix/video-ads-leak.patch
 bugfix/chat-avatar-leak.patch
+bugfix/launch-activity-bulletin-leak.patch
+bugfix/edittextemoji-observer-leak.patch
+bugfix/chat-attach-alert-adapter-leak.patch
