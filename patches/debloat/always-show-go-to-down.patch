@@ -4,8 +4,8 @@ Date: Fri, 10 Apr 2026 05:03:51 +0300
 Subject: disable the "only show go to bottom button when scrolling up" behavior in chat
 
 ---
- .../src/main/java/org/telegram/ui/ChatActivity.java       | 8 +++++++-
- 1 file changed, 7 insertions(+), 1 deletion(-)
+ .../main/java/org/telegram/ui/ChatActivity.java    | 14 ++++++++++++--
+ 1 file changed, 12 insertions(+), 2 deletions(-)
 
 diff --git a/TMessagesProj/src/main/java/org/telegram/ui/ChatActivity.java b/TMessagesProj/src/main/java/org/telegram/ui/ChatActivity.java
 index 0000000..0000000 100644
@@ -26,3 +26,21 @@ index 0000000..0000000 100644
                                  totalDy += dy;
                                  if (totalDy < -scrollValue) {
                                      canShowPagedownButton = false;
+@@ -15258,6 +15264,10 @@ public class ChatActivity extends BaseFragment implements
+             }
+             chatLayoutManager.scrollToPositionWithOffset(position, 0);
+             chatListView.stopScroll();
++            if (InuConfig.CHAT_ALWAYS_SHOW_DOWN.getValue()) {
++                canShowPagedownButton = false;
++                updatePagedownButtonVisibility(true);
++            }
+         }
+     }
+ 
+@@ -46109,4 +46119,4 @@ public class ChatActivity extends BaseFragment implements
+         abstract void drawChatBackgroundElements(Canvas canvas, @Nullable RectF position);
+         abstract void drawChatForegroundElements(Canvas canvas, @Nullable RectF position);
+     }
+-}
+\ No newline at end of file
++}

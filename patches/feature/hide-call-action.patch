@@ -20,7 +20,7 @@ index 0000000..0000000 100644
                      showAudioCallAsIcon = !inPreviewMode;
                      audioCallIconItem.setVisibility(View.VISIBLE);
                  } else {
-@@ -23571,7 +23571,7 @@ public class ChatActivity extends BaseFragment implements
+@@ -23575,7 +23575,7 @@ public class ChatActivity extends BaseFragment implements
                      }
                  }
                  if (headerItem != null) {
@@ -29,7 +29,7 @@ index 0000000..0000000 100644
                      if (avatarContainer != null) {
                          avatarContainer.setTitleExpand(showAudioCallAsIcon);
                      }
-@@ -29190,7 +29190,7 @@ public class ChatActivity extends BaseFragment implements
+@@ -29194,7 +29194,7 @@ public class ChatActivity extends BaseFragment implements
          super.setInPreviewMode(value);
          if (currentUser != null && audioCallIconItem != null) {
              TLRPC.UserFull userFull = getMessagesController().getUserFull(currentUser.id);

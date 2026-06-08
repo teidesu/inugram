@@ -39,7 +39,7 @@ index 0000000..0000000 100644
          if (createUnreadMessageAfterId != 0) {
              scrollToMessageId(createUnreadMessageAfterId, 0, false, returnToLoadIndex, true, 0, null, inCaseLoading);
          } else if (returnToMessageId > 0) {
-@@ -16745,6 +16752,9 @@ public class ChatActivity extends BaseFragment implements
+@@ -16749,6 +16756,9 @@ public class ChatActivity extends BaseFragment implements
                  showFloatingTopicView(false);
              }
          }
@@ -49,7 +49,7 @@ index 0000000..0000000 100644
          returnToMessageId = fromMessageId;
          returnToLoadIndex = loadIndex;
          needSelectFromMessageId = select;
-@@ -16782,6 +16792,7 @@ public class ChatActivity extends BaseFragment implements
+@@ -16786,6 +16796,7 @@ public class ChatActivity extends BaseFragment implements
          } else {
              returnToMessageId = 0;
              newUnreadMessageCount = 0;
@@ -57,7 +57,7 @@ index 0000000..0000000 100644
          }
  
          sideControlsButtonsLayout.showButton(ChatActivitySideControlsButtonsLayout.BUTTON_PAGE_DOWN, show, animated);
-@@ -45795,6 +45806,12 @@ public class ChatActivity extends BaseFragment implements
+@@ -45799,6 +45810,12 @@ public class ChatActivity extends BaseFragment implements
      }
  
      private boolean onSideControlButtonOnLongClick(int buttonId, View view) {
