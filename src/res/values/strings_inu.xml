@@ -404,6 +404,7 @@
     <string name="InuRemoveFromCache">Remove from cache</string>
     <string name="InuCacheRemoved">File removed from cache</string>
     <string name="InuSelectRange">Select range</string>
+    <string name="InuPinMessagesAlert">Pin %1$d messages?</string>
     <string name="InuEventLogMediaBeforeEdit">Media before the edit:</string>
     <string name="InuEventLogBanConfirm">Ban **%1$s**?</string>
     <string name="InuEventLogShowDiff">Show as diff</string>

@@ -5,7 +5,10 @@ import android.content.pm.PackageManager
 import android.os.Build
 import android.os.Bundle
 import android.text.InputType
+import android.view.Gravity
+import android.view.HapticFeedbackConstants
 import android.view.View
+import android.widget.FrameLayout
 import androidx.core.content.edit
 import desu.inugram.InuConfig
 import desu.inugram.helpers.menu.ChatMenuConfig
@@ -19,15 +22,20 @@ import org.telegram.messenger.MessageObject
 import org.telegram.messenger.MessagesController
 import org.telegram.messenger.R
 import org.telegram.messenger.UserConfig
+import org.telegram.messenger.UserObject
 import org.telegram.tgnet.TLRPC
 import org.telegram.ui.ActionBar.ActionBarMenu
 import org.telegram.ui.ActionBar.ActionBarMenuItem
+import org.telegram.ui.ActionBar.AlertDialog
 import org.telegram.ui.BasePermissionsActivity
+import org.telegram.ui.Cells.CheckBoxCell
 import org.telegram.ui.ChannelAdminLogActivity
 import org.telegram.ui.ChatActivity
 import org.telegram.ui.Components.BulletinFactory
+import org.telegram.ui.Components.LayoutHelper
 import org.telegram.ui.Components.TranslateAlert2
 import org.telegram.ui.RestrictedLanguagesSelectActivity
+import org.telegram.ui.ActionBar.Theme
 import desu.inugram.helpers.translate.TranslateHelper
 
 /**
@@ -50,6 +58,8 @@ object ChatActionsHelper {
     const val ACTION_SEL_SAVE = 1502
     const val ACTION_SEL_TRANSLATE = 1503
     const val ACTION_SEL_GALLERY = 1504
+    const val ACTION_SEL_PIN = 1505
+    const val ACTION_SEL_UNPIN = 1506
 
     // --- chat header menu ---
 
@@ -111,6 +121,8 @@ object ChatActionsHelper {
             ACTION_SEL_SAVE -> saveSelectionToSavedMessages(activity)
             ACTION_SEL_TRANSLATE -> translateSelection(activity)
             ACTION_SEL_GALLERY -> saveSelectionToGallery(activity)
+            ACTION_SEL_PIN -> pinSelection(activity)
+            ACTION_SEL_UNPIN -> unpinSelection(activity)
 
             else -> return false
         }
@@ -227,6 +239,16 @@ object ChatActionsHelper {
             R.drawable.msg_download,
             LocaleController.getString(R.string.SaveToGallery),
         )
+        overflow.addSubItem(
+            ACTION_SEL_PIN,
+            R.drawable.msg_pin,
+            LocaleController.getString(R.string.PinMessage),
+        )
+        overflow.addSubItem(
+            ACTION_SEL_UNPIN,
+            R.drawable.msg_unpin,
+            LocaleController.getString(R.string.UnpinMessage),
+        )
         activity.actionModeViews.add(overflow)
     }
 
@@ -248,11 +270,20 @@ object ChatActionsHelper {
         var any = false
         var hasText = false
         var hasMedia = false
+        var canPin = false
+        var canUnpin = false
         var allForwardable = true
         forEachSelectedMessage(activity) { msg ->
             any = true
             if (!msg.messageOwner?.message.isNullOrEmpty()) hasText = true
             if (msg.isPhoto || msg.isVideo) hasMedia = true
+            if (canPinMessage(activity, msg)) {
+                if (isPinnedMessage(activity, msg)) {
+                    canUnpin = true
+                } else {
+                    canPin = true
+                }
+            }
             if (!msg.canForwardMessage()) allForwardable = false
         }
         val selfId = UserConfig.getInstance(activity.currentAccount).clientUserId
@@ -261,9 +292,11 @@ object ChatActionsHelper {
         overflow.setSubItemShown(ACTION_SEL_SAVE, canSave)
         overflow.setSubItemShown(ACTION_SEL_TRANSLATE, canTranslate)
         overflow.setSubItemShown(ACTION_SEL_GALLERY, hasMedia)
+        overflow.setSubItemShown(ACTION_SEL_PIN, canPin)
+        overflow.setSubItemShown(ACTION_SEL_UNPIN, canUnpin)
         actionMode.setItemVisibility(
             ACTION_SELECTION_MENU,
-            if (canSave || canTranslate || hasMedia) View.VISIBLE else View.GONE,
+            if (canSave || canTranslate || hasMedia || canPin || canUnpin) View.VISIBLE else View.GONE,
         )
     }
 
@@ -350,6 +383,127 @@ object ChatActionsHelper {
             BulletinFactory.of(activity).createDownloadBulletin(type, count, activity.resourceProvider).show()
         }
         activity.clearSelectionMode()
+    }
+
+    private fun pinSelection(activity: ChatActivity) {
+        val messages = ArrayList<MessageObject>()
+        val seenIds = HashSet<Int>()
+        forEachSelectedMessage(activity) { msg ->
+            if (seenIds.add(msg.id) && canPinMessage(activity, msg) && !isPinnedMessage(activity, msg)) {
+                messages.add(msg)
+            }
+        }
+        if (messages.isEmpty()) return
+        showPinMessagesAlert(activity, messages)
+        activity.clearSelectionMode()
+    }
+
+    private fun unpinSelection(activity: ChatActivity) {
+        val messages = ArrayList<MessageObject>()
+        val seenIds = HashSet<Int>()
+        forEachSelectedMessage(activity) { msg ->
+            if (seenIds.add(msg.id) && canPinMessage(activity, msg) && isPinnedMessage(activity, msg)) {
+                messages.add(msg)
+            }
+        }
+        if (messages.isEmpty()) return
+        unpinMessages(activity, messages)
+        activity.clearSelectionMode()
+    }
+
+    private fun canPinMessage(activity: ChatActivity, msg: MessageObject): Boolean {
+        if (activity.isInScheduleMode || activity.isThreadChat && !activity.isTopic) return false
+        val chat = activity.currentChat
+        val user = activity.currentUser
+        val allowPin = when {
+            chat != null -> msg.dialogId == activity.dialogId &&
+                ChatObject.canPinMessages(chat) &&
+                !chat.monoforum
+            activity.currentEncryptedChat == null -> {
+                val info = activity.getCurrentUserInfo()
+                !UserObject.isDeleted(user) && info != null && info.can_pin_message
+            }
+            else -> false
+        }
+        if (UserObject.isReplyUser(activity.dialogId) || activity.dialogId == UserObject.VERIFY) return false
+        return allowPin &&
+            msg.id > 0 &&
+            (msg.messageOwner.action == null || msg.messageOwner.action is TLRPC.TL_messageActionEmpty) &&
+            !msg.isExpiredStory &&
+            msg.type != MessageObject.TYPE_STORY_MENTION
+    }
+
+    private fun isPinnedMessage(activity: ChatActivity, msg: MessageObject): Boolean {
+        return msg.dialogId == activity.dialogId && activity.pinnedMessageIds.contains(msg.id) && !msg.isExpiredStory
+    }
+
+    private fun showPinMessagesAlert(activity: ChatActivity, messages: ArrayList<MessageObject>) {
+        val parent = activity.parentActivity ?: return
+        val ids = ArrayList<Int>()
+        for (msg in messages) {
+            if (canPinMessage(activity, msg) && !isPinnedMessage(activity, msg) && !ids.contains(msg.id)) {
+                ids.add(msg.id)
+            }
+        }
+        if (ids.isEmpty()) return
+
+        val builder = AlertDialog.Builder(parent, activity.themeDelegate)
+        builder.setTitle(LocaleController.getString(R.string.PinMessageAlertTitle))
+        builder.setMessage(LocaleController.formatString(R.string.InuPinMessagesAlert, ids.size))
+        builder.setDimAlpha(.5f)
+
+        val user = activity.currentUser
+        val chat = activity.currentChat
+        val showPeerCheckbox = user != null && !UserObject.isUserSelf(user)
+        val showNotifyCheckbox = user == null && chat != null && (ChatObject.isChannel(chat) && chat.megagroup || !ChatObject.isChannel(chat))
+        val checks = booleanArrayOf(showNotifyCheckbox, user == null)
+        if (showPeerCheckbox || showNotifyCheckbox) {
+            val checkIndex = if (showPeerCheckbox) 1 else 0
+            val text = if (showPeerCheckbox) {
+                LocaleController.formatString("PinAlsoFor", R.string.PinAlsoFor, UserObject.getFirstName(user!!))
+            } else {
+                LocaleController.getString(R.string.PinNotify)
+            }
+            val frameLayout = FrameLayout(parent)
+            val cell = CheckBoxCell(parent, 1, activity.themeDelegate)
+            cell.background = Theme.getSelectorDrawable(false)
+            cell.setText(text, "", checks[checkIndex], false)
+            cell.setPadding(AndroidUtilities.dp(if (LocaleController.isRTL) 16f else 8f), 0, AndroidUtilities.dp(if (LocaleController.isRTL) 8f else 16f), 0)
+            frameLayout.addView(cell, LayoutHelper.createFrame(LayoutHelper.MATCH_PARENT, 48, Gravity.TOP or Gravity.LEFT))
+            cell.setOnClickListener {
+                checks[checkIndex] = !checks[checkIndex]
+                cell.setChecked(checks[checkIndex], true)
+            }
+            builder.setCustomViewOffset(if (showPeerCheckbox) 6 else 9)
+            builder.setView(frameLayout)
+        }
+
+        builder.setPositiveButton(LocaleController.getString(R.string.PinMessage)) { _, _ ->
+            val controller = MessagesController.getInstance(activity.currentAccount)
+            for (id in ids) {
+                controller.pinMessage(activity.currentChat, activity.currentUser, id, false, !checks[1], checks[0])
+            }
+            val bulletin = BulletinFactory.createPinMessageBulletin(activity, activity.themeDelegate)
+            bulletin.show()
+            bulletin.layout.postDelayed({
+                try {
+                    bulletin.layout.performHapticFeedback(HapticFeedbackConstants.KEYBOARD_TAP, HapticFeedbackConstants.FLAG_IGNORE_GLOBAL_SETTING)
+                } catch (_: Exception) {
+                }
+            }, 550)
+        }
+        builder.setNegativeButton(LocaleController.getString(R.string.Cancel), null)
+        activity.showDialog(builder.create())
+    }
+
+    private fun unpinMessages(activity: ChatActivity, messages: ArrayList<MessageObject>) {
+        val controller = MessagesController.getInstance(activity.currentAccount)
+        val seenIds = HashSet<Int>()
+        for (msg in messages) {
+            if (seenIds.add(msg.id) && canPinMessage(activity, msg) && isPinnedMessage(activity, msg)) {
+                controller.pinMessage(activity.currentChat, activity.currentUser, msg.id, true, false, false)
+            }
+        }
     }
 
     private data class GapInfo(val targetIndex: Int, val minId: Int, val maxId: Int)
