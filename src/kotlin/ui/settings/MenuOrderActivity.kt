@@ -26,80 +26,58 @@ import org.telegram.ui.Components.UItem
 import org.telegram.ui.Components.UniversalAdapter
 
 abstract class MenuOrderActivity<I : MenuOrderItem> : SettingsPageActivity() {
-    private var entries = config.value.toMutableList()
-    private var reorderSectionId = -1
-    private val rows = HashMap<I, MenuOrderRow>()
+    protected var entries = config.value.toMutableList()
+    protected val rows = HashMap<I, MenuOrderRow>()
+    private val reorderHandlers = HashMap<Int, (List<UItem>) -> Unit>()
 
     protected abstract val config: MenuOrderConfig<I>
     protected abstract val infoStringRes: Int
     protected abstract val headerStringRes: Int
     protected abstract val resetStringRes: Int
 
-    /** subclasses with a per-item sub-cell (e.g. long-tap picker) override these */
-    protected open fun subCellValue(item: I): CharSequence? = null
-    protected open fun subCellLabel(item: I): CharSequence? =
-        LocaleController.getString(R.string.InuLongTapAction)
-    protected open fun showSubCellPicker(item: I, row: MenuOrderRow) {}
+    data class SubCell(val label: CharSequence, val value: CharSequence, val onClick: (MenuOrderRow) -> Unit)
+
+    /** override to attach a long-tap sub-cell to a row (e.g. Reply / Forward long-tap pickers) */
+    protected open fun subCell(item: I): SubCell? = null
+
+    /**
+     * default flips `enabled`, persists, refreshes the row switch. Override for capacity gating
+     * or post-toggle invalidation; call `super` to perform the default flip.
+     */
+    protected open fun onRowToggle(entry: MenuOrderEntry<I>, row: MenuOrderRow?) {
+        val idx = entries.indexOfFirst { it.item == entry.item }
+        if (idx < 0) return
+        entries[idx] = entries[idx].copy(enabled = !entries[idx].enabled)
+        config.value = entries
+        row?.setChecked(entries[idx].enabled)
+    }
 
     @SuppressLint("ClickableViewAccessibility")
     override fun createView(context: Context): View {
         val view = super.createView(context)
         listView.inu_longPressDragEnabled = false
-        listView.listenReorder { id, items ->
-            if (id != reorderSectionId) return@listenReorder
-            val byItem = entries.associateBy { it.item }
-            val newOrder = ArrayList<MenuOrderEntry<I>>(items.size)
-            for (i in items) {
-                @Suppress("UNCHECKED_CAST")
-                val key = i.`object` as? I ?: continue
-                val existing = byItem[key] ?: continue
-                newOrder.add(existing)
-            }
-            if (newOrder.size == entries.size) {
-                entries = newOrder
-                config.value = entries
-            }
-        }
+        listView.listenReorder { id, items -> reorderHandlers[id]?.invoke(items) }
         listView.allowReorder(true)
         return view
     }
 
-    @SuppressLint("ClickableViewAccessibility")
     override fun fillItems(items: ArrayList<UItem>, adapter: UniversalAdapter) {
-        items.add(UItem.asShadow(LocaleController.getString(infoStringRes)))
+        fillMainSection(items, adapter)
+        fillResetSection(items, adapter)
+    }
 
+    protected fun fillMainSection(items: ArrayList<UItem>, adapter: UniversalAdapter) {
+        items.add(UItem.asShadow(LocaleController.getString(infoStringRes)))
         items.add(UItem.asHeader(LocaleController.getString(headerStringRes)))
-        reorderSectionId = adapter.reorderSectionStart()
-        for (entry in entries) {
-            val row = rows.getOrPut(entry.item) {
-                val r = MenuOrderRow(context)
-                r.bind(entry.item)
-                r.setOnReorderTouchListener { _, event ->
-                    if (event.actionMasked == MotionEvent.ACTION_DOWN) {
-                        val holder = listView.findContainingViewHolder(r) ?: return@setOnReorderTouchListener false
-                        listView.itemTouchHelper.startDrag(holder)
-                    }
-                    false
-                }
-                r
-            }
-            row.setChecked(entry.enabled)
-            val subValue = subCellValue(entry.item)
-            val heightDp = if (subValue != null) {
-                row.setSubCell(subCellLabel(entry.item) ?: "", subValue)
-                row.mainHeightDp + row.subHeightDp
-            } else {
-                row.clearSubCell()
-                row.mainHeightDp
-            }
-            val u = UItem.asCustom(row, heightDp)
-            u.id = ITEM_BASE + entry.item.ordinal
-            u.`object` = entry.item
-            items.add(u)
+        openReorderSection(adapter, toBottom = false)
+        for (entry in entries.filter { !it.bottom }) {
+            items.add(buildRow(entry))
         }
         adapter.reorderSectionEnd()
-        items.add(UItem.asShadow(null))
+    }
 
+    protected fun fillResetSection(items: ArrayList<UItem>, adapter: UniversalAdapter) {
+        items.add(UItem.asShadow(SHADOW_END, null))
         items.add(
             UItem.asButton(
                 BUTTON_RESET,
@@ -109,33 +87,81 @@ abstract class MenuOrderActivity<I : MenuOrderItem> : SettingsPageActivity() {
         )
     }
 
-    override fun onClick(item: UItem, view: View, position: Int, x: Float, y: Float) {
-        when (item.id) {
-            BUTTON_RESET -> {
-                config.resetToDefault()
-                entries = config.default.toMutableList()
-                listView.adapter.update(true)
-            }
+    /** opens a reorder section AND registers its drag dispatch (so the base listener routes it) */
+    protected fun openReorderSection(adapter: UniversalAdapter, toBottom: Boolean): Int {
+        val id = adapter.reorderSectionStart()
+        // adapter resets its section list on each rebuild, so id 0 marks a fresh fillItems pass
+        if (id == 0) reorderHandlers.clear()
+        reorderHandlers[id] = { applyReorder(it, toBottom) }
+        return id
+    }
 
-            else -> {
-                @Suppress("UNCHECKED_CAST")
-                val key = item.`object` as? I ?: return
-                val row = rows[key]
-                if (row != null && row.isInSubCell(y)) {
-                    showSubCellPicker(key, row)
-                    return
+    /** reorders `entries` to match the dragged UItems of a section */
+    @Suppress("UNCHECKED_CAST")
+    protected fun applyReorder(items: List<UItem>, toBottom: Boolean) {
+        val byItem = entries.associateBy { it.item }
+        val reordered = items.mapNotNull { byItem[it.`object` as? I] }
+        if (reordered.size != entries.count { it.bottom == toBottom }) return
+        val others = entries.filter { it.bottom != toBottom }
+        entries = (if (toBottom) others + reordered else reordered + others).toMutableList()
+        config.value = entries
+    }
+
+    @SuppressLint("ClickableViewAccessibility")
+    protected fun buildRow(entry: MenuOrderEntry<I>, decorate: (MenuOrderRow) -> Unit = {}): UItem {
+        val row = rows.getOrPut(entry.item) {
+            val newRow = MenuOrderRow(context)
+            newRow.bind(entry.item)
+            newRow.setOnReorderTouchListener { _, event ->
+                if (event.actionMasked == MotionEvent.ACTION_DOWN) {
+                    val holder = listView.findContainingViewHolder(newRow) ?: return@setOnReorderTouchListener false
+                    listView.itemTouchHelper.startDrag(holder)
                 }
-                val idx = entries.indexOfFirst { it.item == key }
-                if (idx < 0) return
-                entries[idx] = entries[idx].copy(enabled = !entries[idx].enabled)
-                config.value = entries
-                row?.setChecked(entries[idx].enabled)
+                false
             }
+            newRow
         }
+        row.setSwitchVisible(true)
+        row.setMoveBackButton(null)
+        decorate(row)
+        row.setChecked(entry.enabled)
+        val sub = subCell(entry.item)
+        val heightDp = if (sub != null) {
+            row.setSubCell(sub.label, sub.value)
+            row.mainHeightDp + row.subHeightDp
+        } else {
+            row.clearSubCell()
+            row.mainHeightDp
+        }
+        val uitem = UItem.asCustom(row, heightDp)
+        uitem.id = ITEM_BASE + entry.item.ordinal
+        uitem.`object` = entry.item
+        return uitem
+    }
+
+    override fun onClick(item: UItem, view: View, position: Int, x: Float, y: Float) {
+        if (item.id == BUTTON_RESET) {
+            config.resetToDefault()
+            entries = config.default.toMutableList()
+            listView.adapter.update(true)
+            return
+        }
+        @Suppress("UNCHECKED_CAST")
+        val key = item.`object` as? I ?: return
+        val row = rows[key]
+        if (row != null && row.isInSubCell(y)) {
+            subCell(key)?.onClick?.invoke(row)
+            return
+        }
+        val entry = entries.firstOrNull { it.item == key } ?: return
+        onRowToggle(entry, row)
     }
 
     companion object {
         private val BUTTON_RESET = InuUtils.generateId()
+        // distinct from any null-text shadow elsewhere in the page; DiffUtil aliases identical
+        // shadows during structural changes and crashes the animated diff
+        private val SHADOW_END = InuUtils.generateId()
         private const val ITEM_BASE = 10000
     }
 }
@@ -146,6 +172,7 @@ class MenuOrderRow(context: Context) : LinearLayout(context) {
     private val icon: ImageView
     private val text: TextView
     private val switch: Switch
+    private val moveBackButton: ImageView
     private val main: FrameLayout
     private var sub: TextCell? = null
     private var subWrapper: FrameLayout? = null
@@ -202,6 +229,19 @@ class MenuOrderRow(context: Context) : LinearLayout(context) {
             // 24dp tall so the MD3 switch track (~22dp) fits without clipping
             LayoutHelper.createFrame(37, 24f, (if (rtl) Gravity.LEFT else Gravity.RIGHT) or Gravity.CENTER_VERTICAL, 22f, 0f, 22f, 0f)
         )
+
+        moveBackButton = ImageView(context).apply {
+            scaleType = ImageView.ScaleType.CENTER
+            setImageResource(R.drawable.msg_go_up)
+            colorFilter = PorterDuffColorFilter(Theme.getColor(Theme.key_windowBackgroundWhiteGrayIcon), PorterDuff.Mode.MULTIPLY)
+            background = Theme.createSelectorDrawable(Theme.getColor(Theme.key_listSelector), Theme.RIPPLE_MASK_CIRCLE_20DP)
+            contentDescription = LocaleController.getString(R.string.InuMenuMoveFromBottomRow)
+            visibility = View.GONE
+        }
+        main.addView(
+            moveBackButton,
+            LayoutHelper.createFrame(36, 36f, (if (rtl) Gravity.LEFT else Gravity.RIGHT) or Gravity.CENTER_VERTICAL, 16f, 0f, 16f, 0f)
+        )
     }
 
     fun bind(item: MenuOrderItem) {
@@ -211,6 +251,21 @@ class MenuOrderRow(context: Context) : LinearLayout(context) {
 
     fun setChecked(checked: Boolean) {
         switch.setChecked(checked, isAttachedToWindow)
+    }
+
+    fun setSwitchVisible(visible: Boolean) {
+        switch.visibility = if (visible) View.VISIBLE else View.GONE
+    }
+
+    fun setMoveBackButton(onClick: (() -> Unit)?) {
+        if (onClick == null) {
+            moveBackButton.visibility = View.GONE
+            moveBackButton.setOnClickListener(null)
+            moveBackButton.isClickable = false
+        } else {
+            moveBackButton.visibility = View.VISIBLE
+            moveBackButton.setOnClickListener { onClick() }
+        }
     }
 
     fun setOnReorderTouchListener(listener: View.OnTouchListener) {

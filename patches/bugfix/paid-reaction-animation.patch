@@ -11,7 +11,7 @@ diff --git a/TMessagesProj/src/main/java/org/telegram/ui/Components/ReactionsCon
 index 0000000..0000000 100644
 --- a/TMessagesProj/src/main/java/org/telegram/ui/Components/ReactionsContainerLayout.java
 +++ b/TMessagesProj/src/main/java/org/telegram/ui/Components/ReactionsContainerLayout.java
-@@ -1976,7 +1976,7 @@ public class ReactionsContainerLayout extends FrameLayout implements Notificatio
+@@ -1986,7 +1986,7 @@ public class ReactionsContainerLayout extends FrameLayout implements Notificatio
  
              resetAnimation();
              currentReaction = react;

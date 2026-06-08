@@ -1,17 +1,13 @@
 package desu.inugram.helpers.media
 
 import android.annotation.SuppressLint
-import android.content.ClipData
-import android.content.ClipboardManager
-import android.content.Context
 import android.graphics.Bitmap
 import android.util.TypedValue
 import android.view.View
 import android.widget.FrameLayout
-import androidx.core.content.FileProvider
 import desu.inugram.InuConfig
+import desu.inugram.helpers.InuUtils
 import org.telegram.messenger.AndroidUtilities
-import org.telegram.messenger.ApplicationLoader
 import org.telegram.messenger.FileLoader
 import org.telegram.messenger.FileLog
 import org.telegram.messenger.ImageLocation
@@ -203,17 +199,10 @@ object PhotoViewerHelper {
     }
 
     private fun copyFileUriToClipboard(file: File, containerView: FrameLayout, bulletinRes: Int) {
-        try {
-            val context = ApplicationLoader.applicationContext
-            val uri = FileProvider.getUriForFile(context, ApplicationLoader.getApplicationId() + ".provider", file)
-            val clip = ClipData.newUri(context.contentResolver, "photo", uri)
-            val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
-            clipboard.setPrimaryClip(clip)
+        if (InuUtils.copyFileUriToClipboard(file)) {
             BulletinFactory.of(containerView, null)
                 .createCopyBulletin(LocaleController.getString(bulletinRes))
                 .show()
-        } catch (e: Exception) {
-            FileLog.e(e)
         }
     }
 }

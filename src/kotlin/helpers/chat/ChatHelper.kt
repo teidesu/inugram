@@ -1,7 +1,10 @@
 package desu.inugram.helpers.chat
 
 import android.Manifest
+import android.content.Context
 import android.content.pm.PackageManager
+import android.graphics.PorterDuff
+import android.graphics.PorterDuffColorFilter
 import android.os.Build
 import android.os.Bundle
 import android.text.InputType
@@ -13,10 +16,12 @@ import android.view.HapticFeedbackConstants
 import android.view.View
 import android.view.View.MeasureSpec
 import android.widget.FrameLayout
+import android.widget.ImageView
 import android.widget.LinearLayout
 import android.widget.ScrollView
 import androidx.core.content.edit
 import desu.inugram.InuConfig
+import desu.inugram.helpers.InuUtils
 import desu.inugram.helpers.cloud.SettingsBackupHelper
 import desu.inugram.helpers.menu.MessageMenuConfig
 import desu.inugram.helpers.menu.reorderByMenu
@@ -42,19 +47,22 @@ import org.telegram.tgnet.TLRPC
 import org.telegram.ui.ActionBar.ActionBarPopupWindow
 import org.telegram.ui.ActionBar.AlertDialog
 import org.telegram.ui.ActionBar.BottomSheet
+import org.telegram.ui.ActionBar.Theme
 import org.telegram.ui.BasePermissionsActivity
 import org.telegram.ui.Cells.ChatMessageCell
 import org.telegram.ui.ChatActivity
 import org.telegram.ui.Components.AnimatedEmojiSpan
 import org.telegram.ui.Components.BulletinFactory
 import org.telegram.ui.Components.ChatActivityEnterView
+import org.telegram.ui.Components.ColoredImageSpan
 import org.telegram.ui.Components.EditTextCaption
 import org.telegram.ui.Components.ItemOptions
+import org.telegram.ui.Components.LayoutHelper
 import org.telegram.ui.Components.PopupSwipeBackLayout
-import org.telegram.ui.Components.ColoredImageSpan
 import org.telegram.ui.Components.RLottieDrawable
 import org.telegram.ui.Components.Reactions.ReactionsLayoutInBubble
 import org.telegram.ui.Components.ReactionsContainerLayout
+import org.telegram.ui.Components.ScaleStateListAnimator
 import org.telegram.ui.Components.URLSpanUserMention
 import org.telegram.ui.Components.UndoView
 import org.telegram.ui.DialogsActivity
@@ -75,6 +83,7 @@ object ChatHelper {
     const val OPTION_REPLY_IN_DMS = 510
     const val OPTION_SUMMARIZE = 511
     const val OPTION_REMOVE_FROM_CACHE = 512
+    const val OPTION_COPY_MEDIA = 513
 
     @JvmStatic
     fun timeAdditionsHash(msg: MessageObject?): Int {
@@ -251,6 +260,15 @@ object ChatHelper {
             icons.add(R.drawable.msg_clear)
         }
 
+        // stock OPTION_COPY only covers text/caption — add a fallback that copies the media file URI
+        if (!noforwards && !options.contains(ChatActivity.OPTION_COPY) &&
+            mediaFileForCopy(activity.currentAccount, selectedObject) != null
+        ) {
+            items.add(LocaleController.getString(R.string.Copy))
+            options.add(OPTION_COPY_MEDIA)
+            icons.add(R.drawable.msg_copy)
+        }
+
         items.add(LocaleController.getString(R.string.InuMessageDetails))
         options.add(OPTION_DETAILS)
         icons.add(R.drawable.msg_info)
@@ -272,9 +290,120 @@ object ChatHelper {
         }
 
         items.clear(); options.clear(); icons.clear()
-        for (r in ordered) {
-            items.add(r.label); options.add(r.option); icons.add(r.icon)
+        for (row in ordered) {
+            items.add(row.label); options.add(row.option); icons.add(row.icon)
         }
+    }
+
+    /**
+     * Builds the bottom action row from the user's config and strips whatever it resolves to
+     * from the inline lists, so nothing is duplicated in the vertical menu. Scrim popup only —
+     * the shared todo/poll menus must keep these inline.
+     *
+     * Each entry is `{option, icon, enabled}` with `enabled == 0` for a greyed slot placeholder
+     * (its fallback chain matched nothing). Returns an empty list when disabled → stock-identical.
+     */
+    @JvmStatic
+    fun extractBottomMenu(
+        items: ArrayList<CharSequence>,
+        options: ArrayList<Int>,
+        icons: ArrayList<Int>,
+    ): ArrayList<IntArray> {
+        val result = ArrayList<IntArray>()
+        if (!InuConfig.MESSAGE_MENU_BOTTOM_ROW.value) return result
+
+        for (entry in InuConfig.MESSAGE_MENU_ITEMS.value.filter { it.bottom && it.enabled }) {
+            val option = if (entry.item.isSlot) resolveSlot(entry.item, options)
+            else options.firstOrNull { MessageMenuConfig.Item.forOption(it) == entry.item }
+            if (option == null) {
+                // slots keep their place as a greyed placeholder NagramX-style; customs are dropped
+                if (entry.item.isSlot) result.add(intArrayOf(-1, entry.item.iconRes, 0))
+                continue
+            }
+            val index = options.indexOf(option)
+            result.add(intArrayOf(option, icons[index], 1))
+            items.removeAt(index); options.removeAt(index); icons.removeAt(index)
+        }
+        return result
+    }
+
+    private fun resolveSlot(item: MessageMenuConfig.Item, options: List<Int>): Int? {
+        if (item == MessageMenuConfig.Item.SLOT_REPLY) {
+            if (ChatActivity.OPTION_REPLY in options) return ChatActivity.OPTION_REPLY
+        }
+        if (item == MessageMenuConfig.Item.SLOT_COPY) {
+            if (ChatActivity.OPTION_COPY in options) return ChatActivity.OPTION_COPY
+            if (OPTION_COPY_MEDIA in options) return OPTION_COPY_MEDIA
+        }
+        if (item == MessageMenuConfig.Item.SLOT_DELETE) {
+            if (ChatActivity.OPTION_DELETE in options) return ChatActivity.OPTION_DELETE
+            if (ChatActivity.OPTION_COPY_LINK in options) return ChatActivity.OPTION_COPY_LINK
+        }
+        if (item == MessageMenuConfig.Item.SLOT_EDIT_FORWARD) {
+            if (ChatActivity.OPTION_EDIT in options) return ChatActivity.OPTION_EDIT
+            if (ChatActivity.OPTION_FORWARD in options) return ChatActivity.OPTION_FORWARD
+        }
+        return null
+    }
+
+    /**
+     * Renders the menu's bottom region in one shared block: a single gap, then the optional
+     * icon-button row, then the seen/reactions row (kept bottommost) via [viewsAdder]. No-op —
+     * and so stock-identical — when neither the button row nor [viewsAdder] is present.
+     *
+     * @return true when content was added; callers use this to suppress redundant separators
+     *         that stock adds further down (e.g. the gap above the emoji-packs row).
+     */
+    @JvmStatic
+    fun addBottomRegion(
+        activity: ChatActivity,
+        popupLayout: ActionBarPopupWindow.ActionBarPopupWindowLayout,
+        context: Context,
+        resourcesProvider: Theme.ResourcesProvider?,
+        bottom: List<IntArray>,
+        viewsAdder: Runnable?,
+        selectedObject: MessageObject?,
+        selectedObjectGroup: MessageObject.GroupedMessages?,
+    ): Boolean {
+        if (bottom.isEmpty() && viewsAdder == null) return false
+
+        popupLayout.addView(
+            ActionBarPopupWindow.GapView(context, resourcesProvider),
+            LayoutHelper.createLinear(LayoutHelper.MATCH_PARENT, 8)
+        )
+        if (bottom.isNotEmpty()) {
+            val row = LinearLayout(context).apply {
+                orientation = LinearLayout.HORIZONTAL
+                gravity = Gravity.CENTER
+            }
+            val pad = AndroidUtilities.dp(8f)
+            val options = bottom.map { it[0] }
+            bottom.forEachIndexed { index, entry ->
+                val (option, icon, enabled) = entry
+                val button = ImageView(context).apply {
+                    setPadding(pad, pad, pad, pad)
+                    scaleType = ImageView.ScaleType.CENTER
+                    setImageResource(icon)
+                    colorFilter = PorterDuffColorFilter(
+                        Theme.getColor(Theme.key_actionBarDefaultSubmenuItemIcon, resourcesProvider),
+                        PorterDuff.Mode.MULTIPLY
+                    )
+                    if (enabled == 0) {
+                        alpha = 0.4f
+                    } else {
+                        ScaleStateListAnimator.apply(this, .1f, 1.5f)
+                        setOnClickListener { activity.processSelectedOption(option) }
+                        setOnLongClickListener {
+                            onMenuOptionLongClick(activity, popupLayout, it, options, index, selectedObject, selectedObjectGroup)
+                        }
+                    }
+                }
+                row.addView(button, LayoutHelper.createLinear(0, LayoutHelper.WRAP_CONTENT, 1f, Gravity.CENTER, 6, 6, 6, 6))
+            }
+            popupLayout.addView(row, LayoutHelper.createLinear(LayoutHelper.MATCH_PARENT, LayoutHelper.WRAP_CONTENT))
+        }
+        viewsAdder?.run()
+        return true
     }
 
     /** @return true if the option was handled */
@@ -362,7 +491,7 @@ object ChatHelper {
 
             OPTION_REMOVE_FROM_CACHE -> {
                 val parent = activity.parentActivity
-                if (parent != null && Build.VERSION.SDK_INT >= 23 &&
+                if (parent != null &&
                     (Build.VERSION.SDK_INT <= 28 || BuildVars.NO_SCOPED_STORAGE) &&
                     parent.checkSelfPermission(Manifest.permission.WRITE_EXTERNAL_STORAGE) != PackageManager.PERMISSION_GRANTED
                 ) {
@@ -378,9 +507,35 @@ object ChatHelper {
 
             OPTION_SHOW_IN_CHAT -> openInNewChat(activity, activity.dialogId, selectedObject.id)
 
+            OPTION_COPY_MEDIA -> {
+                val file = mediaFileForCopy(activity.currentAccount, selectedObject)
+                if (file != null && InuUtils.copyFileUriToClipboard(file)) {
+                    val bulletinRes = if (selectedObject.isPhoto) R.string.InuPhotoCopied else R.string.InuFrameCopied
+                    BulletinFactory.of(activity)
+                        .createCopyBulletin(LocaleController.getString(bulletinRes))
+                        .show()
+                }
+            }
+
             else -> return false
         }
         return true
+    }
+
+    // photo → full cached photo file; video/gif/round → cached poster thumb (matches photo viewer's "copy frame" intent).
+    // null when nothing is cached locally — the menu entry isn't added in that case.
+    private fun mediaFileForCopy(currentAccount: Int, message: MessageObject): File? {
+        if (message.isSticker || message.isAnimatedSticker) return null
+        val loader = FileLoader.getInstance(currentAccount)
+        if (message.isPhoto) {
+            return loader.getPathToMessage(message.messageOwner)?.takeIf { it.exists() }
+        }
+        if (message.isVideo || message.isGif || message.isRoundVideo) {
+            val thumb = FileLoader.getClosestPhotoSizeWithSize(message.photoThumbs, AndroidUtilities.getPhotoSize(true))
+                ?: return null
+            return loader.getPathToAttach(thumb, true)?.takeIf { it.exists() }
+        }
+        return null
     }
 
     // opens dialogId scrolled to messageId in a fresh activity, keeping the current one on the backstack
@@ -636,7 +791,7 @@ object ChatHelper {
             activity.showDialog(create())
         }
 
-        return true;
+        return true
     }
 
     @JvmStatic
@@ -701,7 +856,7 @@ object ChatHelper {
 
     @JvmStatic
     fun shouldForceHideBotCommands(activity: ChatActivity?): Boolean {
-        if (activity == null) return false;
+        if (activity == null) return false
         val chat = activity.currentChat
         val user = activity.currentUser
 
@@ -811,104 +966,78 @@ object ChatHelper {
         cell: View,
         options: List<Int>,
         index: Int,
-        selectedObject: MessageObject?,
-        selectedObjectGroup: MessageObject.GroupedMessages?,
+        message: MessageObject?,
+        group: MessageObject.GroupedMessages?,
     ): Boolean {
-        if (selectedObject == null || index >= options.size) return false
+        if (message == null || index >= options.size) return false
         return when (options[index]) {
-            ChatActivity.OPTION_FORWARD -> handleForwardLongTap(activity, popupLayout, cell, selectedObject, selectedObjectGroup)
-            ChatActivity.OPTION_REPLY -> handleReplyLongTap(activity, popupLayout, cell, selectedObject, selectedObjectGroup)
+            ChatActivity.OPTION_FORWARD -> when (InuConfig.FORWARD_LONG_TAP_ACTION.value) {
+                InuConfig.ForwardLongTapItem.OFF -> false
+                InuConfig.ForwardLongTapItem.CHOOSE_MODE -> openLongTapSubmenu(activity, popupLayout, cell) { swb ->
+                    swb.add(R.drawable.msg_forward, LocaleController.getString(R.string.Forward)) {
+                        activity.processSelectedOption(ChatActivity.OPTION_FORWARD)
+                    }
+                    swb.add(lottieIcon(R.raw.name_hide), LocaleController.getString(R.string.InuForwardWithoutAuthor)) {
+                        activity.processSelectedOption(ChatActivity.OPTION_FORWARD)
+                        pendingHideAuthor = true
+                    }
+                    if (hasCaption(message, group)) {
+                        swb.add(lottieIcon(R.raw.caption_hide), LocaleController.getString(R.string.InuForwardWithoutCaption)) {
+                            activity.processSelectedOption(ChatActivity.OPTION_FORWARD)
+                            pendingHideCaption = true
+                        }
+                    }
+                }
+
+                InuConfig.ForwardLongTapItem.WITHOUT_AUTHOR -> {
+                    activity.processSelectedOption(ChatActivity.OPTION_FORWARD)
+                    pendingHideAuthor = true
+                    true
+                }
+
+                InuConfig.ForwardLongTapItem.WITHOUT_CAPTION -> {
+                    activity.processSelectedOption(ChatActivity.OPTION_FORWARD)
+                    if (hasCaption(message, group)) pendingHideCaption = true else pendingHideAuthor = true
+                    true
+                }
+
+                else -> false
+            }
+
+            ChatActivity.OPTION_REPLY -> when (InuConfig.REPLY_LONG_TAP_ACTION.value) {
+                InuConfig.ReplyLongTapItem.OFF -> false
+                InuConfig.ReplyLongTapItem.CHOOSE_MODE -> openLongTapSubmenu(activity, popupLayout, cell) { swb ->
+                    swb.add(R.drawable.menu_reply, LocaleController.getString(R.string.Reply)) {
+                        activity.processSelectedOption(ChatActivity.OPTION_REPLY)
+                    }
+                    swb.add(R.drawable.menu_reply, LocaleController.getString(R.string.InuReplyIn)) {
+                        activity.processSelectedOption(OPTION_REPLY_IN)
+                    }
+                    if (canReplyInDms(activity, message)) {
+                        swb.add(R.drawable.msg_mention, LocaleController.getString(R.string.InuReplyInDms)) {
+                            activity.processSelectedOption(OPTION_REPLY_IN_DMS)
+                        }
+                    }
+                }
+
+                InuConfig.ReplyLongTapItem.REPLY_IN -> {
+                    activity.processSelectedOption(OPTION_REPLY_IN)
+                    true
+                }
+
+                InuConfig.ReplyLongTapItem.REPLY_IN_DMS -> {
+                    val target = if (canReplyInDms(activity, message)) OPTION_REPLY_IN_DMS else OPTION_REPLY_IN
+                    activity.processSelectedOption(target)
+                    true
+                }
+
+                else -> false
+            }
+
             else -> false
         }
     }
 
-    private fun handleReplyLongTap(
-        activity: ChatActivity,
-        popupLayout: ActionBarPopupWindow.ActionBarPopupWindowLayout,
-        cell: View,
-        selected: MessageObject,
-        group: MessageObject.GroupedMessages?,
-    ): Boolean = when (InuConfig.REPLY_LONG_TAP_ACTION.value) {
-        InuConfig.ReplyLongTapItem.OFF -> false
-        InuConfig.ReplyLongTapItem.CHOOSE_MODE -> openReplySubmenu(activity, popupLayout, cell, selected)
-        InuConfig.ReplyLongTapItem.REPLY_IN -> {
-            activity.processSelectedOption(OPTION_REPLY_IN)
-            true
-        }
-
-        InuConfig.ReplyLongTapItem.REPLY_IN_DMS -> {
-            val target = if (canReplyInDms(activity, selected)) OPTION_REPLY_IN_DMS else OPTION_REPLY_IN
-            activity.processSelectedOption(target)
-            true
-        }
-
-        else -> false
-    }
-
-    private fun handleForwardLongTap(
-        activity: ChatActivity,
-        popupLayout: ActionBarPopupWindow.ActionBarPopupWindowLayout,
-        cell: View,
-        selected: MessageObject,
-        group: MessageObject.GroupedMessages?,
-    ): Boolean = when (InuConfig.FORWARD_LONG_TAP_ACTION.value) {
-        InuConfig.ForwardLongTapItem.OFF -> false
-        InuConfig.ForwardLongTapItem.CHOOSE_MODE -> openForwardSubmenu(activity, popupLayout, cell, selected, group)
-        InuConfig.ForwardLongTapItem.WITHOUT_AUTHOR -> {
-            activity.processSelectedOption(ChatActivity.OPTION_FORWARD)
-            pendingHideAuthor = true
-            true
-        }
-
-        InuConfig.ForwardLongTapItem.WITHOUT_CAPTION -> {
-            activity.processSelectedOption(ChatActivity.OPTION_FORWARD)
-            if (hasCaption(selected, group)) pendingHideCaption = true else pendingHideAuthor = true
-            true
-        }
-
-        else -> false
-    }
-
-    private fun openForwardSubmenu(
-        activity: ChatActivity,
-        popupLayout: ActionBarPopupWindow.ActionBarPopupWindowLayout,
-        anchorCell: View,
-        selected: MessageObject,
-        group: MessageObject.GroupedMessages?,
-    ): Boolean = openLongTapSubmenu(activity, popupLayout, anchorCell) { swb ->
-        swb.add(R.drawable.msg_forward, LocaleController.getString(R.string.Forward)) {
-            activity.processSelectedOption(ChatActivity.OPTION_FORWARD)
-        }
-        swb.add(lottieIcon(R.raw.name_hide), LocaleController.getString(R.string.InuForwardWithoutAuthor)) {
-            activity.processSelectedOption(ChatActivity.OPTION_FORWARD)
-            pendingHideAuthor = true
-        }
-        if (hasCaption(selected, group)) {
-            swb.add(lottieIcon(R.raw.caption_hide), LocaleController.getString(R.string.InuForwardWithoutCaption)) {
-                activity.processSelectedOption(ChatActivity.OPTION_FORWARD)
-                pendingHideCaption = true
-            }
-        }
-    }
-
-    private fun openReplySubmenu(
-        activity: ChatActivity,
-        popupLayout: ActionBarPopupWindow.ActionBarPopupWindowLayout,
-        anchorCell: View,
-        selected: MessageObject,
-    ): Boolean = openLongTapSubmenu(activity, popupLayout, anchorCell) { swb ->
-        swb.add(R.drawable.menu_reply, LocaleController.getString(R.string.Reply)) {
-            activity.processSelectedOption(ChatActivity.OPTION_REPLY)
-        }
-        swb.add(R.drawable.menu_reply, LocaleController.getString(R.string.InuReplyIn)) {
-            activity.processSelectedOption(OPTION_REPLY_IN)
-        }
-        if (canReplyInDms(activity, selected)) {
-            swb.add(R.drawable.msg_mention, LocaleController.getString(R.string.InuReplyInDms)) {
-                activity.processSelectedOption(OPTION_REPLY_IN_DMS)
-            }
-        }
-    }
 
     private inline fun openLongTapSubmenu(
         activity: ChatActivity,

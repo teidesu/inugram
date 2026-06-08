@@ -14,15 +14,18 @@ interface MenuOrderItem {
     val labelRes: Int
     val iconRes: Int
     val ordinal: Int
+
+    /** synthetic "smart slot" that lives only in the bottom row and resolves to an action at render */
+    val isSlot: Boolean get() = false
 }
 
-data class MenuOrderEntry<I : MenuOrderItem>(val item: I, val enabled: Boolean)
+data class MenuOrderEntry<I : MenuOrderItem>(val item: I, val enabled: Boolean, val bottom: Boolean = false)
 
 abstract class MenuOrderConfig<I : MenuOrderItem>(
     key: String,
     private val allItems: List<I>,
     private val offByDefault: Set<I>,
-) : InuConfig.Item<List<MenuOrderEntry<I>>>(key, allItems.map { MenuOrderEntry(it, it !in offByDefault) }) {
+) : InuConfig.Item<List<MenuOrderEntry<I>>>(key, allItems.map { MenuOrderEntry(it, it !in offByDefault, it.isSlot) }) {
 
     protected abstract fun itemByKey(key: String): I?
 
@@ -37,10 +40,10 @@ abstract class MenuOrderConfig<I : MenuOrderItem>(
                 val obj = arr.getJSONObject(i)
                 val item = itemByKey(obj.getString("k")) ?: continue
                 if (!seen.add(item)) continue
-                out.add(MenuOrderEntry(item, obj.optBoolean("e", true)))
+                out.add(MenuOrderEntry(item, obj.optBoolean("e", true), obj.optBoolean("b", false)))
             }
             for (it in allItems) {
-                if (!seen.contains(it)) out.add(MenuOrderEntry(it, it !in offByDefault))
+                if (!seen.contains(it)) out.add(MenuOrderEntry(it, it !in offByDefault, it.isSlot))
             }
             out
         } catch (_: Exception) {
@@ -54,6 +57,7 @@ abstract class MenuOrderConfig<I : MenuOrderItem>(
             arr.put(JSONObject().apply {
                 put("k", e.item.key)
                 put("e", e.enabled)
+                if (e.bottom) put("b", true)
             })
         }
         putString(key, arr.toString())
@@ -167,6 +171,7 @@ class MessageMenuConfig(key: String) : MenuOrderConfig<MessageMenuConfig.Item>(k
         val optionIds: List<Int>,
         override val labelRes: Int,
         override val iconRes: Int,
+        override val isSlot: Boolean = false,
     ) : MenuOrderItem {
         REPLY("reply", listOf(ChatActivity.OPTION_REPLY), R.string.Reply, R.drawable.menu_reply),
         REPLY_IN("reply_in", listOf(ChatHelper.OPTION_REPLY_IN), R.string.InuReplyIn, R.drawable.menu_reply),
@@ -176,7 +181,7 @@ class MessageMenuConfig(key: String) : MenuOrderConfig<MessageMenuConfig.Item>(k
             R.string.InuAddToStickersGifs,
             R.drawable.msg_sticker
         ),
-        COPY("copy", listOf(ChatActivity.OPTION_COPY), R.string.Copy, R.drawable.msg_copy),
+        COPY("copy", listOf(ChatActivity.OPTION_COPY, ChatHelper.OPTION_COPY_MEDIA), R.string.Copy, R.drawable.msg_copy),
         COPY_LINK("copy_link", listOf(ChatActivity.OPTION_COPY_LINK), R.string.CopyLink, R.drawable.msg_link),
         SAVE_TO_GALLERY(
             "save_to_gallery",
@@ -208,7 +213,14 @@ class MessageMenuConfig(key: String) : MenuOrderConfig<MessageMenuConfig.Item>(k
         SHOW_IN_CHAT("show_in_chat", listOf(ChatHelper.OPTION_SHOW_IN_CHAT), R.string.InuShowInChat, R.drawable.msg_openin),
         REMOVE_FROM_CACHE("remove_from_cache", listOf(ChatHelper.OPTION_REMOVE_FROM_CACHE), R.string.InuRemoveFromCache, R.drawable.msg_clear),
         DELETE("delete", listOf(ChatActivity.OPTION_DELETE), R.string.Delete, R.drawable.msg_delete),
-        DETAILS("details", listOf(ChatHelper.OPTION_DETAILS), R.string.InuMessageDetails, R.drawable.msg_info);
+        DETAILS("details", listOf(ChatHelper.OPTION_DETAILS), R.string.InuMessageDetails, R.drawable.msg_info),
+
+        // bottom-row "smart slots" — no real option id; resolved via fallback chains at render
+        // (see ChatHelper.resolveSlot). Default to the bottom row, NagramX-style.
+        SLOT_REPLY("slot_reply", emptyList(), R.string.Reply, R.drawable.menu_reply, true),
+        SLOT_COPY("slot_copy", emptyList(), R.string.Copy, R.drawable.msg_copy, true),
+        SLOT_DELETE("slot_delete", emptyList(), R.string.InuMenuSlotDelete, R.drawable.msg_delete, true),
+        SLOT_EDIT_FORWARD("slot_edit_forward", emptyList(), R.string.InuMenuSlotEditForward, R.drawable.msg_edit, true);
 
         companion object {
             private val byOption: Map<Int, Item> by lazy {

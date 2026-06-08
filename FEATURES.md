@@ -89,7 +89,7 @@ most things are toggleable in `Settings → Inugram`, with sensible opinionated 
 - message details from menu (+ show json)
 - per-message statistics from message menu
 - remove single message's file from cache from the message menu
-- customizable message context menu - reorder and hide items + long-tap forward/reply items
+- customizable message context menu - reorder and hide items + long-tap forward/reply items + bottom bar (*ported from [NagramX](https://github.com/risin42/NagramX)*)
 - customizable chat menu + extra actions:
   - Recent actions
   - Go to beginning

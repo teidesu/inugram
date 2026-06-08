@@ -564,6 +564,9 @@ object InuConfig {
     val MESSAGE_MENU_ITEMS = MessageMenuConfig("message_menu_items")
 
     @JvmField
+    val MESSAGE_MENU_BOTTOM_ROW = BoolItem("message_menu_bottom_row", false)
+
+    @JvmField
     val CHAT_MENU_ITEMS = ChatMenuConfig("chat_menu_items")
 
     class ForwardLongTapItem : IntItem("forward_long_tap_action", CHOOSE_MODE) {

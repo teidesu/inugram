@@ -407,7 +407,7 @@ index 0000000..0000000 100644
              }
  
              @Override
-@@ -45373,7 +45388,7 @@ public class ChatActivity extends BaseFragment implements
+@@ -45423,7 +45438,7 @@ public class ChatActivity extends BaseFragment implements
          }
  
          final float margin = windowInsetsStateHolder.getAnimatedMaxBottomInset() +
@@ -416,7 +416,7 @@ index 0000000..0000000 100644
  
          topicsTabs.setSideMenuBackgroundMarginBottom(margin);
      }
-@@ -45381,13 +45396,13 @@ public class ChatActivity extends BaseFragment implements
+@@ -45431,13 +45446,13 @@ public class ChatActivity extends BaseFragment implements
      private void checkUi_botMenuPosition() {
          final float margin = windowInsetsStateHolder.getAnimatedMaxBottomInset()
              + getTopicTabsSideSize(TopicsTabsView.Position.BOTTOM)
@@ -432,7 +432,7 @@ index 0000000..0000000 100644
          }
      }
  
-@@ -45441,10 +45456,15 @@ public class ChatActivity extends BaseFragment implements
+@@ -45491,10 +45506,15 @@ public class ChatActivity extends BaseFragment implements
              return;
          }
  
@@ -448,7 +448,7 @@ index 0000000..0000000 100644
          updatePagedownButtonsPosition();
          updateBotforumTabsBottomMargin();
          checkUi_botMenuPosition();
-@@ -45485,6 +45505,10 @@ public class ChatActivity extends BaseFragment implements
+@@ -45535,6 +45555,10 @@ public class ChatActivity extends BaseFragment implements
          if (topPanelLayoutFade == null) {
              return;
          }
@@ -459,7 +459,7 @@ index 0000000..0000000 100644
  
          float fadeHeight = 0;
          float fadeAlphaInv = 1;
-@@ -46018,7 +46042,7 @@ public class ChatActivity extends BaseFragment implements
+@@ -46068,7 +46092,7 @@ public class ChatActivity extends BaseFragment implements
      }
  
      private float getTopicTabsSideSize(TopicsTabsView.Position position) {

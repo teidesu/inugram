@@ -31,6 +31,7 @@ feature/call-confirmation.patch
 feature/double-tap-delay.patch
 feature/mutual-contact-icon.patch
 hooks/chat-activity.patch
+feature/message-menu.patch
 debloat/disable-pull-to-next.patch
 debloat/always-show-go-to-down.patch
 bugfix/web-preview-refetch.patch
@@ -49,7 +50,6 @@ debloat/disable-chat-title-phone.patch
 feature/id-in-profile.patch
 feature/hide-spoiler-pending.patch
 bugfix/paid-reaction-animation.patch
-feature/reactions-menu.patch
 feature/folders-display-mode.patch
 hooks/internal-web-app.patch
 hooks/profile-menu.patch
@@ -67,7 +67,6 @@ bugfix/reaction-counter-jump.patch
 feature/customize-text-classifier.patch
 bugfix/message-send-ime-jump.patch
 hooks/popup-swipeback.patch
-feature/seen-view-below.patch
 bugfix/formatting-regular.patch
 feature/custom-formatting-ui.patch
 bugfix/photo-viewer-blur.patch
