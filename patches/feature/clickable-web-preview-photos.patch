@@ -38,7 +38,7 @@ index 0000000..0000000 100644
                          } else {
                              MediaController.getInstance().pauseMessage(currentMessageObject);
                          }
-+                    } else if (drawPhotoImage && documentAttachType == DOCUMENT_ATTACH_TYPE_NONE && photoImage.isInsideImage(lastTouchX, lastTouchY) && currentMessageObject != null && !currentMessageObject.preview && MessageObject.getMedia(currentMessageObject.messageOwner).webpage != null && TextUtils.isEmpty(MessageObject.getMedia(currentMessageObject.messageOwner).webpage.embed_url)) {
++                    } else if (drawPhotoImage && (documentAttachType == DOCUMENT_ATTACH_TYPE_NONE || documentAttachType == DOCUMENT_ATTACH_TYPE_GIF) && photoImage.isInsideImage(lastTouchX, lastTouchY) && currentMessageObject != null && !currentMessageObject.preview && MessageObject.getMedia(currentMessageObject.messageOwner).webpage != null && TextUtils.isEmpty(MessageObject.getMedia(currentMessageObject.messageOwner).webpage.embed_url)) {
 +                        if (delegate != null) {
 +                            delegate.didPressImage(this, lastTouchX, lastTouchY, false);
 +                        }
