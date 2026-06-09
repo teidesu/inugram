@@ -176,6 +176,7 @@ most things are toggleable in `Settings → Inugram`, with sensible opinionated 
 - 🐶 recyclerlistview instant-tap
 - open bottom-tab menus early by swiping up; flat highlight (not ripple) on menu hover
 - faster downloads/uploads
+- original video quality option in quality picker when sending videos
 
 ## annoyances
 

@@ -1,0 +1,259 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: alina sireneva <alina@tei.su>
+Date: Wed, 10 Jun 2026 01:14:57 +0400
+Subject: "original" toggle in video quality selector to skip re-encoding
+
+---
+ .../messenger/SendMessagesHelper.java         |  6 ++++
+ .../telegram/messenger/VideoEditedInfo.java   | 13 +++++++-
+ .../ui/Components/VideoCompressButton.java    |  8 +++++
+ .../java/org/telegram/ui/PhotoViewer.java     | 33 ++++++++++++++++---
+ 4 files changed, 54 insertions(+), 6 deletions(-)
+
+diff --git a/TMessagesProj/src/main/java/org/telegram/messenger/SendMessagesHelper.java b/TMessagesProj/src/main/java/org/telegram/messenger/SendMessagesHelper.java
+index 0000000..0000000 100644
+--- a/TMessagesProj/src/main/java/org/telegram/messenger/SendMessagesHelper.java
++++ b/TMessagesProj/src/main/java/org/telegram/messenger/SendMessagesHelper.java
+@@ -10369,6 +10369,9 @@ public class SendMessagesHelper extends BaseController implements NotificationCe
+                                 if (videoEditedInfo.resultWidth != videoEditedInfo.originalWidth) {
+                                     originalPath += "_" + videoEditedInfo.resultWidth;
+                                 }
++                                if (videoEditedInfo.inu_originalQuality) {
++                                    originalPath += "_oq";
++                                }
+                                 startTime = videoEditedInfo.startTime >= 0 ? videoEditedInfo.startTime : 0;
+                             }
+                             TLRPC.TL_document document = null;
+@@ -11215,6 +11218,9 @@ public class SendMessagesHelper extends BaseController implements NotificationCe
+                         if (videoEditedInfo.resultWidth != videoEditedInfo.originalWidth) {
+                             originalPath += "_" + videoEditedInfo.resultWidth;
+                         }
++                        if (videoEditedInfo.inu_originalQuality) {
++                            originalPath += "_oq";
++                        }
+                     }
+                     startTime = videoEditedInfo.startTime >= 0 ? videoEditedInfo.startTime : 0;
+                 }
+diff --git a/TMessagesProj/src/main/java/org/telegram/messenger/VideoEditedInfo.java b/TMessagesProj/src/main/java/org/telegram/messenger/VideoEditedInfo.java
+index 0000000..0000000 100644
+--- a/TMessagesProj/src/main/java/org/telegram/messenger/VideoEditedInfo.java
++++ b/TMessagesProj/src/main/java/org/telegram/messenger/VideoEditedInfo.java
+@@ -73,6 +73,8 @@ public class VideoEditedInfo {
+     public MediaController.CropState cropState;
+     public boolean isPhoto;
+     public boolean isStory;
++    public boolean inu_originalQuality;
++    public boolean inu_originalQualityNeedsConvert;
+     public StoryEntry.HDRInfo hdrInfo;
+ 
+     public CollageLayout collage;
+@@ -419,7 +421,7 @@ public class VideoEditedInfo {
+ 
+     public String getString() {
+         String filters;
+-        if (avatarStartTime != -1 || filterState != null || paintPath != null || blurPath != null || mediaEntities != null && !mediaEntities.isEmpty() || cropState != null) {
++        if (avatarStartTime != -1 || filterState != null || paintPath != null || blurPath != null || mediaEntities != null && !mediaEntities.isEmpty() || cropState != null || inu_originalQuality) {
+             int len = 10;
+             if (filterState != null) {
+                 len += 160;
+@@ -541,6 +543,9 @@ public class VideoEditedInfo {
+             } else {
+                 serializedData.writeInt32(TLRPC.TL_null.constructor);
+             }
++            // fork flags go past the stock v11 fields without claiming a new version: stock parsers ignore trailing bytes
++            serializedData.writeBool(inu_originalQuality);
++            serializedData.writeBool(inu_originalQualityNeedsConvert);
+             filters = Utilities.bytesToHex(serializedData.toByteArray());
+             serializedData.cleanup();
+         } else {
+@@ -690,6 +695,9 @@ public class VideoEditedInfo {
+                                 }
+                             }
+                         }
++                        // absent in stock-written blobs — readBool(false) silently yields false at EOF
++                        inu_originalQuality = serializedData.readBool(false);
++                        inu_originalQualityNeedsConvert = serializedData.readBool(false);
+                         serializedData.cleanup();
+                     }
+                 } else {
+@@ -718,6 +726,9 @@ public class VideoEditedInfo {
+             }
+             return !mixedSoundInfos.isEmpty() || mediaEntities != null || paintPath != null || blurPath != null || filterState != null || (cropState != null && !cropState.isEmpty()) || startTime > 0 || endTime != -1 && endTime != estimatedDuration || originalHeight != resultHeight || originalWidth != resultWidth;
+         }
++        if (inu_originalQuality && !inu_originalQualityNeedsConvert && !roundVideo && !isPhoto && !isSticker && !muted) {
++            return !mixedSoundInfos.isEmpty() || mediaEntities != null || paintPath != null || blurPath != null || filterState != null || cropState != null || startTime > 0 || endTime != -1 && endTime != originalDuration;
++        }
+         return !mixedSoundInfos.isEmpty() || mediaEntities != null || paintPath != null || blurPath != null || filterState != null || cropState != null || !roundVideo || startTime > 0 || endTime != -1 && endTime != estimatedDuration;
+     }
+ 
+diff --git a/TMessagesProj/src/main/java/org/telegram/ui/Components/VideoCompressButton.java b/TMessagesProj/src/main/java/org/telegram/ui/Components/VideoCompressButton.java
+index 0000000..0000000 100644
+--- a/TMessagesProj/src/main/java/org/telegram/ui/Components/VideoCompressButton.java
++++ b/TMessagesProj/src/main/java/org/telegram/ui/Components/VideoCompressButton.java
+@@ -98,6 +98,14 @@ public class VideoCompressButton extends View {
+         invalidate();
+     }
+ 
++    public void inu_setOriginalState() {
++        this.disabled = false;
++        textDrawable.setText("ORIG");
++        sizeTextDrawable.setText("", true);
++        setClickable(true);
++        invalidate();
++    }
++
+     public void setPhotoState(boolean highQuality) {
+         this.disabled = false;
+         textDrawable.setText(highQuality ? "HD" : "SD");
+diff --git a/TMessagesProj/src/main/java/org/telegram/ui/PhotoViewer.java b/TMessagesProj/src/main/java/org/telegram/ui/PhotoViewer.java
+index 0000000..0000000 100644
+--- a/TMessagesProj/src/main/java/org/telegram/ui/PhotoViewer.java
++++ b/TMessagesProj/src/main/java/org/telegram/ui/PhotoViewer.java
+@@ -6344,6 +6344,7 @@ public class PhotoViewer implements NotificationCenter.NotificationCenterDelegat
+         containerView.addView(qualityPicker, LayoutHelper.createFrame(LayoutHelper.MATCH_PARENT, 48, Gravity.BOTTOM | Gravity.LEFT));
+         qualityPicker.cancelButton.setOnClickListener(view -> {
+             selectedCompression = previousCompression;
++            inu_originalQualitySelected = inu_previousOriginalQualitySelected;
+             didChangedCompressionLevel(false);
+             showQualityView(false);
+             requestVideoPreview(2);
+@@ -6377,6 +6378,7 @@ public class PhotoViewer implements NotificationCenter.NotificationCenterDelegat
+         qualityChooseView.setVisibility(View.INVISIBLE);
+         qualityChooseView.setBackgroundColor(0x7f000000);
+         containerView.addView(qualityChooseView, LayoutHelper.createFrame(LayoutHelper.MATCH_PARENT, 70, Gravity.LEFT | Gravity.BOTTOM, 0, 0, 0, 48));
++        desu.inugram.helpers.media.OriginalVideoQualityHelper.createRow(this, qualityChooseView, resourcesProvider);
+ 
+         Paint pickerBackgroundPaint = new Paint();
+         pickerBackgroundPaint.setColor(0x7f000000);
+@@ -7825,6 +7827,7 @@ public class PhotoViewer implements NotificationCenter.NotificationCenterDelegat
+         compressItem.setBackground(Theme.createInsetRoundRectDrawable(0x10FFFFFF, dp(22), dp(4), dp(6)));
+ 
+         selectedCompression = selectCompression();
++        if (inu_originalVideoQualityAvailable() && desu.inugram.helpers.media.OriginalVideoQualityHelper.loadPref()) compressItem.inu_setOriginalState(); else
+         compressItem.setState(videoConvertSupported && compressionsCount > 1, muteVideo, Math.min(resultWidth, resultHeight));
+         compressItem.setContentDescription(getString("AccDescrVideoQuality", R.string.AccDescrVideoQuality));
+         itemsLayout.addView(compressItem, LayoutHelper.createLinear(48, 48));
+@@ -10034,6 +10037,8 @@ public class PhotoViewer implements NotificationCenter.NotificationCenterDelegat
+         videoEditedInfo.start = videoCutStart;
+         videoEditedInfo.end = videoCutEnd;
+         videoEditedInfo.compressQuality = selectedCompression;
++        videoEditedInfo.inu_originalQuality = inu_isOriginalVideoQuality();
++        videoEditedInfo.inu_originalQualityNeedsConvert = videoEditedInfo.inu_originalQuality && !isH264Video;
+         videoEditedInfo.rotationValue = rotationValue;
+         videoEditedInfo.originalWidth = originalWidth;
+         videoEditedInfo.originalHeight = originalHeight;
+@@ -15175,6 +15180,7 @@ public class PhotoViewer implements NotificationCenter.NotificationCenterDelegat
+                     float start = 0.0f;
+                     float end = 1.0f;
+                     int compressQuality = -1;
++                    boolean originalQuality = false;
+                     String coverPath = null;
+                     TLRPC.Photo coverPhoto = null;
+                     Object coverPhotoObject = null;
+@@ -15185,13 +15191,14 @@ public class PhotoViewer implements NotificationCenter.NotificationCenterDelegat
+                             start = photoEntry.editedInfo.start;
+                             end = photoEntry.editedInfo.end;
+                             compressQuality = photoEntry.editedInfo.compressQuality;
++                            originalQuality = photoEntry.editedInfo.inu_originalQuality;
+                             coverPath = photoEntry.coverPath;
+                         }
+                         coverPhoto = photoEntry.coverPhoto;
+                         coverPhotoObject = photoEntry.coverPhotoParentObject;
+                     }
+                     if (sendPhotoType != SELECT_TYPE_NO_SELECT) {
+-                        processOpenVideo(currentPathObject, livePhotoVideoOffset, isMuted, start, end, compressQuality, livePhotoTimestampUs);
++                        processOpenVideo(currentPathObject, livePhotoVideoOffset, isMuted, start, end, compressQuality, originalQuality, livePhotoTimestampUs);
+                         if (isDocumentsPicker) {
+                             showVideoTimeline(false, animated);
+                             videoAvatarTooltip.setVisibility(View.GONE);
+@@ -21248,6 +21255,16 @@ public class PhotoViewer implements NotificationCenter.NotificationCenterDelegat
+     private volatile int selectedCompression;
+     private volatile int compressionsCount = -1;
+     private int previousCompression;
++    public boolean inu_originalQualitySelected;
++    private boolean inu_previousOriginalQualitySelected;
++
++    public boolean inu_originalVideoQualityAvailable() {
++        return sendPhotoType != SELECT_TYPE_AVATAR && !centerImageIsLivePhoto && !muteVideo;
++    }
++
++    private boolean inu_isOriginalVideoQuality() {
++        return inu_originalQualitySelected && inu_originalVideoQualityAvailable();
++    }
+ 
+     private int rotationValue;
+     private volatile int originalWidth;
+@@ -21468,11 +21485,12 @@ public class PhotoViewer implements NotificationCenter.NotificationCenterDelegat
+         }
+     }
+ 
+-    private void didChangedCompressionLevel(boolean request) {
++    public void didChangedCompressionLevel(boolean request) {
+         SharedPreferences preferences = MessagesController.getGlobalMainSettings();
+         SharedPreferences.Editor editor = preferences.edit();
+         editor.putInt(String.format("compress_video_%d", compressionsCount), selectedCompression);
+         editor.commit();
++        desu.inugram.helpers.media.OriginalVideoQualityHelper.savePref(inu_originalQualitySelected);
+         updateWidthHeightBitrateForCompression();
+         updateVideoInfo();
+         if (request) {
+@@ -21509,6 +21527,7 @@ public class PhotoViewer implements NotificationCenter.NotificationCenterDelegat
+             return;
+         }
+         if (!centerImageIsLivePhoto) {
++            if (inu_isOriginalVideoQuality()) compressItem.inu_setOriginalState(); else
+             compressItem.setState(videoConvertSupported && compressionsCount > 1, muteVideo, Math.min(resultWidth, resultHeight));
+         }
+         itemsLayout.requestLayout();
+@@ -21560,7 +21579,7 @@ public class PhotoViewer implements NotificationCenter.NotificationCenterDelegat
+         }
+     }
+ 
+-    private void requestVideoPreview(int request) {
++    public void requestVideoPreview(int request) {
+         if (videoPreviewMessageObject != null) {
+             MediaController.getInstance().cancelVideoConvert(videoPreviewMessageObject);
+         }
+@@ -21639,7 +21658,7 @@ public class PhotoViewer implements NotificationCenter.NotificationCenterDelegat
+     }
+ 
+     private Size calculateResultVideoSize() {
+-        if (compressionsCount == 1) {
++        if (compressionsCount == 1 || inu_isOriginalVideoQuality()) {
+             return new Size(originalWidth, originalHeight);
+         }
+         float maxSize;
+@@ -21728,6 +21747,7 @@ public class PhotoViewer implements NotificationCenter.NotificationCenterDelegat
+ 
+         if (show) {
+             previousCompression = selectedCompression;
++            inu_previousOriginalQualitySelected = inu_originalQualitySelected;
+         }
+         if (qualityChooseViewAnimation != null) {
+             qualityChooseViewAnimation.cancel();
+@@ -21843,7 +21863,7 @@ public class PhotoViewer implements NotificationCenter.NotificationCenterDelegat
+         return new ByteArrayInputStream(output, 0, outPos);
+     }
+ 
+-    private void processOpenVideo(final String videoPath, long videoPathOffset, boolean muted, float start, float end, final int compressQuality, long livePhotoTimestampUs) {
++    private void processOpenVideo(final String videoPath, long videoPathOffset, boolean muted, float start, float end, final int compressQuality, final boolean originalQuality, long livePhotoTimestampUs) {
+         if (currentLoadingVideoRunnable != null) {
+             Utilities.globalQueue.cancelRunnable(currentLoadingVideoRunnable);
+             currentLoadingVideoRunnable = null;
+@@ -21851,6 +21871,8 @@ public class PhotoViewer implements NotificationCenter.NotificationCenterDelegat
+         videoTimelineView.setVideoPath(videoPath, videoPathOffset, start, end, livePhotoTimestampUs);
+         videoPreviewMessageObject = null;
+         muteVideo = muted || sendPhotoType == SELECT_TYPE_AVATAR;
++        inu_originalQualitySelected = originalQuality || compressQuality == -1 && desu.inugram.helpers.media.OriginalVideoQualityHelper.loadPref();
++        if (!centerImageIsLivePhoto && inu_isOriginalVideoQuality()) compressItem.inu_setOriginalState();
+ 
+         compressionsCount = -1;
+         rotationValue = 0;
+@@ -21904,6 +21926,7 @@ public class PhotoViewer implements NotificationCenter.NotificationCenterDelegat
+                         }
+ 
+                         if (!centerImageIsLivePhoto) {
++                            if (inu_isOriginalVideoQuality()) compressItem.inu_setOriginalState(); else
+                             compressItem.setState(compressionsCount > 1, muteVideo, Math.min(resultWidth, resultHeight));
+                         }
+                         if (BuildVars.LOGS_ENABLED) {

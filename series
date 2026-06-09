@@ -187,3 +187,4 @@ bugfix/launch-activity-bulletin-leak.patch
 bugfix/edittextemoji-observer-leak.patch
 bugfix/chat-attach-alert-adapter-leak.patch
 debloat/sponsored-data-saver.patch
+feature/original-video-quality.patch
