@@ -110,7 +110,7 @@ index 0000000..0000000 100644
          options.setupSelectors();
          if (sendWhenOnlineButton != null) {
              TLRPC.User user = parentFragment == null ? null : parentFragment.getCurrentUser();
-@@ -9664,6 +9682,7 @@ public class ChatActivityEnterView extends FrameLayout implements
+@@ -9665,6 +9683,7 @@ public class ChatActivityEnterView extends FrameLayout implements
              }
  
              doneButton.setOnLongClickListener(v -> {
@@ -118,7 +118,7 @@ index 0000000..0000000 100644
                  if (messageObject.isMediaEmpty()) return false;
                  if (messageEditText == null || TextUtils.isEmpty(messageEditText.getTextToUse())) return false;
                  if (groupedMessages != null && (!groupedMessages.hasCaption || groupedMessages.isDocuments)) return false;
-@@ -9757,7 +9776,7 @@ public class ChatActivityEnterView extends FrameLayout implements
+@@ -9758,7 +9777,7 @@ public class ChatActivityEnterView extends FrameLayout implements
                  draftMessage = messageEditText != null && messageEditText.length() > 0 ? messageEditText.getText() : null;
                  draftSearchWebpage = messageWebPageSearch;
              }

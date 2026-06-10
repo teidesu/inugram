@@ -4,8 +4,8 @@ Date: Fri, 10 Apr 2026 04:23:15 +0300
 Subject: fix for a bug causing images pasted from gboard to be sent directly, without PhotoViewer
 
 ---
- .../java/org/telegram/ui/Components/ChatActivityEnterView.java | 3 ++-
- 1 file changed, 2 insertions(+), 1 deletion(-)
+ .../org/telegram/ui/Components/ChatActivityEnterView.java     | 4 +++-
+ 1 file changed, 3 insertions(+), 1 deletion(-)
 
 diff --git a/TMessagesProj/src/main/java/org/telegram/ui/Components/ChatActivityEnterView.java b/TMessagesProj/src/main/java/org/telegram/ui/Components/ChatActivityEnterView.java
 index 0000000..0000000 100644
@@ -19,12 +19,13 @@ index 0000000..0000000 100644
  import android.util.Property;
  import android.util.TypedValue;
  import android.view.ActionMode;
-@@ -5233,7 +5234,7 @@ public class ChatActivityEnterView extends FrameLayout implements
+@@ -5233,7 +5234,8 @@ public class ChatActivityEnterView extends FrameLayout implements
                              return false;
                          }
                      }
 -                    if (inputContentInfo.getDescription().hasMimeType("image/gif") || SendMessagesHelper.shouldSendWebPAsSticker(null, inputContentInfo.getContentUri())) {
-+                    if (inputContentInfo.getDescription().hasMimeType("image/gif") || (inputContentInfo.getDescription().hasMimeType("image/webp") && SendMessagesHelper.shouldSendWebPAsSticker(null, inputContentInfo.getContentUri()))) {
++                    boolean isGboardSticker = inputContentInfo.getDescription().getExtras() != null && inputContentInfo.getDescription().getExtras().getBoolean("com.google.android.inputmethod.content.IS_STICKER");
++                    if (inputContentInfo.getDescription().hasMimeType("image/gif") || isGboardSticker || (inputContentInfo.getDescription().hasMimeType("image/webp") && SendMessagesHelper.shouldSendWebPAsSticker(null, inputContentInfo.getContentUri()))) {
                          if (isInScheduleMode()) {
                              AlertsCreator.createScheduleDatePickerDialog(parentActivity, parentFragment.getDialogId(), (notify, scheduleDate, scheduleRepeatPeriod) -> send(inputContentInfo, notify, scheduleDate, scheduleRepeatPeriod), resourcesProvider);
                          } else {

@@ -511,7 +511,7 @@ index 0000000..0000000 100644
              }
          }
          boolean result = super.drawChild(canvas, child, drawingTime);
-@@ -6260,7 +6263,7 @@ public class ChatActivityEnterView extends FrameLayout implements
+@@ -6261,7 +6264,7 @@ public class ChatActivityEnterView extends FrameLayout implements
  
          LayoutParams layoutParams = (LayoutParams) textFieldContainer.getLayoutParams();
          layoutParams.topMargin = (show ? topView.getLayoutParams().height : 0);
@@ -520,7 +520,7 @@ index 0000000..0000000 100644
          textFieldContainer.setLayoutParams(layoutParams);
  
          resizeForTopViewLastShow = show;
-@@ -6358,7 +6361,7 @@ public class ChatActivityEnterView extends FrameLayout implements
+@@ -6359,7 +6362,7 @@ public class ChatActivityEnterView extends FrameLayout implements
  
          audioVideoButtonContainer.setAlpha(audioVideoButtonContainerForbidden ? 0.5f : 1.0f);
          audioVideoButtonContainer.invalidate();
@@ -529,7 +529,7 @@ index 0000000..0000000 100644
              getThemedColor(Theme.key_glass_defaultIcon) : Color.WHITE, PorterDuff.Mode.SRC_IN));
          audioVideoSendButton.invalidate();
          updateFieldHint(false);
-@@ -8950,8 +8953,8 @@ public class ChatActivityEnterView extends FrameLayout implements
+@@ -8951,8 +8954,8 @@ public class ChatActivityEnterView extends FrameLayout implements
  
                      FrameLayout.LayoutParams newLayoutParams = new FrameLayout.LayoutParams(parent.getMeasuredWidth() - (editingMessageObject == null ? Math.max(0, sendButton.width() - dp(DEFAULT_HEIGHT)) : 0), dp(DEFAULT_HEIGHT));
                      newLayoutParams.gravity = Gravity.BOTTOM;
@@ -540,7 +540,7 @@ index 0000000..0000000 100644
                      sizeNotifierLayout.addView(recordedAudioPanel, newLayoutParams);
                      videoTimelineView.setVisibility(GONE);
                  } else {
-@@ -14863,9 +14866,11 @@ public class ChatActivityEnterView extends FrameLayout implements
+@@ -14864,9 +14867,11 @@ public class ChatActivityEnterView extends FrameLayout implements
          final float visibility = animatorTopViewVisibility.getFloatValue();
  
          if (topView != null) {

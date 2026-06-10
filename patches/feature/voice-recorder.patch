@@ -226,7 +226,7 @@ index 0000000..0000000 100644
          audioVideoSendButton.setTranslationX(offset);
          if (botButton != null) {
              botButton.setTranslationX(offset);
-@@ -5991,6 +6021,29 @@ public class ChatActivityEnterView extends FrameLayout implements
+@@ -5992,6 +6022,29 @@ public class ChatActivityEnterView extends FrameLayout implements
          updateRecordInterface(RECORD_STATE_CANCEL, true);
      }
  
@@ -256,7 +256,7 @@ index 0000000..0000000 100644
      public void showContextProgress(boolean show) {
          if (progressDrawable == null) {
              return;
-@@ -7871,7 +7924,7 @@ public class ChatActivityEnterView extends FrameLayout implements
+@@ -7872,7 +7925,7 @@ public class ChatActivityEnterView extends FrameLayout implements
                  Theme.setSelectorDrawableColor(sendButton.getBackground(), Color.argb(24, Color.red(color), Color.green(color), Color.blue(color)), true);
              }
  
@@ -265,7 +265,7 @@ index 0000000..0000000 100644
                  if (animated) {
                      if (runningAnimationType == 1 && caption == null || runningAnimationType == 3 && caption != null) {
                          return;
-@@ -14100,7 +14153,7 @@ public class ChatActivityEnterView extends FrameLayout implements
+@@ -14101,7 +14154,7 @@ public class ChatActivityEnterView extends FrameLayout implements
      private void updateAttachLayoutParams() {
          updateAttachButtonTranslationX();
          if (attachLayout != null) {
@@ -274,7 +274,7 @@ index 0000000..0000000 100644
              attachLayout.setAlpha(attachLayoutAlpha * attachLayoutPaddingAlpha);
              attachLayout.setVisibility(attachLayout.getAlpha() > 0 ? View.VISIBLE : View.GONE);
              if (attachButton != null && isStories) {
-@@ -14117,8 +14170,8 @@ public class ChatActivityEnterView extends FrameLayout implements
+@@ -14118,8 +14171,8 @@ public class ChatActivityEnterView extends FrameLayout implements
      }
  
      private void updateAttachButtonTranslationX() {

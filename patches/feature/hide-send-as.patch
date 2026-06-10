@@ -33,7 +33,7 @@ index 0000000..0000000 100644
          messageEditTextContainer.addView(emojiButton, LayoutHelper.createFrame(DEFAULT_HEIGHT, DEFAULT_HEIGHT, Gravity.BOTTOM | Gravity.LEFT, 2, 0, 0, 0));
          setEmojiButtonImage(false, false);
  
-@@ -10589,7 +10597,8 @@ public class ChatActivityEnterView extends FrameLayout implements
+@@ -10590,7 +10598,8 @@ public class ChatActivityEnterView extends FrameLayout implements
          }
          boolean isVisible = !forceHide && defPeer != null && (delegate.getSendAsPeers() == null || delegate.getSendAsPeers().peers.size() > 1) &&
              !isEditingMessage() && !isRecordingAudioVideo() && (recordedAudioPanel == null || recordedAudioPanel.getVisibility() != View.VISIBLE) &&

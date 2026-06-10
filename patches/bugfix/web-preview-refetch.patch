@@ -96,7 +96,7 @@ diff --git a/TMessagesProj/src/main/java/org/telegram/ui/Components/ChatActivity
 index 0000000..0000000 100644
 --- a/TMessagesProj/src/main/java/org/telegram/ui/Components/ChatActivityEnterView.java
 +++ b/TMessagesProj/src/main/java/org/telegram/ui/Components/ChatActivityEnterView.java
-@@ -7597,7 +7597,7 @@ public class ChatActivityEnterView extends FrameLayout implements
+@@ -7598,7 +7598,7 @@ public class ChatActivityEnterView extends FrameLayout implements
                  }
                  if (parentFragment != null) {
                      parentFragment.editingMessageObject = null;

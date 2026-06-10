@@ -60,7 +60,7 @@ diff --git a/TMessagesProj/src/main/java/org/telegram/ui/Components/ChatActivity
 index 0000000..0000000 100644
 --- a/TMessagesProj/src/main/java/org/telegram/ui/Components/ChatActivityEnterView.java
 +++ b/TMessagesProj/src/main/java/org/telegram/ui/Components/ChatActivityEnterView.java
-@@ -5440,6 +5440,7 @@ public class ChatActivityEnterView extends FrameLayout implements
+@@ -5441,6 +5441,7 @@ public class ChatActivityEnterView extends FrameLayout implements
                      info.entities = photoEntry.entities;
                      info.masks = photoEntry.stickers;
                      info.ttl = photoEntry.ttl;
@@ -68,7 +68,7 @@ index 0000000..0000000 100644
                      info.videoEditedInfo = videoEditedInfo;
                      info.canDeleteAfter = true;
                      photos.add(info);
-@@ -11676,7 +11677,7 @@ public class ChatActivityEnterView extends FrameLayout implements
+@@ -11677,7 +11678,7 @@ public class ChatActivityEnterView extends FrameLayout implements
  
                                      SendMessagesHelper.prepareSendingMedia(AccountInstance.getInstance(currentAccount), photos, dialog_id, replyingMessageObject, getThreadMessage(), null, replyingQuote, false, false, editingMessageObject, notify, scheduleDate, scheduleRepeatPeriod, 0, false, null, parentFragment != null ? parentFragment.quickReplyShortcut : null, parentFragment != null ? parentFragment.getQuickReplyId() : 0, effectId, invertMedia, stars, getSendMonoForumPeerId(),  getSendMessageSuggestionParams());
                                  } else {
