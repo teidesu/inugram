@@ -4,8 +4,8 @@ Date: Fri, 10 Apr 2026 05:17:27 +0300
 Subject: remember all clicked replies when jumping back via the down button in chat
 
 ---
- .../main/java/org/telegram/ui/ChatActivity.java | 17 +++++++++++++++++
- 1 file changed, 17 insertions(+)
+ .../java/org/telegram/ui/ChatActivity.java     | 18 ++++++++++++++++++
+ 1 file changed, 18 insertions(+)
 
 diff --git a/TMessagesProj/src/main/java/org/telegram/ui/ChatActivity.java b/TMessagesProj/src/main/java/org/telegram/ui/ChatActivity.java
 index 0000000..0000000 100644
@@ -57,7 +57,15 @@ index 0000000..0000000 100644
          }
  
          sideControlsButtonsLayout.showButton(ChatActivitySideControlsButtonsLayout.BUTTON_PAGE_DOWN, show, animated);
-@@ -45799,6 +45810,12 @@ public class ChatActivity extends BaseFragment implements
+@@ -45739,6 +45750,7 @@ public class ChatActivity extends BaseFragment implements
+     }
+ 
+     private void goToNextOrPrevSearchMessage(boolean searchUp) {
++        inu_replyStack.clear();
+         if (chatMode == MODE_SEARCH) {
+             HashtagSearchController.getInstance(currentAccount).jumpToMessage(classGuid, hashtagSearchSelectedIndex + (searchUp ? 1 : -1), searchType);
+         } else {
+@@ -45799,6 +45811,12 @@ public class ChatActivity extends BaseFragment implements
      }
  
      private boolean onSideControlButtonOnLongClick(int buttonId, View view) {
