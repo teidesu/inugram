@@ -241,4 +241,5 @@ most things are toggleable in `Settings → Inugram`, with sensible opinionated 
 - reply box right padding when the sender-name line is wider than the message text line
 - fix lingering webpage when quickly sending
 - fix sponsored message media not respecting data saver
+- fix non-joined channels history getting stuck in the past
 - a bunch of stock memory/resource leaks
