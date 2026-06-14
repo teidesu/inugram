@@ -506,17 +506,24 @@ object InuConfig {
     @JvmField
     val HIDE_MY_PHONE_NUMBER = BoolItem("hide_my_phone_number", true)
 
-    // 0=bundled (stock), 1=system, 2=user-provided family (which one = ACTIVE_FONT_ID)
-    @JvmField
-    val FONT_MODE = object : IntItem("font_mode", 0) {
+    class FontModeItem : IntItem("font_mode", BUNDLED) {
         override fun read(prefs: SharedPreferences): Int {
             if (prefs.contains(key)) return super.read(prefs)
             // migration: legacy use_system_font bool
-            return if (prefs.getBoolean("use_system_font", false)) 1 else 0
+            return if (prefs.getBoolean("use_system_font", false)) SYSTEM else BUNDLED
+        }
+
+        companion object {
+            const val BUNDLED = 0 // stock Roboto
+            const val SYSTEM = 1
+            const val CUSTOM = 2 // family picked by ACTIVE_FONT_ID
         }
     }
 
-    // id of the imported font family used as the app font when FONT_MODE == 2 ("" = legacy single pack)
+    @JvmField
+    val FONT_MODE = FontModeItem()
+
+    // id of the imported font family used as the app font when FONT_MODE == CUSTOM ("" = legacy single pack)
     @JvmField
     val ACTIVE_FONT_ID = StringItem("active_font_id", "")
 

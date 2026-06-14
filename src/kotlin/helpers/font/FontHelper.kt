@@ -12,6 +12,7 @@ import org.json.JSONArray
 import org.json.JSONObject
 import org.telegram.messenger.AndroidUtilities
 import org.telegram.messenger.LocaleController
+import org.telegram.messenger.NotificationCenter
 import org.telegram.messenger.R
 import org.telegram.ui.ActionBar.Theme
 import org.telegram.ui.Components.Paint.PaintTypeface
@@ -29,7 +30,7 @@ import java.util.Hashtable
  *   <id>/f*.bin       the raw font files
  * ```
  *
- * The **app UI font** is selected via [InuConfig.FONT_MODE] (0 bundled / 1 system / 2 a family) +
+ * The **app UI font** is selected via [InuConfig.FONT_MODE] (bundled / system / custom) +
  * [InuConfig.ACTIVE_FONT_ID]; [resolve] returns the active family so the whole UI-font pipeline
  * ([installAsDefault], [onGetTypeface], [applyDefaultFont], [onThemePaintsCreated]) keeps working.
  *
@@ -40,6 +41,14 @@ object FontHelper {
     private const val INDEX = "index.json"
     private const val MANIFEST = "pack.json"
     private const val STAGING = ".staging"
+    private const val FAMILY_TOKEN_PREFIX = "font:"
+
+    /** Roster token for an imported family id. */
+    fun familyToken(id: String): String = FAMILY_TOKEN_PREFIX + id
+
+    /** The family id if [token] refers to an imported family, null for built-in editor fonts. */
+    fun familyId(token: String): String? =
+        if (token.startsWith(FAMILY_TOKEN_PREFIX)) token.substring(FAMILY_TOKEN_PREFIX.length) else null
 
     private data class Face(
         val file: String,
@@ -78,7 +87,7 @@ object FontHelper {
                     builder.setFontVariationSettings("'wght' $w")
                 }
                 builder.build()
-            } catch (e: Throwable) {
+            } catch (_: Throwable) {
                 return null
             } ?: return null
 
@@ -86,7 +95,7 @@ object FontHelper {
             val needSynth = (targetItalic && !pick.italic) ||
                 (!pick.variable && pick.weight != targetWeight)
             val finalTf = if (needSynth && Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
-                try { Typeface.create(base, targetWeight, targetItalic) } catch (e: Throwable) { base }
+                try { Typeface.create(base, targetWeight, targetItalic) } catch (_: Throwable) { base }
             } else base
 
             cache[cacheKey] = finalTf
@@ -127,7 +136,7 @@ object FontHelper {
                     b.setFontVariationSettings("'wght' ${f.weight.coerceIn(f.wghtMin, f.wghtMax)}")
                 }
                 b.build()
-            } catch (e: Throwable) {
+            } catch (_: Throwable) {
                 null
             }
             faceLabel(f) to tf
@@ -189,38 +198,35 @@ object FontHelper {
         val seenFonts = HashSet<String>()
         val cleaned = ArrayList<String>(roster.size)
         for (tok in roster) {
-            if (tok.startsWith("font:")) {
-                val id = tok.removePrefix("font:")
-                if (discovered.containsKey(id) && seenFonts.add(id)) cleaned.add(tok)
-            } else {
+            val id = familyId(tok)
+            if (id == null) {
+                cleaned.add(tok)
+            } else if (discovered.containsKey(id) && seenFonts.add(id)) {
                 cleaned.add(tok)
             }
         }
-        for ((id, _) in discovered) if (seenFonts.add(id)) cleaned.add("font:$id")
-        for (key in builtinKeys) if (!cleaned.contains(key)) cleaned.add(key)
+        for (id in discovered.keys) if (seenFonts.add(id)) cleaned.add(familyToken(id))
+        for (key in builtinKeys) if (key !in cleaned) cleaned.add(key)
 
-        val newHidden = savedHidden.filterTo(HashSet()) { cleaned.contains(it) }
+        val newHidden = savedHidden.filterTo(HashSet()) { it in cleaned }
         synchronized(lock) {
             families.clear()
             rosterTokens = cleaned
             hiddenTokens = newHidden
             for (tok in cleaned) {
-                if (tok.startsWith("font:")) discovered[tok.removePrefix("font:")]?.let { families[it.id] = it }
+                familyId(tok)?.let { id -> discovered[id]?.let { families[it.id] = it } }
             }
         }
         if (saved == null || saved != cleaned || savedHidden != newHidden) saveRoster()
 
         // active app font may reference a removed family — revert to default so UI doesn't silently
         // fall back to "Custom font" with no typeface installed.
-        if (InuConfig.FONT_MODE.value == 2) {
+        if (InuConfig.FONT_MODE.value == InuConfig.FontModeItem.CUSTOM) {
             val id = InuConfig.ACTIVE_FONT_ID.value
             val builtinKey = id.isNotEmpty() && id in builtinKeys
             val familyExists = id.isNotEmpty() && synchronized(lock) { families.containsKey(id) }
             val migrated = id.isEmpty() && synchronized(lock) { families.isNotEmpty() }
-            if (!builtinKey && !familyExists && !migrated) {
-                InuConfig.FONT_MODE.value = 0
-                InuConfig.ACTIVE_FONT_ID.value = ""
-            }
+            if (!builtinKey && !familyExists && !migrated) resetAppFont()
         }
     }
 
@@ -228,20 +234,10 @@ object FontHelper {
         val mf = File(sub, MANIFEST)
         if (!mf.isFile) return null
         return try {
-            val name = JSONObject(mf.readText()).optString("family", "").takeIf { it.isNotEmpty() }
-            val faces = readFaces(sub)
-            if (faces.isEmpty()) null else Family(sub.name, sub, name, faces)
-        } catch (e: Throwable) {
-            null
-        }
-    }
-
-    private fun readFaces(sub: File): MutableList<Face> {
-        val mf = File(sub, MANIFEST)
-        if (!mf.isFile) return mutableListOf()
-        return try {
-            val arr = JSONObject(mf.readText()).getJSONArray("faces")
-            MutableList(arr.length()) { i ->
+            val root = JSONObject(mf.readText())
+            val name = root.optString("family", "").takeIf { it.isNotEmpty() }
+            val arr = root.getJSONArray("faces")
+            val faces = List(arr.length()) { i ->
                 val o = arr.getJSONObject(i)
                 Face(
                     file = o.getString("file"),
@@ -253,8 +249,9 @@ object FontHelper {
                     wghtMax = o.optInt("wghtMax", 400),
                 )
             }
-        } catch (e: Throwable) {
-            mutableListOf()
+            if (faces.isEmpty()) null else Family(sub.name, sub, name, faces)
+        } catch (_: Throwable) {
+            null
         }
     }
 
@@ -290,7 +287,7 @@ object FontHelper {
             val hArr = o.optJSONArray("hidden")
             val hidden = if (hArr != null) (0 until hArr.length()).mapTo(HashSet()) { hArr.getString(it) } else emptySet()
             roster to hidden
-        } catch (e: Throwable) {
+        } catch (_: Throwable) {
             null to emptySet()
         }
     }
@@ -308,7 +305,7 @@ object FontHelper {
                     .put("hidden", JSONArray(hiddenSnapshot))
                     .toString()
             )
-        } catch (e: Throwable) {
+        } catch (_: Throwable) {
         }
     }
 
@@ -350,7 +347,7 @@ object FontHelper {
     /** (id, display name) for every visible imported family, in roster order — for the app-font picker. */
     fun familyChoices(): List<Pair<String, String>> = synchronized(lock) {
         families.values
-            .filter { "font:${it.id}" !in hiddenTokens }
+            .filter { familyToken(it.id) !in hiddenTokens }
             .map { it.id to (it.name ?: LocaleController.getString(R.string.InuFontUnnamed)) }
     }
 
@@ -365,7 +362,7 @@ object FontHelper {
         synchronized(lock) {
             val builtins = builtinKeys()
             val familyIds = families.keys.sorted()
-            rosterTokens = (builtins + familyIds.map { "font:$it" }).toMutableList()
+            rosterTokens = (builtins + familyIds.map { familyToken(it) }).toMutableList()
             val reordered = LinkedHashMap<String, Family>()
             for (id in familyIds) families[id]?.let { reordered[id] = it }
             families.clear()
@@ -394,7 +391,7 @@ object FontHelper {
         synchronized(lock) {
             rosterTokens = tokens.toMutableList()
             val reordered = LinkedHashMap<String, Family>()
-            for (t in rosterTokens) if (t.startsWith("font:")) families[t.removePrefix("font:")]?.let { reordered[it.id] = it }
+            for (t in rosterTokens) familyId(t)?.let { id -> families[id]?.let { reordered[it.id] = it } }
             for ((k, v) in families) reordered.putIfAbsent(k, v)
             families.clear()
             families.putAll(reordered)
@@ -420,7 +417,7 @@ object FontHelper {
             val tmp = File(staging, "s${i}_${System.nanoTime()}.bin")
             try {
                 cr.openInputStream(uri)?.use { ins -> FileOutputStream(tmp).use { os -> ins.copyTo(os) } } ?: continue
-            } catch (e: Throwable) {
+            } catch (_: Throwable) {
                 continue
             }
             val raws = SfntParser.parse(tmp)
@@ -483,11 +480,11 @@ object FontHelper {
             synchronized(lock) {
                 families[targetId] = refreshed // replaces (refreshes cache) or adds
                 if (existing == null) {
-                    rosterTokens.add("font:$targetId")
+                    rosterTokens.add(familyToken(targetId))
                 } else {
                     // re-importing into an existing (possibly hidden) family makes it visible again,
                     // otherwise the user's new faces are silently missing from the editor.
-                    hiddenTokens.remove("font:$targetId")
+                    hiddenTokens.remove(familyToken(targetId))
                 }
             }
         }
@@ -500,8 +497,8 @@ object FontHelper {
     fun removeFamily(id: String) {
         val fam = synchronized(lock) {
             val f = families.remove(id)
-            rosterTokens.remove("font:$id")
-            hiddenTokens.remove("font:$id")
+            rosterTokens.remove(familyToken(id))
+            hiddenTokens.remove(familyToken(id))
             f
         }
         (fam?.dir ?: rootDir?.let { File(it, id) })?.deleteRecursively()
@@ -511,7 +508,7 @@ object FontHelper {
     // ---- app UI font -----------------------------------------------------------------------
 
     private fun activeFamily(): Family? {
-        if (InuConfig.FONT_MODE.value != 2) return null
+        if (InuConfig.FONT_MODE.value != InuConfig.FontModeItem.CUSTOM) return null
         val id = InuConfig.ACTIVE_FONT_ID.value
         return synchronized(lock) {
             if (id.isNotEmpty()) families[id]
@@ -520,9 +517,24 @@ object FontHelper {
         }
     }
 
+    /** True if [id] (an imported family id or a built-in editor key) is the current app font. */
+    fun isActiveAppFont(id: String): Boolean {
+        if (InuConfig.FONT_MODE.value != InuConfig.FontModeItem.CUSTOM) return false
+        val active = InuConfig.ACTIVE_FONT_ID.value
+        if (active.isNotEmpty()) return active == id
+        // legacy: empty id resolves to the first family, hidden or not (same as activeFamily())
+        return synchronized(lock) { families.keys.firstOrNull() } == id
+    }
+
+    /** Reverts the app font to the bundled default. */
+    fun resetAppFont() {
+        InuConfig.FONT_MODE.value = InuConfig.FontModeItem.BUNDLED
+        InuConfig.ACTIVE_FONT_ID.value = ""
+    }
+
     /** Display name of the active app font, whether it's a built-in editor font or an imported family. */
     fun activeFamilyName(): String? {
-        if (InuConfig.FONT_MODE.value != 2) return null
+        if (InuConfig.FONT_MODE.value != InuConfig.FontModeItem.CUSTOM) return null
         builtinName(InuConfig.ACTIVE_FONT_ID.value)?.let { return it }
         return activeFamily()?.name
     }
@@ -550,17 +562,32 @@ object FontHelper {
 
     @RequiresApi(Build.VERSION_CODES.O)
     private fun resolve(targetWeight: Int, targetItalic: Boolean): Typeface? {
-        if (InuConfig.FONT_MODE.value != 2) return null
+        if (InuConfig.FONT_MODE.value != InuConfig.FontModeItem.CUSTOM) return null
         builtinTypeface(InuConfig.ACTIVE_FONT_ID.value, targetWeight, targetItalic)?.let { return it }
         return activeFamily()?.resolve(targetWeight, targetItalic)
     }
 
     // ---- media editor ----------------------------------------------------------------------
 
-    fun editorName(id: String): String {
-        val name = synchronized(lock) { families[id]?.name }
-        return name ?: LocaleController.getString(R.string.InuFontUnnamed)
+    // Bumped (UI thread only) whenever the editor roster changes; in-flight PaintTypeface roster
+    // builds compare against it at commit time and drop stale results.
+    @Volatile
+    private var rosterGeneration = 0
+
+    /** True if no roster change happened since [generation] was handed out by [buildEditorRoster]. */
+    @JvmStatic
+    fun isRosterCurrent(generation: Int): Boolean = generation == rosterGeneration
+
+    /** Drops PaintTypeface's cached list so the next get() rebuilds it; lets an open editor refresh live. */
+    fun invalidateEditorRoster() {
+        rosterGeneration++
+        PaintTypeface.typefaces = null
+        PaintTypeface.loadingTypefaces = false
+        NotificationCenter.getGlobalInstance().postNotificationName(NotificationCenter.customTypefacesLoaded)
     }
+
+    fun editorName(id: String): String =
+        synchronized(lock) { families[id]?.name } ?: LocaleController.getString(R.string.InuFontUnnamed)
 
     fun editorTypeface(id: String): Typeface? {
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.P) return null
@@ -573,20 +600,24 @@ object FontHelper {
     // Builds the editor's PaintTypeface list from the roster. `load()` prunes `font:$id` tokens whose
     // family is gone, so by the time we read them here every imported entry resolves; Typeface
     // construction is deferred to LazyTypeface so opening the editor doesn't read every font file.
+    // Returns the roster generation for the caller's [isRosterCurrent] check at commit time.
     @JvmStatic
-    fun buildEditorRoster(out: ArrayList<PaintTypeface>) {
+    fun buildEditorRoster(out: ArrayList<PaintTypeface>): Int {
+        // generation first: a bump between here and the snapshot makes the build look stale, which
+        // only costs a redundant rebuild — capturing after could commit a genuinely stale roster
+        val gen = rosterGeneration
         // snapshot tokens + names atomically so a concurrent removeFamily doesn't desync them
         val (tokens, names) = synchronized(lock) {
             rosterTokens.filter { it !in hiddenTokens } to families.mapValues { it.value.name }
         }
         if (tokens.isEmpty()) {
             out.addAll(PaintTypeface.BUILT_IN_FONTS)
-            return
+            return gen
         }
         val byKey = PaintTypeface.BUILT_IN_FONTS.associateBy { it.key }
         for (token in tokens) {
-            if (token.startsWith("font:")) {
-                val id = token.removePrefix("font:")
+            val id = familyId(token)
+            if (id != null) {
                 val name = names[id] ?: LocaleController.getString(R.string.InuFontUnnamed)
                 out.add(PaintTypeface(
                     PaintTypeface.LazyTypeface { editorTypeface(id) },
@@ -597,6 +628,7 @@ object FontHelper {
                 byKey[token]?.let { out.add(it) }
             }
         }
+        return gen
     }
 
     /**
@@ -646,7 +678,7 @@ object FontHelper {
     @JvmStatic
     fun applyDefaultFont(paint: TextPaint?) {
         if (paint == null || paint.typeface != null) return
-        if (InuConfig.FONT_MODE.value != 2) return
+        if (InuConfig.FONT_MODE.value != InuConfig.FontModeItem.CUSTOM) return
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.P) return
         resolve(400, false)?.let { paint.typeface = it }
     }
@@ -654,7 +686,7 @@ object FontHelper {
     @JvmStatic
     fun applyDefaultFont(view: TextView?) {
         if (view == null) return
-        if (InuConfig.FONT_MODE.value != 2) return
+        if (InuConfig.FONT_MODE.value != InuConfig.FontModeItem.CUSTOM) return
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.P) return
         resolve(400, false)?.let { view.typeface = it }
     }
@@ -666,7 +698,7 @@ object FontHelper {
      */
     @JvmStatic
     fun onThemePaintsCreated() {
-        if (InuConfig.FONT_MODE.value != 2) return
+        if (InuConfig.FONT_MODE.value != InuConfig.FontModeItem.CUSTOM) return
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.P) return
         val tf = resolve(400, false) ?: return
         try {
@@ -689,7 +721,7 @@ object FontHelper {
     @JvmStatic
     fun onGetTypeface(cache: Hashtable<String, Typeface>, assetPath: String): Typeface? {
         val mode = InuConfig.FONT_MODE.value
-        if (mode == 0) return null
+        if (mode == InuConfig.FontModeItem.BUNDLED) return null
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.P) return null
         val key = "inu:m$mode:${InuConfig.ACTIVE_FONT_ID.value}:$assetPath"
         cache[key]?.let { return it }
@@ -702,8 +734,8 @@ object FontHelper {
             else -> return null
         }
         val tf = when (mode) {
-            1 -> Typeface.create(null as Typeface?, weight, italic)
-            2 -> resolve(weight, italic)
+            InuConfig.FontModeItem.SYSTEM -> Typeface.create(null as Typeface?, weight, italic)
+            InuConfig.FontModeItem.CUSTOM -> resolve(weight, italic)
             else -> null
         } ?: return null
         cache[key] = tf

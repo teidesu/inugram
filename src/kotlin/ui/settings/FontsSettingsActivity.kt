@@ -56,7 +56,7 @@ class FontsSettingsActivity : SettingsPageActivity() {
             val newOrder = items.mapNotNull { it.`object` as? String }
             if (newOrder.size == FontHelper.roster().size) {
                 FontHelper.setRoster(newOrder)
-                PaintTypeface.inu_invalidate()
+                FontHelper.invalidateEditorRoster()
             }
         }
         listView.allowReorder(true)
@@ -84,10 +84,10 @@ class FontsSettingsActivity : SettingsPageActivity() {
                 }
             }
             row.bind(token, FontHelper.isHidden(token))
-            val u = UItem.asCustom(row, row.heightDp)
-            u.id = token.hashCode()
-            u.`object` = token
-            items.add(u)
+            items.add(UItem.asCustom(row, row.heightDp).apply {
+                id = token.hashCode()
+                `object` = token
+            })
         }
         adapter.reorderSectionEnd()
         items.add(UItem.asShadow(null))
@@ -103,7 +103,7 @@ class FontsSettingsActivity : SettingsPageActivity() {
             BUTTON_ADD -> launchFontPicker()
             BUTTON_RESET -> {
                 FontHelper.resetOrder()
-                PaintTypeface.inu_invalidate()
+                FontHelper.invalidateEditorRoster()
                 listView.adapter.update(true)
             }
             else -> {
@@ -120,14 +120,14 @@ class FontsSettingsActivity : SettingsPageActivity() {
     }
 
     private fun showFontMenu(token: String, anchor: View) {
-        val isFamily = token.startsWith("font:")
+        val familyId = FontHelper.familyId(token)
         // app-font id is the family id for imported fonts, or the built-in key for default fonts
-        val appFontId = if (isFamily) token.removePrefix("font:") else token
+        val appFontId = familyId ?: token
         val opts = ItemOptions.makeOptions(this, anchor)
 
         // for a family, list its individual faces as disabled rows (rendered in their own face) on top
-        if (isFamily) {
-            val faces = FontHelper.familyFaces(appFontId)
+        if (familyId != null) {
+            val faces = FontHelper.familyFaces(familyId)
             if (faces.isNotEmpty()) {
                 val muted = Theme.getColor(Theme.key_windowBackgroundWhiteGrayText)
                 for ((label, tf) in faces) {
@@ -142,12 +142,12 @@ class FontsSettingsActivity : SettingsPageActivity() {
         }
 
         opts.add(R.drawable.msg_text_outlined, LocaleController.getString(R.string.InuFontSetAsApp)) {
-            InuConfig.FONT_MODE.value = 2
+            InuConfig.FONT_MODE.value = InuConfig.FontModeItem.CUSTOM
             InuConfig.ACTIVE_FONT_ID.value = appFontId
             listView.adapter.update(true)
             showRestartBulletin()
         }
-        if (isFamily) {
+        if (familyId != null) {
             opts.add(R.drawable.msg_delete, LocaleController.getString(R.string.InuFontRemove), true) {
                 removeFont(token)
             }
@@ -159,33 +159,31 @@ class FontsSettingsActivity : SettingsPageActivity() {
         FontHelper.setHidden(token, hidden)
         // hiding the active app font (family or built-in) reverts it to the default — otherwise the
         // editor would hide it while the app keeps rendering everything in it.
-        val activeId = if (token.startsWith("font:")) token.removePrefix("font:") else token
-        if (hidden && isActiveFont(activeId)) {
-            InuConfig.FONT_MODE.value = 0
-            InuConfig.ACTIVE_FONT_ID.value = ""
+        val activeId = FontHelper.familyId(token) ?: token
+        if (hidden && FontHelper.isActiveAppFont(activeId)) {
+            FontHelper.resetAppFont()
             showRestartBulletin()
         }
-        PaintTypeface.inu_invalidate()
+        FontHelper.invalidateEditorRoster()
         listView.adapter.update(true)
     }
 
     private fun removeFont(token: String) {
-        val id = token.removePrefix("font:")
-        val wasActive = isActiveFont(id)
+        val id = FontHelper.familyId(token) ?: return
+        val wasActive = FontHelper.isActiveAppFont(id)
         FontHelper.removeFamily(id)
         rows.remove(token)
         if (wasActive) {
-            InuConfig.FONT_MODE.value = 0
-            InuConfig.ACTIVE_FONT_ID.value = ""
+            FontHelper.resetAppFont()
             showRestartBulletin()
         }
-        PaintTypeface.inu_invalidate()
+        FontHelper.invalidateEditorRoster()
         listView.adapter.update(true)
     }
 
     private fun appFontValue(): CharSequence = when (InuConfig.FONT_MODE.value) {
-        1 -> LocaleController.getString(R.string.InuFontSystem)
-        2 -> fontLabel(
+        InuConfig.FontModeItem.SYSTEM -> LocaleController.getString(R.string.InuFontSystem)
+        InuConfig.FontModeItem.CUSTOM -> fontLabel(
             FontHelper.activeFamilyName() ?: LocaleController.getString(R.string.InuFontUnnamed),
             FontHelper.activeFamilyTypeface(),
         )
@@ -200,65 +198,37 @@ class FontsSettingsActivity : SettingsPageActivity() {
         }
     }
 
-    private fun isActiveFont(id: String): Boolean {
-        if (InuConfig.FONT_MODE.value != 2) return false
-        val active = InuConfig.ACTIVE_FONT_ID.value
-        if (active.isNotEmpty()) return active == id
-        // legacy: empty id resolves to the first family
-        return FontHelper.familyChoices().firstOrNull()?.first == id
-    }
+    private class FontChoice(val label: CharSequence, val selected: Boolean, val onSelect: () -> Unit)
 
     private fun showAppFontPicker(anchor: View) {
-        val choices = FontHelper.familyChoices()
+        val mode = InuConfig.FONT_MODE.value
         val activeId = InuConfig.ACTIVE_FONT_ID.value
-        // when the current app font is a built-in (which lives in the editor list, not the family
-        // list) prepend it as a picker choice so the user can see what's selected and stay on it.
-        val activeBuiltin = if (InuConfig.FONT_MODE.value == 2 && FontHelper.isBuiltinKey(activeId)) activeId else null
-        val labels = mutableListOf<CharSequence>(
-            LocaleController.getString(R.string.InuFontDefault),
-            LocaleController.getString(R.string.InuFontSystem),
+        val choices = mutableListOf(
+            FontChoice(LocaleController.getString(R.string.InuFontDefault), mode == InuConfig.FontModeItem.BUNDLED) {
+                FontHelper.resetAppFont()
+            },
+            FontChoice(LocaleController.getString(R.string.InuFontSystem), mode == InuConfig.FontModeItem.SYSTEM) {
+                InuConfig.FONT_MODE.value = InuConfig.FontModeItem.SYSTEM
+                InuConfig.ACTIVE_FONT_ID.value = ""
+            },
         )
-        if (activeBuiltin != null) {
+        // when the current app font is a built-in (which lives in the editor list, not the family
+        // list) include it as a picker choice so the user can see what's selected and stay on it.
+        if (mode == InuConfig.FontModeItem.CUSTOM && FontHelper.isBuiltinKey(activeId)) {
             val tf = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P)
-                FontHelper.builtinTypeface(activeBuiltin, 400, false) else null
-            labels.add(fontLabel(FontHelper.builtinName(activeBuiltin) ?: activeBuiltin, tf))
+                FontHelper.builtinTypeface(activeId, 400, false) else null
+            choices.add(FontChoice(fontLabel(FontHelper.builtinName(activeId) ?: activeId, tf), true) {})
         }
-        choices.forEach { (id, name) -> labels.add(fontLabel(name, FontHelper.editorTypeface(id))) }
-        val builtinOffset = if (activeBuiltin != null) 1 else 0
-        val selected = when (InuConfig.FONT_MODE.value) {
-            1 -> 1
-            2 -> when {
-                activeBuiltin != null -> 2
-                else -> {
-                    val active = activeId.ifEmpty { choices.firstOrNull()?.first ?: "" }
-                    val idx = choices.indexOfFirst { it.first == active }
-                    if (idx >= 0) 2 + idx else -1
-                }
-            }
-            else -> 0
+        for ((id, name) in FontHelper.familyChoices()) {
+            choices.add(FontChoice(fontLabel(name, FontHelper.editorTypeface(id)), FontHelper.isActiveAppFont(id)) {
+                InuConfig.FONT_MODE.value = InuConfig.FontModeItem.CUSTOM
+                InuConfig.ACTIVE_FONT_ID.value = id
+            })
         }
-        RadioItemOptions.show(this, anchor, labels, selected) { which ->
-            val changed = when {
-                which == 0 -> {
-                    val c = InuConfig.FONT_MODE.value != 0
-                    InuConfig.FONT_MODE.value = 0
-                    InuConfig.ACTIVE_FONT_ID.value = ""
-                    c
-                }
-                which == 1 -> {
-                    val c = InuConfig.FONT_MODE.value != 1
-                    InuConfig.FONT_MODE.value = 1
-                    InuConfig.ACTIVE_FONT_ID.value = ""
-                    c
-                }
-                activeBuiltin != null && which == 2 -> false // "keep current built-in" — no-op
-                else -> {
-                    InuConfig.FONT_MODE.value = 2
-                    InuConfig.ACTIVE_FONT_ID.value = choices[which - 2 - builtinOffset].first
-                    true
-                }
-            }
-            if (changed) showRestartBulletin()
+        // RadioItemOptions swallows taps on the already-selected row, so onSelect always means a change
+        RadioItemOptions.show(this, anchor, choices.map { it.label }, choices.indexOfFirst { it.selected }) { which ->
+            choices[which].onSelect()
+            showRestartBulletin()
         }
     }
 
@@ -288,16 +258,19 @@ class FontsSettingsActivity : SettingsPageActivity() {
         if (requestCode != REQ_PICK_FONT) return
         if (resultCode != Activity.RESULT_OK || data == null) return
         val uris = mutableListOf<Uri>()
-        data.clipData?.let { cd ->
-            for (i in 0 until cd.itemCount) uris.add(cd.getItemAt(i).uri)
-        } ?: data.data?.let { uris.add(it) }
+        val clip = data.clipData
+        if (clip != null) {
+            for (i in 0 until clip.itemCount) uris.add(clip.getItemAt(i).uri)
+        } else {
+            data.data?.let(uris::add)
+        }
         if (uris.isEmpty()) return
         val ctx = parentActivity ?: context ?: return
         Utilities.globalQueue.postRunnable {
             val added = FontHelper.importFromUris(ctx, uris)
             AndroidUtilities.runOnUIThread {
                 if (added > 0) {
-                    PaintTypeface.inu_invalidate()
+                    FontHelper.invalidateEditorRoster()
                     listView.adapter.update(true)
                 } else {
                     BulletinFactory.of(this).createErrorBulletin(
@@ -385,8 +358,8 @@ class FontRow(context: Context) : FrameLayout(context) {
     }
 
     fun bind(token: String, hidden: Boolean) {
-        if (token.startsWith("font:")) {
-            val id = token.removePrefix("font:")
+        val id = FontHelper.familyId(token)
+        if (id != null) {
             text.text = FontHelper.editorName(id)
             text.typeface = FontHelper.editorTypeface(id) ?: Typeface.DEFAULT
         } else {
