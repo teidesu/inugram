@@ -118,6 +118,8 @@ export const ICON_SELECTION: { pack: IconifyJSON, icons: string[], options?: Svg
       'filter',
       'cloud',
       'file-diff',
+      'eye',
+      'eye-off',
     ],
   },
 ]

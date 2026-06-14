@@ -4,14 +4,14 @@ Date: Tue, 12 May 2026 14:58:17 +0200
 Subject: force system font for ui
 
 ---
- .../telegram/messenger/AndroidUtilities.java  |  6 +++
+ .../telegram/messenger/AndroidUtilities.java  |  6 ++++
  .../telegram/ui/ActionBar/SimpleTextView.java |  1 +
  .../java/org/telegram/ui/ActionBar/Theme.java |  3 ++
  .../telegram/ui/Cells/ProfileSearchCell.java  |  1 +
  .../ui/Components/AnimatedEmojiSpan.java      |  1 +
  .../ui/Components/AnimatedTextView.java       |  1 +
- .../ui/Components/Paint/PaintTypeface.java    | 38 +++++++++++++++----
- 7 files changed, 44 insertions(+), 7 deletions(-)
+ .../ui/Components/Paint/PaintTypeface.java    | 30 ++++++++++++++-----
+ 7 files changed, 35 insertions(+), 8 deletions(-)
 
 diff --git a/TMessagesProj/src/main/java/org/telegram/messenger/AndroidUtilities.java b/TMessagesProj/src/main/java/org/telegram/messenger/AndroidUtilities.java
 index 0000000..0000000 100644
@@ -154,48 +154,33 @@ index 0000000..0000000 100644
      PaintTypeface(String key, String nameKey, LazyTypeface lazyTypeface) {
          this.key = key;
          this.nameKey = nameKey;
-@@ -142,14 +151,17 @@ public class PaintTypeface {
+@@ -140,7 +149,7 @@ public class PaintTypeface {
+         return LocaleController.getString(nameKey);
+     }
  
-     private static List<PaintTypeface> typefaces;
+-    private static List<PaintTypeface> typefaces;
++    public static List<PaintTypeface> typefaces;
      public static boolean loadingTypefaces;
-+    private static int inu_loadGeneration = 0;
  
      private static void load() {
-         if (typefaces != null || loadingTypefaces) {
-             return;
+@@ -149,7 +158,8 @@ public class PaintTypeface {
          }
          loadingTypefaces = true;
-+        final int gen = inu_loadGeneration;
          Utilities.themeQueue.postRunnable(() -> {
 -            ArrayList<PaintTypeface> typefaces = new ArrayList<PaintTypeface>(BUILT_IN_FONTS);
 +            ArrayList<PaintTypeface> typefaces = new ArrayList<PaintTypeface>();
-+            desu.inugram.helpers.font.FontHelper.buildEditorRoster(typefaces);
++            final int inu_gen = desu.inugram.helpers.font.FontHelper.buildEditorRoster(typefaces);
              if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q && SYSTEM_FONTS_ENABLED) {
                  Set<Font> fonts = SystemFonts.getAvailableFonts();
                  Iterator<Font> i = fonts.iterator();
-@@ -183,6 +195,10 @@ public class PaintTypeface {
+@@ -183,6 +193,10 @@ public class PaintTypeface {
                  }
              }
              AndroidUtilities.runOnUIThread(() -> {
-+                if (gen != inu_loadGeneration) {
-+                    // invalidate landed mid-build; drop this result, a fresh load will be re-triggered
++                if (!desu.inugram.helpers.font.FontHelper.isRosterCurrent(inu_gen)) {
++                    // roster changed mid-build; drop this result, a fresh load will be re-triggered
 +                    return;
 +                }
                  PaintTypeface.typefaces = typefaces;
                  loadingTypefaces = false;
                  NotificationCenter.getGlobalInstance().postNotificationName(NotificationCenter.customTypefacesLoaded);
-@@ -190,6 +206,14 @@ public class PaintTypeface {
-         });
-     }
- 
-+    // Drops the cached list so the next get() rebuilds from the roster; lets an open editor refresh live.
-+    public static void inu_invalidate() {
-+        inu_loadGeneration++;
-+        typefaces = null;
-+        loadingTypefaces = false;
-+        NotificationCenter.getGlobalInstance().postNotificationName(NotificationCenter.customTypefacesLoaded);
-+    }
-+
-     public static List<PaintTypeface> get() {
-         if (typefaces == null) {
-             load();
