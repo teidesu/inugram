@@ -224,7 +224,6 @@
     <string name="InuDisableChatPreviewExpand">Interactive chat preview</string>
     <string name="InuDisableChatPreviewExpandInfo">Disable tap-to-expand, and make the bubbles interactive instead</string>
     <string name="InuHideMyPhoneNumber">Hide my phone number</string>
-    <string name="InuFont">UI font</string>
     <string name="InuFonts">Fonts</string>
     <string name="InuFontsInfo">Visible fonts are available in the media editor\'s text tool. Drag to reorder, tap the eye to hide; tap an imported font to remove it.</string>
     <string name="InuAppFont">App font</string>
@@ -239,7 +238,6 @@
     <string name="InuFontUnnamed">Custom font</string>
     <string name="InuFontDefault">Default</string>
     <string name="InuFontSystem">System</string>
-    <string name="InuFontCustom">Custom…</string>
     <string name="InuFontImportFailed">Could not import font. Make sure it is a TTF/OTF/TTC file.</string>
     <string name="InuProfileIdMode">Show ID in profile</string>
     <string name="InuProfileIdModeOff">Off</string>

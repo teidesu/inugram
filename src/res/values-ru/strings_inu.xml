@@ -166,10 +166,8 @@
     <string name="InuDisableChatPreviewExpand">Интерактивное превью чата</string>
     <string name="InuDisableChatPreviewExpandInfo">Отключить разворачивание по нажатию и сделать пузыри интерактивными</string>
     <string name="InuHideMyPhoneNumber">Скрыть мой номер телефона</string>
-    <string name="InuFont">Шрифт интерфейса</string>
     <string name="InuFontDefault">По умолчанию</string>
     <string name="InuFontSystem">Системный</string>
-    <string name="InuFontCustom">Свой…</string>
     <string name="InuFontImportFailed">Не удалось импортировать шрифт. Убедитесь, что это файл TTF/OTF/TTC.</string>
     <string name="InuProfileIdMode">Показывать ID в профиле</string>
     <string name="InuProfileIdModeOff">Выкл.</string>

@@ -166,10 +166,8 @@
     <string name="InuDisableChatPreviewExpand">交互式聊天预览</string>
     <string name="InuDisableChatPreviewExpandInfo">禁用点击展开，改为让气泡可交互</string>
     <string name="InuHideMyPhoneNumber">隐藏我的手机号</string>
-    <string name="InuFont">界面字体</string>
     <string name="InuFontDefault">默认</string>
     <string name="InuFontSystem">系统</string>
-    <string name="InuFontCustom">自定义…</string>
     <string name="InuFontImportFailed">无法导入字体。请确认是 TTF/OTF/TTC 文件。</string>
     <string name="InuProfileIdMode">在资料中显示 ID</string>
     <string name="InuProfileIdModeOff">关闭</string>
