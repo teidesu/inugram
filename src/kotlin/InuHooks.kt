@@ -34,7 +34,7 @@ object InuHooks {
         CrashReporter.install()
         InuConfig.load(context)
         FontHelper.init(context)
-        if (InuConfig.FONT_MODE.value == 2 && Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
+        if (InuConfig.FONT_MODE.value == InuConfig.FontModeItem.CUSTOM && Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
             FontHelper.installAsDefault()
         }
         syncDoubleTapDelay()
