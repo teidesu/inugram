@@ -368,7 +368,9 @@ class FontRow(context: Context) : FrameLayout(context) {
             text.typeface = pt?.typeface ?: Typeface.DEFAULT
         }
         text.alpha = if (hidden) 0.4f else 1f
-        eye.setImageResource(if (hidden) R.drawable.inu_tabler_eye_off else R.drawable.inu_tabler_eye)
+        // reuse existing stock eye icons (poorly named): menu_hide_gift is a crossed eye,
+        // filled_poll_view_24 an open eye — same 72dp white-fill style
+        eye.setImageResource(if (hidden) R.drawable.menu_hide_gift else R.drawable.filled_poll_view_24)
         eye.contentDescription =
             LocaleController.getString(if (hidden) R.string.InuFontShow else R.string.InuFontHide)
     }
