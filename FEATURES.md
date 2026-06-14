@@ -218,6 +218,7 @@ most things are toggleable in `Settings → Inugram`, with sensible opinionated 
 - lazy face detect (only on filters tab)
 - lazy chromecast init in photo viewer
 - stale video seekbar leaking onto photos in photo viewer
+- round video recorder cancel crash when leaving chat
 - missing `Emoji.replaceEmoji` calls
 - background media loading cpu usage (experimental)
 - animated photo spoilers respect power-saving setting

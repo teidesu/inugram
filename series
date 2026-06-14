@@ -193,3 +193,4 @@ bugfix/photo-crop-not-applied-on-send.patch
 bugfix/media-cancel-race.patch
 debloat/keep-bot-drafts-at-bottom.patch
 bugfix/channel-history-stuck-forward.patch
+bugfix/instant-camera-cancel-race.patch
