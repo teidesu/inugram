@@ -11,7 +11,7 @@ diff --git a/TMessagesProj/src/main/java/org/telegram/ui/ChatActivity.java b/TMe
 index 0000000..0000000 100644
 --- a/TMessagesProj/src/main/java/org/telegram/ui/ChatActivity.java
 +++ b/TMessagesProj/src/main/java/org/telegram/ui/ChatActivity.java
-@@ -7325,7 +7325,7 @@ public class ChatActivity extends BaseFragment implements
+@@ -7441,7 +7441,7 @@ public class ChatActivity extends BaseFragment implements
              }
          });
          mentionContainer.getListView().setOnItemLongClickListener((view, position) -> {
@@ -20,7 +20,7 @@ index 0000000..0000000 100644
                  return false;
              }
              if (position == 0 || mentionContainer.getAdapter().isBannedInline()) {
-@@ -7333,6 +7333,14 @@ public class ChatActivity extends BaseFragment implements
+@@ -7449,6 +7449,14 @@ public class ChatActivity extends BaseFragment implements
              }
              position--;
              Object object = mentionContainer.getAdapter().getItem(position);

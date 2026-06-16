@@ -13,7 +13,7 @@ diff --git a/TMessagesProj/src/main/java/org/telegram/messenger/browser/Browser.
 index 0000000..0000000 100644
 --- a/TMessagesProj/src/main/java/org/telegram/messenger/browser/Browser.java
 +++ b/TMessagesProj/src/main/java/org/telegram/messenger/browser/Browser.java
-@@ -295,6 +295,7 @@ public class Browser {
+@@ -292,6 +292,7 @@ public class Browser {
          if (context == null || uri == null) {
              return;
          }
@@ -100,7 +100,7 @@ diff --git a/TMessagesProj/src/main/java/org/telegram/ui/LaunchActivity.java b/T
 index 0000000..0000000 100644
 --- a/TMessagesProj/src/main/java/org/telegram/ui/LaunchActivity.java
 +++ b/TMessagesProj/src/main/java/org/telegram/ui/LaunchActivity.java
-@@ -1697,7 +1697,7 @@ public class LaunchActivity extends BasePermissionsActivity implements INavigati
+@@ -1712,7 +1712,7 @@ public class LaunchActivity extends BasePermissionsActivity implements INavigati
                              if ((text.startsWith("http://") || text.startsWith("https://")) && !TextUtils.isEmpty(subject)) {
                                  text = subject + "\n" + text;
                              }

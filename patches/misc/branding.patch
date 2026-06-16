@@ -239,7 +239,7 @@ index 0000000..0000000 100644
                  updateStatus(UserConfig.getInstance(currentAccount).getCurrentUser(), false);
              }
              if (folderId == 0) {
-@@ -14075,4 +14079,4 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
+@@ -14087,4 +14091,4 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
          return true;
      }
  
@@ -344,23 +344,23 @@ diff --git a/TMessagesProj/src/main/java/org/telegram/ui/ThemeActivity.java b/TM
 index 0000000..0000000 100644
 --- a/TMessagesProj/src/main/java/org/telegram/ui/ThemeActivity.java
 +++ b/TMessagesProj/src/main/java/org/telegram/ui/ThemeActivity.java
-@@ -844,6 +844,7 @@ public class ThemeActivity extends BaseFragment implements NotificationCenter.No
-         getNotificationCenter().addObserver(this, NotificationCenter.contentSettingsLoaded);
+@@ -846,6 +846,7 @@ public class ThemeActivity extends BaseFragment implements NotificationCenter.No
          getNotificationCenter().addObserver(this, NotificationCenter.themeUploadedToServer);
          getNotificationCenter().addObserver(this, NotificationCenter.themeUploadError);
+         getNotificationCenter().addObserver(this, NotificationCenter.webBrowserSettingsUpdate);
 +        NotificationCenter.getGlobalInstance().addObserver(this, NotificationCenter.showBulletin);
          if (currentType == THEME_TYPE_BASIC) {
              Theme.loadRemoteThemes(currentAccount, true);
              Theme.checkCurrentRemoteTheme(true);
-@@ -867,6 +868,7 @@ public class ThemeActivity extends BaseFragment implements NotificationCenter.No
-         getNotificationCenter().removeObserver(this, NotificationCenter.contentSettingsLoaded);
+@@ -870,6 +871,7 @@ public class ThemeActivity extends BaseFragment implements NotificationCenter.No
          getNotificationCenter().removeObserver(this, NotificationCenter.themeUploadedToServer);
          getNotificationCenter().removeObserver(this, NotificationCenter.themeUploadError);
+         getNotificationCenter().removeObserver(this, NotificationCenter.webBrowserSettingsUpdate);
 +        NotificationCenter.getGlobalInstance().removeObserver(this, NotificationCenter.showBulletin);
          Theme.saveAutoNightThemeConfig();
      }
  
-@@ -883,6 +885,10 @@ public class ThemeActivity extends BaseFragment implements NotificationCenter.No
+@@ -890,6 +892,10 @@ public class ThemeActivity extends BaseFragment implements NotificationCenter.No
              if (listAdapter != null && themeAccentListRow != -1) {
                  listAdapter.notifyItemChanged(themeAccentListRow, new Object());
              }
@@ -371,7 +371,7 @@ index 0000000..0000000 100644
          } else if (id == NotificationCenter.themeListUpdated) {
              updateRows(true);
          } else if (id == NotificationCenter.themeUploadedToServer) {
-@@ -2525,6 +2531,8 @@ public class ThemeActivity extends BaseFragment implements NotificationCenter.No
+@@ -2533,6 +2539,8 @@ public class ThemeActivity extends BaseFragment implements NotificationCenter.No
                          cell.setText(getString("ChatListSwipeGestureInfo", R.string.ChatListSwipeGestureInfo));
                      } else if (position == liteModeInfoRow) {
                          cell.setText(getString("LiteModeInfo", R.string.LiteModeInfo));
@@ -380,7 +380,7 @@ index 0000000..0000000 100644
                      } else {
                          cell.setFixedSize(12);
                          cell.setText("");
-@@ -2727,11 +2735,11 @@ public class ThemeActivity extends BaseFragment implements NotificationCenter.No
+@@ -2735,11 +2743,11 @@ public class ThemeActivity extends BaseFragment implements NotificationCenter.No
                      position == contactsReimportRow || position == contactsSortRow ||
                      position == bluetoothScoRow || position == searchEngineRow) {
                  return TYPE_TEXT_SETTING;
@@ -618,7 +618,7 @@ index 0000000..0000000 100644
      <string name="LanguageName">English</string>
      <string name="English">English</string>
      <string name="LanguageNameInEnglish">English</string>
-@@ -2748,8 +2748,8 @@
+@@ -2751,8 +2751,8 @@
      <string name="AuthAnotherClientUrl">This code can be used to allow someone to log in to your Telegram account.\n\nTo confirm Telegram login, please go to Settings &gt; Devices &gt; Scan QR and scan the code.</string>
      <string name="QRCodePermissionNoCameraWithHint">**Telegram** needs camera access so that you can scan QR codes. Tap Settings -> Permissions, and turn **Camera** on.</string>
      <string name="SetProfilePhoto">Set Profile Photo</string>
@@ -629,7 +629,7 @@ index 0000000..0000000 100644
      <string name="AppUpdateVersionAndSize">Version %1$s • %2$s</string>
      <string name="AppBetaUpdateVersion">Version %1$s (%2$s)</string>
      <string name="AppUpdateDownloading">Downloading %1$d%%...</string>
-@@ -4159,7 +4159,7 @@
+@@ -4167,7 +4167,7 @@
      <string name="ViewMessageStatistic">Message Statistic</string>
      <string name="ViewMessage">Open Message</string>
      <!--Intro view-->

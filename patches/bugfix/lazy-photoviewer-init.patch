@@ -48,7 +48,7 @@ diff --git a/TMessagesProj/src/main/java/org/telegram/ui/PhotoViewer.java b/TMes
 index 0000000..0000000 100644
 --- a/TMessagesProj/src/main/java/org/telegram/ui/PhotoViewer.java
 +++ b/TMessagesProj/src/main/java/org/telegram/ui/PhotoViewer.java
-@@ -911,6 +911,7 @@ public class PhotoViewer implements NotificationCenter.NotificationCenterDelegat
+@@ -913,6 +913,7 @@ public class PhotoViewer implements NotificationCenter.NotificationCenterDelegat
      private ActionBarMenuItem deleteItem;
      private ActionBarMenuSubItem castItem;
      private CastMediaRouteButton castItemButton;
@@ -56,7 +56,7 @@ index 0000000..0000000 100644
      private LinearLayout itemsLayout;
      private SpeedButtonsLayout chooseSpeedLayout;
      private ChooseDownloadQualityLayout chooseDownloadQualityLayout;
-@@ -1988,6 +1989,7 @@ public class PhotoViewer implements NotificationCenter.NotificationCenterDelegat
+@@ -1991,6 +1992,7 @@ public class PhotoViewer implements NotificationCenter.NotificationCenterDelegat
      }
  
      private int currentImageHasFace;
@@ -64,7 +64,7 @@ index 0000000..0000000 100644
      private String currentImageFaceKey;
      private PaintingOverlay paintingOverlay;
      private PaintingOverlay leftPaintingOverlay;
-@@ -5304,6 +5306,16 @@ public class PhotoViewer implements NotificationCenter.NotificationCenterDelegat
+@@ -5328,6 +5330,16 @@ public class PhotoViewer implements NotificationCenter.NotificationCenterDelegat
                          dialog.setTextColor(getThemedColor(Theme.key_voipgroup_actionBarItems));
                      }
                  } else if (id == gallery_menu_chromecast) {
@@ -81,7 +81,7 @@ index 0000000..0000000 100644
                      ChromecastController.getInstance().setCurrentMediaAndCastIfNeeded(getCurrentChromecastMedia());
                      castItemButton.performClick();
                  } else if (id == gallery_menu_showall) {
-@@ -6025,20 +6037,11 @@ public class PhotoViewer implements NotificationCenter.NotificationCenterDelegat
+@@ -6049,20 +6061,11 @@ public class PhotoViewer implements NotificationCenter.NotificationCenterDelegat
                  }
              }
          };
@@ -106,7 +106,7 @@ index 0000000..0000000 100644
  
          videoItem.redrawPopup(0xf9222222);
          videoItem.setOnMenuDismiss(byClick -> checkProgress(0, false, false));
-@@ -7883,7 +7886,16 @@ public class PhotoViewer implements NotificationCenter.NotificationCenterDelegat
+@@ -7907,7 +7910,16 @@ public class PhotoViewer implements NotificationCenter.NotificationCenterDelegat
                      return;
                  }
              }
@@ -124,7 +124,7 @@ index 0000000..0000000 100644
          });
          tuneItem.setContentDescription(getString("AccDescrPhotoAdjust", R.string.AccDescrPhotoAdjust));
  
-@@ -7969,7 +7981,6 @@ public class PhotoViewer implements NotificationCenter.NotificationCenterDelegat
+@@ -7993,7 +8005,6 @@ public class PhotoViewer implements NotificationCenter.NotificationCenterDelegat
                  if (paintingOverlay.getVisibility() == View.VISIBLE) {
                      containerView.requestLayout();
                  }
@@ -132,7 +132,7 @@ index 0000000..0000000 100644
              }
              if (imageReceiver == centerImage && set && placeProvider != null && placeProvider.scaleToFill() && !ignoreDidSetImage && sendPhotoType != SELECT_TYPE_AVATAR && sendPhotoType != SELECT_TYPE_STICKER) {
                  if (!wasLayout) {
-@@ -12067,6 +12078,14 @@ public class PhotoViewer implements NotificationCenter.NotificationCenterDelegat
+@@ -12096,6 +12107,14 @@ public class PhotoViewer implements NotificationCenter.NotificationCenterDelegat
          }
      }
  
@@ -147,7 +147,7 @@ index 0000000..0000000 100644
      private void detectFaces() {
          if (centerImage.getAnimation() != null || imagesArrLocals.isEmpty() || sendPhotoType == SELECT_TYPE_AVATAR) {
              return;
-@@ -12100,6 +12119,10 @@ public class PhotoViewer implements NotificationCenter.NotificationCenterDelegat
+@@ -12129,6 +12148,10 @@ public class PhotoViewer implements NotificationCenter.NotificationCenterDelegat
                          if (key.equals(imageKey)) {
                              currentImageHasFace = hasFaces ? 1 : 0;
                              currentImageFaceKey = key;
@@ -158,7 +158,7 @@ index 0000000..0000000 100644
                          }
                      });
                  } else {
-@@ -12113,6 +12136,7 @@ public class PhotoViewer implements NotificationCenter.NotificationCenterDelegat
+@@ -12142,6 +12165,7 @@ public class PhotoViewer implements NotificationCenter.NotificationCenterDelegat
                              currentImageHasFace = 2;
                              currentImageFaceKey = key;
                          }
@@ -166,7 +166,7 @@ index 0000000..0000000 100644
                      });
                  }
              } catch (Exception e) {
-@@ -16243,7 +16267,9 @@ public class PhotoViewer implements NotificationCenter.NotificationCenterDelegat
+@@ -16275,7 +16299,9 @@ public class PhotoViewer implements NotificationCenter.NotificationCenterDelegat
                  videoFrameBitmap = null;
              }
          }

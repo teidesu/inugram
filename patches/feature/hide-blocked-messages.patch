@@ -17,7 +17,7 @@ diff --git a/TMessagesProj/src/main/java/org/telegram/messenger/MediaDataControl
 index 0000000..0000000 100644
 --- a/TMessagesProj/src/main/java/org/telegram/messenger/MediaDataController.java
 +++ b/TMessagesProj/src/main/java/org/telegram/messenger/MediaDataController.java
-@@ -6982,7 +6982,7 @@ public class MediaDataController extends BaseController {
+@@ -6981,7 +6981,7 @@ public class MediaDataController extends BaseController {
      }
  
      public static void addTextStyleRuns(MessageObject msg, Spannable text) {
@@ -26,7 +26,7 @@ index 0000000..0000000 100644
      }
  
      public static void addTextStyleRuns(TLRPC.DraftMessage msg, Spannable text, int allowedFlags) {
-@@ -6990,7 +6990,7 @@ public class MediaDataController extends BaseController {
+@@ -6989,7 +6989,7 @@ public class MediaDataController extends BaseController {
      }
  
      public static void addTextStyleRuns(MessageObject msg, Spannable text, int allowedFlags) {
@@ -39,7 +39,7 @@ diff --git a/TMessagesProj/src/main/java/org/telegram/messenger/MessageObject.ja
 index 0000000..0000000 100644
 --- a/TMessagesProj/src/main/java/org/telegram/messenger/MessageObject.java
 +++ b/TMessagesProj/src/main/java/org/telegram/messenger/MessageObject.java
-@@ -629,7 +629,7 @@ public class MessageObject {
+@@ -637,7 +637,7 @@ public class MessageObject {
      }
  
      public boolean hasMediaSpoilers() {
@@ -48,7 +48,7 @@ index 0000000..0000000 100644
      }
  
      public Boolean isSensitiveCached;
-@@ -7535,7 +7535,7 @@ public class MessageObject {
+@@ -7874,7 +7874,7 @@ public class MessageObject {
              entities.add(entityItalic);
              return addEntitiesToText(text, entities, isOutOwner(), true, photoViewer, useManualParse);
          } else {
@@ -61,7 +61,7 @@ diff --git a/TMessagesProj/src/main/java/org/telegram/messenger/MessagesControll
 index 0000000..0000000 100644
 --- a/TMessagesProj/src/main/java/org/telegram/messenger/MessagesController.java
 +++ b/TMessagesProj/src/main/java/org/telegram/messenger/MessagesController.java
-@@ -8884,6 +8884,9 @@ public class MessagesController extends BaseController implements NotificationCe
+@@ -8888,6 +8888,9 @@ public class MessagesController extends BaseController implements NotificationCe
                  }
                  loadingBlockedPeers = false;
                  getNotificationCenter().postNotificationName(NotificationCenter.blockedUsersDidLoad);
@@ -75,7 +75,7 @@ diff --git a/TMessagesProj/src/main/java/org/telegram/messenger/NotificationsCon
 index 0000000..0000000 100644
 --- a/TMessagesProj/src/main/java/org/telegram/messenger/NotificationsController.java
 +++ b/TMessagesProj/src/main/java/org/telegram/messenger/NotificationsController.java
-@@ -2442,16 +2442,17 @@ public class NotificationsController extends BaseController {
+@@ -2450,16 +2450,17 @@ public class NotificationsController extends BaseController implements Notificat
              return null;
          }
          String text = messageObject.messageOwner.message;
@@ -101,7 +101,7 @@ diff --git a/TMessagesProj/src/main/java/org/telegram/ui/Cells/ChatMessageCell.j
 index 0000000..0000000 100644
 --- a/TMessagesProj/src/main/java/org/telegram/ui/Cells/ChatMessageCell.java
 +++ b/TMessagesProj/src/main/java/org/telegram/ui/Cells/ChatMessageCell.java
-@@ -7275,7 +7275,7 @@ public class ChatMessageCell extends BaseCell implements SeekBar.SeekBarDelegate
+@@ -7369,7 +7369,7 @@ public class ChatMessageCell extends BaseCell implements SeekBar.SeekBarDelegate
                          hasInvoicePrice = false;
                      }
                  }
@@ -110,7 +110,7 @@ index 0000000..0000000 100644
                  TLRPC.WebPage webpage = hasLinkPreview ? MessageObject.getMedia(messageObject.messageOwner).webpage : null;
                  if (messageObject.isStoryMention()) {
                      hasLinkPreview = true;
-@@ -19343,7 +19343,7 @@ public class ChatMessageCell extends BaseCell implements SeekBar.SeekBarDelegate
+@@ -19372,7 +19372,7 @@ public class ChatMessageCell extends BaseCell implements SeekBar.SeekBarDelegate
                          }
                          stringFinalText = TextUtils.ellipsize(stringFinalText, textPaint, maxWidth, TextUtils.TruncateAt.END);
                          if (stringFinalText instanceof Spannable && messageObject.replyMessageObject.messageOwner != null) {
@@ -145,7 +145,7 @@ diff --git a/TMessagesProj/src/main/java/org/telegram/ui/ChatActivity.java b/TMe
 index 0000000..0000000 100644
 --- a/TMessagesProj/src/main/java/org/telegram/ui/ChatActivity.java
 +++ b/TMessagesProj/src/main/java/org/telegram/ui/ChatActivity.java
-@@ -2911,6 +2911,8 @@ public class ChatActivity extends BaseFragment implements
+@@ -2976,6 +2976,8 @@ public class ChatActivity extends BaseFragment implements
              .add(NotificationCenter.botForumDraftDelete)
              .add(NotificationCenter.joinedGroup);
  
@@ -154,7 +154,7 @@ index 0000000..0000000 100644
          globalObserversGroup
              .add(NotificationCenter.emojiLoaded)
              .add(NotificationCenter.invalidateMotionBackground)
-@@ -22432,6 +22434,9 @@ public class ChatActivity extends BaseFragment implements
+@@ -22739,6 +22741,9 @@ public class ChatActivity extends BaseFragment implements
          } else if (id == NotificationCenter.screenshotTook) {
              updateInformationForScreenshotDetector();
          } else if (id == NotificationCenter.blockedUsersDidLoad) {
@@ -164,7 +164,7 @@ index 0000000..0000000 100644
              if (currentUser != null && !UserObject.isReplyUser(currentUser)) {
                  boolean oldValue = userBlocked;
                  userBlocked = getMessagesController().blockePeers.indexOfKey(currentUser.id) >= 0;
-@@ -36249,6 +36254,12 @@ public class ChatActivity extends BaseFragment implements
+@@ -36731,6 +36736,12 @@ public class ChatActivity extends BaseFragment implements
          private int messagesEndRow;
  
          public ArrayList<MessageObject> getMessages() {
@@ -177,7 +177,7 @@ index 0000000..0000000 100644
              if (isFrozen) {
                  return frozenMessages;
              } else if (isFiltered) {
-@@ -36322,14 +36333,7 @@ public class ChatActivity extends BaseFragment implements
+@@ -36804,14 +36815,7 @@ public class ChatActivity extends BaseFragment implements
  
          private void updateRowsInternal() {
              rowCount = 0;
@@ -193,7 +193,7 @@ index 0000000..0000000 100644
              if (chatMode == MODE_SAVED && isInsideContainer) {
                  hintRow = rowCount++;
              } else {
-@@ -36421,14 +36425,7 @@ public class ChatActivity extends BaseFragment implements
+@@ -36903,14 +36907,7 @@ public class ChatActivity extends BaseFragment implements
                      return 1;
                  }
              }
@@ -209,7 +209,7 @@ index 0000000..0000000 100644
  
              if (position >= messagesStartRow && position < messagesEndRow) {
                  return messages.get(position - messagesStartRow).stableId;
-@@ -36897,21 +36894,14 @@ public class ChatActivity extends BaseFragment implements
+@@ -37373,21 +37370,14 @@ public class ChatActivity extends BaseFragment implements
                  actionCell.setAlpha(1.0f);
                  actionCell.setSpoilersSuppressed(chatListView.getScrollState() != RecyclerView.SCROLL_STATE_IDLE);
              } else if (position >= messagesStartRow && position < messagesEndRow) {
@@ -233,7 +233,7 @@ index 0000000..0000000 100644
                      messageCell.isChat = currentChat != null || UserObject.isUserSelf(currentUser) || UserObject.isReplyUser(currentUser) || (chatMode == MODE_SEARCH);
                      messageCell.setSponsoredMessageVisible(true, false);
                      messageCell.isBotForum = UserObject.isBotForum(currentUser);
-@@ -37443,14 +37433,7 @@ public class ChatActivity extends BaseFragment implements
+@@ -37919,14 +37909,7 @@ public class ChatActivity extends BaseFragment implements
                  return 1;
              }
              if (position >= messagesStartRow && position < messagesEndRow) {

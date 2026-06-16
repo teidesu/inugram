@@ -4,14 +4,14 @@ Date: Thu, 11 Jun 2026 22:20:20 +0400
 Subject: keep bot drafts (streaming) at the bottom of the dialog
 
 ---
- .../main/java/org/telegram/ui/ChatActivity.java  | 16 ++++++++++++----
- 1 file changed, 12 insertions(+), 4 deletions(-)
+ .../main/java/org/telegram/ui/ChatActivity.java   | 15 ++++++++++++---
+ 1 file changed, 12 insertions(+), 3 deletions(-)
 
 diff --git a/TMessagesProj/src/main/java/org/telegram/ui/ChatActivity.java b/TMessagesProj/src/main/java/org/telegram/ui/ChatActivity.java
 index 0000000..0000000 100644
 --- a/TMessagesProj/src/main/java/org/telegram/ui/ChatActivity.java
 +++ b/TMessagesProj/src/main/java/org/telegram/ui/ChatActivity.java
-@@ -24159,20 +24159,26 @@ public class ChatActivity extends BaseFragment implements
+@@ -24478,13 +24478,17 @@ public class ChatActivity extends BaseFragment implements
              if (dialog_id != arg.botUserId) return;
              if (getTopicId() != arg.botTopicId) return;
  
@@ -25,11 +25,14 @@ index 0000000..0000000 100644
              arr.add(arg.messageObject);
              replaceMessageObjects(arr, 0, true, true);
  
-             if (!arr.isEmpty()) {
+             if (!arr.isEmpty() && getDialogId() > 0) {
 +                if (!keepDraftAtBottom) {
-                 BotForumHelper.getInstance(currentAccount).saveIsStreamingTopic(getDialogId(), getTopicId(), true);
--
-                 final int firstMessageGroupHeight = calculateFirstMessageGroupHeight(startRow);
+                 if (updateStreamingTopic != null) {
+                     AndroidUtilities.cancelRunOnUIThread(updateStreamingTopic);
+                     updateStreamingTopic = null;
+@@ -24493,9 +24497,12 @@ public class ChatActivity extends BaseFragment implements
+ 
+                 final int firstMessageGroupHeight = calculateHeightUntilOutOwner(startRow);
                  botDraftHeightController.setPreviousMessageHeight(firstMessageGroupHeight);
 +                }
                  processNewMessages(arr);
@@ -40,25 +43,25 @@ index 0000000..0000000 100644
              checkSendButtonBlockedByTyping(true);
          } else if (id == NotificationCenter.botForumDraftDelete) {
              final BotForumHelper.BotForumTextDraftDeleteNotification arg = (BotForumHelper.BotForumTextDraftDeleteNotification) args[0];
-@@ -24919,7 +24925,7 @@ public class ChatActivity extends BaseFragment implements
-     private void processNewMessages(ArrayList<MessageObject> arr, final boolean animatedFromBottom) {
-         FileLog.d("processNewMessages " + arr.size() + " messages");
+@@ -25296,7 +25303,7 @@ public class ChatActivity extends BaseFragment implements
  
--        if (arr.size() == 1 && UserObject.isBot(currentUser) && BotForumHelper.getInstance(currentAccount).isStreamingTopic(getDialogId(), getTopicId())) {
-+        if (!desu.inugram.InuConfig.DISABLE_BOT_DRAFT_TOP.getValue() && arr.size() == 1 && UserObject.isBot(currentUser) && BotForumHelper.getInstance(currentAccount).isStreamingTopic(getDialogId(), getTopicId())) {
+         final boolean isBot = UserObject.isBot(currentUser);
+         final boolean isStreamingTopic = isBot && BotForumHelper.getInstance(currentAccount).isStreamingTopic(getDialogId(), getTopicId());
+-        if (arr.size() == 1 && isBot && isStreamingTopic) {
++        if (!desu.inugram.InuConfig.DISABLE_BOT_DRAFT_TOP.getValue() && arr.size() == 1 && isBot && isStreamingTopic) {
              MessageObject message = arr.get(0);
-             if (message.getId() < 0 && message.isOutOwner()) {
-                 botDraftHeightController.setPreviousMessageHeight(0);
-@@ -25116,7 +25122,7 @@ public class ChatActivity extends BaseFragment implements
+ 
+             final boolean isOutButWithHeight = !message.isBotPendingDraft && !message.isOutOwner()
+@@ -25496,7 +25503,7 @@ public class ChatActivity extends BaseFragment implements
  
          checkSendButtonBlockedByTyping(true);
  
 -        forceScrollToMessageBottom = hasDraftsReplaces;
 +        forceScrollToMessageBottom = !desu.inugram.InuConfig.DISABLE_BOT_DRAFT_TOP.getValue() && hasDraftsReplaces;
  
-         boolean needMoveScrollToLastMessage = false;
- 
-@@ -26183,8 +26189,10 @@ public class ChatActivity extends BaseFragment implements
+         if (isBot && isStreamingTopic && !hasDraftsReplaces) {
+             boolean hasMessageFromBot = false;
+@@ -26587,8 +26594,10 @@ public class ChatActivity extends BaseFragment implements
              if (messageObject.getId() > 0 && old == null && UserObject.isBot(currentUser)) {
                  old = BotForumHelper.getInstance(currentAccount).onBotForumDraftCheckNewMessages(currentUser.id, (int) getTopicId(), messageObject.getId(), messageObject.messageText.toString());
                  if (old != null) {

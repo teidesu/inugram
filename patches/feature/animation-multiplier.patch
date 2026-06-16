@@ -12,7 +12,7 @@ diff --git a/TMessagesProj/src/main/java/org/telegram/ui/ActionBar/ActionBarLayo
 index 0000000..0000000 100644
 --- a/TMessagesProj/src/main/java/org/telegram/ui/ActionBar/ActionBarLayout.java
 +++ b/TMessagesProj/src/main/java/org/telegram/ui/ActionBar/ActionBarLayout.java
-@@ -1815,7 +1815,7 @@ public class ActionBarLayout extends FrameLayout implements INavigationLayout, F
+@@ -1848,7 +1848,7 @@ public class ActionBarLayout extends FrameLayout implements INavigationLayout, F
                      dt = 18;
                  }
                  lastFrameTime = newTime;

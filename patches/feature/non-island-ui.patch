@@ -4,14 +4,14 @@ Date: Thu, 16 Apr 2026 08:47:27 +0300
 Subject: non-island ui in various parts of the app
 
 ---
- .../org/telegram/ui/ActionBar/ActionBar.java  |   5 +
+ .../org/telegram/ui/ActionBar/ActionBar.java  |  26 ++--
  .../ui/Cells/SharedPhotoVideoCell2.java       |   4 +-
- .../telegram/ui/ChannelAdminLogActivity.java  |  23 +++-
- .../java/org/telegram/ui/ChatActivity.java    |  90 +++++++-----
+ .../telegram/ui/ChannelAdminLogActivity.java  |  21 ++-
+ .../java/org/telegram/ui/ChatActivity.java    |  86 ++++++++----
  .../ui/Components/ChatActivityEnterView.java  |  27 ++--
  ...ChatActivityEnterViewAnimatedIconView.java |  17 ++-
  .../ChatActivityTopPanelLayout.java           |  16 ++-
- .../ui/Components/ChatAttachAlert.java        |  16 +++
+ .../ui/Components/ChatAttachAlert.java        |  19 +++
  .../DialogsActivityTopPanelLayout.java        |   9 +-
  .../ui/Components/FilterTabsView.java         |   6 +
  .../ui/Components/FragmentSearchField.java    |  10 +-
@@ -33,37 +33,77 @@ Subject: non-island ui in various parts of the app
  .../java/org/telegram/ui/bots/BotAdView.java  |   2 +-
  .../ui/bots/BotCommandsMenuContainer.java     |   4 +-
  .../bots/ChatAttachAlertBotWebViewLayout.java |   5 +-
- 29 files changed, 417 insertions(+), 189 deletions(-)
+ 29 files changed, 430 insertions(+), 194 deletions(-)
 
 diff --git a/TMessagesProj/src/main/java/org/telegram/ui/ActionBar/ActionBar.java b/TMessagesProj/src/main/java/org/telegram/ui/ActionBar/ActionBar.java
 index 0000000..0000000 100644
 --- a/TMessagesProj/src/main/java/org/telegram/ui/ActionBar/ActionBar.java
 +++ b/TMessagesProj/src/main/java/org/telegram/ui/ActionBar/ActionBar.java
-@@ -82,6 +82,7 @@ public class ActionBar extends FrameLayout implements Theme.Colorable {
-     }
- 
+@@ -91,6 +91,7 @@ public class ActionBar extends FrameLayout implements FactorAnimator.Target, The
      private Drawable glassDrawable;
+     private Drawable glassDrawableBack;
+     private Drawable glassDrawableMenu;
 +    public boolean inu_nonIsland;
      private INavigationLayout.BackButtonState backButtonState = INavigationLayout.BackButtonState.BACK;
      public ImageView backButtonImageView;
      private BackupImageView avatarSearchImageView;
-@@ -1979,7 +1980,11 @@ public class ActionBar extends FrameLayout implements Theme.Colorable {
-         if (glassDrawable != null) {
-             final int t = getHeight() - getCurrentActionBarHeight() / 2 - dp(26) - dp(7);
-             final int b = t + dp(52) + dp(7) + dp(7);
+@@ -202,20 +203,23 @@ public class ActionBar extends FrameLayout implements FactorAnimator.Target, The
+         setClipChildren(false);
+         glassMode = true;
+ 
++        final int glassRadius = inu_nonIsland ? 0 : 23;
++        final int glassPadding = inu_nonIsland ? 0 : 6;
++
+         glassDrawable = factory.create(this)
+             .setColorProvider(colorProvider)
+-            .setRadius(dp(23))
+-            .setPadding(dp(6));
++            .setRadius(dp(glassRadius))
++            .setPadding(dp(glassPadding));
+ 
+         glassDrawableBack = factory.create(this)
+             .setColorProvider(colorProvider)
+-            .setRadius(dp(23))
+-            .setPadding(dp(6));
++            .setRadius(dp(glassRadius))
++            .setPadding(dp(glassPadding));
+ 
+         glassDrawableMenu = factory.create(this)
+             .setColorProvider(colorProvider)
+-            .setRadius(dp(23))
+-            .setPadding(dp(6));
++            .setRadius(dp(glassRadius))
++            .setPadding(dp(glassPadding));
+ 
+         if (menu != null) {
+             menu.setTranslationX(-dp(10));
+@@ -2147,14 +2151,18 @@ public class ActionBar extends FrameLayout implements FactorAnimator.Target, The
+                 right = rightDefault;
+             }
+ 
+-            glassDrawable.setBounds(left, t, right, b);
 +            if (inu_nonIsland) {
 +                glassDrawable.setBounds(0, 0, getWidth(), getHeight());
 +            } else {
-             glassDrawable.setBounds(0, t, getWidth(), b);
++                glassDrawable.setBounds(left, t, right, b);
 +            }
              glassDrawable.draw(canvas);
          }
- 
+-        if (glassDrawableBack != null && hasBackButton) {
++        if (glassDrawableBack != null && hasBackButton && !inu_nonIsland) {
+             glassDrawableBack.setBounds(0, t, s + p * 2, b);
+             glassDrawableBack.draw(canvas);
+         }
+-        if (glassDrawableMenu != null && menuWidth > 0) {
++        if (glassDrawableMenu != null && menuWidth > 0 && !inu_nonIsland) {
+             glassDrawableMenu.setBounds(getWidth() - menuWidth - p * 2, t, getWidth(), b);
+             glassDrawableMenu.draw(canvas);
+         }
 diff --git a/TMessagesProj/src/main/java/org/telegram/ui/Cells/SharedPhotoVideoCell2.java b/TMessagesProj/src/main/java/org/telegram/ui/Cells/SharedPhotoVideoCell2.java
 index 0000000..0000000 100644
 --- a/TMessagesProj/src/main/java/org/telegram/ui/Cells/SharedPhotoVideoCell2.java
 +++ b/TMessagesProj/src/main/java/org/telegram/ui/Cells/SharedPhotoVideoCell2.java
-@@ -652,8 +652,8 @@ public class SharedPhotoVideoCell2 extends FrameLayout {
+@@ -656,8 +656,8 @@ public class SharedPhotoVideoCell2 extends FrameLayout {
              blurImageReceiver.setImageCoords(leftpadding + padPlus, padding + padPlus, imageWidth, imageHeight);
          }
          imageReceiver.setRoundRadius(
@@ -78,20 +118,16 @@ diff --git a/TMessagesProj/src/main/java/org/telegram/ui/ChannelAdminLogActivity
 index 0000000..0000000 100644
 --- a/TMessagesProj/src/main/java/org/telegram/ui/ChannelAdminLogActivity.java
 +++ b/TMessagesProj/src/main/java/org/telegram/ui/ChannelAdminLogActivity.java
-@@ -1161,9 +1161,11 @@ public class ChannelAdminLogActivity extends BaseFragment implements Notificatio
+@@ -1158,6 +1158,8 @@ public class ChannelAdminLogActivity extends BaseFragment implements Notificatio
+ 
          contentView.setOccupyStatusBar(!AndroidUtilities.isTablet());
          contentView.setBackgroundImage(Theme.getCachedWallpaper(), Theme.isWallpaperMotion());
- 
 +        boolean nonIsland = desu.inugram.helpers.theme.NonIslandHelper.chatElements();
 +        actionBar.inu_nonIsland = nonIsland;
-         actionBar.setGlassDrawable(glassBackgroundDrawableFactory.create(actionBar).setColorProvider(
-                 BlurredBackgroundProviderImpl.topPanelChatActivity(resourceProvider)
--        ).setRadius(dp(26)).setPadding(dp(7)));
-+        ).setRadius(dp(nonIsland ? 0 : 26)).setPadding(dp(nonIsland ? 0 : 7)));
- 
+         actionBar.setupGlass(glassBackgroundDrawableFactory, BlurredBackgroundProviderImpl.topPanelChatActivity(resourceProvider));
          emptyViewContainer = new FrameLayout(context);
          emptyViewContainer.setVisibility(View.INVISIBLE);
-@@ -1496,10 +1498,16 @@ public class ChannelAdminLogActivity extends BaseFragment implements Notificatio
+@@ -1490,10 +1492,16 @@ public class ChannelAdminLogActivity extends BaseFragment implements Notificatio
          bottomOverlayChat2 = new ChatActivityChannelButtonsLayout(context, resourceProvider,
              BlurredBackgroundProviderImpl.bottomPanelChatActivity(resourceProvider), glassBackgroundDrawableFactory);
          bottomOverlayChat2.setTotalVisibilityFactor(1f);
@@ -110,7 +146,7 @@ index 0000000..0000000 100644
  
          bottomOverlayChatText = new TextView(context);
          bottomOverlayChatText.setOnClickListener(view -> {
-@@ -1524,8 +1532,15 @@ public class ChannelAdminLogActivity extends BaseFragment implements Notificatio
+@@ -1518,8 +1526,15 @@ public class ChannelAdminLogActivity extends BaseFragment implements Notificatio
          bottomOverlayChatText.setTypeface(AndroidUtilities.bold());
          bottomOverlayChatText.setTextColor(Theme.getColor(Theme.key_chat_fieldOverlayText));
          bottomOverlayChatText.setText(getString(R.string.SETTINGS));
@@ -131,7 +167,7 @@ diff --git a/TMessagesProj/src/main/java/org/telegram/ui/ChatActivity.java b/TMe
 index 0000000..0000000 100644
 --- a/TMessagesProj/src/main/java/org/telegram/ui/ChatActivity.java
 +++ b/TMessagesProj/src/main/java/org/telegram/ui/ChatActivity.java
-@@ -340,6 +340,7 @@ import java.util.regex.Matcher;
+@@ -344,6 +344,7 @@ import java.util.regex.Matcher;
  import java.util.regex.Pattern;
  import java.util.stream.Collectors;
  
@@ -139,7 +175,7 @@ index 0000000..0000000 100644
  import me.vkryl.android.animator.BoolAnimator;
  import me.vkryl.android.animator.FactorAnimator;
  import me.vkryl.core.BitwiseUtils;
-@@ -2557,9 +2558,9 @@ public class ChatActivity extends BaseFragment implements
+@@ -2617,9 +2618,9 @@ public class ChatActivity extends BaseFragment implements
              glassBackgroundSourceFrostedRenderNode.setUnderSource(navbarContentSourceWallpaper);
  
              glassBackgroundDrawableFactoryFrosted = new BlurredBackgroundDrawableViewFactory(glassBackgroundSourceFrostedRenderNode);
@@ -151,7 +187,15 @@ index 0000000..0000000 100644
                  glassBackgroundSourceRenderNode = new BlurredBackgroundSourceRenderNode(navbarContentSourceWallpaper);
                  glassBackgroundSourceRenderNode.setOnDrawablesRelativePositionChangeListener(this::invalidateMergedVisibleBlurredPositionsAndSourcesPositions);
                  glassBackgroundSourceRenderNode.setScrollableNoiseSuppressor(scrollableViewNoiseSuppressor, DownscaleScrollableNoiseSuppressor.DRAW_GLASS);
-@@ -5325,7 +5326,7 @@ public class ChatActivity extends BaseFragment implements
+@@ -4545,6 +4546,7 @@ public class ChatActivity extends BaseFragment implements
+ 
+         contentView.setOccupyStatusBar(!inBubbleMode && !isInsideContainer && !inPreviewMode);
+ 
++        actionBar.inu_nonIsland = NonIslandHelper.chatElements();
+         actionBar.setupGlass(glassBackgroundDrawableFactory, blurredBackgroundColorProvider);
+         //actionBar.setChatAvatarContainer(avatarContainer);
+         //avatarContainer.setActionBar(actionBar);
+@@ -5395,7 +5397,7 @@ public class ChatActivity extends BaseFragment implements
                              j++;
                          }
  
@@ -160,20 +204,16 @@ index 0000000..0000000 100644
                          int left = dp(noAvatar ? 3 : 51);
                          if (isSideMenued()) {
                              left = lerp(left, dp(SIDE_MENU_WIDTH), getSideMenuAlpha());
-@@ -7389,9 +7390,9 @@ public class ChatActivity extends BaseFragment implements
+@@ -7742,7 +7744,7 @@ public class ChatActivity extends BaseFragment implements
+                 .setColorProvider(BlurredBackgroundProviderImpl.topPanelChatActivity(resourceProvider))
+                 .setRadius(dp(18)).setPadding(dp(7f)));
  
-         messagesSearchListContainer = new FrameLayout(context);
+-            contentView.addView(hashtagSearchTabs, LayoutHelper.createFrameMarginPx(LayoutHelper.MATCH_PARENT, 50, Gravity.FILL_HORIZONTAL | Gravity.TOP, 0, -dp(5), 0, 0));
++            contentView.addView(hashtagSearchTabs, LayoutHelper.createFrameMarginPx(LayoutHelper.MATCH_PARENT, 50, Gravity.FILL_HORIZONTAL | Gravity.TOP, 0, NonIslandHelper.chatElements() ? 0 : -dp(5), 0, 0));
+         }
+         contentView.addView(topPanelLayout, LayoutHelper.createFrame(LayoutHelper.MATCH_PARENT, LayoutHelper.WRAP_CONTENT, Gravity.TOP));
  
--        BlurredBackgroundDrawable searchContainerDrawable = glassBackgroundDrawableFactoryFrosted.create(messagesSearchListContainer, blurredBackgroundColorProviderWhite);
--        searchContainerDrawable.setPadding(dp(5));
--        searchContainerDrawable.setRadius(dp(22));
-+        BlurredBackgroundDrawable searchContainerDrawable = (glassBackgroundDrawableFactoryFrosted != null ? glassBackgroundDrawableFactoryFrosted : glassBackgroundDrawableFactory).create(messagesSearchListContainer, blurredBackgroundColorProviderWhite);
-+        searchContainerDrawable.setPadding(NonIslandHelper.chatElements() ? 0 : dp(5));
-+        searchContainerDrawable.setRadius(NonIslandHelper.chatElements() ? 0 : dp(22));
- 
-         messagesSearchListContainer.setBackground(searchContainerDrawable);
-         messagesSearchListContainer.setClipToOutline(true);
-@@ -7731,7 +7732,7 @@ public class ChatActivity extends BaseFragment implements
+@@ -7843,7 +7845,7 @@ public class ChatActivity extends BaseFragment implements
                          }
  
                          // chatListView.setTranslationY(dy);
@@ -182,7 +222,7 @@ index 0000000..0000000 100644
                              topView.setTranslationY(animatedTop + (1f - getTopViewEnterProgress()) * topView.getLayoutParams().height);
                          }
  
-@@ -7739,7 +7740,7 @@ public class ChatActivity extends BaseFragment implements
+@@ -7851,7 +7853,7 @@ public class ChatActivity extends BaseFragment implements
                          changeBoundAnimator.addUpdateListener(a -> {
                              float top = (float) a.getAnimatedValue();
                              setAnimatedTop((int) top);
@@ -191,7 +231,7 @@ index 0000000..0000000 100644
                                  topView.setTranslationY(top + (1f - getTopViewEnterProgress()) * topView.getLayoutParams().height);
                              } else {
                                  invalidateChatListViewTopPadding();
-@@ -7752,7 +7753,7 @@ public class ChatActivity extends BaseFragment implements
+@@ -7864,7 +7866,7 @@ public class ChatActivity extends BaseFragment implements
                              @Override
                              public void onAnimationEnd(Animator animation) {
                                  setAnimatedTop(0);
@@ -200,7 +240,7 @@ index 0000000..0000000 100644
                                      topView.setTranslationY(animatedTop + (1f - getTopViewEnterProgress()) * topView.getLayoutParams().height);
                                  }
                                  changeBoundAnimator = null;
-@@ -7919,7 +7920,7 @@ public class ChatActivity extends BaseFragment implements
+@@ -8031,7 +8033,7 @@ public class ChatActivity extends BaseFragment implements
          chatActivityEnterView.setViewParentForEmoji(chatInputInAppContainer);
          checkSendButtonBlockedByTyping(false);
  
@@ -209,7 +249,7 @@ index 0000000..0000000 100644
  
          int chatListIndex = contentView.indexOfChild(chatListView);
          chatListIndex = chatListIndex < 0 ? contentView.getChildCount() : (chatListIndex + 1);
-@@ -7961,7 +7962,7 @@ public class ChatActivity extends BaseFragment implements
+@@ -8072,7 +8074,7 @@ public class ChatActivity extends BaseFragment implements
          bottomViewsVisibilityController.setViewVisible(MESSAGE_ACTION_CONTAINER, false, false);
          actionsButtonsLayout.setPadding(0, dp(56), 0, 0);
          actionsButtonsLayout.setClipToPadding(false);
@@ -218,7 +258,7 @@ index 0000000..0000000 100644
          chatActivityEnterView.setSuggestionButtonVisible(ChatObject.isMonoForum(currentChat), false);
  
          chatActivityEnterTopView = new ChatActivityEnterTopView(context) {
-@@ -8273,7 +8274,7 @@ public class ChatActivity extends BaseFragment implements
+@@ -8384,7 +8386,7 @@ public class ChatActivity extends BaseFragment implements
              chatInputViewsContainer.setInputBubbleOffsets(l, r);
          });
  
@@ -227,7 +267,7 @@ index 0000000..0000000 100644
  
          bottomOverlayStartButton = new TextView(context) {
              CellFlickerDrawable cellFlickerDrawable;
-@@ -8799,10 +8800,13 @@ public class ChatActivity extends BaseFragment implements
+@@ -8915,8 +8917,8 @@ public class ChatActivity extends BaseFragment implements
          }
  
          final BlurredBackgroundDrawable topPanelLayoutBackground = glassBackgroundDrawableFactory.create(topPanelLayout, BlurredBackgroundProviderImpl.topPanelChatActivity(themeDelegate));
@@ -235,15 +275,10 @@ index 0000000..0000000 100644
 -        topPanelLayoutBackground.setPadding(dp(7));
 +        topPanelLayoutBackground.setRadius(dp(NonIslandHelper.chatElements() ? 0 : 18));
 +        topPanelLayoutBackground.setPadding(dp(NonIslandHelper.chatElements() ? 0 : 7));
-         topPanelLayout.setPadding(dp(7) + getSideMenuWidth(), dp(7), dp(7), dp(7));
+         checkUi_topPanelLayoutWidth();
          topPanelLayout.setBlurredBackground(topPanelLayoutBackground);
-+        if (NonIslandHelper.chatElements()) {
-+            topPanelLayout.setPadding(getSideMenuWidth(), 0, 0, 0);
-+        }
  
-         if (chatMode == MODE_SEARCH) {
-             messagesSearchListContainer.setVisibility(View.VISIBLE);
-@@ -9469,6 +9473,7 @@ public class ChatActivity extends BaseFragment implements
+@@ -9585,6 +9587,7 @@ public class ChatActivity extends BaseFragment implements
          reportSpamButton = new TextView(getContext());
          reportSpamButton.setTextColor(getThemedColor(Theme.key_text_RedBold));
          reportSpamButton.setBackground(Theme.createInsetRoundRectDrawable(getThemedColor(Theme.key_text_RedBold) & 0x19ffffff, dp(18), dp(4)));
@@ -251,7 +286,7 @@ index 0000000..0000000 100644
          reportSpamButton.setTag(Theme.key_text_RedBold);
          reportSpamButton.setTextSize(TypedValue.COMPLEX_UNIT_DIP, 14);
          reportSpamButton.setTypeface(AndroidUtilities.bold());
-@@ -9505,6 +9510,7 @@ public class ChatActivity extends BaseFragment implements
+@@ -9621,6 +9624,7 @@ public class ChatActivity extends BaseFragment implements
          addToContactsButton.setPadding(AndroidUtilities.dp(4), 0, AndroidUtilities.dp(4), 0);
          addToContactsButton.setGravity(Gravity.CENTER);
          addToContactsButton.setBackground(Theme.createInsetRoundRectDrawable(getThemedColor(Theme.key_chat_addContact) & 0x19ffffff, dp(18), dp(4)));
@@ -259,7 +294,7 @@ index 0000000..0000000 100644
          topChatPanelView.addView(addToContactsButton, LayoutHelper.createFrame(LayoutHelper.MATCH_PARENT, LayoutHelper.MATCH_PARENT, Gravity.LEFT | Gravity.TOP));
          addToContactsButton.setOnClickListener(v -> {
              if (addToContactsButtonArchive) {
-@@ -9564,6 +9570,7 @@ public class ChatActivity extends BaseFragment implements
+@@ -9680,6 +9684,7 @@ public class ChatActivity extends BaseFragment implements
          restartTopicButton.setGravity(Gravity.CENTER);
          restartTopicButton.setText(LocaleController.getString(R.string.RestartTopic));
          restartTopicButton.setBackground(Theme.createSelectorDrawable(getThemedColor(Theme.key_chat_addContact) & 0x19ffffff, 3));
@@ -267,7 +302,7 @@ index 0000000..0000000 100644
          topPanelLayout.addView(restartTopicButton, LayoutHelper.createLinear(LayoutHelper.MATCH_PARENT, 48));
          topPanelLayout.setPriority(restartTopicButton, 4);
          topPanelLayout.setDebugName(restartTopicButton, "restart topic button");
-@@ -9660,6 +9667,7 @@ public class ChatActivity extends BaseFragment implements
+@@ -9776,6 +9781,7 @@ public class ChatActivity extends BaseFragment implements
              });
          });
          ScaleStateListAnimator.apply(addProfilePictureButton, 0.04f, 1.5f);
@@ -275,40 +310,35 @@ index 0000000..0000000 100644
          topPanelLayout.addView(addProfilePictureButton, LayoutHelper.createLinear(LayoutHelper.MATCH_PARENT, 36, Gravity.LEFT | Gravity.BOTTOM));
          topPanelLayout.setPriority(addProfilePictureButton, 12);
          topPanelLayout.setDebugName(addProfilePictureButton, "add profile picture button");
-@@ -9735,9 +9743,12 @@ public class ChatActivity extends BaseFragment implements
-                     view.invalidate();
-                 }
-             });
--            if (topPanelLayout != null) {
-+            if (topPanelLayout != null && !NonIslandHelper.chatElements()) {
-                 topPanelLayout.setPadding(dp(7) + getSideMenuWidth(), dp(7), dp(7), dp(7));
-             }
-+            if (topPanelLayout != null && NonIslandHelper.chatElements()) {
-+                topPanelLayout.setPadding(getSideMenuWidth(), 0, 0, 0);
-+            }
-             if (floatingDateView != null) {
-                 floatingDateView.setTranslationX(getSideMenuWidth() / 2f);
-             }
-@@ -10285,7 +10296,7 @@ public class ChatActivity extends BaseFragment implements
+@@ -10098,7 +10104,7 @@ public class ChatActivity extends BaseFragment implements
+             index = index2 + 1;
+         }
+ 
+-        contentView.addView(topicsTabs, index, LayoutHelper.createFrameMarginPx(LayoutHelper.MATCH_PARENT, LayoutHelper.MATCH_PARENT, Gravity.TOP | Gravity.LEFT, 0, -dp(5), 0, 0));
++        contentView.addView(topicsTabs, index, LayoutHelper.createFrameMarginPx(LayoutHelper.MATCH_PARENT, LayoutHelper.MATCH_PARENT, Gravity.TOP | Gravity.LEFT, 0, NonIslandHelper.chatElements() ? 0 : -dp(5), 0, 0));
+         topicsTabs.updateSidemenuPosition();
+         if (mentionContainer != null) {
+             mentionContainer.bringToFront();
+@@ -10446,7 +10452,7 @@ public class ChatActivity extends BaseFragment implements
          searchCountText.setTextColor(getThemedColor(Theme.key_chat_searchPanelText));
          searchCountText.setGravity(Gravity.LEFT);
          searchContainer.addView(searchCountText, LayoutHelper.createFrame(LayoutHelper.WRAP_CONTENT, 30, Gravity.CENTER_VERTICAL, 0, -1, 97.33f, 0));
 -        chatInputBubbleContainer.addView(searchContainer, LayoutHelper.createFrame(LayoutHelper.MATCH_PARENT, searchContainerHeight, Gravity.BOTTOM, 7, 0, 7, 0));
 +        chatInputBubbleContainer.addView(searchContainer, LayoutHelper.createFrame(LayoutHelper.MATCH_PARENT, searchContainerHeight, Gravity.BOTTOM, NonIslandHelper.chatElements() ? 0 : 7, 0, NonIslandHelper.chatElements() ? 0 : 7, NonIslandHelper.chatElements() ? -9 : 0));
-         if (hashtagHistoryView != null) {
-             hashtagHistoryView.bringToFront();
+ 
+         searchExpandList = new AnimatedTextView(getContext(), true, false, true);
+         searchExpandList.setAnimationProperties(0, 0, 420, CubicBezierInterpolator.EASE_OUT_QUINT);
+@@ -11834,7 +11840,7 @@ public class ChatActivity extends BaseFragment implements
+         if (!invalidateChatListViewTopPadding || chatListView == null || (fixedKeyboardHeight > 0 && searchExpandProgress == 0)) {
+             return;
          }
-@@ -11677,7 +11688,7 @@ public class ChatActivity extends BaseFragment implements
-         }
-         float topPanelViewH = 0;
-         // topPanelViewH += (-topPanelViewH);
--        float pinnedViewH = topPanelLayout.getAnimatedHeightWithPadding(dp(7));
-+        float pinnedViewH = topPanelLayout.getAnimatedHeightWithPadding(dp(NonIslandHelper.chatElements() ? 0 : 7));
-         if (actionBarSearchTags != null) {
-             pinnedViewH = Math.max(pinnedViewH, actionBarSearchTags.getCurrentHeight());
-         }
-@@ -11780,7 +11791,7 @@ public class ChatActivity extends BaseFragment implements
-         if (isInsideContainer) {
+-        float pinnedViewH = getTopPanelHeightWithPadding(dp(7))
++        float pinnedViewH = getTopPanelHeightWithPadding(dp(NonIslandHelper.chatElements() ? 0 : 7))
+             + (actionBarSearchTags != null ? dp((28 + 7) * actionBarSearchTags.shownT) : 0)
+             + (dp(36 + 7) * getHashtagTabsShownT());
+ 
+@@ -11937,7 +11943,7 @@ public class ChatActivity extends BaseFragment implements
+         if (isInsideContainer && parentChatActivity == null) {
              paddingBottom = AndroidUtilities.navigationBarHeight;
          } else {
 -            paddingBottom = blurredViewBottomOffset + dp(9 + 7)
@@ -316,7 +346,7 @@ index 0000000..0000000 100644
                  + inputIslandHeightCurrent
                  + getTopicTabsSideSize(TopicsTabsView.Position.BOTTOM)
                  + windowInsetsStateHolder.getAnimatedMaxBottomInset();
-@@ -11815,7 +11826,7 @@ public class ChatActivity extends BaseFragment implements
+@@ -11972,7 +11978,7 @@ public class ChatActivity extends BaseFragment implements
  
          if (undoView != null) {
              undoView.setAdditionalTranslationY(
@@ -324,8 +354,17 @@ index 0000000..0000000 100644
 +                windowInsetsStateHolder.getAnimatedMaxBottomInset() + dp(9 + 7 - (NonIslandHelper.chatElements() ? 16 : 0))
                      + chatInputViewsContainer.getInputBubbleHeight() + getTopicTabsSideSize(TopicsTabsView.Position.BOTTOM));
          }
-         if (messagesSearchListContainer != null) {
-@@ -16835,6 +16846,10 @@ public class ChatActivity extends BaseFragment implements
+ 
+@@ -12001,7 +12007,7 @@ public class ChatActivity extends BaseFragment implements
+         }
+ 
+         if (topPanelLayout != null) {
+-            topPanelLayout.setTranslationY(ty - dp(5) - getTopicTabsSideSize(TopicsTabsView.Position.TOP) * getHashtagTabsShownT());
++            topPanelLayout.setTranslationY(ty - dp(NonIslandHelper.chatElements() ? 0 : 5) - getTopicTabsSideSize(TopicsTabsView.Position.TOP) * getHashtagTabsShownT());
+         }
+     }
+ 
+@@ -17004,6 +17010,10 @@ public class ChatActivity extends BaseFragment implements
      private boolean shouldHaveLightNavigationBarIcons;
  
      public boolean isShouldHaveLightNavigationBarIcons() {
@@ -336,16 +375,17 @@ index 0000000..0000000 100644
          return shouldHaveLightNavigationBarIcons && (!windowInsetsStateHolder.inAppViewIsVisible() || themeDelegate != null && themeDelegate.isDark);
      }
  
-@@ -17436,7 +17451,7 @@ public class ChatActivity extends BaseFragment implements
+@@ -17601,6 +17611,9 @@ public class ChatActivity extends BaseFragment implements
+                     canvas.restore();
                  }
              }
-             if (child == actionBar && parentLayout != null) {
--                parentLayout.drawHeaderShadow(canvas, actionBar.getVisibility() == VISIBLE ? (int) actionBar.getTranslationY() + actionBar.getMeasuredHeight() + (actionBarSearchTags != null ? actionBarSearchTags.getCurrentHeight() : 0) + (hashtagSearchTabs != null ? hashtagSearchTabs.getCurrentHeight() : 0) : 0);
++            if (child == actionBar && parentLayout != null) {
 +                NonIslandHelper.drawChatHeaderShadow(parentLayout, canvas, topPanelLayout, mentionContainer, getTopicTabsSideSize(TopicsTabsView.Position.TOP), actionBar.getVisibility() == VISIBLE ? (int) actionBar.getTranslationY() + actionBar.getMeasuredHeight() + (actionBarSearchTags != null ? actionBarSearchTags.getCurrentHeight() : 0) + (hashtagSearchTabs != null ? hashtagSearchTabs.getCurrentHeight() : 0) : 0);
-             }
++            }
              return result;
          }
-@@ -17451,7 +17466,7 @@ public class ChatActivity extends BaseFragment implements
+ 
+@@ -17619,7 +17632,7 @@ public class ChatActivity extends BaseFragment implements
              float canvasOffsetX = chatListView.getLeft() + cell.getX();
              float canvasOffsetY = chatListView.getY() + cell.getY() + cell.getPaddingTop();
              float alpha = cell.shouldDrawAlphaLayer() ? cell.getAlpha() : 1f;
@@ -354,7 +394,7 @@ index 0000000..0000000 100644
              canvas.translate(canvasOffsetX, canvasOffsetY);
              cell.setInvalidatesParent(true);
              if (type == 0) {
-@@ -17670,7 +17685,7 @@ public class ChatActivity extends BaseFragment implements
+@@ -17842,7 +17855,7 @@ public class ChatActivity extends BaseFragment implements
                              float viewClipBottom2 = getMeasuredHeight()
                                      - windowInsetsStateHolder.getCurrentMaxBottomInset()
                                      - inputIslandHeightCurrent
@@ -363,7 +403,7 @@ index 0000000..0000000 100644
                                      - (mentionContainer != null ? mentionContainer.clipBottom() : 0);
  
                              canvas.clipRect(0, listTop + (mentionContainer != null ? mentionContainer.clipTop() : 0), getMeasuredWidth(), viewClipBottom2);
-@@ -17691,7 +17706,7 @@ public class ChatActivity extends BaseFragment implements
+@@ -17863,7 +17876,7 @@ public class ChatActivity extends BaseFragment implements
                              - windowInsetsStateHolder.getCurrentMaxBottomInset()
                              - inputIslandHeightCurrent
                              - getTopicTabsSideSize(TopicsTabsView.Position.BOTTOM)
@@ -372,16 +412,7 @@ index 0000000..0000000 100644
  
                          float clipTop = 0, clipBottom = 0;
                          if (mentionContainer != null) {
-@@ -18194,7 +18209,7 @@ public class ChatActivity extends BaseFragment implements
-                     int contentWidthSpec = View.MeasureSpec.makeMeasureSpec(widthSize, View.MeasureSpec.EXACTLY);
-                     int contentHeightSpec = View.MeasureSpec.makeMeasureSpec(allHeight
-                             - (isInsideContainer ? 0 : actionBarHeight)
--                            - AndroidUtilities.dp(44 + 9 + 1) // input field with margins
-+                            - AndroidUtilities.dp(NonIslandHelper.chatElements() ? 40 : (44 + 9 + 1)) // input field with margins
-                             - windowInsetsStateHolder.getCurrentNavigationBarInset(),
-                         View.MeasureSpec.EXACTLY);
-                     child.measure(contentWidthSpec, contentHeightSpec);
-@@ -18363,12 +18378,12 @@ public class ChatActivity extends BaseFragment implements
+@@ -18516,12 +18529,12 @@ public class ChatActivity extends BaseFragment implements
                          childTop = chatActivityEnterView.getBottom();
                      }
                  } else if (chatActivityEnterView != null && chatActivityEnterView.isRecordCircleOrControlsView(child)) {
@@ -398,7 +429,7 @@ index 0000000..0000000 100644
                  } else if (child == gifHintTextView || child == voiceHintTextView || child == mediaBanTooltip || child == emojiHintTextView) {
                      childTop -= inputFieldHeight;
                  } else if (child == chatListView || child == chatListThanosEffect || child == floatingDateView || child == floatingTopicSeparator || child == infoTopView) {
-@@ -29247,7 +29262,7 @@ public class ChatActivity extends BaseFragment implements
+@@ -29652,7 +29665,7 @@ public class ChatActivity extends BaseFragment implements
  
                  return Math.round(windowInsetsStateHolder.getAnimatedMaxBottomInset()
                      + getTopicTabsSideSize(TopicsTabsView.Position.BOTTOM)
@@ -407,16 +438,16 @@ index 0000000..0000000 100644
              }
  
              @Override
-@@ -45427,7 +45442,7 @@ public class ChatActivity extends BaseFragment implements
+@@ -45954,7 +45967,7 @@ public class ChatActivity extends BaseFragment implements
          }
  
          final float margin = windowInsetsStateHolder.getAnimatedMaxBottomInset() +
--                (chatInputViewsContainer.getInputBubbleHeight() + dp(9));
-+                (chatInputViewsContainer.getInputBubbleHeight() + dp(9 - (NonIslandHelper.chatElements() ? 9 : 0)));
+-                (chatInputViewsContainer.getInputBubbleHeight() + dp(9) - dp(5));
++                (chatInputViewsContainer.getInputBubbleHeight() + dp(9 - (NonIslandHelper.chatElements() ? 9 : -dp(5))));
  
          topicsTabs.setSideMenuBackgroundMarginBottom(margin);
      }
-@@ -45435,13 +45450,13 @@ public class ChatActivity extends BaseFragment implements
+@@ -45962,13 +45975,13 @@ public class ChatActivity extends BaseFragment implements
      private void checkUi_botMenuPosition() {
          final float margin = windowInsetsStateHolder.getAnimatedMaxBottomInset()
              + getTopicTabsSideSize(TopicsTabsView.Position.BOTTOM)
@@ -432,7 +463,7 @@ index 0000000..0000000 100644
          }
      }
  
-@@ -45495,10 +45510,15 @@ public class ChatActivity extends BaseFragment implements
+@@ -46022,10 +46035,15 @@ public class ChatActivity extends BaseFragment implements
              return;
          }
  
@@ -448,18 +479,29 @@ index 0000000..0000000 100644
          updatePagedownButtonsPosition();
          updateBotforumTabsBottomMargin();
          checkUi_botMenuPosition();
-@@ -45539,6 +45559,10 @@ public class ChatActivity extends BaseFragment implements
-         if (topPanelLayoutFade == null) {
-             return;
+@@ -46066,6 +46084,10 @@ public class ChatActivity extends BaseFragment implements
+         if (parentChatActivity != null) {
+             parentChatActivity.checkUi_topFade();
          }
 +        if (NonIslandHelper.chatElements()) {
-+            topPanelLayoutFade.setVisibility(View.GONE);
++            chatActivityFadeView.setFadeZoneTop(0);
 +            return;
 +        }
  
-         float fadeHeight = 0;
-         float fadeAlphaInv = 1;
-@@ -46073,7 +46097,7 @@ public class ChatActivity extends BaseFragment implements
+         float fadeHeight = actionBar.getMeasuredHeight();
+         fadeHeight += dp(7 - 6);
+@@ -46127,6 +46149,10 @@ public class ChatActivity extends BaseFragment implements
+                 * (1f - animatorSearchResultAsListVisibility.getFloatValue())
+                 * (1f - getHashtagTabsShownT());
+ 
++            if (NonIslandHelper.chatElements()) {
++                topPanelLayout.setPadding((int) sideMenu, 0, 0, 0);
++                return;
++            }
+             topPanelLayout.setPadding(dp(7) + (int) sideMenu, dp(7), dp(7), dp(7));
+         }
+     }
+@@ -46720,7 +46746,7 @@ public class ChatActivity extends BaseFragment implements
      }
  
      private float getTopicTabsSideSize(TopicsTabsView.Position position) {
@@ -472,7 +514,7 @@ diff --git a/TMessagesProj/src/main/java/org/telegram/ui/Components/ChatActivity
 index 0000000..0000000 100644
 --- a/TMessagesProj/src/main/java/org/telegram/ui/Components/ChatActivityEnterView.java
 +++ b/TMessagesProj/src/main/java/org/telegram/ui/Components/ChatActivityEnterView.java
-@@ -3122,7 +3122,9 @@ public class ChatActivityEnterView extends FrameLayout implements
+@@ -3123,7 +3123,9 @@ public class ChatActivityEnterView extends FrameLayout implements
  
                      canvas.save();
                      canvas.scale(s, s, backgroundRect.centerX(), backgroundRect.centerY());
@@ -483,7 +525,7 @@ index 0000000..0000000 100644
                      canvas.restore();
                  }
                  super.dispatchDraw(canvas);
-@@ -3307,7 +3309,7 @@ public class ChatActivityEnterView extends FrameLayout implements
+@@ -3308,7 +3310,7 @@ public class ChatActivityEnterView extends FrameLayout implements
          cameraOutline = getResources().getDrawable(R.drawable.input_video).mutate();
          cameraOutline.setColorFilter(new PorterDuffColorFilter(getThemedColor(Theme.key_glass_defaultIcon), PorterDuff.Mode.MULTIPLY));
  
@@ -492,7 +534,7 @@ index 0000000..0000000 100644
              private final Rect tmpRectF = new Rect();
              @Override
              public void draw(@NonNull Canvas canvas) {
-@@ -3325,7 +3327,7 @@ public class ChatActivityEnterView extends FrameLayout implements
+@@ -3326,7 +3328,7 @@ public class ChatActivityEnterView extends FrameLayout implements
          audioVideoSendButton.setImportantForAccessibility(View.IMPORTANT_FOR_ACCESSIBILITY_NO);
  //        audioVideoSendButton.setFocusable(true);
  //        audioVideoSendButton.setAccessibilityDelegate(mediaMessageButtonsDelegate);
@@ -501,7 +543,7 @@ index 0000000..0000000 100644
          audioVideoSendButton.setPadding(padding, padding, padding, padding);
          audioVideoButtonContainer.addView(audioVideoSendButton, LayoutHelper.createFrame(DEFAULT_HEIGHT, DEFAULT_HEIGHT));
  
-@@ -4569,7 +4571,8 @@ public class ChatActivityEnterView extends FrameLayout implements
+@@ -4570,7 +4572,8 @@ public class ChatActivityEnterView extends FrameLayout implements
                  canvas.clipRect(0, separatorY, getMeasuredWidth(), getMeasuredHeight());
              }
              if (child == topView) {
@@ -511,7 +553,7 @@ index 0000000..0000000 100644
              }
          }
          boolean result = super.drawChild(canvas, child, drawingTime);
-@@ -6261,7 +6264,7 @@ public class ChatActivityEnterView extends FrameLayout implements
+@@ -6272,7 +6275,7 @@ public class ChatActivityEnterView extends FrameLayout implements
  
          LayoutParams layoutParams = (LayoutParams) textFieldContainer.getLayoutParams();
          layoutParams.topMargin = (show ? topView.getLayoutParams().height : 0);
@@ -520,7 +562,7 @@ index 0000000..0000000 100644
          textFieldContainer.setLayoutParams(layoutParams);
  
          resizeForTopViewLastShow = show;
-@@ -6359,7 +6362,7 @@ public class ChatActivityEnterView extends FrameLayout implements
+@@ -6370,7 +6373,7 @@ public class ChatActivityEnterView extends FrameLayout implements
  
          audioVideoButtonContainer.setAlpha(audioVideoButtonContainerForbidden ? 0.5f : 1.0f);
          audioVideoButtonContainer.invalidate();
@@ -529,7 +571,7 @@ index 0000000..0000000 100644
              getThemedColor(Theme.key_glass_defaultIcon) : Color.WHITE, PorterDuff.Mode.SRC_IN));
          audioVideoSendButton.invalidate();
          updateFieldHint(false);
-@@ -8951,8 +8954,8 @@ public class ChatActivityEnterView extends FrameLayout implements
+@@ -8962,8 +8965,8 @@ public class ChatActivityEnterView extends FrameLayout implements
  
                      FrameLayout.LayoutParams newLayoutParams = new FrameLayout.LayoutParams(parent.getMeasuredWidth() - (editingMessageObject == null ? Math.max(0, sendButton.width() - dp(DEFAULT_HEIGHT)) : 0), dp(DEFAULT_HEIGHT));
                      newLayoutParams.gravity = Gravity.BOTTOM;
@@ -540,7 +582,7 @@ index 0000000..0000000 100644
                      sizeNotifierLayout.addView(recordedAudioPanel, newLayoutParams);
                      videoTimelineView.setVisibility(GONE);
                  } else {
-@@ -14864,9 +14867,11 @@ public class ChatActivityEnterView extends FrameLayout implements
+@@ -14880,9 +14883,11 @@ public class ChatActivityEnterView extends FrameLayout implements
          final float visibility = animatorTopViewVisibility.getFloatValue();
  
          if (topView != null) {
@@ -660,7 +702,7 @@ diff --git a/TMessagesProj/src/main/java/org/telegram/ui/Components/ChatAttachAl
 index 0000000..0000000 100644
 --- a/TMessagesProj/src/main/java/org/telegram/ui/Components/ChatAttachAlert.java
 +++ b/TMessagesProj/src/main/java/org/telegram/ui/Components/ChatAttachAlert.java
-@@ -173,6 +173,7 @@ import java.util.List;
+@@ -177,6 +177,7 @@ import java.util.List;
  import java.util.Locale;
  import java.util.Objects;
  
@@ -668,7 +710,17 @@ index 0000000..0000000 100644
  import me.vkryl.android.animator.BoolAnimator;
  import me.vkryl.android.animator.FactorAnimator;
  import me.vkryl.android.animator.ListAnimator;
-@@ -2547,6 +2548,16 @@ public class ChatAttachAlert extends BottomSheet implements NotificationCenter.N
+@@ -2076,6 +2077,9 @@ public class ChatAttachAlert extends BottomSheet implements NotificationCenter.N
+ 
+             @Override
+             public void drawBlurRect(Canvas canvas, float y, Rect rectTmp, Paint blurScrimPaint, boolean top) {
++                if (NonIslandHelper.tabBars()) {
++                    canvas.drawRect(rectTmp, blurScrimPaint);
++                }
+             }
+ 
+             @Override
+@@ -2568,6 +2572,16 @@ public class ChatAttachAlert extends BottomSheet implements NotificationCenter.N
                  super.setTranslationY(translationY);
                  currentAttachLayout.onButtonsTranslationYUpdated();
              }
@@ -685,7 +737,7 @@ index 0000000..0000000 100644
          };
          buttonsRecyclerView = new RecyclerListView(context) {
              private final BoolAnimator hasFadeLeft = new BoolAnimator(this, CubicBezierInterpolator.EASE_OUT_QUINT, 320L);
-@@ -2575,6 +2586,9 @@ public class ChatAttachAlert extends BottomSheet implements NotificationCenter.N
+@@ -2596,6 +2610,9 @@ public class ChatAttachAlert extends BottomSheet implements NotificationCenter.N
  
              @Override
              public boolean drawChild(Canvas canvas, View child, long drawingTime) {
@@ -695,7 +747,7 @@ index 0000000..0000000 100644
                  final float left = child.getX();
                  final float right = left + child.getWidth();
                  final boolean isFadedLeft = left < dp(10);
-@@ -2691,6 +2705,8 @@ public class ChatAttachAlert extends BottomSheet implements NotificationCenter.N
+@@ -2714,6 +2731,8 @@ public class ChatAttachAlert extends BottomSheet implements NotificationCenter.N
          buttonsRecyclerView.setImportantForAccessibility(View.IMPORTANT_FOR_ACCESSIBILITY_YES);
          buttonsRecyclerViewWrapper.addView(buttonsRecyclerView, LayoutHelper.createFrameMatchParent());
          containerView.addView(buttonsRecyclerViewWrapper, LayoutHelper.createFrame(LayoutHelper.MATCH_PARENT, 70, Gravity.BOTTOM | Gravity.CENTER_HORIZONTAL));
@@ -1070,19 +1122,19 @@ index 0000000..0000000 100644
 +                scrollSlidingTextTabStrip.setLayoutParams(LayoutHelper.createFrame(LayoutHelper.MATCH_PARENT, 36, Gravity.LEFT | Gravity.TOP, 0, 0, 0, 0));
 +                scrollSlidingTextTabStrip.inu_makeNonIsland(desu.inugram.ui.BlurBehindHelper.create(scrollSlidingTextTabStrip, sizeNotifierFrameLayout, Theme.key_windowBackgroundWhite));
 +            }
-             searchTagsList = new SearchTagsList(getContext(), profileActivity, null, profileActivity.getCurrentAccount(), includeSavedDialogs() ? 0 : dialog_id, resourcesProvider, false) {
+             searchTagsList = new SearchTagsList(getContext(), profileActivity, profileActivity.getCurrentAccount(), includeSavedDialogs() ? 0 : dialog_id, resourcesProvider) {
                  @Override
                  protected boolean setFilter(ReactionsLayoutInBubble.VisibleReaction reaction) {
-@@ -3806,7 +3815,7 @@ public class SharedMediaLayout extends FrameLayout implements NotificationCenter
+@@ -3805,7 +3814,7 @@ public class SharedMediaLayout extends FrameLayout implements NotificationCenter
+             };
              searchTagsList.setShown(0f);
-             searchTagsList.attach();
-             addView(searchTagsList, LayoutHelper.createFrame(LayoutHelper.MATCH_PARENT, 40, Gravity.LEFT | Gravity.TOP, 0, 4, 0, 0));
+             addView(searchTagsList, LayoutHelper.createFrame(LayoutHelper.MATCH_PARENT, 38, Gravity.LEFT | Gravity.TOP, 0, 4, 0, 0));
 -            addView(actionModeLayout, LayoutHelper.createFrame(LayoutHelper.MATCH_PARENT, 48, Gravity.LEFT | Gravity.TOP));
 +            addView(actionModeLayout, LayoutHelper.createFrame(LayoutHelper.MATCH_PARENT, NonIslandHelper.tabBars() ? 36 : 48, Gravity.LEFT | Gravity.TOP));
          }
  
          updateTabs(false);
-@@ -4710,7 +4719,7 @@ public class SharedMediaLayout extends FrameLayout implements NotificationCenter
+@@ -4709,7 +4718,7 @@ public class SharedMediaLayout extends FrameLayout implements NotificationCenter
              floatingDateAnimation.setDuration(180);
              floatingDateAnimation.playTogether(
                      ObjectAnimator.ofFloat(floatingDateView, View.ALPHA, 0.0f),
@@ -1091,7 +1143,7 @@ index 0000000..0000000 100644
              floatingDateAnimation.setInterpolator(CubicBezierInterpolator.EASE_OUT);
              floatingDateAnimation.addListener(new AnimatorListenerAdapter() {
                  @Override
-@@ -5679,10 +5688,10 @@ public class SharedMediaLayout extends FrameLayout implements NotificationCenter
+@@ -5675,10 +5684,10 @@ public class SharedMediaLayout extends FrameLayout implements NotificationCenter
          if (topPanelLayout != null) {
              checkUi_topPanelLayoutY();
          } else if (fragmentContextView != null) {
@@ -1104,7 +1156,7 @@ index 0000000..0000000 100644
      }
  
      private void checkUi_topPanelLayoutY() {
-@@ -5792,7 +5801,7 @@ public class SharedMediaLayout extends FrameLayout implements NotificationCenter
+@@ -5788,7 +5797,7 @@ public class SharedMediaLayout extends FrameLayout implements NotificationCenter
                      fwdRestrictedHint.hide();
                  }
              }
@@ -1113,7 +1165,7 @@ index 0000000..0000000 100644
                  startedTrackingPointerId = ev.getPointerId(0);
                  maybeStartTracking = true;
                  startedTrackingX = (int) ev.getX();
-@@ -7374,7 +7383,7 @@ public class SharedMediaLayout extends FrameLayout implements NotificationCenter
+@@ -7370,7 +7379,7 @@ public class SharedMediaLayout extends FrameLayout implements NotificationCenter
                  }
                  if (savedMessagesContainer.getParent() != mediaPages[a]) {
                      AndroidUtilities.removeFromParent(savedMessagesContainer);
@@ -1122,7 +1174,7 @@ index 0000000..0000000 100644
                      savedLp.topMargin += topLayoutPadding;
                      mediaPages[a].addView(savedMessagesContainer, savedLp);
                  }
-@@ -7399,7 +7408,7 @@ public class SharedMediaLayout extends FrameLayout implements NotificationCenter
+@@ -7395,7 +7404,7 @@ public class SharedMediaLayout extends FrameLayout implements NotificationCenter
                  }
              }
              final boolean photos = mediaPages[a].selectedType == TAB_PHOTOVIDEO || isAnyStoryPageType(mediaPages[a].selectedType);
@@ -1131,7 +1183,7 @@ index 0000000..0000000 100644
              progressLp.topMargin += topLayoutPadding;
              mediaPages[a].progressView.setLayoutParams(progressLp);
              if (sections) {
-@@ -7416,7 +7425,7 @@ public class SharedMediaLayout extends FrameLayout implements NotificationCenter
+@@ -7412,7 +7421,7 @@ public class SharedMediaLayout extends FrameLayout implements NotificationCenter
                          Theme.isCurrentThemeDark()
                      )
                  );
@@ -1140,7 +1192,7 @@ index 0000000..0000000 100644
                      @Override
                      public void getOutline(View view, Outline outline) {
                          outline.setRoundRect(0, dp(50), view.getWidth(), view.getHeight() + dp(24), dp(24));
-@@ -11577,6 +11586,7 @@ public class SharedMediaLayout extends FrameLayout implements NotificationCenter
+@@ -11573,6 +11582,7 @@ public class SharedMediaLayout extends FrameLayout implements NotificationCenter
  
          @Override
          protected void dispatchDraw(@NonNull Canvas canvas) {
@@ -1148,7 +1200,7 @@ index 0000000..0000000 100644
              if (backgroundColor != Color.TRANSPARENT) {
                  if (backgroundPaint == null) {
                      backgroundPaint = new Paint();
-@@ -11769,7 +11779,7 @@ public class SharedMediaLayout extends FrameLayout implements NotificationCenter
+@@ -11765,7 +11775,7 @@ public class SharedMediaLayout extends FrameLayout implements NotificationCenter
                  final RecyclerListView listView = mediaPages[i].listView;
                  final View firstChild = listView.getChildCount() == 0 ? null : listView.getChildAt(0);
                  final int firstPosition = firstChild == null ? RecyclerView.NO_POSITION : listView.getChildAdapterPosition(firstChild);
@@ -1157,7 +1209,7 @@ index 0000000..0000000 100644
                  tabY += ty * Utilities.clamp01(1.0f - mediaPages[i].getTranslationX() / mediaPages[i].getMeasuredWidth());
              }
              final float tabAlpha = Utilities.clamp01(1.0f - -tabY / dpf2(48));
-@@ -11942,11 +11952,13 @@ public class SharedMediaLayout extends FrameLayout implements NotificationCenter
+@@ -11938,11 +11948,13 @@ public class SharedMediaLayout extends FrameLayout implements NotificationCenter
      }
  
      private int getPagePaddingTop(int type) {
@@ -1221,7 +1273,7 @@ index 0000000..0000000 100644
                  if (needClip) {
                      canvas.saveLayerAlpha(0, 0, getWidth(), getHeight(), 0xFF, Canvas.ALL_SAVE_FLAG);
                  }
-@@ -440,14 +442,14 @@ public class TopicsTabsView extends FrameLayout implements NotificationCenter.No
+@@ -440,7 +442,7 @@ public class TopicsTabsView extends FrameLayout implements NotificationCenter.No
              sideMenuBackgroundDrawable.setBounds(
                      (int) (sideTabsContainer.getTranslationX()),
                      (int) sideMenuBackgroundMarginTop,
@@ -1230,7 +1282,8 @@ index 0000000..0000000 100644
                      (int) (getMeasuredHeight() - sideMenuBackgroundMarginBottom));
              sideMenuBackgroundDrawable.draw(canvas);
          }
-         if (topTabsContainer.getVisibility() == VISIBLE) {
+@@ -448,7 +450,7 @@ public class TopicsTabsView extends FrameLayout implements NotificationCenter.No
+             topMenuBackgroundDrawable.setAlpha((int) (255 * topTabsContainer.getAlpha()));
              topMenuBackgroundDrawable.setBounds(
                      0, (int) topTabsContainer.getTranslationY(),
 -                    getMeasuredWidth(), (int) (topTabsContainer.getTranslationY() + dp(TOP_TABS_HEIGHT + 7 + 7)));
@@ -1238,7 +1291,7 @@ index 0000000..0000000 100644
              topMenuBackgroundDrawable.draw(canvas);
          }
  
-@@ -479,14 +481,14 @@ public class TopicsTabsView extends FrameLayout implements NotificationCenter.No
+@@ -480,14 +482,14 @@ public class TopicsTabsView extends FrameLayout implements NotificationCenter.No
  
      public void setSideMenuBackgroundDrawable(BlurredBackgroundDrawable sideMenuBackgroundDrawable) {
          this.sideMenuBackgroundDrawable = sideMenuBackgroundDrawable;
@@ -1257,15 +1310,15 @@ index 0000000..0000000 100644
      }
  
  
-@@ -577,9 +579,9 @@ public class TopicsTabsView extends FrameLayout implements NotificationCenter.No
-         topTabsContainer.setAlpha(lerp(1.0f, 0.85f, sidemenuT));
+@@ -578,9 +580,9 @@ public class TopicsTabsView extends FrameLayout implements NotificationCenter.No
+         topTabsContainer.setAlpha(lerp(1.0f, 0f, sidemenuT));
          topTabsContainer.setVisibility(((1f - sidemenuT) * animatorTopicsVisibility.getFloatValue()) > 0 ? View.VISIBLE : View.GONE);
          if (topicBottom) {
 -            topTabsContainer.setTranslationY(getMeasuredHeight() - dp(TOP_TABS_HEIGHT + 7 + 7) - sideMenuBackgroundMarginBottom + lerp(dp(TOP_TABS_HEIGHT + 7), 0, getTabsVisibility(Position.BOTTOM)));
 +            topTabsContainer.setTranslationY(getMeasuredHeight() - dp(TOP_TABS_HEIGHT + (NonIslandHelper.chatElements() ? 0 : (7 + 7))) - sideMenuBackgroundMarginBottom + lerp(dp(TOP_TABS_HEIGHT + (NonIslandHelper.chatElements() ? 0 : 7)), 0, getTabsVisibility(Position.BOTTOM)));
          } else {
--            topTabsContainer.setTranslationY(lerp(-dp(TOP_TABS_HEIGHT + 7), 0, getTabsVisibility(Position.TOP)));
-+            topTabsContainer.setTranslationY(lerp(-dp(TOP_TABS_HEIGHT + (NonIslandHelper.chatElements() ? 0 : 7)), 0, getTabsVisibility(Position.TOP)));
+-            topTabsContainer.setTranslationY(sideMenuBackgroundMarginTop + lerp(-dp(TOP_TABS_HEIGHT + 7), 0, getTabsVisibility(Position.TOP)));
++            topTabsContainer.setTranslationY(sideMenuBackgroundMarginTop + lerp(-dp(TOP_TABS_HEIGHT + (NonIslandHelper.chatElements() ? 0 : 7)), 0, getTabsVisibility(Position.TOP)));
          }
      }
  
@@ -1288,7 +1341,7 @@ diff --git a/TMessagesProj/src/main/java/org/telegram/ui/Components/blur3/drawab
 index 0000000..0000000 100644
 --- a/TMessagesProj/src/main/java/org/telegram/ui/Components/blur3/drawable/BlurredBackgroundDrawable.java
 +++ b/TMessagesProj/src/main/java/org/telegram/ui/Components/blur3/drawable/BlurredBackgroundDrawable.java
-@@ -393,6 +393,7 @@ public abstract class BlurredBackgroundDrawable extends Drawable {
+@@ -395,6 +395,7 @@ public abstract class BlurredBackgroundDrawable extends Drawable {
          float[] radii, float strokeWidth, boolean isTop,
          Paint paint
      ) {
@@ -1296,7 +1349,7 @@ index 0000000..0000000 100644
  
          final boolean radiiAreSame = isTop ?
              radii[0] == radii[1] && radii[1] == radii[2] && radii[2] == radii[3]:
-@@ -440,6 +441,7 @@ public abstract class BlurredBackgroundDrawable extends Drawable {
+@@ -496,6 +497,7 @@ public abstract class BlurredBackgroundDrawable extends Drawable {
  
      public static void drawStroke(Canvas canvas, float left, float top, float right, float bottom,
                                       float radii, float strokeWidth, boolean isTop, Paint paint) {
@@ -1304,7 +1357,7 @@ index 0000000..0000000 100644
          final float strokeHalf = strokeWidth / 2f;
          canvas.save();
          if (isTop) {
-@@ -593,7 +595,7 @@ public abstract class BlurredBackgroundDrawable extends Drawable {
+@@ -649,7 +651,7 @@ public abstract class BlurredBackgroundDrawable extends Drawable {
              return;
          }
  
@@ -1313,7 +1366,7 @@ index 0000000..0000000 100644
          ninePatchDrawable.setBounds(
              boundProps.boundsWithPadding.left - ninePatchDrawablePadding.left,
              boundProps.boundsWithPadding.top - ninePatchDrawablePadding.top,
-@@ -648,6 +650,7 @@ public abstract class BlurredBackgroundDrawable extends Drawable {
+@@ -704,6 +706,7 @@ public abstract class BlurredBackgroundDrawable extends Drawable {
      }
  
      private void drawStrokeInternalIfNeeded(Canvas canvas) {
@@ -1364,7 +1417,7 @@ index 0000000..0000000 100644
 +        return b.build();
      }
  
-     public static BlurredBackgroundProvider bulletin(Theme.ResourcesProvider resourcesProvider) {
+     public static BlurredBackgroundProvider attachMenuActionBar(Theme.ResourcesProvider resourcesProvider) {
 diff --git a/TMessagesProj/src/main/java/org/telegram/ui/Components/chat/ChatInputViewsContainer.java b/TMessagesProj/src/main/java/org/telegram/ui/Components/chat/ChatInputViewsContainer.java
 index 0000000..0000000 100644
 --- a/TMessagesProj/src/main/java/org/telegram/ui/Components/chat/ChatInputViewsContainer.java
@@ -1541,7 +1594,7 @@ diff --git a/TMessagesProj/src/main/java/org/telegram/ui/Components/glass/GlassT
 index 0000000..0000000 100644
 --- a/TMessagesProj/src/main/java/org/telegram/ui/Components/glass/GlassTabView.java
 +++ b/TMessagesProj/src/main/java/org/telegram/ui/Components/glass/GlassTabView.java
-@@ -70,6 +70,7 @@ public class GlassTabView extends FrameLayout implements MainTabsLayout.Tab, Fac
+@@ -71,6 +71,7 @@ public class GlassTabView extends FrameLayout implements MainTabsLayout.Tab, Fac
      private int colorSelectedText;
      private int colorDefault;
      private boolean usePremiumCounter;
@@ -1549,7 +1602,7 @@ index 0000000..0000000 100644
  
      private TabAnimation tabAnimation;
      private TLRPC.TL_attachMenuBot tabAnimationBot;
-@@ -155,7 +156,7 @@ public class GlassTabView extends FrameLayout implements MainTabsLayout.Tab, Fac
+@@ -156,7 +157,7 @@ public class GlassTabView extends FrameLayout implements MainTabsLayout.Tab, Fac
  
              paintCounterBackground.setColor(Theme.multAlpha(colorSelected, 0.09f * alpha));
              tmpRectF.set(0, 0, viewWidth, getHeight());
@@ -1558,7 +1611,7 @@ index 0000000..0000000 100644
              final float s = lerp(0.6f, 1, selectedFactor) * MathUtils.clamp(attachScale, 0, 1);
              canvas.save();
              canvas.scale(s, s, tmpRectF.centerX(), tmpRectF.centerY());
-@@ -443,6 +444,7 @@ public class GlassTabView extends FrameLayout implements MainTabsLayout.Tab, Fac
+@@ -450,6 +451,7 @@ public class GlassTabView extends FrameLayout implements MainTabsLayout.Tab, Fac
          tab.colorSelected = Theme.getColor(Theme.key_glass_tabSelected, resourcesProvider);
          tab.colorSelectedText = Theme.getColor(Theme.key_glass_tabSelectedText, resourcesProvider);
          tab.updateColors();
@@ -1566,7 +1619,7 @@ index 0000000..0000000 100644
          return tab;
      }
  
-@@ -460,6 +462,7 @@ public class GlassTabView extends FrameLayout implements MainTabsLayout.Tab, Fac
+@@ -467,6 +469,7 @@ public class GlassTabView extends FrameLayout implements MainTabsLayout.Tab, Fac
          tab.colorSelected = Theme.getColor(Theme.key_glass_tabSelected, resourcesProvider);
          tab.colorSelectedText = Theme.getColor(Theme.key_glass_tabSelectedText, resourcesProvider);
          tab.updateColors();
@@ -1970,7 +2023,7 @@ index 0000000..0000000 100644
                      } else {
                          scrollAdditionalOffset = 0;
                      }
-@@ -12715,7 +12745,7 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
+@@ -12727,7 +12757,7 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
              @Override
              public void setTranslationY(float translationY) {
                  super.setTranslationY(translationY);
@@ -1979,7 +2032,7 @@ index 0000000..0000000 100644
                      searchTabsAndFiltersLayout.setTranslationY(translationY);
                  }
              }
-@@ -12732,7 +12762,7 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
+@@ -12744,7 +12774,7 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
              @Override
              protected void dispatchDraw(@NonNull Canvas canvas) {
                  super.dispatchDraw(canvas);
@@ -1988,7 +2041,7 @@ index 0000000..0000000 100644
                      final int t = actionBar.getMeasuredHeight()
                          + dp(ADDITIONAL_LIST_HEIGHT_DP)
                          - dp(2)
-@@ -13538,6 +13568,10 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
+@@ -13550,6 +13580,10 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
  
          dialogsActivityStatusLayout.setPadding(0, statusBarHeight, 0, 0);
  
@@ -1999,7 +2052,7 @@ index 0000000..0000000 100644
          updateFloatingButtonOffset();
  
          ViewGroup.MarginLayoutParams lp;
-@@ -13672,7 +13706,7 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
+@@ -13684,7 +13718,7 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
      private void checkUi_topPanelVisible() {
          //final float factor1 = 1f - animatorSearchVisible.getFloatValue();
          // final float factor2 = 1f - getRightSlidingProgress();
@@ -2008,7 +2061,7 @@ index 0000000..0000000 100644
  
          if (topPanelLayout != null) {
              final float s = lerp(0.98f, 1f, factor);
-@@ -13689,8 +13723,8 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
+@@ -13701,8 +13735,8 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
              final int bottom = AndroidUtilities.navigationBarHeight;
              final int top = dp(ADDITIONAL_LIST_HEIGHT_DP)
                  + actionBar.getMeasuredHeight()
@@ -2019,7 +2072,7 @@ index 0000000..0000000 100644
  
              searchViewPager.setPagesPadding(top, bottom, doNotRequestLayout);
          }
-@@ -13734,7 +13768,7 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
+@@ -13746,7 +13780,7 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
          }
  
          final int maxScrollWithoutSearch = getMaxScrollYOffsetWithoutSearch();
@@ -2028,7 +2081,7 @@ index 0000000..0000000 100644
  
          final float actionModeVisible = Math.max(progressToActionMode, animatorActionModeVisible.getFloatValue());
          final float searchFieldVisible = animatorSearchVisible.getFloatValue();
-@@ -13747,7 +13781,7 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
+@@ -13759,7 +13793,7 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
  
          fragmentSearchField.setAlpha(alpha);
          fragmentSearchField.setVisibility(alpha > 0 ? View.VISIBLE : View.GONE);
@@ -2041,7 +2094,7 @@ diff --git a/TMessagesProj/src/main/java/org/telegram/ui/ProfileActivity.java b/
 index 0000000..0000000 100644
 --- a/TMessagesProj/src/main/java/org/telegram/ui/ProfileActivity.java
 +++ b/TMessagesProj/src/main/java/org/telegram/ui/ProfileActivity.java
-@@ -2079,7 +2079,7 @@ public class ProfileActivity extends BaseFragment implements NotificationCenter.
+@@ -2067,7 +2067,7 @@ public class ProfileActivity extends BaseFragment implements NotificationCenter.
              //iBlur3SourceGlassFrosted = new BlurredBackgroundSourceRenderNode(null);
              iBlur3SourceGlass = new BlurredBackgroundSourceRenderNode(null);
              iBlur3FactoryLiquidGlass = new BlurredBackgroundDrawableViewFactory(iBlur3SourceGlass);

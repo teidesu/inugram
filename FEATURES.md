@@ -16,7 +16,6 @@ most things are toggleable in `Settings → Inugram`, with sensible opinionated 
 - notification icon: Telegram (default) or Inugram
 - show seconds in timestamps
 - 🐶 customizable animation speed multiplier (incl. instant)
-- show peer id in profile (telegram id / bot api id)
 - estimated registration date in profile - *ported & datapoints from [NagramX](https://github.com/risin42/NagramX)*
 - show linked channel in discussion group profile similar to personal channel
 - hide own phone number from ui
@@ -40,7 +39,6 @@ most things are toggleable in `Settings → Inugram`, with sensible opinionated 
 - customizable map preview provider
 - in-app updater - *ported from [Nekogram](https://github.com/Nekogram/Nekogram)*
 - 🐶 crash report sheet: catches uncaught exceptions, offers to share the log on next launch, posts a tap-to-restart notification
-- 🐶 logs management in About: toggle FileLog on/off, share zipped logs (with system info) via in-app picker, copy system info to clipboard. Replaces the stock Debug section under Settings.
 - keep search query after picking a result in peer selection screens
 
 ## dialogs list / main page
@@ -70,7 +68,7 @@ most things are toggleable in `Settings → Inugram`, with sensible opinionated 
 - remember all clicked replies when jumping back via the down-button
 - 🐶 keep bot draft messages at the bottom
 - 🐶 long-press reply panel in "Replies" chat opens discussion group
-- show a "Deleted message" placeholder + message ID in the reply box when the replied-to message was deleted; tapping it scrolls to roughly where that message used to be
+- show a "Deleted message" placeholder for deleted messages
 - hide pinned panel
 - hide channel, group preview (🐶) and replies (🐶) bottom bar (mute/join/etc)
 - send message to discussion group without joining
@@ -119,7 +117,6 @@ most things are toggleable in `Settings → Inugram`, with sensible opinionated 
 - 🐶 custom formatting popup ui (better ux for span manipulation)
 - 🐶 customizable text classifier (native / improved / off) - reduces false positive expansions
 - show custom emoji *after* regular ones in `:smile` emoji suggestion popup
-- search regular emoji by keyword in the emoji panel (not just custom emoji)
 - "delete for both/all" default checkbox state
 - hide "send as" picker (long-tap stickers button to reveal)
 - round recorder:

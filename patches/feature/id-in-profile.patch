@@ -27,7 +27,7 @@ index 0000000..0000000 100644
      private int phoneSuggestionSectionRow;
      private int graceSuggestionRow;
      private int graceSuggestionSectionRow;
-@@ -4459,6 +4461,8 @@ public class ProfileActivity extends BaseFragment implements NotificationCenter.
+@@ -4446,6 +4448,8 @@ public class ProfileActivity extends BaseFragment implements NotificationCenter.
                  openAddMember();
              } else if (position == usernameRow) {
                  processOnClickOrPress(position, view, x, y);
@@ -36,7 +36,7 @@ index 0000000..0000000 100644
              } else if (position == locationRow) {
                  if (chatInfo.location instanceof TLRPC.TL_channelLocation) {
                      LocationActivity fragment = new LocationActivity(LocationActivity.LOCATION_TYPE_GROUP_VIEW);
-@@ -5010,6 +5014,9 @@ public class ProfileActivity extends BaseFragment implements NotificationCenter.
+@@ -4997,6 +5001,9 @@ public class ProfileActivity extends BaseFragment implements NotificationCenter.
                  } else if (position == noteRow) {
                      editNotes(view, position);
                      return true;
@@ -46,7 +46,7 @@ index 0000000..0000000 100644
                  } else {
                      if (editRow(view, position)) return true;
                      return processOnClickOrPress(position, view, view.getWidth() / 2f, (int) (view.getHeight() * .75f));
-@@ -10376,6 +10383,7 @@ public class ProfileActivity extends BaseFragment implements NotificationCenter.
+@@ -10369,6 +10376,7 @@ public class ProfileActivity extends BaseFragment implements NotificationCenter.
          birthdayRow = -1;
          setUsernameRow = -1;
          bioRow = -1;
@@ -54,7 +54,7 @@ index 0000000..0000000 100644
          channelRow = -1;
          channelDividerRow = -1;
          phoneSuggestionSectionRow = -1;
-@@ -10538,6 +10546,7 @@ public class ProfileActivity extends BaseFragment implements NotificationCenter.
+@@ -10531,6 +10539,7 @@ public class ProfileActivity extends BaseFragment implements NotificationCenter.
                  numberSectionRow = rowCount++;
                  numberRow = rowCount++;
                  setUsernameRow = rowCount++;
@@ -62,7 +62,7 @@ index 0000000..0000000 100644
                  bioRow = rowCount++;
  
                  settingsSectionRow = rowCount++;
-@@ -10630,6 +10639,7 @@ public class ProfileActivity extends BaseFragment implements NotificationCenter.
+@@ -10623,6 +10632,7 @@ public class ProfileActivity extends BaseFragment implements NotificationCenter.
                  if (user != null && username != null) {
                      usernameRow = rowCount++;
                  }
@@ -70,7 +70,7 @@ index 0000000..0000000 100644
                  if (userInfo != null) {
                      if (userInfo.birthday != null) {
                          birthdayRow = rowCount++;
-@@ -10784,6 +10794,7 @@ public class ProfileActivity extends BaseFragment implements NotificationCenter.
+@@ -10777,6 +10787,7 @@ public class ProfileActivity extends BaseFragment implements NotificationCenter.
                      usernameRow = rowCount++;
                  }
              }
@@ -78,7 +78,7 @@ index 0000000..0000000 100644
              if (emptyRow < 0 && emptyRow2 < 0) {
                  if (hasMusic || peerColor != null || actionsView == null) {
                      emptyRow2 = rowCount++;
-@@ -13374,6 +13385,8 @@ public class ProfileActivity extends BaseFragment implements NotificationCenter.
+@@ -13371,6 +13382,8 @@ public class ProfileActivity extends BaseFragment implements NotificationCenter.
                          }
                          isFragmentPhoneNumber = phoneNumber != null && phoneNumber.matches("888\\d{8}");
                          detailCell.setTextAndValue(text, LocaleController.getString(isFragmentPhoneNumber ? R.string.AnonymousNumber : R.string.PhoneMobile), false);
@@ -87,7 +87,7 @@ index 0000000..0000000 100644
                      } else if (position == noteRow) {
                          final TLRPC.UserFull userInfo = getMessagesController().getUserFull(userId);
                          if (userInfo == null) return;
-@@ -14178,7 +14191,7 @@ public class ProfileActivity extends BaseFragment implements NotificationCenter.
+@@ -14175,7 +14188,7 @@ public class ProfileActivity extends BaseFragment implements NotificationCenter.
              if (position == infoHeaderRow || position == membersHeaderRow || position == settingsSectionRow2 ||
                      position == numberSectionRow || position == helpHeaderRow || position == debugHeaderRow || position == botPermissionsHeader) {
                  return VIEW_TYPE_HEADER;
@@ -96,7 +96,7 @@ index 0000000..0000000 100644
                  return VIEW_TYPE_TEXT_DETAIL;
              } else if (position == usernameRow || position == setUsernameRow) {
                  return VIEW_TYPE_TEXT_DETAIL_MULTILINE;
-@@ -15615,6 +15628,7 @@ public class ProfileActivity extends BaseFragment implements NotificationCenter.
+@@ -15612,6 +15625,7 @@ public class ProfileActivity extends BaseFragment implements NotificationCenter.
              put(++pointer, bizHoursRow, sparseIntArray);
              put(++pointer, bizLocationRow, sparseIntArray);
              put(++pointer, birthdayRow, sparseIntArray);

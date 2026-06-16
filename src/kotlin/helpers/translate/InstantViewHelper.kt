@@ -12,6 +12,7 @@ import org.telegram.messenger.MessageObject
 import org.telegram.messenger.R
 import org.telegram.tgnet.ConnectionsManager
 import org.telegram.tgnet.TLRPC
+import org.telegram.tgnet.tl.TL_iv
 import org.telegram.ui.ActionBar.Theme
 import org.telegram.ui.ArticleViewer
 import org.telegram.ui.Components.BulletinFactory
@@ -33,8 +34,8 @@ object InstantViewHelper {
     private const val SAMPLE_LIMIT = 2_000
 
     @JvmStatic
-    fun shouldHideBlock(block: TLRPC.PageBlock?): Boolean {
-        if (InuConfig.HIDE_IV_SUMMARY.value && block is TLRPC.TL_pageBlockBlockquote) {
+    fun shouldHideBlock(block: TL_iv.PageBlock?): Boolean {
+        if (InuConfig.HIDE_IV_SUMMARY.value && block is TL_iv.pageBlockBlockquote) {
             val caption = ArticleViewer.getPlainText(block.caption) ?: return false
             return caption.toString() == COCOON_SUMMARY_CAPTION
         }
@@ -43,7 +44,7 @@ object InstantViewHelper {
     }
 
     private class State(val original: TLRPC.WebPage) {
-        val richCache = HashMap<TLRPC.RichText, CharSequence>()
+        val richCache = HashMap<TL_iv.RichText, CharSequence>()
         val stringCache = HashMap<String, String>()
         var applied = false
         var loading = false
@@ -77,7 +78,7 @@ object InstantViewHelper {
 
     /** Top-level rich-text root substitution; returns cached styled CharSequence or null. */
     @JvmStatic
-    fun lookupRich(viewer: ArticleViewer?, richText: TLRPC.RichText?): CharSequence? {
+    fun lookupRich(viewer: ArticleViewer?, richText: TL_iv.RichText?): CharSequence? {
         if (richText == null) return null
         val state = activeStateFor(viewer) ?: return null
         if (!state.applied) return null
@@ -220,7 +221,7 @@ object InstantViewHelper {
 
     private sealed class Job(val text: TLRPC.TL_textWithEntities) {
         class Rich(
-            val root: TLRPC.RichText,
+            val root: TL_iv.RichText,
             text: TLRPC.TL_textWithEntities,
             val webpageUrls: Set<String>,
         ) : Job(text)
@@ -373,7 +374,7 @@ object InstantViewHelper {
         val sb = StringBuilder()
         val blocks = page?.cached_page?.blocks ?: return ""
         val visitor = object : Visitor {
-            override fun rich(root: TLRPC.RichText): Boolean {
+            override fun rich(root: TL_iv.RichText): Boolean {
                 appendPlain(root, sb)
                 sb.append(' ')
                 return sb.length < SAMPLE_LIMIT
@@ -388,33 +389,33 @@ object InstantViewHelper {
         return sb.toString().trim()
     }
 
-    private fun appendPlain(rt: TLRPC.RichText?, sb: StringBuilder) {
+    private fun appendPlain(rt: TL_iv.RichText?, sb: StringBuilder) {
         if (rt == null) return
         when (rt) {
-            is TLRPC.TL_textPlain -> rt.text?.let { sb.append(it) }
-            is TLRPC.TL_textConcat -> rt.texts.forEach { appendPlain(it, sb) }
-            is TLRPC.TL_textFixed -> appendPlain(rt.text, sb)
-            is TLRPC.TL_textItalic -> appendPlain(rt.text, sb)
-            is TLRPC.TL_textBold -> appendPlain(rt.text, sb)
-            is TLRPC.TL_textUnderline -> appendPlain(rt.text, sb)
-            is TLRPC.TL_textStrike -> appendPlain(rt.text, sb)
-            is TLRPC.TL_textEmail -> appendPlain(rt.text, sb)
-            is TLRPC.TL_textPhone -> appendPlain(rt.text, sb)
-            is TLRPC.TL_textUrl -> appendPlain(rt.text, sb)
-            is TLRPC.TL_textAnchor -> appendPlain(rt.text, sb)
-            is TLRPC.TL_textSubscript -> appendPlain(rt.text, sb)
-            is TLRPC.TL_textSuperscript -> appendPlain(rt.text, sb)
-            is TLRPC.TL_textMarked -> appendPlain(rt.text, sb)
+            is TL_iv.textPlain -> rt.text?.let { sb.append(it) }
+            is TL_iv.textConcat -> rt.texts.forEach { appendPlain(it, sb) }
+            is TL_iv.textFixed -> appendPlain(rt.text, sb)
+            is TL_iv.textItalic -> appendPlain(rt.text, sb)
+            is TL_iv.textBold -> appendPlain(rt.text, sb)
+            is TL_iv.textUnderline -> appendPlain(rt.text, sb)
+            is TL_iv.textStrike -> appendPlain(rt.text, sb)
+            is TL_iv.textEmail -> appendPlain(rt.text, sb)
+            is TL_iv.textPhone -> appendPlain(rt.text, sb)
+            is TL_iv.textUrl -> appendPlain(rt.text, sb)
+            is TL_iv.textAnchor -> appendPlain(rt.text, sb)
+            is TL_iv.textSubscript -> appendPlain(rt.text, sb)
+            is TL_iv.textSuperscript -> appendPlain(rt.text, sb)
+            is TL_iv.textMarked -> appendPlain(rt.text, sb)
             else -> {}
         }
     }
 
     private fun collectJobs(st: State, page: TLRPC.WebPage?, out: MutableList<Job>) {
         val blocks = page?.cached_page?.blocks ?: return
-        val seenRoots = HashSet<TLRPC.RichText>()
+        val seenRoots = HashSet<TL_iv.RichText>()
         val seenStrings = HashSet<String>()
         val visitor = object : Visitor {
-            override fun rich(root: TLRPC.RichText): Boolean {
+            override fun rich(root: TL_iv.RichText): Boolean {
                 if (st.richCache.containsKey(root)) return true
                 if (!seenRoots.add(root)) return true
                 val ex = buildRichExtract(root) ?: return true
@@ -433,61 +434,61 @@ object InstantViewHelper {
     }
 
     private interface Visitor {
-        fun rich(root: TLRPC.RichText): Boolean
+        fun rich(root: TL_iv.RichText): Boolean
         fun str(s: String): Boolean
     }
 
     /** Visit each top-level RichText and plain-string field in [block]. */
-    private fun walkBlock(block: TLRPC.PageBlock?, visitor: Visitor): Boolean {
+    private fun walkBlock(block: TL_iv.PageBlock?, visitor: Visitor): Boolean {
         if (block == null) return true
         return when (block) {
-            is TLRPC.TL_pageBlockTitle -> visitRich(block.text, visitor)
-            is TLRPC.TL_pageBlockSubtitle -> visitRich(block.text, visitor)
-            is TLRPC.TL_pageBlockHeader -> visitRich(block.text, visitor)
-            is TLRPC.TL_pageBlockSubheader -> visitRich(block.text, visitor)
-            is TLRPC.TL_pageBlockKicker -> visitRich(block.text, visitor)
-            is TLRPC.TL_pageBlockFooter -> visitRich(block.text, visitor)
-            is TLRPC.TL_pageBlockParagraph -> visitRich(block.text, visitor)
-            is TLRPC.TL_pageBlockPreformatted -> visitRich(block.text, visitor)
-            is TLRPC.TL_pageBlockBlockquote ->
+            is TL_iv.pageBlockTitle -> visitRich(block.text, visitor)
+            is TL_iv.pageBlockSubtitle -> visitRich(block.text, visitor)
+            is TL_iv.pageBlockHeader -> visitRich(block.text, visitor)
+            is TL_iv.pageBlockSubheader -> visitRich(block.text, visitor)
+            is TL_iv.pageBlockKicker -> visitRich(block.text, visitor)
+            is TL_iv.pageBlockFooter -> visitRich(block.text, visitor)
+            is TL_iv.pageBlockParagraph -> visitRich(block.text, visitor)
+            is TL_iv.pageBlockPreformatted -> visitRich(block.text, visitor)
+            is TL_iv.pageBlockBlockquote ->
                 visitRich(block.text, visitor) && visitRich(block.caption, visitor)
 
-            is TLRPC.TL_pageBlockPullquote ->
+            is TL_iv.pageBlockPullquote ->
                 visitRich(block.text, visitor) && visitRich(block.caption, visitor)
 
-            is TLRPC.TL_pageBlockAuthorDate -> visitRich(block.author, visitor)
-            is TLRPC.TL_pageBlockPhoto -> visitCaption(block.caption, visitor)
-            is TLRPC.TL_pageBlockVideo -> visitCaption(block.caption, visitor)
-            is TLRPC.TL_pageBlockAudio -> visitCaption(block.caption, visitor)
-            is TLRPC.TL_pageBlockEmbed -> visitCaption(block.caption, visitor)
-            is TLRPC.TL_pageBlockMap -> visitCaption(block.caption, visitor)
-            is TLRPC.TL_pageBlockSlideshow -> {
+            is TL_iv.pageBlockAuthorDate -> visitRich(block.author, visitor)
+            is TL_iv.pageBlockPhoto -> visitCaption(block.caption, visitor)
+            is TL_iv.pageBlockVideo -> visitCaption(block.caption, visitor)
+            is TL_iv.pageBlockAudio -> visitCaption(block.caption, visitor)
+            is TL_iv.pageBlockEmbed -> visitCaption(block.caption, visitor)
+            is TL_iv.pageBlockMap -> visitCaption(block.caption, visitor)
+            is TL_iv.pageBlockSlideshow -> {
                 if (!visitCaption(block.caption, visitor)) return false
                 for (item in block.items) if (!walkBlock(item, visitor)) return false
                 true
             }
 
-            is TLRPC.TL_pageBlockCollage -> {
+            is TL_iv.pageBlockCollage -> {
                 if (!visitCaption(block.caption, visitor)) return false
                 for (item in block.items) if (!walkBlock(item, visitor)) return false
                 true
             }
 
-            is TLRPC.TL_pageBlockEmbedPost -> {
+            is TL_iv.pageBlockEmbedPost -> {
                 val author = block.author
                 if (!author.isNullOrBlank() && !visitor.str(author)) return false
                 for (inner in block.blocks) if (!walkBlock(inner, visitor)) return false
                 visitCaption(block.caption, visitor)
             }
 
-            is TLRPC.TL_pageBlockCover -> walkBlock(block.cover, visitor)
-            is TLRPC.TL_pageBlockDetails -> {
+            is TL_iv.pageBlockCover -> walkBlock(block.cover, visitor)
+            is TL_iv.pageBlockDetails -> {
                 if (!visitRich(block.title, visitor)) return false
                 for (inner in block.blocks) if (!walkBlock(inner, visitor)) return false
                 true
             }
 
-            is TLRPC.TL_pageBlockTable -> {
+            is TL_iv.pageBlockTable -> {
                 if (!visitRich(block.title, visitor)) return false
                 for (row in block.rows) {
                     for (cell in row.cells) if (!visitRich(cell.text, visitor)) return false
@@ -495,27 +496,27 @@ object InstantViewHelper {
                 true
             }
 
-            is TLRPC.TL_pageBlockList -> {
+            is TL_iv.pageBlockList -> {
                 for (item in block.items) {
                     when (item) {
-                        is TLRPC.TL_pageListItemText -> if (!visitRich(item.text, visitor)) return false
-                        is TLRPC.TL_pageListItemBlocks -> for (b in item.blocks) if (!walkBlock(b, visitor)) return false
+                        is TL_iv.TL_pageListItemText -> if (!visitRich(item.text, visitor)) return false
+                        is TL_iv.TL_pageListItemBlocks -> for (b in item.blocks) if (!walkBlock(b, visitor)) return false
                     }
                 }
                 true
             }
 
-            is TLRPC.TL_pageBlockOrderedList -> {
+            is TL_iv.pageBlockOrderedList -> {
                 for (item in block.items) {
                     when (item) {
-                        is TLRPC.TL_pageListOrderedItemText -> if (!visitRich(item.text, visitor)) return false
-                        is TLRPC.TL_pageListOrderedItemBlocks -> for (b in item.blocks) if (!walkBlock(b, visitor)) return false
+                        is TL_iv.TL_pageListOrderedItemText -> if (!visitRich(item.text, visitor)) return false
+                        is TL_iv.TL_pageListOrderedItemBlocks -> for (b in item.blocks) if (!walkBlock(b, visitor)) return false
                     }
                 }
                 true
             }
 
-            is TLRPC.TL_pageBlockRelatedArticles -> {
+            is TL_iv.pageBlockRelatedArticles -> {
                 if (!visitRich(block.title, visitor)) return false
                 for (article in block.articles) {
                     article.title?.takeIf { it.isNotBlank() }?.let { if (!visitor.str(it)) return false }
@@ -529,12 +530,12 @@ object InstantViewHelper {
         }
     }
 
-    private fun visitRich(rt: TLRPC.RichText?, visitor: Visitor): Boolean {
-        if (rt == null || rt is TLRPC.TL_textEmpty) return true
+    private fun visitRich(rt: TL_iv.RichText?, visitor: Visitor): Boolean {
+        if (rt == null || rt is TL_iv.textEmpty) return true
         return visitor.rich(rt)
     }
 
-    private fun visitCaption(cap: TLRPC.TL_pageCaption?, visitor: Visitor): Boolean {
+    private fun visitCaption(cap: TL_iv.PageCaption?, visitor: Visitor): Boolean {
         if (cap == null) return true
         if (!visitRich(cap.text, visitor)) return false
         return visitRich(cap.credit, visitor)
@@ -545,7 +546,7 @@ object InstantViewHelper {
         val webpageUrls: Set<String>,
     )
 
-    private fun buildRichExtract(root: TLRPC.RichText): RichExtract? {
+    private fun buildRichExtract(root: TL_iv.RichText): RichExtract? {
         val b = RichExtractBuilder()
         b.append(root)
         return b.build()
@@ -570,34 +571,34 @@ object InstantViewHelper {
             return RichExtract(twe, webpageUrls)
         }
 
-        fun append(rt: TLRPC.RichText?) {
+        fun append(rt: TL_iv.RichText?) {
             if (rt == null) return
             when (rt) {
-                is TLRPC.TL_textEmpty -> {}
-                is TLRPC.TL_textPlain -> rt.text?.let { sb.append(it) }
-                is TLRPC.TL_textConcat -> rt.texts.forEach { append(it) }
-                is TLRPC.TL_textBold -> wrap(rt.text) { TLRPC.TL_messageEntityBold() }
-                is TLRPC.TL_textItalic -> wrap(rt.text) { TLRPC.TL_messageEntityItalic() }
-                is TLRPC.TL_textUnderline -> wrap(rt.text) { TLRPC.TL_messageEntityUnderline() }
-                is TLRPC.TL_textStrike -> wrap(rt.text) { TLRPC.TL_messageEntityStrike() }
-                is TLRPC.TL_textFixed -> wrap(rt.text) { TLRPC.TL_messageEntityCode() }
-                is TLRPC.TL_textUrl -> {
+                is TL_iv.textEmpty -> {}
+                is TL_iv.textPlain -> rt.text?.let { sb.append(it) }
+                is TL_iv.textConcat -> rt.texts.forEach { append(it) }
+                is TL_iv.textBold -> wrap(rt.text) { TLRPC.TL_messageEntityBold() }
+                is TL_iv.textItalic -> wrap(rt.text) { TLRPC.TL_messageEntityItalic() }
+                is TL_iv.textUnderline -> wrap(rt.text) { TLRPC.TL_messageEntityUnderline() }
+                is TL_iv.textStrike -> wrap(rt.text) { TLRPC.TL_messageEntityStrike() }
+                is TL_iv.textFixed -> wrap(rt.text) { TLRPC.TL_messageEntityCode() }
+                is TL_iv.textUrl -> {
                     val u = rt.url ?: ""
                     if (rt.webpage_id != 0L && u.isNotEmpty()) webpageUrls += u
                     wrap(rt.text) { TLRPC.TL_messageEntityTextUrl().apply { url = u } }
                 }
 
-                is TLRPC.TL_textEmail -> wrap(rt.text) { TLRPC.TL_messageEntityEmail() }
-                is TLRPC.TL_textPhone -> wrap(rt.text) { TLRPC.TL_messageEntityPhone() }
-                is TLRPC.TL_textAnchor -> append(rt.text)
-                is TLRPC.TL_textSubscript -> append(rt.text)
-                is TLRPC.TL_textSuperscript -> append(rt.text)
-                is TLRPC.TL_textMarked -> append(rt.text)
+                is TL_iv.textEmail -> wrap(rt.text) { TLRPC.TL_messageEntityEmail() }
+                is TL_iv.textPhone -> wrap(rt.text) { TLRPC.TL_messageEntityPhone() }
+                is TL_iv.textAnchor -> append(rt.text)
+                is TL_iv.textSubscript -> append(rt.text)
+                is TL_iv.textSuperscript -> append(rt.text)
+                is TL_iv.textMarked -> append(rt.text)
                 else -> {}
             }
         }
 
-        private inline fun wrap(child: TLRPC.RichText?, make: () -> TLRPC.MessageEntity) {
+        private inline fun wrap(child: TL_iv.RichText?, make: () -> TLRPC.MessageEntity) {
             val start = sb.length
             append(child)
             val len = sb.length - start

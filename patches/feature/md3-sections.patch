@@ -188,7 +188,7 @@ diff --git a/TMessagesProj/src/main/java/org/telegram/ui/ChatUsersActivity.java 
 index 0000000..0000000 100644
 --- a/TMessagesProj/src/main/java/org/telegram/ui/ChatUsersActivity.java
 +++ b/TMessagesProj/src/main/java/org/telegram/ui/ChatUsersActivity.java
-@@ -3677,6 +3677,9 @@ public class ChatUsersActivity extends BaseFragment implements NotificationCente
+@@ -3669,6 +3669,9 @@ public class ChatUsersActivity extends BaseFragment implements NotificationCente
                      } else {
                          checkCell.setIcon(0);
                      }
@@ -198,7 +198,7 @@ index 0000000..0000000 100644
                      break;
                  case 8:
                      GraySectionCell sectionCell = (GraySectionCell) holder.itemView;
-@@ -3752,6 +3755,9 @@ public class ChatUsersActivity extends BaseFragment implements NotificationCente
+@@ -3744,6 +3747,9 @@ public class ChatUsersActivity extends BaseFragment implements NotificationCente
                      } else
                      //  checkBoxCell.setText(getCheckBoxTitle(item.headerName, percents[item.index < 0 ? 8 : item.index], item.index < 0), AndroidUtilities.formatFileSize(item.size), selected, item.index < 0 ? !collapsed : !item.last);
                      checkBoxCell.setPad(1);
@@ -247,7 +247,7 @@ index 0000000..0000000 100644
  
      private boolean accessibilityEnabled = true;
  
-@@ -2674,7 +2674,11 @@ public class RecyclerListView extends RecyclerView implements IBlur3Capture {
+@@ -2675,7 +2675,11 @@ public class RecyclerListView extends RecyclerView implements IBlur3Capture {
          if (hasSections() && !ignoreClipChild) {
              canvas.save();
              clipChild(canvas, child);
@@ -259,7 +259,7 @@ index 0000000..0000000 100644
              canvas.restore();
              return r;
          } else {
-@@ -3249,12 +3253,12 @@ public class RecyclerListView extends RecyclerView implements IBlur3Capture {
+@@ -3250,12 +3254,12 @@ public class RecyclerListView extends RecyclerView implements IBlur3Capture {
          return sectionsItemDecoration != null;
      }
  
@@ -275,7 +275,7 @@ index 0000000..0000000 100644
      public boolean applyPaddingToSections = false;
  
      public static final int TAG_NOT_SECTION = -33024;
-@@ -3280,7 +3284,7 @@ public class RecyclerListView extends RecyclerView implements IBlur3Capture {
+@@ -3281,7 +3285,7 @@ public class RecyclerListView extends RecyclerView implements IBlur3Capture {
      }
      public void setSections(int padding, float roundRadius, boolean topPadding) {
          setSections(
@@ -284,7 +284,7 @@ index 0000000..0000000 100644
              padding,
              roundRadius,
              this::drawBackgroundRect,
-@@ -3397,6 +3401,10 @@ public class RecyclerListView extends RecyclerView implements IBlur3Capture {
+@@ -3398,6 +3402,10 @@ public class RecyclerListView extends RecyclerView implements IBlur3Capture {
                          if (last) outRect.bottom = padding;
                      }
                  }
@@ -295,7 +295,7 @@ index 0000000..0000000 100644
              }
          }
  
-@@ -3468,6 +3476,11 @@ public class RecyclerListView extends RecyclerView implements IBlur3Capture {
+@@ -3469,6 +3477,11 @@ public class RecyclerListView extends RecyclerView implements IBlur3Capture {
      public void drawSectionsBackgrounds(Canvas canvas) {
          if (drawSectionBackground == null) return;
  
@@ -307,7 +307,7 @@ index 0000000..0000000 100644
          if (isAnimating()) {
              if (sections == null) {
                  sections = new ArrayList<>();
-@@ -3614,6 +3627,11 @@ public class RecyclerListView extends RecyclerView implements IBlur3Capture {
+@@ -3615,6 +3628,11 @@ public class RecyclerListView extends RecyclerView implements IBlur3Capture {
          if (child == null || !sectionsItemDecoration.isSectionItem.run(child))
              return;
  
@@ -319,7 +319,7 @@ index 0000000..0000000 100644
          boolean prev, next;
          int position = getChildAdapterPosition(child);
          if (position == RecyclerView.NO_POSITION) {
-@@ -3670,6 +3688,11 @@ public class RecyclerListView extends RecyclerView implements IBlur3Capture {
+@@ -3671,6 +3689,11 @@ public class RecyclerListView extends RecyclerView implements IBlur3Capture {
      public Drawable getClipBackground(View child) {
          if (child.getParent() != this || !hasSections() || !sectionsItemDecoration.isSectionItem.run(child)) return null;
  
@@ -395,7 +395,7 @@ diff --git a/TMessagesProj/src/main/java/org/telegram/ui/LiteModeSettingsActivit
 index 0000000..0000000 100644
 --- a/TMessagesProj/src/main/java/org/telegram/ui/LiteModeSettingsActivity.java
 +++ b/TMessagesProj/src/main/java/org/telegram/ui/LiteModeSettingsActivity.java
-@@ -401,6 +401,13 @@ public class LiteModeSettingsActivity extends BaseFragment {
+@@ -405,6 +405,13 @@ public class LiteModeSettingsActivity extends BaseFragment {
                  final boolean divider = position + 1 < items.size() && items.get(position + 1).viewType != VIEW_TYPE_INFO;
                  SwitchCell switchCell = (SwitchCell) holder.itemView;
                  switchCell.set(item, divider);
@@ -440,7 +440,7 @@ diff --git a/TMessagesProj/src/main/java/org/telegram/ui/SettingsActivity.java b
 index 0000000..0000000 100644
 --- a/TMessagesProj/src/main/java/org/telegram/ui/SettingsActivity.java
 +++ b/TMessagesProj/src/main/java/org/telegram/ui/SettingsActivity.java
-@@ -1163,6 +1163,8 @@ public class SettingsActivity extends BaseFragment implements NotificationCenter
+@@ -1185,6 +1185,8 @@ public class SettingsActivity extends BaseFragment implements NotificationCenter
              titleView.setTranslationX(icon == 0 ? dp(2) : 0);
              subtitleView.setTranslationX(icon == 0 ? dp(2) : 0);
  
@@ -449,7 +449,7 @@ index 0000000..0000000 100644
              iconBackground.setColor(iconColorTop, iconColorBottom);
              iconView.setImageResource(icon);
              titleView.setText(title);
-@@ -1174,6 +1176,13 @@ public class SettingsActivity extends BaseFragment implements NotificationCenter
+@@ -1196,6 +1198,13 @@ public class SettingsActivity extends BaseFragment implements NotificationCenter
  
          @Override
          protected void onMeasure(int widthMeasureSpec, int heightMeasureSpec) {
@@ -463,7 +463,7 @@ index 0000000..0000000 100644
              super.onMeasure(
                  MeasureSpec.makeMeasureSpec(MeasureSpec.getSize(widthMeasureSpec), MeasureSpec.EXACTLY),
                  MeasureSpec.makeMeasureSpec(dp(twoLines ? 60 : 50), MeasureSpec.EXACTLY)
-@@ -1202,8 +1211,17 @@ public class SettingsActivity extends BaseFragment implements NotificationCenter
+@@ -1224,8 +1233,17 @@ public class SettingsActivity extends BaseFragment implements NotificationCenter
                  this.border = drawBorder;
              }
  

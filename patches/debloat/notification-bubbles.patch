@@ -11,7 +11,7 @@ diff --git a/TMessagesProj/src/main/java/org/telegram/messenger/NotificationsCon
 index 0000000..0000000 100644
 --- a/TMessagesProj/src/main/java/org/telegram/messenger/NotificationsController.java
 +++ b/TMessagesProj/src/main/java/org/telegram/messenger/NotificationsController.java
-@@ -3595,7 +3595,7 @@ public class NotificationsController extends BaseController {
+@@ -3623,7 +3623,7 @@ public class NotificationsController extends BaseController implements Notificat
              } else {
                  icon = IconCompat.createWithResource(ApplicationLoader.applicationContext, R.drawable.book_group);
              }

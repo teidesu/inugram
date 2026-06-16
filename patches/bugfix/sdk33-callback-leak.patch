@@ -11,7 +11,7 @@ diff --git a/TMessagesProj/src/main/java/org/telegram/ui/LaunchActivity.java b/T
 index 0000000..0000000 100644
 --- a/TMessagesProj/src/main/java/org/telegram/ui/LaunchActivity.java
 +++ b/TMessagesProj/src/main/java/org/telegram/ui/LaunchActivity.java
-@@ -6921,7 +6921,7 @@ public class LaunchActivity extends BasePermissionsActivity implements INavigati
+@@ -6959,7 +6959,7 @@ public class LaunchActivity extends BasePermissionsActivity implements INavigati
                  getOnBackInvokedDispatcher().unregisterOnBackInvokedCallback((OnBackAnimationCallback) onBackAnimationCallback);
              }
          } else if (Build.VERSION.SDK_INT >= 33) {

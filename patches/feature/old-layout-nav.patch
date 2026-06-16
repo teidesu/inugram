@@ -7,13 +7,13 @@ Restore hamburger side drawer for old layout mode (DrawerLayoutContainer)
 
 Restore hamburger side drawer for old layout mode (DialogsActivity)
 ---
- .../ui/ActionBar/DrawerLayoutContainer.java   | 33 ++++++++++++++++---
- .../java/org/telegram/ui/DialogsActivity.java | 22 ++++++++++---
- .../java/org/telegram/ui/LaunchActivity.java  | 24 ++++----------
+ .../ui/ActionBar/DrawerLayoutContainer.java   | 38 +++++++++++++++++--
+ .../java/org/telegram/ui/DialogsActivity.java | 22 +++++++++--
+ .../java/org/telegram/ui/LaunchActivity.java  | 24 ++++--------
  .../java/org/telegram/ui/LoginActivity.java   |  9 ++---
- .../ui/TwoStepVerificationActivity.java       |  5 ++-
- .../ui/TwoStepVerificationSetupActivity.java  | 10 +++---
- 6 files changed, 63 insertions(+), 40 deletions(-)
+ .../ui/TwoStepVerificationActivity.java       |  5 +--
+ .../ui/TwoStepVerificationSetupActivity.java  | 10 ++---
+ 6 files changed, 68 insertions(+), 40 deletions(-)
 
 diff --git a/TMessagesProj/src/main/java/org/telegram/ui/ActionBar/DrawerLayoutContainer.java b/TMessagesProj/src/main/java/org/telegram/ui/ActionBar/DrawerLayoutContainer.java
 index 0000000..0000000 100644
@@ -28,7 +28,7 @@ index 0000000..0000000 100644
  
      private final Paint backgroundPaint = new Paint();
  
-@@ -98,13 +98,26 @@ public class DrawerLayoutContainer extends FrameLayout {
+@@ -89,13 +89,26 @@ public class DrawerLayoutContainer extends FrameLayout {
          return false;
      }
  
@@ -56,7 +56,7 @@ index 0000000..0000000 100644
      }
  
      @Override
-@@ -120,7 +133,11 @@ public class DrawerLayoutContainer extends FrameLayout {
+@@ -111,7 +124,11 @@ public class DrawerLayoutContainer extends FrameLayout {
  
              final LayoutParams lp = (LayoutParams) child.getLayoutParams();
              try {
@@ -69,7 +69,7 @@ index 0000000..0000000 100644
              } catch (Exception e) {
                  FileLog.e(e);
                  if (BuildVars.DEBUG_VERSION) {
-@@ -172,7 +189,12 @@ public class DrawerLayoutContainer extends FrameLayout {
+@@ -163,7 +180,12 @@ public class DrawerLayoutContainer extends FrameLayout {
  
              final LayoutParams lp = (LayoutParams) child.getLayoutParams();
  
@@ -83,16 +83,21 @@ index 0000000..0000000 100644
              final int contentHeightSpec;
              if (lp.height > 0) {
                  contentHeightSpec = MeasureSpec.makeMeasureSpec(lp.height, MeasureSpec.EXACTLY);
-@@ -200,6 +222,9 @@ public class DrawerLayoutContainer extends FrameLayout {
-         if (!allowDrawContent) {
-             return false;
-         }
+@@ -186,6 +208,14 @@ public class DrawerLayoutContainer extends FrameLayout {
+         invalidate();
+     }
+ 
++    @Override
++    protected boolean drawChild(@NonNull Canvas canvas, View child, long drawingTime) {
 +        if (inu_drawer != null) {
 +            return inu_drawer.drawChild(canvas, child, drawingTime);
 +        }
-         return super.drawChild(canvas, child, drawingTime);
-     }
- 
++        return super.drawChild(canvas, child, drawingTime);
++    }
++
+     @Override
+     protected void onDraw(@NonNull Canvas canvas) {
+         if (lastWindowInsetsCompat == null) {
 diff --git a/TMessagesProj/src/main/java/org/telegram/ui/DialogsActivity.java b/TMessagesProj/src/main/java/org/telegram/ui/DialogsActivity.java
 index 0000000..0000000 100644
 --- a/TMessagesProj/src/main/java/org/telegram/ui/DialogsActivity.java
@@ -179,7 +184,7 @@ diff --git a/TMessagesProj/src/main/java/org/telegram/ui/LaunchActivity.java b/T
 index 0000000..0000000 100644
 --- a/TMessagesProj/src/main/java/org/telegram/ui/LaunchActivity.java
 +++ b/TMessagesProj/src/main/java/org/telegram/ui/LaunchActivity.java
-@@ -588,8 +588,7 @@ public class LaunchActivity extends BasePermissionsActivity implements INavigati
+@@ -606,8 +606,7 @@ public class LaunchActivity extends BasePermissionsActivity implements INavigati
              if (!UserConfig.getInstance(currentAccount).isClientActivated()) {
                  actionBarLayout.addFragmentToStack(getClientNotActivatedFragment());
              } else {
@@ -189,7 +194,7 @@ index 0000000..0000000 100644
              }
  
              try {
-@@ -1216,10 +1215,10 @@ public class LaunchActivity extends BasePermissionsActivity implements INavigati
+@@ -1228,10 +1227,10 @@ public class LaunchActivity extends BasePermissionsActivity implements INavigati
  
      private boolean switchingAccount;
      public void switchToAccount(int account, boolean removeAll) {
@@ -202,7 +207,7 @@ index 0000000..0000000 100644
          if (account == UserConfig.selectedAccount || !UserConfig.isValidAccount(account)) {
              return;
          }
-@@ -1247,7 +1246,7 @@ public class LaunchActivity extends BasePermissionsActivity implements INavigati
+@@ -1260,7 +1259,7 @@ public class LaunchActivity extends BasePermissionsActivity implements INavigati
          } else {
              actionBarLayout.removeFragmentFromStack(0);
          }
@@ -211,7 +216,7 @@ index 0000000..0000000 100644
          actionBarLayout.addFragmentToStack(mainTabsActivity, INavigationLayout.FORCE_ATTACH_VIEW_AS_FIRST);
          actionBarLayout.rebuildFragments(INavigationLayout.REBUILD_FLAG_REBUILD_LAST);
          if (AndroidUtilities.isTablet()) {
-@@ -1261,6 +1260,7 @@ public class LaunchActivity extends BasePermissionsActivity implements INavigati
+@@ -1274,6 +1273,7 @@ public class LaunchActivity extends BasePermissionsActivity implements INavigati
              showTosActivity(account, UserConfig.getInstance(account).unacceptedTermsOfService);
          }
          updateCurrentConnectionState(currentAccount);
@@ -219,7 +224,7 @@ index 0000000..0000000 100644
  
          switchingAccount = false;
      }
-@@ -3323,12 +3323,7 @@ public class LaunchActivity extends BasePermissionsActivity implements INavigati
+@@ -3349,12 +3349,7 @@ public class LaunchActivity extends BasePermissionsActivity implements INavigati
                      }
                  } else {
                      if (actionBarLayout.getFragmentStack().isEmpty()) {
@@ -233,7 +238,7 @@ index 0000000..0000000 100644
                      }
                  }
              } else {
-@@ -3336,12 +3331,7 @@ public class LaunchActivity extends BasePermissionsActivity implements INavigati
+@@ -3362,12 +3357,7 @@ public class LaunchActivity extends BasePermissionsActivity implements INavigati
                      if (!UserConfig.getInstance(currentAccount).isClientActivated()) {
                          actionBarLayout.addFragmentToStack(getClientNotActivatedFragment(), INavigationLayout.FORCE_NOT_ATTACH_VIEW);
                      } else {
@@ -251,7 +256,7 @@ diff --git a/TMessagesProj/src/main/java/org/telegram/ui/LoginActivity.java b/TM
 index 0000000..0000000 100644
 --- a/TMessagesProj/src/main/java/org/telegram/ui/LoginActivity.java
 +++ b/TMessagesProj/src/main/java/org/telegram/ui/LoginActivity.java
-@@ -1599,9 +1599,7 @@ public class LoginActivity extends BaseFragment implements NotificationCenter.No
+@@ -1600,9 +1600,7 @@ public class LoginActivity extends BaseFragment implements NotificationCenter.No
                  ((LaunchActivity) getParentActivity()).switchToAccount(currentAccount, true, obj -> {
                      Bundle args = new Bundle();
                      args.putBoolean("afterSignup", afterSignup);
@@ -262,7 +267,7 @@ index 0000000..0000000 100644
                  });
                  pendingSwitchingAccount = false;
                  finishFragment();
-@@ -1614,9 +1612,8 @@ public class LoginActivity extends BaseFragment implements NotificationCenter.No
+@@ -1615,9 +1613,8 @@ public class LoginActivity extends BaseFragment implements NotificationCenter.No
                  } else {
                      Bundle args = new Bundle();
                      args.putBoolean("afterSignup", afterSignup);

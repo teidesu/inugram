@@ -7,14 +7,14 @@ Subject: bottom tabs tweaks: compact mode, hiding contacts, hiding it completely
  .../java/org/telegram/ui/CallLogActivity.java | 15 ++--
  .../ui/Components/BulletinFactory.java        |  9 +++
  .../ui/Components/glass/GlassTabView.java     | 27 +++++++
- .../org/telegram/ui/ContactsActivity.java     |  9 +--
+ .../org/telegram/ui/ContactsActivity.java     |  9 ++-
  .../java/org/telegram/ui/DialogsActivity.java | 14 ++--
- .../org/telegram/ui/MainTabsActivity.java     | 71 +++++++++++++------
- .../java/org/telegram/ui/ProfileActivity.java |  9 +--
- .../org/telegram/ui/SettingsActivity.java     |  8 ++-
- .../java/org/telegram/ui/TopicsFragment.java  |  9 +--
+ .../org/telegram/ui/MainTabsActivity.java     | 73 +++++++++++++------
+ .../java/org/telegram/ui/ProfileActivity.java |  9 ++-
+ .../org/telegram/ui/SettingsActivity.java     |  8 +-
+ .../java/org/telegram/ui/TopicsFragment.java  |  9 ++-
  .../org/telegram/ui/ViewPagerActivity.java    |  2 +-
- 10 files changed, 124 insertions(+), 49 deletions(-)
+ 10 files changed, 125 insertions(+), 50 deletions(-)
 
 diff --git a/TMessagesProj/src/main/java/org/telegram/ui/CallLogActivity.java b/TMessagesProj/src/main/java/org/telegram/ui/CallLogActivity.java
 index 0000000..0000000 100644
@@ -115,7 +115,7 @@ diff --git a/TMessagesProj/src/main/java/org/telegram/ui/Components/glass/GlassT
 index 0000000..0000000 100644
 --- a/TMessagesProj/src/main/java/org/telegram/ui/Components/glass/GlassTabView.java
 +++ b/TMessagesProj/src/main/java/org/telegram/ui/Components/glass/GlassTabView.java
-@@ -622,4 +622,31 @@ public class GlassTabView extends FrameLayout implements MainTabsLayout.Tab, Fac
+@@ -672,4 +672,31 @@ public class GlassTabView extends FrameLayout implements MainTabsLayout.Tab, Fac
      public void onPreBind() {
  
      }
@@ -215,7 +215,7 @@ index 0000000..0000000 100644
  
          return true;
      }
-@@ -13455,6 +13457,8 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
+@@ -13467,6 +13469,8 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
                      io.add(proxyMenuSubItem);
                  }
              }
@@ -224,7 +224,7 @@ index 0000000..0000000 100644
          } else {
              io.add(R.drawable.msg_customize, getString(R.string.ArchiveSettings), () -> presentFragment(new ArchiveSettingsActivity()));
              io.add(R.drawable.msg_help, getString(R.string.HowDoesItWork), this::showArchiveHelp);
-@@ -13820,8 +13824,8 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
+@@ -13832,8 +13836,8 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
          }
  
          final int additionalList = dp(48);
@@ -239,7 +239,7 @@ diff --git a/TMessagesProj/src/main/java/org/telegram/ui/MainTabsActivity.java b
 index 0000000..0000000 100644
 --- a/TMessagesProj/src/main/java/org/telegram/ui/MainTabsActivity.java
 +++ b/TMessagesProj/src/main/java/org/telegram/ui/MainTabsActivity.java
-@@ -76,6 +76,7 @@ import org.telegram.ui.Stories.recorder.HintView2;
+@@ -77,6 +77,7 @@ import org.telegram.ui.Stories.recorder.HintView2;
  import java.util.ArrayList;
  import java.util.Collections;
  
@@ -247,7 +247,7 @@ index 0000000..0000000 100644
  import me.vkryl.android.animator.BoolAnimator;
  import me.vkryl.android.animator.FactorAnimator;
  
-@@ -93,7 +94,12 @@ public class MainTabsActivity extends ViewPagerActivity implements NotificationC
+@@ -95,7 +96,12 @@ public class MainTabsActivity extends ViewPagerActivity implements NotificationC
      private static final int INDEX_PROFILE = 4;
  
      private static int indexToPosition(int index) {
@@ -260,8 +260,8 @@ index 0000000..0000000 100644
 +        return position;
      }
  
- 
-@@ -215,7 +221,8 @@ public class MainTabsActivity extends ViewPagerActivity implements NotificationC
+     private static final int ANIMATOR_ID_TABS_VISIBLE = 0;
+@@ -245,7 +251,8 @@ public class MainTabsActivity extends ViewPagerActivity implements NotificationC
          Bulletin.Delegate delegate = new Bulletin.Delegate() {
              @Override
              public int getBottomOffset(int tag) {
@@ -271,9 +271,9 @@ index 0000000..0000000 100644
              }
          };
  
-@@ -253,9 +260,16 @@ public class MainTabsActivity extends ViewPagerActivity implements NotificationC
-     public View createView(Context context) {
+@@ -284,10 +291,17 @@ public class MainTabsActivity extends ViewPagerActivity implements NotificationC
          super.createView(context);
+         tabletLayout = false;
  
 +        final boolean compact = MainTabsHelper.isCompact();
 +        final int mainTabsMargin = MainTabsHelper.getMainTabsMargin();
@@ -283,13 +283,15 @@ index 0000000..0000000 100644
          tabsView = new MainTabsLayout(context, resourceProvider);
          tabsView.setClipChildren(false);
 -        tabsView.setPadding(dp(DialogsActivity.MAIN_TABS_MARGIN + 4), dp(DialogsActivity.MAIN_TABS_MARGIN + 4), dp(DialogsActivity.MAIN_TABS_MARGIN + 4), dp(DialogsActivity.MAIN_TABS_MARGIN + 4));
+-        tabsView.setMaxWidth(dp(328 + DialogsActivity.MAIN_TABS_MARGIN * 2));
 +        final int paddingH = dp(mainTabsMargin + 4);
 +        final int paddingV = dp(mainTabsMargin + 4);
 +        tabsView.setPadding(paddingH, paddingV, paddingH, paddingV);
++        tabsView.setMaxWidth(dp(tabsViewWidth));
  
          tabs = new GlassTabView[5];
          tabs[INDEX_CHATS] = GlassTabView.createMainTab(context, resourceProvider, GlassTabView.TabAnimation.CHATS, R.string.MainTabsChats);
-@@ -273,6 +287,10 @@ public class MainTabsActivity extends ViewPagerActivity implements NotificationC
+@@ -305,6 +319,10 @@ public class MainTabsActivity extends ViewPagerActivity implements NotificationC
          tabsView.addTabToIgnoreClick(tabs[INDEX_PROFILE]);
          tabsView.addTabToIgnoreClick(tabs[INDEX_CALLS]);
  
@@ -300,7 +302,7 @@ index 0000000..0000000 100644
          for (int index = 0; index < tabs.length; index++) {
              final GlassTabView view = tabs[index];
  
-@@ -298,6 +316,7 @@ public class MainTabsActivity extends ViewPagerActivity implements NotificationC
+@@ -330,6 +348,7 @@ public class MainTabsActivity extends ViewPagerActivity implements NotificationC
              tabsView.setViewVisible(view, true, false);
          }
          checkUi_callTabVisible(getUserConfig().showCallsTab, false);
@@ -308,7 +310,7 @@ index 0000000..0000000 100644
  
          selectTab(viewPager.getCurrentPosition(), false);
  
-@@ -312,8 +331,8 @@ public class MainTabsActivity extends ViewPagerActivity implements NotificationC
+@@ -342,8 +361,8 @@ public class MainTabsActivity extends ViewPagerActivity implements NotificationC
          iBlur3FactoryGlass.setLiquidGlassEffectAllowed(LiteMode.isEnabled(LiteMode.FLAG_LIQUID_GLASS));
  
          tabsViewBackground = iBlur3FactoryGlass.create(tabsView, BlurredBackgroundProviderImpl.mainTabs(resourceProvider));
@@ -319,16 +321,16 @@ index 0000000..0000000 100644
          tabsView.setBackground(tabsViewBackground);
  
          BlurredBackgroundDrawableViewFactory iBlur3FactoryFade = new BlurredBackgroundDrawableViewFactory(iBlur3SourceColor);
-@@ -328,7 +347,7 @@ public class MainTabsActivity extends ViewPagerActivity implements NotificationC
+@@ -358,7 +377,7 @@ public class MainTabsActivity extends ViewPagerActivity implements NotificationC
  
          tabsViewWrapper = new FrameLayout(context);
          tabsViewWrapper.setOnClickListener(v -> {});
--        tabsViewWrapper.addView(tabsView, LayoutHelper.createFrame(328 + DialogsActivity.MAIN_TABS_MARGIN * 2, DialogsActivity.MAIN_TABS_HEIGHT_WITH_MARGINS, Gravity.BOTTOM | Gravity.CENTER_HORIZONTAL));
-+        tabsViewWrapper.addView(tabsView, LayoutHelper.createFrame(tabsViewWidth, MainTabsHelper.getMainTabsHeightWithMargins(), Gravity.BOTTOM | Gravity.CENTER_HORIZONTAL));
+-        tabsViewWrapper.addView(tabsView, LayoutHelper.createFrame(LayoutHelper.MATCH_PARENT, DialogsActivity.MAIN_TABS_HEIGHT_WITH_MARGINS, Gravity.BOTTOM | Gravity.CENTER_HORIZONTAL));
++        tabsViewWrapper.addView(tabsView, LayoutHelper.createFrame(LayoutHelper.MATCH_PARENT, MainTabsHelper.getMainTabsHeightWithMargins(), Gravity.BOTTOM | Gravity.CENTER_HORIZONTAL));
          tabsViewWrapper.setClipToPadding(false);
          contentView.addView(tabsViewWrapper, LayoutHelper.createFrame(LayoutHelper.MATCH_PARENT, LayoutHelper.WRAP_CONTENT, Gravity.BOTTOM));
  
-@@ -590,12 +609,14 @@ public class MainTabsActivity extends ViewPagerActivity implements NotificationC
+@@ -621,12 +640,14 @@ public class MainTabsActivity extends ViewPagerActivity implements NotificationC
  
          if (viewPager != null) {
              final int currentPosition = viewPager.getCurrentPosition();
@@ -347,7 +349,7 @@ index 0000000..0000000 100644
              }
              if (pendingFolderId != null && currentPosition == POSITION_CHATS && dialogsActivity != null) {
                  dialogsActivity.scrollToFolder(pendingFolderId);
-@@ -624,7 +645,7 @@ public class MainTabsActivity extends ViewPagerActivity implements NotificationC
+@@ -655,7 +676,7 @@ public class MainTabsActivity extends ViewPagerActivity implements NotificationC
  
      @Override
      protected int getFragmentsCount() {
@@ -356,7 +358,7 @@ index 0000000..0000000 100644
      }
  
      @Override
-@@ -663,13 +684,13 @@ public class MainTabsActivity extends ViewPagerActivity implements NotificationC
+@@ -694,13 +715,13 @@ public class MainTabsActivity extends ViewPagerActivity implements NotificationC
  
      @Override
      protected BaseFragment createBaseFragmentAt(int position) {
@@ -372,7 +374,7 @@ index 0000000..0000000 100644
              if (getUserConfig().showCallsTab) {
                  Bundle args = new Bundle();
                  args.putBoolean("needFinishFragment", false);
-@@ -685,7 +706,7 @@ public class MainTabsActivity extends ViewPagerActivity implements NotificationC
+@@ -716,7 +737,7 @@ public class MainTabsActivity extends ViewPagerActivity implements NotificationC
              dialogsActivity = new DialogsActivity(args);
              dialogsActivity.setMainTabsActivityController(new MainTabsActivityControllerImpl());
              return dialogsActivity;
@@ -381,7 +383,7 @@ index 0000000..0000000 100644
              Bundle args = new Bundle();
              args.putLong("user_id", UserConfig.getInstance(currentAccount).getClientUserId());
              args.putBoolean("my_profile", true);
-@@ -748,6 +769,7 @@ public class MainTabsActivity extends ViewPagerActivity implements NotificationC
+@@ -779,6 +800,7 @@ public class MainTabsActivity extends ViewPagerActivity implements NotificationC
      }
  
      private boolean canScrollInternal(MotionEvent ev, boolean forward) {
@@ -389,7 +391,7 @@ index 0000000..0000000 100644
          final BaseFragment fragment = getCurrentVisibleFragment();
          if (fragment instanceof TabFragmentDelegate) {
              final TabFragmentDelegate delegate = (TabFragmentDelegate) fragment;
-@@ -773,7 +795,8 @@ public class MainTabsActivity extends ViewPagerActivity implements NotificationC
+@@ -804,7 +826,8 @@ public class MainTabsActivity extends ViewPagerActivity implements NotificationC
  
          ViewGroup.MarginLayoutParams lp;
          {
@@ -399,7 +401,7 @@ index 0000000..0000000 100644
              lp = (ViewGroup.MarginLayoutParams) fadeView.getLayoutParams();
              if (lp.height != height) {
                  lp.height = height;
-@@ -838,12 +861,13 @@ public class MainTabsActivity extends ViewPagerActivity implements NotificationC
+@@ -872,12 +895,13 @@ public class MainTabsActivity extends ViewPagerActivity implements NotificationC
          } else if (id == NotificationCenter.callTabsVisibleToggled) {
              final boolean callTabsVisible = getUserConfig().showCallsTab;
              checkUi_callTabVisible(callTabsVisible, true);
@@ -415,7 +417,7 @@ index 0000000..0000000 100644
              }
          } else if (id == NotificationCenter.mainUserInfoChanged) {
              if (tabs != null && tabs[INDEX_PROFILE] != null) {
-@@ -900,12 +924,12 @@ public class MainTabsActivity extends ViewPagerActivity implements NotificationC
+@@ -934,12 +958,12 @@ public class MainTabsActivity extends ViewPagerActivity implements NotificationC
      }
  
      private void checkUi_fadeView() {
@@ -428,9 +430,9 @@ index 0000000..0000000 100644
 -        final float isProfile = 1f - MathUtils.clamp(Math.abs(POSITION_PROFILE - animatedPosition), 0, 1);
 +        final float isProfile = 1f - MathUtils.clamp(Math.abs(MainTabsHelper.positionOffset(POSITION_PROFILE) - animatedPosition), 0, 1);
          final float hide = 1f - AndroidUtilities.getNavigationBarThirdButtonsFactor(0, 1f, navigationBarHeight);
-         final float alpha = (1f - isProfile * hide) * animatorTabsVisible.getFloatValue();
- 
-@@ -915,10 +939,15 @@ public class MainTabsActivity extends ViewPagerActivity implements NotificationC
+         float alpha = (1f - isProfile * hide) * animatorTabsVisible.getFloatValue();
+         if (tabletLayout) {
+@@ -952,10 +976,15 @@ public class MainTabsActivity extends ViewPagerActivity implements NotificationC
      }
  
      private void checkUi_tabsPosition() {
@@ -447,7 +449,7 @@ index 0000000..0000000 100644
  
          final float factor = animatorTabsVisible.getFloatValue();
          final float scale = lerp(0.85f, 1f, factor);
-@@ -1004,7 +1033,7 @@ public class MainTabsActivity extends ViewPagerActivity implements NotificationC
+@@ -1039,7 +1068,7 @@ public class MainTabsActivity extends ViewPagerActivity implements NotificationC
      private boolean accountSwitchHintShown;
  
      private void showAccountChangeHint() {
@@ -468,7 +470,7 @@ index 0000000..0000000 100644
  import me.vkryl.android.animator.BoolAnimator;
  
  public class ProfileActivity extends BaseFragment implements NotificationCenter.NotificationCenterDelegate, DialogsActivity.DialogsActivityDelegate, SharedMediaLayout.SharedMediaPreloaderDelegate, ImageUpdater.ImageUpdaterDelegate, SharedMediaLayout.Delegate, MainTabsActivity.TabFragmentDelegate {
-@@ -2295,8 +2296,8 @@ public class ProfileActivity extends BaseFragment implements NotificationCenter.
+@@ -2283,8 +2284,8 @@ public class ProfileActivity extends BaseFragment implements NotificationCenter.
  
          setActionsMode();
  
@@ -479,7 +481,7 @@ index 0000000..0000000 100644
  
          return true;
      }
-@@ -16792,8 +16793,8 @@ public class ProfileActivity extends BaseFragment implements NotificationCenter.
+@@ -16789,8 +16790,8 @@ public class ProfileActivity extends BaseFragment implements NotificationCenter.
          }
  
          final int additionalList = dp(48);
@@ -494,16 +496,16 @@ diff --git a/TMessagesProj/src/main/java/org/telegram/ui/SettingsActivity.java b
 index 0000000..0000000 100644
 --- a/TMessagesProj/src/main/java/org/telegram/ui/SettingsActivity.java
 +++ b/TMessagesProj/src/main/java/org/telegram/ui/SettingsActivity.java
-@@ -60,6 +60,8 @@ import androidx.core.view.ViewCompat;
- import androidx.core.view.WindowInsetsCompat;
- import androidx.recyclerview.widget.RecyclerView;
+@@ -62,6 +62,8 @@ import androidx.recyclerview.widget.RecyclerView;
+ 
+ import com.google.common.collect.Lists;
  
 +import desu.inugram.helpers.dialogs.MainTabsHelper;
 +
  import org.telegram.PhoneFormat.PhoneFormat;
  import org.telegram.messenger.AndroidUtilities;
  import org.telegram.messenger.ApplicationLoader;
-@@ -210,7 +212,7 @@ public class SettingsActivity extends BaseFragment implements NotificationCenter
+@@ -216,7 +218,7 @@ public class SettingsActivity extends BaseFragment implements NotificationCenter
              hasMainTabs = arguments.getBoolean("hasMainTabs", false);
          }
  
@@ -512,7 +514,7 @@ index 0000000..0000000 100644
          return super.onFragmentCreate();
      }
  
-@@ -2006,8 +2008,8 @@ public class SettingsActivity extends BaseFragment implements NotificationCenter
+@@ -2029,8 +2031,8 @@ public class SettingsActivity extends BaseFragment implements NotificationCenter
          }
  
          final int additionalList = dp(48);
@@ -561,7 +563,7 @@ diff --git a/TMessagesProj/src/main/java/org/telegram/ui/ViewPagerActivity.java 
 index 0000000..0000000 100644
 --- a/TMessagesProj/src/main/java/org/telegram/ui/ViewPagerActivity.java
 +++ b/TMessagesProj/src/main/java/org/telegram/ui/ViewPagerActivity.java
-@@ -176,7 +176,7 @@ public abstract class ViewPagerActivity extends BaseFragment {
+@@ -180,7 +180,7 @@ public abstract class ViewPagerActivity extends BaseFragment {
      @Override
      public void clearViews() {
          if (viewPager != null) {

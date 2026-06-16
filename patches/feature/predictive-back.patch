@@ -22,7 +22,7 @@ index 0000000..0000000 100644
              try {
                  return (!passivePreview || this != containerView) && super.dispatchTouchEvent(ev);
              } catch (Throwable e) {
-@@ -1026,11 +1029,13 @@ public class ActionBarLayout extends FrameLayout implements INavigationLayout, F
+@@ -1051,11 +1054,13 @@ public class ActionBarLayout extends FrameLayout implements INavigationLayout, F
          int clipRight = width + getPaddingLeft();
          int backOffset = 0;
  
@@ -36,7 +36,7 @@ index 0000000..0000000 100644
  
          final int restoreCount2 = canvas.save();
          if (child != bottomSheetTabs && bottomSheetTabsClip != null) {
-@@ -1269,7 +1274,7 @@ public class ActionBarLayout extends FrameLayout implements INavigationLayout, F
+@@ -1302,7 +1307,7 @@ public class ActionBarLayout extends FrameLayout implements INavigationLayout, F
          delegate = INavigationLayoutDelegate;
      }
  
@@ -45,7 +45,7 @@ index 0000000..0000000 100644
          if (!backAnimation) {
              if (fragmentsStack.size() < 2) {
                  checkBlackScreen("onSlideAnimationEnd exit");
-@@ -1499,8 +1504,8 @@ public class ActionBarLayout extends FrameLayout implements INavigationLayout, F
+@@ -1532,8 +1537,8 @@ public class ActionBarLayout extends FrameLayout implements INavigationLayout, F
          return false;
      }
  
@@ -56,7 +56,7 @@ index 0000000..0000000 100644
      private boolean predictiveBackHasProgress;
      private float predictiveBackY;
      private boolean predictiveBackLeft;
-@@ -1573,6 +1578,8 @@ public class ActionBarLayout extends FrameLayout implements INavigationLayout, F
+@@ -1606,6 +1611,8 @@ public class ActionBarLayout extends FrameLayout implements INavigationLayout, F
          return predictiveBackInProgress && predictiveBackHasProgress;
      }
  
@@ -69,7 +69,7 @@ diff --git a/TMessagesProj/src/main/java/org/telegram/ui/LaunchActivity.java b/T
 index 0000000..0000000 100644
 --- a/TMessagesProj/src/main/java/org/telegram/ui/LaunchActivity.java
 +++ b/TMessagesProj/src/main/java/org/telegram/ui/LaunchActivity.java
-@@ -719,7 +719,27 @@ public class LaunchActivity extends BasePermissionsActivity implements INavigati
+@@ -737,7 +737,27 @@ public class LaunchActivity extends BasePermissionsActivity implements INavigati
          BackupAgent.requestBackup(this);
  
          RestrictedLanguagesSelectActivity.checkRestrictedLanguages(false);

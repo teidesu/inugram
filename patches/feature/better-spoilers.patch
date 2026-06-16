@@ -12,7 +12,7 @@ diff --git a/TMessagesProj/src/main/java/org/telegram/ui/Cells/ChatMessageCell.j
 index 0000000..0000000 100644
 --- a/TMessagesProj/src/main/java/org/telegram/ui/Cells/ChatMessageCell.java
 +++ b/TMessagesProj/src/main/java/org/telegram/ui/Cells/ChatMessageCell.java
-@@ -1284,7 +1284,7 @@ public class ChatMessageCell extends BaseCell implements SeekBar.SeekBarDelegate
+@@ -1296,7 +1296,7 @@ public class ChatMessageCell extends BaseCell implements SeekBar.SeekBarDelegate
      private int buttonY;
      private int videoButtonX;
      private int videoButtonY;
@@ -21,7 +21,7 @@ index 0000000..0000000 100644
      private int buttonPressed;
      private int videoButtonPressed;
      private int miniButtonPressed;
-@@ -15056,6 +15056,9 @@ public class ChatMessageCell extends BaseCell implements SeekBar.SeekBarDelegate
+@@ -15220,6 +15220,9 @@ public class ChatMessageCell extends BaseCell implements SeekBar.SeekBarDelegate
      }
  
      public void drawBlurredPhotoParticles(Canvas canvas) {
@@ -31,7 +31,7 @@ index 0000000..0000000 100644
          if (mediaSpoilerEffect2 == null) {
              if (!LiteMode.isEnabled(LiteMode.FLAG_CHAT_SPOILER)) {
                  if (mediaSpoilerEffect == null) {
-@@ -19475,6 +19478,7 @@ public class ChatMessageCell extends BaseCell implements SeekBar.SeekBarDelegate
+@@ -19504,6 +19507,7 @@ public class ChatMessageCell extends BaseCell implements SeekBar.SeekBarDelegate
                              replyTextWidth -= sz;
                              maxWidth += sz;
                          }
@@ -39,7 +39,7 @@ index 0000000..0000000 100644
                          if (changed || !isReplyQuote) {
                              stringFinalText = TextUtils.ellipsize(sb, textPaint, maxWidth, TextUtils.TruncateAt.END);
                          } else {
-@@ -19502,6 +19506,7 @@ public class ChatMessageCell extends BaseCell implements SeekBar.SeekBarDelegate
+@@ -19531,6 +19535,7 @@ public class ChatMessageCell extends BaseCell implements SeekBar.SeekBarDelegate
                          if (isSideMenued && !drawBackground || (!messageObject.isAnyKindOfSticker() && messageObject.type != MessageObject.TYPE_ROUND_VIDEO || messageObject.type == MessageObject.TYPE_EMOJIS)) {
                              namesOffset += Math.max(0, replyTextHeight - dp(3.66f) - Theme.chat_replyTextPaint.getTextSize());
                          }
@@ -47,7 +47,7 @@ index 0000000..0000000 100644
                          if (replyTextLayout.getLineCount() > 0) {
                              int width = 0;
                              replyTextOffset = replyTextLayout.getWidth();
-@@ -19514,13 +19519,14 @@ public class ChatMessageCell extends BaseCell implements SeekBar.SeekBarDelegate
+@@ -19543,13 +19548,14 @@ public class ChatMessageCell extends BaseCell implements SeekBar.SeekBarDelegate
                                  replyTextOffset = Math.min(replyTextOffset, left);
                              }
                              replyTextWidth += width + dp(18);
@@ -67,7 +67,7 @@ diff --git a/TMessagesProj/src/main/java/org/telegram/ui/Components/spoilers/Spo
 index 0000000..0000000 100644
 --- a/TMessagesProj/src/main/java/org/telegram/ui/Components/spoilers/SpoilerEffect.java
 +++ b/TMessagesProj/src/main/java/org/telegram/ui/Components/spoilers/SpoilerEffect.java
-@@ -109,6 +109,8 @@ public class SpoilerEffect extends Drawable {
+@@ -110,6 +110,8 @@ public class SpoilerEffect extends Drawable {
  
      public boolean insideQuote;
  
@@ -76,7 +76,7 @@ index 0000000..0000000 100644
      private static int measureParticlesPerCharacter() {
          switch (SharedConfig.getDevicePerformanceClass()) {
              default:
-@@ -307,6 +309,9 @@ public class SpoilerEffect extends Drawable {
+@@ -308,6 +310,9 @@ public class SpoilerEffect extends Drawable {
      @Override
      public void draw(@NonNull Canvas canvas) {
          final Rect bounds = getBounds();
@@ -86,7 +86,7 @@ index 0000000..0000000 100644
          if (bounds.isEmpty()) {
              return;
          }
-@@ -693,6 +698,7 @@ public class SpoilerEffect extends Drawable {
+@@ -694,6 +699,7 @@ public class SpoilerEffect extends Drawable {
                  addSpoilerRangesInternal(v, textLayout, left, right, start, end, spoilersPool, spoilers, quoteBlocks);
              }
          }
@@ -94,7 +94,7 @@ index 0000000..0000000 100644
          if (v instanceof TextView && spoilersPool != null) {
              spoilersPool.clear();
          }
-@@ -709,6 +715,13 @@ public class SpoilerEffect extends Drawable {
+@@ -710,6 +716,13 @@ public class SpoilerEffect extends Drawable {
  
      private static void addSpoilerRangeInternal(@Nullable View v, @NonNull Layout textLayout, float left, float top, float right, float bottom, @Nullable Stack<SpoilerEffect> spoilersPool, List<SpoilerEffect> spoilers, int mostleft, int mostright, ArrayList<QuoteSpan.Block> quote) {
          SpoilerEffect spoilerEffect = spoilersPool == null || spoilersPool.isEmpty() ? new SpoilerEffect() : spoilersPool.remove(0);
@@ -108,7 +108,7 @@ index 0000000..0000000 100644
          spoilerEffect.insideQuote = false;
          if (quote != null) {
              final float cy = (top + bottom) / 2f;
-@@ -827,7 +840,7 @@ public class SpoilerEffect extends Drawable {
+@@ -828,7 +841,7 @@ public class SpoilerEffect extends Drawable {
                              sb.removeSpan(e);
                          }
  
@@ -117,7 +117,7 @@ index 0000000..0000000 100644
                          sb.removeSpan(ss);
                      }
                  }
-@@ -954,7 +967,7 @@ public class SpoilerEffect extends Drawable {
+@@ -955,7 +968,7 @@ public class SpoilerEffect extends Drawable {
                              }, sp.getSpanStart(e), sp.getSpanEnd(e), sp.getSpanFlags(ss));
                              sb.removeSpan(e);
                          }

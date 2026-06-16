@@ -11,7 +11,7 @@ diff --git a/TMessagesProj/src/main/java/org/telegram/ui/Cells/SharedPhotoVideoC
 index 0000000..0000000 100644
 --- a/TMessagesProj/src/main/java/org/telegram/ui/Cells/SharedPhotoVideoCell2.java
 +++ b/TMessagesProj/src/main/java/org/telegram/ui/Cells/SharedPhotoVideoCell2.java
-@@ -671,7 +671,7 @@ public class SharedPhotoVideoCell2 extends FrameLayout {
+@@ -675,7 +675,7 @@ public class SharedPhotoVideoCell2 extends FrameLayout {
              imageReceiver.draw(canvas);
              if (currentMessageObject != null && currentMessageObject.hasMediaSpoilers() && !currentMessageObject.isMediaSpoilersRevealedInSharedMedia) {
                  canvas.save();

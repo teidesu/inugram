@@ -148,8 +148,7 @@ object NonIslandHelper {
         actionBarBottom: Int,
     ) {
         if (!chatElements()) {
-            // stock logic
-            parentLayout.drawHeaderShadow(canvas, actionBarBottom);
+            // upstream no longer draws an action-bar header shadow in island mode
             return
         }
 

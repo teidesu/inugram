@@ -26,7 +26,7 @@ diff --git a/TMessagesProj/src/main/java/org/telegram/ui/bots/BotWebViewAttached
 index 0000000..0000000 100644
 --- a/TMessagesProj/src/main/java/org/telegram/ui/bots/BotWebViewAttachedSheet.java
 +++ b/TMessagesProj/src/main/java/org/telegram/ui/bots/BotWebViewAttachedSheet.java
-@@ -948,7 +948,7 @@ public class BotWebViewAttachedSheet implements NotificationCenter.NotificationC
+@@ -955,7 +955,7 @@ public class BotWebViewAttachedSheet implements NotificationCenter.NotificationC
          this.currentWebApp = props.app;
  
          TLRPC.User userbot = MessagesController.getInstance(currentAccount).getUser(botId);
@@ -35,7 +35,7 @@ index 0000000..0000000 100644
          try {
              TextPaint tp = new TextPaint();
              tp.setTextSize(dp(20));
-@@ -1022,12 +1022,17 @@ public class BotWebViewAttachedSheet implements NotificationCenter.NotificationC
+@@ -1029,12 +1029,17 @@ public class BotWebViewAttachedSheet implements NotificationCenter.NotificationC
              otherItem.addSubItem(R.id.menu_delete_bot, R.drawable.msg_delete, LocaleController.getString(R.string.BotWebViewDeleteBot));
          }
          hasPrivacy(currentAccount, botId, has -> {
@@ -58,7 +58,7 @@ diff --git a/TMessagesProj/src/main/java/org/telegram/ui/bots/BotWebViewSheet.ja
 index 0000000..0000000 100644
 --- a/TMessagesProj/src/main/java/org/telegram/ui/bots/BotWebViewSheet.java
 +++ b/TMessagesProj/src/main/java/org/telegram/ui/bots/BotWebViewSheet.java
-@@ -1346,7 +1346,7 @@ public class BotWebViewSheet extends Dialog implements NotificationCenter.Notifi
+@@ -1354,7 +1354,7 @@ public class BotWebViewSheet extends Dialog implements NotificationCenter.Notifi
          this.currentWebApp = props.app;
  
          final TLRPC.User userbot = MessagesController.getInstance(currentAccount).getUser(botId);
@@ -67,7 +67,7 @@ index 0000000..0000000 100644
          try {
              TextPaint tp = new TextPaint();
              tp.setTextSize(dp(20));
-@@ -1662,7 +1662,7 @@ public class BotWebViewSheet extends Dialog implements NotificationCenter.Notifi
+@@ -1670,7 +1670,7 @@ public class BotWebViewSheet extends Dialog implements NotificationCenter.Notifi
              o.addGap();
          }
          o
@@ -76,7 +76,7 @@ index 0000000..0000000 100644
                  if (parentActivity instanceof LaunchActivity) {
                      ((LaunchActivity) parentActivity).presentFragment(ChatActivity.of(botId));
                  }
-@@ -1685,10 +1685,10 @@ public class BotWebViewSheet extends Dialog implements NotificationCenter.Notifi
+@@ -1693,10 +1693,10 @@ public class BotWebViewSheet extends Dialog implements NotificationCenter.Notifi
                  webViewContainer.loadFlickerAndSettingsItem(currentAccount, botId, null);
                  webViewContainer.reload();
              })

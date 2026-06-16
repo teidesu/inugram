@@ -11,7 +11,7 @@ diff --git a/TMessagesProj/src/main/java/org/telegram/ui/Components/Reactions/Re
 index 0000000..0000000 100644
 --- a/TMessagesProj/src/main/java/org/telegram/ui/Components/Reactions/ReactionsLayoutInBubble.java
 +++ b/TMessagesProj/src/main/java/org/telegram/ui/Components/Reactions/ReactionsLayoutInBubble.java
-@@ -1626,6 +1626,7 @@ public class ReactionsLayoutInBubble {
+@@ -1625,6 +1625,7 @@ public class ReactionsLayoutInBubble {
      }
  
      public void animateReaction(VisibleReaction reaction) {

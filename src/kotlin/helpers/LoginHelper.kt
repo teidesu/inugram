@@ -33,6 +33,7 @@ import org.telegram.tgnet.SerializedData
 import org.telegram.tgnet.TLObject
 import org.telegram.tgnet.TLRPC
 import org.telegram.tgnet.tl.TL_account
+import org.telegram.tgnet.tl.TL_update
 import org.telegram.ui.ActionBar.AlertDialog
 import org.telegram.ui.ActionBar.Theme
 import org.telegram.ui.Components.AlertsCreator
@@ -53,7 +54,7 @@ object LoginHelper {
     private var activeQrLogin: State? = null
 
     fun onUpdate(update: TLObject?, account: Int) {
-        if (update !is TLRPC.TL_updateLoginToken) return
+        if (update !is TL_update.TL_updateLoginToken) return
         AndroidUtilities.runOnUIThread {
             activeQrLogin?.takeIf { it.currentAccount == account }?.onPushUpdate()
         }

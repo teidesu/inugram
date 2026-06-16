@@ -76,7 +76,7 @@ diff --git a/TMessagesProj/src/main/java/org/telegram/ui/MainTabsActivity.java b
 index 0000000..0000000 100644
 --- a/TMessagesProj/src/main/java/org/telegram/ui/MainTabsActivity.java
 +++ b/TMessagesProj/src/main/java/org/telegram/ui/MainTabsActivity.java
-@@ -280,7 +280,7 @@ public class MainTabsActivity extends ViewPagerActivity implements NotificationC
+@@ -312,7 +312,7 @@ public class MainTabsActivity extends ViewPagerActivity implements NotificationC
          tabs[INDEX_CHATS].setOnLongClickListener(this::openFoldersSelector);
          tabs[INDEX_CONTACTS].setOnLongClickListener(this::openContactsSelector);
          tabs[INDEX_CALLS].setOnLongClickListener(this::openCallsSelector);
@@ -85,7 +85,7 @@ index 0000000..0000000 100644
  
          tabsView.addTabToIgnoreClick(tabs[INDEX_CHATS]);
          tabsView.addTabToIgnoreClick(tabs[INDEX_CONTACTS]);
-@@ -483,7 +483,7 @@ public class MainTabsActivity extends ViewPagerActivity implements NotificationC
+@@ -514,7 +514,7 @@ public class MainTabsActivity extends ViewPagerActivity implements NotificationC
          }
      }
  
@@ -94,7 +94,7 @@ index 0000000..0000000 100644
          final ArrayList<Integer> accountNumbers = new ArrayList<>();
  
          accountNumbers.clear();
-@@ -552,11 +552,10 @@ public class MainTabsActivity extends ViewPagerActivity implements NotificationC
+@@ -583,11 +583,10 @@ public class MainTabsActivity extends ViewPagerActivity implements NotificationC
          final ShapeDrawable bg = Theme.createRoundRectDrawable(dp(28), getThemedColor(Theme.key_windowBackgroundWhite));
          bg.getPaint().setShadowLayer(dp(6), 0, dp(1), Theme.multAlpha(0xFF000000, 0.15f));
          o.setScrimViewBackground(bg);

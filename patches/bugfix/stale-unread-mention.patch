@@ -11,7 +11,7 @@ diff --git a/TMessagesProj/src/main/java/org/telegram/messenger/MessagesStorage.
 index 0000000..0000000 100644
 --- a/TMessagesProj/src/main/java/org/telegram/messenger/MessagesStorage.java
 +++ b/TMessagesProj/src/main/java/org/telegram/messenger/MessagesStorage.java
-@@ -13504,13 +13504,24 @@ public class MessagesStorage extends BaseController {
+@@ -13506,13 +13506,24 @@ public class MessagesStorage extends BaseController {
  
      private void markMessagesAsReadInternal(LongSparseIntArray inbox, LongSparseIntArray outbox, SparseIntArray encryptedMessages) {
          SQLitePreparedStatement state = null;
@@ -36,7 +36,7 @@ index 0000000..0000000 100644
  
                      state.requery();
                      state.bindLong(1, key);
-@@ -13519,6 +13530,10 @@ public class MessagesStorage extends BaseController {
+@@ -13521,6 +13532,10 @@ public class MessagesStorage extends BaseController {
                  }
                  state.dispose();
                  state = null;
@@ -47,7 +47,7 @@ index 0000000..0000000 100644
              }
              if (!isEmpty(outbox)) {
                  for (int b = 0; b < outbox.size(); b++) {
-@@ -13546,6 +13561,9 @@ public class MessagesStorage extends BaseController {
+@@ -13548,6 +13563,9 @@ public class MessagesStorage extends BaseController {
              if (state != null) {
                  state.dispose();
              }

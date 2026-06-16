@@ -11,7 +11,7 @@ diff --git a/TMessagesProj/src/main/java/org/telegram/ui/Components/AlertsCreato
 index 0000000..0000000 100644
 --- a/TMessagesProj/src/main/java/org/telegram/ui/Components/AlertsCreator.java
 +++ b/TMessagesProj/src/main/java/org/telegram/ui/Components/AlertsCreator.java
-@@ -2410,6 +2410,9 @@ public class AlertsCreator {
+@@ -2677,6 +2677,9 @@ public class AlertsCreator {
              if (forceDeleteForAll) {
                  cell[0].setChecked(deleteForAll[0] = true, false);
                  updateText.run();
@@ -21,7 +21,7 @@ index 0000000..0000000 100644
              }
          }
  
-@@ -7702,6 +7705,9 @@ public class AlertsCreator {
+@@ -7968,6 +7971,9 @@ public class AlertsCreator {
                      deleteForAll[0] = !deleteForAll[0];
                      cell12.setChecked(deleteForAll[0], true);
                  });
@@ -31,7 +31,7 @@ index 0000000..0000000 100644
                  builder.setView(frameLayout);
                  builder.setCustomViewOffset(9);
              }
-@@ -7761,6 +7767,9 @@ public class AlertsCreator {
+@@ -8027,6 +8033,9 @@ public class AlertsCreator {
                      deleteForAll[0] = !deleteForAll[0];
                      cell1.setChecked(deleteForAll[0], true);
                  });

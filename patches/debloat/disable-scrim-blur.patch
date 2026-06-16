@@ -4,14 +4,14 @@ Date: Wed, 29 Apr 2026 17:59:48 +0300
 Subject: option to disable scrim blur throughout the app
 
 ---
- .../telegram/messenger/AndroidUtilities.java    |  7 +++++++
- .../ui/Components/BlurBehindDrawable.java       | 15 +++++++++++++++
- .../telegram/ui/Components/ScrimOptions.java    |  8 ++++++++
- .../org/telegram/ui/ContentPreviewViewer.java   |  4 ++--
- .../java/org/telegram/ui/DialogsActivity.java   | 10 ++++++++++
- .../org/telegram/ui/MessageSendPreview.java     | 17 ++++++++++++++---
- .../java/org/telegram/ui/TopicsFragment.java    | 12 ++++++++++++
- 7 files changed, 68 insertions(+), 5 deletions(-)
+ .../telegram/messenger/AndroidUtilities.java  |  7 +++++++
+ .../ui/Components/BlurBehindDrawable.java     | 15 +++++++++++++++
+ .../telegram/ui/Components/ScrimOptions.java  | 10 +++++++++-
+ .../org/telegram/ui/ContentPreviewViewer.java |  4 ++--
+ .../java/org/telegram/ui/DialogsActivity.java | 10 ++++++++++
+ .../org/telegram/ui/MessageSendPreview.java   | 19 +++++++++++++++----
+ .../java/org/telegram/ui/TopicsFragment.java  | 12 ++++++++++++
+ 7 files changed, 70 insertions(+), 7 deletions(-)
 
 diff --git a/TMessagesProj/src/main/java/org/telegram/messenger/AndroidUtilities.java b/TMessagesProj/src/main/java/org/telegram/messenger/AndroidUtilities.java
 index 0000000..0000000 100644
@@ -61,7 +61,7 @@ diff --git a/TMessagesProj/src/main/java/org/telegram/ui/Components/ScrimOptions
 index 0000000..0000000 100644
 --- a/TMessagesProj/src/main/java/org/telegram/ui/Components/ScrimOptions.java
 +++ b/TMessagesProj/src/main/java/org/telegram/ui/Components/ScrimOptions.java
-@@ -348,6 +348,14 @@ public class ScrimOptions extends Dialog {
+@@ -349,6 +349,14 @@ public class ScrimOptions extends Dialog {
      }
  
      public static void makeGlobalBlurBitmaps(Utilities.Callback2<Bitmap, Bitmap> bitmaps) {
@@ -76,6 +76,15 @@ index 0000000..0000000 100644
          AndroidUtilities.makeGlobalBlurBitmap(bitmap -> {
              final ColorMatrix colorMatrixBg = new ColorMatrix();
              AndroidUtilities.adjustSaturationColorMatrix(colorMatrixBg, Theme.isCurrentThemeDark() ? .04f : +.25f);
+@@ -368,7 +376,7 @@ public class ScrimOptions extends Dialog {
+     }
+ 
+     public static void makeGlobalBlurBitmaps(View cutToContainer, Utilities.Callback2<Bitmap, Bitmap> bitmaps) {
+-        if (cutToContainer == null) {
++        if (cutToContainer == null || desu.inugram.InuConfig.DISABLE_SCRIM_BLUR.getValue()) {
+             makeGlobalBlurBitmaps(bitmaps);
+             return;
+         }
 diff --git a/TMessagesProj/src/main/java/org/telegram/ui/ContentPreviewViewer.java b/TMessagesProj/src/main/java/org/telegram/ui/ContentPreviewViewer.java
 index 0000000..0000000 100644
 --- a/TMessagesProj/src/main/java/org/telegram/ui/ContentPreviewViewer.java
@@ -123,7 +132,16 @@ diff --git a/TMessagesProj/src/main/java/org/telegram/ui/MessageSendPreview.java
 index 0000000..0000000 100644
 --- a/TMessagesProj/src/main/java/org/telegram/ui/MessageSendPreview.java
 +++ b/TMessagesProj/src/main/java/org/telegram/ui/MessageSendPreview.java
-@@ -1165,7 +1165,9 @@ public class MessageSendPreview extends Dialog implements NotificationCenter.Not
+@@ -159,7 +159,7 @@ public class MessageSendPreview extends Dialog implements NotificationCenter.Not
+             @Override
+             protected void dispatchDraw(@NonNull Canvas canvas) {
+                 if (activityVisibilityController != null) {
+-                    activityVisibilityController.setHidden(openProgress == 1 && blurBitmapPaint != null);
++                    activityVisibilityController.setHidden(openProgress == 1 && blurBitmapPaint != null && !desu.inugram.InuConfig.DISABLE_SCRIM_BLUR.getValue());
+                 }
+ 
+                 if (openProgress > 0 && blurBitmapPaint != null) {
+@@ -1163,7 +1163,9 @@ public class MessageSendPreview extends Dialog implements NotificationCenter.Not
                  WindowManager.LayoutParams.FLAG_DRAWS_SYSTEM_BAR_BACKGROUNDS |
                  WindowManager.LayoutParams.FLAG_TRANSLUCENT_NAVIGATION |
                  WindowManager.LayoutParams.FLAG_TRANSLUCENT_STATUS;
@@ -134,7 +152,7 @@ index 0000000..0000000 100644
          params.flags |= WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON;
          if (Build.VERSION.SDK_INT >= 28) {
              params.layoutInDisplayCutoutMode = WindowManager.LayoutParams.LAYOUT_IN_DISPLAY_CUTOUT_MODE_SHORT_EDGES;
-@@ -1680,6 +1682,15 @@ public class MessageSendPreview extends Dialog implements NotificationCenter.Not
+@@ -1678,6 +1680,15 @@ public class MessageSendPreview extends Dialog implements NotificationCenter.Not
          if (dismissing) return;
          dismissing = true;
  
@@ -150,7 +168,7 @@ index 0000000..0000000 100644
          SpoilerEffect2.pause(SpoilerEffect2.TYPE_DEFAULT, false);
          if (spoilerEffect2 != null) {
              spoilerEffect2.detach(windowView);
-@@ -1754,13 +1765,13 @@ public class MessageSendPreview extends Dialog implements NotificationCenter.Not
+@@ -1760,13 +1771,13 @@ public class MessageSendPreview extends Dialog implements NotificationCenter.Not
                      closing = false;
                  }
                  if (editText != null) {

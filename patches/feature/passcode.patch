@@ -19,7 +19,7 @@ diff --git a/TMessagesProj/src/main/java/org/telegram/ui/Components/AlertsCreato
 index 0000000..0000000 100644
 --- a/TMessagesProj/src/main/java/org/telegram/ui/Components/AlertsCreator.java
 +++ b/TMessagesProj/src/main/java/org/telegram/ui/Components/AlertsCreator.java
-@@ -7368,7 +7368,7 @@ public class AlertsCreator {
+@@ -7634,7 +7634,7 @@ public class AlertsCreator {
          linearLayout.setOrientation(LinearLayout.VERTICAL);
          for (int a = 0; a < UserConfig.MAX_ACCOUNT_COUNT; a++) {
              TLRPC.User u = UserConfig.getInstance(a).getCurrentUser();
@@ -74,7 +74,7 @@ diff --git a/TMessagesProj/src/main/java/org/telegram/ui/LaunchActivity.java b/T
 index 0000000..0000000 100644
 --- a/TMessagesProj/src/main/java/org/telegram/ui/LaunchActivity.java
 +++ b/TMessagesProj/src/main/java/org/telegram/ui/LaunchActivity.java
-@@ -1543,6 +1543,7 @@ public class LaunchActivity extends BasePermissionsActivity implements INavigati
+@@ -1558,6 +1558,7 @@ public class LaunchActivity extends BasePermissionsActivity implements INavigati
          if (GiftInfoBottomSheet.handleIntent(intent, progress)) {
              return true;
          }
@@ -86,7 +86,7 @@ diff --git a/TMessagesProj/src/main/java/org/telegram/ui/LoginActivity.java b/TM
 index 0000000..0000000 100644
 --- a/TMessagesProj/src/main/java/org/telegram/ui/LoginActivity.java
 +++ b/TMessagesProj/src/main/java/org/telegram/ui/LoginActivity.java
-@@ -1638,6 +1638,7 @@ public class LoginActivity extends BaseFragment implements NotificationCenter.No
+@@ -1639,6 +1639,7 @@ public class LoginActivity extends BaseFragment implements NotificationCenter.No
      private boolean pendingSwitchingAccount;
  
      private void onAuthSuccess(TLRPC.TL_auth_authorization res, boolean afterSignup) {
@@ -98,7 +98,7 @@ diff --git a/TMessagesProj/src/main/java/org/telegram/ui/MainTabsActivity.java b
 index 0000000..0000000 100644
 --- a/TMessagesProj/src/main/java/org/telegram/ui/MainTabsActivity.java
 +++ b/TMessagesProj/src/main/java/org/telegram/ui/MainTabsActivity.java
-@@ -491,7 +491,7 @@ public class MainTabsActivity extends ViewPagerActivity implements NotificationC
+@@ -522,7 +522,7 @@ public class MainTabsActivity extends ViewPagerActivity implements NotificationC
  
          accountNumbers.clear();
          for (int a = 0; a < UserConfig.MAX_ACCOUNT_COUNT; a++) {
@@ -149,7 +149,7 @@ diff --git a/TMessagesProj/src/main/java/org/telegram/ui/SettingsActivity.java b
 index 0000000..0000000 100644
 --- a/TMessagesProj/src/main/java/org/telegram/ui/SettingsActivity.java
 +++ b/TMessagesProj/src/main/java/org/telegram/ui/SettingsActivity.java
-@@ -631,7 +631,7 @@ public class SettingsActivity extends BaseFragment implements NotificationCenter
+@@ -637,7 +637,7 @@ public class SettingsActivity extends BaseFragment implements NotificationCenter
  
          accountNumbers.clear();
          for (int a = 0; a < UserConfig.MAX_ACCOUNT_COUNT; a++) {
@@ -162,7 +162,7 @@ diff --git a/TMessagesProj/src/main/java/org/telegram/ui/UserInfoActivity.java b
 index 0000000..0000000 100644
 --- a/TMessagesProj/src/main/java/org/telegram/ui/UserInfoActivity.java
 +++ b/TMessagesProj/src/main/java/org/telegram/ui/UserInfoActivity.java
-@@ -292,7 +292,7 @@ public class UserInfoActivity extends UniversalFragment implements NotificationC
+@@ -302,7 +302,7 @@ public class UserInfoActivity extends UniversalFragment implements NotificationC
      private void updateAccounts() {
          accountNumbers.clear();
          for (int a = 0; a < UserConfig.MAX_ACCOUNT_COUNT; a++) {

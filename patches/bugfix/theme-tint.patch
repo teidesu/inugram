@@ -132,7 +132,7 @@ diff --git a/TMessagesProj/src/main/java/org/telegram/ui/ManageLinksActivity.jav
 index 0000000..0000000 100644
 --- a/TMessagesProj/src/main/java/org/telegram/ui/ManageLinksActivity.java
 +++ b/TMessagesProj/src/main/java/org/telegram/ui/ManageLinksActivity.java
-@@ -1288,6 +1288,8 @@ public class ManageLinksActivity extends BaseFragment implements NotificationCen
+@@ -1287,6 +1287,8 @@ public class ManageLinksActivity extends BaseFragment implements NotificationCen
                  linkIconRevoked.setBounds(cX - dp(12), cY - dp(12), cX + dp(12), cY + dp(12));
                  linkIconRevoked.draw(canvas);
              } else {
@@ -145,7 +145,7 @@ diff --git a/TMessagesProj/src/main/java/org/telegram/ui/SettingsActivity.java b
 index 0000000..0000000 100644
 --- a/TMessagesProj/src/main/java/org/telegram/ui/SettingsActivity.java
 +++ b/TMessagesProj/src/main/java/org/telegram/ui/SettingsActivity.java
-@@ -445,6 +445,7 @@ public class SettingsActivity extends BaseFragment implements NotificationCenter
+@@ -451,6 +451,7 @@ public class SettingsActivity extends BaseFragment implements NotificationCenter
          cameraImageView = new ImageView(context);
          cameraImageView.setScaleType(ImageView.ScaleType.CENTER_INSIDE);
          cameraImageView.setImageResource(R.drawable.filled_premium_camera);

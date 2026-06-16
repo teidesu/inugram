@@ -11,7 +11,7 @@ diff --git a/TMessagesProj/src/main/java/org/telegram/ui/ChatActivity.java b/TMe
 index 0000000..0000000 100644
 --- a/TMessagesProj/src/main/java/org/telegram/ui/ChatActivity.java
 +++ b/TMessagesProj/src/main/java/org/telegram/ui/ChatActivity.java
-@@ -33139,6 +33139,7 @@ public class ChatActivity extends BaseFragment implements
+@@ -33542,6 +33542,7 @@ public class ChatActivity extends BaseFragment implements
                          }
                      }
                      replyingMessageObject = messageObject;

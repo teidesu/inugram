@@ -12,7 +12,7 @@ diff --git a/TMessagesProj/src/main/java/org/telegram/messenger/MessagesControll
 index 0000000..0000000 100644
 --- a/TMessagesProj/src/main/java/org/telegram/messenger/MessagesController.java
 +++ b/TMessagesProj/src/main/java/org/telegram/messenger/MessagesController.java
-@@ -11420,7 +11420,7 @@ public class MessagesController extends BaseController implements NotificationCe
+@@ -11424,7 +11424,7 @@ public class MessagesController extends BaseController implements NotificationCe
                              if (!res.dialogs.isEmpty()) {
                                  TLRPC.Dialog dialog = res.dialogs.get(0);
  
@@ -21,7 +21,7 @@ index 0000000..0000000 100644
                                      TLRPC.TL_messages_dialogs dialogs = new TLRPC.TL_messages_dialogs();
                                      dialogs.chats = res.chats;
                                      dialogs.users = res.users;
-@@ -11639,6 +11639,22 @@ public class MessagesController extends BaseController implements NotificationCe
+@@ -11643,6 +11643,22 @@ public class MessagesController extends BaseController implements NotificationCe
          }
          final boolean isInitialLoading = offset_date == 0 && max_id == 0;
          final boolean reload;
@@ -44,7 +44,7 @@ index 0000000..0000000 100644
          final LongSparseArray<TLRPC.User> usersDict = new LongSparseArray<>();
          final LongSparseArray<TLRPC.Chat> chatsDict = new LongSparseArray<>();
          for (int a = 0; a < messagesRes.users.size(); a++) {
-@@ -11658,7 +11674,7 @@ public class MessagesController extends BaseController implements NotificationCe
+@@ -11662,7 +11678,7 @@ public class MessagesController extends BaseController implements NotificationCe
          } else if (mode == ChatActivity.MODE_SAVED) {
              reload = resCount == 0 && (!isInitialLoading || (SystemClock.elapsedRealtime() - lastSavedServerQueryTime.get(threadMessageId, 0L)) > 60 * 1000 || isCache);
          } else {
@@ -53,7 +53,7 @@ index 0000000..0000000 100644
          }
          if (!DialogObject.isEncryptedDialog(dialogId) && isCache && reload) {
              if (mode == ChatActivity.MODE_SCHEDULED) {
-@@ -11716,8 +11732,10 @@ public class MessagesController extends BaseController implements NotificationCe
+@@ -11720,8 +11736,10 @@ public class MessagesController extends BaseController implements NotificationCe
                  }
              }
              final long finalHash = hash;
@@ -66,7 +66,7 @@ index 0000000..0000000 100644
                  return;
              }
          }
-@@ -11887,11 +11905,11 @@ public class MessagesController extends BaseController implements NotificationCe
+@@ -11891,11 +11909,11 @@ public class MessagesController extends BaseController implements NotificationCe
                      if (!needProcess) {
                          getNotificationCenter().postNotificationName(NotificationCenter.messagesDidLoadWithoutProcess, classGuid, resCount, isCache, isEnd, last_message_id);
                      } else {
@@ -84,7 +84,7 @@ diff --git a/TMessagesProj/src/main/java/org/telegram/messenger/MessagesStorage.
 index 0000000..0000000 100644
 --- a/TMessagesProj/src/main/java/org/telegram/messenger/MessagesStorage.java
 +++ b/TMessagesProj/src/main/java/org/telegram/messenger/MessagesStorage.java
-@@ -9100,9 +9100,9 @@ public class MessagesStorage extends BaseController {
+@@ -9102,9 +9102,9 @@ public class MessagesStorage extends BaseController {
  
                      if (load_type == LOAD_AROUND_MESSAGE || load_type == LOAD_AROUND_DATE || queryFromServer && load_type == LOAD_FROM_UNREAD) {
                          if (threadMessageId != 0) {

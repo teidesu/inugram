@@ -7,17 +7,16 @@ Subject: hide fade views
  .../org/telegram/ui/Components/ChatAttachAlert.java  |  2 ++
  .../DialogsActivityTopBubblesFadeView.java           |  1 +
  .../java/org/telegram/ui/Components/ShareAlert.java  |  1 +
- .../ui/Components/chat/ChatActivityTopFadeView.java  |  1 +
  .../ui/Components/chat/ChatInputViewsContainer.java  |  1 +
  .../chat/layouts/ChatActivityFadeView.java           |  1 +
  .../main/java/org/telegram/ui/MainTabsActivity.java  | 12 +++++++++++-
- 7 files changed, 18 insertions(+), 1 deletion(-)
+ 6 files changed, 17 insertions(+), 1 deletion(-)
 
 diff --git a/TMessagesProj/src/main/java/org/telegram/ui/Components/ChatAttachAlert.java b/TMessagesProj/src/main/java/org/telegram/ui/Components/ChatAttachAlert.java
 index 0000000..0000000 100644
 --- a/TMessagesProj/src/main/java/org/telegram/ui/Components/ChatAttachAlert.java
 +++ b/TMessagesProj/src/main/java/org/telegram/ui/Components/ChatAttachAlert.java
-@@ -2667,6 +2667,7 @@ public class ChatAttachAlert extends BottomSheet implements NotificationCenter.N
+@@ -2690,6 +2690,7 @@ public class ChatAttachAlert extends BottomSheet implements NotificationCenter.N
  
              @Override
              public void draw(@NonNull Canvas canvas) {
@@ -25,7 +24,7 @@ index 0000000..0000000 100644
                  super.draw(canvas);
                  bottomFadeDrawable.draw(canvas);
              }
-@@ -6878,6 +6879,7 @@ public class ChatAttachAlert extends BottomSheet implements NotificationCenter.N
+@@ -7042,6 +7043,7 @@ public class ChatAttachAlert extends BottomSheet implements NotificationCenter.N
  
          @Override
          protected void onDraw(@NonNull Canvas canvas) {
@@ -57,18 +56,6 @@ index 0000000..0000000 100644
                  super.draw(canvas);
                  fadeDrawable.setBounds(0, getMeasuredHeight() - systemInsets.bottom - dp(72), getMeasuredWidth(), getMeasuredHeight());
                  fadeDrawable.draw(canvas);
-diff --git a/TMessagesProj/src/main/java/org/telegram/ui/Components/chat/ChatActivityTopFadeView.java b/TMessagesProj/src/main/java/org/telegram/ui/Components/chat/ChatActivityTopFadeView.java
-index 0000000..0000000 100644
---- a/TMessagesProj/src/main/java/org/telegram/ui/Components/chat/ChatActivityTopFadeView.java
-+++ b/TMessagesProj/src/main/java/org/telegram/ui/Components/chat/ChatActivityTopFadeView.java
-@@ -43,6 +43,7 @@ public class ChatActivityTopFadeView extends View {
- 
-     @Override
-     protected void onDraw(@NonNull Canvas canvas) {
-+        if (desu.inugram.helpers.chat.ChatHelper.shouldHideFadeView()) return;
-         if (drawable != null) {
-             drawable.draw(canvas);
-         }
 diff --git a/TMessagesProj/src/main/java/org/telegram/ui/Components/chat/ChatInputViewsContainer.java b/TMessagesProj/src/main/java/org/telegram/ui/Components/chat/ChatInputViewsContainer.java
 index 0000000..0000000 100644
 --- a/TMessagesProj/src/main/java/org/telegram/ui/Components/chat/ChatInputViewsContainer.java
@@ -85,7 +72,7 @@ diff --git a/TMessagesProj/src/main/java/org/telegram/ui/Components/chat/layouts
 index 0000000..0000000 100644
 --- a/TMessagesProj/src/main/java/org/telegram/ui/Components/chat/layouts/ChatActivityFadeView.java
 +++ b/TMessagesProj/src/main/java/org/telegram/ui/Components/chat/layouts/ChatActivityFadeView.java
-@@ -65,6 +65,7 @@ public class ChatActivityFadeView extends View {
+@@ -82,6 +82,7 @@ public class ChatActivityFadeView extends View {
  
      @Override
      protected void onDraw(@NonNull Canvas canvas) {
@@ -97,7 +84,7 @@ diff --git a/TMessagesProj/src/main/java/org/telegram/ui/MainTabsActivity.java b
 index 0000000..0000000 100644
 --- a/TMessagesProj/src/main/java/org/telegram/ui/MainTabsActivity.java
 +++ b/TMessagesProj/src/main/java/org/telegram/ui/MainTabsActivity.java
-@@ -345,7 +345,13 @@ public class MainTabsActivity extends ViewPagerActivity implements NotificationC
+@@ -375,7 +375,13 @@ public class MainTabsActivity extends ViewPagerActivity implements NotificationC
  
          contentView.addView(fadeView, LayoutHelper.createFrame(LayoutHelper.MATCH_PARENT, 0, Gravity.BOTTOM));
  
@@ -110,9 +97,9 @@ index 0000000..0000000 100644
 +            }
 +        };
          tabsViewWrapper.setOnClickListener(v -> {});
-         tabsViewWrapper.addView(tabsView, LayoutHelper.createFrame(tabsViewWidth, MainTabsHelper.getMainTabsHeightWithMargins(), Gravity.BOTTOM | Gravity.CENTER_HORIZONTAL));
+         tabsViewWrapper.addView(tabsView, LayoutHelper.createFrame(LayoutHelper.MATCH_PARENT, MainTabsHelper.getMainTabsHeightWithMargins(), Gravity.BOTTOM | Gravity.CENTER_HORIZONTAL));
          tabsViewWrapper.setClipToPadding(false);
-@@ -927,6 +933,10 @@ public class MainTabsActivity extends ViewPagerActivity implements NotificationC
+@@ -961,6 +967,10 @@ public class MainTabsActivity extends ViewPagerActivity implements NotificationC
          if (viewPager == null || fadeView == null || MainTabsHelper.isHidden()) {
              return;
          }

@@ -11,7 +11,7 @@ diff --git a/TMessagesProj/src/main/java/org/telegram/ui/ProfileActivity.java b/
 index 0000000..0000000 100644
 --- a/TMessagesProj/src/main/java/org/telegram/ui/ProfileActivity.java
 +++ b/TMessagesProj/src/main/java/org/telegram/ui/ProfileActivity.java
-@@ -4079,6 +4079,14 @@ public class ProfileActivity extends BaseFragment implements NotificationCenter.
+@@ -4065,6 +4065,14 @@ public class ProfileActivity extends BaseFragment implements NotificationCenter.
  
              private VelocityTracker velocityTracker;
  
@@ -26,7 +26,7 @@ index 0000000..0000000 100644
              @Override
              protected boolean canHighlightChildAt(View child, float x, float y) {
                  return !(child instanceof AboutLinkCell);
-@@ -4182,7 +4190,7 @@ public class ProfileActivity extends BaseFragment implements NotificationCenter.
+@@ -4168,7 +4176,7 @@ public class ProfileActivity extends BaseFragment implements NotificationCenter.
                              } else {
                                  listView.smoothScrollBy(0, view.getTop() - getHeaderExtraHeight(), CubicBezierInterpolator.EASE_OUT_QUINT);
                              }

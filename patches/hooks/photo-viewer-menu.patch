@@ -11,7 +11,7 @@ diff --git a/TMessagesProj/src/main/java/org/telegram/ui/PhotoViewer.java b/TMes
 index 0000000..0000000 100644
 --- a/TMessagesProj/src/main/java/org/telegram/ui/PhotoViewer.java
 +++ b/TMessagesProj/src/main/java/org/telegram/ui/PhotoViewer.java
-@@ -882,7 +882,7 @@ public class PhotoViewer implements NotificationCenter.NotificationCenterDelegat
+@@ -884,7 +884,7 @@ public class PhotoViewer implements NotificationCenter.NotificationCenterDelegat
      public BlurringShader.BlurManager blurManager;
      private BlurringShader.StoryBlurDrawer shadowBlurer;
      private WindowManager.LayoutParams windowLayoutParams;
@@ -20,7 +20,7 @@ index 0000000..0000000 100644
      private PhotoViewerWebView photoViewerWebView;
      public FrameLayout windowView;
      private ClippingImageView animatingImageView;
-@@ -892,7 +892,7 @@ public class PhotoViewer implements NotificationCenter.NotificationCenterDelegat
+@@ -894,7 +894,7 @@ public class PhotoViewer implements NotificationCenter.NotificationCenterDelegat
      private TextView docNameTextView;
      private TextView docInfoTextView;
      private TextView doneButtonFullWidth;
@@ -29,7 +29,7 @@ index 0000000..0000000 100644
      private ActionBarMenuItem videoItem;
      private ActionBarMenuSubItem allMediaItem;
      private ActionBarMenuSlider.SpeedSlider speedItem;
-@@ -4548,7 +4548,7 @@ public class PhotoViewer implements NotificationCenter.NotificationCenterDelegat
+@@ -4557,7 +4557,7 @@ public class PhotoViewer implements NotificationCenter.NotificationCenterDelegat
          }
      }
  
@@ -38,7 +38,7 @@ index 0000000..0000000 100644
          AlertDialog.Builder builder = new AlertDialog.Builder(parentActivity, resourcesProvider);
          builder.setTitle(getString(R.string.AppName));
          builder.setPositiveButton(getString("OK", R.string.OK), null);
-@@ -5734,6 +5734,8 @@ public class PhotoViewer implements NotificationCenter.NotificationCenterDelegat
+@@ -5758,6 +5758,8 @@ public class PhotoViewer implements NotificationCenter.NotificationCenterDelegat
                      } catch (Exception e) {
                          FileLog.e(e);
                      }
@@ -47,7 +47,7 @@ index 0000000..0000000 100644
                  } else if (id == gallery_menu_masks || id == gallery_menu_masks2) {
                      if (parentActivity == null || currentMessageObject == null) {
                          return;
-@@ -6095,6 +6097,7 @@ public class PhotoViewer implements NotificationCenter.NotificationCenterDelegat
+@@ -6119,6 +6121,7 @@ public class PhotoViewer implements NotificationCenter.NotificationCenterDelegat
          galleryGap = menuItem.addColoredGap();
          galleryGap.setColor(0xff181818);
          menuItem.addSubItem(gallery_menu_openin, R.drawable.msg_openin, getString(R.string.OpenInExternalApp)).setColors(0xfffafafa, 0xfffafafa);
@@ -55,7 +55,7 @@ index 0000000..0000000 100644
          pipItem = menuItem.addSubItem(gallery_menu_pip, R.drawable.menu_video_pip, getString(R.string.PipMinimize)).setColors(0xfffafafa, 0xfffafafa);
          allMediaItem = menuItem.addSubItem(gallery_menu_showall, R.drawable.msg_media, getString(R.string.ShowAllMedia));
          allMediaItem.setColors(0xfffafafa, 0xfffafafa);
-@@ -6111,6 +6114,7 @@ public class PhotoViewer implements NotificationCenter.NotificationCenterDelegat
+@@ -6135,6 +6138,7 @@ public class PhotoViewer implements NotificationCenter.NotificationCenterDelegat
          menuItem.addSubItem(gallery_menu_hide_translation, R.drawable.msg_translate, getString(R.string.HideTranslation)).setColors(0xfffafafa, 0xfffafafa);
          menuItem.addSubItem(gallery_menu_delete, R.drawable.msg_delete, getString(R.string.Delete)).setColors(0xfffafafa, 0xfffafafa);
          menuItem.addSubItem(gallery_menu_cancel_loading, R.drawable.msg_cancel, getString(R.string.StopDownload)).setColors(0xfffafafa, 0xfffafafa);
@@ -63,7 +63,7 @@ index 0000000..0000000 100644
          menuItem.redrawPopup(0xf9222222);
          menuItem.hideSubItem(gallery_menu_translate);
          menuItem.hideSubItem(gallery_menu_hide_translation);
-@@ -14185,6 +14189,7 @@ public class PhotoViewer implements NotificationCenter.NotificationCenterDelegat
+@@ -14214,6 +14218,7 @@ public class PhotoViewer implements NotificationCenter.NotificationCenterDelegat
          menuItem.hideSubItem(gallery_menu_report);
          menuItem.hideSubItem(gallery_menu_share);
          menuItem.hideSubItem(gallery_menu_openin);
@@ -71,7 +71,7 @@ index 0000000..0000000 100644
          menuItem.hideSubItem(gallery_menu_savegif);
          menuItem.hideSubItem(gallery_menu_masks2);
          menuItem.hideSubItem(gallery_menu_edit_avatar);
-@@ -14722,6 +14727,7 @@ public class PhotoViewer implements NotificationCenter.NotificationCenterDelegat
+@@ -14754,6 +14759,7 @@ public class PhotoViewer implements NotificationCenter.NotificationCenterDelegat
                  subtitle = LocaleController.formatDateAudio(newMessageObject.messageOwner.date, false);
              }
              actionBarContainer.setSubtitle(subtitle, animated);
@@ -79,7 +79,7 @@ index 0000000..0000000 100644
  
              boolean isInvoice = newMessageObject.isInvoice();
              boolean noforwards = MessagesController.getInstance(currentAccount).isPeerNoForwards(newMessageObject.getDialogId()) || (newMessageObject.messageOwner != null && newMessageObject.messageOwner.noforwards) || newMessageObject.hasRevealedExtendedMedia();
-@@ -14782,6 +14788,7 @@ public class PhotoViewer implements NotificationCenter.NotificationCenterDelegat
+@@ -14814,6 +14820,7 @@ public class PhotoViewer implements NotificationCenter.NotificationCenterDelegat
                      menuItem.hideSubItem(gallery_menu_hide_translation);
                  }
                  allowShare = !noforwards;
@@ -87,7 +87,7 @@ index 0000000..0000000 100644
                  if (newMessageObject.isNewGif() && allowShare && !DialogObject.isEncryptedDialog(newMessageObject.getDialogId())) {
                      menuItem.showSubItem(gallery_menu_savegif);
                  }
-@@ -15027,6 +15034,7 @@ public class PhotoViewer implements NotificationCenter.NotificationCenterDelegat
+@@ -15059,6 +15066,7 @@ public class PhotoViewer implements NotificationCenter.NotificationCenterDelegat
                  } else {
                      actionBarContainer.setSubtitle("", animated);
                  }
@@ -95,7 +95,7 @@ index 0000000..0000000 100644
                  menuItem.showSubItem(gallery_menu_report);
              }
  
-@@ -15051,6 +15059,7 @@ public class PhotoViewer implements NotificationCenter.NotificationCenterDelegat
+@@ -15083,6 +15091,7 @@ public class PhotoViewer implements NotificationCenter.NotificationCenterDelegat
                  galleryGap.setVisibility(View.VISIBLE);
              }
              allowShare = !noforwards;
@@ -103,15 +103,15 @@ index 0000000..0000000 100644
              menuItem.showSubItem(gallery_menu_share);
              menuItem.checkHideMenuItem();
              groupedPhotosListView.fillList();
-@@ -15337,6 +15346,7 @@ public class PhotoViewer implements NotificationCenter.NotificationCenterDelegat
-             TLRPC.PageBlock pageBlock = pageBlocksAdapter.get(switchingToIndex);
+@@ -15369,6 +15378,7 @@ public class PhotoViewer implements NotificationCenter.NotificationCenterDelegat
+             TL_iv.PageBlock pageBlock = pageBlocksAdapter.get(switchingToIndex);
              caption = pageBlocksAdapter.getCaption(switchingToIndex);
              isVideo = pageBlocksAdapter.isVideo(switchingToIndex);
 +            desu.inugram.helpers.media.PhotoViewerHelper.updateMenuItems(menuItem, allowShare, isVideo, false);
              if (isVideo) {
                  if (allowShare) {
                      menuItem.showSubItem(gallery_menu_openin);
-@@ -23593,6 +23603,26 @@ public class PhotoViewer implements NotificationCenter.NotificationCenterDelegat
+@@ -23629,6 +23639,26 @@ public class PhotoViewer implements NotificationCenter.NotificationCenterDelegat
          return pipItem != null && pipItem.isEnabled() && isPlaying;
      }
  

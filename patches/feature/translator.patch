@@ -6,18 +6,18 @@ Subject: translator-related features
 ---
  .../org/telegram/messenger/MessageObject.java | 13 +++---
  .../messenger/TranslateController.java        |  7 +--
- .../java/org/telegram/ui/ArticleViewer.java   | 21 ++++++---
+ .../java/org/telegram/ui/ArticleViewer.java   | 17 +++++--
  .../telegram/ui/Cells/ChatMessageCell.java    | 39 +++++++++++++---
  .../ui/Cells/TextSelectionHelper.java         |  1 +
  .../java/org/telegram/ui/ChatActivity.java    | 45 ++++++++++++-------
  .../org/telegram/ui/web/WebActionBar.java     |  3 ++
- 7 files changed, 95 insertions(+), 34 deletions(-)
+ 7 files changed, 93 insertions(+), 32 deletions(-)
 
 diff --git a/TMessagesProj/src/main/java/org/telegram/messenger/MessageObject.java b/TMessagesProj/src/main/java/org/telegram/messenger/MessageObject.java
 index 0000000..0000000 100644
 --- a/TMessagesProj/src/main/java/org/telegram/messenger/MessageObject.java
 +++ b/TMessagesProj/src/main/java/org/telegram/messenger/MessageObject.java
-@@ -3627,7 +3627,7 @@ public class MessageObject {
+@@ -3654,7 +3654,7 @@ public class MessageObject {
      public boolean updateTranslation(boolean force) {
          boolean replyUpdated = replyMessageObject != null && replyMessageObject != this && replyMessageObject.updateTranslation(force);
          TranslateController translateController = MessagesController.getInstance(currentAccount).getTranslateController();
@@ -26,7 +26,7 @@ index 0000000..0000000 100644
          final TLRPC.TL_textWithEntities summarizedText = messageOwner != null && messageOwner.summarizedOpen ? messageOwner.summaryText : null;
          final TLRPC.TL_textWithEntities summarizeTranslatedText = messageOwner != null && messageOwner.summarizedOpen ? messageOwner.translatedSummaryText : null;
          if (
-@@ -3663,6 +3663,7 @@ public class MessageObject {
+@@ -3690,6 +3690,7 @@ public class MessageObject {
              generateCaption();
              return replyUpdated || true;
          } else if (
@@ -34,7 +34,7 @@ index 0000000..0000000 100644
              messageOwner != null &&
              TranslateController.isTranslatable(this) &&
              translateController.isTranslatingDialog(getDialogId()) &&
-@@ -7076,7 +7077,7 @@ public class MessageObject {
+@@ -7415,7 +7416,7 @@ public class MessageObject {
          }
          if (linkDescription == null) {
              if (getMedia(messageOwner) instanceof TLRPC.TL_messageMediaWebPage && getMedia(messageOwner).webpage instanceof TLRPC.TL_webPage && getMedia(messageOwner).webpage.description != null) {
@@ -43,7 +43,7 @@ index 0000000..0000000 100644
                  String siteName = getMedia(messageOwner).webpage.site_name;
                  if (siteName != null) {
                      siteName = siteName.toLowerCase();
-@@ -7228,8 +7229,9 @@ public class MessageObject {
+@@ -7567,8 +7568,9 @@ public class MessageObject {
          } else if (messageOwner.translatedText != null && translated) {
              captionSummarized = false;
              captionTranslated = true;
@@ -55,7 +55,7 @@ index 0000000..0000000 100644
          } else {
              captionSummarized = false;
              captionTranslated = false;
-@@ -7577,7 +7579,8 @@ public class MessageObject {
+@@ -7916,7 +7918,8 @@ public class MessageObject {
              if (messageOwner.voiceTranscriptionOpen) {
                  return messageOwner.translatedVoiceTranscription != null ? messageOwner.translatedVoiceTranscription.entities : null;
              } else {
@@ -108,16 +108,7 @@ diff --git a/TMessagesProj/src/main/java/org/telegram/ui/ArticleViewer.java b/TM
 index 0000000..0000000 100644
 --- a/TMessagesProj/src/main/java/org/telegram/ui/ArticleViewer.java
 +++ b/TMessagesProj/src/main/java/org/telegram/ui/ArticleViewer.java
-@@ -274,7 +274,7 @@ public class ArticleViewer implements NotificationCenter.NotificationCenterDeleg
-     private boolean collapsed;
-     private boolean attachedToWindow;
- 
--    private int currentAccount;
-+    public int currentAccount;
- 
-     private int lastBlockNum = 1;
- 
-@@ -298,7 +298,7 @@ public class ArticleViewer implements NotificationCenter.NotificationCenterDeleg
+@@ -301,7 +301,7 @@ public class ArticleViewer extends IArticleViewer implements NotificationCenter.
      private WindowManager.LayoutParams windowLayoutParams;
      private WindowView windowView;
      private FrameLayout containerView;
@@ -126,7 +117,7 @@ index 0000000..0000000 100644
      private AddressBarList addressBarList;
  //    private FrameLayout headerView;
  //    private SimpleTextView titleTextView;
-@@ -1874,6 +1874,7 @@ public class ArticleViewer implements NotificationCenter.NotificationCenterDeleg
+@@ -1976,6 +1976,7 @@ public class ArticleViewer extends IArticleViewer implements NotificationCenter.
              pages[index].setType(PageLayout.TYPE_ARTICLE);
              adapter.isRtl = webPage.cached_page.rtl;
              adapter.currentPage = webPage;
@@ -134,27 +125,27 @@ index 0000000..0000000 100644
  
              int numBlocks = 0;
              int count = webPage.cached_page.blocks.size();
-@@ -2612,6 +2613,10 @@ public class ArticleViewer implements NotificationCenter.NotificationCenterDeleg
+@@ -2891,6 +2892,10 @@ public class ArticleViewer extends IArticleViewer implements NotificationCenter.
          if (richText == null) {
              return null;
          }
 +        if (richText == parentRichText) {
-+            CharSequence inu_cached = desu.inugram.helpers.translate.InstantViewHelper.lookupRich(this, richText);
++            CharSequence inu_cached = desu.inugram.helpers.translate.InstantViewHelper.lookupRich(parent instanceof ArticleViewer ? (ArticleViewer) parent : null, richText);
 +            if (inu_cached != null) return inu_cached;
 +        }
-         if (richText instanceof TLRPC.TL_textFixed) {
-             return getText(page, parentView, parentRichText, ((TLRPC.TL_textFixed) richText).text, parentBlock, maxWidth);
-         } else if (richText instanceof TLRPC.TL_textItalic) {
-@@ -3096,7 +3101,7 @@ public class ArticleViewer implements NotificationCenter.NotificationCenterDeleg
+         if (richText instanceof TL_iv.textFixed) {
+             return getText(parent, page, parentView, parentRichText, ((TL_iv.textFixed) richText).text, parentBlock, maxWidth);
+         } else if (richText instanceof TL_iv.textItalic) {
+@@ -3456,7 +3461,7 @@ public class ArticleViewer extends IArticleViewer implements NotificationCenter.
  
          CharSequence text;
          if (plainText != null) {
 -            text = plainText;
-+            text = desu.inugram.helpers.translate.InstantViewHelper.translate(this, plainText);
++            text = desu.inugram.helpers.translate.InstantViewHelper.translate(parent instanceof ArticleViewer ? (ArticleViewer) parent : null, plainText);
          } else {
-             text = getText(parentAdapter, parentView, richText, richText, parentBlock, width);
+             text = getText(parent, parentAdapter, parentView, richText, richText, parentBlock, width);
          }
-@@ -3975,6 +3980,10 @@ public class ArticleViewer implements NotificationCenter.NotificationCenterDeleg
+@@ -4344,6 +4349,10 @@ public class ArticleViewer extends IArticleViewer implements NotificationCenter.
          headerProgressPaint.setColor(0xff242426);
          navigationBarPaint.setColor(Color.BLACK);
          actionBar = new WebActionBar(activity, getResourcesProvider()) {
@@ -165,7 +156,7 @@ index 0000000..0000000 100644
              @Override
              protected void onOpenedMenu() {
                  pages[0].listView.stopScroll();
-@@ -4421,6 +4430,8 @@ public class ArticleViewer implements NotificationCenter.NotificationCenterDeleg
+@@ -4790,6 +4799,8 @@ public class ArticleViewer extends IArticleViewer implements NotificationCenter.
              if (id == WebActionBar.search_item) {
                  actionBar.setHeight(currentHeaderHeight = dp(56));
                  actionBar.showSearch(true, true);
@@ -174,29 +165,20 @@ index 0000000..0000000 100644
              } else if (id == WebActionBar.share_item) {
                  String url;
                  if (pages[0].isWeb()) {
-@@ -5924,7 +5935,7 @@ public class ArticleViewer implements NotificationCenter.NotificationCenterDeleg
- 
-     private LongSparseArray<BlockVideoCellState> videoStates = new LongSparseArray<>();
- 
--    private class WebpageAdapter extends RecyclerListView.SelectionAdapter {
-+    public class WebpageAdapter extends RecyclerListView.SelectionAdapter {
- 
-         private Context context;
-         private ArrayList<TLRPC.PageBlock> localBlocks = new ArrayList<>();
-@@ -5939,7 +5950,7 @@ public class ArticleViewer implements NotificationCenter.NotificationCenterDeleg
+@@ -6399,7 +6410,7 @@ public class ArticleViewer extends IArticleViewer implements NotificationCenter.
          private ArrayList<Object> textBlocks = new ArrayList<>();
          private HashMap<String, Integer> searchTextOffset = new HashMap<>();
  
 -        private TLRPC.WebPage currentPage;
 +        public TLRPC.WebPage currentPage;
-         private TLRPC.TL_pageBlockChannel channelBlock;
+         private TL_iv.pageBlockChannel channelBlock;
          private boolean isRtl;
          private final boolean padding;
 diff --git a/TMessagesProj/src/main/java/org/telegram/ui/Cells/ChatMessageCell.java b/TMessagesProj/src/main/java/org/telegram/ui/Cells/ChatMessageCell.java
 index 0000000..0000000 100644
 --- a/TMessagesProj/src/main/java/org/telegram/ui/Cells/ChatMessageCell.java
 +++ b/TMessagesProj/src/main/java/org/telegram/ui/Cells/ChatMessageCell.java
-@@ -1025,6 +1025,8 @@ public class ChatMessageCell extends BaseCell implements SeekBar.SeekBarDelegate
+@@ -1035,6 +1035,8 @@ public class ChatMessageCell extends BaseCell implements SeekBar.SeekBarDelegate
      public int textX;
      private int unmovedTextX;
      private int linkPreviewY;
@@ -205,7 +187,7 @@ index 0000000..0000000 100644
      private int factCheckY;
      public int textY;
      public int totalHeight;
-@@ -1772,6 +1774,7 @@ public class ChatMessageCell extends BaseCell implements SeekBar.SeekBarDelegate
+@@ -1784,6 +1786,7 @@ public class ChatMessageCell extends BaseCell implements SeekBar.SeekBarDelegate
      private int lastDeleteDate;
      private int lastViewsCount;
      private int lastRepliesCount;
@@ -213,7 +195,7 @@ index 0000000..0000000 100644
      private float selectedBackgroundProgress;
      private boolean lastTranslated;
  
-@@ -6640,7 +6643,8 @@ public class ChatMessageCell extends BaseCell implements SeekBar.SeekBarDelegate
+@@ -6726,7 +6729,8 @@ public class ChatMessageCell extends BaseCell implements SeekBar.SeekBarDelegate
                  lastPostAuthor != messageObject.messageOwner.post_author ||
                  wasPinned != isPinned ||
                  newReply != lastReplyMessage ||
@@ -223,7 +205,7 @@ index 0000000..0000000 100644
          boolean groupChanged = groupedMessages != currentMessagesGroup;
          boolean pollChanged = false;
  
-@@ -6779,6 +6783,7 @@ public class ChatMessageCell extends BaseCell implements SeekBar.SeekBarDelegate
+@@ -6868,6 +6872,7 @@ public class ChatMessageCell extends BaseCell implements SeekBar.SeekBarDelegate
              linkPreviewY = 0;
              factCheckY = 0;
              lastTranslated = messageObject.translated;
@@ -231,7 +213,7 @@ index 0000000..0000000 100644
              lastSendState = messageObject.messageOwner.send_state;
              lastDeleteDate = messageObject.messageOwner.destroyTime;
              lastViewsCount = messageObject.messageOwner.views;
-@@ -7723,7 +7728,7 @@ public class ChatMessageCell extends BaseCell implements SeekBar.SeekBarDelegate
+@@ -7831,7 +7836,7 @@ public class ChatMessageCell extends BaseCell implements SeekBar.SeekBarDelegate
                          isSmallImage = false;
                          linkPreviewAbove = currentMessageObject.messageOwner != null && currentMessageObject.messageOwner.invert_media;
                      } else if (hasLinkPreview) {
@@ -240,7 +222,7 @@ index 0000000..0000000 100644
                          site_name = webPage.site_name;
                          title = drawInstantViewType != 6 && drawInstantViewType != 7 ? webPage.title : null;
                          if (instantViewTypeIsGiftAuction != null) {
-@@ -12271,6 +12276,27 @@ public class ChatMessageCell extends BaseCell implements SeekBar.SeekBarDelegate
+@@ -12384,6 +12389,27 @@ public class ChatMessageCell extends BaseCell implements SeekBar.SeekBarDelegate
          }
      }
  
@@ -268,7 +250,7 @@ index 0000000..0000000 100644
      @Override
      public void invalidate() {
          if (currentMessageObject == null) {
-@@ -15303,7 +15329,7 @@ public class ChatMessageCell extends BaseCell implements SeekBar.SeekBarDelegate
+@@ -15466,7 +15492,7 @@ public class ChatMessageCell extends BaseCell implements SeekBar.SeekBarDelegate
              restore = true;
  
              AndroidUtilities.rectTmp.set(linkX, linkPreviewY - dp(6), linkX + width, linkPreviewY + linkPreviewHeight + (drawInstantButtonInside && drawInstantView ? dp(42) : 0));
@@ -277,7 +259,7 @@ index 0000000..0000000 100644
              float rad = (float) Math.floor(SharedConfig.bubbleRadius / (currentMessageObject.isSponsored() ? 2f : 3f));
              linkLine
                  .offsetEmoji(0, drawPhotoImageBefore ? (1f - isSmallImage()) * (dp(18) + photoImage.getImageHeight() + (siteNameLayout != null ? siteNameLayout.getLineBottom(siteNameLayout.getLineCount() - 1) : 0)) : 0)
-@@ -15678,7 +15704,7 @@ public class ChatMessageCell extends BaseCell implements SeekBar.SeekBarDelegate
+@@ -15841,7 +15867,7 @@ public class ChatMessageCell extends BaseCell implements SeekBar.SeekBarDelegate
                  photoImage.setImageY(smallImageStartY);
              } else {
                  photoImage.setImageX(linkX + (hasInvoicePreview ? -dp(6.3f) : dp(10)));
@@ -286,7 +268,7 @@ index 0000000..0000000 100644
              }
              if (transitionParams != null && transitionParams.animateSmallImage) {
                  if (!isSmallImage && documentAttachType != DOCUMENT_ATTACH_TYPE_DOCUMENT) {
-@@ -16678,7 +16704,7 @@ public class ChatMessageCell extends BaseCell implements SeekBar.SeekBarDelegate
+@@ -16707,7 +16733,7 @@ public class ChatMessageCell extends BaseCell implements SeekBar.SeekBarDelegate
  
          final TranslateController translateController = MessagesController.getInstance(currentAccount).getTranslateController();
          final boolean translating = translateController.isTranslating(currentMessageObject);
@@ -295,7 +277,7 @@ index 0000000..0000000 100644
          final boolean shouldSummarize = currentMessageObject != null && currentMessageObject.messageOwner.summarizedOpen;
          final boolean isFinal = shouldTranslate == (currentMessageObject != null && currentMessageObject.translated) && shouldSummarize == (currentMessageObject != null && currentMessageObject.summarized);
          if (origin == !isFinal) {
-@@ -18408,7 +18434,8 @@ public class ChatMessageCell extends BaseCell implements SeekBar.SeekBarDelegate
+@@ -18437,7 +18463,8 @@ public class ChatMessageCell extends BaseCell implements SeekBar.SeekBarDelegate
                  currentTimeString = TextUtils.concat(formatString(R.string.MessageScheduledRepeatSeconds, period), ", ", currentTimeString);
              }
          }
@@ -309,7 +291,7 @@ diff --git a/TMessagesProj/src/main/java/org/telegram/ui/Cells/TextSelectionHelp
 index 0000000..0000000 100644
 --- a/TMessagesProj/src/main/java/org/telegram/ui/Cells/TextSelectionHelper.java
 +++ b/TMessagesProj/src/main/java/org/telegram/ui/Cells/TextSelectionHelper.java
-@@ -310,6 +310,7 @@ public abstract class TextSelectionHelper<Cell extends TextSelectionHelper.Selec
+@@ -312,6 +312,7 @@ public abstract class TextSelectionHelper<Cell extends TextSelectionHelper.Selec
          touchSlop = ViewConfiguration.get(ApplicationLoader.applicationContext).getScaledTouchSlop();
          selectionPaint.setPathEffect(new CornerPathEffect(cornerRadius = dp(6)));
          selectionPath.setRectsUnionDiffDelta(1f);
@@ -321,7 +303,7 @@ diff --git a/TMessagesProj/src/main/java/org/telegram/ui/ChatActivity.java b/TMe
 index 0000000..0000000 100644
 --- a/TMessagesProj/src/main/java/org/telegram/ui/ChatActivity.java
 +++ b/TMessagesProj/src/main/java/org/telegram/ui/ChatActivity.java
-@@ -11024,7 +11024,7 @@ public class ChatActivity extends BaseFragment implements
+@@ -11178,7 +11178,7 @@ public class ChatActivity extends BaseFragment implements
          if (translateItem == null) {
              return;
          }
@@ -330,7 +312,7 @@ index 0000000..0000000 100644
      }
  
      private Animator infoTopViewAnimator;
-@@ -24259,6 +24259,10 @@ public class ChatActivity extends BaseFragment implements
+@@ -24632,6 +24632,10 @@ public class ChatActivity extends BaseFragment implements
      }
  
      private void saveGeneralScroll() {
@@ -341,7 +323,7 @@ index 0000000..0000000 100644
          int scrollByCellHeight = 0;
          ChatMessageCell scrollByCell = null;
          for (int i = 0; i < chatListView.getChildCount(); ++i) {
-@@ -24313,16 +24317,19 @@ public class ChatActivity extends BaseFragment implements
+@@ -24686,16 +24690,19 @@ public class ChatActivity extends BaseFragment implements
                  boolean update = false;
                  if (cellMessageObject.getId() == messageObject.getId()) {
                      cellMessageObject.messageOwner.translatedText = messageObject.messageOwner.translatedText;
@@ -367,7 +349,7 @@ index 0000000..0000000 100644
                      }
                  }
                  MessageObject.GroupedMessages group = groupedMessagesMap.get(messageObject.getGroupId());
-@@ -24351,6 +24358,7 @@ public class ChatActivity extends BaseFragment implements
+@@ -24724,6 +24731,7 @@ public class ChatActivity extends BaseFragment implements
                          saveGeneralScroll();
                      }
                      cellMessageObject.forceUpdate = true;
@@ -375,7 +357,7 @@ index 0000000..0000000 100644
                      cell.setMessageObject(cellMessageObject, cell.getCurrentMessagesGroup(), cell.isPinnedBottom(), cell.isPinnedTop(), cell.isFirstInChat(), cell.isLastInChatList());
                      if (group != null) {
                          if (chatListItemAnimator != null) {
-@@ -31399,10 +31407,9 @@ public class ChatActivity extends BaseFragment implements
+@@ -31801,10 +31809,9 @@ public class ChatActivity extends BaseFragment implements
                              waitForLangDetection.set(false);
                              String fromLang = selectedObject.messageOwner.originalLanguage;
                              cell.setVisibility(
@@ -389,7 +371,7 @@ index 0000000..0000000 100644
                              );
                              cell.setOnClickListener(e -> {
                                  if (selectedObject == null || i >= options.size() || getParentActivity() == null) {
-@@ -31411,8 +31418,10 @@ public class ChatActivity extends BaseFragment implements
+@@ -31813,8 +31820,10 @@ public class ChatActivity extends BaseFragment implements
  
                                  String toLangValue = fromLang != null && fromLang.equals(toLang) ? toLangDefault : toLang;
                                  ArrayList<TLRPC.MessageEntity> entities = selectedObject != null && selectedObject.messageOwner != null ? selectedObject.messageOwner.entities : null;
@@ -400,7 +382,7 @@ index 0000000..0000000 100644
                                  closeMenu(false);
                                  
  //                                final TranslateAlert3 alert =
-@@ -31442,10 +31451,9 @@ public class ChatActivity extends BaseFragment implements
+@@ -31844,10 +31853,9 @@ public class ChatActivity extends BaseFragment implements
                                  finalMessageText.toString(),
                                  (String lang) -> {
                                      fromLang[0] = lang;
@@ -414,7 +396,7 @@ index 0000000..0000000 100644
                                          cell.setVisibility(View.VISIBLE);
                                      }
                                      waitForLangDetection.set(false);
-@@ -31469,8 +31477,10 @@ public class ChatActivity extends BaseFragment implements
+@@ -31871,8 +31879,10 @@ public class ChatActivity extends BaseFragment implements
                                  }
                                  String toLangValue = fromLang[0] != null && fromLang[0].equals(toLang) ? toLangDefault : toLang;
                                  ArrayList<TLRPC.MessageEntity> entities = selectedObject != null && selectedObject.messageOwner != null ? selectedObject.messageOwner.entities : null;
@@ -425,7 +407,7 @@ index 0000000..0000000 100644
                                  closeMenu(false);
  
  //                                final TranslateAlert3 alert =
-@@ -31503,8 +31513,10 @@ public class ChatActivity extends BaseFragment implements
+@@ -31905,8 +31915,10 @@ public class ChatActivity extends BaseFragment implements
                                      return;
                                  }
  
@@ -436,7 +418,7 @@ index 0000000..0000000 100644
                                  closeMenu(false);
  
  //                                final TranslateAlert3 alert = new TranslateAlert3(getContext(), getResourceProvider())
-@@ -31527,6 +31539,9 @@ public class ChatActivity extends BaseFragment implements
+@@ -31929,6 +31941,9 @@ public class ChatActivity extends BaseFragment implements
                          } else {
                              cell.setVisibility(View.GONE);
                          }
@@ -450,7 +432,7 @@ diff --git a/TMessagesProj/src/main/java/org/telegram/ui/web/WebActionBar.java b
 index 0000000..0000000 100644
 --- a/TMessagesProj/src/main/java/org/telegram/ui/web/WebActionBar.java
 +++ b/TMessagesProj/src/main/java/org/telegram/ui/web/WebActionBar.java
-@@ -129,6 +129,8 @@ public class WebActionBar extends FrameLayout {
+@@ -127,6 +127,8 @@ public class WebActionBar extends FrameLayout {
      public static final int forward_item = 9;
      public static final int instant_item = 10;
  
@@ -459,7 +441,7 @@ index 0000000..0000000 100644
      public WebActionBar(Context context, Theme.ResourcesProvider resourcesProvider) {
          super(context);
          this.resourcesProvider = resourcesProvider;
-@@ -217,6 +219,7 @@ public class WebActionBar extends FrameLayout {
+@@ -215,6 +217,7 @@ public class WebActionBar extends FrameLayout {
                  o.add(R.drawable.msg_openin, getString(R.string.OpenInExternalApp), click.run(open_item));
                  o.add(R.drawable.msg_search, getString(R.string.Search), click.run(search_item));
                  o.addIf(!isLocal, R.drawable.msg_share, getString(R.string.ShareFile), click.run(share_item));

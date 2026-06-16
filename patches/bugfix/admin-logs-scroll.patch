@@ -11,7 +11,7 @@ diff --git a/TMessagesProj/src/main/java/org/telegram/ui/ChannelAdminLogActivity
 index 0000000..0000000 100644
 --- a/TMessagesProj/src/main/java/org/telegram/ui/ChannelAdminLogActivity.java
 +++ b/TMessagesProj/src/main/java/org/telegram/ui/ChannelAdminLogActivity.java
-@@ -4316,7 +4316,7 @@ public class ChannelAdminLogActivity extends BaseFragment implements Notificatio
+@@ -4314,7 +4314,7 @@ public class ChannelAdminLogActivity extends BaseFragment implements Notificatio
          }
      }
  
@@ -20,7 +20,7 @@ index 0000000..0000000 100644
      private int savedScrollPosition = -1;
      private int savedScrollOffset;
      public void saveScrollPosition(boolean fromTop) {
-@@ -4334,13 +4334,13 @@ public class ChannelAdminLogActivity extends BaseFragment implements Notificatio
+@@ -4332,13 +4332,13 @@ public class ChannelAdminLogActivity extends BaseFragment implements Notificatio
                  }
              }
              if (view != null) {
@@ -38,7 +38,7 @@ index 0000000..0000000 100644
                  savedScrollPosition = position;
                  savedScrollOffset = getScrollingOffsetForView(view);
              }
-@@ -4354,10 +4354,10 @@ public class ChannelAdminLogActivity extends BaseFragment implements Notificatio
+@@ -4352,10 +4352,10 @@ public class ChannelAdminLogActivity extends BaseFragment implements Notificatio
      public void applyScrolledPosition() {
          if (chatListView != null && chatLayoutManager != null && savedScrollPosition >= 0) {
              int adaptedPosition = savedScrollPosition;
@@ -51,7 +51,7 @@ index 0000000..0000000 100644
                          adaptedPosition = i;
                          break;
                      }
-@@ -4365,7 +4365,7 @@ public class ChannelAdminLogActivity extends BaseFragment implements Notificatio
+@@ -4363,7 +4363,7 @@ public class ChannelAdminLogActivity extends BaseFragment implements Notificatio
              }
              chatLayoutManager.scrollToPositionWithOffset(adaptedPosition, savedScrollOffset, true);
              savedScrollPosition = -1;

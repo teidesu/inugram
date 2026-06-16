@@ -181,7 +181,7 @@ index 0000000..0000000 100644
                      updateFlash();
                      invalidate();
                      NotificationCenter.getInstance(currentAccount).postNotificationName(NotificationCenter.recordStarted, recordingGuid, false);
-@@ -3729,6 +3741,7 @@ public class InstantCameraView extends FrameLayout implements NotificationCenter
+@@ -3768,6 +3780,7 @@ public class InstantCameraView extends FrameLayout implements NotificationCenter
                  pinchStartDistance = (float) Math.hypot(ev.getX(1) - ev.getX(0), ev.getY(1) - ev.getY(0));
  
                  pinchScale = 1f;
@@ -189,7 +189,7 @@ index 0000000..0000000 100644
  
                  pointerId1 = ev.getPointerId(0);
                  pointerId2 = ev.getPointerId(1);
-@@ -3757,15 +3770,17 @@ public class InstantCameraView extends FrameLayout implements NotificationCenter
+@@ -3796,15 +3809,17 @@ public class InstantCameraView extends FrameLayout implements NotificationCenter
                  return false;
              }
              pinchScale = (float) Math.hypot(ev.getX(index2) - ev.getX(index1), ev.getY(index2) - ev.getY(index1)) / pinchStartDistance;
@@ -209,7 +209,7 @@ index 0000000..0000000 100644
          } else if ((ev.getActionMasked() == MotionEvent.ACTION_UP || (ev.getActionMasked() == MotionEvent.ACTION_POINTER_UP && checkPointerIds(ev)) || ev.getActionMasked() == MotionEvent.ACTION_CANCEL) && isInPinchToZoomTouchMode) {
              isInPinchToZoomTouchMode = false;
              finishZoom();
-@@ -3774,32 +3789,38 @@ public class InstantCameraView extends FrameLayout implements NotificationCenter
+@@ -3813,32 +3828,38 @@ public class InstantCameraView extends FrameLayout implements NotificationCenter
      }
  
      ValueAnimator finishZoomTransition;

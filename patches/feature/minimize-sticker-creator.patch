@@ -13,7 +13,7 @@ diff --git a/TMessagesProj/src/main/java/org/telegram/messenger/MediaDataControl
 index 0000000..0000000 100644
 --- a/TMessagesProj/src/main/java/org/telegram/messenger/MediaDataController.java
 +++ b/TMessagesProj/src/main/java/org/telegram/messenger/MediaDataController.java
-@@ -913,7 +913,7 @@ public class MediaDataController extends BaseController {
+@@ -912,7 +912,7 @@ public class MediaDataController extends BaseController {
          }
          int limit = desu.inugram.InuConfig.SHOW_ALL_RECENT_STICKERS.getValue() ? arrayList.size() : 20;
          ArrayList<TLRPC.Document> result = new ArrayList<>(arrayList.subList(0, Math.min(arrayList.size(), limit)));

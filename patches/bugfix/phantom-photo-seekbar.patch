@@ -11,7 +11,7 @@ diff --git a/TMessagesProj/src/main/java/org/telegram/ui/PhotoViewer.java b/TMes
 index 0000000..0000000 100644
 --- a/TMessagesProj/src/main/java/org/telegram/ui/PhotoViewer.java
 +++ b/TMessagesProj/src/main/java/org/telegram/ui/PhotoViewer.java
-@@ -9807,7 +9807,18 @@ public class PhotoViewer implements NotificationCenter.NotificationCenterDelegat
+@@ -9836,7 +9836,18 @@ public class PhotoViewer implements NotificationCenter.NotificationCenterDelegat
      }
  
      private void createVideoControlsInterface() {
@@ -30,7 +30,7 @@ index 0000000..0000000 100644
          containerView.addView(videoPlayerControlFrameLayout, LayoutHelper.createFrame(LayoutHelper.MATCH_PARENT, 48, Gravity.BOTTOM | Gravity.LEFT));
  
          final VideoPlayerSeekBar.SeekBarDelegate seekBarDelegate = new VideoPlayerSeekBar.SeekBarDelegate() {
-@@ -11282,6 +11293,12 @@ public class PhotoViewer implements NotificationCenter.NotificationCenterDelegat
+@@ -11311,6 +11322,12 @@ public class PhotoViewer implements NotificationCenter.NotificationCenterDelegat
                  anim.addListener(new AnimatorListenerAdapter() {
                      @Override
                      public void onAnimationEnd(Animator animation) {

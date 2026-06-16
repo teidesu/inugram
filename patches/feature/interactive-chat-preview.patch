@@ -13,7 +13,7 @@ diff --git a/TMessagesProj/src/main/java/org/telegram/ui/ActionBar/ActionBarLayo
 index 0000000..0000000 100644
 --- a/TMessagesProj/src/main/java/org/telegram/ui/ActionBar/ActionBarLayout.java
 +++ b/TMessagesProj/src/main/java/org/telegram/ui/ActionBar/ActionBarLayout.java
-@@ -1940,6 +1940,14 @@ public class ActionBarLayout extends FrameLayout implements INavigationLayout, F
+@@ -1973,6 +1973,14 @@ public class ActionBarLayout extends FrameLayout implements INavigationLayout, F
          if (fragment == null || checkTransitionAnimation() || delegate != null && check && !delegate.needPresentFragment(this, params) || !fragment.onFragmentCreate()) {
              return false;
          }
@@ -32,7 +32,7 @@ diff --git a/TMessagesProj/src/main/java/org/telegram/ui/ChatActivity.java b/TMe
 index 0000000..0000000 100644
 --- a/TMessagesProj/src/main/java/org/telegram/ui/ChatActivity.java
 +++ b/TMessagesProj/src/main/java/org/telegram/ui/ChatActivity.java
-@@ -39917,12 +39917,12 @@ public class ChatActivity extends BaseFragment implements
+@@ -40385,12 +40385,12 @@ public class ChatActivity extends BaseFragment implements
  
          @Override
          public boolean canPerformActions() {

@@ -5,29 +5,16 @@ Subject: fix bottom transparent gap in some bottom sheets
 
 ---
  .../java/org/telegram/ui/Components/FiltersListBottomSheet.java  | 1 -
- .../java/org/telegram/ui/Components/InviteLinkBottomSheet.java   | 1 -
  .../java/org/telegram/ui/Components/PhonebookShareAlert.java     | 1 -
  .../main/java/org/telegram/ui/Components/ThemeEditorView.java    | 1 -
  .../src/main/java/org/telegram/ui/Components/UsersAlertBase.java | 1 -
- 5 files changed, 5 deletions(-)
+ 4 files changed, 4 deletions(-)
 
 diff --git a/TMessagesProj/src/main/java/org/telegram/ui/Components/FiltersListBottomSheet.java b/TMessagesProj/src/main/java/org/telegram/ui/Components/FiltersListBottomSheet.java
 index 0000000..0000000 100644
 --- a/TMessagesProj/src/main/java/org/telegram/ui/Components/FiltersListBottomSheet.java
 +++ b/TMessagesProj/src/main/java/org/telegram/ui/Components/FiltersListBottomSheet.java
 @@ -143,7 +143,6 @@ public class FiltersListBottomSheet extends BottomSheet implements NotificationC
-                 float radProgress = 1.0f;
-                 if (Build.VERSION.SDK_INT >= 21) {
-                     top += AndroidUtilities.statusBarHeight;
--                    height -= AndroidUtilities.statusBarHeight;
- 
-                     if (fullHeight) {
-                         if (top + backgroundPaddingTop < AndroidUtilities.statusBarHeight * 2) {
-diff --git a/TMessagesProj/src/main/java/org/telegram/ui/Components/InviteLinkBottomSheet.java b/TMessagesProj/src/main/java/org/telegram/ui/Components/InviteLinkBottomSheet.java
-index 0000000..0000000 100644
---- a/TMessagesProj/src/main/java/org/telegram/ui/Components/InviteLinkBottomSheet.java
-+++ b/TMessagesProj/src/main/java/org/telegram/ui/Components/InviteLinkBottomSheet.java
-@@ -208,7 +208,6 @@ public class InviteLinkBottomSheet extends BottomSheet {
                  float radProgress = 1.0f;
                  if (Build.VERSION.SDK_INT >= 21) {
                      top += AndroidUtilities.statusBarHeight;
@@ -63,7 +50,7 @@ diff --git a/TMessagesProj/src/main/java/org/telegram/ui/Components/UsersAlertBa
 index 0000000..0000000 100644
 --- a/TMessagesProj/src/main/java/org/telegram/ui/Components/UsersAlertBase.java
 +++ b/TMessagesProj/src/main/java/org/telegram/ui/Components/UsersAlertBase.java
-@@ -597,7 +597,6 @@ public class UsersAlertBase extends BottomSheet {
+@@ -528,7 +528,6 @@ public class UsersAlertBase extends BottomSheet {
              if (Build.VERSION.SDK_INT >= 21) {
                  top += AndroidUtilities.statusBarHeight;
                  y += AndroidUtilities.statusBarHeight;

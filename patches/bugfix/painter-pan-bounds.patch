@@ -11,7 +11,7 @@ diff --git a/TMessagesProj/src/main/java/org/telegram/ui/PhotoViewer.java b/TMes
 index 0000000..0000000 100644
 --- a/TMessagesProj/src/main/java/org/telegram/ui/PhotoViewer.java
 +++ b/TMessagesProj/src/main/java/org/telegram/ui/PhotoViewer.java
-@@ -19042,8 +19042,18 @@ public class PhotoViewer implements NotificationCenter.NotificationCenterDelegat
+@@ -19078,8 +19078,18 @@ public class PhotoViewer implements NotificationCenter.NotificationCenterDelegat
          float w = centerImage.getImageWidth();
          float h = centerImage.getImageHeight();
          if (editState.cropState != null) {
@@ -32,7 +32,7 @@ index 0000000..0000000 100644
          }
          int maxW = sendPhotoType == SELECT_TYPE_STICKER ? (int) (scale * w) : (int) (w * scale - getContainerViewWidth()) / 2;
          int maxH = sendPhotoType == SELECT_TYPE_STICKER ? (int) (scale * h) : (int) (h * scale - getContainerViewHeight()) / 2;
-@@ -20106,8 +20116,9 @@ public class PhotoViewer implements NotificationCenter.NotificationCenterDelegat
+@@ -20142,8 +20152,9 @@ public class PhotoViewer implements NotificationCenter.NotificationCenterDelegat
                  int trueH = getContainerViewHeight(true, 0);
                  trueH -= photoPaintView.getEmojiPadding(Math.abs(AndroidUtilities.displaySize.y + AndroidUtilities.statusBarHeight - trueH) < dp(20));
                  int h = getContainerViewHeight(false, 0);

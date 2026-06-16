@@ -14,7 +14,7 @@ diff --git a/TMessagesProj/src/main/java/org/telegram/ui/Components/EditTextBold
 index 0000000..0000000 100644
 --- a/TMessagesProj/src/main/java/org/telegram/ui/Components/EditTextBoldCursor.java
 +++ b/TMessagesProj/src/main/java/org/telegram/ui/Components/EditTextBoldCursor.java
-@@ -335,6 +335,7 @@ public class EditTextBoldCursor extends EditTextEffects {
+@@ -321,6 +321,7 @@ public class EditTextBoldCursor extends EditTextEffects {
      @TargetApi(Build.VERSION_CODES.O)
      @Override
      public int getAutofillType() {
@@ -26,7 +26,7 @@ diff --git a/TMessagesProj/src/main/java/org/telegram/ui/LoginActivity.java b/TM
 index 0000000..0000000 100644
 --- a/TMessagesProj/src/main/java/org/telegram/ui/LoginActivity.java
 +++ b/TMessagesProj/src/main/java/org/telegram/ui/LoginActivity.java
-@@ -5252,6 +5252,7 @@ public class LoginActivity extends BaseFragment implements NotificationCenter.No
+@@ -5254,6 +5254,7 @@ public class LoginActivity extends BaseFragment implements NotificationCenter.No
              codeField.setTypeface(Typeface.DEFAULT);
              codeField.setGravity(LocaleController.isRTL ? Gravity.RIGHT : Gravity.LEFT);
              codeField.setOnFocusChangeListener((v, hasFocus) -> outlineCodeField.animateSelection(hasFocus ? 1f : 0f));
@@ -34,7 +34,7 @@ index 0000000..0000000 100644
              outlineCodeField.attachEditText(codeField);
              outlineCodeField.addView(codeField, LayoutHelper.createFrame(LayoutHelper.MATCH_PARENT, LayoutHelper.WRAP_CONTENT, Gravity.TOP));
              codeField.setOnEditorActionListener((textView, i, keyEvent) -> {
-@@ -7073,6 +7074,7 @@ public class LoginActivity extends BaseFragment implements NotificationCenter.No
+@@ -7075,6 +7076,7 @@ public class LoginActivity extends BaseFragment implements NotificationCenter.No
                  codeField[a].setPadding(padding, padding, padding, padding);
                  if (stage == 0) {
                      codeField[a].setInputType(InputType.TYPE_CLASS_TEXT | InputType.TYPE_TEXT_VARIATION_PASSWORD);

@@ -34,7 +34,7 @@ diff --git a/TMessagesProj/src/main/java/org/telegram/ui/Cells/ChatMessageCell.j
 index 0000000..0000000 100644
 --- a/TMessagesProj/src/main/java/org/telegram/ui/Cells/ChatMessageCell.java
 +++ b/TMessagesProj/src/main/java/org/telegram/ui/Cells/ChatMessageCell.java
-@@ -3130,6 +3130,10 @@ public class ChatMessageCell extends BaseCell implements SeekBar.SeekBarDelegate
+@@ -3152,6 +3152,10 @@ public class ChatMessageCell extends BaseCell implements SeekBar.SeekBarDelegate
                          } else {
                              MediaController.getInstance().pauseMessage(currentMessageObject);
                          }

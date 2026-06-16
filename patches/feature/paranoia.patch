@@ -36,7 +36,7 @@ diff --git a/TMessagesProj/src/main/java/org/telegram/messenger/MediaDataControl
 index 0000000..0000000 100644
 --- a/TMessagesProj/src/main/java/org/telegram/messenger/MediaDataController.java
 +++ b/TMessagesProj/src/main/java/org/telegram/messenger/MediaDataController.java
-@@ -5252,6 +5252,7 @@ public class MediaDataController extends BaseController {
+@@ -5251,6 +5251,7 @@ public class MediaDataController extends BaseController {
                          inlineBots = inlineBotsNew;
                          guestBots = guestsBotsNew;
                          webapps = webappsNew;
@@ -44,7 +44,7 @@ index 0000000..0000000 100644
                          buildShortcuts();
                          getNotificationCenter().postNotificationName(NotificationCenter.reloadHints);
                          getNotificationCenter().postNotificationName(NotificationCenter.reloadInlineHints);
-@@ -5311,6 +5312,7 @@ public class MediaDataController extends BaseController {
+@@ -5310,6 +5311,7 @@ public class MediaDataController extends BaseController {
                          }
                      }
                      getUserConfig().saveConfig(false);
@@ -56,7 +56,7 @@ diff --git a/TMessagesProj/src/main/java/org/telegram/messenger/MessagesControll
 index 0000000..0000000 100644
 --- a/TMessagesProj/src/main/java/org/telegram/messenger/MessagesController.java
 +++ b/TMessagesProj/src/main/java/org/telegram/messenger/MessagesController.java
-@@ -21328,6 +21328,7 @@ public class MessagesController extends BaseController implements NotificationCe
+@@ -21389,6 +21389,7 @@ public class MessagesController extends BaseController implements NotificationCe
          }
          for (int a = 0, N = allDialogs.size(); a < N; a++) {
              TLRPC.Dialog d = allDialogs.get(a);
@@ -64,7 +64,7 @@ index 0000000..0000000 100644
              if (d instanceof TLRPC.TL_dialog) {
                  long dialogId = d.id;
                  if (DialogObject.isEncryptedDialog(dialogId)) {
-@@ -21407,6 +21408,7 @@ public class MessagesController extends BaseController implements NotificationCe
+@@ -21468,6 +21469,7 @@ public class MessagesController extends BaseController implements NotificationCe
                  }
                  for (int a = 0, N = allDialogs.size(); a < N; a++) {
                      TLRPC.Dialog d = allDialogs.get(a);
@@ -72,7 +72,7 @@ index 0000000..0000000 100644
                      if (d instanceof TLRPC.TL_dialog) {
                          long dialogId = d.id;
                          if (DialogObject.isEncryptedDialog(dialogId)) {
-@@ -21438,6 +21440,7 @@ public class MessagesController extends BaseController implements NotificationCe
+@@ -21499,6 +21501,7 @@ public class MessagesController extends BaseController implements NotificationCe
          }
          for (int a = 0, N = allDialogs.size(); a < N; a++) {
              TLRPC.Dialog d = allDialogs.get(a);
@@ -84,7 +84,7 @@ diff --git a/TMessagesProj/src/main/java/org/telegram/messenger/MessagesStorage.
 index 0000000..0000000 100644
 --- a/TMessagesProj/src/main/java/org/telegram/messenger/MessagesStorage.java
 +++ b/TMessagesProj/src/main/java/org/telegram/messenger/MessagesStorage.java
-@@ -9916,6 +9916,7 @@ public class MessagesStorage extends BaseController {
+@@ -9918,6 +9918,7 @@ public class MessagesStorage extends BaseController {
                      if (id == -1) {
                          continue;
                      }
@@ -92,7 +92,7 @@ index 0000000..0000000 100644
                      dids.add(id);
                      if (users != null && chats != null) {
                          if (DialogObject.isUserDialog(id)) {
-@@ -10001,6 +10002,7 @@ public class MessagesStorage extends BaseController {
+@@ -10003,6 +10004,7 @@ public class MessagesStorage extends BaseController {
                      if (id == -1) {
                          continue;
                      }
@@ -100,7 +100,7 @@ index 0000000..0000000 100644
                      dids.add(id);
                      if (DialogObject.isUserDialog(id)) {
                          usersToLoad.add(id);
-@@ -10035,6 +10037,7 @@ public class MessagesStorage extends BaseController {
+@@ -10037,6 +10039,7 @@ public class MessagesStorage extends BaseController {
                      if (DialogObject.isFolderDialogId(dialogId)) {
                          continue;
                      }
@@ -108,7 +108,7 @@ index 0000000..0000000 100644
                      if (add) {
                          dids.add(dialogId);
                      }
-@@ -17400,6 +17403,7 @@ public class MessagesStorage extends BaseController {
+@@ -17445,6 +17448,7 @@ public class MessagesStorage extends BaseController {
              }
              while (cursor.next()) {
                  long id = cursor.longValue(0);
@@ -116,7 +116,7 @@ index 0000000..0000000 100644
                  DialogsSearchAdapter.DialogSearchResult dialogSearchResult = new DialogsSearchAdapter.DialogSearchResult();
                  dialogSearchResult.date = cursor.intValue(1);
                  dialogsResult.put(id, dialogSearchResult);
-@@ -17675,6 +17679,9 @@ public class MessagesStorage extends BaseController {
+@@ -17720,6 +17724,9 @@ public class MessagesStorage extends BaseController {
                  cursor = getDatabase().queryFinalized("SELECT u.data, u.status, u.name, u.uid FROM users as u INNER JOIN contacts as c ON u.uid = c.uid");
                  while (cursor.next()) {
                      long uid = cursor.longValue(3);
@@ -130,7 +130,7 @@ diff --git a/TMessagesProj/src/main/java/org/telegram/messenger/NotificationsCon
 index 0000000..0000000 100644
 --- a/TMessagesProj/src/main/java/org/telegram/messenger/NotificationsController.java
 +++ b/TMessagesProj/src/main/java/org/telegram/messenger/NotificationsController.java
-@@ -1376,6 +1376,7 @@ public class NotificationsController extends BaseController {
+@@ -1381,6 +1381,7 @@ public class NotificationsController extends BaseController implements Notificat
              SharedPreferences preferences = getAccountInstance().getNotificationsSettings();
              for (int b = 0; b < dialogsToUpdate.size(); b++) {
                  long dialogId = dialogsToUpdate.keyAt(b);
@@ -138,7 +138,7 @@ index 0000000..0000000 100644
                  Integer currentCount = pushDialogs.get(dialogId);
                  int newCount = dialogsToUpdate.get(dialogId);
                  boolean forum = false;
-@@ -1717,6 +1718,7 @@ public class NotificationsController extends BaseController {
+@@ -1722,6 +1723,7 @@ public class NotificationsController extends BaseController implements Notificat
                              final ArrayList<TLRPC.Dialog> dialogs = new ArrayList<>(MessagesController.getInstance(a).allDialogs);
                              for (int i = 0, N = dialogs.size(); i < N; i++) {
                                  TLRPC.Dialog dialog = dialogs.get(i);
@@ -146,7 +146,7 @@ index 0000000..0000000 100644
                                  if (dialog != null && DialogObject.isChatDialog(dialog.id)) {
                                      TLRPC.Chat chat = getMessagesController().getChat(-dialog.id);
                                      if (ChatObject.isNotInChat(chat)) {
-@@ -1738,6 +1740,7 @@ public class NotificationsController extends BaseController {
+@@ -1743,6 +1745,7 @@ public class NotificationsController extends BaseController implements Notificat
                          try {
                              for (int i = 0, N = MessagesController.getInstance(a).allDialogs.size(); i < N; i++) {
                                  TLRPC.Dialog dialog = MessagesController.getInstance(a).allDialogs.get(i);
@@ -279,7 +279,7 @@ diff --git a/TMessagesProj/src/main/java/org/telegram/ui/Cells/SessionCell.java 
 index 0000000..0000000 100644
 --- a/TMessagesProj/src/main/java/org/telegram/ui/Cells/SessionCell.java
 +++ b/TMessagesProj/src/main/java/org/telegram/ui/Cells/SessionCell.java
-@@ -231,6 +231,10 @@ public class SessionCell extends FrameLayout {
+@@ -251,6 +251,10 @@ public class SessionCell extends FrameLayout {
              stringBuilder.append(session.app_name);
              stringBuilder.append(" ").append(session.app_version);
  

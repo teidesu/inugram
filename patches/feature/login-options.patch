@@ -25,14 +25,14 @@ diff --git a/TMessagesProj/src/main/java/org/telegram/messenger/MessagesControll
 index 0000000..0000000 100644
 --- a/TMessagesProj/src/main/java/org/telegram/messenger/MessagesController.java
 +++ b/TMessagesProj/src/main/java/org/telegram/messenger/MessagesController.java
-@@ -17839,6 +17839,7 @@ public class MessagesController extends BaseController implements NotificationCe
+@@ -17888,6 +17888,7 @@ public class MessagesController extends BaseController implements NotificationCe
              if (BuildVars.LOGS_ENABLED && baseUpdate != null) {
                  FileLog.d("process update " + baseUpdate.getClass().getSimpleName());
              }
 +            desu.inugram.InuHooks.onUpdate(baseUpdate, currentAccount);
-             if (baseUpdate instanceof TLRPC.TL_updateNewMessage || baseUpdate instanceof TLRPC.TL_updateNewChannelMessage || baseUpdate instanceof TLRPC.TL_updateNewScheduledMessage) {
+             if (baseUpdate instanceof TL_update.TL_updateNewMessage || baseUpdate instanceof TL_update.TL_updateNewChannelMessage || baseUpdate instanceof TL_update.TL_updateNewScheduledMessage) {
                  TLRPC.Message message;
-                 if (baseUpdate instanceof TLRPC.TL_updateNewMessage) {
+                 if (baseUpdate instanceof TL_update.TL_updateNewMessage) {
 diff --git a/TMessagesProj/src/main/java/org/telegram/messenger/PasskeysController.java b/TMessagesProj/src/main/java/org/telegram/messenger/PasskeysController.java
 index 0000000..0000000 100644
 --- a/TMessagesProj/src/main/java/org/telegram/messenger/PasskeysController.java

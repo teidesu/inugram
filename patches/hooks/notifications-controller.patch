@@ -18,9 +18,9 @@ index 0000000..0000000 100644
 -import java.util.function.Consumer;
 +import java.util.function.Consumer;import desu.inugram.helpers.NotificationsHelper;
  
- public class NotificationsController extends BaseController {
+ public class NotificationsController extends BaseController implements NotificationCenter.NotificationCenterDelegate {
  
-@@ -1060,6 +1060,7 @@ public class NotificationsController extends BaseController {
+@@ -1065,6 +1065,7 @@ public class NotificationsController extends BaseController implements Notificat
  
              for (int a = 0; a < messageObjects.size(); a++) {
                  MessageObject messageObject = messageObjects.get(a);
@@ -28,7 +28,7 @@ index 0000000..0000000 100644
                  if (messageObject.messageOwner != null && (messageObject.isImportedForward() ||
                          messageObject.messageOwner.action instanceof TLRPC.TL_messageActionSetMessagesTTL ||
                          messageObject.messageOwner.silent && (messageObject.messageOwner.action instanceof TLRPC.TL_messageActionContactSignUp || messageObject.messageOwner.action instanceof TLRPC.TL_messageActionUserJoined)) ||
-@@ -4049,7 +4050,7 @@ public class NotificationsController extends BaseController {
+@@ -4077,7 +4078,7 @@ public class NotificationsController extends BaseController implements Notificat
      }
  
      private void showOrUpdateNotification(boolean notifyAboutLast) {
@@ -37,7 +37,7 @@ index 0000000..0000000 100644
              dismissNotification();
              return;
          }
-@@ -4533,7 +4534,7 @@ public class NotificationsController extends BaseController {
+@@ -4561,7 +4562,7 @@ public class NotificationsController extends BaseController implements Notificat
              PendingIntent contentIntent = PendingIntent.getActivity(ApplicationLoader.applicationContext, 0, intent, PendingIntent.FLAG_IMMUTABLE | PendingIntent.FLAG_ONE_SHOT);
  
              mBuilder.setContentTitle(name)
@@ -46,7 +46,7 @@ index 0000000..0000000 100644
                      .setAutoCancel(true)
                      .setNumber(total_unread_count)
                      .setContentIntent(contentIntent)
-@@ -5511,7 +5512,7 @@ public class NotificationsController extends BaseController {
+@@ -5561,7 +5562,7 @@ public class NotificationsController extends BaseController implements Notificat
  
              NotificationCompat.Builder builder = new NotificationCompat.Builder(ApplicationLoader.applicationContext)
                      .setContentTitle(name)

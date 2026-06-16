@@ -11,7 +11,7 @@ diff --git a/TMessagesProj/src/main/java/org/telegram/ui/ChatActivity.java b/TMe
 index 0000000..0000000 100644
 --- a/TMessagesProj/src/main/java/org/telegram/ui/ChatActivity.java
 +++ b/TMessagesProj/src/main/java/org/telegram/ui/ChatActivity.java
-@@ -6635,6 +6635,13 @@ public class ChatActivity extends BaseFragment implements
+@@ -6740,6 +6740,13 @@ public class ChatActivity extends BaseFragment implements
                          wasManualScroll = true;
                          scrollingChatListView = true;
                      } else if (newState == RecyclerView.SCROLL_STATE_DRAGGING) {

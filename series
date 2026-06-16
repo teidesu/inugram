@@ -146,7 +146,6 @@ debloat/volume-keys-videos.patch
 bugfix/chat-preview-reactions-read.patch
 feature/better-spoilers.patch
 feature/old-layout-nav.patch
-feature/emoji-panel-keywords.patch
 bugfix/camera2-av-sync.patch
 feature/round-recorder.patch
 bugfix/cross-peer-reply-stale-quote.patch
@@ -171,11 +170,10 @@ bugfix/painter-pan-bounds.patch
 feature/linked-channel-in-profile.patch
 bugfix/statistics-shared-message-text.patch
 feature/keep-search-peer-select.patch
-bugfix/theme-tint.patch
 bugfix/sheet-bg-bottom-gap.patch
+bugfix/theme-tint.patch
 bugfix/message-persist-transient.patch
 bugfix/audio-alert-search.patch
-bugfix/music-bar-dismiss-scroll-jump.patch
 bugfix/photo-viewer-apply-caption.patch
 feature/hide-blocked-messages.patch
 feature/show-deleted-replies.patch

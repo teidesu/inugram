@@ -11,7 +11,7 @@ diff --git a/TMessagesProj/src/main/java/org/telegram/ui/Components/ChatAttachAl
 index 0000000..0000000 100644
 --- a/TMessagesProj/src/main/java/org/telegram/ui/Components/ChatAttachAlertPhotoLayout.java
 +++ b/TMessagesProj/src/main/java/org/telegram/ui/Components/ChatAttachAlertPhotoLayout.java
-@@ -124,6 +124,7 @@ import java.util.Collections;
+@@ -125,6 +125,7 @@ import java.util.Collections;
  import java.util.HashMap;
  import java.util.List;
  import java.util.Map;
@@ -19,7 +19,7 @@ index 0000000..0000000 100644
  
  @SuppressLint("ViewConstructor")
  public class ChatAttachAlertPhotoLayout extends ChatAttachAlert.AttachAlertLayout implements NotificationCenter.NotificationCenterDelegate {
-@@ -1532,6 +1533,7 @@ public class ChatAttachAlertPhotoLayout extends ChatAttachAlert.AttachAlertLayou
+@@ -1533,6 +1534,7 @@ public class ChatAttachAlertPhotoLayout extends ChatAttachAlert.AttachAlertLayou
  
      private void openCameraByClick() {
          if (SharedConfig.inappCamera) {
@@ -27,7 +27,7 @@ index 0000000..0000000 100644
              openCamera(true);
          } else {
              if (parentAlert.delegate != null) {
-@@ -2147,7 +2149,7 @@ public class ChatAttachAlertPhotoLayout extends ChatAttachAlert.AttachAlertLayou
+@@ -2148,7 +2150,7 @@ public class ChatAttachAlertPhotoLayout extends ChatAttachAlert.AttachAlertLayou
  
              @Override
              public boolean cancelButtonPressed() {
@@ -36,7 +36,7 @@ index 0000000..0000000 100644
                      AndroidUtilities.runOnUIThread(() -> {
                          if (cameraView != null && !parentAlert.isDismissed()) {
                              cameraView.setSystemUiVisibility(View.SYSTEM_UI_FLAG_LAYOUT_FULLSCREEN | View.SYSTEM_UI_FLAG_FULLSCREEN);
-@@ -2437,7 +2439,11 @@ public class ChatAttachAlertPhotoLayout extends ChatAttachAlert.AttachAlertLayou
+@@ -2438,7 +2440,11 @@ public class ChatAttachAlertPhotoLayout extends ChatAttachAlert.AttachAlertLayou
          if ((old != deviceHasGoodCamera || old2 != noCameraPermissions) && adapter != null) {
              adapter.notifyDataSetChanged();
          }
@@ -49,7 +49,7 @@ index 0000000..0000000 100644
              showCamera();
          }
      }
-@@ -2696,7 +2702,7 @@ public class ChatAttachAlertPhotoLayout extends ChatAttachAlert.AttachAlertLayou
+@@ -2697,7 +2703,7 @@ public class ChatAttachAlertPhotoLayout extends ChatAttachAlert.AttachAlertLayou
      }
  
      private void saveLastCameraBitmap() {
@@ -58,7 +58,7 @@ index 0000000..0000000 100644
              return;
          }
          try {
-@@ -3849,7 +3855,7 @@ public class ChatAttachAlertPhotoLayout extends ChatAttachAlert.AttachAlertLayou
+@@ -3850,7 +3856,7 @@ public class ChatAttachAlertPhotoLayout extends ChatAttachAlert.AttachAlertLayou
      }
  
      public void setCheckCameraWhenShown(boolean checkCameraWhenShown) {
@@ -67,7 +67,7 @@ index 0000000..0000000 100644
      }
  
      @Override
-@@ -3897,6 +3903,7 @@ public class ChatAttachAlertPhotoLayout extends ChatAttachAlert.AttachAlertLayou
+@@ -3898,6 +3904,7 @@ public class ChatAttachAlertPhotoLayout extends ChatAttachAlert.AttachAlertLayou
      }
  
      private void resumeCameraPreview() {
@@ -75,7 +75,7 @@ index 0000000..0000000 100644
          try {
              checkCamera(false);
              if (cameraView != null) {
-@@ -3938,7 +3945,7 @@ public class ChatAttachAlertPhotoLayout extends ChatAttachAlert.AttachAlertLayou
+@@ -3939,7 +3946,7 @@ public class ChatAttachAlertPhotoLayout extends ChatAttachAlert.AttachAlertLayou
  //                    afterCameraInitRunnable = null;
  //                    isCameraFrontfaceBeforeEnteringEditMode = null;
  //                };
@@ -84,7 +84,7 @@ index 0000000..0000000 100644
              }
          }
      }
-@@ -4063,7 +4070,7 @@ public class ChatAttachAlertPhotoLayout extends ChatAttachAlert.AttachAlertLayou
+@@ -4064,7 +4071,7 @@ public class ChatAttachAlertPhotoLayout extends ChatAttachAlert.AttachAlertLayou
  
      @Override
      public void onOpenAnimationEnd() {
@@ -93,7 +93,7 @@ index 0000000..0000000 100644
      }
  
      @Override
-@@ -4797,11 +4804,13 @@ public class ChatAttachAlertPhotoLayout extends ChatAttachAlert.AttachAlertLayou
+@@ -4822,11 +4829,13 @@ public class ChatAttachAlertPhotoLayout extends ChatAttachAlert.AttachAlertLayou
  
          public void updateBitmap() {
              Bitmap bitmap = null;

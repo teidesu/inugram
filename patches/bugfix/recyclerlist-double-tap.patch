@@ -19,7 +19,7 @@ index 0000000..0000000 100644
      private int currentChildPosition;
      private boolean interceptedByChild;
      private boolean wasPressed;
-@@ -1113,7 +1114,7 @@ public class RecyclerListView extends RecyclerView implements IBlur3Capture {
+@@ -1114,7 +1115,7 @@ public class RecyclerListView extends RecyclerView implements IBlur3Capture {
  
                  @Override
                  public boolean onDoubleTap(MotionEvent e) {

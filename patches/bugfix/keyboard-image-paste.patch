@@ -19,7 +19,7 @@ index 0000000..0000000 100644
  import android.util.Property;
  import android.util.TypedValue;
  import android.view.ActionMode;
-@@ -5233,7 +5234,8 @@ public class ChatActivityEnterView extends FrameLayout implements
+@@ -5244,7 +5245,8 @@ public class ChatActivityEnterView extends FrameLayout implements
                              return false;
                          }
                      }

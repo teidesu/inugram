@@ -11,7 +11,7 @@ diff --git a/TMessagesProj/src/main/java/org/telegram/ui/ChatActivity.java b/TMe
 index 0000000..0000000 100644
 --- a/TMessagesProj/src/main/java/org/telegram/ui/ChatActivity.java
 +++ b/TMessagesProj/src/main/java/org/telegram/ui/ChatActivity.java
-@@ -12386,7 +12386,7 @@ public class ChatActivity extends BaseFragment implements
+@@ -12557,7 +12557,7 @@ public class ChatActivity extends BaseFragment implements
                                      }
                                      if (!isVideo && photoEntry.imagePath != null) {
                                          info.path = photoEntry.imagePath;
@@ -20,7 +20,7 @@ index 0000000..0000000 100644
                                              info.originalPhotoEntry = photoEntry.clone();
                                          }
                                      } else if (photoEntry.path != null) {
-@@ -12408,7 +12408,7 @@ public class ChatActivity extends BaseFragment implements
+@@ -12579,7 +12579,7 @@ public class ChatActivity extends BaseFragment implements
                                      info.updateStickersOrder = SendMessagesHelper.checkUpdateStickersOrder(photoEntry.caption);
                                      info.hasMediaSpoilers = photoEntry.hasSpoiler;
                                      info.stars = photoEntry.starsAmount;

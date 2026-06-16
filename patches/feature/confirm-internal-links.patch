@@ -4,9 +4,9 @@ Date: Tue, 26 May 2026 00:52:44 +0400
 Subject: confirm internal links
 
 ---
- .../main/java/org/telegram/messenger/AndroidUtilities.java    | 1 +
- .../main/java/org/telegram/ui/Components/AlertsCreator.java   | 4 ++--
- 2 files changed, 3 insertions(+), 2 deletions(-)
+ .../src/main/java/org/telegram/messenger/AndroidUtilities.java  | 1 +
+ .../src/main/java/org/telegram/ui/Components/AlertsCreator.java | 2 +-
+ 2 files changed, 2 insertions(+), 1 deletion(-)
 
 diff --git a/TMessagesProj/src/main/java/org/telegram/messenger/AndroidUtilities.java b/TMessagesProj/src/main/java/org/telegram/messenger/AndroidUtilities.java
 index 0000000..0000000 100644
@@ -24,21 +24,12 @@ diff --git a/TMessagesProj/src/main/java/org/telegram/ui/Components/AlertsCreato
 index 0000000..0000000 100644
 --- a/TMessagesProj/src/main/java/org/telegram/ui/Components/AlertsCreator.java
 +++ b/TMessagesProj/src/main/java/org/telegram/ui/Components/AlertsCreator.java
-@@ -1445,7 +1445,7 @@ public class AlertsCreator {
-         }
-         long inlineReturn = (fragment instanceof ChatActivity) ? ((ChatActivity) fragment).getInlineReturn() : 0;
-         final String scheme = url == null ? null : Uri.parse(url).getScheme();
--        if (Browser.isInternalUrl(url, null) || !ask || "mailto".equalsIgnoreCase(scheme)) {
-+        if ((Browser.isInternalUrl(url, null) && !desu.inugram.InuConfig.CONFIRM_INTERNAL_LINKS.getValue()) || !ask || "mailto".equalsIgnoreCase(scheme)) {
-             Browser.openUrl(fragment.getParentActivity(), Uri.parse(url), inlineReturn == 0, tryTelegraph, forceNotInternalForApps && checkInternalBotApp(url), progress, null, false, true, false);
-         } else {
-             String urlFinal;
-@@ -1490,7 +1490,7 @@ public class AlertsCreator {
-     public static void showOpenUrlAlert(Context context, String url, boolean punycode, boolean tryTelegraph, boolean ask, boolean forceNotInternalForApps, long inlineReturn, Browser.Progress progress, Theme.ResourcesProvider resourcesProvider) {
+@@ -1659,7 +1659,7 @@ public class AlertsCreator {
+     public static void showOpenUrlAlert(Context context, String url, boolean punycode, boolean tryTelegraph, boolean ask, boolean forceNotInternalForApps, long inlineReturn, Browser.Progress progress, @Nullable TLRPC.WebPage webPage, Theme.ResourcesProvider resourcesProvider) {
          if (!AndroidUtilities.isContextSafe(context)) return;
          final String scheme = url == null ? null : Uri.parse(url).getScheme();
 -        if (Browser.isInternalUrl(url, null) || !ask || "mailto".equalsIgnoreCase(scheme)) {
 +        if ((Browser.isInternalUrl(url, null) && !desu.inugram.InuConfig.CONFIRM_INTERNAL_LINKS.getValue()) || !ask || "mailto".equalsIgnoreCase(scheme)) {
              Browser.openUrl(context, Uri.parse(url), inlineReturn == 0, tryTelegraph, forceNotInternalForApps && checkInternalBotApp(url), progress, null, false, true, false);
-         } else {
-             String urlFinal;
+             return;
+         }

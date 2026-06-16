@@ -32,7 +32,7 @@ index 0000000..0000000 100644
                      // SharedMediaLayout.this.setPadding(0, , 0, 0);
                  });
                  fragmentContextView = new FragmentContextView(context, parent, this, false, resourcesProvider) {
-@@ -7365,7 +7374,9 @@ public class SharedMediaLayout extends FrameLayout implements NotificationCenter
+@@ -7361,7 +7370,9 @@ public class SharedMediaLayout extends FrameLayout implements NotificationCenter
                  }
                  if (savedMessagesContainer.getParent() != mediaPages[a]) {
                      AndroidUtilities.removeFromParent(savedMessagesContainer);
@@ -43,7 +43,7 @@ index 0000000..0000000 100644
                  }
              } else if (mediaPages[a].selectedType == TAB_BOT_PREVIEWS) {
                  if (currentAdapter != null) {
-@@ -7388,7 +7399,9 @@ public class SharedMediaLayout extends FrameLayout implements NotificationCenter
+@@ -7384,7 +7395,9 @@ public class SharedMediaLayout extends FrameLayout implements NotificationCenter
                  }
              }
              final boolean photos = mediaPages[a].selectedType == TAB_PHOTOVIDEO || isAnyStoryPageType(mediaPages[a].selectedType);

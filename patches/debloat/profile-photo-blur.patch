@@ -139,7 +139,7 @@ index 0000000..0000000 100644
              }
  
              int gradientX = getWidth() / 2;
-@@ -1556,9 +1557,9 @@ public class ProfileActivity extends BaseFragment implements NotificationCenter.
+@@ -1544,9 +1545,9 @@ public class ProfileActivity extends BaseFragment implements NotificationCenter.
              }
  
              topOverlayGradient.draw(canvas);
@@ -151,7 +151,7 @@ index 0000000..0000000 100644
  
              int count = avatarsViewPager.getRealCount();
              selectedPosition = avatarsViewPager.getRealPosition();
-@@ -3128,6 +3129,7 @@ public class ProfileActivity extends BaseFragment implements NotificationCenter.
+@@ -3118,6 +3119,7 @@ public class ProfileActivity extends BaseFragment implements NotificationCenter.
                          if (giftsView != null) {
                              giftsView.setExpandProgress(1f);
                          }
@@ -159,7 +159,7 @@ index 0000000..0000000 100644
                          if (actionsView != null) {
                              actionsView.setParentExpanded(1f);
                          }
-@@ -11169,7 +11171,7 @@ public class ProfileActivity extends BaseFragment implements NotificationCenter.
+@@ -11162,7 +11164,7 @@ public class ProfileActivity extends BaseFragment implements NotificationCenter.
              actionsView.clipHeight = -1;
              float bottom = extraHeight + newTop - dp(hasMusic ? 25 : 0);
              float height = Math.min(dp(74), bottom - newTop);
@@ -168,7 +168,7 @@ index 0000000..0000000 100644
          }
  
          if (callToActionItem != null && callToActionItem.getTag() != null) {
-@@ -11199,7 +11201,7 @@ public class ProfileActivity extends BaseFragment implements NotificationCenter.
+@@ -11196,7 +11198,7 @@ public class ProfileActivity extends BaseFragment implements NotificationCenter.
  //            musicView.clipHeight = -1;
              float bottom = extraHeight + newTop + dp(74);
              float height = Math.min(getActionsExtraHeight(), bottom - newTop);

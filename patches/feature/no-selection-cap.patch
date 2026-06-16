@@ -12,7 +12,7 @@ diff --git a/TMessagesProj/src/main/java/org/telegram/messenger/MessagesControll
 index 0000000..0000000 100644
 --- a/TMessagesProj/src/main/java/org/telegram/messenger/MessagesController.java
 +++ b/TMessagesProj/src/main/java/org/telegram/messenger/MessagesController.java
-@@ -9252,6 +9252,15 @@ public class MessagesController extends BaseController implements NotificationCe
+@@ -9256,6 +9256,15 @@ public class MessagesController extends BaseController implements NotificationCe
      }
  
      public void deleteMessages(ArrayList<Integer> messages, ArrayList<Long> randoms, TLRPC.EncryptedChat encryptedChat, long dialogId, boolean forAll, int mode, boolean cacheOnly, long taskId, TLObject taskRequest, int topicId, boolean movedToScheduled, int movedToScheduledMessageId) {
@@ -32,7 +32,7 @@ diff --git a/TMessagesProj/src/main/java/org/telegram/ui/ChatActivity.java b/TMe
 index 0000000..0000000 100644
 --- a/TMessagesProj/src/main/java/org/telegram/ui/ChatActivity.java
 +++ b/TMessagesProj/src/main/java/org/telegram/ui/ChatActivity.java
-@@ -1693,11 +1693,7 @@ public class ChatActivity extends BaseFragment implements
+@@ -1752,11 +1752,7 @@ public class ChatActivity extends BaseFragment implements
                          return;
                      }
                      if (messageObject.contentType == 0) {
@@ -45,7 +45,7 @@ index 0000000..0000000 100644
                          RecyclerView.ViewHolder holder = chatListView.findViewHolderForAdapterPosition(position);
                          if (holder != null && holder.itemView instanceof ChatMessageCell) {
                              processRowSelect(holder.itemView, false, x, y);
-@@ -18983,14 +18979,6 @@ public class ChatActivity extends BaseFragment implements
+@@ -19122,14 +19118,6 @@ public class ChatActivity extends BaseFragment implements
                      }
                  }
              } else {

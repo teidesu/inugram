@@ -24,7 +24,7 @@ diff --git a/TMessagesProj/src/main/java/org/telegram/messenger/MessageObject.ja
 index 0000000..0000000 100644
 --- a/TMessagesProj/src/main/java/org/telegram/messenger/MessageObject.java
 +++ b/TMessagesProj/src/main/java/org/telegram/messenger/MessageObject.java
-@@ -10110,6 +10110,9 @@ public class MessageObject {
+@@ -10540,6 +10540,9 @@ public class MessageObject {
          if (getMedia(message) instanceof TLRPC.TL_messageMediaWebPage) {
              return isVideoDocument(getMedia(message).webpage.document);
          }
@@ -34,7 +34,7 @@ index 0000000..0000000 100644
          return getMedia(message) != null && isVideoDocument(getMedia(message).document);
      }
  
-@@ -10653,6 +10656,7 @@ public class MessageObject {
+@@ -11084,6 +11087,7 @@ public class MessageObject {
      }
  
      public boolean isLivePhoto() {
