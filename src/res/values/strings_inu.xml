@@ -267,6 +267,7 @@
     <string name="InuMsgDetailDate">Date</string>
     <string name="InuMsgDetailWhenOnline">When online</string>
     <string name="InuMsgDetailEdited">Edited</string>
+    <string name="InuMsgDetailAutoDelete">Auto-delete</string>
     <string name="InuMsgDetailForwardFrom">Forward From</string>
     <string name="InuMsgDetailRestrictionReason">Restriction Reason</string>
     <string name="InuMsgDetailFileName">File Name</string>

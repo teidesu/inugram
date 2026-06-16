@@ -212,6 +212,10 @@ class MessageDetailsActivity(
                 )
             )
         }
+        val autoDeleteAt = autoDeleteTimestamp()
+        if (autoDeleteAt != 0) {
+            items.add(detailItem(ROW_AUTODELETE, R.string.InuMsgDetailAutoDelete, formatDate(autoDeleteAt)))
+        }
         if (messageObject.isForwarded) {
             items.add(detailItem(ROW_FORWARD, R.string.InuMsgDetailForwardFrom, buildForwardInfo()))
         }
@@ -359,6 +363,15 @@ class MessageDetailsActivity(
         val groupCaption = messageGroup?.findCaptionMessageObject()
         if (groupCaption != null && !groupCaption.caption.isNullOrEmpty()) return groupCaption.caption.toString()
         return null
+    }
+
+    // absolute self-destruct time: secret-media `destroyTime` is already absolute,
+    // otherwise derive it from the dialog auto-delete period (`date + ttl_period`)
+    private fun autoDeleteTimestamp(): Int {
+        val owner = messageObject.messageOwner
+        if (owner.destroyTime != 0) return owner.destroyTime
+        if (owner.ttl_period != 0 && owner.date != 0) return owner.date + owner.ttl_period
+        return 0
     }
 
     private fun formatDate(timestamp: Int): String {
@@ -664,6 +677,7 @@ class MessageDetailsActivity(
         private val ROW_BOT = InuUtils.generateId()
         private val ROW_DATE = InuUtils.generateId()
         private val ROW_EDITED = InuUtils.generateId()
+        private val ROW_AUTODELETE = InuUtils.generateId()
         private val ROW_FORWARD = InuUtils.generateId()
         private val ROW_RESTRICTION = InuUtils.generateId()
         private val ROW_FILE_NAME = InuUtils.generateId()
