@@ -192,3 +192,4 @@ bugfix/media-cancel-race.patch
 debloat/keep-bot-drafts-at-bottom.patch
 bugfix/channel-history-stuck-forward.patch
 bugfix/instant-camera-cancel-race.patch
+bugfix/zoom-reset-on-edit.patch
