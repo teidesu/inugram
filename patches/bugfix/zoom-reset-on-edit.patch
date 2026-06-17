@@ -1,0 +1,31 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: alina sireneva <alina@tei.su>
+Date: Wed, 17 Jun 2026 18:22:40 +0400
+Subject: fix photo zoom/video progress resetting on message edit
+
+---
+ TMessagesProj/src/main/java/org/telegram/ui/PhotoViewer.java | 4 ++--
+ 1 file changed, 2 insertions(+), 2 deletions(-)
+
+diff --git a/TMessagesProj/src/main/java/org/telegram/ui/PhotoViewer.java b/TMessagesProj/src/main/java/org/telegram/ui/PhotoViewer.java
+index 0000000..0000000 100644
+--- a/TMessagesProj/src/main/java/org/telegram/ui/PhotoViewer.java
++++ b/TMessagesProj/src/main/java/org/telegram/ui/PhotoViewer.java
+@@ -15951,7 +15951,7 @@ public class PhotoViewer implements NotificationCenter.NotificationCenterDelegat
+ 
+         int prevIndex = currentIndex;
+         currentIndex = index;
+-        setIsAboutToSwitchToIndex(currentIndex, init, animateCaption);
++        setIsAboutToSwitchToIndex(currentIndex, init, animateCaption, force);
+ 
+         boolean isVideo = false;
+         boolean isLivePhoto = false;
+@@ -15972,7 +15972,7 @@ public class PhotoViewer implements NotificationCenter.NotificationCenterDelegat
+             }
+             MessageObject newMessageObject = imagesArr.get(currentIndex);
+             final boolean noforwards = newMessageObject != null && (MessagesController.getInstance(currentAccount).isPeerNoForwards(newMessageObject.getDialogId()) || (newMessageObject.messageOwner != null && newMessageObject.messageOwner.noforwards) || newMessageObject.hasRevealedExtendedMedia());
+-            sameImage = init && currentMessageObject != null && currentMessageObject.getId() == newMessageObject.getId();
++            sameImage = (init || force) && currentMessageObject != null && currentMessageObject.getId() == newMessageObject.getId();
+             if (sameImage) {
+                 newMessageObject.putInDownloadsStore = currentMessageObject.putInDownloadsStore;
+             }
