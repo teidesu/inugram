@@ -127,6 +127,7 @@ class ParanoiaActivity : SettingsPageActivity() {
         val args = Bundle().apply {
             putBoolean("isNeverShare", true)
             putInt("chatAddType", 2)
+            putBoolean("inu_allowChannels", true)
         }
         val fragment = GroupCreateActivity(args)
         fragment.select(ArrayList(ParanoiaHelper.getHidden(currentAccount)), false, false)

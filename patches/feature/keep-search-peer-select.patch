@@ -11,7 +11,7 @@ diff --git a/TMessagesProj/src/main/java/org/telegram/ui/GroupCreateActivity.jav
 index 0000000..0000000 100644
 --- a/TMessagesProj/src/main/java/org/telegram/ui/GroupCreateActivity.java
 +++ b/TMessagesProj/src/main/java/org/telegram/ui/GroupCreateActivity.java
-@@ -624,15 +624,13 @@ public class GroupCreateActivity extends BaseFragment implements NotificationCen
+@@ -626,15 +626,13 @@ public class GroupCreateActivity extends BaseFragment implements NotificationCen
                      spansContainer.addSpan(span);
                      span.setOnClickListener(GroupCreateActivity.this);
                  }

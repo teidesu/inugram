@@ -16,9 +16,10 @@ Subject: paranoia mode (hide chats, accounts, disguise as stock app)
  .../src/main/java/org/telegram/ui/Cells/SessionCell.java  | 4 ++++
  .../main/java/org/telegram/ui/Components/ShareAlert.java  | 1 +
  .../src/main/java/org/telegram/ui/DialogsActivity.java    | 4 ++--
+ .../main/java/org/telegram/ui/GroupCreateActivity.java    | 4 +++-
  .../src/main/java/org/telegram/ui/SessionBottomSheet.java | 3 +++
  .../java/org/telegram/ui/Stories/StoriesController.java   | 1 +
- 14 files changed, 41 insertions(+), 6 deletions(-)
+ 15 files changed, 44 insertions(+), 7 deletions(-)
 
 diff --git a/TMessagesProj/src/main/java/org/telegram/messenger/ContactsController.java b/TMessagesProj/src/main/java/org/telegram/messenger/ContactsController.java
 index 0000000..0000000 100644
@@ -324,6 +325,35 @@ index 0000000..0000000 100644
          final ActionBarPopupWindow.ActionBarPopupWindowLayout[] previewMenu = new ActionBarPopupWindow.ActionBarPopupWindowLayout[1];
  
          LinearLayout foldersMenuView = null;
+diff --git a/TMessagesProj/src/main/java/org/telegram/ui/GroupCreateActivity.java b/TMessagesProj/src/main/java/org/telegram/ui/GroupCreateActivity.java
+index 0000000..0000000 100644
+--- a/TMessagesProj/src/main/java/org/telegram/ui/GroupCreateActivity.java
++++ b/TMessagesProj/src/main/java/org/telegram/ui/GroupCreateActivity.java
+@@ -143,6 +143,7 @@ public class GroupCreateActivity extends BaseFragment implements NotificationCen
+     private final int chatAddType;
+     private final boolean allowPremium;
+     private final boolean allowMiniApps;
++    private final boolean inu_allowChannels;
+     private GroupCreateSpan selectedPremium;
+     private GroupCreateSpan selectedMiniApps;
+     private LongSparseArray<GroupCreateSpan> selectedContacts = new LongSparseArray<>();
+@@ -235,6 +236,7 @@ public class GroupCreateActivity extends BaseFragment implements NotificationCen
+         chatAddType = args.getInt("chatAddType", 0);
+         allowPremium = args.getBoolean("allowPremium", false);
+         allowMiniApps = args.getBoolean("allowMiniapps", false);
++        inu_allowChannels = args.getBoolean("inu_allowChannels", false);
+         chatId = args.getLong("chatId");
+         channelId = args.getLong("channelId");
+         if (isAlwaysShare || isNeverShare || addToGroup) {
+@@ -1221,7 +1223,7 @@ public class GroupCreateActivity extends BaseFragment implements NotificationCen
+                             continue;
+                         }
+                         TLRPC.Chat chat = getMessagesController().getChat(-dialog.id);
+-                        if (chat == null || chat.migrated_to != null || ChatObject.isChannel(chat) && !chat.megagroup) {
++                        if (chat == null || chat.migrated_to != null || ChatObject.isChannel(chat) && !chat.megagroup && !inu_allowChannels) {
+                             continue;
+                         }
+                         contacts.add(chat);
 diff --git a/TMessagesProj/src/main/java/org/telegram/ui/SessionBottomSheet.java b/TMessagesProj/src/main/java/org/telegram/ui/SessionBottomSheet.java
 index 0000000..0000000 100644
 --- a/TMessagesProj/src/main/java/org/telegram/ui/SessionBottomSheet.java
