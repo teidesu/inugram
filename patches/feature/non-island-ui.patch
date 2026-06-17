@@ -12,6 +12,7 @@ Subject: non-island ui in various parts of the app
  ...ChatActivityEnterViewAnimatedIconView.java |  17 ++-
  .../ChatActivityTopPanelLayout.java           |  16 ++-
  .../ui/Components/ChatAttachAlert.java        |  19 +++
+ .../ui/Components/ChatAvatarContainer.java    |   1 +
  .../DialogsActivityTopPanelLayout.java        |   9 +-
  .../ui/Components/FilterTabsView.java         |   6 +
  .../ui/Components/FragmentSearchField.java    |  10 +-
@@ -28,12 +29,12 @@ Subject: non-island ui in various parts of the app
  .../ChatActivityChannelButtonsLayout.java     |  33 ++++-
  .../ui/Components/glass/GlassTabView.java     |   5 +-
  .../java/org/telegram/ui/DialogsActivity.java | 130 +++++++++++-------
- .../java/org/telegram/ui/ProfileActivity.java |   2 +-
+ .../java/org/telegram/ui/ProfileActivity.java |  18 +--
  .../ui/SearchTabsAndFiltersLayout.java        |   6 +
  .../java/org/telegram/ui/bots/BotAdView.java  |   2 +-
  .../ui/bots/BotCommandsMenuContainer.java     |   4 +-
  .../bots/ChatAttachAlertBotWebViewLayout.java |   5 +-
- 29 files changed, 430 insertions(+), 194 deletions(-)
+ 30 files changed, 439 insertions(+), 202 deletions(-)
 
 diff --git a/TMessagesProj/src/main/java/org/telegram/ui/ActionBar/ActionBar.java b/TMessagesProj/src/main/java/org/telegram/ui/ActionBar/ActionBar.java
 index 0000000..0000000 100644
@@ -756,6 +757,18 @@ index 0000000..0000000 100644
          buttonsRecyclerView.setOnItemClickListener((view, position) -> {
              BaseFragment lastFragment = baseFragment;
              if (lastFragment == null) {
+diff --git a/TMessagesProj/src/main/java/org/telegram/ui/Components/ChatAvatarContainer.java b/TMessagesProj/src/main/java/org/telegram/ui/Components/ChatAvatarContainer.java
+index 0000000..0000000 100644
+--- a/TMessagesProj/src/main/java/org/telegram/ui/Components/ChatAvatarContainer.java
++++ b/TMessagesProj/src/main/java/org/telegram/ui/Components/ChatAvatarContainer.java
+@@ -732,6 +732,7 @@ public class ChatAvatarContainer extends FrameLayout implements NotificationCent
+ 
+     private boolean glassMode;
+     public void setGlassMode() {
++        if (desu.inugram.helpers.theme.NonIslandHelper.chatElements()) return;
+         if (titleTextView != null) {
+             titleTextView.setTextSizePx(dp(17.5f));
+         }
 diff --git a/TMessagesProj/src/main/java/org/telegram/ui/Components/DialogsActivityTopPanelLayout.java b/TMessagesProj/src/main/java/org/telegram/ui/Components/DialogsActivityTopPanelLayout.java
 index 0000000..0000000 100644
 --- a/TMessagesProj/src/main/java/org/telegram/ui/Components/DialogsActivityTopPanelLayout.java
@@ -2103,6 +2116,65 @@ index 0000000..0000000 100644
          } else {
              scrollableViewNoiseSuppressor = null;
              //iBlur3SourceGlassFrosted = null;
+@@ -5521,7 +5521,7 @@ public class ProfileActivity extends BaseFragment implements NotificationCenter.
+                 nameTextView[a].setTextColor(getThemedColor(Theme.key_actionBarDefaultTitle));
+             }
+             nameTextView[a].setPadding(0, AndroidUtilities.dp(6), 0, AndroidUtilities.dp(a == 0 ? 12 : 4));
+-            nameTextView[a].setTextSizePx(dp(17.5f));
++            nameTextView[a].setTextSizePx(dp(desu.inugram.helpers.theme.NonIslandHelper.chatElements() ? 18 : 17.5f));
+             nameTextView[a].setGravity(Gravity.LEFT);
+             nameTextView[a].setTypeface(AndroidUtilities.bold());
+             nameTextView[a].setLeftDrawableTopPadding(-AndroidUtilities.dp(1.3f));
+@@ -5587,7 +5587,7 @@ public class ProfileActivity extends BaseFragment implements NotificationCenter.
+ 
+             onlineTextView[a].setEllipsizeByGradient(true);
+             onlineTextView[a].setTextColor(applyPeerColor(getThemedColor(Theme.key_actionBarDefaultSubtitle), true, null));
+-            onlineTextView[a].setTextSizePx(dp(13.5f));
++            onlineTextView[a].setTextSizePx(dp(desu.inugram.helpers.theme.NonIslandHelper.chatElements() ? 14 : 13.5f));
+             onlineTextView[a].setGravity(Gravity.LEFT);
+             onlineTextView[a].setAlpha(a == 0 ? 0.0f : 1.0f);
+             onlineTextView[a].setPivotX(dp(8));
+@@ -5624,7 +5624,7 @@ public class ProfileActivity extends BaseFragment implements NotificationCenter.
+             protected TextView createTextView() {
+                 TextView textView = new TextView(context);
+                 textView.setTextColor(getThemedColor(Theme.key_player_actionBarSubtitle));
+-                textView.setTextSize(TypedValue.COMPLEX_UNIT_PX, AndroidUtilities.dp(13.5f));
++                textView.setTextSize(TypedValue.COMPLEX_UNIT_PX, AndroidUtilities.dp(desu.inugram.helpers.theme.NonIslandHelper.chatElements() ? 14 : 13.5f));
+                 textView.setSingleLine(true);
+                 textView.setEllipsize(TextUtils.TruncateAt.END);
+                 textView.setGravity(Gravity.LEFT);
+@@ -8233,8 +8233,8 @@ public class ProfileActivity extends BaseFragment implements NotificationCenter.
+                 continue;
+             }
+ 
+-            float nameX = lerp((prevAvatarTranslation - dp(109) + dp(48)), backwardInitialValues[12 + a * 2], backwardDiff);
+-            float onlineX = lerp((prevAvatarTranslation - dp(109) + dp(48)), backwardInitialValues[12 + a * 2 + 1], backwardDiff);
++            float nameX = lerp((prevAvatarTranslation - dp(109) + dp(desu.inugram.helpers.theme.NonIslandHelper.chatElements() ? 54 : 48)), backwardInitialValues[12 + a * 2], backwardDiff);
++            float onlineX = lerp((prevAvatarTranslation - dp(109) + dp(desu.inugram.helpers.theme.NonIslandHelper.chatElements() ? 54 : 48)), backwardInitialValues[12 + a * 2 + 1], backwardDiff);
+ 
+             nameTextView[a].setTranslationX(nameX);
+             nameTextView[a].setTranslationY(nameY);
+@@ -8594,9 +8594,9 @@ public class ProfileActivity extends BaseFragment implements NotificationCenter.
+                 float avY = (actionBar.getOccupyStatusBar() ? AndroidUtilities.statusBarHeight : 0) + ActionBar.getCurrentActionBarHeight() / 2.0f - 21 * AndroidUtilities.density + actionBar.getTranslationY();
+ //                metaball.setVisibility(View.GONE);
+ 
+-                nameTextView[0].setTranslationX((prevAvatarTranslation - dp(109) + dp(48)));
++                nameTextView[0].setTranslationX((prevAvatarTranslation - dp(109) + dp(desu.inugram.helpers.theme.NonIslandHelper.chatElements() ? 54 : 48)));
+                 nameTextView[0].setTranslationY((float) Math.floor(avY) + AndroidUtilities.dp(1.3f));
+-                onlineTextView[0].setTranslationX((prevAvatarTranslation - dp(109) + dp(48)));
++                onlineTextView[0].setTranslationX((prevAvatarTranslation - dp(109) + dp(desu.inugram.helpers.theme.NonIslandHelper.chatElements() ? 54 : 48)));
+                 onlineTextView[0].setTranslationY((float) Math.floor(avY) + AndroidUtilities.dp(24));
+                 nameTextView[0].setScaleX(1.0f);
+                 nameTextView[0].setScaleY(1.0f);
+@@ -8707,7 +8707,7 @@ public class ProfileActivity extends BaseFragment implements NotificationCenter.
+                 final float avatarBottom = (float) Math.floor(endNameY) + (avatarContainer.getHeight() * avatarContainer.getScaleY() + dpf2(8)) * (openAnimationInProgress ? avatarAnimationProgress : diff);
+                 nameY = avatarBottom + dp(1.3f) + dp(7) * diff + titleAnimationsYDiff * (1f - avatarAnimationProgress);
+                 onlineY = avatarBottom + dp(24) + (float) Math.floor(11 * AndroidUtilities.density) * diff;
+-                final float minimizedX = openAnimationInProgress ? (prevAvatarTranslation - dp(109) + dp(48)) : -dpf2(42 + 4);
++                final float minimizedX = openAnimationInProgress ? (prevAvatarTranslation - dp(109) + dp(desu.inugram.helpers.theme.NonIslandHelper.chatElements() ? 54 : 48)) : -dpf2(42 + 4);
+ 
+                 if (showStatusButton != null) {
+                     showStatusButton.setAlpha((int) (0xFF * diff));
 diff --git a/TMessagesProj/src/main/java/org/telegram/ui/SearchTabsAndFiltersLayout.java b/TMessagesProj/src/main/java/org/telegram/ui/SearchTabsAndFiltersLayout.java
 index 0000000..0000000 100644
 --- a/TMessagesProj/src/main/java/org/telegram/ui/SearchTabsAndFiltersLayout.java
