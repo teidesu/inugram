@@ -4,14 +4,14 @@ Date: Tue, 12 May 2026 14:58:17 +0200
 Subject: force system font for ui
 
 ---
- .../telegram/messenger/AndroidUtilities.java  |  6 ++++
+ .../telegram/messenger/AndroidUtilities.java  |  6 ++
  .../telegram/ui/ActionBar/SimpleTextView.java |  1 +
- .../java/org/telegram/ui/ActionBar/Theme.java |  3 ++
+ .../java/org/telegram/ui/ActionBar/Theme.java |  3 +
  .../telegram/ui/Cells/ProfileSearchCell.java  |  1 +
  .../ui/Components/AnimatedEmojiSpan.java      |  1 +
  .../ui/Components/AnimatedTextView.java       |  1 +
- .../ui/Components/Paint/PaintTypeface.java    | 30 ++++++++++++++-----
- 7 files changed, 35 insertions(+), 8 deletions(-)
+ .../ui/Components/Paint/PaintTypeface.java    | 63 +++++++------------
+ 7 files changed, 35 insertions(+), 41 deletions(-)
 
 diff --git a/TMessagesProj/src/main/java/org/telegram/messenger/AndroidUtilities.java b/TMessagesProj/src/main/java/org/telegram/messenger/AndroidUtilities.java
 index 0000000..0000000 100644
@@ -111,7 +111,7 @@ diff --git a/TMessagesProj/src/main/java/org/telegram/ui/Components/Paint/PaintT
 index 0000000..0000000 100644
 --- a/TMessagesProj/src/main/java/org/telegram/ui/Components/Paint/PaintTypeface.java
 +++ b/TMessagesProj/src/main/java/org/telegram/ui/Components/Paint/PaintTypeface.java
-@@ -33,12 +33,12 @@ import java.util.Set;
+@@ -33,16 +33,16 @@ import java.util.Set;
  public class PaintTypeface {
      private final static boolean SYSTEM_FONTS_ENABLED = true;
  
@@ -129,6 +129,11 @@ index 0000000..0000000 100644
  
      public final static List<PaintTypeface> BUILT_IN_FONTS = Arrays.asList(ROBOTO_MEDIUM, ROBOTO_ITALIC, ROBOTO_SERIF, ROBOTO_CONDENSED, ROBOTO_MONO, MW_BOLD);
  
+-    private static final List<String> preferable = Arrays.asList(
++    public static final List<String> preferable = Arrays.asList(
+         "Google Sans",
+         "Dancing Script",
+         "Carrois Gothic SC",
 @@ -59,7 +59,7 @@ public class PaintTypeface {
      private final Font font;
      private Paint paint;
@@ -163,22 +168,47 @@ index 0000000..0000000 100644
      public static boolean loadingTypefaces;
  
      private static void load() {
-@@ -149,7 +158,8 @@ public class PaintTypeface {
+@@ -149,40 +158,12 @@ public class PaintTypeface {
          }
          loadingTypefaces = true;
          Utilities.themeQueue.postRunnable(() -> {
 -            ArrayList<PaintTypeface> typefaces = new ArrayList<PaintTypeface>(BUILT_IN_FONTS);
+-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q && SYSTEM_FONTS_ENABLED) {
+-                Set<Font> fonts = SystemFonts.getAvailableFonts();
+-                Iterator<Font> i = fonts.iterator();
+-                HashMap<String, Family> families = new HashMap<>();
+-                while (i.hasNext()) {
+-                    Font font = i.next();
+-                    if (font.getFile().getName().contains("Noto"))
+-                        continue;
+-                    FontData data = parseFont(font);
+-                    if (data != null) {
+-                        Family family = families.get(data.family);
+-                        if (family == null) {
+-                            family = new Family();
+-                            families.put(family.family = data.family, family);
+-                        }
+-                        family.fonts.add(data);
+-                    }
+-                }
+-
+-                for (String familyName : preferable) {
+-                    Family family = families.get(familyName);
+-                    if (family != null) {
+-                        FontData font = family.getBold();
+-                        if (font == null) {
+-                            font = family.getRegular();
+-                        }
+-                        if (font != null) {
+-                            typefaces.add(new PaintTypeface(font.font, font.getName()));
+-                        }
+-                    }
+-                }
+-            }
 +            ArrayList<PaintTypeface> typefaces = new ArrayList<PaintTypeface>();
-+            final int inu_gen = desu.inugram.helpers.font.FontHelper.buildEditorRoster(typefaces);
-             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q && SYSTEM_FONTS_ENABLED) {
-                 Set<Font> fonts = SystemFonts.getAvailableFonts();
-                 Iterator<Font> i = fonts.iterator();
-@@ -183,6 +193,10 @@ public class PaintTypeface {
-                 }
-             }
++            final int inu_gen = desu.inugram.helpers.font.FontLibrary.buildEditorRoster(typefaces);
              AndroidUtilities.runOnUIThread(() -> {
-+                if (!desu.inugram.helpers.font.FontHelper.isRosterCurrent(inu_gen)) {
-+                    // roster changed mid-build; drop this result, a fresh load will be re-triggered
++                if (!desu.inugram.helpers.font.FontLibrary.isRosterCurrent(inu_gen)) {
 +                    return;
 +                }
                  PaintTypeface.typefaces = typefaces;

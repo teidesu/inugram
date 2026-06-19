@@ -7,13 +7,14 @@ import desu.inugram.ui.settings.AppearanceSettingsActivity
 import desu.inugram.ui.settings.BehaviorSettingsActivity
 import desu.inugram.ui.settings.ChatsSettingsActivity
 import desu.inugram.ui.settings.DialogsSettingsActivity
-import desu.inugram.ui.settings.FontsSettingsActivity
 import desu.inugram.ui.settings.InuSettingsActivity
 import desu.inugram.ui.settings.MessagesSettingsActivity
 import desu.inugram.ui.settings.PrivacySecurityActivity
 import desu.inugram.ui.settings.SettingsPageActivity
 import desu.inugram.ui.settings.TranslatorSettingsActivity
 import desu.inugram.ui.settings.UserProfileSettingsActivity
+import desu.inugram.ui.settings.fonts.FontStackActivity
+import desu.inugram.ui.settings.fonts.FontsSettingsActivity
 import org.telegram.messenger.LocaleController
 import org.telegram.messenger.R
 import org.telegram.ui.ActionBar.BaseFragment
@@ -39,6 +40,7 @@ object SearchRegistry {
             InuSettingsActivity.PAGE,
             AppearanceSettingsActivity.PAGE,
             FontsSettingsActivity.PAGE,
+            FontStackActivity.PAGE,
             ChatsSettingsActivity.PAGE,
             MessagesSettingsActivity.PAGE,
             DialogsSettingsActivity.PAGE,
