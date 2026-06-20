@@ -214,6 +214,7 @@ most things are toggleable in `Settings → Inugram`, with sensible opinionated 
 - "regular" formatting option with mixed-span selections
 - applying a style over a mixed-span selection smearing one span (e.g. mono) across the whole range
 - photo viewer ui respects litemode blur
+- search-as-list box respects litemode blur
 - lazy face detect (only on filters tab)
 - lazy chromecast init in photo viewer
 - stale video seekbar leaking onto photos in photo viewer

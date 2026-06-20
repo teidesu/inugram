@@ -1,0 +1,24 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: alina sireneva <alina@tei.su>
+Date: Sat, 20 Jun 2026 16:38:21 +0400
+Subject: fix "show as list" in search not respecting litemode
+
+---
+ .../drawable/color/impl/BlurredBackgroundProviderImpl.java    | 4 ++++
+ 1 file changed, 4 insertions(+)
+
+diff --git a/TMessagesProj/src/main/java/org/telegram/ui/Components/blur3/drawable/color/impl/BlurredBackgroundProviderImpl.java b/TMessagesProj/src/main/java/org/telegram/ui/Components/blur3/drawable/color/impl/BlurredBackgroundProviderImpl.java
+index 0000000..0000000 100644
+--- a/TMessagesProj/src/main/java/org/telegram/ui/Components/blur3/drawable/color/impl/BlurredBackgroundProviderImpl.java
++++ b/TMessagesProj/src/main/java/org/telegram/ui/Components/blur3/drawable/color/impl/BlurredBackgroundProviderImpl.java
+@@ -181,6 +181,10 @@ public class BlurredBackgroundProviderImpl {
+     public static BlurredBackgroundProvider topPanelChatActivitySearchListBg(Theme.ResourcesProvider resourcesProvider) {
+         return new BlurredBackgroundProviderBuilder(resourcesProvider)
+                 .setBackgroundColor((r, isDark) -> {
++                    if (!checkBlurEnabled(resourcesProvider)) {
++                        return ColorUtils.setAlphaComponent(Theme.getColor(Theme.key_windowBackgroundWhite, r), 255);
++                    }
++
+                     final float alpha = 0.7f;
+                     final int colorBg = Theme.getColor(Theme.key_windowBackgroundWhite, r);
+                     return Theme.multAlpha(colorBg, alpha);

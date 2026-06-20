@@ -194,3 +194,4 @@ bugfix/channel-history-stuck-forward.patch
 bugfix/instant-camera-cancel-race.patch
 bugfix/zoom-reset-on-edit.patch
 bugfix/pip-empty-snapshot.patch
+bugfix/search-list-background-blur.patch
