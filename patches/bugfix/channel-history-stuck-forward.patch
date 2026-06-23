@@ -5,8 +5,7 @@ Subject: fix non-joined channels history getting stuck in the past
 
 ---
  .../messenger/MessagesController.java         | 30 +++++++++++++++----
- .../telegram/messenger/MessagesStorage.java   |  4 +--
- 2 files changed, 26 insertions(+), 8 deletions(-)
+ 1 file changed, 24 insertions(+), 6 deletions(-)
 
 diff --git a/TMessagesProj/src/main/java/org/telegram/messenger/MessagesController.java b/TMessagesProj/src/main/java/org/telegram/messenger/MessagesController.java
 index 0000000..0000000 100644
@@ -80,19 +79,3 @@ index 0000000..0000000 100644
              }
  
              if (!messagesToReload.isEmpty()) {
-diff --git a/TMessagesProj/src/main/java/org/telegram/messenger/MessagesStorage.java b/TMessagesProj/src/main/java/org/telegram/messenger/MessagesStorage.java
-index 0000000..0000000 100644
---- a/TMessagesProj/src/main/java/org/telegram/messenger/MessagesStorage.java
-+++ b/TMessagesProj/src/main/java/org/telegram/messenger/MessagesStorage.java
-@@ -9102,9 +9102,9 @@ public class MessagesStorage extends BaseController {
- 
-                     if (load_type == LOAD_AROUND_MESSAGE || load_type == LOAD_AROUND_DATE || queryFromServer && load_type == LOAD_FROM_UNREAD) {
-                         if (threadMessageId != 0) {
--                            cursor = database.queryFinalized(String.format(Locale.US, "SELECT max(mid) FROM messages_topics WHERE uid = %d AND topic_id = %d AND mid > 0", dialogId, threadMessageId));
-+                            cursor = database.queryFinalized(String.format(Locale.US, "SELECT top_message FROM topics WHERE did = %d AND topic_id = %d", dialogId, threadMessageId));
-                         } else {
--                            cursor = database.queryFinalized(String.format(Locale.US, "SELECT max(mid) FROM messages_v2 WHERE uid = %d AND mid > 0", dialogId));
-+                            cursor = database.queryFinalized(String.format(Locale.US, "SELECT last_mid FROM dialogs WHERE did = %d", dialogId));
-                         }
-                         if (cursor.next()) {
-                             last_message_id = cursor.intValue(0);
