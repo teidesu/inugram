@@ -96,6 +96,7 @@ most things are toggleable in `Settings → Inugram`, with sensible opinionated 
   - Go to beginning
   - Go to message by ID
   - Delete my messages
+  - Statistics / Administrators / Permissions / Invite links (admin shortcuts)
 - 🐶 disable custom wallpaper and theme per chat
 - read-only chat "admin" page for non-admins
 - split media restriction toggles for stickers / gifs / games / inline

@@ -35,11 +35,14 @@ import org.telegram.ui.Cells.CheckBoxCell
 import org.telegram.ui.ChannelAdminLogActivity
 import org.telegram.ui.ChatActivity
 import org.telegram.ui.ChatRightsEditActivity
+import org.telegram.ui.ChatUsersActivity
 import org.telegram.ui.Components.BulletinFactory
 import org.telegram.ui.Components.ItemOptions
 import org.telegram.ui.Components.LayoutHelper
 import org.telegram.ui.Components.TranslateAlert2
+import org.telegram.ui.ManageLinksActivity
 import org.telegram.ui.RestrictedLanguagesSelectActivity
+import org.telegram.ui.StatisticActivity
 
 /**
  * Owns the customizable chat-header overflow menu, the message-selection action bar
@@ -54,6 +57,10 @@ object ChatActionsHelper {
     const val ACTION_GO_TO_BEGINNING = 514
     const val ACTION_GO_TO_MESSAGE = 515
     const val ACTION_DELETE_OWN_MESSAGES = 516
+    const val ACTION_STATISTICS = 517
+    const val ACTION_ADMINISTRATORS = 518
+    const val ACTION_PERMISSIONS = 519
+    const val ACTION_INVITE_LINKS = 520
 
     // selection action mode
     const val ACTION_SELECT_RANGE = 1500
@@ -103,6 +110,26 @@ object ChatActionsHelper {
                 LocaleController.getString(R.string.InuDeleteOwnMessages),
             )
         }
+        if (ChatObject.isBoostSupported(activity.currentChat) && ChatObject.hasAdminRights(activity.currentChat)) {
+            headerItem.lazilyAddSubItem(
+                ACTION_STATISTICS, R.drawable.msg_stats,
+                LocaleController.getString(R.string.Statistics),
+            )
+        }
+        headerItem.lazilyAddSubItem(
+            ACTION_ADMINISTRATORS, R.drawable.msg_admins,
+            LocaleController.getString(R.string.ChannelAdministrators),
+        )
+        headerItem.lazilyAddSubItem(
+            ACTION_PERMISSIONS, R.drawable.msg_permissions,
+            LocaleController.getString(R.string.ChannelPermissions),
+        )
+        if (canViewInviteLinks(activity)) {
+            headerItem.lazilyAddSubItem(
+                ACTION_INVITE_LINKS, R.drawable.msg_link2,
+                LocaleController.getString(R.string.InviteLinks),
+            )
+        }
     }
 
     @JvmStatic
@@ -117,6 +144,34 @@ object ChatActionsHelper {
             ACTION_GO_TO_BEGINNING -> ChatHelper.jumpToBeginning(activity)
             ACTION_GO_TO_MESSAGE -> showGoToMessageDialog(activity)
             ACTION_DELETE_OWN_MESSAGES -> DeleteOwnMessagesHelper.start(activity)
+            ACTION_STATISTICS -> {
+                val chat = activity.currentChat
+                if (chat != null) activity.presentFragment(StatisticActivity.create(chat, false))
+            }
+
+            ACTION_ADMINISTRATORS -> openChatUsers(activity, ChatUsersActivity.TYPE_ADMIN)
+            ACTION_PERMISSIONS -> run {
+                val chat = activity.currentChat
+                if (chat != null) openChatUsers(
+                    activity,
+                    if (!ChatObject.isChannelAndNotMegaGroup(chat) && !chat.gigagroup) {
+                        ChatUsersActivity.TYPE_KICKED
+                    } else {
+                        ChatUsersActivity.TYPE_BANNED
+                    }
+                )
+            }
+
+            ACTION_INVITE_LINKS -> {
+                val chat = activity.currentChat
+                val info = activity.currentChatInfo
+                if (chat != null && info != null) {
+                    val fragment = ManageLinksActivity(chat.id, 0L, 0)
+                    fragment.setInfo(info, info.exported_invite)
+                    activity.presentFragment(fragment)
+                }
+            }
+
             ACTION_PINNED_UNPIN_ALL -> activity.bottomOverlayChatText?.callOnClick()
             ACTION_OPEN_IN_DISCUSSION -> openInDiscussionGroup(activity)
 
@@ -141,10 +196,30 @@ object ChatActionsHelper {
         activity.presentFragment(ChatActivity(args))
     }
 
+    // visibility predicates mirror the matching cells in ChatEditActivity
+
     private fun canViewAdminLog(chat: TLRPC.Chat?): Boolean {
         if (chat == null) return false
         if (!ChatObject.isChannel(chat) && !chat.gigagroup) return false
         return chat.creator || chat.admin_rights != null
+    }
+
+    private fun canViewInviteLinks(activity: ChatActivity): Boolean {
+        val chat = activity.currentChat ?: return false
+        if (!ChatObject.canUserDoAdminAction(chat, ChatObject.ACTION_INVITE)) return false
+        val isPrivate = !ChatObject.isPublic(chat)
+        return isPrivate || !chat.creator
+    }
+
+    private fun openChatUsers(activity: ChatActivity, type: Int) {
+        val chat = activity.currentChat ?: return
+        val args = Bundle().apply {
+            putLong("chat_id", chat.id)
+            putInt("type", type)
+        }
+        val fragment = ChatUsersActivity(args)
+        fragment.setInfo(activity.currentChatInfo)
+        activity.presentFragment(fragment)
     }
 
     private fun showGoToMessageDialog(activity: ChatActivity) {

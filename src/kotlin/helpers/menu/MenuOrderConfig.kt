@@ -142,7 +142,11 @@ class ChatMenuConfig(key: String) : MenuOrderConfig<ChatMenuConfig.Item>(key, It
         SHOW_PINNED_PANEL("show_pinned_panel", listOf(ChatActionsHelper.ACTION_SHOW_PINNED_PANEL), R.string.InuShowPinnedPanel, R.drawable.msg_pin),
         RECENT_ACTIONS("recent_actions", listOf(ChatActionsHelper.ACTION_RECENT_ACTIONS), R.string.EventLog, R.drawable.msg_log),
         GO_TO_BEGINNING("go_to_beginning", listOf(ChatActionsHelper.ACTION_GO_TO_BEGINNING), R.string.InuJumpToBeginning, R.drawable.msg_go_up),
-        GO_TO_MESSAGE("go_to_message", listOf(ChatActionsHelper.ACTION_GO_TO_MESSAGE), R.string.InuGoToMessage, R.drawable.msg_message);
+        GO_TO_MESSAGE("go_to_message", listOf(ChatActionsHelper.ACTION_GO_TO_MESSAGE), R.string.InuGoToMessage, R.drawable.msg_message),
+        STATISTICS("statistics", listOf(ChatActionsHelper.ACTION_STATISTICS), R.string.Statistics, R.drawable.msg_stats),
+        ADMINISTRATORS("administrators", listOf(ChatActionsHelper.ACTION_ADMINISTRATORS), R.string.ChannelAdministrators, R.drawable.msg_admins),
+        PERMISSIONS("permissions", listOf(ChatActionsHelper.ACTION_PERMISSIONS), R.string.ChannelPermissions, R.drawable.msg_permissions),
+        INVITE_LINKS("invite_links", listOf(ChatActionsHelper.ACTION_INVITE_LINKS), R.string.InviteLinks, R.drawable.msg_link2);
 
         companion object {
             private val byId: Map<Int, Item> by lazy {
@@ -161,7 +165,10 @@ class ChatMenuConfig(key: String) : MenuOrderConfig<ChatMenuConfig.Item>(key, It
     override fun itemByKey(key: String): Item? = Item.forKey(key)
 
     companion object {
-        private val OFF_BY_DEFAULT = setOf(Item.RECENT_ACTIONS, Item.GO_TO_BEGINNING, Item.GO_TO_MESSAGE, Item.DELETE_OWN_MESSAGES)
+        private val OFF_BY_DEFAULT = setOf(
+            Item.RECENT_ACTIONS, Item.GO_TO_BEGINNING, Item.GO_TO_MESSAGE, Item.DELETE_OWN_MESSAGES,
+            Item.STATISTICS, Item.ADMINISTRATORS, Item.PERMISSIONS, Item.INVITE_LINKS,
+        )
     }
 }
 
