@@ -74,7 +74,7 @@ object VoiceRecorderHelper {
     fun addFab(alert: ChatAttachAlert, container: FrameLayout, resourcesProvider: Theme.ResourcesProvider?) {
         if (!isMovedToAttach()) return
         val activity: ChatActivity = alert.baseFragment as? ChatActivity ?: return;
-        val enterView = activity.chatActivityEnterView
+        val enterView = activity.chatActivityEnterView ?: return
         val context = container.context
 
         val buttonsWrapper = alert.buttonsRecyclerViewWrapper
