@@ -154,7 +154,7 @@ index 0000000..0000000 100644
              }
  
 +            Object currentObject = imagesArrLocals.get(currentIndex);
-+            boolean canSpoiler = fragment instanceof ChatActivity && !((ChatActivity) fragment).isSecretChat() && currentObject instanceof MediaController.PhotoEntry;
++            boolean canSpoiler = parentFragment instanceof ChatActivity && !((ChatActivity) parentFragment).isSecretChat() && currentObject instanceof MediaController.PhotoEntry;
 +
              final boolean canEdit = placeProvider != null && placeProvider.canEdit(currentIndex);
              final boolean canReplace = placeProvider != null && placeProvider.canReplace(currentIndex);
