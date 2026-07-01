@@ -187,6 +187,12 @@ object InuConfig {
     val GIF_SEEKBAR = BoolItem("gif_seekbar", true)
 
     @JvmField
+    val AUTO_DISABLE_PROXY_ON_VPN = BoolItem("auto_disable_proxy_on_vpn", false)
+
+    @JvmField
+    val PROXY_SUPPRESSED_BY_VPN = BoolItem("proxy_suppressed_by_vpn", false, exportable = false)
+
+    @JvmField
     val SHOW_ALL_RECENT_STICKERS = BoolItem("show_all_recent_stickers", true)
 
     @JvmField

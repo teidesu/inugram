@@ -5,6 +5,7 @@ import android.content.Intent
 import android.os.Build
 import desu.inugram.helpers.CrashReporter
 import desu.inugram.helpers.LoginHelper
+import desu.inugram.helpers.ProxyVpnHelper
 import desu.inugram.helpers.UrlCleanerHelper
 import desu.inugram.helpers.cloud.CloudSettingsHelper
 import desu.inugram.helpers.font.FontConfig
@@ -43,6 +44,7 @@ object InuHooks {
         UpdateHelper.clearPendingIfInstalled()
         ApkInstaller.dismissInstalledNotification()
         CloudSettingsHelper.attachAutoSyncListener()
+        ProxyVpnHelper.init(context)
         Utilities.globalQueue.postRunnable { UrlCleanerHelper.preload() }
     }
 
@@ -99,6 +101,7 @@ object InuHooks {
             MonetHelper.refreshMonetThemeIfChanged()
         }
         CrashReporter.maybeShowReportSheet(launchActivity)
+        ProxyVpnHelper.reconcile()
     }
 
     @JvmStatic

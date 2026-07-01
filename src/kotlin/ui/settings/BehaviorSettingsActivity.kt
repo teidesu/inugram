@@ -5,6 +5,7 @@ import android.view.View
 import desu.inugram.InuConfig
 import desu.inugram.SearchRegistry
 import desu.inugram.helpers.InuUtils
+import desu.inugram.helpers.ProxyVpnHelper
 import desu.inugram.helpers.chat.WebPreviewHelper
 import desu.inugram.helpers.maps.MapsHelper
 import org.telegram.messenger.LocaleController
@@ -116,6 +117,12 @@ class BehaviorSettingsActivity : SettingsPageActivity() {
         )
         items.add(
             UItem.asCheck(
+                TOGGLE_AUTO_DISABLE_PROXY_ON_VPN,
+                LocaleController.getString(R.string.InuAutoDisableProxyOnVpn),
+            ).setChecked(InuConfig.AUTO_DISABLE_PROXY_ON_VPN.value)
+        )
+        items.add(
+            UItem.asCheck(
                 TOGGLE_FASTER_DOWNLOADS,
                 LocaleController.getString(R.string.InuFasterDownloads),
             ).setChecked(InuConfig.FASTER_DOWNLOADS.value)
@@ -184,6 +191,12 @@ class BehaviorSettingsActivity : SettingsPageActivity() {
             TOGGLE_GIF_SEEKBAR -> {
                 val new = InuConfig.GIF_SEEKBAR.toggle()
                 (view as? NotificationsCheckCell)?.isChecked = new
+            }
+
+            TOGGLE_AUTO_DISABLE_PROXY_ON_VPN -> {
+                val new = InuConfig.AUTO_DISABLE_PROXY_ON_VPN.toggle()
+                (view as? TextCheckCell)?.isChecked = new
+                ProxyVpnHelper.reconcile()
             }
 
             TOGGLE_FASTER_DOWNLOADS -> {
@@ -275,6 +288,7 @@ class BehaviorSettingsActivity : SettingsPageActivity() {
         private val TOGGLE_DISABLE_BROWSER_SWIPE_COLLAPSE = InuUtils.generateId()
         private val TOGGLE_GIF_SEEKBAR = InuUtils.generateId()
         private val BUTTON_WEB_PREVIEW_REPLACEMENTS = InuUtils.generateId()
+        private val TOGGLE_AUTO_DISABLE_PROXY_ON_VPN = InuUtils.generateId()
         private val TOGGLE_FASTER_DOWNLOADS = InuUtils.generateId()
         private val TOGGLE_FASTER_UPLOADS = InuUtils.generateId()
         private val SECTION_DELETE_FOR_BOTH = InuUtils.generateId()
@@ -302,6 +316,7 @@ class BehaviorSettingsActivity : SettingsPageActivity() {
                 SearchRegistry.Entry("disable-browser-swipe-collapse", R.string.InuDisableBrowserSwipeCollapse, TOGGLE_DISABLE_BROWSER_SWIPE_COLLAPSE),
                 SearchRegistry.Entry("gif-seekbar", R.string.InuGifSeekbar, TOGGLE_GIF_SEEKBAR),
                 SearchRegistry.Entry("web-preview-replacements", R.string.InuWebPreviewReplacements, BUTTON_WEB_PREVIEW_REPLACEMENTS),
+                SearchRegistry.Entry("auto-disable-proxy-on-vpn", R.string.InuAutoDisableProxyOnVpn, TOGGLE_AUTO_DISABLE_PROXY_ON_VPN),
                 SearchRegistry.Entry("faster-downloads", R.string.InuFasterDownloads, TOGGLE_FASTER_DOWNLOADS),
                 SearchRegistry.Entry("faster-uploads", R.string.InuFasterUploads, TOGGLE_FASTER_UPLOADS),
                 SearchRegistry.Entry("delete-for-both", R.string.InuDeleteForBoth, SECTION_DELETE_FOR_BOTH),
