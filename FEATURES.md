@@ -20,6 +20,7 @@ most things are toggleable in `Settings → Inugram`, with sensible opinionated 
 - show linked channel in discussion group profile similar to personal channel
 - hide own phone number from ui
 - fonts: manage a list of fonts used in the media editor text tool; device system fonts can be toggled on/off
+- extra meme-style outlined text style in the media editor text tool
 - 🐶 app-font *stack*: pick a user-provided TTF/OTF/TTC family as the whole-app font, optionally with fallbacks (e.g. for other scripts)
 - 🐶 separate monospace font: pick any roster font for code blocks (inline + pre), previewed live alongside the stack
 - 🐶 hide fade views

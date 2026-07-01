@@ -201,3 +201,4 @@ bugfix/restore-comments-thread.patch
 bugfix/spoiler-tile-blink.patch
 bugfix/deeplink-album-member-anchor.patch
 feature/biometric-confirmation.patch
+feature/paint-outlined-text-style.patch
