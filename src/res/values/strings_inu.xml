@@ -632,4 +632,12 @@
     <string name="InuDeleteOwnMessagesDone_other">%d messages deleted</string>
     <string name="InuDeleteOwnMessagesError">Error: %1$s</string>
     <string name="InuDeleteOwnMessagesFloodWait">Rate limited, waiting for %ds…</string>
+    <string name="InuBiometricConfirm">Biometric confirmation</string>
+    <string name="InuBiometricConfirmTitle">Confirm your identity</string>
+    <string name="InuBiometricConfirmDeleteChat">Confirm deleting chats</string>
+    <string name="InuBiometricConfirmDeleteChatInfo">Ask for biometric confirmation before deleting or clearing a chat.</string>
+    <string name="InuBiometricConfirmLogout">Confirm logging out</string>
+    <string name="InuBiometricConfirmLogoutInfo">Ask for biometric confirmation before logging out of an account.</string>
+    <string name="InuBiometricAllowDeviceCredential">Allow device PIN/pattern</string>
+    <string name="InuBiometricAllowDeviceCredentialInfo">Fall back to the device PIN, pattern or password when no biometric is enrolled.</string>
 </resources>

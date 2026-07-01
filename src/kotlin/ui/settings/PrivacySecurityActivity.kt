@@ -4,6 +4,7 @@ import android.view.View
 import desu.inugram.InuConfig
 import desu.inugram.SearchRegistry
 import desu.inugram.helpers.InuUtils
+import desu.inugram.helpers.security.BiometricHelper
 import desu.inugram.helpers.security.ParanoiaHelper
 import desu.inugram.helpers.UrlCleanerHelper
 import org.telegram.messenger.AndroidUtilities
@@ -75,6 +76,35 @@ class PrivacySecurityActivity : SettingsPageActivity() {
         )
         items.add(UItem.asCustom(BUTTON_STRIP_TRACKING_PARAMS_SOURCE, getOrCreateSourceRow()))
         items.add(UItem.asShadow(null))
+
+        if (BiometricHelper.isSupported()) {
+            items.add(UItem.asHeader(LocaleController.getString(R.string.InuBiometricConfirm)))
+            items.add(
+                mkTwoLineCheckItem(
+                    TOGGLE_BIOMETRIC_DELETE_CHAT,
+                    R.string.InuBiometricConfirmDeleteChat,
+                    R.string.InuBiometricConfirmDeleteChatInfo,
+                    InuConfig.BIOMETRIC_CONFIRM_DELETE_CHAT.value
+                )
+            )
+            items.add(
+                mkTwoLineCheckItem(
+                    TOGGLE_BIOMETRIC_LOGOUT,
+                    R.string.InuBiometricConfirmLogout,
+                    R.string.InuBiometricConfirmLogoutInfo,
+                    InuConfig.BIOMETRIC_CONFIRM_LOGOUT.value
+                )
+            )
+            items.add(
+                mkTwoLineCheckItem(
+                    TOGGLE_BIOMETRIC_DEVICE_CREDENTIAL,
+                    R.string.InuBiometricAllowDeviceCredential,
+                    R.string.InuBiometricAllowDeviceCredentialInfo,
+                    InuConfig.BIOMETRIC_ALLOW_DEVICE_CREDENTIAL.value
+                )
+            )
+            items.add(UItem.asShadow(null))
+        }
     }
 
     override fun onClick(item: UItem, view: View, position: Int, x: Float, y: Float) {
@@ -99,6 +129,21 @@ class PrivacySecurityActivity : SettingsPageActivity() {
 
             TOGGLE_DISABLE_DRAFT_UPLOAD -> {
                 val new = InuConfig.DISABLE_DRAFT_UPLOAD.toggle()
+                (view as? NotificationsCheckCell)?.isChecked = new
+            }
+
+            TOGGLE_BIOMETRIC_DELETE_CHAT -> {
+                val new = InuConfig.BIOMETRIC_CONFIRM_DELETE_CHAT.toggle()
+                (view as? NotificationsCheckCell)?.isChecked = new
+            }
+
+            TOGGLE_BIOMETRIC_LOGOUT -> {
+                val new = InuConfig.BIOMETRIC_CONFIRM_LOGOUT.toggle()
+                (view as? NotificationsCheckCell)?.isChecked = new
+            }
+
+            TOGGLE_BIOMETRIC_DEVICE_CREDENTIAL -> {
+                val new = InuConfig.BIOMETRIC_ALLOW_DEVICE_CREDENTIAL.toggle()
                 (view as? NotificationsCheckCell)?.isChecked = new
             }
         }
@@ -179,6 +224,9 @@ class PrivacySecurityActivity : SettingsPageActivity() {
         private val TOGGLE_STRIP_TRACKING_PARAMS_ON_PASTE = InuUtils.generateId()
         private val BUTTON_STRIP_TRACKING_PARAMS_SOURCE = InuUtils.generateId()
         private val TOGGLE_DISABLE_DRAFT_UPLOAD = InuUtils.generateId()
+        private val TOGGLE_BIOMETRIC_DELETE_CHAT = InuUtils.generateId()
+        private val TOGGLE_BIOMETRIC_LOGOUT = InuUtils.generateId()
+        private val TOGGLE_BIOMETRIC_DEVICE_CREDENTIAL = InuUtils.generateId()
 
         @JvmField val PAGE = SearchRegistry.Page(
             slug = "privacy-security",
@@ -190,6 +238,9 @@ class PrivacySecurityActivity : SettingsPageActivity() {
                 SearchRegistry.Entry("strip-tracking-params", R.string.InuStripTrackingParamsOnOpen, TOGGLE_STRIP_TRACKING_PARAMS_ON_OPEN),
                 SearchRegistry.Entry("strip-tracking-params-paste", R.string.InuStripTrackingParamsOnPaste, TOGGLE_STRIP_TRACKING_PARAMS_ON_PASTE),
                 SearchRegistry.Entry("disable-draft-upload", R.string.InuDisableDraftUpload, TOGGLE_DISABLE_DRAFT_UPLOAD),
+                SearchRegistry.Entry("biometric-confirm-delete-chat", R.string.InuBiometricConfirmDeleteChat, TOGGLE_BIOMETRIC_DELETE_CHAT),
+                SearchRegistry.Entry("biometric-confirm-logout", R.string.InuBiometricConfirmLogout, TOGGLE_BIOMETRIC_LOGOUT),
+                SearchRegistry.Entry("biometric-allow-device-credential", R.string.InuBiometricAllowDeviceCredential, TOGGLE_BIOMETRIC_DEVICE_CREDENTIAL),
             ),
         )
     }

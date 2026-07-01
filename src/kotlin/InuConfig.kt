@@ -708,4 +708,13 @@ object InuConfig {
 
     @JvmField
     val FASTER_UPLOADS = BoolItem("faster_uploads", true)
+
+    @JvmField
+    val BIOMETRIC_CONFIRM_DELETE_CHAT = BoolItem("biometric_confirm_delete_chat", false)
+
+    @JvmField
+    val BIOMETRIC_CONFIRM_LOGOUT = BoolItem("biometric_confirm_logout", false)
+
+    @JvmField
+    val BIOMETRIC_ALLOW_DEVICE_CREDENTIAL = BoolItem("biometric_allow_device_credential", false)
 }

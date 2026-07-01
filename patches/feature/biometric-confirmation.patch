@@ -1,0 +1,84 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: alina sireneva <alina@tei.su>
+Date: Wed, 1 Jul 2026 18:07:39 +0400
+Subject: client-side biometric confirmation in various places
+
+---
+ .../src/main/java/org/telegram/ui/DialogsActivity.java    | 4 ++--
+ .../src/main/java/org/telegram/ui/LogoutActivity.java     | 2 +-
+ .../src/main/java/org/telegram/ui/ProfileActivity.java    | 8 ++++----
+ 3 files changed, 7 insertions(+), 7 deletions(-)
+
+diff --git a/TMessagesProj/src/main/java/org/telegram/ui/DialogsActivity.java b/TMessagesProj/src/main/java/org/telegram/ui/DialogsActivity.java
+index 0000000..0000000 100644
+--- a/TMessagesProj/src/main/java/org/telegram/ui/DialogsActivity.java
++++ b/TMessagesProj/src/main/java/org/telegram/ui/DialogsActivity.java
+@@ -9350,7 +9350,7 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
+                         builder.setNegativeButton(LocaleController.getString(R.string.Cancel), null);
+                         showDialog(builder.create());
+                     } else {
+-                         AlertsCreator.createClearOrDeleteDialogAlert(DialogsActivity.this, action == clear, chat, user, DialogObject.isEncryptedDialog(dialog.id), action == delete, false, false, (param) -> {
++                        AlertsCreator.createClearOrDeleteDialogAlert(DialogsActivity.this, action == clear, chat, user, DialogObject.isEncryptedDialog(dialog.id), action == delete, false, false, (param) -> desu.inugram.helpers.security.BiometricHelper.gate(getParentActivity(), desu.inugram.InuConfig.BIOMETRIC_CONFIRM_DELETE_CHAT.getValue(), () -> {
+                             hideActionMode(false);
+                             if (action == clear && ChatObject.isChannel(chat) && (!chat.megagroup || ChatObject.isPublic(chat))) {
+                                 getMessagesController().deleteDialog(selectedDialog, 2, param);
+@@ -9398,7 +9398,7 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
+                                     }
+                                 }
+                             }
+-                        });
++                        }));
+                     }
+                     return;
+                 } else {
+diff --git a/TMessagesProj/src/main/java/org/telegram/ui/LogoutActivity.java b/TMessagesProj/src/main/java/org/telegram/ui/LogoutActivity.java
+index 0000000..0000000 100644
+--- a/TMessagesProj/src/main/java/org/telegram/ui/LogoutActivity.java
++++ b/TMessagesProj/src/main/java/org/telegram/ui/LogoutActivity.java
+@@ -164,7 +164,7 @@ public class LogoutActivity extends BaseFragment {
+         AlertDialog.Builder builder = new AlertDialog.Builder(context);
+         builder.setMessage(LocaleController.getString(R.string.AreYouSureLogout));
+         builder.setTitle(LocaleController.getString(R.string.LogOut));
+-        builder.setPositiveButton(LocaleController.getString(R.string.LogOut), (dialogInterface, i) -> MessagesController.getInstance(currentAccount).performLogout(1));
++        builder.setPositiveButton(LocaleController.getString(R.string.LogOut), (dialogInterface, i) -> desu.inugram.helpers.security.BiometricHelper.gate(context, desu.inugram.InuConfig.BIOMETRIC_CONFIRM_LOGOUT.getValue(), () -> MessagesController.getInstance(currentAccount).performLogout(1)));
+         builder.setNegativeButton(LocaleController.getString(R.string.Cancel), null);
+         AlertDialog alertDialog = builder.create();
+         TextView button = (TextView) alertDialog.getButton(DialogInterface.BUTTON_POSITIVE);
+diff --git a/TMessagesProj/src/main/java/org/telegram/ui/ProfileActivity.java b/TMessagesProj/src/main/java/org/telegram/ui/ProfileActivity.java
+index 0000000..0000000 100644
+--- a/TMessagesProj/src/main/java/org/telegram/ui/ProfileActivity.java
++++ b/TMessagesProj/src/main/java/org/telegram/ui/ProfileActivity.java
+@@ -6160,7 +6160,7 @@ public class ProfileActivity extends BaseFragment implements NotificationCenter.
+             }
+         } else {
+             if (!userBlocked || fromActions) {
+-                AlertsCreator.createClearOrDeleteDialogAlert(ProfileActivity.this, false, currentChat, user, currentEncryptedChat != null, true, false, true, (param) -> {
++                AlertsCreator.createClearOrDeleteDialogAlert(ProfileActivity.this, false, currentChat, user, currentEncryptedChat != null, true, false, true, (param) -> desu.inugram.helpers.security.BiometricHelper.gate(getParentActivity(), desu.inugram.InuConfig.BIOMETRIC_CONFIRM_DELETE_CHAT.getValue(), () -> {
+                     if (getParentLayout() != null) {
+                         List<BaseFragment> fragmentStack = getParentLayout().getFragmentStack();
+                         BaseFragment prevFragment = fragmentStack == null || fragmentStack.size() < 2 ? null : fragmentStack.get(fragmentStack.size() - 2);
+@@ -6171,7 +6171,7 @@ public class ProfileActivity extends BaseFragment implements NotificationCenter.
+                     disableProfileAnimation = true;
+                     finishFragment();
+                     getNotificationCenter().postNotificationName(NotificationCenter.needDeleteDialog, dialogId, user, currentChat, param);
+-                });
++                }));
+             } else {
+                 getMessagesController().unblockPeer(userId, () -> getSendMessagesHelper().sendMessage(SendMessagesHelper.SendMessageParams.of("/start", userId, null, null, null, false, null, null, null, true, 0, 0, null, false)));
+                 finishFragment();
+@@ -7651,13 +7651,13 @@ public class ProfileActivity extends BaseFragment implements NotificationCenter.
+ 
+     private void leaveChatPressed(boolean delete) {
+         boolean isForum = ChatObject.isForum(currentChat);
+-        AlertsCreator.createClearOrDeleteDialogAlert(ProfileActivity.this, false, currentChat, null, false, isForum || delete || (currentChat != null && currentChat.creator), delete, !isForum, (param) -> {
++        AlertsCreator.createClearOrDeleteDialogAlert(ProfileActivity.this, false, currentChat, null, false, isForum || delete || (currentChat != null && currentChat.creator), delete, !isForum, (param) -> desu.inugram.helpers.security.BiometricHelper.gate(getParentActivity(), desu.inugram.InuConfig.BIOMETRIC_CONFIRM_DELETE_CHAT.getValue(), () -> {
+             playProfileAnimation = 0;
+             getNotificationCenter().removeObserver(ProfileActivity.this, NotificationCenter.closeChats);
+             getNotificationCenter().postNotificationName(NotificationCenter.closeChats);
+             finishFragment();
+             getNotificationCenter().postNotificationName(NotificationCenter.needDeleteDialog, -currentChat.id, null, currentChat, param);
+-        });
++        }));
+     }
+ 
+     private void getChannelParticipants(boolean reload) {
