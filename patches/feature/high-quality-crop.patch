@@ -1,0 +1,126 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: alina sireneva <alina@tei.su>
+Date: Thu, 2 Jul 2026 19:52:25 +0400
+Subject: high-quality photo cropping in PhotoViewer (crop *before* downscaling)
+
+---
+ .../telegram/messenger/MediaController.java   | 12 +++++++
+ .../java/org/telegram/ui/PhotoViewer.java     | 31 +++++++++++++------
+ 2 files changed, 33 insertions(+), 10 deletions(-)
+
+diff --git a/TMessagesProj/src/main/java/org/telegram/messenger/MediaController.java b/TMessagesProj/src/main/java/org/telegram/messenger/MediaController.java
+index 0000000..0000000 100644
+--- a/TMessagesProj/src/main/java/org/telegram/messenger/MediaController.java
++++ b/TMessagesProj/src/main/java/org/telegram/messenger/MediaController.java
+@@ -781,6 +781,18 @@ public class MediaController implements AudioManager.OnAudioFocusChangeListener,
+         public void rebuildPhoto(boolean highQuality) {
+             final Pair<Integer, Integer> orientation = AndroidUtilities.getImageOrientation(filterPath != null ? filterPath : path);
+             final Bitmap.CompressFormat compressFormat = Bitmap.CompressFormat.JPEG;
++            if (highQuality && fullPaintPath == null && cropState != null && !isVideo) {
++                Bitmap hq = desu.inugram.helpers.media.PhotoViewerHelper.renderHighQualityCrop(this);
++                if (hq != null) {
++                    if (imagePath != null) {
++                        new File(imagePath).delete(); imagePath = null;
++                    }
++                    TLRPC.PhotoSize hqSize = ImageLoader.scaleAndSaveImage(hq, compressFormat, AndroidUtilities.getPhotoSize(highQuality), AndroidUtilities.getPhotoSize(highQuality), 99, false, 101, 101);
++                    imagePath = FileLoader.getInstance(UserConfig.selectedAccount).getPathToAttach(hqSize, true).toString();
++                    hq.recycle();
++                    return;
++                }
++            }
+             final Bitmap bitmap = StoryEntry.getScaledBitmap(opts -> BitmapFactory.decodeFile(filterPath != null ? filterPath : path, opts), AndroidUtilities.getPhotoSize(highQuality), AndroidUtilities.getPhotoSize(highQuality), false, true);
+             if (imagePath != null) {
+                 new File(imagePath).delete(); imagePath = null;
+diff --git a/TMessagesProj/src/main/java/org/telegram/ui/PhotoViewer.java b/TMessagesProj/src/main/java/org/telegram/ui/PhotoViewer.java
+index 0000000..0000000 100644
+--- a/TMessagesProj/src/main/java/org/telegram/ui/PhotoViewer.java
++++ b/TMessagesProj/src/main/java/org/telegram/ui/PhotoViewer.java
+@@ -11695,7 +11695,12 @@ public class PhotoViewer implements NotificationCenter.NotificationCenterDelegat
+             if (entry.cropState == null) {
+                 return currentEditMode != EDIT_MODE_CROP;
+             }
+-            currentCroppedBitmap = createCroppedBitmap(bitmap, entry.cropState, orientation, true);
++            if (!isCurrentVideo) {
++                currentCroppedBitmap = desu.inugram.helpers.media.PhotoViewerHelper.renderHighQualityCrop(entry);
++            }
++            if (currentCroppedBitmap == null) {
++                currentCroppedBitmap = createCroppedBitmap(bitmap, entry.cropState, orientation, true);
++            }
+             if (currentCroppedBitmap == null) {
+                 currentCroppedBitmap = desu.inugram.helpers.media.PhotoViewerHelper.rebakeCroppedBitmap(entry);
+                 if (currentCroppedBitmap == null) {
+@@ -11769,11 +11774,12 @@ public class PhotoViewer implements NotificationCenter.NotificationCenterDelegat
+                     Bitmap croppedPaintBitmap = createCroppedBitmap(paintBitmap, entry.cropState, null, false);
+ 
+                     if (!isCurrentVideo || entry.isLivePhoto()) {
++                        int editSize = AndroidUtilities.getPhotoSize(true);
+                         if (hasAnimatedMediaEntities()) {
+-                            TLRPC.PhotoSize size = ImageLoader.scaleAndSaveImage(croppedBitmap, getCompressFormat(), AndroidUtilities.getPhotoSize(), AndroidUtilities.getPhotoSize(), 87, false, 101, 101);
++                            TLRPC.PhotoSize size = ImageLoader.scaleAndSaveImage(croppedBitmap, getCompressFormat(), editSize, editSize, 99, false, 101, 101);
+                             entry.imagePath = currentImagePath = FileLoader.getInstance(currentAccount).getPathToAttach(size, true).toString();
+                         } else {
+-                            mergeImages(entry.imagePath = getTempFileAbsolutePath(), null, croppedPaintBitmap, croppedBitmap, AndroidUtilities.getPhotoSize(), true);
++                            mergeImages(entry.imagePath = getTempFileAbsolutePath(), null, croppedPaintBitmap, croppedBitmap, editSize, true);
+                         }
+                     }
+                     mergeImages(entry.thumbPath = getTempFileAbsolutePath(), null, croppedPaintBitmap, croppedBitmap, thumbSize, true);
+@@ -11785,7 +11791,8 @@ public class PhotoViewer implements NotificationCenter.NotificationCenterDelegat
+                     }
+                 } else {
+                     if (!isCurrentVideo || entry.isLivePhoto()) {
+-                        TLRPC.PhotoSize size = ImageLoader.scaleAndSaveImage(croppedBitmap, getCompressFormat(), AndroidUtilities.getPhotoSize(), AndroidUtilities.getPhotoSize(), 87, false, 101, 101);
++                        int editSize = AndroidUtilities.getPhotoSize(true);
++                        TLRPC.PhotoSize size = ImageLoader.scaleAndSaveImage(croppedBitmap, getCompressFormat(), editSize, editSize, 99, false, 101, 101);
+                         entry.imagePath = currentImagePath = FileLoader.getInstance(currentAccount).getPathToAttach(size, true).toString();
+                     }
+                     TLRPC.PhotoSize size = ImageLoader.scaleAndSaveImage(croppedBitmap, thumbSize, thumbSize, 70, false, 101, 101);
+@@ -11805,7 +11812,8 @@ public class PhotoViewer implements NotificationCenter.NotificationCenterDelegat
+             Bitmap b = entry.cropState != null ? createCroppedBitmap(bitmap, entry.cropState, null, true) : bitmap;
+             if (entry.paintPath == null) {
+                 if (!isCurrentVideo || entry.isLivePhoto()) {
+-                    size = ImageLoader.scaleAndSaveImage(b, getCompressFormat(), AndroidUtilities.getPhotoSize(), AndroidUtilities.getPhotoSize(), 87, false, 101, 101);
++                    int editSize = AndroidUtilities.getPhotoSize(true);
++                    size = ImageLoader.scaleAndSaveImage(b, getCompressFormat(), editSize, editSize, 99, false, 101, 101);
+                     entry.imagePath = currentImagePath = FileLoader.getInstance(currentAccount).getPathToAttach(size, true).toString();
+                 }
+                 size = ImageLoader.scaleAndSaveImage(b, getCompressFormat(), thumbSize, thumbSize, 83, false, 101, 101);
+@@ -11829,11 +11837,12 @@ public class PhotoViewer implements NotificationCenter.NotificationCenterDelegat
+                     recyclePaint = false;
+                 }
+                 if (!isCurrentVideo || entry.isLivePhoto()) {
++                    int editSize = AndroidUtilities.getPhotoSize(true);
+                     if (hasAnimatedMediaEntities()) {
+-                        size = ImageLoader.scaleAndSaveImage(b, getCompressFormat(), AndroidUtilities.getPhotoSize(), AndroidUtilities.getPhotoSize(), 87, false, 101, 101);
++                        size = ImageLoader.scaleAndSaveImage(b, getCompressFormat(), editSize, editSize, 99, false, 101, 101);
+                         entry.imagePath = currentImagePath = FileLoader.getInstance(currentAccount).getPathToAttach(size, true).toString();
+                     } else {
+-                        mergeImages(entry.imagePath = getTempFileAbsolutePath(), path, paintBitmap, b, AndroidUtilities.getPhotoSize(), true);
++                        mergeImages(entry.imagePath = getTempFileAbsolutePath(), path, paintBitmap, b, editSize, true);
+                     }
+                 }
+                 mergeImages(entry.thumbPath = getTempFileAbsolutePath(), path, paintBitmap, b, thumbSize, true);
+@@ -11947,11 +11956,12 @@ public class PhotoViewer implements NotificationCenter.NotificationCenterDelegat
+                 }
+             }
+             if (!isCurrentVideo || entry.isLivePhoto()) {
++                int editSize = AndroidUtilities.getPhotoSize(true);
+                 if (hasAnimatedMediaEntities()) {
+-                    size = ImageLoader.scaleAndSaveImage(croppedBitmap, getCompressFormat(), AndroidUtilities.getPhotoSize(), AndroidUtilities.getPhotoSize(), 87, false, 101, 101);
++                    size = ImageLoader.scaleAndSaveImage(croppedBitmap, getCompressFormat(), editSize, editSize, 99, false, 101, 101);
+                     entry.imagePath = currentImagePath = FileLoader.getInstance(currentAccount).getPathToAttach(size, true).toString();
+                 } else {
+-                    mergeImages(entry.imagePath = getTempFileAbsolutePath(), null, croppedBitmap, paintBitmap, AndroidUtilities.getPhotoSize(), false);
++                    mergeImages(entry.imagePath = getTempFileAbsolutePath(), null, croppedBitmap, paintBitmap, editSize, false);
+                 }
+             }
+             mergeImages(entry.thumbPath = getTempFileAbsolutePath(), null, croppedBitmap, paintBitmap, thumbSize, false);
+@@ -16989,7 +16999,8 @@ public class PhotoViewer implements NotificationCenter.NotificationCenterDelegat
+                             imageReceiver.setOrientation(photoEntry.orientation, photoEntry.invert, false);
+                             path = photoEntry.path;
+                         }
+-                        filter = String.format(Locale.US, "%d_%d", size, size);
++                        int editSize = (int) (AndroidUtilities.getPhotoSize(true) / AndroidUtilities.density);
++                        filter = String.format(Locale.US, "%d_%d", editSize, editSize);
+                     }
+                 } else if (object instanceof TLRPC.BotInlineResult) {
+                     cacheType = 1;

@@ -209,7 +209,7 @@ most things are toggleable in `Settings → Inugram`, with sensible opinionated 
 
 - gboard image paste no longer skips PhotoViewer
 - photo crop silently not applied to the sent image
-- crop preview no longer low-quality/artifacted for hd photos (editor decoded at 1280px while send re-encoded original at 2560px)
+- high-quality photo cropping in PhotoViewer (crop *before* downscaling)
 - sticker creator output sent as photo when high-quality default is on
 - recyclerlistview double-tap requires same view
 - dialogs list pull-to-reveal-archive glitches

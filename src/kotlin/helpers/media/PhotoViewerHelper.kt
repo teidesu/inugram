@@ -224,7 +224,7 @@ object PhotoViewerHelper {
         orientation[1] = exif.second
         return StoryEntry.getScaledBitmap(
             { opts -> BitmapFactory.decodeFile(path, opts) },
-            AndroidUtilities.getPhotoSize(), AndroidUtilities.getPhotoSize(), false, true,
+            AndroidUtilities.getPhotoSize(true), AndroidUtilities.getPhotoSize(true), false, true,
         )
     }
 
@@ -236,5 +236,50 @@ object PhotoViewerHelper {
         val cropped = PhotoViewer.createCroppedBitmap(bitmap, cropState, orientation, true)
         bitmap.recycle()
         return cropped
+    }
+
+    @JvmStatic
+    fun renderHighQualityCrop(entry: MediaController.MediaEditState): Bitmap? {
+        val cropState = entry.cropState ?: return null
+        if (entry.paintPath != null) return null
+        val path = entry.filterPath?.takeIf { it.isNotEmpty() } ?: entry.path
+        if (path.isNullOrEmpty() || !File(path).exists()) return null
+
+        val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
+        BitmapFactory.decodeFile(path, bounds)
+        val w0 = bounds.outWidth
+        val h0 = bounds.outHeight
+        val target = AndroidUtilities.getPhotoSize(true)
+        if (w0 <= 0 || h0 <= 0 || maxOf(w0, h0) <= target) return null
+
+        val exif = AndroidUtilities.getImageOrientation(path)
+        val orientation = intArrayOf(exif.first, exif.second)
+
+        val tr = (cropState.transformRotation + orientation[0]) % 360
+        val swap = tr == 90 || tr == 270
+        val rotW = if (swap) h0 else w0
+        val rotH = if (swap) w0 else h0
+        val cropOutLong = maxOf(rotW * cropState.cropPw, rotH * cropState.cropPh)
+        if (cropOutLong <= 0f) return null
+
+        var sample = 1
+        while (cropOutLong / (sample * 2) >= target) sample *= 2
+        val maxBytes = minOf(96L * 1024 * 1024, Runtime.getRuntime().maxMemory() / 4)
+        while ((w0.toLong() / sample) * (h0.toLong() / sample) * 4L > maxBytes) sample *= 2
+
+        val opts = BitmapFactory.Options().apply {
+            inSampleSize = sample
+            inPreferredConfig = Bitmap.Config.ARGB_8888
+        }
+        val bitmap = try {
+            BitmapFactory.decodeFile(path, opts)
+        } catch (e: OutOfMemoryError) {
+            null
+        } ?: return null
+        return try {
+            PhotoViewer.createCroppedBitmap(bitmap, cropState, orientation, true)
+        } finally {
+            bitmap.recycle()
+        }
     }
 }
