@@ -1,0 +1,22 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: alina sireneva <alina@tei.su>
+Date: Wed, 1 Jul 2026 18:48:20 +0400
+Subject: fix chat wallpaper drawable leaking every closed chat
+
+---
+ .../src/main/java/org/telegram/ui/ChatBackgroundDrawable.java   | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/TMessagesProj/src/main/java/org/telegram/ui/ChatBackgroundDrawable.java b/TMessagesProj/src/main/java/org/telegram/ui/ChatBackgroundDrawable.java
+index 0000000..0000000 100644
+--- a/TMessagesProj/src/main/java/org/telegram/ui/ChatBackgroundDrawable.java
++++ b/TMessagesProj/src/main/java/org/telegram/ui/ChatBackgroundDrawable.java
+@@ -256,7 +256,7 @@ public class ChatBackgroundDrawable extends Drawable {
+     }
+ 
+     public void onDetachedFromWindow(View view) {
+-        if (!attachedViews.contains(view)) {
++        if (attachedViews.contains(view)) {
+             attachedViews.remove(view);
+         }
+         if (isAttached() && !attached) {

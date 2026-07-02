@@ -35,7 +35,7 @@ index 0000000..0000000 100644
                                  if (args != null) {
                                      ChatActivity chat = new ChatActivity(args);
                                      if (actionBarLayout.addFragmentToStack(chat)) {
-@@ -8336,6 +8353,14 @@ public class LaunchActivity extends BasePermissionsActivity implements INavigati
+@@ -8337,6 +8354,14 @@ public class LaunchActivity extends BasePermissionsActivity implements INavigati
                  if (lastFragment instanceof ChatActivity && args != null) {
                      outState.putBundle("args", args);
                      outState.putString("fragment", "chat");

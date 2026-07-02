@@ -1,0 +1,72 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: alina sireneva <alina@tei.su>
+Date: Thu, 2 Jul 2026 13:38:44 +0400
+Subject: various memory leaks fixes in PhotoViewer
+
+---
+ .../BlurredBackgroundDrawableViewFactory.java |  6 ++++++
+ .../java/org/telegram/ui/PhotoViewer.java     | 20 +++++++++++++++++++
+ 2 files changed, 26 insertions(+)
+
+diff --git a/TMessagesProj/src/main/java/org/telegram/ui/Components/blur3/BlurredBackgroundDrawableViewFactory.java b/TMessagesProj/src/main/java/org/telegram/ui/Components/blur3/BlurredBackgroundDrawableViewFactory.java
+index 0000000..0000000 100644
+--- a/TMessagesProj/src/main/java/org/telegram/ui/Components/blur3/BlurredBackgroundDrawableViewFactory.java
++++ b/TMessagesProj/src/main/java/org/telegram/ui/Components/blur3/BlurredBackgroundDrawableViewFactory.java
+@@ -41,6 +41,12 @@ public class BlurredBackgroundDrawableViewFactory {
+         this.linkedViews = linkedViews;
+     }
+ 
++    public void unsubscribe(@Nullable View view) {
++        if (viewPositionWatcher != null && view != null) {
++            viewPositionWatcher.unsubscribe(view);
++        }
++    }
++
+     public void setLinkedDrawablesRef(@Nullable ReferenceList<BlurredBackgroundDrawable> linkedDrawables) {
+         this.linkedDrawables = linkedDrawables;
+     }
+diff --git a/TMessagesProj/src/main/java/org/telegram/ui/PhotoViewer.java b/TMessagesProj/src/main/java/org/telegram/ui/PhotoViewer.java
+index 0000000..0000000 100644
+--- a/TMessagesProj/src/main/java/org/telegram/ui/PhotoViewer.java
++++ b/TMessagesProj/src/main/java/org/telegram/ui/PhotoViewer.java
+@@ -12421,6 +12421,13 @@ public class PhotoViewer implements NotificationCenter.NotificationCenterDelegat
+                 animatorX.addUpdateListener(animation -> photoPaintView.setOffsetTranslationX((Float) animation.getAnimatedValue()));
+                 paintingOverlay.showAll();
+                 containerView.invalidate();
++                if (iBlur3FactoryFrostedLiquidGlass != null) {
++                    iBlur3FactoryFrostedLiquidGlass.unsubscribe(photoPaintView.bottomLayout);
++                }
++                if (paintKeyboardAnimator != null) {
++                    paintKeyboardAnimator.cancel();
++                    paintKeyboardAnimator = null;
++                }
+                 photoPaintView.shutdown();
+                 animators.add(animatorY);
+                 animators.add(animatorX);
+@@ -18410,6 +18417,13 @@ public class PhotoViewer implements NotificationCenter.NotificationCenterDelegat
+                 editorDoneLayout.setVisibility(View.GONE);
+                 photoCropView.setVisibility(View.GONE);
+             } else if (currentEditMode == EDIT_MODE_PAINT) {
++                if (iBlur3FactoryFrostedLiquidGlass != null) {
++                    iBlur3FactoryFrostedLiquidGlass.unsubscribe(photoPaintView.bottomLayout);
++                }
++                if (paintKeyboardAnimator != null) {
++                    paintKeyboardAnimator.cancel();
++                    paintKeyboardAnimator = null;
++                }
+                 photoPaintView.shutdown();
+                 containerView.removeView(photoPaintView.getView());
+                 photoPaintView = null;
+@@ -18940,6 +18954,12 @@ public class PhotoViewer implements NotificationCenter.NotificationCenterDelegat
+             currentThumb = null;
+         }
+         animatingImageView.setImageBitmap(null);
++        if (captionEdit != null && captionEdit.mentionContainer != null && captionEdit.mentionContainer.getAdapter() != null) {
++            captionEdit.mentionContainer.getAdapter().onDestroy();
++        }
++        if (topCaptionEdit != null && topCaptionEdit.mentionContainer != null && topCaptionEdit.mentionContainer.getAdapter() != null) {
++            topCaptionEdit.mentionContainer.getAdapter().onDestroy();
++        }
+ //        if (captionEdit.editText != null) {
+ //            captionEdit.editText.onDestroy();
+ //        }

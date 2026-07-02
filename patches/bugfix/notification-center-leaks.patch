@@ -1,0 +1,307 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: alina sireneva <alina@tei.su>
+Date: Thu, 2 Jul 2026 14:06:47 +0400
+Subject: various leaks related to NotificationCenter delegates not being unregistered
+
+---
+ .../org/telegram/messenger/FeedWidgetService.java     |  5 ++++-
+ .../org/telegram/messenger/MessagesController.java    |  6 +++++-
+ .../telegram/ui/Cells/DialogsRequestedEmptyCell.java  |  2 +-
+ .../src/main/java/org/telegram/ui/ChatActivity.java   |  7 +++++++
+ .../java/org/telegram/ui/Components/Bulletin.java     | 10 ++++++++--
+ .../java/org/telegram/ui/Components/EmojiView.java    |  1 +
+ .../Reactions/ChatCustomReactionsEditActivity.java    |  1 +
+ .../src/main/java/org/telegram/ui/IntroActivity.java  | 11 +++++++++--
+ .../org/telegram/ui/SelectAnimatedEmojiDialog.java    |  2 +-
+ .../java/org/telegram/ui/SelectChatUserSheet.java     |  2 +-
+ .../main/java/org/telegram/ui/bots/BotShareSheet.java |  4 ++--
+ .../java/org/telegram/ui/web/BotWebViewContainer.java | 11 +++++++++--
+ 12 files changed, 49 insertions(+), 13 deletions(-)
+
+diff --git a/TMessagesProj/src/main/java/org/telegram/messenger/FeedWidgetService.java b/TMessagesProj/src/main/java/org/telegram/messenger/FeedWidgetService.java
+index 0000000..0000000 100644
+--- a/TMessagesProj/src/main/java/org/telegram/messenger/FeedWidgetService.java
++++ b/TMessagesProj/src/main/java/org/telegram/messenger/FeedWidgetService.java
+@@ -56,7 +56,9 @@ class FeedRemoteViewsFactory implements RemoteViewsService.RemoteViewsFactory, N
+     }
+ 
+     public void onDestroy() {
+-
++        if (accountInstance != null) {
++            accountInstance.getNotificationCenter().removeObserver(this, NotificationCenter.messagesDidLoad);
++        }
+     }
+ 
+     public int getCount() {
+@@ -161,6 +163,7 @@ class FeedRemoteViewsFactory implements RemoteViewsService.RemoteViewsFactory, N
+                 messages.clear();
+                 ArrayList<MessageObject> messArr = (ArrayList<MessageObject>) args[2];
+                 messages.addAll(messArr);
++                accountInstance.getNotificationCenter().removeObserver(this, NotificationCenter.messagesDidLoad);
+                 countDownLatch.countDown();
+             }
+         }
+diff --git a/TMessagesProj/src/main/java/org/telegram/messenger/MessagesController.java b/TMessagesProj/src/main/java/org/telegram/messenger/MessagesController.java
+index 0000000..0000000 100644
+--- a/TMessagesProj/src/main/java/org/telegram/messenger/MessagesController.java
++++ b/TMessagesProj/src/main/java/org/telegram/messenger/MessagesController.java
+@@ -22171,7 +22171,11 @@ public class MessagesController extends BaseController implements NotificationCe
+             loadMessagesInternal(dialogId, 0, true, count, finalMessageId, 0, true, 0, classGuid, 2, 0, 0, 0, -1, 0, 0, 0, false, 0, true, false, false, null, 0L);
+         }
+ 
+-        return () -> getConnectionsManager().cancelRequestsForGuid(classGuid);
++        return () -> {
++            getNotificationCenter().removeObserver(delegate, NotificationCenter.messagesDidLoadWithoutProcess);
++            getNotificationCenter().removeObserver(delegate, NotificationCenter.loadingMessagesFailed);
++            getConnectionsManager().cancelRequestsForGuid(classGuid);
++        };
+     }
+ 
+     public int getChatPendingRequestsOnClosed(long chatId) {
+diff --git a/TMessagesProj/src/main/java/org/telegram/ui/Cells/DialogsRequestedEmptyCell.java b/TMessagesProj/src/main/java/org/telegram/ui/Cells/DialogsRequestedEmptyCell.java
+index 0000000..0000000 100644
+--- a/TMessagesProj/src/main/java/org/telegram/ui/Cells/DialogsRequestedEmptyCell.java
++++ b/TMessagesProj/src/main/java/org/telegram/ui/Cells/DialogsRequestedEmptyCell.java
+@@ -134,7 +134,7 @@ public class DialogsRequestedEmptyCell extends LinearLayout implements Notificat
+     @Override
+     protected void onDetachedFromWindow() {
+         super.onDetachedFromWindow();
+-        NotificationCenter.getInstance(currentAccount).addObserver(this, NotificationCenter.diceStickersDidLoad);
++        NotificationCenter.getInstance(currentAccount).removeObserver(this, NotificationCenter.diceStickersDidLoad);
+     }
+ 
+     @Override
+diff --git a/TMessagesProj/src/main/java/org/telegram/ui/ChatActivity.java b/TMessagesProj/src/main/java/org/telegram/ui/ChatActivity.java
+index 0000000..0000000 100644
+--- a/TMessagesProj/src/main/java/org/telegram/ui/ChatActivity.java
++++ b/TMessagesProj/src/main/java/org/telegram/ui/ChatActivity.java
+@@ -3346,6 +3346,10 @@ public class ChatActivity extends BaseFragment implements
+     @Override
+     public void onFragmentDestroy() {
+         super.onFragmentDestroy();
++        if (commentsMessagesObserver != null) {
++            getNotificationCenter().removeObserver(commentsMessagesObserver, NotificationCenter.messagesDidLoad);
++            commentsMessagesObserver = null;
++        }
+         ReactionsEffectOverlay.dismissByFragment(this);
+         if (messageMetricsView != null) {
+             messageMetricsView.finish();
+@@ -35492,6 +35496,7 @@ public class ChatActivity extends BaseFragment implements
+     private int commentMessagesRequestId;
+     private int commentLoadingMessageId;
+     private boolean hideCommentLoading;
++    private NotificationCenter.NotificationCenterDelegate commentsMessagesObserver;
+     private long commentLoadingStartedAt;
+     private TLRPC.TL_messages_discussionMessage savedDiscussionMessage;
+     private TLRPC.messages_Messages savedHistory;
+@@ -35589,9 +35594,11 @@ public class ChatActivity extends BaseFragment implements
+                                     chatActivity.didReceivedNotification(id, account, args);
+                                 }, 50);
+                                 NotificationCenter.getInstance(currentAccount).removeObserver(this, NotificationCenter.messagesDidLoad);
++                                commentsMessagesObserver = null;
+                             }
+                         }
+                     };
++                    commentsMessagesObserver = observer;
+                     NotificationCenter.getInstance(currentAccount).addObserver(observer, NotificationCenter.messagesDidLoad);
+                     Utilities.stageQueue.postRunnable(() -> {
+                         getMessagesController().processLoadedMessages(historyFinal, historyFinal.messages.size(), dialogId, 0, 30, (highlightMsgId > 0 ? highlightMsgId : maxReadId), 0, false, commentsClassGuid, fnidFinal, 0, 0, 0, (highlightMsgId > 0 ? 3 : 2), true, 0, arrayList.get(arrayList.size() - 1).getId(), 1, false, 0, true, isTopic, null);
+diff --git a/TMessagesProj/src/main/java/org/telegram/ui/Components/Bulletin.java b/TMessagesProj/src/main/java/org/telegram/ui/Components/Bulletin.java
+index 0000000..0000000 100644
+--- a/TMessagesProj/src/main/java/org/telegram/ui/Components/Bulletin.java
++++ b/TMessagesProj/src/main/java/org/telegram/ui/Components/Bulletin.java
+@@ -1839,16 +1839,22 @@ public class Bulletin {
+             reactionsContainerLayout.setMessage(null, null, true);
+         }
+ 
++        private int savedMessagesForwardedAccount = -1;
++
+         @Override
+         protected void onAttachedToWindow() {
+             super.onAttachedToWindow();
+-            NotificationCenter.getInstance(UserConfig.selectedAccount).addObserver(this, NotificationCenter.savedMessagesForwarded);
++            savedMessagesForwardedAccount = UserConfig.selectedAccount;
++            NotificationCenter.getInstance(savedMessagesForwardedAccount).addObserver(this, NotificationCenter.savedMessagesForwarded);
+         }
+ 
+         @Override
+         protected void onDetachedFromWindow() {
+             super.onDetachedFromWindow();
+-            NotificationCenter.getInstance(UserConfig.selectedAccount).removeObserver(this, NotificationCenter.savedMessagesForwarded);
++            if (savedMessagesForwardedAccount >= 0) {
++                NotificationCenter.getInstance(savedMessagesForwardedAccount).removeObserver(this, NotificationCenter.savedMessagesForwarded);
++                savedMessagesForwardedAccount = -1;
++            }
+         }
+ 
+         public void hideReactionsDialog() {
+diff --git a/TMessagesProj/src/main/java/org/telegram/ui/Components/EmojiView.java b/TMessagesProj/src/main/java/org/telegram/ui/Components/EmojiView.java
+index 0000000..0000000 100644
+--- a/TMessagesProj/src/main/java/org/telegram/ui/Components/EmojiView.java
++++ b/TMessagesProj/src/main/java/org/telegram/ui/Components/EmojiView.java
+@@ -6145,6 +6145,7 @@ public class EmojiView extends FrameLayout implements
+             colorPickerView.dismiss();
+         }
+         ContentPreviewViewer.getInstance().clearDelegate(contentPreviewViewerDelegate);
++        onDestroy();
+     }
+ 
+     private void checkDocuments(boolean isGif) {
+diff --git a/TMessagesProj/src/main/java/org/telegram/ui/Components/Reactions/ChatCustomReactionsEditActivity.java b/TMessagesProj/src/main/java/org/telegram/ui/Components/Reactions/ChatCustomReactionsEditActivity.java
+index 0000000..0000000 100644
+--- a/TMessagesProj/src/main/java/org/telegram/ui/Components/Reactions/ChatCustomReactionsEditActivity.java
++++ b/TMessagesProj/src/main/java/org/telegram/ui/Components/Reactions/ChatCustomReactionsEditActivity.java
+@@ -724,6 +724,7 @@ public class ChatCustomReactionsEditActivity extends BaseFragment implements Not
+             getMessagesController().setCustomChatReactions(chatId, selectedType, grabReactions(false), reactionsCount, null, null, null);
+         }
+         getNotificationCenter().removeObserver(this, NotificationCenter.dialogDeleted);
++        getNotificationCenter().removeObserver(this, NotificationCenter.reactionsDidLoad);
+     }
+ 
+     @Override
+diff --git a/TMessagesProj/src/main/java/org/telegram/ui/IntroActivity.java b/TMessagesProj/src/main/java/org/telegram/ui/IntroActivity.java
+index 0000000..0000000 100644
+--- a/TMessagesProj/src/main/java/org/telegram/ui/IntroActivity.java
++++ b/TMessagesProj/src/main/java/org/telegram/ui/IntroActivity.java
+@@ -125,6 +125,7 @@ public class IntroActivity extends BaseFragment implements NotificationCenter.No
+     private LocaleController.LocaleInfo localeInfo;
+ 
+     private boolean destroyed;
++    private NotificationCenter.NotificationCenterDelegate switchLanguageDelegate;
+ 
+     private boolean isOnLogout;
+ 
+@@ -405,20 +406,22 @@ public class IntroActivity extends BaseFragment implements NotificationCenter.No
+             loaderDialog.setCanCancel(false);
+             loaderDialog.showDelayed(1000);
+ 
+-            NotificationCenter.getGlobalInstance().addObserver(new NotificationCenter.NotificationCenterDelegate() {
++            switchLanguageDelegate = new NotificationCenter.NotificationCenterDelegate() {
+                 @Override
+                 public void didReceivedNotification(int id, int account, Object... args) {
+                     if (id == NotificationCenter.reloadInterface) {
+                         loaderDialog.dismiss();
+ 
+                         NotificationCenter.getGlobalInstance().removeObserver(this, id);
++                        switchLanguageDelegate = null;
+                         AndroidUtilities.runOnUIThread(()->{
+                             presentFragment(new LoginActivity().setIntroView(frameContainerView, startMessagingButton), true);
+                             destroyed = true;
+                         }, 100);
+                     }
+                 }
+-            }, NotificationCenter.reloadInterface);
++            };
++            NotificationCenter.getGlobalInstance().addObserver(switchLanguageDelegate, NotificationCenter.reloadInterface);
+             LocaleController.getInstance().applyLanguage(localeInfo, true, false, currentAccount);
+         });
+ 
+@@ -483,6 +486,10 @@ public class IntroActivity extends BaseFragment implements NotificationCenter.No
+         destroyed = true;
+         NotificationCenter.getGlobalInstance().removeObserver(this, NotificationCenter.suggestedLangpack);
+         NotificationCenter.getInstance(currentAccount).removeObserver(this, NotificationCenter.configLoaded);
++        if (switchLanguageDelegate != null) {
++            NotificationCenter.getGlobalInstance().removeObserver(switchLanguageDelegate, NotificationCenter.reloadInterface);
++            switchLanguageDelegate = null;
++        }
+         MessagesController.getGlobalMainSettings().edit().putLong("intro_crashed_time", 0).apply();
+     }
+ 
+diff --git a/TMessagesProj/src/main/java/org/telegram/ui/SelectAnimatedEmojiDialog.java b/TMessagesProj/src/main/java/org/telegram/ui/SelectAnimatedEmojiDialog.java
+index 0000000..0000000 100644
+--- a/TMessagesProj/src/main/java/org/telegram/ui/SelectAnimatedEmojiDialog.java
++++ b/TMessagesProj/src/main/java/org/telegram/ui/SelectAnimatedEmojiDialog.java
+@@ -4975,7 +4975,7 @@ public class SelectAnimatedEmojiDialog extends FrameLayout implements Notificati
+         NotificationCenter.getInstance(currentAccount).removeObserver(this, NotificationCenter.groupStickersDidLoad);
+         NotificationCenter.getGlobalInstance().removeObserver(this, NotificationCenter.emojiLoaded);
+         if (type == TYPE_EMOJI_STATUS || type == TYPE_EMOJI_STATUS_TOP) {
+-            NotificationCenter.getInstance(currentAccount).addObserver(this, NotificationCenter.starUserGiftsLoaded);
++            NotificationCenter.getInstance(currentAccount).removeObserver(this, NotificationCenter.starUserGiftsLoaded);
+         }
+ 
+         if (scrimDrawable != null) {
+diff --git a/TMessagesProj/src/main/java/org/telegram/ui/SelectChatUserSheet.java b/TMessagesProj/src/main/java/org/telegram/ui/SelectChatUserSheet.java
+index 0000000..0000000 100644
+--- a/TMessagesProj/src/main/java/org/telegram/ui/SelectChatUserSheet.java
++++ b/TMessagesProj/src/main/java/org/telegram/ui/SelectChatUserSheet.java
+@@ -536,7 +536,7 @@ public class SelectChatUserSheet extends BottomSheetWithRecyclerListView {
+             NotificationCenter.getInstance(currentAccount).addObserver(this, NotificationCenter.chatInfoDidLoad);
+         }
+         public void detach() {
+-            if (attached) return;
++            if (!attached) return;
+             attached = false;
+             NotificationCenter.getInstance(currentAccount).removeObserver(this, NotificationCenter.chatInfoDidLoad);
+ 
+diff --git a/TMessagesProj/src/main/java/org/telegram/ui/bots/BotShareSheet.java b/TMessagesProj/src/main/java/org/telegram/ui/bots/BotShareSheet.java
+index 0000000..0000000 100644
+--- a/TMessagesProj/src/main/java/org/telegram/ui/bots/BotShareSheet.java
++++ b/TMessagesProj/src/main/java/org/telegram/ui/bots/BotShareSheet.java
+@@ -158,7 +158,7 @@ public class BotShareSheet extends BottomSheetWithRecyclerListView {
+                                 if (webPages != null && webPages.containsKey(pendingId)) {
+                                     final TLRPC.WebPage webpage = webPages.get(pendingId);
+                                     if (delegateToRemove[0] != null) {
+-                                        NotificationCenter.getInstance(currentAccount).addObserver(delegateToRemove[0], NotificationCenter.didReceivedWebpagesInUpdates);
++                                        NotificationCenter.getInstance(currentAccount).removeObserver(delegateToRemove[0], NotificationCenter.didReceivedWebpagesInUpdates);
+                                         delegateToRemove[0] = null;
+                                     }
+                                     whenLoaded.run(webpage instanceof TLRPC.TL_webPage ? webpage : null);
+@@ -181,7 +181,7 @@ public class BotShareSheet extends BottomSheetWithRecyclerListView {
+                 reqId[0] = -1;
+             }
+             if (delegateToRemove[0] != null) {
+-                NotificationCenter.getInstance(currentAccount).addObserver(delegateToRemove[0], NotificationCenter.didReceivedWebpagesInUpdates);
++                NotificationCenter.getInstance(currentAccount).removeObserver(delegateToRemove[0], NotificationCenter.didReceivedWebpagesInUpdates);
+                 delegateToRemove[0] = null;
+             }
+         };
+diff --git a/TMessagesProj/src/main/java/org/telegram/ui/web/BotWebViewContainer.java b/TMessagesProj/src/main/java/org/telegram/ui/web/BotWebViewContainer.java
+index 0000000..0000000 100644
+--- a/TMessagesProj/src/main/java/org/telegram/ui/web/BotWebViewContainer.java
++++ b/TMessagesProj/src/main/java/org/telegram/ui/web/BotWebViewContainer.java
+@@ -233,6 +233,7 @@ public abstract class BotWebViewContainer extends FrameLayout implements Notific
+     private BottomSheet cameraBottomSheet;
+     private boolean hasQRPending;
+     private String lastQrText;
++    private NotificationCenter.NotificationCenterDelegate qrPermissionDelegate;
+ 
+     private BotBiometry biometry;
+     private BotLocation location;
+@@ -1064,6 +1065,10 @@ public abstract class BotWebViewContainer extends FrameLayout implements Notific
+         NotificationCenter.getGlobalInstance().removeObserver(this, NotificationCenter.didSetNewTheme);
+         NotificationCenter.getGlobalInstance().removeObserver(this, NotificationCenter.onActivityResultReceived);
+         NotificationCenter.getGlobalInstance().removeObserver(this, NotificationCenter.onRequestPermissionResultReceived);
++        if (qrPermissionDelegate != null) {
++            NotificationCenter.getGlobalInstance().removeObserver(qrPermissionDelegate, NotificationCenter.onRequestPermissionResultReceived);
++            qrPermissionDelegate = null;
++        }
+ 
+         Bulletin.removeDelegate(this);
+     }
+@@ -1436,7 +1441,7 @@ public abstract class BotWebViewContainer extends FrameLayout implements Notific
+                     hasQRPending = true;
+ 
+                     if (Build.VERSION.SDK_INT >= 23 && parentActivity.checkSelfPermission(Manifest.permission.CAMERA) != PackageManager.PERMISSION_GRANTED) {
+-                        NotificationCenter.getGlobalInstance().addObserver(new NotificationCenter.NotificationCenterDelegate() {
++                        qrPermissionDelegate = new NotificationCenter.NotificationCenterDelegate() {
+                             @Override
+                             public void didReceivedNotification(int id, int account, Object... args) {
+                                 if (id == NotificationCenter.onRequestPermissionResultReceived) {
+@@ -1446,6 +1451,7 @@ public abstract class BotWebViewContainer extends FrameLayout implements Notific
+ 
+                                     if (requestCode == REQUEST_CODE_QR_CAMERA_PERMISSION) {
+                                         NotificationCenter.getGlobalInstance().removeObserver(this, NotificationCenter.onRequestPermissionResultReceived);
++                                        qrPermissionDelegate = null;
+ 
+                                         if (grantResults[0] == PackageManager.PERMISSION_GRANTED) {
+                                             openQrScanActivity();
+@@ -1455,7 +1461,8 @@ public abstract class BotWebViewContainer extends FrameLayout implements Notific
+                                     }
+                                 }
+                             }
+-                        }, NotificationCenter.onRequestPermissionResultReceived);
++                        };
++                        NotificationCenter.getGlobalInstance().addObserver(qrPermissionDelegate, NotificationCenter.onRequestPermissionResultReceived);
+                         parentActivity.requestPermissions(new String[]{Manifest.permission.CAMERA}, REQUEST_CODE_QR_CAMERA_PERMISSION);
+                         return;
+                     }

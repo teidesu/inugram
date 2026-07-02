@@ -1,0 +1,91 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: alina sireneva <alina@tei.su>
+Date: Wed, 1 Jul 2026 18:49:01 +0400
+Subject: dismiss reaction effect overlays on chat destroy
+
+---
+ .../java/org/telegram/ui/ChatActivity.java    |  1 +
+ .../Reactions/ReactionsEffectOverlay.java     | 23 +++++++++++++++++++
+ 2 files changed, 24 insertions(+)
+
+diff --git a/TMessagesProj/src/main/java/org/telegram/ui/ChatActivity.java b/TMessagesProj/src/main/java/org/telegram/ui/ChatActivity.java
+index 0000000..0000000 100644
+--- a/TMessagesProj/src/main/java/org/telegram/ui/ChatActivity.java
++++ b/TMessagesProj/src/main/java/org/telegram/ui/ChatActivity.java
+@@ -3346,6 +3346,7 @@ public class ChatActivity extends BaseFragment implements
+     @Override
+     public void onFragmentDestroy() {
+         super.onFragmentDestroy();
++        ReactionsEffectOverlay.dismissByFragment(this);
+         if (messageMetricsView != null) {
+             messageMetricsView.finish();
+         }
+diff --git a/TMessagesProj/src/main/java/org/telegram/ui/Components/Reactions/ReactionsEffectOverlay.java b/TMessagesProj/src/main/java/org/telegram/ui/Components/Reactions/ReactionsEffectOverlay.java
+index 0000000..0000000 100644
+--- a/TMessagesProj/src/main/java/org/telegram/ui/Components/Reactions/ReactionsEffectOverlay.java
++++ b/TMessagesProj/src/main/java/org/telegram/ui/Components/Reactions/ReactionsEffectOverlay.java
+@@ -85,6 +85,8 @@ public class ReactionsEffectOverlay {
+     private View cell;
+     private boolean useWindow;
+     private ViewGroup decorView;
++    private BaseFragment baseFragment;
++    private static final ArrayList<ReactionsEffectOverlay> activeOverlays = new ArrayList<>();
+     private static long lastHapticTime;
+     ArrayList<AvatarParticle> avatars = new ArrayList<>();
+     public long startTime;
+@@ -111,6 +113,7 @@ public class ReactionsEffectOverlay {
+         this.animationType = animationType;
+         this.currentAccount = currentAccount;
+         this.cell = cell;
++        this.baseFragment = fragment;
+         ReactionsLayoutInBubble.ReactionButton reactionButton = null;
+         if (cell instanceof ChatMessageCell) {
+             reactionButton = ((ChatMessageCell) cell).getReactionButton(visibleReaction);
+@@ -479,6 +482,9 @@ public class ReactionsEffectOverlay {
+ 
+                                     ViewGroup viewGroup = (ViewGroup) getParent();
+                                     viewGroup.addView(nextReactionOverlay.windowView);
++                                    if (!activeOverlays.contains(nextReactionOverlay)) {
++                                        activeOverlays.add(nextReactionOverlay);
++                                    }
+                                     nextReactionOverlay.isStories = true;
+                                     nextReactionOverlay.started = true;
+                                     nextReactionOverlay.startTime = System.currentTimeMillis();
+@@ -739,6 +745,7 @@ public class ReactionsEffectOverlay {
+     }
+ 
+     private void removeCurrentView() {
++        activeOverlays.remove(this);
+         try {
+             if (useWindow) {
+                 windowManager.removeView(windowView);
+@@ -750,6 +757,21 @@ public class ReactionsEffectOverlay {
+         }
+     }
+ 
++    public static void dismissByFragment(BaseFragment fragment) {
++        for (int i = activeOverlays.size() - 1; i >= 0; i--) {
++            ReactionsEffectOverlay overlay = activeOverlays.get(i);
++            if (overlay.baseFragment == fragment) {
++                if (currentOverlay == overlay) {
++                    currentOverlay = null;
++                }
++                if (currentShortOverlay == overlay) {
++                    currentShortOverlay = null;
++                }
++                overlay.removeCurrentView();
++            }
++        }
++    }
++
+     public static void show(BaseFragment baseFragment, ReactionsContainerLayout reactionsLayout, View cell, View fromAnimationView, float x, float y, ReactionsLayoutInBubble.VisibleReaction visibleReaction, int currentAccount, int animationType) {
+         if (cell == null || visibleReaction == null || baseFragment == null || baseFragment.getParentActivity() == null) {
+             return;
+@@ -792,6 +814,7 @@ public class ReactionsEffectOverlay {
+             reactionsEffectOverlay.decorView = (FrameLayout) baseFragment.getParentActivity().getWindow().getDecorView();
+             reactionsEffectOverlay.decorView.addView(reactionsEffectOverlay.windowView);
+         }
++        activeOverlays.add(reactionsEffectOverlay);
+         cell.invalidate();
+         if (cell instanceof ChatMessageCell && ((ChatMessageCell) cell).getCurrentMessagesGroup() != null && cell.getParent() != null) {
+             ((View) cell.getParent()).invalidate();

@@ -140,7 +140,6 @@ hooks/universal-recycler.patch
 debloat/reduce-menu-motion.patch
 feature/md3-components.patch
 bugfix/universal-fragment-theme-change.patch
-bugfix/sdk33-callback-leak.patch
 feature/clickable-web-preview-photos.patch
 debloat/volume-keys-videos.patch
 bugfix/chat-preview-reactions-read.patch
@@ -181,7 +180,7 @@ bugfix/reply-name-end-padding.patch
 bugfix/image-loader-leak.patch
 bugfix/video-ads-leak.patch
 bugfix/chat-avatar-leak.patch
-bugfix/launch-activity-bulletin-leak.patch
+bugfix/launch-activity-leaks.patch
 bugfix/edittextemoji-observer-leak.patch
 bugfix/chat-attach-alert-adapter-leak.patch
 debloat/sponsored-data-saver.patch
@@ -202,3 +201,7 @@ bugfix/spoiler-tile-blink.patch
 bugfix/deeplink-album-member-anchor.patch
 feature/biometric-confirmation.patch
 feature/paint-outlined-text-style.patch
+bugfix/chat-background-leak.patch
+bugfix/reaction-overlay-fragment-leak.patch
+bugfix/photo-viewer-leaks.patch
+bugfix/notification-center-leaks.patch

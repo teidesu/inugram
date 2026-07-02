@@ -21,7 +21,7 @@ index 0000000..0000000 100644
                  super.dispatchDraw(canvas);
                  drawRippleAbove(canvas, this);
              }
-@@ -9217,6 +9220,11 @@ public class LaunchActivity extends BasePermissionsActivity implements INavigati
+@@ -9218,6 +9221,11 @@ public class LaunchActivity extends BasePermissionsActivity implements INavigati
  
      private int reasonsToHideMainContent = 0;
      private int reasonsToHideDecorView = 0;
@@ -33,7 +33,7 @@ index 0000000..0000000 100644
  
      private void updateReasonsToHideMainContent(boolean increment, boolean withDecorView) {
          reasonsToHideMainContent += (increment ? 1 : -1);
-@@ -9224,7 +9232,8 @@ public class LaunchActivity extends BasePermissionsActivity implements INavigati
+@@ -9225,7 +9233,8 @@ public class LaunchActivity extends BasePermissionsActivity implements INavigati
              reasonsToHideDecorView += (increment ? 1 : -1);
          }
          if (frameLayout != null) {

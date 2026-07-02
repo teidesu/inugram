@@ -1,0 +1,7 @@
+Manifest-Version: 1.0
+Bundle-ManifestVersion: 2
+Bundle-Name: HeapProbe
+Bundle-SymbolicName: heapprobe;singleton:=true
+Bundle-Version: 1.0.0
+Require-Bundle: org.eclipse.mat.api,org.eclipse.mat.parser,org.eclipse.mat.report,org.eclipse.core.runtime,org.eclipse.equinox.app
+Bundle-RequiredExecutionEnvironment: JavaSE-21
