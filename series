@@ -207,3 +207,4 @@ bugfix/reaction-overlay-fragment-leak.patch
 bugfix/photo-viewer-leaks.patch
 bugfix/notification-center-leaks.patch
 feature/high-quality-crop.patch
+bugfix/notification-channel-id.patch

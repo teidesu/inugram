@@ -255,6 +255,7 @@ most things are toggleable in `Settings → Inugram`, with sensible opinionated 
 - fix sponsored message media not respecting data saver
 - fix non-joined channels history getting stuck in the past
 - fix stuck red snapshot box when the frame capture fails/times out on enter in pip
+- heads-up notifications show only the new message instead of the whole group, on the correct channel (Private Chats/Groups/Channels) instead of "Internal notifications" (visible since android 16 forced grouping)
 - fix npe checking admin/owner when channel admins not yet loaded
 - comments/topic thread restored as plain group chat after activity recreation
 - fix deeplinking to a non-primary album member sometimes mis-anchoring

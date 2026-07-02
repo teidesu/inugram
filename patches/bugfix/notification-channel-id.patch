@@ -1,0 +1,436 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: alina sireneva <alina@tei.su>
+Date: Thu, 2 Jul 2026 20:37:42 +0400
+Subject: correctly handle notification channels on android 16+, fixes heads-up notifications when there are multiple unread chats
+
+---
+ .../messenger/NotificationsController.java    | 394 +++++++++++-------
+ 1 file changed, 251 insertions(+), 143 deletions(-)
+
+diff --git a/TMessagesProj/src/main/java/org/telegram/messenger/NotificationsController.java b/TMessagesProj/src/main/java/org/telegram/messenger/NotificationsController.java
+index 0000000..0000000 100644
+--- a/TMessagesProj/src/main/java/org/telegram/messenger/NotificationsController.java
++++ b/TMessagesProj/src/main/java/org/telegram/messenger/NotificationsController.java
+@@ -4081,6 +4081,234 @@ public class NotificationsController extends BaseController implements Notificat
+         return channelId;
+     }
+ 
++    public static class InuDialogNotificationSettings {
++        public boolean notifyDisabled;
++        public int vibrate;
++        public String soundPath;
++        public boolean isInternalSoundFile;
++        public int ledColor;
++        public int importance;
++        public boolean isDefault;
++        public boolean isInApp;
++        public int chatType;
++    }
++
++    // ! needs to be reusable - stock does this inline. keep in sync with stock code on rebae.
++    public InuDialogNotificationSettings inu_computeDialogNotificationSettings(SharedPreferences preferences, long dialog_id, long topicId, boolean story, boolean isReactionPush, boolean isStoryReactionPush, long chatId, long userId, boolean isChannel, boolean notifyDisabled) {
++        int vibrate = 0;
++        String soundPath = null;
++        boolean isInternalSoundFile = false;
++        int ledColor = 0xff0000ff;
++        int importance = 0;
++
++        if (!notifyDisabled && !preferences.getBoolean("sound_enabled_" + getSharedPrefKey(dialog_id, topicId), true)) {
++            notifyDisabled = true;
++        }
++
++        String defaultPath = Settings.System.DEFAULT_NOTIFICATION_URI.getPath();
++
++        boolean isDefault = true;
++        boolean isInApp = !ApplicationLoader.mainInterfacePaused;
++        int chatType = TYPE_PRIVATE;
++
++        String customSoundPath;
++        boolean customIsInternalSound = false;
++        int customVibrate;
++        int customImportance;
++        Integer customLedColor;
++        String key = getSharedPrefKey(dialog_id, topicId);
++        if (dialogsNotificationsFacade.getProperty("custom_", dialog_id, topicId, false)) {
++            customVibrate = dialogsNotificationsFacade.getProperty("vibrate_", dialog_id, topicId, 0);
++            customImportance = dialogsNotificationsFacade.getProperty("priority_", dialog_id, topicId, 3);
++            long soundDocumentId = dialogsNotificationsFacade.getProperty("sound_document_id_" , dialog_id, topicId, 0L);
++            if (soundDocumentId != 0) {
++                customIsInternalSound = true;
++                customSoundPath = getMediaDataController().ringtoneDataStore.getSoundPath(soundDocumentId);
++            } else {
++                customSoundPath = dialogsNotificationsFacade.getPropertyString("sound_path_" , dialog_id, topicId, null);
++            }
++
++            int color = dialogsNotificationsFacade.getProperty("color_", dialog_id, topicId, 0);
++            if (color != 0) {
++                customLedColor = color;
++            } else {
++                customLedColor = null;
++            }
++        } else {
++            customVibrate = 0;
++            customImportance = 3;
++            customSoundPath = null;
++            customLedColor = null;
++        }
++        boolean vibrateOnlyIfSilent = false;
++
++        if (isReactionPush || isStoryReactionPush) {
++            long soundDocumentId = preferences.getLong("ReactionSoundDocId", 0);
++            if (soundDocumentId != 0) {
++                isInternalSoundFile = true;
++                soundPath = getMediaDataController().ringtoneDataStore.getSoundPath(soundDocumentId);
++            } else {
++                soundPath = preferences.getString("ReactionSoundPath", defaultPath);
++            }
++            vibrate = preferences.getInt("vibrate_react", 0);
++            importance = preferences.getInt("priority_react", 1);
++            ledColor = preferences.getInt("ReactionsLed", 0xff0000ff);
++            chatType = isStoryReactionPush ? TYPE_REACTIONS_STORIES : TYPE_REACTIONS_MESSAGES;
++        } else if (chatId != 0) {
++            if (isChannel) {
++                long soundDocumentId = preferences.getLong("ChannelSoundDocId", 0);
++                if (soundDocumentId != 0) {
++                    isInternalSoundFile = true;
++                    soundPath = getMediaDataController().ringtoneDataStore.getSoundPath(soundDocumentId);
++                } else {
++                    soundPath = preferences.getString("ChannelSoundPath", defaultPath);
++                }
++                vibrate = preferences.getInt("vibrate_channel", 0);
++                importance = preferences.getInt("priority_channel", 1);
++                ledColor = preferences.getInt("ChannelLed", 0xff0000ff);
++                chatType = TYPE_CHANNEL;
++            } else {
++                long soundDocumentId = preferences.getLong("GroupSoundDocId", 0);
++                if (soundDocumentId != 0) {
++                    isInternalSoundFile = true;
++                    soundPath = getMediaDataController().ringtoneDataStore.getSoundPath(soundDocumentId);
++                } else {
++                    soundPath = preferences.getString("GroupSoundPath", defaultPath);
++                }
++                vibrate = preferences.getInt("vibrate_group", 0);
++                importance = preferences.getInt("priority_group", 1);
++                ledColor = preferences.getInt("GroupLed", 0xff0000ff);
++                chatType = TYPE_GROUP;
++            }
++        } else if (userId != 0) {
++            long soundDocumentId = preferences.getLong(story ? "StoriesSoundDocId" : "GlobalSoundDocId", 0);
++            if (soundDocumentId != 0) {
++                isInternalSoundFile = true;
++                soundPath = getMediaDataController().ringtoneDataStore.getSoundPath(soundDocumentId);
++            } else {
++                soundPath = preferences.getString(story ? "StoriesSoundPath" : "GlobalSoundPath", defaultPath);
++            }
++            vibrate = preferences.getInt("vibrate_messages", 0);
++            importance = preferences.getInt("priority_messages", 1);
++            ledColor = preferences.getInt("MessagesLed", 0xff0000ff);
++            chatType = story ? TYPE_STORIES : TYPE_PRIVATE;
++        }
++        if (vibrate == 4) {
++            vibrateOnlyIfSilent = true;
++            vibrate = 0;
++        }
++        if (!TextUtils.isEmpty(customSoundPath) && !TextUtils.equals(soundPath, customSoundPath)) {
++            isInternalSoundFile = customIsInternalSound;
++            soundPath = customSoundPath;
++            isDefault = false;
++        }
++        if (customImportance != 3 && importance != customImportance) {
++            importance = customImportance;
++            isDefault = false;
++        }
++        if (customLedColor != null && customLedColor != ledColor) {
++            ledColor = customLedColor;
++            isDefault = false;
++        }
++        if (customVibrate != 0 && customVibrate != 4 && customVibrate != vibrate) {
++            vibrate = customVibrate;
++            isDefault = false;
++        }
++        if (isInApp) {
++            if (!preferences.getBoolean("EnableInAppSounds", true)) {
++                soundPath = null;
++            }
++            if (!preferences.getBoolean("EnableInAppVibrate", true)) {
++                vibrate = 2;
++            }
++            if (preferences.getBoolean("EnableInAppPopup", true)) {
++                importance = 2;
++            } else {
++                importance = 0;
++            }
++        }
++        if (vibrateOnlyIfSilent && vibrate != 2) {
++            try {
++                int mode = audioManager.getRingerMode();
++                if (mode != AudioManager.RINGER_MODE_SILENT && mode != AudioManager.RINGER_MODE_VIBRATE) {
++                    vibrate = 2;
++                }
++            } catch (Exception e) {
++                FileLog.e(e);
++            }
++        }
++
++        if (notifyDisabled) {
++            vibrate = 0;
++            importance = 0;
++            ledColor = 0;
++            soundPath = null;
++        }
++
++        InuDialogNotificationSettings result = new InuDialogNotificationSettings();
++        result.notifyDisabled = notifyDisabled;
++        result.vibrate = vibrate;
++        result.soundPath = soundPath;
++        result.isInternalSoundFile = isInternalSoundFile;
++        result.ledColor = ledColor;
++        result.importance = importance;
++        result.isDefault = isDefault;
++        result.isInApp = isInApp;
++        result.chatType = chatType;
++        return result;
++    }
++
++    private String inu_validateChannelIdForDialog(long dialogId, long topicId, boolean story, MessageObject lastMessageObject, long chatId, long userId, boolean isChannel, String name) {
++        try {
++            SharedPreferences preferences = getAccountInstance().getNotificationsSettings();
++            boolean isReactionPush = lastMessageObject != null && lastMessageObject.isReactionPush;
++            int notifyOverride = getNotifyOverride(preferences, dialogId, topicId);
++            boolean value;
++            if (notifyOverride == -1) {
++                value = isGlobalNotificationsEnabled(dialogId, isChannel, isReactionPush, isReactionPush);
++            } else {
++                value = notifyOverride != 2;
++            }
++            InuDialogNotificationSettings s = inu_computeDialogNotificationSettings(preferences, dialogId, topicId, story, isReactionPush, lastMessageObject != null && lastMessageObject.isStoryReactionPush, chatId, userId, isChannel, !value);
++            int configImportance;
++            if (s.importance == 1 || s.importance == 2) {
++                configImportance = NotificationManager.IMPORTANCE_HIGH;
++            } else if (s.importance == 4) {
++                configImportance = NotificationManager.IMPORTANCE_MIN;
++            } else if (s.importance == 5) {
++                configImportance = NotificationManager.IMPORTANCE_LOW;
++            } else {
++                configImportance = NotificationManager.IMPORTANCE_DEFAULT;
++            }
++            String defaultPath = Settings.System.DEFAULT_NOTIFICATION_URI.getPath();
++            Uri sound = null;
++            if (!s.notifyDisabled && s.soundPath != null && !s.soundPath.equalsIgnoreCase("NoSound")) {
++                if (s.soundPath.equalsIgnoreCase("Default") || s.soundPath.equals(defaultPath)) {
++                    sound = Settings.System.DEFAULT_NOTIFICATION_URI;
++                } else if (s.isInternalSoundFile) {
++                    sound = FileProvider.getUriForFile(ApplicationLoader.applicationContext, ApplicationLoader.getApplicationId() + ".provider", new File(s.soundPath));
++                    ApplicationLoader.applicationContext.grantUriPermission("com.android.systemui", sound, Intent.FLAG_GRANT_READ_URI_PERMISSION);
++                } else {
++                    sound = Uri.parse(s.soundPath);
++                }
++            }
++            long[] vibrationPattern;
++            if (s.notifyDisabled || s.vibrate == 2) {
++                vibrationPattern = new long[]{0, 0};
++            } else if (s.vibrate == 1) {
++                vibrationPattern = new long[]{0, 100, 0, 100};
++            } else if (s.vibrate == 3) {
++                vibrationPattern = new long[]{0, 1000};
++            } else {
++                vibrationPattern = new long[]{};
++            }
++            return validateChannelId(dialogId, topicId, name, vibrationPattern, s.ledColor, sound, configImportance, s.isDefault, s.isInApp, s.notifyDisabled, s.chatType);
++        } catch (Exception e) {
++            FileLog.e(e);
++            return OTHER_NOTIFICATIONS_CHANNEL;
++        }
++    }
++
+     private void showOrUpdateNotification(boolean notifyAboutLast) {
+         if (!getUserConfig().isClientActivated() || pushMessages.isEmpty() && storyPushMessages.isEmpty() || NotificationsHelper.shouldSuppressNotifications(currentAccount) || !SharedConfig.showNotificationsForAllAccounts && currentAccount != UserConfig.selectedAccount) {
+             dismissNotification();
+@@ -4368,149 +4596,17 @@ public class NotificationsController extends BaseController implements Notificat
+                 }
+             }
+ 
+-            if (!notifyDisabled && !preferences.getBoolean("sound_enabled_" + getSharedPrefKey(dialog_id, topicId), true)) {
+-                notifyDisabled = true;
+-            }
+-
++            InuDialogNotificationSettings inu_settings = inu_computeDialogNotificationSettings(preferences, dialog_id, topicId, story, lastMessageObject != null && lastMessageObject.isReactionPush, lastMessageObject != null && lastMessageObject.isStoryReactionPush, chatId, userId, isChannel, notifyDisabled);
++            notifyDisabled = inu_settings.notifyDisabled;
++            vibrate = inu_settings.vibrate;
++            soundPath = inu_settings.soundPath;
++            isInternalSoundFile = inu_settings.isInternalSoundFile;
++            ledColor = inu_settings.ledColor;
++            importance = inu_settings.importance;
+             String defaultPath = Settings.System.DEFAULT_NOTIFICATION_URI.getPath();
+-
+-            boolean isDefault = true;
+-            boolean isInApp = !ApplicationLoader.mainInterfacePaused;
+-            int chatType = TYPE_PRIVATE;
+-
+-            String customSoundPath;
+-            boolean customIsInternalSound = false;
+-            int customVibrate;
+-            int customImportance;
+-            Integer customLedColor;
+-            String key = getSharedPrefKey(dialog_id, topicId);
+-            if (dialogsNotificationsFacade.getProperty("custom_", dialog_id, topicId, false)) {
+-                customVibrate = dialogsNotificationsFacade.getProperty("vibrate_", dialog_id, topicId, 0);
+-                customImportance = dialogsNotificationsFacade.getProperty("priority_", dialog_id, topicId, 3);
+-                long soundDocumentId = dialogsNotificationsFacade.getProperty("sound_document_id_" , dialog_id, topicId, 0L);
+-                if (soundDocumentId != 0) {
+-                    customIsInternalSound = true;
+-                    customSoundPath = getMediaDataController().ringtoneDataStore.getSoundPath(soundDocumentId);
+-                } else {
+-                    customSoundPath = dialogsNotificationsFacade.getPropertyString("sound_path_" , dialog_id, topicId, null);
+-                }
+-
+-                int color = dialogsNotificationsFacade.getProperty("color_", dialog_id, topicId, 0);
+-                if (color != 0) {
+-                    customLedColor = color;
+-                } else {
+-                    customLedColor = null;
+-                }
+-            } else {
+-                customVibrate = 0;
+-                customImportance = 3;
+-                customSoundPath = null;
+-                customLedColor = null;
+-            }
+-            boolean vibrateOnlyIfSilent = false;
+-
+-            if (lastMessageObject != null && (lastMessageObject.isReactionPush || lastMessageObject.isStoryReactionPush)) {
+-                long soundDocumentId = preferences.getLong("ReactionSoundDocId", 0);
+-                if (soundDocumentId != 0) {
+-                    isInternalSoundFile = true;
+-                    soundPath = getMediaDataController().ringtoneDataStore.getSoundPath(soundDocumentId);
+-                } else {
+-                    soundPath = preferences.getString("ReactionSoundPath", defaultPath);
+-                }
+-                vibrate = preferences.getInt("vibrate_react", 0);
+-                importance = preferences.getInt("priority_react", 1);
+-                ledColor = preferences.getInt("ReactionsLed", 0xff0000ff);
+-                chatType = lastMessageObject.isStoryReactionPush ? TYPE_REACTIONS_STORIES : TYPE_REACTIONS_MESSAGES;
+-            } else if (chatId != 0) {
+-                if (isChannel) {
+-                    long soundDocumentId = preferences.getLong("ChannelSoundDocId", 0);
+-                    if (soundDocumentId != 0) {
+-                        isInternalSoundFile = true;
+-                        soundPath = getMediaDataController().ringtoneDataStore.getSoundPath(soundDocumentId);
+-                    } else {
+-                        soundPath = preferences.getString("ChannelSoundPath", defaultPath);
+-                    }
+-                    vibrate = preferences.getInt("vibrate_channel", 0);
+-                    importance = preferences.getInt("priority_channel", 1);
+-                    ledColor = preferences.getInt("ChannelLed", 0xff0000ff);
+-                    chatType = TYPE_CHANNEL;
+-                } else {
+-                    long soundDocumentId = preferences.getLong("GroupSoundDocId", 0);
+-                    if (soundDocumentId != 0) {
+-                        isInternalSoundFile = true;
+-                        soundPath = getMediaDataController().ringtoneDataStore.getSoundPath(soundDocumentId);
+-                    } else {
+-                        soundPath = preferences.getString("GroupSoundPath", defaultPath);
+-                    }
+-                    vibrate = preferences.getInt("vibrate_group", 0);
+-                    importance = preferences.getInt("priority_group", 1);
+-                    ledColor = preferences.getInt("GroupLed", 0xff0000ff);
+-                    chatType = TYPE_GROUP;
+-                }
+-            } else if (userId != 0) {
+-                long soundDocumentId = preferences.getLong(story ? "StoriesSoundDocId" : "GlobalSoundDocId", 0);
+-                if (soundDocumentId != 0) {
+-                    isInternalSoundFile = true;
+-                    soundPath = getMediaDataController().ringtoneDataStore.getSoundPath(soundDocumentId);
+-                } else {
+-                    soundPath = preferences.getString(story ? "StoriesSoundPath" : "GlobalSoundPath", defaultPath);
+-                }
+-                vibrate = preferences.getInt("vibrate_messages", 0);
+-                importance = preferences.getInt("priority_messages", 1);
+-                ledColor = preferences.getInt("MessagesLed", 0xff0000ff);
+-                chatType = story ? TYPE_STORIES : TYPE_PRIVATE;
+-            }
+-            if (vibrate == 4) {
+-                vibrateOnlyIfSilent = true;
+-                vibrate = 0;
+-            }
+-            if (!TextUtils.isEmpty(customSoundPath) && !TextUtils.equals(soundPath, customSoundPath)) {
+-                isInternalSoundFile = customIsInternalSound;
+-                soundPath = customSoundPath;
+-                isDefault = false;
+-            }
+-            if (customImportance != 3 && importance != customImportance) {
+-                importance = customImportance;
+-                isDefault = false;
+-            }
+-            if (customLedColor != null && customLedColor != ledColor) {
+-                ledColor = customLedColor;
+-                isDefault = false;
+-            }
+-            if (customVibrate != 0 && customVibrate != 4 && customVibrate != vibrate) {
+-                vibrate = customVibrate;
+-                isDefault = false;
+-            }
+-            if (isInApp) {
+-                if (!preferences.getBoolean("EnableInAppSounds", true)) {
+-                    soundPath = null;
+-                }
+-                if (!preferences.getBoolean("EnableInAppVibrate", true)) {
+-                    vibrate = 2;
+-                }
+-                if (preferences.getBoolean("EnableInAppPopup", true)) {
+-                    importance = 2;
+-                } else {
+-                    importance = 0;
+-                }
+-            }
+-            if (vibrateOnlyIfSilent && vibrate != 2) {
+-                try {
+-                    int mode = audioManager.getRingerMode();
+-                    if (mode != AudioManager.RINGER_MODE_SILENT && mode != AudioManager.RINGER_MODE_VIBRATE) {
+-                        vibrate = 2;
+-                    }
+-                } catch (Exception e) {
+-                    FileLog.e(e);
+-                }
+-            }
+-
+-            if (notifyDisabled) {
+-                vibrate = 0;
+-                importance = 0;
+-                ledColor = 0;
+-                soundPath = null;
+-            }
++            boolean isDefault = inu_settings.isDefault;
++            boolean isInApp = inu_settings.isInApp;
++            int chatType = inu_settings.chatType;
+ 
+             Intent intent = new Intent(ApplicationLoader.applicationContext, LaunchActivity.class);
+             intent.setAction("com.tmessages.openchat" + Math.random() + Integer.MAX_VALUE);
+@@ -5669,7 +5765,14 @@ public class NotificationsController extends BaseController implements Notificat
+             }
+ 
+             if (Build.VERSION.SDK_INT >= 26) {
+-                setNotificationChannel(mainNotification, builder, useSummaryNotification);
++                if (useSummaryNotification) {
++                    boolean inu_alerts = !isSilent && (dialogKey.story ? chatType == TYPE_STORIES : chatType != TYPE_STORIES && dialogId == lastDialogId && topicId == lastTopicId);
++                    builder.setGroupAlertBehavior(inu_alerts ? NotificationCompat.GROUP_ALERT_CHILDREN : NotificationCompat.GROUP_ALERT_SUMMARY);
++                    builder.setOnlyAlertOnce(!inu_alerts);
++                    builder.setChannelId(inu_validateChannelIdForDialog(dialogId, topicId, dialogKey.story, lastMessageObject, chat != null ? chat.id : 0, chat == null ? dialogId : 0, isChannel, name));
++                } else {
++                    setNotificationChannel(mainNotification, builder, useSummaryNotification);
++                }
+             }
+             FileLog.d("showExtraNotifications: holders.add " + dialogId);
+             holders.add(new NotificationHolder(internalId, dialogId, dialogKey.story, topicId, name, user, chat, builder));
+@@ -5680,6 +5783,11 @@ public class NotificationsController extends BaseController implements Notificat
+             if (BuildVars.LOGS_ENABLED) {
+                 FileLog.d("show summary with id " + notificationId);
+             }
++            if (Build.VERSION.SDK_INT >= 26) {
++                notificationBuilder.setChannelId(OTHER_NOTIFICATIONS_CHANNEL);
++                notificationBuilder.setGroupAlertBehavior(NotificationCompat.GROUP_ALERT_CHILDREN);
++                mainNotification = notificationBuilder.build();
++            }
+             try {
+                 notificationManager.notify(notificationId, mainNotification);
+             } catch (SecurityException e) {
