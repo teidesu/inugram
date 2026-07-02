@@ -8,7 +8,6 @@ import desu.inugram.helpers.LoginHelper
 import desu.inugram.helpers.ProxyVpnHelper
 import desu.inugram.helpers.UrlCleanerHelper
 import desu.inugram.helpers.cloud.CloudSettingsHelper
-import desu.inugram.helpers.font.FontConfig
 import desu.inugram.helpers.font.FontHelper
 import desu.inugram.helpers.maps.MapsHelper
 import desu.inugram.helpers.security.PasscodeHelper
@@ -24,6 +23,7 @@ import org.telegram.messenger.R
 import org.telegram.messenger.Utilities
 import org.telegram.tgnet.TLObject
 import org.telegram.ui.Components.AnimatedFloat
+import org.telegram.ui.Components.BulletinFactory
 import org.telegram.ui.Components.GestureDetector2
 import org.telegram.ui.Components.GestureDetectorFixDoubleTap
 import org.telegram.ui.LaunchActivity
@@ -88,6 +88,21 @@ object InuHooks {
     fun onDeepLink(activity: LaunchActivity, intent: Intent?): Boolean {
         return PasscodeHelper.tryHandleDeepLink(activity, intent)
             || SearchRegistry.tryHandleDeepLink(activity, intent)
+            || tryHandleFunDeepLink(activity, intent)
+    }
+
+    private fun tryHandleFunDeepLink(activity: LaunchActivity, intent: Intent?): Boolean {
+        val uri = intent?.data ?: return false
+        if (uri.scheme != "tg") return false
+        val host = uri.host ?: uri.schemeSpecificPart?.removePrefix("//")?.substringBefore('/')
+        val (icon, text) = when (host) {
+            "nya" -> R.raw.msg_emoji_cat to "meow~"
+            "woof" -> R.raw.msg_emoji_activities to "woof :3"
+            else -> return false
+        }
+        val fragment = activity.actionBarLayout?.lastFragment ?: return false
+        BulletinFactory.of(fragment).createSimpleBulletin(icon, text).show()
+        return true
     }
 
     @JvmStatic
