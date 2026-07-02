@@ -224,7 +224,7 @@ index 0000000..0000000 100644
  
          switchingAccount = false;
      }
-@@ -3349,12 +3349,7 @@ public class LaunchActivity extends BasePermissionsActivity implements INavigati
+@@ -3350,12 +3350,7 @@ public class LaunchActivity extends BasePermissionsActivity implements INavigati
                      }
                  } else {
                      if (actionBarLayout.getFragmentStack().isEmpty()) {
@@ -238,7 +238,7 @@ index 0000000..0000000 100644
                      }
                  }
              } else {
-@@ -3362,12 +3357,7 @@ public class LaunchActivity extends BasePermissionsActivity implements INavigati
+@@ -3363,12 +3358,7 @@ public class LaunchActivity extends BasePermissionsActivity implements INavigati
                      if (!UserConfig.getInstance(currentAccount).isClientActivated()) {
                          actionBarLayout.addFragmentToStack(getClientNotActivatedFragment(), INavigationLayout.FORCE_NOT_ATTACH_VIEW);
                      } else {

@@ -5,7 +5,7 @@ Subject: paranoia mode (hide chats, accounts, disguise as stock app)
 
 ---
  .../java/org/telegram/messenger/ContactsController.java   | 1 +
- .../java/org/telegram/messenger/MediaDataController.java  | 2 ++
+ .../java/org/telegram/messenger/MediaDataController.java  | 3 +++
  .../java/org/telegram/messenger/MessagesController.java   | 3 +++
  .../main/java/org/telegram/messenger/MessagesStorage.java | 7 +++++++
  .../org/telegram/messenger/NotificationsController.java   | 3 +++
@@ -19,7 +19,7 @@ Subject: paranoia mode (hide chats, accounts, disguise as stock app)
  .../main/java/org/telegram/ui/GroupCreateActivity.java    | 4 +++-
  .../src/main/java/org/telegram/ui/SessionBottomSheet.java | 3 +++
  .../java/org/telegram/ui/Stories/StoriesController.java   | 1 +
- 15 files changed, 44 insertions(+), 7 deletions(-)
+ 15 files changed, 45 insertions(+), 7 deletions(-)
 
 diff --git a/TMessagesProj/src/main/java/org/telegram/messenger/ContactsController.java b/TMessagesProj/src/main/java/org/telegram/messenger/ContactsController.java
 index 0000000..0000000 100644
@@ -37,7 +37,15 @@ diff --git a/TMessagesProj/src/main/java/org/telegram/messenger/MediaDataControl
 index 0000000..0000000 100644
 --- a/TMessagesProj/src/main/java/org/telegram/messenger/MediaDataController.java
 +++ b/TMessagesProj/src/main/java/org/telegram/messenger/MediaDataController.java
-@@ -5251,6 +5251,7 @@ public class MediaDataController extends BaseController {
+@@ -5177,6 +5177,7 @@ public class MediaDataController extends BaseController {
+                         arrayList.clear();
+                     }
+                 }
++                desu.inugram.helpers.ShortcutHelper.sync(ApplicationLoader.applicationContext);
+             } catch (Throwable ignore) {
+ 
+             }
+@@ -5251,6 +5252,7 @@ public class MediaDataController extends BaseController {
                          inlineBots = inlineBotsNew;
                          guestBots = guestsBotsNew;
                          webapps = webappsNew;
@@ -45,7 +53,7 @@ index 0000000..0000000 100644
                          buildShortcuts();
                          getNotificationCenter().postNotificationName(NotificationCenter.reloadHints);
                          getNotificationCenter().postNotificationName(NotificationCenter.reloadInlineHints);
-@@ -5310,6 +5311,7 @@ public class MediaDataController extends BaseController {
+@@ -5310,6 +5312,7 @@ public class MediaDataController extends BaseController {
                          }
                      }
                      getUserConfig().saveConfig(false);

@@ -14,7 +14,7 @@ diff --git a/TMessagesProj/src/main/java/org/telegram/messenger/MediaDataControl
 index 0000000..0000000 100644
 --- a/TMessagesProj/src/main/java/org/telegram/messenger/MediaDataController.java
 +++ b/TMessagesProj/src/main/java/org/telegram/messenger/MediaDataController.java
-@@ -6829,6 +6829,7 @@ public class MediaDataController extends BaseController {
+@@ -6830,6 +6830,7 @@ public class MediaDataController extends BaseController {
                  if (arrayList != null) {
                      for (int b = 0; b < arrayList.size(); b++) {
                          MessageObject m = arrayList.get(b);

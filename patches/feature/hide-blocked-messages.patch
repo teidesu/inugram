@@ -17,7 +17,7 @@ diff --git a/TMessagesProj/src/main/java/org/telegram/messenger/MediaDataControl
 index 0000000..0000000 100644
 --- a/TMessagesProj/src/main/java/org/telegram/messenger/MediaDataController.java
 +++ b/TMessagesProj/src/main/java/org/telegram/messenger/MediaDataController.java
-@@ -6981,7 +6981,7 @@ public class MediaDataController extends BaseController {
+@@ -6982,7 +6982,7 @@ public class MediaDataController extends BaseController {
      }
  
      public static void addTextStyleRuns(MessageObject msg, Spannable text) {
@@ -26,7 +26,7 @@ index 0000000..0000000 100644
      }
  
      public static void addTextStyleRuns(TLRPC.DraftMessage msg, Spannable text, int allowedFlags) {
-@@ -6989,7 +6989,7 @@ public class MediaDataController extends BaseController {
+@@ -6990,7 +6990,7 @@ public class MediaDataController extends BaseController {
      }
  
      public static void addTextStyleRuns(MessageObject msg, Spannable text, int allowedFlags) {

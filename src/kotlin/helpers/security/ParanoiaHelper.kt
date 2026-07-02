@@ -1,5 +1,6 @@
 package desu.inugram.helpers.security
 
+import android.app.Activity
 import android.content.Context
 import androidx.core.content.edit
 import org.telegram.messenger.ApplicationLoader
@@ -56,6 +57,7 @@ object ParanoiaHelper {
     fun setHidden(account: Int, ids: Collection<Long>) {
         prefs.edit { putStringSet("hiddenChats$account", ids.map(Long::toString).toHashSet()) }
         hiddenCache = null
+        reconcileLauncherShortcut()
     }
 
     var whitelist: Boolean
@@ -98,6 +100,25 @@ object ParanoiaHelper {
         get() = prefs.getBoolean("disguiseIcon", false)
         set(value) = prefs.edit { putBoolean("disguiseIcon", value) }
 
+    // opt-in: expose a launcher long-press shortcut to enter paranoia mode.
+    var launcherShortcut: Boolean
+        get() = prefs.getBoolean("launcherShortcut", false)
+        set(value) = prefs.edit { putBoolean("launcherShortcut", value) }
+
+    // same precondition as entering via the settings button: an exit code and at least one picked chat.
+    fun canUseLauncherShortcut(account: Int = UserConfig.selectedAccount): Boolean =
+        hasExitCode() && getHidden(account).isNotEmpty()
+
+    // shown only when armed-able and not already armed (while armed it must vanish).
+    @JvmStatic
+    fun shouldShowLauncherShortcut(): Boolean =
+        launcherShortcut && !isParanoia() && canUseLauncherShortcut()
+
+    // force the toggle off once its preconditions no longer hold (e.g. hidden set cleared).
+    private fun reconcileLauncherShortcut() {
+        if (launcherShortcut && !canUseLauncherShortcut()) launcherShortcut = false
+    }
+
     @Volatile
     private var disguisedCache: Boolean? = null
 
@@ -138,6 +159,7 @@ object ParanoiaHelper {
 
     fun setExitCode(code: String) {
         SecretHash.store(prefs, "exitHash", "exitSalt", code.trim())
+        reconcileLauncherShortcut()
     }
 
     // strips hidden peers from frequent-contacts hints (search "People" row + app shortcuts).
@@ -165,11 +187,19 @@ object ParanoiaHelper {
         return SecretHash.verify(prefs, "exitHash", "exitSalt", query.trim())
     }
 
-    fun enableParanoia(fragment: BaseFragment) = setParanoia(fragment, true)
+    fun enableParanoia(fragment: BaseFragment) {
+        fragment.parentActivity?.let { enableParanoia(it) }
+    }
 
-    fun disableParanoia(fragment: BaseFragment) = setParanoia(fragment, false)
+    fun disableParanoia(fragment: BaseFragment) {
+        fragment.parentActivity?.let { disableParanoia(it) }
+    }
 
-    private fun setParanoia(fragment: BaseFragment, value: Boolean) {
+    fun enableParanoia(activity: Activity) = setParanoia(activity, true)
+
+    fun disableParanoia(activity: Activity) = setParanoia(activity, false)
+
+    private fun setParanoia(activity: Activity, value: Boolean) {
         if (value) {
             if (disguiseIcon) enableDisguise()
         } else {
@@ -178,6 +208,6 @@ object ParanoiaHelper {
         // need commit synchronously
         prefs.edit(commit = true) { putBoolean("paranoia", value) }
         paranoiaCache = value
-        fragment.parentActivity?.let { InuUtils.restartApp(it) }
+        InuUtils.restartApp(activity)
     }
 }

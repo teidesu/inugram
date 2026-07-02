@@ -4,6 +4,7 @@ import android.content.Context
 import android.os.Bundle
 import android.view.View
 import desu.inugram.helpers.InuUtils
+import desu.inugram.helpers.ShortcutHelper
 import desu.inugram.helpers.security.ParanoiaHelper
 import desu.inugram.ui.showInputDialog
 import org.telegram.messenger.LocaleController
@@ -63,6 +64,14 @@ class ParanoiaActivity : SettingsPageActivity() {
 
         items.add(
             UItem.asCheck(
+                TOGGLE_LAUNCHER_SHORTCUT,
+                LocaleController.getString(R.string.InuParanoiaLauncherShortcut)
+            ).setChecked(ParanoiaHelper.launcherShortcut)
+        )
+        items.add(UItem.asShadow(LocaleController.getString(R.string.InuParanoiaLauncherShortcutInfo)))
+
+        items.add(
+            UItem.asCheck(
                 TOGGLE_HIDE_OTHER_ACCOUNTS,
                 LocaleController.getString(R.string.InuParanoiaHideOtherAccounts)
             ).setChecked(ParanoiaHelper.hideOtherAccounts)
@@ -103,12 +112,27 @@ class ParanoiaActivity : SettingsPageActivity() {
                 listView.adapter.update(true)
             }
 
+            TOGGLE_LAUNCHER_SHORTCUT -> {
+                if (!ParanoiaHelper.launcherShortcut && !ParanoiaHelper.canUseLauncherShortcut()) {
+                    BulletinFactory.of(this)
+                        .createErrorBulletin(LocaleController.getString(R.string.InuParanoiaNeedSetup))
+                        .show()
+                    return
+                }
+                toggleCheck(view, ParanoiaHelper.launcherShortcut) { ParanoiaHelper.launcherShortcut = it }
+                syncShortcut()
+            }
+
             TOGGLE_DISGUISE -> toggleCheck(view, ParanoiaHelper.disguiseIcon) { ParanoiaHelper.disguiseIcon = it }
             TOGGLE_HIDE_OTHER_ACCOUNTS -> toggleCheck(view, ParanoiaHelper.hideOtherAccounts) { ParanoiaHelper.hideOtherAccounts = it }
             TOGGLE_HIDE_FOLDERS -> toggleCheck(view, ParanoiaHelper.hideFolders) { ParanoiaHelper.hideFolders = it }
             TOGGLE_DISABLE_NOTIFICATIONS -> toggleCheck(view, ParanoiaHelper.disableNotifications) { ParanoiaHelper.disableNotifications = it }
             TOGGLE_HIDE_SETTINGS -> toggleCheck(view, ParanoiaHelper.hideSettings) { ParanoiaHelper.hideSettings = it }
         }
+    }
+
+    private fun syncShortcut() {
+        parentActivity?.let { ShortcutHelper.sync(it) }
     }
 
     private inline fun toggleCheck(view: View, current: Boolean, set: (Boolean) -> Unit) {
@@ -134,6 +158,7 @@ class ParanoiaActivity : SettingsPageActivity() {
         fragment.setDelegate { _, _, ids ->
             ParanoiaHelper.setHidden(currentAccount, ids)
             listView.adapter.update(true)
+            syncShortcut()
         }
         presentFragment(fragment)
     }
@@ -152,6 +177,7 @@ class ParanoiaActivity : SettingsPageActivity() {
             }
             ParanoiaHelper.setExitCode(code)
             listView.adapter.update(true)
+            syncShortcut()
             BulletinFactory.of(this)
                 .createSimpleBulletin(R.raw.done, LocaleController.getString(R.string.InuParanoiaExitCodeSaved))
                 .show()
@@ -182,6 +208,7 @@ class ParanoiaActivity : SettingsPageActivity() {
         private val SELECT_CHATS = InuUtils.generateId()
         private val SET_CODE = InuUtils.generateId()
         private val TOGGLE_WHITELIST = InuUtils.generateId()
+        private val TOGGLE_LAUNCHER_SHORTCUT = InuUtils.generateId()
         private val TOGGLE_DISGUISE = InuUtils.generateId()
         private val TOGGLE_HIDE_OTHER_ACCOUNTS = InuUtils.generateId()
         private val TOGGLE_HIDE_FOLDERS = InuUtils.generateId()

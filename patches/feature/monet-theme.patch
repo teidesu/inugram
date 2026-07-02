@@ -6,8 +6,7 @@ Subject: monet theme, almost directly ported from NagramX
 ---
  .../java/org/telegram/ui/ActionBar/Theme.java | 61 ++++++++++++++++++-
  .../java/org/telegram/ui/DialogsActivity.java |  4 ++
- .../java/org/telegram/ui/LaunchActivity.java  |  1 +
- 3 files changed, 64 insertions(+), 2 deletions(-)
+ 2 files changed, 63 insertions(+), 2 deletions(-)
 
 diff --git a/TMessagesProj/src/main/java/org/telegram/ui/ActionBar/Theme.java b/TMessagesProj/src/main/java/org/telegram/ui/ActionBar/Theme.java
 index 0000000..0000000 100644
@@ -129,15 +128,3 @@ index 0000000..0000000 100644
          io.setDimAlpha(0x08);
  
          final Activity activity = getParentActivity();
-diff --git a/TMessagesProj/src/main/java/org/telegram/ui/LaunchActivity.java b/TMessagesProj/src/main/java/org/telegram/ui/LaunchActivity.java
-index 0000000..0000000 100644
---- a/TMessagesProj/src/main/java/org/telegram/ui/LaunchActivity.java
-+++ b/TMessagesProj/src/main/java/org/telegram/ui/LaunchActivity.java
-@@ -7023,6 +7023,7 @@ public class LaunchActivity extends BasePermissionsActivity implements INavigati
-         if (Theme.selectedAutoNightType == Theme.AUTO_NIGHT_TYPE_SYSTEM) {
-             Theme.checkAutoNightThemeConditions();
-         }
-+        desu.inugram.InuHooks.onResume(this);
-         checkWasMutedByAdmin(true);
-         //FileLog.d("UI resume time = " + (SystemClock.elapsedRealtime() - ApplicationLoader.startTime));
-         NotificationCenter.getGlobalInstance().postNotificationName(NotificationCenter.startAllHeavyOperations, 4096);

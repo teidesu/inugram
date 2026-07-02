@@ -159,6 +159,7 @@ most things are toggleable in `Settings → Inugram`, with sensible opinionated 
   - optionally silence all notifications while enabled
   - optionally hide all other accounts while enabled
   - optionally collapse folder tabs (show only All Chats) while enabled
+  - optional launcher long-press shortcut to enter it quickly (hidden while active)
 - biometric confirmation before deleting/clearing a chat or logging out - *inspired by [Cherrygram](https://github.com/arsLan4k1390/Cherrygram)*
 
 ## behavior
@@ -208,6 +209,7 @@ most things are toggleable in `Settings → Inugram`, with sensible opinionated 
 
 - gboard image paste no longer skips PhotoViewer
 - photo crop silently not applied to the sent image
+- crop preview no longer low-quality/artifacted for hd photos (editor decoded at 1280px while send re-encoded original at 2560px)
 - sticker creator output sent as photo when high-quality default is on
 - recyclerlistview double-tap requires same view
 - dialogs list pull-to-reveal-archive glitches

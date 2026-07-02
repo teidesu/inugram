@@ -7,13 +7,12 @@ Subject: passcode-related features (per-account pin, panic pin, hidden accounts)
  .../java/org/telegram/ui/Components/AlertsCreator.java   | 2 +-
  .../java/org/telegram/ui/Components/PasscodeView.java    | 4 ++--
  .../src/main/java/org/telegram/ui/DialogsActivity.java   | 9 +++++++++
- .../src/main/java/org/telegram/ui/LaunchActivity.java    | 1 +
  .../src/main/java/org/telegram/ui/LoginActivity.java     | 1 +
  .../src/main/java/org/telegram/ui/MainTabsActivity.java  | 2 +-
  .../src/main/java/org/telegram/ui/PasscodeActivity.java  | 6 +++++-
  .../src/main/java/org/telegram/ui/SettingsActivity.java  | 2 +-
  .../src/main/java/org/telegram/ui/UserInfoActivity.java  | 2 +-
- 9 files changed, 22 insertions(+), 7 deletions(-)
+ 8 files changed, 21 insertions(+), 7 deletions(-)
 
 diff --git a/TMessagesProj/src/main/java/org/telegram/ui/Components/AlertsCreator.java b/TMessagesProj/src/main/java/org/telegram/ui/Components/AlertsCreator.java
 index 0000000..0000000 100644
@@ -70,18 +69,6 @@ index 0000000..0000000 100644
          }
  
          actionBar.setActionBarMenuOnItemClick(new ActionBar.ActionBarMenuOnItemClick() {
-diff --git a/TMessagesProj/src/main/java/org/telegram/ui/LaunchActivity.java b/TMessagesProj/src/main/java/org/telegram/ui/LaunchActivity.java
-index 0000000..0000000 100644
---- a/TMessagesProj/src/main/java/org/telegram/ui/LaunchActivity.java
-+++ b/TMessagesProj/src/main/java/org/telegram/ui/LaunchActivity.java
-@@ -1558,6 +1558,7 @@ public class LaunchActivity extends BasePermissionsActivity implements INavigati
-         if (GiftInfoBottomSheet.handleIntent(intent, progress)) {
-             return true;
-         }
-+        if (desu.inugram.InuHooks.onDeepLink(this, intent)) return true;
-         if (UserSelectorBottomSheet.handleIntent(intent, progress)) {
-             return true;
-         }
 diff --git a/TMessagesProj/src/main/java/org/telegram/ui/LoginActivity.java b/TMessagesProj/src/main/java/org/telegram/ui/LoginActivity.java
 index 0000000..0000000 100644
 --- a/TMessagesProj/src/main/java/org/telegram/ui/LoginActivity.java

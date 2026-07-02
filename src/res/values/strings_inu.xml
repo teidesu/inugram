@@ -586,6 +586,8 @@
     <string name="InuDisguiseName" translatable="false">Telegram</string>
     <string name="InuParanoiaMode">Paranoia mode</string>
     <string name="InuParanoiaModeInfo">Paranoia mode lets you \"prepare\" for someone else checking your phone, by hiding any \"dangerous\" chats, and optionally disguising as the stock app.</string>
+    <string name="InuParanoiaLauncherShortcut">Launcher shortcut</string>
+    <string name="InuParanoiaLauncherShortcutInfo">Add a long-press shortcut on the app icon to quickly enter paranoia mode. Hidden while active.</string>
     <string name="InuParanoiaSelect">Chats to hide</string>
     <string name="InuParanoiaSelectWhitelist">Chats to show</string>
     <string name="InuParanoiaSelectInfo">Secret chats are always hidden. Service notifications stay visible.</string>

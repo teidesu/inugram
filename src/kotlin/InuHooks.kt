@@ -6,6 +6,7 @@ import android.os.Build
 import desu.inugram.helpers.CrashReporter
 import desu.inugram.helpers.LoginHelper
 import desu.inugram.helpers.ProxyVpnHelper
+import desu.inugram.helpers.ShortcutHelper
 import desu.inugram.helpers.UrlCleanerHelper
 import desu.inugram.helpers.cloud.CloudSettingsHelper
 import desu.inugram.helpers.font.FontHelper
@@ -85,10 +86,11 @@ object InuHooks {
     }
 
     @JvmStatic
-    fun onDeepLink(activity: LaunchActivity, intent: Intent?): Boolean {
+    fun handleIntent(activity: LaunchActivity, intent: Intent?): Boolean {
         return PasscodeHelper.tryHandleDeepLink(activity, intent)
             || SearchRegistry.tryHandleDeepLink(activity, intent)
             || tryHandleFunDeepLink(activity, intent)
+            || ShortcutHelper.handleAction(activity, intent)
     }
 
     private fun tryHandleFunDeepLink(activity: LaunchActivity, intent: Intent?): Boolean {

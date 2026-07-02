@@ -100,7 +100,7 @@ diff --git a/TMessagesProj/src/main/java/org/telegram/ui/LaunchActivity.java b/T
 index 0000000..0000000 100644
 --- a/TMessagesProj/src/main/java/org/telegram/ui/LaunchActivity.java
 +++ b/TMessagesProj/src/main/java/org/telegram/ui/LaunchActivity.java
-@@ -1712,7 +1712,7 @@ public class LaunchActivity extends BasePermissionsActivity implements INavigati
+@@ -1713,7 +1713,7 @@ public class LaunchActivity extends BasePermissionsActivity implements INavigati
                              if ((text.startsWith("http://") || text.startsWith("https://")) && !TextUtils.isEmpty(subject)) {
                                  text = subject + "\n" + text;
                              }

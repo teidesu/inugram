@@ -58,6 +58,7 @@ bugfix/attach-panel-perf.patch
 feature/remember-all-replies.patch
 bugfix/attach-panel-close.patch
 feature/max-chat-input-lines.patch
+hooks/launch-activity.patch
 feature/monet-theme.patch
 feature/ios-menu-gesture.patch
 feature/old-mention-indicator.patch
