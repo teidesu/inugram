@@ -10,6 +10,7 @@ Subject: added some missing Emoji.replaceEmoji calls in various places
  .../org/telegram/ui/Cells/DialogCell.java     |  1 +
  .../ui/Cells/GroupCallInvitedCell.java        |  5 +++-
  .../telegram/ui/Cells/GroupCallUserCell.java  |  5 +++-
+ .../telegram/ui/Cells/ManageChatUserCell.java |  3 ++-
  .../telegram/ui/Cells/MemberRequestCell.java  |  9 +++++--
  .../org/telegram/ui/Cells/MentionCell.java    |  2 ++
  .../org/telegram/ui/Cells/SharedLinkCell.java |  6 ++++-
@@ -28,7 +29,7 @@ Subject: added some missing Emoji.replaceEmoji calls in various places
  .../java/org/telegram/ui/PhotoViewer.java     |  1 +
  .../org/telegram/ui/SettingsActivity.java     |  6 +++--
  .../recorder/CaptionContainerView.java        | 13 ++++++++++
- 24 files changed, 117 insertions(+), 37 deletions(-)
+ 25 files changed, 119 insertions(+), 38 deletions(-)
 
 diff --git a/TMessagesProj/src/main/java/org/telegram/ui/ActionBar/ActionBarMenuItem.java b/TMessagesProj/src/main/java/org/telegram/ui/ActionBar/ActionBarMenuItem.java
 index 0000000..0000000 100644
@@ -209,6 +210,27 @@ index 0000000..0000000 100644
              botVerificationIcon = DialogObject.getBotVerificationIcon(currentUser);
              if (currentUser != null && currentUser.verified) {
                  rightDrawable.set(verifiedDrawable = (verifiedDrawable == null ? new VerifiedDrawable(getContext()) : verifiedDrawable), animated);
+diff --git a/TMessagesProj/src/main/java/org/telegram/ui/Cells/ManageChatUserCell.java b/TMessagesProj/src/main/java/org/telegram/ui/Cells/ManageChatUserCell.java
+index 0000000..0000000 100644
+--- a/TMessagesProj/src/main/java/org/telegram/ui/Cells/ManageChatUserCell.java
++++ b/TMessagesProj/src/main/java/org/telegram/ui/Cells/ManageChatUserCell.java
+@@ -116,6 +116,7 @@ public class ManageChatUserCell extends FrameLayout {
+         statusTextView.setTextSize(14);
+         statusTextView.setGravity((LocaleController.isRTL ? Gravity.RIGHT : Gravity.LEFT) | Gravity.TOP);
+         addView(statusTextView, LayoutHelper.createFrame(LayoutHelper.MATCH_PARENT, 20, (LocaleController.isRTL ? Gravity.RIGHT : Gravity.LEFT) | Gravity.TOP, LocaleController.isRTL ? 28 : (68 + namePadding), 34.5f, LocaleController.isRTL ? (68 + namePadding) : 28, 0));
++        NotificationCenter.listenEmojiLoading(statusTextView);
+ 
+         if (needOption) {
+             optionsButton = new ImageView(context);
+@@ -172,7 +173,7 @@ public class ManageChatUserCell extends FrameLayout {
+             avatarImageView.setImageDrawable(null);
+             return;
+         }
+-        currentStatus = status;
++        currentStatus = status != null ? Emoji.replaceEmoji(status, statusTextView.getPaint().getFontMetricsInt(), false) : null;
+         currentName = name;
+         currentObject = object;
+         if (optionsButton != null) {
 diff --git a/TMessagesProj/src/main/java/org/telegram/ui/Cells/MemberRequestCell.java b/TMessagesProj/src/main/java/org/telegram/ui/Cells/MemberRequestCell.java
 index 0000000..0000000 100644
 --- a/TMessagesProj/src/main/java/org/telegram/ui/Cells/MemberRequestCell.java
