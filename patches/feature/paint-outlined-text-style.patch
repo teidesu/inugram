@@ -73,7 +73,7 @@ diff --git a/TMessagesProj/src/main/java/org/telegram/ui/Components/Paint/Views/
 index 0000000..0000000 100644
 --- a/TMessagesProj/src/main/java/org/telegram/ui/Components/Paint/Views/TextPaintView.java
 +++ b/TMessagesProj/src/main/java/org/telegram/ui/Components/Paint/Views/TextPaintView.java
-@@ -364,6 +364,7 @@ public class TextPaintView extends EntityView {
+@@ -368,6 +368,7 @@ public class TextPaintView extends EntityView {
  
      public void updateColor() {
          editText.setShadowLayer(0, 0, 0, 0);
@@ -81,7 +81,7 @@ index 0000000..0000000 100644
          int textColor = swatch.color;
          if (currentType == 0) {
              editText.setFrameColor(swatch.color);
-@@ -372,8 +373,11 @@ public class TextPaintView extends EntityView {
+@@ -376,8 +377,11 @@ public class TextPaintView extends EntityView {
              editText.setFrameColor(AndroidUtilities.computePerceivedBrightness(swatch.color) >= .25f ? 0x99000000 : 0x99ffffff);
          } else if (currentType == 2) {
              editText.setFrameColor(AndroidUtilities.computePerceivedBrightness(swatch.color) >= .25f ? Color.BLACK : Color.WHITE);

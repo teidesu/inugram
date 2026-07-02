@@ -11,7 +11,9 @@ Subject: force system font for ui
  .../ui/Components/AnimatedEmojiSpan.java      |  1 +
  .../ui/Components/AnimatedTextView.java       |  1 +
  .../ui/Components/Paint/PaintTypeface.java    | 63 +++++++------------
- 7 files changed, 35 insertions(+), 41 deletions(-)
+ .../Paint/Views/PaintTextOptionsView.java     |  5 +-
+ .../Components/Paint/Views/TextPaintView.java |  4 ++
+ 9 files changed, 43 insertions(+), 42 deletions(-)
 
 diff --git a/TMessagesProj/src/main/java/org/telegram/messenger/AndroidUtilities.java b/TMessagesProj/src/main/java/org/telegram/messenger/AndroidUtilities.java
 index 0000000..0000000 100644
@@ -214,3 +216,36 @@ index 0000000..0000000 100644
                  PaintTypeface.typefaces = typefaces;
                  loadingTypefaces = false;
                  NotificationCenter.getGlobalInstance().postNotificationName(NotificationCenter.customTypefacesLoaded);
+diff --git a/TMessagesProj/src/main/java/org/telegram/ui/Components/Paint/Views/PaintTextOptionsView.java b/TMessagesProj/src/main/java/org/telegram/ui/Components/Paint/Views/PaintTextOptionsView.java
+index 0000000..0000000 100644
+--- a/TMessagesProj/src/main/java/org/telegram/ui/Components/Paint/Views/PaintTextOptionsView.java
++++ b/TMessagesProj/src/main/java/org/telegram/ui/Components/Paint/Views/PaintTextOptionsView.java
+@@ -218,9 +218,12 @@ public class PaintTextOptionsView extends FrameLayout implements NotificationCen
+         for (PaintTypeface typeface : PaintTypeface.get()) {
+             if (typeface.getKey().equals(key)) {
+                 typefaceCell.bind(typeface);
+-                break;
++                return;
+             }
+         }
++        if (PaintTypeface.typefaces != null && !PaintTypeface.get().isEmpty()) {
++            typefaceCell.bind(PaintTypeface.get().get(0));
++        }
+     }
+ 
+     public void setDelegate(Delegate delegate) {
+diff --git a/TMessagesProj/src/main/java/org/telegram/ui/Components/Paint/Views/TextPaintView.java b/TMessagesProj/src/main/java/org/telegram/ui/Components/Paint/Views/TextPaintView.java
+index 0000000..0000000 100644
+--- a/TMessagesProj/src/main/java/org/telegram/ui/Components/Paint/Views/TextPaintView.java
++++ b/TMessagesProj/src/main/java/org/telegram/ui/Components/Paint/Views/TextPaintView.java
+@@ -270,6 +270,10 @@ public class TextPaintView extends EntityView {
+                 break;
+             }
+         }
++        if (!found && PaintTypeface.typefaces != null && !PaintTypeface.get().isEmpty()) {
++            setTypeface(PaintTypeface.get().get(0));
++            found = true;
++        }
+         lastTypefaceKey = found ? null : key;
+         updateSelectionView();
+     }

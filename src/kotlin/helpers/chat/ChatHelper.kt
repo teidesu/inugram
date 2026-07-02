@@ -23,6 +23,7 @@ import androidx.core.content.edit
 import desu.inugram.InuConfig
 import desu.inugram.helpers.InuUtils
 import desu.inugram.helpers.cloud.SettingsBackupHelper
+import desu.inugram.helpers.font.FontImportHelper
 import desu.inugram.helpers.menu.MessageMenuConfig
 import desu.inugram.helpers.menu.reorderByMenu
 import desu.inugram.helpers.translate.TranslateHelper
@@ -786,13 +787,19 @@ object ChatHelper {
     @JvmStatic
     fun maybeHandleFileClick(activity: ChatActivity, message: MessageObject): Boolean {
         val name = message.documentName ?: return false
-        if (!name.endsWith(SettingsBackupHelper.FILENAME_SUFFIX)) return false
+        val isSettings = name.endsWith(SettingsBackupHelper.FILENAME_SUFFIX)
+        val isFont = !isSettings && FontImportHelper.isFontFileName(name)
+        if (!isSettings && !isFont) return false
         val attach = message.messageOwner?.attachPath?.takeIf { it.isNotEmpty() }?.let { File(it) }
         val file = attach?.takeIf { it.exists() }
             ?: FileLoader.getInstance(activity.currentAccount).getPathToMessage(message.messageOwner)
                 ?.takeIf { it.exists() }
             ?: return false
-        SettingsBackupHelper.startImportFromFile(activity, file)
+        if (isSettings) {
+            SettingsBackupHelper.startImportFromFile(activity, file)
+        } else {
+            FontImportHelper.startImportFromFile(activity, message, file, name)
+        }
         return true
     }
 

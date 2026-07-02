@@ -512,16 +512,64 @@ object FontLibrary {
             } catch (_: Throwable) {
                 continue
             }
-            val raws = SfntParser.parse(tmp)
-            if (raws.isEmpty()) {
-                tmp.delete()
-                continue
-            }
-            val family = raws.mapNotNull { it.family?.takeIf(String::isNotBlank) }
-                .groupingBy { it }.eachCount().maxByOrNull { it.value }?.key
-            staged.add(StagedFile(tmp, raws, family))
+            stageParsedFile(tmp, staged)
         }
 
+        return mergeStagedFiles(dir, staging, staged)
+    }
+
+    fun importFromFile(source: File): Int {
+        val dir = rootDir ?: return 0
+        val staging = File(dir, STAGING).apply { mkdirs() }
+        val tmp = File(staging, "s0_${System.nanoTime()}.bin")
+        val staged = ArrayList<StagedFile>()
+        try {
+            source.copyTo(tmp, overwrite = true)
+            stageParsedFile(tmp, staged)
+        } catch (_: Throwable) {
+        }
+        return mergeStagedFiles(dir, staging, staged)
+    }
+
+    class FontInfo(val family: String?, val faces: List<SfntParser.RawFace>) {
+        val faceCount get() = faces.size
+        val variable get() = faces.any { it.variable }
+    }
+
+    fun inspectFont(file: File): FontInfo? {
+        val raws = SfntParser.parse(file)
+        if (raws.isEmpty()) return null
+        val family = raws.mapNotNull { it.family?.takeIf(String::isNotBlank) }
+            .groupingBy { it }.eachCount().maxByOrNull { it.value }?.key
+        return FontInfo(family, raws)
+    }
+
+    enum class InstallKind { NEW, ADD, REINSTALL }
+
+    class InstallStatus(val kind: InstallKind, val familyName: String?)
+
+    fun getInstallStatus(info: FontInfo): InstallStatus {
+        val familyName = info.family
+        val existing = synchronized(lock) {
+            familyName?.let { name -> families.values.firstOrNull { it.name.equals(name, ignoreCase = true) } }
+        } ?: return InstallStatus(InstallKind.NEW, familyName)
+        val existingKeys = existing.faces.mapTo(HashSet()) { it.weight to it.italic }
+        val allPresent = info.faces.all { (it.weight to it.italic) in existingKeys }
+        return InstallStatus(if (allPresent) InstallKind.REINSTALL else InstallKind.ADD, existing.name ?: familyName)
+    }
+
+    private fun stageParsedFile(tmp: File, out: MutableList<StagedFile>) {
+        val raws = SfntParser.parse(tmp)
+        if (raws.isEmpty()) {
+            tmp.delete()
+            return
+        }
+        val family = raws.mapNotNull { it.family?.takeIf(String::isNotBlank) }
+            .groupingBy { it }.eachCount().maxByOrNull { it.value }?.key
+        out.add(StagedFile(tmp, raws, family))
+    }
+
+    private fun mergeStagedFiles(dir: File, staging: File, staged: List<StagedFile>): Int {
         // 2. bucket files by family name; files with no name each get their own bucket
         val buckets = LinkedHashMap<String, MutableList<StagedFile>>()
         for (s in staged) {
@@ -559,6 +607,17 @@ object FontLibrary {
                         s.file.delete()
                     } catch (_: Throwable) {
                         continue
+                    }
+                }
+                // replace any existing face with the same weight/italic; drop its blob if now orphaned
+                val incomingKeys = s.faces.mapTo(HashSet()) { it.weight to it.italic }
+                val replaced = faces.filter { (it.weight to it.italic) in incomingKeys }
+                if (replaced.isNotEmpty()) {
+                    faces.removeAll(replaced)
+                    for (rem in replaced) {
+                        if (faces.none { it.file == rem.file }) {
+                            File(rem.file).let { if (it.isAbsolute) it else File(targetDir, rem.file) }.delete()
+                        }
                     }
                 }
                 for (r in s.faces) {

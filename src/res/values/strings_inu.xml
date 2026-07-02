@@ -242,6 +242,17 @@
     <string name="InuFontDefault">Default</string>
     <string name="InuFontSystem">System</string>
     <string name="InuFontImportFailed">Could not import font. Make sure it is a TTF/OTF/TTC file.</string>
+    <string name="InuFontInstall">Install</string>
+    <string name="InuFontReinstall">Reinstall</string>
+    <string name="InuFontAddToFamily">Add to %1$s</string>
+    <string name="InuFontInstalled">Font installed</string>
+    <string name="InuFontOpenIn">Open in…</string>
+    <string name="InuFontOpenInFailed">No app can open this file</string>
+    <string name="InuFontPreviewSample">The quick brown fox jumps over the lazy dog</string>
+    <string name="InuFontVariableSlant">Variable font (%1$s)</string>
+    <string name="InuFontStyleRegular">Regular</string>
+    <string name="InuFontStyleItalic">Italic</string>
+    <string name="InuFontStyleItalicSuffix">%1$s Italic</string>
     <string name="InuFontIncludeSystem">Include system fonts</string>
     <string name="InuFontIncludeSystemInfo">Show fonts provided by the system in the list below</string>
     <string name="InuFontTagStock">Stock</string>
@@ -479,6 +490,8 @@
     <string name="InuBackupImportNoChanges">This file matches your current settings</string>
     <string name="InuBackupImportSheetChanges_one">**%1$d** change will be applied to the current settings.</string>
     <string name="InuBackupImportSheetChanges_other">**%1$d** changes will be applied to the current settings.</string>
+    <string name="InuFontStyles_one">%1$d style</string>
+    <string name="InuFontStyles_other">%1$d styles</string>
     <string name="InuBackupImportSheetApply">Yes, apply</string>
     <string name="InuBackupImportSheetCancel">No, leave as is</string>
     <string name="InuCloudSync">Sync settings</string>
