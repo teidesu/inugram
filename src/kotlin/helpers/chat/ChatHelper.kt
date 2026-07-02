@@ -1053,34 +1053,38 @@ object ChatHelper {
                 else -> false
             }
 
-            ChatActivity.OPTION_REPLY -> when (InuConfig.REPLY_LONG_TAP_ACTION.value) {
-                InuConfig.ReplyLongTapItem.OFF -> false
-                InuConfig.ReplyLongTapItem.CHOOSE_MODE -> openLongTapSubmenu(activity, popupLayout, cell) { swb ->
-                    swb.add(R.drawable.menu_reply, LocaleController.getString(R.string.Reply)) {
-                        activity.processSelectedOption(ChatActivity.OPTION_REPLY)
-                    }
-                    swb.add(R.drawable.menu_reply, LocaleController.getString(R.string.InuReplyIn)) {
-                        activity.processSelectedOption(OPTION_REPLY_IN)
-                    }
-                    if (canReplyInDms(activity, message)) {
-                        swb.add(R.drawable.msg_mention, LocaleController.getString(R.string.InuReplyInDms)) {
-                            activity.processSelectedOption(OPTION_REPLY_IN_DMS)
+            ChatActivity.OPTION_REPLY -> {
+                val noforwards = activity.isPeerNoForwards || (message.messageOwner != null && message.messageOwner.noforwards)
+                if (noforwards) return false
+                when (InuConfig.REPLY_LONG_TAP_ACTION.value) {
+                    InuConfig.ReplyLongTapItem.OFF -> false
+                    InuConfig.ReplyLongTapItem.CHOOSE_MODE -> openLongTapSubmenu(activity, popupLayout, cell) { swb ->
+                        swb.add(R.drawable.menu_reply, LocaleController.getString(R.string.Reply)) {
+                            activity.processSelectedOption(ChatActivity.OPTION_REPLY)
+                        }
+                        swb.add(R.drawable.menu_reply, LocaleController.getString(R.string.InuReplyIn)) {
+                            activity.processSelectedOption(OPTION_REPLY_IN)
+                        }
+                        if (canReplyInDms(activity, message)) {
+                            swb.add(R.drawable.msg_mention, LocaleController.getString(R.string.InuReplyInDms)) {
+                                activity.processSelectedOption(OPTION_REPLY_IN_DMS)
+                            }
                         }
                     }
-                }
 
-                InuConfig.ReplyLongTapItem.REPLY_IN -> {
-                    activity.processSelectedOption(OPTION_REPLY_IN)
-                    true
-                }
+                    InuConfig.ReplyLongTapItem.REPLY_IN -> {
+                        activity.processSelectedOption(OPTION_REPLY_IN)
+                        true
+                    }
 
-                InuConfig.ReplyLongTapItem.REPLY_IN_DMS -> {
-                    val target = if (canReplyInDms(activity, message)) OPTION_REPLY_IN_DMS else OPTION_REPLY_IN
-                    activity.processSelectedOption(target)
-                    true
-                }
+                    InuConfig.ReplyLongTapItem.REPLY_IN_DMS -> {
+                        val target = if (canReplyInDms(activity, message)) OPTION_REPLY_IN_DMS else OPTION_REPLY_IN
+                        activity.processSelectedOption(target)
+                        true
+                    }
 
-                else -> false
+                    else -> false
+                }
             }
 
             else -> false
