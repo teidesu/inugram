@@ -85,6 +85,7 @@ object ChatHelper {
     const val OPTION_SUMMARIZE = 511
     const val OPTION_REMOVE_FROM_CACHE = 512
     const val OPTION_COPY_MEDIA = 513
+    const val OPTION_REPEAT = 514
 
     @JvmStatic
     fun timeAdditionsHash(msg: MessageObject?): Int {
@@ -245,6 +246,14 @@ object ChatHelper {
             items.add(LocaleController.getString(R.string.InuForwardNoQuote))
             options.add(OPTION_FORWARD_NO_QUOTE)
             icons.add(R.drawable.msg_forward_noquote)
+        }
+
+        if (isMenuItemEnabled(MessageMenuConfig.Item.REPEAT) &&
+            canRepeatMessage(activity, selectedObject, selectedObjectGroup, noforwards)
+        ) {
+            items.add(LocaleController.getString(R.string.InuRepeat))
+            options.add(OPTION_REPEAT)
+            icons.add(R.drawable.msg_retry)
         }
 
         val chatInfo = activity.currentChatInfo
@@ -557,6 +566,8 @@ object ChatHelper {
 
             OPTION_SHOW_IN_CHAT -> openInNewChat(activity, activity.dialogId, selectedObject.id)
 
+            OPTION_REPEAT -> repeatMessage(activity, selectedObject, selectedObjectGroup)
+
             OPTION_COPY_MEDIA -> {
                 val file = mediaFileForCopy(activity.currentAccount, selectedObject)
                 if (file != null && InuUtils.copyFileUriToClipboard(file)) {
@@ -570,6 +581,69 @@ object ChatHelper {
             else -> return false
         }
         return true
+    }
+
+    private fun canRepeatMessage(
+        activity: ChatActivity,
+        selected: MessageObject,
+        group: MessageObject.GroupedMessages?,
+        noforwards: Boolean,
+    ): Boolean {
+        if (activity.chatMode != ChatActivity.MODE_DEFAULT) return false
+        if (activity.currentEncryptedChat != null) return false
+        val chat = activity.currentChat
+        if (chat != null && !ChatObject.canSendMessages(chat)) return false
+        if (selected.id <= 0 || selected.isSponsored || selected.isExpiredStory) return false
+        if (noforwards) return repeatCopyTarget(activity, selected, group) != null
+        return selected.canForwardMessage()
+    }
+
+    private fun repeatCopyTarget(
+        activity: ChatActivity,
+        selected: MessageObject,
+        group: MessageObject.GroupedMessages?,
+    ): MessageObject? {
+        val target = if (group != null && !group.isDocuments) {
+            group.messages.singleOrNull { !it.messageOwner?.message.isNullOrEmpty() }
+        } else {
+            selected.takeIf { !it.messageOwner?.message.isNullOrEmpty() || it.isAnyKindOfSticker }
+        } ?: return null
+        if (target.isAnyKindOfSticker) {
+            if (target.document == null) return null
+            val chat = activity.currentChat
+            if (chat != null && !ChatObject.canSendStickers(chat)) return null
+        }
+        return target
+    }
+
+    private fun repeatMessage(
+        activity: ChatActivity,
+        selected: MessageObject,
+        group: MessageObject.GroupedMessages?,
+    ) {
+        val noforwards = activity.isPeerNoForwards || selected.messageOwner?.noforwards == true
+        if (noforwards) {
+            val target = repeatCopyTarget(activity, selected, group) ?: return
+            val helper = SendMessagesHelper.getInstance(activity.currentAccount)
+            if (target.isAnyKindOfSticker) {
+                helper.sendSticker(
+                    target.document, null, activity.dialogId, null, activity.threadMessage, null, null, null,
+                    true, 0, 0, false, null, activity.quickReplyShortcut, activity.quickReplyId, 0L,
+                    activity.sendMonoForumPeerId, activity.sendMessageSuggestionParams,
+                )
+            } else {
+                val params = SendMessagesHelper.SendMessageParams.of(
+                    target.messageOwner.message, activity.dialogId, null, activity.threadMessage,
+                    null, false, target.messageOwner.entities, null, null, true, 0, 0, null, false,
+                )
+                params.monoForumPeer = activity.sendMonoForumPeerId
+                params.suggestionParams = activity.sendMessageSuggestionParams
+                helper.sendMessage(params)
+            }
+            return
+        }
+        val messages = group?.messages?.let { ArrayList<MessageObject>(it) } ?: arrayListOf(selected)
+        activity.forwardMessages(messages, true, false, true, 0, 0L)
     }
 
     // photo → full cached photo file; video/gif/round → cached poster thumb (matches photo viewer's "copy frame" intent).

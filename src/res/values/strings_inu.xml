@@ -412,6 +412,7 @@
     <string name="InuForwardLongTapOff">Off</string>
     <string name="InuLongTapChooseMode">Ask every time</string>
     <string name="InuForwardNoQuote">No-Quote forward</string>
+    <string name="InuRepeat">Repeat</string>
     <string name="InuReplyInDms">Reply in DMs</string>
     <string name="InuHiddenCaptionDescription">Captions removed</string>
     <string name="InuHiddenSendersAndCaptionDescription">Sender names and captions removed</string>
