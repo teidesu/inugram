@@ -26,6 +26,7 @@ import androidx.appcompat.widget.TooltipCompat
 import desu.inugram.InuConfig
 import desu.inugram.ui.FormattingPopupConfig
 import org.telegram.messenger.AndroidUtilities
+import org.telegram.messenger.CodeHighlighting
 import org.telegram.messenger.LocaleController
 import org.telegram.ui.ActionBar.Theme
 import org.telegram.ui.Components.EditTextBoldCursor
@@ -140,7 +141,8 @@ class FormattingPopup private constructor(private val edit: EditTextCaption) {
                 FormattingPopupConfig.Item.MONO -> addStyleItem(
                     item.iconRes,
                     item.labelRes,
-                    TextStyleSpan.FLAG_STYLE_MONO
+                    TextStyleSpan.FLAG_STYLE_MONO,
+                    onLongClick = { promptCodeBlock() },
                 )
 
                 FormattingPopupConfig.Item.SPOILER -> addItem(item.iconRes, item.labelRes, { hasSpoiler() }) {
@@ -178,14 +180,20 @@ class FormattingPopup private constructor(private val edit: EditTextCaption) {
         }
     }
 
-    private fun addStyleItem(iconRes: Int, tooltipRes: Int, flag: Int) {
-        addItem(iconRes, tooltipRes, { hasStyleFlag(flag) }) {
+    private fun addStyleItem(iconRes: Int, tooltipRes: Int, flag: Int, onLongClick: (() -> Unit)? = null) {
+        addItem(iconRes, tooltipRes, { hasStyleFlag(flag) }, onLongClick) {
             if (hasStyleFlag(flag)) clearStyleFlag(flag)
             else applyStyleFlag(flag)
         }
     }
 
-    private fun addItem(iconRes: Int, tooltipRes: Int, isActive: () -> Boolean, onClick: () -> Unit) {
+    private fun addItem(
+        iconRes: Int,
+        tooltipRes: Int,
+        isActive: () -> Boolean,
+        onLongClick: (() -> Unit)? = null,
+        onClick: () -> Unit,
+    ) {
         val tint = Theme.getColor(Theme.key_actionBarDefaultSubmenuItem)
         val icon = ImageView(ctx).apply {
             setImageResource(iconRes)
@@ -204,6 +212,12 @@ class FormattingPopup private constructor(private val edit: EditTextCaption) {
             onClick()
             for (it in items) it.refresh(force = true)
             sync()
+        }
+        if (onLongClick != null) {
+            view.setOnLongClickListener {
+                onLongClick()
+                true
+            }
         }
         items.add(item)
         groups.last().add(item)
@@ -435,6 +449,39 @@ class FormattingPopup private constructor(private val edit: EditTextCaption) {
         } else {
             edit.invalidateSpoilers()
         }
+    }
+
+    private fun promptCodeBlock() {
+        val (s, e) = currentRange() ?: return
+        val dialog = showInputDialog(
+            ctx,
+            title = LocaleController.getString(R.string.InuCodeLanguage),
+            hint = "auto",
+            adaptive = edit.adaptiveCreateLinkDialog,
+        ) { lang ->
+            applyCodeBlock(s, e, lang)
+            true
+        }
+        edit.creationLinkDialog = dialog
+        dialog.setOnDismissListener {
+            edit.creationLinkDialog = null
+            edit.requestFocus()
+        }
+    }
+
+    private fun applyCodeBlock(s: Int, e: Int, lang: String) {
+        val text = edit.text ?: return
+        if (e > text.length) return
+        for (span in text.getSpans(s, e, CodeHighlighting.Span::class.java)) {
+            text.removeSpan(span)
+        }
+        val code = text.subSequence(s, e).toString()
+        text.setSpan(
+            CodeHighlighting.Span(true, 0, null, lang, code),
+            s, e, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE,
+        )
+        for (it in items) it.refresh(force = true)
+        sync()
     }
 
     private fun clearQuote() {

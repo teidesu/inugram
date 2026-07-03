@@ -1,5 +1,6 @@
 package desu.inugram.ui
 
+import android.content.Context
 import android.content.DialogInterface
 import android.text.InputType
 import android.util.TypedValue
@@ -10,6 +11,7 @@ import org.telegram.messenger.AndroidUtilities
 import org.telegram.messenger.LocaleController
 import org.telegram.messenger.R
 import org.telegram.ui.ActionBar.AlertDialog
+import org.telegram.ui.ActionBar.AlertDialogDecor
 import org.telegram.ui.ActionBar.BaseFragment
 import org.telegram.ui.ActionBar.Theme
 import org.telegram.ui.Components.EditTextBoldCursor
@@ -29,7 +31,25 @@ fun showInputDialog(
     onSubmit: (String) -> Boolean,
 ): AlertDialog? {
     val ctx = fragment.parentActivity ?: return null
-    val theme = fragment.resourceProvider
+    return showInputDialog(
+        ctx, fragment.resourceProvider, title, hint, initialText, selectAll, inputType,
+        showDialog = { fragment.showDialog(it) },
+        onSubmit = onSubmit,
+    )
+}
+
+fun showInputDialog(
+    ctx: Context,
+    theme: Theme.ResourcesProvider? = null,
+    title: CharSequence,
+    hint: CharSequence? = null,
+    initialText: CharSequence? = null,
+    selectAll: Boolean = false,
+    inputType: Int = InputType.TYPE_CLASS_TEXT,
+    adaptive: Boolean = false,
+    showDialog: (AlertDialog) -> Unit = { it.show() },
+    onSubmit: (String) -> Boolean,
+): AlertDialog {
     val typedInputType = inputType
     val editText = EditTextBoldCursor(ctx).apply {
         background = null
@@ -69,7 +89,8 @@ fun showInputDialog(
         if (!ok) AndroidUtilities.shakeView(editText)
         ok
     }
-    val dialog = AlertDialog.Builder(ctx, theme)
+    val builder = if (adaptive) AlertDialogDecor.Builder(ctx, theme) else AlertDialog.Builder(ctx, theme)
+    val dialog = builder
         .setTitle(title)
         .setView(container)
         .setNegativeButton(LocaleController.getString(R.string.Cancel), null)
@@ -85,7 +106,11 @@ fun showInputDialog(
             AndroidUtilities.showKeyboard(editText)
         }
     }
-    fragment.showDialog(dialog)
+    if (adaptive) {
+        (dialog as AlertDialogDecor).showDelayed(250)
+    } else {
+        showDialog(dialog)
+    }
     dialog.getButton(DialogInterface.BUTTON_POSITIVE)?.setOnClickListener {
         if (submit()) dialog.dismiss()
     }
