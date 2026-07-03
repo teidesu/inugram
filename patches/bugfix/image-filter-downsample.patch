@@ -1,0 +1,25 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: alina sireneva <alina@tei.su>
+Date: Sat, 4 Jul 2026 03:43:31 +0400
+Subject: fix blurry filtered images decoded below the requested size
+
+---
+ .../src/main/java/org/telegram/messenger/ImageLoader.java     | 4 ++--
+ 1 file changed, 2 insertions(+), 2 deletions(-)
+
+diff --git a/TMessagesProj/src/main/java/org/telegram/messenger/ImageLoader.java b/TMessagesProj/src/main/java/org/telegram/messenger/ImageLoader.java
+index 0000000..0000000 100644
+--- a/TMessagesProj/src/main/java/org/telegram/messenger/ImageLoader.java
++++ b/TMessagesProj/src/main/java/org/telegram/messenger/ImageLoader.java
+@@ -1316,9 +1316,9 @@ public class ImageLoader {
+                             opts.inJustDecodeBounds = false;
+                             if (scaleFactor > 1.0f && (photoW > w_filter || photoH > h_filter)) {
+                                 int sample = 1;
+-                                do {
++                                while (sample * 2 <= scaleFactor) {
+                                     sample *= 2;
+-                                } while (sample * 2 < scaleFactor);
++                                }
+                                 opts.inSampleSize = sample;
+                             } else {
+                                 opts.inSampleSize = (int) scaleFactor;

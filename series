@@ -212,3 +212,4 @@ bugfix/reply-longpress-cancel.patch
 bugfix/open-in-preview.patch
 bugfix/topic-separator-avatar-hitbox.patch
 bugfix/expandable-switch-badge-overlap.patch
+bugfix/image-filter-downsample.patch
