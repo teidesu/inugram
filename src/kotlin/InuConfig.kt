@@ -479,8 +479,22 @@ object InuConfig {
     @JvmField
     val ROUND_RECORDER_DUAL_CAMERA = BoolItem("round_recorder_dual_camera", true)
 
+    // todo: remove in 40
+    class NonIslandSplitFromTabBarsItem(key: String) : BoolItem(key, false) {
+        override fun read(prefs: SharedPreferences): Boolean {
+            if (prefs.contains(key)) return prefs.getBoolean(key, default)
+            if (!prefs.contains("non_island_tab_bars")) return default
+            val migrated = prefs.getBoolean("non_island_tab_bars", false)
+            prefs.edit { putBoolean(key, migrated) }
+            return migrated
+        }
+    }
+
     @JvmField
-    val NON_ISLAND_TAB_BARS = BoolItem("non_island_tab_bars", false)
+    val NON_ISLAND_FOLDERS_BAR = NonIslandSplitFromTabBarsItem("non_island_folders_bar")
+
+    @JvmField
+    val NON_ISLAND_SHARED_MEDIA_TABS = NonIslandSplitFromTabBarsItem("non_island_shared_media_tabs")
 
     @JvmField
     val NON_ISLAND_GLOBAL_SEARCH = BoolItem("non_island_global_search", false)

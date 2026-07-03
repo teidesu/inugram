@@ -79,12 +79,12 @@ object VoiceRecorderHelper {
 
         val buttonsWrapper = alert.buttonsRecyclerViewWrapper
 
-        val tabBarHeight = if (NonIslandHelper.tabBars()) 48 else 70
+        val tabBarHeight = if (NonIslandHelper.chatElements()) 48 else 70
         val fabLayoutParams = LayoutHelper.createFrame(
             FAB_SIZE.toFloat(), FAB_SIZE.toFloat(),
             Gravity.BOTTOM or Gravity.RIGHT,
             0f, 0f,
-            (if (NonIslandHelper.tabBars()) 0 else FAB_MARGIN).toFloat(),
+            (if (NonIslandHelper.chatElements()) 0 else FAB_MARGIN).toFloat(),
             (tabBarHeight + FAB_MARGIN).toFloat()
         )
 

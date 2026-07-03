@@ -238,7 +238,8 @@
     <string name="InuAnimationSpeed">アニメーション速度</string>
     <string name="InuAnimationSpeedInstant">瞬時</string>
     <string name="InuAnimationSpeedInfo">注：スプリングベースのアニメーション（ボトムシート、ポップアップ、一部の遷移）と一部のアニメーションは影響を受けません。</string>
-    <string name="InuNonIslandTabBars">タブバー</string>
+    <string name="InuNonIslandFoldersBar">フォルダーバー</string>
+    <string name="InuNonIslandSharedMediaTabs">共有メディアのタブ</string>
     <string name="InuNonIslandGlobalSearch">グローバル検索</string>
     <string name="InuNonIslandChatElements">チャット要素</string>
     <string name="InuNonIslandHint">アイランド UI（「Liquid Glass」とも呼ばれる）は、明らかに iOS に着想を得た新しい (>12.6) UI デザインです。ここではその一部の変更を可能な範囲で元に戻せます。\n視覚的なバグが残っている可能性があるのでご注意ください。</string>

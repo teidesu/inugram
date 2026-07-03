@@ -21,7 +21,10 @@ import desu.inugram.ui.BlurBehindHelper
 
 object NonIslandHelper {
     @JvmStatic
-    fun tabBars(): Boolean = InuConfig.NON_ISLAND_TAB_BARS.value
+    fun foldersBar(): Boolean = InuConfig.NON_ISLAND_FOLDERS_BAR.value
+
+    @JvmStatic
+    fun sharedMediaTabs(): Boolean = InuConfig.NON_ISLAND_SHARED_MEDIA_TABS.value
 
     @JvmStatic
     fun globalSearch(): Boolean = InuConfig.NON_ISLAND_GLOBAL_SEARCH.value
@@ -49,7 +52,7 @@ object NonIslandHelper {
         wrapper: FrameLayout,
         recyclerView: RecyclerListView,
     ) {
-        if (!tabBars()) return
+        if (!chatElements()) return
         wrapper.background = null
         wrapper.clipChildren = false
         recyclerView.clipToOutline = false
@@ -71,7 +74,7 @@ object NonIslandHelper {
     // DialogsActivity.java
     @JvmStatic
     fun applyFilterTabBar(tabsView: FilterTabsView, contentView: SizeNotifierFrameLayout) {
-        if (!tabBars()) return
+        if (!foldersBar()) return
         tabsView.setBlurredBackground(null)
         tabsView.background = null
         tabsView.inu_blurHelper = BlurBehindHelper(tabsView, contentView, Theme.key_windowBackgroundWhite)

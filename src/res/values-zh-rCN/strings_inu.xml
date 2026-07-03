@@ -238,7 +238,8 @@
     <string name="InuAnimationSpeed">动画速度</string>
     <string name="InuAnimationSpeedInstant">瞬间</string>
     <string name="InuAnimationSpeedInfo">注意：基于弹簧的动画（底部弹层、弹窗、部分过渡）和某些动画不受影响。</string>
-    <string name="InuNonIslandTabBars">标签栏</string>
+    <string name="InuNonIslandFoldersBar">文件夹栏</string>
+    <string name="InuNonIslandSharedMediaTabs">共享媒体标签</string>
     <string name="InuNonIslandGlobalSearch">全局搜索</string>
     <string name="InuNonIslandChatElements">聊天元素</string>
     <string name="InuNonIslandHint">「岛」界面（也叫「Liquid Glass」）是新的 (>12.6) 界面设计，明显受 iOS 启发。在这里可以尽力撤销其中部分改动。\n可能仍有视觉缺陷，请知悉。</string>

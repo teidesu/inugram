@@ -360,7 +360,8 @@
     <string name="InuAnimationSpeed">Animation speed</string>
     <string name="InuAnimationSpeedInstant">Instant</string>
     <string name="InuAnimationSpeedInfo">Note: spring-based animations (bottom sheets, popups, some transitions) and some other animations are not affected.</string>
-    <string name="InuNonIslandTabBars">Tab bars</string>
+    <string name="InuNonIslandFoldersBar">Folders bar</string>
+    <string name="InuNonIslandSharedMediaTabs">Shared media tabs</string>
     <string name="InuNonIslandGlobalSearch">Global search</string>
     <string name="InuNonIslandChatElements">Chat elements</string>
     <string name="InuNonIslandHint">Classic UI reverts some of the new (>12.6) "Liquid Glass" UI changes back towards the older flat design (best-effort).\nThere are probably a bunch of visual bugs, so be advised.</string>

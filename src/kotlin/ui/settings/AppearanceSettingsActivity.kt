@@ -100,9 +100,15 @@ class AppearanceSettingsActivity : SettingsPageActivity() {
         )
         items.add(
             UItem.asCheck(
-                TOGGLE_NON_ISLAND_TAB_BARS,
-                LocaleController.getString(R.string.InuNonIslandTabBars),
-            ).setChecked(InuConfig.NON_ISLAND_TAB_BARS.value)
+                TOGGLE_NON_ISLAND_FOLDERS_BAR,
+                LocaleController.getString(R.string.InuNonIslandFoldersBar),
+            ).setChecked(InuConfig.NON_ISLAND_FOLDERS_BAR.value)
+        )
+        items.add(
+            UItem.asCheck(
+                TOGGLE_NON_ISLAND_SHARED_MEDIA_TABS,
+                LocaleController.getString(R.string.InuNonIslandSharedMediaTabs),
+            ).setChecked(InuConfig.NON_ISLAND_SHARED_MEDIA_TABS.value)
         )
         items.add(
             UItem.asCheck(
@@ -241,10 +247,15 @@ class AppearanceSettingsActivity : SettingsPageActivity() {
                 showRestartBulletin()
             }
 
-            TOGGLE_NON_ISLAND_TAB_BARS -> {
-                val new = InuConfig.NON_ISLAND_TAB_BARS.toggle()
+            TOGGLE_NON_ISLAND_FOLDERS_BAR -> {
+                val new = InuConfig.NON_ISLAND_FOLDERS_BAR.toggle()
                 (view as? TextCheckCell)?.isChecked = new
                 softRebuild()
+            }
+
+            TOGGLE_NON_ISLAND_SHARED_MEDIA_TABS -> {
+                val new = InuConfig.NON_ISLAND_SHARED_MEDIA_TABS.toggle()
+                (view as? TextCheckCell)?.isChecked = new
             }
 
             TOGGLE_NON_ISLAND_GLOBAL_SEARCH -> {
@@ -292,7 +303,8 @@ class AppearanceSettingsActivity : SettingsPageActivity() {
     companion object {
         private val TOGGLE_HIDE_FADE_VIEW = InuUtils.generateId()
         private val TOGGLE_NAVIGATION_DRAWER = InuUtils.generateId()
-        private val TOGGLE_NON_ISLAND_TAB_BARS = InuUtils.generateId()
+        private val TOGGLE_NON_ISLAND_FOLDERS_BAR = InuUtils.generateId()
+        private val TOGGLE_NON_ISLAND_SHARED_MEDIA_TABS = InuUtils.generateId()
         private val TOGGLE_NON_ISLAND_GLOBAL_SEARCH = InuUtils.generateId()
         private val TOGGLE_NON_ISLAND_CHAT_ELEMENTS = InuUtils.generateId()
         private val BUTTON_FONTS = InuUtils.generateId()
@@ -342,7 +354,8 @@ class AppearanceSettingsActivity : SettingsPageActivity() {
                 SearchRegistry.Entry("font", R.string.InuFonts, BUTTON_FONTS),
                 SearchRegistry.Entry("predictive-back-mode", R.string.InuPredictiveBack, BUTTON_PREDICTIVE_BACK_MODE),
                 SearchRegistry.Entry("navigation-drawer", R.string.InuNavigationDrawer, TOGGLE_NAVIGATION_DRAWER),
-                SearchRegistry.Entry("non-island-tab-bars", R.string.InuNonIslandTabBars, TOGGLE_NON_ISLAND_TAB_BARS),
+                SearchRegistry.Entry("non-island-folders-bar", R.string.InuNonIslandFoldersBar, TOGGLE_NON_ISLAND_FOLDERS_BAR),
+                SearchRegistry.Entry("non-island-shared-media-tabs", R.string.InuNonIslandSharedMediaTabs, TOGGLE_NON_ISLAND_SHARED_MEDIA_TABS),
                 SearchRegistry.Entry("non-island-global-search", R.string.InuNonIslandGlobalSearch, TOGGLE_NON_ISLAND_GLOBAL_SEARCH),
                 SearchRegistry.Entry("non-island-chat-elements", R.string.InuNonIslandChatElements, TOGGLE_NON_ISLAND_CHAT_ELEMENTS),
                 SearchRegistry.Entry("hide-fade-view", R.string.InuHideFadeView, TOGGLE_HIDE_FADE_VIEW),

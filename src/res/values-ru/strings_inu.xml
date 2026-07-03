@@ -238,7 +238,8 @@
     <string name="InuAnimationSpeed">Скорость анимаций</string>
     <string name="InuAnimationSpeedInstant">Мгновенно</string>
     <string name="InuAnimationSpeedInfo">Примечание: пружинные анимации (нижние шторки, всплывающие окна, некоторые переходы) и часть других анимаций не затрагиваются.</string>
-    <string name="InuNonIslandTabBars">Панели вкладок</string>
+    <string name="InuNonIslandFoldersBar">Панель папок</string>
+    <string name="InuNonIslandSharedMediaTabs">Вкладки медиа</string>
     <string name="InuNonIslandGlobalSearch">Глобальный поиск</string>
     <string name="InuNonIslandChatElements">Элементы чата</string>
     <string name="InuNonIslandHint">«Островной» интерфейс (он же «Liquid Glass») — это новый дизайн (>12.6), явно вдохновлённый iOS. Здесь можно откатить часть этих изменений (по мере возможности).\nВероятно, остались визуальные баги — имейте в виду.</string>
