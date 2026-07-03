@@ -210,3 +210,4 @@ feature/high-quality-crop.patch
 bugfix/notification-channel-id.patch
 bugfix/reply-longpress-cancel.patch
 bugfix/open-in-preview.patch
+bugfix/topic-separator-avatar-hitbox.patch

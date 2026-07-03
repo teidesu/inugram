@@ -1,0 +1,31 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: alina sireneva <alina@tei.su>
+Date: Fri, 3 Jul 2026 21:04:40 +0400
+Subject: fix avatar hit area on messages below a topic separator
+
+---
+ .../src/main/java/org/telegram/ui/Cells/ChatMessageCell.java  | 4 ++--
+ 1 file changed, 2 insertions(+), 2 deletions(-)
+
+diff --git a/TMessagesProj/src/main/java/org/telegram/ui/Cells/ChatMessageCell.java b/TMessagesProj/src/main/java/org/telegram/ui/Cells/ChatMessageCell.java
+index 0000000..0000000 100644
+--- a/TMessagesProj/src/main/java/org/telegram/ui/Cells/ChatMessageCell.java
++++ b/TMessagesProj/src/main/java/org/telegram/ui/Cells/ChatMessageCell.java
+@@ -5095,7 +5095,7 @@ public class ChatMessageCell extends BaseCell implements SeekBar.SeekBarDelegate
+             final float y = getEventY(event);
+             if (event.getAction() == MotionEvent.ACTION_DOWN) {
+                 if (delegate == null || delegate.canPerformActions()) {
+-                    if (isAvatarVisible && avatarImage.isInsideImage(x, y + getTop())) {
++                    if (isAvatarVisible && avatarImage.isInsideImage(x, event.getY() + getTop())) {
+                         avatarPressed = true;
+                         result = true;
+                     } else if (psaButtonVisible && hasPsaHint && x >= psaHelpX && x <= psaHelpX + dp(40) && y >= psaHelpY && y <= psaHelpY + dp(40)) {
+@@ -5192,7 +5192,7 @@ public class ChatMessageCell extends BaseCell implements SeekBar.SeekBarDelegate
+                     } else if (event.getAction() == MotionEvent.ACTION_CANCEL) {
+                         avatarPressed = false;
+                     } else if (event.getAction() == MotionEvent.ACTION_MOVE) {
+-                        if (isAvatarVisible && !avatarImage.isInsideImage(x, y + getTop())) {
++                        if (isAvatarVisible && !avatarImage.isInsideImage(x, event.getY() + getTop())) {
+                             avatarPressed = false;
+                         }
+                     }

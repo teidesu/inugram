@@ -263,3 +263,4 @@ most things are toggleable in `Settings → Inugram`, with sensible opinionated 
 - fix deeplinking to a non-primary album member sometimes mis-anchoring
 - a bunch of stock memory/resource leaks
 - correctly handle "Open in..." in ChatAttachAlert: open editor before sending + support multi-attach
+- avatar of a bubble right below a topic separator (forum "All" tab) only clickable in its lower part
