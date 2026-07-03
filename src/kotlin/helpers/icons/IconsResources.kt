@@ -8,6 +8,12 @@ import desu.inugram.helpers.icons.SolarIconPack
 
 class IconsResources(resources: Resources) : Resources(resources.assets, resources.displayMetrics, resources.configuration) {
 
+    fun syncConfigurationFrom(base: Resources) {
+        if (configuration != base.configuration || displayMetrics != base.displayMetrics) {
+            updateConfiguration(base.configuration, base.displayMetrics)
+        }
+    }
+
     @SuppressLint("UseCompatLoadingForDrawables")
     @Deprecated("Deprecated in Java")
     @Throws(NotFoundException::class)

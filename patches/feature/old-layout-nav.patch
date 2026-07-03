@@ -184,7 +184,7 @@ diff --git a/TMessagesProj/src/main/java/org/telegram/ui/LaunchActivity.java b/T
 index 0000000..0000000 100644
 --- a/TMessagesProj/src/main/java/org/telegram/ui/LaunchActivity.java
 +++ b/TMessagesProj/src/main/java/org/telegram/ui/LaunchActivity.java
-@@ -606,8 +606,7 @@ public class LaunchActivity extends BasePermissionsActivity implements INavigati
+@@ -604,8 +604,7 @@ public class LaunchActivity extends BasePermissionsActivity implements INavigati
              if (!UserConfig.getInstance(currentAccount).isClientActivated()) {
                  actionBarLayout.addFragmentToStack(getClientNotActivatedFragment());
              } else {
@@ -194,7 +194,7 @@ index 0000000..0000000 100644
              }
  
              try {
-@@ -1228,10 +1227,10 @@ public class LaunchActivity extends BasePermissionsActivity implements INavigati
+@@ -1226,10 +1225,10 @@ public class LaunchActivity extends BasePermissionsActivity implements INavigati
  
      private boolean switchingAccount;
      public void switchToAccount(int account, boolean removeAll) {
@@ -207,7 +207,7 @@ index 0000000..0000000 100644
          if (account == UserConfig.selectedAccount || !UserConfig.isValidAccount(account)) {
              return;
          }
-@@ -1260,7 +1259,7 @@ public class LaunchActivity extends BasePermissionsActivity implements INavigati
+@@ -1258,7 +1257,7 @@ public class LaunchActivity extends BasePermissionsActivity implements INavigati
          } else {
              actionBarLayout.removeFragmentFromStack(0);
          }
@@ -216,7 +216,7 @@ index 0000000..0000000 100644
          actionBarLayout.addFragmentToStack(mainTabsActivity, INavigationLayout.FORCE_ATTACH_VIEW_AS_FIRST);
          actionBarLayout.rebuildFragments(INavigationLayout.REBUILD_FLAG_REBUILD_LAST);
          if (AndroidUtilities.isTablet()) {
-@@ -1274,6 +1273,7 @@ public class LaunchActivity extends BasePermissionsActivity implements INavigati
+@@ -1272,6 +1271,7 @@ public class LaunchActivity extends BasePermissionsActivity implements INavigati
              showTosActivity(account, UserConfig.getInstance(account).unacceptedTermsOfService);
          }
          updateCurrentConnectionState(currentAccount);
@@ -224,7 +224,7 @@ index 0000000..0000000 100644
  
          switchingAccount = false;
      }
-@@ -3350,12 +3350,7 @@ public class LaunchActivity extends BasePermissionsActivity implements INavigati
+@@ -3348,12 +3348,7 @@ public class LaunchActivity extends BasePermissionsActivity implements INavigati
                      }
                  } else {
                      if (actionBarLayout.getFragmentStack().isEmpty()) {
@@ -238,7 +238,7 @@ index 0000000..0000000 100644
                      }
                  }
              } else {
-@@ -3363,12 +3358,7 @@ public class LaunchActivity extends BasePermissionsActivity implements INavigati
+@@ -3361,12 +3356,7 @@ public class LaunchActivity extends BasePermissionsActivity implements INavigati
                      if (!UserConfig.getInstance(currentAccount).isClientActivated()) {
                          actionBarLayout.addFragmentToStack(getClientNotActivatedFragment(), INavigationLayout.FORCE_NOT_ATTACH_VIEW);
                      } else {

@@ -11,7 +11,7 @@ diff --git a/TMessagesProj/src/main/java/org/telegram/ui/LaunchActivity.java b/T
 index 0000000..0000000 100644
 --- a/TMessagesProj/src/main/java/org/telegram/ui/LaunchActivity.java
 +++ b/TMessagesProj/src/main/java/org/telegram/ui/LaunchActivity.java
-@@ -6610,6 +6610,7 @@ public class LaunchActivity extends BasePermissionsActivity implements INavigati
+@@ -6608,6 +6608,7 @@ public class LaunchActivity extends BasePermissionsActivity implements INavigati
              NotificationCenter.getInstance(currentAccount).removeObserver(this, NotificationCenter.stickersImportComplete);
              NotificationCenter.getInstance(currentAccount).removeObserver(this, NotificationCenter.currentUserShowLimitReachedDialog);
              NotificationCenter.getInstance(currentAccount).removeObserver(this, NotificationCenter.currentUserPremiumStatusChanged);
@@ -19,7 +19,7 @@ index 0000000..0000000 100644
              NotificationCenter.getInstance(currentAccount).removeObserver(this, NotificationCenter.guardBotDecisionResult);
          }
  
-@@ -6954,6 +6955,9 @@ public class LaunchActivity extends BasePermissionsActivity implements INavigati
+@@ -6952,6 +6953,9 @@ public class LaunchActivity extends BasePermissionsActivity implements INavigati
                  getOnBackInvokedDispatcher().unregisterOnBackInvokedCallback((OnBackInvokedCallback) onBackInvokedCallback);
              }
          }

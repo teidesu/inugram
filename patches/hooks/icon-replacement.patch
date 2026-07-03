@@ -4,8 +4,8 @@ Date: Tue, 28 Apr 2026 15:27:42 +0300
 Subject: add custom resource loader for icon replacement
 
 ---
- .../java/org/telegram/ui/LaunchActivity.java     | 16 ++++++++++++++++
- 1 file changed, 16 insertions(+)
+ .../main/java/org/telegram/ui/LaunchActivity.java  | 14 ++++++++++++++
+ 1 file changed, 14 insertions(+)
 
 diff --git a/TMessagesProj/src/main/java/org/telegram/ui/LaunchActivity.java b/TMessagesProj/src/main/java/org/telegram/ui/LaunchActivity.java
 index 0000000..0000000 100644
@@ -21,28 +21,19 @@ index 0000000..0000000 100644
  import android.database.Cursor;
  import android.graphics.Bitmap;
  import android.graphics.Canvas;
-@@ -252,6 +254,8 @@ import java.util.regex.Pattern;
- import java.util.zip.ZipEntry;
- import java.util.zip.ZipInputStream;
- 
-+import desu.inugram.helpers.icons.IconsResources;
-+
- public class LaunchActivity extends BasePermissionsActivity implements INavigationLayout.INavigationLayoutDelegate, NotificationCenter.NotificationCenterDelegate, DialogsActivity.DialogsActivityDelegate, IPipActivity {
-     public final static String EXTRA_FORCE_NOT_INTERNAL_APPS = "force_not_internal_apps";
-     public final static String EXTRA_FORCE_REQUEST = "force_request";
-@@ -387,6 +391,18 @@ public class LaunchActivity extends BasePermissionsActivity implements INavigati
+@@ -387,6 +389,18 @@ public class LaunchActivity extends BasePermissionsActivity implements INavigati
      private FrameMetricsOverlayView frameMetricsOverlayView;
      // private RefreshRateController refreshRateController;
  
-+    private AssetManager iconsAsset;
-+    private IconsResources customResources;
++    private desu.inugram.helpers.icons.IconsResources customResources;
 +
 +    @Override
 +    public Resources getResources() {
-+        if (iconsAsset != super.getResources().getAssets()) {
-+            customResources = new IconsResources(super.getResources());
-+            iconsAsset = super.getResources().getAssets();
++        Resources baseResources = super.getResources();
++        if (customResources == null) {
++            customResources = new desu.inugram.helpers.icons.IconsResources(baseResources);
 +        }
++        customResources.syncConfigurationFrom(baseResources);
 +        return customResources;
 +    }
 +
