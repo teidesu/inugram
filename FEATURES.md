@@ -11,7 +11,7 @@ most things are toggleable in `Settings → Inugram`, with sensible opinionated 
 
 - navigation drawer instead of bottom tabs, like in older Telegram versions
 - monet (material you) theme support - *ported from [NagramX](https://github.com/risin42/NagramX)*, plus a quick switcher in appearance settings (light/dark/amoled/auto)
-- 🐶 non-island ui mode for tab bars, global search and chat elements
+- 🐶 classic ui mode for tab bars, global search and chat elements (reverts the >12.6 "liquid glass" look)
 - icon replacement (currently: solar pack, [480 Design](https://t.me/Design480)) - *ported from [NagramX](https://github.com/risin42/NagramX)*
 - notification icon: Telegram (default) or Inugram
 - show seconds in timestamps

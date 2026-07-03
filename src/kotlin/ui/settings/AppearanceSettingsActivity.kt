@@ -91,6 +91,14 @@ class AppearanceSettingsActivity : SettingsPageActivity() {
             UItem.asHeader(addExperimentalSpan(LocaleController.getString(R.string.InuNonIslandUI)))
         )
         items.add(
+            mkTwoLineCheckItem(
+                TOGGLE_NAVIGATION_DRAWER,
+                R.string.InuNavigationDrawer,
+                R.string.InuNavigationDrawerInfo,
+                InuConfig.NAVIGATION_DRAWER.value,
+            )
+        )
+        items.add(
             UItem.asCheck(
                 TOGGLE_NON_ISLAND_TAB_BARS,
                 LocaleController.getString(R.string.InuNonIslandTabBars),
@@ -227,6 +235,12 @@ class AppearanceSettingsActivity : SettingsPageActivity() {
                 inu_rebuildSelf()
             }
 
+            TOGGLE_NAVIGATION_DRAWER -> {
+                val new = InuConfig.NAVIGATION_DRAWER.toggle()
+                (view as? NotificationsCheckCell)?.isChecked = new
+                showRestartBulletin()
+            }
+
             TOGGLE_NON_ISLAND_TAB_BARS -> {
                 val new = InuConfig.NON_ISLAND_TAB_BARS.toggle()
                 (view as? TextCheckCell)?.isChecked = new
@@ -277,6 +291,7 @@ class AppearanceSettingsActivity : SettingsPageActivity() {
 
     companion object {
         private val TOGGLE_HIDE_FADE_VIEW = InuUtils.generateId()
+        private val TOGGLE_NAVIGATION_DRAWER = InuUtils.generateId()
         private val TOGGLE_NON_ISLAND_TAB_BARS = InuUtils.generateId()
         private val TOGGLE_NON_ISLAND_GLOBAL_SEARCH = InuUtils.generateId()
         private val TOGGLE_NON_ISLAND_CHAT_ELEMENTS = InuUtils.generateId()
@@ -326,6 +341,7 @@ class AppearanceSettingsActivity : SettingsPageActivity() {
                 SearchRegistry.Entry("notification-icon", R.string.InuNotificationIcon, BUTTON_NOTIFICATION_ICON),
                 SearchRegistry.Entry("font", R.string.InuFonts, BUTTON_FONTS),
                 SearchRegistry.Entry("predictive-back-mode", R.string.InuPredictiveBack, BUTTON_PREDICTIVE_BACK_MODE),
+                SearchRegistry.Entry("navigation-drawer", R.string.InuNavigationDrawer, TOGGLE_NAVIGATION_DRAWER),
                 SearchRegistry.Entry("non-island-tab-bars", R.string.InuNonIslandTabBars, TOGGLE_NON_ISLAND_TAB_BARS),
                 SearchRegistry.Entry("non-island-global-search", R.string.InuNonIslandGlobalSearch, TOGGLE_NON_ISLAND_GLOBAL_SEARCH),
                 SearchRegistry.Entry("non-island-chat-elements", R.string.InuNonIslandChatElements, TOGGLE_NON_ISLAND_CHAT_ELEMENTS),

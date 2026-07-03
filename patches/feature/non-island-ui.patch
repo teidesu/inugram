@@ -11,7 +11,7 @@ Subject: non-island ui in various parts of the app
  .../ui/Components/ChatActivityEnterView.java  |  27 ++--
  ...ChatActivityEnterViewAnimatedIconView.java |  17 ++-
  .../ChatActivityTopPanelLayout.java           |  16 ++-
- .../ui/Components/ChatAttachAlert.java        |  19 +++
+ .../ui/Components/ChatAttachAlert.java        |  20 +++
  .../ui/Components/ChatAvatarContainer.java    |   1 +
  .../DialogsActivityTopPanelLayout.java        |   9 +-
  .../ui/Components/FilterTabsView.java         |   6 +
@@ -34,7 +34,7 @@ Subject: non-island ui in various parts of the app
  .../java/org/telegram/ui/bots/BotAdView.java  |   2 +-
  .../ui/bots/BotCommandsMenuContainer.java     |   4 +-
  .../bots/ChatAttachAlertBotWebViewLayout.java |   5 +-
- 30 files changed, 448 insertions(+), 211 deletions(-)
+ 30 files changed, 449 insertions(+), 211 deletions(-)
 
 diff --git a/TMessagesProj/src/main/java/org/telegram/ui/ActionBar/ActionBar.java b/TMessagesProj/src/main/java/org/telegram/ui/ActionBar/ActionBar.java
 index 0000000..0000000 100644
@@ -807,6 +807,14 @@ index 0000000..0000000 100644
          buttonsRecyclerView.setOnItemClickListener((view, position) -> {
              BaseFragment lastFragment = baseFragment;
              if (lastFragment == null) {
+@@ -4051,6 +4070,7 @@ public class ChatAttachAlert extends BottomSheet implements NotificationCenter.N
+         passcodeView = new PasscodeView(context);
+         containerView.addView(passcodeView, LayoutHelper.createFrame(LayoutHelper.MATCH_PARENT, LayoutHelper.MATCH_PARENT));
+ 
++        actionBar.inu_nonIsland = NonIslandHelper.chatElements();
+         actionBar.setupGlass(iBlur3FactoryLiquidGlass, BlurredBackgroundProviderImpl.attachMenuActionBar(resourcesProvider));
+         animatorCurrentVisibleLayout.replace((long) LAYOUT_TYPE_PHOTO, false);
+     }
 diff --git a/TMessagesProj/src/main/java/org/telegram/ui/Components/ChatAvatarContainer.java b/TMessagesProj/src/main/java/org/telegram/ui/Components/ChatAvatarContainer.java
 index 0000000..0000000 100644
 --- a/TMessagesProj/src/main/java/org/telegram/ui/Components/ChatAvatarContainer.java

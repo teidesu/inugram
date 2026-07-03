@@ -344,7 +344,7 @@
 
     <string name="InuProfilePhotoGradientFade">Disable profile photo blur</string>
 
-    <string name="InuNonIslandUI">Non-island UI</string>
+    <string name="InuNonIslandUI">Classic UI</string>
     <string name="InuTypographyAndIcons">Typography &amp; icons</string>
     <string name="InuMotion">Motion</string>
     <string name="InuFormatting">Formatting</string>
@@ -359,7 +359,7 @@
     <string name="InuNonIslandTabBars">Tab bars</string>
     <string name="InuNonIslandGlobalSearch">Global search</string>
     <string name="InuNonIslandChatElements">Chat elements</string>
-    <string name="InuNonIslandHint">Island UI (aka "Liquid Glass") is the new (>12.6) UI design, obviously inspired by iOS. Here you can revert some of those changes (best-effort).\nThere are probably a bunch of visual bugs, so be advised.</string>
+    <string name="InuNonIslandHint">Classic UI reverts some of the new (>12.6) "Liquid Glass" UI changes back towards the older flat design (best-effort).\nThere are probably a bunch of visual bugs, so be advised.</string>
 
     <string name="InuHideFadeView">Hide fade views</string>
 

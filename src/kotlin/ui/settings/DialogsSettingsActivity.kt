@@ -88,17 +88,8 @@ class DialogsSettingsActivity : SettingsPageActivity() {
         // end chat list section
 
         // bottom tabs section
-        items.add(UItem.asHeader(LocaleController.getString(R.string.InuBottomTabs)))
-        items.add(
-            mkTwoLineCheckItem(
-                TOGGLE_NAVIGATION_DRAWER,
-                R.string.InuNavigationDrawer,
-                R.string.InuNavigationDrawerInfo,
-                InuConfig.NAVIGATION_DRAWER.value,
-                experimental = true,
-            )
-        )
         if (!InuConfig.NAVIGATION_DRAWER.value) {
+            items.add(UItem.asHeader(LocaleController.getString(R.string.InuBottomTabs)))
             items.add(
                 mkTwoLineCheckItem(
                     TOGGLE_BOTTOM_TABS_HIDE,
@@ -123,8 +114,8 @@ class DialogsSettingsActivity : SettingsPageActivity() {
                     )
                 )
             }
+            items.add(UItem.asShadow(null))
         }
-        items.add(UItem.asShadow(null))
         // end bottom tabs section
 
         // fab section
@@ -237,13 +228,6 @@ class DialogsSettingsActivity : SettingsPageActivity() {
                 (view as? NotificationsCheckCell)?.isChecked = new
             }
 
-            TOGGLE_NAVIGATION_DRAWER -> {
-                val new = InuConfig.NAVIGATION_DRAWER.toggle()
-                (view as? NotificationsCheckCell)?.isChecked = new
-                listView.adapter.update(true)
-                showRestartBulletin()
-            }
-
             TOGGLE_BOTTOM_TABS_HIDE -> {
                 val new = InuConfig.BOTTOM_TABS_HIDE.toggle()
                 (view as? NotificationsCheckCell)?.isChecked = new
@@ -305,7 +289,6 @@ class DialogsSettingsActivity : SettingsPageActivity() {
         private val TOGGLE_OLD_MENTION_INDICATOR = InuUtils.generateId()
         private val TOGGLE_OPEN_ARCHIVE_ON_PULL = InuUtils.generateId()
         private val TOGGLE_DISABLE_SWIPE_TO_UNARCHIVE = InuUtils.generateId()
-        private val TOGGLE_NAVIGATION_DRAWER = InuUtils.generateId()
         private val TOGGLE_BOTTOM_TABS_HIDE = InuUtils.generateId()
         private val TOGGLE_HIDE_CONTACTS_TAB = InuUtils.generateId()
         private val TOGGLE_COMPACT_MODE = InuUtils.generateId()
@@ -332,7 +315,6 @@ class DialogsSettingsActivity : SettingsPageActivity() {
                 SearchRegistry.Entry("disable-swipe-to-unarchive", R.string.InuDisableSwipeToUnarchive, TOGGLE_DISABLE_SWIPE_TO_UNARCHIVE),
                 SearchRegistry.Entry("hide-bot-webview-dialogs", R.string.InuHideBotWebView, TOGGLE_BOT_WEBVIEW_BUTTON),
                 SearchRegistry.Entry("disable-chat-preview-expand", R.string.InuDisableChatPreviewExpand, TOGGLE_INTERACTIVE_CHAT_PREVIEW),
-                SearchRegistry.Entry("navigation-drawer", R.string.InuNavigationDrawer, TOGGLE_NAVIGATION_DRAWER),
                 SearchRegistry.Entry("bottom-tabs-hide", R.string.InuBottomTabsHide, TOGGLE_BOTTOM_TABS_HIDE),
                 SearchRegistry.Entry("hide-contacts-tab", R.string.InuHideContactsTab, TOGGLE_HIDE_CONTACTS_TAB),
                 SearchRegistry.Entry("compact-mode", R.string.InuCompactMode, TOGGLE_COMPACT_MODE),
