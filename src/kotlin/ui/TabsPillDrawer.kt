@@ -31,6 +31,8 @@ class TabsPillDrawer(
         }
     }
 
+    fun getDockedProgress(): Float = dockedT.get()
+
     fun drawBackgroundAndClip(canvas: Canvas, color: Int) {
         val t = dockedT.set(docked)
         val w = strip.measuredWidth.toFloat()
@@ -44,7 +46,7 @@ class TabsPillDrawer(
             lerp(maxOf(margin, cx), 0f, t),
             strip.paddingTop.toFloat(),
             lerp(minOf(w - margin, cx + cw), w, t),
-            h - strip.paddingBottom,
+            h - strip.paddingBottom + t * dp(4f),
         )
         val r = lerp(bgRect.height() / 2f, 0f, t)
         canvas.save()
