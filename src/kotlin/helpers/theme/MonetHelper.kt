@@ -1,8 +1,13 @@
 package desu.inugram.helpers.theme
 
+import android.annotation.TargetApi
+import android.content.BroadcastReceiver
 import android.content.Context
+import android.content.Intent
+import android.content.IntentFilter
 import android.graphics.Color
 import android.os.Build
+import android.os.PatternMatcher
 import androidx.annotation.RequiresApi
 import androidx.core.content.edit
 import androidx.core.graphics.ColorUtils
@@ -208,12 +213,35 @@ object MonetHelper {
             put("monetAvatarNameDarkCyan", -0xcf6146)
             put("monetAvatarNameDarkBlue", -0xc9752f)
             put("monetAvatarNameDarkPink", -0x38af75)
-            put("monetRedCall", 0xEF5350)
-            put("monetGreen", 0x4CAF50)
-            put("monetYellow", 0xFFB74D)
+            put("monetRedCall", 0xFFEF5350.toInt())
+            put("monetGreen", 0xFF4CAF50.toInt())
+            put("monetYellow", 0xFFFFB74D.toInt())
         }
     }
     private var lastMonetColor = 0
+    private val peerColorCache = java.util.concurrent.ConcurrentHashMap<Int, Int>()
+    private var overlayReceiverRegistered = false
+
+    private val overlayChangeReceiver = object : BroadcastReceiver() {
+        override fun onReceive(context: Context, intent: Intent) {
+            if (intent.action == "android.intent.action.OVERLAY_CHANGED") {
+                refreshMonetThemeIfChanged()
+            }
+        }
+    }
+
+    fun registerOverlayChangeReceiver(context: Context) {
+        if (overlayReceiverRegistered) return
+        try {
+            val filter = IntentFilter("android.intent.action.OVERLAY_CHANGED")
+            filter.addDataScheme("package")
+            filter.addDataSchemeSpecificPart("android", PatternMatcher.PATTERN_LITERAL)
+            context.registerReceiver(overlayChangeReceiver, filter)
+            overlayReceiverRegistered = true
+        } catch (e: Exception) {
+            FileLog.e("Failed to register OVERLAY_CHANGED receiver", e)
+        }
+    }
 
     // Theme keys whose values represent link *text*. When the wallpaper-derived accent palette
     // collapses to near-neutral (e.g. B&W wallpapers), these would render at the same hue as
@@ -304,7 +332,7 @@ object MonetHelper {
 
         val avatarBaseColor = customColors[color]
         if (avatarBaseColor != null) {
-            val harmonizedColor = harmonizeAvatarColor(avatarBaseColor)
+            val harmonizedColor = harmonize(avatarBaseColor)
             if (color.startsWith("monetAvatarNameDark")) {
                 return softenColorForDarkText(harmonizedColor)
             }
@@ -327,8 +355,23 @@ object MonetHelper {
     }
 
     @JvmStatic
-    fun harmonizeAvatarColor(baseColor: Int): Int {
+    fun harmonize(baseColor: Int): Int {
         return Blend.harmonize(baseColor, resolveColor("a1_600"))
+    }
+
+    @JvmStatic
+    @TargetApi(value = 26)
+    fun maybeHarmonizePeerColor(color: Int): Int {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.S) return color
+        val activeTheme = Theme.getActiveTheme() ?: return color
+        if (!activeTheme.inu_isMonet()) return color
+        return peerColorCache.getOrPut(color) {
+            try {
+                harmonize(color)
+            } catch (_: Exception) {
+                color
+            }
+        }
     }
 
     private fun softenColorForDarkText(color: Int): Int {
@@ -362,6 +405,7 @@ object MonetHelper {
         val activeTheme: Theme.ThemeInfo? = Theme.getActiveTheme()
         if (activeTheme == null || !activeTheme.inu_isMonet()) {
             lastMonetColor = 0
+            peerColorCache.clear()
             return
         }
 
@@ -376,6 +420,7 @@ object MonetHelper {
             return
         }
 
+        peerColorCache.clear()
         val isNight: Boolean = Theme.isCurrentThemeNight()
         Theme.applyTheme(activeTheme, isNight)
         NotificationCenter.getGlobalInstance().postNotificationName(
@@ -407,6 +452,7 @@ object MonetHelper {
     fun setThemeMode(mode: ThemeMode) {
         val current = getThemeMode()
         if (current == mode) return
+        peerColorCache.clear()
 
         // entering Monet from a non-Monet state: snapshot so DISABLED can restore it
         if (current == ThemeMode.DISABLED) {

@@ -49,7 +49,7 @@ diff --git a/TMessagesProj/src/main/java/org/telegram/ui/ActionBar/Theme.java b/
 index 0000000..0000000 100644
 --- a/TMessagesProj/src/main/java/org/telegram/ui/ActionBar/Theme.java
 +++ b/TMessagesProj/src/main/java/org/telegram/ui/ActionBar/Theme.java
-@@ -8528,6 +8528,7 @@ public class Theme {
+@@ -8530,6 +8530,7 @@ public class Theme {
          dialogs_tagTextPaint.setTextSize(dp(10));
          dialogs_searchNamePaint.setTextSize(dp(16));
          dialogs_searchNameEncryptedPaint.setTextSize(dp(16));
@@ -57,7 +57,7 @@ index 0000000..0000000 100644
      }
  
      public static void applyDialogsTheme() {
-@@ -8775,6 +8776,7 @@ public class Theme {
+@@ -8777,6 +8778,7 @@ public class Theme {
              addChatPaint(key_paint_chatComposeBackground, chat_composeBackgroundPaint, key_chat_messagePanelBackground);
              addChatPaint(key_paint_chatTimeBackground, chat_timeBackgroundPaint, key_chat_mediaTimeBackground);
          }
@@ -65,7 +65,7 @@ index 0000000..0000000 100644
      }
  
      public static void createChatResources(Context context, boolean fontsOnly) {
-@@ -9481,6 +9483,7 @@ public class Theme {
+@@ -9483,6 +9485,7 @@ public class Theme {
          }
  
          profile_aboutTextPaint.setTextSize(dp(16));

@@ -42,6 +42,9 @@ object InuHooks {
         }
         syncDoubleTapDelay()
         syncAnimationSpeed()
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+            MonetHelper.registerOverlayChangeReceiver(context)
+        }
         UpdateHelper.clearPendingIfInstalled()
         ApkInstaller.dismissInstalledNotification()
         CloudSettingsHelper.attachAutoSyncListener()

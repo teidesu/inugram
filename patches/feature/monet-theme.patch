@@ -4,10 +4,71 @@ Date: Mon, 20 Apr 2026 10:55:44 +0300
 Subject: monet theme, almost directly ported from NagramX
 
 ---
- .../java/org/telegram/ui/ActionBar/Theme.java | 61 ++++++++++++++++++-
+ .../messenger/MessagesController.java         | 24 +++----
+ .../java/org/telegram/ui/ActionBar/Theme.java | 63 ++++++++++++++++++-
  .../java/org/telegram/ui/DialogsActivity.java |  4 ++
- 2 files changed, 63 insertions(+), 2 deletions(-)
+ 3 files changed, 77 insertions(+), 14 deletions(-)
 
+diff --git a/TMessagesProj/src/main/java/org/telegram/messenger/MessagesController.java b/TMessagesProj/src/main/java/org/telegram/messenger/MessagesController.java
+index 0000000..0000000 100644
+--- a/TMessagesProj/src/main/java/org/telegram/messenger/MessagesController.java
++++ b/TMessagesProj/src/main/java/org/telegram/messenger/MessagesController.java
+@@ -5280,43 +5280,43 @@ public class MessagesController extends BaseController implements NotificationCe
+                 return Theme.getColor(Theme.keys_avatar_nameInMessage[id], resourcesProvider);
+             }
+             final boolean isDark = resourcesProvider != null ? resourcesProvider.isDark() : Theme.isCurrentThemeDark();
+-            return (isDark ? darkColors : colors)[i];
++            return desu.inugram.helpers.theme.MonetHelper.maybeHarmonizePeerColor((isDark ? darkColors : colors)[i]);
+         }
+         public int getLvl(boolean isGroup) {
+             return isGroup ? groupLvl : channelLvl;
+         }
+         public int getColor1(boolean isDark) {
+-            return (isDark ? darkColors : colors)[0];
++            return desu.inugram.helpers.theme.MonetHelper.maybeHarmonizePeerColor((isDark ? darkColors : colors)[0]);
+         }
+         public int getColor2(boolean isDark) {
+-            return (isDark ? darkColors : colors)[1];
++            return desu.inugram.helpers.theme.MonetHelper.maybeHarmonizePeerColor((isDark ? darkColors : colors)[1]);
+         }
+         public int getColor3(boolean isDark) {
+-            return (isDark ? darkColors : colors)[2];
++            return desu.inugram.helpers.theme.MonetHelper.maybeHarmonizePeerColor((isDark ? darkColors : colors)[2]);
+         }
+         public int getColor4(boolean isDark) {
+-            return (isDark ? darkColors : colors)[3];
++            return desu.inugram.helpers.theme.MonetHelper.maybeHarmonizePeerColor((isDark ? darkColors : colors)[3]);
+         }
+         public int getColor5(boolean isDark) {
+-            return (isDark ? darkColors : colors)[4];
++            return desu.inugram.helpers.theme.MonetHelper.maybeHarmonizePeerColor((isDark ? darkColors : colors)[4]);
+         }
+         public int getColor6(boolean isDark) {
+-            return (isDark ? darkColors : colors)[5];
++            return desu.inugram.helpers.theme.MonetHelper.maybeHarmonizePeerColor((isDark ? darkColors : colors)[5]);
+         }
+         public int getColor1() {
+-            return (Theme.isCurrentThemeDark() ? darkColors : colors)[0];
++            return desu.inugram.helpers.theme.MonetHelper.maybeHarmonizePeerColor((Theme.isCurrentThemeDark() ? darkColors : colors)[0]);
+         }
+         public int getColor2() {
+-            return (Theme.isCurrentThemeDark() ? darkColors : colors)[1];
++            return desu.inugram.helpers.theme.MonetHelper.maybeHarmonizePeerColor((Theme.isCurrentThemeDark() ? darkColors : colors)[1]);
+         }
+         public int getColor3() {
+-            return (Theme.isCurrentThemeDark() ? darkColors : colors)[2];
++            return desu.inugram.helpers.theme.MonetHelper.maybeHarmonizePeerColor((Theme.isCurrentThemeDark() ? darkColors : colors)[2]);
+         }
+         public int getColor4() {
+-            return (Theme.isCurrentThemeDark() ? darkColors : colors)[3];
++            return desu.inugram.helpers.theme.MonetHelper.maybeHarmonizePeerColor((Theme.isCurrentThemeDark() ? darkColors : colors)[3]);
+         }
+         public int getColor5() {
+-            return (Theme.isCurrentThemeDark() ? darkColors : colors)[4];
++            return desu.inugram.helpers.theme.MonetHelper.maybeHarmonizePeerColor((Theme.isCurrentThemeDark() ? darkColors : colors)[4]);
+         }
+         public boolean hasColor2() {
+             return getColor2() != getColor1();
 diff --git a/TMessagesProj/src/main/java/org/telegram/ui/ActionBar/Theme.java b/TMessagesProj/src/main/java/org/telegram/ui/ActionBar/Theme.java
 index 0000000..0000000 100644
 --- a/TMessagesProj/src/main/java/org/telegram/ui/ActionBar/Theme.java
@@ -104,12 +165,14 @@ index 0000000..0000000 100644
                  }
              }
              if (oldEditor != null) {
-@@ -8165,6 +8220,8 @@ public class Theme {
+@@ -8165,6 +8220,10 @@ public class Theme {
                                      } catch (Exception ignore) {
                                          value = Utilities.parseInt(param);
                                      }
 +                                } else if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S && (param.startsWith("a") || param.startsWith("n") || param.startsWith("monet"))) {
 +                                    value = MonetHelper.getColor(param, key);
++                                } else if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S && param.endsWith("h")) {
++                                    value = MonetHelper.harmonize(Utilities.parseInt(param));
                                  } else {
                                      value = Utilities.parseInt(param);
                                  }
