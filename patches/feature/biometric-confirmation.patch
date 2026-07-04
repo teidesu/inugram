@@ -4,15 +4,56 @@ Date: Wed, 1 Jul 2026 18:07:39 +0400
 Subject: client-side biometric confirmation in various places
 
 ---
- .../src/main/java/org/telegram/ui/DialogsActivity.java    | 4 ++--
+ .../java/org/telegram/ui/Components/AlertsCreator.java    | 4 ++--
+ .../src/main/java/org/telegram/ui/DialogsActivity.java    | 8 ++++----
  .../src/main/java/org/telegram/ui/LogoutActivity.java     | 2 +-
  .../src/main/java/org/telegram/ui/ProfileActivity.java    | 8 ++++----
- 3 files changed, 7 insertions(+), 7 deletions(-)
+ 4 files changed, 11 insertions(+), 11 deletions(-)
 
+diff --git a/TMessagesProj/src/main/java/org/telegram/ui/Components/AlertsCreator.java b/TMessagesProj/src/main/java/org/telegram/ui/Components/AlertsCreator.java
+index 0000000..0000000 100644
+--- a/TMessagesProj/src/main/java/org/telegram/ui/Components/AlertsCreator.java
++++ b/TMessagesProj/src/main/java/org/telegram/ui/Components/AlertsCreator.java
+@@ -1380,7 +1380,7 @@ public class AlertsCreator {
+             }
+             reportText = LocaleController.getString(R.string.ReportChat);
+         }
+-        builder.setPositiveButton(reportText, (dialogInterface, i) -> {
++        builder.setPositiveButton(reportText, (dialogInterface, i) -> desu.inugram.helpers.security.BiometricHelper.gate(fragment.getParentActivity(), (cells == null || cells[1].isChecked()) && desu.inugram.InuConfig.BIOMETRIC_CONFIRM_DELETE_CHAT.getValue(), () -> {
+             if (currentUser != null) {
+                 accountInstance.getMessagesController().blockPeer(currentUser.id);
+             }
+@@ -1401,7 +1401,7 @@ public class AlertsCreator {
+             } else {
+                 callback.run(0);
+             }
+-        });
++        }));
+         builder.setNegativeButton(LocaleController.getString(R.string.Cancel), null);
+         AlertDialog dialog = builder.create();
+         fragment.showDialog(dialog);
 diff --git a/TMessagesProj/src/main/java/org/telegram/ui/DialogsActivity.java b/TMessagesProj/src/main/java/org/telegram/ui/DialogsActivity.java
 index 0000000..0000000 100644
 --- a/TMessagesProj/src/main/java/org/telegram/ui/DialogsActivity.java
 +++ b/TMessagesProj/src/main/java/org/telegram/ui/DialogsActivity.java
+@@ -9259,7 +9259,7 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
+             } else {
+                 user = null;
+             }
+-            AlertsCreator.createBlockDialogAlert(DialogsActivity.this, count, canReportSpamCount != 0, user, (report, delete) -> {
++            AlertsCreator.createBlockDialogAlert(DialogsActivity.this, count, canReportSpamCount != 0, user, (report, delete) -> desu.inugram.helpers.security.BiometricHelper.gate(getParentActivity(), delete && desu.inugram.InuConfig.BIOMETRIC_CONFIRM_DELETE_CHAT.getValue(), () -> {
+                 for (int a = 0, N = selectedDialogs.size(); a < N; a++) {
+                     long did = selectedDialogs.get(a);
+                     if (report) {
+@@ -9272,7 +9272,7 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
+                     getMessagesController().blockPeer(did);
+                 }
+                 hideActionMode(false);
+-            });
++            }));
+             return;
+         }
+         int minPinnedNum = Integer.MAX_VALUE;
 @@ -9356,7 +9356,7 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
                          builder.setNegativeButton(LocaleController.getString(R.string.Cancel), null);
                          showDialog(builder.create());
