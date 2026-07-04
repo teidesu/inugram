@@ -1,0 +1,49 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: alina sireneva <alina@tei.su>
+Date: Sat, 4 Jul 2026 14:47:12 +0400
+Subject: fix lingering system media session after playback ends.
+
+---
+ .../org/telegram/messenger/MusicPlayerService.java |  3 +++
+ .../telegram/messenger/TelegramMediaSession.java   | 14 ++++++++++++++
+ 2 files changed, 17 insertions(+)
+
+diff --git a/TMessagesProj/src/main/java/org/telegram/messenger/MusicPlayerService.java b/TMessagesProj/src/main/java/org/telegram/messenger/MusicPlayerService.java
+index 0000000..0000000 100644
+--- a/TMessagesProj/src/main/java/org/telegram/messenger/MusicPlayerService.java
++++ b/TMessagesProj/src/main/java/org/telegram/messenger/MusicPlayerService.java
+@@ -715,6 +715,9 @@ public class MusicPlayerService extends Service implements NotificationCenter.No
+             audioManager.unregisterRemoteControlClient(remoteControlClient);
+         }
+         // mediaSession is owned by TelegramMediaSession (process singleton) — do NOT release here.
++        if (sessionHolder != null) {
++            sessionHolder.inu_deactivate();
++        }
+         for (int a = 0; a < UserConfig.MAX_ACCOUNT_COUNT; a++) {
+             NotificationCenter.getInstance(a).removeObserver(this, NotificationCenter.messagePlayingDidSeek);
+             NotificationCenter.getInstance(a).removeObserver(this, NotificationCenter.messagePlayingPlayStateChanged);
+diff --git a/TMessagesProj/src/main/java/org/telegram/messenger/TelegramMediaSession.java b/TMessagesProj/src/main/java/org/telegram/messenger/TelegramMediaSession.java
+index 0000000..0000000 100644
+--- a/TMessagesProj/src/main/java/org/telegram/messenger/TelegramMediaSession.java
++++ b/TMessagesProj/src/main/java/org/telegram/messenger/TelegramMediaSession.java
+@@ -187,6 +187,20 @@ public class TelegramMediaSession {
+         }
+     }
+ 
++    public void inu_deactivate() {
++        if (session == null) {
++            return;
++        }
++        try {
++            PlaybackStateCompat.Builder pb = new PlaybackStateCompat.Builder()
++                    .setState(PlaybackStateCompat.STATE_STOPPED, 0, 1f)
++                    .setActions(getAvailableActions());
++            session.setPlaybackState(pb.build());
++            session.setActive(false);
++        } catch (Throwable ignored) {
++        }
++    }
++
+     public Bundle buildRootHints() {
+         Bundle rootExtras = new Bundle();
+         rootExtras.putBoolean(CONTENT_STYLE_SUPPORTED, true);

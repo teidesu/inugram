@@ -214,3 +214,4 @@ bugfix/topic-separator-avatar-hitbox.patch
 bugfix/expandable-switch-badge-overlap.patch
 bugfix/image-filter-downsample.patch
 feature/hq-sticker-previews.patch
+bugfix/lingering-media-session.patch

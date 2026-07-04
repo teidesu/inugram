@@ -267,3 +267,4 @@ most things are toggleable in `Settings → Inugram`, with sensible opinionated 
 - a bunch of stock memory/resource leaks
 - correctly handle "Open in..." in ChatAttachAlert: open editor before sending + support multi-attach
 - avatar of a bubble right below a topic separator (forum "All" tab) only clickable in its lower part
+- lingering system media session after voice/round/music playback ends (12.8 singleton regression, visible on MIUI)
