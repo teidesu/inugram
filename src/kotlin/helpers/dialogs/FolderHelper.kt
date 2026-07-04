@@ -8,6 +8,7 @@ import android.util.Pair
 import androidx.core.content.edit
 import androidx.core.graphics.withSave
 import desu.inugram.InuConfig
+import desu.inugram.helpers.security.ParanoiaHelper
 import org.telegram.messenger.AndroidUtilities
 import org.telegram.messenger.LocaleController.getString
 import org.telegram.messenger.MessagesController
@@ -18,7 +19,6 @@ import org.telegram.tgnet.TLRPC
 import org.telegram.ui.Components.FilterTabsView
 import org.telegram.ui.Stories.recorder.HintView2
 import kotlin.math.ceil
-import desu.inugram.helpers.security.ParanoiaHelper
 
 object FolderHelper {
     private val folderIcons = mapOf(
@@ -54,8 +54,8 @@ object FolderHelper {
         "\uD83D\uDCCB" to R.drawable.filter_setup,
     )
 
-    const val ICON_SIZE = 28
-    const val ICON_GAP = 2
+    const val ICON_SIZE = 26
+    const val ICON_GAP = 4
 
     @JvmStatic
     fun saveMeta(storage: MessagesStorage, filters: List<MessagesController.DialogFilter>) {

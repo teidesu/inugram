@@ -62,12 +62,12 @@ class TabsPillDrawer(
 
     companion object {
         @JvmStatic
-        fun attach(strip: ScrollSlidingTextTabStrip, contentView: SizeNotifierFrameLayout, resourcesProvider: Theme.ResourcesProvider?) {
+        fun attach(strip: ScrollSlidingTextTabStrip, contentView: SizeNotifierFrameLayout) {
             strip.layoutParams = LayoutHelper.createFrame(LayoutHelper.MATCH_PARENT, 50, Gravity.LEFT or Gravity.TOP)
             strip.setPadding(0, dp(7f), 0, dp(7f))
             strip.clipToPadding = false
             strip.tabsContainer.setPadding(dp(12f), 0, dp(12f), 0)
-            strip.inu_pill = TabsPillDrawer(strip, BlurBehindHelper.create(strip, contentView, Theme.key_windowBackgroundWhite, resourcesProvider = resourcesProvider))
+            strip.inu_pill = TabsPillDrawer(strip, BlurBehindHelper.create(strip, contentView, Theme.key_windowBackgroundWhite))
         }
     }
 }

@@ -1,10 +1,14 @@
 package desu.inugram.helpers.theme
 
 import android.graphics.Canvas
+import android.graphics.Rect
+import android.graphics.drawable.Drawable
+import android.graphics.drawable.GradientDrawable
 import android.widget.FrameLayout
 import android.widget.TextView
 import androidx.core.view.isVisible
 import desu.inugram.InuConfig
+import desu.inugram.ui.BlurBehindHelper
 import org.telegram.messenger.AndroidUtilities
 import org.telegram.messenger.AndroidUtilities.dp
 import org.telegram.ui.ActionBar.INavigationLayout
@@ -17,7 +21,7 @@ import org.telegram.ui.Components.RecyclerListView
 import org.telegram.ui.Components.SizeNotifierFrameLayout
 import org.telegram.ui.DialogsActivity
 import org.telegram.ui.SearchTabsAndFiltersLayout
-import desu.inugram.ui.BlurBehindHelper
+import kotlin.math.max
 
 object NonIslandHelper {
     @JvmStatic
@@ -72,15 +76,49 @@ object NonIslandHelper {
     }
 
     // DialogsActivity.java
+    const val FOLDERS_BAR_HEIGHT_DP = 44
+    const val FOLDERS_BAR_OVERLAP_DP = 10
+    const val FOLDERS_BAR_VISIBLE_HEIGHT_DP = FOLDERS_BAR_HEIGHT_DP - FOLDERS_BAR_OVERLAP_DP
+
+    @JvmStatic
+    fun applyMd3TabsStyle(indicator: GradientDrawable, listView: RecyclerListView, selectorColor: Int) {
+        val rad = AndroidUtilities.dpf2(3f)
+        indicator.cornerRadii = floatArrayOf(rad, rad, rad, rad, 0f, 0f, 0f, 0f)
+        listView.setSelectorType(42)
+        listView.setSelectorRadius(16)
+        listView.setSelectorDrawableColor(selectorColor)
+    }
+
+    @JvmStatic
+    fun adjustMd3TabSelectorRect(rect: Rect) {
+        val cy = rect.centerY()
+        rect.top = cy - dp(16f)
+        rect.bottom = cy + dp(16f)
+        rect.inset(dp(2f), 0)
+    }
+
+    @JvmStatic
+    fun setMd3TabIndicatorBounds(indicator: Drawable, indicatorX: Float, indicatorWidth: Float, height: Float, hideProgress: Float) {
+        val centerX = indicatorX + indicatorWidth / 2f
+        val width = max(dp(24f).toFloat(), indicatorWidth - dp(2f) * 2)
+        val hideOffset = hideProgress * dp(3f)
+        indicator.setBounds(
+            (centerX - width / 2f).toInt(),
+            (height - dp(3f) + hideOffset).toInt(),
+            (centerX + width / 2f).toInt(),
+            (height + hideOffset).toInt(),
+        )
+    }
+
     @JvmStatic
     fun applyFilterTabBar(tabsView: FilterTabsView, contentView: SizeNotifierFrameLayout) {
         if (!foldersBar()) return
         tabsView.setBlurredBackground(null)
         tabsView.background = null
-        tabsView.inu_blurHelper = BlurBehindHelper(tabsView, contentView, Theme.key_windowBackgroundWhite)
+        tabsView.inu_blurHelper = BlurBehindHelper(tabsView, contentView, Theme.key_windowBackgroundWhite, drawBottomDivider = true)
         tabsView.setPadding(0, 0, 0, 0)
         val lp = tabsView.layoutParams as? FrameLayout.LayoutParams ?: return
-        lp.height = dp(36f)
+        lp.height = dp(FOLDERS_BAR_HEIGHT_DP.toFloat())
         lp.leftMargin = 0
         lp.rightMargin = 0
     }
@@ -122,11 +160,11 @@ object NonIslandHelper {
         if (!globalSearch()) return
         layout.setBlurredBackground(null)
         layout.background = null
-        layout.inu_blurHelper = BlurBehindHelper(layout, contentView, Theme.key_windowBackgroundWhite)
+        layout.inu_blurHelper = BlurBehindHelper(layout, contentView, Theme.key_windowBackgroundWhite, drawBottomDivider = true)
         layout.setPadding(0, 0, 0, 0)
-        layout.translationY = -dp(4f).toFloat()
+        layout.translationY = -dp(FOLDERS_BAR_OVERLAP_DP.toFloat()).toFloat()
         val lp = layout.layoutParams as? FrameLayout.LayoutParams ?: return
-        lp.height = dp(36f)
+        lp.height = dp(FOLDERS_BAR_HEIGHT_DP.toFloat())
         lp.leftMargin = 0
         lp.rightMargin = 0
     }

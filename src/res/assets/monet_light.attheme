@@ -312,7 +312,6 @@ glass_defaultText=a2_600
 glass_tabSelected=a1_600
 glass_tabSelectedText=a1_600
 glass_tabUnselected=n1_900
-glass_targetMainTabs=n1_0
 glass_targetMainTopPanel=monet_surface_bright_light
 noGradient=a1_600
 noGradient2=a1_600
