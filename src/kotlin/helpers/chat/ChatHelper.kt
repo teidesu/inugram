@@ -763,6 +763,7 @@ object ChatHelper {
         if (user != null && UserObject.isReplyUser(user) && InuConfig.HIDE_BOTTOM_BAR_REPLIES.value) return true
 
         val chat = activity.currentChat ?: return false
+        if (ChatObject.isMonoForum(chat)) return false
         // stock skips the JOIN bar in non-forum threads w/o join_to_send (e.g. channel-post comments) —
         // don't force-hide there, or we'd also hide the chat input
         if (activity.isThreadChat && !chat.join_to_send && !ChatObject.isForum(chat)) return false
