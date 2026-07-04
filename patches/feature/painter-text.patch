@@ -1,0 +1,256 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: alina sireneva <alina@tei.su>
+Date: Wed, 1 Jul 2026 18:33:38 +0400
+Subject: outlined text style for painter + toggle word-wrap for text layers
+
+---
+ .../messenger/video/TextureRenderer.java      |  4 +++
+ .../telegram/messenger/video/WebmEncoder.java |  4 +++
+ .../Paint/Views/LPhotoPaintView.java          | 13 +++++++-
+ .../Paint/Views/PaintTextOptionsView.java     | 17 +++++++++++
+ .../Components/Paint/Views/TextPaintView.java | 30 ++++++++++++++++++-
+ .../ui/Components/PaintingOverlay.java        |  3 ++
+ .../ui/Stories/recorder/PaintView.java        | 11 +++++++
+ 7 files changed, 80 insertions(+), 2 deletions(-)
+
+diff --git a/TMessagesProj/src/main/java/org/telegram/messenger/video/TextureRenderer.java b/TMessagesProj/src/main/java/org/telegram/messenger/video/TextureRenderer.java
+index 0000000..0000000 100644
+--- a/TMessagesProj/src/main/java/org/telegram/messenger/video/TextureRenderer.java
++++ b/TMessagesProj/src/main/java/org/telegram/messenger/video/TextureRenderer.java
+@@ -1407,6 +1407,10 @@ public class TextureRenderer {
+         } else if (entity.subType == 3) {
+             editText.setFrameColor(0);
+             editText.setTextColor(entity.color);
++        } else if (entity.subType == 4) {
++            editText.setFrameColor(0);
++            editText.setTextColor(entity.color);
++            editText.setStrokeColor(AndroidUtilities.computePerceivedBrightness(entity.color) >= .25f ? Color.BLACK : Color.WHITE);
+         }
+ 
+         editText.measure(View.MeasureSpec.makeMeasureSpec(entity.viewWidth, View.MeasureSpec.EXACTLY), View.MeasureSpec.makeMeasureSpec(entity.viewHeight, View.MeasureSpec.EXACTLY));
+diff --git a/TMessagesProj/src/main/java/org/telegram/messenger/video/WebmEncoder.java b/TMessagesProj/src/main/java/org/telegram/messenger/video/WebmEncoder.java
+index 0000000..0000000 100644
+--- a/TMessagesProj/src/main/java/org/telegram/messenger/video/WebmEncoder.java
++++ b/TMessagesProj/src/main/java/org/telegram/messenger/video/WebmEncoder.java
+@@ -341,6 +341,10 @@ public class WebmEncoder {
+             } else if (entity.subType == 3) {
+                 editText.setFrameColor(0);
+                 editText.setTextColor(entity.color);
++            } else if (entity.subType == 4) {
++                editText.setFrameColor(0);
++                editText.setTextColor(entity.color);
++                editText.setStrokeColor(AndroidUtilities.computePerceivedBrightness(entity.color) >= .25f ? Color.BLACK : Color.WHITE);
+             }
+ 
+             editText.measure(View.MeasureSpec.makeMeasureSpec(entity.viewWidth, View.MeasureSpec.EXACTLY), View.MeasureSpec.makeMeasureSpec(entity.viewHeight, View.MeasureSpec.EXACTLY));
+diff --git a/TMessagesProj/src/main/java/org/telegram/ui/Components/Paint/Views/LPhotoPaintView.java b/TMessagesProj/src/main/java/org/telegram/ui/Components/Paint/Views/LPhotoPaintView.java
+index 0000000..0000000 100644
+--- a/TMessagesProj/src/main/java/org/telegram/ui/Components/Paint/Views/LPhotoPaintView.java
++++ b/TMessagesProj/src/main/java/org/telegram/ui/Components/Paint/Views/LPhotoPaintView.java
+@@ -1120,6 +1120,7 @@ public class LPhotoPaintView extends SizeNotifierFrameLayoutPhoto implements IPh
+             textOptionsView.setAlignment(align);
+             textOptionsView.setTypeface(((TextPaintView) entityView).getTypeface().getKey());
+             textOptionsView.setOutlineType(((TextPaintView) entityView).getType(), true);
++            textOptionsView.inu_setNoWrap(((TextPaintView) entityView).inu_isNoWrap());
+             overlayLayout.invalidate();
+         }
+ 
+@@ -2471,7 +2472,17 @@ public class LPhotoPaintView extends SizeNotifierFrameLayoutPhoto implements IPh
+ 
+     @Override
+     public void onTextOutlineSelected(View v) {
+-        setTextType((selectedTextType + 1) % 4);
++        setTextType((selectedTextType + 1) % 5);
++    }
++
++    @Override
++    public void inu_onTextNoWrapSelected(View v) {
++        if (currentEntityView instanceof TextPaintView) {
++            TextPaintView textPaintView = (TextPaintView) currentEntityView;
++            boolean noWrap = !textPaintView.inu_isNoWrap();
++            textPaintView.inu_setNoWrap(noWrap);
++            textOptionsView.inu_setNoWrap(noWrap);
++        }
+     }
+ 
+     private PopupButton buttonForPopup(String text, int icon, boolean selected, Runnable onClick) {
+diff --git a/TMessagesProj/src/main/java/org/telegram/ui/Components/Paint/Views/PaintTextOptionsView.java b/TMessagesProj/src/main/java/org/telegram/ui/Components/Paint/Views/PaintTextOptionsView.java
+index 0000000..0000000 100644
+--- a/TMessagesProj/src/main/java/org/telegram/ui/Components/Paint/Views/PaintTextOptionsView.java
++++ b/TMessagesProj/src/main/java/org/telegram/ui/Components/Paint/Views/PaintTextOptionsView.java
+@@ -50,6 +50,7 @@ public class PaintTextOptionsView extends FrameLayout implements NotificationCen
+     private ChatActivityEnterViewAnimatedIconView emojiButton;
+     private RLottieImageView alignView;
+     private ImageView outlineView;
++    private ImageView inu_noWrapView;
+     private ImageView plusView;
+     private View colorClickableView;
+ 
+@@ -80,6 +81,13 @@ public class PaintTextOptionsView extends FrameLayout implements NotificationCen
+         alignView.setPadding(AndroidUtilities.dp(2), AndroidUtilities.dp(2), AndroidUtilities.dp(2), AndroidUtilities.dp(2));
+         addView(alignView, LayoutHelper.createFrame(28, 28, Gravity.CENTER_VERTICAL, 0, 0, 16, 0));
+ 
++        inu_noWrapView = new ImageView(context);
++        inu_noWrapView.setImageResource(R.drawable.inu_tabler_text_wrap);
++        inu_noWrapView.setColorFilter(new PorterDuffColorFilter(Color.WHITE, PorterDuff.Mode.SRC_IN));
++        inu_noWrapView.setPadding(AndroidUtilities.dp(2), AndroidUtilities.dp(2), AndroidUtilities.dp(2), AndroidUtilities.dp(2));
++        inu_noWrapView.setOnClickListener(v -> delegate.inu_onTextNoWrapSelected(v));
++        addView(inu_noWrapView, LayoutHelper.createFrame(28, 28, Gravity.CENTER_VERTICAL, 0, 0, 16, 0));
++
+         outlineView = new ImageView(context);
+         outlineView.setImageResource(R.drawable.msg_text_outlined);
+         outlineView.setPadding(AndroidUtilities.dp(1), AndroidUtilities.dp(1), AndroidUtilities.dp(1), AndroidUtilities.dp(1));
+@@ -109,6 +117,7 @@ public class PaintTextOptionsView extends FrameLayout implements NotificationCen
+         x = getPaddingLeft();
+         layoutChild(colorClickableView);
+         layoutChild(alignView);
++        layoutChild(inu_noWrapView);
+         layoutChild(outlineView);
+         layoutChild(plusView);
+         typefaceCell.layout(getMeasuredWidth() - getPaddingRight() - typefaceCell.getMeasuredWidth(), (getMeasuredHeight() - typefaceCell.getMeasuredHeight()) / 2, getMeasuredWidth() - getPaddingRight(), (getMeasuredHeight() + typefaceCell.getMeasuredHeight()) / 2);
+@@ -176,6 +185,10 @@ public class PaintTextOptionsView extends FrameLayout implements NotificationCen
+         return emojiButton;
+     }
+ 
++    public void inu_setNoWrap(boolean noWrap) {
++        inu_noWrapView.setImageResource(noWrap ? R.drawable.inu_tabler_text_wrap_disabled : R.drawable.inu_tabler_text_wrap);
++    }
++
+     public void setOutlineType(int type) {
+         setOutlineType(type, false);
+     }
+@@ -201,6 +214,9 @@ public class PaintTextOptionsView extends FrameLayout implements NotificationCen
+             case 3:
+                 res = R.drawable.msg_photo_text_regular;
+                 break;
++            case 4:
++                res = R.drawable.msg_text_outlined;
++                break;
+         }
+         if (animate) {
+             AndroidUtilities.updateImageViewImageAnimated(outlineView, res);
+@@ -335,6 +351,7 @@ public class PaintTextOptionsView extends FrameLayout implements NotificationCen
+         void onTypefaceSelected(PaintTypeface typeface);
+         void onTypefaceButtonClicked();
+         void onTextAlignmentSelected(int align);
++        default void inu_onTextNoWrapSelected(View v) {}
+     }
+ 
+     private final static class AlignFramePair {
+diff --git a/TMessagesProj/src/main/java/org/telegram/ui/Components/Paint/Views/TextPaintView.java b/TMessagesProj/src/main/java/org/telegram/ui/Components/Paint/Views/TextPaintView.java
+index 0000000..0000000 100644
+--- a/TMessagesProj/src/main/java/org/telegram/ui/Components/Paint/Views/TextPaintView.java
++++ b/TMessagesProj/src/main/java/org/telegram/ui/Components/Paint/Views/TextPaintView.java
+@@ -170,6 +170,7 @@ public class TextPaintView extends EntityView {
+         setScale(textPaintView.getScale());
+         setTypeface(textPaintView.getTypeface());
+         setAlign(textPaintView.getAlign());
++        inu_setNoWrap(textPaintView.inu_isNoWrap());
+ 
+         int gravity;
+         switch (getAlign()) {
+@@ -292,8 +293,28 @@ public class TextPaintView extends EntityView {
+         return editText;
+     }
+ 
++    private int inu_maxWidth;
++    private boolean inu_noWrap;
++
+     public void setMaxWidth(int maxWidth) {
+-        editText.setMaxWidth(maxWidth);
++        inu_maxWidth = maxWidth;
++        editText.setMaxWidth(inu_noWrap ? Integer.MAX_VALUE : maxWidth);
++    }
++
++    public void inu_setNoWrap(boolean noWrap) {
++        if (inu_noWrap == noWrap) {
++            return;
++        }
++        inu_noWrap = noWrap;
++        if (inu_maxWidth > 0) {
++            editText.setMaxWidth(noWrap ? Integer.MAX_VALUE : inu_maxWidth);
++        }
++        requestLayout();
++        updateSelectionView();
++    }
++
++    public boolean inu_isNoWrap() {
++        return inu_noWrap;
+     }
+ 
+     @Override
+@@ -304,6 +325,9 @@ public class TextPaintView extends EntityView {
+ 
+     @Override
+     protected void onMeasure(int widthMeasureSpec, int heightMeasureSpec) {
++        if (inu_noWrap) {
++            widthMeasureSpec = MeasureSpec.makeMeasureSpec(0, MeasureSpec.UNSPECIFIED);
++        }
+         super.onMeasure(widthMeasureSpec, heightMeasureSpec);
+         updatePosition();
+     }
+@@ -368,6 +392,7 @@ public class TextPaintView extends EntityView {
+ 
+     public void updateColor() {
+         editText.setShadowLayer(0, 0, 0, 0);
++        editText.setStrokeColor(Color.TRANSPARENT);
+         int textColor = swatch.color;
+         if (currentType == 0) {
+             editText.setFrameColor(swatch.color);
+@@ -376,8 +401,11 @@ public class TextPaintView extends EntityView {
+             editText.setFrameColor(AndroidUtilities.computePerceivedBrightness(swatch.color) >= .25f ? 0x99000000 : 0x99ffffff);
+         } else if (currentType == 2) {
+             editText.setFrameColor(AndroidUtilities.computePerceivedBrightness(swatch.color) >= .25f ? Color.BLACK : Color.WHITE);
++        } else if (currentType == 3) {
++            editText.setFrameColor(0);
+         } else {
+             editText.setFrameColor(0);
++            editText.setStrokeColor(AndroidUtilities.computePerceivedBrightness(swatch.color) >= .25f ? Color.BLACK : Color.WHITE);
+         }
+         editText.setTextColor(textColor);
+         editText.setCursorColor(textColor);
+diff --git a/TMessagesProj/src/main/java/org/telegram/ui/Components/PaintingOverlay.java b/TMessagesProj/src/main/java/org/telegram/ui/Components/PaintingOverlay.java
+index 0000000..0000000 100644
+--- a/TMessagesProj/src/main/java/org/telegram/ui/Components/PaintingOverlay.java
++++ b/TMessagesProj/src/main/java/org/telegram/ui/Components/PaintingOverlay.java
+@@ -286,8 +286,11 @@ public class PaintingOverlay extends FrameLayout {
+                         editText.setFrameColor(AndroidUtilities.computePerceivedBrightness(entity.color) >= .25f ? 0x99000000 : 0x99ffffff);
+                     } else if (entity.subType == 2) {
+                         editText.setFrameColor(AndroidUtilities.computePerceivedBrightness(entity.color) >= .25f ? Color.BLACK : Color.WHITE);
++                    } else if (entity.subType == 3) {
++                        editText.setFrameColor(0);
+                     } else {
+                         editText.setFrameColor(0);
++                        editText.setStrokeColor(AndroidUtilities.computePerceivedBrightness(entity.color) >= .25f ? Color.BLACK : Color.WHITE);
+                     }
+                     editText.setTextColor(textColor);
+                     editText.setCursorColor(textColor);
+diff --git a/TMessagesProj/src/main/java/org/telegram/ui/Stories/recorder/PaintView.java b/TMessagesProj/src/main/java/org/telegram/ui/Stories/recorder/PaintView.java
+index 0000000..0000000 100644
+--- a/TMessagesProj/src/main/java/org/telegram/ui/Stories/recorder/PaintView.java
++++ b/TMessagesProj/src/main/java/org/telegram/ui/Stories/recorder/PaintView.java
+@@ -1432,6 +1432,7 @@ public class PaintView extends SizeNotifierFrameLayoutPhoto implements IPhotoPai
+                 textOptionsView.setTypeface(typeface.getKey());
+             }
+             textOptionsView.setOutlineType(((TextPaintView) entityView).getType(), true);
++            textOptionsView.inu_setNoWrap(((TextPaintView) entityView).inu_isNoWrap());
+             overlayLayout.invalidate();
+         }
+ 
+@@ -3724,6 +3725,16 @@ public class PaintView extends SizeNotifierFrameLayoutPhoto implements IPhotoPai
+         setTextType((selectedTextType + 1) % 4);
+     }
+ 
++    @Override
++    public void inu_onTextNoWrapSelected(View v) {
++        if (currentEntityView instanceof TextPaintView) {
++            TextPaintView textPaintView = (TextPaintView) currentEntityView;
++            boolean noWrap = !textPaintView.inu_isNoWrap();
++            textPaintView.inu_setNoWrap(noWrap);
++            textOptionsView.inu_setNoWrap(noWrap);
++        }
++    }
++
+     private PaintView.PopupButton buttonForPopup(String text, int icon, boolean selected, Runnable onClick) {
+         PaintView.PopupButton button = new PaintView.PopupButton(getContext());
+         button.setIcon(icon);

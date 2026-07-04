@@ -201,7 +201,7 @@ bugfix/restore-comments-thread.patch
 bugfix/spoiler-tile-blink.patch
 bugfix/deeplink-album-member-anchor.patch
 feature/biometric-confirmation.patch
-feature/paint-outlined-text-style.patch
+feature/painter-text.patch
 bugfix/chat-background-leak.patch
 bugfix/reaction-overlay-fragment-leak.patch
 bugfix/photo-viewer-leaks.patch
