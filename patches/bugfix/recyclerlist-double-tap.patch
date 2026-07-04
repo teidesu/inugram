@@ -4,8 +4,8 @@ Date: Fri, 10 Apr 2026 06:49:47 +0300
 Subject: stock incorrectly handles double-taps in RecyclerListView by not checking if the second tap came from the same view, this patch fixes that
 
 ---
- .../main/java/org/telegram/ui/Components/RecyclerListView.java | 3 ++-
- 1 file changed, 2 insertions(+), 1 deletion(-)
+ .../java/org/telegram/ui/Components/RecyclerListView.java    | 5 +++--
+ 1 file changed, 3 insertions(+), 2 deletions(-)
 
 diff --git a/TMessagesProj/src/main/java/org/telegram/ui/Components/RecyclerListView.java b/TMessagesProj/src/main/java/org/telegram/ui/Components/RecyclerListView.java
 index 0000000..0000000 100644
@@ -28,3 +28,12 @@ index 0000000..0000000 100644
                          onItemClickListenerExtended.onDoubleTap(doubleTapView, currentChildPosition, e.getX(), e.getY());
                          doubleTapView = null;
                          return true;
+@@ -1206,7 +1207,7 @@ public class RecyclerListView extends RecyclerView implements IBlur3Capture {
+ 
+                 @Override
+                 public boolean hasDoubleTap(MotionEvent e) {
+-                    return onItemLongClickListenerExtended != null;
++                    return currentChildView != null && onItemClickListenerExtended != null && onItemClickListenerExtended.hasDoubleTap(currentChildView, currentChildPosition);
+                 }
+             });
+             gestureDetector.setIsLongpressEnabled(false);
