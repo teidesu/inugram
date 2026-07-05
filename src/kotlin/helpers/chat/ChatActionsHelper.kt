@@ -70,6 +70,7 @@ object ChatActionsHelper {
     const val ACTION_SEL_GALLERY = 1504
     const val ACTION_SEL_PIN = 1505
     const val ACTION_SEL_UNPIN = 1506
+    const val ACTION_SEL_FORWARD_NO_QUOTE = 1507
 
     // --- chat header menu ---
 
@@ -179,6 +180,7 @@ object ChatActionsHelper {
 
             ACTION_SELECT_RANGE -> fillSelectionGaps(activity)
             ACTION_SEL_SAVE -> saveSelectionToSavedMessages(activity)
+            ACTION_SEL_FORWARD_NO_QUOTE -> forwardSelectionNoQuote(activity)
             ACTION_SEL_TRANSLATE -> translateSelection(activity)
             ACTION_SEL_GALLERY -> saveSelectionToGallery(activity)
             ACTION_SEL_PIN -> pinSelection(activity)
@@ -310,6 +312,11 @@ object ChatActionsHelper {
             LocaleController.getString(R.string.InuSaveToSavedMessages),
         )
         overflow.addSubItem(
+            ACTION_SEL_FORWARD_NO_QUOTE,
+            R.drawable.msg_forward_noquote,
+            LocaleController.getString(R.string.InuForwardNoQuote),
+        )
+        overflow.addSubItem(
             ACTION_SEL_TRANSLATE,
             R.drawable.msg_translate,
             LocaleController.getString(R.string.TranslateMessage),
@@ -367,16 +374,18 @@ object ChatActionsHelper {
             if (!msg.canForwardMessage()) allForwardable = false
         }
         val selfId = UserConfig.getInstance(activity.currentAccount).clientUserId
-        val canSave = any && allForwardable && !activity.isPeerNoForwards && activity.dialogId != selfId
+        val canForward = any && allForwardable && !activity.isPeerNoForwards
+        val canSave = canForward && activity.dialogId != selfId
         val canTranslate = any && hasText && InuConfig.IN_PLACE_TRANSLATION.value
         overflow.setSubItemShown(ACTION_SEL_SAVE, canSave)
+        overflow.setSubItemShown(ACTION_SEL_FORWARD_NO_QUOTE, canForward)
         overflow.setSubItemShown(ACTION_SEL_TRANSLATE, canTranslate)
         overflow.setSubItemShown(ACTION_SEL_GALLERY, hasMedia)
         overflow.setSubItemShown(ACTION_SEL_PIN, canPin)
         overflow.setSubItemShown(ACTION_SEL_UNPIN, canUnpin)
         actionMode.setItemVisibility(
             ACTION_SELECTION_MENU,
-            if (canSave || canTranslate || hasMedia || canPin || canUnpin) View.VISIBLE else View.GONE,
+            if (canSave || canForward || canTranslate || hasMedia || canPin || canUnpin) View.VISIBLE else View.GONE,
         )
     }
 
@@ -397,6 +406,12 @@ object ChatActionsHelper {
     private fun saveSelectionToSavedMessages(activity: ChatActivity) {
         ChatHelper.forwardToSavedMessages(activity, collectSelected(activity))
         activity.clearSelectionMode()
+    }
+
+    private fun forwardSelectionNoQuote(activity: ChatActivity) {
+        ChatHelper.clearForwardFlags()
+        activity.openForward(true)
+        ChatHelper.pendingHideAuthor = true
     }
 
     private fun translateSelection(activity: ChatActivity) {

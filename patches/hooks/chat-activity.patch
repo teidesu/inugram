@@ -6,8 +6,8 @@ Subject: hooks into various places inside ChatActivity
 ---
  .../ui/ActionBar/ActionBarMenuItem.java       |   4 +
  .../java/org/telegram/ui/AvatarPreviewer.java |   4 +-
- .../java/org/telegram/ui/ChatActivity.java    | 108 +++++++++++-------
- 3 files changed, 76 insertions(+), 40 deletions(-)
+ .../java/org/telegram/ui/ChatActivity.java    | 110 +++++++++++-------
+ 3 files changed, 77 insertions(+), 41 deletions(-)
 
 diff --git a/TMessagesProj/src/main/java/org/telegram/ui/ActionBar/ActionBarMenuItem.java b/TMessagesProj/src/main/java/org/telegram/ui/ActionBar/ActionBarMenuItem.java
 index 0000000..0000000 100644
@@ -263,6 +263,15 @@ index 0000000..0000000 100644
      }
  
      private void hideTagSelector() {
+@@ -12096,7 +12107,7 @@ public class ChatActivity extends BaseFragment implements
+         updateSelectedMessageReactions();
+     }
+ 
+-    private void openForward(boolean fromActionBar) {
++    public void openForward(boolean fromActionBar) {
+         if (isPeerNoForwards() || hasSelectedNoforwardsMessage()) {
+             // We should update text if user changed locale without re-opening chat activity
+             String str;
 @@ -14230,7 +14241,7 @@ public class ChatActivity extends BaseFragment implements
          getConnectionsManager().bindRequestToGuid(linkSearchRequestId, classGuid);
      }
