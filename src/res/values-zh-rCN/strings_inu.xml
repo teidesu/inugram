@@ -184,6 +184,7 @@
     <string name="InuFontDefault">默认</string>
     <string name="InuFontSystem">系统</string>
     <string name="InuFontImportFailed">无法导入字体。请确认是 TTF/OTF/TTC 文件。</string>
+    <string name="InuFontUnsupported">Android 无法加载此字体，因此无法正确显示。</string>
     <string name="InuFontInstall">安装</string>
     <string name="InuFontReinstall">重新安装</string>
     <string name="InuFontAddToFamily">添加到 %1$s</string>
@@ -545,6 +546,8 @@
     <string name="InuTextSpoilerModeEpstein">Epstein</string>
     <string name="InuSpoilerExtendToLineEnd">剧透延伸到行末</string>
     <string name="InuSpoilerExtendToLineEndInfo">当文本接近但未达行末时，将剧透块拉伸到行边缘</string>
+    <string name="InuLinkPreviewSpoiler">剧透链接预览</string>
+    <string name="InuLinkPreviewSpoilerInfo">当生成网页预览的链接被隐藏在剧透下时，也用剧透遮盖该预览</string>
     <string name="InuMediaSpoilerLabel">剧透</string>
     <string name="InuMediaSpoilerMode">媒体剧透样式</string>
     <string name="InuMediaSpoilerModeTelegram">Telegram</string>

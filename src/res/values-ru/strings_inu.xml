@@ -173,6 +173,7 @@
     <string name="InuFontDefault">По умолчанию</string>
     <string name="InuFontSystem">Системный</string>
     <string name="InuFontImportFailed">Не удалось импортировать шрифт. Убедитесь, что это файл TTF/OTF/TTC.</string>
+    <string name="InuFontUnsupported">Android не может загрузить этот шрифт, поэтому он будет отображаться некорректно.</string>
     <string name="InuFonts">Шрифты</string>
     <string name="InuAppFont">Шрифт приложения</string>
     <string name="InuAppFontInfo">Шрифт, используемый по всему интерфейсу приложения.</string>
@@ -553,6 +554,8 @@
     <string name="InuTextSpoilerModeEpstein">Epstein</string>
     <string name="InuSpoilerExtendToLineEnd">Растягивать спойлеры до конца строки</string>
     <string name="InuSpoilerExtendToLineEndInfo">Растягивает блоки спойлеров до края строки, когда текст немного не дотягивает</string>
+    <string name="InuLinkPreviewSpoiler">Спойлер на превью ссылок</string>
+    <string name="InuLinkPreviewSpoilerInfo">Если ссылка, из которой сгенерировано превью, скрыта под спойлером, скрывает под спойлером и само превью</string>
     <string name="InuMediaSpoilerLabel">Спойлер</string>
     <string name="InuMediaSpoilerMode">Стиль медиа-спойлеров</string>
     <string name="InuMediaSpoilerModeTelegram">Telegram</string>

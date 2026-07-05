@@ -185,6 +185,7 @@
     <string name="InuFontDefault">デフォルト</string>
     <string name="InuFontSystem">システム</string>
     <string name="InuFontImportFailed">フォントをインポートできませんでした。TTF/OTF/TTC ファイルか確認してください。</string>
+    <string name="InuFontUnsupported">Android がこのフォントを読み込めないため、正しく表示されません。</string>
     <string name="InuFontInstall">インストール</string>
     <string name="InuFontReinstall">再インストール</string>
     <string name="InuFontAddToFamily">%1$s に追加</string>
@@ -546,6 +547,8 @@
     <string name="InuTextSpoilerModeEpstein">Epstein</string>
     <string name="InuSpoilerExtendToLineEnd">スポイラーを行末まで伸ばす</string>
     <string name="InuSpoilerExtendToLineEndInfo">テキストが行末まで届かないとき、スポイラーブロックを行の端まで伸ばします</string>
+    <string name="InuLinkPreviewSpoiler">リンクプレビューをスポイラーに</string>
+    <string name="InuLinkPreviewSpoilerInfo">Webプレビューを生成したリンクがスポイラーで隠されているとき、プレビューもスポイラーで覆います</string>
     <string name="InuMediaSpoilerLabel">スポイラー</string>
     <string name="InuMediaSpoilerMode">メディアスポイラーのスタイル</string>
     <string name="InuMediaSpoilerModeTelegram">Telegram</string>
