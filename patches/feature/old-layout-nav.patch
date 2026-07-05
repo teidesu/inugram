@@ -8,12 +8,12 @@ Restore hamburger side drawer for old layout mode (DrawerLayoutContainer)
 Restore hamburger side drawer for old layout mode (DialogsActivity)
 ---
  .../ui/ActionBar/DrawerLayoutContainer.java   | 38 +++++++++++++++++--
- .../java/org/telegram/ui/DialogsActivity.java | 22 +++++++++--
+ .../java/org/telegram/ui/DialogsActivity.java | 25 ++++++++++--
  .../java/org/telegram/ui/LaunchActivity.java  | 24 ++++--------
  .../java/org/telegram/ui/LoginActivity.java   |  9 ++---
  .../ui/TwoStepVerificationActivity.java       |  5 +--
  .../ui/TwoStepVerificationSetupActivity.java  | 10 ++---
- 6 files changed, 68 insertions(+), 40 deletions(-)
+ 6 files changed, 71 insertions(+), 40 deletions(-)
 
 diff --git a/TMessagesProj/src/main/java/org/telegram/ui/ActionBar/DrawerLayoutContainer.java b/TMessagesProj/src/main/java/org/telegram/ui/ActionBar/DrawerLayoutContainer.java
 index 0000000..0000000 100644
@@ -162,7 +162,17 @@ index 0000000..0000000 100644
          dialogStoriesCell.allowGlobalUpdates = false;
          dialogStoriesCell.setVisibility(View.GONE);
          animateToHasStories = false;
-@@ -8927,6 +8937,8 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
+@@ -5808,6 +5818,9 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
+             yoff = -(actionBar.getHeight() - AndroidUtilities.rectTmp2.centerY()) - dp(16);
+             xoff = AndroidUtilities.rectTmp2.centerX() - dp(16);
+             xoff += dp(4);
++            if (!hasMainTabs && desu.inugram.InuConfig.NAVIGATION_DRAWER.getValue()) {
++                xoff -= dp(4);
++            }
+             if (animatedStatusView != null) {
+                 animatedStatusView.translate(AndroidUtilities.rectTmp2.centerX(), AndroidUtilities.rectTmp2.centerY());
+             }
+@@ -8927,6 +8940,8 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
          selectedDialogs.clear();
          if (backDrawable != null) {
              backDrawable.setRotation(0, true);
@@ -171,7 +181,7 @@ index 0000000..0000000 100644
          }
          if (filterTabsView != null) {
              filterTabsView.animateColorsTo(Theme.key_actionBarTabLine, Theme.key_actionBarTabActiveText, Theme.key_actionBarTabUnactiveText, Theme.key_actionBarTabSelector, Theme.key_windowBackgroundWhite);
-@@ -9986,6 +9998,8 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
+@@ -9986,6 +10001,8 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
              }
              if (backDrawable != null) {
                  backDrawable.setRotation(1, true);
