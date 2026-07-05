@@ -2,6 +2,7 @@ package desu.inugram.helpers.font
 
 import desu.inugram.ui.settings.fonts.FontInstallSheet
 import org.telegram.messenger.AndroidUtilities
+import org.telegram.messenger.FileLog
 import org.telegram.messenger.LocaleController
 import org.telegram.messenger.MessageObject
 import org.telegram.messenger.R
@@ -11,6 +12,7 @@ import org.telegram.ui.Components.BulletinFactory
 import java.io.File
 
 object FontImportHelper {
+    private const val TAG = "InuFonts"
     private val EXTENSIONS = listOf(".ttf", ".otf", ".ttc")
 
     fun isFontFileName(name: String): Boolean {
@@ -19,13 +21,21 @@ object FontImportHelper {
     }
 
     fun startImportFromFile(fragment: BaseFragment, message: MessageObject, file: File, displayName: String) {
+        FileLog.d("$TAG: startImportFromFile: path=${file.absolutePath} exists=${file.exists()} size=${file.length()} name=$displayName")
         Utilities.globalQueue.postRunnable {
             val info = FontLibrary.inspectFont(file)
+            FileLog.d("$TAG: startImportFromFile: inspect result: family=${info?.family} faces=${info?.faceCount}")
+            val loadable = info != null && FontLibrary.isLoadableBySystem(file)
             AndroidUtilities.runOnUIThread {
-                val ctx = fragment.context ?: fragment.parentActivity ?: return@runOnUIThread
-                if (info == null) {
+                val ctx = fragment.context ?: fragment.parentActivity ?: run {
+                    FileLog.d("$TAG: startImportFromFile: fragment has no context, dropping")
+                    return@runOnUIThread
+                }
+                if (info == null || !loadable) {
                     BulletinFactory.of(fragment).createErrorBulletin(
-                        LocaleController.getString(R.string.InuFontImportFailed)
+                        LocaleController.getString(
+                            if (info == null) R.string.InuFontImportFailed else R.string.InuFontUnsupported
+                        )
                     ).show()
                     return@runOnUIThread
                 }
@@ -42,10 +52,12 @@ object FontImportHelper {
     }
 
     private fun installFont(fragment: BaseFragment, file: File) {
+        FileLog.d("$TAG: installFont: path=${file.absolutePath} exists=${file.exists()} size=${file.length()}")
         Utilities.globalQueue.postRunnable {
-            val added = FontLibrary.importFromFile(file)
+            val result = FontLibrary.importFromFile(file)
+            FileLog.d("$TAG: installFont: added=${result.addedFaces} rejected=${result.rejectedBySystem}")
             AndroidUtilities.runOnUIThread {
-                if (added > 0) {
+                if (result.addedFaces > 0) {
                     FontLibrary.invalidateEditorRoster()
                     BulletinFactory.of(fragment).createSimpleBulletin(
                         R.raw.contact_check,
@@ -53,7 +65,9 @@ object FontImportHelper {
                     ).show()
                 } else {
                     BulletinFactory.of(fragment).createErrorBulletin(
-                        LocaleController.getString(R.string.InuFontImportFailed)
+                        LocaleController.getString(
+                            if (result.rejectedBySystem > 0) R.string.InuFontUnsupported else R.string.InuFontImportFailed
+                        )
                     ).show()
                 }
             }

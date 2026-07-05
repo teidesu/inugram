@@ -247,6 +247,7 @@
     <string name="InuFontDefault">Default</string>
     <string name="InuFontSystem">System</string>
     <string name="InuFontImportFailed">Could not import font. Make sure it is a TTF/OTF/TTC file.</string>
+    <string name="InuFontUnsupported">Android can\'t load this font, so it would not display correctly.</string>
     <string name="InuFontInstall">Install</string>
     <string name="InuFontReinstall">Reinstall</string>
     <string name="InuFontAddToFamily">Add to %1$s</string>

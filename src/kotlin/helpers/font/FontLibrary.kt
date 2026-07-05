@@ -13,6 +13,7 @@ import desu.inugram.helpers.font.SfntParser.Script
 import org.json.JSONArray
 import org.json.JSONObject
 import org.telegram.messenger.AndroidUtilities
+import org.telegram.messenger.FileLog
 import org.telegram.messenger.NotificationCenter
 import org.telegram.messenger.Utilities
 import org.telegram.ui.Components.Paint.PaintTypeface
@@ -35,6 +36,7 @@ import java.io.FileOutputStream
  * system fonts — serialized to/from token strings only at the storage boundary.
  */
 object FontLibrary {
+    private const val TAG = "InuFonts"
     private const val DIR = "inu_fonts"
     private const val INDEX = "index.json"
     private const val MANIFEST = "pack.json"
@@ -71,7 +73,10 @@ object FontLibrary {
 
             val pick = pickBestFace(targetWeight, targetItalic) ?: return null
             val file = faceFile(pick)
-            if (!file.isFile) return null
+            if (!file.isFile) {
+                FileLog.d("$TAG: resolve: face file missing: ${file.absolutePath} (family=$id)")
+                return null
+            }
 
             val base: Typeface = try {
                 val builder = Typeface.Builder(file).setTtcIndex(pick.ttcIndex)
@@ -80,9 +85,13 @@ object FontLibrary {
                     builder.setFontVariationSettings("'wght' $w")
                 }
                 builder.build()
-            } catch (_: Throwable) {
+            } catch (e: Throwable) {
+                FileLog.e("$TAG: resolve: Typeface.Builder threw for ${file.name} (family=$id)", e)
                 return null
-            } ?: return null
+            } ?: run {
+                FileLog.d("$TAG: resolve: Typeface.Builder rejected ${file.name} (family=$id, ttcIndex=${pick.ttcIndex})")
+                return null
+            }
 
             // synthesize italic / weight tweaks when the picked face doesn't match exactly
             val needSynth = (targetItalic && !pick.italic) ||
@@ -144,7 +153,8 @@ object FontLibrary {
                         b.setFontVariationSettings("'wght' ${f.weight.coerceIn(f.wghtMin, f.wghtMax)}")
                     }
                     b.build()
-                } catch (_: Throwable) {
+                } catch (e: Throwable) {
+                    FileLog.e("$TAG: faceInfos: Typeface.Builder failed for ${f.file} (family=$id)", e)
                     null
                 }
                 faceLabel(f) to tf
@@ -177,7 +187,10 @@ object FontLibrary {
         fun fontFor(targetWeight: Int, targetItalic: Boolean): Font? {
             val pick = pickBestFace(targetWeight, targetItalic) ?: return null
             val file = faceFile(pick)
-            if (!file.isFile) return null
+            if (!file.isFile) {
+                FileLog.d("$TAG: fontFor: face file missing: ${file.absolutePath} (family=$id)")
+                return null
+            }
             return try {
                 val b = Font.Builder(file).setTtcIndex(pick.ttcIndex)
                 if (pick.variable && pick.wghtMin != pick.wghtMax) {
@@ -186,7 +199,8 @@ object FontLibrary {
                 b.setWeight(targetWeight.coerceIn(1, 1000))
                 b.setSlant(if (targetItalic) FontStyle.FONT_SLANT_ITALIC else FontStyle.FONT_SLANT_UPRIGHT)
                 b.build()
-            } catch (_: Throwable) {
+            } catch (e: Throwable) {
+                FileLog.e("$TAG: fontFor: Font.Builder failed for ${file.name} (family=$id)", e)
                 null
             }
         }
@@ -289,6 +303,7 @@ object FontLibrary {
             }
         }
         if (saved == null || saved != cleaned || savedHidden != newHidden) saveRoster()
+        FileLog.d("$TAG: load: families=${discovered.size} roster=${cleaned.size} hidden=${newHidden.size}")
     }
 
     private fun readFamily(sub: File): Family? {
@@ -310,8 +325,12 @@ object FontLibrary {
                     wghtMax = o.optInt("wghtMax", 400),
                 )
             }
-            if (faces.isEmpty()) null else Family(sub.name, sub, name, faces)
-        } catch (_: Throwable) {
+            if (faces.isEmpty()) {
+                FileLog.d("$TAG: readFamily: manifest has no faces in ${sub.name}")
+                null
+            } else Family(sub.name, sub, name, faces)
+        } catch (e: Throwable) {
+            FileLog.e("$TAG: readFamily: failed to read manifest in ${sub.name}", e)
             null
         }
     }
@@ -348,7 +367,8 @@ object FontLibrary {
             val hArr = o.optJSONArray("hidden")
             val hidden = if (hArr != null) (0 until hArr.length()).mapTo(HashSet()) { FontId.parse(hArr.getString(it)) } else emptySet()
             roster to hidden
-        } catch (_: Throwable) {
+        } catch (e: Throwable) {
+            FileLog.e("$TAG: readIndex: failed", e)
             null to emptySet()
         }
     }
@@ -366,7 +386,8 @@ object FontLibrary {
                     .put("hidden", JSONArray(hiddenSnapshot))
                     .toString()
             )
-        } catch (_: Throwable) {
+        } catch (e: Throwable) {
+            FileLog.e("$TAG: saveRoster: failed", e)
         }
     }
 
@@ -386,7 +407,8 @@ object FontLibrary {
                     try {
                         f.copyTo(dst, overwrite = true)
                         f.delete()
-                    } catch (_: Throwable) {
+                    } catch (e: Throwable) {
+                        FileLog.e("$TAG: migrateLegacy: failed to move ${f.name}", e)
                     }
                 }
             }
@@ -493,47 +515,81 @@ object FontLibrary {
 
     private class StagedFile(val file: File, val faces: List<SfntParser.RawFace>, val family: String?)
 
+    class ImportResult(val addedFaces: Int, val rejectedBySystem: Int)
+
     /**
      * Imports the given URIs, grouping faces by family name. Files whose family matches an existing
      * family (or each other) merge into one entry instead of creating duplicates. Returns the number
-     * of face entries added (0 on failure).
+     * of face entries added plus the number of files Android's font engine rejected.
      */
-    fun importFromUris(context: Context, uris: List<Uri>): Int {
-        val dir = rootDir ?: return 0
+    fun importFromUris(context: Context, uris: List<Uri>): ImportResult {
+        val dir = rootDir ?: run {
+            FileLog.d("$TAG: importFromUris: rootDir not initialized")
+            return ImportResult(0, 0)
+        }
         val staging = File(dir, STAGING).apply { mkdirs() }
         val cr = context.contentResolver
 
         // 1. save + parse each file, tagging it with its (majority) family name
         val staged = ArrayList<StagedFile>()
+        var rejected = 0
         for ((i, uri) in uris.withIndex()) {
             val tmp = File(staging, "s${i}_${System.nanoTime()}.bin")
-            try {
-                cr.openInputStream(uri)?.use { ins -> FileOutputStream(tmp).use { os -> ins.copyTo(os) } } ?: continue
-            } catch (_: Throwable) {
-                continue
+            val copied = try {
+                val ins = cr.openInputStream(uri)
+                if (ins == null) {
+                    FileLog.d("$TAG: importFromUris: openInputStream returned null for $uri")
+                    false
+                } else {
+                    ins.use { FileOutputStream(tmp).use { os -> it.copyTo(os) } }
+                    true
+                }
+            } catch (e: Throwable) {
+                FileLog.e("$TAG: importFromUris: failed to copy $uri", e)
+                false
             }
-            stageParsedFile(tmp, staged)
+            if (!copied) continue
+            if (stageParsedFile(tmp, staged) == StageResult.UNSUPPORTED) rejected++
         }
+        FileLog.d("$TAG: importFromUris: staged ${staged.size}/${uris.size} files, rejected=$rejected")
 
-        return mergeStagedFiles(dir, staging, staged)
+        return ImportResult(mergeStagedFiles(dir, staging, staged), rejected)
     }
 
-    fun importFromFile(source: File): Int {
-        val dir = rootDir ?: return 0
+    fun importFromFile(source: File): ImportResult {
+        val dir = rootDir ?: run {
+            FileLog.d("$TAG: importFromFile: rootDir not initialized")
+            return ImportResult(0, 0)
+        }
         val staging = File(dir, STAGING).apply { mkdirs() }
         val tmp = File(staging, "s0_${System.nanoTime()}.bin")
         val staged = ArrayList<StagedFile>()
+        var rejected = 0
         try {
             source.copyTo(tmp, overwrite = true)
-            stageParsedFile(tmp, staged)
-        } catch (_: Throwable) {
+            if (stageParsedFile(tmp, staged) == StageResult.UNSUPPORTED) rejected++
+        } catch (e: Throwable) {
+            FileLog.e("$TAG: importFromFile: failed to stage ${source.absolutePath}", e)
         }
-        return mergeStagedFiles(dir, staging, staged)
+        return ImportResult(mergeStagedFiles(dir, staging, staged), rejected)
     }
 
     class FontInfo(val family: String?, val faces: List<SfntParser.RawFace>) {
         val faceCount get() = faces.size
         val variable get() = faces.any { it.variable }
+    }
+
+    /** True when Android's font engine accepts the file — [SfntParser] is far more lenient than Minikin. */
+    fun isLoadableBySystem(file: File): Boolean {
+        val loadable = try {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) Typeface.Builder(file).build() != null
+            else Typeface.createFromFile(file) !== Typeface.DEFAULT
+        } catch (e: Throwable) {
+            FileLog.e("$TAG: isLoadableBySystem: threw for ${file.name}", e)
+            false
+        }
+        if (!loadable) FileLog.d("$TAG: isLoadableBySystem: system rejected ${file.name} (size=${file.length()})")
+        return loadable
     }
 
     fun inspectFont(file: File): FontInfo? {
@@ -558,15 +614,23 @@ object FontLibrary {
         return InstallStatus(if (allPresent) InstallKind.REINSTALL else InstallKind.ADD, existing.name ?: familyName)
     }
 
-    private fun stageParsedFile(tmp: File, out: MutableList<StagedFile>) {
+    private enum class StageResult { STAGED, UNPARSEABLE, UNSUPPORTED }
+
+    private fun stageParsedFile(tmp: File, out: MutableList<StagedFile>): StageResult {
         val raws = SfntParser.parse(tmp)
         if (raws.isEmpty()) {
+            FileLog.d("$TAG: stageParsedFile: no faces parsed from ${tmp.name} (size=${tmp.length()})")
             tmp.delete()
-            return
+            return StageResult.UNPARSEABLE
+        }
+        if (!isLoadableBySystem(tmp)) {
+            tmp.delete()
+            return StageResult.UNSUPPORTED
         }
         val family = raws.mapNotNull { it.family?.takeIf(String::isNotBlank) }
             .groupingBy { it }.eachCount().maxByOrNull { it.value }?.key
         out.add(StagedFile(tmp, raws, family))
+        return StageResult.STAGED
     }
 
     private fun mergeStagedFiles(dir: File, staging: File, staged: List<StagedFile>): Int {
@@ -581,66 +645,77 @@ object FontLibrary {
         var addedFaces = 0
         for ((_, group) in buckets) {
             val familyName = group.firstNotNullOfOrNull { it.family }
-            // resolve `existing` under lock; reading the LinkedHashMap concurrently with mutations is unsafe.
-            val existing = synchronized(lock) {
-                familyName?.let { name -> families.values.firstOrNull { it.name.equals(name, ignoreCase = true) } }
-            }
-            val targetId = existing?.id ?: newId()
-            val targetDir = existing?.dir ?: File(dir, targetId).apply { mkdirs() }
-            // use in-memory faces from the loaded Family — re-reading the manifest here would
-            // silently drop every existing face if the file is momentarily corrupted/unreadable.
-            val faces = existing?.faces?.toMutableList() ?: mutableListOf()
-
-            // counter ensures unique destination names even when called twice in the same nanosecond
-            // or when faces.size collides with a previously-imported file name.
-            var nameCounter = 0
-            for (s in group) {
-                var name: String
-                var dst: File
-                do {
-                    name = "f${faces.size}_${System.nanoTime()}_${nameCounter++}.bin"
-                    dst = File(targetDir, name)
-                } while (dst.exists())
-                if (!s.file.renameTo(dst)) {
-                    try {
-                        s.file.copyTo(dst, overwrite = true)
-                        s.file.delete()
-                    } catch (_: Throwable) {
-                        continue
-                    }
+            try {
+                // resolve `existing` under lock; reading the LinkedHashMap concurrently with mutations is unsafe.
+                val existing = synchronized(lock) {
+                    familyName?.let { name -> families.values.firstOrNull { it.name.equals(name, ignoreCase = true) } }
                 }
-                // replace any existing face with the same weight/italic; drop its blob if now orphaned
-                val incomingKeys = s.faces.mapTo(HashSet()) { it.weight to it.italic }
-                val replaced = faces.filter { (it.weight to it.italic) in incomingKeys }
-                if (replaced.isNotEmpty()) {
-                    faces.removeAll(replaced)
-                    for (rem in replaced) {
-                        if (faces.none { it.file == rem.file }) {
-                            File(rem.file).let { if (it.isAbsolute) it else File(targetDir, rem.file) }.delete()
+                val targetId = existing?.id ?: newId()
+                val targetDir = existing?.dir ?: File(dir, targetId).apply { mkdirs() }
+                // use in-memory faces from the loaded Family — re-reading the manifest here would
+                // silently drop every existing face if the file is momentarily corrupted/unreadable.
+                val faces = existing?.faces?.toMutableList() ?: mutableListOf()
+
+                // counter ensures unique destination names even when called twice in the same nanosecond
+                // or when faces.size collides with a previously-imported file name.
+                var nameCounter = 0
+                for (s in group) {
+                    var name: String
+                    var dst: File
+                    do {
+                        name = "f${faces.size}_${System.nanoTime()}_${nameCounter++}.bin"
+                        dst = File(targetDir, name)
+                    } while (dst.exists())
+                    if (!s.file.renameTo(dst)) {
+                        try {
+                            s.file.copyTo(dst, overwrite = true)
+                            s.file.delete()
+                        } catch (e: Throwable) {
+                            FileLog.e("$TAG: mergeStagedFiles: failed to move ${s.file.name} into $targetId", e)
+                            continue
                         }
                     }
+                    // replace any existing face with the same weight/italic; drop its blob if now orphaned
+                    val incomingKeys = s.faces.mapTo(HashSet()) { it.weight to it.italic }
+                    val replaced = faces.filter { (it.weight to it.italic) in incomingKeys }
+                    if (replaced.isNotEmpty()) {
+                        faces.removeAll(replaced)
+                        for (rem in replaced) {
+                            if (faces.none { it.file == rem.file }) {
+                                File(rem.file).let { if (it.isAbsolute) it else File(targetDir, rem.file) }.delete()
+                            }
+                        }
+                    }
+                    for (r in s.faces) {
+                        faces.add(Face(name, r.ttcIndex, r.weight, r.italic, r.variable, r.wghtMin, r.wghtMax))
+                        addedFaces++
+                    }
                 }
-                for (r in s.faces) {
-                    faces.add(Face(name, r.ttcIndex, r.weight, r.italic, r.variable, r.wghtMin, r.wghtMax))
-                    addedFaces++
+                if (faces.isEmpty()) continue
+                writeManifest(targetDir, faces, familyName ?: existing?.name)
+                val refreshed = readFamily(targetDir)
+                if (refreshed == null) {
+                    FileLog.d("$TAG: mergeStagedFiles: manifest re-read failed for $targetId right after write")
+                    continue
                 }
-            }
-            if (faces.isEmpty()) continue
-            writeManifest(targetDir, faces, familyName ?: existing?.name)
-            val refreshed = readFamily(targetDir) ?: continue
-            synchronized(lock) {
-                families[targetId] = refreshed // replaces (refreshes cache) or adds
-                if (existing == null) {
-                    rosterFonts.add(FontId.Family(targetId))
-                } else {
-                    // re-importing into an existing (possibly hidden) family makes it visible again,
-                    // otherwise the user's new faces are silently missing from the editor.
-                    hiddenFonts.remove(FontId.Family(targetId))
+                FileLog.d("$TAG: mergeStagedFiles: family=$familyName id=$targetId faces=${faces.size} existing=${existing != null}")
+                synchronized(lock) {
+                    families[targetId] = refreshed // replaces (refreshes cache) or adds
+                    if (existing == null) {
+                        rosterFonts.add(FontId.Family(targetId))
+                    } else {
+                        // re-importing into an existing (possibly hidden) family makes it visible again,
+                        // otherwise the user's new faces are silently missing from the editor.
+                        hiddenFonts.remove(FontId.Family(targetId))
+                    }
                 }
+            } catch (e: Throwable) {
+                FileLog.e("$TAG: mergeStagedFiles: failed for family=$familyName", e)
             }
         }
 
         staging.deleteRecursively()
+        FileLog.d("$TAG: mergeStagedFiles: addedFaces=$addedFaces from ${staged.size} staged files")
         if (addedFaces > 0) saveRoster()
         return addedFaces
     }
@@ -705,7 +780,8 @@ object FontLibrary {
                 val faces = byFamily[name] ?: continue
                 discovered[name] = Family(name, rootDir ?: File(name), name, faces)
             }
-        } catch (_: Throwable) {
+        } catch (e: Throwable) {
+            FileLog.e("$TAG: discoverSystemFonts: failed", e)
         }
         return discovered
     }

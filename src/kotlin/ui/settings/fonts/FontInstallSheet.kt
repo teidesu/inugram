@@ -14,6 +14,7 @@ import androidx.core.widget.NestedScrollView
 import desu.inugram.helpers.font.FontLibrary
 import desu.inugram.helpers.font.SfntParser
 import org.telegram.messenger.AndroidUtilities
+import org.telegram.messenger.FileLog
 import org.telegram.messenger.LocaleController
 import org.telegram.messenger.R
 import org.telegram.ui.ActionBar.BottomSheet
@@ -37,7 +38,8 @@ class FontInstallSheet(
 
         val typeface = try {
             Typeface.createFromFile(file)
-        } catch (_: Throwable) {
+        } catch (e: Throwable) {
+            FileLog.e("InuFonts: FontInstallSheet: preview typeface failed for ${file.name}", e)
             Typeface.DEFAULT
         }
 

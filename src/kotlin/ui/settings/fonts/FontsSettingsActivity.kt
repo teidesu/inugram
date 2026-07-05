@@ -257,15 +257,23 @@ class FontsSettingsActivity : SettingsPageActivity(), NotificationCenter.Notific
         }
         if (uris.isEmpty()) return
         val ctx = parentActivity ?: context ?: return
+        FileLog.d("InuFonts: onActivityResultFragment: picked ${uris.size} uris")
         Utilities.globalQueue.postRunnable {
-            val added = FontLibrary.importFromUris(ctx, uris)
+            val result = FontLibrary.importFromUris(ctx, uris)
             AndroidUtilities.runOnUIThread {
-                if (added > 0) {
+                if (result.addedFaces > 0) {
                     FontLibrary.invalidateEditorRoster()
                     listView.adapter.update(true)
+                    if (result.rejectedBySystem > 0) {
+                        BulletinFactory.of(this).createErrorBulletin(
+                            LocaleController.getString(R.string.InuFontUnsupported)
+                        ).show()
+                    }
                 } else {
                     BulletinFactory.of(this).createErrorBulletin(
-                        LocaleController.getString(R.string.InuFontImportFailed)
+                        LocaleController.getString(
+                            if (result.rejectedBySystem > 0) R.string.InuFontUnsupported else R.string.InuFontImportFailed
+                        )
                     ).show()
                 }
             }

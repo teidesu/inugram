@@ -1,9 +1,11 @@
 package desu.inugram.helpers.font
 
+import org.telegram.messenger.FileLog
 import java.io.File
 import java.io.RandomAccessFile
 
 object SfntParser {
+    private const val TAG = "InuFonts"
     enum class Script { LATIN, CYRILLIC, GREEK, ARABIC, HEBREW, CJK, KANA, HANGUL, THAI }
 
     data class RawFace(
@@ -20,13 +22,17 @@ object SfntParser {
     fun parse(file: File): List<RawFace> {
         return try {
             RandomAccessFile(file, "r").use { raf ->
-                when (raf.readInt()) {
+                when (val magic = raf.readInt()) {
                     0x74746366 -> parseTtc(raf) // 'ttcf'
                     0x00010000, 0x4F54544F, 0x74727565 -> listOfNotNull(parseFace(raf, 0, 0))
-                    else -> emptyList()
+                    else -> {
+                        FileLog.d("$TAG: parse: unknown magic 0x${Integer.toHexString(magic)} in ${file.name} (size=${file.length()})")
+                        emptyList()
+                    }
                 }
             }
         } catch (e: Throwable) {
+            FileLog.e("$TAG: parse: failed for ${file.name} (size=${file.length()})", e)
             emptyList()
         }
     }
@@ -37,7 +43,12 @@ object SfntParser {
         if (n <= 0 || n > 256) return emptyList()
         val offsets = List(n) { raf.readInt() }
         return offsets.mapIndexedNotNull { i, off ->
-            try { parseFace(raf, off, i) } catch (e: Throwable) { null }
+            try {
+                parseFace(raf, off, i)
+            } catch (e: Throwable) {
+                FileLog.e("$TAG: parseTtc: face $i at offset $off failed", e)
+                null
+            }
         }
     }
 

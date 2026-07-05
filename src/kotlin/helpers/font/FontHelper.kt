@@ -11,11 +11,14 @@ import android.widget.TextView
 import androidx.annotation.RequiresApi
 import desu.inugram.helpers.font.FontConfig.FontMode
 import org.telegram.messenger.AndroidUtilities
+import org.telegram.messenger.FileLog
 import org.telegram.ui.ActionBar.Theme
 import java.lang.reflect.Field
 import java.util.Hashtable
 
 object FontHelper {
+    private const val TAG = "InuFonts"
+
     // "real" default/mono fonts captured before they are replaced with reflection
     val stockDefault: Typeface = Typeface.DEFAULT
     val stockMonospace: Typeface = Typeface.MONOSPACE
@@ -44,9 +47,15 @@ object FontHelper {
      */
     fun validateActiveAppFont() {
         val m = FontConfig.FONT.value as? FontMode.Custom ?: return
-        val id = m.fontId as? FontId.Family ?: return resetAppFont()
+        val id = m.fontId as? FontId.Family ?: run {
+            FileLog.d("$TAG: validateActiveAppFont: non-family app font ${m.fontId.token()}, resetting to bundled")
+            return resetAppFont()
+        }
         // a Family with an empty id is the legacy "first family" marker → valid as long as any family exists
-        if (if (id.id.isEmpty()) !FontLibrary.hasAnyFamily() else !FontLibrary.containsFamily(id.id)) resetAppFont()
+        if (if (id.id.isEmpty()) !FontLibrary.hasAnyFamily() else !FontLibrary.containsFamily(id.id)) {
+            FileLog.d("$TAG: validateActiveAppFont: family ${id.id} not loaded, resetting to bundled")
+            resetAppFont()
+        }
     }
 
     fun resetAppFont() {
@@ -90,10 +99,14 @@ object FontHelper {
     /** A single imported family as a [FontFamily] at the requested style, for stack composition (Q+). */
     @RequiresApi(Build.VERSION_CODES.Q)
     private fun fontFamilyForToken(token: FontId, weight: Int, italic: Boolean): FontFamily? {
-        val font = FontLibrary.getFont(token, weight, italic) ?: return null
+        val font = FontLibrary.getFont(token, weight, italic) ?: run {
+            FileLog.d("$TAG: fontFamilyForToken: no font for ${token.token()} w=$weight i=$italic")
+            return null
+        }
         return try {
             FontFamily.Builder(font).build()
-        } catch (_: Throwable) {
+        } catch (e: Throwable) {
+            FileLog.e("$TAG: fontFamilyForToken: FontFamily.Builder failed for ${token.token()}", e)
             null
         }
     }
@@ -142,7 +155,8 @@ object FontHelper {
             } else {
                 tf
             }
-        } catch (_: Throwable) {
+        } catch (e: Throwable) {
+            FileLog.e("$TAG: composite: failed for primary=${primary.token()} w=$weight i=$italic", e)
             null
         }
     }
@@ -228,7 +242,11 @@ object FontHelper {
         }
 
         // app UI font (sans-serif*) — only when a custom font is selected
-        val regular = (FontConfig.FONT.value as? FontMode.Custom)?.let { resolve(400, false) }
+        val mode = FontConfig.FONT.value
+        val regular = (mode as? FontMode.Custom)?.let { resolve(400, false) }
+        if (mode is FontMode.Custom && regular == null) {
+            FileLog.d("$TAG: installGlobal: active custom font ${mode.fontId.token()} did not resolve, app font unchanged")
+        }
         if (regular != null) {
             val bold = resolve(700, false) ?: regular
             trySetStatic(typefaceDefaultField, regular)
