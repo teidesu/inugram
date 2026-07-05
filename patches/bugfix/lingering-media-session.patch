@@ -4,10 +4,47 @@ Date: Sat, 4 Jul 2026 14:47:12 +0400
 Subject: fix lingering system media session after playback ends.
 
 ---
- .../org/telegram/messenger/MusicPlayerService.java |  3 +++
- .../telegram/messenger/TelegramMediaSession.java   | 14 ++++++++++++++
- 2 files changed, 17 insertions(+)
+ .../messenger/MusicBrowserService.java        |  7 +++
+ .../messenger/MusicPlayerService.java         |  3 ++
+ .../messenger/TelegramMediaSession.java       | 50 ++++++++++++++++---
+ .../messenger/car/TelegramCarAppService.java  | 14 ++++++
+ 4 files changed, 68 insertions(+), 6 deletions(-)
 
+diff --git a/TMessagesProj/src/main/java/org/telegram/messenger/MusicBrowserService.java b/TMessagesProj/src/main/java/org/telegram/messenger/MusicBrowserService.java
+index 0000000..0000000 100644
+--- a/TMessagesProj/src/main/java/org/telegram/messenger/MusicBrowserService.java
++++ b/TMessagesProj/src/main/java/org/telegram/messenger/MusicBrowserService.java
+@@ -26,9 +26,12 @@ public class MusicBrowserService extends MediaBrowserService {
+ 
+     private static final String MEDIA_ID_ROOT = "__ROOT__";
+ 
++    public static volatile boolean inu_running;
++
+     @Override
+     public void onCreate() {
+         super.onCreate();
++        inu_running = true;
+         ApplicationLoader.postInitApplication();
+         TelegramMediaSession holder = TelegramMediaSession.getInstance(this);
+         setSessionToken(holder.getFrameworkSessionToken());
+@@ -36,6 +39,7 @@ public class MusicBrowserService extends MediaBrowserService {
+ 
+     @Override
+     public void onDestroy() {
++        inu_running = false;
+         super.onDestroy();
+     }
+ 
+@@ -45,6 +49,9 @@ public class MusicBrowserService extends MediaBrowserService {
+         if (clientPackageName == null) {
+             return null;
+         }
++        if (rootHints != null && rootHints.getBoolean(BrowserRoot.EXTRA_RECENT, false)) {
++            return null;
++        }
+         boolean isSelf = Process.SYSTEM_UID == clientUid || Process.myUid() == clientUid;
+         if (!isSelf && !PackageValidator.isKnownCaller(this, clientPackageName, clientUid)) {
+             return null;
 diff --git a/TMessagesProj/src/main/java/org/telegram/messenger/MusicPlayerService.java b/TMessagesProj/src/main/java/org/telegram/messenger/MusicPlayerService.java
 index 0000000..0000000 100644
 --- a/TMessagesProj/src/main/java/org/telegram/messenger/MusicPlayerService.java
@@ -17,7 +54,7 @@ index 0000000..0000000 100644
          }
          // mediaSession is owned by TelegramMediaSession (process singleton) — do NOT release here.
 +        if (sessionHolder != null) {
-+            sessionHolder.inu_deactivate();
++            sessionHolder.inu_releaseIfIdle();
 +        }
          for (int a = 0; a < UserConfig.MAX_ACCOUNT_COUNT; a++) {
              NotificationCenter.getInstance(a).removeObserver(this, NotificationCenter.messagePlayingDidSeek);
@@ -26,7 +63,35 @@ diff --git a/TMessagesProj/src/main/java/org/telegram/messenger/TelegramMediaSes
 index 0000000..0000000 100644
 --- a/TMessagesProj/src/main/java/org/telegram/messenger/TelegramMediaSession.java
 +++ b/TMessagesProj/src/main/java/org/telegram/messenger/TelegramMediaSession.java
-@@ -187,6 +187,20 @@ public class TelegramMediaSession {
+@@ -89,6 +89,8 @@ public class TelegramMediaSession {
+     private Paint roundPaint;
+     private RectF bitmapRect;
+ 
++    private final NotificationCenter.NotificationCenterDelegate inu_accountObserver;
++
+     private TelegramMediaSession(Context appContext) {
+         this.appContext = appContext;
+         this.currentAccount = UserConfig.selectedAccount;
+@@ -120,12 +122,12 @@ public class TelegramMediaSession {
+         updateRepeatMode();
+         updateShuffleMode();
+ 
+-        NotificationCenter.getGlobalInstance().addObserver(
+-                (id, account, args) -> {
+-                    if (id == NotificationCenter.activeAccountChanged) {
+-                        AndroidUtilities.runOnUIThread(this::onAccountSwitched);
+-                    }
+-                }, NotificationCenter.activeAccountChanged);
++        inu_accountObserver = (id, account, args) -> {
++            if (id == NotificationCenter.activeAccountChanged) {
++                AndroidUtilities.runOnUIThread(this::onAccountSwitched);
++            }
++        };
++        NotificationCenter.getGlobalInstance().addObserver(inu_accountObserver, NotificationCenter.activeAccountChanged);
+     }
+ 
+     private void onAccountSwitched() {
+@@ -187,6 +189,42 @@ public class TelegramMediaSession {
          }
      }
  
@@ -44,6 +109,53 @@ index 0000000..0000000 100644
 +        }
 +    }
 +
++    public void inu_releaseIfIdle() {
++        if (MusicBrowserService.inu_running || org.telegram.messenger.car.TelegramCarAppService.inu_running) {
++            inu_deactivate();
++            return;
++        }
++        synchronized (TelegramMediaSession.class) {
++            if (instance != this) {
++                return;
++            }
++            instance = null;
++        }
++        try {
++            NotificationCenter.getGlobalInstance().removeObserver(inu_accountObserver, NotificationCenter.activeAccountChanged);
++        } catch (Throwable ignored) {
++        }
++        try {
++            session.setActive(false);
++            session.release();
++        } catch (Throwable ignored) {
++        }
++    }
++
      public Bundle buildRootHints() {
          Bundle rootExtras = new Bundle();
          rootExtras.putBoolean(CONTENT_STYLE_SUPPORTED, true);
+diff --git a/TMessagesProj/src/main/java/org/telegram/messenger/car/TelegramCarAppService.java b/TMessagesProj/src/main/java/org/telegram/messenger/car/TelegramCarAppService.java
+index 0000000..0000000 100644
+--- a/TMessagesProj/src/main/java/org/telegram/messenger/car/TelegramCarAppService.java
++++ b/TMessagesProj/src/main/java/org/telegram/messenger/car/TelegramCarAppService.java
+@@ -9,6 +9,20 @@ import org.telegram.messenger.BuildVars;
+ 
+ public class TelegramCarAppService extends CarAppService {
+ 
++    public static volatile boolean inu_running;
++
++    @Override
++    public void onCreate() {
++        super.onCreate();
++        inu_running = true;
++    }
++
++    @Override
++    public void onDestroy() {
++        inu_running = false;
++        super.onDestroy();
++    }
++
+     @NonNull
+     @Override
+     public HostValidator createHostValidator() {
