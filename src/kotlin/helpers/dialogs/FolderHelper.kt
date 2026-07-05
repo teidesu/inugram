@@ -54,8 +54,11 @@ object FolderHelper {
         "\uD83D\uDCCB" to R.drawable.filter_setup,
     )
 
-    const val ICON_SIZE = 26
     const val ICON_GAP = 4
+
+    private fun getIconSize(): Int {
+        return if (isIconsOnly()) 28 else 24
+    }
 
     @JvmStatic
     fun saveMeta(storage: MessagesStorage, filters: List<MessagesController.DialogFilter>) {
@@ -149,10 +152,10 @@ object FolderHelper {
     @JvmStatic
     fun getContentWidth(title: CharSequence?, textPaint: TextPaint): Int {
         val mode = InuConfig.FOLDERS_DISPLAY_MODE.value;
-        if (mode == InuConfig.FoldersDisplayModeItem.ICONS_ONLY) return AndroidUtilities.dp(ICON_SIZE.toFloat())
+        if (mode == InuConfig.FoldersDisplayModeItem.ICONS_ONLY) return AndroidUtilities.dp(getIconSize().toFloat())
 
         var w = ceil(HintView2.measureCorrectly(title, textPaint)).toInt();
-        if (mode == InuConfig.FoldersDisplayModeItem.TITLES_AND_ICONS) w += AndroidUtilities.dp((ICON_SIZE + ICON_GAP).toFloat());
+        if (mode == InuConfig.FoldersDisplayModeItem.TITLES_AND_ICONS) w += AndroidUtilities.dp((getIconSize() + ICON_GAP).toFloat());
 
         return w
     }
@@ -176,7 +179,7 @@ object FolderHelper {
     @JvmStatic
     fun getTextXOffset(): Float {
         if (InuConfig.FOLDERS_DISPLAY_MODE.value != InuConfig.FoldersDisplayModeItem.TITLES_AND_ICONS) return 0f
-        return AndroidUtilities.dp((ICON_SIZE + ICON_GAP).toFloat()).toFloat()
+        return AndroidUtilities.dp((getIconSize() + ICON_GAP).toFloat()).toFloat()
     }
 
     /** draw the folder icon on the tab. call before drawing text. */
@@ -191,7 +194,7 @@ object FolderHelper {
     ) {
         if (icon == null || !needIcons()) return
 
-        val iconPx = AndroidUtilities.dp(ICON_SIZE.toFloat())
+        val iconPx = AndroidUtilities.dp(getIconSize().toFloat())
         icon.colorFilter = colorFilter
         icon.setBounds(0, 0, iconPx, iconPx)
         canvas.withSave {
