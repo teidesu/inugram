@@ -10,6 +10,7 @@ import android.view.ViewConfiguration
 import android.widget.FrameLayout
 import android.widget.TextView
 import org.telegram.messenger.AndroidUtilities
+import org.telegram.messenger.LocaleController
 import org.telegram.ui.ActionBar.Theme
 import org.telegram.ui.Components.BackupImageView
 import org.telegram.ui.Components.LayoutHelper
@@ -23,6 +24,7 @@ class DrawerProxyCell(context: Context) : FrameLayout(context) {
     private val checkBox: Switch
 
     private val touchSlop = ViewConfiguration.get(context).scaledTouchSlop
+    private val isRTL get() = LocaleController.isRTL
 
     var onSwitchToggled: ((Boolean) -> Unit)? = null
 
@@ -34,7 +36,7 @@ class DrawerProxyCell(context: Context) : FrameLayout(context) {
         textView.setTextColor(Theme.getColor(Theme.key_chats_menuItemText))
         textView.setTextSize(TypedValue.COMPLEX_UNIT_DIP, 15f)
         textView.typeface = AndroidUtilities.bold()
-        textView.gravity = Gravity.CENTER_VERTICAL or Gravity.LEFT
+        textView.gravity = Gravity.CENTER_VERTICAL or (if (isRTL) Gravity.RIGHT else Gravity.LEFT)
 
         checkBox = Switch(context)
         checkBox.setColors(Theme.key_switchTrack, Theme.key_switchTrackChecked, Theme.key_chats_menuBackground, Theme.key_chats_menuBackground)
@@ -61,8 +63,9 @@ class DrawerProxyCell(context: Context) : FrameLayout(context) {
 
     private fun isInSwitchZone(x: Float): Boolean {
         if (checkBox.visibility != VISIBLE) return false
-        // hit zone: from the switch left edge (with extra padding) to the right edge of the cell
-        return x >= checkBox.left - AndroidUtilities.dp(12f)
+        // hit zone: from the switch edge (with extra padding) to the near edge of the cell
+        return if (isRTL) x <= checkBox.right + AndroidUtilities.dp(12f)
+        else x >= checkBox.left - AndroidUtilities.dp(12f)
     }
 
     override fun onInterceptTouchEvent(ev: MotionEvent): Boolean {

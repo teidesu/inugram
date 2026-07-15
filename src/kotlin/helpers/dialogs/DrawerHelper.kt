@@ -365,11 +365,11 @@ object DrawerHelper {
     }
 
     private fun applyProxyEnabled(enabled: Boolean) {
-        val proxy = SharedConfig.currentProxy ?: return
+        val proxy = if (enabled) SharedConfig.currentProxy else null
         MessagesController.getGlobalMainSettings().edit()
-            .putBoolean("proxy_enabled", enabled)
+            .putBoolean("proxy_enabled", enabled && proxy != null)
             .apply()
-        if (enabled) {
+        if (proxy != null) {
             ConnectionsManager.setProxySettings(
                 true, proxy.address, proxy.port,
                 proxy.username, proxy.password, proxy.secret
