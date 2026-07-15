@@ -17,6 +17,7 @@ import desu.inugram.helpers.update.UpdateHelper
 import desu.inugram.ui.drawer.DrawerAddCell
 import desu.inugram.ui.drawer.DrawerLayoutAdapter
 import desu.inugram.ui.drawer.DrawerProfileCell
+import desu.inugram.ui.drawer.DrawerProxyCell
 import desu.inugram.ui.drawer.DrawerSwipeController
 import desu.inugram.ui.drawer.DrawerUserCell
 import desu.inugram.ui.drawer.SideMenultItemAnimator
@@ -26,6 +27,7 @@ import org.telegram.messenger.ApplicationLoader
 import org.telegram.messenger.FileLoader
 import org.telegram.messenger.ImageLoader
 import org.telegram.messenger.LocaleController.getString
+import org.telegram.tgnet.ConnectionsManager
 import org.telegram.messenger.MessagesController
 import org.telegram.messenger.NotificationCenter
 import org.telegram.messenger.R
@@ -49,6 +51,7 @@ import org.telegram.ui.LaunchActivity
 import org.telegram.ui.LoginActivity
 import org.telegram.ui.MainTabsActivity
 import org.telegram.ui.ProfileActivity
+import org.telegram.ui.ProxyListActivity
 import org.telegram.ui.SettingsActivity
 import org.telegram.ui.UpdateLayoutWrapper
 
@@ -59,6 +62,7 @@ object DrawerHelper {
     private var sideMenu: RecyclerListView? = null
     private var sideMenuContainer: FrameLayout? = null
     private var themeObserver: NotificationCenter.NotificationCenterDelegate? = null
+    private var proxyObserver: NotificationCenter.NotificationCenterDelegate? = null
     private var updateLayout: IUpdateLayout? = null
     private var updateObserver: NotificationCenter.NotificationCenterDelegate? = null
     private var updateObserverAccount: Int = -1
@@ -120,7 +124,7 @@ object DrawerHelper {
         val sm = RecyclerListView(context)
         sm.layoutManager = LinearLayoutManager(context)
         val itemAnimator = SideMenultItemAnimator(sm)
-        val newAdapter = DrawerLayoutAdapter(context, itemAnimator, drawerLayoutContainer)
+        val newAdapter = DrawerLayoutAdapter(context, itemAnimator, drawerLayoutContainer, ::applyProxyEnabled)
         adapter = newAdapter
         sideMenu = sm
         sm.setItemAnimator(itemAnimator)
@@ -157,6 +161,7 @@ object DrawerHelper {
         controller.setAllowOpenDrawer(true, false)
 
         installThemeObserver()
+        installProxyObserver()
         installUpdateLayout(context as? Activity, container, sm)
     }
 
@@ -348,6 +353,34 @@ object DrawerHelper {
         NotificationCenter.getGlobalInstance().addObserver(obs, NotificationCenter.reloadInterface)
     }
 
+    private fun installProxyObserver() {
+        if (proxyObserver != null) return
+        val obs = NotificationCenter.NotificationCenterDelegate { id, _, _ ->
+            if (id == NotificationCenter.proxySettingsChanged) {
+                adapter?.notifyDataSetChanged()
+            }
+        }
+        proxyObserver = obs
+        NotificationCenter.getGlobalInstance().addObserver(obs, NotificationCenter.proxySettingsChanged)
+    }
+
+    private fun applyProxyEnabled(enabled: Boolean) {
+        val proxy = SharedConfig.currentProxy ?: return
+        MessagesController.getGlobalMainSettings().edit()
+            .putBoolean("proxy_enabled", enabled)
+            .apply()
+        if (enabled) {
+            ConnectionsManager.setProxySettings(
+                true, proxy.address, proxy.port,
+                proxy.username, proxy.password, proxy.secret
+            )
+        } else {
+            ConnectionsManager.setProxySettings(false, "", 0, "", "", "")
+        }
+        NotificationCenter.getGlobalInstance()
+            .postNotificationName(NotificationCenter.proxySettingsChanged)
+    }
+
     private fun refreshTheme() {
         sideMenuContainer?.setBackgroundColor(Theme.getColor(Theme.key_chats_menuBackground))
         sideMenu?.let { applySideMenuColors(it) }
@@ -453,6 +486,11 @@ object DrawerHelper {
                 close()
             }
 
+            ITEM_PROXY -> {
+                nav.presentFragment(ProxyListActivity())
+                close()
+            }
+
             else -> close()
         }
     }
@@ -465,6 +503,7 @@ object DrawerHelper {
     private const val ITEM_CALLS = 10
     private const val ITEM_SAVED_MESSAGES = 11
     private const val ITEM_SETTINGS = 8
+    private const val ITEM_PROXY = DrawerLayoutAdapter.ITEM_PROXY
 
     @JvmStatic
     fun notifyDataChanged() {

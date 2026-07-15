@@ -16,6 +16,7 @@ import org.telegram.messenger.UserConfig
 import org.telegram.tgnet.TLRPC
 import org.telegram.ui.ActionBar.DrawerLayoutContainer
 import org.telegram.ui.ActionBar.Theme
+import org.telegram.messenger.SharedConfig
 import org.telegram.ui.Cells.DividerCell
 import org.telegram.ui.Cells.EmptyCell
 import org.telegram.ui.Components.RecyclerListView
@@ -24,6 +25,7 @@ class DrawerLayoutAdapter(
     private val mContext: Context,
     private val itemAnimator: SideMenultItemAnimator,
     private val mDrawerLayoutContainer: DrawerLayoutContainer,
+    private val onProxySwitchToggled: ((Boolean) -> Unit)? = null,
 ) : RecyclerListView.SelectionAdapter() {
 
     private val items = ArrayList<Item?>(11)
@@ -82,7 +84,7 @@ class DrawerLayoutAdapter(
 
     override fun isEnabled(holder: RecyclerView.ViewHolder): Boolean {
         val t = holder.itemViewType
-        return t == 3 || t == 4 || t == 5 || t == 6
+        return t == 3 || t == 4 || t == 5 || t == 6 || t == 7
     }
 
     override fun onCreateViewHolder(parent: ViewGroup, viewType: Int): RecyclerView.ViewHolder {
@@ -92,6 +94,7 @@ class DrawerLayoutAdapter(
             3 -> DrawerActionCell(mContext)
             4 -> DrawerUserCell(mContext)
             5 -> DrawerAddCell(mContext)
+            7 -> DrawerProxyCell(mContext)
             else -> EmptyCell(mContext, AndroidUtilities.dp(8f))
         }
         view.layoutParams = RecyclerView.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT)
@@ -121,6 +124,18 @@ class DrawerLayoutAdapter(
                 val cell = holder.itemView as DrawerUserCell
                 cell.setAccount(accountNumbers[position - 2])
             }
+
+            7 -> {
+                val cell = holder.itemView as DrawerProxyCell
+                var pos = position - 2
+                if (accountsShown) pos -= getAccountRowsCount()
+                val item = items[pos]
+                if (item != null) cell.bind(item.text ?: "", item.icon)
+                val hasProxies = SharedConfig.proxyList.isNotEmpty()
+                cell.setSwitchVisible(hasProxies)
+                cell.setChecked(SharedConfig.isProxyEnabled())
+                cell.onSwitchToggled = onProxySwitchToggled
+            }
         }
     }
 
@@ -138,7 +153,9 @@ class DrawerLayoutAdapter(
             }
             idx -= getAccountRowsCount()
         }
-        if (idx < 0 || idx >= items.size || items[idx] == null) return 2
+        if (idx < 0 || idx >= items.size) return 2
+        val id = items[idx]?.id ?: return 2
+        if (id == ITEM_PROXY) return 7
         return 3
     }
 
@@ -200,7 +217,12 @@ class DrawerLayoutAdapter(
         items.add(Item(6, LocaleController.getString(R.string.Contacts), R.drawable.msg_contacts))
         items.add(Item(10, LocaleController.getString(R.string.Calls), R.drawable.msg_calls))
         items.add(Item(11, LocaleController.getString(R.string.SavedMessages), R.drawable.msg_saved))
+        items.add(Item(ITEM_PROXY, LocaleController.getString(R.string.ProxySettings), R.drawable.outline_shield_check))
         items.add(Item(8, LocaleController.getString(R.string.Settings), R.drawable.msg_settings_old))
+    }
+
+    companion object {
+        const val ITEM_PROXY = 9
     }
 
     class Item private constructor(
