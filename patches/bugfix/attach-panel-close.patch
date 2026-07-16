@@ -11,7 +11,7 @@ diff --git a/TMessagesProj/src/main/java/org/telegram/ui/Components/ChatAttachAl
 index 0000000..0000000 100644
 --- a/TMessagesProj/src/main/java/org/telegram/ui/Components/ChatAttachAlert.java
 +++ b/TMessagesProj/src/main/java/org/telegram/ui/Components/ChatAttachAlert.java
-@@ -5241,46 +5241,49 @@ public class ChatAttachAlert extends BottomSheet implements NotificationCenter.N
+@@ -5311,46 +5311,49 @@ public class ChatAttachAlert extends BottomSheet implements NotificationCenter.N
          currentSheetAnimation.setInterpolator(openInterpolator);
          AnimationNotificationsLocker locker = new AnimationNotificationsLocker();
          BottomSheetDelegateInterface delegate = super.delegate;

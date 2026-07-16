@@ -11,7 +11,7 @@ diff --git a/TMessagesProj/src/main/java/org/telegram/ui/PhotoViewer.java b/TMes
 index 0000000..0000000 100644
 --- a/TMessagesProj/src/main/java/org/telegram/ui/PhotoViewer.java
 +++ b/TMessagesProj/src/main/java/org/telegram/ui/PhotoViewer.java
-@@ -15951,7 +15951,7 @@ public class PhotoViewer implements NotificationCenter.NotificationCenterDelegat
+@@ -15952,7 +15952,7 @@ public class PhotoViewer implements NotificationCenter.NotificationCenterDelegat
  
          int prevIndex = currentIndex;
          currentIndex = index;
@@ -20,7 +20,7 @@ index 0000000..0000000 100644
  
          boolean isVideo = false;
          boolean isLivePhoto = false;
-@@ -15972,7 +15972,7 @@ public class PhotoViewer implements NotificationCenter.NotificationCenterDelegat
+@@ -15973,7 +15973,7 @@ public class PhotoViewer implements NotificationCenter.NotificationCenterDelegat
              }
              MessageObject newMessageObject = imagesArr.get(currentIndex);
              final boolean noforwards = newMessageObject != null && (MessagesController.getInstance(currentAccount).isPeerNoForwards(newMessageObject.getDialogId()) || (newMessageObject.messageOwner != null && newMessageObject.messageOwner.noforwards) || newMessageObject.hasRevealedExtendedMedia());

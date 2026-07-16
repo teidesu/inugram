@@ -11,7 +11,7 @@ diff --git a/TMessagesProj/src/main/java/org/telegram/ui/DialogsActivity.java b/
 index 0000000..0000000 100644
 --- a/TMessagesProj/src/main/java/org/telegram/ui/DialogsActivity.java
 +++ b/TMessagesProj/src/main/java/org/telegram/ui/DialogsActivity.java
-@@ -272,6 +272,7 @@ import java.util.List;
+@@ -278,6 +278,7 @@ import java.util.List;
  import java.util.concurrent.ConcurrentHashMap;
  
  import desu.inugram.InuHooks;
@@ -19,7 +19,7 @@ index 0000000..0000000 100644
  import desu.inugram.helpers.dialogs.FolderHelper;
  import desu.inugram.helpers.dialogs.MainTabsHelper;
  import me.vkryl.android.animator.BoolAnimator;
-@@ -4484,7 +4485,7 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
+@@ -4554,7 +4555,7 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
                                  } else {
                                      goingDown = firstVisiblePosition > prevPosition;
                                  }
@@ -28,7 +28,7 @@ index 0000000..0000000 100644
                                      hideFloatingButton(goingDown);
                                  }
                                  prevPosition = firstVisiblePosition;
-@@ -4675,14 +4676,21 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
+@@ -4745,14 +4746,21 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
          });
          searchTabsAndFiltersLayout.addView(filtersView, LayoutHelper.createFrame(LayoutHelper.MATCH_PARENT, LayoutHelper.MATCH_PARENT, Gravity.TOP));
  
@@ -55,7 +55,7 @@ index 0000000..0000000 100644
          floatingButton3.setOnClickListener(v -> {
              if (parentLayout != null && parentLayout.isInPreviewMode()) {
                  finishPreviewFragment();
-@@ -4702,7 +4710,7 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
+@@ -4772,7 +4780,7 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
                      AccountFrozenAlert.show(currentAccount);
                      return;
                  }
@@ -64,10 +64,10 @@ index 0000000..0000000 100644
              }
          });
  
-@@ -8662,12 +8670,15 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
+@@ -8868,12 +8876,15 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
  
      private void updateFloatingButtonVisibility(boolean animated) {
-         final boolean isVisible = !(onlySelect && initialDialogsType != 10 || folderId != 0 || inPreviewMode || (searching && !onlySelect) || floatingButtonHidden);
+         final boolean isVisible = !(onlySelect && initialDialogsType != 10 || folderId != 0 || communityId != 0 || inPreviewMode || (searching && !onlySelect) || floatingButtonHidden);
 +        final boolean inu_configurable = initialDialogsType == DIALOGS_TYPE_DEFAULT && !onlySelect;
 +        final boolean inu_mainVisible = !inu_configurable || DialogsFabHelper.mainAction() != DialogsFabHelper.Action.NONE;
 +        final boolean inu_secondaryVisible = !inu_configurable || DialogsFabHelper.secondaryAction() != DialogsFabHelper.Action.NONE;
@@ -82,7 +82,7 @@ index 0000000..0000000 100644
          }
      }
  
-@@ -8706,8 +8717,9 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
+@@ -8912,8 +8923,9 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
              floatingButton3.setImageResource(R.drawable.floating_check);
              floatingButton3.setContentDescription(LocaleController.getString(R.string.Done));
          } else {
@@ -94,7 +94,7 @@ index 0000000..0000000 100644
          }
      }
  
-@@ -13246,13 +13258,13 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
+@@ -13523,13 +13535,13 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
          }, 0);
      }
  
@@ -110,17 +110,17 @@ index 0000000..0000000 100644
          if (!storiesEnabled) {
              if (storyPremiumHint != null) {
                  if (storyPremiumHint.shown()) {
-@@ -13435,10 +13447,12 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
-                 });
+@@ -13750,10 +13762,12 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
              });
-             io.addGap();
--            io.add(R.drawable.outline_groups_24, getString(R.string.NewGroup), () -> {
-+            final boolean inu_needNewMessage = !DialogsFabHelper.hasNewMessage();
-+            io.addIf(!inu_needNewMessage, R.drawable.outline_groups_24, getString(R.string.NewGroup), () -> {
-                 Bundle args = new Bundle();
-                 presentFragment(new GroupCreateActivity(args));
-             });
-+            io.addIf(inu_needNewMessage, R.drawable.menu_topic_add, getString(R.string.NewMessageTitle), this::openWriteContacts);
-             io.add(R.drawable.outline_saved_24, getString(R.string.SavedMessages), () -> {
-                 Bundle args = new Bundle();
-                 args.putLong("user_id", UserConfig.getInstance(currentAccount).getClientUserId());
+         });
+         io.addGap();
+-        io.add(R.drawable.outline_groups_24, getString(R.string.NewGroup), () -> {
++        final boolean inu_needNewMessage = !DialogsFabHelper.hasNewMessage();
++        io.addIf(!inu_needNewMessage, R.drawable.outline_groups_24, getString(R.string.NewGroup), () -> {
+             Bundle args = new Bundle();
+             presentFragment(new GroupCreateActivity(args));
+         });
++        io.addIf(inu_needNewMessage, R.drawable.menu_topic_add, getString(R.string.NewMessageTitle), this::openWriteContacts);
+         io.add(R.drawable.outline_saved_24, getString(R.string.SavedMessages), () -> {
+             Bundle args = new Bundle();
+             args.putLong("user_id", UserConfig.getInstance(currentAccount).getClientUserId());

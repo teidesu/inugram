@@ -55,7 +55,7 @@ abstract class MenuOrderActivity<I : MenuOrderItem> : SettingsPageActivity() {
     @SuppressLint("ClickableViewAccessibility")
     override fun createView(context: Context): View {
         val view = super.createView(context)
-        listView.inu_longPressDragEnabled = false
+        listView.setReorderLongPressEnabled(false)
         listView.listenReorder { id, items -> reorderHandlers[id]?.invoke(items) }
         listView.allowReorder(true)
         return view

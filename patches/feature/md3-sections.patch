@@ -4,7 +4,7 @@ Date: Thu, 28 May 2026 22:18:07 +0400
 Subject: md3-style sections redesign
 
 ---
- .../java/org/telegram/ui/Cells/TextCell.java  | 24 +++++++++++---
+ .../java/org/telegram/ui/Cells/TextCell.java  | 25 +++++++++++---
  .../org/telegram/ui/Cells/TextCheckCell.java  |  6 +++-
  .../ui/Cells/TextDetailSettingsCell.java      |  8 +++--
  .../telegram/ui/Cells/TextSettingsCell.java   |  2 +-
@@ -14,9 +14,9 @@ Subject: md3-style sections redesign
  .../ui/Components/RecyclerListView.java       | 33 ++++++++++++++++---
  .../ui/Components/UniversalAdapter.java       | 15 ++++++++-
  .../telegram/ui/LiteModeSettingsActivity.java |  7 ++++
- .../org/telegram/ui/PeerColorActivity.java    | 11 ++++---
+ .../org/telegram/ui/PeerColorActivity.java    |  9 +++--
  .../org/telegram/ui/SettingsActivity.java     | 18 ++++++++++
- 12 files changed, 121 insertions(+), 20 deletions(-)
+ 12 files changed, 121 insertions(+), 19 deletions(-)
 
 diff --git a/TMessagesProj/src/main/java/org/telegram/ui/Cells/TextCell.java b/TMessagesProj/src/main/java/org/telegram/ui/Cells/TextCell.java
 index 0000000..0000000 100644
@@ -26,12 +26,11 @@ index 0000000..0000000 100644
      private ImageView valueImageView;
      public int leftPadding;
      private boolean needDivider;
--    public int offsetFromImage = 71;
+-    public int offsetFromImage = 58;
 -    public int heightDp = 50;
--    public int imageLeft = 21;
-+    public int offsetFromImage = desu.inugram.helpers.theme.M3SectionsHelper.isEnabled() ? 60 : 71;
++    public int offsetFromImage = desu.inugram.helpers.theme.M3SectionsHelper.isEnabled() ? 60 : 58;
 +    public int heightDp = desu.inugram.helpers.theme.M3SectionsHelper.isEnabled() ? 56 : 50;
-+    public int imageLeft = desu.inugram.helpers.theme.M3SectionsHelper.isEnabled() ? 20 : 21;
+     public int imageLeft = 16;
 +    public int inu_m3IconSize = 22;
      private boolean inDialogs;
      private boolean prioritizeTitleOverValue;
@@ -66,31 +65,34 @@ index 0000000..0000000 100644
 -        if (subtitleView.getVisibility() == View.VISIBLE) {
 +        if (subtitleView.getVisibility() == View.VISIBLE && (!desu.inugram.helpers.theme.M3SectionsHelper.isEnabled() || subtitleView.getTextHeight() > 0)) {
              int margin = heightDp > 50 ? 4 : 2;
-             viewTop = (height - textView.getTextHeight() - subtitleView.getTextHeight() - dp(margin)) / 2;
+             viewTop = (height - textView.getTextHeight() - subtitleView.getTextHeight() - dp(margin)) / 2 + dp(1);
              textView.layout(viewLeft, viewTop, viewLeft + textView.getMeasuredWidth(), viewTop + textView.getMeasuredHeight());
-@@ -273,10 +280,16 @@ public class TextCell extends FrameLayout {
+@@ -273,11 +280,18 @@ public class TextCell extends FrameLayout {
              subtitleView.layout(viewLeft, viewTop, viewLeft + subtitleView.getMeasuredWidth(), viewTop + subtitleView.getMeasuredHeight());
          } else {
-             viewTop = (height - textView.getTextHeight()) / 2;
+             viewTop = (height - textView.getTextHeight()) / 2 + dp(1);
 +            if (desu.inugram.helpers.theme.M3SectionsHelper.isEnabled()) {
 +                viewTop = (height - textView.getMeasuredHeight()) / 2;
 +            }
              textView.layout(viewLeft, viewTop, viewLeft + textView.getMeasuredWidth(), viewTop + textView.getMeasuredHeight());
          }
          if (imageView.getVisibility() == VISIBLE) {
-             viewTop = dp(heightDp > 50 ? 0 : 2) + (height - imageView.getMeasuredHeight()) / 2 - imageView.getPaddingTop();
+             viewTop = dp(heightDp > 50 ? 0 : 2) + (height - imageView.getMeasuredHeight()) / 2 - imageView.getPaddingTop() + dp(1);
+-            viewLeft = !LocaleController.isRTL ? dp(imageLeft) : width - imageView.getMeasuredWidth() - dp(imageLeft);
 +            if (desu.inugram.helpers.theme.M3SectionsHelper.isEnabled()) {
 +                viewTop = (height - imageView.getMeasuredHeight()) / 2;
 +            }
-             viewLeft = !LocaleController.isRTL ? dp(imageLeft) : width - imageView.getMeasuredWidth() - dp(imageLeft);
++            final int inu_imageLeft = desu.inugram.helpers.theme.M3SectionsHelper.isEnabled() && imageLeft == 16 ? 21 : imageLeft;
++            viewLeft = !LocaleController.isRTL ? dp(inu_imageLeft) : width - imageView.getMeasuredWidth() - dp(inu_imageLeft);
              imageView.layout(viewLeft, viewTop, viewLeft + imageView.getMeasuredWidth(), viewTop + imageView.getMeasuredHeight());
          }
-@@ -822,6 +835,7 @@ public class TextCell extends FrameLayout {
+ 
+@@ -822,6 +836,7 @@ public class TextCell extends FrameLayout {
      }
  
      protected int getOffsetFromImage(boolean colourful) {
 +        if (desu.inugram.helpers.theme.M3SectionsHelper.isEnabled()) return 60;
-         return colourful ? 65 : 71;
+         return colourful ? 52 : 58;
      }
  
 diff --git a/TMessagesProj/src/main/java/org/telegram/ui/Cells/TextCheckCell.java b/TMessagesProj/src/main/java/org/telegram/ui/Cells/TextCheckCell.java
@@ -174,7 +176,7 @@ diff --git a/TMessagesProj/src/main/java/org/telegram/ui/ChatEditActivity.java b
 index 0000000..0000000 100644
 --- a/TMessagesProj/src/main/java/org/telegram/ui/ChatEditActivity.java
 +++ b/TMessagesProj/src/main/java/org/telegram/ui/ChatEditActivity.java
-@@ -791,6 +791,9 @@ public class ChatEditActivity extends BaseFragment implements ImageUpdater.Image
+@@ -800,6 +800,9 @@ public class ChatEditActivity extends BaseFragment implements ImageUpdater.Image
              };
              setAvatarCell.setBackgroundDrawable(Theme.getSelectorDrawable(false));
              setAvatarCell.setColors(Theme.key_windowBackgroundWhiteBlueIcon, Theme.key_windowBackgroundWhiteBlueButton);
@@ -188,7 +190,7 @@ diff --git a/TMessagesProj/src/main/java/org/telegram/ui/ChatUsersActivity.java 
 index 0000000..0000000 100644
 --- a/TMessagesProj/src/main/java/org/telegram/ui/ChatUsersActivity.java
 +++ b/TMessagesProj/src/main/java/org/telegram/ui/ChatUsersActivity.java
-@@ -3669,6 +3669,9 @@ public class ChatUsersActivity extends BaseFragment implements NotificationCente
+@@ -3740,6 +3740,9 @@ public class ChatUsersActivity extends BaseFragment implements NotificationCente
                      } else {
                          checkCell.setIcon(0);
                      }
@@ -198,7 +200,7 @@ index 0000000..0000000 100644
                      break;
                  case 8:
                      GraySectionCell sectionCell = (GraySectionCell) holder.itemView;
-@@ -3744,6 +3747,9 @@ public class ChatUsersActivity extends BaseFragment implements NotificationCente
+@@ -3815,6 +3818,9 @@ public class ChatUsersActivity extends BaseFragment implements NotificationCente
                      } else
                      //  checkBoxCell.setText(getCheckBoxTitle(item.headerName, percents[item.index < 0 ? 8 : item.index], item.index < 0), AndroidUtilities.formatFileSize(item.size), selected, item.index < 0 ? !collapsed : !item.last);
                      checkBoxCell.setPad(1);
@@ -212,7 +214,7 @@ diff --git a/TMessagesProj/src/main/java/org/telegram/ui/Components/ItemOptions.
 index 0000000..0000000 100644
 --- a/TMessagesProj/src/main/java/org/telegram/ui/Components/ItemOptions.java
 +++ b/TMessagesProj/src/main/java/org/telegram/ui/Components/ItemOptions.java
-@@ -1228,6 +1228,13 @@ public class ItemOptions {
+@@ -1260,6 +1260,13 @@ public class ItemOptions {
              scrimBlur3SourceBitmap = new BlurredBackgroundSourceBitmap();
          }
  
@@ -226,7 +228,7 @@ index 0000000..0000000 100644
          ViewGroup container = pointContainer = this.container == null ? fragment.getParentLayout().getOverlayContainerView() : this.container;
  
          if (context == null || container == null) {
-@@ -1957,6 +1964,7 @@ public class ItemOptions {
+@@ -2144,6 +2151,7 @@ public class ItemOptions {
                      } else {
                          canvas.save();
                      }
@@ -319,8 +321,8 @@ index 0000000..0000000 100644
          boolean prev, next;
          int position = getChildAdapterPosition(child);
          if (position == RecyclerView.NO_POSITION) {
-@@ -3678,6 +3696,11 @@ public class RecyclerListView extends RecyclerView implements IBlur3Capture {
-     public Drawable getClipBackground(View child) {
+@@ -3682,6 +3700,11 @@ public class RecyclerListView extends RecyclerView implements IBlur3Capture {
+     public Drawable getClipBackground(View child, boolean forceRound) {
          if (child.getParent() != this || !hasSections() || !sectionsItemDecoration.isSectionItem.run(child)) return null;
  
 +        if (desu.inugram.helpers.theme.M3SectionsHelper.isEnabled()) {
@@ -335,7 +337,7 @@ diff --git a/TMessagesProj/src/main/java/org/telegram/ui/Components/UniversalAda
 index 0000000..0000000 100644
 --- a/TMessagesProj/src/main/java/org/telegram/ui/Components/UniversalAdapter.java
 +++ b/TMessagesProj/src/main/java/org/telegram/ui/Components/UniversalAdapter.java
-@@ -581,12 +581,14 @@ public class UniversalAdapter extends AdapterWithDiffUtils {
+@@ -590,12 +590,14 @@ public class UniversalAdapter extends AdapterWithDiffUtils {
      }
  
      private boolean hasDivider(int position) {
@@ -350,7 +352,7 @@ index 0000000..0000000 100644
          if (viewType >= UItem.factoryViewTypeStartsWith) {
              UItem.UItemFactory<?> factory = UItem.findFactory(viewType);
              return factory != null && factory.isShadow();
-@@ -612,6 +614,13 @@ public class UniversalAdapter extends AdapterWithDiffUtils {
+@@ -621,6 +623,13 @@ public class UniversalAdapter extends AdapterWithDiffUtils {
          final int viewType = holder.getItemViewType();
          final boolean divider = hasDivider(position);
          updateColors(holder);
@@ -364,7 +366,7 @@ index 0000000..0000000 100644
          if (viewType >= UItem.factoryViewTypeStartsWith) {
              UItem.UItemFactory<?> factory = UItem.findFactory(viewType);
              if (factory != null) {
-@@ -623,6 +632,9 @@ public class UniversalAdapter extends AdapterWithDiffUtils {
+@@ -632,6 +641,9 @@ public class UniversalAdapter extends AdapterWithDiffUtils {
              case VIEW_TYPE_LARGE_HEADER:
                  ((HeaderCell) holder.itemView).setText(item.text);
                  ((HeaderCell) holder.itemView).setEnabled(item.enabled, true);
@@ -374,7 +376,7 @@ index 0000000..0000000 100644
                  break;
              case VIEW_TYPE_ANIMATED_HEADER:
                  HeaderCell animatedHeaderCell = (HeaderCell) holder.itemView;
-@@ -737,7 +749,7 @@ public class UniversalAdapter extends AdapterWithDiffUtils {
+@@ -753,7 +765,7 @@ public class UniversalAdapter extends AdapterWithDiffUtils {
                  if (viewType == VIEW_TYPE_SHADOW || viewType == VIEW_TYPE_LARGE_SHADOW) {
                      TextInfoPrivacyCell cell2 = (TextInfoPrivacyCell) holder.itemView;
                      if (TextUtils.isEmpty(item.text)) {
@@ -383,14 +385,14 @@ index 0000000..0000000 100644
                          cell2.setText("");
                      } else {
                          cell2.setFixedSize(0);
-@@ -1116,6 +1128,7 @@ public class UniversalAdapter extends AdapterWithDiffUtils {
+@@ -1135,6 +1147,7 @@ public class UniversalAdapter extends AdapterWithDiffUtils {
                  viewType == VIEW_TYPE_ICON_TEXT_CHECK ||
                  viewType == VIEW_TYPE_RIGHT_ICON_TEXT ||
                  viewType == VIEW_TYPE_CHECK ||
 +                viewType == VIEW_TYPE_CHECKRIPPLE ||
                  viewType == VIEW_TYPE_RADIO ||
+                 viewType == VIEW_TYPE_RADIO_2 ||
                  viewType == VIEW_TYPE_FILTER_CHAT ||
-                 viewType == VIEW_TYPE_FILTER_CHAT_CHECK ||
 diff --git a/TMessagesProj/src/main/java/org/telegram/ui/LiteModeSettingsActivity.java b/TMessagesProj/src/main/java/org/telegram/ui/LiteModeSettingsActivity.java
 index 0000000..0000000 100644
 --- a/TMessagesProj/src/main/java/org/telegram/ui/LiteModeSettingsActivity.java
@@ -413,25 +415,19 @@ diff --git a/TMessagesProj/src/main/java/org/telegram/ui/PeerColorActivity.java 
 index 0000000..0000000 100644
 --- a/TMessagesProj/src/main/java/org/telegram/ui/PeerColorActivity.java
 +++ b/TMessagesProj/src/main/java/org/telegram/ui/PeerColorActivity.java
-@@ -2289,15 +2289,18 @@ public class PeerColorActivity extends BaseFragment implements NotificationCente
+@@ -2291,10 +2291,13 @@ public class PeerColorActivity extends BaseFragment implements NotificationCente
  
          @Override
          protected void dispatchDraw(Canvas canvas) {
+-            DrawableUtils.setBounds(drawable, rtl(dp(28)), getMeasuredHeight() / 2f, Gravity.CENTER);
 +            final boolean m3 = desu.inugram.helpers.theme.M3SectionsHelper.isEnabled();
-+            final int iconCenter = m3 ? dp(31) : dp(64) / 2;
-+            final int textInset = m3 ? dp(60) : dp(64 + 7);
-             drawable.setBounds(
--                rtl(dp(64) / 2) - drawable.getIntrinsicWidth() / 2,
-+                rtl(iconCenter) - drawable.getIntrinsicWidth() / 2,
-                 getMeasuredHeight() / 2 - drawable.getIntrinsicHeight() / 2,
--                rtl(dp(64) / 2) + drawable.getIntrinsicWidth() / 2,
-+                rtl(iconCenter) + drawable.getIntrinsicWidth() / 2,
-                 getMeasuredHeight() / 2 + drawable.getIntrinsicHeight() / 2
-             );
++            final int iconCenter = m3 ? dp(31) : dp(28);
++            final int textInset = m3 ? dp(60) : dp(58);
++            DrawableUtils.setBounds(drawable, rtl(iconCenter), getMeasuredHeight() / 2f, Gravity.CENTER);
              drawable.draw(canvas);
 -            buttonText.ellipsize(getMeasuredWidth() - dp(64 + 7 + 100) - (lock != null ? lock.getIntrinsicWidth() + dp(8) : 0));
--            float textX = LocaleController.isRTL ? getMeasuredWidth() - buttonText.getWidth() - dp(64 + 7) : dp(64 + 7);
-+            buttonText.ellipsize(getMeasuredWidth() - textInset - dp(100) - (lock != null ? lock.getIntrinsicWidth() + dp(8) : 0));
+-            float textX = LocaleController.isRTL ? getMeasuredWidth() - buttonText.getWidth() - dp(58) : dp(58);
++            buttonText.ellipsize(getMeasuredWidth() - (m3 ? textInset + dp(100) : dp(64 + 7 + 100)) - (lock != null ? lock.getIntrinsicWidth() + dp(8) : 0));
 +            float textX = LocaleController.isRTL ? getMeasuredWidth() - buttonText.getWidth() - textInset : textInset;
              buttonText.draw(canvas, textX, getMeasuredHeight() / 2f);
              if (lock != null) {
@@ -440,7 +436,7 @@ diff --git a/TMessagesProj/src/main/java/org/telegram/ui/SettingsActivity.java b
 index 0000000..0000000 100644
 --- a/TMessagesProj/src/main/java/org/telegram/ui/SettingsActivity.java
 +++ b/TMessagesProj/src/main/java/org/telegram/ui/SettingsActivity.java
-@@ -1185,6 +1185,8 @@ public class SettingsActivity extends BaseFragment implements NotificationCenter
+@@ -1192,6 +1192,8 @@ public class SettingsActivity extends BaseFragment implements NotificationCenter
              titleView.setTranslationX(icon == 0 ? dp(2) : 0);
              subtitleView.setTranslationX(icon == 0 ? dp(2) : 0);
  
@@ -449,7 +445,7 @@ index 0000000..0000000 100644
              iconBackground.setColor(iconColorTop, iconColorBottom);
              iconView.setImageResource(icon);
              titleView.setText(title);
-@@ -1196,6 +1198,13 @@ public class SettingsActivity extends BaseFragment implements NotificationCenter
+@@ -1207,6 +1209,13 @@ public class SettingsActivity extends BaseFragment implements NotificationCenter
  
          @Override
          protected void onMeasure(int widthMeasureSpec, int heightMeasureSpec) {
@@ -462,8 +458,8 @@ index 0000000..0000000 100644
 +            }
              super.onMeasure(
                  MeasureSpec.makeMeasureSpec(MeasureSpec.getSize(widthMeasureSpec), MeasureSpec.EXACTLY),
-                 MeasureSpec.makeMeasureSpec(dp(twoLines ? 60 : 50), MeasureSpec.EXACTLY)
-@@ -1224,8 +1233,17 @@ public class SettingsActivity extends BaseFragment implements NotificationCenter
+                 MeasureSpec.makeMeasureSpec(dp(mini ? 44 : twoLines ? 60 : 50), MeasureSpec.EXACTLY)
+@@ -1235,8 +1244,17 @@ public class SettingsActivity extends BaseFragment implements NotificationCenter
                  this.border = drawBorder;
              }
  

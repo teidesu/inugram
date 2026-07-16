@@ -16,7 +16,7 @@ diff --git a/TMessagesProj/src/main/java/org/telegram/ui/Components/ChatAttachAl
 index 0000000..0000000 100644
 --- a/TMessagesProj/src/main/java/org/telegram/ui/Components/ChatAttachAlert.java
 +++ b/TMessagesProj/src/main/java/org/telegram/ui/Components/ChatAttachAlert.java
-@@ -2690,6 +2690,7 @@ public class ChatAttachAlert extends BottomSheet implements NotificationCenter.N
+@@ -2710,6 +2710,7 @@ public class ChatAttachAlert extends BottomSheet implements NotificationCenter.N
  
              @Override
              public void draw(@NonNull Canvas canvas) {
@@ -24,7 +24,7 @@ index 0000000..0000000 100644
                  super.draw(canvas);
                  bottomFadeDrawable.draw(canvas);
              }
-@@ -7042,6 +7043,7 @@ public class ChatAttachAlert extends BottomSheet implements NotificationCenter.N
+@@ -7175,6 +7176,7 @@ public class ChatAttachAlert extends BottomSheet implements NotificationCenter.N
  
          @Override
          protected void onDraw(@NonNull Canvas canvas) {
@@ -72,7 +72,7 @@ diff --git a/TMessagesProj/src/main/java/org/telegram/ui/Components/chat/layouts
 index 0000000..0000000 100644
 --- a/TMessagesProj/src/main/java/org/telegram/ui/Components/chat/layouts/ChatActivityFadeView.java
 +++ b/TMessagesProj/src/main/java/org/telegram/ui/Components/chat/layouts/ChatActivityFadeView.java
-@@ -82,6 +82,7 @@ public class ChatActivityFadeView extends View {
+@@ -104,6 +104,7 @@ public class ChatActivityFadeView extends View implements Theme.Colorable {
  
      @Override
      protected void onDraw(@NonNull Canvas canvas) {
@@ -84,7 +84,7 @@ diff --git a/TMessagesProj/src/main/java/org/telegram/ui/MainTabsActivity.java b
 index 0000000..0000000 100644
 --- a/TMessagesProj/src/main/java/org/telegram/ui/MainTabsActivity.java
 +++ b/TMessagesProj/src/main/java/org/telegram/ui/MainTabsActivity.java
-@@ -375,7 +375,13 @@ public class MainTabsActivity extends ViewPagerActivity implements NotificationC
+@@ -383,7 +383,13 @@ public class MainTabsActivity extends ViewPagerActivity implements NotificationC
  
          contentView.addView(fadeView, LayoutHelper.createFrame(LayoutHelper.MATCH_PARENT, 0, Gravity.BOTTOM));
  
@@ -99,7 +99,7 @@ index 0000000..0000000 100644
          tabsViewWrapper.setOnClickListener(v -> {});
          tabsViewWrapper.addView(tabsView, LayoutHelper.createFrame(LayoutHelper.MATCH_PARENT, MainTabsHelper.getMainTabsHeightWithMargins(), Gravity.BOTTOM | Gravity.CENTER_HORIZONTAL));
          tabsViewWrapper.setClipToPadding(false);
-@@ -961,6 +967,10 @@ public class MainTabsActivity extends ViewPagerActivity implements NotificationC
+@@ -972,6 +978,10 @@ public class MainTabsActivity extends ViewPagerActivity implements NotificationC
          if (viewPager == null || fadeView == null || MainTabsHelper.isHidden()) {
              return;
          }

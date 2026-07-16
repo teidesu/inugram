@@ -11,7 +11,7 @@ diff --git a/TMessagesProj/src/main/java/org/telegram/ui/Components/blur3/drawab
 index 0000000..0000000 100644
 --- a/TMessagesProj/src/main/java/org/telegram/ui/Components/blur3/drawable/color/impl/BlurredBackgroundProviderImpl.java
 +++ b/TMessagesProj/src/main/java/org/telegram/ui/Components/blur3/drawable/color/impl/BlurredBackgroundProviderImpl.java
-@@ -181,6 +181,10 @@ public class BlurredBackgroundProviderImpl {
+@@ -196,6 +196,10 @@ public class BlurredBackgroundProviderImpl {
      public static BlurredBackgroundProvider topPanelChatActivitySearchListBg(Theme.ResourcesProvider resourcesProvider) {
          return new BlurredBackgroundProviderBuilder(resourcesProvider)
                  .setBackgroundColor((r, isDark) -> {

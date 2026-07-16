@@ -25,7 +25,7 @@ diff --git a/TMessagesProj/src/main/java/org/telegram/ui/Components/EditTextCapt
 index 0000000..0000000 100644
 --- a/TMessagesProj/src/main/java/org/telegram/ui/Components/EditTextCaption.java
 +++ b/TMessagesProj/src/main/java/org/telegram/ui/Components/EditTextCaption.java
-@@ -282,6 +282,17 @@ public class EditTextCaption extends EditTextBoldCursor {
+@@ -329,6 +329,17 @@ public class EditTextCaption extends EditTextBoldCursor implements FloatingToolb
              protected void onMeasure(int widthMeasureSpec, int heightMeasureSpec) {
                  super.onMeasure(widthMeasureSpec, MeasureSpec.makeMeasureSpec(AndroidUtilities.dp(64), MeasureSpec.EXACTLY));
              }
@@ -43,7 +43,7 @@ index 0000000..0000000 100644
          };
          final String def = "http://";
          editText.setTextSize(TypedValue.COMPLEX_UNIT_DIP, 18);
-@@ -333,7 +344,7 @@ public class EditTextCaption extends EditTextBoldCursor {
+@@ -380,7 +391,7 @@ public class EditTextCaption extends EditTextBoldCursor implements FloatingToolb
                  FileLog.e(e);
              }
              if (text != null) {
@@ -52,7 +52,7 @@ index 0000000..0000000 100644
                  editText.setSelection(0, editText.getText().length());
              }
              checkPaste.run();
-@@ -358,7 +369,7 @@ public class EditTextCaption extends EditTextBoldCursor {
+@@ -405,7 +416,7 @@ public class EditTextCaption extends EditTextBoldCursor implements FloatingToolb
                  FileLog.e(e);
              }
              if (text != null) {
@@ -61,16 +61,16 @@ index 0000000..0000000 100644
                  editText.setSelection(0, editText.getText().length());
              }
          }
-@@ -398,7 +409,7 @@ public class EditTextCaption extends EditTextBoldCursor {
+@@ -445,7 +456,7 @@ public class EditTextCaption extends EditTextBoldCursor implements FloatingToolb
                  }
              }
              try {
--                editable.setSpan(new URLSpanReplacement(editText.getText().toString()), start, end, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);
-+                editable.setSpan(new URLSpanReplacement(desu.inugram.helpers.UrlCleanerHelper.cleanUrlString(editText.getText()).toString()), start, end, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);
-             } catch (Exception ignore) {
- 
-             }
-@@ -829,6 +840,7 @@ public class EditTextCaption extends EditTextBoldCursor {
+-                final String url = editText.getText().toString().trim();
++                final String url = desu.inugram.helpers.UrlCleanerHelper.cleanUrlString(editText.getText().toString().trim()).toString();
+                 editable.setSpan(new URLSpanReplacement(url), start, end, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);
+             } catch (Exception ignore) {}
+             if (delegate != null) {
+@@ -1000,6 +1011,7 @@ public class EditTextCaption extends EditTextBoldCursor implements FloatingToolb
                      String html = clipData.getItemAt(0).getHtmlText();
                      SpannableStringBuilder pasted = new SpannableStringBuilder(CopyUtilities.fromHTML(html));
                      Emoji.replaceEmoji(pasted, getPaint().getFontMetricsInt(), false, null);
@@ -78,7 +78,7 @@ index 0000000..0000000 100644
                      AnimatedEmojiSpan[] spans = pasted.getSpans(0, pasted.length(), AnimatedEmojiSpan.class);
                      if (spans != null) {
                          for (int k = 0; k < spans.length; ++k) {
-@@ -854,6 +866,7 @@ public class EditTextCaption extends EditTextBoldCursor {
+@@ -1025,6 +1037,7 @@ public class EditTextCaption extends EditTextBoldCursor implements FloatingToolb
                      FileLog.e(e);
                  }
              }
@@ -86,7 +86,7 @@ index 0000000..0000000 100644
          } else if (id == android.R.id.copy) {
              int start = Math.max(0, getSelectionStart());
              int end = Math.min(getText().length(), getSelectionEnd());
-@@ -886,4 +899,9 @@ public class EditTextCaption extends EditTextBoldCursor {
+@@ -1057,4 +1070,9 @@ public class EditTextCaption extends EditTextBoldCursor implements FloatingToolb
          }
          return super.onTextContextMenuItem(id);
      }
@@ -100,7 +100,7 @@ diff --git a/TMessagesProj/src/main/java/org/telegram/ui/LaunchActivity.java b/T
 index 0000000..0000000 100644
 --- a/TMessagesProj/src/main/java/org/telegram/ui/LaunchActivity.java
 +++ b/TMessagesProj/src/main/java/org/telegram/ui/LaunchActivity.java
-@@ -1711,7 +1711,7 @@ public class LaunchActivity extends BasePermissionsActivity implements INavigati
+@@ -1710,7 +1710,7 @@ public class LaunchActivity extends BasePermissionsActivity implements INavigati
                              if ((text.startsWith("http://") || text.startsWith("https://")) && !TextUtils.isEmpty(subject)) {
                                  text = subject + "\n" + text;
                              }

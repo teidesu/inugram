@@ -13,7 +13,7 @@ diff --git a/TMessagesProj/src/main/java/org/telegram/messenger/MediaDataControl
 index 0000000..0000000 100644
 --- a/TMessagesProj/src/main/java/org/telegram/messenger/MediaDataController.java
 +++ b/TMessagesProj/src/main/java/org/telegram/messenger/MediaDataController.java
-@@ -912,7 +912,7 @@ public class MediaDataController extends BaseController {
+@@ -915,7 +915,7 @@ public class MediaDataController extends BaseController {
          }
          int limit = desu.inugram.InuConfig.SHOW_ALL_RECENT_STICKERS.getValue() ? arrayList.size() : 20;
          ArrayList<TLRPC.Document> result = new ArrayList<>(arrayList.subList(0, Math.min(arrayList.size(), limit)));
@@ -52,7 +52,7 @@ index 0000000..0000000 100644
  import me.vkryl.android.animator.BoolAnimator;
  import me.vkryl.android.animator.FactorAnimator;
  
-@@ -6865,6 +6866,11 @@ public class EmojiView extends FrameLayout implements
+@@ -6871,6 +6872,11 @@ public class EmojiView extends FrameLayout implements
                              ((ChatActivity) fragment).openAttachMenuForCreatingSticker();
                          }
                      });
@@ -64,7 +64,7 @@ index 0000000..0000000 100644
  
                      final ImageView icon = new ImageView(context);
                      icon.setImageResource(R.drawable.menu_sticker_add);
-@@ -6959,6 +6965,17 @@ public class EmojiView extends FrameLayout implements
+@@ -6965,6 +6971,17 @@ public class EmojiView extends FrameLayout implements
                              }
                          } else if (object == recentStickers) {
                              cell.setText(getString(R.string.RecentStickers), R.drawable.msg_close, getString(R.string.ClearRecentStickersAlertTitle));

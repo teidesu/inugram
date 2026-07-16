@@ -11,7 +11,7 @@ diff --git a/TMessagesProj/src/main/java/org/telegram/ui/Cells/ChatMessageCell.j
 index 0000000..0000000 100644
 --- a/TMessagesProj/src/main/java/org/telegram/ui/Cells/ChatMessageCell.java
 +++ b/TMessagesProj/src/main/java/org/telegram/ui/Cells/ChatMessageCell.java
-@@ -5095,7 +5095,7 @@ public class ChatMessageCell extends BaseCell implements SeekBar.SeekBarDelegate
+@@ -5109,7 +5109,7 @@ public class ChatMessageCell extends BaseCell implements SeekBar.SeekBarDelegate
              final float y = getEventY(event);
              if (event.getAction() == MotionEvent.ACTION_DOWN) {
                  if (delegate == null || delegate.canPerformActions()) {
@@ -20,7 +20,7 @@ index 0000000..0000000 100644
                          avatarPressed = true;
                          result = true;
                      } else if (psaButtonVisible && hasPsaHint && x >= psaHelpX && x <= psaHelpX + dp(40) && y >= psaHelpY && y <= psaHelpY + dp(40)) {
-@@ -5192,7 +5192,7 @@ public class ChatMessageCell extends BaseCell implements SeekBar.SeekBarDelegate
+@@ -5206,7 +5206,7 @@ public class ChatMessageCell extends BaseCell implements SeekBar.SeekBarDelegate
                      } else if (event.getAction() == MotionEvent.ACTION_CANCEL) {
                          avatarPressed = false;
                      } else if (event.getAction() == MotionEvent.ACTION_MOVE) {

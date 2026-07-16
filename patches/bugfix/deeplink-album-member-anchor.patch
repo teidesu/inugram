@@ -11,17 +11,17 @@ diff --git a/TMessagesProj/src/main/java/org/telegram/ui/ChatActivity.java b/TMe
 index 0000000..0000000 100644
 --- a/TMessagesProj/src/main/java/org/telegram/ui/ChatActivity.java
 +++ b/TMessagesProj/src/main/java/org/telegram/ui/ChatActivity.java
-@@ -21418,6 +21418,13 @@ public class ChatActivity extends BaseFragment implements
-                             scrollToMessage = messages.get(messArr.size() - 1);
-                         }
-                         if (scrollToMessage != null) {
-+                            MessageObject.GroupedMessages scrollToGroup = groupedMessagesMap.get(scrollToMessage.getGroupId());
-+                            if (scrollToMessage.getGroupId() != 0 && scrollToGroup != null) {
-+                                MessageObject primary = scrollToGroup.findPrimaryMessageObject();
-+                                if (primary != null) {
-+                                    scrollToMessage = primary;
-+                                }
+@@ -21456,6 +21456,13 @@ public class ChatActivity extends BaseFragment implements
+                         scrollToMessage = messages.get(messArr.size() - 1);
+                     }
+                     if (scrollToMessage != null) {
++                        MessageObject.GroupedMessages scrollToGroup = groupedMessagesMap.get(scrollToMessage.getGroupId());
++                        if (scrollToMessage.getGroupId() != 0 && scrollToGroup != null) {
++                            MessageObject primary = scrollToGroup.findPrimaryMessageObject();
++                            if (primary != null) {
++                                scrollToMessage = primary;
 +                            }
-                             addSponsoredMessages(!isFirstLoading);
-                             int yOffset;
-                             boolean opt = false;
++                        }
+                         addSponsoredMessages(!isFirstLoading);
+                         int yOffset;
+                         boolean opt = false;

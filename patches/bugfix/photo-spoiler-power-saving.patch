@@ -14,7 +14,7 @@ diff --git a/TMessagesProj/src/main/java/org/telegram/ui/Cells/ChatMessageCell.j
 index 0000000..0000000 100644
 --- a/TMessagesProj/src/main/java/org/telegram/ui/Cells/ChatMessageCell.java
 +++ b/TMessagesProj/src/main/java/org/telegram/ui/Cells/ChatMessageCell.java
-@@ -15191,6 +15191,14 @@ public class ChatMessageCell extends BaseCell implements SeekBar.SeekBarDelegate
+@@ -15211,6 +15211,14 @@ public class ChatMessageCell extends BaseCell implements SeekBar.SeekBarDelegate
  
      public void drawBlurredPhotoParticles(Canvas canvas) {
          if (mediaSpoilerEffect2 == null) {

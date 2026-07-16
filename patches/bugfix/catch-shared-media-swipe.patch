@@ -11,7 +11,7 @@ diff --git a/TMessagesProj/src/main/java/org/telegram/ui/Components/SharedMediaL
 index 0000000..0000000 100644
 --- a/TMessagesProj/src/main/java/org/telegram/ui/Components/SharedMediaLayout.java
 +++ b/TMessagesProj/src/main/java/org/telegram/ui/Components/SharedMediaLayout.java
-@@ -1569,6 +1569,7 @@ public class SharedMediaLayout extends FrameLayout implements NotificationCenter
+@@ -1572,6 +1572,7 @@ public class SharedMediaLayout extends FrameLayout implements NotificationCenter
      private boolean maybeStartTracking;
      private int startedTrackingX;
      private int startedTrackingY;
@@ -19,7 +19,7 @@ index 0000000..0000000 100644
      private VelocityTracker velocityTracker;
  
      protected boolean isActionModeShowed;
-@@ -5667,7 +5668,7 @@ public class SharedMediaLayout extends FrameLayout implements NotificationCenter
+@@ -5670,7 +5671,7 @@ public class SharedMediaLayout extends FrameLayout implements NotificationCenter
          maybeStartTracking = false;
          startedTracking = true;
          onTabScroll(true);
@@ -28,7 +28,7 @@ index 0000000..0000000 100644
          actionBar.setEnabled(false);
          scrollSlidingTextTabStrip.setEnabled(false);
          mediaPages[1].selectedType = id;
-@@ -5802,11 +5803,57 @@ public class SharedMediaLayout extends FrameLayout implements NotificationCenter
+@@ -5805,11 +5806,57 @@ public class SharedMediaLayout extends FrameLayout implements NotificationCenter
  
      private boolean disableScrolling;
  
@@ -87,7 +87,7 @@ index 0000000..0000000 100644
          if (profileActivity.getParentLayout() != null && !profileActivity.getParentLayout().checkTransitionAnimation() && !checkTabsAnimationInProgress() && !isInPinchToZoomTouchMode) {
              if (ev != null) {
                  if (velocityTracker == null) {
-@@ -5819,13 +5866,14 @@ public class SharedMediaLayout extends FrameLayout implements NotificationCenter
+@@ -5822,13 +5869,14 @@ public class SharedMediaLayout extends FrameLayout implements NotificationCenter
                  }
              }
              if (ev != null && ev.getAction() == MotionEvent.ACTION_DOWN && !startedTracking && !maybeStartTracking && ev.getY() >= dp(48 + 42)) {
@@ -103,7 +103,7 @@ index 0000000..0000000 100644
                  int dy = Math.abs((int) ev.getY() - startedTrackingY);
                  if (startedTracking && (animatingForward && dx > 0 || !animatingForward && dx < 0)) {
                      if (!prepareForMoving(ev, dx < 0)) {
-@@ -5836,6 +5884,10 @@ public class SharedMediaLayout extends FrameLayout implements NotificationCenter
+@@ -5839,6 +5887,10 @@ public class SharedMediaLayout extends FrameLayout implements NotificationCenter
                          mediaPages[1].setTranslationX(animatingForward ? mediaPages[0].getMeasuredWidth() : -mediaPages[0].getMeasuredWidth());
                          selectTabWithId(mediaPages[1].selectedType, 0);
                          onTabProgress(getTabProgress());
@@ -114,7 +114,7 @@ index 0000000..0000000 100644
                      }
                  }
                  if (maybeStartTracking && !startedTracking) {
-@@ -5901,7 +5953,17 @@ public class SharedMediaLayout extends FrameLayout implements NotificationCenter
+@@ -5904,7 +5956,17 @@ public class SharedMediaLayout extends FrameLayout implements NotificationCenter
          if (startedTracking) {
              float x = mediaPages[0].getX();
              tabsAnimation = new AnimatorSet();

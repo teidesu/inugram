@@ -15,7 +15,7 @@ diff --git a/TMessagesProj/src/main/java/org/telegram/ui/ArticleViewer.java b/TM
 index 0000000..0000000 100644
 --- a/TMessagesProj/src/main/java/org/telegram/ui/ArticleViewer.java
 +++ b/TMessagesProj/src/main/java/org/telegram/ui/ArticleViewer.java
-@@ -1981,6 +1981,7 @@ public class ArticleViewer extends IArticleViewer implements NotificationCenter.
+@@ -1982,6 +1982,7 @@ public class ArticleViewer extends IArticleViewer implements NotificationCenter.
              int count = webPage.cached_page.blocks.size();
              for (int a = 0; a < count; a++) {
                  TL_iv.PageBlock block = webPage.cached_page.blocks.get(a);
@@ -27,7 +27,7 @@ diff --git a/TMessagesProj/src/main/java/org/telegram/ui/Cells/ChatMessageCell.j
 index 0000000..0000000 100644
 --- a/TMessagesProj/src/main/java/org/telegram/ui/Cells/ChatMessageCell.java
 +++ b/TMessagesProj/src/main/java/org/telegram/ui/Cells/ChatMessageCell.java
-@@ -6922,7 +6922,7 @@ public class ChatMessageCell extends BaseCell implements SeekBar.SeekBarDelegate
+@@ -6936,7 +6936,7 @@ public class ChatMessageCell extends BaseCell implements SeekBar.SeekBarDelegate
                      drawSideButton = 2;
                  }
              }
@@ -53,12 +53,12 @@ diff --git a/TMessagesProj/src/main/java/org/telegram/ui/Components/ChatActivity
 index 0000000..0000000 100644
 --- a/TMessagesProj/src/main/java/org/telegram/ui/Components/ChatActivityEnterView.java
 +++ b/TMessagesProj/src/main/java/org/telegram/ui/Components/ChatActivityEnterView.java
-@@ -5869,7 +5869,7 @@ public class ChatActivityEnterView extends FrameLayout implements
+@@ -6016,7 +6016,7 @@ public class ChatActivityEnterView extends FrameLayout implements
  
      private boolean shownAiButton;
      private void showAiButton(boolean show_) {
--        final boolean show = show_ && parentFragment != null && !parentFragment.isSecretChat();
-+        final boolean show = show_ && parentFragment != null && !parentFragment.isSecretChat() && !desu.inugram.InuConfig.HIDE_AI_EDITOR.getValue();
+-        final boolean show = (show_ || richDraftActive) && parentFragment != null && !parentFragment.isSecretChat();
++        final boolean show = (show_ || richDraftActive) && parentFragment != null && !parentFragment.isSecretChat() && !desu.inugram.InuConfig.HIDE_AI_EDITOR.getValue();
  
          if (shownAiButton == show) return;
          if (show) {
@@ -66,7 +66,7 @@ diff --git a/TMessagesProj/src/main/java/org/telegram/ui/Components/ChatAttachAl
 index 0000000..0000000 100644
 --- a/TMessagesProj/src/main/java/org/telegram/ui/Components/ChatAttachAlert.java
 +++ b/TMessagesProj/src/main/java/org/telegram/ui/Components/ChatAttachAlert.java
-@@ -6267,7 +6267,7 @@ public class ChatAttachAlert extends BottomSheet implements NotificationCenter.N
+@@ -6381,7 +6381,7 @@ public class ChatAttachAlert extends BottomSheet implements NotificationCenter.N
  
      private boolean shownAiButton;
      private void showAiButton(boolean show_) {

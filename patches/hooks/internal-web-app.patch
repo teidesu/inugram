@@ -58,7 +58,7 @@ diff --git a/TMessagesProj/src/main/java/org/telegram/ui/bots/BotWebViewSheet.ja
 index 0000000..0000000 100644
 --- a/TMessagesProj/src/main/java/org/telegram/ui/bots/BotWebViewSheet.java
 +++ b/TMessagesProj/src/main/java/org/telegram/ui/bots/BotWebViewSheet.java
-@@ -1354,7 +1354,7 @@ public class BotWebViewSheet extends Dialog implements NotificationCenter.Notifi
+@@ -1359,7 +1359,7 @@ public class BotWebViewSheet extends Dialog implements NotificationCenter.Notifi
          this.currentWebApp = props.app;
  
          final TLRPC.User userbot = MessagesController.getInstance(currentAccount).getUser(botId);
@@ -67,7 +67,7 @@ index 0000000..0000000 100644
          try {
              TextPaint tp = new TextPaint();
              tp.setTextSize(dp(20));
-@@ -1670,7 +1670,7 @@ public class BotWebViewSheet extends Dialog implements NotificationCenter.Notifi
+@@ -1693,7 +1693,7 @@ public class BotWebViewSheet extends Dialog implements NotificationCenter.Notifi
              o.addGap();
          }
          o
@@ -76,7 +76,7 @@ index 0000000..0000000 100644
                  if (parentActivity instanceof LaunchActivity) {
                      ((LaunchActivity) parentActivity).presentFragment(ChatActivity.of(botId));
                  }
-@@ -1693,10 +1693,10 @@ public class BotWebViewSheet extends Dialog implements NotificationCenter.Notifi
+@@ -1716,10 +1716,10 @@ public class BotWebViewSheet extends Dialog implements NotificationCenter.Notifi
                  webViewContainer.loadFlickerAndSettingsItem(currentAccount, botId, null);
                  webViewContainer.reload();
              })
@@ -93,7 +93,7 @@ diff --git a/TMessagesProj/src/main/java/org/telegram/ui/bots/WebViewRequestProp
 index 0000000..0000000 100644
 --- a/TMessagesProj/src/main/java/org/telegram/ui/bots/WebViewRequestProps.java
 +++ b/TMessagesProj/src/main/java/org/telegram/ui/bots/WebViewRequestProps.java
-@@ -28,6 +28,7 @@ public class WebViewRequestProps {
+@@ -29,6 +29,7 @@ public class WebViewRequestProps {
      public int flags;
      public boolean compact;
      public boolean fullscreen;

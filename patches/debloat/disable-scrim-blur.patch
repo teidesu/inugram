@@ -17,7 +17,7 @@ diff --git a/TMessagesProj/src/main/java/org/telegram/messenger/AndroidUtilities
 index 0000000..0000000 100644
 --- a/TMessagesProj/src/main/java/org/telegram/messenger/AndroidUtilities.java
 +++ b/TMessagesProj/src/main/java/org/telegram/messenger/AndroidUtilities.java
-@@ -6071,6 +6071,13 @@ public class AndroidUtilities {
+@@ -6086,6 +6086,13 @@ public class AndroidUtilities {
              return;
          }
  
@@ -111,7 +111,7 @@ diff --git a/TMessagesProj/src/main/java/org/telegram/ui/DialogsActivity.java b/
 index 0000000..0000000 100644
 --- a/TMessagesProj/src/main/java/org/telegram/ui/DialogsActivity.java
 +++ b/TMessagesProj/src/main/java/org/telegram/ui/DialogsActivity.java
-@@ -8831,6 +8831,16 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
+@@ -9037,6 +9037,16 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
          if (blurredView == null) {
              return;
          }
@@ -141,7 +141,7 @@ index 0000000..0000000 100644
                  }
  
                  if (openProgress > 0 && blurBitmapPaint != null) {
-@@ -1163,7 +1163,9 @@ public class MessageSendPreview extends Dialog implements NotificationCenter.Not
+@@ -1164,7 +1164,9 @@ public class MessageSendPreview extends Dialog implements NotificationCenter.Not
                  WindowManager.LayoutParams.FLAG_DRAWS_SYSTEM_BAR_BACKGROUNDS |
                  WindowManager.LayoutParams.FLAG_TRANSLUCENT_NAVIGATION |
                  WindowManager.LayoutParams.FLAG_TRANSLUCENT_STATUS;
@@ -152,7 +152,7 @@ index 0000000..0000000 100644
          params.flags |= WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON;
          if (Build.VERSION.SDK_INT >= 28) {
              params.layoutInDisplayCutoutMode = WindowManager.LayoutParams.LAYOUT_IN_DISPLAY_CUTOUT_MODE_SHORT_EDGES;
-@@ -1678,6 +1680,15 @@ public class MessageSendPreview extends Dialog implements NotificationCenter.Not
+@@ -1695,6 +1697,15 @@ public class MessageSendPreview extends Dialog implements NotificationCenter.Not
          if (dismissing) return;
          dismissing = true;
  
@@ -168,7 +168,7 @@ index 0000000..0000000 100644
          SpoilerEffect2.pause(SpoilerEffect2.TYPE_DEFAULT, false);
          if (spoilerEffect2 != null) {
              spoilerEffect2.detach(windowView);
-@@ -1760,13 +1771,13 @@ public class MessageSendPreview extends Dialog implements NotificationCenter.Not
+@@ -1777,13 +1788,13 @@ public class MessageSendPreview extends Dialog implements NotificationCenter.Not
                      closing = false;
                  }
                  if (editText != null) {

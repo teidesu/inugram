@@ -13,7 +13,7 @@ diff --git a/TMessagesProj/src/main/java/org/telegram/ui/ActionBar/ActionBarLayo
 index 0000000..0000000 100644
 --- a/TMessagesProj/src/main/java/org/telegram/ui/ActionBar/ActionBarLayout.java
 +++ b/TMessagesProj/src/main/java/org/telegram/ui/ActionBar/ActionBarLayout.java
-@@ -1973,6 +1973,14 @@ public class ActionBarLayout extends FrameLayout implements INavigationLayout, F
+@@ -1968,6 +1968,14 @@ public class ActionBarLayout extends FrameLayout implements INavigationLayout, F
          if (fragment == null || checkTransitionAnimation() || delegate != null && check && !delegate.needPresentFragment(this, params) || !fragment.onFragmentCreate()) {
              return false;
          }
@@ -32,7 +32,7 @@ diff --git a/TMessagesProj/src/main/java/org/telegram/ui/ChatActivity.java b/TMe
 index 0000000..0000000 100644
 --- a/TMessagesProj/src/main/java/org/telegram/ui/ChatActivity.java
 +++ b/TMessagesProj/src/main/java/org/telegram/ui/ChatActivity.java
-@@ -40396,12 +40396,12 @@ public class ChatActivity extends BaseFragment implements
+@@ -40532,12 +40532,12 @@ public class ChatActivity extends BaseFragment implements
  
          @Override
          public boolean canPerformActions() {
@@ -51,7 +51,7 @@ diff --git a/TMessagesProj/src/main/java/org/telegram/ui/DialogsActivity.java b/
 index 0000000..0000000 100644
 --- a/TMessagesProj/src/main/java/org/telegram/ui/DialogsActivity.java
 +++ b/TMessagesProj/src/main/java/org/telegram/ui/DialogsActivity.java
-@@ -8511,6 +8511,18 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
+@@ -8696,6 +8696,18 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
              });
          }
  
@@ -60,22 +60,22 @@ index 0000000..0000000 100644
 +            openChatItem.setTextAndIcon(LocaleController.getString(R.string.SavedOpenChatNoCaps), R.drawable.msg_discussion);
 +            openChatItem.setMinimumWidth(160);
 +            openChatItem.setOnClickListener(e -> {
-+                if (chatActivity[0] != null && chatActivity[0].getParentLayout() != null) {
-+                    chatActivity[0].getParentLayout().expandPreviewFragment();
++                if (previewActivity[0] != null && previewActivity[0].getParentLayout() != null) {
++                    previewActivity[0].getParentLayout().expandPreviewFragment();
 +                }
 +            });
 +            previewMenu[0].addView(openChatItem);
 +        }
 +
-         ActionBarMenuSubItem markAsUnreadItem = new ActionBarMenuSubItem(getParentActivity(), true, false);
-         if (cell.getHasUnread()) {
-             markAsUnreadItem.setTextAndIcon(LocaleController.getString(R.string.MarkAsRead), R.drawable.msg_markread);
-@@ -8692,7 +8704,7 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
+         if (!isCommunityCell) {
+             ActionBarMenuSubItem markAsUnreadItem = new ActionBarMenuSubItem(getParentActivity(), true, false);
+             if (cell.getHasUnread()) {
+@@ -8898,7 +8910,7 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
              } else {
-                 presentFragmentAsPreviewWithMenu(chatActivity[0] = new ChatActivity(args), previewMenu[0]);
-                 if (chatActivity[0] != null) {
--                    chatActivity[0].allowExpandPreviewByClick = true;
-+                    chatActivity[0].allowExpandPreviewByClick = !desu.inugram.InuConfig.INTERACTIVE_CHAT_PREVIEW.getValue();
+                 presentFragmentAsPreviewWithMenu(previewActivity[0] = chatActivity1, previewMenu[0]);
+                 if (chatActivity1 != null) {
+-                    chatActivity1.allowExpandPreviewByClick = true;
++                    chatActivity1.allowExpandPreviewByClick = !desu.inugram.InuConfig.INTERACTIVE_CHAT_PREVIEW.getValue();
                      try {
-                         chatActivity[0].getAvatarContainer().getAvatarImageView().performAccessibilityAction(AccessibilityNodeInfo.ACTION_ACCESSIBILITY_FOCUS, null);
+                         chatActivity1.getAvatarContainer().getAvatarImageView().performAccessibilityAction(AccessibilityNodeInfo.ACTION_ACCESSIBILITY_FOCUS, null);
                      } catch (Exception ignore) {

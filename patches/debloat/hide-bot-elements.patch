@@ -12,7 +12,7 @@ diff --git a/TMessagesProj/src/main/java/org/telegram/ui/Cells/DialogCell.java b
 index 0000000..0000000 100644
 --- a/TMessagesProj/src/main/java/org/telegram/ui/Cells/DialogCell.java
 +++ b/TMessagesProj/src/main/java/org/telegram/ui/Cells/DialogCell.java
-@@ -2487,7 +2487,7 @@ public class DialogCell extends BaseCell implements StoriesListPlaceProvider.Ava
+@@ -2602,7 +2602,7 @@ public class DialogCell extends BaseCell implements StoriesListPlaceProvider.Ava
                      messageNameLeft += w;
                  }
              }
@@ -34,7 +34,7 @@ index 0000000..0000000 100644
  import static org.telegram.messenger.AndroidUtilities.dp;
  import static org.telegram.messenger.AndroidUtilities.dpf2;
  import static org.telegram.messenger.AndroidUtilities.lerp;
-@@ -10667,7 +10669,7 @@ public class ChatActivityEnterView extends FrameLayout implements
+@@ -11197,7 +11199,7 @@ public class ChatActivityEnterView extends FrameLayout implements
      }
  
      public boolean hasBotWebView() {
@@ -43,7 +43,7 @@ index 0000000..0000000 100644
      }
  
      private void updateBotButton(boolean animated) {
-@@ -10678,7 +10680,8 @@ public class ChatActivityEnterView extends FrameLayout implements
+@@ -11208,7 +11210,8 @@ public class ChatActivityEnterView extends FrameLayout implements
              animated = false;
          }
          boolean hasBotWebView = hasBotWebView();
@@ -53,7 +53,7 @@ index 0000000..0000000 100644
          boolean wasVisible = botButton != null && botButton.getVisibility() == VISIBLE;
          if (hasBotWebView || hasBotCommands || hasQuickReplies || botReplyMarkup != null) {
              if (botReplyMarkup != null) {
-@@ -10696,7 +10699,7 @@ public class ChatActivityEnterView extends FrameLayout implements
+@@ -11226,7 +11229,7 @@ public class ChatActivityEnterView extends FrameLayout implements
                      botButton.setContentDescription(getString("AccDescrBotKeyboard", R.string.AccDescrBotKeyboard));
                  }
              } else {

@@ -11,7 +11,7 @@ diff --git a/TMessagesProj/src/main/java/org/telegram/messenger/MessageObject.ja
 index 0000000..0000000 100644
 --- a/TMessagesProj/src/main/java/org/telegram/messenger/MessageObject.java
 +++ b/TMessagesProj/src/main/java/org/telegram/messenger/MessageObject.java
-@@ -778,6 +778,9 @@ public class MessageObject {
+@@ -781,6 +781,9 @@ public class MessageObject {
          }
          isSpoilersRevealed = old.isSpoilersRevealed;
          isMediaSpoilersRevealed = old.isMediaSpoilersRevealed;

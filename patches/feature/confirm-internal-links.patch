@@ -12,7 +12,7 @@ diff --git a/TMessagesProj/src/main/java/org/telegram/messenger/AndroidUtilities
 index 0000000..0000000 100644
 --- a/TMessagesProj/src/main/java/org/telegram/messenger/AndroidUtilities.java
 +++ b/TMessagesProj/src/main/java/org/telegram/messenger/AndroidUtilities.java
-@@ -5555,6 +5555,7 @@ public class AndroidUtilities {
+@@ -5570,6 +5570,7 @@ public class AndroidUtilities {
  
      public static boolean shouldShowUrlInAlert(String url) {
          try {
@@ -24,7 +24,7 @@ diff --git a/TMessagesProj/src/main/java/org/telegram/ui/Components/AlertsCreato
 index 0000000..0000000 100644
 --- a/TMessagesProj/src/main/java/org/telegram/ui/Components/AlertsCreator.java
 +++ b/TMessagesProj/src/main/java/org/telegram/ui/Components/AlertsCreator.java
-@@ -1659,7 +1659,7 @@ public class AlertsCreator {
+@@ -1743,7 +1743,7 @@ public class AlertsCreator {
      public static void showOpenUrlAlert(Context context, String url, boolean punycode, boolean tryTelegraph, boolean ask, boolean forceNotInternalForApps, long inlineReturn, Browser.Progress progress, @Nullable TLRPC.WebPage webPage, Theme.ResourcesProvider resourcesProvider) {
          if (!AndroidUtilities.isContextSafe(context)) return;
          final String scheme = url == null ? null : Uri.parse(url).getScheme();

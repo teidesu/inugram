@@ -4,28 +4,21 @@ Date: Sun, 7 Jun 2026 02:05:05 +0300
 Subject: fix various memory leaks in LaunchActivity
 
 ---
- .../src/main/java/org/telegram/ui/LaunchActivity.java         | 4 ++++
- 1 file changed, 4 insertions(+)
+ .../src/main/java/org/telegram/ui/LaunchActivity.java         | 4 +++-
+ 1 file changed, 3 insertions(+), 1 deletion(-)
 
 diff --git a/TMessagesProj/src/main/java/org/telegram/ui/LaunchActivity.java b/TMessagesProj/src/main/java/org/telegram/ui/LaunchActivity.java
 index 0000000..0000000 100644
 --- a/TMessagesProj/src/main/java/org/telegram/ui/LaunchActivity.java
 +++ b/TMessagesProj/src/main/java/org/telegram/ui/LaunchActivity.java
-@@ -6608,6 +6608,7 @@ public class LaunchActivity extends BasePermissionsActivity implements INavigati
-             NotificationCenter.getInstance(currentAccount).removeObserver(this, NotificationCenter.stickersImportComplete);
-             NotificationCenter.getInstance(currentAccount).removeObserver(this, NotificationCenter.currentUserShowLimitReachedDialog);
-             NotificationCenter.getInstance(currentAccount).removeObserver(this, NotificationCenter.currentUserPremiumStatusChanged);
-+            NotificationCenter.getInstance(currentAccount).removeObserver(this, NotificationCenter.chatSwitchedForum);
-             NotificationCenter.getInstance(currentAccount).removeObserver(this, NotificationCenter.guardBotDecisionResult);
-         }
- 
-@@ -6952,6 +6953,9 @@ public class LaunchActivity extends BasePermissionsActivity implements INavigati
+@@ -6924,7 +6924,9 @@ public class LaunchActivity extends BasePermissionsActivity implements INavigati
                  getOnBackInvokedDispatcher().unregisterOnBackInvokedCallback((OnBackInvokedCallback) onBackInvokedCallback);
              }
          }
+-        Bulletin.removeDelegate(frameLayout);
 +        if (frameLayout != null) {
 +            Bulletin.removeDelegate(frameLayout);
 +        }
+         VideoAds.dropCache();
+ 
          clearFragments();
-         super.onDestroy();
-         onFinish();

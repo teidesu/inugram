@@ -12,7 +12,7 @@ diff --git a/TMessagesProj/src/main/java/org/telegram/messenger/MessageObject.ja
 index 0000000..0000000 100644
 --- a/TMessagesProj/src/main/java/org/telegram/messenger/MessageObject.java
 +++ b/TMessagesProj/src/main/java/org/telegram/messenger/MessageObject.java
-@@ -2910,6 +2910,9 @@ public class MessageObject {
+@@ -2925,6 +2925,9 @@ public class MessageObject {
                  message.media.webpage.display_url = "";
                  message.media.webpage.url = "";
              }
@@ -22,7 +22,7 @@ index 0000000..0000000 100644
          } else if (event.action instanceof TLRPC.TL_channelAdminLogEventActionChangeEmojiStickerSet) {
              TLRPC.InputStickerSet newPack = ((TLRPC.TL_channelAdminLogEventActionChangeEmojiStickerSet) event.action).new_stickerset;
              TLRPC.InputStickerSet oldPack = ((TLRPC.TL_channelAdminLogEventActionChangeEmojiStickerSet) event.action).new_stickerset;
-@@ -3489,6 +3492,7 @@ public class MessageObject {
+@@ -3504,6 +3507,7 @@ public class MessageObject {
                  messageObject.linkDescription = null;
                  messageObject.generateLinkDescription();
              }
@@ -99,7 +99,7 @@ index 0000000..0000000 100644
 @@ -974,6 +1005,11 @@ public class ChannelAdminLogActivity extends BaseFragment implements Notificatio
          });
          searchItem.setSearchFieldHint(getString(R.string.Search));
-         searchItem.setSearchPaddingStart(12);
+         searchItem.setSearchPaddingStart(7);
 +        AdminLogHelper.setupHeader(this, menu);
 +
 +        actionBar.getBackButton().setTranslationX(dp(6));

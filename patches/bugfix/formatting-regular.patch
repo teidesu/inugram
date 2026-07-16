@@ -11,7 +11,7 @@ diff --git a/TMessagesProj/src/main/java/org/telegram/ui/Components/EditTextCapt
 index 0000000..0000000 100644
 --- a/TMessagesProj/src/main/java/org/telegram/ui/Components/EditTextCaption.java
 +++ b/TMessagesProj/src/main/java/org/telegram/ui/Components/EditTextCaption.java
-@@ -446,7 +446,65 @@ public class EditTextCaption extends EditTextBoldCursor {
+@@ -492,7 +492,65 @@ public class EditTextCaption extends EditTextBoldCursor implements FloatingToolb
      }
  
      public void makeSelectedRegular() {

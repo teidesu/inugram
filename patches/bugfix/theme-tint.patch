@@ -14,7 +14,7 @@ diff --git a/TMessagesProj/src/main/java/org/telegram/ui/Cells/ProfileSearchCell
 index 0000000..0000000 100644
 --- a/TMessagesProj/src/main/java/org/telegram/ui/Cells/ProfileSearchCell.java
 +++ b/TMessagesProj/src/main/java/org/telegram/ui/Cells/ProfileSearchCell.java
-@@ -1103,7 +1103,7 @@ public class ProfileSearchCell extends BaseCell implements NotificationCenter.No
+@@ -1118,7 +1118,7 @@ public class ProfileSearchCell extends BaseCell implements NotificationCenter.No
              final float s = openButtonBounce.getScale(.06f);
              canvas.scale(s, s, openButtonRect.centerX(), openButtonRect.centerY());
              canvas.drawRoundRect(openButtonRect, openButtonRect.height() / 2.0f, openButtonRect.height() / 2.0f, openButtonBackgroundPaint);
@@ -159,7 +159,7 @@ diff --git a/TMessagesProj/src/main/java/org/telegram/ui/SettingsActivity.java b
 index 0000000..0000000 100644
 --- a/TMessagesProj/src/main/java/org/telegram/ui/SettingsActivity.java
 +++ b/TMessagesProj/src/main/java/org/telegram/ui/SettingsActivity.java
-@@ -451,6 +451,7 @@ public class SettingsActivity extends BaseFragment implements NotificationCenter
+@@ -452,6 +452,7 @@ public class SettingsActivity extends BaseFragment implements NotificationCenter
          cameraImageView = new ImageView(context);
          cameraImageView.setScaleType(ImageView.ScaleType.CENTER_INSIDE);
          cameraImageView.setImageResource(R.drawable.filled_premium_camera);

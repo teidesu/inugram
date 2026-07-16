@@ -20,7 +20,7 @@ index 0000000..0000000 100644
      private LongSparseArray<TLObject> searchResultUsernamesMap;
      private Runnable searchGlobalRunnable;
      private String hintHashtag;
-@@ -119,7 +119,7 @@ public class MentionsAdapter extends RecyclerListView.SelectionAdapter implement
+@@ -120,7 +120,7 @@ public class MentionsAdapter extends RecyclerListView.SelectionAdapter implement
      private long searchResultBotContextSwitchUserId;
      private TLRPC.TL_inlineBotSwitchPM searchResultBotContextSwitch;
      private TLRPC.TL_inlineBotWebView searchResultBotWebViewSwitch;
@@ -29,7 +29,7 @@ index 0000000..0000000 100644
      private LongSparseArray<TL_bots.BotInfo> botInfo;
      private int resultStartPosition;
      private int resultLength;
-@@ -964,6 +964,7 @@ public class MentionsAdapter extends RecyclerListView.SelectionAdapter implement
+@@ -966,6 +966,7 @@ public class MentionsAdapter extends RecyclerListView.SelectionAdapter implement
              AndroidUtilities.cancelRunOnUIThread(searchGlobalRunnable);
              searchGlobalRunnable = null;
          }
@@ -37,7 +37,7 @@ index 0000000..0000000 100644
          if (checkAgainRunnable != null) {
              AndroidUtilities.cancelRunOnUIThread(checkAgainRunnable);
              checkAgainRunnable = null;
-@@ -1523,6 +1524,9 @@ public class MentionsAdapter extends RecyclerListView.SelectionAdapter implement
+@@ -1526,6 +1527,9 @@ public class MentionsAdapter extends RecyclerListView.SelectionAdapter implement
              } else {
                  showUsersResult(newResult, newMap, true);
              }

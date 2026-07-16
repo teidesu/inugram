@@ -56,7 +56,7 @@ class FontsSettingsActivity : SettingsPageActivity(), NotificationCenter.Notific
     override fun createView(context: Context): View {
         val view = super.createView(context)
         NotificationCenter.getGlobalInstance().addObserver(this, NotificationCenter.customTypefacesLoaded)
-        listView.inu_longPressDragEnabled = false
+        listView.setReorderLongPressEnabled(false)
         listView.listenReorder { id, items ->
             if (id != reorderSectionId) return@listenReorder
             val newOrder = items.mapNotNull { it.`object` as? String }

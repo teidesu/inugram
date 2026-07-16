@@ -12,7 +12,7 @@ diff --git a/TMessagesProj/src/main/java/org/telegram/messenger/MessageObject.ja
 index 0000000..0000000 100644
 --- a/TMessagesProj/src/main/java/org/telegram/messenger/MessageObject.java
 +++ b/TMessagesProj/src/main/java/org/telegram/messenger/MessageObject.java
-@@ -642,6 +642,7 @@ public class MessageObject {
+@@ -645,6 +645,7 @@ public class MessageObject {
  
      public Boolean isSensitiveCached;
      public boolean isSensitive() {
@@ -24,7 +24,7 @@ diff --git a/TMessagesProj/src/main/java/org/telegram/messenger/MessagesControll
 index 0000000..0000000 100644
 --- a/TMessagesProj/src/main/java/org/telegram/messenger/MessagesController.java
 +++ b/TMessagesProj/src/main/java/org/telegram/messenger/MessagesController.java
-@@ -21628,6 +21628,7 @@ public class MessagesController extends BaseController implements NotificationCe
+@@ -22466,6 +22466,7 @@ public class MessagesController extends BaseController implements NotificationCe
      }
  
      public String getRestrictionReason(ArrayList<TLRPC.RestrictionReason> reasons) {
@@ -32,7 +32,7 @@ index 0000000..0000000 100644
          if (reasons.isEmpty()) {
              return null;
          }
-@@ -21647,6 +21648,7 @@ public class MessagesController extends BaseController implements NotificationCe
+@@ -22485,6 +22486,7 @@ public class MessagesController extends BaseController implements NotificationCe
      }
  
      public boolean isSensitive(ArrayList<TLRPC.RestrictionReason> reasons) {

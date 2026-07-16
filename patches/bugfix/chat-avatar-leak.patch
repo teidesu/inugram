@@ -11,7 +11,7 @@ diff --git a/TMessagesProj/src/main/java/org/telegram/ui/Components/ChatAvatarCo
 index 0000000..0000000 100644
 --- a/TMessagesProj/src/main/java/org/telegram/ui/Components/ChatAvatarContainer.java
 +++ b/TMessagesProj/src/main/java/org/telegram/ui/Components/ChatAvatarContainer.java
-@@ -1010,9 +1010,12 @@ public class ChatAvatarContainer extends FrameLayout implements NotificationCent
+@@ -1027,9 +1027,12 @@ public class ChatAvatarContainer extends FrameLayout implements FactorAnimator.T
      }
  
      public void onDestroy() {
@@ -24,7 +24,7 @@ index 0000000..0000000 100644
      }
  
      private void setTypingAnimation(boolean start) {
-@@ -1521,6 +1524,16 @@ public class ChatAvatarContainer extends FrameLayout implements NotificationCent
+@@ -1538,6 +1541,16 @@ public class ChatAvatarContainer extends FrameLayout implements FactorAnimator.T
      @Override
      protected void onDetachedFromWindow() {
          super.onDetachedFromWindow();
@@ -41,7 +41,7 @@ index 0000000..0000000 100644
          if (parentFragment != null) {
              NotificationCenter.getInstance(currentAccount).removeObserver(this, NotificationCenter.didUpdateConnectionState);
              NotificationCenter.getGlobalInstance().removeObserver(this, NotificationCenter.emojiLoaded);
-@@ -1528,12 +1541,6 @@ public class ChatAvatarContainer extends FrameLayout implements NotificationCent
+@@ -1545,12 +1558,6 @@ public class ChatAvatarContainer extends FrameLayout implements FactorAnimator.T
                  NotificationCenter.getInstance(currentAccount).removeObserver(this, NotificationCenter.savedMessagesDialogsUpdate);
              }
          }

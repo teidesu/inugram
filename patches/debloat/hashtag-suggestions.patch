@@ -11,7 +11,7 @@ diff --git a/TMessagesProj/src/main/java/org/telegram/ui/Adapters/MentionsAdapte
 index 0000000..0000000 100644
 --- a/TMessagesProj/src/main/java/org/telegram/ui/Adapters/MentionsAdapter.java
 +++ b/TMessagesProj/src/main/java/org/telegram/ui/Adapters/MentionsAdapter.java
-@@ -1192,7 +1192,7 @@ public class MentionsAdapter extends RecyclerListView.SelectionAdapter implement
+@@ -1194,7 +1194,7 @@ public class MentionsAdapter extends RecyclerListView.SelectionAdapter implement
                              resultLength = result.length() + 1;
                              break;
                          }

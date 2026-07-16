@@ -15,7 +15,7 @@ diff --git a/TMessagesProj/src/main/java/org/telegram/messenger/MessagesControll
 index 0000000..0000000 100644
 --- a/TMessagesProj/src/main/java/org/telegram/messenger/MessagesController.java
 +++ b/TMessagesProj/src/main/java/org/telegram/messenger/MessagesController.java
-@@ -1269,6 +1269,7 @@ public class MessagesController extends BaseController implements NotificationCe
+@@ -1286,6 +1286,7 @@ public class MessagesController extends BaseController implements NotificationCe
          public ArrayList<TLRPC.Dialog> dialogsForward = new ArrayList<>();
          public int color;
          public boolean title_noanimate;
@@ -27,15 +27,15 @@ diff --git a/TMessagesProj/src/main/java/org/telegram/messenger/MessagesStorage.
 index 0000000..0000000 100644
 --- a/TMessagesProj/src/main/java/org/telegram/messenger/MessagesStorage.java
 +++ b/TMessagesProj/src/main/java/org/telegram/messenger/MessagesStorage.java
-@@ -70,6 +70,7 @@ import java.util.concurrent.CountDownLatch;
+@@ -72,6 +72,7 @@ import java.util.concurrent.CountDownLatch;
  import java.util.concurrent.atomic.AtomicLong;
  import java.util.concurrent.atomic.AtomicReference;
  import java.util.function.Consumer;
 +import desu.inugram.helpers.dialogs.FolderHelper;
  
- public class MessagesStorage extends BaseController {
+ import me.vkryl.core.BitwiseUtils;
  
-@@ -2669,6 +2670,8 @@ public class MessagesStorage extends BaseController {
+@@ -2678,6 +2679,8 @@ public class MessagesStorage extends BaseController {
                      return 0;
                  });
  
@@ -44,7 +44,7 @@ index 0000000..0000000 100644
                  if (updateCounters) {
                      calcUnreadCounters(true);
                  }
-@@ -2762,6 +2765,9 @@ public class MessagesStorage extends BaseController {
+@@ -2772,6 +2775,9 @@ public class MessagesStorage extends BaseController {
              while (cursor.next()) {
                  int folderId = cursor.intValue(1);
                  long did = cursor.longValue(0);
@@ -54,7 +54,7 @@ index 0000000..0000000 100644
                  int unread;
                  int mentions = 0;
                  if (isForum(did, FORUM_TYPE_CHAT | FORUM_TYPE_BOT | FORUM_TYPE_DIRECT)) {
-@@ -2810,6 +2816,11 @@ public class MessagesStorage extends BaseController {
+@@ -2818,6 +2824,11 @@ public class MessagesStorage extends BaseController {
                  getUsersInternal(usersToLoad, users, true);
                  for (int a = 0, N = users.size(); a < N; a++) {
                      TLRPC.User user = users.get(a);
@@ -66,7 +66,7 @@ index 0000000..0000000 100644
                      boolean muted = getMessagesController().isDialogMuted(user.id, 0);
                      int idx1 = dialogsByFolders.get(user.id);
                      int idx2 = muted ? 1 : 0;
-@@ -3297,6 +3308,10 @@ public class MessagesStorage extends BaseController {
+@@ -3329,6 +3340,10 @@ public class MessagesStorage extends BaseController {
                              changed = true;
                              filter.title_noanimate= newFilter.title_noanimate;
                          }
@@ -77,7 +77,7 @@ index 0000000..0000000 100644
                          final int color = (newFilter.flags & 134217728) != 0 ? newFilter.color : -1;
                          if (filter.color != color) {
                              filter.color = color;
-@@ -3438,6 +3453,7 @@ public class MessagesStorage extends BaseController {
+@@ -3470,6 +3485,7 @@ public class MessagesStorage extends BaseController {
                          filter.name = newFilter.title.text;
                          filter.entities = newFilter.title.entities;
                          filter.title_noanimate = newFilter.title_noanimate;
@@ -85,7 +85,7 @@ index 0000000..0000000 100644
                          filter.color = (newFilter.flags & 134217728) != 0 ? newFilter.color : -1;
                          filter.pendingUnreadCount = -1;
                          for (int c = 0; c < 2; c++) {
-@@ -3557,6 +3573,7 @@ public class MessagesStorage extends BaseController {
+@@ -3589,6 +3605,7 @@ public class MessagesStorage extends BaseController {
              saveDialogFilterInternal(filtersToSave.get(a), false, true);
              anythingChanged = true;
          }
@@ -93,7 +93,7 @@ index 0000000..0000000 100644
          boolean orderChanged = false;
          for (int a = 0, N = dialogFilters.size(); a < N; a++) {
              MessagesController.DialogFilter filter = dialogFilters.get(a);
-@@ -6029,6 +6046,9 @@ public class MessagesStorage extends BaseController {
+@@ -6061,6 +6078,9 @@ public class MessagesStorage extends BaseController {
                      continue;
                  }
                  long did = array.keyAt(a);
@@ -103,7 +103,7 @@ index 0000000..0000000 100644
                  if (read) {
                      if (b == 0) {
                          dialogsWithUnread.remove(did);
-@@ -6094,6 +6114,11 @@ public class MessagesStorage extends BaseController {
+@@ -6124,6 +6144,11 @@ public class MessagesStorage extends BaseController {
              getUsersInternal(usersToLoad, users);
              for (int a = 0, N = users.size(); a < N; a++) {
                  TLRPC.User user = users.get(a);
@@ -115,7 +115,7 @@ index 0000000..0000000 100644
                  boolean muted = getMessagesController().isDialogMuted(user.id, 0);
                  Integer folderId = dialogsByFolders.get(user.id);
                  int idx1 = folderId == null || folderId < 0 || folderId > 1 ? 0 : folderId;
-@@ -17068,6 +17093,7 @@ public class MessagesStorage extends BaseController {
+@@ -17395,6 +17420,7 @@ public class MessagesStorage extends BaseController {
      }
  
      public void resetAllUnreadCounters(boolean muted) {
@@ -453,7 +453,7 @@ diff --git a/TMessagesProj/src/main/java/org/telegram/ui/DialogsActivity.java b/
 index 0000000..0000000 100644
 --- a/TMessagesProj/src/main/java/org/telegram/ui/DialogsActivity.java
 +++ b/TMessagesProj/src/main/java/org/telegram/ui/DialogsActivity.java
-@@ -272,6 +272,7 @@ import java.util.List;
+@@ -278,6 +278,7 @@ import java.util.List;
  import java.util.concurrent.ConcurrentHashMap;
  
  import desu.inugram.InuHooks;
@@ -461,7 +461,7 @@ index 0000000..0000000 100644
  import desu.inugram.helpers.dialogs.MainTabsHelper;
  import me.vkryl.android.animator.BoolAnimator;
  import me.vkryl.android.animator.FactorAnimator;
-@@ -3609,6 +3610,9 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
+@@ -3679,6 +3680,9 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
                      if (initialDialogsType == DIALOGS_TYPE_FORWARD) {
                          return 0;
                      }
@@ -471,7 +471,7 @@ index 0000000..0000000 100644
                      if (tabId == filterTabsView.getDefaultTabId()) {
                          return getMessagesStorage().getMainUnreadCount();
                      }
-@@ -6750,12 +6754,15 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
+@@ -6883,12 +6887,15 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
                      selectWithStableId = true;
                  }
                  filterTabsView.removeTabs();
@@ -489,7 +489,7 @@ index 0000000..0000000 100644
                      }
                  }
                  if (stableId >= 0) {
-@@ -6778,9 +6785,15 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
+@@ -6911,9 +6918,15 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
                      if (viewPages[a].selectedType >= filters.size()) {
                          viewPages[a].selectedType = filters.size() - 1;
                      }

@@ -11,7 +11,7 @@ diff --git a/TMessagesProj/src/main/java/org/telegram/messenger/MessagesControll
 index 0000000..0000000 100644
 --- a/TMessagesProj/src/main/java/org/telegram/messenger/MessagesController.java
 +++ b/TMessagesProj/src/main/java/org/telegram/messenger/MessagesController.java
-@@ -7517,6 +7517,7 @@ public class MessagesController extends BaseController implements NotificationCe
+@@ -7577,6 +7577,7 @@ public class MessagesController extends BaseController implements NotificationCe
                      }
                  }
              }
@@ -19,7 +19,7 @@ index 0000000..0000000 100644
          }
          final TLRPC.ChannelParticipant participant = array.get(uid);
          return participant instanceof TLRPC.TL_channelParticipantAdmin || participant instanceof TLRPC.TL_channelParticipantCreator;
-@@ -7537,6 +7538,7 @@ public class MessagesController extends BaseController implements NotificationCe
+@@ -7597,6 +7598,7 @@ public class MessagesController extends BaseController implements NotificationCe
                      }
                  }
              }

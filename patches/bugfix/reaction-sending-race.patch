@@ -32,7 +32,7 @@ diff --git a/TMessagesProj/src/main/java/org/telegram/messenger/MessageObject.ja
 index 0000000..0000000 100644
 --- a/TMessagesProj/src/main/java/org/telegram/messenger/MessageObject.java
 +++ b/TMessagesProj/src/main/java/org/telegram/messenger/MessageObject.java
-@@ -764,6 +764,7 @@ public class MessageObject {
+@@ -767,6 +767,7 @@ public class MessageObject {
          messageOwner.premiumEffectWasPlayed = old.messageOwner.premiumEffectWasPlayed;
          forcePlayEffect = old.forcePlayEffect;
          wasJustSent = old.wasJustSent;
@@ -44,7 +44,7 @@ diff --git a/TMessagesProj/src/main/java/org/telegram/messenger/SendMessagesHelp
 index 0000000..0000000 100644
 --- a/TMessagesProj/src/main/java/org/telegram/messenger/SendMessagesHelper.java
 +++ b/TMessagesProj/src/main/java/org/telegram/messenger/SendMessagesHelper.java
-@@ -3631,6 +3631,7 @@ public class SendMessagesHelper extends BaseController implements NotificationCe
+@@ -3757,6 +3757,7 @@ public class SendMessagesHelper extends BaseController implements NotificationCe
          if (messageObject == null || parentFragment == null) {
              return;
          }
@@ -56,7 +56,7 @@ diff --git a/TMessagesProj/src/main/java/org/telegram/ui/ChatActivity.java b/TMe
 index 0000000..0000000 100644
 --- a/TMessagesProj/src/main/java/org/telegram/ui/ChatActivity.java
 +++ b/TMessagesProj/src/main/java/org/telegram/ui/ChatActivity.java
-@@ -32670,6 +32670,7 @@ public class ChatActivity extends BaseFragment implements
+@@ -32724,6 +32724,7 @@ public class ChatActivity extends BaseFragment implements
          }
  
          ReactionsEffectOverlay.removeCurrent(false);

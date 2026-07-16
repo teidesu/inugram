@@ -226,7 +226,7 @@ diff --git a/TMessagesProj/src/main/java/org/telegram/ui/DialogsActivity.java b/
 index 0000000..0000000 100644
 --- a/TMessagesProj/src/main/java/org/telegram/ui/DialogsActivity.java
 +++ b/TMessagesProj/src/main/java/org/telegram/ui/DialogsActivity.java
-@@ -1701,6 +1701,7 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
+@@ -1737,6 +1737,7 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
              super(context);
              parentPage = page;
              additionalClipBottom = dp(200);

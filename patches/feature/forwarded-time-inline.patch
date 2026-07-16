@@ -11,7 +11,7 @@ diff --git a/TMessagesProj/src/main/java/org/telegram/ui/Cells/ChatMessageCell.j
 index 0000000..0000000 100644
 --- a/TMessagesProj/src/main/java/org/telegram/ui/Cells/ChatMessageCell.java
 +++ b/TMessagesProj/src/main/java/org/telegram/ui/Cells/ChatMessageCell.java
-@@ -19016,6 +19016,7 @@ public class ChatMessageCell extends BaseCell implements SeekBar.SeekBarDelegate
+@@ -19081,6 +19081,7 @@ public class ChatMessageCell extends BaseCell implements SeekBar.SeekBarDelegate
  
                      forwardedNameWidth = getMaxNameWidth();
                      forwardedString = getForwardedMessageText(messageObject);

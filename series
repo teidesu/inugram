@@ -137,7 +137,6 @@ bugfix/search-emoji-size.patch
 bugfix/motion-photo-with-caption.patch
 feature/strip-tracking.patch
 feature/two-finger-select.patch
-hooks/universal-recycler.patch
 debloat/reduce-menu-motion.patch
 feature/md3-components.patch
 bugfix/universal-fragment-theme-change.patch
@@ -182,7 +181,6 @@ bugfix/image-loader-leak.patch
 bugfix/video-ads-leak.patch
 bugfix/chat-avatar-leak.patch
 bugfix/launch-activity-leaks.patch
-bugfix/edittextemoji-observer-leak.patch
 bugfix/chat-attach-alert-adapter-leak.patch
 debloat/sponsored-data-saver.patch
 feature/original-video-quality.patch

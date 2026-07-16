@@ -11,7 +11,7 @@ diff --git a/TMessagesProj/src/main/java/org/telegram/ui/ChatActivity.java b/TMe
 index 0000000..0000000 100644
 --- a/TMessagesProj/src/main/java/org/telegram/ui/ChatActivity.java
 +++ b/TMessagesProj/src/main/java/org/telegram/ui/ChatActivity.java
-@@ -32380,7 +32380,7 @@ public class ChatActivity extends BaseFragment implements
+@@ -32454,7 +32454,7 @@ public class ChatActivity extends BaseFragment implements
              businessLinksEmptyView = new BusinessLinksEmptyView(getContext(), this, businessLink, getResourceProvider());
              businessLinksEmptyView.setBackground(Theme.createServiceDrawable(AndroidUtilities.dp(16), businessLinksEmptyView, contentView, getThemedPaint(Theme.key_paint_chatActionBackground)));
              emptyViewContainer.addView(businessLinksEmptyView, LayoutHelper.createFrame(LayoutHelper.WRAP_CONTENT, LayoutHelper.WRAP_CONTENT, Gravity.CENTER));
@@ -20,7 +20,7 @@ index 0000000..0000000 100644
              greetingsViewContainer = new ChatGreetingsView(getContext(), currentUser, currentAccount, preloadedGreetingsSticker, themeDelegate) {
                  @Override
                  protected void onLayout(boolean changed, int l, int t, int r, int b) {
-@@ -32390,6 +32390,7 @@ public class ChatActivity extends BaseFragment implements
+@@ -32464,6 +32464,7 @@ public class ChatActivity extends BaseFragment implements
              };
              updateGreetingLock();
              greetingsViewContainer.setListener((sticker) -> {
@@ -28,7 +28,7 @@ index 0000000..0000000 100644
                  animatingDocuments.put(sticker, 0);
                  SendMessagesHelper.getInstance(currentAccount).sendSticker(sticker, null, dialog_id, null, null, null, replyingQuote, null, true, 0, 0, false, null, quickReplyShortcut, getQuickReplyId(), 0, getSendMonoForumPeerId(), getSendMessageSuggestionParams());
              });
-@@ -32428,6 +32429,8 @@ public class ChatActivity extends BaseFragment implements
+@@ -32502,6 +32503,8 @@ public class ChatActivity extends BaseFragment implements
                      emptyMessage = LocaleController.getString(R.string.GotAQuestion);
                  } else if (chatMode != MODE_SUGGESTIONS && (currentUser == null || currentUser.self || currentUser.deleted || userBlocked)) {
                      emptyMessage = LocaleController.getString(R.string.NoMessages);
@@ -37,7 +37,7 @@ index 0000000..0000000 100644
                  }
                  if (emptyMessage == null) {
                      greetingsViewContainer = new ChatGreetingsView(getContext(), currentUser, currentAccount, preloadedGreetingsSticker, themeDelegate) {
-@@ -32439,6 +32442,7 @@ public class ChatActivity extends BaseFragment implements
+@@ -32513,6 +32516,7 @@ public class ChatActivity extends BaseFragment implements
                      };
                      updateGreetingLock();
                      greetingsViewContainer.setListener((sticker) -> {

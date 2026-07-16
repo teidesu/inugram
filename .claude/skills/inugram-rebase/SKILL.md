@@ -11,14 +11,14 @@ description: >
   `patched` (the fork's recorded delta), the recurring conflict shapes and their
   fixes, dispatching a subagent for big multi-file refactors, and logging
   questionable resolutions to `TODO.md`. NOT for creating or editing a single
-  patch (that's the inugram-patches skill), and NOT for ordinary git merge
+  patch (that's covered by `CLAUDE.md`), and NOT for ordinary git merge
   conflicts unrelated to the stgit stack.
 ---
 
 # Inugram rebase guide
 
-Rebasing = replaying the whole stgit stack onto a newer stock Telegram. Read the
-`inugram-patches` skill + `CLAUDE.md` first — this covers only the rebase loop.
+Rebasing = replaying the whole stgit stack onto a newer stock Telegram. Read
+`CLAUDE.md` first — this covers only the rebase loop.
 
 `pnpm run rebase latest` (or `pnpm run rebase <sha>`) fetches upstream and
 rebases the stack, stopping at the first conflicting patch. The rebase target
@@ -28,10 +28,11 @@ sha is printed (`Rebasing to <sha> (upstream/master)`) — **note it**; you'll
 ## Authorization
 
 Rebasing IS the task, so running `git add`, `stg refresh`, `stg push -a` is
-expected here — this skill is the explicit exception to inugram-patches' "never
+expected here — this skill is the explicit exception to CLAUDE.md's "never
 run stg/git". **Still never `stg export` / `pnpm run export`** (the user does
-that at the very end). Don't start `pnpm run rebase` yourself unless asked; the
-user usually kicks it off.
+that at the very end). When the user asks for a rebase, that means end-to-end:
+run `pnpm run rebase latest` (or the given ref) yourself and drive the whole
+conflict loop to completion — don't wait for them to kick it off.
 
 ## The conflict loop
 

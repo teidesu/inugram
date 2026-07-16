@@ -11,7 +11,7 @@ diff --git a/TMessagesProj/src/main/java/org/telegram/ui/ChatActivity.java b/TMe
 index 0000000..0000000 100644
 --- a/TMessagesProj/src/main/java/org/telegram/ui/ChatActivity.java
 +++ b/TMessagesProj/src/main/java/org/telegram/ui/ChatActivity.java
-@@ -4262,7 +4262,7 @@ public class ChatActivity extends BaseFragment implements
+@@ -4265,7 +4265,7 @@ public class ChatActivity extends BaseFragment implements
                  audioCallIconItem = menu.lazilyAddItem(call, R.drawable.call, themeDelegate);
                  audioCallIconItem.setContentDescription(LocaleController.getString(R.string.Call));
                  userFull = getMessagesController().getUserFull(currentUser.id);
@@ -20,16 +20,16 @@ index 0000000..0000000 100644
                      showAudioCallAsIcon = !inPreviewMode;
                      audioCallIconItem.setVisibility(View.VISIBLE);
                  } else {
-@@ -23892,7 +23892,7 @@ public class ChatActivity extends BaseFragment implements
+@@ -23929,7 +23929,7 @@ public class ChatActivity extends BaseFragment implements
                      }
                  }
                  if (headerItem != null) {
 -                    showAudioCallAsIcon = userInfo.phone_calls_available && !inPreviewMode;
 +                    showAudioCallAsIcon = userInfo.phone_calls_available && !inPreviewMode && !InuConfig.HIDE_CALL_ACTION_BUTTON.getValue();
-                     if (avatarContainer != null) {
-                         avatarContainer.setTitleExpand(showAudioCallAsIcon);
-                     }
-@@ -29599,7 +29599,7 @@ public class ChatActivity extends BaseFragment implements
+                     if (userInfo.phone_calls_available) {
+                         if (showAudioCallAsIcon) {
+                             if (audioCallIconItem != null) {
+@@ -29634,7 +29634,7 @@ public class ChatActivity extends BaseFragment implements
          super.setInPreviewMode(value);
          if (currentUser != null && audioCallIconItem != null) {
              TLRPC.UserFull userFull = getMessagesController().getUserFull(currentUser.id);

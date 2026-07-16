@@ -11,8 +11,8 @@ diff --git a/TMessagesProj/src/main/java/org/telegram/ui/DialogsActivity.java b/
 index 0000000..0000000 100644
 --- a/TMessagesProj/src/main/java/org/telegram/ui/DialogsActivity.java
 +++ b/TMessagesProj/src/main/java/org/telegram/ui/DialogsActivity.java
-@@ -2374,6 +2374,9 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
-             if (waitingForDialogsAnimationEnd(parentPage) || parentLayout != null && parentLayout.isInPreviewMode() || rightSlidingDialogContainer.hasFragment()) {
+@@ -2414,6 +2414,9 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
+             if (waitingForDialogsAnimationEnd(parentPage) || parentLayout != null && parentLayout.isInPreviewMode() || rightSlidingDialogContainer.hasFragment() || communityId != 0) {
                  return 0;
              }
 +            if (folderId == 1 && desu.inugram.InuConfig.DISABLE_SWIPE_TO_UNARCHIVE.getValue()) {

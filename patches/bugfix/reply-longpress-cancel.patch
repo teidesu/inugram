@@ -11,7 +11,7 @@ diff --git a/TMessagesProj/src/main/java/org/telegram/ui/Cells/ChatMessageCell.j
 index 0000000..0000000 100644
 --- a/TMessagesProj/src/main/java/org/telegram/ui/Cells/ChatMessageCell.java
 +++ b/TMessagesProj/src/main/java/org/telegram/ui/Cells/ChatMessageCell.java
-@@ -4838,6 +4838,7 @@ public class ChatMessageCell extends BaseCell implements SeekBar.SeekBarDelegate
+@@ -4852,6 +4852,7 @@ public class ChatMessageCell extends BaseCell implements SeekBar.SeekBarDelegate
                  }
              }
          } else if (event.getAction() == MotionEvent.ACTION_CANCEL) {
@@ -19,7 +19,7 @@ index 0000000..0000000 100644
              replyPressed = false;
              replySelectorPressed = false;
              if (replySelector != null) {
-@@ -4849,6 +4850,7 @@ public class ChatMessageCell extends BaseCell implements SeekBar.SeekBarDelegate
+@@ -4863,6 +4864,7 @@ public class ChatMessageCell extends BaseCell implements SeekBar.SeekBarDelegate
              }
          } else if (event.getAction() == MotionEvent.ACTION_MOVE) {
              if (!(x >= replyStartX && x <= replyEnd && y >= replyStartY && y <= replyStartY + replyHeight)) {

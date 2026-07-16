@@ -11,7 +11,7 @@ diff --git a/TMessagesProj/src/main/java/org/telegram/ui/Components/EditTextCapt
 index 0000000..0000000 100644
 --- a/TMessagesProj/src/main/java/org/telegram/ui/Components/EditTextCaption.java
 +++ b/TMessagesProj/src/main/java/org/telegram/ui/Components/EditTextCaption.java
-@@ -535,7 +535,11 @@ public class EditTextCaption extends EditTextBoldCursor {
+@@ -706,7 +706,11 @@ public class EditTextCaption extends EditTextBoldCursor implements FloatingToolb
              start = getSelectionStart();
              end = getSelectionEnd();
          }
@@ -24,7 +24,7 @@ index 0000000..0000000 100644
  
          if (span == null) {
              Editable editable = getText();
-@@ -560,6 +564,71 @@ public class EditTextCaption extends EditTextBoldCursor {
+@@ -731,6 +735,71 @@ public class EditTextCaption extends EditTextBoldCursor implements FloatingToolb
          }
      }
  

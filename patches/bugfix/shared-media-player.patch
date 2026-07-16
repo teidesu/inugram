@@ -11,7 +11,7 @@ diff --git a/TMessagesProj/src/main/java/org/telegram/ui/Components/SharedMediaL
 index 0000000..0000000 100644
 --- a/TMessagesProj/src/main/java/org/telegram/ui/Components/SharedMediaLayout.java
 +++ b/TMessagesProj/src/main/java/org/telegram/ui/Components/SharedMediaLayout.java
-@@ -3714,10 +3714,19 @@ public class SharedMediaLayout extends FrameLayout implements NotificationCenter
+@@ -3717,10 +3717,19 @@ public class SharedMediaLayout extends FrameLayout implements NotificationCenter
                                  );
                                  final int paddingTopNew = page.listView.getPaddingTop();
                                  final int scroll = paddingTopOld - paddingTopNew;
@@ -32,7 +32,7 @@ index 0000000..0000000 100644
                      // SharedMediaLayout.this.setPadding(0, , 0, 0);
                  });
                  fragmentContextView = new FragmentContextView(context, parent, this, false, resourcesProvider) {
-@@ -7361,7 +7370,9 @@ public class SharedMediaLayout extends FrameLayout implements NotificationCenter
+@@ -7364,7 +7373,9 @@ public class SharedMediaLayout extends FrameLayout implements NotificationCenter
                  }
                  if (savedMessagesContainer.getParent() != mediaPages[a]) {
                      AndroidUtilities.removeFromParent(savedMessagesContainer);
@@ -43,7 +43,7 @@ index 0000000..0000000 100644
                  }
              } else if (mediaPages[a].selectedType == TAB_BOT_PREVIEWS) {
                  if (currentAdapter != null) {
-@@ -7384,7 +7395,9 @@ public class SharedMediaLayout extends FrameLayout implements NotificationCenter
+@@ -7387,7 +7398,9 @@ public class SharedMediaLayout extends FrameLayout implements NotificationCenter
                  }
              }
              final boolean photos = mediaPages[a].selectedType == TAB_PHOTOVIDEO || isAnyStoryPageType(mediaPages[a].selectedType);

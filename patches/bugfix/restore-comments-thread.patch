@@ -11,7 +11,7 @@ diff --git a/TMessagesProj/src/main/java/org/telegram/ui/LaunchActivity.java b/T
 index 0000000..0000000 100644
 --- a/TMessagesProj/src/main/java/org/telegram/ui/LaunchActivity.java
 +++ b/TMessagesProj/src/main/java/org/telegram/ui/LaunchActivity.java
-@@ -617,6 +617,23 @@ public class LaunchActivity extends BasePermissionsActivity implements INavigati
+@@ -623,6 +623,23 @@ public class LaunchActivity extends BasePermissionsActivity implements INavigati
                          Bundle args = savedInstanceState.getBundle("args");
                          switch (fragmentName) {
                              case "chat":
@@ -35,7 +35,7 @@ index 0000000..0000000 100644
                                  if (args != null) {
                                      ChatActivity chat = new ChatActivity(args);
                                      if (actionBarLayout.addFragmentToStack(chat)) {
-@@ -8335,6 +8352,14 @@ public class LaunchActivity extends BasePermissionsActivity implements INavigati
+@@ -8307,6 +8324,14 @@ public class LaunchActivity extends BasePermissionsActivity implements INavigati
                  if (lastFragment instanceof ChatActivity && args != null) {
                      outState.putBundle("args", args);
                      outState.putString("fragment", "chat");

@@ -12,7 +12,7 @@ diff --git a/TMessagesProj/src/main/java/org/telegram/ui/ActionBar/ActionBarLayo
 index 0000000..0000000 100644
 --- a/TMessagesProj/src/main/java/org/telegram/ui/ActionBar/ActionBarLayout.java
 +++ b/TMessagesProj/src/main/java/org/telegram/ui/ActionBar/ActionBarLayout.java
-@@ -383,6 +383,9 @@ public class ActionBarLayout extends FrameLayout implements INavigationLayout, F
+@@ -384,6 +384,9 @@ public class ActionBarLayout extends FrameLayout implements INavigationLayout, F
              if ((passivePreview || transitionAnimationPreviewMode) && (ev.getActionMasked() == MotionEvent.ACTION_DOWN || ev.getActionMasked() == MotionEvent.ACTION_POINTER_DOWN)) {
                  return false;
              }
@@ -22,7 +22,7 @@ index 0000000..0000000 100644
              try {
                  return (!passivePreview || this != containerView) && super.dispatchTouchEvent(ev);
              } catch (Throwable e) {
-@@ -1051,11 +1054,13 @@ public class ActionBarLayout extends FrameLayout implements INavigationLayout, F
+@@ -1046,11 +1049,13 @@ public class ActionBarLayout extends FrameLayout implements INavigationLayout, F
          int clipRight = width + getPaddingLeft();
          int backOffset = 0;
  
@@ -36,7 +36,7 @@ index 0000000..0000000 100644
  
          final int restoreCount2 = canvas.save();
          if (child != bottomSheetTabs && bottomSheetTabsClip != null) {
-@@ -1302,7 +1307,7 @@ public class ActionBarLayout extends FrameLayout implements INavigationLayout, F
+@@ -1297,7 +1302,7 @@ public class ActionBarLayout extends FrameLayout implements INavigationLayout, F
          delegate = INavigationLayoutDelegate;
      }
  
@@ -45,7 +45,7 @@ index 0000000..0000000 100644
          if (!backAnimation) {
              if (fragmentsStack.size() < 2) {
                  checkBlackScreen("onSlideAnimationEnd exit");
-@@ -1532,8 +1537,8 @@ public class ActionBarLayout extends FrameLayout implements INavigationLayout, F
+@@ -1527,8 +1532,8 @@ public class ActionBarLayout extends FrameLayout implements INavigationLayout, F
          return false;
      }
  
@@ -56,7 +56,7 @@ index 0000000..0000000 100644
      private boolean predictiveBackHasProgress;
      private float predictiveBackY;
      private boolean predictiveBackLeft;
-@@ -1606,6 +1611,8 @@ public class ActionBarLayout extends FrameLayout implements INavigationLayout, F
+@@ -1601,6 +1606,8 @@ public class ActionBarLayout extends FrameLayout implements INavigationLayout, F
          return predictiveBackInProgress && predictiveBackHasProgress;
      }
  
@@ -69,8 +69,8 @@ diff --git a/TMessagesProj/src/main/java/org/telegram/ui/LaunchActivity.java b/T
 index 0000000..0000000 100644
 --- a/TMessagesProj/src/main/java/org/telegram/ui/LaunchActivity.java
 +++ b/TMessagesProj/src/main/java/org/telegram/ui/LaunchActivity.java
-@@ -737,7 +737,27 @@ public class LaunchActivity extends BasePermissionsActivity implements INavigati
-         BackupAgent.requestBackup(this);
+@@ -743,7 +743,27 @@ public class LaunchActivity extends BasePermissionsActivity implements INavigati
+         BackupAgent.requestBackup();
  
          RestrictedLanguagesSelectActivity.checkRestrictedLanguages(false);
 -        if (Build.VERSION.SDK_INT >= 34) {

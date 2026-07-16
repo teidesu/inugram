@@ -81,7 +81,7 @@ class FontStackActivity : SettingsPageActivity() {
             return@run btn
         })
 
-        listView.inu_longPressDragEnabled = false
+        listView.setReorderLongPressEnabled(false)
         listView.listenReorder { id, items ->
             if (id != reorderSectionId) return@listenReorder
             val newOrder = items.mapNotNull { it.`object` as? String }

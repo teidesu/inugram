@@ -11,7 +11,7 @@ diff --git a/TMessagesProj/src/main/java/org/telegram/ui/ChatActivity.java b/TMe
 index 0000000..0000000 100644
 --- a/TMessagesProj/src/main/java/org/telegram/ui/ChatActivity.java
 +++ b/TMessagesProj/src/main/java/org/telegram/ui/ChatActivity.java
-@@ -6864,7 +6864,13 @@ public class ChatActivity extends BaseFragment implements
+@@ -6870,7 +6870,13 @@ public class ChatActivity extends BaseFragment implements
                                  }
                              }
                          } else {
@@ -26,7 +26,7 @@ index 0000000..0000000 100644
                                  totalDy += dy;
                                  if (totalDy < -scrollValue) {
                                      canShowPagedownButton = false;
-@@ -15404,6 +15410,10 @@ public class ChatActivity extends BaseFragment implements
+@@ -15447,6 +15453,10 @@ public class ChatActivity extends BaseFragment implements
              }
              chatLayoutManager.scrollToPositionWithOffset(position, 0);
              chatListView.stopScroll();
@@ -37,7 +37,7 @@ index 0000000..0000000 100644
          }
      }
  
-@@ -46791,4 +46801,4 @@ public class ChatActivity extends BaseFragment implements
+@@ -46937,4 +46947,4 @@ public class ChatActivity extends BaseFragment implements
          abstract void drawChatBackgroundElements(Canvas canvas, @Nullable RectF position);
          abstract void drawChatForegroundElements(Canvas canvas, @Nullable RectF position);
      }

@@ -11,7 +11,7 @@ diff --git a/TMessagesProj/src/main/java/org/telegram/messenger/LocaleController
 index 0000000..0000000 100644
 --- a/TMessagesProj/src/main/java/org/telegram/messenger/LocaleController.java
 +++ b/TMessagesProj/src/main/java/org/telegram/messenger/LocaleController.java
-@@ -2919,6 +2919,10 @@ public class LocaleController {
+@@ -2945,6 +2945,10 @@ public class LocaleController {
      }
  
      public static String formatShortNumber(int number, int[] rounded) {

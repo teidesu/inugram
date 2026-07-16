@@ -19,7 +19,7 @@ index 0000000..0000000 100644
  import org.telegram.messenger.R;
  import org.telegram.messenger.SRPHelper;
  import org.telegram.messenger.SharedConfig;
-@@ -227,7 +228,7 @@ public class LoginActivity extends BaseFragment implements NotificationCenter.No
+@@ -228,7 +229,7 @@ public class LoginActivity extends BaseFragment implements NotificationCenter.No
              MODE_CHANGE_PHONE_NUMBER = 2,
              MODE_CHANGE_LOGIN_EMAIL = 3;
  
@@ -28,7 +28,7 @@ index 0000000..0000000 100644
              VIEW_CODE_MESSAGE = 1,
              VIEW_CODE_SMS = 2,
              VIEW_CODE_FLASH_CALL = 3,
-@@ -348,6 +349,7 @@ public class LoginActivity extends BaseFragment implements NotificationCenter.No
+@@ -349,6 +350,7 @@ public class LoginActivity extends BaseFragment implements NotificationCenter.No
      private RadialProgressView radialProgressView;
  
      private ImageView proxyButtonView;
@@ -36,7 +36,7 @@ index 0000000..0000000 100644
      private ProxyDrawable proxyDrawable;
  
      // Open animation stuff
-@@ -569,6 +571,9 @@ public class LoginActivity extends BaseFragment implements NotificationCenter.No
+@@ -570,6 +572,9 @@ public class LoginActivity extends BaseFragment implements NotificationCenter.No
                  marginLayoutParams = (MarginLayoutParams) proxyButtonView.getLayoutParams();
                  marginLayoutParams.topMargin = AndroidUtilities.dp(16) + statusBarHeight;
  
@@ -46,7 +46,7 @@ index 0000000..0000000 100644
                  marginLayoutParams = (MarginLayoutParams) radialProgressView.getLayoutParams();
                  marginLayoutParams.topMargin = AndroidUtilities.dp(16) + statusBarHeight;
  
-@@ -755,15 +760,17 @@ public class LoginActivity extends BaseFragment implements NotificationCenter.No
+@@ -756,15 +761,17 @@ public class LoginActivity extends BaseFragment implements NotificationCenter.No
          proxyButtonView.setOnClickListener(v -> presentFragment(new ProxyListActivity()));
          proxyButtonView.setAlpha(0f);
          proxyButtonView.setVisibility(View.GONE);
@@ -66,7 +66,7 @@ index 0000000..0000000 100644
  
          floatingButtonIcon = new TransformableLoginButtonView(context);
          floatingButtonIcon.setTransformType(TransformableLoginButtonView.TRANSFORM_OPEN_ARROW);
-@@ -1628,7 +1635,7 @@ public class LoginActivity extends BaseFragment implements NotificationCenter.No
+@@ -1629,7 +1636,7 @@ public class LoginActivity extends BaseFragment implements NotificationCenter.No
          onAuthSuccess(res);
      }
  
@@ -75,7 +75,7 @@ index 0000000..0000000 100644
          onAuthSuccess(res, false);
      }
  
-@@ -3264,9 +3271,6 @@ public class LoginActivity extends BaseFragment implements NotificationCenter.No
+@@ -3265,9 +3272,6 @@ public class LoginActivity extends BaseFragment implements NotificationCenter.No
                          }
                      }
                  }

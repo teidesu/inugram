@@ -152,7 +152,6 @@ object TranslateHelper {
         val toLang = TranslateAlert2.getToLanguage()
         val toLangDefault = LocaleController.getInstance().currentLocale.language
         val messageIdToTranslate = intArrayOf(selected.id)
-        val text = selected.getMessageTextToTranslate(group, messageIdToTranslate) ?: return
 
         val inputPeer = if (selected.isPoll || selected.isVoiceTranscriptionOpen || selected.isSponsored ||
             selected.scheduled || activity.chatMode == ChatActivity.MODE_QUICK_REPLIES
@@ -164,6 +163,31 @@ object TranslateHelper {
         val noforwards = activity.isPeerNoForwards ||
             selected.messageOwner?.noforwards == true ||
             selected.type == MessageObject.TYPE_PAID_MEDIA
+
+        fun updateTranslateHint() {
+            val prefs = MessagesController.getNotificationsSettings(account)
+            val key = "dialog_show_translate_count" + activity.dialogId
+            val hintCount = prefs.getInt(key, 5)
+            if (hintCount > 0) {
+                prefs.edit { putInt(key, hintCount - 1) }
+                activity.updateTopPanel(true)
+            }
+        }
+
+        val richMessage = if (selected.type == MessageObject.TYPE_ARTICLE) selected.messageOwner?.rich_message else null
+        if (richMessage != null) {
+            val fromLang = selected.messageOwner?.originalLanguage
+            val toLangValue = if (fromLang != null && fromLang == toLang) toLangDefault else toLang
+            val alert = TranslateAlert2.showAlert(
+                parent, activity, account, inputPeer, messageIdToTranslate[0],
+                fromLang, toLangValue, richMessage, noforwards, null,
+            ) { activity.dimBehindView(false) }
+            alert?.setDimBehind(false)
+            updateTranslateHint()
+            return
+        }
+
+        val text = selected.getMessageTextToTranslate(group, messageIdToTranslate) ?: return
 
         fun perform(fromLang: String?) {
             val toLangValue = if (fromLang != null && fromLang == toLang) toLangDefault else toLang
@@ -184,13 +208,7 @@ object TranslateHelper {
                 ) { activity.dimBehindView(false) }
                 alert.setDimBehind(false)
             }
-            val prefs = MessagesController.getNotificationsSettings(account)
-            val key = "dialog_show_translate_count" + activity.dialogId
-            val hintCount = prefs.getInt(key, 5)
-            if (hintCount > 0) {
-                prefs.edit { putInt(key, hintCount - 1) }
-                activity.updateTopPanel(true)
-            }
+            updateTranslateHint()
         }
 
         val originalLanguage = selected.messageOwner?.originalLanguage
@@ -216,6 +234,11 @@ object TranslateHelper {
         onLangDetectionDone: AtomicReference<Runnable>,
     ) {
         if (selected == null) return
+
+        if (selected.type == MessageObject.TYPE_ARTICLE && selected.messageOwner?.rich_message != null) {
+            cell.visibility = View.VISIBLE
+            return
+        }
 
         val toLang = TranslateAlert2.getToLanguage()
         val toLangDefault = LocaleController.getInstance().currentLocale.language

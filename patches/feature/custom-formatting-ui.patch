@@ -30,7 +30,7 @@ diff --git a/TMessagesProj/src/main/java/org/telegram/ui/Components/EditTextCapt
 index 0000000..0000000 100644
 --- a/TMessagesProj/src/main/java/org/telegram/ui/Components/EditTextCaption.java
 +++ b/TMessagesProj/src/main/java/org/telegram/ui/Components/EditTextCaption.java
-@@ -83,7 +83,7 @@ public class EditTextCaption extends EditTextBoldCursor {
+@@ -83,7 +83,7 @@ public class EditTextCaption extends EditTextBoldCursor implements FloatingToolb
      private int lineCount;
      private boolean isInitLineCount;
      private final Theme.ResourcesProvider resourcesProvider;
@@ -39,7 +39,7 @@ index 0000000..0000000 100644
      public boolean adaptiveCreateLinkDialog;
  
      public interface EditTextCaptionDelegate {
-@@ -198,7 +198,8 @@ public class EditTextCaption extends EditTextBoldCursor {
+@@ -245,7 +245,8 @@ public class EditTextCaption extends EditTextBoldCursor implements FloatingToolb
          }
          final int setSelection = QuoteSpan.putQuoteToEditable(getText(), start, end, collapse);
          if (setSelection >= 0) {
@@ -53,7 +53,7 @@ diff --git a/TMessagesProj/src/main/java/org/telegram/ui/Components/EditTextEffe
 index 0000000..0000000 100644
 --- a/TMessagesProj/src/main/java/org/telegram/ui/Components/EditTextEffects.java
 +++ b/TMessagesProj/src/main/java/org/telegram/ui/Components/EditTextEffects.java
-@@ -447,7 +447,19 @@ public class EditTextEffects extends EditText {
+@@ -449,7 +449,19 @@ public class EditTextEffects extends EditText {
          invalidateSpoilers();
      }
  

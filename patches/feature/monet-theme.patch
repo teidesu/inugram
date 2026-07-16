@@ -14,7 +14,7 @@ diff --git a/TMessagesProj/src/main/java/org/telegram/messenger/MessagesControll
 index 0000000..0000000 100644
 --- a/TMessagesProj/src/main/java/org/telegram/messenger/MessagesController.java
 +++ b/TMessagesProj/src/main/java/org/telegram/messenger/MessagesController.java
-@@ -5280,43 +5280,43 @@ public class MessagesController extends BaseController implements NotificationCe
+@@ -5319,43 +5319,43 @@ public class MessagesController extends BaseController implements NotificationCe
                  return Theme.getColor(Theme.keys_avatar_nameInMessage[id], resourcesProvider);
              }
              final boolean isDark = resourcesProvider != null ? resourcesProvider.isDark() : Theme.isCurrentThemeDark();
@@ -74,7 +74,7 @@ diff --git a/TMessagesProj/src/main/java/org/telegram/ui/ActionBar/Theme.java b/
 index 0000000..0000000 100644
 --- a/TMessagesProj/src/main/java/org/telegram/ui/ActionBar/Theme.java
 +++ b/TMessagesProj/src/main/java/org/telegram/ui/ActionBar/Theme.java
-@@ -149,6 +149,7 @@ import java.util.Locale;
+@@ -151,6 +151,7 @@ import java.util.Locale;
  import java.util.Map;
  import java.util.Objects;
  import java.util.concurrent.CountDownLatch;
@@ -82,7 +82,7 @@ index 0000000..0000000 100644
  
  public class Theme {
  
-@@ -2474,13 +2475,33 @@ public class Theme {
+@@ -2476,13 +2477,33 @@ public class Theme {
              return defaultAccentCount != 0;
          }
  
@@ -118,7 +118,7 @@ index 0000000..0000000 100644
                  isDark = LIGHT;
              }
              if (isDark == UNKNOWN) {
-@@ -4722,6 +4743,38 @@ public class Theme {
+@@ -4729,6 +4750,38 @@ public class Theme {
          themes.add(themeInfo);
          themesDict.put("Night", themeInfo);
  
@@ -157,7 +157,7 @@ index 0000000..0000000 100644
          String themesString = themeConfig.getString("themes2", null);
  
          int remoteVersion = themeConfig.getInt("remote_version", 0);
-@@ -4954,6 +5007,8 @@ public class Theme {
+@@ -4961,6 +5014,8 @@ public class Theme {
                      if (accent != null) {
                          info.overrideWallpaper = accent.overrideWallpaper;
                      }
@@ -166,7 +166,7 @@ index 0000000..0000000 100644
                  }
              }
              if (oldEditor != null) {
-@@ -8165,6 +8220,10 @@ public class Theme {
+@@ -8172,6 +8227,10 @@ public class Theme {
                                      } catch (Exception ignore) {
                                          value = Utilities.parseInt(param);
                                      }
@@ -194,7 +194,7 @@ diff --git a/TMessagesProj/src/main/java/org/telegram/ui/DialogsActivity.java b/
 index 0000000..0000000 100644
 --- a/TMessagesProj/src/main/java/org/telegram/ui/DialogsActivity.java
 +++ b/TMessagesProj/src/main/java/org/telegram/ui/DialogsActivity.java
-@@ -13378,6 +13378,10 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
+@@ -13655,6 +13655,10 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
      private void showItemOptions() {
          ItemOptions io = ItemOptions.makeOptions(this, optionsItem);
          io.setColors(getThemedColor(Theme.key_actionBarDefaultTitle), getThemedColor(Theme.key_actionBarDefaultTitle));

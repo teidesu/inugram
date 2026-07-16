@@ -45,7 +45,7 @@ diff --git a/TMessagesProj/src/main/java/org/telegram/messenger/MessagesControll
 index 0000000..0000000 100644
 --- a/TMessagesProj/src/main/java/org/telegram/messenger/MessagesController.java
 +++ b/TMessagesProj/src/main/java/org/telegram/messenger/MessagesController.java
-@@ -22171,7 +22171,11 @@ public class MessagesController extends BaseController implements NotificationCe
+@@ -23009,7 +23009,11 @@ public class MessagesController extends BaseController implements NotificationCe
              loadMessagesInternal(dialogId, 0, true, count, finalMessageId, 0, true, 0, classGuid, 2, 0, 0, 0, -1, 0, 0, 0, false, 0, true, false, false, null, 0L);
          }
  
@@ -75,7 +75,7 @@ diff --git a/TMessagesProj/src/main/java/org/telegram/ui/ChatActivity.java b/TMe
 index 0000000..0000000 100644
 --- a/TMessagesProj/src/main/java/org/telegram/ui/ChatActivity.java
 +++ b/TMessagesProj/src/main/java/org/telegram/ui/ChatActivity.java
-@@ -3346,6 +3346,10 @@ public class ChatActivity extends BaseFragment implements
+@@ -3342,6 +3342,10 @@ public class ChatActivity extends BaseFragment implements
      @Override
      public void onFragmentDestroy() {
          super.onFragmentDestroy();
@@ -86,7 +86,7 @@ index 0000000..0000000 100644
          ReactionsEffectOverlay.dismissByFragment(this);
          if (messageMetricsView != null) {
              messageMetricsView.finish();
-@@ -35494,6 +35498,7 @@ public class ChatActivity extends BaseFragment implements
+@@ -35578,6 +35582,7 @@ public class ChatActivity extends BaseFragment implements
      private int commentMessagesRequestId;
      private int commentLoadingMessageId;
      private boolean hideCommentLoading;
@@ -94,7 +94,7 @@ index 0000000..0000000 100644
      private long commentLoadingStartedAt;
      private TLRPC.TL_messages_discussionMessage savedDiscussionMessage;
      private TLRPC.messages_Messages savedHistory;
-@@ -35591,9 +35596,11 @@ public class ChatActivity extends BaseFragment implements
+@@ -35675,9 +35680,11 @@ public class ChatActivity extends BaseFragment implements
                                      chatActivity.didReceivedNotification(id, account, args);
                                  }, 50);
                                  NotificationCenter.getInstance(currentAccount).removeObserver(this, NotificationCenter.messagesDidLoad);
@@ -110,7 +110,7 @@ diff --git a/TMessagesProj/src/main/java/org/telegram/ui/Components/Bulletin.jav
 index 0000000..0000000 100644
 --- a/TMessagesProj/src/main/java/org/telegram/ui/Components/Bulletin.java
 +++ b/TMessagesProj/src/main/java/org/telegram/ui/Components/Bulletin.java
-@@ -1839,16 +1839,22 @@ public class Bulletin {
+@@ -1847,16 +1847,22 @@ public class Bulletin {
              reactionsContainerLayout.setMessage(null, null, true);
          }
  
@@ -139,7 +139,7 @@ diff --git a/TMessagesProj/src/main/java/org/telegram/ui/Components/EmojiView.ja
 index 0000000..0000000 100644
 --- a/TMessagesProj/src/main/java/org/telegram/ui/Components/EmojiView.java
 +++ b/TMessagesProj/src/main/java/org/telegram/ui/Components/EmojiView.java
-@@ -6145,6 +6145,7 @@ public class EmojiView extends FrameLayout implements
+@@ -6151,6 +6151,7 @@ public class EmojiView extends FrameLayout implements
              colorPickerView.dismiss();
          }
          ContentPreviewViewer.getInstance().clearDelegate(contentPreviewViewerDelegate);

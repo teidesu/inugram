@@ -14,14 +14,14 @@ diff --git a/TMessagesProj/src/main/java/org/telegram/ui/Components/FiltersListB
 index 0000000..0000000 100644
 --- a/TMessagesProj/src/main/java/org/telegram/ui/Components/FiltersListBottomSheet.java
 +++ b/TMessagesProj/src/main/java/org/telegram/ui/Components/FiltersListBottomSheet.java
-@@ -143,7 +143,6 @@ public class FiltersListBottomSheet extends BottomSheet implements NotificationC
+@@ -140,7 +140,6 @@ public class FiltersListBottomSheet extends BottomSheet implements NotificationC
+                 int statusBarHeight = 0;
                  float radProgress = 1.0f;
-                 if (Build.VERSION.SDK_INT >= 21) {
-                     top += AndroidUtilities.statusBarHeight;
--                    height -= AndroidUtilities.statusBarHeight;
+                 top += AndroidUtilities.statusBarHeight;
+-                height -= AndroidUtilities.statusBarHeight;
  
-                     if (fullHeight) {
-                         if (top + backgroundPaddingTop < AndroidUtilities.statusBarHeight * 2) {
+                 if (fullHeight) {
+                     if (top + backgroundPaddingTop < AndroidUtilities.statusBarHeight * 2) {
 diff --git a/TMessagesProj/src/main/java/org/telegram/ui/Components/PhonebookShareAlert.java b/TMessagesProj/src/main/java/org/telegram/ui/Components/PhonebookShareAlert.java
 index 0000000..0000000 100644
 --- a/TMessagesProj/src/main/java/org/telegram/ui/Components/PhonebookShareAlert.java
@@ -38,8 +38,8 @@ diff --git a/TMessagesProj/src/main/java/org/telegram/ui/Components/ThemeEditorV
 index 0000000..0000000 100644
 --- a/TMessagesProj/src/main/java/org/telegram/ui/Components/ThemeEditorView.java
 +++ b/TMessagesProj/src/main/java/org/telegram/ui/Components/ThemeEditorView.java
-@@ -716,7 +716,6 @@ public class ThemeEditorView {
-                     if (!isFullscreen && Build.VERSION.SDK_INT >= 21) {
+@@ -717,7 +717,6 @@ public class ThemeEditorView {
+                     if (!isFullscreen) {
                          top += AndroidUtilities.statusBarHeight;
                          y += AndroidUtilities.statusBarHeight;
 -                        height -= AndroidUtilities.statusBarHeight;

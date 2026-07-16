@@ -58,7 +58,7 @@ diff --git a/TMessagesProj/src/main/java/org/telegram/messenger/SharedConfig.jav
 index 0000000..0000000 100644
 --- a/TMessagesProj/src/main/java/org/telegram/messenger/SharedConfig.java
 +++ b/TMessagesProj/src/main/java/org/telegram/messenger/SharedConfig.java
-@@ -622,7 +622,7 @@ public class SharedConfig {
+@@ -621,7 +621,7 @@ public class SharedConfig {
              streamAllVideo = preferences.getBoolean("streamAllVideo", BuildVars.DEBUG_VERSION);
              streamMkv = preferences.getBoolean("streamMkv", false);
              suggestStickers = preferences.getInt("suggestStickers", 0);
@@ -67,7 +67,7 @@ index 0000000..0000000 100644
              overrideDevicePerformanceClass = preferences.getInt("overrideDevicePerformanceClass", -1);
              devicePerformanceClass = preferences.getInt("devicePerformanceClass", -1);
              sortContactsByName = preferences.getBoolean("sortContactsByName", false);
-@@ -674,7 +674,7 @@ public class SharedConfig {
+@@ -673,7 +673,7 @@ public class SharedConfig {
              debugVideoQualities = preferences.getBoolean("debugVideoQualities", false);
              shadowsInSections = preferences.getBoolean("shadowsInSections", false);
              debugViewMetrics = preferences.getBoolean("debugViewMetrics", false);
@@ -76,7 +76,7 @@ index 0000000..0000000 100644
              photoLiveDefault = preferences.getBoolean("photoLiveDefault", false);
  
              loadDebugConfig(preferences);
-@@ -1824,7 +1824,7 @@ public class SharedConfig {
+@@ -1823,7 +1823,7 @@ public class SharedConfig {
      }
  
      public static boolean isUsingCamera2(int currentAccount) {
@@ -89,7 +89,7 @@ diff --git a/TMessagesProj/src/main/java/org/telegram/ui/LoginActivity.java b/TM
 index 0000000..0000000 100644
 --- a/TMessagesProj/src/main/java/org/telegram/ui/LoginActivity.java
 +++ b/TMessagesProj/src/main/java/org/telegram/ui/LoginActivity.java
-@@ -320,7 +320,7 @@ public class LoginActivity extends BaseFragment implements NotificationCenter.No
+@@ -321,7 +321,7 @@ public class LoginActivity extends BaseFragment implements NotificationCenter.No
      private boolean checkPermissions = true;
      private boolean checkShowPermissions = true;
      private boolean newAccount;
@@ -98,7 +98,7 @@ index 0000000..0000000 100644
      private boolean testBackend = false;
  
      @ActivityMode
-@@ -685,7 +685,7 @@ public class LoginActivity extends BaseFragment implements NotificationCenter.No
+@@ -686,7 +686,7 @@ public class LoginActivity extends BaseFragment implements NotificationCenter.No
          }
          if (savedInstanceState != null) {
              currentViewNum = savedInstanceState.getInt("currentViewNum", 0);
@@ -107,7 +107,7 @@ index 0000000..0000000 100644
              if (currentViewNum >= VIEW_CODE_MESSAGE && currentViewNum <= VIEW_CODE_CALL) {
                  int time = savedInstanceState.getInt("open");
                  if (time != 0 && Math.abs(System.currentTimeMillis() / 1000 - time) >= 24 * 60 * 60) {
-@@ -2349,7 +2349,7 @@ public class LoginActivity extends BaseFragment implements NotificationCenter.No
+@@ -2350,7 +2350,7 @@ public class LoginActivity extends BaseFragment implements NotificationCenter.No
                  });
              }
  

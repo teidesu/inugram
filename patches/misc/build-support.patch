@@ -7,15 +7,15 @@ Subject: build support stuff for fork-specific code: - added kotlin - bumped min
  TMessagesProj/build.gradle                    | 110 ++++------------
  TMessagesProj/google-services.json            |  76 ++---------
  TMessagesProj/proguard-rules.pro              |  13 ++
- TMessagesProj/src/main/AndroidManifest.xml    |   7 ++
+ TMessagesProj/src/main/AndroidManifest.xml    |   7 +
  .../org/telegram/messenger/BuildVars.java     |  12 +-
- .../org/telegram/ui/PaymentFormActivity.java  |  28 ++---
+ .../org/telegram/ui/PaymentFormActivity.java  |  28 ++--
  .../org/telegram/ui/SettingsActivity.java     |  24 +---
- TMessagesProj_App/build.gradle                | 119 ++++--------------
+ TMessagesProj_App/build.gradle                | 121 ++++--------------
  TMessagesProj_App/google-services.json        |  76 ++---------
  TMessagesProj_AppTests/build.gradle           |   5 +-
  build.gradle                                  |  12 +-
- gradle.properties                             |   4 +-
+ gradle.properties                             |   2 +-
  settings.gradle                               |   5 +-
  13 files changed, 136 insertions(+), 355 deletions(-)
 
@@ -435,7 +435,7 @@ index 0000000..0000000 100644
  
  import org.json.JSONArray;
  import org.json.JSONException;
-@@ -2962,7 +2960,7 @@ public class PaymentFormActivity extends BaseFragment implements NotificationCen
+@@ -2982,7 +2980,7 @@ public class PaymentFormActivity extends BaseFragment implements NotificationCen
                              put("parameters", new JSONObject() {{
                                  put("gateway", "stripe");
                                  put("stripe:publishableKey", providerApiKey);
@@ -444,7 +444,7 @@ index 0000000..0000000 100644
                              }});
                          }
                      }});
-@@ -3397,7 +3395,7 @@ public class PaymentFormActivity extends BaseFragment implements NotificationCen
+@@ -3417,7 +3415,7 @@ public class PaymentFormActivity extends BaseFragment implements NotificationCen
                                  cardName = "Android Pay";
                              }
                          } else {
@@ -453,7 +453,7 @@ index 0000000..0000000 100644
                              paymentJson = String.format(Locale.US, "{\"type\":\"%1$s\", \"id\":\"%2$s\"}", t.getType(), t.getId());
                              Card card = t.getCard();
                              cardName = card.getBrand() + " *" + card.getLast4();
-@@ -3859,16 +3857,16 @@ public class PaymentFormActivity extends BaseFragment implements NotificationCen
+@@ -3906,16 +3904,16 @@ public class PaymentFormActivity extends BaseFragment implements NotificationCen
              month = null;
              year = null;
          }
@@ -477,7 +477,7 @@ index 0000000..0000000 100644
          cardName = card.getBrand() + " *" + card.getLast4();
  
          boolean skipDateCheck = false;
-@@ -3885,7 +3883,7 @@ public class PaymentFormActivity extends BaseFragment implements NotificationCen
+@@ -3932,7 +3930,7 @@ public class PaymentFormActivity extends BaseFragment implements NotificationCen
          if (!card.validateNumber()) {
              shakeField(FIELD_CARD);
              return false;
@@ -486,7 +486,7 @@ index 0000000..0000000 100644
              shakeField(FIELD_EXPIRE_DATE);
              return false;
          } else if (need_card_name && inputFields[FIELD_CARDNAME].length() == 0) {
-@@ -3904,8 +3902,8 @@ public class PaymentFormActivity extends BaseFragment implements NotificationCen
+@@ -3951,8 +3949,8 @@ public class PaymentFormActivity extends BaseFragment implements NotificationCen
          showEditDoneProgress(true, true);
          try {
              if ("stripe".equals(paymentForm.native_provider)) {
@@ -501,7 +501,7 @@ diff --git a/TMessagesProj/src/main/java/org/telegram/ui/SettingsActivity.java b
 index 0000000..0000000 100644
 --- a/TMessagesProj/src/main/java/org/telegram/ui/SettingsActivity.java
 +++ b/TMessagesProj/src/main/java/org/telegram/ui/SettingsActivity.java
-@@ -913,29 +913,7 @@ public class SettingsActivity extends BaseFragment implements NotificationCenter
+@@ -914,29 +914,7 @@ public class SettingsActivity extends BaseFragment implements NotificationCenter
      }
  
      public String getVersionName() {
@@ -542,7 +542,7 @@ index 0000000..0000000 100644
  
  repositories {
      mavenCentral()
-@@ -16,8 +17,8 @@ configurations.all {
+@@ -16,18 +17,24 @@ configurations.all {
  
  dependencies {
      implementation project(':TMessagesProj')
@@ -552,7 +552,11 @@ index 0000000..0000000 100644
  }
  
  android {
-@@ -28,6 +29,12 @@ android {
+     compileSdkVersion 35
+     buildToolsVersion '35.0.0'
+ 
+-    defaultConfig.applicationId = APP_PACKAGE
++    defaultConfig.applicationId = "desu.inugram"
  
      sourceSets.main.jniLibs.srcDirs = ['../TMessagesProj/jni/']
  
@@ -897,15 +901,6 @@ diff --git a/gradle.properties b/gradle.properties
 index 0000000..0000000 100644
 --- a/gradle.properties
 +++ b/gradle.properties
-@@ -15,7 +15,7 @@
- #Sat Mar 12 05:53:50 MSK 2016
- APP_VERSION_CODE=6916
- APP_VERSION_NAME=12.8.1
--APP_PACKAGE=org.telegram.messenger
-+APP_PACKAGE=desu.inugram
- IS_PRIVATE=false
- RELEASE_KEY_PASSWORD=android
- RELEASE_KEY_ALIAS=androidkey
 @@ -25,7 +25,7 @@ org.gradle.daemon=true
  org.gradle.parallel=true
  org.gradle.configureondemand=false

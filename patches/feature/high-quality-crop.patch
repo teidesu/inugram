@@ -35,7 +35,7 @@ diff --git a/TMessagesProj/src/main/java/org/telegram/ui/PhotoViewer.java b/TMes
 index 0000000..0000000 100644
 --- a/TMessagesProj/src/main/java/org/telegram/ui/PhotoViewer.java
 +++ b/TMessagesProj/src/main/java/org/telegram/ui/PhotoViewer.java
-@@ -11695,7 +11695,12 @@ public class PhotoViewer implements NotificationCenter.NotificationCenterDelegat
+@@ -11689,7 +11689,12 @@ public class PhotoViewer implements NotificationCenter.NotificationCenterDelegat
              if (entry.cropState == null) {
                  return currentEditMode != EDIT_MODE_CROP;
              }
@@ -49,7 +49,7 @@ index 0000000..0000000 100644
              if (currentCroppedBitmap == null) {
                  currentCroppedBitmap = desu.inugram.helpers.media.PhotoViewerHelper.rebakeCroppedBitmap(entry);
                  if (currentCroppedBitmap == null) {
-@@ -11769,11 +11774,12 @@ public class PhotoViewer implements NotificationCenter.NotificationCenterDelegat
+@@ -11763,11 +11768,12 @@ public class PhotoViewer implements NotificationCenter.NotificationCenterDelegat
                      Bitmap croppedPaintBitmap = createCroppedBitmap(paintBitmap, entry.cropState, null, false);
  
                      if (!isCurrentVideo || entry.isLivePhoto()) {
@@ -64,7 +64,7 @@ index 0000000..0000000 100644
                          }
                      }
                      mergeImages(entry.thumbPath = getTempFileAbsolutePath(), null, croppedPaintBitmap, croppedBitmap, thumbSize, true);
-@@ -11785,7 +11791,8 @@ public class PhotoViewer implements NotificationCenter.NotificationCenterDelegat
+@@ -11779,7 +11785,8 @@ public class PhotoViewer implements NotificationCenter.NotificationCenterDelegat
                      }
                  } else {
                      if (!isCurrentVideo || entry.isLivePhoto()) {
@@ -74,7 +74,7 @@ index 0000000..0000000 100644
                          entry.imagePath = currentImagePath = FileLoader.getInstance(currentAccount).getPathToAttach(size, true).toString();
                      }
                      TLRPC.PhotoSize size = ImageLoader.scaleAndSaveImage(croppedBitmap, thumbSize, thumbSize, 70, false, 101, 101);
-@@ -11805,7 +11812,8 @@ public class PhotoViewer implements NotificationCenter.NotificationCenterDelegat
+@@ -11799,7 +11806,8 @@ public class PhotoViewer implements NotificationCenter.NotificationCenterDelegat
              Bitmap b = entry.cropState != null ? createCroppedBitmap(bitmap, entry.cropState, null, true) : bitmap;
              if (entry.paintPath == null) {
                  if (!isCurrentVideo || entry.isLivePhoto()) {
@@ -84,7 +84,7 @@ index 0000000..0000000 100644
                      entry.imagePath = currentImagePath = FileLoader.getInstance(currentAccount).getPathToAttach(size, true).toString();
                  }
                  size = ImageLoader.scaleAndSaveImage(b, getCompressFormat(), thumbSize, thumbSize, 83, false, 101, 101);
-@@ -11829,11 +11837,12 @@ public class PhotoViewer implements NotificationCenter.NotificationCenterDelegat
+@@ -11823,11 +11831,12 @@ public class PhotoViewer implements NotificationCenter.NotificationCenterDelegat
                      recyclePaint = false;
                  }
                  if (!isCurrentVideo || entry.isLivePhoto()) {
@@ -99,7 +99,7 @@ index 0000000..0000000 100644
                      }
                  }
                  mergeImages(entry.thumbPath = getTempFileAbsolutePath(), path, paintBitmap, b, thumbSize, true);
-@@ -11947,11 +11956,12 @@ public class PhotoViewer implements NotificationCenter.NotificationCenterDelegat
+@@ -11941,11 +11950,12 @@ public class PhotoViewer implements NotificationCenter.NotificationCenterDelegat
                  }
              }
              if (!isCurrentVideo || entry.isLivePhoto()) {
@@ -114,7 +114,7 @@ index 0000000..0000000 100644
                  }
              }
              mergeImages(entry.thumbPath = getTempFileAbsolutePath(), null, croppedBitmap, paintBitmap, thumbSize, false);
-@@ -16989,7 +16999,8 @@ public class PhotoViewer implements NotificationCenter.NotificationCenterDelegat
+@@ -16991,7 +17001,8 @@ public class PhotoViewer implements NotificationCenter.NotificationCenterDelegat
                              imageReceiver.setOrientation(photoEntry.orientation, photoEntry.invert, false);
                              path = photoEntry.path;
                          }

@@ -11,7 +11,7 @@ diff --git a/TMessagesProj/src/main/java/org/telegram/ui/DialogsActivity.java b/
 index 0000000..0000000 100644
 --- a/TMessagesProj/src/main/java/org/telegram/ui/DialogsActivity.java
 +++ b/TMessagesProj/src/main/java/org/telegram/ui/DialogsActivity.java
-@@ -2228,6 +2228,23 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
+@@ -2268,6 +2268,23 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
                              disableActionBarScrolling = true;
                              smoothScrollBy(0, diff, CubicBezierInterpolator.EASE_OUT_QUINT);
                              parentPage.archivePullViewState = ARCHIVE_ITEM_STATE_HIDDEN;

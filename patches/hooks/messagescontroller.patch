@@ -11,7 +11,7 @@ diff --git a/TMessagesProj/src/main/java/org/telegram/messenger/MessagesControll
 index 0000000..0000000 100644
 --- a/TMessagesProj/src/main/java/org/telegram/messenger/MessagesController.java
 +++ b/TMessagesProj/src/main/java/org/telegram/messenger/MessagesController.java
-@@ -1474,6 +1474,7 @@ public class MessagesController extends BaseController implements NotificationCe
+@@ -1513,6 +1513,7 @@ public class MessagesController extends BaseController implements NotificationCe
                  localInstance = Instance[num];
                  if (localInstance == null) {
                      Instance[num] = localInstance = new MessagesController(num);

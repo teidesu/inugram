@@ -11,7 +11,7 @@ diff --git a/TMessagesProj/src/main/java/org/telegram/ui/ActionBar/ActionBarMenu
 index 0000000..0000000 100644
 --- a/TMessagesProj/src/main/java/org/telegram/ui/ActionBar/ActionBarMenuItem.java
 +++ b/TMessagesProj/src/main/java/org/telegram/ui/ActionBar/ActionBarMenuItem.java
-@@ -325,7 +325,7 @@ public class ActionBarMenuItem extends FrameLayout {
+@@ -331,7 +331,7 @@ public class ActionBarMenuItem extends FrameLayout {
                      View child = popupLayout.getItemAt(a);
                      child.getHitRect(rect);
                      Object tag = child.getTag();
