@@ -1,0 +1,41 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Andrew <kezin636@gmail.com>
+Date: Thu, 16 Jul 2026 12:32:04 +0300
+Subject: Fix MD3 sections style not applying in Proxy Settings list
+
+---
+ .../src/main/java/org/telegram/ui/ProxyListActivity.java     | 5 -----
+ 1 file changed, 5 deletions(-)
+
+diff --git a/TMessagesProj/src/main/java/org/telegram/ui/ProxyListActivity.java b/TMessagesProj/src/main/java/org/telegram/ui/ProxyListActivity.java
+index 0000000..0000000 100644
+--- a/TMessagesProj/src/main/java/org/telegram/ui/ProxyListActivity.java
++++ b/TMessagesProj/src/main/java/org/telegram/ui/ProxyListActivity.java
+@@ -1008,27 +1008,22 @@ public class ProxyListActivity extends BaseFragment implements NotificationCente
+                     break;
+                 case VIEW_TYPE_TEXT_SETTING:
+                     view = new TextSettingsCell(mContext);
+-                    view.setBackgroundColor(Theme.getColor(Theme.key_windowBackgroundWhite));
+                     break;
+                 case VIEW_TYPE_HEADER:
+                     view = new HeaderCell(mContext);
+-                    view.setBackgroundColor(Theme.getColor(Theme.key_windowBackgroundWhite));
+                     break;
+                 case VIEW_TYPE_TEXT_CHECK:
+                     view = new TextCheckCell(mContext);
+-                    view.setBackgroundColor(Theme.getColor(Theme.key_windowBackgroundWhite));
+                     break;
+                 case VIEW_TYPE_INFO:
+                     view = new TextInfoPrivacyCell(mContext);
+                     break;
+                 case VIEW_TYPE_SLIDE_CHOOSER:
+                     view = new SlideChooseView(mContext);
+-                    view.setBackgroundColor(Theme.getColor(Theme.key_windowBackgroundWhite));
+                     break;
+                 case VIEW_TYPE_PROXY_DETAIL:
+                 default:
+                     view = new TextDetailProxyCell(mContext);
+-                    view.setBackgroundColor(Theme.getColor(Theme.key_windowBackgroundWhite));
+                     break;
+             }
+             view.setLayoutParams(new RecyclerView.LayoutParams(RecyclerView.LayoutParams.MATCH_PARENT, RecyclerView.LayoutParams.WRAP_CONTENT));
