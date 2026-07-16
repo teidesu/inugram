@@ -216,6 +216,7 @@ most things are toggleable in `Settings → Inugram`, with sensible opinionated 
 - photo crop silently not applied to the sent image
 - high-quality photo cropping in PhotoViewer (crop *before* downscaling)
 - sticker creator output sent as photo when high-quality default is on
+- non-square webm stickers rendered off-center in the emoji panel (precached frames were blitted top-left and scaled by width only)
 - recyclerlistview double-tap requires same view
 - dialogs list pull-to-reveal-archive glitches
 - shared media player visual glitches
@@ -272,3 +273,4 @@ most things are toggleable in `Settings → Inugram`, with sensible opinionated 
 - avatar of a bubble right below a topic separator (forum "All" tab) only clickable in its lower part
 - lingering system media session after voice/round/music playback ends (12.8 singleton regression, visible on MIUI)
 - fix profile crash when a contact's note is removed server-side while the open animation is running (note row built from stale user info, bound against fresh)
+- notifications for chats read on another device no longer linger forever when the app process was killed in between (stock only tracked posted notifications in memory)

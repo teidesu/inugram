@@ -1,0 +1,87 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: alina sireneva <alina@tei.su>
+Date: Fri, 17 Jul 2026 00:54:37 +0400
+Subject: fix non-square webm stickers rendering off-center in the emoji panel
+
+---
+ .../messenger/utils/BitmapsCache.java         |  2 +-
+ .../ui/Components/AnimatedFileDrawable.java   | 27 ++++++++++---------
+ 2 files changed, 16 insertions(+), 13 deletions(-)
+
+diff --git a/TMessagesProj/src/main/java/org/telegram/messenger/utils/BitmapsCache.java b/TMessagesProj/src/main/java/org/telegram/messenger/utils/BitmapsCache.java
+index 0000000..0000000 100644
+--- a/TMessagesProj/src/main/java/org/telegram/messenger/utils/BitmapsCache.java
++++ b/TMessagesProj/src/main/java/org/telegram/messenger/utils/BitmapsCache.java
+@@ -96,7 +96,7 @@ public class BitmapsCache {
+             fileTmo.mkdir();
+             mkdir = true;
+         }
+-        file = new File(fileTmo, fileName + "_" + w + "_" + h + (noLimit ? "_nolimit" : " ") + ".pcache2");
++        file = new File(fileTmo, fileName + "_" + w + "_" + h + (noLimit ? "_nolimit" : " ") + ".pcache2i"); // inu: cache busting for bugfix__webm-sticker-precache-centering
+         useSharedBuffers = w < AndroidUtilities.dp(60) && h < AndroidUtilities.dp(60);
+ 
+         // check cache created in file load queue only for high devices
+diff --git a/TMessagesProj/src/main/java/org/telegram/ui/Components/AnimatedFileDrawable.java b/TMessagesProj/src/main/java/org/telegram/ui/Components/AnimatedFileDrawable.java
+index 0000000..0000000 100644
+--- a/TMessagesProj/src/main/java/org/telegram/ui/Components/AnimatedFileDrawable.java
++++ b/TMessagesProj/src/main/java/org/telegram/ui/Components/AnimatedFileDrawable.java
+@@ -1215,7 +1215,6 @@ public class AnimatedFileDrawable extends BitmapDrawable implements Animatable,
+         if (cacheGenerateDecoder == null) {
+             return -1;
+         }
+-        Canvas canvas = new Canvas(bitmap);
+         if (generatingCacheBitmap == null) {
+             generatingCacheBitmap = Bitmap.createBitmap(metaData[0], metaData[1], Bitmap.Config.ARGB_8888);
+         }
+@@ -1230,12 +1229,7 @@ public class AnimatedFileDrawable extends BitmapDrawable implements Animatable,
+             }
+         }
+         lastMetadata = metaData[3];
+-        bitmap.eraseColor(Color.TRANSPARENT);
+-        canvas.save();
+-        float s = (float) renderingWidth / generatingCacheBitmap.getWidth();
+-        canvas.scale(s, s);
+-        canvas.drawBitmap(generatingCacheBitmap, 0, 0, null);
+-        canvas.restore();
++        inu_drawGeneratedFrame(bitmap);
+         cacheGenerateTimestamp = metaData[3];
+         return 1;
+     }
+@@ -1245,8 +1239,6 @@ public class AnimatedFileDrawable extends BitmapDrawable implements Animatable,
+         if (bitmap == null) {
+             bitmap = Bitmap.createBitmap(renderingWidth, renderingHeight, Bitmap.Config.ARGB_8888);
+         }
+-        Canvas canvas = new Canvas(bitmap);
+-
+         AnimatedFileNative tempDecoder = AnimatedFileNative.createDecoderFrom(path.getAbsolutePath(), metaData, currentAccount, streamFileSize, stream, false);
+         if (tempDecoder == null) {
+             return bitmap;
+@@ -1256,14 +1248,25 @@ public class AnimatedFileDrawable extends BitmapDrawable implements Animatable,
+         }
+         tempDecoder.getVideoFrame(generatingCacheBitmap, false, startTime, endTime, true);
+         tempDecoder.recycle();
++        inu_drawGeneratedFrame(bitmap);
++
++        return bitmap;
++    }
++
++    private void inu_drawGeneratedFrame(Bitmap bitmap) {
++        int srcW = generatingCacheBitmap.getWidth();
++        int srcH = generatingCacheBitmap.getHeight();
++        if (srcW <= 0 || srcH <= 0) {
++            return;
++        }
+         bitmap.eraseColor(Color.TRANSPARENT);
++        Canvas canvas = new Canvas(bitmap);
+         canvas.save();
+-        float s = (float) renderingWidth / generatingCacheBitmap.getWidth();
++        float s = Math.min((float) bitmap.getWidth() / srcW, (float) bitmap.getHeight() / srcH);
++        canvas.translate((bitmap.getWidth() - srcW * s) / 2f, (bitmap.getHeight() - srcH * s) / 2f);
+         canvas.scale(s, s);
+         canvas.drawBitmap(generatingCacheBitmap, 0, 0, null);
+         canvas.restore();
+-
+-        return bitmap;
+     }
+ 
+     public void drawFrame(Canvas canvas, int incFrame) {

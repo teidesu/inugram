@@ -219,3 +219,4 @@ bugfix/popup-drag-select-high-ids.patch
 feature/web-preview-spoiler.patch
 bugfix/edit-cover-null-frame.patch
 bugfix/profile-note-npe.patch
+bugfix/webm-sticker-precache-centering.patch
