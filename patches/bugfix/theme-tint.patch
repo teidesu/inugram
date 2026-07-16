@@ -4,12 +4,30 @@ Date: Sat, 30 May 2026 18:26:42 +0400
 Subject: fix hardcoded usage of white color instead of theme colors
 
 ---
+ .../ui/Cells/PhotoAttachPhotoCell.java        |  3 +-
  .../telegram/ui/Cells/ProfileSearchCell.java  |  2 +-
  .../Components/Premium/LimitPreviewView.java  | 31 ++++++++++++-------
  .../org/telegram/ui/ManageLinksActivity.java  |  2 ++
  .../org/telegram/ui/SettingsActivity.java     |  1 +
- 4 files changed, 24 insertions(+), 12 deletions(-)
+ 5 files changed, 26 insertions(+), 13 deletions(-)
 
+diff --git a/TMessagesProj/src/main/java/org/telegram/ui/Cells/PhotoAttachPhotoCell.java b/TMessagesProj/src/main/java/org/telegram/ui/Cells/PhotoAttachPhotoCell.java
+index 0000000..0000000 100644
+--- a/TMessagesProj/src/main/java/org/telegram/ui/Cells/PhotoAttachPhotoCell.java
++++ b/TMessagesProj/src/main/java/org/telegram/ui/Cells/PhotoAttachPhotoCell.java
+@@ -262,10 +262,11 @@ public class PhotoAttachPhotoCell extends FrameLayout {
+ 
+         videoPlayImageView = new ImageView(context);
+         videoPlayImageView.setImageResource(R.drawable.play_mini_video);
++        videoPlayImageView.setColorFilter(getThemedColor(Theme.key_chat_mediaTimeText));
+         videoInfoContainer.addView(videoPlayImageView, LayoutHelper.createFrame(LayoutHelper.WRAP_CONTENT, LayoutHelper.WRAP_CONTENT, Gravity.LEFT | Gravity.CENTER_VERTICAL));
+ 
+         videoTextView = new TextView(context);
+-        videoTextView.setTextColor(0xffffffff);
++        videoTextView.setTextColor(getThemedColor(Theme.key_chat_mediaTimeText));
+         videoTextView.setTypeface(AndroidUtilities.bold());
+         videoTextView.setTextSize(TypedValue.COMPLEX_UNIT_DIP, 12);
+         videoTextView.setImportantForAccessibility(IMPORTANT_FOR_ACCESSIBILITY_NO);
 diff --git a/TMessagesProj/src/main/java/org/telegram/ui/Cells/ProfileSearchCell.java b/TMessagesProj/src/main/java/org/telegram/ui/Cells/ProfileSearchCell.java
 index 0000000..0000000 100644
 --- a/TMessagesProj/src/main/java/org/telegram/ui/Cells/ProfileSearchCell.java

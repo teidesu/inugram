@@ -4,12 +4,149 @@ Date: Mon, 20 Apr 2026 10:55:44 +0300
 Subject: monet theme, almost directly ported from NagramX
 
 ---
+ .../telegram/messenger/CodeHighlighting.java  | 24 +++++--
+ .../org/telegram/messenger/MessageObject.java | 10 +--
  .../messenger/MessagesController.java         | 24 +++----
- .../java/org/telegram/ui/ActionBar/Theme.java | 63 ++++++++++++++++++-
+ .../telegram/messenger/RichMessageLayout.java |  2 +-
+ .../java/org/telegram/ui/ActionBar/Theme.java | 71 ++++++++++++++++++-
+ .../telegram/ui/ActionBar/ThemeColors.java    | 14 ++++
+ .../telegram/ui/Cells/ChatMessageCell.java    |  4 +-
  .../ui/Components/AvatarDrawable.java         |  2 +-
  .../java/org/telegram/ui/DialogsActivity.java |  4 ++
- 4 files changed, 78 insertions(+), 15 deletions(-)
+ 9 files changed, 127 insertions(+), 28 deletions(-)
 
+diff --git a/TMessagesProj/src/main/java/org/telegram/messenger/CodeHighlighting.java b/TMessagesProj/src/main/java/org/telegram/messenger/CodeHighlighting.java
+index 0000000..0000000 100644
+--- a/TMessagesProj/src/main/java/org/telegram/messenger/CodeHighlighting.java
++++ b/TMessagesProj/src/main/java/org/telegram/messenger/CodeHighlighting.java
+@@ -109,9 +109,14 @@ public class CodeHighlighting {
+ 
+     public static class ColorSpan extends CharacterStyle {
+         public int group;
++        public boolean inu_out;
+         public ColorSpan(int match) {
+             this.group = match;
+         }
++        public ColorSpan(int match, boolean inu_out) {
++            this.group = match;
++            this.inu_out = inu_out;
++        }
+ 
+         public int getColorKey() {
+             switch (this.group) {
+@@ -128,7 +133,8 @@ public class CodeHighlighting {
+ 
+         @Override
+         public void updateDrawState(TextPaint tp) {
+-            tp.setColor(Theme.getColor(getColorKey()));
++            final int key = getColorKey();
++            tp.setColor(Theme.getColor(inu_out ? desu.inugram.helpers.theme.MonetHelper.getOutCodeColorKey(key) : key));
+         }
+     }
+ 
+@@ -220,10 +226,14 @@ public class CodeHighlighting {
+     }
+ 
+     public static SpannableString getHighlighted(CharSequence text, String language) {
++        return getHighlighted(text, language, false);
++    }
++
++    public static SpannableString getHighlighted(CharSequence text, String language, boolean inu_out) {
+         if (TextUtils.isEmpty(language)) {
+             return new SpannableString(text);
+         }
+-        final String key = language + "`" + text;
++        final String key = language + "`" + (inu_out ? "1" : "0") + "`" + text;
+         Highlighting process = processedHighlighting.get(key);
+         if (process == null) {
+             process = new Highlighting();
+@@ -231,7 +241,7 @@ public class CodeHighlighting {
+             process.language = language;
+             process.result = new LockedSpannableString(text);
+ 
+-            highlight(process.result, 0, process.result.length(), language, 0, null, true);
++            highlight(process.result, 0, process.result.length(), language, 0, null, true, inu_out);
+ 
+             final Iterator<String> keys = processedHighlighting.keySet().iterator();
+             while (keys.hasNext() && processedHighlighting.size() > 8) {
+@@ -289,6 +299,10 @@ public class CodeHighlighting {
+     }
+ 
+     public static void highlight(Spannable text, int start, int end, String lng, int type, TextStyleSpan.TextStyleRun style, boolean smallerSize) {
++        highlight(text, start, end, lng, type, style, smallerSize, false);
++    }
++
++    public static void highlight(Spannable text, int start, int end, String lng, int type, TextStyleSpan.TextStyleRun style, boolean smallerSize, boolean inu_out) {
+         if (text == null) {
+             return;
+         }
+@@ -315,7 +329,7 @@ public class CodeHighlighting {
+                     long S3 = System.currentTimeMillis();
+                     for (int i = 0; i < spans.size(); ++i) {
+                         CachedToSpan span = spans.get(i);
+-                        text.setSpan(new ColorSpan(span.group), span.start, span.end, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);
++                        text.setSpan(new ColorSpan(span.group, inu_out), span.start, span.end, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);
+                     }
+                     FileLog.d("[CodeHighlighter] applying " + spans.size() + " colorize spans took " + (System.currentTimeMillis() - S3) + "ms in another thread");
+                     AndroidUtilities.runOnUIThread(() -> {
+@@ -327,7 +341,7 @@ public class CodeHighlighting {
+                         long S3 = System.currentTimeMillis();
+                         for (int i = 0; i < spans.size(); ++i) {
+                             CachedToSpan span = spans.get(i);
+-                            text.setSpan(new ColorSpan(span.group), span.start, span.end, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);
++                            text.setSpan(new ColorSpan(span.group, inu_out), span.start, span.end, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);
+                         }
+                         FileLog.d("[CodeHighlighter] applying " + spans.size() + " colorize spans took " + (System.currentTimeMillis() - S3) + "ms");
+                         NotificationCenter.getGlobalInstance().postNotificationName(NotificationCenter.emojiLoaded);
+diff --git a/TMessagesProj/src/main/java/org/telegram/messenger/MessageObject.java b/TMessagesProj/src/main/java/org/telegram/messenger/MessageObject.java
+index 0000000..0000000 100644
+--- a/TMessagesProj/src/main/java/org/telegram/messenger/MessageObject.java
++++ b/TMessagesProj/src/main/java/org/telegram/messenger/MessageObject.java
+@@ -8843,7 +8843,7 @@ public class MessageObject {
+                 if (block.code && !block.quote && textLayout.getText() instanceof Spannable) {
+                     SpannableString sb;
+                     if (!TextUtils.isEmpty(range.language)) {
+-                        sb = CodeHighlighting.getHighlighted(blockText.toString(), range.language);
++                        sb = CodeHighlighting.getHighlighted(blockText.toString(), range.language, isOutOwner());
+                     } else {
+                         sb = new SpannableString(blockText.toString());
+                     }
+@@ -8883,7 +8883,7 @@ public class MessageObject {
+                 try {
+                     SpannableString sb;
+                     if (block.code && !block.quote) {
+-                        sb = CodeHighlighting.getHighlighted(blockText.toString(), range.language);
++                        sb = CodeHighlighting.getHighlighted(blockText.toString(), range.language, isOutOwner());
+                     } else {
+                         sb = SpannableString.valueOf(blockText);
+                     }
+@@ -9306,7 +9306,7 @@ public class MessageObject {
+                     if (block.code && !block.quote && textLayout.getText() instanceof Spannable) {
+                         SpannableString sb;
+                         if (!TextUtils.isEmpty(range.language)) {
+-                            sb = CodeHighlighting.getHighlighted(text.subSequence(range.start, range.end).toString(), range.language);
++                            sb = CodeHighlighting.getHighlighted(text.subSequence(range.start, range.end).toString(), range.language, messageObject != null && messageObject.isOutOwner());
+                         } else {
+                             sb = new SpannableString(text.subSequence(range.start, range.end));
+                         }
+@@ -9333,7 +9333,7 @@ public class MessageObject {
+                     try {
+                         SpannableString sb;
+                         if (block.code && !block.quote) {
+-                            sb = CodeHighlighting.getHighlighted(text.subSequence(startCharacter, endCharacter).toString(), range.language);
++                            sb = CodeHighlighting.getHighlighted(text.subSequence(startCharacter, endCharacter).toString(), range.language, messageObject != null && messageObject.isOutOwner());
+                         } else {
+                             sb = SpannableString.valueOf(text.subSequence(startCharacter, endCharacter));
+                         }
+@@ -9349,7 +9349,7 @@ public class MessageObject {
+                 }
+ 
+                 if (block.code && block.textLayout.getText() instanceof Spannable && TextUtils.isEmpty(range.language)) {
+-                    CodeHighlighting.highlight((Spannable) block.textLayout.getText(), 0, block.textLayout.getText().length(), range.language, 0, null, true);
++                    CodeHighlighting.highlight((Spannable) block.textLayout.getText(), 0, block.textLayout.getText().length(), range.language, 0, null, true, messageObject != null && messageObject.isOutOwner());
+                 }
+ 
+                 textLayoutBlocks.add(block);
 diff --git a/TMessagesProj/src/main/java/org/telegram/messenger/MessagesController.java b/TMessagesProj/src/main/java/org/telegram/messenger/MessagesController.java
 index 0000000..0000000 100644
 --- a/TMessagesProj/src/main/java/org/telegram/messenger/MessagesController.java
@@ -70,6 +207,19 @@ index 0000000..0000000 100644
          }
          public boolean hasColor2() {
              return getColor2() != getColor1();
+diff --git a/TMessagesProj/src/main/java/org/telegram/messenger/RichMessageLayout.java b/TMessagesProj/src/main/java/org/telegram/messenger/RichMessageLayout.java
+index 0000000..0000000 100644
+--- a/TMessagesProj/src/main/java/org/telegram/messenger/RichMessageLayout.java
++++ b/TMessagesProj/src/main/java/org/telegram/messenger/RichMessageLayout.java
+@@ -3602,7 +3602,7 @@ public class RichMessageLayout {
+                     }
+                 }
+                 if (!TextUtils.isEmpty(block.language)) {
+-                    CodeHighlighting.highlight(content, 0, content.length(), block.language, 0, null, false);
++                    CodeHighlighting.highlight(content, 0, content.length(), block.language, 0, null, false, root != null && root.isOut());
+                 }
+             }
+ 
 diff --git a/TMessagesProj/src/main/java/org/telegram/ui/ActionBar/Theme.java b/TMessagesProj/src/main/java/org/telegram/ui/ActionBar/Theme.java
 index 0000000..0000000 100644
 --- a/TMessagesProj/src/main/java/org/telegram/ui/ActionBar/Theme.java
@@ -118,7 +268,22 @@ index 0000000..0000000 100644
                  isDark = LIGHT;
              }
              if (isDark == UNKNOWN) {
-@@ -4729,6 +4750,38 @@ public class Theme {
+@@ -4207,6 +4228,14 @@ public class Theme {
+     public static final int key_telegram_color = colorsCount++;
+     public static final int key_telegram_color_text = colorsCount++;
+ 
++    public static final int key_inu_code_out_keyword = colorsCount++;
++    public static final int key_inu_code_out_operator = colorsCount++;
++    public static final int key_inu_code_out_constant = colorsCount++;
++    public static final int key_inu_code_out_string = colorsCount++;
++    public static final int key_inu_code_out_number = colorsCount++;
++    public static final int key_inu_code_out_comment = colorsCount++;
++    public static final int key_inu_code_out_function = colorsCount++;
++
+     public static final String key_drawable_botInline = "drawableBotInline";
+     public static final String key_drawable_botLink = "drawableBotLink";
+     public static final String key_drawable_botWebView = "drawableBotWebView";
+@@ -4729,6 +4758,38 @@ public class Theme {
          themes.add(themeInfo);
          themesDict.put("Night", themeInfo);
  
@@ -157,7 +322,7 @@ index 0000000..0000000 100644
          String themesString = themeConfig.getString("themes2", null);
  
          int remoteVersion = themeConfig.getInt("remote_version", 0);
-@@ -4961,6 +5014,8 @@ public class Theme {
+@@ -4961,6 +5022,8 @@ public class Theme {
                      if (accent != null) {
                          info.overrideWallpaper = accent.overrideWallpaper;
                      }
@@ -166,7 +331,7 @@ index 0000000..0000000 100644
                  }
              }
              if (oldEditor != null) {
-@@ -8172,6 +8227,10 @@ public class Theme {
+@@ -8172,6 +8235,10 @@ public class Theme {
                                      } catch (Exception ignore) {
                                          value = Utilities.parseInt(param);
                                      }
@@ -177,6 +342,60 @@ index 0000000..0000000 100644
                                  } else {
                                      value = Utilities.parseInt(param);
                                  }
+diff --git a/TMessagesProj/src/main/java/org/telegram/ui/ActionBar/ThemeColors.java b/TMessagesProj/src/main/java/org/telegram/ui/ActionBar/ThemeColors.java
+index 0000000..0000000 100644
+--- a/TMessagesProj/src/main/java/org/telegram/ui/ActionBar/ThemeColors.java
++++ b/TMessagesProj/src/main/java/org/telegram/ui/ActionBar/ThemeColors.java
+@@ -811,6 +811,13 @@ public class ThemeColors {
+         defaultColors[key_code_number] = 0xFF327FE5;
+         defaultColors[key_code_comment] = 0x80000000;
+         defaultColors[key_code_function] = 0xFFF28C39;
++        defaultColors[key_inu_code_out_keyword] = defaultColors[key_code_keyword];
++        defaultColors[key_inu_code_out_operator] = defaultColors[key_code_operator];
++        defaultColors[key_inu_code_out_constant] = defaultColors[key_code_constant];
++        defaultColors[key_inu_code_out_string] = defaultColors[key_code_string];
++        defaultColors[key_inu_code_out_number] = defaultColors[key_code_number];
++        defaultColors[key_inu_code_out_comment] = defaultColors[key_code_comment];
++        defaultColors[key_inu_code_out_function] = defaultColors[key_code_function];
+ 
+         defaultColors[key_iv_background] = 0xFFFFFFFF;
+         defaultColors[key_iv_backgroundGray] = 0xfff0f0f0;
+@@ -1591,6 +1598,13 @@ public class ThemeColors {
+         colorKeysMap.put(key_code_number, "code_number");
+         colorKeysMap.put(key_code_comment, "code_comment");
+         colorKeysMap.put(key_code_function, "code_function");
++        colorKeysMap.put(key_inu_code_out_keyword, "inu_code_out_keyword");
++        colorKeysMap.put(key_inu_code_out_operator, "inu_code_out_operator");
++        colorKeysMap.put(key_inu_code_out_constant, "inu_code_out_constant");
++        colorKeysMap.put(key_inu_code_out_string, "inu_code_out_string");
++        colorKeysMap.put(key_inu_code_out_number, "inu_code_out_number");
++        colorKeysMap.put(key_inu_code_out_comment, "inu_code_out_comment");
++        colorKeysMap.put(key_inu_code_out_function, "inu_code_out_function");
+         colorKeysMap.put(key_iv_background, "iv_background");
+         colorKeysMap.put(key_iv_backgroundGray, "iv_backgroundGray");
+         colorKeysMap.put(key_iv_navigationBackground, "iv_navigationBackground");
+diff --git a/TMessagesProj/src/main/java/org/telegram/ui/Cells/ChatMessageCell.java b/TMessagesProj/src/main/java/org/telegram/ui/Cells/ChatMessageCell.java
+index 0000000..0000000 100644
+--- a/TMessagesProj/src/main/java/org/telegram/ui/Cells/ChatMessageCell.java
++++ b/TMessagesProj/src/main/java/org/telegram/ui/Cells/ChatMessageCell.java
+@@ -23791,7 +23791,7 @@ public class ChatMessageCell extends BaseCell implements SeekBar.SeekBarDelegate
+             if (currentMessageObject != null && currentMessageObject.sendPreview) {
+                 alpha *= effectDrawable == null ? 0f : effectDrawable.isNotEmpty();
+             }
+-            paint.setAlpha((int) (oldAlpha * timeAlpha * alpha * .6f));
++            paint.setAlpha((int) (oldAlpha * timeAlpha * alpha * (Theme.getActiveTheme().inu_isMonetLight() ? 1f : .6f)));
+ 
+             int r;
+             if (documentAttachType != DOCUMENT_ATTACH_TYPE_ROUND && documentAttachType != DOCUMENT_ATTACH_TYPE_STICKER && currentMessageObject.type != MessageObject.TYPE_EMOJIS) {
+@@ -23834,7 +23834,7 @@ public class ChatMessageCell extends BaseCell implements SeekBar.SeekBarDelegate
+                     canvas.restore();
+                     Paint dimPaint = getThemedPaint(Theme.key_paint_chatTimeBackground);
+                     int oldAlpha2 = dimPaint.getAlpha();
+-                    dimPaint.setAlpha((int) (oldAlpha2 * controlsAlpha * .4f));
++                    dimPaint.setAlpha((int) (oldAlpha2 * controlsAlpha * (Theme.getActiveTheme().inu_isMonetLight() ? 1f : .4f)));
+                     canvas.drawRoundRect(rect, r, r, dimPaint);
+                     dimPaint.setAlpha(oldAlpha2);
+                 } else {
 diff --git a/TMessagesProj/src/main/java/org/telegram/ui/Components/AvatarDrawable.java b/TMessagesProj/src/main/java/org/telegram/ui/Components/AvatarDrawable.java
 index 0000000..0000000 100644
 --- a/TMessagesProj/src/main/java/org/telegram/ui/Components/AvatarDrawable.java

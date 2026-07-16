@@ -19,6 +19,7 @@ import org.telegram.messenger.ApplicationLoader
 import org.telegram.messenger.FileLog
 import org.telegram.messenger.NotificationCenter
 import org.telegram.ui.ActionBar.Theme
+import org.telegram.ui.LaunchActivity
 import kotlin.math.max
 import kotlin.math.min
 
@@ -26,6 +27,7 @@ import kotlin.math.min
 @RequiresApi(api = Build.VERSION_CODES.S)
 object MonetHelper {
     private const val DARK_NAME_SOFTEN_RATIO = 0.22f
+    private const val MAX_LIGHTNESS_PERCENT = 200
     private val ids: HashMap<String?, Int?> = object : HashMap<String?, Int?>() {
         init {
             put("a1_0", android.R.color.system_accent1_0)
@@ -216,9 +218,15 @@ object MonetHelper {
             put("monetRedCall", 0xFFEF5350.toInt())
             put("monetGreen", 0xFF4CAF50.toInt())
             put("monetYellow", 0xFFFFB74D.toInt())
+            put("monetCodeKeyword", 0xFFE05356.toInt())
+            put("monetCodeOperator", 0xFF4DBBFF.toInt())
+            put("monetCodeConstant", 0xFF7F79F3.toInt())
+            put("monetCodeString", 0xFF37C123.toInt())
+            put("monetCodeNumber", 0xFF327FE5.toInt())
+            put("monetCodeFunction", 0xFFF28C39.toInt())
         }
     }
-    private var lastMonetColor = 0
+    private var lastMonetSignature: Long? = null
     private val peerColorCache = java.util.concurrent.ConcurrentHashMap<Int, Int>()
     private val avatarTextColorCache = java.util.concurrent.ConcurrentHashMap<Long, Int>()
     private const val AVATAR_TEXT_DARK_TONE = 15.0
@@ -279,7 +287,7 @@ object MonetHelper {
             }
 
             var baseColor = working
-            var darkenPercentValue: String? = null
+            var lightnessPercentValue: String? = null
 
             val lastUnderscore = working.lastIndexOf('_')
             if (lastUnderscore > 0 && lastUnderscore < working.length - 1) {
@@ -287,13 +295,13 @@ object MonetHelper {
                 val candidateBase = working.substring(0, lastUnderscore)
                 if (isDigitsOnly(suffix) && canResolveColor(candidateBase)) {
                     baseColor = candidateBase
-                    darkenPercentValue = suffix
+                    lightnessPercentValue = suffix
                 }
             }
 
             var resolvedColor = resolveColor(baseColor)
-            if (darkenPercentValue != null) {
-                resolvedColor = darkenByPercent(resolvedColor, darkenPercentValue.toInt())
+            if (lightnessPercentValue != null) {
+                resolvedColor = scaleLightnessByPercent(resolvedColor, lightnessPercentValue.toInt())
             }
             if (alphaPercent != null) {
                 val normalized = max(0, min(alphaPercent, 100))
@@ -378,6 +386,18 @@ object MonetHelper {
     }
 
     @JvmStatic
+    fun getOutCodeColorKey(inColorKey: Int): Int = when (inColorKey) {
+        Theme.key_code_keyword -> Theme.key_inu_code_out_keyword
+        Theme.key_code_operator -> Theme.key_inu_code_out_operator
+        Theme.key_code_constant -> Theme.key_inu_code_out_constant
+        Theme.key_code_string -> Theme.key_inu_code_out_string
+        Theme.key_code_number -> Theme.key_inu_code_out_number
+        Theme.key_code_comment -> Theme.key_inu_code_out_comment
+        Theme.key_code_function -> Theme.key_inu_code_out_function
+        else -> inColorKey
+    }
+
+    @JvmStatic
     fun getAvatarTextColor(fallback: Int, background: Int, background2: Int): Int {
         if (!InuConfig.MATERIAL3_AVATARS.value || !(Theme.getActiveTheme()?.inu_isMonetNight() ?: false)) return fallback
         val cacheKey = (background.toLong() shl 32) or (background2.toLong() and 0xFFFFFFFFL)
@@ -396,8 +416,8 @@ object MonetHelper {
         return ColorUtils.blendARGB(color, neutralTextColor, DARK_NAME_SOFTEN_RATIO)
     }
 
-    private fun darkenByPercent(color: Int, percent: Int): Int {
-        val normalizedPercent = max(1, min(percent, 100))
+    private fun scaleLightnessByPercent(color: Int, percent: Int): Int {
+        val normalizedPercent = max(1, min(percent, MAX_LIGHTNESS_PERCENT))
         if (normalizedPercent == 100) {
             return color
         }
@@ -418,33 +438,42 @@ object MonetHelper {
         return !value.isEmpty()
     }
 
+    private fun getMonetSignature(): Long =
+        (getColor("a1_600").toLong() shl 32) or (getColor("n1_500").toLong() and 0xFFFFFFFFL)
+
     fun refreshMonetThemeIfChanged() {
         val activeTheme: Theme.ThemeInfo? = Theme.getActiveTheme()
         if (activeTheme == null || !activeTheme.inu_isMonet()) {
-            lastMonetColor = 0
+            lastMonetSignature = null
             peerColorCache.clear()
             return
         }
 
-        val currentColor = getColor("a1_600")
+        val signature = getMonetSignature()
 
-        if (lastMonetColor == 0) {
-            lastMonetColor = currentColor
+        if (lastMonetSignature == null) {
+            lastMonetSignature = signature
             return
         }
 
-        if (lastMonetColor == currentColor) {
+        if (lastMonetSignature == signature) {
             return
         }
 
         peerColorCache.clear()
+
+        // Theme.applyTheme + needSetDayNightTheme start a crossfade animator in ActionBarLayout,
+        // and only its end callback clears Theme.animatingColors. Without a resumed activity there
+        // are no frames to end it, so leave the signature stale and let the next onResume apply.
+        if (!LaunchActivity.isResumed) return
+
         val isNight: Boolean = Theme.isCurrentThemeNight()
         Theme.applyTheme(activeTheme, isNight)
         NotificationCenter.getGlobalInstance().postNotificationName(
             NotificationCenter.needSetDayNightTheme, activeTheme, isNight, null, -1
         )
 
-        lastMonetColor = currentColor
+        lastMonetSignature = signature
     }
 
     enum class ThemeMode { DISABLED, LIGHT, DARK, AMOLED, AUTO, AUTO_AMOLED }
