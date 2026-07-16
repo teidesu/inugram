@@ -11,7 +11,7 @@ diff --git a/TMessagesProj/src/main/java/org/telegram/ui/Components/SharedMediaL
 index 0000000..0000000 100644
 --- a/TMessagesProj/src/main/java/org/telegram/ui/Components/SharedMediaLayout.java
 +++ b/TMessagesProj/src/main/java/org/telegram/ui/Components/SharedMediaLayout.java
-@@ -1620,7 +1620,7 @@ public class SharedMediaLayout extends FrameLayout implements NotificationCenter
+@@ -1629,7 +1629,7 @@ public class SharedMediaLayout extends FrameLayout implements NotificationCenter
          int[] mediaCount = preloader.getLastMediaCount();
          topicId = sharedMediaPreloader.topicId;
          hasMedia = new int[]{mediaCount[0], mediaCount[1], mediaCount[2], mediaCount[3], mediaCount[4], mediaCount[5], topicId == 0 ? commonGroupsCount : 0, mediaCount[7], mediaCount[8]};
@@ -20,7 +20,7 @@ index 0000000..0000000 100644
          if (userInfo != null) {
              main_tab = userInfo.main_tab;
          } else if (chatInfo != null) {
-@@ -1628,6 +1628,9 @@ public class SharedMediaLayout extends FrameLayout implements NotificationCenter
+@@ -1637,6 +1637,9 @@ public class SharedMediaLayout extends FrameLayout implements NotificationCenter
          } else {
              main_tab = null;
          }
@@ -30,7 +30,7 @@ index 0000000..0000000 100644
          if (initialTab == TAB_GIFTS || initialTab == TAB_RECOMMENDED_CHANNELS || initialTab == TAB_SAVED_DIALOGS || initialTab == TAB_COMMON_GROUPS) {
              this.initialTab = initialTab;
          } else if (user != null && user.bot && user.bot_has_main_app && user.bot_can_edit) {
-@@ -1648,9 +1651,9 @@ public class SharedMediaLayout extends FrameLayout implements NotificationCenter
+@@ -1657,9 +1660,9 @@ public class SharedMediaLayout extends FrameLayout implements NotificationCenter
              this.initialTab = TAB_AUDIO;
          } else if (main_tab instanceof TLRPC.TL_profileTabVoice && (hasMedia[2] == -1 || hasMedia[2] > 0)) {
              this.initialTab = TAB_VOICE;
@@ -42,7 +42,7 @@ index 0000000..0000000 100644
              this.initialTab = TAB_GIFTS;
          } else if (initialTab != -1 && topicId == 0) {
              this.initialTab = initialTab;
-@@ -6789,7 +6792,7 @@ public class SharedMediaLayout extends FrameLayout implements NotificationCenter
+@@ -6807,7 +6810,7 @@ public class SharedMediaLayout extends FrameLayout implements NotificationCenter
              }
          }
          if (info != null && (stories_pinned_available != info.stories_pinned_available)) {
@@ -51,7 +51,7 @@ index 0000000..0000000 100644
                  scrollSlidingTextTabStrip.setInitialTabId(isArchivedOnlyStoriesView() ? TAB_ARCHIVED_STORIES : TAB_STORIES);
              }
              updateTabs(true);
-@@ -6801,7 +6804,7 @@ public class SharedMediaLayout extends FrameLayout implements NotificationCenter
+@@ -6819,7 +6822,7 @@ public class SharedMediaLayout extends FrameLayout implements NotificationCenter
          boolean stories_pinned_available = this.userInfo != null && this.userInfo.stories_pinned_available;
          this.userInfo = userInfo;
          updateTabs(true);
