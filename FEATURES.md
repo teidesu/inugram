@@ -218,7 +218,7 @@ most things are toggleable in `Settings → Inugram`, with sensible opinionated 
 - sticker creator output sent as photo when high-quality default is on
 - recyclerlistview double-tap requires same view
 - dialogs list pull-to-reveal-archive glitches
-- imported fonts with inflated vertical metrics don't add bogus top/bottom padding
+- standalone TTF/OTF fonts with inflated vertical metrics don't add bogus top/bottom padding
 - shared media player visual glitches
 - shared media pager: fling mid-animation to chain tabs or reverse (was ignored until settled); at the edge tab the fling falls through to swipe-to-close
 - attach panel: better perf, safe close before fully open

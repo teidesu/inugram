@@ -278,10 +278,15 @@ class FontsSettingsActivity : SettingsPageActivity(), NotificationCenter.Notific
             LocaleController.getString(R.string.InuFontImporting)
         ).show()
         Utilities.globalQueue.postRunnable {
-            val result = FontLibrary.importFromUris(ctx, uris)
+            val result = try {
+                FontLibrary.importFromUris(ctx, uris)
+            } catch (e: Throwable) {
+                FileLog.e("InuFonts: importFromUris failed", e)
+                null
+            }
             AndroidUtilities.runOnUIThread {
-                val added = result.addedFaces > 0
-                setImportPlaceholderCount(0, notifyOthers = !added)
+                val added = (result?.addedFaces ?: 0) > 0
+                setImportPlaceholderCount(0, notifyOthers = result == null || !added)
                 if (added) FontLibrary.invalidateEditorRoster()
                 if (context == null) return@runOnUIThread
                 if (added) {
@@ -290,7 +295,7 @@ class FontsSettingsActivity : SettingsPageActivity(), NotificationCenter.Notific
                         R.raw.contact_check,
                         LocaleController.getString(R.string.InuFontInstalled)
                     ).show()
-                    if (result.rejectedBySystem > 0) {
+                    if ((result?.rejectedBySystem ?: 0) > 0) {
                         BulletinFactory.of(this).createErrorBulletin(
                             LocaleController.getString(R.string.InuFontUnsupported)
                         ).show()
@@ -298,7 +303,7 @@ class FontsSettingsActivity : SettingsPageActivity(), NotificationCenter.Notific
                 } else {
                     BulletinFactory.of(this).createErrorBulletin(
                         LocaleController.getString(
-                            if (result.rejectedBySystem > 0) R.string.InuFontUnsupported else R.string.InuFontImportFailed
+                            if ((result?.rejectedBySystem ?: 0) > 0) R.string.InuFontUnsupported else R.string.InuFontImportFailed
                         )
                     ).show()
                 }

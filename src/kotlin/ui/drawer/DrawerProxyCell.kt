@@ -43,9 +43,11 @@ class DrawerProxyCell(context: Context) : FrameLayout(context) {
         checkBox.isClickable = false
         checkBox.isFocusable = false
 
-        addView(imageView, LayoutHelper.createFrame(24, 24f, Gravity.LEFT or Gravity.TOP, 19f, 12f, 0f, 0f))
-        addView(textView, LayoutHelper.createFrame(LayoutHelper.MATCH_PARENT, LayoutHelper.MATCH_PARENT.toFloat(), Gravity.LEFT or Gravity.TOP, 72f, 0f, 70f, 0f))
-        addView(checkBox, LayoutHelper.createFrame(37, 24f, Gravity.RIGHT or Gravity.CENTER_VERTICAL, 0f, 0f, 22f, 0f))
+        val startGravity = if (isRTL) Gravity.RIGHT else Gravity.LEFT
+        val endGravity = if (isRTL) Gravity.LEFT else Gravity.RIGHT
+        addView(imageView, LayoutHelper.createFrame(24, 24f, startGravity or Gravity.TOP, if (isRTL) 0f else 19f, 12f, if (isRTL) 19f else 0f, 0f))
+        addView(textView, LayoutHelper.createFrame(LayoutHelper.MATCH_PARENT, LayoutHelper.MATCH_PARENT.toFloat(), startGravity or Gravity.TOP, if (isRTL) 70f else 72f, 0f, if (isRTL) 72f else 70f, 0f))
+        addView(checkBox, LayoutHelper.createFrame(37, 24f, endGravity or Gravity.CENTER_VERTICAL, if (isRTL) 22f else 0f, 0f, if (isRTL) 0f else 22f, 0f))
 
         // Switch draws a larger thumb/ripple than its measured bounds — allow it to overdraw.
         setClipChildren(false)
