@@ -19,6 +19,7 @@ import org.telegram.messenger.Utilities
 import org.telegram.ui.Components.Paint.PaintTypeface
 import java.io.File
 import java.io.FileOutputStream
+import java.io.RandomAccessFile
 
 /**
  * Owns the editor **font roster** and the storage behind it: imported font families, discovered device
@@ -355,6 +356,147 @@ object FontLibrary {
         File(sub, MANIFEST).writeText(root.toString())
     }
 
+    /**
+     * Some Google Fonts downloads (notably Google Sans variable) carry a reasonable line box but a wildly
+     * oversized safety bbox/win box. Android can let those outer boxes leak into TextView top/bottom metrics,
+     * which shifts Telegram text. Clamp only the outer boxes to a padded line box; keep hhea/typo metrics.
+     */
+    private fun normalizeVerticalMetrics(file: File) {
+        try {
+            RandomAccessFile(file, "rw").use { raf ->
+                when (val magic = raf.readInt()) {
+                    0x74746366 -> Unit // TTC checkSumAdjustment is per-face; skip rather than risk corrupting it.
+
+                    0x00010000, 0x4F54544F, 0x74727565 -> {
+                        if (normalizeFaceVerticalMetrics(raf, 0)) {
+                            FileLog.d("$TAG: normalizeVerticalMetrics: normalized ${file.name}")
+                        }
+                    }
+
+                    else -> FileLog.d("$TAG: normalizeVerticalMetrics: unknown magic 0x${Integer.toHexString(magic)} in ${file.name}")
+                }
+            }
+        } catch (e: Throwable) {
+            FileLog.e("$TAG: normalizeVerticalMetrics: failed for ${file.name}", e)
+        }
+    }
+
+    private fun normalizeFaceVerticalMetrics(raf: RandomAccessFile, sfntOffset: Int): Boolean {
+        raf.seek(sfntOffset.toLong())
+        val sfntVer = raf.readInt()
+        if (sfntVer != 0x00010000 && sfntVer != 0x4F54544F && sfntVer != 0x74727565) return false
+        val numTables = raf.readShort().toInt() and 0xffff
+        raf.skipBytes(6)
+
+        var os2: SfntTable? = null
+        var head: SfntTable? = null
+        for (i in 0 until numTables) {
+            val recordOffset = raf.filePointer
+            val tag = raf.readInt()
+            raf.readInt()
+            val off = raf.readInt()
+            val length = raf.readInt()
+            when (tag) {
+                0x4F532F32 -> os2 = SfntTable(recordOffset, off, length) // OS/2
+                0x68656164 -> head = SfntTable(recordOffset, off, length) // head
+            }
+        }
+        val os2Table = os2 ?: return false
+
+        raf.seek(os2Table.offset.toLong() + 68)
+        val typoAsc = raf.readShort().toInt()
+        val typoDesc = raf.readShort().toInt()
+        val typoGap = raf.readShort().toInt()
+        raf.seek(os2Table.offset.toLong() + 74)
+        val winAsc = raf.readShort().toInt() and 0xffff
+        val winDesc = raf.readShort().toInt() and 0xffff
+        val headTable = head
+        var headYMin = 0
+        var headYMax = 0
+        if (headTable != null) {
+            raf.seek(headTable.offset.toLong() + 38)
+            headYMin = raf.readShort().toInt()
+            raf.skipBytes(2)
+            headYMax = raf.readShort().toInt()
+        }
+
+        val typoDescAbs = -typoDesc
+        val typoTotal = typoAsc + typoDescAbs + typoGap
+        val winTotal = winAsc + winDesc
+        if (typoAsc <= 0 || typoDescAbs <= 0 || typoTotal <= 0) return false
+
+        val shouldNormalizeWinBox = winTotal > typoTotal * 3 / 2 || winDesc > typoDescAbs * 2
+        val headDescAbs = -headYMin
+        val shouldNormalizeHeadBox = headTable != null && (headDescAbs > typoDescAbs * 2 || headYMax > typoAsc * 3 / 2)
+        if (!shouldNormalizeWinBox && !shouldNormalizeHeadBox) return false
+
+        val targetDesc = (typoDescAbs + typoTotal / 16).coerceAtMost(typoDescAbs * 2)
+        val targetAsc = (typoAsc + typoTotal / 10).coerceAtMost(typoAsc * 3 / 2)
+        var changed = false
+
+        if (shouldNormalizeHeadBox && headTable != null) {
+            raf.seek(headTable.offset.toLong() + 38)
+            raf.writeShort((-targetDesc).coerceIn(Short.MIN_VALUE.toInt(), -1))
+            raf.skipBytes(2)
+            raf.writeShort(targetAsc.coerceIn(1, 0xffff))
+            changed = true
+        }
+
+        if (shouldNormalizeWinBox) {
+            raf.seek(os2Table.offset.toLong() + 74)
+            raf.writeShort(targetAsc.coerceIn(1, 0xffff))
+            raf.writeShort(targetDesc.coerceIn(1, 0xffff))
+            updateTableChecksum(raf, os2Table)
+            changed = true
+        }
+        if (changed) headTable?.let { updateCheckSumAdjustment(raf, it) }
+        return changed
+    }
+
+    private data class SfntTable(val recordOffset: Long, val offset: Int, val length: Int)
+
+    private fun updateTableChecksum(raf: RandomAccessFile, table: SfntTable) {
+        val checksum = tableChecksum(raf, table.offset.toLong(), table.length)
+        raf.seek(table.recordOffset + 4)
+        raf.writeInt(checksum)
+    }
+
+    private fun updateCheckSumAdjustment(raf: RandomAccessFile, head: SfntTable) {
+        val adjustmentOffset = head.offset.toLong() + 8
+        raf.seek(adjustmentOffset)
+        raf.writeInt(0)
+        val headChecksum = tableChecksum(raf, head.offset.toLong(), head.length)
+        raf.seek(head.recordOffset + 4)
+        raf.writeInt(headChecksum)
+
+        val fileSum = tableChecksum(raf, 0, raf.length().coerceAtMost(Int.MAX_VALUE.toLong()).toInt()).toLong() and 0xffffffffL
+        raf.seek(adjustmentOffset)
+        raf.writeInt((0xB1B0AFBAL - fileSum).toInt())
+    }
+
+    private fun tableChecksum(raf: RandomAccessFile, offset: Long, length: Int): Int {
+        var sum = 0L
+        val paddedLength = (length + 3) and -4
+        val buffer = ByteArray(4)
+        var pos = 0
+        while (pos < paddedLength) {
+            raf.seek(offset + pos)
+            val remaining = length - pos
+            if (remaining >= 4) {
+                raf.readFully(buffer)
+            } else {
+                buffer.fill(0)
+                if (remaining > 0) raf.readFully(buffer, 0, remaining)
+            }
+            sum = (sum + ((buffer[0].toLong() and 0xffL) shl 24) +
+                ((buffer[1].toLong() and 0xffL) shl 16) +
+                ((buffer[2].toLong() and 0xffL) shl 8) +
+                (buffer[3].toLong() and 0xffL)) and 0xffffffffL
+            pos += 4
+        }
+        return sum.toInt()
+    }
+
     /** Returns (roster entries or null if absent, hidden entry set). */
     private fun readIndex(): Pair<MutableList<FontId>?, Set<FontId>> {
         val dir = rootDir ?: return null to emptySet()
@@ -623,6 +765,7 @@ object FontLibrary {
             tmp.delete()
             return StageResult.UNPARSEABLE
         }
+        normalizeVerticalMetrics(tmp)
         if (!isLoadableBySystem(tmp)) {
             tmp.delete()
             return StageResult.UNSUPPORTED
