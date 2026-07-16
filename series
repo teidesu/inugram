@@ -217,3 +217,4 @@ bugfix/catch-shared-media-swipe.patch
 bugfix/recyclerlist-ripple.patch
 bugfix/popup-drag-select-high-ids.patch
 feature/web-preview-spoiler.patch
+bugfix/edit-cover-null-frame.patch
