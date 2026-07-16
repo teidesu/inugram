@@ -14,12 +14,14 @@ package desu.inugram.core.urlcleaner
  *   /url-regex/$removeparam=...              (full-URL regex pattern)
  *   @@...$removeparam[=...]                  (allowlist / exception)
  *   ,domain=a.com|b.com|~c.com
+ *   ,denyallow=a.com|b.com                   (excluded domains; upstream's preferred
+ *                                             replacement for a pile of @@ exceptions)
  *
  * Resource-type modifiers are interpreted in the context of a top-level link click:
  *   - accepted: `document`, `main_frame`, `all`, any negated type (`~image`), `third-party`,
  *               `important`
  *   - drop rule: non-document positive types (xmlhttprequest, image, font, script, …),
- *                `first-party`, `app=`, `header=`, `method=`, `replace=`, `denyallow=`, etc.
+ *                `first-party`, `app=`, `header=`, `method=`, `replace=`, etc.
  */
 internal data class AdGuardRule(
     val exception: Boolean,
@@ -69,7 +71,7 @@ internal object AdGuardRuleParser {
     private val DOCUMENT_TYPES = setOf("document", "main_frame", "main-frame", "all")
     private val NEUTRAL_MODIFIERS = setOf("important", "third-party", "match-case")
     private val DISQUALIFYING_MODIFIER_PREFIXES = listOf(
-        "app=", "header=", "method=", "replace=", "denyallow=", "csp=", "redirect=",
+        "app=", "header=", "method=", "replace=", "csp=", "redirect=",
         "redirect-rule=", "rewrite=", "jsonprune", "removeheader=", "permissions=",
         "cookie=", "stealth=", "to=", "from=", "client=", "ctag=", "dnstype=", "dnsrewrite=",
     )
@@ -94,6 +96,7 @@ internal object AdGuardRuleParser {
         var paramSpec: String? = null
         var hasRemoveparam = false
         var domainSpec: String? = null
+        var denyallowSpec: String? = null
         var sawDocumentType = false
         var sawNonDocumentPositiveType = false
 
@@ -105,6 +108,7 @@ internal object AdGuardRuleParser {
                     paramSpec = m.substring("removeparam=".length)
                 }
                 m.startsWith("domain=") -> domainSpec = m.substring("domain=".length)
+                m.startsWith("denyallow=") -> denyallowSpec = m.substring("denyallow=".length)
                 m in NEUTRAL_MODIFIERS -> Unit
                 m in DOCUMENT_TYPES -> sawDocumentType = true
                 m in NON_DOCUMENT_TYPES -> sawNonDocumentPositiveType = true
@@ -122,7 +126,11 @@ internal object AdGuardRuleParser {
         val paramMatcher = parseParamSpec(paramSpec) ?: return null
         val urlMatcher = parseUrlPattern(pattern) ?: return null
         val (incl, excl) = parseDomains(domainSpec)
-        return AdGuardRule(exception, urlMatcher, paramMatcher, incl, excl)
+        // `denyallow` scopes the request URL's domain rather than the referrer's, but for a
+        // top-level link those are the same — so it collapses into plain excludes. It has no
+        // `~` form; parseDomains' exclude half is always empty here.
+        val denyallow = parseDomains(denyallowSpec).first
+        return AdGuardRule(exception, urlMatcher, paramMatcher, incl, excl + denyallow)
     }
 
     private fun parseParamSpec(spec: String?): ParamMatcher? {

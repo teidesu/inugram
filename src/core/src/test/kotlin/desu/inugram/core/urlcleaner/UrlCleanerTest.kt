@@ -96,6 +96,32 @@ class UrlCleanerTest {
     }
 
     @Test
+    fun denyallowModifier() {
+        val c = cleaner("\$denyallow=video-shoper.ru|glavnoe.life,removeparam=utm_source")
+        assertEquals(
+            "https://open.spotify.com/album/1?si=x",
+            c.clean("https://open.spotify.com/album/1?si=x&utm_source=copy-link"),
+        )
+        val denied = "https://glavnoe.life/news?utm_source=keep"
+        assertEquals(denied, c.clean(denied))
+    }
+
+    @Test
+    fun denyallowAppliesToSubdomains() {
+        val c = cleaner("\$denyallow=glavnoe.life,removeparam=utm_source")
+        val denied = "https://www.glavnoe.life/news?utm_source=keep"
+        assertEquals(denied, c.clean(denied))
+    }
+
+    @Test
+    fun denyallowCombinesWithDomainModifier() {
+        val c = cleaner("\$removeparam=utm_source,domain=example.com,denyallow=safe.example.com")
+        assertEquals("https://example.com/?a=1", c.clean("https://example.com/?utm_source=x&a=1"))
+        val denied = "https://safe.example.com/?utm_source=keep"
+        assertEquals(denied, c.clean(denied))
+    }
+
+    @Test
     fun perParamException() {
         // global utm_* removal, but allow utm_term on example.com
         val c = cleaner(
