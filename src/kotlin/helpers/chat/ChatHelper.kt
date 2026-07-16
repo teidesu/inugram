@@ -756,6 +756,7 @@ object ChatHelper {
     @JvmStatic
     fun shouldForceHideBottomBar(activity: ChatActivity?): Boolean {
         if (activity == null) return false
+        if (activity.isReport) return false
         val chatMode = activity.chatMode
         if (chatMode == ChatActivity.MODE_PINNED) return InuConfig.HIDE_BOTTOM_BAR_PINNED.value
 
