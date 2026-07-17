@@ -7,6 +7,7 @@ import android.graphics.fonts.FontStyle
 import android.graphics.fonts.SystemFonts
 import android.net.Uri
 import android.os.Build
+import android.util.Log
 import androidx.annotation.RequiresApi
 import desu.inugram.helpers.font.FontLibrary.buildEditorRoster
 import desu.inugram.helpers.font.SfntParser.Script
@@ -19,6 +20,7 @@ import org.telegram.messenger.Utilities
 import org.telegram.ui.Components.Paint.PaintTypeface
 import java.io.File
 import java.io.FileOutputStream
+import java.io.RandomAccessFile
 
 /**
  * Owns the editor **font roster** and the storage behind it: imported font families, discovered device
@@ -355,6 +357,208 @@ object FontLibrary {
         File(sub, MANIFEST).writeText(root.toString())
     }
 
+    /**
+     * Some Google Fonts downloads (notably Google Sans variable) carry a reasonable line box but a wildly
+     * oversized safety bbox/win box. Android can let those outer boxes leak into TextView top/bottom metrics,
+     * which shifts Telegram text. Clamp only the outer boxes to a padded line box; keep hhea/typo metrics.
+     */
+    private fun normalizeVerticalMetrics(file: File) {
+        try {
+            RandomAccessFile(file, "rw").use { raf ->
+                when (val magic = raf.readInt()) {
+                    0x74746366 -> Unit // TTC checkSumAdjustment is per-face; skip rather than risk corrupting it.
+
+                    0x00010000, 0x4F54544F, 0x74727565 -> {
+                        if (normalizeFaceVerticalMetrics(raf, 0)) {
+                            Log.d(TAG, "normalizeVerticalMetrics: normalized ${file.name}")
+                        }
+                    }
+
+                    else -> Log.d(TAG, "normalizeVerticalMetrics: unknown magic 0x${Integer.toHexString(magic)} in ${file.name}")
+                }
+            }
+        } catch (e: Throwable) {
+            FileLog.e("$TAG: normalizeVerticalMetrics: failed for ${file.name}", e)
+        }
+    }
+
+    private fun normalizeFaceVerticalMetrics(raf: RandomAccessFile, sfntOffset: Int): Boolean {
+        raf.seek(sfntOffset.toLong())
+        val sfntVer = raf.readInt()
+        if (sfntVer != 0x00010000 && sfntVer != 0x4F54544F && sfntVer != 0x74727565) return false
+        val numTables = raf.readShort().toInt() and 0xffff
+        raf.skipBytes(6)
+
+        var os2: SfntTable? = null
+        var head: SfntTable? = null
+        var maxp: SfntTable? = null
+        var loca: SfntTable? = null
+        var glyf: SfntTable? = null
+        for (i in 0 until numTables) {
+            val recordOffset = raf.filePointer
+            val tag = raf.readInt()
+            raf.readInt()
+            val off = raf.readInt()
+            val length = raf.readInt()
+            when (tag) {
+                0x4F532F32 -> os2 = SfntTable(recordOffset, off, length) // OS/2
+                0x68656164 -> head = SfntTable(recordOffset, off, length) // head
+                0x6D617870 -> maxp = SfntTable(recordOffset, off, length) // maxp
+                0x6C6F6361 -> loca = SfntTable(recordOffset, off, length) // loca
+                0x676C7966 -> glyf = SfntTable(recordOffset, off, length) // glyf
+            }
+        }
+        val os2Table = os2 ?: return false
+
+        raf.seek(os2Table.offset.toLong() + 68)
+        val typoAsc = raf.readShort().toInt()
+        val typoDesc = raf.readShort().toInt()
+        val typoGap = raf.readShort().toInt()
+        raf.seek(os2Table.offset.toLong() + 74)
+        val winAsc = raf.readShort().toInt() and 0xffff
+        val winDesc = raf.readShort().toInt() and 0xffff
+        val headTable = head
+        var headYMin = 0
+        var headYMax = 0
+        if (headTable != null) {
+            raf.seek(headTable.offset.toLong() + 38)
+            headYMin = raf.readShort().toInt()
+            raf.skipBytes(2)
+            headYMax = raf.readShort().toInt()
+        }
+
+        val typoDescAbs = -typoDesc
+        val typoTotal = typoAsc + typoDescAbs + typoGap
+        val winTotal = winAsc + winDesc
+        if (typoAsc <= 0 || typoDescAbs <= 0 || typoTotal <= 0) return false
+
+        val shouldNormalizeWinBox = winTotal > typoTotal * 3 / 2 || winDesc > typoDescAbs * 2
+        val headDescAbs = -headYMin
+        val shouldNormalizeHeadBox = headTable != null && (headDescAbs > typoDescAbs * 2 || headYMax > typoAsc * 3 / 2)
+        if (!shouldNormalizeWinBox && !shouldNormalizeHeadBox) return false
+
+        val glyphExtents = glyphYExtents(raf, headTable, maxp, loca, glyf)
+        val minAsc = glyphExtents?.yMax ?: headYMax.coerceAtLeast(0)
+        val minDesc = -(glyphExtents?.yMin ?: headYMin.coerceAtMost(0))
+        val targetDesc = (typoDescAbs + typoTotal / 16).coerceAtMost(typoDescAbs * 2)
+        val targetAsc = (typoAsc + typoTotal / 10).coerceAtMost(typoAsc * 3 / 2)
+        val safeTargetDesc = targetDesc.coerceAtLeast(minDesc)
+        val safeTargetAsc = targetAsc.coerceAtLeast(minAsc)
+        var changed = false
+
+        if (shouldNormalizeHeadBox && headTable != null && (safeTargetDesc != headDescAbs || safeTargetAsc != headYMax)) {
+            raf.seek(headTable.offset.toLong() + 38)
+            raf.writeShort((-safeTargetDesc).coerceIn(Short.MIN_VALUE.toInt(), -1))
+            raf.skipBytes(2)
+            raf.writeShort(safeTargetAsc.coerceIn(1, 0xffff))
+            changed = true
+        }
+
+        val winTargetAsc = safeTargetAsc.coerceAtMost(winAsc)
+        val winTargetDesc = safeTargetDesc.coerceAtMost(winDesc)
+        if (shouldNormalizeWinBox && (winTargetAsc != winAsc || winTargetDesc != winDesc)) {
+            raf.seek(os2Table.offset.toLong() + 74)
+            raf.writeShort(winTargetAsc.coerceIn(1, 0xffff))
+            raf.writeShort(winTargetDesc.coerceIn(1, 0xffff))
+            updateTableChecksum(raf, os2Table)
+            changed = true
+        }
+        if (changed) headTable?.let { updateCheckSumAdjustment(raf, it) }
+        return changed
+    }
+
+    private data class SfntTable(val recordOffset: Long, val offset: Int, val length: Int)
+    private data class GlyphYExtents(val yMin: Int, val yMax: Int)
+
+    private fun glyphYExtents(
+        raf: RandomAccessFile,
+        head: SfntTable?,
+        maxp: SfntTable?,
+        loca: SfntTable?,
+        glyf: SfntTable?,
+    ): GlyphYExtents? {
+        if (head == null || maxp == null || loca == null || glyf == null) return null
+        return try {
+            raf.seek(head.offset.toLong() + 50)
+            val longLoca = raf.readShort().toInt() != 0
+            raf.seek(maxp.offset.toLong() + 4)
+            val glyphCount = raf.readShort().toInt() and 0xffff
+            if (glyphCount <= 0) return null
+
+            fun locaOffset(index: Int): Int {
+                raf.seek(loca.offset.toLong() + if (longLoca) index * 4L else index * 2L)
+                return if (longLoca) raf.readInt() else (raf.readShort().toInt() and 0xffff) * 2
+            }
+
+            var yMin = Int.MAX_VALUE
+            var yMax = Int.MIN_VALUE
+            for (i in 0 until glyphCount) {
+                val start = locaOffset(i)
+                val end = locaOffset(i + 1)
+                if (end <= start || start < 0 || end > glyf.length) continue
+                raf.seek(glyf.offset.toLong() + start + 4)
+                val glyphYMin = raf.readShort().toInt()
+                raf.skipBytes(2)
+                val glyphYMax = raf.readShort().toInt()
+                if (glyphYMin < yMin) yMin = glyphYMin
+                if (glyphYMax > yMax) yMax = glyphYMax
+            }
+            if (yMin == Int.MAX_VALUE || yMax == Int.MIN_VALUE) null else GlyphYExtents(yMin, yMax)
+        } catch (_: Throwable) {
+            null
+        }
+    }
+
+    private fun updateTableChecksum(raf: RandomAccessFile, table: SfntTable) {
+        val checksum = tableChecksum(raf, table.offset.toLong(), table.length)
+        raf.seek(table.recordOffset + 4)
+        raf.writeInt(checksum)
+    }
+
+    private fun updateCheckSumAdjustment(raf: RandomAccessFile, head: SfntTable) {
+        val adjustmentOffset = head.offset.toLong() + 8
+        raf.seek(adjustmentOffset)
+        raf.writeInt(0)
+        val headChecksum = tableChecksum(raf, head.offset.toLong(), head.length)
+        raf.seek(head.recordOffset + 4)
+        raf.writeInt(headChecksum)
+
+        val fileSum = tableChecksum(raf, 0, raf.length().coerceAtMost(Int.MAX_VALUE.toLong()).toInt()).toLong() and 0xffffffffL
+        raf.seek(adjustmentOffset)
+        raf.writeInt((0xB1B0AFBAL - fileSum).toInt())
+    }
+
+    private fun tableChecksum(raf: RandomAccessFile, offset: Long, length: Int): Int {
+        var sum = 0L
+        val buffer = ByteArray(8192)
+        var remaining = length
+        raf.seek(offset)
+        while (remaining > 0) {
+            val read = minOf(buffer.size, remaining)
+            raf.readFully(buffer, 0, read)
+            var pos = 0
+            while (pos + 4 <= read) {
+                sum = (sum + ((buffer[pos].toLong() and 0xffL) shl 24) +
+                    ((buffer[pos + 1].toLong() and 0xffL) shl 16) +
+                    ((buffer[pos + 2].toLong() and 0xffL) shl 8) +
+                    (buffer[pos + 3].toLong() and 0xffL)) and 0xffffffffL
+                pos += 4
+            }
+            if (pos < read) {
+                var word = 0L
+                var shift = 24
+                while (pos < read) {
+                    word = word or ((buffer[pos].toLong() and 0xffL) shl shift)
+                    shift -= 8
+                    pos++
+                }
+                sum = (sum + word) and 0xffffffffL
+            }
+            remaining -= read
+        }
+        return sum.toInt()
+    }
+
     /** Returns (roster entries or null if absent, hidden entry set). */
     private fun readIndex(): Pair<MutableList<FontId>?, Set<FontId>> {
         val dir = rootDir ?: return null to emptySet()
@@ -623,6 +827,7 @@ object FontLibrary {
             tmp.delete()
             return StageResult.UNPARSEABLE
         }
+        normalizeVerticalMetrics(tmp)
         if (!isLoadableBySystem(tmp)) {
             tmp.delete()
             return StageResult.UNSUPPORTED

@@ -186,6 +186,7 @@
     <string name="InuFontSystem">システム</string>
     <string name="InuFontImportFailed">フォントをインポートできませんでした。TTF/OTF/TTC ファイルか確認してください。</string>
     <string name="InuFontUnsupported">Android がこのフォントを読み込めないため、正しく表示されません。</string>
+    <string name="InuFontImporting">フォントをインポート中…</string>
     <string name="InuFontInstall">インストール</string>
     <string name="InuFontReinstall">再インストール</string>
     <string name="InuFontAddToFamily">%1$s に追加</string>

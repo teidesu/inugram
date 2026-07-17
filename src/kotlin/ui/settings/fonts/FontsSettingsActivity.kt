@@ -4,9 +4,16 @@ import android.annotation.SuppressLint
 import android.app.Activity
 import android.content.Context
 import android.content.Intent
+import android.graphics.Canvas
+import android.graphics.LinearGradient
+import android.graphics.Matrix
+import android.graphics.Paint
+import android.graphics.RectF
+import android.graphics.Shader
 import android.graphics.Typeface
 import android.net.Uri
 import android.os.Build
+import android.os.SystemClock
 import android.view.MotionEvent
 import android.view.View
 import android.widget.FrameLayout
@@ -44,7 +51,7 @@ class FontsSettingsActivity : SettingsPageActivity(), NotificationCenter.Notific
     override fun getTitle(): CharSequence = LocaleController.getString(R.string.InuFonts)
 
     override fun didReceivedNotification(id: Int, account: Int, vararg args: Any?) {
-        if (id == NotificationCenter.customTypefacesLoaded) listView?.adapter?.update(true)
+        if (id == NotificationCenter.customTypefacesLoaded && context != null) listView?.adapter?.update(true)
     }
 
     override fun onFragmentDestroy() {
@@ -71,6 +78,7 @@ class FontsSettingsActivity : SettingsPageActivity(), NotificationCenter.Notific
 
     @SuppressLint("ClickableViewAccessibility")
     override fun fillItems(items: ArrayList<UItem>, adapter: UniversalAdapter) {
+        val ctx = context ?: return
         items.add(
             UItem.asButton(
                 BUTTON_APP_FONT, LocaleController.getString(R.string.InuAppFont), when (val mode = FontConfig.FONT.value) {
@@ -99,7 +107,7 @@ class FontsSettingsActivity : SettingsPageActivity(), NotificationCenter.Notific
         for (font in FontLibrary.getCachedRoster()) {
             val token = font.token()
             val row = rows.getOrPut(token) {
-                FontRow(context).also { r ->
+                FontRow(ctx).also { r ->
                     r.setOnReorderTouchListener { _, event ->
                         if (event.actionMasked == MotionEvent.ACTION_DOWN) {
                             val holder = listView.findContainingViewHolder(r)
@@ -117,9 +125,15 @@ class FontsSettingsActivity : SettingsPageActivity(), NotificationCenter.Notific
             })
         }
         adapter.reorderSectionEnd()
+        for (i in 0 until importPlaceholderCount) {
+            items.add(UItem.asCustom(FontImportSkeletonRow(ctx), 58).apply { id = BUTTON_IMPORT_PROGRESS xor i })
+        }
         items.add(UItem.asShadow(LocaleController.getString(R.string.InuFontsInfo)))
 
-        items.add(UItem.asButton(BUTTON_ADD, R.drawable.msg_add, LocaleController.getString(R.string.InuFontAdd)))
+        items.add(
+            UItem.asButton(BUTTON_ADD, R.drawable.msg_add, LocaleController.getString(R.string.InuFontAdd))
+                .setEnabled(importPlaceholderCount == 0)
+        )
         items.add(UItem.asButton(BUTTON_RESET, R.drawable.msg_reset, LocaleController.getString(R.string.InuFontResetOrder)))
         items.add(UItem.asShadow(null))
     }
@@ -127,7 +141,7 @@ class FontsSettingsActivity : SettingsPageActivity(), NotificationCenter.Notific
     override fun onClick(item: UItem, view: View, position: Int, x: Float, y: Float) {
         when (item.id) {
             BUTTON_APP_FONT -> presentFragment(FontStackActivity())
-            BUTTON_ADD -> launchFontPicker()
+            BUTTON_ADD -> if (importPlaceholderCount == 0) launchFontPicker()
             BUTTON_RESET -> {
                 FontLibrary.resetOrder()
                 FontLibrary.invalidateEditorRoster()
@@ -258,13 +272,30 @@ class FontsSettingsActivity : SettingsPageActivity(), NotificationCenter.Notific
         if (uris.isEmpty()) return
         val ctx = parentActivity ?: context ?: return
         FileLog.d("InuFonts: onActivityResultFragment: picked ${uris.size} uris")
+        setImportPlaceholderCount(uris.size)
+        BulletinFactory.of(this).createSimpleBulletin(
+            R.raw.chats_infotip,
+            LocaleController.getString(R.string.InuFontImporting)
+        ).show()
         Utilities.globalQueue.postRunnable {
-            val result = FontLibrary.importFromUris(ctx, uris)
+            val result = try {
+                FontLibrary.importFromUris(ctx, uris)
+            } catch (e: Throwable) {
+                FileLog.e("InuFonts: importFromUris failed", e)
+                null
+            }
             AndroidUtilities.runOnUIThread {
-                if (result.addedFaces > 0) {
-                    FontLibrary.invalidateEditorRoster()
+                val added = (result?.addedFaces ?: 0) > 0
+                setImportPlaceholderCount(0, notifyOthers = result == null || !added)
+                if (added) FontLibrary.invalidateEditorRoster()
+                if (context == null) return@runOnUIThread
+                if (added) {
                     listView.adapter.update(true)
-                    if (result.rejectedBySystem > 0) {
+                    BulletinFactory.of(this).createSimpleBulletin(
+                        R.raw.contact_check,
+                        LocaleController.getString(R.string.InuFontInstalled)
+                    ).show()
+                    if ((result?.rejectedBySystem ?: 0) > 0) {
                         BulletinFactory.of(this).createErrorBulletin(
                             LocaleController.getString(R.string.InuFontUnsupported)
                         ).show()
@@ -272,7 +303,7 @@ class FontsSettingsActivity : SettingsPageActivity(), NotificationCenter.Notific
                 } else {
                     BulletinFactory.of(this).createErrorBulletin(
                         LocaleController.getString(
-                            if (result.rejectedBySystem > 0) R.string.InuFontUnsupported else R.string.InuFontImportFailed
+                            if ((result?.rejectedBySystem ?: 0) > 0) R.string.InuFontUnsupported else R.string.InuFontImportFailed
                         )
                     ).show()
                 }
@@ -280,11 +311,21 @@ class FontsSettingsActivity : SettingsPageActivity(), NotificationCenter.Notific
         }
     }
 
+    private fun setImportPlaceholderCount(value: Int, notifyOthers: Boolean = false) {
+        importPlaceholderCount = value.coerceAtLeast(0)
+        if (context != null) listView?.adapter?.update(true)
+        if (notifyOthers) NotificationCenter.getGlobalInstance().postNotificationName(NotificationCenter.customTypefacesLoaded)
+    }
+
     companion object {
+        @Volatile
+        private var importPlaceholderCount = 0
+
         private val BUTTON_APP_FONT = InuUtils.generateId()
         private val BUTTON_INCLUDE_SYSTEM = InuUtils.generateId()
         private val BUTTON_ADD = InuUtils.generateId()
         private val BUTTON_RESET = InuUtils.generateId()
+        private val BUTTON_IMPORT_PROGRESS = InuUtils.generateId()
         private const val REQ_PICK_FONT = 31010
 
         @JvmField
@@ -338,6 +379,68 @@ class FontsSettingsActivity : SettingsPageActivity(), NotificationCenter.Notific
 
         /** True if [x] (relative to the row) falls within the eye toggle's bounds. */
         fun isInEye(x: Float): Boolean = x >= eye.left && x <= eye.right
+    }
+
+    private class FontImportSkeletonRow(context: Context) : View(context) {
+        private val paint = Paint(Paint.ANTI_ALIAS_FLAG)
+        private val rect = RectF()
+        private val matrix = Matrix()
+        private var gradient: LinearGradient? = null
+        private var gradientWidth = 0
+        private var lastUpdate = 0L
+        private var shimmerOffset = 0f
+
+        init {
+            setBackgroundColor(Theme.getColor(Theme.key_windowBackgroundWhite))
+        }
+
+        override fun onDraw(canvas: Canvas) {
+            super.onDraw(canvas)
+            val viewWidth = width
+            if (viewWidth <= 0 || height <= 0) return
+
+            ensureGradient(viewWidth)
+            val now = SystemClock.elapsedRealtime()
+            val dt = if (lastUpdate == 0L) 16L else (now - lastUpdate).coerceIn(0L, 32L)
+            lastUpdate = now
+            shimmerOffset += dt * viewWidth / 900f
+            if (shimmerOffset > viewWidth + gradientWidth) shimmerOffset = -gradientWidth.toFloat()
+            matrix.setTranslate(shimmerOffset, 0f)
+            gradient?.setLocalMatrix(matrix)
+
+            val rtl = LocaleController.isRTL
+            val start = AndroidUtilities.dp(64f).toFloat()
+            val end = viewWidth - AndroidUtilities.dp(64f).toFloat()
+            val titleWidth = AndroidUtilities.dp(164f).toFloat().coerceAtMost(end - start)
+            val tagWidth = AndroidUtilities.dp(76f).toFloat().coerceAtMost(end - start)
+            val titleLeft = if (rtl) end - titleWidth else start
+            val tagLeft = if (rtl) end - tagWidth else start
+
+            drawBar(canvas, titleLeft, AndroidUtilities.dp(11f).toFloat(), titleWidth, AndroidUtilities.dp(14f).toFloat(), 6f)
+            drawBar(canvas, tagLeft, AndroidUtilities.dp(32f).toFloat(), tagWidth, AndroidUtilities.dp(15f).toFloat(), 7.5f)
+            postInvalidateOnAnimation()
+        }
+
+        private fun ensureGradient(width: Int) {
+            if (gradient != null && gradientWidth == width) return
+            gradientWidth = width
+            val base = Theme.getColor(Theme.key_windowBackgroundWhiteGrayText)
+            val c0 = Theme.multAlpha(base, if (Theme.isCurrentThemeDark()) 0.18f else 0.10f)
+            val c1 = Theme.multAlpha(base, if (Theme.isCurrentThemeDark()) 0.30f else 0.18f)
+            gradient = LinearGradient(
+                -width.toFloat(), 0f, 0f, 0f,
+                intArrayOf(c0, c1, c0),
+                floatArrayOf(0f, 0.55f, 1f),
+                Shader.TileMode.CLAMP,
+            )
+            paint.shader = gradient
+        }
+
+        private fun drawBar(canvas: Canvas, left: Float, top: Float, width: Float, height: Float, radiusDp: Float) {
+            rect.set(left, top, left + width, top + height)
+            val radius = AndroidUtilities.dp(radiusDp).toFloat()
+            canvas.drawRoundRect(rect, radius, radius, paint)
+        }
     }
 
 }

@@ -174,6 +174,7 @@
     <string name="InuFontSystem">Системный</string>
     <string name="InuFontImportFailed">Не удалось импортировать шрифт. Убедитесь, что это файл TTF/OTF/TTC.</string>
     <string name="InuFontUnsupported">Android не может загрузить этот шрифт, поэтому он будет отображаться некорректно.</string>
+    <string name="InuFontImporting">Импортируем шрифт…</string>
     <string name="InuFonts">Шрифты</string>
     <string name="InuAppFont">Шрифт приложения</string>
     <string name="InuAppFontInfo">Шрифт, используемый по всему интерфейсу приложения.</string>
