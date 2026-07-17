@@ -222,3 +222,4 @@ bugfix/profile-note-npe.patch
 bugfix/webm-sticker-precache-centering.patch
 bugfix/stale-notifications.patch
 bugfix/profile-photo-location-dc-id.patch
+bugfix/chat-activity-scroll.patch

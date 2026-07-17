@@ -1,0 +1,198 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: alina sireneva <alina@tei.su>
+Date: Fri, 17 Jul 2026 04:16:05 +0400
+Subject: fix various scroll-related issues in ChatActivity
+
+---
+ .../java/org/telegram/ui/ChatActivity.java    | 23 +++++++++---
+ .../chat/ChatListViewPaddingsAnimator.java    | 12 ++++++-
+ .../inset/WindowInsetsStateHolder.java        | 35 ++++++++++++++++---
+ 3 files changed, 60 insertions(+), 10 deletions(-)
+
+diff --git a/TMessagesProj/src/main/java/org/telegram/ui/ChatActivity.java b/TMessagesProj/src/main/java/org/telegram/ui/ChatActivity.java
+index 0000000..0000000 100644
+--- a/TMessagesProj/src/main/java/org/telegram/ui/ChatActivity.java
++++ b/TMessagesProj/src/main/java/org/telegram/ui/ChatActivity.java
+@@ -1291,6 +1291,7 @@ public class ChatActivity extends BaseFragment implements
+         }
+     };
+     private int chatEmojiViewPadding;
++    private int inu_inputBottomInset;
+     private int fixedKeyboardHeight = -1;
+     private Runnable cancelFixedPositionRunnable;
+     private boolean invalidateMessagesVisiblePart;
+@@ -18343,8 +18344,7 @@ public class ChatActivity extends BaseFragment implements
+             if (actionBar.getVisibility() == VISIBLE) {
+                 heightSize -= actionBarHeight;
+             }
+-            int keyboardHeightOld = keyboardHeight + chatEmojiViewPadding;
+-            boolean keyboardVisibleOld = keyboardHeight + chatEmojiViewPadding >= AndroidUtilities.dp(20);
++            boolean keyboardVisibleOld = inu_inputBottomInset >= AndroidUtilities.dp(20);
+             if (lastHeight != allHeight) {
+                 measureKeyboardHeight();
+             }
+@@ -18360,7 +18360,11 @@ public class ChatActivity extends BaseFragment implements
+             }
+             setEmojiKeyboardHeight(chatEmojiViewPadding);
+ 
+-            boolean keyboardVisible = keyboardHeight + chatEmojiViewPadding >= AndroidUtilities.dp(20);
++            inu_inputBottomInset = Math.max(
++                windowInsetsStateHolder.getInsets(WindowInsetsCompat.Type.ime()).bottom,
++                windowInsetsStateHolder.getInAppKeyboardHeight()
++            );
++            boolean keyboardVisible = inu_inputBottomInset >= AndroidUtilities.dp(20);
+             boolean waitingChatListItemAnimator = false;
+             if (MediaController.getInstance().getPlayingMessageObject() != null && MediaController.getInstance().getPlayingMessageObject().isRoundVideo() && keyboardVisibleOld != keyboardVisible) {
+                 for (int i = 0; i < chatListView.getChildCount(); i++) {
+@@ -18371,7 +18375,16 @@ public class ChatActivity extends BaseFragment implements
+                         if (messageObject.isRoundVideo() && MediaController.getInstance().isPlayingMessage(messageObject)) {
+                             int p = chatListView.getChildAdapterPosition(child);
+                             if (p >= 0) {
+-                                chatLayoutManager.scrollToPositionWithOffset(p, (int) ((chatListView.getMeasuredHeight() - chatListViewPaddingTop - blurredViewBottomOffset + (keyboardHeight + chatEmojiViewPadding - keyboardHeightOld) - (keyboardVisible ? AndroidUtilities.roundMessageSize : AndroidUtilities.roundPlayingMessageSize(isSideMenued()))) / 2), false);
++                                // the bottom padding is still mid-animation here and the list content
++                                // follows it 1:1, so aim at where the cell should end up and undo the
++                                // slide that is still to come.
++                                final float inu_targetPaddingBottom = chatListView.getPaddingBottom()
++                                    - windowInsetsStateHolder.getAnimatedMaxBottomInset()
++                                    + windowInsetsStateHolder.inu_getTargetMaxBottomInset();
++                                final int inu_roundSize = keyboardVisible ? AndroidUtilities.roundMessageSize : AndroidUtilities.roundPlayingMessageSize(isSideMenued());
++                                final float inu_targetCellTop = (chatListViewPaddingTop + chatListView.getMeasuredHeight() - inu_targetPaddingBottom) / 2 - inu_roundSize / 2f;
++                                int inu_offset = (int) (inu_targetCellTop + inu_targetPaddingBottom - chatListView.getPaddingBottom() - chatListViewPaddingTop);
++                                chatLayoutManager.scrollToPositionWithOffset(p, inu_offset, false);
+                                 chatAdapter.notifyItemChanged(p);
+                                 adjustPanLayoutHelper.delayAnimation();
+                                 waitingChatListItemAnimator = true;
+@@ -22903,7 +22916,7 @@ public class ChatActivity extends BaseFragment implements
+                                 if (MediaController.getInstance().isPlayingMessage(messageObject1)) {
+                                     boolean keyboardIsVisible = contentView.getKeyboardHeight() >= AndroidUtilities.dp(20);
+                                     float topPadding = chatListViewPaddingTop - (contentPanTranslation);
+-                                    int offset = (int) ((chatListView.getMeasuredHeight() - topPadding - blurredViewBottomOffset) / 2 - (cell.reactionsLayoutInBubble == null ? 0 : cell.reactionsLayoutInBubble.totalHeight));
++                                    int offset = (int) ((chatListView.getMeasuredHeight() - topPadding - chatListView.getPaddingBottom()) / 2 - (cell.reactionsLayoutInBubble == null ? 0 : cell.reactionsLayoutInBubble.totalHeight));
+                                     if (messageObject1.type != MessageObject.TYPE_ROUND_VIDEO) {
+                                         offset -= cell.getPhotoImage().getImageY();
+                                     } else {
+diff --git a/TMessagesProj/src/main/java/org/telegram/ui/Components/chat/ChatListViewPaddingsAnimator.java b/TMessagesProj/src/main/java/org/telegram/ui/Components/chat/ChatListViewPaddingsAnimator.java
+index 0000000..0000000 100644
+--- a/TMessagesProj/src/main/java/org/telegram/ui/Components/chat/ChatListViewPaddingsAnimator.java
++++ b/TMessagesProj/src/main/java/org/telegram/ui/Components/chat/ChatListViewPaddingsAnimator.java
+@@ -16,6 +16,12 @@ public class ChatListViewPaddingsAnimator {
+     }
+ 
+     private int currentAdditionalHeight;
++
++    // The list is laid out once before ChatActivity.updateChatListViewTopPadding first runs, with a
++    // zero top padding that was never meant to be shown. Compensating the scroll against that layout
++    // preserves a bogus position, so compensation only starts once a real top padding has been applied.
++    private boolean inu_appliedRealTopPadding;
++
+     public void setPaddings(
+         int paddingTopTarget,
+         float paddingBottomAnimated, boolean allowScrollCompensation
+@@ -41,7 +47,7 @@ public class ChatListViewPaddingsAnimator {
+             final int dy = paddingTopOld - paddingTop;
+ 
+ 
+-            if (allowScrollCompensation && dy != 0) {
++            if (allowScrollCompensation && dy != 0 && inu_appliedRealTopPadding) {
+                 final boolean canScrollDown = recyclerView.canScrollVertically(1);
+                 final boolean canScrollUp = recyclerView.canScrollVertically(-1);
+                 if (dy < 0 && !canScrollDown || dy > 0 && !canScrollUp) {
+@@ -63,6 +69,10 @@ public class ChatListViewPaddingsAnimator {
+                     recyclerView.getPaddingRight(),
+                     paddingBottom
+             );
++
++            if (paddingTop != 0) {
++                inu_appliedRealTopPadding = true;
++            }
+         }
+     }
+ 
+diff --git a/TMessagesProj/src/main/java/org/telegram/ui/Components/inset/WindowInsetsStateHolder.java b/TMessagesProj/src/main/java/org/telegram/ui/Components/inset/WindowInsetsStateHolder.java
+index 0000000..0000000 100644
+--- a/TMessagesProj/src/main/java/org/telegram/ui/Components/inset/WindowInsetsStateHolder.java
++++ b/TMessagesProj/src/main/java/org/telegram/ui/Components/inset/WindowInsetsStateHolder.java
+@@ -105,6 +105,12 @@ public class WindowInsetsStateHolder implements WindowInsetsProvider, WindowInse
+         final Insets inputInsets = Insets.max(imeInsets, inAppInsets);
+         final Insets maxInsets = Insets.max(systemInsets, inputInsets);
+ 
++        inu_prevInputBottomInset = inu_lastInputBottomInset;
++        inu_lastInputBottomInset = inputInsets.bottom;
++        if (inputInsets.bottom > 0) {
++            inu_ignoreAnimatedIme = false;
++        }
++
+         if (animated) {
+             final boolean changed = keyboardVisibility.differs(inputInsets.bottom > 0 ? 1f : 0f)
+                 || insetsMaxRect.differs(maxInsets.left, maxInsets.top, maxInsets.right, maxInsets.bottom)
+@@ -165,7 +171,7 @@ public class WindowInsetsStateHolder implements WindowInsetsProvider, WindowInse
+ 
+     @Override
+     public float getAnimatedMaxBottomInset() {
+-        if (animatedInsetsProvider != null && activeAnimations > 0) {
++        if (inu_shouldUseAnimatedIme()) {
+             return Math.max(animatedImeInset, insetsMaxRect.getBottom());
+         }
+ 
+@@ -174,16 +180,22 @@ public class WindowInsetsStateHolder implements WindowInsetsProvider, WindowInse
+ 
+     @Override
+     public int getCurrentMaxBottomInset() {
+-        if (animatedInsetsProvider != null && activeAnimations > 0) {
+-            return Math.max(animatedImeInset, Math.max(getInsets(WindowInsetsCompat.Type.ime() | WindowInsetsCompat.Type.systemBars()).bottom, inAppKeyboardHeight));
++        if (inu_shouldUseAnimatedIme()) {
++            return Math.max(animatedImeInset, inu_getTargetMaxBottomInset());
+         }
+ 
++        return inu_getTargetMaxBottomInset();
++    }
++
++    // Where the bottom inset will settle once any running IME animation finishes, as opposed to
++    // getCurrentMaxBottomInset() which reports the in-flight value while one is running.
++    public int inu_getTargetMaxBottomInset() {
+         return Math.max(getInsets(WindowInsetsCompat.Type.ime() | WindowInsetsCompat.Type.systemBars()).bottom, inAppKeyboardHeight);
+     }
+ 
+     @Override
+     public float getAnimatedImeBottomInset() {
+-        if (animatedInsetsProvider != null && activeAnimations > 0) {
++        if (inu_shouldUseAnimatedIme()) {
+             return Math.max(animatedImeInset, insetsImeRect.getBottom());
+         }
+ 
+@@ -254,6 +266,17 @@ public class WindowInsetsStateHolder implements WindowInsetsProvider, WindowInse
+     private @Nullable View animatedInsetsProviderTarget;
+     private int animatedImeInset;
+ 
++    // animatedImeInset comes from the app-wide provider, so it also reports IME animations
++    // belonging to other holders (e.g. a fragment presented while the previous one's keyboard
++    // is still closing). Such a holder must not follow that animation: it never had the IME.
++    private boolean inu_ignoreAnimatedIme;
++    private int inu_lastInputBottomInset;
++    private int inu_prevInputBottomInset;
++
++    private boolean inu_shouldUseAnimatedIme() {
++        return animatedInsetsProvider != null && activeAnimations > 0 && !inu_ignoreAnimatedIme;
++    }
++
+     public void setupAnimatedInsetsProvider(WindowAnimatedInsetsProvider provider, View target) {
+         animatedInsetsProvider = provider;
+         animatedInsetsProviderTarget = target;
+@@ -275,6 +298,9 @@ public class WindowInsetsStateHolder implements WindowInsetsProvider, WindowInse
+ 
+     @Override
+     public void onAnimatedInsetsStarted() {
++        if (activeAnimations == 0) {
++            inu_ignoreAnimatedIme = inu_lastInputBottomInset == 0 && inu_prevInputBottomInset == 0;
++        }
+         activeAnimations++;
+     }
+ 
+@@ -284,6 +310,7 @@ public class WindowInsetsStateHolder implements WindowInsetsProvider, WindowInse
+             animatedInsetsProviderTarget.postOnAnimation(() -> {
+                 activeAnimations--;
+                 if (activeAnimations == 0) {
++                    inu_ignoreAnimatedIme = false;
+                     setInsets(WindowAnimatedInsetsProvider.calculateWindowInsets(animatedInsetsProviderTarget), false);
+                 }
+             });
