@@ -337,12 +337,15 @@
 
     <string name="InuAddToStickersGifs">添加到贴纸/GIF</string>
     <string name="InuLongTapAction">长按操作</string>
+    <string name="InuMenuMode">模式</string>
     <string name="InuForwardWithoutAuthor">不带作者</string>
     <string name="InuForwardWithoutCaption">不带说明</string>
     <string name="InuForwardLongTapOff">关闭</string>
     <string name="InuLongTapChooseMode">每次询问</string>
     <string name="InuForwardNoQuote">无引用转发</string>
     <string name="InuRepeat">重复</string>
+    <string name="InuRepeatLongTapCopy">长按以副本形式重复</string>
+    <string name="InuRepeatLongTapForward">长按以转发形式重复</string>
     <string name="InuReplyInDms">在私信中回复</string>
     <string name="InuHiddenCaptionDescription">说明已移除</string>
 
@@ -638,6 +641,8 @@
     <string name="InuDisableBrowserSwipeCollapse">禁用下滑最小化浏览器</string>
     <string name="InuGifSeekbar">GIF 进度条</string>
     <string name="InuGifSeekbarInfo">注意：仅对「新」GIF（即静音 MP4）生效</string>
+    <string name="InuPublicPhotoMark">公开照片</string>
+    <string name="InuPersonalPhotoMark">个人照片</string>
     <string name="InuDisableGlassGlare">禁用玻璃眩光</string>
 
     <string name="InuStripTrackingParamsOnOpen">打开链接时</string>

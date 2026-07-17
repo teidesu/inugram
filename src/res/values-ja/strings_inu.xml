@@ -338,12 +338,15 @@
 
     <string name="InuAddToStickersGifs">ステッカー/GIFに追加</string>
     <string name="InuLongTapAction">長押し動作</string>
+    <string name="InuMenuMode">モード</string>
     <string name="InuForwardWithoutAuthor">投稿者なし</string>
     <string name="InuForwardWithoutCaption">キャプションなし</string>
     <string name="InuForwardLongTapOff">オフ</string>
     <string name="InuLongTapChooseMode">毎回確認</string>
     <string name="InuForwardNoQuote">引用なしで転送</string>
     <string name="InuRepeat">繰り返し</string>
+    <string name="InuRepeatLongTapCopy">長押しでコピーとして繰り返し</string>
+    <string name="InuRepeatLongTapForward">長押しで転送として繰り返し</string>
     <string name="InuReplyInDms">DMで返信</string>
     <string name="InuHiddenCaptionDescription">キャプションを削除しました</string>
 
@@ -639,6 +642,8 @@
     <string name="InuDisableBrowserSwipeCollapse">下スワイプでのブラウザ最小化を無効化</string>
     <string name="InuGifSeekbar">GIF のシークバー</string>
     <string name="InuGifSeekbarInfo">注：「新しい」GIF（つまり無音 MP4）にのみ対応</string>
+    <string name="InuPublicPhotoMark">公開写真</string>
+    <string name="InuPersonalPhotoMark">個人用写真</string>
     <string name="InuDisableGlassGlare">ガラスのグレアを無効化</string>
 
     <string name="InuStripTrackingParamsOnOpen">リンクを開くとき</string>

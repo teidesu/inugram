@@ -337,12 +337,15 @@
 
     <string name="InuAddToStickersGifs">Добавить в стикеры/GIF</string>
     <string name="InuLongTapAction">Действие по долгому тапу</string>
+    <string name="InuMenuMode">Режим</string>
     <string name="InuForwardWithoutAuthor">Без автора</string>
     <string name="InuForwardWithoutCaption">Без подписи</string>
     <string name="InuForwardLongTapOff">Выкл.</string>
     <string name="InuLongTapChooseMode">Спрашивать каждый раз</string>
     <string name="InuForwardNoQuote">Переслать без цитаты</string>
     <string name="InuRepeat">Повторить</string>
+    <string name="InuRepeatLongTapCopy">Долгий тап — повторить копией</string>
+    <string name="InuRepeatLongTapForward">Долгий тап — повторить пересылкой</string>
     <string name="InuReplyInDms">Ответить в ЛС</string>
     <string name="InuHiddenCaptionDescription">Подписи удалены</string>
 
@@ -645,6 +648,8 @@
     <string name="InuDisableBrowserSwipeCollapse">Отключить свайп вниз для сворачивания браузера</string>
     <string name="InuGifSeekbar">Полоса перемотки для GIF</string>
     <string name="InuGifSeekbarInfo">Работает только для «новых» GIF (т.е. беззвучных MP4)</string>
+    <string name="InuPublicPhotoMark">публичное фото</string>
+    <string name="InuPersonalPhotoMark">личное фото</string>
     <string name="InuDisableGlassGlare">Отключить блик стекла</string>
 
     <string name="InuStripTrackingParamsOnOpen">При открытии ссылок</string>
