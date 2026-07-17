@@ -60,6 +60,7 @@ most things are toggleable in `Settings → Inugram`, with sensible opinionated 
 - open archive directly on pull-down (🐶 done right, without revealing the cell)
 - interactive chat preview (long-tap avatar): tappable bubbles, no tap-to-expand
 - 🐶 community display modes: regular / open on avatar long-tap / invisible
+- "select all" in the chat selection three-dot menu (selects all loaded chats in the current folder tab)
 
 ## chats
 
