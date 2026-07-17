@@ -1,0 +1,27 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: alina sireneva <alina@tei.su>
+Date: Fri, 17 Jul 2026 21:27:37 +0400
+Subject: Fix pinned reorder glitching when background list diffing is enabled
+
+---
+ .../main/java/org/telegram/ui/Adapters/DialogsAdapter.java | 7 ++++++-
+ 1 file changed, 6 insertions(+), 1 deletion(-)
+
+diff --git a/TMessagesProj/src/main/java/org/telegram/ui/Adapters/DialogsAdapter.java b/TMessagesProj/src/main/java/org/telegram/ui/Adapters/DialogsAdapter.java
+index 0000000..0000000 100644
+--- a/TMessagesProj/src/main/java/org/telegram/ui/Adapters/DialogsAdapter.java
++++ b/TMessagesProj/src/main/java/org/telegram/ui/Adapters/DialogsAdapter.java
+@@ -1224,7 +1224,12 @@ public class DialogsAdapter extends RecyclerListView.SelectionAdapter implements
+             toDialog.pinnedNum = oldNum;
+         }
+         Collections.swap(dialogs, fromIndex, toIndex);
+-        updateList(null);
++        if (!isCalculatingDiff && fromPosition >= 0 && fromPosition < itemInternals.size() && toPosition >= 0 && toPosition < itemInternals.size()) {
++            itemInternals.add(toPosition, itemInternals.remove(fromPosition));
++            notifyItemMoved(fromPosition, toPosition);
++        } else {
++            updateList(null);
++        }
+     }
+ 
+     @Override

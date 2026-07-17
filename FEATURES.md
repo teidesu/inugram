@@ -224,6 +224,7 @@ most things are toggleable in `Settings → Inugram`, with sensible opinionated 
 - non-square webm stickers rendered off-center in the emoji panel (precached frames were blitted top-left and scaled by width only)
 - recyclerlistview double-tap requires same view
 - dialogs list pull-to-reveal-archive glitches
+- pinned dialog reorder scrolling/glitching mid-drag in the archive (stock bug: async list diffing dispatched the move after the drag swap)
 - shared media player visual glitches
 - shared media pager: fling mid-animation to chain tabs or reverse (was ignored until settled); at the edge tab the fling falls through to swipe-to-close
 - attach panel: better perf, safe close before fully open

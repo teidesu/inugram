@@ -2333,7 +2333,7 @@ index 0000000..0000000 100644
                  fragmentView.requestLayout();
 @@ -10118,7 +10154,7 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
                      actionModeAdditionalHeight = 0;
-                     if (finalTranslateListHeight > 0) {
+                     if (hasStories || !NonIslandHelper.globalSearch()) {
                          actionModeFullyShowed = true;
 -                        scrollAdditionalOffset = dp((hasStories ? DialogStoriesCell.HEIGHT_IN_DP : 0) + SEARCH_FIELD_HEIGHT) - finalTranslateListHeight;
 +                        scrollAdditionalOffset = dp((hasStories ? DialogStoriesCell.HEIGHT_IN_DP : 0) + (NonIslandHelper.globalSearch() ? 0 : SEARCH_FIELD_HEIGHT)) - finalTranslateListHeight;

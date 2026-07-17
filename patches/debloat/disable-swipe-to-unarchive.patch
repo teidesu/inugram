@@ -15,7 +15,7 @@ index 0000000..0000000 100644
              if (waitingForDialogsAnimationEnd(parentPage) || parentLayout != null && parentLayout.isInPreviewMode() || rightSlidingDialogContainer.hasFragment() || communityId != 0) {
                  return 0;
              }
-+            if (folderId == 1 && desu.inugram.InuConfig.DISABLE_SWIPE_TO_UNARCHIVE.getValue()) {
++            if (folderId == 1 && !actionBar.isActionModeShowed(null) && desu.inugram.InuConfig.DISABLE_SWIPE_TO_UNARCHIVE.getValue()) {
 +                return 0;
 +            }
              if (swipingFolder && swipeFolderBack) {

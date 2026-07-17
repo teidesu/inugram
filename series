@@ -232,3 +232,4 @@ bugfix/folder-pins-missing-dialogs.patch
 feature/select-all-dialogs.patch
 bugfix/forward-bar-stale-count.patch
 bugfix/video-audio-focus.patch
+bugfix/reorder-sync-dispatch.patch
