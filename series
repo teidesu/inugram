@@ -223,3 +223,5 @@ bugfix/webm-sticker-precache-centering.patch
 bugfix/stale-notifications.patch
 bugfix/profile-photo-location-dc-id.patch
 bugfix/chat-activity-scroll.patch
+bugfix/universal-adapter-reorder-npe.patch
+bugfix/sticker-maker-recycled-bitmap.patch

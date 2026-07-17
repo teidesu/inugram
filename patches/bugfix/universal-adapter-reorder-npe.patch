@@ -1,0 +1,25 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: alina sireneva <alina@tei.su>
+Date: Fri, 17 Jul 2026 19:59:44 +0400
+Subject: Fix NPE binding reorder state on cached holders in UniversalAdapter
+
+---
+ .../java/org/telegram/ui/Components/UniversalAdapter.java    | 5 +++--
+ 1 file changed, 3 insertions(+), 2 deletions(-)
+
+diff --git a/TMessagesProj/src/main/java/org/telegram/ui/Components/UniversalAdapter.java b/TMessagesProj/src/main/java/org/telegram/ui/Components/UniversalAdapter.java
+index 0000000..0000000 100644
+--- a/TMessagesProj/src/main/java/org/telegram/ui/Components/UniversalAdapter.java
++++ b/TMessagesProj/src/main/java/org/telegram/ui/Components/UniversalAdapter.java
+@@ -1115,8 +1115,9 @@ public class UniversalAdapter extends AdapterWithDiffUtils {
+         final int viewType = holder.getItemViewType();
+         if (viewType >= UItem.factoryViewTypeStartsWith) {
+             UItem.UItemFactory<?> factory = UItem.findFactory(viewType);
+-            if (factory != null) {
+-                factory.attachedView(listView, holder.itemView, getItem(holder.getAdapterPosition()));
++            final UItem item = getItem(holder.getAdapterPosition());
++            if (factory != null && item != null) {
++                factory.attachedView(listView, holder.itemView, item);
+             }
+         } else {
+             switch (viewType) {

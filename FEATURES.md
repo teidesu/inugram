@@ -276,3 +276,5 @@ most things are toggleable in `Settings → Inugram`, with sensible opinionated 
 - lingering system media session after voice/round/music playback ends (12.8 singleton regression, visible on MIUI)
 - fix profile crash when a contact's note is removed server-side while the open animation is running (note row built from stale user info, bound against fresh)
 - notifications for chats read on another device no longer linger forever when the app process was killed in between (stock only tracked posted notifications in memory)
+- crash long-pressing a sticker set while off-screen rows are cached (reorder update bound null item on cached/hidden holders)
+- crash cutting out a sticker after the photo editor recycled the source image mid-segmentation
