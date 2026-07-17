@@ -1,0 +1,51 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: alina sireneva <alina@tei.su>
+Date: Fri, 17 Jul 2026 20:41:35 +0400
+Subject: Fix folder pins missing when the pinned dialog is not in the local cache
+
+---
+ .../org/telegram/messenger/MessagesController.java    | 11 +++++++++++
+ .../java/org/telegram/messenger/MessagesStorage.java  |  8 ++++----
+ 2 files changed, 15 insertions(+), 4 deletions(-)
+
+diff --git a/TMessagesProj/src/main/java/org/telegram/messenger/MessagesController.java b/TMessagesProj/src/main/java/org/telegram/messenger/MessagesController.java
+index 0000000..0000000 100644
+--- a/TMessagesProj/src/main/java/org/telegram/messenger/MessagesController.java
++++ b/TMessagesProj/src/main/java/org/telegram/messenger/MessagesController.java
+@@ -2389,6 +2389,17 @@ public class MessagesController extends BaseController implements NotificationCe
+                     }
+                     sortDialogs(null);
+                     getNotificationCenter().postNotificationName(NotificationCenter.dialogsNeedReload);
++
++                    for (int a = 0, N = dialogFilters.size(); a < N; a++) {
++                        DialogFilter filter = dialogFilters.get(a);
++                        for (int b = 0, N2 = filter.pinnedDialogs.size(); b < N2; b++) {
++                            long did = filter.pinnedDialogs.keyAt(b);
++                            if (DialogObject.isEncryptedDialog(did) || dialogs_dict.indexOfKey(did) >= 0) {
++                                continue;
++                            }
++                            loadUnknownDialog(getInputPeer(did), 0);
++                        }
++                    }
+                 }
+                 if (remote != 0) {
+                     getUserConfig().filtersLoaded = true;
+diff --git a/TMessagesProj/src/main/java/org/telegram/messenger/MessagesStorage.java b/TMessagesProj/src/main/java/org/telegram/messenger/MessagesStorage.java
+index 0000000..0000000 100644
+--- a/TMessagesProj/src/main/java/org/telegram/messenger/MessagesStorage.java
++++ b/TMessagesProj/src/main/java/org/telegram/messenger/MessagesStorage.java
+@@ -3422,10 +3422,10 @@ public class MessagesStorage extends BaseController {
+                             existingIds.remove(id);
+                             if (!existingDialogsIds.remove(id)) {
+                                 changed = true;
+-                                if (!dialogsToLoadMap.containsKey(id)) {
+-                                    dialogsToLoad.add(id);
+-                                    dialogsToLoadMap.put(id, peer);
+-                                }
++                            }
++                            if (!dialogsToLoadMap.containsKey(id)) {
++                                dialogsToLoad.add(id);
++                                dialogsToLoadMap.put(id, peer);
+                             }
+                         }
+                         if (secretChatsMap != null) {

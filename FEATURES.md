@@ -251,6 +251,7 @@ most things are toggleable in `Settings → Inugram`, with sensible opinionated 
 - profile scroll jump when opening uncached user
 - stale unread badges on global-search top peers
 - stale unread mention pointer after reading mention on another device (mention button jumping to old message)
+- folder pins silently missing when the pinned dialog isn't in the local dialogs cache (now fetched from server)
 - photo/video gallery performance improvements
 - messages consisting of only 2 or 3 emojis are huge in chat search results
 - admin logs scroll jumping when loading events

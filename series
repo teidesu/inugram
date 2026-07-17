@@ -228,3 +228,4 @@ bugfix/sticker-maker-recycled-bitmap.patch
 debloat/community-dialogs.patch
 feature/profile-copy-name.patch
 feature/join-request-member-count.patch
+bugfix/folder-pins-missing-dialogs.patch
