@@ -79,6 +79,7 @@ most things are toggleable in `Settings → Inugram`, with sensible opinionated 
 - hide pinned panel
 - hide channel, group preview (🐶) and replies (🐶) bottom bar (mute/join/etc)
 - send message to discussion group without joining
+- 🐶 member count on the join request sheet (instead of "private group/channel"; like tdesktop)
 - 🐶 search: media-type filter + "show only matches"
 - 🐶 "from user" picker in search also finds users not in chat (like tdesktop)
 - static pinned reactions in the reaction bar

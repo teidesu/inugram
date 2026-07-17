@@ -1,0 +1,22 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: alina sireneva <alina@tei.su>
+Date: Fri, 17 Jul 2026 20:40:44 +0400
+Subject: show member count on the join request sheet
+
+---
+ .../main/java/org/telegram/ui/Components/JoinGroupAlert.java    | 2 ++
+ 1 file changed, 2 insertions(+)
+
+diff --git a/TMessagesProj/src/main/java/org/telegram/ui/Components/JoinGroupAlert.java b/TMessagesProj/src/main/java/org/telegram/ui/Components/JoinGroupAlert.java
+index 0000000..0000000 100644
+--- a/TMessagesProj/src/main/java/org/telegram/ui/Components/JoinGroupAlert.java
++++ b/TMessagesProj/src/main/java/org/telegram/ui/Components/JoinGroupAlert.java
+@@ -166,6 +166,8 @@ public class JoinGroupAlert extends BottomSheet {
+ 
+         if (chatInvite != null && origination == ORIGINATION_SPONSORED_CHAT) {
+             textView.setText(getString(R.string.ChannelPublic).toLowerCase());
++        } else if (chatInvite != null && chatInvite.request_needed && participants_count > 0) {
++            textView.setText(LocaleController.formatPluralStringComma(isChannel ? "Subscribers" : "Members", participants_count));
+         } else {
+             textView.setText(isChannel
+                     ? getString(R.string.ChannelPrivate).toLowerCase()
