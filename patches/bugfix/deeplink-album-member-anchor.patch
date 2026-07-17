@@ -11,7 +11,7 @@ diff --git a/TMessagesProj/src/main/java/org/telegram/ui/ChatActivity.java b/TMe
 index 0000000..0000000 100644
 --- a/TMessagesProj/src/main/java/org/telegram/ui/ChatActivity.java
 +++ b/TMessagesProj/src/main/java/org/telegram/ui/ChatActivity.java
-@@ -21456,6 +21456,13 @@ public class ChatActivity extends BaseFragment implements
+@@ -21461,6 +21461,13 @@ public class ChatActivity extends BaseFragment implements
                          scrollToMessage = messages.get(messArr.size() - 1);
                      }
                      if (scrollToMessage != null) {

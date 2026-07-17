@@ -20,7 +20,7 @@ index 0000000..0000000 100644
                                  ChatObject.isChannel(currentChat) && !ChatObject.canPost(currentChat) && !currentChat.megagroup ||
                                  !ChatObject.canSendMessages(currentChat)
                              )
-@@ -19241,7 +19241,7 @@ public class ChatActivity extends BaseFragment implements
+@@ -19246,7 +19246,7 @@ public class ChatActivity extends BaseFragment implements
                  if (actionsButtonsLayout != null) {
                      boolean allowChatActions = true;
                      if (bottomChannelButtonsLayout != null && bottomChannelButtonsLayout.getVisibility() == View.VISIBLE && !bottomOverlayChatWaitsReply ||
@@ -29,7 +29,7 @@ index 0000000..0000000 100644
                          allowChatActions = false;
                      }
  
-@@ -27696,7 +27696,7 @@ public class ChatActivity extends BaseFragment implements
+@@ -27701,7 +27701,7 @@ public class ChatActivity extends BaseFragment implements
              long requestedTime = MessagesController.getNotificationsSettings(currentAccount).getLong("dialog_join_requested_time_" + dialog_id, -1);
              boolean shouldApply = false;
              if (ChatObject.isChannel(currentChat) && !(currentChat instanceof TLRPC.TL_channelForbidden)) {
@@ -38,7 +38,7 @@ index 0000000..0000000 100644
                      if (getMessagesController().isJoiningChannel(currentChat.id)) {
                          showBottomOverlayProgress(true, false);
                      } else {
-@@ -27917,7 +27917,7 @@ public class ChatActivity extends BaseFragment implements
+@@ -27922,7 +27922,7 @@ public class ChatActivity extends BaseFragment implements
                  bottomChannelButtonsLayout.setVisibility(View.VISIBLE);
                  chatActivityEnterView.setVisibility(View.INVISIBLE);
              } else if (chatMode == MODE_PINNED ||
@@ -47,7 +47,7 @@ index 0000000..0000000 100644
                      currentUser != null && (UserObject.isDeleted(currentUser) || userBlocked || UserObject.isReplyUser(currentUser))) {
                  if (chatActivityEnterView.isEditingMessage()) {
                      chatActivityEnterView.setVisibility(View.VISIBLE);
-@@ -30788,7 +30788,7 @@ public class ChatActivity extends BaseFragment implements
+@@ -30793,7 +30793,7 @@ public class ChatActivity extends BaseFragment implements
              allowChatActions = false;
          }
  
@@ -56,7 +56,7 @@ index 0000000..0000000 100644
              allowChatActions = false;
          }
  
-@@ -33569,7 +33569,7 @@ public class ChatActivity extends BaseFragment implements
+@@ -33574,7 +33574,7 @@ public class ChatActivity extends BaseFragment implements
                  if (selectedObject != null && selectedObject.messageOwner != null && selectedObject.messageOwner.noforwards) {
                      return;
                  }
@@ -65,7 +65,7 @@ index 0000000..0000000 100644
                      MessageObject messageObject = selectedObject;
                      if (messageObject.getGroupId() != 0) {
                          MessageObject.GroupedMessages group = getGroup(messageObject.getGroupId());
-@@ -45042,7 +45042,7 @@ public class ChatActivity extends BaseFragment implements
+@@ -45047,7 +45047,7 @@ public class ChatActivity extends BaseFragment implements
              final boolean suggestUpdate = (currentChat != null && currentChat.broadcast_messages_allowed && currentChat.linked_monoforum_id != 0)
                  != (bottomChannelButtonsLayout != null && bottomChannelButtonsLayout.isButtonVisible(ChatActivityChannelButtonsLayout.BUTTON_DIRECT));
  
@@ -74,7 +74,7 @@ index 0000000..0000000 100644
                  updateBottomOverlay(true);
              }
          }
-@@ -45594,7 +45594,7 @@ public class ChatActivity extends BaseFragment implements
+@@ -45599,7 +45599,7 @@ public class ChatActivity extends BaseFragment implements
              allowChatActions = false;
          }
  

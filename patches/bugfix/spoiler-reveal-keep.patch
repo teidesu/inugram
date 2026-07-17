@@ -50,7 +50,7 @@ diff --git a/TMessagesProj/src/main/java/org/telegram/ui/ChatActivity.java b/TMe
 index 0000000..0000000 100644
 --- a/TMessagesProj/src/main/java/org/telegram/ui/ChatActivity.java
 +++ b/TMessagesProj/src/main/java/org/telegram/ui/ChatActivity.java
-@@ -25292,6 +25292,7 @@ public class ChatActivity extends BaseFragment implements
+@@ -25297,6 +25297,7 @@ public class ChatActivity extends BaseFragment implements
                  if (update == null) {
                      object.replyMessageObject = emptyMessage;
                  } else {

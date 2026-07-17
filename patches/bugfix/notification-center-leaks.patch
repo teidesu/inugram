@@ -86,7 +86,7 @@ index 0000000..0000000 100644
          ReactionsEffectOverlay.dismissByFragment(this);
          if (messageMetricsView != null) {
              messageMetricsView.finish();
-@@ -35583,6 +35587,7 @@ public class ChatActivity extends BaseFragment implements
+@@ -35588,6 +35592,7 @@ public class ChatActivity extends BaseFragment implements
      private int commentMessagesRequestId;
      private int commentLoadingMessageId;
      private boolean hideCommentLoading;
@@ -94,7 +94,7 @@ index 0000000..0000000 100644
      private long commentLoadingStartedAt;
      private TLRPC.TL_messages_discussionMessage savedDiscussionMessage;
      private TLRPC.messages_Messages savedHistory;
-@@ -35680,9 +35685,11 @@ public class ChatActivity extends BaseFragment implements
+@@ -35685,9 +35690,11 @@ public class ChatActivity extends BaseFragment implements
                                      chatActivity.didReceivedNotification(id, account, args);
                                  }, 50);
                                  NotificationCenter.getInstance(currentAccount).removeObserver(this, NotificationCenter.messagesDidLoad);

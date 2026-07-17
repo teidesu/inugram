@@ -154,7 +154,7 @@ index 0000000..0000000 100644
          globalObserversGroup
              .add(NotificationCenter.emojiLoaded)
              .add(NotificationCenter.invalidateMotionBackground)
-@@ -22778,6 +22780,9 @@ public class ChatActivity extends BaseFragment implements
+@@ -22783,6 +22785,9 @@ public class ChatActivity extends BaseFragment implements
          } else if (id == NotificationCenter.screenshotTook) {
              updateInformationForScreenshotDetector();
          } else if (id == NotificationCenter.blockedUsersDidLoad) {
@@ -164,7 +164,7 @@ index 0000000..0000000 100644
              if (currentUser != null && !UserObject.isReplyUser(currentUser)) {
                  boolean oldValue = userBlocked;
                  userBlocked = getMessagesController().blockePeers.indexOfKey(currentUser.id) >= 0;
-@@ -36672,6 +36677,12 @@ public class ChatActivity extends BaseFragment implements
+@@ -36677,6 +36682,12 @@ public class ChatActivity extends BaseFragment implements
          private int messagesEndRow;
  
          public ArrayList<MessageObject> getMessages() {
@@ -177,7 +177,7 @@ index 0000000..0000000 100644
              if (isFrozen) {
                  return frozenMessages;
              } else if (isFiltered) {
-@@ -36745,14 +36756,7 @@ public class ChatActivity extends BaseFragment implements
+@@ -36750,14 +36761,7 @@ public class ChatActivity extends BaseFragment implements
  
          private void updateRowsInternal() {
              rowCount = 0;
@@ -193,7 +193,7 @@ index 0000000..0000000 100644
              if (chatMode == MODE_SAVED && isInsideContainer) {
                  hintRow = rowCount++;
              } else {
-@@ -36844,14 +36848,7 @@ public class ChatActivity extends BaseFragment implements
+@@ -36849,14 +36853,7 @@ public class ChatActivity extends BaseFragment implements
                      return 1;
                  }
              }
@@ -209,7 +209,7 @@ index 0000000..0000000 100644
  
              if (position >= messagesStartRow && position < messagesEndRow) {
                  return messages.get(position - messagesStartRow).stableId;
-@@ -37314,21 +37311,14 @@ public class ChatActivity extends BaseFragment implements
+@@ -37319,21 +37316,14 @@ public class ChatActivity extends BaseFragment implements
                  actionCell.setAlpha(1.0f);
                  actionCell.setSpoilersSuppressed(chatListView.getScrollState() != RecyclerView.SCROLL_STATE_IDLE);
              } else if (position >= messagesStartRow && position < messagesEndRow) {
@@ -233,7 +233,7 @@ index 0000000..0000000 100644
                      messageCell.isChat = currentChat != null || UserObject.isUserSelf(currentUser) || UserObject.isReplyUser(currentUser) || (chatMode == MODE_SEARCH);
                      messageCell.setSponsoredMessageVisible(true, false);
                      messageCell.isBotForum = UserObject.isBotForum(currentUser);
-@@ -37860,14 +37850,7 @@ public class ChatActivity extends BaseFragment implements
+@@ -37865,14 +37855,7 @@ public class ChatActivity extends BaseFragment implements
                  return 1;
              }
              if (position >= messagesStartRow && position < messagesEndRow) {

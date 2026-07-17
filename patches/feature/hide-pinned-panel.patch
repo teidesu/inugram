@@ -36,7 +36,7 @@ index 0000000..0000000 100644
      private int maxPinnedMessageId;
      private HashMap<Integer, MessageObject> pinnedMessageObjects = new HashMap<>();
      private SparseArray<Boolean> loadingPinnedMessages = new SparseArray<>();
-@@ -11490,6 +11490,7 @@ public class ChatActivity extends BaseFragment implements
+@@ -11495,6 +11495,7 @@ public class ChatActivity extends BaseFragment implements
          pinnedListButton.setBackgroundDrawable(Theme.createSelectorDrawable(getThemedColor(Theme.key_inappPlayerClose) & 0x19ffffff));
          pinnedMessageView.addView(pinnedListButton, LayoutHelper.createFrame(36, 48, Gravity.RIGHT | Gravity.TOP, 0, 0, 7, 0));
          pinnedListButton.setOnClickListener(v -> openPinnedMessagesList(false));
@@ -44,7 +44,7 @@ index 0000000..0000000 100644
  
          closePinned = new ImageView(getContext());
          closePinned.setImageResource(R.drawable.miniplayer_close);
-@@ -11542,6 +11543,7 @@ public class ChatActivity extends BaseFragment implements
+@@ -11547,6 +11548,7 @@ public class ChatActivity extends BaseFragment implements
                  updatePinnedMessageView(true);
              }
          });
@@ -52,7 +52,7 @@ index 0000000..0000000 100644
  
          updatePinnedListButton(false);
      }
-@@ -28141,7 +28143,7 @@ public class ChatActivity extends BaseFragment implements
+@@ -28146,7 +28148,7 @@ public class ChatActivity extends BaseFragment implements
          return false;
      }
  
@@ -61,7 +61,7 @@ index 0000000..0000000 100644
          updatePinnedMessageView(animated, 0);
      }
  
-@@ -28259,6 +28261,7 @@ public class ChatActivity extends BaseFragment implements
+@@ -28264,6 +28266,7 @@ public class ChatActivity extends BaseFragment implements
          if (currentEncryptedChat != null || chatMode != 0) {
              return;
          }
