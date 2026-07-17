@@ -1,0 +1,39 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: alina sireneva <alina@tei.su>
+Date: Fri, 17 Jul 2026 22:02:09 +0400
+Subject: hopefully fix stuck stickers
+
+---
+ .../main/java/org/telegram/messenger/FileLoadOperation.java  | 5 +++++
+ 1 file changed, 5 insertions(+)
+
+diff --git a/TMessagesProj/src/main/java/org/telegram/messenger/FileLoadOperation.java b/TMessagesProj/src/main/java/org/telegram/messenger/FileLoadOperation.java
+index 0000000..0000000 100644
+--- a/TMessagesProj/src/main/java/org/telegram/messenger/FileLoadOperation.java
++++ b/TMessagesProj/src/main/java/org/telegram/messenger/FileLoadOperation.java
+@@ -1412,6 +1412,7 @@ public class FileLoadOperation {
+ 
+     private void cancelRequests(Runnable fullyCancelled) {
+         FileLog.d("cancelRequests" + (fullyCancelled != null ? " with callback" : ""));
++        boolean inu_waitingForCancelled = false;
+         if (requestInfos != null) {
+             int[] waitingForCancelledCount = new int[1];
+             int[] waitingDownloadSize = new int[2];
+@@ -1433,6 +1434,7 @@ public class FileLoadOperation {
+                             }
+                         };
+                         waitingForCancelledCount[0]++;
++                        inu_waitingForCancelled = true;
+                         FileLog.d("cancelRequests cancel " + requestInfo.requestToken + " with callback");
+                         ConnectionsManager.getInstance(currentAccount).cancelRequest(requestInfo.requestToken, true, () -> {
+                             if (requestInfo.whenCancelled != null) {
+@@ -1452,6 +1454,9 @@ public class FileLoadOperation {
+                 }
+             }
+         }
++        if (fullyCancelled != null && !inu_waitingForCancelled) {
++            fullyCancelled.run();
++        }
+     }
+ 
+     private void cleanup() {

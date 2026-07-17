@@ -234,3 +234,4 @@ bugfix/forward-bar-stale-count.patch
 bugfix/video-audio-focus.patch
 bugfix/reorder-sync-dispatch.patch
 bugfix/optimistic-hidden-forwards.patch
+bugfix/file-load-cancel-stuck.patch
