@@ -22,6 +22,7 @@ import android.widget.ScrollView
 import androidx.core.content.edit
 import desu.inugram.InuConfig
 import desu.inugram.helpers.InuUtils
+import desu.inugram.helpers.WebAppHelper
 import desu.inugram.helpers.cloud.SettingsBackupHelper
 import desu.inugram.helpers.font.FontImportHelper
 import desu.inugram.helpers.menu.MessageMenuConfig
@@ -88,6 +89,7 @@ object ChatHelper {
     const val OPTION_REPEAT = 514
     const val OPTION_REPEAT_COPY = 515
     const val OPTION_REPEAT_FORWARD = 516
+    const val OPTION_SHOW_JSON = 517
 
     @JvmStatic
     fun timeAdditionsHash(msg: MessageObject?): Int {
@@ -532,6 +534,10 @@ object ChatHelper {
 
             OPTION_DETAILS -> {
                 activity.presentFragment(MessageDetailsActivity(selectedObject, selectedObjectGroup))
+            }
+
+            OPTION_SHOW_JSON -> {
+                WebAppHelper.openTlViewer(activity, selectedObject.currentEvent ?: selectedObject.messageOwner)
             }
 
             OPTION_FORWARD_NO_QUOTE -> {
@@ -1207,6 +1213,11 @@ object ChatHelper {
                 activity.processSelectedOption(
                     if (opposite == InuConfig.RepeatModeItem.COPY) OPTION_REPEAT_COPY else OPTION_REPEAT_FORWARD
                 )
+                true
+            }
+
+            OPTION_DETAILS -> {
+                activity.processSelectedOption(OPTION_SHOW_JSON)
                 true
             }
 

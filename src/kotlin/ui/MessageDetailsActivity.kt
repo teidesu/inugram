@@ -10,8 +10,6 @@ import android.os.Build
 import android.os.Bundle
 import android.view.View
 import androidx.core.content.FileProvider
-import androidx.core.view.ViewCompat
-import androidx.core.view.WindowInsetsCompat
 import desu.inugram.helpers.InuUtils
 import desu.inugram.helpers.WebAppHelper
 import org.telegram.messenger.AndroidUtilities
@@ -30,6 +28,7 @@ import org.telegram.messenger.Utilities
 import org.telegram.tgnet.TLRPC
 import org.telegram.ui.ActionBar.Theme
 import org.telegram.ui.Cells.TextDetailSettingsCell
+import org.telegram.ui.Components.AnimatedEmojiDrawable
 import org.telegram.ui.Components.BulletinFactory
 import org.telegram.ui.Components.RecyclerListView
 import org.telegram.ui.Components.UItem
@@ -65,6 +64,8 @@ class MessageDetailsActivity(
     private var hasMultipleTracks = false
     private var sampleRate = 0
     private var dc = 0
+    private var stickerSetOwnerId = 0L
+    private val emojiSetOwnerIds = linkedSetOf<Long>()
 
     init {
         val peerId = messageObject.messageOwner.peer_id
@@ -100,6 +101,9 @@ class MessageDetailsActivity(
                     if (attr is TLRPC.TL_documentAttributeFilename) {
                         fileName = attr.file_name
                     }
+                    if (attr is TLRPC.TL_documentAttributeSticker && attr.stickerset != null) {
+                        stickerSetOwnerId = extractStickerSetOwnerId(attr.stickerset.id)
+                    }
                     if (attr is TLRPC.TL_documentAttributeImageSize || attr is TLRPC.TL_documentAttributeVideo) {
                         width = attr.w
                         height = attr.h
@@ -117,6 +121,32 @@ class MessageDetailsActivity(
                         }, 300)
                     }
                 }
+            }
+        }
+
+        messageObject.messageOwner.entities?.forEach { entity ->
+            if (entity is TLRPC.TL_messageEntityCustomEmoji) {
+                val document = AnimatedEmojiDrawable.findDocument(currentAccount, entity.document_id)
+                val stickerSet = MessageObject.getInputStickerSet(document) ?: return@forEach
+                val ownerId = extractStickerSetOwnerId(stickerSet.id)
+                if (ownerId > 0) emojiSetOwnerIds.add(ownerId)
+            }
+        }
+        resolveOwnersLocally()
+    }
+
+    private fun resolveOwnersLocally() {
+        val unknown = (emojiSetOwnerIds + stickerSetOwnerId)
+            .filter { it > 0 && messagesController.getUser(it) == null }
+        if (unknown.isEmpty()) return
+        messagesStorage.storageQueue.postRunnable {
+            if (fragmentDestroyed) return@postRunnable
+            val users = messagesStorage.getUsers(ArrayList(unknown))
+            if (users.isEmpty()) return@postRunnable
+            AndroidUtilities.runOnUIThread {
+                if (fragmentDestroyed || isFinishing) return@runOnUIThread
+                messagesController.putUsers(users, true)
+                listView?.adapter?.update(true)
             }
         }
     }
@@ -249,6 +279,24 @@ class MessageDetailsActivity(
         if (dc != 0) {
             items.add(detailItem(ROW_DC, "DC", "DC$dc"))
         }
+        if (stickerSetOwnerId > 0) {
+            items.add(
+                detailItem(
+                    ROW_STICKER_SET_CREATOR,
+                    R.string.InuMsgDetailStickerPackCreator,
+                    formatOwnerInfo(stickerSetOwnerId)
+                )
+            )
+        }
+        if (emojiSetOwnerIds.isNotEmpty()) {
+            items.add(
+                detailItem(
+                    ROW_EMOJI_SET_CREATORS,
+                    R.string.InuMsgDetailEmojiPackCreators,
+                    emojiSetOwnerIds.joinToString("\n\n") { formatOwnerInfo(it) }
+                )
+            )
+        }
         items.add(UItem.asShadow(null))
         items.add(
             UItem.asButton(
@@ -266,6 +314,16 @@ class MessageDetailsActivity(
                 messageObject.currentEvent ?: messageObject.messageOwner
             )
             return;
+        }
+
+        val clickedOwnerId = when (item.id) {
+            ROW_STICKER_SET_CREATOR -> stickerSetOwnerId
+            ROW_EMOJI_SET_CREATORS -> emojiSetOwnerIds.singleOrNull() ?: 0L
+            else -> 0L
+        }
+        if (clickedOwnerId > 0 && messagesController.getUser(clickedOwnerId) != null) {
+            openOwnerProfile(clickedOwnerId)
+            return
         }
 
         if (view !is TextDetailSettingsCell) return
@@ -295,6 +353,14 @@ class MessageDetailsActivity(
 
             ROW_FROM -> {
                 openUserProfile(); return true
+            }
+
+            ROW_STICKER_SET_CREATOR -> {
+                openOwnerProfile(stickerSetOwnerId); return true
+            }
+
+            ROW_EMOJI_SET_CREATORS -> {
+                emojiSetOwnerIds.singleOrNull()?.let { openOwnerProfile(it); return true }
             }
         }
         return false
@@ -354,6 +420,11 @@ class MessageDetailsActivity(
         presentFragment(ProfileActivity(Bundle().apply { putLong("user_id", user.id) }))
     }
 
+    private fun openOwnerProfile(ownerId: Long) {
+        messagesController.getUser(ownerId) ?: return
+        presentFragment(ProfileActivity(Bundle().apply { putLong("user_id", ownerId) }))
+    }
+
     // endregion
 
     // region data formatting
@@ -382,6 +453,11 @@ class MessageDetailsActivity(
             locale.formatterYear.format(date),
             locale.formatterDay.format(date)
         )
+    }
+
+    private fun formatOwnerInfo(ownerId: Long): String {
+        val user = messagesController.getUser(ownerId) ?: return ownerId.toString()
+        return formatEntityInfo(ContactsController.formatName(user.first_name, user.last_name), user.username, user.id)
     }
 
     private fun formatEntityInfo(name: String?, username: String?, id: Long): String = buildString {
@@ -653,16 +729,18 @@ class MessageDetailsActivity(
         override fun isClickable() = true
     }
 
+    override fun isSupportEdgeToEdge(): Boolean = true
+
+    override fun onInsets(left: Int, top: Int, right: Int, bottom: Int) {
+        val lv = listView ?: return
+        lv.setPadding(lv.paddingLeft, lv.paddingTop, lv.paddingRight, bottom)
+    }
+
     override fun createView(context: Context): View {
         return super.createView(context).also {
             listView.setSections()
             actionBar.setAdaptiveBackground(listView)
             listView.clipToPadding = false
-            ViewCompat.setOnApplyWindowInsetsListener(listView) { v, insets ->
-                val bottom = insets.getInsets(WindowInsetsCompat.Type.systemBars()).bottom
-                v.setPadding(v.paddingLeft, v.paddingTop, v.paddingRight, bottom)
-                insets
-            }
         }
     }
 
@@ -686,7 +764,18 @@ class MessageDetailsActivity(
         private val ROW_MIME_TYPE = InuUtils.generateId()
         private val ROW_MEDIA = InuUtils.generateId()
         private val ROW_DC = InuUtils.generateId()
+        private val ROW_STICKER_SET_CREATOR = InuUtils.generateId()
+        private val ROW_EMOJI_SET_CREATORS = InuUtils.generateId()
         private val ROW_SHOW_JSON = InuUtils.generateId()
+
+        private fun extractStickerSetOwnerId(setId: Long): Long {
+            var ownerId = setId ushr 32
+            val extByte = (setId shr 24) and 0xff
+            val sepByte = (setId shr 16) and 0xff
+            if (sepByte == 0x3fL) ownerId = ownerId or 0x80000000L
+            if (extByte != 0L) ownerId += 0x100000000L
+            return ownerId
+        }
 
         private fun detailItem(id: Int, label: CharSequence, value: CharSequence): UItem {
             return DetailCellFactory.of(id, label, value)

@@ -337,6 +337,8 @@
     <string name="InuMsgDetailFileSize">File Size</string>
     <string name="InuMsgDetailMimeType">MIME Type</string>
     <string name="InuMsgDetailMedia">Media</string>
+    <string name="InuMsgDetailStickerPackCreator">Sticker Pack Creator</string>
+    <string name="InuMsgDetailEmojiPackCreators">Emoji Pack Creators</string>
     <string name="InuShowJson">Show JSON</string>
     <string name="InuRegDate">Registered: %s</string>
 
