@@ -23,7 +23,7 @@ index 0000000..0000000 100644
              int maxPinnedCount;
              if (containsFilter && filter != null) {
 -                maxPinnedCount = 100 - filter.alwaysShow.size();
-+                maxPinnedCount = getUserConfig().isPremium() ? getMessagesController().dialogFiltersPinnedLimitPremium : getMessagesController().dialogFiltersPinnedLimitDefault;
++                maxPinnedCount = getUserConfig().isPremium() ? getMessagesController().dialogFiltersChatsLimitPremium : getMessagesController().dialogFiltersChatsLimitDefault;
              } else if (folderId != 0 || filter != null) {
                  if (getUserConfig().isPremium()) {
                      maxPinnedCount = getMessagesController().maxFolderPinnedDialogsCountPremium;
@@ -70,7 +70,7 @@ index 0000000..0000000 100644
 -            if (containsFilter) {
 -                maxPinnedCount = 100 - filter.alwaysShow.size();
 +            if (containsFilter && filter != null) {
-+                maxPinnedCount = getUserConfig().isPremium() ? getMessagesController().dialogFiltersPinnedLimitPremium : getMessagesController().dialogFiltersPinnedLimitDefault;
++                maxPinnedCount = getUserConfig().isPremium() ? getMessagesController().dialogFiltersChatsLimitPremium : getMessagesController().dialogFiltersChatsLimitDefault;
              } else if (folderId != 0 || filter != null) {
                  if (UserConfig.getInstance(currentAccount).isPremium()) {
                      maxPinnedCount = getMessagesController().maxFolderPinnedDialogsCountPremium;
