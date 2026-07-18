@@ -1,0 +1,106 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: alina sireneva <alina@tei.pet>
+Date: Sat, 18 Jul 2026 20:30:27 +0400
+Subject: Add the QuickJS plugin engine (rpc hooks + rust build wiring)
+
+---
+ .../messenger/MessagesController.java         |  1 +
+ .../telegram/tgnet/ConnectionsManager.java    |  5 +-
+ TMessagesProj_App/build.gradle                | 59 +++++++++++++++++++
+ 3 files changed, 64 insertions(+), 1 deletion(-)
+
+diff --git a/TMessagesProj/src/main/java/org/telegram/messenger/MessagesController.java b/TMessagesProj/src/main/java/org/telegram/messenger/MessagesController.java
+index 0000000..0000000 100644
+--- a/TMessagesProj/src/main/java/org/telegram/messenger/MessagesController.java
++++ b/TMessagesProj/src/main/java/org/telegram/messenger/MessagesController.java
+@@ -17829,6 +17829,7 @@ public class MessagesController extends BaseController implements NotificationCe
+ 
+     // must be run from Utilities.stageQueue
+     public void processUpdates(final TLRPC.Updates updates, boolean fromQueue) {
++        desu.inugram.helpers.plugins.PluginRpc.onUpdates(updates, currentAccount);
+         ArrayList<Long> needGetChannelsDiff = null;
+         boolean needGetDiff = false;
+         boolean needReceivedQueue = false;
+diff --git a/TMessagesProj/src/main/java/org/telegram/tgnet/ConnectionsManager.java b/TMessagesProj/src/main/java/org/telegram/tgnet/ConnectionsManager.java
+index 0000000..0000000 100644
+--- a/TMessagesProj/src/main/java/org/telegram/tgnet/ConnectionsManager.java
++++ b/TMessagesProj/src/main/java/org/telegram/tgnet/ConnectionsManager.java
+@@ -382,7 +382,10 @@ public class ConnectionsManager extends BaseController {
+         return requestToken;
+     }
+ 
+-    private void sendRequestInternal(TLObject object, RequestDelegate onComplete, RequestDelegateTimestamp onCompleteTimestamp, QuickAckDelegate onQuickAck, WriteToSocketDelegate onWriteToSocket, int flags, int datacenterId, int connectionType, boolean immediate, int requestToken) {
++    public void sendRequestInternal(TLObject object, RequestDelegate onComplete, RequestDelegateTimestamp onCompleteTimestamp, QuickAckDelegate onQuickAck, WriteToSocketDelegate onWriteToSocket, int flags, int datacenterId, int connectionType, boolean immediate, int requestToken) {
++        if (desu.inugram.helpers.plugins.PluginRpc.maybeIntercept(this, object, onComplete, onCompleteTimestamp, onQuickAck, onWriteToSocket, flags, datacenterId, connectionType, immediate, requestToken, currentAccount)) {
++            return;
++        }
+         if (BuildVars.LOGS_ENABLED) {
+             FileLog.d("send request " + object + " with token = " + requestToken);
+         }
+diff --git a/TMessagesProj_App/build.gradle b/TMessagesProj_App/build.gradle
+index 0000000..0000000 100644
+--- a/TMessagesProj_App/build.gradle
++++ b/TMessagesProj_App/build.gradle
+@@ -132,3 +132,62 @@ android {
+ }
+ 
+ apply plugin: 'com.google.gms.google-services'
++
++// --- inugram rust plugin engine (libinu_native.so) ---
++// builds the standalone rquickjs/quickjs-ng cdylib via cargo-ndk and packages it as a jniLib.
++// build-env prerequisites: rustup + `rustup target add aarch64-linux-android`,
++// `cargo install cargo-ndk`, and libclang (NDK-provided) for rquickjs' bindgen.
++def rustModuleDir = file("$projectDir/rust/inu_native")
++def rustJniLibsDir = file("$buildDir/rustJniLibs")
++
++// gradle (launched from Android Studio / a daemon) doesn't inherit the login shell PATH, so cargo
++// isn't found by name. resolve the cargo binary from the usual toolchain locations, and prepend its
++// dir + ~/.cargo/bin (where `cargo install cargo-ndk` lands the subcommand) to the task PATH.
++// override with -Pcargo.bin=/path/to/cargo or the CARGO env var if your setup differs.
++def userHome = System.getProperty('user.home')
++def cargoHome = System.getenv('CARGO_HOME') ?: "$userHome/.cargo"
++def cargoCandidates = [
++    System.getenv('CARGO'),
++    project.findProperty('cargo.bin'),
++    "$cargoHome/bin/cargo",
++    "$userHome/.cargo/bin/cargo",
++    "/etc/profiles/per-user/${System.getProperty('user.name')}/bin/cargo", // nix per-user profile
++    "$userHome/.nix-profile/bin/cargo",                                     // nix home-manager
++    "/run/current-system/sw/bin/cargo",                                     // nixos system profile
++    "/opt/homebrew/bin/cargo",
++    "/usr/local/bin/cargo",
++]
++def cargoFile = cargoCandidates.findAll { it }.collect { file(it) }.find { it.isFile() }
++def cargoExe = cargoFile?.absolutePath ?: 'cargo'
++def cargoPathDirs = [cargoFile?.parentFile?.absolutePath, "$cargoHome/bin", "$userHome/.cargo/bin"].findAll { it }
++
++tasks.register('buildInuNative', Exec) {
++    workingDir rustModuleDir
++    environment 'ANDROID_NDK_HOME', android.ndkDirectory.absolutePath
++    environment 'PATH', (cargoPathDirs + [System.getenv('PATH') ?: '']).join(File.pathSeparator)
++    // bindgen needs *a* libclang to parse the quickjs headers (the android target/sysroot is supplied
++    // separately by cargo-ndk). NDK r27+ no longer ships libclang.dylib, so search the NDK first, then
++    // fall back to system libclang locations. override with -Plibclang.path=/dir if none are found.
++    def prebuilt = file("${android.ndkDirectory}/toolchains/llvm/prebuilt")
++    def ndkHost = prebuilt.listFiles()?.find { it.isDirectory() }
++    def libclangCandidates = [
++        project.findProperty('libclang.path'),
++        ndkHost ? new File(ndkHost, 'lib').absolutePath : null,
++        ndkHost ? new File(ndkHost, 'lib64').absolutePath : null,
++        '/Library/Developer/CommandLineTools/usr/lib',                 // xcode command line tools
++        '/opt/homebrew/opt/llvm/lib', '/usr/local/opt/llvm/lib',       // homebrew llvm
++        '/run/current-system/sw/lib', "${System.getProperty('user.home')}/.nix-profile/lib", // nix
++        '/usr/lib/llvm/lib', '/usr/lib',                               // linux distros
++    ]
++    def libclangDir = libclangCandidates.findAll { it }.find { dir ->
++        def d = file(dir)
++        d.isDirectory() && d.listFiles()?.any { it.name ==~ /libclang\.(dylib|so)(\..*)?/ }
++    }
++    if (libclangDir != null) environment 'LIBCLANG_PATH', libclangDir
++    commandLine cargoExe, 'ndk', '-t', 'arm64-v8a', '-o', rustJniLibsDir.absolutePath, 'build', '--release'
++}
++
++android.sourceSets.main.jniLibs.srcDirs += rustJniLibsDir
++tasks.matching { it.name ==~ /merge.*JniLibFolders/ }.configureEach {
++    dependsOn 'buildInuNative'
++}

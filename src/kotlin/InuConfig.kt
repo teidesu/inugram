@@ -140,6 +140,13 @@ object InuConfig {
     @JvmField
     val M3_BOTTOM_TABS = BoolItem("m3_bottom_tabs", false)
 
+    @JvmField
+    val PLUGINS_ENABLED = BoolItem("plugins_enabled", false)
+
+    // json: ordered [{id, enabled}] — middleware order + per-plugin enabled. device-local, not exported
+    @JvmField
+    val PLUGINS_STATE = StringItem("plugins_state", "", exportable = false)
+
     // snapshot of theme state before Monet was enabled, "day|night|autoNightType"; empty = none
     @JvmField
     val MONET_PREV = StringItem("monet_prev", "", exportable = false)

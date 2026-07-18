@@ -1,0 +1,21 @@
+[package]
+name = "inu_native"
+version = "0.1.0"
+edition = "2021"
+publish = false
+
+[lib]
+crate-type = ["cdylib"]
+
+[dependencies]
+base64 = "0.22"
+jni = "0.21"
+# rquickjs bundles quickjs-ng; `bindgen` is required because it ships no prebuilt Android bindings.
+rquickjs = { version = "0.12", default-features = true, features = ["bindgen"] }
+
+[profile.release]
+opt-level = "z"
+lto = true
+codegen-units = 1
+panic = "abort"
+strip = true

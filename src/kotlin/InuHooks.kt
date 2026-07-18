@@ -13,6 +13,7 @@ import desu.inugram.helpers.dialogs.DrawerHelper
 import desu.inugram.helpers.font.FontHelper
 import desu.inugram.helpers.maps.MapsHelper
 import desu.inugram.helpers.media.MediaSendDebugHelper
+import desu.inugram.helpers.plugins.PluginManager
 import desu.inugram.helpers.security.PasscodeHelper
 import desu.inugram.helpers.theme.MonetHelper
 import desu.inugram.helpers.theme.NonIslandHelper
@@ -55,6 +56,7 @@ object InuHooks {
         ApkInstaller.dismissInstalledNotification()
         CloudSettingsHelper.attachAutoSyncListener()
         ProxyVpnHelper.init(context)
+        PluginManager.init(context)
         Utilities.globalQueue.postRunnable { UrlCleanerHelper.preload() }
     }
 
@@ -130,6 +132,11 @@ object InuHooks {
         ProxyVpnHelper.reconcile()
         DrawerHelper.refreshUpdateState()
         MediaSendDebugHelper.startWatchingCache()
+        if (launchActivity.intent?.action == PluginManager.SAFE_MODE_ACTION) {
+            PluginManager.requestSafeModeRestart()
+            return
+        }
+        PluginManager.onAppInteractive()
     }
 
     @JvmStatic

@@ -74,6 +74,13 @@ class InuSettingsActivity : SettingsPageActivity() {
         )
         items.add(
             UItem.asButton(
+                BUTTON_PLUGINS,
+                R.drawable.inu_tabler_code,
+                LocaleController.getString(R.string.InuPlugins)
+            )
+        )
+        items.add(
+            UItem.asButton(
                 BUTTON_PRIVACY,
                 R.drawable.msg_permissions,
                 LocaleController.getString(R.string.InuPrivacySecurity)
@@ -108,6 +115,7 @@ class InuSettingsActivity : SettingsPageActivity() {
             BUTTON_ANNOYANCES -> presentFragment(AnnoyancesSettingsActivity())
             BUTTON_BEHAVIOR -> presentFragment(BehaviorSettingsActivity())
             BUTTON_TRANSLATOR -> presentFragment(TranslatorSettingsActivity())
+            BUTTON_PLUGINS -> presentFragment(PluginsActivity())
             BUTTON_PRIVACY -> presentFragment(PrivacySecurityActivity())
             BUTTON_ABOUT -> presentFragment(AboutActivity())
             BUTTON_BACKUP -> presentFragment(BackupSettingsActivity())
@@ -123,6 +131,7 @@ class InuSettingsActivity : SettingsPageActivity() {
         private val BUTTON_ANNOYANCES = InuUtils.generateId()
         private val BUTTON_BEHAVIOR = InuUtils.generateId()
         private val BUTTON_TRANSLATOR = InuUtils.generateId()
+        private val BUTTON_PLUGINS = InuUtils.generateId()
         private val BUTTON_PRIVACY = InuUtils.generateId()
         private val BUTTON_ABOUT = InuUtils.generateId()
         private val BUTTON_BACKUP = InuUtils.generateId()

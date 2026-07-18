@@ -1,0 +1,167 @@
+package desu.inugram.core.plugins
+
+import org.junit.Assert.assertEquals
+import org.junit.Assert.assertNull
+import org.junit.Assert.assertTrue
+import org.junit.Test
+import kotlin.test.assertFailsWith
+
+class PluginManifestParserTest {
+    private val full = """
+        // ==UserScript==
+        // @name         My awesome plugin
+        // @author       teidesu
+        // @namespace    http://example.com
+        // @version      1.0
+        // @description         This script rocks.
+        // @description:zh-CN   这个脚本很棒！
+        // @icon https://my.cdn.com/icon.png
+        // @grant        none
+        // @plugin-api   1
+        // @platform   android
+        // ==/UserScript==
+        /// <reference path="./index.d.ts" />
+        console.log('hi')
+    """.trimIndent()
+
+    @Test
+    fun parsesAllDescriptiveFields() {
+        val m = PluginManifestParser.parse(full)
+        assertEquals("My awesome plugin", m.name)
+        assertEquals("teidesu", m.author)
+        assertEquals("http://example.com", m.namespace)
+        assertEquals("1.0", m.version)
+        assertEquals("This script rocks.", m.description)
+        assertEquals("https://my.cdn.com/icon.png", m.icon)
+        assertEquals(1, m.pluginApi)
+        assertEquals("android", m.platform)
+    }
+
+    @Test
+    fun idCombinesNamespaceAndName() {
+        assertEquals("http://example.com/My awesome plugin", PluginManifestParser.parse(full).id)
+    }
+
+    @Test
+    fun idFallsBackToNameWithoutNamespace() {
+        val m = PluginManifestParser.parse(
+            """
+            // ==UserScript==
+            // @name solo
+            // ==/UserScript==
+            """.trimIndent(),
+        )
+        assertEquals("solo", m.id)
+    }
+
+    @Test
+    fun localizedDescriptionFallback() {
+        val m = PluginManifestParser.parse(full)
+        assertEquals("这个脚本很棒！", m.description("zh-CN"))
+        assertEquals("这个脚本很棒！", m.description("zh")) // primary subtag
+        assertEquals("This script rocks.", m.description("ru")) // base fallback
+        assertEquals("This script rocks.", m.description(null))
+    }
+
+    @Test
+    fun grantNoneIsEmpty() {
+        assertTrue(PluginManifestParser.parse(full).grants.isEmpty())
+    }
+
+    @Test
+    fun grantsParsedAndDeduped() {
+        val m = PluginManifestParser.parse(
+            """
+            // ==UserScript==
+            // @name g
+            // @grant inu.kv, fetch
+            // @grant inu.kv
+            // @grant inu.clipboard.read
+            // ==/UserScript==
+            """.trimIndent(),
+        )
+        assertEquals(listOf("inu.kv", "fetch", "inu.clipboard.read"), m.grants)
+    }
+
+    @Test
+    fun scopedGrantsKeepParenthesizedCommas() {
+        val m = PluginManifestParser.parse(
+            """
+            // ==UserScript==
+            // @name g
+            // @grant inu.interceptRpc(users.getUsers,channels.getChannels), inu.kv
+            // @grant fetch(google.com,bing.com)
+            // ==/UserScript==
+            """.trimIndent(),
+        )
+        assertEquals(
+            listOf("inu.interceptRpc(users.getUsers,channels.getChannels)", "inu.kv", "fetch(google.com,bing.com)"),
+            m.grants,
+        )
+    }
+
+    @Test
+    fun missingNameThrows() {
+        assertFailsWith<PluginManifestException> {
+            PluginManifestParser.parse(
+                """
+                // ==UserScript==
+                // @author nobody
+                // ==/UserScript==
+                """.trimIndent(),
+            )
+        }
+    }
+
+    @Test
+    fun missingBlockThrows() {
+        assertFailsWith<PluginManifestException> {
+            PluginManifestParser.parse("console.log('no header')")
+        }
+    }
+
+    @Test
+    fun unterminatedBlockThrows() {
+        assertFailsWith<PluginManifestException> {
+            PluginManifestParser.parse(
+                """
+                // ==UserScript==
+                // @name x
+                console.log('oops')
+                """.trimIndent(),
+            )
+        }
+    }
+
+    @Test
+    fun parseOrNullSwallowsErrors() {
+        assertNull(PluginManifestParser.parseOrNull("nope"))
+    }
+
+    @Test
+    fun directiveKeysAreCaseInsensitive() {
+        val m = PluginManifestParser.parse(
+            """
+            // ==UserScript==
+            // @Name Cased
+            // @PLUGIN-API 2
+            // ==/UserScript==
+            """.trimIndent(),
+        )
+        assertEquals("Cased", m.name)
+        assertEquals(2, m.pluginApi)
+    }
+
+    @Test
+    fun toleratesWhitespaceAndBlankCommentLines() {
+        val m = PluginManifestParser.parse(
+            """
+              // ==UserScript==
+              //
+              //   @name   spaced   out
+              // ==/UserScript==
+            """.trimIndent(),
+        )
+        assertEquals("spaced   out", m.name)
+    }
+}

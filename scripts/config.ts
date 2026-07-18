@@ -38,6 +38,13 @@ export const forkSyncFiles: ForkSyncFile[] = [
     target: 'InuCore',
     directory: true,
   },
+  // native: rust plugin engine (rquickjs/quickjs-ng + jni bridge), built into libinu_native.so
+  // by a cargo-ndk Exec task wired in TMessagesProj_App/build.gradle
+  {
+    source: 'src/rust/inu_native',
+    target: 'TMessagesProj_App/rust/inu_native',
+    directory: true,
+  },
   {
     source: 'src/java/google_material',
     target: 'TMessagesProj/src/main/java/google_material',
@@ -96,6 +103,11 @@ export const forkSyncFiles: ForkSyncFile[] = [
   {
     source: 'src/res/assets/*',
     target: 'TMessagesProj/src/main/assets',
+  },
+  // debug-only bundled test plugins; PluginManager copies them into the install dir on launch
+  {
+    source: 'src/res/assets-debug/inu_plugins/*',
+    target: 'TMessagesProj_App/src/debug/assets/inu_plugins',
   },
   {
     source: 'src/res/raw/*',

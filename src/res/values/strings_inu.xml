@@ -754,4 +754,18 @@
     <string name="InuPreviewMessage">Preview</string>
 
     <string name="InuMinimize">Minimize</string>
+
+    <string name="InuPlugins">Plugins</string>
+    <string name="InuPluginsInfo">Plugins are user-made scripts that extend the app. Only install plugins from sources you trust.</string>
+    <string name="InuPluginsEnableEngine">Enable plugins</string>
+    <string name="InuPluginsEnableEngineInfo">Run installed plugins on startup</string>
+    <string name="InuPluginsInstalled">Installed</string>
+    <string name="InuPluginsEmpty">No plugins installed</string>
+    <string name="InuPluginsLoadFromDisk">Load from file</string>
+    <string name="InuPluginsReload">Reload</string>
+    <string name="InuPluginsRemove">Remove</string>
+    <string name="InuPluginsByAuthor">by %1$s</string>
+    <string name="InuPluginsSafeMode">Start in safe mode</string>
+    <string name="InuPluginsErrorNoManifest">Not a valid plugin (missing metadata header)</string>
+    <string name="InuPluginsErrorRead">Couldn\'t read the selected file</string>
 </resources>

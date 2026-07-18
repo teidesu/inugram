@@ -84,6 +84,7 @@ abstract class SettingsPageActivity : UniversalFragment() {
     }
 
     override fun onInsets(left: Int, top: Int, right: Int, bottom: Int) {
+        lastBottomInset = bottom
         val lv = listView ?: return
         val container = stickyButtonContainer
         if (container != null) {
@@ -100,14 +101,16 @@ abstract class SettingsPageActivity : UniversalFragment() {
     }
 
     private var stickyButtonContainer: FrameLayout? = null
+    private var lastBottomInset = 0
 
     // Sticky bottom button bar (à la CloudSyncActivity): wraps `button` in a windowBackgroundWhite
-    // bar, reserves matching list padding, and offsets bulletins above it. Call from createView
-    // after super.createView. Cleanup is handled in onFragmentDestroy.
+    // bar, reserves matching list padding, and offsets bulletins above it. Callable both from
+    // createView and later (insets seen so far are applied; onInsets keeps them in sync after).
+    // Cleanup is handled in onFragmentDestroy.
     protected fun attachStickyButton(rootView: View, button: View) {
         val container = FrameLayout(rootView.context).apply {
             setBackgroundColor(Theme.getColor(Theme.key_windowBackgroundWhite))
-            setPadding(dp(16), dp(8), dp(16), dp(8))
+            setPadding(dp(16), dp(8), dp(16), dp(8) + lastBottomInset)
             addView(button, LayoutHelper.createFrame(LayoutHelper.MATCH_PARENT, 48f))
         }
         stickyButtonContainer = container
@@ -115,7 +118,7 @@ abstract class SettingsPageActivity : UniversalFragment() {
             container,
             LayoutHelper.createFrame(LayoutHelper.MATCH_PARENT, LayoutHelper.WRAP_CONTENT, Gravity.BOTTOM)
         )
-        listView.setPadding(0, 0, 0, dp(STICKY_BUTTON_HEIGHT))
+        listView.setPadding(0, 0, 0, lastBottomInset + dp(STICKY_BUTTON_HEIGHT))
         Bulletin.addDelegate(this, object : Bulletin.Delegate {
             override fun getBottomOffset(tag: Int): Int = stickyButtonContainer?.height ?: 0
         })

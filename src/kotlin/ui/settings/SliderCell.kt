@@ -27,6 +27,7 @@ class SliderCell(
     title: CharSequence? = null,
     private val format: (Float) -> String,
     private val onChanged: (Float) -> Unit,
+    private val onReleased: ((Float) -> Unit)? = null,
 ) : LinearLayout(context) {
 
     var value: Float = snap(initialValue)
@@ -39,7 +40,15 @@ class SliderCell(
         onProgressChanged = {
             setValue(min + it * (max - min), syncSlider = false)
         }
+        onFinished = { onReleased?.invoke(value) }
         setProgress((value - min) / (max - min))
+    }
+
+    /** external state sync: repositions the slider without firing [onChanged]/[onReleased] */
+    fun updateValue(newValue: Float) {
+        value = snap(newValue)
+        seekBarView.setProgress((value - min) / (max - min))
+        refresh()
     }
 
     private fun snap(v: Float): Float {
@@ -81,6 +90,7 @@ class SliderCell(
         setOnClickListener {
             if (value != defaultValue) {
                 setValue(defaultValue, syncSlider = true)
+                onReleased?.invoke(value)
             }
         }
     }
@@ -150,6 +160,7 @@ class SliderCell(
         private val snapProgress: ((Float) -> Float)? = null,
     ) : View(context) {
         var onProgressChanged: ((Float) -> Unit)? = null
+        var onFinished: (() -> Unit)? = null
         private val seekBar = SeekBar(this)
 
         init {
@@ -193,6 +204,9 @@ class SliderCell(
                 }
                 val handled = seekBar.onTouch(event.action, event.x, event.y)
                 if (handled) invalidate()
+                if (handled && (event.action == MotionEvent.ACTION_UP || event.action == MotionEvent.ACTION_CANCEL)) {
+                    onFinished?.invoke()
+                }
                 return handled
             }
             when (event.action) {
@@ -208,6 +222,9 @@ class SliderCell(
                     seekBar.setProgress(snapped)
                     onProgressChanged?.invoke(snapped)
                     invalidate()
+                    if (event.action == MotionEvent.ACTION_UP || event.action == MotionEvent.ACTION_CANCEL) {
+                        onFinished?.invoke()
+                    }
                     return true
                 }
                 else -> return false
