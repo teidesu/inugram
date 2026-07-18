@@ -246,6 +246,12 @@ most things are toggleable in `Settings → Inugram`, with sensible opinionated 
 - disable quick share (long-tap share button → send to frequent contact without confirmation)
 - disable auto-play when opening the pinned music player on a profile
 
+## 🐶 plugins (experimental, wip)
+
+- userscript-style js plugins running on a rust engine (rquickjs/quickjs-ng) — exposes `console.*`, `inu.info()`, and an rpc bridge (`inu.interceptRpc`/`inu.invokeRpc`/`inu.onUpdate`) gated by `@grant` permissions
+- plugins page in settings: engine toggle, install from file, enable/disable, reload, long-press reorder (middleware order)
+- "start in safe mode" launcher shortcut to boot without running any plugin
+
 ## 🐶 bugfixes (vs stock)
 
 - connection status title no longer gets stuck on "Updating..." when its transition animation is cancelled
