@@ -6,7 +6,14 @@ import android.graphics.drawable.Drawable
 import desu.inugram.InuConfig
 import desu.inugram.helpers.icons.SolarIconPack
 
-class IconsResources(resources: Resources) : Resources(resources.assets, resources.displayMetrics, resources.configuration) {
+class IconsResources(private val resources: Resources) : Resources(resources.assets, resources.displayMetrics, resources.configuration) {
+    override fun getText(id: Int): CharSequence {
+        return resources.getText(id)
+    }
+
+    override fun getText(id: Int, def: CharSequence?): CharSequence {
+        return resources.getText(id, def)
+    }
 
     fun syncConfigurationFrom(base: Resources) {
         if (configuration != base.configuration || displayMetrics != base.displayMetrics) {
