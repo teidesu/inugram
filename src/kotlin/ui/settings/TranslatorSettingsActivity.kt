@@ -9,10 +9,14 @@ import org.telegram.messenger.LocaleController
 import org.telegram.messenger.MessagesController
 import org.telegram.messenger.NotificationCenter
 import org.telegram.messenger.R
+import org.telegram.messenger.UserConfig
+import org.telegram.messenger.Utilities
 import org.telegram.ui.Cells.TextCheckCell
 import org.telegram.ui.Components.TranslateAlert2
 import org.telegram.ui.Components.UItem
 import org.telegram.ui.Components.UniversalAdapter
+import org.telegram.ui.Components.Premium.PremiumFeatureBottomSheet
+import org.telegram.ui.PremiumPreviewFragment
 import org.telegram.ui.RestrictedLanguagesSelectActivity
 
 class TranslatorSettingsActivity : SettingsPageActivity() {
@@ -37,6 +41,12 @@ class TranslatorSettingsActivity : SettingsPageActivity() {
                 TOGGLE_SHOW_TRANSLATE_CHAT_BUTTON,
                 LocaleController.getString(R.string.ShowTranslateChatButton),
             ).setChecked(translateController.isChatTranslateEnabled)
+                .setLocked(!UserConfig.getInstance(currentAccount).isPremium)
+                .onBind(Utilities.Callback { view ->
+                    (view as TextCheckCell).setCheckBoxIcon(
+                        if (UserConfig.getInstance(currentAccount).isPremium) 0 else R.drawable.permission_locked
+                    )
+                })
         )
         items.add(
             UItem.asButton(
@@ -114,6 +124,16 @@ class TranslatorSettingsActivity : SettingsPageActivity() {
 
             TOGGLE_SHOW_TRANSLATE_CHAT_BUTTON -> {
                 val new = !translateController.isChatTranslateEnabled
+                if (new && !UserConfig.getInstance(currentAccount).isPremium) {
+                    showDialog(
+                        PremiumFeatureBottomSheet(
+                            this,
+                            PremiumPreviewFragment.PREMIUM_FEATURE_TRANSLATIONS,
+                            false,
+                        )
+                    )
+                    return
+                }
                 translateController.isChatTranslateEnabled = new
                 (view as? TextCheckCell)?.isChecked = new
                 NotificationCenter.getInstance(currentAccount)
