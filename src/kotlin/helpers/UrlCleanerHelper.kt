@@ -5,8 +5,10 @@ import android.content.Context
 import android.net.Uri
 import android.text.Spannable
 import android.text.SpannableStringBuilder
+import android.text.style.SuggestionSpan
 import android.text.style.URLSpan
 import android.util.Log
+import android.view.inputmethod.BaseInputConnection
 import android.view.inputmethod.InputConnection
 import android.view.inputmethod.InputConnectionWrapper
 import android.widget.EditText
@@ -150,6 +152,12 @@ object UrlCleanerHelper {
             if (out == null) out = SpannableStringBuilder(text)
             out.replace(start + shift, end + shift, cleaned)
             shift += cleaned.length - (end - start)
+        }
+        if (out != null && out.length != text.length) {
+            BaseInputConnection.removeComposingSpans(out)
+            for (span in out.getSpans(0, out.length, SuggestionSpan::class.java)) {
+                out.removeSpan(span)
+            }
         }
         return out ?: text
     }
