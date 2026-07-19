@@ -9,6 +9,7 @@ Subject: md3-style sections redesign
  .../ui/Cells/TextDetailSettingsCell.java      |  8 ++--
  .../telegram/ui/Cells/TextSettingsCell.java   |  2 +-
  .../org/telegram/ui/ChatEditActivity.java     |  3 ++
+ .../telegram/ui/ChatRightsEditActivity.java   |  3 ++
  .../org/telegram/ui/ChatUsersActivity.java    |  6 +++
  .../telegram/ui/Components/ItemOptions.java   |  8 ++++
  .../ui/Components/RecyclerListView.java       | 40 +++++++++++++++----
@@ -17,7 +18,7 @@ Subject: md3-style sections redesign
  .../org/telegram/ui/PeerColorActivity.java    |  9 +++--
  .../org/telegram/ui/ProxyListActivity.java    |  5 ---
  .../org/telegram/ui/SettingsActivity.java     | 18 +++++++++
- 13 files changed, 125 insertions(+), 27 deletions(-)
+ 14 files changed, 128 insertions(+), 27 deletions(-)
 
 diff --git a/TMessagesProj/src/main/java/org/telegram/ui/Cells/TextCell.java b/TMessagesProj/src/main/java/org/telegram/ui/Cells/TextCell.java
 index 0000000..0000000 100644
@@ -187,6 +188,20 @@ index 0000000..0000000 100644
              setAvatarCell.setOnClickListener(v -> {
                  openSetPhotoAlert();
              });
+diff --git a/TMessagesProj/src/main/java/org/telegram/ui/ChatRightsEditActivity.java b/TMessagesProj/src/main/java/org/telegram/ui/ChatRightsEditActivity.java
+index 0000000..0000000 100644
+--- a/TMessagesProj/src/main/java/org/telegram/ui/ChatRightsEditActivity.java
++++ b/TMessagesProj/src/main/java/org/telegram/ui/ChatRightsEditActivity.java
+@@ -1918,6 +1918,9 @@ public class ChatRightsEditActivity extends BaseFragment implements Notification
+                 case VIEW_TYPE_HEADER_CELL:
+                     view = new HeaderCell(mContext, Theme.key_windowBackgroundWhiteBlueHeader, 21, 15, true);
+                     view.setBackgroundColor(Theme.getColor(Theme.key_windowBackgroundWhite));
++                    if (desu.inugram.helpers.theme.M3SectionsHelper.isEnabled()) {
++                        desu.inugram.helpers.theme.M3SectionsHelper.styleHeaderCell((HeaderCell) view);
++                    }
+                     break;
+                 case VIEW_TYPE_EXPANDABLE_SWITCH:
+                 case VIEW_TYPE_SWITCH_CELL:
 diff --git a/TMessagesProj/src/main/java/org/telegram/ui/ChatUsersActivity.java b/TMessagesProj/src/main/java/org/telegram/ui/ChatUsersActivity.java
 index 0000000..0000000 100644
 --- a/TMessagesProj/src/main/java/org/telegram/ui/ChatUsersActivity.java
