@@ -21,13 +21,12 @@ import org.telegram.messenger.NotificationCenter
 import org.telegram.ui.ActionBar.Theme
 import org.telegram.ui.LaunchActivity
 import kotlin.math.max
-import kotlin.math.min
 
 
 @RequiresApi(api = Build.VERSION_CODES.S)
 object MonetHelper {
     private const val DARK_NAME_SOFTEN_RATIO = 0.22f
-    private const val MAX_LIGHTNESS_PERCENT = 200
+    private val MODIFIER_REGEX = Regex("^([^(]+)\\(([^)]+)\\)?$")
     private val ids: HashMap<String?, Int?> = object : HashMap<String?, Int?>() {
         init {
             put("a1_0", android.R.color.system_accent1_0)
@@ -217,6 +216,10 @@ object MonetHelper {
             put("monetAvatarNameDarkPink", -0x38af75)
             put("monetRedCall", 0xFFEF5350.toInt())
             put("monetGreen", 0xFF4CAF50.toInt())
+            put("mRed200", 0xFFEF9A9A.toInt())
+            put("mRed800", 0xFFC62828.toInt())
+            put("mGreen200", 0xFFA5D6A7.toInt())
+            put("mGreen800", 0xFF2E7D32.toInt())
             put("monetYellow", 0xFFFFB74D.toInt())
             put("monetCodeKeyword", 0xFFE05356.toInt())
             put("monetCodeOperator", 0xFF4DBBFF.toInt())
@@ -273,41 +276,37 @@ object MonetHelper {
     @JvmStatic
     fun getColor(color: String?, key: String?): Int {
         try {
-            val rawColor = color?.trim { it <= ' ' } ?: ""
-            var working = rawColor
-            var alphaPercent: Int? = null
+            var working = color?.trim { it <= ' ' } ?: ""
+            var alphaPercent = 100
+            var saturationPercent = 100
+            var lightnessPercent = 100
 
-            val slashIdx = working.lastIndexOf('/')
-            if (slashIdx > 0 && slashIdx < working.length - 1) {
-                val suffix = working.substring(slashIdx + 1)
-                if (isDigitsOnly(suffix)) {
-                    alphaPercent = suffix.toInt()
-                    working = working.substring(0, slashIdx)
+            val match = MODIFIER_REGEX.find(working)
+            if (match != null) {
+                working = match.groupValues[1].trim()
+                for (part in match.groupValues[2].split(',')) {
+                    val kv = part.split('=')
+                    if (kv.size != 2) continue
+                    val value = kv[1].trim().toIntOrNull()?.coerceIn(0, 100) ?: continue
+                    when (kv[0].trim()) {
+                        "a" -> alphaPercent = value
+                        "s" -> saturationPercent = value
+                        "l" -> lightnessPercent = value
+                    }
                 }
             }
 
-            var baseColor = working
-            var lightnessPercentValue: String? = null
-
-            val lastUnderscore = working.lastIndexOf('_')
-            if (lastUnderscore > 0 && lastUnderscore < working.length - 1) {
-                val suffix = working.substring(lastUnderscore + 1)
-                val candidateBase = working.substring(0, lastUnderscore)
-                if (isDigitsOnly(suffix) && canResolveColor(candidateBase)) {
-                    baseColor = candidateBase
-                    lightnessPercentValue = suffix
-                }
+            var resolvedColor = resolveColor(working)
+            if (saturationPercent != 100) {
+                resolvedColor = ColorUtils.blendARGB(Color.WHITE, resolvedColor, saturationPercent / 100f)
             }
-
-            var resolvedColor = resolveColor(baseColor)
-            if (lightnessPercentValue != null) {
-                resolvedColor = scaleLightnessByPercent(resolvedColor, lightnessPercentValue.toInt())
+            if (lightnessPercent != 100) {
+                resolvedColor = ColorUtils.blendARGB(Color.BLACK, resolvedColor, lightnessPercent / 100f)
             }
-            if (alphaPercent != null) {
-                val normalized = max(0, min(alphaPercent, 100))
-                resolvedColor = ColorUtils.setAlphaComponent(resolvedColor, normalized * 255 / 100)
+            if (alphaPercent != 100) {
+                resolvedColor = ColorUtils.setAlphaComponent(resolvedColor, alphaPercent * 255 / 100)
             }
-            if (key != null && key in LINK_TEXT_KEYS && baseColor.startsWith("a") && isAccentPaletteNeutral()) {
+            if (key != null && key in LINK_TEXT_KEYS && working.startsWith("a") && isAccentPaletteNeutral()) {
                 return makeChromaticLink(resolvedColor)
             }
             return resolvedColor
@@ -331,11 +330,16 @@ object MonetHelper {
         return ColorUtils.setAlphaComponent(argb, Color.alpha(original))
     }
 
-    private fun canResolveColor(color: String?): Boolean {
-        return ids.containsKey(color) || customColors.containsKey(color) || semantic.containsKey(color)
-    }
+    private val aliases = hashMapOf(
+        "mRed500" to "monetRedCall",
+        "mGreen500" to "monetGreen",
+    )
 
     private fun resolveColor(color: String): Int {
+        aliases[color]?.let { return resolveColor(it) }
+        if (color == "mBlack") return Color.BLACK
+        if (color == "mWhite") return Color.WHITE
+
         val id = ids[color]
         if (id != null) {
             return ApplicationLoader.applicationContext.getColor(id)
@@ -414,28 +418,6 @@ object MonetHelper {
     private fun softenColorForDarkText(color: Int): Int {
         val neutralTextColor = resolveColor("n1_50")
         return ColorUtils.blendARGB(color, neutralTextColor, DARK_NAME_SOFTEN_RATIO)
-    }
-
-    private fun scaleLightnessByPercent(color: Int, percent: Int): Int {
-        val normalizedPercent = max(1, min(percent, MAX_LIGHTNESS_PERCENT))
-        if (normalizedPercent == 100) {
-            return color
-        }
-
-        val hsl = FloatArray(3)
-        ColorUtils.colorToHSL(color, hsl)
-        hsl[2] = max(0f, min(1f, hsl[2] * normalizedPercent / 100f))
-
-        return ColorUtils.setAlphaComponent(ColorUtils.HSLToColor(hsl), Color.alpha(color))
-    }
-
-    private fun isDigitsOnly(value: String): Boolean {
-        for (i in 0..<value.length) {
-            if (!Character.isDigit(value[i])) {
-                return false
-            }
-        }
-        return !value.isEmpty()
     }
 
     private fun getMonetSignature(): Long =
