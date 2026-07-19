@@ -342,7 +342,6 @@
 
     <string name="InuShowForwardTime">転送時刻を表示</string>
     <string name="InuCompactEdited">コンパクトな編集インジケーター</string>
-    <string name="InuCompactEditedInfo">「編集済み」ラベルの代わりに鉛筆アイコンを表示します</string>
 
     <string name="InuAddToStickersGifs">ステッカー/GIFに追加</string>
     <string name="InuLongTapAction">長押し動作</string>

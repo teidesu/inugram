@@ -341,7 +341,6 @@
 
     <string name="InuShowForwardTime">Показывать время пересылки</string>
     <string name="InuCompactEdited">Компактный индикатор изменения</string>
-    <string name="InuCompactEditedInfo">Показывать значок карандаша вместо надписи «изменено»</string>
 
     <string name="InuAddToStickersGifs">Добавить в стикеры/GIF</string>
     <string name="InuLongTapAction">Действие по долгому тапу</string>

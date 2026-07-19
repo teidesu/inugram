@@ -341,7 +341,6 @@
 
     <string name="InuShowForwardTime">显示转发时间</string>
     <string name="InuCompactEdited">紧凑编辑指示器</string>
-    <string name="InuCompactEditedInfo">用铅笔图标代替「已编辑」文字</string>
 
     <string name="InuAddToStickersGifs">添加到贴纸/GIF</string>
     <string name="InuLongTapAction">长按操作</string>

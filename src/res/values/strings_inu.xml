@@ -146,6 +146,10 @@
     <string name="InuStickerTimeModeHideIncoming">Hide only for incoming</string>
     <string name="InuStickerTimeModeHideCompletely">Hide completely</string>
     <string name="InuStickerSizeDialogMessage">good puppy!</string>
+    <string name="InuBubbleTails">Bubble tails</string>
+    <string name="InuMiscPreviewForwardedFrom">doggo</string>
+    <string name="InuMiscPreviewForwardedMessage">woof!! did you see this?</string>
+    <string name="InuMiscPreviewEditedMessage">pawsitively, no more typos</string>
     <string name="InuDeleteForBoth">\"Delete for both\" by default</string>
     <string name="InuDeleteForBothMessages">Messages</string>
     <string name="InuDeleteForBothDms">DM dialogs</string>
@@ -423,7 +427,6 @@
 
     <string name="InuShowForwardTime">Show forward time</string>
     <string name="InuCompactEdited">Compact edit indicator</string>
-    <string name="InuCompactEditedInfo">Show a pencil icon instead of the "edited" label</string>
 
     <string name="InuAddToStickersGifs">Add to Stickers/GIFs</string>
     <string name="InuLongTapAction">Long-tap action</string>
