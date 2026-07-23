@@ -73,6 +73,12 @@ class DialogsSettingsActivity : SettingsPageActivity() {
             ).setChecked(InuConfig.DISABLE_SWIPE_TO_UNARCHIVE.value)
         )
         items.add(
+            UItem.asCheck(
+                TOGGLE_DISABLE_SWIPE_TO_HIDE_GENERAL_TOPIC,
+                LocaleController.getString(R.string.InuDisableSwipeToHideGeneralTopic),
+            ).setChecked(InuConfig.DISABLE_SWIPE_TO_HIDE_GENERAL_TOPIC.value)
+        )
+        items.add(
             UItem.asCheck(TOGGLE_BOT_WEBVIEW_BUTTON, LocaleController.getString(R.string.InuHideBotWebView))
                 .setChecked(InuConfig.HIDE_BOT_WEBVIEW_DIALOGS.value)
         )
@@ -230,6 +236,11 @@ class DialogsSettingsActivity : SettingsPageActivity() {
                 (view as? TextCheckCell)?.isChecked = new
             }
 
+            TOGGLE_DISABLE_SWIPE_TO_HIDE_GENERAL_TOPIC -> {
+                val new = InuConfig.DISABLE_SWIPE_TO_HIDE_GENERAL_TOPIC.toggle()
+                (view as? TextCheckCell)?.isChecked = new
+            }
+
             TOGGLE_INTERACTIVE_CHAT_PREVIEW -> {
                 val new = InuConfig.INTERACTIVE_CHAT_PREVIEW.toggle()
                 (view as? NotificationsCheckCell)?.isChecked = new
@@ -329,6 +340,7 @@ class DialogsSettingsActivity : SettingsPageActivity() {
         private val TOGGLE_OLD_MENTION_INDICATOR = InuUtils.generateId()
         private val TOGGLE_OPEN_ARCHIVE_ON_PULL = InuUtils.generateId()
         private val TOGGLE_DISABLE_SWIPE_TO_UNARCHIVE = InuUtils.generateId()
+        private val TOGGLE_DISABLE_SWIPE_TO_HIDE_GENERAL_TOPIC = InuUtils.generateId()
         private val TOGGLE_BOTTOM_TABS_HIDE = InuUtils.generateId()
         private val TOGGLE_HIDE_CONTACTS_TAB = InuUtils.generateId()
         private val TOGGLE_COMPACT_MODE = InuUtils.generateId()
@@ -360,6 +372,7 @@ class DialogsSettingsActivity : SettingsPageActivity() {
                 SearchRegistry.Entry("old-mention-indicator", R.string.InuOldMentionIndicator, TOGGLE_OLD_MENTION_INDICATOR),
                 SearchRegistry.Entry("open-archive-on-pull", R.string.InuOpenArchiveOnPull, TOGGLE_OPEN_ARCHIVE_ON_PULL),
                 SearchRegistry.Entry("disable-swipe-to-unarchive", R.string.InuDisableSwipeToUnarchive, TOGGLE_DISABLE_SWIPE_TO_UNARCHIVE),
+                SearchRegistry.Entry("disable-swipe-to-hide-general-topic", R.string.InuDisableSwipeToHideGeneralTopic, TOGGLE_DISABLE_SWIPE_TO_HIDE_GENERAL_TOPIC),
                 SearchRegistry.Entry("hide-bot-webview-dialogs", R.string.InuHideBotWebView, TOGGLE_BOT_WEBVIEW_BUTTON),
                 SearchRegistry.Entry("disable-chat-preview-expand", R.string.InuDisableChatPreviewExpand, TOGGLE_INTERACTIVE_CHAT_PREVIEW),
                 SearchRegistry.Entry("community-display-mode", R.string.InuCommunityDisplayMode, BUTTON_COMMUNITY_DISPLAY_MODE),

@@ -182,6 +182,7 @@ most things are toggleable in `Settings → Inugram`, with sensible opinionated 
 - predictive back mode selector
 - disable pull-to-next-channel
 - disable swipe-to-unarchive
+- 🐶 disable swipe-to-hide the General topic in the forum topics list
 - disable instant camera in attachments
 - disable motion photos (rendering + detection, in picker and in messages)
 - disable notification chat bubbles

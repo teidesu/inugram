@@ -1,0 +1,23 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: alina sireneva <alina@tei.pet>
+Date: Thu, 23 Jul 2026 07:08:00 +0400
+Subject: disable swipe to hide the General topic
+
+---
+ .../src/main/java/org/telegram/ui/TopicsFragment.java          | 3 +++
+ 1 file changed, 3 insertions(+)
+
+diff --git a/TMessagesProj/src/main/java/org/telegram/ui/TopicsFragment.java b/TMessagesProj/src/main/java/org/telegram/ui/TopicsFragment.java
+index 0000000..0000000 100644
+--- a/TMessagesProj/src/main/java/org/telegram/ui/TopicsFragment.java
++++ b/TMessagesProj/src/main/java/org/telegram/ui/TopicsFragment.java
+@@ -2452,6 +2452,9 @@ public class TopicsFragment extends BaseFragment implements NotificationCenter.N
+                 return makeMovementFlags(0, 0);
+             }
+             TLRPC.TL_forumTopic topic = forumTopics.get(position).topic;
++            if (topic.id == 1 && desu.inugram.InuConfig.DISABLE_SWIPE_TO_HIDE_GENERAL_TOPIC.getValue()) {
++                return makeMovementFlags(0, 0);
++            }
+             if (selectedTopics.isEmpty() && viewHolder.itemView instanceof TopicDialogCell && topic.id == 1) {
+                 TopicDialogCell dialogCell = (TopicDialogCell) viewHolder.itemView;
+                 swipeFolderBack = false;

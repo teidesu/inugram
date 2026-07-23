@@ -253,6 +253,9 @@ object InuConfig {
     val DISABLE_SWIPE_TO_UNARCHIVE = BoolItem("disable_swipe_to_unarchive", true)
 
     @JvmField
+    val DISABLE_SWIPE_TO_HIDE_GENERAL_TOPIC = BoolItem("disable_swipe_to_hide_general_topic", true)
+
+    @JvmField
     val OPEN_ARCHIVE_ON_PULL = BoolItem("open_archive_on_pull", false)
 
     @JvmField

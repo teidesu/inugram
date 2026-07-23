@@ -71,6 +71,7 @@
     <string name="InuHideCustomTheme">Hide custom theme</string>
     <string name="InuShowCustomTheme">Show custom theme</string>
     <string name="InuDisableSwipeToUnarchive">Disable swipe to unarchive</string>
+    <string name="InuDisableSwipeToHideGeneralTopic">Disable swipe to hide General topic</string>
     <string name="InuResetStorage">Reset storage</string>
     <string name="InuResetStorageConfirm">This will wipe local auth keys and caches to reset the pending authentication. Are you sure?</string>
     <string name="InuHideBottomBar">Hide bottom bar</string>
