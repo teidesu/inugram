@@ -238,3 +238,4 @@ bugfix/file-load-cancel-stuck.patch
 feature/hide-bubble-tails.patch
 bugfix/ime-insets-animation-desync.patch
 debloat/disable-swipe-to-hide-general-topic.patch
+bugfix/list-row-dead-zones.patch

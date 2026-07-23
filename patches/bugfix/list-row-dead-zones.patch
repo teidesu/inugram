@@ -1,0 +1,36 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: alina sireneva <alina@tei.pet>
+Date: Thu, 23 Jul 2026 07:36:20 +0400
+Subject: fix dead zones in list rows from hidden clickable children.
+
+---
+ .../src/main/java/org/telegram/ui/Cells/UserCell.java          | 1 +
+ .../main/java/org/telegram/ui/Components/RecyclerListView.java | 3 +++
+ 2 files changed, 4 insertions(+)
+
+diff --git a/TMessagesProj/src/main/java/org/telegram/ui/Cells/UserCell.java b/TMessagesProj/src/main/java/org/telegram/ui/Cells/UserCell.java
+index 0000000..0000000 100644
+--- a/TMessagesProj/src/main/java/org/telegram/ui/Cells/UserCell.java
++++ b/TMessagesProj/src/main/java/org/telegram/ui/Cells/UserCell.java
+@@ -318,6 +318,7 @@ public class UserCell extends FrameLayout implements NotificationCenter.Notifica
+             adminTextView.setTranslationX(0);
+             adminTextView.setBackground(null);
+             adminTextView.setOnClickListener(onClick);
++            adminTextView.setClickable(onClick != null && role != null);
+         }
+         adminTextView.setVisibility(role != null || canAddTag ? VISIBLE : GONE);
+         if (role != null || canAddTag) {
+diff --git a/TMessagesProj/src/main/java/org/telegram/ui/Components/RecyclerListView.java b/TMessagesProj/src/main/java/org/telegram/ui/Components/RecyclerListView.java
+index 0000000..0000000 100644
+--- a/TMessagesProj/src/main/java/org/telegram/ui/Components/RecyclerListView.java
++++ b/TMessagesProj/src/main/java/org/telegram/ui/Components/RecyclerListView.java
+@@ -1236,6 +1236,9 @@ public class RecyclerListView extends RecyclerView implements IBlur3Capture {
+                     final int count = viewGroup.getChildCount();
+                     for (int i = count - 1; i >= 0; i--) {
+                         final View child = viewGroup.getChildAt(i);
++                        if (child.getVisibility() != VISIBLE) {
++                            continue;
++                        }
+                         if (x >= child.getLeft() && x <= child.getRight() && y >= child.getTop() && y <= child.getBottom()) {
+                             if (child.isClickable()) {
+                                 // todo: recursion search ???
