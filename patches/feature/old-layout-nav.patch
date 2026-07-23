@@ -125,7 +125,7 @@ index 0000000..0000000 100644
          fragmentSearchFieldWatcher.setDoNotCloseAfterFieldEmpty();
  
 -        if (initialDialogsType == DIALOGS_TYPE_DEFAULT) {
-+        if (initialDialogsType == DIALOGS_TYPE_DEFAULT && !(desu.inugram.InuConfig.NAVIGATION_DRAWER.getValue() && !isArchive())) {
++        if (initialDialogsType == DIALOGS_TYPE_DEFAULT && !(desu.inugram.InuConfig.NAVIGATION_DRAWER.getValue() && !isArchive() && communityId == 0)) {
              optionsItem = menu.addItem(4, R.drawable.ic_ab_other);
              optionsItem.setContentDescription(LocaleController.getString(R.string.AccDescrMoreOptions));
              optionsItem.setOnClickListener(v -> {
@@ -146,7 +146,7 @@ index 0000000..0000000 100644
                  }
                  if (id == -1) {
 +                    if (!hasMainTabs && !actionBar.isActionModeShowed() && desu.inugram.InuConfig.NAVIGATION_DRAWER.getValue()
-+                            && folderId == 0 && searchString == null
++                            && folderId == 0 && communityId == 0 && searchString == null
 +                            && desu.inugram.helpers.dialogs.DrawerHelper.INSTANCE.toggleDrawer(parentLayout)) {
 +                        return;
 +                    }
