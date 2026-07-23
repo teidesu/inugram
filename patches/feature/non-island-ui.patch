@@ -1,14 +1,14 @@
 From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
-From: alina sireneva <alina@tei.su>
-Date: Thu, 16 Apr 2026 08:47:27 +0300
+From: alina sireneva <alina@tei.pet>
+Date: Thu, 23 Jul 2026 12:29:15 +0400
 Subject: non-island ui in various parts of the app
 
 ---
  .../org/telegram/ui/ActionBar/ActionBar.java  |  45 +++---
  .../ui/ActionBar/ActionBarLayout.java         |   2 +-
  .../telegram/ui/ChannelAdminLogActivity.java  |  21 ++-
- .../java/org/telegram/ui/ChatActivity.java    | 109 ++++++++-----
- .../ui/Components/ChatActivityEnterView.java  |  27 ++--
+ .../java/org/telegram/ui/ChatActivity.java    | 125 +++++++++------
+ .../ui/Components/ChatActivityEnterView.java  |  58 ++++---
  ...ChatActivityEnterViewAnimatedIconView.java |  17 +-
  .../ChatActivityTopPanelLayout.java           |  16 +-
  .../ui/Components/ChatAttachAlert.java        |  20 +++
@@ -37,7 +37,7 @@ Subject: non-island ui in various parts of the app
  .../java/org/telegram/ui/bots/BotAdView.java  |   2 +-
  .../ui/bots/BotCommandsMenuContainer.java     |   4 +-
  .../bots/ChatAttachAlertBotWebViewLayout.java |   5 +-
- 33 files changed, 607 insertions(+), 220 deletions(-)
+ 33 files changed, 634 insertions(+), 240 deletions(-)
 
 diff --git a/TMessagesProj/src/main/java/org/telegram/ui/ActionBar/ActionBar.java b/TMessagesProj/src/main/java/org/telegram/ui/ActionBar/ActionBar.java
 index 0000000..0000000 100644
@@ -223,6 +223,24 @@ index 0000000..0000000 100644
  import me.vkryl.android.animator.BoolAnimator;
  import me.vkryl.android.animator.FactorAnimator;
  import me.vkryl.core.BitwiseUtils;
+@@ -598,7 +599,7 @@ public class ChatActivity extends BaseFragment implements
+     private Runnable hideAlertViewRunnable;
+     private TextView alertNameTextView;
+     private TextView alertTextView;
+-    private final int searchContainerHeight = 44;
++    private final int searchContainerHeight = ChatActivityEnterView.DEFAULT_HEIGHT;
+     private FrameLayout searchContainer;
+     private ImageView searchCalendarButton;
+     private ImageView searchUserButton;
+@@ -2560,7 +2561,7 @@ public class ChatActivity extends BaseFragment implements
+             scheduledOrNoSoundHint = new HintView(getParentActivity(), 4, themeDelegate) {
+                 @Override
+                 protected int offsetCx() {
+-                    return dp(100 - 44) / 2;
++                    return dp(100 - ChatActivityEnterView.DEFAULT_HEIGHT) / 2;
+                 }
+             };
+             scheduledOrNoSoundHint.createCloseButton();
 @@ -2613,9 +2614,9 @@ public class ChatActivity extends BaseFragment implements
              glassBackgroundSourceFrostedRenderNode.setUnderSource(navbarContentSourceWallpaper);
  
@@ -315,12 +333,21 @@ index 0000000..0000000 100644
          chatActivityEnterView.setSuggestionButtonVisible(ChatObject.isMonoForum(currentChat), false);
  
          chatActivityEnterTopView = new ChatActivityEnterTopView(context) {
+@@ -8333,7 +8335,7 @@ public class ChatActivity extends BaseFragment implements
+         bottomOverlay.setFocusable(true);
+         bottomOverlay.setFocusableInTouchMode(true);
+         bottomOverlay.setClickable(true);
+-        chatInputBubbleContainer.addView(bottomOverlay, LayoutHelper.createFrame(LayoutHelper.MATCH_PARENT, 44, Gravity.BOTTOM, 7, 0, 7, 0));
++        chatInputBubbleContainer.addView(bottomOverlay, LayoutHelper.createFrame(LayoutHelper.MATCH_PARENT, ChatActivityEnterView.DEFAULT_HEIGHT, Gravity.BOTTOM, 7, 0, 7, 0));
+ 
+         bottomOverlayText = new TextView(context);
+         bottomOverlayText.setTextSize(TypedValue.COMPLEX_UNIT_DIP, 14);
 @@ -8420,7 +8422,7 @@ public class ChatActivity extends BaseFragment implements
              chatInputViewsContainer.setInputBubbleOffsets(l, r);
          });
  
 -        chatInputBubbleContainer.addView(bottomChannelButtonsLayout, LayoutHelper.createFrame(LayoutHelper.MATCH_PARENT, 56, Gravity.BOTTOM, 0, 0, 0, (44 - 56) / 2));
-+        chatInputBubbleContainer.addView(bottomChannelButtonsLayout, LayoutHelper.createFrame(LayoutHelper.MATCH_PARENT, 56, Gravity.BOTTOM, 0, 0, 0, (44 - 56) / 2 - (NonIslandHelper.chatElements() ? 10 : 0)));
++        chatInputBubbleContainer.addView(bottomChannelButtonsLayout, LayoutHelper.createFrame(LayoutHelper.MATCH_PARENT, 56, Gravity.BOTTOM, 0, 0, 0, (ChatActivityEnterView.DEFAULT_HEIGHT - 56) / 2 - (NonIslandHelper.chatElements() ? 10 : 0)));
  
          bottomOverlayStartButton = new TextView(context) {
              CellFlickerDrawable cellFlickerDrawable;
@@ -405,6 +432,24 @@ index 0000000..0000000 100644
  
          searchExpandList = new AnimatedTextView(getContext(), true, false, true);
          searchExpandList.setAnimationProperties(0, 0, 420, CubicBezierInterpolator.EASE_OUT_QUINT);
+@@ -10514,7 +10525,7 @@ public class ChatActivity extends BaseFragment implements
+             searchUserButton.setImageResource(R.drawable.msg_usersearch);
+             searchUserButton.setColorFilter(new PorterDuffColorFilter(getThemedColor(Theme.key_chat_searchPanelIcons), PorterDuff.Mode.MULTIPLY));
+             searchUserButton.setBackgroundDrawable(Theme.createSelectorDrawable(getThemedColor(Theme.key_actionBarActionModeDefaultSelector), 1));
+-            searchContainer.addView(searchUserButton, LayoutHelper.createFrame(44, 44, Gravity.LEFT | Gravity.TOP, 48, 0, 0, 0));
++            searchContainer.addView(searchUserButton, LayoutHelper.createFrame(ChatActivityEnterView.DEFAULT_HEIGHT, ChatActivityEnterView.DEFAULT_HEIGHT, Gravity.LEFT | Gravity.TOP, 48, 0, 0, 0));
+             searchUserButton.setOnClickListener(view -> {
+                 if (mentionContainer != null) {
+                     mentionContainer.setReversed(true);
+@@ -10540,7 +10551,7 @@ public class ChatActivity extends BaseFragment implements
+             searchCalendarButton.setImageResource(R.drawable.msg_calendar);
+             searchCalendarButton.setColorFilter(new PorterDuffColorFilter(getThemedColor(Theme.key_chat_searchPanelIcons), PorterDuff.Mode.MULTIPLY));
+             searchCalendarButton.setBackgroundDrawable(Theme.createSelectorDrawable(getThemedColor(Theme.key_actionBarActionModeDefaultSelector), 1));
+-            searchContainer.addView(searchCalendarButton, LayoutHelper.createFrame(44, 44, Gravity.LEFT | Gravity.TOP, 2.66f, 0, 0, 0));
++            searchContainer.addView(searchCalendarButton, LayoutHelper.createFrame(ChatActivityEnterView.DEFAULT_HEIGHT, ChatActivityEnterView.DEFAULT_HEIGHT, Gravity.LEFT | Gravity.TOP, 2.66f, 0, 0, 0));
+             searchCalendarButton.setOnClickListener(view -> {
+                 if (getParentActivity() == null) {
+                     return;
 @@ -10835,13 +10846,13 @@ public class ChatActivity extends BaseFragment implements
              float baseTranslationY2 = -windowInsetsStateHolder.getAnimatedMaxBottomInset()
                  - chatInputViewsContainer.getInputBubbleHeight()
@@ -601,6 +646,27 @@ index 0000000..0000000 100644
          }
      }
  
+@@ -46142,9 +46162,9 @@ public class ChatActivity extends BaseFragment implements
+ 
+     private float calculateInputIslandHeight(boolean target) {
+         final float enterViewIslandHeight = Math.max(
+-            chatActivityEnterView != null ? chatActivityEnterView.getIslandTotalHeight(target): 0, dp(44));
++            chatActivityEnterView != null ? chatActivityEnterView.getIslandTotalHeight(target): 0, dp(ChatActivityEnterView.DEFAULT_HEIGHT));
+ 
+-        final float defaultIslandHeight = dp(44);
++        final float defaultIslandHeight = dp(ChatActivityEnterView.DEFAULT_HEIGHT);
+         final float enterViewFactor;
+         float visibility;
+         float pollAddVisibility;
+@@ -46160,7 +46180,7 @@ public class ChatActivity extends BaseFragment implements
+         }
+ 
+         if (!isInsideContainer && !isInPreviewMode()) {
+-            return lerp(Math.max(lerp(defaultIslandHeight, enterViewIslandHeight, enterViewFactor) * visibility, dp(44)), -dp(7), pollAddVisibility);
++            return lerp(Math.max(lerp(defaultIslandHeight, enterViewIslandHeight, enterViewFactor) * visibility, dp(ChatActivityEnterView.DEFAULT_HEIGHT)), -dp(7), pollAddVisibility);
+         } else {
+             return lerp(defaultIslandHeight, enterViewIslandHeight, enterViewFactor) * visibility;
+         }
 @@ -46178,10 +46198,15 @@ public class ChatActivity extends BaseFragment implements
              return;
          }
@@ -652,6 +718,37 @@ diff --git a/TMessagesProj/src/main/java/org/telegram/ui/Components/ChatActivity
 index 0000000..0000000 100644
 --- a/TMessagesProj/src/main/java/org/telegram/ui/Components/ChatActivityEnterView.java
 +++ b/TMessagesProj/src/main/java/org/telegram/ui/Components/ChatActivityEnterView.java
+@@ -2623,7 +2623,7 @@ public class ChatActivityEnterView extends FrameLayout implements
+             @Override
+             protected void onMeasure(int widthMeasureSpec, int heightMeasureSpec) {
+                 super.onMeasure(widthMeasureSpec, heightMeasureSpec);
+-                final int height = Math.max(dp(44), getMeasuredHeight());
++                final int height = Math.max(dp(DEFAULT_HEIGHT), getMeasuredHeight());
+                 if (animatorInputFieldHeight.getFactor() > 0) {
+                     animatorInputFieldHeight.animateTo(height);
+                 } else {
+@@ -2676,10 +2676,10 @@ public class ChatActivityEnterView extends FrameLayout implements
+         };
+         emojiButton.setContentDescription(getString(R.string.AccDescrEmojiButton));
+         emojiButton.setFocusable(true);
+-        int padding = dp(7.5f);
++        int padding = dp(inu_ICON_PADDING);
+         emojiButton.setPadding(padding, padding, padding, padding);
+         emojiButton.setColorFilter(new PorterDuffColorFilter(getThemedColor(Theme.key_glass_defaultIcon), PorterDuff.Mode.SRC_IN));
+-        emojiButton.setBackground(Theme.createInsetRoundRectDrawable(getThemedColor(Theme.key_listSelector), dp(19), dp(1), dp(3)));
++        emojiButton.setBackground(desu.inugram.helpers.theme.NonIslandHelper.createInputButtonSelector(getThemedColor(Theme.key_listSelector)));
+         emojiButton.setOnClickListener(v -> {
+             if (adjustPanLayoutHelper != null && adjustPanLayoutHelper.animationInProgress()) {
+                 return;
+@@ -2720,7 +2720,7 @@ public class ChatActivityEnterView extends FrameLayout implements
+         deleteRichDraftButton.setScaleType(ImageView.ScaleType.CENTER);
+         deleteRichDraftButton.setImageResource(R.drawable.menu_delete_old);
+         deleteRichDraftButton.setColorFilter(new PorterDuffColorFilter(getThemedColor(Theme.key_glass_defaultIcon), PorterDuff.Mode.SRC_IN));
+-        deleteRichDraftButton.setBackground(Theme.createInsetRoundRectDrawable(getThemedColor(Theme.key_listSelector), dp(19), dp(1), dp(3)));
++        deleteRichDraftButton.setBackground(desu.inugram.helpers.theme.NonIslandHelper.createInputButtonSelector(getThemedColor(Theme.key_listSelector)));
+         deleteRichDraftButton.setVisibility(View.GONE);
+         deleteRichDraftButton.setContentDescription(getString(R.string.ArticleDeleteDraft));
+         deleteRichDraftButton.setOnClickListener(v -> {
 @@ -3202,7 +3202,9 @@ public class ChatActivityEnterView extends FrameLayout implements
  
                      canvas.save();
@@ -663,7 +760,7 @@ index 0000000..0000000 100644
                      canvas.restore();
                  }
                  super.dispatchDraw(canvas);
-@@ -3387,7 +3389,7 @@ public class ChatActivityEnterView extends FrameLayout implements
+@@ -3387,13 +3389,13 @@ public class ChatActivityEnterView extends FrameLayout implements
          cameraOutline = getResources().getDrawable(R.drawable.input_video).mutate();
          cameraOutline.setColorFilter(new PorterDuffColorFilter(getThemedColor(Theme.key_glass_defaultIcon), PorterDuff.Mode.MULTIPLY));
  
@@ -672,16 +769,40 @@ index 0000000..0000000 100644
              private final Rect tmpRectF = new Rect();
              @Override
              public void draw(@NonNull Canvas canvas) {
+                 if (audioVideoButtonContainerForbidden) {
+                     tmpRectF.set(0, 0, getMeasuredWidth(), getMeasuredHeight());
+-                    tmpRectF.inset(dp(7.5f), dp(7.5f));
++                    tmpRectF.inset(dp(inu_ICON_PADDING), dp(inu_ICON_PADDING));
+                     Drawable d = getCurrentState() == State.VIDEO ? cameraOutline : micOutline;
+                     d.setBounds(tmpRectF);
+                     d.draw(canvas);
 @@ -3405,7 +3407,7 @@ public class ChatActivityEnterView extends FrameLayout implements
          audioVideoSendButton.setImportantForAccessibility(View.IMPORTANT_FOR_ACCESSIBILITY_NO);
  //        audioVideoSendButton.setFocusable(true);
  //        audioVideoSendButton.setAccessibilityDelegate(mediaMessageButtonsDelegate);
 -        padding = dp(10f);
-+        padding = dp(desu.inugram.helpers.theme.NonIslandHelper.chatElements() ? 7.5f : 10f);
++        padding = dp(desu.inugram.helpers.theme.NonIslandHelper.chatElements() ? inu_ICON_PADDING : 10f);
          audioVideoSendButton.setPadding(padding, padding, padding, padding);
          audioVideoButtonContainer.addView(audioVideoSendButton, LayoutHelper.createFrame(DEFAULT_HEIGHT, DEFAULT_HEIGHT));
  
-@@ -4650,7 +4652,8 @@ public class ChatActivityEnterView extends FrameLayout implements
+@@ -3435,7 +3437,7 @@ public class ChatActivityEnterView extends FrameLayout implements
+             }
+         });
+ 
+-        sendButton = new SendButton(context, isInScheduleMode() ? R.drawable.input_schedule : R.drawable.send_plane_24, resourcesProvider, true) {
++        sendButton = new SendButton(context, isInScheduleMode() ? R.drawable.input_schedule : desu.inugram.helpers.theme.NonIslandHelper.chatSendIcon(), resourcesProvider, !desu.inugram.helpers.theme.NonIslandHelper.chatElements()) {
+             @Override
+             public boolean isInScheduleMode() {
+                 return ChatActivityEnterView.this.isInScheduleMode();
+@@ -3469,6 +3471,7 @@ public class ChatActivityEnterView extends FrameLayout implements
+         sendButton.setScaleY(0.1f);
+         sendButton.setAlpha(0.0f);
+         sendButtonContainer.addView(sendButton, LayoutHelper.createFrame(100, DEFAULT_HEIGHT, Gravity.RIGHT | Gravity.BOTTOM));
++        desu.inugram.helpers.theme.NonIslandHelper.applySendButtonRipple(sendButton, 100, getThemedColor(Theme.key_listSelector));
+         sendButton.setOnClickListener(view -> {
+             if ((messageSendPreview != null && messageSendPreview.isShowing()) || (runningAnimationAudio != null && runningAnimationAudio.isRunning()) || moveToSendStateRunnable != null) {
+                 return;
+@@ -4650,7 +4653,8 @@ public class ChatActivityEnterView extends FrameLayout implements
                  canvas.clipRect(0, separatorY, getMeasuredWidth(), getMeasuredHeight());
              }
              if (child == topView) {
@@ -691,7 +812,37 @@ index 0000000..0000000 100644
              }
          }
          boolean result = super.drawChild(canvas, child, drawingTime);
-@@ -6440,7 +6443,7 @@ public class ChatActivityEnterView extends FrameLayout implements
+@@ -5774,7 +5778,7 @@ public class ChatActivityEnterView extends FrameLayout implements
+         messageEditText.setMaxLines(desu.inugram.InuConfig.CHAT_INPUT_MAX_LINES.getValue());
+         messageEditText.setTextSize(TypedValue.COMPLEX_UNIT_DIP, 18);
+         messageEditText.setGravity(Gravity.BOTTOM);
+-        messageEditText.setPadding(0, dp(9), 0, dp(10));
++        messageEditText.setPadding(0, dp(inu_FIELD_PADDING_TOP), 0, dp(inu_FIELD_PADDING_BOTTOM));
+         messageEditText.setBackgroundDrawable(null);
+         messageEditText.setTextColor(getThemedColor(Theme.key_chat_messagePanelText));
+         messageEditText.setLinkTextColor(getThemedColor(Theme.key_chat_messageLinkOut));
+@@ -5790,7 +5794,7 @@ public class ChatActivityEnterView extends FrameLayout implements
+         richDraftPreview.setMaxHeight(dp(150));
+         richDraftPreview.setMinHeight(dp(DEFAULT_HEIGHT + DEFAULT_HEIGHT));
+         richDraftPreview.setVisibility(View.GONE);
+-        richDraftPreview.setPadding(dp(8), dp(9), dp(8), dp(10));
++        richDraftPreview.setPadding(dp(8), dp(inu_FIELD_PADDING_TOP), dp(8), dp(inu_FIELD_PADDING_BOTTOM));
+         richDraftPreview.setOnClickListener(v -> openRichEditor());
+         messageEditTextContainer.addView(richDraftPreview, 2, LayoutHelper.createFrame(LayoutHelper.MATCH_PARENT, LayoutHelper.WRAP_CONTENT, Gravity.BOTTOM, 52 - 8, 0, (isChat ? 50 : 2) - 8, 1.5f));
+         messageEditText.setOnKeyListener(new OnKeyListener() {
+@@ -6430,7 +6434,10 @@ public class ChatActivityEnterView extends FrameLayout implements
+         }
+     }
+ 
+-    public static final int DEFAULT_HEIGHT = 44;
++    public static int DEFAULT_HEIGHT = 44;
++    public static int inu_FIELD_PADDING_TOP = 9;
++    public static int inu_FIELD_PADDING_BOTTOM = 10;
++    public static float inu_ICON_PADDING = 7.5f;
+ 
+     private boolean resizeForTopViewLastShow;
+     private void resizeForTopView(boolean show) {
+@@ -6440,11 +6447,11 @@ public class ChatActivityEnterView extends FrameLayout implements
  
          LayoutParams layoutParams = (LayoutParams) textFieldContainer.getLayoutParams();
          layoutParams.topMargin = (show ? topView.getLayoutParams().height : 0);
@@ -700,7 +851,12 @@ index 0000000..0000000 100644
          textFieldContainer.setLayoutParams(layoutParams);
  
          resizeForTopViewLastShow = show;
-@@ -6539,7 +6542,7 @@ public class ChatActivityEnterView extends FrameLayout implements
+-        setMinimumHeight(dp(44) + (show ? topView.getLayoutParams().height : 0));
++        setMinimumHeight(dp(DEFAULT_HEIGHT) + (show ? topView.getLayoutParams().height : 0));
+         if (stickersExpanded) {
+             if (searchingType == 0) {
+                 setStickersExpanded(false, true, false);
+@@ -6539,7 +6546,7 @@ public class ChatActivityEnterView extends FrameLayout implements
  
          audioVideoButtonContainer.setAlpha(audioVideoButtonContainerForbidden ? 0.5f : 1.0f);
          audioVideoButtonContainer.invalidate();
@@ -709,7 +865,16 @@ index 0000000..0000000 100644
              getThemedColor(Theme.key_glass_defaultIcon) : Color.WHITE, PorterDuff.Mode.SRC_IN));
          audioVideoSendButton.invalidate();
          updateFieldHint(false);
-@@ -9182,8 +9185,8 @@ public class ChatActivityEnterView extends FrameLayout implements
+@@ -8719,7 +8726,7 @@ public class ChatActivityEnterView extends FrameLayout implements
+         slowModeButton.setVisibility(visible ? VISIBLE : GONE);
+         int padding = visible ? dp(slowModeButton.isPremiumMode ? 26 : 16) : 0;
+         if (messageEditText != null && messageEditText.getPaddingRight() != padding) {
+-            messageEditText.setPadding(0, dp(9), padding, dp(10));
++            messageEditText.setPadding(0, dp(inu_FIELD_PADDING_TOP), padding, dp(inu_FIELD_PADDING_BOTTOM));
+         }
+     }
+ 
+@@ -9182,8 +9189,8 @@ public class ChatActivityEnterView extends FrameLayout implements
  
                      FrameLayout.LayoutParams newLayoutParams = new FrameLayout.LayoutParams(parent.getMeasuredWidth() - (editingMessageObject == null ? Math.max(0, sendButton.width() - dp(DEFAULT_HEIGHT)) : 0), dp(DEFAULT_HEIGHT));
                      newLayoutParams.gravity = Gravity.BOTTOM;
@@ -720,7 +885,31 @@ index 0000000..0000000 100644
                      sizeNotifierLayout.addView(recordedAudioPanel, newLayoutParams);
                      videoTimelineView.setVisibility(GONE);
                  } else {
-@@ -15517,9 +15520,11 @@ public class ChatActivityEnterView extends FrameLayout implements
+@@ -10364,8 +10371,9 @@ public class ChatActivityEnterView extends FrameLayout implements
+         emojiButton.setColorFilter(new PorterDuffColorFilter(getThemedColor(Theme.key_glass_defaultIcon), PorterDuff.Mode.SRC_IN));
+         emojiButton.setBackground(Theme.createSelectorDrawable(getThemedColor(Theme.key_listSelector)));
+         deleteRichDraftButton.setColorFilter(new PorterDuffColorFilter(getThemedColor(Theme.key_glass_defaultIcon), PorterDuff.Mode.SRC_IN));
+-        deleteRichDraftButton.setBackground(Theme.createInsetRoundRectDrawable(getThemedColor(Theme.key_listSelector), dp(19), dp(1), dp(3)));
++        deleteRichDraftButton.setBackground(desu.inugram.helpers.theme.NonIslandHelper.createInputButtonSelector(getThemedColor(Theme.key_listSelector)));
+         sendOutlineView.setColorFilter(getThemedColor(Theme.key_telegram_color), PorterDuff.Mode.SRC_IN);
++        desu.inugram.helpers.theme.NonIslandHelper.applySendButtonRipple(sendButton, 100, getThemedColor(Theme.key_listSelector));
+     }
+ 
+     private void updateRecordedDeleteIconColors() {
+@@ -15074,10 +15082,12 @@ public class ChatActivityEnterView extends FrameLayout implements
+             final float appear = this.appear.set(1);
+             if (openProgress < 1) {
+                 canvas.save();
++                if (!desu.inugram.helpers.theme.NonIslandHelper.chatElements()) {
+                 canvas.translate(-dp(24) * (1f - appear), dp(24) * (1f - appear));
+                 final float s = lerp(0.35f, 1.0f, appear);
+                 canvas.scale(s, s, x + drawable.getIntrinsicWidth() / 2f, y + drawable.getIntrinsicHeight() / 2f);
+                 canvas.rotate(60 * (1f - appear), x + drawable.getIntrinsicWidth() / 2f, y + drawable.getIntrinsicHeight() / 2f);
++                }
+                 drawable.setBounds(x, y, x + drawable.getIntrinsicWidth(), y + drawable.getIntrinsicHeight());
+                 drawable.setAlpha((int) (0xFF * (1.0f - priceProgress)));
+                 drawable.draw(canvas);
+@@ -15517,9 +15527,11 @@ public class ChatActivityEnterView extends FrameLayout implements
          final float visibility = animatorTopViewVisibility.getFloatValue();
  
          if (topView != null) {

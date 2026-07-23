@@ -4,6 +4,7 @@ import android.graphics.Canvas
 import android.graphics.Rect
 import android.graphics.drawable.Drawable
 import android.graphics.drawable.GradientDrawable
+import android.view.View
 import android.widget.FrameLayout
 import android.widget.TextView
 import androidx.core.view.isVisible
@@ -11,8 +12,10 @@ import desu.inugram.InuConfig
 import desu.inugram.ui.BlurBehindHelper
 import org.telegram.messenger.AndroidUtilities
 import org.telegram.messenger.AndroidUtilities.dp
+import org.telegram.messenger.R
 import org.telegram.ui.ActionBar.INavigationLayout
 import org.telegram.ui.ActionBar.Theme
+import org.telegram.ui.Components.ChatActivityEnterView
 import org.telegram.ui.Components.ChatActivityTopPanelLayout
 import org.telegram.ui.Components.FilterTabsView
 import org.telegram.ui.Components.FragmentSearchField
@@ -35,6 +38,29 @@ object NonIslandHelper {
 
     @JvmStatic
     fun chatElements(): Boolean = InuConfig.NON_ISLAND_CHAT_ELEMENTS.value
+
+    @JvmStatic
+    fun chatInputRowHeight(): Int = if (chatElements()) 48 else 44
+
+    @JvmStatic
+    fun chatSendIcon(): Int = if (chatElements()) R.drawable.ic_send else R.drawable.send_plane_24
+
+    @JvmStatic
+    fun createInputButtonSelector(color: Int): Drawable =
+        if (chatElements()) Theme.createSelectorDrawable(color)
+        else Theme.createInsetRoundRectDrawable(color, dp(19f).toFloat(), dp(1f), dp(3f))
+
+    @JvmStatic
+    fun applySendButtonRipple(button: View, frameWidthDp: Int, color: Int) {
+        if (!chatElements()) return
+        val box = dp(ChatActivityEnterView.DEFAULT_HEIGHT.toFloat())
+        val inset = dp(3f)
+        button.background = Theme.createInsetRoundRectDrawable(
+            color,
+            (box - inset * 2) / 2f,
+            dp(frameWidthDp.toFloat()) - box + inset, inset, inset, inset,
+        )
+    }
 
     // ChatActivity.java
     @JvmStatic

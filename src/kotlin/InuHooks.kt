@@ -13,6 +13,7 @@ import desu.inugram.helpers.font.FontHelper
 import desu.inugram.helpers.maps.MapsHelper
 import desu.inugram.helpers.security.PasscodeHelper
 import desu.inugram.helpers.theme.MonetHelper
+import desu.inugram.helpers.theme.NonIslandHelper
 import desu.inugram.helpers.update.ApkInstaller
 import desu.inugram.helpers.update.UpdateHelper
 import org.telegram.messenger.AndroidUtilities
@@ -25,6 +26,7 @@ import org.telegram.messenger.Utilities
 import org.telegram.tgnet.TLObject
 import org.telegram.ui.Components.AnimatedFloat
 import org.telegram.ui.Components.BulletinFactory
+import org.telegram.ui.Components.ChatActivityEnterView
 import org.telegram.ui.Components.GestureDetector2
 import org.telegram.ui.Components.GestureDetectorFixDoubleTap
 import org.telegram.ui.LaunchActivity
@@ -42,6 +44,7 @@ object InuHooks {
         }
         syncDoubleTapDelay()
         syncAnimationSpeed()
+        syncChatInputRowHeight()
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
             MonetHelper.registerOverlayChangeReceiver(context)
         }
@@ -129,6 +132,16 @@ object InuHooks {
         val delay = InuConfig.DOUBLE_TAP_DELAY.value
         GestureDetectorFixDoubleTap.GestureDetectorCompatImplBase.DOUBLE_TAP_TIMEOUT = delay
         GestureDetector2.DOUBLE_TAP_TIMEOUT = delay
+    }
+
+    @JvmStatic
+    fun syncChatInputRowHeight() {
+        val height = NonIslandHelper.chatInputRowHeight()
+        val delta = (height - 44) / 2
+        ChatActivityEnterView.DEFAULT_HEIGHT = height
+        ChatActivityEnterView.inu_FIELD_PADDING_TOP = 9 + delta
+        ChatActivityEnterView.inu_FIELD_PADDING_BOTTOM = 10 + delta
+        ChatActivityEnterView.inu_ICON_PADDING = 7.5f + delta
     }
 
     @JvmStatic

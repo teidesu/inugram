@@ -34,7 +34,7 @@ index 0000000..0000000 100644
              messageViewY = messageView.getTop() + messageView.getPaddingTop() + listView.getTop() - container.getY();
  
 -            messageViewY -= (listViewTargetBottomPadding - listView.getPaddingBottom());
-+            messageViewY += (chatActivity.getInputIslandHeightTarget() - dp(44));
++            messageViewY += (chatActivity.getInputIslandHeightTarget() - dp(ChatActivityEnterView.DEFAULT_HEIGHT));
  
              lastMessageX = messageViewX;
              lastMessageY = messageViewY;

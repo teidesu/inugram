@@ -170,6 +170,7 @@ Currently exposed (update this table when adding):
 | `onNewMessage(TLRPC.Message, Int)` | `didReceiveNewMessages` observer | generic new-message dispatch (all arrival paths incl. difference catch-up); fans out to `UpdateHelper` etc. |
 | `syncDoubleTapDelay()` | fork + `init` | propagate `DOUBLE_TAP_DELAY` into stock gesture detectors |
 | `syncAnimationSpeed()` | fork + `init` | propagate `ANIMATION_SPEED` into stock animators |
+| `syncChatInputRowHeight()` | fork + `init` | propagate classic-ui input row height/padding into `ChatActivityEnterView` statics |
 | `getCurrentAppIconLicense()` | About page | current launcher icon's license string |
 
 New hook → `@JvmStatic fun` on `InuHooks`, one-line call site in the patch, **update this table**.

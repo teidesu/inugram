@@ -295,6 +295,7 @@ class AppearanceSettingsActivity : SettingsPageActivity() {
             TOGGLE_NON_ISLAND_CHAT_ELEMENTS -> {
                 val new = InuConfig.NON_ISLAND_CHAT_ELEMENTS.toggle()
                 (view as? TextCheckCell)?.isChecked = new
+                InuHooks.syncChatInputRowHeight()
             }
 
             BUTTON_MONET_THEME -> if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) RadioItemOptions.show(
