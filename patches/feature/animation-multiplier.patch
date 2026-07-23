@@ -4,9 +4,10 @@ Date: Wed, 22 Apr 2026 10:42:47 +0300
 Subject: customizable animation speed multiplier for most animations
 
 ---
- .../main/java/org/telegram/ui/ActionBar/ActionBarLayout.java   | 2 +-
- .../main/java/org/telegram/ui/Components/AnimatedFloat.java    | 3 ++-
- 2 files changed, 3 insertions(+), 2 deletions(-)
+ .../main/java/org/telegram/ui/ActionBar/ActionBarLayout.java  | 2 +-
+ .../main/java/org/telegram/ui/Components/AnimatedFloat.java   | 3 ++-
+ .../src/main/java/org/telegram/ui/ProfileActivity.java        | 4 ++--
+ 3 files changed, 5 insertions(+), 4 deletions(-)
 
 diff --git a/TMessagesProj/src/main/java/org/telegram/ui/ActionBar/ActionBarLayout.java b/TMessagesProj/src/main/java/org/telegram/ui/ActionBar/ActionBarLayout.java
 index 0000000..0000000 100644
@@ -38,3 +39,23 @@ index 0000000..0000000 100644
              if (now - transitionStart >= transitionDelay) {
                  if (transitionInterpolator == null) {
                      value = AndroidUtilities.lerp(startValue, targetValue, t);
+diff --git a/TMessagesProj/src/main/java/org/telegram/ui/ProfileActivity.java b/TMessagesProj/src/main/java/org/telegram/ui/ProfileActivity.java
+index 0000000..0000000 100644
+--- a/TMessagesProj/src/main/java/org/telegram/ui/ProfileActivity.java
++++ b/TMessagesProj/src/main/java/org/telegram/ui/ProfileActivity.java
+@@ -8484,7 +8484,7 @@ public class ProfileActivity extends BaseFragment implements NotificationCenter.
+                         if (!ignoreScrollOnFullExpand && view != null /*&& hasActions*/) {
+                             justFullyExpanded = true;
+                             final int actionBarHeight = ActionBar.getCurrentActionBarHeight() + (actionBar.getOccupyStatusBar() ? AndroidUtilities.statusBarHeight : 0);
+-                            listView.smoothScrollBy(0, view.getTop() - listView.getMeasuredWidth() - getActionsExtraHeight() + actionBarHeight, (int) expandAnimator.getDuration(), (Interpolator) expandAnimator.getInterpolator());
++                            listView.smoothScrollBy(0, view.getTop() - listView.getMeasuredWidth() - getActionsExtraHeight() + actionBarHeight, Math.max(1, Math.round(expandAnimator.getDuration() / desu.inugram.InuConfig.ANIMATION_SPEED.getValue())), (Interpolator) expandAnimator.getInterpolator());
+                             listView.canStopFlinger = false;
+                         }
+                         expandNameYStartedFrom = nameTextView[1].getTranslationY();
+@@ -16953,4 +16953,4 @@ public class ProfileActivity extends BaseFragment implements NotificationCenter.
+             setTextColor(Theme.getColor(Theme.key_windowBackgroundWhiteBlackText, resourcesProvider));
+         }
+     }
+-}
+\ No newline at end of file
++}
