@@ -1,0 +1,138 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: alina sireneva <alina@tei.pet>
+Date: Thu, 23 Jul 2026 07:02:27 +0400
+Subject: Fix chat permanently not following keyboard during predictive back
+
+---
+ .../inset/WindowAnimatedInsetsProvider.java   | 76 ++++++++++++++++---
+ .../inset/WindowInsetsStateHolder.java        |  2 +-
+ 2 files changed, 68 insertions(+), 10 deletions(-)
+
+diff --git a/TMessagesProj/src/main/java/org/telegram/ui/Components/inset/WindowAnimatedInsetsProvider.java b/TMessagesProj/src/main/java/org/telegram/ui/Components/inset/WindowAnimatedInsetsProvider.java
+index 0000000..0000000 100644
+--- a/TMessagesProj/src/main/java/org/telegram/ui/Components/inset/WindowAnimatedInsetsProvider.java
++++ b/TMessagesProj/src/main/java/org/telegram/ui/Components/inset/WindowAnimatedInsetsProvider.java
+@@ -15,6 +15,8 @@ import org.jspecify.annotations.Nullable;
+ import org.telegram.messenger.AndroidUtilities;
+ import org.telegram.ui.Components.chat.ViewPositionWatcher;
+ 
++import java.util.ArrayList;
++import java.util.HashMap;
+ import java.util.List;
+ 
+ import me.vkryl.core.BitwiseUtils;
+@@ -38,7 +40,11 @@ public class WindowAnimatedInsetsProvider extends WindowInsetsAnimationCompat.Ca
+         int typeMask = 0;
+         for (WindowInsetsAnimationCompat animation : runningAnimations) {
+             typeMask |= animation.getTypeMask();
++            if (BitwiseUtils.hasFlag(animation.getTypeMask(), WindowInsetsCompat.Type.ime())) {
++                inu_trackAnimation(animation);
++            }
+         }
++        inu_pruneStaleAnimations(runningAnimations);
+ 
+         if (BitwiseUtils.hasFlag(typeMask, WindowInsetsCompat.Type.ime())) {
+             dispatchWindowInsetsAnimationChange(insets);
+@@ -46,28 +52,80 @@ public class WindowAnimatedInsetsProvider extends WindowInsetsAnimationCompat.Ca
+         return insets;
+     }
+ 
+-    private int activeAnimationsCounter;
++    // The platform may skip onStart/onEnd for a cancelled insets animation (e.g. an aborted
++    // predictive-back IME dismissal), so active state can't be derived from pairing them alone.
++    // onProgress carries the authoritative running list every frame — it is used to both pick up
++    // animations whose onStart was missed and evict ones whose onEnd was missed.
++    private final ArrayList<WindowInsetsAnimationCompat> inu_activeImeAnimations = new ArrayList<>();
++    private final HashMap<WindowInsetsAnimationCompat, Integer> inu_absentCounts = new HashMap<>();
++
++    // A just-started animation can be absent from a concurrent animation's onProgress dispatch
++    // until its own first frame, so eviction requires missing several consecutive dispatches.
++    private static final int INU_ABSENT_DISPATCHES_TO_EVICT = 3;
+ 
+     public boolean hasActiveAnimations() {
+-        return activeAnimationsCounter > 0;
++        return !inu_activeImeAnimations.isEmpty();
++    }
++
++    private void inu_trackAnimation(WindowInsetsAnimationCompat animation) {
++        if (inu_activeImeAnimations.contains(animation)) {
++            inu_absentCounts.remove(animation);
++            return;
++        }
++        final boolean wasEmpty = inu_activeImeAnimations.isEmpty();
++        inu_activeImeAnimations.add(animation);
++        if (wasEmpty) {
++            dispatchWindowInsetsAnimationStart();
++        }
++    }
++
++    private void inu_untrackAnimation(WindowInsetsAnimationCompat animation) {
++        if (inu_activeImeAnimations.remove(animation)) {
++            inu_absentCounts.remove(animation);
++            if (inu_activeImeAnimations.isEmpty()) {
++                dispatchWindowInsetsAnimationFinish();
++            }
++        }
++    }
++
++    private void inu_pruneStaleAnimations(List<WindowInsetsAnimationCompat> runningAnimations) {
++        if (inu_activeImeAnimations.isEmpty()) {
++            return;
++        }
++        boolean removed = false;
++        for (int i = inu_activeImeAnimations.size() - 1; i >= 0; i--) {
++            final WindowInsetsAnimationCompat tracked = inu_activeImeAnimations.get(i);
++            if (runningAnimations.contains(tracked)) {
++                inu_absentCounts.remove(tracked);
++                continue;
++            }
++            final Integer prev = inu_absentCounts.get(tracked);
++            final int absent = (prev == null ? 0 : prev) + 1;
++            if (absent >= INU_ABSENT_DISPATCHES_TO_EVICT) {
++                inu_activeImeAnimations.remove(i);
++                inu_absentCounts.remove(tracked);
++                removed = true;
++            } else {
++                inu_absentCounts.put(tracked, absent);
++            }
++        }
++        if (removed && inu_activeImeAnimations.isEmpty()) {
++            dispatchWindowInsetsAnimationFinish();
++        }
+     }
+ 
+     @Override
+     public WindowInsetsAnimationCompat.@NonNull BoundsCompat onStart(@NonNull WindowInsetsAnimationCompat animation, WindowInsetsAnimationCompat.@NonNull BoundsCompat bounds) {
+-        if (activeAnimationsCounter == 0) {
+-            dispatchWindowInsetsAnimationStart();
++        if (BitwiseUtils.hasFlag(animation.getTypeMask(), WindowInsetsCompat.Type.ime())) {
++            inu_trackAnimation(animation);
+         }
+-        activeAnimationsCounter++;
+         return super.onStart(animation, bounds);
+     }
+ 
+     @Override
+     public void onEnd(@NonNull WindowInsetsAnimationCompat animation) {
+         super.onEnd(animation);
+-        activeAnimationsCounter--;
+-        if (activeAnimationsCounter == 0) {
+-            dispatchWindowInsetsAnimationFinish();
+-        }
++        inu_untrackAnimation(animation);
+     }
+ 
+     private final ReferenceList<Listener> listeners =  new ReferenceList<>();
+diff --git a/TMessagesProj/src/main/java/org/telegram/ui/Components/inset/WindowInsetsStateHolder.java b/TMessagesProj/src/main/java/org/telegram/ui/Components/inset/WindowInsetsStateHolder.java
+index 0000000..0000000 100644
+--- a/TMessagesProj/src/main/java/org/telegram/ui/Components/inset/WindowInsetsStateHolder.java
++++ b/TMessagesProj/src/main/java/org/telegram/ui/Components/inset/WindowInsetsStateHolder.java
+@@ -308,7 +308,7 @@ public class WindowInsetsStateHolder implements WindowInsetsProvider, WindowInse
+     public void onAnimatedInsetsFinished() {
+         if (animatedInsetsProviderTarget != null) {
+             animatedInsetsProviderTarget.postOnAnimation(() -> {
+-                activeAnimations--;
++                activeAnimations = Math.max(0, activeAnimations - 1);
+                 if (activeAnimations == 0) {
+                     inu_ignoreAnimatedIme = false;
+                     setInsets(WindowAnimatedInsetsProvider.calculateWindowInsets(animatedInsetsProviderTarget), false);

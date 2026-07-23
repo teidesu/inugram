@@ -236,3 +236,4 @@ bugfix/reorder-sync-dispatch.patch
 bugfix/optimistic-hidden-forwards.patch
 bugfix/file-load-cancel-stuck.patch
 feature/hide-bubble-tails.patch
+bugfix/ime-insets-animation-desync.patch
