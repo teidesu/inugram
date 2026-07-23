@@ -8,6 +8,7 @@ import android.content.IntentFilter
 import android.graphics.Color
 import android.os.Build
 import android.os.PatternMatcher
+import android.util.Log
 import androidx.annotation.RequiresApi
 import androidx.core.content.edit
 import androidx.core.graphics.ColorUtils
@@ -16,10 +17,12 @@ import desu.inugram.InuConfig
 import google_material.Blend
 import google_material.Hct
 import org.telegram.messenger.ApplicationLoader
+import org.telegram.messenger.BuildVars
 import org.telegram.messenger.FileLog
 import org.telegram.messenger.NotificationCenter
 import org.telegram.ui.ActionBar.Theme
 import org.telegram.ui.LaunchActivity
+import java.io.File
 import kotlin.math.max
 
 
@@ -235,6 +238,10 @@ object MonetHelper {
     private const val AVATAR_TEXT_DARK_TONE = 15.0
     private const val AVATAR_TEXT_MIN_CHROMA = 40.0
     private var overlayReceiverRegistered = false
+    private var themeReloadReceiverRegistered = false
+
+    private const val THEME_OVERRIDE_DIR = "theme-override"
+    private const val ACTION_RELOAD_THEME = "desu.inugram.RELOAD_THEME"
 
     private val overlayChangeReceiver = object : BroadcastReceiver() {
         override fun onReceive(context: Context, intent: Intent) {
@@ -257,6 +264,38 @@ object MonetHelper {
         }
     }
 
+    private val themeReloadReceiver = object : BroadcastReceiver() {
+        override fun onReceive(context: Context, intent: Intent) {
+            if (intent.action != ACTION_RELOAD_THEME) return
+            Log.d("MonetHelper", "theme reload broadcast: applied=${reapplyActiveTheme()}")
+        }
+    }
+
+    fun registerThemeReloadReceiver(context: Context) {
+        if (!BuildVars.DEBUG_VERSION || themeReloadReceiverRegistered) return
+        try {
+            val filter = IntentFilter(ACTION_RELOAD_THEME)
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
+                context.registerReceiver(themeReloadReceiver, filter, Context.RECEIVER_EXPORTED)
+            } else {
+                context.registerReceiver(themeReloadReceiver, filter)
+            }
+            themeReloadReceiverRegistered = true
+        } catch (e: Exception) {
+            FileLog.e("Failed to register theme reload receiver", e)
+        }
+    }
+
+    private fun getThemeOverrideDir(): File? =
+        ApplicationLoader.applicationContext.getExternalFilesDir(THEME_OVERRIDE_DIR)
+
+    @JvmStatic
+    fun getThemeOverrideFile(assetName: String): File? {
+        if (!BuildVars.DEBUG_VERSION) return null
+        val file = File(getThemeOverrideDir() ?: return null, assetName)
+        return if (file.isFile) file else null
+    }
+
     // Theme keys whose values represent link *text*. When the wallpaper-derived accent palette
     // collapses to near-neutral (e.g. B&W wallpapers), these would render at the same hue as
     // body text and become indistinguishable. We substitute a chromatic fallback in that case.
@@ -266,6 +305,7 @@ object MonetHelper {
         "windowBackgroundWhiteLinkText",
         "dialogTextLink",
     )
+    private const val MAX_CHROMA_PERCENT = 400
     private const val NEUTRAL_ACCENT_CHROMA_THRESHOLD = 8.0
     private const val FALLBACK_LINK_HUE = 250.0
     private const val FALLBACK_LINK_CHROMA = 70.0
@@ -280,6 +320,8 @@ object MonetHelper {
             var alphaPercent = 100
             var saturationPercent = 100
             var lightnessPercent = 100
+            var tone = -1
+            var chromaPercent = 100
 
             val match = MODIFIER_REGEX.find(working)
             if (match != null) {
@@ -287,16 +329,26 @@ object MonetHelper {
                 for (part in match.groupValues[2].split(',')) {
                     val kv = part.split('=')
                     if (kv.size != 2) continue
-                    val value = kv[1].trim().toIntOrNull()?.coerceIn(0, 100) ?: continue
+                    val raw = kv[1].trim().toIntOrNull() ?: continue
                     when (kv[0].trim()) {
-                        "a" -> alphaPercent = value
-                        "s" -> saturationPercent = value
-                        "l" -> lightnessPercent = value
+                        "a" -> alphaPercent = raw.coerceIn(0, 100)
+                        "s" -> saturationPercent = raw.coerceIn(0, 100)
+                        "l" -> lightnessPercent = raw.coerceIn(0, 100)
+                        "t" -> tone = raw.coerceIn(0, 100)
+                        "c" -> chromaPercent = raw.coerceIn(0, MAX_CHROMA_PERCENT)
                     }
                 }
             }
 
             var resolvedColor = resolveColor(working)
+            if (tone >= 0 || chromaPercent != 100) {
+                val hct = Hct.fromInt(resolvedColor)
+                resolvedColor = Hct.from(
+                    hct.hue,
+                    hct.chroma * chromaPercent / 100.0,
+                    if (tone >= 0) tone.toDouble() else hct.tone,
+                ).toInt()
+            }
             if (saturationPercent != 100) {
                 resolvedColor = ColorUtils.blendARGB(Color.WHITE, resolvedColor, saturationPercent / 100f)
             }
@@ -447,15 +499,21 @@ object MonetHelper {
         // Theme.applyTheme + needSetDayNightTheme start a crossfade animator in ActionBarLayout,
         // and only its end callback clears Theme.animatingColors. Without a resumed activity there
         // are no frames to end it, so leave the signature stale and let the next onResume apply.
-        if (!LaunchActivity.isResumed) return
+        if (!reapplyActiveTheme()) return
+
+        lastMonetSignature = signature
+    }
+
+    private fun reapplyActiveTheme(): Boolean {
+        val activeTheme = Theme.getActiveTheme() ?: return false
+        if (!LaunchActivity.isResumed) return false
 
         val isNight: Boolean = Theme.isCurrentThemeNight()
         Theme.applyTheme(activeTheme, isNight)
         NotificationCenter.getGlobalInstance().postNotificationName(
             NotificationCenter.needSetDayNightTheme, activeTheme, isNight, null, -1
         )
-
-        lastMonetSignature = signature
+        return true
     }
 
     enum class ThemeMode { DISABLED, LIGHT, DARK, AMOLED, AUTO, AUTO_AMOLED }

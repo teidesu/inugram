@@ -4,16 +4,16 @@ Date: Mon, 20 Apr 2026 10:55:44 +0300
 Subject: monet theme, almost directly ported from NagramX
 
 ---
- .../telegram/messenger/CodeHighlighting.java  | 24 +++++--
+ .../telegram/messenger/CodeHighlighting.java  | 24 ++++--
  .../org/telegram/messenger/MessageObject.java | 10 +--
- .../messenger/MessagesController.java         | 24 +++----
+ .../messenger/MessagesController.java         | 24 +++---
  .../telegram/messenger/RichMessageLayout.java |  2 +-
- .../java/org/telegram/ui/ActionBar/Theme.java | 71 ++++++++++++++++++-
+ .../java/org/telegram/ui/ActionBar/Theme.java | 77 ++++++++++++++++++-
  .../telegram/ui/ActionBar/ThemeColors.java    | 14 ++++
  .../telegram/ui/Cells/ChatMessageCell.java    |  4 +-
  .../ui/Components/AvatarDrawable.java         |  2 +-
- .../java/org/telegram/ui/DialogsActivity.java |  4 ++
- 9 files changed, 127 insertions(+), 28 deletions(-)
+ .../java/org/telegram/ui/DialogsActivity.java |  4 +
+ 9 files changed, 133 insertions(+), 28 deletions(-)
 
 diff --git a/TMessagesProj/src/main/java/org/telegram/messenger/CodeHighlighting.java b/TMessagesProj/src/main/java/org/telegram/messenger/CodeHighlighting.java
 index 0000000..0000000 100644
@@ -331,7 +331,20 @@ index 0000000..0000000 100644
                  }
              }
              if (oldEditor != null) {
-@@ -8172,6 +8235,10 @@ public class Theme {
+@@ -8140,6 +8203,12 @@ public class Theme {
+             int currentPosition = 0;
+             if (assetName != null) {
+                 file = getAssetFile(assetName);
++                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
++                    File override = desu.inugram.helpers.theme.MonetHelper.getThemeOverrideFile(assetName);
++                    if (override != null) {
++                        file = override;
++                    }
++                }
+             }
+             stream = new FileInputStream(file);
+             int idx;
+@@ -8172,6 +8241,10 @@ public class Theme {
                                      } catch (Exception ignore) {
                                          value = Utilities.parseInt(param);
                                      }

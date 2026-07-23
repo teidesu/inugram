@@ -47,6 +47,7 @@ object InuHooks {
         syncChatInputRowHeight()
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
             MonetHelper.registerOverlayChangeReceiver(context)
+            MonetHelper.registerThemeReloadReceiver(context)
         }
         UpdateHelper.clearPendingIfInstalled()
         ApkInstaller.dismissInstalledNotification()

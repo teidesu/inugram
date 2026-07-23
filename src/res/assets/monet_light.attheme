@@ -272,7 +272,7 @@ chat_linkSelectBackground=a3_300(a=80)
 chat_lockIcon=a1_600
 chat_messageLinkIn=a3_500
 chat_messageLinkOut=a3_600
-chat_messagePanelBackground=monet_surface_bright_light
+chat_messagePanelBackground=monet_surface_bright_light(t=98)
 chat_messagePanelCancelInlineBot=a1_600
 chat_messagePanelCursor=a1_600
 chat_messagePanelHint=n1_300
@@ -300,7 +300,7 @@ chat_outAudioSeekbarFill=a1_700
 chat_outAudioSeekbarSelected=a1_300
 chat_outAudioSelectedProgress=a1_700
 chat_outAudioTitleText=a1_800
-chat_outBubble=a1_100(s=70)
+chat_outBubble=a1_100(t=90,c=95)
 code_constant=monetCodeConstant(l=70)
 inu_code_out_constant=monetCodeConstant(l=70)
 inu_code_out_function=monetCodeFunction(l=70)
@@ -426,7 +426,7 @@ chat_topPanelTitle=a1_600
 chat_unreadMessagesStartArrowIcon=n1_700
 chat_unreadMessagesStartBackground=n1_10(a=80)
 chat_unreadMessagesStartText=n1_700
-chat_wallpaper=n1_50(l=99)
+chat_wallpaper=n1_50(t=95)
 checkbox=a1_600
 checkboxCheck=a1_50
 checkboxDisabled=a2_200

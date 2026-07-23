@@ -10,6 +10,9 @@ export const worktreeDir = join(rootDir, 'worktree')
 export const patchesDir = join(rootDir, 'patches')
 export const seriesFile = join(rootDir, 'series')
 export const upstreamCommitFile = join(rootDir, 'upstream-commit')
+export const assetsDir = join(rootDir, 'src/res/assets')
+
+export const debugAppId = 'desu.inugram.beta'
 
 export interface ForkSyncFile {
   source: string

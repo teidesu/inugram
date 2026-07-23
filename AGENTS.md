@@ -226,6 +226,15 @@ New hook → `@JvmStatic fun` on `InuHooks`, one-line call site in the patch, **
 - New asset dir → add path to `scripts/config.ts` → `forkSyncFiles`.
 - Icons: lucide pre-bundled; selection list in `scripts/config.ts` → `ICON_SELECTION`. Tabler pack preferred for visual consistency.
 
+## Monet themes
+
+`src/res/assets/monet_{light,dark,amoled}.attheme` — stock attheme format, values resolved by
+`MonetHelper.getColor` (hooked into `Theme.getThemeFileValues` by `feature/monet-theme.patch`).
+
+- Values are palette tones (`a1_600`, `n1_50`), M3 semantic tokens (`monet_surface_container_light`), custom names (`monetGreen`), or raw ints.
+- Modifiers: `(a=)` alpha %, `(s=)` blend→white %, `(l=)` blend→black %, `(t=)` absolute HCT tone, `(c=)` HCT chroma multiplier % (0–400, relative so monochrome palettes stay gray). Comma-separated: `monet_secondary_container_light(t=90,c=75)`.
+- Debug hot reload: `pnpm run push-theme [light|dark|amoled] [--watch] [--clear] [-s <serial>]` — adb-pushes the asset to the app's external files dir and broadcasts `desu.inugram.RELOAD_THEME`. Debug builds only (`getThemeOverrideFile` is a no-op otherwise); the app must be running.
+
 ## Java ↔ Kotlin gotchas
 
 - `.value` (Kotlin) → `.getValue()` from Java.

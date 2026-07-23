@@ -9,6 +9,7 @@
     "export": "tsx scripts/export.ts",
     "rebase": "tsx scripts/rebase.ts",
     "find-patches": "tsx scripts/find-patches.ts",
+    "push-theme": "tsx scripts/push-theme.ts",
     "prepare": "husky"
   },
   "dependencies": {

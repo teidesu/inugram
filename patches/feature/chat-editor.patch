@@ -5,10 +5,11 @@ Subject: chat editor improvements: - make it available for everyone (as a read-o
 
 ---
  .../org/telegram/ui/ChatEditActivity.java     | 38 ++++++--
+ .../telegram/ui/ChatRightsEditActivity.java   |  4 +-
  .../org/telegram/ui/ChatUsersActivity.java    | 90 ++++++++++++++-----
  .../ui/Components/SlideChooseView.java        |  3 +
  .../java/org/telegram/ui/ProfileActivity.java |  2 +-
- 4 files changed, 104 insertions(+), 29 deletions(-)
+ 5 files changed, 106 insertions(+), 31 deletions(-)
 
 diff --git a/TMessagesProj/src/main/java/org/telegram/ui/ChatEditActivity.java b/TMessagesProj/src/main/java/org/telegram/ui/ChatEditActivity.java
 index 0000000..0000000 100644
@@ -98,6 +99,28 @@ index 0000000..0000000 100644
      }
  
      public void updateColorCell() {
+diff --git a/TMessagesProj/src/main/java/org/telegram/ui/ChatRightsEditActivity.java b/TMessagesProj/src/main/java/org/telegram/ui/ChatRightsEditActivity.java
+index 0000000..0000000 100644
+--- a/TMessagesProj/src/main/java/org/telegram/ui/ChatRightsEditActivity.java
++++ b/TMessagesProj/src/main/java/org/telegram/ui/ChatRightsEditActivity.java
+@@ -639,7 +639,7 @@ public class ChatRightsEditActivity extends BaseFragment implements Notification
+         });
+ 
+         listView.setOnItemClickListener((view, position) -> {
+-            if (!canEdit && (!currentChat.creator || currentType != TYPE_ADMIN || position != anonymousRow)) {
++            if (!canEdit && position != 0 && (!currentChat.creator || currentType != TYPE_ADMIN || position != anonymousRow)) {
+                 return;
+             }
+             if (position == sendMediaRow) {
+@@ -1844,7 +1844,7 @@ public class ChatRightsEditActivity extends BaseFragment implements Notification
+                 return true;
+             }
+             if (!canEdit) {
+-                return false;
++                return type == VIEW_TYPE_USER_CELL && holder.getAdapterPosition() == 0;
+             }
+             if ((currentType == TYPE_ADMIN || currentType == TYPE_ADD_BOT) && type == VIEW_TYPE_SWITCH_CELL) {
+                 int position = holder.getAdapterPosition();
 diff --git a/TMessagesProj/src/main/java/org/telegram/ui/ChatUsersActivity.java b/TMessagesProj/src/main/java/org/telegram/ui/ChatUsersActivity.java
 index 0000000..0000000 100644
 --- a/TMessagesProj/src/main/java/org/telegram/ui/ChatUsersActivity.java
