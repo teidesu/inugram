@@ -294,3 +294,4 @@ most things are toggleable in `Settings → Inugram`, with sensible opinionated 
 - crash long-pressing a sticker set while off-screen rows are cached (reorder update bound null item on cached/hidden holders)
 - crash cutting out a sticker after the photo editor recycled the source image mid-segmentation
 - storage usage cached-media list intermittently refusing to scroll
+- crash after transferring channel ownership (admin sort comparator overflowed on 64-bit peer ids)
