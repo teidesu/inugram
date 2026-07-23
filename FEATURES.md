@@ -291,3 +291,4 @@ most things are toggleable in `Settings → Inugram`, with sensible opinionated 
 - notifications for chats read on another device no longer linger forever when the app process was killed in between (stock only tracked posted notifications in memory)
 - crash long-pressing a sticker set while off-screen rows are cached (reorder update bound null item on cached/hidden holders)
 - crash cutting out a sticker after the photo editor recycled the source image mid-segmentation
+- storage usage cached-media list intermittently refusing to scroll
