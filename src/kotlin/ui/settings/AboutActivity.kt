@@ -7,6 +7,8 @@ import android.graphics.PorterDuff
 import android.graphics.drawable.LayerDrawable
 import android.util.TypedValue
 import android.view.Gravity
+import android.view.HapticFeedbackConstants
+import android.view.MotionEvent
 import android.view.View
 import android.view.ViewOutlineProvider
 import android.widget.FrameLayout
@@ -439,6 +441,30 @@ class AboutActivity : SettingsPageActivity(), NotificationCenter.NotificationCen
         }
     }
 
+    private val ripplePos = IntArray(2)
+    private var lastRippleTime = 0L
+    private var rippleStreak = 0
+
+    private fun rippleFrom(view: View, x: Float, y: Float) {
+        val now = System.currentTimeMillis()
+        rippleStreak = if (now - lastRippleTime < 800L) rippleStreak + 1 else 0
+        lastRippleTime = now
+
+        view.getLocationInWindow(ripplePos)
+        LaunchActivity.makeRipple(
+            ripplePos[0] + x,
+            ripplePos[1] + y,
+            1f + minOf(rippleStreak, 9),
+        )
+        try {
+            view.performHapticFeedback(
+                HapticFeedbackConstants.KEYBOARD_TAP,
+                HapticFeedbackConstants.FLAG_IGNORE_VIEW_SETTING,
+            )
+        } catch (ignore: Exception) {
+        }
+    }
+
     private var logoHeader: View? = null
     private fun getOrCreateLogoHeader(): View {
         logoHeader?.let { return it }
@@ -465,6 +491,10 @@ class AboutActivity : SettingsPageActivity(), NotificationCenter.NotificationCen
                 override fun getOutline(view: View, outline: Outline) {
                     outline.setRoundRect(0, 0, view.width, view.height, dp(28f).toFloat())
                 }
+            }
+            setOnTouchListener { v, event ->
+                if (event.action == MotionEvent.ACTION_DOWN) rippleFrom(v, event.x, event.y)
+                false
             }
         }
         container.addView(icon, LinearLayout.LayoutParams(dp(120f), dp(120f)).apply {
