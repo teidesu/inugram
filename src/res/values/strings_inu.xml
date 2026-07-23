@@ -348,6 +348,8 @@
     <string name="InuMsgDetailEmojiPackCreators">Emoji Pack Creators</string>
     <string name="InuShowJson">Show JSON</string>
     <string name="InuRegDate">Registered: %s</string>
+    <string name="InuJoinDate">Joined: %s</string>
+    <string name="InuCreatedDate">Created: %s</string>
 
     <string name="InuChatVoiceInAttach">Recorder in attachments</string>
     <string name="InuChatVoiceInAttachInfo">Moves the voice/video record button from the input bar into the attachment sheet</string>

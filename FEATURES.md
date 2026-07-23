@@ -18,6 +18,7 @@ most things are toggleable in `Settings → Inugram`, with sensible opinionated 
 - show seconds in timestamps
 - 🐶 customizable animation speed multiplier (incl. instant)
 - estimated registration date in profile - *ported & datapoints from [NagramX](https://github.com/risin42/NagramX)*
+- join/creation date in group & channel profiles
 - show linked channel in discussion group profile similar to personal channel
 - hide own phone number from ui
 - fonts: manage a list of fonts used in the media editor text tool; device system fonts can be toggled on/off. install fonts from .ttf/.otf/.ttc files right from the chats.

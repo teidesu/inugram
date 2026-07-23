@@ -372,10 +372,17 @@ object ProfileHelper {
                 }
                 WebAppHelper.openTlViewer(fragment, items)
             }.let { opts ->
-                val regDate = if (userId != 0L) getRegDate(userId) else null
-                if (regDate != null) {
+                if (userId != 0L) {
+                    val regDate = getRegDate(userId)
+                    if (regDate != null) {
+                        opts.addGap()
+                            .addText(LocaleController.formatString(R.string.InuRegDate, regDate), 13)
+                    }
+                } else if (chat != null && chat.date != 0) {
+                    val joined = ChatObject.isChannel(chat) && !ChatObject.isNotInChat(chat)
+                    val res = if (joined) R.string.InuJoinDate else R.string.InuCreatedDate
                     opts.addGap()
-                        .addText(LocaleController.formatString(R.string.InuRegDate, regDate), 13)
+                        .addText(LocaleController.formatString(res, formatDateTime(chat.date * 1000L)), 13)
                 }
                 opts
             }.show()
@@ -400,9 +407,12 @@ object ProfileHelper {
         }
     }
 
-    private fun formatRegDate(prefix: String, dateMs: Long): String {
-        val str = LocaleController.getInstance().formatterYear.format(Date(dateMs))
-        return "$prefix$str"
+    private fun formatShortDate(dateMs: Long): String {
+        return LocaleController.getInstance().formatterYear.format(Date(dateMs))
+    }
+
+    private fun formatDateTime(dateMs: Long): String {
+        return LocaleController.getInstance().formatterStats.format(Date(dateMs))
     }
 
     private fun getRegDate(userId: Long): String? {
@@ -414,10 +424,10 @@ object ProfileHelper {
             if (userId in a.id..b.id) {
                 val t = (userId - a.id).toDouble() / (b.id - a.id)
                 val date = (a.date + t * (b.date - a.date)) * 1000.0
-                return formatRegDate("~", Math.round(date))
+                return "~" + formatShortDate(Math.round(date))
             }
         }
-        if (userId <= list.first().id) return formatRegDate("", list.first().date * 1000L)
-        return formatRegDate(">", list.last().date * 1000L)
+        if (userId <= list.first().id) return formatShortDate(list.first().date * 1000L)
+        return ">" + formatShortDate(list.last().date * 1000L)
     }
 }
