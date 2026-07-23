@@ -129,7 +129,11 @@ object M3SectionsHelper {
     ): Pair<Float, Float> {
         val prev = if (childIndex >= 0) visualSibling(listView, childIndex, forward = false) else null
         val next = if (childIndex >= 0) visualSibling(listView, childIndex, forward = true) else null
-        return m3Radii(child, prev != null && isSection.run(prev), next != null && isSection.run(next))
+        return m3Radii(
+            child,
+            prev?.takeIf { isSection.run(it) },
+            next?.takeIf { isSection.run(it) },
+        )
     }
 
     private fun visualSibling(listView: RecyclerListView, fromIndex: Int, forward: Boolean): View? {
@@ -154,16 +158,16 @@ object M3SectionsHelper {
         return computeRadii(listView, child, index, isSection)
     }
 
-    private fun m3Radii(child: View, prevIsSection: Boolean, nextIsSection: Boolean): Pair<Float, Float> {
+    private fun m3Radii(child: View, prev: View?, next: View?): Pair<Float, Float> {
         val outer = outerRForChild(child)
         val tR = when {
-            isMergedWithPrev(child) -> 0f
-            prevIsSection -> innerR
+            isMergedWithPrev(child) || isMergedWithNext(prev) -> 0f
+            prev != null -> innerR
             else -> outer
         }
         val bR = when {
-            isMergedWithNext(child) -> 0f
-            nextIsSection -> innerR
+            isMergedWithNext(child) || isMergedWithPrev(next) -> 0f
+            next != null -> innerR
             else -> outer
         }
         return tR to bR
@@ -231,9 +235,16 @@ object M3SectionsHelper {
     }
 
     @JvmStatic
-    fun augmentItemOffsets(outRect: Rect, view: View, position: Int) {
-        if (position > 0 && !isMergedWithPrev(view)) {
-            outRect.top += gap
+    fun augmentItemOffsets(outRect: Rect, listView: RecyclerView, view: View) {
+        // disappearing holders in a change animation have no adapter position anymore; without the
+        // layout-position fallback they'd lose the gap and jump while fading out. their layout
+        // position indexes the old list, so the is-last test against the new count is skipped too
+        val adapterPosition = listView.getChildAdapterPosition(view)
+        val disappearing = adapterPosition == RecyclerView.NO_POSITION
+        val position = if (disappearing) listView.getChildLayoutPosition(view) else adapterPosition
+        val isLast = !disappearing && position == (listView.adapter?.itemCount ?: 0) - 1
+        if (position >= 0 && !isLast && !isMergedWithNext(view)) {
+            outRect.bottom += gap
         }
     }
 

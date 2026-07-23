@@ -4,22 +4,66 @@ Date: Thu, 28 May 2026 22:18:07 +0400
 Subject: md3-style sections redesign
 
 ---
+ .../java/org/telegram/ui/BoostsActivity.java  |  5 +++
  .../java/org/telegram/ui/Cells/TextCell.java  | 25 +++++++++---
  .../org/telegram/ui/Cells/TextCheckCell.java  |  6 ++-
  .../ui/Cells/TextDetailSettingsCell.java      |  8 ++--
  .../telegram/ui/Cells/TextSettingsCell.java   |  2 +-
+ .../org/telegram/ui/ChannelBoostLayout.java   |  5 +++
  .../org/telegram/ui/ChatEditActivity.java     |  3 ++
  .../telegram/ui/ChatRightsEditActivity.java   |  3 ++
  .../org/telegram/ui/ChatUsersActivity.java    |  6 +++
  .../telegram/ui/Components/ItemOptions.java   |  8 ++++
- .../ui/Components/RecyclerListView.java       | 40 +++++++++++++++----
+ .../ui/Components/RecyclerListView.java       | 39 +++++++++++++++----
  .../ui/Components/UniversalAdapter.java       | 15 ++++++-
  .../telegram/ui/LiteModeSettingsActivity.java |  7 ++++
  .../org/telegram/ui/PeerColorActivity.java    |  9 +++--
  .../org/telegram/ui/ProxyListActivity.java    |  5 ---
  .../org/telegram/ui/SettingsActivity.java     | 18 +++++++++
- 14 files changed, 128 insertions(+), 27 deletions(-)
+ .../org/telegram/ui/StatisticActivity.java    |  1 +
+ 17 files changed, 138 insertions(+), 27 deletions(-)
 
+diff --git a/TMessagesProj/src/main/java/org/telegram/ui/BoostsActivity.java b/TMessagesProj/src/main/java/org/telegram/ui/BoostsActivity.java
+index 0000000..0000000 100644
+--- a/TMessagesProj/src/main/java/org/telegram/ui/BoostsActivity.java
++++ b/TMessagesProj/src/main/java/org/telegram/ui/BoostsActivity.java
+@@ -160,10 +160,12 @@ public class BoostsActivity extends GradientHeaderActivity implements Notificati
+                 case HEADER_VIEW_TYPE:
+                     view = new ChartHeaderView(getContext());
+                     view.setPadding(view.getPaddingLeft(), AndroidUtilities.dp(16), view.getRight(), AndroidUtilities.dp(16));
++                    desu.inugram.helpers.theme.M3SectionsHelper.markMerged(view, false, true);
+                     break;
+                 case HEADER_VIEW_TYPE_SMALL:
+                     view = new ChartHeaderView(getContext());
+                     view.setPadding(view.getPaddingLeft(), AndroidUtilities.dp(16), view.getRight(), AndroidUtilities.dp(8));
++                    desu.inugram.helpers.theme.M3SectionsHelper.markMerged(view, false, true);
+                     break;
+                 case HEADER_VIEW_TYPE_TABS:
+                     boostsTabs = new ScrollSlidingTextTabStrip(getContext(), resourceProvider);
+@@ -174,6 +176,7 @@ public class BoostsActivity extends GradientHeaderActivity implements Notificati
+                         @Override
+                         protected void dispatchDraw(Canvas canvas) {
+                             super.dispatchDraw(canvas);
++                            if (desu.inugram.helpers.theme.M3SectionsHelper.isEnabled()) return;
+                             dividerPaint.setColor(Theme.getColor(Theme.key_windowBackgroundGray, resourceProvider));
+                             canvas.drawRect(0, getHeight() - 2, getWidth(), getHeight(), dividerPaint);
+                         }
+@@ -196,6 +199,7 @@ public class BoostsActivity extends GradientHeaderActivity implements Notificati
+                         }
+                     });
+                     frameLayoutWrapper.addView(boostsTabs, LayoutHelper.createFrame(LayoutHelper.WRAP_CONTENT, 48));
++                    desu.inugram.helpers.theme.M3SectionsHelper.markMerged(frameLayoutWrapper, false, true);
+                     view = frameLayoutWrapper;
+                     break;
+                 case SHOW_BOOST_BY_GIFTS:
+@@ -285,6 +289,7 @@ public class BoostsActivity extends GradientHeaderActivity implements Notificati
+                 userCell.setData(user, ContactsController.formatName(user), str, 0, !items.get(position).isLast);
+                 userCell.setStatus(booster);
+                 userCell.setAvatarPadding(5);
++                desu.inugram.helpers.theme.M3SectionsHelper.markMerged(userCell, true, true);
+             } else if (holder.getItemViewType() == DIVIDER_TEXT_VIEW_TYPE) {
+                 TextInfoPrivacyCell privacyCell = (TextInfoPrivacyCell) holder.itemView;
+                 privacyCell.setText(items.get(position).title);
 diff --git a/TMessagesProj/src/main/java/org/telegram/ui/Cells/TextCell.java b/TMessagesProj/src/main/java/org/telegram/ui/Cells/TextCell.java
 index 0000000..0000000 100644
 --- a/TMessagesProj/src/main/java/org/telegram/ui/Cells/TextCell.java
@@ -174,6 +218,47 @@ index 0000000..0000000 100644
  
          int availableWidth = getMeasuredWidth() - getPaddingLeft() - getPaddingRight() - AndroidUtilities.dp(34);
          int width = betterLayout ? availableWidth : availableWidth / 2;
+diff --git a/TMessagesProj/src/main/java/org/telegram/ui/ChannelBoostLayout.java b/TMessagesProj/src/main/java/org/telegram/ui/ChannelBoostLayout.java
+index 0000000..0000000 100644
+--- a/TMessagesProj/src/main/java/org/telegram/ui/ChannelBoostLayout.java
++++ b/TMessagesProj/src/main/java/org/telegram/ui/ChannelBoostLayout.java
+@@ -137,10 +137,12 @@ public class ChannelBoostLayout extends FrameLayout {
+                 case HEADER_VIEW_TYPE:
+                     view = new ChartHeaderView(getContext());
+                     view.setPadding(view.getPaddingLeft(), AndroidUtilities.dp(16), view.getRight(), AndroidUtilities.dp(16));
++                    desu.inugram.helpers.theme.M3SectionsHelper.markMerged(view, false, true);
+                     break;
+                 case HEADER_VIEW_TYPE_SMALL:
+                     view = new ChartHeaderView(getContext());
+                     view.setPadding(view.getPaddingLeft(), AndroidUtilities.dp(16), view.getRight(), AndroidUtilities.dp(8));
++                    desu.inugram.helpers.theme.M3SectionsHelper.markMerged(view, false, true);
+                     break;
+                 case HEADER_VIEW_TYPE_TABS:
+                     boostsTabs = new ScrollSlidingTextTabStrip(fragment.getContext(), resourcesProvider);
+@@ -151,6 +153,7 @@ public class ChannelBoostLayout extends FrameLayout {
+                         @Override
+                         protected void dispatchDraw(Canvas canvas) {
+                             super.dispatchDraw(canvas);
++                            if (desu.inugram.helpers.theme.M3SectionsHelper.isEnabled()) return;
+                             dividerPaint.setColor(Theme.getColor(Theme.key_windowBackgroundGray, resourcesProvider));
+                             canvas.drawRect(0, getHeight() - 2, getWidth(), getHeight(), dividerPaint);
+                         }
+@@ -173,6 +176,7 @@ public class ChannelBoostLayout extends FrameLayout {
+                         }
+                     });
+                     frameLayoutWrapper.addView(boostsTabs, LayoutHelper.createFrame(LayoutHelper.WRAP_CONTENT, 48));
++                    desu.inugram.helpers.theme.M3SectionsHelper.markMerged(frameLayoutWrapper, false, true);
+                     view = frameLayoutWrapper;
+                     break;
+                 case SHOW_BOOST_BY_GIFTS:
+@@ -263,6 +267,7 @@ public class ChannelBoostLayout extends FrameLayout {
+                 userCell.setData(user, ContactsController.formatName(user), str, 0, !items.get(position).isLast);
+                 userCell.setStatus(booster);
+                 userCell.setAvatarPadding(5);
++                desu.inugram.helpers.theme.M3SectionsHelper.markMerged(userCell, true, true);
+             } else if (holder.getItemViewType() == DIVIDER_TEXT_VIEW_TYPE) {
+                 TextInfoPrivacyCell privacyCell = (TextInfoPrivacyCell) holder.itemView;
+                 privacyCell.setText(items.get(position).title);
 diff --git a/TMessagesProj/src/main/java/org/telegram/ui/ChatEditActivity.java b/TMessagesProj/src/main/java/org/telegram/ui/ChatEditActivity.java
 index 0000000..0000000 100644
 --- a/TMessagesProj/src/main/java/org/telegram/ui/ChatEditActivity.java
@@ -314,18 +399,17 @@ index 0000000..0000000 100644
              padding,
              roundRadius,
              this::drawBackgroundRect,
-@@ -3405,6 +3410,10 @@ public class RecyclerListView extends RecyclerView implements IBlur3Capture {
+@@ -3405,6 +3410,9 @@ public class RecyclerListView extends RecyclerView implements IBlur3Capture {
                          if (last) outRect.bottom = padding;
                      }
                  }
 +                if (desu.inugram.helpers.theme.M3SectionsHelper.isEnabled()) {
-+                    final int adapterPos = parent.getChildAdapterPosition(view);
-+                    desu.inugram.helpers.theme.M3SectionsHelper.augmentItemOffsets(outRect, view, adapterPos);
++                    desu.inugram.helpers.theme.M3SectionsHelper.augmentItemOffsets(outRect, parent, view);
 +                }
              }
          }
  
-@@ -3476,6 +3485,11 @@ public class RecyclerListView extends RecyclerView implements IBlur3Capture {
+@@ -3476,6 +3484,11 @@ public class RecyclerListView extends RecyclerView implements IBlur3Capture {
      public void drawSectionsBackgrounds(Canvas canvas) {
          if (drawSectionBackground == null) return;
  
@@ -337,7 +421,7 @@ index 0000000..0000000 100644
          if (isAnimating()) {
              if (sections == null) {
                  sections = new ArrayList<>();
-@@ -3622,6 +3636,11 @@ public class RecyclerListView extends RecyclerView implements IBlur3Capture {
+@@ -3622,6 +3635,11 @@ public class RecyclerListView extends RecyclerView implements IBlur3Capture {
          if (child == null || !sectionsItemDecoration.isSectionItem.run(child))
              return;
  
@@ -349,7 +433,7 @@ index 0000000..0000000 100644
          boolean prev, next;
          int position = getChildAdapterPosition(child);
          if (position == RecyclerView.NO_POSITION) {
-@@ -3682,6 +3701,11 @@ public class RecyclerListView extends RecyclerView implements IBlur3Capture {
+@@ -3682,6 +3700,11 @@ public class RecyclerListView extends RecyclerView implements IBlur3Capture {
      public Drawable getClipBackground(View child, boolean forceRound) {
          if (child.getParent() != this || !hasSections() || !sectionsItemDecoration.isSectionItem.run(child)) return null;
  
@@ -537,3 +621,15 @@ index 0000000..0000000 100644
                  final float r = dp(10);
                  AndroidUtilities.rectTmp.set(getBounds());
                  matrix.reset();
+diff --git a/TMessagesProj/src/main/java/org/telegram/ui/StatisticActivity.java b/TMessagesProj/src/main/java/org/telegram/ui/StatisticActivity.java
+index 0000000..0000000 100644
+--- a/TMessagesProj/src/main/java/org/telegram/ui/StatisticActivity.java
++++ b/TMessagesProj/src/main/java/org/telegram/ui/StatisticActivity.java
+@@ -1287,6 +1287,7 @@ public class StatisticActivity extends BaseFragment implements NotificationCente
+                 };
+                 headerCell.setWillNotDraw(false);
+                 headerCell.setPadding(headerCell.getPaddingLeft(), dp(16), headerCell.getRight(), dp(16));
++                desu.inugram.helpers.theme.M3SectionsHelper.markMerged(headerCell, false, true);
+                 v = headerCell;
+             } else if (viewType == 14) {
+                 v = new OverviewCell(parent.getContext(), isMegagroup ? 2 : 4);
