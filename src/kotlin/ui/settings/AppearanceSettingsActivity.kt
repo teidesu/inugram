@@ -104,6 +104,16 @@ class AppearanceSettingsActivity : SettingsPageActivity() {
                 InuConfig.NAVIGATION_DRAWER.value,
             )
         )
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE && InuConfig.NAVIGATION_DRAWER.value) {
+            items.add(
+                mkTwoLineCheckItem(
+                    TOGGLE_DRAWER_BACK_GESTURE,
+                    R.string.InuDrawerBackGesture,
+                    R.string.InuDrawerBackGestureInfo,
+                    InuConfig.DRAWER_BACK_GESTURE.value,
+                )
+            )
+        }
         items.add(
             UItem.asCheck(
                 TOGGLE_NON_ISLAND_FOLDERS_BAR,
@@ -255,6 +265,13 @@ class AppearanceSettingsActivity : SettingsPageActivity() {
             TOGGLE_NAVIGATION_DRAWER -> {
                 val new = InuConfig.NAVIGATION_DRAWER.toggle()
                 (view as? NotificationsCheckCell)?.isChecked = new
+                listView.adapter.update(true)
+                showRestartBulletin()
+            }
+
+            TOGGLE_DRAWER_BACK_GESTURE -> {
+                val new = InuConfig.DRAWER_BACK_GESTURE.toggle()
+                (view as? NotificationsCheckCell)?.isChecked = new
                 showRestartBulletin()
             }
 
@@ -314,6 +331,7 @@ class AppearanceSettingsActivity : SettingsPageActivity() {
     companion object {
         private val TOGGLE_HIDE_FADE_VIEW = InuUtils.generateId()
         private val TOGGLE_NAVIGATION_DRAWER = InuUtils.generateId()
+        private val TOGGLE_DRAWER_BACK_GESTURE = InuUtils.generateId()
         private val TOGGLE_NON_ISLAND_FOLDERS_BAR = InuUtils.generateId()
         private val TOGGLE_NON_ISLAND_SHARED_MEDIA_TABS = InuUtils.generateId()
         private val TOGGLE_NON_ISLAND_GLOBAL_SEARCH = InuUtils.generateId()
@@ -367,6 +385,7 @@ class AppearanceSettingsActivity : SettingsPageActivity() {
                 SearchRegistry.Entry("font", R.string.InuFonts, BUTTON_FONTS),
                 SearchRegistry.Entry("predictive-back-mode", R.string.InuPredictiveBack, BUTTON_PREDICTIVE_BACK_MODE),
                 SearchRegistry.Entry("navigation-drawer", R.string.InuNavigationDrawer, TOGGLE_NAVIGATION_DRAWER),
+                SearchRegistry.Entry("drawer-back-gesture", R.string.InuDrawerBackGesture, TOGGLE_DRAWER_BACK_GESTURE),
                 SearchRegistry.Entry("non-island-folders-bar", R.string.InuNonIslandFoldersBar, TOGGLE_NON_ISLAND_FOLDERS_BAR),
                 SearchRegistry.Entry("non-island-shared-media-tabs", R.string.InuNonIslandSharedMediaTabs, TOGGLE_NON_ISLAND_SHARED_MEDIA_TABS),
                 SearchRegistry.Entry("non-island-global-search", R.string.InuNonIslandGlobalSearch, TOGGLE_NON_ISLAND_GLOBAL_SEARCH),

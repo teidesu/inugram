@@ -6,6 +6,8 @@
     <string name="InuSendToDiscussWithoutJoinInfo">Skip the client-only membership check for discussion groups</string>
     <string name="InuNavigationDrawer">Navigation drawer</string>
     <string name="InuNavigationDrawerInfo">Replaces the bottom tab bar with the pre-12.0 hamburger side drawer. Requires restart.</string>
+    <string name="InuDrawerBackGesture">Open drawer with back gesture</string>
+    <string name="InuDrawerBackGestureInfo">Swiping back from the left edge of the chat list opens the drawer instead of leaving the app.</string>
     <string name="InuSettings">Inugram Settings</string>
     <string name="InuSettingsInfo">what the dog doin?</string>
     <string name="InuExperimental">Experimental</string>

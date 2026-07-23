@@ -9,11 +9,11 @@ Restore hamburger side drawer for old layout mode (DialogsActivity)
 ---
  .../ui/ActionBar/DrawerLayoutContainer.java   | 38 +++++++++++++++++--
  .../java/org/telegram/ui/DialogsActivity.java | 25 ++++++++++--
- .../java/org/telegram/ui/LaunchActivity.java  | 24 ++++--------
+ .../java/org/telegram/ui/LaunchActivity.java  | 32 ++++++----------
  .../java/org/telegram/ui/LoginActivity.java   |  9 ++---
  .../ui/TwoStepVerificationActivity.java       |  5 +--
  .../ui/TwoStepVerificationSetupActivity.java  | 10 ++---
- 6 files changed, 71 insertions(+), 40 deletions(-)
+ 6 files changed, 75 insertions(+), 44 deletions(-)
 
 diff --git a/TMessagesProj/src/main/java/org/telegram/ui/ActionBar/DrawerLayoutContainer.java b/TMessagesProj/src/main/java/org/telegram/ui/ActionBar/DrawerLayoutContainer.java
 index 0000000..0000000 100644
@@ -204,6 +204,42 @@ index 0000000..0000000 100644
              }
  
              try {
+@@ -760,7 +759,7 @@ public class LaunchActivity extends BasePermissionsActivity implements INavigati
+         final int inuPredictiveMode = desu.inugram.InuConfig.PREDICTIVE_BACK_MODE.getValue();
+         if (Build.VERSION.SDK_INT >= 34 && inuPredictiveMode == desu.inugram.InuConfig.PredictiveBackModeItem.MATERIAL3 && actionBarLayout != null) {
+             if (onBackAnimationCallback == null) {
+-                onBackAnimationCallback = desu.inugram.helpers.theme.Material3PredictiveBack.createCallback(
++                onBackAnimationCallback = desu.inugram.helpers.dialogs.DrawerBackGesture.wrap(this, desu.inugram.helpers.theme.Material3PredictiveBack.createCallback(
+                     this,
+                     actionBarLayout,
+                     () -> {
+@@ -771,7 +770,7 @@ public class LaunchActivity extends BasePermissionsActivity implements INavigati
+                         if (!onBackPressed(true)) return;
+                         onBackPressed();
+                     }
+-                );
++                ));
+             }
+             getOnBackInvokedDispatcher().registerOnBackInvokedCallback(
+                 OnBackInvokedDispatcher.PRIORITY_DEFAULT,
+@@ -779,7 +778,7 @@ public class LaunchActivity extends BasePermissionsActivity implements INavigati
+             );
+         } else if (Build.VERSION.SDK_INT >= 34 && inuPredictiveMode == desu.inugram.InuConfig.PredictiveBackModeItem.STOCK) {
+             if (onBackAnimationCallback == null) {
+-                onBackAnimationCallback =  new OnBackAnimationCallback() {
++                onBackAnimationCallback = desu.inugram.helpers.dialogs.DrawerBackGesture.wrap(this, new OnBackAnimationCallback() {
+                     private AnimationNotificationsLocker locker = new AnimationNotificationsLocker();
+                     private boolean locked;
+ 
+@@ -862,7 +861,7 @@ public class LaunchActivity extends BasePermissionsActivity implements INavigati
+                             actionBarLayout.onBackCancelled();
+                         }
+                     }
+-                };
++                });
+             }
+             getOnBackInvokedDispatcher().registerOnBackInvokedCallback(
+                 OnBackInvokedDispatcher.PRIORITY_DEFAULT,
 @@ -1231,10 +1230,10 @@ public class LaunchActivity extends BasePermissionsActivity implements INavigati
  
      private boolean switchingAccount;

@@ -208,6 +208,9 @@ object InuConfig {
     val NAVIGATION_DRAWER = BoolItem("navigation_drawer", false)
 
     @JvmField
+    val DRAWER_BACK_GESTURE = BoolItem("drawer_back_gesture", false)
+
+    @JvmField
     val BOTTOM_TABS_HIDE = BoolItem("bottom_tabs_hide", false)
 
     @JvmField

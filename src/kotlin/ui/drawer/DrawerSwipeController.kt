@@ -71,6 +71,17 @@ class DrawerSwipeController(private val host: DrawerLayoutContainer) {
 
     val isDrawerOpened: Boolean get() = drawerOpened
 
+    val drawerWidth: Int get() = drawerLayout?.measuredWidth ?: 0
+
+    val canOpenFromBackGesture: Boolean
+        get() = allowOpenDrawer && !drawerOpened && drawerPosition == 0f &&
+            drawerWidth > 0 && canTrackGesture()
+
+    fun dragDrawerTo(value: Float) {
+        cancelCurrentAnimation()
+        setDrawerPosition(value)
+    }
+
     fun setDrawerLayout(layout: FrameLayout, listView: View, lp: FrameLayout.LayoutParams) {
         drawerLayout = layout
         drawerListView = listView
