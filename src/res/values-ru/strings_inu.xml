@@ -45,6 +45,7 @@
     <string name="InuHideCustomTheme">Отключить кастомную тему</string>
     <string name="InuShowCustomTheme">Включить кастомную тему</string>
     <string name="InuDisableSwipeToUnarchive">Отключить свайп для разархивирования</string>
+    <string name="InuDisableSwipeToHideGeneralTopic">Отключить свайп для скрытия темы General</string>
     <string name="InuResetStorage">Сбросить хранилище</string>
     <string name="InuResetStorageConfirm">Это удалит локальные ключи авторизации и кэши, чтобы сбросить ожидающую авторизацию. Вы уверены?</string>
     <string name="InuHideBottomBar">Скрывать нижнюю панель</string>
@@ -97,6 +98,10 @@
     <string name="InuStickerTimeModeHideIncoming">Скрыть только для входящих</string>
     <string name="InuStickerTimeModeHideCompletely">Скрыть полностью</string>
     <string name="InuStickerSizeDialogMessage">хороший щеночек!</string>
+    <string name="InuBubbleTails">Хвостики у сообщений</string>
+    <string name="InuMiscPreviewForwardedFrom">пёсик</string>
+    <string name="InuMiscPreviewForwardedMessage">гав!! ты это видел?</string>
+    <string name="InuMiscPreviewEditedMessage">безупёсно, больше никаких опечаток</string>
     <string name="InuDeleteForBoth">«Удалить у всех» по умолчанию</string>
     <string name="InuDeleteForBothMessages">Отдельные сообщения</string>
     <string name="InuDeleteForBothDms">Переписки</string>
@@ -469,6 +474,8 @@
     <string name="InuFasterDownloads">Ускорение скачивания</string>
     <string name="InuFasterUploads">Ускорение выгрузки</string>
     <string name="InuFasterTransfersInfo">Увеличивает размер чанка и количество параллельных запросов. Может улучшить скорость, но может и навредить (особенно для пользователей без Premium)</string>
+    <string name="InuSendMp4DocumentAsVideo">Отправлять MP4-документы как видео</string>
+    <string name="InuSendMp4DocumentAsVideoInfo">MP4-файлы, прикреплённые через «Файлы», отправляются как проигрываемые видео без конвертации</string>
 
     <string name="InuMentionInsertTitle">Вставить упоминание</string>
 
@@ -541,6 +548,8 @@
     <string name="InuSendToDiscussWithoutJoinInfo">Пропускать клиентскую проверку членства для групп обсуждения (комментариев)</string>
     <string name="InuNavigationDrawer">Боковое меню</string>
     <string name="InuNavigationDrawerInfo">Заменяет нижнюю панель вкладок на боковое меню, как в старых версиях. Требуется перезапуск.</string>
+    <string name="InuDrawerBackGesture">Открывать меню жестом «назад»</string>
+    <string name="InuDrawerBackGestureInfo">Свайп назад от левого края списка чатов открывает боковое меню вместо выхода из приложения.</string>
     <string name="InuMaterial3">Material Design 3</string>
     <string name="InuMaterial3Switches">Переключатели</string>
     <string name="InuMaterial3Avatars">Аватары</string>

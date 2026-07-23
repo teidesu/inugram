@@ -45,6 +45,7 @@
     <string name="InuHideCustomTheme">カスタムテーマを非表示</string>
     <string name="InuShowCustomTheme">カスタムテーマを表示</string>
     <string name="InuDisableSwipeToUnarchive">スワイプでアーカイブ解除を無効化</string>
+    <string name="InuDisableSwipeToHideGeneralTopic">スワイプで General トピックを非表示にするのを無効化</string>
     <string name="InuResetStorage">ストレージをリセット</string>
     <string name="InuResetStorageConfirm">保留中の認証をリセットするため、ローカル認証キーとキャッシュを消去します。よろしいですか？</string>
     <string name="InuHideBottomBar">下部バーを非表示</string>
@@ -97,6 +98,10 @@
     <string name="InuStickerTimeModeHideIncoming">受信のみ非表示</string>
     <string name="InuStickerTimeModeHideCompletely">完全に非表示</string>
     <string name="InuStickerSizeDialogMessage">いい子だね！</string>
+    <string name="InuBubbleTails">吹き出しのしっぽ</string>
+    <string name="InuMiscPreviewForwardedFrom">わんこ</string>
+    <string name="InuMiscPreviewForwardedMessage">わんっ!! これ見た?</string>
+    <string name="InuMiscPreviewEditedMessage">誤字はもうワンつもないよ</string>
     <string name="InuDeleteForBoth">デフォルトで「全員から削除」</string>
     <string name="InuDeleteForBothMessages">メッセージ</string>
     <string name="InuDeleteForBothDms">DM ダイアログ</string>
@@ -465,6 +470,8 @@
     <string name="InuFasterDownloads">ダウンロード高速化</string>
     <string name="InuFasterUploads">アップロード高速化</string>
     <string name="InuFasterTransfersInfo">チャンクサイズと並列リクエスト数を増やします。スループットが上がる場合もあれば、逆に下がる場合もあります (特に Premium 以外のユーザー)</string>
+    <string name="InuSendMp4DocumentAsVideo">MP4 ドキュメントを動画として送信</string>
+    <string name="InuSendMp4DocumentAsVideoInfo">ファイルから添付した MP4 は変換せずに再生可能な動画として送信されます</string>
     <string name="InuMentionInsertTitle">メンションを挿入</string>
     <string name="InuPasscode">パスコード</string>
     <string name="InuPasscodeNeeded">先に Telegram のパスコードを設定してください。</string>
@@ -535,6 +542,8 @@
     <string name="InuSendToDiscussWithoutJoinInfo">ディスカッショングループのクライアント側メンバーシップチェックをスキップします</string>
     <string name="InuNavigationDrawer">ナビゲーションドロワー</string>
     <string name="InuNavigationDrawerInfo">下部タブバーを 12.0 以前のハンバーガーサイドドロワーに置き換えます。再起動が必要です。</string>
+    <string name="InuDrawerBackGesture">戻るジェスチャーでドロワーを開く</string>
+    <string name="InuDrawerBackGestureInfo">チャットリストの左端から戻るスワイプをすると、アプリを終了せずにドロワーを開きます。</string>
     <string name="InuMaterial3">Material Design 3</string>
     <string name="InuMaterial3Switches">スイッチ</string>
     <string name="InuMonetTheme">Monet テーマ</string>

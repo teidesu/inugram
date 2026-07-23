@@ -45,6 +45,7 @@
     <string name="InuHideCustomTheme">隐藏自定义主题</string>
     <string name="InuShowCustomTheme">显示自定义主题</string>
     <string name="InuDisableSwipeToUnarchive">禁用滑动取消归档</string>
+    <string name="InuDisableSwipeToHideGeneralTopic">禁用滑动隐藏 General 话题</string>
     <string name="InuResetStorage">重置存储</string>
     <string name="InuResetStorageConfirm">这将清除本地认证密钥和缓存，以重置待处理的认证。确定吗？</string>
     <string name="InuHideBottomBar">隐藏底部栏</string>
@@ -97,6 +98,10 @@
     <string name="InuStickerTimeModeHideIncoming">仅隐藏收到的</string>
     <string name="InuStickerTimeModeHideCompletely">完全隐藏</string>
     <string name="InuStickerSizeDialogMessage">好狗狗！</string>
+    <string name="InuBubbleTails">气泡尾巴</string>
+    <string name="InuMiscPreviewForwardedFrom">狗狗</string>
+    <string name="InuMiscPreviewForwardedMessage">汪!! 你看到这个了吗?</string>
+    <string name="InuMiscPreviewEditedMessage">汪美无缺，再没有错别字</string>
     <string name="InuDeleteForBoth">默认「为所有人删除」</string>
     <string name="InuDeleteForBothMessages">消息</string>
     <string name="InuDeleteForBothDms">私聊</string>
@@ -464,6 +469,8 @@
     <string name="InuFasterDownloads">加速下载</string>
     <string name="InuFasterUploads">加速上传</string>
     <string name="InuFasterTransfersInfo">提高分块大小和并行请求数。可能提升吞吐，也可能产生反效果 (尤其对非 Premium 用户)</string>
+    <string name="InuSendMp4DocumentAsVideo">将 MP4 文档作为视频发送</string>
+    <string name="InuSendMp4DocumentAsVideoInfo">通过「文件」附加的 MP4 会作为可播放视频发送，无需转换</string>
     <string name="InuMentionInsertTitle">插入提及</string>
     <string name="InuPasscode">密码锁</string>
     <string name="InuPasscodeNeeded">请先设置 Telegram 密码锁。</string>
@@ -534,6 +541,8 @@
     <string name="InuSendToDiscussWithoutJoinInfo">跳过讨论组的客户端成员检查</string>
     <string name="InuNavigationDrawer">侧边抽屉</string>
     <string name="InuNavigationDrawerInfo">用 12.0 之前的汉堡侧边抽屉替换底部标签栏。需重启。</string>
+    <string name="InuDrawerBackGesture">用返回手势打开抽屉</string>
+    <string name="InuDrawerBackGestureInfo">从聊天列表左边缘向内滑动返回时打开抽屉，而不是退出应用。</string>
     <string name="InuMaterial3">Material Design 3</string>
     <string name="InuMaterial3Switches">开关</string>
     <string name="InuMonetTheme">Monet 主题</string>
