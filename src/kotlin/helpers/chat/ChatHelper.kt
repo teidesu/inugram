@@ -290,6 +290,17 @@ object ChatHelper {
             icons.add(R.drawable.msg_copy)
         }
 
+        // stock only offers this for documents/music, but its handler saves any cached file just fine
+        if (!noforwards && !options.contains(ChatActivity.OPTION_SAVE_TO_DOWNLOADS_OR_MUSIC) &&
+            (selectedObject.isSticker || selectedObject.isAnimatedSticker) &&
+            selectedObject.messageOwner?.media is TLRPC.TL_messageMediaDocument &&
+            (selectedObject.mediaExists || selectedObject.attachPathExists)
+        ) {
+            items.add(LocaleController.getString(R.string.SaveToDownloads))
+            options.add(ChatActivity.OPTION_SAVE_TO_DOWNLOADS_OR_MUSIC)
+            icons.add(R.drawable.msg_download)
+        }
+
         items.add(LocaleController.getString(R.string.InuMessageDetails))
         options.add(OPTION_DETAILS)
         icons.add(R.drawable.msg_info)
