@@ -6,11 +6,14 @@ import android.animation.AnimatorSet
 import android.animation.ObjectAnimator
 import android.graphics.Canvas
 import android.graphics.Paint
+import android.graphics.Rect
 import android.graphics.drawable.Drawable
+import android.os.Build
 import android.util.Property
 import android.view.MotionEvent
 import android.view.VelocityTracker
 import android.view.View
+import android.view.ViewTreeObserver
 import android.view.accessibility.AccessibilityEvent
 import android.view.animation.DecelerateInterpolator
 import android.widget.FrameLayout
@@ -47,6 +50,24 @@ class DrawerSwipeController(private val host: DrawerLayoutContainer) {
     private var scrimOpacity: Float = 0f
     private val scrimPaint = Paint()
     private var shadowLeft: Drawable? = null
+    private val exclusionRect = Rect()
+    private val exclusionRects = listOf(exclusionRect)
+
+    private val preDrawListener = ViewTreeObserver.OnPreDrawListener {
+        updateGestureExclusion()
+        true
+    }
+
+    private val attachListener = object : View.OnAttachStateChangeListener {
+        override fun onViewAttachedToWindow(v: View) {
+            v.viewTreeObserver.addOnPreDrawListener(preDrawListener)
+        }
+
+        override fun onViewDetachedFromWindow(v: View) {
+            val observer = v.viewTreeObserver
+            if (observer.isAlive) observer.removeOnPreDrawListener(preDrawListener)
+        }
+    }
 
     val isDrawerOpened: Boolean get() = drawerOpened
 
@@ -61,6 +82,10 @@ class DrawerSwipeController(private val host: DrawerLayoutContainer) {
             } catch (_: Exception) {
             }
         }
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+            host.addOnAttachStateChangeListener(attachListener)
+            if (host.isAttachedToWindow) host.viewTreeObserver.addOnPreDrawListener(preDrawListener)
+        }
     }
 
     fun isDrawerChild(child: View?): Boolean = child != null && child == drawerLayout
@@ -72,6 +97,7 @@ class DrawerSwipeController(private val host: DrawerLayoutContainer) {
                 setDrawerPosition(0f); onDrawerAnimationEnd(false)
             } else closeDrawer(true)
         }
+        updateGestureExclusion()
     }
 
     @Keep
@@ -131,6 +157,7 @@ class DrawerSwipeController(private val host: DrawerLayoutContainer) {
         drawerOpened = opened
         host.sendAccessibilityEvent(AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED)
         syncStatusBar(opened)
+        updateGestureExclusion()
     }
 
     private fun syncStatusBar(opened: Boolean) {
@@ -169,6 +196,33 @@ class DrawerSwipeController(private val host: DrawerLayoutContainer) {
         val top = host.parentActionBarLayout.lastFragment as? DialogsActivity ?: return false
         val tabs = top.filterTabsView ?: return false
         return tabs.visibility == View.VISIBLE && !tabs.isFirstTabSelected
+    }
+
+    /**
+     * Hand the left edge back to the drawer instead of the system back gesture.
+     * The platform honours at most 200dp of exclusion per edge (consumed
+     * bottom-up, `config_systemGestureExclusionLimitDp`), so the band is anchored
+     * above the navigation bar rather than spanning the whole screen.
+     *
+     * Pushed unconditionally rather than diffed against a local cache: a detach /
+     * reattach or a new ViewRootImpl drops the registration silently, and the
+     * platform already coalesces unchanged rect lists before reporting them to WM.
+     */
+    private fun updateGestureExclusion() {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.Q) return
+        val height = host.height
+        if (!allowOpenDrawer || height <= 0 || !canTrackGesture()) {
+            host.systemGestureExclusionRects = emptyList()
+            return
+        }
+        val bottom = maxOf(0, height - AndroidUtilities.navigationBarHeight)
+        exclusionRect.set(
+            0,
+            maxOf(0, bottom - AndroidUtilities.dp(EXCLUSION_HEIGHT_DP.toFloat())),
+            AndroidUtilities.dp(EDGE_SAFE_ZONE_DP.toFloat()),
+            bottom,
+        )
+        host.systemGestureExclusionRects = exclusionRects
     }
 
     fun onTouchEvent(ev: MotionEvent?): Boolean {
@@ -344,6 +398,7 @@ class DrawerSwipeController(private val host: DrawerLayoutContainer) {
 
     companion object {
         private const val EDGE_SAFE_ZONE_DP = 25
+        private const val EXCLUSION_HEIGHT_DP = 200
 
         // ObjectAnimator with a string property name uses JavaBeans naming; an
         // explicit Property bypasses that.
