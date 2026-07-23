@@ -560,6 +560,8 @@
     <string name="InuFasterDownloads">Faster downloads</string>
     <string name="InuFasterUploads">Faster uploads</string>
     <string name="InuFasterTransfersInfo">Bumps chunk size and parallel request count. May improve throughput, but may also cause the adverse effect (especially for non-Premium users)</string>
+    <string name="InuSendMp4DocumentAsVideo">Send MP4 documents as videos</string>
+    <string name="InuSendMp4DocumentAsVideoInfo">MP4 files attached through Files are sent as playable videos without conversion</string>
     <string name="InuMentionInsertTitle">Insert mention</string>
     <string name="InuPasscode">Passcode</string>
     <string name="InuPasscodeNeeded">Set up a Telegram passcode first.</string>

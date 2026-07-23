@@ -196,6 +196,7 @@ most things are toggleable in `Settings → Inugram`, with sensible opinionated 
 - open bottom-tab menus early by swiping up; flat highlight (not ripple) on menu hover
 - faster downloads/uploads
 - auto-disable the configured proxy while a VPN is active
+- send MP4 files attached through Files as playable videos without conversion
 - original video quality option in quality picker when sending videos
 
 ## annoyances

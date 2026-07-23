@@ -1,0 +1,30 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: alina sireneva <alina@tei.pet>
+Date: Thu, 23 Jul 2026 10:27:30 +0400
+Subject: send mp4 from Files as a proper video
+
+---
+ .../main/java/org/telegram/messenger/SendMessagesHelper.java   | 3 ++-
+ 1 file changed, 2 insertions(+), 1 deletion(-)
+
+diff --git a/TMessagesProj/src/main/java/org/telegram/messenger/SendMessagesHelper.java b/TMessagesProj/src/main/java/org/telegram/messenger/SendMessagesHelper.java
+index 0000000..0000000 100644
+--- a/TMessagesProj/src/main/java/org/telegram/messenger/SendMessagesHelper.java
++++ b/TMessagesProj/src/main/java/org/telegram/messenger/SendMessagesHelper.java
+@@ -9404,6 +9404,7 @@ public class SendMessagesHelper extends BaseController implements NotificationCe
+                 }
+             }
+         }
++        final boolean inu_sendMp4DocumentAsVideo = desu.inugram.helpers.media.MediaSendHelper.prepareMp4Document(document, path, isEncrypted, forceDocument);
+         final String captionFinal = caption != null ? caption.toString() : "";
+ 
+         final TLRPC.TL_document documentFinal = document;
+@@ -9413,7 +9414,7 @@ public class SendMessagesHelper extends BaseController implements NotificationCe
+         if (originalPath != null) {
+             params.put("originalPath", originalPath);
+         }
+-        if (forceDocument && attributeAudio == null) {
++        if (forceDocument && attributeAudio == null && !inu_sendMp4DocumentAsVideo) {
+             params.put("forceDocument", "1");
+         }
+         if (parentFinal != null) {
