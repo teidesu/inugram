@@ -1,0 +1,22 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: alina sireneva <alina@tei.pet>
+Date: Thu, 23 Jul 2026 10:26:24 +0400
+Subject: preserve filenames when saving to downloads
+
+---
+ .../src/main/java/org/telegram/messenger/MediaController.java   | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/TMessagesProj/src/main/java/org/telegram/messenger/MediaController.java b/TMessagesProj/src/main/java/org/telegram/messenger/MediaController.java
+index 0000000..0000000 100644
+--- a/TMessagesProj/src/main/java/org/telegram/messenger/MediaController.java
++++ b/TMessagesProj/src/main/java/org/telegram/messenger/MediaController.java
+@@ -5571,7 +5571,7 @@ public class MediaController implements AudioManager.OnAudioFocusChangeListener,
+                     Uri uri;
+                     boolean result = true;
+                     if (Build.VERSION.SDK_INT >= 29) {
+-                        uri = saveFileInternal(type, sourceFile, null);
++                        uri = saveFileInternal(type, sourceFile, name);
+                         result = uri != null;
+                     } else {
+                         File destFile;

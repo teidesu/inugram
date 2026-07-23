@@ -220,6 +220,7 @@ most things are toggleable in `Settings → Inugram`, with sensible opinionated 
 
 ## 🐶 bugfixes (vs stock)
 
+- "Save to Downloads" preserves the original filename on Android 10+
 - gboard image paste no longer skips PhotoViewer
 - photo crop silently not applied to the sent image
 - high-quality photo cropping in PhotoViewer (crop *before* downscaling)

@@ -240,3 +240,4 @@ bugfix/ime-insets-animation-desync.patch
 debloat/disable-swipe-to-hide-general-topic.patch
 bugfix/list-row-dead-zones.patch
 bugfix/storage-usage-nested-scroll.patch
+bugfix/preserve-download-filename.patch
