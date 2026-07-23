@@ -4,9 +4,9 @@ Date: Sun, 5 Jul 2026 01:44:58 +0400
 Subject: improved ripple handling in RecyclerListView
 
 ---
- .../ui/Components/RecyclerListView.java       | 107 ++++++++++++++++--
+ .../ui/Components/RecyclerListView.java       | 111 ++++++++++++++++--
  .../java/org/telegram/ui/DialogsActivity.java |   1 +
- 2 files changed, 101 insertions(+), 7 deletions(-)
+ 2 files changed, 105 insertions(+), 7 deletions(-)
 
 diff --git a/TMessagesProj/src/main/java/org/telegram/ui/Components/RecyclerListView.java b/TMessagesProj/src/main/java/org/telegram/ui/Components/RecyclerListView.java
 index 0000000..0000000 100644
@@ -195,7 +195,7 @@ index 0000000..0000000 100644
      }
  
      @Override
-@@ -2637,9 +2713,26 @@ public class RecyclerListView extends RecyclerView implements IBlur3Capture {
+@@ -2637,9 +2713,30 @@ public class RecyclerListView extends RecyclerView implements IBlur3Capture {
      }
  
      private void drawSelectors2(Canvas canvas) {
@@ -218,6 +218,10 @@ index 0000000..0000000 100644
 +            selectorDrawable.jumpToCurrentState();
 +            selectorRect.setEmpty();
 +            return;
++        }
++        if (selectorView != null && selectorView.getParent() == this && translateSelector != -2 && translateSelector != selectorPosition) {
++            int inu_bottomPadding = getAdapter() instanceof SelectionAdapter ? ((SelectionAdapter) getAdapter()).getSelectionBottomPadding(selectorView) : 0;
++            selectorRect.set(selectorView.getLeft(), selectorView.getTop(), selectorView.getRight(), selectorView.getBottom() - inu_bottomPadding);
 +        }
  
          if ((translateSelector == -2 || translateSelector == selectorPosition) && selectorView != null) {

@@ -8,9 +8,12 @@ import android.graphics.PorterDuffColorFilter
 import android.os.Build
 import android.os.Bundle
 import android.text.InputType
+import android.text.Layout
 import android.text.SpannableString
 import android.text.SpannableStringBuilder
 import android.text.Spanned
+import android.text.StaticLayout
+import android.text.TextUtils
 import android.view.Gravity
 import android.view.HapticFeedbackConstants
 import android.view.View
@@ -75,6 +78,8 @@ import kotlin.math.roundToInt
 
 object ChatHelper {
     private var skipNextReactionConfirm = false
+
+    private const val COMPACT_FORWARD_ICON_SIZE = 12f
 
     const val OPTION_SAVE = 501
     const val OPTION_DETAILS = 502
@@ -1011,19 +1016,84 @@ object ChatHelper {
 
     @JvmStatic
     fun maybeAppendForwardTime(forwardedString: String, messageObject: MessageObject): String {
-        if (!InuConfig.SHOW_FORWARD_TIME.value) return forwardedString
-        val fwd = messageObject.messageOwner.fwd_from ?: return forwardedString
-        if (fwd.date == 0) return forwardedString
+        if (isCompactForward(messageObject)) return forwardedString
+        val suffix = getForwardTimeSuffix(messageObject) ?: return forwardedString
+        return "$forwardedString • $suffix"
+    }
+
+    @JvmStatic
+    fun isCompactForward(messageObject: MessageObject?): Boolean {
+        if (!InuConfig.COMPACT_FORWARDED.value) return false
+        if (messageObject == null || messageObject.type == MessageObject.TYPE_STORY) return false
+        val fwd = messageObject.messageOwner?.fwd_from ?: return false
+        return fwd.psa_type.isNullOrEmpty()
+    }
+
+    @JvmStatic
+    fun getForwardLineCount(messageObject: MessageObject?): Int = if (isCompactForward(messageObject)) 1 else 2
+
+    @JvmStatic
+    fun getCompactForwardPrefixWidth(messageObject: MessageObject?): Int {
+        if (!isCompactForward(messageObject)) return 0
+        return AndroidUtilities.dp(COMPACT_FORWARD_ICON_SIZE) +
+            Theme.chat_forwardNamePaint.measureText(" ").roundToInt()
+    }
+
+    @JvmStatic
+    fun maybeCompactForwardLine(name: CharSequence, maxWidth: Int, messageObject: MessageObject): CharSequence {
+        if (!isCompactForward(messageObject)) return name
+        val suffix = getForwardTimeSuffix(messageObject)?.let { " • $it" } ?: ""
+        val available = maxWidth - getCompactForwardPrefixWidth(messageObject) -
+            Theme.chat_forwardNamePaint.measureText(suffix)
+        val sb = SpannableStringBuilder()
+        appendTimeIcon(sb, R.drawable.mini_forwarded, sizeDp = COMPACT_FORWARD_ICON_SIZE, translateYDp = 1f)
+        sb.append(" ")
+        sb.append(TextUtils.ellipsize(name, Theme.chat_forwardNamePaint, available, TextUtils.TruncateAt.END))
+        sb.append(suffix)
+        return sb
+    }
+
+    @JvmStatic
+    fun maybeCompactForwardLayouts(layouts: Array<StaticLayout>, width: Int, messageObject: MessageObject) {
+        if (!isCompactForward(messageObject)) return
+        layouts[0] = layouts[1]
+        layouts[1] = StaticLayout(
+            "",
+            Theme.chat_forwardNamePaint,
+            width,
+            Layout.Alignment.ALIGN_NORMAL,
+            1f,
+            0f,
+            false,
+        )
+    }
+
+    @JvmStatic
+    fun getCompactForwardHintShift(messageObject: MessageObject?): Int {
+        if (!isCompactForward(messageObject)) return 0
+        val stockHeight = AndroidUtilities.dp(4f) + Theme.chat_forwardNamePaint.textSize.toInt() * 2
+        return (stockHeight / 2f + AndroidUtilities.dpf2(1.33f)).roundToInt()
+    }
+
+    @JvmStatic
+    fun getForwardAccessibilityPrefix(messageObject: MessageObject?): String {
+        if (!isCompactForward(messageObject)) return ""
+        return LocaleController.getString(R.string.ForwardedFrom) + " "
+    }
+
+    private fun getForwardTimeSuffix(messageObject: MessageObject): String? {
+        if (!InuConfig.SHOW_FORWARD_TIME.value) return null
+        val fwd = messageObject.messageOwner.fwd_from ?: return null
+        if (fwd.date == 0) return null
 
         val origMs = fwd.date * 1000L
         val msgMs = messageObject.messageOwner.date * 1000L
         val time = LocaleController.getInstance().formatterDay.format(origMs)
-        val suffix = if (isSameDay(origMs, msgMs)) {
+        return if (isSameDay(origMs, msgMs)) {
             time
         } else {
             "${LocaleController.getInstance().formatterYearMax.format(origMs)} $time"
         }
-        return "$forwardedString • $suffix"
     }
 
     private fun isSameDay(a: Long, b: Long): Boolean {

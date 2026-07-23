@@ -122,7 +122,7 @@ most things are toggleable in `Settings → Inugram`, with sensible opinionated 
 - more bulk actions in message selection mode (save, translate, gallery, pin/unpin, no-quote forward)
 - in-place message translation, with optional web preview translation, original-text appending and on-device source-language auto-detection (hides Translate when already in your language)
 - instant view pages translator
-- show original time/date in "forwarded from" header
+- show original time/date in "forwarded from" header, optionally collapsing it to a single line with an icon instead of the "forwarded from" label
 - long-tap forward bar (above input) to cycle between regular / without sender / without caption
 - long-tap a mention in a message to insert a name-mention into the input with custom text
 - 🐶 restrict/ban menu items the avatar long-tap menu
@@ -230,6 +230,7 @@ most things are toggleable in `Settings → Inugram`, with sensible opinionated 
 - sticker creator output sent as photo when high-quality default is on
 - non-square webm stickers rendered off-center in the emoji panel (precached frames were blitted top-left and scaled by width only)
 - recyclerlistview double-tap requires same view
+- list ripple left behind when the pressed row moves because another row changed height (selector was only re-synced on scroll)
 - dead zones in list rows where a hidden clickable child kept stale bounds from a previous binding (e.g. top-right corner of a member row in profile after a tagged member was recycled)
 - dialogs list pull-to-reveal-archive glitches
 - pinned dialog reorder scrolling/glitching mid-drag in the archive (stock bug: async list diffing dispatched the move after the drag swap)

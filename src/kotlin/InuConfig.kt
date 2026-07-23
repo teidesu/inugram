@@ -583,6 +583,9 @@ object InuConfig {
     val SHOW_FORWARD_TIME = BoolItem("show_forward_time", true)
 
     @JvmField
+    val COMPACT_FORWARDED = BoolItem("compact_forwarded", false)
+
+    @JvmField
     val COMPACT_EDITED = BoolItem("compact_edited", false)
 
     @JvmField

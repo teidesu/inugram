@@ -114,7 +114,7 @@ hooks/messagescontroller.patch
 feature/maps.patch
 feature/translator.patch
 feature/global-from-user-search.patch
-feature/forwarded-time-inline.patch
+feature/forwarded-time.patch
 debloat/profile-photo-blur.patch
 bugfix/reaction-sending-race.patch
 feature/custom-emoji-after-regular.patch

@@ -1,0 +1,159 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: alina sireneva <alina@tei.su>
+Date: Mon, 11 May 2026 17:40:37 +0200
+Subject: tweaks for the forwarded header: show time + compact one-line mode
+
+---
+ .../telegram/messenger/SendMessagesHelper.java |  3 +++
+ .../org/telegram/ui/Cells/ChatMessageCell.java | 18 +++++++++++-------
+ .../ui/Components/ForwardBackground.java       |  8 ++++----
+ .../org/telegram/ui/Components/HintView.java   |  1 +
+ 4 files changed, 19 insertions(+), 11 deletions(-)
+
+diff --git a/TMessagesProj/src/main/java/org/telegram/messenger/SendMessagesHelper.java b/TMessagesProj/src/main/java/org/telegram/messenger/SendMessagesHelper.java
+index 0000000..0000000 100644
+--- a/TMessagesProj/src/main/java/org/telegram/messenger/SendMessagesHelper.java
++++ b/TMessagesProj/src/main/java/org/telegram/messenger/SendMessagesHelper.java
+@@ -2254,6 +2254,9 @@ public class SendMessagesHelper extends BaseController implements NotificationCe
+                     } else if (!forwardFromSaved) { //if (!toMyself || !msgObj.isOutOwner())
+                         long fromId = msgObj.getFromChatId();
+                         newMsg.fwd_from = new TLRPC.TL_messageFwdHeader();
++                        if (desu.inugram.InuConfig.SHOW_FORWARD_TIME.getValue()) {
++                            newMsg.fwd_from.date = msgObj.messageOwner.date;
++                        }
+                         newMsg.fwd_from.channel_post = msgObj.getId();
+                         newMsg.fwd_from.flags |= 4;
+                         if (msgObj.isFromUser()) {
+diff --git a/TMessagesProj/src/main/java/org/telegram/ui/Cells/ChatMessageCell.java b/TMessagesProj/src/main/java/org/telegram/ui/Cells/ChatMessageCell.java
+index 0000000..0000000 100644
+--- a/TMessagesProj/src/main/java/org/telegram/ui/Cells/ChatMessageCell.java
++++ b/TMessagesProj/src/main/java/org/telegram/ui/Cells/ChatMessageCell.java
+@@ -19081,6 +19081,7 @@ public class ChatMessageCell extends BaseCell implements SeekBar.SeekBarDelegate
+ 
+                     forwardedNameWidth = getMaxNameWidth();
+                     forwardedString = getForwardedMessageText(messageObject);
++                    forwardedString = desu.inugram.helpers.chat.ChatHelper.maybeAppendForwardTime(forwardedString, messageObject);
+                     if (hasPsaHint) {
+                         forwardedNameWidth -= dp(36);
+                     }
+@@ -19098,7 +19099,7 @@ public class ChatMessageCell extends BaseCell implements SeekBar.SeekBarDelegate
+                     if (includeAvatar && stringBuilder.length() > 1) {
+                         stringBuilder.setSpan(forwardAvatar, 0, 1, Spannable.SPAN_EXCLUSIVE_EXCLUSIVE);
+                     }
+-                    forwardNameCenterX = (int) Math.ceil(Theme.chat_forwardNamePaint.measureText(name, 0, name.length())) / 2;
++                    forwardNameCenterX = (int) Math.ceil(Theme.chat_forwardNamePaint.measureText(name, 0, name.length())) / 2 + desu.inugram.helpers.chat.ChatHelper.getCompactForwardPrefixWidth(messageObject);
+                     if (currentForwardName == null || messageObject.messageOwner.fwd_from.from_id != null) {
+                         stringBuilder.setSpan(new TypefaceSpan(AndroidUtilities.bold()), 0, stringBuilder.length(), Spannable.SPAN_EXCLUSIVE_EXCLUSIVE);
+                     }
+@@ -19108,15 +19109,17 @@ public class ChatMessageCell extends BaseCell implements SeekBar.SeekBarDelegate
+                     lastLine = Emoji.replaceEmoji(lastLine, Theme.chat_forwardNamePaint.getFontMetricsInt(), false);
+                 } catch (Exception ignore) {
+                 }
++                lastLine = desu.inugram.helpers.chat.ChatHelper.maybeCompactForwardLine(lastLine, forwardedNameWidth, messageObject);
+                 lastLine = TextUtils.ellipsize(lastLine, Theme.chat_forwardNamePaint, forwardedNameWidth, TextUtils.TruncateAt.END);
+                 try {
+                     forwardedNameLayout[1] = new StaticLayout(lastLine, Theme.chat_forwardNamePaint, forwardedNameWidth + dp(2), Layout.Alignment.ALIGN_NORMAL, 1.0f, 0.0f, false);
+                     lastLine = TextUtils.ellipsize(AndroidUtilities.replaceTags(forwardedString), Theme.chat_forwardNamePaint, forwardedNameWidth, TextUtils.TruncateAt.END);
+                     forwardedNameLayout[0] = new StaticLayout(lastLine, Theme.chat_forwardNamePaint, forwardedNameWidth + dp(2), Layout.Alignment.ALIGN_NORMAL, 1.0f, 0.0f, false);
++                    desu.inugram.helpers.chat.ChatHelper.maybeCompactForwardLayouts(forwardedNameLayout, forwardedNameWidth + dp(2), messageObject);
+                     if (forwardBg == null) {
+                         forwardBg = new ForwardBackground(this);
+                     }
+-                    forwardBg.set(forwardedNameLayout, !currentMessageObject.isOutOwner() && !(drawNameLayout && nameLayout != null) && pinnedTop);
++                    forwardBg.set(forwardedNameLayout, !currentMessageObject.isOutOwner() && !(drawNameLayout && nameLayout != null) && pinnedTop, desu.inugram.helpers.chat.ChatHelper.isCompactForward(messageObject));
+                     forwardedNameWidth = Math.max((int) Math.ceil(forwardedNameLayout[0].getLineWidth(0)), (int) Math.ceil(forwardedNameLayout[1].getLineWidth(0)));
+                     if (hasPsaHint) {
+                         forwardedNameWidth += dp(36);
+@@ -19124,7 +19127,7 @@ public class ChatMessageCell extends BaseCell implements SeekBar.SeekBarDelegate
+                     forwardNameOffsetX[0] = forwardedNameLayout[0].getLineLeft(0);
+                     forwardNameOffsetX[1] = forwardedNameLayout[1].getLineLeft(0);
+                     if (isSideMenued && !drawBackground || messageObject.type != MessageObject.TYPE_ROUND_VIDEO && !messageObject.isAnyKindOfSticker() || messageObject.type == MessageObject.TYPE_EMOJIS) {
+-                        namesOffset += dp(8) + Theme.chat_forwardNamePaint.getTextSize() * 2;
++                        namesOffset += dp(8) + Theme.chat_forwardNamePaint.getTextSize() * desu.inugram.helpers.chat.ChatHelper.getForwardLineCount(messageObject) - (desu.inugram.helpers.chat.ChatHelper.isCompactForward(messageObject) ? dp(4) : 0);
+                         if (messageObject.type == MessageObject.TYPE_EMOJIS) {
+                             namesOffset += dp(8);
+                         }
+@@ -20198,7 +20201,7 @@ public class ChatMessageCell extends BaseCell implements SeekBar.SeekBarDelegate
+                     replyStartX = backgroundDrawableLeft + backgroundDrawableRight + dp(17);
+                 }
+                 if (drawForwardedName) {
+-                    forwardHeight = dp(4) + (int) Theme.chat_forwardNamePaint.getTextSize() * 2;
++                    forwardHeight = dp(4) + (int) Theme.chat_forwardNamePaint.getTextSize() * desu.inugram.helpers.chat.ChatHelper.getForwardLineCount(currentMessageObject);
+                     replyStartY = forwardNameY + forwardHeight + dp(6);
+                 } else {
+                     replyStartY = dp(12);
+@@ -20219,7 +20222,7 @@ public class ChatMessageCell extends BaseCell implements SeekBar.SeekBarDelegate
+                 if (currentMessageObject.type == MessageObject.TYPE_EMOJIS) {
+                     replyStartX -= dp(7);
+                 }
+-                forwardHeight = dp(4) + (int) Theme.chat_forwardNamePaint.getTextSize() * 2;
++                forwardHeight = dp(4) + (int) Theme.chat_forwardNamePaint.getTextSize() * desu.inugram.helpers.chat.ChatHelper.getForwardLineCount(currentMessageObject);
+                 replyStartY = dp(12) + (int) (drawNameLayout && nameLayout != null ? getNameHeightAnimated() + dp(1) : 0) + (drawForwardedName && forwardedNameLayout[0] != null ? dp(4) + forwardHeight : 0);
+             }
+             replyStartY += dp(.66f);
+@@ -22241,7 +22244,7 @@ public class ChatMessageCell extends BaseCell implements SeekBar.SeekBarDelegate
+                     forwardNameXLocal -= dp(78) * (isPlayingRound ? transitionParams.animateChangeProgress : (1f - transitionParams.animateChangeProgress));
+                 }
+                 forwardNameY = dp(12);
+-                forwardHeight = dp(4) + (int) Theme.chat_forwardNamePaint.getTextSize() * 2;
++                forwardHeight = dp(4) + (int) Theme.chat_forwardNamePaint.getTextSize() * desu.inugram.helpers.chat.ChatHelper.getForwardLineCount(currentMessageObject);
+ 
+                 int backWidth = forwardedNameWidthLocal + dp(14);
+                 if (hasReply) {
+@@ -22300,7 +22303,7 @@ public class ChatMessageCell extends BaseCell implements SeekBar.SeekBarDelegate
+                 if (!drawNameLayout && currentMessageObject.type == MessageObject.TYPE_TEXT && !drawPinnedTop) {
+                     forwardNameY += dp(2);
+                 }
+-                forwardHeight = dp(4) + (int) Theme.chat_forwardNamePaint.getTextSize() * 2;
++                forwardHeight = dp(4) + (int) Theme.chat_forwardNamePaint.getTextSize() * desu.inugram.helpers.chat.ChatHelper.getForwardLineCount(currentMessageObject);
+                 Theme.chat_forwardNamePaint.setColor(getThemedColor(hasPsaHint ? Theme.key_chat_inPsaNameText : Theme.key_chat_inForwardedNameText));
+                 if (currentMessageObject.isOutOwner()) {
+                     Theme.chat_forwardNamePaint.setColor(getThemedColor(hasPsaHint ? Theme.key_chat_outPsaNameText : Theme.key_chat_outForwardedNameText));
+@@ -27553,6 +27556,7 @@ public class ChatMessageCell extends BaseCell implements SeekBar.SeekBarDelegate
+                 } else if (virtualViewId == FORWARD) {
+                     info.setEnabled(true);
+                     StringBuilder sb = new StringBuilder();
++                    sb.append(desu.inugram.helpers.chat.ChatHelper.getForwardAccessibilityPrefix(currentMessageObject));
+                     if (forwardedNameLayout[0] != null && forwardedNameLayout[1] != null) {
+                         for (int a = 0; a < 2; a++) {
+                             sb.append(forwardedNameLayout[a].getText());
+diff --git a/TMessagesProj/src/main/java/org/telegram/ui/Components/ForwardBackground.java b/TMessagesProj/src/main/java/org/telegram/ui/Components/ForwardBackground.java
+index 0000000..0000000 100644
+--- a/TMessagesProj/src/main/java/org/telegram/ui/Components/ForwardBackground.java
++++ b/TMessagesProj/src/main/java/org/telegram/ui/Components/ForwardBackground.java
+@@ -31,8 +31,8 @@ public class ForwardBackground {
+     private int rippleDrawableColor;
+     private Drawable rippleDrawable;
+ 
+-    public void set(StaticLayout[] layout, boolean topLeftRad) {
+-        final int h = dp(4) + (int) Theme.chat_forwardNamePaint.getTextSize() * 2;
++    public void set(StaticLayout[] layout, boolean topLeftRad, boolean singleLine) {
++        final int h = dp(4) + (int) Theme.chat_forwardNamePaint.getTextSize() * (singleLine ? 1 : 2);
+ 
+         float pinnedR = Math.max(0, Math.min(6, SharedConfig.bubbleRadius) - 1);
+         float R = Math.min(9, SharedConfig.bubbleRadius);
+@@ -41,10 +41,10 @@ public class ForwardBackground {
+         float pad = 4 + R / 9f * 2.66f;
+         float l = -dp(pad);
+         float t = -dp(3);
+-        float b = h + dp(5);
++        float b = h + dp(singleLine ? 2 : 5);
+ 
+         float w1 = layout[0].getLineWidth(0) + dp(pad);
+-        float w2 = layout[1].getLineWidth(0) + dp(pad);
++        float w2 = singleLine ? w1 : layout[1].getLineWidth(0) + dp(pad);
+ 
+         float D;
+ 
+diff --git a/TMessagesProj/src/main/java/org/telegram/ui/Components/HintView.java b/TMessagesProj/src/main/java/org/telegram/ui/Components/HintView.java
+index 0000000..0000000 100644
+--- a/TMessagesProj/src/main/java/org/telegram/ui/Components/HintView.java
++++ b/TMessagesProj/src/main/java/org/telegram/ui/Components/HintView.java
+@@ -246,6 +246,7 @@ public class HintView extends FrameLayout {
+                 top += (cell.getMeasuredHeight() - Math.max(0, cell.getBottom() - parentView.getMeasuredHeight()) - AndroidUtilities.dp(50));
+             } else {
+                 top += AndroidUtilities.dp(22);
++                top -= desu.inugram.helpers.chat.ChatHelper.getCompactForwardHintShift(messageObject);
+                 if (!messageObject.isOutOwner() && cell.isDrawNameLayout()) {
+                     top += AndroidUtilities.dp(20);
+                 }
