@@ -6,10 +6,11 @@ Subject: fix hardcoded usage of white color instead of theme colors
 ---
  .../ui/Cells/PhotoAttachPhotoCell.java        |  3 +-
  .../telegram/ui/Cells/ProfileSearchCell.java  |  2 +-
+ .../ui/Cells/SharedPhotoVideoCell2.java       |  8 +++--
  .../Components/Premium/LimitPreviewView.java  | 31 ++++++++++++-------
  .../org/telegram/ui/ManageLinksActivity.java  |  2 ++
  .../org/telegram/ui/SettingsActivity.java     |  1 +
- 5 files changed, 26 insertions(+), 13 deletions(-)
+ 6 files changed, 32 insertions(+), 15 deletions(-)
 
 diff --git a/TMessagesProj/src/main/java/org/telegram/ui/Cells/PhotoAttachPhotoCell.java b/TMessagesProj/src/main/java/org/telegram/ui/Cells/PhotoAttachPhotoCell.java
 index 0000000..0000000 100644
@@ -41,6 +42,39 @@ index 0000000..0000000 100644
              canvas.restore();
          }
      }
+diff --git a/TMessagesProj/src/main/java/org/telegram/ui/Cells/SharedPhotoVideoCell2.java b/TMessagesProj/src/main/java/org/telegram/ui/Cells/SharedPhotoVideoCell2.java
+index 0000000..0000000 100644
+--- a/TMessagesProj/src/main/java/org/telegram/ui/Cells/SharedPhotoVideoCell2.java
++++ b/TMessagesProj/src/main/java/org/telegram/ui/Cells/SharedPhotoVideoCell2.java
+@@ -181,7 +181,7 @@ public class SharedPhotoVideoCell2 extends FrameLayout {
+ 
+         viewsText.setCallback(this);
+         viewsText.setTextSize(dp(12));
+-        viewsText.setTextColor(Color.WHITE);
++        viewsText.setTextColor(sharedResources.inu_mediaTimeTextColor);
+         viewsText.setTypeface(AndroidUtilities.bold());
+         viewsText.setOverrideFullWidth(AndroidUtilities.displaySize.x);
+ 
+@@ -1234,14 +1234,18 @@ public class SharedPhotoVideoCell2 extends FrameLayout {
+         Paint highlightPaint = new Paint();
+         SparseArray<String> imageFilters = new SparseArray<>();
+         private final HashMap<Integer, Bitmap> privacyBitmaps = new HashMap<>();
++        public int inu_mediaTimeTextColor;
+ 
+         public SharedResources(Context context, Theme.ResourcesProvider resourcesProvider) {
++            inu_mediaTimeTextColor = Theme.getColor(Theme.key_chat_mediaTimeText, resourcesProvider);
+             textPaint.setTextSize(dp(12));
+-            textPaint.setColor(Color.WHITE);
++            textPaint.setColor(inu_mediaTimeTextColor);
+             textPaint.setTypeface(AndroidUtilities.bold());
+             playDrawable = ContextCompat.getDrawable(context, R.drawable.play_mini_video).mutate();
++            playDrawable.setColorFilter(new PorterDuffColorFilter(inu_mediaTimeTextColor, PorterDuff.Mode.SRC_IN));
+             playDrawable.setBounds(0, 0, playDrawable.getIntrinsicWidth(), playDrawable.getIntrinsicHeight());
+             viewDrawable = ContextCompat.getDrawable(context, R.drawable.filled_views).mutate();
++            viewDrawable.setColorFilter(new PorterDuffColorFilter(inu_mediaTimeTextColor, PorterDuff.Mode.SRC_IN));
+             viewDrawable.setBounds(0, 0, (int) (viewDrawable.getIntrinsicWidth() * .7f), (int) (viewDrawable.getIntrinsicHeight() * .7f));
+             backgroundPaint.setColor(Theme.getColor(Theme.key_sharedMedia_photoPlaceholder, resourcesProvider));
+         }
 diff --git a/TMessagesProj/src/main/java/org/telegram/ui/Components/Premium/LimitPreviewView.java b/TMessagesProj/src/main/java/org/telegram/ui/Components/Premium/LimitPreviewView.java
 index 0000000..0000000 100644
 --- a/TMessagesProj/src/main/java/org/telegram/ui/Components/Premium/LimitPreviewView.java
