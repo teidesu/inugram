@@ -233,6 +233,7 @@ most things are toggleable in `Settings → Inugram`, with sensible opinionated 
 - list ripple left behind when the pressed row moves because another row changed height (selector was only re-synced on scroll)
 - dead zones in list rows where a hidden clickable child kept stale bounds from a previous binding (e.g. top-right corner of a member row in profile after a tagged member was recycled)
 - dialogs list pull-to-reveal-archive glitches
+- inline code in dialog previews no longer inherits chat-bubble colors
 - pinned dialog reorder scrolling/glitching mid-drag in the archive (stock bug: async list diffing dispatched the move after the drag swap)
 - forwards from users with hidden forward privacy: the optimistic message shows the anonymized name right away (when their profile is cached), and the server-confirmed hidden header is applied in place instead of showing the linked author until chat reopen
 - shared media player visual glitches

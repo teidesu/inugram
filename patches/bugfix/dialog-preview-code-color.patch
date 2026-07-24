@@ -1,0 +1,30 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: alina sireneva <alina@tei.pet>
+Date: Fri, 24 Jul 2026 18:25:07 +0400
+Subject: strip mono from DialogCell preview
+
+---
+ .../src/main/java/org/telegram/ui/Cells/DialogCell.java        | 3 ++-
+ 1 file changed, 2 insertions(+), 1 deletion(-)
+
+diff --git a/TMessagesProj/src/main/java/org/telegram/ui/Cells/DialogCell.java b/TMessagesProj/src/main/java/org/telegram/ui/Cells/DialogCell.java
+index 0000000..0000000 100644
+--- a/TMessagesProj/src/main/java/org/telegram/ui/Cells/DialogCell.java
++++ b/TMessagesProj/src/main/java/org/telegram/ui/Cells/DialogCell.java
+@@ -122,6 +122,7 @@ import org.telegram.ui.Components.Text;
+ import org.telegram.ui.Components.TextStyleSpan;
+ import org.telegram.ui.Components.TimerDrawable;
+ import org.telegram.ui.Components.TypefaceSpan;
++import org.telegram.ui.Components.URLSpanMono;
+ import org.telegram.ui.Components.URLSpanNoUnderline;
+ import org.telegram.ui.Components.URLSpanNoUnderlineBold;
+ import org.telegram.ui.Components.VectorAvatarThumbDrawable;
+@@ -2741,7 +2742,7 @@ public class DialogCell extends BaseCell implements StoriesListPlaceProvider.Ava
+             if (messageString instanceof Spannable) {
+                 Spannable messageStringSpannable = (Spannable) messageString;
+                 for (Object span : messageStringSpannable.getSpans(0, messageStringSpannable.length(), Object.class)) {
+-                    if (span instanceof ClickableSpan || span instanceof CodeHighlighting.Span || currentDialogCommunityId == 0 && !isFolderCell() && span instanceof TypefaceSpan || span instanceof CodeHighlighting.ColorSpan || span instanceof QuoteSpan || span instanceof QuoteSpan.QuoteStyleSpan || (span instanceof StyleSpan && ((StyleSpan) span).getStyle() == android.graphics.Typeface.BOLD)) {
++                    if (span instanceof ClickableSpan || span instanceof URLSpanMono || span instanceof CodeHighlighting.Span || currentDialogCommunityId == 0 && !isFolderCell() && span instanceof TypefaceSpan || span instanceof CodeHighlighting.ColorSpan || span instanceof QuoteSpan || span instanceof QuoteSpan.QuoteStyleSpan || (span instanceof StyleSpan && ((StyleSpan) span).getStyle() == android.graphics.Typeface.BOLD)) {
+                         messageStringSpannable.removeSpan(span);
+                     }
+                 }
