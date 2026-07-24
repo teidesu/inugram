@@ -4,11 +4,11 @@ Date: Sun, 12 Apr 2026 23:42:54 +0300
 Subject: move the voice record button into attachments drawer
 
 ---
- .../java/org/telegram/ui/ChatActivity.java    | 43 ++++++-----
- .../ui/Components/ChatActivityEnterView.java  | 71 ++++++++++++++++---
+ .../java/org/telegram/ui/ChatActivity.java    | 43 +++++++----
+ .../ui/Components/ChatActivityEnterView.java  | 73 ++++++++++++++++---
  .../ui/Components/ChatAttachAlert.java        |  2 +-
  .../ui/Components/InstantCameraView.java      |  5 +-
- 4 files changed, 92 insertions(+), 29 deletions(-)
+ 4 files changed, 93 insertions(+), 30 deletions(-)
 
 diff --git a/TMessagesProj/src/main/java/org/telegram/ui/ChatActivity.java b/TMessagesProj/src/main/java/org/telegram/ui/ChatActivity.java
 index 0000000..0000000 100644
@@ -226,7 +226,7 @@ index 0000000..0000000 100644
          audioVideoSendButton.setTranslationX(offset);
          if (botButton != null) {
              botButton.setTranslationX(offset);
-@@ -6172,6 +6202,29 @@ public class ChatActivityEnterView extends FrameLayout implements
+@@ -6176,6 +6206,29 @@ public class ChatActivityEnterView extends FrameLayout implements
          updateRecordInterface(RECORD_STATE_CANCEL, true);
      }
  
@@ -256,7 +256,15 @@ index 0000000..0000000 100644
      public void showContextProgress(boolean show) {
          if (progressDrawable == null) {
              return;
-@@ -8098,7 +8151,7 @@ public class ChatActivityEnterView extends FrameLayout implements
+@@ -8095,14 +8148,14 @@ public class ChatActivityEnterView extends FrameLayout implements
+             } else {
+                 color = getThemedColor(Theme.key_chat_messagePanelSend);
+             }
+-            boolean captionNearAttach = messageEditText != null && (!TextUtils.isEmpty(messageEditText.getCaption()) || messageEditText.isNearRightCaption(dp(DEFAULT_HEIGHT))) || LocaleController.isRTL;
++            boolean captionNearAttach = VoiceRecorderHelper.isMovedToAttach() || messageEditText != null && (!TextUtils.isEmpty(messageEditText.getCaption()) || messageEditText.isNearRightCaption(dp(DEFAULT_HEIGHT))) || LocaleController.isRTL;
+ 
+             if (color != sendButtonBackgroundColor) {
+                 sendButtonBackgroundColor = color;
                  Theme.setSelectorDrawableColor(sendButton.getBackground(), Color.argb(24, Color.red(color), Color.green(color), Color.blue(color)), true);
              }
  
@@ -265,7 +273,7 @@ index 0000000..0000000 100644
                  if (animated) {
                      if (runningAnimationType == 1 && caption == null || runningAnimationType == 3 && caption != null) {
                          return;
-@@ -14668,7 +14721,7 @@ public class ChatActivityEnterView extends FrameLayout implements
+@@ -14672,7 +14725,7 @@ public class ChatActivityEnterView extends FrameLayout implements
      private void updateAttachLayoutParams() {
          updateAttachButtonTranslationX();
          if (attachLayout != null) {
@@ -274,7 +282,7 @@ index 0000000..0000000 100644
              attachLayout.setAlpha(attachLayoutAlpha * attachLayoutPaddingAlpha);
              attachLayout.setVisibility(attachLayout.getAlpha() > 0 ? View.VISIBLE : View.GONE);
              if (attachButton != null && isStories) {
-@@ -14685,8 +14738,8 @@ public class ChatActivityEnterView extends FrameLayout implements
+@@ -14689,8 +14742,8 @@ public class ChatActivityEnterView extends FrameLayout implements
      }
  
      private void updateAttachButtonTranslationX() {
