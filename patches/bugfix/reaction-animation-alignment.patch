@@ -1,0 +1,23 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: alina sireneva <alina@tei.pet>
+Date: Fri, 24 Jul 2026 18:13:42 +0400
+Subject: fix reaction alignment after move animation
+
+---
+ .../ui/Components/Reactions/ReactionsEffectOverlay.java        | 3 ---
+ 1 file changed, 3 deletions(-)
+
+diff --git a/TMessagesProj/src/main/java/org/telegram/ui/Components/Reactions/ReactionsEffectOverlay.java b/TMessagesProj/src/main/java/org/telegram/ui/Components/Reactions/ReactionsEffectOverlay.java
+index 0000000..0000000 100644
+--- a/TMessagesProj/src/main/java/org/telegram/ui/Components/Reactions/ReactionsEffectOverlay.java
++++ b/TMessagesProj/src/main/java/org/telegram/ui/Components/Reactions/ReactionsEffectOverlay.java
+@@ -332,9 +332,6 @@ public class ReactionsEffectOverlay {
+                     if (drawingCell instanceof ChatMessageCell) {
+                         ChatMessageCell messageCell = (ChatMessageCell) drawingCell;
+                         reactionButton = messageCell.getReactionButton(reaction);
+-                        if (messageCell.drawPinnedBottom && !messageCell.shouldDrawTimeOnMedia()) {
+-                            toY += AndroidUtilities.dp(2);
+-                        }
+                         toY += messageCell.getPaddingTop();
+                     } else if (drawingCell instanceof ChatActionCell) {
+                         reactionButton = ((ChatActionCell) drawingCell).getReactionButton(reaction);

@@ -243,3 +243,4 @@ bugfix/storage-usage-nested-scroll.patch
 bugfix/preserve-download-filename.patch
 feature/send-mp4-as-video.patch
 bugfix/admin-sort-overflow.patch
+bugfix/reaction-animation-alignment.patch
