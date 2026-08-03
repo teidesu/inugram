@@ -1,14 +1,31 @@
-declare type JavaObject = OpaqueType<'JVMObject'>
+declare type JavaObject = OpaqueType<'JVMObject'> & {
+  /**
+   * shorthands for the `getDeclaredField(name).get(obj)` dance, walking up the superclass chain
+   * and handling `setAccessible` for you. reaching into private state is most of what reflection
+   * gets used for, so it shouldn't cost three calls and a temporary.
+   */
+  getField: (name: string) => any
+  setField: (name: string, value: any) => void
+  /** same idea for methods; pass a name+descriptor to pin an overload */
+  call: (method: string, ...args: any[]) => any
+}
 declare type JavaMethod = OpaqueType<'JVMMethod'> & {
-  invoke: (obj: JavaObject, ...args: any[]) => any
+  /** `null` for static methods */
+  invoke: (obj: JavaObject | null, ...args: any[]) => any
 }
 declare type JavaField = OpaqueType<'JVMField'> & {
-  get: (obj: JavaObject) => any
+  /** `null` for static fields */
+  get: (obj: JavaObject | null) => any
+  set: (obj: JavaObject | null, value: any) => void
 }
 declare type JavaClass = OpaqueType<'JVMClass'> & {
   new (...args: any[]): JavaObject
   getDeclaredMethod: (name: string) => JavaMethod
   getDeclaredField: (name: string) => JavaField
+  /** static counterparts of `JavaObject`'s shorthands */
+  getStaticField: (name: string) => any
+  setStaticField: (name: string, value: any) => void
+  callStatic: (method: string, ...args: any[]) => any
 }
 
 /**
@@ -26,27 +43,30 @@ declare interface JvmColdMethodSpec {
   body: JvmColdMethod
 }
 
-declare interface JvmHotMethodSpec {
-  // required for hot: the source is compiled ahead of time, so the codegen needs
-  // the exact signature (no runtime type inference like the cold path has).
-  params: string[]
-  returns: string
-  /**
-   * NOT executed as js. the engine extracts this function's *source* and compiles
-   * it straight to a dex method body — zero js crossing at call time, native speed.
-   *
-   * only a restricted subset is allowed, and it's checked at defineClass time:
-   * - params + `self` field access only. NO closures over the js heap — anything
-   *   the body reads/writes must be a declared `field` (that's why fields are typed).
-   * - calls are limited to a whitelist == the plugin's grants (so the fast path
-   *   can't smuggle capabilities the cold path couldn't reach).
-   * - no allocation beyond whitelisted ctors, no console, no async.
-   *
-   * because it's plain source in the js file, it stays auditable — the engine is
-   * the only thing that ever produces dex; plugins never ship bytecode.
-   */
-  body: (self: JavaObject, ...args: any[]) => any
-}
+// -- hot methods: designed, deliberately not shipped --
+//
+// a `hot` body would NOT be executed as js: the engine would extract the function's *source* and
+// compile it straight to a dex method body — zero js crossing at call time, native speed — with a
+// restricted subset checked at defineClass time:
+// - params + `self` field access only. NO closures over the js heap — anything the body reads or
+//   writes must be a declared `field` (that's why fields are typed).
+// - calls limited to a whitelist == the plugin's grants, so the fast path can't smuggle
+//   capabilities the cold path couldn't reach.
+// - no allocation beyond whitelisted ctors, no console, no async.
+// because it's plain source in the js file it stays auditable — the engine is the only thing that
+// ever produces dex, plugins never ship bytecode.
+//
+// it's out of the public surface until something provably needs it: cold methods carry every real
+// case so far (listeners, factories, comparators, spans), and this is a whole js->dalvik compiler
+// to save a jni jump. keeping the spec here so the eventual implementation has a target.
+//
+// declare interface JvmHotMethodSpec {
+//   // required for hot: the source is compiled ahead of time, so the codegen needs the exact
+//   // signature (no runtime type inference like the cold path has).
+//   params: string[]
+//   returns: string
+//   body: (self: JavaObject, ...args: any[]) => any
+// }
 
 declare interface JvmConstructorSpec {
   params?: string[]
@@ -80,31 +100,35 @@ declare interface JvmClassSpec {
   methods?: Record<string, JvmColdMethod | JvmColdMethodSpec>
   staticMethods?: Record<string, JvmColdMethod | JvmColdMethodSpec>
 
-  /**
-   * hot overrides compiled to native dex bodies. opt-in per method — everything
-   * else stays real js in `methods`. use ONLY where a js jump would tank perf
-   * (things called inside onDraw/onMeasure/text layout).
-   */
-  hot?: Record<string, JvmHotMethodSpec>
+  // hot?: Record<string, JvmHotMethodSpec>  // see the note above
 
   constructors?: JvmConstructorSpec[]
 }
 
 declare namespace inu {
-  /** android-specific apis to access java classes */
+  /**
+   * android-specific apis to access java classes.
+   *
+   * **this is a game-over grant, and it is not offered with a scope list.** an earlier design let
+   * you write `inu.jvm.cls(java.util.*)` to narrow it, which read like a capability and wasn't one:
+   * the scope can only gate the *entry point*, and once any `JavaObject` is in hand `getField`
+   * walks the whole heap — one hop from a reachable context to anything at all. rather than ship a
+   * boundary that doesn't hold, `inu.jvm` is a single all-or-nothing permission, presented to the
+   * user as such.
+   *
+   * that applies within the namespace too: `loadDex` and `defineClass` used to carry sub-grants of
+   * their own, which were locks on an open door — `cls('dalvik.system.InMemoryDexClassLoader')`
+   * loads dex and `java.lang.reflect.Proxy` defines classes, both reachable from bare `jvm`.
+   *
+   * @needs-grant jvm
+   */
   namespace jvm {
     /** create a Runnable from a callback */
     function runnable(callback: () => void): JavaObject
-    /**
-     * get a java class by its FQN
-     * @needs-grant inu.jvm.cls
-     */
+    /** get a java class by its FQN */
     function cls(name: string): JavaClass
 
-    /**
-     * load a dex file
-     * @needs-grant inu.jvm.loadDex
-     */
+    /** load a dex file */
     function loadDex(path: string | Uint8Array): void
 
     /**
@@ -120,8 +144,6 @@ declare namespace inu {
      * js jump, `hot` methods run as native dex.
      *
      * `hot` methods require a js-to-dalvik compiler, which is not implemented yet.
-     *
-     * @needs-grant inu.jvm.defineClass
      */
     function defineClass(name: string, spec: JvmClassSpec): JavaClass
 

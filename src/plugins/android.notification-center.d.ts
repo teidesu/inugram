@@ -1,5 +1,3 @@
-/* eslint-disable ts/method-signature-style */
-
 declare namespace inu {
   /**
    * api to access commonly used android app internals
@@ -7,22 +5,22 @@ declare namespace inu {
    * **note**: this api is NOT stable, does not follow the overall versioning.
    * and docs/typings below might also be out of date.
    * use at your own risk.
+   *
+   * ids here are plain `number`s like everywhere else in this api — java hands them over as
+   * `long`, but a dialog id fits a js number, so there's no reason for this corner to speak a
+   * different dialect. anything genuinely too wide for a number arrives as a `JavaObject`.
    */
   namespace android {
-    interface MessageObject {
-      // todo
-    }
-
     interface NotificationCenterEventsMap {
       /**
        * Posted when new messages arrive for a dialog (all paths incl. difference catch-up).
        * Single call site in MessagesController.processNewDifferenceParams.
        * @param dialogId target dialog id
-       * @param messages mutable; observers may filter/modify; ArrayList<MessageObject>
+       * @param messages mutable; observers may filter/modify; ArrayList<JavaObject>
        * @param scheduled true if these are scheduled messages
        * @param mode ChatActivity mode constant (MODE_DEFAULT=0, MODE_SCHEDULED, MODE_QUICK_REPLIES, etc.)
        */
-      didReceiveNewMessages(dialogId: bigint, messages: Array<MessageObject>, scheduled: boolean, mode: number): void
+      didReceiveNewMessages(dialogId: number, messages: Array<JavaObject>, scheduled: boolean, mode: number): void
 
       /**
        * Posted to signal UI refresh for peers/dialogs. arg is a bitmask of what changed.
@@ -41,7 +39,7 @@ declare namespace inu {
        * Posted to close chat screens. Without args closes all; with a dialogId only closes that dialog.
        * @param dialogId optional; if present, only the ChatActivity matching this id is closed; negative for channels (ChatEditActivity passes -chatId)
        */
-      closeChats(dialogId?: bigint): void
+      closeChats(dialogId?: number): void
 
       /**
        * Posted to close a specific ChatActivity (not profile). Closes all stack instances matching dialogId except last,
@@ -49,14 +47,14 @@ declare namespace inu {
        * @param dialogId dialog id to close
        * @param includingLast if true, also close if this is the topmost fragment
        */
-      closeChatActivity(dialogId: bigint, includingLast: boolean): void
+      closeChatActivity(dialogId: number, includingLast: boolean): void
 
       /**
        * Posted to close a specific ProfileActivity for a dialog.
        * @param dialogId dialog id to close
        * @param includingLast if true, also close if this is the topmost fragment
        */
-      closeProfileActivity(dialogId: bigint, includingLast: boolean): void
+      closeProfileActivity(dialogId: number, includingLast: boolean): void
 
       /**
        * Posted when messages are deleted. Arg counts vary across call sites (3 to 7 args).
@@ -71,17 +69,17 @@ declare namespace inu {
        * @param sentMessageIds ArrayList<number>|null (only in 7-arg form); ids from sent scheduled messages that were deleted
        *
        * Overloads:
-       *   3-arg: (messageIds: Array<number>, channelId: bigint, scheduled: boolean)
-       *   7-arg: (messageIds: Array<number>, channelId: bigint, scheduled: boolean, forAll: boolean, movedToScheduled: boolean, movedToScheduledMessageId: number, sentMessageIds: Array<number>|null)
+       *   3-arg: (messageIds: Array<number>, channelId: number, scheduled: boolean)
+       *   7-arg: (messageIds: Array<number>, channelId: number, scheduled: boolean, forAll: boolean, movedToScheduled: boolean, movedToScheduledMessageId: number, sentMessageIds: Array<number>|null)
        */
-      messagesDeleted(messageIds: Array<number>, channelId: bigint, scheduled: boolean, forAll?: boolean, movedToScheduled?: boolean, movedToScheduledMessageId?: number, sentMessageIds?: Array<number> | null): void
+      messagesDeleted(messageIds: Array<number>, channelId: number, scheduled: boolean, forAll?: boolean, movedToScheduled?: boolean, movedToScheduledMessageId?: number, sentMessageIds?: Array<number> | null): void
 
       /**
        * Posted when a dialog's history is cleared (delete history operation).
        * @param dialogId long; the dialog whose history was cleared (negative for channels)
        * @param maxId int; the max message id that was cleared up to
        */
-      historyCleared(dialogId: bigint, maxId: number): void
+      historyCleared(dialogId: number, maxId: number): void
 
       /**
        * Posted when inbox/outbox read state is updated for dialogs.
@@ -89,7 +87,7 @@ declare namespace inu {
        * @param inbox LongMap<number, number>|null; dialogId → max inbox read message id
        * @param outbox LongMap<number, number>|null; dialogId → max outbox read message id
        */
-      messagesRead(inbox: Map<bigint, number[]> | null, outbox: Map<bigint, number[]> | null): void
+      messagesRead(inbox: Map<number, number[]> | null, outbox: Map<number, number[]> | null): void
 
       /**
        * Posted when a comment thread's read state is updated (inbox or outbox).
@@ -99,7 +97,7 @@ declare namespace inu {
        * @param inboxReadMaxId int; new max inbox read id; 0 if this is an outbox update
        * @param outboxReadMaxId int; new max outbox read id; 0 if this is an inbox update
        */
-      threadMessagesRead(channelDialogId: bigint, topMsgId: number, inboxReadMaxId: number, outboxReadMaxId: number): void
+      threadMessagesRead(channelDialogId: number, topMsgId: number, inboxReadMaxId: number, outboxReadMaxId: number): void
 
       /**
        * Posted when a monoforum subthread's read state is updated (inbox or outbox).
@@ -109,7 +107,7 @@ declare namespace inu {
        * @param inboxReadMaxId int; new max inbox read id; 0 if this is an outbox update
        * @param outboxReadMaxId int; new max outbox read id; 0 if this is an inbox update
        */
-      monoForumMessagesRead(channelDialogId: bigint, savedPeerDialogId: bigint, inboxReadMaxId: number, outboxReadMaxId: number): void
+      monoForumMessagesRead(channelDialogId: number, savedPeerDialogId: number, inboxReadMaxId: number, outboxReadMaxId: number): void
 
       /**
        * Posted when comments on a broadcast post are read.
@@ -119,7 +117,7 @@ declare namespace inu {
        * @param broadcastPostId int; message id of the original broadcast post
        * @param maxReadId int; new max read comment message id
        */
-      commentsRead(broadcastChannelId: bigint, broadcastPostId: number, maxReadId: number): void
+      commentsRead(broadcastChannelId: number, broadcastPostId: number, maxReadId: number): void
 
       /**
        * Posted to adjust the replies counter on a broadcast post (e.g. when comments are deleted).
@@ -127,7 +125,7 @@ declare namespace inu {
        * @param originalMessageId int; message id of the post whose counter changes
        * @param delta int; signed delta to add to replies count (negative when deleting)
        */
-      changeRepliesCounter(channelId: bigint, originalMessageId: number, delta: number): void
+      changeRepliesCounter(channelId: number, originalMessageId: number, delta: number): void
 
       /**
        * Posted when a batch of messages finishes loading (after reply preloading is done).
@@ -135,7 +133,7 @@ declare namespace inu {
        * HashtagSearchController posts with mode=ChatActivity.MODE_SEARCH and fewer meaningful args (count=actual size).
        * @param dialogId long; the dialog the messages belong to
        * @param count int; number of messages loaded
-       * @param messages ArrayList<MessageObject>; the loaded messages (mutable)
+       * @param messages ArrayList<JavaObject>; the loaded messages (mutable)
        * @param isCache boolean; true if loaded from local cache
        * @param firstUnread int; message id of the first unread message (0 if none)
        * @param lastMessageId int; id of the last delivered message
@@ -149,14 +147,14 @@ declare namespace inu {
        * @param mentionsCount int; unread mentions count
        * @param mode int; ChatActivity mode constant
        */
-      messagesDidLoad(dialogId: bigint, count: number, messages: Array<MessageObject>, isCache: boolean, firstUnread: number, lastMessageId: number, unreadCount: number, lastDate: number, loadType: number, isEnd: boolean, classGuid: number, loadIndex: number, maxId: number, mentionsCount: number, mode: number): void
+      messagesDidLoad(dialogId: number, count: number, messages: Array<JavaObject>, isCache: boolean, firstUnread: number, lastMessageId: number, unreadCount: number, lastDate: number, loadType: number, isEnd: boolean, classGuid: number, loadIndex: number, maxId: number, mentionsCount: number, mode: number): void
 
       /**
        * Posted when sponsored messages finish loading for a dialog.
        * @param dialogId long; the dialog the sponsored messages belong to
        * @param messages TLRPC.TL_messages_sponsoredMessages; the loaded sponsored messages result
        */
-      didLoadSponsoredMessages(dialogId: bigint, messages: TLObject): void
+      didLoadSponsoredMessages(dialogId: number, messages: TLObject): void
 
       /**
        * Posted when the list of "send as" peers finishes loading for a dialog.
@@ -164,14 +162,14 @@ declare namespace inu {
        * @param peers TLRPC.TL_channels_sendAsPeers; the loaded peers result
        * @param liveStories boolean; whether live stories peers are included
        */
-      didLoadSendAsPeers(dialogId: bigint, peers: TLObject, liveStories: boolean): void
+      didLoadSendAsPeers(dialogId: number, peers: TLObject, liveStories: boolean): void
 
       /**
        * Posted when the default "send as" peer for a chat is changed.
        * @param chatId long; the chat whose default send-as changed
        * @param peer TLRPC.Peer; the new default send-as peer
        */
-      updateDefaultSendAsPeer(chatId: bigint, peer: TLObject): void
+      updateDefaultSendAsPeer(chatId: number, peer: TLObject): void
 
       /**
        * Posted when messages finish loading but do NOT need UI processing (e.g. encrypted dialogs,
@@ -204,26 +202,26 @@ declare namespace inu {
        * msg can be null when only the id mapping is known (e.g. scheduled message finalization in MessagesController).
        * @param oldId int; the temporary (local) message id
        * @param newId int; the real server-assigned message id
-       * @param msg MessageObject|null; the confirmed message object; null in some MessagesController paths
+       * @param msg JavaObject|null; the confirmed message object; null in some MessagesController paths
        * @param dialogId long; dialog the message belongs to
        * @param groupedId long; media group id if part of an album; 0 otherwise
        * @param existFlags int; bitmask of which fields already existed (used for dedup); -1 when unknown
        * @param scheduled boolean; true if this is a scheduled message
        */
-      messageReceivedByServer(oldId: number, newId: number, msg: MessageObject | null, dialogId: bigint, groupedId: bigint, existFlags: number, scheduled: boolean): void
+      messageReceivedByServer(oldId: number, newId: number, msg: JavaObject | null, dialogId: number, groupedId: number, existFlags: number, scheduled: boolean): void
 
       /**
        * Posted after messageReceivedByServer once the message has been fully saved to storage.
        * Same argument signature as messageReceivedByServer.
        * @param oldId int; the temporary (local) message id
        * @param newId int; the real server-assigned message id
-       * @param msg MessageObject|null; the confirmed message object; null in some MessagesController paths
+       * @param msg JavaObject|null; the confirmed message object; null in some MessagesController paths
        * @param dialogId long; dialog the message belongs to
        * @param groupedId long; media group id if part of an album; 0 otherwise
        * @param existFlags int; bitmask of which fields already existed; -1 when unknown
        * @param scheduled boolean; true if this is a scheduled message
        */
-      messageReceivedByServer2(oldId: number, newId: number, msg: MessageObject | null, dialogId: bigint, groupedId: bigint, existFlags: number, scheduled: boolean): void
+      messageReceivedByServer2(oldId: number, newId: number, msg: JavaObject | null, dialogId: number, groupedId: number, existFlags: number, scheduled: boolean): void
 
       /**
        * Posted when a pending outgoing message permanently fails to send.
@@ -262,7 +260,7 @@ declare namespace inu {
        * Posted when a new group/channel chat is successfully created.
        * @param chatId long; the id of the newly created chat
        */
-      chatDidCreated(chatId: bigint): void
+      chatDidCreated(chatId: number): void
 
       /**
        * Posted when creating a group/channel chat fails (no args).
@@ -284,20 +282,20 @@ declare namespace inu {
        * @param channelId long channel id
        * @param reason int 0=generic, 1=banned, 2=private
        */
-      chatInfoCantLoad(channelId: bigint, reason: number): void
+      chatInfoCantLoad(channelId: number, reason: number): void
 
       /**
        * Posted when a page of shared media loaded.
        * @param dialogId long dialog id
        * @param totalCount int total item count from server
-       * @param objects ArrayList<MessageObject> loaded messages (mutable, observers may iterate only)
+       * @param objects ArrayList<JavaObject> loaded messages (mutable, observers may iterate only)
        * @param classGuid int request class guid
        * @param type int media type constant
        * @param topReached boolean true if top of history reached
        * @param fromStart boolean true if loaded from a non-zero min_id (i.e. not from newest end)
        * @param requestIndex int request sequence index
        */
-      mediaDidLoad(dialogId: bigint, totalCount: number, objects: Array<MessageObject>, classGuid: number, type: number, topReached: boolean, fromStart: boolean, requestIndex: number): void
+      mediaDidLoad(dialogId: number, totalCount: number, objects: Array<JavaObject>, classGuid: number, type: number, topReached: boolean, fromStart: boolean, requestIndex: number): void
 
       /**
        * Posted when a single media type count loaded.
@@ -307,7 +305,7 @@ declare namespace inu {
        * @param fromCache boolean true if count came from local cache
        * @param type int media type constant
        */
-      mediaCountDidLoad(dialogId: bigint, topicId: bigint, count: number, fromCache: boolean, type: number): void
+      mediaCountDidLoad(dialogId: number, topicId: number, count: number, fromCache: boolean, type: number): void
 
       /**
        * Posted when all media type counts loaded at once.
@@ -315,7 +313,7 @@ declare namespace inu {
        * @param topicId long topic id (0 if none)
        * @param counts int[] per-type counts array (indexed by media type constant)
        */
-      mediaCountsDidLoad(dialogId: bigint, topicId: bigint, counts: number[]): void
+      mediaCountsDidLoad(dialogId: number, topicId: number, counts: number[]): void
 
       /**
        * Posted when an encrypted chat object is updated (key exchange steps, state changes).
@@ -362,7 +360,7 @@ declare namespace inu {
        * @param fromDifference boolean true if triggered by channel difference, false if by explicit history clear
        * @param difference TLRPC.TL_updates_channelDifferenceTooLong|null non-null only when fromDifference=true
        */
-      removeAllMessagesFromDialog(dialogId: bigint, fromDifference: boolean, difference: TLObject): void
+      removeAllMessagesFromDialog(dialogId: number, fromDifference: boolean, difference: TLObject): void
 
       /**
        * Posted when notification settings are changed (global or per-dialog).
@@ -382,14 +380,14 @@ declare namespace inu {
        * @param topicId long topic id (0 if none)
        * @param closed boolean true if the chat was closed, false if opened
        */
-      openedChatChanged(dialogId: bigint, topicId: bigint, closed: boolean): void
+      openedChatChanged(dialogId: number, topicId: number, closed: boolean): void
 
       /**
        * Posted when a new scheduled self-destruct delete task is created.
        * @param dialogId long dialog id the task belongs to
        * @param mids Map<number, ArrayList<number>> map of destroyTime -> list of message ids
        */
-      didCreatedNewDeleteTask(dialogId: bigint, mids: Map<number, Array<number>>): void
+      didCreatedNewDeleteTask(dialogId: number, mids: Map<number, Array<number>>): void
 
       /**
        * Posted when the current user's own profile info changes (name, photo, bio, etc.).
@@ -410,13 +408,13 @@ declare namespace inu {
       updateMessageMedia(message: TLObject): void
 
       /**
-       * Posted when MessageObject wrappers for existing messages are replaced (e.g. after edit or send confirmation).
+       * Posted when JavaObject wrappers for existing messages are replaced (e.g. after edit or send confirmation).
        * Most call sites pass 2 args; one call site (MessagesController diff processing) passes an optional 3rd boolean.
        * @param dialogId long dialog id
-       * @param messageObjects ArrayList<MessageObject> replacement message objects
+       * @param messageObjects ArrayList<JavaObject> replacement message objects
        * @param updateDialogs boolean? (optional, only some call sites) whether to also update dialogs list
        */
-      replaceMessagesObjects(dialogId: bigint, messageObjects: Array<MessageObject>, updateDialogs?: boolean): void
+      replaceMessagesObjects(dialogId: number, messageObjects: Array<JavaObject>, updateDialogs?: boolean): void
 
       /**
        * Posted when passcode is set, changed, or screen-capture setting toggled.
@@ -462,10 +460,10 @@ declare namespace inu {
       /**
        * Posted when reply-to messages are loaded for rendering quoted replies.
        * @param dialogId long dialog id
-       * @param loadedMessages ArrayList<MessageObject> the loaded reply message objects
-       * @param replyMessageOwners LongMap<number, Map<number, ArrayList<MessageObject>>>|null owner map for updating reply refs; null in some call sites
+       * @param loadedMessages ArrayList<JavaObject> the loaded reply message objects
+       * @param replyMessageOwners LongMap<number, Map<number, ArrayList<JavaObject>>>|null owner map for updating reply refs; null in some call sites
        */
-      replyMessagesDidLoad(dialogId: bigint, loadedMessages: Array<MessageObject>, replyMessageOwners: Map<bigint, Map<number, Array<MessageObject>>> | null): void
+      replyMessagesDidLoad(dialogId: number, loadedMessages: Array<JavaObject>, replyMessageOwners: Map<number, Map<number, Array<JavaObject>>> | null): void
 
       /**
        * Posted when pinned messages for a dialog are loaded.
@@ -473,13 +471,13 @@ declare namespace inu {
        * @param dialogId long dialog id
        * @param ids ArrayList<number>|null list of pinned message ids (null in the "objects already known" path)
        * @param pin boolean true = add/update pins, false = unpin
-       * @param arrayList ArrayList<MessageObject>|null loaded pinned message objects (null when only updating id list)
-       * @param replaceObjects HashMap<number,MessageObject>|null replacement map (non-null when ids non-null and data from server)
+       * @param arrayList ArrayList<JavaObject>|null loaded pinned message objects (null when only updating id list)
+       * @param replaceObjects HashMap<number,JavaObject>|null replacement map (non-null when ids non-null and data from server)
        * @param maxId int max message id boundary for pagination (0 when loading from top)
        * @param totalPinnedCount int total pinned message count (-1 when unknown)
        * @param endReached boolean true if no more pinned messages to load
        */
-      didLoadPinnedMessages(dialogId: bigint, ids: Array<number> | null, pin: boolean, arrayList: Array<MessageObject> | null, replaceObjects: Map<number, MessageObject> | null, maxId: number, totalPinnedCount: number, endReached: boolean): void
+      didLoadPinnedMessages(dialogId: number, ids: Array<number> | null, pin: boolean, arrayList: Array<JavaObject> | null, replaceObjects: Map<number, JavaObject> | null, maxId: number, totalPinnedCount: number, endReached: boolean): void
 
       /**
        * Posted when a new login session is detected on the account. No arguments.
@@ -497,7 +495,7 @@ declare namespace inu {
        * Posted when webpage previews arrive via update diff.
        * @param webPages map from webpage ID → updated TLRPC.WebPage; never null at call site (guarded)
        */
-      didReceivedWebpagesInUpdates(webPages: Map<bigint, TLObject>): void
+      didReceivedWebpagesInUpdates(webPages: Map<number, TLObject>): void
 
       /**
        * Posted when a sticker set type finishes loading or reordering.
@@ -529,14 +527,14 @@ declare namespace inu {
        * @param setId long ID of the StickerSet
        * @param set   loaded TLRPC.TL_messages_stickerSet (may be updated cached copy)
        */
-      groupStickersDidLoad(setId: bigint, set: TLObject): void
+      groupStickersDidLoad(setId: number, set: TLObject): void
 
       /**
        * Posted when message content (media) has been marked as read (opened).
        * @param dialogId long dialog ID
        * @param messageIds ArrayList<number> of message IDs whose content was read; mutable, do not retain reference
        */
-      messagesReadContent(dialogId: bigint, messageIds: Array<number>): void
+      messagesReadContent(dialogId: number, messageIds: Array<number>): void
 
       /**
        * Posted when bot info for a user/dialog finishes loading.
@@ -550,20 +548,20 @@ declare namespace inu {
        * @param userId  long — the user/dialog ID the full info belongs to
        * @param userFull TLRPC.UserFull loaded object
        */
-      userInfoDidLoad(userId: bigint, userFull: TLObject): void
+      userInfoDidLoad(userId: number, userFull: TLObject): void
 
       /**
        * Posted when pinned messages for a chat/user finish loading.
        * @param peerId           long — negative for channels/chats, positive for users
        * @param pinnedMessages   ArrayList<number> of pinned message IDs (ordered)
-       * @param pinnedMessagesMap HashMap<number, MessageObject> id → MessageObject cache
+       * @param pinnedMessagesMap HashMap<number, JavaObject> id → JavaObject cache
        * @param totalPinnedCount int total count of pinned messages
        * @param pinnedEndReached boolean whether all pinned messages have been loaded
        */
       pinnedInfoDidLoad(
-        peerId: bigint,
+        peerId: number,
         pinnedMessages: Array<number>,
-        pinnedMessagesMap: Map<number, MessageObject>,
+        pinnedMessagesMap: Map<number, JavaObject>,
         totalPinnedCount: number,
         pinnedEndReached: boolean
       ): void
@@ -573,7 +571,7 @@ declare namespace inu {
        * @param keyboard TLRPC.Message|null — null when no keyboard exists for this topic
        * @param topicKey long topic key (dialog + thread ID)
        */
-      botKeyboardDidLoad(keyboard: TLObject, topicKey: bigint): void
+      botKeyboardDidLoad(keyboard: TLObject, topicKey: number): void
 
       /**
        * Posted when in-chat search navigates to a result or clears.
@@ -589,7 +587,7 @@ declare namespace inu {
         guid: number,
         messageId: number,
         mask: number,
-        dialogId: bigint,
+        dialogId: number,
         index: number,
         count: number,
         jumpToMessage: boolean
@@ -622,13 +620,13 @@ declare namespace inu {
       /**
        * Posted when local music tracks for a dialog finish loading from the database.
        * @param dialogId       long dialog ID the tracks belong to
-       * @param tracksBegin    ArrayList<MessageObject> tracks before current (older)
-       * @param tracksEnd      ArrayList<MessageObject> tracks after current (newer)
+       * @param tracksBegin    ArrayList<JavaObject> tracks before current (older)
+       * @param tracksEnd      ArrayList<JavaObject> tracks after current (newer)
        */
       musicDidLoad(
-        dialogId: bigint,
-        tracksBegin: Array<MessageObject>,
-        tracksEnd: Array<MessageObject>
+        dialogId: number,
+        tracksBegin: Array<JavaObject>,
+        tracksEnd: Array<JavaObject>
       ): void
 
       /**
@@ -663,9 +661,9 @@ declare namespace inu {
        * @param onlySelf        boolean true when only updating counts for the local client's own sends
        */
       didUpdateMessagesViews(
-        channelViews: Map<bigint, Map<number, number>> | null,
-        channelForwards: Map<bigint, Map<number, number>> | null,
-        channelReplies: Map<bigint, Map<number, TLObject>> | null,
+        channelViews: Map<number, Map<number, number>> | null,
+        channelForwards: Map<number, Map<number, number>> | null,
+        channelReplies: Map<number, Map<number, TLObject>> | null,
         onlySelf: boolean
       ): void
 
@@ -679,13 +677,13 @@ declare namespace inu {
        * Posted when peer settings (PeerSettings/privacy info) finish loading for a dialog.
        * @param dialogId long peer/dialog ID
        */
-      peerSettingsDidLoad(dialogId: bigint): void
+      peerSettingsDidLoad(dialogId: number): void
 
       /**
        * Posted when a location-sharing send attempt fails because the current location cannot be obtained.
-       * @param pendingMessages HashMap<String, MessageObject> copy of messages waiting for location (key = random ID string); mutable copy, safe to retain
+       * @param pendingMessages HashMap<String, JavaObject> copy of messages waiting for location (key = random ID string); mutable copy, safe to retain
        */
-      wasUnableToFindCurrentLocation(pendingMessages: Map<string, MessageObject>): void
+      wasUnableToFindCurrentLocation(pendingMessages: Map<string, JavaObject>): void
 
       /**
        * Posted when top peer (people/bots/inline) hints should be reloaded.
@@ -715,7 +713,7 @@ declare namespace inu {
        * Posted when a new or updated draft is received/saved for a dialog.
        * @param dialogId long dialog ID whose draft changed
        */
-      newDraftReceived(dialogId: bigint): void
+      newDraftReceived(dialogId: number): void
 
       /**
        * Posted when recent stickers/GIFs list finishes loading from cache or network.
@@ -767,7 +765,7 @@ declare namespace inu {
        * @param arg1 long — always 0L at current call sites (reserved/padding)
        * @param unreadMentionsCount int — new unread mentions count
        */
-      updateMentionsCount(dialogId: bigint, arg1: bigint, unreadMentionsCount: number): void
+      updateMentionsCount(dialogId: number, arg1: number, unreadMentionsCount: number): void
 
       /**
        * Fired when a poll's results are updated.
@@ -775,14 +773,14 @@ declare namespace inu {
        * @param poll TLRPC.Poll — updated poll object
        * @param results TLRPC.PollResults — updated poll results
        */
-      didUpdatePollResults(pollId: bigint, poll: TLObject, results: TLObject): void
+      didUpdatePollResults(pollId: number, poll: TLObject, results: TLObject): void
 
       /**
        * Fired when online member count for a chat is loaded.
        * @param chatId long — chat id (used as key)
        * @param onlines int — number of online members
        */
-      chatOnlineCountDidLoad(chatId: bigint, onlines: number): void
+      chatOnlineCountDidLoad(chatId: number, onlines: number): void
 
       /**
        * Fired when video preloading/loading state changes for a file.
@@ -835,7 +833,7 @@ declare namespace inu {
        * @param messageId int — id of the message whose reactions changed
        * @param reactions TLRPC.ReactionCount (or TLRPC.MessageReactions) — updated reactions object (mutable, observers read it)
        */
-      didUpdateReactions(dialogId: bigint, messageId: number, reactions: TLObject): void
+      didUpdateReactions(dialogId: number, messageId: number, reactions: TLObject): void
 
       /**
        * Fired when extended media (e.g. invoice media) is updated for a message.
@@ -843,13 +841,13 @@ declare namespace inu {
        * @param msgId int — message id
        * @param extendedMedia ArrayList<TLRPC.MessageExtendedMedia> — updated extended media list (mutable)
        */
-      didUpdateExtendedMedia(dialogId: bigint, msgId: number, extendedMedia: Array<TLObject>): void
+      didUpdateExtendedMedia(dialogId: number, msgId: number, extendedMedia: Array<TLObject>): void
 
       /**
        * Fired after sticker verification for a set of messages completes.
-       * @param messages ArrayList<MessageObject> — messages whose stickers were verified (mutable list)
+       * @param messages ArrayList<JavaObject> — messages whose stickers were verified (mutable list)
        */
-      didVerifyMessagesStickers(messages: Array<MessageObject>): void
+      didVerifyMessagesStickers(messages: Array<JavaObject>): void
 
       /**
        * Fired when scheduled messages for a dialog are loaded or updated.
@@ -857,7 +855,7 @@ declare namespace inu {
        * @param count int — number of scheduled messages
        * @param fromStorage boolean — true if count came from local DB, false if from server response
        */
-      scheduledMessagesUpdated(dialogId: bigint, count: number, fromStorage: boolean): void
+      scheduledMessagesUpdated(dialogId: number, count: number, fromStorage: boolean): void
 
       /**
        * Fired when the list of account suggestions (e.g. phone/birthday) changes.
@@ -870,13 +868,13 @@ declare namespace inu {
        * @param chatId long — chat id
        * @param inviterId long — user id of the inviter
        */
-      didLoadChatInviter(chatId: bigint, inviterId: bigint): void
+      didLoadChatInviter(chatId: number, inviterId: number): void
 
       /**
        * Fired when the admin list for a chat is loaded.
        * @param chatId long — chat id
        */
-      didLoadChatAdmins(chatId: bigint): void
+      didLoadChatAdmins(chatId: number): void
 
       /**
        * Fired as history import progresses or fails.
@@ -887,7 +885,7 @@ declare namespace inu {
        * @param [req] TLRPC.TL_messages_initHistoryImport? — request object (only on error/finish)
        * @param [error] TLRPC.TL_error? — error object, null on success (only on error/finish)
        */
-      historyImportProgressChanged(dialogId: bigint, req?: TLObject, error?: TLObject): void
+      historyImportProgressChanged(dialogId: number, req?: TLObject, error?: TLObject): void
 
       /**
        * Fired as sticker pack import progresses or fails.
@@ -911,32 +909,32 @@ declare namespace inu {
        * @param dialogId long — dialog id (negative for channels; for topics: -chatId)
        * @param topicId int — topic id within the channel, 0 for regular dialogs
        */
-      dialogDeleted(dialogId: bigint, topicId: number): void
+      dialogDeleted(dialogId: number, topicId: number): void
 
       /**
        * Fired when a web app inline query result is sent.
        * @param queryId long — the query_id of the sent web view result
        */
-      webViewResultSent(queryId: bigint): void
+      webViewResultSent(queryId: number): void
 
       /**
        * Fired when a voice message transcription is updated.
        * Arg count varies:
        *   - 1 arg: simple state refresh (e.g. error/cancel, fetch messageObject from args[0])
        *   - 5 args: full update with transcription data
-       * @param messageObject MessageObject? — the voice message being transcribed (nullable in MessagesController update path)
+       * @param messageObject JavaObject? — the voice message being transcribed (nullable in MessagesController update path)
        * @param [transcriptionId] Long? — transcription id (null on simple refresh)
        * @param [text] String? — transcription text so far (null on simple refresh)
        * @param [isPremium] Boolean? — whether transcription requires premium (null on simple refresh)
        * @param [isFinal] Boolean? — whether transcription is complete (null on simple refresh or on cancel)
        */
-      voiceTranscriptionUpdate(messageObject: MessageObject | null, transcriptionId?: bigint | null, text?: string | null, isPremium?: boolean | null, isFinal?: boolean | null): void
+      voiceTranscriptionUpdate(messageObject: JavaObject | null, transcriptionId?: number | null, text?: string | null, isPremium?: boolean | null, isFinal?: boolean | null): void
 
       /**
-       * Fired when an animated emoji document finishes loading for a MessageObject.
-       * @param messageObject MessageObject — the message that triggered the emoji load
+       * Fired when an animated emoji document finishes loading for a JavaObject.
+       * @param messageObject JavaObject — the message that triggered the emoji load
        */
-      animatedEmojiDocumentLoaded(messageObject: MessageObject): void
+      animatedEmojiDocumentLoaded(messageObject: JavaObject): void
 
       /**
        * Fired when the recent emoji statuses list is updated.
@@ -972,13 +970,13 @@ declare namespace inu {
        * @param messageIds ArrayList of deleted message IDs (number); mutable list owned by caller
        * @param topicId    quick-reply topic ID (long / Long)
        */
-      quickRepliesDeleted(messageIds: number[], topicId: bigint): void
+      quickRepliesDeleted(messageIds: number[], topicId: number): void
 
       /**
        * Fired when a web-page bookmark is saved from the article viewer.
-       * @param messageObject MessageObject wrapping the bookmarked URL
+       * @param messageObject JavaObject wrapping the bookmarked URL
        */
-      bookmarkAdded(messageObject: MessageObject): void
+      bookmarkAdded(messageObject: JavaObject): void
 
       /**
        * Fired when the user changes the anonymity setting for a paid star-reaction on
@@ -987,7 +985,7 @@ declare namespace inu {
        * @param messageId message ID (int)
        * @param peer selected privacy peer ID (long); 0 = default, UserObject.ANONYMOUS = anonymous
        */
-      starReactionAnonymousUpdate(dialogId: bigint, messageId: number, peer: bigint): void
+      starReactionAnonymousUpdate(dialogId: number, messageId: number, peer: number): void
 
       /**
        * Fired whenever the business-chat-links list changes (created, deleted, edited,
@@ -1014,30 +1012,30 @@ declare namespace inu {
        * Arg count varies:
        *   2 args: messageObject translated (success path, single-message translate)
        *   3 args: messageObject translated dialogTranslating (when toggling dialog-level translate off)
-       * @param messageObject  MessageObject whose translation changed
+       * @param messageObject  JavaObject whose translation changed
        * @param translated     boolean — true = translation applied, false = cleared
        * @param dialogTranslating boolean (optional, 3-arg form only) — whether dialog-level translation is still active
        */
-      messageTranslated(messageObject: MessageObject, translated: boolean, dialogTranslating?: boolean): void
+      messageTranslated(messageObject: JavaObject, translated: boolean, dialogTranslating?: boolean): void
 
       /**
        * Fired when translation of a message is in progress (request sent, awaiting result).
-       * @param messageObject MessageObject being translated
+       * @param messageObject JavaObject being translated
        */
-      messageTranslating(messageObject: MessageObject): void
+      messageTranslating(messageObject: JavaObject): void
 
       /**
        * Fired when the "is this dialog translatable?" state is determined for a dialog.
        * @param dialogId dialog ID (long / Long)
        */
-      dialogIsTranslatable(dialogId: bigint): void
+      dialogIsTranslatable(dialogId: number): void
 
       /**
        * Fired when dialog-level translation is toggled on or off for a specific dialog.
        * @param dialogId    dialog ID (long / Long)
        * @param translating boolean — true = translation enabled, false = disabled
        */
-      dialogTranslate(dialogId: bigint, translating: boolean): void
+      dialogTranslate(dialogId: number, translating: boolean): void
 
       /**
        * Global event. Fired after the biometric (fingerprint) key pair is generated.
@@ -1086,7 +1084,7 @@ declare namespace inu {
        * @param iv                 encryption IV bytes (byte[], nullable)
        * @param totalFileSize      total size in bytes (long / Long)
        */
-      fileUploaded(location: string, inputFile: TLObject, inputEncryptedFile: TLObject, key: Uint8Array, iv: Uint8Array, totalFileSize: bigint): void
+      fileUploaded(location: string, inputFile: TLObject, inputEncryptedFile: TLObject, key: Uint8Array, iv: Uint8Array, totalFileSize: number): void
 
       /**
        * Fired when a file upload fails.
@@ -1104,7 +1102,7 @@ declare namespace inu {
        * @param totalSize    total file size in bytes (long); -1 = unknown
        * @param isEncrypted  boolean — secret-chat upload
        */
-      fileUploadProgressChanged(location: string, uploadedSize: bigint, totalSize: bigint, isEncrypted: boolean): void
+      fileUploadProgressChanged(location: string, uploadedSize: number, totalSize: number, isEncrypted: boolean): void
 
       /**
        * Fired periodically as a file download progresses (both blob cache and
@@ -1113,14 +1111,14 @@ declare namespace inu {
        * @param downloadedSize bytes downloaded so far (long)
        * @param totalSize    total expected size in bytes (long)
        */
-      fileLoadProgressChanged(url: string, downloadedSize: bigint, totalSize: bigint): void
+      fileLoadProgressChanged(url: string, downloadedSize: number, totalSize: number): void
 
       /**
        * Fired when a file download completes.
        * @param location  cache key / attach file name (String)
-       * @param finalFile the downloaded File on disk (File)
+       * @param finalFile the downloaded `java.io.File` on disk
        */
-      fileLoaded(location: string, finalFile: File): void
+      fileLoaded(location: string, finalFile: JavaObject): void
 
       /**
        * Fired when a file download fails or is cancelled.
@@ -1132,24 +1130,24 @@ declare namespace inu {
       /**
        * Fired once when a video-conversion job writes its first chunk to disk, signalling
        * that the output file path is valid and upload can begin.
-       * @param messageObject    MessageObject being converted (MessageObject)
+       * @param messageObject    JavaObject being converted (JavaObject)
        * @param filePath         output file path (String)
        * @param progress         conversion progress 0..1 (Float)
        * @param lastFrameTimestamp timestamp of the last encoded frame (long / Long)
        */
-      filePreparingStarted(messageObject: MessageObject, filePath: string, progress: number, lastFrameTimestamp: bigint): void
+      filePreparingStarted(messageObject: JavaObject, filePath: string, progress: number, lastFrameTimestamp: number): void
 
       /**
        * Fired on each new chunk written during video conversion, allowing incremental
        * upload of the still-encoding file.
-       * @param messageObject    MessageObject being converted (MessageObject)
+       * @param messageObject    JavaObject being converted (JavaObject)
        * @param filePath         output file path (String)
        * @param availableSize    bytes written and available for upload so far (long)
        * @param finalSize        total expected file size when done; 0 if not yet final (long)
        * @param progress         conversion progress 0..1 (Float)
        * @param lastFrameTimestamp timestamp of the last encoded frame (long / Long)
        */
-      fileNewChunkAvailable(messageObject: MessageObject, filePath: string, availableSize: bigint, finalSize: bigint, progress: number, lastFrameTimestamp: bigint): void
+      fileNewChunkAvailable(messageObject: JavaObject, filePath: string, availableSize: number, finalSize: number, progress: number, lastFrameTimestamp: number): void
 
       /**
        * Posted when video conversion/preparation fails before sending.
@@ -1158,7 +1156,7 @@ declare namespace inu {
        * @param progress Conversion progress at failure (float)
        * @param lastFrameTimestamp Timestamp of last successfully encoded frame (long)
        */
-      filePreparingFailed(messageObject: MessageObject, file: string, progress: number, lastFrameTimestamp: bigint): void
+      filePreparingFailed(messageObject: JavaObject, file: string, progress: number, lastFrameTimestamp: number): void
 
       /**
        * Posted when the push notification unread counter changes.
@@ -1168,7 +1166,7 @@ declare namespace inu {
 
       /**
        * Posted periodically during audio/voice message playback with updated progress.
-       * @param messageId ID of the currently playing message (int, from MessageObject.getId())
+       * @param messageId ID of the currently playing message (int, from JavaObject.getId())
        * @param progress Current playback progress 0.0–1.0 (float); 0 when stopping/resetting
        */
       messagePlayingProgressDidChanged(messageId: number, progress: number): void
@@ -1188,10 +1186,10 @@ declare namespace inu {
 
       /**
        * Posted when a new audio/voice message starts playing.
-       * @param messageObject The message now playing (MessageObject)
-       * @param oldMessageObject The previously playing message, may be null (MessageObject | null)
+       * @param messageObject The message now playing (JavaObject)
+       * @param oldMessageObject The previously playing message, may be null (JavaObject | null)
        */
-      messagePlayingDidStart(messageObject: MessageObject, oldMessageObject: MessageObject | null): void
+      messagePlayingDidStart(messageObject: JavaObject, oldMessageObject: JavaObject | null): void
 
       /**
        * Posted after a seek operation completes.
@@ -1202,10 +1200,10 @@ declare namespace inu {
 
       /**
        * Posted just before playback stops, giving observers a chance to react before state is cleared.
-       * @param messageObject The message about to stop (MessageObject)
+       * @param messageObject The message about to stop (JavaObject)
        * @param stopService Whether the playback service will be stopped (boolean)
        */
-      messagePlayingGoingToStop(messageObject: MessageObject, stopService: boolean): void
+      messagePlayingGoingToStop(messageObject: JavaObject, stopService: boolean): void
 
       /**
        * Posted on UI thread during audio recording with updated amplitude.
@@ -1262,7 +1260,7 @@ declare namespace inu {
        * @param photoAlbumsSorted Photo-only albums sorted (ArrayList<MediaController.AlbumEntry>)
        * @param cameraAlbumId ID of the camera roll album (long)
        */
-      albumsDidLoad(guid: number, mediaAlbumsSorted: Array<JavaObject>, photoAlbumsSorted: Array<JavaObject>, cameraAlbumId: bigint): void
+      albumsDidLoad(guid: number, mediaAlbumsSorted: Array<JavaObject>, photoAlbumsSorted: Array<JavaObject>, cameraAlbumId: number): void
 
       /**
        * Posted when a voice or round-video recording is ready to send.
@@ -1308,14 +1306,14 @@ declare namespace inu {
        * @param selfUpdated true if the local participant's own state changed (boolean)
        * @param [justJoinedId] Peer ID of the participant that just joined, 0 if none (long?) — optional
        */
-      groupCallUpdated(chatId: bigint, callId: bigint, selfUpdated: boolean, justJoinedId?: bigint): void
+      groupCallUpdated(chatId: number, callId: number, selfUpdated: boolean, justJoinedId?: number): void
 
       /**
        * Posted when a story's associated live/group call is updated.
        * @param dialogId Dialog ID of the story owner (long)
        * @param call Updated group call object (TLRPC.GroupCall)
        */
-      storyGroupCallUpdated(dialogId: bigint, call: TLObject): void
+      storyGroupCallUpdated(dialogId: number, call: TLObject): void
 
       /**
        * Posted when the set of actively speaking participants in a group call changes.
@@ -1323,7 +1321,7 @@ declare namespace inu {
        * @param callId The group call ID (long)
        * @param selfUpdated true if the local user's speaking state changed (boolean)
        */
-      groupCallSpeakingUsersUpdated(chatId: bigint, callId: bigint, selfUpdated: boolean): void
+      groupCallSpeakingUsersUpdated(chatId: number, callId: number, selfUpdated: boolean): void
 
       /**
        * Posted when the local screencast state in a group call changes (started or stopped).
@@ -1342,7 +1340,7 @@ declare namespace inu {
        * used to batch participant load requests.
        * @param time Current elapsed realtime in ms (long, from SystemClock.elapsedRealtime())
        */
-      applyGroupCallVisibleParticipants(time: bigint): void
+      applyGroupCallVisibleParticipants(time: number): void
 
       /**
        * Posted when the list of users "typing" in a group call (raise-hand / active speakers indicator) changes.
@@ -1372,7 +1370,7 @@ declare namespace inu {
        * Fired when a live story call state changes (empty stream, participant joined/left, call ended, recording started/stopped).
        * @param callId — long; the group call id the update pertains to
        */
-      liveStoryUpdated(callId: bigint): void
+      liveStoryUpdated(callId: number): void
 
       /**
        * Fired when a group call message arrives or is deleted during a live story.
@@ -1381,7 +1379,7 @@ declare namespace inu {
        * @param update    — TL_update.TL_updateGroupCallMessage | TL_update.TL_updateDeleteGroupCallMessages; the raw update
        * @param isHistory — boolean; true when replaying buffered history on join, false for live updates
        */
-      liveStoryMessageUpdate(callId: bigint, update: TLObject, isHistory: boolean): void
+      liveStoryMessageUpdate(callId: number, update: TLObject, isHistory: boolean): void
 
       /**
        * Fired after the current account is fully logged out and its data cleared.
@@ -1402,7 +1400,7 @@ declare namespace inu {
        * @param chat     — TLRPC.Chat | null; non-null for group/channel dialogs, null for user
        * @param param    — Boolean; revoke flag for non-bot users, blockBot flag for bots
        */
-      needDeleteDialog(dialogId: bigint, user: TLObject, chat: TLObject, param: boolean): void
+      needDeleteDialog(dialogId: number, user: TLObject, chat: TLObject, param: boolean): void
 
       /**
        * Fired when emoji keyword suggestions for a language have been refreshed in the local DB.
@@ -1447,7 +1445,7 @@ declare namespace inu {
        * @param botId         — long; the bot's user id
        * @param botMenuButton — TL_bots.BotMenuButton; the new menu button (may be TL_botMenuButton or TL_botMenuButtonDefault)
        */
-      updateBotMenuButton(botId: bigint, botMenuButton: TLObject): void
+      updateBotMenuButton(botId: number, botMenuButton: TLObject): void
 
       /**
        * Fired after a gift has been successfully sent to a user.
@@ -1537,7 +1535,7 @@ declare namespace inu {
        * Fired when channel recommendations for a specific dialog have been loaded or refreshed.
        * @param dialogId — long; the dialog id whose recommendations changed (negative = channel)
        */
-      channelRecommendationsLoaded(dialogId: bigint): void
+      channelRecommendationsLoaded(dialogId: number): void
 
       /**
        * Fired when the list of saved-messages sub-dialogs changes.
@@ -1549,7 +1547,7 @@ declare namespace inu {
        * Fired when saved-message reaction tags change for a topic.
        * @param topicId — long; the saved-messages topic id affected; 0 means all topics
        */
-      savedReactionTagsUpdate(topicId: bigint): void
+      savedReactionTagsUpdate(topicId: number): void
 
       /**
        * Posted when the premium-blocked status of one or more contacts changes
@@ -1562,13 +1560,13 @@ declare namespace inu {
        * @param dialogId - dialog whose albums changed
        * @param collections - the live StoriesCollections object (mutable; observers should not hold long-term references)
        */
-      storyAlbumsCollectionsUpdate(dialogId: bigint, collections: JavaObject): void
+      storyAlbumsCollectionsUpdate(dialogId: number, collections: JavaObject): void
 
       /**
        * Posted on UI thread after messages are forwarded to Saved Messages and server confirms new IDs.
-       * @param newMessagesByIds - map from new message id -> random_id used during send (mutable Map<number, bigint>)
+       * @param newMessagesByIds - map from new message id -> random_id used during send (mutable Map<number, number>)
        */
-      savedMessagesForwarded(newMessagesByIds: Map<number, bigint>): void
+      savedMessagesForwarded(newMessagesByIds: Map<number, number>): void
 
       /**
        * Posted when emoji keywords finish loading (any language or locale).
@@ -1591,7 +1589,7 @@ declare namespace inu {
        * @param dialogId - target dialog id (long, may be negative for channels)
        * @param cell - (optional) the ChatMessageCell that was tapped
        */
-      openBoostForUsersDialog(dialogId: bigint, cell?: JavaObject): void
+      openBoostForUsersDialog(dialogId: number, cell?: JavaObject): void
 
       /**
        * Posted on UI thread when group restrictions are unlocked via boosts
@@ -1606,14 +1604,14 @@ declare namespace inu {
        * @param canApplyBoost - copy of the CanApplyBoost state at boost time
        * @param dialogId - the boosted dialog id
        */
-      chatWasBoostedByUser(boostsStatus: TLObject, canApplyBoost: JavaObject, dialogId: bigint): void
+      chatWasBoostedByUser(boostsStatus: TLObject, canApplyBoost: JavaObject, dialogId: number): void
 
       /**
        * Posted after the group sticker/emoji pack is updated server-side.
        * @param chatId - the chat id whose pack changed (info.id, positive)
        * @param isEmoji - true if the updated pack is an emoji pack, false for sticker pack
        */
-      groupPackUpdated(chatId: bigint, isEmoji: boolean): void
+      groupPackUpdated(chatId: number, isEmoji: boolean): void
 
       /**
        * Posted when timezone list is loaded or refreshed from the server.
@@ -1695,13 +1693,13 @@ declare namespace inu {
        * Posted when bot stars revenue stats are loaded or refreshed (stars or TON variant).
        * @param dialogId - the bot/channel dialog id whose stats were updated
        */
-      botStarsUpdated(dialogId: bigint): void
+      botStarsUpdated(dialogId: number): void
 
       /**
        * Posted when bot stars transactions finish loading for a dialog.
        * @param dialogId - the dialog id whose transactions were loaded
        */
-      botStarsTransactionsLoaded(dialogId: bigint): void
+      botStarsTransactionsLoaded(dialogId: number): void
 
       // never posted; infer from declaration only
       channelStarsUpdated(): void
@@ -1710,7 +1708,7 @@ declare namespace inu {
        * Posted to trigger a full redraw of all messages in a chat (e.g. after topic slowmode change).
        * @param chatId - negative chat id (pass as -chatId from the call site)
        */
-      updateAllMessages(chatId: bigint): void
+      updateAllMessages(chatId: number): void
 
       /**
        * Posted when the catalog of purchasable star gifts finishes loading or refreshing.
@@ -1723,14 +1721,14 @@ declare namespace inu {
        * @param dialogId - owner dialog id
        * @param list - the live GiftsList object for the given dialog (mutable)
        */
-      starUserGiftsLoaded(dialogId: bigint, list: JavaObject): void
+      starUserGiftsLoaded(dialogId: number, list: JavaObject): void
 
       /**
        * Posted when the collections metadata for a user's star gifts loads or changes.
        * @param dialogId - owner dialog id
        * @param collections - the live GiftsCollections object (mutable)
        */
-      starUserGiftCollectionsLoaded(dialogId: bigint, collections: JavaObject): void
+      starUserGiftCollectionsLoaded(dialogId: number, collections: JavaObject): void
 
       /**
        * Posted when a star gift's availability drops to zero (sold out).
@@ -1755,13 +1753,13 @@ declare namespace inu {
        * Fired when suggested bots for a channel are updated.
        * @param dialogId - long, channel dialog id
        */
-      channelSuggestedBotsUpdate(dialogId: bigint): void
+      channelSuggestedBotsUpdate(dialogId: number): void
 
       /**
        * Fired when connected bots for a channel are updated.
        * @param dialogId - long, channel dialog id
        */
-      channelConnectedBotsUpdate(dialogId: bigint): void
+      channelConnectedBotsUpdate(dialogId: number): void
 
       /**
        * Fired when the list of admined channels has been loaded.
@@ -1773,14 +1771,14 @@ declare namespace inu {
        * Fired when the paid message fee for a user is updated.
        * @param userId - long, target user/dialog id
        */
-      messagesFeeUpdated(userId: bigint): void
+      messagesFeeUpdated(userId: number): void
 
       /**
        * Fired when a common chats list for a dialog is loaded.
        * @param dialogId - long, dialog id whose common chats were loaded
        * @param list - MessagesController.CommonChatsList, the loaded list (mutable, observers read from it)
        */
-      commonChatsLoaded(dialogId: bigint, list: JavaObject): void
+      commonChatsLoaded(dialogId: number, list: JavaObject): void
 
       /**
        * Fired when the app config is updated.
@@ -1823,7 +1821,7 @@ declare namespace inu {
        * Fired when profile music (bio music track) for a dialog is updated.
        * @param dialogId - long, dialog whose profile music changed
        */
-      profileMusicUpdated(dialogId: bigint): void
+      profileMusicUpdated(dialogId: number): void
 
       /**
        * Fired when a chat member rank is updated.
@@ -1831,13 +1829,13 @@ declare namespace inu {
        * @param userId - long, user id whose rank changed
        * @param rank - String, new rank string (may be empty)
        */
-      updatedChatRanks(chatId: bigint, userId: bigint, rank: string): void
+      updatedChatRanks(chatId: number, userId: number, rank: string): void
 
       /**
        * Fired when the current user joins a group (non-channel megagroup).
        * @param chatId - long, chat id of the joined group
        */
-      joinedGroup(chatId: bigint): void
+      joinedGroup(chatId: number): void
 
       /**
        * Fired when AI compose tones finish loading.
@@ -2061,7 +2059,7 @@ declare namespace inu {
        * @param account account index (int) — only present when posted from LocationController; absent when posted from LocationActivity
        * Arg count: 1 or 2.
        */
-      liveLocationsCacheChanged(dialogId: bigint, account?: number): void
+      liveLocationsCacheChanged(dialogId: number, account?: number): void
 
       /**
        * Fired when the unread notifications count badge needs to be refreshed.
@@ -2155,7 +2153,7 @@ declare namespace inu {
        * @param dialogId long — positive = user_id, negative = chat_id (already negated at call site)
        * @param action TLRPC.TL_sendMessageEmojiInteraction — the interaction payload
        */
-      onEmojiInteractionsReceived(dialogId: bigint, action: TLObject): void
+      onEmojiInteractionsReceived(dialogId: number, action: TLObject): void
 
       /**
        * Fired when the set of emoji preview themes (status/reaction previews) changes.
@@ -2180,7 +2178,7 @@ declare namespace inu {
        * @param chatId long — chat identifier (positive)
        * @param unused long — always 0L at all call sites (reserved/padding)
        */
-      chatAvailableReactionsUpdated(chatId: bigint, unused: bigint): void
+      chatAvailableReactionsUpdated(chatId: number, unused: number): void
 
       /**
        * Never posted anywhere in the codebase; declared in NotificationCenter at line 330.
@@ -2305,7 +2303,7 @@ declare namespace inu {
        * @param chatId long — chat identifier (positive); negated for saved-dialogs case at one call site
        * @param fromCache boolean — true if loaded from local cache/storage, false if from server
        */
-      topicsDidLoaded(chatId: bigint, fromCache: boolean): void
+      topicsDidLoaded(chatId: number, fromCache: boolean): void
 
       /**
        * Fired when a chat's forum mode or forum-tabs mode is toggled.
@@ -2313,7 +2311,7 @@ declare namespace inu {
        * @param forum boolean — whether forum mode is now enabled
        * @param forumTabs boolean — whether forum tabs are now enabled (chat.forum_tabs)
        */
-      chatSwitchedForum(chatId: bigint, forum: boolean, forumTabs: boolean): void
+      chatSwitchedForum(chatId: number, forum: boolean, forumTabs: boolean): void
 
       /**
        * Fired when the account-wide global auto-delete timer setting changes.
@@ -2345,7 +2343,7 @@ declare namespace inu {
        * @param dialogId - long, peer whose story was deleted
        * @param storyId  - int, id of the deleted story
        */
-      storyDeleted(dialogId: bigint, storyId: number): void
+      storyDeleted(dialogId: number, storyId: number): void
 
       /**
        * Posted from StoriesController.StoriesList when the paginated story list changes.
@@ -2396,7 +2394,7 @@ declare namespace inu {
        * Posted from MessagesController when channel difference processing completes.
        * @param channelId - long, the channel whose difference was received
        */
-      onReceivedChannelDifference(channelId: bigint): void
+      onReceivedChannelDifference(channelId: number): void
 
       /**
        * Posted from StoriesController when story read state is updated (mark-as-read).
@@ -2495,12 +2493,12 @@ declare namespace inu {
      *
      * object keys are event names, values are callback functions
      *
-     * @needs-grant inu.android.addNotificationCenterDelegate
+     * @needs-grant android.addNotificationCenterDelegate
      */
     function addNotificationCenterDelegate(
       handlers: {
         [key in keyof NotificationCenterEventsMap]?: (...args: Parameters<NotificationCenterEventsMap[key]>) => void
       },
-    ): VoidFunction
+    ): Disposer
   }
 }

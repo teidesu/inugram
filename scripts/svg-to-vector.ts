@@ -172,7 +172,7 @@ export function svgBodyToVectorDrawable(body: string, width: number, height: num
   const vpW = width - 2 * inset
   const vpH = height - 2 * inset
   const strokeScale = vpW / width
-  const paths = shapes.map(shape => {
+  const paths = shapes.map((shape) => {
     const attrs: string[] = [`android:pathData="${shape.d}"`]
     const fill = resolveFillColor(shape.fill)
     const stroke = resolveStrokeColor(shape.stroke)

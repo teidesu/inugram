@@ -37,7 +37,7 @@ inu.registerSettings(ui.settingsPage({
     ui.select({
       text: 'select',
       items: ['item1', 'item2', 'item3'],
-      value: 0,
+      selected: 0,
       onChange: (value) => {
         console.log('select', value)
       },
@@ -51,8 +51,8 @@ inu.registerSettings(ui.settingsPage({
       default: 50,
       value: 50,
       step: 1,
-      title: 'slider',
-      format: value => `${value}%`,
+      text: 'slider',
+      label: value => `${value}%`,
       onChange: (value) => {
         console.log('slider', value)
       },
@@ -77,7 +77,11 @@ inu.registerSettings(ui.settingsPage({
 // })
 inu.interceptRpc('messages.getSponsoredMessages', () => ({ _: 'messages.sponsoredMessagesEmpty' }))
 inu.interceptRpc('contacts.getSponsoredPeers', () => ({ _: 'contacts.sponsoredPeersEmpty' }))
-inu.interceptRpc('help.getPromoData', () => ({ _: 'help.promoDataEmpty' }))
+// `expires` is when the client may re-ask; a day out keeps it from refetching in a loop
+inu.interceptRpc('help.getPromoData', () => ({
+  _: 'help.promoDataEmpty',
+  expires: Math.floor(Date.now() / 1000) + 86400,
+}))
 
 // local premium via hooking
 const userConfigCls = inu.jvm.cls('org.telegram.messenger.UserConfig')
@@ -181,14 +185,14 @@ const GradientSpan = inu.jvm.defineClass('my/plugin/GradientSpan', {
     super: [],
     init: (self, colors, width) => {
       // cold (plain js): seed the real dex fields the hot method will read.
-      self.colors = colors
-      self.width = width
+      self.setField('width', width)
+      self.setField('colors', colors)
     },
   }],
 
   // cold override — toString is called ~never, a js jump is free.
   methods: {
-    toString: self => `GradientSpan(${self.width}px)`,
+    toString: (self: JavaObject) => `GradientSpan(${self.getField('width')}px)`,
   },
 
   // hot override — runs inside text draw, so it must be native dex.

@@ -63,7 +63,7 @@ function escapeMarkdownCell(value: string) {
 }
 
 function formatSize(added: number, removed: number) {
-  return `\${\\color{green}+${added}}$\u00a0\${\\color{red}-${removed}}$`
+  return `\${\\color{green}+${added}}$\u00A0\${\\color{red}-${removed}}$`
 }
 
 function formatTable(patches: PatchInfo[]) {

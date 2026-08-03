@@ -163,7 +163,7 @@ object PluginRpc {
         // hasInterceptors would leak the entry whenever interceptors vanish mid-flight
         if (bypassed.remove(request)) return false
         if (!hasInterceptors) return false
-        val tlName = TlNames.classNameToTlName(request.javaClass.simpleName)
+        val tlName = TlNames.classNameToTlName(request.javaClass)
         val chain = interceptorsByMethod[tlName]?.takeIf { it.isNotEmpty() } ?: return false
         val params = OriginalParams(flags, datacenterId, connectionType, immediate, requestToken, onQuickAck, onWriteToSocket)
         Utilities.globalQueue.postRunnable {
@@ -220,7 +220,7 @@ object PluginRpc {
         val dispatchId = nextDispatchId++
         pendingDispatches[dispatchId] = PendingDispatch(interceptor.plugin, connectionsManager, chain, index, params, scopeId, finalize)
         val requestHandle = TlHandles.mintForScope(request, scopeId)
-        val method = TlNames.classNameToTlName(request.javaClass.simpleName)
+        val method = TlNames.classNameToTlName(request.javaClass)
         engine.dispatchRpc(interceptor.callbackId, dispatchId, method, TlWire.encodeHandle(vector = false, id = requestHandle))
     }
 
@@ -292,7 +292,7 @@ object PluginRpc {
         } catch (e: Exception) {
             return "invokeRpc: ${e.message}"
         }
-        val tlName = TlNames.classNameToTlName(request.javaClass.simpleName)
+        val tlName = TlNames.classNameToTlName(request.javaClass)
         if (!plugin.permissions.allows("inu.invokeRpc", tlName, ScopeMatch.EXACT)) {
             return "invokeRpc: '$tlName' not granted"
         }
@@ -334,7 +334,7 @@ object PluginRpc {
     }
 
     private fun dispatchUpdate(update: TLObject) {
-        val tlName = TlNames.classNameToTlName(update.javaClass.simpleName)
+        val tlName = TlNames.classNameToTlName(update.javaClass)
         var json: String? = null
         for (plugin in updateListeners) {
             val engine = plugin.engine ?: continue

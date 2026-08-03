@@ -1,6 +1,7 @@
 package desu.inugram.helpers.plugins
 
 import android.util.Base64
+import desu.inugram.core.plugins.TlFlags
 import desu.inugram.core.plugins.TlNames
 import desu.inugram.core.plugins.TlWire
 import org.json.JSONArray
@@ -39,6 +40,10 @@ object TlHandles : QuickJs.TlListener {
         val target: Any,
         val elementType: Type?,
         val scopeId: Long,
+        // set only when target is a vector minted for a TLObject field, so a mutation through
+        // this handle (push, length=) can resync the owning object's flag bit; syncFlagBit is a
+        // no-op when the field isn't gated
+        val flagOwner: Pair<TLObject, String>? = null,
     )
 
     private var nextHandle = 1L
@@ -52,9 +57,9 @@ object TlHandles : QuickJs.TlListener {
     /** mints a handle for a TLObject or ArrayList<Any?> owned by an intercept-dispatch scope */
     fun mintForScope(target: Any, scopeId: Long): Long = mint(target, elementType = null, scopeId = scopeId)
 
-    private fun mint(target: Any, elementType: Type?, scopeId: Long): Long {
+    private fun mint(target: Any, elementType: Type?, scopeId: Long, flagOwner: Pair<TLObject, String>? = null): Long {
         val handle = nextHandle++
-        table[handle] = HandleEntry(target, elementType, scopeId)
+        table[handle] = HandleEntry(target, elementType, scopeId, flagOwner)
         return handle
     }
 
@@ -90,7 +95,7 @@ object TlHandles : QuickJs.TlListener {
     override fun tlHas(handle: Long, key: String): Int {
         val entry = table[handle] ?: return -1
         val present = when (val target = entry.target) {
-            is TLObject -> key == "_" || TlJson.publicFields(target.javaClass).containsKey(key)
+            is TLObject -> key == "_" || isVisibleField(target, key)
             is ArrayList<*> -> key == "length" || (key.toIntOrNull()?.let { it in 0 until target.size } ?: false)
             else -> false
         }
@@ -99,7 +104,17 @@ object TlHandles : QuickJs.TlListener {
 
     override fun tlOwnKeys(handle: Long): String? {
         val target = table[handle]?.target as? TLObject ?: return null
-        return (sequenceOf("_") + TlJson.publicFields(target.javaClass).keys).joinToString(",")
+        val fields = TlJson.publicFields(target.javaClass).keys.filter { isVisibleField(target, it) }
+        return (sequenceOf("_") + fields).joinToString(",")
+    }
+
+    /** `in` and `Object.keys` have to agree with reads: no flag words, no cleared-bit fields */
+    private fun isVisibleField(target: TLObject, key: String): Boolean {
+        val cls = target.javaClass
+        if (!TlJson.publicFields(cls).containsKey(key)) return false
+        if (TlFlags.isFlagWord(cls, key)) return false
+        val gate = TlFlags.gateOf(cls, key) ?: return true
+        return isBitSet(target, cls, gate)
     }
 
     override fun tlCopy(handle: Long): String? {
@@ -108,7 +123,7 @@ object TlHandles : QuickJs.TlListener {
             is TLObject -> TlJson.toJson(target).toString()
             is ArrayList<*> -> {
                 val arr = JSONArray()
-                for (item in target) if (item != null) arr.put(TlJson.valueToJson(item))
+                for (item in target) if (item != null) TlJson.valueToJson(item)?.let { arr.put(it) }
                 arr.toString()
             }
             else -> null
@@ -122,29 +137,49 @@ object TlHandles : QuickJs.TlListener {
     // -- object field get/set --
 
     private fun getObjectField(entry: HandleEntry, target: TLObject, key: String): String {
-        if (key == "_") return TlWire.encodeString(TlNames.classNameToTlName(target.javaClass.simpleName))
-        val field = TlJson.publicFields(target.javaClass)[key]
-            ?: return TlWire.encodeError("no such field '$key' on '${TlNames.classNameToTlName(target.javaClass.simpleName)}'")
+        val cls = target.javaClass
+        if (key == "_") return TlWire.encodeString(TlNames.classNameToTlName(cls))
+        if (TlFlags.isFlagWord(cls, key)) return TlWire.encodeNull()
+        val field = TlJson.publicFields(cls)[key]
+            ?: return TlWire.encodeError("no such field '$key' on '${TlNames.classNameToTlName(cls)}'")
+        // a field whose bit is clear isn't there, whatever the java slot happens to hold - stock
+        // parks placeholders in some of them (`photo = new TL_photoEmpty()`)
+        val gate = TlFlags.gateOf(cls, key)
+        if (gate != null && !isBitSet(target, cls, gate)) return TlWire.encodeNull()
         val value = try {
             field.get(target)
         } catch (e: Exception) {
             return TlWire.encodeError(e.message ?: "reflection get failed")
         }
-        return encodeFieldValue(entry, value, field.genericType)
+        return encodeFieldValue(entry, value, field.genericType, flagOwner = target to key)
     }
 
     private fun setObjectField(target: TLObject, key: String, wire: String): String? {
+        val cls = target.javaClass
         if (key == "_") return "cannot assign to '_'"
-        val field = TlJson.publicFields(target.javaClass)[key]
-            ?: return "no such field '$key' on '${TlNames.classNameToTlName(target.javaClass.simpleName)}'"
-        val resolved = resolveSetValue(TlWire.decode(wire), field.genericType, field.type, key)
+        if (TlFlags.isFlagWord(cls, key)) {
+            return "'$key' on '${TlNames.classNameToTlName(cls)}' is managed by the bridge - set the optional fields instead"
+        }
+        val field = TlJson.publicFields(cls)[key]
+            ?: return "no such field '$key' on '${TlNames.classNameToTlName(cls)}'"
+        val gated = TlFlags.gateOf(cls, key) != null
+        val resolved = resolveSetValue(TlWire.decode(wire), field.genericType, field.type, key, allowPrimitiveClear = gated)
         if (resolved.isError) return resolved.error
         return try {
             field.set(target, resolved.value)
+            // only this field's bit, never the whole word: the object is live, and its untouched
+            // fields may hold those same placeholders, which a wholesale recompute would flag
+            TlJson.syncFlagBit(target, key)
             null
         } catch (e: Exception) {
             e.message ?: "reflection set failed"
         }
+    }
+
+    private fun isBitSet(target: TLObject, cls: Class<*>, gate: TlFlags.Gate): Boolean {
+        val name = TlFlags.wordName(gate.word) ?: return true
+        val field = TlJson.publicFields(cls)[name] ?: return true
+        return (field.getInt(target) and (1 shl gate.bit)) != 0
     }
 
     // -- vector get/set (length, indexed, push-via-index==size) --
@@ -169,6 +204,7 @@ object TlHandles : QuickJs.TlListener {
             } ?: return "vector length must be an integer"
             if (newLength < 0 || newLength > target.size) return "vector length can only shrink (${target.size} -> $newLength not allowed)"
             while (target.size > newLength) target.removeAt(target.size - 1)
+            entry.flagOwner?.let { (obj, name) -> TlJson.syncFlagBit(obj, name) }
             return null
         }
         val index = key.toIntOrNull() ?: return "no such property '$key' on a TL vector"
@@ -177,12 +213,13 @@ object TlHandles : QuickJs.TlListener {
         val resolved = resolveSetValue(TlWire.decode(wire), elementType, rawClassOf(elementType), "[$index]")
         if (resolved.isError) return resolved.error
         if (index == target.size) target.add(resolved.value) else target[index] = resolved.value
+        entry.flagOwner?.let { (obj, name) -> TlJson.syncFlagBit(obj, name) }
         return null
     }
 
     // -- shared value codecs --
 
-    private fun encodeFieldValue(entry: HandleEntry, value: Any?, declaredType: Type): String {
+    private fun encodeFieldValue(entry: HandleEntry, value: Any?, declaredType: Type, flagOwner: Pair<TLObject, String>? = null): String {
         if (value == null) return TlWire.encodeNull()
         return when (value) {
             is Long -> TlWire.encodeString(value.toString())
@@ -197,7 +234,7 @@ object TlHandles : QuickJs.TlListener {
             is TLObject -> TlWire.encodeHandle(vector = false, id = mint(value, null, entry.scopeId))
             is ArrayList<*> -> {
                 val elementType = elementTypeOf(declaredType)
-                TlWire.encodeHandle(vector = true, id = mint(value, elementType, entry.scopeId))
+                TlWire.encodeHandle(vector = true, id = mint(value, elementType, entry.scopeId, flagOwner))
             }
             else -> TlWire.encodeError("unsupported field type ${value.javaClass}")
         }
@@ -210,10 +247,24 @@ object TlHandles : QuickJs.TlListener {
     private fun ok(value: Any?) = Resolved(value, null)
     private fun err(message: String) = Resolved(null, message)
 
-    private fun resolveSetValue(decoded: TlWire.Value, genericType: Type, rawType: Class<*>, path: String): Resolved =
+    private fun resolveSetValue(
+        decoded: TlWire.Value,
+        genericType: Type,
+        rawType: Class<*>,
+        path: String,
+        allowPrimitiveClear: Boolean = false,
+    ): Resolved =
         when (decoded) {
             is TlWire.Value.Null -> {
-                if (rawType.isPrimitive) err("cannot clear primitive field at '$path'") else ok(null)
+                if (!rawType.isPrimitive) {
+                    ok(null)
+                } else if (allowPrimitiveClear) {
+                    // gated primitive field: null means "absent", which for a primitive java slot
+                    // is indistinguishable from its zero value - syncFlagBit clears the bit from here
+                    ok(zeroValueOf(rawType))
+                } else {
+                    err("cannot clear primitive field at '$path'")
+                }
             }
             is TlWire.Value.Bytes -> {
                 if (rawType == ByteArray::class.java) {
@@ -238,6 +289,17 @@ object TlHandles : QuickJs.TlListener {
             }
             else -> err("unsupported set payload at '$path'")
         }
+
+    private fun zeroValueOf(rawType: Class<*>): Any = when (rawType) {
+        java.lang.Integer.TYPE -> 0
+        java.lang.Long.TYPE -> 0L
+        java.lang.Short.TYPE -> 0.toShort()
+        java.lang.Byte.TYPE -> 0.toByte()
+        java.lang.Double.TYPE -> 0.0
+        java.lang.Float.TYPE -> 0f
+        java.lang.Boolean.TYPE -> false
+        else -> error("no zero value for $rawType")
+    }
 
     private fun elementTypeOf(type: Type): Type? {
         if (type !is ParameterizedType) return null

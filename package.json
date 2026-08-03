@@ -6,6 +6,7 @@
   "scripts": {
     "setup": "tsx scripts/setup.ts",
     "generate-icons": "tsx scripts/generate-icons.ts",
+    "generate-tl-typings": "tsx scripts/generate-tl-typings.ts",
     "export": "tsx scripts/export.ts",
     "rebase": "tsx scripts/rebase.ts",
     "find-patches": "tsx scripts/find-patches.ts",
