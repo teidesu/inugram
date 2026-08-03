@@ -217,6 +217,33 @@ New hook → `@JvmStatic fun` on `InuHooks`, one-line call site in the patch, **
 - Register in `SearchRegistry.pages`. Slugs are persistent identity (deeplinks + recents), globally unique — uniqueness asserted at first access. Renaming a slug is a breaking change.
 - Row highlight on open: `SettingsPageActivity.withHighlight(itemId)` + existing `onTransitionAnimationEnd` hook. No extra wiring per page.
 
+## Plugin TL typings
+
+`pnpm run generate-tl-typings` regenerates, from stock's tgnet sources — **run it after every rebase**:
+
+| output | what |
+| --- | --- |
+| `src/plugins/android.tl.d.ts` | every TL type as `tl.Raw*` / `tl.Type*`, plus `tl.RpcCallReturn`. header stamps `@layer` + `@appVersion` (read from `TLRPC.java` / `gradle.properties`) so a copy outside the repo still says which build it describes |
+| `src/core/.../TlNamesTable.kt` | the wire name of every class whose java name doesn't read as it |
+| `src/core/src/main/resources/tl_flags.txt` | which flag word + bit gates each optional field |
+
+It parses `TLRPC.java` + `tgnet/tl/**` (`scripts/tl-parser.ts`) and joins the result against stock's
+own layer dumps in `TMessagesProj_AppTests/tlscheme/*.json` by constructor id. All three outputs are
+committed. Never hand-edit them — and never hand-edit `TlNamesTable.kt`/`tl_flags.txt` to "fix" a
+wrong name or flag, since the bridge and the typings only agree because one script writes both.
+
+- **Names.** `TlNames.classNameToTlName(cls)` needs the class, not its name — it reads the enclosing
+  container. The name is whatever the layer dumps call the constructor, so the table carries both
+  namespace and member (`TL_statsGetPollStats` → `stats.getPollStats`). The exception is a legacy
+  variant colliding with a live one: `TL_message_old7` is `message` on the wire too, so it keeps its
+  derived name and stays distinct from `TL_message`.
+- **Flags.** `TlFlags` owns `flags`/`flags2`: they're hidden from plugins, fields whose bit is clear
+  are omitted from reads, and assigning a field recomputes its bit from the value (`null`/`0`/`''`/
+  `[]` clear it). Layout is read out of each constructor's `serializeToStream`, **not** the schema —
+  where stock lags a layer, the bytes it writes are what a round-tripped object must match.
+- Only `_layerNNN` classes are dropped from the typings; the flag table still covers them, because
+  the bridge can hand a plugin one loaded from local storage.
+
 ## Strings
 
 - `src/res/values/strings_inu.xml`. All keys prefixed `Inu` (`InuHideStories`).

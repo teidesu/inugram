@@ -1,13 +1,23 @@
 package desu.inugram.core.plugins
 
 /**
- * maps between java `TL_*` simple class names and the `namespace.method`-ish names plugins see
- * over the JSON bridge (e.g. `TL_messages_sendMessage` <-> `messages.sendMessage`).
+ * maps stock's java TL classes onto the `namespace.member` names plugins see over the JSON bridge
+ * (`TLRPC.TL_messages_sendMessage` -> `messages.sendMessage`).
  *
- * rule: strip the `TL_` prefix; if the leading segment up to the first underscore is entirely
- * lowercase, that segment is a namespace — replace that first underscore with a dot. any
- * remaining underscores are left as-is (they're part of the member name, e.g. `updateShort_message`
- * style names don't occur in practice, but nested legacy names might carry extra underscores).
+ * the name is whatever the TL schema calls the constructor, so [TL_NAME_OVERRIDES] lists every
+ * class stock spells differently from it. the exception is the legacy variants of one predicate:
+ * `TL_message` and `TL_message_old7` are both `message` on the wire, and since a plugin has to be
+ * able to tell which one it got, whichever loses the name keeps its derived one.
+ *
+ * that derivation is also the fallback for classes the schema dumps don't cover, and it can only
+ * ever guess the namespace. a leading `foo_` is one only when `foo` really is a namespace -
+ * otherwise `TL_user_old` would read as `user.old` - and the ~200 classes stock declares without a
+ * `TL_` prefix carry nothing to read at all. nor does the container decide it:
+ * `TL_stars.transferStarGift` is `payments.transferStarGift`, and `TL_stories.TL_storyView` is
+ * namespaced nowhere.
+ *
+ * both tables are generated from stock's own layer dumps by `pnpm run generate-tl-typings`,
+ * alongside the plugin typings, which is what keeps the two in agreement.
  */
 object TlNames {
     private val LAYER_SUFFIX = Regex("_layer\\d+$")
@@ -18,27 +28,20 @@ object TlNames {
     /** strips a trailing `_layerNNN` suffix, if present */
     fun stripLayerSuffix(className: String): String = className.replace(LAYER_SUFFIX, "")
 
-    /** `TL_messages_sendMessage` -> `messages.sendMessage`; `TL_updateNewMessage` -> `updateNewMessage` */
-    fun classNameToTlName(className: String): String {
-        val withoutPrefix = className.removePrefix("TL_")
-        val withoutLayer = stripLayerSuffix(withoutPrefix)
-        val underscoreIdx = withoutLayer.indexOf('_')
-        if (underscoreIdx < 0) return withoutLayer
-        val namespace = withoutLayer.substring(0, underscoreIdx)
-        if (namespace.isNotEmpty() && namespace.all { it.isLowerCase() }) {
-            return namespace + "." + withoutLayer.substring(underscoreIdx + 1)
-        }
-        return withoutLayer
-    }
+    fun classNameToTlName(cls: Class<*>): String =
+        classNameToTlName(cls.enclosingClass?.simpleName ?: "", cls.simpleName)
 
-    /** `messages.sendMessage` -> `TL_messages_sendMessage`; `updateNewMessage` -> `TL_updateNewMessage` */
-    fun tlNameToClassName(tlName: String): String {
-        val dotIdx = tlName.indexOf('.')
-        val body = if (dotIdx >= 0) {
-            tlName.substring(0, dotIdx) + "_" + tlName.substring(dotIdx + 1)
-        } else {
-            tlName
+    /** [container] is the enclosing class's simple name, e.g. `TLRPC` or `TL_account` */
+    fun classNameToTlName(container: String, className: String): String {
+        val stripped = stripLayerSuffix(className)
+        TL_NAME_OVERRIDES["$container.$stripped"]?.let { return it }
+
+        val member = stripped.removePrefix("TL_")
+        val underscoreIdx = member.indexOf('_')
+        if (underscoreIdx > 0) {
+            val prefix = member.substring(0, underscoreIdx)
+            if (prefix in TL_NAMESPACES) return "$prefix.${member.substring(underscoreIdx + 1)}"
         }
-        return "TL_$body"
+        return member
     }
 }

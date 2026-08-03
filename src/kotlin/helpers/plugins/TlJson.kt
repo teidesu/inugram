@@ -1,6 +1,8 @@
 package desu.inugram.helpers.plugins
 
 import android.util.Base64
+import android.util.SparseArray
+import desu.inugram.core.plugins.TlFlags
 import desu.inugram.core.plugins.TlNames
 import org.json.JSONArray
 import org.json.JSONObject
@@ -10,6 +12,7 @@ import org.telegram.tgnet.tl.TL_account
 import org.telegram.tgnet.tl.TL_aicompose
 import org.telegram.tgnet.tl.TL_bots
 import org.telegram.tgnet.tl.TL_chatlists
+import org.telegram.tgnet.tl.TL_communities
 import org.telegram.tgnet.tl.TL_forum
 import org.telegram.tgnet.tl.TL_fragment
 import org.telegram.tgnet.tl.TL_iv
@@ -37,8 +40,14 @@ import java.util.ArrayList
  *
  * Caveats (mirrored in src/plugins/common.d.ts):
  * - `long` fields are exposed as JSON strings to avoid losing int64 precision in JS numbers.
- * - `flags` bitfields are exposed raw; setting/clearing optional fields without also fixing up
- *   `flags` is the plugin's responsibility.
+ * - `flags`/`flags2` are never exposed and never accepted: [TlFlags] owns them. a field whose bit is
+ *   clear is omitted from snapshots entirely, and assigning a field recomputes its bit from the
+ *   value (`null`/`0`/`""`/empty vector clear it).
+ * - stock annotates TL classes with non-wire `//custom` fields (`Message.dialog_id`, `attachPath`,
+ *   `voiceTranscription`, ...); reflection can't tell them apart from wire fields, so they ride
+ *   along in snapshots. `params`/`pollMediaAttachPaths` are the two whose types aren't TL-shaped;
+ *   they map to JSON objects. Field types with no JSON mapping at all are skipped rather than
+ *   throwing, so one exotic field can't sink a whole snapshot.
  */
 object TlJson {
     /**
@@ -57,6 +66,7 @@ object TlJson {
         TL_aicompose::class.java,
         TL_bots::class.java,
         TL_chatlists::class.java,
+        TL_communities::class.java,
         TL_forum::class.java,
         TL_fragment::class.java,
         TL_iv::class.java,
@@ -80,6 +90,17 @@ object TlJson {
         return out
     }
 
+    /**
+     * a `static int constructor` is what makes a TL class serializable - stock declares hundreds of
+     * them without the `TL_` prefix (`TL_account.contentSettings`), so the name says nothing.
+     */
+    private fun isWireSerializable(cls: Class<*>): Boolean = try {
+        val field = cls.getDeclaredField("constructor")
+        Modifier.isStatic(field.modifiers) && field.type == Integer.TYPE
+    } catch (e: NoSuchFieldException) {
+        false
+    }
+
     private fun collectTlClasses(root: Class<*>, out: MutableMap<String, Class<out TLObject>>) {
         val stack = ArrayDeque<Class<*>>()
         stack.add(root)
@@ -88,10 +109,10 @@ object TlJson {
             for (nested in cls.declaredClasses) stack.add(nested)
             if (!TLObject::class.java.isAssignableFrom(cls)) continue
             if (Modifier.isAbstract(cls.modifiers)) continue
-            if (!cls.simpleName.startsWith("TL_")) continue
+            if (!isWireSerializable(cls)) continue
             @Suppress("UNCHECKED_CAST")
             val tlClass = cls as Class<out TLObject>
-            val tlName = TlNames.classNameToTlName(cls.simpleName)
+            val tlName = TlNames.classNameToTlName(cls)
             val existing = out[tlName]
             if (existing == null) {
                 out[tlName] = tlClass
@@ -102,13 +123,23 @@ object TlJson {
         }
     }
 
+    /**
+     * walks the chain most-derived first, because stock shadows inherited fields with a different
+     * type (`PageBlock.caption` is a PageCaption, `pageBlockBlockquote.caption` a RichText) and
+     * `Class.getFields()` doesn't say which of the two it hands back first.
+     */
     internal fun publicFields(cls: Class<*>): Map<String, Field> = fieldsByClass.getOrPut(cls) {
         val map = LinkedHashMap<String, Field>()
-        for (field in cls.fields) {
-            if (Modifier.isStatic(field.modifiers)) continue
-            if (field.isSynthetic) continue
-            if (field.name in EXCLUDED_FIELD_NAMES) continue
-            map[field.name] = field
+        var current: Class<*>? = cls
+        while (current != null) {
+            for (field in current.declaredFields) {
+                if (!Modifier.isPublic(field.modifiers)) continue
+                if (Modifier.isStatic(field.modifiers)) continue
+                if (field.isSynthetic) continue
+                if (field.name in EXCLUDED_FIELD_NAMES) continue
+                if (field.name !in map) map[field.name] = field
+            }
+            current = current.superclass
         }
         map
     }
@@ -116,26 +147,83 @@ object TlJson {
     // -- serialize (TLObject -> JSON) --
 
     fun toJson(obj: TLObject): JSONObject {
+        val cls = obj.javaClass
         val json = JSONObject()
-        json.put("_", TlNames.classNameToTlName(obj.javaClass.simpleName))
-        for ((name, field) in publicFields(obj.javaClass)) {
+        json.put("_", TlNames.classNameToTlName(cls))
+        for ((name, field) in publicFields(cls)) {
+            if (TlFlags.isFlagWord(cls, name)) continue
+            val gate = TlFlags.gateOf(cls, name)
+            if (gate != null && !isBitSet(obj, cls, gate)) continue
             val value = field.get(obj) ?: continue
-            json.put(name, valueToJson(value))
+            json.put(name, valueToJson(value) ?: continue)
         }
         return json
     }
 
-    internal fun valueToJson(value: Any): Any = when (value) {
+    private fun isBitSet(obj: TLObject, cls: Class<*>, gate: TlFlags.Gate): Boolean {
+        val name = TlFlags.wordName(gate.word) ?: return true
+        val field = publicFields(cls)[name] ?: return true
+        return (field.getInt(obj) and (1 shl gate.bit)) != 0
+    }
+
+    /**
+     * updates just the bit gating [fieldName], for writes onto a live object whose other fields
+     * must be left exactly as the app had them.
+     */
+    internal fun syncFlagBit(obj: TLObject, fieldName: String) {
+        val cls = obj.javaClass
+        val gate = TlFlags.gateOf(cls, fieldName) ?: return
+        val fields = publicFields(cls)
+        val wordField = fields[TlFlags.wordName(gate.word) ?: return] ?: return
+        val present = TlFlags.isBitPresent(cls, gate) { TlFlags.isPresent(fields[it]?.get(obj)) }
+        val mask = 1 shl gate.bit
+        val current = wordField.getInt(obj)
+        wordField.setInt(obj, if (present) current or mask else current and mask.inv())
+    }
+
+    /**
+     * rewrites every flag word from what the fields currently hold. plugins never touch the words
+     * themselves; see [TlFlags].
+     */
+    internal fun syncFlags(obj: TLObject) {
+        val cls = obj.javaClass
+        val fields = publicFields(cls)
+        for (word in TlFlags.wordsOf(cls)) {
+            val name = TlFlags.wordName(word) ?: continue
+            val target = fields[name] ?: continue
+            target.setInt(obj, TlFlags.computeWord(cls, word) { field ->
+                TlFlags.isPresent(fields[field]?.get(obj))
+            })
+        }
+    }
+
+    internal fun valueToJson(value: Any): Any? = when (value) {
         is Long -> value.toString()
         is Int, is Short, is Byte, is Double, is Float, is Boolean, is String -> value
         is ByteArray -> JSONObject().put(BYTES_KEY, Base64.encodeToString(value, Base64.NO_WRAP))
         is TLObject -> toJson(value)
         is ArrayList<*> -> {
             val arr = JSONArray()
-            for (item in value) if (item != null) arr.put(valueToJson(item))
+            for (item in value) if (item != null) valueToJson(item)?.let { arr.put(it) }
             arr
         }
-        else -> throw IllegalArgumentException("TlJson.toJson: unsupported field type ${value.javaClass}")
+        is Map<*, *> -> {
+            val out = JSONObject()
+            for ((k, v) in value) {
+                if (k !is String || v == null) continue
+                valueToJson(v)?.let { out.put(k, it) }
+            }
+            out
+        }
+        is SparseArray<*> -> {
+            val out = JSONObject()
+            for (i in 0 until value.size()) {
+                val v = value.valueAt(i) ?: continue
+                valueToJson(v)?.let { out.put(value.keyAt(i).toString(), it) }
+            }
+            out
+        }
+        else -> null
     }
 
     // -- deserialize (JSON -> TLObject) --
@@ -155,12 +243,18 @@ object TlJson {
         while (keys.hasNext()) {
             val key = keys.next()
             if (key == "_") continue
+            if (TlFlags.isFlagWord(cls, key)) {
+                throw IllegalArgumentException(
+                    "TlJson.fromJson: '$key' on '$tlName' is managed by the bridge - set the optional fields instead",
+                )
+            }
             val field = fields[key]
                 ?: throw IllegalArgumentException("TlJson.fromJson: unknown field '$key' on '$tlName'")
             val jsonValue = json.get(key)
             val converted = jsonToValue(field.genericType, jsonValue, "$tlName.$key")
             field.set(instance, converted)
         }
+        syncFlags(instance)
         return instance
     }
 
@@ -199,18 +293,44 @@ object TlJson {
                 jsonValue is JSONObject && jsonValue.has(BYTES_KEY) -> Base64.decode(jsonValue.getString(BYTES_KEY), Base64.NO_WRAP)
                 else -> throw IllegalArgumentException("TlJson.fromJson: expected bytes (base64 string or {$BYTES_KEY}) at '$path'")
             }
-            is ParameterizedType -> {
-                if (type.rawType != ArrayList::class.java) {
-                    throw IllegalArgumentException("TlJson.fromJson: unsupported generic type at '$path'")
+            is ParameterizedType -> when (type.rawType) {
+                ArrayList::class.java -> {
+                    val elementType = type.actualTypeArguments[0]
+                    val arr = jsonValue as? JSONArray
+                        ?: throw IllegalArgumentException("TlJson.fromJson: expected array at '$path'")
+                    val list = ArrayList<Any>(arr.length())
+                    for (i in 0 until arr.length()) {
+                        list.add(jsonToValue(elementType, arr.get(i), "$path[$i]"))
+                    }
+                    list
                 }
-                val elementType = type.actualTypeArguments[0]
-                val arr = jsonValue as? JSONArray
-                    ?: throw IllegalArgumentException("TlJson.fromJson: expected array at '$path'")
-                val list = ArrayList<Any>(arr.length())
-                for (i in 0 until arr.length()) {
-                    list.add(jsonToValue(elementType, arr.get(i), "$path[$i]"))
+                HashMap::class.java -> {
+                    val valueType = type.actualTypeArguments[1]
+                    val obj = jsonValue as? JSONObject
+                        ?: throw IllegalArgumentException("TlJson.fromJson: expected object at '$path'")
+                    val map = HashMap<String, Any>()
+                    val keys = obj.keys()
+                    while (keys.hasNext()) {
+                        val key = keys.next()
+                        map[key] = jsonToValue(valueType, obj.get(key), "$path.$key")
+                    }
+                    map
                 }
-                list
+                SparseArray::class.java -> {
+                    val valueType = type.actualTypeArguments[0]
+                    val obj = jsonValue as? JSONObject
+                        ?: throw IllegalArgumentException("TlJson.fromJson: expected object at '$path'")
+                    val out = SparseArray<Any>()
+                    val keys = obj.keys()
+                    while (keys.hasNext()) {
+                        val key = keys.next()
+                        val index = key.toIntOrNull()
+                            ?: throw IllegalArgumentException("TlJson.fromJson: expected integer key at '$path.$key'")
+                        out.put(index, jsonToValue(valueType, obj.get(key), "$path.$key"))
+                    }
+                    out
+                }
+                else -> throw IllegalArgumentException("TlJson.fromJson: unsupported generic type at '$path'")
             }
             is Class<*> -> {
                 if (TLObject::class.java.isAssignableFrom(type)) {

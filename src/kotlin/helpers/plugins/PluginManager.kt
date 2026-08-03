@@ -18,6 +18,7 @@ import org.telegram.messenger.AndroidUtilities
 import org.telegram.messenger.BuildConfig
 import org.telegram.messenger.BuildVars
 import org.telegram.messenger.LocaleController
+import org.telegram.messenger.LocaleController.formatString
 import org.telegram.messenger.LocaleController.getString
 import org.telegram.messenger.R
 import org.telegram.messenger.Utilities
@@ -37,6 +38,7 @@ object PluginManager {
     private const val SAFE_MODE_SHORTCUT_ID = "inu_safe_mode"
     private const val TAG = "InuPlugin"
     private const val PLUGIN_API_VERSION = 1
+    private const val PLATFORM = "android"
     private const val BUNDLED_DIR = "inu_plugins"
 
     // set (commit) before plugins run at boot, cleared once boot is stable; still-set on the next
@@ -254,7 +256,30 @@ object PluginManager {
 
     // -- engine ops (globalQueue) --
 
+    /**
+     * why this app can't run [plugin], or null if it can. `@plugin-api` reads like minSdkVersion:
+     * a level is never broken once shipped, so only a plugin asking for a level above ours is
+     * refused - and refusing here, with a reason the user can read, beats failing later at whatever
+     * call site happens to touch the missing api first.
+     */
+    private fun incompatibility(plugin: Plugin): String? {
+        val manifest = plugin.manifest
+        val wanted = manifest.pluginApi
+        if (wanted != null && wanted > PLUGIN_API_VERSION) {
+            return formatString(R.string.InuPluginsErrorApiVersion, wanted, PLUGIN_API_VERSION)
+        }
+        val platform = manifest.platform
+        if (platform != null && !platform.equals(PLATFORM, ignoreCase = true)) {
+            return formatString(R.string.InuPluginsErrorPlatform, platform)
+        }
+        return null
+    }
+
     private fun run(plugin: Plugin) {
+        incompatibility(plugin)?.let {
+            setError(plugin, it)
+            return
+        }
         Utilities.globalQueue.postRunnable {
             if (plugin.engine != null) return@postRunnable
             val engine = QuickJs()
