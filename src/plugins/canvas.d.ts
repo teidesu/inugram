@@ -3,6 +3,20 @@
  * answers) carry over. backed by the platform's native 2d rasterizer, so there's no image library
  * to bundle and nothing to ship per-plugin.
  *
+ * **`@not-implemented` as a whole: every member of `inu.canvas` throws `'unsupported'` today.**
+ * the spec stays in this file rather than being deleted, because the design is settled and the
+ * shape is the part worth agreeing on early. what's left is a large pile of unglamorous native
+ * work with no design questions in it: a css colour parser and a css font-shorthand parser (the
+ * platform's own `parseColor` covers hex and a handful of names, and nothing covers the shorthand),
+ * `saveLayer` juggling for every composite mode that isn't `source-over`, and canvas `arcTo`, which
+ * is tangent-based and is *not* the platform's `Path.arcTo`. that's the reason it isn't in v1: it's
+ * the biggest single item on the surface and the least central to what plugins do.
+ *
+ * one consequence worth stating now, since it shapes the eventual implementation: where a mode
+ * can't be honoured it must throw, not approximate. an earlier draft had the separable blend modes
+ * silently falling back to `source-over` on older platforms, which renders the wrong picture and
+ * tells nobody. absent is a contract; wrong is not.
+ *
  * it is a *subset*: the parts that map cleanly onto the native rasterizer are here and behave as
  * the spec says, and the rest is absent rather than approximated. absent, and why:
  *
@@ -26,9 +40,10 @@
  * `TextMetrics` carries only the box fields the native rasterizer can answer; the font-relative
  * ones (`emHeightAscent`, `hangingBaseline`, ...) are absent.
  *
- * drawing itself needs no grant — it's pure computation. reading or writing a file does: a path
- * passed to `inu.canvas.load`, and `toFile`, both need `fs` (relative to the plugin's own
- * directory; absolute paths additionally need `fs(full)`).
+ * drawing itself needs no grant — it's pure computation — and neither does getting the result out:
+ * `convertToBlob` hands back a `Blob` that `sendMedia` takes as-is. only naming a file needs `fs`:
+ * a `{ path }` passed to `inu.canvas.load` or `loadFont` (relative to the plugin's own directory;
+ * absolute paths additionally need `unsafe.fs`), and `inu.fs.write` if you want to keep the result.
  */
 
 declare interface CanvasGradient {
@@ -53,8 +68,12 @@ declare interface DOMMatrix2DInit {
 declare interface ImageBitmap {
   readonly width: number
   readonly height: number
-  /** free the underlying bitmap; drawing a closed image throws */
-  close(): void
+  /**
+   * free the underlying bitmap; drawing a disposed image throws `handle-expired`. spelled
+   * `dispose` rather than the spec's `close` so that everything with a lifetime on this surface
+   * (`Blob`, `UIPage`, this) ends the same way
+   */
+  dispose(): void
 }
 
 declare interface TextMetrics {
@@ -71,7 +90,8 @@ declare type CanvasImageSource = ImageBitmap | OffscreenCanvas
 
 /**
  * the classic porter-duff set is always available. the separable blend modes (`multiply` through
- * `luminosity`) need android 10+ and fall back to `source-over` below that.
+ * `luminosity`) need android 10+ and throw `'unsupported'` below that, rather than quietly
+ * rendering as `source-over` — feature-detect on `inu.info()` if you need to degrade.
  */
 declare type GlobalCompositeOperation
   = | 'source-over' | 'source-in' | 'source-out' | 'source-atop'
@@ -193,8 +213,16 @@ declare interface OffscreenCanvas {
   getContext(contextId: '2d'): CanvasRenderingContext2D
 
   /**
-   * encode the current contents. the spec's `convertToBlob` in all but name — there's no `Blob`
-   * here, so you get the bytes directly.
+   * encode the current contents, exactly as the spec's `convertToBlob` does.
+   *
+   * ```ts
+   * const png = await canvas.convertToBlob()
+   * await inu.account().sendMedia('me', png)
+   * ```
+   *
+   * that send needs no `fs` grant, and there's nothing to clean up — see `Blob`. `.bytes()` if you
+   * actually want the bytes in js, `inu.fs.write` to keep it; neither is on the path above, which
+   * is the point.
    *
    * `quality` applies to `image/jpeg` and `image/webp` only.
    *
@@ -202,20 +230,7 @@ declare interface OffscreenCanvas {
    * plugin's timers and handlers keep running while it does. (nothing here can stall another
    * plugin — each has its own queue; see the execution-model note in `common.d.ts`.)
    */
-  toBytes(options?: { type?: 'image/png' | 'image/jpeg' | 'image/webp', quality?: number }): Promise<Uint8Array>
-  /**
-   * same, written straight to disk — skips materializing the bytes in js, which for a large image
-   * is most of the cost, and is the right way to hand a drawing to `sendMedia`.
-   *
-   * relative paths land in the plugin's own directory; absolute ones need `fs(full)`.
-   *
-   * what you write here persists until you remove it — it is the plugin's storage. for a drawing
-   * you only need long enough to send, write to an `inu.fs.createTempFile()` path instead: those
-   * are wiped on unload and don't count against the plugin's storage.
-   *
-   * @needs-grant fs
-   */
-  toFile(path: string, options?: { type?: 'image/png' | 'image/jpeg' | 'image/webp', quality?: number }): Promise<void>
+  convertToBlob(options?: { type?: 'image/png' | 'image/jpeg' | 'image/webp', quality?: number }): Promise<Blob>
 }
 
 declare namespace inu {
@@ -226,22 +241,21 @@ declare namespace inu {
     /**
      * decode an image. stands in for `createImageBitmap`, which takes a `Blob` we don't have.
      *
-     * a string is a filesystem path and needs `fs`; bytes need no grant. use `fetch` for
-     * network images and pass the bytes.
+     * neither shape needs a grant: bytes are the plugin's own, and a `Blob` can only be one it
+     * was handed. a message's photo goes straight from `downloadMedia` into here, and a remote one
+     * from `fetch`, without either touching the filesystem. `load` is the same thing from a path.
      */
-    function decode(source: Uint8Array): Promise<ImageBitmap>
+    function decode(source: Blob | Uint8Array): Promise<ImageBitmap>
     /** @needs-grant fs */
-    function load(path: string): Promise<ImageBitmap>
+    function load(file: { path: string }): Promise<ImageBitmap>
 
     /**
      * register a font file under a family name, so `ctx.font` can name it. the spec equivalent is
      * constructing a `FontFace` and adding it to `document.fonts`.
      *
      * families the host already has (the app's own ui font, and whatever the system ships) are
-     * usable without this.
-     *
-     * @needs-grant fs
+     * usable without this. `{ path }` needs `fs`; a `Blob` needs no grant.
      */
-    function loadFont(family: string, path: string): Promise<void>
+    function loadFont(family: string, source: Blob | { path: string }): Promise<void>
   }
 }

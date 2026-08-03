@@ -2493,7 +2493,17 @@ declare namespace inu {
      *
      * object keys are event names, values are callback functions
      *
-     * @needs-grant android.addNotificationCenterDelegate
+     * **this is an unsafe-tier grant.** nearly every event here hands over a `JavaObject`, and one
+     * of those walks the whole app heap through `getField` exactly as `unsafe.jvm` does — so a
+     * scope list over event names would gate the entry point to a room with no walls. it is named
+     * for what it is rather than sitting in `sensitive` looking narrower than it is.
+     *
+     * the api filtering described in `common.d.ts` does **not** apply here, and can't: these
+     * payloads are arbitrary java objects rather than TL, so there is no chokepoint to filter at
+     * and no general way to find a message inside one. that's the same reason the filter is a
+     * property of the safe and sensitive tiers only.
+     *
+     * @needs-grant unsafe.notificationCenter
      */
     function addNotificationCenterDelegate(
       handlers: {

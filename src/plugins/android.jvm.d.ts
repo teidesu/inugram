@@ -118,9 +118,16 @@ declare namespace inu {
    *
    * that applies within the namespace too: `loadDex` and `defineClass` used to carry sub-grants of
    * their own, which were locks on an open door — `cls('dalvik.system.InMemoryDexClassLoader')`
-   * loads dex and `java.lang.reflect.Proxy` defines classes, both reachable from bare `jvm`.
+   * loads dex and `java.lang.reflect.Proxy` defines classes, both reachable from bare `unsafe.jvm`.
    *
-   * @needs-grant jvm
+   * it is also the reason the api filtering (see the header in `common.d.ts`) is documented as a
+   * property of the *other* apis and not of the app: reflection reads the message cache and the
+   * connection layer directly, so a plugin holding this grant sees login codes and can invoke
+   * `auth.*` without going anywhere near `invokeRpc`. that is not a gap to be plugged — it's the
+   * same "game over" restated, and it's why `unsafe.disableApiFiltering` exists as an honest
+   * separate grant rather than as a thing you'd reach this way anyway.
+   *
+   * @needs-grant unsafe.jvm
    */
   namespace jvm {
     /** create a Runnable from a callback */
@@ -144,6 +151,8 @@ declare namespace inu {
      * js jump, `hot` methods run as native dex.
      *
      * `hot` methods require a js-to-dalvik compiler, which is not implemented yet.
+     *
+     * @not-implemented
      */
     function defineClass(name: string, spec: JvmClassSpec): JavaClass
 
