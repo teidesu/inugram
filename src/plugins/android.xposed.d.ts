@@ -4,11 +4,14 @@ declare namespace inu {
   /**
    * method hooking.
    *
-   * **implies `jvm`**: every entry point here takes a `JavaMethod`/`JavaClass`, and `inu.jvm.cls` is
-   * the only thing that mints one — so `@grant xposed` on its own would be a permission you can't
-   * spend. it's granted alongside `jvm` rather than requiring both be listed.
+   * **needs `unsafe.jvm` listed too, and does not imply it.** every entry point here takes a
+   * `JavaMethod`/`JavaClass`, and `inu.jvm.cls` is the only thing that mints one, so this grant on
+   * its own is a permission you can't spend. an earlier draft granted the pair implicitly, which
+   * saved one token in a header at the cost of the only property this tier has: that what the
+   * manifest lists is what the plugin got. a grant that quietly becomes two is a grant nobody read.
    *
-   * @needs-grant xposed
+   * @needs-grant unsafe.xposed
+   * @needs-grant unsafe.jvm
    */
   namespace xposed {
     interface MethodHookContext {
@@ -19,13 +22,13 @@ declare namespace inu {
       args: any[]
 
       /** the original's return value. only meaningful in `after` — `null` in `before` */
-      result: any
+      returnValue: any
       /** what the original threw, or `null`. only meaningful in `after` */
       throwable: JavaObject | null
 
       /** in `before`, skips the original entirely; in `after`, replaces what it returned */
-      setResult: (result: any) => void
-      /** same, but makes the call throw. clears any result set by an earlier hook */
+      setReturnValue: (value: any) => void
+      /** same, but makes the call throw. clears any return value set by an earlier hook */
       setThrowable: (throwable: JavaObject) => void
     }
 
@@ -33,7 +36,7 @@ declare namespace inu {
       /**
        * ran *before* the java method is called.
        *
-       * use `setResult` or `setThrowable` to avoid the original method from being called
+       * use `setReturnValue` or `setThrowable` to avoid the original method from being called
        */
       before?: (ctx: MethodHookContext) => void
 
@@ -48,7 +51,7 @@ declare namespace inu {
      * hook every overload of `name` on `cls` — the point being that you don't have to resolve a
      * `JavaMethod` (and therefore a descriptor) per overload first
      */
-    function hookAllMethods(cls: JavaClass, name: string, hook: MethodHook): Disposer
+    function hookAllOverloads(cls: JavaClass, name: string, hook: MethodHook): Disposer
 
     /** hook all constructors of a given java class. returns a function to remove the hooks */
     function hookAllConstructors(cls: JavaClass, hook: MethodHook): Disposer

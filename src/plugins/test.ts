@@ -85,13 +85,13 @@ inu.interceptRpc('help.getPromoData', () => ({
 
 // local premium via hooking
 const userConfigCls = inu.jvm.cls('org.telegram.messenger.UserConfig')
-const returnTrueHook: inu.xposed.MethodHook = { before: ctx => ctx.setResult(true) }
+const returnTrueHook: inu.xposed.MethodHook = { before: ctx => ctx.setReturnValue(true) }
 
 inu.xposed.hookMethod(userConfigCls.getDeclaredMethod('isPremium'), returnTrueHook)
 inu.xposed.hookMethod(userConfigCls.getDeclaredMethod('hasPremiumOnAccounts'), returnTrueHook)
 inu.xposed.hookMethod(
   inu.jvm.cls('org.telegram.messenger.MessagesController').getDeclaredMethod('premiumFeaturesBlocked'),
-  { before: ctx => ctx.setResult(false) },
+  { before: ctx => ctx.setReturnValue(false) },
 )
 
 // local premium via deserialization interception
@@ -146,7 +146,7 @@ inu.xposed.hookMethod(inu.jvm.cls('android.view.WindowManagerImpl').getDeclaredM
 })
 inu.xposed.hookMethod(
   inu.jvm.cls('org.telegram.messenger.FlagSecureReason').getDeclaredMethod('attach'),
-  { before: ctx => ctx.setResult(null) },
+  { before: ctx => ctx.setReturnValue(null) },
 )
 
 // disable FLAG_SECURE via deserialization interception (remove noforwards)

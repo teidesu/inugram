@@ -18,9 +18,6 @@ declare namespace inu {
     function getCacheDir(): string
     function getMediaDir(type: 'files' | 'images' | 'videos' | 'audios' | 'documents'): string
 
-    /** force convert a tl object to a JavaObject representing a TLRPC object */
-    function tlToJavaObject(tl: TLObject): JavaObject // todo: do we need this?
-
     /**
      * the fragment on top of the navigation stack — stock's `getLastFragment()`, which is the
      * single most-used thing in exteragram's sdk. the portable slice of it is
@@ -29,14 +26,14 @@ declare namespace inu {
      *
      * `null` when nothing is on screen.
      *
-     * @needs-grant jvm
+     * @needs-grant unsafe.jvm
      */
     function getCurrentFragment(): JavaObject | null
     /**
      * the hosting activity (`LaunchActivity`), for the places that want a `Context` rather than a
      * fragment.
      *
-     * @needs-grant jvm
+     * @needs-grant unsafe.jvm
      */
     function getCurrentActivity(): JavaObject | null
 
@@ -51,7 +48,7 @@ declare namespace inu {
      * wrap a real `View` as a `UIElement`, so it can be a settings row or a dialog `body`. the
      * escape hatch for ui the declarative elements can't express.
      *
-     * @needs-grant jvm
+     * @needs-grant unsafe.jvm
      */
     function nativeView(view: JavaObject): UIElement
   }
