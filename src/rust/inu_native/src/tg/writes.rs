@@ -122,7 +122,7 @@ pub struct WritesState {
     /// [`TRANSFER_LIMIT_BYTES`], injectable so a test does not have to move a quarter of a gigabyte
     /// to reach it - same reason `blob.rs` takes its ceilings as a struct
     transfer_limit: u64,
-    next_request_id: Cell<i64>,
+    next_request_id: crate::engine::registry::RequestIds,
     next_staged: Cell<u64>,
     pending: RefCell<HashMap<i64, PendingWrite>>,
 }
@@ -136,14 +136,6 @@ struct PendingWrite {
     last_total: Cell<i64>,
     /// what [`stage_value`] wrote for this request, deleted however it settles
     staged: Vec<PathBuf>,
-}
-
-impl WritesState {
-    fn alloc_request_id(&self) -> i64 {
-        let id = self.next_request_id.get();
-        self.next_request_id.set(id + 1);
-        id
-    }
 }
 
 fn throw_write<'js, T>(ctx: &Ctx<'js>, code: &str, message: &str) -> JsResult<T> {
@@ -345,7 +337,7 @@ fn js_write<'js>(
         return Err(e);
     }
 
-    let request_id = state.alloc_request_id();
+    let request_id = state.next_request_id.alloc();
     let (promise, settle) = PendingSettle::new(ctx)?;
     let progress = on_progress.map(|callback| ProgressReporter::new(ctx, callback, state.log.clone()));
     state
@@ -542,7 +534,7 @@ pub(crate) fn install_writes_with_limit<'js>(
         stage_dir: deps.stage_dir,
         log: deps.log,
         transfer_limit,
-        next_request_id: Cell::new(1),
+        next_request_id: crate::engine::registry::RequestIds::default(),
         next_staged: Cell::new(0),
         pending: RefCell::new(HashMap::new()),
     });

@@ -254,7 +254,8 @@ wrong name or flag, since the bridge and the typings only agree because one scri
 
 The engine crate is `src/rust/inu_native`, one folder per area under `src/`: `jni/` (the
 `extern "system"` entry points, the one Java object every upcall goes through, and the host-trait
-impls), `engine/` (argv, the cpu and memory ceilings, the error vocabulary, the globals, the
+impls), `engine/` (argv, the property forms a rust-built prototype uses, the cpu and memory
+ceilings, the error vocabulary, the globals, the
 registration bookkeeping, the timer wheel), `tl/` (the handle proxy plus the `inu.Message` and
 `inu.utils` preludes), `tg/` (account reads/writes and the rpc, update and deserialize
 interception), `io/` (blob, fs, fetch), `draw/` (canvas, geometry, css), `ui/` (settings pages,

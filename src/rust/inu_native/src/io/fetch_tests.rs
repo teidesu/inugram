@@ -2,6 +2,7 @@ use super::*;
 use crate::engine::error::install_plugin_error;
 use crate::io::fs::tests::{install_sandbox_globals, TestDir};
 use rquickjs::Context;
+use std::cell::Cell;
 
 /// Mirrors `PluginPermissions.allows(..., ScopeMatch.DOMAIN)`, which is what really answers
 /// `onCheckGrant` here. The shared `TestGrantHost` compares scopes literally, and a fixture that
@@ -144,19 +145,11 @@ fn setup(grant: Option<&str>) -> Fixture {
 }
 
 fn eval(f: &Fixture, code: &str) -> String {
-    f.ctx.with(|ctx| match ctx.eval::<String, _>(code) {
-        Ok(v) => v,
-        Err(rquickjs::Error::Exception) => panic!("{}", crate::tg::rpc::format_exception(&ctx)),
-        Err(e) => panic!("{e:?}"),
-    })
+    crate::testing::util::eval_string(&f.ctx, code)
 }
 
 fn run(f: &Fixture, code: &str) {
-    f.ctx.with(|ctx| match ctx.eval::<(), _>(code) {
-        Ok(()) => {}
-        Err(rquickjs::Error::Exception) => panic!("{}", crate::tg::rpc::format_exception(&ctx)),
-        Err(e) => panic!("{e:?}"),
-    });
+    crate::testing::util::eval_unit(&f.ctx, code);
     pump_jobs(&f.rt, &f.ctx, &|_| {});
 }
 

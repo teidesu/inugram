@@ -13,7 +13,7 @@
 //! it never touches either heap. A *request* body does cross, bounded by
 //! [`crate::io::blob::BUILD_LIMIT_BYTES`]; anything bigger is `uploadFile`'s job.
 
-use std::cell::{Cell, RefCell};
+use std::cell::RefCell;
 use std::collections::HashMap;
 use std::rc::Rc;
 
@@ -44,7 +44,7 @@ pub struct FetchState {
     grants: Rc<dyn GrantHost>,
     blobs: Rc<BlobState>,
     log: crate::Log,
-    next_request_id: Cell<i64>,
+    next_request_id: crate::engine::registry::RequestIds,
     pending: RefCell<HashMap<i64, PendingSettle>>,
 }
 
@@ -150,8 +150,7 @@ fn js_send<'js>(
         Err((code, message)) => return throw_plugin_error(ctx, &code, &message, None, None, None),
     };
 
-    let request_id = state.next_request_id.get();
-    state.next_request_id.set(request_id + 1);
+    let request_id = state.next_request_id.alloc();
     let (promise, settle) = PendingSettle::new(ctx)?;
     state.pending.borrow_mut().insert(request_id, settle);
 
@@ -180,7 +179,7 @@ pub fn install_fetch<'js>(
         grants,
         blobs,
         log,
-        next_request_id: Cell::new(1),
+        next_request_id: crate::engine::registry::RequestIds::default(),
         pending: RefCell::new(HashMap::new()),
     });
 

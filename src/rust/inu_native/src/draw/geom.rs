@@ -397,7 +397,7 @@ fn line_verb(p: (f64, f64)) -> Verb {
     Verb::Line(p.0, p.1)
 }
 
-fn finite(values: &[f64]) -> bool {
+pub fn finite(values: &[f64]) -> bool {
     values.iter().all(|v| v.is_finite())
 }
 

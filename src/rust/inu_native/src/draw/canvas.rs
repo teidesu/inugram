@@ -32,9 +32,10 @@ use rquickjs::{
 };
 
 use crate::draw::css::{parse_color, parse_font, Font};
-use crate::draw::geom::{normalize_round_rect, ArcError, Matrix, Path, Verb};
+use crate::draw::geom::{finite, normalize_round_rect, ArcError, Matrix, Path, Verb};
 use crate::engine::deadline::{ExternalCharge, ExternalMemory};
 use crate::engine::error::{get_or_create_inu, throw_plugin_error, wire_error_to_js};
+use crate::engine::shape::{define_getter, define_method};
 use crate::io::blob::{mint_app_file, resolve_export, BlobState, BUILD_LIMIT_BYTES};
 use crate::tg::rpc::{format_exception, pump_jobs, PendingSettle};
 
@@ -585,10 +586,6 @@ fn nth(args: &[Value<'_>], index: usize) -> f64 {
     Coerced::<f64>::from_js(value.ctx(), value.clone()).map(|v| v.0).unwrap_or(f64::NAN)
 }
 
-fn finite(values: &[f64]) -> bool {
-    values.iter().all(|v| v.is_finite())
-}
-
 impl Context2d {
     fn live(&self, ctx: &Ctx<'_>) -> JsResult<()> {
         if !self.surface.alive.get() {
@@ -978,23 +975,12 @@ fn resize_surface(ctx: &Ctx<'_>, surface: &Rc<Surface>, width: i32, height: i32)
     Ok(())
 }
 
-fn define_getter<'js, F, P>(target: &Object<'js>, name: &str, get: F) -> JsResult<()>
-where
-    F: rquickjs::function::IntoJsFunc<'js, P> + 'js,
-{
-    target.prop(name, Accessor::new_get(get).enumerable().configurable())
-}
-
 fn define_accessor<'js, G, GP, S, SP>(target: &Object<'js>, name: &str, get: G, set: S) -> JsResult<()>
 where
     G: rquickjs::function::IntoJsFunc<'js, GP> + 'js,
     S: rquickjs::function::IntoJsFunc<'js, SP> + 'js,
 {
     target.prop(name, Accessor::new(get, set).enumerable().configurable())
-}
-
-fn define_method<'js>(target: &Object<'js>, name: &str, f: Function<'js>) -> JsResult<()> {
-    target.prop(name, Property::from(f).writable().enumerable().configurable())
 }
 
 /// where a canvas caches its own 2d context, so `getContext('2d')` answers with the same object
