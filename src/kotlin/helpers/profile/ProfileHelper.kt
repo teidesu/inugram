@@ -15,10 +15,15 @@ import android.widget.Toast
 import androidx.collection.LongSparseArray
 import androidx.core.graphics.ColorUtils
 import desu.inugram.InuConfig
+import desu.inugram.core.plugins.ActionRow
 import desu.inugram.helpers.WebAppHelper
 import desu.inugram.helpers.chat.BlockedMessagesHelper
 import desu.inugram.helpers.chat.ChatHelper
 import desu.inugram.helpers.chat.ForumDisplayHelper
+import desu.inugram.helpers.plugins.QuickJs
+import desu.inugram.helpers.plugins.ui.PluginActions
+import java.util.Date
+import java.util.WeakHashMap
 import org.json.JSONArray
 import org.telegram.messenger.AccountInstance
 import org.telegram.messenger.AndroidUtilities
@@ -47,7 +52,6 @@ import org.telegram.ui.Components.ProfileGalleryView
 import org.telegram.ui.ProfileActivity
 import org.telegram.ui.Stars.StarsController
 import org.telegram.ui.Stories.StoriesController
-import java.util.Date
 
 object ProfileHelper {
     const val ACTION_TOGGLE_HIDE_WALLPAPER = 505
@@ -251,6 +255,37 @@ object ProfileHelper {
                 "Debug: clear profile cache",
             )
         }
+        addPluginItems(otherItem, currentAccount, dialogId)
+    }
+
+    // --- plugin rows (inu.registerProfileAction) ---
+
+    // keyed by the menu the rows were drawn into, since a profile is rebuilt rather than reused
+    private val pluginRows = WeakHashMap<ActionBarMenuItem, List<ActionRow<QuickJs>>>()
+
+    /**
+     * The rows land one globalQueue hop later (an engine cannot be entered from the ui thread), so
+     * they are rendered when the menu is *built* - which for a profile is when it opens, well
+     * before the user taps the overflow.
+     */
+    private fun addPluginItems(otherItem: ActionBarMenuItem, currentAccount: Int, dialogId: Long) {
+        pluginRows.remove(otherItem)
+        if (!PluginActions.hasRows(PluginActions.KIND_PROFILE)) return
+        val surface = PluginActions.Surface.profile(currentAccount, dialogId)
+        PluginActions.render(PluginActions.KIND_PROFILE, surface) { rows ->
+            pluginRows[otherItem] = rows
+            rows.forEachIndexed { index, row ->
+                otherItem.addSubItem(
+                    PluginActions.optionIdAt(index), R.drawable.msg_settings_old, row.text,
+                )
+            }
+        }
+    }
+
+    private fun dispatchPluginItem(id: Int, otherItem: ActionBarMenuItem?, currentAccount: Int, dialogId: Long): Boolean {
+        val row = PluginActions.rowAt(pluginRows[otherItem].orEmpty(), id) ?: return false
+        PluginActions.dispatch(row, PluginActions.Surface.profile(currentAccount, dialogId))
+        return true
     }
 
     private fun canHideMessagesFrom(currentAccount: Int, dialogId: Long): Boolean {
@@ -266,7 +301,8 @@ object ProfileHelper {
     }
 
     @JvmStatic
-    fun handleMenuClick(id: Int, currentAccount: Int, dialogId: Long): Boolean {
+    fun handleMenuClick(id: Int, otherItem: ActionBarMenuItem?, currentAccount: Int, dialogId: Long): Boolean {
+        if (id >= PluginActions.OPTION_BASE) return dispatchPluginItem(id, otherItem, currentAccount, dialogId)
         when (id) {
             ACTION_TOGGLE_HIDE_WALLPAPER -> ChatHelper.toggleRemoveWallpaper(currentAccount, dialogId)
             ACTION_TOGGLE_HIDE_THEME -> ChatHelper.toggleRemoveTheme(currentAccount, dialogId)

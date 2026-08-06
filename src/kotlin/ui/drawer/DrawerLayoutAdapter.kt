@@ -6,18 +6,20 @@ import android.view.ViewGroup
 import androidx.recyclerview.widget.RecyclerView
 import desu.inugram.helpers.dialogs.AccountOrderHelper
 import desu.inugram.helpers.dialogs.DialogsFabHelper
+import desu.inugram.helpers.dialogs.DrawerHelper
 import desu.inugram.helpers.dialogs.PullActionHelper
+import desu.inugram.helpers.plugins.ui.PluginActions
 import desu.inugram.helpers.security.PasscodeHelper
 import org.telegram.messenger.AndroidUtilities
 import org.telegram.messenger.LocaleController
 import org.telegram.messenger.MediaDataController
 import org.telegram.messenger.MessagesController
 import org.telegram.messenger.R
+import org.telegram.messenger.SharedConfig
 import org.telegram.messenger.UserConfig
 import org.telegram.tgnet.TLRPC
 import org.telegram.ui.ActionBar.DrawerLayoutContainer
 import org.telegram.ui.ActionBar.Theme
-import org.telegram.messenger.SharedConfig
 import org.telegram.ui.Cells.DividerCell
 import org.telegram.ui.Cells.EmptyCell
 import org.telegram.ui.Components.RecyclerListView
@@ -227,6 +229,14 @@ class DrawerLayoutAdapter(
         }
         items.add(Item(ITEM_PROXY, LocaleController.getString(R.string.ProxySettings), R.drawable.outline_shield_check))
         items.add(Item(8, LocaleController.getString(R.string.Settings), R.drawable.msg_settings_old))
+
+        val pluginRows = DrawerHelper.globalActionRows
+        if (pluginRows.isNotEmpty()) {
+            items.add(null)
+            for ((index, row) in pluginRows.withIndex()) {
+                items.add(Item(PluginActions.optionIdAt(index), row.text, R.drawable.msg_settings_old))
+            }
+        }
     }
 
     companion object {

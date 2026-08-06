@@ -6,7 +6,8 @@
   "scripts": {
     "setup": "tsx scripts/setup.ts",
     "generate-icons": "tsx scripts/generate-icons.ts",
-    "generate-tl-typings": "tsx scripts/generate-tl-typings.ts",
+    "generate-tl-typings": "tsx scripts/generate-tl-typings.ts && tsx scripts/generate-tl-stubs.ts",
+    "generate-tl-stubs": "tsx scripts/generate-tl-stubs.ts",
     "export": "tsx scripts/export.ts",
     "rebase": "tsx scripts/rebase.ts",
     "find-patches": "tsx scripts/find-patches.ts",
@@ -14,6 +15,8 @@
     "push-theme": "tsx scripts/push-theme.ts",
     "build-debug": "cd worktree && ./gradlew TMessagesProj_App:assembleDebug",
     "run-debug": "cd worktree && ./gradlew TMessagesProj_App:installDebug && adb shell am start desu.inugram.beta/org.telegram.ui.LaunchActivity",
+    "check-plugin-syntax": "for f in src/res/assets-debug/inu_plugins/*.js $(find src/rust/inu_native/src -name '*.js'); do node --check \"$f\" || exit 1; done",
+    "typecheck-plugins": "pnpm run check-plugin-syntax && tsx scripts/generate-tl-typings.ts --typings-only && tsc -p src/plugins --noEmit && tsc -p src/plugins/tsconfig.bundled.json --noEmit",
     "prepare": "husky"
   },
   "dependencies": {

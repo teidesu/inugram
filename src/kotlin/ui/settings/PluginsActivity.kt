@@ -12,10 +12,11 @@ import android.widget.ImageView
 import android.widget.LinearLayout
 import android.widget.TextView
 import androidx.core.content.res.ResourcesCompat
+import desu.inugram.core.plugins.BootGuard
 import desu.inugram.helpers.InuUtils
 import desu.inugram.helpers.plugins.Plugin
 import desu.inugram.helpers.plugins.PluginManager
-import desu.inugram.helpers.plugins.PluginUi
+import desu.inugram.helpers.plugins.ui.PluginUi
 import org.telegram.messenger.AndroidUtilities
 import org.telegram.messenger.LocaleController
 import org.telegram.messenger.R
@@ -62,6 +63,9 @@ class PluginsActivity : SettingsPageActivity() {
                 PluginManager.isEngineEnabled(),
             )
         )
+        // the rows below still read as enabled, because they are: safe mode is about this session
+        // and nothing else, and a session that ran nothing has to say so somewhere
+        safeModeNotice()?.let { items.add(UItem.asShadow(it)) }
 
         val plugins = PluginManager.plugins()
         if (plugins.isEmpty()) {
@@ -82,6 +86,12 @@ class PluginsActivity : SettingsPageActivity() {
             )
         )
         items.add(UItem.asShadow(null))
+    }
+
+    private fun safeModeNotice(): CharSequence? = when (PluginManager.safeModeReason) {
+        BootGuard.Reason.FORCED -> LocaleController.getString(R.string.InuPluginsSafeModeForced)
+        BootGuard.Reason.CRASHED -> LocaleController.getString(R.string.InuPluginsSafeModeCrashed)
+        null -> null
     }
 
     private fun buildRow(plugin: Plugin): UItem {
@@ -254,10 +264,10 @@ class PluginRow(context: Context) : LinearLayout(context) {
         // @icon is always a remote url; null path falls back to the placeholder thumb
         icon.setImage(plugin.manifest.icon, ICON_FILTER, placeholder)
         title.text = plugin.manifest.name
-        val error = plugin.error
-        if (error != null) {
+        val failure = plugin.failure
+        if (failure != null) {
             subtitle.setTextColor(Theme.getColor(Theme.key_text_RedRegular))
-            subtitle.text = error
+            subtitle.text = failure.describe()
         } else {
             subtitle.setTextColor(Theme.getColor(Theme.key_windowBackgroundWhiteGrayText))
             subtitle.text = plugin.manifest.description

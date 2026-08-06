@@ -3,19 +3,47 @@
  * answers) carry over. backed by the platform's native 2d rasterizer, so there's no image library
  * to bundle and nothing to ship per-plugin.
  *
- * **`@not-implemented` as a whole: every member of `inu.canvas` throws `'unsupported'` today.**
- * the spec stays in this file rather than being deleted, because the design is settled and the
- * shape is the part worth agreeing on early. what's left is a large pile of unglamorous native
- * work with no design questions in it: a css colour parser and a css font-shorthand parser (the
- * platform's own `parseColor` covers hex and a handful of names, and nothing covers the shorthand),
- * `saveLayer` juggling for every composite mode that isn't `source-over`, and canvas `arcTo`, which
- * is tangent-based and is *not* the platform's `Path.arcTo`. that's the reason it isn't in v1: it's
- * the biggest single item on the surface and the least central to what plugins do.
+ * where a mode can't be honoured it throws rather than approximating. an earlier draft had the
+ * separable blend modes silently falling back to `source-over` on older platforms, which renders
+ * the wrong picture and tells nobody. absent is a contract; wrong is not.
  *
- * one consequence worth stating now, since it shapes the eventual implementation: where a mode
- * can't be honoured it must throw, not approximate. an earlier draft had the separable blend modes
- * silently falling back to `source-over` on older platforms, which renders the wrong picture and
- * tells nobody. absent is a contract; wrong is not.
+ * **drawing is recorded, not performed.** every call appends to a command buffer, and the buffer is
+ * handed to the rasterizer only when something actually needs the pixels: `convertToBlob`,
+ * `getAverageColor`, or naming this canvas as a source from another one. so a drawing of ten
+ * thousand shapes costs one crossing, and `ctx.fillRect(...)` returning is not a promise that
+ * anything has been painted yet — an error the rasterizer reports (it ran out of memory, the
+ * bitmap is gone) surfaces at whichever of those three points flushed the buffer, not at the call
+ * that recorded the shape. the one thing that follows for you: `try`/`catch` around the read, not
+ * around the drawing.
+ *
+ * a consequence of that same design, and the two places it is visible. a `CanvasGradient` is
+ * encoded with the stops it has **when it is drawn with**, so `addColorStop` after assigning it to
+ * `fillStyle` still counts, exactly as on the web. and an image source — a `drawImage`, or the
+ * image behind a `createPattern` — is **read when the buffer is flushed**, not when the call was
+ * recorded, so drawing into a source canvas between the two shows up in the copy. if you need the
+ * web's snapshot-at-draw-time there, read the destination (`convertToBlob`, `getAverageColor`)
+ * before you touch the source again. an `ImageBitmap` is immutable, so this only ever concerns a
+ * canvas used as a source; `dispose()` is safe at any point and still frees the memory there and
+ * then, flushing whatever named it first.
+ *
+ * limits, all of them `quota-exceeded` or `invalid-argument` and none of them silent:
+ *
+ * - a canvas is at most 8192 pixels on a side, and its bitmap (`width * height * 4` bytes) is
+ *   charged against the same per-plugin native budget a `Blob` is — see `common.d.ts`. so is a
+ *   decoded `ImageBitmap`. `dispose()` gives it back; so does dropping the last reference.
+ * - a gradient may carry at most 256 colour stops.
+ * - `decode`/`load`/`loadFont` take at most 32 MB of source in one call.
+ *
+ * three things the platform's rasterizer has no equivalent for, and each throws `'unsupported'`
+ * where you ask for it rather than drawing something else:
+ *
+ * - the separable blend modes below android 10 — see `GlobalCompositeOperation`.
+ * - a `createRadialGradient` whose two circles are not concentric. the concentric case (which is
+ *   every `(x, y, 0)` → `(x, y, r)` gradient, i.e. nearly all of them) is exact; the focal case
+ *   needs a two-point conical shader that does not exist here.
+ * - a `createPattern` repetition other than `'repeat'` below android 12, which is where the tile
+ *   mode that leaves the outside transparent arrives. below it, `'no-repeat'` and friends would
+ *   smear the edge pixel across the whole fill.
  *
  * it is a *subset*: the parts that map cleanly onto the native rasterizer are here and behave as
  * the spec says, and the rest is absent rather than approximated. absent, and why:
@@ -144,7 +172,12 @@ declare interface CanvasRenderingContext2D {
   createLinearGradient(x0: number, y0: number, x1: number, y1: number): CanvasGradient
   createRadialGradient(x0: number, y0: number, r0: number, x1: number, y1: number, r1: number): CanvasGradient
   createConicGradient(startAngle: number, x: number, y: number): CanvasGradient
-  createPattern(image: CanvasImageSource, repetition: 'repeat' | 'repeat-x' | 'repeat-y' | 'no-repeat' | null): CanvasPattern | null
+  /**
+   * unlike the spec's, this never answers `null`: the two reasons it would (an image that isn't
+   * usable yet, a repetition that isn't one) are a `handle-expired` and an `invalid-argument` here,
+   * because there is no loading state on this platform for the first to mean
+   */
+  createPattern(image: CanvasImageSource, repetition?: 'repeat' | 'repeat-x' | 'repeat-y' | 'no-repeat' | null): CanvasPattern
 
   // -- rects --
   clearRect(x: number, y: number, w: number, h: number): void
@@ -254,8 +287,8 @@ declare namespace inu {
      * constructing a `FontFace` and adding it to `document.fonts`.
      *
      * families the host already has (the app's own ui font, and whatever the system ships) are
-     * usable without this. `{ path }` needs `fs`; a `Blob` needs no grant.
+     * usable without this. `{ path }` needs `fs`; bytes need no grant.
      */
-    function loadFont(family: string, source: Blob | { path: string }): Promise<void>
+    function loadFont(family: string, source: Blob | Uint8Array | { path: string }): Promise<void>
   }
 }

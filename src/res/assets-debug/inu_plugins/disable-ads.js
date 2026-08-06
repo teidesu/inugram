@@ -1,10 +1,9 @@
 // ==UserScript==
 // @name         intercept test
 // @author       teidesu
-// @namespace    inugram.dev
 // @version      1.0
 // @description  injects ads via interceptRpc
-// @grant        inu.interceptRpc(help.getPromoData)
+// @grant        interceptRpc(help.getPromoData)
 // @plugin-api   1
 // @platform     android
 // ==/UserScript==

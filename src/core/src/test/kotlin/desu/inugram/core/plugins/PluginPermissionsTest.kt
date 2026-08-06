@@ -9,14 +9,14 @@ import org.junit.Test
 class PluginPermissionsTest {
     @Test
     fun parsesUnscopedGrant() {
-        assertEquals(Grant("inu.kv", emptyList()), PluginPermissions.parseGrant("inu.kv"))
+        assertEquals(Grant("kv", emptyList()), PluginPermissions.parseGrant("kv"))
     }
 
     @Test
     fun parsesScopedGrant() {
         assertEquals(
-            Grant("inu.interceptRpc", listOf("users.getUsers", "channels.getChannels")),
-            PluginPermissions.parseGrant("inu.interceptRpc(users.getUsers,channels.getChannels)"),
+            Grant("interceptRpc", listOf("users.getUsers", "channels.getChannels")),
+            PluginPermissions.parseGrant("interceptRpc(users.getUsers,channels.getChannels)"),
         )
     }
 
@@ -29,43 +29,74 @@ class PluginPermissionsTest {
     }
 
     @Test
+    fun parseGrantRefusesAnUnclosedScopeListRatherThanWideningIt() {
+        // the widening this replaces was fail-OPEN: `fetch(evil.com` used to parse as unscoped
+        // `fetch`, i.e. every domain
+        assertNull(PluginPermissions.parseGrant("fetch(evil.com"))
+        assertTrue(PluginPermissions.isMalformed("fetch(evil.com"))
+        assertNull(PluginPermissions.parseGrant("invokeRpc(messages.sendMessage)x"))
+        assertTrue(PluginPermissions.isMalformed("invokeRpc(messages.sendMessage)x"))
+    }
+
+    @Test
+    fun aMalformedTokenGrantsNothingAtTheGate() {
+        val permissions = PluginPermissions.parse(listOf("fetch(evil.com"))
+        assertFalse(permissions.has("fetch"))
+        assertFalse(permissions.allows("fetch", "evil.com", ScopeMatch.DOMAIN))
+    }
+
+    @Test
+    fun wellFormedTokensAreNotMalformed() {
+        assertFalse(PluginPermissions.isMalformed("kv"))
+        assertFalse(PluginPermissions.isMalformed("fetch(a.com,b.com)"))
+        assertFalse(PluginPermissions.isMalformed("   "))
+    }
+
+    @Test
     fun parseGrantBlankIsNull() {
         assertNull(PluginPermissions.parseGrant("   "))
     }
 
     @Test
-    fun emptyParensIsUnscoped() {
-        assertEquals(Grant("fetch", emptyList()), PluginPermissions.parseGrant("fetch()"))
+    fun writtenButEmptyScopeListIsRefusedRatherThanWidened() {
+        // it used to parse as unscoped, so `invokeRpc()` read like "no methods" and meant "every
+        // method", sailing past the takeover screen that rejects `invokeRpc(auth.exportLoginToken)`
+        for (token in listOf("fetch()", "fetch( )", "account.read(,)", "invokeRpc()")) {
+            assertNull(token, PluginPermissions.parseGrant(token))
+            assertTrue(token, PluginPermissions.isMalformed(token))
+        }
+        val permissions = PluginPermissions.parse(listOf("account.read()"))
+        assertFalse(permissions.allows("account.read", "messages", ScopeMatch.EXACT))
     }
 
     @Test
     fun hasReflectsAnyGrant() {
-        val p = PluginPermissions.parse(listOf("inu.kv", "fetch(google.com)"))
-        assertTrue(p.has("inu.kv"))
+        val p = PluginPermissions.parse(listOf("kv", "fetch(google.com)"))
+        assertTrue(p.has("kv"))
         assertTrue(p.has("fetch"))
-        assertFalse(p.has("inu.clipboard.read"))
-        assertEquals(setOf("inu.kv", "fetch"), p.grantedApis)
+        assertFalse(p.has("clipboard.read"))
+        assertEquals(setOf("kv", "fetch"), p.grantedApis)
     }
 
     @Test
     fun unscopedGrantAllowsAnyTarget() {
-        val p = PluginPermissions.parse(listOf("inu.interceptRpc"))
-        assertTrue(p.allows("inu.interceptRpc", "users.getUsers", ScopeMatch.EXACT))
-        assertTrue(p.allows("inu.interceptRpc", "anything.at.all", ScopeMatch.EXACT))
+        val p = PluginPermissions.parse(listOf("interceptRpc"))
+        assertTrue(p.allows("interceptRpc", "users.getUsers", ScopeMatch.EXACT))
+        assertTrue(p.allows("interceptRpc", "anything.at.all", ScopeMatch.EXACT))
     }
 
     @Test
     fun scopedGrantAllowsOnlyListed() {
-        val p = PluginPermissions.parse(listOf("inu.interceptRpc(users.getUsers,channels.getChannels)"))
-        assertTrue(p.allows("inu.interceptRpc", "users.getUsers", ScopeMatch.EXACT))
-        assertTrue(p.allows("inu.interceptRpc", "channels.getChannels", ScopeMatch.EXACT))
-        assertFalse(p.allows("inu.interceptRpc", "messages.getHistory", ScopeMatch.EXACT))
+        val p = PluginPermissions.parse(listOf("interceptRpc(users.getUsers,channels.getChannels)"))
+        assertTrue(p.allows("interceptRpc", "users.getUsers", ScopeMatch.EXACT))
+        assertTrue(p.allows("interceptRpc", "channels.getChannels", ScopeMatch.EXACT))
+        assertFalse(p.allows("interceptRpc", "messages.getHistory", ScopeMatch.EXACT))
     }
 
     @Test
     fun ungrantedApiIsNeverAllowed() {
-        val p = PluginPermissions.parse(listOf("inu.kv"))
-        assertFalse(p.allows("inu.interceptRpc", "users.getUsers", ScopeMatch.EXACT))
+        val p = PluginPermissions.parse(listOf("kv"))
+        assertFalse(p.allows("interceptRpc", "users.getUsers", ScopeMatch.EXACT))
     }
 
     @Test
@@ -81,21 +112,23 @@ class PluginPermissionsTest {
         assertTrue(p.allows("fetch", "api.google.com", ScopeMatch.DOMAIN))
         assertFalse(p.allows("fetch", "evilgoogle.com", ScopeMatch.DOMAIN))
         assertFalse(p.allows("fetch", "google.com.evil.com", ScopeMatch.DOMAIN))
+        // dns is case-insensitive and the caller lowercases, so a scope written in any case matches
+        assertTrue(PluginPermissions.parse(listOf("fetch(Google.COM)")).allows("fetch", "api.google.com", ScopeMatch.DOMAIN))
     }
 
     @Test
     fun namespaceWildcardMatchesPrefix() {
-        val p = PluginPermissions.parse(listOf("inu.jvm.cls(java.util.*,java.lang.Object)"))
-        assertTrue(p.allows("inu.jvm.cls", "java.util.List", ScopeMatch.NAMESPACE))
-        assertTrue(p.allows("inu.jvm.cls", "java.util.concurrent.Executor", ScopeMatch.NAMESPACE))
-        assertTrue(p.allows("inu.jvm.cls", "java.lang.Object", ScopeMatch.NAMESPACE))
-        assertFalse(p.allows("inu.jvm.cls", "java.lang.String", ScopeMatch.NAMESPACE))
-        assertFalse(p.allows("inu.jvm.cls", "java.utility.Foo", ScopeMatch.NAMESPACE))
+        val p = PluginPermissions.parse(listOf("jvm.cls(java.util.*,java.lang.Object)"))
+        assertTrue(p.allows("jvm.cls", "java.util.List", ScopeMatch.NAMESPACE))
+        assertTrue(p.allows("jvm.cls", "java.util.concurrent.Executor", ScopeMatch.NAMESPACE))
+        assertTrue(p.allows("jvm.cls", "java.lang.Object", ScopeMatch.NAMESPACE))
+        assertFalse(p.allows("jvm.cls", "java.lang.String", ScopeMatch.NAMESPACE))
+        assertFalse(p.allows("jvm.cls", "java.utility.Foo", ScopeMatch.NAMESPACE))
     }
 
     @Test
     fun starWildcardMatchesEverything() {
-        val p = PluginPermissions.parse(listOf("inu.jvm.cls(*)"))
-        assertTrue(p.allows("inu.jvm.cls", "any.Class", ScopeMatch.NAMESPACE))
+        val p = PluginPermissions.parse(listOf("jvm.cls(*)"))
+        assertTrue(p.allows("jvm.cls", "any.Class", ScopeMatch.NAMESPACE))
     }
 }

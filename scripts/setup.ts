@@ -2,6 +2,7 @@ import fs from 'node:fs/promises'
 import { join } from 'node:path'
 import { ICON_SELECTION, patchesDir, rootDir, worktreeDir } from './config.js'
 import {
+  applySubmodulePatches,
   cd,
   cloneUpstream,
   ensureDir,
@@ -210,7 +211,10 @@ if (noStgit) {
     step(`Applying ${entry}`)
     await repo`git apply ${join(patchesDir, entry)}`
   }
-  if (!noSubmodules) await syncSubmodules(worktreeDir)
+  if (!noSubmodules) {
+    await syncSubmodules(worktreeDir)
+    await applySubmodulePatches(worktreeDir)
+  }
   await ensureAdGuardFilter()
   await linkForkSource(worktreeDir)
   await generateIconDrawables(worktreeDir)
@@ -226,9 +230,11 @@ if (noStgit) {
     await ensurePatches(expectedPatches, seriesEntries)
   }
   const syncedSubmodules = noSubmodules ? false : await syncSubmodules(worktreeDir)
+  const patchedSubmodules = noSubmodules ? false : await applySubmodulePatches(worktreeDir)
   await ensureAdGuardFilter()
   await ensureGitExclude(worktreeDir, '.kotlin')
+  await ensureGitExclude(worktreeDir, '.cxx')
   const linkedAny = await linkForkSource(worktreeDir)
   const generatedAny = await generateIconDrawables(worktreeDir)
-  success(linkedAny || generatedAny || syncedSubmodules ? 'Setup complete' : 'Up to date')
+  success(linkedAny || generatedAny || syncedSubmodules || patchedSubmodules ? 'Setup complete' : 'Up to date')
 }

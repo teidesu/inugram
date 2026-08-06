@@ -765,9 +765,17 @@
     <string name="InuPluginsReload">Reload</string>
     <string name="InuPluginsRemove">Remove</string>
     <string name="InuPluginsByAuthor">by %1$s</string>
-    <string name="InuPluginsSafeMode">Start in safe mode</string>
+    <string name="InuPluginsSafeMode">Safe mode</string>
+    <string name="InuPluginsSafeModeShortcut">Close app, next start is safe mode</string>
+    <string name="InuPluginsSafeModeForced">Safe mode: no plugins are running. Restart the app to run them again.</string>
+    <string name="InuPluginsSafeModeCrashed">Safe mode: the app stopped last time while a plugin was starting, so none are running. Restart the app to try again.</string>
     <string name="InuPluginsErrorNoManifest">Not a valid plugin (missing metadata header)</string>
     <string name="InuPluginsErrorRead">Couldn\'t read the selected file</string>
     <string name="InuPluginsErrorApiVersion">Needs a newer Inugram (plugin API %1$d, this app has %2$d)</string>
     <string name="InuPluginsErrorPlatform">Not made for this platform (needs %1$s)</string>
+    <string name="InuPluginsErrorBadGrant">Invalid permissions requested (%1$s)</string>
+    <string name="InuPluginsFailedAtLoad">Load error</string>
+    <string name="InuPluginsFailedAtRuntime">Runtime error</string>
+    <string name="InuPluginsFailedAtUnload">Unload error</string>
+    <string name="InuPluginsFailedFormat">%1$s: %2$s</string>
 </resources>

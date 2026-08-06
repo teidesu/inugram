@@ -61,6 +61,11 @@ object InuHooks {
     }
 
     @JvmStatic
+    fun onAppBoot() {
+        PluginManager.onAppBoot()
+    }
+
+    @JvmStatic
     fun onMessagesControllerCreated(messagesController: MessagesController, account: Int) {
         MapsHelper.syncMapProvider(messagesController)
         AndroidUtilities.runOnUIThread {
@@ -133,7 +138,7 @@ object InuHooks {
         DrawerHelper.refreshUpdateState()
         MediaSendDebugHelper.startWatchingCache()
         if (launchActivity.intent?.action == PluginManager.SAFE_MODE_ACTION) {
-            PluginManager.requestSafeModeRestart()
+            PluginManager.requestSafeMode()
             return
         }
         PluginManager.onAppInteractive()

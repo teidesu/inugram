@@ -5,20 +5,29 @@ import android.content.pm.PackageManager
 import android.os.Build
 import android.os.Bundle
 import android.text.InputType
+import android.text.SpannableStringBuilder
 import android.view.Gravity
 import android.view.HapticFeedbackConstants
 import android.view.View
 import android.widget.FrameLayout
 import androidx.core.content.edit
 import desu.inugram.InuConfig
+import desu.inugram.core.plugins.ActionRow
 import desu.inugram.helpers.menu.ChatMenuConfig
 import desu.inugram.helpers.menu.reorderByMenu
+import desu.inugram.helpers.plugins.QuickJs
+import desu.inugram.helpers.plugins.tl.TlFilter
+import desu.inugram.helpers.plugins.tl.TlJson
+import desu.inugram.helpers.plugins.ui.PluginActions
 import desu.inugram.helpers.translate.TranslateHelper
 import desu.inugram.ui.showInputDialog
+import java.util.WeakHashMap
+import org.json.JSONArray
 import org.telegram.messenger.AndroidUtilities
 import org.telegram.messenger.BuildVars
 import org.telegram.messenger.ChatObject
 import org.telegram.messenger.LocaleController
+import org.telegram.messenger.MediaDataController
 import org.telegram.messenger.MessageObject
 import org.telegram.messenger.MessagesController
 import org.telegram.messenger.R
@@ -37,10 +46,12 @@ import org.telegram.ui.ChatActivity
 import org.telegram.ui.ChatRightsEditActivity
 import org.telegram.ui.ChatUsersActivity
 import org.telegram.ui.Components.BulletinFactory
+import org.telegram.ui.Components.ChatActivityEnterView
 import org.telegram.ui.Components.ItemOptions
 import org.telegram.ui.Components.LayoutHelper
 import org.telegram.ui.Components.TranslateAlert2
 import org.telegram.ui.ManageLinksActivity
+import org.telegram.ui.MessageSendPreview
 import org.telegram.ui.RestrictedLanguagesSelectActivity
 import org.telegram.ui.StatisticActivity
 
@@ -133,10 +144,144 @@ object ChatActionsHelper {
                 LocaleController.getString(R.string.InviteLinks),
             )
         }
+        addPluginItems(activity, headerItem)
+    }
+
+    // --- plugin rows (inu.registerChatAction) ---
+
+    // one entry per open chat; the rows a menu drew are what a click on it resolves against
+    private val pluginRows = WeakHashMap<ChatActivity, List<ActionRow<QuickJs>>>()
+
+    /**
+     * The rows arrive one globalQueue hop later - an engine cannot be entered from the ui thread -
+     * which is why they are rendered here, when the chat's menu is *built*, rather than when the
+     * user opens it. `lazilyAddSubItem` is what makes that work: the header lays its lazy items out
+     * every time the submenu opens, so rows added after this returns still show up.
+     */
+    private fun addPluginItems(activity: ChatActivity, headerItem: ActionBarMenuItem) {
+        pluginRows.remove(activity)
+        if (!PluginActions.hasRows(PluginActions.KIND_CHAT)) return
+        val surface = pluginSurface(activity)
+        PluginActions.render(PluginActions.KIND_CHAT, surface) { rows ->
+            if (activity.isFinished) return@render
+            pluginRows[activity] = rows
+            rows.forEachIndexed { index, row ->
+                headerItem.lazilyAddSubItem(
+                    PluginActions.optionIdAt(index), R.drawable.msg_settings_old, row.text,
+                )
+            }
+        }
+    }
+
+    /**
+     * `inu.registerMessageEditorAction`'s rows, in the send-button long-press sheet. Unlike the
+     * chat header's, this menu is rebuilt from scratch on every long press, so there is nothing to
+     * keep live between opens - but a row's label still only comes from globalQueue, so the sheet
+     * is parked until the rows land or [PluginActions.RENDER_BUDGET_MS] runs out, exactly as the
+     * message menu is. With no rows registered this is stock's own `show()` and nothing else.
+     */
+    @JvmStatic
+    fun inu_showSendPreview(enterView: ChatActivityEnterView, options: ItemOptions, preview: MessageSendPreview) {
+        val activity = enterView.parentFragment
+        if (activity == null || PluginActions.rowCount(PluginActions.KIND_EDITOR) == 0) {
+            preview.show()
+            return
+        }
+
+        val text = enterView.fieldText ?: ""
+        val parsed = arrayOf<CharSequence>(SpannableStringBuilder(text))
+        val entities = MediaDataController.getInstance(activity.currentAccount).getEntities(parsed, true)
+        val entitiesJson = JSONArray().apply {
+            for (entity in entities) put(TlJson.toJson(entity, TlFilter.Policy(takeover = false, drafts = true)))
+        }
+
+        // the composer outlives the sheet, so the surface is opened here and closed with it
+        // ([inu_onSendPreviewDismissed]): a callback that resolves after the user dismissed the
+        // menu has nothing left to write into
+        val surfaceId = PluginActions.openEditorSurface(EditorSurface(enterView))
+        editorSurfaces.put(enterView, surfaceId)?.let(PluginActions::closeEditorSurface)
+        val surface = PluginActions.Surface.editor(
+            activity.currentAccount,
+            activity.dialogId,
+            activity.topicId,
+            surfaceId,
+            parsed[0].toString(),
+            entitiesJson.toString(),
+        )
+
+        var shown = false
+        fun showOnce(rows: List<ActionRow<QuickJs>>) {
+            if (shown) return
+            shown = true
+            for (row in rows) {
+                options.add(R.drawable.msg_settings_old, row.text) { PluginActions.dispatch(row, surface) }
+            }
+            options.setupSelectors()
+            preview.show()
+        }
+        PluginActions.render(PluginActions.KIND_EDITOR, surface) { rows -> showOnce(rows) }
+        AndroidUtilities.runOnUIThread({ showOnce(emptyList()) }, PluginActions.RENDER_BUDGET_MS)
+    }
+
+    // one sheet per composer at a time, so this is the surface the live one owns
+    private val editorSurfaces = WeakHashMap<ChatActivityEnterView, Long>()
+
+    @JvmStatic
+    fun inu_onSendPreviewDismissed(enterView: ChatActivityEnterView) {
+        editorSurfaces.remove(enterView)?.let(PluginActions::closeEditorSurface)
+    }
+
+    /**
+     * what `MessageEditorActionContext.replace`/`send` reach. The composer is held for as long as
+     * the sheet is up and no longer ([PluginActions.closeEditorSurface]); both arrive on the ui
+     * thread, which is where the field and the send path both have to be touched from.
+     */
+    private class EditorSurface(
+        private val enterView: ChatActivityEnterView,
+    ) : PluginActions.EditorSurface {
+        override fun replaceDraft(text: String, entitiesJson: String?) {
+            enterView.setFieldText(formatted(text, entitiesJson))
+        }
+
+        override fun sendDraft(text: String, entitiesJson: String?) {
+            enterView.setFieldText(formatted(text, entitiesJson))
+            enterView.sendMessage()
+        }
+
+        private fun formatted(text: String, entitiesJson: String?): CharSequence {
+            if (entitiesJson.isNullOrEmpty()) return text
+            val entities = ArrayList<TLRPC.MessageEntity>()
+            val array = try {
+                JSONArray(entitiesJson)
+            } catch (e: Exception) {
+                return text
+            }
+            for (index in 0 until array.length()) {
+                val one = array.optJSONObject(index) ?: continue
+                (runCatching { TlJson.fromJson(one) }.getOrNull() as? TLRPC.MessageEntity)?.let(entities::add)
+            }
+            if (entities.isEmpty()) return text
+            val out = SpannableStringBuilder(text)
+            MessageObject.addEntitiesToText(out, entities, false, false, false, false)
+            return out
+        }
+    }
+
+    private fun pluginSurface(activity: ChatActivity) = PluginActions.Surface.chat(
+        activity.currentAccount,
+        activity.dialogId,
+        activity.topicId,
+    )
+
+    private fun dispatchPluginItem(id: Int, activity: ChatActivity): Boolean {
+        val row = PluginActions.rowAt(pluginRows[activity].orEmpty(), id) ?: return false
+        PluginActions.dispatch(row, pluginSurface(activity))
+        return true
     }
 
     @JvmStatic
     fun handleClick(id: Int, activity: ChatActivity): Boolean {
+        if (id >= PluginActions.OPTION_BASE) return dispatchPluginItem(id, activity)
         when (id) {
             ACTION_SHOW_PINNED_PANEL -> showPinnedPanel(activity)
             ACTION_RECENT_ACTIONS -> {
@@ -672,7 +817,6 @@ object ChatActionsHelper {
         activity.updateVisibleRows()
     }
 
-    // -- avatar long tap actions --
     private class AvatarModeration(val canRestrict: Boolean, val canBan: Boolean)
 
     private fun resolveModeration(activity: ChatActivity, peerId: Long): AvatarModeration {

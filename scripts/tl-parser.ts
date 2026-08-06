@@ -7,6 +7,8 @@ export interface JavaField {
   name: string
   type: string
   custom: boolean
+  /** the declaration's initializer expression, verbatim and without the `=` */
+  initializer: string | null
   line: number
 }
 
@@ -251,8 +253,11 @@ export function parseJavaFile(src: string, containerName: string, file: string, 
           const m = FIELD_DECL.exec(head)
           if (m) {
             const custom = trailing != null && trailing.includes('custom')
-            for (const name of m[2].split(',')) {
-              owner.fields.push({ type: m[1], name: name.trim(), custom, line: bufferLine })
+            const names = m[2].split(',')
+            // `public int a, b = 5` initializes only `b`, and nothing in the schema files does that
+            const initializer = eq < 0 || names.length > 1 ? null : buffer.slice(eq + 1).replace(/\s+/g, ' ').trim()
+            for (const name of names) {
+              owner.fields.push({ type: m[1], name: name.trim(), custom, initializer, line: bufferLine })
             }
           } else if (/^public\s/.test(head) && !/^public\s+(?:static|abstract|native)\b/.test(head)) {
             warnings.push({ file, line: bufferLine, message: `unparsed public member: ${head}` })

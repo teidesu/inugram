@@ -2489,25 +2489,69 @@ declare namespace inu {
     }
 
     /**
-     * add a notification center delegate
+     * one argument of a payload, as it arrives.
      *
-     * object keys are event names, values are callback functions
+     * only numbers, strings and booleans cross. everything else — a `JavaObject`, an array, a
+     * `TLObject` — is `null`, because there is no runtime value on this side to make it into:
+     * `unsafe.jvm` is what would give a java object a representation, and handing over a class name
+     * or a `toString()` in its place would be an approximation of the payload rather than the
+     * payload. the signatures in `NotificationCenterEventsMap` keep saying what the *app* posted,
+     * which is what tells you which arguments are worth reading at all.
      *
-     * **this is an unsafe-tier grant.** nearly every event here hands over a `JavaObject`, and one
-     * of those walks the whole app heap through `getField` exactly as `unsafe.jvm` does — so a
-     * scope list over event names would gate the entry point to a room with no walls. it is named
-     * for what it is rather than sitting in `sensitive` looking narrower than it is.
+     * a `char` arrives as a one-character string, a `long` as a number, and a non-finite `double`
+     * as `null`.
+     */
+    type NotificationArg<T> = T extends number | string | boolean | undefined ? T : null
+
+    type NotificationArgs<T extends unknown[]> = { [K in keyof T]: NotificationArg<T[K]> }
+
+    /**
+     * observe the app's own internal event bus.
      *
-     * the api filtering described in `common.d.ts` does **not** apply here, and can't: these
-     * payloads are arbitrary java objects rather than TL, so there is no chokepoint to filter at
-     * and no general way to find a message inside one. that's the same reason the filter is a
-     * property of the safe and sensitive tiers only.
+     * object keys are event names, values are callback functions. every handler is called with the
+     * **account slot first** — `0`..`n` for a logged-in account, `-1` for the app-wide centre —
+     * followed by whatever the event carried, narrowed by {@link NotificationArg}.
+     *
+     * ```ts
+     * const stop = inu.android.addNotificationCenterDelegate({
+     *   dialogsNeedReload: (account, force) => console.log(account, force),
+     * })
+     * ```
+     *
+     * **this is an unsafe-tier grant.** the vocabulary here is the app's internal state machine,
+     * not a feature: subscribing to it tells you every dialog that was opened, every message that
+     * arrived, every file that was fetched and every screen that was shown, all at once. a scope
+     * list over event names would not narrow that in any way a user could reason about, and the api
+     * filtering described in `common.d.ts` does **not** apply here and can't — these payloads are
+     * arbitrary java objects rather than TL, so there is no chokepoint to filter at and no general
+     * way to find a message inside one. that is the same reason the filter is a property of the safe
+     * and sensitive tiers only.
+     *
+     * the event names are a **closed vocabulary**: they are the app's own, they change between
+     * versions, and a name this build does not have rejects the whole call with `invalid-argument`
+     * rather than registering a handler that could never fire — which you would not be able to tell
+     * from an event that simply never happened.
+     *
+     * the app posts these on its ui thread; delivery hops to the plugin's own queue like everything
+     * else, so a handler never runs inside the post and cannot make the app wait on it. the payload
+     * is snapshotted at the post, so what you are handed is what was posted and not what a later
+     * observer rewrote it to. a handler that throws faults the plugin.
+     *
+     * returns a {@link Disposer} with the usual semantics, and every observer is torn down when the
+     * plugin unloads whether or not you called it.
+     *
+     * some of these fire *constantly* (`updateInterfaces` on every profile change, the file
+     * progress events per chunk). every post costs a queue hop and a payload encode for as long as
+     * you are registered, so name only the events you act on.
      *
      * @needs-grant unsafe.notificationCenter
      */
     function addNotificationCenterDelegate(
       handlers: {
-        [key in keyof NotificationCenterEventsMap]?: (...args: Parameters<NotificationCenterEventsMap[key]>) => void
+        [key in keyof NotificationCenterEventsMap]?: (
+          account: number,
+          ...args: NotificationArgs<Parameters<NotificationCenterEventsMap[key]>>
+        ) => void
       },
     ): Disposer
   }

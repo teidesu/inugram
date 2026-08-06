@@ -10,6 +10,32 @@ declare namespace inu {
    * saved one token in a header at the cost of the only property this tier has: that what the
    * manifest lists is what the plugin got. a grant that quietly becomes two is a grant nobody read.
    *
+   * one plugin may have at most 512 hooks live at once, and a `hookAll*` counts one per overload it
+   * installed; past that every entry point here throws `quota-exceeded` until a `Disposer` runs.
+   * unlike a registration, a hook is an ART method whose entry point was rewritten for the life of
+   * the process, and it costs a dispatch on every call of a method the app may run in a loop.
+   *
+   * every entry point returns a `Disposer` with the semantics `common.d.ts` states for all of them.
+   * the callbacks of one hook site run in registration order, `before` first to last and then
+   * `after` first to last; a dispatch walks the list as it was when the call arrived, so a hook
+   * added by a callback joins from the next call and one disposed by a callback still finishes the
+   * run in flight. hooking the same method twice registers a second set of callbacks over the one
+   * hook site rather than a second hook, and the site is uninstalled when the last of them goes.
+   *
+   * an engine being unloaded takes down every hook it installed, because an ART entry point stays
+   * rewritten and a hook left behind would dispatch into an engine that is gone.
+   *
+   * **your callbacks do not run on the thread that called the hooked method.** they run where all
+   * your other code runs, and the calling thread waits for them — once for `before`, and again for
+   * `after` if you have one — for at most **250 ms per phase**, past which the app gets its own
+   * method as if nothing had hooked it. the original itself is still called on the thread that
+   * called it, so hooking something only the ui thread may run is safe. two consequences worth
+   * planning around: a hook on a method the app calls in a tight loop pays a queue hop per call, so
+   * keep the callbacks short and prefer hooking something coarse; and a `before` that answers with
+   * `setReturnValue`/`setThrowable` costs *no* hop for its `after`, nothing having to run in
+   * between. a hooked method reached from inside your own plugin code runs its original directly
+   * with no callbacks at all — the wait there would be a wait on yourself.
+   *
    * @needs-grant unsafe.xposed
    * @needs-grant unsafe.jvm
    */

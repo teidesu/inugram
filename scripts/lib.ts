@@ -7,6 +7,7 @@ import {
   forkSyncFiles,
   rootDir,
   seriesFile,
+  submodulePatches,
   upstreamCommitFile,
   upstreamUrl,
 } from './config.js'
@@ -120,6 +121,25 @@ export async function syncSubmodules(repoDir: string) {
   step(`Syncing ${stale.length} submodule(s), this will take a while`)
   await git`git submodule update --init --recursive --filter=blob:none`
   return true
+}
+
+export async function applySubmodulePatches(repoDir: string) {
+  let appliedAny = false
+
+  for (const { submodule, patch } of submodulePatches) {
+    const dir = join(repoDir, submodule)
+    if (!existsSync(dir)) continue
+
+    const git = cd(dir)
+    const alreadyApplied = await git`git apply --reverse --check ${patch}`.nothrow().quiet()
+    if (alreadyApplied.exitCode === 0) continue
+
+    step(`Patching ${submodule}`)
+    await git`git apply ${patch}`
+    appliedAny = true
+  }
+
+  return appliedAny
 }
 
 export function hasGitRepo(repoDir: string) {
