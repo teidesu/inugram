@@ -48,9 +48,7 @@ fn thrown_code(ctx: &Context, expr: &str) -> String {
     })
 }
 
-fn eval_string(ctx: &Context, expr: &str) -> String {
-    ctx.with(|ctx| ctx.eval::<String, _>(expr).unwrap())
-}
+use crate::testing::util::eval_string;
 
 #[test]
 fn the_curated_table_is_sorted_and_unique() {

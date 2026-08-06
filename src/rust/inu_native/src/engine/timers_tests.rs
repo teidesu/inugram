@@ -34,21 +34,9 @@ fn setup() -> Fixture {
     (rt, ctx, host, lifecycle, state, logs)
 }
 
-fn eval(ctx: &Context, code: &str) -> String {
-    ctx.with(|ctx| match ctx.eval::<String, _>(code) {
-        Ok(s) => s,
-        Err(rquickjs::Error::Exception) => panic!("{}", crate::tg::rpc::format_exception(&ctx)),
-        Err(e) => panic!("{e:?}"),
-    })
-}
+use crate::testing::util::eval_string as eval;
 
-fn run(ctx: &Context, code: &str) {
-    ctx.with(|ctx| match ctx.eval::<(), _>(code) {
-        Ok(()) => {}
-        Err(rquickjs::Error::Exception) => panic!("{}", crate::tg::rpc::format_exception(&ctx)),
-        Err(e) => panic!("{e:?}"),
-    });
-}
+use crate::testing::util::eval_unit as run;
 
 #[test]
 fn a_timeout_fires_once_its_delay_has_passed() {

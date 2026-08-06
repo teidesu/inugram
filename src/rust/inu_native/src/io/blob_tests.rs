@@ -54,19 +54,11 @@ fn setup_with(name: &str, spilling: bool, limits: BlobLimits) -> Fixture {
 }
 
 fn eval(fixture: &Fixture, code: &str) -> String {
-    fixture.ctx.with(|ctx| match ctx.eval::<String, _>(code) {
-        Ok(s) => s,
-        Err(rquickjs::Error::Exception) => panic!("{}", crate::tg::rpc::format_exception(&ctx)),
-        Err(e) => panic!("{e:?}"),
-    })
+    crate::testing::util::eval_string(&fixture.ctx, code)
 }
 
 fn run(fixture: &Fixture, code: &str) {
-    fixture.ctx.with(|ctx| match ctx.eval::<(), _>(code) {
-        Ok(()) => {}
-        Err(rquickjs::Error::Exception) => panic!("{}", crate::tg::rpc::format_exception(&ctx)),
-        Err(e) => panic!("{e:?}"),
-    });
+    crate::testing::util::eval_unit(&fixture.ctx, code)
 }
 
 /// awaits `expr` and stringifies the outcome, since every read answers with a promise. The

@@ -86,21 +86,9 @@ fn settle(rt: &Runtime, ctx: &Context, expr: &str) -> String {
     eval(ctx, "globalThis.__out")
 }
 
-fn eval(ctx: &Context, code: &str) -> String {
-    ctx.with(|ctx| match ctx.eval::<String, _>(code) {
-        Ok(s) => s,
-        Err(rquickjs::Error::Exception) => panic!("{}", crate::tg::rpc::format_exception(&ctx)),
-        Err(e) => panic!("{e:?}"),
-    })
-}
+use crate::testing::util::eval_string as eval;
 
-fn run(ctx: &Context, code: &str) {
-    ctx.with(|ctx| match ctx.eval::<(), _>(code) {
-        Ok(()) => {}
-        Err(rquickjs::Error::Exception) => panic!("{}", crate::tg::rpc::format_exception(&ctx)),
-        Err(e) => panic!("{e:?}"),
-    });
-}
+use crate::testing::util::eval_unit as run;
 
 /// the guard that pins the *engine's* context rather than this fixture's: `Context::base` is
 /// what any narrower constructor looks like from here, and installing into one has to fail

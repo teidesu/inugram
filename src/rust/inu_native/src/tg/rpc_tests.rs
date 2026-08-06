@@ -123,13 +123,9 @@ fn setup(grants: &[&str]) -> (Runtime, Context, Rc<TestHost>, Disposing) {
     (rt, ctx, host, state)
 }
 
-fn eval(ctx: &Context, code: &str) {
-    ctx.with(|ctx| ctx.eval::<(), _>(code).unwrap());
-}
+use crate::testing::util::eval_unit as eval;
 
-fn eval_json(ctx: &Context, code: &str) -> String {
-    ctx.with(|ctx| ctx.eval::<String, _>(format!("JSON.stringify({code})")).unwrap())
-}
+use crate::testing::util::eval_json;
 
 /// like [`setup`] but captures every `log()` upcall so tests can assert on emitted diagnostics
 fn setup_logging(grants: &[&str]) -> LoggingFixture {
@@ -671,19 +667,7 @@ fn on_update_fan_out_survives_throwing_callback() {
 }
 
 /// evaluates `code`, returning the caught error as `[isPluginError, code, grant, message]` json
-fn catch_json(ctx: &Context, code: &str) -> String {
-    ctx.with(|ctx| {
-        ctx.eval::<String, _>(format!(
-            r#"(() => {{
-                try {{ {code}; return 'no-throw'; }}
-                catch (e) {{
-                    return JSON.stringify([e instanceof inu.PluginError, e.code, e.grant ?? null, e.message]);
-                }}
-            }})()"#
-        ))
-        .unwrap()
-    })
-}
+use crate::testing::util::catch_json;
 
 #[test]
 fn intercept_registration_without_a_scoped_grant_throws_not_granted() {

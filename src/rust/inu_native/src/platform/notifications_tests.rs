@@ -47,25 +47,9 @@ fn setup(grants: &[&str]) -> Fixture {
 
 const GRANTED: &[&str] = &["unsafe.notificationCenter"];
 
-fn eval_json(ctx: &Context, code: &str) -> String {
-    ctx.with(|ctx| match ctx.eval::<String, _>(format!("JSON.stringify({code})")) {
-        Ok(s) => s,
-        Err(rquickjs::Error::Exception) => panic!("{}", format_exception(&ctx)),
-        Err(e) => panic!("{e:?}"),
-    })
-}
+use crate::testing::util::eval_json;
 
-fn catch_json(ctx: &Context, code: &str) -> String {
-    ctx.with(|ctx| {
-        ctx.eval::<String, _>(format!(
-            r#"(() => {{
-                try {{ {code}; return 'no-throw'; }}
-                catch (e) {{ return JSON.stringify([e instanceof inu.PluginError, e.code, e.grant ?? null, e.message]); }}
-            }})()"#
-        ))
-        .unwrap()
-    })
-}
+use crate::testing::util::catch_json;
 
 fn arm(ctx: &Context) {
     ctx.with(|ctx| {

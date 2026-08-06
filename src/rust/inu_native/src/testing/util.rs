@@ -7,6 +7,117 @@ use std::sync::{Arc, Mutex, MutexGuard};
 use rquickjs::function::Rest;
 use rquickjs::{Coerced, Context, Function, Object, Runtime};
 
+/// One TL object behind a fake handle: its constructor name, and each field already as a wire.
+pub(crate) struct FakeObject {
+    pub(crate) name: String,
+    pub(crate) fields: Vec<(String, String)>,
+}
+
+/// What `TlHandles` is on the host side of the bridge, for a suite whose subject is some *other*
+/// module's use of it: a table of minted objects, answering the `TlHost` upcalls the proxy makes.
+///
+/// `tl_own_keys` answers a comma-joined list because that is what `proxy::keys_to_array` splits on;
+/// a fake that joined on anything else would hand `Object.keys` one key holding the whole list.
+#[derive(Default)]
+pub(crate) struct FakeHandles {
+    objects: std::cell::RefCell<std::collections::HashMap<i64, FakeObject>>,
+    next: std::cell::Cell<i64>,
+}
+
+impl FakeHandles {
+    pub(crate) fn mint<K: Into<String>>(&self, name: &str, fields: impl IntoIterator<Item = (K, String)>) -> i64 {
+        let id = self.next.get() + 1;
+        self.next.set(id);
+        let fields = fields.into_iter().map(|(k, v)| (k.into(), v)).collect();
+        self.objects.borrow_mut().insert(id, FakeObject { name: name.to_string(), fields });
+        id
+    }
+
+    /// the read-only object wire, which is what `PluginReads.mint(readOnly = true)` answers with
+    pub(crate) fn mint_wire<K: Into<String>>(
+        &self,
+        name: &str,
+        fields: impl IntoIterator<Item = (K, String)>,
+    ) -> String {
+        format!("HOR{}", self.mint(name, fields))
+    }
+
+    pub(crate) fn get(&self, handle: i64, key: &str) -> String {
+        let objects = self.objects.borrow();
+        let Some(object) = objects.get(&handle) else {
+            return "Phandle-expired\n\n\n\nexpired".to_string();
+        };
+        if key == "_" {
+            return format!("S{}", object.name);
+        }
+        match object.fields.iter().find(|(name, _)| name == key) {
+            Some((_, wire)) => wire.clone(),
+            None => "N".to_string(),
+        }
+    }
+
+    pub(crate) fn has(&self, handle: i64, key: &str) -> i32 {
+        let objects = self.objects.borrow();
+        match objects.get(&handle) {
+            None => -1,
+            Some(object) => i32::from(key == "_" || object.fields.iter().any(|(name, _)| name == key)),
+        }
+    }
+
+    pub(crate) fn own_keys(&self, handle: i64) -> Option<String> {
+        let objects = self.objects.borrow();
+        let object = objects.get(&handle)?;
+        let mut keys = vec!["_".to_string()];
+        keys.extend(object.fields.iter().map(|(name, _)| name.clone()));
+        Some(keys.join(","))
+    }
+
+    pub(crate) fn release(&self, handle: i64) {
+        self.objects.borrow_mut().remove(&handle);
+    }
+}
+
+/// Evaluates for a string, reporting a thrown exception the way the engine formats one for the
+/// host rather than as rquickjs's opaque `Error::Exception`.
+pub(crate) fn eval_string(ctx: &Context, code: &str) -> String {
+    ctx.with(|ctx| match ctx.eval::<String, _>(code) {
+        Ok(value) => value,
+        Err(rquickjs::Error::Exception) => panic!("{}", crate::tg::rpc::format_exception(&ctx)),
+        Err(e) => panic!("{e:?}"),
+    })
+}
+
+/// [`eval_string`] for code evaluated for its effect.
+pub(crate) fn eval_unit(ctx: &Context, code: &str) {
+    ctx.with(|ctx| match ctx.eval::<(), _>(code) {
+        Ok(()) => {}
+        Err(rquickjs::Error::Exception) => panic!("{}", crate::tg::rpc::format_exception(&ctx)),
+        Err(e) => panic!("{e:?}"),
+    });
+}
+
+/// [`eval_string`] over `JSON.stringify`, for asserting on a shape rather than on a scalar.
+pub(crate) fn eval_json(ctx: &Context, code: &str) -> String {
+    eval_string(ctx, &format!("JSON.stringify({code})"))
+}
+
+/// What a refusal looks like from JS: `[is a PluginError, code, grant, message]`, or `'no-throw'`.
+/// The grant is part of it because `not-granted` naming the wrong scope is the failure a test of a
+/// gate is written to catch.
+pub(crate) fn catch_json(ctx: &Context, code: &str) -> String {
+    eval_string(
+        ctx,
+        &format!(
+            r#"(() => {{
+                try {{ {code}; return 'no-throw'; }}
+                catch (e) {{
+                    return JSON.stringify([e instanceof inu.PluginError, e.code, e.grant ?? null, e.message]);
+                }}
+            }})()"#
+        ),
+    )
+}
+
 /// What a test reads a module's diagnostics out of.
 ///
 /// [`crate::Log`] is `Send + Sync`, so the `Rc<RefCell<Vec<String>>>` the suite used to build one

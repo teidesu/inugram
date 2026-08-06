@@ -134,11 +134,7 @@ fn the_app_directories_answer_what_the_host_gave() {
 }
 
 fn eval(fixture: &Fixture, code: &str) -> String {
-    fixture.ctx.with(|ctx| match ctx.eval::<String, _>(code) {
-        Ok(value) => value,
-        Err(rquickjs::Error::Exception) => panic!("{}", crate::tg::rpc::format_exception(&ctx)),
-        Err(e) => panic!("{e:?}"),
-    })
+    crate::testing::util::eval_string(&fixture.ctx, code)
 }
 
 /// runs `code` and reports `<code>|<message>` of whatever it threw, or "no-throw"
