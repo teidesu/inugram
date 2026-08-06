@@ -6,12 +6,25 @@
 mod wiring {
     const SOURCE: &str = concat!(include_str!("exports.rs"), include_str!("bridge.rs"), include_str!("hosts.rs"),);
 
+    /// An export is either a hand-written `extern "system" fn` or an `engine_export!` invocation,
+    /// and a test asking for one by name has no business knowing which.
     fn body_of(name: &str) -> &'static str {
-        let at = SOURCE
-            .find(&format!("fn Java_desu_inugram_helpers_plugins_QuickJs_{name}("))
-            .unwrap_or_else(|| panic!("no JNI export named '{name}'"));
+        let (at, end) = match SOURCE.find(&format!("fn Java_desu_inugram_helpers_plugins_QuickJs_{name}(")) {
+            Some(at) => (at, "\n}\n"),
+            None => {
+                let at = SOURCE
+                    .find(&format!("Java_desu_inugram_helpers_plugins_QuickJs_{name},"))
+                    .unwrap_or_else(|| panic!("no JNI export named '{name}'"));
+                // rustfmt joins an invocation it can fit, so the close is `);` or `});`
+                (at, "")
+            }
+        };
         let body = &SOURCE[at..];
-        &body[..body.find("\n}\n").map(|end| end + 3).unwrap_or(body.len())]
+        let to = match end {
+            "" => ["\n);\n", "\n});\n"].iter().filter_map(|m| body.find(m).map(|at| at + m.len())).min(),
+            _ => body.find(end).map(|to| to + end.len()),
+        };
+        &body[..to.unwrap_or(body.len())]
     }
 
     /// rustfmt owns the layout inside an export, so a needle spanning an argument list has to be
@@ -66,9 +79,22 @@ mod wiring {
 
     #[test]
     fn no_entry_point_builds_its_own_diagnostic_sink() {
-        const PREFIX: &str = "pub extern \"system\" fn Java_desu_inugram_helpers_plugins_QuickJs_";
-        for (index, _) in SOURCE.match_indices(PREFIX) {
-            let name: String = SOURCE[index + PREFIX.len()..].chars().take_while(|c| *c != '(').collect();
+        // both shapes an export comes in, counted exactly: scanning for only the hand-written one
+        // would walk past every generated export while still passing
+        const WRITTEN: &str = "pub extern \"system\" fn Java_desu_inugram_helpers_plugins_QuickJs_";
+        const PREFIX: &str = "Java_desu_inugram_helpers_plugins_QuickJs_";
+        let mut names = Vec::new();
+        for (index, _) in SOURCE.match_indices(WRITTEN) {
+            names.push(SOURCE[index + WRITTEN.len()..].chars().take_while(|c| *c != '(').collect::<String>());
+        }
+        // the generated ones, found through the invocation rather than through a layout rustfmt owns
+        for (index, _) in SOURCE.match_indices("engine_export!(") {
+            let rest = &SOURCE[index..];
+            let at = rest.find(PREFIX).expect("an engine_export! that names no export");
+            names.push(rest[at + PREFIX.len()..].chars().take_while(|c| *c != ',').collect::<String>());
+        }
+        assert_eq!(names.len(), 43, "the set of QuickJs entry points moved");
+        for name in names {
             assert!(
                 !body_of(&name).contains("emit_console("),
                 "JNI export '{name}' logs past make_log, so its faults reach the host as ordinary errors",
