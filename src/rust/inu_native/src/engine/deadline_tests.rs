@@ -424,6 +424,23 @@ mod entry_points {
             );
             checked += 1;
         }
-        assert_eq!(checked, 40, "export count changed; confirm each new one arms a deadline");
+        assert_eq!(checked, 11, "hand-written export count changed; confirm each new one arms a deadline");
+
+        // the rest are generated, so the deadline belongs to `engine_export!` rather than to each
+        // export. That is only true of the ones whose rule arms it, so every rule has to: a fifth
+        // one added without the line would expand into exports this scan can no longer see.
+        let at = source.find("macro_rules! engine_export {").expect("engine_export! moved");
+        let body = &source[at..];
+        let body = &body[..body.find("\n}\n").expect("engine_export! has no end")];
+        let rules = body.matches(") => {").count();
+        assert!(rules > 0, "engine_export! parsed as having no rules");
+        assert_eq!(
+            body.matches("deadline::arm_entry_deadline()").count(),
+            rules,
+            "an engine_export! rule expands without arming a deadline",
+        );
+
+        let generated = source.matches("\nengine_export!(").count();
+        assert_eq!(checked + generated, 40, "export count changed; confirm each new one arms a deadline");
     }
 }
