@@ -16,6 +16,7 @@ use std::rc::Rc;
 use rquickjs::{Array, Ctx, Exception, Function, Object, Persistent, Result as JsResult, Runtime, Value};
 
 use crate::api::{json_parse, json_stringify};
+use crate::engine::argv::{field, opt_bool, opt_fn, opt_num, opt_str, req_bool, req_fn, req_num, req_str};
 use crate::engine::error::{get_or_create_inu, throw_plugin_error};
 use crate::engine::registry::{make_disposer, noop_disposer, Lifecycle, Registry};
 use crate::tg::rpc::{format_exception, pump_jobs, PendingSettle};
@@ -129,76 +130,6 @@ impl UiState {
         self.next_id.set(id + 1);
         id
     }
-}
-
-fn field<'js>(ctx: &Ctx<'js>, obj: &Object<'js>, what: &str, key: &str) -> JsResult<Value<'js>> {
-    obj.get(key).map_err(|_| Exception::throw_type(ctx, &format!("{what}: cannot read '{key}'")))
-}
-
-fn req_str<'js>(ctx: &Ctx<'js>, obj: &Object<'js>, what: &str, key: &str) -> JsResult<String> {
-    let v = field(ctx, obj, what, key)?;
-    match v.as_string() {
-        Some(s) => Ok(s.to_string()?),
-        None => Err(Exception::throw_type(ctx, &format!("{what}: '{key}' must be a string"))),
-    }
-}
-
-fn opt_str<'js>(ctx: &Ctx<'js>, obj: &Object<'js>, what: &str, key: &str) -> JsResult<Option<String>> {
-    let v = field(ctx, obj, what, key)?;
-    if v.is_undefined() || v.is_null() {
-        return Ok(None);
-    }
-    match v.as_string() {
-        Some(s) => Ok(Some(s.to_string()?)),
-        None => Err(Exception::throw_type(ctx, &format!("{what}: '{key}' must be a string"))),
-    }
-}
-
-fn req_bool<'js>(ctx: &Ctx<'js>, obj: &Object<'js>, what: &str, key: &str) -> JsResult<bool> {
-    let v = field(ctx, obj, what, key)?;
-    v.as_bool().ok_or_else(|| Exception::throw_type(ctx, &format!("{what}: '{key}' must be a boolean")))
-}
-
-fn opt_bool<'js>(ctx: &Ctx<'js>, obj: &Object<'js>, what: &str, key: &str) -> JsResult<bool> {
-    let v = field(ctx, obj, what, key)?;
-    if v.is_undefined() || v.is_null() {
-        return Ok(false);
-    }
-    v.as_bool().ok_or_else(|| Exception::throw_type(ctx, &format!("{what}: '{key}' must be a boolean")))
-}
-
-fn req_num<'js>(ctx: &Ctx<'js>, obj: &Object<'js>, what: &str, key: &str) -> JsResult<f64> {
-    let v = field(ctx, obj, what, key)?;
-    if let Some(i) = v.as_int() {
-        return Ok(i as f64);
-    }
-    v.as_float().ok_or_else(|| Exception::throw_type(ctx, &format!("{what}: '{key}' must be a number")))
-}
-
-fn opt_num<'js>(ctx: &Ctx<'js>, obj: &Object<'js>, what: &str, key: &str) -> JsResult<Option<f64>> {
-    let v = field(ctx, obj, what, key)?;
-    if v.is_undefined() || v.is_null() {
-        return Ok(None);
-    }
-    if let Some(i) = v.as_int() {
-        return Ok(Some(i as f64));
-    }
-    v.as_float().map(Some).ok_or_else(|| Exception::throw_type(ctx, &format!("{what}: '{key}' must be a number")))
-}
-
-fn req_fn<'js>(ctx: &Ctx<'js>, obj: &Object<'js>, what: &str, key: &str) -> JsResult<Function<'js>> {
-    let v = field(ctx, obj, what, key)?;
-    v.into_function().ok_or_else(|| Exception::throw_type(ctx, &format!("{what}: '{key}' must be a function")))
-}
-
-fn opt_fn<'js>(ctx: &Ctx<'js>, obj: &Object<'js>, what: &str, key: &str) -> JsResult<Option<Function<'js>>> {
-    let v = field(ctx, obj, what, key)?;
-    if v.is_undefined() || v.is_null() {
-        return Ok(None);
-    }
-    v.into_function()
-        .map(Some)
-        .ok_or_else(|| Exception::throw_type(ctx, &format!("{what}: '{key}' must be a function")))
 }
 
 fn set_opt<'js, T: rquickjs::IntoJs<'js>>(out: &Object<'js>, key: &str, value: Option<T>) -> JsResult<()> {

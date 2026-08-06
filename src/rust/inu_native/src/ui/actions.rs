@@ -16,6 +16,7 @@ use rquickjs::object::Accessor;
 use rquickjs::{Array, Ctx, Exception, Function, Object, Persistent, Result as JsResult, Runtime, Value};
 
 use crate::api::{json_parse, json_stringify};
+use crate::engine::argv::{field, opt_fn, req_fn, req_str};
 use crate::engine::error::{check_grant, get_or_create_inu, throw_plugin_error, GrantHost, MATCH_EXACT};
 use crate::engine::registry::{make_disposer, noop_disposer, Lifecycle, Registry, Token};
 use crate::tg::account::AccountState;
@@ -105,33 +106,6 @@ impl ActionState {
     fn registry(&self, kind: i32) -> Option<&Registry<Rc<ActionDef>>> {
         self.kinds.get(kind as usize)
     }
-}
-
-fn field<'js>(ctx: &Ctx<'js>, obj: &Object<'js>, what: &str, key: &str) -> JsResult<Value<'js>> {
-    obj.get(key).map_err(|_| Exception::throw_type(ctx, &format!("{what}: cannot read '{key}'")))
-}
-
-fn req_str<'js>(ctx: &Ctx<'js>, obj: &Object<'js>, what: &str, key: &str) -> JsResult<String> {
-    let v = field(ctx, obj, what, key)?;
-    match v.as_string() {
-        Some(s) => Ok(s.to_string()?),
-        None => Err(Exception::throw_type(ctx, &format!("{what}: '{key}' must be a string"))),
-    }
-}
-
-fn req_fn<'js>(ctx: &Ctx<'js>, obj: &Object<'js>, what: &str, key: &str) -> JsResult<Function<'js>> {
-    let v = field(ctx, obj, what, key)?;
-    v.into_function().ok_or_else(|| Exception::throw_type(ctx, &format!("{what}: '{key}' must be a function")))
-}
-
-fn opt_fn<'js>(ctx: &Ctx<'js>, obj: &Object<'js>, what: &str, key: &str) -> JsResult<Option<Function<'js>>> {
-    let v = field(ctx, obj, what, key)?;
-    if v.is_undefined() || v.is_null() {
-        return Ok(None);
-    }
-    v.into_function()
-        .map(Some)
-        .ok_or_else(|| Exception::throw_type(ctx, &format!("{what}: '{key}' must be a function")))
 }
 
 pub fn install_actions<'js>(

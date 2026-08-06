@@ -17,6 +17,27 @@ use rquickjs::{Ctx, Function, Persistent, Result as JsResult};
 
 pub type Token = u32;
 
+/// The id a host call is answered by, handed out by whichever state owns that call's pending table.
+///
+/// Not a [`Registry`] token: those name a registration the host can dispose, these name one
+/// outstanding request, and both must be able to run out of a *different* id space per state.
+/// Starts at 1, so a state that has answered nothing is distinguishable from one id.
+pub struct RequestIds(Cell<i64>);
+
+impl Default for RequestIds {
+    fn default() -> Self {
+        RequestIds(Cell::new(1))
+    }
+}
+
+impl RequestIds {
+    pub fn alloc(&self) -> i64 {
+        let id = self.0.get();
+        self.0.set(id + 1);
+        id
+    }
+}
+
 struct Entry<T> {
     token: Token,
     key: Option<String>,

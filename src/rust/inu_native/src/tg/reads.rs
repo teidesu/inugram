@@ -150,7 +150,7 @@ pub struct ReadsState {
     grants: Rc<dyn GrantHost>,
     views: Rc<TlViews>,
     log: crate::Log,
-    next_request_id: Cell<i64>,
+    next_request_id: crate::engine::registry::RequestIds,
     pending: RefCell<HashMap<i64, PendingRead>>,
     cursors: Cursors,
 }
@@ -158,14 +158,6 @@ pub struct ReadsState {
 struct PendingRead {
     settle: PendingSettle,
     shape: Shape,
-}
-
-impl ReadsState {
-    fn alloc_request_id(&self) -> i64 {
-        let id = self.next_request_id.get();
-        self.next_request_id.set(id + 1);
-        id
-    }
 }
 
 /// the one gate. `getUserFull` is the only op with two ways through it: `common.d.ts` lets you ask
@@ -246,7 +238,7 @@ pub fn install_reads<'js>(
         grants,
         views,
         log,
-        next_request_id: Cell::new(1),
+        next_request_id: crate::engine::registry::RequestIds::default(),
         pending: RefCell::new(HashMap::new()),
         cursors: Cursors::default(),
     });
@@ -359,7 +351,7 @@ fn park<'js>(
     shape: Shape,
     ask: impl FnOnce(i64) -> Option<String>,
 ) -> JsResult<Value<'js>> {
-    let request_id = state.alloc_request_id();
+    let request_id = state.next_request_id.alloc();
     let (promise, settle) = PendingSettle::new(ctx)?;
     state.pending.borrow_mut().insert(request_id, PendingRead { settle, shape });
 

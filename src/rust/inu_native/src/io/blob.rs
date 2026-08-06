@@ -21,7 +21,7 @@ use std::time::{SystemTime, UNIX_EPOCH};
 
 use rquickjs::class::{JsClass, Readable, Trace, Tracer};
 use rquickjs::function::{Constructor, Opt, This};
-use rquickjs::object::{Accessor, Property};
+use rquickjs::object::Property;
 use rquickjs::{
     ArrayBuffer, Class, Coerced, Ctx, Exception, FromJs, Function, JsLifetime, Object, Result as JsResult, TypedArray,
     Value,
@@ -29,6 +29,7 @@ use rquickjs::{
 
 use crate::engine::deadline::{ExternalCharge, ExternalMemory, EXTERNAL_LIMIT_BYTES, HEAP_LIMIT_BYTES};
 use crate::engine::error::{make_plugin_error, throw_plugin_error};
+use crate::engine::shape::{define_getter, define_method};
 
 /// where a built blob stops being kept in ram. 2 MiB is ~6% of the js heap ceiling, so
 /// materializing one back into js is never the allocation that kills a plugin, and 1/32 of the
@@ -995,17 +996,6 @@ pub(crate) fn install_with_limits<'js>(
 }
 
 /// webidl attribute flags, so the shapes read like the platform types they claim to be
-fn define_getter<'js, F, P>(target: &Object<'js>, name: &str, get: F) -> JsResult<()>
-where
-    F: rquickjs::function::IntoJsFunc<'js, P> + 'js,
-{
-    target.prop(name, Accessor::new_get(get).enumerable().configurable())
-}
-
-fn define_method<'js>(target: &Object<'js>, name: &str, f: Function<'js>) -> JsResult<()> {
-    target.prop(name, Property::from(f).writable().enumerable().configurable())
-}
-
 fn install_blob_members<'js>(ctx: &Ctx<'js>, proto: &Object<'js>) -> JsResult<()> {
     define_getter(proto, "size", |ctx: Ctx<'js>, this: This<Class<'js, BlobHandle>>| {
         let handle = this.0.borrow();

@@ -94,7 +94,7 @@ pub struct ApiState {
     grants: Rc<dyn GrantHost>,
     lifecycle: Rc<Lifecycle>,
     pub(crate) log: crate::Log,
-    next_request_id: Cell<i64>,
+    next_request_id: crate::engine::registry::RequestIds,
     pending_dialogs: RefCell<HashMap<i64, PendingSettle>>,
     /// a chooser remembers the mode it was opened in: the host answers with a list either way, and
     /// what a single-select promise resolves to is a number
@@ -104,14 +104,6 @@ pub struct ApiState {
     /// what the plugin was last told; a fresh engine starts foreground and the host corrects it
     /// before the plugin's own code runs
     visible: Cell<bool>,
-}
-
-impl ApiState {
-    fn alloc_request_id(&self) -> i64 {
-        let id = self.next_request_id.get();
-        self.next_request_id.set(id + 1);
-        id
-    }
 }
 
 pub(crate) fn json_parse<'js>(ctx: &Ctx<'js>, json: &str) -> JsResult<Value<'js>> {
@@ -162,7 +154,7 @@ pub fn install_api<'js>(
         grants,
         lifecycle,
         log,
-        next_request_id: Cell::new(1),
+        next_request_id: crate::engine::registry::RequestIds::default(),
         pending_dialogs: RefCell::new(HashMap::new()),
         pending_choosers: RefCell::new(HashMap::new()),
         unload_fns: CallbackRegistry::default(),
@@ -326,7 +318,7 @@ fn js_ui_dialog<'js>(ctx: &Ctx<'js>, state: &Rc<ApiState>, options: Value<'js>) 
     let json = json_stringify(ctx, options)?
         .ok_or_else(|| Exception::throw_type(ctx, "dialog: expected an options object"))?;
 
-    let request_id = state.alloc_request_id();
+    let request_id = state.next_request_id.alloc();
     let (promise, pending) = PendingSettle::new(ctx)?;
     state.pending_dialogs.borrow_mut().insert(request_id, pending);
 
@@ -442,7 +434,7 @@ fn js_ui_chooser<'js>(ctx: &Ctx<'js>, state: &Rc<ApiState>, opts: Object<'js>) -
     let json = json_stringify(ctx, out.into_value())?
         .ok_or_else(|| Exception::throw_message(ctx, "chooser: serialization failed"))?;
 
-    let request_id = state.alloc_request_id();
+    let request_id = state.next_request_id.alloc();
     let (promise, pending) = PendingSettle::new(ctx)?;
     state.pending_choosers.borrow_mut().insert(request_id, (pending, multiple));
 

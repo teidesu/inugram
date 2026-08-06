@@ -7,4 +7,5 @@ pub(crate) mod deadline;
 pub(crate) mod error;
 pub(crate) mod globals;
 pub(crate) mod registry;
+pub(crate) mod shape;
 pub(crate) mod timers;
