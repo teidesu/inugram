@@ -54,9 +54,7 @@ fn setup(grants: &[&str]) -> Fixture {
 const CHAT: &str = r#"{"type":"chat","dialogId":-1001,"topicId":7,"account":1}"#;
 const DIALOGS: &str = r#"{"type":"dialogs","account":0}"#;
 
-fn eval_json(ctx: &Context, code: &str) -> String {
-    ctx.with(|ctx| ctx.eval::<String, _>(format!("JSON.stringify({code})")).unwrap())
-}
+use crate::testing::util::eval_json;
 
 #[test]
 fn current_screen_answers_null_for_every_shape_of_nothing() {

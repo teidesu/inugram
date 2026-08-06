@@ -406,19 +406,11 @@ fn setup(name: &str) -> Fixture {
 }
 
 fn run(f: &Fixture, code: &str) {
-    f.ctx.with(|ctx| match ctx.eval::<(), _>(code) {
-        Ok(()) => {}
-        Err(rquickjs::Error::Exception) => panic!("{}", crate::tg::rpc::format_exception(&ctx)),
-        Err(e) => panic!("{e:?}"),
-    });
+    crate::testing::util::eval_unit(&f.ctx, code)
 }
 
 fn eval(f: &Fixture, code: &str) -> String {
-    f.ctx.with(|ctx| match ctx.eval::<String, _>(code) {
-        Ok(v) => v,
-        Err(rquickjs::Error::Exception) => panic!("{}", crate::tg::rpc::format_exception(&ctx)),
-        Err(e) => panic!("{e:?}"),
-    })
+    crate::testing::util::eval_string(&f.ctx, code)
 }
 
 /// runs `code` and answers `code:message` for whatever `PluginError` it raised, so a refusal is

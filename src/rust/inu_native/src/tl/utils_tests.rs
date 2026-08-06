@@ -11,13 +11,7 @@ fn setup() -> (Runtime, Context) {
     (rt, ctx)
 }
 
-fn eval(ctx: &Context, code: &str) -> String {
-    ctx.with(|ctx| match ctx.eval::<String, _>(code) {
-        Ok(s) => s,
-        Err(rquickjs::Error::Exception) => panic!("{}", crate::tg::rpc::format_exception(&ctx)),
-        Err(e) => panic!("{e:?}"),
-    })
-}
+use crate::testing::util::eval_string as eval;
 
 /// what a caught `inu.PluginError` is worth branching on, or the thrown value's type name
 fn code_of(ctx: &Context, code: &str) -> String {

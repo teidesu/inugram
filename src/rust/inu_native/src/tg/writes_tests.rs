@@ -34,14 +34,7 @@ struct TestWritesHost {
     transfers_fail: Cell<bool>,
     /// the handle table `PluginReads.mint` stands for, so a send can answer with the message
     /// the server made rather than with nothing
-    objects: RefCell<HashMap<i64, FakeTl>>,
-    next_handle: Cell<i64>,
-}
-
-/// one TL object behind a handle: its constructor name, and each field as a wire
-struct FakeTl {
-    name: String,
-    fields: Vec<(String, String)>,
+    handles: crate::testing::util::FakeHandles,
 }
 
 /// what the download hands back, and what `getMessageFile` says is on disk
@@ -59,21 +52,14 @@ impl TestWritesHost {
             downloaded: RefCell::new(None),
             message_files: Cell::new(0),
             transfers_fail: Cell::new(false),
-            objects: RefCell::new(HashMap::new()),
-            next_handle: Cell::new(0),
+            handles: crate::testing::util::FakeHandles::default(),
         })
     }
 
     /// a *read-only* object handle, which is what `PluginReads.mint(readOnly = true)` answers
     /// with - everything an `Account` hands over is read-only
     fn handle_wire(&self, name: &str, fields: Vec<(&str, String)>) -> String {
-        let id = self.next_handle.get() + 1;
-        self.next_handle.set(id);
-        self.objects.borrow_mut().insert(
-            id,
-            FakeTl { name: name.to_string(), fields: fields.into_iter().map(|(k, v)| (k.to_string(), v)).collect() },
-        );
-        format!("HOR{id}")
+        self.handles.mint_wire(name, fields)
     }
 
     /// the message a send or an edit resolves with. Its text is read back out of the request,
@@ -273,32 +259,16 @@ impl ReadsHost for SelfOnlyReadsHost {
 /// proxy traps first, which is the half of that rule this file's oracle asserts.
 impl TlHost for TestWritesHost {
     fn tl_get(&self, handle: i64, key: &str) -> String {
-        let objects = self.objects.borrow();
-        let Some(object) = objects.get(&handle) else {
-            return "Phandle-expired\n\n\n\nexpired".to_string();
-        };
-        if key == "_" {
-            return format!("S{}", object.name);
-        }
-        match object.fields.iter().find(|(name, _)| name == key) {
-            Some((_, wire)) => wire.clone(),
-            None => "N".to_string(),
-        }
+        self.handles.get(handle, key)
     }
     fn tl_set(&self, _handle: i64, _key: &str, _value: &str) -> Option<String> {
         Some("Pforbidden\n\n\n\nthe fake host takes no writes".to_string())
     }
     fn tl_has(&self, handle: i64, key: &str) -> i32 {
-        let objects = self.objects.borrow();
-        match objects.get(&handle) {
-            None => -1,
-            Some(object) => i32::from(key == "_" || object.fields.iter().any(|(name, _)| name == key)),
-        }
+        self.handles.has(handle, key)
     }
     fn tl_own_keys(&self, handle: i64) -> Option<String> {
-        let objects = self.objects.borrow();
-        let object = objects.get(&handle)?;
-        Some(object.fields.iter().map(|(name, _)| name.as_str()).collect::<Vec<_>>().join(&SEPARATOR.to_string()))
+        self.handles.own_keys(handle)
     }
     fn tl_copy(&self, _handle: i64) -> Option<String> {
         None
@@ -442,19 +412,7 @@ fn settle(rt: &Runtime, ctx: &Context, state: &Rc<WritesState>, host: &Rc<TestWr
     panic!("the host queue never drained");
 }
 
-fn catch_json(ctx: &Context, code: &str) -> String {
-    ctx.with(|ctx| {
-        ctx.eval::<String, _>(format!(
-            r#"(() => {{
-                try {{ {code}; return 'no-throw'; }}
-                catch (e) {{
-                    return JSON.stringify([e instanceof inu.PluginError, e.code, e.grant ?? null]);
-                }}
-            }})()"#
-        ))
-        .unwrap()
-    })
-}
+use crate::testing::util::catch_json;
 
 /// runs `code` with `__out` collecting whatever it pushes, settling the host until it is done
 fn run_async(grants: &[&str], code: &str) -> (String, Rc<TestWritesHost>) {
@@ -740,7 +698,7 @@ fn get_message_file_is_synchronous_and_gated_on_the_messages_scope() {
     let (_rt, ctx, host, _w, _r, _a, _d) = setup(&["account.read(peers)"]);
     assert_eq!(
         catch_json(&ctx, "inu.account().getMessageFile({ _: 'message', id: 1 })"),
-        r#"[true,"not-granted","account.read(messages)"]"#,
+        r#"[true,"not-granted","account.read(messages)","missing grant: account.read(messages)"]"#,
     );
     assert_eq!(host.message_files.get(), 0, "a refused read must not cross");
 

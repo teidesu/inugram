@@ -53,28 +53,12 @@ pub(crate) fn setup(grants: &[&str], accounts: &str) -> Fixture {
     (rt, ctx, host, state, logs)
 }
 
-fn eval(ctx: &Context, code: &str) {
-    ctx.with(|ctx| ctx.eval::<(), _>(code).unwrap());
-}
+use crate::testing::util::eval_unit as eval;
 
-fn eval_json(ctx: &Context, code: &str) -> String {
-    ctx.with(|ctx| ctx.eval::<String, _>(format!("JSON.stringify({code})")).unwrap())
-}
+use crate::testing::util::eval_json;
 
 /// evaluates `code`, returning the caught error as `[isPluginError, code, grant, message]` json
-fn catch_json(ctx: &Context, code: &str) -> String {
-    ctx.with(|ctx| {
-        ctx.eval::<String, _>(format!(
-            r#"(() => {{
-                try {{ {code}; return 'no-throw'; }}
-                catch (e) {{
-                    return JSON.stringify([e instanceof inu.PluginError, e.code, e.grant ?? null, e.message]);
-                }}
-            }})()"#
-        ))
-        .unwrap()
-    })
-}
+use crate::testing::util::catch_json;
 
 #[test]
 fn account_needs_no_grant_and_defaults_to_the_selected_slot() {

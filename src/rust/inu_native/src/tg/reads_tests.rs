@@ -21,11 +21,6 @@ struct Entity {
     access_hash: i64,
 }
 
-struct FakeObject {
-    name: String,
-    fields: Vec<(String, String)>,
-}
-
 /// stands in for `PluginReads` + `TlHandles`: a tiny cache, a handle table over it, and a
 /// record of what the prelude actually asked for - which is where the spec normalization is
 /// observed rather than assumed.
@@ -37,8 +32,7 @@ struct TestReadsHost {
     messages: RefCell<Vec<(i64, i32)>>,
     dialogs: RefCell<Vec<i64>>,
     self_id: Cell<i64>,
-    objects: RefCell<HashMap<i64, FakeObject>>,
-    next_handle: Cell<i64>,
+    handles: crate::testing::util::FakeHandles,
     reads: RefCell<Vec<(i32, i32, String)>>,
     resolves: RefCell<Vec<(i64, String, i32)>>,
     fetches: RefCell<Vec<(i64, i32, String)>>,
@@ -60,15 +54,8 @@ impl TestReadsHost {
         host
     }
 
-    fn mint(&self, object: FakeObject) -> i64 {
-        let id = self.next_handle.get() + 1;
-        self.next_handle.set(id);
-        self.objects.borrow_mut().insert(id, object);
-        id
-    }
-
     fn handle_wire(&self, object: FakeObject) -> String {
-        format!("HOR{}", self.mint(object))
+        self.handles.mint_wire(&object.name, object.fields)
     }
 
     fn entity(&self, id: i64) -> Option<Entity> {
@@ -378,17 +365,7 @@ impl ReadsHost for TestReadsHost {
 
 impl TlHost for TestReadsHost {
     fn tl_get(&self, handle: i64, key: &str) -> String {
-        let objects = self.objects.borrow();
-        let Some(object) = objects.get(&handle) else {
-            return "Phandle-expired\n\n\n\nexpired".to_string();
-        };
-        if key == "_" {
-            return format!("S{}", object.name);
-        }
-        match object.fields.iter().find(|(name, _)| name == key) {
-            Some((_, wire)) => wire.clone(),
-            None => "N".to_string(),
-        }
+        self.handles.get(handle, key)
     }
 
     // deliberately *not* the read-only message: a test asserting on that one must be reading
@@ -398,19 +375,11 @@ impl TlHost for TestReadsHost {
     }
 
     fn tl_has(&self, handle: i64, key: &str) -> i32 {
-        let objects = self.objects.borrow();
-        match objects.get(&handle) {
-            None => -1,
-            Some(object) => i32::from(key == "_" || object.fields.iter().any(|(name, _)| name == key)),
-        }
+        self.handles.has(handle, key)
     }
 
     fn tl_own_keys(&self, handle: i64) -> Option<String> {
-        let objects = self.objects.borrow();
-        let object = objects.get(&handle)?;
-        let mut keys = vec!["_".to_string()];
-        keys.extend(object.fields.iter().map(|(name, _)| name.clone()));
-        Some(keys.join(","))
+        self.handles.own_keys(handle)
     }
 
     fn tl_copy(&self, _handle: i64) -> Option<String> {
@@ -418,7 +387,7 @@ impl TlHost for TestReadsHost {
     }
 
     fn tl_release(&self, handle: i64) {
-        self.objects.borrow_mut().remove(&handle);
+        self.handles.release(handle)
     }
 }
 
@@ -466,13 +435,7 @@ fn setup(grants: &[&str]) -> Fixture {
 
 const ALL_GRANTS: &[&str] = &["account.read(self,peers,dialogs,messages)"];
 
-fn eval_json(ctx: &Context, code: &str) -> String {
-    ctx.with(|ctx| match ctx.eval::<String, _>(format!("JSON.stringify({code})")) {
-        Ok(s) => s,
-        Err(rquickjs::Error::Exception) => panic!("{}", format_exception(&ctx)),
-        Err(e) => panic!("{e:?}"),
-    })
-}
+use crate::testing::util::{eval_json, FakeObject};
 
 /// for the reads whose *answer* does not matter: `JSON.stringify` on a view would ask the fake
 /// host for a snapshot it deliberately cannot make
@@ -485,19 +448,7 @@ fn eval_void(ctx: &Context, code: &str) {
 }
 
 /// evaluates `code`, returning the caught error as `[isPluginError, code, grant, message]` json
-fn catch_json(ctx: &Context, code: &str) -> String {
-    ctx.with(|ctx| {
-        ctx.eval::<String, _>(format!(
-            r#"(() => {{
-                try {{ {code}; return 'no-throw'; }}
-                catch (e) {{
-                    return JSON.stringify([e instanceof inu.PluginError, e.code, e.grant ?? null, e.message]);
-                }}
-            }})()"#
-        ))
-        .unwrap()
-    })
-}
+use crate::testing::util::catch_json;
 
 /// drives the fake host the way `PluginReads` drives the real one: drain the microtask queue,
 /// answer whatever it parked, repeat

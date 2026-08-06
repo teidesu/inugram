@@ -83,13 +83,7 @@ fn setup_with(lifecycle: Rc<Lifecycle>, grants: &[&str]) -> Fixture {
     (rt, ctx, host, state, logs)
 }
 
-fn eval(ctx: &Context, source: &str) {
-    ctx.with(|ctx| match ctx.eval::<(), _>(source) {
-        Ok(()) => {}
-        Err(rquickjs::Error::Exception) => panic!("{}", format_exception(&ctx)),
-        Err(e) => panic!("{e:?}"),
-    });
-}
+use crate::testing::util::eval_unit as eval;
 
 fn eval_err(ctx: &Context, source: &str) -> String {
     ctx.with(|ctx| match ctx.eval::<Value, _>(source) {
