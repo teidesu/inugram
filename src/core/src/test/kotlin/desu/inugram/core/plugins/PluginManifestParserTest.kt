@@ -29,7 +29,6 @@ class PluginManifestParserTest {
         val m = PluginManifestParser.parse(full)
         assertEquals("My awesome plugin", m.name)
         assertEquals("teidesu", m.author)
-        assertEquals("http://example.com", m.namespace)
         assertEquals("1.0", m.version)
         assertEquals("This script rocks.", m.description)
         assertEquals("https://my.cdn.com/icon.png", m.icon)
@@ -38,20 +37,9 @@ class PluginManifestParserTest {
     }
 
     @Test
-    fun idCombinesNamespaceAndName() {
-        assertEquals("http://example.com/My awesome plugin", PluginManifestParser.parse(full).id)
-    }
-
-    @Test
-    fun idFallsBackToNameWithoutNamespace() {
-        val m = PluginManifestParser.parse(
-            """
-            // ==UserScript==
-            // @name solo
-            // ==/UserScript==
-            """.trimIndent(),
-        )
-        assertEquals("solo", m.id)
+    fun namespaceIsJustAnotherHeaderLine() {
+        val m = PluginManifestParser.parse(full)
+        assertEquals(listOf("http://example.com"), m.raw["namespace"])
     }
 
     @Test
@@ -74,13 +62,13 @@ class PluginManifestParserTest {
             """
             // ==UserScript==
             // @name g
-            // @grant inu.kv, fetch
-            // @grant inu.kv
-            // @grant inu.clipboard.read
+            // @grant kv, fetch
+            // @grant kv
+            // @grant clipboard.read
             // ==/UserScript==
             """.trimIndent(),
         )
-        assertEquals(listOf("inu.kv", "fetch", "inu.clipboard.read"), m.grants)
+        assertEquals(listOf("kv", "fetch", "clipboard.read"), m.grants)
     }
 
     @Test
@@ -89,13 +77,13 @@ class PluginManifestParserTest {
             """
             // ==UserScript==
             // @name g
-            // @grant inu.interceptRpc(users.getUsers,channels.getChannels), inu.kv
+            // @grant interceptRpc(users.getUsers,channels.getChannels), kv
             // @grant fetch(google.com,bing.com)
             // ==/UserScript==
             """.trimIndent(),
         )
         assertEquals(
-            listOf("inu.interceptRpc(users.getUsers,channels.getChannels)", "inu.kv", "fetch(google.com,bing.com)"),
+            listOf("interceptRpc(users.getUsers,channels.getChannels)", "kv", "fetch(google.com,bing.com)"),
             m.grants,
         )
     }

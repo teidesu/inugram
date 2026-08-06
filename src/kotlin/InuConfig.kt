@@ -143,7 +143,9 @@ object InuConfig {
     @JvmField
     val PLUGINS_ENABLED = BoolItem("plugins_enabled", false)
 
-    // json: ordered [{id, enabled}] — middleware order + per-plugin enabled. device-local, not exported
+    // json: ordered [{id, file, enabled}] — install id + source file + middleware order + per-plugin
+    // enabled. the install ids live here and nowhere else, so losing it wipes every plugin's storage.
+    // device-local, not exported
     @JvmField
     val PLUGINS_STATE = StringItem("plugins_state", "", exportable = false)
 

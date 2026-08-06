@@ -1,0 +1,139 @@
+// ==UserScript==
+// @name         send intercept test
+// @author       teidesu
+// @version      1.0
+// @description  asserts inu.interceptSendMessage normalizes all four send methods into one OutgoingMessage, that a rewrite lands on the request that goes out and that a drop is total
+// @grant        interceptSendMessage
+// @plugin-api   1
+// @platform     android
+// ==/UserScript==
+
+function pass(label, detail) {
+  console.log(detail === undefined ? `PASS ${label}` : `PASS ${label}: ${detail}`)
+}
+
+function fail(label, detail) {
+  console.error(`FAIL ${label}: ${detail}`)
+}
+
+function check(label, ok, detail) {
+  if (ok) pass(label, detail)
+  else fail(label, detail)
+}
+
+// -- the surface --
+
+check('interceptSendMessage exists', typeof inu.interceptSendMessage === 'function')
+
+const disposer = inu.interceptSendMessage(() => 'send')
+check('registering hands back a disposer', typeof disposer === 'function')
+disposer()
+disposer()
+pass('disposing twice is a no-op')
+
+// registered and disposed before anything could be sent; `neverRan` re-asserts it below
+let neverRan = 0
+inu.interceptSendMessage(() => { neverRan += 1; return 'drop' })()
+
+// -- the chain --
+//
+// the harness pushes one of each of the four send methods plus a second sendMessage whose text says
+// to drop it, then hands `__report` what the *host* was actually asked to send. so the rewrite
+// assertions are against the request that went out rather than against this file's own bookkeeping,
+// and a drop is proved by the send being absent from that list.
+
+const seen = []
+const refusals = []
+const silentRefusals = []
+
+inu.interceptSendMessage((m, account) => {
+  seen.push({
+    peer: m.peer,
+    text: m.text.text,
+    media: m.media.length,
+    silent: m.silent,
+    isEdit: m.isEdit,
+    editMessageId: m.editMessageId,
+    replyToMessageId: m.replyToMessageId,
+    topicId: m.topicId,
+    scheduleDate: m.scheduleDate,
+    account: typeof account === 'object' && account !== null && typeof account.id === 'number',
+  })
+
+  if (m.text.text === 'drop me') return 'drop'
+
+  // a shape change is refused where it is decidable, rather than silently swapping the method the
+  // app is already awaiting a response type for
+  try {
+    m.media = m.media.concat([{ _: 'inputMediaEmpty' }])
+    refusals.push('no-throw')
+  } catch (e) {
+    refusals.push(e.code)
+  }
+
+  m.text = { text: `[${m.text.text}]`, entities: [] }
+  // an edit is never sent silently, and the field is simply not on the request - which is why the
+  // shape is read off the method rather than probed: a flag-clear field is omitted from reads too
+  try {
+    m.silent = true
+    silentRefusals.push('no-throw')
+  } catch (e) {
+    silentRefusals.push(e.code)
+  }
+  return 'send'
+})
+
+globalThis.__report = (sent) => {
+  check('the disposed middleware never ran', neverRan === 0, String(neverRan))
+  check('every send reached the middleware', seen.length === 5, String(seen.length))
+
+  const [text, media, album, edit, dropped] = seen
+
+  check('a text send carries no media', text.media === 0 && text.text === 'hi', JSON.stringify(text))
+  check('a dialog id is what a peer reads as', text.peer === 7, String(text.peer))
+  check('a channel send reads as a negative dialog id', media.peer === -9, String(media.peer))
+  check('a basic group send reads as a negative dialog id', album.peer === -5, String(album.peer))
+
+  check('a media send carries exactly one', media.media === 1, String(media.media))
+  check('a media send carries its caption as the text', media.text === 'cap', media.text)
+  check('silent is read off the request', media.silent === true && text.silent === false)
+
+  check('an album carries one media per item', album.media === 2, String(album.media))
+  check("an album's caption is its first item's", album.text === 'one', album.text)
+
+  check('an edit says so', edit.isEdit === true && edit.editMessageId === 42, JSON.stringify(edit))
+  check('a send is not an edit', text.isEdit === false && text.editMessageId === null)
+
+  check('an unset reply reads as null', text.replyToMessageId === null && text.topicId === null)
+  check('an unscheduled send reads as null', text.scheduleDate === null)
+  check('the account handle comes with it', seen.every(s => s.account))
+  check('the dropped send was seen before it was dropped', dropped.text === 'drop me', dropped.text)
+
+  check(
+    'only an edit refuses to be sent silently',
+    silentRefusals.join(',') === 'no-throw,no-throw,no-throw,unsupported',
+    silentRefusals.join(','),
+  )
+  check(
+    'attaching media is refused rather than swapping the method',
+    refusals.length === 4 && refusals.every(code => code === 'unsupported'),
+    JSON.stringify(refusals),
+  )
+
+  // what actually went out
+  check('a dropped send never reaches the network', sent.length === 4, String(sent.length))
+  check(
+    'the rewritten text is what goes out',
+    sent.map(s => JSON.parse(s).message).join(',') === '[hi],[cap],,[fixed]',
+    sent.map(s => JSON.parse(s).message).join(','),
+  )
+  check(
+    "an album's caption is rewritten on its first item",
+    JSON.parse(sent[2]).multi_media[0].message === '[one]',
+    sent[2],
+  )
+  check('a flag written by a middleware goes out', JSON.parse(sent[0]).silent === true, sent[0])
+  check('nothing that went out says "drop me"', sent.every(s => !s.includes('drop me')))
+
+  console.log('send intercept test done')
+}

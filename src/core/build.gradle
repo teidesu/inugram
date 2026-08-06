@@ -21,12 +21,102 @@ compileTestKotlin {
     }
 }
 
+// the plugin bridge (src/kotlin/helpers/plugins) has no other test target: it lives in the app
+// module, which needs the whole android toolchain. so it is compiled *here*, into a source set of
+// its own, against the doubles in src/bridgeTest/fakes and the generated stock TL tree in
+// src/bridgeTest/tlstubs. nothing of this reaches the app build - the module's main jar is
+// untouched. see src/bridgeTest/README.md.
+// canonical, because this module is reached through a symlink (worktree/InuCore -> src/core) and
+// `$projectDir/..` would then point inside the worktree instead of at the fork's own src/
+def forkRoot = projectDir.canonicalFile.parentFile.parentFile
+def bridgeSources = new File(projectDir.canonicalFile.parentFile, 'kotlin/helpers/plugins')
+def tlStubsDir = new File(projectDir, 'src/bridgeTest/tlstubs')
+
+// what the harness cannot compile: these reach Context/Activity/AlarmManager or (QuickJs) the JNI
+// library itself. QuickJs and PluginManager have doubles in src/bridgeTest/kotlin instead. anything
+// added to the bridge is in the harness by default, which is the point - dropping a file here is a
+// deliberate act.
+def bridgeExcluded = [
+    'PluginApi.kt',
+    // the whole of it is android.graphics: Bitmap, Canvas, Paint, Typeface. The half that is
+    // decidable without a rasterizer is in rust (`canvas.rs`/`geom.rs`) and is tested there
+    'PluginCanvas.kt',
+    'PluginIcons.kt',
+    'PluginManager.kt',
+    // reaches LaunchActivity and the concrete fragment classes; the part that is decidable without
+    // them is ScreenStack, in the module's own main source set and tested there
+    'PluginScreens.kt',
+    'PluginUi.kt',
+    // every op it can run goes through lsplant, whose entry points are `external` and exist only
+    // on a device; the half that is decidable without one is the registry, which lives in rust
+    // (`xposed.rs`) and is tested there
+    'PluginXposed.kt',
+    'QuickJs.kt',
+]
+
+sourceSets {
+    bridgeTest {
+        java.srcDirs = ['src/bridgeTest/fakes', 'src/bridgeTest/tlstubs']
+        // the java roots are listed for kotlin too: joint compilation is what lets the bridge
+        // resolve org.telegram.* while javac still owns those files
+        kotlin.srcDirs = ['src/bridgeTest/kotlin', 'src/bridgeTest/fakes', 'src/bridgeTest/tlstubs', bridgeSources]
+        kotlin.exclude bridgeExcluded.collect { "**/$it" }
+        resources.srcDirs = []
+        compileClasspath += sourceSets.main.output
+        runtimeClasspath += sourceSets.main.output
+    }
+}
+
+// 17k lines derived from stock in under a second, so it is built rather than committed. gradle's
+// own up-to-date check is what makes that cheap: with the tree present and stock unchanged the task
+// is skipped and pnpm is never invoked, so a checkout without node still builds after one run
+tasks.register('generateTlStubs', Exec) {
+    description = 'Regenerates the compile-only stock TL tree the bridge harness reflects over.'
+    group = 'build'
+    inputs.files(fileTree(new File(forkRoot, 'worktree/TMessagesProj/src/main/java/org/telegram/tgnet')) {
+        include '**/*.java'
+    })
+    inputs.file(new File(forkRoot, 'scripts/generate-tl-stubs.ts'))
+    inputs.file(new File(forkRoot, 'scripts/tl-parser.ts'))
+    outputs.dir(tlStubsDir)
+    workingDir forkRoot
+    commandLine 'pnpm', 'run', 'generate-tl-stubs'
+}
+
+tasks.named('compileBridgeTestJava') { dependsOn 'generateTlStubs' }
+
+compileBridgeTestKotlin {
+    dependsOn 'generateTlStubs'
+    kotlinOptions {
+        jvmTarget = "1.8"
+    }
+}
+
 dependencies {
     testImplementation 'junit:junit:4.13.2'
     testImplementation "org.jetbrains.kotlin:kotlin-test:2.1.20"
     testImplementation "org.jetbrains.kotlin:kotlin-test-junit:2.1.20"
+
+    bridgeTestImplementation 'junit:junit:4.13.2'
+    bridgeTestImplementation "org.jetbrains.kotlin:kotlin-test:2.1.20"
+    bridgeTestImplementation "org.jetbrains.kotlin:kotlin-test-junit:2.1.20"
+    // android ships org.json; this is the reference implementation of the same api. NOT the same
+    // code: android's JSONObject is LinkedHashMap-backed, so `keys()` is insertion-ordered, while
+    // this one is HashMap-backed and its order is arbitrary. Nothing here may assert on key order
+    // or on a whole `toString()` - see src/bridgeTest/README.md
+    bridgeTestImplementation 'org.json:json:20260719'
 }
 
 test {
     useJUnit()
 }
+
+tasks.register('bridgeTest', Test) {
+    description = 'Runs the plugin bridge tests (src/kotlin/helpers/plugins).'
+    group = 'verification'
+    testClassesDirs = sourceSets.bridgeTest.output.classesDirs
+    classpath = sourceSets.bridgeTest.runtimeClasspath
+    useJUnit()
+}
+
+tasks.named('check') { dependsOn 'bridgeTest' }

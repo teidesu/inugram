@@ -1,13 +1,15 @@
 package desu.inugram.core.plugins
 
 /**
- * Parsed userscript-style metadata header of a plugin. v0 only consumes the descriptive/identity
- * directives; [grants], [pluginApi], [platform] are parsed already so the engine layer can gate on
- * them without re-parsing.
+ * Parsed userscript-style metadata header of a plugin. v0 only consumes the descriptive directives;
+ * [grants], [pluginApi], [platform] are parsed already so the engine layer can gate on them without
+ * re-parsing.
+ *
+ * Nothing here is identity: that is [PluginInstall], minted at install time. [name] is a label, two
+ * plugins may share one, and there is no `@namespace`.
  */
 data class PluginManifest(
     val name: String,
-    val namespace: String?,
     val author: String?,
     val version: String?,
     val description: String?,
@@ -19,10 +21,6 @@ data class PluginManifest(
     /** every directive, base key lowercased, in declaration order; backs `inu.info().header` */
     val raw: Map<String, List<String>>,
 ) {
-    /** stable identity for ordering/enable persistence — userscript namespace+name convention */
-    val id: String get() = if (namespace.isNullOrBlank()) name else "$namespace/$name"
-
-    /** localized description with language fallback (exact → primary subtag → base) */
     fun description(lang: String?): String? {
         if (lang == null) return description
         val key = lang.lowercase()
@@ -109,7 +107,6 @@ object PluginManifestParser {
 
         return PluginManifest(
             name = name,
-            namespace = raw["namespace"]?.firstOrNull()?.takeIf { it.isNotBlank() },
             author = raw["author"]?.firstOrNull()?.takeIf { it.isNotBlank() },
             version = raw["version"]?.firstOrNull()?.takeIf { it.isNotBlank() },
             description = raw["description"]?.firstOrNull()?.takeIf { it.isNotBlank() },

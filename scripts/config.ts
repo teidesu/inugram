@@ -12,6 +12,20 @@ export const seriesFile = join(rootDir, 'series')
 export const upstreamCommitFile = join(rootDir, 'upstream-commit')
 export const assetsDir = join(rootDir, 'src/res/assets')
 
+export interface SubmodulePatch {
+  submodule: string
+  patch: string
+}
+
+// changes carried against a submodule's pinned commit, applied to its working tree after
+// `git submodule update --init`. the pin stays upstream's, so nothing here needs a fork.
+export const submodulePatches: SubmodulePatch[] = [
+  {
+    submodule: 'TMessagesProj_App/jni/lsplant',
+    patch: join(rootDir, 'patches-native/lsplant-c-abi.patch'),
+  },
+]
+
 export const debugAppId = 'desu.inugram.beta'
 
 export interface ForkSyncFile {

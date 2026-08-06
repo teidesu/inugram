@@ -24,6 +24,7 @@ import android.widget.LinearLayout
 import android.widget.ScrollView
 import androidx.core.content.edit
 import desu.inugram.InuConfig
+import desu.inugram.core.plugins.ActionRow
 import desu.inugram.helpers.InuUtils
 import desu.inugram.helpers.StickerDownloadHelper
 import desu.inugram.helpers.WebAppHelper
@@ -32,9 +33,14 @@ import desu.inugram.helpers.font.FontImportHelper
 import desu.inugram.helpers.media.MediaSendDebugHelper
 import desu.inugram.helpers.menu.MessageMenuConfig
 import desu.inugram.helpers.menu.reorderByMenu
+import desu.inugram.helpers.plugins.QuickJs
+import desu.inugram.helpers.plugins.ui.PluginActions
 import desu.inugram.helpers.translate.TranslateHelper
 import desu.inugram.ui.MessageDetailsActivity
 import desu.inugram.ui.showInputDialog
+import java.io.File
+import java.util.Calendar
+import kotlin.math.roundToInt
 import org.telegram.messenger.AndroidUtilities
 import org.telegram.messenger.BuildVars
 import org.telegram.messenger.ChatObject
@@ -53,6 +59,7 @@ import org.telegram.messenger.Utilities
 import org.telegram.messenger.utils.tlutils.TLKeyboardHelper
 import org.telegram.tgnet.TLRPC
 import org.telegram.tgnet.tl.TL_keyboard
+import org.telegram.ui.ActionBar.ActionBarMenuSubItem
 import org.telegram.ui.ActionBar.ActionBarPopupWindow
 import org.telegram.ui.ActionBar.AlertDialog
 import org.telegram.ui.ActionBar.BottomSheet
@@ -362,6 +369,115 @@ object ChatHelper {
         icons.add(R.drawable.msg_info)
 
         applyMessageMenuOrder(items, options, icons)
+        reservePluginItems(items, options, icons, activity, selectedObject, selectedObjectGroup)
+    }
+
+    /**
+     * one message menu's plugin rows, from the gesture that reserved them to the tap that
+     * dispatches one.
+     *
+     * A value rather than fields on this object because the two things that can end the wait - the
+     * render landing and [PluginActions.RENDER_BUDGET_MS] expiring - both settle it, and whichever
+     * loses has to be able to tell that it lost. [done] is that answer, and it is per menu because
+     * the ui thread can be building the next menu while the render for the previous one is still
+     * on its way back.
+     */
+    private class MessageMenu(val surface: PluginActions.Surface) {
+        var rows: List<ActionRow<QuickJs>> = emptyList()
+        val cells = HashMap<Int, ActionBarMenuSubItem>()
+        var done = false
+        var pending: Runnable? = null
+    }
+
+    private var messageMenu: MessageMenu? = null
+
+    private fun reservePluginItems(
+        items: ArrayList<CharSequence>,
+        options: ArrayList<Int>,
+        icons: ArrayList<Int>,
+        activity: ChatActivity,
+        selectedObject: MessageObject,
+        selectedObjectGroup: MessageObject.GroupedMessages?,
+    ) {
+        messageMenu = null
+
+        val reserved = PluginActions.rowCount(PluginActions.KIND_MESSAGE)
+        if (reserved == 0) return
+
+        val messageIds = selectedObjectGroup?.messages?.map { it.id } ?: listOf(selectedObject.id)
+        val menu = MessageMenu(
+            PluginActions.Surface.message(
+                activity.currentAccount,
+                activity.dialogId,
+                activity.topicId,
+                messageIds,
+            )
+        )
+        messageMenu = menu
+        repeat(reserved) { index ->
+            items.add("…")
+            options.add(PluginActions.optionIdAt(index))
+            icons.add(R.drawable.msg_settings_old)
+        }
+        PluginActions.render(PluginActions.KIND_MESSAGE, menu.surface) { rows ->
+            if (messageMenu !== menu || menu.done) return@render
+            menu.rows = rows
+            finishPluginItems(menu)
+        }
+    }
+
+    @JvmStatic
+    fun bindMenuCell(cell: ActionBarMenuSubItem, option: Int) {
+        if (option < PluginActions.OPTION_BASE) return
+        val menu = messageMenu ?: return
+        val index = option - PluginActions.OPTION_BASE
+        // a menu the budget already gave up on is built *after* it settled, so its cells have
+        // nobody left to fill them in and would sit there reading "…"
+        if (menu.done) bindRow(menu, index, cell) else menu.cells[index] = cell
+    }
+
+    /**
+     * the menu is built by the same gesture that opens it and a row's label can only be had from
+     * globalQueue, so the rows are reserved at their measured size and the show is parked until they
+     * are filled in. Stock already parks it for language detection ([onLangDetectionDone]), and past
+     * [PluginActions.RENDER_BUDGET_MS] the reserved rows are dropped rather than shown blank.
+     */
+    @JvmStatic
+    fun gateMessageMenu(showMenu: Runnable): Runnable = Runnable {
+        val menu = messageMenu
+        if (menu == null || menu.done) {
+            showMenu.run()
+            return@Runnable
+        }
+        menu.pending = showMenu
+        AndroidUtilities.runOnUIThread({
+            if (menu.pending !== showMenu || menu.done) return@runOnUIThread
+            finishPluginItems(menu)
+        }, PluginActions.RENDER_BUDGET_MS)
+    }
+
+    private fun bindRow(menu: MessageMenu, index: Int, cell: ActionBarMenuSubItem) {
+        val row = menu.rows.getOrNull(index)
+        if (row == null) cell.visibility = View.GONE else cell.setTextAndIcon(row.text, R.drawable.msg_settings_old)
+    }
+
+    private fun finishPluginItems(menu: MessageMenu) {
+        menu.done = true
+        for ((index, cell) in menu.cells) bindRow(menu, index, cell)
+        // the cells are the popup's views and this is the last thing that binds them: a menu is
+        // built in one turn and filled in the next, so holding them past here keeps the closed
+        // popup's view tree - and the ChatActivity behind it - reachable until the next menu opens
+        menu.cells.clear()
+        val pending = menu.pending ?: return
+        menu.pending = null
+        pending.run()
+    }
+
+    private fun dispatchPluginItem(option: Int): Boolean {
+        val menu = messageMenu ?: return true
+        val row = PluginActions.rowAt(menu.rows, option) ?: return true
+        PluginActions.dispatch(row, menu.surface)
+        return true
     }
 
 
@@ -546,6 +662,7 @@ object ChatHelper {
         selectedObject: MessageObject,
         selectedObjectGroup: MessageObject.GroupedMessages?
     ): Boolean {
+        if (option >= PluginActions.OPTION_BASE) return dispatchPluginItem(option)
         when (option) {
             OPTION_SAVE -> {
                 val messages = ArrayList<MessageObject>()

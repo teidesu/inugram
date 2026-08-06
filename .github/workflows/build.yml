@@ -80,6 +80,30 @@ jobs:
 
       - run: pnpm install --frozen-lockfile
 
+      # rquickjs-sys always runs bindgen, which loads the clang C api; the runner image ships the
+      # clang drivers without libclang.so
+      - name: install libclang
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y --no-install-recommends libclang-dev
+
+      - name: cache cargo
+        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            src/rust/inu_native/target
+          key: ${{ runner.os }}-cargo-${{ hashFiles('src/rust/inu_native/Cargo.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-cargo-
+
+      # the plugin engine's own suite, including every bundled oracle; ubuntu-latest already ships
+      # rustup and a stable toolchain
+      - name: test (plugin engine)
+        working-directory: src/rust/inu_native
+        run: cargo test --locked
+
       - uses: actions/setup-java@c1e323688fd81a25caa38c78aa6df2d33d3e20d9 # v4
         with:
           distribution: temurin
@@ -99,6 +123,11 @@ jobs:
 
       - name: set up worktree
         run: pnpm run setup -- --no-stgit
+
+      # the node --check loop plus both tsc projects: the plugin contract, and the bundled plugins
+      # against it - a bundled oracle that lost a member reads as a refusal and passes without this
+      - name: typecheck (plugin contract + bundled plugins)
+        run: pnpm run typecheck-plugins
 
       - name: compute build info
         id: info
@@ -125,6 +154,11 @@ jobs:
           echo 'org.gradle.parallel=true' >> ~/.gradle/gradle.properties
           echo 'org.gradle.jvmargs=-Xmx8192m -Dfile.encoding=UTF-8 -XX:+UseParallelGC' >> ~/.gradle/gradle.properties
           echo 'android.native.buildOutput=verbose' >> ~/.gradle/gradle.properties
+
+      # pure JVM, no android toolchain: the shared plugin policy plus the plugin bridge harness
+      - name: test (InuCore + plugin bridge)
+        working-directory: worktree
+        run: ./gradlew --no-daemon :InuCore:check
 
       - name: reset ccache stats
         run: ccache -z
