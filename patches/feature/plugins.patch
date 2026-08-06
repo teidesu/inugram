@@ -1,23 +1,80 @@
 From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
 From: alina sireneva <alina@tei.pet>
-Date: Sat, 18 Jul 2026 20:30:27 +0400
-Subject: Add the QuickJS plugin engine (rpc hooks + rust build wiring)
+Date: Fri, 7 Aug 2026 02:38:51 +0400
+Subject: Add the QuickJS plugin engine (hooks, action rows, native build wiring)
 
 ---
- .../messenger/MessagesController.java         |  1 +
- .../telegram/tgnet/ConnectionsManager.java    |  5 +-
- TMessagesProj_App/build.gradle                | 59 +++++++++++++++++++
- 3 files changed, 64 insertions(+), 1 deletion(-)
+ .gitmodules                                   |  3 +
+ .../telegram/messenger/ApplicationLoader.java |  6 ++
+ .../messenger/MessagesController.java         |  5 ++
+ .../telegram/tgnet/ConnectionsManager.java    |  8 ++-
+ .../java/org/telegram/tgnet/TLObject.java     |  3 +
+ .../java/org/telegram/ui/ChatActivity.java    |  6 +-
+ .../ui/Components/ChatActivityEnterView.java  |  3 +-
+ .../java/org/telegram/ui/LaunchActivity.java  |  1 +
+ .../java/org/telegram/ui/ProfileActivity.java |  2 +-
+ TMessagesProj_App/build.gradle                | 71 ++++++++++++++++++-
+ TMessagesProj_App/jni/CMakeLists.txt          | 13 ++++
+ TMessagesProj_App/jni/lsplant                 |  1 +
+ 12 files changed, 116 insertions(+), 6 deletions(-)
+ create mode 100644 TMessagesProj_App/jni/CMakeLists.txt
+ create mode 160000 TMessagesProj_App/jni/lsplant
 
+diff --git a/.gitmodules b/.gitmodules
+index 0000000..0000000 100644
+--- a/.gitmodules
++++ b/.gitmodules
+@@ -7,3 +7,6 @@
+ [submodule "TMessagesProj/jni/third_party/ffmpeg"]
+ 	path = TMessagesProj/jni/third_party/ffmpeg
+ 	url = https://github.com/FFmpeg/FFmpeg.git
++[submodule "TMessagesProj_App/jni/lsplant"]
++	path = TMessagesProj_App/jni/lsplant
++	url = https://github.com/LSPosed/LSPlant.git
+diff --git a/TMessagesProj/src/main/java/org/telegram/messenger/ApplicationLoader.java b/TMessagesProj/src/main/java/org/telegram/messenger/ApplicationLoader.java
+index 0000000..0000000 100644
+--- a/TMessagesProj/src/main/java/org/telegram/messenger/ApplicationLoader.java
++++ b/TMessagesProj/src/main/java/org/telegram/messenger/ApplicationLoader.java
+@@ -272,6 +272,12 @@ public class ApplicationLoader extends Application {
+             DownloadController.getInstance(a);
+         }
+         BillingController.getInstance().startConnection();
++
++        try {
++            desu.inugram.InuHooks.onAppBoot();
++        } catch (Exception e) {
++            e.printStackTrace();
++        }
+     }
+ 
+     public ApplicationLoader() {
 diff --git a/TMessagesProj/src/main/java/org/telegram/messenger/MessagesController.java b/TMessagesProj/src/main/java/org/telegram/messenger/MessagesController.java
 index 0000000..0000000 100644
 --- a/TMessagesProj/src/main/java/org/telegram/messenger/MessagesController.java
 +++ b/TMessagesProj/src/main/java/org/telegram/messenger/MessagesController.java
-@@ -17829,6 +17829,7 @@ public class MessagesController extends BaseController implements NotificationCe
+@@ -16707,6 +16707,7 @@ public class MessagesController extends BaseController implements NotificationCe
+                     }
+ 
+                     Utilities.stageQueue.postRunnable(() -> {
++                        desu.inugram.helpers.plugins.tg.PluginRpc.onDifference(res.new_messages, res.other_updates, currentAccount);
+                         boolean notifyAbountDifference = true;
+                         if (res instanceof TLRPC.TL_updates_channelDifference || res instanceof TLRPC.TL_updates_channelDifferenceEmpty) {
+                             if (!res.new_messages.isEmpty()) {
+@@ -16965,6 +16966,7 @@ public class MessagesController extends BaseController implements NotificationCe
+                         }
+ 
+                         Utilities.stageQueue.postRunnable(() -> {
++                            desu.inugram.helpers.plugins.tg.PluginRpc.onDifference(res.new_messages, res.other_updates, currentAccount);
+                             if (!res.new_messages.isEmpty() || !res.new_encrypted_messages.isEmpty()) {
+                                 LongSparseArray<ArrayList<MessageObject>> messages = new LongSparseArray<>();
+                                 for (int b = 0; b < res.new_encrypted_messages.size(); b++) {
+@@ -17834,6 +17836,9 @@ public class MessagesController extends BaseController implements NotificationCe
  
      // must be run from Utilities.stageQueue
      public void processUpdates(final TLRPC.Updates updates, boolean fromQueue) {
-+        desu.inugram.helpers.plugins.PluginRpc.onUpdates(updates, currentAccount);
++        if (desu.inugram.helpers.plugins.tg.PluginRpc.onUpdates(this, updates, currentAccount, fromQueue)) {
++            return;
++        }
          ArrayList<Long> needGetChannelsDiff = null;
          boolean needGetDiff = false;
          boolean needReceivedQueue = false;
@@ -31,17 +88,160 @@ index 0000000..0000000 100644
  
 -    private void sendRequestInternal(TLObject object, RequestDelegate onComplete, RequestDelegateTimestamp onCompleteTimestamp, QuickAckDelegate onQuickAck, WriteToSocketDelegate onWriteToSocket, int flags, int datacenterId, int connectionType, boolean immediate, int requestToken) {
 +    public void sendRequestInternal(TLObject object, RequestDelegate onComplete, RequestDelegateTimestamp onCompleteTimestamp, QuickAckDelegate onQuickAck, WriteToSocketDelegate onWriteToSocket, int flags, int datacenterId, int connectionType, boolean immediate, int requestToken) {
-+        if (desu.inugram.helpers.plugins.PluginRpc.maybeIntercept(this, object, onComplete, onCompleteTimestamp, onQuickAck, onWriteToSocket, flags, datacenterId, connectionType, immediate, requestToken, currentAccount)) {
++        if (desu.inugram.helpers.plugins.tg.PluginRpc.maybeIntercept(this, object, onComplete, onCompleteTimestamp, onQuickAck, onWriteToSocket, flags, datacenterId, connectionType, immediate, requestToken, currentAccount)) {
 +            return;
 +        }
          if (BuildVars.LOGS_ENABLED) {
              FileLog.d("send request " + object + " with token = " + requestToken);
          }
+@@ -567,6 +570,7 @@ public class ConnectionsManager extends BaseController {
+ 
+     public void cancelRequest(int token, boolean notifyServer, Runnable onCancelled) {
+         Utilities.stageQueue.postRunnable(() -> {
++            desu.inugram.helpers.plugins.tg.PluginRpc.onRequestCancelled(currentAccount, token, notifyServer, onCancelled);
+             if (onCancelled != null) {
+                 listenCancel(token, () -> {
+                     Utilities.stageQueue.postRunnable(onCancelled);
+@@ -582,6 +586,7 @@ public class ConnectionsManager extends BaseController {
+ 
+     public void cancelRequestsForGuid(int guid) {
+         Utilities.stageQueue.postRunnable(() -> {
++            desu.inugram.helpers.plugins.tg.PluginRpc.onRequestsCancelledForGuid(currentAccount, guid);
+             native_cancelRequestsForGuid(currentAccount, guid);
+         });
+     }
+@@ -590,6 +595,7 @@ public class ConnectionsManager extends BaseController {
+         if (guid == 0) {
+             return;
+         }
++        desu.inugram.helpers.plugins.tg.PluginRpc.onRequestBoundToGuid(currentAccount, requestToken, guid);
+         native_bindRequestToGuid(currentAccount, requestToken, guid);
+     }
+ 
+diff --git a/TMessagesProj/src/main/java/org/telegram/tgnet/TLObject.java b/TMessagesProj/src/main/java/org/telegram/tgnet/TLObject.java
+index 0000000..0000000 100644
+--- a/TMessagesProj/src/main/java/org/telegram/tgnet/TLObject.java
++++ b/TMessagesProj/src/main/java/org/telegram/tgnet/TLObject.java
+@@ -103,6 +103,9 @@ public class TLObject {
+         }
+ 
+         object.readParams(stream, exception);
++        if (desu.inugram.helpers.plugins.tg.PluginDeserialize.hot) {
++            desu.inugram.helpers.plugins.tg.PluginDeserialize.apply(object, constructor);
++        }
+         return object;
+     }
+ 
+diff --git a/TMessagesProj/src/main/java/org/telegram/ui/ChatActivity.java b/TMessagesProj/src/main/java/org/telegram/ui/ChatActivity.java
+index 0000000..0000000 100644
+--- a/TMessagesProj/src/main/java/org/telegram/ui/ChatActivity.java
++++ b/TMessagesProj/src/main/java/org/telegram/ui/ChatActivity.java
+@@ -31938,6 +31938,7 @@ public class ChatActivity extends BaseFragment implements
+                         }
+                     }
+                     scrimPopupWindowItems[a] = cell;
++                    ChatHelper.bindMenuCell(cell, option);
+                     if (option == OPTION_REMOVE_ADS) {
+                         popupLayout.addView(new ActionBarPopupWindow.GapView(contentView.getContext(), themeDelegate), LayoutHelper.createLinear(LayoutHelper.MATCH_PARENT, 8));
+                     }
+@@ -32376,10 +32377,11 @@ public class ChatActivity extends BaseFragment implements
+                     }
+                 }, 420);
+             };
++            Runnable inu_showMenu = ChatHelper.gateMessageMenu(showMenu);
+             if (waitForLangDetection.get()) {
+-                onLangDetectionDone.set(showMenu);
++                onLangDetectionDone.set(inu_showMenu);
+             } else {
+-                showMenu.run();
++                inu_showMenu.run();
+             }
+             chatListView.stopScroll();
+             chatLayoutManager.setCanScrollVertically(false);
+diff --git a/TMessagesProj/src/main/java/org/telegram/ui/Components/ChatActivityEnterView.java b/TMessagesProj/src/main/java/org/telegram/ui/Components/ChatActivityEnterView.java
+index 0000000..0000000 100644
+--- a/TMessagesProj/src/main/java/org/telegram/ui/Components/ChatActivityEnterView.java
++++ b/TMessagesProj/src/main/java/org/telegram/ui/Components/ChatActivityEnterView.java
+@@ -4921,6 +4921,7 @@ public class ChatActivityEnterView extends FrameLayout implements
+         };
+         messageSendPreview.setOnDismissListener(di -> {
+             messageSendPreview = null;
++            desu.inugram.helpers.chat.ChatActionsHelper.inu_onSendPreviewDismissed(this);
+         });
+ 
+         final boolean containsSendMessage = audioToSendMessageObject != null || messageEditText != null && !TextUtils.isEmpty(messageEditText.getText());
+@@ -5163,7 +5164,7 @@ public class ChatActivityEnterView extends FrameLayout implements
+         }
+         messageSendPreview.setItemOptions(options);
+ 
+-        messageSendPreview.show();
++        desu.inugram.helpers.chat.ChatActionsHelper.inu_showSendPreview(this, options, messageSendPreview);
+ 
+         try {
+             view.performHapticFeedback(HapticFeedbackConstants.KEYBOARD_TAP, HapticFeedbackConstants.FLAG_IGNORE_GLOBAL_SETTING);
+diff --git a/TMessagesProj/src/main/java/org/telegram/ui/LaunchActivity.java b/TMessagesProj/src/main/java/org/telegram/ui/LaunchActivity.java
+index 0000000..0000000 100644
+--- a/TMessagesProj/src/main/java/org/telegram/ui/LaunchActivity.java
++++ b/TMessagesProj/src/main/java/org/telegram/ui/LaunchActivity.java
+@@ -561,6 +561,7 @@ public class LaunchActivity extends BasePermissionsActivity implements INavigati
+             if (getLastFragment() != null && getLastFragment().getLastStoryViewer() != null) {
+                 getLastFragment().getLastStoryViewer().updatePlayingMode();
+             }
++            desu.inugram.helpers.plugins.ui.PluginScreens.onFragmentStackChanged(this);
+         });
+         actionBarLayout.setDelegate(this);
+         Theme.loadWallpaper(true);
+diff --git a/TMessagesProj/src/main/java/org/telegram/ui/ProfileActivity.java b/TMessagesProj/src/main/java/org/telegram/ui/ProfileActivity.java
+index 0000000..0000000 100644
+--- a/TMessagesProj/src/main/java/org/telegram/ui/ProfileActivity.java
++++ b/TMessagesProj/src/main/java/org/telegram/ui/ProfileActivity.java
+@@ -2548,7 +2548,7 @@ public class ProfileActivity extends BaseFragment implements NotificationCenter.
+                 if (getParentActivity() == null) {
+                     return;
+                 }
+-                if (desu.inugram.helpers.profile.ProfileHelper.handleMenuClick(id, currentAccount, getDialogId())) {
++                if (desu.inugram.helpers.profile.ProfileHelper.handleMenuClick(id, otherItem, currentAccount, getDialogId())) {
+                     return;
+                 }
+                 if (id == -1) {
 diff --git a/TMessagesProj_App/build.gradle b/TMessagesProj_App/build.gradle
 index 0000000..0000000 100644
 --- a/TMessagesProj_App/build.gradle
 +++ b/TMessagesProj_App/build.gradle
-@@ -132,3 +132,62 @@ android {
+@@ -19,6 +19,9 @@ dependencies {
+     implementation project(':TMessagesProj')
+     implementation files('../TMessagesProj/libs/libgsaverification-client.aar')
+     implementation 'androidx.core:core:1.16.0'
++    // the inline hooker behind lsplant. only libshadowhook.so is wanted, dlopened by the rust
++    // engine; nothing links or imports it.
++    implementation 'com.bytedance.android:shadowhook:2.0.1'
+ }
+ 
+ android {
+@@ -100,7 +103,7 @@ android {
+         minSdkVersion 26
+         targetSdkVersion 35
+         versionName rootProject.ext.verName
+-        ndkVersion "27.2.12479018"
++        ndkVersion "29.0.14206865"
+ 
+         ndk {
+             abiFilters "arm64-v8a"
+@@ -117,6 +120,13 @@ android {
+         }
+     }
+ 
++    externalNativeBuild {
++        cmake {
++            path 'jni/CMakeLists.txt'
++            version '3.28.0+'
++        }
++    }
++
+     buildFeatures {
+         buildConfig = true
+     }
+@@ -132,3 +142,62 @@ android {
  }
  
  apply plugin: 'com.google.gms.google-services'
@@ -104,3 +304,29 @@ index 0000000..0000000 100644
 +tasks.matching { it.name ==~ /merge.*JniLibFolders/ }.configureEach {
 +    dependsOn 'buildInuNative'
 +}
+diff --git a/TMessagesProj_App/jni/CMakeLists.txt b/TMessagesProj_App/jni/CMakeLists.txt
+new file mode 100644
+index 0000000..0000000
+--- /dev/null
++++ b/TMessagesProj_App/jni/CMakeLists.txt
+@@ -0,0 +1,13 @@
++cmake_minimum_required(VERSION 3.22.1)
++project(inu_jni CXX C)
++
++# There are no sources here on purpose. liblsplant.so is lsplant's own target; the C entry points
++# the rust engine dlopens come from patches-native/lsplant-c-abi.patch, applied to the submodule
++# after `git submodule update --init`.
++
++# lsplant reads this in a POST_BUILD command but only defaults it further down its own file, so as a
++# subdirectory it would strip to an empty path.
++set(DEBUG_SYMBOLS_PATH ${CMAKE_BINARY_DIR}/symbols)
++
++set(LSPLANT_BUILD_SHARED ON CACHE BOOL "" FORCE)
++add_subdirectory(lsplant/lsplant/src/main/jni)
+diff --git a/TMessagesProj_App/jni/lsplant b/TMessagesProj_App/jni/lsplant
+new file mode 160000
+index 0000000..0000000
+--- /dev/null
++++ b/TMessagesProj_App/jni/lsplant
+@@ -0,0 +1 @@
++Subproject commit 61e10e51eb99dca00dd873f48c28a674dd2b4c4c
