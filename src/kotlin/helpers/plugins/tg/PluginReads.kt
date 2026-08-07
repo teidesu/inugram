@@ -5,6 +5,7 @@ import desu.inugram.core.plugins.PluginWire
 import desu.inugram.helpers.plugins.Plugin
 import desu.inugram.helpers.plugins.PluginDispatch
 import desu.inugram.helpers.plugins.QuickJs
+import desu.inugram.helpers.plugins.ReadsListener
 import desu.inugram.helpers.plugins.tl.TlFilter
 import desu.inugram.helpers.plugins.tl.TlHandles
 import desu.inugram.helpers.plugins.tl.TlJson
@@ -84,8 +85,8 @@ object PluginReads {
     /** what telegram itself accepts for one page, and what an omitted `limit` asks for */
     private const val PAGE_LIMIT = 100
 
-    fun attach(plugin: Plugin, engine: QuickJs) {
-        engine.readsListener = object : QuickJs.ReadsListener {
+    fun listenerFor(plugin: Plugin, engine: QuickJs): ReadsListener =
+        object : ReadsListener {
             override fun accountRead(accountId: Int, op: Int, arg: String): String =
                 read(plugin, engine, accountId, op, arg)
 
@@ -95,7 +96,6 @@ object PluginReads {
             override fun accountFetch(accountId: Int, requestId: Long, op: Int, arg: String): String? =
                 fetch(plugin, engine, accountId, requestId, op, arg)
         }
-    }
 
     private fun read(plugin: Plugin, engine: QuickJs, accountId: Int, op: Int, arg: String): String {
         val scope = SCOPE_BY_OP[op] ?: return PluginWire.encodeError("account read: unknown op $op")
@@ -105,7 +105,7 @@ object PluginReads {
             return PluginWire.encodeNotGranted("account.read", scope)
         }
         if (!allowsSelf(plugin, arg)) return PluginWire.encodeNotGranted("account.read", "self")
-        val handles = engine.tlListener as? TlHandles
+        val handles = engine.listener?.tl as? TlHandles
             ?: return PluginWire.encodePluginError("internal", "account read: no handle table")
         val controller = controllerFor(accountId)
             ?: return PluginWire.encodePluginError("not-found", "account read: no account is logged in as #$accountId")

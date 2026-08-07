@@ -18,6 +18,7 @@ import android.graphics.SweepGradient
 import android.graphics.Typeface
 import android.os.Build
 import desu.inugram.core.plugins.PluginWire
+import desu.inugram.helpers.plugins.CanvasListener
 import desu.inugram.helpers.plugins.Plugin
 import desu.inugram.helpers.plugins.PluginDispatch
 import desu.inugram.helpers.plugins.QuickJs
@@ -98,14 +99,11 @@ object PluginCanvas {
         })
     }
 
-    fun attach(plugin: Plugin, engine: QuickJs) {
-        engine.canvasListener = Session(plugin, engine)
-    }
+    fun listenerFor(plugin: Plugin, engine: QuickJs): CanvasListener = Session(plugin, engine)
 
     /** call on globalQueue as the engine stops: every bitmap it holds is native memory */
     fun detach(engine: QuickJs) {
-        (engine.canvasListener as? Session)?.close()
-        engine.canvasListener = null
+        (engine.listener?.canvas as? Session)?.close()
     }
 
     /** deletes whatever `convertToBlob` wrote for a plugin being uninstalled */
@@ -120,7 +118,7 @@ object PluginCanvas {
     private fun refuse(code: String, message: String): Nothing =
         throw Refusal(PluginWire.encodePluginError(code, message))
 
-    private class Session(private val plugin: Plugin, private val engine: QuickJs) : QuickJs.CanvasListener {
+    private class Session(private val plugin: Plugin, private val engine: QuickJs) : CanvasListener {
         private val canvases = HashMap<Long, Surface>()
         private val images = HashMap<Long, Bitmap>()
         private val fonts = HashMap<String, Typeface>()

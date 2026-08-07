@@ -171,12 +171,4 @@ class HarnessIntegrityTest {
         assertTrue(native.isNotEmpty(), "read no ops out of xposed.rs")
         assertEquals(native, bridge, "PluginXposed and xposed.rs disagree about the xposed op numbering")
     }
-
-    @Test
-    fun `the QuickJs double declares the listener surface the bridge implements`() {
-        // TlHandles implements the double's interface, so this only has to catch the reverse drift:
-        // a method the real QuickJs has that the double forgot would make the bridge fail to compile
-        val methods = QuickJs.TlListener::class.java.declaredMethods.map { it.name }.toSet()
-        assertEquals(setOf("tlGet", "tlSet", "tlHas", "tlOwnKeys", "tlCopy", "tlRelease"), methods)
-    }
 }

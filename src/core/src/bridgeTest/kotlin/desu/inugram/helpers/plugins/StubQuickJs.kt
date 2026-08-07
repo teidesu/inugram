@@ -4,10 +4,9 @@ package desu.inugram.helpers.plugins
  * stands in for the real [QuickJs], which cannot exist here: its constructor calls `nativeCreate()`
  * and its class initializer loads `libinu_native`.
  *
- * The two nested interfaces are declared, not stubbed away, so the bridge classes under test
- * implement *these*: if the real interface gains a method or changes a signature, the real
- * implementers stop compiling against this file and the harness fails loudly rather than testing a
- * shape stock no longer has.
+ * Only the native side is stubbed. The listener surface is the real [PluginListener], compiled from
+ * the app's own source, so a member added there reaches the bridge classes under test without
+ * anything in this file changing.
  *
  * Everything an engine would do in JS is a recorded call plus an optional [onDispatchRpc] /
  * [onCompleteNext] hook, which is how a test plays a middleware.
@@ -17,67 +16,13 @@ class QuickJs {
         const val ANY_ACCOUNT = -1
     }
 
-    interface RpcListener {
-        fun onRpcRegister(methods: Array<String>, callbackId: Int, scope: String): String?
-        fun onRpcUnregister(callbackId: Int)
-        fun onInvokeRpc(invokeId: Long, slot: Int, requestWire: String): String?
-        fun onRpcNext(dispatchId: Long, requestWire: String): String?
-        fun onRpcComplete(dispatchId: Long, resultWire: String)
-        fun onUpdateRegister(callbackId: Int, types: Array<String>, scope: String): String?
-        fun onUpdateUnregister(callbackId: Int)
-        fun onInterceptUpdateRegister(callbackId: Int, types: Array<String>): String?
-        fun onInterceptUpdateUnregister(callbackId: Int)
-        fun onUpdateVerdict(dispatchId: Long, deliver: Boolean)
-    }
-
-    interface TlListener {
-        fun tlGet(handle: Long, key: String): String
-        fun tlSet(handle: Long, key: String, valueWire: String): String?
-        fun tlHas(handle: Long, key: String): Int
-        fun tlOwnKeys(handle: Long): String?
-        fun tlCopy(handle: Long): String?
-        fun tlRelease(handle: Long)
-    }
-
     class Dispatch(val callbackId: Int, val dispatchId: Long, val method: String, val accountId: Int, val requestWire: String)
-    interface ReadsListener {
-        fun accountRead(accountId: Int, op: Int, arg: String): String
-        fun resolvePeer(accountId: Int, requestId: Long, spec: String, kind: Int): String?
-        fun accountFetch(accountId: Int, requestId: Long, op: Int, arg: String): String?
-    }
-
-    interface FetchListener {
-        fun fetch(requestId: Long, url: String, specJson: String, body: ByteArray?): String?
-        fun abort(requestId: Long)
-    }
-
-    interface WritesListener {
-        fun accountWrite(accountId: Int, requestId: Long, op: Int, arg: String, values: Array<String>): String?
-        fun messageFile(accountId: Int, value: String): String
-    }
-
-    interface NotificationListener {
-        fun register(callbackId: Int, events: Array<String>): String?
-        fun unregister(callbackId: Int)
-    }
-
-    interface DeserializeListener {
-        fun onDeserializeRegister(callbackId: Int, rulesJson: String): String?
-        fun onDeserializeUnregister(callbackId: Int)
-        fun onDeserializeMiddlewareRegister(callbackId: Int, typesJson: String): String?
-        fun onDeserializeMiddlewareUnregister(callbackId: Int)
-    }
-
     class DeserializeDispatch(val callbackId: Int, val objectWire: String)
 
     val deserializeDispatches = ArrayList<DeserializeDispatch>()
 
     /** what this engine does with the view it is handed, standing in for the plugin's middleware */
     var onDispatchDeserialize: ((DeserializeDispatch) -> Unit)? = null
-
-    interface JvmListener {
-        fun jvm(op: Int, target: Long, name: String, args: Array<String>): String
-    }
 
     class Completion(val dispatchId: Long, val resultWire: String)
     class Abandon(val dispatchId: Long, val reasonWire: String)
@@ -91,14 +36,8 @@ class QuickJs {
     class WriteProgress(val requestId: Long, val loaded: Long, val total: Long)
     class Notification(val callbackId: Int, val name: String, val accountId: Int, val argsJson: String)
 
-    var rpcListener: RpcListener? = null
-    var tlListener: TlListener? = null
-    var readsListener: ReadsListener? = null
-    var writesListener: WritesListener? = null
-    var fetchListener: FetchListener? = null
-    var notificationListener: NotificationListener? = null
-    var deserializeListener: DeserializeListener? = null
-    var jvmListener: JvmListener? = null
+    /** set once, exactly as `PluginManager` does; nothing ever clears it */
+    var listener: PluginBridge? = null
 
     var rpcInstalled = false
         private set

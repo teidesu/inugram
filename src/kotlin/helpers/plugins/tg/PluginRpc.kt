@@ -13,6 +13,7 @@ import desu.inugram.helpers.plugins.Plugin
 import desu.inugram.helpers.plugins.PluginDispatch
 import desu.inugram.helpers.plugins.PluginManager
 import desu.inugram.helpers.plugins.QuickJs
+import desu.inugram.helpers.plugins.RpcListener
 import desu.inugram.helpers.plugins.tl.TlFilter
 import desu.inugram.helpers.plugins.tl.TlHandles
 import desu.inugram.helpers.plugins.tl.TlJson
@@ -251,13 +252,14 @@ object PluginRpc {
     // counted, because one instance can be leased twice
     private val bypassed = IdentityHashMap<TLObject, Int>()
 
-    fun attach(plugin: Plugin, engine: QuickJs) {
-        val tl = TlHandles(TlFilter.policyFor(plugin.permissions))
-        tlTables[plugin] = tl
-        engine.tlListener = tl
+    /** the plugin's handle table, which every materialization for it mints into */
+    fun tlFor(plugin: Plugin): TlHandles =
+        TlHandles(TlFilter.policyFor(plugin.permissions)).also { tlTables[plugin] = it }
+
+    fun listenerFor(plugin: Plugin, engine: QuickJs, tl: TlHandles): RpcListener {
         // snapshot: the account-less `inu.invokeRpc` names no account, and a plugin's requests must not jump slots on a switch
         val invokeAccount = UserConfig.selectedAccount
-        engine.rpcListener = object : QuickJs.RpcListener {
+        return object : RpcListener {
             override fun onRpcRegister(methods: Array<String>, callbackId: Int, scope: String): String? =
                 registerIntercept(plugin, methods, callbackId, scope)
 
@@ -288,10 +290,10 @@ object PluginRpc {
             override fun onUpdateVerdict(dispatchId: Long, deliver: Boolean) =
                 onUpdateStageSettled(dispatchId, deliver)
         }
-        // `inu.interceptDeserialize` installs from inside `installRpc`, so its listener has to precede it
-        PluginDeserialize.attach(plugin, engine)
-        engine.installRpc()
     }
+
+    /** `inu.interceptDeserialize` installs from inside this, so its listener has to be in place already */
+    fun install(engine: QuickJs) = engine.installRpc()
 
     /**
      * drops the plugin's handle table and its interceptors, and fails any dispatch waiting on its

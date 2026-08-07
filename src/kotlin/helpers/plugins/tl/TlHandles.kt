@@ -7,6 +7,7 @@ import desu.inugram.core.plugins.TlFlags
 import desu.inugram.core.plugins.TlNames
 import desu.inugram.core.plugins.PluginWire
 import desu.inugram.helpers.plugins.QuickJs
+import desu.inugram.helpers.plugins.TlListener
 import java.lang.reflect.ParameterizedType
 import java.lang.reflect.Type
 import org.json.JSONArray
@@ -15,7 +16,7 @@ import org.telegram.tgnet.TLObject
 
 /**
  * Handle table backing the live-proxy TL bridge (rust: `tl_proxy.rs`): JS holds a lazy `Proxy` over
- * a handle id whose traps round-trip through [QuickJs.TlListener], never an eager snapshot of the
+ * a handle id whose traps round-trip through [TlListener], never an eager snapshot of the
  * object graph.
  *
  * **One instance per running plugin.** An id is a bare integer and rust re-emits any JS object
@@ -30,7 +31,7 @@ import org.telegram.tgnet.TLObject
  * [releaseScope] whether or not JS still references them, and plugin-lifetime ones
  * ([mintForPlugin]) under a scope [releaseScope] is never called with.
  */
-class TlHandles(private val policy: TlFilter.Policy) : QuickJs.TlListener {
+class TlHandles(private val policy: TlFilter.Policy) : TlListener {
     private class HandleEntry(
         val target: Any,
         val elementType: Type?,
@@ -426,6 +427,6 @@ class TlHandles(private val policy: TlFilter.Policy) : QuickJs.TlListener {
         fun newScope(): Long = nextScopeId++
 
         fun of(engine: QuickJs): TlHandles =
-            engine.tlListener as? TlHandles ?: throw IllegalStateException("no handle table")
+            engine.listener?.tl as? TlHandles ?: throw IllegalStateException("no handle table")
     }
 }

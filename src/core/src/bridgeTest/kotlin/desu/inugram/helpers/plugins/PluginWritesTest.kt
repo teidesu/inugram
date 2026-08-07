@@ -63,7 +63,7 @@ class PluginWritesTest {
         values: Array<String> = emptyArray(),
         requestId: Long = 1L,
         account: Int = 0,
-    ): String? = plugin.js.writesListener!!.accountWrite(account, requestId, op, arg.toString(), values)
+    ): String? = plugin.js.listener!!.accountWrite(account, requestId, op, arg.toString(), values)
 
     private fun send(peer: String, text: String = "hi") = JSONObject()
         .put("peer", peer)

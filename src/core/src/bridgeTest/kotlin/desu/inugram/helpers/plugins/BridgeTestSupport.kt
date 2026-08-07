@@ -4,6 +4,7 @@ import android.content.Context
 import android.os.SystemClock
 import desu.inugram.core.plugins.PluginManifest
 import desu.inugram.core.plugins.PluginWire
+import desu.inugram.helpers.plugins.io.PluginFetch
 import desu.inugram.helpers.plugins.platform.PluginJvm
 import desu.inugram.helpers.plugins.platform.PluginNotifications
 import desu.inugram.helpers.plugins.tg.PluginDeserialize
@@ -87,7 +88,6 @@ private fun clearRpcState() {
     }
 }
 
-/** a running plugin with [grants], attached to [PluginRpc] the way `PluginManager` does on start */
 /**
  * what `inu.android.getCurrentFragment`/`getCurrentActivity` answer in the harness. There is no
  * `LaunchActivity` here, so a test that wants one puts an object of its own in.
@@ -101,6 +101,7 @@ object testAppScreen : PluginJvm.AppScreen {
     override fun currentActivity(): Any? = activity
 }
 
+/** a running plugin with [grants], wired the way `PluginManager` does on start */
 fun startPlugin(name: String, vararg grants: String): Plugin {
     testAppScreen.fragment = null
     testAppScreen.activity = null
@@ -112,14 +113,91 @@ fun startPlugin(name: String, vararg grants: String): Plugin {
     )
     plugin.engine = QuickJs()
     PluginManager.installed = PluginManager.installed + plugin
-    // in the app `PluginApi.attach` runs first, and the read surface needs the handle table
-    // `PluginRpc.attach` mints into - which is why it reads it off the engine rather than holding one
-    PluginReads.attach(plugin, plugin.engine!!)
-    PluginWrites.attach(plugin, plugin.engine!!)
-    PluginNotifications.attach(plugin, plugin.engine!!)
-    PluginJvm.attach(plugin, plugin.engine!!, testAppScreen)
-    PluginRpc.attach(plugin, plugin.engine!!)
+    attachBridge(plugin, plugin.engine!!)
     return plugin
+}
+
+/**
+ * builds [engine]'s [PluginBridge] and runs the installs, the way `PluginManager.start` does. Three
+ * parts come from [HarnessMissing] rather than their owners: `PluginApi` and `PluginCanvas` are in
+ * `bridgeExcluded`, and the core listener is `PluginManager`'s. Nothing here reaches them, so they
+ * refuse loudly instead of recording.
+ *
+ * Call it again on a fresh engine to play a reload, which is what the app does after a teardown.
+ */
+fun attachBridge(plugin: Plugin, engine: QuickJs) {
+    val tl = PluginRpc.tlFor(plugin)
+    val jvm = PluginJvm.listenerFor(plugin, engine, testAppScreen)
+    engine.listener = PluginBridge(
+        core = HarnessMissing,
+        rpc = PluginRpc.listenerFor(plugin, engine, tl),
+        tl = tl,
+        deserialize = PluginDeserialize.listenerFor(plugin, engine),
+        api = HarnessMissing,
+        reads = PluginReads.listenerFor(plugin, engine),
+        writes = PluginWrites.listenerFor(plugin, engine),
+        fetch = PluginFetch.listenerFor(plugin, engine),
+        canvas = HarnessMissing,
+        notifications = PluginNotifications.listenerFor(plugin, engine),
+        jvm = jvm,
+        // PluginXposed is in `bridgeExcluded` too, and every entry point of it needs a device
+        xposed = null,
+    )
+    // in the app these are `PluginApi.install`'s, which the harness cannot compile
+    PluginJvm.install(engine)
+    PluginRpc.install(engine)
+}
+
+private object HarnessMissing : CoreListener, ApiListener, CanvasListener {
+    private fun no(what: String): Nothing = throw UnsupportedOperationException("the harness has no $what")
+
+    override fun onConsole(level: Int, message: String) = no("console")
+
+    override fun onCheckGrant(name: String, target: String?, mode: Int) = no("grant checker")
+
+    override fun onTimerSchedule(delayMs: Long) = no("timer scheduler")
+
+    override fun canvas(op: Int, id: Long, arg: String, bytes: ByteArray?) = no("canvas")
+
+    override fun kv(op: Int, key: String, value: String) = no("kv")
+
+    override fun accounts() = no("accounts")
+
+    override fun uiToast(text: String) = no("ui")
+
+    override fun uiDialog(requestId: Long, optionsJson: String) = no("ui")
+
+    override fun uiPrompt(requestId: Long, optionsJson: String) = no("ui")
+
+    override fun uiChooser(requestId: Long, optionsJson: String) = no("ui")
+
+    override fun uiCurrentScreen() = no("ui")
+
+    override fun openUrl(url: String) = no("ui")
+
+    override fun clipboardRead() = no("clipboard")
+
+    override fun clipboardWrite(text: String) = no("clipboard")
+
+    override fun uiOpenPage(pageId: Long) = no("ui")
+
+    override fun uiOpenFragment(handle: Long) = no("ui")
+
+    override fun uiRegisterSettings(pageId: Long) = no("ui")
+
+    override fun uiUnregisterSettings(pageId: Long) = no("ui")
+
+    override fun uiInvalidate(pageId: Long) = no("ui")
+
+    override fun uiOpenMenu(menuId: Long, pageId: Long, anchorKey: String, itemsJson: String) = no("ui")
+
+    override fun iconResolves(kind: Int, value: String) = no("icons")
+
+    override fun actionRegister(kind: Int, token: Int, id: String) = no("actions")
+
+    override fun actionUnregister(kind: Int, token: Int) = no("actions")
+
+    override fun actionEditor(op: Int, surface: Long, payloadJson: String) = no("actions")
 }
 
 fun manifestOf(name: String, grants: List<String>): PluginManifest = PluginManifest(
@@ -139,7 +217,7 @@ val Plugin.js: QuickJs get() = engine!!
 
 /** the `inu.interceptRpc(methods)` a plugin's own JS would have called */
 fun Plugin.interceptRpc(vararg methods: String, callbackId: Int = 1): String? =
-    js.rpcListener!!.onRpcRegister(arrayOf(*methods), callbackId, "")
+    js.listener!!.onRpcRegister(arrayOf(*methods), callbackId, "")
 
 /**
  * what the engine registers for `inu.interceptSendMessage`: the fixed method list `rpc.rs` owns
@@ -153,19 +231,19 @@ val SEND_METHODS = arrayOf(
 )
 
 fun Plugin.interceptSendMessage(callbackId: Int = 1): String? =
-    js.rpcListener!!.onRpcRegister(SEND_METHODS, callbackId, "interceptSendMessage")
+    js.listener!!.onRpcRegister(SEND_METHODS, callbackId, "interceptSendMessage")
 
 /** the `inu.interceptUpdate(types, cb)` a plugin's own JS would have called */
 fun Plugin.interceptUpdate(vararg types: String, callbackId: Int = 1): String? =
-    js.rpcListener!!.onInterceptUpdateRegister(callbackId, arrayOf(*types))
+    js.listener!!.onInterceptUpdateRegister(callbackId, arrayOf(*types))
 
 /** the verdict a middleware handed back, delivered the way the engine delivers one */
 fun Plugin.updateVerdict(dispatchId: Long, deliver: Boolean) =
-    js.rpcListener!!.onUpdateVerdict(dispatchId, deliver)
+    js.listener!!.onUpdateVerdict(dispatchId, deliver)
 
 /** the `inu.onUpdate(types)` a plugin's own JS would have called */
 fun Plugin.onUpdate(vararg types: String, callbackId: Int = 1): String? =
-    js.rpcListener!!.onUpdateRegister(callbackId, arrayOf(*types), "")
+    js.listener!!.onUpdateRegister(callbackId, arrayOf(*types), "")
 
 /**
  * what the engine registers for one of the demuxed events: the fixed constructor list `rpc.rs`
@@ -179,15 +257,15 @@ enum class DemuxedEvent(val scope: String, val types: Array<String>) {
 
 /** the `inu.onNewMessage(cb)`/`onMessageEdited(cb)`/`onMessageDeleted(cb)` a plugin's own JS would have called */
 fun Plugin.onDemuxedEvent(event: DemuxedEvent, callbackId: Int = 1): String? =
-    js.rpcListener!!.onUpdateRegister(callbackId, event.types, event.scope)
+    js.listener!!.onUpdateRegister(callbackId, event.types, event.scope)
 
 fun Plugin.next(dispatchId: Long, requestWire: String): String? =
-    js.rpcListener!!.onRpcNext(dispatchId, requestWire)
+    js.listener!!.onRpcNext(dispatchId, requestWire)
 
 fun Plugin.complete(dispatchId: Long, resultWire: String) =
-    js.rpcListener!!.onRpcComplete(dispatchId, resultWire)
+    js.listener!!.onRpcComplete(dispatchId, resultWire)
 
-fun Plugin.tl(): QuickJs.TlListener = js.tlListener!!
+fun Plugin.tl(): TlListener = js.listener!!
 
 /**
  * the handle table [PluginRpc] mints into for a plugin, so a test can ask what a wire it handed the

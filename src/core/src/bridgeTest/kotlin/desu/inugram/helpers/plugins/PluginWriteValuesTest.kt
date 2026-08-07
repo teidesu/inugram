@@ -64,7 +64,7 @@ class PluginWriteValuesTest {
         }.synced()
     }.synced()
 
-    private fun sendMedia(plugin: Plugin, wire: String): String? = plugin.js.writesListener!!.accountWrite(
+    private fun sendMedia(plugin: Plugin, wire: String): String? = plugin.js.listener!!.accountWrite(
         0,
         1L,
         PluginWrites.OP_SEND_MEDIA,
@@ -103,12 +103,12 @@ class PluginWriteValuesTest {
             "note.txt",
         ).apply { writeText("hello world") }
 
-        val answer = plugin.js.writesListener!!.messageFile(0, wire)
+        val answer = plugin.js.listener!!.messageFile(0, wire)
         val json = JSONObject((PluginWire.decode(answer) as PluginWire.Value.Json).json)
         assertTrue(json.getBoolean("exists"), "getMessageFile refused a message off an Account")
 
         assertNull(
-            plugin.js.writesListener!!.accountWrite(
+            plugin.js.listener!!.accountWrite(
                 0,
                 2L,
                 PluginWrites.OP_DOWNLOAD_MEDIA,

@@ -434,7 +434,7 @@ class PluginRpcUpdatesTest {
     fun `disposing a demuxed registration stops its dispatches`() {
         val plugin = demuxed(DemuxedEvent.NEW_MESSAGE, "onUpdate(new_message)")
 
-        plugin.js.rpcListener!!.onUpdateUnregister(1)
+        plugin.js.listener!!.onUpdateUnregister(1)
         deliverUpdates(batchOf(newMessage(1)), 0)
         drain()
 

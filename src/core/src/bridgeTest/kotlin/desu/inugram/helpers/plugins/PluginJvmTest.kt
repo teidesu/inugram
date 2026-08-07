@@ -32,7 +32,7 @@ class PluginJvmTest {
     @Test
     fun theApiIsInstalledOnlyForAPluginThatHoldsTheGrant() {
         val without = startPlugin("plain", "kv")
-        assertNull(without.js.jvmListener)
+        assertNull(without.js.listener?.jvm)
         assertFalse(without.js.jvmInstalled)
 
         val with = startPlugin("reflective", scoped)
@@ -47,7 +47,11 @@ class PluginJvmTest {
     @Test
     fun theLifetimeWiringIsInTheFilesTheHarnessCannotCompile() {
         val api = bridgeSource("PluginApi.kt").readText()
-        assertTrue(api.contains("PluginJvm.attach(plugin, engine, AppScreen)"), "nothing installs inu.jvm")
+        assertTrue(api.contains("PluginJvm.install(engine)"), "nothing installs inu.jvm")
+        assertTrue(
+            api.contains("PluginJvm.listenerFor(plugin, engine, AppScreen)"),
+            "nothing gives inu.jvm the screen it reads the current fragment off",
+        )
 
         val manager = bridgeSource("PluginManager.kt").readText()
         assertTrue(
@@ -160,12 +164,13 @@ class PluginJvmTest {
     @Test
     fun aHandleDoesNotOutliveTheEngineThatMintedIt() {
         val plugin = startPlugin("reflective", scoped)
-        val listener = plugin.js.jvmListener!!
+        val listener = plugin.js.listener!!
         val handle = plugin.mint(JvmFixture())
         assertEquals(3L, intOf(plugin.jvm(PluginJvm.OP_GET, handle, "count")))
 
+        // detach closes the session rather than unhooking it: the bridge is fixed for the life of
+        // the engine, and `PluginManager` closes the engine on the same runnable
         PluginJvm.detach(plugin.js)
-        assertNull(plugin.js.jvmListener)
         assertPluginError("handle-expired", listener.jvm(PluginJvm.OP_GET, handle, "count", emptyArray()))
     }
 
@@ -465,7 +470,7 @@ class PluginJvmTest {
     }
 
     private fun Plugin.jvm(op: Int, target: Long = 0, name: String = "", vararg args: String): String =
-        js.jvmListener!!.jvm(op, target, name, arrayOf(*args))
+        js.listener!!.jvm(op, target, name, arrayOf(*args))
 
     private fun Plugin.cls(name: String): Long = idOf(jvm(PluginJvm.OP_CLASS, name = name))
 
@@ -478,7 +483,7 @@ class PluginJvmTest {
         val table = PluginJvm::class.java.declaredClasses.single { it.simpleName == "Session" }
         val handles = table.getDeclaredField("handles").apply { isAccessible = true }
         @Suppress("UNCHECKED_CAST")
-        (handles.get(js.jvmListener) as MutableMap<Long, Any>)[handle] = value
+        (handles.get(js.listener!!.jvm) as MutableMap<Long, Any>)[handle] = value
         return handle
     }
 

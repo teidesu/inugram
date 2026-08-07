@@ -3,6 +3,7 @@ package desu.inugram.helpers.plugins.io
 import desu.inugram.core.plugins.PluginPermissions
 import desu.inugram.core.plugins.ScopeMatch
 import desu.inugram.core.plugins.PluginWire
+import desu.inugram.helpers.plugins.FetchListener
 import desu.inugram.helpers.plugins.Plugin
 import desu.inugram.helpers.plugins.PluginDispatch
 import desu.inugram.helpers.plugins.QuickJs
@@ -82,8 +83,8 @@ object PluginFetch {
         }
     }
 
-    fun attach(plugin: Plugin, engine: QuickJs) {
-        engine.fetchListener = object : QuickJs.FetchListener {
+    fun listenerFor(plugin: Plugin, engine: QuickJs): FetchListener =
+        object : FetchListener {
             override fun fetch(requestId: Long, url: String, specJson: String, body: ByteArray?): String? {
                 val spec = try {
                     Spec.parse(specJson)
@@ -112,7 +113,6 @@ object PluginFetch {
                 flights.remove(flightKey(plugin.id, engine, requestId))?.cancel()
             }
         }
-    }
 
     class Delivery(val wire: String, private val body: Hop?) {
         /** nobody took the body, so the file goes and the budget it holds comes back */

@@ -14,7 +14,8 @@ import org.telegram.messenger.ApplicationLoader
  * granularity for plugin state), so reads are in-memory after first touch and writes persist
  * asynchronously. Values are strings only; total size is capped at [MAX_BYTES] per plugin.
  *
- * Results are PluginWire-tagged strings (`S`/`N`/`J`/`E`/`P`) - see [QuickJs.ApiListener.kv].
+ * Results are PluginWire-tagged strings (`S`/`N`/`J`/`E`/`P`) - see
+ * [desu.inugram.helpers.plugins.ApiListener.kv].
  * Called only on [org.telegram.messenger.Utilities.globalQueue] (the engines' thread).
  */
 object PluginKv {

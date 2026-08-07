@@ -25,10 +25,10 @@ class PluginNotificationsTest {
         startPlugin("notifications", "unsafe.notificationCenter", *extra)
 
     private fun Plugin.observe(vararg events: String, callbackId: Int = 1): String? =
-        js.notificationListener!!.register(callbackId, arrayOf(*events))
+        js.listener!!.register(callbackId, arrayOf(*events))
 
     private fun Plugin.stopObserving(callbackId: Int = 1) =
-        js.notificationListener!!.unregister(callbackId)
+        js.listener!!.unregister(callbackId)
 
     /** every observer the app is holding, on every centre a post could come from */
     private fun observerCount(): Int {

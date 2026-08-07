@@ -60,7 +60,7 @@ class PluginReadsAsyncTest {
     private fun granted(vararg extra: String) =
         startPlugin("async-reads", "account.read(self,peers,dialogs,messages,history,draft)", *extra)
 
-    private fun reads(plugin: Plugin): QuickJs.ReadsListener = plugin.js.readsListener!!
+    private fun reads(plugin: Plugin): ReadsListener = plugin.js.listener!!
 
     private fun fetch(plugin: Plugin, op: Int, arg: String, requestId: Long = 1L, account: Int = 0): String? =
         reads(plugin).accountFetch(account, requestId, op, arg)
@@ -453,8 +453,7 @@ class PluginReadsAsyncTest {
         fetch(plugin, PluginReads.OP_USER_FULL, "D$alice")
         val stale = plugin.js
         plugin.engine = QuickJs()
-        PluginReads.attach(plugin, plugin.js)
-        PluginRpc.attach(plugin, plugin.js)
+        attachBridge(plugin, plugin.js)
 
         answerWith(TLRPC.TL_users_userFull().apply { full_user = TLRPC.TL_userFull() })
         drain()

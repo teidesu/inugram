@@ -378,15 +378,39 @@ object PluginManager {
             return
         }
         val budget = LogBudget()
-        engine.consoleListener = { level, msg ->
-            if (level == QuickJs.LEVEL_FAULT) fail(plugin, PluginFailure.Site.RUNTIME, msg, engine)
-            else logConsole(plugin, budget, level, msg)
-        }
         val permissions = plugin.permissions
-        engine.grantChecker = { name, target, mode ->
-            val match = ScopeMatch.entries.getOrNull(mode)
-            if (target == null) permissions.has(name) else match != null && permissions.allows(name, target, match)
+        val timers = PluginApi.timerSchedulerFor(plugin, engine)
+        val core = object : CoreListener {
+            override fun onConsole(level: Int, message: String) {
+                if (level == QuickJs.LEVEL_FAULT) fail(plugin, PluginFailure.Site.RUNTIME, message, engine)
+                else logConsole(plugin, budget, level, message)
+            }
+
+            override fun onCheckGrant(name: String, target: String?, mode: Int): Boolean {
+                val match = ScopeMatch.entries.getOrNull(mode)
+                return if (target == null) permissions.has(name) else match != null && permissions.allows(name, target, match)
+            }
+
+            override fun onTimerSchedule(delayMs: Long) = timers(delayMs)
         }
+        // built whole and assigned once, before anything that can call back into it: `install*` is
+        // the first of those, and every ordering constraint among the installs is in `PluginApi`
+        val jvm = PluginApi.jvmListenerFor(plugin, engine)
+        val tl = PluginRpc.tlFor(plugin)
+        engine.listener = PluginBridge(
+            core = core,
+            rpc = PluginRpc.listenerFor(plugin, engine, tl),
+            tl = tl,
+            deserialize = PluginDeserialize.listenerFor(plugin, engine),
+            api = PluginApi.listenerFor(plugin, engine),
+            reads = PluginReads.listenerFor(plugin, engine),
+            writes = PluginWrites.listenerFor(plugin, engine),
+            fetch = PluginFetch.listenerFor(plugin, engine),
+            canvas = PluginCanvas.listenerFor(plugin, engine),
+            notifications = PluginNotifications.listenerFor(plugin, engine),
+            jvm = jvm,
+            xposed = PluginXposed.listenerFor(plugin, engine, jvm),
+        )
         plugin.engine = engine
         try {
             engine.installInfo(
@@ -397,8 +421,8 @@ object PluginManager {
                 language = LocaleController.getInstance().currentLocaleInfo?.langCode ?: "",
                 header = plugin.manifest.raw,
             )
-            PluginApi.attach(plugin, engine)
-            PluginRpc.attach(plugin, engine)
+            PluginApi.install(plugin, engine)
+            PluginRpc.install(engine)
             engine.evaluate(plugin.source, plugin.manifest.name)
             notifyChanged()
         } catch (e: Throwable) {
