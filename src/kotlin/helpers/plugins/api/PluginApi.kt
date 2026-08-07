@@ -12,6 +12,7 @@ import android.util.Log
 import android.view.View
 import android.widget.Toast
 import desu.inugram.core.plugins.PluginWire
+import desu.inugram.helpers.plugins.ApiListener
 import desu.inugram.helpers.plugins.Plugin
 import desu.inugram.helpers.plugins.PluginDispatch
 import desu.inugram.helpers.plugins.PluginManager
@@ -47,9 +48,9 @@ import org.telegram.ui.LaunchActivity
 object PluginApi {
     private const val TAG = "InuPluginApi"
 
-    fun attach(plugin: Plugin, engine: QuickJs) {
+    fun listenerFor(plugin: Plugin, engine: QuickJs): ApiListener {
         watchAccounts()
-        engine.apiListener = object : QuickJs.ApiListener {
+        return object : ApiListener {
             override fun kv(op: Int, key: String, value: String): String {
                 // the engine's grant check already ran in native; this is belt-and-braces
                 if (!plugin.permissions.has("kv")) {
@@ -115,17 +116,23 @@ object PluginApi {
             override fun actionEditor(op: Int, surface: Long, payloadJson: String): String? =
                 PluginActions.editorOp(op, surface, payloadJson)
         }
-        // the read surface installs from inside `installApi`, taking the peer helpers `inu.utils` leaves behind and the `Account` handles it hangs its getters on
-        PluginReads.attach(plugin, engine)
-        PluginWrites.attach(plugin, engine)
-        PluginFetch.attach(plugin, engine)
-        PluginCanvas.attach(plugin, engine)
-        PluginNotifications.attach(plugin, engine)
-        PluginJvm.attach(plugin, engine, AppScreen)
-        // after `inu.jvm`, which mints every handle its entry points take
-        PluginXposed.attach(plugin, engine)
-        val throttle = TimerThrottle(plugin, engine)
-        engine.timerScheduler = throttle::schedule
+    }
+
+    /** the per-engine clock [PluginBridge] carries; nothing can ask for a wake before the plugin's own code runs */
+    fun timerSchedulerFor(plugin: Plugin, engine: QuickJs): (Long) -> Unit = TimerThrottle(plugin, engine)::schedule
+
+    /** the app screen is here rather than in `PluginJvm`, which is in the bridge harness */
+    fun jvmListenerFor(plugin: Plugin, engine: QuickJs) = PluginJvm.listenerFor(plugin, engine, AppScreen)
+
+    /**
+     * Everything the engine's own bindings need in place, in the one order that works: the read
+     * surface installs from inside `installApi`, taking the peer helpers `inu.utils` leaves behind
+     * and the `Account` handles it hangs its getters on, and `inu.xposed` mints every handle its
+     * entry points take out of `inu.jvm`'s table.
+     */
+    fun install(plugin: Plugin, engine: QuickJs) {
+        PluginJvm.install(engine)
+        PluginXposed.install(engine)
         engine.installApi(PluginBlobs.dirFor(plugin.id))
         // after installApi, which creates the blob table `fs.write` reads a `Blob` through. A plugin that declared no `fs` gets no bindings and no directory
         val quota = PluginFs.quotaFor(plugin.manifest.grants)

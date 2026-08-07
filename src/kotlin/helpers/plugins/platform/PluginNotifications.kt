@@ -1,6 +1,7 @@
 package desu.inugram.helpers.plugins.platform
 
 import desu.inugram.core.plugins.PluginWire
+import desu.inugram.helpers.plugins.NotificationListener
 import desu.inugram.helpers.plugins.Plugin
 import desu.inugram.helpers.plugins.PluginDispatch
 import desu.inugram.helpers.plugins.QuickJs
@@ -54,14 +55,13 @@ object PluginNotifications {
 
     private val live = HashMap<QuickJs, MutableList<Registration>>()
 
-    fun attach(plugin: Plugin, engine: QuickJs) {
-        engine.notificationListener = object : QuickJs.NotificationListener {
+    fun listenerFor(plugin: Plugin, engine: QuickJs): NotificationListener =
+        object : NotificationListener {
             override fun register(callbackId: Int, events: Array<String>): String? =
                 startObserving(plugin, engine, callbackId, events)
 
             override fun unregister(callbackId: Int) = stopObserving(engine, callbackId)
         }
-    }
 
     private fun startObserving(plugin: Plugin, engine: QuickJs, callbackId: Int, events: Array<String>): String? {
         // the engine's own check_grant already ran in native; this is the second gate, on the side that owns the data

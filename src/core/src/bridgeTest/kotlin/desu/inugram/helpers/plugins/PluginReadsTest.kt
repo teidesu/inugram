@@ -52,7 +52,7 @@ class PluginReadsTest {
 
     private fun basicGroup(id: Long) = TLRPC.TL_chat().apply { this.id = id }
 
-    private fun reads(plugin: Plugin): QuickJs.ReadsListener = plugin.js.readsListener!!
+    private fun reads(plugin: Plugin): ReadsListener = plugin.js.listener!!
 
     private fun read(plugin: Plugin, op: Int, arg: String = "", account: Int = 0): String =
         reads(plugin).accountRead(account, op, arg)
@@ -421,7 +421,7 @@ class PluginReadsTest {
         resolve(plugin, "Utelegram")
         val stale = plugin.js
         plugin.engine = QuickJs()
-        PluginReads.attach(plugin, plugin.js)
+        attachBridge(plugin, plugin.js)
 
         connections().lastSent()!!.answer(TLRPC.TL_contacts_resolvedPeer(), null, 0L)
         drain()

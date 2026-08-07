@@ -73,13 +73,13 @@ class PluginBootTest {
     /**
      * the residual gap `BootCohort` cannot close by itself: it names *grants*, and a new api whose
      * registrations a headless path dispatches into would be invisible to it. Every one of those
-     * registers through [QuickJs.RpcListener] (the action and settings registrations go through
+     * registers through [RpcListener] (the action and settings registrations go through
      * `ApiListener`, and nothing dispatches those without a ui), so a new registration family here
      * is the one moment someone can be asked.
      */
     @Test
     fun `a new host-dispatched registration family has to be weighed against the boot cohort`() {
-        val families = QuickJs.RpcListener::class.java.declaredMethods
+        val families = RpcListener::class.java.declaredMethods
             .map { it.name }
             .filter { it.endsWith("Register") }
             .toSet()

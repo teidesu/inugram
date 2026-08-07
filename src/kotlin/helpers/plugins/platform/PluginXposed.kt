@@ -5,6 +5,7 @@ import desu.inugram.core.plugins.ScopeMatch
 import desu.inugram.core.plugins.PluginWire
 import desu.inugram.helpers.plugins.Plugin
 import desu.inugram.helpers.plugins.QuickJs
+import desu.inugram.helpers.plugins.XposedListener
 import java.lang.reflect.InvocationTargetException
 import java.lang.reflect.Member
 import java.lang.reflect.Method
@@ -68,25 +69,26 @@ object PluginXposed {
         @Suppress("unused")
         fun callback(args: Array<Any?>): Any? {
             // args[0] is the receiver for an instance method and there is no placeholder for a static one, so the split is the method's shape rather than the array's
-            val session = engine.xposedListener as? Session ?: return null
+            val session = engine.listener?.xposed as? Session ?: return null
             val receiver = if (isStatic) null else args.firstOrNull()
             val rest = if (isStatic) args.toList() else args.drop(1)
             return session.dispatch(site, receiver, rest)
         }
     }
 
-    fun attach(plugin: Plugin, engine: QuickJs) {
-        if (!plugin.permissions.has(GRANT)) return
-        // a hard dependency rather than an implicit grant: every entry point takes a handle only `inu.jvm` mints
-        if (engine.jvmListener == null) return
-        engine.xposedListener = Session(plugin, engine)
-        engine.installXposed()
+    /** [jvm] is a hard dependency rather than an implicit grant: every entry point takes a handle only `inu.jvm` mints */
+    fun listenerFor(plugin: Plugin, engine: QuickJs, jvm: JvmListener?): XposedListener? {
+        if (!plugin.permissions.has(GRANT) || jvm == null) return null
+        return Session(plugin, engine)
+    }
+
+    fun install(engine: QuickJs) {
+        if (engine.listener?.xposed != null) engine.installXposed()
     }
 
     /** an ART entry point stays rewritten, so a site left behind dispatches into an engine that is gone */
     fun detach(engine: QuickJs) {
-        (engine.xposedListener as? Session)?.close()
-        engine.xposedListener = null
+        (engine.listener?.xposed as? Session)?.close()
     }
 
     private class Refusal(val wire: String) : RuntimeException(null, null, false, false)
@@ -96,7 +98,7 @@ object PluginXposed {
 
     private class Site(val target: Member, val backup: Method)
 
-    private class Session(private val plugin: Plugin, private val engine: QuickJs) : QuickJs.XposedListener {
+    private class Session(private val plugin: Plugin, private val engine: QuickJs) : XposedListener {
         // concurrent because [dispatch] reads this on whichever thread called the hooked method, while install/remove run on globalQueue
         private val sites = ConcurrentHashMap<Long, Site>()
         private val nextSite = AtomicLong(1)

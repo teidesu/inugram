@@ -58,7 +58,7 @@ class PluginRequestFlagsTest {
     )
 
     private fun write(plugin: Plugin, op: Int, arg: JSONObject): String? =
-        plugin.js.writesListener!!.accountWrite(0, 1L, op, arg.toString(), emptyArray())
+        plugin.js.listener!!.accountWrite(0, 1L, op, arg.toString(), emptyArray())
 
     private fun send(peer: String) = JSONObject().put("peer", peer).put("text", "hi")
 

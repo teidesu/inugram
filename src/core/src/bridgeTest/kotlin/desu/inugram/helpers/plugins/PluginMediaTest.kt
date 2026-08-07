@@ -71,7 +71,7 @@ class PluginMediaTest {
         arg: JSONObject,
         values: Array<String>,
         requestId: Long = 1L,
-    ): String? = plugin.js.writesListener!!.accountWrite(0, requestId, op, arg.toString(), values)
+    ): String? = plugin.js.listener!!.accountWrite(0, requestId, op, arg.toString(), values)
 
     private fun onDisk(name: String, content: String): File =
         File(scratch, name).apply { writeText(content) }
@@ -87,12 +87,12 @@ class PluginMediaTest {
         val message = withMedia()
         FileLoader.getInstance(0).inu_paths[message.id] = onDisk("note.txt", "hello world")
 
-        val wire = plugin.js.writesListener!!.messageFile(0, messageWire(message))
+        val wire = plugin.js.listener!!.messageFile(0, messageWire(message))
         val json = JSONObject((PluginWire.decode(wire) as PluginWire.Value.Json).json)
         assertTrue(json.getString("path").endsWith("note.txt"), json.getString("path"))
         assertTrue(json.getBoolean("exists"))
 
-        assertEquals("N", plugin.js.writesListener!!.messageFile(0, messageWire(noMedia())))
+        assertEquals("N", plugin.js.listener!!.messageFile(0, messageWire(noMedia())))
     }
 
     @Test
@@ -101,7 +101,7 @@ class PluginMediaTest {
         val message = withMedia()
         FileLoader.getInstance(0).inu_paths[message.id] = File(scratch, "missing.txt")
         val json = JSONObject(
-            (PluginWire.decode(plugin.js.writesListener!!.messageFile(0, messageWire(message))) as PluginWire.Value.Json).json,
+            (PluginWire.decode(plugin.js.listener!!.messageFile(0, messageWire(message))) as PluginWire.Value.Json).json,
         )
         assertTrue(json.getString("path").endsWith("missing.txt"))
         assertTrue(!json.getBoolean("exists"), "a path that is not there must not read as downloaded")
@@ -110,7 +110,7 @@ class PluginMediaTest {
     @Test
     fun `getMessageFile is gated on the messages scope, on the side that owns the data`() {
         val plugin = startPlugin("media", "account.write(send)")
-        assertPluginError("not-granted", plugin.js.writesListener!!.messageFile(0, messageWire(withMedia())))
+        assertPluginError("not-granted", plugin.js.listener!!.messageFile(0, messageWire(withMedia())))
     }
 
     @Test

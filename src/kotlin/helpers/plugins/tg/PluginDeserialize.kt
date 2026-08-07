@@ -8,6 +8,7 @@ import desu.inugram.core.plugins.TlCtorIds
 import desu.inugram.core.plugins.TlFlags
 import desu.inugram.core.plugins.TlNames
 import desu.inugram.core.plugins.PluginWire
+import desu.inugram.helpers.plugins.DeserializeListener
 import desu.inugram.helpers.plugins.Plugin
 import desu.inugram.helpers.plugins.PluginDispatch
 import desu.inugram.helpers.plugins.QuickJs
@@ -155,8 +156,8 @@ object PluginDeserialize {
         }
     }
 
-    fun attach(plugin: Plugin, engine: QuickJs) {
-        engine.deserializeListener = object : QuickJs.DeserializeListener {
+    fun listenerFor(plugin: Plugin, engine: QuickJs): DeserializeListener =
+        object : DeserializeListener {
             override fun onDeserializeRegister(callbackId: Int, rulesJson: String): String? =
                 register(plugin, engine, callbackId, rulesJson)
 
@@ -168,7 +169,6 @@ object PluginDeserialize {
             override fun onDeserializeMiddlewareUnregister(callbackId: Int) =
                 unregisterMiddleware(engine, callbackId)
         }
-    }
 
     internal fun detach(engine: QuickJs) {
         synchronized(lock) {

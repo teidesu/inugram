@@ -287,10 +287,26 @@ The host half is `src/kotlin/helpers/plugins`, grouped to mirror the crate: `tg/
 `TlFilter`), `ui/` (`PluginUi`, `PluginActions`, `PluginIcons`, `PluginScreens`, `PluginCanvas`),
 `io/` (`PluginFetch`, `PluginFs`, `PluginBlobs`), `platform/` (`PluginJvm`, `PluginXposed`,
 `PluginNotifications`) and `api/` (`PluginApi`, `PluginKv`), with `Plugin`, `PluginManager`,
-`PluginDispatch` and `QuickJs` left at the root. `QuickJs` cannot move: its package is half of every
-`Java_desu_inugram_helpers_plugins_QuickJs_*` symbol name in `jni/exports.rs`. The subpackages are
-still under the prefix `PluginJvm.ENGINE_PACKAGE` refuses, so reflecting back into the engine stays
-`forbidden`.
+`PluginDispatch`, `PluginListener`, `PluginBridge` and `QuickJs` left at the root. `QuickJs` cannot
+move: its package is half of every `Java_desu_inugram_helpers_plugins_QuickJs_*` symbol name in
+`jni/exports.rs`. The subpackages are still under the prefix `PluginJvm.ENGINE_PACKAGE` refuses, so
+reflecting back into the engine stays `forbidden`.
+
+**Rust calls back into one object, and it is not `QuickJs`.** Every upcall is a member of
+`PluginListener` (`PluginListener.kt`), which is the union of one interface per subsystem, and the
+single implementation is `PluginBridge` — composed with Kotlin's `by`, so a member added to a
+subsystem's interface costs no forwarder anywhere. Three consequences worth knowing before moving
+anything. The contract lives in its own file **because `QuickJs` cannot be compiled off a device**
+(`nativeCreate()` in its constructor, `System.loadLibrary` in its class initializer), so it is in
+`bridgeExcluded` while the interfaces it used to nest are not — that is what lets the harness hold
+the real declarations instead of a hand-kept copy that only the app build could catch drifting. Each
+`Plugin*` owner therefore exposes a `listenerFor(...)` that *builds* its part and an `install(...)`
+that runs its `engine.install*` call, because the bridge is assigned whole, once, before anything
+that can call into it; the ordering constraints among the installs are all in `PluginApi.install`.
+And the bridge is also the engine's **registry**: `tl`, `canvas`, `jvm` and `xposed` are readable
+back off it, which is what their owners look up. A part is fixed for the life of the bridge, so
+teardown is `close()` on the part, never swapping it out — safe because `PluginManager.teardown`
+closes the engine on the same runnable and rust cannot call a closed one.
 
 **Everything below is testable, and most of it only here.** `src/kotlin/helpers/plugins` is compiled
 into `:InuCore`'s `bridgeTest` source set and run on a plain JVM — `./gradlew :InuCore:bridgeTest`,

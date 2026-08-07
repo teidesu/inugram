@@ -258,10 +258,10 @@ class PluginRpcChainTest {
         // `@grant interceptRpc` and auth.exportLoginToken
         val plugin = startPlugin("p", "interceptRpc", "invokeRpc")
         assertPluginError("forbidden", plugin.interceptRpc("auth.exportLoginToken"))
-        assertPluginError("forbidden", plugin.js.rpcListener!!.onInvokeRpc(1L, QuickJs.ANY_ACCOUNT, PluginWire.encodeJson("""{"_":"auth.exportLoginToken"}""")))
+        assertPluginError("forbidden", plugin.js.listener!!.onInvokeRpc(1L, QuickJs.ANY_ACCOUNT, PluginWire.encodeJson("""{"_":"auth.exportLoginToken"}""")))
         // the account.* half of the list is not a prefix, so it is refused by name or not at all
         assertPluginError("forbidden", plugin.interceptRpc("account.deleteAccount"))
-        assertPluginError("forbidden", plugin.js.rpcListener!!.onInvokeRpc(2L, QuickJs.ANY_ACCOUNT, PluginWire.encodeJson("""{"_":"account.resetAuthorization"}""")))
+        assertPluginError("forbidden", plugin.js.listener!!.onInvokeRpc(2L, QuickJs.ANY_ACCOUNT, PluginWire.encodeJson("""{"_":"account.resetAuthorization"}""")))
     }
 
     /**
@@ -276,17 +276,17 @@ class PluginRpcChainTest {
         val plugin = startPlugin("p", "invokeRpc(users.getUsers)")
         val request = PluginWire.encodeJson("""{"_":"users.getUsers"}""")
 
-        assertNull(plugin.js.rpcListener!!.onInvokeRpc(1L, QuickJs.ANY_ACCOUNT, request))
+        assertNull(plugin.js.listener!!.onInvokeRpc(1L, QuickJs.ANY_ACCOUNT, request))
         assertEquals(1, connections(0).sent.size)
         assertEquals(0, connections(1).sent.size)
 
-        assertNull(plugin.js.rpcListener!!.onInvokeRpc(2L, 1, request))
+        assertNull(plugin.js.listener!!.onInvokeRpc(2L, 1, request))
         assertEquals(1, connections(0).sent.size)
         assertEquals(1, connections(1).sent.size, "the named account is the one it went out on")
 
-        assertPluginError("invalid-argument", plugin.js.rpcListener!!.onInvokeRpc(3L, 7, request))
-        assertPluginError("invalid-argument", plugin.js.rpcListener!!.onInvokeRpc(4L, 9999, request))
-        assertPluginError("invalid-argument", plugin.js.rpcListener!!.onInvokeRpc(5L, -2, request))
+        assertPluginError("invalid-argument", plugin.js.listener!!.onInvokeRpc(3L, 7, request))
+        assertPluginError("invalid-argument", plugin.js.listener!!.onInvokeRpc(4L, 9999, request))
+        assertPluginError("invalid-argument", plugin.js.listener!!.onInvokeRpc(5L, -2, request))
     }
 
     /**
@@ -307,7 +307,7 @@ class PluginRpcChainTest {
         drain()
 
         assertPluginError("forbidden", refusal)
-        assertPluginError("forbidden", plugin.js.rpcListener!!.onInvokeRpc(1L, QuickJs.ANY_ACCOUNT, readOnlyWire))
+        assertPluginError("forbidden", plugin.js.listener!!.onInvokeRpc(1L, QuickJs.ANY_ACCOUNT, readOnlyWire))
         assertEquals(0, connections().sent.size)
     }
 

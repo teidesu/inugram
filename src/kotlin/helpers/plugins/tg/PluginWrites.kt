@@ -5,6 +5,7 @@ import desu.inugram.core.plugins.PluginWire
 import desu.inugram.helpers.plugins.Plugin
 import desu.inugram.helpers.plugins.PluginDispatch
 import desu.inugram.helpers.plugins.QuickJs
+import desu.inugram.helpers.plugins.WritesListener
 import desu.inugram.helpers.plugins.tl.TlHandles
 import desu.inugram.helpers.plugins.tl.TlJson
 import org.json.JSONArray
@@ -67,8 +68,8 @@ object PluginWrites {
         OP_DOWNLOAD_MEDIA_TO_FILE to ("account.read" to "messages"),
     )
 
-    fun attach(plugin: Plugin, engine: QuickJs) {
-        engine.writesListener = object : QuickJs.WritesListener {
+    fun listenerFor(plugin: Plugin, engine: QuickJs): WritesListener =
+        object : WritesListener {
             override fun accountWrite(
                 accountId: Int,
                 requestId: Long,
@@ -80,7 +81,6 @@ object PluginWrites {
             override fun messageFile(accountId: Int, value: String): String =
                 PluginMedia.messageFile(plugin, engine, accountId, value)
         }
-    }
 
     private fun write(
         plugin: Plugin,

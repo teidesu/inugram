@@ -33,10 +33,10 @@ class PluginDeserializeTest {
         startPlugin("deserialize", "interceptDeserialize(${scopes.joinToString(",")})")
 
     private fun Plugin.rules(json: String, callbackId: Int = 1): String? =
-        js.deserializeListener!!.onDeserializeRegister(callbackId, json)
+        js.listener!!.onDeserializeRegister(callbackId, json)
 
     private fun Plugin.dropRules(callbackId: Int = 1) =
-        js.deserializeListener!!.onDeserializeUnregister(callbackId)
+        js.listener!!.onDeserializeUnregister(callbackId)
 
     /** the wire `deserialize.rs` builds: `type` is always an array and `when` always present */
     private fun rule(type: String, set: String, matching: String = "{}"): String =
@@ -341,10 +341,10 @@ class PluginDeserializeTest {
     }
 
     private fun Plugin.middleware(typesJson: String, callbackId: Int = 1): String? =
-        js.deserializeListener!!.onDeserializeMiddlewareRegister(callbackId, typesJson)
+        js.listener!!.onDeserializeMiddlewareRegister(callbackId, typesJson)
 
     private fun Plugin.dropMiddleware(callbackId: Int = 1) =
-        js.deserializeListener!!.onDeserializeMiddlewareUnregister(callbackId)
+        js.listener!!.onDeserializeMiddlewareUnregister(callbackId)
 
     /**
      * The parsing thread blocks on a `globalQueue` runnable, so a test that called [apply] on its

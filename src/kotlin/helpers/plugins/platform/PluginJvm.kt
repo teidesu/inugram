@@ -5,6 +5,7 @@ import dalvik.system.DexClassLoader
 import desu.inugram.core.plugins.PluginInstalls
 import desu.inugram.core.plugins.ScopeMatch
 import desu.inugram.core.plugins.PluginWire
+import desu.inugram.helpers.plugins.JvmListener
 import desu.inugram.helpers.plugins.Plugin
 import desu.inugram.helpers.plugins.PluginDispatch
 import desu.inugram.helpers.plugins.QuickJs
@@ -78,18 +79,18 @@ object PluginJvm {
     }
 
     /** nothing at all for a plugin without the grant: the api is the whole app */
-    fun attach(plugin: Plugin, engine: QuickJs, screen: AppScreen) {
-        if (!plugin.permissions.has(GRANT)) return
-        engine.jvmListener = Session(plugin, engine, screen)
-        engine.installJvm()
+    fun listenerFor(plugin: Plugin, engine: QuickJs, screen: AppScreen): JvmListener? =
+        if (plugin.permissions.has(GRANT)) Session(plugin, engine, screen) else null
+
+    fun install(engine: QuickJs) {
+        if (engine.listener?.jvm != null) engine.installJvm()
     }
 
     /** the scope list already decided this: a handle only exists because [Session.checkClass] let it be minted */
-    fun objectAt(engine: QuickJs, handle: Long): Any? = (engine.jvmListener as? Session)?.objectAt(handle)
+    fun objectAt(engine: QuickJs, handle: Long): Any? = (engine.listener?.jvm as? Session)?.objectAt(handle)
 
     fun detach(engine: QuickJs) {
-        (engine.jvmListener as? Session)?.close()
-        engine.jvmListener = null
+        (engine.listener?.jvm as? Session)?.close()
     }
 
     fun dexDir(installId: String): File {
@@ -121,7 +122,7 @@ object PluginJvm {
         fun wireOf(failure: Throwable): String?
     }
 
-    internal fun bridgeFor(engine: QuickJs): ValueBridge? = engine.jvmListener as? ValueBridge
+    internal fun bridgeFor(engine: QuickJs): ValueBridge? = engine.listener?.jvm as? ValueBridge
 
     private class Refusal(val wire: String) : RuntimeException(null, null, false, false)
 
@@ -139,7 +140,7 @@ object PluginJvm {
         )
 
     private class Session(private val plugin: Plugin, private val engine: QuickJs, private val screen: AppScreen) :
-        QuickJs.JvmListener, ValueBridge {
+        JvmListener, ValueBridge {
         // concurrent because [ValueBridge] is reached from off globalQueue: `inu.xposed` encodes on the hooked method's own thread, and `PluginApi.showDialog` on the ui thread
         private val handles = ConcurrentHashMap<Long, Any>()
         private val nextId = AtomicLong(1)
