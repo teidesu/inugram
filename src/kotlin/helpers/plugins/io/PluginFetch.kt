@@ -155,17 +155,53 @@ object PluginFetch {
 
     class Spec(val method: String, val headers: Map<String, List<String>>, val redirect: String) {
         companion object {
+            /** rfc7230's token, which is what a header name and a method are allowed to be */
+            private val TOKEN = Regex("^[!#$%&'*+\\-.^_`|~0-9a-zA-Z]+$")
+
+            /**
+             * headers the transport owns: one of these set from a plugin either does nothing or
+             * makes the request lie about its own framing. Android's `HttpURLConnection` is okhttp,
+             * which has no restricted-name list of its own and supplies `Host` only when it is
+             * absent, so a forged one does go on the wire.
+             */
+            private val RESERVED = setOf(
+                "host", "content-length", "connection", "transfer-encoding", "upgrade", "keep-alive", "te", "trailer",
+            )
+
+            private val REDIRECT_MODES = setOf("follow", "manual", "error")
+
+            /**
+             * `fetch.js` checks all of this too, for the error message - but it is evaluated into
+             * the plugin's own realm and hands the spec over as text, so its checks are advisory and
+             * these are the ones that decide. Same reasoning as `api::json_stringify` not reading
+             * `globalThis.JSON`: a refusal a plugin can reassign is not a refusal.
+             */
             fun parse(json: String): Spec {
                 val obj = JSONObject(json)
                 val headers = LinkedHashMap<String, List<String>>()
                 val raw = obj.optJSONObject("headers")
                 if (raw != null) {
-                    for (name in raw.keys()) {
-                        val values = raw.getJSONArray(name)
-                        headers[name] = (0 until values.length()).map { values.getString(it) }
+                    for (key in raw.keys()) {
+                        require(TOKEN.matches(key)) { "'$key' is not a header name" }
+                        val name = key.lowercase()
+                        require(name !in RESERVED) { "the '$key' header belongs to the transport" }
+                        require(name !in headers) { "the '$key' header is repeated" }
+                        val values = raw.getJSONArray(key)
+                        headers[name] = (0 until values.length()).map {
+                            val value = values.getString(it)
+                            // a newline in a value is a second header, and a request nobody wrote
+                            require(value.none { c -> c < ' ' && c != '\t' || c == '\u007f' }) {
+                                "the '$key' header has a control character in it"
+                            }
+                            value
+                        }
                     }
                 }
-                return Spec(obj.optString("method", "GET"), headers, obj.optString("redirect", "follow"))
+                val method = obj.optString("method", "GET")
+                require(TOKEN.matches(method)) { "'$method' is not a method" }
+                val redirect = obj.optString("redirect", "follow")
+                require(redirect in REDIRECT_MODES) { "'$redirect' is not a redirect mode" }
+                return Spec(method, headers, redirect)
             }
         }
     }

@@ -8,6 +8,7 @@ import desu.inugram.helpers.plugins.api.PluginApi
 import desu.inugram.ui.settings.SettingsPageActivity
 import org.json.JSONArray
 import org.json.JSONObject
+import org.telegram.messenger.DialogObject
 import org.telegram.messenger.Utilities
 import org.telegram.ui.ActionBar.BaseFragment
 import org.telegram.ui.ChatActivity
@@ -70,15 +71,24 @@ object PluginScreens {
         return out
     }
 
+    /**
+     * A secret chat is opened as an ordinary [ChatActivity] whose `dialog_id` is
+     * `DialogObject.makeEncryptedDialogId(encId)`, so the id is dropped here for the same reason
+     * [desu.inugram.helpers.plugins.tg.PluginReads.dialogIdOf] answers `null` for one and
+     * [PluginActions.Surface] refuses one: `common.d.ts` says a secret chat has no `DialogId` to
+     * name. `type` still says there was a chat, which is what [toJson] omitting a zero id leaves.
+     */
+    private fun namedDialogId(id: Long): Long = if (DialogObject.isEncryptedDialog(id)) 0L else id
+
     /** stock has no marker for "this is a settings screen", so the fallback is the name every one of them is spelled with; getting it wrong costs a screen the `other` label */
     private fun describe(fragment: BaseFragment): ScreenRef = when (fragment) {
         is ChatActivity -> ScreenRef(
             "chat",
-            fragment.dialogId,
+            namedDialogId(fragment.dialogId),
             fragment.topicId.toInt(),
             fragment.currentAccount,
         )
-        is ProfileActivity -> ScreenRef("profile", fragment.dialogId, 0, fragment.currentAccount)
+        is ProfileActivity -> ScreenRef("profile", namedDialogId(fragment.dialogId), 0, fragment.currentAccount)
         is DialogsActivity -> ScreenRef("dialogs", 0, 0, fragment.currentAccount)
         is SettingsPageActivity -> ScreenRef("settings", 0, 0, fragment.currentAccount)
         else -> ScreenRef(
