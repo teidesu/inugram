@@ -87,6 +87,27 @@ fn current_screen_carries_the_dialog_only_with_the_dialogs_grant() {
 }
 
 #[test]
+fn a_hijacked_json_global_never_sees_the_ungated_screen_wire() {
+    let (_rt, ctx, host, _state, _accounts, _logs) = setup(&[]);
+    *host.screen.borrow_mut() = format!("J{CHAT}");
+    crate::testing::util::eval_unit(
+        &ctx,
+        r#"
+        globalThis.__wires = [];
+        globalThis.JSON = {
+            parse: (s) => { globalThis.__wires.push(String(s)); return {type: 'chat', dialogId: -1001} },
+            stringify: () => '"hijacked"',
+        };
+        "#,
+    );
+    let seen = crate::testing::util::eval_string(
+        &ctx,
+        "(s => [s.type, 'dialogId' in s, globalThis.__wires.length].join(','))(inu.ui.getCurrentScreen())",
+    );
+    assert_eq!(seen, "chat,false,0", "the host wire carries dialogId; without the grant nothing may see it");
+}
+
+#[test]
 fn current_screen_is_read_per_call_and_never_cached() {
     let (_rt, ctx, host, _state, _accounts, _logs) = setup(&[]);
     *host.screen.borrow_mut() = format!("J{DIALOGS}");

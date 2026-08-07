@@ -2617,6 +2617,14 @@ declare namespace inu {
    * `id`, any `*_id`, `access_hash`, `dc_id` and `file_reference` are `forbidden` to assign, and
    * what you can read is what the api filter lets you read anywhere else.
    *
+   * the guard is on the slot the rewrite lands in, not on the name you wrote, so it holds **at any
+   * depth of the value** too: `m.peer_id = { _: 'peerUser', user_id: '7' }` is the same rewrite as
+   * `m.peer_id.user_id = '7'` and is `forbidden` the same way, and so is an object carrying one
+   * several levels down, and so is a vector element. for the same reason **another live TL object
+   * cannot be assigned here at all** (`forbidden`): it carries the addressing fields of wherever it
+   * was parsed, so splicing one in is that rewrite by reference. build the replacement as a plain
+   * object — structural rewrites are what this form is for, it is only the addressing that is out.
+   *
    * **the app is blocked while your middleware runs**, on its own network or storage thread, and it
    * gives up after 250ms — past that the object is delivered as parsed. so this must be synchronous
    * and cheap: an `await` in here settles long after the object has been handed on, and the view is

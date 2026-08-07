@@ -222,7 +222,14 @@ class TlHandles(private val policy: TlFilter.Policy) : QuickJs.TlListener {
         val field = TlJson.publicFields(cls)[key]
             ?: return "no such field '$key' on '${TlNames.classNameToTlName(cls)}'"
         val gated = TlFlags.gateOf(cls, key) != null
-        val resolved = resolveSetValue(TlWire.decode(wire), field.genericType, field.type, key, allowPrimitiveClear = gated)
+        val resolved = resolveSetValue(
+            TlWire.decode(wire),
+            field.genericType,
+            field.type,
+            key,
+            allowPrimitiveClear = gated,
+            guarded = entry.guarded,
+        )
         if (resolved.isError) return resolved.error
         return try {
             field.set(target, resolved.value)
@@ -264,7 +271,8 @@ class TlHandles(private val policy: TlFilter.Policy) : QuickJs.TlListener {
         val index = key.toIntOrNull() ?: return "no such property '$key' on a TL vector"
         if (index < 0 || index > target.size) return "vector index out of range: $index"
         val elementType = entry.elementType ?: return "vector element type is unknown"
-        val resolved = resolveSetValue(TlWire.decode(wire), elementType, rawClassOf(elementType), "[$index]")
+        val resolved =
+            resolveSetValue(TlWire.decode(wire), elementType, rawClassOf(elementType), "[$index]", guarded = entry.guarded)
         if (resolved.isError) return resolved.error
         if (index == target.size) target.add(resolved.value) else target[index] = resolved.value
         entry.flagOwner?.let { (obj, name) -> TlJson.syncFlagBit(obj, name) }
@@ -319,12 +327,18 @@ class TlHandles(private val policy: TlFilter.Policy) : QuickJs.TlListener {
     private fun ok(value: Any?) = Resolved(value, null)
     private fun err(message: String) = Resolved(null, message)
 
+    /**
+     * [guarded] is the deserialize scope's rule, and it lives here rather than at the two call
+     * sites because the guard is about the value: the name a payload is assigned to says nothing
+     * about the fields the payload itself carries, and a vector element has no name at all.
+     */
     private fun resolveSetValue(
         decoded: TlWire.Value,
         genericType: Type,
         rawType: Class<*>,
         path: String,
         allowPrimitiveClear: Boolean = false,
+        guarded: Boolean = false,
     ): Resolved =
         when (decoded) {
             is TlWire.Value.Null -> {
@@ -347,7 +361,10 @@ class TlHandles(private val policy: TlFilter.Policy) : QuickJs.TlListener {
             is TlWire.Value.Handle -> {
                 val source = table[decoded.id] ?: return err(TlWire.encodeExpired())
                 val instance = source.target
-                if (source.readOnly) {
+                if (guarded) {
+                    // it carries the addressing fields of wherever it was parsed, and splicing it in is how those reach a slot they do not name
+                    err(TlWire.encodePluginError("forbidden", SPLICE_MESSAGE))
+                } else if (source.readOnly) {
                     err(TlWire.encodePluginError("forbidden", READ_ONLY_MESSAGE))
                 } else if (!rawType.isInstance(instance)) {
                     err("type mismatch assigning handle at '$path': expected $rawType, got ${instance.javaClass}")
@@ -357,7 +374,12 @@ class TlHandles(private val policy: TlFilter.Policy) : QuickJs.TlListener {
             }
             is TlWire.Value.Json -> try {
                 val parsed = JSONTokener(decoded.json).nextValue()
-                ok(TlJson.jsonToValue(genericType, parsed, path))
+                val protected = if (guarded) TlJson.findProtectedField(parsed) else null
+                if (protected != null) {
+                    err(TlWire.encodePluginError("forbidden", DeserializeGuards.protectedFieldReason(protected)))
+                } else {
+                    ok(TlJson.jsonToValue(genericType, parsed, path))
+                }
             } catch (e: Exception) {
                 err(e.message ?: "construct failed at '$path'")
             }
@@ -393,6 +415,9 @@ class TlHandles(private val policy: TlFilter.Policy) : QuickJs.TlListener {
         // must stay byte-identical to READ_ONLY_MESSAGE in src/rust/inu_native/src/tl/proxy.rs:
         // the same refusal is raised on whichever side sees the write first
         const val READ_ONLY_MESSAGE = "this TL view is read-only; take a copy with toJSON() to edit it"
+
+        const val SPLICE_MESSAGE = "a live TL object cannot be assigned inside interceptDeserialize: it carries the " +
+            "addressing fields of wherever it was parsed - build the replacement as a plain object instead"
 
         // one dispatch's chain spans several plugins' tables and every one of them must release
         // the same scope id, so the counter can't live per-instance

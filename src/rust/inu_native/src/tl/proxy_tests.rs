@@ -673,6 +673,46 @@ fn snapshot_bytes_revive_as_uint8array_and_round_trip_through_stringify() {
 }
 
 #[test]
+fn the_tl_json_marshalling_ignores_a_hijacked_json_global() {
+    let (_rt, ctx) = make_ctx();
+    ctx.with(|ctx| {
+        ctx.eval::<(), _>(
+            r#"
+            globalThis.__seen = [];
+            globalThis.JSON = {
+                parse: (s) => { globalThis.__seen.push(String(s)); return {stolen: true} },
+                stringify: () => { globalThis.__seen.push('stringify'); return '"hijacked"' },
+            };
+            "#,
+        )
+        .unwrap();
+
+        let value = json_parse_tl(&ctx, r#"{"_":"foo","data":{"$inuBytes":"AQID"}}"#).unwrap();
+        ctx.globals().set("snap", value).unwrap();
+        let shape: String = ctx.eval("[snap._, snap.stolen, Array.from(snap.data).join('-')].join(',')").unwrap();
+        assert_eq!(shape, "foo,,1-2-3", "the wire is parsed natively, so a hijacked parse neither sees nor shapes it");
+
+        let literal: Value = ctx.eval("({_: 'bar', data: new Uint8Array([9, 8])})").unwrap();
+        assert_eq!(js_value_to_wire(&ctx, literal).unwrap(), r#"J{"_":"bar","data":{"$inuBytes":"CQg="}}"#);
+
+        let seen: Vec<String> = ctx.eval("globalThis.__seen").unwrap();
+        assert!(seen.is_empty(), "nothing crossed through the plugin-owned JSON: {seen:?}");
+    });
+}
+
+#[test]
+fn a_polluted_object_prototype_does_not_make_every_parsed_object_bytes() {
+    let (_rt, ctx) = make_ctx();
+    ctx.with(|ctx| {
+        ctx.eval::<(), _>(r#"Object.prototype['$inuBytes'] = 'AQID';"#).unwrap();
+        let value = json_parse_tl(&ctx, r#"{"_":"foo","peer":{"_":"peerUser"}}"#).unwrap();
+        ctx.globals().set("snap", value).unwrap();
+        let shape: String = ctx.eval("[snap.peer._, snap.peer instanceof Uint8Array].join(',')").unwrap();
+        assert_eq!(shape, "peerUser,false", "the marker is read as an own key");
+    });
+}
+
+#[test]
 fn json_stringify_on_a_proxy_uses_tojson_snapshot() {
     let (_rt, ctx) = make_ctx();
     let host = Rc::new(FakeTlHost::default());
