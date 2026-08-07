@@ -5,7 +5,7 @@ import android.util.SparseArray
 import desu.inugram.core.plugins.DeserializeGuards
 import desu.inugram.core.plugins.TlFlags
 import desu.inugram.core.plugins.TlNames
-import desu.inugram.core.plugins.TlWire
+import desu.inugram.core.plugins.PluginWire
 import desu.inugram.helpers.plugins.QuickJs
 import java.lang.reflect.ParameterizedType
 import java.lang.reflect.Type
@@ -107,18 +107,18 @@ class TlHandles(private val policy: TlFilter.Policy) : QuickJs.TlListener {
     fun isReadOnly(handle: Long): Boolean = table[handle]?.readOnly ?: false
 
     override fun tlGet(handle: Long, key: String): String {
-        val entry = table[handle] ?: return TlWire.encodeExpired()
+        val entry = table[handle] ?: return PluginWire.encodeExpired()
         return when (val target = entry.target) {
             is TLObject -> getObjectField(entry, target, key)
             is ArrayList<*> -> getVectorProp(entry, target, key)
-            else -> TlWire.encodeError("internal: unsupported handle target ${target.javaClass}")
+            else -> PluginWire.encodeError("internal: unsupported handle target ${target.javaClass}")
         }
     }
 
     override fun tlSet(handle: Long, key: String, valueWire: String): String? {
-        val entry = table[handle] ?: return TlWire.encodeExpired()
+        val entry = table[handle] ?: return PluginWire.encodeExpired()
         // the rust traps already refuse a read-only view; this is the same refusal on the side that owns the mode, so a forged wire can't write either
-        if (entry.readOnly) return TlWire.encodePluginError("forbidden", READ_ONLY_MESSAGE)
+        if (entry.readOnly) return PluginWire.encodePluginError("forbidden", READ_ONLY_MESSAGE)
         @Suppress("UNCHECKED_CAST")
         return try {
             when (val target = entry.target) {
@@ -128,7 +128,7 @@ class TlHandles(private val policy: TlFilter.Policy) : QuickJs.TlListener {
             }
         } catch (e: Exception) {
             // a plugin picks the assigned value and rust re-emits whatever string it hangs off the marker symbol, so a malformed wire is plugin input, not a bug
-            TlWire.encodePluginError("invalid-argument", "assigning '$key': ${e.message ?: e.toString()}")
+            PluginWire.encodePluginError("invalid-argument", "assigning '$key': ${e.message ?: e.toString()}")
         }
     }
 
@@ -177,20 +177,20 @@ class TlHandles(private val policy: TlFilter.Policy) : QuickJs.TlListener {
 
     private fun getObjectField(entry: HandleEntry, target: TLObject, key: String): String {
         val cls = target.javaClass
-        if (key == "_") return TlWire.encodeString(TlNames.classNameToTlName(cls))
-        if (TlFlags.isFlagWord(cls, key)) return TlWire.encodeNull()
+        if (key == "_") return PluginWire.encodeString(TlNames.classNameToTlName(cls))
+        if (TlFlags.isFlagWord(cls, key)) return PluginWire.encodeNull()
         // a filtered-out field reads as absent, exactly like a cleared flag bit, never as an error
-        if (TlFilter.hidesField(policy, cls, key)) return TlWire.encodeNull()
+        if (TlFilter.hidesField(policy, cls, key)) return PluginWire.encodeNull()
         val field = TlJson.publicFields(cls)[key]
-            ?: return TlWire.encodeError("no such field '$key' on '${TlNames.classNameToTlName(cls)}'")
+            ?: return PluginWire.encodeError("no such field '$key' on '${TlNames.classNameToTlName(cls)}'")
         // a field whose bit is clear isn't there, whatever the java slot happens to hold - stock
         // parks placeholders in some of them (`photo = new TL_photoEmpty()`)
         val gate = TlFlags.gateOf(cls, key)
-        if (gate != null && !isBitSet(target, cls, gate)) return TlWire.encodeNull()
+        if (gate != null && !isBitSet(target, cls, gate)) return PluginWire.encodeNull()
         val value = try {
             field.get(target)
         } catch (e: Exception) {
-            return TlWire.encodeError(e.message ?: "reflection get failed")
+            return PluginWire.encodeError(e.message ?: "reflection get failed")
         }
         val filtered = if (policy.takeover) TlFilter.filterFieldValue(target, key, value) else value
         return encodeFieldValue(
@@ -207,7 +207,7 @@ class TlHandles(private val policy: TlFilter.Policy) : QuickJs.TlListener {
         val cls = target.javaClass
         if (key == "_") return "cannot assign to '_'"
         if (entry.guarded && DeserializeGuards.isProtectedField(key)) {
-            return TlWire.encodePluginError("forbidden", DeserializeGuards.protectedFieldReason(key))
+            return PluginWire.encodePluginError("forbidden", DeserializeGuards.protectedFieldReason(key))
         }
         if (TlFlags.isFlagWord(cls, key)) {
             return "'$key' on '${TlNames.classNameToTlName(cls)}' is managed by the bridge - set the optional fields instead"
@@ -217,13 +217,13 @@ class TlHandles(private val policy: TlFilter.Policy) : QuickJs.TlListener {
             return "no such field '$key' on '${TlNames.classNameToTlName(cls)}'"
         }
         if (policy.takeover && TlFilter.decidesRedaction(cls, key)) {
-            return TlWire.encodePluginError("forbidden", "'$key' is sealed while api filtering is on: login code redaction is keyed on it")
+            return PluginWire.encodePluginError("forbidden", "'$key' is sealed while api filtering is on: login code redaction is keyed on it")
         }
         val field = TlJson.publicFields(cls)[key]
             ?: return "no such field '$key' on '${TlNames.classNameToTlName(cls)}'"
         val gated = TlFlags.gateOf(cls, key) != null
         val resolved = resolveSetValue(
-            TlWire.decode(wire),
+            PluginWire.decode(wire),
             field.genericType,
             field.type,
             key,
@@ -248,19 +248,19 @@ class TlHandles(private val policy: TlFilter.Policy) : QuickJs.TlListener {
     }
 
     private fun getVectorProp(entry: HandleEntry, target: ArrayList<*>, key: String): String {
-        if (key == "length") return TlWire.encodeInt(target.size.toLong())
-        val index = key.toIntOrNull() ?: return TlWire.encodeError("no such property '$key' on a TL vector")
-        if (index < 0 || index >= target.size) return TlWire.encodeError("vector index out of range: $index")
+        if (key == "length") return PluginWire.encodeInt(target.size.toLong())
+        val index = key.toIntOrNull() ?: return PluginWire.encodeError("no such property '$key' on a TL vector")
+        if (index < 0 || index >= target.size) return PluginWire.encodeError("vector index out of range: $index")
         return encodeFieldValue(entry, target[index], entry.elementType ?: Any::class.java)
     }
 
     private fun setVectorProp(entry: HandleEntry, target: ArrayList<Any?>, key: String, wire: String): String? {
         if (key == "length") {
             // `vec.length = n` always crosses as a `J`-tagged JSON number, never a raw `I` tag, so `Value.IntNum` alone is unreachable
-            val decoded = TlWire.decode(wire)
+            val decoded = PluginWire.decode(wire)
             val newLength = when (decoded) {
-                is TlWire.Value.IntNum -> decoded.value.toInt()
-                is TlWire.Value.Json -> (JSONTokener(decoded.json).nextValue() as? Number)?.toInt()
+                is PluginWire.Value.IntNum -> decoded.value.toInt()
+                is PluginWire.Value.Json -> (JSONTokener(decoded.json).nextValue() as? Number)?.toInt()
                 else -> null
             } ?: return "vector length must be an integer"
             if (newLength < 0 || newLength > target.size) return "vector length can only shrink (${target.size} -> $newLength not allowed)"
@@ -272,7 +272,7 @@ class TlHandles(private val policy: TlFilter.Policy) : QuickJs.TlListener {
         if (index < 0 || index > target.size) return "vector index out of range: $index"
         val elementType = entry.elementType ?: return "vector element type is unknown"
         val resolved =
-            resolveSetValue(TlWire.decode(wire), elementType, rawClassOf(elementType), "[$index]", guarded = entry.guarded)
+            resolveSetValue(PluginWire.decode(wire), elementType, rawClassOf(elementType), "[$index]", guarded = entry.guarded)
         if (resolved.isError) return resolved.error
         if (index == target.size) target.add(resolved.value) else target[index] = resolved.value
         entry.flagOwner?.let { (obj, name) -> TlJson.syncFlagBit(obj, name) }
@@ -286,37 +286,37 @@ class TlHandles(private val policy: TlFilter.Policy) : QuickJs.TlListener {
         flagOwner: Pair<TLObject, String>? = null,
         sealed: Boolean = false,
     ): String {
-        if (value == null) return TlWire.encodeNull()
+        if (value == null) return PluginWire.encodeNull()
         val readOnly = entry.readOnly || sealed
         return when (value) {
-            is Long -> TlWire.encodeString(value.toString())
-            is Int -> TlWire.encodeInt(value.toLong())
-            is Short -> TlWire.encodeInt(value.toLong())
-            is Byte -> TlWire.encodeInt(value.toLong())
-            is Double -> TlWire.encodeDouble(value)
-            is Float -> TlWire.encodeDouble(value.toDouble())
-            is Boolean -> TlWire.encodeBool(value)
-            is String -> TlWire.encodeString(value)
-            is ByteArray -> TlWire.encodeBytes(Base64.encodeToString(value, Base64.NO_WRAP))
+            is Long -> PluginWire.encodeString(value.toString())
+            is Int -> PluginWire.encodeInt(value.toLong())
+            is Short -> PluginWire.encodeInt(value.toLong())
+            is Byte -> PluginWire.encodeInt(value.toLong())
+            is Double -> PluginWire.encodeDouble(value)
+            is Float -> PluginWire.encodeDouble(value.toDouble())
+            is Boolean -> PluginWire.encodeBool(value)
+            is String -> PluginWire.encodeString(value)
+            is ByteArray -> PluginWire.encodeBytes(Base64.encodeToString(value, Base64.NO_WRAP))
             // a child MUST inherit its parent's scope, and its mode unless [sealed] tightens it:
             // rust infers a view's lifetime from the entry point rather than carrying it on the
             // wire, so another scope would let releaseScope kill a plugin-lifetime view, and a
             // writable child of a read-only parent would be a mutable alias of an app object
-            is TLObject -> TlWire.encodeHandle(
+            is TLObject -> PluginWire.encodeHandle(
                 vector = false,
                 id = mint(value, null, entry.scopeId, readOnly, guarded = entry.guarded),
                 readOnly = readOnly,
             )
-            is ArrayList<*> -> TlWire.encodeHandle(
+            is ArrayList<*> -> PluginWire.encodeHandle(
                 vector = true,
                 id = mint(value, elementTypeOf(declaredType), entry.scopeId, readOnly, flagOwner, guarded = entry.guarded),
                 readOnly = readOnly,
             )
             // map-shaped fields (TLRPC.Message.params) have no handle kind of their own, so they cross as a detached json snapshot
             is Map<*, *>, is SparseArray<*> -> TlJson.valueToJson(value, policy)
-                ?.let { TlWire.encodeJson(it.toString()) }
-                ?: TlWire.encodeNull()
-            else -> TlWire.encodeError("unsupported field type ${value.javaClass}")
+                ?.let { PluginWire.encodeJson(it.toString()) }
+                ?: PluginWire.encodeNull()
+            else -> PluginWire.encodeError("unsupported field type ${value.javaClass}")
         }
     }
 
@@ -333,7 +333,7 @@ class TlHandles(private val policy: TlFilter.Policy) : QuickJs.TlListener {
      * about the fields the payload itself carries, and a vector element has no name at all.
      */
     private fun resolveSetValue(
-        decoded: TlWire.Value,
+        decoded: PluginWire.Value,
         genericType: Type,
         rawType: Class<*>,
         path: String,
@@ -341,7 +341,7 @@ class TlHandles(private val policy: TlFilter.Policy) : QuickJs.TlListener {
         guarded: Boolean = false,
     ): Resolved =
         when (decoded) {
-            is TlWire.Value.Null -> {
+            is PluginWire.Value.Null -> {
                 if (!rawType.isPrimitive) {
                     ok(null)
                 } else if (allowPrimitiveClear) {
@@ -351,32 +351,32 @@ class TlHandles(private val policy: TlFilter.Policy) : QuickJs.TlListener {
                     err("cannot clear primitive field at '$path'")
                 }
             }
-            is TlWire.Value.Bytes -> {
+            is PluginWire.Value.Bytes -> {
                 if (rawType == ByteArray::class.java) {
                     ok(Base64.decode(decoded.base64, Base64.NO_WRAP))
                 } else {
                     err("type mismatch assigning bytes at '$path': expected $rawType")
                 }
             }
-            is TlWire.Value.Handle -> {
-                val source = table[decoded.id] ?: return err(TlWire.encodeExpired())
+            is PluginWire.Value.Handle -> {
+                val source = table[decoded.id] ?: return err(PluginWire.encodeExpired())
                 val instance = source.target
                 if (guarded) {
                     // it carries the addressing fields of wherever it was parsed, and splicing it in is how those reach a slot they do not name
-                    err(TlWire.encodePluginError("forbidden", SPLICE_MESSAGE))
+                    err(PluginWire.encodePluginError("forbidden", SPLICE_MESSAGE))
                 } else if (source.readOnly) {
-                    err(TlWire.encodePluginError("forbidden", READ_ONLY_MESSAGE))
+                    err(PluginWire.encodePluginError("forbidden", READ_ONLY_MESSAGE))
                 } else if (!rawType.isInstance(instance)) {
                     err("type mismatch assigning handle at '$path': expected $rawType, got ${instance.javaClass}")
                 } else {
                     ok(instance)
                 }
             }
-            is TlWire.Value.Json -> try {
+            is PluginWire.Value.Json -> try {
                 val parsed = JSONTokener(decoded.json).nextValue()
                 val protected = if (guarded) TlJson.findProtectedField(parsed) else null
                 if (protected != null) {
-                    err(TlWire.encodePluginError("forbidden", DeserializeGuards.protectedFieldReason(protected)))
+                    err(PluginWire.encodePluginError("forbidden", DeserializeGuards.protectedFieldReason(protected)))
                 } else {
                     ok(TlJson.jsonToValue(genericType, parsed, path))
                 }

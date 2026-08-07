@@ -1,13 +1,36 @@
 //! `fetch`: the one api here that talks to something other than telegram, per `common.d.ts`. The
 //! `Response` shape, the `AbortSignal` wiring and the `timeout` are prelude js in `fetch.js`.
 //!
-//! **There is no http client in this crate and there will not be one**: the app already has a
-//! network stack, and both egress rules `common.d.ts` states are decidable only where the
-//! connection is made. `PluginFetch` runs the exchange, screening every redirect hop against the
-//! grant's domain list and every *resolved* address against the loopback/link-local/private ranges;
-//! this module does the pre-flight (scheme, shape, the first url's grant) so a refused call never
-//! crosses. The host's check is the authoritative one, being the only side that knows what the name
-//! resolved to and where the redirects went.
+//! **There is no http client in this crate and there will not be one**, for three reasons, none of
+//! which is the egress screening - that part rust could do, and arguably better, since a socket
+//! pinned to an address it resolved itself would close the rebinding window `PluginFetch` documents
+//! as residual.
+//!
+//! *Trust.* `HttpURLConnection` verifies against the **platform** store, so user-installed CAs, a
+//! system distrust update and the app's Network Security Config all apply. A rust client means
+//! bundling a root list into the apk: no user CAs (which breaks both a corporate proxy and anyone
+//! debugging this with mitmproxy), no distrust updates, no Network Security Config. The usual fix
+//! for that, `rustls-platform-verifier`, does its verification *by calling back into java* - so the
+//! boundary comes back at the least testable point of the stack rather than going away.
+//!
+//! *Threading.* An engine may only be entered from `globalQueue`. A client here would need its own
+//! thread and would still have to marshal the answer onto that queue to settle the promise, which is
+//! the hop `PluginFetch` already does - no structural gain, and one more foreign-thread path into a
+//! crate whose worst two bugs were exactly that shape.
+//!
+//! *Size.* This is a cdylib shipped per abi. `url` alone costs ~194 KB stripped; a tls stack and an
+//! async runtime are megabytes.
+//!
+//! What crosses is small and does not scale with the payload: **two JNI crossings per request**
+//! (`send`, then `fetch_result`), against a network round trip that is three to four orders of
+//! magnitude longer. The response body makes none at all - the host writes it to a file and it
+//! arrives here as an app-file blob.
+//!
+//! So `PluginFetch` runs the exchange, screening every redirect hop against the grant's domain list
+//! and every *resolved* address against the loopback/link-local/private ranges; this module does the
+//! pre-flight (scheme, shape, the first url's grant) so a refused call never crosses. The host's
+//! check is the authoritative one, being the only side that knows what the name resolved to and
+//! where the redirects went.
 //!
 //! A response body is a file the host wrote, reaching js as a [`crate::io::blob`] app-file backing, so
 //! it never touches either heap. A *request* body does cross, bounded by

@@ -4,7 +4,7 @@ import android.util.Base64
 import dalvik.system.DexClassLoader
 import desu.inugram.core.plugins.PluginInstalls
 import desu.inugram.core.plugins.ScopeMatch
-import desu.inugram.core.plugins.TlWire
+import desu.inugram.core.plugins.PluginWire
 import desu.inugram.helpers.plugins.Plugin
 import desu.inugram.helpers.plugins.PluginDispatch
 import desu.inugram.helpers.plugins.QuickJs
@@ -126,11 +126,11 @@ object PluginJvm {
     private class Refusal(val wire: String) : RuntimeException(null, null, false, false)
 
     private fun refuse(code: String, message: String, grant: String? = null): Nothing =
-        throw Refusal(TlWire.encodePluginError(code, message, grant = grant))
+        throw Refusal(PluginWire.encodePluginError(code, message, grant = grant))
 
     private fun tooBig(what: String, size: Long): Nothing =
         throw Refusal(
-            TlWire.encodePluginError(
+            PluginWire.encodePluginError(
                 "quota-exceeded",
                 "jvm: $what is $size bytes, over the $VALUE_LIMIT_BYTES this bridge carries",
                 usage = size,
@@ -155,9 +155,9 @@ object PluginJvm {
             e.wire
         } catch (e: InvocationTargetException) {
             // a java exception is not part of this api's taxonomy, so it arrives as a plain Error rather than a PluginError
-            TlWire.encodeError(describe(e.cause ?: e))
+            PluginWire.encodeError(describe(e.cause ?: e))
         } catch (e: Throwable) {
-            TlWire.encodeError("jvm: ${describe(e)}")
+            PluginWire.encodeError("jvm: ${describe(e)}")
         }
 
         private fun handle(op: Int, target: Long, name: String, args: Array<String>): String = when (op) {
@@ -188,12 +188,12 @@ object PluginJvm {
             }
             OP_RELEASE -> {
                 handles.remove(target)
-                TlWire.encodeNull()
+                PluginWire.encodeNull()
             }
             // `encodeValue` mints through `checkClass`, so a plugin scoped to one package still cannot be handed a fragment from another
             OP_CURRENT_FRAGMENT -> encodeValue(screen.currentFragment())
             OP_CURRENT_ACTIVITY -> encodeValue(screen.currentActivity())
-            else -> TlWire.encodeError("jvm: unknown op $op")
+            else -> PluginWire.encodeError("jvm: unknown op $op")
         }
 
         fun objectAt(handle: Long): Any? = if (live) handles[handle] else null
@@ -278,7 +278,7 @@ object PluginJvm {
 
         private fun decodeArgs(args: Array<String>): List<Any?> = args.map { decodeArg(it) }
 
-        /** the scalars are [TlWire]'s own; `G<id>` carries no kind, because the table that answers it is the one that minted it */
+        /** the scalars are [PluginWire]'s own; `G<id>` carries no kind, because the table that answers it is the one that minted it */
         private fun decodeArg(wire: String): Any? {
             if (wire.isEmpty()) refuse("invalid-argument", "jvm: empty argument wire")
             if (wire[0] == 'G') {
@@ -286,39 +286,39 @@ object PluginJvm {
                     ?: refuse("invalid-argument", "jvm: malformed handle argument")
                 return at(id)
             }
-            return when (val decoded = TlWire.decode(wire)) {
-                is TlWire.Value.Null -> null
-                is TlWire.Value.Str -> decoded.value.also {
+            return when (val decoded = PluginWire.decode(wire)) {
+                is PluginWire.Value.Null -> null
+                is PluginWire.Value.Str -> decoded.value.also {
                     val size = it.toByteArray(Charsets.UTF_8).size
                     if (size > VALUE_LIMIT_BYTES) tooBig("a string argument", size.toLong())
                 }
-                is TlWire.Value.IntNum -> decoded.value
-                is TlWire.Value.DoubleNum -> decoded.value
-                is TlWire.Value.Bool -> decoded.value
-                is TlWire.Value.Bytes -> Base64.decode(decoded.base64, Base64.NO_WRAP)
+                is PluginWire.Value.IntNum -> decoded.value
+                is PluginWire.Value.DoubleNum -> decoded.value
+                is PluginWire.Value.Bool -> decoded.value
+                is PluginWire.Value.Bytes -> Base64.decode(decoded.base64, Base64.NO_WRAP)
                 else -> refuse("invalid-argument", "jvm: cannot pass $wire to java")
             }
         }
 
         private fun encodeValue(value: Any?): String = when (value) {
-            null -> TlWire.encodeNull()
-            is Boolean -> TlWire.encodeBool(value)
-            is Byte -> TlWire.encodeInt(value.toLong())
-            is Short -> TlWire.encodeInt(value.toLong())
-            is Int -> TlWire.encodeInt(value.toLong())
-            is Long -> TlWire.encodeInt(value)
-            is Float -> TlWire.encodeDouble(value.toDouble())
-            is Double -> TlWire.encodeDouble(value)
+            null -> PluginWire.encodeNull()
+            is Boolean -> PluginWire.encodeBool(value)
+            is Byte -> PluginWire.encodeInt(value.toLong())
+            is Short -> PluginWire.encodeInt(value.toLong())
+            is Int -> PluginWire.encodeInt(value.toLong())
+            is Long -> PluginWire.encodeInt(value)
+            is Float -> PluginWire.encodeDouble(value.toDouble())
+            is Double -> PluginWire.encodeDouble(value)
             // a char is one character of text rather than its code point: that is what goes back into a `char` parameter unchanged
-            is Char -> TlWire.encodeString(value.toString())
+            is Char -> PluginWire.encodeString(value.toString())
             is String -> {
                 val size = value.toByteArray(Charsets.UTF_8).size
                 if (size > VALUE_LIMIT_BYTES) tooBig("a string", size.toLong())
-                TlWire.encodeString(value)
+                PluginWire.encodeString(value)
             }
             is ByteArray -> {
                 if (value.size > VALUE_LIMIT_BYTES) tooBig("a byte[]", value.size.toLong())
-                TlWire.encodeBytes(Base64.encodeToString(value, Base64.NO_WRAP))
+                PluginWire.encodeBytes(Base64.encodeToString(value, Base64.NO_WRAP))
             }
             // a `Class` is checked as the class it *names*, or `getClass()` on something out of scope would be checked as `java.lang.Class`
             is Class<*> -> {
@@ -381,7 +381,7 @@ object PluginJvm {
             val value = convert(args[0], field.type)
                 ?: refuse("invalid-argument", "jvm: cannot assign that to a ${field.type.name}")
             field.set(self, value.value)
-            return TlWire.encodeNull()
+            return PluginWire.encodeNull()
         }
 
         private fun callMethod(cls: Class<*>, self: Any?, name: String, args: List<Any?>): String {
@@ -505,7 +505,7 @@ object PluginJvm {
             if (length == 0L) refuse("invalid-argument", "loadDex: ${file.name} is empty")
             if (length > DEX_LIMIT_BYTES) {
                 throw Refusal(
-                    TlWire.encodePluginError(
+                    PluginWire.encodePluginError(
                         "quota-exceeded",
                         "loadDex: ${file.name} is $length bytes, over the $DEX_LIMIT_BYTES this api loads",
                         usage = length,
@@ -515,7 +515,7 @@ object PluginJvm {
             }
             // the platform's verifier owns dex validation, and reports by failing to define the class rather than by refusing the file
             loaders.add(DexClassLoader(file.absolutePath, null, null, PluginJvm::class.java.classLoader))
-            return TlWire.encodeNull()
+            return PluginWire.encodeNull()
         }
 
         private fun fromPath(path: String): File {

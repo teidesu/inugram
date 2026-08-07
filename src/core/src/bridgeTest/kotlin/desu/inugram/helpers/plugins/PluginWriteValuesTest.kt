@@ -1,6 +1,6 @@
 package desu.inugram.helpers.plugins
 
-import desu.inugram.core.plugins.TlWire
+import desu.inugram.core.plugins.PluginWire
 import desu.inugram.helpers.plugins.tg.PluginWrites
 import desu.inugram.helpers.plugins.tl.TlHandles
 import java.io.File
@@ -42,7 +42,7 @@ class PluginWriteValuesTest {
 
     private fun handleFor(plugin: Plugin, value: TLObject, readOnly: Boolean): String {
         val handles = TlHandles.of(plugin.js)
-        return TlWire.encodeHandle(vector = false, id = handles.mintForPlugin(value, readOnly), readOnly = readOnly)
+        return PluginWire.encodeHandle(vector = false, id = handles.mintForPlugin(value, readOnly), readOnly = readOnly)
     }
 
     private fun contact() = TLRPC.TL_inputMediaContact().apply {
@@ -104,7 +104,7 @@ class PluginWriteValuesTest {
         ).apply { writeText("hello world") }
 
         val answer = plugin.js.writesListener!!.messageFile(0, wire)
-        val json = JSONObject((TlWire.decode(answer) as TlWire.Value.Json).json)
+        val json = JSONObject((PluginWire.decode(answer) as PluginWire.Value.Json).json)
         assertTrue(json.getBoolean("exists"), "getMessageFile refused a message off an Account")
 
         assertNull(
@@ -122,6 +122,6 @@ class PluginWriteValuesTest {
     @Test
     fun `a handle whose table entry is gone is expired, not forbidden`() {
         val plugin = granted()
-        assertPluginError("handle-expired", sendMedia(plugin, TlWire.encodeHandle(vector = false, id = 9999L, readOnly = false)))
+        assertPluginError("handle-expired", sendMedia(plugin, PluginWire.encodeHandle(vector = false, id = 9999L, readOnly = false)))
     }
 }

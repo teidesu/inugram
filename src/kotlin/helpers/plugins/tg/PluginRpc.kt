@@ -8,7 +8,7 @@ import desu.inugram.core.plugins.ScopeMatch
 import desu.inugram.core.plugins.TakeoverMethods
 import desu.inugram.core.plugins.TlCtorIds
 import desu.inugram.core.plugins.TlNames
-import desu.inugram.core.plugins.TlWire
+import desu.inugram.core.plugins.PluginWire
 import desu.inugram.helpers.plugins.Plugin
 import desu.inugram.helpers.plugins.PluginDispatch
 import desu.inugram.helpers.plugins.PluginManager
@@ -194,8 +194,8 @@ object PluginRpc {
     private const val SYNTHETIC_CODE = -1000
     private const val TIMEOUT_TEXT = "INTERCEPTOR_TIMEOUT"
     private const val ABANDONED_TEXT = "INTERCEPTOR_ABANDONED"
-    private val TIMEOUT_WIRE = TlWire.encodeRpcError(SYNTHETIC_CODE, TIMEOUT_TEXT)
-    private val ABANDONED_WIRE = TlWire.encodeRpcError(SYNTHETIC_CODE, ABANDONED_TEXT)
+    private val TIMEOUT_WIRE = PluginWire.encodeRpcError(SYNTHETIC_CODE, TIMEOUT_TEXT)
+    private val ABANDONED_WIRE = PluginWire.encodeRpcError(SYNTHETIC_CODE, ABANDONED_TEXT)
 
     // fast-path gate read from arbitrary stageQueue threads before paying for a globalQueue hop
     @Volatile private var hasInterceptors = false
@@ -486,11 +486,11 @@ object PluginRpc {
         }
         if (scope.isNotEmpty()) {
             if (!plugin.permissions.has(scope)) {
-                return TlWire.encodeNotGranted(scope)
+                return PluginWire.encodeNotGranted(scope)
             }
         } else for (method in methods) {
             if (!plugin.permissions.allows("interceptRpc", method, ScopeMatch.EXACT)) {
-                return TlWire.encodeNotGranted("interceptRpc", method)
+                return PluginWire.encodeNotGranted("interceptRpc", method)
             }
         }
         val updated = interceptorsByMethod.toMutableMap()
@@ -522,13 +522,13 @@ object PluginRpc {
     private fun registerUpdates(plugin: Plugin, callbackId: Int, types: Array<String>, scope: String): String? {
         for (type in types) {
             if (type !in TlCtorIds.updateNames) {
-                return TlWire.encodePluginError("unknown-constructor", "onUpdate: unknown update type '$type'")
+                return PluginWire.encodePluginError("unknown-constructor", "onUpdate: unknown update type '$type'")
             }
         }
         val grantScope = scope.ifEmpty { null }
         for (target in grantScope?.let { listOf(it) } ?: types.toList()) {
             if (!plugin.permissions.allows("onUpdate", target, ScopeMatch.EXACT)) {
-                return TlWire.encodeNotGranted("onUpdate", target)
+                return PluginWire.encodeNotGranted("onUpdate", target)
             }
         }
         publishUpdateRegs(updateRegs + UpdateReg(plugin, callbackId, types.toSet(), grantScope))
@@ -543,10 +543,10 @@ object PluginRpc {
     private fun registerInterceptUpdates(plugin: Plugin, callbackId: Int, types: Array<String>): String? {
         for (type in types) {
             if (type !in TlCtorIds.updateNames) {
-                return TlWire.encodePluginError("unknown-constructor", "interceptUpdate: unknown update type '$type'")
+                return PluginWire.encodePluginError("unknown-constructor", "interceptUpdate: unknown update type '$type'")
             }
             if (!plugin.permissions.allows("interceptUpdate", type, ScopeMatch.EXACT)) {
-                return TlWire.encodeNotGranted("interceptUpdate", type)
+                return PluginWire.encodeNotGranted("interceptUpdate", type)
             }
         }
         publishUpdateInterceptors(updateInterceptRegs + UpdateInterceptor(plugin, callbackId, types.toSet()))
@@ -668,7 +668,7 @@ object PluginRpc {
     private fun takeoverRefusal(plugin: Plugin, method: String): String? {
         if (!TakeoverMethods.isBlocked(method)) return null
         if (plugin.permissions.has("unsafe.disableApiFiltering")) return null
-        return TlWire.encodePluginError("forbidden", "'$method' is an account-takeover method and is never available to plugins")
+        return PluginWire.encodePluginError("forbidden", "'$method' is an account-takeover method and is never available to plugins")
     }
 
     private fun dispatchChain(
@@ -723,7 +723,7 @@ object PluginRpc {
             dispatchId,
             method,
             account,
-            TlWire.encodeHandle(vector = false, id = requestHandle, readOnly = false),
+            PluginWire.encodeHandle(vector = false, id = requestHandle, readOnly = false),
         )
     }
 
@@ -832,7 +832,7 @@ object PluginRpc {
     }
 
     private fun onNext(dispatchId: Long, requestWire: String): String? {
-        val pending = pendingDispatches[dispatchId] ?: return TlWire.encodePluginError("internal", "next(): unknown dispatch")
+        val pending = pendingDispatches[dispatchId] ?: return PluginWire.encodePluginError("internal", "next(): unknown dispatch")
         val nextRequest = try {
             decodeTlObject(pending.tl, requestWire)
         } catch (e: Exception) {
@@ -841,7 +841,7 @@ object PluginRpc {
         // next() may rewrite fields but never the method: the app awaits that method's response type, and a swap would turn any interceptRpc grant into an unscoped send primitive
         val nextMethod = TlNames.classNameToTlName(nextRequest.javaClass)
         if (nextMethod != pending.method) {
-            return TlWire.encodePluginError(
+            return PluginWire.encodePluginError(
                 "forbidden",
                 "next(): expected a '${pending.method}' request, got '$nextMethod' - rewrite the request's fields rather than replacing it",
             )
@@ -954,12 +954,12 @@ object PluginRpc {
         val tlName = TlNames.classNameToTlName(request.javaClass)
         takeoverRefusal(plugin, tlName)?.let { return it }
         if (!plugin.permissions.allows("invokeRpc", tlName, ScopeMatch.EXACT)) {
-            return TlWire.encodeNotGranted("invokeRpc", tlName)
+            return PluginWire.encodeNotGranted("invokeRpc", tlName)
         }
         // last, so a takeover method stays refused whichever slot it was aimed at. The slot is not the host's to trust: a plugin can call `invokeRpc` through any object carrying an `id`
         val account = if (slot == QuickJs.ANY_ACCOUNT) startedOn else slot
         if (account < 0 || account >= UserConfig.MAX_ACCOUNT_COUNT || !UserConfig.isValidAccount(account)) {
-            return TlWire.encodePluginError("invalid-argument", "invokeRpc: no account in slot $account")
+            return PluginWire.encodePluginError("invalid-argument", "invokeRpc: no account in slot $account")
         }
         sendWithoutInterceptors(account, request, 0) { response, error ->
             // stageQueue, where freeResources() runs the moment this delegate returns - before the runnable below mints a handle. ownership moves here
@@ -1079,7 +1079,7 @@ object PluginRpc {
                 dispatchId,
                 unit.tlName,
                 batch.account,
-                TlWire.encodeHandle(vector = false, id = handle, readOnly = false),
+                PluginWire.encodeHandle(vector = false, id = handle, readOnly = false),
             )
             return
         }
@@ -1318,7 +1318,7 @@ object PluginRpc {
             // over the scopes that actually authorized this plugin for this constructor - a demuxed registration holds its event's scope, and the two never imply each other
             if (listener.grantScopes.none { plugin.permissions.allows("onUpdate", it, ScopeMatch.EXACT) }) continue
             val handle = tl.mintForPlugin(update, readOnly = true)
-            engine.dispatchUpdate(tlName, account, TlWire.encodeHandle(vector = false, id = handle, readOnly = true))
+            engine.dispatchUpdate(tlName, account, PluginWire.encodeHandle(vector = false, id = handle, readOnly = true))
         }
     }
 
@@ -1333,13 +1333,13 @@ object PluginRpc {
 
     private class DecodeFault(val code: String, message: String) : Exception(message)
 
-    private fun decodeTlObject(tl: TlHandles, wire: String): TLObject = when (val decoded = TlWire.decode(wire)) {
-        is TlWire.Value.Handle -> {
+    private fun decodeTlObject(tl: TlHandles, wire: String): TLObject = when (val decoded = PluginWire.decode(wire)) {
+        is PluginWire.Value.Handle -> {
             if (tl.isReadOnly(decoded.id)) throw DecodeFault("forbidden", TlHandles.READ_ONLY_MESSAGE)
             tl.resolveTlObject(decoded.id)
-                ?: throw DecodeFault("handle-expired", TlWire.HANDLE_EXPIRED_MESSAGE)
+                ?: throw DecodeFault("handle-expired", PluginWire.HANDLE_EXPIRED_MESSAGE)
         }
-        is TlWire.Value.Json -> constructTlObject(JSONObject(decoded.json))
+        is PluginWire.Value.Json -> constructTlObject(JSONObject(decoded.json))
         else -> throw DecodeFault("invalid-argument", "expected a TL object")
     }
 
@@ -1355,37 +1355,37 @@ object PluginRpc {
     }
 
     private fun decodeFailureWire(prefix: String, e: Exception): String = when (e) {
-        is DecodeFault -> TlWire.encodePluginError(e.code, "$prefix: ${e.message}")
-        else -> TlWire.encodePluginError("invalid-argument", "$prefix: ${e.message}")
+        is DecodeFault -> PluginWire.encodePluginError(e.code, "$prefix: ${e.message}")
+        else -> PluginWire.encodePluginError("invalid-argument", "$prefix: ${e.message}")
     }
 
-    private fun decodeTlValueOrError(tl: TlHandles, wire: String): TLObject? = when (val decoded = TlWire.decode(wire)) {
-        is TlWire.Value.Null -> null
-        is TlWire.Value.Error -> throw TlResultError(syntheticError(decoded.message))
-        is TlWire.Value.RpcError -> throw TlResultError(TLRPC.TL_error().apply { code = decoded.code; text = decoded.text })
-        is TlWire.Value.Handle -> {
+    private fun decodeTlValueOrError(tl: TlHandles, wire: String): TLObject? = when (val decoded = PluginWire.decode(wire)) {
+        is PluginWire.Value.Null -> null
+        is PluginWire.Value.Error -> throw TlResultError(syntheticError(decoded.message))
+        is PluginWire.Value.RpcError -> throw TlResultError(TLRPC.TL_error().apply { code = decoded.code; text = decoded.text })
+        is PluginWire.Value.Handle -> {
             if (tl.isReadOnly(decoded.id)) throw TlResultError(syntheticError(TlHandles.READ_ONLY_MESSAGE))
             tl.resolveTlObject(decoded.id)
-                ?: throw TlResultError(syntheticError(TlWire.HANDLE_EXPIRED_MESSAGE))
+                ?: throw TlResultError(syntheticError(PluginWire.HANDLE_EXPIRED_MESSAGE))
         }
-        is TlWire.Value.Json -> constructTlObject(JSONObject(decoded.json))
+        is PluginWire.Value.Json -> constructTlObject(JSONObject(decoded.json))
         else -> throw IllegalArgumentException("unsupported result payload")
     }
 
     private fun encodeChainResult(tl: TlHandles, response: TLObject?, error: TLRPC.TL_error?, scopeId: Long): String {
-        if (error != null) return TlWire.encodeRpcError(error.code, error.text ?: "")
-        if (response == null) return TlWire.encodeNull()
-        return TlWire.encodeHandle(vector = false, id = tl.mintForScope(response, scopeId), readOnly = false)
+        if (error != null) return PluginWire.encodeRpcError(error.code, error.text ?: "")
+        if (response == null) return PluginWire.encodeNull()
+        return PluginWire.encodeHandle(vector = false, id = tl.mintForScope(response, scopeId), readOnly = false)
     }
 
     private fun encodeInvokeResult(tl: TlHandles, response: TLObject?, error: TLRPC.TL_error?): String {
         if (error != null) {
             // stock's free was suppressed before we knew it wouldn't be handed over, so nothing else will free it
             releaseUnowned(response)
-            return TlWire.encodeRpcError(error.code, error.text ?: "")
+            return PluginWire.encodeRpcError(error.code, error.text ?: "")
         }
-        if (response == null) return TlWire.encodeNull()
-        return TlWire.encodeHandle(
+        if (response == null) return PluginWire.encodeNull()
+        return PluginWire.encodeHandle(
             vector = false,
             id = tl.mintForPlugin(response, readOnly = false, owned = true),
             readOnly = false,

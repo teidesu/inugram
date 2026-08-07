@@ -1,6 +1,6 @@
 package desu.inugram.helpers.plugins
 
-import desu.inugram.core.plugins.TlWire
+import desu.inugram.core.plugins.PluginWire
 import desu.inugram.helpers.plugins.tg.PluginMedia
 import desu.inugram.helpers.plugins.tg.PluginWrites
 import desu.inugram.helpers.plugins.tl.TlFilter
@@ -63,7 +63,7 @@ class PluginMediaTest {
     }.synced()
 
     private fun messageWire(message: TLRPC.Message): String =
-        TlWire.encodeJson(TlJson.toJson(message, TlFilter.Policy(takeover = true, drafts = true)).toString())
+        PluginWire.encodeJson(TlJson.toJson(message, TlFilter.Policy(takeover = true, drafts = true)).toString())
 
     private fun write(
         plugin: Plugin,
@@ -88,7 +88,7 @@ class PluginMediaTest {
         FileLoader.getInstance(0).inu_paths[message.id] = onDisk("note.txt", "hello world")
 
         val wire = plugin.js.writesListener!!.messageFile(0, messageWire(message))
-        val json = JSONObject((TlWire.decode(wire) as TlWire.Value.Json).json)
+        val json = JSONObject((PluginWire.decode(wire) as PluginWire.Value.Json).json)
         assertTrue(json.getString("path").endsWith("note.txt"), json.getString("path"))
         assertTrue(json.getBoolean("exists"))
 
@@ -101,7 +101,7 @@ class PluginMediaTest {
         val message = withMedia()
         FileLoader.getInstance(0).inu_paths[message.id] = File(scratch, "missing.txt")
         val json = JSONObject(
-            (TlWire.decode(plugin.js.writesListener!!.messageFile(0, messageWire(message))) as TlWire.Value.Json).json,
+            (PluginWire.decode(plugin.js.writesListener!!.messageFile(0, messageWire(message))) as PluginWire.Value.Json).json,
         )
         assertTrue(json.getString("path").endsWith("missing.txt"))
         assertTrue(!json.getBoolean("exists"), "a path that is not there must not read as downloaded")
@@ -123,7 +123,7 @@ class PluginMediaTest {
         drain()
 
         assertTrue(FileLoader.getInstance(0).loads.isEmpty(), "a file already there was downloaded again")
-        val json = JSONObject((TlWire.decode(plugin.js.writeResults.last().resultWire) as TlWire.Value.Json).json)
+        val json = JSONObject((PluginWire.decode(plugin.js.writeResults.last().resultWire) as PluginWire.Value.Json).json)
         assertEquals(11L, json.getLong("size"))
         assertEquals("note.txt", json.getString("name"))
         assertEquals("text/plain", json.getString("mime"))
@@ -156,7 +156,7 @@ class PluginMediaTest {
         target.writeText("hello world")
         centre().postNotificationName(NotificationCenter.fileLoaded, name, target)
         drain()
-        val json = JSONObject((TlWire.decode(plugin.js.writeResults.single().resultWire) as TlWire.Value.Json).json)
+        val json = JSONObject((PluginWire.decode(plugin.js.writeResults.single().resultWire) as PluginWire.Value.Json).json)
         assertEquals(target.absolutePath, json.getString("path"))
         assertEquals(0, centre().inu_observerCount(), "a finished transfer kept listening")
     }
@@ -203,7 +203,7 @@ class PluginMediaTest {
         FileLoader.getInstance(0).inu_paths[message.id] = onDisk("note.txt", "hello world")
         assertNull(write(plugin, PluginWrites.OP_DOWNLOAD_MEDIA_TO_FILE, JSONObject(), arrayOf(messageWire(message))))
         drain()
-        val json = JSONObject((TlWire.decode(plugin.js.writeResults.single().resultWire) as TlWire.Value.Json).json)
+        val json = JSONObject((PluginWire.decode(plugin.js.writeResults.single().resultWire) as PluginWire.Value.Json).json)
         assertTrue(json.has("path"))
         assertTrue(!json.has("size") && !json.has("mime"), "the path form must not describe a File")
     }
@@ -235,7 +235,7 @@ class PluginMediaTest {
 
         uploaded(staged.absolutePath)
         drain()
-        val json = JSONObject((TlWire.decode(plugin.js.writeResults.single().resultWire) as TlWire.Value.Json).json)
+        val json = JSONObject((PluginWire.decode(plugin.js.writeResults.single().resultWire) as PluginWire.Value.Json).json)
         assertEquals("inputFile", json.getString("_"))
         assertEquals("chosen.dat", json.getString("name"))
         assertEquals(0, centre().inu_observerCount(), "a finished upload kept listening")
@@ -251,7 +251,7 @@ class PluginMediaTest {
         drain()
         uploaded(staged.absolutePath)
         drain()
-        val json = JSONObject((TlWire.decode(plugin.js.writeResults.single().resultWire) as TlWire.Value.Json).json)
+        val json = JSONObject((PluginWire.decode(plugin.js.writeResults.single().resultWire) as PluginWire.Value.Json).json)
         assertEquals("payload.bin", json.getString("name"))
     }
 
@@ -302,7 +302,7 @@ class PluginMediaTest {
         uploaded(staged.absolutePath)
         drain()
         val names = plugin.js.writeResults.associate {
-            it.requestId to JSONObject((TlWire.decode(it.resultWire) as TlWire.Value.Json).json).getString("name")
+            it.requestId to JSONObject((PluginWire.decode(it.resultWire) as PluginWire.Value.Json).json).getString("name")
         }
         assertEquals(
             mapOf(1L to "one.dat", 2L to "two.dat"),

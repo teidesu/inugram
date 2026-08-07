@@ -3,7 +3,7 @@ package desu.inugram.helpers.plugins
 import desu.inugram.core.plugins.ApiFilter
 import desu.inugram.core.plugins.TlCtorIds
 import desu.inugram.core.plugins.TlNames
-import desu.inugram.core.plugins.TlWire
+import desu.inugram.core.plugins.PluginWire
 import desu.inugram.helpers.plugins.tl.TlFilter
 import desu.inugram.helpers.plugins.tl.TlHandles
 import kotlin.test.assertEquals
@@ -82,9 +82,9 @@ class TlFilterViewTest {
         val handle = mint(short)
 
         // the short form names its sender with bare ids, so these are the fields the verdict reads
-        assertPluginError("forbidden", handles.tlSet(handle, "user_id", TlWire.encodeJson("1")))
-        assertPluginError("forbidden", handles.tlSet(handle, "out", TlWire.encodeJson("true")))
-        assertPluginError("forbidden", handles.tlSet(handle, "chat_id", TlWire.encodeJson("5")))
+        assertPluginError("forbidden", handles.tlSet(handle, "user_id", PluginWire.encodeJson("1")))
+        assertPluginError("forbidden", handles.tlSet(handle, "out", PluginWire.encodeJson("true")))
+        assertPluginError("forbidden", handles.tlSet(handle, "chat_id", PluginWire.encodeJson("5")))
         assertEquals(777000L, short.user_id)
         assertEquals("Login code: *****.", stringOf(handles.tlGet(handle, "message")))
     }
@@ -116,7 +116,7 @@ class TlFilterViewTest {
         val handle = mint(message)
 
         // this is the attack: drop the sender, then re-read the text with nothing to key redaction on
-        val refusal = handles.tlSet(handle, "from_id", TlWire.encodeNull())
+        val refusal = handles.tlSet(handle, "from_id", PluginWire.encodeNull())
 
         assertPluginError("forbidden", refusal)
         assertEquals(777000L, (message.from_id as TLRPC.TL_peerUser).user_id)
@@ -131,9 +131,9 @@ class TlFilterViewTest {
         val handle = mint(message)
 
         for (field in listOf("from_id", "peer_id", "fwd_from")) {
-            assertPluginError("forbidden", handles.tlSet(handle, field, TlWire.encodeNull()))
+            assertPluginError("forbidden", handles.tlSet(handle, field, PluginWire.encodeNull()))
         }
-        assertPluginError("forbidden", handles.tlSet(handle, "out", TlWire.encodeBool(true)))
+        assertPluginError("forbidden", handles.tlSet(handle, "out", PluginWire.encodeBool(true)))
     }
 
     @Test
@@ -146,7 +146,7 @@ class TlFilterViewTest {
         val child = handleOf(handles.tlGet(handle, "from_id"))
         assertTrue(child.readOnly, "from_id's peer must not be writable while filtering is on")
 
-        assertPluginError("forbidden", handles.tlSet(child.id, "user_id", TlWire.encodeJson("0")))
+        assertPluginError("forbidden", handles.tlSet(child.id, "user_id", PluginWire.encodeJson("0")))
         assertEquals(777000L, (message.from_id as TLRPC.TL_peerUser).user_id)
         assertEquals("Login code: *****.", stringOf(handles.tlGet(handle, "message")))
     }
@@ -162,9 +162,9 @@ class TlFilterViewTest {
         }.synced()
         val handle = mint(message)
 
-        assertNull(handles.tlSet(handle, "message", TlWire.encodeJson("\"edited\"")))
+        assertNull(handles.tlSet(handle, "message", PluginWire.encodeJson("\"edited\"")))
         assertEquals("edited", message.message)
-        assertNull(handles.tlSet(handle, "id", TlWire.encodeJson("8")))
+        assertNull(handles.tlSet(handle, "id", PluginWire.encodeJson("8")))
         assertEquals(8, message.id)
         // the seal is not conditional on the verdict: it is recomputed on every read, so a message
         // that is not from a service peer now may be one after a write the seal is what refuses
@@ -178,7 +178,7 @@ class TlFilterViewTest {
         val handle = mint(message)
 
         assertFalse(handleOf(handles.tlGet(handle, "from_id")).readOnly)
-        assertNull(handles.tlSet(handle, "from_id", TlWire.encodeNull()))
+        assertNull(handles.tlSet(handle, "from_id", PluginWire.encodeNull()))
         assertNull(message.from_id)
     }
 
@@ -191,10 +191,10 @@ class TlFilterViewTest {
         }
         val handle = mint(notification)
 
-        assertEquals(TlWire.Value.Null, TlWire.decode(handles.tlGet(handle, "message")))
+        assertEquals(PluginWire.Value.Null, PluginWire.decode(handles.tlGet(handle, "message")))
         assertEquals(0, handles.tlHas(handle, "message"))
         assertFalse(handles.tlOwnKeys(handle)!!.split(",").contains("message"))
-        assertTrue(handles.tlSet(handle, "message", TlWire.encodeJson("\"x\""))!!.contains("no such field"))
+        assertTrue(handles.tlSet(handle, "message", PluginWire.encodeJson("\"x\""))!!.contains("no such field"))
         assertEquals("your code is 63527", notification.message, "the app's own object stays intact")
     }
 
@@ -217,7 +217,7 @@ class TlFilterViewTest {
             "the case only proves anything while this class calls itself something else",
         )
         val handle = mint(variant)
-        assertEquals(TlWire.Value.Null, TlWire.decode(handles.tlGet(handle, "message")))
+        assertEquals(PluginWire.Value.Null, PluginWire.decode(handles.tlGet(handle, "message")))
         assertEquals(0, handles.tlHas(handle, "message"))
         assertEquals("your code is 63527", variant.message, "the app's own object stays intact")
     }

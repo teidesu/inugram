@@ -10,7 +10,8 @@
 //!
 //! What is left is `TextEncoder`/`TextDecoder`, `crypto`, `AbortController`/`AbortSignal` and
 //! `structuredClone`, whose shapes live in `globals.js`. `Blob`/`File` install from here too, before
-//! the prelude, so `structuredClone` can be taught about them without a JNI export.
+//! the prelude, so `structuredClone` can be taught about them without a JNI export, and so does
+//! `URL`/`URLSearchParams` ([`crate::engine::url`]), which needs a real parser rather than a shape.
 
 use std::path::Path;
 use std::rc::Rc;
@@ -62,6 +63,8 @@ pub fn install_globals<'js>(
 
     // before the prelude, which captures `globalThis.Blob` to teach `structuredClone` about it
     let blobs = crate::io::blob::install(ctx, spill_dir, external.clone())?;
+
+    crate::engine::url::install_url(ctx)?;
 
     let natives = Object::new(ctx.clone())?;
     natives.set("cloneBlob", crate::io::blob::make_clone_fn(ctx)?)?;

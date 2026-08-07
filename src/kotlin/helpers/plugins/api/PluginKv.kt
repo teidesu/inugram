@@ -3,7 +3,7 @@ package desu.inugram.helpers.plugins.api
 import android.content.Context
 import android.content.SharedPreferences
 import desu.inugram.core.plugins.PluginInstalls
-import desu.inugram.core.plugins.TlWire
+import desu.inugram.core.plugins.PluginWire
 import org.json.JSONArray
 import org.json.JSONObject
 import org.telegram.messenger.ApplicationLoader
@@ -14,7 +14,7 @@ import org.telegram.messenger.ApplicationLoader
  * granularity for plugin state), so reads are in-memory after first touch and writes persist
  * asynchronously. Values are strings only; total size is capped at [MAX_BYTES] per plugin.
  *
- * Results are TlWire-tagged strings (`S`/`N`/`J`/`E`/`P`) - see [QuickJs.ApiListener.kv].
+ * Results are PluginWire-tagged strings (`S`/`N`/`J`/`E`/`P`) - see [QuickJs.ApiListener.kv].
  * Called only on [org.telegram.messenger.Utilities.globalQueue] (the engines' thread).
  */
 object PluginKv {
@@ -42,25 +42,25 @@ object PluginKv {
     fun handleOp(installId: String, op: Int, key: String, value: String): String = try {
         val prefs = prefs(installId)
         when (op) {
-            OP_GET -> prefs.getString(key, null)?.let { TlWire.encodeString(it) } ?: TlWire.encodeNull()
+            OP_GET -> prefs.getString(key, null)?.let { PluginWire.encodeString(it) } ?: PluginWire.encodeNull()
             OP_SET -> setEntries(prefs, mapOf(key to value))
             OP_DEL -> {
                 prefs.edit().remove(key).apply()
-                TlWire.encodeNull()
+                PluginWire.encodeNull()
             }
             OP_KEYS -> {
                 val arr = JSONArray()
                 for (k in prefs.all.keys) arr.put(k)
-                TlWire.encodeJson(arr.toString())
+                PluginWire.encodeJson(arr.toString())
             }
             OP_CLEAR -> {
                 prefs.edit().clear().apply()
-                TlWire.encodeNull()
+                PluginWire.encodeNull()
             }
             OP_GET_ALL -> {
                 val obj = JSONObject()
                 for ((k, v) in prefs.all) obj.put(k, v as? String ?: continue)
-                TlWire.encodeJson(obj.toString())
+                PluginWire.encodeJson(obj.toString())
             }
             OP_INSERT_ALL -> {
                 val parsed = JSONObject(value)
@@ -72,12 +72,12 @@ object PluginKv {
                 }
                 setEntries(prefs, entries)
             }
-            OP_HAS -> TlWire.encodeJson(prefs.contains(key).toString())
-            OP_USAGE -> TlWire.encodeJson(usedBytes(prefs).toString())
-            else -> TlWire.encodeError("kv: unknown op $op")
+            OP_HAS -> PluginWire.encodeJson(prefs.contains(key).toString())
+            OP_USAGE -> PluginWire.encodeJson(usedBytes(prefs).toString())
+            else -> PluginWire.encodeError("kv: unknown op $op")
         }
     } catch (e: Exception) {
-        TlWire.encodeError("kv: ${e.message}")
+        PluginWire.encodeError("kv: ${e.message}")
     }
 
     private fun setEntries(prefs: SharedPreferences, entries: Map<String, String>): String {
@@ -87,7 +87,7 @@ object PluginKv {
             total += entrySize(key, value)
         }
         if (total > MAX_BYTES) {
-            return TlWire.encodePluginError(
+            return PluginWire.encodePluginError(
                 "quota-exceeded",
                 "kv: 1 MB per-plugin quota exceeded",
                 usage = total.toLong(),
@@ -97,7 +97,7 @@ object PluginKv {
         val editor = prefs.edit()
         for ((key, value) in entries) editor.putString(key, value)
         editor.apply()
-        return TlWire.encodeNull()
+        return PluginWire.encodeNull()
     }
 
     private fun usedBytes(prefs: SharedPreferences): Int {

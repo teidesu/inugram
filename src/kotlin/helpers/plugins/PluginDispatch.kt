@@ -1,6 +1,6 @@
 package desu.inugram.helpers.plugins
 
-import desu.inugram.core.plugins.TlWire
+import desu.inugram.core.plugins.PluginWire
 import org.telegram.messenger.Utilities
 
 /**
@@ -42,6 +42,6 @@ internal object PluginDispatch {
     fun wireOf(what: String, produce: () -> String): String = try {
         produce()
     } catch (e: Exception) {
-        TlWire.encodePluginError("internal", "$what: ${e.message ?: e.toString()}")
+        PluginWire.encodePluginError("internal", "$what: ${e.message ?: e.toString()}")
     }
 }

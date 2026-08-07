@@ -2,7 +2,7 @@ package desu.inugram.helpers.plugins.platform
 
 import android.util.Log
 import desu.inugram.core.plugins.ScopeMatch
-import desu.inugram.core.plugins.TlWire
+import desu.inugram.core.plugins.PluginWire
 import desu.inugram.helpers.plugins.Plugin
 import desu.inugram.helpers.plugins.QuickJs
 import java.lang.reflect.InvocationTargetException
@@ -92,7 +92,7 @@ object PluginXposed {
     private class Refusal(val wire: String) : RuntimeException(null, null, false, false)
 
     private fun refuse(code: String, message: String, grant: String? = null): Nothing =
-        throw Refusal(TlWire.encodePluginError(code, message, grant = grant))
+        throw Refusal(PluginWire.encodePluginError(code, message, grant = grant))
 
     private class Site(val target: Member, val backup: Method)
 
@@ -112,12 +112,12 @@ object PluginXposed {
         } catch (e: Refusal) {
             e.wire
         } catch (e: Throwable) {
-            values.wireOf(e) ?: TlWire.encodePluginError("internal", "xposed: ${e.javaClass.simpleName}: ${e.message}")
+            values.wireOf(e) ?: PluginWire.encodePluginError("internal", "xposed: ${e.javaClass.simpleName}: ${e.message}")
         }
 
         private fun run(op: Int, target: Long, name: String, args: Array<String>): String = when (op) {
-            OP_HOOK -> TlWire.encodeString(install(listOf(values.memberAt(target))))
-            OP_HOOK_ALL -> TlWire.encodeString(install(overloads(values.classAt(target), name)))
+            OP_HOOK -> PluginWire.encodeString(install(listOf(values.memberAt(target))))
+            OP_HOOK_ALL -> PluginWire.encodeString(install(overloads(values.classAt(target), name)))
             OP_UNHOOK -> uninstall(target)
             OP_CALL_ORIGINAL -> callOriginal(values.memberAt(target), args)
             else -> refuse("invalid-argument", "xposed: unknown op $op")
@@ -180,9 +180,9 @@ object PluginXposed {
         }
 
         private fun uninstall(site: Long): String {
-            val removed = sites.remove(site) ?: return TlWire.encodeNull()
+            val removed = sites.remove(site) ?: return PluginWire.encodeNull()
             Native.nativeUnhook(removed.target)
-            return TlWire.encodeNull()
+            return PluginWire.encodeNull()
         }
 
         /** its backup when this plugin hooked the method, and the method itself when it did not - the same call either way for the caller */
@@ -230,7 +230,7 @@ object PluginXposed {
                 ?: return runOriginal(site, receiver, args)
             val wantsAfter = before.firstOrNull() == "P1"
             if (before.firstOrNull() == "A") {
-                val answer = answerOf(before.getOrNull(1) ?: TlWire.encodeNull())
+                val answer = answerOf(before.getOrNull(1) ?: PluginWire.encodeNull())
                     ?: return runOriginal(site, receiver, args)
                 return answer.getOrThrow()
             }

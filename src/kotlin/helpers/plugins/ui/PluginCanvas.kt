@@ -17,7 +17,7 @@ import android.graphics.Shader
 import android.graphics.SweepGradient
 import android.graphics.Typeface
 import android.os.Build
-import desu.inugram.core.plugins.TlWire
+import desu.inugram.core.plugins.PluginWire
 import desu.inugram.helpers.plugins.Plugin
 import desu.inugram.helpers.plugins.PluginDispatch
 import desu.inugram.helpers.plugins.QuickJs
@@ -118,7 +118,7 @@ object PluginCanvas {
     private class Refusal(val wire: String) : RuntimeException(null, null, false, false)
 
     private fun refuse(code: String, message: String): Nothing =
-        throw Refusal(TlWire.encodePluginError(code, message))
+        throw Refusal(PluginWire.encodePluginError(code, message))
 
     private class Session(private val plugin: Plugin, private val engine: QuickJs) : QuickJs.CanvasListener {
         private val canvases = HashMap<Long, Surface>()
@@ -135,9 +135,9 @@ object PluginCanvas {
         } catch (e: Refusal) {
             e.wire
         } catch (e: OutOfMemoryError) {
-            TlWire.encodePluginError("quota-exceeded", "canvas: out of memory")
+            PluginWire.encodePluginError("quota-exceeded", "canvas: out of memory")
         } catch (e: Throwable) {
-            TlWire.encodePluginError("internal", "canvas: ${e.javaClass.simpleName}: ${e.message}")
+            PluginWire.encodePluginError("internal", "canvas: ${e.javaClass.simpleName}: ${e.message}")
         }
 
         private fun run(op: Int, id: Long, arg: String, bytes: ByteArray?): String = when (op) {
@@ -151,7 +151,7 @@ object PluginCanvas {
             OP_DECODE -> decode(id, arg)
             OP_RELEASE_IMAGE -> releaseImage(id)
             OP_LOAD_FONT -> loadFont(arg)
-            else -> TlWire.encodePluginError("invalid-argument", "canvas: unknown op $op")
+            else -> PluginWire.encodePluginError("invalid-argument", "canvas: unknown op $op")
         }
 
         private fun create(id: Long, arg: String): String {
@@ -640,7 +640,7 @@ object PluginCanvas {
                 PluginDispatch.onEngine(plugin, engine) {
                     val wire = loaded.fold(
                         onSuccess = { fonts[family] = it; "" },
-                        onFailure = { TlWire.encodePluginError("invalid-argument", "canvas: this is not a font file") },
+                        onFailure = { PluginWire.encodePluginError("invalid-argument", "canvas: this is not a font file") },
                     )
                     engine.canvasResult(requestId, wire)
                 }
@@ -656,7 +656,7 @@ object PluginCanvas {
                 PluginDispatch.onEngine(plugin, engine, onDropped = { bitmap?.recycle() }) {
                     if (bitmap == null) {
                         val message = result.exceptionOrNull()?.message ?: "the decode failed"
-                        engine.canvasResult(requestId, TlWire.encodePluginError("invalid-argument", "canvas: $message"))
+                        engine.canvasResult(requestId, PluginWire.encodePluginError("invalid-argument", "canvas: $message"))
                         return@onEngine
                     }
                     images[imageId] = bitmap
@@ -673,9 +673,9 @@ object PluginCanvas {
                 val wire = try {
                     produce()
                 } catch (e: OutOfMemoryError) {
-                    TlWire.encodePluginError("quota-exceeded", "canvas: out of memory")
+                    PluginWire.encodePluginError("quota-exceeded", "canvas: out of memory")
                 } catch (e: Throwable) {
-                    TlWire.encodePluginError("internal", "canvas: ${e.message ?: e.toString()}")
+                    PluginWire.encodePluginError("internal", "canvas: ${e.message ?: e.toString()}")
                 }
                 PluginDispatch.onEngine(plugin, engine) { engine.canvasResult(requestId, wire) }
             }

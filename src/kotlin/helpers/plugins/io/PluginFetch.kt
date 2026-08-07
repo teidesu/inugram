@@ -2,7 +2,7 @@ package desu.inugram.helpers.plugins.io
 
 import desu.inugram.core.plugins.PluginPermissions
 import desu.inugram.core.plugins.ScopeMatch
-import desu.inugram.core.plugins.TlWire
+import desu.inugram.core.plugins.PluginWire
 import desu.inugram.helpers.plugins.Plugin
 import desu.inugram.helpers.plugins.PluginDispatch
 import desu.inugram.helpers.plugins.QuickJs
@@ -88,10 +88,10 @@ object PluginFetch {
                 val spec = try {
                     Spec.parse(specJson)
                 } catch (e: Exception) {
-                    return TlWire.encodePluginError("invalid-argument", "fetch: ${e.message}")
+                    return PluginWire.encodePluginError("invalid-argument", "fetch: ${e.message}")
                 }
                 val bodiesDir = bodiesDir(plugin.id)
-                    ?: return TlWire.encodePluginError("internal", "fetch: there is nowhere to put a response body")
+                    ?: return PluginWire.encodePluginError("internal", "fetch: there is nowhere to put a response body")
                 val key = flightKey(plugin.id, engine, requestId)
                 val flight = Flight()
                 flights[key] = flight
@@ -100,7 +100,7 @@ object PluginFetch {
                     val delivery = try {
                         exchange(permissions, plugin.id, url, spec, body, bodiesDir, flight)
                     } catch (e: Throwable) {
-                        Delivery(TlWire.encodePluginError("internal", "fetch: ${e.message ?: e.toString()}"), null)
+                        Delivery(PluginWire.encodePluginError("internal", "fetch: ${e.message ?: e.toString()}"), null)
                     }
                     flights.remove(key)
                     Utilities.globalQueue.postRunnable { deliver(plugin, engine, requestId, delivery, flight) }
@@ -281,7 +281,7 @@ object PluginFetch {
     }
 
     private fun refuse(code: String, message: String, grant: String? = null) =
-        TlWire.encodePluginError(code, message, grant = grant)
+        PluginWire.encodePluginError(code, message, grant = grant)
 
     /** [resolve] is a parameter so the rule can be tested against addresses rather than against whatever dns says today */
     fun screenHop(
@@ -409,7 +409,7 @@ object PluginFetch {
             runExchange(permissions, url, spec, body, ::resolveAddresses, transport, flight)
         } catch (e: BodyTooBig) {
             return Delivery(
-                TlWire.encodePluginError(
+                PluginWire.encodePluginError(
                     "quota-exceeded",
                     e.message ?: "fetch: the response is too big",
                     usage = e.usage,
@@ -419,9 +419,9 @@ object PluginFetch {
             )
         } catch (e: Exception) {
             if (flight.cancelled) {
-                return Delivery(TlWire.encodePluginError("aborted", "fetch: the request was aborted"), null)
+                return Delivery(PluginWire.encodePluginError("aborted", "fetch: the request was aborted"), null)
             }
-            return Delivery(TlWire.encodePluginError("network", "fetch: ${e.message ?: e.toString()}"), null)
+            return Delivery(PluginWire.encodePluginError("network", "fetch: ${e.message ?: e.toString()}"), null)
         }
         return when (outcome) {
             is Outcome.Refused -> Delivery(outcome.wire, null)
@@ -443,7 +443,7 @@ object PluginFetch {
         hop.bodyFile?.let {
             json.put("body", JSONObject().put("path", it.absolutePath).put("type", hop.contentType))
         }
-        return TlWire.encodeJson(json.toString())
+        return PluginWire.encodeJson(json.toString())
     }
 
     private fun resolveAddresses(host: String): List<ByteArray> =

@@ -1,7 +1,7 @@
 package desu.inugram.helpers.plugins.tg
 
 import desu.inugram.core.plugins.ScopeMatch
-import desu.inugram.core.plugins.TlWire
+import desu.inugram.core.plugins.PluginWire
 import desu.inugram.helpers.plugins.Plugin
 import desu.inugram.helpers.plugins.PluginDispatch
 import desu.inugram.helpers.plugins.QuickJs
@@ -91,13 +91,13 @@ object PluginWrites {
         arg: String,
         values: Array<String>,
     ): String? {
-        val grant = GRANT_BY_OP[op] ?: return TlWire.encodePluginError("internal", "account write: unknown op $op")
+        val grant = GRANT_BY_OP[op] ?: return PluginWire.encodePluginError("internal", "account write: unknown op $op")
         // the engine's own check_grant already ran in native; this is the second gate, on the side that owns the data
         if (!plugin.permissions.allows(grant.first, grant.second, ScopeMatch.EXACT)) {
-            return TlWire.encodeNotGranted(grant.first, grant.second)
+            return PluginWire.encodeNotGranted(grant.first, grant.second)
         }
         val controller = PluginReads.controllerFor(accountId)
-            ?: return TlWire.encodePluginError("not-found", "account write: no account is logged in as #$accountId")
+            ?: return PluginWire.encodePluginError("not-found", "account write: no account is logged in as #$accountId")
         return try {
             val json = JSONObject(arg)
             val call = Call(plugin, engine, controller, accountId, requestId, json, values)
@@ -114,12 +114,12 @@ object PluginWrites {
                 OP_DOWNLOAD_MEDIA -> PluginMedia.download(call, toFile = false)
                 OP_DOWNLOAD_MEDIA_TO_FILE -> PluginMedia.download(call, toFile = true)
                 OP_UPLOAD_FILE -> PluginMedia.uploadFile(call)
-                else -> TlWire.encodePluginError("internal", "account write: unknown op $op")
+                else -> PluginWire.encodePluginError("internal", "account write: unknown op $op")
             }
         } catch (e: Refused) {
             e.wire
         } catch (e: Exception) {
-            TlWire.encodePluginError("internal", "account write: ${e.message ?: e.toString()}")
+            PluginWire.encodePluginError("internal", "account write: ${e.message ?: e.toString()}")
         }
     }
 
@@ -134,7 +134,7 @@ object PluginWrites {
 
     internal class Refused(val wire: String) : Exception()
 
-    internal fun refuse(code: String, message: String): Nothing = throw Refused(TlWire.encodePluginError(code, message))
+    internal fun refuse(code: String, message: String): Nothing = throw Refused(PluginWire.encodePluginError(code, message))
 
     internal class Call(
         val plugin: Plugin,
@@ -175,7 +175,7 @@ object PluginWrites {
             // stageQueue frees the response the moment this returns, before [answer]'s runnable reads it on globalQueue, so ownership moves here
             response?.disableFree = true
             answer(call, release = { PluginRpc.releaseUnowned(response) }) {
-                if (error != null) TlWire.encodeRpcError(error.code, error.text ?: "")
+                if (error != null) PluginWire.encodeRpcError(error.code, error.text ?: "")
                 else produce(response)
             }
         }
@@ -228,20 +228,20 @@ object PluginWrites {
      * counterpart for the ops that only *name* an object.
      */
     internal fun tlValue(engine: QuickJs, wire: String): TLObject {
-        val decoded = TlWire.decode(wire)
-        if (decoded is TlWire.Value.Handle && TlHandles.of(engine).isReadOnly(decoded.id)) {
+        val decoded = PluginWire.decode(wire)
+        if (decoded is PluginWire.Value.Handle && TlHandles.of(engine).isReadOnly(decoded.id)) {
             refuse("forbidden", TlHandles.READ_ONLY_MESSAGE)
         }
         return readValue(engine, decoded)
     }
 
     /** read-only is the normal shape here: everything an `Account` hands over is read-only, so the message a download names is one */
-    internal fun readValue(engine: QuickJs, wire: String): TLObject = readValue(engine, TlWire.decode(wire))
+    internal fun readValue(engine: QuickJs, wire: String): TLObject = readValue(engine, PluginWire.decode(wire))
 
-    private fun readValue(engine: QuickJs, decoded: TlWire.Value): TLObject = when (decoded) {
-        is TlWire.Value.Handle -> TlHandles.of(engine).resolveTlObject(decoded.id)
-            ?: refuse("handle-expired", TlWire.HANDLE_EXPIRED_MESSAGE)
-        is TlWire.Value.Json -> TlJson.fromJson(JSONObject(decoded.json))
+    private fun readValue(engine: QuickJs, decoded: PluginWire.Value): TLObject = when (decoded) {
+        is PluginWire.Value.Handle -> TlHandles.of(engine).resolveTlObject(decoded.id)
+            ?: refuse("handle-expired", PluginWire.HANDLE_EXPIRED_MESSAGE)
+        is PluginWire.Value.Json -> TlJson.fromJson(JSONObject(decoded.json))
         else -> refuse("invalid-argument", "expected a TL object")
     }
 
@@ -286,7 +286,7 @@ object PluginWrites {
                 id.addAll(ids)
             }
         }
-        return send(call, request) { TlWire.encodeNull() }
+        return send(call, request) { PluginWire.encodeNull() }
     }
 
     private fun forwardMessages(call: Call): String? {
@@ -319,7 +319,7 @@ object PluginWrites {
                 else TLRPC.TL_reactionEmoji().apply { emoticon = one.optString("emoji") },
             )
         }
-        return send(call, request) { TlWire.encodeNull() }
+        return send(call, request) { PluginWire.encodeNull() }
     }
 
     private fun readHistory(call: Call): String? {
@@ -342,7 +342,7 @@ object PluginWrites {
                 max_id = maxId
             }
         }
-        return send(call, request) { TlWire.encodeNull() }
+        return send(call, request) { PluginWire.encodeNull() }
     }
 
     private fun sendTyping(call: Call): String? {
@@ -350,7 +350,7 @@ object PluginWrites {
         request.peer = call.peer() as TLRPC.InputPeer
         request.top_msg_id = call.int("topicId")
         request.action = typingAction(call.json.optString("action"))
-        return send(call, request) { TlWire.encodeNull() }
+        return send(call, request) { PluginWire.encodeNull() }
     }
 
     private fun setDraft(call: Call): String? {
@@ -359,7 +359,7 @@ object PluginWrites {
         request.message = call.text()
         request.entities = entitiesOf(call.json)
         request.reply_to = replyTo(call)
-        return send(call, request) { TlWire.encodeNull() }
+        return send(call, request) { PluginWire.encodeNull() }
     }
 
     private fun typingAction(name: String): TLRPC.SendMessageAction = when (name) {

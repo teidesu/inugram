@@ -1,18 +1,38 @@
 package desu.inugram.core.plugins
 
 /**
- * Compact single-value wire codec crossing the JNI boundary for the live-proxy TL bridge
- * (desu.inugram.helpers.plugins.tl.TlHandles <-> src/rust/inu_native/src/tl/proxy.rs).
+ * The single-value codec every channel across the [desu.inugram.helpers.plugins.QuickJs] boundary
+ * speaks. Mirrored byte for byte by src/rust/inu_native/src/tl/proxy.rs; neither side may add a tag
+ * without the other.
  *
- * Carries exactly ONE field/element value per call, never a whole object graph, so a get()/set()
- * trap costs O(1).
+ * It is named after its first caller no longer: the TL live-proxy bridge
+ * (desu.inugram.helpers.plugins.tl.TlHandles) is one user among ~20, alongside kv, canvas, fetch,
+ * jvm, xposed, notifications, actions, ui, media, reads, writes and deserialize. The reason they
+ * share it rather than each getting typed JNI methods is that JNI has no sum type, and every one of
+ * these channels carries a heterogeneous value that may also have failed - so a second
+ * implementation of these tags is a second `Y` that forgets it is base64.
  *
- * tag chars: N=null, S=string, I=int, D=double, B=bool, Y=bytes(base64),
- * H=handle(kind + mode + id, e.g. "HOW12" = object/writable/#12, "HVR7" = vector/read-only/#7),
- * J=json(construct), E=error, R=rpc error ("code:text", surfaced as `inu.RpcError`),
- * P=plugin error (surfaced as `inu.PluginError`). First char is the tag; rest is the payload.
+ * Carries exactly ONE value per call, never a whole object graph, so a proxy get()/set() trap costs
+ * O(1). First char is the tag; the rest is the payload.
+ *
+ * ```
+ * N  null                    S  string                  I  int            D  double
+ * B  bool                    Y  bytes (base64)          J  json construct
+ * H  handle: kind + mode + id - "HOW12" = object/writable/#12, "HVR7" = vector/read-only/#7
+ * E  error                   R  rpc error "code:text" -> `inu.RpcError`
+ * P  plugin error -> `inu.PluginError`
+ * ```
+ *
+ * Three more tags are minted by a single bridge each and decoded only by it, so they are not
+ * encoded here - but they share this tag space and a fourth bridge must not collide with them:
+ * `F<json>` a staged file ([desu.inugram.helpers.plugins.QuickJs.WritesListener]), `G<kind><id>` a
+ * jvm handle ([desu.inugram.helpers.plugins.QuickJs.JvmListener]), and the `T` prefix on a thrown
+ * original ([desu.inugram.helpers.plugins.QuickJs.XposedListener]).
+ *
+ * Note the two channel *shapes* on top of this vocabulary, which are not interchangeable - see
+ * [desu.inugram.helpers.plugins.QuickJs]. A `String?` error channel must never carry an `E` wire.
  */
-object TlWire {
+object PluginWire {
     sealed class Value {
         data object Null : Value()
         data class Str(val value: String) : Value()
@@ -70,7 +90,7 @@ object TlWire {
     }
 
     fun decode(wire: String): Value {
-        if (wire.isEmpty()) throw IllegalArgumentException("TlWire.decode: empty wire value")
+        if (wire.isEmpty()) throw IllegalArgumentException("PluginWire.decode: empty wire value")
         val payload = wire.substring(1)
         return when (wire[0]) {
             'N' -> Value.Null
@@ -80,11 +100,11 @@ object TlWire {
             'B' -> Value.Bool(payload == "1")
             'Y' -> Value.Bytes(payload)
             'H' -> {
-                if (payload.length < 3) throw IllegalArgumentException("TlWire.decode: truncated handle payload")
+                if (payload.length < 3) throw IllegalArgumentException("PluginWire.decode: truncated handle payload")
                 val kind = payload[0]
                 val mode = payload[1]
                 if ((kind != 'O' && kind != 'V') || (mode != 'W' && mode != 'R')) {
-                    throw IllegalArgumentException("TlWire.decode: bad handle payload '$payload'")
+                    throw IllegalArgumentException("PluginWire.decode: bad handle payload '$payload'")
                 }
                 Value.Handle(vector = kind == 'V', id = payload.substring(2).toLong(), readOnly = mode == 'R')
             }
@@ -92,7 +112,7 @@ object TlWire {
             'E' -> Value.Error(payload)
             'R' -> {
                 val sep = payload.indexOf(':')
-                if (sep < 0) throw IllegalArgumentException("TlWire.decode: bad rpc error payload")
+                if (sep < 0) throw IllegalArgumentException("PluginWire.decode: bad rpc error payload")
                 Value.RpcError(code = payload.substring(0, sep).toInt(), text = payload.substring(sep + 1))
             }
             'P' -> {
@@ -101,7 +121,7 @@ object TlWire {
                 val n3 = if (n2 >= 0) payload.indexOf('\n', n2 + 1) else -1
                 val n4 = if (n3 >= 0) payload.indexOf('\n', n3 + 1) else -1
                 if (n1 < 0 || n2 < 0 || n3 < 0 || n4 < 0) {
-                    throw IllegalArgumentException("TlWire.decode: bad plugin error payload")
+                    throw IllegalArgumentException("PluginWire.decode: bad plugin error payload")
                 }
                 Value.PluginErr(
                     code = payload.substring(0, n1),
@@ -111,7 +131,7 @@ object TlWire {
                     message = payload.substring(n4 + 1),
                 )
             }
-            else -> throw IllegalArgumentException("TlWire.decode: unknown tag '${wire[0]}'")
+            else -> throw IllegalArgumentException("PluginWire.decode: unknown tag '${wire[0]}'")
         }
     }
 }

@@ -3,7 +3,7 @@ package desu.inugram.helpers.plugins.ui
 import android.util.Log
 import desu.inugram.core.plugins.ActionRegistry
 import desu.inugram.core.plugins.ActionRow
-import desu.inugram.core.plugins.TlWire
+import desu.inugram.core.plugins.PluginWire
 import desu.inugram.helpers.plugins.Plugin
 import desu.inugram.helpers.plugins.PluginManager
 import desu.inugram.helpers.plugins.QuickJs
@@ -78,7 +78,7 @@ object PluginActions {
         if (refusal != null) {
             Log.w(TAG, "[${plugin.manifest.name}] refused an action row: $refusal")
             // a `P` wire, so the cap refusal carries its own code: every other answer this upcall can give is a JNI-level failure, and reporting those as `quota-exceeded` tells a plugin it is at a limit it is nowhere near
-            return TlWire.encodePluginError("quota-exceeded", refusal)
+            return PluginWire.encodePluginError("quota-exceeded", refusal)
         }
         publishCounts()
         return null
