@@ -743,9 +743,10 @@ declare interface Response {
  * redirect hop, since a host inside an allowed domain can still point at the device.
  *
  * a url whose host isn't what it reads as is refused outright (`invalid-argument`): userinfo
- * (`https://good.com@127.0.0.1/`), and any scheme other than http/https. that holds for a redirect's
- * `Location` too, which is where it matters most: a granted host answering `302 file:///…` is
- * refused rather than turned into a local file read.
+ * (`https://good.com@127.0.0.1/`), a backslash in the authority, whitespace or control characters
+ * anywhere in it, and any scheme other than http/https. that holds for a redirect's `Location` too,
+ * which is where it matters most: a granted host answering `302 file:///…` is refused rather than
+ * turned into a local file read.
  *
  * **bodies are capped at 32 MB in each direction.** a request body past that is `quota-exceeded`
  * (that's `uploadFile`'s job), and so is a response body. on top of that

@@ -231,6 +231,27 @@ fn install_hooks<'js>(
         tokens.push(token);
     }
 
+    // the ceiling is checked here rather than at the entry point because `hookAllOverloads` is one
+    // call installing a site per overload, and the host is what knows how many that is. Backing the
+    // excess out goes through the disposer's own path, which unhooks a site only when its last
+    // holder goes - two registrations may name one already-rewritten ART method.
+    let held = state.hooks.len();
+    if held > HOOK_LIMIT {
+        for token in &tokens {
+            if let Some(hook) = state.hooks.remove(*token) {
+                state.release(ctx, hook);
+            }
+        }
+        return throw_plugin_error(
+            ctx,
+            "quota-exceeded",
+            &format!("xposed: this plugin may hold at most {HOOK_LIMIT} hooks"),
+            None,
+            Some(held as i64),
+            Some(HOOK_LIMIT as i64),
+        );
+    }
+
     let state = state.clone();
     make_disposer(ctx, move |ctx| {
         for token in &tokens {
@@ -256,17 +277,6 @@ fn js_hook<'js>(
     if state.lifecycle.is_unloading() {
         return noop_disposer(ctx);
     }
-    if state.hooks.len() >= HOOK_LIMIT {
-        return throw_plugin_error(
-            ctx,
-            "quota-exceeded",
-            &format!("xposed: this plugin already holds {HOOK_LIMIT} hooks"),
-            None,
-            Some(state.hooks.len() as i64),
-            Some(HOOK_LIMIT as i64),
-        );
-    }
-
     let target = require_handle(ctx, state, &target, "hook")?;
     let answered = ask(ctx, state, op, target, &name, &[])?;
     let sites = sites_from(ctx, answered)?;
@@ -389,11 +399,16 @@ fn run_callback<'js>(
     }
 }
 
-/// The `before` half of a dispatch, run on `globalQueue` with the app's thread parked on it.
-///
 /// `method` is the `jvm` wire of the member lsplant is dispatching for - taken from the host rather
 /// than from the registration, because the bulk forms install one hook over several overloads and
 /// only the host knows which of them was called. `this`/`args` are `jvm` wires too.
+pub struct Invocation<'a> {
+    pub method: &'a str,
+    pub this: &'a str,
+    pub args: &'a [String],
+}
+
+/// The `before` half of a dispatch, run on `globalQueue` with the app's thread parked on it.
 ///
 /// The answer is read positionally by the host: `["A", wire]` means answer the app with `wire` and
 /// run nothing, and `["P0" | "P1", ...args]` means call the original with those args - `P1` also
@@ -404,10 +419,9 @@ pub fn dispatch_before(
     state: &Rc<XposedState>,
     dispatch_id: i64,
     site: i64,
-    method: &str,
-    this: &str,
-    args: &[String],
+    call: &Invocation,
 ) -> Vec<String> {
+    let Invocation { method, this, args } = *call;
     let answer = context.with(|ctx| -> JsResult<Vec<String>> {
         // taken before the first callback runs: a hook registered by one joins from the next
         // dispatch, and one disposed by it still finishes this run

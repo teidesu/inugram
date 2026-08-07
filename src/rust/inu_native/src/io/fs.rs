@@ -494,12 +494,36 @@ fn op_move(state: &FsState, src: &str, dest: &str) -> FsResult<()> {
     match fs::rename(&src, &dest) {
         Ok(()) => Ok(()),
         // a rename cannot cross a mount, and under `unsafe.fs` the two ends may be on different
-        // ones. Copy-then-remove is what every `mv` does about it.
+        // ones. Copy-then-remove is what every `mv` does about it - recursively, `move` taking a
+        // directory where `copy` does not
         Err(e) if e.raw_os_error() == Some(EXDEV) => {
-            fs::copy(&src, &dest).map_err(|e| io("move", e))?;
-            fs::remove_file(&src).map_err(|e| io("move", e))
+            copy_tree(&src, &dest).map_err(|e| io("move", e))?;
+            remove_tree(&src).map_err(|e| io("move", e))
         }
         Err(e) => Err(io("move", e)),
+    }
+}
+
+/// every path here has already been through [`resolve_path`], which reads through every link it
+/// meets, so there is nothing left to follow and no cycle to guard against
+fn copy_tree(src: &Path, dest: &Path) -> std::io::Result<()> {
+    if !fs::metadata(src)?.is_dir() {
+        fs::copy(src, dest)?;
+        return Ok(());
+    }
+    fs::create_dir_all(dest)?;
+    for entry in fs::read_dir(src)? {
+        let entry = entry?;
+        copy_tree(&entry.path(), &dest.join(entry.file_name()))?;
+    }
+    Ok(())
+}
+
+fn remove_tree(path: &Path) -> std::io::Result<()> {
+    if fs::metadata(path)?.is_dir() {
+        fs::remove_dir_all(path)
+    } else {
+        fs::remove_file(path)
     }
 }
 

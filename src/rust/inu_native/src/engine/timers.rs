@@ -284,7 +284,7 @@ pub fn run_due(rt: &Runtime, context: &rquickjs::Context, state: &Rc<TimerState>
             match callback.call::<_, Value>(()) {
                 Ok(_) => {}
                 Err(rquickjs::Error::Exception) => {
-                    (state.log)(&format!("timer callback threw: {}", format_exception(&ctx)));
+                    (state.log)(&crate::fault(format_args!("timer callback threw: {}", format_exception(&ctx))));
                 }
                 Err(e) => (state.log)(&format!("timer callback failed: {e:?}")),
             }
@@ -296,9 +296,11 @@ pub fn run_due(rt: &Runtime, context: &rquickjs::Context, state: &Rc<TimerState>
 
 /// drops every armed timer and withdraws the host's wake. Call after the `inu.onUnload` callbacks
 /// have run, so one clearing its own timers still sees them.
+///
+/// [`dispose`]'s work exactly: a timer holds nothing but its own callback root and the outstanding
+/// wake, so unloading a plugin and destroying its engine give back the same two things.
 pub fn notify_unload(context: &rquickjs::Context, state: &Rc<TimerState>) {
-    context.with(|ctx| release_all(&ctx, state));
-    sync_wake(state);
+    dispose(context, state);
 }
 
 /// releases every `Persistent` GC root this state still owns - same contract as [`crate::tg::rpc::dispose`].

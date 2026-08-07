@@ -48,43 +48,12 @@ pub struct FetchState {
     pending: RefCell<HashMap<i64, PendingSettle>>,
 }
 
-/// what the url has to be before the host is asked anything: a scheme it will speak, and a host
-/// name to check the grant against. The host parses it again with a real url parser - this is the
-/// pre-flight, not the authority.
-struct Target {
-    host: String,
-}
-
-/// Extracts the host the grant is checked against, refusing every shape whose host is not what it
-/// reads as. The `@` case is the one that matters: `http://allowed.com@127.0.0.1/` connects to
-/// 127.0.0.1 while the eye (and a naive parser) reads `allowed.com`, so userinfo is refused
-/// outright rather than skipped - nothing here has a use for it.
-fn parse_target(url: &str) -> Result<Target, String> {
-    let Some((scheme, rest)) = url.split_once("://") else {
-        return Err("fetch: the url has no scheme".to_string());
-    };
-    let scheme = scheme.to_ascii_lowercase();
-    if scheme != "http" && scheme != "https" {
-        return Err(format!("fetch: '{scheme}' is not a scheme this api speaks"));
-    }
-    let authority = rest.split(['/', '?', '#']).next().unwrap_or_default();
-    if authority.contains('@') {
-        return Err("fetch: a url with userinfo in it is refused; put credentials in a header".to_string());
-    }
-    let host = match authority.strip_prefix('[') {
-        // an ipv6 literal keeps its brackets out of the name the grant is matched against
-        Some(rest) => match rest.split_once(']') {
-            Some((inside, _)) => inside.to_string(),
-            None => return Err("fetch: the url has an unterminated ipv6 literal".to_string()),
-        },
-        None => authority.split(':').next().unwrap_or_default().to_string(),
-    };
-    // a trailing dot is the same name to dns and a different string to the grant's domain match
-    let host = host.trim_end_matches('.').to_ascii_lowercase();
-    if host.is_empty() {
-        return Err("fetch: the url has no host".to_string());
-    }
-    Ok(Target { host })
+/// The host the grant is checked against, from [`crate::engine::url`]'s screen - which `openUrl`
+/// runs too, both apis handing the string on to something that re-parses it. `PluginFetch.hostOf`
+/// does it a third time with a real url parser and is the authority; this is the pre-flight that
+/// decides which grant to ask for.
+fn parse_target(url: &str) -> Result<String, String> {
+    crate::engine::url::parse_http_url("fetch", url)
 }
 
 /// `string | Uint8Array | Blob` for a request body, read here because only this side can read a
@@ -141,13 +110,13 @@ fn js_send<'js>(
     // prelude runs in the plugin's realm, so a spec it serialized itself would be whatever the
     // plugin's `JSON.stringify` felt like returning. The host validates it again either way.
     let spec_json = json_stringify(ctx, spec)?.unwrap_or_else(|| "{}".to_string());
-    let target = match parse_target(&url) {
-        Ok(target) => target,
+    let host = match parse_target(&url) {
+        Ok(host) => host,
         Err(message) => return throw_plugin_error(ctx, "invalid-argument", &message, None, None, None),
     };
     // domain-matched, so `@grant fetch(google.com)` covers `api.google.com` and nothing else. The
     // host re-checks this for every redirect hop, which is the half this side cannot see.
-    check_grant(ctx, &state.grants, "fetch", Some(&target.host), MATCH_DOMAIN)?;
+    check_grant(ctx, &state.grants, "fetch", Some(&host), MATCH_DOMAIN)?;
 
     let body = match read_body(state, &body) {
         Ok(body) => body,

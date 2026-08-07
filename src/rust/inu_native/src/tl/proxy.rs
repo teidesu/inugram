@@ -716,13 +716,11 @@ fn build_proxy<'js>(
             Function::new(ctx.clone(), move |ctx: Ctx<'js>, target: Value<'js>| -> JsResult<Array<'js>> {
                 if state.is_vector {
                     let arr = Array::new(ctx.clone())?;
-                    let len = vector_length(&ctx, state.host(), state.handle)?;
-                    let mut i = 0usize;
+                    let len = vector_length(&ctx, state.host(), state.handle)?.max(0) as usize;
                     for idx in 0..len {
-                        arr.set(i, idx.to_string())?;
-                        i += 1;
+                        arr.set(idx, idx.to_string())?;
                     }
-                    arr.set(i, "length")?;
+                    arr.set(len, "length")?;
                     return Ok(arr);
                 }
                 sync_epoch(&state, &ctx, &target)?;

@@ -35,6 +35,7 @@ use crate::draw::css::{parse_color, parse_font, Font};
 use crate::draw::geom::{finite, normalize_round_rect, ArcError, Matrix, Path, Verb};
 use crate::engine::deadline::{ExternalCharge, ExternalMemory};
 use crate::engine::error::{get_or_create_inu, throw_plugin_error, wire_error_to_js};
+use crate::engine::registry::RequestIds;
 use crate::engine::shape::{define_getter, define_method};
 use crate::io::blob::{mint_app_file, resolve_export, BlobState, BUILD_LIMIT_BYTES};
 use crate::tg::rpc::{format_exception, pump_jobs, PendingSettle};
@@ -519,9 +520,9 @@ pub struct CanvasState {
     stage_dir: PathBuf,
     /// whether the host can honour the separable blend modes at all, read once at install
     blend_modes: Cell<bool>,
-    next_id: Cell<i64>,
-    next_request: Cell<i64>,
-    next_staged: Cell<u64>,
+    next_id: RequestIds,
+    next_request: RequestIds,
+    next_staged: RequestIds,
     pending: RefCell<HashMap<i64, Pending>>,
     /// every live surface, weakly. Only [`ImageData::release`] reads it, and only to make sure no
     /// buffer still names a bitmap it is about to give back.
@@ -529,12 +530,6 @@ pub struct CanvasState {
 }
 
 impl CanvasState {
-    fn next_id(&self) -> i64 {
-        let id = self.next_id.get();
-        self.next_id.set(id + 1);
-        id
-    }
-
     fn track_surface(&self, surface: &Rc<Surface>) {
         let mut surfaces = self.surfaces.borrow_mut();
         surfaces.retain(|weak| weak.strong_count() > 0);
@@ -901,8 +896,7 @@ fn write_staged<'js>(
             None,
         );
     }
-    let n = state.next_staged.get() + 1;
-    state.next_staged.set(n);
+    let n = state.next_staged.alloc();
     let path = state.stage_dir.join(format!("canvas-{n}.bin"));
     let written = fs::create_dir_all(&state.stage_dir)
         .and_then(|_| fs::File::create(&path))
@@ -926,7 +920,7 @@ fn create_surface<'js>(ctx: &Ctx<'js>, state: &Rc<CanvasState>, width: i32, heig
     check_dimensions(ctx, width, height)?;
     let bytes = width as usize * height as usize * 4;
     let charge = state.external.charge(ctx, bytes)?;
-    let id = state.next_id();
+    let id = state.next_id.alloc();
     let answer = state.host.canvas(OP_CREATE, id, &format!("{width},{height}"), None);
     throw_host_error(ctx, &answer)?;
     let surface = Rc::new(Surface {
@@ -1005,9 +999,9 @@ pub fn install_canvas<'js>(
         log,
         stage_dir,
         blend_modes: Cell::new(false),
-        next_id: Cell::new(1),
-        next_request: Cell::new(1),
-        next_staged: Cell::new(0),
+        next_id: RequestIds::default(),
+        next_request: RequestIds::default(),
+        next_staged: RequestIds::default(),
         pending: RefCell::new(HashMap::new()),
         surfaces: RefCell::new(Vec::new()),
     });
@@ -1083,15 +1077,14 @@ fn start_async<'js>(
         return invalid(ctx, "loadFont: the family name is empty");
     }
     let (path, staged) = stage_source(ctx, state, source)?;
-    let request_id = state.next_request.get();
-    state.next_request.set(request_id + 1);
+    let request_id = state.next_request.alloc();
     let (promise, settle) = PendingSettle::new(ctx)?;
 
     let (kind, op, id, arg) = if is_font {
         let arg = format!("{request_id}{FIELD}{family}{FIELD}{}", path.to_string_lossy());
         (PendingKind::Font, OP_LOAD_FONT, 0, arg)
     } else {
-        let id = state.next_id();
+        let id = state.next_id.alloc();
         let image = Rc::new(ImageData {
             id,
             width: 0,
@@ -1219,8 +1212,7 @@ fn convert_to_blob<'js>(
         }
     }
     surface.flush(ctx)?;
-    let request_id = state.next_request.get();
-    state.next_request.set(request_id + 1);
+    let request_id = state.next_request.alloc();
     let (promise, settle) = PendingSettle::new(ctx)?;
     state.pending.borrow_mut().insert(request_id, Pending { kind: PendingKind::Encode, settle, staged: None });
     let arg = format!("{request_id}{FIELD}{mime}{FIELD}{quality}");

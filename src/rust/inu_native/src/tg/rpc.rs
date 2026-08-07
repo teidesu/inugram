@@ -1295,11 +1295,14 @@ pub fn dispatch_rpc(
                 other => other.to_string(),
             };
             (state.log)(&format!("interceptRpc({method}) dispatch failed: {msg}"));
-            state.host.on_complete(dispatch_id, &proxy::encode_error(&msg));
-            if let Some(dstate) = state.remove_dispatch(dispatch_id) {
-                if let Some(pending) = dstate.next_resolvers.borrow_mut().take() {
-                    pending.release(&ctx);
-                }
+            let wire = proxy::encode_error(&msg);
+            // through the same guard every other answer takes: a stage that parked its `next()`
+            // before the failure has a passthrough in flight, and answering the host here *and*
+            // from `complete_next` is two answers to one request
+            let dstate = state.dispatches.borrow().get(&dispatch_id).cloned();
+            match dstate {
+                Some(dstate) => complete_dispatch(&ctx, state, &dstate, dispatch_id, &wire),
+                None => state.host.on_complete(dispatch_id, &wire),
             }
         }
     });
