@@ -495,9 +495,7 @@ pub extern "system" fn Java_desu_inugram_helpers_plugins_QuickJs_nativeXposedBef
                 state,
                 dispatch_id,
                 site,
-                &method_wire,
-                &this_wire,
-                &args,
+                &crate::platform::xposed::Invocation { method: &method_wire, this: &this_wire, args: &args },
             ),
             // no api installed is the same answer as no hook left on the site: run what the app called
             None => std::iter::once("P0".to_string()).chain(args.iter().cloned()).collect(),

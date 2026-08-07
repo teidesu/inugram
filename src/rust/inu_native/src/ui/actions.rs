@@ -33,12 +33,10 @@ pub const KIND_EDITOR: i32 = 4;
 const DRAFT_GRANT: &str = "account.read";
 const DRAFT_SCOPE: &str = "draft";
 
-fn check_draft_grant(state: &Rc<ActionState>) -> Result<(), ()> {
-    if state.grants.is_granted(DRAFT_GRANT, Some(DRAFT_SCOPE), MATCH_EXACT) {
-        return Ok(());
-    }
-    Err(())
+fn has_draft_grant(state: &Rc<ActionState>) -> bool {
+    state.grants.is_granted(DRAFT_GRANT, Some(DRAFT_SCOPE), MATCH_EXACT)
 }
+
 const KIND_COUNT: usize = 5;
 
 /// keep in sync with Kotlin `PluginActions.EDITOR_OP_*`
@@ -253,7 +251,7 @@ fn build_context<'js>(ctx: &Ctx<'js>, state: &Rc<ActionState>, kind: i32, surfac
         // Gated per context rather than at registration, or a row that only wants to `send` would
         // need a read grant to exist at all; the refusal is a throwing accessor rather than an
         // absent member so a plugin is told which grant it is short of.
-        if check_draft_grant(state).is_ok() {
+        if has_draft_grant(state) {
             let draft: Value = parsed.get("draft")?;
             out.set("draft", draft)?;
         } else {
@@ -348,35 +346,72 @@ pub fn render_actions(
     kind: i32,
     surface_json: &str,
 ) -> Option<String> {
-    let out = context.with(|ctx| match try_render(&ctx, state, kind, surface_json) {
-        Ok(json) => Some(json),
-        Err(rquickjs::Error::Exception) => {
-            (state.log)(&crate::fault(format_args!("{}: render failed: {}", kind_name(kind), format_exception(&ctx))));
-            None
+    let out = context.with(|ctx| {
+        // the two ways a render fails on the *host's* input rather than the plugin's code, kept out
+        // of the faulting path below: naming a kind that does not exist, or handing over a surface
+        // that will not parse, are the app's bad day, and switching a plugin off for one is the bug
+        // that reads as a plugin bug
+        let Some(registry) = state.registry(kind) else {
+            (state.log)(&format!("render: unknown action kind {kind}"));
+            return None;
+        };
+        let defs = registry.values();
+        if defs.is_empty() {
+            return Some("[]".to_string());
         }
-        Err(e) => {
-            (state.log)(&format!("{}: render failed: {e:?}", kind_name(kind)));
-            None
+        // one ctx for the whole render: the rows of one menu describe one surface, and minting an
+        // `Account` per row would cost a host crossing per row for the same answer
+        let context_obj = surface_context(&ctx, state, kind, surface_json)?;
+        match try_render(&ctx, state, kind, registry, defs, &context_obj) {
+            Ok(json) => Some(json),
+            Err(rquickjs::Error::Exception) => {
+                (state.log)(&crate::fault(format_args!(
+                    "{}: render failed: {}",
+                    kind_name(kind),
+                    format_exception(&ctx)
+                )));
+                None
+            }
+            Err(e) => {
+                (state.log)(&format!("{}: render failed: {e:?}", kind_name(kind)));
+                None
+            }
         }
     });
     pump_jobs(rt, context, state.log.as_ref());
     out
 }
 
-fn try_render<'js>(ctx: &Ctx<'js>, state: &Rc<ActionState>, kind: i32, surface_json: &str) -> JsResult<String> {
-    let Some(registry) = state.registry(kind) else {
-        return Err(Exception::throw_type(ctx, "render: unknown action kind"));
-    };
-    let defs = registry.values();
-    let out = Array::new(ctx.clone())?;
-    if defs.is_empty() {
-        return json_stringify(ctx, out.into_value())?
-            .ok_or_else(|| Exception::throw_message(ctx, "render: serialization produced no output"));
+/// [`build_context`] over host-supplied json, with the failure logged as the host's own. Shared by
+/// the two entry points so a malformed surface answers the same way whichever one saw it.
+fn surface_context<'js>(
+    ctx: &Ctx<'js>,
+    state: &Rc<ActionState>,
+    kind: i32,
+    surface_json: &str,
+) -> Option<Object<'js>> {
+    match build_context(ctx, state, kind, surface_json) {
+        Ok(obj) => Some(obj),
+        Err(rquickjs::Error::Exception) => {
+            (state.log)(&format!("{}: bad surface: {}", kind_name(kind), format_exception(ctx)));
+            None
+        }
+        Err(e) => {
+            (state.log)(&format!("{}: bad surface: {e:?}", kind_name(kind)));
+            None
+        }
     }
-    // one ctx for the whole render: the rows of one menu describe one surface, and minting an
-    // `Account` per row would cost a host crossing per row for the same answer
-    let context_obj = build_context(ctx, state, kind, surface_json)?;
+}
 
+fn try_render<'js>(
+    ctx: &Ctx<'js>,
+    state: &Rc<ActionState>,
+    kind: i32,
+    registry: &Registry<Rc<ActionDef>>,
+    defs: Vec<Rc<ActionDef>>,
+    context_obj: &Object<'js>,
+) -> JsResult<String> {
+    let out = Array::new(ctx.clone())?;
     let mut index = 0;
     for def in defs {
         // a row disposed by an earlier row's `visible` is not drawn: the walk holds a snapshot, so
@@ -384,7 +419,7 @@ fn try_render<'js>(ctx: &Ctx<'js>, state: &Rc<ActionState>, kind: i32, surface_j
         if !registry.contains(def.token) {
             continue;
         }
-        match render_one(ctx, &def, &context_obj) {
+        match render_one(ctx, &def, context_obj) {
             Ok(Some(text)) => {
                 let row = Object::new(ctx.clone())?;
                 row.set("token", def.token)?;
@@ -448,16 +483,8 @@ pub fn dispatch_action(
                 return;
             }
         };
-        let context_obj = match build_context(&ctx, state, kind, surface_json) {
-            Ok(obj) => obj,
-            Err(rquickjs::Error::Exception) => {
-                (state.log)(&format!("{}: bad surface: {}", kind_name(kind), format_exception(&ctx)));
-                return;
-            }
-            Err(e) => {
-                (state.log)(&format!("{}: bad surface: {e:?}", kind_name(kind)));
-                return;
-            }
+        let Some(context_obj) = surface_context(&ctx, state, kind, surface_json) else {
+            return;
         };
         match callback.call::<_, Value>((context_obj,)) {
             Ok(_) => {}

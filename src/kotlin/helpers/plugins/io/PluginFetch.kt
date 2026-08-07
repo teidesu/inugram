@@ -62,6 +62,9 @@ object PluginFetch {
     private val flights = ConcurrentHashMap<String, Flight>()
     private val used = ConcurrentHashMap<String, AtomicLong>()
 
+    /** four hops run at once on [transfers], and two reading the same clock would write one file */
+    private val nextBody = AtomicLong(1)
+
     /**
      * [connection] only exists once a worker opened one, and everything before that (the queue hop,
      * the pool dispatch, the name resolution) is time an abort has to be *asked for* rather than
@@ -487,7 +490,7 @@ object PluginFetch {
             val stream = if (status >= 400) connection.errorStream else connection.inputStream
             // always a file, even for a 204: a body that exists as an empty `Blob` is one shape
             // fewer for a plugin to branch on than a `null` body
-            val file = File(bodiesDir, "b${System.nanoTime()}-$status")
+            val file = File(bodiesDir, "b${nextBody.getAndIncrement()}-$status")
             return Hop(
                 status = status,
                 statusText = connection.responseMessage ?: "",

@@ -46,47 +46,10 @@ pub trait ApiHost {
     fn clipboard_write(&self, text: &str);
 }
 
-/// What `inu.openUrl` may hand to the system, and nothing else.
-///
-/// **http/https only.** Any other scheme is an instruction to whichever app claims it: `tg:` is
-/// the app's own deeplink surface, `intent:` names an activity and its extras, `content:`/`file:`
-/// name the storage this sandbox exists to gate. A scheme allowlist is the only check that can
-/// tell them apart before something else has acted on the string.
-///
-/// The `@` rule is [`crate::io::fetch`]'s: `https://telegram.org@evil.com/` reads as one host and goes
-/// to another. Whitespace and control characters are refused rather than percent-encoded, because
-/// a url handed on as text is re-parsed by whatever receives it.
+/// What `inu.openUrl` may hand to the system, and nothing else: [`crate::engine::url`]'s screen,
+/// which `fetch` runs too, since both end up handing the string to something that re-parses it.
 pub(crate) fn screen_external_url(url: &str) -> Result<(), String> {
-    if url.chars().any(|c| c.is_whitespace() || c.is_control()) {
-        return Err("openUrl: a url may not contain whitespace or control characters".to_string());
-    }
-    let Some((scheme, rest)) = url.split_once("://") else {
-        return Err("openUrl: the url has no scheme".to_string());
-    };
-    let scheme = scheme.to_ascii_lowercase();
-    if scheme != "http" && scheme != "https" {
-        return Err(format!("openUrl: '{scheme}' is not a scheme this api opens; http and https only"));
-    }
-    let authority = rest.split(['/', '?', '#']).next().unwrap_or_default();
-    if authority.contains('@') {
-        return Err("openUrl: a url with userinfo in it is refused".to_string());
-    }
-    // browsers fold a backslash to a slash before the authority ends, so `https://evil.com\@ok.com`
-    // is another host that is not what it reads as
-    if authority.contains('\\') {
-        return Err("openUrl: a url with a backslash in its authority is refused".to_string());
-    }
-    let host = match authority.strip_prefix('[') {
-        Some(rest) => match rest.split_once(']') {
-            Some((inside, _)) => inside,
-            None => return Err("openUrl: the url has an unterminated ipv6 literal".to_string()),
-        },
-        None => authority.split(':').next().unwrap_or_default(),
-    };
-    if host.trim_end_matches('.').is_empty() {
-        return Err("openUrl: the url has no host".to_string());
-    }
-    Ok(())
+    crate::engine::url::parse_http_url("openUrl", url).map(|_| ())
 }
 
 pub struct ApiState {

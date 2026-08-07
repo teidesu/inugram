@@ -256,7 +256,8 @@ The engine crate is `src/rust/inu_native`, one folder per area under `src/`: `jn
 `extern "system"` entry points, the one Java object every upcall goes through, and the host-trait
 impls), `engine/` (argv, the property forms a rust-built prototype uses, the cpu and memory
 ceilings, the error vocabulary, the globals, the
-registration bookkeeping, the timer wheel), `tl/` (the handle proxy plus the `inu.Message` and
+registration bookkeeping, the timer wheel, the http url screen `fetch` and `openUrl` share),
+`tl/` (the handle proxy plus the `inu.Message` and
 `inu.utils` preludes), `tg/` (account reads/writes and the rpc, update and deserialize
 interception), `io/` (blob, fs, fetch), `draw/` (canvas, geometry, css), `ui/` (settings pages,
 action rows, icons, screens), `platform/` (jvm, xposed, elf, lsplant, the notification centre),
@@ -464,7 +465,8 @@ broken engine — or, as `api-filter-test.js` had been, red on a working one.
   that threw or rejected, an `interceptUpdate` middleware that threw, rejected, or answered with
   something that is not a verdict, a throwing `onUpdate`/`onUnload`/`onAppVisibilityChange`/
   `onScreenChanged` callback, a throwing `unsafe.notificationCenter` handler, a throwing
-  `jvm.runnable` callback, a throwing settings callback / menu-item callback / `onClose`, a throwing
+  `jvm.runnable` callback, a throwing `setTimeout`/`setInterval` callback, a throwing `onProgress`,
+  a throwing settings callback / menu-item callback / `onClose`, a throwing
   action `callback`, an action or settings-page render that failed as a whole (a throwing `items()`,
   or `try_render` itself throwing, which plugin code reaches only by polluting `Object.prototype`),
   an unhandled rejection, and an entry the execution deadline cut down. The last one is a fault

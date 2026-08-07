@@ -18,7 +18,7 @@ use rquickjs::{Array, Ctx, Exception, Function, Object, Persistent, Result as Js
 use crate::api::{json_parse, json_stringify};
 use crate::engine::argv::{field, opt_bool, opt_fn, opt_num, opt_str, req_bool, req_fn, req_num, req_str};
 use crate::engine::error::{get_or_create_inu, throw_plugin_error};
-use crate::engine::registry::{make_disposer, noop_disposer, Lifecycle, Registry};
+use crate::engine::registry::{make_disposer, noop_disposer, Lifecycle, Registry, RequestIds};
 use crate::tg::rpc::{format_exception, pump_jobs, PendingSettle};
 use crate::ui::icons::opt_icon;
 
@@ -117,19 +117,13 @@ pub struct UiState {
     /// android object (`openPage` of a stock fragment, `inu.android.nativeView`) resolve it through
     /// that table, so nothing but a handle id ever crosses and the scope list still decided it
     jvm: Option<Rc<crate::platform::jvm::JvmState>>,
-    next_id: Cell<i64>,
+    /// one space for pages, menus and prompts alike: they are all "one thing outstanding the host
+    /// names back", and the only property any of them needs is that an id is never reused
+    next_id: RequestIds,
     pages: RefCell<HashMap<i64, UiPageDef>>,
     menus: RefCell<HashMap<i64, Vec<Persistent<Function<'static>>>>>,
     pending_prompts: RefCell<HashMap<i64, PendingSettle>>,
     settings: Registry<i64>,
-}
-
-impl UiState {
-    fn alloc_id(&self) -> i64 {
-        let id = self.next_id.get();
-        self.next_id.set(id + 1);
-        id
-    }
 }
 
 fn set_opt<'js, T: rquickjs::IntoJs<'js>>(out: &Object<'js>, key: &str, value: Option<T>) -> JsResult<()> {
@@ -250,7 +244,7 @@ pub fn install_ui<'js>(
         lifecycle,
         log,
         jvm,
-        next_id: Cell::new(1),
+        next_id: RequestIds::default(),
         pages: RefCell::new(HashMap::new()),
         menus: RefCell::new(HashMap::new()),
         pending_prompts: RefCell::new(HashMap::new()),
@@ -431,7 +425,7 @@ fn js_settings_page<'js>(ctx: &Ctx<'js>, state: &Rc<UiState>, opts: Object<'js>)
         (Some(req_str(ctx, obj, "bottomButton", "text")?), Some(req_fn(ctx, obj, "bottomButton", "onClick")?))
     };
 
-    let page_id = state.alloc_id();
+    let page_id = state.next_id.alloc();
     // a page built after unload began is never inserted, so it holds no GC roots `dispose` has
     // already walked past. Its handle is still handed back, and every op on it is `handle-expired`,
     // which is what the same page answers once it has been disposed
@@ -762,7 +756,7 @@ fn js_open_menu<'js>(ctx: &Ctx<'js>, state: &Rc<UiState>, page_id: i64, row: &st
     let json = json_stringify(ctx, out.into())?
         .ok_or_else(|| Exception::throw_message(ctx, "openMenu: serialization failed"))?;
 
-    let menu_id = state.alloc_id();
+    let menu_id = state.next_id.alloc();
     if let Some(err) = state.host.ui_open_menu(menu_id, page_id, row, &json) {
         return Err(Exception::throw_message(ctx, &err));
     }
@@ -809,7 +803,7 @@ fn js_prompt<'js>(ctx: &Ctx<'js>, state: &Rc<UiState>, opts: Object<'js>) -> JsR
     let json = json_stringify(ctx, out.into())?
         .ok_or_else(|| Exception::throw_message(ctx, "prompt: serialization failed"))?;
 
-    let request_id = state.alloc_id();
+    let request_id = state.next_id.alloc();
     let (promise, pending) = PendingSettle::new(ctx)?;
     state.pending_prompts.borrow_mut().insert(request_id, pending);
 
