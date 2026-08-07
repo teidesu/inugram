@@ -1004,6 +1004,16 @@ broken engine — or, as `api-filter-test.js` had been, red on a working one.
   `runExchange` rather than in `send`, which is private and opens a real connection: a check only
   the socket path can reach is a check no test can. There is **no http client in the crate**
   and there will not be one; the app already has a network stack.
+- **A prelude is not a trust boundary, so a refusal it states is stated again where it is acted on.**
+  `fetch.js` runs in the plugin's own realm, so the header rules `common.d.ts` promises (a name that
+  is an rfc7230 token, none of the ones the transport owns, no control character in a value) are
+  re-applied in `PluginFetch.Spec.parse`, which is the side that opens the socket - android's
+  `HttpURLConnection` is okhttp, which has no restricted-name list of its own and supplies `Host`
+  only when it is absent, so a forged `Host`/`Transfer-Encoding` really does go on the wire. For
+  the same reason **the prelude hands the spec across as an object and rust serializes it**
+  (`api::json_stringify`, never `globalThis.JSON`, which is writable and shared): a spec the plugin
+  stringified itself is one none of the above ran on. The rule generalizes - a security check
+  written in prelude js buys the error message, never the refusal.
 - **A fetched body is a `Blob` over a file the host wrote**, minted with `blob::mint_app_file`, so a
   download never touches either heap, `response.blob()` costs nothing, and `bytes()`/`text()`
   inherit that type's ceilings and its `handle-expired`. A *request* body does cross, bounded by
@@ -1119,7 +1129,10 @@ broken engine — or, as `api-filter-test.js` had been, red on a working one.
   installed later would answer `null` until the user navigated. `ScreenChange.stack` is a js getter
   memoized in a closure (`ui/screens.rs`), so a plugin that only reads `screen` never mints an
   `Account` per stack entry; `dialogId`/`topicId` cost `account.read(dialogs)` and are **omitted,
-  not refused**, since `type` already says whether there was one to give.
+  not refused**, since `type` already says whether there was one to give. A secret chat is an
+  ordinary `ChatActivity` whose `dialog_id` is `makeEncryptedDialogId`, so `describe` drops that id
+  to 0 and the field goes away with it - the same refusal `PluginReads.dialogIdOf` and
+  `PluginActions.Surface` make, on the one surface that had not been counted among them.
 - **`openUrl` opens a page, and the clipboard is two grants.** `api::screen_external_url` allows
   **http/https only**: every other scheme names an *action* rather than a page (`tg:` is the app's
   own deeplink surface, `intent:` names an activity and its extras, `file:`/`content:` name the

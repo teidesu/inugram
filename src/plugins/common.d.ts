@@ -754,7 +754,9 @@ declare interface Response {
  * chain moves past it.
  *
  * headers the transport owns are refused (`invalid-argument`): `host`, `content-length`,
- * `connection`, `transfer-encoding`, and friends. so is a value with a line break in it.
+ * `connection`, `transfer-encoding`, and friends. so is a name that isn't a token, a repeat of one
+ * you already gave, and a value with a control character in it. the app checks all of that again
+ * where it opens the socket, so none of it is a refusal you can talk your way out of.
  *
  * @needs-grant fetch
  */
@@ -2187,7 +2189,12 @@ declare namespace inu {
      */
     interface CurrentScreen {
       type: 'chat' | 'profile' | 'dialogs' | 'settings' | 'other'
-      /** set for `chat` and `profile`. @needs-grant account.read(dialogs) */
+      /**
+       * set for `chat` and `profile`. absent for a secret chat, which has no `DialogId` to name
+       * here any more than it does anywhere else — `type` still says a chat is open.
+       *
+       * @needs-grant account.read(dialogs)
+       */
       dialogId?: DialogId
       /** set for `chat` in a forum. @needs-grant account.read(dialogs) */
       topicId?: number

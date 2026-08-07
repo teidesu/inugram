@@ -19,7 +19,7 @@ use std::rc::Rc;
 
 use rquickjs::{Ctx, Function, Object, Result as JsResult, Runtime, TypedArray, Value};
 
-use crate::api::json_parse;
+use crate::api::{json_parse, json_stringify};
 use crate::engine::error::{
     check_grant, get_or_create_inu, throw_plugin_error, wire_error_to_js, GrantHost, MATCH_DOMAIN,
 };
@@ -134,9 +134,13 @@ fn js_send<'js>(
     ctx: &Ctx<'js>,
     state: &Rc<FetchState>,
     url: String,
-    spec_json: String,
+    spec: Value<'js>,
     body: Value<'js>,
 ) -> JsResult<Object<'js>> {
+    // through `Ctx`, never `globalThis.JSON`, for [`crate::api::json_stringify`]'s reason: the
+    // prelude runs in the plugin's realm, so a spec it serialized itself would be whatever the
+    // plugin's `JSON.stringify` felt like returning. The host validates it again either way.
+    let spec_json = json_stringify(ctx, spec)?.unwrap_or_else(|| "{}".to_string());
     let target = match parse_target(&url) {
         Ok(target) => target,
         Err(message) => return throw_plugin_error(ctx, "invalid-argument", &message, None, None, None),
@@ -186,8 +190,8 @@ pub fn install_fetch<'js>(
     let natives = Object::new(ctx.clone())?;
     {
         let state = state.clone();
-        let f = Function::new(ctx.clone(), move |ctx: Ctx<'js>, url: String, spec_json: String, body: Value<'js>| {
-            js_send(&ctx, &state, url, spec_json, body)
+        let f = Function::new(ctx.clone(), move |ctx: Ctx<'js>, url: String, spec: Value<'js>, body: Value<'js>| {
+            js_send(&ctx, &state, url, spec, body)
         })?;
         natives.set("send", f)?;
     }

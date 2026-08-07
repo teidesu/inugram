@@ -160,6 +160,49 @@ class PluginFetchTest {
         assertEquals("network", codeOf(threw))
     }
 
+    /**
+     * `fetch.js` states these refusals too, but it is evaluated into the plugin's own realm and the
+     * spec reaches this side as text, so this is the check that decides. Android's
+     * `HttpURLConnection` is okhttp, which has no restricted-name list of its own: a forged `Host`
+     * or `Transfer-Encoding` goes on the wire.
+     */
+    @Test
+    fun `a spec naming a header the transport owns is refused`() {
+        for (name in listOf(
+            "host", "Host", "content-length", "connection", "transfer-encoding", "upgrade", "keep-alive", "te",
+            "trailer",
+        )) {
+            assertFailsWith<IllegalArgumentException>(name) {
+                PluginFetch.Spec.parse("""{"method":"GET","headers":{"$name":["x"]},"redirect":"follow"}""")
+            }
+        }
+    }
+
+    @Test
+    fun `a spec whose header name, value, method or redirect mode is malformed is refused`() {
+        for (json in listOf(
+            """{"headers":{"x y":["a"]}}""",
+            """{"headers":{"x-one:":["a"]}}""",
+            """{"headers":{"":["a"]}}""",
+            """{"headers":{"x-one":["a\r\nx-two: b"]}}""",
+            """{"headers":{"x-one":["a"],"X-One":["b"]}}""",
+            """{"method":"GET /x HTTP/1.1"}""",
+            """{"redirect":"whatever"}""",
+        )) {
+            assertFailsWith<IllegalArgumentException>(json) { PluginFetch.Spec.parse(json) }
+        }
+    }
+
+    @Test
+    fun `an ordinary spec parses, lowercasing names and keeping repeats`() {
+        val spec = PluginFetch.Spec.parse(
+            """{"method":"POST","headers":{"X-One":["a"],"x-many":["b","c"]},"redirect":"manual"}""",
+        )
+        assertEquals("POST", spec.method)
+        assertEquals("manual", spec.redirect)
+        assertEquals(mapOf("x-one" to listOf("a"), "x-many" to listOf("b", "c")), spec.headers)
+    }
+
     private class Recorder(private val script: Map<String, PluginFetch.Hop>) : PluginFetch.Transport {
 
         val urls = ArrayList<String>()

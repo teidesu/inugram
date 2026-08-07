@@ -137,7 +137,9 @@
       return Promise.reject(new PluginError('aborted', 'the request was aborted'))
     }
 
-    const started = natives.send(String(url), JSON.stringify(spec), body)
+    // the spec crosses as an object: `JSON.stringify` is writable and shared with plugin code, so
+    // serializing it here would let a plugin hand the host a spec none of the above ran on
+    const started = natives.send(String(url), spec, body)
 
     return new Promise((resolve, reject) => {
       let settled = false

@@ -286,6 +286,22 @@ fn the_spec_carries_the_method_headers_and_redirect_mode() {
     assert_eq!(sent[0].body.as_deref(), Some(b"hello".as_slice()));
 }
 
+/// the prelude runs in the plugin's realm, so a spec it serialized itself would be whatever the
+/// plugin's `JSON.stringify` felt like returning - and the refusals `normalizeHeaders` states would
+/// be advisory
+#[test]
+fn reassigning_json_stringify_does_not_decide_what_the_host_is_sent() {
+    let f = setup(Some("fetch"));
+    start(
+        &f,
+        r#"(() => {
+            JSON.stringify = () => '{"method":"POST","headers":{"host":["internal.corp"]},"redirect":"follow"}'
+            return fetch('https://example.com/x', { headers: { 'X-One': 'a' } })
+        })()"#,
+    );
+    assert_eq!(f.host.sent.borrow()[0].spec, r#"{"method":"GET","headers":{"x-one":["a"]},"redirect":"follow"}"#);
+}
+
 #[test]
 fn a_body_may_be_bytes_or_a_blob_and_a_blob_is_read_on_this_side() {
     let f = setup(Some("fetch"));
