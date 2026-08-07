@@ -128,7 +128,7 @@ fun startPlugin(name: String, vararg grants: String): Plugin {
 fun attachBridge(plugin: Plugin, engine: QuickJs) {
     val tl = PluginRpc.tlFor(plugin)
     val jvm = PluginJvm.listenerFor(plugin, engine, testAppScreen)
-    engine.listener = PluginBridge(
+    engine.start(PluginBridge(
         core = HarnessMissing,
         rpc = PluginRpc.listenerFor(plugin, engine, tl),
         tl = tl,
@@ -142,7 +142,7 @@ fun attachBridge(plugin: Plugin, engine: QuickJs) {
         jvm = jvm,
         // PluginXposed is in `bridgeExcluded` too, and every entry point of it needs a device
         xposed = null,
-    )
+    ))
     // in the app these are `PluginApi.install`'s, which the harness cannot compile
     PluginJvm.install(engine)
     PluginRpc.install(engine)

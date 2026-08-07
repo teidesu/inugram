@@ -369,14 +369,7 @@ object PluginManager {
             fail(plugin, PluginFailure.Site.REFUSED, it)
             return
         }
-        // creating one runs the JNI bridge's own wiring, which throws when a descriptor does not
-        // resolve - and an exception escaping here would take the queue's thread, and the app, down
-        val engine = try {
-            QuickJs()
-        } catch (e: Throwable) {
-            fail(plugin, PluginFailure.Site.LOAD, e.message ?: e.toString())
-            return
-        }
+        val engine = QuickJs()
         val budget = LogBudget()
         val permissions = plugin.permissions
         val timers = PluginApi.timerSchedulerFor(plugin, engine)
@@ -393,11 +386,11 @@ object PluginManager {
 
             override fun onTimerSchedule(delayMs: Long) = timers(delayMs)
         }
-        // built whole and assigned once, before anything that can call back into it: `install*` is
-        // the first of those, and every ordering constraint among the installs is in `PluginApi`
+        // built whole and handed over once: rust caches its method ids off `PluginBridge` at
+        // `start`, and every ordering constraint among the installs after it is in `PluginApi`
         val jvm = PluginApi.jvmListenerFor(plugin, engine)
         val tl = PluginRpc.tlFor(plugin)
-        engine.listener = PluginBridge(
+        val bridge = PluginBridge(
             core = core,
             rpc = PluginRpc.listenerFor(plugin, engine, tl),
             tl = tl,
@@ -413,6 +406,9 @@ object PluginManager {
         )
         plugin.engine = engine
         try {
+            // this is what runs the JNI bridge's own wiring, which throws when a descriptor does
+            // not resolve - and an exception escaping here would take globalQueue, and the app, down
+            engine.start(bridge)
             engine.installInfo(
                 appVersion = BuildVars.BUILD_VERSION_STRING,
                 appBuild = appBuild,

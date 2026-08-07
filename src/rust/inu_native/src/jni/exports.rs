@@ -140,10 +140,13 @@ macro_rules! engine_export {
 #[no_mangle]
 pub extern "system" fn Java_desu_inugram_helpers_plugins_QuickJs_nativeCreate(
     mut env: EnvUnowned,
-    this: JObject,
+    _this: JObject,
+    listener: JObject,
 ) -> jlong {
     in_env(&mut env, 0, |env| {
-        let Some(bridge) = JniBridge::new(env, &this) else {
+        // every upcall goes to the listener, never to the `QuickJs` that owns this pointer: the
+        // method ids are cached off one class here, and `PluginBridge` is the only stable one
+        let Some(bridge) = JniBridge::new(env, &listener) else {
             return 0;
         };
 

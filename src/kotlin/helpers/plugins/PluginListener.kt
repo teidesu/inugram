@@ -3,10 +3,14 @@ package desu.inugram.helpers.plugins
 /**
  * Everything rust can call back into, split by the subsystem that answers it.
  *
- * These live here rather than inside [QuickJs] because [QuickJs] cannot be compiled anywhere but a
- * device: its constructor calls `nativeCreate()` and its class initializer loads `libinu_native`.
- * The contract it carries can be, so the bridge harness compiles *these* declarations instead of a
- * hand-kept copy of them.
+ * Rust resolves a method id per member off [PluginBridge] at `nativeCreate` and calls it directly,
+ * so these names and signatures are the wire: `jni/tests.rs` reads this file and cross-checks every
+ * one of them against the descriptors `JniBridge` looks up.
+ *
+ * They live here rather than inside [QuickJs] because [QuickJs] cannot be compiled anywhere but a
+ * device ([QuickJs.start] calls `nativeCreate()`, and its class initializer loads `libinu_native`),
+ * while the contract it carries can be - so the bridge harness compiles *these* declarations
+ * instead of a hand-kept copy of them.
  *
  * Two channel shapes cross here and they are not interchangeable:
  *

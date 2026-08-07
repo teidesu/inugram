@@ -1,8 +1,8 @@
 package desu.inugram.helpers.plugins
 
 /**
- * stands in for the real [QuickJs], which cannot exist here: its constructor calls `nativeCreate()`
- * and its class initializer loads `libinu_native`.
+ * stands in for the real [QuickJs], which cannot exist here: [start] calls `nativeCreate()` and its
+ * class initializer loads `libinu_native`.
  *
  * Only the native side is stubbed. The listener surface is the real [PluginListener], compiled from
  * the app's own source, so a member added there reaches the bridge classes under test without
@@ -36,8 +36,14 @@ class QuickJs {
     class WriteProgress(val requestId: Long, val loaded: Long, val total: Long)
     class Notification(val callbackId: Int, val name: String, val accountId: Int, val argsJson: String)
 
-    /** set once, exactly as `PluginManager` does; nothing ever clears it */
+    /** handed over by [start], exactly as `PluginManager` does; nothing ever clears it */
     var listener: PluginBridge? = null
+        private set
+
+    fun start(listener: PluginBridge) {
+        check(this.listener == null) { "QuickJs is already started" }
+        this.listener = listener
+    }
 
     var rpcInstalled = false
         private set
