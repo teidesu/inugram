@@ -1,7 +1,7 @@
 package desu.inugram.helpers.plugins.tg
 
 import desu.inugram.core.plugins.ScopeMatch
-import desu.inugram.core.plugins.TlWire
+import desu.inugram.core.plugins.PluginWire
 import desu.inugram.helpers.plugins.Plugin
 import desu.inugram.helpers.plugins.PluginDispatch
 import desu.inugram.helpers.plugins.QuickJs
@@ -59,21 +59,21 @@ object PluginMedia {
 
     fun messageFile(plugin: Plugin, engine: QuickJs, accountId: Int, value: String): String {
         if (!plugin.permissions.allows("account.read", "messages", ScopeMatch.EXACT)) {
-            return TlWire.encodeNotGranted("account.read", "messages")
+            return PluginWire.encodeNotGranted("account.read", "messages")
         }
         return try {
             val message = messageOf(engine, value)
-            if (mediaFile(message) == null) return TlWire.encodeNull()
+            if (mediaFile(message) == null) return PluginWire.encodeNull()
             val path = FileLoader.getInstance(accountId).getPathToMessage(message)
-                ?: return TlWire.encodeNull()
+                ?: return PluginWire.encodeNull()
             val json = JSONObject()
             json.put("path", path.absolutePath)
             json.put("exists", path.exists() && path.length() > 0)
-            TlWire.encodeJson(json.toString())
+            PluginWire.encodeJson(json.toString())
         } catch (e: PluginWrites.Refused) {
             e.wire
         } catch (e: Exception) {
-            TlWire.encodePluginError("internal", "getMessageFile: ${e.message ?: e.toString()}")
+            PluginWire.encodePluginError("internal", "getMessageFile: ${e.message ?: e.toString()}")
         }
     }
 
@@ -91,8 +91,8 @@ object PluginMedia {
             PluginWrites.answer(call) {
                 val file = arrived as? File
                 when {
-                    error != null -> TlWire.encodePluginError("internal", "downloadMedia: $error")
-                    file == null -> TlWire.encodePluginError("not-found", "downloadMedia: the file did not arrive")
+                    error != null -> PluginWire.encodePluginError("internal", "downloadMedia: $error")
+                    file == null -> PluginWire.encodePluginError("not-found", "downloadMedia: the file did not arrive")
                     else -> downloadWire(file, message, toFile)
                 }
             }
@@ -118,7 +118,7 @@ object PluginMedia {
             json.put("name", downloadName(message, file))
             json.put("mtime", file.lastModified())
         }
-        return TlWire.encodeJson(json.toString())
+        return PluginWire.encodeJson(json.toString())
     }
 
     private fun downloadName(message: TLRPC.Message, file: File): String {
@@ -136,8 +136,8 @@ object PluginMedia {
         val source = stagedFile(call, call.values.firstOrNull() ?: refuse("invalid-argument", "no file"))
         upload(call, source) { input ->
             PluginWrites.answer(call) {
-                if (input == null) TlWire.encodePluginError("internal", "uploadFile: the upload failed")
-                else TlWire.encodeJson(TlJson.toJson(input, TlFilter.policyFor(call.plugin.permissions)).toString())
+                if (input == null) PluginWire.encodePluginError("internal", "uploadFile: the upload failed")
+                else PluginWire.encodeJson(TlJson.toJson(input, TlFilter.policyFor(call.plugin.permissions)).toString())
             }
         }
         return null
@@ -193,7 +193,7 @@ object PluginMedia {
                     if (remaining > 0) return@postRunnable
                     if (medias.any { it == null }) {
                         PluginWrites.answer(call) {
-                            TlWire.encodePluginError("internal", "sendMedia: an upload failed")
+                            PluginWire.encodePluginError("internal", "sendMedia: an upload failed")
                         }
                     } else {
                         try {

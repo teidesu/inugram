@@ -1,6 +1,6 @@
 package desu.inugram.helpers.plugins
 
-import desu.inugram.core.plugins.TlWire
+import desu.inugram.core.plugins.PluginWire
 import desu.inugram.helpers.plugins.tg.PluginRpc
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
@@ -241,7 +241,7 @@ class PluginRpcChainTest {
         // chain owns that free whether or not it passed the request on
         val plugin = startPlugin("p", "interceptRpc(users.getUsers)")
         assertNull(plugin.interceptRpc("users.getUsers"))
-        plugin.js.onDispatchRpc = { plugin.complete(it.dispatchId, TlWire.encodeJson("""{"_":"boolTrue"}""")) }
+        plugin.js.onDispatchRpc = { plugin.complete(it.dispatchId, PluginWire.encodeJson("""{"_":"boolTrue"}""")) }
         val app = AppRequest()
 
         assertTrue(send(app))
@@ -258,10 +258,10 @@ class PluginRpcChainTest {
         // `@grant interceptRpc` and auth.exportLoginToken
         val plugin = startPlugin("p", "interceptRpc", "invokeRpc")
         assertPluginError("forbidden", plugin.interceptRpc("auth.exportLoginToken"))
-        assertPluginError("forbidden", plugin.js.rpcListener!!.onInvokeRpc(1L, QuickJs.ANY_ACCOUNT, TlWire.encodeJson("""{"_":"auth.exportLoginToken"}""")))
+        assertPluginError("forbidden", plugin.js.rpcListener!!.onInvokeRpc(1L, QuickJs.ANY_ACCOUNT, PluginWire.encodeJson("""{"_":"auth.exportLoginToken"}""")))
         // the account.* half of the list is not a prefix, so it is refused by name or not at all
         assertPluginError("forbidden", plugin.interceptRpc("account.deleteAccount"))
-        assertPluginError("forbidden", plugin.js.rpcListener!!.onInvokeRpc(2L, QuickJs.ANY_ACCOUNT, TlWire.encodeJson("""{"_":"account.resetAuthorization"}""")))
+        assertPluginError("forbidden", plugin.js.rpcListener!!.onInvokeRpc(2L, QuickJs.ANY_ACCOUNT, PluginWire.encodeJson("""{"_":"account.resetAuthorization"}""")))
     }
 
     /**
@@ -274,7 +274,7 @@ class PluginRpcChainTest {
     fun `invokeRpc sends on the slot it was given`() {
         for (slot in 0..1) UserConfig.getInstance(slot).currentUser = TLRPC.TL_user().apply { id = 100L + slot }
         val plugin = startPlugin("p", "invokeRpc(users.getUsers)")
-        val request = TlWire.encodeJson("""{"_":"users.getUsers"}""")
+        val request = PluginWire.encodeJson("""{"_":"users.getUsers"}""")
 
         assertNull(plugin.js.rpcListener!!.onInvokeRpc(1L, QuickJs.ANY_ACCOUNT, request))
         assertEquals(1, connections(0).sent.size)
@@ -299,7 +299,7 @@ class PluginRpcChainTest {
         val plugin = startPlugin("p", "interceptRpc(users.getUsers)", "invokeRpc(users.getUsers)")
         assertNull(plugin.interceptRpc("users.getUsers"))
         val appOwned = tlTableOf(plugin)!!.mintForPlugin(TLRPC.TL_users_getUsers(), readOnly = true)
-        val readOnlyWire = TlWire.encodeHandle(vector = false, id = appOwned, readOnly = true)
+        val readOnlyWire = PluginWire.encodeHandle(vector = false, id = appOwned, readOnly = true)
 
         var refusal: String? = null
         plugin.js.onDispatchRpc = { refusal = plugin.next(it.dispatchId, readOnlyWire) }
@@ -325,7 +325,7 @@ class PluginRpcChainTest {
         // identity guard on it is the only thing between a dead chain and a real send.
         // (the later window, a collapse after the send is already queued on stageQueue, needs two
         // real threads and is not reachable from this single-threaded harness.)
-        plugin.next(dispatchId, TlWire.encodeJson("""{"_":"users.getUsers"}"""))
+        plugin.next(dispatchId, PluginWire.encodeJson("""{"_":"users.getUsers"}"""))
         PluginRpc.detach(plugin)
         drain()
 
@@ -340,7 +340,7 @@ class PluginRpcChainTest {
         // calls next() and settles anyway, so the stage below it is live when this one answers
         first.js.onDispatchRpc = {
             first.next(it.dispatchId, it.requestWire)
-            first.complete(it.dispatchId, TlWire.encodeJson("""{"_":"boolTrue"}"""))
+            first.complete(it.dispatchId, PluginWire.encodeJson("""{"_":"boolTrue"}"""))
         }
         val app = AppRequest()
 
@@ -365,7 +365,7 @@ class PluginRpcChainTest {
         passthroughPlugin("third")
         second.js.onDispatchRpc = {
             second.next(it.dispatchId, it.requestWire)
-            second.complete(it.dispatchId, TlWire.encodeJson("""{"_":"boolTrue"}"""))
+            second.complete(it.dispatchId, PluginWire.encodeJson("""{"_":"boolTrue"}"""))
         }
         val app = AppRequest()
 
@@ -422,7 +422,7 @@ class PluginRpcChainTest {
         drain()
         assertTrue(chain.all { it.js.dispatches.size == 1 }, "every stage has to be live for this to mean anything")
 
-        second.complete(second.js.dispatches.single().dispatchId, TlWire.encodeJson("""{"_":"boolTrue"}"""))
+        second.complete(second.js.dispatches.single().dispatchId, PluginWire.encodeJson("""{"_":"boolTrue"}"""))
         drain()
 
         assertEquals(listOf("fourth", "third"), order)
@@ -447,8 +447,8 @@ class PluginRpcChainTest {
         advanceBy(10_001)
 
         assertTrue(
-            TlWire.decode(readAtAbandon!!) is TlWire.Value.Handle,
-            "the scope must outlive every abandon, got ${TlWire.decode(readAtAbandon!!)}",
+            PluginWire.decode(readAtAbandon!!) is PluginWire.Value.Handle,
+            "the scope must outlive every abandon, got ${PluginWire.decode(readAtAbandon!!)}",
         )
     }
 
@@ -476,8 +476,8 @@ class PluginRpcChainTest {
         drain()
 
         assertTrue(
-            TlWire.decode(readAtAbandon!!) is TlWire.Value.Handle,
-            "the table must outlive every abandon, got ${TlWire.decode(readAtAbandon!!)}",
+            PluginWire.decode(readAtAbandon!!) is PluginWire.Value.Handle,
+            "the table must outlive every abandon, got ${PluginWire.decode(readAtAbandon!!)}",
         )
     }
 
@@ -502,7 +502,7 @@ class PluginRpcChainTest {
         plugin.interceptRpc("users.getUsers")
         var refusal: String? = null
         plugin.js.onDispatchRpc = { dispatch ->
-            refusal = plugin.next(dispatch.dispatchId, TlWire.encodeJson("""{"_":"messages.getHistory"}"""))
+            refusal = plugin.next(dispatch.dispatchId, PluginWire.encodeJson("""{"_":"messages.getHistory"}"""))
         }
         val app = AppRequest()
 

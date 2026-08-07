@@ -1,7 +1,7 @@
 package desu.inugram.helpers.plugins
 
 import desu.inugram.core.plugins.PluginPermissions
-import desu.inugram.core.plugins.TlWire
+import desu.inugram.core.plugins.PluginWire
 import desu.inugram.helpers.plugins.io.PluginFetch
 import java.io.File
 import java.io.InputStream
@@ -45,8 +45,8 @@ class PluginFetchTest {
     private val public4 = v4(93, 184, 216, 34)
 
     private fun codeOf(wire: String?): String? {
-        val decoded = TlWire.decode(wire ?: return null)
-        return (decoded as TlWire.Value.PluginErr).code
+        val decoded = PluginWire.decode(wire ?: return null)
+        return (decoded as PluginWire.Value.PluginErr).code
     }
 
     @Test

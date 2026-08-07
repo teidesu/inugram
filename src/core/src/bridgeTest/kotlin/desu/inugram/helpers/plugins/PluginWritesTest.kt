@@ -1,6 +1,6 @@
 package desu.inugram.helpers.plugins
 
-import desu.inugram.core.plugins.TlWire
+import desu.inugram.core.plugins.PluginWire
 import desu.inugram.helpers.plugins.tg.PluginWrites
 import kotlin.test.assertEquals
 import kotlin.test.assertNull

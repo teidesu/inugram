@@ -1,6 +1,6 @@
 package desu.inugram.helpers.plugins
 
-import desu.inugram.core.plugins.TlWire
+import desu.inugram.core.plugins.PluginWire
 import desu.inugram.helpers.plugins.tg.PluginReads
 import desu.inugram.helpers.plugins.tg.PluginRpc
 import kotlin.test.assertEquals
@@ -91,8 +91,8 @@ class PluginReadsAsyncTest {
     @Test
     fun `the refusal names the grant that would have allowed it`() {
         val plugin = startPlugin("none")
-        val decoded = TlWire.decode(fetch(plugin, PluginReads.OP_HISTORY, "S\n10\n0\n0\n0\n0")!!)
-        assertEquals("account.read(history)", (decoded as TlWire.Value.PluginErr).grant)
+        val decoded = PluginWire.decode(fetch(plugin, PluginReads.OP_HISTORY, "S\n10\n0\n0\n0\n0")!!)
+        assertEquals("account.read(history)", (decoded as PluginWire.Value.PluginErr).grant)
     }
 
     /**
@@ -167,7 +167,7 @@ class PluginReadsAsyncTest {
         val plugin = granted()
         fetch(plugin, PluginReads.OP_USER_FULL, "D$alice")
         answerWith(null, TLRPC.TL_error().apply { code = 420; text = "FLOOD_WAIT_5" })
-        val decoded = TlWire.decode(settled(plugin)) as TlWire.Value.RpcError
+        val decoded = PluginWire.decode(settled(plugin)) as PluginWire.Value.RpcError
         assertEquals(420, decoded.code)
         assertEquals("FLOOD_WAIT_5", decoded.text)
     }
@@ -405,7 +405,7 @@ class PluginReadsAsyncTest {
     private fun draft(plugin: Plugin, spec: String, topicId: Long = 0L): String =
         reads(plugin).accountRead(0, PluginReads.OP_DRAFT, "$spec\n$topicId")
 
-    private fun jsonOf(wire: String): JSONObject = JSONObject((TlWire.decode(wire) as TlWire.Value.Json).json)
+    private fun jsonOf(wire: String): JSONObject = JSONObject((PluginWire.decode(wire) as PluginWire.Value.Json).json)
 
     @Test
     fun `a draft reads back as the text and entities the input field would show`() {

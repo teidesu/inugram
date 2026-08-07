@@ -1,6 +1,6 @@
 package desu.inugram.helpers.plugins
 
-import desu.inugram.core.plugins.TlWire
+import desu.inugram.core.plugins.PluginWire
 import desu.inugram.helpers.plugins.tg.PluginReads
 import java.util.ArrayList
 import kotlin.test.assertEquals
@@ -107,7 +107,7 @@ class PluginReadsTest {
     @Test
     fun `the refusal names the grant that would have allowed it`() {
         val plugin = startPlugin("none")
-        val decoded = TlWire.decode(read(plugin, PluginReads.OP_ME)) as TlWire.Value.PluginErr
+        val decoded = PluginWire.decode(read(plugin, PluginReads.OP_ME)) as PluginWire.Value.PluginErr
         assertEquals("account.read(self)", decoded.grant)
     }
 
@@ -135,9 +135,9 @@ class PluginReadsTest {
             PluginReads.OP_INPUT_PEER to "S\n${PluginReads.KIND_PEER}",
         )
         for ((op, arg) in ops) {
-            val decoded = TlWire.decode(read(plugin, op, arg))
+            val decoded = PluginWire.decode(read(plugin, op, arg))
             assertTrue(
-                decoded is TlWire.Value.PluginErr && decoded.grant == "account.read(self)",
+                decoded is PluginWire.Value.PluginErr && decoded.grant == "account.read(self)",
                 "op $op answered for 'me' without the self scope: $decoded",
             )
         }
@@ -153,7 +153,7 @@ class PluginReadsTest {
     @Test
     fun `the reads own scope is checked before the self rule`() {
         val plugin = startPlugin("peers", "account.read(peers)")
-        val decoded = TlWire.decode(read(plugin, PluginReads.OP_DIALOG, "S")) as TlWire.Value.PluginErr
+        val decoded = PluginWire.decode(read(plugin, PluginReads.OP_DIALOG, "S")) as PluginWire.Value.PluginErr
         assertEquals("account.read(dialogs)", decoded.grant)
     }
 
@@ -281,7 +281,7 @@ class PluginReadsTest {
         assertEquals(0, plugin.tl().tlHas(handle, "draft"), "and `in` agrees with the read")
         assertTrue("draft" !in plugin.tl().tlOwnKeys(handle)!!.split(","))
         assertTrue(!JSONObject(plugin.tl().tlCopy(handle)!!).has("draft"), "including in a toJSON snapshot")
-        assertEquals(7, (TlWire.decode(fieldOf(plugin, wire, "top_message")) as TlWire.Value.IntNum).value.toInt())
+        assertEquals(7, (PluginWire.decode(fieldOf(plugin, wire, "top_message")) as PluginWire.Value.IntNum).value.toInt())
 
         val allowed = startPlugin("drafts", "account.read(dialogs,draft)")
         val row = read(allowed, PluginReads.OP_DIALOG, "D$alice")
@@ -316,7 +316,7 @@ class PluginReadsTest {
     private fun inputPeer(plugin: Plugin, spec: String, kind: Int): String =
         read(plugin, PluginReads.OP_INPUT_PEER, "$spec\n$kind")
 
-    private fun jsonOf(wire: String): JSONObject = JSONObject((TlWire.decode(wire) as TlWire.Value.Json).json)
+    private fun jsonOf(wire: String): JSONObject = JSONObject((PluginWire.decode(wire) as PluginWire.Value.Json).json)
 
     @Test
     fun `an input peer is answered without serializing the entity behind it`() {
@@ -390,7 +390,7 @@ class PluginReadsTest {
         resolve(plugin, "Utelegram")
         connections().lastSent()!!.answer(null, TLRPC.TL_error().apply { code = 420; text = "FLOOD_WAIT_5" }, 0L)
         drain()
-        val decoded = TlWire.decode(plugin.js.peerResults.single().resultWire) as TlWire.Value.RpcError
+        val decoded = PluginWire.decode(plugin.js.peerResults.single().resultWire) as PluginWire.Value.RpcError
         assertEquals(420, decoded.code)
         assertEquals("FLOOD_WAIT_5", decoded.text)
     }

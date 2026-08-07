@@ -1,8 +1,9 @@
 //! Lazy JS `Proxy` bridge over live Kotlin TL handles (`desu.inugram.helpers.plugins.tl.TlHandles`).
 //!
 //! A handle is an opaque `i64` Kotlin minted for a `TLObject` or a TL vector; the proxy's traps
-//! round-trip one field at a time through [`TlHost`]. Every value crossing carries a [`TlWire`]
-//! tag, mirroring `desu.inugram.core.plugins.TlWire` byte-for-byte.
+//! round-trip one field at a time through [`TlHost`]. Every value crossing carries a
+//! `PluginWire` tag, mirroring `desu.inugram.core.plugins.PluginWire` byte-for-byte - that codec is
+//! this whole bridge's, not this module's, so a tag added here has to be added there too.
 //!
 //! Identification is duck-typed: the `get` trap self-answers `Symbol.for("inu.tl.handle")` with
 //! its own wire tag, so [`js_value_to_wire`] needs no access to rquickjs's crate-private `Proxy`
@@ -142,7 +143,7 @@ impl ViewState {
     }
 }
 
-/// mirrors `TlWire.HANDLE_EXPIRED_MESSAGE` Kotlin-side
+/// mirrors `PluginWire.HANDLE_EXPIRED_MESSAGE` Kotlin-side
 const HANDLE_EXPIRED_MESSAGE: &str =
     "TL handle expired — object escaped back to native code; copy fields you need before returning";
 
@@ -191,13 +192,13 @@ fn parse_handle(payload: &str) -> Option<(bool, bool, i64)> {
     Some((is_vector, read_only, id))
 }
 
-/// encodes an `E`-tagged wire error value (mirrors `TlWire.encodeError` Kotlin-side); used by
+/// encodes an `E`-tagged wire error value (mirrors `PluginWire.encodeError` Kotlin-side); used by
 /// `rpc.rs` for a middleware's thrown/rejected error before crossing back into the host.
 pub fn encode_error(message: &str) -> String {
     format!("E{message}")
 }
 
-/// encodes an `R`-tagged rpc error (mirrors `TlWire.encodeRpcError` Kotlin-side)
+/// encodes an `R`-tagged rpc error (mirrors `PluginWire.encodeRpcError` Kotlin-side)
 pub fn encode_rpc_error(code: i32, text: &str) -> String {
     format!("R{code}:{text}")
 }

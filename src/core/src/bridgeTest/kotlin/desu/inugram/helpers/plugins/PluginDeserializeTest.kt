@@ -1,7 +1,7 @@
 package desu.inugram.helpers.plugins
 
 import desu.inugram.core.plugins.TlCtorIds
-import desu.inugram.core.plugins.TlWire
+import desu.inugram.core.plugins.PluginWire
 import desu.inugram.helpers.plugins.tg.PluginDeserialize
 import desu.inugram.helpers.plugins.tl.TlJson
 import java.io.File
@@ -234,7 +234,7 @@ class PluginDeserializeTest {
     }
 
     private fun messageOf(wire: String?): String =
-        (desu.inugram.core.plugins.TlWire.decode(wire ?: "N") as desu.inugram.core.plugins.TlWire.Value.PluginErr).message
+        (desu.inugram.core.plugins.PluginWire.decode(wire ?: "N") as desu.inugram.core.plugins.PluginWire.Value.PluginErr).message
 
     @Test
     fun `a name that is not a constructor is refused`() {
@@ -362,7 +362,7 @@ class PluginDeserializeTest {
     fun `a middleware is handed a writable view of the object stock just parsed`() {
         val plugin = granted("user")
         plugin.js.onDispatchDeserialize = { dispatch ->
-            plugin.tl().tlSet(handleId(dispatch.objectWire), "premium", TlWire.encodeJson("true"))
+            plugin.tl().tlSet(handleId(dispatch.objectWire), "premium", PluginWire.encodeJson("true"))
         }
         assertNull(plugin.middleware("""["user"]"""))
         val user = TLRPC.TL_user()
@@ -380,7 +380,7 @@ class PluginDeserializeTest {
         val plugin = granted("user")
         var refusal: String? = null
         plugin.js.onDispatchDeserialize = { dispatch ->
-            refusal = plugin.tl().tlSet(handleId(dispatch.objectWire), "access_hash", TlWire.encodeJson("7"))
+            refusal = plugin.tl().tlSet(handleId(dispatch.objectWire), "access_hash", PluginWire.encodeJson("7"))
         }
         assertNull(plugin.middleware("""["user"]"""))
         val user = TLRPC.TL_user().apply { access_hash = 1 }
@@ -398,7 +398,7 @@ class PluginDeserializeTest {
         }
         assertNull(plugin.middleware("""["user"]"""))
         parseOffThread(TLRPC.TL_user())
-        assertEquals(TlWire.encodeExpired(), plugin.tl().tlGet(handle, "premium"))
+        assertEquals(PluginWire.encodeExpired(), plugin.tl().tlGet(handle, "premium"))
     }
 
     @Test

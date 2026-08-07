@@ -2264,7 +2264,7 @@ mod bundled_oracles {
         Val::Ref(value.clone())
     }
 
-    /// mirrors `TlWire.encodePluginError` Kotlin-side: code, grant, usage, quota, message
+    /// mirrors `PluginWire.encodePluginError` Kotlin-side: code, grant, usage, quota, message
     fn plugin_error(code: &str, message: &str) -> String {
         format!("P{code}\n\n\n\n{message}")
     }

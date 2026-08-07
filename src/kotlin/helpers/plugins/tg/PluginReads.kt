@@ -1,7 +1,7 @@
 package desu.inugram.helpers.plugins.tg
 
 import desu.inugram.core.plugins.ScopeMatch
-import desu.inugram.core.plugins.TlWire
+import desu.inugram.core.plugins.PluginWire
 import desu.inugram.helpers.plugins.Plugin
 import desu.inugram.helpers.plugins.PluginDispatch
 import desu.inugram.helpers.plugins.QuickJs
@@ -98,17 +98,17 @@ object PluginReads {
     }
 
     private fun read(plugin: Plugin, engine: QuickJs, accountId: Int, op: Int, arg: String): String {
-        val scope = SCOPE_BY_OP[op] ?: return TlWire.encodeError("account read: unknown op $op")
+        val scope = SCOPE_BY_OP[op] ?: return PluginWire.encodeError("account read: unknown op $op")
         // the engine's own check_grant already ran in native; this is the same belt-and-braces
         // second gate PluginKv keeps, on the side that owns the data
         if (!plugin.permissions.allows("account.read", scope, ScopeMatch.EXACT)) {
-            return TlWire.encodeNotGranted("account.read", scope)
+            return PluginWire.encodeNotGranted("account.read", scope)
         }
-        if (!allowsSelf(plugin, arg)) return TlWire.encodeNotGranted("account.read", "self")
+        if (!allowsSelf(plugin, arg)) return PluginWire.encodeNotGranted("account.read", "self")
         val handles = engine.tlListener as? TlHandles
-            ?: return TlWire.encodePluginError("internal", "account read: no handle table")
+            ?: return PluginWire.encodePluginError("internal", "account read: no handle table")
         val controller = controllerFor(accountId)
-            ?: return TlWire.encodePluginError("not-found", "account read: no account is logged in as #$accountId")
+            ?: return PluginWire.encodePluginError("not-found", "account read: no account is logged in as #$accountId")
         return try {
             when (op) {
                 OP_ME -> mint(handles, UserConfig.getInstance(accountId).getCurrentUser())
@@ -134,19 +134,19 @@ object PluginReads {
                     val (spec, rest) = splitOnce(arg)
                     draftWire(controller, accountId, spec, rest.toLongOrNull() ?: 0L, policyOf(plugin))
                 }
-                else -> TlWire.encodeError("account read: unknown op $op")
+                else -> PluginWire.encodeError("account read: unknown op $op")
             }
         } catch (e: Exception) {
             // a LongSparseArray read that raced the app's own writer lands here, and so does a
             // reflection failure inside a mint: neither is a plugin's doing, and neither is worth
             // taking the app down over
-            TlWire.encodePluginError("internal", "account read: ${e.message ?: e.toString()}")
+            PluginWire.encodePluginError("internal", "account read: ${e.message ?: e.toString()}")
         }
     }
 
     internal fun mint(handles: TlHandles, value: TLObject?): String =
-        if (value == null) TlWire.encodeNull()
-        else TlWire.encodeHandle(vector = false, id = handles.mintForPlugin(value, readOnly = true), readOnly = true)
+        if (value == null) PluginWire.encodeNull()
+        else PluginWire.encodeHandle(vector = false, id = handles.mintForPlugin(value, readOnly = true), readOnly = true)
 
     internal fun mintEach(handles: TlHandles, values: List<TLObject?>): String =
         values.joinToString(LIST_SEPARATOR) { mint(handles, it) }
@@ -263,9 +263,9 @@ object PluginReads {
         kind: Int,
         policy: TlFilter.Policy,
     ): String = when (val built = buildInputPeer(controller, accountId, spec, kind)) {
-        is Built.Missing -> TlWire.encodeNull()
+        is Built.Missing -> PluginWire.encodeNull()
         is Built.WrongKind -> wrongKind(spec, built.kind)
-        is Built.Peer -> TlWire.encodeJson(TlJson.toJson(built.value, policy).toString())
+        is Built.Peer -> PluginWire.encodeJson(TlJson.toJson(built.value, policy).toString())
     }
 
     /** stock's own `getInputPeer` answers for anything, filling in a zero `access_hash` the server refuses - the deferred failure `null` exists to avoid */
@@ -294,7 +294,7 @@ object PluginReads {
     }
 
     internal fun wrongKind(spec: String, kind: Int): String =
-        TlWire.encodePluginError("invalid-argument", "${describeSpec(spec)} is not ${describeKind(kind)}")
+        PluginWire.encodePluginError("invalid-argument", "${describeSpec(spec)} is not ${describeKind(kind)}")
 
     /** the spec back in the terms the plugin wrote it in, for an error message */
     internal fun describeSpec(spec: String): String {
@@ -316,17 +316,17 @@ object PluginReads {
         topicId: Long,
         policy: TlFilter.Policy,
     ): String {
-        val dialogId = dialogIdOf(controller, accountId, spec) ?: return TlWire.encodeNull()
-        if (dialogId == 0L) return TlWire.encodeNull()
+        val dialogId = dialogIdOf(controller, accountId, spec) ?: return PluginWire.encodeNull()
+        if (dialogId == 0L) return PluginWire.encodeNull()
         val draft = MediaDataController.getInstance(accountId).getDraft(dialogId, topicId)
-        if (draft == null || draft is TLRPC.TL_draftMessageEmpty) return TlWire.encodeNull()
+        if (draft == null || draft is TLRPC.TL_draftMessageEmpty) return PluginWire.encodeNull()
         // through the one materialization point rather than field by field: this is the only text a
         // read hands over outside [TlHandles]/[TlJson], and a rule they gain later has to reach it
         val snapshot = TlJson.toJson(draft, policy)
         val json = JSONObject()
         json.put("text", snapshot.optString("message"))
         snapshot.optJSONArray("entities")?.let { json.put("entities", it) }
-        return TlWire.encodeJson(json.toString())
+        return PluginWire.encodeJson(json.toString())
     }
 
     /** only for a username: an id with no cached entity has no `access_hash` anywhere reachable, the server handing those out attached to an entity rather than on request */
@@ -338,12 +338,12 @@ object PluginReads {
         spec: String,
         kind: Int,
     ): String? {
-        if (!plugin.permissions.allows("account.read", "peers", ScopeMatch.EXACT)) return TlWire.encodeNotGranted("account.read", "peers")
-        if (!allowsSelf(plugin, spec)) return TlWire.encodeNotGranted("account.read", "self")
+        if (!plugin.permissions.allows("account.read", "peers", ScopeMatch.EXACT)) return PluginWire.encodeNotGranted("account.read", "peers")
+        if (!allowsSelf(plugin, spec)) return PluginWire.encodeNotGranted("account.read", "self")
         val controller = controllerFor(accountId)
-            ?: return TlWire.encodePluginError("not-found", "resolvePeer: no account is logged in as #$accountId")
+            ?: return PluginWire.encodePluginError("not-found", "resolvePeer: no account is logged in as #$accountId")
         if (spec.isEmpty() || spec[0] != SPEC_USERNAME) {
-            return TlWire.encodePluginError(
+            return PluginWire.encodePluginError(
                 "not-found",
                 "resolvePeer: this peer is not cached, and only a username can be looked up",
             )
@@ -375,19 +375,19 @@ object PluginReads {
         kind: Int,
         policy: TlFilter.Policy,
     ): String {
-        if (error != null) return TlWire.encodeRpcError(error.code, error.text ?: "")
+        if (error != null) return PluginWire.encodeRpcError(error.code, error.text ?: "")
         val resolved = response as? TLRPC.TL_contacts_resolvedPeer
-            ?: return TlWire.encodePluginError("not-found", "resolvePeer: nothing resolved for ${describeSpec(spec)}")
+            ?: return PluginWire.encodePluginError("not-found", "resolvePeer: nothing resolved for ${describeSpec(spec)}")
         // into the app's own caches, so the synchronous half starts answering for this peer too
         controller.putUsers(resolved.users, false)
         controller.putChats(resolved.chats, false)
         return when (val built = buildInputPeer(controller, accountId, spec, kind)) {
-            is Built.Missing -> TlWire.encodePluginError(
+            is Built.Missing -> PluginWire.encodePluginError(
                 "not-found",
                 "resolvePeer: nothing resolved for ${describeSpec(spec)}",
             )
             is Built.WrongKind -> wrongKind(spec, built.kind)
-            is Built.Peer -> TlWire.encodeJson(TlJson.toJson(built.value, policy).toString())
+            is Built.Peer -> PluginWire.encodeJson(TlJson.toJson(built.value, policy).toString())
         }
     }
 
@@ -405,11 +405,11 @@ object PluginReads {
         op: Int,
         arg: String,
     ): String? {
-        val scope = SCOPE_BY_OP[op] ?: return TlWire.encodePluginError("internal", "account fetch: unknown op $op")
-        if (!allowsFetch(plugin, op, arg)) return TlWire.encodeNotGranted("account.read", scope)
-        if (!allowsSelf(plugin, arg)) return TlWire.encodeNotGranted("account.read", "self")
+        val scope = SCOPE_BY_OP[op] ?: return PluginWire.encodePluginError("internal", "account fetch: unknown op $op")
+        if (!allowsFetch(plugin, op, arg)) return PluginWire.encodeNotGranted("account.read", scope)
+        if (!allowsSelf(plugin, arg)) return PluginWire.encodeNotGranted("account.read", "self")
         val controller = controllerFor(accountId)
-            ?: return TlWire.encodePluginError("not-found", "account fetch: no account is logged in as #$accountId")
+            ?: return PluginWire.encodePluginError("not-found", "account fetch: no account is logged in as #$accountId")
         val call = Fetch(plugin, engine, controller, accountId, requestId, splitList(arg))
         return try {
             when (op) {
@@ -418,12 +418,12 @@ object PluginReads {
                 OP_HISTORY -> fetchHistory(call)
                 OP_DIALOGS -> fetchDialogs(call)
                 OP_TOPICS -> fetchTopics(call)
-                else -> TlWire.encodePluginError("internal", "account fetch: unknown op $op")
+                else -> PluginWire.encodePluginError("internal", "account fetch: unknown op $op")
             }
         } catch (e: NotResolved) {
             e.wire
         } catch (e: Exception) {
-            TlWire.encodePluginError("internal", "account fetch: ${e.message ?: e.toString()}")
+            PluginWire.encodePluginError("internal", "account fetch: ${e.message ?: e.toString()}")
         }
     }
 
@@ -460,7 +460,7 @@ object PluginReads {
         val flags = ConnectionsManager.RequestFlagFailOnServerErrors
         PluginRpc.sendWithoutInterceptors(call.accountId, request, flags) { response, error ->
             answer(call) {
-                if (error != null) TlWire.encodeRpcError(error.code, error.text ?: "")
+                if (error != null) PluginWire.encodeRpcError(error.code, error.text ?: "")
                 else produce(response)
             }
         }
@@ -475,7 +475,7 @@ object PluginReads {
     private class NotResolved(val wire: String) : Exception()
 
     private fun refuse(code: String, message: String): Nothing =
-        throw NotResolved(TlWire.encodePluginError(code, message))
+        throw NotResolved(PluginWire.encodePluginError(code, message))
 
     private fun notCached(spec: String): Nothing = refuse("not-found", "${describeSpec(spec)} is not cached")
 
@@ -525,7 +525,7 @@ object PluginReads {
         val request = TLRPC.TL_users_getFullUser()
         request.id = call.peer(kind = KIND_USER) as TLRPC.InputUser
         return send(call, request) { response ->
-            val full = (response as? TLRPC.TL_users_userFull) ?: return@send TlWire.encodeNull()
+            val full = (response as? TLRPC.TL_users_userFull) ?: return@send PluginWire.encodeNull()
             call.cache(full.users, full.chats)
             mint(call.handles, full.full_user)
         }
@@ -551,7 +551,7 @@ object PluginReads {
             TLRPC.TL_messages_getFullChat().apply { chat_id = -dialogId }
         }
         return send(call, request) { response ->
-            val full = (response as? TLRPC.TL_messages_chatFull) ?: return@send TlWire.encodeNull()
+            val full = (response as? TLRPC.TL_messages_chatFull) ?: return@send PluginWire.encodeNull()
             call.cache(full.users, full.chats)
             mint(call.handles, full.full_chat)
         }

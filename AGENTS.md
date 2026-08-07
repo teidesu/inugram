@@ -498,6 +498,17 @@ broken engine — or, as `api-filter-test.js` had been, red on a working one.
   real `quota-exceeded` `PluginError`, because that allocation has not happened yet; it runs a GC
   first, since a cycle holding a canvas is a few dozen bytes of JS and gives quickjs no reason to
   sweep.
+- **`URL`/`URLSearchParams` are the whatwg parser, and deliberately *not* the egress screen.**
+  `engine/url.rs` owns both: `parse_http_url` (what `fetch` and `inu.openUrl` screen) and the
+  classes, in one module because two url parsers in different files is how they come to disagree.
+  They stay separate functions all the same - the screen must keep reading **the caller's string**,
+  since its whole job is refusing spellings whose host depends on who parses them (whitespace,
+  userinfo, a backslash in the authority), and screening a normalized `Url::parse(x).as_str()` would
+  screen the one form that was never ambiguous while the original still reaches `ACTION_VIEW`. A
+  plugin wanting the normalized form passes `.href` itself. `URLSearchParams` is prelude JS
+  (`url.js`) over the *crate's* query codec, never its own, so what the params say and what `href`
+  says cannot come apart; a bound one holds no pairs at all and reads through to its `URL`. The
+  `url` crate costs ~194 KB stripped, which is the whole of what the ICU/idna tree survives LTO as.
 - **The sandbox globals are three different kinds of thing, and only one is ours.** Everything in
   `common.d.ts`'s globals block that quickjs-ng ships (`atob`/`btoa`, `DOMException`,
   `performance`, `queueMicrotask`, `BigInt`, `Proxy`/`Reflect`, `WeakRef`, all of ES2022) arrives
@@ -1004,8 +1015,17 @@ broken engine — or, as `api-filter-test.js` had been, red on a working one.
   the socket `Flight.cancel` disconnects does not exist yet during the queue hop, the pool dispatch
   or the name resolution, which is most of the window an abort lands in. Both reads are in
   `runExchange` rather than in `send`, which is private and opens a real connection: a check only
-  the socket path can reach is a check no test can. There is **no http client in the crate**
-  and there will not be one; the app already has a network stack.
+  the socket path can reach is a check no test can. There is **no http client in the crate** and
+  there will not be one - and the reason is *not* the screening, which rust could do and arguably
+  better. It is **trust** (`HttpURLConnection` verifies against the platform store, so user CAs,
+  distrust updates and Network Security Config all apply; bundling roots loses all three, and
+  `rustls-platform-verifier` gets them back only by calling into java anyway), **threading** (an
+  engine is entered only from `globalQueue`, so a rust client would still marshal its answer onto
+  that queue - the hop `PluginFetch` already does - while adding a foreign-thread path), and
+  **size** (per-abi cdylib; `url` alone is ~194 KB). Performance is not among them: a fetch is
+  **two JNI crossings**, the response body making none, against a network round trip three to four
+  orders of magnitude longer. The bridge surface where crossing cost *does* matter is `onTlGet`,
+  one upcall per field access - which is why `JniBridge` caches every `jmethodID` at `nativeCreate`.
 - **A prelude is not a trust boundary, so a refusal it states is stated again where it is acted on.**
   `fetch.js` runs in the plugin's own realm, so the header rules `common.d.ts` promises (a name that
   is an rfc7230 token, none of the ones the transport owns, no control character in a value) are

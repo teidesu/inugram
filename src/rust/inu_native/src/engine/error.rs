@@ -6,7 +6,7 @@
 //!
 //! Errors cross the host boundary as [`crate::tl::proxy`]-tagged wire strings: `E<message>` a plain
 //! `Error`, `R<code>:<text>` an `inu.RpcError`, and `P` an `inu.PluginError` shaped
-//! `P<code>\n<grant>\n<usage>\n<quota>\n<message>` (mirrors `TlWire.encodePluginError`
+//! `P<code>\n<grant>\n<usage>\n<quota>\n<message>` (mirrors `PluginWire.encodePluginError`
 //! Kotlin-side): grant/usage/quota are empty when absent, and the message is everything past the
 //! FOURTH newline, so it may contain newlines of its own.
 
@@ -156,7 +156,7 @@ fn parse_plugin_error(payload: &str) -> Option<PluginErrorWire<'_>> {
 
 /// the two tags a bare message cannot impersonate: `R` needs a colon and a parseable code, `P` a
 /// four-newline header, and neither parses back into anything else. `E` is deliberately absent -
-/// `TlWire.encodeError` is `"E" + message` with nothing to validate.
+/// `PluginWire.encodeError` is `"E" + message` with nothing to validate.
 fn structured_error_to_js<'js>(ctx: &Ctx<'js>, wire: &str) -> Option<JsResult<Value<'js>>> {
     if let Some((code, text)) = crate::tl::proxy::wire_rpc_error(wire) {
         return Some(crate::tg::rpc::make_rpc_error(ctx, code, text));

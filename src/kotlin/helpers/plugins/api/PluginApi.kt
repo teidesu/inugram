@@ -11,7 +11,7 @@ import android.os.SystemClock
 import android.util.Log
 import android.view.View
 import android.widget.Toast
-import desu.inugram.core.plugins.TlWire
+import desu.inugram.core.plugins.PluginWire
 import desu.inugram.helpers.plugins.Plugin
 import desu.inugram.helpers.plugins.PluginDispatch
 import desu.inugram.helpers.plugins.PluginManager
@@ -53,7 +53,7 @@ object PluginApi {
             override fun kv(op: Int, key: String, value: String): String {
                 // the engine's grant check already ran in native; this is belt-and-braces
                 if (!plugin.permissions.has("kv")) {
-                    return TlWire.encodeNotGranted("kv")
+                    return PluginWire.encodeNotGranted("kv")
                 }
                 return PluginKv.handleOp(plugin.id, op, key, value)
             }

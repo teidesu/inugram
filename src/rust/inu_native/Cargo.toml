@@ -19,6 +19,7 @@ jni = "0.22"
 lzma-rs = "0.3"
 # rquickjs bundles quickjs-ng; `bindgen` is required because it ships no prebuilt Android bindings.
 rquickjs = { version = "0.12", default-features = true, features = ["bindgen"] }
+url = "2.5.8"
 
 [profile.release]
 opt-level = "z"

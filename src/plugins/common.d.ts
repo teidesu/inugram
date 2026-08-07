@@ -478,6 +478,74 @@ declare class TextDecoder {
   readonly encoding: 'utf-8'
 }
 
+/**
+ * the whatwg url parser, same as the web's. a real parser rather than string surgery — idna,
+ * percent-encoding, relative resolution against a base and the component setters all behave as they
+ * do in a browser.
+ *
+ * **this is not what `fetch` and `inu.openUrl` screen.** those read the string you hand them, and
+ * refuse anything whose host depends on who is parsing it — whitespace, userinfo, a backslash in
+ * the authority — because the thing that eventually acts on it is another parser (java's `URI`, the
+ * system's `ACTION_VIEW`). so the two disagree on purpose: `new URL()` *resolves* that ambiguity,
+ * the screen *refuses* it. if you want the normalized form to be what gets sent, pass `.href`
+ * rather than the string you started with, and the screen will see exactly what you built.
+ *
+ * the constructor throws `TypeError` on a url it cannot parse; `URL.parse` answers `null` instead
+ * and `URL.canParse` answers a boolean, which is usually what you want for input you did not write.
+ * every setter except `href` silently leaves the component alone when the value will not apply,
+ * which is webidl's rule and not a bug.
+ */
+declare class URL {
+  constructor(url: string, base?: string)
+  static canParse(url: string, base?: string): boolean
+  static parse(url: string, base?: string): URL | null
+
+  href: string
+  protocol: string
+  username: string
+  password: string
+  host: string
+  hostname: string
+  port: string
+  pathname: string
+  search: string
+  hash: string
+  /** always the same object for a given url, and writing through it updates `search`/`href` */
+  readonly searchParams: URLSearchParams
+  readonly origin: string
+  toString(): string
+  toJSON(): string
+}
+
+/**
+ * the query half of the above, and usable on its own for anything `application/x-www-form-urlencoded`.
+ * one taken off a `URL` is a live view of that url's query rather than a copy of it.
+ *
+ * the one place it diverges from the web: `keys()`/`values()`/`entries()` and the default iterator
+ * walk a **snapshot** taken when you call them, so mutating during iteration cannot make the loop
+ * skip or repeat a pair. the web's are live, and nothing that iterates without mutating can tell.
+ */
+declare class URLSearchParams {
+  constructor(init?: string | string[][] | Record<string, string> | URLSearchParams)
+  readonly size: number
+  append(name: string, value: string): void
+  /** with a `value`, removes only the pairs matching both */
+  delete(name: string, value?: string): void
+  get(name: string): string | null
+  getAll(name: string): string[]
+  has(name: string, value?: string): boolean
+  /** replaces the first match where it stands and drops any others, so ordering survives a round trip */
+  set(name: string, value: string): void
+  /** by name only, and stable: pairs sharing a name keep the order they were appended in */
+  sort(): void
+  forEach(callback: (value: string, name: string, parent: URLSearchParams) => void, thisArg?: any): void
+  keys(): IterableIterator<string>
+  values(): IterableIterator<string>
+  entries(): IterableIterator<[string, string]>
+  [Symbol.iterator](): IterableIterator<[string, string]>
+  toString(): string
+}
+
 declare const crypto: {
   /** fills with cryptographically strong random bytes and returns it */
   getRandomValues: <T extends Uint8Array>(array: T) => T

@@ -18,3 +18,14 @@ where
 pub fn define_method<'js>(target: &Object<'js>, name: &str, f: Function<'js>) -> JsResult<()> {
     target.prop(name, Property::from(f).writable().enumerable().configurable())
 }
+
+/// a read/write attribute. Separate from [`define_getter`] because a webidl setter that refuses its
+/// input does **not** throw - it leaves the attribute alone - so every setter built with this
+/// returns `()` and swallows what it could not apply.
+pub fn define_accessor<'js, G, S, PG, PS>(target: &Object<'js>, name: &str, get: G, set: S) -> JsResult<()>
+where
+    G: rquickjs::function::IntoJsFunc<'js, PG> + 'js,
+    S: rquickjs::function::IntoJsFunc<'js, PS> + 'js,
+{
+    target.prop(name, Accessor::new(get, set).enumerable().configurable())
+}

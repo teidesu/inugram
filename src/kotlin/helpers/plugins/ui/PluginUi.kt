@@ -6,7 +6,7 @@ import android.text.Spanned
 import android.text.style.ForegroundColorSpan
 import android.util.Log
 import android.widget.LinearLayout
-import desu.inugram.core.plugins.TlWire
+import desu.inugram.core.plugins.PluginWire
 import desu.inugram.helpers.plugins.Plugin
 import desu.inugram.helpers.plugins.PluginDispatch
 import desu.inugram.helpers.plugins.QuickJs
@@ -89,9 +89,9 @@ object PluginUi {
     /** the handle is resolved before the ui-thread hop, so naming something that is not a `BaseFragment` throws where the plugin can catch it */
     fun openFragment(engine: QuickJs, handle: Long): String? {
         val fragment = PluginJvm.objectAt(engine, handle)
-            ?: return TlWire.encodePluginError("handle-expired", "openPage: that java object is gone")
+            ?: return PluginWire.encodePluginError("handle-expired", "openPage: that java object is gone")
         if (fragment !is BaseFragment) {
-            return TlWire.encodePluginError(
+            return PluginWire.encodePluginError(
                 "invalid-argument",
                 "openPage: expected a BaseFragment, got ${fragment.javaClass.name}",
             )

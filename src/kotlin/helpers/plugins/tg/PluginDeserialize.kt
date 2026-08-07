@@ -7,7 +7,7 @@ import desu.inugram.core.plugins.ScopeMatch
 import desu.inugram.core.plugins.TlCtorIds
 import desu.inugram.core.plugins.TlFlags
 import desu.inugram.core.plugins.TlNames
-import desu.inugram.core.plugins.TlWire
+import desu.inugram.core.plugins.PluginWire
 import desu.inugram.helpers.plugins.Plugin
 import desu.inugram.helpers.plugins.PluginDispatch
 import desu.inugram.helpers.plugins.QuickJs
@@ -123,7 +123,7 @@ object PluginDeserialize {
                         val handle = tl.mintForDeserialize(obj, scopeId)
                         listener.engine.dispatchDeserialize(
                             listener.callbackId,
-                            TlWire.encodeHandle(vector = false, id = handle, readOnly = false),
+                            PluginWire.encodeHandle(vector = false, id = handle, readOnly = false),
                         )
                     } finally {
                         tl.releaseScope(scopeId)
@@ -194,7 +194,7 @@ object PluginDeserialize {
             for (typeIndex in 0 until types.length()) {
                 val name = types.optString(typeIndex)
                 if (!permissions.allows("interceptDeserialize", name, ScopeMatch.EXACT)) {
-                    return TlWire.encodeNotGranted("interceptDeserialize", name)
+                    return PluginWire.encodeNotGranted("interceptDeserialize", name)
                 }
                 compileType(name, rule, policy, compiled)?.let { return it }
             }
@@ -364,7 +364,7 @@ object PluginDeserialize {
     }
 
     private fun refuse(code: String, message: String): String =
-        TlWire.encodePluginError(code, "interceptDeserialize: $message")
+        PluginWire.encodePluginError(code, "interceptDeserialize: $message")
 
     private fun unregister(engine: QuickJs, callbackId: Int) {
         synchronized(lock) {
@@ -385,7 +385,7 @@ object PluginDeserialize {
         for (index in 0 until array.length()) {
             val name = array.optString(index)
             if (!permissions.allows("interceptDeserialize", name, ScopeMatch.EXACT)) {
-                return TlWire.encodeNotGranted("interceptDeserialize", name)
+                return PluginWire.encodeNotGranted("interceptDeserialize", name)
             }
             val reachable = reachableIds(name, policy)
             reachable.error?.let { return it }

@@ -1,6 +1,6 @@
 package desu.inugram.helpers.plugins
 
-import desu.inugram.core.plugins.TlWire
+import desu.inugram.core.plugins.PluginWire
 import desu.inugram.helpers.plugins.tl.TlFilter
 import desu.inugram.helpers.plugins.tl.TlHandles
 import kotlin.test.assertEquals
@@ -49,7 +49,7 @@ class TlHandlesLifetimeTest {
 
         handles.releaseScope(scope)
 
-        assertEquals(1L, (TlWire.decode(handles.tlGet(owned, "id")) as TlWire.Value.IntNum).value)
+        assertEquals(1L, (PluginWire.decode(handles.tlGet(owned, "id")) as PluginWire.Value.IntNum).value)
     }
 
     @Test
@@ -58,12 +58,12 @@ class TlHandlesLifetimeTest {
         val target = message()
         val root = handles.mintForPlugin(target, readOnly = true)
 
-        assertPluginError("forbidden", handles.tlSet(root, "message", TlWire.encodeJson("\"x\"")))
+        assertPluginError("forbidden", handles.tlSet(root, "message", PluginWire.encodeJson("\"x\"")))
         assertEquals("hi", target.message)
 
         val child = handleOf(handles.tlGet(root, "from_id"))
         assertTrue(child.readOnly)
-        assertPluginError("forbidden", handles.tlSet(child.id, "user_id", TlWire.encodeJson("1")))
+        assertPluginError("forbidden", handles.tlSet(child.id, "user_id", PluginWire.encodeJson("1")))
     }
 
     @Test
@@ -73,7 +73,7 @@ class TlHandlesLifetimeTest {
         val appOwned = handles.mintForPlugin(peerUser(9L), readOnly = true)
 
         // assigning it would re-mint it writable on the next read of that field
-        val refusal = handles.tlSet(writable, "from_id", TlWire.encodeHandle(false, appOwned, readOnly = true))
+        val refusal = handles.tlSet(writable, "from_id", PluginWire.encodeHandle(false, appOwned, readOnly = true))
 
         assertPluginError("forbidden", refusal)
         assertTrue(handles.isReadOnly(appOwned))
@@ -90,13 +90,13 @@ class TlHandlesLifetimeTest {
         val target = message()
         val root = handles.mintForDeserialize(target, TlHandles.newScope())
 
-        assertPluginError("forbidden", handles.tlSet(root, "peer_id", TlWire.encodeJson("""{"_":"peerUser","user_id":"777000"}""")))
-        assertPluginError("forbidden", handles.tlSet(root, "from_id", TlWire.encodeJson("""{"_":"peerUser","user_id":"777000"}""")))
+        assertPluginError("forbidden", handles.tlSet(root, "peer_id", PluginWire.encodeJson("""{"_":"peerUser","user_id":"777000"}""")))
+        assertPluginError("forbidden", handles.tlSet(root, "from_id", PluginWire.encodeJson("""{"_":"peerUser","user_id":"777000"}""")))
         assertEquals(42L, (target.from_id as TLRPC.TL_peerUser).user_id)
         assertEquals(43L, (target.peer_id as TLRPC.TL_peerUser).user_id)
 
         // one that describes rather than addresses still goes through: the middleware form exists for structural rewrites
-        assertNull(handles.tlSet(root, "message", TlWire.encodeJson("\"rewritten\"")))
+        assertNull(handles.tlSet(root, "message", PluginWire.encodeJson("\"rewritten\"")))
         assertEquals("rewritten", target.message)
     }
 
@@ -108,7 +108,7 @@ class TlHandlesLifetimeTest {
 
         val nested =
             """{"_":"messageMediaDocument","document":{"_":"document","id":"7","access_hash":"9","dc_id":2,"mime_type":"x","size":"1"}}"""
-        assertPluginError("forbidden", handles.tlSet(root, "media", TlWire.encodeJson(nested)))
+        assertPluginError("forbidden", handles.tlSet(root, "media", PluginWire.encodeJson(nested)))
         assertNull(target.media)
     }
 
@@ -120,11 +120,11 @@ class TlHandlesLifetimeTest {
         val entities = handleId(handles.tlGet(root, "entities"))
 
         val forged = """{"_":"messageEntityMentionName","offset":0,"length":1,"user_id":"777000"}"""
-        assertPluginError("forbidden", handles.tlSet(entities, "0", TlWire.encodeJson(forged)))
+        assertPluginError("forbidden", handles.tlSet(entities, "0", PluginWire.encodeJson(forged)))
         assertTrue(target.entities[0] is TLRPC.TL_messageEntityBold)
 
         val plain = """{"_":"messageEntityItalic","offset":0,"length":1}"""
-        assertNull(handles.tlSet(entities, "0", TlWire.encodeJson(plain)))
+        assertNull(handles.tlSet(entities, "0", PluginWire.encodeJson(plain)))
         assertTrue(target.entities[0] is TLRPC.TL_messageEntityItalic)
     }
 
@@ -136,7 +136,7 @@ class TlHandlesLifetimeTest {
         val root = handles.mintForDeserialize(target, TlHandles.newScope())
         val other = handles.mintForPlugin(peerUser(777000L), readOnly = false)
 
-        assertPluginError("forbidden", handles.tlSet(root, "from_id", TlWire.encodeHandle(false, other, readOnly = false)))
+        assertPluginError("forbidden", handles.tlSet(root, "from_id", PluginWire.encodeHandle(false, other, readOnly = false)))
         assertEquals(42L, (target.from_id as TLRPC.TL_peerUser).user_id)
     }
 
@@ -161,14 +161,14 @@ class TlHandlesLifetimeTest {
         val root = handles.mintForScope(request, TlHandles.newScope())
         val vector = handleId(handles.tlGet(root, "id"))
 
-        assertEquals("vector length can only shrink (2 -> 5 not allowed)", handles.tlSet(vector, "length", TlWire.encodeJson("5")))
-        assertNull(handles.tlSet(vector, "length", TlWire.encodeJson("1")))
+        assertEquals("vector length can only shrink (2 -> 5 not allowed)", handles.tlSet(vector, "length", PluginWire.encodeJson("5")))
+        assertNull(handles.tlSet(vector, "length", PluginWire.encodeJson("1")))
         assertEquals(1, request.id.size)
 
         // index == size is the push
-        assertNull(handles.tlSet(vector, "1", TlWire.encodeJson("""{"_":"inputUserSelf"}""")))
+        assertNull(handles.tlSet(vector, "1", PluginWire.encodeJson("""{"_":"inputUserSelf"}""")))
         assertEquals(2, request.id.size)
-        assertEquals("vector index out of range: 5", handles.tlSet(vector, "5", TlWire.encodeJson("""{"_":"inputUserSelf"}""")))
+        assertEquals("vector index out of range: 5", handles.tlSet(vector, "5", PluginWire.encodeJson("""{"_":"inputUserSelf"}""")))
     }
 
     @Test
@@ -193,13 +193,13 @@ class TlHandlesLifetimeTest {
         val root = handles.mintForScope(target, TlHandles.newScope())
         val before = target.flags
 
-        assertNull(handles.tlSet(root, "post_author", TlWire.encodeJson("\"nick\"")))
+        assertNull(handles.tlSet(root, "post_author", PluginWire.encodeJson("\"nick\"")))
         assertTrue(target.flags != before)
         assertEquals("nick", stringOf(handles.tlGet(root, "post_author")))
 
-        assertNull(handles.tlSet(root, "post_author", TlWire.encodeNull()))
+        assertNull(handles.tlSet(root, "post_author", PluginWire.encodeNull()))
         assertEquals(before, target.flags, "clearing it must leave every other bit exactly as it was")
-        assertEquals(TlWire.Value.Null, TlWire.decode(handles.tlGet(root, "post_author")))
+        assertEquals(PluginWire.Value.Null, PluginWire.decode(handles.tlGet(root, "post_author")))
     }
 
     @Test
@@ -207,10 +207,10 @@ class TlHandlesLifetimeTest {
         val handles = TlHandles(UNFILTERED)
         val root = handles.mintForScope(message(), TlHandles.newScope())
 
-        assertEquals(TlWire.Value.Null, TlWire.decode(handles.tlGet(root, "flags")))
+        assertEquals(PluginWire.Value.Null, PluginWire.decode(handles.tlGet(root, "flags")))
         assertEquals(0, handles.tlHas(root, "flags"))
         assertTrue(handles.tlOwnKeys(root)!!.split(",").none { it == "flags" || it == "flags2" })
-        assertTrue(handles.tlSet(root, "flags", TlWire.encodeJson("7"))!!.contains("managed by the bridge"))
+        assertTrue(handles.tlSet(root, "flags", PluginWire.encodeJson("7"))!!.contains("managed by the bridge"))
     }
 
     @Test

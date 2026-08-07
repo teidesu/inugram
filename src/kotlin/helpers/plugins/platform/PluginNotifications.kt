@@ -1,6 +1,6 @@
 package desu.inugram.helpers.plugins.platform
 
-import desu.inugram.core.plugins.TlWire
+import desu.inugram.core.plugins.PluginWire
 import desu.inugram.helpers.plugins.Plugin
 import desu.inugram.helpers.plugins.PluginDispatch
 import desu.inugram.helpers.plugins.QuickJs
@@ -66,13 +66,13 @@ object PluginNotifications {
     private fun startObserving(plugin: Plugin, engine: QuickJs, callbackId: Int, events: Array<String>): String? {
         // the engine's own check_grant already ran in native; this is the second gate, on the side that owns the data
         if (!plugin.permissions.has("unsafe.notificationCenter")) {
-            return TlWire.encodeNotGranted("unsafe.notificationCenter")
+            return PluginWire.encodeNotGranted("unsafe.notificationCenter")
         }
         val ids = IntArray(events.size)
         for (index in events.indices) {
             // a closed vocabulary: a name this app does not have is refused rather than silently never firing, which a plugin could not tell from an event that never happened
             ids[index] = idsByName[events[index]]
-                ?: return TlWire.encodePluginError("invalid-argument", "no notification named '${events[index]}'")
+                ?: return PluginWire.encodePluginError("invalid-argument", "no notification named '${events[index]}'")
         }
         val registration = Registration(plugin, engine, callbackId, ids)
         synchronized(live) { live.getOrPut(engine) { ArrayList() }.add(registration) }

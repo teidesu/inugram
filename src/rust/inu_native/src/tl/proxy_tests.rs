@@ -185,12 +185,12 @@ fn fake_value_to_wire(host: &FakeTlHost, value: &FakeValue, read_only: bool) -> 
     }
 }
 
-/// mirrors `TlWire.encodeExpired()` Kotlin-side
+/// mirrors `PluginWire.encodeExpired()` Kotlin-side
 fn expired_wire() -> String {
     format!("Phandle-expired\n\n\n\n{HANDLE_EXPIRED_MESSAGE}")
 }
 
-/// mirrors `TlWire.encodePluginError("forbidden", ...)` Kotlin-side
+/// mirrors `PluginWire.encodePluginError("forbidden", ...)` Kotlin-side
 fn forbidden_wire() -> String {
     format!("Pforbidden\n\n\n\n{READ_ONLY_MESSAGE}")
 }

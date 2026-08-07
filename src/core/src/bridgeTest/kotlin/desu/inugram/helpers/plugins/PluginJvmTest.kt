@@ -2,7 +2,7 @@ package desu.inugram.helpers.plugins
 
 import android.util.Base64
 import dalvik.system.DexClassLoader
-import desu.inugram.core.plugins.TlWire
+import desu.inugram.core.plugins.PluginWire
 import desu.inugram.helpers.plugins.platform.PluginJvm
 import desu.inugram.jvmfixture.JvmFixture
 import java.io.File
@@ -87,8 +87,8 @@ class PluginJvmTest {
         testAppScreen.fragment = null
         testAppScreen.activity = null
 
-        assertEquals(TlWire.Value.Null, TlWire.decode(plugin.jvm(PluginJvm.OP_CURRENT_FRAGMENT)))
-        assertEquals(TlWire.Value.Null, TlWire.decode(plugin.jvm(PluginJvm.OP_CURRENT_ACTIVITY)))
+        assertEquals(PluginWire.Value.Null, PluginWire.decode(plugin.jvm(PluginJvm.OP_CURRENT_FRAGMENT)))
+        assertEquals(PluginWire.Value.Null, PluginWire.decode(plugin.jvm(PluginJvm.OP_CURRENT_ACTIVITY)))
     }
 
     @Test
@@ -194,8 +194,8 @@ class PluginJvmTest {
 
         assertEquals(3L, intOf(plugin.jvm(PluginJvm.OP_GET, handle, "count")))
         assertEquals("inugram", stringOf(plugin.jvm(PluginJvm.OP_GET, handle, "label")))
-        assertEquals(TlWire.Value.Bool(true), TlWire.decode(plugin.jvm(PluginJvm.OP_GET, handle, "flag")))
-        assertEquals(TlWire.Value.Null, TlWire.decode(plugin.jvm(PluginJvm.OP_GET, handle, "nothing")))
+        assertEquals(PluginWire.Value.Bool(true), PluginWire.decode(plugin.jvm(PluginJvm.OP_GET, handle, "flag")))
+        assertEquals(PluginWire.Value.Null, PluginWire.decode(plugin.jvm(PluginJvm.OP_GET, handle, "nothing")))
         // a long past 2^53 is not a number js can hold, so it stays exact on the wire and rust is
         // what turns it into a bigint
         assertEquals(9007199254740993L, intOf(plugin.jvm(PluginJvm.OP_GET, handle, "big")))
@@ -229,19 +229,19 @@ class PluginJvmTest {
         val plugin = startPlugin("reflective", scoped)
         val handle = plugin.mint(JvmFixture())
 
-        assertEquals("echo:hi", stringOf(plugin.jvm(PluginJvm.OP_CALL, handle, "echo", TlWire.encodeString("hi"))))
-        assertEquals(2L, intOf(plugin.jvm(PluginJvm.OP_CALL, handle, "sized", TlWire.encodeBytes(base64("ab")))))
+        assertEquals("echo:hi", stringOf(plugin.jvm(PluginJvm.OP_CALL, handle, "echo", PluginWire.encodeString("hi"))))
+        assertEquals(2L, intOf(plugin.jvm(PluginJvm.OP_CALL, handle, "sized", PluginWire.encodeBytes(base64("ab")))))
         // a js number is an integer or a double and nothing narrower, so the parameter decides
-        assertEquals("int", stringOf(plugin.jvm(PluginJvm.OP_CALL, handle, "width", TlWire.encodeInt(5))))
-        assertEquals("double", stringOf(plugin.jvm(PluginJvm.OP_CALL, handle, "width", TlWire.encodeDouble(1.5))))
+        assertEquals("int", stringOf(plugin.jvm(PluginJvm.OP_CALL, handle, "width", PluginWire.encodeInt(5))))
+        assertEquals("double", stringOf(plugin.jvm(PluginJvm.OP_CALL, handle, "width", PluginWire.encodeDouble(1.5))))
         // an Object-shaped parameter takes the box a java literal would have been
         assertEquals(
             "java.lang.Integer",
-            stringOf(plugin.jvm(PluginJvm.OP_CALL, handle, "boxed", TlWire.encodeInt(5))),
+            stringOf(plugin.jvm(PluginJvm.OP_CALL, handle, "boxed", PluginWire.encodeInt(5))),
         )
         assertEquals(
             "java.lang.Long",
-            stringOf(plugin.jvm(PluginJvm.OP_CALL, handle, "boxed", TlWire.encodeInt(1L shl 40))),
+            stringOf(plugin.jvm(PluginJvm.OP_CALL, handle, "boxed", PluginWire.encodeInt(1L shl 40))),
         )
     }
 
@@ -252,7 +252,7 @@ class PluginJvmTest {
         // `count` is an int and this is not one
         assertPluginError(
             "invalid-argument",
-            plugin.jvm(PluginJvm.OP_SET, handle, "count", TlWire.encodeInt(1L shl 40)),
+            plugin.jvm(PluginJvm.OP_SET, handle, "count", PluginWire.encodeInt(1L shl 40)),
         )
         assertEquals(3, JvmFixture().count)
     }
@@ -263,7 +263,7 @@ class PluginJvmTest {
         val handle = plugin.mint(JvmFixture())
         assertPluginError(
             "invalid-argument",
-            plugin.jvm(PluginJvm.OP_CALL, handle, "ambiguous", TlWire.encodeString("x")),
+            plugin.jvm(PluginJvm.OP_CALL, handle, "ambiguous", PluginWire.encodeString("x")),
         )
     }
 
@@ -273,7 +273,7 @@ class PluginJvmTest {
         val handle = plugin.mint(JvmFixture())
         assertEquals(
             "long",
-            stringOf(plugin.jvm(PluginJvm.OP_CALL, handle, "width(J)Ljava/lang/String;", TlWire.encodeInt(5))),
+            stringOf(plugin.jvm(PluginJvm.OP_CALL, handle, "width(J)Ljava/lang/String;", PluginWire.encodeInt(5))),
         )
         assertEquals(
             "charSequence",
@@ -282,7 +282,7 @@ class PluginJvmTest {
                     PluginJvm.OP_CALL,
                     handle,
                     "ambiguous(Ljava/lang/CharSequence;)Ljava/lang/String;",
-                    TlWire.encodeString("x"),
+                    PluginWire.encodeString("x"),
                 )
             ),
         )
@@ -295,7 +295,7 @@ class PluginJvmTest {
         assertEquals("private", stringOf(plugin.jvm(PluginJvm.OP_GET, handle, "secret")))
         assertPluginError(
             "forbidden",
-            plugin.jvm(PluginJvm.OP_SET, handle, "sealed", TlWire.encodeString("nope")),
+            plugin.jvm(PluginJvm.OP_SET, handle, "sealed", PluginWire.encodeString("nope")),
         )
     }
 
@@ -304,9 +304,9 @@ class PluginJvmTest {
         val plugin = startPlugin("reflective", scoped)
         val cls = plugin.cls(fixtureClass)
         assertEquals("static", stringOf(plugin.jvm(PluginJvm.OP_GET, cls, "tag")))
-        plugin.jvm(PluginJvm.OP_SET, cls, "tag", TlWire.encodeString("assigned"))
+        plugin.jvm(PluginJvm.OP_SET, cls, "tag", PluginWire.encodeString("assigned"))
         assertEquals("assigned", JvmFixture.tag)
-        assertEquals(7L, intOf(plugin.jvm(PluginJvm.OP_CALL, cls, "sum", TlWire.encodeInt(3), TlWire.encodeInt(4))))
+        assertEquals(7L, intOf(plugin.jvm(PluginJvm.OP_CALL, cls, "sum", PluginWire.encodeInt(3), PluginWire.encodeInt(4))))
 
         val made = plugin.jvm(PluginJvm.OP_CALL, cls, "make")
         assertEquals("inugram", stringOf(plugin.jvm(PluginJvm.OP_GET, idOf(made), "label")))
@@ -324,12 +324,12 @@ class PluginJvmTest {
         val echo = idOf(plugin.jvm(PluginJvm.OP_METHOD, cls, "echo"))
         assertEquals(
             "echo:hi",
-            stringOf(plugin.jvm(PluginJvm.OP_INVOKE, echo, "", "G$handle", TlWire.encodeString("hi"))),
+            stringOf(plugin.jvm(PluginJvm.OP_INVOKE, echo, "", "G$handle", PluginWire.encodeString("hi"))),
         )
 
         val count = idOf(plugin.jvm(PluginJvm.OP_FIELD, cls, "count"))
         assertEquals(3L, intOf(plugin.jvm(PluginJvm.OP_MEMBER_GET, count, "", "G$handle")))
-        plugin.jvm(PluginJvm.OP_MEMBER_SET, count, "", "G$handle", TlWire.encodeInt(9))
+        plugin.jvm(PluginJvm.OP_MEMBER_SET, count, "", "G$handle", PluginWire.encodeInt(9))
         assertEquals(9L, intOf(plugin.jvm(PluginJvm.OP_GET, handle, "count")))
 
         // nothing is being called yet, so only a descriptor can say which `width` was meant
@@ -356,7 +356,7 @@ class PluginJvmTest {
         assertEquals('M', kindOf(method), "a member crossing as a value was not minted as one")
         assertEquals(
             "echo:hi",
-            stringOf(plugin.jvm(PluginJvm.OP_INVOKE, idOf(method), "", "G$handle", TlWire.encodeString("hi"))),
+            stringOf(plugin.jvm(PluginJvm.OP_INVOKE, idOf(method), "", "G$handle", PluginWire.encodeString("hi"))),
         )
 
         val outOfScope = JvmFixture()
@@ -368,15 +368,15 @@ class PluginJvmTest {
     fun aJavaThrowIsAPlainErrorAndNotAPluginError() {
         val plugin = startPlugin("reflective", scoped)
         val handle = plugin.mint(JvmFixture())
-        val decoded = TlWire.decode(plugin.jvm(PluginJvm.OP_CALL, handle, "boom"))
-        assertTrue(decoded is TlWire.Value.Error && decoded.message.contains("IllegalStateException: boom"), "$decoded")
+        val decoded = PluginWire.decode(plugin.jvm(PluginJvm.OP_CALL, handle, "boom"))
+        assertTrue(decoded is PluginWire.Value.Error && decoded.message.contains("IllegalStateException: boom"), "$decoded")
     }
 
     @Test
     fun aCallbackNeverRunsInsideTheCallThatHandedItOver() {
         val plugin = startPlugin("reflective", scoped)
         val handle = plugin.mint(JvmFixture())
-        val runnable = idOf(plugin.jvm(PluginJvm.OP_RUNNABLE, name = "", args = arrayOf(TlWire.encodeInt(7))))
+        val runnable = idOf(plugin.jvm(PluginJvm.OP_RUNNABLE, name = "", args = arrayOf(PluginWire.encodeInt(7))))
 
         // `runNow` calls `run()` before it returns, so the engine would be re-entered from inside
         // its own upcall - which is a process abort, not an error
@@ -391,7 +391,7 @@ class PluginJvmTest {
     fun aCallbackNeverFiresIntoASuccessorEngine() {
         val plugin = startPlugin("reflective", scoped)
         val handle = plugin.mint(JvmFixture())
-        val runnable = idOf(plugin.jvm(PluginJvm.OP_RUNNABLE, name = "", args = arrayOf(TlWire.encodeInt(7))))
+        val runnable = idOf(plugin.jvm(PluginJvm.OP_RUNNABLE, name = "", args = arrayOf(PluginWire.encodeInt(7))))
         plugin.jvm(PluginJvm.OP_CALL, handle, "runNow", "G$runnable")
 
         val stopped = plugin.js
@@ -405,7 +405,7 @@ class PluginJvmTest {
     @Test
     fun theRunnableItselfCannotBeReachedInto() {
         val plugin = startPlugin("reflective", "unsafe.jvm")
-        val runnable = idOf(plugin.jvm(PluginJvm.OP_RUNNABLE, name = "", args = arrayOf(TlWire.encodeInt(7))))
+        val runnable = idOf(plugin.jvm(PluginJvm.OP_RUNNABLE, name = "", args = arrayOf(PluginWire.encodeInt(7))))
         assertPluginError("forbidden", plugin.jvm(PluginJvm.OP_CALL, runnable, "run"))
     }
 
@@ -427,8 +427,8 @@ class PluginJvmTest {
     fun stagedDexLandsReadOnlyUnderThePluginsOwnDirectory() {
         val plugin = startPlugin("reflective", "unsafe.jvm")
         assertEquals(
-            TlWire.Value.Null,
-            TlWire.decode(plugin.jvm(PluginJvm.OP_LOAD_DEX, name = "", args = arrayOf(TlWire.encodeBytes(base64("dex\u0000"))))),
+            PluginWire.Value.Null,
+            PluginWire.decode(plugin.jvm(PluginJvm.OP_LOAD_DEX, name = "", args = arrayOf(PluginWire.encodeBytes(base64("dex\u0000"))))),
         )
 
         val staged = PluginJvm.dexDir(plugin.id).listFiles()!!.single()
@@ -445,7 +445,7 @@ class PluginJvmTest {
         val bytes = ByteArray(PluginJvm.DEX_LIMIT_BYTES.toInt() + 1)
         assertPluginError(
             "quota-exceeded",
-            plugin.jvm(PluginJvm.OP_LOAD_DEX, name = "", args = arrayOf(TlWire.encodeBytes(base64(bytes)))),
+            plugin.jvm(PluginJvm.OP_LOAD_DEX, name = "", args = arrayOf(PluginWire.encodeBytes(base64(bytes)))),
         )
         assertFalse(PluginJvm.dexDir(plugin.id).isDirectory)
         assertEquals(emptyList(), DexClassLoader.loaded)
@@ -460,7 +460,7 @@ class PluginJvmTest {
             it.parentFile!!.mkdirs()
             it.writeBytes(byteArrayOf(1, 2, 3))
         }
-        assertEquals(TlWire.Value.Null, TlWire.decode(plugin.jvm(PluginJvm.OP_LOAD_DEX, name = file.absolutePath)))
+        assertEquals(PluginWire.Value.Null, PluginWire.decode(plugin.jvm(PluginJvm.OP_LOAD_DEX, name = file.absolutePath)))
         assertEquals(listOf(file.absolutePath), DexClassLoader.loaded)
     }
 
@@ -492,18 +492,18 @@ class PluginJvmTest {
         return wire.substring(2).toLong()
     }
 
-    private fun intOf(wire: String): Long = (TlWire.decode(wire) as TlWire.Value.IntNum).value
+    private fun intOf(wire: String): Long = (PluginWire.decode(wire) as PluginWire.Value.IntNum).value
 
-    private fun bytesOf(wire: String): String = (TlWire.decode(wire) as TlWire.Value.Bytes).base64
+    private fun bytesOf(wire: String): String = (PluginWire.decode(wire) as PluginWire.Value.Bytes).base64
 
     private fun base64(text: String): String = base64(text.toByteArray())
 
     private fun base64(bytes: ByteArray): String = Base64.encodeToString(bytes, Base64.NO_WRAP)
 
     private fun assertGrantRefusal(grant: String, wire: String) {
-        val decoded = TlWire.decode(wire)
+        val decoded = PluginWire.decode(wire)
         assertTrue(
-            decoded is TlWire.Value.PluginErr && decoded.code == "not-granted" && decoded.grant == grant,
+            decoded is PluginWire.Value.PluginErr && decoded.code == "not-granted" && decoded.grant == grant,
             "expected a not-granted naming $grant, got $decoded",
         )
     }

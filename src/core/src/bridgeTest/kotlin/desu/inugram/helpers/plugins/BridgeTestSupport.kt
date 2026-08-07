@@ -3,7 +3,7 @@ package desu.inugram.helpers.plugins
 import android.content.Context
 import android.os.SystemClock
 import desu.inugram.core.plugins.PluginManifest
-import desu.inugram.core.plugins.TlWire
+import desu.inugram.core.plugins.PluginWire
 import desu.inugram.helpers.plugins.platform.PluginJvm
 import desu.inugram.helpers.plugins.platform.PluginNotifications
 import desu.inugram.helpers.plugins.tg.PluginDeserialize
@@ -242,16 +242,16 @@ fun serviceMessage(text: String, id: Int = 1): TLRPC.TL_message = TLRPC.TL_messa
     peer_id = peerUser(100L)
 }.synced()
 
-fun handleId(wire: String): Long = (TlWire.decode(wire) as TlWire.Value.Handle).id
+fun handleId(wire: String): Long = (PluginWire.decode(wire) as PluginWire.Value.Handle).id
 
-fun handleOf(wire: String): TlWire.Value.Handle = TlWire.decode(wire) as TlWire.Value.Handle
+fun handleOf(wire: String): PluginWire.Value.Handle = PluginWire.decode(wire) as PluginWire.Value.Handle
 
-fun stringOf(wire: String): String = (TlWire.decode(wire) as TlWire.Value.Str).value
+fun stringOf(wire: String): String = (PluginWire.decode(wire) as PluginWire.Value.Str).value
 
 fun assertPluginError(code: String, wire: String?) {
-    val decoded = TlWire.decode(wire ?: "N")
+    val decoded = PluginWire.decode(wire ?: "N")
     assertTrue(
-        decoded is TlWire.Value.PluginErr && decoded.code == code,
+        decoded is PluginWire.Value.PluginErr && decoded.code == code,
         "expected a '$code' PluginError, got $decoded",
     )
 }
