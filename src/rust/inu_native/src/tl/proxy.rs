@@ -276,31 +276,47 @@ fn make_bytes_value<'js>(ctx: &Ctx<'js>, bytes: Vec<u8>) -> JsResult<Value<'js>>
     arr.into_js(ctx)
 }
 
-/// `JSON.parse` reviving `{"$inuBytes": base64}` wrappers into real Uint8Arrays
-pub(crate) fn json_parse_tl<'js>(ctx: &Ctx<'js>, json: &str) -> JsResult<Value<'js>> {
-    let json_obj: Object = ctx.globals().get("JSON")?;
-    let parse: Function = json_obj.get("parse")?;
-    let reviver =
-        Function::new(ctx.clone(), |ctx: Ctx<'js>, _key: Value<'js>, value: Value<'js>| -> JsResult<Value<'js>> {
-            let Some(obj) = value.as_object() else {
-                return Ok(value);
-            };
-            let Some(b64) = obj.get::<_, Option<String>>(BYTES_MARKER_KEY)? else {
-                return Ok(value);
-            };
-            let Some(bytes) = base64_decode(&b64) else {
-                return Ok(value);
-            };
-            make_bytes_value(&ctx, bytes)
-        })?;
-    parse.call((json, reviver))
+/// walks a freshly parsed JSON graph, replacing every `{"$inuBytes": base64}` wrapper with a real
+/// Uint8Array. This is what `JSON.parse`'s reviver argument used to do, moved into rust because
+/// reaching the reviver at all meant reaching `JSON` off the globals, which plugin code owns.
+/// Own enumerable string keys only, so a polluted `Object.prototype` can't make every parsed object
+/// answer to the marker.
+fn revive_bytes<'js>(ctx: &Ctx<'js>, value: Value<'js>) -> JsResult<Value<'js>> {
+    let Some(obj) = value.as_object() else {
+        return Ok(value);
+    };
+    if let Some(arr) = obj.clone().into_array() {
+        for idx in 0..arr.len() {
+            let item: Value = arr.get(idx)?;
+            let revived = revive_bytes(ctx, item)?;
+            arr.set(idx, revived)?;
+        }
+        return Ok(value);
+    }
+    let keys: Vec<String> = obj.own_keys(Filter::new().string().enum_only()).collect::<JsResult<_>>()?;
+    if keys.iter().any(|k| k == BYTES_MARKER_KEY) {
+        return match obj.get::<_, Option<String>>(BYTES_MARKER_KEY)?.as_deref().and_then(base64_decode) {
+            Some(bytes) => make_bytes_value(ctx, bytes),
+            None => Ok(value),
+        };
+    }
+    for key in keys {
+        let item: Value = obj.get(key.as_str())?;
+        let revived = revive_bytes(ctx, item)?;
+        obj.set(key.as_str(), revived)?;
+    }
+    Ok(value)
 }
 
-/// `JSON.stringify` wrapping any Uint8Array (plugin-created ones included - revived ones already
+/// JSON parse reviving `{"$inuBytes": base64}` wrappers into real Uint8Arrays
+pub(crate) fn json_parse_tl<'js>(ctx: &Ctx<'js>, json: &str) -> JsResult<Value<'js>> {
+    let parsed = ctx.json_parse(json)?;
+    revive_bytes(ctx, parsed)
+}
+
+/// JSON stringify wrapping any Uint8Array (plugin-created ones included - revived ones already
 /// self-wrap via their own `toJSON`) into `{"$inuBytes": base64}`
 pub(crate) fn json_stringify_tl<'js>(ctx: &Ctx<'js>, value: Value<'js>) -> JsResult<String> {
-    let json_obj: Object = ctx.globals().get("JSON")?;
-    let stringify: Function = json_obj.get("stringify")?;
     let replacer =
         Function::new(ctx.clone(), |ctx: Ctx<'js>, _key: Value<'js>, value: Value<'js>| -> JsResult<Value<'js>> {
             if let Ok(typed) = TypedArray::<u8>::from_value(value.clone()) {
@@ -312,7 +328,10 @@ pub(crate) fn json_stringify_tl<'js>(ctx: &Ctx<'js>, value: Value<'js>) -> JsRes
             }
             Ok(value)
         })?;
-    stringify.call((value, replacer))
+    match ctx.json_stringify_replacer(value, replacer)? {
+        Some(json) => json.to_string(),
+        None => Err(Exception::throw_message(ctx, "tl wire: value has no JSON representation")),
+    }
 }
 
 /// the tags that carry a value rather than a reference, shared with [`crate::platform::jvm`]: those are the

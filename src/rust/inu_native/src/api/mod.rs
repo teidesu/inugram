@@ -106,16 +106,18 @@ pub struct ApiState {
     visible: Cell<bool>,
 }
 
+/// `JSON` is an ordinary writable global and plugin code shares this context, so reading
+/// `parse`/`stringify` off it would hand a plugin every host wire *before* the grant gates that
+/// rebuild the exposed object from it run. `JS_ParseJSON`/`JS_JSONStringify` cannot be interposed.
 pub(crate) fn json_parse<'js>(ctx: &Ctx<'js>, json: &str) -> JsResult<Value<'js>> {
-    let json_obj: Object = ctx.globals().get("JSON")?;
-    let parse: Function = json_obj.get("parse")?;
-    parse.call((json,))
+    ctx.json_parse(json)
 }
 
 pub(crate) fn json_stringify<'js>(ctx: &Ctx<'js>, value: Value<'js>) -> JsResult<Option<String>> {
-    let json_obj: Object = ctx.globals().get("JSON")?;
-    let stringify: Function = json_obj.get("stringify")?;
-    stringify.call((value,))
+    Ok(match ctx.json_stringify(value)? {
+        Some(s) => Some(s.to_string()?),
+        None => None,
+    })
 }
 
 /// decodes a [`ApiHost::kv`] result into a JS value, throwing on an error tag

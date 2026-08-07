@@ -5,6 +5,7 @@ import android.content.res.Resources
 import android.graphics.Bitmap
 import android.graphics.drawable.BitmapDrawable
 import android.graphics.drawable.Drawable
+import desu.inugram.core.plugins.IconSpec
 import org.telegram.messenger.AndroidUtilities
 import org.telegram.messenger.ApplicationLoader
 import org.telegram.messenger.SvgHelper
@@ -61,6 +62,7 @@ object PluginIcons {
     }
 
     private fun resourceIdOf(name: String): Int {
+        if (!IconSpec.isResourceName(name)) return 0
         val context = ApplicationLoader.applicationContext ?: return 0
         return synchronized(resourceIds) {
             resourceIds.getOrPut(name) {
@@ -78,6 +80,7 @@ object PluginIcons {
      * not make anything of it.
      */
     private fun maskOf(source: String): Bitmap? = synchronized(svgMasks) {
+        if (!IconSpec.isSvgSource(source)) return@synchronized null
         svgMasks[source] ?: run {
             val size = AndroidUtilities.dp(ICON_DP)
             val bitmap = SvgHelper.getBitmap(source, size, size, true) ?: return@run null

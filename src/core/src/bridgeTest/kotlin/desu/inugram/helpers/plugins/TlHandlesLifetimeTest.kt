@@ -79,6 +79,67 @@ class TlHandlesLifetimeTest {
         assertTrue(handles.isReadOnly(appOwned))
     }
 
+    /**
+     * the guard is on the *slot* a rewrite lands in, and `d.peer.user_id = x` and
+     * `d.peer = {_: 'peerUser', user_id: x}` land in the same one. checking only the assigned name
+     * refuses the first and allows the second, which is the whole of the bypass.
+     */
+    @Test
+    fun `a guarded scope refuses an addressing field carried inside the assigned value`() {
+        val handles = TlHandles(UNFILTERED)
+        val target = message()
+        val root = handles.mintForDeserialize(target, TlHandles.newScope())
+
+        assertPluginError("forbidden", handles.tlSet(root, "peer_id", TlWire.encodeJson("""{"_":"peerUser","user_id":"777000"}""")))
+        assertPluginError("forbidden", handles.tlSet(root, "from_id", TlWire.encodeJson("""{"_":"peerUser","user_id":"777000"}""")))
+        assertEquals(42L, (target.from_id as TLRPC.TL_peerUser).user_id)
+        assertEquals(43L, (target.peer_id as TLRPC.TL_peerUser).user_id)
+
+        // one that describes rather than addresses still goes through: the middleware form exists for structural rewrites
+        assertNull(handles.tlSet(root, "message", TlWire.encodeJson("\"rewritten\"")))
+        assertEquals("rewritten", target.message)
+    }
+
+    @Test
+    fun `a guarded scope refuses an addressing field nested any distance down`() {
+        val handles = TlHandles(UNFILTERED)
+        val target = message()
+        val root = handles.mintForDeserialize(target, TlHandles.newScope())
+
+        val nested =
+            """{"_":"messageMediaDocument","document":{"_":"document","id":"7","access_hash":"9","dc_id":2,"mime_type":"x","size":"1"}}"""
+        assertPluginError("forbidden", handles.tlSet(root, "media", TlWire.encodeJson(nested)))
+        assertNull(target.media)
+    }
+
+    @Test
+    fun `a guarded scope refuses a vector element carrying an addressing field`() {
+        val handles = TlHandles(UNFILTERED)
+        val target = message().apply { entities.add(TLRPC.TL_messageEntityBold().apply { offset = 0; length = 1 }) }.synced()
+        val root = handles.mintForDeserialize(target, TlHandles.newScope())
+        val entities = handleId(handles.tlGet(root, "entities"))
+
+        val forged = """{"_":"messageEntityMentionName","offset":0,"length":1,"user_id":"777000"}"""
+        assertPluginError("forbidden", handles.tlSet(entities, "0", TlWire.encodeJson(forged)))
+        assertTrue(target.entities[0] is TLRPC.TL_messageEntityBold)
+
+        val plain = """{"_":"messageEntityItalic","offset":0,"length":1}"""
+        assertNull(handles.tlSet(entities, "0", TlWire.encodeJson(plain)))
+        assertTrue(target.entities[0] is TLRPC.TL_messageEntityItalic)
+    }
+
+    /** a live object carries the addressing fields of wherever it was parsed, so splicing one in is the same rewrite by reference */
+    @Test
+    fun `a guarded scope refuses a live handle as a value`() {
+        val handles = TlHandles(UNFILTERED)
+        val target = message()
+        val root = handles.mintForDeserialize(target, TlHandles.newScope())
+        val other = handles.mintForPlugin(peerUser(777000L), readOnly = false)
+
+        assertPluginError("forbidden", handles.tlSet(root, "from_id", TlWire.encodeHandle(false, other, readOnly = false)))
+        assertEquals(42L, (target.from_id as TLRPC.TL_peerUser).user_id)
+    }
+
     @Test
     fun `a handle id does not resolve in another plugin's table`() {
         val mine = TlHandles(UNFILTERED)

@@ -408,7 +408,12 @@ broken engine — or, as `api-filter-test.js` had been, red on a working one.
   for good; uninstalling does not undo it. Hence `DeserializeGuards`: `id`, any `*_id`,
   `access_hash`, `dc_id` and `file_reference` may not be `set`, because those *address* the object,
   a wrong one is well-formed so the app never notices, and a refetch writes to the row the wrong id
-  names. That guard is **not** a filter and `unsafe.disableApiFiltering` does not lift it. Three
+  names. That guard is **not** a filter and `unsafe.disableApiFiltering` does not lift it. It is a
+  rule about the *slot*, so `TlHandles` applies it to the value rather than to the name written:
+  `d.peer = {_:'peerUser',user_id:x}` lands where `d.peer.user_id = x` does, a vector element has no
+  name at all, and a live handle carries the addressing of wherever it was parsed - so a guarded
+  scope walks the whole construct payload (`TlJson.findProtectedField`) and refuses a handle value
+  outright. Checking the assigned name alone refuses the first form and allows every other. Three
   refusals that *are* the deserialize-side half of rules holding elsewhere: secret-chat traffic is
   unreachable (stripped by constructor id, since `TL_message_secret` rides inside `idsOf("message")`),
   the takeover surface is not a rule target, and **a `when` may only name a field the plugin could
@@ -510,7 +515,17 @@ broken engine — or, as `api-filter-test.js` had been, red on a working one.
   shares one after it. `structuredClone`
   **throws `DataCloneError` on a TL view**, duck-typed on `Symbol.for('inu.tl.handle')`: a view is a
   host object, cloning one would walk the graph over the bridge a field at a time and could expire
-  halfway, and `toJSON()` already detaches one in a single hop.
+  halfway, and `toJSON()` already detaches one in a single hop. **None of the host's own marshalling
+  goes through a global**, which is the other half of that sentence: `JSON` is writable and plugin
+  code shares this context, so `api::json_parse`/`json_stringify` and `proxy::json_parse_tl`/
+  `json_stringify_tl` call `Ctx`'s `JS_ParseJSON`/`JS_JSONStringify` instead. Reading `JSON.parse`
+  off the globals handed a plugin every host wire *before* the grant gates that rebuild the exposed
+  object from it ran - which is how `getCurrentScreen`, ungated by design, disclosed the `dialogId`
+  it is `account.read(dialogs)` that gates. The bytes reviver moved into rust with it
+  (`proxy::revive_bytes`, own enumerable keys only, or a polluted `Object.prototype` makes every
+  parsed object a Uint8Array). The same reasoning is why `PluginIcons` re-checks a spec's shape
+  (`core.plugins.IconSpec`) rather than trusting that rust validated it: it crossed as
+  plugin-serialized text.
 - **A `Blob` is content with three possible homes and one owner.** `io/blob.rs` mints a `Backing`
   (memory / spill file / a file the *app* owns) and any number of `BlobHandle` ranges over it, of
   which only the root `owns_backing`. That is what makes the two disposal rules `common.d.ts`
