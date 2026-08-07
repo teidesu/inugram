@@ -1,24 +1,21 @@
 package desu.inugram.helpers.plugins
 
-import desu.inugram.core.plugins.PluginWire
-
 /**
  * JNI wrapper over an rquickjs (quickjs-ng) context; the engine itself is the rust crate in
  * src/rust/inu_native.
  *
  * NOT thread-safe: a context is created, used and closed on one thread.
  *
- * Everything rust calls back into is [PluginListener], which is where the wire rules those calls
- * follow are written down. It lives in its own file because this class cannot be compiled off a
- * device and that contract can.
+ * There are no upcalls here: rust calls [PluginBridge] directly, caching its method ids off that
+ * class. So construction is two-phase - the listeners need this object, and [start] needs them.
  */
 class QuickJs {
     /**
-     * published as null *before* the free: a `long` is not read atomically off the owning thread,
-     * and one reader (the `inu.xposed` dispatch) is posted by an arbitrary app thread, where a
-     * stale pointer is a use-after-free rather than a wrong answer.
+     * 0 until [start], and published as 0 again *before* the free: a `long` is not read atomically
+     * off the owning thread, and one reader (the `inu.xposed` dispatch) is posted by an arbitrary
+     * app thread, where a stale pointer is a use-after-free rather than a wrong answer.
      */
-    @Volatile private var ptr: Long = nativeCreate()
+    @Volatile private var ptr: Long = 0
 
     /**
      * Every native call below picks one of these two, and which one is a claim about the caller.
@@ -33,7 +30,7 @@ class QuickJs {
      */
     private inline fun <T> requireLive(call: (Long) -> T): T {
         val live = ptr
-        check(live != 0L) { "QuickJs context is closed" }
+        check(live != 0L) { "QuickJs context is closed or was never started" }
         return call(live)
     }
 
@@ -47,8 +44,19 @@ class QuickJs {
         return if (live == 0L) fallback else call(live)
     }
 
-    /** set before any `install*` call, which is the first thing that can reach it */
+    /** whatever [start] was handed; the parts that carry per-engine state are read back off it */
     var listener: PluginBridge? = null
+        private set
+
+    /**
+     * creates the native context and hands rust the object it will call back into. Throws if the
+     * lookup of any upcall fails, which is one wrong descriptor away and takes every plugin with it.
+     */
+    fun start(listener: PluginBridge) {
+        check(ptr == 0L) { "QuickJs is already started" }
+        this.listener = listener
+        ptr = nativeCreate(listener)
+    }
 
     fun dispatchNotification(callbackId: Int, name: String, accountId: Int, argsJson: String) =
         ifLive { nativeDispatchNotification(it, callbackId, name, accountId, argsJson) }
@@ -216,253 +224,7 @@ class QuickJs {
         nativeDestroy(live)
     }
 
-    // every `on*` below is looked up by name from rust (src/rust/inu_native/src/lib.rs); keep the
-    // names and signatures in sync with it and with proguard. [listener] is null only between
-    // `nativeCreate` and the assignment that follows it, since nothing ever clears it again
-    @Suppress("unused")
-    private fun onConsole(level: Int, message: String) {
-        listener?.onConsole(level, message)
-    }
-
-    @Suppress("unused")
-    private fun onCheckGrant(name: String, target: String?, mode: Int): Boolean =
-        listener?.onCheckGrant(name, target, mode) ?: false
-
-    @Suppress("unused")
-    private fun onRpcRegister(methods: Array<String>, callbackId: Int, scope: String): String? =
-        listener?.onRpcRegister(methods, callbackId, scope) ?: NO_LISTENER
-
-    @Suppress("unused")
-    private fun onRpcUnregister(callbackId: Int) {
-        listener?.onRpcUnregister(callbackId)
-    }
-
-    @Suppress("unused")
-    private fun onInvokeRpc(invokeId: Long, slot: Int, requestWire: String): String? =
-        listener?.onInvokeRpc(invokeId, slot, requestWire) ?: NO_LISTENER
-
-    @Suppress("unused")
-    private fun onRpcNext(dispatchId: Long, requestWire: String): String? =
-        listener?.onRpcNext(dispatchId, requestWire) ?: NO_LISTENER
-
-    @Suppress("unused")
-    private fun onRpcComplete(dispatchId: Long, resultWire: String) {
-        listener?.onRpcComplete(dispatchId, resultWire)
-    }
-
-    @Suppress("unused")
-    private fun onUpdateRegister(callbackId: Int, types: Array<String>, scope: String): String? =
-        listener?.onUpdateRegister(callbackId, types, scope) ?: NO_LISTENER
-
-    @Suppress("unused")
-    private fun onUpdateUnregister(callbackId: Int) {
-        listener?.onUpdateUnregister(callbackId)
-    }
-
-    @Suppress("unused")
-    private fun onInterceptUpdateRegister(callbackId: Int, types: Array<String>): String? =
-        listener?.onInterceptUpdateRegister(callbackId, types) ?: NO_LISTENER
-
-    @Suppress("unused")
-    private fun onInterceptUpdateUnregister(callbackId: Int) {
-        listener?.onInterceptUpdateUnregister(callbackId)
-    }
-
-    @Suppress("unused")
-    private fun onUpdateVerdict(dispatchId: Long, deliver: Boolean) {
-        listener?.onUpdateVerdict(dispatchId, deliver)
-    }
-
-    @Suppress("unused")
-    private fun onDeserializeRegister(callbackId: Int, rulesJson: String): String? =
-        listener?.onDeserializeRegister(callbackId, rulesJson) ?: NO_LISTENER
-
-    @Suppress("unused")
-    private fun onDeserializeUnregister(callbackId: Int) {
-        listener?.onDeserializeUnregister(callbackId)
-    }
-
-    @Suppress("unused")
-    private fun onDeserializeMiddlewareRegister(callbackId: Int, typesJson: String): String? =
-        listener?.onDeserializeMiddlewareRegister(callbackId, typesJson) ?: NO_LISTENER
-
-    @Suppress("unused")
-    private fun onDeserializeMiddlewareUnregister(callbackId: Int) {
-        listener?.onDeserializeMiddlewareUnregister(callbackId)
-    }
-
-    @Suppress("unused")
-    private fun onAccountRead(accountId: Int, op: Int, arg: String): String =
-        listener?.accountRead(accountId, op, arg) ?: NO_LISTENER_WIRE
-
-    @Suppress("unused")
-    private fun onResolvePeer(accountId: Int, requestId: Long, spec: String, kind: Int): String? =
-        listener?.resolvePeer(accountId, requestId, spec, kind) ?: NO_LISTENER
-
-    @Suppress("unused")
-    private fun onAccountFetch(accountId: Int, requestId: Long, op: Int, arg: String): String? =
-        listener?.accountFetch(accountId, requestId, op, arg) ?: NO_LISTENER
-
-    @Suppress("unused")
-    private fun onAccountWrite(accountId: Int, requestId: Long, op: Int, arg: String, values: Array<String>): String? =
-        listener?.accountWrite(accountId, requestId, op, arg, values) ?: NO_LISTENER
-
-    @Suppress("unused")
-    private fun onMessageFile(accountId: Int, value: String): String =
-        listener?.messageFile(accountId, value) ?: NO_LISTENER_WIRE
-
-    @Suppress("unused")
-    private fun onTlGet(handle: Long, key: String): String =
-        listener?.tlGet(handle, key) ?: NO_LISTENER_WIRE
-
-    @Suppress("unused")
-    private fun onTlSet(handle: Long, key: String, valueWire: String): String? =
-        listener?.tlSet(handle, key, valueWire) ?: NO_LISTENER
-
-    @Suppress("unused")
-    private fun onTlHas(handle: Long, key: String): Int = listener?.tlHas(handle, key) ?: -1
-
-    @Suppress("unused")
-    private fun onTlOwnKeys(handle: Long): String? = listener?.tlOwnKeys(handle)
-
-    @Suppress("unused")
-    private fun onTlCopy(handle: Long): String? = listener?.tlCopy(handle)
-
-    @Suppress("unused")
-    private fun onTlRelease(handle: Long) {
-        listener?.tlRelease(handle)
-    }
-
-    @Suppress("unused")
-    private fun onKv(op: Int, key: String, value: String): String =
-        listener?.kv(op, key, value) ?: NO_LISTENER_WIRE
-
-    // "[]" rather than an error wire: native caches whatever comes back, and a host that cannot
-    // answer has no accounts to speak of
-    @Suppress("unused")
-    private fun onAccounts(): String = listener?.accounts() ?: "[]"
-
-    @Suppress("unused")
-    private fun onUiToast(text: String) {
-        listener?.uiToast(text)
-    }
-
-    @Suppress("unused")
-    private fun onUiDialog(requestId: Long, optionsJson: String): String? =
-        listener?.uiDialog(requestId, optionsJson) ?: NO_LISTENER
-
-    @Suppress("unused")
-    private fun onUiPrompt(requestId: Long, optionsJson: String): String? =
-        listener?.uiPrompt(requestId, optionsJson) ?: NO_LISTENER
-
-    @Suppress("unused")
-    private fun onUiChooser(requestId: Long, optionsJson: String): String? =
-        listener?.uiChooser(requestId, optionsJson) ?: NO_LISTENER
-
-    // "N" rather than an error wire: a getter that cannot answer answers "nothing on screen"
-    @Suppress("unused")
-    private fun onUiCurrentScreen(): String = listener?.uiCurrentScreen() ?: "N"
-
-    @Suppress("unused")
-    private fun onOpenUrl(url: String) {
-        listener?.openUrl(url)
-    }
-
-    @Suppress("unused")
-    private fun onClipboardRead(): String = listener?.clipboardRead() ?: ""
-
-    @Suppress("unused")
-    private fun onClipboardWrite(text: String) {
-        listener?.clipboardWrite(text)
-    }
-
-    @Suppress("unused")
-    private fun onUiOpenPage(pageId: Long): String? =
-        listener?.uiOpenPage(pageId) ?: NO_LISTENER
-
-    @Suppress("unused")
-    private fun onUiOpenFragment(handle: Long): String? =
-        listener?.uiOpenFragment(handle) ?: NO_LISTENER
-
-    @Suppress("unused")
-    private fun onUiRegisterSettings(pageId: Long) {
-        listener?.uiRegisterSettings(pageId)
-    }
-
-    @Suppress("unused")
-    private fun onUiUnregisterSettings(pageId: Long) {
-        listener?.uiUnregisterSettings(pageId)
-    }
-
-    @Suppress("unused")
-    private fun onUiInvalidate(pageId: Long) {
-        listener?.uiInvalidate(pageId)
-    }
-
-    @Suppress("unused")
-    private fun onUiOpenMenu(menuId: Long, pageId: Long, anchorKey: String, itemsJson: String): String? =
-        listener?.uiOpenMenu(menuId, pageId, anchorKey, itemsJson) ?: NO_LISTENER
-
-    // fails closed like every other bool upcall: an icon nobody can resolve is better refused at
-    // the call that made it than drawn as a blank
-    @Suppress("unused")
-    private fun onIconResolves(kind: Int, value: String): Boolean =
-        listener?.iconResolves(kind, value) ?: false
-
-    @Suppress("unused")
-    private fun onActionRegister(kind: Int, token: Int, id: String): String? =
-        listener?.actionRegister(kind, token, id) ?: NO_LISTENER
-
-    @Suppress("unused")
-    private fun onActionUnregister(kind: Int, token: Int) {
-        listener?.actionUnregister(kind, token)
-    }
-
-    @Suppress("unused")
-    private fun onActionEditor(op: Int, surface: Long, payloadJson: String): String? =
-        listener?.actionEditor(op, surface, payloadJson) ?: NO_LISTENER
-
-    // a short answer is a clean failure on the rust side, and `crypto.getRandomValues` then throws
-    // rather than hand back anything weaker than it promised
-    @Suppress("unused")
-    private fun onRandomBytes(count: Int): ByteArray = listener?.onRandomBytes(count) ?: ByteArray(0)
-
-    @Suppress("unused")
-    private fun onTimerSchedule(delayMs: Long) {
-        listener?.onTimerSchedule(delayMs)
-    }
-
-    @Suppress("unused")
-    private fun onFetch(requestId: Long, url: String, specJson: String, body: ByteArray?): String? =
-        listener?.fetch(requestId, url, specJson, body) ?: NO_LISTENER
-
-    @Suppress("unused")
-    private fun onFetchAbort(requestId: Long) {
-        listener?.abort(requestId)
-    }
-
-    @Suppress("unused")
-    private fun onCanvas(op: Int, id: Long, arg: String, bytes: ByteArray?): String =
-        listener?.canvas(op, id, arg, bytes) ?: NO_LISTENER_WIRE
-
-    @Suppress("unused")
-    private fun onNotificationRegister(callbackId: Int, events: Array<String>): String? =
-        listener?.register(callbackId, events) ?: NO_LISTENER
-
-    @Suppress("unused")
-    private fun onNotificationUnregister(callbackId: Int) {
-        listener?.unregister(callbackId)
-    }
-
-    @Suppress("unused")
-    private fun onJvm(op: Int, target: Long, name: String, args: Array<String>): String =
-        listener?.jvm(op, target, name, args) ?: NO_LISTENER_WIRE
-
-    @Suppress("unused")
-    private fun onXposed(op: Int, target: Long, name: String, args: Array<String>): String =
-        listener?.xposed(op, target, name, args) ?: NO_LISTENER_WIRE
-
-    private external fun nativeCreate(): Long
+    private external fun nativeCreate(listener: PluginBridge): Long
     private external fun nativeEvaluate(ptr: Long, code: String, filename: String): String?
     private external fun nativeInstallInfo(
         ptr: Long,
@@ -527,13 +289,6 @@ class QuickJs {
     private external fun nativeDestroy(ptr: Long)
 
     companion object {
-        /**
-         * null means SUCCESS on an error channel, so an absent bridge cannot be folded into an
-         * elvis there; the value channels carry the same text as a wire.
-         */
-        private const val NO_LISTENER = "internal: plugin listener not installed"
-        private val NO_LISTENER_WIRE = PluginWire.encodeError(NO_LISTENER)
-
         /**
          * a fault: plugin code threw at a site the engine catches rather than propagates.
          * `console.*` binds 0..4 only, so plugin JS cannot forge one.

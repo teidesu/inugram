@@ -295,8 +295,12 @@ reflecting back into the engine stays `forbidden`.
 **Rust calls back into one object, and it is not `QuickJs`.** Every upcall is a member of
 `PluginListener` (`PluginListener.kt`), which is the union of one interface per subsystem, and the
 single implementation is `PluginBridge` — composed with Kotlin's `by`, so a member added to a
-subsystem's interface costs no forwarder anywhere. Three consequences worth knowing before moving
-anything. The contract lives in its own file **because `QuickJs` cannot be compiled off a device**
+subsystem's interface costs no forwarder anywhere. `JniBridge::new` caches a method id per member
+off **`PluginBridge`**, so that class name and every one of those signatures is load-bearing;
+`jni/tests.rs` parses `PluginListener.kt` and cross-checks all 56 against the descriptors rust looks
+up, which is the one seam test there is. It also forces construction to be **two-phase** — the
+listeners capture the engine, so `QuickJs()` allocates nothing and `start(bridge)` is what calls
+`nativeCreate`. Three more consequences worth knowing before moving anything. The contract lives in its own file **because `QuickJs` cannot be compiled off a device**
 (`nativeCreate()` in its constructor, `System.loadLibrary` in its class initializer), so it is in
 `bridgeExcluded` while the interfaces it used to nest are not — that is what lets the harness hold
 the real declarations instead of a hand-kept copy that only the app build could catch drifting. Each

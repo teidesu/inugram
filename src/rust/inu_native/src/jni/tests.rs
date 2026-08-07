@@ -232,12 +232,16 @@ mod wiring {
         assert!(api < timers, "an onUnload callback clearing its own timers must still find them");
     }
 
-    /// `QuickJs.kt` is in `bridgeExcluded` and stood in for by a double, so nothing in any suite
-    /// compiles the real file against these descriptors: a `get_method_id` mismatch is only found
-    /// by the app build. It also fails whole rather than per method - `JniBridge::new` `?`-chains
-    /// every lookup, so one wrong signature makes the bridge `None`, `nativeCreate` answers 0, and
-    /// every plugin dies at `installInfo` with a message naming nothing.
-    const KOTLIN_BRIDGE: &str = include_str!("../../../../kotlin/helpers/plugins/QuickJs.kt");
+    /// Every upcall is a member of `PluginListener`, and nothing in any suite checks these
+    /// descriptors against it: `get_method_id` resolves them off `PluginBridge` at runtime, so a
+    /// mismatch is only found by the app build. It also fails whole rather than per method -
+    /// `JniBridge::new` `?`-chains every lookup, so one wrong signature makes the bridge `None`,
+    /// `nativeCreate` answers 0, and every plugin dies at `installInfo` with a message naming
+    /// nothing.
+    ///
+    /// The file rather than `PluginBridge.kt` because `by` writes the forwarders: the declarations
+    /// are the only place the shapes are spelled out.
+    const KOTLIN_BRIDGE: &str = include_str!("../../../../kotlin/helpers/plugins/PluginListener.kt");
 
     fn jni_type(kotlin: &str) -> String {
         let bare = kotlin.trim().trim_end_matches('?');
@@ -258,14 +262,14 @@ mod wiring {
         let mut out = Vec::new();
         for line in KOTLIN_BRIDGE.lines() {
             let line = line.trim();
-            let Some(rest) = line.strip_prefix("private fun on") else {
+            let Some(rest) = line.strip_prefix("fun ") else {
                 continue;
             };
             let Some(open) = rest.find('(') else { continue };
             let Some(close) = rest.find(')') else {
                 continue;
             };
-            let name = format!("on{}", &rest[..open]);
+            let name = rest[..open].to_string();
             let params = &rest[open + 1..close];
             let mut sig = String::from("(");
             for param in params.split(',') {
@@ -322,8 +326,8 @@ mod wiring {
         let mut wrong = Vec::new();
         for (name, sig) in &rust {
             match kotlin.get(name) {
-                None => wrong.push(format!("{name}: rust calls it, QuickJs.kt has no such upcall")),
-                Some(actual) if actual != sig => wrong.push(format!("{name}: rust says {sig}, QuickJs.kt is {actual}")),
+                None => wrong.push(format!("{name}: rust calls it, PluginListener has no such member")),
+                Some(actual) if actual != sig => wrong.push(format!("{name}: rust says {sig}, PluginListener is {actual}")),
                 Some(_) => {}
             }
         }
