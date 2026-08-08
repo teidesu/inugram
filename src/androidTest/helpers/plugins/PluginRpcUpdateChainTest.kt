@@ -1,6 +1,6 @@
 package desu.inugram.helpers.plugins
 
-import desu.inugram.helpers.plugins.tg.PluginRpc
+import desu.inugram.helpers.plugins.tg.PluginUpdates
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
 import kotlin.test.assertNull
@@ -85,7 +85,7 @@ class PluginRpcUpdateChainTest {
     /**
      * the batch keeps every update it arrived with, dropped ones included: taking one out leaves
      * its pts unaccounted for, and the app then runs a catch-up that hands the message straight
-     * back. What makes it a drop is [PluginRpc.isDropped], which stock's own loop asks.
+     * back. What makes it a drop is [PluginUpdates.isDropped], which stock's own loop asks.
      */
     @Test
     fun a_dropped_update_stays_in_the_batch_and_is_refused_at_the_apply_instead() {
@@ -105,9 +105,9 @@ class PluginRpcUpdateChainTest {
             applied.updates.map { (it as TL_update.TL_updateNewMessage).message.id },
             "the pts of all three has to reach the app, or it fetches the dropped one right back",
         )
-        assertTrue(PluginRpc.isDropped(doomed), "and the app is told not to apply that one")
-        assertFalse(PluginRpc.isDropped(applied.updates[0]))
-        assertFalse(PluginRpc.isDropped(applied.updates[2]))
+        assertTrue(PluginUpdates.isDropped(doomed), "and the app is told not to apply that one")
+        assertFalse(PluginUpdates.isDropped(applied.updates[0]))
+        assertFalse(PluginUpdates.isDropped(applied.updates[2]))
     }
 
     @Test
@@ -119,7 +119,7 @@ class PluginRpcUpdateChainTest {
         drain()
 
         assertEquals(1, applied().single().updates.size, "the seq, date and pts advance all still land")
-        assertTrue(PluginRpc.isDropped(update))
+        assertTrue(PluginUpdates.isDropped(update))
     }
 
     @Test
@@ -131,7 +131,7 @@ class PluginRpcUpdateChainTest {
         drain()
 
         assertEquals(1, applied().size, "stock wraps it into a one-element array for the same loop")
-        assertTrue(PluginRpc.isDropped(update))
+        assertTrue(PluginUpdates.isDropped(update))
     }
 
     /**
@@ -149,7 +149,7 @@ class PluginRpcUpdateChainTest {
         deliverUpdates(batchOf(update), fromQueue = true)
         drain()
 
-        assertTrue(PluginRpc.isDropped(update), "the verdict has to outlive the hand-back")
+        assertTrue(PluginUpdates.isDropped(update), "the verdict has to outlive the hand-back")
     }
 
     @Test
@@ -181,7 +181,7 @@ class PluginRpcUpdateChainTest {
         assertEquals(listOf("a", "b"), order)
 
         setInstalledPlugins(listOf(second, first))
-        PluginRpc.refreshChainOrder()
+        PluginUpdates.refreshOrder()
         drain()
         order.clear()
         deliverUpdates(batchOf(newMessage(2)))
@@ -244,9 +244,9 @@ class PluginRpcUpdateChainTest {
 
         val applied = applied().single().updates
         assertEquals(listOf(1, 2, 3), applied.map { (it as TL_update.TL_updateNewMessage).message.id })
-        assertTrue(PluginRpc.isDropped(applied[0]), "the one verdict there was still stands")
-        assertFalse(PluginRpc.isDropped(applied[1]), "and an undecided update is applied, never dropped")
-        assertFalse(PluginRpc.isDropped(applied[2]))
+        assertTrue(PluginUpdates.isDropped(applied[0]), "the one verdict there was still stands")
+        assertFalse(PluginUpdates.isDropped(applied[1]), "and an undecided update is applied, never dropped")
+        assertFalse(PluginUpdates.isDropped(applied[2]))
         assertEquals(1, plugin.js.updateAbandons.size, "the parked stage is told it no longer matters")
     }
 
@@ -278,7 +278,7 @@ class PluginRpcUpdateChainTest {
         drain()
         assertEquals(0, applied().size)
 
-        Utilities.globalQueue.postRunnable { PluginRpc.detach(plugin) }
+        Utilities.globalQueue.postRunnable { detachPlugin(plugin) }
         drain()
 
         assertEquals(1, applied().single().updates.size)
@@ -302,7 +302,7 @@ class PluginRpcUpdateChainTest {
         drain()
         assertEquals(1, plugin.js.updateDispatches.size, "one stage at a time")
 
-        Utilities.globalQueue.postRunnable { PluginRpc.detach(plugin) }
+        Utilities.globalQueue.postRunnable { detachPlugin(plugin) }
         drain()
 
         assertEquals(1, plugin.js.updateDispatches.size, "the second unit must not enter a dying engine")
@@ -434,7 +434,7 @@ class PluginRpcUpdateChainTest {
         assertTrue(applied is TLRPC.TL_updates, "got ${applied.javaClass.simpleName}")
         val update = applied.updates.single() as TL_update.TL_updateNewMessage
         assertEquals(9, update.pts)
-        assertTrue(PluginRpc.isDropped(update), "and nothing of it is applied")
+        assertTrue(PluginUpdates.isDropped(update), "and nothing of it is applied")
     }
 
     /**
@@ -516,7 +516,7 @@ class PluginRpcUpdateChainTest {
         drain()
 
         assertSame(hostile, applied().singleOrNull())
-        assertTrue(PluginRpc.isDropped(doomed))
+        assertTrue(PluginUpdates.isDropped(doomed))
     }
 
     /**

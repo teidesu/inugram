@@ -7,27 +7,14 @@ import android.content.Context
 import android.content.Intent
 import android.net.Uri
 import android.os.Bundle
-import android.os.SystemClock
 import android.util.Log
-import android.view.View
 import android.widget.Toast
-import desu.inugram.core.plugins.FsQuota
 import desu.inugram.core.plugins.PluginWire
 import desu.inugram.helpers.plugins.ApiListener
 import desu.inugram.helpers.plugins.Plugin
-import desu.inugram.helpers.plugins.PluginDispatch
 import desu.inugram.helpers.plugins.PluginManager
 import desu.inugram.helpers.plugins.QuickJs
-import desu.inugram.helpers.plugins.io.PluginBlobs
-import desu.inugram.helpers.plugins.io.PluginFetch
-import desu.inugram.helpers.plugins.io.PluginFs
-import desu.inugram.helpers.plugins.platform.PluginJvm
-import desu.inugram.helpers.plugins.platform.PluginNotifications
-import desu.inugram.helpers.plugins.platform.PluginXposed
-import desu.inugram.helpers.plugins.tg.PluginReads
-import desu.inugram.helpers.plugins.tg.PluginWrites
 import desu.inugram.helpers.plugins.ui.PluginActions
-import desu.inugram.helpers.plugins.ui.PluginCanvas
 import desu.inugram.helpers.plugins.ui.PluginIcons
 import desu.inugram.helpers.plugins.ui.PluginScreens
 import desu.inugram.helpers.plugins.ui.PluginUi
@@ -38,7 +25,6 @@ import org.telegram.messenger.ApplicationLoader
 import org.telegram.messenger.NotificationCenter
 import org.telegram.messenger.UserConfig
 import org.telegram.messenger.Utilities
-import org.telegram.ui.ActionBar.AlertDialog
 import org.telegram.ui.LaunchActivity
 
 /**
@@ -69,7 +55,7 @@ object PluginApi {
             }
 
             override fun uiDialog(requestId: Long, optionsJson: String): String? =
-                showDialog(plugin, engine, requestId, optionsJson)
+                PluginUi.dialog(plugin, engine, requestId, optionsJson)
 
             override fun uiPrompt(requestId: Long, optionsJson: String): String? =
                 PluginUi.prompt(plugin, engine, requestId, optionsJson)
@@ -119,43 +105,6 @@ object PluginApi {
         }
     }
 
-    /** the per-engine clock [PluginBridge] carries; nothing can ask for a wake before the plugin's own code runs */
-    fun timerSchedulerFor(plugin: Plugin, engine: QuickJs): (Long) -> Unit = TimerThrottle(plugin, engine)::schedule
-
-    /** the app screen is here rather than in `PluginJvm`, which reaches no `Activity` of its own */
-    fun jvmListenerFor(plugin: Plugin, engine: QuickJs) = PluginJvm.listenerFor(plugin, engine, AppScreen)
-
-    /**
-     * Everything the engine's own bindings need in place, in the one order that works: the read
-     * surface installs from inside `installApi`, taking the peer helpers `inu.utils` leaves behind
-     * and the `Account` handles it hangs its getters on, and `inu.xposed` mints every handle its
-     * entry points take out of `inu.jvm`'s table.
-     */
-    fun install(plugin: Plugin, engine: QuickJs) {
-        PluginJvm.install(engine)
-        PluginXposed.install(engine)
-        engine.installApi(PluginBlobs.dirFor(plugin.id))
-        // after installApi, which creates the blob table `fs.write` reads a `Blob` through. A plugin that declared no `fs` gets no bindings and no directory
-        val quota = FsQuota.forGrants(plugin.manifest.grants)
-        if (quota != null) {
-            engine.installFs(
-                PluginFs.dirFor(plugin.id),
-                quota,
-                PluginFs.isUnscoped(plugin.permissions),
-                PluginFs.androidDirs(),
-            )
-        }
-        // a plugin loaded while the app is hidden would otherwise tick unthrottled until the next transition; no callback can hear this, its own code not having run yet
-        if (!foreground) engine.appVisibilityChanged(false)
-    }
-
-    /** read live rather than off a snapshot, which would be a strong reference to a screen the user has already left. Here rather than in `PluginJvm`, which reaches no `Activity` of its own */
-    private object AppScreen : PluginJvm.AppScreen {
-        override fun currentFragment(): Any? = LaunchActivity.getSafeLastFragment()
-
-        override fun currentActivity(): Any? = LaunchActivity.instance?.takeIf { !it.isFinishing }
-    }
-
     /**
      * Deliberately **not** `Browser.openUrl`, which appends the account's `autologin_token` to any
      * url whose host the server put in `autologinDomains` - precisely what the takeover filter
@@ -199,69 +148,6 @@ object PluginApi {
         } catch (e: Exception) {
             Log.e(TAG, "clipboard read failed", e)
             ""
-        }
-    }
-
-    // the share of wall time one plugin's timer callbacks may take on globalQueue: a tick is followed by (100/this - 1) times its own cost
-    private const val TIMER_DUTY_PERCENT = 10
-
-    // what bounds a chain of ~free ticks, which no duty cycle can: browsers' nested-setTimeout clamp, and the wheel's own setInterval floor
-    private const val MIN_WAKE_GAP_MS = 4L
-
-    private const val NO_WAKE = -1L
-
-    /**
-     * paces one engine's timer wakes on [Utilities.globalQueue].
-     *
-     * Timers are the only thing a plugin can put on that queue without ever returning to the engine,
-     * and the native deadline bounds one entry rather than their rate: `setTimeout(function f() {
-     * setTimeout(f, 0) }, 0)` re-arms forever. So a tick is charged for what it cost and the next
-     * waits out the difference.
-     *
-     * Here rather than in the wheel because it is not a statement about timers: the engine decides
-     * when it *wants* waking, this decides when the host can afford it. A delayed wake only ever
-     * fires later, never less, so it composes with the background floor by `max`.
-     */
-    private class TimerThrottle(private val plugin: Plugin, private val engine: QuickJs) {
-        private val wake = Runnable { tick() }
-
-        private var wantedAt = NO_WAKE
-
-        private var readyAt = 0L
-
-        fun schedule(delayMs: Long) {
-            if (delayMs < 0) {
-                wantedAt = NO_WAKE
-                Utilities.globalQueue.cancelRunnable(wake)
-                return
-            }
-            wantedAt = SystemClock.uptimeMillis() + delayMs
-            post()
-        }
-
-        private fun post() {
-            val at = maxOf(wantedAt, readyAt)
-            Utilities.globalQueue.cancelRunnable(wake)
-            Utilities.globalQueue.postRunnable(wake, maxOf(0L, at - SystemClock.uptimeMillis()))
-        }
-
-        private fun tick() {
-            // after a reload the plugin runs on a new engine with its own wheel
-            if (!PluginDispatch.isLive(plugin, engine)) return
-            wantedAt = NO_WAKE
-            val startedAt = System.nanoTime()
-            try {
-                engine.runTimers()
-            } finally {
-                readyAt = SystemClock.uptimeMillis() + cooldownMs(System.nanoTime() - startedAt)
-                // the tick re-armed from inside itself, before its own cost was known
-                if (wantedAt != NO_WAKE) post()
-            }
-        }
-
-        private fun cooldownMs(busyNanos: Long): Long {
-            val cooldown = busyNanos / TIMER_DUTY_PERCENT * (100 - TIMER_DUTY_PERCENT)
-            return maxOf(MIN_WAKE_GAP_MS, (cooldown + 999_999L) / 1_000_000L)
         }
     }
 
@@ -361,57 +247,5 @@ object PluginApi {
                 center.addObserver(observer, NotificationCenter.appDidLogout)
             }
         }
-    }
-
-    private fun showDialog(plugin: Plugin, engine: QuickJs, requestId: Long, optionsJson: String): String? {
-        val options = try {
-            JSONObject(optionsJson)
-        } catch (e: Exception) {
-            return "dialog: ${e.message}"
-        }
-        AndroidUtilities.runOnUIThread {
-            var settled = false
-            fun settle(result: String) {
-                if (settled) return
-                settled = true
-                PluginDispatch.onEngine(plugin, engine) { engine.resolveDialog(requestId, result) }
-            }
-
-            val activity = LaunchActivity.instance
-            if (activity == null || activity.isFinishing) {
-                settle("dismissed")
-                return@runOnUIThread
-            }
-            try {
-                val builder = AlertDialog.Builder(activity)
-                options.optString("title").takeIf { it.isNotEmpty() }?.let { builder.setTitle(it) }
-                options.optString("message").takeIf { it.isNotEmpty() }?.let { builder.setMessage(it) }
-                // rust already refused every element but `inu.android.nativeView`, which is a jvm
-                // handle id; one the plugin has since released simply leaves the dialog bodiless
-                options.optJSONObject("body")?.optLong("handle")?.let { handle ->
-                    (PluginJvm.objectAt(engine, handle) as? View)?.let { builder.setView(it) }
-                }
-                options.optString("positive").takeIf { it.isNotEmpty() }?.let {
-                    builder.setPositiveButton(it) { _, _ -> settle("positive") }
-                }
-                options.optString("negative").takeIf { it.isNotEmpty() }?.let {
-                    builder.setNegativeButton(it) { _, _ -> settle("negative") }
-                }
-                options.optString("neutral").takeIf { it.isNotEmpty() }?.let {
-                    builder.setNeutralButton(it) { _, _ -> settle("neutral") }
-                }
-                val dialog = builder.create()
-                // buttons settle first (their click listeners run before dismissal), so this only
-                // catches back-press / outside-tap / activity teardown
-                dialog.setOnDismissListener { settle("dismissed") }
-                val fragment = LaunchActivity.getSafeLastFragment()
-                // BaseFragment.showDialog returns null when it refuses to show (mid-transition
-                // etc.) - without the fallback the promise would hang forever
-                if (fragment?.showDialog(dialog) == null) dialog.show()
-            } catch (e: Exception) {
-                settle("dismissed")
-            }
-        }
-        return null
     }
 }

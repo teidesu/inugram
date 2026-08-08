@@ -9,9 +9,11 @@ import desu.inugram.helpers.plugins.platform.PluginNotifications
 import desu.inugram.helpers.plugins.tg.PluginDeserialize
 import desu.inugram.helpers.plugins.tg.PluginReads
 import desu.inugram.helpers.plugins.tg.PluginRpc
+import desu.inugram.helpers.plugins.tg.PluginUpdates
 import desu.inugram.helpers.plugins.tg.PluginWrites
+import desu.inugram.helpers.plugins.tl.TlFilter
 import desu.inugram.helpers.plugins.tl.TlHandles
-import desu.inugram.helpers.plugins.tl.TlJson
+import desu.inugram.helpers.plugins.tl.TlReflect
 import desu.inugram.helpers.plugins.ui.PluginActions
 import java.io.File
 import kotlin.test.assertEquals
@@ -82,17 +84,29 @@ private fun clearDeserializeRules() {
 }
 
 private fun clearRpcState() {
-    for (field in PluginRpc::class.java.declaredFields) {
-        field.isAccessible = true
-        when (field.name) {
-            "interceptorsByMethod", "updateListenersByType", "updateInterceptorsByType" ->
-                field.set(PluginRpc, emptyMap<String, Any>())
-            "updateRegs", "updateInterceptRegs" -> field.set(PluginRpc, emptyList<Any>())
-            "hasInterceptors", "hasUpdateListeners", "hasUpdateInterceptors" -> field.setBoolean(PluginRpc, false)
-            else -> when (val value = field.get(PluginRpc)) {
-                is MutableMap<*, *> -> value.clear()
-                is MutableCollection<*> -> value.clear()
+    for (owner in listOf(PluginRpc, PluginUpdates)) {
+        for (field in owner.javaClass.declaredFields) {
+            field.isAccessible = true
+            when (field.name) {
+                "interceptorsByMethod", "updateListenersByType", "updateInterceptorsByType" ->
+                    field.set(owner, emptyMap<String, Any>())
+                "updateRegs", "updateInterceptRegs" -> field.set(owner, emptyList<Any>())
+                "hasInterceptors", "hasUpdateListeners", "hasUpdateInterceptors" -> field.setBoolean(owner, false)
+                else -> when (val value = field.get(owner)) {
+                    is MutableMap<*, *> -> value.clear()
+                    is MutableCollection<*> -> value.clear()
+                }
             }
+        }
+    }
+    // the per-plugin handle tables, which moved out of PluginRpc into TlHandles' companion and are
+    // reached the same way for the same reason: a table left behind is another test's plugin
+    val companion = TlHandles.Companion
+    for (field in companion.javaClass.declaredFields) {
+        field.isAccessible = true
+        when (val value = field.get(companion)) {
+            is MutableMap<*, *> -> value.clear()
+            is MutableCollection<*> -> value.clear()
         }
     }
 }
@@ -185,11 +199,12 @@ fun startPlugin(name: String, vararg grants: String): Plugin {
  * touches them, so they refuse loudly instead of recording.
  */
 fun attachBridge(plugin: Plugin, engine: RecordingQuickJs) {
-    val tl = PluginRpc.tlFor(plugin)
+    val tl = TlHandles.attach(plugin, TlFilter.policyFor(plugin.permissions))
     val jvm = PluginJvm.listenerFor(plugin, engine, testAppScreen)
     engine.start(PluginBridge(
         core = DeviceMissing,
         rpc = PluginRpc.listenerFor(plugin, engine, tl),
+        updates = PluginUpdates.listenerFor(plugin),
         tl = tl,
         deserialize = PluginDeserialize.listenerFor(plugin, engine),
         api = DeviceMissing,
@@ -324,15 +339,8 @@ fun Plugin.complete(dispatchId: Long, resultWire: String) =
 
 fun Plugin.tl(): TlListener = js.listener!!
 
-/**
- * the handle table [PluginRpc] mints into for a plugin, so a test can ask what a wire it handed the
- * engine actually points at.
- */
-@Suppress("UNCHECKED_CAST")
-fun tlTableOf(plugin: Plugin): TlHandles? {
-    val field = PluginRpc::class.java.getDeclaredField("tlTables").apply { isAccessible = true }
-    return (field.get(PluginRpc) as Map<Plugin, TlHandles>)[plugin]
-}
+/** the handle table a plugin's materializations mint into, so a test can ask what a wire points at */
+fun tlTableOf(plugin: Plugin): TlHandles? = TlHandles.of(plugin)
 
 /**
  * every observer the *bridge* is holding, on every centre a post could come from. The app's own
@@ -437,7 +445,7 @@ fun jvmContract(): String = contractAsset("android.jvm.d.ts")
  * over: the app was handed nothing and gets it back later.
  */
 fun deliverUpdates(updates: TLRPC.Updates, account: Int = 0, fromQueue: Boolean = false): Boolean =
-    PluginRpc.onUpdates(TestApp.updatesController(account), updates, account, fromQueue)
+    PluginUpdates.onUpdates(TestApp.updatesController(account), updates, account, fromQueue)
 
 /** what the app was actually handed, in order */
 fun applied(account: Int = 0): List<TLRPC.Updates> = TestApp.updatesController(account).processed
@@ -466,7 +474,7 @@ fun deliverDifference(
     val run = DifferenceRun(ArrayList(newMessages), ArrayList(otherUpdates))
     lateinit var runnable: Runnable
     runnable = Runnable {
-        if (PluginRpc.onDifference(run.newMessages, run.otherUpdates, account, runnable)) return@Runnable
+        if (PluginUpdates.onDifference(run.newMessages, run.otherUpdates, account, runnable)) return@Runnable
         run.applied++
     }
     runnable.run()
@@ -482,7 +490,7 @@ fun peerChannel(id: Long): TLRPC.TL_peerChannel = TLRPC.TL_peerChannel().apply {
  * for anything that came off the wire. without it an optional field a test just assigned reads back
  * as absent, exactly as it would for the app.
  */
-fun <T : TLObject> T.synced(): T = apply { TlJson.syncFlags(this) }
+fun <T : TLObject> T.synced(): T = apply { TlReflect.syncFlags(this) }
 
 /** a message from Telegram's own service account, i.e. one login code redaction applies to */
 fun serviceMessage(text: String, id: Int = 1): TLRPC.TL_message = TLRPC.TL_message().apply {
@@ -510,4 +518,16 @@ fun List<Any>.toJsonArray(): org.json.JSONArray {
     val array = org.json.JSONArray()
     for (item in this) array.put(item)
     return array
+}
+
+/**
+ * the tg half of `PluginManager.teardown`, whose own ordering `ForkWiringTest` lints: both chains
+ * abandon before the handle table is released, or a stage rejecting inside this plugin finds every
+ * field of its own request expired.
+ */
+fun detachPlugin(plugin: Plugin) {
+    TlHandles.beginDetach(plugin)
+    PluginRpc.detach(plugin)
+    PluginUpdates.detach(plugin)
+    TlHandles.endDetach(plugin)
 }

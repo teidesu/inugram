@@ -1,9 +1,9 @@
 package desu.inugram.helpers.plugins.tg
 
-import desu.inugram.core.plugins.ScopeMatch
 import desu.inugram.core.plugins.PluginWire
+import desu.inugram.core.plugins.ScopeMatch
+import desu.inugram.helpers.plugins.EngineDispatch
 import desu.inugram.helpers.plugins.Plugin
-import desu.inugram.helpers.plugins.PluginDispatch
 import desu.inugram.helpers.plugins.QuickJs
 import desu.inugram.helpers.plugins.tg.PluginWrites.Call
 import desu.inugram.helpers.plugins.tg.PluginWrites.refuse
@@ -370,7 +370,7 @@ object PluginMedia {
 
     private fun report(transfer: Transfer, loaded: Long, total: Long) {
         val engine = transfer.call.engine
-        PluginDispatch.onEngine(transfer.call.plugin, engine) {
+        EngineDispatch.onEngine(transfer.call.plugin, engine) {
             engine.writeProgress(transfer.call.requestId, loaded, total)
         }
     }

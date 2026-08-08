@@ -72,7 +72,7 @@ pub struct FetchState {
 }
 
 /// The host the grant is checked against, from [`crate::engine::url`]'s screen - which `openUrl`
-/// runs too, both apis handing the string on to something that re-parses it. `PluginFetch.hostOf`
+/// runs too, both apis handing the string on to something that re-parses it. `EgressPolicy.hostOf`
 /// does it a third time with a real url parser and is the authority; this is the pre-flight that
 /// decides which grant to ask for.
 fn parse_target(url: &str) -> Result<String, String> {

@@ -56,14 +56,14 @@ class StockHooksTest {
         )
         assertOpensWith(
             body,
-            "if (desu.inugram.helpers.plugins.tg.PluginRpc.onUpdates(",
+            "if (desu.inugram.helpers.plugins.tg.PluginUpdates.onUpdates(",
             "interceptUpdate takes the whole batch over by answering true here; below any of the " +
                 "branches, a drop would come after the app already applied the update",
         )
     }
 
     /**
-     * The two compressed short forms carry no `Update`, so `PluginRpc.normalizeShortMessage` has to
+     * The two compressed short forms carry no `Update`, so `PluginUpdates.normalizeShortMessage` has to
      * build the message stock would have applied. It calls stock's own builder for it, and this is
      * what keeps that true: a second copy drifts silently, which is how it once lost `unread` and
      * the Saved Messages adjustments that stock does at the end.
@@ -101,7 +101,7 @@ class StockHooksTest {
             "public boolean processUpdateArray(",
         )
         assertTrue(
-            Regex("""if \(desu\.inugram\.helpers\.plugins\.tg\.PluginRpc\.isDropped\(baseUpdate\)\) \{\s*continue;""")
+            Regex("""if \(desu\.inugram\.helpers\.plugins\.tg\.PluginUpdates\.isDropped\(baseUpdate\)\) \{\s*continue;""")
                 .containsMatchIn(body),
             "interceptUpdate's 'drop' verdict is enforced here and nowhere else: without it every " +
                 "dropped update is applied, and the batch still carries them all by design",
@@ -129,7 +129,7 @@ class StockHooksTest {
     @Test
     fun `the difference walk is handed over at the top of its runnable, above the secret-chat decrypt`() {
         val source = stock("org/telegram/messenger/MessagesController.java")
-        val hook = "desu.inugram.helpers.plugins.tg.PluginRpc.onDifference("
+        val hook = "desu.inugram.helpers.plugins.tg.PluginUpdates.onDifference("
         assertEquals(
             2,
             source.split(hook).size - 1,
@@ -145,7 +145,7 @@ class StockHooksTest {
         assertEquals(
             2,
             hooked.size,
-            "PluginRpc.onDifference is no longer the first statement of both difference runnables",
+            "PluginUpdates.onDifference is no longer the first statement of both difference runnables",
         )
         for (at in hooked) {
             val call = source.substring(at, source.indexOf(')', source.indexOf(hook, at)))
@@ -189,10 +189,10 @@ class StockHooksTest {
         assertEquals(
             listOf(
                 "org/telegram/messenger/ApplicationLoader.java -> InuHooks.onAppBoot",
-                "org/telegram/messenger/MessagesController.java -> PluginRpc.isDropped",
-                "org/telegram/messenger/MessagesController.java -> PluginRpc.onDifference",
-                "org/telegram/messenger/MessagesController.java -> PluginRpc.onDifference",
-                "org/telegram/messenger/MessagesController.java -> PluginRpc.onUpdates",
+                "org/telegram/messenger/MessagesController.java -> PluginUpdates.isDropped",
+                "org/telegram/messenger/MessagesController.java -> PluginUpdates.onDifference",
+                "org/telegram/messenger/MessagesController.java -> PluginUpdates.onDifference",
+                "org/telegram/messenger/MessagesController.java -> PluginUpdates.onUpdates",
                 "org/telegram/tgnet/ConnectionsManager.java -> PluginRpc.maybeIntercept",
                 "org/telegram/tgnet/ConnectionsManager.java -> PluginRpc.onRequestBoundToGuid",
                 "org/telegram/tgnet/ConnectionsManager.java -> PluginRpc.onRequestCancelled",

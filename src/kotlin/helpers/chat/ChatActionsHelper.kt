@@ -17,6 +17,7 @@ import desu.inugram.helpers.menu.ChatMenuConfig
 import desu.inugram.helpers.menu.reorderByMenu
 import desu.inugram.helpers.plugins.tl.TlFilter
 import desu.inugram.helpers.plugins.tl.TlJson
+import desu.inugram.helpers.plugins.ui.ActionSurface
 import desu.inugram.helpers.plugins.ui.PluginActions
 import desu.inugram.helpers.translate.TranslateHelper
 import desu.inugram.ui.showInputDialog
@@ -201,7 +202,7 @@ object ChatActionsHelper {
         // menu has nothing left to write into
         val surfaceId = PluginActions.openEditorSurface(EditorSurface(enterView))
         editorSurfaces.put(enterView, surfaceId)?.let(PluginActions::closeEditorSurface)
-        val surface = PluginActions.Surface.editor(
+        val surface = ActionSurface.editor(
             activity.currentAccount,
             activity.dialogId,
             activity.topicId,
@@ -285,7 +286,7 @@ object ChatActionsHelper {
         }
     }
 
-    private fun pluginSurface(activity: ChatActivity) = PluginActions.Surface.chat(
+    private fun pluginSurface(activity: ChatActivity) = ActionSurface.chat(
         activity.currentAccount,
         activity.dialogId,
         activity.topicId,

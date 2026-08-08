@@ -20,6 +20,7 @@ import desu.inugram.helpers.WebAppHelper
 import desu.inugram.helpers.chat.BlockedMessagesHelper
 import desu.inugram.helpers.chat.ChatHelper
 import desu.inugram.helpers.chat.ForumDisplayHelper
+import desu.inugram.helpers.plugins.ui.ActionSurface
 import desu.inugram.helpers.plugins.ui.PluginActions
 import java.util.Date
 import java.util.WeakHashMap
@@ -270,7 +271,7 @@ object ProfileHelper {
     private fun addPluginItems(otherItem: ActionBarMenuItem, currentAccount: Int, dialogId: Long) {
         pluginRows.remove(otherItem)
         if (!PluginActions.hasRows(PluginActions.KIND_PROFILE)) return
-        val surface = PluginActions.Surface.profile(currentAccount, dialogId)
+        val surface = ActionSurface.profile(currentAccount, dialogId)
         PluginActions.render(PluginActions.KIND_PROFILE, surface) { rows ->
             pluginRows[otherItem] = rows
             rows.forEachIndexed { index, row ->
@@ -283,7 +284,7 @@ object ProfileHelper {
 
     private fun dispatchPluginItem(id: Int, otherItem: ActionBarMenuItem?, currentAccount: Int, dialogId: Long): Boolean {
         val row = PluginActions.rowAt(pluginRows[otherItem].orEmpty(), id) ?: return false
-        PluginActions.dispatch(row, PluginActions.Surface.profile(currentAccount, dialogId))
+        PluginActions.dispatch(row, ActionSurface.profile(currentAccount, dialogId))
         return true
     }
 

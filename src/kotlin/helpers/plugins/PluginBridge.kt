@@ -20,6 +20,7 @@ import desu.inugram.core.plugins.PluginWire
 class PluginBridge(
     core: CoreListener,
     rpc: RpcListener,
+    updates: UpdatesListener,
     val tl: TlListener,
     deserialize: DeserializeListener,
     api: ApiListener,
@@ -33,6 +34,7 @@ class PluginBridge(
 ) : PluginListener,
     CoreListener by core,
     RpcListener by rpc,
+    UpdatesListener by updates,
     TlListener by tl,
     DeserializeListener by deserialize,
     ApiListener by api,

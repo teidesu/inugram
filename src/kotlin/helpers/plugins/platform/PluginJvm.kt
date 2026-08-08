@@ -3,11 +3,11 @@ package desu.inugram.helpers.plugins.platform
 import android.util.Base64
 import dalvik.system.DexClassLoader
 import desu.inugram.core.plugins.PluginInstalls
-import desu.inugram.core.plugins.ScopeMatch
 import desu.inugram.core.plugins.PluginWire
+import desu.inugram.core.plugins.ScopeMatch
+import desu.inugram.helpers.plugins.EngineDispatch
 import desu.inugram.helpers.plugins.JvmListener
 import desu.inugram.helpers.plugins.Plugin
-import desu.inugram.helpers.plugins.PluginDispatch
 import desu.inugram.helpers.plugins.QuickJs
 import java.io.File
 import java.lang.reflect.Executable
@@ -497,7 +497,7 @@ object PluginJvm {
         /** **posted, never inline**: the reflected call that handed the object over may still be on the stack, inside the engine */
         fun fire(callbackId: Int) {
             // `live` on top of the engine identity: a disposed runnable java kept hold of
-            PluginDispatch.onEngine(plugin, engine) { if (live) engine.jvmCallback(callbackId) }
+            EngineDispatch.onEngine(plugin, engine) { if (live) engine.jvmCallback(callbackId) }
         }
 
         private fun loadDex(path: String, args: Array<String>): String {

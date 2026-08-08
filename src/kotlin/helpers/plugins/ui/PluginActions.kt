@@ -10,7 +10,6 @@ import java.util.concurrent.CopyOnWriteArrayList
 import org.json.JSONArray
 import org.json.JSONObject
 import org.telegram.messenger.AndroidUtilities
-import org.telegram.messenger.DialogObject
 import org.telegram.messenger.Utilities
 
 /**
@@ -136,7 +135,7 @@ object PluginActions {
      * exactly once and never before this returns, so a menu can reserve its rows and bind its cells
      * in the same turn it asked; a caller that has already given up ignores it.
      */
-    fun render(kind: Int, surface: Surface, onRows: (List<ActionRow>) -> Unit) {
+    fun render(kind: Int, surface: ActionSurface, onRows: (List<ActionRow>) -> Unit) {
         if (surface.isSecret) {
             AndroidUtilities.runOnUIThread { onRows(emptyList()) }
             return
@@ -155,7 +154,7 @@ object PluginActions {
      * disabled, uninstalled or reloaded while its menu was open has an engine nothing lists any
      * more, and the row does nothing rather than reaching whatever took its token.
      */
-    fun dispatch(row: ActionRow, surface: Surface) {
+    fun dispatch(row: ActionRow, surface: ActionSurface) {
         Utilities.globalQueue.postRunnable {
             if (row.owner !in liveOrder()) return@postRunnable
             row.owner.dispatchAction(surface.kind, row.token, surface.json)
@@ -172,66 +171,6 @@ object PluginActions {
     fun closeEditorSurface(id: Long) {
         if (editorSurfaces.remove(id) == null) return
         liveEditorSurfaces = editorSurfaces.keys.toSet()
-    }
-
-    /**
-     * everything a context is built from, already serialized. Held as one string because it crosses
-     * to the engine unchanged and is the same for every plugin in one menu.
-     */
-    class Surface private constructor(val json: String, internal val kind: Int, dialogId: Long) {
-        /**
-         * an action never fires in a secret chat, which is the same rule
-         * [PluginReads.dialogIdOf] enforces for every read - stated once here so no attach point
-         * can forget it
-         */
-        internal val isSecret: Boolean = DialogObject.isEncryptedDialog(dialogId)
-
-        companion object {
-            fun global(accountId: Int): Surface =
-                Surface(JSONObject().put("accountId", accountId).toString(), KIND_GLOBAL, 0)
-
-            fun chat(accountId: Int, dialogId: Long, topicId: Long?): Surface =
-                Surface(chatJson(accountId, dialogId, topicId).toString(), KIND_CHAT, dialogId)
-
-            fun profile(accountId: Int, dialogId: Long): Surface =
-                Surface(chatJson(accountId, dialogId, null).toString(), KIND_PROFILE, dialogId)
-
-            fun message(accountId: Int, dialogId: Long, topicId: Long?, messageIds: List<Int>): Surface {
-                val ids = JSONArray()
-                for (id in messageIds) ids.put(id)
-                return Surface(
-                    chatJson(accountId, dialogId, topicId).put("messageIds", ids).toString(),
-                    KIND_MESSAGE,
-                    dialogId,
-                )
-            }
-
-            fun editor(
-                accountId: Int,
-                dialogId: Long,
-                topicId: Long?,
-                surfaceId: Long,
-                text: String,
-                entitiesJson: String?,
-            ): Surface {
-                val draft = JSONObject().put("text", text)
-                if (entitiesJson != null) draft.put("entities", JSONArray(entitiesJson))
-                return Surface(
-                    chatJson(accountId, dialogId, topicId)
-                        .put("surface", surfaceId)
-                        .put("draft", draft)
-                        .toString(),
-                    KIND_EDITOR,
-                    dialogId,
-                )
-            }
-
-            private fun chatJson(accountId: Int, dialogId: Long, topicId: Long?): JSONObject {
-                val out = JSONObject().put("accountId", accountId).put("dialogId", dialogId)
-                if (topicId != null && topicId != 0L) out.put("topicId", topicId)
-                return out
-            }
-        }
     }
 
     /**

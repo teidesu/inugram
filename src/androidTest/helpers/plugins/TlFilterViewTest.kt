@@ -50,7 +50,7 @@ class TlFilterViewTest {
      * `updateShortMessage` is the form a 1:1 message actually arrives in, and it carries the text on
      * `Updates` rather than in a `Message` - so a redaction predicate keyed on the `Message` class
      * misses the one shape a login code reaches the device in. The update fan-out never shows this
-     * object to a plugin (`PluginRpc.normalizeShortMessage` builds a synthetic `TL_message` first),
+     * object to a plugin (`PluginUpdates.normalizeShortMessage` builds a synthetic `TL_message` first),
      * but `interceptDeserialize` materializes the real one.
      */
     @Test

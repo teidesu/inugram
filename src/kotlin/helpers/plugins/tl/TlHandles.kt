@@ -6,10 +6,13 @@ import desu.inugram.core.plugins.DeserializeGuards
 import desu.inugram.core.plugins.TlFlags
 import desu.inugram.core.plugins.TlNames
 import desu.inugram.core.plugins.PluginWire
+import desu.inugram.helpers.plugins.Plugin
 import desu.inugram.helpers.plugins.QuickJs
 import desu.inugram.helpers.plugins.TlListener
 import java.lang.reflect.ParameterizedType
 import java.lang.reflect.Type
+import java.util.Collections
+import java.util.IdentityHashMap
 import org.json.JSONArray
 import org.json.JSONTokener
 import org.telegram.tgnet.TLObject
@@ -145,18 +148,18 @@ class TlHandles(private val policy: TlFilter.Policy) : TlListener {
 
     override fun tlOwnKeys(handle: Long): String? {
         val target = table[handle]?.target as? TLObject ?: return null
-        val fields = TlJson.publicFields(target.javaClass).keys.filter { isVisibleField(target, it) }
+        val fields = TlReflect.publicFields(target.javaClass).keys.filter { isVisibleField(target, it) }
         return (sequenceOf("_") + fields).joinToString(",")
     }
 
     /** `in` and `Object.keys` have to agree with reads: no flag words, no cleared-bit fields, nothing [TlFilter] hides */
     private fun isVisibleField(target: TLObject, key: String): Boolean {
         val cls = target.javaClass
-        if (!TlJson.publicFields(cls).containsKey(key)) return false
+        if (!TlReflect.publicFields(cls).containsKey(key)) return false
         if (TlFlags.isFlagWord(cls, key)) return false
         if (TlFilter.hidesField(policy, cls, key)) return false
         val gate = TlFlags.gateOf(cls, key) ?: return true
-        return isBitSet(target, cls, gate)
+        return TlReflect.isBitSet(target, cls, gate)
     }
 
     override fun tlCopy(handle: Long): String? {
@@ -182,12 +185,12 @@ class TlHandles(private val policy: TlFilter.Policy) : TlListener {
         if (TlFlags.isFlagWord(cls, key)) return PluginWire.encodeNull()
         // a filtered-out field reads as absent, exactly like a cleared flag bit, never as an error
         if (TlFilter.hidesField(policy, cls, key)) return PluginWire.encodeNull()
-        val field = TlJson.publicFields(cls)[key]
+        val field = TlReflect.publicFields(cls)[key]
             ?: return PluginWire.encodeError("no such field '$key' on '${TlNames.classNameToTlName(cls)}'")
         // a field whose bit is clear isn't there, whatever the java slot happens to hold - stock
         // parks placeholders in some of them (`photo = new TL_photoEmpty()`)
         val gate = TlFlags.gateOf(cls, key)
-        if (gate != null && !isBitSet(target, cls, gate)) return PluginWire.encodeNull()
+        if (gate != null && !TlReflect.isBitSet(target, cls, gate)) return PluginWire.encodeNull()
         val value = try {
             field.get(target)
         } catch (e: Exception) {
@@ -220,7 +223,7 @@ class TlHandles(private val policy: TlFilter.Policy) : TlListener {
         if (policy.takeover && TlFilter.decidesRedaction(cls, key)) {
             return PluginWire.encodePluginError("forbidden", "'$key' is sealed while api filtering is on: login code redaction is keyed on it")
         }
-        val field = TlJson.publicFields(cls)[key]
+        val field = TlReflect.publicFields(cls)[key]
             ?: return "no such field '$key' on '${TlNames.classNameToTlName(cls)}'"
         val gated = TlFlags.gateOf(cls, key) != null
         val resolved = resolveSetValue(
@@ -235,17 +238,11 @@ class TlHandles(private val policy: TlFilter.Policy) : TlListener {
         return try {
             field.set(target, resolved.value)
             // only this field's bit: the object is live, and its untouched fields may hold placeholders a wholesale recompute would flag
-            TlJson.syncFlagBit(target, key)
+            TlReflect.syncFlagBit(target, key)
             null
         } catch (e: Exception) {
             e.message ?: "reflection set failed"
         }
-    }
-
-    private fun isBitSet(target: TLObject, cls: Class<*>, gate: TlFlags.Gate): Boolean {
-        val name = TlFlags.wordName(gate.word) ?: return true
-        val field = TlJson.publicFields(cls)[name] ?: return true
-        return (field.getInt(target) and (1 shl gate.bit)) != 0
     }
 
     private fun getVectorProp(entry: HandleEntry, target: ArrayList<*>, key: String): String {
@@ -266,7 +263,7 @@ class TlHandles(private val policy: TlFilter.Policy) : TlListener {
             } ?: return "vector length must be an integer"
             if (newLength < 0 || newLength > target.size) return "vector length can only shrink (${target.size} -> $newLength not allowed)"
             while (target.size > newLength) target.removeAt(target.size - 1)
-            entry.flagOwner?.let { (obj, name) -> TlJson.syncFlagBit(obj, name) }
+            entry.flagOwner?.let { (obj, name) -> TlReflect.syncFlagBit(obj, name) }
             return null
         }
         val index = key.toIntOrNull() ?: return "no such property '$key' on a TL vector"
@@ -276,7 +273,7 @@ class TlHandles(private val policy: TlFilter.Policy) : TlListener {
             resolveSetValue(PluginWire.decode(wire), elementType, rawClassOf(elementType), "[$index]", guarded = entry.guarded)
         if (resolved.isError) return resolved.error
         if (index == target.size) target.add(resolved.value) else target[index] = resolved.value
-        entry.flagOwner?.let { (obj, name) -> TlJson.syncFlagBit(obj, name) }
+        entry.flagOwner?.let { (obj, name) -> TlReflect.syncFlagBit(obj, name) }
         return null
     }
 
@@ -428,5 +425,35 @@ class TlHandles(private val policy: TlFilter.Policy) : TlListener {
 
         fun of(engine: QuickJs): TlHandles =
             engine.listener?.tl as? TlHandles ?: throw IllegalStateException("no handle table")
+
+        private val byPlugin = HashMap<Plugin, TlHandles>()
+
+        // `plugin.engine` is *not* this signal: it is cleared only after `engine.close()` and the
+        // table only after the abandon loops, so between the two a chain restarted by one of those
+        // abandons would read a leaving plugin as live and mint into an engine already unloading
+        private val detaching = Collections.newSetFromMap(IdentityHashMap<Plugin, Boolean>())
+
+        /** the plugin's own table, which every materialization for it mints into */
+        fun attach(plugin: Plugin, policy: TlFilter.Policy): TlHandles =
+            TlHandles(policy).also { byPlugin[plugin] = it }
+
+        fun of(plugin: Plugin): TlHandles? = byPlugin[plugin]
+
+        /** [of], but null once the plugin is on its way out - see [detaching] */
+        fun attached(plugin: Plugin): TlHandles? = if (plugin in detaching) null else byPlugin[plugin]
+
+        fun beginDetach(plugin: Plugin) {
+            detaching.add(plugin)
+        }
+
+        /**
+         * last of the whole teardown, and that is the rule: the abandons above it reject inside this
+         * plugin too, and a continuation touching its own request view must not find every field
+         * expired.
+         */
+        fun endDetach(plugin: Plugin) {
+            byPlugin.remove(plugin)?.releaseAll()
+            detaching.remove(plugin)
+        }
     }
 }

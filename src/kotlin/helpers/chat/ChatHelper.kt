@@ -33,6 +33,7 @@ import desu.inugram.helpers.font.FontImportHelper
 import desu.inugram.helpers.media.MediaSendDebugHelper
 import desu.inugram.helpers.menu.MessageMenuConfig
 import desu.inugram.helpers.menu.reorderByMenu
+import desu.inugram.helpers.plugins.ui.ActionSurface
 import desu.inugram.helpers.plugins.ui.PluginActions
 import desu.inugram.helpers.translate.TranslateHelper
 import desu.inugram.ui.MessageDetailsActivity
@@ -381,7 +382,7 @@ object ChatHelper {
      * the ui thread can be building the next menu while the render for the previous one is still
      * on its way back.
      */
-    private class MessageMenu(val surface: PluginActions.Surface) {
+    private class MessageMenu(val surface: ActionSurface) {
         var rows: List<ActionRow> = emptyList()
         val cells = HashMap<Int, ActionBarMenuSubItem>()
         var done = false
@@ -405,7 +406,7 @@ object ChatHelper {
 
         val messageIds = selectedObjectGroup?.messages?.map { it.id } ?: listOf(selectedObject.id)
         val menu = MessageMenu(
-            PluginActions.Surface.message(
+            ActionSurface.message(
                 activity.currentAccount,
                 activity.dialogId,
                 activity.topicId,

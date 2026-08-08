@@ -74,8 +74,8 @@ object PluginScreens {
     /**
      * A secret chat is opened as an ordinary [ChatActivity] whose `dialog_id` is
      * `DialogObject.makeEncryptedDialogId(encId)`, so the id is dropped here for the same reason
-     * [desu.inugram.helpers.plugins.tg.PluginReads.dialogIdOf] answers `null` for one and
-     * [PluginActions.Surface] refuses one: `common.d.ts` says a secret chat has no `DialogId` to
+     * [desu.inugram.helpers.plugins.tg.PeerSpecs.dialogIdOf] answers `null` for one and
+     * [ActionSurface] refuses one: `common.d.ts` says a secret chat has no `DialogId` to
      * name. `type` still says there was a chat, which is what [toJson] omitting a zero id leaves.
      */
     private fun namedDialogId(id: Long): Long = if (DialogObject.isEncryptedDialog(id)) 0L else id

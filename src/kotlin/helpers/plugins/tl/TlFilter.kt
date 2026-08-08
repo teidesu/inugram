@@ -62,7 +62,7 @@ object TlFilter {
 
     /** a draft rides on a `Dialog`, a `ForumTopic`, a `savedDialog` and `updateDraftMessage` as well as on `getDraft`, so this keys on the field's declared type */
     private fun isDraftField(cls: Class<*>, key: String): Boolean =
-        TlJson.publicFields(cls)[key]?.type == TLRPC.DraftMessage::class.java
+        TlReflect.publicFields(cls)[key]?.type == TLRPC.DraftMessage::class.java
 
     fun filterFieldValue(target: TLObject, key: String, value: Any?): Any? {
         if (key != ApiFilter.REDACTED_MESSAGE_FIELD || value !is String) return value

@@ -1,5 +1,6 @@
 package desu.inugram.helpers.plugins
 
+import desu.inugram.core.plugins.EgressPolicy
 import desu.inugram.core.plugins.PluginPermissions
 import desu.inugram.core.plugins.PluginWire
 import desu.inugram.helpers.plugins.io.PluginFetch
@@ -17,9 +18,13 @@ import org.junit.Before
 import org.junit.Test
 
 /**
- * The two egress rules, which only exist here: the engine checks the first url's grant and nothing
- * else, so a redirect that is screened once and an address that is checked as a literal are both
- * failures nothing else in this codebase can see.
+ * The transport: that [EgressPolicy] is asked on *every* hop rather than once, what a spec may put
+ * on the wire, and what a body costs. The rules it is asked for are `EgressPolicyTest`'s - stated
+ * against addresses a test names, which is the only way they can be stated at all.
+ *
+ * Here because okhttp is the subject: android's `HttpURLConnection` is what supplies `Host` only
+ * when it is absent, and what a real `InputStream` does when a budget runs out is not something a
+ * stand-in can answer.
  */
 class PluginFetchTest {
     @Before
@@ -30,134 +35,11 @@ class PluginFetchTest {
     private fun v4(a: Int, b: Int, c: Int, d: Int) =
         byteArrayOf(a.toByte(), b.toByte(), c.toByte(), d.toByte())
 
-    /** `1234:5678::` style, written as the 16 bytes the resolver hands over */
-    private fun v6(vararg words: Int): ByteArray {
-        val out = ByteArray(16)
-        for (i in words.indices) {
-            out[i * 2] = (words[i] shr 8).toByte()
-            out[i * 2 + 1] = words[i].toByte()
-        }
-        return out
-    }
-
-    private fun answers(vararg addresses: ByteArray): (String) -> List<ByteArray> = { addresses.toList() }
-
     private val public4 = v4(93, 184, 216, 34)
 
     private fun codeOf(wire: String?): String? {
         val decoded = PluginWire.decode(wire ?: return null)
         return (decoded as PluginWire.Value.PluginErr).code
-    }
-
-    @Test
-    fun every_private_loopback_and_link_local_v4_range_is_refused() {
-        for (address in listOf(
-            v4(127, 0, 0, 1),
-            v4(127, 255, 255, 254),
-            v4(0, 0, 0, 0),
-            v4(10, 0, 0, 5),
-            v4(172, 16, 0, 1),
-            v4(172, 31, 255, 255),
-            v4(192, 168, 1, 1),
-            v4(169, 254, 169, 254),
-            v4(100, 64, 0, 1),
-            v4(192, 0, 0, 1),
-            v4(198, 18, 0, 1),
-            v4(224, 0, 0, 1),
-            v4(255, 255, 255, 255),
-        )) {
-            assertTrue(PluginFetch.isBlockedAddress(address), address.joinToString("."))
-        }
-    }
-
-    @Test
-    fun an_ordinary_public_address_is_not_refused() {
-        for (address in listOf(public4, v4(8, 8, 8, 8), v4(1, 1, 1, 1), v4(172, 32, 0, 1), v4(100, 63, 0, 1))) {
-            assertFalse(PluginFetch.isBlockedAddress(address), address.joinToString("."))
-        }
-    }
-
-    @Test
-    fun the_v6_ranges_are_refused_too() {
-        assertTrue(PluginFetch.isBlockedAddress(v6(0, 0, 0, 0, 0, 0, 0, 1)), "::1")
-        assertTrue(PluginFetch.isBlockedAddress(v6(0, 0, 0, 0, 0, 0, 0, 0)), "::")
-        assertTrue(PluginFetch.isBlockedAddress(v6(0xfd00, 0, 0, 0, 0, 0, 0, 1)), "unique local")
-        assertTrue(PluginFetch.isBlockedAddress(v6(0xfe80, 0, 0, 0, 0, 0, 0, 1)), "link-local")
-        assertTrue(PluginFetch.isBlockedAddress(v6(0xff02, 0, 0, 0, 0, 0, 0, 1)), "multicast")
-        assertFalse(PluginFetch.isBlockedAddress(v6(0x2606, 0x4700, 0, 0, 0, 0, 0, 1)), "a public v6 address")
-    }
-
-    /** all three shapes reach the v4 address they carry, so all three are checked as one */
-    @Test
-    fun a_v4_address_wrapped_in_a_v6_one_is_unwrapped_before_it_is_judged() {
-        val mapped = v6(0, 0, 0, 0, 0, 0xffff, 0x7f00, 0x0001)
-        assertTrue(PluginFetch.isBlockedAddress(mapped), "::ffff:127.0.0.1")
-        val mappedPublic = v6(0, 0, 0, 0, 0, 0xffff, 0x5db8, 0xd822)
-        assertFalse(PluginFetch.isBlockedAddress(mappedPublic), "::ffff:93.184.216.34")
-
-        val nat64 = v6(0x0064, 0xff9b, 0, 0, 0, 0, 0xa9fe, 0xa9fe)
-        assertTrue(PluginFetch.isBlockedAddress(nat64), "64:ff9b::169.254.169.254")
-
-        val compatible = v6(0, 0, 0, 0, 0, 0, 0x0a00, 0x0001)
-        assertTrue(PluginFetch.isBlockedAddress(compatible), "::10.0.0.1")
-    }
-
-    @Test
-    fun an_address_of_a_shape_this_does_not_know_is_refused_rather_than_allowed() {
-        assertTrue(PluginFetch.isBlockedAddress(ByteArray(0)))
-        assertTrue(PluginFetch.isBlockedAddress(ByteArray(6)))
-    }
-
-    @Test
-    fun the_host_is_the_one_the_request_connects_to_never_the_one_it_reads_as() {
-        assertEquals("example.com", PluginFetch.hostOf("https://example.com/x"))
-        assertEquals("example.com", PluginFetch.hostOf("https://EXAMPLE.com.:8443/x?q=1"))
-        assertEquals("::1", PluginFetch.hostOf("http://[::1]:8080/x"))
-        assertNull(PluginFetch.hostOf("https://allowed.com@127.0.0.1/x"), "userinfo hides the real host")
-        assertNull(PluginFetch.hostOf("file:///etc/hosts"))
-        assertNull(PluginFetch.hostOf("content://media/external/1"))
-        assertNull(PluginFetch.hostOf("ftp://example.com/x"))
-        assertNull(PluginFetch.hostOf("not a url"))
-    }
-
-    @Test
-    fun a_host_the_grant_does_not_cover_is_refused_before_it_is_resolved() {
-        var resolved = false
-        val wire = PluginFetch.screenHop(grants("fetch(example.com)"), "https://evil.com/x") {
-            resolved = true
-            listOf(public4)
-        }
-        assertEquals("not-granted", codeOf(wire))
-        assertFalse(resolved, "a refused host must not even be looked up")
-    }
-
-    @Test
-    fun a_granted_host_that_resolves_into_a_private_range_is_refused() {
-        val wire = PluginFetch.screenHop(grants("fetch"), "https://localtest.me/x", answers(v4(127, 0, 0, 1)))
-        assertEquals("forbidden", codeOf(wire))
-    }
-
-    /**
-     * the resolver picks per connection, so a name with one private answer among its public ones is
-     * not a name to connect to: taking "the first address" would make the refusal a coin flip
-     */
-    @Test
-    fun one_private_answer_among_several_refuses_the_whole_name() {
-        val wire = PluginFetch.screenHop(grants("fetch"), "https://mixed.example/x", answers(public4, v4(10, 0, 0, 1)))
-        assertEquals("forbidden", codeOf(wire))
-    }
-
-    @Test
-    fun a_granted_public_host_passes() {
-        assertNull(PluginFetch.screenHop(grants("fetch(example.com)"), "https://api.example.com/x", answers(public4)))
-    }
-
-    @Test
-    fun a_name_that_does_not_resolve_fails_rather_than_being_sent() {
-        val wire = PluginFetch.screenHop(grants("fetch"), "https://nx.example/x") { emptyList() }
-        assertEquals("network", codeOf(wire))
-        val threw = PluginFetch.screenHop(grants("fetch"), "https://nx.example/x") { throw java.net.UnknownHostException() }
-        assertEquals("network", codeOf(threw))
     }
 
     /**
@@ -359,7 +241,7 @@ class PluginFetchTest {
 
     /**
      * the shape the scheme check is the only thing standing in front of: a hop that leaves http
-     * entirely. `URI.resolve` hands back the absolute `file:` url, and if [PluginFetch.hostOf] ever
+     * entirely. `URI.resolve` hands back the absolute `file:` url, and if [EgressPolicy.hostOf] ever
      * grew a fallback for a scheme it does not know, a granted host redirecting to
      * `file:///data/data/org.telegram.messenger/shared_prefs/` would be handed to the plugin as a
      * `Blob` with nothing noticing.

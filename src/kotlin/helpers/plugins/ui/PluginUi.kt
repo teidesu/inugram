@@ -5,10 +5,11 @@ import android.text.SpannableString
 import android.text.Spanned
 import android.text.style.ForegroundColorSpan
 import android.util.Log
+import android.view.View
 import android.widget.LinearLayout
 import desu.inugram.core.plugins.PluginWire
+import desu.inugram.helpers.plugins.EngineDispatch
 import desu.inugram.helpers.plugins.Plugin
-import desu.inugram.helpers.plugins.PluginDispatch
 import desu.inugram.helpers.plugins.QuickJs
 import desu.inugram.helpers.plugins.platform.PluginJvm
 import desu.inugram.ui.settings.PluginSettingsActivity
@@ -31,7 +32,7 @@ import org.telegram.ui.LaunchActivity
 /**
  * Kotlin side of the settings-page ui bridge (rust: `ui.rs`): presents [PluginSettingsActivity]
  * pages, routes `page.invalidate()` to open pages, anchors `UIAnchor.openMenu` popups to the row
- * the anchor names, and shows the `inu.ui.prompt`/`inu.ui.chooser` modals.
+ * the anchor names, and shows the `inu.ui.dialog`/`prompt`/`chooser` modals.
  *
  * Threading: upcalls arrive on [Utilities.globalQueue]; anything view-touching hops to the UI
  * thread and settles back on globalQueue with the usual engine-identity check.
@@ -57,7 +58,7 @@ object PluginUi {
         list.remove(activity)
         if (list.isNotEmpty()) return
         openPages.remove(key)
-        PluginDispatch.onEngine(activity.plugin, activity.engine) {
+        EngineDispatch.onEngine(activity.plugin, activity.engine) {
             activity.engine.uiPageClosed(activity.pageId)
         }
     }
@@ -130,7 +131,7 @@ object PluginUi {
         }
         AndroidUtilities.runOnUIThread {
             fun settle(slot: Int) {
-                PluginDispatch.onEngine(plugin, engine) { engine.uiMenuClick(menuId, slot) }
+                EngineDispatch.onEngine(plugin, engine) { engine.uiMenuClick(menuId, slot) }
             }
             val activity = openPages[PageKey(engine, pageId)]?.lastOrNull()
             val anchorView = activity?.anchorViewFor(anchorKey)
@@ -176,6 +177,58 @@ object PluginUi {
         }
     }
 
+    fun dialog(plugin: Plugin, engine: QuickJs, requestId: Long, optionsJson: String): String? {
+        val options = try {
+            JSONObject(optionsJson)
+        } catch (e: Exception) {
+            return "dialog: ${e.message}"
+        }
+        AndroidUtilities.runOnUIThread {
+            var settled = false
+            fun settle(result: String) {
+                if (settled) return
+                settled = true
+                EngineDispatch.onEngine(plugin, engine) { engine.resolveDialog(requestId, result) }
+            }
+
+            val activity = LaunchActivity.instance
+            if (activity == null || activity.isFinishing) {
+                settle("dismissed")
+                return@runOnUIThread
+            }
+            try {
+                val builder = AlertDialog.Builder(activity)
+                options.optString("title").takeIf { it.isNotEmpty() }?.let { builder.setTitle(it) }
+                options.optString("message").takeIf { it.isNotEmpty() }?.let { builder.setMessage(it) }
+                // rust already refused every element but `inu.android.nativeView`, which is a jvm
+                // handle id; one the plugin has since released simply leaves the dialog bodiless
+                options.optJSONObject("body")?.optLong("handle")?.let { handle ->
+                    (PluginJvm.objectAt(engine, handle) as? View)?.let { builder.setView(it) }
+                }
+                options.optString("positive").takeIf { it.isNotEmpty() }?.let {
+                    builder.setPositiveButton(it) { _, _ -> settle("positive") }
+                }
+                options.optString("negative").takeIf { it.isNotEmpty() }?.let {
+                    builder.setNegativeButton(it) { _, _ -> settle("negative") }
+                }
+                options.optString("neutral").takeIf { it.isNotEmpty() }?.let {
+                    builder.setNeutralButton(it) { _, _ -> settle("neutral") }
+                }
+                val dialog = builder.create()
+                // buttons settle first (their click listeners run before dismissal), so this only
+                // catches back-press / outside-tap / activity teardown
+                dialog.setOnDismissListener { settle("dismissed") }
+                val fragment = LaunchActivity.getSafeLastFragment()
+                // BaseFragment.showDialog returns null when it refuses to show (mid-transition
+                // etc.) - without the fallback the promise would hang forever
+                if (fragment?.showDialog(dialog) == null) dialog.show()
+            } catch (e: Exception) {
+                settle("dismissed")
+            }
+        }
+        return null
+    }
+
     fun prompt(plugin: Plugin, engine: QuickJs, requestId: Long, optionsJson: String): String? {
         val options = try {
             JSONObject(optionsJson)
@@ -187,7 +240,7 @@ object PluginUi {
             fun settle(text: String?) {
                 if (settled) return
                 settled = true
-                PluginDispatch.onEngine(plugin, engine) { engine.resolvePrompt(requestId, text) }
+                EngineDispatch.onEngine(plugin, engine) { engine.resolvePrompt(requestId, text) }
             }
 
             val fragment = LaunchActivity.getSafeLastFragment()
@@ -238,7 +291,7 @@ object PluginUi {
             fun settle(result: String?) {
                 if (settled) return
                 settled = true
-                PluginDispatch.onEngine(plugin, engine) { engine.resolveChooser(requestId, result) }
+                EngineDispatch.onEngine(plugin, engine) { engine.resolveChooser(requestId, result) }
             }
 
             val activity = LaunchActivity.instance

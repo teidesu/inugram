@@ -284,14 +284,32 @@ ignores every argument after it, so `node --check a.js b.js` parses `a.js`, repo
 nothing about `b.js`. Never write that form; run the script.
 
 The host half is `src/kotlin/helpers/plugins`, grouped to mirror the crate: `tg/` (`PluginRpc`,
-`PluginReads`, `PluginWrites`, `PluginMedia`, `PluginDeserialize`), `tl/` (`TlHandles`, `TlJson`,
-`TlFilter`), `ui/` (`PluginUi`, `PluginActions`, `PluginIcons`, `PluginScreens`, `PluginCanvas`),
+`PluginUpdates`, `PluginReads`, `PluginWrites`, `PeerSpecs`, `PluginMedia`, `PluginDeserialize`),
+`tl/` (`TlHandles`, `TlJson`, `TlReflect`, `TlFilter`), `ui/` (`PluginUi`, `PluginActions`,
+`ActionSurface`, `PluginIcons`, `PluginScreens`, `PluginCanvas`),
 `io/` (`PluginFetch`, `PluginFs`, `PluginBlobs`), `platform/` (`PluginJvm`, `PluginXposed`,
-`PluginNotifications`) and `api/` (`PluginApi`, `PluginKv`), with `Plugin`, `PluginManager`,
-`PluginDispatch`, `PluginListener`, `PluginBridge`, `BootGuard` and `QuickJs` left at the root. `QuickJs` cannot
+`PluginNotifications`) and `api/` (`PluginApi`, `PluginKv`, `EngineBindings`), with `Plugin`,
+`PluginManager`, `PluginStore`, `EngineDispatch`, `TimerThrottle`,
+`PluginListener`, `PluginBridge`, `BootGuard` and `QuickJs` left at the root. `QuickJs` cannot
 move: its package is half of every `Java_desu_inugram_helpers_plugins_QuickJs_*` symbol name in
 `jni/exports.rs`. The subpackages are still under the prefix `PluginJvm.ENGINE_PACKAGE` refuses, so
 reflecting back into the engine stays `forbidden`.
+
+**Four splits in that list are load-bearing rather than cosmetic.** `PluginRpc` owns the *chain* and
+`PluginUpdates` the whole update pipeline (`onUpdates`/`onDifference`/`isDropped`, the four identity
+rings, the per-account fifo) - two subsystems that shared only their per-plugin handle table and the
+plugin order, so those moved to where they belong: the table to `TlHandles`'s own companion (`attach`
+/`of`/`attached`/`beginDetach`/`endDetach`, the detach pair being what keeps a rejecting continuation
+from finding its own request expired) and the order to `PluginManager.orderIndex()`, leaving one
+`PluginRpc` → `PluginUpdates` edge and no cycle. Each keeps its **own dispatch id space**, which is
+safe because `tg/rpc.rs` keeps `dispatches` and `update_dispatches` in different maps.
+`EngineBindings` is the composition root `PluginApi` used to be wearing an api's name: the install
+ordering lives there and nowhere else. `TlReflect` is the TL class index, the `publicFields` cache
+and the flag syncing - the hot path every one of `TlHandles`/`TlJson`/`PluginDeserialize`/`TlFilter`
+reads through, and none of it JSON. `PluginStore` is the installed set on disk, split from the
+engines `PluginManager` runs: a plugin that will not *load* is the store's problem and one that
+*throws* is the manager's. `EgressPolicy` (in `:InuCore`) and `PeerSpecs` are the same move one step
+further - pure logic that had been reachable only from a device test.
 
 **Rust calls back into one object, and it is not `QuickJs`.** Every upcall is a member of
 `PluginListener` (`PluginListener.kt`), which is the union of one interface per subsystem, and the
@@ -306,7 +324,7 @@ listeners capture the engine, so `QuickJs()` allocates nothing and `start(bridge
 declarations rust looks up live somewhere a cargo test can read without one. Each
 `Plugin*` owner therefore exposes a `listenerFor(...)` that *builds* its part and an `install(...)`
 that runs its `engine.install*` call, because the bridge is assigned whole, once, before anything
-that can call into it; the ordering constraints among the installs are all in `PluginApi.install`.
+that can call into it; the ordering constraints among the installs are all in `EngineBindings.install`.
 And the bridge is also the engine's **registry**: `tl`, `canvas`, `jvm` and `xposed` are readable
 back off it, which is what their owners look up. A part is fixed for the life of the bridge, so
 teardown is `close()` on the part, never swapping it out — safe because `PluginManager.teardown`
@@ -314,7 +332,7 @@ closes the engine on the same runnable and rust cannot call a closed one.
 
 **Everything below is testable, and all of it on a device.** The bridge's suite is `src/androidTest`
 (symlinked into `:TMessagesProj`'s `androidTest` by `pnpm run setup`) —
-`./gradlew :TMessagesProj:connectedDebugAndroidTest`, 385 cases against the *real* stock classes,
+`./gradlew :TMessagesProj:connectedDebugAndroidTest`, 384 cases against the *real* stock classes,
 real `org.json`, real `SharedPreferences`, the real `DexClassLoader` and a real filesystem. **There
 is no JVM bridge harness any more.** It was a `bridgeTest` source set in `:InuCore` that compiled
 `src/kotlin/helpers/plugins` against hand-written fakes and a generated stock TL tree, with an
@@ -454,9 +472,13 @@ broken engine — or, as `api-filter-test.js` had been, red on a working one.
 - **Identity is minted at install**, never derived from the manifest: `PluginInstalls.mintId()` (32
   hex chars), persisted in `PLUGINS_STATE` next to the file it was installed from. There is no
   `@namespace` and `@name` is a label, so renaming keeps a plugin's data and a name-squatter gets an
-  empty store. The install id keys `kv` (prefs file `inuplugin_kv_<id>`) and will key the `fs` scoped
+  empty store. The install id keys `kv` (prefs file `inuplugin_kv_<id>`) and the `fs` scoped
   directory, and uninstall wipes both. Load-from-file is always a *new* install, the per-plugin
-  reload action always an update in place — nothing ever matches on a name.
+  reload action always an update in place — nothing ever matches on a name. **Every per-install
+  store is wiped from exactly one place** (`PluginManager.remove`), which is a hand-written list of
+  the owners and therefore a lint: `ForkWiringTest` finds every `fun wipe(installId` in the host and
+  fails if one is missing from that method, since a store nobody wipes outlives the plugin and is
+  then inherited by nothing - it is unreachable disk keyed on an id that will never be minted again.
 - **The boot point is `ApplicationLoader.postInitApplication`, and it blocks.** That is stock's own
   "the app is really starting" gate, idempotent behind `applicationInited` and called from ~22 entry
   points, so one hook covers the push wakeup that hands a decrypted `TL_updates` to `processUpdates`
@@ -726,7 +748,7 @@ broken engine — or, as `api-filter-test.js` had been, red on a working one.
   state, and a stray `setInterval` cannot outlive it. A tick fires only what was due when it
   started, so a timer armed *by* a callback waits for the next wake; an interval that came due
   several times over re-arms from now and fires **once**.
-- **The wake is paced by the host, because the queue is the host's** (`PluginApi.TimerThrottle`).
+- **The wake is paced by the host, because the queue is the host's** (`TimerThrottle`).
   The 2 s entry deadline bounds one entry, not entries per second, so `setTimeout(function f() {
   setTimeout(f, 0) }, 0)` is an unbounded claim on `globalQueue` that no in-engine limit can see.
   A tick is timed and the next wake is held to `max(what the wheel asked for, end of tick + 9x its
@@ -915,7 +937,7 @@ broken engine — or, as `api-filter-test.js` had been, red on a working one.
   `PluginRpc.sendWithoutInterceptors` (the same bypass *lease* `invokeRpc` takes, held until the
   delegate answers because stock re-sends the very instance on CONNECTION_NOT_INITED), and every op
   names its peer through **`writePeer`**, which refuses an encrypted dialog id with `forbidden` -
-  the write-side counterpart of `PluginReads.dialogIdOf` answering `null`. A write that skipped
+  the write-side counterpart of `PeerSpecs.dialogIdOf` answering `null`. A write that skipped
   either would have to build its own request *and* its own peer. The delegate runs on `stageQueue`,
   which is both where stock answers one and the only queue `processUpdates` may run on, so the app
   applies what a plugin sent exactly where it applies what the ui sent; only the engine settle hops
@@ -976,7 +998,7 @@ broken engine — or, as `api-filter-test.js` had been, red on a working one.
   families never reach a plugin at all: `updateServiceNotification` (a takeover rule, lifted by
   `unsafe.disableApiFiltering`) and the four **secret-chat** updates (`updateNewEncryptedMessage`/
   `updateEncryption`/`updateEncryptedChatTyping`/`updateEncryptedMessagesRead`), which nothing
-  lifts - the same rule `PluginReads.dialogIdOf` enforces by refusing an encrypted dialog id.
+  lifts - the same rule `PeerSpecs.dialogIdOf` enforces by refusing an encrypted dialog id.
 - **The demuxed events are `onUpdate` registrations, not a second stream.** `onNewMessage`/
   `onMessageEdited`/`onMessageDeleted` register for the fixed constructor lists in `tg/rpc.rs`'s
   `DEMUX_EVENTS`, holding the listener `events.js` builds around the plugin's callback — so they
@@ -991,7 +1013,7 @@ broken engine — or, as `api-filter-test.js` had been, red on a working one.
   `updateDeleteMessages` carries no peer at all and resolving one means a query against the app's
   message database that the fan-out cannot wait on.
 - **`interceptUpdate` takes the whole arriving batch over, because that is the unit the app applies
-  and the unit it is blocked on.** `PluginRpc.onUpdates` answers *true* and stock's `processUpdates`
+  and the unit it is blocked on.** `PluginUpdates.onUpdates` answers *true* and stock's `processUpdates`
   early-returns; the walk runs on `globalQueue` and the batch is handed back by calling
   `processUpdates` again on `stageQueue`, marked in `takenOver` so it is not taken over twice. Three
   things follow. The budget is **one 2 s per batch**, not per update — a per-update budget would let
@@ -1011,7 +1033,7 @@ broken engine — or, as `api-filter-test.js` had been, red on a working one.
   per-account fifo that never retires stops that account receiving anything for the life of the
   process, and nothing may escape onto `stageQueue`, which every account's update pipeline runs on.
 - **A dropped update is marked, not removed, and stock's own loop is what refuses it.** The batch is
-  handed back with every update it arrived with; `PluginRpc.isDropped(baseUpdate)` in
+  handed back with every update it arrived with; `PluginUpdates.isDropped(baseUpdate)` in
   `processUpdateArray` skips the payload. That is because stock applies a group's pts *around* that
   method (`lastPts + pts_count == pts`, then `setLastPtsValue`), so an update taken out leaves its
   pts unaccounted for: the next group stops lining up, the app parks it and runs a catch-up, and the
@@ -1084,7 +1106,7 @@ broken engine — or, as `api-filter-test.js` had been, red on a working one.
   `account.read(peers)` and needs no bridge of its own.
 - **The difference catch-up is a second dispatch site, because stock never routes it through
   `processUpdates`.** `updates.getDifference`/`getChannelDifference` walk their own
-  `other_updates`/`new_messages`, so `PluginRpc.onDifference` is hooked at the **top of each one's
+  `other_updates`/`new_messages`, so `PluginUpdates.onDifference` is hooked at the **top of each one's
   `stageQueue` runnable** — above the point `getDifference` appends the secret-chat messages it
   decrypted, which plugins have no business seeing. A `new_messages` entry is a bare `Message`, and
   is wrapped in the update the server would have sent had the client been online
@@ -1098,7 +1120,7 @@ broken engine — or, as `api-filter-test.js` had been, red on a working one.
   `Channels`, sometimes repacked into a fresh `TL_updates` around the *same* `TLRPC.Update`
   instances) and re-feeds it later as `processUpdates(_, true)`, so `onUpdates` sees one arrival
   twice; `fromQueue` alone can't tell them apart, because a wrapper is also how sub-updates the
-  first pass could not apply come back. `PluginRpc.rememberDispatch` therefore dedups on **object
+  first pass could not apply come back. `PluginUpdates.rememberDispatch` therefore dedups on **object
   identity** (bounded ring, no `TLRPC` class overrides `hashCode`), keyed on what stock would re-feed
   — the `Update` for a real batch, the batch itself for the `updateShort*` forms, whose normalized
   `updateNewMessage` is a new instance every pass. Unpacking must stay **synchronous** in the hook
@@ -1166,7 +1188,10 @@ broken engine — or, as `api-filter-test.js` had been, red on a working one.
   is `filesDir`, never the cache area (`PluginFs`): `fs.d.ts` promises durability, and it is the one
   plugin-owned tree that outlives its engine — only uninstall clears it.
 - **`fetch`'s two egress rules can only be enforced where the connection is made**, which is why
-  `io/fetch.rs` does a pre-flight and `PluginFetch` does the deciding. **Every redirect hop is
+  `io/fetch.rs` does a pre-flight and `PluginFetch` does the asking. *What* is refused is
+  `EgressPolicy`'s, in `:InuCore` and unit-tested there - the grant match, the host parse and the
+  address classification are pure logic that had been running on a phone. What `PluginFetch` is
+  responsible for is that the policy is asked at all, and asked **per hop**. **Every redirect hop is
   screened, not just the url the plugin passed** (`instanceFollowRedirects` off,
   `PluginFetch.runExchange` walking the chain itself): a client that follows them checks the grant
   once, which turns any open redirect on an allowed host into a proxy to every other, and the
@@ -1293,8 +1318,8 @@ broken engine — or, as `api-filter-test.js` had been, red on a working one.
   re-registration that is the documented way to change a row - leaving a plugin at the cap unable to
   update any of its rows for the rest of the process. It reaches the plugin as `quota-exceeded`,
   which is what a limit is called everywhere else here.
-  Secret chats are refused once, in `PluginActions.Surface`, the same rule
-  `PluginReads.dialogIdOf` enforces for reads.
+  Secret chats are refused once, in `ActionSurface`, the same rule
+  `PeerSpecs.dialogIdOf` enforces for reads.
 - **The editor rows are the second gesture-built menu**, and the only kind whose surface is a live
   object rather than a description. `ChatActionsHelper.showSendPreview` parks
   `MessageSendPreview.show()` behind one render exactly as the message menu parks its popup, and
@@ -1322,8 +1347,8 @@ broken engine — or, as `api-filter-test.js` had been, red on a working one.
   `Account` per stack entry; `dialogId`/`topicId` cost `account.read(dialogs)` and are **omitted,
   not refused**, since `type` already says whether there was one to give. A secret chat is an
   ordinary `ChatActivity` whose `dialog_id` is `makeEncryptedDialogId`, so `describe` drops that id
-  to 0 and the field goes away with it - the same refusal `PluginReads.dialogIdOf` and
-  `PluginActions.Surface` make, on the one surface that had not been counted among them.
+  to 0 and the field goes away with it - the same refusal `PeerSpecs.dialogIdOf` and
+  `ActionSurface` make, on the one surface that had not been counted among them.
 - **`openUrl` opens a page, and the clipboard is two grants.** `api::screen_external_url` allows
   **http/https only**: every other scheme names an *action* rather than a page (`tg:` is the app's
   own deeplink surface, `intent:` names an activity and its extras, `file:`/`content:` name the

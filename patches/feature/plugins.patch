@@ -21,7 +21,7 @@ index 0000000..0000000 100644
  
 -                    Utilities.stageQueue.postRunnable(() -> {
 +                    Utilities.stageQueue.postRunnable(new Runnable() { public void run() {
-+                        if (desu.inugram.helpers.plugins.tg.PluginRpc.onDifference(res.new_messages, res.other_updates, currentAccount, this)) {
++                        if (desu.inugram.helpers.plugins.tg.PluginUpdates.onDifference(res.new_messages, res.other_updates, currentAccount, this)) {
 +                            return;
 +                        }
                          boolean notifyAbountDifference = true;
@@ -42,7 +42,7 @@ index 0000000..0000000 100644
  
 -                        Utilities.stageQueue.postRunnable(() -> {
 +                        Utilities.stageQueue.postRunnable(new Runnable() { public void run() {
-+                            if (desu.inugram.helpers.plugins.tg.PluginRpc.onDifference(res.new_messages, res.other_updates, currentAccount, this)) {
++                            if (desu.inugram.helpers.plugins.tg.PluginUpdates.onDifference(res.new_messages, res.other_updates, currentAccount, this)) {
 +                                return;
 +                            }
                              if (!res.new_messages.isEmpty() || !res.new_encrypted_messages.isEmpty()) {
@@ -116,7 +116,7 @@ index 0000000..0000000 100644
 +
      // must be run from Utilities.stageQueue
      public void processUpdates(final TLRPC.Updates updates, boolean fromQueue) {
-+        if (desu.inugram.helpers.plugins.tg.PluginRpc.onUpdates(this, updates, currentAccount, fromQueue)) {
++        if (desu.inugram.helpers.plugins.tg.PluginUpdates.onUpdates(this, updates, currentAccount, fromQueue)) {
 +            return;
 +        }
          ArrayList<Long> needGetChannelsDiff = null;
@@ -182,7 +182,7 @@ index 0000000..0000000 100644
                  FileLog.d("process update " + baseUpdate.getClass().getSimpleName());
              }
              desu.inugram.InuHooks.onUpdate(baseUpdate, currentAccount);
-+            if (desu.inugram.helpers.plugins.tg.PluginRpc.isDropped(baseUpdate)) {
++            if (desu.inugram.helpers.plugins.tg.PluginUpdates.isDropped(baseUpdate)) {
 +                continue;
 +            }
              if (baseUpdate instanceof TL_update.TL_updateNewMessage || baseUpdate instanceof TL_update.TL_updateNewChannelMessage || baseUpdate instanceof TL_update.TL_updateNewScheduledMessage) {

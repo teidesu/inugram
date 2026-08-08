@@ -1,14 +1,15 @@
 package desu.inugram.helpers.plugins.tg
 
 import android.util.Log
-import desu.inugram.core.plugins.ScopeMatch
 import desu.inugram.core.plugins.PluginWire
+import desu.inugram.core.plugins.ScopeMatch
+import desu.inugram.helpers.plugins.EngineDispatch
 import desu.inugram.helpers.plugins.Plugin
-import desu.inugram.helpers.plugins.PluginDispatch
 import desu.inugram.helpers.plugins.QuickJs
 import desu.inugram.helpers.plugins.WritesListener
 import desu.inugram.helpers.plugins.tl.TlHandles
 import desu.inugram.helpers.plugins.tl.TlJson
+import desu.inugram.helpers.plugins.tl.TlReflect
 import org.json.JSONArray
 import org.json.JSONObject
 import org.telegram.messenger.DialogObject
@@ -99,7 +100,7 @@ object PluginWrites {
         if (!plugin.permissions.allows(grant.first, grant.second, ScopeMatch.EXACT)) {
             return PluginWire.encodeNotGranted(grant.first, grant.second)
         }
-        val controller = PluginReads.controllerFor(accountId)
+        val controller = PeerSpecs.controllerFor(accountId)
             ?: return PluginWire.encodePluginError("not-found", "account write: no account is logged in as #$accountId")
         return try {
             val json = JSONObject(arg)
@@ -148,7 +149,7 @@ object PluginWrites {
         val json: JSONObject,
         val values: Array<String>,
     ) {
-        fun peer(key: String = "peer", kind: Int = PluginReads.KIND_PEER): TLObject =
+        fun peer(key: String = "peer", kind: Int = PeerSpecs.KIND_PEER): TLObject =
             writePeer(controller, accountId, json.optString(key), kind)
 
         fun int(key: String): Int = json.optString(key).toIntOrNull() ?: 0
@@ -169,7 +170,7 @@ object PluginWrites {
      */
     internal fun send(call: Call, request: TLObject, produce: (TLObject?) -> String): String? {
         // stock's own call sites set the optional bits by hand, `serializeToStream` recomputing only the boolean ones - so a request built here goes out without its `reply_to`/`entities` unless the words are synced
-        TlJson.syncFlagsDeep(request)
+        TlReflect.syncFlagsDeep(request)
         val flags = ConnectionsManager.RequestFlagFailOnServerErrors
         PluginRpc.sendWithoutInterceptors(call.accountId, request, flags) { response, error ->
             // stageQueue frees the response the moment this returns, before [answer]'s runnable reads it on globalQueue, so ownership moves here
@@ -192,31 +193,31 @@ object PluginWrites {
         return null
     }
 
-    /** `forbidden` rather than the `not-found` [PluginReads.dialogIdOf] would answer: a secret chat is not a peer that might resolve later */
+    /** `forbidden` rather than the `not-found` [PeerSpecs.dialogIdOf] would answer: a secret chat is not a peer that might resolve later */
     internal fun writePeer(
         controller: MessagesController,
         accountId: Int,
         spec: String,
-        kind: Int = PluginReads.KIND_PEER,
+        kind: Int = PeerSpecs.KIND_PEER,
     ): TLObject {
-        val named = spec.takeIf { it.length > 1 && it[0] == PluginReads.SPEC_DIALOG_ID }?.substring(1)?.toLongOrNull()
+        val named = spec.takeIf { it.length > 1 && it[0] == PeerSpecs.SPEC_DIALOG_ID }?.substring(1)?.toLongOrNull()
         if (named != null && DialogObject.isEncryptedDialog(named)) {
             refuse("forbidden", "secret chats are never reachable from a plugin")
         }
-        return when (val built = PluginReads.buildInputPeer(controller, accountId, spec, kind)) {
-            is PluginReads.Built.Missing -> refuse(
+        return when (val built = PeerSpecs.buildInputPeer(controller, accountId, spec, kind)) {
+            is PeerSpecs.Built.Missing -> refuse(
                 "not-found",
-                "${PluginReads.describeSpec(spec)} is not cached; resolve it with resolvePeer() first",
+                "${PeerSpecs.describeSpec(spec)} is not cached; resolve it with resolvePeer() first",
             )
-            is PluginReads.Built.WrongKind -> throw Refused(PluginReads.wrongKind(spec, built.kind))
-            is PluginReads.Built.Peer -> built.value
+            is PeerSpecs.Built.WrongKind -> throw Refused(PeerSpecs.wrongKind(spec, built.kind))
+            is PeerSpecs.Built.Peer -> built.value
         }
     }
 
     /** [release] gives back whatever the settle borrowed, and runs on the stale path too: an obligation dropped because the plugin reloaded is still an obligation */
     internal fun answer(call: Call, release: () -> Unit = {}, produce: () -> String) {
-        PluginDispatch.onEngine(call.plugin, call.engine, onDropped = release) {
-            val wire = PluginDispatch.wireOf("account write") {
+        EngineDispatch.onEngine(call.plugin, call.engine, onDropped = release) {
+            val wire = EngineDispatch.wireOf("account write") {
                 try {
                     produce()
                 } catch (e: Refused) {
@@ -233,7 +234,7 @@ object PluginWrites {
      * instance - which is what lets stock refresh its file reference from it.
      *
      * A read-only handle is refused: whatever comes back becomes part of a request [send] walks
-     * with [TlJson.syncFlagsDeep], so accepting one would rewrite the flag word of an object the app
+     * with [TlReflect.syncFlagsDeep], so accepting one would rewrite the flag word of an object the app
      * owns - and a `show_previews = false` whose bit is set reads as absent. [readValue] is the
      * counterpart for the ops that only *name* an object.
      */
@@ -287,7 +288,7 @@ object PluginWrites {
         val peer = call.peer()
         val request: TLObject = if (isChannelPeer(peer)) {
             TLRPC.TL_channels_deleteMessages().apply {
-                channel = call.peer(kind = PluginReads.KIND_CHANNEL) as TLRPC.InputChannel
+                channel = call.peer(kind = PeerSpecs.KIND_CHANNEL) as TLRPC.InputChannel
                 id.addAll(ids)
             }
         } else {
@@ -344,7 +345,7 @@ object PluginWrites {
                 read_max_id = maxId
             }
             isChannelPeer(peer) -> TLRPC.TL_channels_readHistory().apply {
-                channel = call.peer(kind = PluginReads.KIND_CHANNEL) as TLRPC.InputChannel
+                channel = call.peer(kind = PeerSpecs.KIND_CHANNEL) as TLRPC.InputChannel
                 max_id = maxId
             }
             else -> TLRPC.TL_messages_readHistory().apply {
@@ -466,13 +467,13 @@ object PluginWrites {
         message.random_id = randomId
         message.from_id = TLRPC.TL_peerUser().apply { user_id = UserConfig.getInstance(call.accountId).getClientUserId() }
         message.peer_id = peerOfSpec(call)
-        message.dialog_id = PluginReads.dialogIdOf(call.controller, call.accountId, call.json.optString("peer")) ?: 0L
-        TlJson.syncFlags(message)
+        message.dialog_id = PeerSpecs.dialogIdOf(call.controller, call.accountId, call.json.optString("peer")) ?: 0L
+        TlReflect.syncFlags(message)
         return message
     }
 
     private fun peerOfSpec(call: Call): TLRPC.Peer {
-        val id = PluginReads.dialogIdOf(call.controller, call.accountId, call.json.optString("peer")) ?: 0L
+        val id = PeerSpecs.dialogIdOf(call.controller, call.accountId, call.json.optString("peer")) ?: 0L
         return when {
             id > 0 -> TLRPC.TL_peerUser().apply { user_id = id }
             call.controller.getChat(-id)?.let { it.broadcast || it.megagroup } == true ->

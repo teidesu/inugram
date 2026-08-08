@@ -3,18 +3,18 @@ package desu.inugram.helpers.plugins.tg
 import android.util.SparseArray
 import desu.inugram.core.plugins.ApiFilter
 import desu.inugram.core.plugins.DeserializeGuards
+import desu.inugram.core.plugins.PluginWire
 import desu.inugram.core.plugins.ScopeMatch
 import desu.inugram.core.plugins.TlCtorIds
 import desu.inugram.core.plugins.TlFlags
 import desu.inugram.core.plugins.TlNames
-import desu.inugram.core.plugins.PluginWire
 import desu.inugram.helpers.plugins.DeserializeListener
+import desu.inugram.helpers.plugins.EngineDispatch
 import desu.inugram.helpers.plugins.Plugin
-import desu.inugram.helpers.plugins.PluginDispatch
 import desu.inugram.helpers.plugins.QuickJs
 import desu.inugram.helpers.plugins.tl.TlFilter
 import desu.inugram.helpers.plugins.tl.TlHandles
-import desu.inugram.helpers.plugins.tl.TlJson
+import desu.inugram.helpers.plugins.tl.TlReflect
 import java.lang.reflect.Field
 import java.util.concurrent.CountDownLatch
 import java.util.concurrent.TimeUnit
@@ -88,7 +88,7 @@ object PluginDeserialize {
     }
 
     private fun applyRules(obj: TLObject, matching: Array<Rule>) {
-        val fields = TlJson.publicFields(obj.javaClass)
+        val fields = TlReflect.publicFields(obj.javaClass)
         for (rule in matching) {
             try {
                 if (!matches(obj, fields, rule)) continue
@@ -117,8 +117,8 @@ object PluginDeserialize {
             try {
                 for (listener in listeners) {
                     if (!waiting.get()) break
-                    val tl = PluginRpc.tableFor(listener.plugin) ?: continue
-                    if (!PluginDispatch.isLive(listener.plugin, listener.engine)) continue
+                    val tl = TlHandles.of(listener.plugin) ?: continue
+                    if (!EngineDispatch.isLive(listener.plugin, listener.engine)) continue
                     val scopeId = TlHandles.newScope()
                     try {
                         val handle = tl.mintForDeserialize(obj, scopeId)
@@ -152,7 +152,7 @@ object PluginDeserialize {
             if (field.type !== term.type) continue
             field.set(obj, term.value)
             // only this field's bit: a wholesale recompute would flag the placeholders stock parks in untouched optional slots
-            TlJson.syncFlagBit(obj, term.name)
+            TlReflect.syncFlagBit(obj, term.name)
         }
     }
 
@@ -247,7 +247,7 @@ object PluginDeserialize {
         val reachable = reachableIds(name, policy)
         reachable.error?.let { return it }
         val ids = reachable.ids
-        val cls = TlJson.classOf(name)
+        val cls = TlReflect.classOf(name)
             ?: return refuse("invalid-argument", "no TL constructor is named '$name'")
 
         val whenTerms = ArrayList<Term>()
@@ -268,7 +268,7 @@ object PluginDeserialize {
         out: MutableList<Term>,
     ): String? {
         if (terms == null) return null
-        val fields = TlJson.publicFields(cls)
+        val fields = TlReflect.publicFields(cls)
         val tlName = TlNames.classNameToTlName(cls)
         val keys = terms.keys()
         while (keys.hasNext()) {
