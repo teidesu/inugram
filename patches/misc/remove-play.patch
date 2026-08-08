@@ -16,8 +16,8 @@ diff --git a/TMessagesProj/build.gradle b/TMessagesProj/build.gradle
 index 0000000..0000000 100644
 --- a/TMessagesProj/build.gradle
 +++ b/TMessagesProj/build.gradle
-@@ -66,8 +66,6 @@ dependencies {
-     implementation 'com.android.billingclient:billing:8.0.0'
+@@ -52,8 +52,6 @@ dependencies {
+     implementation 'com.android.billingclient:billing:7.1.1'
      implementation 'com.google.code.gson:gson:2.11.0'
      implementation 'com.google.guava:guava:31.1-android'
 -    implementation 'com.google.android.play:integrity:1.3.0'
@@ -25,14 +25,14 @@ index 0000000..0000000 100644
  
      implementation 'com.google.android.gms:play-services-mlkit-subject-segmentation:16.0.0-beta1'
      implementation 'com.google.android.gms:play-services-mlkit-image-labeling:16.0.8'
-@@ -99,7 +97,6 @@ dependencies {
+@@ -87,7 +85,6 @@ dependencies {
              because("kotlin-stdlib-jdk8 is now a part of kotlin-stdlib")
          }
      }
 -    implementation 'com.google.android.recaptcha:recaptcha:18.7.1'
  }
  
- android {
+ def isWindows = String.valueOf(DefaultNativePlatform.currentOperatingSystem.toFamilyName() == OperatingSystemFamily.WINDOWS)
 diff --git a/TMessagesProj/src/main/java/org/telegram/messenger/CaptchaController.java b/TMessagesProj/src/main/java/org/telegram/messenger/CaptchaController.java
 deleted file mode 100644
 index 0000000..0000000
@@ -157,7 +157,7 @@ diff --git a/TMessagesProj/src/main/java/org/telegram/messenger/MessagesControll
 index 0000000..0000000 100644
 --- a/TMessagesProj/src/main/java/org/telegram/messenger/MessagesController.java
 +++ b/TMessagesProj/src/main/java/org/telegram/messenger/MessagesController.java
-@@ -1822,7 +1822,6 @@ public class MessagesController extends BaseController implements NotificationCe
+@@ -1821,7 +1821,6 @@ public class MessagesController extends BaseController implements NotificationCe
              }
          }
          scheduleTranscriptionUpdate();
@@ -165,7 +165,7 @@ index 0000000..0000000 100644
          if (mainPreferences.contains("dcDomainName2")) {
              dcDomainName = mainPreferences.getString("dcDomainName2", "apv3.stel.com");
          } else {
-@@ -2819,17 +2818,6 @@ public class MessagesController extends BaseController implements NotificationCe
+@@ -2818,17 +2817,6 @@ public class MessagesController extends BaseController implements NotificationCe
                      }
                      break;
                  }
@@ -196,10 +196,10 @@ index 0000000..0000000 100644
 -import com.google.android.play.core.integrity.IntegrityManagerFactory;
 -import com.google.android.play.core.integrity.IntegrityTokenRequest;
 -import com.google.android.play.core.integrity.IntegrityTokenResponse;
+ import com.google.firebase.remoteconfig.FirebaseRemoteConfig;
  
  import org.json.JSONArray;
- import org.json.JSONObject;
-@@ -28,7 +23,6 @@ import org.telegram.messenger.AndroidUtilities;
+@@ -29,7 +24,6 @@ import org.telegram.messenger.AndroidUtilities;
  import org.telegram.messenger.ApplicationLoader;
  import org.telegram.messenger.BaseController;
  import org.telegram.messenger.BuildVars;
@@ -207,7 +207,7 @@ index 0000000..0000000 100644
  import org.telegram.messenger.EmuDetector;
  import org.telegram.messenger.FileLoadOperation;
  import org.telegram.messenger.FileLoader;
-@@ -1489,44 +1483,13 @@ public class ConnectionsManager extends BaseController {
+@@ -1582,44 +1576,13 @@ public class ConnectionsManager extends BaseController {
      @Keep
      public static void onIntegrityCheckClassic(final int currentAccount, final int requestToken, final String project, final String nonce) {
          AndroidUtilities.runOnUIThread(() -> {
