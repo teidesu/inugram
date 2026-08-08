@@ -15,7 +15,7 @@ use std::path::{Path, PathBuf};
 /// rather than a judgement call.
 const DEMOS: &[&str] = &["disable-ads.js"];
 
-/// what an oracle prints on its own last line; [`crate::testing::util::assert_oracle_exact`] is written
+/// what an oracle prints on its own last line; [`crate::testing::harness::assert_oracle_exact`] is written
 /// around it, so a file carrying one is a file some test is meant to be driving to completion
 const MARKER: &str = "test done";
 

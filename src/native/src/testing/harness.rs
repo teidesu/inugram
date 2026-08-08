@@ -1,0 +1,477 @@
+//! Test-only plumbing shared by the module test suites.
+
+use std::collections::HashMap;
+use std::ops::Deref;
+use std::rc::Rc;
+use std::sync::{Arc, Mutex, MutexGuard};
+
+use crate::api::io::kv::{
+    KvHost, KV_CLEAR, KV_DEL, KV_GET, KV_GET_ALL, KV_HAS, KV_INSERT_ALL, KV_KEYS, KV_SET, KV_USAGE,
+};
+use crate::api::lifecycle::LifecycleState;
+use crate::api::platform::clipboard::ClipboardHost;
+use crate::api::platform::open_url::OpenUrlHost;
+use crate::api::tl::proxy;
+use crate::api::ui::dialogs::{DialogHost, DialogState};
+use crate::sandbox::grants::TestGrantHost;
+use crate::sandbox::registry::Lifecycle;
+use rquickjs::function::Rest;
+use rquickjs::{Coerced, Context, Function, Object, Runtime};
+use std::cell::{Cell, RefCell};
+
+/// One TL object behind a fake handle: its constructor name, and each field already as a wire.
+pub(crate) struct FakeObject {
+    pub(crate) name: String,
+    pub(crate) fields: Vec<(String, String)>,
+}
+
+/// What `TlHandles` is on the host side of the bridge, for a suite whose subject is some *other*
+/// module's use of it: a table of minted objects, answering the `TlHost` upcalls the proxy makes.
+///
+/// `tl_own_keys` answers a comma-joined list because that is what `proxy::keys_to_array` splits on;
+/// a fake that joined on anything else would hand `Object.keys` one key holding the whole list.
+#[derive(Default)]
+pub(crate) struct FakeHandles {
+    objects: RefCell<HashMap<i64, FakeObject>>,
+    next: Cell<i64>,
+}
+
+impl FakeHandles {
+    pub(crate) fn mint<K: Into<String>>(&self, name: &str, fields: impl IntoIterator<Item = (K, String)>) -> i64 {
+        let id = self.next.get() + 1;
+        self.next.set(id);
+        let fields = fields.into_iter().map(|(k, v)| (k.into(), v)).collect();
+        self.objects.borrow_mut().insert(id, FakeObject { name: name.to_string(), fields });
+        id
+    }
+
+    /// the read-only object wire, which is what `PluginReads.mint(readOnly = true)` answers with
+    pub(crate) fn mint_wire<K: Into<String>>(
+        &self,
+        name: &str,
+        fields: impl IntoIterator<Item = (K, String)>,
+    ) -> String {
+        format!("HOR{}", self.mint(name, fields))
+    }
+
+    pub(crate) fn get(&self, handle: i64, key: &str) -> String {
+        let objects = self.objects.borrow();
+        let Some(object) = objects.get(&handle) else {
+            return "Phandle-expired\n\n\n\nexpired".to_string();
+        };
+        if key == "_" {
+            return format!("S{}", object.name);
+        }
+        match object.fields.iter().find(|(name, _)| name == key) {
+            Some((_, wire)) => wire.clone(),
+            None => "N".to_string(),
+        }
+    }
+
+    pub(crate) fn has(&self, handle: i64, key: &str) -> i32 {
+        let objects = self.objects.borrow();
+        match objects.get(&handle) {
+            None => -1,
+            Some(object) => i32::from(key == "_" || object.fields.iter().any(|(name, _)| name == key)),
+        }
+    }
+
+    pub(crate) fn own_keys(&self, handle: i64) -> Option<String> {
+        let objects = self.objects.borrow();
+        let object = objects.get(&handle)?;
+        let mut keys = vec!["_".to_string()];
+        keys.extend(object.fields.iter().map(|(name, _)| name.clone()));
+        Some(keys.join(","))
+    }
+
+    pub(crate) fn release(&self, handle: i64) {
+        self.objects.borrow_mut().remove(&handle);
+    }
+}
+
+/// Evaluates for a string, reporting a thrown exception the way the engine formats one for the
+/// host rather than as rquickjs's opaque `Error::Exception`.
+pub(crate) fn eval_string(ctx: &Context, code: &str) -> String {
+    ctx.with(|ctx| match ctx.eval::<String, _>(code) {
+        Ok(value) => value,
+        Err(rquickjs::Error::Exception) => panic!("{}", crate::api::telegram::rpc::format_exception(&ctx)),
+        Err(e) => panic!("{e:?}"),
+    })
+}
+
+/// [`eval_string`] for code evaluated for its effect.
+pub(crate) fn eval_unit(ctx: &Context, code: &str) {
+    ctx.with(|ctx| match ctx.eval::<(), _>(code) {
+        Ok(()) => {}
+        Err(rquickjs::Error::Exception) => panic!("{}", crate::api::telegram::rpc::format_exception(&ctx)),
+        Err(e) => panic!("{e:?}"),
+    });
+}
+
+/// [`eval_string`] over `JSON.stringify`, for asserting on a shape rather than on a scalar.
+pub(crate) fn eval_json(ctx: &Context, code: &str) -> String {
+    eval_string(ctx, &format!("JSON.stringify({code})"))
+}
+
+/// What a refusal looks like from JS: `[is a PluginError, code, grant, message]`, or `'no-throw'`.
+/// The grant is part of it because `not-granted` naming the wrong scope is the failure a test of a
+/// gate is written to catch.
+pub(crate) fn catch_json(ctx: &Context, code: &str) -> String {
+    eval_string(
+        ctx,
+        &format!(
+            r#"(() => {{
+                try {{ {code}; return 'no-throw'; }}
+                catch (e) {{
+                    return JSON.stringify([e instanceof inu.PluginError, e.code, e.grant ?? null, e.message]);
+                }}
+            }})()"#
+        ),
+    )
+}
+
+/// What a test reads a module's diagnostics out of.
+///
+/// [`crate::Log`] is `Send + Sync`, so the `Rc<RefCell<Vec<String>>>` the suite used to build one
+/// out of no longer fits. Keeps `borrow`/`borrow_mut` rather than exposing the lock, so an
+/// assertion reads exactly as it did.
+pub(crate) struct Logs(Mutex<Vec<String>>);
+
+impl Logs {
+    pub(crate) fn new() -> Arc<Logs> {
+        Arc::new(Logs(Mutex::new(Vec::new())))
+    }
+
+    pub(crate) fn borrow(&self) -> MutexGuard<'_, Vec<String>> {
+        self.0.lock().expect("a test thread panicked holding the log")
+    }
+
+    pub(crate) fn borrow_mut(&self) -> MutexGuard<'_, Vec<String>> {
+        self.borrow()
+    }
+}
+
+/// the [`crate::Log`] a module writes into this sink through
+pub(crate) fn log_sink(logs: &Arc<Logs>) -> crate::Log {
+    let logs = logs.clone();
+    Arc::new(move |msg: &str| logs.borrow_mut().push(msg.to_string()))
+}
+
+/// Runs a module's `dispose` when the test's state binding goes out of scope, on the failing path
+/// too. Skipping disposal leaves quickjs GC roots (`Persistent` has no `Drop`) and `JS_FreeRuntime`
+/// aborts the process over them, which under `cargo test`'s shared process turns one failed
+/// assertion into a suite with no results at all.
+///
+/// Holds its own `Context` clone, which keeps the `Runtime` alive regardless of the order the
+/// test's own bindings drop in.
+pub(crate) struct DisposeOnDrop<S> {
+    ctx: Context,
+    state: Rc<S>,
+    dispose: fn(&Context, &Rc<S>),
+}
+
+impl<S> DisposeOnDrop<S> {
+    pub(crate) fn new(ctx: &Context, state: Rc<S>, dispose: fn(&Context, &Rc<S>)) -> Self {
+        DisposeOnDrop { ctx: ctx.clone(), state, dispose }
+    }
+}
+
+impl<S> Deref for DisposeOnDrop<S> {
+    type Target = Rc<S>;
+
+    fn deref(&self) -> &Rc<S> {
+        &self.state
+    }
+}
+
+impl<S> Drop for DisposeOnDrop<S> {
+    fn drop(&mut self) {
+        (self.dispose)(&self.ctx, &self.state);
+    }
+}
+
+/// Runs a bundled oracle plugin the way the host would - a console that captures instead of
+/// reaching logcat, then a drain of whatever it left pending - and hands back what it printed.
+/// A plugin whose surface is pure needs nothing else, which is what makes the oracle a real test
+/// here rather than only on a device.
+pub(crate) fn run_capturing_console(rt: &Runtime, ctx: &Context, source: &str) -> Vec<String> {
+    let lines = install_capturing_console(ctx);
+    ctx.with(|ctx| match ctx.eval::<(), _>(source) {
+        Ok(()) => {}
+        Err(rquickjs::Error::Exception) => panic!("{}", crate::api::telegram::rpc::format_exception(&ctx)),
+        Err(e) => panic!("{e:?}"),
+    });
+    while rt.is_job_pending() {
+        rt.execute_pending_job().ok();
+    }
+    let lines = lines.borrow();
+    lines.clone()
+}
+
+/// The console half of [`run_capturing_console`], for an oracle whose assertions only run once the
+/// host has fed it something: install this, evaluate the source, drive the host, then read the lines.
+pub(crate) fn install_capturing_console(ctx: &Context) -> Arc<Logs> {
+    let lines = Logs::new();
+    ctx.with(|ctx| {
+        let console = Object::new(ctx.clone()).unwrap();
+        for name in ["log", "error", "warn", "info", "debug"] {
+            let lines = lines.clone();
+            let f = Function::new(ctx.clone(), move |args: Rest<Coerced<String>>| {
+                lines.borrow_mut().push(args.0.iter().map(|a| a.0.as_str()).collect::<Vec<_>>().join(" "));
+            })
+            .unwrap();
+            console.set(name, f).unwrap();
+        }
+        ctx.globals().set("console", console).unwrap();
+    });
+    lines
+}
+
+/// The one thing a bundled oracle is held to, for every oracle in the crate.
+///
+/// An oracle that stopped halfway prints no `FAIL` either, so reaching its own last line is part of
+/// passing. The count is **exact** and never a floor: in a suite written out of `expectThrow` a
+/// member that vanished reads as a refusal, and only the count tells those apart - so a floor is
+/// cleared by every number it is not equal to, which is the failure the oracle exists to catch.
+/// Nothing may `SKIP` either: every escape hatch in an oracle exists for a device with no peer, no
+/// network or no login, and a harness has all three, so a block that starts skipping here is a
+/// surface that stopped answering.
+pub(crate) fn assert_oracle_exact(lines: &[String], done: &str, count: usize) {
+    assert_oracle_exact_skipping(lines, done, count, &[]);
+}
+
+/// [`assert_oracle_exact`] for a harness that genuinely cannot answer part of an oracle - no
+/// network, no telegram chat, no forum. The skips are listed rather than tolerated, so one that
+/// appears is still a failure and the ones named here have to keep being the only ones.
+pub(crate) fn assert_oracle_exact_skipping(lines: &[String], done: &str, count: usize, skips: &[&str]) {
+    let failures: Vec<&String> = lines.iter().filter(|l| l.starts_with("FAIL")).collect();
+    assert!(failures.is_empty(), "{failures:#?}");
+    assert!(lines.iter().any(|l| l == done), "the oracle did not finish: {lines:#?}");
+    let skipped: Vec<&str> = lines.iter().filter(|l| l.starts_with("SKIP")).map(String::as_str).collect();
+    assert_eq!(skipped, skips, "the harness answers everything else, so nothing else may skip");
+    assert_eq!(
+        lines.iter().filter(|l| l.starts_with("PASS")).count(),
+        count,
+        "the oracle ran a different number of assertions than this floor pins: {lines:#?}",
+    );
+}
+
+/// `common.d.ts`, the normative contract, as the file a plugin author reads
+pub(crate) const CONTRACT: &str = include_str!("../../../plugins/common.d.ts");
+
+/// `fs.d.ts`, which states `inu.fs`'s own numbers
+pub(crate) const FS_CONTRACT: &str = include_str!("../../../plugins/fs.d.ts");
+
+/// `android.xposed.d.ts`, which states `inu.xposed`'s own numbers
+pub(crate) const XPOSED_CONTRACT: &str = include_str!("../../../plugins/android.xposed.d.ts");
+
+/// `android.d.ts`, which states what the platform-specific half promises - `inu.android.resourceIcon`
+/// among them, whose rules `icons.rs` enforces
+pub(crate) const ANDROID_CONTRACT: &str = include_str!("../../../plugins/android.d.ts");
+
+/// Reads the number the contract states, given the sentence it appears in with `{}` standing in for
+/// the number. A ceiling pinned to a constant the app also ships is pinned to a copy of itself and
+/// can be raised to its maximum with the suite green; this is what makes the promise the number.
+///
+/// Exactly one place in the document may match, so a ceiling the contract states twice cannot be
+/// pinned to whichever of the two happened to be updated.
+pub(crate) fn stated_number(doc: &str, phrase: &str) -> u64 {
+    let (head, tail) = phrase.split_once("{}").expect("mark the number with {}");
+    assert!(!tail.is_empty(), "the phrase must carry text after the number to anchor on");
+    let bytes = doc.as_bytes();
+    let mut found: Vec<u64> = Vec::new();
+    let mut from = 0;
+    while let Some(offset) = doc[from..].find(tail) {
+        let end = from + offset;
+        from = end + tail.len();
+        let mut start = end;
+        while start > 0 && bytes[start - 1].is_ascii_digit() {
+            start -= 1;
+        }
+        if start < end && doc[..start].ends_with(head) {
+            found.push(doc[start..end].parse().expect("digits"));
+        }
+    }
+    assert_eq!(found.len(), 1, "the contract states '{phrase}' {} time(s)", found.len());
+    found[0]
+}
+
+fn header_lines(source: &str) -> impl Iterator<Item = &str> {
+    source.lines().take_while(|line| !line.contains("==/UserScript=="))
+}
+
+/// The grants a bundled oracle's *own manifest* asks for. Running it under these rather than a list
+/// written in the test is what makes the `@grant` header load-bearing: the device reads that header
+/// and nothing else, so a suite granting a scope the header forgot would pass on a plugin the app
+/// then refuses.
+pub(crate) fn manifest_grants(source: &str) -> Vec<&str> {
+    header_lines(source).filter_map(|line| line.trim().strip_prefix("// @grant")).map(str::trim).collect()
+}
+
+/// Every directive of a bundled oracle's own manifest, base key lowercased and repeated once per
+/// value. That is the shape `QuickJs.installInfo` flattens `PluginManifest.raw` into, so a run site
+/// builds `inu.info().header` out of what the device builds it out of rather than out of a literal
+/// written next to the assertion it is checked by.
+pub(crate) fn manifest_header(source: &str) -> Vec<(String, String)> {
+    header_lines(source)
+        .filter_map(|line| {
+            let directive = line.trim().strip_prefix("//")?.trim().strip_prefix('@')?;
+            let (key, value) = match directive.split_once(char::is_whitespace) {
+                Some((key, value)) => (key, value.trim()),
+                None => (directive, ""),
+            };
+            Some((key.to_ascii_lowercase(), value.to_string()))
+        })
+        .collect()
+}
+
+/// The four surfaces that answer to one upcall each, faked together: [`setup_apis`] installs all of
+/// them over one of these, because each is a handful of members and the two bundled oracles reach
+/// across them. `fail_*` holds a verbatim error wire to answer with.
+/// `PluginKv.MAX_BYTES`. Mirrored rather than shared: the host is java's, and the oracle only
+/// asks that a store which enforces *some* cap answers the wire this side decodes.
+const KV_TEST_QUOTA: usize = 1 << 20;
+
+/// in-memory kv + recorded ui calls; `fail_kv` holds a verbatim error wire to answer with
+#[derive(Default)]
+pub(crate) struct RecordingHost {
+    pub(crate) store: RefCell<std::collections::BTreeMap<String, String>>,
+    pub(crate) toasts: RefCell<Vec<String>>,
+    pub(crate) dialogs: RefCell<Vec<(i64, String)>>,
+    pub(crate) fail_kv: RefCell<Option<String>>,
+    pub(crate) fail_dialog: RefCell<Option<String>>,
+    pub(crate) opened: RefCell<Vec<String>>,
+    pub(crate) clipboard: RefCell<String>,
+    pub(crate) writes: RefCell<Vec<String>>,
+    pub(crate) choosers: RefCell<Vec<(i64, String)>>,
+    pub(crate) fail_chooser: RefCell<Option<String>>,
+}
+
+impl KvHost for RecordingHost {
+    fn kv(&self, op: i32, key: &str, value: &str) -> String {
+        if let Some(wire) = self.fail_kv.borrow().as_ref() {
+            return wire.clone();
+        }
+        let mut store = self.store.borrow_mut();
+        match op {
+            KV_GET => match store.get(key) {
+                Some(v) => format!("S{v}"),
+                None => "N".to_string(),
+            },
+            KV_SET => {
+                let mut total: usize =
+                    store.iter().filter(|(k, _)| k.as_str() != key).map(|(k, v)| k.len() + v.len()).sum();
+                total += key.len() + value.len();
+                if total > KV_TEST_QUOTA {
+                    return format!("Pquota-exceeded\n\n{total}\n{KV_TEST_QUOTA}\nkv: 1 MB per-plugin quota exceeded");
+                }
+                store.insert(key.to_string(), value.to_string());
+                "N".to_string()
+            }
+            KV_DEL => {
+                store.remove(key);
+                "N".to_string()
+            }
+            KV_KEYS => {
+                let keys: Vec<String> = store.keys().map(|k| format!("\"{k}\"")).collect();
+                format!("J[{}]", keys.join(","))
+            }
+            KV_CLEAR => {
+                store.clear();
+                "N".to_string()
+            }
+            KV_GET_ALL => {
+                let entries: Vec<String> = store.iter().map(|(k, v)| format!("\"{k}\":\"{v}\"")).collect();
+                format!("J{{{}}}", entries.join(","))
+            }
+            KV_INSERT_ALL => {
+                // value is a JSON object of string->string; cheap parse good enough for tests
+                let trimmed = value.trim_start_matches('{').trim_end_matches('}');
+                for pair in trimmed.split(',').filter(|p| !p.is_empty()) {
+                    let (k, v) = pair.split_once(':').unwrap();
+                    store.insert(k.trim_matches('"').to_string(), v.trim_matches('"').to_string());
+                }
+                "N".to_string()
+            }
+            KV_HAS => format!("J{}", store.contains_key(key)),
+            KV_USAGE => {
+                let total: usize = store.iter().map(|(k, v)| k.len() + v.len()).sum();
+                format!("J{total}")
+            }
+            _ => proxy::encode_error("unknown op"),
+        }
+    }
+}
+
+impl DialogHost for RecordingHost {
+    fn toast(&self, text: &str) {
+        self.toasts.borrow_mut().push(text.to_string());
+    }
+
+    fn dialog(&self, request_id: i64, options_json: &str) -> Option<String> {
+        if let Some(err) = self.fail_dialog.borrow().as_ref() {
+            return Some(err.clone());
+        }
+        self.dialogs.borrow_mut().push((request_id, options_json.to_string()));
+        None
+    }
+
+    fn chooser(&self, request_id: i64, options_json: &str) -> Option<String> {
+        if let Some(err) = self.fail_chooser.borrow().as_ref() {
+            return Some(err.clone());
+        }
+        self.choosers.borrow_mut().push((request_id, options_json.to_string()));
+        None
+    }
+}
+
+impl OpenUrlHost for RecordingHost {
+    fn open_url(&self, url: &str) {
+        self.opened.borrow_mut().push(url.to_string());
+    }
+}
+
+impl ClipboardHost for RecordingHost {
+    fn read(&self) -> String {
+        self.clipboard.borrow().clone()
+    }
+
+    fn write(&self, text: &str) {
+        self.writes.borrow_mut().push(text.to_string());
+        *self.clipboard.borrow_mut() = text.to_string();
+    }
+}
+
+/// disposes on drop, so a failing assertion is one failed test rather than an abort in
+/// `JS_FreeRuntime` that takes the whole suite's reporting with it
+pub(crate) type ApiFixture = (
+    Runtime,
+    Context,
+    Rc<RecordingHost>,
+    DisposeOnDrop<LifecycleState>,
+    DisposeOnDrop<DialogState>,
+    std::sync::Arc<Logs>,
+);
+
+pub(crate) fn setup_apis(grants: &[&str]) -> ApiFixture {
+    let rt = Runtime::new().unwrap();
+    let ctx = Context::full(&rt).unwrap();
+    let host = Rc::new(RecordingHost::default());
+    let grants = TestGrantHost::new(grants).as_host();
+    let logs = Logs::new();
+    let log = log_sink(&logs);
+    let (lifecycle, dialogs) = ctx.with(|ctx| {
+        crate::api::error::install_plugin_error(&ctx).unwrap();
+        let lifecycle =
+            crate::api::lifecycle::install_lifecycle(&ctx, grants.clone(), Lifecycle::new(), log.clone()).unwrap();
+        let inu = crate::utils::namespace::get_or_create_inu(&ctx).unwrap();
+        crate::api::io::kv::install_kv(&ctx, host.clone(), grants.clone(), &inu).unwrap();
+        crate::api::platform::clipboard::install_clipboard(&ctx, host.clone(), grants.clone(), &inu).unwrap();
+        crate::api::platform::open_url::install_open_url(&ctx, host.clone(), grants.clone(), &inu).unwrap();
+        let dialogs = crate::api::ui::dialogs::install_dialogs(&ctx, host.clone(), log.clone(), &inu).unwrap();
+        (lifecycle, dialogs)
+    });
+    let lifecycle = DisposeOnDrop::new(&ctx, lifecycle, crate::api::lifecycle::dispose);
+    let dialogs = DisposeOnDrop::new(&ctx, dialogs, crate::api::ui::dialogs::dispose);
+    (rt, ctx, host, lifecycle, dialogs, logs)
+}

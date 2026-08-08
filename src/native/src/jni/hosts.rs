@@ -2,25 +2,28 @@
 
 use crate::LEVEL_ERROR;
 
-use crate::api::ApiHost;
-use crate::draw::canvas::CanvasHost;
-use crate::grants::GrantHost;
-use crate::io::fetch::FetchHost;
-use crate::platform::jvm::JvmHost;
-use crate::platform::notifications::NotificationHost;
-use crate::platform::xposed::XposedHost;
-use crate::sandbox::globals::RandomHost;
-use crate::sandbox::timers::TimerHost;
-use crate::telegram::account::AccountHost;
-use crate::telegram::deserialize::DeserializeHost;
-use crate::telegram::reads::ReadsHost;
-use crate::telegram::rpc::RpcHost;
-use crate::telegram::writes::WritesHost;
-use crate::tl::proxy::TlHost;
-use crate::ui::actions::ActionHost;
-use crate::ui::icons::IconHost;
-use crate::ui::pages::UiHost;
-use crate::ui::screens::ScreenHost;
+use crate::api::canvas::CanvasHost;
+use crate::api::globals::RandomHost;
+use crate::api::io::fetch::FetchHost;
+use crate::api::io::kv::KvHost;
+use crate::api::platform::clipboard::ClipboardHost;
+use crate::api::platform::jvm::JvmHost;
+use crate::api::platform::notifications::NotificationHost;
+use crate::api::platform::open_url::OpenUrlHost;
+use crate::api::platform::xposed::XposedHost;
+use crate::api::telegram::account::AccountHost;
+use crate::api::telegram::deserialize::DeserializeHost;
+use crate::api::telegram::reads::ReadsHost;
+use crate::api::telegram::rpc::RpcHost;
+use crate::api::telegram::writes::WritesHost;
+use crate::api::timers::TimerHost;
+use crate::api::tl::proxy::TlHost;
+use crate::api::ui::actions::ActionHost;
+use crate::api::ui::dialogs::DialogHost;
+use crate::api::ui::icons::IconHost;
+use crate::api::ui::pages::UiHost;
+use crate::api::ui::screens::ScreenHost;
+use crate::sandbox::grants::GrantHost;
 
 use super::bridge::{Arg, JniBridge};
 
@@ -195,34 +198,40 @@ impl WritesHost for JniBridge {
     }
 }
 
-impl ApiHost for JniBridge {
+impl KvHost for JniBridge {
     fn kv(&self, op: i32, key: &str, value: &str) -> String {
         self.call_wire("kv", self.on_kv, &[Arg::Int(op), Arg::Str(key), Arg::Str(value)])
     }
+}
 
-    fn ui_toast(&self, text: &str) {
+impl DialogHost for JniBridge {
+    fn toast(&self, text: &str) {
         self.call_void("toast", self.on_ui_toast, &[Arg::Str(text)]);
     }
 
-    fn ui_dialog(&self, request_id: i64, options_json: &str) -> Option<String> {
+    fn dialog(&self, request_id: i64, options_json: &str) -> Option<String> {
         self.call_refusal("dialog", self.on_ui_dialog, &[Arg::Long(request_id), Arg::Str(options_json)])
     }
 
-    fn ui_chooser(&self, request_id: i64, options_json: &str) -> Option<String> {
+    fn chooser(&self, request_id: i64, options_json: &str) -> Option<String> {
         self.call_refusal("chooser", self.on_ui_chooser, &[Arg::Long(request_id), Arg::Str(options_json)])
     }
+}
 
+impl OpenUrlHost for JniBridge {
     fn open_url(&self, url: &str) {
         self.call_void("openUrl", self.on_open_url, &[Arg::Str(url)]);
     }
+}
 
+impl ClipboardHost for JniBridge {
     // "" for every failure, which is also what an empty clipboard answers: the channel carries the
-    // user's own text and so cannot be tagged (see `api`'s module doc)
-    fn clipboard_read(&self) -> String {
+    // user's own text and so cannot be tagged (see `ClipboardHost`'s own doc)
+    fn read(&self) -> String {
         self.call_string("clipboardRead", self.on_clipboard_read, &[]).unwrap_or_default().unwrap_or_default()
     }
 
-    fn clipboard_write(&self, text: &str) {
+    fn write(&self, text: &str) {
         self.call_void("clipboardWrite", self.on_clipboard_write, &[Arg::Str(text)]);
     }
 }
@@ -337,7 +346,7 @@ impl TimerHost for JniBridge {
 impl FetchHost for JniBridge {
     fn send(&self, request_id: i64, url: &str, spec_json: &str, body: Option<&[u8]>) -> Option<String> {
         // the body is the one thing here that can be megabytes, and it is bounded on the rust side
-        // (`crate::io::blob::BUILD_LIMIT_BYTES`) before it ever reaches this allocation
+        // (`crate::api::io::blob::BUILD_LIMIT_BYTES`) before it ever reaches this allocation
         self.call_refusal(
             "fetch",
             self.on_fetch,
@@ -353,7 +362,7 @@ impl FetchHost for JniBridge {
 impl CanvasHost for JniBridge {
     fn canvas(&self, op: i32, id: i64, arg: &str, bytes: Option<&[u8]>) -> String {
         // the command buffer, which is the one thing here that can be a megabyte - and is bounded
-        // on this side by `crate::draw::canvas::FLUSH_AT_BYTES` before it ever reaches this allocation
+        // on this side by `crate::api::canvas::FLUSH_AT_BYTES` before it ever reaches this allocation
         match self.call_string(
             "canvas",
             self.on_canvas,

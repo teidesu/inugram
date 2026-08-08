@@ -18,17 +18,11 @@ use std::sync::Arc;
 pub type Log = Arc<dyn Fn(&str) + Send + Sync>;
 
 mod api;
-mod draw;
-mod grants;
-mod io;
 mod jni;
-mod platform;
 mod sandbox;
-mod telegram;
 #[cfg(test)]
 mod testing;
-mod tl;
-mod ui;
+mod utils;
 
 /// `QuickJs.onConsole` level for an engine diagnostic the plugin survives - a JNI failure, a
 /// throwing host listener, a wire the bridge could not decode. Same level `console.error` binds.
@@ -58,27 +52,5 @@ fn classify_log(message: &str) -> (i32, &str) {
 }
 
 #[cfg(test)]
-mod log_levels {
-    use super::*;
-
-    #[test]
-    fn a_fault_reaches_the_host_at_the_level_that_disables_the_plugin() {
-        let logged = fault("onUpdate callback threw: Error: boom");
-        let (level, message) = classify_log(&logged);
-        assert_eq!(level, LEVEL_FAULT);
-        assert_eq!(message, "onUpdate callback threw: Error: boom", "the marker must not reach the host");
-    }
-
-    #[test]
-    fn a_host_diagnostic_stays_an_ordinary_error() {
-        let message = "kv: JNI env unavailable";
-        assert_eq!(classify_log(message), (LEVEL_ERROR, message));
-    }
-
-    #[test]
-    fn a_plugins_own_error_text_cannot_forge_a_fault() {
-        let thrown = fault("nice try");
-        let logged = format!("interceptRpc(foo.bar) callback rejected: {thrown}");
-        assert_eq!(classify_log(&logged).0, LEVEL_ERROR);
-    }
-}
+#[path = "lib_tests.rs"]
+mod lib_tests;

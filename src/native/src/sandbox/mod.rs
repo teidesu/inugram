@@ -1,14 +1,7 @@
-//! The sandbox every api runs inside: argument conversion, the cpu and memory ceilings,
-//! the error vocabulary, the globals quickjs-ng and the prelude install, registration bookkeeping,
-//! the timer wheel, and urls - both the whatwg `URL` classes and the http egress screen the two
-//! apis that *send* one share, which are deliberately not the same parser.
+//! What bounds a plugin, and nothing it can name: the single gate every permission decision goes
+//! through, the cpu and native-memory ceilings, and the registration bookkeeping that makes the
+//! `Disposer` rules `src/plugins/common.d.ts` states hold identically for every `on*`/`intercept*`.
 
-pub(crate) mod argv;
-pub(crate) mod error;
-pub(crate) mod globals;
+pub(crate) mod grants;
 pub(crate) mod limits;
-pub(crate) mod prelude;
 pub(crate) mod registry;
-pub(crate) mod shape;
-pub(crate) mod timers;
-pub(crate) mod url;

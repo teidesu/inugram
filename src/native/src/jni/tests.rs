@@ -72,7 +72,7 @@ mod wiring {
     #[test]
     fn unhandled_rejections_are_tracked_from_engine_creation() {
         assert!(
-            body_of("nativeCreate").contains("crate::telegram::rpc::install_rejection_tracker(&rt"),
+            body_of("nativeCreate").contains("crate::api::telegram::rpc::install_rejection_tracker(&rt"),
             "an async handler that throws would fail silently",
         );
     }
@@ -106,19 +106,18 @@ mod wiring {
     fn installing_the_api_installs_the_sandbox_globals_and_the_timer_wheel() {
         let body = body_of("nativeInstallApi");
         assert!(
-            body.contains("crate::sandbox::globals::install_globals("),
+            body.contains("crate::api::globals::install_globals("),
             "the documented sandbox globals would be missing"
         );
-        assert!(body.contains("crate::sandbox::timers::install_timers("), "setTimeout would be missing");
+        assert!(body.contains("crate::api::timers::install_timers("), "setTimeout would be missing");
         assert!(
-            body.contains("crate::tl::utils::install_utils(&ctx)") && body.contains("crate::tl::message::install_message(&ctx, &shared)"),
+            body.contains("crate::api::tl::utils::install_utils(&ctx)") && body.contains("crate::api::tl::message::install_message(&ctx, &shared)"),
             "inu.utils/inu.Message would be missing, and `inu.Message` cannot install without the helpers utils returns",
         );
         assert!(
             body.contains("std::path::PathBuf::from(spill_dir)")
-                && body.contains(
-                    "crate::sandbox::globals::install_globals(&ctx, random_host, &spill_dir, external.clone())"
-                ),
+                && body
+                    .contains("crate::api::globals::install_globals(&ctx, random_host, &spill_dir, external.clone())"),
             "an engine installed with anything but the host's own spill directory keeps every blob in memory",
         );
     }
@@ -129,9 +128,11 @@ mod wiring {
     #[test]
     fn installing_the_api_installs_the_account_read_surface() {
         let body = body_of("nativeInstallApi");
-        let accounts = position_of(body, "crate::telegram::account::install_account(", "inu.account would be missing");
-        let reads = position_of(body, "crate::telegram::reads::install_reads(", "the Account getters would be missing");
-        let message = position_of(body, "crate::tl::message::install_message(", "inu.Message would be missing");
+        let accounts =
+            position_of(body, "crate::api::telegram::account::install_account(", "inu.account would be missing");
+        let reads =
+            position_of(body, "crate::api::telegram::reads::install_reads(", "the Account getters would be missing");
+        let message = position_of(body, "crate::api::tl::message::install_message(", "inu.Message would be missing");
         assert!(accounts < reads && message < reads);
     }
 
@@ -141,7 +142,7 @@ mod wiring {
     #[test]
     fn installing_the_rpc_family_installs_the_deserialize_rules() {
         assert!(
-            body_of("nativeInstallRpc").contains("crate::telegram::deserialize::install_deserialize("),
+            body_of("nativeInstallRpc").contains("crate::api::telegram::deserialize::install_deserialize("),
             "inu.interceptDeserialize would be missing",
         );
     }
@@ -165,8 +166,8 @@ mod wiring {
             body.contains("engine.blobs = blobs.clone()"),
             "without the blob table kept, neither `fs.write` nor a fetched body can exist",
         );
-        let timers = position_of(body, "crate::sandbox::timers::install_timers(", "setTimeout would be missing");
-        let fetch = position_of(body, "crate::io::fetch::install_fetch(", "the global fetch would be missing");
+        let timers = position_of(body, "crate::api::timers::install_timers(", "setTimeout would be missing");
+        let fetch = position_of(body, "crate::api::io::fetch::install_fetch(", "the global fetch would be missing");
         assert!(timers < fetch, "`fetch.js` captures setTimeout at install to measure `timeout` on",);
     }
 
@@ -177,7 +178,7 @@ mod wiring {
         let body = body_of("nativeInstallFs");
         assert!(body.contains("std::path::Path::new(&dir)"), "the fs root must be the one the host named");
         assert!(body.contains("engine.blobs.clone()"), "fs.write reads a `Blob` through the blob table");
-        assert!(body.contains("crate::io::fs::UNCAPPED"), "unsafe.fs would silently get the default cap");
+        assert!(body.contains("crate::api::io::fs::UNCAPPED"), "unsafe.fs would silently get the default cap");
     }
 
     /// the whole app is behind this one, so an engine that installed it with anything but the
@@ -187,7 +188,7 @@ mod wiring {
         let body = body_of("nativeInstallJvm");
         assert!(
             body.contains("let grants: Rc<dyn GrantHost> = engine.bridge.clone()")
-                && body.contains("crate::platform::jvm::install_jvm(&ctx, host, grants"),
+                && body.contains("crate::api::platform::jvm::install_jvm(&ctx, host, grants"),
             "inu.jvm installed without the grant gate reflects for anyone",
         );
     }
@@ -197,7 +198,7 @@ mod wiring {
     #[test]
     fn a_jvm_runnable_comes_back_through_its_own_entry_point() {
         assert!(
-            body_of("nativeJvmCallback").contains("crate::platform::jvm::dispatch_callback("),
+            body_of("nativeJvmCallback").contains("crate::api::platform::jvm::dispatch_callback("),
             "a java Runnable would be run and the plugin's callback never fire",
         );
     }
@@ -205,20 +206,20 @@ mod wiring {
     #[test]
     fn a_visibility_change_reaches_the_wheel_before_the_plugin() {
         let body = body_of("nativeAppVisibilityChanged");
-        let wheel = position_of(
+        let wheel =
+            position_of(body, "crate::api::timers::set_visible(", "backgrounding no longer throttles the timer wheel");
+        let callbacks = position_of(
             body,
-            "crate::sandbox::timers::set_visible(",
-            "backgrounding no longer throttles the timer wheel",
+            "crate::api::lifecycle::app_visibility_changed(",
+            "inu.onAppVisibilityChange never fires",
         );
-        let callbacks =
-            position_of(body, "crate::api::app_visibility_changed(", "inu.onAppVisibilityChange never fires");
         assert!(wheel < callbacks, "a callback arming a timer must already arm it against the new floor",);
     }
 
     #[test]
     fn a_timer_wake_runs_the_wheel() {
         assert!(
-            body_of("nativeRunTimers").contains("crate::sandbox::timers::run_due("),
+            body_of("nativeRunTimers").contains("crate::api::timers::run_due("),
             "the wake the engine asked for would arrive and do nothing",
         );
     }
@@ -226,9 +227,9 @@ mod wiring {
     #[test]
     fn unload_drops_the_timers_after_the_plugins_own_callbacks() {
         let body = body_of("nativeNotifyUnload");
-        let api = position_of(body, "crate::api::notify_unload(", "inu.onUnload never fires");
+        let api = position_of(body, "crate::api::lifecycle::notify_unload(", "inu.onUnload never fires");
         let timers =
-            position_of(body, "crate::sandbox::timers::notify_unload(", "a stray setInterval would outlive the plugin");
+            position_of(body, "crate::api::timers::notify_unload(", "a stray setInterval would outlive the plugin");
         assert!(api < timers, "an onUnload callback clearing its own timers must still find them");
     }
 
@@ -442,7 +443,7 @@ mod wiring {
 
 #[cfg(test)]
 mod info_tests {
-    use super::super::info::{build_info_object, install_inu, InuInfo};
+    use crate::api::info::{build_info_object, install_inu, InuInfo};
     use rquickjs::{Context, Runtime};
     use std::sync::Arc;
 
@@ -491,12 +492,12 @@ mod info_tests {
             api_version: 1,
             layer: 214,
             language: "en".into(),
-            header: crate::testing::util::manifest_header(ORACLE),
+            header: crate::testing::harness::manifest_header(ORACLE),
         });
         ctx.with(|ctx| install_inu(&ctx, info).unwrap());
 
-        let lines = crate::testing::util::run_capturing_console(&rt, &ctx, ORACLE);
-        crate::testing::util::assert_oracle_exact(&lines, "info test done", 11);
+        let lines = crate::testing::harness::run_capturing_console(&rt, &ctx, ORACLE);
+        crate::testing::harness::assert_oracle_exact(&lines, "info test done", 11);
     }
 }
 

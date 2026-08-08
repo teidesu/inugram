@@ -10,7 +10,7 @@
 //!
 //! Back-edge polling is also its limit - nothing polls while a *native* op runs, so any op that can
 //! move an unbounded number of bytes needs its own bound in its own unit
-//! ([`crate::io::blob::BUILD_LIMIT_BYTES`]). A *loop* of bounded ops is still cut down, the deadline
+//! ([`crate::api::io::blob::BUILD_LIMIT_BYTES`]). A *loop* of bounded ops is still cut down, the deadline
 //! being wall clock rather than cpu spent in js.
 //!
 //! The js heap is bounded per runtime (`JS_SetMemoryLimit`), its failure mode on
@@ -216,7 +216,7 @@ impl ExternalMemory {
         if let Some(charge) = self.try_charge(ctx, bytes) {
             return Ok(charge);
         }
-        crate::sandbox::error::throw_plugin_error(
+        crate::api::error::throw_plugin_error(
             ctx,
             "quota-exceeded",
             &format!(
