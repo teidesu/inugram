@@ -413,7 +413,7 @@ class TlHandles(private val policy: TlFilter.Policy) : TlListener {
     companion object {
         private const val PLUGIN_SCOPE = 0L
 
-        // must stay byte-identical to READ_ONLY_MESSAGE in src/rust/inu_native/src/tl/proxy.rs:
+        // must stay byte-identical to READ_ONLY_MESSAGE in src/native/src/tl/proxy.rs:
         // the same refusal is raised on whichever side sees the write first
         const val READ_ONLY_MESSAGE = "this TL view is read-only; take a copy with toJSON() to edit it"
 

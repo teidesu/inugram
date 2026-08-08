@@ -80,8 +80,8 @@ export const forkSyncFiles: ForkSyncFile[] = [
   // native: rust plugin engine (rquickjs/quickjs-ng + jni bridge), built into libinu_native.so
   // by a cargo-ndk Exec task wired in TMessagesProj_App/build.gradle
   {
-    source: 'src/rust/inu_native',
-    target: 'TMessagesProj_App/rust/inu_native',
+    source: 'src/native',
+    target: 'TMessagesProj_App/native',
     directory: true,
   },
   {

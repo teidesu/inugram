@@ -4,19 +4,19 @@ Date: Fri, 7 Aug 2026 02:38:51 +0400
 Subject: Add the QuickJS plugin engine (hooks, action rows, native build wiring)
 
 ---
- .gitmodules                                   |  3 +
- .../telegram/messenger/ApplicationLoader.java |  6 ++
- .../messenger/MessagesController.java         |  5 ++
- .../telegram/tgnet/ConnectionsManager.java    |  8 ++-
- .../java/org/telegram/tgnet/TLObject.java     |  3 +
- .../java/org/telegram/ui/ChatActivity.java    |  6 +-
- .../ui/Components/ChatActivityEnterView.java  |  3 +-
- .../java/org/telegram/ui/LaunchActivity.java  |  1 +
- .../java/org/telegram/ui/ProfileActivity.java |  2 +-
- TMessagesProj_App/build.gradle                | 71 ++++++++++++++++++-
- TMessagesProj_App/jni/CMakeLists.txt          | 13 ++++
- TMessagesProj_App/jni/lsplant                 |  1 +
- 12 files changed, 116 insertions(+), 6 deletions(-)
+ .gitmodules                                   |   3 +
+ .../telegram/messenger/ApplicationLoader.java |   6 +
+ .../messenger/MessagesController.java         |   5 +
+ .../telegram/tgnet/ConnectionsManager.java    |   8 +-
+ .../java/org/telegram/tgnet/TLObject.java     |   3 +
+ .../java/org/telegram/ui/ChatActivity.java    |   6 +-
+ .../ui/Components/ChatActivityEnterView.java  |   3 +-
+ .../java/org/telegram/ui/LaunchActivity.java  |   1 +
+ .../java/org/telegram/ui/ProfileActivity.java |   2 +-
+ TMessagesProj_App/build.gradle                | 103 +++++++++++++++++-
+ TMessagesProj_App/jni/CMakeLists.txt          |  13 +++
+ TMessagesProj_App/jni/lsplant                 |   1 +
+ 12 files changed, 148 insertions(+), 6 deletions(-)
  create mode 100644 TMessagesProj_App/jni/CMakeLists.txt
  create mode 160000 TMessagesProj_App/jni/lsplant
 
@@ -208,17 +208,28 @@ diff --git a/TMessagesProj_App/build.gradle b/TMessagesProj_App/build.gradle
 index 0000000..0000000 100644
 --- a/TMessagesProj_App/build.gradle
 +++ b/TMessagesProj_App/build.gradle
-@@ -19,6 +19,9 @@ dependencies {
+@@ -15,10 +15,20 @@ configurations.all {
+     exclude group: 'androidx.recyclerview', module: 'recyclerview'
+ }
+ 
++configurations {
++    // non-transitive: the aar is wanted for its .so alone, and its own dependencies would be
++    // resolved into this configuration and break `singleFile` below
++    shadowhookAar { transitive = false }
++}
++
+ dependencies {
      implementation project(':TMessagesProj')
      implementation files('../TMessagesProj/libs/libgsaverification-client.aar')
      implementation 'androidx.core:core:1.16.0'
 +    // the inline hooker behind lsplant. only libshadowhook.so is wanted, dlopened by the rust
-+    // engine; nothing links or imports it.
-+    implementation 'com.bytedance.android:shadowhook:2.0.1'
++    // engine; nothing links or imports it - so it is unpacked as a jniLib rather than depended on,
++    // see the shadowhook block below.
++    shadowhookAar 'com.bytedance.android:shadowhook:2.0.1'
  }
  
  android {
-@@ -100,7 +103,7 @@ android {
+@@ -100,7 +110,7 @@ android {
          minSdkVersion 26
          targetSdkVersion 35
          versionName rootProject.ext.verName
@@ -227,7 +238,7 @@ index 0000000..0000000 100644
  
          ndk {
              abiFilters "arm64-v8a"
-@@ -117,6 +120,13 @@ android {
+@@ -117,6 +127,13 @@ android {
          }
      }
  
@@ -241,16 +252,41 @@ index 0000000..0000000 100644
      buildFeatures {
          buildConfig = true
      }
-@@ -132,3 +142,62 @@ android {
+@@ -132,3 +149,87 @@ android {
  }
  
  apply plugin: 'com.google.gms.google-services'
++
++// --- shadowhook (libshadowhook.so) ---
++// unpacked from the aar instead of depended on. `implementation` would put it on the variant's
++// runtime classpath, where `checkAarMetadata` enforces the `minCompileSdk=37` its manifest carries -
++// and 37 is a *minor-versioned* platform (android-37.0) that AGP 8.6.1 predates and cannot resolve.
++// Nothing links or imports the aar's classes.jar, so resolving it in a configuration of our own
++// leaves that check with nothing to check and the .so is all that ships. Drop this block for a
++// plain `implementation` once AGP is new enough to resolve android-37.0.
++def shadowhookJniLibsDir = file("$buildDir/shadowhookJniLibs")
++
++tasks.register('unpackShadowhook', Copy) {
++    // both: libshadowhook.so dlopens libshadowhook_nothing.so for its hook trampolines
++    from({ zipTree(configurations.shadowhookAar.singleFile) }) {
++        include 'jni/**/libshadowhook.so'
++        include 'jni/**/libshadowhook_nothing.so'
++        eachFile { it.path = it.path.replaceFirst('^jni/', '') }
++        includeEmptyDirs = false
++    }
++    into shadowhookJniLibsDir
++}
++
++android.sourceSets.main.jniLibs.srcDirs += shadowhookJniLibsDir
++tasks.matching { it.name ==~ /merge.*JniLibFolders/ }.configureEach {
++    dependsOn 'unpackShadowhook'
++}
 +
 +// --- inugram rust plugin engine (libinu_native.so) ---
 +// builds the standalone rquickjs/quickjs-ng cdylib via cargo-ndk and packages it as a jniLib.
 +// build-env prerequisites: rustup + `rustup target add aarch64-linux-android`,
 +// `cargo install cargo-ndk`, and libclang (NDK-provided) for rquickjs' bindgen.
-+def rustModuleDir = file("$projectDir/rust/inu_native")
++def rustModuleDir = file("$projectDir/native")
 +def rustJniLibsDir = file("$buildDir/rustJniLibs")
 +
 +// gradle (launched from Android Studio / a daemon) doesn't inherit the login shell PATH, so cargo

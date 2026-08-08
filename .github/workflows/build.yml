@@ -93,15 +93,15 @@ jobs:
           path: |
             ~/.cargo/registry
             ~/.cargo/git
-            src/rust/inu_native/target
-          key: ${{ runner.os }}-cargo-${{ hashFiles('src/rust/inu_native/Cargo.lock') }}
+            src/native/target
+          key: ${{ runner.os }}-cargo-${{ hashFiles('src/native/Cargo.lock') }}
           restore-keys: |
             ${{ runner.os }}-cargo-
 
       # the plugin engine's own suite, including every bundled oracle; ubuntu-latest already ships
       # rustup and a stable toolchain
       - name: test (plugin engine)
-        working-directory: src/rust/inu_native
+        working-directory: src/native
         run: cargo test --locked
 
       - uses: actions/setup-java@c1e323688fd81a25caa38c78aa6df2d33d3e20d9 # v4
