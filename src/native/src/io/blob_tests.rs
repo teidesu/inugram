@@ -905,7 +905,8 @@ mod bundled_oracle {
             let clone = make_clone_fn(&ctx).unwrap();
             let natives = Object::new(ctx.clone()).unwrap();
             natives.set("cloneBlob", clone).unwrap();
-            let factory: Function = ctx.eval(include_str!("../engine/globals.js")).unwrap();
+            let factory: Function =
+                crate::engine::prelude::load(&ctx, include_bytes!(concat!(env!("OUT_DIR"), "/globals.qbc"))).unwrap();
             factory.call::<_, ()>((natives,)).unwrap();
             match ctx.eval::<(), _>(ORACLE) {
                 Ok(()) => {}

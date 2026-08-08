@@ -28,7 +28,7 @@ pub trait RandomHost {
     fn random_bytes(&self, out: &mut [u8]) -> bool;
 }
 
-const PRELUDE: &str = include_str!("globals.js");
+const PRELUDE: &[u8] = include_bytes!(concat!(env!("OUT_DIR"), "/globals.qbc"));
 
 /// what the context is expected to bring with it. The first three are the ones an `intrinsic::All`
 /// context would be missing; the rest are cheap to name and catch a context slimmed down any other
@@ -79,9 +79,7 @@ pub fn install_globals<'js>(
         Function::new(ctx.clone(), move |ctx: Ctx<'js>, array: Value<'js>| random_fill(&ctx, host.as_ref(), array))?;
     natives.set("randomFill", f)?;
 
-    let mut options = rquickjs::context::EvalOptions::default();
-    options.filename = Some("<inu:globals>".to_string());
-    let factory: Function = ctx.eval_with_options(PRELUDE, options)?;
+    let factory = crate::engine::prelude::load(ctx, PRELUDE)?;
     factory.call::<_, ()>((natives,))?;
     Ok(blobs)
 }

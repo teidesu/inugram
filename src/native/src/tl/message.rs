@@ -11,20 +11,18 @@
 //! sender out of anything but the fields the filter itself seals; a wrapper that did any of those
 //! would be a way to read a login code the filter had already decided to hide.
 
-use rquickjs::{Ctx, Function, Object, Result as JsResult, Value};
+use rquickjs::{Ctx, Object, Result as JsResult, Value};
 
 use crate::engine::error::get_or_create_inu;
 
-const PRELUDE: &str = include_str!("message.js");
+const PRELUDE: &[u8] = include_bytes!(concat!(env!("OUT_DIR"), "/message.qbc"));
 
 /// `shared` is what [`crate::tl::utils::install_utils`] handed back
 pub fn install_message<'js>(ctx: &Ctx<'js>, shared: &Object<'js>) -> JsResult<()> {
     let inu = get_or_create_inu(ctx)?;
     let plugin_error: Value = inu.get("PluginError")?;
 
-    let mut options = rquickjs::context::EvalOptions::default();
-    options.filename = Some("<inu:message>".to_string());
-    let factory: Function = ctx.eval_with_options(PRELUDE, options)?;
+    let factory = crate::engine::prelude::load(ctx, PRELUDE)?;
     let class: Value = factory.call((shared.clone(), plugin_error))?;
 
     inu.set("Message", class)?;

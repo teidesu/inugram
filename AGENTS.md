@@ -259,12 +259,37 @@ impls), `engine/` (argv, the property forms a rust-built prototype uses, the cpu
 ceilings, the error vocabulary, the globals, the
 registration bookkeeping, the timer wheel, the http url screen `fetch` and `openUrl` share),
 `tl/` (the handle proxy plus the `inu.Message` and
-`inu.utils` preludes), `tg/` (account reads/writes and the rpc, update and deserialize
+`inu.utils` surfaces), `tg/` (account reads/writes and the rpc, update and deserialize
 interception), `io/` (blob, fs, fetch), `draw/` (canvas, geometry, css), `ui/` (settings pages,
 action rows, icons, screens), `platform/` (jvm, xposed, elf, lsplant, the notification centre),
 `api/` (kv, dialogs, clipboard, `openUrl`) and `testing/`. A module's test suite lives beside it as
-`<name>_tests.rs`, pulled in with `#[path]`; a `.js` prelude sits next to the module that
-`include_str!`s it.
+`<name>_tests.rs`, pulled in with `#[path]`; **every `.js` prelude lives in `src/js/`**, named for the
+module that loads it, since what a reader wants is to see the eleven of them at once and the module
+they belong to is already in the name.
+
+**A prelude is compiled to quickjs bytecode by `build.rs`, never parsed on a device.** Parsing the
+eleven of them cost 3.8 ms per engine (measured, release, desktop; a phone is 3-5x that) against
+`BootCohort.EARLY_BUDGET_MILLIS`, which is 500 for *every* plugin booting on the push path.
+`build.rs` compiles each one - as `export default <the factory expression the file already is>` -
+with the same `rquickjs` the cdylib links, resolved from the same lockfile, and writes a `.qbc` into
+`OUT_DIR`; `engine::prelude::load` reads one back with `Module::load` and hands over the default
+export, which is the `Function` `ctx.eval` used to answer with. **0.37 ms**, and with `strip_source`
+the artifacts are 55 KB against 87 KB of source strings, so the cdylib is *smaller* than it was.
+Three properties this rests on, none of them checkable at runtime: the bytecode format is tied to
+the exact quickjs build that reads it, which is why nothing is committed and `Module::load` is
+`unsafe`; it is endian-dependent and carries no marker, so it is written little-endian explicitly
+rather than natively; and the name a stack trace shows (`<inu:reads>`) is baked in at *declare*
+time, so it is `build.rs` that has to keep saying it. Two lints in `engine/prelude_tests.rs` cover
+the way this rots: a `.js` under `src/` missing from `PRELUDES`, and a prelude reached with
+`include_str!` again, which would be parsed per engine with nothing anywhere saying so.
+
+**What is *not* gated is a contract requirement, not an oversight.** `fetch`/`jvm`/`xposed`/`fs`
+install only with their grant, but the eager set cannot follow: `common.d.ts` answers a missing
+grant with `not-granted` *from the member*, so `account.getUser` has to exist in order to refuse -
+`grant-boundary-test.js` asserts exactly that for eleven of them. Skipping `reads.js` would answer
+a plugin with `TypeError: not a function` instead. Deferring it to the first `Account` is no way
+out either: the prototype is a three-link chain assembled across two JNI calls and frozen by the
+last of them (`install_account_invoke`), and a frozen object's prototype can no longer be set.
 
 `src/plugins/common.d.ts` is the **normative** contract — if code and doc disagree, the doc wins or
 the disagreement is a bug. `private/plugins-plan.md` is the roadmap.
