@@ -11,6 +11,8 @@ class ActionRowsTest {
         override fun toString(): String = name
     }
 
+    private data class Row(val owner: Owner, val token: Int, val text: String)
+
     private val chat = 1
     private val message = 2
 
@@ -111,13 +113,13 @@ class ActionRowsTest {
         registry.register(a, chat, 1, "a")
         registry.register(a, chat, 2, "a2")
 
-        val render = { owner: Owner -> listOf(ActionRow(owner, 1, owner.name)) }
+        val render = { owner: Owner -> listOf(Row(owner, 1, owner.name)) }
         assertEquals(
-            listOf(ActionRow(a, 1, "a"), ActionRow(c, 1, "c")),
+            listOf(Row(a, 1, "a"), Row(c, 1, "c")),
             registry.rowsInOrder(chat, listOf(a, b, c), render),
         )
         assertEquals(
-            listOf(ActionRow(c, 1, "c"), ActionRow(a, 1, "a")),
+            listOf(Row(c, 1, "c"), Row(a, 1, "a")),
             registry.rowsInOrder(chat, listOf(c, b, a), render),
         )
     }
@@ -133,10 +135,10 @@ class ActionRowsTest {
         val asked = mutableListOf<Owner>()
         val out = registry.rowsInOrder(chat, listOf(a)) { owner ->
             asked.add(owner)
-            listOf(ActionRow(owner, 1, owner.name))
+            listOf(Row(owner, 1, owner.name))
         }
         assertEquals(listOf(a), asked)
-        assertEquals(listOf(ActionRow(a, 1, "a")), out)
+        assertEquals(listOf(Row(a, 1, "a")), out)
         assertEquals("a menu reserves no room for an owner that is gone", 1, registry.size(chat, listOf(a)))
     }
 
@@ -151,7 +153,7 @@ class ActionRowsTest {
         val asked = mutableListOf<Owner>()
         registry.rowsInOrder(chat, listOf(a, b)) { owner ->
             asked.add(owner)
-            emptyList()
+            emptyList<Row>()
         }
         assertEquals(listOf(a), asked)
     }
@@ -165,8 +167,8 @@ class ActionRowsTest {
         registry.register(b, chat, 1, "b")
 
         val out = registry.rowsInOrder(chat, listOf(a, b)) { owner ->
-            if (owner === a) null else listOf(ActionRow(owner, 1, "B"))
+            if (owner === a) null else listOf(Row(owner, 1, "B"))
         }
-        assertEquals(listOf(ActionRow(b, 1, "B")), out)
+        assertEquals(listOf(Row(b, 1, "B")), out)
     }
 }

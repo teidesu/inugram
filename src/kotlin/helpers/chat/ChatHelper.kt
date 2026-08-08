@@ -24,7 +24,7 @@ import android.widget.LinearLayout
 import android.widget.ScrollView
 import androidx.core.content.edit
 import desu.inugram.InuConfig
-import desu.inugram.core.plugins.ActionRow
+import desu.inugram.helpers.plugins.ui.ActionRow
 import desu.inugram.helpers.InuUtils
 import desu.inugram.helpers.StickerDownloadHelper
 import desu.inugram.helpers.WebAppHelper
@@ -33,7 +33,6 @@ import desu.inugram.helpers.font.FontImportHelper
 import desu.inugram.helpers.media.MediaSendDebugHelper
 import desu.inugram.helpers.menu.MessageMenuConfig
 import desu.inugram.helpers.menu.reorderByMenu
-import desu.inugram.helpers.plugins.QuickJs
 import desu.inugram.helpers.plugins.ui.PluginActions
 import desu.inugram.helpers.translate.TranslateHelper
 import desu.inugram.ui.MessageDetailsActivity
@@ -383,7 +382,7 @@ object ChatHelper {
      * on its way back.
      */
     private class MessageMenu(val surface: PluginActions.Surface) {
-        var rows: List<ActionRow<QuickJs>> = emptyList()
+        var rows: List<ActionRow> = emptyList()
         val cells = HashMap<Int, ActionBarMenuSubItem>()
         var done = false
         var pending: Runnable? = null

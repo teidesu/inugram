@@ -12,7 +12,7 @@ import android.widget.ImageView
 import android.widget.LinearLayout
 import android.widget.TextView
 import androidx.core.content.res.ResourcesCompat
-import desu.inugram.core.plugins.BootGuard
+import desu.inugram.helpers.plugins.BootGuard
 import desu.inugram.helpers.InuUtils
 import desu.inugram.helpers.plugins.Plugin
 import desu.inugram.helpers.plugins.PluginManager

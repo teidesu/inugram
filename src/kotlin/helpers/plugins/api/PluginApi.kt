@@ -11,6 +11,7 @@ import android.os.SystemClock
 import android.util.Log
 import android.view.View
 import android.widget.Toast
+import desu.inugram.core.plugins.FsQuota
 import desu.inugram.core.plugins.PluginWire
 import desu.inugram.helpers.plugins.ApiListener
 import desu.inugram.helpers.plugins.Plugin
@@ -135,7 +136,7 @@ object PluginApi {
         PluginXposed.install(engine)
         engine.installApi(PluginBlobs.dirFor(plugin.id))
         // after installApi, which creates the blob table `fs.write` reads a `Blob` through. A plugin that declared no `fs` gets no bindings and no directory
-        val quota = PluginFs.quotaFor(plugin.manifest.grants)
+        val quota = FsQuota.forGrants(plugin.manifest.grants)
         if (quota != null) {
             engine.installFs(
                 PluginFs.dirFor(plugin.id),

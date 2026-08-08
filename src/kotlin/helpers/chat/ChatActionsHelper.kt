@@ -12,10 +12,9 @@ import android.view.View
 import android.widget.FrameLayout
 import androidx.core.content.edit
 import desu.inugram.InuConfig
-import desu.inugram.core.plugins.ActionRow
+import desu.inugram.helpers.plugins.ui.ActionRow
 import desu.inugram.helpers.menu.ChatMenuConfig
 import desu.inugram.helpers.menu.reorderByMenu
-import desu.inugram.helpers.plugins.QuickJs
 import desu.inugram.helpers.plugins.tl.TlFilter
 import desu.inugram.helpers.plugins.tl.TlJson
 import desu.inugram.helpers.plugins.ui.PluginActions
@@ -150,7 +149,7 @@ object ChatActionsHelper {
     // --- plugin rows (inu.registerChatAction) ---
 
     // one entry per open chat; the rows a menu drew are what a click on it resolves against
-    private val pluginRows = WeakHashMap<ChatActivity, List<ActionRow<QuickJs>>>()
+    private val pluginRows = WeakHashMap<ChatActivity, List<ActionRow>>()
 
     /**
      * The rows arrive one globalQueue hop later - an engine cannot be entered from the ui thread -
@@ -212,7 +211,7 @@ object ChatActionsHelper {
         )
 
         var shown = false
-        fun showOnce(rows: List<ActionRow<QuickJs>>) {
+        fun showOnce(rows: List<ActionRow>) {
             if (shown) return
             shown = true
             for (row in rows) {

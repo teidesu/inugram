@@ -11,7 +11,6 @@ import android.util.Log
 import androidx.core.content.edit
 import desu.inugram.InuConfig
 import desu.inugram.core.plugins.BootCohort
-import desu.inugram.core.plugins.BootGuard
 import desu.inugram.core.plugins.GrantValidator
 import desu.inugram.core.plugins.PluginInstall
 import desu.inugram.core.plugins.PluginInstalls
@@ -94,12 +93,7 @@ object PluginManager {
     // interceptor chains, so readers get an immutable snapshot rather than the live list
     @Volatile private var snapshot: List<Plugin> = emptyList()
 
-    private val guard = BootGuard(object : BootGuard.Store {
-        override fun read(key: String): Boolean = InuConfig.prefs.getBoolean(key, false)
-        override fun write(key: String, value: Boolean) {
-            InuConfig.prefs.edit(commit = true) { putBoolean(key, value) }
-        }
-    })
+    private val guard = BootGuard()
 
     val safeMode: Boolean get() = guard.safeMode
 

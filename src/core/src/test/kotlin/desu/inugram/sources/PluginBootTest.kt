@@ -40,6 +40,23 @@ class PluginBootTest {
         )
     }
 
+    /**
+     * The one property of the guard nothing can observe: `apply()` reaches disk *after* it returns,
+     * so a guard armed with one is not armed at all for the process that dies inside the plugin it
+     * was arming. A device cannot tell the two apart - it never dies mid-write - and the flag reads
+     * back either way, so both of them are green on every target there is.
+     */
+    @Test
+    fun `the guard's flags are committed rather than applied`() {
+        val guard = forkSource("BootGuard.kt").readText()
+        val writes = Regex("""InuConfig\.prefs\.edit\(([^)]*)\)""").findAll(guard).toList()
+        assertEquals(1, writes.size, "BootGuard writes its flags in more than one place")
+        assertTrue(
+            writes.single().groupValues[1].contains("commit = true"),
+            "the crash guard is only a guard if the arming write outlives the process that armed it",
+        )
+    }
+
     @Test
     fun `the boot pass is the cohort, and the app stops waiting for it`() {
         val boot = bodyOf("fun onAppBoot(")

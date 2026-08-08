@@ -25,12 +25,6 @@ object PluginFs {
     /** where [PluginManager] installs plugin sources; `inu.android.getPluginsDir` answers this */
     private const val STORE = "inugram_plugins"
 
-    /** the cap `@grant fs` alone buys, per `fs.d.ts`. Keep in sync with rust `fs::DEFAULT_QUOTA_BYTES`. */
-    const val DEFAULT_QUOTA_BYTES = FsQuota.DEFAULT_BYTES
-
-    /** what `installFs` is passed for `unsafe.fs`; rust turns it into `quota()` answering `Infinity` */
-    const val UNCAPPED = FsQuota.UNCAPPED
-
     private fun dir(installId: String): File {
         require(PluginInstalls.isValidId(installId)) { "malformed install id" }
         return File(ApplicationLoader.applicationContext.filesDir, "$SCOPED_ROOT/scoped_$installId")
@@ -77,16 +71,6 @@ object PluginFs {
      * gets the unscoped mode and the safe token buys it nothing extra.
      */
     fun isUnscoped(permissions: PluginPermissions): Boolean = permissions.has("unsafe.fs")
-
-    /**
-     * the cap the manifest asked for, or null when it declared no `fs` at all. Null is what makes
-     * `PluginApi.attach` skip `installFs` entirely, following the rule `PluginJvm`/`PluginXposed`
-     * already follow: an api nobody granted gets no bindings, and no directory on disk either.
-     */
-    fun quotaFor(grants: List<String>): Long? = FsQuota.forGrants(grants)
-
-    /** the `\d+(kb|mb|gb)` shape `GrantValidator` already refuses the install over, in bytes */
-    fun parseSize(scope: String): Long? = FsQuota.parseSize(scope)
 
     /**
      * permanently deletes a plugin's storage. Only on **uninstall**, never on stop: this is the one
