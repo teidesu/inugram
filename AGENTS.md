@@ -979,8 +979,8 @@ broken engine — or, as `api-filter-test.js` had been, red on a working one.
   `processUpdates` again on `stageQueue`, marked in `takenOver` so it is not taken over twice. Three
   things follow. The budget is **one 2 s per batch**, not per update — a per-update budget would let
   one arrival hold the stream for its size times the budget — and on expiry everything undecided is
-  **delivered**, as is anything a middleware threw on: `drop` is the one verdict that desyncs pts,
-  and producing it out of a stall or a plugin's typo would lose the user's messages. Batches queue
+  **delivered**, as is anything a middleware threw on: `drop` is final and nothing re-requests what
+  it took, so producing it out of a stall or a plugin's typo would lose the user's messages. Batches queue
   **per account behind whichever is being walked**, claimed or not, because the app applies updates
   in arrival order and a plugin must not be able to reorder them. And observation runs off the
   *hand-back*, so `onUpdate` sees exactly what the app sees and a dropped update never happened for
@@ -993,6 +993,23 @@ broken engine — or, as `api-filter-test.js` had been, red on a working one.
   `deliverable` and `processUpdates` and advances the queue from a `finally`, because the head of a
   per-account fifo that never retires stops that account receiving anything for the life of the
   process, and nothing may escape onto `stageQueue`, which every account's update pipeline runs on.
+- **A dropped update is marked, not removed, and stock's own loop is what refuses it.** The batch is
+  handed back with every update it arrived with; `PluginRpc.isDropped(baseUpdate)` in
+  `processUpdateArray` skips the payload. That is because stock applies a group's pts *around* that
+  method (`lastPts + pts_count == pts`, then `setLastPtsValue`), so an update taken out leaves its
+  pts unaccounted for: the next group stops lining up, the app parks it and runs a catch-up, and the
+  message the plugin dropped comes straight back and is applied. Marking leaves the arithmetic
+  stock's, so a drop costs no round trip and cannot desync — and nothing rebuilds the batch, so no
+  shape of one can fail to be rebuilt. The mark lives in a **bounded identity ring**, not a set
+  cleared after the hand-back, for the same reason `interceptedUpdates` is one: a parked batch is
+  re-fed around the same instances and is deliberately not re-intercepted, so a forgotten verdict
+  would be applied on the second pass. `BoundedIdentitySet` is `@Synchronized` for this member
+  alone: `processUpdateArray` has callers off `stageQueue` (`ChatThemeController`), so stock reads
+  the ring on a thread that did not write it. Observation filters on the same ring, the batch no
+  longer being self-describing. The two exceptions are the ones with no loop to be refused in: the
+  compressed short forms, where a *dropped* one is substituted exactly like a rewritten one, the
+  substitute being what carries the pts; and the difference, which has no `processUpdateArray` at
+  all and where removal from the list is both correct and free.
 - **The two compressed short forms are the one arrival `interceptUpdate` cannot answer in place.**
   The app applies `updateShortMessage`/`updateShortChatMessage` from their own fields and never
   builds the `TLRPC.Update` a middleware was handed (`normalizeShortMessage`'s synthetic
