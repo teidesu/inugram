@@ -356,7 +356,7 @@ pub(super) fn install_style_members<'js>(ctx: &Ctx<'js>, proto: &Object<'js>) ->
             return invalid(&ctx, "setLineDash: expected an array of lengths");
         };
         let mut dash = Vec::new();
-        for value in crate::engine::argv::array_values(&ctx, array, "setLineDash")? {
+        for value in crate::sandbox::argv::array_values(&ctx, array, "setLineDash")? {
             let value = Coerced::<f64>::from_js(&ctx, value)?.0;
             // the spec's rule: one bad entry throws the whole list away rather than being
             // dropped, since a dash pattern missing a segment is a different pattern
@@ -632,7 +632,7 @@ fn read_radii<'js>(ctx: &Ctx<'js>, value: &Opt<Value<'js>>) -> JsResult<[(f64, f
     }
     if let Some(array) = value.as_array() {
         let mut values = Vec::new();
-        for entry in crate::engine::argv::array_values(ctx, array, "roundRect")? {
+        for entry in crate::sandbox::argv::array_values(ctx, array, "roundRect")? {
             let entry = Coerced::<f64>::from_js(ctx, entry)?.0;
             if !entry.is_finite() || entry < 0.0 {
                 return invalid(ctx, "a corner radius must be a non-negative number");

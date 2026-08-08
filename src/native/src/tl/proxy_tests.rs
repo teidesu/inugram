@@ -324,7 +324,7 @@ impl TlHost for FakeTlHost {
 fn make_ctx() -> (Runtime, Context) {
     let rt = Runtime::new().unwrap();
     let ctx = Context::full(&rt).unwrap();
-    ctx.with(|ctx| crate::engine::error::install_plugin_error(&ctx).unwrap());
+    ctx.with(|ctx| crate::sandbox::error::install_plugin_error(&ctx).unwrap());
     (rt, ctx)
 }
 

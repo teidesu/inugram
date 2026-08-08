@@ -21,7 +21,7 @@ index 0000000..0000000 100644
  
 -                    Utilities.stageQueue.postRunnable(() -> {
 +                    Utilities.stageQueue.postRunnable(new Runnable() { public void run() {
-+                        if (desu.inugram.helpers.plugins.tg.PluginUpdates.onDifference(res.new_messages, res.other_updates, currentAccount, this)) {
++                        if (desu.inugram.helpers.plugins.telegram.PluginUpdates.onDifference(res.new_messages, res.other_updates, currentAccount, this)) {
 +                            return;
 +                        }
                          boolean notifyAbountDifference = true;
@@ -42,7 +42,7 @@ index 0000000..0000000 100644
  
 -                        Utilities.stageQueue.postRunnable(() -> {
 +                        Utilities.stageQueue.postRunnable(new Runnable() { public void run() {
-+                            if (desu.inugram.helpers.plugins.tg.PluginUpdates.onDifference(res.new_messages, res.other_updates, currentAccount, this)) {
++                            if (desu.inugram.helpers.plugins.telegram.PluginUpdates.onDifference(res.new_messages, res.other_updates, currentAccount, this)) {
 +                                return;
 +                            }
                              if (!res.new_messages.isEmpty() || !res.new_encrypted_messages.isEmpty()) {
@@ -116,7 +116,7 @@ index 0000000..0000000 100644
 +
      // must be run from Utilities.stageQueue
      public void processUpdates(final TLRPC.Updates updates, boolean fromQueue) {
-+        if (desu.inugram.helpers.plugins.tg.PluginUpdates.onUpdates(this, updates, currentAccount, fromQueue)) {
++        if (desu.inugram.helpers.plugins.telegram.PluginUpdates.onUpdates(this, updates, currentAccount, fromQueue)) {
 +            return;
 +        }
          ArrayList<Long> needGetChannelsDiff = null;
@@ -182,7 +182,7 @@ index 0000000..0000000 100644
                  FileLog.d("process update " + baseUpdate.getClass().getSimpleName());
              }
              desu.inugram.InuHooks.onUpdate(baseUpdate, currentAccount);
-+            if (desu.inugram.helpers.plugins.tg.PluginUpdates.isDropped(baseUpdate)) {
++            if (desu.inugram.helpers.plugins.telegram.PluginUpdates.isDropped(baseUpdate)) {
 +                continue;
 +            }
              if (baseUpdate instanceof TL_update.TL_updateNewMessage || baseUpdate instanceof TL_update.TL_updateNewChannelMessage || baseUpdate instanceof TL_update.TL_updateNewScheduledMessage) {
@@ -198,7 +198,7 @@ index 0000000..0000000 100644
  
 -    private void sendRequestInternal(TLObject object, RequestDelegate onComplete, RequestDelegateTimestamp onCompleteTimestamp, QuickAckDelegate onQuickAck, WriteToSocketDelegate onWriteToSocket, int flags, int datacenterId, int connectionType, boolean immediate, int requestToken) {
 +    public void sendRequestInternal(TLObject object, RequestDelegate onComplete, RequestDelegateTimestamp onCompleteTimestamp, QuickAckDelegate onQuickAck, WriteToSocketDelegate onWriteToSocket, int flags, int datacenterId, int connectionType, boolean immediate, int requestToken) {
-+        if (desu.inugram.helpers.plugins.tg.PluginRpc.maybeIntercept(this, object, onComplete, onCompleteTimestamp, onQuickAck, onWriteToSocket, flags, datacenterId, connectionType, immediate, requestToken, currentAccount)) {
++        if (desu.inugram.helpers.plugins.telegram.PluginRpc.maybeIntercept(this, object, onComplete, onCompleteTimestamp, onQuickAck, onWriteToSocket, flags, datacenterId, connectionType, immediate, requestToken, currentAccount)) {
 +            return;
 +        }
          if (BuildVars.LOGS_ENABLED) {
@@ -208,7 +208,7 @@ index 0000000..0000000 100644
  
      public void cancelRequest(int token, boolean notifyServer, Runnable onCancelled) {
          Utilities.stageQueue.postRunnable(() -> {
-+            desu.inugram.helpers.plugins.tg.PluginRpc.onRequestCancelled(currentAccount, token, notifyServer, onCancelled);
++            desu.inugram.helpers.plugins.telegram.PluginRpc.onRequestCancelled(currentAccount, token, notifyServer, onCancelled);
              if (onCancelled != null) {
                  listenCancel(token, () -> {
                      Utilities.stageQueue.postRunnable(onCancelled);
@@ -216,7 +216,7 @@ index 0000000..0000000 100644
  
      public void cancelRequestsForGuid(int guid) {
          Utilities.stageQueue.postRunnable(() -> {
-+            desu.inugram.helpers.plugins.tg.PluginRpc.onRequestsCancelledForGuid(currentAccount, guid);
++            desu.inugram.helpers.plugins.telegram.PluginRpc.onRequestsCancelledForGuid(currentAccount, guid);
              native_cancelRequestsForGuid(currentAccount, guid);
          });
      }
@@ -224,7 +224,7 @@ index 0000000..0000000 100644
          if (guid == 0) {
              return;
          }
-+        desu.inugram.helpers.plugins.tg.PluginRpc.onRequestBoundToGuid(currentAccount, requestToken, guid);
++        desu.inugram.helpers.plugins.telegram.PluginRpc.onRequestBoundToGuid(currentAccount, requestToken, guid);
          native_bindRequestToGuid(currentAccount, requestToken, guid);
      }
  
@@ -236,8 +236,8 @@ index 0000000..0000000 100644
          }
  
          object.readParams(stream, exception);
-+        if (desu.inugram.helpers.plugins.tg.PluginDeserialize.hot) {
-+            desu.inugram.helpers.plugins.tg.PluginDeserialize.apply(object, constructor);
++        if (desu.inugram.helpers.plugins.telegram.PluginDeserialize.hot) {
++            desu.inugram.helpers.plugins.telegram.PluginDeserialize.apply(object, constructor);
 +        }
          return object;
      }

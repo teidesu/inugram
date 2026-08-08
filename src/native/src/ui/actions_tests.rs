@@ -75,8 +75,8 @@ fn setup_with(lifecycle: Rc<Lifecycle>, grants: &[&str]) -> Fixture {
     let logs = crate::testing::util::Logs::new();
     let log = crate::testing::util::log_sink(&logs);
     let state = ctx.with(|ctx| {
-        crate::engine::error::install_plugin_error(&ctx).unwrap();
-        let grants = crate::engine::error::TestGrantHost::new(grants).as_host();
+        crate::sandbox::error::install_plugin_error(&ctx).unwrap();
+        let grants = crate::grants::TestGrantHost::new(grants).as_host();
         install_actions(&ctx, host_dyn, lifecycle, None, grants, log).unwrap()
     });
     let state = Disposing::new(&ctx, state, dispose);

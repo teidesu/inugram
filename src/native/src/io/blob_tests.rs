@@ -47,7 +47,7 @@ fn setup_with(name: &str, spilling: bool, limits: BlobLimits) -> Fixture {
     let dir = TestDir::new(name);
     let spill_dir = if spilling { dir.path().to_path_buf() } else { PathBuf::new() };
     let state = ctx.with(|ctx| {
-        crate::engine::error::install_plugin_error(&ctx).unwrap();
+        crate::sandbox::error::install_plugin_error(&ctx).unwrap();
         install_with_limits(&ctx, &spill_dir, ExternalMemory::new(), limits).unwrap()
     });
     Fixture { _rt: rt, ctx, state, dir }
@@ -227,7 +227,7 @@ fn building_from_a_spilled_blob_never_charges_the_native_budget() {
 fn a_full_native_budget_spills_instead_of_throwing() {
     let f = setup("pressure");
     let held =
-        f.ctx.with(|ctx| f.state.external.try_charge(&ctx, crate::engine::deadline::EXTERNAL_LIMIT_BYTES).unwrap());
+        f.ctx.with(|ctx| f.state.external.try_charge(&ctx, crate::sandbox::limits::EXTERNAL_LIMIT_BYTES).unwrap());
     run(&f, "globalThis.__b = new Blob(['tiny']);");
     assert_eq!(f.dir.entries().len(), 1, "a refused charge must land on disk");
     assert_eq!(f.state.spilled_bytes(), 4);
@@ -318,7 +318,7 @@ fn with_nowhere_to_spill_the_buffer_is_charged_as_it_grows() {
     let room = 4 * 1024 * 1024;
     let held = f
         .ctx
-        .with(|ctx| f.state.external.try_charge(&ctx, crate::engine::deadline::EXTERNAL_LIMIT_BYTES - room).unwrap());
+        .with(|ctx| f.state.external.try_charge(&ctx, crate::sandbox::limits::EXTERNAL_LIMIT_BYTES - room).unwrap());
     let out = eval(
         &f,
         r#"
@@ -411,7 +411,7 @@ fn the_three_content_ceilings_are_the_ones_the_contract_states() {
 fn a_plugin_may_not_hold_more_spill_files_than_the_engine_will_open() {
     let f = setup_with("fd-limit", true, BlobLimits { spill_files: 3, ..BlobLimits::default() });
     let held =
-        f.ctx.with(|ctx| f.state.external.try_charge(&ctx, crate::engine::deadline::EXTERNAL_LIMIT_BYTES).unwrap());
+        f.ctx.with(|ctx| f.state.external.try_charge(&ctx, crate::sandbox::limits::EXTERNAL_LIMIT_BYTES).unwrap());
     let out = eval(
         &f,
         r#"
@@ -538,7 +538,7 @@ fn dropping_the_engine_removes_every_spill_it_made() {
         let rt = Runtime::new().unwrap();
         let ctx = Context::full(&rt).unwrap();
         ctx.with(|ctx| {
-            crate::engine::error::install_plugin_error(&ctx).unwrap();
+            crate::sandbox::error::install_plugin_error(&ctx).unwrap();
             install(&ctx, dir.path(), ExternalMemory::new()).unwrap();
             ctx.eval::<(), _>(format!(
                 r#"
@@ -890,7 +890,7 @@ mod bundled_oracle {
         let dir = TestDir::new("oracle");
         let lines = std::rc::Rc::new(RefCell::new(Vec::<String>::new()));
         ctx.with(|ctx| {
-            crate::engine::error::install_plugin_error(&ctx).unwrap();
+            crate::sandbox::error::install_plugin_error(&ctx).unwrap();
             let console = Object::new(ctx.clone()).unwrap();
             for name in ["log", "error", "warn", "info", "debug"] {
                 let lines = lines.clone();
@@ -906,12 +906,12 @@ mod bundled_oracle {
             let natives = Object::new(ctx.clone()).unwrap();
             natives.set("cloneBlob", clone).unwrap();
             let factory: Function =
-                crate::engine::prelude::load(&ctx, include_bytes!(concat!(env!("OUT_DIR"), "/globals.qbc"))).unwrap();
+                crate::sandbox::prelude::load(&ctx, include_bytes!(concat!(env!("OUT_DIR"), "/globals.qbc"))).unwrap();
             factory.call::<_, ()>((natives,)).unwrap();
             match ctx.eval::<(), _>(ORACLE) {
                 Ok(()) => {}
                 Err(rquickjs::Error::Exception) => {
-                    panic!("{}", crate::tg::rpc::format_exception(&ctx))
+                    panic!("{}", crate::telegram::rpc::format_exception(&ctx))
                 }
                 Err(e) => panic!("{e:?}"),
             }

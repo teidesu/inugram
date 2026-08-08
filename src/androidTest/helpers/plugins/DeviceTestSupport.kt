@@ -6,11 +6,11 @@ import desu.inugram.core.plugins.PluginWire
 import desu.inugram.helpers.plugins.io.PluginFetch
 import desu.inugram.helpers.plugins.platform.PluginJvm
 import desu.inugram.helpers.plugins.platform.PluginNotifications
-import desu.inugram.helpers.plugins.tg.PluginDeserialize
-import desu.inugram.helpers.plugins.tg.PluginReads
-import desu.inugram.helpers.plugins.tg.PluginRpc
-import desu.inugram.helpers.plugins.tg.PluginUpdates
-import desu.inugram.helpers.plugins.tg.PluginWrites
+import desu.inugram.helpers.plugins.telegram.PluginDeserialize
+import desu.inugram.helpers.plugins.telegram.PluginReads
+import desu.inugram.helpers.plugins.telegram.PluginRpc
+import desu.inugram.helpers.plugins.telegram.PluginUpdates
+import desu.inugram.helpers.plugins.telegram.PluginWrites
 import desu.inugram.helpers.plugins.tl.TlFilter
 import desu.inugram.helpers.plugins.tl.TlHandles
 import desu.inugram.helpers.plugins.tl.TlReflect

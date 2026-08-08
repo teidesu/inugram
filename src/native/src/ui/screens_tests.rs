@@ -1,6 +1,7 @@
 use super::*;
-use crate::engine::error::{install_plugin_error, TestGrantHost};
-use crate::tg::account::tests::TestAccountHost;
+use crate::grants::TestGrantHost;
+use crate::sandbox::error::install_plugin_error;
+use crate::telegram::account::tests::TestAccountHost;
 use rquickjs::Context;
 
 const TWO_ACCOUNTS: &str = r#"[{"id":0,"userId":111,"isCurrent":true,"isPremium":false},{"id":1,"userId":222,"isCurrent":false,"isPremium":true}]"#;
@@ -35,7 +36,7 @@ fn setup(grants: &[&str]) -> Fixture {
     let lifecycle = Lifecycle::new();
     let (state, accounts) = ctx.with(|ctx| {
         install_plugin_error(&ctx).unwrap();
-        let accounts = crate::tg::account::install_account(
+        let accounts = crate::telegram::account::install_account(
             &ctx,
             TestAccountHost::with(TWO_ACCOUNTS),
             grants.clone(),
@@ -47,7 +48,7 @@ fn setup(grants: &[&str]) -> Fixture {
         (state, accounts)
     });
     let state = Disposing::new(&ctx, state, dispose);
-    let accounts = AccountDisposing::new(&ctx, accounts, crate::tg::account::dispose);
+    let accounts = AccountDisposing::new(&ctx, accounts, crate::telegram::account::dispose);
     (rt, ctx, host, state, accounts, logs)
 }
 

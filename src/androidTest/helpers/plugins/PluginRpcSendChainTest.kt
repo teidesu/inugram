@@ -1,6 +1,6 @@
 package desu.inugram.helpers.plugins
 
-import desu.inugram.helpers.plugins.tg.PluginRpc
+import desu.inugram.helpers.plugins.telegram.PluginRpc
 import kotlin.test.assertEquals
 import kotlin.test.assertNotNull
 import kotlin.test.assertNull

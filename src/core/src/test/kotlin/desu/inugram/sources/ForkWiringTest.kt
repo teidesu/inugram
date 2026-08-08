@@ -111,7 +111,7 @@ class ForkWiringTest {
             .findAll(forkSource("PluginXposed.kt").readText())
             .associate { it.groupValues[1] to it.groupValues[2].toInt() }
         val native = Regex("""const (OP_\w+): i32 = (\d+);""")
-            .findAll(File(forkRoot(), "src/native/src/platform/xposed.rs").readText())
+            .findAll(File(forkRoot(), "src/native/src/platform/xposed/mod.rs").readText())
             .associate { it.groupValues[1] to it.groupValues[2].toInt() }
         assertTrue(bridge.isNotEmpty(), "read no ops out of PluginXposed.kt")
         assertTrue(native.isNotEmpty(), "read no ops out of xposed.rs")

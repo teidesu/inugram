@@ -66,7 +66,7 @@ fn setup() -> Fixture {
     let logs = crate::testing::util::Logs::new();
     let log = crate::testing::util::log_sink(&logs);
     let state = ctx.with(|ctx| {
-        crate::engine::error::install_plugin_error(&ctx).unwrap();
+        crate::sandbox::error::install_plugin_error(&ctx).unwrap();
         install_ui(&ctx, host_dyn, Lifecycle::new(), log, None).unwrap()
     });
     let state = Disposing::new(&ctx, state, dispose);
@@ -462,9 +462,9 @@ fn a_java_object_reaches_open_page_and_native_view() {
     let host_dyn: Rc<dyn UiHost> = host.clone();
     let log = crate::testing::util::log_sink(&crate::testing::util::Logs::new());
     let jvm_host = crate::platform::jvm::tests::testing::OracleJvmHost::new();
-    let grants = crate::engine::error::TestGrantHost::new(&["unsafe.jvm"]);
+    let grants = crate::grants::TestGrantHost::new(&["unsafe.jvm"]);
     let (state, jvm) = ctx.with(|ctx| {
-        crate::engine::error::install_plugin_error(&ctx).unwrap();
+        crate::sandbox::error::install_plugin_error(&ctx).unwrap();
         let jvm = crate::platform::jvm::install_jvm(
             &ctx,
             jvm_host.as_host(),

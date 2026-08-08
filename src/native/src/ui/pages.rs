@@ -16,10 +16,10 @@ use std::rc::Rc;
 use rquickjs::{Array, Ctx, Exception, Function, Object, Persistent, Result as JsResult, Runtime, Value};
 
 use crate::api::{json_parse, json_stringify};
-use crate::engine::argv::{field, opt_bool, opt_fn, opt_num, opt_str, req_bool, req_fn, req_num, req_str};
-use crate::engine::error::{get_or_create_inu, throw_plugin_error};
-use crate::engine::registry::{make_disposer, noop_disposer, Lifecycle, Registry, RequestIds};
-use crate::tg::rpc::{format_exception, pump_jobs, PendingSettle};
+use crate::sandbox::argv::{field, opt_bool, opt_fn, opt_num, opt_str, req_bool, req_fn, req_num, req_str};
+use crate::sandbox::error::{get_or_create_inu, throw_plugin_error};
+use crate::sandbox::registry::{make_disposer, noop_disposer, Lifecycle, Registry, RequestIds};
+use crate::telegram::rpc::{format_exception, pump_jobs, PendingSettle};
 use crate::ui::icons::opt_icon;
 
 /// most steps a slider `label` callback may be evaluated for at render time. the whole strip is
@@ -171,7 +171,7 @@ fn make_select<'js>(ctx: &Ctx<'js>, opts: Object<'js>) -> JsResult<Object<'js>> 
 
     let raw: Value = field(ctx, &opts, "select", "items")?;
     let arr = raw.as_array().ok_or_else(|| Exception::throw_type(ctx, "select: 'items' must be an array"))?;
-    let arr = crate::engine::argv::array_values(ctx, arr, "select: 'items'")?;
+    let arr = crate::sandbox::argv::array_values(ctx, arr, "select: 'items'")?;
     if arr.is_empty() {
         return Err(Exception::throw_type(ctx, "select: 'items' must not be empty"));
     }
@@ -729,7 +729,7 @@ fn js_open_menu<'js>(ctx: &Ctx<'js>, state: &Rc<UiState>, page_id: i64, row: &st
         );
     }
     let arr = items.as_array().ok_or_else(|| Exception::throw_type(ctx, "openMenu: expected an array of items"))?;
-    let arr = crate::engine::argv::array_values(ctx, arr, "openMenu")?;
+    let arr = crate::sandbox::argv::array_values(ctx, arr, "openMenu")?;
     if arr.is_empty() {
         return Err(Exception::throw_type(ctx, "openMenu: items must not be empty"));
     }
@@ -879,7 +879,7 @@ pub fn page_closed(rt: &Runtime, context: &rquickjs::Context, state: &Rc<UiState
     pump_jobs(rt, context, state.log.as_ref());
 }
 
-/// releases every `Persistent` GC root this state still owns - same contract as [`crate::tg::rpc::dispose`]
+/// releases every `Persistent` GC root this state still owns - same contract as [`crate::telegram::rpc::dispose`]
 pub fn dispose(context: &rquickjs::Context, state: &Rc<UiState>) {
     context.with(|ctx| {
         for (_, def) in state.pages.borrow_mut().drain() {

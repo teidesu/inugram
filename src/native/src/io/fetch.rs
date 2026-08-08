@@ -43,11 +43,10 @@ use std::rc::Rc;
 use rquickjs::{Ctx, Function, Object, Result as JsResult, Runtime, TypedArray, Value};
 
 use crate::api::{json_parse, json_stringify};
-use crate::engine::error::{
-    check_grant, get_or_create_inu, throw_plugin_error, wire_error_to_js, GrantHost, MATCH_DOMAIN,
-};
+use crate::grants::{check_grant, GrantHost, MATCH_DOMAIN};
 use crate::io::blob::{export_for_host, mint_app_file, resolve_export, BlobState, BUILD_LIMIT_BYTES};
-use crate::tg::rpc::{format_exception, pump_jobs, PendingSettle};
+use crate::sandbox::error::{get_or_create_inu, throw_plugin_error, wire_error_to_js};
+use crate::telegram::rpc::{format_exception, pump_jobs, PendingSettle};
 
 const PRELUDE: &[u8] = include_bytes!(concat!(env!("OUT_DIR"), "/fetch.qbc"));
 
@@ -67,16 +66,16 @@ pub struct FetchState {
     grants: Rc<dyn GrantHost>,
     blobs: Rc<BlobState>,
     log: crate::Log,
-    next_request_id: crate::engine::registry::RequestIds,
+    next_request_id: crate::sandbox::registry::RequestIds,
     pending: RefCell<HashMap<i64, PendingSettle>>,
 }
 
-/// The host the grant is checked against, from [`crate::engine::url`]'s screen - which `openUrl`
+/// The host the grant is checked against, from [`crate::sandbox::url`]'s screen - which `openUrl`
 /// runs too, both apis handing the string on to something that re-parses it. `EgressPolicy.hostOf`
 /// does it a third time with a real url parser and is the authority; this is the pre-flight that
 /// decides which grant to ask for.
 fn parse_target(url: &str) -> Result<String, String> {
-    crate::engine::url::parse_http_url("fetch", url)
+    crate::sandbox::url::parse_http_url("fetch", url)
 }
 
 /// `string | Uint8Array | Blob` for a request body, read here because only this side can read a
@@ -152,7 +151,7 @@ fn js_send<'js>(
 
     if let Some(err) = state.host.send(request_id, &url, &spec_json, body.as_deref()) {
         if let Some(settle) = state.pending.borrow_mut().remove(&request_id) {
-            let value = crate::engine::error::host_error_to_js(ctx, &err)?;
+            let value = crate::sandbox::error::host_error_to_js(ctx, &err)?;
             settle.reject_with_value(ctx, value)?;
         }
     }
@@ -175,7 +174,7 @@ pub fn install_fetch<'js>(
         grants,
         blobs,
         log,
-        next_request_id: crate::engine::registry::RequestIds::default(),
+        next_request_id: crate::sandbox::registry::RequestIds::default(),
         pending: RefCell::new(HashMap::new()),
     });
 
@@ -206,7 +205,7 @@ pub fn install_fetch<'js>(
         timers.set(name, f)?;
     }
 
-    let factory = crate::engine::prelude::load(ctx, PRELUDE)?;
+    let factory = crate::sandbox::prelude::load(ctx, PRELUDE)?;
     factory.call::<_, ()>((natives, plugin_error, timers))?;
     Ok(state)
 }
@@ -293,7 +292,7 @@ pub fn fetch_result(
     pump_jobs(rt, context, state.log.as_ref());
 }
 
-/// releases every `Persistent` GC root this state still owns - same contract as [`crate::tg::rpc::dispose`]
+/// releases every `Persistent` GC root this state still owns - same contract as [`crate::telegram::rpc::dispose`]
 pub fn dispose(context: &rquickjs::Context, state: &Rc<FetchState>) {
     context.with(|ctx| {
         for (_, settle) in state.pending.borrow_mut().drain() {

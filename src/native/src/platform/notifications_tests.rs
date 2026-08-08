@@ -1,5 +1,6 @@
 use super::*;
-use crate::engine::error::{install_plugin_error, TestGrantHost};
+use crate::grants::TestGrantHost;
+use crate::sandbox::error::install_plugin_error;
 use rquickjs::Context;
 
 /// the names the app's own `NotificationCenter` would answer to; a closed vocabulary is the

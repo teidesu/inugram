@@ -11,7 +11,7 @@ import org.telegram.messenger.DialogObject
 class ActionSurface private constructor(val json: String, internal val kind: Int, dialogId: Long) {
     /**
      * an action never fires in a secret chat, which is the same rule
-     * [desu.inugram.helpers.plugins.tg.PeerSpecs.dialogIdOf] enforces for every read - stated once
+     * [desu.inugram.helpers.plugins.telegram.PeerSpecs.dialogIdOf] enforces for every read - stated once
      * here so no attach point can forget it
      */
     internal val isSecret: Boolean = DialogObject.isEncryptedDialog(dialogId)

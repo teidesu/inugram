@@ -1,5 +1,6 @@
+use super::kv::{KV_CLEAR, KV_DEL, KV_GET, KV_GET_ALL, KV_HAS, KV_INSERT_ALL, KV_KEYS, KV_SET, KV_USAGE};
 use super::*;
-use crate::engine::error::TestGrantHost;
+use crate::grants::TestGrantHost;
 use crate::tl::proxy;
 use rquickjs::Context;
 
@@ -126,7 +127,7 @@ fn setup(grants: &[&str]) -> Fixture {
     let logs = crate::testing::util::Logs::new();
     let log = crate::testing::util::log_sink(&logs);
     let state = ctx.with(|ctx| {
-        error::install_plugin_error(&ctx).unwrap();
+        crate::sandbox::error::install_plugin_error(&ctx).unwrap();
         install_api(&ctx, host_dyn, grants, Lifecycle::new(), log).unwrap()
     });
     let state = Disposing::new(&ctx, state, dispose);

@@ -217,15 +217,15 @@ fn throw_tl<'js, T>(ctx: &Ctx<'js>, message: &str) -> JsResult<T> {
 /// the host's out-of-band expiry answers (`tl_own_keys`/`tl_copy`'s `null`, `tl_has`'s `-1`) carry
 /// no wire, so they raise the same `handle-expired` error the wire path produces
 fn throw_expired<'js, T>(ctx: &Ctx<'js>) -> JsResult<T> {
-    crate::engine::error::throw_plugin_error(ctx, "handle-expired", HANDLE_EXPIRED_MESSAGE, None, None, None)
+    crate::sandbox::error::throw_plugin_error(ctx, "handle-expired", HANDLE_EXPIRED_MESSAGE, None, None, None)
 }
 
 fn throw_read_only<'js, T>(ctx: &Ctx<'js>) -> JsResult<T> {
-    crate::engine::error::throw_plugin_error(ctx, "forbidden", READ_ONLY_MESSAGE, None, None, None)
+    crate::sandbox::error::throw_plugin_error(ctx, "forbidden", READ_ONLY_MESSAGE, None, None, None)
 }
 
 fn throw_unsupported<'js, T>(ctx: &Ctx<'js>, message: &str) -> JsResult<T> {
-    crate::engine::error::throw_plugin_error(ctx, "unsupported", message, None, None, None)
+    crate::sandbox::error::throw_plugin_error(ctx, "unsupported", message, None, None, None)
 }
 
 /// QuickJS normalizes a descriptor through `js_obj_to_desc`/`js_create_desc` before the trap sees
@@ -362,10 +362,10 @@ pub(crate) fn scalar_wire_to_js<'js>(ctx: &Ctx<'js>, tag: char, payload: &str) -
 /// decodes a single [`TlHost::tl_get`]/`next()`/`invokeRpc()`/`onUpdate` value into a JS value;
 /// `life` is the lifetime any view built here (and, transitively, its children) gets.
 /// Error-tagged wire values (`E`/`R`/`P`) throw rather than returning - callers that expect a
-/// thrown error (vs. a value) should route the wire through [`crate::engine::error::wire_error_to_js`]
+/// thrown error (vs. a value) should route the wire through [`crate::sandbox::error::wire_error_to_js`]
 /// themselves before calling this.
 pub fn wire_to_js_value<'js>(ctx: &Ctx<'js>, views: &Rc<TlViews>, wire: &str, life: ViewLife) -> JsResult<Value<'js>> {
-    if let Some(built) = crate::engine::error::wire_error_to_js(ctx, wire) {
+    if let Some(built) = crate::sandbox::error::wire_error_to_js(ctx, wire) {
         return Err(ctx.throw(built?));
     }
     let mut chars = wire.chars();
@@ -523,7 +523,7 @@ fn write_field<'js>(state: &ViewState, ctx: &Ctx<'js>, target: &Value<'js>, key:
     sync_epoch(state, ctx, target)?;
     match result {
         None => Ok(true),
-        Some(err) => Err(ctx.throw(crate::engine::error::host_error_to_js(ctx, &err)?)),
+        Some(err) => Err(ctx.throw(crate::sandbox::error::host_error_to_js(ctx, &err)?)),
     }
 }
 
@@ -801,7 +801,7 @@ fn vector_length<'js>(ctx: &Ctx<'js>, host: &Rc<dyn TlHost>, handle: i64) -> JsR
     if let Some(n) = wire.strip_prefix('I').and_then(|p| p.parse().ok()) {
         return Ok(n);
     }
-    match crate::engine::error::wire_error_to_js(ctx, &wire) {
+    match crate::sandbox::error::wire_error_to_js(ctx, &wire) {
         Some(built) => Err(ctx.throw(built?)),
         None => throw_tl(ctx, "tl vector: bad length"),
     }

@@ -82,7 +82,7 @@ impl FakeHandles {
 pub(crate) fn eval_string(ctx: &Context, code: &str) -> String {
     ctx.with(|ctx| match ctx.eval::<String, _>(code) {
         Ok(value) => value,
-        Err(rquickjs::Error::Exception) => panic!("{}", crate::tg::rpc::format_exception(&ctx)),
+        Err(rquickjs::Error::Exception) => panic!("{}", crate::telegram::rpc::format_exception(&ctx)),
         Err(e) => panic!("{e:?}"),
     })
 }
@@ -91,7 +91,7 @@ pub(crate) fn eval_string(ctx: &Context, code: &str) -> String {
 pub(crate) fn eval_unit(ctx: &Context, code: &str) {
     ctx.with(|ctx| match ctx.eval::<(), _>(code) {
         Ok(()) => {}
-        Err(rquickjs::Error::Exception) => panic!("{}", crate::tg::rpc::format_exception(&ctx)),
+        Err(rquickjs::Error::Exception) => panic!("{}", crate::telegram::rpc::format_exception(&ctx)),
         Err(e) => panic!("{e:?}"),
     });
 }
@@ -186,7 +186,7 @@ pub(crate) fn run_capturing_console(rt: &Runtime, ctx: &Context, source: &str) -
     let lines = install_capturing_console(ctx);
     ctx.with(|ctx| match ctx.eval::<(), _>(source) {
         Ok(()) => {}
-        Err(rquickjs::Error::Exception) => panic!("{}", crate::tg::rpc::format_exception(&ctx)),
+        Err(rquickjs::Error::Exception) => panic!("{}", crate::telegram::rpc::format_exception(&ctx)),
         Err(e) => panic!("{e:?}"),
     });
     while rt.is_job_pending() {

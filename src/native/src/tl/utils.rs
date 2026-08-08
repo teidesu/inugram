@@ -11,7 +11,7 @@
 use base64::Engine;
 use rquickjs::{Ctx, Exception, Function, Object, Result as JsResult, TypedArray, Value};
 
-use crate::engine::error::{get_or_create_inu, throw_plugin_error};
+use crate::sandbox::error::{get_or_create_inu, throw_plugin_error};
 
 const PRELUDE: &[u8] = include_bytes!(concat!(env!("OUT_DIR"), "/utils.qbc"));
 
@@ -53,7 +53,7 @@ pub fn install_utils<'js>(ctx: &Ctx<'js>) -> JsResult<Object<'js>> {
     // throws, the same reason `globals.js` takes its natives as an argument
     let plugin_error: Value = inu.get("PluginError")?;
 
-    let factory = crate::engine::prelude::load(ctx, PRELUDE)?;
+    let factory = crate::sandbox::prelude::load(ctx, PRELUDE)?;
     let shared: Object = factory.call((utils.clone(), plugin_error))?;
 
     inu.set("utils", utils)?;

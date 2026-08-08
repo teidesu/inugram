@@ -2,7 +2,7 @@ package desu.inugram.helpers.plugins
 
 import desu.inugram.core.plugins.TlCtorIds
 import desu.inugram.core.plugins.PluginWire
-import desu.inugram.helpers.plugins.tg.PluginUpdates
+import desu.inugram.helpers.plugins.telegram.PluginUpdates
 import kotlin.test.assertEquals
 import kotlin.test.assertNull
 import kotlin.test.assertTrue

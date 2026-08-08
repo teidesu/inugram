@@ -1,6 +1,7 @@
 use super::*;
-use crate::engine::error::{install_plugin_error, TestGrantHost};
-use crate::engine::globals::{install_globals, RandomHost};
+use crate::grants::TestGrantHost;
+use crate::sandbox::error::install_plugin_error;
+use crate::sandbox::globals::{install_globals, RandomHost};
 use rquickjs::{Context, Runtime};
 use std::sync::atomic::{AtomicU64, Ordering};
 
@@ -15,7 +16,7 @@ impl RandomHost for NoRandomness {
 }
 
 pub(crate) fn install_sandbox_globals(ctx: &Ctx<'_>, spill_dir: &Path) -> JsResult<Rc<BlobState>> {
-    install_globals(ctx, Rc::new(NoRandomness), spill_dir, crate::engine::deadline::ExternalMemory::new())
+    install_globals(ctx, Rc::new(NoRandomness), spill_dir, crate::sandbox::limits::ExternalMemory::new())
 }
 
 static NEXT_DIR: AtomicU64 = AtomicU64::new(0);
@@ -664,7 +665,8 @@ fn writing_in_a_loop_does_not_grow_the_export_table() {
 mod bundled_oracle {
     use super::tests::{install_sandbox_globals, TestDir};
     use super::*;
-    use crate::engine::error::{install_plugin_error, TestGrantHost};
+    use crate::grants::TestGrantHost;
+    use crate::sandbox::error::install_plugin_error;
     use rquickjs::{Context, Runtime};
 
     const ORACLE: &str = include_str!("../../../res/assets-debug/inu_plugins/fs-test.js");
@@ -732,7 +734,7 @@ mod bundled_oracle {
             match ctx.eval::<(), _>(ORACLE) {
                 Ok(()) => {}
                 Err(rquickjs::Error::Exception) => {
-                    panic!("{}", crate::tg::rpc::format_exception(&ctx))
+                    panic!("{}", crate::telegram::rpc::format_exception(&ctx))
                 }
                 Err(e) => panic!("{e:?}"),
             }

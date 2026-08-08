@@ -33,12 +33,12 @@ use rquickjs::{
 
 use crate::draw::css::{parse_color, parse_font, Font};
 use crate::draw::geom::{finite, normalize_round_rect, ArcError, Matrix, Path, Verb};
-use crate::engine::deadline::{ExternalCharge, ExternalMemory};
-use crate::engine::error::{get_or_create_inu, throw_plugin_error, wire_error_to_js};
-use crate::engine::registry::RequestIds;
-use crate::engine::shape::{define_getter, define_method};
 use crate::io::blob::{mint_app_file, resolve_export, BlobState, BUILD_LIMIT_BYTES};
-use crate::tg::rpc::{format_exception, pump_jobs, PendingSettle};
+use crate::sandbox::error::{get_or_create_inu, throw_plugin_error, wire_error_to_js};
+use crate::sandbox::limits::{ExternalCharge, ExternalMemory};
+use crate::sandbox::registry::RequestIds;
+use crate::sandbox::shape::{define_getter, define_method};
+use crate::telegram::rpc::{format_exception, pump_jobs, PendingSettle};
 
 /// the largest canvas one plugin may ask for, per side. A canvas is one contiguous allocation of
 /// `width * height * 4`, so the ceiling that matters is the native budget - this one exists on top
@@ -753,7 +753,7 @@ fn rect_path(m: &Matrix, x: f64, y: f64, w: f64, h: f64) -> Path {
 }
 
 fn fill_rule_of<'js>(ctx: &Ctx<'js>, rule: Opt<Value<'js>>) -> JsResult<u8> {
-    let rule = match crate::engine::argv::opt(rule) {
+    let rule = match crate::sandbox::argv::opt(rule) {
         Some(value) => Coerced::<String>::from_js(ctx, value)?.0,
         None => return Ok(0),
     };
@@ -1106,7 +1106,7 @@ fn start_async<'js>(
             match wire_error_to_js(ctx, &answer) {
                 Some(Ok(value)) => pending.settle.reject_with_value(ctx, value)?,
                 _ => {
-                    let value = crate::engine::error::make_plugin_error(ctx, "internal", &answer, None, None, None)?;
+                    let value = crate::sandbox::error::make_plugin_error(ctx, "internal", &answer, None, None, None)?;
                     pending.settle.reject_with_value(ctx, value)?;
                 }
             }
@@ -1221,7 +1221,7 @@ fn convert_to_blob<'js>(
         if let Some(pending) = take_pending(state, request_id) {
             let value = match wire_error_to_js(ctx, &answer) {
                 Some(Ok(value)) => value,
-                _ => crate::engine::error::make_plugin_error(ctx, "internal", &answer, None, None, None)?,
+                _ => crate::sandbox::error::make_plugin_error(ctx, "internal", &answer, None, None, None)?,
             };
             pending.settle.reject_with_value(ctx, value)?;
         }

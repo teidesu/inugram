@@ -27,9 +27,9 @@ use rquickjs::{
     Value,
 };
 
-use crate::engine::deadline::{ExternalCharge, ExternalMemory, EXTERNAL_LIMIT_BYTES, HEAP_LIMIT_BYTES};
-use crate::engine::error::{make_plugin_error, throw_plugin_error};
-use crate::engine::shape::{define_getter, define_method};
+use crate::sandbox::error::{make_plugin_error, throw_plugin_error};
+use crate::sandbox::limits::{ExternalCharge, ExternalMemory, EXTERNAL_LIMIT_BYTES, HEAP_LIMIT_BYTES};
+use crate::sandbox::shape::{define_getter, define_method};
 
 /// where a built blob stops being kept in ram. 2 MiB is ~6% of the js heap ceiling, so
 /// materializing one back into js is never the allocation that kills a plugin, and 1/32 of the
@@ -757,7 +757,7 @@ fn build_blob<'js>(
             let Some(array) = parts.as_array() else {
                 return Err(Exception::throw_type(ctx, "Blob: expected an array of parts"));
             };
-            for part in crate::engine::argv::array_values(ctx, array, "Blob")? {
+            for part in crate::sandbox::argv::array_values(ctx, array, "Blob")? {
                 append_part(ctx, &mut sink, part)?;
             }
         }
@@ -1021,14 +1021,14 @@ fn install_blob_members<'js>(ctx: &Ctx<'js>, proto: &Object<'js>) -> JsResult<()
             let coerce = |v: Option<Value<'js>>| -> JsResult<Option<f64>> {
                 v.map(|v| Ok(Coerced::<f64>::from_js(&ctx, v)?.0)).transpose()
             };
-            let start = coerce(crate::engine::argv::opt(start))?;
-            let end = coerce(crate::engine::argv::opt(end))?;
+            let start = coerce(crate::sandbox::argv::opt(start))?;
+            let end = coerce(crate::sandbox::argv::opt(end))?;
             let handle = this.0.borrow();
             let backing = handle.live(&ctx)?;
             let size = handle.size();
             let from = clamp_index(start, size, 0);
             let to = clamp_index(end, size, size).max(from);
-            let mime = match crate::engine::argv::opt(content_type) {
+            let mime = match crate::sandbox::argv::opt(content_type) {
                 Some(v) => normalize_mime(&Coerced::<String>::from_js(&ctx, v)?.0),
                 None => String::new(),
             };

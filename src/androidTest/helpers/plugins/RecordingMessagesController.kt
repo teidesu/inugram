@@ -1,6 +1,6 @@
 package desu.inugram.helpers.plugins
 
-import desu.inugram.helpers.plugins.tg.PluginUpdates
+import desu.inugram.helpers.plugins.telegram.PluginUpdates
 import org.telegram.messenger.MessagesController
 import org.telegram.tgnet.TLRPC
 

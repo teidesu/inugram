@@ -25,11 +25,10 @@ use rquickjs::{
     TypedArray, Value,
 };
 
-use crate::engine::error::{
-    check_grant, get_or_create_inu, throw_plugin_error, wire_error_to_js, GrantHost, MATCH_NAMESPACE,
-};
-use crate::engine::registry::{CallbackRegistry, Lifecycle};
-use crate::tg::rpc::{format_exception, pump_jobs};
+use crate::grants::{check_grant, GrantHost, MATCH_NAMESPACE};
+use crate::sandbox::error::{get_or_create_inu, throw_plugin_error, wire_error_to_js};
+use crate::sandbox::registry::{CallbackRegistry, Lifecycle};
+use crate::telegram::rpc::{format_exception, pump_jobs};
 
 const PRELUDE: &[u8] = include_bytes!(concat!(env!("OUT_DIR"), "/jvm.qbc"));
 
@@ -256,7 +255,7 @@ fn js_op<'js>(
     // is about to reach; this is the same coarse gate every other api keeps at its entry point
     check_grant(ctx, &state.grants, GRANT, None, MATCH_NAMESPACE)?;
     let mut wires = Vec::new();
-    for arg in crate::engine::argv::array_values(ctx, &args, "jvm")? {
+    for arg in crate::sandbox::argv::array_values(ctx, &args, "jvm")? {
         wires.push(arg_to_wire(ctx, state, &arg)?);
     }
     ask(ctx, state, op, target, &name, &wires)
@@ -377,7 +376,7 @@ pub fn install_jvm<'js>(
     // by a plugin reassigning `inu.PluginError`
     let plugin_error: Value = inu.get("PluginError")?;
 
-    let factory = crate::engine::prelude::load(ctx, PRELUDE)?;
+    let factory = crate::sandbox::prelude::load(ctx, PRELUDE)?;
     let built: Object = factory.call((natives, plugin_error))?;
     let jvm: Object = built.get("jvm")?;
     let mint: Function = built.get("mint")?;

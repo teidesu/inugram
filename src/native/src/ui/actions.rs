@@ -16,11 +16,12 @@ use rquickjs::object::Accessor;
 use rquickjs::{Array, Ctx, Exception, Function, Object, Persistent, Result as JsResult, Runtime, Value};
 
 use crate::api::{json_parse, json_stringify};
-use crate::engine::argv::{field, opt_fn, req_fn, req_str};
-use crate::engine::error::{check_grant, get_or_create_inu, throw_plugin_error, GrantHost, MATCH_EXACT};
-use crate::engine::registry::{make_disposer, noop_disposer, Lifecycle, Registry, Token};
-use crate::tg::account::AccountState;
-use crate::tg::rpc::{format_exception, pump_jobs};
+use crate::grants::{check_grant, GrantHost, MATCH_EXACT};
+use crate::sandbox::argv::{field, opt_fn, req_fn, req_str};
+use crate::sandbox::error::{get_or_create_inu, throw_plugin_error};
+use crate::sandbox::registry::{make_disposer, noop_disposer, Lifecycle, Registry, Token};
+use crate::telegram::account::AccountState;
+use crate::telegram::rpc::{format_exception, pump_jobs};
 
 /// keep in sync with Kotlin `PluginActions.KIND_*`
 pub const KIND_GLOBAL: i32 = 0;
@@ -192,7 +193,7 @@ fn js_register<'js>(ctx: &Ctx<'js>, state: &Rc<ActionState>, kind: i32, opts: Ob
         }
         // the row cap arrives as a `P` wire naming its own code; anything else this upcall can
         // answer is a JNI-level failure, which is the host's bad day and not a quota
-        return Err(ctx.throw(crate::engine::error::host_error_to_js(ctx, &err)?));
+        return Err(ctx.throw(crate::sandbox::error::host_error_to_js(ctx, &err)?));
     }
     let def = Rc::new(ActionDef {
         token,
@@ -232,7 +233,7 @@ fn build_context<'js>(ctx: &Ctx<'js>, state: &Rc<ActionState>, kind: i32, surfac
 
     let out = Object::new(ctx.clone())?;
     let account_id: i32 = parsed.get::<_, Option<i32>>("accountId")?.unwrap_or(0);
-    out.set("account", crate::tg::account::dispatch_account(ctx, &state.accounts, account_id)?)?;
+    out.set("account", crate::telegram::account::dispatch_account(ctx, &state.accounts, account_id)?)?;
 
     if kind != KIND_GLOBAL {
         let dialog_id: f64 = parsed.get::<_, Option<f64>>("dialogId")?.unwrap_or(0.0);
@@ -384,12 +385,7 @@ pub fn render_actions(
 
 /// [`build_context`] over host-supplied json, with the failure logged as the host's own. Shared by
 /// the two entry points so a malformed surface answers the same way whichever one saw it.
-fn surface_context<'js>(
-    ctx: &Ctx<'js>,
-    state: &Rc<ActionState>,
-    kind: i32,
-    surface_json: &str,
-) -> Option<Object<'js>> {
+fn surface_context<'js>(ctx: &Ctx<'js>, state: &Rc<ActionState>, kind: i32, surface_json: &str) -> Option<Object<'js>> {
     match build_context(ctx, state, kind, surface_json) {
         Ok(obj) => Some(obj),
         Err(rquickjs::Error::Exception) => {
@@ -501,7 +497,7 @@ pub fn dispatch_action(
     pump_jobs(rt, context, state.log.as_ref());
 }
 
-/// releases every `Persistent` GC root this state still owns - same contract as [`crate::tg::rpc::dispose`]
+/// releases every `Persistent` GC root this state still owns - same contract as [`crate::telegram::rpc::dispose`]
 pub fn dispose(context: &rquickjs::Context, state: &Rc<ActionState>) {
     context.with(|ctx| {
         for registry in &state.kinds {
