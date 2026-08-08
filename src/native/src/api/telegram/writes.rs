@@ -28,7 +28,6 @@ use crate::api::telegram::progress::ProgressReporter;
 use crate::api::telegram::rpc::{format_exception, pump_jobs, PendingSettle};
 use crate::api::tl::proxy::{js_value_to_wire, wire_to_js_value, TlViews, ViewLife};
 use crate::sandbox::grants::{check_grant, GrantHost, MATCH_EXACT};
-use crate::utils::namespace::get_or_create_inu;
 
 const PRELUDE: &[u8] = include_bytes!(concat!(env!("OUT_DIR"), "/writes.qbc"));
 
@@ -517,8 +516,9 @@ pub fn install_writes<'js>(
     deps: WritesDeps,
     shared: &Object<'js>,
     accounts: &Rc<AccountState>,
+    inu: &Object<'js>,
 ) -> JsResult<Rc<WritesState>> {
-    install_writes_with_limit(ctx, deps, shared, accounts, TRANSFER_LIMIT_BYTES)
+    install_writes_with_limit(ctx, deps, shared, accounts, inu, TRANSFER_LIMIT_BYTES)
 }
 
 pub(crate) fn install_writes_with_limit<'js>(
@@ -526,6 +526,7 @@ pub(crate) fn install_writes_with_limit<'js>(
     deps: WritesDeps,
     shared: &Object<'js>,
     accounts: &Rc<AccountState>,
+    inu: &Object<'js>,
     transfer_limit: u64,
 ) -> JsResult<Rc<WritesState>> {
     let state = Rc::new(WritesState {
@@ -568,7 +569,6 @@ pub(crate) fn install_writes_with_limit<'js>(
         natives.set("messageFile", f)?;
     }
 
-    let inu = get_or_create_inu(ctx)?;
     // captured at install, like `reads.js`'s: what the prelude constructs must not be decidable by
     // a plugin reassigning `inu.Message`
     let message: Value = inu.get("Message")?;

@@ -41,7 +41,6 @@ use crate::api::io::blob::{mint_app_file, resolve_export, BlobState, BUILD_LIMIT
 use crate::api::telegram::rpc::{format_exception, pump_jobs, PendingSettle};
 use crate::sandbox::limits::{ExternalCharge, ExternalMemory};
 use crate::sandbox::registry::RequestIds;
-use crate::utils::namespace::get_or_create_inu;
 use crate::utils::shape::{define_getter, define_method};
 
 /// the largest canvas one plugin may ask for, per side. A canvas is one contiguous allocation of
@@ -994,6 +993,7 @@ pub fn install_canvas<'js>(
     external: Rc<ExternalMemory>,
     stage_dir: PathBuf,
     log: crate::Log,
+    inu: &Object<'js>,
 ) -> JsResult<Rc<CanvasState>> {
     let state = Rc::new(CanvasState {
         host,
@@ -1017,7 +1017,7 @@ pub fn install_canvas<'js>(
     install_gradient_members(ctx)?;
     install_pattern_members(ctx)?;
     install_image_members(ctx)?;
-    install_namespace(ctx, &state)?;
+    install_namespace(ctx, &state, inu)?;
     Ok(state)
 }
 
@@ -1027,8 +1027,7 @@ pub fn attach_fs(state: &Rc<CanvasState>, fs: Rc<crate::api::io::fs::FsState>) {
     *state.fs.borrow_mut() = Some(fs);
 }
 
-fn install_namespace<'js>(ctx: &Ctx<'js>, state: &Rc<CanvasState>) -> JsResult<()> {
-    let inu = get_or_create_inu(ctx)?;
+fn install_namespace<'js>(ctx: &Ctx<'js>, state: &Rc<CanvasState>, inu: &Object<'js>) -> JsResult<()> {
     let canvas = Object::new(ctx.clone())?;
 
     let owned = state.clone();

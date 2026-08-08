@@ -46,7 +46,6 @@ use crate::api::error::{throw_plugin_error, wire_error_to_js};
 use crate::api::io::blob::{export_for_host, mint_app_file, resolve_export, BlobState, BUILD_LIMIT_BYTES};
 use crate::api::telegram::rpc::{format_exception, pump_jobs, PendingSettle};
 use crate::sandbox::grants::{check_grant, GrantHost, MATCH_DOMAIN};
-use crate::utils::namespace::get_or_create_inu;
 
 const PRELUDE: &[u8] = include_bytes!(concat!(env!("OUT_DIR"), "/fetch.qbc"));
 
@@ -168,6 +167,7 @@ pub fn install_fetch<'js>(
     grants: Rc<dyn GrantHost>,
     blobs: Rc<BlobState>,
     log: crate::Log,
+    inu: &Object<'js>,
 ) -> JsResult<Rc<FetchState>> {
     let state = Rc::new(FetchState {
         host,
@@ -198,7 +198,7 @@ pub fn install_fetch<'js>(
 
     // captured at install like `reads.js`'s constructors: what the prelude throws, and the clock it
     // measures `timeout` on, must not be decidable by a plugin reassigning a global
-    let plugin_error: Value = get_or_create_inu(ctx)?.get("PluginError")?;
+    let plugin_error: Value = inu.get("PluginError")?;
     let timers = Object::new(ctx.clone())?;
     for name in ["setTimeout", "clearTimeout"] {
         let f: Value = ctx.globals().get(name)?;

@@ -32,7 +32,6 @@ use rquickjs::{Ctx, Function, Object, Result as JsResult, TypedArray, Value};
 use crate::api::error::throw_plugin_error;
 use crate::api::io::blob::{export_for_host, resolve_export, BlobExport, BlobState, MATERIALIZE_LIMIT_BYTES};
 use crate::sandbox::grants::{check_grant, GrantHost, MATCH_EXACT};
-use crate::utils::namespace::get_or_create_inu;
 
 /// how many bytes move between a blob and a file at a time. The same size [`crate::api::io::blob`] joins its
 /// own parts in, and for the same reason: writing a 200 MB blob must not be a 200 MB allocation.
@@ -532,6 +531,7 @@ fn remove_tree(path: &Path) -> std::io::Result<()> {
 /// `root` is this plugin's own durable directory (`PluginFs.dirFor`), or "" when the host could not
 /// make one - which leaves every call failing rather than landing somewhere else. `quota` is what
 /// the manifest asked for, [`UNCAPPED`] under `unsafe.fs`.
+#[allow(clippy::too_many_arguments)]
 pub fn install_fs<'js>(
     ctx: &Ctx<'js>,
     grants: Rc<dyn GrantHost>,
@@ -540,6 +540,7 @@ pub fn install_fs<'js>(
     quota: u64,
     unscoped: bool,
     android_dirs: &str,
+    inu: &Object<'js>,
 ) -> JsResult<Rc<FsState>> {
     // once, here: containment compares a resolved path against this prefix, and a root reached
     // through a link would make every op read as an escape
@@ -668,8 +669,8 @@ pub fn install_fs<'js>(
         fs_obj.set("quota", f)?;
     }
 
-    get_or_create_inu(ctx)?.set("fs", fs_obj)?;
-    install_android_dirs(ctx, &state)?;
+    inu.set("fs", fs_obj)?;
+    install_android_dirs(ctx, &state, inu)?;
     Ok(state)
 }
 
@@ -679,8 +680,7 @@ pub fn install_fs<'js>(
 /// for it here rather than at the first `read` is the difference between a refusal and a
 /// disclosure. Not an upcall either, for the module's own reason - the host answers all of them
 /// once, at install, and they do not change for the life of the process.
-fn install_android_dirs<'js>(ctx: &Ctx<'js>, state: &Rc<FsState>) -> JsResult<()> {
-    let inu = get_or_create_inu(ctx)?;
+fn install_android_dirs<'js>(ctx: &Ctx<'js>, state: &Rc<FsState>, inu: &Object<'js>) -> JsResult<()> {
     let android: Object = match inu.get::<_, Object>("android") {
         Ok(o) => o,
         Err(_) => {

@@ -5,8 +5,9 @@ fn setup() -> (Runtime, Context) {
     let rt = Runtime::new().unwrap();
     let ctx = Context::full(&rt).unwrap();
     ctx.with(|ctx| {
-        crate::api::error::install_plugin_error(&ctx).unwrap();
-        install_utils(&ctx).unwrap();
+        let inu = crate::testing::harness::inu_namespace(&ctx);
+        crate::api::error::install_plugin_error(&ctx, &inu).unwrap();
+        install_utils(&ctx, &inu).unwrap();
     });
     (rt, ctx)
 }

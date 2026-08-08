@@ -4,7 +4,7 @@ use jni::objects::{JObject, JObjectArray, JString};
 use jni::strings::JNIString;
 use jni::sys::{jboolean, jint, jlong, jobject, jstring};
 use jni::EnvUnowned;
-use rquickjs::{Coerced, Context, Persistent, Runtime, Value};
+use rquickjs::{Coerced, Context, Object, Persistent, Result as JsResult, Runtime, Value};
 use std::rc::Rc;
 use std::sync::Arc;
 
@@ -158,13 +158,16 @@ pub extern "system" fn Java_desu_inugram_helpers_plugins_QuickJs_nativeCreate(
             return 0;
         };
 
-        let installed = ctx.with(|ctx| {
+        let installed = ctx.with(|ctx| -> JsResult<Persistent<Object<'static>>> {
             install_console(&ctx, bridge.clone())?;
-            crate::api::error::install_plugin_error(&ctx)
+            let inu = Object::new(ctx.clone())?;
+            ctx.globals().set("inu", inu.clone())?;
+            crate::api::error::install_plugin_error(&ctx, &inu)?;
+            Ok(Persistent::save(&ctx, inu))
         });
-        if installed.is_err() {
+        let Ok(inu) = installed else {
             return 0;
-        }
+        };
 
         // set outside ctx.with(): both setters lock the runtime, which ctx.with() also holds
         crate::api::telegram::rpc::install_rejection_tracker(&rt, make_log(bridge.console.clone()));
@@ -181,6 +184,7 @@ pub extern "system" fn Java_desu_inugram_helpers_plugins_QuickJs_nativeCreate(
             _rt: rt,
             bridge,
             lifecycle: Lifecycle::new(),
+            inu,
             views,
             blobs: None,
             shared: None,
@@ -224,15 +228,16 @@ pub extern "system" fn Java_desu_inugram_helpers_plugins_QuickJs_nativeInstallAp
 
         let lifecycle = engine.lifecycle.clone();
 
-        let installed = engine
-            .ctx
-            .with(|ctx| crate::api::lifecycle::install_lifecycle(&ctx, grants.clone(), lifecycle.clone(), log.clone()));
+        let installed = engine.ctx.with(|ctx| {
+            let inu = engine.inu.clone().restore(&ctx)?;
+            crate::api::lifecycle::install_lifecycle(&ctx, grants.clone(), lifecycle.clone(), log.clone(), &inu)
+        });
         match installed {
             Ok(state) => engine.lifecycle_state = Some(state),
             Err(e) => log(&format!("inu.onUnload failed to install: {e:?}")),
         }
         let installed = engine.ctx.with(|ctx| {
-            let inu = crate::utils::namespace::get_or_create_inu(&ctx)?;
+            let inu = engine.inu.clone().restore(&ctx)?;
             let kv_host: Rc<dyn KvHost> = engine.bridge.clone();
             crate::api::io::kv::install_kv(&ctx, kv_host, grants.clone(), &inu)?;
             let clipboard_host: Rc<dyn ClipboardHost> = engine.bridge.clone();
@@ -249,7 +254,15 @@ pub extern "system" fn Java_desu_inugram_helpers_plugins_QuickJs_nativeInstallAp
         // before the rpc install, which hands every dispatch the account it arrived on
         let account_host: Rc<dyn AccountHost> = engine.bridge.clone();
         let installed = engine.ctx.with(|ctx| {
-            crate::api::telegram::account::install_account(&ctx, account_host, grants, lifecycle.clone(), log.clone())
+            let inu = engine.inu.clone().restore(&ctx)?;
+            crate::api::telegram::account::install_account(
+                &ctx,
+                account_host,
+                grants,
+                lifecycle.clone(),
+                log.clone(),
+                &inu,
+            )
         });
         match installed {
             Ok(state) => engine.account = Some(state),
@@ -257,7 +270,8 @@ pub extern "system" fn Java_desu_inugram_helpers_plugins_QuickJs_nativeInstallAp
         }
         let ui_host: Rc<dyn UiHost> = engine.bridge.clone();
         let installed = engine.ctx.with(|ctx| {
-            crate::api::ui::pages::install_ui(&ctx, ui_host, lifecycle.clone(), log.clone(), engine.jvm.clone())
+            let inu = engine.inu.clone().restore(&ctx)?;
+            crate::api::ui::pages::install_ui(&ctx, ui_host, lifecycle.clone(), log.clone(), engine.jvm.clone(), &inu)
         });
         match installed {
             Ok(state) => engine.ui = Some(state),
@@ -266,7 +280,10 @@ pub extern "system" fn Java_desu_inugram_helpers_plugins_QuickJs_nativeInstallAp
         // before anything that takes a `UIIcon` in its options: an element built by top-level plugin
         // code would otherwise be refused an icon that `common.d.ts` says it can have
         let icon_host: Rc<dyn IconHost> = engine.bridge.clone();
-        if let Err(e) = engine.ctx.with(|ctx| crate::api::ui::icons::install_icons(&ctx, icon_host)) {
+        if let Err(e) = engine.ctx.with(|ctx| {
+            let inu = engine.inu.clone().restore(&ctx)?;
+            crate::api::ui::icons::install_icons(&ctx, icon_host, &inu)
+        }) {
             log(&format!("inu.icons failed to install: {e:?}"));
         }
         // after the account install: every action context carries the account its surface belongs to
@@ -274,6 +291,7 @@ pub extern "system" fn Java_desu_inugram_helpers_plugins_QuickJs_nativeInstallAp
         let accounts = engine.account.clone();
         let action_grants: Rc<dyn GrantHost> = engine.bridge.clone();
         let installed = engine.ctx.with(|ctx| {
+            let inu = engine.inu.clone().restore(&ctx)?;
             crate::api::ui::actions::install_actions(
                 &ctx,
                 action_host,
@@ -281,6 +299,7 @@ pub extern "system" fn Java_desu_inugram_helpers_plugins_QuickJs_nativeInstallAp
                 accounts,
                 action_grants,
                 log.clone(),
+                &inu,
             )
         });
         match installed {
@@ -292,6 +311,7 @@ pub extern "system" fn Java_desu_inugram_helpers_plugins_QuickJs_nativeInstallAp
         let screen_grants: Rc<dyn GrantHost> = engine.bridge.clone();
         let accounts = engine.account.clone();
         let installed = engine.ctx.with(|ctx| {
+            let inu = engine.inu.clone().restore(&ctx)?;
             crate::api::ui::screens::install_screens(
                 &ctx,
                 screen_host,
@@ -299,6 +319,7 @@ pub extern "system" fn Java_desu_inugram_helpers_plugins_QuickJs_nativeInstallAp
                 accounts,
                 lifecycle.clone(),
                 log.clone(),
+                &inu,
             )
         });
         match installed {
@@ -310,12 +331,14 @@ pub extern "system" fn Java_desu_inugram_helpers_plugins_QuickJs_nativeInstallAp
         let notification_host: Rc<dyn NotificationHost> = engine.bridge.clone();
         let notification_grants: Rc<dyn GrantHost> = engine.bridge.clone();
         let installed = engine.ctx.with(|ctx| {
+            let inu = engine.inu.clone().restore(&ctx)?;
             crate::api::platform::notifications::install_notifications(
                 &ctx,
                 notification_host,
                 notification_grants,
                 lifecycle.clone(),
                 log.clone(),
+                &inu,
             )
         });
         match installed {
@@ -343,6 +366,7 @@ pub extern "system" fn Java_desu_inugram_helpers_plugins_QuickJs_nativeInstallAp
         if let Some(blobs) = blobs.clone() {
             let canvas_host: Rc<dyn CanvasHost> = engine.bridge.clone();
             let installed = engine.ctx.with(|ctx| {
+                let inu = engine.inu.clone().restore(&ctx)?;
                 crate::api::canvas::install_canvas(
                     &ctx,
                     canvas_host,
@@ -350,6 +374,7 @@ pub extern "system" fn Java_desu_inugram_helpers_plugins_QuickJs_nativeInstallAp
                     external.clone(),
                     spill_dir.clone(),
                     log.clone(),
+                    &inu,
                 )
             });
             match installed {
@@ -371,8 +396,9 @@ pub extern "system" fn Java_desu_inugram_helpers_plugins_QuickJs_nativeInstallAp
         );
         let mut shared_root = None;
         let installed = engine.ctx.with(|ctx| -> rquickjs::Result<Surfaces> {
-            let shared = crate::api::tl::utils::install_utils(&ctx)?;
-            crate::api::tl::message::install_message(&ctx, &shared)?;
+            let inu = engine.inu.clone().restore(&ctx)?;
+            let shared = crate::api::tl::utils::install_utils(&ctx, &inu)?;
+            crate::api::tl::message::install_message(&ctx, &shared, &inu)?;
             // `installRpc` is a later JNI call and `send_message.js` takes the same helpers
             shared_root = Some(Persistent::save(&ctx, shared.clone()));
             let Some(accounts) = accounts.as_ref() else {
@@ -386,6 +412,7 @@ pub extern "system" fn Java_desu_inugram_helpers_plugins_QuickJs_nativeInstallAp
                 &shared,
                 accounts,
                 log.clone(),
+                &inu,
             )?;
             // after the reads, whose prototype it chains behind its own; and only with a blob table,
             // since a `sendMedia` that cannot read a `Blob` is not the api `common.d.ts` describes
@@ -400,7 +427,7 @@ pub extern "system" fn Java_desu_inugram_helpers_plugins_QuickJs_nativeInstallAp
                 stage_dir: spill_dir.clone(),
                 log: log.clone(),
             };
-            let writes = crate::api::telegram::writes::install_writes(&ctx, deps, &shared, accounts)?;
+            let writes = crate::api::telegram::writes::install_writes(&ctx, deps, &shared, accounts, &inu)?;
             Ok((Some(reads), Some(writes)))
         });
         engine.shared = shared_root;
@@ -423,9 +450,10 @@ pub extern "system" fn Java_desu_inugram_helpers_plugins_QuickJs_nativeInstallAp
         let fetch_host: Rc<dyn FetchHost> = engine.bridge.clone();
         let grants: Rc<dyn GrantHost> = engine.bridge.clone();
         if let Some(blobs) = engine.blobs.clone() {
-            let installed = engine
-                .ctx
-                .with(|ctx| crate::api::io::fetch::install_fetch(&ctx, fetch_host, grants, blobs, log.clone()));
+            let installed = engine.ctx.with(|ctx| {
+                let inu = engine.inu.clone().restore(&ctx)?;
+                crate::api::io::fetch::install_fetch(&ctx, fetch_host, grants, blobs, log.clone(), &inu)
+            });
             match installed {
                 Ok(state) => engine.fetch = Some(state),
                 Err(e) => log(&format!("fetch failed to install: {e:?}")),
@@ -452,8 +480,10 @@ pub extern "system" fn Java_desu_inugram_helpers_plugins_QuickJs_nativeInstallJv
     let grants: Rc<dyn GrantHost> = engine.bridge.clone();
     let log = make_log(engine.bridge.console.clone());
     let lifecycle = engine.lifecycle.clone();
-    let installed =
-        engine.ctx.with(|ctx| crate::api::platform::jvm::install_jvm(&ctx, host, grants, lifecycle, log.clone()));
+    let installed = engine.ctx.with(|ctx| {
+        let inu = engine.inu.clone().restore(&ctx)?;
+        crate::api::platform::jvm::install_jvm(&ctx, host, grants, lifecycle, log.clone(), &inu)
+    });
     match installed {
         Ok(state) => engine.jvm = Some(state),
         Err(e) => log(&format!("inu.jvm failed to install: {e:?}")),
@@ -481,9 +511,10 @@ pub extern "system" fn Java_desu_inugram_helpers_plugins_QuickJs_nativeInstallXp
     let host: Rc<dyn XposedHost> = engine.bridge.clone();
     let grants: Rc<dyn GrantHost> = engine.bridge.clone();
     let lifecycle = engine.lifecycle.clone();
-    let installed = engine
-        .ctx
-        .with(|ctx| crate::api::platform::xposed::install_xposed(&ctx, host, grants, lifecycle, jvm, log.clone()));
+    let installed = engine.ctx.with(|ctx| {
+        let inu = engine.inu.clone().restore(&ctx)?;
+        crate::api::platform::xposed::install_xposed(&ctx, host, grants, lifecycle, jvm, log.clone(), &inu)
+    });
     match installed {
         Ok(state) => engine.xposed = Some(state),
         Err(e) => log(&format!("inu.xposed failed to install: {e:?}")),
@@ -700,6 +731,7 @@ pub extern "system" fn Java_desu_inugram_helpers_plugins_QuickJs_nativeInstallFs
             quota_bytes as u64
         };
         let installed = engine.ctx.with(|ctx| {
+            let inu = engine.inu.clone().restore(&ctx)?;
             crate::api::io::fs::install_fs(
                 &ctx,
                 grants,
@@ -708,6 +740,7 @@ pub extern "system" fn Java_desu_inugram_helpers_plugins_QuickJs_nativeInstallFs
                 quota,
                 unscoped,
                 &android_dirs,
+                &inu,
             )
         });
         match installed {
@@ -916,6 +949,7 @@ pub extern "system" fn Java_desu_inugram_helpers_plugins_QuickJs_nativeInstallRp
     let rules_log = log.clone();
 
     let installed = engine.ctx.with(|ctx| {
+        let inu = engine.inu.clone().restore(&ctx)?;
         let rules = crate::api::telegram::deserialize::install_deserialize(
             &ctx,
             rules_host,
@@ -923,10 +957,20 @@ pub extern "system" fn Java_desu_inugram_helpers_plugins_QuickJs_nativeInstallRp
             rules_lifecycle,
             rules_tl,
             rules_log,
+            &inu,
         )?;
         let shared = shared.restore(&ctx)?;
-        let rpc =
-            crate::api::telegram::rpc::install_rpc(&ctx, host, tl, grants, lifecycle, accounts, shared, log.clone())?;
+        let rpc = crate::api::telegram::rpc::install_rpc(
+            &ctx,
+            host,
+            tl,
+            grants,
+            lifecycle,
+            accounts,
+            shared,
+            log.clone(),
+            &inu,
+        )?;
         Ok::<_, rquickjs::Error>((rules, rpc))
     });
     match installed {
@@ -1056,7 +1100,10 @@ pub extern "system" fn Java_desu_inugram_helpers_plugins_QuickJs_nativeInstallIn
             language: jstring_to_string(env, &language),
             header: read_header(env, &header_keys, &header_values),
         });
-        let _ = engine.ctx.with(|ctx| install_inu(&ctx, info));
+        let _ = engine.ctx.with(|ctx| {
+            let inu = engine.inu.clone().restore(&ctx)?;
+            install_inu(&ctx, info, &inu)
+        });
     })
 }
 
@@ -1163,7 +1210,12 @@ pub extern "system" fn Java_desu_inugram_helpers_plugins_QuickJs_nativeDestroy(
         if let Some(shared) = engine.shared.take() {
             engine.ctx.with(|ctx| drop(shared.restore(&ctx)));
         }
-        engine.ctx.with(|ctx| crate::api::telegram::rpc::dispose_rejection_tracker(&ctx));
-        drop(engine);
+        // moved out rather than cloned: a `Persistent` has no `Drop`, so the root the engine holds
+        // is only given back by consuming it
+        let inu = engine.inu;
+        engine.ctx.with(|ctx| {
+            drop(inu.restore(&ctx));
+            crate::api::telegram::rpc::dispose_rejection_tracker(&ctx);
+        });
     }
 }

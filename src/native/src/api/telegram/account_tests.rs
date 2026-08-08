@@ -46,8 +46,9 @@ pub(crate) fn setup(grants: &[&str], accounts: &str) -> Fixture {
     let logs = crate::testing::harness::Logs::new();
     let log = crate::testing::harness::log_sink(&logs);
     let state = ctx.with(|ctx| {
-        error::install_plugin_error(&ctx).unwrap();
-        install_account(&ctx, host_dyn, grants, Lifecycle::new(), log).unwrap()
+        let inu = crate::testing::harness::inu_namespace(&ctx);
+        error::install_plugin_error(&ctx, &inu).unwrap();
+        install_account(&ctx, host_dyn, grants, Lifecycle::new(), log, &inu).unwrap()
     });
     let state = Disposing::new(&ctx, state, dispose);
     (rt, ctx, host, state, logs)

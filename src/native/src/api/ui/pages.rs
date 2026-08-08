@@ -20,7 +20,6 @@ use crate::api::telegram::rpc::{format_exception, pump_jobs, PendingSettle};
 use crate::api::ui::icons::opt_icon;
 use crate::sandbox::registry::{make_disposer, noop_disposer, Lifecycle, Registry, RequestIds};
 use crate::utils::arguments::{field, opt_bool, opt_fn, opt_num, opt_str, req_bool, req_fn, req_num, req_str};
-use crate::utils::namespace::get_or_create_inu;
 
 /// most steps a slider `label` callback may be evaluated for at render time. the whole strip is
 /// precomputed (live dragging never calls JS), so this is a real bound on one render rather than a
@@ -238,6 +237,7 @@ pub fn install_ui<'js>(
     lifecycle: Rc<Lifecycle>,
     log: crate::Log,
     jvm: Option<Rc<crate::api::platform::jvm::JvmState>>,
+    inu: &Object<'js>,
 ) -> JsResult<Rc<UiState>> {
     let state = Rc::new(UiState {
         host,
@@ -251,7 +251,6 @@ pub fn install_ui<'js>(
         settings: Registry::default(),
     });
 
-    let inu = get_or_create_inu(ctx)?;
     let ui: Object = match inu.get::<_, Object>("ui") {
         Ok(o) => o,
         Err(_) => {

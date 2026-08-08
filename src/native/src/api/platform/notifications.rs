@@ -20,7 +20,6 @@ use crate::api::error::{host_error_to_js, throw_plugin_error};
 use crate::api::telegram::rpc::{format_exception, pump_jobs};
 use crate::sandbox::grants::{check_grant, GrantHost, MATCH_EXACT};
 use crate::sandbox::registry::{make_disposer, noop_disposer, Lifecycle, Registry, Token};
-use crate::utils::namespace::get_or_create_inu;
 
 /// stand-in for the Kotlin `QuickJs.NotificationListener`
 pub trait NotificationHost {
@@ -71,6 +70,7 @@ pub fn install_notifications<'js>(
     grants: Rc<dyn GrantHost>,
     lifecycle: Rc<Lifecycle>,
     log: crate::Log,
+    inu: &Object<'js>,
 ) -> JsResult<Rc<NotificationState>> {
     let state = Rc::new(NotificationState {
         host,
@@ -81,7 +81,6 @@ pub fn install_notifications<'js>(
         invoke: RefCell::new(None),
     });
 
-    let inu = get_or_create_inu(ctx)?;
     let android: Object = match inu.get::<_, Object>("android") {
         Ok(o) => o,
         Err(_) => {

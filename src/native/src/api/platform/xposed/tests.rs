@@ -59,16 +59,18 @@ fn the_bundled_xposed_test_plugin_passes() {
     let lifecycle = Lifecycle::new();
     let log: std::sync::Arc<dyn Fn(&str) + Send + Sync> = std::sync::Arc::new(|_: &str| {});
     let (state, jvm) = ctx.with(|ctx| {
-        crate::api::error::install_plugin_error(&ctx).unwrap();
+        let inu = crate::testing::harness::inu_namespace(&ctx);
+        crate::api::error::install_plugin_error(&ctx, &inu).unwrap();
         let jvm = crate::api::platform::jvm::install_jvm(
             &ctx,
             OracleJvmHost::new().as_host(),
             grants.clone(),
             lifecycle.clone(),
             log.clone(),
+            &inu,
         )
         .unwrap();
-        let state = install_xposed(&ctx, host.clone(), grants, lifecycle, jvm.clone(), log).unwrap();
+        let state = install_xposed(&ctx, host.clone(), grants, lifecycle, jvm.clone(), log, &inu).unwrap();
         (state, jvm)
     });
     let _jvm = DisposeOnDrop::new(&ctx, jvm, crate::api::platform::jvm::dispose);
@@ -186,17 +188,19 @@ fn setup(grants: &[&str]) -> Fixture {
     let host = TestXposedHost::new();
 
     let (state, jvm) = ctx.with(|ctx| {
-        crate::api::error::install_plugin_error(&ctx).unwrap();
+        let inu = crate::testing::harness::inu_namespace(&ctx);
+        crate::api::error::install_plugin_error(&ctx, &inu).unwrap();
         let jvm = crate::api::platform::jvm::install_jvm(
             &ctx,
             OracleJvmHost::new().as_host(),
             grant_host.clone(),
             lifecycle.clone(),
             log.clone(),
+            &inu,
         )
         .unwrap();
         let state =
-            install_xposed(&ctx, host.as_host(), grant_host.clone(), lifecycle.clone(), jvm.clone(), log.clone())
+            install_xposed(&ctx, host.as_host(), grant_host.clone(), lifecycle.clone(), jvm.clone(), log.clone(), &inu)
                 .unwrap();
         (state, jvm)
     });

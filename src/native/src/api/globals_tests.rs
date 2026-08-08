@@ -590,7 +590,9 @@ fn a_build_that_throws_after_it_started_spilling_leaves_nothing_behind() {
 #[test]
 fn with_nowhere_to_spill_a_full_native_budget_is_the_one_way_building_a_blob_fails() {
     let (_rt, ctx, _host) = setup();
-    ctx.with(|ctx| crate::api::error::install_plugin_error(&ctx).unwrap());
+    ctx.with(|ctx| {
+        crate::api::error::install_plugin_error(&ctx, &crate::testing::harness::inu_namespace(&ctx)).unwrap()
+    });
     run(
         &ctx,
         &format!(

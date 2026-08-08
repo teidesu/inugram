@@ -22,7 +22,6 @@ use crate::api::telegram::account::{self, AccountState};
 use crate::api::telegram::rpc::{format_exception, pump_jobs};
 use crate::sandbox::grants::{GrantHost, MATCH_EXACT};
 use crate::sandbox::registry::{make_disposer, noop_disposer, CallbackRegistry, Lifecycle};
-use crate::utils::namespace::get_or_create_inu;
 
 /// stand-in for the navigation half of the Kotlin `QuickJs.ApiListener`
 pub trait ScreenHost {
@@ -96,6 +95,7 @@ pub fn install_screens<'js>(
     accounts: Option<Rc<AccountState>>,
     lifecycle: Rc<Lifecycle>,
     log: crate::Log,
+    inu: &Object<'js>,
 ) -> JsResult<Rc<ScreenState>> {
     let state = Rc::new(ScreenState {
         host,
@@ -107,7 +107,6 @@ pub fn install_screens<'js>(
         event_factory: RefCell::new(None),
     });
 
-    let inu = get_or_create_inu(ctx)?;
     let ui: Object = match inu.get::<_, Object>("ui") {
         Ok(o) => o,
         Err(_) => {

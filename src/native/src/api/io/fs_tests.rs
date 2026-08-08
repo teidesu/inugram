@@ -94,9 +94,10 @@ fn setup(name: &str, grants: &[&str], quota: u64, unscoped: bool) -> Fixture {
     fs::write(outside_path.join("secret.txt"), b"a secret").unwrap();
     let grants = TestGrantHost::new(grants).as_host();
     let state = ctx.with(|ctx| {
-        install_plugin_error(&ctx).unwrap();
+        let inu = crate::testing::harness::inu_namespace(&ctx);
+        install_plugin_error(&ctx, &inu).unwrap();
         let blobs = install_sandbox_globals(&ctx, spill.path()).unwrap();
-        install_fs(&ctx, grants, blobs, dir.path(), quota, unscoped, TEST_ANDROID_DIRS).unwrap()
+        install_fs(&ctx, grants, blobs, dir.path(), quota, unscoped, TEST_ANDROID_DIRS, &inu).unwrap()
     });
     Fixture { _rt: rt, ctx, dir, _spill: spill, _outside: outside, outside_path, state }
 }
@@ -629,9 +630,10 @@ fn an_engine_without_a_directory_fails_every_call_rather_than_landing_elsewhere(
     let spill = TestDir::new("no-root-spill");
     let grants = TestGrantHost::new(&["fs"]).as_host();
     ctx.with(|ctx| {
-        install_plugin_error(&ctx).unwrap();
+        let inu = crate::testing::harness::inu_namespace(&ctx);
+        install_plugin_error(&ctx, &inu).unwrap();
         let blobs = install_sandbox_globals(&ctx, spill.path()).unwrap();
-        install_fs(&ctx, grants, blobs, Path::new(""), DEFAULT_QUOTA_BYTES, false, TEST_ANDROID_DIRS).unwrap();
+        install_fs(&ctx, grants, blobs, Path::new(""), DEFAULT_QUOTA_BYTES, false, TEST_ANDROID_DIRS, &inu).unwrap();
         for call in ["inu.fs.write('a', new Uint8Array([1]))", "inu.fs.read('a')", "inu.fs.usage()"] {
             let got: String = ctx
                 .eval(format!(r#"(() => {{ try {{ {call}; return 'no-throw' }} catch (e) {{ return e.code }} }})()"#,))
@@ -719,7 +721,8 @@ mod bundled_oracle {
         let spill = TestDir::new("oracle-spill");
         let lines = crate::testing::harness::install_capturing_console(&ctx);
         ctx.with(|ctx| {
-            install_plugin_error(&ctx).unwrap();
+            let inu = crate::testing::harness::inu_namespace(&ctx);
+            install_plugin_error(&ctx, &inu).unwrap();
             let blobs = install_sandbox_globals(&ctx, spill.path()).unwrap();
             install_fs(
                 &ctx,
@@ -729,6 +732,7 @@ mod bundled_oracle {
                 oracle_quota(),
                 false,
                 TEST_ANDROID_DIRS,
+                &inu,
             )
             .unwrap();
             match ctx.eval::<(), _>(ORACLE) {

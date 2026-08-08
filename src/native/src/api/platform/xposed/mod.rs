@@ -27,7 +27,6 @@ use crate::api::error::throw_plugin_error;
 use crate::api::platform::jvm::{arg_to_wire, handle_id, wire_to_value, JvmState};
 use crate::sandbox::grants::{check_grant, GrantHost, MATCH_NAMESPACE};
 use crate::sandbox::registry::{make_disposer, noop_disposer, Lifecycle, Registry};
-use crate::utils::namespace::get_or_create_inu;
 use rquickjs::function::This;
 
 use crate::api::telegram::rpc::{format_exception, pump_jobs};
@@ -311,6 +310,7 @@ pub fn install_xposed<'js>(
     lifecycle: Rc<Lifecycle>,
     jvm: Rc<JvmState>,
     log: crate::Log,
+    inu: &Object<'js>,
 ) -> JsResult<Rc<XposedState>> {
     let state = Rc::new(XposedState {
         host,
@@ -351,7 +351,6 @@ pub fn install_xposed<'js>(
         natives.set("ops", ops)?;
     }
 
-    let inu = get_or_create_inu(ctx)?;
     // captured at install like every other prelude's, so what this one throws is not decidable by a
     // plugin reassigning `inu.PluginError`
     let plugin_error: Value = inu.get("PluginError")?;

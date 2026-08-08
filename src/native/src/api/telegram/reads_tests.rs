@@ -412,21 +412,24 @@ fn setup(grants: &[&str]) -> Fixture {
     let grants = TestGrantHost::new(grants).as_host();
     let log: crate::Log = std::sync::Arc::new(|_| {});
     let (state, accounts) = ctx.with(|ctx| {
-        install_plugin_error(&ctx).unwrap();
+        let inu = crate::testing::harness::inu_namespace(&ctx);
+        install_plugin_error(&ctx, &inu).unwrap();
         let accounts = crate::api::telegram::account::install_account(
             &ctx,
             TestAccountHost::with(ONE_ACCOUNT),
             grants.clone(),
             crate::sandbox::registry::Lifecycle::new(),
             log.clone(),
+            &inu,
         )
         .unwrap();
-        let shared = crate::api::tl::utils::install_utils(&ctx).unwrap();
-        crate::api::tl::message::install_message(&ctx, &shared).unwrap();
+        let shared = crate::api::tl::utils::install_utils(&ctx, &inu).unwrap();
+        crate::api::tl::message::install_message(&ctx, &shared, &inu).unwrap();
         let reads_host: Rc<dyn ReadsHost> = host.clone();
         let tl_host: Rc<dyn TlHost> = host.clone();
         let state =
-            install_reads(&ctx, reads_host, grants, TlViews::new(tl_host), &shared, &accounts, log.clone()).unwrap();
+            install_reads(&ctx, reads_host, grants, TlViews::new(tl_host), &shared, &accounts, log.clone(), &inu)
+                .unwrap();
         (state, accounts)
     });
     let state = Disposing::new(&ctx, state, dispose);
@@ -1407,9 +1410,11 @@ mod grant_boundary {
         // the order `nativeInstallApi`/`nativeInstallRpc` install in, which is what makes the
         // `Account` prototype and the demuxed events exist
         let (reads_state, accounts, rpc_state) = ctx.with(|ctx| {
-            install_plugin_error(&ctx).unwrap();
-            crate::api::lifecycle::install_lifecycle(&ctx, grants.clone(), lifecycle.clone(), log.clone()).unwrap();
-            let inu = crate::utils::namespace::get_or_create_inu(&ctx).unwrap();
+            let inu = crate::testing::harness::inu_namespace(&ctx);
+            install_plugin_error(&ctx, &inu).unwrap();
+            crate::api::lifecycle::install_lifecycle(&ctx, grants.clone(), lifecycle.clone(), log.clone(), &inu)
+                .unwrap();
+            let inu = crate::testing::harness::inu_namespace(&ctx);
             let kv_host: Rc<dyn KvHost> = boundary.clone();
             crate::api::io::kv::install_kv(&ctx, kv_host, grants.clone(), &inu).unwrap();
             let clipboard_host: Rc<dyn ClipboardHost> = boundary.clone();
@@ -1424,15 +1429,17 @@ mod grant_boundary {
                 grants.clone(),
                 lifecycle.clone(),
                 log.clone(),
+                &inu,
             )
             .unwrap();
-            let shared = crate::api::tl::utils::install_utils(&ctx).unwrap();
-            crate::api::tl::message::install_message(&ctx, &shared).unwrap();
+            let shared = crate::api::tl::utils::install_utils(&ctx, &inu).unwrap();
+            crate::api::tl::message::install_message(&ctx, &shared, &inu).unwrap();
             let tl_host: Rc<dyn TlHost> = reads_host.clone();
             let views = TlViews::new(tl_host);
             let reads: Rc<dyn ReadsHost> = reads_host.clone();
             let reads_state =
-                install_reads(&ctx, reads, grants.clone(), views.clone(), &shared, &accounts, log.clone()).unwrap();
+                install_reads(&ctx, reads, grants.clone(), views.clone(), &shared, &accounts, log.clone(), &inu)
+                    .unwrap();
             let rpc_host: Rc<dyn RpcHost> = boundary.clone();
             let rpc_state = crate::api::telegram::rpc::install_rpc(
                 &ctx,
@@ -1443,6 +1450,7 @@ mod grant_boundary {
                 Some(accounts.clone()),
                 shared,
                 log.clone(),
+                &inu,
             )
             .unwrap();
             (reads_state, accounts, rpc_state)

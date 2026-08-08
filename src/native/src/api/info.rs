@@ -3,8 +3,6 @@
 use rquickjs::{Ctx, Function, Object};
 use std::sync::Arc;
 
-use crate::utils::namespace::get_or_create_inu;
-
 /// backing data for inu.info(); built fresh into a JS object on each call
 pub(crate) struct InuInfo {
     pub(crate) app_version: String,
@@ -42,9 +40,8 @@ pub(crate) fn build_info_object<'js>(ctx: Ctx<'js>, info: &InuInfo) -> rquickjs:
     Ok(obj)
 }
 
-pub(crate) fn install_inu(ctx: &Ctx, info: Arc<InuInfo>) -> rquickjs::Result<()> {
+pub(crate) fn install_inu<'js>(ctx: &Ctx<'js>, info: Arc<InuInfo>, inu: &Object<'js>) -> rquickjs::Result<()> {
     let info_fn = Function::new(ctx.clone(), move |ctx| build_info_object(ctx, &info))?;
-    let inu = get_or_create_inu(ctx)?;
     inu.set("info", info_fn)?;
     Ok(())
 }

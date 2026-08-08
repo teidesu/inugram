@@ -12,13 +12,12 @@ use base64::Engine;
 use rquickjs::{Ctx, Exception, Function, Object, Result as JsResult, TypedArray, Value};
 
 use crate::api::error::throw_plugin_error;
-use crate::utils::namespace::get_or_create_inu;
 
 const PRELUDE: &[u8] = include_bytes!(concat!(env!("OUT_DIR"), "/utils.qbc"));
 
 const HEX_DIGITS: &[u8; 16] = b"0123456789abcdef";
 
-pub fn install_utils<'js>(ctx: &Ctx<'js>) -> JsResult<Object<'js>> {
+pub fn install_utils<'js>(ctx: &Ctx<'js>, inu: &Object<'js>) -> JsResult<Object<'js>> {
     let utils = Object::new(ctx.clone())?;
 
     let f = Function::new(ctx.clone(), |ctx: Ctx<'js>, bytes: Value<'js>| {
@@ -49,7 +48,6 @@ pub fn install_utils<'js>(ctx: &Ctx<'js>) -> JsResult<Object<'js>> {
     })?;
     utils.set("fromHex", f)?;
 
-    let inu = get_or_create_inu(ctx)?;
     // captured at install so a plugin reassigning `inu.PluginError` cannot decide what the prelude
     // throws, the same reason `globals.js` takes its natives as an argument
     let plugin_error: Value = inu.get("PluginError")?;

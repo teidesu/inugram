@@ -127,7 +127,8 @@ fn setup(grant: Option<&str>) -> Fixture {
     let grants = TestDomainGrants::new(grant).as_host();
     let log: crate::Log = std::sync::Arc::new(|_| {});
     let (timers, state) = ctx.with(|ctx| {
-        install_plugin_error(&ctx).unwrap();
+        let inu = crate::testing::harness::inu_namespace(&ctx);
+        install_plugin_error(&ctx, &inu).unwrap();
         let blobs = install_sandbox_globals(&ctx, dir.path()).unwrap();
         let timers = crate::api::timers::install_timers(
             &ctx,
@@ -136,7 +137,7 @@ fn setup(grant: Option<&str>) -> Fixture {
             log.clone(),
         )
         .unwrap();
-        let state = install_fetch(&ctx, host_dyn, grants, blobs, log.clone()).unwrap();
+        let state = install_fetch(&ctx, host_dyn, grants, blobs, log.clone(), &inu).unwrap();
         (timers, state)
     });
     let timers = DisposingTimers::new(&ctx, timers, crate::api::timers::dispose);
@@ -549,7 +550,8 @@ mod bundled_oracle {
         let clock = Rc::new(super::tests::TestClock::default());
         let clock_dyn: Rc<dyn crate::api::timers::TimerHost> = clock.clone();
         let (timers, state) = ctx.with(|ctx| {
-            install_plugin_error(&ctx).unwrap();
+            let inu = crate::testing::harness::inu_namespace(&ctx);
+            install_plugin_error(&ctx, &inu).unwrap();
             let blobs = install_sandbox_globals(&ctx, dir.path()).unwrap();
             let timers = crate::api::timers::install_timers(
                 &ctx,
@@ -564,6 +566,7 @@ mod bundled_oracle {
                 super::tests::TestDomainGrants::new(oracle_grant()).as_host(),
                 blobs,
                 log.clone(),
+                &inu,
             )
             .unwrap();
             (timers, state)

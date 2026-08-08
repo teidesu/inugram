@@ -336,13 +336,15 @@ fn setup_with_limit(grants: &[&str], transfer_limit: u64) -> Fixture {
     let dir = tempdir::TempDir::new("stage");
     let empty = Rc::new(SelfOnlyReadsHost);
     let (writes, reads, accounts) = ctx.with(|ctx| {
-        install_plugin_error(&ctx).unwrap();
+        let inu = crate::testing::harness::inu_namespace(&ctx);
+        install_plugin_error(&ctx, &inu).unwrap();
         let accounts = crate::api::telegram::account::install_account(
             &ctx,
             TestAccountHost::with(ONE_ACCOUNT),
             grants.clone(),
             crate::sandbox::registry::Lifecycle::new(),
             log.clone(),
+            &inu,
         )
         .unwrap();
         let random: Rc<dyn RandomHost> = Rc::new(NoRandom);
@@ -353,8 +355,8 @@ fn setup_with_limit(grants: &[&str], transfer_limit: u64) -> Fixture {
             crate::sandbox::limits::ExternalMemory::new(),
         )
         .unwrap();
-        let shared = crate::api::tl::utils::install_utils(&ctx).unwrap();
-        crate::api::tl::message::install_message(&ctx, &shared).unwrap();
+        let shared = crate::api::tl::utils::install_utils(&ctx, &inu).unwrap();
+        crate::api::tl::message::install_message(&ctx, &shared, &inu).unwrap();
         let tl_host: Rc<dyn TlHost> = host.clone();
         let views = TlViews::new(tl_host);
         let reads_host: Rc<dyn ReadsHost> = empty.clone();
@@ -366,6 +368,7 @@ fn setup_with_limit(grants: &[&str], transfer_limit: u64) -> Fixture {
             &shared,
             &accounts,
             log.clone(),
+            &inu,
         )
         .unwrap();
         let deps = WritesDeps {
@@ -376,7 +379,7 @@ fn setup_with_limit(grants: &[&str], transfer_limit: u64) -> Fixture {
             stage_dir: dir.path().to_path_buf(),
             log: log.clone(),
         };
-        let writes = install_writes_with_limit(&ctx, deps, &shared, &accounts, transfer_limit).unwrap();
+        let writes = install_writes_with_limit(&ctx, deps, &shared, &accounts, &inu, transfer_limit).unwrap();
         (writes, reads, accounts)
     });
     let writes = crate::testing::harness::DisposeOnDrop::new(&ctx, writes, dispose);
@@ -793,17 +796,19 @@ fn setup_send(grants: &[&str]) -> SendFixture {
     let peers = Rc::new(SelfOnlyReadsHost);
     let views = TlViews::new(TestWritesHost::new() as Rc<dyn TlHost>);
     let (rpc, reads, accounts) = ctx.with(|ctx| {
-        install_plugin_error(&ctx).unwrap();
+        let inu = crate::testing::harness::inu_namespace(&ctx);
+        install_plugin_error(&ctx, &inu).unwrap();
         let accounts = crate::api::telegram::account::install_account(
             &ctx,
             TestAccountHost::with(ONE_ACCOUNT),
             grants.clone(),
             crate::sandbox::registry::Lifecycle::new(),
             log.clone(),
+            &inu,
         )
         .unwrap();
-        let shared = crate::api::tl::utils::install_utils(&ctx).unwrap();
-        crate::api::tl::message::install_message(&ctx, &shared).unwrap();
+        let shared = crate::api::tl::utils::install_utils(&ctx, &inu).unwrap();
+        crate::api::tl::message::install_message(&ctx, &shared, &inu).unwrap();
         let reads_host: Rc<dyn ReadsHost> = peers.clone();
         let reads = crate::api::telegram::reads::install_reads(
             &ctx,
@@ -813,6 +818,7 @@ fn setup_send(grants: &[&str]) -> SendFixture {
             &shared,
             &accounts,
             log.clone(),
+            &inu,
         )
         .unwrap();
         let rpc_host_dyn: Rc<dyn crate::api::telegram::rpc::RpcHost> = rpc_host.clone();
@@ -825,6 +831,7 @@ fn setup_send(grants: &[&str]) -> SendFixture {
             Some(accounts.clone()),
             shared,
             log.clone(),
+            &inu,
         )
         .unwrap();
         (rpc, reads, accounts)

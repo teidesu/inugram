@@ -35,16 +35,19 @@ fn setup(grants: &[&str]) -> Fixture {
     let log = crate::testing::harness::log_sink(&logs);
     let lifecycle = Lifecycle::new();
     let (state, accounts) = ctx.with(|ctx| {
-        install_plugin_error(&ctx).unwrap();
+        let inu = crate::testing::harness::inu_namespace(&ctx);
+        install_plugin_error(&ctx, &inu).unwrap();
         let accounts = crate::api::telegram::account::install_account(
             &ctx,
             TestAccountHost::with(TWO_ACCOUNTS),
             grants.clone(),
             lifecycle.clone(),
             log.clone(),
+            &inu,
         )
         .unwrap();
-        let state = install_screens(&ctx, host_dyn, grants, Some(accounts.clone()), lifecycle, log.clone()).unwrap();
+        let state =
+            install_screens(&ctx, host_dyn, grants, Some(accounts.clone()), lifecycle, log.clone(), &inu).unwrap();
         (state, accounts)
     });
     let state = Disposing::new(&ctx, state, dispose);
