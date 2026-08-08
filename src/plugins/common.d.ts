@@ -2868,8 +2868,15 @@ declare namespace inu {
    * its bare messages arrive as the `updateNewMessage`/`updateNewChannelMessage` the server would
    * have sent, exactly as for `onUpdate`. two differences from a live batch, both because the app
    * has not built anything yet: a rewrite lands on the very message it is about to store, and a
-   * `drop` removes it from the catch-up outright — the app never sees it, and unlike a live update
-   * there is nothing to re-request, since the pts the difference carries advances regardless.
+   * `drop` removes it from the catch-up outright.
+   *
+   * that is also the only place a `drop` is final, and worth understanding if you drop messages at
+   * all. dropping a live update that carries a pts leaves a hole in the app's pts, so the app runs
+   * a catch-up within seconds and the server hands the message back — through this same hook, where
+   * your middleware sees it again and can drop it again. so a message you consistently drop does
+   * stay gone, but it takes an extra round trip to get there, and a middleware that decides
+   * differently the second time will apply it after all. a difference carries one pts for the whole
+   * batch, applied whether or not you kept the messages in it, so there is nothing to re-request.
    *
    * the compressed `updateShortMessage`/`updateShortChatMessage` forms are handed over as the
    * `updateNewMessage` they normalize to, exactly as for `onUpdate`; if you rewrite one, the app is
