@@ -29,7 +29,6 @@ use crate::api::error::{throw_plugin_error, wire_error_to_js};
 use crate::api::telegram::rpc::{format_exception, pump_jobs};
 use crate::sandbox::grants::{check_grant, GrantHost, MATCH_NAMESPACE};
 use crate::sandbox::registry::{CallbackRegistry, Lifecycle};
-use crate::utils::namespace::get_or_create_inu;
 
 const PRELUDE: &[u8] = include_bytes!(concat!(env!("OUT_DIR"), "/jvm.qbc"));
 
@@ -308,6 +307,7 @@ pub fn install_jvm<'js>(
     grants: Rc<dyn GrantHost>,
     lifecycle: Rc<Lifecycle>,
     log: crate::Log,
+    inu: &Object<'js>,
 ) -> JsResult<Rc<JvmState>> {
     let state = Rc::new(JvmState {
         host,
@@ -372,7 +372,6 @@ pub fn install_jvm<'js>(
         natives.set("release", f)?;
     }
 
-    let inu = get_or_create_inu(ctx)?;
     // captured at install, like every other prelude's: what this one throws must not be decidable
     // by a plugin reassigning `inu.PluginError`
     let plugin_error: Value = inu.get("PluginError")?;
@@ -385,7 +384,7 @@ pub fn install_jvm<'js>(
     *state.prelude.borrow_mut() =
         Some(Prelude { mint: Persistent::save(ctx, mint), id_of: Persistent::save(ctx, id_of) });
     inu.set("jvm", jvm)?;
-    install_android_screen(ctx, &state, &inu)?;
+    install_android_screen(ctx, &state, inu)?;
 
     Ok(state)
 }

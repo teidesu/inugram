@@ -21,7 +21,6 @@ use crate::api::telegram::rpc::{format_exception, pump_jobs};
 use crate::sandbox::grants::{check_grant, GrantHost, MATCH_EXACT};
 use crate::sandbox::registry::{make_disposer, noop_disposer, Lifecycle, Registry, Token};
 use crate::utils::arguments::{field, opt_fn, req_fn, req_str};
-use crate::utils::namespace::get_or_create_inu;
 
 /// keep in sync with Kotlin `PluginActions.KIND_*`
 pub const KIND_GLOBAL: i32 = 0;
@@ -114,6 +113,7 @@ pub fn install_actions<'js>(
     accounts: Option<Rc<AccountState>>,
     grants: Rc<dyn GrantHost>,
     log: crate::Log,
+    inu: &Object<'js>,
 ) -> JsResult<Rc<ActionState>> {
     let state = Rc::new(ActionState {
         host,
@@ -124,7 +124,6 @@ pub fn install_actions<'js>(
         kinds: (0..KIND_COUNT).map(|_| Registry::default()).collect(),
     });
 
-    let inu = get_or_create_inu(ctx)?;
     for (name, kind) in [
         ("registerAction", KIND_GLOBAL),
         ("registerChatAction", KIND_CHAT),

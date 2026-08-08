@@ -512,6 +512,7 @@ pub fn install_rpc<'js>(
     accounts: Option<Rc<AccountState>>,
     shared: Object<'js>,
     log: crate::Log,
+    inu: &Object<'js>,
 ) -> JsResult<Rc<RpcState>> {
     let state = Rc::new(RpcState {
         host,
@@ -531,8 +532,6 @@ pub fn install_rpc<'js>(
         update_dispatches: RefCell::new(HashMap::new()),
         pending_invoke: RefCell::new(HashMap::new()),
     });
-
-    let inu = crate::utils::namespace::get_or_create_inu(ctx)?;
 
     let rpc_error_ctor: Value = ctx.eval(
         r#"(class RpcError extends Error {
@@ -574,8 +573,8 @@ pub fn install_rpc<'js>(
         })?;
         inu.set("interceptUpdate", f)?;
     }
-    install_demuxed_events(ctx, &state, &inu)?;
-    install_send_message(ctx, &state, &inu, shared)?;
+    install_demuxed_events(ctx, &state, inu)?;
+    install_send_message(ctx, &state, inu, shared)?;
     install_account_invoke(ctx, &state)?;
     Ok(state)
 }

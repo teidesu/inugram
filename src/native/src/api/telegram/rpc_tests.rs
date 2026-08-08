@@ -141,20 +141,23 @@ fn setup_logging(grants: &[&str]) -> LoggingFixture {
     let accounts_host: Rc<dyn crate::api::telegram::account::AccountHost> =
         crate::api::telegram::account::tests::TestAccountHost::with(crate::api::telegram::account::tests::TWO_ACCOUNTS);
     let state = ctx.with(|ctx| {
-        crate::api::error::install_plugin_error(&ctx).unwrap();
+        let inu = crate::testing::harness::inu_namespace(&ctx);
+        crate::api::error::install_plugin_error(&ctx, &inu).unwrap();
         // installApi runs before installRpc on a device, and the demuxed events read the
         // `inu.Message` it leaves behind
-        let shared = crate::api::tl::utils::install_utils(&ctx).unwrap();
-        crate::api::tl::message::install_message(&ctx, &shared).unwrap();
+        let shared = crate::api::tl::utils::install_utils(&ctx, &inu).unwrap();
+        crate::api::tl::message::install_message(&ctx, &shared, &inu).unwrap();
         let accounts = crate::api::telegram::account::install_account(
             &ctx,
             accounts_host,
             grant_host.as_host(),
             Lifecycle::new(),
             log.clone(),
+            &inu,
         )
         .unwrap();
-        install_rpc(&ctx, host_dyn, tl, grant_host.as_host(), Lifecycle::new(), Some(accounts), shared, log).unwrap()
+        install_rpc(&ctx, host_dyn, tl, grant_host.as_host(), Lifecycle::new(), Some(accounts), shared, log, &inu)
+            .unwrap()
     });
     let state = Disposing::new(&ctx, state, dispose);
     (rt, ctx, host, state, logs)
@@ -809,10 +812,11 @@ fn without_the_account_api_a_dispatch_hands_over_undefined() {
     let grants = TestGrantHost::new(&["onUpdate", "interceptRpc"]);
     let log: crate::Log = std::sync::Arc::new(|_: &str| {});
     let state = ctx.with(|ctx| {
-        crate::api::error::install_plugin_error(&ctx).unwrap();
-        let shared = crate::api::tl::utils::install_utils(&ctx).unwrap();
-        crate::api::tl::message::install_message(&ctx, &shared).unwrap();
-        install_rpc(&ctx, host_dyn, tl, grants.as_host(), Lifecycle::new(), None, shared, log).unwrap()
+        let inu = crate::testing::harness::inu_namespace(&ctx);
+        crate::api::error::install_plugin_error(&ctx, &inu).unwrap();
+        let shared = crate::api::tl::utils::install_utils(&ctx, &inu).unwrap();
+        crate::api::tl::message::install_message(&ctx, &shared, &inu).unwrap();
+        install_rpc(&ctx, host_dyn, tl, grants.as_host(), Lifecycle::new(), None, shared, log, &inu).unwrap()
     });
     let state = Disposing::new(&ctx, state, dispose);
 
@@ -1639,15 +1643,17 @@ fn the_bundled_accounts_test_plugin_passes() {
         crate::api::telegram::account::tests::TestAccountHost::with(crate::api::telegram::account::tests::TWO_ACCOUNTS);
     let accounts_dyn: Rc<dyn crate::api::telegram::account::AccountHost> = accounts_host.clone();
     let (state, accounts) = ctx.with(|ctx| {
-        crate::api::error::install_plugin_error(&ctx).unwrap();
-        let shared = crate::api::tl::utils::install_utils(&ctx).unwrap();
-        crate::api::tl::message::install_message(&ctx, &shared).unwrap();
+        let inu = crate::testing::harness::inu_namespace(&ctx);
+        crate::api::error::install_plugin_error(&ctx, &inu).unwrap();
+        let shared = crate::api::tl::utils::install_utils(&ctx, &inu).unwrap();
+        crate::api::tl::message::install_message(&ctx, &shared, &inu).unwrap();
         let accounts = crate::api::telegram::account::install_account(
             &ctx,
             accounts_dyn,
             grant_host.as_host(),
             Lifecycle::new(),
             log.clone(),
+            &inu,
         )
         .unwrap();
         let state = install_rpc(
@@ -1659,6 +1665,7 @@ fn the_bundled_accounts_test_plugin_passes() {
             Some(accounts.clone()),
             shared,
             log,
+            &inu,
         )
         .unwrap();
         (state, accounts)
@@ -2542,7 +2549,8 @@ mod bundled_oracles {
                 crate::api::telegram::account::tests::TWO_ACCOUNTS,
             );
         let state = ctx.with(|ctx| {
-            crate::api::error::install_plugin_error(&ctx).unwrap();
+            let inu = crate::testing::harness::inu_namespace(&ctx);
+            crate::api::error::install_plugin_error(&ctx, &inu).unwrap();
             if with_globals {
                 let random: Rc<dyn RandomHost> = Rc::new(CountingRandom::default());
                 crate::api::globals::install_globals(
@@ -2553,17 +2561,18 @@ mod bundled_oracles {
                 )
                 .unwrap();
             }
-            let shared = crate::api::tl::utils::install_utils(&ctx).unwrap();
-            crate::api::tl::message::install_message(&ctx, &shared).unwrap();
+            let shared = crate::api::tl::utils::install_utils(&ctx, &inu).unwrap();
+            crate::api::tl::message::install_message(&ctx, &shared, &inu).unwrap();
             let accounts = crate::api::telegram::account::install_account(
                 &ctx,
                 accounts_host,
                 grant_host.as_host(),
                 Lifecycle::new(),
                 log.clone(),
+                &inu,
             )
             .unwrap();
-            install_rpc(&ctx, host_dyn, tl, grant_host.as_host(), Lifecycle::new(), Some(accounts), shared, log)
+            install_rpc(&ctx, host_dyn, tl, grant_host.as_host(), Lifecycle::new(), Some(accounts), shared, log, &inu)
                 .unwrap()
         });
         let state = Disposing::new(&ctx, state, dispose);

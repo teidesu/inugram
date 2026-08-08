@@ -106,8 +106,9 @@ fn setup(grants: &[&str]) -> Fixture {
     let log: std::sync::Arc<dyn Fn(&str) + Send + Sync> =
         std::sync::Arc::new(move |line: &str| sink.lock().unwrap().push(line.to_string()));
     let state = ctx.with(|ctx| {
-        install_plugin_error(&ctx).unwrap();
-        install_deserialize(&ctx, host_dyn, grants, lifecycle.clone(), views, log).unwrap()
+        let inu = crate::testing::harness::inu_namespace(&ctx);
+        install_plugin_error(&ctx, &inu).unwrap();
+        install_deserialize(&ctx, host_dyn, grants, lifecycle.clone(), views, log, &inu).unwrap()
     });
     Fixture { _rt: rt, ctx, host, lifecycle, state, tl, logs }
 }
@@ -469,10 +470,11 @@ mod bundled_oracle {
         let host_dyn: Rc<dyn DeserializeHost> = host.clone();
         let grants = TestGrantHost::new(&crate::testing::harness::manifest_grants(ORACLE)).as_host();
         ctx.with(|ctx| {
-            install_plugin_error(&ctx).unwrap();
+            let inu = crate::testing::harness::inu_namespace(&ctx);
+            install_plugin_error(&ctx, &inu).unwrap();
             let tl = TlViews::new(Rc::new(super::tests::TestTl::default()) as Rc<dyn crate::api::tl::proxy::TlHost>);
             let log: std::sync::Arc<dyn Fn(&str) + Send + Sync> = std::sync::Arc::new(|_: &str| {});
-            install_deserialize(&ctx, host_dyn, grants, Lifecycle::new(), tl, log).unwrap();
+            install_deserialize(&ctx, host_dyn, grants, Lifecycle::new(), tl, log, &inu).unwrap();
         });
 
         let lines = crate::testing::harness::run_capturing_console(&rt, &ctx, ORACLE);

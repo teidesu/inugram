@@ -16,7 +16,7 @@ use crate::api::ui::dialogs::{DialogHost, DialogState};
 use crate::sandbox::grants::TestGrantHost;
 use crate::sandbox::registry::Lifecycle;
 use rquickjs::function::Rest;
-use rquickjs::{Coerced, Context, Function, Object, Runtime};
+use rquickjs::{Coerced, Context, Ctx, Function, Object, Runtime};
 use std::cell::{Cell, RefCell};
 
 /// One TL object behind a fake handle: its constructor name, and each field already as a wire.
@@ -91,6 +91,18 @@ impl FakeHandles {
 
 /// Evaluates for a string, reporting a thrown exception the way the engine formats one for the
 /// host rather than as rquickjs's opaque `Error::Exception`.
+/// the `inu` namespace, which a real engine builds once in `nativeCreate` and hands to every
+/// `install_*`. A test owns its context, so it makes one here - get-or-create, because a test
+/// exercising two surfaces installs both onto the one object, as the engine does.
+pub(crate) fn inu_namespace<'js>(ctx: &Ctx<'js>) -> Object<'js> {
+    if let Ok(inu) = ctx.globals().get::<_, Object>("inu") {
+        return inu;
+    }
+    let inu = Object::new(ctx.clone()).unwrap();
+    ctx.globals().set("inu", inu.clone()).unwrap();
+    inu
+}
+
 pub(crate) fn eval_string(ctx: &Context, code: &str) -> String {
     ctx.with(|ctx| match ctx.eval::<String, _>(code) {
         Ok(value) => value,
@@ -461,10 +473,11 @@ pub(crate) fn setup_apis(grants: &[&str]) -> ApiFixture {
     let logs = Logs::new();
     let log = log_sink(&logs);
     let (lifecycle, dialogs) = ctx.with(|ctx| {
-        crate::api::error::install_plugin_error(&ctx).unwrap();
+        let inu = inu_namespace(&ctx);
+        crate::api::error::install_plugin_error(&ctx, &inu).unwrap();
         let lifecycle =
-            crate::api::lifecycle::install_lifecycle(&ctx, grants.clone(), Lifecycle::new(), log.clone()).unwrap();
-        let inu = crate::utils::namespace::get_or_create_inu(&ctx).unwrap();
+            crate::api::lifecycle::install_lifecycle(&ctx, grants.clone(), Lifecycle::new(), log.clone(), &inu)
+                .unwrap();
         crate::api::io::kv::install_kv(&ctx, host.clone(), grants.clone(), &inu).unwrap();
         crate::api::platform::clipboard::install_clipboard(&ctx, host.clone(), grants.clone(), &inu).unwrap();
         crate::api::platform::open_url::install_open_url(&ctx, host.clone(), grants.clone(), &inu).unwrap();

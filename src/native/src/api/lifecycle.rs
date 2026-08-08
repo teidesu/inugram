@@ -8,12 +8,11 @@
 use std::cell::Cell;
 use std::rc::Rc;
 
-use rquickjs::{Ctx, Function, Result as JsResult, Runtime, Value};
+use rquickjs::{Ctx, Function, Object, Result as JsResult, Runtime, Value};
 
 use crate::api::telegram::rpc::{format_exception, pump_jobs};
 use crate::sandbox::grants::{check_grant, GrantHost, MATCH_EXACT};
 use crate::sandbox::registry::{make_disposer, noop_disposer, CallbackRegistry, Lifecycle};
-use crate::utils::namespace::get_or_create_inu;
 
 pub struct LifecycleState {
     grants: Rc<dyn GrantHost>,
@@ -31,6 +30,7 @@ pub fn install_lifecycle<'js>(
     grants: Rc<dyn GrantHost>,
     lifecycle: Rc<Lifecycle>,
     log: crate::Log,
+    inu: &Object<'js>,
 ) -> JsResult<Rc<LifecycleState>> {
     let state = Rc::new(LifecycleState {
         grants,
@@ -40,8 +40,6 @@ pub fn install_lifecycle<'js>(
         visibility_fns: CallbackRegistry::default(),
         visible: Cell::new(true),
     });
-
-    let inu = get_or_create_inu(ctx)?;
 
     {
         let state2 = state.clone();

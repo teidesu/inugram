@@ -47,7 +47,7 @@ fn setup_with(name: &str, spilling: bool, limits: BlobLimits) -> Fixture {
     let dir = TestDir::new(name);
     let spill_dir = if spilling { dir.path().to_path_buf() } else { PathBuf::new() };
     let state = ctx.with(|ctx| {
-        crate::api::error::install_plugin_error(&ctx).unwrap();
+        crate::api::error::install_plugin_error(&ctx, &crate::testing::harness::inu_namespace(&ctx)).unwrap();
         install_with_limits(&ctx, &spill_dir, ExternalMemory::new(), limits).unwrap()
     });
     Fixture { _rt: rt, ctx, state, dir }
@@ -538,7 +538,7 @@ fn dropping_the_engine_removes_every_spill_it_made() {
         let rt = Runtime::new().unwrap();
         let ctx = Context::full(&rt).unwrap();
         ctx.with(|ctx| {
-            crate::api::error::install_plugin_error(&ctx).unwrap();
+            crate::api::error::install_plugin_error(&ctx, &crate::testing::harness::inu_namespace(&ctx)).unwrap();
             install(&ctx, dir.path(), ExternalMemory::new()).unwrap();
             ctx.eval::<(), _>(format!(
                 r#"
@@ -890,7 +890,7 @@ mod bundled_oracle {
         let dir = TestDir::new("oracle");
         let lines = std::rc::Rc::new(RefCell::new(Vec::<String>::new()));
         ctx.with(|ctx| {
-            crate::api::error::install_plugin_error(&ctx).unwrap();
+            crate::api::error::install_plugin_error(&ctx, &crate::testing::harness::inu_namespace(&ctx)).unwrap();
             let console = Object::new(ctx.clone()).unwrap();
             for name in ["log", "error", "warn", "info", "debug"] {
                 let lines = lines.clone();

@@ -518,10 +518,12 @@ mod bundled_oracle {
         let log: crate::Log = std::sync::Arc::new(|_| {});
 
         let (api, timers) = ctx.with(|ctx| {
-            crate::api::error::install_plugin_error(&ctx).unwrap();
+            let inu = crate::testing::harness::inu_namespace(&ctx);
+            crate::api::error::install_plugin_error(&ctx, &inu).unwrap();
             let api =
-                crate::api::lifecycle::install_lifecycle(&ctx, grants.clone(), lifecycle.clone(), log.clone()).unwrap();
-            let inu = crate::utils::namespace::get_or_create_inu(&ctx).unwrap();
+                crate::api::lifecycle::install_lifecycle(&ctx, grants.clone(), lifecycle.clone(), log.clone(), &inu)
+                    .unwrap();
+            let inu = crate::testing::harness::inu_namespace(&ctx);
             crate::api::io::kv::install_kv(&ctx, kv_host, grants, &inu).unwrap();
             let timers = install_timers(&ctx, wakes_dyn, lifecycle.clone(), log.clone()).unwrap();
             (api, timers)
@@ -627,10 +629,12 @@ mod bundled_oracle {
         let log: crate::Log = std::sync::Arc::new(|_| {});
 
         let (api, timers) = ctx.with(|ctx| {
-            crate::api::error::install_plugin_error(&ctx).unwrap();
+            let inu = crate::testing::harness::inu_namespace(&ctx);
+            crate::api::error::install_plugin_error(&ctx, &inu).unwrap();
             let api =
-                crate::api::lifecycle::install_lifecycle(&ctx, grants.clone(), lifecycle.clone(), log.clone()).unwrap();
-            let inu = crate::utils::namespace::get_or_create_inu(&ctx).unwrap();
+                crate::api::lifecycle::install_lifecycle(&ctx, grants.clone(), lifecycle.clone(), log.clone(), &inu)
+                    .unwrap();
+            let inu = crate::testing::harness::inu_namespace(&ctx);
             crate::api::io::kv::install_kv(&ctx, kv_host, grants, &inu).unwrap();
             let timers = install_timers(&ctx, wakes_dyn, lifecycle.clone(), log.clone()).unwrap();
             (api, timers)

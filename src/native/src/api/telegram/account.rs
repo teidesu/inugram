@@ -23,7 +23,6 @@ use crate::api::error::{self};
 use crate::api::telegram::rpc::pump_jobs;
 use crate::sandbox::grants::{check_grant, GrantHost, MATCH_EXACT};
 use crate::sandbox::registry::{make_disposer, noop_disposer, CallbackRegistry, Lifecycle, Registry, Token};
-use crate::utils::namespace::get_or_create_inu;
 
 /// stand-in for the accounts half of the Kotlin `QuickJs.ApiListener`
 pub trait AccountHost {
@@ -230,6 +229,7 @@ pub fn install_account<'js>(
     grants: Rc<dyn GrantHost>,
     lifecycle: Rc<Lifecycle>,
     log: crate::Log,
+    inu: &Object<'js>,
 ) -> JsResult<Rc<AccountState>> {
     let state = Rc::new(AccountState {
         host,
@@ -243,7 +243,6 @@ pub fn install_account<'js>(
     });
     let _ = refresh(ctx, &state);
 
-    let inu = get_or_create_inu(ctx)?;
     {
         let state = state.clone();
         let f = Function::new(ctx.clone(), move |ctx: Ctx<'js>, id: Opt<Value<'js>>| js_account(&ctx, &state, id.0))?;

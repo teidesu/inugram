@@ -73,13 +73,15 @@ fn setup(grants: &[&str]) -> Fixture {
     let ctx = Context::full(&rt).unwrap();
     let host = TestJvmHost::new();
     let state = ctx.with(|ctx| {
-        install_plugin_error(&ctx).unwrap();
+        let inu = crate::testing::harness::inu_namespace(&ctx);
+        install_plugin_error(&ctx, &inu).unwrap();
         install_jvm(
             &ctx,
             host.as_host(),
             TestGrantHost::new(grants).as_host(),
             Lifecycle::new(),
             std::sync::Arc::new(|_: &str| {}),
+            &inu,
         )
         .unwrap()
     });
@@ -366,13 +368,15 @@ fn a_throwing_callback_is_the_plugins_fault() {
     let ctx = Context::full(&rt).unwrap();
     let logged = crate::testing::harness::Logs::new();
     let state = ctx.with(|ctx| {
-        install_plugin_error(&ctx).unwrap();
+        let inu = crate::testing::harness::inu_namespace(&ctx);
+        install_plugin_error(&ctx, &inu).unwrap();
         install_jvm(
             &ctx,
             TestJvmHost::new().as_host(),
             TestGrantHost::new(&["unsafe.jvm"]).as_host(),
             Lifecycle::new(),
             crate::testing::harness::log_sink(&logged),
+            &inu,
         )
         .unwrap()
     });
@@ -415,7 +419,8 @@ mod bundled_oracle {
         let lines = install_capturing_console(&ctx);
         let host = OracleJvmHost::new();
         let state = ctx.with(|ctx| {
-            install_plugin_error(&ctx).unwrap();
+            let inu = crate::testing::harness::inu_namespace(&ctx);
+            install_plugin_error(&ctx, &inu).unwrap();
             install_jvm(
                 &ctx,
                 host.as_host(),
@@ -423,6 +428,7 @@ mod bundled_oracle {
                 TestGrantHost::new(&manifest_grants(ORACLE)).as_host(),
                 Lifecycle::new(),
                 std::sync::Arc::new(|_: &str| {}),
+                &inu,
             )
             .unwrap()
         });

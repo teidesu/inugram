@@ -11,11 +11,10 @@ use rquickjs::function::Constructor;
 use rquickjs::{Ctx, Object, Result as JsResult, Value};
 
 use crate::api::telegram::rpc;
-use crate::utils::namespace::get_or_create_inu;
 
 /// installs `inu.PluginError`; runs once per context at creation, before any plugin code, so a
 /// plugin can `instanceof` it even against an api surface it holds no grant for
-pub fn install_plugin_error(ctx: &Ctx) -> JsResult<()> {
+pub fn install_plugin_error<'js>(ctx: &Ctx<'js>, inu: &Object<'js>) -> JsResult<()> {
     let ctor: Value = ctx.eval(
         r#"(class PluginError extends Error {
             constructor(code, message) {
@@ -25,7 +24,7 @@ pub fn install_plugin_error(ctx: &Ctx) -> JsResult<()> {
             }
         })"#,
     )?;
-    get_or_create_inu(ctx)?.set("PluginError", ctor)?;
+    inu.set("PluginError", ctor)?;
     Ok(())
 }
 

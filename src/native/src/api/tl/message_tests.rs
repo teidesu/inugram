@@ -5,9 +5,10 @@ fn setup() -> (Runtime, Context) {
     let rt = Runtime::new().unwrap();
     let ctx = Context::full(&rt).unwrap();
     ctx.with(|ctx| {
-        crate::api::error::install_plugin_error(&ctx).unwrap();
-        let shared = crate::api::tl::utils::install_utils(&ctx).unwrap();
-        install_message(&ctx, &shared).unwrap();
+        let inu = crate::testing::harness::inu_namespace(&ctx);
+        crate::api::error::install_plugin_error(&ctx, &inu).unwrap();
+        let shared = crate::api::tl::utils::install_utils(&ctx, &inu).unwrap();
+        install_message(&ctx, &shared, &inu).unwrap();
     });
     (rt, ctx)
 }

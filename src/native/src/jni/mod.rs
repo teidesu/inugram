@@ -23,6 +23,11 @@ pub(crate) struct Engine {
     pub(crate) _rt: Runtime,
     pub(crate) bridge: Rc<JniBridge>,
     pub(crate) lifecycle: Rc<Lifecycle>,
+    /// the `inu` namespace, built once here and handed to every `install_*` that hangs a member off
+    /// it. Held as a root rather than read back off the globals so a surface installing in a later
+    /// JNI call writes onto the object this engine made, whatever `globalThis.inu` says by then.
+    /// Released in `nativeDestroy`: a `Persistent` has no `Drop`.
+    pub(crate) inu: Persistent<Object<'static>>,
     /// one per engine, shared by `rpc` and `reads`: a view's field cache is invalidated by an epoch
     /// this owns, and `common.d.ts` promises a write invalidates every cached field *everywhere* -
     /// two of these would leave each family blind to the other's writes.

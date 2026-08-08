@@ -14,7 +14,6 @@ use std::rc::Rc;
 use rquickjs::{Ctx, Exception, Function, Object, Result as JsResult, Value};
 
 use crate::api::error::{make_plugin_error, throw_plugin_error};
-use crate::utils::namespace::get_or_create_inu;
 
 /// the most utf-8 an `inu.icons.svg` source may be. The host parses it with the platform's xml
 /// reader, which no interpreter deadline can interrupt (it is one host call), so the bound is a
@@ -272,9 +271,7 @@ fn js_svg<'js>(ctx: &Ctx<'js>, host: &Rc<dyn IconHost>, source: Value<'js>) -> J
     new_icon(ctx, svg_spec(&source))
 }
 
-pub fn install_icons<'js>(ctx: &Ctx<'js>, host: Rc<dyn IconHost>) -> JsResult<()> {
-    let inu = get_or_create_inu(ctx)?;
-
+pub fn install_icons<'js>(ctx: &Ctx<'js>, host: Rc<dyn IconHost>, inu: &Object<'js>) -> JsResult<()> {
     let icons = Object::new(ctx.clone())?;
     {
         let host = host.clone();

@@ -278,16 +278,20 @@ already knew), `limits` (the execution deadline **and** the native-memory ceilin
 
 `utils/` takes what the api rule leaves over, and its membership is **two** conditions, not one:
 nothing in it installs anything a plugin can name, **and** nothing in it is owned by one domain -
-argument reading, JSON marshalling that must not go through the writable `JSON` global, the prelude
-loader, the property forms a rust-built prototype uses, and the `inu` namespace object every surface
-hangs its members off. The second half is what keeps it from becoming the next drawer:
-`api/canvas/css.rs`, `api/canvas/geometry.rs` and `api/telegram/progress.rs` install nothing either
-and stay where they are, having one caller each, as do all three of `sandbox/`.
+argument reading, the prelude loader, and the property forms a rust-built prototype uses. The second
+half is what keeps it from becoming the next drawer: `api/canvas/css.rs`, `api/canvas/geometry.rs`
+and `api/telegram/progress.rs` install nothing either and stay where they are, having one caller
+each, as do all three of `sandbox/`.
 
-Two files were in the wrong folder outright, and both are worth knowing as the shape of that
-mistake. `inu.info()` sat in `jni/` with no JNI in the file at all. And `get_or_create_inu` sat in
-`error.rs`, where nothing about the name says that most of that module's 52 importers want the `inu`
-object and not an error. A file name is spelled out rather than shortened (`arguments`, `geometry`,
+**The `inu` object is built once, in `nativeCreate`, and passed into every `install_*` that hangs a
+member off it.** `Engine` keeps it as the one `Persistent` it holds unconditionally, and each JNI
+install export restores it and hands it down - so a surface installing in a later call writes onto
+the object this engine made, whatever `globalThis.inu` says by then. What it replaces is a
+`get_or_create_inu(ctx)` every installer called for itself, which put the *creation* of the
+namespace in whichever surface happened to install first, and lived in `error.rs`, where nothing
+about the name said that most of that module's 52 importers wanted the `inu` object and not an
+error. `api/info.rs` is the other file that was in the wrong folder outright, having sat in `jni/`
+with no JNI in it at all. A file name is spelled out rather than shortened (`arguments`, `geometry`,
 `send_message.js`), the exceptions being the ones naming something outside this repo verbatim: `kv`,
 `fs`, `utils` and `css` are the api and format names, `jni`, `tl` and `env` the platform's.
 

@@ -26,7 +26,6 @@ use crate::api::telegram::account::AccountState;
 use crate::api::telegram::rpc::{format_exception, pump_jobs, PendingSettle};
 use crate::api::tl::proxy::{wire_to_js_value, TlViews, ViewLife};
 use crate::sandbox::grants::{check_grant, GrantHost, MATCH_EXACT};
-use crate::utils::namespace::get_or_create_inu;
 
 const PRELUDE: &[u8] = include_bytes!(concat!(env!("OUT_DIR"), "/reads.qbc"));
 
@@ -226,6 +225,7 @@ fn join(parts: &[&str]) -> String {
     parts.join(&SEPARATOR.to_string())
 }
 
+#[allow(clippy::too_many_arguments)]
 pub fn install_reads<'js>(
     ctx: &Ctx<'js>,
     host: Rc<dyn ReadsHost>,
@@ -234,6 +234,7 @@ pub fn install_reads<'js>(
     shared: &Object<'js>,
     accounts: &Rc<AccountState>,
     log: crate::Log,
+    inu: &Object<'js>,
 ) -> JsResult<Rc<ReadsState>> {
     let state = Rc::new(ReadsState {
         host,
@@ -318,7 +319,6 @@ pub fn install_reads<'js>(
         natives.set("fetch", f)?;
     }
 
-    let inu = get_or_create_inu(ctx)?;
     // captured at install, like `utils.js`'s: what the prelude constructs and throws must not be
     // decidable by a plugin reassigning `inu.Message`
     let message: Value = inu.get("Message")?;

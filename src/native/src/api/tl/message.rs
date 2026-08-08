@@ -13,13 +13,10 @@
 
 use rquickjs::{Ctx, Object, Result as JsResult, Value};
 
-use crate::utils::namespace::get_or_create_inu;
-
 const PRELUDE: &[u8] = include_bytes!(concat!(env!("OUT_DIR"), "/message.qbc"));
 
 /// `shared` is what [`crate::api::tl::utils::install_utils`] handed back
-pub fn install_message<'js>(ctx: &Ctx<'js>, shared: &Object<'js>) -> JsResult<()> {
-    let inu = get_or_create_inu(ctx)?;
+pub fn install_message<'js>(ctx: &Ctx<'js>, shared: &Object<'js>, inu: &Object<'js>) -> JsResult<()> {
     let plugin_error: Value = inu.get("PluginError")?;
 
     let factory = crate::utils::prelude::load(ctx, PRELUDE)?;
