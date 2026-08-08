@@ -10,8 +10,7 @@ Subject: Add the QuickJS plugin engine (hooks, action rows)
  .../src/main/java/org/telegram/ui/ChatActivity.java       | 6 ++++--
  .../org/telegram/ui/Components/ChatActivityEnterView.java | 3 ++-
  .../src/main/java/org/telegram/ui/LaunchActivity.java     | 1 +
- .../src/main/java/org/telegram/ui/ProfileActivity.java    | 2 +-
- 7 files changed, 23 insertions(+), 5 deletions(-)
+ 6 files changed, 22 insertions(+), 4 deletions(-)
 
 diff --git a/TMessagesProj/src/main/java/org/telegram/messenger/MessagesController.java b/TMessagesProj/src/main/java/org/telegram/messenger/MessagesController.java
 index 0000000..0000000 100644
@@ -156,16 +155,3 @@ index 0000000..0000000 100644
          });
          actionBarLayout.setDelegate(this);
          Theme.loadWallpaper(true);
-diff --git a/TMessagesProj/src/main/java/org/telegram/ui/ProfileActivity.java b/TMessagesProj/src/main/java/org/telegram/ui/ProfileActivity.java
-index 0000000..0000000 100644
---- a/TMessagesProj/src/main/java/org/telegram/ui/ProfileActivity.java
-+++ b/TMessagesProj/src/main/java/org/telegram/ui/ProfileActivity.java
-@@ -2548,7 +2548,7 @@ public class ProfileActivity extends BaseFragment implements NotificationCenter.
-                 if (getParentActivity() == null) {
-                     return;
-                 }
--                if (desu.inugram.helpers.profile.ProfileHelper.handleMenuClick(id, currentAccount, getDialogId())) {
-+                if (desu.inugram.helpers.profile.ProfileHelper.handleMenuClick(id, otherItem, currentAccount, getDialogId())) {
-                     return;
-                 }
-                 if (id == -1) {
