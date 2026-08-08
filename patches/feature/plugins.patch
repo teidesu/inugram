@@ -4,7 +4,6 @@ Date: Fri, 7 Aug 2026 02:38:51 +0400
 Subject: Add the QuickJS plugin engine (hooks, action rows)
 
 ---
- .../java/org/telegram/messenger/ApplicationLoader.java    | 6 ++++++
  .../java/org/telegram/messenger/MessagesController.java   | 5 +++++
  .../main/java/org/telegram/tgnet/ConnectionsManager.java  | 8 +++++++-
  .../src/main/java/org/telegram/tgnet/TLObject.java        | 3 +++
@@ -12,25 +11,8 @@ Subject: Add the QuickJS plugin engine (hooks, action rows)
  .../org/telegram/ui/Components/ChatActivityEnterView.java | 3 ++-
  .../src/main/java/org/telegram/ui/LaunchActivity.java     | 1 +
  .../src/main/java/org/telegram/ui/ProfileActivity.java    | 2 +-
- 8 files changed, 29 insertions(+), 5 deletions(-)
+ 7 files changed, 23 insertions(+), 5 deletions(-)
 
-diff --git a/TMessagesProj/src/main/java/org/telegram/messenger/ApplicationLoader.java b/TMessagesProj/src/main/java/org/telegram/messenger/ApplicationLoader.java
-index 0000000..0000000 100644
---- a/TMessagesProj/src/main/java/org/telegram/messenger/ApplicationLoader.java
-+++ b/TMessagesProj/src/main/java/org/telegram/messenger/ApplicationLoader.java
-@@ -272,6 +272,12 @@ public class ApplicationLoader extends Application {
-             DownloadController.getInstance(a);
-         }
-         BillingController.getInstance().startConnection();
-+
-+        try {
-+            desu.inugram.InuHooks.onAppBoot();
-+        } catch (Exception e) {
-+            e.printStackTrace();
-+        }
-     }
- 
-     public ApplicationLoader() {
 diff --git a/TMessagesProj/src/main/java/org/telegram/messenger/MessagesController.java b/TMessagesProj/src/main/java/org/telegram/messenger/MessagesController.java
 index 0000000..0000000 100644
 --- a/TMessagesProj/src/main/java/org/telegram/messenger/MessagesController.java

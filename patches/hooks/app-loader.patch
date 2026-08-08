@@ -4,9 +4,27 @@ Date: Mon, 27 Apr 2026 09:46:28 +0300
 Subject: hooks for the app loader: our own ApplicationLoaderImpl, and the boot point at the tail of postInitApplication
 
 ---
- TMessagesProj_App/src/main/AndroidManifest.xml | 2 +-
- 1 file changed, 1 insertion(+), 1 deletion(-)
+ .../main/java/org/telegram/messenger/ApplicationLoader.java | 6 ++++++
+ TMessagesProj_App/src/main/AndroidManifest.xml              | 2 +-
+ 2 files changed, 7 insertions(+), 1 deletion(-)
 
+diff --git a/TMessagesProj/src/main/java/org/telegram/messenger/ApplicationLoader.java b/TMessagesProj/src/main/java/org/telegram/messenger/ApplicationLoader.java
+index 0000000..0000000 100644
+--- a/TMessagesProj/src/main/java/org/telegram/messenger/ApplicationLoader.java
++++ b/TMessagesProj/src/main/java/org/telegram/messenger/ApplicationLoader.java
+@@ -272,6 +272,12 @@ public class ApplicationLoader extends Application {
+             DownloadController.getInstance(a);
+         }
+         BillingController.getInstance().startConnection();
++
++        try {
++            desu.inugram.InuHooks.onAppBoot();
++        } catch (Exception e) {
++            e.printStackTrace();
++        }
+     }
+ 
+     public ApplicationLoader() {
 diff --git a/TMessagesProj_App/src/main/AndroidManifest.xml b/TMessagesProj_App/src/main/AndroidManifest.xml
 index 0000000..0000000 100644
 --- a/TMessagesProj_App/src/main/AndroidManifest.xml

@@ -122,7 +122,7 @@ Standalone hook patches expose surfaces (menu builders, callbacks, `public` fiel
 | patch | what it exposes |
 | --- | --- |
 | `admin-logs.patch` | hooks inside admin logs activity |
-| `app-loader.patch` | custom `ApplicationLoaderImpl` instead of stock |
+| `app-loader.patch` | custom `ApplicationLoaderImpl` instead of stock; `InuHooks.onAppBoot` at the tail of `postInitApplication` |
 | `chat-activity.patch` | various ChatActivity hooks — message menu (`ChatHelper.addMenuItems`/`processMenuOption`), `undoView`, `replyingMessageObject` etc. |
 | `icon-replacement.patch` | custom resource loader for icon replacement |
 | `internal-web-app.patch` | `WebViewRequestProps.inu_internalType` + `WebAppHelper.getInternalBotName` for internal bot web sheets |
