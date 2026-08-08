@@ -996,7 +996,11 @@ broken engine — or, as `api-filter-test.js` had been, red on a working one.
 - **The two compressed short forms are the one arrival `interceptUpdate` cannot answer in place.**
   The app applies `updateShortMessage`/`updateShortChatMessage` from their own fields and never
   builds the `TLRPC.Update` a middleware was handed (`normalizeShortMessage`'s synthetic
-  `updateNewMessage`, the same one `onUpdate` gets), so a rewrite has nowhere to land. `deliverable`
+  `updateNewMessage`, the same one `onUpdate` gets), so a rewrite has nowhere to land. The message
+  inside it is **stock's**, not a copy: `MessagesController.inu_buildShortMessage` is that branch's
+  own construction, promoted to a method so both callers share it. A second copy is not a
+  maintenance smell here but a wrong answer, and it had already become one — the fork's copy had
+  drifted, missing `unread` and the Saved Messages adjustments stock does at the end. `deliverable`
   therefore compares an unfiltered `TlJson` snapshot taken before the walk against one taken after,
   and **substitutes** the `TL_updates` the server would have sent only when something actually
   changed: stock's own short-form branch prefetches the sender and does its own pts bookkeeping, and
@@ -1009,9 +1013,21 @@ broken engine — or, as `api-filter-test.js` had been, red on a working one.
   `MessagesController.getUser`, then `MessagesStorage.getUserSync`) and answer a miss by returning
   false, which its caller turns into `needGetDiff`. So an uncached sender is caught and backfilled
   exactly as on the short-form branch, `users`/`chats` stay empty on purpose, and falling back to
-  the compressed form over a cache miss would only throw the rewrite away. The difference
-  catch-up (`onDifference`) stays observation-only; it is applied by its own code path, which
-  `common.d.ts` says out loud.
+  the compressed form over a cache miss would only throw the rewrite away.
+- **The difference is the same walk answered a different way, and that is what `UpdateDelivery`
+  is for.** Stock applies a catch-up from its own `stageQueue` runnable rather than through
+  `processUpdates`, so there is no `TLRPC.Updates` to substitute and nothing to hand back to — the
+  hook is passed **the runnable itself** and re-runs it once the chain settles, which is why both
+  sites are an anonymous `Runnable` and not a lambda (`this` is the continuation, and a lambda's is
+  the controller). Claiming one costs no rebuild at all: a unit wraps the very `Message` the app is
+  about to store, so a rewrite has already landed where stock will read it, and a `drop` is a
+  removal from `new_messages`/`other_updates` before the body walks them. `UpdateUnit.arrival` is
+  what a drop removes, since for a difference the update a middleware saw is a wrapper we
+  synthesised. It shares the per-account fifo with the live batches — a catch-up must not overtake
+  an arrival already being walked — and observation still runs off the hand-back, so a dropped
+  message never happened for `onUpdate` either. What it cannot share is `deliverable`'s snapshot
+  comparison, hence `interceptableUnits(snapshots = false)`: that exists for the short forms, which
+  a difference never carries.
 - **`interceptSendMessage` is a narrowing of the `interceptRpc` chain, not a chain of its own.**
   `sendmsg.js` wraps the plugin's verdict middleware into an ordinary one over `tg/rpc.rs`'s
   `SEND_METHODS`, so the 10 s budget, the plugin-list order, `collapseChain`, the cancel handling

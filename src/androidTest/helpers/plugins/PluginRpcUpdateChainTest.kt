@@ -499,6 +499,81 @@ class PluginRpcUpdateChainTest {
         assertEquals(2, plugin.js.updateDispatches.size)
     }
 
+    @Test
+    fun a_difference_nobody_claims_is_applied_by_its_own_runnable() {
+        verdictPlugin("p", true, "updateUserTyping")
+
+        val run = deliverDifference(otherUpdates = listOf(newMessage(1)))
+        drain()
+
+        assertEquals(1, run.applied, "the app walked its own difference, in its own runnable")
+    }
+
+    @Test
+    fun a_claimed_difference_is_parked_and_its_runnable_re_run_once_the_chain_settles() {
+        val plugin = verdictPlugin("p", true, "updateNewMessage")
+
+        val run = deliverDifference(otherUpdates = listOf(newMessage(1)))
+        assertEquals(0, run.applied, "the app must not apply a difference a middleware is rewriting")
+        drain()
+
+        assertEquals(1, plugin.js.updateDispatches.size)
+        assertEquals(1, run.applied, "handed back exactly once")
+    }
+
+    /**
+     * a difference unit wraps the very `Message` the app is about to apply, so unlike the batch path
+     * there is nothing to substitute: the rewrite is already where stock will read it.
+     */
+    @Test
+    fun a_rewrite_of_a_difference_message_lands_on_the_object_the_app_applies() {
+        val plugin = startPlugin("p", "interceptUpdate(updateNewMessage)")
+        assertNull(plugin.interceptUpdate("updateNewMessage"))
+        plugin.js.onDispatchUpdateIntercept = { dispatch ->
+            val update = plugin.resolved(handleId(dispatch.updateWire)) as TL_update.TL_updateNewMessage
+            update.message.message = "rewritten"
+            plugin.updateVerdict(dispatch.dispatchId, true)
+        }
+
+        val message = TLRPC.TL_message().apply { id = 1; peer_id = peerUser(7L); message = "before" }.synced()
+        val run = deliverDifference(listOf(message))
+        drain()
+
+        assertEquals(1, run.applied)
+        assertEquals("rewritten", run.newMessages.single().message)
+    }
+
+    /** a drop is a removal from the list the runnable is about to walk, there being no batch to rebuild */
+    @Test
+    fun a_dropped_difference_message_is_gone_from_the_list_the_app_walks() {
+        val plugin = verdictPlugin("p", false, "updateNewMessage")
+        val kept = TLRPC.TL_message().apply { id = 1; peer_id = peerUser(7L) }.synced()
+        val dropped = TLRPC.TL_message().apply { id = 2; peer_id = peerUser(7L) }.synced()
+        val update = TL_update.TL_updateUserTyping()
+
+        val run = deliverDifference(listOf(kept, dropped), listOf(update))
+        drain()
+
+        assertEquals(1, run.applied)
+        assertEquals(listOf<TLRPC.Update>(update), run.otherUpdates, "nothing named that constructor, so it stays")
+        assertEquals(emptyList<TLRPC.Message>(), run.newMessages, "both were dropped")
+        assertEquals(2, plugin.js.updateDispatches.size)
+    }
+
+    /** the same fifo as the batch path, or a catch-up would overtake an arrival already being walked */
+    @Test
+    fun a_difference_queues_behind_a_batch_already_being_walked() {
+        val plugin = verdictPlugin("p", true, "updateNewMessage")
+
+        assertTrue(deliverUpdates(batchOf(newMessage(1))))
+        val run = deliverDifference(otherUpdates = listOf(newMessage(2)))
+        assertEquals(0, run.applied, "the difference waits its turn")
+        drain()
+
+        assertEquals(1, run.applied)
+        assertEquals(2, plugin.js.updateDispatches.size)
+    }
+
     /** `deliverable` rebuilds a batch that lost an update through `removeAt`; this one refuses */
     private class ExplodingList(update: TLRPC.Update) : ArrayList<TLRPC.Update>(listOf(update)) {
         override fun removeAt(index: Int): TLRPC.Update = throw IllegalStateException("cannot rebuild")

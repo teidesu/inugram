@@ -442,6 +442,37 @@ fun deliverUpdates(updates: TLRPC.Updates, account: Int = 0, fromQueue: Boolean 
 /** what the app was actually handed, in order */
 fun applied(account: Int = 0): List<TLRPC.Updates> = TestApp.updatesController(account).processed
 
+/**
+ * one run of a difference's own stageQueue runnable: [applied] counts the times its body ran, which
+ * is once for a difference nothing claimed and once more when a claimed one is handed back. The
+ * lists are the runnable's own, so a drop is visible as their contents.
+ */
+class DifferenceRun(
+    val newMessages: MutableList<TLRPC.Message>,
+    val otherUpdates: MutableList<TLRPC.Update>,
+) {
+    var applied = 0
+}
+
+/**
+ * the difference hook, driven the way stock's runnable drives it: the hook answers first and the
+ * body runs only if it did not claim the walk.
+ */
+fun deliverDifference(
+    newMessages: List<TLRPC.Message> = emptyList(),
+    otherUpdates: List<TLRPC.Update> = emptyList(),
+    account: Int = 0,
+): DifferenceRun {
+    val run = DifferenceRun(ArrayList(newMessages), ArrayList(otherUpdates))
+    lateinit var runnable: Runnable
+    runnable = Runnable {
+        if (PluginRpc.onDifference(run.newMessages, run.otherUpdates, account, runnable)) return@Runnable
+        run.applied++
+    }
+    runnable.run()
+    return run
+}
+
 fun peerUser(id: Long): TLRPC.TL_peerUser = TLRPC.TL_peerUser().apply { user_id = id }
 
 fun peerChannel(id: Long): TLRPC.TL_peerChannel = TLRPC.TL_peerChannel().apply { channel_id = id }
