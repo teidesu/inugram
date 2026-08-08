@@ -25,7 +25,7 @@ const PRELUDES: &[(&str, &str, &str)] = &[
     ("xposed", "<inu:xposed>", "src/js/xposed.js"),
     ("events", "<inu:events>", "src/js/events.js"),
     ("reads", "<inu:reads>", "src/js/reads.js"),
-    ("sendmsg", "<inu:sendmsg>", "src/js/sendmsg.js"),
+    ("send_message", "<inu:send_message>", "src/js/send_message.js"),
     ("writes", "<inu:writes>", "src/js/writes.js"),
     ("message", "<inu:message>", "src/js/message.js"),
     ("utils", "<inu:utils>", "src/js/utils.js"),

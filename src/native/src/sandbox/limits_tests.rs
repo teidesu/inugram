@@ -1,11 +1,11 @@
 use super::*;
 use rquickjs::{Context, Runtime};
 
-fn setup() -> (Runtime, Context, std::sync::Arc<crate::testing::util::Logs>) {
+fn setup() -> (Runtime, Context, std::sync::Arc<crate::testing::harness::Logs>) {
     let rt = Runtime::new().unwrap();
     let ctx = Context::full(&rt).unwrap();
-    let logs = crate::testing::util::Logs::new();
-    install_interrupt_handler(&rt, crate::testing::util::log_sink(&logs));
+    let logs = crate::testing::harness::Logs::new();
+    install_interrupt_handler(&rt, crate::testing::harness::log_sink(&logs));
     (rt, ctx, logs)
 }
 
@@ -13,7 +13,7 @@ fn setup() -> (Runtime, Context, std::sync::Arc<crate::testing::util::Logs>) {
 fn eval(ctx: &Context, code: &str) -> Result<(), String> {
     ctx.with(|ctx| {
         ctx.eval::<(), _>(code).map_err(|e| match e {
-            rquickjs::Error::Exception => crate::telegram::rpc::format_exception(&ctx),
+            rquickjs::Error::Exception => crate::api::telegram::rpc::format_exception(&ctx),
             other => other.to_string(),
         })
     })
@@ -24,7 +24,7 @@ fn eval(ctx: &Context, code: &str) -> Result<(), String> {
 /// a `while (true) {}`: raised, the queue wedges forever with the suite green.
 #[test]
 fn the_two_deadlines_are_the_ones_the_contract_states() {
-    use crate::testing::util::{stated_number, CONTRACT};
+    use crate::testing::harness::{stated_number, CONTRACT};
     assert_eq!(ENTRY_DEADLINE_MS, stated_number(CONTRACT, "may run {} seconds of uninterrupted") * 1000);
     assert_eq!(EVAL_DEADLINE_MS, stated_number(CONTRACT, "or {} for the top-level evaluation") * 1000);
 }
@@ -72,10 +72,10 @@ fn the_interrupt_survives_catch_and_finally() {
 fn a_spinning_microtask_is_interrupted() {
     let (rt, ctx, logs) = setup();
     let armed = arm(50);
-    let log = crate::testing::util::log_sink(&logs);
+    let log = crate::testing::harness::log_sink(&logs);
 
     eval(&ctx, "Promise.resolve().then(() => { while (true) {} });").unwrap();
-    crate::telegram::rpc::pump_jobs(&rt, &ctx, log.as_ref());
+    crate::api::telegram::rpc::pump_jobs(&rt, &ctx, log.as_ref());
 
     assert!(armed.tripped());
 }
@@ -100,7 +100,7 @@ fn honest_work_within_the_real_entry_budget_is_never_interrupted() {
         "#,
     )
     .unwrap();
-    crate::telegram::rpc::pump_jobs(&rt, &ctx, log.as_ref());
+    crate::api::telegram::rpc::pump_jobs(&rt, &ctx, log.as_ref());
 
     assert!(!armed.tripped());
     assert!(logs.borrow().is_empty(), "got: {:?}", logs.borrow());
@@ -233,7 +233,7 @@ mod memory_tests {
     fn setup() -> (Runtime, Context) {
         let rt = Runtime::new().unwrap();
         let ctx = Context::full(&rt).unwrap();
-        ctx.with(|ctx| crate::sandbox::error::install_plugin_error(&ctx).unwrap());
+        ctx.with(|ctx| crate::api::error::install_plugin_error(&ctx).unwrap());
         (rt, ctx)
     }
 
@@ -241,7 +241,7 @@ mod memory_tests {
     fn eval(ctx: &Context, code: &str) -> Result<String, String> {
         ctx.with(|ctx| match ctx.eval::<Value, _>(code) {
             Ok(value) => Ok(rquickjs::Coerced::<String>::from_js(&ctx, value).map(|c| c.0).unwrap_or_default()),
-            Err(rquickjs::Error::Exception) => Err(crate::telegram::rpc::format_exception(&ctx)),
+            Err(rquickjs::Error::Exception) => Err(crate::api::telegram::rpc::format_exception(&ctx)),
             Err(e) => Err(e.to_string()),
         })
     }
@@ -256,7 +256,7 @@ mod memory_tests {
     /// heap ceiling next to it needs no such test: it is named in the message the host reports.
     #[test]
     fn the_external_budget_is_the_one_the_contract_states() {
-        use crate::testing::util::{stated_number, CONTRACT};
+        use crate::testing::harness::{stated_number, CONTRACT};
         let mb = stated_number(CONTRACT, "their own budget, {} MB per plugin");
         assert_eq!(EXTERNAL_LIMIT_BYTES as u64, mb * 1024 * 1024);
     }

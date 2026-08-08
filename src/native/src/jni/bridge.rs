@@ -259,8 +259,8 @@ impl JniBridge {
     pub(crate) fn call_wire(&self, what: &str, method: JMethodID, args: &[Arg<'_>]) -> String {
         match self.call_string(what, method, args) {
             Ok(Some(wire)) => wire,
-            Ok(None) => crate::tl::proxy::encode_error(&format!("{what}: host returned null")),
-            Err(e) => crate::tl::proxy::encode_error(&e),
+            Ok(None) => crate::api::tl::proxy::encode_error(&format!("{what}: host returned null")),
+            Err(e) => crate::api::tl::proxy::encode_error(&e),
         }
     }
 
