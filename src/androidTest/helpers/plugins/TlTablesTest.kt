@@ -4,6 +4,7 @@ import desu.inugram.core.plugins.TlCtorIds
 import desu.inugram.core.plugins.TlFlags
 import desu.inugram.core.plugins.TlNames
 import desu.inugram.helpers.plugins.tl.TlJson
+import desu.inugram.helpers.plugins.tl.TlReflect
 import java.lang.reflect.Modifier
 import kotlin.test.assertTrue
 import org.json.JSONObject
@@ -59,7 +60,7 @@ class TlTablesTest {
 
     /**
      * one case rather than three, and reading the fields itself rather than through
-     * [TlJson.publicFields]: walking the tree loads every TL class into the process, and a cache
+     * [TlReflect.publicFields]: walking the tree loads every TL class into the process, and a cache
      * keyed by class then holds a `Field` per field of each for the rest of the run. Three walks
      * plus that was enough to have the instrumentation process killed, in whichever suite happened
      * to be running next.

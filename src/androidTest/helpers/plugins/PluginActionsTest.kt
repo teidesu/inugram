@@ -1,6 +1,7 @@
 package desu.inugram.helpers.plugins
 
 import desu.inugram.helpers.plugins.ui.ActionRow
+import desu.inugram.helpers.plugins.ui.ActionSurface
 import desu.inugram.helpers.plugins.ui.PluginActions
 import kotlin.test.assertEquals
 import kotlin.test.assertNotNull
@@ -20,14 +21,14 @@ class PluginActionsTest {
         }
     }
 
-    private fun rendered(kind: Int, surface: PluginActions.Surface): List<String> {
+    private fun rendered(kind: Int, surface: ActionSurface): List<String> {
         val out = ArrayList<String>()
         PluginActions.render(kind, surface) { rows -> out.addAll(rows.map { it.text }) }
         settle()
         return out
     }
 
-    private val chat = PluginActions.Surface.chat(0, 4242L, null)
+    private val chat = ActionSurface.chat(0, 4242L, null)
 
     @Test
     fun rowsFollowThePluginListRatherThanTheOrderRegistrationsArrived() {
@@ -50,7 +51,7 @@ class PluginActionsTest {
         PluginActions.register(plugin, plugin.js, PluginActions.KIND_CHAT, 1, "a")
         plugin.answers(1 to "row")
 
-        val secret = PluginActions.Surface.chat(0, DialogObjectIds.ENCRYPTED, null)
+        val secret = ActionSurface.chat(0, DialogObjectIds.ENCRYPTED, null)
         assertEquals(emptyList(), rendered(PluginActions.KIND_CHAT, secret))
         assertEquals(0, plugin.js.actionRenders.size)
     }
@@ -85,7 +86,7 @@ class PluginActionsTest {
         PluginActions.register(plugin, plugin.js, PluginActions.KIND_MESSAGE, 1, "a")
         plugin.answers(1 to "row")
 
-        val surface = PluginActions.Surface.message(0, 4242L, 99L, listOf(11, 12, 13))
+        val surface = ActionSurface.message(0, 4242L, 99L, listOf(11, 12, 13))
         rendered(PluginActions.KIND_MESSAGE, surface)
 
         assertEquals(1, plugin.js.actionRenders.size)

@@ -1,6 +1,7 @@
 package desu.inugram.helpers.plugins
 
 import desu.inugram.core.plugins.PluginWire
+import desu.inugram.helpers.plugins.tg.PeerSpecs
 import desu.inugram.helpers.plugins.tg.PluginReads
 import java.util.ArrayList
 import kotlin.test.assertEquals
@@ -129,7 +130,7 @@ class PluginReadsTest {
             PluginReads.OP_DIALOG to "S",
             PluginReads.OP_MESSAGE to "S\n7",
             PluginReads.OP_DRAFT to "S\n0",
-            PluginReads.OP_INPUT_PEER to "S\n${PluginReads.KIND_PEER}",
+            PluginReads.OP_INPUT_PEER to "S\n${PeerSpecs.KIND_PEER}",
         )
         for ((op, arg) in ops) {
             val decoded = PluginWire.decode(read(plugin, op, arg))
@@ -318,9 +319,9 @@ class PluginReadsTest {
     @Test
     fun an_input_peer_is_answered_without_serializing_the_entity_behind_it() {
         val plugin = granted()
-        assertEquals("inputPeerSelf", jsonOf(inputPeer(plugin, "S", PluginReads.KIND_PEER)).getString("_"))
-        assertEquals("inputUserSelf", jsonOf(inputPeer(plugin, "S", PluginReads.KIND_USER)).getString("_"))
-        val peer = jsonOf(inputPeer(plugin, "D$alice", PluginReads.KIND_PEER))
+        assertEquals("inputPeerSelf", jsonOf(inputPeer(plugin, "S", PeerSpecs.KIND_PEER)).getString("_"))
+        assertEquals("inputUserSelf", jsonOf(inputPeer(plugin, "S", PeerSpecs.KIND_USER)).getString("_"))
+        val peer = jsonOf(inputPeer(plugin, "D$alice", PeerSpecs.KIND_PEER))
         assertEquals("inputPeerUser", peer.getString("_"))
         assertEquals("2220", peer.getString("access_hash"), "the cached entity's own hash, not a zero")
     }
@@ -328,20 +329,20 @@ class PluginReadsTest {
     @Test
     fun an_uncached_peer_has_no_input_peer_however_willing_stock_is_to_build_one() {
         val plugin = granted()
-        assertEquals("N", inputPeer(plugin, "D4242", PluginReads.KIND_PEER))
-        assertEquals("N", inputPeer(plugin, "Unobody", PluginReads.KIND_PEER))
+        assertEquals("N", inputPeer(plugin, "D4242", PeerSpecs.KIND_PEER))
+        assertEquals("N", inputPeer(plugin, "Unobody", PeerSpecs.KIND_PEER))
     }
 
     @Test
     fun narrowing_to_the_wrong_kind_says_so_instead_of_answering_nothing() {
         val plugin = granted()
-        assertPluginError("invalid-argument", inputPeer(plugin, "D$alice", PluginReads.KIND_CHANNEL))
-        assertPluginError("invalid-argument", inputPeer(plugin, "D-$channel", PluginReads.KIND_USER))
-        assertPluginError("invalid-argument", inputPeer(plugin, "S", PluginReads.KIND_CHANNEL))
-        assertPluginError("invalid-argument", inputPeer(plugin, "D-2002", PluginReads.KIND_CHANNEL))
+        assertPluginError("invalid-argument", inputPeer(plugin, "D$alice", PeerSpecs.KIND_CHANNEL))
+        assertPluginError("invalid-argument", inputPeer(plugin, "D-$channel", PeerSpecs.KIND_USER))
+        assertPluginError("invalid-argument", inputPeer(plugin, "S", PeerSpecs.KIND_CHANNEL))
+        assertPluginError("invalid-argument", inputPeer(plugin, "D-2002", PeerSpecs.KIND_CHANNEL))
     }
 
-    private fun resolve(plugin: Plugin, spec: String, kind: Int = PluginReads.KIND_PEER, requestId: Long = 1L): String? =
+    private fun resolve(plugin: Plugin, spec: String, kind: Int = PeerSpecs.KIND_PEER, requestId: Long = 1L): String? =
         reads(plugin).resolvePeer(0, requestId, spec, kind)
 
     @Test
@@ -376,7 +377,7 @@ class PluginReadsTest {
         assertEquals("inputPeerChannel", jsonOf(settled.resultWire).getString("_"))
         assertEquals(
             "inputPeerChannel",
-            jsonOf(inputPeer(plugin, "Utelegram", PluginReads.KIND_PEER)).getString("_"),
+            jsonOf(inputPeer(plugin, "Utelegram", PeerSpecs.KIND_PEER)).getString("_"),
             "and the synchronous half answers for it afterwards",
         )
     }
@@ -395,7 +396,7 @@ class PluginReadsTest {
     @Test
     fun a_username_that_resolves_to_the_wrong_kind_is_an_invalid_argument() {
         val plugin = granted()
-        resolve(plugin, "Utelegram", PluginReads.KIND_USER)
+        resolve(plugin, "Utelegram", PeerSpecs.KIND_USER)
         connections().lastSent()!!.answer(
             TLRPC.TL_contacts_resolvedPeer().apply {
                 peer = peerChannel(3003L)
@@ -430,7 +431,7 @@ class PluginReadsTest {
     fun a_slot_nobody_is_logged_into_answers_not_found_rather_than_reading_slot_zero() {
         val plugin = granted()
         assertPluginError("not-found", read(plugin, PluginReads.OP_USER, "D$alice", account = 3))
-        assertPluginError("not-found", reads(plugin).resolvePeer(3, 1L, "Utelegram", PluginReads.KIND_PEER))
+        assertPluginError("not-found", reads(plugin).resolvePeer(3, 1L, "Utelegram", PeerSpecs.KIND_PEER))
         assertTrue(connections(3).sent.isEmpty())
     }
 }

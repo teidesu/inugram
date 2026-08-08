@@ -1,11 +1,11 @@
 package desu.inugram.helpers.plugins.io
 
+import desu.inugram.core.plugins.EgressPolicy
 import desu.inugram.core.plugins.PluginPermissions
-import desu.inugram.core.plugins.ScopeMatch
 import desu.inugram.core.plugins.PluginWire
+import desu.inugram.helpers.plugins.EngineDispatch
 import desu.inugram.helpers.plugins.FetchListener
 import desu.inugram.helpers.plugins.Plugin
-import desu.inugram.helpers.plugins.PluginDispatch
 import desu.inugram.helpers.plugins.QuickJs
 import java.io.File
 import java.io.InputStream
@@ -21,17 +21,18 @@ import org.telegram.messenger.Utilities
 
 /**
  * The transport behind the global `fetch` (rust: `fetch.rs`), and the only place the two egress
- * rules `common.d.ts` states can be enforced.
+ * rules `common.d.ts` states can be enforced. [EgressPolicy] decides them; what is enforced here is
+ * that it is asked at all, and asked per hop.
  *
- * **Every redirect hop is screened, not just the url the plugin passed**
- * (`instanceFollowRedirects` off, [runExchange] walking the chain itself): a client that follows
- * them for us checks the grant once, which turns any open redirect on an allowed host into a proxy
- * to everything else, and the response then looks like it came from the allowed host.
+ * **Every redirect hop is screened, not just the url the plugin passed**: `instanceFollowRedirects`
+ * is off and [runExchange] walks the chain itself, calling [EgressPolicy.screenHop] on each. A
+ * client that follows them for us checks the grant once, which turns any open redirect on an
+ * allowed host into a proxy to everything else, and the response then looks like it came from the
+ * allowed host.
  *
- * **Addresses are screened after resolution, and *every* answer must be public.** A name is not an
- * address, and the resolver picks per connection. What remains is the rebinding window between this
- * resolution and the socket's own, which needs a pinned-address socket with `Host`/SNI set by hand
- * to close - documented rather than pretended away.
+ * The residual rebinding window is between that resolution and the socket's own, which needs a
+ * pinned-address socket with `Host`/SNI set by hand to close - documented rather than pretended
+ * away.
  *
  * Only a body the plugin is actually handed stays charged against [BODY_BUDGET_BYTES]: a counter
  * nothing decrements is one a remote server drives to the ceiling by answering every request with a
@@ -127,7 +128,7 @@ object PluginFetch {
      * or it aborted - which it does *after* settling its own promise.
      */
     fun deliver(plugin: Plugin, engine: QuickJs, requestId: Long, delivery: Delivery, flight: Flight) {
-        if (!PluginDispatch.isLive(plugin, engine) || flight.cancelled) delivery.drop()
+        if (!EngineDispatch.isLive(plugin, engine) || flight.cancelled) delivery.drop()
         else engine.fetchResult(requestId, delivery.wire)
     }
 
@@ -210,106 +211,8 @@ object PluginFetch {
     }
 
     /** kept close to rust `fetch::parse_target`, which pre-flights the same thing; this side is the authority, being the one that connects */
-    fun hostOf(url: String): String? {
-        val uri = try {
-            URI(url)
-        } catch (e: Exception) {
-            return null
-        }
-        val scheme = uri.scheme?.lowercase() ?: return null
-        if (scheme != "http" && scheme != "https") return null
-        // `http://allowed.com@127.0.0.1/` reads as one host and connects to another
-        if (uri.rawUserInfo != null) return null
-        val host = uri.host ?: return null
-        return host.removeSurrounding("[", "]").trimEnd('.').lowercase().ifEmpty { null }
-    }
-
-    /**
-     * every range a plugin has no business reaching from a grant reading "arbitrary http": loopback
-     * and link-local (the device's own services), the private ones (the user's lan), and the
-     * shared/benchmark/multicast ones.
-     *
-     * Fail-closed on an address length this does not recognise.
-     */
-    fun isBlockedAddress(raw: ByteArray): Boolean {
-        when (raw.size) {
-            4 -> {
-                val a = raw[0].toInt() and 0xff
-                val b = raw[1].toInt() and 0xff
-                return when {
-                    a == 0 -> true // "this network"
-                    a == 10 -> true
-                    a == 127 -> true // loopback
-                    a == 100 && b in 64..127 -> true // carrier-grade nat
-                    a == 169 && b == 254 -> true // link-local, and the metadata services on it
-                    a == 172 && b in 16..31 -> true
-                    a == 192 && b == 0 -> true // ietf protocol assignments, incl. 192.0.0.0/24
-                    a == 192 && b == 168 -> true
-                    a == 198 && b in 18..19 -> true // benchmarking
-                    a >= 224 -> true // multicast, reserved, broadcast
-                    else -> false
-                }
-            }
-            16 -> {
-                val v4 = embeddedIpv4(raw)
-                if (v4 != null) return isBlockedAddress(v4)
-                val first = raw[0].toInt() and 0xff
-                if (first == 0xff) return true // multicast
-                if (first and 0xfe == 0xfc) return true // unique local, fc00::/7
-                if (first == 0xfe && (raw[1].toInt() and 0xc0) == 0x80) return true // link-local, fe80::/10
-                // ::1 and :: - both are this device
-                if (raw.take(15).all { it.toInt() == 0 }) return true
-                return false
-            }
-            else -> return true
-        }
-    }
-
-    /** the three v6 shapes carrying a v4 address - `::ffff:a.b.c.d`, `::a.b.c.d`, `64:ff9b::/96` - each of which reaches the v4 address it embeds */
-    private fun embeddedIpv4(raw: ByteArray): ByteArray? {
-        val tail = raw.copyOfRange(12, 16)
-        val mapped = raw.take(10).all { it.toInt() == 0 } &&
-            (raw[10].toInt() and 0xff) == 0xff && (raw[11].toInt() and 0xff) == 0xff
-        if (mapped) return tail
-        val nat64 = (raw[0].toInt() and 0xff) == 0x00 && (raw[1].toInt() and 0xff) == 0x64 &&
-            (raw[2].toInt() and 0xff) == 0xff && (raw[3].toInt() and 0xff) == 0x9b &&
-            raw.copyOfRange(4, 12).all { it.toInt() == 0 }
-        if (nat64) return tail
-        val compatible = raw.take(12).all { it.toInt() == 0 } && tail.any { it.toInt() != 0 }
-        if (compatible) return tail
-        return null
-    }
-
     private fun refuse(code: String, message: String, grant: String? = null) =
         PluginWire.encodePluginError(code, message, grant = grant)
-
-    /** [resolve] is a parameter so the rule can be tested against addresses rather than against whatever dns says today */
-    fun screenHop(
-        permissions: PluginPermissions,
-        url: String,
-        resolve: (String) -> List<ByteArray>,
-    ): String? {
-        val host = hostOf(url)
-            ?: return refuse("invalid-argument", "fetch: '$url' is not an http(s) url this api will follow")
-        if (!permissions.allows("fetch", host, ScopeMatch.DOMAIN)) {
-            return refuse("not-granted", "missing grant: fetch($host)", grant = "fetch($host)")
-        }
-        val addresses = try {
-            resolve(host)
-        } catch (e: Exception) {
-            return refuse("network", "fetch: '$host' does not resolve")
-        }
-        if (addresses.isEmpty()) return refuse("network", "fetch: '$host' does not resolve")
-        for (address in addresses) {
-            if (isBlockedAddress(address)) {
-                return refuse(
-                    "forbidden",
-                    "fetch: '$host' resolves onto a loopback, link-local or private address, which this api does not reach",
-                )
-            }
-        }
-        return null
-    }
 
     class Hop(
         val status: Int,
@@ -361,7 +264,7 @@ object PluginFetch {
         var hops = 0
         while (true) {
             if (flight.cancelled) return aborted()
-            screenHop(permissions, url, resolve)?.let { return Outcome.Refused(it) }
+            EgressPolicy.screenHop(permissions, url, resolve)?.let { return Outcome.Refused(it) }
             // again on the far side of the screen: resolving the name is the longest stretch of a
             // hop nothing else looks at, and there is no socket yet for `Flight.cancel` to reach
             if (flight.cancelled) return aborted()

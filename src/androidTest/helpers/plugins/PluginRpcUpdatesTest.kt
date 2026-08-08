@@ -2,7 +2,7 @@ package desu.inugram.helpers.plugins
 
 import desu.inugram.core.plugins.TlCtorIds
 import desu.inugram.core.plugins.PluginWire
-import desu.inugram.helpers.plugins.tg.PluginRpc
+import desu.inugram.helpers.plugins.tg.PluginUpdates
 import kotlin.test.assertEquals
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
@@ -205,7 +205,7 @@ class PluginRpcUpdatesTest {
     /**
      * the fan-out asks again, over the scopes that actually authorized this plugin for this
      * constructor. Nothing in the app reaches the state below - a registration that got past
-     * [PluginRpc.registerUpdates] holds a scope its plugin has - which is exactly why the second
+     * [PluginUpdates.registerUpdates] holds a scope its plugin has - which is exactly why the second
      * gate has no other way to be observed, and why it is worth having: it is what makes the
      * dispatch depend on the permissions rather than on a list built from them once.
      */
@@ -221,14 +221,14 @@ class PluginRpcUpdatesTest {
     }
 
     /**
-     * rewrites the scope a published [PluginRpc.UpdateListener] remembers. Reflection for the same
+     * rewrites the scope a published [PluginUpdates.UpdateListener] remembers. Reflection for the same
      * reason [resetBridge] uses it: the bridge must not grow a seam the app has no use for.
      */
     @Suppress("UNCHECKED_CAST")
     private fun forgeGrantScope(plugin: Plugin, type: String, scope: String) {
-        val byType = PluginRpc::class.java.getDeclaredField("updateListenersByType")
+        val byType = PluginUpdates::class.java.getDeclaredField("updateListenersByType")
             .apply { isAccessible = true }
-            .get(PluginRpc) as Map<String, List<Any>>
+            .get(PluginUpdates) as Map<String, List<Any>>
         val listener = byType[type]!!.single { entry ->
             entry.javaClass.getDeclaredField("plugin").apply { isAccessible = true }.get(entry) === plugin
         }

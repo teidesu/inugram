@@ -18,10 +18,10 @@ class ForkWiringTest {
      */
     @Test
     fun `the inu-jvm lifetime wiring is in the files no test target compiles`() {
-        val api = forkSource("PluginApi.kt").readText()
-        assertTrue(api.contains("PluginJvm.install(engine)"), "nothing installs inu.jvm")
+        val bindings = forkSource("EngineBindings.kt").readText()
+        assertTrue(bindings.contains("PluginJvm.install(engine)"), "nothing installs inu.jvm")
         assertTrue(
-            api.contains("PluginJvm.listenerFor(plugin, engine, AppScreen)"),
+            bindings.contains("PluginJvm.listenerFor(plugin, engine, AppScreen)"),
             "nothing gives inu.jvm the screen it reads the current fragment off",
         )
 
@@ -39,6 +39,29 @@ class ForkWiringTest {
     }
 
     /**
+     * Six objects own a directory keyed by install id, and `remove` is a hand-written list of them.
+     * A seventh that forgets to join it leaks that plugin's tree for good - nothing reads it again,
+     * nothing reports it, and the id is minted fresh on the next install - so the list is derived
+     * from the declarations rather than kept in step with them by hand.
+     */
+    @Test
+    fun `everything keyed by install id is wiped when the plugin is uninstalled`() {
+        val owners = File(forkRoot(), "src/kotlin/helpers/plugins").walkTopDown()
+            .filter { it.isFile && it.extension == "kt" }
+            .filter { it.readText().contains("fun wipe(installId: String)") }
+            .map { it.nameWithoutExtension }
+            .toSortedSet()
+        assertTrue(owners.isNotEmpty(), "the wipe signature changed, so this lint now checks nothing")
+
+        val remove = bodyOf(forkSource("PluginManager.kt").readText(), "fun remove(plugin: Plugin)")
+        assertEquals(
+            emptyList(),
+            owners.filterNot { remove.contains("$it.wipe(plugin.id)") },
+            "uninstalling a plugin leaves this much of it on the device forever",
+        )
+    }
+
+    /**
      * a transfer's observer is registered on the app-wide centre, which holds it strongly, so a
      * plugin dropped without `PluginMedia.detach` keeps its engine alive for the life of the process
      */
@@ -48,9 +71,15 @@ class ForkWiringTest {
         val drops = lines.withIndex().filter { it.value.trim() == "PluginRpc.detach(plugin)" }
         assertEquals(1, drops.size, "the teardown sequence is one function, so a plugin is dropped one way")
         assertEquals(
-            "PluginMedia.detach(plugin)",
-            lines[drops[0].index + 1].trim(),
-            "a dropped plugin keeps its transfers, and through them its engine",
+            listOf("PluginUpdates.detach(plugin)", "TlHandles.endDetach(plugin)", "PluginMedia.detach(plugin)"),
+            lines.drop(drops[0].index + 1).take(3).map { it.trim() },
+            "a dropped plugin keeps its transfers, and through them its engine - and the handle " +
+                "table is released after both chains have abandoned, never before",
+        )
+        assertEquals(
+            "TlHandles.beginDetach(plugin)",
+            lines[drops[0].index - 1].trim(),
+            "an abandon restarting a chain would read a leaving plugin as live",
         )
     }
 

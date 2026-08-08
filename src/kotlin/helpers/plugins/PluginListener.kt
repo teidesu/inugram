@@ -26,6 +26,7 @@ package desu.inugram.helpers.plugins
 interface PluginListener :
     CoreListener,
     RpcListener,
+    UpdatesListener,
     TlListener,
     DeserializeListener,
     ApiListener,
@@ -119,6 +120,10 @@ interface RpcListener {
 
     fun onRpcComplete(dispatchId: Long, resultWire: String)
 
+}
+
+/** the arriving update stream, which is [PluginUpdates] rather than [PluginRpc]: a different table in rust too */
+interface UpdatesListener {
     /**
      * [scope] is "" when every constructor in [types] is its own scope, else the demuxed event
      * name (`new_message`, ...). `dispatchUpdate` must not be called for a type no registration
@@ -155,7 +160,7 @@ interface DeserializeListener {
 interface ReadsListener {
     /**
      * [op] keeps in sync with rust `reads::OP_*`; [arg] and a batch answer both join on
-     * `PluginReads.LIST_SEPARATOR`. An op that failed as a whole answers a single `P`/`E` wire,
+     * `PeerSpecs.LIST_SEPARATOR`. An op that failed as a whole answers a single `P`/`E` wire,
      * which native checks for before it splits.
      */
     fun accountRead(accountId: Int, op: Int, arg: String): String

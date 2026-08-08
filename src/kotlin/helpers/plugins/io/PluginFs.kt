@@ -22,7 +22,7 @@ import org.telegram.messenger.FileLoader
 object PluginFs {
     private const val SCOPED_ROOT = "inu_plugins"
 
-    /** where [PluginManager] installs plugin sources; `inu.android.getPluginsDir` answers this */
+    /** where [desu.inugram.helpers.plugins.PluginStore] keeps plugin sources; `inu.android.getPluginsDir` answers this */
     private const val STORE = "inugram_plugins"
 
     private fun dir(installId: String): File {

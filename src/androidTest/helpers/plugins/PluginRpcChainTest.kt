@@ -338,7 +338,7 @@ class PluginRpcChainTest {
         // (the later window, a collapse after the send is already queued on stageQueue, needs two
         // real threads and is not reachable from this single-threaded harness.)
         plugin.next(dispatchId, PluginWire.encodeJson("""{"_":"users.getUsers"}"""))
-        PluginRpc.detach(plugin)
+        detachPlugin(plugin)
         drain()
 
         assertEquals(0, connections().sent.size, "a collapsed chain must not still reach the server")
@@ -464,7 +464,7 @@ class PluginRpcChainTest {
         )
     }
 
-    /** the same ordering in [PluginRpc.detach], where `releaseAll()` is what has to come last */
+    /** the same ordering in `PluginManager.teardown`, where `TlHandles.endDetach` is what has to come last */
     @Test
     fun a_stage_detach_rejects_can_still_read_its_own_request() {
         // two registrations put one plugin in the chain twice, which is what gives detach a stage of
@@ -484,7 +484,7 @@ class PluginRpcChainTest {
         drain()
         assertEquals(2, plugin.js.dispatches.size)
 
-        PluginRpc.detach(plugin)
+        detachPlugin(plugin)
         drain()
 
         assertTrue(

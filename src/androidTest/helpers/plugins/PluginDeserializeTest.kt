@@ -3,7 +3,7 @@ package desu.inugram.helpers.plugins
 import desu.inugram.core.plugins.TlCtorIds
 import desu.inugram.core.plugins.PluginWire
 import desu.inugram.helpers.plugins.tg.PluginDeserialize
-import desu.inugram.helpers.plugins.tl.TlJson
+import desu.inugram.helpers.plugins.tl.TlReflect
 import java.io.File
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
@@ -529,7 +529,7 @@ class PluginDeserializeTest {
 private fun flagBitIsSet(obj: TLObject, field: String): Boolean {
     val gate = desu.inugram.core.plugins.TlFlags.gateOf(obj.javaClass, field) ?: return true
     val word = desu.inugram.core.plugins.TlFlags.wordName(gate.word) ?: return true
-    val holder = TlJson.publicFields(obj.javaClass)[word] ?: return true
+    val holder = TlReflect.publicFields(obj.javaClass)[word] ?: return true
     return (holder.getInt(obj) and (1 shl gate.bit)) != 0
 }
 

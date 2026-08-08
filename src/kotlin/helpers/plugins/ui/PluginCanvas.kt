@@ -19,8 +19,8 @@ import android.graphics.Typeface
 import android.os.Build
 import desu.inugram.core.plugins.PluginWire
 import desu.inugram.helpers.plugins.CanvasListener
+import desu.inugram.helpers.plugins.EngineDispatch
 import desu.inugram.helpers.plugins.Plugin
-import desu.inugram.helpers.plugins.PluginDispatch
 import desu.inugram.helpers.plugins.QuickJs
 import desu.inugram.helpers.plugins.io.PluginBlobs
 import java.io.File
@@ -635,7 +635,7 @@ object PluginCanvas {
             val path = fields.drop(2).joinToString(FIELD.toString())
             work.execute {
                 val loaded = runCatching { Typeface.createFromFile(path) }
-                PluginDispatch.onEngine(plugin, engine) {
+                EngineDispatch.onEngine(plugin, engine) {
                     val wire = loaded.fold(
                         onSuccess = { fonts[family] = it; "" },
                         onFailure = { PluginWire.encodePluginError("invalid-argument", "canvas: this is not a font file") },
@@ -651,7 +651,7 @@ object PluginCanvas {
             work.execute {
                 val result = runCatching(produce)
                 val bitmap = result.getOrNull()
-                PluginDispatch.onEngine(plugin, engine, onDropped = { bitmap?.recycle() }) {
+                EngineDispatch.onEngine(plugin, engine, onDropped = { bitmap?.recycle() }) {
                     if (bitmap == null) {
                         val message = result.exceptionOrNull()?.message ?: "the decode failed"
                         engine.canvasResult(requestId, PluginWire.encodePluginError("invalid-argument", "canvas: $message"))
@@ -675,7 +675,7 @@ object PluginCanvas {
                 } catch (e: Throwable) {
                     PluginWire.encodePluginError("internal", "canvas: ${e.message ?: e.toString()}")
                 }
-                PluginDispatch.onEngine(plugin, engine) { engine.canvasResult(requestId, wire) }
+                EngineDispatch.onEngine(plugin, engine) { engine.canvasResult(requestId, wire) }
             }
         }
 

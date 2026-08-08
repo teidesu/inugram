@@ -89,17 +89,20 @@ class PluginBootTest {
     /**
      * the residual gap `BootCohort` cannot close by itself: it names *grants*, and a new api whose
      * registrations a headless path dispatches into would be invisible to it. Every one of those
-     * registers through `RpcListener` (the action and settings registrations go through
+     * registers through `RpcListener`/`UpdatesListener` (the action and settings registrations go through
      * `ApiListener`, and nothing dispatches those without a ui), so a new registration family there
      * is the one moment someone can be asked.
      */
     @Test
     fun `a new host-dispatched registration family has to be weighed against the boot cohort`() {
         val listener = forkSource("PluginListener.kt").readText()
-        val at = listener.indexOf("interface RpcListener")
-        assertTrue(at >= 0, "PluginListener no longer declares RpcListener")
-        val body = listener.substring(blockAt(listener, listener.indexOf('{', at)))
-        val families = Regex("""fun (\w+Register)\(""").findAll(body).map { it.groupValues[1] }.toSet()
+        val families = HashSet<String>()
+        for (name in listOf("RpcListener", "UpdatesListener")) {
+            val at = listener.indexOf("interface $name")
+            assertTrue(at >= 0, "PluginListener no longer declares $name")
+            val body = listener.substring(blockAt(listener, listener.indexOf('{', at)))
+            Regex("""fun (\w+Register)\(""").findAll(body).forEach { families.add(it.groupValues[1]) }
+        }
         assertEquals(
             setOf("onRpcRegister", "onUpdateRegister", "onInterceptUpdateRegister"),
             families,

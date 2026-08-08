@@ -14,6 +14,7 @@ import androidx.recyclerview.widget.RecyclerView
 import desu.inugram.InuConfig
 import desu.inugram.helpers.plugins.ui.ActionRow
 import desu.inugram.helpers.dialogs.DrawerHelper.setupMainFragment
+import desu.inugram.helpers.plugins.ui.ActionSurface
 import desu.inugram.helpers.plugins.ui.PluginActions
 import desu.inugram.helpers.update.UpdateHelper
 import desu.inugram.ui.drawer.DrawerAddCell
@@ -578,7 +579,7 @@ object DrawerHelper {
         val itemId = adapter.getId(position)
         if (itemId >= PluginActions.OPTION_BASE) {
             PluginActions.rowAt(globalActionRows, itemId)?.let {
-                PluginActions.dispatch(it, PluginActions.Surface.global(account))
+                PluginActions.dispatch(it, ActionSurface.global(account))
             }
             close()
             return
@@ -696,7 +697,7 @@ object DrawerHelper {
      */
     private fun refreshGlobalActionRows() {
         if (globalActionRows.isEmpty() && !PluginActions.hasRows(PluginActions.KIND_GLOBAL)) return
-        val surface = PluginActions.Surface.global(UserConfig.selectedAccount)
+        val surface = ActionSurface.global(UserConfig.selectedAccount)
         PluginActions.render(PluginActions.KIND_GLOBAL, surface) { rows ->
             if (rows == globalActionRows) return@render
             globalActionRows = rows

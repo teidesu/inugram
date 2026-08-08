@@ -149,7 +149,7 @@ class PluginRpcSendChainTest {
         assertNull(plugin.interceptSendMessage())
         plugin.js.onDispatchRpc = { plugin.next(it.dispatchId, it.requestWire) }
 
-        Utilities.globalQueue.postRunnable { PluginRpc.detach(plugin) }
+        Utilities.globalQueue.postRunnable { detachPlugin(plugin) }
         drain()
 
         val request = TLRPC.TL_messages_sendMessage()

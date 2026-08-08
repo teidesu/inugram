@@ -4,7 +4,8 @@ import desu.inugram.core.plugins.PluginWire
 import org.telegram.messenger.Utilities
 
 /**
- * The one rule every host callback into an engine obeys, in one place.
+ * The one rule every host callback into an engine obeys, in one place: a settle that crossed a
+ * queue hop has to prove it is still talking to the engine it left from.
  *
  * A plugin that reloaded is running on a *different* engine whose request, invoke, callback and
  * menu ids all restart at 1, so a settle that crossed a queue hop has to prove the plugin is still
@@ -14,7 +15,7 @@ import org.telegram.messenger.Utilities
  * [onDropped] runs on the stale path, because some of these settles carry an obligation: a bitmap
  * to recycle, a response whose free stock suppressed, a fetched body's bytes.
  */
-internal object PluginDispatch {
+internal object EngineDispatch {
     /** is [plugin] still running on [engine]? Identity, not null: a reload swaps the instance. */
     fun isLive(plugin: Plugin, engine: QuickJs): Boolean = plugin.engine === engine
 

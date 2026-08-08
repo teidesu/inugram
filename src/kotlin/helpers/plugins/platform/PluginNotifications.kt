@@ -1,9 +1,9 @@
 package desu.inugram.helpers.plugins.platform
 
 import desu.inugram.core.plugins.PluginWire
+import desu.inugram.helpers.plugins.EngineDispatch
 import desu.inugram.helpers.plugins.NotificationListener
 import desu.inugram.helpers.plugins.Plugin
-import desu.inugram.helpers.plugins.PluginDispatch
 import desu.inugram.helpers.plugins.QuickJs
 import java.lang.reflect.Modifier
 import org.json.JSONArray
@@ -100,7 +100,7 @@ object PluginNotifications {
         val name = namesById[id] ?: return
         val payload = encodeArgs(args)
         val engine = registration.engine
-        PluginDispatch.onEngine(registration.plugin, engine) {
+        EngineDispatch.onEngine(registration.plugin, engine) {
             engine.dispatchNotification(registration.callbackId, name, accountId, payload)
         }
     }

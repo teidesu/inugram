@@ -1,6 +1,6 @@
 package desu.inugram.helpers.plugins
 
-import desu.inugram.helpers.plugins.tg.PluginRpc
+import desu.inugram.helpers.plugins.tg.PluginUpdates
 import org.telegram.messenger.MessagesController
 import org.telegram.tgnet.TLRPC
 
@@ -30,7 +30,7 @@ class RecordingMessagesController : MessagesController {
 
     /** the stock hook, verbatim: a chain hands its batch back through here */
     override fun processUpdates(updates: TLRPC.Updates, fromQueue: Boolean) {
-        if (PluginRpc.onUpdates(this, updates, currentAccount, fromQueue)) return
+        if (PluginUpdates.onUpdates(this, updates, currentAccount, fromQueue)) return
         if (failHandBack) throw IllegalStateException("processUpdates blew up")
         processed.add(updates)
     }

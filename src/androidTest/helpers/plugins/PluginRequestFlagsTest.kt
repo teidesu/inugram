@@ -2,7 +2,7 @@ package desu.inugram.helpers.plugins
 
 import desu.inugram.core.plugins.TlFlags
 import desu.inugram.helpers.plugins.tg.PluginWrites
-import desu.inugram.helpers.plugins.tl.TlJson
+import desu.inugram.helpers.plugins.tl.TlReflect
 import kotlin.test.assertEquals
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
@@ -110,7 +110,7 @@ class PluginRequestFlagsTest {
 
     private fun inconsistent(obj: TLObject, path: String, out: MutableList<String>) {
         val cls = obj.javaClass
-        val fields = TlJson.publicFields(cls)
+        val fields = TlReflect.publicFields(cls)
         for (word in TlFlags.wordsOf(cls)) {
             val name = TlFlags.wordName(word) ?: continue
             val stored = fields[name]?.getInt(obj) ?: continue

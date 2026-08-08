@@ -12,12 +12,12 @@ import androidx.core.content.edit
 import desu.inugram.InuConfig
 import desu.inugram.core.plugins.BootCohort
 import desu.inugram.core.plugins.GrantValidator
-import desu.inugram.core.plugins.PluginInstall
 import desu.inugram.core.plugins.PluginInstalls
 import desu.inugram.core.plugins.PluginManifest
 import desu.inugram.core.plugins.PluginManifestParser
 import desu.inugram.core.plugins.ScopeMatch
 import desu.inugram.core.plugins.TlCtorIds
+import desu.inugram.helpers.plugins.api.EngineBindings
 import desu.inugram.helpers.plugins.api.PluginApi
 import desu.inugram.helpers.plugins.api.PluginKv
 import desu.inugram.helpers.plugins.io.PluginBlobs
@@ -30,17 +30,18 @@ import desu.inugram.helpers.plugins.tg.PluginDeserialize
 import desu.inugram.helpers.plugins.tg.PluginMedia
 import desu.inugram.helpers.plugins.tg.PluginReads
 import desu.inugram.helpers.plugins.tg.PluginRpc
+import desu.inugram.helpers.plugins.tg.PluginUpdates
 import desu.inugram.helpers.plugins.tg.PluginWrites
 import desu.inugram.helpers.plugins.ui.PluginActions
 import desu.inugram.helpers.plugins.ui.PluginCanvas
 import desu.inugram.helpers.plugins.ui.PluginUi
+import desu.inugram.helpers.plugins.tl.TlFilter
+import desu.inugram.helpers.plugins.tl.TlHandles
 import java.io.File
+import java.util.IdentityHashMap
 import java.util.concurrent.CountDownLatch
 import java.util.concurrent.TimeUnit
-import org.json.JSONArray
-import org.json.JSONObject
 import org.telegram.messenger.AndroidUtilities
-import org.telegram.messenger.BuildConfig
 import org.telegram.messenger.BuildVars
 import org.telegram.messenger.LocaleController
 import org.telegram.messenger.LocaleController.formatString
@@ -51,7 +52,8 @@ import org.telegram.tgnet.TLRPC
 import org.telegram.ui.LaunchActivity
 
 /**
- * Owns the plugin set: discovery, persistence (order + enabled), and the QuickJs engines.
+ * Owns the running plugins: which of them are loaded, when each one starts and stops, and what
+ * happens when one throws. The installed set on disk is [PluginStore]'s.
  *
  * Every engine op is funnelled through [Utilities.globalQueue] so each engine keeps its
  * same-thread invariant; structural list/flag mutations happen on the UI thread.
@@ -62,9 +64,6 @@ object PluginManager {
     private const val TAG = "InuPlugin"
     private const val PLUGIN_API_VERSION = 1
     private const val PLATFORM = "android"
-    private const val BUNDLED_DIR = "inu_plugins"
-
-    private const val BUNDLED_STAMP_KEY = "plugins_bundled_apk"
 
     // console.* is one JNI upcall and one logcat line per call, and a plugin logging in a loop never
     // throws, so nothing in the failure policy stops it flooding on its own
@@ -72,7 +71,6 @@ object PluginManager {
     private const val LOG_WINDOW_MS = 10_000L
 
     private lateinit var appContext: Context
-    private val pluginsDir by lazy { PluginFs.storeDir() }
     private val packageInfo by lazy {
         try {
             appContext.packageManager.getPackageInfo(appContext.packageName, 0)
@@ -85,9 +83,6 @@ object PluginManager {
     private val appBuild by lazy { packageInfo?.versionCode?.toString() ?: "0" }
 
     private val plugins = mutableListOf<Plugin>()
-
-    /** installs whose file is present but failed to load; kept so [persist] doesn't drop their ids */
-    private var unloaded: List<PluginInstall> = emptyList()
 
     // structural mutations happen on the UI thread while globalQueue reads the order to sort
     // interceptor chains, so readers get an immutable snapshot rather than the live list
@@ -112,45 +107,25 @@ object PluginManager {
         // needs to know whether there is a foreground to attach into
         PluginApi.watchVisibility(appContext)
         PluginBlobs.scheduleSweep()
-        copyBundledPlugins()
-        scan()
-    }
-
-    /**
-     * debug-only. Skipped unless the apk changed, because [init] runs from
-     * `ApplicationLoader.onCreate` - the head of the notification path for a process a push woke,
-     * and unpacking the set is a read and a write each. The assets live *in* the apk, so a reinstall
-     * (what dev iteration is) bumps `lastUpdateTime`.
-     */
-    private fun copyBundledPlugins() {
-        if (!BuildConfig.DEBUG) return
-        val stamp = packageInfo?.let { "${appBuild}:${it.lastUpdateTime}" }
-        if (stamp != null && InuConfig.prefs.getString(BUNDLED_STAMP_KEY, null) == stamp) return
-        val names = try {
-            appContext.assets.list(BUNDLED_DIR)
-        } catch (e: Exception) {
-            Log.e(TAG, "list bundled plugins failed", e)
-            null
-        } ?: return
-        var complete = true
-        for (name in names) {
-            if (!name.endsWith(".js")) continue
-            try {
-                val text = appContext.assets.open("$BUNDLED_DIR/$name").use {
-                    it.readBytes().toString(Charsets.UTF_8)
-                }
-                File(pluginsDir, name).writeText(text)
-            } catch (e: Exception) {
-                complete = false
-                Log.e(TAG, "copy bundled plugin failed: $name", e)
-            }
-        }
-        if (stamp != null && complete) InuConfig.prefs.edit { putString(BUNDLED_STAMP_KEY, stamp) }
+        PluginStore.copyBundled(appContext, packageInfo, appBuild)
+        plugins.addAll(PluginStore.load())
+        PluginStore.persist(plugins)
+        republishOrder()
     }
 
     fun isEngineEnabled(): Boolean = InuConfig.PLUGINS_ENABLED.value
 
     fun plugins(): List<Plugin> = snapshot
+
+    /**
+     * [plugins] as a lookup, which is what every chain-order publish sorts by. Identity, because
+     * `Plugin` has no `equals()` and a reload replaces the instance.
+     */
+    fun orderIndex(): IdentityHashMap<Plugin, Int> {
+        val order = IdentityHashMap<Plugin, Int>()
+        snapshot.forEachIndexed { index, plugin -> order[plugin] = index }
+        return order
+    }
 
     /**
      * runs at the end of `ApplicationLoader.postInitApplication`, stock's own "the app is really
@@ -229,7 +204,7 @@ object PluginManager {
     fun setEnabled(plugin: Plugin, enabled: Boolean) {
         plugin.enabled = enabled
         if (enabled) plugin.failure = null
-        persist()
+        PluginStore.persist(plugins)
         if (enabled) {
             if (isEngineEnabled() && !safeMode) run(plugin)
         } else {
@@ -271,11 +246,11 @@ object PluginManager {
         val manifest = PluginManifestParser.parseOrNull(source)
             ?: return getString(R.string.InuPluginsErrorNoManifest)
         badGrants(manifest)?.let { return it }
-        val target = uniqueFile(suggestedName)
+        val target = PluginStore.fileFor(suggestedName)
         target.writeText(source)
         val plugin = Plugin(PluginInstalls.mintId(), target, source, manifest)
         plugins.add(plugin)
-        persist()
+        PluginStore.persist(plugins)
         republishOrder()
         notifyChanged()
         if (plugin.enabled && isEngineEnabled() && !safeMode) run(plugin)
@@ -299,7 +274,7 @@ object PluginManager {
         }
         plugin.file.delete()
         plugins.remove(plugin)
-        persist()
+        PluginStore.persist(plugins)
         republishOrder()
         notifyChanged()
     }
@@ -308,18 +283,19 @@ object PluginManager {
         if (ordered.size != plugins.size || !plugins.containsAll(ordered)) return
         plugins.clear()
         plugins.addAll(ordered)
-        persist()
+        PluginStore.persist(plugins)
         republishOrder()
     }
 
     /**
      * republishes the snapshot readers sort by, and the interceptor chains derived from it. chain
      * order is the plugin-list order per `common.d.ts`, so every structural change has to reach
-     * [PluginRpc] or dragging a plugin would not move it until the process restarts.
+     * both chains or dragging a plugin would not move it until the process restarts.
      */
     private fun republishOrder() {
         snapshot = plugins.toList()
         PluginRpc.refreshChainOrder()
+        PluginUpdates.refreshOrder()
     }
 
     /**
@@ -368,7 +344,7 @@ object PluginManager {
         val engine = QuickJs()
         val budget = LogBudget()
         val permissions = plugin.permissions
-        val timers = PluginApi.timerSchedulerFor(plugin, engine)
+        val timers = TimerThrottle(plugin, engine)::schedule
         val core = object : CoreListener {
             override fun onConsole(level: Int, message: String) {
                 if (level == QuickJs.LEVEL_FAULT) fail(plugin, PluginFailure.Site.RUNTIME, message, engine)
@@ -384,11 +360,12 @@ object PluginManager {
         }
         // built whole and handed over once: rust caches its method ids off `PluginBridge` at
         // `start`, and every ordering constraint among the installs after it is in `PluginApi`
-        val jvm = PluginApi.jvmListenerFor(plugin, engine)
-        val tl = PluginRpc.tlFor(plugin)
+        val jvm = EngineBindings.jvmListenerFor(plugin, engine)
+        val tl = TlHandles.attach(plugin, TlFilter.policyFor(plugin.permissions))
         val bridge = PluginBridge(
             core = core,
             rpc = PluginRpc.listenerFor(plugin, engine, tl),
+            updates = PluginUpdates.listenerFor(plugin),
             tl = tl,
             deserialize = PluginDeserialize.listenerFor(plugin, engine),
             api = PluginApi.listenerFor(plugin, engine),
@@ -413,7 +390,7 @@ object PluginManager {
                 language = LocaleController.getInstance().currentLocaleInfo?.langCode ?: "",
                 header = plugin.manifest.raw,
             )
-            PluginApi.install(plugin, engine)
+            EngineBindings.install(plugin, engine)
             PluginRpc.install(engine)
             engine.evaluate(plugin.source, plugin.manifest.name)
             notifyChanged()
@@ -436,7 +413,13 @@ object PluginManager {
      * while `plugin.engine` still points at [engine], which is what [fail] reads.
      */
     private fun teardown(plugin: Plugin, engine: QuickJs, beforeClear: () -> Unit = {}) {
+        // the plugin's handle table spans both, and is released last of the three: the abandons
+        // each of them runs reject inside this plugin, and a continuation touching its own request
+        // view must not find every field expired
+        TlHandles.beginDetach(plugin)
         PluginRpc.detach(plugin)
+        PluginUpdates.detach(plugin)
+        TlHandles.endDetach(plugin)
         PluginMedia.detach(plugin)
         PluginUi.detach(engine)
         PluginActions.detach(engine)
@@ -488,7 +471,7 @@ object PluginManager {
             plugin.failure = failure
             if (failure.disables && plugin.enabled) {
                 plugin.enabled = false
-                persist()
+                PluginStore.persist(plugins)
                 stop(plugin)
             }
             onChanged?.invoke()
@@ -531,84 +514,6 @@ object PluginManager {
         }
 
         enum class Verdict { PASS, LAST, DROP }
-    }
-
-    /**
-     * a file in the plugins dir is one install; the persisted state carries its identity, its place
-     * in the order and its enabled bit. a file nobody has a record for is a new install and is
-     * assigned a fresh id here, so the id has to be written back before anything can use it.
-     */
-    private fun scan() {
-        // null is "could not list", which is not "there are no plugins": reconciling against an empty
-        // set drops every record, and [persist] would then write that back, losing the ids the kv
-        // stores are keyed on. leave the persisted state alone and run no plugins this boot
-        val files = pluginsDir.listFiles { f -> f.isFile && f.name.endsWith(".js") }
-        if (files == null) {
-            Log.e(TAG, "could not list $pluginsDir; keeping the persisted installs and skipping plugins")
-            return
-        }
-        val installs = PluginInstalls.reconcile(readPersistedInstalls(), files.map { it.name }.sorted())
-        for (install in installs) {
-            val file = File(pluginsDir, install.file)
-            if (plugins.any { it.file == file }) continue
-            val source = try {
-                file.readText()
-            } catch (e: Exception) {
-                Log.e(TAG, "read failed: ${install.file}", e)
-                continue
-            }
-            val manifest = PluginManifestParser.parseOrNull(source)
-            if (manifest == null) {
-                Log.w(TAG, "no valid manifest: ${install.file}")
-                continue
-            }
-            plugins.add(Plugin(install.id, file, source, manifest).apply { enabled = install.enabled })
-        }
-        // a file we could not load this boot keeps its record, or fixing it later would land it on a
-        // fresh id and an empty store
-        unloaded = installs.filter { install -> plugins.none { it.file.name == install.file } }
-        persist()
-        republishOrder()
-    }
-
-    private fun readPersistedInstalls(): List<PluginInstall> {
-        val raw = InuConfig.PLUGINS_STATE.value
-        if (raw.isBlank()) return emptyList()
-        return try {
-            val arr = JSONArray(raw)
-            (0 until arr.length()).mapNotNull { i ->
-                val o = arr.getJSONObject(i)
-                val file = o.optString("file")
-                if (file.isEmpty()) null
-                else PluginInstall(o.optString("id"), file, o.optBoolean("enabled", true))
-            }
-        } catch (e: Exception) {
-            Log.e(TAG, "bad plugins state", e)
-            emptyList()
-        }
-    }
-
-    private fun persist() {
-        val arr = JSONArray()
-        for (p in plugins) {
-            arr.put(JSONObject().put("id", p.id).put("file", p.file.name).put("enabled", p.enabled))
-        }
-        for (install in unloaded) {
-            arr.put(JSONObject().put("id", install.id).put("file", install.file).put("enabled", install.enabled))
-        }
-        InuConfig.PLUGINS_STATE.value = arr.toString()
-    }
-
-    private fun uniqueFile(suggestedName: String): File {
-        val safe = suggestedName.replace(Regex("[^A-Za-z0-9._-]"), "_")
-            .removeSuffix(".js").ifBlank { "plugin" }
-        var candidate = File(pluginsDir, "$safe.js")
-        var i = 1
-        while (candidate.exists()) {
-            candidate = File(pluginsDir, "$safe-$i.js")
-            i++
-        }
-        return candidate
     }
 
     private fun notifyChanged() {

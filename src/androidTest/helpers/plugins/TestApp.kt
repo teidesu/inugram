@@ -147,7 +147,7 @@ object TestApp {
     }
 
     /**
-     * the controller a test hands `PluginRpc.onUpdates`, which is the only use `PluginRpc` has for
+     * the controller a test hands `PluginUpdates.onUpdates`, which is the only use it has for
      * one. Deliberately *not* installed into `MessagesController.Instance`: every other read on the
      * update path is meant to reach the app's own.
      */

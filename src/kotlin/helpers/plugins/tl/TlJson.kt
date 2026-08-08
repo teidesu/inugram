@@ -5,41 +5,19 @@ import android.util.SparseArray
 import desu.inugram.core.plugins.DeserializeGuards
 import desu.inugram.core.plugins.TlFlags
 import desu.inugram.core.plugins.TlNames
-import java.lang.reflect.Field
-import java.lang.reflect.Modifier
 import java.lang.reflect.ParameterizedType
 import java.lang.reflect.Type
-import java.util.ArrayList
 import org.json.JSONArray
 import org.json.JSONObject
 import org.telegram.tgnet.TLObject
-import org.telegram.tgnet.TLRPC
-import org.telegram.tgnet.tl.TL_account
-import org.telegram.tgnet.tl.TL_aicompose
-import org.telegram.tgnet.tl.TL_bots
-import org.telegram.tgnet.tl.TL_chatlists
-import org.telegram.tgnet.tl.TL_communities
-import org.telegram.tgnet.tl.TL_forum
-import org.telegram.tgnet.tl.TL_fragment
-import org.telegram.tgnet.tl.TL_iv
-import org.telegram.tgnet.tl.TL_payments
-import org.telegram.tgnet.tl.TL_phone
-import org.telegram.tgnet.tl.TL_stars
-import org.telegram.tgnet.tl.TL_stats
-import org.telegram.tgnet.tl.TL_stories
-import org.telegram.tgnet.tl.TL_update
-import org.telegram.tgnet.tl.legacy.TL_legacy_message
 
 /**
- * Reflection-based JSON <-> TLObject bridge, [TlHandles] owning the hot get/set path: constructing
- * a real TLObject from a plugin-authored `{_: "...", ...}` literal (reused by [TlHandles] for
- * single-field coercion), and `obj.toJSON()` snapshots.
+ * JSON <-> TLObject, over the reflection [TlReflect] owns: constructing a real TLObject from a
+ * plugin-authored `{_: "...", ...}` literal (reused by [TlHandles] for single-field coercion), and
+ * `obj.toJSON()` snapshots. The live get/set path is [TlHandles]'s and does not come through here.
  *
  * Caveats (mirrored in src/plugins/common.d.ts):
  * - `long` fields are exposed as JSON strings to avoid losing int64 precision in JS numbers.
- * - `flags`/`flags2` are never exposed and never accepted: [TlFlags] owns them. a field whose bit is
- *   clear is omitted from snapshots entirely, and assigning a field recomputes its bit from the
- *   value (`null`/`0`/`""`/empty vector clear it).
  * - stock annotates TL classes with non-wire `//custom` fields (`Message.dialog_id`, `attachPath`,
  *   `voiceTranscription`, ...); reflection can't tell them apart from wire fields, so they ride
  *   along in snapshots. `params`/`pollMediaAttachPaths` are the two whose types aren't TL-shaped;
@@ -53,147 +31,20 @@ object TlJson {
      */
     const val BYTES_KEY = "\$inuBytes"
 
-    // fields inherited from TLObject that are runtime bookkeeping, not TL wire data
-    private val EXCLUDED_FIELD_NAMES = setOf("networkType", "disableFree")
-
-    private val containerClasses: List<Class<*>> = listOf(
-        TLRPC::class.java,
-        TL_account::class.java,
-        TL_aicompose::class.java,
-        TL_bots::class.java,
-        TL_chatlists::class.java,
-        TL_communities::class.java,
-        TL_forum::class.java,
-        TL_fragment::class.java,
-        TL_iv::class.java,
-        TL_payments::class.java,
-        TL_phone::class.java,
-        TL_stars::class.java,
-        TL_stats::class.java,
-        TL_stories::class.java,
-        TL_update::class.java,
-        TL_legacy_message::class.java,
-    )
-
-    private val classesByTlName: Map<String, Class<out TLObject>> by lazy { buildClassIndex() }
-    private val fieldsByClass = java.util.concurrent.ConcurrentHashMap<Class<*>, Map<String, Field>>()
-
-    private fun buildClassIndex(): Map<String, Class<out TLObject>> {
-        val out = HashMap<String, Class<out TLObject>>()
-        for (container in containerClasses) {
-            collectTlClasses(container, out)
-        }
-        return out
-    }
-
-    /** a `static int constructor` is what makes a TL class serializable - stock declares hundreds without the `TL_` prefix, so the name says nothing */
-    private fun isWireSerializable(cls: Class<*>): Boolean = try {
-        val field = cls.getDeclaredField("constructor")
-        Modifier.isStatic(field.modifiers) && field.type == Integer.TYPE
-    } catch (e: NoSuchFieldException) {
-        false
-    }
-
-    private fun collectTlClasses(root: Class<*>, out: MutableMap<String, Class<out TLObject>>) {
-        val stack = ArrayDeque<Class<*>>()
-        stack.add(root)
-        while (stack.isNotEmpty()) {
-            val cls = stack.removeLast()
-            for (nested in cls.declaredClasses) stack.add(nested)
-            if (!TLObject::class.java.isAssignableFrom(cls)) continue
-            if (Modifier.isAbstract(cls.modifiers)) continue
-            if (!isWireSerializable(cls)) continue
-            @Suppress("UNCHECKED_CAST")
-            val tlClass = cls as Class<out TLObject>
-            val tlName = TlNames.classNameToTlName(cls)
-            val existing = out[tlName]
-            if (existing == null) {
-                out[tlName] = tlClass
-            } else if (TlNames.isLayerVariant(existing.simpleName) && !TlNames.isLayerVariant(cls.simpleName)) {
-                out[tlName] = tlClass
-            }
-            // else: keep the existing (non-layer) mapping
-        }
-    }
-
-    /**
-     * most-derived first, because stock shadows inherited fields with a different type
-     * (`PageBlock.caption` is a PageCaption, `pageBlockBlockquote.caption` a RichText) and
-     * `Class.getFields()` does not say which it hands back first.
-     */
-    internal fun publicFields(cls: Class<*>): Map<String, Field> = fieldsByClass.getOrPut(cls) {
-        val map = LinkedHashMap<String, Field>()
-        var current: Class<*>? = cls
-        while (current != null) {
-            for (field in current.declaredFields) {
-                if (!Modifier.isPublic(field.modifiers)) continue
-                if (Modifier.isStatic(field.modifiers)) continue
-                if (field.isSynthetic) continue
-                if (field.name in EXCLUDED_FIELD_NAMES) continue
-                if (field.name !in map) map[field.name] = field
-            }
-            current = current.superclass
-        }
-        map
-    }
-
-    internal fun classOf(tlName: String): Class<out TLObject>? = classesByTlName[tlName]
-
     fun toJson(obj: TLObject, policy: TlFilter.Policy): JSONObject {
         val cls = obj.javaClass
         val json = JSONObject()
         json.put("_", TlNames.classNameToTlName(cls))
-        for ((name, field) in publicFields(cls)) {
+        for ((name, field) in TlReflect.publicFields(cls)) {
             if (TlFlags.isFlagWord(cls, name)) continue
             if (TlFilter.hidesField(policy, cls, name)) continue
             val gate = TlFlags.gateOf(cls, name)
-            if (gate != null && !isBitSet(obj, cls, gate)) continue
+            if (gate != null && !TlReflect.isBitSet(obj, cls, gate)) continue
             val raw = field.get(obj) ?: continue
             val value = (if (policy.takeover) TlFilter.filterFieldValue(obj, name, raw) else raw) ?: continue
             json.put(name, valueToJson(value, policy) ?: continue)
         }
         return json
-    }
-
-    private fun isBitSet(obj: TLObject, cls: Class<*>, gate: TlFlags.Gate): Boolean {
-        val name = TlFlags.wordName(gate.word) ?: return true
-        val field = publicFields(cls)[name] ?: return true
-        return (field.getInt(obj) and (1 shl gate.bit)) != 0
-    }
-
-    /** for writes onto a live object whose other fields must be left exactly as the app had them */
-    internal fun syncFlagBit(obj: TLObject, fieldName: String) {
-        val cls = obj.javaClass
-        val gate = TlFlags.gateOf(cls, fieldName) ?: return
-        val fields = publicFields(cls)
-        val wordField = fields[TlFlags.wordName(gate.word) ?: return] ?: return
-        val present = TlFlags.isBitPresent(cls, gate) { TlFlags.isPresent(fields[it]?.get(obj)) }
-        val mask = 1 shl gate.bit
-        val current = wordField.getInt(obj)
-        wordField.setInt(obj, if (present) current or mask else current and mask.inv())
-    }
-
-    internal fun syncFlags(obj: TLObject) {
-        val cls = obj.javaClass
-        val fields = publicFields(cls)
-        for (word in TlFlags.wordsOf(cls)) {
-            val name = TlFlags.wordName(word) ?: continue
-            val target = fields[name] ?: continue
-            target.setInt(obj, TlFlags.computeWord(cls, word) { field ->
-                TlFlags.isPresent(fields[field]?.get(obj))
-            })
-        }
-    }
-
-    /** a hand-built request nests objects carrying flag words of their own, so a top-level-only sync still drops them */
-    internal fun syncFlagsDeep(obj: TLObject) {
-        for (field in publicFields(obj.javaClass).values) {
-            when (val value = field.get(obj)) {
-                is TLObject -> syncFlagsDeep(value)
-                is List<*> -> for (item in value) if (item is TLObject) syncFlagsDeep(item)
-            }
-        }
-        syncFlags(obj)
     }
 
     internal fun valueToJson(value: Any, policy: TlFilter.Policy): Any? = when (value) {
@@ -257,14 +108,14 @@ object TlJson {
     fun fromJson(json: JSONObject): TLObject {
         val tlName = json.optString("_", "")
         if (tlName.isEmpty()) throw IllegalArgumentException("TlJson.fromJson: missing '_' type name")
-        val cls = classesByTlName[tlName]
+        val cls = TlReflect.classOf(tlName)
             ?: throw IllegalArgumentException("TlJson.fromJson: unknown TL type '$tlName'")
         val instance = try {
             cls.getDeclaredConstructor().newInstance()
         } catch (e: Exception) {
             throw IllegalArgumentException("TlJson.fromJson: cannot instantiate '$tlName': ${e.message}", e)
         }
-        val fields = publicFields(cls)
+        val fields = TlReflect.publicFields(cls)
         val keys = json.keys()
         while (keys.hasNext()) {
             val key = keys.next()
@@ -280,7 +131,7 @@ object TlJson {
             val converted = jsonToValue(field.genericType, jsonValue, "$tlName.$key")
             field.set(instance, converted)
         }
-        syncFlags(instance)
+        TlReflect.syncFlags(instance)
         return instance
     }
 
