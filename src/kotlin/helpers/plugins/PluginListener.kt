@@ -9,7 +9,7 @@ package desu.inugram.helpers.plugins
  *
  * They live here rather than inside [QuickJs] because [QuickJs] cannot be compiled anywhere but a
  * device ([QuickJs.start] calls `nativeCreate()`, and its class initializer loads `libinu_native`),
- * while the contract it carries can be - so the bridge harness compiles *these* declarations
+ * while the contract it carries can be - so the cargo test cross-checking rust's method ids reads *these* declarations
  * instead of a hand-kept copy of them.
  *
  * Two channel shapes cross here and they are not interchangeable:

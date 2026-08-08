@@ -29,7 +29,9 @@ import desu.inugram.helpers.plugins.platform.PluginNotifications
 import desu.inugram.helpers.plugins.platform.PluginXposed
 import desu.inugram.helpers.plugins.tg.PluginDeserialize
 import desu.inugram.helpers.plugins.tg.PluginMedia
+import desu.inugram.helpers.plugins.tg.PluginReads
 import desu.inugram.helpers.plugins.tg.PluginRpc
+import desu.inugram.helpers.plugins.tg.PluginWrites
 import desu.inugram.helpers.plugins.ui.PluginActions
 import desu.inugram.helpers.plugins.ui.PluginCanvas
 import desu.inugram.helpers.plugins.ui.PluginUi

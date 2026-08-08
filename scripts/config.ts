@@ -47,6 +47,31 @@ export const forkSyncFiles: ForkSyncFile[] = [
     target: 'TMessagesProj_App/src/main/kotlin/desu/inugram',
     directory: true,
   },
+  // the plugin bridge's own suite, against the real stock classes.
+  // `./gradlew :TMessagesProj:connectedDebugAndroidTest`
+  {
+    source: 'src/androidTest',
+    target: 'TMessagesProj/src/androidTest/kotlin/desu/inugram',
+    directory: true,
+  },
+  // the normative contract, as a test asset: a ceiling is pinned to the sentence stating it, and
+  // there is no repo to read on a device
+  {
+    source: 'src/plugins/*.d.ts',
+    target: 'TMessagesProj/src/androidTest/assets/plugins',
+  },
+  // the bundled oracles, for the suites that read a plugin's own `@grant` line rather than
+  // restating it: the app ships these to a different module's debug assets
+  {
+    source: 'src/res/assets-debug/inu_plugins/*',
+    target: 'TMessagesProj/src/androidTest/assets/inu_plugins',
+  },
+  // src/androidTest is synced into a kotlin source root, so what the suite needs as a *file* is
+  // kept apart from it
+  {
+    source: 'src/androidTestAssets/*.dex',
+    target: 'TMessagesProj/src/androidTest/assets/inu',
+  },
   {
     source: 'src/core',
     target: 'InuCore',

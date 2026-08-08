@@ -72,7 +72,7 @@ object PluginJvm {
     private const val KIND_METHOD = 'M'
     private const val KIND_FIELD = 'F'
 
-    /** handed in rather than read here: `LaunchActivity` exists only on a device, and this file is in the bridge harness */
+    /** handed in rather than read here, so a test can put a screen in front of the api without an `Activity` */
     interface AppScreen {
         fun currentFragment(): Any?
         fun currentActivity(): Any?

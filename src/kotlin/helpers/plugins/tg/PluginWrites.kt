@@ -1,5 +1,6 @@
 package desu.inugram.helpers.plugins.tg
 
+import android.util.Log
 import desu.inugram.core.plugins.ScopeMatch
 import desu.inugram.core.plugins.PluginWire
 import desu.inugram.helpers.plugins.Plugin
@@ -34,6 +35,8 @@ import org.telegram.tgnet.tl.TL_update
  * `processUpdates` has applied it.
  */
 object PluginWrites {
+    private const val TAG = "InuPluginWrites"
+
     // keep in sync with rust `writes::OP_*` and `writes.js`
     const val OP_SEND_MESSAGE = 0
     const val OP_SEND_MEDIA = 1
@@ -169,11 +172,18 @@ object PluginWrites {
         TlJson.syncFlagsDeep(request)
         val flags = ConnectionsManager.RequestFlagFailOnServerErrors
         PluginRpc.sendWithoutInterceptors(call.accountId, request, flags) { response, error ->
-            if (response is TLRPC.Updates) {
-                MessagesController.getInstance(call.accountId).processUpdates(response, false)
-            }
             // stageQueue frees the response the moment this returns, before [answer]'s runnable reads it on globalQueue, so ownership moves here
             response?.disableFree = true
+            if (response is TLRPC.Updates) {
+                // `processUpdates` removes the entries it applied from this very list, and the answer below is built out of it
+                val sent = ArrayList(response.updates)
+                try {
+                    MessagesController.getInstance(call.accountId).processUpdates(response, false)
+                } catch (e: Throwable) {
+                    Log.e(TAG, "applying what a plugin sent failed", e)
+                }
+                response.updates = sent
+            }
             answer(call, release = { PluginRpc.releaseUnowned(response) }) {
                 if (error != null) PluginWire.encodeRpcError(error.code, error.text ?: "")
                 else produce(response)
