@@ -132,6 +132,7 @@ Standalone hook patches expose surfaces (menu builders, callbacks, `public` fiel
 | `photo-viewer-menu.patch` | `PhotoViewerHelper.{addMenuItems,updateMenuItems,resetMenuItems,handleMenuClick}` + `inu_getCurrentPhotoFile`; exposes `containerView`, `menuItem`, `showDownloadAlert` |
 | `popup-swipeback.patch` | foreground translation + unified touch coords on swipeback popup |
 | `profile-menu.patch` | `ProfileHelper.addMenuItems` + `ProfileHelper.handleMenuClick` |
+| `send-preview.patch` | `ChatActionsHelper.showSendPreview` (owns the sheet's `show()`, so fork rows can be appended) + `onSendPreviewDismissed` |
 | `universal-recycler.patch` | extra features in `UniversalRecyclerView` used by settings pages |
 
 **When to add a `hooks/` patch vs a normal patch:**
@@ -1243,10 +1244,10 @@ broken engine — or, as `api-filter-test.js` had been, red on a working one.
   Secret chats are refused once, in `PluginActions.Surface`, the same rule
   `PluginReads.dialogIdOf` enforces for reads.
 - **The editor rows are the second gesture-built menu**, and the only kind whose surface is a live
-  object rather than a description. `ChatActionsHelper.inu_showSendPreview` parks
+  object rather than a description. `ChatActionsHelper.showSendPreview` parks
   `MessageSendPreview.show()` behind one render exactly as the message menu parks its popup, and
   opens a `PluginActions` editor surface the composer's `replace`/`send` reach - closed by
-  `inu_onSendPreviewDismissed`, because a callback settling after the sheet is gone has nothing to
+  `onSendPreviewDismissed`, because a callback settling after the sheet is gone has nothing to
   write into. `send` goes through `ChatActivityEnterView.sendMessage()`, the send button's own path,
   so schedule mode and the premium conversions still happen; `sendMessageInternal` is `protected`
   and stays that way (`PeerStoriesView` overrides it, so promoting it is a second stock file).

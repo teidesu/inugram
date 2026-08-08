@@ -1,0 +1,30 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: alina sireneva <alina@tei.pet>
+Date: Sat, 8 Aug 2026 16:28:58 +0400
+Subject: hook for fork rows in the send preview sheet
+
+---
+ .../java/org/telegram/ui/Components/ChatActivityEnterView.java | 3 ++-
+ 1 file changed, 2 insertions(+), 1 deletion(-)
+
+diff --git a/TMessagesProj/src/main/java/org/telegram/ui/Components/ChatActivityEnterView.java b/TMessagesProj/src/main/java/org/telegram/ui/Components/ChatActivityEnterView.java
+index 0000000..0000000 100644
+--- a/TMessagesProj/src/main/java/org/telegram/ui/Components/ChatActivityEnterView.java
++++ b/TMessagesProj/src/main/java/org/telegram/ui/Components/ChatActivityEnterView.java
+@@ -4875,6 +4875,7 @@ public class ChatActivityEnterView extends FrameLayout implements
+         };
+         messageSendPreview.setOnDismissListener(di -> {
+             messageSendPreview = null;
++            desu.inugram.helpers.chat.ChatActionsHelper.onSendPreviewDismissed(this);
+         });
+ 
+         final boolean containsSendMessage = audioToSendMessageObject != null || messageEditText != null && !TextUtils.isEmpty(messageEditText.getText());
+@@ -5099,7 +5100,7 @@ public class ChatActivityEnterView extends FrameLayout implements
+         }
+         messageSendPreview.setItemOptions(options);
+ 
+-        messageSendPreview.show();
++        desu.inugram.helpers.chat.ChatActionsHelper.showSendPreview(this, options, messageSendPreview);
+ 
+         try {
+             view.performHapticFeedback(HapticFeedbackConstants.KEYBOARD_TAP, HapticFeedbackConstants.FLAG_IGNORE_GLOBAL_SETTING);
