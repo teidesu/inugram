@@ -2839,8 +2839,10 @@ declare namespace inu {
    * is no legitimate "intercept everything" case; register the constructors you actually rewrite.
    *
    * dropping is a blunt instrument: the app never learns the update happened, but the *server*
-   * believes it was delivered, so dropping something that carries a pts/seq advance desyncs the
-   * client until the next full catch-up. prefer rewriting. it is also why **every failure delivers**
+   * believes it was delivered, and there is nothing that re-requests it — the update's pts is
+   * accounted for whether or not it was applied, precisely so that a drop does not desync the
+   * client into a catch-up loop. a dropped message is gone. prefer rewriting. it is also why
+   * **every failure delivers**
    * — a middleware that throws, rejects or returns anything other than the two verdicts is a bug
    * that switches the plugin off, and the update goes through untouched. losing the user's messages
    * because a plugin has a typo in it is not a trade worth making.
@@ -2869,14 +2871,6 @@ declare namespace inu {
    * have sent, exactly as for `onUpdate`. two differences from a live batch, both because the app
    * has not built anything yet: a rewrite lands on the very message it is about to store, and a
    * `drop` removes it from the catch-up outright.
-   *
-   * that is also the only place a `drop` is final, and worth understanding if you drop messages at
-   * all. dropping a live update that carries a pts leaves a hole in the app's pts, so the app runs
-   * a catch-up within seconds and the server hands the message back — through this same hook, where
-   * your middleware sees it again and can drop it again. so a message you consistently drop does
-   * stay gone, but it takes an extra round trip to get there, and a middleware that decides
-   * differently the second time will apply it after all. a difference carries one pts for the whole
-   * batch, applied whether or not you kept the messages in it, so there is nothing to re-request.
    *
    * the compressed `updateShortMessage`/`updateShortChatMessage` forms are handed over as the
    * `updateNewMessage` they normalize to, exactly as for `onUpdate`; if you rewrite one, the app is

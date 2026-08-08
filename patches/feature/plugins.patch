@@ -4,12 +4,12 @@ Date: Fri, 7 Aug 2026 02:38:51 +0400
 Subject: Add the QuickJS plugin engine (hooks, action rows)
 
 ---
- .../messenger/MessagesController.java         | 119 ++++++++++--------
+ .../messenger/MessagesController.java         | 122 ++++++++++--------
  .../telegram/tgnet/ConnectionsManager.java    |   8 +-
  .../java/org/telegram/tgnet/TLObject.java     |   3 +
  .../java/org/telegram/ui/ChatActivity.java    |   6 +-
  .../java/org/telegram/ui/LaunchActivity.java  |   1 +
- 5 files changed, 82 insertions(+), 55 deletions(-)
+ 5 files changed, 85 insertions(+), 55 deletions(-)
 
 diff --git a/TMessagesProj/src/main/java/org/telegram/messenger/MessagesController.java b/TMessagesProj/src/main/java/org/telegram/messenger/MessagesController.java
 index 0000000..0000000 100644
@@ -178,6 +178,16 @@ index 0000000..0000000 100644
  
                      getMessagesStorage().setLastPtsValue(updates.pts);
                      boolean isDialogCreated = createdDialogIds.contains(message.dialog_id);
+@@ -18463,6 +18478,9 @@ public class MessagesController extends BaseController implements NotificationCe
+                 FileLog.d("process update " + baseUpdate.getClass().getSimpleName());
+             }
+             desu.inugram.InuHooks.onUpdate(baseUpdate, currentAccount);
++            if (desu.inugram.helpers.plugins.tg.PluginRpc.isDropped(baseUpdate)) {
++                continue;
++            }
+             if (baseUpdate instanceof TL_update.TL_updateNewMessage || baseUpdate instanceof TL_update.TL_updateNewChannelMessage || baseUpdate instanceof TL_update.TL_updateNewScheduledMessage) {
+                 TLRPC.Message message;
+                 if (baseUpdate instanceof TL_update.TL_updateNewMessage) {
 diff --git a/TMessagesProj/src/main/java/org/telegram/tgnet/ConnectionsManager.java b/TMessagesProj/src/main/java/org/telegram/tgnet/ConnectionsManager.java
 index 0000000..0000000 100644
 --- a/TMessagesProj/src/main/java/org/telegram/tgnet/ConnectionsManager.java

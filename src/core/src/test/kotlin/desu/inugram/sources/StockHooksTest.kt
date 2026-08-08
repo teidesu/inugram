@@ -90,6 +90,25 @@ class StockHooksTest {
     }
 
     /**
+     * A drop is this line and nothing else. The batch is handed back whole so that stock's pts
+     * arithmetic is untouched, which means an absent hook does not fail loudly - it applies every
+     * update a plugin refused, and the only thing that would ever say so is this.
+     */
+    @Test
+    fun `the update loop still asks whether it may apply each update`() {
+        val body = bodyOf(
+            stock("org/telegram/messenger/MessagesController.java"),
+            "public boolean processUpdateArray(",
+        )
+        assertTrue(
+            Regex("""if \(desu\.inugram\.helpers\.plugins\.tg\.PluginRpc\.isDropped\(baseUpdate\)\) \{\s*continue;""")
+                .containsMatchIn(body),
+            "interceptUpdate's 'drop' verdict is enforced here and nowhere else: without it every " +
+                "dropped update is applied, and the batch still carries them all by design",
+        )
+    }
+
+    /**
      * Nothing else notices this going away: the deserialize suite drives `PluginDeserialize.apply`
      * directly, so the one thing that makes any of it reach a real object is the call site in stock.
      */
@@ -170,6 +189,7 @@ class StockHooksTest {
         assertEquals(
             listOf(
                 "org/telegram/messenger/ApplicationLoader.java -> InuHooks.onAppBoot",
+                "org/telegram/messenger/MessagesController.java -> PluginRpc.isDropped",
                 "org/telegram/messenger/MessagesController.java -> PluginRpc.onDifference",
                 "org/telegram/messenger/MessagesController.java -> PluginRpc.onDifference",
                 "org/telegram/messenger/MessagesController.java -> PluginRpc.onUpdates",

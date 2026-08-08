@@ -9,11 +9,16 @@ import java.util.IdentityHashMap
  * the question is only ever asked about an arrival still in flight: stock parks a batch whose
  * pts/seq does not line up and re-feeds it later around the *same* instances, and an entry only has
  * to outlive that window.
+ *
+ * Synchronized because one of these is read by stock rather than by us: `processUpdateArray` asks
+ * whether it may apply an update, and it has callers on threads other than the one that wrote the
+ * answer. An uncontended lock costs nothing next to a resize racing a lookup.
  */
 class BoundedIdentitySet<T : Any>(private val capacity: Int) {
     private val seen = java.util.Collections.newSetFromMap(IdentityHashMap<T, Boolean>())
     private val order = ArrayDeque<T>()
 
+    @Synchronized
     fun add(value: T): Boolean {
         if (!seen.add(value)) return false
         order.addLast(value)
@@ -21,14 +26,16 @@ class BoundedIdentitySet<T : Any>(private val capacity: Int) {
         return true
     }
 
+    @Synchronized
     operator fun contains(value: T): Boolean = seen.contains(value)
 
+    @Synchronized
     fun clear() {
         seen.clear()
         order.clear()
     }
 
-    val size: Int get() = seen.size
+    val size: Int @Synchronized get() = seen.size
 }
 
 /**

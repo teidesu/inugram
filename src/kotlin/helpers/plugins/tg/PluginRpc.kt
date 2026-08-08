@@ -264,6 +264,8 @@ object PluginRpc {
     private val takenOverDifferences = Collections.newSetFromMap(IdentityHashMap<Runnable, Boolean>())
     // same bounded identity ring as [dispatchedUpdates]: stock re-feeds a parked batch around the very objects a first pass ran over
     private val interceptedUpdates = BoundedIdentitySet<TLObject>(DISPATCH_MEMORY)
+    // a ring for the same reason: a parked batch is re-fed but not re-intercepted, so a verdict cleared after the hand-back would be lost and the update applied on the second pass
+    private val droppedUpdates = BoundedIdentitySet<TLObject>(DISPATCH_MEMORY)
     private val pendingUpdateDispatches = HashMap<Long, UpdateBatch>()
 
     // requests we re-issued (chain passthrough / invokeRpc), which must not re-enter maybeIntercept.
@@ -346,7 +348,7 @@ object PluginRpc {
             abandonBelow(dispatchId, pending, ABANDONED_WIRE)
             pending.finalize(null, syntheticError("plugin '${plugin.manifest.name}' was stopped"), completionTime(pending))
         }
-        // an update batch parked here is delivered rather than failed: dropping it desyncs pts
+        // an update batch parked here is delivered rather than failed: dropping it loses the user messages nothing re-requests
         for (dispatchId in pendingUpdateDispatches.filterValues { it.stagePlugin === plugin }.keys.toList()) {
             val batch = pendingUpdateDispatches.remove(dispatchId) ?: continue
             plugin.engine?.abandonUpdateDispatch(dispatchId)
@@ -1128,8 +1130,9 @@ object PluginRpc {
     }
 
     /**
-     * Everything still undecided is **delivered**, never dropped: dropping is the one verdict that
-     * desyncs pts, and doing it because a plugin stalled would turn any stall into lost messages.
+     * Everything still undecided is **delivered**, never dropped: a drop is final and nothing
+     * re-requests what it took, so producing one out of a stall would turn any stall into lost
+     * messages.
      */
     private fun expireBatch(batch: UpdateBatch) {
         if (batch.finished) return
@@ -1200,28 +1203,41 @@ object PluginRpc {
     }
 
     /**
-     * A `TL_updates` that lost every update is still handed over: it carries the seq and date
-     * advance, and withholding that desyncs strictly more than the drop already did.
+     * **The batch is handed back whole, and a drop is a mark rather than a removal.** Stock applies
+     * the pts of a group it accepted (`lastPts + pts_count == pts`, then `setLastPtsValue`) around
+     * `processUpdateArray`, so an update taken *out* leaves its pts unaccounted for: the next group
+     * no longer lines up, the app parks it and runs a catch-up, and the message a plugin dropped
+     * comes back. Left in and marked, stock's own arithmetic is untouched and
+     * [isDropped] skips the payload inside the loop, so the drop costs no round trip and cannot
+     * desync. Nothing here rebuilds the batch, which is also why no shape of it can fail to.
      *
-     * The two short forms cannot be answered in place - the app applies them from their own fields
-     * and never builds the `Update` a middleware was handed - so a *rewritten* one is handed over as
-     * the `TL_updates` the server would have sent. Only when rewritten: stock's branch prefetches
-     * the sender and does its own pts bookkeeping, and there is no reason to leave it for a plugin
-     * that only looked.
+     * The two short forms are the exception, the app applying them from their own fields and never
+     * building the `Update` a middleware was handed. A *rewritten* one is handed over as the
+     * `TL_updates` the server would have sent; so is a *dropped* one, marked, because that batch is
+     * what carries the pts advance into the loop above. Only those two cases: stock's branch
+     * prefetches the sender and does its own pts bookkeeping, and there is no reason to leave it
+     * for a plugin that only looked.
      */
     private fun deliverable(batch: UpdateBatch, delivery: UpdateDelivery.Batch): TLRPC.Updates? {
         val updates = delivery.updates
         val short = batch.units.firstOrNull { it.synthesized }
         if (short != null) {
-            if (short.update in batch.dropped) return null
+            if (short.update in batch.dropped) {
+                droppedUpdates.add(short.update)
+                return asUpdatesBatch(short.update, updates)
+            }
             val untouched = short.snapshot != null && rawSnapshotOf(short.update) == short.snapshot
             return if (untouched) updates else asUpdatesBatch(short.update, updates)
         }
-        if (batch.dropped.isEmpty()) return updates
-        if (updates is TLRPC.TL_updateShort) return if (updates.update in batch.dropped) null else updates
-        updates.updates?.let { list -> list.removeAll { it in batch.dropped } }
+        for (unit in batch.units) {
+            if (unit.update in batch.dropped) droppedUpdates.add(unit.update)
+        }
         return updates
     }
+
+    /** the app's own update loop, asking whether it may apply this one */
+    @JvmStatic
+    fun isDropped(update: TLObject?): Boolean = update != null && update in droppedUpdates
 
     /**
      * `users`/`chats` stay empty on purpose. Stock groups by `getUpdatePts`/`getUpdatePtsCount`
@@ -1297,6 +1313,8 @@ object PluginRpc {
         Utilities.stageQueue.postRunnable {
             Utilities.globalQueue.postRunnable {
                 for (unpacked in batch) {
+                    // a dropped update is still in the batch the app was handed, marked rather than removed, and never happened for observers either
+                    if (unpacked.update in droppedUpdates) continue
                     if (!rememberDispatch(unpacked.arrival)) continue
                     dispatchUpdate(unpacked.update, account)
                 }

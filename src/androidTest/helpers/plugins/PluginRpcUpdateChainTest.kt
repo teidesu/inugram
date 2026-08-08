@@ -82,8 +82,13 @@ class PluginRpcUpdateChainTest {
         assertNull(plugin.resolved(handle.id), "the batch's scope is released before the app applies it")
     }
 
+    /**
+     * the batch keeps every update it arrived with, dropped ones included: taking one out leaves
+     * its pts unaccounted for, and the app then runs a catch-up that hands the message straight
+     * back. What makes it a drop is [PluginRpc.isDropped], which stock's own loop asks.
+     */
     @Test
-    fun a_dropped_update_is_taken_out_of_the_batch_and_the_rest_still_arrives() {
+    fun a_dropped_update_stays_in_the_batch_and_is_refused_at_the_apply_instead() {
         val plugin = startPlugin("p", "interceptUpdate(updateNewMessage)")
         assertNull(plugin.interceptUpdate("updateNewMessage"))
         val doomed = newMessage(2)
@@ -95,31 +100,56 @@ class PluginRpcUpdateChainTest {
         drain()
 
         val applied = applied().single()
-        assertEquals(listOf(1, 3), applied.updates.map { (it as TL_update.TL_updateNewMessage).message.id })
+        assertEquals(
+            listOf(1, 2, 3),
+            applied.updates.map { (it as TL_update.TL_updateNewMessage).message.id },
+            "the pts of all three has to reach the app, or it fetches the dropped one right back",
+        )
+        assertTrue(PluginRpc.isDropped(doomed), "and the app is told not to apply that one")
+        assertFalse(PluginRpc.isDropped(applied.updates[0]))
+        assertFalse(PluginRpc.isDropped(applied.updates[2]))
+    }
+
+    @Test
+    fun a_batch_every_update_of_which_was_dropped_is_still_handed_over_whole() {
+        verdictPlugin("p", false, "updateNewMessage")
+        val update = newMessage(1)
+
+        deliverUpdates(batchOf(update))
+        drain()
+
+        assertEquals(1, applied().single().updates.size, "the seq, date and pts advance all still land")
+        assertTrue(PluginRpc.isDropped(update))
+    }
+
+    @Test
+    fun a_dropped_updateshort_is_handed_over_carrying_its_one_refused_update() {
+        verdictPlugin("p", false, "updateNewMessage")
+        val update = newMessage(1)
+
+        deliverUpdates(TLRPC.TL_updateShort().apply { this.update = update })
+        drain()
+
+        assertEquals(1, applied().size, "stock wraps it into a one-element array for the same loop")
+        assertTrue(PluginRpc.isDropped(update))
     }
 
     /**
-     * a `TL_updates` that lost every update still carries the seq and date advance for the batch,
-     * and withholding that desyncs strictly more than the drop already did
+     * stock parks a batch whose pts does not line up and re-feeds it around the same instances,
+     * without re-intercepting it - so a mark cleared after the hand-back would let the second pass
+     * apply what the first one dropped.
      */
     @Test
-    fun a_batch_every_update_of_which_was_dropped_is_still_handed_over_empty() {
+    fun a_re_fed_batch_still_knows_which_of_its_updates_were_dropped() {
         verdictPlugin("p", false, "updateNewMessage")
+        val update = newMessage(1)
 
-        deliverUpdates(batchOf(newMessage(1)))
+        deliverUpdates(batchOf(update))
+        drain()
+        deliverUpdates(batchOf(update), fromQueue = true)
         drain()
 
-        assertEquals(0, applied().single().updates.size)
-    }
-
-    @Test
-    fun a_dropped_updateshort_is_the_whole_batch_since_it_is_its_update() {
-        verdictPlugin("p", false, "updateNewMessage")
-
-        deliverUpdates(TLRPC.TL_updateShort().apply { update = newMessage(1) })
-        drain()
-
-        assertEquals(0, applied().size, "nothing of that arrival survived")
+        assertTrue(PluginRpc.isDropped(update), "the verdict has to outlive the hand-back")
     }
 
     @Test
@@ -191,8 +221,8 @@ class PluginRpcUpdateChainTest {
     }
 
     /**
-     * dropping is the one verdict that desyncs pts, so a stall must never produce it - what the
-     * plugin already decided stands, and everything else is delivered untouched
+     * dropping loses the user a message with nothing to re-request it, so a stall must never
+     * produce one - what the plugin already decided stands, and everything else is applied
      */
     @Test
     fun the_budget_expiring_delivers_everything_still_undecided() {
@@ -212,7 +242,11 @@ class PluginRpcUpdateChainTest {
         advanceBy(2_000)
         drain()
 
-        assertEquals(listOf(2, 3), applied().single().updates.map { (it as TL_update.TL_updateNewMessage).message.id })
+        val applied = applied().single().updates
+        assertEquals(listOf(1, 2, 3), applied.map { (it as TL_update.TL_updateNewMessage).message.id })
+        assertTrue(PluginRpc.isDropped(applied[0]), "the one verdict there was still stands")
+        assertFalse(PluginRpc.isDropped(applied[1]), "and an undecided update is applied, never dropped")
+        assertFalse(PluginRpc.isDropped(applied[2]))
         assertEquals(1, plugin.js.updateAbandons.size, "the parked stage is told it no longer matters")
     }
 
@@ -385,14 +419,22 @@ class PluginRpcUpdateChainTest {
         assertEquals(9, update.pts, "the pts advance the short form carried has to come with it")
     }
 
+    /**
+     * the compressed form has no loop to be refused in, so a dropped one is substituted like a
+     * rewritten one and the substitute is what carries the pts into the loop above.
+     */
     @Test
-    fun a_dropped_short_form_message_never_reaches_the_app_in_any_shape() {
+    fun a_dropped_short_form_message_is_substituted_so_its_pts_still_lands() {
         verdictPlugin("p", false, "updateNewMessage")
 
         deliverUpdates(TLRPC.TL_updateShortMessage().apply { id = 5; user_id = 7; message = "hi"; pts = 9 })
         drain()
 
-        assertEquals(0, applied().size)
+        val applied = applied().single()
+        assertTrue(applied is TLRPC.TL_updates, "got ${applied.javaClass.simpleName}")
+        val update = applied.updates.single() as TL_update.TL_updateNewMessage
+        assertEquals(9, update.pts)
+        assertTrue(PluginRpc.isDropped(update), "and nothing of it is applied")
     }
 
     /**
@@ -456,9 +498,12 @@ class PluginRpcUpdateChainTest {
         assertEquals(0, applied.seq, "a synthetic batch has no seq of its own to advance")
     }
 
-    /** the other half of the same `try`: a batch this code cannot rebuild must not strand the queue */
+    /**
+     * a drop no longer rewrites the batch, so the list stock arrived with is the list it gets back
+     * even when that list refuses to be edited. This is the shape that used to strand the queue.
+     */
     @Test
-    fun a_batch_that_cannot_be_rebuilt_after_a_drop_still_drains_the_queue() {
+    fun a_batch_whose_list_refuses_to_be_edited_is_still_handed_back_whole() {
         val plugin = startPlugin("p", "interceptUpdate(updateNewMessage)")
         assertNull(plugin.interceptUpdate("updateNewMessage"))
         val doomed = newMessage(1)
@@ -469,13 +514,9 @@ class PluginRpcUpdateChainTest {
         val hostile = TLRPC.TL_updates().apply { updates = ExplodingList(doomed) }
         assertTrue(deliverUpdates(hostile))
         drain()
-        assertEquals(0, applied().size, "rebuilding that batch is what threw")
 
-        val second = batchOf(newMessage(2))
-        assertTrue(deliverUpdates(second))
-        drain()
-
-        assertSame(second, applied().singleOrNull(), "the next batch never moved")
+        assertSame(hostile, applied().singleOrNull())
+        assertTrue(PluginRpc.isDropped(doomed))
     }
 
     /**
