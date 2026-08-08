@@ -1,36 +1,19 @@
 From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
 From: alina sireneva <alina@tei.pet>
 Date: Fri, 7 Aug 2026 02:38:51 +0400
-Subject: Add the QuickJS plugin engine (hooks, action rows, native build wiring)
+Subject: Add the QuickJS plugin engine (hooks, action rows)
 
 ---
- .gitmodules                                   |   3 +
- .../telegram/messenger/ApplicationLoader.java |   6 +
- .../messenger/MessagesController.java         |   5 +
- .../telegram/tgnet/ConnectionsManager.java    |   8 +-
- .../java/org/telegram/tgnet/TLObject.java     |   3 +
- .../java/org/telegram/ui/ChatActivity.java    |   6 +-
- .../ui/Components/ChatActivityEnterView.java  |   3 +-
- .../java/org/telegram/ui/LaunchActivity.java  |   1 +
- .../java/org/telegram/ui/ProfileActivity.java |   2 +-
- TMessagesProj_App/build.gradle                | 103 +++++++++++++++++-
- TMessagesProj_App/jni/CMakeLists.txt          |  13 +++
- TMessagesProj_App/jni/lsplant                 |   1 +
- 12 files changed, 148 insertions(+), 6 deletions(-)
- create mode 100644 TMessagesProj_App/jni/CMakeLists.txt
- create mode 160000 TMessagesProj_App/jni/lsplant
+ .../java/org/telegram/messenger/ApplicationLoader.java    | 6 ++++++
+ .../java/org/telegram/messenger/MessagesController.java   | 5 +++++
+ .../main/java/org/telegram/tgnet/ConnectionsManager.java  | 8 +++++++-
+ .../src/main/java/org/telegram/tgnet/TLObject.java        | 3 +++
+ .../src/main/java/org/telegram/ui/ChatActivity.java       | 6 ++++--
+ .../org/telegram/ui/Components/ChatActivityEnterView.java | 3 ++-
+ .../src/main/java/org/telegram/ui/LaunchActivity.java     | 1 +
+ .../src/main/java/org/telegram/ui/ProfileActivity.java    | 2 +-
+ 8 files changed, 29 insertions(+), 5 deletions(-)
 
-diff --git a/.gitmodules b/.gitmodules
-index 0000000..0000000 100644
---- a/.gitmodules
-+++ b/.gitmodules
-@@ -7,3 +7,6 @@
- [submodule "TMessagesProj/jni/third_party/ffmpeg"]
- 	path = TMessagesProj/jni/third_party/ffmpeg
- 	url = https://github.com/FFmpeg/FFmpeg.git
-+[submodule "TMessagesProj_App/jni/lsplant"]
-+	path = TMessagesProj_App/jni/lsplant
-+	url = https://github.com/LSPosed/LSPlant.git
 diff --git a/TMessagesProj/src/main/java/org/telegram/messenger/ApplicationLoader.java b/TMessagesProj/src/main/java/org/telegram/messenger/ApplicationLoader.java
 index 0000000..0000000 100644
 --- a/TMessagesProj/src/main/java/org/telegram/messenger/ApplicationLoader.java
@@ -204,165 +187,3 @@ index 0000000..0000000 100644
                      return;
                  }
                  if (id == -1) {
-diff --git a/TMessagesProj_App/build.gradle b/TMessagesProj_App/build.gradle
-index 0000000..0000000 100644
---- a/TMessagesProj_App/build.gradle
-+++ b/TMessagesProj_App/build.gradle
-@@ -15,10 +15,20 @@ configurations.all {
-     exclude group: 'androidx.recyclerview', module: 'recyclerview'
- }
- 
-+configurations {
-+    // non-transitive: the aar is wanted for its .so alone, and its own dependencies would be
-+    // resolved into this configuration and break `singleFile` below
-+    shadowhookAar { transitive = false }
-+}
-+
- dependencies {
-     implementation project(':TMessagesProj')
-     implementation files('../TMessagesProj/libs/libgsaverification-client.aar')
-     implementation 'androidx.core:core:1.16.0'
-+    // the inline hooker behind lsplant. only libshadowhook.so is wanted, dlopened by the rust
-+    // engine; nothing links or imports it - so it is unpacked as a jniLib rather than depended on,
-+    // see the shadowhook block below.
-+    shadowhookAar 'com.bytedance.android:shadowhook:2.0.1'
- }
- 
- android {
-@@ -100,7 +110,7 @@ android {
-         minSdkVersion 26
-         targetSdkVersion 35
-         versionName rootProject.ext.verName
--        ndkVersion "27.2.12479018"
-+        ndkVersion "29.0.14206865"
- 
-         ndk {
-             abiFilters "arm64-v8a"
-@@ -117,6 +127,13 @@ android {
-         }
-     }
- 
-+    externalNativeBuild {
-+        cmake {
-+            path 'jni/CMakeLists.txt'
-+            version '3.28.0+'
-+        }
-+    }
-+
-     buildFeatures {
-         buildConfig = true
-     }
-@@ -132,3 +149,87 @@ android {
- }
- 
- apply plugin: 'com.google.gms.google-services'
-+
-+// --- shadowhook (libshadowhook.so) ---
-+// unpacked from the aar instead of depended on. `implementation` would put it on the variant's
-+// runtime classpath, where `checkAarMetadata` enforces the `minCompileSdk=37` its manifest carries -
-+// and 37 is a *minor-versioned* platform (android-37.0) that AGP 8.6.1 predates and cannot resolve.
-+// Nothing links or imports the aar's classes.jar, so resolving it in a configuration of our own
-+// leaves that check with nothing to check and the .so is all that ships. Drop this block for a
-+// plain `implementation` once AGP is new enough to resolve android-37.0.
-+def shadowhookJniLibsDir = file("$buildDir/shadowhookJniLibs")
-+
-+tasks.register('unpackShadowhook', Copy) {
-+    // both: libshadowhook.so dlopens libshadowhook_nothing.so for its hook trampolines
-+    from({ zipTree(configurations.shadowhookAar.singleFile) }) {
-+        include 'jni/**/libshadowhook.so'
-+        include 'jni/**/libshadowhook_nothing.so'
-+        eachFile { it.path = it.path.replaceFirst('^jni/', '') }
-+        includeEmptyDirs = false
-+    }
-+    into shadowhookJniLibsDir
-+}
-+
-+android.sourceSets.main.jniLibs.srcDirs += shadowhookJniLibsDir
-+tasks.matching { it.name ==~ /merge.*JniLibFolders/ }.configureEach {
-+    dependsOn 'unpackShadowhook'
-+}
-+
-+// --- inugram rust plugin engine (libinu_native.so) ---
-+// builds the standalone rquickjs/quickjs-ng cdylib via cargo-ndk and packages it as a jniLib.
-+// build-env prerequisites: rustup + `rustup target add aarch64-linux-android`,
-+// `cargo install cargo-ndk`, and libclang (NDK-provided) for rquickjs' bindgen.
-+def rustModuleDir = file("$projectDir/native")
-+def rustJniLibsDir = file("$buildDir/rustJniLibs")
-+
-+// gradle (launched from Android Studio / a daemon) doesn't inherit the login shell PATH, so cargo
-+// isn't found by name. resolve the cargo binary from the usual toolchain locations, and prepend its
-+// dir + ~/.cargo/bin (where `cargo install cargo-ndk` lands the subcommand) to the task PATH.
-+// override with -Pcargo.bin=/path/to/cargo or the CARGO env var if your setup differs.
-+def userHome = System.getProperty('user.home')
-+def cargoHome = System.getenv('CARGO_HOME') ?: "$userHome/.cargo"
-+def cargoCandidates = [
-+    System.getenv('CARGO'),
-+    project.findProperty('cargo.bin'),
-+    "$cargoHome/bin/cargo",
-+    "$userHome/.cargo/bin/cargo",
-+    "/etc/profiles/per-user/${System.getProperty('user.name')}/bin/cargo", // nix per-user profile
-+    "$userHome/.nix-profile/bin/cargo",                                     // nix home-manager
-+    "/run/current-system/sw/bin/cargo",                                     // nixos system profile
-+    "/opt/homebrew/bin/cargo",
-+    "/usr/local/bin/cargo",
-+]
-+def cargoFile = cargoCandidates.findAll { it }.collect { file(it) }.find { it.isFile() }
-+def cargoExe = cargoFile?.absolutePath ?: 'cargo'
-+def cargoPathDirs = [cargoFile?.parentFile?.absolutePath, "$cargoHome/bin", "$userHome/.cargo/bin"].findAll { it }
-+
-+tasks.register('buildInuNative', Exec) {
-+    workingDir rustModuleDir
-+    environment 'ANDROID_NDK_HOME', android.ndkDirectory.absolutePath
-+    environment 'PATH', (cargoPathDirs + [System.getenv('PATH') ?: '']).join(File.pathSeparator)
-+    // bindgen needs *a* libclang to parse the quickjs headers (the android target/sysroot is supplied
-+    // separately by cargo-ndk). NDK r27+ no longer ships libclang.dylib, so search the NDK first, then
-+    // fall back to system libclang locations. override with -Plibclang.path=/dir if none are found.
-+    def prebuilt = file("${android.ndkDirectory}/toolchains/llvm/prebuilt")
-+    def ndkHost = prebuilt.listFiles()?.find { it.isDirectory() }
-+    def libclangCandidates = [
-+        project.findProperty('libclang.path'),
-+        ndkHost ? new File(ndkHost, 'lib').absolutePath : null,
-+        ndkHost ? new File(ndkHost, 'lib64').absolutePath : null,
-+        '/Library/Developer/CommandLineTools/usr/lib',                 // xcode command line tools
-+        '/opt/homebrew/opt/llvm/lib', '/usr/local/opt/llvm/lib',       // homebrew llvm
-+        '/run/current-system/sw/lib', "${System.getProperty('user.home')}/.nix-profile/lib", // nix
-+        '/usr/lib/llvm/lib', '/usr/lib',                               // linux distros
-+    ]
-+    def libclangDir = libclangCandidates.findAll { it }.find { dir ->
-+        def d = file(dir)
-+        d.isDirectory() && d.listFiles()?.any { it.name ==~ /libclang\.(dylib|so)(\..*)?/ }
-+    }
-+    if (libclangDir != null) environment 'LIBCLANG_PATH', libclangDir
-+    commandLine cargoExe, 'ndk', '-t', 'arm64-v8a', '-o', rustJniLibsDir.absolutePath, 'build', '--release'
-+}
-+
-+android.sourceSets.main.jniLibs.srcDirs += rustJniLibsDir
-+tasks.matching { it.name ==~ /merge.*JniLibFolders/ }.configureEach {
-+    dependsOn 'buildInuNative'
-+}
-diff --git a/TMessagesProj_App/jni/CMakeLists.txt b/TMessagesProj_App/jni/CMakeLists.txt
-new file mode 100644
-index 0000000..0000000
---- /dev/null
-+++ b/TMessagesProj_App/jni/CMakeLists.txt
-@@ -0,0 +1,13 @@
-+cmake_minimum_required(VERSION 3.22.1)
-+project(inu_jni CXX C)
-+
-+# There are no sources here on purpose. liblsplant.so is lsplant's own target; the C entry points
-+# the rust engine dlopens come from patches-native/lsplant-c-abi.patch, applied to the submodule
-+# after `git submodule update --init`.
-+
-+# lsplant reads this in a POST_BUILD command but only defaults it further down its own file, so as a
-+# subdirectory it would strip to an empty path.
-+set(DEBUG_SYMBOLS_PATH ${CMAKE_BINARY_DIR}/symbols)
-+
-+set(LSPLANT_BUILD_SHARED ON CACHE BOOL "" FORCE)
-+add_subdirectory(lsplant/lsplant/src/main/jni)
-diff --git a/TMessagesProj_App/jni/lsplant b/TMessagesProj_App/jni/lsplant
-new file mode 160000
-index 0000000..0000000
---- /dev/null
-+++ b/TMessagesProj_App/jni/lsplant
-@@ -0,0 +1 @@
-+Subproject commit 61e10e51eb99dca00dd873f48c28a674dd2b4c4c
