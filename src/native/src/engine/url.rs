@@ -25,7 +25,7 @@ use url::{form_urlencoded, Url};
 
 use crate::engine::shape::{define_accessor, define_getter, define_method};
 
-const PRELUDE: &str = include_str!("url.js");
+const PRELUDE: &[u8] = include_bytes!(concat!(env!("OUT_DIR"), "/url.qbc"));
 
 /// The host, lowercased, with a trailing dot and any ipv6 brackets stripped - which is the form a
 /// grant's domain match is against, `a.` and `a` being one name to dns and two strings to it.
@@ -182,9 +182,7 @@ pub fn install_url<'js>(ctx: &Ctx<'js>) -> JsResult<()> {
         })?,
     )?;
 
-    let mut options = rquickjs::context::EvalOptions::default();
-    options.filename = Some("<inu:url>".to_string());
-    let factory: Function = ctx.eval_with_options(PRELUDE, options)?;
+    let factory = crate::engine::prelude::load(ctx, PRELUDE)?;
     factory.call::<_, ()>((natives,))?;
     Ok(())
 }

@@ -27,7 +27,7 @@ use rquickjs::function::This;
 
 use crate::tg::rpc::{format_exception, pump_jobs};
 
-const PRELUDE: &str = include_str!("xposed.js");
+const PRELUDE: &[u8] = include_bytes!(concat!(env!("OUT_DIR"), "/xposed.qbc"));
 
 /// stand-in for the Kotlin `QuickJs.XposedListener`
 pub trait XposedHost {
@@ -351,9 +351,7 @@ pub fn install_xposed<'js>(
     // plugin reassigning `inu.PluginError`
     let plugin_error: Value = inu.get("PluginError")?;
 
-    let mut options = rquickjs::context::EvalOptions::default();
-    options.filename = Some("<inu:xposed>".to_string());
-    let factory: Function = ctx.eval_with_options(PRELUDE, options)?;
+    let factory = crate::engine::prelude::load(ctx, PRELUDE)?;
     let xposed: Object = factory.call((natives, plugin_error))?;
     inu.set("xposed", xposed)?;
 

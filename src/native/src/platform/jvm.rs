@@ -31,7 +31,7 @@ use crate::engine::error::{
 use crate::engine::registry::{CallbackRegistry, Lifecycle};
 use crate::tg::rpc::{format_exception, pump_jobs};
 
-const PRELUDE: &str = include_str!("jvm.js");
+const PRELUDE: &[u8] = include_bytes!(concat!(env!("OUT_DIR"), "/jvm.qbc"));
 
 /// stand-in for the Kotlin `QuickJs.JvmListener`
 pub trait JvmHost {
@@ -377,9 +377,7 @@ pub fn install_jvm<'js>(
     // by a plugin reassigning `inu.PluginError`
     let plugin_error: Value = inu.get("PluginError")?;
 
-    let mut options = rquickjs::context::EvalOptions::default();
-    options.filename = Some("<inu:jvm>".to_string());
-    let factory: Function = ctx.eval_with_options(PRELUDE, options)?;
+    let factory = crate::engine::prelude::load(ctx, PRELUDE)?;
     let built: Object = factory.call((natives, plugin_error))?;
     let jvm: Object = built.get("jvm")?;
     let mint: Function = built.get("mint")?;

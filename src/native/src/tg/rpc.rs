@@ -146,8 +146,8 @@ const DEMUX_EVENTS: [(&str, &str, &[&str]); 3] = [
 /// `Account.invokeRpc` names its own slot instead, which is the whole point of that form.
 pub const ANY_ACCOUNT: i32 = -1;
 
-const EVENTS_PRELUDE: &str = include_str!("events.js");
-const SEND_PRELUDE: &str = include_str!("sendmsg.js");
+const EVENTS_PRELUDE: &[u8] = include_bytes!(concat!(env!("OUT_DIR"), "/events.qbc"));
+const SEND_PRELUDE: &[u8] = include_bytes!(concat!(env!("OUT_DIR"), "/sendmsg.qbc"));
 
 /// what `inu.interceptSendMessage` registers for. The raw layer spreads one outgoing message across
 /// these four (and their scheduled forms, which are a flag on the same methods), which is the whole
@@ -637,9 +637,7 @@ fn install_send_message<'js>(
     inu: &Object<'js>,
     shared: Object<'js>,
 ) -> JsResult<()> {
-    let mut options = rquickjs::context::EvalOptions::default();
-    options.filename = Some("<inu:sendmsg>".to_string());
-    let factory: Function = ctx.eval_with_options(SEND_PRELUDE, options)?;
+    let factory = crate::engine::prelude::load(ctx, SEND_PRELUDE)?;
     let plugin_error: Value = ctx.globals().get::<_, Object>("inu")?.get("PluginError")?;
     let rpc_error: Value = inu.get("RpcError")?;
     let accounts = state.accounts.clone();
@@ -661,9 +659,7 @@ fn install_send_message<'js>(
 /// here rather than at dispatch: `installApi` runs before `installRpc`, and both run before the
 /// plugin's source, so this is the last moment the class is still the one this engine installed.
 fn install_demuxed_events<'js>(ctx: &Ctx<'js>, state: &Rc<RpcState>, inu: &Object<'js>) -> JsResult<()> {
-    let mut options = rquickjs::context::EvalOptions::default();
-    options.filename = Some("<inu:events>".to_string());
-    let factory: Function = ctx.eval_with_options(EVENTS_PRELUDE, options)?;
+    let factory = crate::engine::prelude::load(ctx, EVENTS_PRELUDE)?;
     let message: Value = inu.get("Message")?;
     if !message.is_function() {
         // a late TypeError out of a handler would report this as the plugin's fault

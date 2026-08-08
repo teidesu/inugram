@@ -28,7 +28,7 @@ use crate::tg::progress::ProgressReporter;
 use crate::tg::rpc::{format_exception, pump_jobs, PendingSettle};
 use crate::tl::proxy::{js_value_to_wire, wire_to_js_value, TlViews, ViewLife};
 
-const PRELUDE: &str = include_str!("writes.js");
+const PRELUDE: &[u8] = include_bytes!(concat!(env!("OUT_DIR"), "/writes.qbc"));
 
 /// stand-in for the Kotlin `QuickJs.WritesListener`
 pub trait WritesHost {
@@ -576,9 +576,7 @@ pub(crate) fn install_writes_with_limit<'js>(
     // releasing it first leaks a GC root and aborts `JS_FreeRuntime`
     let reads = crate::tg::account::take_prototype(ctx, accounts);
 
-    let mut options = rquickjs::context::EvalOptions::default();
-    options.filename = Some("<inu:writes>".to_string());
-    let factory: Function = ctx.eval_with_options(PRELUDE, options)?;
+    let factory = crate::engine::prelude::load(ctx, PRELUDE)?;
     let prototype: Object = factory.call((natives, shared.clone(), message, plugin_error, reads))?;
     crate::tg::account::set_prototype(ctx, accounts, &prototype);
 

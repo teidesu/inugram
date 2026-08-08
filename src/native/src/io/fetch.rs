@@ -49,7 +49,7 @@ use crate::engine::error::{
 use crate::io::blob::{export_for_host, mint_app_file, resolve_export, BlobState, BUILD_LIMIT_BYTES};
 use crate::tg::rpc::{format_exception, pump_jobs, PendingSettle};
 
-const PRELUDE: &str = include_str!("fetch.js");
+const PRELUDE: &[u8] = include_bytes!(concat!(env!("OUT_DIR"), "/fetch.qbc"));
 
 /// stand-in for the Kotlin `QuickJs.FetchListener`
 pub trait FetchHost {
@@ -206,9 +206,7 @@ pub fn install_fetch<'js>(
         timers.set(name, f)?;
     }
 
-    let mut options = rquickjs::context::EvalOptions::default();
-    options.filename = Some("<inu:fetch>".to_string());
-    let factory: Function = ctx.eval_with_options(PRELUDE, options)?;
+    let factory = crate::engine::prelude::load(ctx, PRELUDE)?;
     factory.call::<_, ()>((natives, plugin_error, timers))?;
     Ok(state)
 }

@@ -13,7 +13,7 @@ use rquickjs::{Ctx, Exception, Function, Object, Result as JsResult, TypedArray,
 
 use crate::engine::error::{get_or_create_inu, throw_plugin_error};
 
-const PRELUDE: &str = include_str!("utils.js");
+const PRELUDE: &[u8] = include_bytes!(concat!(env!("OUT_DIR"), "/utils.qbc"));
 
 const HEX_DIGITS: &[u8; 16] = b"0123456789abcdef";
 
@@ -53,9 +53,7 @@ pub fn install_utils<'js>(ctx: &Ctx<'js>) -> JsResult<Object<'js>> {
     // throws, the same reason `globals.js` takes its natives as an argument
     let plugin_error: Value = inu.get("PluginError")?;
 
-    let mut options = rquickjs::context::EvalOptions::default();
-    options.filename = Some("<inu:utils>".to_string());
-    let factory: Function = ctx.eval_with_options(PRELUDE, options)?;
+    let factory = crate::engine::prelude::load(ctx, PRELUDE)?;
     let shared: Object = factory.call((utils.clone(), plugin_error))?;
 
     inu.set("utils", utils)?;

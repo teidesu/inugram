@@ -26,7 +26,7 @@ use crate::tg::account::AccountState;
 use crate::tg::rpc::{format_exception, pump_jobs, PendingSettle};
 use crate::tl::proxy::{wire_to_js_value, TlViews, ViewLife};
 
-const PRELUDE: &str = include_str!("reads.js");
+const PRELUDE: &[u8] = include_bytes!(concat!(env!("OUT_DIR"), "/reads.qbc"));
 
 /// stand-in for the Kotlin `QuickJs.ReadsListener`
 pub trait ReadsHost {
@@ -322,9 +322,7 @@ pub fn install_reads<'js>(
     let message: Value = inu.get("Message")?;
     let plugin_error: Value = inu.get("PluginError")?;
 
-    let mut options = rquickjs::context::EvalOptions::default();
-    options.filename = Some("<inu:reads>".to_string());
-    let factory: Function = ctx.eval_with_options(PRELUDE, options)?;
+    let factory = crate::engine::prelude::load(ctx, PRELUDE)?;
     let prototype: Object = factory.call((natives, shared.clone(), message, plugin_error))?;
     crate::tg::account::set_prototype(ctx, accounts, &prototype);
 

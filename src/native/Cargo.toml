@@ -21,6 +21,12 @@ lzma-rs = "0.3"
 rquickjs = { version = "0.12", default-features = true, features = ["bindgen"] }
 url = "2.5.8"
 
+[build-dependencies]
+# the same quickjs the cdylib links, resolved from the same lockfile, so `build.rs` cannot emit
+# bytecode a different interpreter would read. `bindgen` is not asked for here: rquickjs ships
+# prebuilt bindings for every host anyone builds this on, and only android has none.
+rquickjs = { version = "0.12", features = ["loader"] }
+
 [profile.release]
 opt-level = "z"
 lto = true
