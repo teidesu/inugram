@@ -8,9 +8,8 @@ Subject: Add the QuickJS plugin engine (hooks, action rows)
  .../main/java/org/telegram/tgnet/ConnectionsManager.java  | 8 +++++++-
  .../src/main/java/org/telegram/tgnet/TLObject.java        | 3 +++
  .../src/main/java/org/telegram/ui/ChatActivity.java       | 6 ++++--
- .../org/telegram/ui/Components/ChatActivityEnterView.java | 3 ++-
  .../src/main/java/org/telegram/ui/LaunchActivity.java     | 1 +
- 6 files changed, 22 insertions(+), 4 deletions(-)
+ 5 files changed, 20 insertions(+), 3 deletions(-)
 
 diff --git a/TMessagesProj/src/main/java/org/telegram/messenger/MessagesController.java b/TMessagesProj/src/main/java/org/telegram/messenger/MessagesController.java
 index 0000000..0000000 100644
@@ -122,27 +121,6 @@ index 0000000..0000000 100644
              }
              chatListView.stopScroll();
              chatLayoutManager.setCanScrollVertically(false);
-diff --git a/TMessagesProj/src/main/java/org/telegram/ui/Components/ChatActivityEnterView.java b/TMessagesProj/src/main/java/org/telegram/ui/Components/ChatActivityEnterView.java
-index 0000000..0000000 100644
---- a/TMessagesProj/src/main/java/org/telegram/ui/Components/ChatActivityEnterView.java
-+++ b/TMessagesProj/src/main/java/org/telegram/ui/Components/ChatActivityEnterView.java
-@@ -4921,6 +4921,7 @@ public class ChatActivityEnterView extends FrameLayout implements
-         };
-         messageSendPreview.setOnDismissListener(di -> {
-             messageSendPreview = null;
-+            desu.inugram.helpers.chat.ChatActionsHelper.inu_onSendPreviewDismissed(this);
-         });
- 
-         final boolean containsSendMessage = audioToSendMessageObject != null || messageEditText != null && !TextUtils.isEmpty(messageEditText.getText());
-@@ -5163,7 +5164,7 @@ public class ChatActivityEnterView extends FrameLayout implements
-         }
-         messageSendPreview.setItemOptions(options);
- 
--        messageSendPreview.show();
-+        desu.inugram.helpers.chat.ChatActionsHelper.inu_showSendPreview(this, options, messageSendPreview);
- 
-         try {
-             view.performHapticFeedback(HapticFeedbackConstants.KEYBOARD_TAP, HapticFeedbackConstants.FLAG_IGNORE_GLOBAL_SETTING);
 diff --git a/TMessagesProj/src/main/java/org/telegram/ui/LaunchActivity.java b/TMessagesProj/src/main/java/org/telegram/ui/LaunchActivity.java
 index 0000000..0000000 100644
 --- a/TMessagesProj/src/main/java/org/telegram/ui/LaunchActivity.java

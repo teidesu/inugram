@@ -174,16 +174,18 @@ object ChatActionsHelper {
     }
 
     /**
-     * `inu.registerMessageEditorAction`'s rows, in the send-button long-press sheet. Unlike the
-     * chat header's, this menu is rebuilt from scratch on every long press, so there is nothing to
-     * keep live between opens - but a row's label still only comes from globalQueue, so the sheet
-     * is parked until the rows land or [PluginActions.RENDER_BUDGET_MS] runs out, exactly as the
-     * message menu is. With no rows registered this is stock's own `show()` and nothing else.
+     * every fork row in the send-button long-press sheet, and the sheet's own `show()`. Unlike the
+     * chat header's menu, this one is rebuilt from scratch on every long press, so there is nothing
+     * to keep live between opens - but a plugin row's label only comes from globalQueue, so the
+     * sheet is parked until the rows land or [PluginActions.RENDER_BUDGET_MS] runs out, exactly as
+     * the message menu is. With no plugin rows registered this is stock's own `show()`.
      */
     @JvmStatic
-    fun inu_showSendPreview(enterView: ChatActivityEnterView, options: ItemOptions, preview: MessageSendPreview) {
+    fun showSendPreview(enterView: ChatActivityEnterView, options: ItemOptions, preview: MessageSendPreview) {
         val activity = enterView.parentFragment
+        addRefetchWebPreviewItem(activity, enterView, options, preview)
         if (activity == null || PluginActions.rowCount(PluginActions.KIND_EDITOR) == 0) {
+            options.setupSelectors()
             preview.show()
             return
         }
@@ -196,7 +198,7 @@ object ChatActionsHelper {
         }
 
         // the composer outlives the sheet, so the surface is opened here and closed with it
-        // ([inu_onSendPreviewDismissed]): a callback that resolves after the user dismissed the
+        // ([onSendPreviewDismissed]): a callback that resolves after the user dismissed the
         // menu has nothing left to write into
         val surfaceId = PluginActions.openEditorSurface(EditorSurface(enterView))
         editorSurfaces.put(enterView, surfaceId)?.let(PluginActions::closeEditorSurface)
@@ -223,11 +225,28 @@ object ChatActionsHelper {
         AndroidUtilities.runOnUIThread({ showOnce(emptyList()) }, PluginActions.RENDER_BUDGET_MS)
     }
 
+    private fun addRefetchWebPreviewItem(
+        activity: ChatActivity?,
+        enterView: ChatActivityEnterView,
+        options: ItemOptions,
+        preview: MessageSendPreview,
+    ) {
+        if (activity == null) return
+        val text = enterView.fieldText ?: return
+        val hasUrl = runCatching { AndroidUtilities.WEB_URL.matcher(text).find() }.getOrDefault(false)
+        if (!hasUrl) return
+        options.add(R.drawable.msg_retry, LocaleController.getString(R.string.InuRefetchWebPreview)) {
+            preview.dismiss(false)
+            enterView.messageSendPreview = null
+            activity.inu_refetchWebPreview()
+        }
+    }
+
     // one sheet per composer at a time, so this is the surface the live one owns
     private val editorSurfaces = WeakHashMap<ChatActivityEnterView, Long>()
 
     @JvmStatic
-    fun inu_onSendPreviewDismissed(enterView: ChatActivityEnterView) {
+    fun onSendPreviewDismissed(enterView: ChatActivityEnterView) {
         editorSurfaces.remove(enterView)?.let(PluginActions::closeEditorSurface)
     }
 
