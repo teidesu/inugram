@@ -17,11 +17,10 @@ use std::rc::Rc;
 use rquickjs::{Ctx, Function, Object, Persistent, Result as JsResult, Runtime, Value};
 
 use crate::api::json_parse;
-use crate::engine::error::{
-    check_grant, get_or_create_inu, host_error_to_js, throw_plugin_error, GrantHost, MATCH_EXACT,
-};
-use crate::engine::registry::{make_disposer, noop_disposer, Lifecycle, Registry, Token};
-use crate::tg::rpc::{format_exception, pump_jobs};
+use crate::grants::{check_grant, GrantHost, MATCH_EXACT};
+use crate::sandbox::error::{get_or_create_inu, host_error_to_js, throw_plugin_error};
+use crate::sandbox::registry::{make_disposer, noop_disposer, Lifecycle, Registry, Token};
+use crate::telegram::rpc::{format_exception, pump_jobs};
 
 /// stand-in for the Kotlin `QuickJs.NotificationListener`
 pub trait NotificationHost {

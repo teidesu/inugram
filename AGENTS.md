@@ -255,14 +255,21 @@ wrong name or flag, since the bridge and the typings only agree because one scri
 
 The engine crate is `src/native`, one folder per area under `src/`: `jni/` (the
 `extern "system"` entry points, the one Java object every upcall goes through, and the host-trait
-impls), `engine/` (argv, the property forms a rust-built prototype uses, the cpu and memory
-ceilings, the error vocabulary, the globals, the
-registration bookkeeping, the timer wheel, the http url screen `fetch` and `openUrl` share),
-`tl/` (the handle proxy plus the `inu.Message` and
-`inu.utils` surfaces), `tg/` (account reads/writes and the rpc, update and deserialize
+impls), `sandbox/` (the realm plugin code runs in and what bounds it - argv, the property forms a
+rust-built prototype uses, the error vocabulary, the globals, the prelude loader, the cpu and memory
+ceilings, registration bookkeeping, the timer wheel, and urls: both the whatwg classes and the http
+egress screen `fetch` and `openUrl` share), `tl/` (the handle proxy plus the `inu.Message` and
+`inu.utils` surfaces), `telegram/` (account reads/writes and the rpc, update and deserialize
 interception), `io/` (blob, fs, fetch), `draw/` (canvas, geometry, css), `ui/` (settings pages,
-action rows, icons, screens), `platform/` (jvm, xposed, elf, lsplant, the notification centre),
-`api/` (kv, dialogs, clipboard, `openUrl`) and `testing/`. A module's test suite lives beside it as
+action rows, icons, screens), `platform/` (the three surfaces a plugin calls - jvm, xposed,
+notifications - with `xposed/` carrying the elf and lsplant machinery hooking is built on),
+`api/` (kv, dialogs, clipboard, open_url) and `testing/`, plus `grants.rs` and `lib.rs` at the root.
+
+**Two of those names were earned rather than chosen.** `grants.rs` is its own file at the root
+because `check_grant` is the single gate every permission decision in the crate goes through, and it
+had been living in `engine/error.rs` on the grounds that it *builds* a `PluginError` - findable only
+by someone who already knew. `sandbox/limits.rs` says what it holds: the execution deadline **and**
+the native-memory ceiling, which is why `deadline` was the wrong half of it. A module's test suite lives beside it as
 `<name>_tests.rs`, pulled in with `#[path]`; **every `.js` prelude lives in `src/js/`**, named for the
 module that loads it, since what a reader wants is to see the eleven of them at once and the module
 they belong to is already in the name.
@@ -272,14 +279,14 @@ eleven of them cost 3.8 ms per engine (measured, release, desktop; a phone is 3-
 `BootCohort.EARLY_BUDGET_MILLIS`, which is 500 for *every* plugin booting on the push path.
 `build.rs` compiles each one - as `export default <the factory expression the file already is>` -
 with the same `rquickjs` the cdylib links, resolved from the same lockfile, and writes a `.qbc` into
-`OUT_DIR`; `engine::prelude::load` reads one back with `Module::load` and hands over the default
+`OUT_DIR`; `sandbox::prelude::load` reads one back with `Module::load` and hands over the default
 export, which is the `Function` `ctx.eval` used to answer with. **0.37 ms**, and with `strip_source`
 the artifacts are 55 KB against 87 KB of source strings, so the cdylib is *smaller* than it was.
 Three properties this rests on, none of them checkable at runtime: the bytecode format is tied to
 the exact quickjs build that reads it, which is why nothing is committed and `Module::load` is
 `unsafe`; it is endian-dependent and carries no marker, so it is written little-endian explicitly
 rather than natively; and the name a stack trace shows (`<inu:reads>`) is baked in at *declare*
-time, so it is `build.rs` that has to keep saying it. Two lints in `engine/prelude_tests.rs` cover
+time, so it is `build.rs` that has to keep saying it. Two lints in `sandbox/prelude_tests.rs` cover
 the way this rots: a `.js` under `src/` missing from `PRELUDES`, and a prelude reached with
 `include_str!` again, which would be parsed per engine with nothing anywhere saying so.
 
@@ -308,7 +315,7 @@ regenerates `android.tl.d.ts` on the way (gitignored, so it may not be there at 
 ignores every argument after it, so `node --check a.js b.js` parses `a.js`, reports clean, and says
 nothing about `b.js`. Never write that form; run the script.
 
-The host half is `src/kotlin/helpers/plugins`, grouped to mirror the crate: `tg/` (`PluginRpc`,
+The host half is `src/kotlin/helpers/plugins`, grouped to mirror the crate: `telegram/` (`PluginRpc`,
 `PluginUpdates`, `PluginReads`, `PluginWrites`, `PeerSpecs`, `PluginMedia`, `PluginDeserialize`),
 `tl/` (`TlHandles`, `TlJson`, `TlReflect`, `TlFilter`), `ui/` (`PluginUi`, `PluginActions`,
 `ActionSurface`, `PluginIcons`, `PluginScreens`, `PluginCanvas`),
@@ -327,7 +334,7 @@ plugin order, so those moved to where they belong: the table to `TlHandles`'s ow
 /`of`/`attached`/`beginDetach`/`endDetach`, the detach pair being what keeps a rejecting continuation
 from finding its own request expired) and the order to `PluginManager.orderIndex()`, leaving one
 `PluginRpc` → `PluginUpdates` edge and no cycle. Each keeps its **own dispatch id space**, which is
-safe because `tg/rpc.rs` keeps `dispatches` and `update_dispatches` in different maps.
+safe because `telegram/rpc.rs` keeps `dispatches` and `update_dispatches` in different maps.
 `EngineBindings` is the composition root `PluginApi` used to be wearing an api's name: the install
 ordering lives there and nowhere else. `TlReflect` is the TL class index, the `publicFields` cache
 and the flag syncing - the hot path every one of `TlHandles`/`TlJson`/`PluginDeserialize`/`TlFilter`
@@ -554,7 +561,7 @@ broken engine — or, as `api-filter-test.js` had been, red on a working one.
   feature stays off**, and turning it on to let a foreign thread in is the trap: it swaps that
   `RefCell` for a non-reentrant `std::sync::Mutex` (`safe_ref.rs`), so the abort becomes a *silent
   deadlock* of whichever thread re-entered, on a queue shared with the whole app - it was on for one
-  release and `platform/xposed.rs` deadlocked on `inu.account().getUser()` inside a hook. So a surface the app
+  release and `platform/xposed/mod.rs` deadlocked on `inu.account().getUser()` inside a hook. So a surface the app
   calls *synchronously* from its own thread either posts and returns nothing
   (`inu.jvm.runnable`), or posts and blocks the caller on the answer - `interceptDeserialize`'s
   middleware form, and `inu.xposed`, which is the same shape one phase further: `PluginXposed`
@@ -564,7 +571,7 @@ broken engine — or, as `api-filter-test.js` had been, red on a working one.
   A member that can do neither is `unsupported`, which is `inu.jvm.defineClass`: a js-backed
   override has to answer java with a value, on whichever thread java called on.
 - **`interceptDeserialize`'s declarative tier sidesteps that by never entering an engine at all.** A
-  rule is data: `tg/deserialize.rs` validates it, hands the host one normalized JSON array at
+  rule is data: `telegram/deserialize.rs` validates it, hands the host one normalized JSON array at
   registration, and `PluginDeserialize` alone evaluates it. The wire is built from the values that
   module *read*, never a re-stringification of the plugin's object, because a rules object may carry
   getters and a re-read after the grant check could say something else. The hook is stock's own
@@ -629,7 +636,7 @@ broken engine — or, as `api-filter-test.js` had been, red on a working one.
   process restarted.
 - **A runaway plugin can only be stopped from inside quickjs.** Every engine op shares `globalQueue`
   with the chain's own expiry timer, so nothing posted there can preempt a `while (true) {}`. Hence
-  `engine/deadline.rs`: every JNI export that can run plugin JS arms a thread-local deadline (2 s per entry,
+  `sandbox/limits.rs`: every JNI export that can run plugin JS arms a thread-local deadline (2 s per entry,
   10 s for `nativeEvaluate`), and the interrupt handler raises an uncatchable `InternalError`. It
   bounds **one entry only**: the handler is polled on interpreter back-edges, so a callback blocked
   inside a synchronous host call is not interrupted until it returns, and an async stall is the
@@ -666,7 +673,7 @@ broken engine — or, as `api-filter-test.js` had been, red on a working one.
   engine composed itself, so plugin text cannot forge one. A heap ceiling reached inside plugin
   code arrives as a fault too, since `format_thrown` names it (`describe_heap_exhaustion`) at the
   same site that reports the throw.
-- **Memory is bounded per engine, in two counters that cannot see each other.** `engine/deadline.rs` also
+- **Memory is bounded per engine, in two counters that cannot see each other.** `sandbox/limits.rs` also
   owns the ceilings: 32 MiB of JS heap (`JS_SetMemoryLimit`, applied in `nativeCreate`) and 64 MiB
   of native memory behind JS objects (`ExternalMemory`, charged by an in-memory `Blob` and later by
   `OffscreenCanvas`). They stay separate because a shared pool would need a whole-heap
@@ -680,7 +687,7 @@ broken engine — or, as `api-filter-test.js` had been, red on a working one.
   first, since a cycle holding a canvas is a few dozen bytes of JS and gives quickjs no reason to
   sweep.
 - **`URL`/`URLSearchParams` are the whatwg parser, and deliberately *not* the egress screen.**
-  `engine/url.rs` owns both: `parse_http_url` (what `fetch` and `inu.openUrl` screen) and the
+  `sandbox/url.rs` owns both: `parse_http_url` (what `fetch` and `inu.openUrl` screen) and the
   classes, in one module because two url parsers in different files is how they come to disagree.
   They stay separate functions all the same - the screen must keep reading **the caller's string**,
   since its whole job is refusing spellings whose host depends on who parses them (whitespace,
@@ -702,7 +709,7 @@ broken engine — or, as `api-filter-test.js` had been, red on a working one.
   shapes with no host state (`TextEncoder`/`TextDecoder`, `crypto`, `AbortController`,
   `structuredClone`) are prelude JS in `globals.js`, handed its native helpers as a **factory
   argument** so nothing reachable from plugin code holds a reference to them. `Blob`/`File` install
-  from `engine/globals.rs` too, *before* the prelude, so `structuredClone` can capture the real
+  from `sandbox/globals.rs` too, *before* the prelude, so `structuredClone` can capture the real
   constructor: a blob clones **by reference** (a second handle over the same backing, the same
   relation as a slice), which needed one more native helper and no JNI export. `structuredClone`
   preserves reference identity, not only cycles, so a graph that shared a node before the clone
@@ -766,7 +773,7 @@ broken engine — or, as `api-filter-test.js` had been, red on a working one.
   does fail for want of ram.
   Reads stay in rust: an `onBlobRead` upcall would put 16 MiB per read on the app-wide *Java* heap,
   handing a plugin back the lever the per-plugin heap ceiling exists to take away.
-- **Timers are per plugin and the host is only an alarm clock.** `engine/timers.rs` owns the whole wheel;
+- **Timers are per plugin and the host is only an alarm clock.** `sandbox/timers.rs` owns the whole wheel;
   the only thing that crosses to Kotlin is one outstanding "wake me in N ms" (`onTimerSchedule`,
   `-1` withdraws), re-armed only when the earliest deadline moves, answered by `runTimers()` on the
   engine's own `globalQueue`. So unloading a plugin cancels every timer it armed by dropping that
@@ -778,7 +785,7 @@ broken engine — or, as `api-filter-test.js` had been, red on a working one.
   setTimeout(f, 0) }, 0)` is an unbounded claim on `globalQueue` that no in-engine limit can see.
   A tick is timed and the next wake is held to `max(what the wheel asked for, end of tick + 9x its
   cost, end of tick + 4 ms)`, i.e. a tenth of the queue per plugin, with the 4 ms covering ticks too
-  cheap to measure. It is *not* in `engine/timers.rs`: the wheel's job is when a plugin wants to be woken,
+  cheap to measure. It is *not* in `sandbox/timers.rs`: the wheel's job is when a plugin wants to be woken,
   and the cost of serving that is a property of a queue rust does not know exists. Delaying a wake
   can only fire timers later, never fewer, so it composes with the background floor by `max`.
 - **Backgrounding throttles the timers, not the queue.** `timers::set_visible` floors *the wheel*
@@ -802,14 +809,14 @@ broken engine — or, as `api-filter-test.js` had been, red on a working one.
   activity before starting its replacement. An engine starts out believing it is in the foreground,
   so `PluginApi.attach` pushes `false` when it is not: a process a push notification woke has no
   activity and never will.
-- **`onProgress` is coalesced on time, never per chunk** (`tg/progress.rs`): leading edge, then one
+- **`onProgress` is coalesced on time, never per chunk** (`telegram/progress.rs`): leading edge, then one
   report per 100 ms, and a withheld report is kept rather than dropped. Nothing drives the throttle
   but the reports themselves, so whatever ends a transfer *must* call `finish`/`release` or the last
   numbers a plugin saw are whichever ones happened to land on a window boundary. Its callers are
-  the media transfers: `tg/writes.rs` holds one reporter per request and `write_result` is what owes it
+  the media transfers: `telegram/writes.rs` holds one reporter per request and `write_result` is what owes it
   the terminal call - `finish(total, total)` for a transfer that arrived, `abandon()` for one that
   did not, and `release()` from `dispose`. The host reports per chunk and nothing between it and
-  `tg/progress.rs` throttles, so the contract is one implementation rather than five.
+  `telegram/progress.rs` throttles, so the contract is one implementation rather than five.
 - **A chain's token does not exist for native until the passthrough sends it**, so everything the app
   addresses by token has to be caught in java. `cancelRequest` and `cancelRequestsForGuid` call
   `PluginRpc` from **inside** stock's own `stageQueue` runnable, never before it: a cancel issued
@@ -881,7 +888,7 @@ broken engine — or, as `api-filter-test.js` had been, red on a working one.
   dispatch snapshots its handler list up front (register mid-dispatch lands next dispatch, dispose
   mid-dispatch lets the in-flight run finish), keyed registrations replace and unkeyed ones stack,
   a second `dispose()` is a no-op, and registering after unload began is a no-op returning a no-op
-  disposer. `engine/registry.rs` holds all of that once; do not hand-roll a second mechanism. Every
+  disposer. `sandbox/registry.rs` holds all of that once; do not hand-roll a second mechanism. Every
   disposal that the host has bookkeeping for gets an unregister upcall carrying **the callback id**,
   because the host tracks registrations and not plugins. Tokens are allocated before the entry
   exists (a host upcall needs the id and must be able to refuse without leaving anything behind) and
@@ -890,13 +897,13 @@ broken engine — or, as `api-filter-test.js` had been, red on a working one.
 - **An `Account` is pinned to a slot for life.** `id`/`userId` are read at mint time and only
   `isCurrent()` moves, so handing one to a helper can't silently retarget on a switch;
   `withCurrentAccount` is the form that follows switches, and it re-runs when the slot is re-used by
-  a *different* login (slot indices are recycled). `tg/account.rs` caches the slot list rather than
+  a *different* login (slot indices are recycled). `telegram/account.rs` caches the slot list rather than
   asking the host per call, because every `onUpdate` payload and every `interceptRpc` dispatch
   carries an `Account`; a lookup that misses refreshes once before answering. `PluginApi` re-reads
   the list on `activeAccountChanged`/`mainUserInfoChanged`/`appDidLogout` and only fans out when the
   snapshot actually differs, since the last two fire for renames and premium purchases too.
 - **The `Account` read surface is one gate, one spec vocabulary, one materialization point.**
-  `tg/reads.rs` checks the `account.read` scope its op belongs to and then hands the host a *spec* -
+  `telegram/reads.rs` checks the `account.read` scope its op belongs to and then hands the host a *spec* -
   `S` (myself), `D<dialog id>`, `U<username>` - never a peer, so `PluginReads` parses no TL and the
   normalization has one implementation, the one `utils.js` already owns. A batch is **one crossing
   whose misses stay `null` in place**, which is why it answers one wire per element joined with a
@@ -920,7 +927,7 @@ broken engine — or, as `api-filter-test.js` had been, red on a working one.
   appears (`'me'`, `inputPeerSelf`, your own `User`): `getUser('me').id` and `getDialog('me').peer`
   are the identity `Account.userId` and `inu.accounts()` gate, and a plugin holding one handle per
   slot would rebuild that list out of them. The op's own scope is checked first on both sides, so a
-  plugin missing both is told about the wider one; `PluginReads.allowsSelf` and `tg/reads.rs`'s
+  plugin missing both is told about the wider one; `PluginReads.allowsSelf` and `telegram/reads.rs`'s
   `check_self_grant` have to keep agreeing. The **one exception is `OutgoingMessage.peer`**, which
   resolves `inputPeerSelf` through `account::self_user_id` with no check: `common.d.ts` promises
   reading it needs no grant, and a getter that throws there fails the *user's* send to Saved
@@ -933,7 +940,7 @@ broken engine — or, as `api-filter-test.js` had been, red on a working one.
   (`not-found`, worth a lookup) and "cached, wrong kind" (`invalid-argument`, never resolvable) are
   different answers, hence `buildInputPeer` returning three states rather than a nullable.
 - **A paging cursor is a token, never an encoding.** `getDialogs`/`getTopics` hand back a `Cursor`
-  the plugin can only give back: the offsets live in `tg/reads.rs`'s per-engine `Cursors` table, keyed
+  the plugin can only give back: the offsets live in `telegram/reads.rs`'s per-engine `Cursors` table, keyed
   by which list minted them, and JS holds `c<n>`. So opaque is structural rather than a promise, the
   `Cursor<List>` brand is enforced a second time at runtime, and a *forged* token can only ever name
   a cursor the same plugin already holds. The table is bounded (32, oldest dropped), which is the
@@ -956,7 +963,7 @@ broken engine — or, as `api-filter-test.js` had been, red on a working one.
   a rule the materialization point gains later has to reach it too.
 - **The write surface is one send path and one peer path, and that is where both of its rules
   live.** `common.d.ts` states two for the whole block: the request an op sends never re-enters the
-  interceptors, and none of them reaches a secret chat. Neither is decidable in `tg/writes.rs` (a peer
+  interceptors, and none of them reaches a secret chat. Neither is decidable in `telegram/writes.rs` (a peer
   is still a spec there, and there is no request yet), so both are enforced once in `PluginWrites`:
   every op builds a request and hands it to **`send`**, which goes out through
   `PluginRpc.sendWithoutInterceptors` (the same bypass *lease* `invokeRpc` takes, held until the
@@ -975,8 +982,8 @@ broken engine — or, as `api-filter-test.js` had been, red on a working one.
   `slotOf`) live with the peer arithmetic `message.js` already shares, so `reads.js` and `writes.js`
   normalize a peer the same way by construction rather than by agreement. A write is an op that
   passes the same `S`/`D<id>`/`U<name>` spec; nothing else about a peer ever crosses.
-- **The `Account` prototype is a two-link chain, and taking it is not reading it.** `tg/writes.rs`
-  installs after `tg/reads.rs` and chains its own frozen prototype behind the read one, so one handle
+- **The `Account` prototype is a two-link chain, and taking it is not reading it.** `telegram/writes.rs`
+  installs after `telegram/reads.rs` and chains its own frozen prototype behind the read one, so one handle
   answers for both families and neither file knows the other's members. The reads prototype is taken
   out of `AccountState` (`account::take_prototype`) rather than read, because a `Persistent` has no
   `Drop`: overwriting the account's without releasing it first leaks a GC root and aborts
@@ -984,7 +991,7 @@ broken engine — or, as `api-filter-test.js` had been, red on a working one.
   object's prototype can no longer be set.
 - **Content a plugin hands a send becomes a file before it crosses.** Stock's uploader takes a path
   and Kotlin cannot read a `Blob`'s backing (that is rust's, deliberately), so a `Blob` or a
-  `Uint8Array` in a file position is staged into the engine's own spill directory by `tg/writes.rs` and
+  `Uint8Array` in a file position is staged into the engine's own spill directory by `telegram/writes.rs` and
   the *path* is what the host gets (`F<json>`, alongside the name and mime a `File` carries). The
   staged copy is deleted by `take_pending`, which every exit goes through, so it outlives its
   transfer by nothing. Staging is native work no interpreter deadline can interrupt, so it carries
@@ -1001,7 +1008,7 @@ broken engine — or, as `api-filter-test.js` had been, red on a working one.
   where media lives. So a plugin's download is the app's download and lands where picking it in the
   ui would have. Progress arrives on `NotificationCenter`, keyed by the name stock gave the file,
   observed and released on the ui thread; every report hops to `globalQueue` and is handed straight
-  to `tg/progress.rs`, which is the *only* place coalescing happens. A completed transfer ends on
+  to `telegram/progress.rs`, which is the *only* place coalescing happens. A completed transfer ends on
   `total`/`total` and a failed one flushes whatever the window withheld, so the numbers a plugin is
   left on are the transfer's own. It follows that **a transfer's own rpcs are not the plugin's
   send**: `upload.saveFilePart`/`getFile` reach `interceptRpc` like any other app request, because
@@ -1025,7 +1032,7 @@ broken engine — or, as `api-filter-test.js` had been, red on a working one.
   `updateEncryption`/`updateEncryptedChatTyping`/`updateEncryptedMessagesRead`), which nothing
   lifts - the same rule `PeerSpecs.dialogIdOf` enforces by refusing an encrypted dialog id.
 - **The demuxed events are `onUpdate` registrations, not a second stream.** `onNewMessage`/
-  `onMessageEdited`/`onMessageDeleted` register for the fixed constructor lists in `tg/rpc.rs`'s
+  `onMessageEdited`/`onMessageDeleted` register for the fixed constructor lists in `telegram/rpc.rs`'s
   `DEMUX_EVENTS`, holding the listener `events.js` builds around the plugin's callback — so they
   inherit the arrival paths, `rememberDispatch`'s once-per-arrival dedup, the takeover filter and
   the `Disposer` rules for free, and a plugin holding both forms over one constructor is dispatched
@@ -1110,7 +1117,7 @@ broken engine — or, as `api-filter-test.js` had been, red on a working one.
   comparison, hence `interceptableUnits(snapshots = false)`: that exists for the short forms, which
   a difference never carries.
 - **`interceptSendMessage` is a narrowing of the `interceptRpc` chain, not a chain of its own.**
-  `sendmsg.js` wraps the plugin's verdict middleware into an ordinary one over `tg/rpc.rs`'s
+  `sendmsg.js` wraps the plugin's verdict middleware into an ordinary one over `telegram/rpc.rs`'s
   `SEND_METHODS`, so the 10 s budget, the plugin-list order, `collapseChain`, the cancel handling
   and the "a plugin's own send never re-enters" lease are the ones already tested — `'send'` is
   `next(request)` and `'drop'` is an `inu.RpcError(-1000, MESSAGE_DROPPED_BY_PLUGIN)` returned, which

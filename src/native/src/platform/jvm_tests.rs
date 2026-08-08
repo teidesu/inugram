@@ -1,5 +1,6 @@
 use super::*;
-use crate::engine::error::{install_plugin_error, TestGrantHost};
+use crate::grants::TestGrantHost;
+use crate::sandbox::error::install_plugin_error;
 use crate::testing::util::DisposeOnDrop;
 use std::cell::Cell;
 
@@ -401,7 +402,8 @@ fn a_handle_cannot_be_forged_out_of_what_js_can_see() {
 mod bundled_oracle {
     use super::testing::OracleJvmHost;
     use super::*;
-    use crate::engine::error::{install_plugin_error, TestGrantHost};
+    use crate::grants::TestGrantHost;
+    use crate::sandbox::error::install_plugin_error;
     use crate::testing::util::{assert_oracle_exact, install_capturing_console, manifest_grants, DisposeOnDrop};
 
     const ORACLE: &str = include_str!("../../../res/assets-debug/inu_plugins/jvm-test.js");

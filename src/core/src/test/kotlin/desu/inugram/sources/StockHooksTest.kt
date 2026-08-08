@@ -42,7 +42,7 @@ class StockHooksTest {
         )
         assertOpensWith(
             body,
-            "if (desu.inugram.helpers.plugins.tg.PluginRpc.maybeIntercept(",
+            "if (desu.inugram.helpers.plugins.telegram.PluginRpc.maybeIntercept(",
             "interceptRpc is bypassed for anything sendRequestInternal does before the hook, and the " +
                 "fork calls this method itself, so it has to stay public too",
         )
@@ -56,7 +56,7 @@ class StockHooksTest {
         )
         assertOpensWith(
             body,
-            "if (desu.inugram.helpers.plugins.tg.PluginUpdates.onUpdates(",
+            "if (desu.inugram.helpers.plugins.telegram.PluginUpdates.onUpdates(",
             "interceptUpdate takes the whole batch over by answering true here; below any of the " +
                 "branches, a drop would come after the app already applied the update",
         )
@@ -101,7 +101,7 @@ class StockHooksTest {
             "public boolean processUpdateArray(",
         )
         assertTrue(
-            Regex("""if \(desu\.inugram\.helpers\.plugins\.tg\.PluginUpdates\.isDropped\(baseUpdate\)\) \{\s*continue;""")
+            Regex("""if \(desu\.inugram\.helpers\.plugins\.telegram\.PluginUpdates\.isDropped\(baseUpdate\)\) \{\s*continue;""")
                 .containsMatchIn(body),
             "interceptUpdate's 'drop' verdict is enforced here and nowhere else: without it every " +
                 "dropped update is applied, and the batch still carries them all by design",
@@ -129,7 +129,7 @@ class StockHooksTest {
     @Test
     fun `the difference walk is handed over at the top of its runnable, above the secret-chat decrypt`() {
         val source = stock("org/telegram/messenger/MessagesController.java")
-        val hook = "desu.inugram.helpers.plugins.tg.PluginUpdates.onDifference("
+        val hook = "desu.inugram.helpers.plugins.telegram.PluginUpdates.onDifference("
         assertEquals(
             2,
             source.split(hook).size - 1,

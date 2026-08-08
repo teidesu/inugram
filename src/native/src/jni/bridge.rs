@@ -103,7 +103,9 @@ impl JniBridge {
                     clear_exception(env);
                     let _ = env.throw_new(
                         JNIString::from("java/lang/NoSuchMethodError"),
-                        JNIString::from(format!("PluginBridge.{name}{sig} is missing; the plugin engine cannot be created")),
+                        JNIString::from(format!(
+                            "PluginBridge.{name}{sig} is missing; the plugin engine cannot be created"
+                        )),
                     );
                     None
                 }

@@ -5,7 +5,7 @@ fn setup() -> (Runtime, Context) {
     let rt = Runtime::new().unwrap();
     let ctx = Context::full(&rt).unwrap();
     ctx.with(|ctx| {
-        crate::engine::error::install_plugin_error(&ctx).unwrap();
+        crate::sandbox::error::install_plugin_error(&ctx).unwrap();
         let shared = crate::tl::utils::install_utils(&ctx).unwrap();
         install_message(&ctx, &shared).unwrap();
     });

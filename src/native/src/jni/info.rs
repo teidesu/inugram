@@ -42,7 +42,7 @@ pub(crate) fn build_info_object<'js>(ctx: Ctx<'js>, info: &InuInfo) -> rquickjs:
 
 pub(crate) fn install_inu(ctx: &Ctx, info: Arc<InuInfo>) -> rquickjs::Result<()> {
     let info_fn = Function::new(ctx.clone(), move |ctx| build_info_object(ctx, &info))?;
-    let inu = crate::engine::error::get_or_create_inu(ctx)?;
+    let inu = crate::sandbox::error::get_or_create_inu(ctx)?;
     inu.set("info", info_fn)?;
     Ok(())
 }

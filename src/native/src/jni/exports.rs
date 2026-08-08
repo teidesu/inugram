@@ -15,19 +15,19 @@ use super::log::{install_console, make_log};
 use super::{pump, Engine};
 use crate::api::ApiHost;
 use crate::draw::canvas::CanvasHost;
-use crate::engine::error::GrantHost;
-use crate::engine::globals::RandomHost;
-use crate::engine::registry::Lifecycle;
-use crate::engine::timers::TimerHost;
+use crate::grants::GrantHost;
 use crate::io::fetch::FetchHost;
 use crate::platform::jvm::JvmHost;
 use crate::platform::notifications::NotificationHost;
 use crate::platform::xposed::XposedHost;
-use crate::tg::account::AccountHost;
-use crate::tg::deserialize::DeserializeHost;
-use crate::tg::reads::ReadsHost;
-use crate::tg::rpc::{format_exception, RpcHost};
-use crate::tg::writes::WritesHost;
+use crate::sandbox::globals::RandomHost;
+use crate::sandbox::registry::Lifecycle;
+use crate::sandbox::timers::TimerHost;
+use crate::telegram::account::AccountHost;
+use crate::telegram::deserialize::DeserializeHost;
+use crate::telegram::reads::ReadsHost;
+use crate::telegram::rpc::{format_exception, RpcHost};
+use crate::telegram::writes::WritesHost;
 use crate::ui::actions::ActionHost;
 use crate::ui::icons::IconHost;
 use crate::ui::pages::UiHost;
@@ -52,7 +52,7 @@ macro_rules! engine_export {
         #[no_mangle]
         pub extern "system" fn $name(mut env: EnvUnowned, _this: JObject, ptr: jlong, $($param: $ty),*) {
             in_env(&mut env, (), |env| {
-                let _deadline = crate::engine::deadline::arm_entry_deadline();
+                let _deadline = crate::sandbox::limits::arm_entry_deadline();
                 let Some($engine) = (unsafe { (ptr as *mut Engine).as_ref() }) else {
                     return;
                 };
@@ -76,7 +76,7 @@ macro_rules! engine_export {
         #[no_mangle]
         pub extern "system" fn $name(mut env: EnvUnowned, _this: JObject, ptr: jlong, $($param: $ty),*) {
             in_env(&mut env, (), |env| {
-                let _deadline = crate::engine::deadline::arm_entry_deadline();
+                let _deadline = crate::sandbox::limits::arm_entry_deadline();
                 let Some($engine) = (unsafe { (ptr as *mut Engine).as_ref() }) else {
                     return;
                 };
@@ -98,7 +98,7 @@ macro_rules! engine_export {
         $(#[$meta])*
         #[no_mangle]
         pub extern "system" fn $name(_env: EnvUnowned, _this: JObject, ptr: jlong, $($param: $ty),*) {
-            let _deadline = crate::engine::deadline::arm_entry_deadline();
+            let _deadline = crate::sandbox::limits::arm_entry_deadline();
             let Some($engine) = (unsafe { (ptr as *mut Engine).as_ref() }) else {
                 return;
             };
@@ -120,7 +120,7 @@ macro_rules! engine_export {
         #[no_mangle]
         pub extern "system" fn $name(mut env: EnvUnowned, _this: JObject, ptr: jlong, $($param: $ty),*) -> jstring {
             in_env(&mut env, std::ptr::null_mut(), |env| {
-                let _deadline = crate::engine::deadline::arm_entry_deadline();
+                let _deadline = crate::sandbox::limits::arm_entry_deadline();
                 let Some($engine) = (unsafe { (ptr as *mut Engine).as_ref() }) else {
                     return std::ptr::null_mut();
                 };
@@ -157,20 +157,20 @@ pub extern "system" fn Java_desu_inugram_helpers_plugins_QuickJs_nativeCreate(
 
         let installed = ctx.with(|ctx| {
             install_console(&ctx, bridge.clone())?;
-            crate::engine::error::install_plugin_error(&ctx)
+            crate::sandbox::error::install_plugin_error(&ctx)
         });
         if installed.is_err() {
             return 0;
         }
 
         // set outside ctx.with(): both setters lock the runtime, which ctx.with() also holds
-        crate::tg::rpc::install_rejection_tracker(&rt, make_log(bridge.console.clone()));
+        crate::telegram::rpc::install_rejection_tracker(&rt, make_log(bridge.console.clone()));
         // not a fault: `common.d.ts` promises "only the turn dies: timers, registrations and everything
         // else the plugin set up are still there, and the next callback starts with a full budget", and
         // a turn parked in a slow host call is charged the budget without having misbehaved
         let interrupt_log = make_log(bridge.console.clone());
-        crate::engine::deadline::install_interrupt_handler(&rt, Arc::new(move |msg: &str| interrupt_log(msg)));
-        crate::engine::deadline::apply_heap_limit(&rt);
+        crate::sandbox::limits::install_interrupt_handler(&rt, Arc::new(move |msg: &str| interrupt_log(msg)));
+        crate::sandbox::limits::apply_heap_limit(&rt);
 
         let views = crate::tl::proxy::TlViews::new(bridge.clone());
         let engine = Box::new(Engine {
@@ -210,7 +210,7 @@ pub extern "system" fn Java_desu_inugram_helpers_plugins_QuickJs_nativeInstallAp
     spill_dir: JString,
 ) {
     in_env(&mut env, (), |env| {
-        let _deadline = crate::engine::deadline::arm_entry_deadline();
+        let _deadline = crate::sandbox::limits::arm_entry_deadline();
         let spill_dir = jstring_to_string(env, &spill_dir);
         let Some(engine) = (unsafe { (ptr as *mut Engine).as_mut() }) else {
             return;
@@ -230,7 +230,7 @@ pub extern "system" fn Java_desu_inugram_helpers_plugins_QuickJs_nativeInstallAp
         // before the rpc install, which hands every dispatch the account it arrived on
         let account_host: Rc<dyn AccountHost> = engine.bridge.clone();
         let installed = engine.ctx.with(|ctx| {
-            crate::tg::account::install_account(&ctx, account_host, grants, lifecycle.clone(), log.clone())
+            crate::telegram::account::install_account(&ctx, account_host, grants, lifecycle.clone(), log.clone())
         });
         match installed {
             Ok(state) => engine.account = Some(state),
@@ -305,12 +305,12 @@ pub extern "system" fn Java_desu_inugram_helpers_plugins_QuickJs_nativeInstallAp
         }
         let random_host: Rc<dyn RandomHost> = engine.bridge.clone();
         let spill_dir = std::path::PathBuf::from(spill_dir);
-        // one counter for everything native-backed this engine holds, per `crate::engine::deadline::ExternalMemory`:
+        // one counter for everything native-backed this engine holds, per `crate::sandbox::limits::ExternalMemory`:
         // a blob's bytes and a canvas's bitmap come out of the same 64 MB
-        let external = crate::engine::deadline::ExternalMemory::new();
+        let external = crate::sandbox::limits::ExternalMemory::new();
         let blobs = match engine
             .ctx
-            .with(|ctx| crate::engine::globals::install_globals(&ctx, random_host, &spill_dir, external.clone()))
+            .with(|ctx| crate::sandbox::globals::install_globals(&ctx, random_host, &spill_dir, external.clone()))
         {
             Ok(blobs) => Some(blobs),
             Err(e) => {
@@ -346,7 +346,8 @@ pub extern "system" fn Java_desu_inugram_helpers_plugins_QuickJs_nativeInstallAp
         let grants: Rc<dyn GrantHost> = engine.bridge.clone();
         let views = engine.views.clone();
         let accounts = engine.account.clone();
-        type Surfaces = (Option<Rc<crate::tg::reads::ReadsState>>, Option<Rc<crate::tg::writes::WritesState>>);
+        type Surfaces =
+            (Option<Rc<crate::telegram::reads::ReadsState>>, Option<Rc<crate::telegram::writes::WritesState>>);
         let mut shared_root = None;
         let installed = engine.ctx.with(|ctx| -> rquickjs::Result<Surfaces> {
             let shared = crate::tl::utils::install_utils(&ctx)?;
@@ -356,7 +357,7 @@ pub extern "system" fn Java_desu_inugram_helpers_plugins_QuickJs_nativeInstallAp
             let Some(accounts) = accounts.as_ref() else {
                 return Ok((None, None));
             };
-            let reads = crate::tg::reads::install_reads(
+            let reads = crate::telegram::reads::install_reads(
                 &ctx,
                 reads_host,
                 grants.clone(),
@@ -370,7 +371,7 @@ pub extern "system" fn Java_desu_inugram_helpers_plugins_QuickJs_nativeInstallAp
             let Some(blobs) = blobs else {
                 return Ok((Some(reads), None));
             };
-            let deps = crate::tg::writes::WritesDeps {
+            let deps = crate::telegram::writes::WritesDeps {
                 host: writes_host,
                 grants,
                 views,
@@ -378,7 +379,7 @@ pub extern "system" fn Java_desu_inugram_helpers_plugins_QuickJs_nativeInstallAp
                 stage_dir: spill_dir.clone(),
                 log: log.clone(),
             };
-            let writes = crate::tg::writes::install_writes(&ctx, deps, &shared, accounts)?;
+            let writes = crate::telegram::writes::install_writes(&ctx, deps, &shared, accounts)?;
             Ok((Some(reads), Some(writes)))
         });
         engine.shared = shared_root;
@@ -391,7 +392,7 @@ pub extern "system" fn Java_desu_inugram_helpers_plugins_QuickJs_nativeInstallAp
         }
         let timer_host: Rc<dyn TimerHost> = engine.bridge.clone();
         let installed =
-            engine.ctx.with(|ctx| crate::engine::timers::install_timers(&ctx, timer_host, lifecycle, log.clone()));
+            engine.ctx.with(|ctx| crate::sandbox::timers::install_timers(&ctx, timer_host, lifecycle, log.clone()));
         match installed {
             Ok(state) => engine.timers = Some(state),
             Err(e) => log(&format!("timers failed to install: {e:?}")),
@@ -421,7 +422,7 @@ pub extern "system" fn Java_desu_inugram_helpers_plugins_QuickJs_nativeInstallJv
     _this: JObject,
     ptr: jlong,
 ) {
-    let _deadline = crate::engine::deadline::arm_entry_deadline();
+    let _deadline = crate::sandbox::limits::arm_entry_deadline();
     let Some(engine) = (unsafe { (ptr as *mut Engine).as_mut() }) else {
         return;
     };
@@ -446,7 +447,7 @@ pub extern "system" fn Java_desu_inugram_helpers_plugins_QuickJs_nativeInstallXp
     _this: JObject,
     ptr: jlong,
 ) {
-    let _deadline = crate::engine::deadline::arm_entry_deadline();
+    let _deadline = crate::sandbox::limits::arm_entry_deadline();
     let Some(engine) = (unsafe { (ptr as *mut Engine).as_mut() }) else {
         return;
     };
@@ -484,7 +485,7 @@ pub extern "system" fn Java_desu_inugram_helpers_plugins_QuickJs_nativeXposedBef
     args: JObjectArray<'local, JString<'local>>,
 ) -> jobject {
     in_env(&mut env, std::ptr::null_mut(), |env| {
-        let _deadline = crate::engine::deadline::arm_entry_deadline();
+        let _deadline = crate::sandbox::limits::arm_entry_deadline();
         let method_wire = jstring_to_string(env, &method_wire);
         let this_wire = jstring_to_string(env, &this_wire);
         let args = read_string_array(env, &args);
@@ -524,7 +525,7 @@ pub extern "system" fn Java_desu_inugram_helpers_plugins_QuickJs_nativeXposedAft
     result: JString<'local>,
 ) -> jstring {
     in_env(&mut env, std::ptr::null_mut(), |env| {
-        let _deadline = crate::engine::deadline::arm_entry_deadline();
+        let _deadline = crate::sandbox::limits::arm_entry_deadline();
         let result = jstring_to_string(env, &result);
         let answer = match unsafe { (ptr as *mut Engine).as_ref() } {
             Some(engine) => match engine.xposed.as_ref() {
@@ -568,7 +569,7 @@ pub extern "system" fn Java_desu_inugram_helpers_plugins_platform_PluginXposed_0
     mut env: EnvUnowned,
     _this: JObject,
 ) -> jboolean {
-    in_env(&mut env, false, |env| crate::platform::lsplant::init(env))
+    in_env(&mut env, false, |env| crate::platform::xposed::lsplant::init(env))
 }
 
 /// Rewrites `target`'s entry point to call `callback` on `hooker`, answering the backup method to
@@ -585,7 +586,7 @@ pub extern "system" fn Java_desu_inugram_helpers_plugins_platform_PluginXposed_0
     callback: JObject<'local>,
 ) -> jobject {
     in_env(&mut env, std::ptr::null_mut(), |env| unsafe {
-        crate::platform::lsplant::hook(env, target.as_raw(), hooker.as_raw(), callback.as_raw())
+        crate::platform::xposed::lsplant::hook(env, target.as_raw(), hooker.as_raw(), callback.as_raw())
     })
 }
 
@@ -595,7 +596,7 @@ pub extern "system" fn Java_desu_inugram_helpers_plugins_platform_PluginXposed_0
     _this: JObject<'local>,
     target: JObject<'local>,
 ) -> jboolean {
-    in_env(&mut env, false, |env| unsafe { crate::platform::lsplant::unhook(env, target.as_raw()) })
+    in_env(&mut env, false, |env| unsafe { crate::platform::xposed::lsplant::unhook(env, target.as_raw()) })
 }
 
 #[no_mangle]
@@ -604,7 +605,7 @@ pub extern "system" fn Java_desu_inugram_helpers_plugins_platform_PluginXposed_0
     _this: JObject<'local>,
     target: JObject<'local>,
 ) -> jboolean {
-    in_env(&mut env, false, |env| unsafe { crate::platform::lsplant::is_hooked(env, target.as_raw()) })
+    in_env(&mut env, false, |env| unsafe { crate::platform::xposed::lsplant::is_hooked(env, target.as_raw()) })
 }
 
 #[no_mangle]
@@ -613,16 +614,18 @@ pub extern "system" fn Java_desu_inugram_helpers_plugins_platform_PluginXposed_0
     _this: JObject<'local>,
     method: JObject<'local>,
 ) -> jboolean {
-    in_env(&mut env, false, |env| unsafe { crate::platform::lsplant::deoptimize(env, method.as_raw()) })
+    in_env(&mut env, false, |env| unsafe { crate::platform::xposed::lsplant::deoptimize(env, method.as_raw()) })
 }
 
 #[no_mangle]
-pub extern "system" fn Java_desu_inugram_helpers_plugins_platform_PluginXposed_00024Native_nativeMakeInheritable<'local>(
+pub extern "system" fn Java_desu_inugram_helpers_plugins_platform_PluginXposed_00024Native_nativeMakeInheritable<
+    'local,
+>(
     mut env: EnvUnowned<'local>,
     _this: JObject<'local>,
     target: JObject<'local>,
 ) -> jboolean {
-    in_env(&mut env, false, |env| unsafe { crate::platform::lsplant::make_inheritable(env, target.as_raw()) })
+    in_env(&mut env, false, |env| unsafe { crate::platform::xposed::lsplant::make_inheritable(env, target.as_raw()) })
 }
 
 engine_export!(
@@ -652,7 +655,7 @@ pub extern "system" fn Java_desu_inugram_helpers_plugins_QuickJs_nativeInstallFs
     android_dirs: JString,
 ) {
     in_env(&mut env, (), |env| {
-        let _deadline = crate::engine::deadline::arm_entry_deadline();
+        let _deadline = crate::sandbox::limits::arm_entry_deadline();
         let dir = jstring_to_string(env, &dir);
         let android_dirs = jstring_to_string(env, &android_dirs);
         let Some(engine) = (unsafe { (ptr as *mut Engine).as_mut() }) else {
@@ -709,7 +712,7 @@ engine_export!(
     /// the wake requested through `QuickJs.onTimerSchedule` came due
     Java_desu_inugram_helpers_plugins_QuickJs_nativeRunTimers, timers,
     (),
-    |engine, state| crate::engine::timers::run_due(&engine._rt, &engine.ctx, state)
+    |engine, state| crate::sandbox::timers::run_due(&engine._rt, &engine.ctx, state)
 );
 
 /// the app moved to the foreground or the background: floors this engine's timer wheel and fires
@@ -723,14 +726,14 @@ pub extern "system" fn Java_desu_inugram_helpers_plugins_QuickJs_nativeAppVisibi
     ptr: jlong,
     visible: jboolean,
 ) {
-    let _deadline = crate::engine::deadline::arm_entry_deadline();
+    let _deadline = crate::sandbox::limits::arm_entry_deadline();
     let Some(engine) = (unsafe { (ptr as *mut Engine).as_ref() }) else {
         return;
     };
 
     // the wheel first, so a callback arming a timer already arms it against the new floor
     if let Some(state) = engine.timers.as_ref() {
-        crate::engine::timers::set_visible(state, visible);
+        crate::sandbox::timers::set_visible(state, visible);
     }
     if let Some(state) = engine.api.as_ref() {
         crate::api::app_visibility_changed(&engine._rt, &engine.ctx, state, visible);
@@ -825,13 +828,13 @@ pub extern "system" fn Java_desu_inugram_helpers_plugins_QuickJs_nativeNotifyUnl
     _this: JObject,
     ptr: jlong,
 ) {
-    let _deadline = crate::engine::deadline::arm_entry_deadline();
+    let _deadline = crate::sandbox::limits::arm_entry_deadline();
     let Some(engine) = (unsafe { (ptr as *mut Engine).as_ref() }) else {
         return;
     };
     engine.lifecycle.begin_unload();
     if let Some(state) = engine.account.as_ref() {
-        crate::tg::account::notify_unload(&engine._rt, &engine.ctx, state);
+        crate::telegram::account::notify_unload(&engine._rt, &engine.ctx, state);
     }
     if let Some(state) = engine.api.as_ref() {
         crate::api::notify_unload(&engine._rt, &engine.ctx, state);
@@ -840,11 +843,11 @@ pub extern "system" fn Java_desu_inugram_helpers_plugins_QuickJs_nativeNotifyUnl
     let Some(state) = engine.timers.as_ref() else {
         return;
     };
-    crate::engine::timers::notify_unload(&engine.ctx, state);
+    crate::sandbox::timers::notify_unload(&engine.ctx, state);
 }
 
 engine_export!(Java_desu_inugram_helpers_plugins_QuickJs_nativeAccountsChanged, account, (), |engine, state| {
-    crate::tg::account::accounts_changed(&engine._rt, &engine.ctx, state)
+    crate::telegram::account::accounts_changed(&engine._rt, &engine.ctx, state)
 });
 
 #[no_mangle]
@@ -853,7 +856,7 @@ pub extern "system" fn Java_desu_inugram_helpers_plugins_QuickJs_nativeInstallRp
     _this: JObject,
     ptr: jlong,
 ) {
-    let _deadline = crate::engine::deadline::arm_entry_deadline();
+    let _deadline = crate::sandbox::limits::arm_entry_deadline();
     let Some(engine) = (unsafe { (ptr as *mut Engine).as_mut() }) else {
         return;
     };
@@ -880,7 +883,7 @@ pub extern "system" fn Java_desu_inugram_helpers_plugins_QuickJs_nativeInstallRp
     let rules_log = log.clone();
 
     let installed = engine.ctx.with(|ctx| {
-        let rules = crate::tg::deserialize::install_deserialize(
+        let rules = crate::telegram::deserialize::install_deserialize(
             &ctx,
             rules_host,
             rules_grants,
@@ -889,7 +892,7 @@ pub extern "system" fn Java_desu_inugram_helpers_plugins_QuickJs_nativeInstallRp
             rules_log,
         )?;
         let shared = shared.restore(&ctx)?;
-        let rpc = crate::tg::rpc::install_rpc(&ctx, host, tl, grants, lifecycle, accounts, shared, log.clone())?;
+        let rpc = crate::telegram::rpc::install_rpc(&ctx, host, tl, grants, lifecycle, accounts, shared, log.clone())?;
         Ok::<_, rquickjs::Error>((rules, rpc))
     });
     match installed {
@@ -907,28 +910,28 @@ engine_export!(
     Java_desu_inugram_helpers_plugins_QuickJs_nativeDispatchRpc, rpc,
     (callback_id: jint, dispatch_id: jlong, method: JString, account_id: jint, request_wire: JString),
     strings(method, request_wire),
-    |engine, state| crate::tg::rpc::dispatch_rpc(&engine._rt, &engine.ctx, state, callback_id as u32, dispatch_id, &method, account_id, &request_wire)
+    |engine, state| crate::telegram::rpc::dispatch_rpc(&engine._rt, &engine.ctx, state, callback_id as u32, dispatch_id, &method, account_id, &request_wire)
 );
 
 engine_export!(
     Java_desu_inugram_helpers_plugins_QuickJs_nativeCompleteNext, rpc,
     (dispatch_id: jlong, result_wire: JString),
     strings(result_wire),
-    |engine, state| crate::tg::rpc::complete_next(&engine._rt, &engine.ctx, state, dispatch_id, &result_wire)
+    |engine, state| crate::telegram::rpc::complete_next(&engine._rt, &engine.ctx, state, dispatch_id, &result_wire)
 );
 
 engine_export!(
     Java_desu_inugram_helpers_plugins_QuickJs_nativeAbandonDispatch, rpc,
     (dispatch_id: jlong, reason_wire: JString),
     strings(reason_wire),
-    |engine, state| crate::tg::rpc::abandon_dispatch(&engine._rt, &engine.ctx, state, dispatch_id, &reason_wire)
+    |engine, state| crate::telegram::rpc::abandon_dispatch(&engine._rt, &engine.ctx, state, dispatch_id, &reason_wire)
 );
 
 engine_export!(
     Java_desu_inugram_helpers_plugins_QuickJs_nativeResolveInvoke, rpc,
     (invoke_id: jlong, result_wire: JString),
     strings(result_wire),
-    |engine, state| crate::tg::rpc::resolve_invoke(&engine._rt, &engine.ctx, state, invoke_id, &result_wire)
+    |engine, state| crate::telegram::rpc::resolve_invoke(&engine._rt, &engine.ctx, state, invoke_id, &result_wire)
 );
 
 engine_export!(
@@ -936,7 +939,7 @@ engine_export!(
     Java_desu_inugram_helpers_plugins_QuickJs_nativeResolvePeerResult, reads,
     (request_id: jlong, result_wire: JString),
     strings(result_wire),
-    |engine, state| crate::tg::reads::resolve_peer_result(&engine._rt, &engine.ctx, state, request_id, &result_wire)
+    |engine, state| crate::telegram::reads::resolve_peer_result(&engine._rt, &engine.ctx, state, request_id, &result_wire)
 );
 
 engine_export!(
@@ -944,7 +947,7 @@ engine_export!(
     Java_desu_inugram_helpers_plugins_QuickJs_nativeAccountFetchResult, reads,
     (request_id: jlong, result_wire: JString),
     strings(result_wire),
-    |engine, state| crate::tg::reads::account_fetch_result(&engine._rt, &engine.ctx, state, request_id, &result_wire)
+    |engine, state| crate::telegram::reads::account_fetch_result(&engine._rt, &engine.ctx, state, request_id, &result_wire)
 );
 
 engine_export!(
@@ -952,21 +955,21 @@ engine_export!(
     Java_desu_inugram_helpers_plugins_QuickJs_nativeWriteResult, writes,
     (request_id: jlong, result_wire: JString),
     strings(result_wire),
-    |engine, state| crate::tg::writes::write_result(&engine._rt, &engine.ctx, state, request_id, &result_wire)
+    |engine, state| crate::telegram::writes::write_result(&engine._rt, &engine.ctx, state, request_id, &result_wire)
 );
 
 engine_export!(
     /// one `(loaded, total)` from a transfer in flight; the coalescing decides whether it is delivered
     Java_desu_inugram_helpers_plugins_QuickJs_nativeWriteProgress, writes,
     (request_id: jlong, loaded: jlong, total: jlong),
-    |engine, state| crate::tg::writes::write_progress(&engine._rt, &engine.ctx, state, request_id, loaded, total)
+    |engine, state| crate::telegram::writes::write_progress(&engine._rt, &engine.ctx, state, request_id, loaded, total)
 );
 
 engine_export!(
     Java_desu_inugram_helpers_plugins_QuickJs_nativeDispatchUpdate, rpc,
     (type_name: JString, account_id: jint, update_wire: JString),
     strings(type_name, update_wire),
-    |engine, state| crate::tg::rpc::dispatch_update(&engine._rt, &engine.ctx, state, &type_name, account_id, &update_wire)
+    |engine, state| crate::telegram::rpc::dispatch_update(&engine._rt, &engine.ctx, state, &type_name, account_id, &update_wire)
 );
 
 engine_export!(
@@ -976,7 +979,7 @@ engine_export!(
     Java_desu_inugram_helpers_plugins_QuickJs_nativeDispatchDeserialize, deserialize,
     (callback_id: jint, object_wire: JString),
     strings(object_wire),
-    |engine, state| crate::tg::deserialize::dispatch_middleware(&engine.ctx, state, callback_id as u32, &object_wire)
+    |engine, state| crate::telegram::deserialize::dispatch_middleware(&engine.ctx, state, callback_id as u32, &object_wire)
 );
 
 engine_export!(
@@ -984,13 +987,13 @@ engine_export!(
     Java_desu_inugram_helpers_plugins_QuickJs_nativeDispatchUpdateIntercept, rpc,
     (callback_id: jint, dispatch_id: jlong, type_name: JString, account_id: jint, update_wire: JString),
     strings(type_name, update_wire),
-    |engine, state| crate::tg::rpc::dispatch_update_intercept(&engine._rt, &engine.ctx, state, callback_id as u32, dispatch_id, &type_name, account_id, &update_wire)
+    |engine, state| crate::telegram::rpc::dispatch_update_intercept(&engine._rt, &engine.ctx, state, callback_id as u32, dispatch_id, &type_name, account_id, &update_wire)
 );
 
 engine_export!(
     Java_desu_inugram_helpers_plugins_QuickJs_nativeAbandonUpdateDispatch, rpc,
     (dispatch_id: jlong),
-    |engine, state| crate::tg::rpc::abandon_update_dispatch(&engine._rt, &engine.ctx, state, dispatch_id)
+    |engine, state| crate::telegram::rpc::abandon_update_dispatch(&engine._rt, &engine.ctx, state, dispatch_id)
 );
 
 #[no_mangle]
@@ -1007,7 +1010,7 @@ pub extern "system" fn Java_desu_inugram_helpers_plugins_QuickJs_nativeInstallIn
     header_values: JObjectArray<'local, JString<'local>>,
 ) {
     in_env(&mut env, (), |env| {
-        let _deadline = crate::engine::deadline::arm_entry_deadline();
+        let _deadline = crate::sandbox::limits::arm_entry_deadline();
         let Some(engine) = (unsafe { (ptr as *mut Engine).as_ref() }) else {
             return;
         };
@@ -1032,7 +1035,7 @@ pub extern "system" fn Java_desu_inugram_helpers_plugins_QuickJs_nativeEvaluate(
     filename: JString,
 ) -> jstring {
     in_env(&mut env, std::ptr::null_mut(), |env| {
-        let _deadline = crate::engine::deadline::arm_eval_deadline();
+        let _deadline = crate::sandbox::limits::arm_eval_deadline();
         let Some(engine) = (unsafe { (ptr as *mut Engine).as_ref() }) else {
             return std::ptr::null_mut();
         };
@@ -1075,10 +1078,10 @@ pub extern "system" fn Java_desu_inugram_helpers_plugins_QuickJs_nativeDestroy(
     if ptr != 0 {
         let mut engine = unsafe { Box::from_raw(ptr as *mut Engine) };
         if let Some(state) = engine.rpc.take() {
-            crate::tg::rpc::dispose(&engine.ctx, &state);
+            crate::telegram::rpc::dispose(&engine.ctx, &state);
         }
         if let Some(state) = engine.deserialize.take() {
-            crate::tg::deserialize::dispose(&engine.ctx, &state);
+            crate::telegram::deserialize::dispose(&engine.ctx, &state);
         }
         if let Some(state) = engine.api.take() {
             crate::api::dispose(&engine.ctx, &state);
@@ -1093,14 +1096,14 @@ pub extern "system" fn Java_desu_inugram_helpers_plugins_QuickJs_nativeDestroy(
             crate::ui::actions::dispose(&engine.ctx, &state);
         }
         if let Some(state) = engine.writes.take() {
-            crate::tg::writes::dispose(&engine.ctx, &state);
+            crate::telegram::writes::dispose(&engine.ctx, &state);
         }
         if let Some(state) = engine.reads.take() {
-            crate::tg::reads::dispose(&engine.ctx, &state);
+            crate::telegram::reads::dispose(&engine.ctx, &state);
         }
         // after reads, whose prototype it holds the last reference to
         if let Some(state) = engine.account.take() {
-            crate::tg::account::dispose(&engine.ctx, &state);
+            crate::telegram::account::dispose(&engine.ctx, &state);
         }
         if let Some(state) = engine.fetch.take() {
             crate::io::fetch::dispose(&engine.ctx, &state);
@@ -1109,7 +1112,7 @@ pub extern "system" fn Java_desu_inugram_helpers_plugins_QuickJs_nativeDestroy(
             crate::draw::canvas::dispose(&engine.ctx, &state);
         }
         if let Some(state) = engine.timers.take() {
-            crate::engine::timers::dispose(&engine.ctx, &state);
+            crate::sandbox::timers::dispose(&engine.ctx, &state);
         }
         if let Some(state) = engine.notifications.take() {
             crate::platform::notifications::dispose(&engine.ctx, &state);
@@ -1123,7 +1126,7 @@ pub extern "system" fn Java_desu_inugram_helpers_plugins_QuickJs_nativeDestroy(
         if let Some(shared) = engine.shared.take() {
             engine.ctx.with(|ctx| drop(shared.restore(&ctx)));
         }
-        engine.ctx.with(|ctx| crate::tg::rpc::dispose_rejection_tracker(&ctx));
+        engine.ctx.with(|ctx| crate::telegram::rpc::dispose_rejection_tracker(&ctx));
         drop(engine);
     }
 }

@@ -51,7 +51,7 @@ mod wiring {
     #[test]
     fn a_new_runtime_gets_its_heap_ceiling() {
         assert!(
-            body_of("nativeCreate").contains("crate::engine::deadline::apply_heap_limit(&rt)"),
+            body_of("nativeCreate").contains("crate::sandbox::limits::apply_heap_limit(&rt)"),
             "an engine created without its heap ceiling can take the app down with it",
         );
     }
@@ -60,7 +60,7 @@ mod wiring {
     fn an_interrupted_entry_is_stopped_but_the_plugin_is_not_disabled() {
         let body = body_of("nativeCreate");
         assert!(
-            without_space(body).contains("crate::engine::deadline::install_interrupt_handler(&rt,"),
+            without_space(body).contains("crate::sandbox::limits::install_interrupt_handler(&rt,"),
             "without the interrupt handler a spinning plugin wedges the queue for good",
         );
         assert!(
@@ -72,7 +72,7 @@ mod wiring {
     #[test]
     fn unhandled_rejections_are_tracked_from_engine_creation() {
         assert!(
-            body_of("nativeCreate").contains("crate::tg::rpc::install_rejection_tracker(&rt"),
+            body_of("nativeCreate").contains("crate::telegram::rpc::install_rejection_tracker(&rt"),
             "an async handler that throws would fail silently",
         );
     }
@@ -106,10 +106,10 @@ mod wiring {
     fn installing_the_api_installs_the_sandbox_globals_and_the_timer_wheel() {
         let body = body_of("nativeInstallApi");
         assert!(
-            body.contains("crate::engine::globals::install_globals("),
+            body.contains("crate::sandbox::globals::install_globals("),
             "the documented sandbox globals would be missing"
         );
-        assert!(body.contains("crate::engine::timers::install_timers("), "setTimeout would be missing");
+        assert!(body.contains("crate::sandbox::timers::install_timers("), "setTimeout would be missing");
         assert!(
             body.contains("crate::tl::utils::install_utils(&ctx)") && body.contains("crate::tl::message::install_message(&ctx, &shared)"),
             "inu.utils/inu.Message would be missing, and `inu.Message` cannot install without the helpers utils returns",
@@ -117,7 +117,7 @@ mod wiring {
         assert!(
             body.contains("std::path::PathBuf::from(spill_dir)")
                 && body.contains(
-                    "crate::engine::globals::install_globals(&ctx, random_host, &spill_dir, external.clone())"
+                    "crate::sandbox::globals::install_globals(&ctx, random_host, &spill_dir, external.clone())"
                 ),
             "an engine installed with anything but the host's own spill directory keeps every blob in memory",
         );
@@ -129,8 +129,8 @@ mod wiring {
     #[test]
     fn installing_the_api_installs_the_account_read_surface() {
         let body = body_of("nativeInstallApi");
-        let accounts = position_of(body, "crate::tg::account::install_account(", "inu.account would be missing");
-        let reads = position_of(body, "crate::tg::reads::install_reads(", "the Account getters would be missing");
+        let accounts = position_of(body, "crate::telegram::account::install_account(", "inu.account would be missing");
+        let reads = position_of(body, "crate::telegram::reads::install_reads(", "the Account getters would be missing");
         let message = position_of(body, "crate::tl::message::install_message(", "inu.Message would be missing");
         assert!(accounts < reads && message < reads);
     }
@@ -141,7 +141,7 @@ mod wiring {
     #[test]
     fn installing_the_rpc_family_installs_the_deserialize_rules() {
         assert!(
-            body_of("nativeInstallRpc").contains("crate::tg::deserialize::install_deserialize("),
+            body_of("nativeInstallRpc").contains("crate::telegram::deserialize::install_deserialize("),
             "inu.interceptDeserialize would be missing",
         );
     }
@@ -165,7 +165,7 @@ mod wiring {
             body.contains("engine.blobs = blobs.clone()"),
             "without the blob table kept, neither `fs.write` nor a fetched body can exist",
         );
-        let timers = position_of(body, "crate::engine::timers::install_timers(", "setTimeout would be missing");
+        let timers = position_of(body, "crate::sandbox::timers::install_timers(", "setTimeout would be missing");
         let fetch = position_of(body, "crate::io::fetch::install_fetch(", "the global fetch would be missing");
         assert!(timers < fetch, "`fetch.js` captures setTimeout at install to measure `timeout` on",);
     }
@@ -207,7 +207,7 @@ mod wiring {
         let body = body_of("nativeAppVisibilityChanged");
         let wheel = position_of(
             body,
-            "crate::engine::timers::set_visible(",
+            "crate::sandbox::timers::set_visible(",
             "backgrounding no longer throttles the timer wheel",
         );
         let callbacks =
@@ -218,7 +218,7 @@ mod wiring {
     #[test]
     fn a_timer_wake_runs_the_wheel() {
         assert!(
-            body_of("nativeRunTimers").contains("crate::engine::timers::run_due("),
+            body_of("nativeRunTimers").contains("crate::sandbox::timers::run_due("),
             "the wake the engine asked for would arrive and do nothing",
         );
     }
@@ -228,7 +228,7 @@ mod wiring {
         let body = body_of("nativeNotifyUnload");
         let api = position_of(body, "crate::api::notify_unload(", "inu.onUnload never fires");
         let timers =
-            position_of(body, "crate::engine::timers::notify_unload(", "a stray setInterval would outlive the plugin");
+            position_of(body, "crate::sandbox::timers::notify_unload(", "a stray setInterval would outlive the plugin");
         assert!(api < timers, "an onUnload callback clearing its own timers must still find them");
     }
 
@@ -327,7 +327,9 @@ mod wiring {
         for (name, sig) in &rust {
             match kotlin.get(name) {
                 None => wrong.push(format!("{name}: rust calls it, PluginListener has no such member")),
-                Some(actual) if actual != sig => wrong.push(format!("{name}: rust says {sig}, PluginListener is {actual}")),
+                Some(actual) if actual != sig => {
+                    wrong.push(format!("{name}: rust says {sig}, PluginListener is {actual}"))
+                }
                 Some(_) => {}
             }
         }

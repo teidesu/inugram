@@ -13,7 +13,7 @@ use std::rc::Rc;
 
 use rquickjs::{Ctx, Exception, Function, Object, Result as JsResult, Value};
 
-use crate::engine::error::{get_or_create_inu, make_plugin_error, throw_plugin_error};
+use crate::sandbox::error::{get_or_create_inu, make_plugin_error, throw_plugin_error};
 
 /// the most utf-8 an `inu.icons.svg` source may be. The host parses it with the platform's xml
 /// reader, which no interpreter deadline can interrupt (it is one host call), so the bound is a

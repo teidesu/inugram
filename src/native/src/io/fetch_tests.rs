@@ -1,6 +1,6 @@
 use super::*;
-use crate::engine::error::install_plugin_error;
 use crate::io::fs::tests::{install_sandbox_globals, TestDir};
+use crate::sandbox::error::install_plugin_error;
 use rquickjs::Context;
 use std::cell::Cell;
 
@@ -76,7 +76,7 @@ impl FetchHost for TestFetchHost {
 }
 
 type Disposing = crate::testing::util::DisposeOnDrop<FetchState>;
-type DisposingTimers = crate::testing::util::DisposeOnDrop<crate::engine::timers::TimerState>;
+type DisposingTimers = crate::testing::util::DisposeOnDrop<crate::sandbox::timers::TimerState>;
 
 /// the wheel `timeout` is measured on, with a clock the test moves. `schedule_wake` is a no-op
 /// because there is no queue here to post the wake to - [`Fixture::advance`] is that queue.
@@ -91,7 +91,7 @@ impl TestClock {
     }
 }
 
-impl crate::engine::timers::TimerHost for TestClock {
+impl crate::sandbox::timers::TimerHost for TestClock {
     fn schedule_wake(&self, _delay_ms: i64) {}
 
     fn now_ms(&self) -> u64 {
@@ -112,7 +112,7 @@ struct Fixture {
 impl Fixture {
     fn advance(&self, millis: u64) {
         self.clock.advance(millis);
-        crate::engine::timers::run_due(&self.rt, &self.ctx, &self.timers);
+        crate::sandbox::timers::run_due(&self.rt, &self.ctx, &self.timers);
     }
 }
 
@@ -123,23 +123,23 @@ fn setup(grant: Option<&str>) -> Fixture {
     let host = Rc::new(TestFetchHost::default());
     let host_dyn: Rc<dyn FetchHost> = host.clone();
     let clock = Rc::new(TestClock::default());
-    let clock_dyn: Rc<dyn crate::engine::timers::TimerHost> = clock.clone();
+    let clock_dyn: Rc<dyn crate::sandbox::timers::TimerHost> = clock.clone();
     let grants = TestDomainGrants::new(grant).as_host();
     let log: crate::Log = std::sync::Arc::new(|_| {});
     let (timers, state) = ctx.with(|ctx| {
         install_plugin_error(&ctx).unwrap();
         let blobs = install_sandbox_globals(&ctx, dir.path()).unwrap();
-        let timers = crate::engine::timers::install_timers(
+        let timers = crate::sandbox::timers::install_timers(
             &ctx,
             clock_dyn,
-            crate::engine::registry::Lifecycle::new(),
+            crate::sandbox::registry::Lifecycle::new(),
             log.clone(),
         )
         .unwrap();
         let state = install_fetch(&ctx, host_dyn, grants, blobs, log.clone()).unwrap();
         (timers, state)
     });
-    let timers = DisposingTimers::new(&ctx, timers, crate::engine::timers::dispose);
+    let timers = DisposingTimers::new(&ctx, timers, crate::sandbox::timers::dispose);
     let state = Disposing::new(&ctx, state, dispose);
     Fixture { rt, ctx, host, dir, clock, timers, state }
 }
@@ -500,8 +500,8 @@ fn an_answer_after_an_abort_is_dropped() {
 #[cfg(test)]
 mod bundled_oracle {
     use super::*;
-    use crate::engine::error::install_plugin_error;
     use crate::io::fs::tests::{install_sandbox_globals, TestDir};
+    use crate::sandbox::error::install_plugin_error;
     use rquickjs::Context;
 
     const ORACLE: &str = include_str!("../../../res/assets-debug/inu_plugins/fetch-test.js");
@@ -547,14 +547,14 @@ mod bundled_oracle {
         let log: crate::Log = std::sync::Arc::new(|_| {});
         let lines = crate::testing::util::install_capturing_console(&ctx);
         let clock = Rc::new(super::tests::TestClock::default());
-        let clock_dyn: Rc<dyn crate::engine::timers::TimerHost> = clock.clone();
+        let clock_dyn: Rc<dyn crate::sandbox::timers::TimerHost> = clock.clone();
         let (timers, state) = ctx.with(|ctx| {
             install_plugin_error(&ctx).unwrap();
             let blobs = install_sandbox_globals(&ctx, dir.path()).unwrap();
-            let timers = crate::engine::timers::install_timers(
+            let timers = crate::sandbox::timers::install_timers(
                 &ctx,
                 clock_dyn,
-                crate::engine::registry::Lifecycle::new(),
+                crate::sandbox::registry::Lifecycle::new(),
                 log.clone(),
             )
             .unwrap();
@@ -570,7 +570,7 @@ mod bundled_oracle {
         });
         ctx.with(|ctx| match ctx.eval::<(), _>(ORACLE) {
             Ok(()) => {}
-            Err(rquickjs::Error::Exception) => panic!("{}", crate::tg::rpc::format_exception(&ctx)),
+            Err(rquickjs::Error::Exception) => panic!("{}", crate::telegram::rpc::format_exception(&ctx)),
             Err(e) => panic!("{e:?}"),
         });
 
@@ -584,14 +584,14 @@ mod bundled_oracle {
                 answer_ok(&rt, &ctx, &state, &host.dir, request_id);
             }
             clock.advance(1000);
-            crate::engine::timers::run_due(&rt, &ctx, &timers);
+            crate::sandbox::timers::run_due(&rt, &ctx, &timers);
             if lines.borrow().iter().any(|l| l == "fetch test done") {
                 break;
             }
         }
 
         dispose(&ctx, &state);
-        crate::engine::timers::dispose(&ctx, &timers);
+        crate::sandbox::timers::dispose(&ctx, &timers);
         let lines = lines.borrow().clone();
         crate::testing::util::assert_oracle_exact(&lines, "fetch test done", 35);
     }

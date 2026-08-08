@@ -19,10 +19,11 @@ use std::rc::Rc;
 use rquickjs::{Array, Ctx, Function, Object, Persistent, Result as JsResult, Runtime, Value};
 
 use crate::api::json_parse;
-use crate::engine::error::{get_or_create_inu, GrantHost, MATCH_EXACT};
-use crate::engine::registry::{make_disposer, noop_disposer, CallbackRegistry, Lifecycle};
-use crate::tg::account::{self, AccountState};
-use crate::tg::rpc::{format_exception, pump_jobs};
+use crate::grants::{GrantHost, MATCH_EXACT};
+use crate::sandbox::error::get_or_create_inu;
+use crate::sandbox::registry::{make_disposer, noop_disposer, CallbackRegistry, Lifecycle};
+use crate::telegram::account::{self, AccountState};
+use crate::telegram::rpc::{format_exception, pump_jobs};
 
 /// stand-in for the navigation half of the Kotlin `QuickJs.ApiListener`
 pub trait ScreenHost {
@@ -221,7 +222,7 @@ fn build_event<'js>(
     builder.call((action, screen, previous, stack_json))
 }
 
-/// releases every `Persistent` GC root this state still owns - same contract as [`crate::tg::rpc::dispose`]
+/// releases every `Persistent` GC root this state still owns - same contract as [`crate::telegram::rpc::dispose`]
 pub fn dispose(context: &rquickjs::Context, state: &Rc<ScreenState>) {
     context.with(|ctx| {
         state.changed_fns.release_all(&ctx);

@@ -10,9 +10,9 @@ use std::rc::Rc;
 use rquickjs::{Context, Runtime};
 
 use super::*;
-use crate::engine::deadline::ExternalMemory;
-use crate::engine::error::install_plugin_error;
 use crate::io::fs::tests::TestDir;
+use crate::sandbox::error::install_plugin_error;
+use crate::sandbox::limits::ExternalMemory;
 
 /// mirrors `PluginCanvas.decodeTable`, deliberately over UTF-16 units the way the host reads it:
 /// the point of the length prefix is that no entry can be mistaken for two, and a decoder that

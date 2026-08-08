@@ -13,19 +13,20 @@
 use std::sync::Arc;
 
 /// `Send + Sync` because rquickjs's handler types demand it of anything hung off the `Runtime`,
-/// which two of its holders are: `deadline`'s interrupt handler and `rpc`'s promise-rejection
+/// which two of its holders are: `limits`'s interrupt handler and `rpc`'s promise-rejection
 /// tracker. Every engine is still entered from one thread.
 pub type Log = Arc<dyn Fn(&str) + Send + Sync>;
 
 mod api;
 mod draw;
-mod engine;
+mod grants;
 mod io;
 mod jni;
 mod platform;
+mod sandbox;
+mod telegram;
 #[cfg(test)]
 mod testing;
-mod tg;
 mod tl;
 mod ui;
 

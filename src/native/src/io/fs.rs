@@ -29,8 +29,9 @@ use std::time::UNIX_EPOCH;
 use rquickjs::function::Opt;
 use rquickjs::{Ctx, Function, Object, Result as JsResult, TypedArray, Value};
 
-use crate::engine::error::{check_grant, get_or_create_inu, throw_plugin_error, GrantHost, MATCH_EXACT};
+use crate::grants::{check_grant, GrantHost, MATCH_EXACT};
 use crate::io::blob::{export_for_host, resolve_export, BlobExport, BlobState, MATERIALIZE_LIMIT_BYTES};
+use crate::sandbox::error::{get_or_create_inu, throw_plugin_error};
 
 /// how many bytes move between a blob and a file at a time. The same size [`crate::io::blob`] joins its
 /// own parts in, and for the same reason: writing a 200 MB blob must not be a 200 MB allocation.

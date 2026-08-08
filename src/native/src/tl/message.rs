@@ -13,7 +13,7 @@
 
 use rquickjs::{Ctx, Object, Result as JsResult, Value};
 
-use crate::engine::error::get_or_create_inu;
+use crate::sandbox::error::get_or_create_inu;
 
 const PRELUDE: &[u8] = include_bytes!(concat!(env!("OUT_DIR"), "/message.qbc"));
 
@@ -22,7 +22,7 @@ pub fn install_message<'js>(ctx: &Ctx<'js>, shared: &Object<'js>) -> JsResult<()
     let inu = get_or_create_inu(ctx)?;
     let plugin_error: Value = inu.get("PluginError")?;
 
-    let factory = crate::engine::prelude::load(ctx, PRELUDE)?;
+    let factory = crate::sandbox::prelude::load(ctx, PRELUDE)?;
     let class: Value = factory.call((shared.clone(), plugin_error))?;
 
     inu.set("Message", class)?;

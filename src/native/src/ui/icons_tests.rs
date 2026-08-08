@@ -31,7 +31,7 @@ fn setup(missing: &[&str]) -> (Runtime, Context, Rc<TestIconHost>) {
     let host = TestIconHost::without(missing);
     let host_dyn: Rc<dyn IconHost> = host.clone();
     ctx.with(|ctx| {
-        crate::engine::error::install_plugin_error(&ctx).unwrap();
+        crate::sandbox::error::install_plugin_error(&ctx).unwrap();
         install_icons(&ctx, host_dyn).unwrap();
     });
     (rt, ctx, host)
@@ -240,7 +240,7 @@ fn a_row_carries_its_icon_spec_into_the_render() {
     let ui_host: Rc<dyn crate::ui::pages::UiHost> = Rc::new(SilentUiHost);
     let log: crate::Log = std::sync::Arc::new(|_| {});
     let state = ctx.with(|ctx| {
-        crate::ui::pages::install_ui(&ctx, ui_host, crate::engine::registry::Lifecycle::new(), log, None).unwrap()
+        crate::ui::pages::install_ui(&ctx, ui_host, crate::sandbox::registry::Lifecycle::new(), log, None).unwrap()
     });
     let state = crate::testing::util::DisposeOnDrop::new(&ctx, state, crate::ui::pages::dispose);
     let page_id = ctx.with(|ctx| {
@@ -275,7 +275,7 @@ fn an_element_refuses_an_icon_it_was_not_handed() {
     let ui_host: Rc<dyn crate::ui::pages::UiHost> = Rc::new(SilentUiHost);
     let log: crate::Log = std::sync::Arc::new(|_| {});
     let state = ctx.with(|ctx| {
-        crate::ui::pages::install_ui(&ctx, ui_host, crate::engine::registry::Lifecycle::new(), log, None).unwrap()
+        crate::ui::pages::install_ui(&ctx, ui_host, crate::sandbox::registry::Lifecycle::new(), log, None).unwrap()
     });
     let _state = crate::testing::util::DisposeOnDrop::new(&ctx, state, crate::ui::pages::dispose);
     let make = |icon: &str| format!("inu.ui.button({{ text: 'x', icon: {icon}, onClick: () => {{}} }})");
@@ -301,7 +301,7 @@ fn an_element_refuses_an_icon_it_was_not_handed() {
 mod bundled_oracle {
     use super::tests::SilentUiHost;
     use super::*;
-    use crate::engine::error::install_plugin_error;
+    use crate::sandbox::error::install_plugin_error;
     use rquickjs::{Context, Runtime};
 
     const ORACLE: &str = include_str!("../../../res/assets-debug/inu_plugins/icons-test.js");
@@ -326,7 +326,7 @@ mod bundled_oracle {
         let ui = ctx.with(|ctx| {
             install_plugin_error(&ctx).unwrap();
             install_icons(&ctx, icon_host).unwrap();
-            crate::ui::pages::install_ui(&ctx, ui_host, crate::engine::registry::Lifecycle::new(), log, None).unwrap()
+            crate::ui::pages::install_ui(&ctx, ui_host, crate::sandbox::registry::Lifecycle::new(), log, None).unwrap()
         });
         let ui = crate::testing::util::DisposeOnDrop::new(&ctx, ui, crate::ui::pages::dispose);
 

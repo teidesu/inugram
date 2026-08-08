@@ -1,8 +1,8 @@
 package desu.inugram.helpers.plugins
 
 import desu.inugram.core.plugins.PluginWire
-import desu.inugram.helpers.plugins.tg.PeerSpecs
-import desu.inugram.helpers.plugins.tg.PluginReads
+import desu.inugram.helpers.plugins.telegram.PeerSpecs
+import desu.inugram.helpers.plugins.telegram.PluginReads
 import java.util.ArrayList
 import kotlin.test.assertEquals
 import kotlin.test.assertNotEquals

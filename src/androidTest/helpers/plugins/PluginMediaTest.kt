@@ -1,8 +1,8 @@
 package desu.inugram.helpers.plugins
 
 import desu.inugram.core.plugins.PluginWire
-import desu.inugram.helpers.plugins.tg.PluginMedia
-import desu.inugram.helpers.plugins.tg.PluginWrites
+import desu.inugram.helpers.plugins.telegram.PluginMedia
+import desu.inugram.helpers.plugins.telegram.PluginWrites
 import desu.inugram.helpers.plugins.tl.TlFilter
 import desu.inugram.helpers.plugins.tl.TlJson
 import java.io.File

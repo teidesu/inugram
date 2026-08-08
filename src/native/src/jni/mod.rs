@@ -1,12 +1,12 @@
 //! The JNI surface: `desu.inugram.helpers.plugins.QuickJs`'s native methods, and the upcalls back
 //! into it.
 //!
-//! Every export here arms an execution deadline before it can reach plugin JS ([`crate::engine::deadline`]).
+//! Every export here arms an execution deadline before it can reach plugin JS ([`crate::sandbox::limits`]).
 
 use rquickjs::{Context, Object, Persistent, Runtime};
 use std::rc::Rc;
 
-use crate::engine::registry::Lifecycle;
+use crate::sandbox::registry::Lifecycle;
 
 pub(crate) mod bridge;
 pub(crate) mod env;
@@ -35,19 +35,19 @@ pub(crate) struct Engine {
     /// `installApi` and `sendmsg.js` normalizes a peer through the same one implementation the read
     /// and write surfaces do. Released in `nativeDestroy`: a `Persistent` has no `Drop`.
     pub(crate) shared: Option<Persistent<Object<'static>>>,
-    pub(crate) rpc: Option<Rc<crate::tg::rpc::RpcState>>,
-    pub(crate) deserialize: Option<Rc<crate::tg::deserialize::DeserializeState>>,
+    pub(crate) rpc: Option<Rc<crate::telegram::rpc::RpcState>>,
+    pub(crate) deserialize: Option<Rc<crate::telegram::deserialize::DeserializeState>>,
     pub(crate) api: Option<Rc<crate::api::ApiState>>,
     pub(crate) ui: Option<Rc<crate::ui::pages::UiState>>,
     pub(crate) screens: Option<Rc<crate::ui::screens::ScreenState>>,
     pub(crate) actions: Option<Rc<crate::ui::actions::ActionState>>,
-    pub(crate) account: Option<Rc<crate::tg::account::AccountState>>,
-    pub(crate) reads: Option<Rc<crate::tg::reads::ReadsState>>,
-    pub(crate) writes: Option<Rc<crate::tg::writes::WritesState>>,
+    pub(crate) account: Option<Rc<crate::telegram::account::AccountState>>,
+    pub(crate) reads: Option<Rc<crate::telegram::reads::ReadsState>>,
+    pub(crate) writes: Option<Rc<crate::telegram::writes::WritesState>>,
     pub(crate) fs: Option<Rc<crate::io::fs::FsState>>,
     pub(crate) fetch: Option<Rc<crate::io::fetch::FetchState>>,
     pub(crate) canvas: Option<Rc<crate::draw::canvas::CanvasState>>,
-    pub(crate) timers: Option<Rc<crate::engine::timers::TimerState>>,
+    pub(crate) timers: Option<Rc<crate::sandbox::timers::TimerState>>,
     pub(crate) notifications: Option<Rc<crate::platform::notifications::NotificationState>>,
     pub(crate) jvm: Option<Rc<crate::platform::jvm::JvmState>>,
     pub(crate) xposed: Option<Rc<crate::platform::xposed::XposedState>>,
@@ -57,10 +57,10 @@ pub(crate) struct Engine {
 /// (or dropping them silently pre-installRpc, when there's nowhere to log yet)
 pub(crate) fn pump(engine: &Engine) {
     if let Some(state) = engine.rpc.as_ref() {
-        crate::tg::rpc::pump_jobs(&engine._rt, &engine.ctx, state.log.as_ref());
+        crate::telegram::rpc::pump_jobs(&engine._rt, &engine.ctx, state.log.as_ref());
     } else if let Some(state) = engine.api.as_ref() {
-        crate::tg::rpc::pump_jobs(&engine._rt, &engine.ctx, state.log.as_ref());
+        crate::telegram::rpc::pump_jobs(&engine._rt, &engine.ctx, state.log.as_ref());
     } else {
-        crate::tg::rpc::pump_jobs(&engine._rt, &engine.ctx, &|_| {});
+        crate::telegram::rpc::pump_jobs(&engine._rt, &engine.ctx, &|_| {});
     }
 }
