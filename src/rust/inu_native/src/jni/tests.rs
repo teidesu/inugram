@@ -334,6 +334,102 @@ mod wiring {
         assert!(wrong.is_empty(), "JNI descriptor mismatch:\n{}", wrong.join("\n"));
     }
 
+    /// Every `external fun` in the bridge, paired with the package of the file declaring it.
+    fn kotlin_natives() -> Vec<(String, String)> {
+        let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../kotlin/helpers/plugins");
+        let mut files = vec![root];
+        let mut out = Vec::new();
+        while let Some(path) = files.pop() {
+            if path.is_dir() {
+                files.extend(std::fs::read_dir(&path).unwrap().map(|e| e.unwrap().path()));
+                continue;
+            }
+            if path.extension().is_none_or(|e| e != "kt") {
+                continue;
+            }
+            let source = std::fs::read_to_string(&path).unwrap();
+            let package = source
+                .lines()
+                .find_map(|l| l.trim().strip_prefix("package "))
+                .unwrap_or_else(|| panic!("{} declares no package", path.display()))
+                .trim()
+                .to_string();
+            for line in source.lines() {
+                let Some(rest) = line.trim().split("external fun ").nth(1) else { continue };
+                let Some(open) = rest.find('(') else { continue };
+                out.push((rest[..open].trim().to_string(), package.clone()));
+            }
+        }
+        out
+    }
+
+    /// The package a JNI export encodes, e.g.
+    /// `Java_desu_inugram_helpers_plugins_platform_PluginXposed_00024Native_nativeInit` ->
+    /// (`desu.inugram.helpers.plugins.platform`, `nativeInit`). None of our names contain an
+    /// underscore, which is what makes splitting on one sound (JNI escapes a real one as `_1`).
+    fn export_package_and_method(symbol: &str) -> (String, String) {
+        let rest = symbol.strip_prefix("Java_").expect("not a JNI export");
+        // a nested class is `_00024Nested`, and the method is whatever follows it
+        let (owner, method) = match rest.split_once("_00024") {
+            Some((owner, nested)) => (owner, nested.split_once('_').expect("no method after the nested class").1),
+            None => rest.rsplit_once('_').expect("no method"),
+        };
+        // the last segment of the owner is the class; everything before it is the package
+        let package = owner.rsplit_once('_').expect("no package").0.replace('_', ".");
+        (package, method.to_string())
+    }
+
+    fn rust_exports() -> Vec<String> {
+        let mut out: Vec<String> = SOURCE
+            .match_indices("Java_desu_inugram_helpers_plugins_")
+            .map(|(at, _)| {
+                let tail = &SOURCE[at..];
+                let end = tail.find(|c: char| !c.is_ascii_alphanumeric() && c != '_').unwrap_or(tail.len());
+                tail[..end].to_string()
+            })
+            .collect();
+        out.sort();
+        out.dedup();
+        out
+    }
+
+    /// A JNI export's name carries the *package* of the class it implements, so moving that class
+    /// into a subpackage silently unbinds every one of its natives - the app then throws
+    /// `UnsatisfiedLinkError` at the first call and nothing before launch says a word.
+    /// `PluginXposed` moved into `platform/` and its six exports kept the old name, which left
+    /// `inu.xposed` dead on device. `QuickJs` survives only by never having moved.
+    #[test]
+    fn every_jni_export_names_the_package_its_kotlin_actually_lives_in() {
+        let kotlin: std::collections::HashMap<_, _> = kotlin_natives().into_iter().collect();
+        let exports = rust_exports();
+        assert_eq!(exports.len(), 49, "the set of JNI exports changed");
+
+        let mut wrong = Vec::new();
+        for symbol in &exports {
+            let (package, method) = export_package_and_method(symbol);
+            match kotlin.get(&method) {
+                None => wrong.push(format!("{symbol}: no `external fun {method}` anywhere in the bridge")),
+                Some(actual) if *actual != package => {
+                    wrong.push(format!("{symbol}: names package {package}, but {method} is declared in {actual}"))
+                }
+                Some(_) => {}
+            }
+        }
+        assert!(wrong.is_empty(), "JNI export/package mismatch:\n{}", wrong.join("\n"));
+    }
+
+    #[test]
+    fn every_kotlin_native_has_a_rust_export() {
+        let exports: std::collections::HashSet<_> =
+            rust_exports().iter().map(|s| export_package_and_method(s)).collect();
+        let orphans: Vec<_> = kotlin_natives()
+            .into_iter()
+            .filter(|(method, package)| !exports.contains(&(package.clone(), method.clone())))
+            .map(|(method, package)| format!("{package}.{method}"))
+            .collect();
+        assert!(orphans.is_empty(), "`external fun`s nothing in rust exports: {orphans:?}");
+    }
+
     #[test]
     fn every_kotlin_upcall_is_one_rust_looks_up() {
         let rust: std::collections::HashSet<_> = rust_descriptors().into_iter().map(|(n, _)| n).collect();

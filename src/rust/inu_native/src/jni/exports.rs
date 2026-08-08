@@ -564,7 +564,7 @@ engine_export!(
 /// `env` must carry no hidden-api restrictions, which is why the host chooses when this runs rather
 /// than it happening lazily behind the first hook.
 #[no_mangle]
-pub extern "system" fn Java_desu_inugram_helpers_plugins_PluginXposed_00024Native_nativeInit(
+pub extern "system" fn Java_desu_inugram_helpers_plugins_platform_PluginXposed_00024Native_nativeInit(
     mut env: EnvUnowned,
     _this: JObject,
 ) -> jboolean {
@@ -577,7 +577,7 @@ pub extern "system" fn Java_desu_inugram_helpers_plugins_PluginXposed_00024Nativ
 /// Nothing about the hook registry is on this side: `hooker` carries a site id minted by
 /// `xposed.rs`, and a forged one resolves to nothing.
 #[no_mangle]
-pub extern "system" fn Java_desu_inugram_helpers_plugins_PluginXposed_00024Native_nativeHook<'local>(
+pub extern "system" fn Java_desu_inugram_helpers_plugins_platform_PluginXposed_00024Native_nativeHook<'local>(
     mut env: EnvUnowned<'local>,
     _this: JObject<'local>,
     target: JObject<'local>,
@@ -590,7 +590,7 @@ pub extern "system" fn Java_desu_inugram_helpers_plugins_PluginXposed_00024Nativ
 }
 
 #[no_mangle]
-pub extern "system" fn Java_desu_inugram_helpers_plugins_PluginXposed_00024Native_nativeUnhook<'local>(
+pub extern "system" fn Java_desu_inugram_helpers_plugins_platform_PluginXposed_00024Native_nativeUnhook<'local>(
     mut env: EnvUnowned<'local>,
     _this: JObject<'local>,
     target: JObject<'local>,
@@ -599,7 +599,7 @@ pub extern "system" fn Java_desu_inugram_helpers_plugins_PluginXposed_00024Nativ
 }
 
 #[no_mangle]
-pub extern "system" fn Java_desu_inugram_helpers_plugins_PluginXposed_00024Native_nativeIsHooked<'local>(
+pub extern "system" fn Java_desu_inugram_helpers_plugins_platform_PluginXposed_00024Native_nativeIsHooked<'local>(
     mut env: EnvUnowned<'local>,
     _this: JObject<'local>,
     target: JObject<'local>,
@@ -608,7 +608,7 @@ pub extern "system" fn Java_desu_inugram_helpers_plugins_PluginXposed_00024Nativ
 }
 
 #[no_mangle]
-pub extern "system" fn Java_desu_inugram_helpers_plugins_PluginXposed_00024Native_nativeDeoptimize<'local>(
+pub extern "system" fn Java_desu_inugram_helpers_plugins_platform_PluginXposed_00024Native_nativeDeoptimize<'local>(
     mut env: EnvUnowned<'local>,
     _this: JObject<'local>,
     method: JObject<'local>,
@@ -617,7 +617,7 @@ pub extern "system" fn Java_desu_inugram_helpers_plugins_PluginXposed_00024Nativ
 }
 
 #[no_mangle]
-pub extern "system" fn Java_desu_inugram_helpers_plugins_PluginXposed_00024Native_nativeMakeInheritable<'local>(
+pub extern "system" fn Java_desu_inugram_helpers_plugins_platform_PluginXposed_00024Native_nativeMakeInheritable<'local>(
     mut env: EnvUnowned<'local>,
     _this: JObject<'local>,
     target: JObject<'local>,

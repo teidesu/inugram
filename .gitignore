@@ -2,7 +2,6 @@ node_modules/
 worktree/
 .DS_Store
 src/core/build
-src/core/src/bridgeTest/tlstubs/
 src/plugins/android.tl.d.ts
 src/res/assets/adguard_url_tracking.txt
 TODO.md

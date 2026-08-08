@@ -38,8 +38,12 @@ fn a_spinning_script_is_interrupted_and_logged_once() {
 
     assert!(err.contains("interrupted"), "unexpected error: {err}");
     assert!(armed.tripped());
-    assert_eq!(logs.borrow().len(), 1, "got: {:?}", logs.borrow());
-    assert!(logs.borrow()[0].contains("execution budget exceeded"), "got: {:?}", logs.borrow());
+    // `Logs` is a `Mutex`, and `assert_eq!` keeps both operands' temporaries alive across the arm
+    // that formats the failure message: a second `borrow()` in there blocks the thread forever
+    // instead of reporting, which is how a failing run gets left behind as a hung `cargo test`
+    let logged = logs.borrow().clone();
+    assert_eq!(logged.len(), 1, "got: {logged:?}");
+    assert!(logged[0].contains("execution budget exceeded"), "got: {logged:?}");
 }
 
 #[test]
@@ -102,6 +106,78 @@ fn honest_work_within_the_real_entry_budget_is_never_interrupted() {
     assert!(logs.borrow().is_empty(), "got: {:?}", logs.borrow());
     let done: bool = ctx.with(|ctx| ctx.eval("globalThis.__done > 0").unwrap());
     assert!(done);
+}
+
+/// The handler reads the deadline out of a thread-local, so whatever armed it and whatever polls it
+/// have to be the same thread, and both directions of getting that wrong are silent. A slot read
+/// off the *wrong* thread answers `None`, which the handler reports as "no ceiling" and a
+/// `while (true) {}` then runs for as long as the process does; a slot *shared* between threads
+/// cuts down a neighbour that never asked for a budget. Two engines side by side is what the suite
+/// itself does under `--test-threads`, so the halves here run against each other rather than one
+/// after the other: the neighbour's own work is timed to fall strictly inside the window where the
+/// armed thread holds an already-expired deadline, which is the only window a shared slot is
+/// visible in and is microseconds wide if it is left to chance. Results come back over a channel
+/// with a timeout, so a regression fails this test rather than wedging the run that found it.
+#[test]
+fn one_thread_being_armed_neither_arms_nor_disarms_another() {
+    use std::sync::mpsc;
+    use std::sync::{Arc, Barrier};
+
+    // 1: both engines up. 2: the armed thread has tripped and still holds its deadline. 3: the
+    // neighbour is done with it
+    let phase = Arc::new(Barrier::new(2));
+    let (report, results) = mpsc::channel::<(&'static str, Result<(), String>)>();
+
+    let armed_side = {
+        let (phase, report) = (phase.clone(), report.clone());
+        std::thread::spawn(move || {
+            let (_rt, ctx, _logs) = setup();
+            let armed = arm(50);
+            phase.wait();
+            let outcome = match eval(&ctx, "while (true) {}") {
+                Ok(()) => Err("a spinning script on an armed thread ran to completion".to_string()),
+                Err(e) if !e.contains("interrupted") => Err(format!("unexpected error: {e}")),
+                Err(_) if !armed.tripped() => Err("the armed thread's own deadline never tripped".to_string()),
+                Err(_) => Ok(()),
+            };
+            phase.wait();
+            phase.wait();
+            drop(armed);
+            let _ = report.send(("armed", outcome));
+        })
+    };
+
+    let unarmed_side = std::thread::spawn(move || {
+        let (_rt, ctx, logs) = setup();
+        phase.wait();
+        // alongside the spin, then again while the expired deadline is still held
+        let bounded = "(function () { let n = 0; for (let i = 0; i < 2000000; i++) n += i % 7; })();";
+        let mut outcome = eval(&ctx, bounded);
+        phase.wait();
+        outcome = outcome.and_then(|()| eval(&ctx, bounded));
+        let outcome = match outcome {
+            Err(e) => Err(format!("an unarmed thread was interrupted: {e}")),
+            Ok(()) => {
+                let logged = logs.borrow().clone();
+                if logged.is_empty() {
+                    Ok(())
+                } else {
+                    Err(format!("an unarmed thread was reported against: {logged:?}"))
+                }
+            }
+        };
+        phase.wait();
+        let _ = report.send(("unarmed", outcome));
+    });
+
+    for _ in 0..2 {
+        let (side, outcome) = results
+            .recv_timeout(Duration::from_secs(30))
+            .expect("a deadline armed on one thread was invisible to it, or visible to the other");
+        outcome.unwrap_or_else(|e| panic!("{side} side: {e}"));
+    }
+    armed_side.join().unwrap();
+    unarmed_side.join().unwrap();
 }
 
 #[test]
@@ -385,12 +461,12 @@ mod entry_points {
         "QuickJs_nativeCreate",
         "QuickJs_nativeDestroy",
         "QuickJs_nativeXposedBudgetMs",
-        "PluginXposed_00024Native_nativeInit",
-        "PluginXposed_00024Native_nativeHook",
-        "PluginXposed_00024Native_nativeUnhook",
-        "PluginXposed_00024Native_nativeIsHooked",
-        "PluginXposed_00024Native_nativeDeoptimize",
-        "PluginXposed_00024Native_nativeMakeInheritable",
+        "platform_PluginXposed_00024Native_nativeInit",
+        "platform_PluginXposed_00024Native_nativeHook",
+        "platform_PluginXposed_00024Native_nativeUnhook",
+        "platform_PluginXposed_00024Native_nativeIsHooked",
+        "platform_PluginXposed_00024Native_nativeDeoptimize",
+        "platform_PluginXposed_00024Native_nativeMakeInheritable",
     ];
 
     #[test]

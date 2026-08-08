@@ -3,6 +3,7 @@ package desu.inugram.helpers.plugins.platform
 import android.util.Log
 import desu.inugram.core.plugins.ScopeMatch
 import desu.inugram.core.plugins.PluginWire
+import desu.inugram.helpers.plugins.JvmListener
 import desu.inugram.helpers.plugins.Plugin
 import desu.inugram.helpers.plugins.QuickJs
 import desu.inugram.helpers.plugins.XposedListener

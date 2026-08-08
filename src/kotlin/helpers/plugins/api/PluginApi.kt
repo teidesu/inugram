@@ -121,7 +121,7 @@ object PluginApi {
     /** the per-engine clock [PluginBridge] carries; nothing can ask for a wake before the plugin's own code runs */
     fun timerSchedulerFor(plugin: Plugin, engine: QuickJs): (Long) -> Unit = TimerThrottle(plugin, engine)::schedule
 
-    /** the app screen is here rather than in `PluginJvm`, which is in the bridge harness */
+    /** the app screen is here rather than in `PluginJvm`, which reaches no `Activity` of its own */
     fun jvmListenerFor(plugin: Plugin, engine: QuickJs) = PluginJvm.listenerFor(plugin, engine, AppScreen)
 
     /**
@@ -148,7 +148,7 @@ object PluginApi {
         if (!foreground) engine.appVisibilityChanged(false)
     }
 
-    /** read live rather than off a snapshot, which would be a strong reference to a screen the user has already left. Here rather than in `PluginJvm`, which is in the bridge harness */
+    /** read live rather than off a snapshot, which would be a strong reference to a screen the user has already left. Here rather than in `PluginJvm`, which reaches no `Activity` of its own */
     private object AppScreen : PluginJvm.AppScreen {
         override fun currentFragment(): Any? = LaunchActivity.getSafeLastFragment()
 

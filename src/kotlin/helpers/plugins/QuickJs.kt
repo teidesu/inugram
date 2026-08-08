@@ -8,8 +8,12 @@ package desu.inugram.helpers.plugins
  *
  * There are no upcalls here: rust calls [PluginBridge] directly, caching its method ids off that
  * class. So construction is two-phase - the listeners need this object, and [start] needs them.
+ *
+ * `open` for the on-device suite alone. It runs in the app's own process, where this class is on
+ * the classpath already, so it cannot shadow it the way the JVM harness does; the members a test
+ * double records are the ones opened. Nothing in the app subclasses it.
  */
-class QuickJs {
+open class QuickJs {
     /**
      * 0 until [start], and published as 0 again *before* the free: a `long` is not read atomically
      * off the owning thread, and one reader (the `inu.xposed` dispatch) is posted by an arbitrary
@@ -46,19 +50,19 @@ class QuickJs {
 
     /** whatever [start] was handed; the parts that carry per-engine state are read back off it */
     var listener: PluginBridge? = null
-        private set
+        protected set
 
     /**
      * creates the native context and hands rust the object it will call back into. Throws if the
      * lookup of any upcall fails, which is one wrong descriptor away and takes every plugin with it.
      */
-    fun start(listener: PluginBridge) {
+    open fun start(listener: PluginBridge) {
         check(ptr == 0L) { "QuickJs is already started" }
         this.listener = listener
         ptr = nativeCreate(listener)
     }
 
-    fun dispatchNotification(callbackId: Int, name: String, accountId: Int, argsJson: String) =
+    open fun dispatchNotification(callbackId: Int, name: String, accountId: Int, argsJson: String) =
         ifLive { nativeDispatchNotification(it, callbackId, name, accountId, argsJson) }
 
     fun evaluate(code: String, filename: String = "<plugin>"): String? = requireLive { nativeEvaluate(it, code, filename) }
@@ -75,7 +79,7 @@ class QuickJs {
         requireLive { nativeInstallFs(it, dir, quotaBytes, unscoped, androidDirs) }
 
     /** its own call because the host only makes it for a plugin holding `unsafe.jvm` */
-    fun installJvm() = requireLive { nativeInstallJvm(it) }
+    open fun installJvm() = requireLive { nativeInstallJvm(it) }
 
     /** after [installJvm]: every entry point takes a `JavaMethod`, which is a handle in that api's table */
     fun installXposed() = requireLive { nativeInstallXposed(it) }
@@ -103,10 +107,10 @@ class QuickJs {
     fun xposedRelease(dispatchId: Long) = ifLive { nativeXposedRelease(it, dispatchId) }
 
     /** **Post it**, never call it from inside the reflected call that handed the object over: that call is already inside this engine */
-    fun jvmCallback(callbackId: Int) = ifLive { nativeJvmCallback(it, callbackId) }
+    open fun jvmCallback(callbackId: Int) = ifLive { nativeJvmCallback(it, callbackId) }
 
     /** [resultWire] is `J{status, statusText, url, headers, body: {path, type}}` or an error wire */
-    fun fetchResult(requestId: Long, resultWire: String) = requireLive { nativeFetchResult(it, requestId, resultWire) }
+    open fun fetchResult(requestId: Long, resultWire: String) = requireLive { nativeFetchResult(it, requestId, resultWire) }
 
     /** `J{path, type}` for an encode, `J{width, height}` for a decode, `""` for a font, or an error wire */
     fun canvasResult(requestId: Long, resultWire: String) = requireLive { nativeCanvasResult(it, requestId, resultWire) }
@@ -136,9 +140,9 @@ class QuickJs {
     fun resolvePrompt(requestId: Long, text: String?) = requireLive { nativeResolvePrompt(it, requestId, text) }
 
     /** never call it off [org.telegram.messenger.Utilities.globalQueue] */
-    fun renderActions(kind: Int, surfaceJson: String): String? = ifLiveOr(null) { nativeRenderActions(it, kind, surfaceJson) }
+    open fun renderActions(kind: Int, surfaceJson: String): String? = ifLiveOr(null) { nativeRenderActions(it, kind, surfaceJson) }
 
-    fun dispatchAction(kind: Int, token: Int, surfaceJson: String) = ifLive { nativeDispatchAction(it, kind, token, surfaceJson) }
+    open fun dispatchAction(kind: Int, token: Int, surfaceJson: String) = ifLive { nativeDispatchAction(it, kind, token, surfaceJson) }
 
     /** [picked] null == dismissed, else a comma-separated index list - one in single mode, any number in multiple */
     fun resolveChooser(requestId: Long, picked: String?) = requireLive { nativeResolveChooser(it, requestId, picked) }
@@ -147,41 +151,41 @@ class QuickJs {
     fun dispatchScreenChange(changeJson: String, stackJson: String) = requireLive { nativeDispatchScreenChange(it, changeJson, stackJson) }
 
     /** after [installApi], whose `inu.Message` the demuxed `inu.onNewMessage` family is built on */
-    fun installRpc() = requireLive { nativeInstallRpc(it) }
+    open fun installRpc() = requireLive { nativeInstallRpc(it) }
 
-    fun resolvePeerResult(requestId: Long, resultWire: String) = requireLive { nativeResolvePeerResult(it, requestId, resultWire) }
+    open fun resolvePeerResult(requestId: Long, resultWire: String) = requireLive { nativeResolvePeerResult(it, requestId, resultWire) }
 
     /** [resultWire] is a single value, or (for a paged op) the cursor payload followed by the elements */
-    fun accountFetchResult(requestId: Long, resultWire: String) = requireLive { nativeAccountFetchResult(it, requestId, resultWire) }
+    open fun accountFetchResult(requestId: Long, resultWire: String) = requireLive { nativeAccountFetchResult(it, requestId, resultWire) }
 
     /** [resultWire] is a single value, or the `J{path,size,mime,name,mtime}` a `File` is minted from */
-    fun writeResult(requestId: Long, resultWire: String) = requireLive { nativeWriteResult(it, requestId, resultWire) }
+    open fun writeResult(requestId: Long, resultWire: String) = requireLive { nativeWriteResult(it, requestId, resultWire) }
 
     /** native coalesces these on a time interval, so calling it per chunk is what the contract expects */
-    fun writeProgress(requestId: Long, loaded: Long, total: Long) = ifLive { nativeWriteProgress(it, requestId, loaded, total) }
+    open fun writeProgress(requestId: Long, loaded: Long, total: Long) = ifLive { nativeWriteProgress(it, requestId, loaded, total) }
 
-    fun dispatchRpc(callbackId: Int, dispatchId: Long, method: String, accountId: Int, requestWire: String) =
+    open fun dispatchRpc(callbackId: Int, dispatchId: Long, method: String, accountId: Int, requestWire: String) =
         requireLive { nativeDispatchRpc(it, callbackId, dispatchId, method, accountId, requestWire) }
 
-    fun completeNext(dispatchId: Long, resultWire: String) = requireLive { nativeCompleteNext(it, dispatchId, resultWire) }
+    open fun completeNext(dispatchId: Long, resultWire: String) = requireLive { nativeCompleteNext(it, dispatchId, resultWire) }
 
     /** the host has already answered the app, so no completion comes back */
-    fun abandonDispatch(dispatchId: Long, reasonWire: String) = requireLive { nativeAbandonDispatch(it, dispatchId, reasonWire) }
+    open fun abandonDispatch(dispatchId: Long, reasonWire: String) = requireLive { nativeAbandonDispatch(it, dispatchId, reasonWire) }
 
-    fun resolveInvoke(invokeId: Long, resultWire: String) = requireLive { nativeResolveInvoke(it, invokeId, resultWire) }
+    open fun resolveInvoke(invokeId: Long, resultWire: String) = requireLive { nativeResolveInvoke(it, invokeId, resultWire) }
 
     /** only for a type some registration named; the payload is decoded either way, since nothing else frees its handle */
-    fun dispatchUpdate(typeName: String, accountId: Int, updateWire: String) = requireLive { nativeDispatchUpdate(it, typeName, accountId, updateWire) }
+    open fun dispatchUpdate(typeName: String, accountId: Int, updateWire: String) = requireLive { nativeDispatchUpdate(it, typeName, accountId, updateWire) }
 
     /** answered exactly once through [RpcListener.onUpdateVerdict], whatever the middleware does */
-    fun dispatchUpdateIntercept(callbackId: Int, dispatchId: Long, typeName: String, accountId: Int, updateWire: String) =
+    open fun dispatchUpdateIntercept(callbackId: Int, dispatchId: Long, typeName: String, accountId: Int, updateWire: String) =
         requireLive { nativeDispatchUpdateIntercept(it, callbackId, dispatchId, typeName, accountId, updateWire) }
 
     /** returns once the middleware has: the thread that parsed [objectWire] is blocked on this */
-    fun dispatchDeserialize(callbackId: Int, objectWire: String) = requireLive { nativeDispatchDeserialize(it, callbackId, objectWire) }
+    open fun dispatchDeserialize(callbackId: Int, objectWire: String) = requireLive { nativeDispatchDeserialize(it, callbackId, objectWire) }
 
     /** nothing is rejected, but a middleware settling later can no longer drop an update the app already has */
-    fun abandonUpdateDispatch(dispatchId: Long) = requireLive { nativeAbandonUpdateDispatch(it, dispatchId) }
+    open fun abandonUpdateDispatch(dispatchId: Long) = requireLive { nativeAbandonUpdateDispatch(it, dispatchId) }
 
     fun notifyAccountsChanged() = requireLive { nativeAccountsChanged(it) }
 
@@ -217,7 +221,7 @@ class QuickJs {
      * the null is published *before* the free, or a runnable another thread posted spends the whole
      * of `nativeDestroy` holding a pointer this has already handed to `Box::from_raw`
      */
-    fun close() {
+    open fun close() {
         val live = ptr
         if (live == 0L) return
         ptr = 0L

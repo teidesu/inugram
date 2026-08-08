@@ -13,7 +13,7 @@
 // the load-time half is everything that can run without touching the user's device: a refused url
 // opens nothing and a refused chooser shows nothing. the half that does something the user would
 // notice - clobbering their clipboard, opening a browser, putting three dialogs on screen - is a
-// function, reached from a button on a device and called directly by the bridge harness.
+// function, reached from a button on a device.
 
 let ran = 0
 
