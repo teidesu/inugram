@@ -2,7 +2,7 @@ package desu.inugram.core.plugins
 
 /**
  * The single-value codec every channel across the [desu.inugram.helpers.plugins.QuickJs] boundary
- * speaks. Mirrored byte for byte by src/rust/inu_native/src/tl/proxy.rs; neither side may add a tag
+ * speaks. Mirrored byte for byte by src/native/src/tl/proxy.rs; neither side may add a tag
  * without the other.
  *
  * It is named after its first caller no longer: the TL live-proxy bridge

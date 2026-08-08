@@ -6,5 +6,5 @@ src/plugins/android.tl.d.ts
 src/res/assets/adguard_url_tracking.txt
 TODO.md
 CLAUDE.local.md
-src/rust/inu_native/target
+src/native/target
 out

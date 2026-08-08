@@ -252,7 +252,7 @@ wrong name or flag, since the bridge and the typings only agree because one scri
 
 ## Plugin engine invariants
 
-The engine crate is `src/rust/inu_native`, one folder per area under `src/`: `jni/` (the
+The engine crate is `src/native`, one folder per area under `src/`: `jni/` (the
 `extern "system"` entry points, the one Java object every upcall goes through, and the host-trait
 impls), `engine/` (argv, the property forms a rust-built prototype uses, the cpu and memory
 ceilings, the error vocabulary, the globals, the

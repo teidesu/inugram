@@ -2,7 +2,7 @@ package desu.inugram.helpers.plugins
 
 /**
  * JNI wrapper over an rquickjs (quickjs-ng) context; the engine itself is the rust crate in
- * src/rust/inu_native.
+ * src/native.
  *
  * NOT thread-safe: a context is created, used and closed on one thread.
  *
