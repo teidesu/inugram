@@ -2863,10 +2863,15 @@ declare namespace inu {
    * ones arriving behind it wait, whether or not anything claims them. the app applies updates in
    * arrival order and a plugin must not be able to reorder them.
    *
-   * two arrival paths differ from `onUpdate`'s. the difference catch-up
-   * (`updates.getDifference`) is **observation only** — it is applied by its own code path, not
-   * through the one this hooks — so a plugin that must rewrite everything cannot rely on this alone.
-   * and the compressed `updateShortMessage`/`updateShortChatMessage` forms are handed over as the
+   * the difference catch-up (`updates.getDifference`/`getChannelDifference`) is covered too, and
+   * shares that queue, so a reconnect's whole backlog is walked before the app applies any of it.
+   * its bare messages arrive as the `updateNewMessage`/`updateNewChannelMessage` the server would
+   * have sent, exactly as for `onUpdate`. two differences from a live batch, both because the app
+   * has not built anything yet: a rewrite lands on the very message it is about to store, and a
+   * `drop` removes it from the catch-up outright — the app never sees it, and unlike a live update
+   * there is nothing to re-request, since the pts the difference carries advances regardless.
+   *
+   * the compressed `updateShortMessage`/`updateShortChatMessage` forms are handed over as the
    * `updateNewMessage` they normalize to, exactly as for `onUpdate`; if you rewrite one, the app is
    * handed the `updates` batch the server would have sent instead of the compressed form, since the
    * compressed form has nowhere to carry your rewrite.

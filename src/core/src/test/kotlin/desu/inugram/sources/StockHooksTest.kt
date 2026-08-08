@@ -63,6 +63,33 @@ class StockHooksTest {
     }
 
     /**
+     * The two compressed short forms carry no `Update`, so `PluginRpc.normalizeShortMessage` has to
+     * build the message stock would have applied. It calls stock's own builder for it, and this is
+     * what keeps that true: a second copy drifts silently, which is how it once lost `unread` and
+     * the Saved Messages adjustments that stock does at the end.
+     */
+    @Test
+    fun `the short-form message is built once, by stock, for both the app and the update chain`() {
+        val source = stock("org/telegram/messenger/MessagesController.java")
+        val builder = bodyOf(source, "public TLRPC.TL_message inu_buildShortMessage(")
+        assertTrue(
+            builder.contains("message.unread = value < message.id;") && builder.contains("message.media = new TLRPC.TL_messageMediaEmpty();"),
+            "inu_buildShortMessage no longer builds the whole message",
+        )
+        val branch = bodyOf(source, "public void processUpdates(")
+        assertTrue(
+            branch.contains("TLRPC.TL_message message = inu_buildShortMessage(updates);"),
+            "stock's own updateShortMessage branch stopped using the extracted builder, so the fork " +
+                "copy of it is now the only one and nothing says when they disagree",
+        )
+        assertEquals(
+            1,
+            source.split("message.via_bot_id = updates.via_bot_id;").size - 1,
+            "the short-form message construction is back in two places",
+        )
+    }
+
+    /**
      * Nothing else notices this going away: the deserialize suite drives `PluginDeserialize.apply`
      * directly, so the one thing that makes any of it reach a real object is the call site in stock.
      */
@@ -89,16 +116,26 @@ class StockHooksTest {
             source.split(hook).size - 1,
             "updates.getDifference and getChannelDifference walk their own updates, so both need the hook",
         )
-        val hooked = Regex("""Utilities\.stageQueue\.postRunnable\(\(\) -> \{""")
+        // an anonymous Runnable rather than a lambda, and that is load-bearing: `this` is the
+        // continuation the hook parks and re-runs, and a lambda's `this` is the controller
+        val hooked = Regex("""Utilities\.stageQueue\.postRunnable\(new Runnable\(\) \{ public void run\(\) \{""")
             .findAll(source)
             .map { it.range.last }
-            .filter { source.substring(it + 1).trimStart().startsWith(hook) }
+            .filter { source.substring(it + 1).trimStart().startsWith("if ($hook") }
             .toList()
         assertEquals(
             2,
             hooked.size,
             "PluginRpc.onDifference is no longer the first statement of both difference runnables",
         )
+        for (at in hooked) {
+            val call = source.substring(at, source.indexOf(')', source.indexOf(hook, at)))
+            assertTrue(
+                call.contains("currentAccount, this"),
+                "the hook is handed the runnable it must re-run, so anything but `this` parks the " +
+                    "difference forever: $call",
+            )
+        }
 
         val decrypt = "getSecretChatHelper().decryptMessage("
         val carrying = hooked.filter { source.substring(blockAt(source, it)).contains(decrypt) }

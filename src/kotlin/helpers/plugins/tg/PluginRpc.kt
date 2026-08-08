@@ -76,11 +76,14 @@ object PluginRpc {
     private class UpdateInterceptor(val plugin: Plugin, val callbackId: Int, val types: Set<String>)
 
     /**
-     * [synthesized] marks the two compressed short forms, where [update] is what
-     * [normalizeShortMessage] built rather than anything the app will apply. [snapshot] is the
-     * pre-walk state [deliverable] compares against; null means it failed, and a rewrite is assumed.
+     * [arrival] is what the app holds - the `Update` itself, or the `Message` a difference carries
+     * - while [update] is what a middleware is handed. [synthesized] marks the two compressed short
+     * forms, where [update] is what [normalizeShortMessage] built rather than anything the app will
+     * apply; [snapshot] is the pre-walk state [deliverable] compares against, null meaning it failed
+     * and a rewrite is assumed.
      */
     private class UpdateUnit(
+        val arrival: TLObject,
         val update: TLObject,
         val tlName: String,
         val chain: List<UpdateInterceptor>,
@@ -89,15 +92,32 @@ object PluginRpc {
     )
 
     /**
+     * how a walked batch is given back, which is the one thing the two arrival paths do not share:
+     * `processUpdates` is answered with a whole `TLRPC.Updates` it has not seen yet, while a
+     * difference is answered by letting its own runnable carry on over the lists it already holds.
+     */
+    private sealed class UpdateDelivery {
+        class Batch(
+            val controller: MessagesController,
+            val updates: TLRPC.Updates,
+            val fromQueue: Boolean,
+        ) : UpdateDelivery()
+
+        class Difference(
+            val newMessages: MutableList<TLRPC.Message>?,
+            val otherUpdates: MutableList<TLRPC.Update>?,
+            val apply: Runnable,
+        ) : UpdateDelivery()
+    }
+
+    /**
      * The app is blocked on this, so it carries [UPDATE_BUDGET_MS] shared by every stage of every
      * update in the batch: updates arrive in bursts, and a per-update budget would let one batch
      * hold the stream for its size times the budget.
      */
     private class UpdateBatch(
-        val controller: MessagesController,
-        val updates: TLRPC.Updates,
+        val delivery: UpdateDelivery,
         val account: Int,
-        val fromQueue: Boolean,
         val units: List<UpdateUnit>,
     ) {
         var scopeId = 0L
@@ -240,6 +260,8 @@ object PluginRpc {
     private val updateQueues = HashMap<Int, ArrayDeque<UpdateBatch>>()
     // the batches this re-fed, so [onUpdates] lets its own hand-back through
     private val takenOver = Collections.newSetFromMap(IdentityHashMap<TLRPC.Updates, Boolean>())
+    // the same, for [onDifference]: the runnable re-run is the one carrying the hook
+    private val takenOverDifferences = Collections.newSetFromMap(IdentityHashMap<Runnable, Boolean>())
     // same bounded identity ring as [dispatchedUpdates]: stock re-feeds a parked batch around the very objects a first pass ran over
     private val interceptedUpdates = BoundedIdentitySet<TLObject>(DISPATCH_MEMORY)
     private val pendingUpdateDispatches = HashMap<Long, UpdateBatch>()
@@ -992,14 +1014,17 @@ object PluginRpc {
             if (hasUpdateListeners) fanOut(unpackUpdates(updates, account), account)
             return false
         }
-        val units = if (hasUpdateInterceptors) interceptableUnits(updates, account) else emptyList()
+        val units = if (hasUpdateInterceptors) interceptableUnits(unpackUpdates(updates, account), snapshots = true) else emptyList()
         // nothing to intercept and nothing ahead of it, so the app keeps the batch
         if (!busy && units.isEmpty()) {
             if (hasUpdateListeners) fanOut(unpackUpdates(updates, account), account)
             return false
         }
-        val batch = UpdateBatch(controller, updates, account, fromQueue, units)
-        val queue = updateQueues.getOrPut(account) { ArrayDeque() }
+        return enqueue(UpdateBatch(UpdateDelivery.Batch(controller, updates, fromQueue), account, units))
+    }
+
+    private fun enqueue(batch: UpdateBatch): Boolean {
+        val queue = updateQueues.getOrPut(batch.account) { ArrayDeque() }
         queue.addLast(batch)
         // ordering is why an unclaimed batch is queued too: the app applies updates in arrival order
         if (queue.size == 1) Utilities.globalQueue.postRunnable { runBatch(batch) }
@@ -1011,16 +1036,17 @@ object PluginRpc {
      * batch - the rule every `Disposer` follows. The two short forms carry no `TLRPC.Update` at
      * all, so what a middleware is handed is [normalizeShortMessage]'s synthetic one.
      */
-    private fun interceptableUnits(updates: TLRPC.Updates, account: Int): List<UpdateUnit> {
+    private fun interceptableUnits(unpacked: List<UnpackedUpdate>, snapshots: Boolean): List<UpdateUnit> {
         val units = ArrayList<UpdateUnit>()
-        for ((arrival, update) in unpackUpdates(updates, account)) {
+        for ((arrival, update) in unpacked) {
             val tlName = TlNames.classNameToTlName(update.javaClass)
             val chain = chainFor(update, tlName)
             if (chain.isEmpty()) continue
             // keyed on what stock would re-feed. A ring of its own, not [dispatchedUpdates]: sharing one would make the hand-back look already delivered
             if (!rememberIntercept(arrival)) continue
             val synthesized = arrival !== update
-            units.add(UpdateUnit(update, tlName, chain, synthesized, if (synthesized) rawSnapshotOf(update) else null))
+            val snapshot = if (snapshots && synthesized) rawSnapshotOf(update) else null
+            units.add(UpdateUnit(arrival, update, tlName, chain, synthesized, snapshot))
         }
         return units
     }
@@ -1137,10 +1163,26 @@ object PluginRpc {
      */
     private fun deliverBatch(batch: UpdateBatch) {
         try {
-            val deliverable = deliverable(batch)
-            if (deliverable != null) {
-                takenOver.add(deliverable)
-                batch.controller.processUpdates(deliverable, batch.fromQueue)
+            when (val delivery = batch.delivery) {
+                is UpdateDelivery.Batch -> {
+                    val deliverable = deliverable(batch, delivery)
+                    if (deliverable != null) {
+                        takenOver.add(deliverable)
+                        delivery.controller.processUpdates(deliverable, delivery.fromQueue)
+                    }
+                }
+                is UpdateDelivery.Difference -> {
+                    // no substitution: a difference unit wraps the very object the app is about to
+                    // apply, so a rewrite has already landed and a drop is a removal from its list
+                    if (batch.dropped.isNotEmpty()) {
+                        val gone: MutableSet<TLObject> = Collections.newSetFromMap(IdentityHashMap())
+                        batch.units.filterTo(ArrayList()) { it.update in batch.dropped }.mapTo(gone) { it.arrival }
+                        delivery.otherUpdates?.removeAll { it in gone }
+                        delivery.newMessages?.removeAll { it in gone }
+                    }
+                    takenOverDifferences.add(delivery.apply)
+                    delivery.apply.run()
+                }
             }
         } catch (e: Throwable) {
             Log.e(TAG, "handing an update batch back to the app failed", e)
@@ -1167,8 +1209,8 @@ object PluginRpc {
      * the sender and does its own pts bookkeeping, and there is no reason to leave it for a plugin
      * that only looked.
      */
-    private fun deliverable(batch: UpdateBatch): TLRPC.Updates? {
-        val updates = batch.updates
+    private fun deliverable(batch: UpdateBatch, delivery: UpdateDelivery.Batch): TLRPC.Updates? {
+        val updates = delivery.updates
         val short = batch.units.firstOrNull { it.synthesized }
         if (short != null) {
             if (short.update in batch.dropped) return null
@@ -1200,20 +1242,54 @@ object PluginRpc {
      * offline. `new_messages` are bare messages, so each is wrapped in the update the server would
      * have sent had the client been online.
      *
+     * Claiming one parks the caller's whole runnable, which is why [apply] is the runnable itself:
+     * it is re-run once the walk is done and lets its own hand-back through. Answering `true` means
+     * the caller must return, having applied nothing.
+     *
      * Must stay at the top of the difference's own stageQueue runnable: the secret-chat messages
      * `getDifference` decrypts are appended to `new_messages` further down that same runnable.
      */
     @JvmStatic
-    fun onDifference(newMessages: List<TLRPC.Message>?, otherUpdates: List<TLRPC.Update>?, account: Int) {
-        if (!hasUpdateListeners) return
-        val batch = ArrayList<UnpackedUpdate>()
-        otherUpdates?.forEach { batch.add(UnpackedUpdate(it, it)) }
+    fun onDifference(
+        newMessages: MutableList<TLRPC.Message>?,
+        otherUpdates: MutableList<TLRPC.Update>?,
+        account: Int,
+        apply: Runnable,
+    ): Boolean {
+        // our own hand-back, as in [onUpdates]: observers see what the app is about to apply
+        if (takenOverDifferences.remove(apply)) {
+            if (hasUpdateListeners) fanOut(unpackDifference(newMessages, otherUpdates), account)
+            return false
+        }
+        val busy = updateQueues[account]?.isNotEmpty() == true
+        if (!busy && !hasUpdateInterceptors) {
+            if (hasUpdateListeners) fanOut(unpackDifference(newMessages, otherUpdates), account)
+            return false
+        }
+        val units = if (hasUpdateInterceptors) {
+            interceptableUnits(unpackDifference(newMessages, otherUpdates), snapshots = false)
+        } else {
+            emptyList()
+        }
+        if (!busy && units.isEmpty()) {
+            if (hasUpdateListeners) fanOut(unpackDifference(newMessages, otherUpdates), account)
+            return false
+        }
+        return enqueue(UpdateBatch(UpdateDelivery.Difference(newMessages, otherUpdates, apply), account, units))
+    }
+
+    private fun unpackDifference(
+        newMessages: List<TLRPC.Message>?,
+        otherUpdates: List<TLRPC.Update>?,
+    ): List<UnpackedUpdate> {
+        val unpacked = ArrayList<UnpackedUpdate>()
+        otherUpdates?.forEach { unpacked.add(UnpackedUpdate(it, it)) }
         newMessages?.forEach { message ->
             // stock skips these too: a hole the server is reporting, not a message
             if (message is TLRPC.TL_messageEmpty) return@forEach
-            batch.add(UnpackedUpdate(message, wrapDifferenceMessage(message)))
+            unpacked.add(UnpackedUpdate(message, wrapDifferenceMessage(message)))
         }
-        fanOut(batch, account)
+        return unpacked
     }
 
     private fun fanOut(batch: List<UnpackedUpdate>, account: Int) {
@@ -1267,42 +1343,16 @@ object PluginRpc {
     private fun rememberDispatch(arrival: TLObject): Boolean = dispatchedUpdates.add(arrival)
 
     /**
-     * the compressed short forms are rebuilt the same way stock's `processUpdates` does (field
-     * mapping must stay in sync with that branch). `updateShortSentMessage` is not delivered at
-     * all - a send ack with no message body, and the sender already holds the rpc response.
+     * the compressed short forms carry no `Update`, so the one stock's own branch would have
+     * applied is rebuilt from stock's own builder. `updateShortSentMessage` is not delivered at all
+     * - a send ack with no message body, and the sender already holds the rpc response.
      */
-    private fun normalizeShortMessage(updates: TLRPC.Updates, account: Int): TL_update.TL_updateNewMessage {
-        val message = TLRPC.TL_message()
-        message.id = updates.id
-        if (updates is TLRPC.TL_updateShortChatMessage) {
-            message.from_id = TLRPC.TL_peerUser().apply { user_id = updates.from_id }
-            message.peer_id = TLRPC.TL_peerChat().apply { chat_id = updates.chat_id }
-            message.dialog_id = -updates.chat_id
-        } else {
-            val clientUserId = UserConfig.getInstance(account).getClientUserId()
-            message.from_id = TLRPC.TL_peerUser().apply { user_id = if (updates.out) clientUserId else updates.user_id }
-            message.peer_id = TLRPC.TL_peerUser().apply { user_id = updates.user_id }
-            message.dialog_id = updates.user_id
-        }
-        message.fwd_from = updates.fwd_from
-        message.silent = updates.silent
-        message.out = updates.out
-        message.mentioned = updates.mentioned
-        message.media_unread = updates.media_unread
-        message.entities = updates.entities
-        message.message = updates.message
-        message.date = updates.date
-        message.via_bot_id = updates.via_bot_id
-        message.flags = updates.flags or TLRPC.MESSAGE_FLAG_HAS_FROM_ID
-        message.reply_to = updates.reply_to
-        message.ttl_period = updates.ttl_period
-        message.media = TLRPC.TL_messageMediaEmpty()
-        return TL_update.TL_updateNewMessage().apply {
-            this.message = message
+    private fun normalizeShortMessage(updates: TLRPC.Updates, account: Int): TL_update.TL_updateNewMessage =
+        TL_update.TL_updateNewMessage().apply {
+            message = MessagesController.getInstance(account).inu_buildShortMessage(updates)
             pts = updates.pts
             pts_count = updates.pts_count
         }
-    }
 
     /** skipped before anything is minted: the type list is required precisely so filtering costs a map lookup rather than a handle and a bridge crossing per update */
     private fun dispatchUpdate(update: TLObject, account: Int) {

@@ -4,35 +4,116 @@ Date: Fri, 7 Aug 2026 02:38:51 +0400
 Subject: Add the QuickJS plugin engine (hooks, action rows)
 
 ---
- .../java/org/telegram/messenger/MessagesController.java   | 5 +++++
- .../main/java/org/telegram/tgnet/ConnectionsManager.java  | 8 +++++++-
- .../src/main/java/org/telegram/tgnet/TLObject.java        | 3 +++
- .../src/main/java/org/telegram/ui/ChatActivity.java       | 6 ++++--
- .../src/main/java/org/telegram/ui/LaunchActivity.java     | 1 +
- 5 files changed, 20 insertions(+), 3 deletions(-)
+ .../messenger/MessagesController.java         | 119 ++++++++++--------
+ .../telegram/tgnet/ConnectionsManager.java    |   8 +-
+ .../java/org/telegram/tgnet/TLObject.java     |   3 +
+ .../java/org/telegram/ui/ChatActivity.java    |   6 +-
+ .../java/org/telegram/ui/LaunchActivity.java  |   1 +
+ 5 files changed, 82 insertions(+), 55 deletions(-)
 
 diff --git a/TMessagesProj/src/main/java/org/telegram/messenger/MessagesController.java b/TMessagesProj/src/main/java/org/telegram/messenger/MessagesController.java
 index 0000000..0000000 100644
 --- a/TMessagesProj/src/main/java/org/telegram/messenger/MessagesController.java
 +++ b/TMessagesProj/src/main/java/org/telegram/messenger/MessagesController.java
-@@ -16707,6 +16707,7 @@ public class MessagesController extends BaseController implements NotificationCe
+@@ -16706,7 +16706,10 @@ public class MessagesController extends BaseController implements NotificationCe
+                         }
                      }
  
-                     Utilities.stageQueue.postRunnable(() -> {
-+                        desu.inugram.helpers.plugins.tg.PluginRpc.onDifference(res.new_messages, res.other_updates, currentAccount);
+-                    Utilities.stageQueue.postRunnable(() -> {
++                    Utilities.stageQueue.postRunnable(new Runnable() { public void run() {
++                        if (desu.inugram.helpers.plugins.tg.PluginRpc.onDifference(res.new_messages, res.other_updates, currentAccount, this)) {
++                            return;
++                        }
                          boolean notifyAbountDifference = true;
                          if (res instanceof TLRPC.TL_updates_channelDifference || res instanceof TLRPC.TL_updates_channelDifferenceEmpty) {
                              if (!res.new_messages.isEmpty()) {
-@@ -16965,6 +16966,7 @@ public class MessagesController extends BaseController implements NotificationCe
+@@ -16817,7 +16820,7 @@ public class MessagesController extends BaseController implements NotificationCe
+                                 NotificationCenter.getInstance(currentAccount).postNotificationName(NotificationCenter.onReceivedChannelDifference, channelId);
+                             });
+                         }
+-                    });
++                    }});
+                 });
+             } else if (error != null) {
+                 AndroidUtilities.runOnUIThread(() -> {
+@@ -16964,7 +16967,10 @@ public class MessagesController extends BaseController implements NotificationCe
+                             }
                          }
  
-                         Utilities.stageQueue.postRunnable(() -> {
-+                            desu.inugram.helpers.plugins.tg.PluginRpc.onDifference(res.new_messages, res.other_updates, currentAccount);
+-                        Utilities.stageQueue.postRunnable(() -> {
++                        Utilities.stageQueue.postRunnable(new Runnable() { public void run() {
++                            if (desu.inugram.helpers.plugins.tg.PluginRpc.onDifference(res.new_messages, res.other_updates, currentAccount, this)) {
++                                return;
++                            }
                              if (!res.new_messages.isEmpty() || !res.new_encrypted_messages.isEmpty()) {
                                  LongSparseArray<ArrayList<MessageObject>> messages = new LongSparseArray<>();
                                  for (int b = 0; b < res.new_encrypted_messages.size(); b++) {
-@@ -17834,6 +17836,9 @@ public class MessagesController extends BaseController implements NotificationCe
+@@ -17082,7 +17088,7 @@ public class MessagesController extends BaseController implements NotificationCe
+                             if (BuildVars.LOGS_ENABLED) {
+                                 FileLog.d("received difference with date = " + getMessagesStorage().getLastDateValue() + " pts = " + getMessagesStorage().getLastPtsValue() + " seq = " + getMessagesStorage().getLastSeqValue() + " messages = " + res.new_messages.size() + " users = " + res.users.size() + " chats = " + res.chats.size() + " other updates = " + res.other_updates.size());
+                             }
+-                        });
++                        }});
+                     });
+                 }
+             } else {
+@@ -17832,8 +17838,64 @@ public class MessagesController extends BaseController implements NotificationCe
+         }
+     }
  
++    public TLRPC.TL_message inu_buildShortMessage(TLRPC.Updates updates) {
++        long userId = updates instanceof TLRPC.TL_updateShortChatMessage ? updates.from_id : updates.user_id;
++        TLRPC.TL_message message = new TLRPC.TL_message();
++        message.id = updates.id;
++        long clientUserId = getUserConfig().getClientUserId();
++        if (updates instanceof TLRPC.TL_updateShortMessage) {
++            message.from_id = new TLRPC.TL_peerUser();
++            if (updates.out) {
++                message.from_id.user_id = clientUserId;
++            } else {
++                message.from_id.user_id = userId;
++            }
++            message.peer_id = new TLRPC.TL_peerUser();
++            message.peer_id.user_id = userId;
++            message.dialog_id = userId;
++        } else {
++            message.from_id = new TLRPC.TL_peerUser();
++            message.from_id.user_id = userId;
++            message.peer_id = new TLRPC.TL_peerChat();
++            message.peer_id.chat_id = updates.chat_id;
++            message.dialog_id = -updates.chat_id;
++        }
++
++        message.fwd_from = updates.fwd_from;
++        message.silent = updates.silent;
++        message.out = updates.out;
++        message.mentioned = updates.mentioned;
++        message.media_unread = updates.media_unread;
++        message.entities = updates.entities;
++        message.message = updates.message;
++        message.date = updates.date;
++        message.via_bot_id = updates.via_bot_id;
++        message.flags = updates.flags | TLRPC.MESSAGE_FLAG_HAS_FROM_ID;
++        message.reply_to = updates.reply_to;
++        message.ttl_period = updates.ttl_period;
++        message.media = new TLRPC.TL_messageMediaEmpty();
++
++        ConcurrentHashMap<Long, Integer> read_max = message.out ? dialogs_read_outbox_max : dialogs_read_inbox_max;
++        Integer value = read_max.get(message.dialog_id);
++        if (value == null) {
++            value = getMessagesStorage().getDialogReadMax(message.out, message.dialog_id);
++            read_max.put(message.dialog_id, value);
++        }
++        message.unread = value < message.id;
++
++        if (message.dialog_id == clientUserId) {
++            message.unread = false;
++            message.media_unread = false;
++            message.out = true;
++        }
++        return message;
++    }
++
      // must be run from Utilities.stageQueue
      public void processUpdates(final TLRPC.Updates updates, boolean fromQueue) {
 +        if (desu.inugram.helpers.plugins.tg.PluginRpc.onUpdates(this, updates, currentAccount, fromQueue)) {
@@ -41,6 +122,62 @@ index 0000000..0000000 100644
          ArrayList<Long> needGetChannelsDiff = null;
          boolean needGetDiff = false;
          boolean needReceivedQueue = false;
+@@ -17934,54 +17996,7 @@ public class MessagesController extends BaseController implements NotificationCe
+                 needGetDiff = true;
+             } else {
+                 if (getMessagesStorage().getLastPtsValue() + updates.pts_count == updates.pts) {
+-                    TLRPC.TL_message message = new TLRPC.TL_message();
+-                    message.id = updates.id;
+-                    long clientUserId = getUserConfig().getClientUserId();
+-                    if (updates instanceof TLRPC.TL_updateShortMessage) {
+-                        message.from_id = new TLRPC.TL_peerUser();
+-                        if (updates.out) {
+-                            message.from_id.user_id = clientUserId;
+-                        } else {
+-                            message.from_id.user_id = userId;
+-                        }
+-                        message.peer_id = new TLRPC.TL_peerUser();
+-                        message.peer_id.user_id = userId;
+-                        message.dialog_id = userId;
+-                    } else {
+-                        message.from_id = new TLRPC.TL_peerUser();
+-                        message.from_id.user_id = userId;
+-                        message.peer_id = new TLRPC.TL_peerChat();
+-                        message.peer_id.chat_id = updates.chat_id;
+-                        message.dialog_id = -updates.chat_id;
+-                    }
+-
+-                    message.fwd_from = updates.fwd_from;
+-                    message.silent = updates.silent;
+-                    message.out = updates.out;
+-                    message.mentioned = updates.mentioned;
+-                    message.media_unread = updates.media_unread;
+-                    message.entities = updates.entities;
+-                    message.message = updates.message;
+-                    message.date = updates.date;
+-                    message.via_bot_id = updates.via_bot_id;
+-                    message.flags = updates.flags | TLRPC.MESSAGE_FLAG_HAS_FROM_ID;
+-                    message.reply_to = updates.reply_to;
+-                    message.ttl_period = updates.ttl_period;
+-                    message.media = new TLRPC.TL_messageMediaEmpty();
+-
+-                    ConcurrentHashMap<Long, Integer> read_max = message.out ? dialogs_read_outbox_max : dialogs_read_inbox_max;
+-                    Integer value = read_max.get(message.dialog_id);
+-                    if (value == null) {
+-                        value = getMessagesStorage().getDialogReadMax(message.out, message.dialog_id);
+-                        read_max.put(message.dialog_id, value);
+-                    }
+-                    message.unread = value < message.id;
+-
+-                    if (message.dialog_id == clientUserId) {
+-                        message.unread = false;
+-                        message.media_unread = false;
+-                        message.out = true;
+-                    }
++                    TLRPC.TL_message message = inu_buildShortMessage(updates);
+ 
+                     getMessagesStorage().setLastPtsValue(updates.pts);
+                     boolean isDialogCreated = createdDialogIds.contains(message.dialog_id);
 diff --git a/TMessagesProj/src/main/java/org/telegram/tgnet/ConnectionsManager.java b/TMessagesProj/src/main/java/org/telegram/tgnet/ConnectionsManager.java
 index 0000000..0000000 100644
 --- a/TMessagesProj/src/main/java/org/telegram/tgnet/ConnectionsManager.java

@@ -76,7 +76,7 @@ class PluginRpcUpdatesTest {
         val direct = TLRPC.TL_message().apply { id = 1; peer_id = peerUser(7L) }.synced()
         val inChannel = TLRPC.TL_message().apply { id = 2; peer_id = peerChannel(9L) }.synced()
 
-        PluginRpc.onDifference(listOf(direct, inChannel), emptyList(), 0)
+        deliverDifference(listOf(direct, inChannel))
         drain()
 
         assertEquals(
@@ -90,7 +90,7 @@ class PluginRpcUpdatesTest {
         val plugin = listener("updateNewMessage")
         val update = newMessage(1)
 
-        PluginRpc.onDifference(emptyList(), listOf(update), 0)
+        deliverDifference(otherUpdates = listOf(update))
         drain()
 
         assertEquals(1, plugin.js.updates.size)
@@ -100,7 +100,7 @@ class PluginRpcUpdatesTest {
     fun a_message_the_difference_reports_as_a_hole_is_skipped_as_stock_skips_it() {
         val plugin = listener("updateNewMessage")
 
-        PluginRpc.onDifference(listOf(TLRPC.TL_messageEmpty().apply { id = 1 }), emptyList(), 0)
+        deliverDifference(listOf(TLRPC.TL_messageEmpty().apply { id = 1 }))
         drain()
 
         assertEquals(0, plugin.js.updates.size)
@@ -111,10 +111,10 @@ class PluginRpcUpdatesTest {
         val plugin = listener("updateNewMessage")
         val message = TLRPC.TL_message().apply { id = 1; peer_id = peerUser(7L) }.synced()
 
-        PluginRpc.onDifference(listOf(message), emptyList(), 0)
+        deliverDifference(listOf(message))
         drain()
         // the wrapper is one we synthesised, so identity dedup has to key on the message itself
-        PluginRpc.onDifference(listOf(message), emptyList(), 0)
+        deliverDifference(listOf(message))
         drain()
 
         assertEquals(1, plugin.js.updates.size)
@@ -382,9 +382,9 @@ class PluginRpcUpdatesTest {
         val direct = TLRPC.TL_message().apply { id = 1; peer_id = peerUser(7L) }.synced()
         val inChannel = TLRPC.TL_message().apply { id = 2; peer_id = peerChannel(9L) }.synced()
 
-        PluginRpc.onDifference(listOf(direct, inChannel), emptyList(), 0)
+        deliverDifference(listOf(direct, inChannel))
         drain()
-        PluginRpc.onDifference(listOf(direct, inChannel), emptyList(), 0)
+        deliverDifference(listOf(direct, inChannel))
         drain()
 
         assertEquals(
@@ -404,7 +404,7 @@ class PluginRpcUpdatesTest {
 
         deliverUpdates(batchOf(update), 0)
         drain()
-        PluginRpc.onDifference(emptyList(), listOf(update), 0)
+        deliverDifference(otherUpdates = listOf(update))
         drain()
 
         assertEquals(1, plugin.js.updates.size)
