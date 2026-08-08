@@ -1,5 +1,6 @@
 package desu.inugram.helpers.plugins
 
+import desu.inugram.helpers.plugins.ui.ActionRow
 import desu.inugram.helpers.plugins.ui.PluginActions
 import kotlin.test.assertEquals
 import kotlin.test.assertNotNull
@@ -60,7 +61,7 @@ class PluginActionsTest {
         PluginActions.register(plugin, plugin.js, PluginActions.KIND_CHAT, 7, "a")
         plugin.answers(7 to "row")
 
-        val rows = ArrayList<desu.inugram.core.plugins.ActionRow<QuickJs>>()
+        val rows = ArrayList<ActionRow>()
         PluginActions.render(PluginActions.KIND_CHAT, chat) { rows.addAll(it) }
         settle()
         assertEquals(1, rows.size)

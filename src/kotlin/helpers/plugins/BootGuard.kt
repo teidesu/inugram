@@ -1,4 +1,7 @@
-package desu.inugram.core.plugins
+package desu.inugram.helpers.plugins
+
+import androidx.core.content.edit
+import desu.inugram.InuConfig
 
 /**
  * whether plugins may run in this process.
@@ -10,17 +13,12 @@ package desu.inugram.core.plugins
  * Scoped to **one plugin, not the process and not the pass**. Not the process, because android
  * starts this one without a ui all the time (a push, a widget, `BOOT_COMPLETED`) and kills it again,
  * so a guard waiting for an activity would be left armed by every one of those. Not the pass, because
- * the app stops *waiting* for it at [BootCohort.EARLY_BUDGET_MILLIS] while every plugin behind that
- * keeps evaluating, and a flag committed across all of it turns the reap of a process android
- * considers idle into a crash nobody had.
+ * the app stops *waiting* for it at [BootCohort.EARLY_BUDGET_MILLIS][
+ * desu.inugram.core.plugins.BootCohort.EARLY_BUDGET_MILLIS] while every plugin behind that keeps
+ * evaluating, and a flag committed across all of it turns the reap of a process android considers
+ * idle into a crash nobody had.
  */
-class BootGuard(private val store: Store) {
-    /** the persisted flags; a write has to be durable before it returns */
-    interface Store {
-        fun read(key: String): Boolean
-        fun write(key: String, value: Boolean)
-    }
-
+class BootGuard {
     enum class Reason { FORCED, CRASHED }
 
     @Volatile
@@ -30,6 +28,16 @@ class BootGuard(private val store: Store) {
     private var decided = false
 
     val safeMode: Boolean get() = reason != null
+
+    private fun read(key: String): Boolean = InuConfig.prefs.getBoolean(key, false)
+
+    /**
+     * `commit` and never `apply`: the whole mechanism is that this write survives a process that
+     * does not come back, and `apply` reaches disk after it returns.
+     */
+    private fun write(key: String, value: Boolean) {
+        InuConfig.prefs.edit(commit = true) { putBoolean(key, value) }
+    }
 
     /**
      * true == this pass may run plugins. Once safe mode is decided it holds for the whole process:
@@ -42,12 +50,12 @@ class BootGuard(private val store: Store) {
     fun startPass(): Boolean {
         if (decided) return reason == null
         decided = true
-        val forced = store.read(FORCED_KEY)
-        val crashed = store.read(GUARD_KEY)
+        val forced = read(FORCED_KEY)
+        val crashed = read(GUARD_KEY)
         if (forced || crashed) {
             reason = if (forced) Reason.FORCED else Reason.CRASHED
-            store.write(FORCED_KEY, false)
-            store.write(GUARD_KEY, false)
+            write(FORCED_KEY, false)
+            write(GUARD_KEY, false)
             return false
         }
         return true
@@ -55,17 +63,17 @@ class BootGuard(private val store: Store) {
 
     /** runs one plugin's own code with the flag committed across it, and across nothing else */
     fun guardPlugin(body: () -> Unit) {
-        store.write(GUARD_KEY, true)
+        write(GUARD_KEY, true)
         try {
             body()
         } finally {
-            store.write(GUARD_KEY, false)
+            write(GUARD_KEY, false)
         }
     }
 
     /** the user asked for safe mode; honoured (and cleared) by the next process's first pass */
     fun armForcedSafeMode() {
-        store.write(FORCED_KEY, true)
+        write(FORCED_KEY, true)
     }
 
     companion object {

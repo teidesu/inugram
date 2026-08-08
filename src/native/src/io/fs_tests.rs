@@ -156,7 +156,7 @@ fn code_of(fixture: &Fixture, code: &str) -> String {
 
 /// the host derives the real cap from the manifest, so this is only what an engine installed
 /// without one falls back to - and every fixture here spells the constant, which leaves it
-/// pinned by nothing. `PluginFs.DEFAULT_QUOTA_BYTES`, the number a device actually gets, is
+/// pinned by nothing. `FsQuota.DEFAULT_BYTES`, the number a device actually gets, is
 /// held to the same sentence by `PluginFsTest`.
 #[test]
 fn the_default_quota_is_the_size_the_contract_states() {
@@ -669,7 +669,7 @@ mod bundled_oracle {
 
     const ORACLE: &str = include_str!("../../../res/assets-debug/inu_plugins/fs-test.js");
 
-    /// `PluginFs.parseSize`'s shape, the one `GrantValidator` refuses an install over
+    /// `FsQuota.parseSize`'s shape, the one `GrantValidator` refuses an install over
     fn parse_grant_size(scope: &str) -> Option<u64> {
         let digits = scope.len() - scope.trim_start_matches(|c: char| c.is_ascii_digit()).len();
         let (amount, unit) = scope.split_at(digits);
@@ -682,7 +682,7 @@ mod bundled_oracle {
         amount.parse::<u64>().ok().map(|n| n * unit)
     }
 
-    /// `PluginFs.quotaFor`'s rule, over the oracle's *own* `@grant` header: the device sizes the
+    /// `FsQuota.forGrants`'s rule, over the oracle's *own* `@grant` header: the device sizes the
     /// directory off that line and nothing else, so a fixture naming a number of its own runs the
     /// oracle against a cap the app would never hand it. Largest of what the manifest named, since
     /// adding a grant line must not be able to take storage away.

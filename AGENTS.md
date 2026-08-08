@@ -288,7 +288,7 @@ The host half is `src/kotlin/helpers/plugins`, grouped to mirror the crate: `tg/
 `TlFilter`), `ui/` (`PluginUi`, `PluginActions`, `PluginIcons`, `PluginScreens`, `PluginCanvas`),
 `io/` (`PluginFetch`, `PluginFs`, `PluginBlobs`), `platform/` (`PluginJvm`, `PluginXposed`,
 `PluginNotifications`) and `api/` (`PluginApi`, `PluginKv`), with `Plugin`, `PluginManager`,
-`PluginDispatch`, `PluginListener`, `PluginBridge` and `QuickJs` left at the root. `QuickJs` cannot
+`PluginDispatch`, `PluginListener`, `PluginBridge`, `BootGuard` and `QuickJs` left at the root. `QuickJs` cannot
 move: its package is half of every `Java_desu_inugram_helpers_plugins_QuickJs_*` symbol name in
 `jni/exports.rs`. The subpackages are still under the prefix `PluginJvm.ENGINE_PACKAGE` refuses, so
 reflecting back into the engine stays `forbidden`.
@@ -330,6 +330,23 @@ okhttp's header handling, what a dex loader accepts) drifts silently, and a fake
 the example worth remembering: it looked like it needed a `SystemClock` fake, and it only needed an
 offset on the queue the test already owns (`TestQueues.advanceBy`), because the budgets are driven
 by posted timers.
+
+The rule cuts the other way too, and that half is easier to miss: **a `Plugin*` object's name on a
+test does not make it a device test.** `PluginFs`'s four quota members were pure forwarders to
+`FsQuota`, so a dozen cases of string-to-long arithmetic were being run on a phone for no reason -
+they are `FsQuotaTest` now, and the forwarders are gone. A forwarder in the app half whose whole
+body is a call into `:InuCore` is the smell: it exists so a device test can spell a name it likes,
+and it takes the coverage down with it.
+
+**An interface with one implementation is the other smell, and `BootGuard` was the last of them.**
+It took a two-method `Store` so `:InuCore` could hold it, and the truth its suite asserted was
+exactly the one the stand-in supplied: that the arming write is *there* for the next process. It is
+`desu.inugram.helpers.plugins.BootGuard` now, reading `InuConfig.prefs` itself, and its suite is on
+the device against that file - a crashed process modelled as the state it leaves on disk (armed
+key, no clearing write), which is the real thing rather than a picture of it. There is **no
+interface-for-testing anywhere in the plugin host any more**; do not reintroduce one. The single
+property that move puts out of reach is `commit` vs `apply` - a device never dies mid-write, so
+both read back - and that is a lint in `PluginBootTest`.
 
 **What is left off-device is not a bridge test**: it reads the fork's own sources, because neither
 target can see a call site moving or vanishing. That is `src/core/src/test/kotlin/desu/inugram/
@@ -1268,7 +1285,9 @@ broken engine — or, as `api-filter-test.js` had been, red on a working one.
   `Plugin`, a reload restarting tokens at 1. Menu-item ids come from one space
   (`PluginActions.OPTION_BASE`, far above stock's and the fork's), so every attach point routes a
   tap the same way. `ActionRegistry` in `:InuCore` holds the per-owner-per-kind bookkeeping and the
-  8-row cap so both are unit-tested. The cap is
+  8-row cap so both are unit-tested - but *not* the row, which is `PluginActions.ActionRow` and
+  names its `QuickJs` outright: a registry generic enough to hold one would have put that type
+  parameter in the signature of every menu the fork draws, and it never reads a row anyway. The cap is
   consulted **per id, not per token**: `ui/actions.rs` allocates the replacement's token and registers
   it *before* retiring the one it displaces, so a registry that counted tokens refuses the keyed
   re-registration that is the documented way to change a row - leaving a plugin at the cap unable to

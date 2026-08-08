@@ -72,7 +72,7 @@ open class QuickJs {
 
     /**
      * [dir] "" is a directory the host could not make, and every `inu.fs` call then fails rather
-     * than landing somewhere else. [quotaBytes] is [PluginFs.UNCAPPED] under `unsafe.fs`, which is
+     * than landing somewhere else. [quotaBytes] is [desu.inugram.core.plugins.FsQuota.UNCAPPED] under `unsafe.fs`, which is
      * also what [unscoped] is, and turns the containment check off.
      */
     fun installFs(dir: String, quotaBytes: Long, unscoped: Boolean, androidDirs: String) =

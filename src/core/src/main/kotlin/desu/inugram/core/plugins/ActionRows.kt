@@ -1,7 +1,5 @@
 package desu.inugram.core.plugins
 
-data class ActionRow<T : Any>(val owner: T, val token: Int, val text: String)
-
 /**
  * What the host knows about `inu.register*Action` rows *without* entering an engine: which rows
  * exist is host state, and only `text`/`visible` need the engine - which is what lets a menu
@@ -49,9 +47,13 @@ class ActionRegistry<T : Any>(private val perKindLimit: Int = DEFAULT_PER_KIND_L
      * [order] is the plugin list's own order and also the liveness test: an owner missing from it
      * is one whose engine is gone, and is neither asked nor drawn. A [render] answering null
      * contributes nothing rather than aborting the menu.
+     *
+     * A row is whatever [render] built, never a type of this registry's own: nothing here reads
+     * one, and a row that carried its owner as a type parameter put that parameter in the
+     * signature of every unrelated menu the host draws.
      */
-    fun rowsInOrder(kind: Int, order: List<T>, render: (T) -> List<ActionRow<T>>?): List<ActionRow<T>> {
-        val out = mutableListOf<ActionRow<T>>()
+    fun <R> rowsInOrder(kind: Int, order: List<T>, render: (T) -> List<R>?): List<R> {
+        val out = mutableListOf<R>()
         for (owner in order) {
             if (count(owner, kind) == 0) continue
             out.addAll(render(owner).orEmpty())

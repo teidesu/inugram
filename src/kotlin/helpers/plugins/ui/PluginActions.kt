@@ -2,7 +2,6 @@ package desu.inugram.helpers.plugins.ui
 
 import android.util.Log
 import desu.inugram.core.plugins.ActionRegistry
-import desu.inugram.core.plugins.ActionRow
 import desu.inugram.core.plugins.PluginWire
 import desu.inugram.helpers.plugins.Plugin
 import desu.inugram.helpers.plugins.PluginManager
@@ -15,6 +14,12 @@ import org.telegram.messenger.DialogObject
 import org.telegram.messenger.Utilities
 
 /**
+ * one rendered row, and the [QuickJs] a tap on it goes back to. Never a [Plugin]: a reload builds
+ * a new engine whose tokens restart at 1.
+ */
+data class ActionRow(val owner: QuickJs, val token: Int, val text: String)
+
+/**
  * Kotlin side of `inu.register*Action` (rust: `actions.rs`): rows a plugin contributes to menus the
  * app owns.
  *
@@ -24,8 +29,7 @@ import org.telegram.messenger.Utilities
  * hands the rows back on the ui thread. What *is* answerable synchronously is how many rows there
  * are ([rowCount]), which is what lets a menu reserve them rather than grow under the user's finger.
  *
- * A row is owned by the [QuickJs] that registered it, never by the [Plugin]: a reload builds a new
- * engine whose tokens restart at 1. [liveOrder] is both the ordering and the liveness test.
+ * [liveOrder] is both the ordering and the liveness test.
  */
 object PluginActions {
     private const val TAG = "InuPluginActions"
@@ -120,7 +124,7 @@ object PluginActions {
 
     fun optionIdAt(index: Int): Int = OPTION_BASE + index
 
-    fun rowAt(rows: List<ActionRow<QuickJs>>, optionId: Int): ActionRow<QuickJs>? =
+    fun rowAt(rows: List<ActionRow>, optionId: Int): ActionRow? =
         rows.getOrNull(optionId - OPTION_BASE)
 
     fun rowCount(kind: Int): Int = counts.getOrElse(kind) { 0 }
@@ -132,7 +136,7 @@ object PluginActions {
      * exactly once and never before this returns, so a menu can reserve its rows and bind its cells
      * in the same turn it asked; a caller that has already given up ignores it.
      */
-    fun render(kind: Int, surface: Surface, onRows: (List<ActionRow<QuickJs>>) -> Unit) {
+    fun render(kind: Int, surface: Surface, onRows: (List<ActionRow>) -> Unit) {
         if (surface.isSecret) {
             AndroidUtilities.runOnUIThread { onRows(emptyList()) }
             return
@@ -151,7 +155,7 @@ object PluginActions {
      * disabled, uninstalled or reloaded while its menu was open has an engine nothing lists any
      * more, and the row does nothing rather than reaching whatever took its token.
      */
-    fun dispatch(row: ActionRow<QuickJs>, surface: Surface) {
+    fun dispatch(row: ActionRow, surface: Surface) {
         Utilities.globalQueue.postRunnable {
             if (row.owner !in liveOrder()) return@postRunnable
             row.owner.dispatchAction(surface.kind, row.token, surface.json)
@@ -246,7 +250,7 @@ object PluginActions {
         AndroidUtilities.runOnUIThread { for (redraw in onCountsChanged) redraw() }
     }
 
-    private fun parseRows(engine: QuickJs, json: String): List<ActionRow<QuickJs>>? {
+    private fun parseRows(engine: QuickJs, json: String): List<ActionRow>? {
         return try {
             val array = JSONArray(json)
             (0 until array.length()).map { i ->

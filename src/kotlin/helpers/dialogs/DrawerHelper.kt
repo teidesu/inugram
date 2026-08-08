@@ -12,9 +12,8 @@ import androidx.recyclerview.widget.ItemTouchHelper
 import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
 import desu.inugram.InuConfig
-import desu.inugram.core.plugins.ActionRow
+import desu.inugram.helpers.plugins.ui.ActionRow
 import desu.inugram.helpers.dialogs.DrawerHelper.setupMainFragment
-import desu.inugram.helpers.plugins.QuickJs
 import desu.inugram.helpers.plugins.ui.PluginActions
 import desu.inugram.helpers.update.UpdateHelper
 import desu.inugram.ui.drawer.DrawerAddCell
@@ -682,7 +681,7 @@ object DrawerHelper {
         PluginActions.watchCounts { refreshGlobalActionRows() }
     }
 
-    internal var globalActionRows: List<ActionRow<QuickJs>> = emptyList()
+    internal var globalActionRows: List<ActionRow> = emptyList()
         private set
 
     /**

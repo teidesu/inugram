@@ -15,12 +15,11 @@ import android.widget.Toast
 import androidx.collection.LongSparseArray
 import androidx.core.graphics.ColorUtils
 import desu.inugram.InuConfig
-import desu.inugram.core.plugins.ActionRow
+import desu.inugram.helpers.plugins.ui.ActionRow
 import desu.inugram.helpers.WebAppHelper
 import desu.inugram.helpers.chat.BlockedMessagesHelper
 import desu.inugram.helpers.chat.ChatHelper
 import desu.inugram.helpers.chat.ForumDisplayHelper
-import desu.inugram.helpers.plugins.QuickJs
 import desu.inugram.helpers.plugins.ui.PluginActions
 import java.util.Date
 import java.util.WeakHashMap
@@ -261,7 +260,7 @@ object ProfileHelper {
     // --- plugin rows (inu.registerProfileAction) ---
 
     // keyed by the menu the rows were drawn into, since a profile is rebuilt rather than reused
-    private val pluginRows = WeakHashMap<ActionBarMenuItem, List<ActionRow<QuickJs>>>()
+    private val pluginRows = WeakHashMap<ActionBarMenuItem, List<ActionRow>>()
 
     /**
      * The rows land one globalQueue hop later (an engine cannot be entered from the ui thread), so
