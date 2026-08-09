@@ -1,5 +1,5 @@
-Test assets for the on-device plugin suite. `src/androidTest` itself is synced into a *kotlin*
-source root, so anything that is not source lives here instead.
+Test assets for the on-device plugin suite. `src/test/kotlin` is synced into a *kotlin* source
+root, so anything that is not source lives here instead.
 
 `probe.dex` is a dex the platform loader accepts, so `inu.jvm.loadDex` is checked by loading a class
 out of it rather than against a recorded path. One class, built once and committed:

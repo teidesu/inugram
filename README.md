@@ -41,7 +41,13 @@ the patchset is managed using stgit and a few supporting scripts in `scripts/`.
 
 ## repo layout
 
-- `src/kotlin`: our custom Kotlin code
+- `src/fork`: our custom Kotlin code
+- `src/fork-app`: ditto, for the bits that live in the app module instead of the library one
+- `src/core`: InuCore, a plain jvm module (so it can be tested without a device)
+- `src/native`: rust plugin engine (quickjs + jni bridge)
+- `src/plugins`: the plugin api contract and its typings
+- `src/test`: on-device suite for the plugin bridge (`kotlin/`) and the files it needs (`assets/`)
+- `src/vendor`: third-party code copied in as-is
 - `src/res`: our custom resources
 - `patches/`: stock patches
 - `series`: patch apply order

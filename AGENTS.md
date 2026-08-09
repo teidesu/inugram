@@ -1,8 +1,13 @@
 # Inugram Agent Guide
 
 Inugram is a **patchset**, not a fork. `worktree/` is a stock Telegram checkout with
-stgit patches applied on top. Fork code lives in `src/kotlin`/`src/res` (symlinked
+stgit patches applied on top. Fork code lives in `src/fork`/`src/res` (symlinked
 into the worktree). `patches/` and `series` are export targets, not source of truth.
+
+`src/` is named by role, never by language: `fork/` (main kotlin) + `fork-app/` (app module),
+`core/` (InuCore, jvm-testable), `native/` (rust engine), `plugins/` (plugin contract),
+`test/` (`kotlin/` device suite + `assets/` it reads as files), `vendor/` (copied-in third
+party), `res/` (resources). Each maps to a `forkSyncFiles` entry in `scripts/config.ts`.
 
 `FEATURES.md` is the user-facing list of fork features/bugfixes. Keep it in sync —
 when adding, removing or meaningfully changing a patch, update `FEATURES.md` in
@@ -12,7 +17,7 @@ the same change.
 
 1. **Edit `worktree/` directly.** Never hand-edit `patches/*.patch` or `series` — they regenerate from stgit.
 2. **Do not run `stg` or `git` yourself** unless explicitly asked. Read-only `stg top` / `stg show` is fine. NEVER run `stg export`.
-3. **Stock patches stay tiny.** Only wiring/hooks/guards. Real logic goes in `src/kotlin`. A patch touching only `src/**` is usually wrong.
+3. **Stock patches stay tiny.** Only wiring/hooks/guards. Real logic goes in `src/fork`. A patch touching only `src/**` is usually wrong.
 4. **Default off = stock-identical.** Every behavior change gated behind an `InuConfig.*.getValue()` check. Verify every call site is gated.
 5. **Check if stock already does it** before implementing a toggle (e.g. Lite Mode often has it). Tell the user, don't silently re-implement.
 6. **Confirm bug repro in unpatched worktree** before treating a visual/behavior issue as a patch regression.
@@ -146,7 +151,7 @@ Conventions: expose the minimum, promote `private` → `public` over duplicating
 
 ## Helpers
 
-Live in `src/kotlin/helpers/`. Sub-packages by feature area: `chat/`, `dialogs/`, `menu/`, `translate/`, `search/`, `media/`, `font/`, `update/`, `cloud/`, `security/`, `theme/`, `profile/`, `icons/`, `maps/`, `notifications/`. Cross-cutting / standalone ones stay flat.
+Live in `src/fork/helpers/`. Sub-packages by feature area: `chat/`, `dialogs/`, `menu/`, `translate/`, `search/`, `media/`, `font/`, `update/`, `cloud/`, `security/`, `theme/`, `profile/`, `icons/`, `maps/`, `notifications/`. Cross-cutting / standalone ones stay flat.
 
 Naming (don't mass-rename):
 - `*Helper` = feature-coordinator singleton
@@ -159,7 +164,7 @@ Before creating a new helper, check whether an existing one owns the area.
 
 ## `InuHooks` — central lifecycle bus
 
-`src/kotlin/InuHooks.kt`. Generic lifecycle dispatch only — feature-specific code goes on its own helper.
+`src/fork/InuHooks.kt`. Generic lifecycle dispatch only — feature-specific code goes on its own helper.
 
 Currently exposed (update this table when adding):
 
@@ -258,7 +263,7 @@ wrong name or flag, since the bridge and the typings only agree because one scri
 ### Layout
 
 - `src/native`: plugin API in `api/`, JNI in `jni/`, grants/limits/registry in `sandbox/`, internal plumbing in `utils/`.
-- `src/kotlin/helpers/plugins`: host implementation. Its packages mirror native domains.
+- `src/fork/helpers/plugins`: host implementation. Its packages mirror native domains.
 - Build the `inu` object once in `nativeCreate`; pass it to every `install_*`.
 - `EngineBindings` owns install order. Do not move `QuickJs`: its package is part of JNI export names.
 - `PluginRpc` owns RPC chains; `PluginUpdates` owns updates. Keep their dispatch IDs separate.
@@ -302,7 +307,7 @@ wrong name or flag, since the bridge and the typings only agree because one scri
 
 - Put Rust tests in adjacent `*_tests.rs` files and include them with `#[path]`. Do not use inline test modules.
 - `build.rs` compiles every JS prelude to QuickJS bytecode. Keep bytecode little-endian and tied to the exact QuickJS build. Do not use `include_str!` for preludes.
-- Bridge tests run on a device in `src/androidTest`. Do not use a fake as the source of a fact the test asserts.
+- Bridge tests run on a device in `src/test/kotlin`. Do not use a fake as the source of a fact the test asserts.
 - Off-device source tests protect stock hooks and boot wiring. Keep them when a rebase could silently remove a call site.
 - Install all queue recorders in `resetBridge`. Use a fresh install ID per test; wipe fixed-name test storage where required.
 - Native JNI failures abort the process. Clear pending exceptions, take the app offline in `resetBridge`, and initialize every container that a native callback reads.
