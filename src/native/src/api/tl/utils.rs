@@ -19,128 +19,115 @@ pub const FORMAT_FILE_SIZE: i32 = 6;
 pub const FORMAT_DURATION: i32 = 7;
 
 pub trait UtilsHost {
-    fn format(&self, op: i32, value: i64) -> String;
+  fn format(&self, op: i32, value: i64) -> String;
 }
 
 #[cfg(test)]
 pub fn install_utils<'js>(ctx: &Ctx<'js>, inu: &Object<'js>) -> JsResult<Object<'js>> {
-    install_utils_with_host(ctx, Rc::new(UnavailableUtilsHost), inu)
+  install_utils_with_host(ctx, Rc::new(UnavailableUtilsHost), inu)
 }
 
 pub fn install_utils_with_host<'js>(
-    ctx: &Ctx<'js>,
-    host: Rc<dyn UtilsHost>,
-    inu: &Object<'js>,
+  ctx: &Ctx<'js>,
+  host: Rc<dyn UtilsHost>,
+  inu: &Object<'js>,
 ) -> JsResult<Object<'js>> {
-    let utils = Object::new(ctx.clone())?;
+  let utils = Object::new(ctx.clone())?;
 
-    let f = Function::new(ctx.clone(), |ctx: Ctx<'js>, bytes: Value<'js>| {
-        read_bytes(&ctx, &bytes, "toBase64").map(|bytes| base64::engine::general_purpose::STANDARD.encode(bytes))
-    })?;
-    utils.set("toBase64", f)?;
+  let f = Function::new(ctx.clone(), |ctx: Ctx<'js>, bytes: Value<'js>| {
+    read_bytes(&ctx, &bytes, "toBase64").map(|bytes| base64::engine::general_purpose::STANDARD.encode(bytes))
+  })?;
+  utils.set("toBase64", f)?;
 
-    let f = Function::new(ctx.clone(), |ctx: Ctx<'js>, text: String| -> JsResult<TypedArray<'js, u8>> {
-        match decode_base64(&text) {
-            Some(bytes) => TypedArray::<u8>::new(ctx, bytes),
-            None => throw_plugin_error(&ctx, "invalid-argument", "fromBase64: not base64", None, None, None),
-        }
-    })?;
-    utils.set("fromBase64", f)?;
+  let f = Function::new(ctx.clone(), |ctx: Ctx<'js>, text: String| -> JsResult<TypedArray<'js, u8>> {
+    match decode_base64(&text) {
+      Some(bytes) => TypedArray::<u8>::new(ctx, bytes),
+      None => throw_plugin_error(&ctx, "invalid-argument", "fromBase64: not base64", None, None, None),
+    }
+  })?;
+  utils.set("fromBase64", f)?;
 
-    let f = Function::new(ctx.clone(), |ctx: Ctx<'js>, bytes: Value<'js>| {
-        read_bytes(&ctx, &bytes, "toHex").map(|bytes| encode_hex(&bytes))
-    })?;
-    utils.set("toHex", f)?;
+  let f = Function::new(ctx.clone(), |ctx: Ctx<'js>, bytes: Value<'js>| {
+    read_bytes(&ctx, &bytes, "toHex").map(|bytes| encode_hex(&bytes))
+  })?;
+  utils.set("toHex", f)?;
 
-    let f = Function::new(ctx.clone(), |ctx: Ctx<'js>, text: String| -> JsResult<TypedArray<'js, u8>> {
-        match decode_hex(&text) {
-            Some(bytes) => TypedArray::<u8>::new(ctx, bytes),
-            None => {
-                throw_plugin_error(&ctx, "invalid-argument", "fromHex: expected hex digits, in pairs", None, None, None)
+  let f = Function::new(ctx.clone(), |ctx: Ctx<'js>, text: String| -> JsResult<TypedArray<'js, u8>> {
+    match decode_hex(&text) {
+      Some(bytes) => TypedArray::<u8>::new(ctx, bytes),
+      None => throw_plugin_error(&ctx, "invalid-argument", "fromHex: expected hex digits, in pairs", None, None, None),
+    }
+  })?;
+  utils.set("fromHex", f)?;
+
+  {
+    let host = host.clone();
+    let f =
+      Function::new(ctx.clone(), move |ctx: Ctx<'js>, unix: Value<'js>, style: Opt<Value<'js>>| -> JsResult<String> {
+        let value = format_integer(&ctx, &unix, "formatDate", i64::MIN, i64::MAX)?;
+        let op = match style.0.filter(|style| !style.is_undefined() && !style.is_null()) {
+          None => FORMAT_DATE_TIME,
+          Some(style) => match style.as_string().and_then(|style| style.to_string().ok()).as_deref() {
+            Some("date") => FORMAT_DATE,
+            Some("time") => FORMAT_TIME,
+            Some("dateTime") => FORMAT_DATE_TIME,
+            Some("relative") => FORMAT_RELATIVE_DATE,
+            Some(style) => {
+              return throw_plugin_error(
+                &ctx,
+                "invalid-argument",
+                &format!("formatDate: unknown style '{style}'"),
+                None,
+                None,
+                None,
+              )
             }
-        }
+            None => return throw_plugin_error(&ctx, "invalid-argument", "formatDate: unknown style", None, None, None),
+          },
+        };
+        Ok(host.format(op, value))
+      })?;
+    utils.set("formatDate", f)?;
+  }
+  {
+    let host = host.clone();
+    let f = Function::new(
+      ctx.clone(),
+      move |ctx: Ctx<'js>, value: Value<'js>, options: Opt<Value<'js>>| -> JsResult<String> {
+        let value = format_integer(&ctx, &value, "formatNumber", i64::MIN, i64::MAX)?;
+        let compact = match options.0 {
+          Some(options) if !options.is_undefined() && !options.is_null() => {
+            options.as_object().is_some_and(|options| options.get::<_, bool>("compact").unwrap_or(false))
+          }
+          _ => false,
+        };
+        Ok(host.format(if compact { FORMAT_COMPACT_NUMBER } else { FORMAT_NUMBER }, value))
+      },
+    )?;
+    utils.set("formatNumber", f)?;
+  }
+  {
+    let host = host.clone();
+    let f = Function::new(ctx.clone(), move |ctx: Ctx<'js>, value: Value<'js>| -> JsResult<String> {
+      Ok(host.format(FORMAT_FILE_SIZE, format_integer(&ctx, &value, "formatFileSize", i64::MIN, i64::MAX)?))
     })?;
-    utils.set("fromHex", f)?;
+    utils.set("formatFileSize", f)?;
+  }
+  {
+    let host = host.clone();
+    let f = Function::new(ctx.clone(), move |ctx: Ctx<'js>, value: Value<'js>| -> JsResult<String> {
+      Ok(host.format(FORMAT_DURATION, format_integer(&ctx, &value, "formatDuration", 0, i32::MAX as i64)?))
+    })?;
+    utils.set("formatDuration", f)?;
+  }
 
-    {
-        let host = host.clone();
-        let f = Function::new(
-            ctx.clone(),
-            move |ctx: Ctx<'js>, unix: Value<'js>, style: Opt<Value<'js>>| -> JsResult<String> {
-                let value = format_integer(&ctx, &unix, "formatDate", i64::MIN, i64::MAX)?;
-                let op = match style.0.filter(|style| !style.is_undefined() && !style.is_null()) {
-                    None => FORMAT_DATE_TIME,
-                    Some(style) => match style.as_string().and_then(|style| style.to_string().ok()).as_deref() {
-                        Some("date") => FORMAT_DATE,
-                        Some("time") => FORMAT_TIME,
-                        Some("dateTime") => FORMAT_DATE_TIME,
-                        Some("relative") => FORMAT_RELATIVE_DATE,
-                        Some(style) => {
-                            return throw_plugin_error(
-                                &ctx,
-                                "invalid-argument",
-                                &format!("formatDate: unknown style '{style}'"),
-                                None,
-                                None,
-                                None,
-                            )
-                        }
-                        None => {
-                            return throw_plugin_error(
-                                &ctx,
-                                "invalid-argument",
-                                "formatDate: unknown style",
-                                None,
-                                None,
-                                None,
-                            )
-                        }
-                    },
-                };
-                Ok(host.format(op, value))
-            },
-        )?;
-        utils.set("formatDate", f)?;
-    }
-    {
-        let host = host.clone();
-        let f = Function::new(
-            ctx.clone(),
-            move |ctx: Ctx<'js>, value: Value<'js>, options: Opt<Value<'js>>| -> JsResult<String> {
-                let value = format_integer(&ctx, &value, "formatNumber", i64::MIN, i64::MAX)?;
-                let compact = match options.0 {
-                    Some(options) if !options.is_undefined() && !options.is_null() => {
-                        options.as_object().is_some_and(|options| options.get::<_, bool>("compact").unwrap_or(false))
-                    }
-                    _ => false,
-                };
-                Ok(host.format(if compact { FORMAT_COMPACT_NUMBER } else { FORMAT_NUMBER }, value))
-            },
-        )?;
-        utils.set("formatNumber", f)?;
-    }
-    {
-        let host = host.clone();
-        let f = Function::new(ctx.clone(), move |ctx: Ctx<'js>, value: Value<'js>| -> JsResult<String> {
-            Ok(host.format(FORMAT_FILE_SIZE, format_integer(&ctx, &value, "formatFileSize", i64::MIN, i64::MAX)?))
-        })?;
-        utils.set("formatFileSize", f)?;
-    }
-    {
-        let host = host.clone();
-        let f = Function::new(ctx.clone(), move |ctx: Ctx<'js>, value: Value<'js>| -> JsResult<String> {
-            Ok(host.format(FORMAT_DURATION, format_integer(&ctx, &value, "formatDuration", 0, i32::MAX as i64)?))
-        })?;
-        utils.set("formatDuration", f)?;
-    }
+  let plugin_error: Value = inu.get("PluginError")?;
 
-    let plugin_error: Value = inu.get("PluginError")?;
+  let factory = crate::utils::prelude::load(ctx, PRELUDE)?;
+  let shared: Object = factory.call((utils.clone(), plugin_error))?;
 
-    let factory = crate::utils::prelude::load(ctx, PRELUDE)?;
-    let shared: Object = factory.call((utils.clone(), plugin_error))?;
-
-    inu.set("utils", utils)?;
-    Ok(shared)
+  inu.set("utils", utils)?;
+  Ok(shared)
 }
 
 #[cfg(test)]
@@ -148,79 +135,65 @@ struct UnavailableUtilsHost;
 
 #[cfg(test)]
 impl UtilsHost for UnavailableUtilsHost {
-    fn format(&self, _: i32, _: i64) -> String {
-        "unavailable".into()
-    }
+  fn format(&self, _: i32, _: i64) -> String {
+    "unavailable".into()
+  }
 }
 
 fn format_integer<'js>(ctx: &Ctx<'js>, value: &Value<'js>, what: &str, min: i64, max: i64) -> JsResult<i64> {
-    let Some(value) = value.as_number() else {
-        return throw_plugin_error(
-            ctx,
-            "invalid-argument",
-            &format!("{what}: expected a safe integer"),
-            None,
-            None,
-            None,
-        );
-    };
-    if !value.is_finite()
-        || value.fract() != 0.0
-        || value < min as f64
-        || value > max as f64
-        || value.abs() > 9_007_199_254_740_991.0
-    {
-        return throw_plugin_error(
-            ctx,
-            "invalid-argument",
-            &format!("{what}: expected a safe integer"),
-            None,
-            None,
-            None,
-        );
-    }
-    Ok(value as i64)
+  let Some(value) = value.as_number() else {
+    return throw_plugin_error(ctx, "invalid-argument", &format!("{what}: expected a safe integer"), None, None, None);
+  };
+  if !value.is_finite()
+    || value.fract() != 0.0
+    || value < min as f64
+    || value > max as f64
+    || value.abs() > 9_007_199_254_740_991.0
+  {
+    return throw_plugin_error(ctx, "invalid-argument", &format!("{what}: expected a safe integer"), None, None, None);
+  }
+  Ok(value as i64)
 }
 
 fn read_bytes<'js>(ctx: &Ctx<'js>, value: &Value<'js>, what: &str) -> JsResult<Vec<u8>> {
-    let Ok(typed) = TypedArray::<u8>::from_value(value.clone()) else {
-        return Err(Exception::throw_type(ctx, &format!("{what}: expected a Uint8Array")));
-    };
-    let Some(bytes) = typed.as_bytes() else {
-        return Err(Exception::throw_type(ctx, &format!("{what}: the array is detached")));
-    };
-    Ok(bytes.to_vec())
+  let Ok(typed) = TypedArray::<u8>::from_value(value.clone()) else {
+    return Err(Exception::throw_type(ctx, &format!("{what}: expected a Uint8Array")));
+  };
+  let Some(bytes) = typed.as_bytes() else {
+    return Err(Exception::throw_type(ctx, &format!("{what}: the array is detached")));
+  };
+  Ok(bytes.to_vec())
 }
 
 fn decode_base64(text: &str) -> Option<Vec<u8>> {
-    let standard = base64::engine::general_purpose::STANDARD;
-    if let Ok(bytes) = standard.decode(text) {
-        return Some(bytes);
-    }
-    base64::engine::general_purpose::STANDARD_NO_PAD.decode(text).ok()
+  let standard = base64::engine::general_purpose::STANDARD;
+  if let Ok(bytes) = standard.decode(text) {
+    return Some(bytes);
+  }
+  base64::engine::general_purpose::STANDARD_NO_PAD.decode(text).ok()
 }
 
 fn encode_hex(bytes: &[u8]) -> String {
-    let mut out = String::with_capacity(bytes.len() * 2);
-    for byte in bytes {
-        out.push(HEX_DIGITS[(byte >> 4) as usize] as char);
-        out.push(HEX_DIGITS[(byte & 0x0f) as usize] as char);
-    }
-    out
+  let mut out = String::with_capacity(bytes.len() * 2);
+  for byte in bytes {
+    out.push(HEX_DIGITS[(byte >> 4) as usize] as char);
+    out.push(HEX_DIGITS[(byte & 0x0f) as usize] as char);
+  }
+  out
 }
 
 fn decode_hex(text: &str) -> Option<Vec<u8>> {
-    let digits = text.as_bytes();
-    if !digits.len().is_multiple_of(2) {
-        return None;
-    }
-    let mut out = Vec::with_capacity(digits.len() / 2);
-    for pair in digits.chunks_exact(2) {
-        let high = (pair[0] as char).to_digit(16)?;
-        let low = (pair[1] as char).to_digit(16)?;
-        out.push((high * 16 + low) as u8);
-    }
-    Some(out)
+  let digits = text.as_bytes();
+  if !digits.len().is_multiple_of(2) {
+    return None;
+  }
+  let mut out = Vec::with_capacity(digits.len() / 2);
+  for pair in digits.chunks_exact(2) {
+    let high = (pair[0] as char).to_digit(16)?;
+    let low = (pair[1] as char).to_digit(16)?;
+    out.push((high * 16 + low) as u8);
+  }
+  Some(out)
 }
 
 #[cfg(test)]

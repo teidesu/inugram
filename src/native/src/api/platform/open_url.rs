@@ -6,29 +6,29 @@ use crate::api::error;
 use crate::sandbox::grants::{check_grant, GrantHost, MATCH_EXACT};
 
 pub trait OpenUrlHost {
-    fn open_url(&self, url: &str);
+  fn open_url(&self, url: &str);
 }
 
 pub(crate) fn screen_external_url(url: &str) -> Result<(), String> {
-    crate::api::url::parse_http_url("openUrl", url).map(|_| ())
+  crate::api::url::parse_http_url("openUrl", url).map(|_| ())
 }
 
 pub fn install_open_url<'js>(
-    ctx: &Ctx<'js>,
-    host: Rc<dyn OpenUrlHost>,
-    grants: Rc<dyn GrantHost>,
-    inu: &Object<'js>,
+  ctx: &Ctx<'js>,
+  host: Rc<dyn OpenUrlHost>,
+  grants: Rc<dyn GrantHost>,
+  inu: &Object<'js>,
 ) -> JsResult<()> {
-    let f = Function::new(ctx.clone(), move |ctx: Ctx<'js>, url: String| -> JsResult<()> {
-        check_grant(&ctx, &grants, "openUrl", None, MATCH_EXACT)?;
-        if let Err(why) = screen_external_url(&url) {
-            return error::throw_plugin_error(&ctx, "invalid-argument", &why, None, None, None);
-        }
-        host.open_url(&url);
-        Ok(())
-    })?;
-    inu.set("openUrl", f)?;
+  let f = Function::new(ctx.clone(), move |ctx: Ctx<'js>, url: String| -> JsResult<()> {
+    check_grant(&ctx, &grants, "openUrl", None, MATCH_EXACT)?;
+    if let Err(why) = screen_external_url(&url) {
+      return error::throw_plugin_error(&ctx, "invalid-argument", &why, None, None, None);
+    }
+    host.open_url(&url);
     Ok(())
+  })?;
+  inu.set("openUrl", f)?;
+  Ok(())
 }
 
 #[cfg(test)]
