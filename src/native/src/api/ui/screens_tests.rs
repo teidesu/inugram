@@ -51,7 +51,7 @@ fn setup(grants: &[&str]) -> Fixture {
         (state, accounts)
     });
     let state = Disposing::new(&ctx, state, dispose);
-    let accounts = AccountDisposing::new(&ctx, accounts, crate::api::telegram::account::dispose);
+    let accounts = AccountDisposing::new(&ctx, accounts, |ctx, state| state.dispose(ctx));
     (rt, ctx, host, state, accounts, logs)
 }
 

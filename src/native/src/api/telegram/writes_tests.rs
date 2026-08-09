@@ -384,7 +384,7 @@ fn setup_with_limit(grants: &[&str], transfer_limit: u64) -> Fixture {
     });
     let writes = crate::testing::harness::DisposeOnDrop::new(&ctx, writes, dispose);
     let reads = crate::testing::harness::DisposeOnDrop::new(&ctx, reads, crate::api::telegram::reads::dispose);
-    let accounts = crate::testing::harness::DisposeOnDrop::new(&ctx, accounts, crate::api::telegram::account::dispose);
+    let accounts = crate::testing::harness::DisposeOnDrop::new(&ctx, accounts, |ctx, state| state.dispose(ctx));
     (rt, ctx, host, writes, reads, accounts, dir)
 }
 
@@ -827,7 +827,7 @@ fn setup_send(grants: &[&str]) -> SendFixture {
     });
     let rpc = crate::testing::harness::DisposeOnDrop::new(&ctx, rpc, crate::api::telegram::rpc::dispose);
     let reads = crate::testing::harness::DisposeOnDrop::new(&ctx, reads, crate::api::telegram::reads::dispose);
-    let accounts = crate::testing::harness::DisposeOnDrop::new(&ctx, accounts, crate::api::telegram::account::dispose);
+    let accounts = crate::testing::harness::DisposeOnDrop::new(&ctx, accounts, |ctx, state| state.dispose(ctx));
     (rt, ctx, rpc_host, rpc, reads, accounts)
 }
 

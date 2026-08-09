@@ -171,10 +171,12 @@ impl TestReadsHost {
             KIND_USER => {
                 format!(r#"J{{"_":"inputUser","user_id":"{}","access_hash":"{}"}}"#, entity.id, entity.access_hash)
             }
-            KIND_CHANNEL => format!(
+            KIND_CHANNEL => {
+                format!(
                 r#"J{{"_":"inputChannel","channel_id":"{}","access_hash":"{}"}}"#,
                 -entity.id, entity.access_hash
-            ),
+                )
+            }
             _ if entity.is_user => {
                 format!(r#"J{{"_":"inputPeerUser","user_id":"{}","access_hash":"{}"}}"#, entity.id, entity.access_hash)
             }
@@ -433,7 +435,7 @@ fn setup(grants: &[&str]) -> Fixture {
         (state, accounts)
     });
     let state = Disposing::new(&ctx, state, dispose);
-    let accounts = crate::testing::harness::DisposeOnDrop::new(&ctx, accounts, crate::api::telegram::account::dispose);
+    let accounts = crate::testing::harness::DisposeOnDrop::new(&ctx, accounts, |ctx, state| state.dispose(ctx));
     (rt, ctx, host, state, accounts)
 }
 
@@ -1212,11 +1214,7 @@ fn resolve_peer_many_limits_in_flight_requests() {
         )
         .unwrap()
     });
-    assert_eq!(
-        host.resolves.borrow().len() as u64,
-        8,
-        "more peers are being resolved at once than the engine allows"
-    );
+    assert_eq!(host.resolves.borrow().len() as u64, 8, "more peers are being resolved at once than the engine allows");
 }
 
 /// a pending read whose engine is torn down must release its resolvers, or `JS_FreeRuntime`
@@ -1438,8 +1436,7 @@ mod grant_boundary {
             (reads_state, accounts, rpc_state)
         });
         let reads_state = Disposing::new(&ctx, reads_state, dispose);
-        let accounts =
-            crate::testing::harness::DisposeOnDrop::new(&ctx, accounts, crate::api::telegram::account::dispose);
+        let accounts = crate::testing::harness::DisposeOnDrop::new(&ctx, accounts, |ctx, state| state.dispose(ctx));
         let rpc_state =
             crate::testing::harness::DisposeOnDrop::new(&ctx, rpc_state, crate::api::telegram::rpc::dispose);
 

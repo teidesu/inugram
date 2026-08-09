@@ -499,13 +499,13 @@ fn install_account_invoke<'js>(ctx: &Ctx<'js>, state: &Rc<RpcState>) -> JsResult
         },
     )?;
     prototype.set("invokeRpc", f)?;
-    if let Some(inner) = crate::api::telegram::account::take_prototype(ctx, &accounts) {
+    if let Some(inner) = accounts.take_prototype(ctx) {
         prototype.set_prototype(Some(&inner))?;
     }
     let object_ctor: Object = ctx.globals().get("Object")?;
     let freeze: Function = object_ctor.get("freeze")?;
     freeze.call::<_, Value>((prototype.clone(),))?;
-    crate::api::telegram::account::set_prototype(ctx, &accounts, &prototype);
+    accounts.set_prototype(ctx, &prototype);
     Ok(())
 }
 
@@ -520,7 +520,7 @@ fn install_send_message<'js>(
     let rpc_error: Value = inu.get("RpcError")?;
     let accounts = state.accounts.clone();
     let self_user_id = Function::new(ctx.clone(), move |account_id: i32| {
-        crate::api::telegram::account::self_user_id(&accounts, account_id).map(|id| id as f64)
+        accounts.as_ref().and_then(|accounts| accounts.self_user_id(account_id)).map(|id| id as f64)
     })?;
     let build: Function = factory.call((shared, plugin_error, rpc_error, self_user_id))?;
     *state.send_wrap.borrow_mut() = Some(Persistent::save(ctx, build));
@@ -1198,7 +1198,7 @@ pub fn dispose(context: &rquickjs::Context, state: &Rc<RpcState>) {
             let _ = tools.then.restore(&ctx);
         }
         if let Some(accounts) = state.accounts.as_ref() {
-            let _ = crate::api::telegram::account::take_prototype(&ctx, accounts);
+            let _ = accounts.take_prototype(&ctx);
         }
         state.drain_update_dispatches();
         for (_, pending) in state.pending_invoke.borrow_mut().drain() {
