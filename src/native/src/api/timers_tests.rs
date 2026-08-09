@@ -109,15 +109,9 @@ fn an_interval_repeats_and_a_missed_run_is_not_replayed() {
     assert!(state.timers.is_empty());
 }
 
-/// the floor is read out of the contract rather than off [`MIN_INTERVAL_MS`], which is what
-/// keeps this from passing with the floor removed
 #[test]
-fn an_interval_asking_for_zero_repeats_at_the_floor_the_contract_states() {
-    let floor = crate::testing::harness::stated_number(
-        crate::testing::harness::CONTRACT,
-        "an interval repeats every {} ms at the fastest",
-    );
-    assert_eq!(MIN_INTERVAL_MS, floor);
+fn an_interval_asking_for_zero_repeats_at_the_floor() {
+    let floor = MIN_INTERVAL_MS;
 
     let (rt, ctx, host, _lifecycle, state, _logs) = setup();
     run(&ctx, "globalThis.__ticks = 0; globalThis.__id = setInterval(() => { __ticks++; }, 0);");

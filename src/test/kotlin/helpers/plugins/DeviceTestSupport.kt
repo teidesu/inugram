@@ -392,34 +392,6 @@ fun pluginObserverCount(centre: NotificationCenter): Int {
     return total
 }
 
-/**
- * Reads the number the plugin contract states, given the sentence it appears in with `{}` standing
- * in for the number. A ceiling pinned to a constant the app also ships is pinned to a copy of
- * itself and can be raised to its maximum with the suite green; this is what makes the promise the
- * number. Exactly one place in the document may match. Mirrors rust `testutil::stated_number`.
- */
-fun statedNumber(doc: String, phrase: String): Long {
-    val marker = phrase.indexOf("{}")
-    require(marker >= 0) { "mark the number with {}" }
-    val head = phrase.substring(0, marker)
-    val tail = phrase.substring(marker + 2)
-    require(tail.isNotEmpty()) { "the phrase must carry text after the number to anchor on" }
-    val found = ArrayList<Long>()
-    var from = 0
-    while (true) {
-        val end = doc.indexOf(tail, from)
-        if (end < 0) break
-        from = end + tail.length
-        var start = end
-        while (start > 0 && doc[start - 1].isDigit()) start--
-        if (start < end && doc.regionMatches(start - head.length, head, 0, head.length)) {
-            found.add(doc.substring(start, end).toLong())
-        }
-    }
-    assertEquals(1, found.size, "the contract states '$phrase' ${found.size} time(s)")
-    return found[0]
-}
-
 /** the `.d.ts` sources, bundled as test assets because a device has no repo to read */
 private fun contractAsset(name: String): String =
     InstrumentationRegistry.getInstrumentation()

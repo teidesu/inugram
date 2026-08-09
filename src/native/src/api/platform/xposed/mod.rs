@@ -5,6 +5,7 @@ use std::cell::RefCell;
 use std::collections::HashMap;
 use std::rc::Rc;
 
+use rquickjs::function::Opt;
 use rquickjs::{Array, Context, Ctx, Function, Object, Persistent, Result as JsResult, Runtime, Value};
 
 use crate::api::error::throw_plugin_error;
@@ -14,8 +15,6 @@ use crate::sandbox::registry::{make_disposer, noop_disposer, Lifecycle, Registry
 use rquickjs::function::This;
 
 use crate::api::telegram::rpc::{format_exception, pump_jobs};
-
-const PRELUDE: &[u8] = include_bytes!(concat!(env!("OUT_DIR"), "/xposed.qbc"));
 
 pub trait XposedHost {
     fn xposed(&self, op: i32, target: i64, name: &str, args: &[String]) -> String;
@@ -137,9 +136,26 @@ struct Callbacks<'js> {
     after: Option<Function<'js>>,
 }
 
-fn callbacks_of<'js>(ctx: &Ctx<'js>, hook: &Object<'js>) -> JsResult<Callbacks<'js>> {
-    let before: Option<Function> = hook.get("before").ok().flatten();
-    let after: Option<Function> = hook.get("after").ok().flatten();
+fn callbacks_of<'js>(ctx: &Ctx<'js>, hook: &Object<'js>, what: &str) -> JsResult<Callbacks<'js>> {
+    let callback = |phase| -> JsResult<Option<Function<'js>>> {
+        let value: Value = hook.get(phase)?;
+        if value.is_undefined() {
+            return Ok(None);
+        }
+        let Some(callback) = value.as_function() else {
+            return throw_plugin_error(
+                ctx,
+                "invalid-argument",
+                &format!("{what}: {phase} must be a function"),
+                None,
+                None,
+                None,
+            );
+        };
+        Ok(Some(callback.clone()))
+    };
+    let before = callback("before")?;
+    let after = callback("after")?;
     if before.is_none() && after.is_none() {
         return throw_plugin_error(
             ctx,
@@ -207,16 +223,27 @@ fn js_hook<'js>(
     state: &Rc<XposedState>,
     op: i32,
     target: Value<'js>,
-    name: String,
-    hook: Object<'js>,
+    name: &str,
+    hook: Value<'js>,
+    what: &str,
 ) -> JsResult<Function<'js>> {
     check_grant(ctx, &state.grants, GRANT, None, MATCH_NAMESPACE)?;
-    let callbacks = callbacks_of(ctx, &hook)?;
+    let Some(hook) = hook.as_object() else {
+        return throw_plugin_error(
+            ctx,
+            "invalid-argument",
+            &format!("{what}: expected a hook object"),
+            None,
+            None,
+            None,
+        );
+    };
+    let callbacks = callbacks_of(ctx, hook, what)?;
     if state.lifecycle.is_unloading() {
         return noop_disposer(ctx);
     }
     let target = require_handle(ctx, state, &target, "hook")?;
-    let answered = ask(ctx, state, op, target, &name, &[])?;
+    let answered = ask(ctx, state, op, target, name, &[])?;
     let sites = sites_from(ctx, answered)?;
     install_hooks(ctx, state, sites, callbacks)
 }
@@ -225,13 +252,33 @@ fn js_call_original<'js>(
     ctx: &Ctx<'js>,
     state: &Rc<XposedState>,
     method: Value<'js>,
-    this: Value<'js>,
-    args: Array<'js>,
+    this: Opt<Value<'js>>,
+    args: Opt<Value<'js>>,
 ) -> JsResult<Value<'js>> {
     check_grant(ctx, &state.grants, GRANT, None, MATCH_NAMESPACE)?;
     let method = require_handle(ctx, state, &method, "callOriginalMethod")?;
+    let this = this
+        .0
+        .filter(|value| !value.is_null() && !value.is_undefined())
+        .unwrap_or_else(|| Value::new_null(ctx.clone()));
+    let args = match args.0.filter(|value| !value.is_null() && !value.is_undefined()) {
+        None => Vec::new(),
+        Some(args) => {
+            let Some(args) = args.as_array() else {
+                return throw_plugin_error(
+                    ctx,
+                    "invalid-argument",
+                    "callOriginalMethod: expected an array of arguments",
+                    None,
+                    None,
+                    None,
+                );
+            };
+            crate::utils::arguments::array_values(ctx, args, "callOriginalMethod")?
+        }
+    };
     let mut wires = vec![arg_to_wire(ctx, &state.jvm, &this)?];
-    for arg in crate::utils::arguments::array_values(ctx, &args, "callOriginalMethod")? {
+    for arg in args {
         wires.push(arg_to_wire(ctx, &state.jvm, &arg)?);
     }
     ask(ctx, state, OP_CALL_ORIGINAL, method, "", &wires)
@@ -268,45 +315,97 @@ pub fn install_xposed<'js>(
         pending: RefCell::new(HashMap::new()),
     });
 
-    let natives = Object::new(ctx.clone())?;
+    let xposed = Object::new(ctx.clone())?;
     {
         let state = state.clone();
-        let f = Function::new(
-            ctx.clone(),
-            move |ctx: Ctx<'js>, op: i32, target: Value<'js>, name: String, hook: Object<'js>| {
-                js_hook(&ctx, &state, op, target, name, hook)
-            },
-        )?;
-        natives.set("hook", f)?;
+        let f = Function::new(ctx.clone(), move |ctx: Ctx<'js>, method: Opt<Value<'js>>, hook: Opt<Value<'js>>| {
+            js_hook(
+                &ctx,
+                &state,
+                OP_HOOK,
+                method.0.unwrap_or_else(|| Value::new_undefined(ctx.clone())),
+                "",
+                hook.0.unwrap_or_else(|| Value::new_undefined(ctx.clone())),
+                "hookMethod",
+            )
+        })?;
+        xposed.set("hookMethod", f)?;
     }
     {
         let state = state.clone();
         let f = Function::new(
             ctx.clone(),
-            move |ctx: Ctx<'js>, method: Value<'js>, this: Value<'js>, args: Array<'js>| {
-                js_call_original(&ctx, &state, method, this, args)
+            move |ctx: Ctx<'js>, class: Opt<Value<'js>>, name: Opt<Value<'js>>, hook: Opt<Value<'js>>| {
+                let Some(name) = name
+                    .0
+                    .and_then(|name| name.as_string().and_then(|name| name.to_string().ok()))
+                    .filter(|name| !name.is_empty())
+                else {
+                    return throw_plugin_error(
+                        &ctx,
+                        "invalid-argument",
+                        "hookAllOverloads: expected a method name",
+                        None,
+                        None,
+                        None,
+                    );
+                };
+                js_hook(
+                    &ctx,
+                    &state,
+                    OP_HOOK_ALL,
+                    class.0.unwrap_or_else(|| Value::new_undefined(ctx.clone())),
+                    &name,
+                    hook.0.unwrap_or_else(|| Value::new_undefined(ctx.clone())),
+                    "hookAllOverloads",
+                )
             },
         )?;
-        natives.set("callOriginal", f)?;
+        xposed.set("hookAllOverloads", f)?;
     }
     {
         let state = state.clone();
-        let f = Function::new(ctx.clone(), move |ctx: Ctx<'js>, class: Value<'js>| js_allocate(&ctx, &state, class))?;
-        natives.set("allocate", f)?;
+        let f = Function::new(ctx.clone(), move |ctx: Ctx<'js>, class: Opt<Value<'js>>, hook: Opt<Value<'js>>| {
+            js_hook(
+                &ctx,
+                &state,
+                OP_HOOK_ALL,
+                class.0.unwrap_or_else(|| Value::new_undefined(ctx.clone())),
+                "",
+                hook.0.unwrap_or_else(|| Value::new_undefined(ctx.clone())),
+                "hookAllConstructors",
+            )
+        })?;
+        xposed.set("hookAllConstructors", f)?;
+    }
+    {
+        let state = state.clone();
+        let f = Function::new(
+            ctx.clone(),
+            move |ctx: Ctx<'js>, method: Opt<Value<'js>>, this: Opt<Value<'js>>, args: Opt<Value<'js>>| {
+                js_call_original(
+                    &ctx,
+                    &state,
+                    method.0.unwrap_or_else(|| Value::new_undefined(ctx.clone())),
+                    this,
+                    args,
+                )
+            },
+        )?;
+        xposed.set("callOriginalMethod", f)?;
+    }
+    {
+        let state = state.clone();
+        let f = Function::new(ctx.clone(), move |ctx: Ctx<'js>, class: Opt<Value<'js>>| {
+            js_allocate(&ctx, &state, class.0.unwrap_or_else(|| Value::new_undefined(ctx.clone())))
+        })?;
+        xposed.set("allocateInstance", f)?;
     }
     {
         let state = state.clone();
         let f = Function::new(ctx.clone(), move |ctx: Ctx<'js>| js_disable_profile_saver(&ctx, &state))?;
-        natives.set("disableProfileSaver", f)?;
+        xposed.set("disableProfileSaver", f)?;
     }
-    let ops = Object::new(ctx.clone())?;
-    ops.set("hook", OP_HOOK)?;
-    ops.set("hookAll", OP_HOOK_ALL)?;
-
-    let plugin_error: Value = inu.get("PluginError")?;
-
-    let factory = crate::utils::prelude::load(ctx, PRELUDE)?;
-    let xposed: Object = factory.call((natives, plugin_error, ops))?;
     inu.set("xposed", xposed)?;
 
     Ok(state)

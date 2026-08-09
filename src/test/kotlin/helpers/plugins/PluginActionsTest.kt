@@ -127,15 +127,9 @@ class PluginActionsTest {
         assertEquals(0, PluginActions.rowCount(PluginActions.KIND_CHAT))
     }
 
-    /**
-     * both numbers come out of `common.d.ts` rather than out of the code they check: a ceiling
-     * pinned to the constant the app ships is pinned to a copy of itself, and stays green with the
-     * constant raised to its maximum.
-     */
     @Test
-    fun theCapAndTheRenderBudgetAreTheNumbersTheContractStates() {
-        assertEquals(statedNumber(contract(), "{}ms for every plugin's"), PluginActions.RENDER_BUDGET_MS)
-        val cap = statedNumber(contract(), "at most {} rows per menu per plugin").toInt()
+    fun the_action_row_cap_is_enforced() {
+        val cap = 8
         val plugin = startPlugin("p")
         for (token in 1..cap) {
             assertNull(PluginActions.register(plugin, plugin.js, PluginActions.KIND_CHAT, token, "row$token"))

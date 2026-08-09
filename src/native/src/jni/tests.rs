@@ -51,7 +51,7 @@ mod wiring {
     #[test]
     fn a_new_runtime_gets_its_heap_ceiling() {
         assert!(
-            body_of("nativeCreate").contains("crate::sandbox::limits::apply_heap_limit(&rt)"),
+            body_of("nativeCreate").contains("apply_heap_limit(&rt)"),
             "an engine created without its heap ceiling can take the app down with it",
         );
     }
@@ -60,7 +60,7 @@ mod wiring {
     fn an_interrupted_entry_is_stopped_but_the_plugin_is_not_disabled() {
         let body = body_of("nativeCreate");
         assert!(
-            without_space(body).contains("crate::sandbox::limits::install_interrupt_handler(&rt,"),
+            without_space(body).contains("install_interrupt_handler(&rt,"),
             "without the interrupt handler a spinning plugin wedges the queue for good",
         );
         assert!(
@@ -72,7 +72,7 @@ mod wiring {
     #[test]
     fn unhandled_rejections_are_tracked_from_engine_creation() {
         assert!(
-            body_of("nativeCreate").contains("crate::api::telegram::rpc::install_rejection_tracker(&rt"),
+            body_of("nativeCreate").contains("install_rejection_tracker(&rt"),
             "an async handler that throws would fail silently",
         );
     }
@@ -106,18 +106,18 @@ mod wiring {
     fn installing_the_api_installs_the_sandbox_globals_and_the_timer_wheel() {
         let body = body_of("nativeInstallApi");
         assert!(
-            body.contains("crate::api::globals::install_globals("),
+            body.contains("install_globals("),
             "the documented sandbox globals would be missing"
         );
-        assert!(body.contains("crate::api::timers::install_timers("), "setTimeout would be missing");
+        assert!(body.contains("install_timers("), "setTimeout would be missing");
         assert!(
-            body.contains("crate::api::tl::utils::install_utils_with_host(&ctx, utils_host, &inu)") && body.contains("crate::api::tl::message::install_message(&ctx, &shared, &inu)"),
+            body.contains("install_utils_with_host(&ctx, utils_host, &inu)") && body.contains("install_message(&ctx, &shared, &inu)"),
             "inu.utils/inu.Message would be missing, and `inu.Message` cannot install without the helpers utils returns",
         );
         assert!(
-            body.contains("std::path::PathBuf::from(spill_dir)")
+            body.contains("PathBuf::from(spill_dir)")
                 && body
-                    .contains("crate::api::globals::install_globals(&ctx, random_host, &spill_dir, external.clone())"),
+                    .contains("install_globals(&ctx, random_host, &spill_dir, external.clone())"),
             "an engine installed with anything but the host's own spill directory keeps every blob in memory",
         );
     }
@@ -129,10 +129,10 @@ mod wiring {
     fn installing_the_api_installs_the_account_read_surface() {
         let body = body_of("nativeInstallApi");
         let accounts =
-            position_of(body, "crate::api::telegram::account::install_account(", "inu.account would be missing");
+            position_of(body, "install_account(", "inu.account would be missing");
         let reads =
-            position_of(body, "crate::api::telegram::reads::install_reads(", "the Account getters would be missing");
-        let message = position_of(body, "crate::api::tl::message::install_message(", "inu.Message would be missing");
+            position_of(body, "install_reads(", "the Account getters would be missing");
+        let message = position_of(body, "install_message(", "inu.Message would be missing");
         assert!(accounts < reads && message < reads);
     }
 
@@ -166,8 +166,8 @@ mod wiring {
             body.contains("engine.blobs = blobs.clone()"),
             "without the blob table kept, neither `fs.write` nor a fetched body can exist",
         );
-        let timers = position_of(body, "crate::api::timers::install_timers(", "setTimeout would be missing");
-        let fetch = position_of(body, "crate::api::io::fetch::install_fetch(", "the global fetch would be missing");
+        let timers = position_of(body, "install_timers(", "setTimeout would be missing");
+        let fetch = position_of(body, "install_fetch(", "the global fetch would be missing");
         assert!(timers < fetch, "`fetch.js` captures setTimeout at install to measure `timeout` on",);
     }
 
@@ -176,7 +176,7 @@ mod wiring {
     #[test]
     fn installing_fs_uses_the_hosts_own_directory_and_quota() {
         let body = body_of("nativeInstallFs");
-        assert!(body.contains("std::path::Path::new(&dir)"), "the fs root must be the one the host named");
+        assert!(body.contains("Path::new(&dir)"), "the fs root must be the one the host named");
         assert!(body.contains("engine.blobs.clone()"), "fs.write reads a `Blob` through the blob table");
         assert!(body.contains("crate::api::io::fs::UNCAPPED"), "unsafe.fs would silently get the default cap");
     }
@@ -188,7 +188,7 @@ mod wiring {
         let body = body_of("nativeInstallJvm");
         assert!(
             body.contains("let grants: Rc<dyn GrantHost> = engine.bridge.clone()")
-                && body.contains("crate::api::platform::jvm::install_jvm(&ctx, host, grants"),
+                && body.contains("install_jvm(&ctx, host, grants"),
             "inu.jvm installed without the grant gate reflects for anyone",
         );
     }

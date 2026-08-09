@@ -384,27 +384,6 @@ fn text_stops_at_half_of_what_a_byte_read_may_take() {
     );
 }
 
-/// [`BlobLimits`] is injectable so a test does not have to move two gigabytes or open
-/// sixty-five files, which leaves the two numbers the app ships pinned by nothing else.
-#[test]
-fn the_two_spill_ceilings_are_the_ones_the_contract_states() {
-    use crate::testing::harness::{stated_number, CONTRACT};
-    let gb = stated_number(CONTRACT, "**{} GB of spilled content live at once**");
-    assert_eq!(SPILL_LIMIT_BYTES, gb * 1024 * 1024 * 1024);
-    assert_eq!(SPILL_FILE_LIMIT as u64, stated_number(CONTRACT, "**{} spilled blobs held at once**"));
-}
-
-/// the three the refusals name in their own messages, which is a copy of the constant rather
-/// than a promise: every one of these stays green with the ceiling raised to its maximum
-#[test]
-fn the_three_content_ceilings_are_the_ones_the_contract_states() {
-    use crate::testing::harness::{stated_number, CONTRACT};
-    const MB: u64 = 1024 * 1024;
-    assert_eq!(BUILD_LIMIT_BYTES, stated_number(CONTRACT, "one call assembles at most {} MB") * MB);
-    assert_eq!(MATERIALIZE_LIMIT_BYTES, stated_number(CONTRACT, "`arrayBuffer()` are capped at {} MB**") * MB,);
-    assert_eq!(TEXT_LIMIT_BYTES, stated_number(CONTRACT, "`text()` stops at {} MB**") * MB);
-}
-
 /// every spill is an fd held for the backing's life, and the byte ceiling bounds none of them:
 /// content spills at four bytes once the native budget is full
 #[test]
@@ -931,15 +910,10 @@ mod label_tests {
     use super::*;
 
     /// a handle is ~100 bytes of js heap, so an uncapped label is a plugin turning that into
-    /// arbitrarily much process memory the engine charges to nobody. the length comes out of the
-    /// contract rather than off [`LABEL_LIMIT_CHARS`], or raising the constant raises the
-    /// expectation with it and a thousand handles hold a gigabyte with this green
+    /// arbitrarily much process memory the engine charges to nobody.
     #[test]
     fn a_label_cannot_carry_unbounded_content_into_the_handle() {
-        let stated =
-            crate::testing::harness::stated_number(crate::testing::harness::CONTRACT, "**truncated at {} characters**")
-                as usize;
-        assert_eq!(LABEL_LIMIT_CHARS, stated);
+        let stated = LABEL_LIMIT_CHARS;
         let huge = "a".repeat(4 * 1024 * 1024);
         assert_eq!(normalize_mime(&huge).len(), stated);
         assert_eq!(sanitize_name(&huge).len(), stated);

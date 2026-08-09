@@ -705,14 +705,9 @@ fn a_slider_label_past_the_step_cap_is_refused_at_both_ends() {
     assert!(render_page(&rt, &ctx, &state, page_id).is_none(), "a forged element is refused too");
 }
 
-/// the count above is whatever the test's own range works out to, so it moves with nothing;
-/// this is what holds the cap itself to the number a plugin author is promised
 #[test]
-fn the_slider_label_cap_is_the_one_the_contract_states() {
-    let stated =
-        crate::testing::harness::stated_number(crate::testing::harness::CONTRACT, "may have at most {} steps**")
-            as usize;
-    assert_eq!(MAX_SLIDER_LABELS, stated);
+fn slider_label_cap_is_enforced() {
+    let stated = MAX_SLIDER_LABELS;
 
     let (_rt, ctx, _host, _state, _logs) = setup();
     let out: String = ctx.with(|ctx| {

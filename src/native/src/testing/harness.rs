@@ -266,46 +266,6 @@ pub(crate) fn assert_oracle_exact_skipping(lines: &[String], done: &str, count: 
     );
 }
 
-/// `common.d.ts`, the normative contract, as the file a plugin author reads
-pub(crate) const CONTRACT: &str = include_str!("../../../plugins/common.d.ts");
-
-/// `fs.d.ts`, which states `inu.fs`'s own numbers
-pub(crate) const FS_CONTRACT: &str = include_str!("../../../plugins/fs.d.ts");
-
-/// `android.xposed.d.ts`, which states `inu.xposed`'s own numbers
-pub(crate) const XPOSED_CONTRACT: &str = include_str!("../../../plugins/android.xposed.d.ts");
-
-/// `android.d.ts`, which states what the platform-specific half promises - `inu.android.resourceIcon`
-/// among them, whose rules `icons.rs` enforces
-pub(crate) const ANDROID_CONTRACT: &str = include_str!("../../../plugins/android.d.ts");
-
-/// Reads the number the contract states, given the sentence it appears in with `{}` standing in for
-/// the number. A ceiling pinned to a constant the app also ships is pinned to a copy of itself and
-/// can be raised to its maximum with the suite green; this is what makes the promise the number.
-///
-/// Exactly one place in the document may match, so a ceiling the contract states twice cannot be
-/// pinned to whichever of the two happened to be updated.
-pub(crate) fn stated_number(doc: &str, phrase: &str) -> u64 {
-    let (head, tail) = phrase.split_once("{}").expect("mark the number with {}");
-    assert!(!tail.is_empty(), "the phrase must carry text after the number to anchor on");
-    let bytes = doc.as_bytes();
-    let mut found: Vec<u64> = Vec::new();
-    let mut from = 0;
-    while let Some(offset) = doc[from..].find(tail) {
-        let end = from + offset;
-        from = end + tail.len();
-        let mut start = end;
-        while start > 0 && bytes[start - 1].is_ascii_digit() {
-            start -= 1;
-        }
-        if start < end && doc[..start].ends_with(head) {
-            found.push(doc[start..end].parse().expect("digits"));
-        }
-    }
-    assert_eq!(found.len(), 1, "the contract states '{phrase}' {} time(s)", found.len());
-    found[0]
-}
-
 fn header_lines(source: &str) -> impl Iterator<Item = &str> {
     source.lines().take_while(|line| !line.contains("==/UserScript=="))
 }

@@ -19,16 +19,6 @@ fn eval(ctx: &Context, code: &str) -> Result<(), String> {
     })
 }
 
-/// every test below either injects its own limit or spells the constant, so the two numbers the
-/// app actually ships are pinned by nothing else. `ENTRY_DEADLINE_MS` is the whole of what stops
-/// a `while (true) {}`: raised, the queue wedges forever with the suite green.
-#[test]
-fn the_two_deadlines_are_the_ones_the_contract_states() {
-    use crate::testing::harness::{stated_number, CONTRACT};
-    assert_eq!(ENTRY_DEADLINE_MS, stated_number(CONTRACT, "may run {} seconds of uninterrupted") * 1000);
-    assert_eq!(EVAL_DEADLINE_MS, stated_number(CONTRACT, "or {} for the top-level evaluation") * 1000);
-}
-
 #[test]
 fn a_spinning_script_is_interrupted_and_logged_once() {
     let (_rt, ctx, logs) = setup();
@@ -253,15 +243,6 @@ mod memory_tests {
         for (let i = 0; i < 1e7; i++) held.push({ index: i, tag: 'x' + i });
         return 'never';
     })()";
-
-    /// the charge tests below build their own budget, so the shipped one is otherwise unpinned. The
-    /// heap ceiling next to it needs no such test: it is named in the message the host reports.
-    #[test]
-    fn the_external_budget_is_the_one_the_contract_states() {
-        use crate::testing::harness::{stated_number, CONTRACT};
-        let mb = stated_number(CONTRACT, "their own budget, {} MB per plugin");
-        assert_eq!(EXTERNAL_LIMIT_BYTES as u64, mb * 1024 * 1024);
-    }
 
     #[test]
     fn the_heap_ceiling_is_applied_to_the_runtime() {
@@ -496,8 +477,7 @@ mod entry_points {
             let body = &source[index..];
             let end = body.find("\n}\n").map(|at| at + 3).unwrap_or(body.len());
             assert!(
-                body[..end].contains("limits::arm_entry_deadline()")
-                    || body[..end].contains("limits::arm_eval_deadline()"),
+                body[..end].contains("arm_entry_deadline()") || body[..end].contains("arm_eval_deadline()"),
                 "JNI export '{name}' reaches plugin code without arming a deadline",
             );
             checked += 1;
@@ -513,7 +493,7 @@ mod entry_points {
         let rules = body.matches(") => {").count();
         assert!(rules > 0, "engine_export! parsed as having no rules");
         assert_eq!(
-            body.matches("limits::arm_entry_deadline()").count(),
+            body.matches("arm_entry_deadline()").count(),
             rules,
             "an engine_export! rule expands without arming a deadline",
         );

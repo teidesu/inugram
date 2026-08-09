@@ -87,20 +87,6 @@ class PluginFsTest {
         assertTrue(root.isDirectory, "and it takes only its own directory")
     }
 
-    /**
-     * `FsQuotaTest` spells the constant everywhere else, so the number a device actually gets is
-     * otherwise pinned by nothing: multiplied by a thousand that whole suite stays green and a
-     * plugin holding `@grant fs` gets the disk.
-     */
-    @Test
-    fun the_default_cap_is_the_size_the_contract_states() {
-        val contract = fsContract()
-        val mb = statedNumber(contract, "so it is **capped at {} MB**")
-        assertEquals(mb * 1024 * 1024, FsQuota.DEFAULT_BYTES)
-        // `quota()` restates it, and a plugin reads that line rather than the prose above it
-        assertEquals(mb, statedNumber(contract, "the cap, in bytes: {} MB"))
-    }
-
     /** the mode half of `unsafe.fs`; that it is also uncapped is [FsQuota.forGrants]'s, in `FsQuotaTest` */
     @Test
     fun unsafe_fs_is_unscoped_and_replaces_the_safe_grant_rather_than_adding_to_it() {

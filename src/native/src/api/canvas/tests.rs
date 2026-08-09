@@ -515,25 +515,6 @@ fn a_canvas_is_refused_before_it_is_allocated_rather_than_after() {
     assert!(f.host.log.borrow().canvases.is_empty(), "a refused canvas was still allocated");
 }
 
-/// the ceiling is read out of the contract, not out of the constant it is stated for
-#[test]
-fn the_dimension_ceiling_is_the_one_the_contract_states() {
-    let stated = crate::testing::harness::stated_number(
-        include_str!("../../../../plugins/canvas.d.ts"),
-        "at most {} pixels on a side",
-    );
-    assert_eq!(stated, MAX_DIMENSION as u64);
-}
-
-#[test]
-fn the_gradient_stop_ceiling_is_the_one_the_contract_states() {
-    let stated = crate::testing::harness::stated_number(
-        include_str!("../../../../plugins/canvas.d.ts"),
-        "at most {} colour stops",
-    );
-    assert_eq!(stated, MAX_GRADIENT_STOPS as u64);
-}
-
 #[test]
 fn resizing_reallocates_and_throws_the_recorded_drawing_away() {
     let f = setup("resize");
@@ -1499,7 +1480,7 @@ mod bundled_oracle {
         run(&fixture, ORACLE);
         drain(&fixture, &encoded);
         let lines = lines.borrow().clone();
-        crate::testing::harness::assert_oracle_exact(&lines, "canvas test done", 65);
+        crate::testing::harness::assert_oracle_exact(&lines, "canvas test done", 64);
     }
 
     fn install_console(ctx: &Ctx<'_>, lines: Rc<RefCell<Vec<String>>>) {

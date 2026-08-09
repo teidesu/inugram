@@ -46,7 +46,7 @@ function expectPluginError(label, code, grant, fn) {
 
 // exact, not a floor: most of what follows is a refusal, and a member that stopped existing refuses
 // too - so the surface is asserted positively first and the count is what catches the rest
-const EXPECTED = 29
+const EXPECTED = 30
 const before = ran
 
 check(

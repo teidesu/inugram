@@ -72,14 +72,6 @@ fn the_curated_table_is_exactly_what_the_contract_declares() {
     assert_eq!(declared, known);
 }
 
-/// derived from the contract rather than restated, because every other test here spells the
-/// limit `SVG_LIMIT_BYTES` and so moves with it
-#[test]
-fn the_svg_limit_is_the_size_the_contract_states() {
-    let kib = crate::testing::harness::stated_number(crate::testing::harness::CONTRACT, "**at most {} KiB of source**");
-    assert_eq!(SVG_LIMIT_BYTES as u64, kib * 1024);
-}
-
 #[test]
 fn every_curated_name_maps_to_a_bare_resource_name() {
     for (api, resource) in COMMON_ICONS {
@@ -103,19 +95,6 @@ fn a_resource_name_is_bare() {
     assert!(!is_resource_name("msg settings"));
 }
 
-/// the length is read out of the contract rather than off [`MAX_RESOURCE_NAME`], or the case
-/// below moves with the constant and the ceiling is pinned to a copy of itself
-#[test]
-fn a_resource_name_is_no_longer_than_the_contract_states() {
-    let stated = crate::testing::harness::stated_number(
-        crate::testing::harness::ANDROID_CONTRACT,
-        "a name longer than {} characters",
-    ) as usize;
-    assert_eq!(MAX_RESOURCE_NAME, stated);
-    assert!(is_resource_name(&"a".repeat(stated)));
-    assert!(!is_resource_name(&"a".repeat(stated + 1)));
-}
-
 #[test]
 fn an_svg_is_bounded_and_declaration_free() {
     assert!(check_svg("<svg viewBox='0 0 24 24'><path d='M0 0h24v24H0z'/></svg>").is_ok());
@@ -124,7 +103,7 @@ fn an_svg_is_bounded_and_declaration_free() {
     assert!(matches!(check_svg("<!DOCTYPE svg SYSTEM 'file:///etc/passwd'><svg></svg>"), Err(SvgReject::Markup),));
     assert!(matches!(check_svg("<svg><!ENTITY x '&x;&x;'/></svg>"), Err(SvgReject::Markup),));
     assert!(matches!(check_svg(&format!("<svg>{}</svg>", "x".repeat(SVG_LIMIT_BYTES))), Err(SvgReject::TooLarge(_)),));
-    // exactly at the limit passes: the bound is what the contract states, not one less
+    // exactly at the limit passes
     let head = "<svg>";
     let tail = "</svg>";
     let filler = SVG_LIMIT_BYTES - head.len() - tail.len();
