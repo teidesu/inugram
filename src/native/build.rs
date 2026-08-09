@@ -1,13 +1,3 @@
-//! Compiles every prelude to quickjs bytecode, so an engine loads its object graph in one pass over
-//! a flat buffer instead of parsing ~87 KB of javascript per plugin.
-//!
-//! The bytecode format is tied to the exact quickjs build that reads it, which is why this is
-//! generated here rather than committed: the `rquickjs` compiling it below and the one linked into
-//! the cdylib are the same dependency, resolved from the same lockfile. It is also endian-dependent
-//! and carries no marker of which it is, so it is written little-endian explicitly - every abi the
-//! app ships is little-endian, and a host that is not would otherwise emit bytecode that reads as
-//! garbage on a device.
-
 use std::{env, fs, path::PathBuf};
 
 use rquickjs::{
@@ -15,14 +5,11 @@ use rquickjs::{
     CatchResultExt, Context, Runtime,
 };
 
-/// `(artifact stem, the name a stack trace shows, source)`. Each file is one parenthesized arrow
-/// expression: the factory its module calls with the host state that surface is allowed to see.
 const PRELUDES: &[(&str, &str, &str)] = &[
     ("globals", "<inu:globals>", "src/js/globals.js"),
     ("url", "<inu:url>", "src/js/url.js"),
     ("fetch", "<inu:fetch>", "src/js/fetch.js"),
     ("jvm", "<inu:jvm>", "src/js/jvm.js"),
-    ("xposed", "<inu:xposed>", "src/js/xposed.js"),
     ("events", "<inu:events>", "src/js/events.js"),
     ("reads", "<inu:reads>", "src/js/reads.js"),
     ("send_message", "<inu:send_message>", "src/js/send_message.js"),

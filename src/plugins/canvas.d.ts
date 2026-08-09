@@ -1,5 +1,4 @@
-
-
+/** A canvas is at most 8192 pixels on a side; a gradient has at most 256 colour stops. */
 declare interface CanvasGradient {
   addColorStop(offset: number, color: string): void
 }
@@ -111,7 +110,6 @@ declare interface CanvasRenderingContext2D {
   strokeText(text: string, x: number, y: number, maxWidth?: number): void
   measureText(text: string): TextMetrics
 
-
   getAverageColor(): { r: number, g: number, b: number, a: number }
   getAverageColor(sx: number, sy: number, sw: number, sh: number): { r: number, g: number, b: number, a: number }
   drawImage(image: CanvasImageSource, dx: number, dy: number): void
@@ -127,21 +125,16 @@ declare interface OffscreenCanvas {
   width: number
   height: number
   getContext(contextId: '2d'): CanvasRenderingContext2D
-
-
   convertToBlob(options?: { type?: 'image/png' | 'image/jpeg' | 'image/webp', quality?: number }): Promise<Blob>
 }
 
 declare namespace inu {
   namespace canvas {
-
     function create(width: number, height: number): OffscreenCanvas
-
 
     function decode(source: Blob | Uint8Array): Promise<ImageBitmap>
     /** @needs-grant fs */
     function load(file: { path: string }): Promise<ImageBitmap>
-
 
     function loadFont(family: string, source: Blob | Uint8Array | { path: string }): Promise<void>
   }

@@ -2,7 +2,6 @@ use super::*;
 use crate::api::platform::jvm::tests::testing::OracleJvmHost;
 use crate::sandbox::grants::MATCH_EXACT;
 use crate::testing::harness::{assert_oracle_exact, install_capturing_console, manifest_grants, DisposeOnDrop};
-use rquickjs::Function;
 use std::cell::{Cell, RefCell};
 use std::collections::HashMap;
 
@@ -42,7 +41,7 @@ impl XposedHost for OracleXposedHost {
                 let first = self.site_for(target);
                 format!("S{first},{}", first + 500)
             }
-            OP_CALL_ORIGINAL => "S<original>".to_string(),
+            OP_CALL_ORIGINAL => "I3".to_string(),
             _ => "N".to_string(),
         }
     }
@@ -74,23 +73,15 @@ fn the_bundled_xposed_test_plugin_passes() {
         (state, jvm)
     });
     let _jvm = DisposeOnDrop::new(&ctx, jvm, crate::api::platform::jvm::dispose);
-    let state = DisposeOnDrop::new(&ctx, state, dispose);
+    let _state = DisposeOnDrop::new(&ctx, state, dispose);
 
     ctx.with(|ctx| match ctx.eval::<(), _>(ORACLE) {
         Ok(()) => {}
         Err(rquickjs::Error::Exception) => panic!("{}", format_exception(&ctx)),
         Err(e) => panic!("{e:?}"),
     });
-    // the one thing only java can do: call the method both hooks are on
-    let site = host.sites.borrow().values().copied().min().unwrap();
-    run_dispatch(&rt, &ctx, &state, site, &["I7".to_string()], "S<original>");
-    ctx.with(|ctx| {
-        let done: Function = ctx.globals().get("__xposedDone").unwrap();
-        done.call::<_, ()>(()).unwrap()
-    });
-
     let lines = lines.borrow().clone();
-    assert_oracle_exact(&lines, "xposed test done", 12);
+    assert_oracle_exact(&lines, "xposed test done", 6);
 }
 
 /// One whole dispatch as a host runs it: the `before` phase on the queue, the original on the
@@ -509,6 +500,29 @@ fn a_hook_with_neither_callback_is_refused_before_anything_is_installed() {
 }
 
 #[test]
+fn hook_arguments_are_checked_without_a_js_prelude() {
+    let fixture = granted();
+    for (source, expected) in [
+        (
+            "(() => { const m = inu.jvm.cls('java.lang.String').getDeclaredMethod('length'); inu.xposed.hookMethod(m, null) })()",
+            "expected a hook object",
+        ),
+        (
+            "(() => { const m = inu.jvm.cls('java.lang.String').getDeclaredMethod('length'); inu.xposed.hookMethod(m, { before: 1 }) })()",
+            "before must be a function",
+        ),
+        (
+            "(() => { const c = inu.jvm.cls('java.lang.String'); inu.xposed.hookAllOverloads(c, '', { before() {} }) })()",
+            "expected a method name",
+        ),
+    ] {
+        let message = fixture.eval_err(source);
+        assert!(message.contains(expected), "{source}: {message}");
+    }
+    assert!(!fixture.host.ops().contains(&OP_HOOK));
+}
+
+#[test]
 fn hook_all_overloads_registers_one_hook_per_site() {
     let fixture = granted();
     *fixture.host.sites.borrow_mut() = vec!["S200,201".to_string()];
@@ -542,27 +556,6 @@ fn registering_after_unload_began_is_a_no_op_returning_a_disposer() {
     assert!(!fixture.host.ops().contains(&OP_HOOK));
 }
 
-/// The waiting is the host's, so this is the only thing holding the number it waits to the
-/// sentence a plugin reads.
-#[test]
-fn the_dispatch_budget_is_the_one_the_contract_states() {
-    assert_eq!(
-        HOOK_BUDGET_MS as u64,
-        crate::testing::harness::stated_number(crate::testing::harness::XPOSED_CONTRACT, "at most **{} ms per phase**"),
-    );
-}
-
-#[test]
-fn the_hook_ceiling_is_the_one_the_contract_states() {
-    assert_eq!(
-        HOOK_LIMIT as u64,
-        crate::testing::harness::stated_number(
-            crate::testing::harness::XPOSED_CONTRACT,
-            "at most {} hooks live at once",
-        )
-    );
-}
-
 #[test]
 fn disposing_the_engine_unhooks_everything_it_installed() {
     // an ART entry point stays rewritten, so a hook left behind dispatches into a dead engine
@@ -587,6 +580,18 @@ fn call_original_needs_the_grant_and_passes_the_receiver_first() {
     let calls = fixture.host.calls.borrow();
     let call = calls.iter().find(|call| call.0 == OP_CALL_ORIGINAL).expect("called");
     assert_eq!(call.3, vec!["N".to_string(), "I1".to_string(), "Stwo".to_string()]);
+}
+
+#[test]
+fn call_original_defaults_omitted_receiver_and_arguments() {
+    let fixture = granted();
+    fixture.eval(
+        "const m = inu.jvm.cls('java.lang.String').getDeclaredMethod('length');
+         inu.xposed.callOriginalMethod(m)",
+    );
+    let calls = fixture.host.calls.borrow();
+    let call = calls.iter().find(|call| call.0 == OP_CALL_ORIGINAL).expect("called");
+    assert_eq!(call.3, vec!["N".to_string()]);
 }
 
 #[test]

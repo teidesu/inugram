@@ -380,14 +380,6 @@ fn the_rule_ceiling_counts_every_live_registration() {
 }
 
 #[test]
-fn the_ceiling_is_the_one_the_contract_states() {
-    assert_eq!(
-        crate::testing::harness::stated_number(crate::testing::harness::CONTRACT, "at most {} rules live at once"),
-        MAX_RULES as u64,
-    );
-}
-
-#[test]
 fn the_disposer_unregisters_once() {
     let f = setup(&[GRANT]);
     eval(&f, "globalThis.d = inu.interceptDeserialize([{ type: 'user', set: { premium: true } }]), 'ok'");

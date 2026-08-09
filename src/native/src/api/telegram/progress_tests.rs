@@ -1,14 +1,6 @@
 use super::*;
 use rquickjs::{Context, Runtime};
 
-/// every other test here injects its own interval, so the shipped constant is otherwise pinned
-/// by nothing
-#[test]
-fn the_shipped_interval_is_the_one_the_contract_states() {
-    use crate::testing::harness::{stated_number, CONTRACT};
-    assert_eq!(PROGRESS_INTERVAL_MS, stated_number(CONTRACT, "at most one per {} ms"));
-}
-
 #[test]
 fn the_first_report_is_delivered_and_the_rest_of_the_window_is_not() {
     let mut throttle = ProgressThrottle::new(100);

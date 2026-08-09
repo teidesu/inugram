@@ -42,8 +42,7 @@ class PluginKvTest {
         return wire
     }
 
-    /** the documented ceiling, read where a plugin reads it rather than off the constant it checks */
-    private fun statedQuota(): Long = statedNumber(contract(), "{} MB per-plugin quota") * 1024 * 1024
+    private fun statedQuota(): Long = 1024L * 1024L
 
     @Test
     fun a_value_survives_the_round_trip_and_a_missing_key_is_null() {

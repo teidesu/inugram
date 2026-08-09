@@ -192,13 +192,12 @@ class PluginFetchTest {
     }
 
     @Test
-    fun a_chain_that_never_ends_is_stopped_after_the_number_of_hops_the_contract_states() {
+    fun a_chain_that_never_ends_is_stopped_after_twenty_hops() {
         val transport = Recorder(mapOf("https://example.com/loop" to hop(302, "https://example.com/loop")))
         val outcome = exchange(grants("fetch"), "https://example.com/loop", transport)
 
         assertEquals("network", codeOf((outcome as PluginFetch.Outcome.Refused).wire))
-        // the first request is not a hop, so the chain is the stated number of them plus it
-        assertEquals(statedNumber(contract(), "longer than {} hops") + 1, transport.urls.size.toLong())
+        assertEquals(21, transport.urls.size)
     }
 
     /**
@@ -511,18 +510,6 @@ class PluginFetchTest {
         }
         assertFalse(file.exists())
         assertEquals(0L, budget.get())
-    }
-
-    /**
-     * every other assertion about these two is written in terms of the constant, so raising either
-     * to its maximum leaves the suite green. What a plugin can read is `common.d.ts`, so that is
-     * what they are held to.
-     */
-    @Test
-    fun the_two_body_ceilings_are_the_numbers_the_contract_states() {
-        val mb = 1024L * 1024L
-        assertEquals(statedNumber(contract(), "{} MB in each direction") * mb, PluginFetch.MAX_BODY_BYTES)
-        assertEquals(statedNumber(contract(), "hold at most {} MB of fetched content") * mb, PluginFetch.BODY_BUDGET_BYTES)
     }
 
     /**

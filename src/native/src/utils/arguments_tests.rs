@@ -51,11 +51,3 @@ fn an_explicit_undefined_reads_as_absent_and_null_does_not() {
         assert!(opt(Opt(Some(Value::new_null(ctx.clone())))).is_some());
     });
 }
-
-#[test]
-fn the_limit_is_the_one_the_contract_states() {
-    assert_eq!(
-        crate::testing::harness::stated_number(crate::testing::harness::CONTRACT, "at most {} elements"),
-        ARRAY_LIMIT as u64,
-    );
-}

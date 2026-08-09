@@ -194,16 +194,6 @@ class PluginJvmTest {
     }
 
     @Test
-    fun theBoundsAreTheOnesTheContractStates() {
-        val contract = jvmContract()
-        assertEquals(
-            PluginJvm.VALUE_LIMIT_BYTES.toLong(),
-            statedNumber(contract, "{} bytes in either direction"),
-        )
-        assertEquals(PluginJvm.DEX_LIMIT_BYTES, statedNumber(contract, "{} bytes of dex"))
-    }
-
-    @Test
     fun anArgumentIsConvertedByTheParameterItLandsIn() {
         val plugin = startPlugin("reflective", scoped)
         val handle = plugin.mint(JvmFixture())

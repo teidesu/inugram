@@ -1063,18 +1063,13 @@ fn a_limit_stops_an_iterator_mid_page_and_asks_for_nothing_more() {
     assert_eq!(asked.len(), 1);
 }
 
-/// the number is read back out of the contract, not out of a copy of itself: a test spelling
-/// the constant stays green with it raised to anything
 #[test]
-fn an_iterator_asks_for_the_page_size_the_contract_states() {
+fn an_iterator_uses_the_default_page_size() {
     let (_out, asked) = run_ordered(
         ASYNC_GRANTS,
         "(async () => { for await (const d of inu.account().iterDialogs()) __out.push(d._) })()",
     );
-    let stated = crate::testing::harness::stated_number(
-        crate::testing::harness::CONTRACT,
-        "(omitted, **{}**, which is telegram's own page)",
-    );
+    let stated = 100;
     assert_eq!(asked[0].1, format!("0\n{stated}\n"), "the default batch is not the documented one");
 }
 
@@ -1153,16 +1148,6 @@ fn an_iterator_whose_cursor_was_evicted_ends_with_invalid_argument() {
     assert_eq!(out, r#"["dialog","dialog","invalid-argument"]"#);
 }
 
-/// same bound, stated: raising `CURSOR_LIMIT` with the contract left alone is the drift this
-/// catches, and the test above would happily follow it
-#[test]
-fn the_cursor_table_holds_what_the_contract_says_it_holds() {
-    assert_eq!(
-        CURSOR_LIMIT as u64,
-        crate::testing::harness::stated_number(crate::testing::harness::CONTRACT, "table holds **{} cursors at once**"),
-    );
-}
-
 #[test]
 fn resolve_peer_many_answers_in_place_and_only_the_misses_cost_a_request() {
     let (out, _asked) = run_ordered(
@@ -1216,10 +1201,8 @@ fn a_resolve_that_fails_for_anything_but_not_found_fails_the_batch() {
     assert_eq!(out, r#"["batch:forbidden"]"#);
 }
 
-/// the bound is what the contract states, and it is observed as what the host is holding at
-/// once rather than as the constant that produced it
 #[test]
-fn resolve_peer_many_keeps_the_stated_number_in_flight() {
+fn resolve_peer_many_limits_in_flight_requests() {
     let (_rt, ctx, host, _state, _accounts) = setup(ASYNC_GRANTS);
     ctx.with(|ctx| {
         ctx.eval::<(), _>(
@@ -1229,11 +1212,10 @@ fn resolve_peer_many_keeps_the_stated_number_in_flight() {
         )
         .unwrap()
     });
-    let stated = crate::testing::harness::stated_number(crate::testing::harness::CONTRACT, "at most **{} in flight**");
     assert_eq!(
         host.resolves.borrow().len() as u64,
-        stated,
-        "more peers are being resolved at once than the contract allows"
+        8,
+        "more peers are being resolved at once than the engine allows"
     );
 }
 

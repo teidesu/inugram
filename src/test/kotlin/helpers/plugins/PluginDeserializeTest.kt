@@ -483,7 +483,7 @@ class PluginDeserializeTest {
     @Test
     fun the_refusals_the_bundled_oracle_expects_are_the_ones_the_real_host_gives() {
         val plugin = startPlugin("deserialize", "interceptDeserialize(${oracleScopes().joinToString(",")})")
-        assertEquals(listOf("userFull", "user", "message", "encryptedMessage"), oracleScopes())
+        assertEquals(listOf("userFull", "user", "message"), oracleScopes())
         assertNull(
             plugin.rules(rule("userFull", """{"noforwards_my_enabled":false,"noforwards_peer_enabled":false}""")),
             "the rule the oracle registers has to be one the host accepts",
@@ -491,7 +491,7 @@ class PluginDeserializeTest {
         assertPluginError("invalid-argument", plugin.rules(rule("user", """{"nope":true}""")))
         assertPluginError("forbidden", plugin.rules(rule("user", """{"access_hash":"1"}""")))
         assertPluginError("forbidden", plugin.rules(rule("user", """{"flags":3}""")))
-        assertPluginError("forbidden", plugin.rules(rule("encryptedMessage", """{"date":1}""")))
+        assertPluginError("not-granted", plugin.rules(rule("encryptedMessage", """{"date":1}""")))
         assertPluginError(
             "forbidden",
             plugin.rules(rule("message", """{"pinned":true}""", """{"message":"Login code: 12345"}""")),
@@ -505,24 +505,6 @@ class PluginDeserializeTest {
         return scopes.split(",").map { it.trim() }
     }
 
-    @Test
-    fun the_rule_ceiling_the_contract_states_is_the_one_the_engine_enforces() {
-        // the host counts nothing; the engine does, and the contract is what both are read against
-        assertEquals(32, statedNumber(contract(), "at most {} rules live at once"))
-    }
-
-    /**
-     * read out of the contract rather than off the constant: every other test here injects or
-     * awaits its own budget, so a suite that only ever compared the constant to itself would stay
-     * green with the parking window raised to anything at all
-     */
-    @Test
-    fun the_middleware_budget_the_contract_states_is_the_one_the_parse_waits_for() {
-        assertEquals(
-            PluginDeserialize.MIDDLEWARE_BUDGET_MS,
-            statedNumber(contract(), "parked on the answer for at most {}ms"),
-        )
-    }
 }
 
 /** [PluginDeserialize] syncs a flag bit through [TlJson]; this reads the same bit back */

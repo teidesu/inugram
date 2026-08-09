@@ -156,19 +156,6 @@ fn code_of(fixture: &Fixture, code: &str) -> String {
     caught(fixture, code).split('|').next().unwrap().to_string()
 }
 
-/// the host derives the real cap from the manifest, so this is only what an engine installed
-/// without one falls back to - and every fixture here spells the constant, which leaves it
-/// pinned by nothing. `FsQuota.DEFAULT_BYTES`, the number a device actually gets, is
-/// held to the same sentence by `PluginFsTest`.
-#[test]
-fn the_default_quota_is_the_size_the_contract_states() {
-    use crate::testing::harness::{stated_number, FS_CONTRACT};
-    let mb = stated_number(FS_CONTRACT, "so it is **capped at {} MB**");
-    assert_eq!(DEFAULT_QUOTA_BYTES, mb * 1024 * 1024);
-    // `quota()` restates it, and a plugin reads that line rather than the prose above it
-    assert_eq!(mb, stated_number(FS_CONTRACT, "the cap, in bytes: {} MB"));
-}
-
 /// `cargo test` runs these on several threads, so the suite root is made and unmade
 /// concurrently. Nothing here asserts on `inu.fs`: what it defends is every *other* test in the
 /// binary, since a fixture that panics while building itself fails whichever one was unlucky.

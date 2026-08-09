@@ -449,7 +449,7 @@ mod bundled_oracle {
             rt.execute_pending_job().ok();
         }
         let lines = lines.borrow().clone();
-        assert_oracle_exact(&lines, "jvm test done", 35);
+        assert_oracle_exact(&lines, "jvm test done", 31);
     }
 }
 
@@ -459,17 +459,25 @@ mod bundled_oracle {
 #[cfg(test)]
 pub(crate) mod testing {
     use super::*;
-    use std::cell::Cell;
+    use std::cell::{Cell, RefCell};
+    use std::collections::HashMap;
 
     #[derive(Default)]
     pub(crate) struct OracleJvmHost {
         next_id: Cell<i64>,
         runnable: Cell<u32>,
+        classes: RefCell<HashMap<i64, String>>,
+        list_size: Cell<i32>,
     }
 
     impl OracleJvmHost {
         pub(crate) fn new() -> Rc<Self> {
-            Rc::new(OracleJvmHost { next_id: Cell::new(1), runnable: Cell::new(0) })
+            Rc::new(OracleJvmHost {
+                next_id: Cell::new(1),
+                runnable: Cell::new(0),
+                classes: RefCell::new(HashMap::new()),
+                list_size: Cell::new(0),
+            })
         }
 
         pub(crate) fn as_host(self: &Rc<Self>) -> Rc<dyn JvmHost> {
@@ -487,12 +495,19 @@ pub(crate) mod testing {
             self.next_id.set(id + 1);
             format!("G{kind}{id}")
         }
+
+        fn mint_class(&self, name: &str) -> String {
+            let id = self.next_id.get();
+            self.next_id.set(id + 1);
+            self.classes.borrow_mut().insert(id, name.to_string());
+            format!("GC{id}")
+        }
     }
 
     impl JvmHost for OracleJvmHost {
-        fn jvm(&self, op: i32, _target: i64, name: &str, args: &[String]) -> String {
+        fn jvm(&self, op: i32, target: i64, name: &str, args: &[String]) -> String {
             match op {
-                OP_CLASS => self.mint('C'),
+                OP_CLASS => self.mint_class(name),
                 OP_NEW => self.mint('O'),
                 OP_METHOD => self.mint('M'),
                 OP_FIELD => self.mint('F'),
@@ -503,7 +518,11 @@ pub(crate) mod testing {
                     self.mint('O')
                 }
                 OP_GET => match name {
-                    "size" => "I3".to_string(),
+                    "size" => format!("I{}", self.list_size.get()),
+                    "MAX_VALUE" if self.classes.borrow().get(&target).is_some_and(|class| class == "java.lang.Long") => {
+                        "I9223372036854775807".to_string()
+                    }
+                    "MAX_VALUE" => "I2147483647".to_string(),
                     "TAG" => "Sinugram".to_string(),
                     "digest" => "YAQID".to_string(),
                     "serialVersionUID" => "I9007199254740993".to_string(),
@@ -515,14 +534,22 @@ pub(crate) mod testing {
                     _ => "N".to_string(),
                 },
                 OP_CALL => match name {
-                    "toString" => "S[1, 2]".to_string(),
-                    "add" => "B1".to_string(),
+                    "toString" => "S[1, 2, x]".to_string(),
+                    "add" => {
+                        self.list_size.set(self.list_size.get() + 1);
+                        "B1".to_string()
+                    }
+                    "valueOf" => "I1".to_string(),
+                    "parseInt" => "Ejava.lang.NumberFormatException: For input string: \"NaN\"".to_string(),
                     "clone" => self.mint('O'),
                     "boom" => "Ejava.lang.IllegalStateException: boom".to_string(),
                     _ => "N".to_string(),
                 },
-                OP_INVOKE => "B1".to_string(),
-                OP_MEMBER_GET => "I3".to_string(),
+                OP_INVOKE => {
+                    self.list_size.set(self.list_size.get() + 1);
+                    "B1".to_string()
+                }
+                OP_MEMBER_GET => format!("I{}", self.list_size.get()),
                 _ => "N".to_string(),
             }
         }

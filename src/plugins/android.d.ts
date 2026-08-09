@@ -5,10 +5,8 @@
 
 declare namespace inu {
   namespace ui {
-
     function openPage(fragment: JavaObject): void
   }
-
 
   namespace android {
     /** @needs-grant unsafe.fs */
@@ -23,7 +21,7 @@ declare namespace inu {
     /** @needs-grant unsafe.jvm */
     function getCurrentActivity(): JavaObject | null
 
-
+    /** Refuses a name longer than 128 characters. */
     function resourceIcon(name: string): UIIcon
 
     /** @needs-grant unsafe.jvm */

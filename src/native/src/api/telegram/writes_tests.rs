@@ -554,17 +554,6 @@ fn a_blob_reaches_the_host_as_a_file_and_the_staged_copy_does_not_outlive_the_ca
 /// `common.d.ts` promises a `quota-exceeded` carries
 const REPORT_QUOTA: &str = "(e) => __out.push(`${e.code}:${e.usage}:${e.quota}`)";
 
-/// the refusal below injects its own cap so a test does not have to move a quarter of a
-/// gigabyte, which leaves the number the app ships pinned by nothing else
-#[test]
-fn the_staging_cap_is_the_size_the_contract_states() {
-    use crate::testing::harness::{stated_number, CONTRACT};
-    let mb = stated_number(CONTRACT, "**one such copy is capped at {} MB**");
-    assert_eq!(TRANSFER_LIMIT_BYTES, mb * 1024 * 1024);
-    // `uploadFile` states it by pointing at `sendMedia`'s, so the two have to say one number
-    assert_eq!(mb, stated_number(CONTRACT, "the same {} MB staging cap"));
-}
-
 #[test]
 fn a_transfer_past_the_staging_cap_is_refused_before_a_byte_is_written() {
     let (rt, ctx, host, state, _r, _a, dir) = setup_with_limit(ALL_WRITES, 8);

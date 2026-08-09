@@ -1,5 +1,7 @@
 /*
 Plugin lifecycle follows its grants. Network hooks can run with no activity after a push wakeup.
+One JavaScript turn may run 2 seconds of uninterrupted work, or 10 for the top-level evaluation.
+Native-backed values have their own budget, 64 MB per plugin; API arrays have at most 65536 elements.
 
 Unknown grant names give no access. Unknown grant scopes reject installation.
 
@@ -32,6 +34,7 @@ declare class DOMException extends Error {
 
 declare function setTimeout(callback: () => void, ms?: number): number
 declare function clearTimeout(id?: number): void
+/** an interval repeats every 4 ms at the fastest. */
 declare function setInterval(callback: () => void, ms?: number): number
 declare function clearInterval(id?: number): void
 declare function queueMicrotask(callback: () => void): void
@@ -108,23 +111,23 @@ declare interface AbortSignal {
 
 declare function structuredClone<T>(value: T): T
 
+/** One call assembles at most 32 MB; spilled content is **2 GB of spilled content live at once** and **64 spilled blobs held at once**. */
 declare class Blob {
-
   constructor(parts?: (Blob | Uint8Array | ArrayBuffer | string)[], options?: { type?: string })
 
   readonly size: number
 
   readonly type: string
 
-
   slice(start?: number, end?: number, contentType?: string): Blob
 
-
+  /** Labels are **truncated at 1024 characters**. */
   bytes(): Promise<Uint8Array>
+  /** `arrayBuffer()` are capped at 16 MB**. */
   arrayBuffer(): Promise<ArrayBuffer>
 
+  /** `text()` stops at 8 MB**. */
   text(): Promise<string>
-
 
   dispose(): void
 }
@@ -140,6 +143,7 @@ declare class File extends Blob {
   readonly lastModified: number
 }
 
+/** Progress reports at most one per 100 ms. */
 declare type ProgressCallback = (loaded: number, total: number) => void
 
 declare type HeadersInit = Record<string, string | string[]>
@@ -160,7 +164,7 @@ declare interface Response {
   blob(): Promise<Blob>
 }
 
-/** @needs-grant fetch */
+/** @needs-grant fetch. A response has 32 MB in each direction; a plugin may hold at most 256 MB of fetched content, and a chain is refused when longer than 20 hops. */
 declare function fetch(url: string, init?: {
   method?: string
   headers?: HeadersInit
@@ -204,43 +208,27 @@ declare interface TextWithEntities {
 declare type InputText = string | TextWithEntities
 
 declare namespace inu {
-
   class RpcError extends Error {
     constructor(code: number, text: string)
     code: number
     text: string
   }
 
-
   class PluginError extends Error {
     code:
-
       | 'not-granted'
-
       | 'forbidden'
-
       | 'quota-exceeded'
-
       | 'handle-expired'
-
       | 'unknown-constructor'
-
       | 'invalid-argument'
-
       | 'not-found'
-
       | 'unsupported'
-
       | 'timed-out'
-
       | 'aborted'
-
       | 'network'
-
       | 'internal'
-
       | (string & {})
-
 
     grant?: string
 
@@ -248,20 +236,15 @@ declare namespace inu {
     quota?: number
   }
 
-
   function info(): {
-
     platform: 'android' | (string & {})
     appVersion: string
     appBuild: string
-
     apiVersion: number
     layer: number
     language: string
-
     header: Record<string, string[]>
   }
-
 
   function onUnload(callback: () => void): Disposer
 
@@ -271,7 +254,7 @@ declare namespace inu {
   /** @needs-grant onAppVisibilityChange */
   function onAppVisibilityChange(callback: (mode: 'foreground' | 'background') => void): Disposer
 
-
+  /** 1 MB per-plugin quota. */
   namespace kv {
     /** @needs-grant kv */
     function get(key: string): string | null
@@ -293,14 +276,12 @@ declare namespace inu {
     function usage(): number
   }
 
-
   namespace clipboard {
     /** @needs-grant clipboard.write */
     function write(text: string): void
     /** @needs-grant clipboard.read */
     function read(): string
   }
-
 
   class Message {
     constructor(raw: tl.TypeMessage)
@@ -345,10 +326,8 @@ declare namespace inu {
 
     get isSecret(): boolean
 
-
     toJSON(): tl.TypeMessage
   }
-
 
   interface AccountInfo {
 
@@ -364,18 +343,14 @@ declare namespace inu {
   /** @needs-grant account.read(self) */
   function onAccountsChanged(callback: (accounts: AccountInfo[]) => void): Disposer
 
-
   function withCurrentAccount(callback: (account: Account) => (() => void) | void): Disposer
-
 
   function account(id?: number): Account
 
-
+  /** The cursor table holds **32 cursors at once**. */
   type Cursor<List extends string> = OpaqueType<`Cursor:${List}`> & string
 
-
   type Paged<T, List extends string> = T[] & { next: Cursor<List> | null }
-
 
   interface Account {
 
@@ -420,7 +395,7 @@ declare namespace inu {
       onProgress?: ProgressCallback
     }): Promise<{ path: string }>
 
-    /** @needs-grant account.write(send) */
+    /** @needs-grant account.write(send). One staged copy is **one such copy is capped at 256 MB**; the same 256 MB staging cap applies to every write. */
     uploadFile(file: Blob | Uint8Array | { path: string }, options?: {
       fileName?: string
       onProgress?: ProgressCallback
@@ -437,7 +412,7 @@ declare namespace inu {
       limit?: number
       cursor?: Cursor<'dialogs'>
     }): Promise<Paged<tl.TypeDialog, 'dialogs'>>
-    /** @needs-grant account.read(dialogs) */
+    /** @needs-grant account.read(dialogs). `batchSize` defaults to (omitted, **100**, which is telegram's own page). */
     iterDialogs(options?: { folderId?: number, limit?: number, batchSize?: number }): AsyncIterableIterator<tl.TypeDialog>
 
     /** @needs-grant account.read(history) */
@@ -484,7 +459,7 @@ declare namespace inu {
     resolveUser(peer: InputPeerLike): Promise<tl.TypeInputUser>
     /** @needs-grant account.read(peers) */
     resolveChannel(peer: InputPeerLike): Promise<tl.TypeInputChannel>
-    /** @needs-grant account.read(peers) */
+    /** @needs-grant account.read(peers). Resolves at most **8 in flight**. */
     resolvePeerMany(peers: InputPeerLike[]): Promise<(tl.TypeInputPeer | null)[]>
 
     /** @needs-grant account.write(send) */
@@ -560,11 +535,23 @@ declare namespace inu {
     readHistory(peer: InputPeerLike, options?: { maxId?: number, topicId?: number }): Promise<void>
 
     /** @needs-grant account.write(typing) */
-    sendTyping(peer: InputPeerLike, action?:
-      | 'typing' | 'cancel' | 'recordVideo' | 'uploadVideo' | 'recordVoice' | 'uploadVoice'
-      | 'uploadPhoto' | 'uploadDocument' | 'chooseSticker' | 'chooseContact', options?: {
+    sendTyping(
+      peer: InputPeerLike,
+      action?:
+        | 'typing'
+        | 'cancel'
+        | 'recordVideo'
+        | 'uploadVideo'
+        | 'recordVoice'
+        | 'uploadVoice'
+        | 'uploadPhoto'
+        | 'uploadDocument'
+        | 'chooseSticker'
+        | 'chooseContact',
+      options?: {
         topicId?: number
-      }): Promise<void>
+      }
+    ): Promise<void>
 
     /** @needs-grant account.read(draft) */
     getDraft(peer: InputPeerLike, options?: { topicId?: number }): TextWithEntities | null
@@ -578,14 +565,11 @@ declare namespace inu {
     invokeRpc<T extends tl.TypeRpcMethod>(params: T): Promise<tl.RpcCallReturn[T['_']] | null>
   }
 
-
   namespace utils {
-
     function toBase64(bytes: Uint8Array): string
     function fromBase64(base64: string): Uint8Array
     function toHex(bytes: Uint8Array): string
     function fromHex(hex: string): Uint8Array
-
 
     /** Telegram-localized date text. `unix` must be a safe integer Unix timestamp in seconds. */
     function formatDate(unix: number, style?: 'date' | 'time' | 'dateTime' | 'relative'): string
@@ -599,28 +583,21 @@ declare namespace inu {
     /** Telegram's clock-style duration text. `seconds` must be a non-negative signed 32-bit integer. */
     function formatDuration(seconds: number): string
 
-
     namespace peers {
-
       function toDialogId(peer: PeerLikeObject): DialogId
-
       function parseDialogId(id: DialogId | string): {
         type: 'user' | 'chat'
-
         id: number
       }
 
       function toInputPeer(userOrChat: tl.TypeUser | tl.TypeChat): tl.TypeInputPeer
-
       function toBotApiId(peer: PeerLikeObject): number
-
       function fromBotApiId(id: DialogId | string): DialogId
     }
   }
 
   type UIElement = OpaqueType<'UIElement'>
   type UIIcon = OpaqueType<'UIIcon'>
-
 
   namespace icons {
 
@@ -632,34 +609,27 @@ declare namespace inu {
         | 'plus' | 'minus' | 'check' | 'close' | 'more' | 'translate' | 'bookmark',
     ): UIIcon
 
+    /** **at most 64 KiB of source**. */
     function svg(source: string): UIIcon
   }
   namespace ui {
-
     interface UIPage {
-
       invalidate(): void
-
       dispose(): void
     }
 
-
     function openPage(page: UIPage): void
 
-
     function toast(text: string): void
-
 
     function dialog(options: {
       title?: string
       message?: string
-
       body?: UIElement
       positive?: string
       negative?: string
       neutral?: string
     }): Promise<'positive' | 'negative' | 'neutral' | 'dismissed'>
-
 
     function chooser(options: {
       title?: string
@@ -674,49 +644,36 @@ declare namespace inu {
       multiple: true
     }): Promise<number[] | null>
 
-
     interface CurrentScreen {
       type: 'chat' | 'profile' | 'dialogs' | 'settings' | 'other'
       /** @needs-grant account.read(dialogs) */
       dialogId?: DialogId
       /** @needs-grant account.read(dialogs) */
       topicId?: number
-
       account: Account
     }
-
 
     function getCurrentScreen(): CurrentScreen | null
 
     interface ScreenChange {
-
       screen: CurrentScreen | null
-
       previous: CurrentScreen | null
-
       action: 'push' | 'pop' | 'replace'
-
       readonly stack: CurrentScreen[]
     }
 
-
     function onScreenChanged(callback: (change: ScreenChange) => void): Disposer
-
 
     function prompt(options: {
       title: string
       hint?: string
-
       value?: string
-
       selectAll?: boolean
     }): Promise<string | null>
-
 
     interface UIAnchor {
       openMenu(items: {
         text: string
-
         checked?: boolean
         danger?: boolean
         onClick: () => void
@@ -725,47 +682,38 @@ declare namespace inu {
 
     function header(text: string): UIElement
 
-
     function check(options: {
       id?: string
       text: string
       subtitle?: string
       checked: boolean
       onChange: (checked: boolean, anchor: UIAnchor) => void
-
       onSecondaryClick?: (anchor: UIAnchor) => void
     }): UIElement
-
 
     function button(options: {
       id?: string
       text: string
       subtitle?: string
-
       icon?: UIIcon
-
       value?: string
       danger?: boolean
       onClick: (anchor: UIAnchor) => void
-
       onSecondaryClick?: (anchor: UIAnchor) => void
     }): UIElement
-
 
     function select(options: {
       id?: string
       text: string
-
       icon?: UIIcon
       items: (string | { text: string, subtitle?: string })[]
       selected: number
       dialog?: boolean
       onChange: (index: number, anchor: UIAnchor) => void
-
       onSecondaryClick?: (anchor: UIAnchor) => void
     }): UIElement
 
-
+    /** A label may have at most 501 steps**. */
     function slider(options: {
       id?: string
       text?: string
@@ -773,22 +721,17 @@ declare namespace inu {
       max: number
       step: number
       value: number
-
       default?: number
       label?: (value: number) => string
       onChange: (value: number, anchor: UIAnchor) => void
     }): UIElement
 
-
     function separator(text?: string): UIElement
 
     function settingsPage(options: {
       title: string
-
       transient?: boolean
-
       items: () => UIElement[]
-
       bottomButton?: {
         text: string
         onClick: (anchor: UIAnchor) => void
@@ -796,7 +739,6 @@ declare namespace inu {
       onClose?: () => void
     }): UIPage
   }
-
 
   function registerSettings(page: ui.UIPage): Disposer
 
@@ -821,13 +763,10 @@ declare namespace inu {
     ) => MaybePromise<SharedRpcReturn<M> | null | undefined>,
   ): Disposer
 
-  /** `TLRPC.deserialize` bypasses interception for `messages.foundStickers`, `messages.foundStickersNotModified`, `users.users`, and `users.usersSlice`. */
+  /** `TLRPC.deserialize` bypasses interception for `messages.foundStickers`, `messages.foundStickersNotModified`, `users.users`, and `users.usersSlice`. At most 32 rules live at once; parsing is parked on the answer for at most 250ms. */
   function interceptDeserialize(rules: {
-
     type: string | string[]
-
     when?: Record<string, string | number | boolean | null>
-
     set: Record<string, string | number | boolean | null>
   }[]): Disposer
   /** @needs-grant interceptDeserialize */
@@ -857,17 +796,14 @@ declare namespace inu {
     ) => MaybePromise<'deliver' | 'drop'>,
   ): Disposer
 
-
   interface ActionContext {
     account: Account
   }
   interface ChatActionContext extends ActionContext {
     dialogId: DialogId
-
     topicId?: number
   }
   interface MessageActionContext extends ChatActionContext {
-
     messageIds: number[]
   }
   interface MessageEditorActionContext extends ChatActionContext {
@@ -876,45 +812,33 @@ declare namespace inu {
     send: (message: InputText) => void
   }
 
-
   interface ActionOptions<Ctx> {
     id: string
     text: string | ((ctx: Ctx) => string)
-
     icon?: UIIcon | ((ctx: Ctx) => UIIcon)
-
     visible?: (ctx: Ctx) => boolean
     callback: (ctx: Ctx) => void
   }
 
-
+  /** Renders in 150ms for every plugin's answer; at most 8 rows per menu per plugin. */
   function registerAction(options: ActionOptions<ActionContext>): Disposer
-
 
   function registerChatAction(options: ActionOptions<ChatActionContext>): Disposer
 
-
   function registerMessageAction(options: ActionOptions<MessageActionContext>): Disposer
-
 
   function registerProfileAction(options: ActionOptions<ChatActionContext>): Disposer
 
-
   function registerMessageEditorAction(options: ActionOptions<MessageEditorActionContext>): Disposer
 
-
   interface OutgoingMessage {
-
     peer: DialogId
     text: TextWithEntities
     replyToMessageId: number | null
     topicId: number | null
-
     scheduleDate: number | null
     silent: boolean
-
     media: tl.TypeInputMedia[]
-
     readonly isEdit: boolean
     readonly editMessageId: number | null
   }
