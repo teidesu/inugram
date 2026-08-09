@@ -4,7 +4,6 @@ import desu.inugram.core.plugins.ScreenChangeAction
 import desu.inugram.core.plugins.ScreenRef
 import desu.inugram.core.plugins.ScreenStack
 import desu.inugram.helpers.plugins.PluginManager
-import desu.inugram.helpers.plugins.api.PluginApi
 import desu.inugram.ui.settings.SettingsPageActivity
 import org.json.JSONArray
 import org.json.JSONObject
@@ -59,7 +58,7 @@ object PluginScreens {
     }
 
     fun currentScreenWire(): String {
-        if (!PluginApi.isForeground) return "N"
+        if (!PluginAppVisibility.isForeground) return "N"
         val top = stack.lastOrNull() ?: return "N"
         return "J${toJson(top)}"
     }

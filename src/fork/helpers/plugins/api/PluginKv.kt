@@ -4,6 +4,8 @@ import android.content.Context
 import android.content.SharedPreferences
 import desu.inugram.core.plugins.PluginInstalls
 import desu.inugram.core.plugins.PluginWire
+import desu.inugram.helpers.plugins.Plugin
+import desu.inugram.helpers.plugins.StorageListener
 import org.json.JSONArray
 import org.json.JSONObject
 import org.telegram.messenger.ApplicationLoader
@@ -15,7 +17,7 @@ import org.telegram.messenger.ApplicationLoader
  * asynchronously. Values are strings only; total size is capped at [MAX_BYTES] per plugin.
  *
  * Results are PluginWire-tagged strings (`S`/`N`/`J`/`E`/`P`) - see
- * [desu.inugram.helpers.plugins.ApiListener.kv].
+ * [desu.inugram.helpers.plugins.StorageListener.kv].
  * Called only on [org.telegram.messenger.Utilities.globalQueue] (the engines' thread).
  */
 object PluginKv {
@@ -30,6 +32,13 @@ object PluginKv {
     const val OP_INSERT_ALL = 6
     const val OP_HAS = 7
     const val OP_USAGE = 8
+
+    fun listenerFor(plugin: Plugin): StorageListener = object : StorageListener {
+        override fun kv(op: Int, key: String, value: String): String {
+            if (!plugin.permissions.has("kv")) return PluginWire.encodeNotGranted("kv")
+            return handleOp(plugin.id, op, key, value)
+        }
+    }
 
     // the id names a file, so it is re-checked where it becomes one: an id that reached here malformed would be a path fragment out of persisted state
     private fun prefsName(installId: String): String {

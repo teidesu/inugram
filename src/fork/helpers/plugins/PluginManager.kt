@@ -5,10 +5,8 @@ import android.content.Intent
 import android.content.pm.ShortcutInfo
 import android.content.pm.ShortcutManager
 import android.graphics.drawable.Icon
-import android.os.Build
 import android.os.SystemClock
 import android.util.Log
-import androidx.core.content.edit
 import desu.inugram.InuConfig
 import desu.inugram.core.plugins.BootCohort
 import desu.inugram.core.plugins.GrantValidator
@@ -17,31 +15,36 @@ import desu.inugram.core.plugins.PluginManifest
 import desu.inugram.core.plugins.PluginManifestParser
 import desu.inugram.core.plugins.ScopeMatch
 import desu.inugram.core.plugins.TlCtorIds
+import desu.inugram.helpers.plugins.PluginManager.fail
+import desu.inugram.helpers.plugins.PluginManager.init
+import desu.inugram.helpers.plugins.PluginManager.onAppInteractive
+import desu.inugram.helpers.plugins.PluginManager.plugins
+import desu.inugram.helpers.plugins.PluginManager.reload
+import desu.inugram.helpers.plugins.PluginManager.start
+import desu.inugram.helpers.plugins.PluginManager.stop
 import desu.inugram.helpers.plugins.api.EngineBindings
-import desu.inugram.helpers.plugins.api.PluginApi
 import desu.inugram.helpers.plugins.api.PluginKv
 import desu.inugram.helpers.plugins.io.PluginBlobs
 import desu.inugram.helpers.plugins.io.PluginFetch
 import desu.inugram.helpers.plugins.io.PluginFs
 import desu.inugram.helpers.plugins.platform.PluginJvm
 import desu.inugram.helpers.plugins.platform.PluginNotifications
+import desu.inugram.helpers.plugins.platform.PluginPlatform
 import desu.inugram.helpers.plugins.platform.PluginXposed
+import desu.inugram.helpers.plugins.telegram.PluginAccounts
 import desu.inugram.helpers.plugins.telegram.PluginDeserialize
 import desu.inugram.helpers.plugins.telegram.PluginMedia
-import desu.inugram.helpers.plugins.telegram.PluginReads
 import desu.inugram.helpers.plugins.telegram.PluginRpc
 import desu.inugram.helpers.plugins.telegram.PluginUpdates
-import desu.inugram.helpers.plugins.telegram.PluginWrites
-import desu.inugram.helpers.plugins.ui.PluginActions
-import desu.inugram.helpers.plugins.ui.PluginCanvas
-import desu.inugram.helpers.plugins.ui.PluginUi
 import desu.inugram.helpers.plugins.tl.TlFilter
 import desu.inugram.helpers.plugins.tl.TlHandles
-import java.io.File
-import java.util.IdentityHashMap
-import java.util.concurrent.CountDownLatch
-import java.util.concurrent.TimeUnit
+import desu.inugram.helpers.plugins.ui.PluginActions
+import desu.inugram.helpers.plugins.ui.PluginAppVisibility
+import desu.inugram.helpers.plugins.ui.PluginCanvas
+import desu.inugram.helpers.plugins.ui.PluginUi
+import desu.inugram.helpers.update.UpdateHelper
 import org.telegram.messenger.AndroidUtilities
+import org.telegram.messenger.ApplicationLoader
 import org.telegram.messenger.BuildVars
 import org.telegram.messenger.LocaleController
 import org.telegram.messenger.LocaleController.formatString
@@ -50,6 +53,9 @@ import org.telegram.messenger.R
 import org.telegram.messenger.Utilities
 import org.telegram.tgnet.TLRPC
 import org.telegram.ui.LaunchActivity
+import java.util.IdentityHashMap
+import java.util.concurrent.CountDownLatch
+import java.util.concurrent.TimeUnit
 
 /**
  * Owns the running plugins: which of them are loaded, when each one starts and stops, and what
@@ -65,28 +71,18 @@ object PluginManager {
     private const val PLUGIN_API_VERSION = 1
     private const val PLATFORM = "android"
 
-    // console.* is one JNI upcall and one logcat line per call, and a plugin logging in a loop never
-    // throws, so nothing in the failure policy stops it flooding on its own
     private const val LOG_BUDGET = 200
     private const val LOG_WINDOW_MS = 10_000L
 
-    private lateinit var appContext: Context
-    private val packageInfo by lazy {
-        try {
-            appContext.packageManager.getPackageInfo(appContext.packageName, 0)
-        } catch (_: Exception) {
-            null
-        }
-    }
-
     @Suppress("DEPRECATION")
-    private val appBuild by lazy { packageInfo?.versionCode?.toString() ?: "0" }
+    private val appBuild by lazy { UpdateHelper.packageInfo?.versionCode?.toString() ?: "0" }
 
     private val plugins = mutableListOf<Plugin>()
 
     // structural mutations happen on the UI thread while globalQueue reads the order to sort
     // interceptor chains, so readers get an immutable snapshot rather than the live list
-    @Volatile private var snapshot: List<Plugin> = emptyList()
+    @Volatile
+    private var snapshot: List<Plugin> = emptyList()
 
     private val guard = BootGuard()
 
@@ -102,12 +98,10 @@ object PluginManager {
     var onChanged: (() -> Unit)? = null
 
     fun init(context: Context) {
-        appContext = context.applicationContext
-        // before anything can run: it has to see the first activity start, and a plugin attaching
-        // needs to know whether there is a foreground to attach into
-        PluginApi.watchVisibility(appContext)
+        PluginAppVisibility.watch(context)
+        PluginAccounts.watch()
         PluginBlobs.scheduleSweep()
-        PluginStore.copyBundled(appContext, packageInfo, appBuild)
+        PluginStore.copyBundled(context, UpdateHelper.packageInfo, appBuild)
         plugins.addAll(PluginStore.load())
         PluginStore.persist(plugins)
         republishOrder()
@@ -138,7 +132,7 @@ object PluginManager {
      * stops waiting.
      */
     fun onAppBoot() {
-        if (booted || !::appContext.isInitialized) return
+        if (booted || ApplicationLoader.applicationContext == null) return
         booted = true
         if (!isEngineEnabled()) return
         val loaded = CountDownLatch(1)
@@ -334,8 +328,6 @@ object PluginManager {
     /** globalQueue only */
     private fun start(plugin: Plugin) {
         if (plugin.engine != null) return
-        // re-read here rather than trusting the call site: a fault raised while the previous
-        // engine was tearing down switches the plugin off after this runnable was queued
         if (!plugin.enabled || !isEngineEnabled() || safeMode) return
         incompatibility(plugin)?.let {
             fail(plugin, PluginFailure.Site.REFUSED, it)
@@ -359,7 +351,7 @@ object PluginManager {
             override fun onTimerSchedule(delayMs: Long) = timers(delayMs)
         }
         // built whole and handed over once: rust caches its method ids off `PluginBridge` at
-        // `start`, and every ordering constraint among the installs after it is in `PluginApi`
+        // `start`, and every ordering constraint among the installs after it is in `EngineBindings`
         val jvm = EngineBindings.jvmListenerFor(plugin, engine)
         val tl = TlHandles.attach(plugin, TlFilter.policyFor(plugin.permissions))
         val bridge = PluginBridge(
@@ -368,9 +360,10 @@ object PluginManager {
             updates = PluginUpdates.listenerFor(plugin),
             tl = tl,
             deserialize = PluginDeserialize.listenerFor(plugin, engine),
-            api = PluginApi.listenerFor(plugin, engine),
-            reads = PluginReads.listenerFor(plugin, engine),
-            writes = PluginWrites.listenerFor(plugin, engine),
+            storage = PluginKv.listenerFor(plugin),
+            account = PluginAccounts.listenerFor(plugin, engine),
+            ui = PluginUi.listenerFor(plugin, engine),
+            platform = PluginPlatform.listenerFor(),
             fetch = PluginFetch.listenerFor(plugin, engine),
             canvas = PluginCanvas.listenerFor(plugin, engine),
             notifications = PluginNotifications.listenerFor(plugin, engine),
@@ -486,6 +479,7 @@ object PluginManager {
                 Log.w(tag, "spent its log budget ($LOG_BUDGET per ${LOG_WINDOW_MS / 1000}s); muting the rest")
                 return
             }
+
             LogBudget.Verdict.PASS -> Unit
         }
         when (level) {
@@ -521,14 +515,13 @@ object PluginManager {
     }
 
     private fun registerSafeModeShortcut() {
-        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.N_MR1) return
         try {
-            val manager = appContext.getSystemService(ShortcutManager::class.java) ?: return
-            val intent = Intent(appContext, LaunchActivity::class.java).setAction(SAFE_MODE_ACTION)
-            val shortcut = ShortcutInfo.Builder(appContext, SAFE_MODE_SHORTCUT_ID)
+            val manager = ApplicationLoader.applicationContext.getSystemService(ShortcutManager::class.java) ?: return
+            val intent = Intent(ApplicationLoader.applicationContext, LaunchActivity::class.java).setAction(SAFE_MODE_ACTION)
+            val shortcut = ShortcutInfo.Builder(ApplicationLoader.applicationContext, SAFE_MODE_SHORTCUT_ID)
                 .setShortLabel(getString(R.string.InuPluginsSafeMode))
                 .setLongLabel(getString(R.string.InuPluginsSafeModeShortcut))
-                .setIcon(Icon.createWithResource(appContext, R.drawable.msg_settings))
+                .setIcon(Icon.createWithResource(ApplicationLoader.applicationContext, R.drawable.msg_settings))
                 .setIntent(intent)
                 .build()
             manager.addDynamicShortcuts(listOf(shortcut))

@@ -39,7 +39,7 @@ class FsQuotaTest {
     /**
      * null rather than 0: rust reads a 0 as "the host had no number to give" and substitutes the
      * default cap, so the two sentinels would silently disagree and every install would get a
-     * scoped directory made for an api it may never call. `PluginApi.install` skips `installFs`
+     * scoped directory made for an api it may never call. `EngineBindings.install` skips `installFs`
      * outright on null.
      */
     @Test

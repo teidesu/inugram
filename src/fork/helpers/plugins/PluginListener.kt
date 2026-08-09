@@ -29,9 +29,10 @@ interface PluginListener :
     UpdatesListener,
     TlListener,
     DeserializeListener,
-    ApiListener,
-    ReadsListener,
-    WritesListener,
+    StorageListener,
+    AccountListener,
+    UiListener,
+    PlatformListener,
     FetchListener,
     CanvasListener,
     NotificationListener,
@@ -53,15 +54,36 @@ interface CoreListener {
     fun onTimerSchedule(delayMs: Long)
 }
 
-interface ApiListener {
+interface StorageListener {
     /** [op] keeps in sync with rust `api::KV_*`; unused [key]/[value] arrive as "" */
     fun kv(op: Int, key: String, value: String): String
 
-    /**
-     * `[{id, userId, isCurrent, isPremium}]`. Anything unparseable is taken as "no accounts",
-     * so this must never be an error wire.
-     */
+}
+
+interface AccountListener : ReadsListener, WritesListener {
+    /** `[{id, userId, isCurrent, isPremium}]`; anything unparseable is taken as "no accounts". */
     fun accounts(): String
+
+}
+
+interface ReadsListener {
+    /** [op] keeps in sync with rust `reads::OP_*`; a failed batch answers one `P`/`E` wire. */
+    fun accountRead(accountId: Int, op: Int, arg: String): String
+
+    fun resolvePeer(accountId: Int, requestId: Long, spec: String, kind: Int): String?
+
+    fun accountFetch(accountId: Int, requestId: Long, op: Int, arg: String): String?
+}
+
+interface WritesListener {
+    /** [op] keeps in sync with rust `writes::OP_*`; [values] carries staged files and TL values. */
+    fun accountWrite(accountId: Int, requestId: Long, op: Int, arg: String, values: Array<String>): String?
+
+    /** synchronous: reads the app's file-path database and transfers nothing */
+    fun messageFile(accountId: Int, value: String): String
+}
+
+interface UiListener {
 
     fun uiToast(text: String)
 
@@ -73,13 +95,6 @@ interface ApiListener {
     fun uiModal(op: Int, requestId: Long, optionsJson: String): String?
 
     fun uiCurrentScreen(): String
-
-    fun openUrl(url: String)
-
-    /** **not a wire**: it carries whatever the user copied, so no tag could be told from content */
-    fun clipboardRead(): String
-
-    fun clipboardWrite(text: String)
 
     fun uiOpenPage(pageId: Long): String?
 
@@ -103,6 +118,15 @@ interface ApiListener {
 
     /** [op] keeps in sync with rust `actions::EDITOR_*` */
     fun actionEditor(op: Int, surface: Long, payloadJson: String): String?
+}
+
+interface PlatformListener {
+    fun openUrl(url: String)
+
+    /** **not a wire**: it carries whatever the user copied, so no tag could be told from content */
+    fun clipboardRead(): String
+
+    fun clipboardWrite(text: String)
 }
 
 interface RpcListener {
@@ -156,30 +180,6 @@ interface DeserializeListener {
     fun onDeserializeMiddlewareRegister(callbackId: Int, typesJson: String): String?
 
     fun onDeserializeMiddlewareUnregister(callbackId: Int)
-}
-
-interface ReadsListener {
-    /**
-     * [op] keeps in sync with rust `reads::OP_*`; [arg] and a batch answer both join on
-     * `PeerSpecs.LIST_SEPARATOR`. An op that failed as a whole answers a single `P`/`E` wire,
-     * which native checks for before it splits.
-     */
-    fun accountRead(accountId: Int, op: Int, arg: String): String
-
-    fun resolvePeer(accountId: Int, requestId: Long, spec: String, kind: Int): String?
-
-    fun accountFetch(accountId: Int, requestId: Long, op: Int, arg: String): String?
-}
-
-interface WritesListener {
-    /**
-     * [op] keeps in sync with rust `writes::OP_*`. [values] carries the positions JSON could
-     * not: a staged file (`F<json>`), a live handle (`H...`) or a plain TL object (`J<json>`).
-     */
-    fun accountWrite(accountId: Int, requestId: Long, op: Int, arg: String, values: Array<String>): String?
-
-    /** the one synchronous member here: it reads the app's file-path database and transfers nothing */
-    fun messageFile(accountId: Int, value: String): String
 }
 
 /**

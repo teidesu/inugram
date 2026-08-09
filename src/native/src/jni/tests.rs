@@ -242,7 +242,7 @@ mod wiring {
     ///
     /// The file rather than `PluginBridge.kt` because `by` writes the forwarders: the declarations
     /// are the only place the shapes are spelled out.
-    const KOTLIN_BRIDGE: &str = include_str!("../../../kotlin/helpers/plugins/PluginListener.kt");
+    const KOTLIN_BRIDGE: &str = include_str!("../../../fork/helpers/plugins/PluginListener.kt");
 
     fn jni_type(kotlin: &str) -> String {
         let bare = kotlin.trim().trim_end_matches('?');
@@ -339,7 +339,7 @@ mod wiring {
 
     /// Every `external fun` in the bridge, paired with the package of the file declaring it.
     fn kotlin_natives() -> Vec<(String, String)> {
-        let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../kotlin/helpers/plugins");
+        let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../fork/helpers/plugins");
         let mut files = vec![root];
         let mut out = Vec::new();
         while let Some(path) = files.pop() {

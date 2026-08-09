@@ -309,6 +309,8 @@ wrong name or flag, since the bridge and the typings only agree because one scri
 - `build.rs` compiles every JS prelude to QuickJS bytecode. Keep bytecode little-endian and tied to the exact QuickJS build. Do not use `include_str!` for preludes.
 - Bridge tests run on a device in `src/test/kotlin`. Do not use a fake as the source of a fact the test asserts.
 - Off-device source tests protect stock hooks and boot wiring. Keep them when a rebase could silently remove a call site.
+- Plugin checks: `cd src/native && cargo check`; native tests: `cd src/native && cargo test`.
+- Local JVM tests: `cd worktree && ./gradlew :InuCore:test`. Device bridge tests: `cd worktree && ./gradlew :TMessagesProj:connectedDebugAndroidTest`.
 - Install all queue recorders in `resetBridge`. Use a fresh install ID per test; wipe fixed-name test storage where required.
 - Native JNI failures abort the process. Clear pending exceptions, take the app offline in `resetBridge`, and initialize every container that a native callback reads.
 - Keep device test method names snake_case and without spaces.

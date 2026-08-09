@@ -194,9 +194,9 @@ fun startPlugin(name: String, vararg grants: String): Plugin {
 /**
  * builds [engine]'s [PluginBridge] and runs the installs, the way `PluginManager.start` does.
  *
- * `PluginApi` and `PluginCanvas` come from [DeviceMissing] rather than their owners even though
- * both compile here: their installs reach an `Activity` and a real engine. Nothing under test
- * touches them, so they refuse loudly instead of recording.
+ * Storage, ui, platform, and canvas come from [DeviceMissing] rather than their owners even
+ * though both compile here: their installs reach an `Activity` and a real engine. Nothing under
+ * test touches them, so they refuse loudly instead of recording.
  */
 fun attachBridge(plugin: Plugin, engine: RecordingQuickJs) {
     val tl = TlHandles.attach(plugin, TlFilter.policyFor(plugin.permissions))
@@ -207,9 +207,14 @@ fun attachBridge(plugin: Plugin, engine: RecordingQuickJs) {
         updates = PluginUpdates.listenerFor(plugin),
         tl = tl,
         deserialize = PluginDeserialize.listenerFor(plugin, engine),
-        api = DeviceMissing,
-        reads = PluginReads.listenerFor(plugin, engine),
-        writes = PluginWrites.listenerFor(plugin, engine),
+        storage = DeviceMissing,
+        account = object : AccountListener,
+            ReadsListener by PluginReads.listenerFor(plugin, engine),
+            WritesListener by PluginWrites.listenerFor(plugin, engine) {
+            override fun accounts(): String = throw UnsupportedOperationException("this suite has no accounts")
+        },
+        ui = DeviceMissing,
+        platform = DeviceMissing,
         fetch = PluginFetch.listenerFor(plugin, engine),
         canvas = DeviceMissing,
         notifications = PluginNotifications.listenerFor(plugin, engine),
@@ -220,7 +225,7 @@ fun attachBridge(plugin: Plugin, engine: RecordingQuickJs) {
     PluginRpc.install(engine)
 }
 
-private object DeviceMissing : CoreListener, ApiListener, CanvasListener {
+private object DeviceMissing : CoreListener, StorageListener, UiListener, PlatformListener, CanvasListener {
     private fun no(what: String): Nothing = throw UnsupportedOperationException("this suite has no $what")
 
     override fun onConsole(level: Int, message: String) = no("console")
@@ -232,8 +237,6 @@ private object DeviceMissing : CoreListener, ApiListener, CanvasListener {
     override fun canvas(op: Int, id: Long, arg: String, bytes: ByteArray?) = no("canvas")
 
     override fun kv(op: Int, key: String, value: String) = no("kv")
-
-    override fun accounts() = no("accounts")
 
     override fun uiToast(text: String) = no("ui")
 

@@ -7,12 +7,13 @@ import desu.inugram.helpers.plugins.io.PluginBlobs
 import desu.inugram.helpers.plugins.io.PluginFs
 import desu.inugram.helpers.plugins.platform.PluginJvm
 import desu.inugram.helpers.plugins.platform.PluginXposed
+import desu.inugram.helpers.plugins.ui.PluginAppVisibility
 import org.telegram.ui.LaunchActivity
 
 /**
  * What an engine is wired with, and the order it happens in.
  *
- * Here rather than in [PluginApi] because none of it is an api: it is the bring-up `PluginManager`
+ * Separate from the bridge because none of it is an api: it is the bring-up `PluginManager`
  * runs once per engine, and the ordering constraints among the pieces are the whole content of the
  * file. Split off the api for the same reason the api is not the bridge - a file everything imports
  * is not the file everything belongs in.
@@ -42,7 +43,7 @@ object EngineBindings {
             )
         }
         // a plugin loaded while the app is hidden would otherwise tick unthrottled until the next transition; no callback can hear this, its own code not having run yet
-        if (!PluginApi.isForeground) engine.appVisibilityChanged(false)
+        if (!PluginAppVisibility.isForeground) engine.appVisibilityChanged(false)
     }
 
     /** read live rather than off a snapshot, which would be a strong reference to a screen the user has already left. Here rather than in `PluginJvm`, which reaches no `Activity` of its own */

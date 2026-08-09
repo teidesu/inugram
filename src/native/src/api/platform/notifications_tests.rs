@@ -238,7 +238,6 @@ fn dispose_releases_the_callbacks_and_tells_the_host_to_stop_observing() {
     arm(&ctx);
     dispose(&ctx, &state);
     assert!(state.delegates.is_empty());
-    assert!(state.invoke.borrow().is_none());
     // the host is told through its own detach rather than one upcall per token: an engine being
     // torn down cannot answer another one. What this pins is that nothing is left in the engine
     assert!(host.unregistered.borrow().is_empty());

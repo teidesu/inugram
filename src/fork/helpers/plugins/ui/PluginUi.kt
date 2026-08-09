@@ -7,10 +7,12 @@ import android.text.style.ForegroundColorSpan
 import android.util.Log
 import android.view.View
 import android.widget.LinearLayout
+import android.widget.Toast
 import desu.inugram.core.plugins.PluginWire
 import desu.inugram.helpers.plugins.EngineDispatch
 import desu.inugram.helpers.plugins.Plugin
 import desu.inugram.helpers.plugins.QuickJs
+import desu.inugram.helpers.plugins.UiListener
 import desu.inugram.helpers.plugins.platform.PluginJvm
 import desu.inugram.ui.settings.PluginSettingsActivity
 import desu.inugram.ui.settings.RadioDialogBuilder
@@ -18,6 +20,7 @@ import desu.inugram.ui.showInputDialog
 import org.json.JSONArray
 import org.json.JSONObject
 import org.telegram.messenger.AndroidUtilities
+import org.telegram.messenger.ApplicationLoader
 import org.telegram.messenger.LocaleController
 import org.telegram.messenger.R
 import org.telegram.messenger.Utilities
@@ -52,6 +55,42 @@ object PluginUi {
         override fun hashCode(): Int = System.identityHashCode(engine) * 31 + pageId.hashCode()
     }
     private val openPages = HashMap<PageKey, MutableList<PluginSettingsActivity>>()
+
+    fun listenerFor(plugin: Plugin, engine: QuickJs): UiListener = object : UiListener {
+        override fun uiToast(text: String) {
+            AndroidUtilities.runOnUIThread {
+                Toast.makeText(ApplicationLoader.applicationContext, text, Toast.LENGTH_SHORT).show()
+            }
+        }
+
+        override fun uiModal(op: Int, requestId: Long, optionsJson: String): String? =
+            modal(plugin, engine, op, requestId, optionsJson)
+
+        override fun uiCurrentScreen(): String = PluginScreens.currentScreenWire()
+
+        override fun uiOpenPage(pageId: Long): String? = openPage(plugin, engine, pageId)
+
+        override fun uiOpenFragment(handle: Long): String? = openFragment(engine, handle)
+
+        override fun uiRegisterSettings(pageId: Long) = registerSettings(plugin, pageId)
+
+        override fun uiUnregisterSettings(pageId: Long) = unregisterSettings(plugin, pageId)
+
+        override fun uiInvalidate(pageId: Long) = invalidate(engine, pageId)
+
+        override fun uiOpenMenu(menuId: Long, pageId: Long, anchorKey: String, itemsJson: String): String? =
+            openMenu(plugin, engine, menuId, pageId, anchorKey, itemsJson)
+
+        override fun iconResolves(kind: Int, value: String): Boolean = PluginIcons.iconResolves(kind, value)
+
+        override fun actionRegister(kind: Int, token: Int, id: String): String? =
+            PluginActions.register(plugin, engine, kind, token, id)
+
+        override fun actionUnregister(kind: Int, token: Int) = PluginActions.unregister(engine, kind, token)
+
+        override fun actionEditor(op: Int, surface: Long, payloadJson: String): String? =
+            PluginActions.editorOp(op, surface, payloadJson)
+    }
 
     fun onPageOpened(activity: PluginSettingsActivity) {
         openPages.getOrPut(PageKey(activity.engine, activity.pageId)) { mutableListOf() }.add(activity)

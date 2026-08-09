@@ -1,7 +1,8 @@
 use std::cell::RefCell;
 use std::rc::Rc;
 
-use rquickjs::{Ctx, Function, Object, Persistent, Result as JsResult, Runtime, Value};
+use rquickjs::function::Args;
+use rquickjs::{Ctx, Exception, Function, Object, Persistent, Result as JsResult, Runtime, Value};
 
 use crate::api::error::{host_error_to_js, throw_plugin_error};
 use crate::api::telegram::rpc::{format_exception, pump_jobs};
@@ -13,8 +14,6 @@ pub trait NotificationHost {
 
     fn notification_unregister(&self, callback_id: u32);
 }
-
-const INVOKE_SRC: &str = "(handler, account, args) => handler(account, ...args)";
 
 struct Delegate {
     handlers: RefCell<Vec<(String, Persistent<Function<'static>>)>>,
@@ -42,7 +41,6 @@ pub struct NotificationState {
     lifecycle: Rc<Lifecycle>,
     log: crate::Log,
     delegates: Registry<Rc<Delegate>>,
-    invoke: RefCell<Option<Persistent<Function<'static>>>>,
 }
 
 pub fn install_notifications<'js>(
@@ -59,7 +57,6 @@ pub fn install_notifications<'js>(
         lifecycle,
         log,
         delegates: Registry::default(),
-        invoke: RefCell::new(None),
     });
 
     let android: Object = match inu.get::<_, Object>("android") {
@@ -76,9 +73,6 @@ pub fn install_notifications<'js>(
         js_add_delegate(&ctx, &state2, handlers)
     })?;
     android.set("addNotificationCenterDelegate", f)?;
-
-    let invoke: Function = ctx.eval(INVOKE_SRC)?;
-    *state.invoke.borrow_mut() = Some(Persistent::save(ctx, invoke));
 
     Ok(state)
 }
@@ -159,11 +153,18 @@ pub fn dispatch_notification(
                 return;
             }
         };
-        let Some(invoke) = state.invoke.borrow().clone().and_then(|f| f.restore(&ctx).ok()) else {
-            (state.log)(&format!("{name}: no notification invoker"));
-            return;
-        };
-        match invoke.call::<_, Value>((handler, account, args)) {
+        let result = (|| -> JsResult<Value<'_>> {
+            let Some(args) = args.as_array() else {
+                return Err(Exception::throw_type(&ctx, "notification arguments must be an array"));
+            };
+            let mut call_args = Args::new(ctx.clone(), args.len() + 1);
+            call_args.push_arg(account)?;
+            for value in args.iter::<Value>() {
+                call_args.push_arg(value?)?;
+            }
+            handler.call_arg(call_args)
+        })();
+        match result {
             Ok(_) => {}
             Err(rquickjs::Error::Exception) => {
                 (state.log)(&crate::fault(format_args!(
@@ -181,9 +182,6 @@ pub fn dispose(context: &rquickjs::Context, state: &Rc<NotificationState>) {
     context.with(|ctx| {
         for delegate in state.delegates.remove_matching(|_| true) {
             delegate.release(&ctx);
-        }
-        if let Some(invoke) = state.invoke.borrow_mut().take() {
-            let _ = invoke.restore(&ctx);
         }
     });
 }
