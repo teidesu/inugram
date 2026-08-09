@@ -121,6 +121,9 @@ interface UiListener {
 }
 
 interface PlatformListener {
+    /** [op] keeps in sync with rust `tl::utils::FORMAT_*`. */
+    fun format(op: Int, value: Long): String
+
     fun openUrl(url: String)
 
     /** **not a wire**: it carries whatever the user copied, so no tag could be told from content */

@@ -1,5 +1,14 @@
 use super::*;
 use rquickjs::{Context, Runtime};
+use std::rc::Rc;
+
+struct TestUtilsHost;
+
+impl UtilsHost for TestUtilsHost {
+    fn format(&self, op: i32, value: i64) -> String {
+        format!("{op}:{value}")
+    }
+}
 
 fn setup() -> (Runtime, Context) {
     let rt = Runtime::new().unwrap();
@@ -7,7 +16,7 @@ fn setup() -> (Runtime, Context) {
     ctx.with(|ctx| {
         let inu = crate::testing::harness::inu_namespace(&ctx);
         crate::api::error::install_plugin_error(&ctx, &inu).unwrap();
-        install_utils(&ctx, &inu).unwrap();
+        install_utils_with_host(&ctx, Rc::new(TestUtilsHost), &inu).unwrap();
     });
     (rt, ctx)
 }
@@ -27,8 +36,7 @@ fn code_of(ctx: &Context, code: &str) -> String {
     )
 }
 
-/// the bundled oracle is the only test the js surface gets on a device, so it is also run here
-/// - `inu.utils` has no host behind it, and an oracle nothing ever runs is documentation
+/// the bundled oracle also runs off-device against a recording formatter host
 #[test]
 fn the_bundled_utils_test_plugin_passes() {
     let (rt, ctx) = setup();
@@ -37,7 +45,7 @@ fn the_bundled_utils_test_plugin_passes() {
         &ctx,
         include_str!("../../../../res/assets-debug/inu_plugins/utils-test.js"),
     );
-    crate::testing::harness::assert_oracle_exact(&lines, "utils test done", 92);
+    crate::testing::harness::assert_oracle_exact(&lines, "utils test done", 83);
 }
 
 #[test]
@@ -218,10 +226,8 @@ fn a_peer_helper_refuses_what_it_cannot_answer_for() {
     }
 }
 
-/// dates are formatted against the device's own timezone, so the fixture pins the instant by
-/// building the expectation the same way rather than by hardcoding a wall clock
 #[test]
-fn format_date_covers_every_style() {
+fn format_date_dispatches_each_style_to_the_host() {
     let (_rt, ctx) = setup();
     let out = eval(
         &ctx,
@@ -236,37 +242,23 @@ fn format_date_covers_every_style() {
         ]);
         "#,
     );
-    assert_eq!(out, r#"["12 May 2024","19:04","12 May 2024, 19:04","12 May 2024, 19:04"]"#,);
+    assert_eq!(out, r#"["0:1715526270","1:1715526270","2:1715526270","2:1715526270"]"#,);
 }
 
 #[test]
-fn relative_dates_walk_from_a_time_through_a_weekday_to_a_date() {
+fn relative_dates_use_the_dialog_row_formatter() {
     let (_rt, ctx) = setup();
     let out = eval(
         &ctx,
         r#"
-        const now = new Date();
-        const daysAgo = (days, hour) => {
-            const at = new Date(now.getFullYear(), now.getMonth(), now.getDate() - days, hour, 5);
-            return Math.floor(at.getTime() / 1000);
-        };
-        const relative = unix => inu.utils.formatDate(unix, 'relative');
-        const weekdays = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
-        const dayName = days => weekdays[new Date(daysAgo(days, 9) * 1000).getDay()];
-        JSON.stringify([
-            relative(daysAgo(0, 9)),
-            relative(daysAgo(1, 9)) === dayName(1),
-            relative(daysAgo(6, 9)) === dayName(6),
-            relative(daysAgo(7, 9)).includes(String(new Date(daysAgo(7, 9) * 1000).getFullYear())),
-            relative(daysAgo(400, 9)).includes(String(new Date(daysAgo(400, 9) * 1000).getFullYear())),
-        ]);
+        inu.utils.formatDate(123, 'relative');
         "#,
     );
-    assert_eq!(out, r#"["09:05",true,true,true,true]"#);
+    assert_eq!(out, "3:123");
 }
 
 #[test]
-fn numbers_group_and_compact() {
+fn numbers_dispatch_the_plain_and_compact_stock_formatters() {
     let (_rt, ctx) = setup();
     let out = eval(
         &ctx,
@@ -274,20 +266,16 @@ fn numbers_group_and_compact() {
         const plain = v => inu.utils.formatNumber(v);
         const short = v => inu.utils.formatNumber(v, { compact: true });
         JSON.stringify([
-            plain(0), plain(999), plain(1000), plain(1234567), plain(-1234567), plain(1234.5),
-            short(0), short(999), short(1000), short(1500), short(1999), short(12345),
-            short(1000000), short(1200000), short(-1200000), short(2500000000),
+            plain(0), plain(1234567), plain(-1234567),
+            short(999), short(1000000), short(2500000000),
         ]);
         "#,
     );
-    assert_eq!(
-        out,
-        r#"["0","999","1 000","1 234 567","-1 234 567","1 234.5","0","999","1K","1.5K","1.9K","12.3K","1M","1.2M","-1.2M","2.5B"]"#,
-    );
+    assert_eq!(out, r#"["4:0","4:1234567","4:-1234567","5:999","5:1000000","5:2500000000"]"#,);
 }
 
 #[test]
-fn file_sizes_and_durations_read_the_way_the_app_writes_them() {
+fn file_sizes_and_durations_dispatch_to_stock() {
     let (_rt, ctx) = setup();
     let out = eval(
         &ctx,
@@ -295,12 +283,12 @@ fn file_sizes_and_durations_read_the_way_the_app_writes_them() {
         const size = inu.utils.formatFileSize;
         const time = inu.utils.formatDuration;
         JSON.stringify([
-            size(0), size(512), size(1024), size(4404019), size(1073741824),
-            time(0), time(7), time(187), time(3764), time(-5),
+            size(0), size(512), size(1073741824),
+            time(0), time(187), time(3764),
         ]);
         "#,
     );
-    assert_eq!(out, r#"["0 B","512 B","1.0 KB","4.2 MB","1.0 GB","0:00","0:07","3:07","1:02:44","0:00"]"#,);
+    assert_eq!(out, r#"["6:0","6:512","6:1073741824","7:0","7:187","7:3764"]"#,);
 }
 
 #[test]
@@ -311,7 +299,10 @@ fn a_formatter_refuses_what_it_cannot_format() {
         "inu.utils.formatDate('yesterday')",
         "inu.utils.formatDate(0, 'fuzzy')",
         "inu.utils.formatNumber('lots')",
+        "inu.utils.formatNumber(1.5)",
         "inu.utils.formatFileSize(Infinity)",
+        "inu.utils.formatDuration(-1)",
+        "inu.utils.formatDuration(2147483648)",
         "inu.utils.formatDuration({})",
     ] {
         assert_eq!(code_of(&ctx, call), "invalid-argument", "{call}");

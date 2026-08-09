@@ -16,6 +16,7 @@ use crate::api::telegram::rpc::RpcHost;
 use crate::api::telegram::writes::WritesHost;
 use crate::api::timers::TimerHost;
 use crate::api::tl::proxy::TlHost;
+use crate::api::tl::utils::UtilsHost;
 use crate::api::ui::actions::ActionHost;
 use crate::api::ui::dialogs::DialogHost;
 use crate::api::ui::icons::IconHost;
@@ -231,6 +232,14 @@ impl ClipboardHost for JniBridge {
 
     fn write(&self, text: &str) {
         self.call_void("clipboardWrite", self.on_clipboard_write, &[Arg::Str(text)]);
+    }
+}
+
+impl UtilsHost for JniBridge {
+    fn format(&self, op: i32, value: i64) -> String {
+        self.call_string("format", self.on_format, &[Arg::Int(op), Arg::Long(value)])
+            .unwrap_or_default()
+            .unwrap_or_default()
     }
 }
 
