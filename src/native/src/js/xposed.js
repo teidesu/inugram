@@ -1,7 +1,5 @@
-((natives, PluginError) => {
-  const OP = natives.ops
-
-  const invalid = (message) => new PluginError('invalid-argument', message)
+(natives, PluginError, ops) => {
+  const invalid = message => new PluginError('invalid-argument', message)
 
   const hookOf = (hook, what) => {
     if (hook === null || typeof hook !== 'object') throw invalid(`${what}: expected a hook object`)
@@ -21,12 +19,12 @@
 
   return Object.freeze({
     hookMethod(method, hook) {
-      return natives.hook(OP.hook, method, '', hookOf(hook, 'hookMethod'))
+      return natives.hook(ops.hook, method, '', hookOf(hook, 'hookMethod'))
     },
 
     hookAllOverloads(cls, name, hook) {
       return natives.hook(
-        OP.hookAll,
+        ops.hookAll,
         cls,
         named('hookAllOverloads', name),
         hookOf(hook, 'hookAllOverloads'),
@@ -36,7 +34,7 @@
     hookAllConstructors(cls, hook) {
       // the empty name is what makes it the constructors rather than a method: a java method can
       // never be called `<init>` through reflection, so the two cannot collide
-      return natives.hook(OP.hookAll, cls, '', hookOf(hook, 'hookAllConstructors'))
+      return natives.hook(ops.hookAll, cls, '', hookOf(hook, 'hookAllConstructors'))
     },
 
     callOriginalMethod(method, thisObject, args) {
@@ -54,4 +52,4 @@
       return natives.disableProfileSaver()
     },
   })
-})
+}

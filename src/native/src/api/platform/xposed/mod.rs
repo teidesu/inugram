@@ -299,17 +299,14 @@ pub fn install_xposed<'js>(
         let f = Function::new(ctx.clone(), move |ctx: Ctx<'js>| js_disable_profile_saver(&ctx, &state))?;
         natives.set("disableProfileSaver", f)?;
     }
-    {
-        let ops = Object::new(ctx.clone())?;
-        ops.set("hook", OP_HOOK)?;
-        ops.set("hookAll", OP_HOOK_ALL)?;
-        natives.set("ops", ops)?;
-    }
+    let ops = Object::new(ctx.clone())?;
+    ops.set("hook", OP_HOOK)?;
+    ops.set("hookAll", OP_HOOK_ALL)?;
 
     let plugin_error: Value = inu.get("PluginError")?;
 
     let factory = crate::utils::prelude::load(ctx, PRELUDE)?;
-    let xposed: Object = factory.call((natives, plugin_error))?;
+    let xposed: Object = factory.call((natives, plugin_error, ops))?;
     inu.set("xposed", xposed)?;
 
     Ok(state)

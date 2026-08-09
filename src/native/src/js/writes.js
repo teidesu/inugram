@@ -1,20 +1,5 @@
-(natives, shared, Message, PluginError, readsPrototype) => {
+(natives, shared, Message, PluginError, readsPrototype, ops) => {
   const { invalid, toSpec, toOptions, toCount, toMessageId, toMessageIds, slotOf } = shared
-
-  // keep in sync with rust `writes::OP_*` and Kotlin `PluginWrites.OP_*`
-  const OP_SEND_MESSAGE = 0
-  const OP_SEND_MEDIA = 1
-  const OP_SEND_MULTI_MEDIA = 2
-  const OP_EDIT_MESSAGE = 3
-  const OP_DELETE_MESSAGES = 4
-  const OP_FORWARD_MESSAGES = 5
-  const OP_SET_REACTION = 6
-  const OP_READ_HISTORY = 7
-  const OP_SEND_TYPING = 8
-  const OP_SET_DRAFT = 9
-  const OP_DOWNLOAD_MEDIA = 10
-  const OP_DOWNLOAD_MEDIA_TO_FILE = 11
-  const OP_UPLOAD_FILE = 12
 
   const INT64 = /^-?\d+$/
 
@@ -137,7 +122,7 @@
 
   const proto = {
     sendMessage(peer, text, options) {
-      return startWrite(this, OP_SEND_MESSAGE, 'sendMessage', () => {
+      return startWrite(this, ops.sendMessage, 'sendMessage', () => {
         const opts = toOptions(options, 'sendMessage')
         const body = toText(text, 'sendMessage')
         return [
@@ -155,7 +140,7 @@
     },
 
     sendMedia(peer, file, options) {
-      return startWrite(this, OP_SEND_MEDIA, 'sendMedia', () => {
+      return startWrite(this, ops.sendMedia, 'sendMedia', () => {
         const opts = toOptions(options, 'sendMedia')
         const caption = opts.caption === undefined || opts.caption === null
           ? { text: '', entities: null }
@@ -175,7 +160,7 @@
     },
 
     sendMultiMedia(peer, items, options) {
-      return startWrite(this, OP_SEND_MULTI_MEDIA, 'sendMultiMedia', () => {
+      return startWrite(this, ops.sendMultiMedia, 'sendMultiMedia', () => {
         if (!Array.isArray(items) || items.length === 0) {
           throw invalid('sendMultiMedia: expected a non-empty array of items')
         }
@@ -202,7 +187,7 @@
     },
 
     editMessage(peer, messageId, text, options) {
-      return startWrite(this, OP_EDIT_MESSAGE, 'editMessage', () => {
+      return startWrite(this, ops.editMessage, 'editMessage', () => {
         const opts = toOptions(options, 'editMessage')
         return [
           {
@@ -218,7 +203,7 @@
     },
 
     deleteMessages(peer, messageIds, options) {
-      return voidly(startWrite(this, OP_DELETE_MESSAGES, 'deleteMessages', () => {
+      return voidly(startWrite(this, ops.deleteMessages, 'deleteMessages', () => {
         const opts = toOptions(options, 'deleteMessages')
         return [
           {
@@ -233,7 +218,7 @@
     },
 
     forwardMessages(fromPeer, messageIds, toPeer, options) {
-      return startWrite(this, OP_FORWARD_MESSAGES, 'forwardMessages', () => {
+      return startWrite(this, ops.forwardMessages, 'forwardMessages', () => {
         const opts = toOptions(options, 'forwardMessages')
         return [
           {
@@ -253,7 +238,7 @@
     },
 
     setReaction(peer, messageId, reactions, options) {
-      return voidly(startWrite(this, OP_SET_REACTION, 'setReaction', () => {
+      return voidly(startWrite(this, ops.setReaction, 'setReaction', () => {
         const opts = toOptions(options, 'setReaction')
         return [
           {
@@ -269,7 +254,7 @@
     },
 
     readHistory(peer, options) {
-      return voidly(startWrite(this, OP_READ_HISTORY, 'readHistory', () => {
+      return voidly(startWrite(this, ops.readHistory, 'readHistory', () => {
         const opts = toOptions(options, 'readHistory')
         return [
           {
@@ -284,7 +269,7 @@
     },
 
     sendTyping(peer, action, options) {
-      return voidly(startWrite(this, OP_SEND_TYPING, 'sendTyping', () => {
+      return voidly(startWrite(this, ops.sendTyping, 'sendTyping', () => {
         const opts = toOptions(options, 'sendTyping')
         const what = action ?? 'typing'
         if (!TYPING_ACTIONS.has(what)) throw invalid(`sendTyping: unknown action '${what}'`)
@@ -297,7 +282,7 @@
     },
 
     setDraft(peer, draft, options) {
-      return voidly(startWrite(this, OP_SET_DRAFT, 'setDraft', () => {
+      return voidly(startWrite(this, ops.setDraft, 'setDraft', () => {
         const opts = toOptions(options, 'setDraft')
         // null clears it, which is a different call from setting an empty one
         const body = draft === null || draft === undefined ? { text: null, entities: null } : toText(draft, 'setDraft')
@@ -320,21 +305,21 @@
     },
 
     downloadMedia(message, options) {
-      return startWrite(this, OP_DOWNLOAD_MEDIA, 'downloadMedia', () => {
+      return startWrite(this, ops.downloadMedia, 'downloadMedia', () => {
         const opts = toOptions(options, 'downloadMedia')
         return [{}, [toRawMessage(message, 'downloadMedia')], toProgress(opts.onProgress, 'downloadMedia')]
       })
     },
 
     downloadMediaToFile(message, options) {
-      return startWrite(this, OP_DOWNLOAD_MEDIA_TO_FILE, 'downloadMediaToFile', () => {
+      return startWrite(this, ops.downloadMediaToFile, 'downloadMediaToFile', () => {
         const opts = toOptions(options, 'downloadMediaToFile')
         return [{}, [toRawMessage(message, 'downloadMediaToFile')], toProgress(opts.onProgress, 'downloadMediaToFile')]
       })
     },
 
     uploadFile(file, options) {
-      return startWrite(this, OP_UPLOAD_FILE, 'uploadFile', () => {
+      return startWrite(this, ops.uploadFile, 'uploadFile', () => {
         const opts = toOptions(options, 'uploadFile')
         return [
           { fileName: toName(opts.fileName, 'uploadFile', 'fileName') },

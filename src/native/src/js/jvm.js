@@ -1,9 +1,5 @@
-((natives, PluginError) => {
+(natives, PluginError, ops) => {
   const ids = new WeakMap()
-
-  // the numbers themselves are rust's (`jvm::OP_*`, which Kotlin's `PluginJvm.OP_*` mirrors), so
-  // there is one place to change them rather than one per language
-  const OP = natives.ops
 
   // keep in sync with Kotlin `PluginJvm.KIND_*`
   const KIND_CLASS = 'C'
@@ -13,9 +9,9 @@
   // a handle whose js side became unreachable is one the host can forget. Nothing else ever
   // removes an entry before unload does, so without this a loop over a list would hold every row
   // it read for as long as the plugin runs.
-  const registry = new FinalizationRegistry((id) => natives.release(id))
+  const registry = new FinalizationRegistry(id => natives.release(id))
 
-  const invalid = (message) => new PluginError('invalid-argument', message)
+  const invalid = message => new PluginError('invalid-argument', message)
 
   const idOf = (value) => {
     if (value === null || (typeof value !== 'object' && typeof value !== 'function')) return -1
@@ -36,52 +32,52 @@
 
   const objectMembers = {
     getField(field) {
-      return natives.op(OP.get, handleOf(this, 'getField'), named('getField', field), [])
+      return natives.op(ops.get, handleOf(this, 'getField'), named('getField', field), [])
     },
     setField(field, value) {
-      natives.op(OP.set, handleOf(this, 'setField'), named('setField', field), [value])
+      natives.op(ops.set, handleOf(this, 'setField'), named('setField', field), [value])
     },
     call(method, ...args) {
-      return natives.op(OP.call, handleOf(this, 'call'), named('call', method), args)
+      return natives.op(ops.call, handleOf(this, 'call'), named('call', method), args)
     },
   }
 
   const classMembers = {
     getDeclaredMethod(method) {
-      return natives.op(OP.method, handleOf(this, 'getDeclaredMethod'), named('getDeclaredMethod', method), [])
+      return natives.op(ops.method, handleOf(this, 'getDeclaredMethod'), named('getDeclaredMethod', method), [])
     },
     getDeclaredConstructor(descriptor) {
       if (typeof descriptor !== 'string' || !/^\([^)]*\)V$/.test(descriptor)) {
         throw invalid('getDeclaredConstructor: expected a JVM constructor descriptor')
       }
-      return natives.op(OP.method, handleOf(this, 'getDeclaredConstructor'), `<init>${descriptor}`, [])
+      return natives.op(ops.method, handleOf(this, 'getDeclaredConstructor'), `<init>${descriptor}`, [])
     },
     getDeclaredField(field) {
-      return natives.op(OP.field, handleOf(this, 'getDeclaredField'), named('getDeclaredField', field), [])
+      return natives.op(ops.field, handleOf(this, 'getDeclaredField'), named('getDeclaredField', field), [])
     },
     getStaticField(field) {
-      return natives.op(OP.get, handleOf(this, 'getStaticField'), named('getStaticField', field), [])
+      return natives.op(ops.get, handleOf(this, 'getStaticField'), named('getStaticField', field), [])
     },
     setStaticField(field, value) {
-      natives.op(OP.set, handleOf(this, 'setStaticField'), named('setStaticField', field), [value])
+      natives.op(ops.set, handleOf(this, 'setStaticField'), named('setStaticField', field), [value])
     },
     callStatic(method, ...args) {
-      return natives.op(OP.call, handleOf(this, 'callStatic'), named('callStatic', method), args)
+      return natives.op(ops.call, handleOf(this, 'callStatic'), named('callStatic', method), args)
     },
   }
 
   const methodMembers = {
     invoke(self, ...args) {
-      return natives.op(OP.invoke, handleOf(this, 'invoke'), '', [self, ...args])
+      return natives.op(ops.invoke, handleOf(this, 'invoke'), '', [self, ...args])
     },
   }
 
   const fieldMembers = {
     get(self) {
-      return natives.op(OP.memberGet, handleOf(this, 'get'), '', [self])
+      return natives.op(ops.memberGet, handleOf(this, 'get'), '', [self])
     },
     set(self, value) {
-      natives.op(OP.memberSet, handleOf(this, 'set'), '', [self, value])
+      natives.op(ops.memberSet, handleOf(this, 'set'), '', [self, value])
     },
   }
 
@@ -99,7 +95,7 @@
   // object is what makes `new` answer with the host's handle rather than the empty `this` js built
   const mintClass = (id) => {
     const ctor = function (...args) {
-      return natives.op(OP.construct, id, '', args)
+      return natives.op(ops.construct, id, '', args)
     }
     Object.assign(ctor, classMembers)
     return attach(ctor, id)
@@ -138,4 +134,4 @@
   })
 
   return { jvm, mint, idOf }
-})
+}

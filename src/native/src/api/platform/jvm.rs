@@ -267,22 +267,19 @@ pub fn install_jvm<'js>(
     });
 
     let natives = Object::new(ctx.clone())?;
-    {
-        let ops = Object::new(ctx.clone())?;
-        for (name, op) in [
-            ("construct", OP_NEW),
-            ("get", OP_GET),
-            ("set", OP_SET),
-            ("call", OP_CALL),
-            ("method", OP_METHOD),
-            ("field", OP_FIELD),
-            ("invoke", OP_INVOKE),
-            ("memberGet", OP_MEMBER_GET),
-            ("memberSet", OP_MEMBER_SET),
-        ] {
-            ops.set(name, op)?;
-        }
-        natives.set("ops", ops)?;
+    let ops = Object::new(ctx.clone())?;
+    for (name, op) in [
+        ("construct", OP_NEW),
+        ("get", OP_GET),
+        ("set", OP_SET),
+        ("call", OP_CALL),
+        ("method", OP_METHOD),
+        ("field", OP_FIELD),
+        ("invoke", OP_INVOKE),
+        ("memberGet", OP_MEMBER_GET),
+        ("memberSet", OP_MEMBER_SET),
+    ] {
+        ops.set(name, op)?;
     }
     {
         let state = state.clone();
@@ -320,7 +317,7 @@ pub fn install_jvm<'js>(
     let plugin_error: Value = inu.get("PluginError")?;
 
     let factory = crate::utils::prelude::load(ctx, PRELUDE)?;
-    let built: Object = factory.call((natives, plugin_error))?;
+    let built: Object = factory.call((natives, plugin_error, ops))?;
     let jvm: Object = built.get("jvm")?;
     let mint: Function = built.get("mint")?;
     let id_of: Function = built.get("idOf")?;

@@ -1,4 +1,4 @@
-(natives, shared, Message, PluginError) => {
+(natives, shared, Message, PluginError, ops) => {
   const { baseName, invalid, SEPARATOR, toSpec, toSpecList, toMessageId, toMessageIds, toOptions, toCount, slotOf }
     = shared
 
@@ -6,13 +6,6 @@
   const KIND_PEER = 0
   const KIND_USER = 1
   const KIND_CHANNEL = 2
-
-  // the asynchronous half; keep in sync with rust `reads::OP_*` and Kotlin `PluginReads.OP_*`
-  const OP_USER_FULL = 11
-  const OP_CHAT_FULL = 12
-  const OP_HISTORY = 13
-  const OP_DIALOGS = 14
-  const OP_TOPICS = 15
 
   // what a resolve* was already handed and gives straight back, per kind
   const PASSTHROUGH = [
@@ -197,15 +190,15 @@
     },
 
     getUserFull(peer) {
-      return fetchWith(this, OP_USER_FULL, 'getUserFull', () => [toSpec(peer), ''])
+      return fetchWith(this, ops.userFull, 'getUserFull', () => [toSpec(peer), ''])
     },
 
     getChatFull(peer) {
-      return fetchWith(this, OP_CHAT_FULL, 'getChatFull', () => [toSpec(peer), ''])
+      return fetchWith(this, ops.chatFull, 'getChatFull', () => [toSpec(peer), ''])
     },
 
     getHistory(peer, options) {
-      return fetchWith(this, OP_HISTORY, 'getHistory', () => {
+      return fetchWith(this, ops.history, 'getHistory', () => {
         const opts = toOptions(options, 'getHistory')
         return [
           [
@@ -222,7 +215,7 @@
     },
 
     getDialogs(options) {
-      return fetchWith(this, OP_DIALOGS, 'getDialogs', () => {
+      return fetchWith(this, ops.dialogs, 'getDialogs', () => {
         const opts = toOptions(options, 'getDialogs')
         return [
           [
@@ -235,7 +228,7 @@
     },
 
     getTopics(peer, options) {
-      return fetchWith(this, OP_TOPICS, 'getTopics', () => {
+      return fetchWith(this, ops.topics, 'getTopics', () => {
         const opts = toOptions(options, 'getTopics')
         return [
           [toSpec(peer), toCount(opts.limit, 'getTopics', 'limit')].join(SEPARATOR),
