@@ -12,28 +12,29 @@ use super::env::{in_env, jstring_to_string, read_header, read_string_array};
 use super::log::{install_console, make_log};
 use super::{pump, Engine};
 use crate::api::canvas::{self, install_canvas, CanvasHost};
+use crate::api::error::{dispose_rejection_tracker, format_exception, install_plugin_error, install_rejection_tracker};
 use crate::api::globals::{install_globals, RandomHost};
 use crate::api::info::{install_inu, InuInfo};
 use crate::api::io::fetch::{install_fetch, FetchHost};
 use crate::api::io::fs::install_fs;
-use crate::api::io::kv::{install_kv, KvHost};
+use crate::api::io::kv::install_kv;
 use crate::api::lifecycle::install_lifecycle;
-use crate::api::platform::clipboard::{install_clipboard, ClipboardHost};
+use crate::api::platform::clipboard::install_clipboard;
 use crate::api::platform::jvm::{self, install_jvm, JvmHost};
 use crate::api::platform::notifications::{install_notifications, NotificationHost};
-use crate::api::platform::open_url::{install_open_url, OpenUrlHost};
+use crate::api::platform::open_url::install_open_url;
 use crate::api::platform::xposed::{self, install_xposed, XposedHost};
 use crate::api::telegram::account::{install_account, AccountHost};
 use crate::api::telegram::deserialize::DeserializeHost;
 use crate::api::telegram::reads::{install_reads, ReadsHost, ReadsState};
-use crate::api::telegram::rpc::{format_exception, install_rejection_tracker, RpcHost};
+use crate::api::telegram::rpc::RpcHost;
 use crate::api::telegram::writes::{install_writes, WritesDeps, WritesHost, WritesState};
 use crate::api::timers::{install_timers, TimerHost};
 use crate::api::tl::message::install_message;
 use crate::api::tl::proxy::TlViews;
 use crate::api::tl::utils::{install_utils_with_host, UtilsHost};
 use crate::api::ui::actions::{install_actions, ActionHost};
-use crate::api::ui::dialogs::{install_dialogs, DialogHost};
+use crate::api::ui::dialogs::install_dialogs;
 use crate::api::ui::icons::{install_icons, IconHost};
 use crate::api::ui::pages::{install_ui, UiHost};
 use crate::api::ui::screens::{install_screens, ScreenHost};
@@ -61,7 +62,7 @@ pub extern "system" fn Java_desu_inugram_helpers_plugins_QuickJs_nativeCreate(
       install_console(&ctx, bridge.clone())?;
       let inu = Object::new(ctx.clone())?;
       ctx.globals().set("inu", inu.clone())?;
-      crate::api::error::install_plugin_error(&ctx, &inu)?;
+      install_plugin_error(&ctx, &inu)?;
       Ok(Persistent::save(&ctx, inu))
     });
     let Ok(inu) = installed else {
@@ -133,14 +134,10 @@ pub extern "system" fn Java_desu_inugram_helpers_plugins_QuickJs_nativeInstallAp
     }
     let installed = engine.ctx.with(|ctx| {
       let inu = engine.inu.clone().restore(&ctx)?;
-      let kv_host: Rc<dyn KvHost> = engine.bridge.clone();
-      install_kv(&ctx, kv_host, grants.clone(), &inu)?;
-      let clipboard_host: Rc<dyn ClipboardHost> = engine.bridge.clone();
-      install_clipboard(&ctx, clipboard_host, grants.clone(), &inu)?;
-      let open_url_host: Rc<dyn OpenUrlHost> = engine.bridge.clone();
-      install_open_url(&ctx, open_url_host, grants.clone(), &inu)?;
-      let dialog_host: Rc<dyn DialogHost> = engine.bridge.clone();
-      install_dialogs(&ctx, dialog_host, log.clone(), &inu)
+      install_kv(&ctx, engine.bridge.clone(), grants.clone(), &inu)?;
+      install_clipboard(&ctx, engine.bridge.clone(), grants.clone(), &inu)?;
+      install_open_url(&ctx, engine.bridge.clone(), grants.clone(), &inu)?;
+      install_dialogs(&ctx, engine.bridge.clone(), log.clone(), &inu)
     });
     match installed {
       Ok(state) => engine.dialogs = Some(state),
@@ -372,7 +369,7 @@ pub extern "system" fn Java_desu_inugram_helpers_plugins_QuickJs_nativeXposedBef
       ),
       None => std::iter::once("P0".to_string()).chain(args.iter().cloned()).collect(),
     };
-    match engine.bridge.new_jstring_array(env, "xposedBefore", &answer) {
+    match JniBridge::new_jstring_array(env, "xposedBefore", &answer) {
       Ok(array) => array.unwrap().into_raw(),
       Err(e) => {
         make_log(engine.bridge.console.clone())(&e);
@@ -631,9 +628,7 @@ pub extern "system" fn Java_desu_inugram_helpers_plugins_QuickJs_nativeRunTimers
   let Some(state) = engine.timers.as_ref() else {
     return;
   };
-  {
-    crate::api::timers::run_due(&engine._rt, &engine.ctx, state)
-  };
+  crate::api::timers::run_due(&engine._rt, &engine.ctx, state);
 }
 
 #[no_mangle]
@@ -934,9 +929,7 @@ pub extern "system" fn Java_desu_inugram_helpers_plugins_QuickJs_nativeAccountsC
   let Some(state) = engine.account.as_ref() else {
     return;
   };
-  {
-    state.accounts_changed(&engine._rt, &engine.ctx)
-  };
+  state.accounts_changed(&engine._rt, &engine.ctx);
 }
 
 #[no_mangle]
@@ -1403,7 +1396,7 @@ pub extern "system" fn Java_desu_inugram_helpers_plugins_QuickJs_nativeDestroy(
     let inu = engine.inu;
     engine.ctx.with(|ctx| {
       drop(inu.restore(&ctx));
-      crate::api::telegram::rpc::dispose_rejection_tracker(&ctx);
+      dispose_rejection_tracker(&ctx);
     });
   }
 }

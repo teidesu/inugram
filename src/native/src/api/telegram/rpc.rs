@@ -3,14 +3,17 @@ use std::collections::HashMap;
 use std::rc::Rc;
 
 use rquickjs::function::This;
-use rquickjs::{Coerced, Ctx, Exception, Function, Object, Persistent, Result as JsResult, Runtime, Value};
+use rquickjs::{Ctx, Exception, Function, Object, Persistent, Result as JsResult, Runtime, Value};
 
-use crate::api::error;
+use crate::api::error::{self, error_value_to_string, format_thrown, PluginErrorCode};
 use crate::api::telegram::account::{dispatch_account, AccountState};
 use crate::api::tl::proxy::{self, TlViews, ViewLife};
 use crate::sandbox::grants::{check_grant, GrantHost, MATCH_EXACT};
 use crate::sandbox::registry::{make_disposer, noop_disposer, CallbackRegistry, Lifecycle, Registry};
 use crate::utils::prelude;
+use crate::Log;
+
+pub(crate) use crate::api::error::format_exception;
 
 pub trait RpcHost {
   fn on_register(&self, methods: &[String], callback_id: u32, scope: &str) -> Option<String>;
@@ -119,7 +122,7 @@ pub struct RpcState {
   grants: Rc<dyn GrantHost>,
   lifecycle: Rc<Lifecycle>,
   accounts: Option<Rc<AccountState>>,
-  pub(crate) log: crate::Log,
+  pub(crate) log: Log,
   next_invoke_id: Cell<i64>,
   intercept_fns: CallbackRegistry,
   update_fns: Registry<UpdateReg>,
@@ -138,11 +141,6 @@ impl RpcState {
     self.next_invoke_id.set(id + 1);
     id
   }
-}
-
-pub(crate) fn make_error<'js>(ctx: &Ctx<'js>, message: &str) -> JsResult<Value<'js>> {
-  let ctor: rquickjs::function::Constructor = ctx.globals().get("Error")?;
-  ctor.construct((message,))
 }
 
 impl RpcState {
@@ -243,119 +241,6 @@ fn settle_from_wire<'js>(
   }
 }
 
-fn format_thrown<'js>(ctx: &Ctx<'js>, value: &Value<'js>) -> String {
-  let msg = describe_thrown(ctx, value);
-  let _ = ctx.catch();
-  msg
-}
-
-fn describe_thrown<'js>(ctx: &Ctx<'js>, value: &Value<'js>) -> String {
-  use rquickjs::FromJs;
-  if let Some(message) = crate::sandbox::limits::describe_heap_exhaustion(value) {
-    return message;
-  }
-  let mut msg = Coerced::<String>::from_js(ctx, value.clone())
-    .map(|c| c.0)
-    .unwrap_or_else(|_| "JS exception".to_string());
-  if let Some(obj) = value.as_object() {
-    if let Ok(stack) = obj.get::<_, String>("stack") {
-      if !stack.is_empty() {
-        msg.push('\n');
-        msg.push_str(&stack);
-      }
-    }
-  }
-  msg
-}
-
-pub(crate) fn format_exception(ctx: &Ctx) -> String {
-  format_thrown(ctx, &ctx.catch())
-}
-
-struct RejectionSlot {
-  log: crate::Log,
-  pending: HashMap<u64, String>,
-}
-
-thread_local! {
-    static REJECTIONS: RefCell<HashMap<usize, RejectionSlot>> = RefCell::new(HashMap::new());
-}
-
-fn ctx_key(ctx: &Ctx) -> usize {
-  ctx.as_raw().as_ptr() as usize
-}
-
-fn value_hash(value: &Value) -> u64 {
-  use std::collections::hash_map::DefaultHasher;
-  use std::hash::{Hash, Hasher};
-  let mut h = DefaultHasher::new();
-  value.hash(&mut h);
-  h.finish()
-}
-
-pub fn install_rejection_tracker(rt: &Runtime, log: crate::Log) {
-  rt.set_host_promise_rejection_tracker(Some(Box::new(move |ctx, promise, reason, is_handled| {
-    let key = ctx_key(&ctx);
-    let phash = value_hash(&promise);
-    if is_handled {
-      REJECTIONS.with(|r| {
-        if let Some(slot) = r.borrow_mut().get_mut(&key) {
-          slot.pending.remove(&phash);
-        }
-      });
-    } else {
-      let msg = format_thrown(&ctx, &reason);
-      REJECTIONS.with(|r| {
-        r.borrow_mut()
-          .entry(key)
-          .or_insert_with(|| RejectionSlot {
-            log: log.clone(),
-            pending: HashMap::new(),
-          })
-          .pending
-          .insert(phash, msg);
-      });
-    }
-  })));
-}
-
-fn report_rejections(ctx: &Ctx) {
-  let drained = REJECTIONS.with(|r| {
-    let mut map = r.borrow_mut();
-    let slot = map.get_mut(&ctx_key(ctx))?;
-    if slot.pending.is_empty() {
-      return None;
-    }
-    let msgs: Vec<String> = slot.pending.drain().map(|(_, v)| v).collect();
-    Some((slot.log.clone(), msgs))
-  });
-  if let Some((log, msgs)) = drained {
-    for msg in msgs {
-      log(&crate::fault(format_args!("unhandled promise rejection: {msg}")));
-    }
-  }
-}
-
-pub fn dispose_rejection_tracker(ctx: &Ctx) {
-  REJECTIONS.with(|r| {
-    r.borrow_mut().remove(&ctx_key(ctx));
-  });
-}
-
-fn error_value_to_string<'js>(ctx: &Ctx<'js>, value: &Value<'js>) -> String {
-  use rquickjs::FromJs;
-  if let Some(obj) = value.as_object() {
-    if let Ok(msg) = obj.get::<_, String>("message") {
-      if !msg.is_empty() {
-        return msg;
-      }
-    }
-  }
-  Coerced::<String>::from_js(ctx, value.clone())
-    .map(|c| c.0)
-    .unwrap_or_else(|_| "unknown error".to_string())
-}
-
 fn resolve_and_then<'js>(
   ctx: &Ctx<'js>,
   state: &Rc<RpcState>,
@@ -402,7 +287,7 @@ pub fn pump_jobs(rt: &Runtime, context: &rquickjs::Context, log: &dyn Fn(&str)) 
       }
     }
   }
-  context.with(|ctx| report_rejections(&ctx));
+  context.with(|ctx| error::report_rejections(&ctx));
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -414,7 +299,7 @@ pub fn install_rpc<'js>(
   lifecycle: Rc<Lifecycle>,
   accounts: Option<Rc<AccountState>>,
   shared: Object<'js>,
-  log: crate::Log,
+  log: Log,
   inu: &Object<'js>,
 ) -> JsResult<Rc<RpcState>> {
   let state = Rc::new(RpcState {
@@ -436,44 +321,53 @@ pub fn install_rpc<'js>(
     pending_invoke: RefCell::new(HashMap::new()),
   });
 
-  let rpc_error_ctor: Value = ctx.eval(
-    r#"(class RpcError extends Error {
-            constructor(code, text) {
-                super(code + ': ' + text);
-                this.name = 'RpcError';
-                this.code = code | 0;
-                this.text = String(text ?? '');
-            }
-        })"#,
+  inu.set(
+    "RpcError",
+    ctx.eval::<Value, _>(
+      r"(class RpcError extends Error {
+        constructor(code, text) {
+          super(code + ': ' + text);
+          this.name = 'RpcError';
+          this.code = code | 0;
+          this.text = String(text ?? '');
+        }
+    })",
+    )?,
   )?;
-  inu.set("RpcError", rpc_error_ctor)?;
 
   {
     let state2 = state.clone();
-    let f = Function::new(ctx.clone(), move |ctx: Ctx<'js>, methods: Value<'js>, cb: Function<'js>| {
-      js_intercept_rpc(&ctx, &state2, methods, cb)
-    })?;
-    inu.set("interceptRpc", f)?;
+    inu.set(
+      "interceptRpc",
+      Function::new(ctx.clone(), move |ctx: Ctx<'js>, methods: Value<'js>, cb: Function<'js>| {
+        js_intercept_rpc(&ctx, &state2, methods, cb)
+      })?,
+    )?;
   }
   {
     let state2 = state.clone();
-    let f =
-      Function::new(ctx.clone(), move |ctx: Ctx<'js>, obj: Value<'js>| js_invoke_rpc(&ctx, &state2, ANY_ACCOUNT, obj))?;
-    inu.set("invokeRpc", f)?;
+    inu.set(
+      "invokeRpc",
+      Function::new(ctx.clone(), move |ctx: Ctx<'js>, obj: Value<'js>| js_invoke_rpc(&ctx, &state2, ANY_ACCOUNT, obj))?,
+    )?;
   }
   {
     let state2 = state.clone();
-    let f = Function::new(ctx.clone(), move |ctx: Ctx<'js>, types: Value<'js>, cb: Function<'js>| {
-      js_on_update(&ctx, &state2, types, cb)
-    })?;
-    inu.set("onUpdate", f)?;
+    inu.set(
+      "onUpdate",
+      Function::new(ctx.clone(), move |ctx: Ctx<'js>, types: Value<'js>, cb: Function<'js>| {
+        js_on_update(&ctx, &state2, types, cb)
+      })?,
+    )?;
   }
   {
     let state2 = state.clone();
-    let f = Function::new(ctx.clone(), move |ctx: Ctx<'js>, types: Value<'js>, cb: Function<'js>| {
-      js_intercept_update(&ctx, &state2, types, cb)
-    })?;
-    inu.set("interceptUpdate", f)?;
+    inu.set(
+      "interceptUpdate",
+      Function::new(ctx.clone(), move |ctx: Ctx<'js>, types: Value<'js>, cb: Function<'js>| {
+        js_intercept_update(&ctx, &state2, types, cb)
+      })?,
+    )?;
   }
   install_demuxed_events(ctx, &state, inu)?;
   install_send_message(ctx, &state, inu, shared)?;
@@ -487,24 +381,26 @@ fn install_account_invoke<'js>(ctx: &Ctx<'js>, state: &Rc<RpcState>) -> JsResult
   };
   let prototype = Object::new(ctx.clone())?;
   let state2 = state.clone();
-  let f = Function::new(
-    ctx.clone(),
-    move |ctx: Ctx<'js>, this: This<Value<'js>>, obj: Value<'js>| -> JsResult<Value<'js>> {
-      let slot = this
-        .0
-        .as_object()
-        .and_then(|handle| handle.get::<_, Value>("id").ok())
-        .and_then(|id| id.as_number())
-        .filter(|id| id.fract() == 0.0 && *id >= 0.0)
-        .map(|id| id as i32);
-      let Some(slot) = slot else {
-        return crate::api::error::PluginErrorCode::InvalidArgument
-          .throw(&ctx, "invokeRpc: not called on an account handle; use inu.account().invokeRpc(...)");
-      };
-      js_invoke_rpc(&ctx, &state2, slot, obj)
-    },
+  prototype.set(
+    "invokeRpc",
+    Function::new(
+      ctx.clone(),
+      move |ctx: Ctx<'js>, this: This<Value<'js>>, obj: Value<'js>| -> JsResult<Value<'js>> {
+        let slot = this
+          .0
+          .as_object()
+          .and_then(|handle| handle.get::<_, Value>("id").ok())
+          .and_then(|id| id.as_number())
+          .filter(|id| id.fract() == 0.0 && *id >= 0.0)
+          .map(|id| id as i32);
+        let Some(slot) = slot else {
+          return PluginErrorCode::InvalidArgument
+            .throw(&ctx, "invokeRpc: not called on an account handle; use inu.account().invokeRpc(...)");
+        };
+        js_invoke_rpc(&ctx, &state2, slot, obj)
+      },
+    )?,
   )?;
-  prototype.set("invokeRpc", f)?;
   if let Some(inner) = accounts.take_prototype(ctx) {
     prototype.set_prototype(Some(&inner))?;
   }
@@ -532,9 +428,10 @@ fn install_send_message<'js>(
   *state.send_wrap.borrow_mut() = Some(Persistent::save(ctx, build));
 
   let state = state.clone();
-  let f =
-    Function::new(ctx.clone(), move |ctx: Ctx<'js>, cb: Function<'js>| js_intercept_send_message(&ctx, &state, cb))?;
-  inu.set("interceptSendMessage", f)?;
+  inu.set(
+    "interceptSendMessage",
+    Function::new(ctx.clone(), move |ctx: Ctx<'js>, cb: Function<'js>| js_intercept_send_message(&ctx, &state, cb))?,
+  )?;
   Ok(())
 }
 
@@ -549,9 +446,10 @@ fn install_demuxed_events<'js>(ctx: &Ctx<'js>, state: &Rc<RpcState>, inu: &Objec
 
   for (name, kind, types) in DEMUX_EVENTS {
     let state = state.clone();
-    let f =
-      Function::new(ctx.clone(), move |ctx: Ctx<'js>, cb: Function<'js>| js_on_demuxed(&ctx, &state, kind, types, cb))?;
-    inu.set(name, f)?;
+    inu.set(
+      name,
+      Function::new(ctx.clone(), move |ctx: Ctx<'js>, cb: Function<'js>| js_on_demuxed(&ctx, &state, kind, types, cb))?,
+    )?;
   }
   Ok(())
 }
@@ -588,7 +486,7 @@ fn js_intercept_rpc<'js>(
     return noop_disposer(ctx);
   }
   let list = read_name_list(ctx, "interceptRpc", methods, "method")?;
-  for method in list.iter() {
+  for method in &list {
     check_grant(ctx, &state.grants, "interceptRpc", Some(method), MATCH_EXACT)?;
   }
   register_intercept(ctx, state, list, "", cb)
@@ -604,7 +502,7 @@ fn js_intercept_send_message<'js>(ctx: &Ctx<'js>, state: &Rc<RpcState>, cb: Func
     None => return Err(Exception::throw_type(ctx, "interceptSendMessage is not installed")),
   };
   let middleware: Function = build.call((cb,))?;
-  let list = SEND_METHODS.iter().map(|m| m.to_string()).collect();
+  let list = SEND_METHODS.iter().map(ToString::to_string).collect();
   register_intercept(ctx, state, list, SEND_SCOPE, middleware)
 }
 
@@ -636,8 +534,7 @@ fn read_method_name<'js>(ctx: &Ctx<'js>, obj: &Value<'js>) -> JsResult<String> {
   };
   match name.as_string().and_then(|s| s.to_string().ok()) {
     Some(name) => Ok(name),
-    None => crate::api::error::PluginErrorCode::InvalidArgument
-      .throw(ctx, "invokeRpc: the request must carry its method name in '_'"),
+    None => PluginErrorCode::InvalidArgument.throw(ctx, "invokeRpc: the request must carry its method name in '_'"),
   }
 }
 
@@ -685,7 +582,7 @@ fn js_on_update<'js>(
     return noop_disposer(ctx);
   }
   let list = read_name_list(ctx, "onUpdate", types, "type")?;
-  for name in list.iter() {
+  for name in &list {
     check_grant(ctx, &state.grants, "onUpdate", Some(name), MATCH_EXACT)?;
   }
   register_update_listener(ctx, state, list, "", cb)
@@ -701,7 +598,7 @@ fn js_intercept_update<'js>(
     return noop_disposer(ctx);
   }
   let list = read_name_list(ctx, "interceptUpdate", types, "type")?;
-  for name in list.iter() {
+  for name in &list {
     check_grant(ctx, &state.grants, "interceptUpdate", Some(name), MATCH_EXACT)?;
   }
   let callback_id = state.intercept_update_fns.alloc();
@@ -742,7 +639,7 @@ fn js_on_demuxed<'js>(
     None => return Err(Exception::throw_type(ctx, "the demuxed events are not installed")),
   };
   let listener: Function = build.call((kind, cb))?;
-  register_update_listener(ctx, state, types.iter().map(|t| t.to_string()).collect(), kind, listener)
+  register_update_listener(ctx, state, types.iter().map(ToString::to_string).collect(), kind, listener)
 }
 
 fn register_update_listener<'js>(
@@ -1024,8 +921,7 @@ fn try_dispatch_rpc<'js>(
         return code.throw(&ctx, message);
       }
       if dstate.settled.get() {
-        return crate::api::error::PluginErrorCode::InvalidArgument
-          .throw(&ctx, "next(): this dispatch already settled");
+        return PluginErrorCode::InvalidArgument.throw(&ctx, "next(): this dispatch already settled");
       }
       if dstate.called.replace(true) {
         return Err(Exception::throw_type(&ctx, "next() may only be called once"));

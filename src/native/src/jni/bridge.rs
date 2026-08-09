@@ -173,9 +173,9 @@ impl JniBridge {
         Arg::Int(v) => Marshalled::Prim(JValue::Int(*v).as_jni()),
         Arg::Long(v) => Marshalled::Prim(JValue::Long(*v).as_jni()),
         Arg::Bool(v) => Marshalled::Prim(JValue::Bool(*v).as_jni()),
-        Arg::Str(s) => Marshalled::Obj(self.new_jstring(env, what, s)?),
-        Arg::OptStr(Some(s)) => Marshalled::Obj(self.new_jstring(env, what, s)?),
-        Arg::Strs(items) => Marshalled::Obj(self.new_jstring_array(env, what, items)?),
+        Arg::Str(s) => Marshalled::Obj(Self::new_jstring(env, what, s)?),
+        Arg::OptStr(Some(s)) => Marshalled::Obj(Self::new_jstring(env, what, s)?),
+        Arg::Strs(items) => Marshalled::Obj(Self::new_jstring_array(env, what, items)?),
         Arg::Bytes(Some(bytes)) => match env.byte_array_from_slice(bytes) {
           Ok(array) => Marshalled::Obj(JObject::from(array).auto()),
           Err(e) => {
@@ -317,7 +317,6 @@ impl JniBridge {
   }
 
   pub(crate) fn new_jstring_array<'l>(
-    &self,
     env: &mut Env<'l>,
     what: &str,
     items: &[String],
@@ -330,23 +329,22 @@ impl JniBridge {
       }
     };
     for (i, item) in items.iter().enumerate() {
-      let item = self.new_jstring(env, what, item)?;
-      let item = unsafe { JString::from_raw(env, item.as_raw()) };
+      let item = match env.new_string(item) {
+        Ok(item) => item.auto(),
+        Err(e) => {
+          clear_exception(env);
+          return Err(format!("{what}: {e}"));
+        }
+      };
       if let Err(e) = array.set_element(env, i, &item) {
         clear_exception(env);
         return Err(format!("{what}: {e}"));
       }
     }
-    let raw = array.unwrap().into_raw();
-    Ok(unsafe { JObject::from_raw(env, raw) }.auto())
+    Ok(JObject::from(array.unwrap()).auto())
   }
 
-  pub(crate) fn new_jstring<'l>(
-    &self,
-    env: &mut Env<'l>,
-    what: &str,
-    s: &str,
-  ) -> Result<Auto<'l, JObject<'l>>, String> {
+  pub(crate) fn new_jstring<'l>(env: &mut Env<'l>, what: &str, s: &str) -> Result<Auto<'l, JObject<'l>>, String> {
     match env.new_string(s) {
       Ok(j) => Ok(JObject::from(j).auto()),
       Err(e) => {

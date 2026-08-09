@@ -31,17 +31,43 @@ fn parse_target(url: &str) -> Result<String, String> {
   crate::api::url::parse_http_url("fetch", url)
 }
 
-fn read_body(state: &FetchState, value: &Value<'_>) -> Result<Option<Vec<u8>>, (String, String)> {
+enum BodyError {
+  HandleExpired(String),
+  InvalidArgument(String),
+  QuotaExceeded { usage: u64, message: String },
+}
+
+impl BodyError {
+  fn message(&self) -> &str {
+    match self {
+      Self::HandleExpired(message) | Self::InvalidArgument(message) => message,
+      Self::QuotaExceeded { message, .. } => message,
+    }
+  }
+
+  fn code(&self) -> PluginErrorCode<'_> {
+    match self {
+      Self::HandleExpired(_) => PluginErrorCode::HandleExpired,
+      Self::InvalidArgument(_) => PluginErrorCode::InvalidArgument,
+      Self::QuotaExceeded { usage, .. } => PluginErrorCode::QuotaExceeded(
+        i64::try_from(*usage).unwrap_or(i64::MAX),
+        i64::try_from(BUILD_LIMIT_BYTES).unwrap_or(i64::MAX),
+      ),
+    }
+  }
+}
+
+fn read_body(state: &FetchState, value: &Value<'_>) -> Result<Option<Vec<u8>>, BodyError> {
   if value.is_undefined() || value.is_null() {
     return Ok(None);
   }
   if let Some(text) = value.as_string() {
-    let text = text.to_string().map_err(|e| ("internal".to_string(), format!("fetch: {e:?}")))?;
+    let text = text.to_string().map_err(|e| BodyError::InvalidArgument(format!("fetch: {e:?}")))?;
     return Ok(Some(text.into_bytes()));
   }
   if let Ok(typed) = TypedArray::<u8>::from_value(value.clone()) {
     let Some(bytes) = typed.as_bytes() else {
-      return Err(("invalid-argument".to_string(), "fetch: the body array is detached".to_string()));
+      return Err(BodyError::InvalidArgument("fetch: the body array is detached".to_string()));
     };
     return Ok(Some(bytes.to_vec()));
   }
@@ -52,26 +78,25 @@ fn read_body(state: &FetchState, value: &Value<'_>) -> Result<Option<Vec<u8>>, (
       .and_then(|id| id.parse().ok())
       .unwrap_or(0);
     let Some(export) = resolve_export(&state.blobs, id) else {
-      return Err(("handle-expired".to_string(), "fetch: the body blob is gone".to_string()));
+      return Err(BodyError::HandleExpired("fetch: the body blob is gone".to_string()));
     };
     if export.len() > BUILD_LIMIT_BYTES {
-      return Err((
-        "quota-exceeded".to_string(),
-        format!("fetch: a request body is capped at {BUILD_LIMIT_BYTES} bytes; use uploadFile for anything bigger",),
-      ));
+      return Err(BodyError::QuotaExceeded {
+        usage: export.len(),
+        message: format!(
+          "fetch: a request body is capped at {BUILD_LIMIT_BYTES} bytes; use uploadFile for anything bigger"
+        ),
+      });
     }
     let bytes = export
       .read(0, export.len())
-      .map_err(|_| ("handle-expired".to_string(), "fetch: the body blob is gone".to_string()))?;
+      .map_err(|_| BodyError::HandleExpired("fetch: the body blob is gone".to_string()))?;
     return Ok(Some(bytes));
   }
   if rquickjs::Class::<crate::api::io::blob::BlobHandle>::from_value(value).is_ok() {
-    return Err(("handle-expired".to_string(), "fetch: the body blob was disposed".to_string()));
+    return Err(BodyError::HandleExpired("fetch: the body blob was disposed".to_string()));
   }
-  Err((
-    "invalid-argument".to_string(),
-    "fetch: the body must be a string, a Uint8Array or a Blob".to_string(),
-  ))
+  Err(BodyError::InvalidArgument("fetch: the body must be a string, a Uint8Array or a Blob".to_string()))
 }
 
 fn js_send<'js>(
@@ -90,14 +115,7 @@ fn js_send<'js>(
 
   let body = match read_body(state, &body) {
     Ok(body) => body,
-    Err((code, message)) => {
-      let code = match code.as_str() {
-        "handle-expired" => PluginErrorCode::HandleExpired,
-        "invalid-argument" => PluginErrorCode::InvalidArgument,
-        _ => unreachable!("read_body returned an unknown error code"),
-      };
-      return code.throw(ctx, &message);
-    }
+    Err(error) => return error.code().throw(ctx, error.message()),
   };
 
   let request_id = state.next_request_id.alloc();
@@ -174,7 +192,7 @@ fn mint_body<'js>(ctx: &Ctx<'js>, body: &Object<'js>) -> JsResult<Value<'js>> {
         .modified()
         .ok()
         .and_then(|t| t.duration_since(std::time::UNIX_EPOCH).ok())
-        .map(|d| d.as_millis() as i64)
+        .map(|d| i64::try_from(d.as_millis()).unwrap_or(i64::MAX))
         .unwrap_or(0),
     ),
     Err(_) => (0, 0),

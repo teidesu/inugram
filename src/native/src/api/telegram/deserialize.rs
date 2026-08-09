@@ -9,6 +9,7 @@ use crate::api::telegram::writes::json_string;
 use crate::api::tl::proxy::{self, TlViews, ViewLife};
 use crate::sandbox::grants::{check_grant, GrantHost, MATCH_EXACT};
 use crate::sandbox::registry::{make_disposer, noop_disposer, CallbackRegistry, Lifecycle, Registry};
+use crate::utils::arguments::array_values;
 
 pub const MAX_RULES: usize = 32;
 
@@ -112,7 +113,7 @@ fn read_types<'js>(ctx: &Ctx<'js>, at: &str, value: Value<'js>) -> JsResult<Vec<
     return refuse(ctx, &format!("{at}.type must be a constructor name or an array of them"));
   };
   let mut out = Vec::new();
-  for item in crate::utils::arguments::array_values(ctx, array, &format!("{at}.type"))? {
+  for item in array_values(ctx, array, &format!("{at}.type"))? {
     let Some(name) = item.as_string() else {
       return refuse(ctx, &format!("{at}.type must contain only constructor names"));
     };
@@ -151,7 +152,7 @@ fn read_rules<'js>(ctx: &Ctx<'js>, value: Value<'js>) -> JsResult<Vec<Rule>> {
   let Some(array) = value.as_array() else {
     return refuse(ctx, "the declarative form takes an array of rules");
   };
-  let rules = crate::utils::arguments::array_values(ctx, array, "interceptDeserialize")?;
+  let rules = array_values(ctx, array, "interceptDeserialize")?;
   if rules.is_empty() {
     return refuse(ctx, "a rule set with no rules in it");
   }
@@ -240,7 +241,7 @@ fn register_middleware<'js>(
     return refuse(ctx, "the middleware form takes an array of constructor names");
   };
   let mut types = Vec::new();
-  for item in crate::utils::arguments::array_values(ctx, array, "interceptDeserialize")? {
+  for item in array_values(ctx, array, "interceptDeserialize")? {
     let Some(name) = item.as_string() else {
       return refuse(ctx, "the middleware form's first argument must contain only constructor names");
     };

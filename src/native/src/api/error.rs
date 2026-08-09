@@ -1,7 +1,132 @@
+use std::cell::RefCell;
+use std::collections::HashMap;
+
 use rquickjs::function::Constructor;
-use rquickjs::{Ctx, Object, Result as JsResult, Value};
+use rquickjs::{Coerced, Ctx, Object, Result as JsResult, Runtime, Value};
 
 use crate::api::telegram::rpc;
+
+pub(crate) fn format_thrown<'js>(ctx: &Ctx<'js>, value: &Value<'js>) -> String {
+  let message = describe_thrown(ctx, value);
+  let _ = ctx.catch();
+  message
+}
+
+fn describe_thrown<'js>(ctx: &Ctx<'js>, value: &Value<'js>) -> String {
+  use rquickjs::FromJs;
+
+  if let Some(message) = crate::sandbox::limits::describe_heap_exhaustion(value) {
+    return message;
+  }
+  let mut message = Coerced::<String>::from_js(ctx, value.clone())
+    .map(|coerced| coerced.0)
+    .unwrap_or_else(|_| "JS exception".to_string());
+  if let Some(object) = value.as_object() {
+    if let Ok(stack) = object.get::<_, String>("stack") {
+      if !stack.is_empty() {
+        message.push('\n');
+        message.push_str(&stack);
+      }
+    }
+  }
+  message
+}
+
+pub(crate) fn format_exception(ctx: &Ctx<'_>) -> String {
+  format_thrown(ctx, &ctx.catch())
+}
+
+pub(crate) fn error_value_to_string<'js>(ctx: &Ctx<'js>, value: &Value<'js>) -> String {
+  use rquickjs::FromJs;
+
+  if let Some(object) = value.as_object() {
+    if let Ok(message) = object.get::<_, String>("message") {
+      if !message.is_empty() {
+        return message;
+      }
+    }
+  }
+  Coerced::<String>::from_js(ctx, value.clone())
+    .map(|coerced| coerced.0)
+    .unwrap_or_else(|_| "unknown error".to_string())
+}
+
+pub(crate) fn make_error<'js>(ctx: &Ctx<'js>, message: &str) -> JsResult<Value<'js>> {
+  let constructor: Constructor = ctx.globals().get("Error")?;
+  constructor.construct((message,))
+}
+
+struct RejectionSlot {
+  log: crate::Log,
+  pending: HashMap<u64, String>,
+}
+
+thread_local! {
+  static REJECTIONS: RefCell<HashMap<usize, RejectionSlot>> = RefCell::new(HashMap::new());
+}
+
+fn get_context_key(ctx: &Ctx<'_>) -> usize {
+  ctx.as_raw().as_ptr() as usize
+}
+
+fn get_value_hash(value: &Value<'_>) -> u64 {
+  use std::collections::hash_map::DefaultHasher;
+  use std::hash::{Hash, Hasher};
+
+  let mut hasher = DefaultHasher::new();
+  value.hash(&mut hasher);
+  hasher.finish()
+}
+
+pub(crate) fn install_rejection_tracker(runtime: &Runtime, log: crate::Log) {
+  runtime.set_host_promise_rejection_tracker(Some(Box::new(move |ctx, promise, reason, is_handled| {
+    let context_key = get_context_key(&ctx);
+    let promise_hash = get_value_hash(&promise);
+    if is_handled {
+      REJECTIONS.with(|rejections| {
+        if let Some(slot) = rejections.borrow_mut().get_mut(&context_key) {
+          slot.pending.remove(&promise_hash);
+        }
+      });
+    } else {
+      let message = format_thrown(&ctx, &reason);
+      REJECTIONS.with(|rejections| {
+        rejections
+          .borrow_mut()
+          .entry(context_key)
+          .or_insert_with(|| RejectionSlot {
+            log: log.clone(),
+            pending: HashMap::new(),
+          })
+          .pending
+          .insert(promise_hash, message);
+      });
+    }
+  })));
+}
+
+pub(crate) fn report_rejections(ctx: &Ctx<'_>) {
+  let drained = REJECTIONS.with(|rejections| {
+    let mut rejections = rejections.borrow_mut();
+    let slot = rejections.get_mut(&get_context_key(ctx))?;
+    if slot.pending.is_empty() {
+      return None;
+    }
+    let messages = slot.pending.drain().map(|(_, message)| message).collect::<Vec<_>>();
+    Some((slot.log.clone(), messages))
+  });
+  if let Some((log, messages)) = drained {
+    for message in messages {
+      log(&crate::fault(format_args!("unhandled promise rejection: {message}")));
+    }
+  }
+}
+
+pub(crate) fn dispose_rejection_tracker(ctx: &Ctx<'_>) {
+  REJECTIONS.with(|rejections| {
+    rejections.borrow_mut().remove(&get_context_key(ctx));
+  });
+}
 
 #[derive(Clone, Copy)]
 pub enum PluginErrorCode<'a> {
@@ -46,13 +171,13 @@ impl<'a> PluginErrorCode<'a> {
 
 pub fn install_plugin_error<'js>(ctx: &Ctx<'js>, inu: &Object<'js>) -> JsResult<()> {
   let ctor: Value = ctx.eval(
-    r#"(class PluginError extends Error {
-            constructor(code, message) {
-                super(message);
-                this.name = 'PluginError';
-                this.code = String(code);
-            }
-        })"#,
+    r"(class PluginError extends Error {
+      constructor(code, message) {
+        super(message);
+        this.name = 'PluginError';
+        this.code = String(code);
+      }
+    })",
   )?;
   inu.set("PluginError", ctor)?;
   Ok(())
@@ -83,38 +208,6 @@ pub fn make_plugin_error<'js>(
   Ok(obj.into_value())
 }
 
-pub fn make_quota_error<'js>(ctx: &Ctx<'js>, message: &str, usage: i64, quota: i64) -> JsResult<Value<'js>> {
-  make_plugin_error(ctx, "quota-exceeded", message, None, Some(usage), Some(quota))
-}
-
-pub fn throw_invalid_argument<'js, T>(ctx: &Ctx<'js>, message: &str) -> JsResult<T> {
-  PluginErrorCode::InvalidArgument.throw(ctx, message)
-}
-
-pub fn throw_not_found<'js, T>(ctx: &Ctx<'js>, message: &str) -> JsResult<T> {
-  PluginErrorCode::NotFound.throw(ctx, message)
-}
-
-pub fn throw_not_granted<'js, T>(ctx: &Ctx<'js>, message: &str, grant: &str) -> JsResult<T> {
-  PluginErrorCode::NotGranted(grant).throw(ctx, message)
-}
-
-pub fn throw_forbidden<'js, T>(ctx: &Ctx<'js>, message: &str) -> JsResult<T> {
-  PluginErrorCode::Forbidden.throw(ctx, message)
-}
-
-pub fn throw_handle_expired<'js, T>(ctx: &Ctx<'js>, message: &str) -> JsResult<T> {
-  PluginErrorCode::HandleExpired.throw(ctx, message)
-}
-
-pub fn throw_internal<'js, T>(ctx: &Ctx<'js>, message: &str) -> JsResult<T> {
-  PluginErrorCode::Internal.throw(ctx, message)
-}
-
-pub fn throw_quota_exceeded<'js, T>(ctx: &Ctx<'js>, message: &str, usage: i64, quota: i64) -> JsResult<T> {
-  PluginErrorCode::QuotaExceeded(usage, quota).throw(ctx, message)
-}
-
 struct PluginErrorWire<'a> {
   code: &'a str,
   grant: Option<&'a str>,
@@ -123,19 +216,11 @@ struct PluginErrorWire<'a> {
   message: &'a str,
 }
 
-fn non_empty(s: &str) -> Option<&str> {
-  if s.is_empty() {
-    None
-  } else {
-    Some(s)
-  }
-}
-
 fn parse_optional_int(s: &str) -> Option<Option<i64>> {
-  match non_empty(s) {
-    None => Some(None),
-    Some(s) => s.parse().ok().map(Some),
-  }
+  if s.is_empty() {
+    return Some(None);
+  };
+  return s.parse().ok().map(Some);
 }
 
 fn parse_plugin_error(payload: &str) -> Option<PluginErrorWire<'_>> {
@@ -150,7 +235,7 @@ fn parse_plugin_error(payload: &str) -> Option<PluginErrorWire<'_>> {
   }
   Some(PluginErrorWire {
     code,
-    grant: non_empty(grant),
+    grant: if grant.is_empty() { None } else { Some(grant) },
     usage: parse_optional_int(usage)?,
     quota: parse_optional_int(quota)?,
     message,
@@ -167,7 +252,7 @@ fn structured_error_to_js<'js>(ctx: &Ctx<'js>, wire: &str) -> Option<JsResult<Va
 
 pub fn wire_error_to_js<'js>(ctx: &Ctx<'js>, wire: &str) -> Option<JsResult<Value<'js>>> {
   if let Some(message) = wire.strip_prefix('E') {
-    return Some(rpc::make_error(ctx, message));
+    return Some(make_error(ctx, message));
   }
   structured_error_to_js(ctx, wire)
 }
@@ -175,7 +260,7 @@ pub fn wire_error_to_js<'js>(ctx: &Ctx<'js>, wire: &str) -> Option<JsResult<Valu
 pub fn host_error_to_js<'js>(ctx: &Ctx<'js>, err: &str) -> JsResult<Value<'js>> {
   match structured_error_to_js(ctx, err) {
     Some(value) => value,
-    None => rpc::make_error(ctx, err),
+    None => make_error(ctx, err),
   }
 }
 

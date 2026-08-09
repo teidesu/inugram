@@ -49,6 +49,7 @@ impl<'js> Trace<'js> for UrlBox {
   fn trace<'a>(&self, _tracer: Tracer<'a, 'js>) {}
 }
 
+// SAFETY: `UrlBox` contains no JavaScript-lifetime-bound data.
 unsafe impl<'js> JsLifetime<'js> for UrlBox {
   type Changed<'to> = UrlBox;
 }

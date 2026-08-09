@@ -97,8 +97,8 @@ pub fn describe_heap_exhaustion<'js>(exception: &Value<'js>) -> Option<String> {
   let ceiling_mb = HEAP_LIMIT_BYTES / (1024 * 1024);
   if exception.is_null() {
     return Some(format!(
-            "null was thrown, which is also what this plugin's javascript heap ceiling of {ceiling_mb} MB raises when it has no room left to build an error object",
-        ));
+      "null was thrown, which is also what this plugin's javascript heap ceiling of {ceiling_mb} MB raises when it has no room left to build an error object",
+    ));
   }
   let obj = exception.as_object()?;
   let out_of_memory = obj.get::<_, String>("name").ok().as_deref() == Some("InternalError")

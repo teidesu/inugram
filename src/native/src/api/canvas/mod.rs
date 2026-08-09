@@ -413,6 +413,7 @@ macro_rules! opaque_class {
     impl<'js> Trace<'js> for $name {
       fn trace<'a>(&self, _tracer: Tracer<'a, 'js>) {}
     }
+    // SAFETY: these opaque handles contain no values tied to the JavaScript lifetime.
     unsafe impl<'js> JsLifetime<'js> for $name {
       type Changed<'to> = $name;
     }

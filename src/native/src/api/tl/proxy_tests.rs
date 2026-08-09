@@ -1098,7 +1098,9 @@ fn dispatch_scoped_view_stores_nothing_on_its_target() {
     assert_eq!(host.gets_of("child"), 2);
 
     let target = proxy.as_proxy().unwrap().target().unwrap();
-    assert!(!target.contains_key(cache_marker(&ctx).unwrap().as_atom()).unwrap());
+    assert!(!target
+      .contains_key({ Symbol::new_global((&ctx).clone(), CACHE_MARKER_DESCRIPTION) }.unwrap().as_atom())
+      .unwrap());
   });
 }
 
