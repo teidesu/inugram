@@ -587,12 +587,16 @@ declare namespace inu {
     function fromHex(hex: string): Uint8Array
 
 
+    /** Telegram-localized date text. `unix` must be a safe integer Unix timestamp in seconds. */
     function formatDate(unix: number, style?: 'date' | 'time' | 'dateTime' | 'relative'): string
 
+    /** Telegram-localized integer text. `compact` uses Telegram's million formatter. */
     function formatNumber(value: number, options?: { compact?: boolean }): string
 
+    /** Telegram-localized file size text. `bytes` must be a safe integer. */
     function formatFileSize(bytes: number): string
 
+    /** Telegram's clock-style duration text. `seconds` must be a non-negative signed 32-bit integer. */
     function formatDuration(seconds: number): string
 
 

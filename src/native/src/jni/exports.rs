@@ -365,7 +365,8 @@ pub extern "system" fn Java_desu_inugram_helpers_plugins_QuickJs_nativeInstallAp
         let mut shared_root = None;
         let installed = engine.ctx.with(|ctx| -> rquickjs::Result<Surfaces> {
             let inu = engine.inu.clone().restore(&ctx)?;
-            let shared = crate::api::tl::utils::install_utils(&ctx, &inu)?;
+            let utils_host: Rc<dyn crate::api::tl::utils::UtilsHost> = engine.bridge.clone();
+            let shared = crate::api::tl::utils::install_utils_with_host(&ctx, utils_host, &inu)?;
             crate::api::tl::message::install_message(&ctx, &shared, &inu)?;
             shared_root = Some(Persistent::save(&ctx, shared.clone()));
             let Some(accounts) = accounts.as_ref() else {

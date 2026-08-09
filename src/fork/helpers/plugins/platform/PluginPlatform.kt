@@ -8,12 +8,33 @@ import androidx.core.net.toUri
 import desu.inugram.helpers.plugins.PlatformListener
 import org.telegram.messenger.AndroidUtilities
 import org.telegram.messenger.ApplicationLoader
+import org.telegram.messenger.LocaleController
 import org.telegram.ui.LaunchActivity
 
 object PluginPlatform {
     private const val TAG = "InuPluginPlatform"
+    private const val FORMAT_DATE = 0
+    private const val FORMAT_TIME = 1
+    private const val FORMAT_DATE_TIME = 2
+    private const val FORMAT_RELATIVE_DATE = 3
+    private const val FORMAT_NUMBER = 4
+    private const val FORMAT_COMPACT_NUMBER = 5
+    private const val FORMAT_FILE_SIZE = 6
+    private const val FORMAT_DURATION = 7
 
     fun listenerFor(): PlatformListener = object : PlatformListener {
+        override fun format(op: Int, value: Long): String = when (op) {
+            FORMAT_DATE -> LocaleController.formatDate(value)
+            FORMAT_TIME -> LocaleController.getInstance().formatterDay.format(java.util.Date(value * 1000))
+            FORMAT_DATE_TIME -> LocaleController.formatDateTime(value, true)
+            FORMAT_RELATIVE_DATE -> LocaleController.formatDateChat(value, true)
+            FORMAT_NUMBER -> LocaleController.formatNumber(value, ' ')
+            FORMAT_COMPACT_NUMBER -> LocaleController.formatNumberWithMillion(value, ' ')
+            FORMAT_FILE_SIZE -> AndroidUtilities.formatFileSize(value)
+            FORMAT_DURATION -> LocaleController.formatShortDuration(value.toInt())
+            else -> error("unknown format op $op")
+        }
+
         override fun openUrl(url: String) = PluginPlatform.openUrl(url)
 
         override fun clipboardRead(): String = readClipboard()

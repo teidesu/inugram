@@ -1,5 +1,7 @@
 use base64::Engine;
+use rquickjs::function::Opt;
 use rquickjs::{Ctx, Exception, Function, Object, Result as JsResult, TypedArray, Value};
+use std::rc::Rc;
 
 use crate::api::error::throw_plugin_error;
 
@@ -7,7 +9,29 @@ const PRELUDE: &[u8] = include_bytes!(concat!(env!("OUT_DIR"), "/utils.qbc"));
 
 const HEX_DIGITS: &[u8; 16] = b"0123456789abcdef";
 
+pub const FORMAT_DATE: i32 = 0;
+pub const FORMAT_TIME: i32 = 1;
+pub const FORMAT_DATE_TIME: i32 = 2;
+pub const FORMAT_RELATIVE_DATE: i32 = 3;
+pub const FORMAT_NUMBER: i32 = 4;
+pub const FORMAT_COMPACT_NUMBER: i32 = 5;
+pub const FORMAT_FILE_SIZE: i32 = 6;
+pub const FORMAT_DURATION: i32 = 7;
+
+pub trait UtilsHost {
+    fn format(&self, op: i32, value: i64) -> String;
+}
+
+#[cfg(test)]
 pub fn install_utils<'js>(ctx: &Ctx<'js>, inu: &Object<'js>) -> JsResult<Object<'js>> {
+    install_utils_with_host(ctx, Rc::new(UnavailableUtilsHost), inu)
+}
+
+pub fn install_utils_with_host<'js>(
+    ctx: &Ctx<'js>,
+    host: Rc<dyn UtilsHost>,
+    inu: &Object<'js>,
+) -> JsResult<Object<'js>> {
     let utils = Object::new(ctx.clone())?;
 
     let f = Function::new(ctx.clone(), |ctx: Ctx<'js>, bytes: Value<'js>| {
@@ -38,6 +62,78 @@ pub fn install_utils<'js>(ctx: &Ctx<'js>, inu: &Object<'js>) -> JsResult<Object<
     })?;
     utils.set("fromHex", f)?;
 
+    {
+        let host = host.clone();
+        let f = Function::new(
+            ctx.clone(),
+            move |ctx: Ctx<'js>, unix: Value<'js>, style: Opt<Value<'js>>| -> JsResult<String> {
+                let value = format_integer(&ctx, &unix, "formatDate", i64::MIN, i64::MAX)?;
+                let op = match style.0.filter(|style| !style.is_undefined() && !style.is_null()) {
+                    None => FORMAT_DATE_TIME,
+                    Some(style) => match style.as_string().and_then(|style| style.to_string().ok()).as_deref() {
+                        Some("date") => FORMAT_DATE,
+                        Some("time") => FORMAT_TIME,
+                        Some("dateTime") => FORMAT_DATE_TIME,
+                        Some("relative") => FORMAT_RELATIVE_DATE,
+                        Some(style) => {
+                            return throw_plugin_error(
+                                &ctx,
+                                "invalid-argument",
+                                &format!("formatDate: unknown style '{style}'"),
+                                None,
+                                None,
+                                None,
+                            )
+                        }
+                        None => {
+                            return throw_plugin_error(
+                                &ctx,
+                                "invalid-argument",
+                                "formatDate: unknown style",
+                                None,
+                                None,
+                                None,
+                            )
+                        }
+                    },
+                };
+                Ok(host.format(op, value))
+            },
+        )?;
+        utils.set("formatDate", f)?;
+    }
+    {
+        let host = host.clone();
+        let f = Function::new(
+            ctx.clone(),
+            move |ctx: Ctx<'js>, value: Value<'js>, options: Opt<Value<'js>>| -> JsResult<String> {
+                let value = format_integer(&ctx, &value, "formatNumber", i64::MIN, i64::MAX)?;
+                let compact = match options.0 {
+                    Some(options) if !options.is_undefined() && !options.is_null() => {
+                        options.as_object().is_some_and(|options| options.get::<_, bool>("compact").unwrap_or(false))
+                    }
+                    _ => false,
+                };
+                Ok(host.format(if compact { FORMAT_COMPACT_NUMBER } else { FORMAT_NUMBER }, value))
+            },
+        )?;
+        utils.set("formatNumber", f)?;
+    }
+    {
+        let host = host.clone();
+        let f = Function::new(ctx.clone(), move |ctx: Ctx<'js>, value: Value<'js>| -> JsResult<String> {
+            Ok(host.format(FORMAT_FILE_SIZE, format_integer(&ctx, &value, "formatFileSize", i64::MIN, i64::MAX)?))
+        })?;
+        utils.set("formatFileSize", f)?;
+    }
+    {
+        let host = host.clone();
+        let f = Function::new(ctx.clone(), move |ctx: Ctx<'js>, value: Value<'js>| -> JsResult<String> {
+            Ok(host.format(FORMAT_DURATION, format_integer(&ctx, &value, "formatDuration", 0, i32::MAX as i64)?))
+        })?;
+        utils.set("formatDuration", f)?;
+    }
+
     let plugin_error: Value = inu.get("PluginError")?;
 
     let factory = crate::utils::prelude::load(ctx, PRELUDE)?;
@@ -45,6 +141,45 @@ pub fn install_utils<'js>(ctx: &Ctx<'js>, inu: &Object<'js>) -> JsResult<Object<
 
     inu.set("utils", utils)?;
     Ok(shared)
+}
+
+#[cfg(test)]
+struct UnavailableUtilsHost;
+
+#[cfg(test)]
+impl UtilsHost for UnavailableUtilsHost {
+    fn format(&self, _: i32, _: i64) -> String {
+        "unavailable".into()
+    }
+}
+
+fn format_integer<'js>(ctx: &Ctx<'js>, value: &Value<'js>, what: &str, min: i64, max: i64) -> JsResult<i64> {
+    let Some(value) = value.as_number() else {
+        return throw_plugin_error(
+            ctx,
+            "invalid-argument",
+            &format!("{what}: expected a safe integer"),
+            None,
+            None,
+            None,
+        );
+    };
+    if !value.is_finite()
+        || value.fract() != 0.0
+        || value < min as f64
+        || value > max as f64
+        || value.abs() > 9_007_199_254_740_991.0
+    {
+        return throw_plugin_error(
+            ctx,
+            "invalid-argument",
+            &format!("{what}: expected a safe integer"),
+            None,
+            None,
+            None,
+        );
+    }
+    Ok(value as i64)
 }
 
 fn read_bytes<'js>(ctx: &Ctx<'js>, value: &Value<'js>, what: &str) -> JsResult<Vec<u8>> {

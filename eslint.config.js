@@ -25,6 +25,7 @@ export default antfu({
     'node/prefer-global/buffer': 'off',
     'e18e/prefer-static-regex': 'off',
     'ts/method-signature-style': 'off',
+    'antfu/top-level-function': 'off',
   },
 }, {
   files: ['src/native/**/*.js'],

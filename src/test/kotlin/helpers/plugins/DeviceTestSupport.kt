@@ -246,6 +246,8 @@ private object DeviceMissing : CoreListener, StorageListener, UiListener, Platfo
 
     override fun uiCurrentScreen() = no("ui")
 
+    override fun format(op: Int, value: Long) = no("formatting")
+
     override fun openUrl(url: String) = no("ui")
 
     override fun clipboardRead() = no("clipboard")
