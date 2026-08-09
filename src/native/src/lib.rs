@@ -16,14 +16,14 @@ const LEVEL_FAULT: i32 = 5;
 const FAULT_PREFIX: &str = "\u{1}";
 
 pub(crate) fn fault(message: impl std::fmt::Display) -> String {
-    format!("{FAULT_PREFIX}{message}")
+  format!("{FAULT_PREFIX}{message}")
 }
 
 fn classify_log(message: &str) -> (i32, &str) {
-    match message.strip_prefix(FAULT_PREFIX) {
-        Some(rest) => (LEVEL_FAULT, rest),
-        None => (LEVEL_ERROR, message),
-    }
+  match message.strip_prefix(FAULT_PREFIX) {
+    Some(rest) => (LEVEL_FAULT, rest),
+    None => (LEVEL_ERROR, message),
+  }
 }
 
 #[cfg(test)]

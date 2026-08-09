@@ -5,10 +5,11 @@ use rquickjs::Value;
 
 #[test]
 fn open_url_accepts_http_and_https_and_refuses_every_other_shape() {
-    let (_rt, ctx, host, _lifecycle, _dialogs, _logs) = setup(&["openUrl"]);
-    let outcomes: String = ctx.with(|ctx| {
-        ctx.eval::<String, _>(
-            r#"
+  let (_rt, ctx, host, _lifecycle, _dialogs, _logs) = setup(&["openUrl"]);
+  let outcomes: String = ctx.with(|ctx| {
+    ctx
+      .eval::<String, _>(
+        r#"
             const urls = [
               'https://example.com/a?b=1#c',
               'HTTP://Example.COM',
@@ -31,31 +32,32 @@ fn open_url_accepts_http_and_https_and_refuses_every_other_shape() {
             }
             JSON.stringify(out);
             "#,
-        )
-        .unwrap()
-    });
-    assert_eq!(
-        outcomes,
-        r#"["opened","opened","opened","invalid-argument","invalid-argument","invalid-argument","invalid-argument","invalid-argument","invalid-argument","invalid-argument","invalid-argument","invalid-argument","invalid-argument"]"#,
-    );
-    assert_eq!(
-        *host.opened.borrow(),
-        vec![
-            "https://example.com/a?b=1#c".to_string(),
-            "HTTP://Example.COM".to_string(),
-            "http://[2001:db8::1]:8080/x".to_string(),
-        ],
-        "only the three http(s) urls may reach the host",
-    );
+      )
+      .unwrap()
+  });
+  assert_eq!(
+    outcomes,
+    r#"["opened","opened","opened","invalid-argument","invalid-argument","invalid-argument","invalid-argument","invalid-argument","invalid-argument","invalid-argument","invalid-argument","invalid-argument","invalid-argument"]"#,
+  );
+  assert_eq!(
+    *host.opened.borrow(),
+    vec![
+      "https://example.com/a?b=1#c".to_string(),
+      "HTTP://Example.COM".to_string(),
+      "http://[2001:db8::1]:8080/x".to_string(),
+    ],
+    "only the three http(s) urls may reach the host",
+  );
 }
 
 #[test]
 fn open_url_and_the_two_clipboard_halves_are_three_separate_grants() {
-    let (_rt, ctx, host, _lifecycle, _dialogs, _logs) = setup(&["clipboard.write"]);
-    *host.clipboard.borrow_mut() = "hunter2".to_string();
-    let got: String = ctx.with(|ctx| {
-        ctx.eval::<String, _>(
-            r#"
+  let (_rt, ctx, host, _lifecycle, _dialogs, _logs) = setup(&["clipboard.write"]);
+  *host.clipboard.borrow_mut() = "hunter2".to_string();
+  let got: String = ctx.with(|ctx| {
+    ctx
+      .eval::<String, _>(
+        r#"
             const out = [];
             const attempt = f => {
                 try { out.push(f() ?? 'ok'); }
@@ -66,12 +68,12 @@ fn open_url_and_the_two_clipboard_halves_are_three_separate_grants() {
             attempt(() => inu.clipboard.write('mine'));
             JSON.stringify(out);
             "#,
-        )
-        .unwrap()
-    });
-    assert_eq!(got, r#"["not-granted/clipboard.read","not-granted/openUrl","ok"]"#);
-    assert_eq!(*host.writes.borrow(), vec!["mine".to_string()]);
-    assert!(host.opened.borrow().is_empty(), "a refused openUrl must not reach the host");
+      )
+      .unwrap()
+  });
+  assert_eq!(got, r#"["not-granted/clipboard.read","not-granted/openUrl","ok"]"#);
+  assert_eq!(*host.writes.borrow(), vec!["mine".to_string()]);
+  assert!(host.opened.borrow().is_empty(), "a refused openUrl must not reach the host");
 }
 
 const SHELL_ORACLE: &str = include_str!("../../../../res/assets-debug/inu_plugins/shell-test.js");
@@ -82,25 +84,25 @@ const SHELL_ORACLE: &str = include_str!("../../../../res/assets-debug/inu_plugin
 /// written out of `expectThrow`, and only the count tells those apart
 #[test]
 fn the_bundled_shell_test_plugin_passes() {
-    let (rt, ctx, host, _lifecycle, dialogs, _logs) = setup(&crate::testing::harness::manifest_grants(SHELL_ORACLE));
-    let lines = crate::testing::harness::install_capturing_console(&ctx);
-    ctx.with(|ctx| match ctx.eval::<(), _>(SHELL_ORACLE) {
-        Ok(()) => {}
-        Err(rquickjs::Error::Exception) => panic!("{}", format_exception(&ctx)),
-        Err(e) => panic!("{e:?}"),
-    });
-    ctx.with(|ctx| {
-        ctx.eval::<Value, _>("globalThis.__shell()").unwrap();
-    });
+  let (rt, ctx, host, _lifecycle, dialogs, _logs) = setup(&crate::testing::harness::manifest_grants(SHELL_ORACLE));
+  let lines = crate::testing::harness::install_capturing_console(&ctx);
+  ctx.with(|ctx| match ctx.eval::<(), _>(SHELL_ORACLE) {
+    Ok(()) => {}
+    Err(rquickjs::Error::Exception) => panic!("{}", format_exception(&ctx)),
+    Err(e) => panic!("{e:?}"),
+  });
+  ctx.with(|ctx| {
+    ctx.eval::<Value, _>("globalThis.__shell()").unwrap();
+  });
 
-    for picked in [Some("2"), Some("0,2"), None] {
-        let request_id = host.choosers.borrow().last().expect("a chooser was opened").0;
-        resolve_chooser(&rt, &ctx, &dialogs, request_id, picked);
-    }
+  for picked in [Some("2"), Some("0,2"), None] {
+    let request_id = host.choosers.borrow().last().expect("a chooser was opened").0;
+    resolve_chooser(&rt, &ctx, &dialogs, request_id, picked);
+  }
 
-    let lines = lines.borrow().clone();
-    crate::testing::harness::assert_oracle_exact(&lines, "shell test done", 23);
-    // what "did not throw" cannot say: the accepted url and the write reached the host
-    assert_eq!(*host.opened.borrow(), vec!["https://telegram.org/".to_string()]);
-    assert_eq!(*host.writes.borrow(), vec!["inugram shell test".to_string()]);
+  let lines = lines.borrow().clone();
+  crate::testing::harness::assert_oracle_exact(&lines, "shell test done", 23);
+  // what "did not throw" cannot say: the accepted url and the write reached the host
+  assert_eq!(*host.opened.borrow(), vec!["https://telegram.org/".to_string()]);
+  assert_eq!(*host.writes.borrow(), vec!["inugram shell test".to_string()]);
 }

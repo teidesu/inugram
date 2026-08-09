@@ -5,55 +5,55 @@ use std::rc::Rc;
 struct TestUtilsHost;
 
 impl UtilsHost for TestUtilsHost {
-    fn format(&self, op: i32, value: i64) -> String {
-        format!("{op}:{value}")
-    }
+  fn format(&self, op: i32, value: i64) -> String {
+    format!("{op}:{value}")
+  }
 }
 
 fn setup() -> (Runtime, Context) {
-    let rt = Runtime::new().unwrap();
-    let ctx = Context::full(&rt).unwrap();
-    ctx.with(|ctx| {
-        let inu = crate::testing::harness::inu_namespace(&ctx);
-        crate::api::error::install_plugin_error(&ctx, &inu).unwrap();
-        install_utils_with_host(&ctx, Rc::new(TestUtilsHost), &inu).unwrap();
-    });
-    (rt, ctx)
+  let rt = Runtime::new().unwrap();
+  let ctx = Context::full(&rt).unwrap();
+  ctx.with(|ctx| {
+    let inu = crate::testing::harness::inu_namespace(&ctx);
+    crate::api::error::install_plugin_error(&ctx, &inu).unwrap();
+    install_utils_with_host(&ctx, Rc::new(TestUtilsHost), &inu).unwrap();
+  });
+  (rt, ctx)
 }
 
 use crate::testing::harness::eval_string as eval;
 
 /// what a caught `inu.PluginError` is worth branching on, or the thrown value's type name
 fn code_of(ctx: &Context, code: &str) -> String {
-    eval(
-        ctx,
-        &format!(
-            r#"(() => {{
+  eval(
+    ctx,
+    &format!(
+      r#"(() => {{
                 try {{ {code}; return 'no-throw' }}
                 catch (e) {{ return e instanceof inu.PluginError ? e.code : e.constructor.name }}
             }})()"#,
-        ),
-    )
+    ),
+  )
 }
 
 /// the bundled oracle also runs off-device against a recording formatter host
 #[test]
 fn the_bundled_utils_test_plugin_passes() {
-    let (rt, ctx) = setup();
-    let lines = crate::testing::harness::run_capturing_console(
-        &rt,
-        &ctx,
-        include_str!("../../../../res/assets-debug/inu_plugins/utils-test.js"),
-    );
-    crate::testing::harness::assert_oracle_exact(&lines, "utils test done", 83);
+  let (rt, ctx) = setup();
+  let lines = crate::testing::harness::run_capturing_console(
+    &rt,
+    &ctx,
+    include_str!("../../../../res/assets-debug/inu_plugins/utils-test.js"),
+  );
+  crate::testing::harness::assert_oracle_exact(&lines, "utils test done", 83);
 }
 
 #[test]
 fn base64_and_hex_round_trip_real_byte_arrays() {
-    let (_rt, ctx) = setup();
-    let out = eval(
-        &ctx,
-        r#"
+  let (_rt, ctx) = setup();
+  let out = eval(
+    &ctx,
+    r#"
         const bytes = new Uint8Array([0, 1, 15, 16, 127, 128, 255]);
         const b64 = inu.utils.toBase64(bytes);
         const hex = inu.utils.toHex(bytes);
@@ -69,47 +69,47 @@ fn base64_and_hex_round_trip_real_byte_arrays() {
             Array.from(inu.utils.fromBase64('')).length,
         ]);
         "#,
-    );
-    assert_eq!(
-        out,
-        r#"["AAEPEH+A/w==","00010f107f80ff",true,"0,1,15,16,127,128,255","0,1,15,16,127,128,255","","",0]"#,
-    );
+  );
+  assert_eq!(
+    out,
+    r#"["AAEPEH+A/w==","00010f107f80ff",true,"0,1,15,16,127,128,255","0,1,15,16,127,128,255","","",0]"#,
+  );
 }
 
 /// the `$inuBytes` wrapper is padded, a good deal of the web is not, and a plugin should not
 /// have to know which it was handed
 #[test]
 fn base64_decodes_padded_and_unpadded_alike() {
-    let (_rt, ctx) = setup();
-    let out = eval(
-        &ctx,
-        r#"
+  let (_rt, ctx) = setup();
+  let out = eval(
+    &ctx,
+    r#"
         const of = s => Array.from(inu.utils.fromBase64(s)).join(',');
         JSON.stringify([of('aGk='), of('aGk'), of('YQ=='), of('YQ')]);
         "#,
-    );
-    assert_eq!(out, r#"["104,105","104,105","97","97"]"#);
+  );
+  assert_eq!(out, r#"["104,105","104,105","97","97"]"#);
 }
 
 #[test]
 fn a_malformed_codec_argument_is_told_apart_from_a_wrong_type() {
-    let (_rt, ctx) = setup();
-    // content the codec cannot read is the plugin's argument being wrong...
-    assert_eq!(code_of(&ctx, "inu.utils.fromBase64('!!!!')"), "invalid-argument");
-    assert_eq!(code_of(&ctx, "inu.utils.fromHex('abc')"), "invalid-argument");
-    assert_eq!(code_of(&ctx, "inu.utils.fromHex('zz')"), "invalid-argument");
-    // ...while handing a codec something that is not bytes at all is a plain type error, the
-    // same call shape `crypto.getRandomValues` already refuses that way
-    assert_eq!(code_of(&ctx, "inu.utils.toHex([1, 2, 3])"), "TypeError");
-    assert_eq!(code_of(&ctx, "inu.utils.toBase64('hi')"), "TypeError");
+  let (_rt, ctx) = setup();
+  // content the codec cannot read is the plugin's argument being wrong...
+  assert_eq!(code_of(&ctx, "inu.utils.fromBase64('!!!!')"), "invalid-argument");
+  assert_eq!(code_of(&ctx, "inu.utils.fromHex('abc')"), "invalid-argument");
+  assert_eq!(code_of(&ctx, "inu.utils.fromHex('zz')"), "invalid-argument");
+  // ...while handing a codec something that is not bytes at all is a plain type error, the
+  // same call shape `crypto.getRandomValues` already refuses that way
+  assert_eq!(code_of(&ctx, "inu.utils.toHex([1, 2, 3])"), "TypeError");
+  assert_eq!(code_of(&ctx, "inu.utils.toBase64('hi')"), "TypeError");
 }
 
 #[test]
 fn hex_is_lowercase_out_and_case_insensitive_in() {
-    let (_rt, ctx) = setup();
-    let out = eval(
-        &ctx,
-        r#"
+  let (_rt, ctx) = setup();
+  let out = eval(
+    &ctx,
+    r#"
         const bytes = new Uint8Array([0xde, 0xad, 0xbe, 0xef]);
         JSON.stringify([
             inu.utils.toHex(bytes),
@@ -117,16 +117,16 @@ fn hex_is_lowercase_out_and_case_insensitive_in() {
             Array.from(inu.utils.fromHex('dEaDbEeF')).join(','),
         ]);
         "#,
-    );
-    assert_eq!(out, r#"["deadbeef","222,173,190,239","222,173,190,239"]"#);
+  );
+  assert_eq!(out, r#"["deadbeef","222,173,190,239","222,173,190,239"]"#);
 }
 
 #[test]
 fn peers_convert_between_the_two_id_schemes() {
-    let (_rt, ctx) = setup();
-    let out = eval(
-        &ctx,
-        r#"
+  let (_rt, ctx) = setup();
+  let out = eval(
+    &ctx,
+    r#"
         const { peers } = inu.utils;
         JSON.stringify([
             peers.toDialogId({ _: 'peerUser', user_id: '777000' }),
@@ -143,18 +143,18 @@ fn peers_convert_between_the_two_id_schemes() {
             peers.fromBotApiId(42),
         ]);
         "#,
-    );
-    assert_eq!(out, "[777000,-123,-456,-456,42,-7,-1000000000456,-123,42,-456,-123,42]");
+  );
+  assert_eq!(out, "[777000,-123,-456,-456,42,-7,-1000000000456,-123,42,-456,-123,42]");
 }
 
 /// the round trip is the point of having both: a channel is the only kind the schemes disagree
 /// on, and disagreeing about which one it is silently addresses another chat entirely
 #[test]
 fn a_bot_api_id_round_trips_for_every_kind() {
-    let (_rt, ctx) = setup();
-    let out = eval(
-        &ctx,
-        r#"
+  let (_rt, ctx) = setup();
+  let out = eval(
+    &ctx,
+    r#"
         const { peers } = inu.utils;
         const trip = peer => peers.fromBotApiId(peers.toBotApiId(peer)) === peers.toDialogId(peer);
         JSON.stringify([
@@ -164,16 +164,16 @@ fn a_bot_api_id_round_trips_for_every_kind() {
             trip({ _: 'channel', id: '2' }),
         ]);
         "#,
-    );
-    assert_eq!(out, "[true,true,true,true]");
+  );
+  assert_eq!(out, "[true,true,true,true]");
 }
 
 #[test]
 fn parse_dialog_id_cannot_tell_a_channel_from_a_group_and_says_so() {
-    let (_rt, ctx) = setup();
-    let out = eval(
-        &ctx,
-        r#"
+  let (_rt, ctx) = setup();
+  let out = eval(
+    &ctx,
+    r#"
         const { peers } = inu.utils;
         JSON.stringify([
             peers.parseDialogId(777000),
@@ -181,16 +181,16 @@ fn parse_dialog_id_cannot_tell_a_channel_from_a_group_and_says_so() {
             peers.parseDialogId(-123),
         ]);
         "#,
-    );
-    assert_eq!(out, r#"[{"type":"user","id":777000},{"type":"chat","id":456},{"type":"chat","id":123}]"#,);
+  );
+  assert_eq!(out, r#"[{"type":"user","id":777000},{"type":"chat","id":456},{"type":"chat","id":123}]"#,);
 }
 
 #[test]
 fn to_input_peer_reads_the_access_hash_off_the_entity() {
-    let (_rt, ctx) = setup();
-    let out = eval(
-        &ctx,
-        r#"
+  let (_rt, ctx) = setup();
+  let out = eval(
+    &ctx,
+    r#"
         const { peers } = inu.utils;
         JSON.stringify([
             peers.toInputPeer({ _: 'user', id: '42', access_hash: '99' }),
@@ -200,38 +200,38 @@ fn to_input_peer_reads_the_access_hash_off_the_entity() {
             peers.toInputPeer({ _: 'channel', id: '456', access_hash: '11' }),
         ]);
         "#,
-    );
-    assert_eq!(
-        out,
-        r#"[{"_":"inputPeerUser","user_id":"42","access_hash":"99"},{"_":"inputPeerSelf"},{"_":"inputPeerUser","user_id":"7","access_hash":"0"},{"_":"inputPeerChat","chat_id":"123"},{"_":"inputPeerChannel","channel_id":"456","access_hash":"11"}]"#,
-    );
+  );
+  assert_eq!(
+    out,
+    r#"[{"_":"inputPeerUser","user_id":"42","access_hash":"99"},{"_":"inputPeerSelf"},{"_":"inputPeerUser","user_id":"7","access_hash":"0"},{"_":"inputPeerChat","chat_id":"123"},{"_":"inputPeerChannel","channel_id":"456","access_hash":"11"}]"#,
+  );
 }
 
 #[test]
 fn a_peer_helper_refuses_what_it_cannot_answer_for() {
-    let (_rt, ctx) = setup();
-    for call in [
-        "inu.utils.peers.toDialogId({ _: 'inputPeerSelf' })",
-        "inu.utils.peers.toDialogId({ _: 'inputPeerEmpty' })",
-        "inu.utils.peers.toDialogId(null)",
-        "inu.utils.peers.toDialogId(42)",
-        "inu.utils.peers.toDialogId({ _: 'constructor' })",
-        "inu.utils.peers.parseDialogId(0)",
-        "inu.utils.peers.parseDialogId('me')",
-        "inu.utils.peers.toBotApiId({ _: 'message' })",
-        "inu.utils.peers.toInputPeer({ _: 'peerUser', user_id: '1' })",
-        "inu.utils.peers.toInputPeer({ _: 'userEmpty', id: '1' })",
-    ] {
-        assert_eq!(code_of(&ctx, call), "invalid-argument", "{call}");
-    }
+  let (_rt, ctx) = setup();
+  for call in [
+    "inu.utils.peers.toDialogId({ _: 'inputPeerSelf' })",
+    "inu.utils.peers.toDialogId({ _: 'inputPeerEmpty' })",
+    "inu.utils.peers.toDialogId(null)",
+    "inu.utils.peers.toDialogId(42)",
+    "inu.utils.peers.toDialogId({ _: 'constructor' })",
+    "inu.utils.peers.parseDialogId(0)",
+    "inu.utils.peers.parseDialogId('me')",
+    "inu.utils.peers.toBotApiId({ _: 'message' })",
+    "inu.utils.peers.toInputPeer({ _: 'peerUser', user_id: '1' })",
+    "inu.utils.peers.toInputPeer({ _: 'userEmpty', id: '1' })",
+  ] {
+    assert_eq!(code_of(&ctx, call), "invalid-argument", "{call}");
+  }
 }
 
 #[test]
 fn format_date_dispatches_each_style_to_the_host() {
-    let (_rt, ctx) = setup();
-    let out = eval(
-        &ctx,
-        r#"
+  let (_rt, ctx) = setup();
+  let out = eval(
+    &ctx,
+    r#"
         const at = new Date(2024, 4, 12, 19, 4, 30);
         const unix = Math.floor(at.getTime() / 1000);
         JSON.stringify([
@@ -241,28 +241,28 @@ fn format_date_dispatches_each_style_to_the_host() {
             inu.utils.formatDate(unix),
         ]);
         "#,
-    );
-    assert_eq!(out, r#"["0:1715526270","1:1715526270","2:1715526270","2:1715526270"]"#,);
+  );
+  assert_eq!(out, r#"["0:1715526270","1:1715526270","2:1715526270","2:1715526270"]"#,);
 }
 
 #[test]
 fn relative_dates_use_the_dialog_row_formatter() {
-    let (_rt, ctx) = setup();
-    let out = eval(
-        &ctx,
-        r#"
+  let (_rt, ctx) = setup();
+  let out = eval(
+    &ctx,
+    r#"
         inu.utils.formatDate(123, 'relative');
         "#,
-    );
-    assert_eq!(out, "3:123");
+  );
+  assert_eq!(out, "3:123");
 }
 
 #[test]
 fn numbers_dispatch_the_plain_and_compact_stock_formatters() {
-    let (_rt, ctx) = setup();
-    let out = eval(
-        &ctx,
-        r#"
+  let (_rt, ctx) = setup();
+  let out = eval(
+    &ctx,
+    r#"
         const plain = v => inu.utils.formatNumber(v);
         const short = v => inu.utils.formatNumber(v, { compact: true });
         JSON.stringify([
@@ -270,16 +270,16 @@ fn numbers_dispatch_the_plain_and_compact_stock_formatters() {
             short(999), short(1000000), short(2500000000),
         ]);
         "#,
-    );
-    assert_eq!(out, r#"["4:0","4:1234567","4:-1234567","5:999","5:1000000","5:2500000000"]"#,);
+  );
+  assert_eq!(out, r#"["4:0","4:1234567","4:-1234567","5:999","5:1000000","5:2500000000"]"#,);
 }
 
 #[test]
 fn file_sizes_and_durations_dispatch_to_stock() {
-    let (_rt, ctx) = setup();
-    let out = eval(
-        &ctx,
-        r#"
+  let (_rt, ctx) = setup();
+  let out = eval(
+    &ctx,
+    r#"
         const size = inu.utils.formatFileSize;
         const time = inu.utils.formatDuration;
         JSON.stringify([
@@ -287,35 +287,35 @@ fn file_sizes_and_durations_dispatch_to_stock() {
             time(0), time(187), time(3764),
         ]);
         "#,
-    );
-    assert_eq!(out, r#"["6:0","6:512","6:1073741824","7:0","7:187","7:3764"]"#,);
+  );
+  assert_eq!(out, r#"["6:0","6:512","6:1073741824","7:0","7:187","7:3764"]"#,);
 }
 
 #[test]
 fn a_formatter_refuses_what_it_cannot_format() {
-    let (_rt, ctx) = setup();
-    for call in [
-        "inu.utils.formatDate(NaN)",
-        "inu.utils.formatDate('yesterday')",
-        "inu.utils.formatDate(0, 'fuzzy')",
-        "inu.utils.formatNumber('lots')",
-        "inu.utils.formatNumber(1.5)",
-        "inu.utils.formatFileSize(Infinity)",
-        "inu.utils.formatDuration(-1)",
-        "inu.utils.formatDuration(2147483648)",
-        "inu.utils.formatDuration({})",
-    ] {
-        assert_eq!(code_of(&ctx, call), "invalid-argument", "{call}");
-    }
+  let (_rt, ctx) = setup();
+  for call in [
+    "inu.utils.formatDate(NaN)",
+    "inu.utils.formatDate('yesterday')",
+    "inu.utils.formatDate(0, 'fuzzy')",
+    "inu.utils.formatNumber('lots')",
+    "inu.utils.formatNumber(1.5)",
+    "inu.utils.formatFileSize(Infinity)",
+    "inu.utils.formatDuration(-1)",
+    "inu.utils.formatDuration(2147483648)",
+    "inu.utils.formatDuration({})",
+  ] {
+    assert_eq!(code_of(&ctx, call), "invalid-argument", "{call}");
+  }
 }
 
 /// the surface is `common.d.ts`'s, and a plugin cannot be allowed to reshape it under another
 #[test]
 fn the_namespace_is_exactly_what_the_contract_lists_and_is_frozen() {
-    let (_rt, ctx) = setup();
-    let out = eval(
-        &ctx,
-        r#"
+  let (_rt, ctx) = setup();
+  let out = eval(
+    &ctx,
+    r#"
         const keys = Object.keys(inu.utils).sort().join(',');
         const replace = (target, name) => {
             try { target[name] = () => 'replaced'; return 'no-throw' }
@@ -330,9 +330,9 @@ fn the_namespace_is_exactly_what_the_contract_lists_and_is_frozen() {
             inu.utils.peers.toDialogId({ _: 'peerUser', user_id: '3' }),
         ]);
         "#,
-    );
-    assert_eq!(
-        out,
-        r#"["formatDate,formatDuration,formatFileSize,formatNumber,fromBase64,fromHex,peers,toBase64,toHex","fromBotApiId,parseDialogId,toBotApiId,toDialogId,toInputPeer","TypeError","TypeError","01",3]"#,
-    );
+  );
+  assert_eq!(
+    out,
+    r#"["formatDate,formatDuration,formatFileSize,formatNumber,fromBase64,fromHex,peers,toBase64,toHex","fromBotApiId,parseDialogId,toBotApiId,toDialogId,toInputPeer","TypeError","TypeError","01",3]"#,
+  );
 }
