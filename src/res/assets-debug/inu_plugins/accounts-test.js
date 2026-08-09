@@ -59,7 +59,8 @@ check(
 
 let missing
 try {
-  inu.account(7)
+  const occupied = new Set(list.map((account) => account.id))
+  inu.account(Array.from({ length: 64 }, (_, id) => id).find((id) => !occupied.has(id)))
 } catch (e) {
   missing = e
 }

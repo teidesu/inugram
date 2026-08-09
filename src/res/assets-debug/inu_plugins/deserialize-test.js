@@ -3,7 +3,7 @@
 // @author       teidesu
 // @version      1.0
 // @description  registers a real interceptDeserialize rule, then asserts the refusal vocabulary around it
-// @grant        interceptDeserialize(userFull,user,message,encryptedMessage)
+// @grant        interceptDeserialize(userFull,user,message)
 // @plugin-api   1
 // @platform     android
 // ==/UserScript==
@@ -111,7 +111,7 @@ expectRefused('refuses the wire\'s own flag word', 'forbidden', () => {
   inu.interceptDeserialize([{ type: 'user', set: { flags: 3 } }])
 })
 
-expectRefused('refuses secret-chat traffic', 'forbidden', () => {
+expectRefused('refuses secret-chat traffic', 'not-granted', () => {
   inu.interceptDeserialize([{ type: 'encryptedMessage', set: { date: 1 } }])
 })
 

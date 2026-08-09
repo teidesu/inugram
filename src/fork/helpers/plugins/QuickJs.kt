@@ -82,7 +82,7 @@ open class QuickJs {
     open fun installJvm() = requireLive { nativeInstallJvm(it) }
 
     /** after [installJvm]: every entry point takes a `JavaMethod`, which is a handle in that api's table */
-    fun installXposed() = requireLive { nativeInstallXposed(it) }
+    open fun installXposed() = requireLive { nativeInstallXposed(it) }
 
     /**
      * **Call from globalQueue**: the thread that called the hooked method parks on the answer
@@ -90,7 +90,7 @@ open class QuickJs {
      * or `["P0" | "P1", ...args]` to run the original with those args - `P1` also meaning
      * [xposedAfter] is owed a call for [dispatchId].
      */
-    fun xposedBefore(
+    open fun xposedBefore(
         dispatchId: Long,
         site: Long,
         methodWire: String,
@@ -99,12 +99,12 @@ open class QuickJs {
     ): Array<String>? = ifLiveOr(null) { nativeXposedBefore(it, dispatchId, site, methodWire, thisWire, args) }
 
     /** [resultWire] is what the original answered, `T`-prefixed when it threw */
-    fun xposedAfter(dispatchId: Long, resultWire: String): String = ifLiveOr(resultWire) { nativeXposedAfter(it, dispatchId, resultWire) ?: resultWire }
+    open fun xposedAfter(dispatchId: Long, resultWire: String): String = ifLiveOr(resultWire) { nativeXposedAfter(it, dispatchId, resultWire) ?: resultWire }
 
     /** the waiting is the host's, but the number is rust's (`xposed::HOOK_BUDGET_MS`) so there is one of it */
-    fun xposedBudgetMs(): Long = nativeXposedBudgetMs()
+    open fun xposedBudgetMs(): Long = nativeXposedBudgetMs()
 
-    fun xposedRelease(dispatchId: Long) = ifLive { nativeXposedRelease(it, dispatchId) }
+    open fun xposedRelease(dispatchId: Long) = ifLive { nativeXposedRelease(it, dispatchId) }
 
     /** **Post it**, never call it from inside the reflected call that handed the object over: that call is already inside this engine */
     open fun jvmCallback(callbackId: Int) = ifLive { nativeJvmCallback(it, callbackId) }

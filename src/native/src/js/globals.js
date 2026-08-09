@@ -1,4 +1,4 @@
-((native) => {
+(native) => {
   const define = (name, value) => {
     Object.defineProperty(globalThis, name, { value, writable: true, configurable: true })
   }
@@ -136,7 +136,13 @@
   // Error) and `errorTypes['__proto__']`/`['toString']` are not constructors at all, which throws
   // a TypeError out of structuredClone
   const errorTypes = Object.assign(Object.create(null), {
-    Error, EvalError, RangeError, ReferenceError, SyntaxError, TypeError, URIError,
+    Error,
+    EvalError,
+    RangeError,
+    ReferenceError,
+    SyntaxError,
+    TypeError,
+    URIError,
   })
   // captured here rather than read off globalThis per clone, so replacing the global later cannot
   // decide what does or doesn't take the blob path
@@ -202,11 +208,12 @@
       return clone
     }
     if (Array.isArray(value)) {
-      const clone = new Array(value.length)
+      const clone = Array.from({ length: value.length })
       seen.set(value, clone)
       for (const key of Object.keys(value)) clone[key] = cloneValue(value[key], seen)
       return clone
     }
+    // eslint-disable-next-line unicorn/no-instanceof-builtins
     if (value instanceof Boolean || value instanceof Number || value instanceof String) {
       return remember(seen, value, new value.constructor(value.valueOf()))
     }
@@ -218,4 +225,4 @@
   }
 
   define('structuredClone', value => cloneValue(value, new Map()))
-})
+}

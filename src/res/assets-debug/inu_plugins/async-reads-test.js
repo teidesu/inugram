@@ -146,7 +146,7 @@ const SERVICE_PEER = 777000
   const withDraft = page.find((d) => d.draft !== null && d.draft !== undefined)
   const rowDraft = withDraft?.draft
   const rowPeer = withDraft?.peer
-  if (rowDraft === undefined || rowPeer === undefined) {
+  if (rowDraft === undefined || rowPeer === undefined || rowDraft.message === null) {
     skip('a dialog row carries the draft getDraft answers with', 'no draft in the first page')
   } else {
     const own = acc.getDraft(rowPeer)

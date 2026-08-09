@@ -2,10 +2,12 @@ use std::ffi::{c_char, c_int, c_void, CString};
 use std::ptr;
 use std::sync::{Mutex, OnceLock};
 
-use jni::sys::{jclass, jobject, JNIEnv as RawJNIEnv};
+use jni::sys::{jclass, jobject, jobjectArray, JNIEnv as RawJNIEnv};
+use jni::strings::JNIString;
 use jni::Env;
 
 use crate::api::platform::xposed::elf::Resolver;
+use crate::jni::env::clear_exception;
 
 type ShadowhookInit = unsafe extern "C" fn(c_int, bool) -> c_int;
 type ShadowhookDlopen = unsafe extern "C" fn(*const c_char) -> *mut c_void;
@@ -32,6 +34,7 @@ type LSPlantHook = unsafe extern "C" fn(*mut RawJNIEnv, jobject, jobject, jobjec
 type LSPlantUnHook = unsafe extern "C" fn(*mut RawJNIEnv, jobject) -> bool;
 type LSPlantOnObject = unsafe extern "C" fn(*mut RawJNIEnv, jobject) -> bool;
 type LSPlantOnClass = unsafe extern "C" fn(*mut RawJNIEnv, jclass) -> bool;
+type SetHiddenApiExemptions = unsafe extern "C" fn(*mut RawJNIEnv, jclass, jobjectArray);
 
 struct Shadowhook {
     dlopen: ShadowhookDlopen,
@@ -92,14 +95,24 @@ extern "C" {
     fn libc_dlopen(name: *const c_char, flags: c_int) -> *mut c_void;
     #[link_name = "dlsym"]
     fn libc_dlsym(handle: *mut c_void, name: *const c_char) -> *mut c_void;
-    fn sysconf(name: c_int) -> i64;
-    fn mprotect(addr: *mut c_void, len: usize, prot: c_int) -> c_int;
 }
 
-const SC_PAGESIZE: c_int = 29;
-const PROT_READ: c_int = 1;
-const PROT_WRITE: c_int = 2;
-const PROT_EXEC: c_int = 4;
+#[cfg(target_os = "android")]
+#[link(name = "log")]
+extern "C" {
+    fn __android_log_write(priority: c_int, tag: *const c_char, text: *const c_char) -> c_int;
+}
+
+const ANDROID_LOG_ERROR: c_int = 6;
+
+fn log_init_failure(message: &str) {
+    #[cfg(target_os = "android")]
+    {
+        let Ok(tag) = CString::new("InuPluginXposed") else { return };
+        let Ok(message) = CString::new(message) else { return };
+        unsafe { __android_log_write(ANDROID_LOG_ERROR, tag.as_ptr(), message.as_ptr()) };
+    }
+}
 
 fn name_of(name: *const c_char, length: usize) -> &'static str {
     if name.is_null() {
@@ -145,25 +158,10 @@ extern "C" fn resolve_prefix(prefix: *const c_char, length: usize) -> *mut c_voi
     }
 }
 
-fn unprotect(address: *mut c_void) -> bool {
-    let page = unsafe { sysconf(SC_PAGESIZE) };
-    if page <= 0 {
-        return false;
-    }
-    let page = page as usize;
-    let value = address as usize;
-    let start = value & !(page - 1);
-    let end = (value + page + page - 1) & !(page - 1);
-    unsafe { mprotect(start as *mut c_void, end - start, PROT_READ | PROT_WRITE | PROT_EXEC) == 0 }
-}
-
 extern "C" fn inline_hooker(target: *mut c_void, hooker: *mut c_void) -> *mut c_void {
     let Some(native) = native() else {
         return ptr::null_mut();
     };
-    if !unprotect(target) {
-        return ptr::null_mut();
-    }
     let mut original: *mut c_void = ptr::null_mut();
     let stub = unsafe { (native.shadowhook.hook_addr)(target, hooker, &mut original) };
     if stub.is_null() {
@@ -178,6 +176,50 @@ extern "C" fn inline_unhooker(func: *mut c_void) -> bool {
 }
 
 const SHADOWHOOK_MODE_UNIQUE: c_int = 1;
+const SET_HIDDEN_API_EXEMPTIONS: &str = "_ZN3artL32VMRuntime_setHiddenApiExemptionsEP7_JNIEnvP7_jclassP13_jobjectArray";
+
+fn disable_hidden_api(env: &mut Env, native: &Native) -> bool {
+    let mut address = ptr::null_mut();
+    if native.art_handle != 0 {
+        if let Ok(name) = CString::new(SET_HIDDEN_API_EXEMPTIONS) {
+            address = unsafe { (native.shadowhook.dlsym)(native.art_handle as *mut c_void, name.as_ptr()) };
+        }
+    }
+    if address.is_null() {
+        address = match native.art.lock() {
+            Ok(mut art) => art.prefix(SET_HIDDEN_API_EXEMPTIONS),
+            Err(_) => ptr::null_mut(),
+        };
+    };
+    if address.is_null() {
+        log_init_failure("could not resolve VMRuntime_setHiddenApiExemptions");
+        return true;
+    }
+
+    let Ok(string_class) = env.find_class(JNIString::from("java/lang/String")) else {
+        log_init_failure("could not resolve java.lang.String for hidden API exemptions");
+        clear_exception(env);
+        return false;
+    };
+    let Ok(prefix) = env.new_string("L") else {
+        log_init_failure("could not create hidden API exemption prefix");
+        clear_exception(env);
+        return false;
+    };
+    let Ok(exemptions) = env.new_object_array(1, &string_class, &prefix) else {
+        log_init_failure("could not create hidden API exemption array");
+        clear_exception(env);
+        return false;
+    };
+
+    let set_exemptions: SetHiddenApiExemptions = unsafe { std::mem::transmute(address) };
+    unsafe { set_exemptions(env.get_raw(), string_class.as_raw(), exemptions.as_raw()) };
+    if clear_exception(env) {
+        log_init_failure("VMRuntime_setHiddenApiExemptions threw");
+        return false;
+    }
+    true
+}
 
 fn load() -> Option<Native> {
     let shadowhook_lib = unsafe { dlopen("libshadowhook.so") };
@@ -217,10 +259,14 @@ fn load() -> Option<Native> {
 pub fn init(env: &mut Env) -> bool {
     let loaded = NATIVE.get_or_init(load);
     let Some(native) = loaded.as_ref() else {
+        log_init_failure("could not load xposed native libraries");
         return false;
     };
 
     *INITIALIZED.get_or_init(|| {
+        if !disable_hidden_api(env, native) {
+            return false;
+        }
         let info = LSPlantInitInfoC {
             inline_hooker,
             inline_unhooker,
@@ -231,7 +277,11 @@ pub fn init(env: &mut Env) -> bool {
             generated_field_name: ptr::null(),
             generated_method_name: ptr::null(),
         };
-        unsafe { (native.lsplant.init)(env.get_raw(), &info) }
+        let initialized = unsafe { (native.lsplant.init)(env.get_raw(), &info) };
+        if !initialized {
+            log_init_failure("LSPlantInitC failed");
+        }
+        initialized
     })
 }
 

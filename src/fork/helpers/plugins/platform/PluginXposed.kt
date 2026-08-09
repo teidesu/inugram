@@ -57,7 +57,16 @@ object PluginXposed {
     /** set at first use rather than at boot: `nativeInit` prefetches ART symbols and installs hooks of its own, a cost no plugin should pay for unasked */
     private var ready: Boolean? = null
 
-    private fun ensureReady(): Boolean = ready ?: Native.nativeInit().also { ready = it }
+    private fun ensureReady(): Boolean = ready ?: runCatching {
+        System.loadLibrary("lsplant")
+        Native.nativeInit()
+    }.getOrElse {
+        Log.e(TAG, "load xposed libraries failed", it)
+        false
+    }.also {
+        ready = it
+        Log.d(TAG, "native xposed ${if (it) "ready" else "unavailable"}")
+    }
 
     /**
      * Everything about it that matters is what it is *not*: it holds no callback list, decides
@@ -105,6 +114,7 @@ object PluginXposed {
         private val nextSite = AtomicLong(1)
         private val nextDispatch = AtomicLong(1)
         private val budgetMs = engine.xposedBudgetMs()
+        private val dispatching = ThreadLocal<Boolean>()
 
         private val values: PluginJvm.ValueBridge
             get() = PluginJvm.bridgeFor(engine)
@@ -179,12 +189,14 @@ object PluginXposed {
                 ?: refuse("internal", "xposed: lsplant declined to hook $member")
             backup.isAccessible = true
             sites[site] = Site(member, backup)
+            Log.d(TAG, "[${plugin.manifest.name}] installed xposed site $site: $member")
             return site
         }
 
         private fun uninstall(site: Long): String {
             val removed = sites.remove(site) ?: return PluginWire.encodeNull()
             Native.nativeUnhook(removed.target)
+            Log.d(TAG, "[${plugin.manifest.name}] removed xposed site $site: ${removed.target}")
             return PluginWire.encodeNull()
         }
 
@@ -199,7 +211,8 @@ object PluginXposed {
         private fun invoke(method: Method, args: Array<String>): String {
             val decoded = args.map { values.decode(it) }
             val receiver = decoded.firstOrNull()
-            val rest = decoded.drop(1).toTypedArray()
+            val rest = PluginJvm.convertArguments(method.parameterTypes, decoded.drop(1))
+                ?: refuse("invalid-argument", "xposed: ${method.name} does not take these arguments")
             method.isAccessible = true
             return try {
                 values.encode(method.invoke(receiver, *rest))
@@ -217,7 +230,20 @@ object PluginXposed {
          */
         fun dispatch(site: Long, receiver: Any?, args: List<Any?>): Any? {
             // already inside the engine's queue: this is a hooked method plugin code reached, and parking here would be parking on ourselves
-            if (Utilities.globalQueue as Any === Thread.currentThread()) return runOriginal(site, receiver, args)
+            if (Utilities.globalQueue as Any === Thread.currentThread() || dispatching.get() == true) {
+                Log.d(TAG, "[${plugin.manifest.name}] xposed site $site bypassed re-entry")
+                return runOriginal(site, receiver, args)
+            }
+            dispatching.set(true)
+            return try {
+                Log.d(TAG, "[${plugin.manifest.name}] xposed site $site dispatching")
+                dispatchOnce(site, receiver, args)
+            } finally {
+                dispatching.remove()
+            }
+        }
+
+        private fun dispatchOnce(site: Long, receiver: Any?, args: List<Any?>): Any? {
             val request = try {
                 Request(
                     values.encode(sites[site]?.target),
@@ -235,7 +261,7 @@ object PluginXposed {
             if (before.firstOrNull() == "A") {
                 val answer = answerOf(before.getOrNull(1) ?: PluginWire.encodeNull())
                     ?: return runOriginal(site, receiver, args)
-                return answer.getOrThrow()
+                return returnValue(site, answer)
             }
 
             val callArgs = try {
@@ -260,7 +286,9 @@ object PluginXposed {
                 release(id)
                 return outcome.getOrThrow()
             }
-            return (answerOf(after) ?: outcome).getOrThrow()
+            val answer = answerOf(after) ?: outcome
+            release(id)
+            return returnValue(site, answer)
         }
 
         private class Request(val method: String, val receiver: String, val args: Array<String>)
@@ -305,6 +333,13 @@ object PluginXposed {
             }
         }
 
+        private fun returnValue(site: Long, answer: Result<Any?>): Any? = answer.map { value ->
+            val type = sites[site]?.backup?.returnType ?: return@map value
+            if (type == Void.TYPE) return@map null
+            PluginJvm.convertArguments(arrayOf(type), listOf(value))?.single()
+                ?: throw IllegalArgumentException("xposed: cannot return that from ${type.name}")
+        }.getOrThrow()
+
         private fun unhooked(cause: Throwable, site: Long, receiver: Any?, args: List<Any?>): Any? {
             Log.e(TAG, "[${plugin.manifest.name}] xposed dispatch failed; running the original", cause)
             return runOriginal(site, receiver, args)
@@ -312,9 +347,11 @@ object PluginXposed {
 
         private fun runOriginal(site: Long, receiver: Any?, args: List<Any?>): Any? {
             val backup = sites[site]?.backup ?: return null
+            val converted = PluginJvm.convertArguments(backup.parameterTypes, args)
+                ?: throw IllegalArgumentException("xposed: ${backup.name} does not take these arguments")
             backup.isAccessible = true
             return try {
-                backup.invoke(receiver, *args.toTypedArray())
+                backup.invoke(receiver, *converted)
             } catch (e: InvocationTargetException) {
                 throw e.targetException
             }

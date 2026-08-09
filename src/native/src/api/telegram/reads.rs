@@ -9,6 +9,7 @@ use crate::api::telegram::account::AccountState;
 use crate::api::telegram::rpc::{format_exception, pump_jobs, PendingSettle};
 use crate::api::tl::proxy::{wire_to_js_value, TlViews, ViewLife};
 use crate::sandbox::grants::{check_grant, GrantHost, MATCH_EXACT};
+use crate::utils::prelude;
 
 const PRELUDE: &[u8] = include_bytes!(concat!(env!("OUT_DIR"), "/reads.qbc"));
 
@@ -264,7 +265,7 @@ pub fn install_reads<'js>(
     let message: Value = inu.get("Message")?;
     let plugin_error: Value = inu.get("PluginError")?;
 
-    let factory = crate::utils::prelude::load(ctx, PRELUDE)?;
+    let factory = prelude::load(ctx, PRELUDE)?;
     let prototype: Object = factory.call((natives, shared.clone(), message, plugin_error))?;
     crate::api::telegram::account::set_prototype(ctx, accounts, &prototype);
 

@@ -5,6 +5,7 @@ import desu.inugram.core.plugins.PluginManifest
 import desu.inugram.core.plugins.PluginWire
 import desu.inugram.helpers.plugins.io.PluginFetch
 import desu.inugram.helpers.plugins.platform.PluginJvm
+import desu.inugram.helpers.plugins.platform.PluginXposed
 import desu.inugram.helpers.plugins.platform.PluginNotifications
 import desu.inugram.helpers.plugins.telegram.PluginDeserialize
 import desu.inugram.helpers.plugins.telegram.PluginReads
@@ -219,9 +220,10 @@ fun attachBridge(plugin: Plugin, engine: RecordingQuickJs) {
         canvas = DeviceMissing,
         notifications = PluginNotifications.listenerFor(plugin, engine),
         jvm = jvm,
-        xposed = null,
+        xposed = PluginXposed.listenerFor(plugin, engine, jvm),
     ))
     PluginJvm.install(engine)
+    PluginXposed.install(engine)
     PluginRpc.install(engine)
 }
 
