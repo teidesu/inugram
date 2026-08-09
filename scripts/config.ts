@@ -69,7 +69,7 @@ export const forkSyncFiles: ForkSyncFile[] = [
   // src/androidTest is synced into a kotlin source root, so what the suite needs as a *file* is
   // kept apart from it
   {
-    source: 'src/androidTestAssets/*.dex',
+    source: 'src/res/assets-test/*.dex',
     target: 'TMessagesProj/src/androidTest/assets/inu',
   },
   {
