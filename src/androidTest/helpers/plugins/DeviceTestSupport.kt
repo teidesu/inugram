@@ -237,11 +237,7 @@ private object DeviceMissing : CoreListener, ApiListener, CanvasListener {
 
     override fun uiToast(text: String) = no("ui")
 
-    override fun uiDialog(requestId: Long, optionsJson: String) = no("ui")
-
-    override fun uiPrompt(requestId: Long, optionsJson: String) = no("ui")
-
-    override fun uiChooser(requestId: Long, optionsJson: String) = no("ui")
+    override fun uiModal(op: Int, requestId: Long, optionsJson: String) = no("ui")
 
     override fun uiCurrentScreen() = no("ui")
 

@@ -106,15 +106,27 @@ class ForkWiringTest {
      * `keep in sync` comment on each half is what this makes true.
      */
     @Test
-    fun `the xposed ops the bridge sends are the ones rust reads`() {
+    fun `the xposed ops the bridge sends are the ones rust reads`() =
+        assertOpsAgree("PluginXposed.kt", "src/native/src/api/platform/xposed/mod.rs")
+
+    /**
+     * the same hazard one api over: `inu.ui.dialog`/`prompt`/`chooser` cross as one upcall, so the
+     * op is the only thing saying which modal was asked for, and rust picks it at a JNI call site
+     * no rust test reaches while the device suite drives the host half off Kotlin's own constants.
+     */
+    @Test
+    fun `the ui modal ops the bridge sends are the ones rust reads`() =
+        assertOpsAgree("PluginUi.kt", "src/native/src/api/ui/mod.rs")
+
+    private fun assertOpsAgree(kotlinFile: String, nativePath: String) {
         val bridge = Regex("""const val (OP_\w+) = (\d+)""")
-            .findAll(forkSource("PluginXposed.kt").readText())
+            .findAll(forkSource(kotlinFile).readText())
             .associate { it.groupValues[1] to it.groupValues[2].toInt() }
         val native = Regex("""const (OP_\w+): i32 = (\d+);""")
-            .findAll(File(forkRoot(), "src/native/src/api/platform/xposed/mod.rs").readText())
+            .findAll(File(forkRoot(), nativePath).readText())
             .associate { it.groupValues[1] to it.groupValues[2].toInt() }
-        assertTrue(bridge.isNotEmpty(), "read no ops out of PluginXposed.kt")
-        assertTrue(native.isNotEmpty(), "read no ops out of xposed.rs")
-        assertEquals(native, bridge, "PluginXposed and xposed.rs disagree about the xposed op numbering")
+        assertTrue(bridge.isNotEmpty(), "read no ops out of $kotlinFile")
+        assertTrue(native.isNotEmpty(), "read no ops out of $nativePath")
+        assertEquals(native, bridge, "$kotlinFile and $nativePath disagree about the op numbering")
     }
 }

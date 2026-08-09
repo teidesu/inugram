@@ -54,14 +54,8 @@ object PluginApi {
                 }
             }
 
-            override fun uiDialog(requestId: Long, optionsJson: String): String? =
-                PluginUi.dialog(plugin, engine, requestId, optionsJson)
-
-            override fun uiPrompt(requestId: Long, optionsJson: String): String? =
-                PluginUi.prompt(plugin, engine, requestId, optionsJson)
-
-            override fun uiChooser(requestId: Long, optionsJson: String): String? =
-                PluginUi.chooser(plugin, engine, requestId, optionsJson)
+            override fun uiModal(op: Int, requestId: Long, optionsJson: String): String? =
+                PluginUi.modal(plugin, engine, op, requestId, optionsJson)
 
             override fun uiCurrentScreen(): String = PluginScreens.currentScreenWire()
 

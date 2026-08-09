@@ -378,7 +378,7 @@ further - pure logic that had been reachable only from a device test.
 single implementation is `PluginBridge` — composed with Kotlin's `by`, so a member added to a
 subsystem's interface costs no forwarder anywhere. `JniBridge::new` caches a method id per member
 off **`PluginBridge`**, so that class name and every one of those signatures is load-bearing;
-`jni/tests.rs` parses `PluginListener.kt` and cross-checks all 56 against the descriptors rust looks
+`jni/tests.rs` parses `PluginListener.kt` and cross-checks all 54 against the descriptors rust looks
 up, which is the one seam test there is. It also forces construction to be **two-phase** — the
 listeners capture the engine, so `QuickJs()` allocates nothing and `start(bridge)` is what calls
 `nativeCreate`. Three more consequences worth knowing before moving anything. The contract lives in its own file **because `QuickJs` cannot be compiled off a device**

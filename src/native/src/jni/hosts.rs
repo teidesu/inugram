@@ -23,6 +23,7 @@ use crate::api::ui::dialogs::DialogHost;
 use crate::api::ui::icons::IconHost;
 use crate::api::ui::pages::UiHost;
 use crate::api::ui::screens::ScreenHost;
+use crate::api::ui::{OP_CHOOSER, OP_DIALOG, OP_PROMPT};
 use crate::sandbox::grants::GrantHost;
 
 use super::bridge::{Arg, JniBridge};
@@ -204,17 +205,25 @@ impl KvHost for JniBridge {
     }
 }
 
+impl JniBridge {
+    /// the one upcall behind `inu.ui.dialog`/`prompt`/`chooser`, which differ in nothing the bridge
+    /// can see: same arguments, same refusal channel, same queue
+    fn ui_modal(&self, op: i32, request_id: i64, options_json: &str) -> Option<String> {
+        self.call_refusal("modal", self.on_ui_modal, &[Arg::Int(op), Arg::Long(request_id), Arg::Str(options_json)])
+    }
+}
+
 impl DialogHost for JniBridge {
     fn toast(&self, text: &str) {
         self.call_void("toast", self.on_ui_toast, &[Arg::Str(text)]);
     }
 
     fn dialog(&self, request_id: i64, options_json: &str) -> Option<String> {
-        self.call_refusal("dialog", self.on_ui_dialog, &[Arg::Long(request_id), Arg::Str(options_json)])
+        self.ui_modal(OP_DIALOG, request_id, options_json)
     }
 
     fn chooser(&self, request_id: i64, options_json: &str) -> Option<String> {
-        self.call_refusal("chooser", self.on_ui_chooser, &[Arg::Long(request_id), Arg::Str(options_json)])
+        self.ui_modal(OP_CHOOSER, request_id, options_json)
     }
 }
 
@@ -262,7 +271,7 @@ impl NotificationHost for JniBridge {
 
 impl UiHost for JniBridge {
     fn ui_prompt(&self, request_id: i64, options_json: &str) -> Option<String> {
-        self.call_refusal("prompt", self.on_ui_prompt, &[Arg::Long(request_id), Arg::Str(options_json)])
+        self.ui_modal(OP_PROMPT, request_id, options_json)
     }
 
     fn ui_open_page(&self, page_id: i64) -> Option<String> {
