@@ -3,7 +3,7 @@ use std::rc::Rc;
 use rquickjs::function::Opt;
 use rquickjs::{Ctx, Function, Object, Result as JsResult, Value};
 
-use crate::api::error;
+use crate::api::error::{self, PluginErrorCode};
 use crate::api::telegram::rpc::format_exception;
 use crate::api::telegram::writes::json_string;
 use crate::api::tl::proxy::{self, TlViews, ViewLife};
@@ -56,7 +56,7 @@ struct Rule {
 }
 
 fn refuse<T>(ctx: &Ctx<'_>, message: &str) -> JsResult<T> {
-  error::throw_plugin_error(ctx, "invalid-argument", &format!("{GRANT}: {message}"), None, None, None)
+  PluginErrorCode::InvalidArgument.throw(ctx, &format!("{GRANT}: {message}"))
 }
 
 fn read_const<'js>(ctx: &Ctx<'js>, at: &str, value: Value<'js>) -> JsResult<Const> {
@@ -208,14 +208,8 @@ fn js_intercept_deserialize<'js>(
   }
   let wanted = live_rules(state) + parsed.len();
   if wanted > MAX_RULES {
-    return error::throw_plugin_error(
-      ctx,
-      "quota-exceeded",
-      &format!("{GRANT}: at most {MAX_RULES} rules may be live at once"),
-      None,
-      Some(wanted as i64),
-      Some(MAX_RULES as i64),
-    );
+    return PluginErrorCode::QuotaExceeded(wanted as i64, MAX_RULES as i64)
+      .throw(ctx, &format!("{GRANT}: at most {MAX_RULES} rules may be live at once"));
   }
 
   let json = encode_rules(&parsed);
@@ -260,14 +254,8 @@ fn register_middleware<'js>(
   }
   let wanted = live_rules(state) + types.len();
   if wanted > MAX_RULES {
-    return error::throw_plugin_error(
-      ctx,
-      "quota-exceeded",
-      &format!("{GRANT}: at most {MAX_RULES} rules may be live at once"),
-      None,
-      Some(wanted as i64),
-      Some(MAX_RULES as i64),
-    );
+    return PluginErrorCode::QuotaExceeded(wanted as i64, MAX_RULES as i64)
+      .throw(ctx, &format!("{GRANT}: at most {MAX_RULES} rules may be live at once"));
   }
 
   let json: Vec<String> = types.iter().map(|t| json_string(t)).collect();

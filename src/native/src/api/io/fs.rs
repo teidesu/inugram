@@ -8,7 +8,7 @@ use std::time::UNIX_EPOCH;
 use rquickjs::function::Opt;
 use rquickjs::{Ctx, Function, Object, Result as JsResult, TypedArray, Value};
 
-use crate::api::error::throw_plugin_error;
+use crate::api::error::PluginErrorCode;
 use crate::api::io::blob::{export_for_host, resolve_export, BlobExport, BlobState, MATERIALIZE_LIMIT_BYTES};
 use crate::sandbox::grants::{check_grant, GrantHost, MATCH_EXACT};
 
@@ -45,8 +45,13 @@ impl FsState {
 }
 
 #[cfg(test)]
-const TEST_ANDROID_DIRS: &str =
-  "/data/plugins\n/data/cache\n/media/files\n/media/images\n\n/media/audios\n/media/documents";
+const TEST_ANDROID_DIRS: &str = r#"/data/plugins
+/data/cache
+/media/files
+/media/images
+
+/media/audios
+/media/documents"#;
 
 enum Fault {
   Escape(PathBuf),
@@ -60,21 +65,17 @@ enum Fault {
 impl Fault {
   fn throw<T>(self, ctx: &Ctx<'_>) -> JsResult<T> {
     match self {
-      Fault::Escape(path) => throw_plugin_error(
+      Fault::Escape(path) => PluginErrorCode::NotGranted("unsafe.fs").throw(
         ctx,
-        "not-granted",
         &format!("'{}' is outside this plugin's directory; only @grant unsafe.fs reaches there", path.display(),),
-        Some("unsafe.fs"),
-        None,
-        None,
       ),
-      Fault::Invalid(message) => throw_plugin_error(ctx, "invalid-argument", &message, None, None, None),
-      Fault::NotFound(message) => throw_plugin_error(ctx, "not-found", &message, None, None, None),
+      Fault::Invalid(message) => PluginErrorCode::InvalidArgument.throw(ctx, &message),
+      Fault::NotFound(message) => PluginErrorCode::NotFound.throw(ctx, &message),
       Fault::Quota { usage, quota, message } => {
-        throw_plugin_error(ctx, "quota-exceeded", &message, None, Some(usage as i64), Some(quota as i64))
+        PluginErrorCode::QuotaExceeded(usage as i64, quota as i64).throw(ctx, &message)
       }
-      Fault::Io(message) => throw_plugin_error(ctx, "internal", &message, None, None, None),
-      Fault::Gone(message) => throw_plugin_error(ctx, "handle-expired", &message, None, None, None),
+      Fault::Io(message) => PluginErrorCode::Internal.throw(ctx, &message),
+      Fault::Gone(message) => PluginErrorCode::HandleExpired.throw(ctx, &message),
     }
   }
 }
@@ -587,14 +588,8 @@ fn install_android_dirs<'js>(ctx: &Ctx<'js>, state: &Rc<FsState>, inu: &Object<'
     let state = state.clone();
     let f = Function::new(ctx.clone(), move |ctx: Ctx<'js>, kind: String| -> JsResult<String> {
       let Some(index) = ANDROID_DIR_NAMES.iter().position(|k| *k == kind) else {
-        return throw_plugin_error(
-          &ctx,
-          "invalid-argument",
-          &format!("getMediaDir: '{kind}' is not one of {}", ANDROID_DIR_NAMES.join(", ")),
-          None,
-          None,
-          None,
-        );
+        return PluginErrorCode::InvalidArgument
+          .throw(&ctx, &format!("getMediaDir: '{kind}' is not one of {}", ANDROID_DIR_NAMES.join(", ")));
       };
       android_dir(&ctx, &state, 2 + index, "getMediaDir")
     })?;
@@ -607,7 +602,7 @@ fn android_dir(ctx: &Ctx<'_>, state: &Rc<FsState>, index: usize, what: &str) -> 
   check_grant(ctx, &state.grants, "unsafe.fs", None, MATCH_EXACT)?;
   match state.android_dirs.get(index) {
     Some(path) if !path.is_empty() => Ok(path.clone()),
-    _ => throw_plugin_error(ctx, "not-found", &format!("{what}: the app has no such directory"), None, None, None),
+    _ => PluginErrorCode::NotFound.throw(ctx, &format!("{what}: the app has no such directory")),
   }
 }
 

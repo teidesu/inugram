@@ -4,7 +4,7 @@ use std::rc::Rc;
 use rquickjs::function::Args;
 use rquickjs::{Ctx, Exception, Function, Object, Persistent, Result as JsResult, Runtime, Value};
 
-use crate::api::error::{host_error_to_js, throw_plugin_error};
+use crate::api::error::host_error_to_js;
 use crate::api::telegram::rpc::{format_exception, pump_jobs};
 use crate::sandbox::grants::{check_grant, GrantHost, MATCH_EXACT};
 use crate::sandbox::registry::{make_disposer, noop_disposer, Lifecycle, Registry, Token};
@@ -78,7 +78,7 @@ pub fn install_notifications<'js>(
 }
 
 fn invalid<'js, T>(ctx: &Ctx<'js>, message: &str) -> JsResult<T> {
-  throw_plugin_error(ctx, "invalid-argument", message, None, None, None)
+  crate::api::error::PluginErrorCode::InvalidArgument.throw(ctx, message)
 }
 
 fn js_add_delegate<'js>(

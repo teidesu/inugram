@@ -3,7 +3,6 @@ use std::rc::Rc;
 use rquickjs::object::Accessor;
 use rquickjs::{Array, Ctx, Exception, Function, Object, Persistent, Result as JsResult, Runtime, Value};
 
-use crate::api::error::throw_plugin_error;
 use crate::api::telegram::account::AccountState;
 use crate::api::telegram::rpc::{format_exception, pump_jobs};
 use crate::sandbox::grants::{check_grant, GrantHost, MATCH_EXACT};
@@ -131,14 +130,8 @@ fn js_register<'js>(ctx: &Ctx<'js>, state: &Rc<ActionState>, kind: i32, opts: Ob
     if let Label::Dynamic(p) = label {
       let _ = p.restore(ctx);
     }
-    return throw_plugin_error(
-      ctx,
-      "unsupported",
-      &format!("{what}: an action row does not carry an icon yet"),
-      None,
-      None,
-      None,
-    );
+    return crate::api::error::PluginErrorCode::Unsupported
+      .throw(ctx, &format!("{what}: an action row does not carry an icon yet"));
   }
   let visible = opt_fn(ctx, &opts, what, "visible")?;
   let callback = req_fn(ctx, &opts, what, "callback")?;
@@ -243,39 +236,21 @@ fn editor_op<'js>(ctx: &Ctx<'js>, state: &Rc<ActionState>, op: i32, surface: i64
   } else if let Some(obj) = value.as_object() {
     let text: Value = obj.get("text")?;
     let Some(text) = text.as_string() else {
-      return throw_plugin_error(
-        ctx,
-        "invalid-argument",
-        &format!("{what}: expected a string or {{ text, entities }}"),
-        None,
-        None,
-        None,
-      );
+      return crate::api::error::PluginErrorCode::InvalidArgument
+        .throw(ctx, &format!("{what}: expected a string or {{ text, entities }}"));
     };
     payload.set("text", text.to_string()?)?;
     let entities: Value = obj.get("entities")?;
     if !entities.is_undefined() && !entities.is_null() {
       if entities.as_array().is_none() {
-        return throw_plugin_error(
-          ctx,
-          "invalid-argument",
-          &format!("{what}: entities must be an array"),
-          None,
-          None,
-          None,
-        );
+        return crate::api::error::PluginErrorCode::InvalidArgument
+          .throw(ctx, &format!("{what}: entities must be an array"));
       }
       payload.set("entities", entities)?;
     }
   } else {
-    return throw_plugin_error(
-      ctx,
-      "invalid-argument",
-      &format!("{what}: expected a string or {{ text, entities }}"),
-      None,
-      None,
-      None,
-    );
+    return crate::api::error::PluginErrorCode::InvalidArgument
+      .throw(ctx, &format!("{what}: expected a string or {{ text, entities }}"));
   }
   let json = ctx
     .json_stringify(payload.into_value())?

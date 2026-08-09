@@ -6,7 +6,7 @@ use rquickjs::{
   Value,
 };
 
-use crate::api::error::{throw_internal, throw_plugin_error, throw_quota_exceeded, wire_error_to_js};
+use crate::api::error::{throw_internal, throw_quota_exceeded, wire_error_to_js, PluginErrorCode};
 use crate::api::telegram::rpc::{format_exception, pump_jobs};
 use crate::sandbox::grants::{check_grant, GrantHost, MATCH_NAMESPACE};
 use crate::sandbox::registry::{CallbackRegistry, Lifecycle};
@@ -95,14 +95,7 @@ pub(crate) fn arg_to_wire<'js>(ctx: &Ctx<'js>, state: &Rc<JvmState>, value: &Val
     let text = Coerced::<String>::from_js(ctx, value.clone())?.0;
     return match text.parse::<i64>() {
       Ok(v) => Ok(format!("I{v}")),
-      Err(_) => throw_plugin_error(
-        ctx,
-        "invalid-argument",
-        &format!("jvm: {text} does not fit in a java long"),
-        None,
-        None,
-        None,
-      ),
+      Err(_) => PluginErrorCode::InvalidArgument.throw(ctx, &format!("jvm: {text} does not fit in a java long")),
     };
   }
   if let Some(s) = value.as_string() {
@@ -117,21 +110,14 @@ pub(crate) fn arg_to_wire<'js>(ctx: &Ctx<'js>, state: &Rc<JvmState>, value: &Val
       if !bounded_bytes(bytes, VALUE_LIMIT_BYTES) {
         return throw_too_big(ctx, "a byte[] argument", bytes.len(), VALUE_LIMIT_BYTES);
       }
-      return Ok(format!("Y{}", crate::api::tl::proxy::base64_encode(bytes)));
+      return Ok(format!("Y{}", base64::Engine::encode(&base64::engine::general_purpose::STANDARD, bytes)));
     }
   }
   let id = handle_id(ctx, state, value)?;
   if id >= 0 {
     return Ok(format!("G{id}"));
   }
-  throw_plugin_error(
-    ctx,
-    "invalid-argument",
-    &format!("jvm: cannot hand a {} to java", value.type_of()),
-    None,
-    None,
-    None,
-  )
+  PluginErrorCode::InvalidArgument.throw(ctx, &format!("jvm: cannot hand a {} to java", value.type_of()))
 }
 
 fn bounded_bytes(bytes: &[u8], limit: usize) -> bool {
@@ -149,7 +135,7 @@ pub(crate) fn wire_to_value<'js>(ctx: &Ctx<'js>, state: &Rc<JvmState>, wire: &st
   let payload = chars.as_str();
   if tag == 'I' {
     let Ok(value) = payload.parse::<i64>() else {
-      return throw_plugin_error(ctx, "internal", "jvm: the host answered with a bad int", None, None, None);
+      return PluginErrorCode::Internal.throw(ctx, "jvm: the host answered with a bad int");
     };
     if value.unsigned_abs() > 9007199254740991 {
       return Value::new_big_int(ctx.clone(), value);
@@ -159,28 +145,21 @@ pub(crate) fn wire_to_value<'js>(ctx: &Ctx<'js>, state: &Rc<JvmState>, wire: &st
   if tag == 'G' {
     let mut kind = payload.chars();
     let Some(kind) = kind.next() else {
-      return throw_plugin_error(ctx, "internal", "jvm: the host answered with a bad handle", None, None, None);
+      return PluginErrorCode::Internal.throw(ctx, "jvm: the host answered with a bad handle");
     };
     let Ok(id) = payload[kind.len_utf8()..].parse::<i64>() else {
-      return throw_plugin_error(ctx, "internal", "jvm: the host answered with a bad handle", None, None, None);
+      return PluginErrorCode::Internal.throw(ctx, "jvm: the host answered with a bad handle");
     };
     let borrowed = state.prelude.borrow();
     let Some(prelude) = borrowed.as_ref() else {
-      return throw_plugin_error(ctx, "internal", "jvm: the prelude is not installed", None, None, None);
+      return PluginErrorCode::Internal.throw(ctx, "jvm: the prelude is not installed");
     };
     let mint = prelude.mint.clone().restore(ctx)?;
     return mint.call((kind.to_string(), id));
   }
   match crate::api::tl::proxy::scalar_wire_to_js(ctx, tag, payload) {
     Some(value) => value,
-    None => throw_plugin_error(
-      ctx,
-      "internal",
-      &format!("jvm: the host answered with an unknown tag '{tag}'"),
-      None,
-      None,
-      None,
-    ),
+    None => PluginErrorCode::Internal.throw(ctx, &format!("jvm: the host answered with an unknown tag '{tag}'")),
   }
 }
 
@@ -239,12 +218,12 @@ fn js_load_dex<'js>(ctx: &Ctx<'js>, state: &Rc<JvmState>, source: Value<'js>) ->
       if !bounded_bytes(bytes, DEX_LIMIT_BYTES) {
         return throw_too_big(ctx, "a dex", bytes.len(), DEX_LIMIT_BYTES);
       }
-      let wire = format!("Y{}", crate::api::tl::proxy::base64_encode(bytes));
+      let wire = format!("Y{}", base64::Engine::encode(&base64::engine::general_purpose::STANDARD, bytes));
       ask(ctx, state, OP_LOAD_DEX, 0, "", &[wire])?;
       return Ok(());
     }
   }
-  throw_plugin_error(ctx, "invalid-argument", "loadDex: expected an absolute path or a Uint8Array", None, None, None)
+  PluginErrorCode::InvalidArgument.throw(ctx, "loadDex: expected an absolute path or a Uint8Array")
 }
 
 pub fn install_jvm<'js>(

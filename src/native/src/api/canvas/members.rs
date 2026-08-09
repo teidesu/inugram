@@ -1,4 +1,4 @@
-use crate::utils::arguments::array_values;
+use crate::{api::error::PluginErrorCode, utils::arguments::array_values};
 
 use super::*;
 
@@ -25,14 +25,8 @@ pub(super) fn install_gradient_members<'js>(ctx: &Ctx<'js>) -> JsResult<()> {
       let data = this.0.borrow().0.clone();
       let mut stops = data.stops.borrow_mut();
       if stops.len() >= MAX_GRADIENT_STOPS {
-        return throw_plugin_error(
-          &ctx,
-          "quota-exceeded",
-          &format!("a gradient may have at most {MAX_GRADIENT_STOPS} colour stops"),
-          None,
-          Some(stops.len() as i64 + 1),
-          Some(MAX_GRADIENT_STOPS as i64),
-        );
+        return PluginErrorCode::QuotaExceeded(stops.len() as i64 + 1, MAX_GRADIENT_STOPS as i64)
+          .throw(&ctx, &format!("a gradient may have at most {MAX_GRADIENT_STOPS} colour stops"));
       }
       let at = stops.partition_point(|(existing, _)| *existing <= offset);
       stops.insert(at, (offset, color));
@@ -88,13 +82,6 @@ pub(super) fn install_image_members<'js>(ctx: &Ctx<'js>) -> JsResult<()> {
   Ok(())
 }
 
-macro_rules! ctx_method {
-  ($ctx:expr, $proto:expr, $name:literal, $f:expr) => {{
-    let f = Function::new($ctx.clone(), $f)?;
-    define_method($proto, $name, f)?;
-  }};
-}
-
 pub(super) fn install_context_members<'js>(ctx: &Ctx<'js>, _state: &Rc<CanvasState>) -> JsResult<()> {
   let proto = Class::<Context2d>::prototype(ctx)?
     .ok_or_else(|| Exception::throw_message(ctx, "CanvasRenderingContext2D: the class has no prototype"))?;
@@ -110,98 +97,128 @@ pub(super) fn install_context_members<'js>(ctx: &Ctx<'js>, _state: &Rc<CanvasSta
 }
 
 pub(super) fn install_state_members<'js>(ctx: &Ctx<'js>, proto: &Object<'js>) -> JsResult<()> {
-  ctx_method!(ctx, proto, "save", |ctx: Ctx<'js>, this: This<Class<'js, Context2d>>| -> JsResult<()> {
-    let this = this.0.borrow();
-    this.live(&ctx)?;
-    this.save();
-    this.surface.record(&ctx, |out| out.u8(CMD_SAVE))
-  });
-  ctx_method!(ctx, proto, "restore", |ctx: Ctx<'js>, this: This<Class<'js, Context2d>>| -> JsResult<()> {
-    let this = this.0.borrow();
-    this.live(&ctx)?;
-    if !this.restore() {
-      return Ok(());
-    }
-    this.surface.record(&ctx, |out| out.u8(CMD_RESTORE))
-  });
-  ctx_method!(ctx, proto, "reset", |ctx: Ctx<'js>, this: This<Class<'js, Context2d>>| -> JsResult<()> {
-    let this = this.0.borrow();
-    this.live(&ctx)?;
-    this.reset();
-    this.surface.record(&ctx, |out| out.u8(CMD_RESET))
-  });
+  define_method(
+    proto,
+    "save",
+    Function::new(ctx.clone(), |ctx: Ctx<'js>, this: This<Class<'js, Context2d>>| -> JsResult<()> {
+      let this = this.0.borrow();
+      this.live(&ctx)?;
+      this.save();
+      this.surface.record(&ctx, |out| out.u8(CMD_SAVE))
+    })?,
+  )?;
+  define_method(
+    proto,
+    "restore",
+    Function::new(ctx.clone(), |ctx: Ctx<'js>, this: This<Class<'js, Context2d>>| -> JsResult<()> {
+      let this = this.0.borrow();
+      this.live(&ctx)?;
+      if !this.restore() {
+        return Ok(());
+      }
+      this.surface.record(&ctx, |out| out.u8(CMD_RESTORE))
+    })?,
+  )?;
+  define_method(
+    proto,
+    "reset",
+    Function::new(ctx.clone(), |ctx: Ctx<'js>, this: This<Class<'js, Context2d>>| -> JsResult<()> {
+      let this = this.0.borrow();
+      this.live(&ctx)?;
+      this.reset();
+      this.surface.record(&ctx, |out| out.u8(CMD_RESET))
+    })?,
+  )?;
   Ok(())
 }
 
 pub(super) fn install_transform_members<'js>(ctx: &Ctx<'js>, proto: &Object<'js>) -> JsResult<()> {
-  ctx_method!(ctx, proto, "scale", |this: This<Class<'js, Context2d>>,
-                                    x: Opt<Coerced<f64>>,
-                                    y: Opt<Coerced<f64>>| {
-    let (x, y) = (num(&x), num(&y));
-    if finite(&[x, y]) {
-      let this = this.0.borrow();
-      let next = this.state.borrow().matrix.scaled(x, y);
-      this.state.borrow_mut().matrix = next;
-    }
-  });
-  ctx_method!(ctx, proto, "rotate", |this: This<Class<'js, Context2d>>, angle: Opt<Coerced<f64>>| {
-    let angle = num(&angle);
-    if angle.is_finite() {
-      let this = this.0.borrow();
-      let next = this.state.borrow().matrix.rotated(angle);
-      this.state.borrow_mut().matrix = next;
-    }
-  });
-  ctx_method!(ctx, proto, "translate", |this: This<Class<'js, Context2d>>,
-                                        x: Opt<Coerced<f64>>,
-                                        y: Opt<Coerced<f64>>| {
-    let (x, y) = (num(&x), num(&y));
-    if finite(&[x, y]) {
-      let this = this.0.borrow();
-      let next = this.state.borrow().matrix.translated(x, y);
-      this.state.borrow_mut().matrix = next;
-    }
-  });
-  ctx_method!(ctx, proto, "transform", |this: This<Class<'js, Context2d>>, args: Rest<Value<'js>>| {
-    let v = &args.0;
-    let m = Matrix {
-      a: nth(v, 0),
-      b: nth(v, 1),
-      c: nth(v, 2),
-      d: nth(v, 3),
-      e: nth(v, 4),
-      f: nth(v, 5),
-    };
-    if m.is_finite() {
-      let this = this.0.borrow();
-      let next = this.state.borrow().matrix.multiply(&m);
-      this.state.borrow_mut().matrix = next;
-    }
-  });
-  ctx_method!(ctx, proto, "setTransform", |this: This<Class<'js, Context2d>>,
-                                           args: Rest<Value<'js>>|
-   -> JsResult<()> {
-    let v = &args.0;
-    let m = match v.first() {
-      Some(first) if first.is_object() => matrix_from_init(&Opt(Some(first.clone())))?,
-      None => Matrix::IDENTITY,
-      _ => Matrix {
+  define_method(
+    proto,
+    "scale",
+    Function::new(ctx.clone(), |this: This<Class<'js, Context2d>>, x: Opt<Coerced<f64>>, y: Opt<Coerced<f64>>| {
+      let (x, y) = (num(&x), num(&y));
+      if finite(&[x, y]) {
+        let this = this.0.borrow();
+        let next = this.state.borrow().matrix.scaled(x, y);
+        this.state.borrow_mut().matrix = next;
+      }
+    })?,
+  )?;
+  define_method(
+    proto,
+    "rotate",
+    Function::new(ctx.clone(), |this: This<Class<'js, Context2d>>, angle: Opt<Coerced<f64>>| {
+      let angle = num(&angle);
+      if angle.is_finite() {
+        let this = this.0.borrow();
+        let next = this.state.borrow().matrix.rotated(angle);
+        this.state.borrow_mut().matrix = next;
+      }
+    })?,
+  )?;
+  define_method(
+    proto,
+    "translate",
+    Function::new(ctx.clone(), |this: This<Class<'js, Context2d>>, x: Opt<Coerced<f64>>, y: Opt<Coerced<f64>>| {
+      let (x, y) = (num(&x), num(&y));
+      if finite(&[x, y]) {
+        let this = this.0.borrow();
+        let next = this.state.borrow().matrix.translated(x, y);
+        this.state.borrow_mut().matrix = next;
+      }
+    })?,
+  )?;
+  define_method(
+    proto,
+    "transform",
+    Function::new(ctx.clone(), |this: This<Class<'js, Context2d>>, args: Rest<Value<'js>>| {
+      let v = &args.0;
+      let m = Matrix {
         a: nth(v, 0),
         b: nth(v, 1),
         c: nth(v, 2),
         d: nth(v, 3),
         e: nth(v, 4),
         f: nth(v, 5),
-      },
-    };
-    if m.is_finite() {
-      this.0.borrow().state.borrow_mut().matrix = m;
-    }
-    Ok(())
-  });
-  ctx_method!(ctx, proto, "resetTransform", |this: This<Class<'js, Context2d>>| {
-    this.0.borrow().state.borrow_mut().matrix = Matrix::IDENTITY;
-  });
+      };
+      if m.is_finite() {
+        let this = this.0.borrow();
+        let next = this.state.borrow().matrix.multiply(&m);
+        this.state.borrow_mut().matrix = next;
+      }
+    })?,
+  )?;
+  define_method(
+    proto,
+    "setTransform",
+    Function::new(ctx.clone(), |this: This<Class<'js, Context2d>>, args: Rest<Value<'js>>| -> JsResult<()> {
+      let v = &args.0;
+      let m = match v.first() {
+        Some(first) if first.is_object() => matrix_from_init(&Opt(Some(first.clone())))?,
+        None => Matrix::IDENTITY,
+        _ => Matrix {
+          a: nth(v, 0),
+          b: nth(v, 1),
+          c: nth(v, 2),
+          d: nth(v, 3),
+          e: nth(v, 4),
+          f: nth(v, 5),
+        },
+      };
+      if m.is_finite() {
+        this.0.borrow().state.borrow_mut().matrix = m;
+      }
+      Ok(())
+    })?,
+  )?;
+  define_method(
+    proto,
+    "resetTransform",
+    Function::new(ctx.clone(), |this: This<Class<'js, Context2d>>| {
+      this.0.borrow().state.borrow_mut().matrix = Matrix::IDENTITY;
+    })?,
+  )?;
   Ok(())
 }
 
@@ -350,103 +367,134 @@ pub(super) fn install_style_members<'js>(ctx: &Ctx<'js>, proto: &Object<'js>) ->
     )?;
   }
 
-  ctx_method!(ctx, proto, "setLineDash", |ctx: Ctx<'js>,
-                                          this: This<Class<'js, Context2d>>,
-                                          segments: Opt<Value<'js>>|
-   -> JsResult<()> {
-    let Some(array) = segments.0.as_ref().and_then(|v| v.as_array()) else {
-      return invalid(&ctx, "setLineDash: expected an array of lengths");
-    };
-    let mut dash = Vec::new();
-    for value in crate::utils::arguments::array_values(&ctx, array, "setLineDash")? {
-      let value = Coerced::<f64>::from_js(&ctx, value)?.0;
-      if !value.is_finite() || value < 0.0 {
-        return Ok(());
-      }
-      dash.push(value);
-    }
-    if dash.len() % 2 == 1 {
-      dash.extend_from_within(..);
-    }
-    this.0.borrow().state.borrow_mut().dash = dash;
-    Ok(())
-  });
-  ctx_method!(ctx, proto, "getLineDash", |ctx: Ctx<'js>,
-                                          this: This<Class<'js, Context2d>>|
-   -> JsResult<Value<'js>> {
-    let this = this.0.borrow();
-    let dash = this.state.borrow().dash.clone();
-    let array = rquickjs::Array::new(ctx.clone())?;
-    for (index, value) in dash.into_iter().enumerate() {
-      array.set(index, value)?;
-    }
-    Ok(array.into_value())
-  });
-
-  ctx_method!(ctx, proto, "createLinearGradient", |ctx: Ctx<'js>,
-                                                   _this: This<Class<'js, Context2d>>,
-                                                   x0: Opt<Coerced<f64>>,
-                                                   y0: Opt<Coerced<f64>>,
-                                                   x1: Opt<Coerced<f64>>,
-                                                   y1: Opt<Coerced<f64>>|
-   -> JsResult<Value<'js>> {
-    let coords = [num(&x0), num(&y0), num(&x1), num(&y1), 0.0, 0.0];
-    make_gradient(&ctx, STYLE_LINEAR, coords, 4)
-  });
-  ctx_method!(ctx, proto, "createRadialGradient", |ctx: Ctx<'js>,
-                                                   _this: This<Class<'js, Context2d>>,
-                                                   args: Rest<Value<'js>>|
-   -> JsResult<Value<'js>> {
-    let a = &args.0;
-    if nth(a, 2) < 0.0 || nth(a, 5) < 0.0 {
-      return invalid(&ctx, "a radial gradient's radii must not be negative");
-    }
-    let coords = [nth(a, 0), nth(a, 1), nth(a, 2), nth(a, 3), nth(a, 4), nth(a, 5)];
-    make_gradient(&ctx, STYLE_RADIAL, coords, 6)
-  });
-  ctx_method!(ctx, proto, "createConicGradient", |ctx: Ctx<'js>,
-                                                  _this: This<Class<'js, Context2d>>,
-                                                  angle: Opt<Coerced<f64>>,
-                                                  x: Opt<Coerced<f64>>,
-                                                  y: Opt<Coerced<f64>>|
-   -> JsResult<Value<'js>> {
-    let coords = [num(&angle), num(&x), num(&y), 0.0, 0.0, 0.0];
-    make_gradient(&ctx, STYLE_CONIC, coords, 3)
-  });
-  ctx_method!(ctx, proto, "createPattern", |ctx: Ctx<'js>,
-                                            this: This<Class<'js, Context2d>>,
-                                            image: Opt<Value<'js>>,
-                                            repetition: Opt<Value<'js>>|
-   -> JsResult<Value<'js>> {
-    let repeat = match repetition.0.as_ref() {
-      None => 0,
-      Some(value) if value.is_null() || value.is_undefined() => 0,
-      Some(value) => {
-        let Some(text) = value.as_string() else {
-          return invalid(&ctx, "createPattern: that is not a repetition");
+  define_method(
+    proto,
+    "setLineDash",
+    Function::new(
+      ctx.clone(),
+      |ctx: Ctx<'js>, this: This<Class<'js, Context2d>>, segments: Opt<Value<'js>>| -> JsResult<()> {
+        let Some(array) = segments.0.as_ref().and_then(|v| v.as_array()) else {
+          return invalid(&ctx, "setLineDash: expected an array of lengths");
         };
-        let text = text.to_string()?;
-        match index_of(&REPETITIONS, &text) {
-          Some(index) => index,
-          None => return invalid(&ctx, &format!("'{text}' is not a repetition")),
+        let mut dash = Vec::new();
+        for value in crate::utils::arguments::array_values(&ctx, array, "setLineDash")? {
+          let value = Coerced::<f64>::from_js(&ctx, value)?.0;
+          if !value.is_finite() || value < 0.0 {
+            return Ok(());
+          }
+          dash.push(value);
         }
+        if dash.len() % 2 == 1 {
+          dash.extend_from_within(..);
+        }
+        this.0.borrow().state.borrow_mut().dash = dash;
+        Ok(())
+      },
+    )?,
+  )?;
+  define_method(
+    proto,
+    "getLineDash",
+    Function::new(ctx.clone(), |ctx: Ctx<'js>, this: This<Class<'js, Context2d>>| -> JsResult<Value<'js>> {
+      let this = this.0.borrow();
+      let dash = this.state.borrow().dash.clone();
+      let array = rquickjs::Array::new(ctx.clone())?;
+      for (index, value) in dash.into_iter().enumerate() {
+        array.set(index, value)?;
       }
-    };
-    let Some(value) = image.0 else {
-      return invalid(&ctx, "createPattern: expected an image");
-    };
-    let source = image_source(&ctx, &value)?;
-    if let ImageSource::Canvas(canvas) = &source {
-      canvas.flush(&ctx)?;
-    }
-    let _ = this;
-    let data = Rc::new(PatternData {
-      source,
-      repeat,
-      transform: Cell::new(Matrix::IDENTITY),
-    });
-    Ok(Class::instance(ctx.clone(), PatternHandle(data))?.into_value())
-  });
+      Ok(array.into_value())
+    })?,
+  )?;
+
+  define_method(
+    proto,
+    "createLinearGradient",
+    Function::new(
+      ctx.clone(),
+      |ctx: Ctx<'js>,
+       _this: This<Class<'js, Context2d>>,
+       x0: Opt<Coerced<f64>>,
+       y0: Opt<Coerced<f64>>,
+       x1: Opt<Coerced<f64>>,
+       y1: Opt<Coerced<f64>>|
+       -> JsResult<Value<'js>> {
+        let coords = [num(&x0), num(&y0), num(&x1), num(&y1), 0.0, 0.0];
+        make_gradient(&ctx, STYLE_LINEAR, coords, 4)
+      },
+    )?,
+  )?;
+  define_method(
+    proto,
+    "createRadialGradient",
+    Function::new(
+      ctx.clone(),
+      |ctx: Ctx<'js>, _this: This<Class<'js, Context2d>>, args: Rest<Value<'js>>| -> JsResult<Value<'js>> {
+        let a = &args.0;
+        if nth(a, 2) < 0.0 || nth(a, 5) < 0.0 {
+          return invalid(&ctx, "a radial gradient's radii must not be negative");
+        }
+        let coords = [nth(a, 0), nth(a, 1), nth(a, 2), nth(a, 3), nth(a, 4), nth(a, 5)];
+        make_gradient(&ctx, STYLE_RADIAL, coords, 6)
+      },
+    )?,
+  )?;
+  define_method(
+    proto,
+    "createConicGradient",
+    Function::new(
+      ctx.clone(),
+      |ctx: Ctx<'js>,
+       _this: This<Class<'js, Context2d>>,
+       angle: Opt<Coerced<f64>>,
+       x: Opt<Coerced<f64>>,
+       y: Opt<Coerced<f64>>|
+       -> JsResult<Value<'js>> {
+        let coords = [num(&angle), num(&x), num(&y), 0.0, 0.0, 0.0];
+        make_gradient(&ctx, STYLE_CONIC, coords, 3)
+      },
+    )?,
+  )?;
+  define_method(
+    proto,
+    "createPattern",
+    Function::new(
+      ctx.clone(),
+      |ctx: Ctx<'js>,
+       this: This<Class<'js, Context2d>>,
+       image: Opt<Value<'js>>,
+       repetition: Opt<Value<'js>>|
+       -> JsResult<Value<'js>> {
+        let repeat = match repetition.0.as_ref() {
+          None => 0,
+          Some(value) if value.is_null() || value.is_undefined() => 0,
+          Some(value) => {
+            let Some(text) = value.as_string() else {
+              return invalid(&ctx, "createPattern: that is not a repetition");
+            };
+            let text = text.to_string()?;
+            match index_of(&REPETITIONS, &text) {
+              Some(index) => index,
+              None => return invalid(&ctx, &format!("'{text}' is not a repetition")),
+            }
+          }
+        };
+        let Some(value) = image.0 else {
+          return invalid(&ctx, "createPattern: expected an image");
+        };
+        let source = image_source(&ctx, &value)?;
+        if let ImageSource::Canvas(canvas) = &source {
+          canvas.flush(&ctx)?;
+        }
+        let _ = this;
+        let data = Rc::new(PatternData {
+          source,
+          repeat,
+          transform: Cell::new(Matrix::IDENTITY),
+        });
+        Ok(Class::instance(ctx.clone(), PatternHandle(data))?.into_value())
+      },
+    )?,
+  )?;
   Ok(())
 }
 
@@ -481,125 +529,169 @@ fn image_source<'js>(ctx: &Ctx<'js>, value: &Value<'js>) -> JsResult<ImageSource
 }
 
 pub(super) fn install_path_members<'js>(ctx: &Ctx<'js>, proto: &Object<'js>) -> JsResult<()> {
-  ctx_method!(ctx, proto, "beginPath", |this: This<Class<'js, Context2d>>| {
-    this.0.borrow().path.borrow_mut().clear();
-  });
-  ctx_method!(ctx, proto, "closePath", |this: This<Class<'js, Context2d>>| {
-    this.0.borrow().path.borrow_mut().close();
-  });
-  ctx_method!(ctx, proto, "moveTo", |this: This<Class<'js, Context2d>>,
-                                     x: Opt<Coerced<f64>>,
-                                     y: Opt<Coerced<f64>>| {
-    let this = this.0.borrow();
-    let m = this.state.borrow().matrix;
-    this.path.borrow_mut().move_to(&m, num(&x), num(&y));
-  });
-  ctx_method!(ctx, proto, "lineTo", |this: This<Class<'js, Context2d>>,
-                                     x: Opt<Coerced<f64>>,
-                                     y: Opt<Coerced<f64>>| {
-    let this = this.0.borrow();
-    let m = this.state.borrow().matrix;
-    this.path.borrow_mut().line_to(&m, num(&x), num(&y));
-  });
-  ctx_method!(ctx, proto, "bezierCurveTo", |this: This<Class<'js, Context2d>>, args: Rest<Value<'js>>| {
-    let a = &args.0;
-    let this = this.0.borrow();
-    let m = this.state.borrow().matrix;
-    this
-      .path
-      .borrow_mut()
-      .cubic_to(&m, nth(a, 0), nth(a, 1), nth(a, 2), nth(a, 3), nth(a, 4), nth(a, 5));
-  });
-  ctx_method!(
-    ctx,
+  define_method(
     proto,
-    "quadraticCurveTo",
-    |this: This<Class<'js, Context2d>>,
-     cx: Opt<Coerced<f64>>,
-     cy: Opt<Coerced<f64>>,
-     x: Opt<Coerced<f64>>,
-     y: Opt<Coerced<f64>>| {
+    "beginPath",
+    Function::new(ctx.clone(), |this: This<Class<'js, Context2d>>| {
+      this.0.borrow().path.borrow_mut().clear();
+    })?,
+  )?;
+  define_method(
+    proto,
+    "closePath",
+    Function::new(ctx.clone(), |this: This<Class<'js, Context2d>>| {
+      this.0.borrow().path.borrow_mut().close();
+    })?,
+  )?;
+  define_method(
+    proto,
+    "moveTo",
+    Function::new(ctx.clone(), |this: This<Class<'js, Context2d>>, x: Opt<Coerced<f64>>, y: Opt<Coerced<f64>>| {
       let this = this.0.borrow();
       let m = this.state.borrow().matrix;
-      let inverse = m.invert();
-      this.path.borrow_mut().quad_to(&m, num(&cx), num(&cy), num(&x), num(&y), inverse.as_ref());
-    }
-  );
-  ctx_method!(ctx, proto, "arc", |ctx: Ctx<'js>,
-                                  this: This<Class<'js, Context2d>>,
-                                  args: Rest<Value<'js>>|
-   -> JsResult<()> {
-    let a = &args.0;
-    let this = this.0.borrow();
-    let m = this.state.borrow().matrix;
-    let result =
+      this.path.borrow_mut().move_to(&m, num(&x), num(&y));
+    })?,
+  )?;
+  define_method(
+    proto,
+    "lineTo",
+    Function::new(ctx.clone(), |this: This<Class<'js, Context2d>>, x: Opt<Coerced<f64>>, y: Opt<Coerced<f64>>| {
+      let this = this.0.borrow();
+      let m = this.state.borrow().matrix;
+      this.path.borrow_mut().line_to(&m, num(&x), num(&y));
+    })?,
+  )?;
+  define_method(
+    proto,
+    "bezierCurveTo",
+    Function::new(ctx.clone(), |this: This<Class<'js, Context2d>>, args: Rest<Value<'js>>| {
+      let a = &args.0;
+      let this = this.0.borrow();
+      let m = this.state.borrow().matrix;
       this
         .path
         .borrow_mut()
-        .arc(&m, nth(a, 0), nth(a, 1), nth(a, 2), nth(a, 3), nth(a, 4), truthy(a.get(5)));
-    arc_result(&ctx, result)
-  });
-  ctx_method!(ctx, proto, "ellipse", |ctx: Ctx<'js>,
-                                      this: This<Class<'js, Context2d>>,
-                                      args: Rest<Value<'js>>|
-   -> JsResult<()> {
-    let a = &args.0;
-    let this = this.0.borrow();
-    let m = this.state.borrow().matrix;
-    let result = this.path.borrow_mut().ellipse(
-      &m,
-      nth(a, 0),
-      nth(a, 1),
-      nth(a, 2),
-      nth(a, 3),
-      nth(a, 4),
-      nth(a, 5),
-      nth(a, 6),
-      truthy(a.get(7)),
-    );
-    arc_result(&ctx, result)
-  });
-  ctx_method!(ctx, proto, "arcTo", |ctx: Ctx<'js>,
-                                    this: This<Class<'js, Context2d>>,
-                                    args: Rest<Value<'js>>|
-   -> JsResult<()> {
-    let a = &args.0;
-    let this = this.0.borrow();
-    let m = this.state.borrow().matrix;
-    let Some(inverse) = m.invert() else {
-      return Ok(());
-    };
-    let result = this.path.borrow_mut().arc_to(&m, &inverse, nth(a, 0), nth(a, 1), nth(a, 2), nth(a, 3), nth(a, 4));
-    arc_result(&ctx, result)
-  });
-  ctx_method!(ctx, proto, "rect", |this: This<Class<'js, Context2d>>,
-                                   x: Opt<Coerced<f64>>,
-                                   y: Opt<Coerced<f64>>,
-                                   w: Opt<Coerced<f64>>,
-                                   h: Opt<Coerced<f64>>| {
-    let this = this.0.borrow();
-    let m = this.state.borrow().matrix;
-    this.path.borrow_mut().rect(&m, num(&x), num(&y), num(&w), num(&h));
-  });
-  ctx_method!(ctx, proto, "roundRect", |ctx: Ctx<'js>,
-                                        this: This<Class<'js, Context2d>>,
-                                        x: Opt<Coerced<f64>>,
-                                        y: Opt<Coerced<f64>>,
-                                        w: Opt<Coerced<f64>>,
-                                        h: Opt<Coerced<f64>>,
-                                        radii: Opt<Value<'js>>|
-   -> JsResult<()> {
-    let corners = read_radii(&ctx, &radii)?;
-    let this = this.0.borrow();
-    let m = this.state.borrow().matrix;
-    let (x, y, w, h) = (num(&x), num(&y), num(&w), num(&h));
-    if !finite(&[x, y, w, h]) {
-      return Ok(());
-    }
-    let (x, y, w, h, corners) = normalize_round_rect(x, y, w, h, corners);
-    this.path.borrow_mut().round_rect(&m, x, y, w, h, corners);
-    Ok(())
-  });
+        .cubic_to(&m, nth(a, 0), nth(a, 1), nth(a, 2), nth(a, 3), nth(a, 4), nth(a, 5));
+    })?,
+  )?;
+  define_method(
+    proto,
+    "quadraticCurveTo",
+    Function::new(
+      ctx.clone(),
+      |this: This<Class<'js, Context2d>>,
+       cx: Opt<Coerced<f64>>,
+       cy: Opt<Coerced<f64>>,
+       x: Opt<Coerced<f64>>,
+       y: Opt<Coerced<f64>>| {
+        let this = this.0.borrow();
+        let m = this.state.borrow().matrix;
+        let inverse = m.invert();
+        this.path.borrow_mut().quad_to(&m, num(&cx), num(&cy), num(&x), num(&y), inverse.as_ref());
+      },
+    )?,
+  )?;
+  define_method(
+    proto,
+    "arc",
+    Function::new(
+      ctx.clone(),
+      |ctx: Ctx<'js>, this: This<Class<'js, Context2d>>, args: Rest<Value<'js>>| -> JsResult<()> {
+        let a = &args.0;
+        let this = this.0.borrow();
+        let m = this.state.borrow().matrix;
+        let result =
+          this
+            .path
+            .borrow_mut()
+            .arc(&m, nth(a, 0), nth(a, 1), nth(a, 2), nth(a, 3), nth(a, 4), truthy(a.get(5)));
+        arc_result(&ctx, result)
+      },
+    )?,
+  )?;
+  define_method(
+    proto,
+    "ellipse",
+    Function::new(
+      ctx.clone(),
+      |ctx: Ctx<'js>, this: This<Class<'js, Context2d>>, args: Rest<Value<'js>>| -> JsResult<()> {
+        let a = &args.0;
+        let this = this.0.borrow();
+        let m = this.state.borrow().matrix;
+        let result = this.path.borrow_mut().ellipse(
+          &m,
+          nth(a, 0),
+          nth(a, 1),
+          nth(a, 2),
+          nth(a, 3),
+          nth(a, 4),
+          nth(a, 5),
+          nth(a, 6),
+          truthy(a.get(7)),
+        );
+        arc_result(&ctx, result)
+      },
+    )?,
+  )?;
+  define_method(
+    proto,
+    "arcTo",
+    Function::new(
+      ctx.clone(),
+      |ctx: Ctx<'js>, this: This<Class<'js, Context2d>>, args: Rest<Value<'js>>| -> JsResult<()> {
+        let a = &args.0;
+        let this = this.0.borrow();
+        let m = this.state.borrow().matrix;
+        let Some(inverse) = m.invert() else {
+          return Ok(());
+        };
+        let result = this.path.borrow_mut().arc_to(&m, &inverse, nth(a, 0), nth(a, 1), nth(a, 2), nth(a, 3), nth(a, 4));
+        arc_result(&ctx, result)
+      },
+    )?,
+  )?;
+  define_method(
+    proto,
+    "rect",
+    Function::new(
+      ctx.clone(),
+      |this: This<Class<'js, Context2d>>,
+       x: Opt<Coerced<f64>>,
+       y: Opt<Coerced<f64>>,
+       w: Opt<Coerced<f64>>,
+       h: Opt<Coerced<f64>>| {
+        let this = this.0.borrow();
+        let m = this.state.borrow().matrix;
+        this.path.borrow_mut().rect(&m, num(&x), num(&y), num(&w), num(&h));
+      },
+    )?,
+  )?;
+  define_method(
+    proto,
+    "roundRect",
+    Function::new(
+      ctx.clone(),
+      |ctx: Ctx<'js>,
+       this: This<Class<'js, Context2d>>,
+       x: Opt<Coerced<f64>>,
+       y: Opt<Coerced<f64>>,
+       w: Opt<Coerced<f64>>,
+       h: Opt<Coerced<f64>>,
+       radii: Opt<Value<'js>>|
+       -> JsResult<()> {
+        let corners = read_radii(&ctx, &radii)?;
+        let this = this.0.borrow();
+        let m = this.state.borrow().matrix;
+        let (x, y, w, h) = (num(&x), num(&y), num(&w), num(&h));
+        if !finite(&[x, y, w, h]) {
+          return Ok(());
+        }
+        let (x, y, w, h, corners) = normalize_round_rect(x, y, w, h, corners);
+        this.path.borrow_mut().round_rect(&m, x, y, w, h, corners);
+        Ok(())
+      },
+    )?,
+  )?;
 
   for (name, command, kind) in [("fill", CMD_FILL, Some(PaintKind::Fill)), ("clip", CMD_CLIP, None)] {
     let f = Function::new(
@@ -613,11 +705,15 @@ pub(super) fn install_path_members<'js>(ctx: &Ctx<'js>, proto: &Object<'js>) -> 
     )?;
     define_method(proto, name, f)?;
   }
-  ctx_method!(ctx, proto, "stroke", |ctx: Ctx<'js>, this: This<Class<'js, Context2d>>| -> JsResult<()> {
-    let this = this.0.borrow();
-    let path = this.path.borrow().clone();
-    draw_path(&ctx, &this, CMD_STROKE, Some(PaintKind::Stroke), 0, &path)
-  });
+  define_method(
+    proto,
+    "stroke",
+    Function::new(ctx.clone(), |ctx: Ctx<'js>, this: This<Class<'js, Context2d>>| -> JsResult<()> {
+      let this = this.0.borrow();
+      let path = this.path.borrow().clone();
+      draw_path(&ctx, &this, CMD_STROKE, Some(PaintKind::Stroke), 0, &path)
+    })?,
+  )?;
   Ok(())
 }
 
@@ -753,59 +849,70 @@ pub(super) fn install_text_members<'js>(ctx: &Ctx<'js>, proto: &Object<'js>) -> 
     define_method(proto, name, f)?;
   }
 
-  ctx_method!(ctx, proto, "measureText", |ctx: Ctx<'js>,
-                                          this: This<Class<'js, Context2d>>,
-                                          text: Opt<Coerced<String>>|
-   -> JsResult<Value<'js>> {
-    let text = text.0.map(|v| v.0).unwrap_or_default();
-    let this = this.0.borrow();
-    this.live(&ctx)?;
-    let (font, align) = {
-      let state = this.state.borrow();
-      (font_wire(&state.font), state.text_align)
-    };
-    let arg = format!("{font}{FIELD}{align}{FIELD}{text}");
-    let answer = this.surface.state.host.canvas(OP_MEASURE, 0, &arg, None);
-    let json = match answer.strip_prefix('J') {
-      Some(json) => json,
-      None => {
-        throw_host_error(&ctx, &answer)?;
-        return throw_plugin_error(&ctx, "internal", "measureText: the host said nothing", None, None, None);
-      }
-    };
-    ctx.json_parse(json)
-  });
+  define_method(
+    proto,
+    "measureText",
+    Function::new(
+      ctx.clone(),
+      |ctx: Ctx<'js>, this: This<Class<'js, Context2d>>, text: Opt<Coerced<String>>| -> JsResult<Value<'js>> {
+        let text = text.0.map(|v| v.0).unwrap_or_default();
+        let this = this.0.borrow();
+        this.live(&ctx)?;
+        let (font, align) = {
+          let state = this.state.borrow();
+          (font_wire(&state.font), state.text_align)
+        };
+        let arg = format!("{font}{FIELD}{align}{FIELD}{text}");
+        let answer = this.surface.state.host.canvas(OP_MEASURE, 0, &arg, None);
+        let json = match answer.strip_prefix('J') {
+          Some(json) => json,
+          None => {
+            throw_host_error(&ctx, &answer)?;
+            return PluginErrorCode::Internal.throw(&ctx, "measureText: the host said nothing");
+          }
+        };
+        ctx.json_parse(json)
+      },
+    )?,
+  )?;
 
-  ctx_method!(ctx, proto, "getAverageColor", |ctx: Ctx<'js>,
-                                              this: This<Class<'js, Context2d>>,
-                                              sx: Opt<Coerced<f64>>,
-                                              sy: Opt<Coerced<f64>>,
-                                              sw: Opt<Coerced<f64>>,
-                                              sh: Opt<Coerced<f64>>|
-   -> JsResult<Value<'js>> {
-    let this = this.0.borrow();
-    this.live(&ctx)?;
-    let region = if sx.0.is_none() && sy.0.is_none() && sw.0.is_none() && sh.0.is_none() {
-      (0.0, 0.0, this.surface.width.get() as f64, this.surface.height.get() as f64)
-    } else {
-      let region = (num(&sx), num(&sy), num(&sw), num(&sh));
-      if !finite(&[region.0, region.1, region.2, region.3]) {
-        return invalid(&ctx, "getAverageColor: the region must be four finite numbers");
-      }
-      region
-    };
-    this.surface.flush(&ctx)?;
-    let arg = format!("{},{},{},{}", region.0, region.1, region.2, region.3);
-    let answer = this.surface.state.host.canvas(OP_AVERAGE, this.surface.id, &arg, None);
-    let json = match answer.strip_prefix('J') {
-      Some(json) => json,
-      None => {
-        throw_host_error(&ctx, &answer)?;
-        return throw_plugin_error(&ctx, "internal", "getAverageColor: the host said nothing", None, None, None);
-      }
-    };
-    ctx.json_parse(json)
-  });
+  define_method(
+    proto,
+    "getAverageColor",
+    Function::new(
+      ctx.clone(),
+      |ctx: Ctx<'js>,
+       this: This<Class<'js, Context2d>>,
+       sx: Opt<Coerced<f64>>,
+       sy: Opt<Coerced<f64>>,
+       sw: Opt<Coerced<f64>>,
+       sh: Opt<Coerced<f64>>|
+       -> JsResult<Value<'js>> {
+        let this = this.0.borrow();
+        this.live(&ctx)?;
+        let region = if sx.0.is_none() && sy.0.is_none() && sw.0.is_none() && sh.0.is_none() {
+          (0.0, 0.0, this.surface.width.get() as f64, this.surface.height.get() as f64)
+        } else {
+          let region = (num(&sx), num(&sy), num(&sw), num(&sh));
+          if !finite(&[region.0, region.1, region.2, region.3]) {
+            return invalid(&ctx, "getAverageColor: the region must be four finite numbers");
+          }
+          region
+        };
+        this.surface.flush(&ctx)?;
+        let arg = format!("{},{},{},{}", region.0, region.1, region.2, region.3);
+        let answer = this.surface.state.host.canvas(OP_AVERAGE, this.surface.id, &arg, None);
+        let json = match answer.strip_prefix('J') {
+          Some(json) => json,
+          None => {
+            throw_host_error(&ctx, &answer)?;
+            return PluginErrorCode::Internal.throw(&ctx, "getAverageColor: the host said nothing");
+          }
+        };
+        ctx.json_parse(json)
+      },
+    )?,
+  )?;
   Ok(())
 }
 
@@ -854,58 +961,62 @@ fn draw_text(
 }
 
 pub(super) fn install_image_draw_members<'js>(ctx: &Ctx<'js>, proto: &Object<'js>) -> JsResult<()> {
-  ctx_method!(ctx, proto, "drawImage", |ctx: Ctx<'js>,
-                                        this: This<Class<'js, Context2d>>,
-                                        args: Rest<Value<'js>>|
-   -> JsResult<()> {
-    let a = &args.0;
-    let Some(value) = a.first().cloned() else {
-      return invalid(&ctx, "drawImage: expected an image");
-    };
-    let source = image_source(&ctx, &value)?;
-    let (iw, ih) = source.size();
-    let (src, dst) = match a.len() - 1 {
-      2 => ((0.0, 0.0, iw, ih), (nth(a, 1), nth(a, 2), iw, ih)),
-      4 => ((0.0, 0.0, iw, ih), (nth(a, 1), nth(a, 2), nth(a, 3), nth(a, 4))),
-      8 => ((nth(a, 1), nth(a, 2), nth(a, 3), nth(a, 4)), (nth(a, 5), nth(a, 6), nth(a, 7), nth(a, 8))),
-      _ => return invalid(&ctx, "drawImage: expected 2, 4 or 8 coordinates"),
-    };
-    if !finite(&[src.0, src.1, src.2, src.3, dst.0, dst.1, dst.2, dst.3]) {
-      return Ok(());
-    }
-    if src.2 == 0.0 || src.3 == 0.0 {
-      return invalid(&ctx, "drawImage: the source rectangle is empty");
-    }
-    if dst.2 == 0.0 || dst.3 == 0.0 {
-      return Ok(());
-    }
-    let this = this.0.borrow();
-    this.live(&ctx)?;
-    if let ImageSource::Canvas(canvas) = &source {
-      canvas.flush(&ctx)?;
-    }
-    let state = this.state.borrow();
-    let Some(inverse) = state.matrix.invert() else {
-      return Ok(());
-    };
-    let blend_modes = this.surface.state.blend_modes.get();
-    let mut scratch = Encoder::default();
-    encode_paint(&ctx, &mut scratch, &state, &Style::Color(0), &inverse, blend_modes)?;
-    let matrix = state.matrix;
-    drop(state);
-    let (kind, id) = (source.kind(), source.id());
-    this.surface.record(&ctx, move |out| {
-      let mut scratch = scratch;
-      out.sources.push(source);
-      out.u8(CMD_IMAGE);
-      out.matrix(&matrix);
-      out.paint(&mut scratch);
-      out.u8(kind);
-      out.i64(id);
-      for value in [src.0, src.1, src.2, src.3, dst.0, dst.1, dst.2, dst.3] {
-        out.f(value);
-      }
-    })
-  });
+  define_method(
+    proto,
+    "drawImage",
+    Function::new(
+      ctx.clone(),
+      |ctx: Ctx<'js>, this: This<Class<'js, Context2d>>, args: Rest<Value<'js>>| -> JsResult<()> {
+        let a = &args.0;
+        let Some(value) = a.first().cloned() else {
+          return invalid(&ctx, "drawImage: expected an image");
+        };
+        let source = image_source(&ctx, &value)?;
+        let (iw, ih) = source.size();
+        let (src, dst) = match a.len() - 1 {
+          2 => ((0.0, 0.0, iw, ih), (nth(a, 1), nth(a, 2), iw, ih)),
+          4 => ((0.0, 0.0, iw, ih), (nth(a, 1), nth(a, 2), nth(a, 3), nth(a, 4))),
+          8 => ((nth(a, 1), nth(a, 2), nth(a, 3), nth(a, 4)), (nth(a, 5), nth(a, 6), nth(a, 7), nth(a, 8))),
+          _ => return invalid(&ctx, "drawImage: expected 2, 4 or 8 coordinates"),
+        };
+        if !finite(&[src.0, src.1, src.2, src.3, dst.0, dst.1, dst.2, dst.3]) {
+          return Ok(());
+        }
+        if src.2 == 0.0 || src.3 == 0.0 {
+          return invalid(&ctx, "drawImage: the source rectangle is empty");
+        }
+        if dst.2 == 0.0 || dst.3 == 0.0 {
+          return Ok(());
+        }
+        let this = this.0.borrow();
+        this.live(&ctx)?;
+        if let ImageSource::Canvas(canvas) = &source {
+          canvas.flush(&ctx)?;
+        }
+        let state = this.state.borrow();
+        let Some(inverse) = state.matrix.invert() else {
+          return Ok(());
+        };
+        let blend_modes = this.surface.state.blend_modes.get();
+        let mut scratch = Encoder::default();
+        encode_paint(&ctx, &mut scratch, &state, &Style::Color(0), &inverse, blend_modes)?;
+        let matrix = state.matrix;
+        drop(state);
+        let (kind, id) = (source.kind(), source.id());
+        this.surface.record(&ctx, move |out| {
+          let mut scratch = scratch;
+          out.sources.push(source);
+          out.u8(CMD_IMAGE);
+          out.matrix(&matrix);
+          out.paint(&mut scratch);
+          out.u8(kind);
+          out.i64(id);
+          for value in [src.0, src.1, src.2, src.3, dst.0, dst.1, dst.2, dst.3] {
+            out.f(value);
+          }
+        })
+      },
+    )?,
+  )?;
   Ok(())
 }

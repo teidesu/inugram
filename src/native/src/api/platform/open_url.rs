@@ -2,7 +2,6 @@ use std::rc::Rc;
 
 use rquickjs::{Ctx, Function, Object, Result as JsResult};
 
-use crate::api::error;
 use crate::sandbox::grants::{check_grant, GrantHost, MATCH_EXACT};
 
 pub trait OpenUrlHost {
@@ -22,7 +21,7 @@ pub fn install_open_url<'js>(
   let f = Function::new(ctx.clone(), move |ctx: Ctx<'js>, url: String| -> JsResult<()> {
     check_grant(&ctx, &grants, "openUrl", None, MATCH_EXACT)?;
     if let Err(why) = screen_external_url(&url) {
-      return error::throw_plugin_error(&ctx, "invalid-argument", &why, None, None, None);
+      return crate::api::error::PluginErrorCode::InvalidArgument.throw(&ctx, &why);
     }
     host.open_url(&url);
     Ok(())

@@ -1,5 +1,12 @@
 {
   "rust-analyzer.linkedProjects": [
     "src/native/Cargo.toml"
-  ]
+  ],
+  "rust-analyzer.diagnostics.disabled": [
+    "E0308"
+  ],
+  "[rust]": {
+    "editor.insertSpaces": true,
+    "editor.tabSize": 2
+  }
 }

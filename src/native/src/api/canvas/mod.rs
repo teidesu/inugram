@@ -17,8 +17,9 @@ use rquickjs::{
 
 use crate::api::canvas::css::{parse_color, parse_font, Font};
 use crate::api::canvas::geometry::{finite, normalize_round_rect, ArcError, Matrix, Path, Verb};
-use crate::api::error::{throw_plugin_error, wire_error_to_js};
-use crate::api::io::blob::{mint_app_file, resolve_export, BlobState, BUILD_LIMIT_BYTES};
+use crate::api::error::{wire_error_to_js, PluginErrorCode};
+use crate::api::io::blob::{self, mint_app_file, resolve_export, BlobHandle, BlobState, BUILD_LIMIT_BYTES};
+use crate::api::io::fs::FsState;
 use crate::api::telegram::rpc::{format_exception, pump_jobs, PendingSettle};
 use crate::sandbox::limits::{ExternalCharge, ExternalMemory};
 use crate::sandbox::registry::RequestIds;
@@ -446,7 +447,7 @@ struct Pending {
 pub struct CanvasState {
   host: Rc<dyn CanvasHost>,
   blobs: Rc<BlobState>,
-  fs: RefCell<Option<Rc<crate::api::io::fs::FsState>>>,
+  fs: RefCell<Option<Rc<FsState>>>,
   external: Rc<ExternalMemory>,
   log: crate::Log,
   stage_dir: PathBuf,
@@ -481,16 +482,16 @@ fn throw_host_error(ctx: &Ctx<'_>, answer: &str) -> JsResult<()> {
   match wire_error_to_js(ctx, answer) {
     Some(Ok(value)) => Err(ctx.throw(value)),
     Some(Err(e)) => Err(e),
-    None => throw_plugin_error(ctx, "internal", answer, None, None, None),
+    None => PluginErrorCode::Internal.throw(ctx, answer),
   }
 }
 
 fn invalid<T>(ctx: &Ctx<'_>, message: &str) -> JsResult<T> {
-  throw_plugin_error(ctx, "invalid-argument", message, None, None, None)
+  PluginErrorCode::InvalidArgument.throw(ctx, message)
 }
 
 fn expired<T>(ctx: &Ctx<'_>, message: &str) -> JsResult<T> {
-  throw_plugin_error(ctx, "handle-expired", message, None, None, None)
+  PluginErrorCode::HandleExpired.throw(ctx, message)
 }
 
 fn num(value: &Opt<Coerced<f64>>) -> f64 {
@@ -543,16 +544,12 @@ fn encode_paint(
   blend_modes: bool,
 ) -> JsResult<()> {
   if state.composite as usize >= FIRST_BLEND_MODE && !blend_modes {
-    return throw_plugin_error(
+    return PluginErrorCode::Unsupported.throw(
       ctx,
-      "unsupported",
       &format!(
         "'{}' needs android 10 or newer; check inu.info().sdk before using the blend modes",
         COMPOSITE_MODES[state.composite as usize],
       ),
-      None,
-      None,
-      None,
     );
   }
   out.f(state.alpha);
@@ -737,12 +734,12 @@ fn stage_source<'js>(ctx: &Ctx<'js>, state: &Rc<CanvasState>, value: &Value<'js>
     check_source_limit(ctx, bytes.len() as u64)?;
     return Ok((write_staged(ctx, state, |file| file.write_all(bytes))?, true));
   }
-  if rquickjs::Class::<crate::api::io::blob::BlobHandle>::from_value(value).is_ok() {
-    let Some(exported) = crate::api::io::blob::export_for_host(&state.blobs, value) else {
+  if rquickjs::Class::<BlobHandle>::from_value(value).is_ok() {
+    let Some(exported) = blob::export_for_host(&state.blobs, value) else {
       return expired(ctx, "this blob has been disposed");
     };
     let Some(id) = exported.strip_prefix('B').and_then(|v| v.split(':').next()).and_then(|v| v.parse().ok()) else {
-      return throw_plugin_error(ctx, "internal", "this blob could not be handed over", None, None, None);
+      return PluginErrorCode::Internal.throw(ctx, "this blob could not be handed over");
     };
     let Some(export) = resolve_export(&state.blobs, id) else {
       return expired(ctx, "this blob has been disposed");
@@ -766,7 +763,7 @@ fn stage_source<'js>(ctx: &Ctx<'js>, state: &Rc<CanvasState>, value: &Value<'js>
   if let Some(object) = value.as_object() {
     if let Some(path) = object.get::<_, Option<String>>("path")? {
       let Some(fs) = state.fs.borrow().clone() else {
-        return throw_plugin_error(ctx, "not-granted", "naming a file needs @grant fs", Some("fs"), None, None);
+        return PluginErrorCode::NotGranted("fs").throw(ctx, "naming a file needs @grant fs");
       };
       return Ok((crate::api::io::fs::resolve_external(ctx, &fs, &path)?, false));
     }
@@ -778,13 +775,9 @@ fn check_source_limit(ctx: &Ctx<'_>, len: u64) -> JsResult<()> {
   if len <= MAX_SOURCE_BYTES {
     return Ok(());
   }
-  throw_plugin_error(
+  PluginErrorCode::QuotaExceeded(len as i64, MAX_SOURCE_BYTES as i64).throw(
     ctx,
-    "quota-exceeded",
     &format!("this source is {len} bytes; at most {} may be handed to inu.canvas in one call", MAX_SOURCE_BYTES,),
-    None,
-    Some(len as i64),
-    Some(MAX_SOURCE_BYTES as i64),
   )
 }
 
@@ -794,7 +787,7 @@ fn write_staged<'js>(
   fill: impl FnOnce(&mut fs::File) -> std::io::Result<()>,
 ) -> JsResult<PathBuf> {
   if state.stage_dir.as_os_str().is_empty() {
-    return throw_plugin_error(ctx, "internal", "this engine has no directory to stage a source in", None, None, None);
+    return PluginErrorCode::Internal.throw(ctx, "this engine has no directory to stage a source in");
   }
   let n = state.next_staged.alloc();
   let path = state.stage_dir.join(format!("canvas-{n}.bin"));
@@ -803,7 +796,7 @@ fn write_staged<'js>(
     .and_then(|mut file| fill(&mut file).and_then(|_| file.sync_all()));
   if let Err(e) = written {
     let _ = fs::remove_file(&path);
-    return throw_plugin_error(ctx, "internal", &format!("staging this source failed: {e}"), None, None, None);
+    return PluginErrorCode::Internal.throw(ctx, &format!("staging this source failed: {e}"));
   }
   Ok(path)
 }
@@ -909,7 +902,7 @@ pub fn install_canvas<'js>(
   Ok(state)
 }
 
-pub fn attach_fs(state: &Rc<CanvasState>, fs: Rc<crate::api::io::fs::FsState>) {
+pub fn attach_fs(state: &Rc<CanvasState>, fs: Rc<FsState>) {
   *state.fs.borrow_mut() = Some(fs);
 }
 

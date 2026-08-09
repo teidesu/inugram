@@ -19,7 +19,7 @@ use crate::api::io::fs::install_fs;
 use crate::api::io::kv::{install_kv, KvHost};
 use crate::api::lifecycle::install_lifecycle;
 use crate::api::platform::clipboard::{install_clipboard, ClipboardHost};
-use crate::api::platform::jvm::{install_jvm, JvmHost};
+use crate::api::platform::jvm::{self, install_jvm, JvmHost};
 use crate::api::platform::notifications::{install_notifications, NotificationHost};
 use crate::api::platform::open_url::{install_open_url, OpenUrlHost};
 use crate::api::platform::xposed::{self, install_xposed, XposedHost};
@@ -40,100 +40,6 @@ use crate::api::ui::screens::{install_screens, ScreenHost};
 use crate::sandbox::grants::GrantHost;
 use crate::sandbox::limits::{apply_heap_limit, arm_entry_deadline, install_interrupt_handler, ExternalMemory};
 use crate::sandbox::registry::Lifecycle;
-
-macro_rules! engine_export {
-    (
-        $(#[$meta:meta])*
-        $name:ident, $field:ident,
-        ($($param:ident: $ty:ty),* $(,)?),
-        strings($($str:ident),* $(,)?),
-        |$engine:ident, $state:ident| $call:expr $(,)?
-    ) => {
-        $(#[$meta])*
-        #[no_mangle]
-        pub extern "system" fn $name(mut env: EnvUnowned, _this: JObject, ptr: jlong, $($param: $ty),*) {
-            in_env(&mut env, (), |env| {
-                let _deadline = crate::sandbox::limits::arm_entry_deadline();
-                let Some($engine) = (unsafe { (ptr as *mut Engine).as_ref() }) else {
-                    return;
-                };
-                let Some($state) = $engine.$field.as_ref() else {
-                    return;
-                };
-                $(let $str = jstring_to_string(env, &$str);)*
-                $call;
-            })
-        }
-    };
-    (
-        $(#[$meta:meta])*
-        $name:ident, $field:ident,
-        ($($param:ident: $ty:ty),* $(,)?),
-        opt_strings($($str:ident),* $(,)?),
-        |$engine:ident, $state:ident| $call:expr $(,)?
-    ) => {
-        $(#[$meta])*
-        #[no_mangle]
-        pub extern "system" fn $name(mut env: EnvUnowned, _this: JObject, ptr: jlong, $($param: $ty),*) {
-            in_env(&mut env, (), |env| {
-                let _deadline = crate::sandbox::limits::arm_entry_deadline();
-                let Some($engine) = (unsafe { (ptr as *mut Engine).as_ref() }) else {
-                    return;
-                };
-                let Some($state) = $engine.$field.as_ref() else {
-                    return;
-                };
-                $(let $str = if $str.is_null() { None } else { Some(jstring_to_string(env, &$str)) };)*
-                $call;
-            })
-        }
-    };
-    (
-        $(#[$meta:meta])*
-        $name:ident, $field:ident,
-        ($($param:ident: $ty:ty),* $(,)?),
-        |$engine:ident, $state:ident| $call:expr $(,)?
-    ) => {
-        $(#[$meta])*
-        #[no_mangle]
-        pub extern "system" fn $name(_env: EnvUnowned, _this: JObject, ptr: jlong, $($param: $ty),*) {
-            let _deadline = crate::sandbox::limits::arm_entry_deadline();
-            let Some($engine) = (unsafe { (ptr as *mut Engine).as_ref() }) else {
-                return;
-            };
-            let Some($state) = $engine.$field.as_ref() else {
-                return;
-            };
-            $call;
-        }
-    };
-    (
-        $(#[$meta:meta])*
-        $name:ident, $field:ident,
-        ($($param:ident: $ty:ty),* $(,)?),
-        strings($($str:ident),* $(,)?),
-        -> jstring |$engine:ident, $state:ident| $call:expr $(,)?
-    ) => {
-        $(#[$meta])*
-        #[no_mangle]
-        pub extern "system" fn $name(mut env: EnvUnowned, _this: JObject, ptr: jlong, $($param: $ty),*) -> jstring {
-            in_env(&mut env, std::ptr::null_mut(), |env| {
-                let _deadline = crate::sandbox::limits::arm_entry_deadline();
-                let Some($engine) = (unsafe { (ptr as *mut Engine).as_ref() }) else {
-                    return std::ptr::null_mut();
-                };
-                let Some($state) = $engine.$field.as_ref() else {
-                    return std::ptr::null_mut();
-                };
-                $(let $str = jstring_to_string(env, &$str);)*
-                match $call {
-                    Some(json) => env.new_string(json).map(|j| j.into_raw()).unwrap_or(std::ptr::null_mut()),
-                    None => std::ptr::null_mut(),
-                }
-            })
-        }
-    };
-}
 
 #[no_mangle]
 pub extern "system" fn Java_desu_inugram_helpers_plugins_QuickJs_nativeCreate(
@@ -506,11 +412,22 @@ pub extern "system" fn Java_desu_inugram_helpers_plugins_QuickJs_nativeXposedBud
   xposed::HOOK_BUDGET_MS
 }
 
-engine_export!(
-    Java_desu_inugram_helpers_plugins_QuickJs_nativeXposedRelease, xposed,
-    (dispatch_id: jlong),
-    |engine, state| xposed::release_dispatch(&engine.ctx, state, dispatch_id)
-);
+#[no_mangle]
+pub extern "system" fn Java_desu_inugram_helpers_plugins_QuickJs_nativeXposedRelease(
+  _env: EnvUnowned,
+  _this: JObject,
+  ptr: jlong,
+  dispatch_id: jlong,
+) {
+  let _deadline = arm_entry_deadline();
+  let Some(engine) = (unsafe { (ptr as *mut Engine).as_ref() }) else {
+    return;
+  };
+  let Some(state) = engine.xposed.as_ref() else {
+    return;
+  };
+  (xposed::release_dispatch(&engine.ctx, state, dispatch_id));
+}
 
 #[no_mangle]
 pub extern "system" fn Java_desu_inugram_helpers_plugins_platform_PluginXposed_00024Native_nativeInit(
@@ -597,11 +514,22 @@ pub extern "system" fn Java_desu_inugram_helpers_plugins_platform_PluginXposed_0
   })
 }
 
-engine_export!(
-    Java_desu_inugram_helpers_plugins_QuickJs_nativeJvmCallback, jvm,
-    (callback_id: jint),
-    |engine, state| crate::api::platform::jvm::dispatch_callback(&engine._rt, &engine.ctx, state, callback_id as u32)
-);
+#[no_mangle]
+pub extern "system" fn Java_desu_inugram_helpers_plugins_QuickJs_nativeJvmCallback(
+  _env: EnvUnowned,
+  _this: JObject,
+  ptr: jlong,
+  callback_id: jint,
+) {
+  let _deadline = arm_entry_deadline();
+  let Some(engine) = (unsafe { (ptr as *mut Engine).as_ref() }) else {
+    return;
+  };
+  let Some(state) = engine.jvm.as_ref() else {
+    return;
+  };
+  (jvm::dispatch_callback(&engine._rt, &engine.ctx, state, callback_id as u32));
+}
 
 #[no_mangle]
 pub extern "system" fn Java_desu_inugram_helpers_plugins_QuickJs_nativeInstallFs(
@@ -648,23 +576,65 @@ pub extern "system" fn Java_desu_inugram_helpers_plugins_QuickJs_nativeInstallFs
   })
 }
 
-engine_export!(
-    Java_desu_inugram_helpers_plugins_QuickJs_nativeCanvasResult, canvas,
-    (request_id: jlong, result_wire: JString),
-    strings(result_wire),
-    |engine, state| canvas::canvas_result(&engine._rt, &engine.ctx, state, request_id, &result_wire)
-);
+#[no_mangle]
+pub extern "system" fn Java_desu_inugram_helpers_plugins_QuickJs_nativeCanvasResult(
+  mut env: EnvUnowned,
+  _this: JObject,
+  ptr: jlong,
+  request_id: jlong,
+  result_wire: JString,
+) {
+  in_env(&mut env, (), |env| {
+    let _deadline = crate::sandbox::limits::arm_entry_deadline();
+    let Some(engine) = (unsafe { (ptr as *mut Engine).as_ref() }) else {
+      return;
+    };
+    let Some(state) = engine.canvas.as_ref() else {
+      return;
+    };
+    let result_wire = jstring_to_string(env, &result_wire);
+    (canvas::canvas_result(&engine._rt, &engine.ctx, state, request_id, &result_wire));
+  })
+}
 
-engine_export!(
-    Java_desu_inugram_helpers_plugins_QuickJs_nativeFetchResult, fetch,
-    (request_id: jlong, result_wire: JString),
-    strings(result_wire),
-    |engine, state| crate::api::io::fetch::fetch_result(&engine._rt, &engine.ctx, state, request_id, &result_wire)
-);
+#[no_mangle]
+pub extern "system" fn Java_desu_inugram_helpers_plugins_QuickJs_nativeFetchResult(
+  mut env: EnvUnowned,
+  _this: JObject,
+  ptr: jlong,
+  request_id: jlong,
+  result_wire: JString,
+) {
+  in_env(&mut env, (), |env| {
+    let _deadline = crate::sandbox::limits::arm_entry_deadline();
+    let Some(engine) = (unsafe { (ptr as *mut Engine).as_ref() }) else {
+      return;
+    };
+    let Some(state) = engine.fetch.as_ref() else {
+      return;
+    };
+    let result_wire = jstring_to_string(env, &result_wire);
+    (crate::api::io::fetch::fetch_result(&engine._rt, &engine.ctx, state, request_id, &result_wire));
+  })
+}
 
-engine_export!(Java_desu_inugram_helpers_plugins_QuickJs_nativeRunTimers, timers, (), |engine, state| {
-  crate::api::timers::run_due(&engine._rt, &engine.ctx, state)
-});
+#[no_mangle]
+pub extern "system" fn Java_desu_inugram_helpers_plugins_QuickJs_nativeRunTimers(
+  _env: EnvUnowned,
+  _this: JObject,
+  ptr: jlong,
+) {
+  let _deadline = crate::sandbox::limits::arm_entry_deadline();
+  let Some(engine) = (unsafe { (ptr as *mut Engine).as_ref() }) else {
+    return;
+  };
+  let Some(state) = engine.timers.as_ref() else {
+    return;
+  };
+  {
+    crate::api::timers::run_due(&engine._rt, &engine.ctx, state)
+  };
+}
 
 #[no_mangle]
 pub extern "system" fn Java_desu_inugram_helpers_plugins_QuickJs_nativeAppVisibilityChanged(
@@ -686,80 +656,247 @@ pub extern "system" fn Java_desu_inugram_helpers_plugins_QuickJs_nativeAppVisibi
   }
 }
 
-engine_export!(
-    Java_desu_inugram_helpers_plugins_QuickJs_nativeUiRender, ui,
-    (page_id: jlong),
-    strings(),
-    -> jstring |engine, state| crate::api::ui::pages::render_page(&engine._rt, &engine.ctx, state, page_id)
-);
+#[no_mangle]
+pub extern "system" fn Java_desu_inugram_helpers_plugins_QuickJs_nativeUiRender(
+  mut env: EnvUnowned,
+  _this: JObject,
+  ptr: jlong,
+  page_id: jlong,
+) -> jstring {
+  in_env(&mut env, std::ptr::null_mut(), |env| {
+    let _deadline = crate::sandbox::limits::arm_entry_deadline();
+    let Some(engine) = (unsafe { (ptr as *mut Engine).as_ref() }) else {
+      return std::ptr::null_mut();
+    };
+    let Some(state) = engine.ui.as_ref() else {
+      return std::ptr::null_mut();
+    };
+    match crate::api::ui::pages::render_page(&engine._rt, &engine.ctx, state, page_id) {
+      Some(json) => env.new_string(json).map(|j| j.into_raw()).unwrap_or(std::ptr::null_mut()),
+      None => std::ptr::null_mut(),
+    }
+  })
+}
 
-engine_export!(
-    Java_desu_inugram_helpers_plugins_QuickJs_nativeUiEvent, ui,
-    (page_id: jlong, slot: jint, arg_json: JString),
-    strings(arg_json),
-    |engine, state| crate::api::ui::pages::dispatch_ui_event(&engine._rt, &engine.ctx, state, page_id, slot as u32, &arg_json)
-);
+#[no_mangle]
+pub extern "system" fn Java_desu_inugram_helpers_plugins_QuickJs_nativeUiEvent(
+  mut env: EnvUnowned,
+  _this: JObject,
+  ptr: jlong,
+  page_id: jlong,
+  slot: jint,
+  arg_json: JString,
+) {
+  in_env(&mut env, (), |env| {
+    let _deadline = crate::sandbox::limits::arm_entry_deadline();
+    let Some(engine) = (unsafe { (ptr as *mut Engine).as_ref() }) else {
+      return;
+    };
+    let Some(state) = engine.ui.as_ref() else {
+      return;
+    };
+    let arg_json = jstring_to_string(env, &arg_json);
+    (crate::api::ui::pages::dispatch_ui_event(&engine._rt, &engine.ctx, state, page_id, slot as u32, &arg_json));
+  })
+}
 
-engine_export!(
-    Java_desu_inugram_helpers_plugins_QuickJs_nativeUiMenuClick, ui,
-    (menu_id: jlong, slot: jint),
-    |engine, state| crate::api::ui::pages::dispatch_menu_click(&engine._rt, &engine.ctx, state, menu_id, slot)
-);
+#[no_mangle]
+pub extern "system" fn Java_desu_inugram_helpers_plugins_QuickJs_nativeUiMenuClick(
+  _env: EnvUnowned,
+  _this: JObject,
+  ptr: jlong,
+  menu_id: jlong,
+  slot: jint,
+) {
+  let _deadline = crate::sandbox::limits::arm_entry_deadline();
+  let Some(engine) = (unsafe { (ptr as *mut Engine).as_ref() }) else {
+    return;
+  };
+  let Some(state) = engine.ui.as_ref() else {
+    return;
+  };
+  (crate::api::ui::pages::dispatch_menu_click(&engine._rt, &engine.ctx, state, menu_id, slot));
+}
 
-engine_export!(
-    Java_desu_inugram_helpers_plugins_QuickJs_nativeUiPageClosed, ui,
-    (page_id: jlong),
-    |engine, state| crate::api::ui::pages::page_closed(&engine._rt, &engine.ctx, state, page_id)
-);
+#[no_mangle]
+pub extern "system" fn Java_desu_inugram_helpers_plugins_QuickJs_nativeUiPageClosed(
+  _env: EnvUnowned,
+  _this: JObject,
+  ptr: jlong,
+  page_id: jlong,
+) {
+  let _deadline = crate::sandbox::limits::arm_entry_deadline();
+  let Some(engine) = (unsafe { (ptr as *mut Engine).as_ref() }) else {
+    return;
+  };
+  let Some(state) = engine.ui.as_ref() else {
+    return;
+  };
+  (crate::api::ui::pages::page_closed(&engine._rt, &engine.ctx, state, page_id));
+}
 
-engine_export!(
-    Java_desu_inugram_helpers_plugins_QuickJs_nativeRenderActions, actions,
-    (kind: jint, surface_json: JString),
-    strings(surface_json),
-    -> jstring |engine, state| crate::api::ui::actions::render_actions(&engine._rt, &engine.ctx, state, kind, &surface_json)
-);
+#[no_mangle]
+pub extern "system" fn Java_desu_inugram_helpers_plugins_QuickJs_nativeRenderActions(
+  mut env: EnvUnowned,
+  _this: JObject,
+  ptr: jlong,
+  kind: jint,
+  surface_json: JString,
+) -> jstring {
+  in_env(&mut env, std::ptr::null_mut(), |env| {
+    let _deadline = crate::sandbox::limits::arm_entry_deadline();
+    let Some(engine) = (unsafe { (ptr as *mut Engine).as_ref() }) else {
+      return std::ptr::null_mut();
+    };
+    let Some(state) = engine.actions.as_ref() else {
+      return std::ptr::null_mut();
+    };
+    let surface_json = jstring_to_string(env, &surface_json);
+    match crate::api::ui::actions::render_actions(&engine._rt, &engine.ctx, state, kind, &surface_json) {
+      Some(json) => env.new_string(json).map(|j| j.into_raw()).unwrap_or(std::ptr::null_mut()),
+      None => std::ptr::null_mut(),
+    }
+  })
+}
 
-engine_export!(
-    Java_desu_inugram_helpers_plugins_QuickJs_nativeDispatchAction, actions,
-    (kind: jint, token: jint, surface_json: JString),
-    strings(surface_json),
-    |engine, state| crate::api::ui::actions::dispatch_action(&engine._rt, &engine.ctx, state, kind, token as u32, &surface_json)
-);
+#[no_mangle]
+pub extern "system" fn Java_desu_inugram_helpers_plugins_QuickJs_nativeDispatchAction(
+  mut env: EnvUnowned,
+  _this: JObject,
+  ptr: jlong,
+  kind: jint,
+  token: jint,
+  surface_json: JString,
+) {
+  in_env(&mut env, (), |env| {
+    let _deadline = crate::sandbox::limits::arm_entry_deadline();
+    let Some(engine) = (unsafe { (ptr as *mut Engine).as_ref() }) else {
+      return;
+    };
+    let Some(state) = engine.actions.as_ref() else {
+      return;
+    };
+    let surface_json = jstring_to_string(env, &surface_json);
+    (crate::api::ui::actions::dispatch_action(&engine._rt, &engine.ctx, state, kind, token as u32, &surface_json));
+  })
+}
 
-engine_export!(
-    Java_desu_inugram_helpers_plugins_QuickJs_nativeResolvePrompt, ui,
-    (request_id: jlong, text: JString),
-    opt_strings(text),
-    |engine, state| crate::api::ui::pages::resolve_prompt(&engine._rt, &engine.ctx, state, request_id, text.as_deref())
-);
+#[no_mangle]
+pub extern "system" fn Java_desu_inugram_helpers_plugins_QuickJs_nativeResolvePrompt(
+  mut env: EnvUnowned,
+  _this: JObject,
+  ptr: jlong,
+  request_id: jlong,
+  text: JString,
+) {
+  in_env(&mut env, (), |env| {
+    let _deadline = crate::sandbox::limits::arm_entry_deadline();
+    let Some(engine) = (unsafe { (ptr as *mut Engine).as_ref() }) else {
+      return;
+    };
+    let Some(state) = engine.ui.as_ref() else {
+      return;
+    };
+    let text = if text.is_null() { None } else { Some(jstring_to_string(env, &text)) };
+    (crate::api::ui::pages::resolve_prompt(&engine._rt, &engine.ctx, state, request_id, text.as_deref()));
+  })
+}
 
-engine_export!(
-    Java_desu_inugram_helpers_plugins_QuickJs_nativeResolveChooser, dialogs,
-    (request_id: jlong, picked: JString),
-    opt_strings(picked),
-    |engine, state| crate::api::ui::dialogs::resolve_chooser(&engine._rt, &engine.ctx, state, request_id, picked.as_deref())
-);
+#[no_mangle]
+pub extern "system" fn Java_desu_inugram_helpers_plugins_QuickJs_nativeResolveChooser(
+  mut env: EnvUnowned,
+  _this: JObject,
+  ptr: jlong,
+  request_id: jlong,
+  picked: JString,
+) {
+  in_env(&mut env, (), |env| {
+    let _deadline = crate::sandbox::limits::arm_entry_deadline();
+    let Some(engine) = (unsafe { (ptr as *mut Engine).as_ref() }) else {
+      return;
+    };
+    let Some(state) = engine.dialogs.as_ref() else {
+      return;
+    };
+    let picked = if picked.is_null() { None } else { Some(jstring_to_string(env, &picked)) };
+    (crate::api::ui::dialogs::resolve_chooser(&engine._rt, &engine.ctx, state, request_id, picked.as_deref()));
+  })
+}
 
-engine_export!(
-    Java_desu_inugram_helpers_plugins_QuickJs_nativeDispatchScreenChange, screens,
-    (change_json: JString, stack_json: JString),
-    strings(change_json, stack_json),
-    |engine, state| crate::api::ui::screens::dispatch_screen_change(&engine._rt, &engine.ctx, state, &change_json, &stack_json)
-);
+#[no_mangle]
+pub extern "system" fn Java_desu_inugram_helpers_plugins_QuickJs_nativeDispatchScreenChange(
+  mut env: EnvUnowned,
+  _this: JObject,
+  ptr: jlong,
+  change_json: JString,
+  stack_json: JString,
+) {
+  in_env(&mut env, (), |env| {
+    let _deadline = crate::sandbox::limits::arm_entry_deadline();
+    let Some(engine) = (unsafe { (ptr as *mut Engine).as_ref() }) else {
+      return;
+    };
+    let Some(state) = engine.screens.as_ref() else {
+      return;
+    };
+    let change_json = jstring_to_string(env, &change_json);
+    let stack_json = jstring_to_string(env, &stack_json);
+    (crate::api::ui::screens::dispatch_screen_change(&engine._rt, &engine.ctx, state, &change_json, &stack_json));
+  })
+}
 
-engine_export!(
-    Java_desu_inugram_helpers_plugins_QuickJs_nativeDispatchNotification, notifications,
-    (callback_id: jint, name: JString, account: jint, args_json: JString),
-    strings(name, args_json),
-    |engine, state| crate::api::platform::notifications::dispatch_notification(&engine._rt, &engine.ctx, state, callback_id as u32, &name, account, &args_json)
-);
+#[no_mangle]
+pub extern "system" fn Java_desu_inugram_helpers_plugins_QuickJs_nativeDispatchNotification(
+  mut env: EnvUnowned,
+  _this: JObject,
+  ptr: jlong,
+  callback_id: jint,
+  name: JString,
+  account: jint,
+  args_json: JString,
+) {
+  in_env(&mut env, (), |env| {
+    let _deadline = crate::sandbox::limits::arm_entry_deadline();
+    let Some(engine) = (unsafe { (ptr as *mut Engine).as_ref() }) else {
+      return;
+    };
+    let Some(state) = engine.notifications.as_ref() else {
+      return;
+    };
+    let name = jstring_to_string(env, &name);
+    let args_json = jstring_to_string(env, &args_json);
+    (crate::api::platform::notifications::dispatch_notification(
+      &engine._rt,
+      &engine.ctx,
+      state,
+      callback_id as u32,
+      &name,
+      account,
+      &args_json,
+    ));
+  })
+}
 
-engine_export!(
-    Java_desu_inugram_helpers_plugins_QuickJs_nativeResolveDialog, dialogs,
-    (request_id: jlong, result: JString),
-    strings(result),
-    |engine, state| crate::api::ui::dialogs::resolve_dialog(&engine._rt, &engine.ctx, state, request_id, &result)
-);
+#[no_mangle]
+pub extern "system" fn Java_desu_inugram_helpers_plugins_QuickJs_nativeResolveDialog(
+  mut env: EnvUnowned,
+  _this: JObject,
+  ptr: jlong,
+  request_id: jlong,
+  result: JString,
+) {
+  in_env(&mut env, (), |env| {
+    let _deadline = crate::sandbox::limits::arm_entry_deadline();
+    let Some(engine) = (unsafe { (ptr as *mut Engine).as_ref() }) else {
+      return;
+    };
+    let Some(state) = engine.dialogs.as_ref() else {
+      return;
+    };
+    let result = jstring_to_string(env, &result);
+    (crate::api::ui::dialogs::resolve_dialog(&engine._rt, &engine.ctx, state, request_id, &result));
+  })
+}
 
 #[no_mangle]
 pub extern "system" fn Java_desu_inugram_helpers_plugins_QuickJs_nativeNotifyUnload(
@@ -784,9 +921,23 @@ pub extern "system" fn Java_desu_inugram_helpers_plugins_QuickJs_nativeNotifyUnl
   crate::api::timers::notify_unload(&engine.ctx, state);
 }
 
-engine_export!(Java_desu_inugram_helpers_plugins_QuickJs_nativeAccountsChanged, account, (), |engine, state| {
-  state.accounts_changed(&engine._rt, &engine.ctx)
-});
+#[no_mangle]
+pub extern "system" fn Java_desu_inugram_helpers_plugins_QuickJs_nativeAccountsChanged(
+  _env: EnvUnowned,
+  _this: JObject,
+  ptr: jlong,
+) {
+  let _deadline = crate::sandbox::limits::arm_entry_deadline();
+  let Some(engine) = (unsafe { (ptr as *mut Engine).as_ref() }) else {
+    return;
+  };
+  let Some(state) = engine.account.as_ref() else {
+    return;
+  };
+  {
+    state.accounts_changed(&engine._rt, &engine.ctx)
+  };
+}
 
 #[no_mangle]
 pub extern "system" fn Java_desu_inugram_helpers_plugins_QuickJs_nativeInstallRpc(
@@ -842,87 +993,279 @@ pub extern "system" fn Java_desu_inugram_helpers_plugins_QuickJs_nativeInstallRp
   }
 }
 
-engine_export!(
-    Java_desu_inugram_helpers_plugins_QuickJs_nativeDispatchRpc, rpc,
-    (callback_id: jint, dispatch_id: jlong, method: JString, account_id: jint, request_wire: JString),
-    strings(method, request_wire),
-    |engine, state| crate::api::telegram::rpc::dispatch_rpc(&engine._rt, &engine.ctx, state, callback_id as u32, dispatch_id, &method, account_id, &request_wire)
-);
+#[no_mangle]
+pub extern "system" fn Java_desu_inugram_helpers_plugins_QuickJs_nativeDispatchRpc(
+  mut env: EnvUnowned,
+  _this: JObject,
+  ptr: jlong,
+  callback_id: jint,
+  dispatch_id: jlong,
+  method: JString,
+  account_id: jint,
+  request_wire: JString,
+) {
+  in_env(&mut env, (), |env| {
+    let _deadline = crate::sandbox::limits::arm_entry_deadline();
+    let Some(engine) = (unsafe { (ptr as *mut Engine).as_ref() }) else {
+      return;
+    };
+    let Some(state) = engine.rpc.as_ref() else {
+      return;
+    };
+    let method = jstring_to_string(env, &method);
+    let request_wire = jstring_to_string(env, &request_wire);
+    (crate::api::telegram::rpc::dispatch_rpc(
+      &engine._rt,
+      &engine.ctx,
+      state,
+      callback_id as u32,
+      dispatch_id,
+      &method,
+      account_id,
+      &request_wire,
+    ));
+  })
+}
 
-engine_export!(
-    Java_desu_inugram_helpers_plugins_QuickJs_nativeCompleteNext, rpc,
-    (dispatch_id: jlong, result_wire: JString),
-    strings(result_wire),
-    |engine, state| crate::api::telegram::rpc::complete_next(&engine._rt, &engine.ctx, state, dispatch_id, &result_wire)
-);
+#[no_mangle]
+pub extern "system" fn Java_desu_inugram_helpers_plugins_QuickJs_nativeCompleteNext(
+  mut env: EnvUnowned,
+  _this: JObject,
+  ptr: jlong,
+  dispatch_id: jlong,
+  result_wire: JString,
+) {
+  in_env(&mut env, (), |env| {
+    let _deadline = crate::sandbox::limits::arm_entry_deadline();
+    let Some(engine) = (unsafe { (ptr as *mut Engine).as_ref() }) else {
+      return;
+    };
+    let Some(state) = engine.rpc.as_ref() else {
+      return;
+    };
+    let result_wire = jstring_to_string(env, &result_wire);
+    (crate::api::telegram::rpc::complete_next(&engine._rt, &engine.ctx, state, dispatch_id, &result_wire));
+  })
+}
 
-engine_export!(
-    Java_desu_inugram_helpers_plugins_QuickJs_nativeAbandonDispatch, rpc,
-    (dispatch_id: jlong, reason_wire: JString),
-    strings(reason_wire),
-    |engine, state| crate::api::telegram::rpc::abandon_dispatch(&engine._rt, &engine.ctx, state, dispatch_id, &reason_wire)
-);
+#[no_mangle]
+pub extern "system" fn Java_desu_inugram_helpers_plugins_QuickJs_nativeAbandonDispatch(
+  mut env: EnvUnowned,
+  _this: JObject,
+  ptr: jlong,
+  dispatch_id: jlong,
+  reason_wire: JString,
+) {
+  in_env(&mut env, (), |env| {
+    let _deadline = crate::sandbox::limits::arm_entry_deadline();
+    let Some(engine) = (unsafe { (ptr as *mut Engine).as_ref() }) else {
+      return;
+    };
+    let Some(state) = engine.rpc.as_ref() else {
+      return;
+    };
+    let reason_wire = jstring_to_string(env, &reason_wire);
+    (crate::api::telegram::rpc::abandon_dispatch(&engine._rt, &engine.ctx, state, dispatch_id, &reason_wire));
+  })
+}
 
-engine_export!(
-    Java_desu_inugram_helpers_plugins_QuickJs_nativeResolveInvoke, rpc,
-    (invoke_id: jlong, result_wire: JString),
-    strings(result_wire),
-    |engine, state| crate::api::telegram::rpc::resolve_invoke(&engine._rt, &engine.ctx, state, invoke_id, &result_wire)
-);
+#[no_mangle]
+pub extern "system" fn Java_desu_inugram_helpers_plugins_QuickJs_nativeResolveInvoke(
+  mut env: EnvUnowned,
+  _this: JObject,
+  ptr: jlong,
+  invoke_id: jlong,
+  result_wire: JString,
+) {
+  in_env(&mut env, (), |env| {
+    let _deadline = crate::sandbox::limits::arm_entry_deadline();
+    let Some(engine) = (unsafe { (ptr as *mut Engine).as_ref() }) else {
+      return;
+    };
+    let Some(state) = engine.rpc.as_ref() else {
+      return;
+    };
+    let result_wire = jstring_to_string(env, &result_wire);
+    (crate::api::telegram::rpc::resolve_invoke(&engine._rt, &engine.ctx, state, invoke_id, &result_wire));
+  })
+}
 
-engine_export!(
-    Java_desu_inugram_helpers_plugins_QuickJs_nativeResolvePeerResult, reads,
-    (request_id: jlong, result_wire: JString),
-    strings(result_wire),
-    |engine, state| crate::api::telegram::reads::resolve_peer_result(&engine._rt, &engine.ctx, state, request_id, &result_wire)
-);
+#[no_mangle]
+pub extern "system" fn Java_desu_inugram_helpers_plugins_QuickJs_nativeResolvePeerResult(
+  mut env: EnvUnowned,
+  _this: JObject,
+  ptr: jlong,
+  request_id: jlong,
+  result_wire: JString,
+) {
+  in_env(&mut env, (), |env| {
+    let _deadline = crate::sandbox::limits::arm_entry_deadline();
+    let Some(engine) = (unsafe { (ptr as *mut Engine).as_ref() }) else {
+      return;
+    };
+    let Some(state) = engine.reads.as_ref() else {
+      return;
+    };
+    let result_wire = jstring_to_string(env, &result_wire);
+    (crate::api::telegram::reads::resolve_peer_result(&engine._rt, &engine.ctx, state, request_id, &result_wire));
+  })
+}
 
-engine_export!(
-    Java_desu_inugram_helpers_plugins_QuickJs_nativeAccountFetchResult, reads,
-    (request_id: jlong, result_wire: JString),
-    strings(result_wire),
-    |engine, state| crate::api::telegram::reads::account_fetch_result(&engine._rt, &engine.ctx, state, request_id, &result_wire)
-);
+#[no_mangle]
+pub extern "system" fn Java_desu_inugram_helpers_plugins_QuickJs_nativeAccountFetchResult(
+  mut env: EnvUnowned,
+  _this: JObject,
+  ptr: jlong,
+  request_id: jlong,
+  result_wire: JString,
+) {
+  in_env(&mut env, (), |env| {
+    let _deadline = crate::sandbox::limits::arm_entry_deadline();
+    let Some(engine) = (unsafe { (ptr as *mut Engine).as_ref() }) else {
+      return;
+    };
+    let Some(state) = engine.reads.as_ref() else {
+      return;
+    };
+    let result_wire = jstring_to_string(env, &result_wire);
+    (crate::api::telegram::reads::account_fetch_result(&engine._rt, &engine.ctx, state, request_id, &result_wire));
+  })
+}
 
-engine_export!(
-    Java_desu_inugram_helpers_plugins_QuickJs_nativeWriteResult, writes,
-    (request_id: jlong, result_wire: JString),
-    strings(result_wire),
-    |engine, state| crate::api::telegram::writes::write_result(&engine._rt, &engine.ctx, state, request_id, &result_wire)
-);
+#[no_mangle]
+pub extern "system" fn Java_desu_inugram_helpers_plugins_QuickJs_nativeWriteResult(
+  mut env: EnvUnowned,
+  _this: JObject,
+  ptr: jlong,
+  request_id: jlong,
+  result_wire: JString,
+) {
+  in_env(&mut env, (), |env| {
+    let _deadline = crate::sandbox::limits::arm_entry_deadline();
+    let Some(engine) = (unsafe { (ptr as *mut Engine).as_ref() }) else {
+      return;
+    };
+    let Some(state) = engine.writes.as_ref() else {
+      return;
+    };
+    let result_wire = jstring_to_string(env, &result_wire);
+    (crate::api::telegram::writes::write_result(&engine._rt, &engine.ctx, state, request_id, &result_wire));
+  })
+}
 
-engine_export!(
-    Java_desu_inugram_helpers_plugins_QuickJs_nativeWriteProgress, writes,
-    (request_id: jlong, loaded: jlong, total: jlong),
-    |engine, state| crate::api::telegram::writes::write_progress(&engine._rt, &engine.ctx, state, request_id, loaded, total)
-);
+#[no_mangle]
+pub extern "system" fn Java_desu_inugram_helpers_plugins_QuickJs_nativeWriteProgress(
+  _env: EnvUnowned,
+  _this: JObject,
+  ptr: jlong,
+  request_id: jlong,
+  loaded: jlong,
+  total: jlong,
+) {
+  let _deadline = crate::sandbox::limits::arm_entry_deadline();
+  let Some(engine) = (unsafe { (ptr as *mut Engine).as_ref() }) else {
+    return;
+  };
+  let Some(state) = engine.writes.as_ref() else {
+    return;
+  };
+  (crate::api::telegram::writes::write_progress(&engine._rt, &engine.ctx, state, request_id, loaded, total));
+}
 
-engine_export!(
-    Java_desu_inugram_helpers_plugins_QuickJs_nativeDispatchUpdate, rpc,
-    (type_name: JString, account_id: jint, update_wire: JString),
-    strings(type_name, update_wire),
-    |engine, state| crate::api::telegram::rpc::dispatch_update(&engine._rt, &engine.ctx, state, &type_name, account_id, &update_wire)
-);
+#[no_mangle]
+pub extern "system" fn Java_desu_inugram_helpers_plugins_QuickJs_nativeDispatchUpdate(
+  mut env: EnvUnowned,
+  _this: JObject,
+  ptr: jlong,
+  type_name: JString,
+  account_id: jint,
+  update_wire: JString,
+) {
+  in_env(&mut env, (), |env| {
+    let _deadline = crate::sandbox::limits::arm_entry_deadline();
+    let Some(engine) = (unsafe { (ptr as *mut Engine).as_ref() }) else {
+      return;
+    };
+    let Some(state) = engine.rpc.as_ref() else {
+      return;
+    };
+    let type_name = jstring_to_string(env, &type_name);
+    let update_wire = jstring_to_string(env, &update_wire);
+    (crate::api::telegram::rpc::dispatch_update(&engine._rt, &engine.ctx, state, &type_name, account_id, &update_wire));
+  })
+}
 
-engine_export!(
-    Java_desu_inugram_helpers_plugins_QuickJs_nativeDispatchDeserialize, deserialize,
-    (callback_id: jint, object_wire: JString),
-    strings(object_wire),
-    |engine, state| crate::api::telegram::deserialize::dispatch_middleware(&engine.ctx, state, callback_id as u32, &object_wire)
-);
+#[no_mangle]
+pub extern "system" fn Java_desu_inugram_helpers_plugins_QuickJs_nativeDispatchDeserialize(
+  mut env: EnvUnowned,
+  _this: JObject,
+  ptr: jlong,
+  callback_id: jint,
+  object_wire: JString,
+) {
+  in_env(&mut env, (), |env| {
+    let _deadline = crate::sandbox::limits::arm_entry_deadline();
+    let Some(engine) = (unsafe { (ptr as *mut Engine).as_ref() }) else {
+      return;
+    };
+    let Some(state) = engine.deserialize.as_ref() else {
+      return;
+    };
+    let object_wire = jstring_to_string(env, &object_wire);
+    (crate::api::telegram::deserialize::dispatch_middleware(&engine.ctx, state, callback_id as u32, &object_wire));
+  })
+}
 
-engine_export!(
-    Java_desu_inugram_helpers_plugins_QuickJs_nativeDispatchUpdateIntercept, rpc,
-    (callback_id: jint, dispatch_id: jlong, type_name: JString, account_id: jint, update_wire: JString),
-    strings(type_name, update_wire),
-    |engine, state| crate::api::telegram::rpc::dispatch_update_intercept(&engine._rt, &engine.ctx, state, callback_id as u32, dispatch_id, &type_name, account_id, &update_wire)
-);
+#[no_mangle]
+pub extern "system" fn Java_desu_inugram_helpers_plugins_QuickJs_nativeDispatchUpdateIntercept(
+  mut env: EnvUnowned,
+  _this: JObject,
+  ptr: jlong,
+  callback_id: jint,
+  dispatch_id: jlong,
+  type_name: JString,
+  account_id: jint,
+  update_wire: JString,
+) {
+  in_env(&mut env, (), |env| {
+    let _deadline = crate::sandbox::limits::arm_entry_deadline();
+    let Some(engine) = (unsafe { (ptr as *mut Engine).as_ref() }) else {
+      return;
+    };
+    let Some(state) = engine.rpc.as_ref() else {
+      return;
+    };
+    let type_name = jstring_to_string(env, &type_name);
+    let update_wire = jstring_to_string(env, &update_wire);
+    (crate::api::telegram::rpc::dispatch_update_intercept(
+      &engine._rt,
+      &engine.ctx,
+      state,
+      callback_id as u32,
+      dispatch_id,
+      &type_name,
+      account_id,
+      &update_wire,
+    ));
+  })
+}
 
-engine_export!(
-    Java_desu_inugram_helpers_plugins_QuickJs_nativeAbandonUpdateDispatch, rpc,
-    (dispatch_id: jlong),
-    |engine, state| crate::api::telegram::rpc::abandon_update_dispatch(&engine._rt, &engine.ctx, state, dispatch_id)
-);
+#[no_mangle]
+pub extern "system" fn Java_desu_inugram_helpers_plugins_QuickJs_nativeAbandonUpdateDispatch(
+  _env: EnvUnowned,
+  _this: JObject,
+  ptr: jlong,
+  dispatch_id: jlong,
+) {
+  let _deadline = crate::sandbox::limits::arm_entry_deadline();
+  let Some(engine) = (unsafe { (ptr as *mut Engine).as_ref() }) else {
+    return;
+  };
+  let Some(state) = engine.rpc.as_ref() else {
+    return;
+  };
+  (crate::api::telegram::rpc::abandon_update_dispatch(&engine._rt, &engine.ctx, state, dispatch_id));
+}
 
 #[no_mangle]
 pub extern "system" fn Java_desu_inugram_helpers_plugins_QuickJs_nativeInstallInfo<'local>(
@@ -1052,7 +1395,7 @@ pub extern "system" fn Java_desu_inugram_helpers_plugins_QuickJs_nativeDestroy(
       xposed::dispose(&engine.ctx, &state);
     }
     if let Some(state) = engine.jvm.take() {
-      crate::api::platform::jvm::dispose(&engine.ctx, &state);
+      jvm::dispose(&engine.ctx, &state);
     }
     if let Some(shared) = engine.shared.take() {
       engine.ctx.with(|ctx| drop(shared.restore(&ctx)));

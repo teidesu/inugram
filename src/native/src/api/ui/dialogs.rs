@@ -4,7 +4,6 @@ use std::rc::Rc;
 
 use rquickjs::{Ctx, Exception, Function, Object, Result as JsResult, Runtime, Value};
 
-use crate::api::error;
 use crate::api::telegram::rpc::{format_exception, pump_jobs, PendingSettle};
 use crate::sandbox::registry::RequestIds;
 
@@ -34,13 +33,9 @@ fn js_ui_dialog<'js>(ctx: &Ctx<'js>, state: &Rc<DialogState>, options: Value<'js
     match kind.as_deref() {
       Some("native") => {}
       Some(other) => {
-        return error::throw_plugin_error(
+        return crate::api::error::PluginErrorCode::Unsupported.throw(
           ctx,
-          "unsupported",
           &format!("dialog: a '{other}' element cannot be a dialog body; only inu.android.nativeView can"),
-          None,
-          None,
-          None,
         );
       }
       None => return Err(Exception::throw_type(ctx, "dialog: 'body' is not an inu.ui element")),

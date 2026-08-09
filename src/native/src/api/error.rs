@@ -3,6 +3,47 @@ use rquickjs::{Ctx, Object, Result as JsResult, Value};
 
 use crate::api::telegram::rpc;
 
+#[derive(Clone, Copy)]
+pub enum PluginErrorCode<'a> {
+  InvalidArgument,
+  NotFound,
+  NotGranted(&'a str),
+  Forbidden,
+  HandleExpired,
+  Unsupported,
+  Internal,
+  TimedOut,
+  Aborted,
+  QuotaExceeded(i64, i64),
+}
+
+impl<'a> PluginErrorCode<'a> {
+  fn name(self) -> &'static str {
+    match self {
+      Self::InvalidArgument => "invalid-argument",
+      Self::NotFound => "not-found",
+      Self::NotGranted(_) => "not-granted",
+      Self::Forbidden => "forbidden",
+      Self::HandleExpired => "handle-expired",
+      Self::Unsupported => "unsupported",
+      Self::Internal => "internal",
+      Self::TimedOut => "timed-out",
+      Self::Aborted => "aborted",
+      Self::QuotaExceeded(..) => "quota-exceeded",
+    }
+  }
+
+  pub fn throw<'js, T>(self, ctx: &Ctx<'js>, message: &str) -> JsResult<T> {
+    let (grant, usage, quota) = match self {
+      Self::NotGranted(grant) => (Some(grant), None, None),
+      Self::QuotaExceeded(usage, quota) => (None, Some(usage), Some(quota)),
+      _ => (None, None, None),
+    };
+    let value = make_plugin_error(ctx, self.name(), message, grant, usage, quota)?;
+    Err(ctx.throw(value))
+  }
+}
+
 pub fn install_plugin_error<'js>(ctx: &Ctx<'js>, inu: &Object<'js>) -> JsResult<()> {
   let ctor: Value = ctx.eval(
     r#"(class PluginError extends Error {
@@ -42,48 +83,36 @@ pub fn make_plugin_error<'js>(
   Ok(obj.into_value())
 }
 
-pub fn throw_plugin_error<'js, T>(
-  ctx: &Ctx<'js>,
-  code: &str,
-  message: &str,
-  grant: Option<&str>,
-  usage: Option<i64>,
-  quota: Option<i64>,
-) -> JsResult<T> {
-  let value = make_plugin_error(ctx, code, message, grant, usage, quota)?;
-  Err(ctx.throw(value))
-}
-
 pub fn make_quota_error<'js>(ctx: &Ctx<'js>, message: &str, usage: i64, quota: i64) -> JsResult<Value<'js>> {
   make_plugin_error(ctx, "quota-exceeded", message, None, Some(usage), Some(quota))
 }
 
 pub fn throw_invalid_argument<'js, T>(ctx: &Ctx<'js>, message: &str) -> JsResult<T> {
-  throw_plugin_error(ctx, "invalid-argument", message, None, None, None)
+  PluginErrorCode::InvalidArgument.throw(ctx, message)
 }
 
 pub fn throw_not_found<'js, T>(ctx: &Ctx<'js>, message: &str) -> JsResult<T> {
-  throw_plugin_error(ctx, "not-found", message, None, None, None)
+  PluginErrorCode::NotFound.throw(ctx, message)
 }
 
 pub fn throw_not_granted<'js, T>(ctx: &Ctx<'js>, message: &str, grant: &str) -> JsResult<T> {
-  throw_plugin_error(ctx, "not-granted", message, Some(grant), None, None)
+  PluginErrorCode::NotGranted(grant).throw(ctx, message)
 }
 
 pub fn throw_forbidden<'js, T>(ctx: &Ctx<'js>, message: &str) -> JsResult<T> {
-  throw_plugin_error(ctx, "forbidden", message, None, None, None)
+  PluginErrorCode::Forbidden.throw(ctx, message)
 }
 
 pub fn throw_handle_expired<'js, T>(ctx: &Ctx<'js>, message: &str) -> JsResult<T> {
-  throw_plugin_error(ctx, "handle-expired", message, None, None, None)
+  PluginErrorCode::HandleExpired.throw(ctx, message)
 }
 
 pub fn throw_internal<'js, T>(ctx: &Ctx<'js>, message: &str) -> JsResult<T> {
-  throw_plugin_error(ctx, "internal", message, None, None, None)
+  PluginErrorCode::Internal.throw(ctx, message)
 }
 
 pub fn throw_quota_exceeded<'js, T>(ctx: &Ctx<'js>, message: &str, usage: i64, quota: i64) -> JsResult<T> {
-  throw_plugin_error(ctx, "quota-exceeded", message, None, Some(usage), Some(quota))
+  PluginErrorCode::QuotaExceeded(usage, quota).throw(ctx, message)
 }
 
 struct PluginErrorWire<'a> {

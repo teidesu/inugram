@@ -1,9 +1,10 @@
+use base64::engine::general_purpose::{STANDARD, STANDARD_NO_PAD};
 use base64::Engine;
 use rquickjs::function::Opt;
 use rquickjs::{Ctx, Exception, Function, Object, Result as JsResult, TypedArray, Value};
 use std::rc::Rc;
 
-use crate::api::error::throw_plugin_error;
+use crate::api::error::PluginErrorCode;
 
 const PRELUDE: &[u8] = include_bytes!(concat!(env!("OUT_DIR"), "/utils.qbc"));
 
@@ -35,27 +36,37 @@ pub fn install_utils_with_host<'js>(
   let utils = Object::new(ctx.clone())?;
 
   let f = Function::new(ctx.clone(), |ctx: Ctx<'js>, bytes: Value<'js>| {
-    read_bytes(&ctx, &bytes, "toBase64").map(|bytes| base64::engine::general_purpose::STANDARD.encode(bytes))
+    read_bytes(&ctx, &bytes, "toBase64").map(|bytes| STANDARD.encode(bytes))
   })?;
   utils.set("toBase64", f)?;
 
   let f = Function::new(ctx.clone(), |ctx: Ctx<'js>, text: String| -> JsResult<TypedArray<'js, u8>> {
-    match decode_base64(&text) {
+    let text: &str = &text;
+    let bytes = STANDARD.decode(&text).ok().or_else(|| STANDARD_NO_PAD.decode(&text).ok());
+    match bytes {
       Some(bytes) => TypedArray::<u8>::new(ctx, bytes),
-      None => throw_plugin_error(&ctx, "invalid-argument", "fromBase64: not base64", None, None, None),
+      None => PluginErrorCode::InvalidArgument.throw(&ctx, "fromBase64: not base64"),
     }
   })?;
   utils.set("fromBase64", f)?;
 
   let f = Function::new(ctx.clone(), |ctx: Ctx<'js>, bytes: Value<'js>| {
-    read_bytes(&ctx, &bytes, "toHex").map(|bytes| encode_hex(&bytes))
+    read_bytes(&ctx, &bytes, "toHex").map(|bytes| {
+      let bytes: &[u8] = &bytes;
+      let mut out = String::with_capacity(bytes.len() * 2);
+      for byte in bytes {
+        out.push(HEX_DIGITS[(byte >> 4) as usize] as char);
+        out.push(HEX_DIGITS[(byte & 0x0f) as usize] as char);
+      }
+      out
+    })
   })?;
   utils.set("toHex", f)?;
 
   let f = Function::new(ctx.clone(), |ctx: Ctx<'js>, text: String| -> JsResult<TypedArray<'js, u8>> {
     match decode_hex(&text) {
       Some(bytes) => TypedArray::<u8>::new(ctx, bytes),
-      None => throw_plugin_error(&ctx, "invalid-argument", "fromHex: expected hex digits, in pairs", None, None, None),
+      None => PluginErrorCode::InvalidArgument.throw(&ctx, "fromHex: expected hex digits, in pairs"),
     }
   })?;
   utils.set("fromHex", f)?;
@@ -73,16 +84,9 @@ pub fn install_utils_with_host<'js>(
             Some("dateTime") => FORMAT_DATE_TIME,
             Some("relative") => FORMAT_RELATIVE_DATE,
             Some(style) => {
-              return throw_plugin_error(
-                &ctx,
-                "invalid-argument",
-                &format!("formatDate: unknown style '{style}'"),
-                None,
-                None,
-                None,
-              )
+              return PluginErrorCode::InvalidArgument.throw(&ctx, &format!("formatDate: unknown style '{style}'"))
             }
-            None => return throw_plugin_error(&ctx, "invalid-argument", "formatDate: unknown style", None, None, None),
+            None => return PluginErrorCode::InvalidArgument.throw(&ctx, "formatDate: unknown style"),
           },
         };
         Ok(host.format(op, value))
@@ -142,7 +146,7 @@ impl UtilsHost for UnavailableUtilsHost {
 
 fn format_integer<'js>(ctx: &Ctx<'js>, value: &Value<'js>, what: &str, min: i64, max: i64) -> JsResult<i64> {
   let Some(value) = value.as_number() else {
-    return throw_plugin_error(ctx, "invalid-argument", &format!("{what}: expected a safe integer"), None, None, None);
+    return PluginErrorCode::InvalidArgument.throw(ctx, &format!("{what}: expected a safe integer"));
   };
   if !value.is_finite()
     || value.fract() != 0.0
@@ -150,7 +154,7 @@ fn format_integer<'js>(ctx: &Ctx<'js>, value: &Value<'js>, what: &str, min: i64,
     || value > max as f64
     || value.abs() > 9_007_199_254_740_991.0
   {
-    return throw_plugin_error(ctx, "invalid-argument", &format!("{what}: expected a safe integer"), None, None, None);
+    return PluginErrorCode::InvalidArgument.throw(ctx, &format!("{what}: expected a safe integer"));
   }
   Ok(value as i64)
 }
@@ -163,23 +167,6 @@ fn read_bytes<'js>(ctx: &Ctx<'js>, value: &Value<'js>, what: &str) -> JsResult<V
     return Err(Exception::throw_type(ctx, &format!("{what}: the array is detached")));
   };
   Ok(bytes.to_vec())
-}
-
-fn decode_base64(text: &str) -> Option<Vec<u8>> {
-  let standard = base64::engine::general_purpose::STANDARD;
-  if let Ok(bytes) = standard.decode(text) {
-    return Some(bytes);
-  }
-  base64::engine::general_purpose::STANDARD_NO_PAD.decode(text).ok()
-}
-
-fn encode_hex(bytes: &[u8]) -> String {
-  let mut out = String::with_capacity(bytes.len() * 2);
-  for byte in bytes {
-    out.push(HEX_DIGITS[(byte >> 4) as usize] as char);
-    out.push(HEX_DIGITS[(byte & 0x0f) as usize] as char);
-  }
-  out
 }
 
 fn decode_hex(text: &str) -> Option<Vec<u8>> {
