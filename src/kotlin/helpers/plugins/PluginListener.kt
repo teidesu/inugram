@@ -65,11 +65,12 @@ interface ApiListener {
 
     fun uiToast(text: String)
 
-    fun uiDialog(requestId: Long, optionsJson: String): String?
-
-    fun uiPrompt(requestId: Long, optionsJson: String): String?
-
-    fun uiChooser(requestId: Long, optionsJson: String): String?
+    /**
+     * `inu.ui.dialog`/`prompt`/`chooser`, which are one member because they are one contract: null
+     * means shown and settled later by the matching `resolve*` native, non-null an immediate
+     * refusal. [op] keeps in sync with rust `api::ui::OP_*`.
+     */
+    fun uiModal(op: Int, requestId: Long, optionsJson: String): String?
 
     fun uiCurrentScreen(): String
 

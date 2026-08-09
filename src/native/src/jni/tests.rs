@@ -322,7 +322,7 @@ mod wiring {
         let rust = rust_descriptors();
         // exact rather than a floor: the cross-check below only speaks for the descriptors the
         // parser found, so a parse that quietly lost some passes while covering nothing of them
-        assert_eq!(rust.len(), 56, "the set of upcalls rust looks up changed");
+        assert_eq!(rust.len(), 54, "the set of upcalls rust looks up changed");
 
         let mut wrong = Vec::new();
         for (name, sig) in &rust {
@@ -623,7 +623,7 @@ mod bridge_signature_tests {
     fn every_upcall_passes_what_its_java_descriptor_declares() {
         let source = squeeze(concat!(include_str!("exports.rs"), include_str!("bridge.rs"), include_str!("hosts.rs"),));
         let table = lookup_table(&source);
-        assert_eq!(table.len(), 56, "the set of cached method ids changed");
+        assert_eq!(table.len(), 54, "the set of cached method ids changed");
 
         let mut called = std::collections::HashSet::new();
         let mut rest = source.as_str();

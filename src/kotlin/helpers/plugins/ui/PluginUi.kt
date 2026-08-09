@@ -40,6 +40,11 @@ import org.telegram.ui.LaunchActivity
 object PluginUi {
     private const val TAG = "InuPluginUi"
 
+    // keep in sync with rust `api::ui::OP_*`
+    const val OP_DIALOG = 0
+    const val OP_PROMPT = 1
+    const val OP_CHOOSER = 2
+
     // UI-thread state: open page views, keyed per engine so page ids can't cross plugins
     private class PageKey(val engine: QuickJs, val pageId: Long) {
         override fun equals(other: Any?): Boolean =
@@ -177,145 +182,157 @@ object PluginUi {
         }
     }
 
-    fun dialog(plugin: Plugin, engine: QuickJs, requestId: Long, optionsJson: String): String? {
-        val options = try {
-            JSONObject(optionsJson)
-        } catch (e: Exception) {
-            return "dialog: ${e.message}"
-        }
-        AndroidUtilities.runOnUIThread {
-            var settled = false
-            fun settle(result: String) {
-                if (settled) return
-                settled = true
-                EngineDispatch.onEngine(plugin, engine) { engine.resolveDialog(requestId, result) }
-            }
+    fun modal(plugin: Plugin, engine: QuickJs, op: Int, requestId: Long, optionsJson: String): String? = when (op) {
+        OP_DIALOG -> showModal(
+            plugin,
+            engine,
+            "dialog",
+            dismissed = "dismissed",
+            resolve = { engine.resolveDialog(requestId, it) },
+            prepare = { JSONObject(optionsJson) },
+        ) { options, settle -> showDialog(engine, options, settle) }
 
-            val activity = LaunchActivity.instance
-            if (activity == null || activity.isFinishing) {
-                settle("dismissed")
-                return@runOnUIThread
-            }
-            try {
-                val builder = AlertDialog.Builder(activity)
-                options.optString("title").takeIf { it.isNotEmpty() }?.let { builder.setTitle(it) }
-                options.optString("message").takeIf { it.isNotEmpty() }?.let { builder.setMessage(it) }
-                // rust already refused every element but `inu.android.nativeView`, which is a jvm
-                // handle id; one the plugin has since released simply leaves the dialog bodiless
-                options.optJSONObject("body")?.optLong("handle")?.let { handle ->
-                    (PluginJvm.objectAt(engine, handle) as? View)?.let { builder.setView(it) }
-                }
-                options.optString("positive").takeIf { it.isNotEmpty() }?.let {
-                    builder.setPositiveButton(it) { _, _ -> settle("positive") }
-                }
-                options.optString("negative").takeIf { it.isNotEmpty() }?.let {
-                    builder.setNegativeButton(it) { _, _ -> settle("negative") }
-                }
-                options.optString("neutral").takeIf { it.isNotEmpty() }?.let {
-                    builder.setNeutralButton(it) { _, _ -> settle("neutral") }
-                }
-                val dialog = builder.create()
-                // buttons settle first (their click listeners run before dismissal), so this only
-                // catches back-press / outside-tap / activity teardown
-                dialog.setOnDismissListener { settle("dismissed") }
-                val fragment = LaunchActivity.getSafeLastFragment()
-                // BaseFragment.showDialog returns null when it refuses to show (mid-transition
-                // etc.) - without the fallback the promise would hang forever
-                if (fragment?.showDialog(dialog) == null) dialog.show()
-            } catch (e: Exception) {
-                settle("dismissed")
-            }
-        }
-        return null
-    }
+        OP_PROMPT -> showModal<JSONObject, String?>(
+            plugin,
+            engine,
+            "prompt",
+            dismissed = null,
+            resolve = { engine.resolvePrompt(requestId, it) },
+            prepare = { JSONObject(optionsJson) },
+        ) { options, settle -> showPrompt(options, settle) }
 
-    fun prompt(plugin: Plugin, engine: QuickJs, requestId: Long, optionsJson: String): String? {
-        val options = try {
-            JSONObject(optionsJson)
-        } catch (e: Exception) {
-            return "prompt: ${e.message}"
-        }
-        AndroidUtilities.runOnUIThread {
-            var settled = false
-            fun settle(text: String?) {
-                if (settled) return
-                settled = true
-                EngineDispatch.onEngine(plugin, engine) { engine.resolvePrompt(requestId, text) }
-            }
+        OP_CHOOSER -> showModal<ChooserSpec, String?>(
+            plugin,
+            engine,
+            "chooser",
+            dismissed = null,
+            resolve = { engine.resolveChooser(requestId, it) },
+            prepare = { ChooserSpec(JSONObject(optionsJson)) },
+        ) { spec, settle -> showChooser(spec, settle) }
 
-            val fragment = LaunchActivity.getSafeLastFragment()
-            if (fragment == null) {
-                settle(null)
-                return@runOnUIThread
-            }
-            val dialog = showInputDialog(
-                fragment,
-                title = options.optString("title"),
-                hint = options.optString("hint").takeIf { it.isNotEmpty() },
-                initialText = options.optString("value").takeIf { it.isNotEmpty() },
-                selectAll = options.optBoolean("selectAll"),
-            ) { text ->
-                settle(text)
-                true
-            }
-            if (dialog == null) {
-                settle(null)
-            } else {
-                dialog.setOnDismissListener { settle(null) }
-            }
-        }
-        return null
+        else -> "modal: unknown op $op"
     }
 
     /**
-     * one dialog for both modes, the engine having normalized `selected` into a list. Exactly one
-     * settle either way - the engine drops a second, but the promise must never be left hanging.
+     * every modal is the same shape: read the options (a failure there is the refusal the engine
+     * answers the plugin with, before anything is shown), hop to the ui thread, and settle exactly
+     * once - the engine drops a second settle, but a promise left hanging is left hanging forever.
+     * So [dismissed] is what a [show] that threw answers with, each one handling for itself the
+     * case it has no ui to attach to.
      */
-    fun chooser(plugin: Plugin, engine: QuickJs, requestId: Long, optionsJson: String): String? {
-        val options = try {
-            JSONObject(optionsJson)
+    private fun <S, T> showModal(
+        plugin: Plugin,
+        engine: QuickJs,
+        name: String,
+        dismissed: T,
+        resolve: (T) -> Unit,
+        prepare: () -> S,
+        show: (S, (T) -> Unit) -> Unit,
+    ): String? {
+        val prepared = try {
+            prepare()
         } catch (e: Exception) {
-            return "chooser: ${e.message}"
+            return "$name: ${e.message}"
         }
-        val items = try {
-            parseChooserItems(options.getJSONArray("items"))
-        } catch (e: Exception) {
-            return "chooser: ${e.message}"
-        }
-        val multiple = options.optBoolean("multiple")
-        val selected = options.optJSONArray("selected")
-        val picked = (0 until (selected?.length() ?: 0)).mapTo(HashSet()) { selected!!.getInt(it) }
-
         AndroidUtilities.runOnUIThread {
             var settled = false
-            fun settle(result: String?) {
-                if (settled) return
-                settled = true
-                EngineDispatch.onEngine(plugin, engine) { engine.resolveChooser(requestId, result) }
-            }
-
-            val activity = LaunchActivity.instance
-            if (activity == null || activity.isFinishing) {
-                settle(null)
-                return@runOnUIThread
+            val settle: (T) -> Unit = { result ->
+                if (!settled) {
+                    settled = true
+                    EngineDispatch.onEngine(plugin, engine) { resolve(result) }
+                }
             }
             try {
-                val fragment = LaunchActivity.getSafeLastFragment()
-                val theme = fragment?.resourceProvider
-                val title = options.optString("title").takeIf { it.isNotEmpty() }
-                val dialog = if (multiple) {
-                    buildMultiChooser(activity, theme, title, items, picked, ::settle)
-                } else {
-                    buildSingleChooser(activity, theme, title, items, picked.firstOrNull(), ::settle)
-                }
-                dialog.setOnDismissListener { settle(null) }
-                if (fragment?.showDialog(dialog) == null) dialog.show()
+                show(prepared, settle)
             } catch (e: Exception) {
-                Log.e(TAG, "chooser failed", e)
-                settle(null)
+                Log.e(TAG, "$name failed", e)
+                settle(dismissed)
             }
         }
         return null
+    }
+
+    private fun showDialog(engine: QuickJs, options: JSONObject, settle: (String) -> Unit) {
+        val activity = LaunchActivity.instance
+        if (activity == null || activity.isFinishing) {
+            settle("dismissed")
+            return
+        }
+        val builder = AlertDialog.Builder(activity)
+        options.optString("title").takeIf { it.isNotEmpty() }?.let { builder.setTitle(it) }
+        options.optString("message").takeIf { it.isNotEmpty() }?.let { builder.setMessage(it) }
+        // rust already refused every element but `inu.android.nativeView`, which is a jvm
+        // handle id; one the plugin has since released simply leaves the dialog bodiless
+        options.optJSONObject("body")?.optLong("handle")?.let { handle ->
+            (PluginJvm.objectAt(engine, handle) as? View)?.let { builder.setView(it) }
+        }
+        options.optString("positive").takeIf { it.isNotEmpty() }?.let {
+            builder.setPositiveButton(it) { _, _ -> settle("positive") }
+        }
+        options.optString("negative").takeIf { it.isNotEmpty() }?.let {
+            builder.setNegativeButton(it) { _, _ -> settle("negative") }
+        }
+        options.optString("neutral").takeIf { it.isNotEmpty() }?.let {
+            builder.setNeutralButton(it) { _, _ -> settle("neutral") }
+        }
+        val dialog = builder.create()
+        // buttons settle first (their click listeners run before dismissal), so this only
+        // catches back-press / outside-tap / activity teardown
+        dialog.setOnDismissListener { settle("dismissed") }
+        val fragment = LaunchActivity.getSafeLastFragment()
+        // BaseFragment.showDialog returns null when it refuses to show (mid-transition
+        // etc.) - without the fallback the promise would hang forever
+        if (fragment?.showDialog(dialog) == null) dialog.show()
+    }
+
+    private fun showPrompt(options: JSONObject, settle: (String?) -> Unit) {
+        val fragment = LaunchActivity.getSafeLastFragment()
+        if (fragment == null) {
+            settle(null)
+            return
+        }
+        val dialog = showInputDialog(
+            fragment,
+            title = options.optString("title"),
+            hint = options.optString("hint").takeIf { it.isNotEmpty() },
+            initialText = options.optString("value").takeIf { it.isNotEmpty() },
+            selectAll = options.optBoolean("selectAll"),
+        ) { text ->
+            settle(text)
+            true
+        }
+        if (dialog == null) {
+            settle(null)
+        } else {
+            dialog.setOnDismissListener { settle(null) }
+        }
+    }
+
+    /** one dialog for both modes, the engine having normalized `selected` into a list */
+    private fun showChooser(spec: ChooserSpec, settle: (String?) -> Unit) {
+        val activity = LaunchActivity.instance
+        if (activity == null || activity.isFinishing) {
+            settle(null)
+            return
+        }
+        val fragment = LaunchActivity.getSafeLastFragment()
+        val theme = fragment?.resourceProvider
+        val dialog = if (spec.multiple) {
+            buildMultiChooser(activity, theme, spec.title, spec.items, spec.selected, settle)
+        } else {
+            buildSingleChooser(activity, theme, spec.title, spec.items, spec.selected.firstOrNull(), settle)
+        }
+        dialog.setOnDismissListener { settle(null) }
+        if (fragment?.showDialog(dialog) == null) dialog.show()
+    }
+
+    private class ChooserSpec(options: JSONObject) {
+        val title: String? = options.optString("title").takeIf { it.isNotEmpty() }
+        val items: List<ChooserItem> = parseChooserItems(options.getJSONArray("items"))
+        val multiple: Boolean = options.optBoolean("multiple")
+        val selected: Set<Int> = options.optJSONArray("selected").let { arr ->
+            (0 until (arr?.length() ?: 0)).mapTo(HashSet()) { arr!!.getInt(it) }
+        }
     }
 
     private class ChooserItem(val text: String, val subtitle: String?, val danger: Boolean)
