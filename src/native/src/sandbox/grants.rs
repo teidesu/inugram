@@ -2,7 +2,7 @@ use std::rc::Rc;
 
 use rquickjs::{Ctx, Result as JsResult};
 
-use crate::api::error::throw_plugin_error;
+use crate::api::error::throw_not_granted;
 
 pub const MATCH_EXACT: i32 = 0;
 pub const MATCH_DOMAIN: i32 = 1;
@@ -30,7 +30,7 @@ pub fn check_grant(
         return Ok(());
     }
     let token = grant_token(name, target);
-    throw_plugin_error(ctx, "not-granted", &format!("missing grant: {token}"), Some(&token), None, None)
+    throw_not_granted(ctx, &format!("missing grant: {token}"), &token)
 }
 
 #[cfg(test)]

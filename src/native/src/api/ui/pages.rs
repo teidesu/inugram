@@ -6,7 +6,7 @@ use rquickjs::{Array, Ctx, Exception, Function, Object, Persistent, Result as Js
 
 use crate::api::error::throw_plugin_error;
 use crate::api::telegram::rpc::{format_exception, pump_jobs, PendingSettle};
-use crate::api::ui::icons::opt_icon;
+use crate::api::ui::icons::{opt_icon, Icon, RETAINED_VALUE_TAG};
 use crate::sandbox::registry::{make_disposer, noop_disposer, Lifecycle, Registry, RequestIds};
 use crate::utils::arguments::{field, opt_bool, opt_fn, opt_num, opt_str, req_bool, req_fn, req_num, req_str};
 
@@ -60,6 +60,7 @@ struct UiPageDef {
     bottom_text: Option<String>,
     bottom_on_click: Option<Persistent<Function<'static>>>,
     callbacks: RefCell<HashMap<u32, CallbackEntry>>,
+    retained_icon_values: RefCell<Vec<Persistent<Value<'static>>>>,
     next_slot: Cell<u32>,
 }
 
@@ -73,6 +74,9 @@ fn release_page_def(ctx: &Ctx<'_>, def: UiPageDef) {
     }
     for (_, entry) in def.callbacks.into_inner() {
         let _ = entry.func.restore(ctx);
+    }
+    for value in def.retained_icon_values.into_inner() {
+        let _ = value.restore(ctx);
     }
 }
 
@@ -121,11 +125,24 @@ fn make_check<'js>(ctx: &Ctx<'js>, opts: Object<'js>) -> JsResult<Object<'js>> {
     Ok(out)
 }
 
-fn make_button<'js>(ctx: &Ctx<'js>, opts: Object<'js>) -> JsResult<Object<'js>> {
+fn set_icon<'js>(out: &Object<'js>, icon: Option<Icon<'js>>) -> JsResult<()> {
+    let Some(icon) = icon else { return Ok(()) };
+    out.set("icon", icon.spec)?;
+    if let Some(value) = icon.retained_value {
+        out.set(RETAINED_VALUE_TAG, value)?;
+    }
+    Ok(())
+}
+
+fn make_button<'js>(
+    ctx: &Ctx<'js>,
+    opts: Object<'js>,
+    jvm: Option<&Rc<crate::api::platform::jvm::JvmState>>,
+) -> JsResult<Object<'js>> {
     let out = new_element(ctx, "button")?;
     set_opt(&out, "id", opt_str(ctx, &opts, "button", "id")?)?;
     out.set("text", req_str(ctx, &opts, "button", "text")?)?;
-    set_opt(&out, "icon", opt_icon(ctx, &opts, "button")?)?;
+    set_icon(&out, opt_icon(ctx, &opts, "button", jvm)?)?;
     set_opt(&out, "subtitle", opt_str(ctx, &opts, "button", "subtitle")?)?;
     set_opt(&out, "value", opt_str(ctx, &opts, "button", "value")?)?;
     out.set("danger", opt_bool(ctx, &opts, "button", "danger")?)?;
@@ -134,11 +151,15 @@ fn make_button<'js>(ctx: &Ctx<'js>, opts: Object<'js>) -> JsResult<Object<'js>> 
     Ok(out)
 }
 
-fn make_select<'js>(ctx: &Ctx<'js>, opts: Object<'js>) -> JsResult<Object<'js>> {
+fn make_select<'js>(
+    ctx: &Ctx<'js>,
+    opts: Object<'js>,
+    jvm: Option<&Rc<crate::api::platform::jvm::JvmState>>,
+) -> JsResult<Object<'js>> {
     let out = new_element(ctx, "select")?;
     set_opt(&out, "id", opt_str(ctx, &opts, "select", "id")?)?;
     out.set("text", req_str(ctx, &opts, "select", "text")?)?;
-    set_opt(&out, "icon", opt_icon(ctx, &opts, "select")?)?;
+    set_icon(&out, opt_icon(ctx, &opts, "select", jvm)?)?;
 
     let raw: Value = field(ctx, &opts, "select", "items")?;
     let arr = raw.as_array().ok_or_else(|| Exception::throw_type(ctx, "select: 'items' must be an array"))?;
@@ -241,8 +262,20 @@ pub fn install_ui<'js>(
         })?,
     )?;
     ui.set("check", Function::new(ctx.clone(), |ctx: Ctx<'js>, opts: Object<'js>| make_check(&ctx, opts))?)?;
-    ui.set("button", Function::new(ctx.clone(), |ctx: Ctx<'js>, opts: Object<'js>| make_button(&ctx, opts))?)?;
-    ui.set("select", Function::new(ctx.clone(), |ctx: Ctx<'js>, opts: Object<'js>| make_select(&ctx, opts))?)?;
+    {
+        let jvm = state.jvm.clone();
+        ui.set(
+            "button",
+            Function::new(ctx.clone(), move |ctx: Ctx<'js>, opts: Object<'js>| make_button(&ctx, opts, jvm.as_ref()))?,
+        )?;
+    }
+    {
+        let jvm = state.jvm.clone();
+        ui.set(
+            "select",
+            Function::new(ctx.clone(), move |ctx: Ctx<'js>, opts: Object<'js>| make_select(&ctx, opts, jvm.as_ref()))?,
+        )?;
+    }
     ui.set("slider", Function::new(ctx.clone(), |ctx: Ctx<'js>, opts: Object<'js>| make_slider(&ctx, opts))?)?;
     ui.set(
         "separator",
@@ -398,6 +431,7 @@ fn js_settings_page<'js>(ctx: &Ctx<'js>, state: &Rc<UiState>, opts: Object<'js>)
                 bottom_text,
                 bottom_on_click: bottom_on_click.map(|f| Persistent::save(ctx, f)),
                 callbacks: RefCell::new(HashMap::new()),
+                retained_icon_values: RefCell::new(Vec::new()),
                 next_slot: Cell::new(1),
             },
         );
@@ -469,6 +503,7 @@ fn try_render<'js>(ctx: &Ctx<'js>, state: &Rc<UiState>, page_id: i64) -> JsResul
         items_val.as_array().ok_or_else(|| Exception::throw_type(ctx, "settingsPage: items() must return an array"))?;
 
     let mut new_cbs: Vec<(u32, Rc<str>, Function<'js>)> = Vec::new();
+    let mut retained_icon_values: Vec<Value<'js>> = Vec::new();
     let mut alloc_slot = |row: &Rc<str>, f: Function<'js>| -> u32 {
         let slot = next_slot;
         next_slot += 1;
@@ -516,6 +551,9 @@ fn try_render<'js>(ctx: &Ctx<'js>, state: &Rc<UiState>, page_id: i64) -> JsResul
                 set_opt(&out, "id", obj.get::<_, Option<String>>("id")?)?;
                 out.set("text", obj.get::<_, String>("text")?)?;
                 set_opt(&out, "icon", obj.get::<_, Option<String>>("icon")?)?;
+                if let Some(value) = obj.get::<_, Option<Value>>(RETAINED_VALUE_TAG)? {
+                    retained_icon_values.push(value);
+                }
                 set_opt(&out, "subtitle", obj.get::<_, Option<String>>("subtitle")?)?;
                 set_opt(&out, "value", obj.get::<_, Option<String>>("value")?)?;
                 out.set("danger", obj.get::<_, bool>("danger")?)?;
@@ -528,6 +566,9 @@ fn try_render<'js>(ctx: &Ctx<'js>, state: &Rc<UiState>, page_id: i64) -> JsResul
                 set_opt(&out, "id", obj.get::<_, Option<String>>("id")?)?;
                 out.set("text", obj.get::<_, String>("text")?)?;
                 set_opt(&out, "icon", obj.get::<_, Option<String>>("icon")?)?;
+                if let Some(value) = obj.get::<_, Option<Value>>(RETAINED_VALUE_TAG)? {
+                    retained_icon_values.push(value);
+                }
                 out.set("items", obj.get::<_, Array>("items")?)?;
                 out.set("selected", obj.get::<_, i32>("selected")?)?;
                 out.set("dialog", obj.get::<_, bool>("dialog")?)?;
@@ -586,6 +627,12 @@ fn try_render<'js>(ctx: &Ctx<'js>, state: &Rc<UiState>, page_id: i64) -> JsResul
             }
             for (slot, row, f) in new_cbs {
                 cbs.insert(slot, CallbackEntry { func: Persistent::save(ctx, f), row });
+            }
+            for value in def
+                .retained_icon_values
+                .replace(retained_icon_values.into_iter().map(|value| Persistent::save(ctx, value)).collect())
+            {
+                let _ = value.restore(ctx);
             }
             def.next_slot.set(next_slot);
         }

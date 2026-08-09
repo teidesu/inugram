@@ -24,6 +24,9 @@ declare namespace inu {
     /** Refuses a name longer than 128 characters. */
     function resourceIcon(name: string): UIIcon
 
+    /** @needs-grant unsafe.jvm. Retains the drawable while its settings page is rendered. */
+    function drawableIcon(drawable: JavaObject): UIIcon
+
     /** @needs-grant unsafe.jvm */
     function nativeView(view: JavaObject): UIElement
   }

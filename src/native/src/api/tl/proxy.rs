@@ -159,11 +159,11 @@ fn throw_tl<'js, T>(ctx: &Ctx<'js>, message: &str) -> JsResult<T> {
 }
 
 fn throw_expired<'js, T>(ctx: &Ctx<'js>) -> JsResult<T> {
-    crate::api::error::throw_plugin_error(ctx, "handle-expired", HANDLE_EXPIRED_MESSAGE, None, None, None)
+    crate::api::error::throw_handle_expired(ctx, HANDLE_EXPIRED_MESSAGE)
 }
 
 fn throw_read_only<'js, T>(ctx: &Ctx<'js>) -> JsResult<T> {
-    crate::api::error::throw_plugin_error(ctx, "forbidden", READ_ONLY_MESSAGE, None, None, None)
+    crate::api::error::throw_forbidden(ctx, READ_ONLY_MESSAGE)
 }
 
 fn throw_unsupported<'js, T>(ctx: &Ctx<'js>, message: &str) -> JsResult<T> {

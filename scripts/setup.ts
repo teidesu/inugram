@@ -234,6 +234,7 @@ if (noStgit) {
   await ensureAdGuardFilter()
   await ensureGitExclude(worktreeDir, '.kotlin')
   await ensureGitExclude(worktreeDir, '.cxx')
+  await cd(worktreeDir)`git config submodule.TMessagesProj_App/jni/lsplant.ignore all`
   const linkedAny = await linkForkSource(worktreeDir)
   const generatedAny = await generateIconDrawables(worktreeDir)
   success(linkedAny || generatedAny || syncedSubmodules || patchedSubmodules ? 'Setup complete' : 'Up to date')

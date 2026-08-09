@@ -6,7 +6,7 @@ use rquickjs::{
     TypedArray, Value,
 };
 
-use crate::api::error::{throw_plugin_error, wire_error_to_js};
+use crate::api::error::{throw_internal, throw_plugin_error, throw_quota_exceeded, wire_error_to_js};
 use crate::api::telegram::rpc::{format_exception, pump_jobs};
 use crate::sandbox::grants::{check_grant, GrantHost, MATCH_NAMESPACE};
 use crate::sandbox::registry::{CallbackRegistry, Lifecycle};
@@ -58,13 +58,11 @@ fn bounded(value: &str, limit: usize) -> bool {
 }
 
 fn throw_too_big<'js, T>(ctx: &Ctx<'js>, what: &str, size: usize, limit: usize) -> JsResult<T> {
-    throw_plugin_error(
+    throw_quota_exceeded(
         ctx,
-        "quota-exceeded",
         &format!("jvm: {what} is {size} bytes, over the {limit} this bridge carries"),
-        None,
-        Some(size as i64),
-        Some(limit as i64),
+        size as i64,
+        limit as i64,
     )
 }
 
@@ -146,7 +144,7 @@ pub(crate) fn wire_to_value<'js>(ctx: &Ctx<'js>, state: &Rc<JvmState>, wire: &st
     }
     let mut chars = wire.chars();
     let Some(tag) = chars.next() else {
-        return throw_plugin_error(ctx, "internal", "jvm: the host answered with an empty wire", None, None, None);
+        return throw_internal(ctx, "jvm: the host answered with an empty wire");
     };
     let payload = chars.as_str();
     if tag == 'I' {

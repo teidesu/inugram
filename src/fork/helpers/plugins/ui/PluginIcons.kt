@@ -5,6 +5,8 @@ import android.content.res.Resources
 import android.graphics.Bitmap
 import android.graphics.drawable.BitmapDrawable
 import android.graphics.drawable.Drawable
+import desu.inugram.helpers.plugins.QuickJs
+import desu.inugram.helpers.plugins.platform.PluginJvm
 import desu.inugram.core.plugins.IconSpec
 import org.telegram.messenger.AndroidUtilities
 import org.telegram.messenger.ApplicationLoader
@@ -40,12 +42,13 @@ object PluginIcons {
         else -> false
     }
 
-    fun resolveDrawable(context: Context, spec: String?): Drawable? {
+    fun resolveDrawable(context: Context, spec: String?, engine: QuickJs): Drawable? {
         if (spec.isNullOrEmpty()) return null
         val payload = spec.substring(1)
         return when (spec[0]) {
             'r' -> drawableOf(context, payload)
             's' -> maskOf(payload)?.let { BitmapDrawable(context.resources, it) }
+            'j' -> payload.toLongOrNull()?.let { PluginJvm.objectAt(engine, it) as? Drawable }
             else -> null
         }
     }
