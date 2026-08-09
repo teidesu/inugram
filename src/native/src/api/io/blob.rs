@@ -1,15 +1,3 @@
-//! `Blob`/`File`: content a plugin can slice and pass around without the bytes crossing into js.
-//!
-//! A memory backing is charged against [`ExternalMemory`], because quickjs schedules its
-//! collections off js heap growth and cannot see these bytes at all. A spill's descriptor is held
-//! open for the backing's whole life, so android evicting the cache dir cannot break reads; that fd
-//! is a process-wide resource, hence [`SPILL_FILE_LIMIT`] on top of the byte budget. An app-owned
-//! file seals `size`/`mtime` at mint time, because stock re-downloads into the same path.
-//!
-//! [`BUILD_LIMIT_BYTES`] and [`MATERIALIZE_LIMIT_BYTES`] exist because the execution deadline is
-//! polled on quickjs back-edges and sees nothing between entering a host call and returning from
-//! it. A *loop* of bounded calls is still cut down by it, being wall clock.
-
 use std::cell::{Cell, RefCell};
 use std::collections::HashMap;
 use std::fs;
@@ -31,72 +19,27 @@ use crate::api::error::{make_plugin_error, throw_plugin_error};
 use crate::sandbox::limits::{ExternalCharge, ExternalMemory, EXTERNAL_LIMIT_BYTES, HEAP_LIMIT_BYTES};
 use crate::utils::shape::{define_getter, define_method};
 
-/// where a built blob stops being kept in ram. 2 MiB is ~6% of the js heap ceiling, so
-/// materializing one back into js is never the allocation that kills a plugin, and 1/32 of the
-/// native budget, so a working set of a few dozen is not a leak. It also comfortably holds
-/// everything the api can synthesize in one shot (an encoded screen-sized png, a fetched json body,
-/// a sticker, an avatar), below which a file per fetched thumbnail would be pure waste.
 pub const SPILL_THRESHOLD_BYTES: u64 = 2 * 1024 * 1024;
 
-/// ceiling on one `bytes()`/`arrayBuffer()`, refused *before* anything is read. Half the js heap,
-/// because the copy has to coexist with whatever the plugin already holds. Without it a 200 MB
-/// `bytes()` does the whole read and then dies as `InternalError: out of memory` or bare `null`
-/// (see `deadline::describe_heap_exhaustion`), which is neither catchable-looking nor attributable;
-/// with it the failure is a `quota-exceeded` `PluginError` carrying the numbers.
 pub const MATERIALIZE_LIMIT_BYTES: u64 = (HEAP_LIMIT_BYTES / 2) as u64;
 
-/// ceiling on one `text()`, which is [`MATERIALIZE_LIMIT_BYTES`] halved because a js string is not
-/// a byte array. quickjs stores one 8-bit char per byte until a single char is past latin-1 and
-/// then widens the *whole* string to 16, while an ascii byte is one char and no utf-8 sequence is
-/// shorter than a byte - so N bytes of content can be 2N bytes of heap, and a blob at exactly the
-/// byte ceiling would reliably exhaust the heap the ceiling exists to protect.
 pub const TEXT_LIMIT_BYTES: u64 = MATERIALIZE_LIMIT_BYTES / 2;
 
-/// ceiling on the content one `new Blob(...)`/`new File(...)` may assemble, and the only bound
-/// there is on how long that call blocks the shared queue, since the execution deadline cannot see
-/// native work at all. 32 MiB of file-to-file copying is a few hundred ms even on the slowest
-/// storage this app runs on, well inside the 2 s an entry may block for anyway; it is also the js
-/// heap ceiling, so no assembly of js-side values can reach it without naming a blob, and twice
-/// the materialization ceiling, so "build it, then read a piece of it" keeps its headroom. Content
-/// bigger than this is something to stream through `inu.fs`, never to join in one call.
 pub const BUILD_LIMIT_BYTES: u64 = 32 * 1024 * 1024;
 
-/// how much spilled content one plugin may hold live at once. Every other budget here is per
-/// plugin (`kv`'s 1 MB, `fs`'s 50 MB, the native 64 MB) and this is the same shape: without it a
-/// plugin can fill the device with fd-pinned scratch the OS cannot reclaim. Big enough for the case
-/// the spill exists for - one large video download in flight - and nothing like a device.
 pub const SPILL_LIMIT_BYTES: u64 = 2 * 1024 * 1024 * 1024;
 
-/// how many spill files one plugin may hold open at once. Each one is an fd kept for the backing's
-/// life, and android leaves a process on the order of a thousand of those for everything it does,
-/// so a few plugins each holding a few dozen is what the process table can absorb. It has to be its
-/// own ceiling rather than a consequence of [`SPILL_LIMIT_BYTES`], because the two are not
-/// proportional: content spills at four bytes when the native budget is full, so the byte ceiling
-/// alone bounds nothing here.
 pub const SPILL_FILE_LIMIT: usize = 64;
 
-/// how much of a file-backed part is in ram at once while it is being concatenated, which is what
-/// keeps `new Blob([twoHundredMbDownload, header])` from being a 200 MB allocation
 const COPY_CHUNK_BYTES: usize = 256 * 1024;
 
-/// the accumulator's first allocation, and the floor under its growth: a blob built from a hundred
-/// one-byte parts should not reallocate a hundred times
 const MIN_MEMORY_CAPACITY: usize = 4096;
 
-/// how many exported ids may pile up before the table drops the ones whose content is gone. The
-/// entries are `Weak`, so this is only about the map itself, and sweeping on every insert would
-/// walk it once per `fs.write`.
 const EXPORT_SWEEP_AT: usize = 64;
 
-/// ENOSPC. `std::io::ErrorKind::StorageFull` is still unstable, and the distinction matters: a full
-/// disk is something a plugin can back off from, any other io failure is a bug in the host.
 const ENOSPC: i32 = 28;
 
-/// per-engine blob bookkeeping: where spills go, what they cost, and the ids of the handles that
-/// have been named to the host
 pub struct BlobState {
-    /// empty == this engine cannot spill; oversized content then stays in memory and a refused
-    /// charge is a real `quota-exceeded`
     spill_dir: PathBuf,
     external: Rc<ExternalMemory>,
     limits: BlobLimits,
@@ -104,12 +47,9 @@ pub struct BlobState {
     open_spills: Cell<usize>,
     next_file: Cell<u64>,
     next_export: Cell<i64>,
-    /// `Weak`, so a blob the plugin dropped cannot be reached through an id it once had
     exported: RefCell<HashMap<i64, Export>>,
 }
 
-/// what one engine's blobs may cost, injectable so a test does not have to move two gigabytes or
-/// open sixty-five files to reach a ceiling
 #[derive(Clone, Copy)]
 pub(crate) struct BlobLimits {
     pub build: u64,
@@ -128,8 +68,6 @@ impl BlobState {
         !self.spill_dir.as_os_str().is_empty()
     }
 
-    /// `ctx` so a refusal collects first: a blob caught in a reference cycle holds its fd until a
-    /// mark-sweep runs, and nothing about the js heap gives quickjs a reason to run one
     fn open_spill(self: &Rc<Self>, ctx: &Ctx<'_>) -> Result<SpillFile, BlobFault> {
         if !self.can_spill() {
             return Err(BlobFault::Io("this engine has no spill directory".to_string()));
@@ -183,9 +121,6 @@ impl BlobState {
     }
 }
 
-/// An open spill, and everything owed for it. Unlinks and gives its quota back on drop, which
-/// covers both ways one ends: a construction that failed halfway, and the backing it became being
-/// freed.
 struct SpillFile {
     state: Rc<BlobState>,
     file: fs::File,
@@ -194,9 +129,6 @@ struct SpillFile {
 }
 
 impl SpillFile {
-    /// raises the reservation to `total` bytes, or refuses and leaves it where it was. Collects
-    /// before refusing, for the same reason `ExternalMemory::try_charge` does: content held only by
-    /// a reference cycle is quota a plugin cannot get back by any means available to it.
     fn reserve(&self, ctx: &Ctx<'_>, total: u64) -> Result<(), BlobFault> {
         let extra = total.saturating_sub(self.charged.get());
         if extra == 0 {
@@ -235,11 +167,9 @@ impl Drop for SpillFile {
 enum BackingKind {
     Memory {
         bytes: Vec<u8>,
-        /// `None` only for content that costs nothing to hold: an empty blob
         _charge: Option<ExternalCharge>,
     },
     Spill(SpillFile),
-    /// the app owns this file: never unlinked, and answered against the size/mtime sealed here
     AppFile {
         path: PathBuf,
         mtime_ms: i64,
@@ -247,15 +177,12 @@ enum BackingKind {
     Freed,
 }
 
-/// the content itself, shared by a blob and every slice of it
 pub struct Backing {
     kind: RefCell<BackingKind>,
     len: u64,
 }
 
 impl Backing {
-    /// what was really allocated for in-memory content, which is what the native budget has to be
-    /// charged for. `None` for content that is not in memory at all.
     #[cfg(test)]
     fn memory_capacity(&self) -> Option<usize> {
         match &*self.kind.borrow() {
@@ -268,8 +195,6 @@ impl Backing {
         !matches!(*self.kind.borrow(), BackingKind::Freed)
     }
 
-    /// frees the bytes (releasing the native charge) or closes and unlinks the spill. Idempotent,
-    /// and the same path `Drop` takes, so a disposed backing and a collected one end identically.
     fn release(&self) {
         let kind = std::mem::replace(&mut *self.kind.borrow_mut(), BackingKind::Freed);
         drop(kind);
@@ -299,9 +224,6 @@ impl Backing {
         }
     }
 
-    /// appends `[start, end)` to `sink`. File-backed content goes chunk by chunk, so concatenating
-    /// a spilled blob never materializes it, and the whole range is checked against the sink's
-    /// ceiling first, so a part too big to join is refused before a byte of it is read.
     fn copy_into(&self, ctx: &Ctx<'_>, start: u64, end: u64, sink: &mut Accumulator) -> Result<(), BlobFault> {
         sink.check_room(end.saturating_sub(start))?;
         if let BackingKind::Memory { bytes, .. } = &*self.kind.borrow() {
@@ -371,7 +293,6 @@ fn read_exact_at(file: &fs::File, mut offset: u64, len: usize) -> std::io::Resul
     Ok(buf)
 }
 
-/// every way reading or building content fails, and the `PluginError` code each earns
 pub(crate) enum BlobFault {
     Gone(String),
     Quota { usage: u64, quota: u64, message: String },
@@ -400,15 +321,9 @@ impl BlobFault {
     }
 }
 
-/// Gathers the constructor's parts, in memory until they outgrow [`SPILL_THRESHOLD_BYTES`] and on
-/// disk from there on. The transient allocation is therefore bounded by the threshold plus one
-/// chunk however big the result is - and is charged against the native budget *as it grows* rather
-/// than at the end, so an engine with nowhere to spill refuses the growth it cannot afford instead
-/// of allocating it and finding out afterwards.
 struct Accumulator {
     state: Rc<BlobState>,
     memory: Vec<u8>,
-    /// covers `memory.capacity()`, not `memory.len()`: what a plugin holds is what was allocated
     charge: Option<ExternalCharge>,
     spill: Option<SpillFile>,
     len: u64,
@@ -420,7 +335,6 @@ impl Accumulator {
         Accumulator { state, memory: Vec::new(), charge: None, spill: None, len: 0, limit }
     }
 
-    /// refuses `add` more bytes without reading them, so a part too big to join costs nothing
     fn check_room(&self, add: u64) -> Result<(), BlobFault> {
         let after = self.len.saturating_add(add);
         if after <= self.limit {
@@ -460,9 +374,6 @@ impl Accumulator {
         Ok(())
     }
 
-    /// Raises the reservation to cover a buffer holding `after` bytes and grows it to match, or
-    /// answers `false` having allocated and charged nothing. `false` is only ever a routing
-    /// decision: an engine that cannot spill has nowhere for these bytes to go, so it fails here.
     fn reserve_memory(&mut self, ctx: &Ctx<'_>, after: u64) -> Result<bool, BlobFault> {
         if after <= self.memory.capacity() as u64 {
             return Ok(true);
@@ -488,8 +399,6 @@ impl Accumulator {
             return Ok(false);
         }
         self.memory.reserve_exact(target as usize - self.memory.len());
-        // an allocator may hand back a larger block than was asked for; those bytes exist whether
-        // or not the budget has room left to be told about them
         let _ = self.charge_up_to(ctx, self.memory.capacity() as u64);
         Ok(true)
     }
@@ -521,7 +430,6 @@ impl Accumulator {
         Ok(())
     }
 
-    /// hands the content to a backing, giving back everything the buffer reserved and did not use
     fn finish(self) -> Rc<Backing> {
         let Accumulator { mut memory, mut charge, spill, len, .. } = self;
         if let Some(spill) = spill {
@@ -540,19 +448,12 @@ struct FileMeta {
     last_modified: f64,
 }
 
-/// one `Blob` (or `File`) as js holds it: a range over a [`Backing`], plus the metadata that is
-/// answered from this object and never from the content
 pub struct BlobHandle {
-    /// `None` == this handle's own `dispose()` ran, which kills every member including `size`
     backing: RefCell<Option<Rc<Backing>>>,
     start: u64,
     end: u64,
     mime: String,
-    /// the id this handle was last exported under. a handle's window never changes, so re-exporting
-    /// one may reuse its id; without this a plugin handing the same blob to the host in a loop
-    /// grows the table forever, and the sweep only ever reclaims ids whose backing has died
     export_id: Cell<Option<i64>>,
-    /// only a root owns its backing; a slice disposing itself must never free what its parent holds
     owns_backing: bool,
     meta: Option<FileMeta>,
 }
@@ -579,7 +480,6 @@ impl BlobHandle {
         self.end - self.start
     }
 
-    /// the backing, or the refusal `common.d.ts` promises for a handle the plugin disposed itself
     fn live(&self, ctx: &Ctx<'_>) -> JsResult<Rc<Backing>> {
         match self.backing.borrow().clone() {
             Some(backing) => Ok(backing),
@@ -615,8 +515,6 @@ impl BlobHandle {
     }
 }
 
-/// a second handle over content something else owns: a slice, or a `structuredClone`. Never owns
-/// the backing, so disposing one can only ever end itself.
 fn make_view(backing: Rc<Backing>, start: u64, end: u64, mime: String, meta: Option<FileMeta>) -> BlobHandle {
     BlobHandle {
         backing: RefCell::new(Some(backing)),
@@ -629,10 +527,6 @@ fn make_view(backing: Rc<Backing>, start: u64, end: u64, mime: String, meta: Opt
     }
 }
 
-/// a mime type and a file name are the only unbounded strings a handle copies out of js, and they
-/// are charged against nothing: quickjs sees ~100 bytes of handle while rust holds the whole copy.
-/// both are metadata, so truncating is the honest bound - refusing would fail a construction over a
-/// field nobody reads for its tail.
 const LABEL_LIMIT_CHARS: usize = 1024;
 
 fn truncate_label(raw: &str) -> String {
@@ -642,8 +536,6 @@ fn truncate_label(raw: &str) -> String {
     }
 }
 
-/// the spec's normalization: anything outside printable ascii means the caller did not hand us a
-/// mime type at all, and what is left is lowercased
 fn normalize_mime(raw: &str) -> String {
     if raw.chars().any(|c| !(' '..='~').contains(&c)) {
         return String::new();
@@ -661,8 +553,6 @@ fn read_mime_option<'js>(options: &Opt<Value<'js>>) -> JsResult<String> {
     }
 }
 
-/// the spec's relative-range clamp: negatives count from the end, everything lands inside
-/// `[0, size]`, and a reversed range is empty
 fn clamp_index(value: Option<f64>, size: u64, default: u64) -> u64 {
     let Some(value) = value else { return default };
     if value.is_nan() {
@@ -712,8 +602,6 @@ fn append_part<'js>(ctx: &Ctx<'js>, sink: &mut Accumulator, part: Value<'js>) ->
     }
 }
 
-/// `Uint8Array` and every other view over an `ArrayBuffer`, appended through its own window without
-/// a copy of its own. `false` when `value` is not a view at all.
 fn append_buffer_view<'js>(ctx: &Ctx<'js>, sink: &mut Accumulator, value: &Value<'js>) -> JsResult<bool> {
     let Some(object) = value.as_object() else {
         return Ok(false);
@@ -780,9 +668,6 @@ fn now_millis() -> f64 {
     SystemTime::now().duration_since(UNIX_EPOCH).map(|d| d.as_millis() as f64).unwrap_or(0.0)
 }
 
-/// mints a blob over a file the *app* owns. `size`/`mtime_ms` are sealed here and every read is
-/// checked against them, so a path stock re-downloaded into reads as gone rather than answering
-/// bytes that no longer match the `size` this blob promised.
 pub fn mint_app_file<'js>(
     ctx: &Ctx<'js>,
     path: &Path,
@@ -811,21 +696,16 @@ pub fn mint_app_file<'js>(
     Ok(instance.into_value())
 }
 
-/// the spec's own rule, and the reason `common.d.ts` can say a name "can't name a file on disk"
 fn sanitize_name(name: &str) -> String {
     truncate_label(&name.replace('/', ":"))
 }
 
-/// what an id authorizes: one handle's range over one backing, never the backing itself
 struct Export {
     backing: Weak<Backing>,
     start: u64,
     end: u64,
 }
 
-/// `B<id>:<start>:<len>`, the shape a blob crosses to Kotlin in (`fs.write`, `sendMedia`,
-/// `uploadFile`). The id indexes this engine's table only, so one forged by a plugin can name
-/// nothing but that plugin's own content.
 pub fn export_for_host(state: &Rc<BlobState>, value: &Value<'_>) -> Option<String> {
     let class = Class::<BlobHandle>::from_value(value).ok()?;
     let handle = class.borrow();
@@ -849,9 +729,6 @@ pub fn export_for_host(state: &Rc<BlobState>, value: &Value<'_>) -> Option<Strin
     Some(format!("B{id}:{}:{}", handle.start, handle.size()))
 }
 
-/// The content an id names, which is the *handle* it was minted from and not everything behind it:
-/// a plugin handing over a four-byte header sliced off a download must not have handed over the
-/// download. Answers `None` for an id whose blob is gone, so the table never resurrects anything.
 pub fn resolve_export(state: &Rc<BlobState>, id: i64) -> Option<BlobExport> {
     let mut exported = state.exported.borrow_mut();
     let export = exported.get(&id)?;
@@ -862,8 +739,6 @@ pub fn resolve_export(state: &Rc<BlobState>, id: i64) -> Option<BlobExport> {
     Some(BlobExport { backing, start: export.start, end: export.end })
 }
 
-/// a range of content the host may read, and nothing else: it carries no way to reach past its own
-/// window, so a caller cannot widen what an id was minted for
 pub struct BlobExport {
     backing: Rc<Backing>,
     start: u64,
@@ -875,8 +750,6 @@ impl BlobExport {
         self.end - self.start
     }
 
-    /// `offset` is relative to this export's own start, and a read past its end is refused rather
-    /// than clamped: the host asks for what an id promised, so a mismatch is a bug on that side
     pub fn read(&self, offset: u64, len: u64) -> Result<Vec<u8>, BlobFault> {
         let end = offset.checked_add(len).filter(|end| *end <= self.len()).ok_or_else(|| {
             BlobFault::Io(format!("this blob is {} bytes; a read of {len} at {offset} is past its end", self.len(),))
@@ -885,10 +758,6 @@ impl BlobExport {
     }
 }
 
-/// `File.prototype`, kept where a plugin cannot swap it. Reading it off `globalThis.File` would
-/// let a plugin that reassigned the global decide what prototype the *app's* own media blobs get,
-/// so it is stashed on the blob prototype as a non-writable, non-configurable property instead -
-/// which roots nothing, unlike holding the object in rust.
 const FILE_PROTO_KEY: &str = "inu.blob.fileProto";
 
 fn file_prototype<'js>(ctx: &Ctx<'js>) -> JsResult<Option<Object<'js>>> {
@@ -899,10 +768,6 @@ fn file_prototype<'js>(ctx: &Ctx<'js>) -> JsResult<Option<Object<'js>>> {
     Ok(blob_proto.get::<_, Value<'js>>(key.as_atom())?.into_object())
 }
 
-/// clones a blob into an independent handle over the same backing, for `structuredClone`. Not a
-/// copy of the content: the web clones a blob by reference too, and the relation this creates is
-/// the parent/slice one the type already explains. `None` when `value` is not really a blob, which
-/// is how the prelude tells an impostor carrying `Blob.prototype` from the real thing.
 pub fn make_clone_fn<'js>(ctx: &Ctx<'js>) -> JsResult<Function<'js>> {
     Function::new(ctx.clone(), |ctx: Ctx<'js>, value: Value<'js>| -> JsResult<Value<'js>> {
         let Ok(class) = Class::<BlobHandle>::from_value(&value) else {
@@ -918,8 +783,6 @@ pub fn make_clone_fn<'js>(ctx: &Ctx<'js>) -> JsResult<Function<'js>> {
             make_view(backing, handle.start, handle.end, handle.mime.clone(), meta)
         };
         let instance = Class::instance(ctx.clone(), clone)?;
-        // the source's own prototype, so a `File` clones as a `File` without this module having to
-        // hold a reference to `File.prototype` anywhere a plugin could swap
         if let Some(proto) = class.as_inner().get_prototype() {
             instance.as_inner().set_prototype(Some(&proto))?;
         }
@@ -927,8 +790,6 @@ pub fn make_clone_fn<'js>(ctx: &Ctx<'js>) -> JsResult<Function<'js>> {
     })
 }
 
-/// The returned state is kept alive by the constructor closures for as long as the context is, and
-/// by any live spill after that, so a caller with nothing to ask it may drop it.
 pub fn install<'js>(ctx: &Ctx<'js>, spill_dir: &Path, external: Rc<ExternalMemory>) -> JsResult<Rc<BlobState>> {
     install_with_limits(ctx, spill_dir, external, BlobLimits::default())
 }
@@ -972,9 +833,6 @@ pub(crate) fn install_with_limits<'js>(
     let file_ctor = Constructor::new_prototype(
         ctx,
         file_proto,
-        // every parameter is declared optional and `name` is checked here, because rquickjs's
-        // arity check does not see a required parameter *after* an optional one and a missing
-        // argument panics out of the rust closure rather than raising
         move |ctx: Ctx<'js>, parts: Opt<Value<'js>>, name: Opt<Coerced<String>>, options: Opt<Value<'js>>| {
             let Some(name) = name.0 else {
                 return Err(Exception::throw_type(&ctx, "File: a name is required"));
@@ -995,7 +853,6 @@ pub(crate) fn install_with_limits<'js>(
     Ok(state)
 }
 
-/// webidl attribute flags, so the shapes read like the platform types they claim to be
 fn install_blob_members<'js>(ctx: &Ctx<'js>, proto: &Object<'js>) -> JsResult<()> {
     define_getter(proto, "size", |ctx: Ctx<'js>, this: This<Class<'js, BlobHandle>>| {
         let handle = this.0.borrow();
@@ -1016,8 +873,6 @@ fn install_blob_members<'js>(ctx: &Ctx<'js>, proto: &Object<'js>) -> JsResult<()
          end: Opt<Value<'js>>,
          content_type: Opt<Value<'js>>|
          -> JsResult<Value<'js>> {
-            // webidl, not arity: `slice(2, undefined)` is `slice(2)`, and reading an explicit
-            // `undefined` as present makes it `Coerced(NaN)`, i.e. an empty blob
             let coerce = |v: Option<Value<'js>>| -> JsResult<Option<f64>> {
                 v.map(|v| Ok(Coerced::<f64>::from_js(&ctx, v)?.0)).transpose()
             };
@@ -1032,7 +887,6 @@ fn install_blob_members<'js>(ctx: &Ctx<'js>, proto: &Object<'js>) -> JsResult<()
                 Some(v) => normalize_mime(&Coerced::<String>::from_js(&ctx, v)?.0),
                 None => String::new(),
             };
-            // a slice of a `File` is a plain `Blob`, per spec, so it carries no metadata
             let slice = make_view(backing, handle.start + from, handle.start + to, mime, None);
             Ok(Class::instance(ctx.clone(), slice)?.into_value())
         },
@@ -1086,10 +940,6 @@ impl ReadAs {
     }
 }
 
-/// The reads answer with an already-settled promise: with the materialization ceiling above, one
-/// read is bounded to tens of milliseconds on the queue every plugin shares, so there is nothing
-/// to hop a thread for. A failure *rejects* rather than throwing synchronously, as on the web, so
-/// `await`/`catch` sees it wherever the plugin put it.
 fn read_promise<'js>(ctx: &Ctx<'js>, class: &Class<'js, BlobHandle>, kind: ReadAs) -> JsResult<Value<'js>> {
     let (promise, resolve, reject) = rquickjs::Promise::new(ctx)?;
     let read = class.borrow().read_all(kind.limit());

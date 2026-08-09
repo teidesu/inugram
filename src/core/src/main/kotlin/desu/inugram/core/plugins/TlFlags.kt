@@ -1,16 +1,6 @@
 package desu.inugram.core.plugins
 
-/**
- * the flag bookkeeping plugins never see. TL gates optional fields on bits of a `flags` int, and
- * leaving that to the plugin makes two silent failures easy: a bit without its field throws inside
- * `serializeToStream`, which [org.telegram.tgnet.ConnectionsManager] swallows, so the request is
- * never sent and the promise never settles; a field without its bit is dropped on the wire with no
- * error at all.
- *
- * [RESOURCE] is generated from what each constructor's `serializeToStream` actually writes, not
- * from the published schema: where stock lags a layer, the bytes it writes are what a round-tripped
- * object has to match.
- */
+/** Use flags from stock serialization, not the schema. Stock can use an older TL layer. */
 object TlFlags {
     data class Gate(val word: Int, val bit: Int)
 
@@ -22,7 +12,6 @@ object TlFlags {
 
     private fun parse(): Table {
         val text = TlFlags::class.java.getResourceAsStream(RESOURCE)?.use { it.readBytes().toString(Charsets.UTF_8) }
-        // an absent resource would silently disable flag management, which fails as a wrong wire format rather than as an error
             ?: throw IllegalStateException("$RESOURCE is missing from the classpath; run `pnpm run generate-tl-typings`")
 
         var words = emptyList<String>()
@@ -61,7 +50,6 @@ object TlFlags {
     fun wordsOf(cls: Class<*>): Set<Int> =
         gatesOf(cls)?.values?.mapTo(HashSet()) { it.word } ?: emptySet()
 
-    /** OR-ing over every field that shares the bit: sharing one means it stands for "any of these is set" */
     fun isBitPresent(cls: Class<*>, gate: Gate, isPresent: (String) -> Boolean): Boolean {
         for ((name, other) in gatesOf(cls) ?: return false) {
             if (other == gate && isPresent(name)) return true
@@ -93,11 +81,6 @@ object TlFlags {
         null
     }
 
-    /**
-     * whether a value counts as present. absent and "zero-ish" are the same thing on the wire - an
-     * omitted int reads back as 0, an omitted vector as empty - so this is what lets presence be
-     * read off the value rather than tracked separately.
-     */
     fun isPresent(value: Any?): Boolean = when (value) {
         null -> false
         is Boolean -> value

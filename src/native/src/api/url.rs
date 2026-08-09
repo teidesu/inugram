@@ -1,21 +1,3 @@
-//! Urls: the whatwg `URL`/`URLSearchParams` globals, and the http(s) egress screen the two apis
-//! that *send* one share.
-//!
-//! Two different jobs over one concept, in one module deliberately. [`parse_http_url`] answers
-//! "may this string leave the device, and under whose name", which is a question about the string a
-//! plugin typed; the classes answer "what does this string mean", which is the whatwg parser's.
-//! Keeping them apart in different modules is how a codebase ends up with two url parsers that
-//! disagree, and a disagreement between the thing that *screens* a url and the thing that *builds*
-//! one is a bypass by construction.
-//!
-//! They stay separate *functions* for the same reason they share a module: the screen must keep
-//! reading the string the caller passed, never a normalized form of it. Normalization is what makes
-//! a url unambiguous, and the screen's whole job is refusing strings whose meaning depends on who
-//! is parsing - so screening `Url::parse(input).as_str()` would screen the one form that was never
-//! in question and let the ambiguous original through to the system's `ACTION_VIEW`. A plugin that
-//! wants the normalizing behaviour can call `new URL(...).href` itself and pass *that*, which is
-//! the same string the screen would then see.
-
 use std::cell::RefCell;
 
 use rquickjs::class::{JsClass, Readable, Trace, Tracer};
@@ -27,12 +9,6 @@ use crate::utils::shape::{define_accessor, define_getter, define_method};
 
 const PRELUDE: &[u8] = include_bytes!(concat!(env!("OUT_DIR"), "/url.qbc"));
 
-/// The host, lowercased, with a trailing dot and any ipv6 brackets stripped - which is the form a
-/// grant's domain match is against, `a.` and `a` being one name to dns and two strings to it.
-///
-/// Hand-rolled rather than `Url::parse`d on purpose - see the module doc. What it refuses is a
-/// string that reads as one host and parses as another, which a parser that *resolves* the
-/// ambiguity cannot report.
 pub fn parse_http_url(api: &str, url: &str) -> Result<String, String> {
     if url.chars().any(|c| c.is_whitespace() || c.is_control()) {
         return Err(format!("{api}: a url may not contain whitespace or control characters"));
@@ -65,8 +41,6 @@ pub fn parse_http_url(api: &str, url: &str) -> Result<String, String> {
     Ok(host)
 }
 
-/// one `URL` as js holds it. `Readable` + a `RefCell` rather than `Mutable`, matching every other
-/// class here: a setter re-enters js to coerce its argument, so the borrow must not span that.
 pub struct UrlBox {
     inner: RefCell<Url>,
 }
@@ -88,8 +62,6 @@ impl<'js> JsClass<'js> for UrlBox {
     }
 }
 
-/// `new URL(input, base)`. `base` absent and `input` relative is the failure the spec makes a
-/// `TypeError`, which is what the crate's `RelativeUrlWithoutBase` becomes here.
 fn parse(input: &str, base: Option<&str>) -> Result<Url, String> {
     match base {
         Some(base) => {
@@ -101,9 +73,6 @@ fn parse(input: &str, base: Option<&str>) -> Result<Url, String> {
 }
 
 fn read_args(input: Coerced<String>, base: Opt<Value<'_>>) -> (String, Option<String>) {
-    // `undefined` passed explicitly is `Some` to rquickjs but absent to webidl, and `new
-    // URL(x, undefined)` must behave as `new URL(x)` rather than resolving against the literal
-    // text "undefined" - the hazard `crate::utils::arguments` exists for
     let base = base.0.filter(|v| !v.is_undefined()).map(|v| match v.get::<Coerced<String>>() {
         Ok(s) => s.0,
         Err(_) => String::new(),
@@ -111,8 +80,6 @@ fn read_args(input: Coerced<String>, base: Opt<Value<'_>>) -> (String, Option<St
     (input.0, base)
 }
 
-/// the whatwg `search`/`hash` rule: one leading delimiter is dropped, and the empty string clears
-/// the component rather than leaving `?`/`#` behind in `href`
 fn optional_component(value: &str, delimiter: char) -> Option<String> {
     let trimmed = value.strip_prefix(delimiter).unwrap_or(value);
     if trimmed.is_empty() {
@@ -162,8 +129,6 @@ pub fn install_url<'js>(ctx: &Ctx<'js>) -> JsResult<()> {
 
     ctx.globals().set("URL", ctor)?;
 
-    // the query codec `URLSearchParams` is written against, so the prelude never re-implements
-    // application/x-www-form-urlencoded and cannot disagree with what `href` says
     let natives = Object::new(ctx.clone())?;
     natives.set("parseQuery", Function::new(ctx.clone(), parse_query)?)?;
     natives.set("serializeQuery", Function::new(ctx.clone(), serialize_query)?)?;
@@ -210,9 +175,6 @@ fn serialize_query(pairs: Array<'_>) -> JsResult<String> {
     Ok(out.finish())
 }
 
-/// Every accessor reads through the `RefCell`, so a plugin that kept a `URL` sees each component as
-/// of now rather than as of construction - which is what makes `searchParams` writing back through
-/// `setQuery` visible on `href` with nothing to invalidate.
 fn install_members<'js>(ctx: &Ctx<'js>, proto: &Object<'js>) -> JsResult<()> {
     type Me<'js> = This<rquickjs::Class<'js, UrlBox>>;
 
@@ -221,7 +183,6 @@ fn install_members<'js>(ctx: &Ctx<'js>, proto: &Object<'js>) -> JsResult<()> {
         "href",
         |this: Me<'js>| this.0.borrow().inner.borrow().as_str().to_string(),
         |ctx: Ctx<'js>, this: Me<'js>, value: Coerced<String>| -> JsResult<()> {
-            // the one setter the spec *does* throw from: it is a re-parse of the whole url
             match Url::parse(&value.0) {
                 Ok(parsed) => {
                     *this.0.borrow().inner.borrow_mut() = parsed;
@@ -280,8 +241,6 @@ fn install_members<'js>(ctx: &Ctx<'js>, proto: &Object<'js>) -> JsResult<()> {
             let mut url = class.inner.borrow_mut();
             let (host, port) = split_host_port(&value.0);
             if url.set_host(Some(host)).is_ok() {
-                // only after the host took: a port applied to the old host is a url the plugin
-                // never asked for, and worse than the setter having done nothing
                 let _ = url.set_port(port);
             }
         },
@@ -292,7 +251,6 @@ fn install_members<'js>(ctx: &Ctx<'js>, proto: &Object<'js>) -> JsResult<()> {
         "hostname",
         |this: Me<'js>| this.0.borrow().inner.borrow().host_str().unwrap_or_default().to_string(),
         |this: Me<'js>, value: Coerced<String>| {
-            // the spec's hostname setter stops at the port delimiter rather than reading one
             let (host, _) = split_host_port(&value.0);
             let _ = this.0.borrow().inner.borrow_mut().set_host(Some(host));
         },
@@ -352,8 +310,6 @@ fn install_members<'js>(ctx: &Ctx<'js>, proto: &Object<'js>) -> JsResult<()> {
     Ok(())
 }
 
-/// `host:port` as the spec's host setter reads it: an ipv6 literal keeps its brackets and its
-/// colons, everything else splits at the first one.
 fn split_host_port(value: &str) -> (&str, Option<u16>) {
     let rest = match value.strip_prefix('[') {
         Some(inside) => match inside.split_once(']') {

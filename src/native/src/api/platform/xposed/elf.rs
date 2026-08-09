@@ -1,14 +1,3 @@
-//! Symbol lookup in a loaded ELF image, for the `art_symbol_prefix_resolver` lsplant's `InitInfo`
-//! demands. ShadowHook answers exact lookups (`shadowhook_dlsym`, which reads past linker namespace
-//! restrictions) but has no prefix search, so that half is ours.
-//!
-//! Three places a symbol can be, and libart.so needs all three: `.dynsym`, which the linker keeps
-//! mapped; `.symtab`, which is in the file but not in memory; and, on a platform build, an entire
-//! second ELF holding the real `.symtab`, xz-compressed inside the `.gnu_debugdata` section.
-//!
-//! Everything here reads the file from disk rather than the mapping, so a section the loader did
-//! not map is still readable, and every address is `st_value` plus the load bias.
-
 use std::collections::HashMap;
 use std::ffi::{c_char, c_void};
 #[cfg(target_os = "android")]
@@ -92,18 +81,12 @@ fn section_name(strings: &[u8], at: u32) -> Option<&str> {
     std::str::from_utf8(&tail[..end]).ok()
 }
 
-/// One `.dynsym`/`.symtab` and the string table it names its symbols through.
 struct Table {
-    /// which of `Symbols`' buffers both ranges index into
     debug: bool,
     symbols: Range<usize>,
     strings: Range<usize>,
 }
 
-/// Every symbol table of one ELF image, with the two buffers they live in.
-///
-/// A `.gnu_debugdata` ELF is a *second* image whose section offsets are its own, hence the flag on
-/// each table rather than one buffer here.
 pub struct Symbols {
     image: Vec<u8>,
     debug: Vec<u8>,
@@ -148,10 +131,6 @@ impl Symbols {
         }
     }
 
-    /// The `st_value` of the first defined symbol whose name satisfies `matches`.
-    ///
-    /// Undefined symbols (`st_shndx == SHN_UNDEF`) are skipped: they carry no address, and libart's
-    /// `.dynsym` holds a good many of them.
     fn find(&self, matches: impl Fn(&str) -> bool) -> Option<u64> {
         for table in &self.tables {
             let buffer = self.buffer(table);
@@ -212,9 +191,6 @@ fn decompress_xz(compressed: &[u8]) -> Option<Vec<u8>> {
     Some(out)
 }
 
-// The leading members of glibc/bionic's `struct dl_phdr_info`. Only the first two are read, and
-// both have been at these offsets since the interface was introduced; the tail is deliberately
-// unnamed so a platform that grew the struct still passes a pointer we read correctly.
 #[repr(C)]
 #[cfg_attr(not(target_os = "android"), allow(dead_code))]
 struct DlPhdrInfo {
@@ -246,7 +222,6 @@ extern "C" fn visit(info: *mut DlPhdrInfo, _size: usize, data: *mut c_void) -> c
     let Ok(name) = (unsafe { CStr::from_ptr(info.name) }).to_str() else {
         return 0;
     };
-    // dlpi_name is the full path the loader opened, and libart.so is under /apex on modern builds
     if !name.ends_with(search.wanted) {
         return 0;
     }
@@ -254,10 +229,6 @@ extern "C" fn visit(info: *mut DlPhdrInfo, _size: usize, data: *mut c_void) -> c
     1
 }
 
-/// Where a loaded library was mapped, and the path it was loaded from.
-///
-/// `dlpi_addr` is the load bias itself rather than the mapping base, so nothing here has to find
-/// the first `PT_LOAD` or read `/proc/self/maps`, which recent platforms restrict.
 #[cfg(target_os = "android")]
 fn find_loaded(name: &'static str) -> Option<(usize, String)> {
     let mut search = Search { wanted: name, found: None };
@@ -265,14 +236,11 @@ fn find_loaded(name: &'static str) -> Option<(usize, String)> {
     search.found
 }
 
-/// The host builds this crate to run the tests, and `dl_iterate_phdr` is not a symbol it has. What
-/// the tests exercise is the parsing above, which is the same code on either platform.
 #[cfg(not(target_os = "android"))]
 fn find_loaded(_name: &'static str) -> Option<(usize, String)> {
     None
 }
 
-/// A library's symbol tables plus the bias to turn an `st_value` into an address.
 pub struct LoadedImage {
     bias: usize,
     symbols: Symbols,
@@ -301,10 +269,6 @@ impl LoadedImage {
     }
 }
 
-/// Caches what a resolver already answered.
-///
-/// lsplant asks for the same symbol more than once, and every miss is a full scan of a table with
-/// tens of thousands of entries.
 pub struct Resolver {
     image: Option<LoadedImage>,
     seen: HashMap<String, usize>,
@@ -329,7 +293,6 @@ impl Resolver {
     }
 
     pub fn prefix(&mut self, prefix: &str) -> *mut c_void {
-        // the two spaces cannot collide: a symbol name never contains a space
         self.cached(format!("{prefix} "), |image| image.prefix(prefix))
     }
 }

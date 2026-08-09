@@ -1,13 +1,3 @@
-//! `inu.utils`. The four codecs are native; the formatters and `utils.peers` are prelude js in
-//! `utils.js`, handed the same `utils` object to finish and freeze.
-//!
-//! **The formatters do not reach the app's own formatter.** There is no bridge to
-//! `LocaleController`, so this is the engine's own arithmetic with English month/weekday names and
-//! a 24-hour clock; `common.d.ts` says so, and the output is for display, never for parsing.
-//!
-//! [`install_utils`] returns an object because `message.js` shares its TL name normalization and
-//! peer arithmetic.
-
 use base64::Engine;
 use rquickjs::{Ctx, Exception, Function, Object, Result as JsResult, TypedArray, Value};
 
@@ -48,8 +38,6 @@ pub fn install_utils<'js>(ctx: &Ctx<'js>, inu: &Object<'js>) -> JsResult<Object<
     })?;
     utils.set("fromHex", f)?;
 
-    // captured at install so a plugin reassigning `inu.PluginError` cannot decide what the prelude
-    // throws, the same reason `globals.js` takes its natives as an argument
     let plugin_error: Value = inu.get("PluginError")?;
 
     let factory = crate::utils::prelude::load(ctx, PRELUDE)?;
@@ -69,8 +57,6 @@ fn read_bytes<'js>(ctx: &Ctx<'js>, value: &Value<'js>, what: &str) -> JsResult<V
     Ok(bytes.to_vec())
 }
 
-/// padded is what [`install_utils`] emits and what a `$inuBytes` wrapper carries, but unpadded is
-/// what a great deal of the web hands out, so both decode rather than one of them being a puzzle
 fn decode_base64(text: &str) -> Option<Vec<u8>> {
     let standard = base64::engine::general_purpose::STANDARD;
     if let Ok(bytes) = standard.decode(text) {

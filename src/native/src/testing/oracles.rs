@@ -1,11 +1,3 @@
-//! Holds the crate to the rule that every bundled oracle has a run site.
-//!
-//! The per-surface run sites live with the module they exercise; what cannot live there is the
-//! question "is there one at all", which is a property of the *directory* and of the whole crate.
-//! Nine of these were unrun at one point and four still were after a pass that fixed five, with
-//! nothing asserting the number either time - an oracle nobody runs is one nobody notices going
-//! green on a broken engine, and adding a plugin file is how the count silently goes back up.
-
 use std::collections::BTreeSet;
 use std::path::{Path, PathBuf};
 

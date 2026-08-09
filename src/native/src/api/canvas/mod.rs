@@ -1,21 +1,3 @@
-//! `inu.canvas`: `OffscreenCanvas`, `CanvasRenderingContext2D` and the handle types around them,
-//! per `src/plugins/canvas.d.ts`.
-//!
-//! **The engine records, the host rasterizes.** A context appends to a command buffer, flushed only
-//! where pixels are needed - `convertToBlob`, `getAverageColor`, and any op naming another canvas as
-//! a source, which flushes that one first so the snapshot the spec promises is the one the plugin
-//! can see. A command is self-contained rather than mutating a paint the host holds between
-//! commands, which is what makes a `CanvasGradient` render with the stops it has *when it is drawn
-//! with* (the spec's rule) without the host owning a state machine.
-//!
-//! **Everything is emitted under the current transform, in user space.** [`crate::api::canvas::geometry`] keeps the
-//! path in device space because that is what a path is, and a draw hands over the transform plus the
-//! path pulled back through its inverse: a stroke's pen, a gradient's coordinates and a pattern's
-//! tiling are all defined in the user space of the draw. The two things the spec defines in *device*
-//! space - the shadow's offset and its blur - are pushed the other way through the same inverse at
-//! emit time. A transform with no inverse flattens the canvas onto a line, so those draws are
-//! dropped rather than approximated.
-
 pub(crate) mod css;
 pub(crate) mod geometry;
 
@@ -43,29 +25,14 @@ use crate::sandbox::limits::{ExternalCharge, ExternalMemory};
 use crate::sandbox::registry::RequestIds;
 use crate::utils::shape::{define_getter, define_method};
 
-/// the largest canvas one plugin may ask for, per side. A canvas is one contiguous allocation of
-/// `width * height * 4`, so the ceiling that matters is the native budget - this one exists on top
-/// of it because a single side past it is a shape no rasterizer here is built for (the platform's
-/// own hardware canvases stop around the same number), and because `create(1, 1e9)` should be an
-/// `invalid-argument` rather than a `quota-exceeded` about a number nobody meant to ask for.
 pub const MAX_DIMENSION: i32 = 8192;
 
-/// how many colour stops one gradient may carry. Every stop is encoded into every draw the gradient
-/// paints, so an unbounded list is a per-draw cost a plugin can grow without limit; 256 is more
-/// than any real gradient and small enough that the encoding stays a rounding error.
 pub const MAX_GRADIENT_STOPS: usize = 256;
 
-/// how much content `decode`/`load`/`loadFont` may be handed in one call. Same bound
-/// [`crate::api::io::blob`] puts on assembling a blob, for the same reason: the copy into a staged file is
-/// native work no interpreter deadline can interrupt.
 pub const MAX_SOURCE_BYTES: u64 = BUILD_LIMIT_BYTES;
 
-/// how large a command buffer may grow before it is replayed without being asked. Without it a
-/// plugin that draws a million shapes and never reads the result holds all of them in rust; with
-/// it the buffer is bounded and the flush is work the drawing was going to cost anyway.
 const FLUSH_AT_BYTES: usize = 1024 * 1024;
 
-/// how much of a staged source is held in memory at once
 const STAGE_CHUNK_BYTES: u64 = 256 * 1024;
 
 pub const OP_CREATE: i32 = 0;
@@ -79,16 +46,9 @@ pub const OP_RELEASE_IMAGE: i32 = 7;
 pub const OP_LOAD_FONT: i32 = 8;
 pub const OP_CAPABILITIES: i32 = 9;
 
-/// separates the fields of an op's argument string. Both are control characters, so neither can
-/// appear in a family name, a mime type or a path the filesystem gave us.
 const FIELD: char = '\u{1e}';
 const ITEM: char = '\u{1f}';
 
-/// The replay wire's string table. Length-prefixed rather than separator-joined: an entry is
-/// whatever a plugin passed to `fillText` or named as a font family, so there is no character it
-/// cannot contain and no separator that would not eventually shift every index recorded after it -
-/// silently, since the table only grows. Lengths are UTF-16 units, which is what the host counts a
-/// string in. Read back by `PluginCanvas.decodeTable`.
 fn encode_table(strings: &[String]) -> String {
     let mut out = String::new();
     for value in strings {
@@ -99,13 +59,10 @@ fn encode_table(strings: &[String]) -> String {
     out
 }
 
-/// stand-in for the Kotlin `QuickJs.CanvasListener`. Answers `""` for an op with nothing to say,
-/// `J<json>` for a value, or a `P`/`R` error wire.
 pub trait CanvasHost {
     fn canvas(&self, op: i32, id: i64, arg: &str, bytes: Option<&[u8]>) -> String;
 }
 
-/// in the order `GlobalCompositeOperation` declares them, which is the order the wire uses
 const COMPOSITE_MODES: [&str; 26] = [
     "source-over",
     "source-in",
@@ -135,8 +92,6 @@ const COMPOSITE_MODES: [&str; 26] = [
     "luminosity",
 ];
 
-/// the first of the separable blend modes, which need android 10 and are refused rather than
-/// approximated below it
 const FIRST_BLEND_MODE: usize = 11;
 
 const LINE_CAPS: [&str; 3] = ["butt", "round", "square"];
@@ -168,16 +123,11 @@ const STYLE_PATTERN: u8 = 4;
 const SOURCE_IMAGE: u8 = 0;
 const SOURCE_CANVAS: u8 = 1;
 
-/// little-endian, because that is what every device this runs on is and what `ByteBuffer` is told
-/// to expect on the other side. Geometry is `f32`: the largest canvas is 8192 px, so a float's 24
-/// bits of mantissa put the quantization well below a thousandth of a pixel.
 #[derive(Default)]
 struct Encoder {
     bytes: Vec<u8>,
     strings: Vec<String>,
     interned: HashMap<String, u32>,
-    /// the image sources commands in this buffer name, held for as long as they do. See
-    /// [`ImageData::release`] for why the handle's own lifetime is not enough.
     sources: Vec<ImageSource>,
 }
 
@@ -213,8 +163,6 @@ impl Encoder {
         self.bytes.extend_from_slice(&(v as f32).to_le_bytes());
     }
 
-    /// appends a paint built in a scratch encoder. Not a plain `bytes` copy: whatever the paint
-    /// named (a pattern's image) has to be retained by the buffer the bytes end up in.
     fn paint(&mut self, scratch: &mut Encoder) {
         self.bytes.extend_from_slice(&scratch.bytes);
         self.sources.append(&mut scratch.sources);
@@ -226,7 +174,6 @@ impl Encoder {
         }
     }
 
-    /// interned, so a font or a run of identical text costs one entry however many commands name it
     fn string(&mut self, value: &str) -> u32 {
         if let Some(index) = self.interned.get(value) {
             return *index;
@@ -322,8 +269,6 @@ enum Style {
     Pattern(Rc<PatternData>),
 }
 
-/// one canvas: an id the host keys its bitmap by, the pending commands for it, and what its bitmap
-/// costs against the native budget
 pub struct Surface {
     id: i64,
     width: Cell<i32>,
@@ -343,11 +288,7 @@ impl Drop for Surface {
 }
 
 impl Surface {
-    /// hands whatever has been recorded to the host. Every read of the pixels goes through here,
-    /// and so does every op that names this canvas as a source for another one.
     fn flush(&self, ctx: &Ctx<'_>) -> JsResult<()> {
-        // `sources` is held across the host call and dropped after it: it is what keeps a bitmap
-        // the plugin already disposed alive long enough for the id in the buffer to resolve
         let (bytes, strings, _sources) = {
             let mut commands = self.commands.borrow_mut();
             if commands.is_empty() {
@@ -377,15 +318,11 @@ impl Surface {
 
 pub struct CanvasHandle(Rc<Surface>);
 
-/// a decoded bitmap the host holds
 pub struct ImageData {
     id: i64,
     width: i32,
     height: i32,
-    /// the *handle*: `dispose()` ends it, and drawing with it after is `handle-expired`
     alive: Cell<bool>,
-    /// whether the host holds a bitmap under [`ImageData::id`]. False for the placeholder a pending
-    /// decode carries, which is an id reserved before there is anything to free.
     owns_bitmap: Cell<bool>,
     charge: RefCell<Option<ExternalCharge>>,
     state: Rc<CanvasState>,
@@ -406,13 +343,6 @@ impl ImageData {
         }
     }
 
-    /// `dispose()`, which `canvas.d.ts` promises gives the memory back there and then.
-    ///
-    /// A recorded `drawImage` names an id the host only resolves at replay, so freeing the bitmap
-    /// with commands still buffered would leave an id that resolves to nothing - and one of those
-    /// fails the whole flush, silently taking every command recorded after it. Rather than defer
-    /// the free (which would break the promise above), the buffers holding it are flushed first,
-    /// which is the same work the draw was always going to cost.
     fn release(&self, ctx: &Ctx<'_>) -> JsResult<()> {
         self.state.flush_surfaces(ctx)?;
         self.free();
@@ -521,14 +451,11 @@ pub struct CanvasState {
     external: Rc<ExternalMemory>,
     log: crate::Log,
     stage_dir: PathBuf,
-    /// whether the host can honour the separable blend modes at all, read once at install
     blend_modes: Cell<bool>,
     next_id: RequestIds,
     next_request: RequestIds,
     next_staged: RequestIds,
     pending: RefCell<HashMap<i64, Pending>>,
-    /// every live surface, weakly. Only [`ImageData::release`] reads it, and only to make sure no
-    /// buffer still names a bitmap it is about to give back.
     surfaces: RefCell<Vec<Weak<Surface>>>,
 }
 
@@ -548,8 +475,6 @@ impl CanvasState {
     }
 }
 
-/// the host answered an op that has nothing to say; anything but an empty string is a failure it
-/// described, and is raised as the plugin's own
 fn throw_host_error(ctx: &Ctx<'_>, answer: &str) -> JsResult<()> {
     if answer.is_empty() {
         return Ok(());
@@ -569,14 +494,10 @@ fn expired<T>(ctx: &Ctx<'_>, message: &str) -> JsResult<T> {
     throw_plugin_error(ctx, "handle-expired", message, None, None, None)
 }
 
-/// the spec's own coercion for a geometry argument: everything is a double, and a non-finite one
-/// makes the whole call a no-op rather than an error
 fn num(value: &Opt<Coerced<f64>>) -> f64 {
     value.0.as_ref().map(|v| v.0).unwrap_or(f64::NAN)
 }
 
-/// the same coercion off a `Rest`, which is how the members with more arguments than rquickjs can
-/// name individually take theirs
 fn nth(args: &[Value<'_>], index: usize) -> f64 {
     let Some(value) = args.get(index) else {
         return f64::NAN;
@@ -614,8 +535,6 @@ impl Context2d {
     }
 }
 
-/// the paint block every draw carries. Fails only where a style names something that has been
-/// disposed, which the contract says is `handle-expired` at the moment it is drawn with.
 fn encode_paint(
     ctx: &Ctx<'_>,
     out: &mut Encoder,
@@ -639,8 +558,6 @@ fn encode_paint(
     }
     out.f(state.alpha);
     out.u8(state.composite);
-    // the spec puts the shadow in device space, and the host draws under the transform, so the
-    // offset and the blur are pushed back through the inverse to survive it
     let offset = inverse.apply_vector(state.shadow_offset.0, state.shadow_offset.1);
     let scale = inverse.determinant().abs().sqrt();
     out.f(state.shadow_blur * if scale.is_finite() && scale > 0.0 { scale } else { 1.0 });
@@ -706,8 +623,6 @@ enum PaintKind {
     Stroke,
 }
 
-/// fill/stroke/clip/clear of an arbitrary path, which is every geometry op there is once the rects
-/// and the text have built theirs
 fn draw_path(
     ctx: &Ctx<'_>,
     this: &Context2d,
@@ -750,7 +665,6 @@ fn draw_path(
 fn rect_path(m: &Matrix, x: f64, y: f64, w: f64, h: f64) -> Path {
     let mut path = Path::default();
     path.rect(m, x, y, w, h);
-    // `rect` leaves a fresh subpath behind it, which would draw as a stray point under a round cap
     path.verbs.pop();
     path
 }
@@ -780,8 +694,6 @@ fn style_from_value<'js>(ctx: &Ctx<'js>, value: &Value<'js>) -> JsResult<Option<
         return Ok(None);
     };
     let text = text.to_string()?;
-    // the spec's rule for an unparseable colour: the assignment is ignored, so a typo leaves the
-    // previous style in place rather than painting something arbitrary
     let _ = ctx;
     Ok(parse_color(&text).map(Style::Color))
 }
@@ -797,8 +709,6 @@ fn style_to_value<'js>(ctx: &Ctx<'js>, style: &Style) -> JsResult<Value<'js>> {
     }
 }
 
-/// the serialization the spec asks for when `fillStyle` is *read* back: `#rrggbb` when the colour
-/// is opaque, and `rgba(r, g, b, a)` otherwise
 fn format_color(color: i32) -> String {
     let value = color as u32;
     let (a, r, g, b) = (value >> 24, (value >> 16) & 0xff, (value >> 8) & 0xff, value & 0xff);
@@ -809,8 +719,6 @@ fn format_color(color: i32) -> String {
     format!("rgba({r}, {g}, {b}, {alpha})")
 }
 
-/// the font as the host reads it back: size, weight, italic, small caps, then the family list.
-/// Both separators are control characters, which a css family name cannot contain.
 fn font_wire(font: &Font) -> String {
     format!(
         "{}{FIELD}{}{FIELD}{}{FIELD}{}{FIELD}{}",
@@ -822,9 +730,6 @@ fn font_wire(font: &Font) -> String {
     )
 }
 
-/// copies whatever a `decode`/`loadFont` was handed into a file the host can open, because the
-/// alternative is a byte array of the same size on the app-wide java heap - the lever the per-plugin
-/// budgets exist to take away
 fn stage_source<'js>(ctx: &Ctx<'js>, state: &Rc<CanvasState>, value: &Value<'js>) -> JsResult<(PathBuf, bool)> {
     if let Ok(typed) = TypedArray::<u8>::from_value(value.clone()) {
         let Some(bytes) = typed.as_bytes() else {
@@ -949,19 +854,14 @@ fn check_dimensions(ctx: &Ctx<'_>, width: i32, height: i32) -> JsResult<()> {
     Ok(())
 }
 
-/// the spec's rule for assigning `width`/`height`: the canvas is reallocated and everything on it,
-/// including the context's own state, goes back to its initial value
 fn resize_surface(ctx: &Ctx<'_>, surface: &Rc<Surface>, width: i32, height: i32) -> JsResult<()> {
     check_dimensions(ctx, width, height)?;
     if width == surface.width.get() && height == surface.height.get() {
-        // still a reset: assigning the same size clears the canvas on the web too
         surface.commands.borrow_mut().clear();
         let answer = surface.state.host.canvas(OP_CREATE, surface.id, &format!("{width},{height}"), None);
         return throw_host_error(ctx, &answer);
     }
     let bytes = width as usize * height as usize * 4;
-    // charged before the old one is given back, so a resize that cannot fit is refused with the
-    // canvas it already had intact
     let charge = surface.state.external.charge(ctx, bytes)?;
     surface.commands.borrow_mut().clear();
     let answer = surface.state.host.canvas(OP_CREATE, surface.id, &format!("{width},{height}"), None);
@@ -980,10 +880,6 @@ where
     target.prop(name, Accessor::new(get, set).enumerable().configurable())
 }
 
-/// where a canvas caches its own 2d context, so `getContext('2d')` answers with the same object
-/// every time. A *js* property rather than anything rust holds: the context refers back to its
-/// canvas, and a cycle between two js objects is one quickjs can collect while a `Persistent` on
-/// either side is a root that would leak both.
 const CONTEXT_KEY: &str = "inu.canvas.context";
 
 pub fn install_canvas<'js>(
@@ -1021,8 +917,6 @@ pub fn install_canvas<'js>(
     Ok(state)
 }
 
-/// `inu.fs` installs after this one and the scoped root is its property, so `{ path }` is wired up
-/// afterwards rather than duplicated here
 pub fn attach_fs(state: &Rc<CanvasState>, fs: Rc<crate::api::io::fs::FsState>) {
     *state.fs.borrow_mut() = Some(fs);
 }
@@ -1068,7 +962,6 @@ fn install_namespace<'js>(ctx: &Ctx<'js>, state: &Rc<CanvasState>, inu: &Object<
     Ok(())
 }
 
-/// `decode`/`load`/`loadFont`, which differ only in what the host is asked to do with the file
 fn start_async<'js>(
     ctx: &Ctx<'js>,
     state: &Rc<CanvasState>,
@@ -1093,8 +986,6 @@ fn start_async<'js>(
             width: 0,
             height: 0,
             alive: Cell::new(false),
-            // the host has nothing under this id yet; the value built once it answers is the one
-            // that owns the bitmap
             owns_bitmap: Cell::new(false),
             charge: RefCell::new(None),
             state: state.clone(),
@@ -1169,8 +1060,6 @@ fn install_canvas_members<'js>(ctx: &Ctx<'js>, state: &Rc<CanvasState>) -> JsRes
                     path: RefCell::new(Path::default()),
                 },
             )?;
-            // the back-reference the spec's `ctx.canvas` promises, and the half of the cycle that
-            // makes both objects collectable together
             context.as_inner().prop("canvas", Property::from(canvas.clone()).enumerable())?;
             canvas.prop(key.as_atom(), Property::from(context.as_value().clone()))?;
             Ok(context.into_value())
@@ -1263,8 +1152,6 @@ fn build_answer<'js>(ctx: &Ctx<'js>, state: &Rc<CanvasState>, kind: &PendingKind
             let width: i32 = object.get("width")?;
             let height: i32 = object.get("height")?;
             let bytes = width.max(0) as usize * height.max(0) as usize * 4;
-            // charged only now: until the host answered there was nothing allocated to charge for,
-            // and a decode that failed must not leave a reservation behind
             let charge = match state.external.charge(ctx, bytes) {
                 Ok(charge) => charge,
                 Err(e) => {
@@ -1291,8 +1178,6 @@ fn parse_answer<'js>(ctx: &Ctx<'js>, wire: &str) -> JsResult<Object<'js>> {
     ctx.json_parse(json)?.into_object().ok_or_else(|| Exception::throw_message(ctx, "canvas: malformed host answer"))
 }
 
-/// releases every `Persistent` this state owns and deletes anything still staged - same contract as
-/// [`crate::api::io::fetch::dispose`]
 pub fn dispose(context: &rquickjs::Context, state: &Rc<CanvasState>) {
     context.with(|ctx| {
         for (_, pending) in state.pending.borrow_mut().drain() {
@@ -1308,7 +1193,6 @@ pub fn dispose(context: &rquickjs::Context, state: &Rc<CanvasState>) {
 #[path = "tests.rs"]
 mod tests;
 
-/// settles one `convertToBlob`/`decode`/`load`/`loadFont`
 pub fn canvas_result(
     rt: &Runtime,
     context: &rquickjs::Context,

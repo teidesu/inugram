@@ -1,13 +1,3 @@
-// Evaluated once per engine by `rpc.rs`, which hands in the peer helpers `utils.js` returned plus
-// the two constructors a plugin must not be able to swap out. The factory returned takes the
-// plugin's verdict middleware and hands back an ordinary `interceptRpc` middleware over the four
-// send methods - so `interceptSendMessage` is a *narrowing* of that chain rather than a second one,
-// and the budget, the plugin-list order, the collapse-on-expiry, the cancel handling and the
-// "a plugin's own send never re-enters" lease are the ones already tested there.
-//
-// Two rules fall out of that and are stated in `common.d.ts` rather than enforced twice: a secret
-// chat never appears (it is `messages.sendEncrypted*`, which is not in this list) and a plugin's
-// own send never appears (the bypass lease keeps it out of every chain).
 ((shared, PluginError, RpcError, selfUserId) => {
   const { baseName, toNumber, peerDialogId, invalid } = shared
 

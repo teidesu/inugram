@@ -1,6 +1,3 @@
-// Evaluated once per engine by `globals.rs`, which calls this factory with the handful of native
-// helpers it binds. `native` is an argument and never a property of anything reachable from plugin
-// code, so nothing below leaks a way to call the host directly.
 ((native) => {
   const define = (name, value) => {
     Object.defineProperty(globalThis, name, { value, writable: true, configurable: true })

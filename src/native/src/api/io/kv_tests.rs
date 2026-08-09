@@ -1,5 +1,3 @@
-//! `inu.kv` over a fake store, plus the bundled oracle whose grant line is `kv`.
-
 use super::*;
 use crate::api::tl::proxy;
 use crate::testing::harness::setup_apis as setup;

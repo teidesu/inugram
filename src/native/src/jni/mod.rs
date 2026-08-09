@@ -1,8 +1,3 @@
-//! The JNI surface: `desu.inugram.helpers.plugins.QuickJs`'s native methods, and the upcalls back
-//! into it.
-//!
-//! Every export here arms an execution deadline before it can reach plugin JS ([`crate::sandbox::limits`]).
-
 use rquickjs::{Context, Object, Persistent, Runtime};
 use std::rc::Rc;
 
@@ -23,21 +18,9 @@ pub(crate) struct Engine {
     pub(crate) _rt: Runtime,
     pub(crate) bridge: Rc<JniBridge>,
     pub(crate) lifecycle: Rc<Lifecycle>,
-    /// the `inu` namespace, built once here and handed to every `install_*` that hangs a member off
-    /// it. Held as a root rather than read back off the globals so a surface installing in a later
-    /// JNI call writes onto the object this engine made, whatever `globalThis.inu` says by then.
-    /// Released in `nativeDestroy`: a `Persistent` has no `Drop`.
     pub(crate) inu: Persistent<Object<'static>>,
-    /// one per engine, shared by `rpc` and `reads`: a view's field cache is invalidated by an epoch
-    /// this owns, and `common.d.ts` promises a write invalidates every cached field *everywhere* -
-    /// two of these would leave each family blind to the other's writes.
     pub(crate) views: Rc<crate::api::tl::proxy::TlViews>,
-    /// the blob bookkeeping `globals` mints, kept because the two surfaces that take a `Blob`
-    /// without its bytes ever entering js (`fs`, `fetch`) read it from here
     pub(crate) blobs: Option<Rc<crate::api::io::blob::BlobState>>,
-    /// what `utils.js` handed back, kept because `installRpc` runs in a later JNI call than
-    /// `installApi` and `send_message.js` normalizes a peer through the same one implementation the read
-    /// and write surfaces do. Released in `nativeDestroy`: a `Persistent` has no `Drop`.
     pub(crate) shared: Option<Persistent<Object<'static>>>,
     pub(crate) rpc: Option<Rc<crate::api::telegram::rpc::RpcState>>,
     pub(crate) deserialize: Option<Rc<crate::api::telegram::deserialize::DeserializeState>>,
@@ -58,8 +41,6 @@ pub(crate) struct Engine {
     pub(crate) xposed: Option<Rc<crate::api::platform::xposed::XposedState>>,
 }
 
-/// drains microtasks, logging job errors + unhandled rejections through the engine's rpc log
-/// (or dropping them silently pre-installRpc, when there's nowhere to log yet)
 pub(crate) fn pump(engine: &Engine) {
     if let Some(state) = engine.rpc.as_ref() {
         crate::api::telegram::rpc::pump_jobs(&engine._rt, &engine.ctx, state.log.as_ref());

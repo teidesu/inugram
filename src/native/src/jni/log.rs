@@ -1,5 +1,3 @@
-//! The console upcall.
-
 use jni::objects::{Global, JMethodID, JObject, JValue};
 use jni::refs::IntoAuto;
 use jni::signature::{Primitive, ReturnType};
@@ -13,15 +11,6 @@ use crate::classify_log;
 
 use super::bridge::JniBridge;
 
-/// the diagnostic sink every subsystem is handed; the one place a [`fault`] becomes [`LEVEL_FAULT`]
-/// The console upcall on its own, and the only piece of [`JniBridge`] that has to be thread-safe.
-///
-/// [`crate::Log`] is `Send + Sync` because the interrupt handler and the rejection tracker hang off
-/// the `Runtime`, which rquickjs requires it of. Every *other* upcall is reached only from inside
-/// the context, so the rest of the bridge stays `Rc` and unshared. `JavaVM::get_env` is what keeps
-/// this safe wherever it is reached from: a thread calling into JNI is already attached, and one
-/// that is not answers `Err` and the diagnostic is dropped rather than crashing on a detached
-/// thread.
 pub(crate) struct ConsoleSink {
     pub(crate) target: Global<JObject<'static>>,
     pub(crate) on_console: JMethodID,

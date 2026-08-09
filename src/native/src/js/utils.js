@@ -1,8 +1,3 @@
-// Evaluated once per engine by `utils.rs`, which has already put the four native codecs on the
-// `utils` object it hands in. Everything below is pure js; the factory returns the helpers
-// `message.js`, `reads.js` and `writes.js` share with this file - the peer arithmetic and the
-// `InputPeerLike` resolver built on it - so nothing reachable from plugin code is the path any of
-// them uses, and there is one implementation of what a peer is rather than one per surface.
 ((utils, PluginError) => {
   const invalid = message => new PluginError('invalid-argument', message)
 

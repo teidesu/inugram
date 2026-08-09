@@ -1,10 +1,3 @@
-//! Coalescing for the `onProgress` callbacks the transfer apis take.
-//!
-//! A transfer reports per chunk and a chunk is 32 KB, so a 200 MB download is ~6400 upcalls for a
-//! pair of numbers nothing redraws faster than display rate. What falls inside a window is
-//! *withheld* rather than dropped, and nothing here is driven by a clock of its own, so every
-//! transfer owes the throttle exactly one terminal call.
-
 use std::cell::RefCell;
 use std::rc::Rc;
 
@@ -13,8 +6,6 @@ use rquickjs::{Ctx, Function, Persistent, Value};
 use crate::api::telegram::rpc::format_exception;
 use crate::api::timers::monotonic_now_ms;
 
-/// 10 reports a second: fast enough that a progress bar driven off it never looks stepped, slow
-/// enough that the rate is the same for a 32 KB chunk stream as for a 4 MB one
 pub const PROGRESS_INTERVAL_MS: u64 = 100;
 
 #[derive(Default)]
@@ -65,9 +56,6 @@ impl ProgressThrottle {
     }
 }
 
-/// one transfer's `onProgress`, held as a GC root until the transfer ends. All three terminal
-/// calls are idempotent, so every way a transfer can end has exactly one to make and cannot make
-/// it twice.
 pub struct ProgressReporter {
     callback: RefCell<Option<Persistent<Function<'static>>>>,
     throttle: RefCell<ProgressThrottle>,
@@ -92,7 +80,6 @@ impl ProgressReporter {
         })
     }
 
-    /// `total` is 0 when the size is not known yet, which the plugin sees exactly as the web does.
     pub fn report(&self, ctx: &Ctx<'_>, loaded: i64, total: i64) {
         let emit = self.throttle.borrow_mut().offer(monotonic_now_ms(), loaded, total);
         if let Some((loaded, total)) = emit {

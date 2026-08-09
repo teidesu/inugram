@@ -1,9 +1,6 @@
-//! `inu.info()`: what the manifest and the app say about the running plugin.
-
 use rquickjs::{Ctx, Function, Object};
 use std::sync::Arc;
 
-/// backing data for inu.info(); built fresh into a JS object on each call
 pub(crate) struct InuInfo {
     pub(crate) app_version: String,
     pub(crate) app_build: String,
@@ -21,8 +18,6 @@ pub(crate) fn build_info_object<'js>(ctx: Ctx<'js>, info: &InuInfo) -> rquickjs:
     obj.set("apiVersion", info.api_version)?;
     obj.set("layer", info.layer)?;
     obj.set("language", info.language.as_str())?;
-    // the key repeats once per value on the wire (a directive may appear more than once), and
-    // `common.d.ts` declares `header` as Record<string, string[]>, so each one groups into an array
     let header = Object::new(ctx.clone())?;
     for (k, v) in info.header.iter() {
         let existing: Option<rquickjs::Array> = header.get(k.as_str()).ok();

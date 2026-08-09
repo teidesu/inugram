@@ -1,17 +1,3 @@
-//! `inu.account` / `inu.accounts` / `inu.onAccountsChanged` / `inu.withCurrentAccount`. JNI-free
-//! behind [`AccountHost`].
-//!
-//! An `Account` is **pinned to a slot for life**: `id` and `userId` are read at mint time and
-//! `isCurrent()` is the only part that moves, so handing one to a helper cannot silently retarget
-//! on a switch. Minting costs no grant and neither do `id`/`isCurrent()`; `userId` is behind
-//! `account.read(self)`, or the gate on `inu.accounts()` would be decorative, since a plugin can
-//! mint one handle per slot. Slot *existence* stays ungated: it reveals how many logins there are,
-//! never whose.
-//!
-//! The slot list is cached rather than fetched per call, because every `onUpdate` payload and every
-//! `interceptRpc` dispatch carries an `Account`. A lookup that misses refreshes once before giving
-//! up, so a change the host failed to announce costs a stale read and not a wrong answer.
-
 use std::cell::{Cell, RefCell};
 use std::rc::Rc;
 
@@ -24,10 +10,7 @@ use crate::api::telegram::rpc::pump_jobs;
 use crate::sandbox::grants::{check_grant, GrantHost, MATCH_EXACT};
 use crate::sandbox::registry::{make_disposer, noop_disposer, CallbackRegistry, Lifecycle, Registry, Token};
 
-/// stand-in for the accounts half of the Kotlin `QuickJs.ApiListener`
 pub trait AccountHost {
-    /// every logged-in slot as json: `[{"id":0,"userId":1,"isCurrent":true,"isPremium":false}]`.
-    /// `None` means the list could not be read at all, which is not the same answer as `[]`.
     fn accounts(&self) -> Option<String>;
 }
 
@@ -39,20 +22,14 @@ pub struct AccountInfo {
     is_premium: bool,
 }
 
-/// one live `withCurrentAccount` registration. [`account`] is the slot its last invocation ran
-/// for, paired with the user id so a slot re-used by a different login re-runs the callback.
 struct CurrentScope {
     token: Token,
-    /// an `Option` so releasing it can `take` it: `Persistent` has no `Drop`, and restoring a
-    /// *clone* only gives back the reference the clone added, leaving the original's GC root held
-    /// for the life of the runtime
     callback: RefCell<Option<Persistent<Function<'static>>>>,
     teardown: RefCell<Option<Persistent<Function<'static>>>>,
     account: Cell<Option<(i32, i64)>>,
 }
 
 impl CurrentScope {
-    /// a clone to call through, the original staying rooted until [`Self::release_callback`]
     fn borrow_callback<'js>(&self, ctx: &Ctx<'js>) -> Option<Function<'js>> {
         let saved = self.callback.borrow().clone()?;
         saved.restore(ctx).ok()
@@ -73,10 +50,6 @@ pub struct AccountState {
     accounts: RefCell<Vec<AccountInfo>>,
     changed_fns: CallbackRegistry,
     scopes: Registry<Rc<CurrentScope>>,
-    /// the read surface [`crate::api::telegram::reads`] installs, shared by every handle: a dispatch mints one of
-    /// these per update and per intercepted request, so its dozen getters are built once per engine
-    /// rather than once per mint. Absent until `installRpc`, and a handle minted before then simply
-    /// has none - nothing can call one, since no plugin code has run yet.
     prototype: RefCell<Option<Persistent<Object<'static>>>>,
 }
 
@@ -89,8 +62,6 @@ impl AccountState {
         self.accounts.borrow().iter().find(|a| a.is_current).cloned()
     }
 
-    /// a scope stays live only while the registry still holds it, and anything that runs plugin JS
-    /// (a callback, a teardown, another scope's callback) can dispose it mid-walk
     fn is_live(&self, scope: &Rc<CurrentScope>) -> bool {
         self.scopes.contains(scope.token)
     }
@@ -112,8 +83,6 @@ fn parse_accounts<'js>(ctx: &Ctx<'js>, json: &str) -> JsResult<Vec<AccountInfo>>
     Ok(out)
 }
 
-/// `false` when the cache was left alone because the host's answer was unusable, which callers must
-/// not confuse with "the list is now empty"
 fn refresh(ctx: &Ctx<'_>, state: &Rc<AccountState>) -> bool {
     let Some(json) = state.host.accounts() else {
         (state.log)("accounts: the host could not read the account list");
@@ -135,18 +104,10 @@ fn refresh(ctx: &Ctx<'_>, state: &Rc<AccountState>) -> bool {
     }
 }
 
-/// hands every `Account` handle the getters in [`crate::api::telegram::reads`]; called once, at install
 pub fn set_prototype<'js>(ctx: &Ctx<'js>, state: &Rc<AccountState>, prototype: &Object<'js>) {
     *state.prototype.borrow_mut() = Some(Persistent::save(ctx, prototype.clone()));
 }
 
-/// what a later surface chains its own prototype behind, so the two families share one handle
-/// without either file knowing the other's members.
-///
-/// It *takes* rather than reads: a `Persistent` has no `Drop`, so leaving this one in place while
-/// [`set_prototype`] overwrites it would leak a GC root and abort `JS_FreeRuntime`. The caller is
-/// the only holder afterwards, which is what makes the chain it builds the one thing keeping the
-/// old prototype alive.
 pub fn take_prototype<'js>(ctx: &Ctx<'js>, state: &Rc<AccountState>) -> Option<Object<'js>> {
     state.prototype.borrow_mut().take()?.restore(ctx).ok()
 }
@@ -174,20 +135,10 @@ fn build_account<'js>(ctx: &Ctx<'js>, state: &Rc<AccountState>, info: &AccountIn
     Ok(obj.into_value())
 }
 
-/// the slot's own user id, with no grant check. This exists for `send_message.js`'s `peer` getter and is
-/// handed to that prelude as a factory argument, so nothing reachable from plugin code holds it:
-/// `common.d.ts` promises reading `OutgoingMessage.peer` needs no grant, and the one peer form that
-/// has to be resolved through the account is `inputPeerSelf`. Going through the gated `userId`
-/// accessor there fails the *user's* send and faults the plugin, which is worse than the disclosure
-/// under either reading of the contract.
 pub fn self_user_id(state: &Option<Rc<AccountState>>, account_id: i32) -> Option<i64> {
     state.as_ref()?.find(account_id).map(|info| info.user_id)
 }
 
-/// the `Account` handed to a dispatch (`onUpdate`, `interceptRpc`). A slot the cache doesn't know
-/// is refreshed once before falling back: the host only dispatches for live accounts, so a miss
-/// means the cache is behind, and a handle with a zero `userId` is the last resort rather than the
-/// answer.
 pub fn dispatch_account<'js>(
     ctx: &Ctx<'js>,
     state: &Option<Rc<AccountState>>,
@@ -278,8 +229,6 @@ fn js_account<'js>(ctx: &Ctx<'js>, state: &Rc<AccountState>, id: Option<Value<'j
         None => None,
         Some(id) if id.is_undefined() || id.is_null() => None,
         Some(id) => match id.as_number() {
-            // a slot index is an exact i32, so NaN/Infinity/1.5/1e12 are refused rather than
-            // truncated - `as i32` saturates, and would answer `inu.account(NaN)` with slot 0
             Some(n) if n.fract() == 0.0 && n >= i32::MIN as f64 && n <= i32::MAX as f64 => Some(n as i32),
             Some(_) => {
                 return error::throw_plugin_error(
@@ -304,7 +253,6 @@ fn js_account<'js>(ctx: &Ctx<'js>, state: &Rc<AccountState>, id: Option<Value<'j
         },
     };
 
-    // resolved once, here: the handle is pinned, so a later switch must not move it
     for attempt in 0..2 {
         let found = match wanted {
             Some(id) => state.find(id),
@@ -363,7 +311,6 @@ fn js_with_current_account<'js>(
 
     let state = state.clone();
     make_disposer(ctx, move |ctx| {
-        // disposing ends the scope, so its teardown runs here as it would before a re-run
         if let Some(scope) = state.scopes.remove(token) {
             leave_scope(ctx, &state, &scope);
             scope.release_callback(ctx);
@@ -384,7 +331,6 @@ fn run_teardown(ctx: &Ctx<'_>, state: &Rc<AccountState>, teardown: &Function<'_>
     }
 }
 
-/// runs the scope's teardown, if it left one, and forgets which account it was set up for
 fn leave_scope(ctx: &Ctx<'_>, state: &Rc<AccountState>, scope: &Rc<CurrentScope>) {
     scope.account.set(None);
     let Some(teardown) = scope.teardown.borrow_mut().take() else {
@@ -396,9 +342,6 @@ fn leave_scope(ctx: &Ctx<'_>, state: &Rc<AccountState>, scope: &Rc<CurrentScope>
     run_teardown(ctx, state, &teardown);
 }
 
-/// invokes the scope's callback for whichever account is selected now, keeping the teardown it
-/// returns. a no-op while no account is logged in - the callback takes an `Account`, so there is
-/// nothing to hand it until one is.
 fn enter_scope(ctx: &Ctx<'_>, state: &Rc<AccountState>, scope: &Rc<CurrentScope>) {
     let Some(info) = state.current() else { return };
     let Some(callback) = scope.borrow_callback(ctx) else {
@@ -420,8 +363,6 @@ fn enter_scope(ctx: &Ctx<'_>, state: &Rc<AccountState>, scope: &Rc<CurrentScope>
             if state.is_live(scope) {
                 *scope.teardown.borrow_mut() = Some(Persistent::save(ctx, teardown));
             } else {
-                // the callback disposed its own scope: storing the teardown would park it on an
-                // entry nothing walks again, so the disposal that raced it runs it now instead
                 run_teardown(ctx, state, &teardown);
             }
         }
@@ -435,12 +376,8 @@ fn enter_scope(ctx: &Ctx<'_>, state: &Rc<AccountState>, scope: &Rc<CurrentScope>
     }
 }
 
-/// the logged-in set changed (login, logout or switch): re-reads it, fans the new list out to
-/// `onAccountsChanged`, then re-runs every `withCurrentAccount` whose account moved.
 pub fn accounts_changed(rt: &Runtime, context: &rquickjs::Context, state: &Rc<AccountState>) {
     context.with(|ctx| {
-        // a read the host could not answer is not a changed list: announcing the stale cache as new
-        // is noise, and re-running the scopes off it would tear every one of them down
         if !refresh(&ctx, state) {
             return;
         }
@@ -464,9 +401,6 @@ pub fn accounts_changed(rt: &Runtime, context: &rquickjs::Context, state: &Rc<Ac
             }
         }
         let current = state.current().map(|info| (info.id, info.user_id));
-        // the walk is over a snapshot, and every callback and teardown it runs can dispose any
-        // scope in it - including one already visited - so liveness is re-read per iteration and
-        // again after the teardown, never assumed from having been live a step ago
         for scope in state.scopes.values() {
             if !state.is_live(&scope) || scope.account.get() == current {
                 continue;
@@ -481,8 +415,6 @@ pub fn accounts_changed(rt: &Runtime, context: &rquickjs::Context, state: &Rc<Ac
     pump_jobs(rt, context, state.log.as_ref());
 }
 
-/// runs every live `withCurrentAccount` teardown one last time. call before
-/// [`crate::api::lifecycle::notify_unload`], so a teardown still sees a plugin that has not been told goodbye.
 pub fn notify_unload(rt: &Runtime, context: &rquickjs::Context, state: &Rc<AccountState>) {
     state.lifecycle.begin_unload();
     context.with(|ctx| {
@@ -494,7 +426,6 @@ pub fn notify_unload(rt: &Runtime, context: &rquickjs::Context, state: &Rc<Accou
     pump_jobs(rt, context, state.log.as_ref());
 }
 
-/// releases every `Persistent` GC root this state still owns - same contract as [`crate::api::telegram::rpc::dispose`]
 pub fn dispose(context: &rquickjs::Context, state: &Rc<AccountState>) {
     context.with(|ctx| {
         if let Some(prototype) = state.prototype.borrow_mut().take() {

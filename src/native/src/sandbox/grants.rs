@@ -1,24 +1,13 @@
-//! The one gate every permission decision goes through.
-//!
-//! Grants are checked at call/registration time, never at binding-install time: every gated
-//! binding exists in the realm whatever the manifest says, and a plugin missing a grant gets a
-//! `not-granted` error naming the exact token that would have allowed the call. Which is why this
-//! is one function: `check_grant` -> `onCheckGrant` -> `PluginPermissions.allows`, fail-closed, and
-//! nothing else anywhere may decide it.
-
 use std::rc::Rc;
 
 use rquickjs::{Ctx, Result as JsResult};
 
 use crate::api::error::throw_plugin_error;
 
-/// ordinals of `desu.inugram.core.plugins.ScopeMatch`, which is what the `onCheckGrant` upcall's
-/// `mode` argument is
 pub const MATCH_EXACT: i32 = 0;
 pub const MATCH_DOMAIN: i32 = 1;
 pub const MATCH_NAMESPACE: i32 = 2;
 
-/// stand-in for the Kotlin `QuickJs.onCheckGrant` upcall; fail-closed, `false` == denied
 pub trait GrantHost {
     fn is_granted(&self, name: &str, target: Option<&str>, mode: i32) -> bool;
 }
@@ -51,7 +40,6 @@ pub(crate) struct TestGrantHost {
 
 #[cfg(test)]
 impl TestGrantHost {
-    /// `tokens` are grant tokens as a manifest writes them: `kv`, `invokeRpc(messages.sendMessage)`
     pub(crate) fn new(tokens: &[&str]) -> Rc<Self> {
         let mut allowed = std::collections::HashSet::new();
         for token in tokens {
@@ -81,8 +69,6 @@ impl GrantHost for TestGrantHost {
         if self.allowed.contains(&(name.to_string(), None)) {
             return true;
         }
-        // like the real host (`PluginManager`'s `grantChecker`), a `None` target asks whether the
-        // grant is held at all - `PluginPermissions.has` - and not whether it is unscoped
         let Some(target) = target else {
             return self.allowed.iter().any(|(granted, _)| granted == name);
         };
@@ -93,9 +79,6 @@ impl GrantHost for TestGrantHost {
     }
 }
 
-/// mirrors `PluginPermissions.scopeMatches`, which is what the real host behind this trait runs.
-/// Only the modes a test actually passes are implemented; anything else stays exact, which is the
-/// fail-closed reading.
 #[cfg(test)]
 fn scope_matches(scope: &str, target: &str, mode: i32) -> bool {
     let scope_lower = scope.to_ascii_lowercase();

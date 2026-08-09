@@ -1,10 +1,3 @@
-//! What a plugin is told about its own lifetime and the app's: `inu.onUnload` and
-//! `inu.onAppVisibilityChange`.
-//!
-//! The flag every other subsystem reads to refuse a late registration is
-//! [`crate::sandbox::registry::Lifecycle`], which lives with the registration rules it is part of;
-//! this is the surface built on top of it.
-
 use std::cell::Cell;
 use std::rc::Rc;
 
@@ -20,8 +13,6 @@ pub struct LifecycleState {
     pub(crate) log: crate::Log,
     unload_fns: CallbackRegistry,
     visibility_fns: CallbackRegistry,
-    /// what the plugin was last told; a fresh engine starts foreground and the host corrects it
-    /// before the plugin's own code runs
     visible: Cell<bool>,
 }
 
@@ -77,12 +68,6 @@ pub fn install_lifecycle<'js>(
     Ok(state)
 }
 
-/// the app moved to the foreground or the background. fires on a transition only, so a host that
-/// re-announces the state it already reported costs the plugin nothing.
-///
-/// this is the signal a plugin does its catch-up work from: [`crate::api::timers`] floors the wheel
-/// while hidden and a suspended interval fires once on return rather than replaying the backlog,
-/// so a timer cannot be read as a clock across a background stretch.
 pub fn app_visibility_changed(rt: &Runtime, context: &rquickjs::Context, state: &Rc<LifecycleState>, visible: bool) {
     if state.visible.replace(visible) == visible {
         return;
@@ -105,8 +90,6 @@ pub fn app_visibility_changed(rt: &Runtime, context: &rquickjs::Context, state: 
     pump_jobs(rt, context, state.log.as_ref());
 }
 
-/// runs every registered unload callback (in registration order), logging but not propagating
-/// throws, then drains microtasks. call once, right before tearing the engine down.
 pub fn notify_unload(rt: &Runtime, context: &rquickjs::Context, state: &Rc<LifecycleState>) {
     state.lifecycle.begin_unload();
     context.with(|ctx| {
@@ -123,7 +106,6 @@ pub fn notify_unload(rt: &Runtime, context: &rquickjs::Context, state: &Rc<Lifec
     pump_jobs(rt, context, state.log.as_ref());
 }
 
-/// releases every `Persistent` GC root this state still owns - same contract as [`crate::api::telegram::rpc::dispose`]
 pub fn dispose(context: &rquickjs::Context, state: &Rc<LifecycleState>) {
     context.with(|ctx| {
         state.unload_fns.release_all(&ctx);

@@ -1,7 +1,3 @@
-// Evaluated once per engine by `fetch.rs`, which calls this factory with the two native ops, the
-// error constructor and the timer functions. All three are arguments and never properties of
-// anything reachable from plugin code, so reassigning a global cannot decide what this file throws,
-// what clock it measures `timeout` on, or whether a request is really sent.
 ((natives, PluginError, timers) => {
   const { setTimeout, clearTimeout } = timers
 

@@ -1,26 +1,3 @@
-//! Lazy JS `Proxy` bridge over live Kotlin TL handles (`desu.inugram.helpers.plugins.tl.TlHandles`).
-//!
-//! A handle is an opaque `i64` Kotlin minted for a `TLObject` or a TL vector; the proxy's traps
-//! round-trip one field at a time through [`TlHost`]. Every value crossing carries a
-//! `PluginWire` tag, mirroring `desu.inugram.core.plugins.PluginWire` byte-for-byte - that codec is
-//! this whole bridge's, not this module's, so a tag added here has to be added there too.
-//!
-//! Identification is duck-typed: the `get` trap self-answers `Symbol.for("inu.tl.handle")` with
-//! its own wire tag, so [`js_value_to_wire`] needs no access to rquickjs's crate-private `Proxy`
-//! internals. The target is a [`Class<HandleBox>`](rquickjs::Class) rather than a plain object so
-//! that quickjs's finalizer runs [`HandleBox`]'s `Drop` and releases the handle.
-//!
-//! A view's lifetime is not on the wire - it comes from the entry point, and a child inherits its
-//! parent's, which is exact because Kotlin mints children under the parent entry's scope id.
-//!
-//! A plugin-lifetime *object* view memoizes reads in a bag hung off its proxy target under a
-//! private symbol; any write through any view bumps a context-wide epoch and an older-stamped bag
-//! is emptied on next touch, Kotlin owning the flag words so one write can change the visibility of
-//! a sibling field or of one seen through another view over the same Java object. Dispatch-scoped
-//! views never cache (they must observe other middleware's rewrites and expire loudly), and neither
-//! do vector views (the firebreak keeping a walk of a long vector from pinning a handle per
-//! element).
-
 use std::cell::Cell;
 use std::rc::Rc;
 
@@ -32,43 +9,17 @@ use rquickjs::{
     Symbol, TypedArray, Value,
 };
 
-/// sentinel key marking a byte-array value inside a `J` JSON payload (mirrors `TlJson.BYTES_KEY`
-/// Kotlin-side): `{"$inuBytes": "<base64>"}`. Plain JSON can't carry a Uint8Array, so snapshots
-/// wrap bytes in this shape and [`json_parse_tl`] revives them into real Uint8Arrays (and
-/// [`json_stringify_tl`] re-wraps them going the other way). Collision-safe: a real TL object is
-/// always `{"_": ...}`-shaped and TL field names are Java identifiers, which can't contain `$inu`.
 const BYTES_MARKER_KEY: &str = "$inuBytes";
 
-/// stand-in for the Kotlin `QuickJs.TlListener` interface (rust: `JniBridge` in `lib.rs`)
 pub trait TlHost {
-    /// `get` trap; `key == "_"` reads the TL type name, `"length"` a vector's size
     fn tl_get(&self, handle: i64, key: &str) -> String;
-    /// `set`/`deleteProperty` trap (`value_wire` is `N` for delete); `None` on success
     fn tl_set(&self, handle: i64, key: &str, value_wire: &str) -> Option<String>;
-    /// `has`/`getOwnPropertyDescriptor` existence probe: 1 = present, 0 = absent, -1 = expired.
-    /// O(1) Kotlin-side (a map/range lookup) - deliberately not answered via [`Self::tl_own_keys`],
-    /// which would rebuild the full key list per probed key
     fn tl_has(&self, handle: i64, key: &str) -> i32;
-    /// `ownKeys` trap (object handles only); a comma-separated key list (keys are Java field
-    /// names, so the separator is unambiguous); `None` if `handle` is expired
     fn tl_own_keys(&self, handle: i64) -> Option<String>;
-    /// `obj.toJSON()` full detached snapshot; `None` if `handle` is expired
     fn tl_copy(&self, handle: i64) -> Option<String>;
-    /// the handle's backing proxy target ([`HandleBox`]) was garbage-collected; frees the entry
-    /// Kotlin-side. Called from [`HandleBox`]'s `Drop`, always on the engine's own thread (see its
-    /// doc comment) - never crosses threads, same as every other `TlHost` method.
     fn tl_release(&self, handle: i64);
 }
 
-/// Backing store for a live proxy's `target`.
-///
-/// QuickJS only runs GC while executing on the engine's `Context`, which for this engine only
-/// ever happens on `Utilities.globalQueue`, so `tl_release`'s upcall never needs to cross
-/// threads.
-///
-/// The handle may already have been freed by the time this drops - dispatch scopes are
-/// hard-invalidated in bulk whether or not GC has run. `TlHandles.tlRelease` is a plain
-/// `HashMap.remove`, a no-op for a missing key, so the double release needs no guard here.
 struct HandleBox {
     host: Rc<dyn TlHost>,
     handle: i64,
@@ -97,8 +48,6 @@ impl<'js> JsClass<'js> for HandleBox {
     }
 }
 
-/// per-context view factory: the host every view upcalls into, plus the write epoch their field
-/// caches are stamped against
 pub struct TlViews {
     host: Rc<dyn TlHost>,
     epoch: Cell<u64>,
@@ -143,7 +92,6 @@ impl ViewState {
     }
 }
 
-/// mirrors `PluginWire.HANDLE_EXPIRED_MESSAGE` Kotlin-side
 const HANDLE_EXPIRED_MESSAGE: &str =
     "TL handle expired — object escaped back to native code; copy fields you need before returning";
 
@@ -192,18 +140,14 @@ fn parse_handle(payload: &str) -> Option<(bool, bool, i64)> {
     Some((is_vector, read_only, id))
 }
 
-/// encodes an `E`-tagged wire error value (mirrors `PluginWire.encodeError` Kotlin-side); used by
-/// `rpc.rs` for a middleware's thrown/rejected error before crossing back into the host.
 pub fn encode_error(message: &str) -> String {
     format!("E{message}")
 }
 
-/// encodes an `R`-tagged rpc error (mirrors `PluginWire.encodeRpcError` Kotlin-side)
 pub fn encode_rpc_error(code: i32, text: &str) -> String {
     format!("R{code}:{text}")
 }
 
-/// `Some((code, text))` if `wire` is an `R`-tagged rpc error value, `None` otherwise
 pub fn wire_rpc_error(wire: &str) -> Option<(i32, &str)> {
     let payload = wire.strip_prefix('R')?;
     let (code, text) = payload.split_once(':')?;
@@ -214,8 +158,6 @@ fn throw_tl<'js, T>(ctx: &Ctx<'js>, message: &str) -> JsResult<T> {
     Err(Exception::throw_message(ctx, message))
 }
 
-/// the host's out-of-band expiry answers (`tl_own_keys`/`tl_copy`'s `null`, `tl_has`'s `-1`) carry
-/// no wire, so they raise the same `handle-expired` error the wire path produces
 fn throw_expired<'js, T>(ctx: &Ctx<'js>) -> JsResult<T> {
     crate::api::error::throw_plugin_error(ctx, "handle-expired", HANDLE_EXPIRED_MESSAGE, None, None, None)
 }
@@ -228,11 +170,6 @@ fn throw_unsupported<'js, T>(ctx: &Ctx<'js>, message: &str) -> JsResult<T> {
     crate::api::error::throw_plugin_error(ctx, "unsupported", message, None, None, None)
 }
 
-/// QuickJS normalizes a descriptor through `js_obj_to_desc`/`js_create_desc` before the trap sees
-/// it, so it arrives carrying exactly the attributes the caller wrote, each already a real boolean.
-/// A `false` attribute has to be refused rather than honoured: the proxy target holds no own
-/// property, and QuickJS answers a `configurable: false` define over one with a bare
-/// "inconsistent defineProperty" TypeError of its own.
 fn descriptor_value<'js>(ctx: &Ctx<'js>, descriptor: &Value<'js>) -> JsResult<Value<'js>> {
     let Some(obj) = descriptor.as_object() else {
         return throw_unsupported(ctx, DESCRIPTOR_MESSAGE);
@@ -262,9 +199,6 @@ fn base64_decode(s: &str) -> Option<Vec<u8>> {
     base64::engine::general_purpose::STANDARD.decode(s).ok()
 }
 
-/// a real Uint8Array whose own `toJSON` re-emits the `{"$inuBytes": base64}` wrapper, so a
-/// plugin-side `JSON.stringify` of a snapshot round-trips bytes instead of producing an
-/// index-map (`{"0":1,...}`) that nothing can decode
 fn make_bytes_value<'js>(ctx: &Ctx<'js>, bytes: Vec<u8>) -> JsResult<Value<'js>> {
     let b64 = base64_encode(&bytes);
     let arr = TypedArray::<u8>::new_copy(ctx.clone(), bytes)?;
@@ -277,11 +211,6 @@ fn make_bytes_value<'js>(ctx: &Ctx<'js>, bytes: Vec<u8>) -> JsResult<Value<'js>>
     arr.into_js(ctx)
 }
 
-/// walks a freshly parsed JSON graph, replacing every `{"$inuBytes": base64}` wrapper with a real
-/// Uint8Array. This is what `JSON.parse`'s reviver argument used to do, moved into rust because
-/// reaching the reviver at all meant reaching `JSON` off the globals, which plugin code owns.
-/// Own enumerable string keys only, so a polluted `Object.prototype` can't make every parsed object
-/// answer to the marker.
 fn revive_bytes<'js>(ctx: &Ctx<'js>, value: Value<'js>) -> JsResult<Value<'js>> {
     let Some(obj) = value.as_object() else {
         return Ok(value);
@@ -309,14 +238,11 @@ fn revive_bytes<'js>(ctx: &Ctx<'js>, value: Value<'js>) -> JsResult<Value<'js>> 
     Ok(value)
 }
 
-/// JSON parse reviving `{"$inuBytes": base64}` wrappers into real Uint8Arrays
 pub(crate) fn json_parse_tl<'js>(ctx: &Ctx<'js>, json: &str) -> JsResult<Value<'js>> {
     let parsed = ctx.json_parse(json)?;
     revive_bytes(ctx, parsed)
 }
 
-/// JSON stringify wrapping any Uint8Array (plugin-created ones included - revived ones already
-/// self-wrap via their own `toJSON`) into `{"$inuBytes": base64}`
 pub(crate) fn json_stringify_tl<'js>(ctx: &Ctx<'js>, value: Value<'js>) -> JsResult<String> {
     let replacer =
         Function::new(ctx.clone(), |ctx: Ctx<'js>, _key: Value<'js>, value: Value<'js>| -> JsResult<Value<'js>> {
@@ -335,9 +261,6 @@ pub(crate) fn json_stringify_tl<'js>(ctx: &Ctx<'js>, value: Value<'js>) -> JsRes
     }
 }
 
-/// the tags that carry a value rather than a reference, shared with [`crate::api::platform::jvm`]: those are the
-/// same five bytes on either bridge, and a second implementation of them is a second `Y` that
-/// forgets it is base64. `None` for a tag this does not own (`H`/`J`, and jvm's `G`).
 pub(crate) fn scalar_wire_to_js<'js>(ctx: &Ctx<'js>, tag: char, payload: &str) -> Option<JsResult<Value<'js>>> {
     Some(match tag {
         'N' => Ok(Value::new_null(ctx.clone())),
@@ -359,11 +282,6 @@ pub(crate) fn scalar_wire_to_js<'js>(ctx: &Ctx<'js>, tag: char, payload: &str) -
     })
 }
 
-/// decodes a single [`TlHost::tl_get`]/`next()`/`invokeRpc()`/`onUpdate` value into a JS value;
-/// `life` is the lifetime any view built here (and, transitively, its children) gets.
-/// Error-tagged wire values (`E`/`R`/`P`) throw rather than returning - callers that expect a
-/// thrown error (vs. a value) should route the wire through [`crate::api::error::wire_error_to_js`]
-/// themselves before calling this.
 pub fn wire_to_js_value<'js>(ctx: &Ctx<'js>, views: &Rc<TlViews>, wire: &str, life: ViewLife) -> JsResult<Value<'js>> {
     if let Some(built) = crate::api::error::wire_error_to_js(ctx, wire) {
         return Err(ctx.throw(built?));
@@ -387,9 +305,6 @@ pub fn wire_to_js_value<'js>(ctx: &Ctx<'js>, views: &Rc<TlViews>, wire: &str, li
     }
 }
 
-/// encodes an outbound JS value: a live proxy re-uses its handle (`H`) with zero copying, a plain
-/// value falls back to a JSON construct payload (`J`). Used for `set`'s new value, `next(req)`'s
-/// argument, `invokeRpc(obj)`'s argument, and a middleware's short-circuit return value.
 pub fn js_value_to_wire<'js>(ctx: &Ctx<'js>, value: Value<'js>) -> JsResult<String> {
     if value.is_null() {
         return Ok("N".to_string());
@@ -417,9 +332,6 @@ fn try_read_marker<'js>(ctx: &Ctx<'js>, value: &Value<'js>) -> JsResult<Option<S
     }
 }
 
-/// null-prototype throughout: section keys are raw TL field names, and on a normal object
-/// `contains_key` would answer for `toString`/`constructor`, while `set("__proto__", v)` would
-/// reparent the section instead of storing a field
 fn new_section<'js>(ctx: &Ctx<'js>) -> JsResult<Object<'js>> {
     Object::new_proto(ctx.clone(), None)
 }
@@ -494,8 +406,6 @@ fn read_field<'js>(state: &ViewState, ctx: &Ctx<'js>, target: &Value<'js>, key: 
     Ok(value)
 }
 
-/// the raw presence path, without the `get` trap's synthetic answers: `getOwnPropertyDescriptor`
-/// must keep reporting `undefined` for `toJSON` even though `'toJSON' in view` is true
 fn has_field<'js>(state: &ViewState, ctx: &Ctx<'js>, target: &Value<'js>, key: &str) -> JsResult<bool> {
     sync_epoch(state, ctx, target)?;
     if let Some(bag) = bag_read(state, ctx, target)? {
@@ -517,8 +427,6 @@ fn has_field<'js>(state: &ViewState, ctx: &Ctx<'js>, target: &Value<'js>, key: &
 
 fn write_field<'js>(state: &ViewState, ctx: &Ctx<'js>, target: &Value<'js>, key: &str, wire: &str) -> JsResult<bool> {
     let result = state.host().tl_set(state.handle, key, wire);
-    // `TlHandles.setObjectField` assigns the java field and only then runs `syncFlagBit`, so a
-    // reported failure can still have mutated the object: invalidate whatever the answer is
     state.views.bump();
     sync_epoch(state, ctx, target)?;
     match result {
@@ -569,9 +477,6 @@ fn keys_to_array<'js>(ctx: &Ctx<'js>, keys: &str) -> JsResult<Array<'js>> {
     Ok(arr)
 }
 
-/// A trap closure must never capture a JS value: `RustFunction`'s `Trace` is a no-op, so anything
-/// it holds is an untraced GC root - the cache is reached through the `target` argument instead,
-/// and [`ViewState`] is deliberately JS-free.
 fn build_proxy<'js>(
     ctx: &Ctx<'js>,
     views: Rc<TlViews>,
@@ -605,17 +510,10 @@ fn build_proxy<'js>(
                         return Ok(Value::new_undefined(ctx.clone()));
                     }
                     let key = property_key_string(&ctx, &prop)?;
-                    // resolving a promise with an object [[Get]]s its "then" to see if it's a thenable,
-                    // and every view reaches JS through one (invokeRpc, next()), so answering "no such
-                    // field" here would reject the very promise carrying the view. no TL field is named
-                    // `then`, so nothing is shadowed
                     if key == THEN_KEY {
                         return Ok(Value::new_undefined(ctx.clone()));
                     }
                     sync_epoch(&state, &ctx, &target)?;
-                    // JSON.stringify [[Get]]s "toJSON"; neither a TL object nor a vector has such a
-                    // field, so instead of throwing "no such field" we hand back a snapshot fn
-                    // producing a detached plain value (an array, for a vector)
                     if key == TO_JSON_KEY {
                         return read_to_json(&state, &ctx, &target);
                     }
@@ -674,7 +572,6 @@ fn build_proxy<'js>(
         handler_obj.set(
             PredefinedAtom::Has,
             Function::new(ctx.clone(), move |ctx: Ctx<'js>, target: Value<'js>, prop: Value<'js>| -> JsResult<bool> {
-                // mirror exactly what the get trap self-answers, so `in` never lies about it
                 if let Some(sym) = prop.as_symbol() {
                     if sym == &marker(&ctx)? {
                         return Ok(true);
@@ -698,9 +595,6 @@ fn build_proxy<'js>(
                 if state.read_only {
                     return throw_read_only(&ctx);
                 }
-                // as the `set` and `defineProperty` traps do: `property_key_string` answers a
-                // symbol with its *description*, so without this `delete v[Symbol.for('message')]`
-                // would null the app's real `message` field
                 if prop.as_symbol().is_some() {
                     return throw_tl(&ctx, "tl proxy: cannot delete a symbol-keyed property");
                 }
@@ -760,9 +654,6 @@ fn build_proxy<'js>(
                     descriptor.set("value", value)?;
                     descriptor.set("writable", !state.read_only)?;
                     descriptor.set("enumerable", true)?;
-                    // the target genuinely has no such own property, and a proxy reporting a
-                    // non-configurable descriptor for one is a TypeError - `writable: false` is only
-                    // legal here alongside `configurable: true`
                     descriptor.set("configurable", true)?;
                     descriptor.into_js(&ctx)
                 },
@@ -770,9 +661,6 @@ fn build_proxy<'js>(
         )?;
     }
 
-    // refusing keeps the target extensible, which every `configurable: true` descriptor the
-    // getOwnPropertyDescriptor trap reports depends on: QuickJS rejects a proxy claiming an own
-    // property the target lacks once that target stops being extensible
     handler_obj.set(
         PredefinedAtom::PreventExtensions,
         Function::new(ctx.clone(), |ctx: Ctx<'js>, _target: Value<'js>| -> JsResult<bool> {
@@ -794,8 +682,6 @@ fn property_key_string<'js>(ctx: &Ctx<'js>, prop: &Value<'js>) -> JsResult<Strin
     throw_tl(ctx, "tl proxy: unsupported property key")
 }
 
-/// throws (instead of silently reading 0) on an expired handle or malformed wire, so iterating a
-/// stale vector fails as loudly as reading a stale object field does
 fn vector_length<'js>(ctx: &Ctx<'js>, host: &Rc<dyn TlHost>, handle: i64) -> JsResult<i64> {
     let wire = host.tl_get(handle, "length");
     if let Some(n) = wire.strip_prefix('I').and_then(|p| p.parse().ok()) {

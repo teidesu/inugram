@@ -1,49 +1,22 @@
-//! `inu.icons.common`/`inu.icons.svg` and `inu.android.resourceIcon`.
-//!
-//! An icon is a *descriptor*, never a drawable: what crosses is one spec string (`r<resource name>`
-//! or `s<svg source>`) and the host turns it into a `Drawable` on the ui thread as a row binds. So
-//! minting one needs no `Activity`, and a rotation or an icon-pack change re-resolves the same spec
-//! with nothing to invalidate.
-//!
-//! The host is asked one question, [`IconHost::icon_resolves`]. Everything else - the curated
-//! table, the shape of a resource name, the size and markup rules on an svg - is decided here, so
-//! the policy is testable without a device.
-
 use std::rc::Rc;
 
 use rquickjs::{Ctx, Exception, Function, Object, Result as JsResult, Value};
 
 use crate::api::error::{make_plugin_error, throw_plugin_error};
 
-/// the most utf-8 an `inu.icons.svg` source may be. The host parses it with the platform's xml
-/// reader, which no interpreter deadline can interrupt (it is one host call), so the bound is a
-/// byte count the contract can state rather than time spent - same rule as `blob.rs`'s
-/// `BUILD_LIMIT_BYTES`. An icon is a glyph; 64 KiB is an order of magnitude more than one needs.
 pub const SVG_LIMIT_BYTES: usize = 64 * 1024;
 
-/// longest drawable name the host will be asked about
 const MAX_RESOURCE_NAME: usize = 128;
 
-/// where the spec lives on the object `inu.icons.*` hands back
 const ICON_TAG: &str = "__inuIcon";
 
 pub const KIND_RESOURCE: i32 = 0;
 pub const KIND_SVG: i32 = 1;
 
-/// stand-in for the icon half of the Kotlin `QuickJs.ApiListener`
 pub trait IconHost {
-    /// `kind` is [`KIND_RESOURCE`] (a bare drawable name) or [`KIND_SVG`] (svg source). `false`
-    /// means nothing on this host resolves it; which error that is, is decided here.
     fn icon_resolves(&self, kind: i32, value: &str) -> bool;
 }
 
-/// The set `inu.icons.common` answers for, mapped onto the drawable the app ships for it. Sorted
-/// by api name so the lookup can binary-search; a test pins both the order and that the set is
-/// exactly the union `common.d.ts` declares.
-///
-/// Everything here is a stock drawable rather than a fork asset, and none of them is a `_solar`
-/// variant: `IconsResources` swaps a stock id for the user's icon pack at `getDrawable` time, so
-/// naming the plain one is what makes a plugin's icon follow the pack.
 const COMMON_ICONS: &[(&str, &str)] = &[
     ("archive", "msg_archive"),
     ("bookmark", "msg_saved"),
@@ -82,10 +55,6 @@ fn lookup_common(name: &str) -> Option<&'static str> {
     COMMON_ICONS.binary_search_by(|(api, _)| (*api).cmp(name)).ok().map(|at| COMMON_ICONS[at].1)
 }
 
-/// A bare `[A-Za-z0-9_]` name and nothing else, because the host looks it up with
-/// `Resources.getIdentifier`, which also accepts a qualified `package:type/name` - a plugin that
-/// could write one would be naming any resource of any type in any installed package rather than
-/// a drawable in this one.
 fn is_resource_name(name: &str) -> bool {
     !name.is_empty()
         && name.len() <= MAX_RESOURCE_NAME
@@ -106,9 +75,6 @@ fn check_svg(source: &str) -> Result<(), SvgReject> {
     if !source.contains("<svg") {
         return Err(SvgReject::NotSvg);
     }
-    // a document type declaration is the only thing in xml that can name an external resource or
-    // expand to more of itself, and the host parses this with whichever expat android ships rather
-    // than one we configured. refused at the door instead: `<!` may only ever open a comment.
     let mut rest = source;
     while let Some(at) = rest.find("<!") {
         if !rest[at..].starts_with("<!--") {
@@ -127,10 +93,6 @@ fn svg_spec(source: &str) -> String {
     format!("s{source}")
 }
 
-/// The rules a spec must satisfy wherever it is read, not only where it was minted. The object
-/// carrying it is an ordinary one a plugin can build itself, so an element that takes an icon
-/// re-checks rather than trusting the tag: a forged spec then names a drawable that does not
-/// exist (and renders nothing), never an unbounded string or a qualified resource reference.
 fn validate_spec<'js>(ctx: &Ctx<'js>, what: &str, spec: &str) -> JsResult<()> {
     let valid = match spec.as_bytes().first() {
         Some(b'r') => is_resource_name(&spec[1..]),
@@ -150,7 +112,6 @@ fn validate_spec<'js>(ctx: &Ctx<'js>, what: &str, spec: &str) -> JsResult<()> {
     )
 }
 
-/// reads an optional `icon` off an element's options object, answering the spec to put on the wire
 pub fn opt_icon<'js>(ctx: &Ctx<'js>, obj: &Object<'js>, what: &str) -> JsResult<Option<String>> {
     let value: Value =
         obj.get("icon").map_err(|_| Exception::throw_type(ctx, &format!("{what}: cannot read 'icon'")))?;
@@ -191,7 +152,6 @@ fn js_common<'js>(ctx: &Ctx<'js>, host: &Rc<dyn IconHost>, name: Value<'js>) -> 
         );
     };
     if !host.icon_resolves(KIND_RESOURCE, resource) {
-        // the name is in the curated set, so this is the app having dropped the drawable behind it
         return throw_plugin_error(
             ctx,
             "not-found",

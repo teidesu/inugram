@@ -1,10 +1,3 @@
-// Evaluated once per engine by `url.rs`, which calls this factory with the query codec it binds.
-// `native` is an argument and never a property of anything reachable from plugin code.
-//
-// `URLSearchParams` is here rather than in rust because it is a shape with no state of its own: a
-// bound one reads and writes its URL's query through `native`, so there is one parser and one
-// serializer and `href` can never disagree with what this says. The pairs of a *free* one live in
-// this object, which is why the two backings are the only branch in the file.
 ((native) => {
   // module-private: nothing outside this closure holds them, and `Symbol()` (not `Symbol.for`)
   // keeps them out of the global registry a plugin can enumerate by name

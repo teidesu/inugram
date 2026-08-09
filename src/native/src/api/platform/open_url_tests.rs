@@ -1,5 +1,3 @@
-//! What `inu.openUrl` may hand the system, plus the bundled oracle that leads with it.
-
 use crate::api::telegram::rpc::format_exception;
 use crate::api::ui::dialogs::resolve_chooser;
 use crate::testing::harness::setup_apis as setup;

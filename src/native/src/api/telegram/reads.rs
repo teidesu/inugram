@@ -1,20 +1,3 @@
-//! The `Account` read surface: the synchronous cache getters and peer resolution, per
-//! `common.d.ts`. JNI-free behind [`ReadsHost`]; the normalization half is prelude js in
-//! `reads.js`, over the peer helpers [`crate::api::tl::utils`] already owns.
-//!
-//! **One gate, one materialization point.** Every getter runs [`check_grant`] against the
-//! `account.read` scope its op belongs to and then hands the host a spec - `S` (myself),
-//! `D<dialog id>`, `U<username>` - never a peer, so the host parses no TL, a batch is one crossing,
-//! and the takeover filter (Kotlin-side, at materialization) covers this surface by construction.
-//! [`check_self_grant`] is the one rule on top: naming yourself is naming your identity.
-//!
-//! The getters live on one prototype per engine, because `dispatch_account` mints an `Account` for
-//! every update and every intercepted request; the slot comes off `this.id`.
-//!
-//! A paging cursor is a token, not an encoding: `Cursors` maps it to the offset triple, keyed by
-//! which list minted it, so nothing about a page's position is ever in JS and a token from
-//! `getDialogs` handed to `getTopics` is refused rather than paging from a nonsense offset.
-
 use std::cell::{Cell, RefCell};
 use std::collections::{HashMap, VecDeque};
 use std::rc::Rc;
@@ -29,23 +12,14 @@ use crate::sandbox::grants::{check_grant, GrantHost, MATCH_EXACT};
 
 const PRELUDE: &[u8] = include_bytes!(concat!(env!("OUT_DIR"), "/reads.qbc"));
 
-/// stand-in for the Kotlin `QuickJs.ReadsListener`
 pub trait ReadsHost {
-    /// one cache lookup; the answer is a single wire value, or one per element joined with
-    /// [`SEPARATOR`] for a batch op
     fn account_read(&self, account_id: i32, op: i32, arg: &str) -> String;
 
-    /// `None` == accepted, settled later through [`resolve_peer_result`]; `Some` == an error to
-    /// reject with, as a bare message or a `P`/`R` wire
     fn resolve_peer(&self, account_id: i32, request_id: i64, spec: &str, kind: i32) -> Option<String>;
 
-    /// one read that may go to the network. Same accept/reject contract as [`Self::resolve_peer`],
-    /// settled later through [`account_fetch_result`]; `arg` is the op's operands joined with
-    /// [`SEPARATOR`], with the cursor already turned back into the host's own offset triple.
     fn account_fetch(&self, account_id: i32, request_id: i64, op: i32, arg: &str) -> Option<String>;
 }
 
-// keep in sync with Kotlin `PluginReads.OP_*`
 const OP_ME: i32 = 0;
 const OP_USER: i32 = 1;
 const OP_CHAT: i32 = 2;
@@ -63,16 +37,10 @@ const OP_HISTORY: i32 = 13;
 const OP_DIALOGS: i32 = 14;
 const OP_TOPICS: i32 = 15;
 
-/// keep in sync with Kotlin `PluginReads.LIST_SEPARATOR`
 const SEPARATOR: char = '\n';
 
-/// the spec `reads.js` writes for "myself", the one shape whose grant can be decided before the
-/// peer is resolved - see [`check_read_grant`]
 const SPEC_SELF: &str = "S";
 
-/// which `account.read` scope each op reads behind, per `common.d.ts`'s grant list. `None` is an op
-/// only this crate's own prelude could have asked for, so it is refused before it can be gated on a
-/// scope picked by a fallback.
 fn scope_of(op: i32) -> Option<&'static str> {
     Some(match op {
         OP_ME => "self",
@@ -85,14 +53,10 @@ fn scope_of(op: i32) -> Option<&'static str> {
     })
 }
 
-/// what settling an op's request builds out of the host's wire
 #[derive(Clone, Copy)]
 enum Shape {
-    /// one value, `N` for a miss
     Value,
-    /// one wire per element, joined with [`SEPARATOR`]
     List,
-    /// the cursor payload, then one wire per element - all joined with [`SEPARATOR`]
     Page(&'static str),
 }
 
@@ -105,13 +69,9 @@ fn shape_of(op: i32) -> Shape {
     }
 }
 
-/// the `Cursor<List>` brands `common.d.ts` declares, as the runtime half of the same distinction
 const LIST_DIALOGS: &str = "dialogs";
 const LIST_TOPICS: &str = "topics";
 
-/// how many cursors an engine keeps live at once. Paging uses the newest, so the oldest is what a
-/// bound can drop; a plugin holding more than this many half-read lists gets `invalid-argument` on
-/// the ones it abandoned rather than an unbounded table.
 const CURSOR_LIMIT: usize = 32;
 
 struct Cursor {
@@ -120,8 +80,6 @@ struct Cursor {
     payload: String,
 }
 
-/// tokens are never reused and mean nothing outside this table, which is per engine - so a forged
-/// one can only ever name a cursor the same plugin already holds
 #[derive(Default)]
 struct Cursors {
     next_id: Cell<u64>,
@@ -161,10 +119,6 @@ struct PendingRead {
     shape: Shape,
 }
 
-/// the one gate. `getUserFull` is the only op with two ways through it: `common.d.ts` lets you ask
-/// about *yourself* under `account.read(self)` alone, and "yourself" has to mean the spec that says
-/// so - a dialog id that happens to be yours is not decidable here, and the host mirrors this exact
-/// rule rather than resolving one first.
 fn check_read_grant(ctx: &Ctx<'_>, state: &Rc<ReadsState>, op: i32, arg: &str) -> JsResult<()> {
     if op == OP_USER_FULL && arg == SPEC_SELF && state.grants.is_granted("account.read", Some("self"), MATCH_EXACT) {
         return Ok(());
@@ -183,11 +137,6 @@ fn check_read_grant(ctx: &Ctx<'_>, state: &Rc<ReadsState>, op: i32, arg: &str) -
     check_self_grant(ctx, state, arg)
 }
 
-/// Naming *yourself* tells a plugin which peer you are, which is the identity `account.read(self)`
-/// gates on `Account.userId` and `inu.accounts()` - a plugin holding one `Account` per slot would
-/// otherwise rebuild that list out of `getUser('me').id`. So it is required on top of the read's own
-/// scope, which is checked first: a plugin missing both is told about the wider one. `PluginReads`
-/// mirrors this, and this side is what keeps a refused call from crossing at all.
 fn check_self_grant(ctx: &Ctx<'_>, state: &Rc<ReadsState>, arg: &str) -> JsResult<()> {
     if !names_self(arg) {
         return Ok(());
@@ -195,12 +144,10 @@ fn check_self_grant(ctx: &Ctx<'_>, state: &Rc<ReadsState>, arg: &str) -> JsResul
     check_grant(ctx, &state.grants, "account.read", Some("self"), MATCH_EXACT)
 }
 
-/// the spec vocabulary makes this exact: nothing else an op sends (ids, counts, a cursor) is `S`
 fn names_self(arg: &str) -> bool {
     arg.split(SEPARATOR).any(|part| part == SPEC_SELF)
 }
 
-/// runs the grant check for `op`, then asks the host
 fn read_wire(ctx: &Ctx<'_>, state: &Rc<ReadsState>, op: i32, slot: i32, arg: &str) -> JsResult<String> {
     check_read_grant(ctx, state, op, arg)?;
     Ok(state.host.account_read(slot, op, arg))
@@ -211,8 +158,6 @@ fn read_one<'js>(ctx: &Ctx<'js>, state: &Rc<ReadsState>, op: i32, slot: i32, arg
     wire_to_js_value(ctx, &state.views, &wire, ViewLife::Plugin)
 }
 
-/// a batch answers with one wire per element, so misses stay `null` *in place* - which is what the
-/// contract promises and what a TL vector handle could not express
 fn read_many<'js>(ctx: &Ctx<'js>, state: &Rc<ReadsState>, op: i32, slot: i32, arg: &str) -> JsResult<Value<'js>> {
     let wire = read_wire(ctx, state, op, slot, arg)?;
     if let Some(built) = wire_error_to_js(ctx, &wire) {
@@ -295,9 +240,6 @@ pub fn install_reads<'js>(
         natives.set("resolve", f)?;
     }
     {
-        // `resolvePeerMany` is a scheduler over `resolve`, so its own gate has nothing to hang off:
-        // without this an empty list, or one of nothing but input peers, would be answered without
-        // the check every other read runs
         let state = state.clone();
         let f = Function::new(ctx.clone(), move |ctx: Ctx<'js>, _slot: i32| -> JsResult<()> {
             check_grant(&ctx, &state.grants, "account.read", Some("peers"), MATCH_EXACT)
@@ -319,8 +261,6 @@ pub fn install_reads<'js>(
         natives.set("fetch", f)?;
     }
 
-    // captured at install, like `utils.js`'s: what the prelude constructs and throws must not be
-    // decidable by a plugin reassigning `inu.Message`
     let message: Value = inu.get("Message")?;
     let plugin_error: Value = inu.get("PluginError")?;
 
@@ -343,8 +283,6 @@ fn js_resolve_peer<'js>(
     park(ctx, state, Shape::Value, |request_id| state.host.resolve_peer(slot, request_id, spec, kind))
 }
 
-/// mints the promise, remembers how its answer will have to be built, and lets `ask` hand the
-/// request to the host - which either takes it or refuses it outright
 fn park<'js>(
     ctx: &Ctx<'js>,
     state: &Rc<ReadsState>,
@@ -374,8 +312,6 @@ fn js_fetch<'js>(
 ) -> JsResult<Value<'js>> {
     check_read_grant(ctx, state, op, arg)?;
     let shape = shape_of(op);
-    // the cursor is resolved here rather than crossing: what the host is handed is the offset
-    // triple it minted, and a token naming another list never reaches it at all
     let host_arg = match shape {
         Shape::Page(list) => {
             let payload = if cursor.is_empty() {
@@ -402,8 +338,6 @@ fn js_fetch<'js>(
     park(ctx, state, shape, |request_id| state.host.account_fetch(slot, request_id, op, &host_arg))
 }
 
-/// splits a `SEPARATOR`-joined answer into a JS array; an empty wire is an empty array rather than
-/// one empty element
 fn decode_list<'js>(ctx: &Ctx<'js>, state: &Rc<ReadsState>, wire: &str) -> JsResult<Array<'js>> {
     let array = Array::new(ctx.clone())?;
     if wire.is_empty() {
@@ -433,7 +367,6 @@ fn decode_result<'js>(ctx: &Ctx<'js>, state: &Rc<ReadsState>, shape: Shape, wire
     }
 }
 
-/// settles a pending `resolvePeer` or async read; the wire is the op's own shape, or an error
 fn settle(
     rt: &Runtime,
     context: &rquickjs::Context,
@@ -475,8 +408,6 @@ fn settle(
     pump_jobs(rt, context, state.log.as_ref());
 }
 
-/// settles a pending `resolvePeer`/`resolveUser`/`resolveChannel`; the wire is a `J` `InputPeer` or
-/// an error
 pub fn resolve_peer_result(
     rt: &Runtime,
     context: &rquickjs::Context,
@@ -487,7 +418,6 @@ pub fn resolve_peer_result(
     settle(rt, context, state, "resolvePeer", request_id, result_wire);
 }
 
-/// settles a pending `getHistory`/`getDialogs`/`getTopics`/`getUserFull`/`getChatFull`
 pub fn account_fetch_result(
     rt: &Runtime,
     context: &rquickjs::Context,
@@ -498,7 +428,6 @@ pub fn account_fetch_result(
     settle(rt, context, state, "accountFetch", request_id, result_wire);
 }
 
-/// releases every `Persistent` GC root this state still owns - same contract as [`crate::api::telegram::rpc::dispose`]
 pub fn dispose(context: &rquickjs::Context, state: &Rc<ReadsState>) {
     context.with(|ctx| {
         for (_, pending) in state.pending.borrow_mut().drain() {

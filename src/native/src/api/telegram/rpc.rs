@@ -1,15 +1,3 @@
-//! Pure JS-plumbing for the `inu.interceptRpc` / `inu.invokeRpc` / `inu.onUpdate` bridge.
-//!
-//! Deliberately JNI-free: all "Java" interaction is behind [`RpcHost`]/[`crate::api::tl::proxy::TlHost`],
-//! so this module is exercised directly with rquickjs in cargo tests using Rust closure/struct
-//! stand-ins for the upcalls. `src/native/src/lib.rs` wires JNI-backed hosts and forwards
-//! the JNI exports into the `pub fn`s here.
-//!
-//! Every request/response/update value crossing the host boundary is a single
-//! [`crate::api::tl::proxy`]-shaped wire string (`H<O|V><W|R><id>` a live handle, `J<json>` a plain-value
-//! construct, `E`/`R`/`P` the three error shapes decoded by [`crate::api::error`]) rather than raw JSON -
-//! see `tl_proxy.rs`'s module doc for the full tag list.
-
 use std::cell::{Cell, RefCell};
 use std::collections::HashMap;
 use std::rc::Rc;
@@ -23,33 +11,16 @@ use crate::api::tl::proxy::{self, TlViews, ViewLife};
 use crate::sandbox::grants::{check_grant, GrantHost, MATCH_EXACT};
 use crate::sandbox::registry::{make_disposer, noop_disposer, CallbackRegistry, Lifecycle, Registry};
 
-/// stand-in for the Kotlin `QuickJs.RpcListener` interface; `None` == ok, `Some(msg)` == error.
-/// `*_wire` params/returns are [`tl_proxy`]-tagged strings, never raw JSON.
 pub trait RpcHost {
-    /// `scope` is the grant the registration is gated on: `""` for `inu.interceptRpc`, where every
-    /// method is its own scope, or `interceptSendMessage` for the narrowing of the same chain that
-    /// api is - whose grant vocabulary is the api and not the four methods it is built from
     fn on_register(&self, methods: &[String], callback_id: u32, scope: &str) -> Option<String>;
     fn on_unregister(&self, callback_id: u32);
-    /// `slot` is the account to send on, or [`ANY_ACCOUNT`] for the one the plugin started on
-    /// (`inu.invokeRpc`, which names no account)
     fn on_invoke(&self, invoke_id: i64, slot: i32, request_wire: &str) -> Option<String>;
     fn on_next(&self, dispatch_id: i64, request_wire: &str) -> Option<String>;
     fn on_complete(&self, dispatch_id: i64, result_wire: &str);
-    /// `types` is the registration's constructor list, which the host filters on: an update no
-    /// registration named must never be materialized, let alone crossed into JS. `scope` is what
-    /// the host gates the registration on - `""` for `inu.onUpdate`, where every constructor is its
-    /// own grant scope, or the demuxed event name (`new_message`, ...) for the conveniences, whose
-    /// grant vocabulary is the event and not the constructors it happens to be built from
     fn on_update_register(&self, callback_id: u32, types: &[String], scope: &str) -> Option<String>;
     fn on_update_unregister(&self, callback_id: u32);
-    /// `inu.interceptUpdate`. A separate table from [`RpcHost::on_update_register`]'s: an
-    /// observation registration only decides who a batch is fanned out to, while one of these
-    /// decides whether the app is handed the batch at all.
     fn on_intercept_update_register(&self, callback_id: u32, types: &[String]) -> Option<String>;
     fn on_intercept_update_unregister(&self, callback_id: u32);
-    /// one `interceptUpdate` stage's verdict. `deliver` false means the update is dropped, which
-    /// ends the chain for it - the host walks no further stage.
     fn on_update_verdict(&self, dispatch_id: i64, deliver: bool);
 }
 
@@ -59,13 +30,11 @@ pub(crate) struct PendingSettle {
 }
 
 impl PendingSettle {
-    /// mints a promise and saves its resolvers as roots
     pub(crate) fn new<'js>(ctx: &Ctx<'js>) -> JsResult<(rquickjs::Promise<'js>, Self)> {
         let (promise, resolve, reject) = rquickjs::Promise::new(ctx)?;
         Ok((promise, PendingSettle { resolve: Persistent::save(ctx, resolve), reject: Persistent::save(ctx, reject) }))
     }
 
-    /// releases both roots and rejects with the host's error (an `E`/`R`/`P` wire, or a bare message)
     pub(crate) fn reject_with(self, ctx: &Ctx<'_>, msg: &str) -> JsResult<()> {
         let error_val = match error::host_error_to_js(ctx, msg) {
             Ok(v) => v,
@@ -77,7 +46,6 @@ impl PendingSettle {
         self.reject_with_value(ctx, error_val)
     }
 
-    /// releases both roots and rejects with an already-built error value
     pub(crate) fn reject_with_value<'js>(self, ctx: &Ctx<'js>, value: Value<'js>) -> JsResult<()> {
         let reject = self.reject.restore(ctx)?;
         let _ = self.resolve.restore(ctx);
@@ -85,7 +53,6 @@ impl PendingSettle {
         Ok(())
     }
 
-    /// releases both roots and resolves with [`value`]
     pub(crate) fn resolve_with<'js>(self, ctx: &Ctx<'js>, value: Value<'js>) -> JsResult<()> {
         let resolve = self.resolve.restore(ctx)?;
         let _ = self.reject.restore(ctx);
@@ -93,17 +60,12 @@ impl PendingSettle {
         Ok(())
     }
 
-    /// releases both roots without settling (dispose paths)
     pub(crate) fn release(self, ctx: &Ctx<'_>) {
         let _ = self.resolve.restore(ctx);
         let _ = self.reject.restore(ctx);
     }
 }
 
-/// text of the synthetic `TL_error(-1000, ...)` `PluginRpc` tears a chain down with when the
-/// *budget* ran out, as opposed to its other teardown reasons (`INTERCEPTOR_ABANDONED`: the plugin
-/// owning a stage was stopped, the app cancelled, ...). Only the first is the plugin's fault, so
-/// only the first may tell it so.
 const CHAIN_TIMEOUT_TEXT: &str = "INTERCEPTOR_TIMEOUT";
 
 #[derive(Default)]
@@ -117,52 +79,28 @@ struct DispatchState {
     next_resolvers: RefCell<Option<PendingSettle>>,
 }
 
-/// one `inu.onUpdate` registration. The constructor list is part of the registration rather than
-/// of the plugin, so a plugin listening for two disjoint sets doesn't see either one's updates in
-/// the other's callback.
-///
-/// A demuxed event ([`DEMUX_EVENTS`]) is one of these too, holding the listener `events.js` built
-/// around the plugin's callback rather than the callback itself - so it narrows, dedups and expires
-/// identically, and there is no second dispatch path for the host to keep in step with this one.
 #[derive(Clone)]
 struct UpdateReg {
     callback: Persistent<Function<'static>>,
     types: Rc<[String]>,
 }
 
-/// the demuxed event helpers, per `common.d.ts`: `(api name, grant scope, constructors)`.
-///
-/// The constructor lists are deliberately narrow. A scheduled message has not been sent, a quick
-/// reply is a template, an ephemeral/business message belongs to another account's inbox and a
-/// secret chat is somewhere plugin code never reaches - none of them is "a message arrived in a
-/// dialog", which is the only thing these three promise.
 const DEMUX_EVENTS: [(&str, &str, &[&str]); 3] = [
     ("onNewMessage", "new_message", &["updateNewMessage", "updateNewChannelMessage"]),
     ("onMessageEdited", "edit_message", &["updateEditMessage", "updateEditChannelMessage"]),
     ("onMessageDeleted", "delete_message", &["updateDeleteMessages", "updateDeleteChannelMessages"]),
 ];
 
-/// what `inu.invokeRpc` sends on: the slot the plugin started on, which the host snapshots rather
-/// than re-reading, so a user switching accounts cannot silently retarget a plugin's requests.
-/// `Account.invokeRpc` names its own slot instead, which is the whole point of that form.
 pub const ANY_ACCOUNT: i32 = -1;
 
 const EVENTS_PRELUDE: &[u8] = include_bytes!(concat!(env!("OUT_DIR"), "/events.qbc"));
 const SEND_PRELUDE: &[u8] = include_bytes!(concat!(env!("OUT_DIR"), "/send_message.qbc"));
 
-/// what `inu.interceptSendMessage` registers for. The raw layer spreads one outgoing message across
-/// these four (and their scheduled forms, which are a flag on the same methods), which is the whole
-/// reason the api exists; `send_message.js` normalizes them into one `OutgoingMessage`.
 const SEND_METHODS: [&str; 4] =
     ["messages.sendMessage", "messages.sendMedia", "messages.sendMultiMedia", "messages.editMessage"];
 
-/// the grant `interceptSendMessage` registrations are gated on, in place of the four
-/// `interceptRpc(...)` scopes they would otherwise need
 const SEND_SCOPE: &str = "interceptSendMessage";
 
-/// one `inu.interceptUpdate` stage in flight. There is no `next()` to park, so the only thing to
-/// remember is whether something has already answered for it: a middleware that settles after the
-/// host abandoned it must not answer a chain that has moved on.
 #[derive(Default)]
 struct UpdateDispatchState {
     settled: Cell<bool>,
@@ -179,16 +117,8 @@ pub struct RpcState {
     intercept_fns: CallbackRegistry,
     update_fns: Registry<UpdateReg>,
     intercept_update_fns: Registry<UpdateReg>,
-    /// `events.js`'s factory, held as a root for the engine's life: it is what turns a demuxed
-    /// registration into an ordinary [`UpdateReg`], and plugin code must not be able to reach it
     demux: RefCell<Option<Persistent<Function<'static>>>>,
-    /// `send_message.js`'s factory, held for the same reason: it is what turns a verdict middleware into
-    /// an ordinary `interceptRpc` one
     send_wrap: RefCell<Option<Persistent<Function<'static>>>>,
-    /// the `Promise` constructor, its `resolve` and its prototype's `then`, captured at install for
-    /// the reason every other prelude captures its constructors: how an intercepted request settles
-    /// must not be decidable by a plugin reassigning `globalThis.Promise` or patching the prototype.
-    /// The constructor is held because `Promise.resolve` reads its species off `this`.
     promise: RefCell<Option<PromiseTools>>,
     dispatches: RefCell<HashMap<i64, Rc<DispatchState>>>,
     update_dispatches: RefCell<HashMap<i64, Rc<UpdateDispatchState>>>,
@@ -209,10 +139,6 @@ pub(crate) fn make_error<'js>(ctx: &Ctx<'js>, message: &str) -> JsResult<Value<'
 }
 
 impl RpcState {
-    /// The dispatch map is what "the app is parked behind this plugin" means, and the timer floor
-    /// reads it to know a backgrounded chain must not be throttled into the chain budget. Every
-    /// mutation goes through these three so the two can never drift; `no_raw_dispatch_mutation`
-    /// pins that.
     fn insert_dispatch(&self, dispatch_id: i64, dstate: Rc<DispatchState>) {
         self.dispatches.borrow_mut().insert(dispatch_id, dstate);
         self.sync_blocking();
@@ -246,9 +172,6 @@ impl RpcState {
         self.sync_blocking();
     }
 
-    /// an `interceptUpdate` stage blocks the app's whole arriving batch, exactly as an
-    /// `interceptRpc` stage blocks its request, so both count toward the same "something is waiting
-    /// on us" the background timer floor reads
     fn sync_blocking(&self) {
         let count = self.dispatches.borrow().len() + self.update_dispatches.borrow().len();
         self.lifecycle.set_blocking_dispatches(count);
@@ -263,7 +186,6 @@ pub(crate) fn make_rpc_error<'js>(ctx: &Ctx<'js>, code: i32, text: &str) -> JsRe
     get_rpc_error_ctor(ctx)?.construct((code, text))
 }
 
-/// `Some(R-wire)` if `value` is an `inu.RpcError` instance (code/text preserved structurally)
 fn rpc_error_to_wire<'js>(ctx: &Ctx<'js>, value: &Value<'js>) -> Option<String> {
     let obj = value.as_object()?;
     let ctor = get_rpc_error_ctor(ctx).ok()?;
@@ -275,17 +197,10 @@ fn rpc_error_to_wire<'js>(ctx: &Ctx<'js>, value: &Value<'js>) -> Option<String> 
     Some(proxy::encode_rpc_error(code, &text))
 }
 
-/// encodes a middleware's thrown/rejected value into a result wire: `R` when it's an
-/// `inu.RpcError`, `E` with its message otherwise
 fn thrown_to_result_wire<'js>(ctx: &Ctx<'js>, value: &Value<'js>) -> String {
     rpc_error_to_wire(ctx, value).unwrap_or_else(|| proxy::encode_error(&error_value_to_string(ctx, value)))
 }
 
-/// how a stage's thrown/rejected value is logged. an `inu.RpcError` is not a bug: `common.d.ts`
-/// documents throwing one as *the* way to fail an intercepted request, and a stage the host
-/// abandoned has its parked `next()` rejected with one it did not cause (`INTERCEPTOR_TIMEOUT`,
-/// `INTERCEPTOR_ABANDONED`). Faulting on either would disable a plugin for using the api as
-/// written, or for another plugin's stall.
 fn describe_stage_failure<'js>(ctx: &Ctx<'js>, what: std::fmt::Arguments, value: &Value<'js>) -> String {
     let detail = format_thrown(ctx, value);
     if rpc_error_to_wire(ctx, value).is_some() {
@@ -295,8 +210,6 @@ fn describe_stage_failure<'js>(ctx: &Ctx<'js>, what: std::fmt::Arguments, value:
     }
 }
 
-/// resolves or rejects `settle` with a decoded wire value, routing on its `E`/`R`/`P`-tag.
-/// consumes the settle: both roots are released whatever happens
 fn settle_from_wire<'js>(
     ctx: &Ctx<'js>,
     tl: &Rc<TlViews>,
@@ -323,13 +236,8 @@ fn settle_from_wire<'js>(
     }
 }
 
-/// formats a thrown/rejected JS value into "message\nstack" (stack appended when present), or into
-/// the quota it really was when the js heap ceiling raised it
 fn format_thrown<'js>(ctx: &Ctx<'js>, value: &Value<'js>) -> String {
     let msg = describe_thrown(ctx, value);
-    // reading the value can itself raise (a throwing `toString`, a `stack` getter, a Proxy), and
-    // this runs where nothing else will look: the rejection tracker returns straight into quickjs,
-    // and a raise left pending would fire at whatever unrelated call touched the context next
     let _ = ctx.catch();
     msg
 }
@@ -352,7 +260,6 @@ fn describe_thrown<'js>(ctx: &Ctx<'js>, value: &Value<'js>) -> String {
     msg
 }
 
-/// formats the pending exception (already raised; caught via ctx.catch) into "message\nstack"
 pub(crate) fn format_exception(ctx: &Ctx) -> String {
     format_thrown(ctx, &ctx.catch())
 }
@@ -363,8 +270,6 @@ struct RejectionSlot {
 }
 
 thread_local! {
-    // per-JSContext (keyed by its raw pointer) rejection state. engines run single-threaded on
-    // globalQueue, so a thread-local keyed by context is enough to isolate them without locking.
     static REJECTIONS: RefCell<HashMap<usize, RejectionSlot>> = RefCell::new(HashMap::new());
 }
 
@@ -372,8 +277,6 @@ fn ctx_key(ctx: &Ctx) -> usize {
     ctx.as_raw().as_ptr() as usize
 }
 
-/// identity key for a promise value (Value's Hash is tag+bits, i.e. the heap pointer for objects),
-/// stable across the false/true tracker callbacks for the same promise
 fn value_hash(value: &Value) -> u64 {
     use std::collections::hash_map::DefaultHasher;
     use std::hash::{Hash, Hasher};
@@ -382,12 +285,6 @@ fn value_hash(value: &Value) -> u64 {
     h.finish()
 }
 
-/// installs a host tracker that surfaces unhandled promise rejections (e.g. an `async` onUpdate
-/// handler that throws, or any plugin code awaiting a rejecting promise without a `.catch`) —
-/// quickjs otherwise drops them silently. quickjs reports a rejection with `is_handled=false` at
-/// rejection time and `is_handled=true` if a handler is attached later (the `Promise.reject(x)
-/// .catch(...)` case), so we only *record* here and let [`report_rejections`] surface whatever is
-/// still unhandled once the microtask queue drains. Installed per-engine regardless of RPC grant.
 pub fn install_rejection_tracker(rt: &Runtime, log: crate::Log) {
     rt.set_host_promise_rejection_tracker(Some(Box::new(move |ctx, promise, reason, is_handled| {
         let key = ctx_key(&ctx);
@@ -411,7 +308,6 @@ pub fn install_rejection_tracker(rt: &Runtime, log: crate::Log) {
     })));
 }
 
-/// logs every rejection that stayed unhandled for [`ctx`]'s context, then clears them
 fn report_rejections(ctx: &Ctx) {
     let drained = REJECTIONS.with(|r| {
         let mut map = r.borrow_mut();
@@ -429,8 +325,6 @@ fn report_rejections(ctx: &Ctx) {
     }
 }
 
-/// drops a context's rejection-tracking slot; call on engine teardown so a later context reusing
-/// the same address can't inherit stale pending entries
 pub fn dispose_rejection_tracker(ctx: &Ctx) {
     REJECTIONS.with(|r| {
         r.borrow_mut().remove(&ctx_key(ctx));
@@ -449,8 +343,6 @@ fn error_value_to_string<'js>(ctx: &Ctx<'js>, value: &Value<'js>) -> String {
     Coerced::<String>::from_js(ctx, value.clone()).map(|c| c.0).unwrap_or_else(|_| "unknown error".to_string())
 }
 
-/// normalizes `result` (a value, a thenable or a Promise) via `Promise.resolve(result).then(ok, err)`,
-/// through the pair [`RpcState::promise`] captured at install rather than through the globals
 fn resolve_and_then<'js>(
     ctx: &Ctx<'js>,
     state: &Rc<RpcState>,
@@ -486,8 +378,6 @@ fn capture_promise_tools(ctx: &Ctx<'_>) -> JsResult<PromiseTools> {
     })
 }
 
-/// drains the runtime's microtask queue (logging but not propagating job exceptions), then surfaces
-/// any promise rejections that stayed unhandled once the queue settled
 pub fn pump_jobs(rt: &Runtime, context: &rquickjs::Context, log: &dyn Fn(&str)) {
     loop {
         match rt.execute_pending_job() {
@@ -579,12 +469,6 @@ pub fn install_rpc<'js>(
     Ok(state)
 }
 
-/// `Account.invokeRpc`, as a third link chained behind whatever prototype the read and write
-/// surfaces built. It goes here rather than in `writes.js` because the pending-invoke table is this
-/// module's, and it can go here at all because `installRpc` is a later JNI call than `installApi`.
-///
-/// The slot comes off `this.id`, for `utils.js`'s reason: one prototype serves every account, so a
-/// method torn off a handle has to fail by name rather than send on slot 0.
 fn install_account_invoke<'js>(ctx: &Ctx<'js>, state: &Rc<RpcState>) -> JsResult<()> {
     let Some(accounts) = state.accounts.clone() else {
         return Ok(());
@@ -615,8 +499,6 @@ fn install_account_invoke<'js>(ctx: &Ctx<'js>, state: &Rc<RpcState>) -> JsResult
         },
     )?;
     prototype.set("invokeRpc", f)?;
-    // taken rather than read, for `writes.rs`'s reason: overwriting the account's `Persistent`
-    // without releasing it first leaks a GC root and aborts `JS_FreeRuntime`
     if let Some(inner) = crate::api::telegram::account::take_prototype(ctx, &accounts) {
         prototype.set_prototype(Some(&inner))?;
     }
@@ -627,10 +509,6 @@ fn install_account_invoke<'js>(ctx: &Ctx<'js>, state: &Rc<RpcState>) -> JsResult
     Ok(())
 }
 
-/// hangs `inu.interceptSendMessage` off `inu` as a narrowing of the `interceptRpc` chain. The
-/// prelude captures `inu.RpcError` here rather than at dispatch, for the reason
-/// [`install_demuxed_events`] captures `inu.Message` here: this is the last moment it is still the
-/// one this engine installed.
 fn install_send_message<'js>(
     ctx: &Ctx<'js>,
     state: &Rc<RpcState>,
@@ -655,14 +533,10 @@ fn install_send_message<'js>(
     Ok(())
 }
 
-/// hangs the three conveniences off `inu`, each closing over its own kind. `inu.Message` is read
-/// here rather than at dispatch: `installApi` runs before `installRpc`, and both run before the
-/// plugin's source, so this is the last moment the class is still the one this engine installed.
 fn install_demuxed_events<'js>(ctx: &Ctx<'js>, state: &Rc<RpcState>, inu: &Object<'js>) -> JsResult<()> {
     let factory = crate::utils::prelude::load(ctx, EVENTS_PRELUDE)?;
     let message: Value = inu.get("Message")?;
     if !message.is_function() {
-        // a late TypeError out of a handler would report this as the plugin's fault
         return Err(Exception::throw_type(ctx, "the demuxed events need the inu.Message installApi installs"));
     }
     let build: Function = factory.call((message,))?;
@@ -678,9 +552,6 @@ fn install_demuxed_events<'js>(ctx: &Ctx<'js>, state: &Rc<RpcState>, inu: &Objec
     Ok(())
 }
 
-/// reads the `string | string[]` first argument every registration that names TL constructors
-/// takes. Empty is refused rather than read as "everything": the whole point of the list is that
-/// the filtering happens natively.
 fn read_name_list<'js>(ctx: &Ctx<'js>, what: &str, names: Value<'js>, noun: &str) -> JsResult<Vec<String>> {
     let list: Vec<String> = if let Some(s) = names.as_string() {
         vec![s.to_string()?]
@@ -719,10 +590,6 @@ fn js_intercept_rpc<'js>(
     register_intercept(ctx, state, list, "", cb)
 }
 
-/// `inu.interceptSendMessage`: the same chain, over [`SEND_METHODS`], with the plugin's verdict
-/// middleware wrapped by `send_message.js` into an ordinary one. The grant is the api's own, never the
-/// four methods' - `interceptRpc(messages.sendMessage)` and this do not imply each other, the same
-/// way the demuxed events and their constructors do not.
 fn js_intercept_send_message<'js>(ctx: &Ctx<'js>, state: &Rc<RpcState>, cb: Function<'js>) -> JsResult<Function<'js>> {
     if state.lifecycle.is_unloading() {
         return noop_disposer(ctx);
@@ -793,12 +660,6 @@ fn js_invoke_rpc<'js>(ctx: &Ctx<'js>, state: &Rc<RpcState>, slot: i32, obj: Valu
     Ok(promise.into_value())
 }
 
-/// NOTE on locking: `Context::with` holds the runtime's lock for its whole closure. `pump_jobs`
-/// re-locks the same runtime via `Runtime::execute_pending_job`, so it must run *after* the
-/// `with` block returns - never nested inside one, or the reentrant lock panics (and, since job
-/// callbacks run through quickjs's C job queue, that panic unwinds across an FFI boundary and
-/// aborts the process instead of failing gracefully). Every public entry point below follows the
-/// `context.with(|ctx| { ...sync work... }); pump_jobs(rt, ...);` shape for this reason.
 pub fn resolve_invoke(
     rt: &Runtime,
     context: &rquickjs::Context,
@@ -808,7 +669,6 @@ pub fn resolve_invoke(
 ) {
     context.with(|ctx| {
         if let Some(pending) = state.pending_invoke.borrow_mut().remove(&invoke_id) {
-            // the response is the plugin's own: its views outlive this call and die with their proxies
             if let Err(e) = settle_from_wire(&ctx, &state.tl, pending, result_wire, ViewLife::Plugin) {
                 (state.log)(&format!("resolveInvoke({invoke_id}) failed: {e:?}"));
             }
@@ -833,9 +693,6 @@ fn js_on_update<'js>(
     register_update_listener(ctx, state, list, "", cb)
 }
 
-/// `inu.interceptUpdate`. Its own registry rather than a flag on [`js_on_update`]'s: an observation
-/// registration only decides who a batch reaches, one of these decides whether the app is handed
-/// the batch at all, and the host walks the two lists at different points.
 fn js_intercept_update<'js>(
     ctx: &Ctx<'js>,
     state: &Rc<RpcState>,
@@ -868,9 +725,6 @@ fn js_intercept_update<'js>(
     })
 }
 
-/// one of [`DEMUX_EVENTS`]. The grant is checked against the event's own scope, never against the
-/// constructors: `common.d.ts` keeps the two vocabularies apart, so `onUpdate(new_message)` buys
-/// this and nothing of the raw stream, and `onUpdate(updateNewMessage)` the other way round.
 fn js_on_demuxed<'js>(
     ctx: &Ctx<'js>,
     state: &Rc<RpcState>,
@@ -916,11 +770,6 @@ fn register_update_listener<'js>(
     })
 }
 
-/// the payload is a read-only, plugin-lifetime view: decoded even when no registration named
-/// [`type_name`], because its handle is freed by the proxy's finalizer and nothing else would ever
-/// release it. The host only dispatches an update at least one registration asked for, so this is
-/// the narrow case of a plugin listening for several disjoint sets, not the bulk filtering - that
-/// happens host-side, before a handle is minted.
 pub fn dispatch_update(
     rt: &Runtime,
     context: &rquickjs::Context,
@@ -971,11 +820,6 @@ pub fn dispatch_update(
     pump_jobs(rt, context, state.log.as_ref());
 }
 
-/// answers one `interceptUpdate` stage. `deliver` false ends the chain for that update.
-///
-/// Guarded on [`UpdateDispatchState::settled`] so the host is answered exactly once: a middleware
-/// resolving after [`abandon_update_dispatch`] has moved the batch on must not retro-drop an update
-/// the app has already been handed.
 fn settle_update_verdict(state: &Rc<RpcState>, ustate: &Rc<UpdateDispatchState>, dispatch_id: i64, deliver: bool) {
     if ustate.settled.replace(true) {
         return;
@@ -995,8 +839,6 @@ fn try_dispatch_update_intercept<'js>(
 ) -> JsResult<()> {
     let ustate = Rc::new(UpdateDispatchState::default());
     let Some(reg) = state.intercept_update_fns.get(callback_id) else {
-        // the host picked its chain before it could see a disposal, so this stage goes transparent -
-        // the same answer [`passthrough_dispatch`] gives for the request chain
         (state.log)(&format!(
             "interceptUpdate({type_name}): dispatch {dispatch_id} names disposed interceptor {callback_id}, delivering"
         ));
@@ -1004,8 +846,6 @@ fn try_dispatch_update_intercept<'js>(
         return Ok(());
     };
     let middleware = reg.callback.restore(ctx)?;
-    // writable and dispatch-scoped: rewriting in place is the point, and the view dies with the
-    // batch the host released the scope for
     let update = proxy::wire_to_js_value(ctx, &state.tl, update_wire, ViewLife::Dispatch)?;
     let account = dispatch_account(ctx, &state.accounts, account_id)?;
 
@@ -1015,8 +855,6 @@ fn try_dispatch_update_intercept<'js>(
         Ok(v) => v,
         Err(rquickjs::Error::Exception) => {
             let caught = ctx.catch();
-            // delivered rather than dropped: a drop desyncs pts until the next catch-up, which is
-            // not a thing to do because a plugin has a bug in it
             (state.log)(&crate::fault(format_args!(
                 "interceptUpdate({type_name}) middleware threw, delivering: {}",
                 format_thrown(ctx, &caught)
@@ -1062,8 +900,6 @@ fn try_dispatch_update_intercept<'js>(
     resolve_and_then(ctx, state, result_value, ok_fn, err_fn)
 }
 
-/// runs one `interceptUpdate` stage. The host answers itself when nothing can run, so every
-/// dispatch is answered exactly once however this goes.
 #[allow(clippy::too_many_arguments)]
 pub fn dispatch_update_intercept(
     rt: &Runtime,
@@ -1094,8 +930,6 @@ pub fn dispatch_update_intercept(
     pump_jobs(rt, context, state.log.as_ref());
 }
 
-/// the failure tail of [`dispatch_update_intercept`], where the dispatch has already been taken off
-/// the map: answers unless something already did
 fn settle_update_verdict_after_removal(state: &Rc<RpcState>, ustate: &Rc<UpdateDispatchState>, dispatch_id: i64) {
     if ustate.settled.replace(true) {
         return;
@@ -1103,9 +937,6 @@ fn settle_update_verdict_after_removal(state: &Rc<RpcState>, ustate: &Rc<UpdateD
     state.host.on_update_verdict(dispatch_id, true);
 }
 
-/// the batch this stage belongs to has moved on (its budget ran out, or the plugin was stopped).
-/// Nothing is rejected, there being no `next()` to park - the stage is simply made unable to answer,
-/// so a middleware that resolves later cannot drop an update the app has already applied.
 pub fn abandon_update_dispatch(rt: &Runtime, context: &rquickjs::Context, state: &Rc<RpcState>, dispatch_id: i64) {
     context.with(|_ctx| {
         if let Some(ustate) = state.remove_update_dispatch(dispatch_id) {
@@ -1129,19 +960,12 @@ fn complete_dispatch(
         return;
     }
     state.remove_dispatch(dispatch_id);
-    // if the middleware settled without ever awaiting its own next() call, the next() promise's
-    // resolve/reject are still rooted in dstate.next_resolvers - release them here so they don't
-    // outlive the runtime (Persistent has no Drop; an unreleased root aborts JS_FreeRuntime).
     if let Some(pending) = dstate.next_resolvers.borrow_mut().take() {
         pending.release(ctx);
     }
     state.host.on_complete(dispatch_id, result_wire);
 }
 
-/// answers a dispatch whose middleware is no longer registered exactly as a middleware that called
-/// `next(req)` and returned `undefined` would: the stage goes transparent. The host picks a chain
-/// before it can see a disposal that happened in the meantime, and a plugin disposing an
-/// interceptor must not fail the app's request on its way out.
 fn passthrough_dispatch(ctx: &Ctx<'_>, state: &Rc<RpcState>, dispatch_id: i64, request_wire: &str) {
     let dstate = Rc::new(DispatchState::default());
     dstate.called.set(true);
@@ -1292,9 +1116,6 @@ pub fn dispatch_rpc(
             };
             (state.log)(&format!("interceptRpc({method}) dispatch failed: {msg}"));
             let wire = proxy::encode_error(&msg);
-            // through the same guard every other answer takes: a stage that parked its `next()`
-            // before the failure has a passthrough in flight, and answering the host here *and*
-            // from `complete_next` is two answers to one request
             let dstate = state.dispatches.borrow().get(&dispatch_id).cloned();
             match dstate {
                 Some(dstate) => complete_dispatch(&ctx, state, &dstate, dispatch_id, &wire),
@@ -1332,13 +1153,6 @@ pub fn complete_next(
     pump_jobs(rt, context, state.log.as_ref());
 }
 
-/// Drops a dispatch the host has already answered without it: rejects the parked `next()` with
-/// `reason_wire`, and marks the dispatch settled so the middleware's eventual resolution becomes a
-/// no-op in [`complete_dispatch`]. Deliberately does not call `on_complete` - the host is the one
-/// abandoning, and it has already sent its own answer to the app. A later `next()` from the stage
-/// throws `timed-out` only when `reason_wire` says the chain ran out of budget, `aborted`
-/// otherwise: blaming the budget for an unrelated teardown sends the plugin author hunting a
-/// timeout that never happened.
 pub fn abandon_dispatch(
     rt: &Runtime,
     context: &rquickjs::Context,
@@ -1363,11 +1177,6 @@ pub fn abandon_dispatch(
     pump_jobs(rt, context, state.log.as_ref());
 }
 
-/// Restores every `Persistent` this state still owns into `ctx` and immediately drops the
-/// resulting `Value`, releasing quickjs's GC roots. Must run (with a live `Runtime`/`Context`)
-/// before the engine's `Runtime` is dropped — `Persistent` has no `Drop` impl of its own, and an
-/// unreleased root left dangling makes `JS_FreeRuntime` abort the process (see rquickjs's
-/// `Persistent` docs). Call once, right before tearing down the engine.
 pub fn dispose(context: &rquickjs::Context, state: &Rc<RpcState>) {
     context.with(|ctx| {
         state.intercept_fns.release_all(&ctx);
@@ -1388,9 +1197,6 @@ pub fn dispose(context: &rquickjs::Context, state: &Rc<RpcState>) {
             let _ = tools.resolve.restore(&ctx);
             let _ = tools.then.restore(&ctx);
         }
-        // the `Account` prototype chain, whose outermost link `install_account_invoke` put there.
-        // Whichever of this and `account::dispose` runs first releases the whole chain, the inner
-        // links being ordinary JS references by then; the other finds nothing left to take.
         if let Some(accounts) = state.accounts.as_ref() {
             let _ = crate::api::telegram::account::take_prototype(&ctx, accounts);
         }

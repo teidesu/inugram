@@ -1,31 +1,9 @@
-//! The geometry [`crate::api::canvas`] records: an affine transform, and a path made of nothing but
-//! move/line/cubic/close.
-//!
-//! **Every curve is decomposed here rather than by the host**, and `arcTo` is why: the canvas one
-//! is *tangent-based* while the platform's `Path.arcTo` takes an oval and two angles, so a host
-//! handed the canvas arguments would be computing the tangent circle itself - in java, on a device,
-//! where nothing can test it. `arc`/`ellipse`/`roundRect` follow, plus one more reason: an ellipse
-//! under a rotation or a non-uniform scale is not an oval the platform can name.
-//!
-//! **Points are stored in device space**, because that is what the canvas spec says a path is:
-//! `moveTo`, `translate`, `lineTo` puts two points in different user spaces and one device space.
-//! So an op needing the current point in *user* space (`arcTo`'s tangents, `closePath`'s subpath
-//! start) reads it back through the inverse, and a singular transform makes those unrepresentable.
-
 pub const TAU: f64 = std::f64::consts::TAU;
 
-/// how far apart two directions must be before `arcTo` believes there is a corner between them.
-/// Below it the tangent circle's centre is off at infinity, and the spec's own answer is a straight
-/// line to the corner point.
 const COLLINEAR_EPSILON: f64 = 1e-12;
 
-/// `|determinant|` below which a transform is treated as having no inverse. Not an arbitrary
-/// epsilon: a matrix this flat maps the whole canvas onto a line, so every path under it is
-/// invisible and the alternative to skipping is dividing by it.
 const SINGULAR_EPSILON: f64 = 1e-12;
 
-/// the canvas 2d transform, `[a b c d e f]` exactly as `setTransform` takes it:
-/// `x' = a*x + c*y + e`, `y' = b*x + d*y + f`
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct Matrix {
     pub a: f64,
@@ -45,8 +23,6 @@ impl Default for Matrix {
 impl Matrix {
     pub const IDENTITY: Matrix = Matrix { a: 1.0, b: 0.0, c: 0.0, d: 1.0, e: 0.0, f: 0.0 };
 
-    /// `self` then... no: the canvas `transform()` *post*-multiplies, so `other` is applied to a
-    /// point first and `self` second
     pub fn multiply(&self, other: &Matrix) -> Matrix {
         Matrix {
             a: self.a * other.a + self.c * other.b,
@@ -62,7 +38,6 @@ impl Matrix {
         (self.a * x + self.c * y + self.e, self.b * x + self.d * y + self.f)
     }
 
-    /// a direction rather than a position: an offset is rotated and scaled but never translated
     pub fn apply_vector(&self, x: f64, y: f64) -> (f64, f64) {
         (self.a * x + self.c * y, self.b * x + self.d * y)
     }
@@ -87,8 +62,6 @@ impl Matrix {
         })
     }
 
-    /// the canvas rule for every transform entry point: a non-finite argument is *ignored*, so the
-    /// context keeps the transform it had rather than acquiring a NaN nothing can draw under
     pub fn is_finite(&self) -> bool {
         [self.a, self.b, self.c, self.d, self.e, self.f].iter().all(|v| v.is_finite())
     }
@@ -115,8 +88,6 @@ pub enum Verb {
     Close,
 }
 
-/// a path in device space, plus the two things the spec's own algorithms need to consult: where the
-/// pen is, and where the subpath it is in began
 #[derive(Clone, Debug, Default)]
 pub struct Path {
     pub verbs: Vec<Verb>,
@@ -135,8 +106,6 @@ impl Path {
         self.subpath_start = None;
     }
 
-    /// the pen, in the user space `inverse` describes. `None` when there is no subpath yet, or when
-    /// the transform has no inverse to read it back through.
     pub fn current_in(&self, inverse: &Matrix) -> Option<(f64, f64)> {
         let (x, y) = self.current?;
         Some(inverse.apply(x, y))
@@ -151,7 +120,6 @@ impl Path {
     fn push_line(&mut self, device: (f64, f64)) {
         match self.current {
             Some(_) => self.verbs.push(Verb::Line(device.0, device.1)),
-            // "if there is no subpath, act as if moveTo had been called with the same arguments"
             None => return self.push_move(device),
         }
         self.current = Some(device);
@@ -186,7 +154,6 @@ impl Path {
         self.current = Some(to);
     }
 
-    /// the spec's own elevation of a quadratic to a cubic, done here so the host has one curve type
     pub fn quad_to(&mut self, m: &Matrix, cx: f64, cy: f64, x: f64, y: f64, inverse: Option<&Matrix>) {
         if !finite(&[cx, cy, x, y]) {
             return;
@@ -223,13 +190,9 @@ impl Path {
         self.verbs.push(line_verb(m.apply(x + w, y + h)));
         self.verbs.push(line_verb(m.apply(x, y + h)));
         self.verbs.push(Verb::Close);
-        // "then create a new subpath with the point (x, y) as its only point", which is what makes
-        // a `lineTo` after a `rect` start a fresh subpath rather than continue the rectangle
         self.push_move(m.apply(x, y));
     }
 
-    /// `radii` is four `(rx, ry)` corners in tl, tr, br, bl order, already clamped by
-    /// [`normalize_round_rect`]
     pub fn round_rect(&mut self, m: &Matrix, x: f64, y: f64, w: f64, h: f64, radii: [(f64, f64); 4]) {
         if !finite(&[x, y, w, h]) {
             return;
@@ -256,7 +219,6 @@ impl Path {
         self.append_arc(m, centre, radii, 0.0, start, TAU / 4.0);
     }
 
-    /// canvas `arc`, which is `ellipse` with one radius
     #[allow(clippy::too_many_arguments)]
     pub fn arc(
         &mut self,
@@ -292,8 +254,6 @@ impl Path {
         }
         let sweep = sweep_of(start, end, counterclockwise);
         let first = ellipse_point((x, y), (radius_x, radius_y), rotation, start);
-        // "if the path has a subpath, add a straight line to the arc's starting point" - the join
-        // the spec makes so an arc after a `lineTo` is one continuous outline
         self.push_line(m.apply(first.0, first.1));
         if sweep != 0.0 {
             self.append_arc(m, (x, y), (radius_x, radius_y), rotation, start, sweep);
@@ -301,8 +261,6 @@ impl Path {
         Ok(())
     }
 
-    /// canvas `arcTo`: not the platform's. It takes the corner the pen should turn at and the point
-    /// it heads for afterwards, and finds the circle of the given radius tangent to both legs.
     #[allow(clippy::too_many_arguments)]
     pub fn arc_to(
         &mut self,
@@ -335,8 +293,6 @@ impl Path {
             self.push_line(m.apply(x1, y1));
             return Ok(());
         }
-        // the half-angle at the corner, from the dot product clamped against the rounding that
-        // pushes a normalized dot a hair outside acos's domain
         let dot = (d0.0 * d2.0 + d0.1 * d2.1).clamp(-1.0, 1.0);
         let half = dot.acos() / 2.0;
         let leg = radius / half.tan();
@@ -353,8 +309,6 @@ impl Path {
         self.push_line(m.apply(touch_in.0, touch_in.1));
 
         let start = (touch_in.1 - centre.1).atan2(touch_in.0 - centre.0);
-        // the arc turns the same way the corner does, and the corner's direction is the sign of the
-        // cross product of the two legs read from p1 outward - so the arc's is its opposite
         let sweep = (std::f64::consts::PI - 2.0 * half) * if cross < 0.0 { 1.0 } else { -1.0 };
         self.append_arc(m, centre, (radius, radius), 0.0, start, sweep);
         let end = m.apply(touch_out.0, touch_out.1);
@@ -362,8 +316,6 @@ impl Path {
         Ok(())
     }
 
-    /// the one place an arc becomes curves: `sweep` is signed and unbounded up to a full turn, split
-    /// into quarter-turn-or-smaller cubics because that is where the standard error bound holds
     fn append_arc(&mut self, m: &Matrix, centre: (f64, f64), radii: (f64, f64), rotation: f64, start: f64, sweep: f64) {
         let segments = (sweep.abs() / (TAU / 4.0)).ceil().max(1.0) as usize;
         let delta = sweep / segments as f64;
@@ -417,7 +369,6 @@ fn ellipse_point(centre: (f64, f64), radii: (f64, f64), rotation: f64, angle: f6
     (centre.0 + x * cos_r - y * sin_r, centre.1 + x * sin_r + y * cos_r)
 }
 
-/// d/dangle of [`ellipse_point`], which is what the cubic's control points are placed along
 fn ellipse_tangent(radii: (f64, f64), rotation: f64, angle: f64) -> (f64, f64) {
     let (sin_r, cos_r) = rotation.sin_cos();
     let (sin_a, cos_a) = angle.sin_cos();
@@ -426,8 +377,6 @@ fn ellipse_tangent(radii: (f64, f64), rotation: f64, angle: f64) -> (f64, f64) {
     (dx * cos_r - dy * sin_r, dx * sin_r + dy * cos_r)
 }
 
-/// the spec's direction rule: a full turn when the angles already span one, and otherwise the
-/// shortest sweep that runs the way the flag says
 fn sweep_of(start: f64, end: f64, counterclockwise: bool) -> f64 {
     let raw = end - start;
     if counterclockwise {
@@ -442,10 +391,6 @@ fn sweep_of(start: f64, end: f64, counterclockwise: bool) -> f64 {
     raw.rem_euclid(TAU)
 }
 
-/// The spec's `roundRect` normalization: a negative width or height flips the rectangle *and* the
-/// corners that go with it, and a corner set too big for the box is scaled down as a whole rather
-/// than clamped per corner - clamping each one independently changes the shape's proportions, which
-/// is visible the moment two adjacent radii differ.
 pub fn normalize_round_rect(
     x: f64,
     y: f64,

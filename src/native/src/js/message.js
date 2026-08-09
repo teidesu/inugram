@@ -1,11 +1,3 @@
-// Evaluated once per engine by `message.rs`, which hands in the pure helpers `utils.js` returned
-// and the `inu.PluginError` constructor. `shared` is an argument rather than `inu.utils`, so a
-// plugin replacing that namespace cannot decide what a Message answers.
-//
-// Every member is a *lazy* read through `raw`: nothing is copied at construction. That is what
-// makes the wrapper compose with the takeover filter (which sits at materialization, so `text`
-// reads whatever `raw.message` is willing to say) and with view lifetimes (a wrapper over a
-// dispatch-scoped view expires with it instead of outliving it holding stale text).
 ((shared, PluginError) => {
   const { baseName, toNumber, peerDialogId, peerUserId } = shared
 

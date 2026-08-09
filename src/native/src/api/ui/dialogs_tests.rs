@@ -1,5 +1,3 @@
-//! `inu.ui.toast` / `dialog` / `chooser`, and what a dispose leaves behind.
-
 use super::*;
 use crate::testing::harness::setup_apis as setup;
 

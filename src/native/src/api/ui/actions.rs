@@ -1,15 +1,3 @@
-//! `inu.registerAction` and its four narrowings - rows a plugin contributes to menus the app owns.
-//!
-//! Android ui objects live on the ui thread and an engine may only be entered from `globalQueue`,
-//! so nothing here can be answered while a menu is being built. A menu is two crossings: the host
-//! asks for a render ([`render_actions`]) and a tap comes back later as [`dispatch_action`]. What
-//! is *registered* is known to the host synchronously, so it can size a menu without asking anyone;
-//! only `text`/`visible` need the engine, which is what bounds the "park the menu for one hop"
-//! pattern in `PluginActions`.
-//!
-//! Tokens are [`Registry`] tokens, so `registry.rs`'s `Disposer` rules hold here for free - most
-//! visibly the keyed one, `ActionOptions.id` being required.
-
 use std::rc::Rc;
 
 use rquickjs::object::Accessor;
@@ -22,14 +10,12 @@ use crate::sandbox::grants::{check_grant, GrantHost, MATCH_EXACT};
 use crate::sandbox::registry::{make_disposer, noop_disposer, Lifecycle, Registry, Token};
 use crate::utils::arguments::{field, opt_fn, req_fn, req_str};
 
-/// keep in sync with Kotlin `PluginActions.KIND_*`
 pub const KIND_GLOBAL: i32 = 0;
 pub const KIND_CHAT: i32 = 1;
 pub const KIND_MESSAGE: i32 = 2;
 pub const KIND_PROFILE: i32 = 3;
 pub const KIND_EDITOR: i32 = 4;
 
-/// the grant `MessageEditorActionContext.draft` is behind, which is `getDraft`'s own
 const DRAFT_GRANT: &str = "account.read";
 const DRAFT_SCOPE: &str = "draft";
 
@@ -39,7 +25,6 @@ fn has_draft_grant(state: &Rc<ActionState>) -> bool {
 
 const KIND_COUNT: usize = 5;
 
-/// keep in sync with Kotlin `PluginActions.EDITOR_OP_*`
 pub const EDITOR_REPLACE: i32 = 0;
 pub const EDITOR_SEND: i32 = 1;
 
@@ -53,17 +38,9 @@ fn kind_name(kind: i32) -> &'static str {
     }
 }
 
-/// stand-in for the action half of the Kotlin `QuickJs.ApiListener`; `Some(msg)` == error
 pub trait ActionHost {
-    /// a row was registered. the host tracks these to size a menu without entering the engine, so
-    /// it needs the id as well as the token: a keyed replacement takes the place its predecessor
-    /// held, which is also what keeps a plugin at the row cap able to update its own rows.
-    /// `Some(wire)` is a refusal, and it names its own code: the row cap is a `P` wire carrying
-    /// `quota-exceeded`, while a JNI-level failure is a bare message and stays an ordinary error.
     fn action_register(&self, kind: i32, token: u32, id: &str) -> Option<String>;
     fn action_unregister(&self, kind: i32, token: u32);
-    /// `MessageEditorActionContext.replace`/`send`; `surface` names the composer the dispatch came
-    /// from, since the plugin may still be holding the ctx after the menu is gone
     fn action_editor(&self, op: i32, surface: i64, payload_json: &str) -> Option<String>;
 }
 
@@ -94,8 +71,6 @@ pub struct ActionState {
     lifecycle: Rc<Lifecycle>,
     log: crate::Log,
     accounts: Option<Rc<AccountState>>,
-    /// only `MessageEditorActionContext.draft` is gated, and it is gated where every other read of
-    /// a draft is: what is in the composer is the same app state `getDraft` hands over
     grants: Rc<dyn GrantHost>,
     kinds: Vec<Registry<Rc<ActionDef>>>,
 }
@@ -154,8 +129,6 @@ fn js_register<'js>(ctx: &Ctx<'js>, state: &Rc<ActionState>, kind: i32, opts: Ob
             },
         }
     };
-    // the menus these rows land in are the app's own and every one of them draws a fixed glyph for
-    // a plugin row today; accepting an icon and dropping it would be a promise the row cannot keep
     let icon = field(ctx, &opts, what, "icon")?;
     if !icon.is_undefined() && !icon.is_null() {
         if let Label::Dynamic(p) = label {
@@ -173,8 +146,6 @@ fn js_register<'js>(ctx: &Ctx<'js>, state: &Rc<ActionState>, kind: i32, opts: Ob
     let visible = opt_fn(ctx, &opts, what, "visible")?;
     let callback = req_fn(ctx, &opts, what, "callback")?;
 
-    // after the validation, so a malformed registration throws rather than silently doing nothing,
-    // and before anything is inserted, so nothing has to be undone
     if state.lifecycle.is_unloading() {
         if let Label::Dynamic(p) = label {
             let _ = p.restore(ctx);
@@ -190,8 +161,6 @@ fn js_register<'js>(ctx: &Ctx<'js>, state: &Rc<ActionState>, kind: i32, opts: Ob
         if let Label::Dynamic(p) = label {
             let _ = p.restore(ctx);
         }
-        // the row cap arrives as a `P` wire naming its own code; anything else this upcall can
-        // answer is a JNI-level failure, which is the host's bad day and not a quota
         return Err(ctx.throw(crate::api::error::host_error_to_js(ctx, &err)?));
     }
     let def = Rc::new(ActionDef {
@@ -201,8 +170,6 @@ fn js_register<'js>(ctx: &Ctx<'js>, state: &Rc<ActionState>, kind: i32, opts: Ob
         callback: Persistent::save(ctx, callback),
     });
     if let Some(previous) = registry.insert(token, Some(id), def) {
-        // the host tracks rows by token, so a replacement has to retire the one it displaced or the
-        // menu would keep sizing itself for a row nothing can render
         state.host.action_unregister(kind, previous.token);
         if let Ok(previous) = Rc::try_unwrap(previous) {
             release_def(ctx, previous);
@@ -223,9 +190,6 @@ fn js_register<'js>(ctx: &Ctx<'js>, state: &Rc<ActionState>, kind: i32, opts: Ob
     })
 }
 
-/// builds the ctx object from what the host knows about the surface. `account` is minted the same
-/// way every other dispatch mints one, so an `Account` handed to an action is the same handle an
-/// `onUpdate` payload carries.
 fn build_context<'js>(ctx: &Ctx<'js>, state: &Rc<ActionState>, kind: i32, surface_json: &str) -> JsResult<Object<'js>> {
     let parsed: Value = ctx.json_parse(surface_json)?;
     let parsed = parsed.as_object().ok_or_else(|| Exception::throw_type(ctx, "action: malformed surface"))?;
@@ -247,10 +211,6 @@ fn build_context<'js>(ctx: &Ctx<'js>, state: &Rc<ActionState>, kind: i32, surfac
         out.set("messageIds", ids.clone())?;
     }
     if kind == KIND_EDITOR {
-        // the composer's text is the same app state `getDraft` reads, so it costs the same scope.
-        // Gated per context rather than at registration, or a row that only wants to `send` would
-        // need a read grant to exist at all; the refusal is a throwing accessor rather than an
-        // absent member so a plugin is told which grant it is short of.
         if has_draft_grant(state) {
             let draft: Value = parsed.get("draft")?;
             out.set("draft", draft)?;
@@ -278,9 +238,6 @@ fn build_context<'js>(ctx: &Ctx<'js>, state: &Rc<ActionState>, kind: i32, surfac
     Ok(out)
 }
 
-/// `InputText`: a bare string is unformatted text, exactly as the write surface reads one. entities
-/// stay whatever the plugin handed over - a live TL view included, which stringifies through its
-/// own `toJSON`.
 fn editor_op<'js>(ctx: &Ctx<'js>, state: &Rc<ActionState>, op: i32, surface: i64, value: Value<'js>) -> JsResult<()> {
     let what = if op == EDITOR_REPLACE { "replace" } else { "send" };
     let payload = Object::new(ctx.clone())?;
@@ -334,14 +291,6 @@ fn editor_op<'js>(ctx: &Ctx<'js>, state: &Rc<ActionState>, op: i32, surface: i64
     }
 }
 
-/// evaluates `visible` and `text` for every registered row of [`kind`] and answers the rows the
-/// host should draw, as `[{token, text}]`. `None` means the engine could not answer at all, which
-/// the host reads as "this plugin contributes nothing to this menu".
-///
-/// A row whose `visible`/`text` threw is dropped and the throw is an ordinary error, *not* a fault:
-/// a render predicate that fails on one chat must not switch off every other feature the plugin
-/// provides. An action the user actually clicked is the other way round, and [`dispatch_action`]
-/// faults for it.
 pub fn render_actions(
     rt: &Runtime,
     context: &rquickjs::Context,
@@ -350,10 +299,6 @@ pub fn render_actions(
     surface_json: &str,
 ) -> Option<String> {
     let out = context.with(|ctx| {
-        // the two ways a render fails on the *host's* input rather than the plugin's code, kept out
-        // of the faulting path below: naming a kind that does not exist, or handing over a surface
-        // that will not parse, are the app's bad day, and switching a plugin off for one is the bug
-        // that reads as a plugin bug
         let Some(registry) = state.registry(kind) else {
             (state.log)(&format!("render: unknown action kind {kind}"));
             return None;
@@ -362,8 +307,6 @@ pub fn render_actions(
         if defs.is_empty() {
             return Some("[]".to_string());
         }
-        // one ctx for the whole render: the rows of one menu describe one surface, and minting an
-        // `Account` per row would cost a host crossing per row for the same answer
         let context_obj = surface_context(&ctx, state, kind, surface_json)?;
         match try_render(&ctx, state, kind, registry, defs, &context_obj) {
             Ok(json) => Some(json),
@@ -385,8 +328,6 @@ pub fn render_actions(
     out
 }
 
-/// [`build_context`] over host-supplied json, with the failure logged as the host's own. Shared by
-/// the two entry points so a malformed surface answers the same way whichever one saw it.
 fn surface_context<'js>(ctx: &Ctx<'js>, state: &Rc<ActionState>, kind: i32, surface_json: &str) -> Option<Object<'js>> {
     match build_context(ctx, state, kind, surface_json) {
         Ok(obj) => Some(obj),
@@ -412,8 +353,6 @@ fn try_render<'js>(
     let out = Array::new(ctx.clone())?;
     let mut index = 0;
     for def in defs {
-        // a row disposed by an earlier row's `visible` is not drawn: the walk holds a snapshot, so
-        // this is the one liveness question a snapshot cannot answer on its own
         if !registry.contains(def.token) {
             continue;
         }
@@ -438,7 +377,6 @@ fn try_render<'js>(
         .ok_or_else(|| Exception::throw_message(ctx, "render: serialization produced no output"))
 }
 
-/// `None` == the row's `visible` said no
 fn render_one<'js>(ctx: &Ctx<'js>, def: &Rc<ActionDef>, context_obj: &Object<'js>) -> JsResult<Option<String>> {
     if let Some(visible) = def.visible.as_ref() {
         let visible = visible.clone().restore(ctx)?;
@@ -458,9 +396,6 @@ fn render_one<'js>(ctx: &Ctx<'js>, def: &Rc<ActionDef>, context_obj: &Object<'js
     Ok(Some(text))
 }
 
-/// the user tapped the row [`token`] names. A token the registry no longer holds is a no-op: the
-/// row was drawn from a render that is now stale (the plugin disposed it, or replaced its id), and
-/// the menu it is in cannot be un-drawn.
 pub fn dispatch_action(
     rt: &Runtime,
     context: &rquickjs::Context,
@@ -501,7 +436,6 @@ pub fn dispatch_action(
     pump_jobs(rt, context, state.log.as_ref());
 }
 
-/// releases every `Persistent` GC root this state still owns - same contract as [`crate::api::telegram::rpc::dispose`]
 pub fn dispose(context: &rquickjs::Context, state: &Rc<ActionState>) {
     context.with(|ctx| {
         for registry in &state.kinds {

@@ -1,9 +1,3 @@
-//! `inu.ui.toast` / `dialog` / `chooser`: the modals the app owns and a plugin can only ask for.
-//!
-//! A request crosses as one json shape and is settled later by the host, so everything here is a
-//! pending promise keyed by request id - which is why a process with no ui answers `'dismissed'`
-//! rather than hanging.
-
 use std::cell::RefCell;
 use std::collections::HashMap;
 use std::rc::Rc;
@@ -14,15 +8,9 @@ use crate::api::error;
 use crate::api::telegram::rpc::{format_exception, pump_jobs, PendingSettle};
 use crate::sandbox::registry::RequestIds;
 
-/// stand-in for the Kotlin `QuickJs.DialogListener` interface
 pub trait DialogHost {
     fn toast(&self, text: &str);
-    /// `None` == shown (settled later via [`resolve_dialog`]), `Some(msg)` == immediate error
     fn dialog(&self, request_id: i64, options_json: &str) -> Option<String>;
-    /// `inu.ui.chooser(options)`; same contract as [`DialogHost::dialog`], settled by
-    /// [`resolve_chooser`]. `options_json` is `{title?, multiple, items: [{text, subtitle?,
-    /// danger}], selected: [index...]}` - `selected` is a list in both modes, so the host renders
-    /// one shape and `multiple` alone decides what comes back
     fn chooser(&self, request_id: i64, options_json: &str) -> Option<String>;
 }
 
@@ -31,8 +19,6 @@ pub struct DialogState {
     log: crate::Log,
     next_request_id: RequestIds,
     pending_dialogs: RefCell<HashMap<i64, PendingSettle>>,
-    /// a chooser remembers the mode it was opened in: the host answers with a list either way, and
-    /// what a single-select promise resolves to is a number
     pending_choosers: RefCell<HashMap<i64, (PendingSettle, bool)>>,
 }
 
@@ -40,10 +26,6 @@ fn js_ui_dialog<'js>(ctx: &Ctx<'js>, state: &Rc<DialogState>, options: Value<'js
     let Some(obj) = options.as_object() else {
         return Err(Exception::throw_type(ctx, "dialog: expected an options object"));
     };
-    // the options cross as JSON, so the only element a body may be is the one that survives it: a
-    // `nativeView`, which is a host handle id and nothing else. Every declarative element carries
-    // callbacks the crossing would drop, which is why they are refused here rather than rendered
-    // into something that quietly does nothing
     let body: Value = obj.get("body").map_err(|_| Exception::throw_type(ctx, "dialog: cannot read 'body'"))?;
     if !body.is_undefined() && !body.is_null() {
         let kind = body
@@ -112,9 +94,6 @@ fn chooser_index(ctx: &Ctx<'_>, value: &Value<'_>, len: usize) -> JsResult<i32> 
     Ok(index)
 }
 
-/// Validates eagerly and hands the host one shape whichever mode it is: `selected` is always a
-/// list, because a single-select chooser and a multi-select one differ in what comes *back*, and
-/// the mode is what [`resolve_chooser`] reads to decide that.
 fn js_ui_chooser<'js>(ctx: &Ctx<'js>, state: &Rc<DialogState>, opts: Object<'js>) -> JsResult<Value<'js>> {
     let out = Object::new(ctx.clone())?;
     if let Some(title) = opt_string(ctx, &opts, "chooser", "title")? {
@@ -239,8 +218,6 @@ pub fn install_dialogs<'js>(
     Ok(state)
 }
 
-/// settles a pending `inu.ui.chooser()`. `picked` is `None` for dismissed (-> null) and otherwise a
-/// comma-separated index list: one entry in single mode, any number (including none) in multi.
 pub fn resolve_chooser(
     rt: &Runtime,
     context: &rquickjs::Context,
@@ -263,8 +240,6 @@ pub fn resolve_chooser(
                 }
                 Ok(array.into_value())
             }),
-            // a single-select answer with no index is a host that lost the choice; `null` is what
-            // the promise already means by "no choice was made"
             (Some(indices), false) => match indices.first() {
                 Some(index) => rquickjs::IntoJs::into_js(*index, &ctx),
                 None => Ok(Value::new_null(ctx.clone())),
@@ -285,7 +260,6 @@ pub fn resolve_chooser(
     pump_jobs(rt, context, state.log.as_ref());
 }
 
-/// settles a pending `inu.ui.dialog()` promise with the user's action ("positive", "dismissed", ...)
 pub fn resolve_dialog(
     rt: &Runtime,
     context: &rquickjs::Context,
@@ -312,8 +286,6 @@ pub fn resolve_dialog(
     pump_jobs(rt, context, state.log.as_ref());
 }
 
-/// releases every `Persistent` GC root this state still owns - same contract as
-/// [`crate::api::telegram::rpc::dispose`]
 pub fn dispose(context: &rquickjs::Context, state: &Rc<DialogState>) {
     context.with(|ctx| {
         for (_, pending) in state.pending_dialogs.borrow_mut().drain() {

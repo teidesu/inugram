@@ -1,14 +1,3 @@
-//! The declarative settings-page api: `inu.ui.settingsPage`/`openPage`/`prompt`, the element
-//! factories, the `UIAnchor` every item callback is handed, and `inu.registerSettings`. JNI-free
-//! behind [`UiHost`].
-//!
-//! The host asks for a render ([`render_page`]) and gets one JSON tree back. Element callbacks
-//! become integer slots into a per-page table, allocated fresh and monotonically each render, so a
-//! stale event is a no-op rather than a misdirected call. Every slot also carries the *row key* of
-//! the element it came off, which is what an anchor is: a row identity rather than a slot, so
-//! `anchor.openMenu(...)` still names the right row after an `await`, by which point the
-//! auto-invalidate has reallocated every slot on the page.
-
 use std::cell::{Cell, RefCell};
 use std::collections::HashMap;
 use std::rc::Rc;
@@ -21,13 +10,8 @@ use crate::api::ui::icons::opt_icon;
 use crate::sandbox::registry::{make_disposer, noop_disposer, Lifecycle, Registry, RequestIds};
 use crate::utils::arguments::{field, opt_bool, opt_fn, opt_num, opt_str, req_bool, req_fn, req_num, req_str};
 
-/// most steps a slider `label` callback may be evaluated for at render time. the whole strip is
-/// precomputed (live dragging never calls JS), so this is a real bound on one render rather than a
-/// preference, and a slider past it is refused: falling back to bare numbers loses the unit the
-/// label was written to carry and tells nobody
 const MAX_SLIDER_LABELS: usize = 501;
 
-/// how many values a `label` would be called for, which is the unit the refusal is stated in
 fn slider_steps(min: f64, max: f64, step: f64) -> usize {
     (((max - min) / step).round() as usize).saturating_add(1)
 }
@@ -51,15 +35,11 @@ fn check_slider_steps<'js>(ctx: &Ctx<'js>, min: f64, max: f64, step: f64) -> JsR
 
 pub(crate) const ELEMENT_TAG: &str = "__inuUi";
 const PAGE_ID_KEY: &str = "__inuPageId";
-/// the row key of the sticky bottom button, which is anchorable but is not an item
 const BOTTOM_BUTTON_KEY: &str = "b";
 
-/// stand-in for the ui half of the Kotlin `QuickJs.ApiListener`; `Some(msg)` == error
 pub trait UiHost {
     fn ui_prompt(&self, request_id: i64, options_json: &str) -> Option<String>;
     fn ui_open_page(&self, page_id: i64) -> Option<String>;
-    /// `inu.ui.openPage` handed a stock fragment rather than a plugin page; `handle` is an
-    /// `inu.jvm` handle id, so the host resolves it through that table and nothing else crosses
     fn ui_open_fragment(&self, handle: i64) -> Option<String>;
     fn ui_register_settings(&self, page_id: i64);
     fn ui_unregister_settings(&self, page_id: i64);
@@ -96,9 +76,6 @@ fn release_page_def(ctx: &Ctx<'_>, def: UiPageDef) {
     }
 }
 
-/// removes the page and releases every root it holds; missing page == already-disposed no-op.
-/// a page that was the plugin's settings entry stops being it: leaving the registration would
-/// point the settings button at something that can no longer render.
 fn dispose_page(ctx: &Ctx<'_>, state: &UiState, page_id: i64) {
     if let Some(def) = state.pages.borrow_mut().remove(&page_id) {
         release_page_def(ctx, def);
@@ -112,12 +89,7 @@ pub struct UiState {
     host: Rc<dyn UiHost>,
     lifecycle: Rc<Lifecycle>,
     pub(crate) log: crate::Log,
-    /// `inu.jvm`'s state, when the plugin holds that grant: the two members here that take a real
-    /// android object (`openPage` of a stock fragment, `inu.android.nativeView`) resolve it through
-    /// that table, so nothing but a handle id ever crosses and the scope list still decided it
     jvm: Option<Rc<crate::api::platform::jvm::JvmState>>,
-    /// one space for pages, menus and prompts alike: they are all "one thing outstanding the host
-    /// names back", and the only property any of them needs is that an id is never reused
     next_id: RequestIds,
     pages: RefCell<HashMap<i64, UiPageDef>>,
     menus: RefCell<HashMap<i64, Vec<Persistent<Function<'static>>>>>,
@@ -293,8 +265,6 @@ pub fn install_ui<'js>(
         ui.set(
             "openPage",
             Function::new(ctx.clone(), move |ctx: Ctx<'js>, page: Value<'js>| {
-                // a stock fragment first, because it is the shape `page_id_of` would reject with a
-                // message about settings pages
                 if let Some(handle) = java_handle(&ctx, &state2, &page)? {
                     if let Some(err) = state2.host.ui_open_fragment(handle) {
                         return Err(Exception::throw_message(&ctx, &err));
@@ -351,8 +321,6 @@ pub fn install_ui<'js>(
     Ok(state)
 }
 
-/// per `common.d.ts`: one settings page per plugin, and a second registration throws rather than
-/// silently deciding which page wins — swapping means disposing the first registration first
 fn js_register_settings<'js>(ctx: &Ctx<'js>, state: &Rc<UiState>, page: Value<'js>) -> JsResult<Function<'js>> {
     if state.lifecycle.is_unloading() {
         return noop_disposer(ctx);
@@ -376,12 +344,6 @@ fn js_register_settings<'js>(ctx: &Ctx<'js>, state: &Rc<UiState>, page: Value<'j
     })
 }
 
-/// a value that is not a page at all is the plugin passing the wrong thing (a `TypeError`); one
-/// that names a page this state no longer has is a disposed `UIPage`, which `common.d.ts` lists
-/// under `handle-expired` alongside a disposed `Blob`
-/// the `inu.jvm` handle id behind `value`, or `None` for anything that is not one. A handle carries
-/// its id in a `WeakMap` keyed on the object itself, so a plugin cannot forge one by writing a
-/// number: what this answers is always something the scope list already let it have.
 fn java_handle<'js>(ctx: &Ctx<'js>, state: &Rc<UiState>, value: &Value<'js>) -> JsResult<Option<i64>> {
     let Some(jvm) = state.jvm.as_ref() else {
         return Ok(None);
@@ -425,9 +387,6 @@ fn js_settings_page<'js>(ctx: &Ctx<'js>, state: &Rc<UiState>, opts: Object<'js>)
     };
 
     let page_id = state.next_id.alloc();
-    // a page built after unload began is never inserted, so it holds no GC roots `dispose` has
-    // already walked past. Its handle is still handed back, and every op on it is `handle-expired`,
-    // which is what the same page answers once it has been disposed
     if !state.lifecycle.is_unloading() {
         state.pages.borrow_mut().insert(
             page_id,
@@ -463,9 +422,6 @@ fn js_settings_page<'js>(ctx: &Ctx<'js>, state: &Rc<UiState>, opts: Object<'js>)
     Ok(page)
 }
 
-/// a row's identity across renders, and therefore what an anchor names. an explicit `id` is the
-/// plugin's own; without one it is the element's type plus its text, which is stable for the
-/// static-ish lists that is documented for. the occurrence suffix keeps duplicates apart.
 fn alloc_row_key(counts: &mut HashMap<String, u32>, ty: &str, id: Option<&str>, text: Option<&str>) -> Rc<str> {
     let base = match id {
         Some(id) => format!("i:{id}"),
@@ -475,10 +431,7 @@ fn alloc_row_key(counts: &mut HashMap<String, u32>, ty: &str, id: Option<&str>, 
     Rc::from(format!("{base}#{occurrence}").as_str())
 }
 
-/// renders [`page_id`]'s full element tree into one JSON string; `None` (with a log) on failure
 pub fn render_page(rt: &Runtime, context: &rquickjs::Context, state: &Rc<UiState>, page_id: i64) -> Option<String> {
-    // a page the plugin disposed while a view of it was open: the host is naming a page the engine
-    // no longer has, which is not the plugin throwing and must not disable it
     if !state.pages.borrow().contains_key(&page_id) {
         (state.log)(&format!("ui: render({page_id}): no such page (already disposed?)"));
         return None;
@@ -499,8 +452,6 @@ pub fn render_page(rt: &Runtime, context: &rquickjs::Context, state: &Rc<UiState
 }
 
 fn try_render<'js>(ctx: &Ctx<'js>, state: &Rc<UiState>, page_id: i64) -> JsResult<String> {
-    // snapshot everything needed, then release the map borrow: items() runs plugin code that may
-    // itself create pages (which needs a mut borrow)
     let (items_fn, title, bottom_text, bottom_on_click, mut next_slot) = {
         let pages = state.pages.borrow();
         let def = pages.get(&page_id).ok_or_else(|| Exception::throw_message(ctx, "render: unknown page"))?;
@@ -597,8 +548,6 @@ fn try_render<'js>(ctx: &Ctx<'js>, state: &Rc<UiState>, page_id: i64) -> JsResul
                 out.set("value", obj.get::<_, f64>("value")?)?;
                 set_opt(&out, "default", obj.get::<_, Option<f64>>("default")?)?;
                 if let Some(label) = obj.get::<_, Option<Function>>("label")? {
-                    // re-checked where the spec is *read* and not only where it was minted, like
-                    // `opt_icon`: an element is an ordinary object a plugin can build itself
                     check_slider_steps(ctx, min, max, step)?;
                     let labels = Array::new(ctx.clone())?;
                     for s in 0..slider_steps(min, max, step) {
@@ -628,8 +577,6 @@ fn try_render<'js>(ctx: &Ctx<'js>, state: &Rc<UiState>, page_id: i64) -> JsResul
         root.set("bottomButton", bottom)?;
     }
 
-    // the swap happens here and not before `items()` ran: a render that threw leaves the host
-    // showing the previous model, whose rows still have to answer the taps they draw
     {
         let pages = state.pages.borrow();
         if let Some(def) = pages.get(&page_id) {
@@ -650,8 +597,6 @@ fn try_render<'js>(ctx: &Ctx<'js>, state: &Rc<UiState>, page_id: i64) -> JsResul
         .ok_or_else(|| Exception::throw_message(ctx, "render: serialization produced no output"))
 }
 
-/// the `UIAnchor` an item callback is handed: the page and the row key, and nothing else. holding
-/// one past a re-render is the point, so it names the row rather than the slot it arrived on.
 fn make_anchor<'js>(ctx: &Ctx<'js>, state: &Rc<UiState>, page_id: i64, row: Rc<str>) -> JsResult<Object<'js>> {
     let anchor = Object::new(ctx.clone())?;
     let state = state.clone();
@@ -664,8 +609,6 @@ fn make_anchor<'js>(ctx: &Ctx<'js>, state: &Rc<UiState>, page_id: i64, row: Rc<s
     Ok(anchor)
 }
 
-/// fires the callback behind [`slot`]. [`arg_json`]: "" for no-arg callbacks, else one JSON scalar.
-/// a slot from a previous render is a safe no-op (slots are never reused within a page).
 pub fn dispatch_ui_event(
     rt: &Runtime,
     context: &rquickjs::Context,
@@ -741,8 +684,6 @@ fn js_open_menu<'js>(ctx: &Ctx<'js>, state: &Rc<UiState>, page_id: i64, row: &st
         let obj = item.as_object().ok_or_else(|| Exception::throw_type(ctx, "openMenu: items must be objects"))?;
         let entry = Object::new(ctx.clone())?;
         entry.set("text", req_str(ctx, obj, "openMenu item", "text")?)?;
-        // "checked" present at all (even false) switches the host to radio-style rendering, so
-        // only emit it when the plugin actually specified it
         let checked: Value = field(ctx, obj, "openMenu item", "checked")?;
         if !checked.is_undefined() && !checked.is_null() {
             let checked = checked
@@ -768,8 +709,6 @@ fn js_open_menu<'js>(ctx: &Ctx<'js>, state: &Rc<UiState>, page_id: i64, row: &st
     Ok(())
 }
 
-/// settles an open menu: [`slot`] is the clicked item's index, or -1 for dismissed-without-click.
-/// either way the menu's callbacks are released.
 pub fn dispatch_menu_click(rt: &Runtime, context: &rquickjs::Context, state: &Rc<UiState>, menu_id: i64, slot: i32) {
     context.with(|ctx| {
         let Some(callbacks) = state.menus.borrow_mut().remove(&menu_id) else {
@@ -822,7 +761,6 @@ fn js_prompt<'js>(ctx: &Ctx<'js>, state: &Rc<UiState>, opts: Object<'js>) -> JsR
     Ok(promise.into_value())
 }
 
-/// settles a pending `inu.ui.prompt()`: the submitted text, or `None` for cancel/dismiss (-> null)
 pub fn resolve_prompt(
     rt: &Runtime,
     context: &rquickjs::Context,
@@ -853,8 +791,6 @@ pub fn resolve_prompt(
     pump_jobs(rt, context, state.log.as_ref());
 }
 
-/// the host closed the last view of [`page_id`]: fire `onClose`, release the render callbacks.
-/// the page definition stays reopenable, unless it's `transient` — then it's disposed entirely.
 pub fn page_closed(rt: &Runtime, context: &rquickjs::Context, state: &Rc<UiState>, page_id: i64) {
     context.with(|ctx| {
         let (on_close, transient) = {
@@ -886,7 +822,6 @@ pub fn page_closed(rt: &Runtime, context: &rquickjs::Context, state: &Rc<UiState
     pump_jobs(rt, context, state.log.as_ref());
 }
 
-/// releases every `Persistent` GC root this state still owns - same contract as [`crate::api::telegram::rpc::dispose`]
 pub fn dispose(context: &rquickjs::Context, state: &Rc<UiState>) {
     context.with(|ctx| {
         for (_, def) in state.pages.borrow_mut().drain() {

@@ -1,5 +1,3 @@
-//! Every host trait the modules declare, answered by one JNI upcall each.
-
 use crate::LEVEL_ERROR;
 
 use crate::api::canvas::CanvasHost;
@@ -120,8 +118,6 @@ impl AccountHost for JniBridge {
     fn accounts(&self) -> Option<String> {
         match self.call_string("accounts", self.on_accounts, &[]) {
             Ok(Some(json)) => Some(json),
-            // "we could not ask" is not "nobody is logged in": the caller caches this answer, and
-            // reading an empty list out of a transient JNI failure would tear down every live scope
             Ok(None) => {
                 self.emit_console(LEVEL_ERROR, "accounts: the host returned null");
                 None
@@ -148,9 +144,6 @@ impl TlHost for JniBridge {
     }
 
     fn tl_own_keys(&self, handle: i64) -> Option<String> {
-        // Err (JNI failure / throwing listener) folds into None: the caller's expired path, which
-        // throws into JS - still fail-closed, just with a less precise message (the exception
-        // itself has already been dumped to logcat by clear_exception)
         self.call_string("tlOwnKeys", self.on_tl_own_keys, &[Arg::Long(handle)]).ok().flatten()
     }
 
@@ -206,8 +199,6 @@ impl KvHost for JniBridge {
 }
 
 impl JniBridge {
-    /// the one upcall behind `inu.ui.dialog`/`prompt`/`chooser`, which differ in nothing the bridge
-    /// can see: same arguments, same refusal channel, same queue
     fn ui_modal(&self, op: i32, request_id: i64, options_json: &str) -> Option<String> {
         self.call_refusal("modal", self.on_ui_modal, &[Arg::Int(op), Arg::Long(request_id), Arg::Str(options_json)])
     }
@@ -234,8 +225,6 @@ impl OpenUrlHost for JniBridge {
 }
 
 impl ClipboardHost for JniBridge {
-    // "" for every failure, which is also what an empty clipboard answers: the channel carries the
-    // user's own text and so cannot be tagged (see `ClipboardHost`'s own doc)
     fn read(&self) -> String {
         self.call_string("clipboardRead", self.on_clipboard_read, &[]).unwrap_or_default().unwrap_or_default()
     }
@@ -354,8 +343,6 @@ impl TimerHost for JniBridge {
 
 impl FetchHost for JniBridge {
     fn send(&self, request_id: i64, url: &str, spec_json: &str, body: Option<&[u8]>) -> Option<String> {
-        // the body is the one thing here that can be megabytes, and it is bounded on the rust side
-        // (`crate::api::io::blob::BUILD_LIMIT_BYTES`) before it ever reaches this allocation
         self.call_refusal(
             "fetch",
             self.on_fetch,
@@ -370,8 +357,6 @@ impl FetchHost for JniBridge {
 
 impl CanvasHost for JniBridge {
     fn canvas(&self, op: i32, id: i64, arg: &str, bytes: Option<&[u8]>) -> String {
-        // the command buffer, which is the one thing here that can be a megabyte - and is bounded
-        // on this side by `crate::api::canvas::FLUSH_AT_BYTES` before it ever reaches this allocation
         match self.call_string(
             "canvas",
             self.on_canvas,
