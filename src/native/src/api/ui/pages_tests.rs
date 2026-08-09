@@ -452,11 +452,19 @@ fn open_page_and_invalidate_reach_host() {
     let _ = (&rt, page_id);
 }
 
-/// the two members that take a real android object take it as an `inu.jvm` handle and nothing
+/// the android members that take a real object take it as an `inu.jvm` handle and nothing
 /// else: what crosses is the id, so the scope list that let the handle be minted is still the
 /// only thing that decided anything
 #[test]
-fn a_java_object_reaches_open_page_and_native_view() {
+fn a_java_object_reaches_open_page_native_view_and_drawable_icon() {
+    struct IconHost;
+
+    impl crate::api::ui::icons::IconHost for IconHost {
+        fn icon_resolves(&self, _kind: i32, _value: &str) -> bool {
+            true
+        }
+    }
+
     let rt = Runtime::new().unwrap();
     let ctx = Context::full(&rt).unwrap();
     let host = Rc::new(TestUiHost::default());
@@ -476,6 +484,7 @@ fn a_java_object_reaches_open_page_and_native_view() {
             &inu,
         )
         .unwrap();
+        crate::api::ui::icons::install_icons(&ctx, Rc::new(IconHost), Some(jvm.clone()), &inu).unwrap();
         let ui = install_ui(&ctx, host_dyn, Lifecycle::new(), log, Some(jvm.clone()), &inu).unwrap();
         (ui, jvm)
     });
@@ -492,6 +501,26 @@ fn a_java_object_reaches_open_page_and_native_view() {
     let element: String = ctx.with(|ctx| ctx.eval("JSON.stringify(inu.android.nativeView(globalThis.__obj))").unwrap());
     assert!(element.contains(r#""__inuUi":"native""#), "{element}");
     assert!(element.contains(r#""handle":"#), "{element}");
+
+    let page_id: i64 = ctx.with(|ctx| {
+        ctx.eval(
+            r#"
+            globalThis.__iconPage = inu.ui.settingsPage({
+                title: 'Icon',
+                items: () => [inu.ui.button({
+                    text: 'Icon',
+                    icon: inu.android.drawableIcon(globalThis.__obj),
+                    onClick: () => {},
+                })],
+            });
+            globalThis.__iconPage.__inuPageId
+            "#,
+        )
+        .unwrap()
+    });
+    let rendered = render_page(&rt, &ctx, &state, page_id).unwrap();
+    assert!(rendered.contains(r#""icon":"j"#), "{rendered}");
+    assert_eq!(state.pages.borrow()[&page_id].retained_icon_values.borrow().len(), 1);
 
     // a number is not a handle: the id lives in a WeakMap keyed on the object, so writing one
     // down is not a way to name something the plugin was never handed

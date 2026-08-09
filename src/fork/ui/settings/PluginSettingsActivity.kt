@@ -41,6 +41,7 @@ class PluginSettingsActivity(
 ) : SettingsPageActivity() {
 
     private class SelectOption(val text: String, val subtitle: String?)
+    class ButtonIcon(val spec: String?, val engine: QuickJs)
 
     private sealed class Row(val uid: Int, val secondarySlot: Int) {
         class Header(uid: Int, val text: String) : Row(uid, 0)
@@ -224,7 +225,7 @@ class PluginSettingsActivity(
                 is Row.Separator -> UItem.asShadow(row.uid, row.text)
                 is Row.Check -> buildCheck(row)
                 is Row.Button -> buildButton(row)
-                is Row.Select -> ButtonCellFactory.of(row.uid, row.text, row.options[row.selected].text, null, row.icon, false)
+                is Row.Select -> ButtonCellFactory.of(row.uid, row.text, row.options[row.selected].text, null, ButtonIcon(row.icon, engine), false)
                 is Row.Slider -> UItem.asCustom(row.uid, sliderCellFor(row))
                 // the view is the plugin's, not ours: a handle it has since released, or one that
                 // never named a View, drops the row rather than failing the whole render - the
@@ -262,7 +263,7 @@ class PluginSettingsActivity(
     }
 
     private fun buildButton(row: Row.Button): UItem =
-        ButtonCellFactory.of(row.uid, row.text, row.value, row.subtitle, row.icon, row.danger)
+        ButtonCellFactory.of(row.uid, row.text, row.value, row.subtitle, ButtonIcon(row.icon, engine), row.danger)
 
     /**
      * stock VIEW_TYPE_TEXT puts textValue into the differ's *identity* (itemEquals), so a value
@@ -277,7 +278,7 @@ class PluginSettingsActivity(
             }
 
             /** [icon] is an `icons.rs` spec, resolved at bind time so it follows theme + icon pack */
-            fun of(id: Int, text: String, value: String?, subtitle: String?, icon: String?, danger: Boolean): UItem =
+            fun of(id: Int, text: String, value: String?, subtitle: String?, icon: ButtonIcon, danger: Boolean): UItem =
                 UItem.ofFactory(ButtonCellFactory::class.java).apply {
                     this.id = id
                     this.text = text
@@ -309,7 +310,7 @@ class PluginSettingsActivity(
             // context, so the drawable follows the current theme and icon pack without the model
             // knowing either existed. the icon setter drops the cell's colour filter, which the
             // setColors below puts back - that is what tints it to the row
-            val icon = PluginIcons.resolveDrawable(cell.context, item.`object` as? String)
+            val icon = (item.`object` as? ButtonIcon)?.let { PluginIcons.resolveDrawable(cell.context, it.spec, it.engine) }
             if (icon == null) {
                 cell.setTextAndValue(item.text, item.textValue, sameRow, divider)
             } else {
@@ -331,7 +332,9 @@ class PluginSettingsActivity(
             TextUtils.equals(a.text, b.text) &&
                 TextUtils.equals(a.textValue, b.textValue) &&
                 TextUtils.equals(a.subtext, b.subtext) &&
-                a.`object` == b.`object` &&
+                (a.`object` as? ButtonIcon)?.let { left ->
+                    (b.`object` as? ButtonIcon)?.let { right -> left.spec == right.spec && left.engine === right.engine }
+                } == true &&
                 a.red == b.red
     }
 

@@ -261,7 +261,7 @@ pub extern "system" fn Java_desu_inugram_helpers_plugins_QuickJs_nativeInstallAp
         let icon_host: Rc<dyn IconHost> = engine.bridge.clone();
         if let Err(e) = engine.ctx.with(|ctx| {
             let inu = engine.inu.clone().restore(&ctx)?;
-            install_icons(&ctx, icon_host, &inu)
+            install_icons(&ctx, icon_host, engine.jvm.clone(), &inu)
         }) {
             log(&format!("inu.icons failed to install: {e:?}"));
         }

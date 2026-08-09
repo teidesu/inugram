@@ -54,6 +54,38 @@ pub fn throw_plugin_error<'js, T>(
     Err(ctx.throw(value))
 }
 
+pub fn make_quota_error<'js>(ctx: &Ctx<'js>, message: &str, usage: i64, quota: i64) -> JsResult<Value<'js>> {
+    make_plugin_error(ctx, "quota-exceeded", message, None, Some(usage), Some(quota))
+}
+
+pub fn throw_invalid_argument<'js, T>(ctx: &Ctx<'js>, message: &str) -> JsResult<T> {
+    throw_plugin_error(ctx, "invalid-argument", message, None, None, None)
+}
+
+pub fn throw_not_found<'js, T>(ctx: &Ctx<'js>, message: &str) -> JsResult<T> {
+    throw_plugin_error(ctx, "not-found", message, None, None, None)
+}
+
+pub fn throw_not_granted<'js, T>(ctx: &Ctx<'js>, message: &str, grant: &str) -> JsResult<T> {
+    throw_plugin_error(ctx, "not-granted", message, Some(grant), None, None)
+}
+
+pub fn throw_forbidden<'js, T>(ctx: &Ctx<'js>, message: &str) -> JsResult<T> {
+    throw_plugin_error(ctx, "forbidden", message, None, None, None)
+}
+
+pub fn throw_handle_expired<'js, T>(ctx: &Ctx<'js>, message: &str) -> JsResult<T> {
+    throw_plugin_error(ctx, "handle-expired", message, None, None, None)
+}
+
+pub fn throw_internal<'js, T>(ctx: &Ctx<'js>, message: &str) -> JsResult<T> {
+    throw_plugin_error(ctx, "internal", message, None, None, None)
+}
+
+pub fn throw_quota_exceeded<'js, T>(ctx: &Ctx<'js>, message: &str, usage: i64, quota: i64) -> JsResult<T> {
+    throw_plugin_error(ctx, "quota-exceeded", message, None, Some(usage), Some(quota))
+}
+
 struct PluginErrorWire<'a> {
     code: &'a str,
     grant: Option<&'a str>,

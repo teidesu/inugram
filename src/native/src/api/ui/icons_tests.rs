@@ -33,7 +33,7 @@ fn setup(missing: &[&str]) -> (Runtime, Context, Rc<TestIconHost>) {
     ctx.with(|ctx| {
         let inu = crate::testing::harness::inu_namespace(&ctx);
         crate::api::error::install_plugin_error(&ctx, &inu).unwrap();
-        install_icons(&ctx, host_dyn, &inu).unwrap();
+        install_icons(&ctx, host_dyn, None, &inu).unwrap();
     });
     (rt, ctx, host)
 }
@@ -323,7 +323,7 @@ mod bundled_oracle {
         let ui = ctx.with(|ctx| {
             let inu = crate::testing::harness::inu_namespace(&ctx);
             install_plugin_error(&ctx, &inu).unwrap();
-            install_icons(&ctx, icon_host, &inu).unwrap();
+            install_icons(&ctx, icon_host, None, &inu).unwrap();
             crate::api::ui::pages::install_ui(
                 &ctx,
                 ui_host,

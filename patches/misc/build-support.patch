@@ -16,14 +16,12 @@ Subject: build support stuff for fork-specific code: - added kotlin - bumped min
  TMessagesProj_App/build.gradle                | 237 +++++++++++-------
  TMessagesProj_App/google-services.json        |  76 +-----
  TMessagesProj_App/jni/CMakeLists.txt          |  13 +
- TMessagesProj_App/jni/lsplant                 |   1 +
  TMessagesProj_AppTests/build.gradle           |   5 +-
  build.gradle                                  |  12 +-
  gradle.properties                             |   2 +-
  settings.gradle                               |   5 +-
- 17 files changed, 290 insertions(+), 357 deletions(-)
+ 16 files changed, 289 insertions(+), 357 deletions(-)
  create mode 100644 TMessagesProj_App/jni/CMakeLists.txt
- create mode 160000 TMessagesProj_App/jni/lsplant
 
 diff --git a/.gitmodules b/.gitmodules
 index 0000000..0000000 100644
@@ -1049,13 +1047,6 @@ index 0000000..0000000
 +
 +set(LSPLANT_BUILD_SHARED ON CACHE BOOL "" FORCE)
 +add_subdirectory(lsplant/lsplant/src/main/jni)
-diff --git a/TMessagesProj_App/jni/lsplant b/TMessagesProj_App/jni/lsplant
-new file mode 160000
-index 0000000..0000000
---- /dev/null
-+++ b/TMessagesProj_App/jni/lsplant
-@@ -0,0 +1 @@
-+Subproject commit 61e10e51eb99dca00dd873f48c28a674dd2b4c4c
 diff --git a/TMessagesProj_AppTests/build.gradle b/TMessagesProj_AppTests/build.gradle
 index 0000000..0000000 100644
 --- a/TMessagesProj_AppTests/build.gradle
