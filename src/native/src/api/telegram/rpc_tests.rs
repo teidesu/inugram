@@ -430,7 +430,10 @@ fn invoke_rpc_carries_the_account_it_was_called_through() {
 fn a_torn_off_invoke_rpc_refuses_rather_than_picking_a_slot() {
     let (_rt, ctx, host, _state) = setup(&["invokeRpc", "account.read(self)"]);
     assert_eq!(
-        eval_json(&ctx, "(() => { const f = inu.account(1).invokeRpc; try { f({ _: 'foo.bar' }) } catch (e) { return [e.code, e.message] } })()"),
+    eval_json(
+      &ctx,
+      "(() => { const f = inu.account(1).invokeRpc; try { f({ _: 'foo.bar' }) } catch (e) { return [e.code, e.message] } })()"
+    ),
         r#"["invalid-argument","invokeRpc: not called on an account handle; use inu.account().invokeRpc(...)"]"#,
     );
     assert!(host.invoke_calls.borrow().is_empty());
@@ -470,7 +473,8 @@ fn invoke_rpc_resolves_and_rejects() {
 fn rpc_error_wire_rejects_as_rpc_error_instance_and_rethrow_round_trips() {
     let (rt, ctx, host, state) = setup(&["interceptRpc"]);
     ctx.with(|ctx| {
-        ctx.eval::<(), _>(
+    ctx
+      .eval::<(), _>(
             r#"
             globalThis.__caught = null;
             inu.interceptRpc('foo.bar', async (req, next) => {
@@ -838,7 +842,8 @@ fn without_the_account_api_a_dispatch_hands_over_undefined() {
 fn invoke_rejection_with_a_plugin_error_wire_carries_usage_and_quota() {
     let (rt, ctx, host, state) = setup(&["invokeRpc"]);
     ctx.with(|ctx| {
-        ctx.eval::<(), _>(
+    ctx
+      .eval::<(), _>(
             r#"
             globalThis.__caught = null;
             inu.invokeRpc({_:'foo.bar'}).catch(e => {
@@ -1673,7 +1678,7 @@ fn the_bundled_accounts_test_plugin_passes() {
     // the oracle registers onAccountsChanged and withCurrentAccount, so the account api holds
     // roots of its own and JS_FreeRuntime aborts if only the rpc half is disposed
     let _accounts_disposer =
-        crate::testing::harness::DisposeOnDrop::new(&ctx, accounts.clone(), crate::api::telegram::account::dispose);
+        crate::testing::harness::DisposeOnDrop::new(&ctx, accounts.clone(), |ctx, state| state.dispose(ctx));
     let state = Disposing::new(&ctx, state, dispose);
 
     let lines = crate::testing::harness::install_capturing_console(&ctx);
@@ -1684,7 +1689,7 @@ fn the_bundled_accounts_test_plugin_passes() {
     });
 
     *accounts_host.json.borrow_mut() = SWITCHED.to_string();
-    crate::api::telegram::account::accounts_changed(&rt, &ctx, &accounts);
+    accounts.accounts_changed(&rt, &ctx);
     dispatch_update(
         &rt,
         &ctx,

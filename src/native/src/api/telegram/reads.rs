@@ -277,7 +277,7 @@ pub fn install_reads<'js>(
 
     let factory = prelude::load(ctx, PRELUDE)?;
     let prototype: Object = factory.call((natives, shared.clone(), message, plugin_error, ops))?;
-    crate::api::telegram::account::set_prototype(ctx, accounts, &prototype);
+    accounts.set_prototype(ctx, &prototype);
 
     Ok(state)
 }

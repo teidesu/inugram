@@ -764,7 +764,7 @@ pub extern "system" fn Java_desu_inugram_helpers_plugins_QuickJs_nativeNotifyUnl
     };
     engine.lifecycle.begin_unload();
     if let Some(state) = engine.account.as_ref() {
-        crate::api::telegram::account::notify_unload(&engine._rt, &engine.ctx, state);
+        state.notify_unload(&engine._rt, &engine.ctx);
     }
     if let Some(state) = engine.lifecycle_state.as_ref() {
         crate::api::lifecycle::notify_unload(&engine._rt, &engine.ctx, state);
@@ -776,7 +776,7 @@ pub extern "system" fn Java_desu_inugram_helpers_plugins_QuickJs_nativeNotifyUnl
 }
 
 engine_export!(Java_desu_inugram_helpers_plugins_QuickJs_nativeAccountsChanged, account, (), |engine, state| {
-    crate::api::telegram::account::accounts_changed(&engine._rt, &engine.ctx, state)
+    state.accounts_changed(&engine._rt, &engine.ctx)
 });
 
 #[no_mangle]
@@ -1034,7 +1034,7 @@ pub extern "system" fn Java_desu_inugram_helpers_plugins_QuickJs_nativeDestroy(
             crate::api::telegram::reads::dispose(&engine.ctx, &state);
         }
         if let Some(state) = engine.account.take() {
-            crate::api::telegram::account::dispose(&engine.ctx, &state);
+            state.dispose(&engine.ctx);
         }
         if let Some(state) = engine.fetch.take() {
             crate::api::io::fetch::dispose(&engine.ctx, &state);
