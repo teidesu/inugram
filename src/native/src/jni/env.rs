@@ -25,14 +25,27 @@ pub(crate) fn in_env<'local, T>(env: &mut EnvUnowned<'local>, fallback: T, f: im
 }
 
 pub(crate) fn jstring_to_string(env: &mut Env, s: &JString) -> String {
-  s.try_to_string(env).unwrap_or_default()
+  match s.try_to_string(env) {
+    Ok(value) => value,
+    Err(_) => {
+      clear_exception(env);
+      String::new()
+    }
+  }
 }
 
 pub(crate) fn read_string_array(env: &mut Env, array: &JObjectArray<JString>) -> Vec<String> {
-  let n = array.len(env).unwrap_or(0);
+  let n = match array.len(env) {
+    Ok(length) => length,
+    Err(_) => {
+      clear_exception(env);
+      return Vec::new();
+    }
+  };
   let mut out = Vec::with_capacity(n);
   for i in 0..n {
     let Ok(item) = array.get_element(env, i) else {
+      clear_exception(env);
       continue;
     };
     let item = item.auto();
@@ -46,13 +59,29 @@ pub(crate) fn read_header(
   keys: &JObjectArray<JString>,
   values: &JObjectArray<JString>,
 ) -> Vec<(String, String)> {
-  let n = keys.len(env).unwrap_or(0);
+  let key_count = match keys.len(env) {
+    Ok(length) => length,
+    Err(_) => {
+      clear_exception(env);
+      return Vec::new();
+    }
+  };
+  let value_count = match values.len(env) {
+    Ok(length) => length,
+    Err(_) => {
+      clear_exception(env);
+      return Vec::new();
+    }
+  };
+  let n = key_count.min(value_count);
   let mut out = Vec::with_capacity(n);
   for i in 0..n {
     let Ok(k) = keys.get_element(env, i) else {
+      clear_exception(env);
       continue;
     };
     let Ok(v) = values.get_element(env, i) else {
+      clear_exception(env);
       continue;
     };
     let k = k.auto();

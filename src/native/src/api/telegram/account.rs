@@ -17,7 +17,7 @@ pub trait AccountHost {
   fn accounts(&self) -> Option<String>;
 }
 
-#[derive(Clone, PartialEq)]
+#[derive(Clone, PartialEq, Eq)]
 pub struct AccountInfo {
   id: i32,
   user_id: i64,

@@ -9,6 +9,7 @@ use crate::api::telegram::account::AccountState;
 use crate::api::telegram::rpc::{format_exception, pump_jobs, PendingSettle};
 use crate::api::tl::proxy::{wire_to_js_value, TlViews, ViewLife};
 use crate::sandbox::grants::{check_grant, GrantHost, MATCH_EXACT};
+use crate::sandbox::registry::RequestIds;
 use crate::utils::prelude;
 
 const PRELUDE: &[u8] = include_bytes!(concat!(env!("OUT_DIR"), "/reads.qbc"));
@@ -114,7 +115,7 @@ pub struct ReadsState {
   grants: Rc<dyn GrantHost>,
   views: Rc<TlViews>,
   log: crate::Log,
-  next_request_id: crate::sandbox::registry::RequestIds,
+  next_request_id: RequestIds,
   pending: RefCell<HashMap<i64, PendingRead>>,
   cursors: Cursors,
 }
@@ -164,10 +165,6 @@ fn read_many<'js>(ctx: &Ctx<'js>, state: &Rc<ReadsState>, op: i32, slot: i32, ar
   Ok(decode_list(ctx, state, &wire)?.into_value())
 }
 
-fn join(parts: &[&str]) -> String {
-  parts.join(&SEPARATOR.to_string())
-}
-
 #[allow(clippy::too_many_arguments)]
 pub fn install_reads<'js>(
   ctx: &Ctx<'js>,
@@ -184,7 +181,7 @@ pub fn install_reads<'js>(
     grants,
     views,
     log,
-    next_request_id: crate::sandbox::registry::RequestIds::default(),
+    next_request_id: RequestIds::default(),
     pending: RefCell::new(HashMap::new()),
     cursors: Cursors::default(),
   });
@@ -205,7 +202,10 @@ pub fn install_reads<'js>(
   {
     let state = state.clone();
     let f = Function::new(ctx.clone(), move |ctx: Ctx<'js>, slot: i32, spec: String, id: String| {
-      read_one(&ctx, &state, OP_MESSAGE, slot, &join(&[&spec, &id]))
+      read_one(&ctx, &state, OP_MESSAGE, slot, &{
+        let parts: &[&str] = &[&spec, &id];
+        parts.join("\n")
+      })
     })?;
     natives.set("getMessage", f)?;
   }
@@ -219,14 +219,20 @@ pub fn install_reads<'js>(
   {
     let state = state.clone();
     let f = Function::new(ctx.clone(), move |ctx: Ctx<'js>, slot: i32, spec: String, ids: String| {
-      read_many(&ctx, &state, OP_MESSAGES, slot, &join(&[&spec, &ids]))
+      read_many(&ctx, &state, OP_MESSAGES, slot, &{
+        let parts: &[&str] = &[&spec, &ids];
+        parts.join("\n")
+      })
     })?;
     natives.set("getMessages", f)?;
   }
   {
     let state = state.clone();
     let f = Function::new(ctx.clone(), move |ctx: Ctx<'js>, slot: i32, spec: String, kind: i32| {
-      read_one(&ctx, &state, OP_INPUT_PEER, slot, &join(&[&spec, &kind.to_string()]))
+      read_one(&ctx, &state, OP_INPUT_PEER, slot, &{
+        let parts: &[&str] = &[&spec, &kind.to_string()];
+        parts.join("\n")
+      })
     })?;
     natives.set("inputPeer", f)?;
   }
@@ -247,7 +253,10 @@ pub fn install_reads<'js>(
   {
     let state = state.clone();
     let f = Function::new(ctx.clone(), move |ctx: Ctx<'js>, slot: i32, spec: String, topic: String| {
-      read_one(&ctx, &state, OP_DRAFT, slot, &join(&[&spec, &topic]))
+      read_one(&ctx, &state, OP_DRAFT, slot, &{
+        let parts: &[&str] = &[&spec, &topic];
+        parts.join("\n")
+      })
     })?;
     natives.set("getDraft", f)?;
   }
@@ -333,7 +342,10 @@ fn js_fetch<'js>(
           }
         }
       };
-      join(&[arg, &payload])
+      {
+        let parts: &[&str] = &[arg, &payload];
+        parts.join("\n")
+      }
     }
     _ => arg.to_string(),
   };

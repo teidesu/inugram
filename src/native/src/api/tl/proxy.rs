@@ -10,6 +10,8 @@ use rquickjs::{
   Symbol, TypedArray, Value,
 };
 
+use crate::api::error::PluginErrorCode;
+
 const BYTES_MARKER_KEY: &str = "$inuBytes";
 
 pub trait TlHost {
@@ -36,8 +38,9 @@ impl<'js> Trace<'js> for HandleBox {
   fn trace<'a>(&self, _tracer: Tracer<'a, 'js>) {}
 }
 
-unsafe impl<'js> JsLifetime<'js> for HandleBox {
-  type Changed<'to> = HandleBox;
+// SAFETY: `HandleBox` contains no JavaScript-lifetime-bound data.
+unsafe impl JsLifetime<'_> for HandleBox {
+  type Changed<'to> = Self;
 }
 
 impl<'js> JsClass<'js> for HandleBox {
@@ -56,7 +59,7 @@ pub struct TlViews {
 
 impl TlViews {
   pub fn new(host: Rc<dyn TlHost>) -> Rc<Self> {
-    Rc::new(TlViews { host, epoch: Cell::new(0) })
+    Rc::new(Self { host, epoch: Cell::new(0) })
   }
 
   fn epoch(&self) -> u64 {
@@ -88,13 +91,12 @@ impl ViewState {
     self.life == ViewLife::Plugin && !self.is_vector
   }
 
-  fn host(&self) -> &Rc<dyn TlHost> {
-    &self.views.host
+  fn host(&self) -> &dyn TlHost {
+    self.views.host.as_ref()
   }
 }
 
-const HANDLE_EXPIRED_MESSAGE: &str =
-  "TL handle expired — object escaped back to native code; copy fields you need before returning";
+const HANDLE_EXPIRED_MESSAGE: &str = "TL handle expired. Copy fields you need before returning";
 
 const READ_ONLY_MESSAGE: &str = "this TL view is read-only; take a copy with toJSON() to edit it";
 
@@ -103,7 +105,7 @@ const DESCRIPTOR_MESSAGE: &str =
 
 const NOT_EXTENSIBLE_MESSAGE: &str = "a TL view cannot be sealed or frozen; take a copy with toJSON() to freeze it";
 
-const MARKER_DESCRIPTION: &str = "inu.tl.handle";
+const HANDLE_MARKER_DESCRIPTION: &str = "inu.tl.handle";
 const CACHE_MARKER_DESCRIPTION: &str = "inu.tl.cache";
 
 const SECTION_PERM: &str = "perm";
@@ -112,14 +114,6 @@ const SECTION_HAS: &str = "has";
 const KEYS_ENTRY: &str = "keys";
 const TO_JSON_KEY: &str = "toJSON";
 const THEN_KEY: &str = "then";
-
-fn marker<'js>(ctx: &Ctx<'js>) -> JsResult<Symbol<'js>> {
-  Symbol::new_global(ctx.clone(), MARKER_DESCRIPTION)
-}
-
-fn cache_marker<'js>(ctx: &Ctx<'js>) -> JsResult<Symbol<'js>> {
-  Symbol::new_global(ctx.clone(), CACHE_MARKER_DESCRIPTION)
-}
 
 fn encode_handle(is_vector: bool, read_only: bool, id: i64) -> String {
   format!("H{}{}{}", if is_vector { 'V' } else { 'O' }, if read_only { 'R' } else { 'W' }, id)
@@ -159,21 +153,9 @@ fn throw_tl<'js, T>(ctx: &Ctx<'js>, message: &str) -> JsResult<T> {
   Err(Exception::throw_message(ctx, message))
 }
 
-fn throw_expired<'js, T>(ctx: &Ctx<'js>) -> JsResult<T> {
-  crate::api::error::throw_handle_expired(ctx, HANDLE_EXPIRED_MESSAGE)
-}
-
-fn throw_read_only<'js, T>(ctx: &Ctx<'js>) -> JsResult<T> {
-  crate::api::error::throw_forbidden(ctx, READ_ONLY_MESSAGE)
-}
-
-fn throw_unsupported<'js, T>(ctx: &Ctx<'js>, message: &str) -> JsResult<T> {
-  crate::api::error::PluginErrorCode::Unsupported.throw(ctx, message)
-}
-
 fn descriptor_value<'js>(ctx: &Ctx<'js>, descriptor: &Value<'js>) -> JsResult<Value<'js>> {
   let Some(obj) = descriptor.as_object() else {
-    return throw_unsupported(ctx, DESCRIPTOR_MESSAGE);
+    return PluginErrorCode::Unsupported.throw(ctx, DESCRIPTOR_MESSAGE);
   };
   let mut value = None;
   for entry in obj.own_props::<String, Value>(Filter::new().string()) {
@@ -181,12 +163,12 @@ fn descriptor_value<'js>(ctx: &Ctx<'js>, descriptor: &Value<'js>) -> JsResult<Va
     match attribute.as_str() {
       "value" => value = Some(given),
       "writable" | "enumerable" | "configurable" if given.as_bool() == Some(true) => {}
-      _ => return throw_unsupported(ctx, DESCRIPTOR_MESSAGE),
+      _ => return PluginErrorCode::Unsupported.throw(ctx, DESCRIPTOR_MESSAGE),
     }
   }
   match value {
     Some(value) => Ok(value),
-    None => throw_unsupported(ctx, DESCRIPTOR_MESSAGE),
+    None => PluginErrorCode::Unsupported.throw(ctx, DESCRIPTOR_MESSAGE),
   }
 }
 
@@ -320,7 +302,7 @@ fn try_read_marker<'js>(ctx: &Ctx<'js>, value: &Value<'js>) -> JsResult<Option<S
   let Some(obj) = value.as_object() else {
     return Ok(None);
   };
-  let key = marker(ctx)?;
+  let key = Symbol::new_global(ctx.clone(), HANDLE_MARKER_DESCRIPTION)?;
   match obj.get::<_, Value>(key.as_atom()) {
     Ok(v) => Ok(v.as_string().and_then(|s| s.to_string().ok())),
     Err(_) => Ok(None),
@@ -335,7 +317,11 @@ fn read_bag<'js>(ctx: &Ctx<'js>, target: &Value<'js>) -> JsResult<Option<Object<
   let Some(obj) = target.as_object() else {
     return Ok(None);
   };
-  Ok(obj.get::<_, Value>(cache_marker(ctx)?.as_atom())?.into_object())
+  Ok(
+    obj
+      .get::<_, Value>(Symbol::new_global(ctx.clone(), CACHE_MARKER_DESCRIPTION)?.as_atom())?
+      .into_object(),
+  )
 }
 
 fn bag_read<'js>(state: &ViewState, ctx: &Ctx<'js>, target: &Value<'js>) -> JsResult<Option<Object<'js>>> {
@@ -359,7 +345,7 @@ fn bag_write<'js>(state: &ViewState, ctx: &Ctx<'js>, target: &Value<'js>) -> JsR
   bag.set(SECTION_PERM, new_section(ctx)?)?;
   bag.set(SECTION_VAL, new_section(ctx)?)?;
   bag.set(SECTION_HAS, new_section(ctx)?)?;
-  obj.set(cache_marker(ctx)?.as_atom(), bag.clone())?;
+  obj.set(Symbol::new_global(ctx.clone(), CACHE_MARKER_DESCRIPTION)?.as_atom(), bag.clone())?;
   Ok(Some(bag))
 }
 
@@ -412,7 +398,7 @@ fn has_field<'js>(state: &ViewState, ctx: &Ctx<'js>, target: &Value<'js>, key: &
   let present = match state.host().tl_has(state.handle, key) {
     1 => true,
     0 => false,
-    _ => return throw_expired(ctx),
+    _ => return PluginErrorCode::HandleExpired.throw(ctx, HANDLE_EXPIRED_MESSAGE),
   };
   if let Some(bag) = bag_write(state, ctx, target)? {
     cache_section(&bag, SECTION_HAS)?.set(key, present)?;
@@ -449,12 +435,15 @@ fn read_to_json<'js>(state: &ViewState, ctx: &Ctx<'js>, target: &Value<'js>) -> 
       return perm.get(TO_JSON_KEY);
     }
   }
-  let host = state.host().clone();
+  let host = state.views.host.clone();
   let handle = state.handle;
   let f = Function::new(ctx.clone(), move |ctx: Ctx<'js>| -> JsResult<Value<'js>> {
     match host.tl_copy(handle) {
       Some(json) => json_parse_tl(&ctx, &json),
-      None => throw_expired(&ctx),
+      None => {
+        let ctx: &Ctx<'js> = &ctx;
+        PluginErrorCode::HandleExpired.throw(ctx, HANDLE_EXPIRED_MESSAGE)
+      }
     }
   })?;
   let value = f.into_js(ctx)?;
@@ -499,7 +488,12 @@ fn build_proxy<'js>(
         ctx.clone(),
         move |ctx: Ctx<'js>, target: Value<'js>, prop: Value<'js>, _receiver: Value<'js>| -> JsResult<Value<'js>> {
           if let Some(sym) = prop.as_symbol() {
-            if sym == &marker(&ctx)? {
+            if sym
+              == &{
+                let ctx: &Ctx<'js> = &ctx;
+                Symbol::new_global(ctx.clone(), HANDLE_MARKER_DESCRIPTION)
+              }?
+            {
               return encode_handle(state.is_vector, state.read_only, state.handle).into_js(&ctx);
             }
             if state.is_vector && sym == &Symbol::iterator(ctx.clone()) {
@@ -537,7 +531,10 @@ fn build_proxy<'js>(
             return throw_tl(&ctx, "tl proxy: cannot set a symbol-keyed property");
           }
           if state.read_only {
-            return throw_read_only(&ctx);
+            return {
+              let ctx: &Ctx<'js> = &ctx;
+              PluginErrorCode::Forbidden.throw(ctx, READ_ONLY_MESSAGE)
+            };
           }
           assign_property(&state, &ctx, &target, &prop, value)
         },
@@ -553,7 +550,10 @@ fn build_proxy<'js>(
         ctx.clone(),
         move |ctx: Ctx<'js>, target: Value<'js>, prop: Value<'js>, descriptor: Value<'js>| -> JsResult<bool> {
           if state.read_only {
-            return throw_read_only(&ctx);
+            return {
+              let ctx: &Ctx<'js> = &ctx;
+              PluginErrorCode::Forbidden.throw(ctx, READ_ONLY_MESSAGE)
+            };
           }
           if prop.as_symbol().is_some() {
             return throw_tl(&ctx, "tl proxy: cannot define a symbol-keyed property");
@@ -571,7 +571,12 @@ fn build_proxy<'js>(
       PredefinedAtom::Has,
       Function::new(ctx.clone(), move |ctx: Ctx<'js>, target: Value<'js>, prop: Value<'js>| -> JsResult<bool> {
         if let Some(sym) = prop.as_symbol() {
-          if sym == &marker(&ctx)? {
+          if sym
+            == &{
+              let ctx: &Ctx<'js> = &ctx;
+              Symbol::new_global(ctx.clone(), HANDLE_MARKER_DESCRIPTION)
+            }?
+          {
             return Ok(true);
           }
           return Ok(state.is_vector && sym == &Symbol::iterator(ctx.clone()));
@@ -591,7 +596,10 @@ fn build_proxy<'js>(
       PredefinedAtom::DeleteProperty,
       Function::new(ctx.clone(), move |ctx: Ctx<'js>, target: Value<'js>, prop: Value<'js>| -> JsResult<bool> {
         if state.read_only {
-          return throw_read_only(&ctx);
+          return {
+            let ctx: &Ctx<'js> = &ctx;
+            PluginErrorCode::Forbidden.throw(ctx, READ_ONLY_MESSAGE)
+          };
         }
         if prop.as_symbol().is_some() {
           return throw_tl(&ctx, "tl proxy: cannot delete a symbol-keyed property");
@@ -623,7 +631,10 @@ fn build_proxy<'js>(
           }
         }
         let Some(keys) = state.host().tl_own_keys(state.handle) else {
-          return throw_expired(&ctx);
+          return {
+            let ctx: &Ctx<'js> = &ctx;
+            PluginErrorCode::HandleExpired.throw(ctx, HANDLE_EXPIRED_MESSAGE)
+          };
         };
         if let Some(bag) = bag_write(&state, &ctx, &target)? {
           bag.set(KEYS_ENTRY, keys.as_str())?;
@@ -634,7 +645,6 @@ fn build_proxy<'js>(
   }
 
   {
-    let state = state.clone();
     handler_obj.set(
       PredefinedAtom::GetOwnPropertyDescriptor,
       Function::new(ctx.clone(), move |ctx: Ctx<'js>, target: Value<'js>, prop: Value<'js>| -> JsResult<Value<'js>> {
@@ -659,7 +669,10 @@ fn build_proxy<'js>(
   handler_obj.set(
     PredefinedAtom::PreventExtensions,
     Function::new(ctx.clone(), |ctx: Ctx<'js>, _target: Value<'js>| -> JsResult<bool> {
-      throw_unsupported(&ctx, NOT_EXTENSIBLE_MESSAGE)
+      {
+        let ctx: &Ctx<'js> = &ctx;
+        PluginErrorCode::Unsupported.throw(ctx, NOT_EXTENSIBLE_MESSAGE)
+      }
     })?,
   )?;
 
@@ -677,7 +690,7 @@ fn property_key_string<'js>(ctx: &Ctx<'js>, prop: &Value<'js>) -> JsResult<Strin
   throw_tl(ctx, "tl proxy: unsupported property key")
 }
 
-fn vector_length<'js>(ctx: &Ctx<'js>, host: &Rc<dyn TlHost>, handle: i64) -> JsResult<i64> {
+fn vector_length<'js>(ctx: &Ctx<'js>, host: &dyn TlHost, handle: i64) -> JsResult<i64> {
   let wire = host.tl_get(handle, "length");
   if let Some(n) = wire.strip_prefix('I').and_then(|p| p.parse().ok()) {
     return Ok(n);

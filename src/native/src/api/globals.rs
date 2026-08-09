@@ -34,7 +34,7 @@ pub fn install_globals<'js>(
     }
   }
 
-  let blobs = blob::install(ctx, spill_dir, external.clone())?;
+  let blobs = blob::install(ctx, spill_dir, external)?;
 
   crate::api::url::install_url(ctx)?;
 
@@ -87,6 +87,8 @@ fn random_fill<'js>(ctx: &Ctx<'js>, host: &dyn RandomHost, array: Value<'js>) ->
   if raw.len != bytes.len() {
     return Err(Exception::throw_type(ctx, "getRandomValues: the array was resized"));
   }
+  // SAFETY: `as_raw` guarantees a live, non-detached typed-array buffer. Its
+  // length was checked against `bytes`, so both ranges are valid and equal.
   unsafe { std::ptr::copy_nonoverlapping(bytes.as_ptr(), raw.ptr.as_ptr(), raw.len) };
   Ok(array)
 }

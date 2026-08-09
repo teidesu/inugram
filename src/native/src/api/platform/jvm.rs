@@ -6,7 +6,7 @@ use rquickjs::{
   Value,
 };
 
-use crate::api::error::{throw_internal, throw_quota_exceeded, wire_error_to_js, PluginErrorCode};
+use crate::api::error::{wire_error_to_js, PluginErrorCode};
 use crate::api::telegram::rpc::{format_exception, pump_jobs};
 use crate::sandbox::grants::{check_grant, GrantHost, MATCH_NAMESPACE};
 use crate::sandbox::registry::{CallbackRegistry, Lifecycle};
@@ -58,12 +58,12 @@ fn bounded(value: &str, limit: usize) -> bool {
 }
 
 fn throw_too_big<'js, T>(ctx: &Ctx<'js>, what: &str, size: usize, limit: usize) -> JsResult<T> {
-  throw_quota_exceeded(
-    ctx,
-    &format!("jvm: {what} is {size} bytes, over the {limit} this bridge carries"),
-    size as i64,
-    limit as i64,
-  )
+  {
+    let message: &str = &format!("jvm: {what} is {size} bytes, over the {limit} this bridge carries");
+    let usage = size as i64;
+    let quota = limit as i64;
+    PluginErrorCode::QuotaExceeded(usage, quota).throw(ctx, message)
+  }
 }
 
 pub(crate) fn handle_id<'js>(ctx: &Ctx<'js>, state: &Rc<JvmState>, value: &Value<'js>) -> JsResult<i64> {
@@ -86,7 +86,7 @@ pub(crate) fn arg_to_wire<'js>(ctx: &Ctx<'js>, state: &Rc<JvmState>, value: &Val
     return Ok(format!("I{i}"));
   }
   if let Some(f) = value.as_float() {
-    if f.fract() == 0.0 && f.abs() <= 9007199254740991.0 {
+    if f.fract() == 0.0 && f.abs() <= 9_007_199_254_740_991.0 {
       return Ok(format!("I{}", f as i64));
     }
     return Ok(format!("D{f}"));
@@ -130,14 +130,14 @@ pub(crate) fn wire_to_value<'js>(ctx: &Ctx<'js>, state: &Rc<JvmState>, wire: &st
   }
   let mut chars = wire.chars();
   let Some(tag) = chars.next() else {
-    return throw_internal(ctx, "jvm: the host answered with an empty wire");
+    return PluginErrorCode::Internal.throw(ctx, "jvm: the host answered with an empty wire");
   };
   let payload = chars.as_str();
   if tag == 'I' {
     let Ok(value) = payload.parse::<i64>() else {
       return PluginErrorCode::Internal.throw(ctx, "jvm: the host answered with a bad int");
     };
-    if value.unsigned_abs() > 9007199254740991 {
+    if value.unsigned_abs() > 9_007_199_254_740_991 {
       return Value::new_big_int(ctx.clone(), value);
     }
     return value.into_js(ctx);

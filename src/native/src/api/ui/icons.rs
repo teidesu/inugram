@@ -3,7 +3,7 @@ use std::rc::Rc;
 use rquickjs::{Ctx, Exception, Function, Object, Result as JsResult, Value};
 
 use crate::api::{
-  error::{make_quota_error, throw_invalid_argument, throw_not_found, throw_not_granted},
+  error::PluginErrorCode,
   platform::jvm::{self, JvmState},
 };
 
@@ -111,7 +111,10 @@ fn validate_spec<'js>(ctx: &Ctx<'js>, what: &str, spec: &str) -> JsResult<()> {
   if valid {
     return Ok(());
   }
-  throw_invalid_argument(ctx, &format!("{what}: 'icon' is not an icon inu.icons handed out"))
+  {
+    let message: &str = &format!("{what}: 'icon' is not an icon inu.icons handed out");
+    PluginErrorCode::InvalidArgument.throw(ctx, message)
+  }
 }
 
 pub fn opt_icon<'js>(
@@ -139,8 +142,10 @@ pub fn opt_icon<'js>(
     let Some(jvm) = jvm else {
       return Err(Exception::throw_type(ctx, &format!("{what}: 'icon' must come from inu.icons")));
     };
-    let expected = handle.parse::<i64>().ok();
-    if expected.is_none() || jvm::handle_id(ctx, jvm, &retained_value)? != expected.unwrap() {
+    let Ok(expected) = handle.parse::<i64>() else {
+      return Err(Exception::throw_type(ctx, &format!("{what}: 'icon' must come from inu.icons")));
+    };
+    if jvm::handle_id(ctx, jvm, &retained_value)? != expected {
       return Err(Exception::throw_type(ctx, &format!("{what}: 'icon' must come from inu.icons")));
     }
     return Ok(Some(Icon {
@@ -168,10 +173,16 @@ fn as_str<'js>(ctx: &Ctx<'js>, what: &str, value: &Value<'js>) -> JsResult<Strin
 fn js_common<'js>(ctx: &Ctx<'js>, host: &Rc<dyn IconHost>, name: Value<'js>) -> JsResult<Object<'js>> {
   let name = as_str(ctx, "icons.common", &name)?;
   let Some(resource) = lookup_common(&name) else {
-    return throw_invalid_argument(ctx, &format!("icons.common: unknown icon '{name}'"));
+    return {
+      let message: &str = &format!("icons.common: unknown icon '{name}'");
+      PluginErrorCode::InvalidArgument.throw(ctx, message)
+    };
   };
   if !host.icon_resolves(KIND_RESOURCE, resource) {
-    return throw_not_found(ctx, &format!("icons.common: this app ships no '{resource}' for '{name}'"));
+    return {
+      let message: &str = &format!("icons.common: this app ships no '{resource}' for '{name}'");
+      PluginErrorCode::NotFound.throw(ctx, message)
+    };
   }
   new_icon(ctx, resource_spec(resource))
 }
@@ -179,10 +190,16 @@ fn js_common<'js>(ctx: &Ctx<'js>, host: &Rc<dyn IconHost>, name: Value<'js>) -> 
 fn js_resource_icon<'js>(ctx: &Ctx<'js>, host: &Rc<dyn IconHost>, name: Value<'js>) -> JsResult<Object<'js>> {
   let name = as_str(ctx, "android.resourceIcon", &name)?;
   if !is_resource_name(&name) {
-    return throw_invalid_argument(ctx, &format!("android.resourceIcon: '{name}' is not a drawable name"));
+    return {
+      let message: &str = &format!("android.resourceIcon: '{name}' is not a drawable name");
+      PluginErrorCode::InvalidArgument.throw(ctx, message)
+    };
   }
   if !host.icon_resolves(KIND_RESOURCE, &name) {
-    return throw_not_found(ctx, &format!("android.resourceIcon: no drawable named '{name}'"));
+    return {
+      let message: &str = &format!("android.resourceIcon: no drawable named '{name}'");
+      PluginErrorCode::NotFound.throw(ctx, message)
+    };
   }
   new_icon(ctx, resource_spec(&name))
 }
@@ -192,21 +209,19 @@ fn js_svg<'js>(ctx: &Ctx<'js>, host: &Rc<dyn IconHost>, source: Value<'js>) -> J
   match check_svg(&source) {
     Ok(()) => {}
     Err(SvgReject::TooLarge(size)) => {
-      let error = make_quota_error(
-        ctx,
-        &format!("icons.svg: {size} bytes of source, the limit is {SVG_LIMIT_BYTES}"),
-        size as i64,
-        SVG_LIMIT_BYTES as i64,
-      )?;
-      return Err(ctx.throw(error));
+      return PluginErrorCode::QuotaExceeded(size as i64, SVG_LIMIT_BYTES as i64)
+        .throw(ctx, &format!("icons.svg: {size} bytes of source, the limit is {SVG_LIMIT_BYTES}"));
     }
-    Err(SvgReject::NotSvg) => return throw_invalid_argument(ctx, "icons.svg: the source carries no <svg> element"),
+    Err(SvgReject::NotSvg) => {
+      return PluginErrorCode::InvalidArgument.throw(ctx, "icons.svg: the source carries no <svg> element")
+    }
     Err(SvgReject::Markup) => {
-      return throw_invalid_argument(ctx, "icons.svg: a doctype or other markup declaration is not allowed")
+      return PluginErrorCode::InvalidArgument
+        .throw(ctx, "icons.svg: a doctype or other markup declaration is not allowed")
     }
   }
   if !host.icon_resolves(KIND_SVG, &source) {
-    return throw_invalid_argument(ctx, "icons.svg: the source did not parse");
+    return PluginErrorCode::InvalidArgument.throw(ctx, "icons.svg: the source did not parse");
   }
   new_icon(ctx, svg_spec(&source))
 }
@@ -260,7 +275,10 @@ pub fn install_icons<'js>(
     "drawableIcon",
     Function::new(ctx.clone(), move |ctx: Ctx<'js>, drawable: Value<'js>| match jvm.as_ref() {
       Some(jvm) => js_drawable_icon(&ctx, jvm, drawable),
-      None => throw_not_granted(&ctx, "android.drawableIcon: needs @grant unsafe.jvm", "unsafe.jvm"),
+      None => {
+        let ctx: &Ctx<'js> = &ctx;
+        PluginErrorCode::NotGranted("unsafe.jvm").throw(ctx, "android.drawableIcon: needs @grant unsafe.jvm")
+      }
     })?,
   )?;
 

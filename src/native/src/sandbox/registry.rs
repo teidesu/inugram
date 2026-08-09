@@ -79,15 +79,16 @@ impl<T> Registry<T> {
 
   pub fn remove_matching(&self, predicate: impl Fn(&T) -> bool) -> Vec<T> {
     let mut entries = self.entries.borrow_mut();
-    let mut removed = Vec::new();
-    let mut index = 0;
-    while index < entries.len() {
-      if predicate(&entries[index].value) {
-        removed.push(entries.remove(index).value);
+    let mut retained = Vec::with_capacity(entries.len());
+    let mut removed = Vec::with_capacity(entries.len());
+    for entry in std::mem::take(&mut *entries) {
+      if predicate(&entry.value) {
+        removed.push(entry.value);
       } else {
-        index += 1;
+        retained.push(entry);
       }
     }
+    *entries = retained;
     removed
   }
 

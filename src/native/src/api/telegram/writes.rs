@@ -1,5 +1,6 @@
 use std::cell::{Cell, RefCell};
 use std::collections::HashMap;
+use std::fmt::Write as _;
 use std::fs;
 use std::io::Write;
 use std::path::{Path, PathBuf};
@@ -7,13 +8,14 @@ use std::rc::Rc;
 
 use rquickjs::{Array, Ctx, Function, Object, Result as JsResult, Runtime, TypedArray, Value};
 
-use crate::api::error::wire_error_to_js;
-use crate::api::io::blob::BlobState;
+use crate::api::error::{wire_error_to_js, PluginErrorCode};
+use crate::api::io::blob::{self, BlobHandle, BlobState};
 use crate::api::telegram::account::AccountState;
 use crate::api::telegram::progress::ProgressReporter;
 use crate::api::telegram::rpc::{format_exception, pump_jobs, PendingSettle};
 use crate::api::tl::proxy::{js_value_to_wire, wire_to_js_value, TlViews, ViewLife};
 use crate::sandbox::grants::{check_grant, GrantHost, MATCH_EXACT};
+use crate::sandbox::registry::RequestIds;
 
 const PRELUDE: &[u8] = include_bytes!(concat!(env!("OUT_DIR"), "/writes.qbc"));
 
@@ -63,18 +65,12 @@ enum Shape {
   File,
 }
 
-const SEPARATOR: char = '\n';
-
 fn shape_of(op: i32) -> Shape {
   match op {
     OP_SEND_MULTI_MEDIA | OP_FORWARD_MESSAGES => Shape::List,
     OP_DOWNLOAD_MEDIA => Shape::File,
     _ => Shape::Value,
   }
-}
-
-fn takes_files(op: i32) -> bool {
-  matches!(op, OP_SEND_MEDIA | OP_SEND_MULTI_MEDIA | OP_UPLOAD_FILE)
 }
 
 pub struct WritesState {
@@ -85,7 +81,7 @@ pub struct WritesState {
   stage_dir: PathBuf,
   log: crate::Log,
   transfer_limit: u64,
-  next_request_id: crate::sandbox::registry::RequestIds,
+  next_request_id: RequestIds,
   next_staged: Cell<u64>,
   pending: RefCell<HashMap<i64, PendingWrite>>,
 }
@@ -98,13 +94,9 @@ struct PendingWrite {
   staged: Vec<PathBuf>,
 }
 
-fn throw_write<'js, T>(ctx: &Ctx<'js>, code: crate::api::error::PluginErrorCode, message: &str) -> JsResult<T> {
-  code.throw(ctx, message)
-}
-
 fn check_write_grant(ctx: &Ctx<'_>, state: &Rc<WritesState>, op: i32) -> JsResult<()> {
   let Some((name, scope)) = grant_of(op) else {
-    return throw_write(ctx, crate::api::error::PluginErrorCode::InvalidArgument, "unknown account write");
+    return PluginErrorCode::InvalidArgument.throw(ctx, "unknown account write");
   };
   check_grant(ctx, &state.grants, name, Some(scope), MATCH_EXACT)
 }
@@ -114,11 +106,9 @@ fn check_path_grant(ctx: &Ctx<'_>, state: &Rc<WritesState>, path: &str) -> JsRes
     return check_grant(ctx, &state.grants, "unsafe.fs", None, MATCH_EXACT);
   }
   check_grant(ctx, &state.grants, "fs", None, MATCH_EXACT)?;
-  throw_write(
+  PluginErrorCode::Unsupported.throw(
     ctx,
-    crate::api::error::PluginErrorCode::Unsupported,
-    "a relative path needs the plugin's scoped directory, which arrives with inu.fs; \
-         pass a Blob, bytes, or an absolute path under unsafe.fs",
+    "a relative path needs the plugin's scoped directory, which arrives with inu.fs; pass a Blob, bytes, or an absolute path under unsafe.fs",
   )
 }
 
@@ -139,15 +129,15 @@ fn stage_value<'js>(ctx: &Ctx<'js>, state: &Rc<WritesState>, value: &Value<'js>)
       }
     }
   }
-  if rquickjs::Class::<crate::api::io::blob::BlobHandle>::from_value(value).is_ok() {
-    let Some(exported) = crate::api::io::blob::export_for_host(&state.blobs, value) else {
-      return throw_write(ctx, crate::api::error::PluginErrorCode::HandleExpired, "this blob has been disposed");
+  if rquickjs::Class::<BlobHandle>::from_value(value).is_ok() {
+    let Some(exported) = blob::export_for_host(&state.blobs, value) else {
+      return PluginErrorCode::HandleExpired.throw(ctx, "this blob has been disposed");
     };
     return stage_blob(ctx, state, value, &exported);
   }
   if let Ok(typed) = TypedArray::<u8>::from_value(value.clone()) {
     let Some(bytes) = typed.as_bytes() else {
-      return throw_write(ctx, crate::api::error::PluginErrorCode::InvalidArgument, "this Uint8Array is detached");
+      return PluginErrorCode::InvalidArgument.throw(ctx, "this Uint8Array is detached");
     };
     check_transfer_limit(ctx, state, bytes.len() as u64)?;
     let path = write_staged(ctx, state, |file| file.write_all(bytes))?;
@@ -166,7 +156,11 @@ fn check_transfer_limit(ctx: &Ctx<'_>, state: &Rc<WritesState>, len: u64) -> JsR
   if len <= state.transfer_limit {
     return Ok(());
   }
-  crate::api::error::PluginErrorCode::QuotaExceeded(len as i64, state.transfer_limit as i64).throw(
+  PluginErrorCode::QuotaExceeded(
+    i64::try_from(len).unwrap_or(i64::MAX),
+    i64::try_from(state.transfer_limit).unwrap_or(i64::MAX),
+  )
+  .throw(
     ctx,
     &format!("this transfer is {len} bytes; at most {} may be staged at once", state.transfer_limit,),
   )
@@ -174,10 +168,10 @@ fn check_transfer_limit(ctx: &Ctx<'_>, state: &Rc<WritesState>, len: u64) -> JsR
 
 fn stage_blob<'js>(ctx: &Ctx<'js>, state: &Rc<WritesState>, value: &Value<'js>, exported: &str) -> JsResult<Staged> {
   let Some(id) = parse_export_id(exported) else {
-    return throw_write(ctx, crate::api::error::PluginErrorCode::Internal, "this blob could not be handed over");
+    return PluginErrorCode::Internal.throw(ctx, "this blob could not be handed over");
   };
-  let Some(export) = crate::api::io::blob::resolve_export(&state.blobs, id) else {
-    return throw_write(ctx, crate::api::error::PluginErrorCode::HandleExpired, "this blob has been disposed");
+  let Some(export) = blob::resolve_export(&state.blobs, id) else {
+    return PluginErrorCode::HandleExpired.throw(ctx, "this blob has been disposed");
   };
   let len = export.len();
   check_transfer_limit(ctx, state, len)?;
@@ -213,25 +207,17 @@ fn write_staged<'js>(
   fill: impl FnOnce(&mut fs::File) -> std::io::Result<()>,
 ) -> JsResult<PathBuf> {
   if state.stage_dir.as_os_str().is_empty() {
-    return throw_write(
-      ctx,
-      crate::api::error::PluginErrorCode::Internal,
-      "this engine has no directory to stage a transfer in",
-    );
+    return PluginErrorCode::Internal.throw(ctx, "this engine has no directory to stage a transfer in");
   }
   let n = state.next_staged.get() + 1;
   state.next_staged.set(n);
   let path = state.stage_dir.join(format!("transfer-{n}.bin"));
   let written = fs::create_dir_all(&state.stage_dir)
-    .and_then(|_| fs::File::create(&path))
-    .and_then(|mut file| fill(&mut file).and_then(|_| file.sync_all()));
+    .and_then(|()| fs::File::create(&path))
+    .and_then(|mut file| fill(&mut file).and_then(|()| file.sync_all()));
   if let Err(e) = written {
     let _ = fs::remove_file(&path);
-    return throw_write(
-      ctx,
-      crate::api::error::PluginErrorCode::Internal,
-      &format!("staging this transfer failed: {e}"),
-    );
+    return PluginErrorCode::Internal.throw(ctx, &format!("staging this transfer failed: {e}"));
   }
   Ok(path)
 }
@@ -250,7 +236,9 @@ pub(crate) fn json_string(value: &str) -> String {
       '\n' => out.push_str("\\n"),
       '\r' => out.push_str("\\r"),
       '\t' => out.push_str("\\t"),
-      c if (c as u32) < 0x20 => out.push_str(&format!("\\u{:04x}", c as u32)),
+      c if (c as u32) < 0x20 => {
+        write!(out, "\\u{:04x}", c as u32).expect("writing to a String cannot fail");
+      }
       c => out.push(c),
     }
   }
@@ -273,7 +261,7 @@ fn js_write<'js>(
   let mut staged = Vec::new();
   let outcome = (|| -> JsResult<()> {
     for value in crate::utils::arguments::array_values(ctx, &values, "account write")? {
-      let one = if takes_files(op) {
+      let one = if matches!(op, OP_SEND_MEDIA | OP_SEND_MULTI_MEDIA | OP_UPLOAD_FILE) {
         stage_value(ctx, state, &value)?
       } else {
         Staged {
@@ -323,7 +311,7 @@ fn js_write<'js>(
 
 fn take_pending(state: &Rc<WritesState>, request_id: i64) -> Option<PendingWrite> {
   let pending = state.pending.borrow_mut().remove(&request_id)?;
-  for path in pending.staged.iter() {
+  for path in &pending.staged {
     let _ = fs::remove_file(path);
   }
   Some(pending)
@@ -334,7 +322,7 @@ fn decode_list<'js>(ctx: &Ctx<'js>, state: &Rc<WritesState>, wire: &str) -> JsRe
   if wire.is_empty() {
     return Ok(array);
   }
-  for (index, element) in wire.split(SEPARATOR).enumerate() {
+  for (index, element) in wire.split("\n").enumerate() {
     array.set(index, wire_to_js_value(ctx, &state.views, element, ViewLife::Plugin)?)?;
   }
   Ok(array)
@@ -347,25 +335,14 @@ fn decode_result<'js>(ctx: &Ctx<'js>, state: &Rc<WritesState>, shape: Shape, wir
     Shape::File => {
       let described = wire_to_js_value(ctx, &state.views, wire, ViewLife::Plugin)?;
       let Some(object) = described.as_object() else {
-        return throw_write(
-          ctx,
-          crate::api::error::PluginErrorCode::Internal,
-          "the host described a download it did not make",
-        );
+        return PluginErrorCode::Internal.throw(ctx, "the host described a download it did not make");
       };
       let path: String = object.get("path")?;
       let size: f64 = object.get::<_, Option<f64>>("size")?.unwrap_or(0.0);
       let mime: String = object.get::<_, Option<String>>("mime")?.unwrap_or_default();
       let name: Option<String> = object.get::<_, Option<String>>("name")?.filter(|n| !n.is_empty());
       let mtime: f64 = object.get::<_, Option<f64>>("mtime")?.unwrap_or(0.0);
-      crate::api::io::blob::mint_app_file(
-        ctx,
-        Path::new(&path),
-        size.max(0.0) as u64,
-        &mime,
-        name.as_deref(),
-        mtime as i64,
-      )
+      blob::mint_app_file(ctx, Path::new(&path), size.max(0.0) as u64, &mime, name.as_deref(), mtime as i64)
     }
   }
 }
@@ -451,7 +428,7 @@ pub fn dispose(context: &rquickjs::Context, state: &Rc<WritesState>) {
         progress.release(&ctx);
       }
       pending.settle.release(&ctx);
-      for path in pending.staged.iter() {
+      for path in &pending.staged {
         let _ = fs::remove_file(path);
       }
     }
@@ -493,7 +470,7 @@ pub(crate) fn install_writes_with_limit<'js>(
     stage_dir: deps.stage_dir,
     log: deps.log,
     transfer_limit,
-    next_request_id: crate::sandbox::registry::RequestIds::default(),
+    next_request_id: RequestIds::default(),
     next_staged: Cell::new(0),
     pending: RefCell::new(HashMap::new()),
   });

@@ -30,7 +30,7 @@ pub trait TimerHost {
 
 pub(crate) fn monotonic_now_ms() -> u64 {
   static START: OnceLock<Instant> = OnceLock::new();
-  START.get_or_init(Instant::now).elapsed().as_millis() as u64
+  u64::try_from(START.get_or_init(Instant::now).elapsed().as_millis()).unwrap_or(u64::MAX)
 }
 
 struct Timer {

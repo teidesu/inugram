@@ -221,7 +221,7 @@ struct SelfOnlyReadsHost;
 
 impl ReadsHost for SelfOnlyReadsHost {
   fn account_read(&self, _account_id: i32, op: i32, arg: &str) -> String {
-    let spec = arg.split(SEPARATOR).next().unwrap_or("");
+    let spec = arg.split("\n").next().unwrap_or("");
     if op != crate::api::telegram::reads::OP_INPUT_PEER {
       return "N".to_string();
     }

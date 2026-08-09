@@ -71,9 +71,11 @@ impl Fault {
       ),
       Fault::Invalid(message) => PluginErrorCode::InvalidArgument.throw(ctx, &message),
       Fault::NotFound(message) => PluginErrorCode::NotFound.throw(ctx, &message),
-      Fault::Quota { usage, quota, message } => {
-        PluginErrorCode::QuotaExceeded(usage as i64, quota as i64).throw(ctx, &message)
-      }
+      Fault::Quota { usage, quota, message } => PluginErrorCode::QuotaExceeded(
+        i64::try_from(usage).unwrap_or(i64::MAX),
+        i64::try_from(quota).unwrap_or(i64::MAX),
+      )
+      .throw(ctx, &message),
       Fault::Io(message) => PluginErrorCode::Internal.throw(ctx, &message),
       Fault::Gone(message) => PluginErrorCode::HandleExpired.throw(ctx, &message),
     }
@@ -362,8 +364,8 @@ fn op_stat(state: &FsState, path: &str) -> FsResult<Stat> {
 fn system_time_millis(time: Option<std::time::SystemTime>) -> i64 {
   let Some(time) = time else { return 0 };
   match time.duration_since(UNIX_EPOCH) {
-    Ok(d) => d.as_millis() as i64,
-    Err(e) => -(e.duration().as_millis() as i64),
+    Ok(duration) => i64::try_from(duration.as_millis()).unwrap_or(i64::MAX),
+    Err(error) => i64::try_from(error.duration().as_millis()).map_or(i64::MIN, i64::saturating_neg),
   }
 }
 
@@ -374,7 +376,7 @@ fn unix_ctime_millis(meta: &fs::Metadata) -> Option<i64> {
   if seconds == 0 && nanos == 0 {
     return None;
   }
-  Some(seconds * 1000 + nanos / 1_000_000)
+  Some(seconds.saturating_mul(1000).saturating_add(nanos / 1_000_000))
 }
 
 fn op_copy(state: &FsState, src: &str, dest: &str) -> FsResult<()> {

@@ -42,7 +42,7 @@ pub fn install_utils_with_host<'js>(
 
   let f = Function::new(ctx.clone(), |ctx: Ctx<'js>, text: String| -> JsResult<TypedArray<'js, u8>> {
     let text: &str = &text;
-    let bytes = STANDARD.decode(&text).ok().or_else(|| STANDARD_NO_PAD.decode(&text).ok());
+    let bytes = STANDARD.decode(text).ok().or_else(|| STANDARD_NO_PAD.decode(text).ok());
     match bytes {
       Some(bytes) => TypedArray::<u8>::new(ctx, bytes),
       None => PluginErrorCode::InvalidArgument.throw(&ctx, "fromBase64: not base64"),

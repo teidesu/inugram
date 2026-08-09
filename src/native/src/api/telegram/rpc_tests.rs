@@ -1,4 +1,5 @@
 use super::*;
+use crate::api::error::install_rejection_tracker;
 use crate::api::tl::proxy::TlHost;
 use crate::sandbox::grants::TestGrantHost;
 use rquickjs::Context;
