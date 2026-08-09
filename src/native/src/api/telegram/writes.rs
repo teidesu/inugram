@@ -98,13 +98,13 @@ struct PendingWrite {
   staged: Vec<PathBuf>,
 }
 
-fn throw_write<'js, T>(ctx: &Ctx<'js>, code: &str, message: &str) -> JsResult<T> {
-  crate::api::error::throw_plugin_error(ctx, code, message, None, None, None)
+fn throw_write<'js, T>(ctx: &Ctx<'js>, code: crate::api::error::PluginErrorCode, message: &str) -> JsResult<T> {
+  code.throw(ctx, message)
 }
 
 fn check_write_grant(ctx: &Ctx<'_>, state: &Rc<WritesState>, op: i32) -> JsResult<()> {
   let Some((name, scope)) = grant_of(op) else {
-    return throw_write(ctx, "invalid-argument", "unknown account write");
+    return throw_write(ctx, crate::api::error::PluginErrorCode::InvalidArgument, "unknown account write");
   };
   check_grant(ctx, &state.grants, name, Some(scope), MATCH_EXACT)
 }
@@ -116,7 +116,7 @@ fn check_path_grant(ctx: &Ctx<'_>, state: &Rc<WritesState>, path: &str) -> JsRes
   check_grant(ctx, &state.grants, "fs", None, MATCH_EXACT)?;
   throw_write(
     ctx,
-    "unsupported",
+    crate::api::error::PluginErrorCode::Unsupported,
     "a relative path needs the plugin's scoped directory, which arrives with inu.fs; \
          pass a Blob, bytes, or an absolute path under unsafe.fs",
   )
@@ -141,13 +141,13 @@ fn stage_value<'js>(ctx: &Ctx<'js>, state: &Rc<WritesState>, value: &Value<'js>)
   }
   if rquickjs::Class::<crate::api::io::blob::BlobHandle>::from_value(value).is_ok() {
     let Some(exported) = crate::api::io::blob::export_for_host(&state.blobs, value) else {
-      return throw_write(ctx, "handle-expired", "this blob has been disposed");
+      return throw_write(ctx, crate::api::error::PluginErrorCode::HandleExpired, "this blob has been disposed");
     };
     return stage_blob(ctx, state, value, &exported);
   }
   if let Ok(typed) = TypedArray::<u8>::from_value(value.clone()) {
     let Some(bytes) = typed.as_bytes() else {
-      return throw_write(ctx, "invalid-argument", "this Uint8Array is detached");
+      return throw_write(ctx, crate::api::error::PluginErrorCode::InvalidArgument, "this Uint8Array is detached");
     };
     check_transfer_limit(ctx, state, bytes.len() as u64)?;
     let path = write_staged(ctx, state, |file| file.write_all(bytes))?;
@@ -166,22 +166,18 @@ fn check_transfer_limit(ctx: &Ctx<'_>, state: &Rc<WritesState>, len: u64) -> JsR
   if len <= state.transfer_limit {
     return Ok(());
   }
-  crate::api::error::throw_plugin_error(
+  crate::api::error::PluginErrorCode::QuotaExceeded(len as i64, state.transfer_limit as i64).throw(
     ctx,
-    "quota-exceeded",
     &format!("this transfer is {len} bytes; at most {} may be staged at once", state.transfer_limit,),
-    None,
-    Some(len as i64),
-    Some(state.transfer_limit as i64),
   )
 }
 
 fn stage_blob<'js>(ctx: &Ctx<'js>, state: &Rc<WritesState>, value: &Value<'js>, exported: &str) -> JsResult<Staged> {
   let Some(id) = parse_export_id(exported) else {
-    return throw_write(ctx, "internal", "this blob could not be handed over");
+    return throw_write(ctx, crate::api::error::PluginErrorCode::Internal, "this blob could not be handed over");
   };
   let Some(export) = crate::api::io::blob::resolve_export(&state.blobs, id) else {
-    return throw_write(ctx, "handle-expired", "this blob has been disposed");
+    return throw_write(ctx, crate::api::error::PluginErrorCode::HandleExpired, "this blob has been disposed");
   };
   let len = export.len();
   check_transfer_limit(ctx, state, len)?;
@@ -217,7 +213,11 @@ fn write_staged<'js>(
   fill: impl FnOnce(&mut fs::File) -> std::io::Result<()>,
 ) -> JsResult<PathBuf> {
   if state.stage_dir.as_os_str().is_empty() {
-    return throw_write(ctx, "internal", "this engine has no directory to stage a transfer in");
+    return throw_write(
+      ctx,
+      crate::api::error::PluginErrorCode::Internal,
+      "this engine has no directory to stage a transfer in",
+    );
   }
   let n = state.next_staged.get() + 1;
   state.next_staged.set(n);
@@ -227,7 +227,11 @@ fn write_staged<'js>(
     .and_then(|mut file| fill(&mut file).and_then(|_| file.sync_all()));
   if let Err(e) = written {
     let _ = fs::remove_file(&path);
-    return throw_write(ctx, "internal", &format!("staging this transfer failed: {e}"));
+    return throw_write(
+      ctx,
+      crate::api::error::PluginErrorCode::Internal,
+      &format!("staging this transfer failed: {e}"),
+    );
   }
   Ok(path)
 }
@@ -343,7 +347,11 @@ fn decode_result<'js>(ctx: &Ctx<'js>, state: &Rc<WritesState>, shape: Shape, wir
     Shape::File => {
       let described = wire_to_js_value(ctx, &state.views, wire, ViewLife::Plugin)?;
       let Some(object) = described.as_object() else {
-        return throw_write(ctx, "internal", "the host described a download it did not make");
+        return throw_write(
+          ctx,
+          crate::api::error::PluginErrorCode::Internal,
+          "the host described a download it did not make",
+        );
       };
       let path: String = object.get("path")?;
       let size: f64 = object.get::<_, Option<f64>>("size")?.unwrap_or(0.0);

@@ -4,10 +4,11 @@ use std::rc::Rc;
 
 use rquickjs::{Ctx, Function, Object, Result as JsResult, Runtime, TypedArray, Value};
 
-use crate::api::error::{throw_plugin_error, wire_error_to_js};
+use crate::api::error::{host_error_to_js, wire_error_to_js, PluginErrorCode};
 use crate::api::io::blob::{export_for_host, mint_app_file, resolve_export, BlobState, BUILD_LIMIT_BYTES};
 use crate::api::telegram::rpc::{format_exception, pump_jobs, PendingSettle};
 use crate::sandbox::grants::{check_grant, GrantHost, MATCH_DOMAIN};
+use crate::sandbox::registry::RequestIds;
 
 const PRELUDE: &[u8] = include_bytes!(concat!(env!("OUT_DIR"), "/fetch.qbc"));
 
@@ -22,7 +23,7 @@ pub struct FetchState {
   grants: Rc<dyn GrantHost>,
   blobs: Rc<BlobState>,
   log: crate::Log,
-  next_request_id: crate::sandbox::registry::RequestIds,
+  next_request_id: RequestIds,
   pending: RefCell<HashMap<i64, PendingSettle>>,
 }
 
@@ -83,13 +84,20 @@ fn js_send<'js>(
   let spec_json = ctx.json_stringify(spec)?.map(|s| s.to_string()).transpose()?.unwrap_or_else(|| "{}".to_string());
   let host = match parse_target(&url) {
     Ok(host) => host,
-    Err(message) => return throw_plugin_error(ctx, "invalid-argument", &message, None, None, None),
+    Err(message) => return PluginErrorCode::InvalidArgument.throw(ctx, &message),
   };
   check_grant(ctx, &state.grants, "fetch", Some(&host), MATCH_DOMAIN)?;
 
   let body = match read_body(state, &body) {
     Ok(body) => body,
-    Err((code, message)) => return throw_plugin_error(ctx, &code, &message, None, None, None),
+    Err((code, message)) => {
+      let code = match code.as_str() {
+        "handle-expired" => PluginErrorCode::HandleExpired,
+        "invalid-argument" => PluginErrorCode::InvalidArgument,
+        _ => unreachable!("read_body returned an unknown error code"),
+      };
+      return code.throw(ctx, &message);
+    }
   };
 
   let request_id = state.next_request_id.alloc();
@@ -98,7 +106,7 @@ fn js_send<'js>(
 
   if let Some(err) = state.host.send(request_id, &url, &spec_json, body.as_deref()) {
     if let Some(settle) = state.pending.borrow_mut().remove(&request_id) {
-      let value = crate::api::error::host_error_to_js(ctx, &err)?;
+      let value = host_error_to_js(ctx, &err)?;
       settle.reject_with_value(ctx, value)?;
     }
   }
@@ -122,7 +130,7 @@ pub fn install_fetch<'js>(
     grants,
     blobs,
     log,
-    next_request_id: crate::sandbox::registry::RequestIds::default(),
+    next_request_id: RequestIds::default(),
     pending: RefCell::new(HashMap::new()),
   });
 

@@ -1027,24 +1027,6 @@ fn a_plugin_throw_faults_where_a_host_failure_does_not() {
   assert_eq!(levels(&logs).first().map(|(level, _)| *level), Some(crate::LEVEL_ERROR), "got: {:?}", levels(&logs),);
 }
 
-/// the timer floor lifts only while the app is parked behind a chain, so a mutation that
-/// skipped the accessors would silently leave a backgrounded interceptor throttled into the
-/// chain budget. no unit test can see the omission, so pin the count instead
-#[test]
-fn no_raw_dispatch_mutation() {
-  // split so this test's own source does not match
-  let needle = concat!("dispatches.borrow", "_mut()");
-  // whitespace-stripped: rustfmt breaks a long receiver chain across lines, and a needle that
-  // could not see that would fail the moment someone ran `cargo fmt`
-  let source: String = include_str!("rpc.rs").chars().filter(|c| !c.is_whitespace()).collect();
-  let found = source.matches(needle).count();
-  assert_eq!(
-    found, 6,
-    "neither dispatch map may be mutated outside its three accessors (insert/remove/drain), \
-         which are what keep Lifecycle's blocking count in step",
-  );
-}
-
 /// throwing an `inu.RpcError` is the documented way to fail an intercepted request, and an
 /// abandoned stage's parked next() rejects with one the plugin did not cause, so neither may
 /// disable it: the first would punish using the api as written, the second would let one

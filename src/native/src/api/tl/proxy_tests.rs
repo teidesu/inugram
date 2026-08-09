@@ -1,4 +1,5 @@
 use super::*;
+use base64::Engine;
 use rquickjs::{Context, Runtime};
 use std::cell::RefCell;
 use std::collections::{HashMap, HashSet};
@@ -423,6 +424,10 @@ fn vector_length_indexing_push_and_iteration() {
     let len3: i64 = ctx.eval("vec.length").unwrap();
     assert_eq!(len3, 1);
   });
+}
+
+fn base64_encode(bytes: &[u8]) -> String {
+  base64::engine::general_purpose::STANDARD.encode(bytes)
 }
 
 #[test]

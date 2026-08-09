@@ -5,10 +5,13 @@ use rquickjs::function::Opt;
 use rquickjs::object::Accessor;
 use rquickjs::{Array, Ctx, Function, Object, Persistent, Result as JsResult, Runtime, Value};
 
-use crate::api::error::{self};
+use crate::api::error::PluginErrorCode;
 use crate::api::telegram::rpc::pump_jobs;
 use crate::sandbox::grants::{check_grant, GrantHost, MATCH_EXACT};
 use crate::sandbox::registry::{make_disposer, noop_disposer, CallbackRegistry, Lifecycle, Registry, Token};
+
+#[cfg(test)]
+use crate::api::error;
 
 pub trait AccountHost {
   fn accounts(&self) -> Option<String>;
@@ -130,19 +133,8 @@ impl AccountState {
       Some(id) if id.is_undefined() || id.is_null() => None,
       Some(id) => match id.as_number() {
         Some(n) if n.fract() == 0.0 && n >= i32::MIN as f64 && n <= i32::MAX as f64 => Some(n as i32),
-        Some(_) => {
-          return error::throw_plugin_error(
-            ctx,
-            "invalid-argument",
-            "account: 'id' must be an integer slot index",
-            None,
-            None,
-            None,
-          )
-        }
-        None => {
-          return error::throw_plugin_error(ctx, "invalid-argument", "account: 'id' must be a number", None, None, None)
-        }
+        Some(_) => return PluginErrorCode::InvalidArgument.throw(ctx, "account: 'id' must be an integer slot index"),
+        None => return PluginErrorCode::InvalidArgument.throw(ctx, "account: 'id' must be a number"),
       },
     };
 
@@ -159,15 +151,8 @@ impl AccountState {
       }
     }
     match wanted {
-      Some(id) => error::throw_plugin_error(
-        ctx,
-        "not-found",
-        &format!("account: no account is logged in as #{id}"),
-        None,
-        None,
-        None,
-      ),
-      None => error::throw_plugin_error(ctx, "not-found", "account: no account is logged in", None, None, None),
+      Some(id) => PluginErrorCode::NotFound.throw(ctx, &format!("account: no account is logged in as #{id}")),
+      None => PluginErrorCode::NotFound.throw(ctx, "account: no account is logged in"),
     }
   }
 

@@ -8,10 +8,11 @@ use std::rc::Rc;
 use rquickjs::function::Opt;
 use rquickjs::{Array, Context, Ctx, Function, Object, Persistent, Result as JsResult, Runtime, Value};
 
-use crate::api::error::throw_plugin_error;
+use crate::api::error::PluginErrorCode;
 use crate::api::platform::jvm::{arg_to_wire, handle_id, wire_to_value, JvmState};
 use crate::sandbox::grants::{check_grant, GrantHost, MATCH_NAMESPACE};
 use crate::sandbox::registry::{make_disposer, noop_disposer, Lifecycle, Registry};
+use crate::utils::arguments::array_values;
 use rquickjs::function::This;
 
 use crate::api::telegram::rpc::{format_exception, pump_jobs};
@@ -110,14 +111,7 @@ fn ask<'js>(
 fn require_handle<'js>(ctx: &Ctx<'js>, state: &Rc<XposedState>, value: &Value<'js>, what: &str) -> JsResult<i64> {
   let id = handle_id(ctx, &state.jvm, value)?;
   if id < 0 {
-    return throw_plugin_error(
-      ctx,
-      "invalid-argument",
-      &format!("xposed: {what} expected a java class or method"),
-      None,
-      None,
-      None,
-    );
+    return PluginErrorCode::InvalidArgument.throw(ctx, &format!("xposed: {what} expected a java class or method"));
   }
   Ok(id)
 }
@@ -128,7 +122,7 @@ fn sites_from<'js>(ctx: &Ctx<'js>, value: Value<'js>) -> JsResult<Vec<i64>> {
     listed.split(',').filter(|part| !part.is_empty()).map(|part| part.parse().ok()).collect();
   match sites {
     Some(sites) if !sites.is_empty() => Ok(sites),
-    _ => throw_plugin_error(ctx, "internal", "xposed: the host installed no hook site", None, None, None),
+    _ => PluginErrorCode::Internal.throw(ctx, "xposed: the host installed no hook site"),
   }
 }
 
@@ -144,28 +138,14 @@ fn callbacks_of<'js>(ctx: &Ctx<'js>, hook: &Object<'js>, what: &str) -> JsResult
       return Ok(None);
     }
     let Some(callback) = value.as_function() else {
-      return throw_plugin_error(
-        ctx,
-        "invalid-argument",
-        &format!("{what}: {phase} must be a function"),
-        None,
-        None,
-        None,
-      );
+      return PluginErrorCode::InvalidArgument.throw(ctx, &format!("{what}: {phase} must be a function"));
     };
     Ok(Some(callback.clone()))
   };
   let before = callback("before")?;
   let after = callback("after")?;
   if before.is_none() && after.is_none() {
-    return throw_plugin_error(
-      ctx,
-      "invalid-argument",
-      "xposed: a hook needs a before or an after callback",
-      None,
-      None,
-      None,
-    );
+    return PluginErrorCode::InvalidArgument.throw(ctx, "xposed: a hook needs a before or an after callback");
   }
   Ok(Callbacks { before, after })
 }
@@ -199,14 +179,8 @@ fn install_hooks<'js>(
         state.release(ctx, hook);
       }
     }
-    return throw_plugin_error(
-      ctx,
-      "quota-exceeded",
-      &format!("xposed: this plugin may hold at most {HOOK_LIMIT} hooks"),
-      None,
-      Some(held as i64),
-      Some(HOOK_LIMIT as i64),
-    );
+    return PluginErrorCode::QuotaExceeded(held as i64, HOOK_LIMIT as i64)
+      .throw(ctx, &format!("xposed: this plugin may hold at most {HOOK_LIMIT} hooks"));
   }
 
   let state = state.clone();
@@ -230,7 +204,7 @@ fn js_hook<'js>(
 ) -> JsResult<Function<'js>> {
   check_grant(ctx, &state.grants, GRANT, None, MATCH_NAMESPACE)?;
   let Some(hook) = hook.as_object() else {
-    return throw_plugin_error(ctx, "invalid-argument", &format!("{what}: expected a hook object"), None, None, None);
+    return PluginErrorCode::InvalidArgument.throw(ctx, &format!("{what}: expected a hook object"));
   };
   let callbacks = callbacks_of(ctx, hook, what)?;
   if state.lifecycle.is_unloading() {
@@ -259,16 +233,9 @@ fn js_call_original<'js>(
     None => Vec::new(),
     Some(args) => {
       let Some(args) = args.as_array() else {
-        return throw_plugin_error(
-          ctx,
-          "invalid-argument",
-          "callOriginalMethod: expected an array of arguments",
-          None,
-          None,
-          None,
-        );
+        return PluginErrorCode::InvalidArgument.throw(ctx, "callOriginalMethod: expected an array of arguments");
       };
-      crate::utils::arguments::array_values(ctx, args, "callOriginalMethod")?
+      array_values(ctx, args, "callOriginalMethod")?
     }
   };
   let mut wires = vec![arg_to_wire(ctx, &state.jvm, &this)?];
@@ -335,14 +302,7 @@ pub fn install_xposed<'js>(
           .and_then(|name| name.as_string().and_then(|name| name.to_string().ok()))
           .filter(|name| !name.is_empty())
         else {
-          return throw_plugin_error(
-            &ctx,
-            "invalid-argument",
-            "hookAllOverloads: expected a method name",
-            None,
-            None,
-            None,
-          );
+          return PluginErrorCode::InvalidArgument.throw(&ctx, "hookAllOverloads: expected a method name");
         };
         js_hook(
           &ctx,
@@ -599,7 +559,7 @@ fn build_context<'js>(
 fn read_args<'js>(ctx: &Ctx<'js>, state: &Rc<XposedState>, context: &Object<'js>) -> JsResult<Vec<String>> {
   let array: Array = context.get("args")?;
   let mut wires = Vec::new();
-  for value in crate::utils::arguments::array_values(ctx, &array, "xposed: 'args'")? {
+  for value in array_values(ctx, &array, "xposed: 'args'")? {
     wires.push(arg_to_wire(ctx, &state.jvm, &value)?);
   }
   Ok(wires)

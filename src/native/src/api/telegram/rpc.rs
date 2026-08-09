@@ -10,6 +10,7 @@ use crate::api::telegram::account::{dispatch_account, AccountState};
 use crate::api::tl::proxy::{self, TlViews, ViewLife};
 use crate::sandbox::grants::{check_grant, GrantHost, MATCH_EXACT};
 use crate::sandbox::registry::{make_disposer, noop_disposer, CallbackRegistry, Lifecycle, Registry};
+use crate::utils::prelude;
 
 pub trait RpcHost {
   fn on_register(&self, methods: &[String], callback_id: u32, scope: &str) -> Option<String>;
@@ -497,14 +498,8 @@ fn install_account_invoke<'js>(ctx: &Ctx<'js>, state: &Rc<RpcState>) -> JsResult
         .filter(|id| id.fract() == 0.0 && *id >= 0.0)
         .map(|id| id as i32);
       let Some(slot) = slot else {
-        return error::throw_plugin_error(
-          &ctx,
-          "invalid-argument",
-          "invokeRpc: not called on an account handle; use inu.account().invokeRpc(...)",
-          None,
-          None,
-          None,
-        );
+        return crate::api::error::PluginErrorCode::InvalidArgument
+          .throw(&ctx, "invokeRpc: not called on an account handle; use inu.account().invokeRpc(...)");
       };
       js_invoke_rpc(&ctx, &state2, slot, obj)
     },
@@ -526,7 +521,7 @@ fn install_send_message<'js>(
   inu: &Object<'js>,
   shared: Object<'js>,
 ) -> JsResult<()> {
-  let factory = crate::utils::prelude::load(ctx, SEND_PRELUDE)?;
+  let factory = prelude::load(ctx, SEND_PRELUDE)?;
   let plugin_error: Value = ctx.globals().get::<_, Object>("inu")?.get("PluginError")?;
   let rpc_error: Value = inu.get("RpcError")?;
   let accounts = state.accounts.clone();
@@ -544,7 +539,7 @@ fn install_send_message<'js>(
 }
 
 fn install_demuxed_events<'js>(ctx: &Ctx<'js>, state: &Rc<RpcState>, inu: &Object<'js>) -> JsResult<()> {
-  let factory = crate::utils::prelude::load(ctx, EVENTS_PRELUDE)?;
+  let factory = prelude::load(ctx, EVENTS_PRELUDE)?;
   let message: Value = inu.get("Message")?;
   if !message.is_function() {
     return Err(Exception::throw_type(ctx, "the demuxed events need the inu.Message installApi installs"));
@@ -641,14 +636,8 @@ fn read_method_name<'js>(ctx: &Ctx<'js>, obj: &Value<'js>) -> JsResult<String> {
   };
   match name.as_string().and_then(|s| s.to_string().ok()) {
     Some(name) => Ok(name),
-    None => error::throw_plugin_error(
-      ctx,
-      "invalid-argument",
-      "invokeRpc: the request must carry its method name in '_'",
-      None,
-      None,
-      None,
-    ),
+    None => crate::api::error::PluginErrorCode::InvalidArgument
+      .throw(ctx, "invokeRpc: the request must carry its method name in '_'"),
   }
 }
 
@@ -1022,21 +1011,21 @@ fn try_dispatch_rpc<'js>(
     Function::new(ctx.clone(), move |ctx: Ctx<'js>, req: Value<'js>| -> JsResult<Value<'js>> {
       if dstate.abandoned.get() {
         let (code, message) = if dstate.timed_out.get() {
-          ("timed-out", "next(): the interceptor chain's budget expired and this stage was abandoned")
+          (
+            error::PluginErrorCode::TimedOut,
+            "next(): the interceptor chain's budget expired and this stage was abandoned",
+          )
         } else {
-          ("aborted", "next(): the interceptor chain was torn down and this stage was abandoned")
+          (
+            error::PluginErrorCode::Aborted,
+            "next(): the interceptor chain was torn down and this stage was abandoned",
+          )
         };
-        return error::throw_plugin_error(&ctx, code, message, None, None, None);
+        return code.throw(&ctx, message);
       }
       if dstate.settled.get() {
-        return error::throw_plugin_error(
-          &ctx,
-          "invalid-argument",
-          "next(): this dispatch already settled",
-          None,
-          None,
-          None,
-        );
+        return crate::api::error::PluginErrorCode::InvalidArgument
+          .throw(&ctx, "next(): this dispatch already settled");
       }
       if dstate.called.replace(true) {
         return Err(Exception::throw_type(&ctx, "next() may only be called once"));

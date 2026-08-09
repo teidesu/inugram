@@ -129,7 +129,7 @@ fn check_read_grant(ctx: &Ctx<'_>, state: &Rc<ReadsState>, op: i32, arg: &str) -
     return Ok(());
   }
   let Some(scope) = scope_of(op) else {
-    return crate::api::error::throw_plugin_error(ctx, "invalid-argument", "unknown account read", None, None, None);
+    return crate::api::error::PluginErrorCode::InvalidArgument.throw(ctx, "unknown account read");
   };
   check_grant(ctx, &state.grants, "account.read", Some(scope), MATCH_EXACT)?;
   check_self_grant(ctx, state, arg)
@@ -328,14 +328,8 @@ fn js_fetch<'js>(
         match state.cursors.payload_of(list, cursor) {
           Some(payload) => payload,
           None => {
-            return crate::api::error::throw_plugin_error(
-              ctx,
-              "invalid-argument",
-              "this cursor did not come from this list, or is too old to page from",
-              None,
-              None,
-              None,
-            )
+            return crate::api::error::PluginErrorCode::InvalidArgument
+              .throw(ctx, "this cursor did not come from this list, or is too old to page from")
           }
         }
       };

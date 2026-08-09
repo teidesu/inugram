@@ -1,6 +1,7 @@
 use std::cell::Cell;
 use std::rc::Rc;
 
+use base64::engine::general_purpose::STANDARD;
 use rquickjs::atom::PredefinedAtom;
 use rquickjs::class::{JsClass, Readable, Trace, Tracer};
 use rquickjs::proxy::ProxyHandler;
@@ -167,7 +168,7 @@ fn throw_read_only<'js, T>(ctx: &Ctx<'js>) -> JsResult<T> {
 }
 
 fn throw_unsupported<'js, T>(ctx: &Ctx<'js>, message: &str) -> JsResult<T> {
-  crate::api::error::throw_plugin_error(ctx, "unsupported", message, None, None, None)
+  crate::api::error::PluginErrorCode::Unsupported.throw(ctx, message)
 }
 
 fn descriptor_value<'js>(ctx: &Ctx<'js>, descriptor: &Value<'js>) -> JsResult<Value<'js>> {
@@ -189,18 +190,12 @@ fn descriptor_value<'js>(ctx: &Ctx<'js>, descriptor: &Value<'js>) -> JsResult<Va
   }
 }
 
-pub(crate) fn base64_encode(bytes: &[u8]) -> String {
-  use base64::Engine;
-  base64::engine::general_purpose::STANDARD.encode(bytes)
-}
-
 fn base64_decode(s: &str) -> Option<Vec<u8>> {
-  use base64::Engine;
-  base64::engine::general_purpose::STANDARD.decode(s).ok()
+  base64::Engine::decode(&STANDARD, s).ok()
 }
 
 fn make_bytes_value<'js>(ctx: &Ctx<'js>, bytes: Vec<u8>) -> JsResult<Value<'js>> {
-  let b64 = base64_encode(&bytes);
+  let b64 = base64::Engine::encode(&STANDARD, &bytes);
   let arr = TypedArray::<u8>::new_copy(ctx.clone(), bytes)?;
   let to_json = Function::new(ctx.clone(), move |ctx: Ctx<'js>| -> JsResult<Object<'js>> {
     let wrapper = Object::new(ctx.clone())?;
@@ -249,7 +244,7 @@ pub(crate) fn json_stringify_tl<'js>(ctx: &Ctx<'js>, value: Value<'js>) -> JsRes
       if let Ok(typed) = TypedArray::<u8>::from_value(value.clone()) {
         if let Some(bytes) = typed.as_bytes() {
           let wrapper = Object::new(ctx.clone())?;
-          wrapper.set(BYTES_MARKER_KEY, base64_encode(bytes))?;
+          wrapper.set(BYTES_MARKER_KEY, base64::Engine::encode(&STANDARD, bytes))?;
           return wrapper.into_js(&ctx);
         }
       }
@@ -274,7 +269,7 @@ pub(crate) fn scalar_wire_to_js<'js>(ctx: &Ctx<'js>, tag: char, payload: &str) -
       .map_err(|_| Exception::throw_message(ctx, "tl wire: bad double"))
       .and_then(|n| n.into_js(ctx)),
     'B' => Ok(Value::new_bool(ctx.clone(), payload == "1")),
-    'Y' => match base64_decode(payload) {
+    'Y' => match base64::Engine::decode(&STANDARD, payload).ok() {
       Some(bytes) => make_bytes_value(ctx, bytes),
       None => Err(Exception::throw_message(ctx, "tl wire: bad base64")),
     },
@@ -314,7 +309,7 @@ pub fn js_value_to_wire<'js>(ctx: &Ctx<'js>, value: Value<'js>) -> JsResult<Stri
   }
   if let Ok(typed) = TypedArray::<u8>::from_value(value.clone()) {
     if let Some(bytes) = typed.as_bytes() {
-      return Ok(format!("Y{}", base64_encode(bytes)));
+      return Ok(format!("Y{}", base64::Engine::encode(&STANDARD, bytes)));
     }
   }
   let json = json_stringify_tl(ctx, value)?;

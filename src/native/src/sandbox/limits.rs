@@ -150,18 +150,18 @@ impl ExternalMemory {
     if let Some(charge) = self.try_charge(ctx, bytes) {
       return Ok(charge);
     }
-    crate::api::error::throw_plugin_error(
+    crate::api::error::PluginErrorCode::QuotaExceeded(
+      self.charged.get().saturating_add(bytes) as i64,
+      EXTERNAL_LIMIT_BYTES as i64,
+    )
+    .throw(
       ctx,
-      "quota-exceeded",
       &format!(
         "this plugin holds {:.1} MB of native memory and asked for {:.1} MB more, past its ceiling of {} MB",
         self.charged.get() as f64 / (1024.0 * 1024.0),
         bytes as f64 / (1024.0 * 1024.0),
         EXTERNAL_LIMIT_BYTES / (1024 * 1024),
       ),
-      None,
-      Some(self.charged.get().saturating_add(bytes) as i64),
-      Some(EXTERNAL_LIMIT_BYTES as i64),
     )
   }
 

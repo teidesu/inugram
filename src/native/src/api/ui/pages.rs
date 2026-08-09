@@ -4,7 +4,6 @@ use std::rc::Rc;
 
 use rquickjs::{Array, Ctx, Exception, Function, Object, Persistent, Result as JsResult, Runtime, Value};
 
-use crate::api::error::throw_plugin_error;
 use crate::api::telegram::rpc::{format_exception, pump_jobs, PendingSettle};
 use crate::api::ui::icons::{opt_icon, Icon, RETAINED_VALUE_TAG};
 use crate::sandbox::registry::{make_disposer, noop_disposer, Lifecycle, Registry, RequestIds};
@@ -19,13 +18,9 @@ fn slider_steps(min: f64, max: f64, step: f64) -> usize {
 fn check_slider_steps<'js>(ctx: &Ctx<'js>, min: f64, max: f64, step: f64) -> JsResult<()> {
   let steps = slider_steps(min, max, step);
   if steps > MAX_SLIDER_LABELS {
-    return throw_plugin_error(
+    return crate::api::error::PluginErrorCode::InvalidArgument.throw(
       ctx,
-      "invalid-argument",
       &format!("slider: a 'label' is evaluated per step, and {steps} steps is past the {MAX_SLIDER_LABELS} allowed"),
-      None,
-      None,
-      None,
     );
   }
   Ok(())
@@ -387,14 +382,8 @@ fn page_id_of<'js>(ctx: &Ctx<'js>, state: &Rc<UiState>, page: &Value<'js>, what:
     .and_then(|o| o.get::<_, Option<f64>>(PAGE_ID_KEY).ok().flatten())
     .ok_or_else(|| Exception::throw_type(ctx, &format!("{what}: expected a settings page")))? as i64;
   if !state.pages.borrow().contains_key(&id) {
-    return throw_plugin_error(
-      ctx,
-      "handle-expired",
-      &format!("{what}: this page has been disposed"),
-      None,
-      None,
-      None,
-    );
+    return crate::api::error::PluginErrorCode::HandleExpired
+      .throw(ctx, &format!("{what}: this page has been disposed"));
   }
   Ok(id)
 }
@@ -708,14 +697,8 @@ pub fn dispatch_ui_event(
 
 fn js_open_menu<'js>(ctx: &Ctx<'js>, state: &Rc<UiState>, page_id: i64, row: &str, items: Value<'js>) -> JsResult<()> {
   if !state.pages.borrow().contains_key(&page_id) {
-    return throw_plugin_error(
-      ctx,
-      "handle-expired",
-      "openMenu: the page this anchor came from has been disposed",
-      None,
-      None,
-      None,
-    );
+    return crate::api::error::PluginErrorCode::HandleExpired
+      .throw(ctx, "openMenu: the page this anchor came from has been disposed");
   }
   let arr = items.as_array().ok_or_else(|| Exception::throw_type(ctx, "openMenu: expected an array of items"))?;
   let arr = crate::utils::arguments::array_values(ctx, arr, "openMenu")?;

@@ -15,8 +15,9 @@ use rquickjs::{
   Value,
 };
 
-use crate::api::error::{make_plugin_error, throw_plugin_error};
+use crate::api::error::{make_plugin_error, PluginErrorCode};
 use crate::sandbox::limits::{ExternalCharge, ExternalMemory, EXTERNAL_LIMIT_BYTES, HEAP_LIMIT_BYTES};
+use crate::utils::arguments::array_values;
 use crate::utils::shape::{define_getter, define_method};
 
 pub const SPILL_THRESHOLD_BYTES: u64 = 2 * 1024 * 1024;
@@ -501,7 +502,7 @@ impl BlobHandle {
   fn live(&self, ctx: &Ctx<'_>) -> JsResult<Rc<Backing>> {
     match self.backing.borrow().clone() {
       Some(backing) => Ok(backing),
-      None => throw_plugin_error(ctx, "handle-expired", "this blob was disposed", None, None, None),
+      None => PluginErrorCode::HandleExpired.throw(ctx, "this blob was disposed"),
     }
   }
 
@@ -663,7 +664,7 @@ fn build_blob<'js>(
       let Some(array) = parts.as_array() else {
         return Err(Exception::throw_type(ctx, "Blob: expected an array of parts"));
       };
-      for part in crate::utils::arguments::array_values(ctx, array, "Blob")? {
+      for part in array_values(ctx, array, "Blob")? {
         append_part(ctx, &mut sink, part)?;
       }
     }

@@ -104,14 +104,13 @@ extern "C" {
   fn __android_log_write(priority: c_int, tag: *const c_char, text: *const c_char) -> c_int;
 }
 
-const ANDROID_LOG_ERROR: c_int = 6;
-
+#[allow(unused)]
 fn log_init_failure(message: &str) {
   #[cfg(target_os = "android")]
   {
     let Ok(tag) = CString::new("InuPluginXposed") else { return };
     let Ok(message) = CString::new(message) else { return };
-    unsafe { __android_log_write(ANDROID_LOG_ERROR, tag.as_ptr(), message.as_ptr()) };
+    unsafe { __android_log_write(6, tag.as_ptr(), message.as_ptr()) };
   }
 }
 
