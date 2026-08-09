@@ -94,7 +94,7 @@ index 0000000..0000000 100644
      ndkVersion "27.2.12479018"
  
      sourceSets.main.jniLibs.srcDirs = ['./jni/']
-+    // inu: the plugin bridge's own suite, symlinked in from src/androidTest like src/kotlin is
++    // inu: the plugin bridge's own suite, symlinked in from src/test/kotlin like src/fork is
 +    sourceSets.androidTest.kotlin.srcDirs += ['src/androidTest/kotlin']
 +    // this is a *library* module, so its androidTest apk is standalone rather than instrumenting the
 +    // app: nothing puts the app module's own jniLibs in it, and `QuickJs`'s class initializer loads

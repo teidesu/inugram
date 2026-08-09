@@ -426,7 +426,7 @@ fun bundledPlugin(name: String): String =
     InstrumentationRegistry.getInstrumentation()
         .context.assets.open("inu_plugins/$name").bufferedReader().use { it.readText() }
 
-/** `src/res/assets-test`, for what the suite needs as a file rather than as source */
+/** `src/test/assets`, for what the suite needs as a file rather than as source */
 fun testAsset(name: String): ByteArray =
     InstrumentationRegistry.getInstrumentation().context.assets.open("inu/$name").use { it.readBytes() }
 

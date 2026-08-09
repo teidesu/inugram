@@ -14,7 +14,7 @@ import kotlin.test.assertTrue
  */
 internal fun forkRoot(): File {
     var dir: File? = File({}.javaClass.protectionDomain.codeSource.location.toURI()).canonicalFile
-    while (dir != null && !File(dir, "src/kotlin/helpers/plugins").isDirectory) dir = dir.parentFile
+    while (dir != null && !File(dir, "src/fork/helpers/plugins").isDirectory) dir = dir.parentFile
     return dir ?: error("could not locate the repo root")
 }
 
@@ -24,7 +24,7 @@ internal fun stock(path: String): String = File(stockRoot(), path).readText()
 
 /** the bridge is a package tree, so one of its files is found by name rather than by path */
 internal fun forkSource(name: String): File =
-    File(forkRoot(), "src/kotlin/helpers/plugins").walkTopDown().firstOrNull { it.name == name }
+    File(forkRoot(), "src/fork/helpers/plugins").walkTopDown().firstOrNull { it.name == name }
         ?: error("no bridge source named $name")
 
 private fun skipQuoted(source: String, start: Int, quote: Char): Int {

@@ -46,7 +46,7 @@ class ForkWiringTest {
      */
     @Test
     fun `everything keyed by install id is wiped when the plugin is uninstalled`() {
-        val owners = File(forkRoot(), "src/kotlin/helpers/plugins").walkTopDown()
+        val owners = File(forkRoot(), "src/fork/helpers/plugins").walkTopDown()
             .filter { it.isFile && it.extension == "kt" }
             .filter { it.readText().contains("fun wipe(installId: String)") }
             .map { it.nameWithoutExtension }

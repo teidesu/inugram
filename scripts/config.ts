@@ -38,19 +38,19 @@ export interface ForkSyncFile {
 export const forkSyncFiles: ForkSyncFile[] = [
   // code
   {
-    source: 'src/kotlin',
+    source: 'src/fork',
     target: 'TMessagesProj/src/main/kotlin/desu/inugram',
     directory: true,
   },
   {
-    source: 'src/kotlin-app',
+    source: 'src/fork-app',
     target: 'TMessagesProj_App/src/main/kotlin/desu/inugram',
     directory: true,
   },
   // the plugin bridge's own suite, against the real stock classes.
   // `./gradlew :TMessagesProj:connectedDebugAndroidTest`
   {
-    source: 'src/androidTest',
+    source: 'src/test/kotlin',
     target: 'TMessagesProj/src/androidTest/kotlin/desu/inugram',
     directory: true,
   },
@@ -66,10 +66,10 @@ export const forkSyncFiles: ForkSyncFile[] = [
     source: 'src/res/assets-debug/inu_plugins/*',
     target: 'TMessagesProj/src/androidTest/assets/inu_plugins',
   },
-  // src/androidTest is synced into a kotlin source root, so what the suite needs as a *file* is
-  // kept apart from it
+  // src/test/kotlin is synced into a kotlin source root, so what the suite needs as a *file* is
+  // kept beside it rather than in it
   {
-    source: 'src/res/assets-test/*.dex',
+    source: 'src/test/assets/*.dex',
     target: 'TMessagesProj/src/androidTest/assets/inu',
   },
   {
@@ -85,7 +85,7 @@ export const forkSyncFiles: ForkSyncFile[] = [
     directory: true,
   },
   {
-    source: 'src/java/google_material',
+    source: 'src/vendor/google_material',
     target: 'TMessagesProj/src/main/java/google_material',
     directory: true,
   },
