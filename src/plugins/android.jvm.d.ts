@@ -9,6 +9,7 @@ declare type JavaMethod = OpaqueType<'JVMMethod'> & {
 
   invoke: (obj: JavaObject | null, ...args: any[]) => any
 }
+declare type JavaConstructor = OpaqueType<'JVMConstructor'> & {}
 declare type JavaField = OpaqueType<'JVMField'> & {
 
   get: (obj: JavaObject | null) => any
@@ -18,6 +19,7 @@ declare type JavaClass = OpaqueType<'JVMClass'> & {
   new (...args: any[]): JavaObject
 
   getDeclaredMethod: (name: string) => JavaMethod
+  getDeclaredConstructor: (descriptor: string) => JavaConstructor
   getDeclaredField: (name: string) => JavaField
 
   getStaticField: (name: string) => any

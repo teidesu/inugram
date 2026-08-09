@@ -38,6 +38,12 @@ declare namespace inu {
     function hookAllConstructors(cls: JavaClass, hook: MethodHook): Disposer
 
 
-    function callOriginalMethod(method: JavaMethod, thisObject: JavaObject | null, args: any[]): any
+    function callOriginalMethod(method: JavaMethod | JavaConstructor, thisObject: JavaObject | null, args: any[]): any
+
+
+    function allocateInstance(cls: JavaClass): JavaObject
+
+
+    function disableProfileSaver(): boolean
   }
 }

@@ -52,6 +52,26 @@ class PluginXposedTest {
         PluginXposed.detach(engine)
     }
 
+    @Test
+    fun xposedCanAllocateAndCallOriginalConstructors() {
+        val plugin = startPlugin("xposed", scope, "unsafe.xposed(desu.inugram.jvmfixture.*)")
+        val cls = jvmHandleId(plugin.jvm(PluginJvm.OP_CLASS, name = JvmFixture::class.java.name))
+
+        val allocated = jvmHandleId(plugin.xposed(PluginXposed.OP_ALLOCATE, cls))
+        assertEquals(0, intOf(plugin.jvm(PluginJvm.OP_GET, allocated, "count")))
+
+        val constructor = jvmHandleId(plugin.jvm(PluginJvm.OP_METHOD, cls, "<init>()V"))
+        val constructed = jvmHandleId(plugin.xposed(PluginXposed.OP_CALL_ORIGINAL, constructor, PluginWire.encodeNull()))
+        assertEquals(3, intOf(plugin.jvm(PluginJvm.OP_GET, constructed, "count")))
+    }
+
+    @Test
+    fun xposedCanDisableProfileSaver() {
+        val plugin = startPlugin("xposed", scope, "unsafe.xposed(desu.inugram.jvmfixture.*)")
+        val result = plugin.xposed(PluginXposed.OP_DISABLE_PROFILE_SAVER, 0)
+        assertTrue(PluginWire.decode(result) is PluginWire.Value.Bool)
+    }
+
     private fun Plugin.jvm(op: Int, target: Long = 0, name: String = "", vararg args: String): String =
         js.listener!!.jvm(op, target, name, arrayOf(*args))
 

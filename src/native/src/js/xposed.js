@@ -45,5 +45,13 @@
       }
       return natives.callOriginal(method, thisObject ?? null, args ?? [])
     },
+
+    allocateInstance(cls) {
+      return natives.allocate(cls)
+    },
+
+    disableProfileSaver() {
+      return natives.disableProfileSaver()
+    },
   })
 })

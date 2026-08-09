@@ -41,17 +41,21 @@ object PluginXposed {
     const val OP_HOOK_ALL = 1
     const val OP_UNHOOK = 2
     const val OP_CALL_ORIGINAL = 3
+    const val OP_ALLOCATE = 4
+    const val OP_DISABLE_PROFILE_SAVER = 5
 
     const val GRANT = "unsafe.xposed"
 
     /** reached through the C binding `patches-native/lsplant-c-abi.patch` adds. `private` because holding one of these *is* the grant: `nativeHook` rewrites an ART entry point and asks nobody */
     private object Native {
         external fun nativeInit(): Boolean
-        external fun nativeHook(target: Member, hooker: Any, callback: Method): Method?
+        external fun nativeHook(target: Member, hooker: Any, callback: Method): Member?
         external fun nativeUnhook(target: Member): Boolean
         external fun nativeIsHooked(target: Member): Boolean
         external fun nativeDeoptimize(method: Member): Boolean
         external fun nativeMakeInheritable(target: Class<*>): Boolean
+        external fun nativeAllocateInstance(target: Class<*>): Any?
+        external fun nativeDisableProfileSaver(): Boolean
     }
 
     /** set at first use rather than at boot: `nativeInit` prefetches ART symbols and installs hooks of its own, a cost no plugin should pay for unasked */
@@ -106,7 +110,7 @@ object PluginXposed {
     private fun refuse(code: String, message: String, grant: String? = null): Nothing =
         throw Refusal(PluginWire.encodePluginError(code, message, grant = grant))
 
-    private class Site(val target: Member, val backup: Method)
+    private class Site(val target: Member, val backup: Member)
 
     private class Session(private val plugin: Plugin, private val engine: QuickJs) : XposedListener {
         // concurrent because [dispatch] reads this on whichever thread called the hooked method, while install/remove run on globalQueue
@@ -133,6 +137,8 @@ object PluginXposed {
             OP_HOOK_ALL -> PluginWire.encodeString(install(overloads(values.classAt(target), name)))
             OP_UNHOOK -> uninstall(target)
             OP_CALL_ORIGINAL -> callOriginal(values.memberAt(target), args)
+            OP_ALLOCATE -> allocate(values.classAt(target))
+            OP_DISABLE_PROFILE_SAVER -> values.encode(ensureReady() && Native.nativeDisableProfileSaver())
             else -> refuse("invalid-argument", "xposed: unknown op $op")
         }
 
@@ -187,7 +193,7 @@ object PluginXposed {
             val callback = Hooker::class.java.getDeclaredMethod("callback", Array<Any?>::class.java)
             val backup = Native.nativeHook(member, hooker, callback)
                 ?: refuse("internal", "xposed: lsplant declined to hook $member")
-            backup.isAccessible = true
+            (backup as? java.lang.reflect.AccessibleObject)?.isAccessible = true
             sites[site] = Site(member, backup)
             Log.d(TAG, "[${plugin.manifest.name}] installed xposed site $site: $member")
             return site
@@ -203,19 +209,37 @@ object PluginXposed {
         /** its backup when this plugin hooked the method, and the method itself when it did not - the same call either way for the caller */
         private fun callOriginal(member: Member, args: Array<String>): String {
             val backup = sites.values.firstOrNull { it.target == member }?.backup
-            val method = backup ?: member as? Method
-                ?: refuse("invalid-argument", "xposed: callOriginalMethod needs a method")
-            return invoke(method, args)
+            return invoke(backup ?: member, args)
         }
 
-        private fun invoke(method: Method, args: Array<String>): String {
+        private fun allocate(cls: Class<*>): String {
+            checkTarget(cls.declaredConstructors.firstOrNull() ?: refuse("invalid-argument", "xposed: ${cls.name} has no constructor"))
+            return Native.nativeAllocateInstance(cls)?.let(values::encode)
+                ?: refuse("internal", "xposed: could not allocate ${cls.name}")
+        }
+
+        private fun invoke(member: Member, args: Array<String>): String {
             val decoded = args.map { values.decode(it) }
             val receiver = decoded.firstOrNull()
-            val rest = PluginJvm.convertArguments(method.parameterTypes, decoded.drop(1))
-                ?: refuse("invalid-argument", "xposed: ${method.name} does not take these arguments")
-            method.isAccessible = true
+            val parameters = when (member) {
+                is Method -> member.parameterTypes
+                is java.lang.reflect.Constructor<*> -> member.parameterTypes
+                else -> refuse("invalid-argument", "xposed: callOriginalMethod needs a method or constructor")
+            }
+            val rest = PluginJvm.convertArguments(parameters, decoded.drop(1))
+                ?: refuse("invalid-argument", "xposed: ${member.name} does not take these arguments")
             return try {
-                values.encode(method.invoke(receiver, *rest))
+                values.encode(when (member) {
+                    is Method -> {
+                        member.isAccessible = true
+                        member.invoke(receiver, *rest)
+                    }
+                    is java.lang.reflect.Constructor<*> -> {
+                        member.isAccessible = true
+                        member.newInstance(*rest)
+                    }
+                    else -> error("unreachable")
+                })
             } catch (e: InvocationTargetException) {
                 // the method's own outcome, handed back as a throwable rather than reported as this bridge failing
                 "T" + values.encode(e.targetException)
@@ -334,7 +358,7 @@ object PluginXposed {
         }
 
         private fun returnValue(site: Long, answer: Result<Any?>): Any? = answer.map { value ->
-            val type = sites[site]?.backup?.returnType ?: return@map value
+            val type = (sites[site]?.backup as? Method)?.returnType ?: return@map null
             if (type == Void.TYPE) return@map null
             PluginJvm.convertArguments(arrayOf(type), listOf(value))?.single()
                 ?: throw IllegalArgumentException("xposed: cannot return that from ${type.name}")
@@ -347,11 +371,22 @@ object PluginXposed {
 
         private fun runOriginal(site: Long, receiver: Any?, args: List<Any?>): Any? {
             val backup = sites[site]?.backup ?: return null
-            val converted = PluginJvm.convertArguments(backup.parameterTypes, args)
-                ?: throw IllegalArgumentException("xposed: ${backup.name} does not take these arguments")
-            backup.isAccessible = true
             return try {
-                backup.invoke(receiver, *converted)
+                when (backup) {
+                    is Method -> {
+                        val converted = PluginJvm.convertArguments(backup.parameterTypes, args)
+                            ?: throw IllegalArgumentException("xposed: ${backup.name} does not take these arguments")
+                        backup.isAccessible = true
+                        backup.invoke(receiver, *converted)
+                    }
+                    is java.lang.reflect.Constructor<*> -> {
+                        val converted = PluginJvm.convertArguments(backup.parameterTypes, args)
+                            ?: throw IllegalArgumentException("xposed: constructor does not take these arguments")
+                        backup.isAccessible = true
+                        backup.newInstance(*converted)
+                    }
+                    else -> null
+                }
             } catch (e: InvocationTargetException) {
                 throw e.targetException
             }

@@ -25,6 +25,8 @@ const OP_HOOK: i32 = 0;
 const OP_HOOK_ALL: i32 = 1;
 const OP_UNHOOK: i32 = 2;
 const OP_CALL_ORIGINAL: i32 = 3;
+const OP_ALLOCATE: i32 = 4;
+const OP_DISABLE_PROFILE_SAVER: i32 = 5;
 
 pub const GRANT: &str = "unsafe.xposed";
 
@@ -235,6 +237,17 @@ fn js_call_original<'js>(
     ask(ctx, state, OP_CALL_ORIGINAL, method, "", &wires)
 }
 
+fn js_allocate<'js>(ctx: &Ctx<'js>, state: &Rc<XposedState>, class: Value<'js>) -> JsResult<Value<'js>> {
+    check_grant(ctx, &state.grants, GRANT, None, MATCH_NAMESPACE)?;
+    let class = require_handle(ctx, state, &class, "allocateInstance")?;
+    ask(ctx, state, OP_ALLOCATE, class, "", &[])
+}
+
+fn js_disable_profile_saver<'js>(ctx: &Ctx<'js>, state: &Rc<XposedState>) -> JsResult<Value<'js>> {
+    check_grant(ctx, &state.grants, GRANT, None, MATCH_NAMESPACE)?;
+    ask(ctx, state, OP_DISABLE_PROFILE_SAVER, 0, "", &[])
+}
+
 pub fn install_xposed<'js>(
     ctx: &Ctx<'js>,
     host: Rc<dyn XposedHost>,
@@ -275,6 +288,16 @@ pub fn install_xposed<'js>(
             },
         )?;
         natives.set("callOriginal", f)?;
+    }
+    {
+        let state = state.clone();
+        let f = Function::new(ctx.clone(), move |ctx: Ctx<'js>, class: Value<'js>| js_allocate(&ctx, &state, class))?;
+        natives.set("allocate", f)?;
+    }
+    {
+        let state = state.clone();
+        let f = Function::new(ctx.clone(), move |ctx: Ctx<'js>| js_disable_profile_saver(&ctx, &state))?;
+        natives.set("disableProfileSaver", f)?;
     }
     {
         let ops = Object::new(ctx.clone())?;

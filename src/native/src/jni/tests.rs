@@ -399,13 +399,13 @@ mod wiring {
     /// A JNI export's name carries the *package* of the class it implements, so moving that class
     /// into a subpackage silently unbinds every one of its natives - the app then throws
     /// `UnsatisfiedLinkError` at the first call and nothing before launch says a word.
-    /// `PluginXposed` moved into `platform/` and its six exports kept the old name, which left
+    /// `PluginXposed` moved into `platform/` and its exports kept the old name, which left
     /// `inu.xposed` dead on device. `QuickJs` survives only by never having moved.
     #[test]
     fn every_jni_export_names_the_package_its_kotlin_actually_lives_in() {
         let kotlin: std::collections::HashMap<_, _> = kotlin_natives().into_iter().collect();
         let exports = rust_exports();
-        assert_eq!(exports.len(), 49, "the set of JNI exports changed");
+        assert_eq!(exports.len(), 51, "the set of JNI exports changed");
 
         let mut wrong = Vec::new();
         for symbol in &exports {
