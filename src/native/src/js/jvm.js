@@ -50,6 +50,12 @@
     getDeclaredMethod(method) {
       return natives.op(OP.method, handleOf(this, 'getDeclaredMethod'), named('getDeclaredMethod', method), [])
     },
+    getDeclaredConstructor(descriptor) {
+      if (typeof descriptor !== 'string' || !/^\([^)]*\)V$/.test(descriptor)) {
+        throw invalid('getDeclaredConstructor: expected a JVM constructor descriptor')
+      }
+      return natives.op(OP.method, handleOf(this, 'getDeclaredConstructor'), `<init>${descriptor}`, [])
+    },
     getDeclaredField(field) {
       return natives.op(OP.field, handleOf(this, 'getDeclaredField'), named('getDeclaredField', field), [])
     },

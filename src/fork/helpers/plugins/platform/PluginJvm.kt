@@ -256,8 +256,8 @@ object PluginJvm {
         private fun classHandleAt(target: Long): Class<*> = at(target) as? Class<*>
             ?: refuse("invalid-argument", "jvm: that handle is not a class")
 
-        private fun methodAt(target: Long): Method = at(target) as? Method
-            ?: refuse("invalid-argument", "jvm: that handle is not a method")
+        private fun methodAt(target: Long): Member = at(target) as? Member
+            ?: refuse("invalid-argument", "jvm: that handle is not a method or constructor")
 
         private fun fieldAt(target: Long): Field = at(target) as? Field
             ?: refuse("invalid-argument", "jvm: that handle is not a field")
@@ -329,7 +329,7 @@ object PluginJvm {
             // and a member by the class it *declares*. The ops that skip [checkMember] can, because a member handle only exists if its declaring class was checked wherever one is minted
             is Member -> {
                 checkMember(value)
-                mint(value, if (value is Method) KIND_METHOD else if (value is Field) KIND_FIELD else KIND_OBJECT)
+                mint(value, if (value is Method || value is java.lang.reflect.Constructor<*>) KIND_METHOD else if (value is Field) KIND_FIELD else KIND_OBJECT)
             }
             else -> {
                 checkClass(value.javaClass)
@@ -391,7 +391,16 @@ object PluginJvm {
             return encodeValue(method.invoke(self, *convertAll(method.parameterTypes, args)))
         }
 
-        private fun invokePinned(method: Method, args: List<Any?>): String {
+        private fun invokePinned(method: Member, args: List<Any?>): String {
+            if (method is java.lang.reflect.Constructor<*>) {
+                val values = args.drop(1)
+                if (!matches(method.parameterTypes, values)) {
+                    refuse("invalid-argument", "jvm: ${method.declaringClass.name} constructor does not take these arguments")
+                }
+                method.isAccessible = true
+                return encodeValue(method.newInstance(*convertAll(method.parameterTypes, values)))
+            }
+            method as? Method ?: refuse("invalid-argument", "jvm: that handle is not a method or constructor")
             val self = self(args, 0)
             val rest = args.drop(1)
             if (!matches(method.parameterTypes, rest)) {
@@ -408,9 +417,17 @@ object PluginJvm {
             return encodeValue(ctor.newInstance(*convertAll(ctor.parameterTypes, args)))
         }
 
-        private fun resolvePinned(cls: Class<*>, name: String): Method {
+        private fun resolvePinned(cls: Class<*>, name: String): Member {
             val descriptor = descriptorIn(name)
             val simple = simpleName(name)
+            if (simple == "<init>") {
+                val candidates = cls.declaredConstructors.filter { descriptor == null || descriptorOf(it) == descriptor }
+                if (candidates.isEmpty()) refuse("not-found", "jvm: ${cls.name} has no constructor named $name")
+                if (candidates.size > 1) refuse("invalid-argument", "jvm: ${cls.name} constructor is overloaded; pin one with a descriptor")
+                val constructor = candidates[0]
+                checkMember(constructor)
+                return constructor
+            }
             val candidates = candidateMethods(cls, simple)
                 .filter { descriptor == null || descriptorOf(it) == descriptor }
             if (candidates.isEmpty()) refuse("not-found", "jvm: ${cls.name} has no method named $name")

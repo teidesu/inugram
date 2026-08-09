@@ -13,7 +13,7 @@ Subject: build support stuff for fork-specific code: - added kotlin - bumped min
  .../telegram/tgnet/ConnectionsManager.java    |   2 +-
  .../org/telegram/ui/PaymentFormActivity.java  |  28 +--
  .../org/telegram/ui/SettingsActivity.java     |  24 +-
- TMessagesProj_App/build.gradle                | 224 ++++++++++--------
+ TMessagesProj_App/build.gradle                | 237 +++++++++++-------
  TMessagesProj_App/google-services.json        |  76 +-----
  TMessagesProj_App/jni/CMakeLists.txt          |  13 +
  TMessagesProj_App/jni/lsplant                 |   1 +
@@ -21,7 +21,7 @@ Subject: build support stuff for fork-specific code: - added kotlin - bumped min
  build.gradle                                  |  12 +-
  gradle.properties                             |   2 +-
  settings.gradle                               |   5 +-
- 17 files changed, 277 insertions(+), 357 deletions(-)
+ 17 files changed, 290 insertions(+), 357 deletions(-)
  create mode 100644 TMessagesProj_App/jni/CMakeLists.txt
  create mode 160000 TMessagesProj_App/jni/lsplant
 
@@ -99,7 +99,7 @@ index 0000000..0000000 100644
 +    // this is a *library* module, so its androidTest apk is standalone rather than instrumenting the
 +    // app: nothing puts the app module's own jniLibs in it, and `QuickJs`'s class initializer loads
 +    // this one. Without it every suite that so much as names the class dies in <clinit>.
-+    sourceSets.androidTest.jniLibs.srcDirs += ["$rootDir/TMessagesProj_App/build/rustJniLibs"]
++    sourceSets.androidTest.jniLibs.srcDirs += ["$rootDir/TMessagesProj_App/build/inuTestJniLibs"]
  
      externalNativeBuild {
          cmake {
@@ -263,7 +263,7 @@ index 0000000..0000000 100644
 +// inu: the cargo build producing the libinu_native.so the androidTest apk packages lives in the app
 +// module, which does not otherwise take part in this module's test build
 +tasks.matching { it.name ==~ /merge.*AndroidTestJniLibFolders/ }.configureEach {
-+    dependsOn ':TMessagesProj_App:buildInuNative'
++    dependsOn ':TMessagesProj_App:prepareInuTestJniLibs'
 +}
 diff --git a/TMessagesProj/google-services.json b/TMessagesProj/google-services.json
 index 0000000..0000000 100644
@@ -703,9 +703,8 @@ index 0000000..0000000 100644
  
      sourceSets.release {
 -        manifest.srcFile '../TMessagesProj/config/release/AndroidManifest.xml'
-+        manifest.srcFile '../TMessagesProj/config/release/AndroidManifest_SDK23.xml'
-     }
- 
+-    }
+-
 -    flavorDimensions "minApi"
 -
 -    productFlavors {
@@ -752,8 +751,9 @@ index 0000000..0000000 100644
 -            }
 -            buildConfigField "boolean", "BUNDLE", "false"
 -        }
--    }
--
++        manifest.srcFile '../TMessagesProj/config/release/AndroidManifest_SDK23.xml'
+     }
+ 
 -    defaultConfig.versionCode = Integer.parseInt(APP_VERSION_CODE)
 +    defaultConfig.versionCode = rootProject.ext.verCode
  
@@ -809,7 +809,7 @@ index 0000000..0000000 100644
      buildFeatures {
          buildConfig = true
      }
-@@ -196,6 +142,94 @@ android {
+@@ -196,6 +142,107 @@ android {
      lintOptions {
          checkReleaseBuilds false
      }
@@ -903,6 +903,19 @@ index 0000000..0000000 100644
 +android.sourceSets.main.jniLibs.srcDirs += rustJniLibsDir
 +tasks.matching { it.name ==~ /merge.*JniLibFolders/ }.configureEach {
 +    dependsOn 'buildInuNative'
++}
++
++// inu: the bridge's standalone androidTest apk needs every library Xposed loads at runtime, not
++// just the Rust JNI entrypoint it links against.
++def inuTestJniLibsDir = file("$buildDir/inuTestJniLibs")
++tasks.register('prepareInuTestJniLibs', Sync) {
++    dependsOn 'buildInuNative', 'unpackShadowhook', 'mergeDebugNativeLibs'
++    from rustJniLibsDir
++    from shadowhookJniLibsDir
++    from("$buildDir/intermediates/merged_native_libs/debug/mergeDebugNativeLibs/out/lib") {
++        include '**/liblsplant.so'
++    }
++    into inuTestJniLibsDir
 +}
 diff --git a/TMessagesProj_App/google-services.json b/TMessagesProj_App/google-services.json
 index 0000000..0000000 100644

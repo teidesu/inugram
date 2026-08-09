@@ -1,6 +1,6 @@
-use jni::objects::{JObject, JObjectArray, JString};
+use jni::objects::{JClass, JObject, JObjectArray, JString};
 use jni::strings::JNIString;
-use jni::sys::{jboolean, jint, jlong, jobject, jstring};
+use jni::sys::{jboolean, jclass, jint, jlong, jobject, jstring};
 use jni::EnvUnowned;
 use rquickjs::{Coerced, Context, Object, Persistent, Result as JsResult, Runtime, Value};
 use std::rc::Rc;
@@ -615,6 +615,26 @@ pub extern "system" fn Java_desu_inugram_helpers_plugins_platform_PluginXposed_0
     in_env(&mut env, false, |env| unsafe {
         crate::api::platform::xposed::lsplant::make_inheritable(env, target.as_raw())
     })
+}
+
+#[no_mangle]
+pub extern "system" fn Java_desu_inugram_helpers_plugins_platform_PluginXposed_00024Native_nativeAllocateInstance<'local>(
+    mut env: EnvUnowned<'local>,
+    _this: JObject<'local>,
+    target: JObject<'local>,
+) -> jobject {
+    in_env(&mut env, std::ptr::null_mut(), |env| {
+        let class = unsafe { JClass::from_raw(env, target.into_raw() as jclass) };
+        env.alloc_object(class).map(|value| value.into_raw()).unwrap_or(std::ptr::null_mut())
+    })
+}
+
+#[no_mangle]
+pub extern "system" fn Java_desu_inugram_helpers_plugins_platform_PluginXposed_00024Native_nativeDisableProfileSaver(
+    _env: EnvUnowned,
+    _this: JObject,
+) -> jboolean {
+    crate::api::platform::xposed::lsplant::disable_profile_saver()
 }
 
 engine_export!(

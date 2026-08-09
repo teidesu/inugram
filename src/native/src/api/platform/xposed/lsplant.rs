@@ -65,6 +65,7 @@ unsafe impl Sync for Native {}
 static NATIVE: OnceLock<Option<Native>> = OnceLock::new();
 
 static INITIALIZED: OnceLock<bool> = OnceLock::new();
+static PROFILE_SAVER_DISABLED: OnceLock<bool> = OnceLock::new();
 
 fn native() -> Option<&'static Native> {
     NATIVE.get().and_then(|slot| slot.as_ref())
@@ -310,4 +311,37 @@ pub unsafe fn deoptimize(env: &mut Env, method: jobject) -> bool {
 pub unsafe fn make_inheritable(env: &mut Env, target: jclass) -> bool {
     let Some(native) = native() else { return false };
     (native.lsplant.make_inheritable)(env.get_raw(), target)
+}
+
+extern "C" fn ignore_profile_saver() -> bool {
+    true
+}
+
+pub fn disable_profile_saver() -> bool {
+    *PROFILE_SAVER_DISABLED.get_or_init(|| {
+        let Some(native) = native() else { return false };
+        let symbols = [
+            "_ZN3art12ProfileSaver20ProcessProfilingInfoEbPtb",
+            "_ZN3art12ProfileSaver20ProcessProfilingInfoEPt",
+            "_ZN3art12ProfileSaver20ProcessProfilingInfoEbPt",
+            "_ZN3art12ProfileSaver20ProcessProfilingInfoEbbPt",
+        ];
+        let address = match native.art.lock() {
+            Ok(mut art) => symbols.into_iter().map(|symbol| art.exact(symbol)).find(|address| !address.is_null()),
+            Err(_) => None,
+        };
+        let Some(address) = address else {
+            log_init_failure("could not resolve ProfileSaver::ProcessProfilingInfo");
+            return false;
+        };
+        let mut original = ptr::null_mut();
+        let hook = unsafe {
+            (native.shadowhook.hook_addr)(address, ignore_profile_saver as *const () as *mut c_void, &mut original)
+        };
+        if hook.is_null() {
+            log_init_failure("could not disable ProfileSaver");
+            return false;
+        }
+        true
+    })
 }
