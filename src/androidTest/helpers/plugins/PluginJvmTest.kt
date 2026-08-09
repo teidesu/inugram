@@ -505,7 +505,7 @@ class PluginJvmTest {
     private companion object {
         const val PLUGIN_PACKAGE = "desu.inugram.helpers.plugins"
 
-        /** the one class in `src/androidTestAssets/probe.dex` */
+        /** the one class in `src/res/assets-test/probe.dex` */
         const val PROBE_CLASS = "desu.inugram.probe.Probe"
 
         /** any well-formed install id: [PluginJvm.dexDir] validates the shape, and only its parent is wanted */
