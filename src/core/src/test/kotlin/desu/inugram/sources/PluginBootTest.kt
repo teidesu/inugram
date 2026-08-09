@@ -90,7 +90,7 @@ class PluginBootTest {
      * the residual gap `BootCohort` cannot close by itself: it names *grants*, and a new api whose
      * registrations a headless path dispatches into would be invisible to it. Every one of those
      * registers through `RpcListener`/`UpdatesListener` (the action and settings registrations go through
-     * `ApiListener`, and nothing dispatches those without a ui), so a new registration family there
+     * `UiListener`, and nothing dispatches those without a ui), so a new registration family there
      * is the one moment someone can be asked.
      */
     @Test

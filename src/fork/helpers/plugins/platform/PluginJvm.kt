@@ -141,7 +141,7 @@ object PluginJvm {
 
     private class Session(private val plugin: Plugin, private val engine: QuickJs, private val screen: AppScreen) :
         JvmListener, ValueBridge {
-        // concurrent because [ValueBridge] is reached from off globalQueue: `inu.xposed` encodes on the hooked method's own thread, and `PluginApi.showDialog` on the ui thread
+        // concurrent because [ValueBridge] is reached from off globalQueue: `inu.xposed` encodes on the hooked method's own thread, and `PluginUi` resolves dialogs on the ui thread
         private val handles = ConcurrentHashMap<Long, Any>()
         private val nextId = AtomicLong(1)
         private val loaders = ArrayList<ClassLoader>()

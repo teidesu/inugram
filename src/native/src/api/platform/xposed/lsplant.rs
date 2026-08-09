@@ -211,12 +211,7 @@ fn load() -> Option<Native> {
     let art_name = CString::new("libart.so").ok()?;
     let art_handle = unsafe { (shadowhook.dlopen)(art_name.as_ptr()) } as usize;
 
-    Some(Native {
-        shadowhook,
-        lsplant,
-        art: Mutex::new(Resolver::open("libart.so")),
-        art_handle,
-    })
+    Some(Native { shadowhook, lsplant, art: Mutex::new(Resolver::open("libart.so")), art_handle })
 }
 
 pub fn init(env: &mut Env) -> bool {
@@ -238,11 +233,6 @@ pub fn init(env: &mut Env) -> bool {
         };
         unsafe { (native.lsplant.init)(env.get_raw(), &info) }
     })
-}
-
-#[allow(dead_code)]
-pub fn is_available() -> bool {
-    matches!(INITIALIZED.get(), Some(true))
 }
 
 pub unsafe fn hook(env: &mut Env, target: jobject, hooker: jobject, callback: jobject) -> jobject {

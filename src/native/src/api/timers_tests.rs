@@ -456,10 +456,10 @@ mod bundled_oracle {
     const ORACLE: &str = include_str!("../../../res/assets-debug/inu_plugins/timers-test.js");
 
     /// what the oracle's own pacing assertion is measured against. A **port** of
-    /// `PluginApi.TimerThrottle`, not the thing itself: the throttle is java, lives on the app's
+    /// `TimerThrottle`, not the thing itself: the throttle is java, lives on the app's
     /// `globalQueue`, and rust has no way to reach either. So that one assertion holds this driver
     /// to the rule rather than the app to it, and the app's own copy is what
-    /// `src/fork/helpers/plugins/PluginApi.kt` owes a test. Everything else the oracle asserts is
+    /// `src/fork/helpers/plugins/TimerThrottle.kt` owes a test. Everything else the oracle asserts is
     /// the wheel's, and that is here.
     const DUTY_PERCENT: u128 = 10;
     const MIN_WAKE_GAP_MS: u64 = 4;
