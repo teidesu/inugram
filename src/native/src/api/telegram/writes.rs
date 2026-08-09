@@ -500,9 +500,23 @@ pub(crate) fn install_writes_with_limit<'js>(
     let plugin_error: Value = inu.get("PluginError")?;
 
     let reads = crate::api::telegram::account::take_prototype(ctx, accounts);
+    let ops = Object::new(ctx.clone())?;
+    ops.set("sendMessage", OP_SEND_MESSAGE)?;
+    ops.set("sendMedia", OP_SEND_MEDIA)?;
+    ops.set("sendMultiMedia", OP_SEND_MULTI_MEDIA)?;
+    ops.set("editMessage", OP_EDIT_MESSAGE)?;
+    ops.set("deleteMessages", OP_DELETE_MESSAGES)?;
+    ops.set("forwardMessages", OP_FORWARD_MESSAGES)?;
+    ops.set("setReaction", OP_SET_REACTION)?;
+    ops.set("readHistory", OP_READ_HISTORY)?;
+    ops.set("sendTyping", OP_SEND_TYPING)?;
+    ops.set("setDraft", OP_SET_DRAFT)?;
+    ops.set("downloadMedia", OP_DOWNLOAD_MEDIA)?;
+    ops.set("downloadMediaToFile", OP_DOWNLOAD_MEDIA_TO_FILE)?;
+    ops.set("uploadFile", OP_UPLOAD_FILE)?;
 
     let factory = crate::utils::prelude::load(ctx, PRELUDE)?;
-    let prototype: Object = factory.call((natives, shared.clone(), message, plugin_error, reads))?;
+    let prototype: Object = factory.call((natives, shared.clone(), message, plugin_error, reads, ops))?;
     crate::api::telegram::account::set_prototype(ctx, accounts, &prototype);
 
     Ok(state)

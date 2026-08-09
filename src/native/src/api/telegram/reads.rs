@@ -264,9 +264,19 @@ pub fn install_reads<'js>(
 
     let message: Value = inu.get("Message")?;
     let plugin_error: Value = inu.get("PluginError")?;
+    let ops = Object::new(ctx.clone())?;
+    for (name, op) in [
+        ("userFull", OP_USER_FULL),
+        ("chatFull", OP_CHAT_FULL),
+        ("history", OP_HISTORY),
+        ("dialogs", OP_DIALOGS),
+        ("topics", OP_TOPICS),
+    ] {
+        ops.set(name, op)?;
+    }
 
     let factory = prelude::load(ctx, PRELUDE)?;
-    let prototype: Object = factory.call((natives, shared.clone(), message, plugin_error))?;
+    let prototype: Object = factory.call((natives, shared.clone(), message, plugin_error, ops))?;
     crate::api::telegram::account::set_prototype(ctx, accounts, &prototype);
 
     Ok(state)

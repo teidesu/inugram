@@ -624,6 +624,7 @@ pub extern "system" fn Java_desu_inugram_helpers_plugins_platform_PluginXposed_0
     target: JObject<'local>,
 ) -> jobject {
     in_env(&mut env, std::ptr::null_mut(), |env| {
+        let _deadline = crate::sandbox::limits::arm_entry_deadline();
         let class = unsafe { JClass::from_raw(env, target.into_raw() as jclass) };
         env.alloc_object(class).map(|value| value.into_raw()).unwrap_or(std::ptr::null_mut())
     })
@@ -631,10 +632,13 @@ pub extern "system" fn Java_desu_inugram_helpers_plugins_platform_PluginXposed_0
 
 #[no_mangle]
 pub extern "system" fn Java_desu_inugram_helpers_plugins_platform_PluginXposed_00024Native_nativeDisableProfileSaver(
-    _env: EnvUnowned,
+    mut env: EnvUnowned,
     _this: JObject,
 ) -> jboolean {
-    crate::api::platform::xposed::lsplant::disable_profile_saver()
+    in_env(&mut env, false, |_env| {
+        let _deadline = crate::sandbox::limits::arm_entry_deadline();
+        crate::api::platform::xposed::lsplant::disable_profile_saver()
+    })
 }
 
 engine_export!(

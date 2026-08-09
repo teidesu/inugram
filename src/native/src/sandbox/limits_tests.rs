@@ -502,7 +502,7 @@ mod entry_points {
             );
             checked += 1;
         }
-        assert_eq!(checked, 11, "hand-written export count changed; confirm each new one arms a deadline");
+        assert_eq!(checked, 13, "hand-written export count changed; confirm each new one arms a deadline");
 
         // the rest are generated, so the deadline belongs to `engine_export!` rather than to each
         // export. That is only true of the ones whose rule arms it, so every rule has to: a fifth
@@ -519,6 +519,6 @@ mod entry_points {
         );
 
         let generated = source.matches("\nengine_export!(").count();
-        assert_eq!(checked + generated, 40, "export count changed; confirm each new one arms a deadline");
+        assert_eq!(checked + generated, 42, "export count changed; confirm each new one arms a deadline");
     }
 }
