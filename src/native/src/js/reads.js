@@ -1,6 +1,6 @@
-((natives, shared, Message, PluginError) => {
-  const { baseName, invalid, SEPARATOR, toSpec, toSpecList, toMessageId, toMessageIds, toOptions, toCount, slotOf } =
-    shared
+(natives, shared, Message, PluginError) => {
+  const { baseName, invalid, SEPARATOR, toSpec, toSpecList, toMessageId, toMessageIds, toOptions, toCount, slotOf }
+    = shared
 
   // keep in sync with rust `reads::KIND_*` and Kotlin `PluginReads.KIND_*`
   const KIND_PEER = 0
@@ -17,8 +17,12 @@
   // what a resolve* was already handed and gives straight back, per kind
   const PASSTHROUGH = [
     new Set([
-      'inputPeerSelf', 'inputPeerUser', 'inputPeerChat', 'inputPeerChannel',
-      'inputPeerUserFromMessage', 'inputPeerChannelFromMessage',
+      'inputPeerSelf',
+      'inputPeerUser',
+      'inputPeerChat',
+      'inputPeerChannel',
+      'inputPeerUserFromMessage',
+      'inputPeerChannelFromMessage',
     ]),
     new Set(['inputUserSelf', 'inputUser', 'inputUserFromMessage']),
     new Set(['inputChannel', 'inputChannelFromMessage']),
@@ -44,7 +48,7 @@
     return size === 0 ? BATCH_SIZE : size
   }
 
-  const wrap = (raw) => (raw === null ? null : new Message(raw))
+  const wrap = raw => (raw === null ? null : new Message(raw))
 
   // an input peer the caller already holds is the answer, per `common.d.ts`: nothing is read to
   // produce it, which is also why it needs no grant
@@ -158,7 +162,7 @@
         // refused for the same reason a full one is rather than answering `[]` to anybody
         natives.checkPeers(slot)
         if (!Array.isArray(peers)) throw invalid('resolvePeerMany: expected an array of peers')
-        const out = new Array(peers.length).fill(null)
+        const out = Array.from({ length: peers.length }).fill(null)
         const misses = []
         for (let index = 0; index < peers.length; index++) {
           const peer = peers[index]
@@ -214,7 +218,7 @@
           ].join(SEPARATOR),
           '',
         ]
-      }).then((messages) => messages.map(wrap))
+      }).then(messages => messages.map(wrap))
     },
 
     getDialogs(options) {
@@ -245,7 +249,7 @@
     // is normalized, gated and materialized in exactly one place rather than in two that agree.
     // Nothing runs until the first `next()`, so a bad argument and a missing grant reject there.
 
-    async *iterDialogs(options) {
+    async* iterDialogs(options) {
       const opts = toOptions(options, 'iterDialogs')
       const limit = toLimit(opts.limit, 'iterDialogs')
       const batch = toBatch(opts.batchSize, 'iterDialogs')
@@ -262,7 +266,7 @@
       }
     },
 
-    async *iterHistory(peer, options) {
+    async* iterHistory(peer, options) {
       const opts = toOptions(options, 'iterHistory')
       const limit = toLimit(opts.limit, 'iterHistory')
       const batch = toBatch(opts.batchSize, 'iterHistory')
@@ -291,7 +295,7 @@
       }
     },
 
-    async *iterTopics(peer, options) {
+    async* iterTopics(peer, options) {
       const opts = toOptions(options, 'iterTopics')
       const limit = toLimit(opts.limit, 'iterTopics')
       const batch = toBatch(opts.batchSize, 'iterTopics')
@@ -310,4 +314,4 @@
   }
 
   return Object.freeze(proto)
-})
+}

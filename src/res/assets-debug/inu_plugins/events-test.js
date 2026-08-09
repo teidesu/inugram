@@ -80,12 +80,16 @@ const verified = new Set()
 function verifyOnce(label, key, kind, detail) {
   const raw = rawSeen.get(key) ?? 0
   const demuxed = demuxSeen.get(key) ?? 0
-  if (raw !== 1 || demuxed !== 1) return fail(label, `${key}: raw x${raw}, demuxed x${demuxed}`)
-  if (detail !== null) return fail(label, `${key}: ${detail}`)
-  if (disposedRan !== 0) return fail(label, 'a disposed handler fired')
-  pass(label, key)
-  verified.add(kind)
-  if (verified.size === 3) console.log('events test done')
+  if (raw !== 1 || demuxed !== 1) fail(label, `${key}: raw x${raw}, demuxed x${demuxed}`)
+  else if (detail !== null) fail(label, `${key}: ${detail}`)
+  else if (disposedRan !== 0) fail(label, 'a disposed handler fired')
+  else {
+    pass(label, key)
+    verified.add(kind)
+    if (verified.size === 3) console.log('events test done')
+  }
+  rawSeen.delete(key)
+  demuxSeen.delete(key)
 }
 
 // the comparison runs a microtask later so it does not depend on which of the two handlers the

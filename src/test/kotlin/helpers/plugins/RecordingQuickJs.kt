@@ -26,6 +26,8 @@ class RecordingQuickJs : QuickJs() {
     class WriteProgress(val requestId: Long, val loaded: Long, val total: Long)
     class Notification(val callbackId: Int, val name: String, val accountId: Int, val argsJson: String)
     class ActionDispatch(val kind: Int, val token: Int, val surfaceJson: String)
+    class XposedBefore(val dispatchId: Long, val site: Long, val method: String, val receiver: String, val args: Array<String>)
+    class XposedAfter(val dispatchId: Long, val resultWire: String)
 
     val deserializeDispatches = ArrayList<DeserializeDispatch>()
     val dispatches = ArrayList<Dispatch>()
@@ -43,6 +45,9 @@ class RecordingQuickJs : QuickJs() {
     val notifications = ArrayList<Notification>()
     val actionRenders = ArrayList<Pair<Int, String>>()
     val actionDispatches = ArrayList<ActionDispatch>()
+    val xposedBefores = ArrayList<XposedBefore>()
+    val xposedAfters = ArrayList<XposedAfter>()
+    val xposedReleases = ArrayList<Long>()
 
     /** callback ids java asked to run, in the order the engine would have run them */
     val jvmCallbacks = ArrayList<Int>()
@@ -51,6 +56,9 @@ class RecordingQuickJs : QuickJs() {
         private set
 
     var jvmInstalled = false
+        private set
+
+    var xposedInstalled = false
         private set
 
     /** what this engine does with the view it is handed, standing in for the plugin's middleware */
@@ -77,6 +85,9 @@ class RecordingQuickJs : QuickJs() {
     /** what this engine answers a menu render with; `null` is an engine that could not answer */
     var onRenderActions: ((Int, String) -> String?)? = null
 
+    var onXposedBefore: ((XposedBefore) -> Array<String>?)? = null
+    var onXposedAfter: ((XposedAfter) -> String)? = null
+
     override fun start(listener: PluginBridge) {
         check(this.listener == null) { "QuickJs is already started" }
         this.listener = listener
@@ -90,6 +101,34 @@ class RecordingQuickJs : QuickJs() {
 
     override fun installJvm() {
         jvmInstalled = true
+    }
+
+    override fun installXposed() {
+        xposedInstalled = true
+    }
+
+    override fun xposedBefore(
+        dispatchId: Long,
+        site: Long,
+        methodWire: String,
+        thisWire: String,
+        args: Array<String>,
+    ): Array<String>? {
+        val dispatch = XposedBefore(dispatchId, site, methodWire, thisWire, args)
+        xposedBefores.add(dispatch)
+        return onXposedBefore?.invoke(dispatch)
+    }
+
+    override fun xposedAfter(dispatchId: Long, resultWire: String): String {
+        val dispatch = XposedAfter(dispatchId, resultWire)
+        xposedAfters.add(dispatch)
+        return onXposedAfter?.invoke(dispatch) ?: resultWire
+    }
+
+    override fun xposedBudgetMs(): Long = 1_000
+
+    override fun xposedRelease(dispatchId: Long) {
+        xposedReleases.add(dispatchId)
     }
 
     override fun jvmCallback(callbackId: Int) {

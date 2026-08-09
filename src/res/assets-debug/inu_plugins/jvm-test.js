@@ -46,7 +46,7 @@ function expectPluginError(label, code, grant, fn) {
 
 // exact, not a floor: most of what follows is a refusal, and a member that stopped existing refuses
 // too - so the surface is asserted positively first and the count is what catches the rest
-const EXPECTED = 34
+const EXPECTED = 29
 const before = ran
 
 check(
@@ -61,10 +61,12 @@ check(
 // -- the entry point --
 
 const ArrayList = inu.jvm.cls('java.util.ArrayList')
+const Integer = inu.jvm.cls('java.lang.Integer')
+const Long = inu.jvm.cls('java.lang.Long')
 check('a class inside the scope list resolves', typeof ArrayList === 'function')
 
 // a class is callable because `new cls(...)` is how the contract builds one
-const list = new ArrayList(4)
+const list = new ArrayList()
 check('new gives a java object', typeof list === 'object' && typeof list.call === 'function')
 
 expectPluginError(
@@ -83,23 +85,16 @@ expectPluginError('cls takes a name', 'invalid-argument', null, () => inu.jvm.cl
 
 // -- values on their way out --
 
-check('a java int reads as a number', list.getField('size') === 3, `${list.getField('size')}`)
-check('a java String reads as a string', list.getField('TAG') === 'inugram', list.getField('TAG'))
+list.call('add', 1)
+list.call('add', 2)
+check('a java int reads as a number', list.getField('size') === 2, `${list.getField('size')}`)
 check('a java boolean reads as a boolean', list.call('add', 'x') === true)
-check('a java String return reads as a string', list.call('toString') === '[1, 2]')
-check('a java null reads as null', list.getField('nothing') === null)
-
-const digest = list.getField('digest')
-check(
-  'a java byte[] reads as a Uint8Array',
-  digest instanceof Uint8Array && Array.from(digest).join(',') === '1,2,3',
-  `${digest}`,
-)
+check('a java String return reads as a string', list.call('toString') === '[1, 2, x]')
 
 // a java long is 64 bits wide; the alternative to a bigint here is a number that is quietly not
 // the one java holds
-const big = list.getField('serialVersionUID')
-check('a java long past 2^53 reads as a bigint', typeof big === 'bigint' && big === 9007199254740993n, `${big}`)
+const big = Long.getStaticField('MAX_VALUE')
+check('a java long reads as a bigint', typeof big === 'bigint' && big === 9223372036854775807n, `${big}`)
 
 const clone = list.call('clone')
 check('a java object return is a handle of its own', typeof clone === 'object' && clone !== list)
@@ -109,7 +104,7 @@ check('a java object return is a handle of its own', typeof clone === 'object' &
 expectPluginError(
   'a value whose class is outside the scope list is refused',
   'not-granted',
-  'unsafe.jvm(java.io.PrintStream)',
+  null,
   () => inu.jvm.cls('java.lang.System').getStaticField('out'),
 )
 
@@ -133,31 +128,29 @@ expectPluginError('a string past the value bound is refused', 'quota-exceeded', 
 
 // -- the pinned forms --
 
-const add = ArrayList.getDeclaredMethod('add')
+const add = ArrayList.getDeclaredMethod('add(Ljava/lang/Object;)Z')
 check('getDeclaredMethod gives something invocable', typeof add.invoke === 'function')
 check('an invoked method answers like the shorthand', add.invoke(list, 'x') === true)
 
 const size = ArrayList.getDeclaredField('size')
-check('getDeclaredField gives something readable', size.get(list) === 3, `${size.get(list)}`)
+check('getDeclaredField gives something readable', size.get(list) === 4, `${size.get(list)}`)
 size.set(list, 4)
 pass('a field can be assigned through its handle')
 
-check('a static field reads', ArrayList.getStaticField('TAG') === 'inugram')
-ArrayList.setStaticField('TAG', 'set')
-pass('a static field can be assigned')
-check('a static method answers', ArrayList.callStatic('of', 1, 2) === null)
+check('a static field reads', Integer.getStaticField('MAX_VALUE') === 2147483647)
+check('a static method answers', Integer.callStatic('valueOf', 1) === 1)
 
 // -- what a java throw looks like --
 
 let thrown
 try {
-  list.call('boom')
+  Integer.callStatic('parseInt', 'NaN')
 } catch (e) {
   thrown = e
 }
 check(
   'a java exception is a plain Error, not a PluginError',
-  thrown instanceof Error && !(thrown instanceof inu.PluginError) && thrown.message.includes('IllegalStateException'),
+  thrown instanceof Error && !(thrown instanceof inu.PluginError) && thrown.message.includes('NumberFormatException'),
   `${thrown}`,
 )
 

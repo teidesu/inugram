@@ -1,15 +1,22 @@
-((natives, PluginError, timers) => {
+(natives, PluginError, timers) => {
   const { setTimeout, clearTimeout } = timers
 
-  const invalid = (message) => new PluginError('invalid-argument', message)
+  const invalid = message => new PluginError('invalid-argument', message)
 
   // rfc7230's token, which is what a header name is allowed to be
-  const TOKEN = /^[!#$%&'*+\-.^_`|~0-9a-zA-Z]+$/
+  const TOKEN = /^[!#$%&'*+\-.^\w`|~]+$/
 
   // headers the transport owns: setting one of these from here either does nothing or makes the
   // request lie about its own framing
   const RESERVED = new Set([
-    'host', 'content-length', 'connection', 'transfer-encoding', 'upgrade', 'keep-alive', 'te', 'trailer',
+    'host',
+    'content-length',
+    'connection',
+    'transfer-encoding',
+    'upgrade',
+    'keep-alive',
+    'te',
+    'trailer',
   ])
 
   const REDIRECT_MODES = new Set(['follow', 'manual', 'error'])
@@ -147,6 +154,7 @@
         if (settled) return false
         settled = true
         if (timer !== undefined) clearTimeout(timer)
+        // eslint-disable-next-line no-use-before-define
         if (signal !== undefined) signal.removeEventListener('abort', onAbort)
         run()
         return true
@@ -187,4 +195,4 @@
   // constructor to promise, and a plugin that could reach one would be reading surface nothing
   // agreed to
   Object.defineProperty(globalThis, 'fetch', { value: fetch, writable: true, configurable: true })
-})
+}

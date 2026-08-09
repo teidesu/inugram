@@ -3,6 +3,7 @@
 // @author       teidesu
 // @version      1.0
 // @description  registers one row of every action kind and asserts the context each one is handed
+// @grant        account.read(draft)
 // @plugin-api   1
 // @platform     android
 // ==/UserScript==

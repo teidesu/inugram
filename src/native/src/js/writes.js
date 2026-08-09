@@ -1,4 +1,4 @@
-((natives, shared, Message, PluginError, readsPrototype) => {
+(natives, shared, Message, PluginError, readsPrototype) => {
   const { invalid, toSpec, toOptions, toCount, toMessageId, toMessageIds, slotOf } = shared
 
   // keep in sync with rust `writes::OP_*` and Kotlin `PluginWrites.OP_*`
@@ -19,8 +19,16 @@
   const INT64 = /^-?\d+$/
 
   const TYPING_ACTIONS = new Set([
-    'typing', 'cancel', 'recordVideo', 'uploadVideo', 'recordVoice', 'uploadVoice',
-    'uploadPhoto', 'uploadDocument', 'chooseSticker', 'chooseContact',
+    'typing',
+    'cancel',
+    'recordVideo',
+    'uploadVideo',
+    'recordVoice',
+    'uploadVoice',
+    'uploadPhoto',
+    'uploadDocument',
+    'chooseSticker',
+    'chooseContact',
   ])
 
   // `InputText`: a bare string is unformatted text, per `common.d.ts`. entities stay whatever the
@@ -49,7 +57,7 @@
     return value
   }
 
-  const toPeerOrNull = (value) => (value === undefined || value === null ? null : toSpec(value))
+  const toPeerOrNull = value => (value === undefined || value === null ? null : toSpec(value))
 
   const toProgress = (value, what) => {
     if (value === undefined || value === null) return null
@@ -112,11 +120,11 @@
     }
   }
 
-  const wrap = (raw) => (raw === null ? null : new Message(raw))
+  const wrap = raw => (raw === null ? null : new Message(raw))
 
   // the `Promise<void>` members: the host answers a null wire, and `undefined` is what a plugin
   // writing `await acc.readHistory(...) === undefined` is entitled to see
-  const voidly = (promise) => promise.then(() => undefined)
+  const voidly = promise => promise.then(() => undefined)
 
   /** the options every send shares, so one shape reaches the host however it was called */
   const sendOptions = (opts, what) => ({
@@ -190,7 +198,7 @@
           files,
           toProgress(opts.onProgress, 'sendMultiMedia'),
         ]
-      }).then((messages) => messages.map(wrap))
+      }).then(messages => messages.map(wrap))
     },
 
     editMessage(peer, messageId, text, options) {
@@ -241,7 +249,7 @@
           [],
           null,
         ]
-      }).then((messages) => messages.map(wrap))
+      }).then(messages => messages.map(wrap))
     },
 
     setReaction(peer, messageId, reactions, options) {
@@ -278,7 +286,7 @@
     sendTyping(peer, action, options) {
       return voidly(startWrite(this, OP_SEND_TYPING, 'sendTyping', () => {
         const opts = toOptions(options, 'sendTyping')
-        const what = action === undefined || action === null ? 'typing' : action
+        const what = action ?? 'typing'
         if (!TYPING_ACTIONS.has(what)) throw invalid(`sendTyping: unknown action '${what}'`)
         return [
           { peer: toSpec(peer), action: what, topicId: toCount(opts.topicId, 'sendTyping', 'topicId') },
@@ -343,4 +351,4 @@
   if (readsPrototype !== null && readsPrototype !== undefined) Object.setPrototypeOf(proto, readsPrototype)
 
   return Object.freeze(proto)
-})
+}

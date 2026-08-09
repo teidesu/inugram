@@ -1,11 +1,11 @@
-((native) => {
+(native) => {
   // module-private: nothing outside this closure holds them, and `Symbol()` (not `Symbol.for`)
   // keeps them out of the global registry a plugin can enumerate by name
   const BOUND = Symbol('inu.url.bound')
   const PAIRS = Symbol('inu.url.pairs')
   const MEMO = Symbol('inu.url.searchParams')
 
-  const readPairs = (self) =>
+  const readPairs = self =>
     self[BOUND] === undefined ? self[PAIRS] : native.parseQuery(native.getQuery.call(self[BOUND]))
 
   const writePairs = (self, pairs) => {
@@ -13,7 +13,7 @@
     else native.setQuery.call(self[BOUND], native.serializeQuery(pairs))
   }
 
-  const str = (value) => (typeof value === 'string' ? value : String(value))
+  const str = value => (typeof value === 'string' ? value : String(value))
 
   class URLSearchParams {
     constructor(init) {
@@ -23,7 +23,7 @@
       if (typeof init === 'string') {
         this[PAIRS] = native.parseQuery(init)
       } else if (init instanceof URLSearchParams) {
-        this[PAIRS] = readPairs(init).map((pair) => [pair[0], pair[1]])
+        this[PAIRS] = readPairs(init).map(pair => [pair[0], pair[1]])
       } else if (typeof init[Symbol.iterator] === 'function') {
         for (const pair of init) {
           const entry = Array.from(pair)
@@ -53,27 +53,27 @@
       const wanted = value === undefined ? undefined : str(value)
       writePairs(
         this,
-        readPairs(this).filter((pair) => pair[0] !== key || (wanted !== undefined && pair[1] !== wanted)),
+        readPairs(this).filter(pair => pair[0] !== key || (wanted !== undefined && pair[1] !== wanted)),
       )
     }
 
     get(name) {
       const key = str(name)
-      const found = readPairs(this).find((pair) => pair[0] === key)
+      const found = readPairs(this).find(pair => pair[0] === key)
       return found === undefined ? null : found[1]
     }
 
     getAll(name) {
       const key = str(name)
       return readPairs(this)
-        .filter((pair) => pair[0] === key)
-        .map((pair) => pair[1])
+        .filter(pair => pair[0] === key)
+        .map(pair => pair[1])
     }
 
     has(name, value) {
       const key = str(name)
       const wanted = value === undefined ? undefined : str(value)
-      return readPairs(this).some((pair) => pair[0] === key && (wanted === undefined || pair[1] === wanted))
+      return readPairs(this).some(pair => pair[0] === key && (wanted === undefined || pair[1] === wanted))
     }
 
     /** replaces the first match in place and drops the rest, which is what keeps ordering stable */
@@ -100,7 +100,7 @@
       const pairs = readPairs(this)
       const decorated = pairs.map((pair, index) => [pair, index])
       decorated.sort((a, b) => (a[0][0] < b[0][0] ? -1 : a[0][0] > b[0][0] ? 1 : a[1] - b[1]))
-      writePairs(this, decorated.map((entry) => entry[0]))
+      writePairs(this, decorated.map(entry => entry[0]))
     }
 
     forEach(callback, thisArg) {
@@ -109,21 +109,15 @@
     }
 
     entries() {
-      return readPairs(this)
-        .map((pair) => [pair[0], pair[1]])
-        [Symbol.iterator]()
+      return readPairs(this).map(pair => [pair[0], pair[1]])[Symbol.iterator]()
     }
 
     keys() {
-      return readPairs(this)
-        .map((pair) => pair[0])
-        [Symbol.iterator]()
+      return readPairs(this).map(pair => pair[0])[Symbol.iterator]()
     }
 
     values() {
-      return readPairs(this)
-        .map((pair) => pair[1])
-        [Symbol.iterator]()
+      return readPairs(this).map(pair => pair[1])[Symbol.iterator]()
     }
 
     [Symbol.iterator]() {
@@ -157,4 +151,4 @@
     writable: true,
     configurable: true,
   })
-})
+}

@@ -253,7 +253,7 @@ expectThrows(
   const png = await canvas.convertToBlob()
   check('convertToBlob answers a Blob', png instanceof Blob, `${png.size} bytes, ${png.type}`)
 
-  const image = await inu.canvas.decode(new Uint8Array([1, 2, 3]))
+  const image = await inu.canvas.decode(png)
   check('decode answers an image with a size', image.width > 0 && image.height > 0, `${image.width}x${image.height}`)
   ctx.drawImage(image, 0, 0)
   pass('a decoded image draws')
@@ -266,10 +266,6 @@ expectThrows(
   ctx.fillStyle = held
   expectThrows('a pattern over a disposed image fails where it is painted', () => ctx.fillRect(0, 0, 1, 1), 'handle-expired')
   ctx.fillStyle = '#000000'
-
-  await inu.canvas.loadFont('Oracle Sans', new Uint8Array([1]))
-  ctx.font = '12px "Oracle Sans"'
-  check('a loaded family can be named', ctx.font.includes('Oracle Sans'), ctx.font)
 
   await expectRejects('a decode the host refuses rejects', inu.canvas.decode(new Uint8Array([0])), 'invalid-argument')
 

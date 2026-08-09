@@ -3,6 +3,7 @@ package desu.inugram.helpers.update
 import android.os.Build
 import desu.inugram.InuConfig
 import desu.inugram.helpers.InuUtils
+import desu.inugram.helpers.security.ParanoiaHelper
 import org.telegram.messenger.AndroidUtilities
 import org.telegram.messenger.ApplicationLoader
 import org.telegram.messenger.BetaUpdate
@@ -20,7 +21,6 @@ import org.telegram.tgnet.ConnectionsManager
 import org.telegram.tgnet.TLRPC
 import kotlin.math.max
 import kotlin.math.min
-import desu.inugram.helpers.security.ParanoiaHelper
 
 object UpdateHelper {
     const val USERNAME = "InugramCI"
@@ -28,21 +28,22 @@ object UpdateHelper {
     private const val CHECK_INTERVAL_MS = 4L * 60 * 60 * 1000
     private const val INFLIGHT_TIMEOUT_MS = 60L * 1000
 
-    private val pInfo by lazy {
+    val packageInfo by lazy {
         ApplicationLoader.applicationContext.packageManager.getPackageInfo(
             ApplicationLoader.applicationContext.packageName,
             0
         )
     }
+
     @JvmStatic
     val stockVersionName by lazy {
-        pInfo.versionName?.replace(Regex("-[0-9a-f]{7}$"), "") ?: ""
+        packageInfo.versionName?.replace(Regex("-[0-9a-f]{7}$"), "") ?: ""
     }
 
     fun getVersionInfoString(): String {
         return LocaleController.formatString(
             R.string.InuVersion,
-            pInfo.versionCode,
+            packageInfo.versionCode,
             stockVersionName,
             BuildConfig.STOCK_VERSION_CODE
         )
@@ -331,7 +332,7 @@ object UpdateHelper {
     }
 
     @Suppress("DEPRECATION")
-    private fun currentBuild(): CurrentBuild = CurrentBuild(pInfo.versionCode)
+    private fun currentBuild(): CurrentBuild = CurrentBuild(packageInfo.versionCode)
 
     private fun extractApkInfo(msg: TLRPC.Message): ApkInfo? {
         val media = msg.media as? TLRPC.TL_messageMediaDocument ?: return null

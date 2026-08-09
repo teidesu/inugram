@@ -559,6 +559,9 @@ object PluginJvm {
 
     private class Converted(val value: Any?)
 
+    internal fun convertArguments(types: Array<Class<*>>, args: List<Any?>): Array<Any?>? =
+        if (matches(types, args)) convertAll(types, args) else null
+
     private fun convertAll(types: Array<Class<*>>, args: List<Any?>): Array<Any?> =
         Array(types.size) { convert(args[it], types[it])?.value }
 

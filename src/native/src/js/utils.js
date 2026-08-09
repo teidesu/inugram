@@ -1,4 +1,4 @@
-((utils, PluginError) => {
+(utils, PluginError) => {
   const invalid = message => new PluginError('invalid-argument', message)
 
   // a legacy constructor is `<base>_<suffix>` (`message_old7`, `documentAttributeSticker_old2`,
@@ -72,12 +72,12 @@
 
   // telegram's own shape for a username, plus the '@' people paste in front of one. it is also what
   // keeps a spec free of the separator the batch ops join on
-  const USERNAME = /^[a-zA-Z0-9_]{1,32}$/
+  const USERNAME = /^\w{1,32}$/
   const DIGITS = /^-?\d+$/
 
   const SELF = new Set(['inputPeerSelf', 'inputUserSelf'])
 
-  const describe = (peer) => baseName(peer) || (peer === null ? 'null' : typeof peer)
+  const describe = peer => baseName(peer) || (peer === null ? 'null' : typeof peer)
 
   const toSpec = (peer) => {
     if (typeof peer === 'number') {
@@ -108,7 +108,7 @@
 
   const toSpecList = (peers, what) => {
     if (!Array.isArray(peers)) throw invalid(`${what}: expected an array of peers`)
-    return peers.map((peer) => toSpec(peer)).join(SEPARATOR)
+    return peers.map(peer => toSpec(peer)).join(SEPARATOR)
   }
 
   const toMessageId = (id, what) => {
@@ -119,7 +119,7 @@
 
   const toMessageIds = (ids, what) => {
     if (!Array.isArray(ids)) throw invalid(`${what}: expected an array of message ids`)
-    return ids.map((id) => toMessageId(id, what))
+    return ids.map(id => toMessageId(id, what))
   }
 
   const NO_OPTIONS = Object.freeze({})
@@ -176,9 +176,7 @@
       }
       // the id keeps whatever form it arrived in, int64s being strings on a snapshot
       const id = userOrChat.id
-      const hash = userOrChat.access_hash === undefined || userOrChat.access_hash === null
-        ? '0'
-        : userOrChat.access_hash
+      const hash = userOrChat.access_hash ?? '0'
       if (name === 'user') return { _: 'inputPeerUser', user_id: id, access_hash: hash }
       if (name === 'chat' || name === 'chatForbidden') return { _: 'inputPeerChat', chat_id: id }
       return { _: 'inputPeerChannel', channel_id: id, access_hash: hash }
@@ -257,7 +255,7 @@
     const sign = number < 0 ? '-' : ''
     const parts = String(Math.abs(number)).split('.')
     if (!/^\d+$/.test(parts[0])) return `${sign}${Math.abs(number)}`
-    const grouped = parts[0].replace(/\B(?=(\d{3})+(?!\d))/g, ' ')
+    const grouped = parts[0].replace(/\B(?=(?:\d{3})+(?!\d))/g, ' ')
     return parts.length === 1 ? `${sign}${grouped}` : `${sign}${grouped}.${parts[1]}`
   }
 
@@ -284,7 +282,18 @@
   Object.freeze(utils)
 
   return {
-    baseName, toNumber, peerDialogId, peerUserId,
-    SEPARATOR, invalid, toSpec, toSpecList, toMessageId, toMessageIds, toOptions, toCount, slotOf,
+    baseName,
+    toNumber,
+    peerDialogId,
+    peerUserId,
+    SEPARATOR,
+    invalid,
+    toSpec,
+    toSpecList,
+    toMessageId,
+    toMessageIds,
+    toOptions,
+    toCount,
+    slotOf,
   }
-})
+}
