@@ -1,9 +1,3 @@
-//! What can be tested without a rasterizer, which is everything this module actually decides: the
-//! argument rules, the ceilings, the handle lifetimes, and the bytes the host is handed.
-//!
-//! The oracle host records every op and decodes the command buffer back into a readable form, so a
-//! test asserts on what a real host would *see* rather than on the internal state that produced it.
-
 use std::cell::RefCell;
 use std::rc::Rc;
 

@@ -1,18 +1,3 @@
-//! `inu.ui.getCurrentScreen` and `inu.ui.onScreenChanged`. JNI-free behind [`ScreenHost`]. Its own
-//! module rather than part of [`crate::api::ui::pages`] because it is the opposite arrow: the settings-page api
-//! is the plugin driving the host, this is the host reporting a stack it owns.
-//!
-//! The host classifies; this side gates. `dialogId`/`topicId` cost `account.read(dialogs)` (which
-//! chat the user is reading must not be cheaper to get for having come from the ui) and are
-//! **omitted, never refused**, since `type` already says whether there was one to give. The event
-//! itself needs no grant.
-//!
-//! `getCurrentScreen` answers from whatever the host last published or not at all; `N` covers every
-//! "nothing to say" the host has (no activity, backgrounded, too early during startup).
-//!
-//! `ScreenChange.stack` is a js getter over the json ([`EVENT_FACTORY_SRC`]), memoized in the
-//! closure, so a plugin that only reads `screen` never mints an `Account` per stack entry.
-
 use std::cell::RefCell;
 use std::rc::Rc;
 
@@ -23,16 +8,10 @@ use crate::api::telegram::rpc::{format_exception, pump_jobs};
 use crate::sandbox::grants::{GrantHost, MATCH_EXACT};
 use crate::sandbox::registry::{make_disposer, noop_disposer, CallbackRegistry, Lifecycle};
 
-/// stand-in for the navigation half of the Kotlin `QuickJs.ApiListener`
 pub trait ScreenHost {
-    /// the screen on top right now: `N` for none, or `J<json>` shaped like one `stack` entry
     fn current_screen(&self) -> String;
 }
 
-/// `(materialize) => (action, screen, previous, stackJson) => ScreenChange`.
-///
-/// In js because the memoized lazy getter needs a closure to keep the array in: a rust accessor
-/// would have to hold it as a `Persistent`, which is a GC root with no owner to release it.
 const EVENT_FACTORY_SRC: &str = r#"(materialize) => (action, screen, previous, stackJson) => {
     let stack
     return {
@@ -56,8 +35,6 @@ pub struct ScreenState {
     event_factory: RefCell<Option<Persistent<Function<'static>>>>,
 }
 
-/// One `CurrentScreen` out of one host-side json object. Never throws for a missing grant: the
-/// fields it gates are documented absent without it.
 fn build_screen<'js>(ctx: &Ctx<'js>, state: &Rc<ScreenState>, raw: &Value<'js>) -> JsResult<Value<'js>> {
     let Some(obj) = raw.as_object() else {
         return Ok(Value::new_null(ctx.clone()));
@@ -154,12 +131,6 @@ pub fn install_screens<'js>(
     Ok(state)
 }
 
-/// The user navigated. `change_json` is `{action, screen, previous}` (either screen `null` when
-/// there is none) and `stack_json` the whole stack, bottom first, left as text until a plugin asks
-/// for it.
-///
-/// The host has already decided that this *is* a change, per `common.d.ts`: a rebuild that ends on
-/// the same screen is not dispatched, so every call here is one navigation.
 pub fn dispatch_screen_change(
     rt: &Runtime,
     context: &rquickjs::Context,
@@ -220,7 +191,6 @@ fn build_event<'js>(
     builder.call((action, screen, previous, stack_json))
 }
 
-/// releases every `Persistent` GC root this state still owns - same contract as [`crate::api::telegram::rpc::dispose`]
 pub fn dispose(context: &rquickjs::Context, state: &Rc<ScreenState>) {
     context.with(|ctx| {
         state.changed_fns.release_all(&ctx);

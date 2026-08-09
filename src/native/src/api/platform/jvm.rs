@@ -1,22 +1,3 @@
-//! `inu.jvm`: the reflection escape hatch, per `android.jvm.d.ts`.
-//!
-//! Which class a name resolves to, what an overload takes and what a member declares are facts
-//! about a heap this side cannot see, so the whole of it is Kotlin (`PluginJvm`) and this module
-//! is the wire plus two rules it *can* decide: the entry point's class name is scope-checked here
-//! ([`js_cls`]), and `loadDex` needs the unscoped grant, since dex code runs with the app's own
-//! permissions and never crosses this bridge again.
-//!
-//! `defineClass` and `callSuper` throw `unsupported`. `defineClass` needs the thing this engine
-//! does not have: a synchronous answer for java, on whichever thread java called on. [`js_runnable`]
-//! works only because it returns nothing and can therefore *post* into the one queue an engine may
-//! be entered from. `callSuper` only means anything inside a body `defineClass` would have
-//! produced, and `Method.invoke` dispatches virtually, so an approximation of it would recurse.
-//!
-//! A reflected call runs on `globalQueue` inside a JNI upcall, i.e. with this engine's `RefCell`
-//! already borrowed, so a synchronous re-entry is a process abort. Nothing this module mints can
-//! do that; what it cannot promise is that *reflection* will not reach a path that does, which is
-//! why `PluginJvm` refuses the engine's own package outright.
-
 use std::cell::RefCell;
 use std::rc::Rc;
 
@@ -32,15 +13,10 @@ use crate::sandbox::registry::{CallbackRegistry, Lifecycle};
 
 const PRELUDE: &[u8] = include_bytes!(concat!(env!("OUT_DIR"), "/jvm.qbc"));
 
-/// stand-in for the Kotlin `QuickJs.JvmListener`
 pub trait JvmHost {
-    /// one reflection op. `target` is a handle id (0 for the ops that name none), `name` the class
-    /// or member, `args` one wire per argument. The answer is always a tagged wire: a scalar
-    /// (`N`/`S`/`I`/`D`/`B`/`Y`), a handle (`G<kind><id>`), or an error (`E`/`P`).
     fn jvm(&self, op: i32, target: i64, name: &str, args: &[String]) -> String;
 }
 
-// keep in sync with Kotlin `PluginJvm.OP_*` and `jvm.js`
 const OP_CLASS: i32 = 0;
 const OP_NEW: i32 = 1;
 const OP_GET: i32 = 2;
@@ -57,17 +33,10 @@ const OP_RELEASE: i32 = 12;
 const OP_CURRENT_FRAGMENT: i32 = 13;
 const OP_CURRENT_ACTIVITY: i32 = 14;
 
-/// the single grant this api is behind; its scopes are class namespaces
 pub const GRANT: &str = "unsafe.jvm";
 
-/// what one value may weigh in either direction, per `android.jvm.d.ts`. A string crosses as a
-/// java `String` and a `byte[]` as base64, so the transient cost of one is several times its own
-/// size on a heap the plugin's ceiling does not cover - the app's.
 pub const VALUE_LIMIT_BYTES: usize = 1024 * 1024;
 
-/// what `loadDex` may take, per `android.jvm.d.ts`, whichever way it arrives. Kotlin holds the same
-/// number against the file it is handed; this is the in-memory form, which also has to be
-/// base64'd across.
 pub const DEX_LIMIT_BYTES: usize = 8 * 1024 * 1024;
 
 pub struct JvmState {
@@ -75,10 +44,7 @@ pub struct JvmState {
     grants: Rc<dyn GrantHost>,
     lifecycle: Rc<Lifecycle>,
     log: crate::Log,
-    /// `inu.jvm.runnable` callbacks. Plugin-lifetime: the java object holding one may be anywhere
-    /// in the app by then, so there is no reachability this side could key a release on.
     callbacks: CallbackRegistry,
-    /// `jvm.js`'s two halves of the handle representation, saved because every op crosses them
     prelude: RefCell<Option<Prelude>>,
 }
 
@@ -102,7 +68,6 @@ fn throw_too_big<'js, T>(ctx: &Ctx<'js>, what: &str, size: usize, limit: usize) 
     )
 }
 
-/// the id `jvm.js` carries on a handle, or `-1` for anything that is not one
 pub(crate) fn handle_id<'js>(ctx: &Ctx<'js>, state: &Rc<JvmState>, value: &Value<'js>) -> JsResult<i64> {
     let borrowed = state.prelude.borrow();
     let Some(prelude) = borrowed.as_ref() else {
@@ -112,8 +77,6 @@ pub(crate) fn handle_id<'js>(ctx: &Ctx<'js>, state: &Rc<JvmState>, value: &Value
     id_of.call((value.clone(),))
 }
 
-/// one argument on its way to java. Every shape here is a value java can be handed without asking
-/// the plugin what type it meant; anything else is refused rather than guessed at.
 pub(crate) fn arg_to_wire<'js>(ctx: &Ctx<'js>, state: &Rc<JvmState>, value: &Value<'js>) -> JsResult<String> {
     if value.is_null() || value.is_undefined() {
         return Ok("N".to_string());
@@ -125,17 +88,12 @@ pub(crate) fn arg_to_wire<'js>(ctx: &Ctx<'js>, state: &Rc<JvmState>, value: &Val
         return Ok(format!("I{i}"));
     }
     if let Some(f) = value.as_float() {
-        // an integral js number is an integer as far as java is concerned; the exponent form a
-        // `{f}` would print for one is not something a java parse would take back
         if f.fract() == 0.0 && f.abs() <= 9007199254740991.0 {
             return Ok(format!("I{}", f as i64));
         }
         return Ok(format!("D{f}"));
     }
     if value.is_big_int() {
-        // through its decimal text rather than `to_i64`, which truncates a bigint too wide for a
-        // java long instead of failing - and a silently truncated one is the exact lie the bigint
-        // exists to avoid
         let text = Coerced::<String>::from_js(ctx, value.clone())?.0;
         return match text.parse::<i64>() {
             Ok(v) => Ok(format!("I{v}")),
@@ -182,9 +140,6 @@ fn bounded_bytes(bytes: &[u8], limit: usize) -> bool {
     bytes.len() <= limit
 }
 
-/// one value on its way back from java. The scalars are [`crate::api::tl::proxy`]'s, so a `Y` means the
-/// same thing on both bridges; `G` is a handle, and an `I` too big for a js number is a `bigint`
-/// rather than a rounded one - a java `long` is 64 bits wide and an `access_hash` uses all of them.
 pub(crate) fn wire_to_value<'js>(ctx: &Ctx<'js>, state: &Rc<JvmState>, wire: &str) -> JsResult<Value<'js>> {
     if let Some(built) = wire_error_to_js(ctx, wire) {
         return Err(ctx.throw(built?));
@@ -251,8 +206,6 @@ fn js_op<'js>(
     name: String,
     args: Array<'js>,
 ) -> JsResult<Value<'js>> {
-    // the fine-grained check is the host's, on the class it is about to hand over or the member it
-    // is about to reach; this is the same coarse gate every other api keeps at its entry point
     check_grant(ctx, &state.grants, GRANT, None, MATCH_NAMESPACE)?;
     let mut wires = Vec::new();
     for arg in crate::utils::arguments::array_values(ctx, &args, "jvm")? {
@@ -268,9 +221,6 @@ fn js_cls<'js>(ctx: &Ctx<'js>, state: &Rc<JvmState>, name: String) -> JsResult<V
 
 fn js_runnable<'js>(ctx: &Ctx<'js>, state: &Rc<JvmState>, callback: Function<'js>) -> JsResult<Value<'js>> {
     check_grant(ctx, &state.grants, GRANT, None, MATCH_NAMESPACE)?;
-    // allocated before the host is asked, and registered only once it has accepted: the upcall
-    // needs the id to build the java object around, and must be able to refuse without leaving a
-    // registration behind
     let token = state.callbacks.alloc();
     let handle = ask(ctx, state, OP_RUNNABLE, 0, "", &[format!("I{token}")])?;
     if !state.lifecycle.is_unloading() {
@@ -280,8 +230,6 @@ fn js_runnable<'js>(ctx: &Ctx<'js>, state: &Rc<JvmState>, callback: Function<'js
 }
 
 fn js_load_dex<'js>(ctx: &Ctx<'js>, state: &Rc<JvmState>, source: Value<'js>) -> JsResult<()> {
-    // not `None`: dex runs outside this bridge, so nothing a scope list says survives it. An
-    // unscoped grant is `unsafe.jvm(*)` under NAMESPACE matching, which is what this asks for.
     check_grant(ctx, &state.grants, GRANT, Some("*"), MATCH_NAMESPACE)?;
     if let Some(path) = source.as_string() {
         let path = path.to_string()?;
@@ -320,7 +268,6 @@ pub fn install_jvm<'js>(
 
     let natives = Object::new(ctx.clone())?;
     {
-        // the op numbers are handed over rather than restated in `jvm.js`: one wire, one place
         let ops = Object::new(ctx.clone())?;
         for (name, op) in [
             ("construct", OP_NEW),
@@ -363,8 +310,6 @@ pub fn install_jvm<'js>(
         natives.set("loadDex", f)?;
     }
     {
-        // the finalizer's, so it can neither throw into a job nor be gated: the handle it names is
-        // already unreachable, and refusing to forget it would only leak the java object behind it
         let state = state.clone();
         let f = Function::new(ctx.clone(), move |target: i64| {
             state.host.jvm(OP_RELEASE, target, "", &[]);
@@ -372,8 +317,6 @@ pub fn install_jvm<'js>(
         natives.set("release", f)?;
     }
 
-    // captured at install, like every other prelude's: what this one throws must not be decidable
-    // by a plugin reassigning `inu.PluginError`
     let plugin_error: Value = inu.get("PluginError")?;
 
     let factory = crate::utils::prelude::load(ctx, PRELUDE)?;
@@ -389,14 +332,6 @@ pub fn install_jvm<'js>(
     Ok(state)
 }
 
-/// `inu.android.getCurrentFragment`/`getCurrentActivity`. They belong to this module rather than to
-/// `ui.rs` because what they answer is a `JavaObject` and nothing else: the handle is minted by the
-/// same upcall every other reference goes through, so the host still checks the runtime class
-/// against the scope list - a plugin scoped to one package cannot reach a fragment in another.
-///
-/// Synchronous, so they answer from whatever the app has right now or not at all: `null` covers a
-/// process with no activity (one a push woke), one that is finishing, and a navigation stack that
-/// is momentarily empty.
 fn install_android_screen<'js>(ctx: &Ctx<'js>, state: &Rc<JvmState>, inu: &Object<'js>) -> JsResult<()> {
     let android: Object = match inu.get::<_, Object>("android") {
         Ok(o) => o,
@@ -417,8 +352,6 @@ fn install_android_screen<'js>(ctx: &Ctx<'js>, state: &Rc<JvmState>, inu: &Objec
     Ok(())
 }
 
-/// a java `Runnable` this engine minted was run. Always from a `globalQueue` post, never from
-/// inside the call that handed the object over.
 pub fn dispatch_callback(rt: &Runtime, context: &Context, state: &Rc<JvmState>, callback_id: u32) {
     context.with(|ctx| {
         let Some(callback) = state.callbacks.restore(&ctx, callback_id) else {
@@ -435,7 +368,6 @@ pub fn dispatch_callback(rt: &Runtime, context: &Context, state: &Rc<JvmState>, 
     pump_jobs(rt, context, state.log.as_ref());
 }
 
-/// `Persistent` has no `Drop`: an unreleased root aborts `JS_FreeRuntime`.
 pub fn dispose(context: &Context, state: &Rc<JvmState>) {
     context.with(|ctx| {
         state.callbacks.release_all(&ctx);

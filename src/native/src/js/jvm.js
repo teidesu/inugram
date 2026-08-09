@@ -1,12 +1,3 @@
-// Evaluated once per engine by `jvm.rs`, which hands in the one native op and the error
-// constructor this file must not let a plugin swap out. The factory returns the `inu.jvm`
-// namespace plus the two functions the native side needs to cross a handle in either direction:
-// `mint` builds one out of (kind, id), `idOf` reads the id back out of one.
-//
-// The id lives in a `WeakMap` this closure never publishes, so a handle carries nothing a plugin
-// could read off it or copy onto an object of its own - not even a symbol key. That is hygiene
-// rather than a boundary: the host's table is per plugin, so a forged id could only ever name a
-// handle this same plugin already holds.
 ((natives, PluginError) => {
   const ids = new WeakMap()
 

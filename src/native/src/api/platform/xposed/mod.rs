@@ -1,19 +1,3 @@
-//! `inu.xposed`: method hooking, per `android.xposed.d.ts`.
-//!
-//! **The registry is here and nothing about it is java's.** A `de.robv.android.xposed.XposedBridge`
-//! with `hook0` on it would *be* this grant, reachable by anyone holding `unsafe.jvm` - which every
-//! holder of this one does, `inu.jvm.cls` being the only thing that mints the `JavaMethod` these
-//! entry points take. So the property has to be structural: no java method installs a hook.
-//!
-//! Values reuse `jvm.rs`'s wire and its per-engine handle table, so a `JavaObject` a hook is handed
-//! is one `inu.jvm` can call methods on. There is deliberately no second handle space.
-//!
-//! A dispatch is two engine entries with the original's call between them: the app's thread parks
-//! on [`dispatch_before`], **calls the original itself** (a hooked method may be one only the ui
-//! thread may run), then parks on [`dispatch_after`]. Entering an engine from an app thread races
-//! every piece of `globalQueue`-confined bridge state, and re-entering it on one thread is a
-//! `BorrowMutError` abort. Past [`HOOK_BUDGET_MS`] the host runs the original as the app called it.
-
 pub(crate) mod elf;
 pub(crate) mod lsplant;
 
@@ -33,37 +17,19 @@ use crate::api::telegram::rpc::{format_exception, pump_jobs};
 
 const PRELUDE: &[u8] = include_bytes!(concat!(env!("OUT_DIR"), "/xposed.qbc"));
 
-/// stand-in for the Kotlin `QuickJs.XposedListener`
 pub trait XposedHost {
-    /// one hooking op. `target` is a `jvm` handle id or a site id depending on the op, `name` a
-    /// method name where one is needed, `args` one `jvm` wire per argument. The answer is a `jvm`
-    /// wire too: a value, a handle, or an error (`E`/`P`).
     fn xposed(&self, op: i32, target: i64, name: &str, args: &[String]) -> String;
 }
 
-// keep in sync with Kotlin `PluginXposed.OP_*` and `xposed.js`
 const OP_HOOK: i32 = 0;
 const OP_HOOK_ALL: i32 = 1;
 const OP_UNHOOK: i32 = 2;
 const OP_CALL_ORIGINAL: i32 = 3;
 
-/// the single grant this api is behind; its scopes are class namespaces, like `unsafe.jvm`'s, and
-/// are checked against the *declaring* class by the host - the only side that knows it.
 pub const GRANT: &str = "unsafe.xposed";
 
-/// how many hooks one plugin may hold at once.
-///
-/// Every one of them is an ART method whose entry point was rewritten for the life of the process:
-/// unlike a registration, it is not undone by the engine going away, and it costs a dispatch on
-/// every call of a method the app may run in a loop.
 pub const HOOK_LIMIT: usize = 512;
 
-/// how long the thread that called a hooked method waits for one phase of its dispatch.
-///
-/// It is an app thread - often the ui one - parked on a queue every other plugin shares, so this is
-/// short on purpose: past it the host runs the original as the app called it and the phase is
-/// skipped rather than raced. Lives here rather than with the waiting so there is one of it, and is
-/// read out through `QuickJs.nativeXposedBudgetMs`.
 pub const HOOK_BUDGET_MS: i64 = 250;
 
 #[derive(Clone)]
@@ -80,19 +46,10 @@ pub struct XposedState {
     jvm: Rc<JvmState>,
     log: crate::Log,
     hooks: Registry<Hook>,
-    /// how many live hooks each site carries, so the host is told to uninstall exactly once - when
-    /// the last one goes. Installing twice over one ART method is undefined behaviour in lsplant.
     sites: RefCell<HashMap<i64, usize>>,
-    /// dispatches parked between their two phases, keyed by the id the host allocated. Only a
-    /// dispatch with an `after` to run is in here; everything else finishes inside its `before`.
     pending: RefCell<HashMap<i64, PendingDispatch>>,
 }
 
-/// one dispatch's `after` phase, held while the app's thread runs the original.
-///
-/// The `after` callbacks are re-saved rather than re-snapshotted at the far end: the rule is that a
-/// hook disposed mid-dispatch still finishes its run and one registered mid-dispatch joins from the
-/// next, and re-reading the registry a hop later would break both directions.
 struct PendingDispatch {
     context: Persistent<Object<'static>>,
     after: Vec<Persistent<Function<'static>>>,
@@ -118,11 +75,6 @@ impl XposedState {
         }
     }
 
-    /// The callback pairs one dispatch walks, restored up front rather than kept as roots.
-    ///
-    /// Cloning a `Persistent` duplicates the root, so a clone that is never restored is a leak that
-    /// aborts `JS_FreeRuntime`; a restored `Function<'js>` releases itself on drop, so bailing out
-    /// mid-walk cannot strand one.
     fn snapshot<'js>(&self, ctx: &Ctx<'js>, site: i64) -> Vec<Phase<'js>> {
         self.hooks
             .values()
@@ -153,10 +105,6 @@ fn ask<'js>(
     wire_to_value(ctx, &state.jvm, &wire)
 }
 
-/// The `jvm` handle id behind a `JavaMethod`/`JavaClass`.
-///
-/// Read through `jvm.js`'s own accessor rather than off the object, so `idOf` stays inside that
-/// prelude's closure and a plugin cannot mint a handle by copying a property onto an object.
 fn require_handle<'js>(ctx: &Ctx<'js>, state: &Rc<XposedState>, value: &Value<'js>, what: &str) -> JsResult<i64> {
     let id = handle_id(ctx, &state.jvm, value)?;
     if id < 0 {
@@ -172,24 +120,16 @@ fn require_handle<'js>(ctx: &Ctx<'js>, state: &Rc<XposedState>, value: &Value<'j
     Ok(id)
 }
 
-/// The site ids one hook op answered with.
-///
-/// `hookAllOverloads` installs several at once, so the answer is a comma-separated list carried in
-/// the `jvm` wire's own string tag rather than an array, which that wire has no way to express.
 fn sites_from<'js>(ctx: &Ctx<'js>, value: Value<'js>) -> JsResult<Vec<i64>> {
     let listed = value.as_string().and_then(|text| text.to_string().ok()).unwrap_or_default();
     let sites: Option<Vec<i64>> =
         listed.split(',').filter(|part| !part.is_empty()).map(|part| part.parse().ok()).collect();
     match sites {
         Some(sites) if !sites.is_empty() => Ok(sites),
-        // a method the host declined to hook is not an error the plugin can act on, but it is one
-        // it must not be able to mistake for a hook that took
         _ => throw_plugin_error(ctx, "internal", "xposed: the host installed no hook site", None, None, None),
     }
 }
 
-/// One `MethodHook` object, checked here rather than in the prelude so that "neither half given" is
-/// the same refusal whichever entry point was called.
 struct Callbacks<'js> {
     before: Option<Function<'js>>,
     after: Option<Function<'js>>,
@@ -211,8 +151,6 @@ fn callbacks_of<'js>(ctx: &Ctx<'js>, hook: &Object<'js>) -> JsResult<Callbacks<'
     Ok(Callbacks { before, after })
 }
 
-/// Registers one callback pair against every site the host installed, and answers the `Disposer`
-/// that takes all of them back down.
 fn install_hooks<'js>(
     ctx: &Ctx<'js>,
     state: &Rc<XposedState>,
@@ -235,10 +173,6 @@ fn install_hooks<'js>(
         tokens.push(token);
     }
 
-    // the ceiling is checked here rather than at the entry point because `hookAllOverloads` is one
-    // call installing a site per overload, and the host is what knows how many that is. Backing the
-    // excess out goes through the disposer's own path, which unhooks a site only when its last
-    // holder goes - two registrations may name one already-rewritten ART method.
     let held = state.hooks.len();
     if held > HOOK_LIMIT {
         for token in &tokens {
@@ -274,8 +208,6 @@ fn js_hook<'js>(
     name: String,
     hook: Object<'js>,
 ) -> JsResult<Function<'js>> {
-    // the scope check that matters is the host's, against the declaring class of the method it is
-    // about to rewrite; this is the coarse gate every api keeps at its entry point
     check_grant(ctx, &state.grants, GRANT, None, MATCH_NAMESPACE)?;
     let callbacks = callbacks_of(ctx, &hook)?;
     if state.lifecycle.is_unloading() {
@@ -351,8 +283,6 @@ pub fn install_xposed<'js>(
         natives.set("ops", ops)?;
     }
 
-    // captured at install like every other prelude's, so what this one throws is not decidable by a
-    // plugin reassigning `inu.PluginError`
     let plugin_error: Value = inu.get("PluginError")?;
 
     let factory = crate::utils::prelude::load(ctx, PRELUDE)?;
@@ -362,11 +292,8 @@ pub fn install_xposed<'js>(
     Ok(state)
 }
 
-/// What a `before` callback decided, and what a dispatch answers with.
 enum Verdict {
-    /// call the original, with whatever the callbacks left in `args`
     Proceed,
-    /// a `setReturnValue`, or a `setThrowable` (already a `T` wire)
     Answered(String),
 }
 
@@ -401,20 +328,12 @@ fn run_callback<'js>(
     }
 }
 
-/// `method` is the `jvm` wire of the member lsplant is dispatching for - taken from the host rather
-/// than from the registration, because the bulk forms install one hook over several overloads and
-/// only the host knows which of them was called. `this`/`args` are `jvm` wires too.
 pub struct Invocation<'a> {
     pub method: &'a str,
     pub this: &'a str,
     pub args: &'a [String],
 }
 
-/// The `before` half of a dispatch, run on `globalQueue` with the app's thread parked on it.
-///
-/// The answer is read positionally by the host: `["A", wire]` means answer the app with `wire` and
-/// run nothing, and `["P0" | "P1", ...args]` means call the original with those args - `P1` also
-/// meaning this `dispatch_id` is parked and owes [`dispatch_after`] a call, `P0` that it does not.
 pub fn dispatch_before(
     rt: &Runtime,
     context: &Context,
@@ -425,11 +344,8 @@ pub fn dispatch_before(
 ) -> Vec<String> {
     let Invocation { method, this, args } = *call;
     let answer = context.with(|ctx| -> JsResult<Vec<String>> {
-        // taken before the first callback runs: a hook registered by one joins from the next
-        // dispatch, and one disposed by it still finishes this run
         let hooks = state.snapshot(&ctx, site);
         if hooks.is_empty() {
-            // the site outlived its last hook, which a dispatch already in flight can reach
             return Ok(proceed_with(false, args));
         }
 
@@ -447,7 +363,6 @@ pub fn dispatch_before(
 
         let wants_after = hooks.iter().any(|hook| hook.after.is_some());
         if let Verdict::Answered(wire) = verdict {
-            // nothing runs the original, so there is no hop for the `after` phase to wait behind
             let afters: Vec<&Function> = hooks.iter().filter_map(|hook| hook.after.as_ref()).collect();
             let wire = run_after(&ctx, state, &afters, &context_object, &wire)?;
             return Ok(vec!["A".to_string(), wire]);
@@ -469,8 +384,6 @@ pub fn dispatch_before(
     });
 
     pump_jobs(rt, context, state.log.as_ref());
-    // the bridge failing is not the plugin's answer to give: the app gets its own method, which is
-    // also what the host falls back to when this phase does not land inside its budget
     answer.unwrap_or_else(|_| proceed_with(false, args))
 }
 
@@ -481,8 +394,6 @@ fn proceed_with(wants_after: bool, args: &[String]) -> Vec<String> {
     out
 }
 
-/// The `after` half, owed to every dispatch [`dispatch_before`] answered `P1`. `result` is the `jvm`
-/// wire the original answered, or a `T`-prefixed one when it threw.
 pub fn dispatch_after(
     rt: &Runtime,
     context: &Context,
@@ -502,8 +413,6 @@ pub fn dispatch_after(
     answer.unwrap_or_else(|_| result.to_string())
 }
 
-/// drops a parked dispatch the host stopped waiting on, which is the only thing that releases its
-/// GC roots when no `after` phase follows
 pub fn release_dispatch(context: &Context, state: &Rc<XposedState>, dispatch_id: i64) {
     let Some(pending) = state.pending.borrow_mut().remove(&dispatch_id) else {
         return;
@@ -532,7 +441,6 @@ fn run_after<'js>(
     }
     Ok(match read_context(ctx, state, context_object)? {
         Verdict::Answered(wire) => wire,
-        // an `after` that set nothing leaves whatever the original answered
         Verdict::Proceed => result.to_string(),
     })
 }
@@ -557,9 +465,6 @@ fn build_context<'js>(
     object.set("__answered", false)?;
     object.set("__throwable", Value::new_null(ctx.clone()))?;
 
-    // both setters reach the context through `this` rather than capturing it. A closure holding an
-    // `Object<'js>` is a strong reference from *outside* the js heap, so an object owning a function
-    // that captured it is a cycle quickjs cannot see and therefore never collects.
     {
         let f = Function::new(ctx.clone(), |this: This<Object<'js>>, value: Value<'js>| -> JsResult<()> {
             let null = Value::new_null(this.0.ctx().clone());
@@ -571,7 +476,6 @@ fn build_context<'js>(
     }
     {
         let f = Function::new(ctx.clone(), |this: This<Object<'js>>, value: Value<'js>| -> JsResult<()> {
-            // clears any return value an earlier hook set, per `android.xposed.d.ts`
             let null = Value::new_null(this.0.ctx().clone());
             this.0.set("returnValue", null)?;
             this.0.set("__throwable", value)?;
@@ -582,8 +486,6 @@ fn build_context<'js>(
     Ok(object)
 }
 
-/// `args` after the `before` callbacks: the array is live, per `android.xposed.d.ts`, so what the
-/// original is called with is read back rather than being the wire we were handed.
 fn read_args<'js>(ctx: &Ctx<'js>, state: &Rc<XposedState>, context: &Object<'js>) -> JsResult<Vec<String>> {
     let array: Array = context.get("args")?;
     let mut wires = Vec::new();
@@ -594,8 +496,6 @@ fn read_args<'js>(ctx: &Ctx<'js>, state: &Rc<XposedState>, context: &Object<'js>
 }
 
 fn publish_result<'js>(ctx: &Ctx<'js>, state: &Rc<XposedState>, context: &Object<'js>, result: &str) -> JsResult<()> {
-    // an `after` starts from what actually happened, so the verdict an earlier `before` may have
-    // left is cleared first
     context.set("__answered", false)?;
     context.set("__throwable", Value::new_null(ctx.clone()))?;
     match result.strip_prefix('T') {
@@ -610,15 +510,11 @@ fn publish_result<'js>(ctx: &Ctx<'js>, state: &Rc<XposedState>, context: &Object
     }
 }
 
-/// Every hook this engine installed comes down with it. Unlike a registration, an ART method whose
-/// entry point was rewritten stays rewritten, so leaving one behind would keep dispatching into an
-/// engine that no longer exists.
 pub fn dispose(context: &Context, state: &Rc<XposedState>) {
     context.with(|ctx| {
         for hook in state.hooks.take_values() {
             state.release(&ctx, hook);
         }
-        // a dispatch whose parked thread never came back for its `after` phase still holds roots
         for (_, pending) in state.pending.borrow_mut().drain() {
             let _ = pending.context.restore(&ctx);
             for f in pending.after {

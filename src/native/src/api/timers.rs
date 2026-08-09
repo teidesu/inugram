@@ -1,17 +1,3 @@
-//! `setTimeout`/`setInterval`/`clearTimeout`/`clearInterval`, which quickjs-ng has no intrinsic for.
-//!
-//! One outstanding host wake at a time, always for the earliest deadline. An interval that came due
-//! more than once while nothing was ticking fires **once** and re-arms from now rather than
-//! replaying, which is what lets background throttling change only *when* the wake is asked for.
-//!
-//! [`set_visible`] floors the wake while the app is hidden - on the wheel, not on each timer's
-//! delay, so ten intervals cost one wake per period rather than ten. The floor is suspended while
-//! the app is parked behind this plugin ([`Lifecycle::has_blocking_dispatches`]): an `interceptRpc`
-//! stage that `await`s a timer is the ordinary way to write a debounce, and a floor of up to a
-//! minute would expire the 10 s chain budget (`PluginRpc.CHAIN_BUDGET_MS`) and fail the user's own
-//! send because they switched apps. Taking or releasing the hold is not itself a re-sync; the next
-//! [`sync_wake`] picks it up.
-
 use std::cell::{Cell, RefCell};
 use std::rc::Rc;
 use std::sync::OnceLock;
@@ -23,29 +9,18 @@ use rquickjs::{Coerced, Ctx, Exception, Function, Persistent, Result as JsResult
 use crate::api::telegram::rpc::{format_exception, pump_jobs};
 use crate::sandbox::registry::{Lifecycle, Registry, Token};
 
-/// a negative delay withdraws the outstanding wake without arming a new one
 pub const CANCEL_WAKE: i64 = -1;
 
-/// browsers wrap anything past this back to 0; clamping instead means a plugin asking for a
-/// 40-day timer gets ~24 days rather than an immediate fire
 const MAX_DELAY_MS: u64 = i32::MAX as u64;
 
-/// the floor browsers put under a repeating timer, so `setInterval(f, 0)` is a fast timer rather
-/// than a spin on the engine's queue
 const MIN_INTERVAL_MS: u64 = 4;
 
-/// what a browser clamps a hidden tab's timers to
 pub const BACKGROUND_MIN_INTERVAL_MS: u64 = 1_000;
 
-/// chrome drops a tab that has been hidden this long to one wake a minute ("intensive throttling");
-/// an app the user left five minutes ago is the same bet
 pub const BACKGROUND_INTENSIVE_AFTER_MS: u64 = 5 * 60_000;
 pub const BACKGROUND_INTENSIVE_INTERVAL_MS: u64 = 60_000;
 
-/// stand-in for the Kotlin `QuickJs.onTimerSchedule` upcall
 pub trait TimerHost {
-    /// re-enter [`run_due`] in `delay_ms`, replacing whatever wake was requested before;
-    /// [`CANCEL_WAKE`] only withdraws. never called back into the engine synchronously.
     fn schedule_wake(&self, delay_ms: i64);
 
     fn now_ms(&self) -> u64 {
@@ -60,12 +35,9 @@ pub(crate) fn monotonic_now_ms() -> u64 {
 
 struct Timer {
     id: Token,
-    /// `None` once released, which is what makes releasing one twice safe
     callback: RefCell<Option<Persistent<Function<'static>>>>,
-    /// `None` for a one-shot
     interval_ms: Option<u64>,
     due: Cell<u64>,
-    /// tiebreaks equal deadlines, so timers armed for the same millisecond fire in arming order
     seq: Cell<u64>,
 }
 
@@ -83,14 +55,9 @@ pub struct TimerState {
     log: crate::Log,
     timers: Registry<Rc<Timer>>,
     next_seq: Cell<u64>,
-    /// the deadline the host was last asked to wake at, so an unchanged earliest deadline costs
-    /// no upcall. it is the *floored* deadline, not the earliest due one, or a hidden wheel would
-    /// re-arm on every sync.
     armed: Cell<Option<u64>>,
     visible: Cell<bool>,
-    /// when the app was last backgrounded, which decides which of the two floors applies
     hidden_since: Cell<u64>,
-    /// when [`run_due`] last ran, which the background floor is measured from
     last_tick: Cell<u64>,
 }
 
@@ -189,7 +156,6 @@ fn clear_timer(ctx: &Ctx<'_>, state: &Rc<TimerState>, id: Option<f64>) {
     }
 }
 
-/// how long the wheel must leave between ticks right now, or `None` when nothing is floored
 fn tick_floor(state: &Rc<TimerState>, now: u64) -> Option<u64> {
     if state.visible.get() || state.lifecycle.has_blocking_dispatches() {
         return None;
@@ -224,12 +190,6 @@ fn sync_wake(state: &Rc<TimerState>) {
     }
 }
 
-/// the app moved to the foreground or the background.
-///
-/// Hiding floors how often the wheel may tick; showing lifts the floor, so everything that came due
-/// while hidden fires on the next tick - once each, since [`run_due`] re-arms an interval from now
-/// rather than replaying what it missed. Only timers are affected: updates, interceptors and host
-/// callbacks reach the engine on their own paths and keep their timing in both states.
 pub fn set_visible(state: &Rc<TimerState>, visible: bool) {
     if state.visible.replace(visible) == visible {
         return;
@@ -246,9 +206,6 @@ fn release_all(ctx: &Ctx<'_>, state: &Rc<TimerState>) {
     }
 }
 
-/// fires every callback due as of entry, in deadline order. Only the timers already due when the
-/// tick started run: one armed (or re-armed) by a callback waits for the next wake, so a
-/// zero-delay timer arming another cannot hold the queue for a whole entry deadline.
 pub fn run_due(rt: &Runtime, context: &rquickjs::Context, state: &Rc<TimerState>) {
     state.armed.set(None);
     context.with(|ctx| {
@@ -262,8 +219,6 @@ pub fn run_due(rt: &Runtime, context: &rquickjs::Context, state: &Rc<TimerState>
         due.sort_by_key(|t| (t.due.get(), t.seq.get()));
 
         for timer in due {
-            // a callback already run this tick may have cleared this one, or its interval may have
-            // been re-armed past `now` - liveness is never implied by having been live earlier
             if !state.timers.contains(timer.id) || timer.due.get() > now {
                 continue;
             }
@@ -294,19 +249,10 @@ pub fn run_due(rt: &Runtime, context: &rquickjs::Context, state: &Rc<TimerState>
     pump_jobs(rt, context, state.log.as_ref());
 }
 
-/// drops every armed timer and withdraws the host's wake. Call after the `inu.onUnload` callbacks
-/// have run, so one clearing its own timers still sees them.
-///
-/// [`dispose`]'s work exactly: a timer holds nothing but its own callback root and the outstanding
-/// wake, so unloading a plugin and destroying its engine give back the same two things.
 pub fn notify_unload(context: &rquickjs::Context, state: &Rc<TimerState>) {
     dispose(context, state);
 }
 
-/// releases every `Persistent` GC root this state still owns - same contract as [`crate::api::telegram::rpc::dispose`].
-/// Withdraws the outstanding wake too: an engine destroyed without [`notify_unload`] would otherwise
-/// leave a queued host runnable holding the `QuickJs` (and through it the whole `Plugin`) until it
-/// came due.
 pub fn dispose(context: &rquickjs::Context, state: &Rc<TimerState>) {
     context.with(|ctx| release_all(&ctx, state));
     sync_wake(state);

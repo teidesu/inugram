@@ -1,15 +1,3 @@
-//! Loading lsplant and shadowhook, and standing up the four callbacks `LSPlantInitC` demands.
-//!
-//! Neither library is linked: both are `dlopen`ed by name and every entry point is a `dlsym`, which
-//! is what keeps the engine a plain cargo cdylib built outside CMake while lsplant is a CMake
-//! project built by AGP. The C entry points come from `patches-native/lsplant-c-abi.patch`, applied
-//! to the submodule: lsplant's own interface is C++ linkage and `lsplant::Init` takes a struct of
-//! `std::function`, which has no C representation.
-//!
-//! **Exact lookups go to shadowhook first.** `shadowhook_dlsym` is maintained against the platform
-//! and reads `.dynsym` *and* `.symtab` past linker namespace restrictions, including inside an
-//! APEX. It has no prefix search, which is why [`crate::api::platform::xposed::elf`] exists at all.
-
 use std::ffi::{c_char, c_int, c_void, CString};
 use std::ptr;
 use std::sync::{Mutex, OnceLock};
@@ -61,27 +49,18 @@ struct LSPlant {
     make_inheritable: LSPlantOnClass,
 }
 
-/// Every library handle and entry point this module resolved, plus the `libart.so` reader.
-///
-/// One process-wide slot rather than one per engine: an ART entry point is rewritten for the whole
-/// process, and `lsplant::Init` installs hooks of its own that must run exactly once.
 struct Native {
     shadowhook: Shadowhook,
     lsplant: LSPlant,
     art: Mutex<Resolver>,
-    /// `shadowhook_dlopen("libart.so")`, or null where it could not be opened
     art_handle: usize,
 }
 
-// SAFETY: every member is either a function pointer into a library that is never unloaded, a
-// `Mutex`, or an address. The `*mut c_void` handle is kept as a `usize` for exactly this reason.
 unsafe impl Send for Native {}
 unsafe impl Sync for Native {}
 
 static NATIVE: OnceLock<Option<Native>> = OnceLock::new();
 
-/// Whether `lsplant::Init` succeeded. Separate from [`NATIVE`] because the resolvers it calls read
-/// that slot, so it cannot be published from inside that slot's own initializer.
 static INITIALIZED: OnceLock<bool> = OnceLock::new();
 
 fn native() -> Option<&'static Native> {
@@ -126,7 +105,6 @@ fn name_of(name: *const c_char, length: usize) -> &'static str {
     if name.is_null() {
         return "";
     }
-    // lsplant hands over a `string_view`, which is not NUL-terminated: the length is authoritative
     let bytes = unsafe { std::slice::from_raw_parts(name as *const u8, length) };
     std::str::from_utf8(bytes).unwrap_or("")
 }
@@ -167,12 +145,6 @@ extern "C" fn resolve_prefix(prefix: *const c_char, length: usize) -> *mut c_voi
     }
 }
 
-/// Makes the page holding `address` writable, and the next one too when the write would straddle
-/// the boundary.
-///
-/// The old protection is deliberately not restored: the region is ART's own text, what it carried
-/// is not recorded anywhere cheap to read back, and shadowhook keeps its trampolines live for the
-/// life of the process anyway.
 fn unprotect(address: *mut c_void) -> bool {
     let page = unsafe { sysconf(SC_PAGESIZE) };
     if page <= 0 {
@@ -205,10 +177,6 @@ extern "C" fn inline_unhooker(func: *mut c_void) -> bool {
     unsafe { (native.shadowhook.unhook)(func) == 0 }
 }
 
-/// shadowhook's own `SHADOWHOOK_MODE_UNIQUE`: one hook per target, which is what lsplant installs,
-/// and hooking an already-hooked target reports an error instead of stacking silently. The value is
-/// 1 in every shadowhook release (0 is `SHADOWHOOK_MODE_SHARED`); it is not derived from a header,
-/// since the library is dlopened rather than linked.
 const SHADOWHOOK_MODE_UNIQUE: c_int = 1;
 
 fn load() -> Option<Native> {
@@ -217,7 +185,6 @@ fn load() -> Option<Native> {
         return None;
     }
     let init: ShadowhookInit = unsafe { dlsym(shadowhook_lib, "shadowhook_init")? };
-    // false: shadowhook's own debug logging, which is not ours to turn on
     if unsafe { init(SHADOWHOOK_MODE_UNIQUE, false) } != 0 {
         return None;
     }
@@ -247,22 +214,12 @@ fn load() -> Option<Native> {
     Some(Native {
         shadowhook,
         lsplant,
-        // not fatal on its own: shadowhook may answer every exact lookup, and a prefix lookup that
-        // finds nothing fails lsplant's own init with a clearer message than one from here
         art: Mutex::new(Resolver::open("libart.so")),
         art_handle,
     })
 }
 
-/// Loads both libraries and runs `lsplant::Init`. Idempotent; false means hooking is unavailable on
-/// this device and every other entry point here will refuse.
-///
-/// `env` must have no hidden-api restrictions, which is what makes this the host's call to make
-/// rather than something done lazily on the first hook.
 pub fn init(env: &mut Env) -> bool {
-    // published before `Init` runs, and deliberately not inside the closure: `Init` calls the two
-    // resolvers, which read `NATIVE`, and a `OnceLock` has not published anything while its
-    // initializer is still running
     let loaded = NATIVE.get_or_init(load);
     let Some(native) = loaded.as_ref() else {
         return false;
@@ -274,7 +231,6 @@ pub fn init(env: &mut Env) -> bool {
             inline_unhooker,
             art_symbol_resolver: resolve_exact,
             art_symbol_prefix_resolver: resolve_prefix,
-            // null keeps lsplant's own default for all four generated names
             generated_class_name: ptr::null(),
             generated_source_name: ptr::null(),
             generated_field_name: ptr::null(),
@@ -284,16 +240,11 @@ pub fn init(env: &mut Env) -> bool {
     })
 }
 
-#[allow(dead_code)] // the only caller is `PluginXposed`, through the JNI export rather than this crate
+#[allow(dead_code)]
 pub fn is_available() -> bool {
     matches!(INITIALIZED.get(), Some(true))
 }
 
-/// Installs a hook, answering the backup method to invoke the original through, or null.
-///
-/// # Safety
-/// `target` and `callback` must be a `java.lang.reflect.Method`/`Constructor`, and `hooker` the
-/// object `callback` is declared on. lsplant's own contract, which nothing here can check.
 pub unsafe fn hook(env: &mut Env, target: jobject, hooker: jobject, callback: jobject) -> jobject {
     let Some(native) = native() else {
         return ptr::null_mut();
@@ -301,33 +252,21 @@ pub unsafe fn hook(env: &mut Env, target: jobject, hooker: jobject, callback: jo
     (native.lsplant.hook)(env.get_raw(), target, hooker, callback)
 }
 
-/// # Safety
-/// `target` must be a `java.lang.reflect.Method`/`Constructor` previously hooked.
 pub unsafe fn unhook(env: &mut Env, target: jobject) -> bool {
     let Some(native) = native() else { return false };
     (native.lsplant.unhook)(env.get_raw(), target)
 }
 
-/// # Safety
-/// `target` must be a `java.lang.reflect.Method`/`Constructor`.
 pub unsafe fn is_hooked(env: &mut Env, target: jobject) -> bool {
     let Some(native) = native() else { return false };
     (native.lsplant.is_hooked)(env.get_raw(), target)
 }
 
-/// Stops callers of `method` inlining it, so a hook on a short callee actually fires.
-///
-/// # Safety
-/// `method` must be a `java.lang.reflect.Method`/`Constructor`.
 pub unsafe fn deoptimize(env: &mut Env, method: jobject) -> bool {
     let Some(native) = native() else { return false };
     (native.lsplant.deoptimize)(env.get_raw(), method)
 }
 
-/// Clears `final` on a class so it can be subclassed.
-///
-/// # Safety
-/// `target` must be a `java.lang.Class`.
 pub unsafe fn make_inheritable(env: &mut Env, target: jclass) -> bool {
     let Some(native) = native() else { return false };
     (native.lsplant.make_inheritable)(env.get_raw(), target)

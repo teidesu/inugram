@@ -1,19 +1,8 @@
-//! `inu.PluginError`, and every other error shape a plugin can be handed. The gate that mints the
-//! `not-granted` one is [`crate::sandbox::grants`].
-//!
-//! Errors cross the host boundary as [`crate::api::tl::proxy`]-tagged wire strings: `E<message>` a plain
-//! `Error`, `R<code>:<text>` an `inu.RpcError`, and `P` an `inu.PluginError` shaped
-//! `P<code>\n<grant>\n<usage>\n<quota>\n<message>` (mirrors `PluginWire.encodePluginError`
-//! Kotlin-side): grant/usage/quota are empty when absent, and the message is everything past the
-//! FOURTH newline, so it may contain newlines of its own.
-
 use rquickjs::function::Constructor;
 use rquickjs::{Ctx, Object, Result as JsResult, Value};
 
 use crate::api::telegram::rpc;
 
-/// installs `inu.PluginError`; runs once per context at creation, before any plugin code, so a
-/// plugin can `instanceof` it even against an api surface it holds no grant for
 pub fn install_plugin_error<'js>(ctx: &Ctx<'js>, inu: &Object<'js>) -> JsResult<()> {
     let ctor: Value = ctx.eval(
         r#"(class PluginError extends Error {
@@ -81,7 +70,6 @@ fn non_empty(s: &str) -> Option<&str> {
     }
 }
 
-/// `Some(None)` == the field is absent, `None` == it is malformed
 fn parse_optional_int(s: &str) -> Option<Option<i64>> {
     match non_empty(s) {
         None => Some(None),
@@ -108,9 +96,6 @@ fn parse_plugin_error(payload: &str) -> Option<PluginErrorWire<'_>> {
     })
 }
 
-/// the two tags a bare message cannot impersonate: `R` needs a colon and a parseable code, `P` a
-/// four-newline header, and neither parses back into anything else. `E` is deliberately absent -
-/// `PluginWire.encodeError` is `"E" + message` with nothing to validate.
 fn structured_error_to_js<'js>(ctx: &Ctx<'js>, wire: &str) -> Option<JsResult<Value<'js>>> {
     if let Some((code, text)) = crate::api::tl::proxy::wire_rpc_error(wire) {
         return Some(rpc::make_rpc_error(ctx, code, text));
@@ -119,10 +104,6 @@ fn structured_error_to_js<'js>(ctx: &Ctx<'js>, wire: &str) -> Option<JsResult<Va
     Some(make_plugin_error(ctx, parsed.code, parsed.message, parsed.grant, parsed.usage, parsed.quota))
 }
 
-/// `Some` when `wire` is an error-tagged value (`E`/`R`/`P`) and so must be thrown/rejected rather
-/// than decoded into a value; `None` when it carries a value, or when its payload doesn't parse.
-/// Only for channels where every string is a tagged wire (`tl_get`, `kv`, result and update wires):
-/// one that also carries bare messages must go through [`host_error_to_js`] instead.
 pub fn wire_error_to_js<'js>(ctx: &Ctx<'js>, wire: &str) -> Option<JsResult<Value<'js>>> {
     if let Some(message) = wire.strip_prefix('E') {
         return Some(rpc::make_error(ctx, message));
@@ -130,10 +111,6 @@ pub fn wire_error_to_js<'js>(ctx: &Ctx<'js>, wire: &str) -> Option<JsResult<Valu
     structured_error_to_js(ctx, wire)
 }
 
-/// the host's `Option<String>` error channel carries either a structured error wire or a bare
-/// message, so an `E` wire here is indistinguishable from a message that starts with `E`. Both
-/// surface as the same plain `Error`, so the tag buys nothing and stripping it would eat a real
-/// message's first character: producers on this channel must not emit `E`.
 pub fn host_error_to_js<'js>(ctx: &Ctx<'js>, err: &str) -> JsResult<Value<'js>> {
     match structured_error_to_js(ctx, err) {
         Some(value) => value,
@@ -141,8 +118,6 @@ pub fn host_error_to_js<'js>(ctx: &Ctx<'js>, err: &str) -> JsResult<Value<'js>> 
     }
 }
 
-/// [`host_error_to_js`]'s counterpart for errors that go straight back out as a result wire instead
-/// of into JS: an `R`/`P` wire is already one and survives untouched, a bare message gets tagged.
 pub fn host_error_to_wire(err: &str) -> String {
     let structured = crate::api::tl::proxy::wire_rpc_error(err).is_some()
         || err.strip_prefix('P').and_then(parse_plugin_error).is_some();

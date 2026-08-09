@@ -1,9 +1,3 @@
-//! Every member the canvas classes expose to JS.
-//!
-//! Split from [`super`] because it is bulk rather than mechanism: each of these turns arguments
-//! into one `DrawState` change or one recorded command, and none of it is reachable except through
-//! the prototypes installed here.
-
 use crate::utils::arguments::array_values;
 
 use super::*;
@@ -40,8 +34,6 @@ pub(super) fn install_gradient_members<'js>(ctx: &Ctx<'js>) -> JsResult<()> {
                     Some(MAX_GRADIENT_STOPS as i64),
                 );
             }
-            // sorted on insert, since the host draws them in the order it is handed and the spec
-            // orders by offset with equal offsets keeping insertion order
             let at = stops.partition_point(|(existing, _)| *existing <= offset);
             stops.insert(at, (offset, color));
             Ok(())
@@ -98,7 +90,6 @@ pub(super) fn install_image_members<'js>(ctx: &Ctx<'js>) -> JsResult<()> {
     Ok(())
 }
 
-/// reads `this` as a context and hands its surface's state along, which every member needs
 macro_rules! ctx_method {
     ($ctx:expr, $proto:expr, $name:literal, $f:expr) => {{
         let f = Function::new($ctx.clone(), $f)?;
@@ -186,7 +177,6 @@ pub(super) fn install_transform_members<'js>(ctx: &Ctx<'js>, proto: &Object<'js>
                                              args: Rest<Value<'js>>|
      -> JsResult<()> {
         let v = &args.0;
-        // the two overloads the spec has: six numbers, or one `DOMMatrix2DInit`
         let m = match v.first() {
             Some(first) if first.is_object() => matrix_from_init(&Opt(Some(first.clone())))?,
             None => Matrix::IDENTITY,
@@ -360,15 +350,11 @@ pub(super) fn install_style_members<'js>(ctx: &Ctx<'js>, proto: &Object<'js>) ->
         let mut dash = Vec::new();
         for value in crate::utils::arguments::array_values(&ctx, array, "setLineDash")? {
             let value = Coerced::<f64>::from_js(&ctx, value)?.0;
-            // the spec's rule: one bad entry throws the whole list away rather than being
-            // dropped, since a dash pattern missing a segment is a different pattern
             if !value.is_finite() || value < 0.0 {
                 return Ok(());
             }
             dash.push(value);
         }
-        // "if the list has an odd number of entries, it is duplicated" - so the host never has
-        // to know that rule
         if dash.len() % 2 == 1 {
             dash.extend_from_within(..);
         }
@@ -440,8 +426,6 @@ pub(super) fn install_style_members<'js>(ctx: &Ctx<'js>, proto: &Object<'js>) ->
             return invalid(&ctx, "createPattern: expected an image");
         };
         let source = image_source(&ctx, &value)?;
-        // the spec copies a canvas source's pixels when the pattern is created, so whatever it
-        // still has recorded has to land on the bitmap before this returns
         if let ImageSource::Canvas(canvas) = &source {
             canvas.flush(&ctx)?;
         }
@@ -624,7 +608,6 @@ fn arc_result(ctx: &Ctx<'_>, result: Result<(), ArcError>) -> JsResult<()> {
     }
 }
 
-/// `roundRect`'s `radii`: one number, or up to four, in the spec's css-shorthand order
 fn read_radii<'js>(ctx: &Ctx<'js>, value: &Opt<Value<'js>>) -> JsResult<[(f64, f64); 4]> {
     let Some(value) = value.0.as_ref() else {
         return Ok([(0.0, 0.0); 4]);
@@ -693,7 +676,6 @@ pub(super) fn install_text_members<'js>(ctx: &Ctx<'js>, proto: &Object<'js>) -> 
         "font",
         |this: This<Class<'js, Context2d>>| this.0.borrow().state.borrow().font_source.clone(),
         |this: This<Class<'js, Context2d>>, value: Coerced<String>| {
-            // an unparseable shorthand is ignored, exactly like an unparseable colour
             if let Some(font) = parse_font(&value.0) {
                 let this = this.0.borrow();
                 let mut state = this.state.borrow_mut();
@@ -882,8 +864,6 @@ pub(super) fn install_image_draw_members<'js>(ctx: &Ctx<'js>, proto: &Object<'js
         }
         let this = this.0.borrow();
         this.live(&ctx)?;
-        // whatever the source canvas still has recorded has to be on its bitmap first, or the
-        // copy is of a stale picture
         if let ImageSource::Canvas(canvas) = &source {
             canvas.flush(&ctx)?;
         }
@@ -893,7 +873,6 @@ pub(super) fn install_image_draw_members<'js>(ctx: &Ctx<'js>, proto: &Object<'js
         };
         let blend_modes = this.surface.state.blend_modes.get();
         let mut scratch = Encoder::default();
-        // an image carries no fill style; its paint is the alpha, the composite and the shadow
         encode_paint(&ctx, &mut scratch, &state, &Style::Color(0), &inverse, blend_modes)?;
         let matrix = state.matrix;
         drop(state);

@@ -1,13 +1,3 @@
-//! `inu.interceptDeserialize`, declarative tier: a rule is validated here, handed to the host once
-//! at registration, and evaluated by the host alone. No plugin code runs per object - that is the
-//! entire point of the tier, deserialization happening on the app's network and storage threads
-//! where an engine may not be entered at all. The middleware overload is the same hook one blocking
-//! queue hop further on, which is why the two are different apis rather than sugar for each other.
-//!
-//! What crosses is a normalized JSON array built *here*, from the values this module read and
-//! validated - never a re-stringification of the plugin's own object, which may carry getters that
-//! would say something else on a second read.
-
 use std::rc::Rc;
 
 use rquickjs::function::Opt;
@@ -20,25 +10,13 @@ use crate::api::tl::proxy::{self, TlViews, ViewLife};
 use crate::sandbox::grants::{check_grant, GrantHost, MATCH_EXACT};
 use crate::sandbox::registry::{make_disposer, noop_disposer, CallbackRegistry, Lifecycle, Registry};
 
-/// how many rules one plugin may hold live at once, across every registration. Stated in
-/// `common.d.ts`, and bounded here rather than host-side because this is the layer that can refuse
-/// before anything crosses: every rule is one more per-object test on the app's cold-start path.
 pub const MAX_RULES: usize = 32;
 
 const GRANT: &str = "interceptDeserialize";
 
-/// stand-in for the Kotlin `QuickJs.DeserializeListener`; `None` == ok, `Some(msg)` == error.
-/// Never an `E` wire, for the reason `QuickJs.RpcListener` gives.
 pub trait DeserializeHost {
-    /// the whole registration as one normalized JSON array. The host owns compiling it against the
-    /// real TL classes - which constructors and fields exist, which of them it refuses - so this
-    /// answers with the error a plugin sees.
     fn on_rules_register(&self, callback_id: u32, rules_json: &str) -> Option<String>;
-    /// the disposer ran: drop [`DeserializeHost::on_rules_register`]'s rules. Never fired twice for
-    /// one registration, and never for one the host refused.
     fn on_rules_unregister(&self, callback_id: u32);
-    /// the middleware form: the host owns turning constructor names into the ids it matches on, and
-    /// refuses the same names a rule may not target. `None` == ok.
     fn on_middleware_register(&self, callback_id: u32, types_json: &str) -> Option<String>;
     fn on_middleware_unregister(&self, callback_id: u32);
 }
@@ -47,11 +25,7 @@ pub struct DeserializeState {
     host: Rc<dyn DeserializeHost>,
     grants: Rc<dyn GrantHost>,
     lifecycle: Rc<Lifecycle>,
-    /// one entry per live registration of *either* tier, holding how many rules it carries - which
-    /// is what [`MAX_RULES`] counts, and the only reason this registry holds a value at all. One
-    /// token space for both, so a middleware and a rule set can never answer to the same id.
     registrations: Registry<usize>,
-    /// the middleware functions, keyed by the token their entry in `registrations` holds
     middlewares: CallbackRegistry,
     tl: Rc<TlViews>,
     log: std::sync::Arc<dyn Fn(&str) + Send + Sync>,
@@ -68,8 +42,6 @@ impl Const {
     fn to_json(&self) -> String {
         match self {
             Const::Str(s) => json_string(s),
-            // f64 Display is the shortest round-tripping form, so an integral value stays integral
-            // and the host reads it back as an int rather than as 1.0
             Const::Num(n) => n.to_string(),
             Const::Bool(b) => b.to_string(),
             Const::Null => "null".to_string(),
@@ -109,8 +81,6 @@ fn read_const<'js>(ctx: &Ctx<'js>, at: &str, value: Value<'js>) -> JsResult<Cons
     refuse(ctx, &format!("{at} must be a string, number, boolean or null - a rule compares against constants only"))
 }
 
-/// an object literal and nothing else: an array and a function are both objects to quickjs, and
-/// neither is a rule or a field map
 fn as_plain_object<'a, 'js>(value: &'a Value<'js>) -> Option<&'a Object<'js>> {
     if value.is_array() || value.is_function() {
         return None;
@@ -156,8 +126,6 @@ fn read_rule<'js>(ctx: &Ctx<'js>, index: usize, value: Value<'js>) -> JsResult<R
     let Some(object) = as_plain_object(&value) else {
         return refuse(ctx, &format!("{at} is not a rule object"));
     };
-    // an unknown key is refused rather than ignored: `where` for `when` would otherwise be a rule
-    // that rewrites every object of its type instead of the ones the plugin meant
     for key in object.keys::<String>() {
         let key = key?;
         if key != "type" && key != "when" && key != "set" {
@@ -262,9 +230,6 @@ fn js_intercept_deserialize<'js>(
     })
 }
 
-/// the middleware form. Its first argument is a plain list of constructor names, so it shares the
-/// grant check and the [`MAX_RULES`] budget with the rule form (one named constructor is one rule:
-/// each is one more entry in the table the app probes per parsed object) and nothing else.
 fn register_middleware<'js>(
     ctx: &Ctx<'js>,
     state: &Rc<DeserializeState>,
@@ -319,9 +284,6 @@ fn register_middleware<'js>(
     })
 }
 
-/// runs one middleware over one object the app just parsed. The host is blocked on this returning,
-/// so nothing here may park: the view is dispatch-scoped and released by the host the moment this
-/// answers, and a middleware that returns a promise is not waited on.
 pub fn dispatch_middleware(
     context: &rquickjs::Context,
     state: &Rc<DeserializeState>,

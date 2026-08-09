@@ -1,18 +1,3 @@
-//! The web globals the sandbox promises that quickjs-ng does not already ship, minus the timers
-//! (those are [`crate::api::timers`]).
-//!
-//! `Context::full` goes through quickjs-ng's own `JS_NewContext`, which already installs
-//! `atob`/`btoa`, `DOMException`, `performance`, `queueMicrotask`, `BigInt`, `Proxy`/`Reflect`,
-//! `WeakRef`/`FinalizationRegistry` and the rest of ES2022. rquickjs's own `intrinsic::All` is not
-//! the same list and omits `JS_AddIntrinsicAToB`/`JS_AddIntrinsicDOMException`, so moving off
-//! `Context::full` would silently drop documented surface. A test can only pin a context it built
-//! itself, so [`install_globals`] refuses a context missing any of [`REQUIRED_INTRINSICS`] instead.
-//!
-//! What is left is `TextEncoder`/`TextDecoder`, `crypto`, `AbortController`/`AbortSignal` and
-//! `structuredClone`, whose shapes live in `globals.js`. `Blob`/`File` install from here too, before
-//! the prelude, so `structuredClone` can be taught about them without a JNI export, and so does
-//! `URL`/`URLSearchParams` ([`crate::api::url`]), which needs a real parser rather than a shape.
-
 use std::path::Path;
 use std::rc::Rc;
 
@@ -23,30 +8,15 @@ use crate::{
     sandbox::limits::ExternalMemory,
 };
 
-/// stand-in for the Kotlin `QuickJs.onRandomBytes` upcall
 pub trait RandomHost {
-    /// fills `out` with cryptographically strong bytes (`SecureRandom` on android). `false` == the
-    /// host could not answer, and `crypto.getRandomValues` throws rather than handing back
-    /// something weaker than it promised.
     fn random_bytes(&self, out: &mut [u8]) -> bool;
 }
 
 const PRELUDE: &[u8] = include_bytes!(concat!(env!("OUT_DIR"), "/globals.qbc"));
 
-/// what the context is expected to bring with it. The first three are the ones an `intrinsic::All`
-/// context would be missing; the rest are cheap to name and catch a context slimmed down any other
-/// way. `structuredClone`'s `WeakRef` check and `AbortController`'s `DOMException` are in
-/// `globals.js`, so this is a precondition of the prelude and not only of the doc.
 const REQUIRED_INTRINSICS: [&str; 8] =
     ["atob", "btoa", "DOMException", "performance", "queueMicrotask", "Proxy", "Reflect", "WeakRef"];
 
-/// `spill_dir` is this plugin's own directory under the app's cache area, which the host creates,
-/// sweeps and wipes. An empty path means this engine cannot spill and oversized blobs stay in
-/// memory against the native budget.
-///
-/// The blob state is returned rather than dropped because [`crate::api::telegram::writes`] needs it: a `Blob` in a
-/// `sendMedia`/`uploadFile` position is content only this side can read, and staging it into a file
-/// is what lets the host upload it.
 pub fn install_globals<'js>(
     ctx: &Ctx<'js>,
     host: Rc<dyn RandomHost>,
@@ -64,7 +34,6 @@ pub fn install_globals<'js>(
         }
     }
 
-    // before the prelude, which captures `globalThis.Blob` to teach `structuredClone` about it
     let blobs = blob::install(ctx, spill_dir, external.clone())?;
 
     crate::api::url::install_url(ctx)?;
@@ -108,8 +77,6 @@ fn random_fill<'js>(ctx: &Ctx<'js>, host: &dyn RandomHost, array: Value<'js>) ->
         return Err(Exception::throw_type(ctx, "getRandomValues: expected a Uint8Array"));
     };
 
-    // filled before the pointer is taken, because `random_bytes` is a JNI upcall: whatever the host
-    // does there, it must not be able to happen between taking the pointer and writing through it
     let mut bytes = vec![0u8; typed.len()];
     if !host.random_bytes(&mut bytes) {
         return Err(Exception::throw_message(ctx, "getRandomValues: the host has no randomness to give"));
@@ -121,9 +88,6 @@ fn random_fill<'js>(ctx: &Ctx<'js>, host: &dyn RandomHost, array: Value<'js>) ->
     if raw.len != bytes.len() {
         return Err(Exception::throw_type(ctx, "getRandomValues: the array was resized"));
     }
-    // SAFETY: `raw` describes the live backing store of this Uint8Array's own window (`as_raw`
-    // resolves byteOffset), taken on the thread that owns the runtime, and the copy is the very
-    // next thing that happens - nothing in between runs JS, upcalls, or allocates.
     unsafe { std::ptr::copy_nonoverlapping(bytes.as_ptr(), raw.ptr.as_ptr(), raw.len) };
     Ok(array)
 }

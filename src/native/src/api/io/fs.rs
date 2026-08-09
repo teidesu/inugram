@@ -1,24 +1,3 @@
-//! `inu.fs`: the plugin's own durable directory, per `src/plugins/fs.d.ts`.
-//!
-//! **The whole api is native** - the host hands over one directory and one quota at [`install_fs`]
-//! and nothing else crosses. Routing `fs.write`'s bytes through an upcall would put every written
-//! megabyte on the app-wide *Java* heap, which is the lever the per-plugin ceilings exist to take
-//! away, so blob -> file is a [`COPY_CHUNK_BYTES`]-chunked copy inside rust.
-//!
-//! **Normalization happens before containment, and that ordering is the security property.** A
-//! containment check on the path a plugin typed passes for `a/../../etc` (a string prefix), for
-//! `a//..//b` (a `..` behind a doubled separator) and for a symlink the plugin planted in its own
-//! directory. So [`walk`] takes one component at a time, popping on `..`, skipping `.` and reading
-//! through every link it meets ([`MAX_SYMLINK_HOPS`]), and `starts_with` runs on the *result* -
-//! component-wise, so `<root>-evil` is not inside `<root>`. `..` pops what was already resolved
-//! rather than being collapsed lexically, so a link followed by `..` lands where the kernel would
-//! have gone. The root is canonicalized once at install, or a data directory reached through a link
-//! makes every op read as an escape.
-//!
-//! [`FsState::unscoped`] is the same code with containment and the quota off. The quota is charged
-//! before a byte is written and not at all for a `move` (inside the scope it cannot add, outside
-//! there is no cap).
-
 use std::cell::Cell;
 use std::fs;
 use std::io::Write;
@@ -33,47 +12,29 @@ use crate::api::error::throw_plugin_error;
 use crate::api::io::blob::{export_for_host, resolve_export, BlobExport, BlobState, MATERIALIZE_LIMIT_BYTES};
 use crate::sandbox::grants::{check_grant, GrantHost, MATCH_EXACT};
 
-/// how many bytes move between a blob and a file at a time. The same size [`crate::api::io::blob`] joins its
-/// own parts in, and for the same reason: writing a 200 MB blob must not be a 200 MB allocation.
 const COPY_CHUNK_BYTES: u64 = 256 * 1024;
 
-/// near enough the kernel's own `ELOOP` bound. A cycle of symlinks is the one input to
-/// [`resolve_path`] that does not terminate on its own.
 const MAX_SYMLINK_HOPS: u32 = 40;
 
-/// what `@grant fs` alone buys, per `fs.d.ts`. The host derives the real number from the manifest
-/// (`fs(200mb)`); this is what an engine installed without one falls back to.
 pub const DEFAULT_QUOTA_BYTES: u64 = 50 * 1024 * 1024;
 
-/// `quota()` under `unsafe.fs`, which `fs.d.ts` declares as `Infinity`
 pub const UNCAPPED: u64 = u64::MAX;
 
-/// EXDEV. `std::io::ErrorKind::CrossesDevices` is still unstable, and the distinction decides
-/// whether a move may fall back to a copy or is a real failure.
 const EXDEV: i32 = 18;
 
-/// the app's own directories, in the order [`install_fs`] is handed them: the plugin store, the
-/// cache, then the five media kinds `android.d.ts` names. Absolute paths outside the scoped root,
-/// so nothing here is reachable without `unsafe.fs`; an entry the host could not answer is empty.
 pub const ANDROID_DIR_NAMES: [&str; 5] = ["files", "images", "videos", "audios", "documents"];
 
 pub struct FsState {
     grants: Rc<dyn GrantHost>,
     blobs: Rc<BlobState>,
-    /// canonicalized at install. Empty == the host could not make one, and every op then fails
-    /// rather than landing somewhere this plugin does not own
     root: PathBuf,
     quota: u64,
     unscoped: bool,
-    /// the tree's byte total, or `None` when it has to be walked again
     usage: Cell<Option<u64>>,
-    /// `[plugins, cache, ..ANDROID_DIR_NAMES]`, as the host answered them at install
     android_dirs: Vec<String>,
 }
 
 impl FsState {
-    /// the token the one gate asks for. It follows the mode the host installed, so a plugin the
-    /// host believed held `unsafe.fs` is still refused if the manifest says otherwise.
     fn grant(&self) -> &'static str {
         if self.unscoped {
             "unsafe.fs"
@@ -83,17 +44,11 @@ impl FsState {
     }
 }
 
-/// what the host answers with on a device: the plugin store, the cache, then the five media kinds.
-/// The fourth is empty on purpose - a media directory the app has not made yet is a real answer,
-/// and it is the one the `not-found` refusal exists for.
 #[cfg(test)]
 const TEST_ANDROID_DIRS: &str =
     "/data/plugins\n/data/cache\n/media/files\n/media/images\n\n/media/audios\n/media/documents";
 
-/// every way an `inu.fs` call fails, and the `PluginError` code each earns
 enum Fault {
-    /// the path resolved outside the plugin's own directory. `not-granted` rather than `forbidden`,
-    /// because `unsafe.fs` is exactly what would allow it - which is what that code means
     Escape(PathBuf),
     Invalid(String),
     NotFound(String),
@@ -141,12 +96,6 @@ fn io(what: &str, e: std::io::Error) -> Fault {
     }
 }
 
-/// Resolves `input` the way the kernel would, **then** requires the result to be inside the
-/// plugin's own directory. See the module doc for why that order is the whole point.
-///
-/// A component that does not exist is not a failure: a `write` names a file that is not there yet,
-/// and something that does not exist cannot be a symlink either, so appending it is exactly what
-/// the kernel does.
 fn resolve_path(state: &FsState, input: &str) -> FsResult<PathBuf> {
     if state.root.as_os_str().is_empty() {
         return Err(Fault::Io("fs: this plugin has no storage directory".to_string()));
@@ -154,8 +103,6 @@ fn resolve_path(state: &FsState, input: &str) -> FsResult<PathBuf> {
     if input.is_empty() {
         return Err(Fault::Invalid("fs: the path is empty".to_string()));
     }
-    // a NUL truncates the path at the syscall boundary, so a path carrying one names something
-    // other than what it reads as
     if input.contains('\0') {
         return Err(Fault::Invalid("fs: the path contains a NUL".to_string()));
     }
@@ -175,10 +122,6 @@ fn resolve_path(state: &FsState, input: &str) -> FsResult<PathBuf> {
     Ok(resolved)
 }
 
-/// Resolves a path on behalf of another api that takes `{ path }` (`inu.canvas.load`/`loadFont`),
-/// applying this module's own gate rather than a second copy of it: the grant the engine was
-/// installed with, and then containment. A relative path lands in the plugin's scoped directory,
-/// which is the whole reason the resolution belongs here and not at the call site.
 pub(crate) fn resolve_external(ctx: &Ctx<'_>, state: &Rc<FsState>, input: &str) -> JsResult<PathBuf> {
     check_grant(ctx, &state.grants, state.grant(), None, MATCH_EXACT)?;
     match resolve_path(state, input) {
@@ -187,13 +130,9 @@ pub(crate) fn resolve_external(ctx: &Ctx<'_>, state: &Rc<FsState>, input: &str) 
     }
 }
 
-/// One component at a time, reading through every symlink. `current` is always already resolved,
-/// which is what makes `..` the parent of where the links actually led rather than the parent of
-/// what the plugin typed.
 fn walk(mut current: PathBuf, path: &Path, hops: &mut u32) -> FsResult<PathBuf> {
     for component in path.components() {
         match component {
-            // windows only; no shape of it means anything here
             Component::Prefix(_) => return Err(Fault::Invalid("fs: the path has a drive prefix".to_string())),
             Component::RootDir => current = PathBuf::from("/"),
             Component::CurDir => {}
@@ -212,7 +151,6 @@ fn walk(mut current: PathBuf, path: &Path, hops: &mut u32) -> FsResult<PathBuf> 
                     return Err(Fault::Invalid(format!("fs: too many symbolic links resolving '{}'", path.display(),)));
                 }
                 let target = fs::read_link(&next).map_err(|e| io("fs", e))?;
-                // an absolute target opens with a `RootDir` component, which resets `current` itself
                 current = walk(current, &target, hops)?;
             }
         }
@@ -220,8 +158,6 @@ fn walk(mut current: PathBuf, path: &Path, hops: &mut u32) -> FsResult<PathBuf> 
     Ok(current)
 }
 
-/// the tree's byte total. Directory entries are not counted: what the user is paying for is
-/// content, and a per-entry estimate is a number no filesystem agrees on.
 fn walk_usage(dir: &Path) -> u64 {
     let Ok(entries) = fs::read_dir(dir) else {
         return 0;
@@ -247,13 +183,10 @@ fn usage_of(state: &FsState) -> u64 {
     total
 }
 
-/// what a file currently costs, so a rewrite is charged for its difference rather than its size
 fn current_size(path: &Path) -> u64 {
     fs::metadata(path).map(|meta| if meta.is_file() { meta.len() } else { 0 }).unwrap_or(0)
 }
 
-/// refuses *before* anything is written, so a plugin that crosses the cap is left with neither a
-/// truncated file nor a partly grown one
 fn check_quota(state: &FsState, adding: u64, replacing: u64) -> FsResult<u64> {
     let usage = usage_of(state);
     let after = usage.saturating_sub(replacing).saturating_add(adding);
@@ -273,8 +206,6 @@ fn check_quota(state: &FsState, adding: u64, replacing: u64) -> FsResult<u64> {
     Ok(after)
 }
 
-/// `Blob | Uint8Array`, resolved to something a file can be filled from without either heap ever
-/// holding the whole of it
 enum Source {
     Bytes(Vec<u8>),
     Blob(BlobExport),
@@ -288,8 +219,6 @@ impl Source {
         }
     }
 
-    /// chunked for the blob case, so the transient allocation is [`COPY_CHUNK_BYTES`] whatever the
-    /// content's size
     fn write_into(&self, file: &mut fs::File) -> FsResult<()> {
         match self {
             Source::Bytes(bytes) => file.write_all(bytes).map_err(|e| io("fs", e)),
@@ -319,17 +248,12 @@ fn read_source(state: &FsState, value: &Value<'_>) -> FsResult<Source> {
     if let Some(export) = blob_export(state, value) {
         return Ok(Source::Blob(export));
     }
-    // a real blob whose content is gone reaches here too, and is the one case worth telling apart:
-    // the plugin handed over something that *was* a blob
     if rquickjs::Class::<crate::api::io::blob::BlobHandle>::from_value(value).is_ok() {
         return Err(Fault::Gone("fs: the blob being written was disposed".to_string()));
     }
     Err(Fault::Invalid("fs: expected a Blob or a Uint8Array".to_string()))
 }
 
-/// A blob crosses to the host as `B<id>:<start>:<len>`. Here the host *is* this process, so the
-/// wire is minted and resolved back in one breath rather than [`crate::api::io::blob`] growing a second
-/// accessor for a caller that never leaves it.
 fn blob_export(state: &FsState, value: &Value<'_>) -> Option<BlobExport> {
     let wire = export_for_host(&state.blobs, value)?;
     let id = wire.strip_prefix('B')?.split(':').next()?.parse().ok()?;
@@ -342,8 +266,6 @@ fn op_read<'js>(ctx: &Ctx<'js>, state: &FsState, path: &str) -> FsResult<Value<'
     if !meta.is_file() {
         return Err(Fault::Invalid(format!("read: '{}' is not a file", path.display())));
     }
-    // the ceiling `blob.bytes()` has, refused for the same reason: without it the read succeeds and
-    // the engine then dies of an out-of-memory nothing can attribute to this line
     if meta.len() > MATERIALIZE_LIMIT_BYTES {
         return Err(Fault::Quota {
             usage: meta.len(),
@@ -377,7 +299,6 @@ fn op_write(state: &FsState, path: &str, source: Source, append: bool) -> FsResu
         .open(&path)
         .map_err(|e| io(what, e))?;
     if let Err(e) = source.write_into(&mut file) {
-        // a partial file is still bytes on disk, so the cached total is no longer known
         state.usage.set(None);
         return Err(e);
     }
@@ -392,14 +313,10 @@ fn op_mkdir(state: &FsState, path: &str) -> FsResult<()> {
 
 fn op_rm(state: &FsState, path: &str, recursive: bool) -> FsResult<()> {
     let path = resolve_path(state, path)?;
-    // the plugin's own directory is not a thing it may delete: what would be left is a root that no
-    // longer exists, and every later op would fail on a directory only the host ever creates
     if path == state.root {
         return Err(Fault::Invalid("rm: the plugin's own directory cannot be removed".to_string()));
     }
     let Ok(meta) = fs::symlink_metadata(&path) else {
-        // idempotent, like every other disposal in this api: removing what is already gone is what
-        // the caller asked for
         return Ok(());
     };
     state.usage.set(None);
@@ -425,8 +342,6 @@ fn op_readdir(state: &FsState, path: &str) -> FsResult<Vec<String>> {
     let entries = fs::read_dir(&path).map_err(|e| io("readdir", e))?;
     let mut names: Vec<String> =
         entries.flatten().map(|entry| entry.file_name().to_string_lossy().into_owned()).collect();
-    // the order a directory hands entries back in is the filesystem's business and changes as it is
-    // written to, which makes an unsorted answer a plugin bug waiting to happen
     names.sort();
     Ok(names)
 }
@@ -483,8 +398,6 @@ fn op_copy(state: &FsState, src: &str, dest: &str) -> FsResult<()> {
     Ok(())
 }
 
-/// no quota check: inside the scope a move cannot raise the total, and only `unsafe.fs` can name an
-/// endpoint outside it, where there is no cap to check against
 fn op_move(state: &FsState, src: &str, dest: &str) -> FsResult<()> {
     let src = resolve_path(state, src)?;
     let dest = resolve_path(state, dest)?;
@@ -494,9 +407,6 @@ fn op_move(state: &FsState, src: &str, dest: &str) -> FsResult<()> {
     state.usage.set(None);
     match fs::rename(&src, &dest) {
         Ok(()) => Ok(()),
-        // a rename cannot cross a mount, and under `unsafe.fs` the two ends may be on different
-        // ones. Copy-then-remove is what every `mv` does about it - recursively, `move` taking a
-        // directory where `copy` does not
         Err(e) if e.raw_os_error() == Some(EXDEV) => {
             copy_tree(&src, &dest).map_err(|e| io("move", e))?;
             remove_tree(&src).map_err(|e| io("move", e))
@@ -505,8 +415,6 @@ fn op_move(state: &FsState, src: &str, dest: &str) -> FsResult<()> {
     }
 }
 
-/// every path here has already been through [`resolve_path`], which reads through every link it
-/// meets, so there is nothing left to follow and no cycle to guard against
 fn copy_tree(src: &Path, dest: &Path) -> std::io::Result<()> {
     if !fs::metadata(src)?.is_dir() {
         fs::copy(src, dest)?;
@@ -528,9 +436,6 @@ fn remove_tree(path: &Path) -> std::io::Result<()> {
     }
 }
 
-/// `root` is this plugin's own durable directory (`PluginFs.dirFor`), or "" when the host could not
-/// make one - which leaves every call failing rather than landing somewhere else. `quota` is what
-/// the manifest asked for, [`UNCAPPED`] under `unsafe.fs`.
 #[allow(clippy::too_many_arguments)]
 pub fn install_fs<'js>(
     ctx: &Ctx<'js>,
@@ -542,8 +447,6 @@ pub fn install_fs<'js>(
     android_dirs: &str,
     inu: &Object<'js>,
 ) -> JsResult<Rc<FsState>> {
-    // once, here: containment compares a resolved path against this prefix, and a root reached
-    // through a link would make every op read as an escape
     let root = if root.as_os_str().is_empty() {
         PathBuf::new()
     } else {
@@ -674,12 +577,6 @@ pub fn install_fs<'js>(
     Ok(state)
 }
 
-/// `inu.android.getPluginsDir`/`getCacheDir`/`getMediaDir`. They live here because they are paths
-/// and because they are only ever actionable through this api: every one of them is outside the
-/// scoped root, so `unsafe.fs` is what a plugin needs to do anything with the string, and asking
-/// for it here rather than at the first `read` is the difference between a refusal and a
-/// disclosure. Not an upcall either, for the module's own reason - the host answers all of them
-/// once, at install, and they do not change for the life of the process.
 fn install_android_dirs<'js>(ctx: &Ctx<'js>, state: &Rc<FsState>, inu: &Object<'js>) -> JsResult<()> {
     let android: Object = match inu.get::<_, Object>("android") {
         Ok(o) => o,
@@ -725,7 +622,6 @@ fn android_dir(ctx: &Ctx<'_>, state: &Rc<FsState>, index: usize, what: &str) -> 
     }
 }
 
-/// the one gate, run before any of these touches a path
 fn gate(ctx: &Ctx<'_>, state: &Rc<FsState>) -> JsResult<()> {
     check_grant(ctx, &state.grants, state.grant(), None, MATCH_EXACT)
 }

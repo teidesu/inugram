@@ -1,5 +1,3 @@
-//! Test-only plumbing shared by the module test suites.
-
 use std::collections::HashMap;
 use std::ops::Deref;
 use std::rc::Rc;

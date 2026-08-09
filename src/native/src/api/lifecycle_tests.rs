@@ -1,5 +1,3 @@
-//! `inu.onUnload` and `inu.onAppVisibilityChange`.
-
 use super::*;
 use crate::testing::harness::setup_apis as setup;
 

@@ -1,18 +1,9 @@
-//! `inu.clipboard`: two grants two tiers apart, because reading what the user copied and writing
-//! what they will paste are different powers.
-
 use std::rc::Rc;
 
 use rquickjs::{Ctx, Function, Object, Result as JsResult};
 
 use crate::sandbox::grants::{check_grant, GrantHost, MATCH_EXACT};
 
-/// stand-in for the Kotlin `QuickJs.ClipboardListener` interface.
-///
-/// [`ClipboardHost::read`] is the one upcall in this crate that is **not** a tagged wire and cannot
-/// be: it carries whatever the user last copied, so a leading `E` is a plain clipboard far more
-/// often than it is an error wire. It answers text or the empty string, and so does a host that
-/// cannot read the clipboard at all.
 pub trait ClipboardHost {
     fn read(&self) -> String;
     fn write(&self, text: &str);

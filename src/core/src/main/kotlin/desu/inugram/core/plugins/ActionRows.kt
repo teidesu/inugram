@@ -1,17 +1,6 @@
 package desu.inugram.core.plugins
 
-/**
- * What the host knows about `inu.register*Action` rows *without* entering an engine: which rows
- * exist is host state, and only `text`/`visible` need the engine - which is what lets a menu
- * reserve its rows synchronously and ask for the labels one queue hop ahead.
- *
- * The owner is an *engine*, not a plugin: a reload restarts tokens at 1, so anything keyed on the
- * plugin would let a row drawn before the reload dispatch into whatever holds that token after it.
- *
- * Rows are keyed by *id* rather than merely counted because re-registering an id is the documented
- * way to change a row, and the engine allocates the replacement's token before retiring the one it
- * displaces - so a registry counting tokens would refuse the replacement as one row too many.
- */
+/** Rows belong to an engine. A reload can reuse a token. */
 class ActionRegistry<T : Any>(private val perKindLimit: Int = DEFAULT_PER_KIND_LIMIT) {
     private val rows = HashMap<T, HashMap<Int, LinkedHashMap<String, Int>>>()
 
@@ -43,15 +32,6 @@ class ActionRegistry<T : Any>(private val perKindLimit: Int = DEFAULT_PER_KIND_L
 
     fun size(kind: Int, order: List<T>): Int = order.sumOf { count(it, kind) }
 
-    /**
-     * [order] is the plugin list's own order and also the liveness test: an owner missing from it
-     * is one whose engine is gone, and is neither asked nor drawn. A [render] answering null
-     * contributes nothing rather than aborting the menu.
-     *
-     * A row is whatever [render] built, never a type of this registry's own: nothing here reads
-     * one, and a row that carried its owner as a type parameter put that parameter in the
-     * signature of every unrelated menu the host draws.
-     */
     fun <R> rowsInOrder(kind: Int, order: List<T>, render: (T) -> List<R>?): List<R> {
         val out = mutableListOf<R>()
         for (owner in order) {

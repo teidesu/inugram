@@ -1,12 +1,3 @@
-// Evaluated once per engine by `writes.rs`, which hands in the native ops, the shared helpers
-// `utils.js` returned and the two constructors this file must not let a plugin swap out. The
-// factory returns the object every `Account` handle gets as the *outer* link of its prototype
-// chain, the reads prototype being the inner one.
-//
-// Nothing here decides anything: a peer becomes `utils.js`'s spec, an option becomes a scalar, and
-// one crossing carries the whole call. Both rules `common.d.ts` states for this block - never
-// re-enter the interceptors, never reach a secret chat - live on the host side of that crossing,
-// where the request and the peer actually exist.
 ((natives, shared, Message, PluginError, readsPrototype) => {
   const { invalid, toSpec, toOptions, toCount, toMessageId, toMessageIds, slotOf } = shared
 

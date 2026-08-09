@@ -1,8 +1,3 @@
-//! `inu.kv`: the plugin's own key/value store, one prefs file per install id.
-//!
-//! Every op is one upcall answering a single tagged wire string, reusing [`crate::api::tl::proxy`]'s
-//! scalar tags, so a value and a failure cross the same channel without a second encoding.
-
 use std::rc::Rc;
 
 use rquickjs::{Ctx, Exception, Function, Object, Result as JsResult, Value};
@@ -20,9 +15,7 @@ pub const KV_INSERT_ALL: i32 = 6;
 pub const KV_HAS: i32 = 7;
 pub const KV_USAGE: i32 = 8;
 
-/// stand-in for the Kotlin `QuickJs.KvListener` interface
 pub trait KvHost {
-    /// tagged wire string: `S`/`N`/`J`/`E`/`P`. unused key/value args are ""
     fn kv(&self, op: i32, key: &str, value: &str) -> String;
 }
 
@@ -31,7 +24,6 @@ struct KvState {
     grants: Rc<dyn GrantHost>,
 }
 
-/// decodes a [`KvHost::kv`] result into a JS value, throwing on an error tag
 fn kv_result_to_js<'js>(ctx: &Ctx<'js>, wire: &str) -> JsResult<Value<'js>> {
     use rquickjs::IntoJs;
     if let Some(built) = error::wire_error_to_js(ctx, wire) {

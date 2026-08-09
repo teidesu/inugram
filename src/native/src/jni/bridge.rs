@@ -1,5 +1,3 @@
-//! The one Java object every upcall goes through, and the argument marshalling around it.
-
 use jni::objects::{Auto, Global, JByteArray, JMethodID, JObject, JObjectArray, JString, JValue};
 use jni::refs::IntoAuto;
 use jni::signature::{MethodSignature, Primitive, ReturnType, RuntimeMethodSignature};
@@ -14,14 +12,6 @@ use crate::LEVEL_ERROR;
 
 use super::env::{clear_exception, with_current_env};
 
-/// The single JNI upcall surface into the Java `QuickJs` object: one global reference + jmethodIDs cached
-/// once at [`Java_desu_inugram_helpers_plugins_QuickJs_nativeCreate`] (jmethodIDs are stable for
-/// the lifetime of the class, and proxy traps hit these on every field access - per-call name
-/// lookups were measurable pure waste).
-///
-/// Failure policy is fail-closed: a JNI-level failure or a throwing Java listener surfaces as an
-/// *error* to JS (never as "null == ok, proceed"), and the pending Java exception is always
-/// cleared before this thread touches JNI again.
 pub(crate) struct JniBridge {
     pub(crate) target: Global<JObject<'static>>,
     pub(crate) console: Arc<ConsoleSink>,
@@ -82,14 +72,9 @@ pub(crate) struct JniBridge {
 
 impl JniBridge {
     pub(crate) fn new(env: &mut Env, this: &JObject) -> Option<Rc<JniBridge>> {
-        // there is one JavaVM per process and jni owns it, so the bridge and the console sink
-        // both name the singleton rather than each carrying a handle
         let target = env.new_global_ref(this).ok()?;
         let console_target = env.new_global_ref(this).ok()?;
         let class = env.get_object_class(this).ok()?;
-        // one wrong descriptor makes the whole bridge `None`, `nativeCreate` answer 0 and every
-        // plugin fail at its first call with "context is closed" - so the name is carried out on the
-        // pending exception the failed lookup left, which is the only place it is still known
         let mut method = |name: &str, sig: &str| {
             let parsed = RuntimeMethodSignature::from_str(sig).ok();
             let found = parsed.as_ref().and_then(|parsed| {
@@ -182,12 +167,6 @@ impl JniBridge {
         Some(Rc::new(bridge))
     }
 
-    /// one argument of an upcall, in the vocabulary the java signatures are written in.
-    ///
-    /// Marshalling used to be written out per upcall, twenty times, because a local reference has
-    /// to outlive the `jvalue` array that points at it - so every one of them repeated the same
-    /// allocate-then-borrow dance and its own copy of the failure path. [`Marshalled`] holds the
-    /// references for the length of the call instead, and every upcall below is one line.
     pub(crate) fn marshal<'l>(
         &self,
         env: &mut Env<'l>,
@@ -216,8 +195,6 @@ impl JniBridge {
         Ok(out)
     }
 
-    /// `Ok(None)` = Java returned null, `Ok(Some)` = a string, `Err(msg)` = JNI failure or a
-    /// throwing Java listener - callers map `Err` onto their own error channel, never onto success
     pub(crate) fn call_string(
         &self,
         what: &str,
@@ -245,13 +222,10 @@ impl JniBridge {
         if obj.is_null() {
             return Ok(None);
         }
-        // safe by construction: the descriptor these ids were looked up under says the return type
         let obj = unsafe { JString::from_raw(env, obj.into_raw()) }.auto();
         obj.try_to_string(env).map(Some).map_err(|e| format!("{what}: {e}"))
     }
 
-    /// [`call_string`](Self::call_string) for the channels that carry a wire rather than a nullable
-    /// string: every failure, including a null, becomes an `E` wire the caller can throw
     pub(crate) fn call_wire(&self, what: &str, method: JMethodID, args: &[Arg<'_>]) -> String {
         match self.call_string(what, method, args) {
             Ok(Some(wire)) => wire,
@@ -260,7 +234,6 @@ impl JniBridge {
         }
     }
 
-    /// [`call_string`](Self::call_string) for the `Some(msg) == error` channels
     pub(crate) fn call_refusal(&self, what: &str, method: JMethodID, args: &[Arg<'_>]) -> Option<String> {
         self.call_string(what, method, args).unwrap_or_else(Some)
     }
@@ -278,7 +251,6 @@ impl JniBridge {
         });
     }
 
-    /// fails closed: a JNI failure or a throwing Java listener denies, never allows
     pub(crate) fn call_bool(&self, what: &str, method: JMethodID, args: &[Arg<'_>]) -> bool {
         let answered = with_current_env(|env| {
             let marshalled = match self.marshal(env, what, args) {
@@ -324,8 +296,6 @@ impl JniBridge {
         .unwrap_or(fallback)
     }
 
-    /// fills [out] from a `byte[]` the host answers with; false leaves it untouched, and the caller
-    /// must treat that as a failure rather than as zeroes
     pub(crate) fn call_bytes(&self, what: &str, method: JMethodID, args: &[Arg<'_>], out: &mut [u8]) -> bool {
         with_current_env(|env| {
             let Ok(marshalled) = self.marshal(env, what, args) else {
@@ -342,7 +312,6 @@ impl JniBridge {
             if array.is_null() {
                 return false;
             }
-            // safe by construction: `onRandomBytes` is declared to answer a byte[]
             let array = unsafe { JByteArray::from_raw(env, array.into_raw()) }.auto();
             let Ok(bytes) = env.convert_byte_array(&array) else {
                 clear_exception(env);
@@ -357,12 +326,10 @@ impl JniBridge {
         .unwrap_or(false)
     }
 
-    /// console.* / engine diagnostics -> QuickJs.onConsole(level, message)
     pub(crate) fn emit_console(&self, level: i32, message: &str) {
         self.console.emit(level, message);
     }
 
-    /// allocates a `String[]`, auto-deleted for the same reason [`JniBridge::new_jstring`]'s result is
     pub(crate) fn new_jstring_array<'l>(
         &self,
         env: &mut Env<'l>,
@@ -378,22 +345,16 @@ impl JniBridge {
         };
         for (i, item) in items.iter().enumerate() {
             let item = self.new_jstring(env, what, item)?;
-            // safe by construction: the element type is what this array was made of
             let item = unsafe { JString::from_raw(env, item.as_raw()) };
             if let Err(e) = array.set_element(env, i, &item) {
                 clear_exception(env);
                 return Err(format!("{what}: {e}"));
             }
         }
-        // the array outlives this frame as a plain object reference; the element locals above are
-        // dropped with it, which is safe because the array itself holds them
         let raw = array.unwrap().into_raw();
         Ok(unsafe { JObject::from_raw(env, raw) }.auto())
     }
 
-    /// allocates a Java string or reports the failure through `on_fail`'s error message. The result
-    /// is auto-deleted: proxy traps hit these per field access, and ART's per-frame local reference
-    /// table (512 entries) would otherwise overflow inside one long-running native call.
     pub(crate) fn new_jstring<'l>(
         &self,
         env: &mut Env<'l>,
@@ -410,21 +371,16 @@ impl JniBridge {
     }
 }
 
-/// one upcall argument, before it has been turned into a JNI local reference
 pub(crate) enum Arg<'a> {
     Int(i32),
     Long(i64),
     Bool(bool),
     Str(&'a str),
-    /// a `String` parameter the host may be handed null for
     OptStr(Option<&'a str>),
     Strs(&'a [String]),
-    /// a `byte[]` parameter, null when absent
     Bytes(Option<&'a [u8]>),
 }
 
-/// an [`Arg`] that has been marshalled. Holds the local reference for as long as the `jvalue`
-/// array built from it is alive - which is the invariant the per-upcall code existed to maintain.
 pub(crate) enum Marshalled<'l> {
     Prim(jvalue),
     Obj(Auto<'l, JObject<'l>>),

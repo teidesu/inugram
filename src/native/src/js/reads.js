@@ -1,7 +1,3 @@
-// Evaluated once per engine by `reads.rs`, which hands in the native ops, the peer helpers
-// `utils.js` returned, and the two constructors this file must not let a plugin swap out. The
-// factory returns the `Account` prototype: every handle `account.rs` mints gets it, so these
-// methods exist once per engine rather than once per dispatch.
 ((natives, shared, Message, PluginError) => {
   const { baseName, invalid, SEPARATOR, toSpec, toSpecList, toMessageId, toMessageIds, toOptions, toCount, slotOf } =
     shared

@@ -1,5 +1,3 @@
-//! `inu.clipboard`, the one channel that cannot be a tagged wire.
-
 use crate::testing::harness::setup_apis as setup;
 
 /// the clipboard channel carries the user's own text, so it is the one upcall here that cannot

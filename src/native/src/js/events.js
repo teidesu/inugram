@@ -1,11 +1,3 @@
-// Evaluated once per engine by `rpc.rs`, which hands in the real `inu.Message` - read before any
-// plugin source has run, so replacing `inu.Message` cannot decide what a handler is given. The
-// factory returned takes one demuxed event kind plus the plugin's own callback and hands back the
-// `onUpdate` listener the registry actually stores.
-//
-// Each kind is a narrowing of the raw update stream over a fixed constructor list and touches no
-// host state: the arrival paths, the per-arrival dedup and the takeover filter all sit behind the
-// update this is handed, so there is nothing here for a second one of them to disagree with.
 ((Message) => {
   // int64 fields cross the bridge as decimal strings, and a peer id is never 0
   const toId = (value) => {

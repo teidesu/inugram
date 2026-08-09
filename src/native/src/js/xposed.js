@@ -1,9 +1,3 @@
-// Evaluated once per engine by `xposed.rs`, which hands in the two natives, the error constructor
-// this file must not let a plugin swap out. The factory returns the `inu.xposed` namespace.
-//
-// There is deliberately almost nothing here: every decision this api makes is rust's, because a
-// registry a plugin could reach would be a registry a plugin could rewrite. What is left is
-// argument shape, which is checked here so the refusal names the entry point the plugin called.
 ((natives, PluginError) => {
   const OP = natives.ops
 
