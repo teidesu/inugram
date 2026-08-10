@@ -130,59 +130,64 @@ fn js_add_delegate<'js>(
   })
 }
 
-pub fn dispatch_notification(
-  rt: &Runtime,
-  context: &rquickjs::Context,
-  state: &Rc<NotificationState>,
-  callback_id: Token,
-  name: &str,
-  account: i32,
-  args_json: &str,
-) {
-  context.with(|ctx| {
-    let Some(delegate) = state.delegates.get(callback_id) else {
-      return;
-    };
-    let Some(handler) = delegate.handler(&ctx, name) else {
-      return;
-    };
-    let args = match ctx.json_parse(args_json) {
-      Ok(args) => args,
-      Err(_) => {
-        (state.log)(&format!("{name}: bad notification payload: {}", format_exception(&ctx)));
+impl NotificationState {
+  pub fn dispatch(
+    self: &Rc<Self>,
+    rt: &Runtime,
+    context: &rquickjs::Context,
+    callback_id: Token,
+    name: &str,
+    account: i32,
+    args_json: &str,
+  ) {
+    let state = self;
+    context.with(|ctx| {
+      let Some(delegate) = state.delegates.get(callback_id) else {
         return;
-      }
-    };
-    let result = (|| -> JsResult<Value<'_>> {
-      let Some(args) = args.as_array() else {
-        return Err(Exception::throw_type(&ctx, "notification arguments must be an array"));
       };
-      let mut call_args = Args::new(ctx.clone(), args.len() + 1);
-      call_args.push_arg(account)?;
-      for value in args.iter::<Value>() {
-        call_args.push_arg(value?)?;
+      let Some(handler) = delegate.handler(&ctx, name) else {
+        return;
+      };
+      let args = match ctx.json_parse(args_json) {
+        Ok(args) => args,
+        Err(_) => {
+          (state.log)(&format!("{name}: bad notification payload: {}", format_exception(&ctx)));
+          return;
+        }
+      };
+      let result = (|| -> JsResult<Value<'_>> {
+        let Some(args) = args.as_array() else {
+          return Err(Exception::throw_type(&ctx, "notification arguments must be an array"));
+        };
+        let mut call_args = Args::new(ctx.clone(), args.len() + 1);
+        call_args.push_arg(account)?;
+        for value in args.iter::<Value>() {
+          call_args.push_arg(value?)?;
+        }
+        handler.call_arg(call_args)
+      })();
+      match result {
+        Ok(_) => {}
+        Err(rquickjs::Error::Exception) => {
+          (state.log)(&crate::fault(format_args!(
+            "notification handler for '{name}' threw: {}",
+            format_exception(&ctx),
+          )));
+        }
+        Err(e) => (state.log)(&format!("notification handler for '{name}' failed: {e:?}")),
       }
-      handler.call_arg(call_args)
-    })();
-    match result {
-      Ok(_) => {}
-      Err(rquickjs::Error::Exception) => {
-        (state.log)(&crate::fault(
-          format_args!("notification handler for '{name}' threw: {}", format_exception(&ctx),),
-        ));
-      }
-      Err(e) => (state.log)(&format!("notification handler for '{name}' failed: {e:?}")),
-    }
-  });
-  pump_jobs(rt, context, state.log.as_ref());
-}
+    });
+    pump_jobs(rt, context, state.log.as_ref());
+  }
 
-pub fn dispose(context: &rquickjs::Context, state: &Rc<NotificationState>) {
-  context.with(|ctx| {
-    for delegate in state.delegates.remove_matching(|_| true) {
-      delegate.release(&ctx);
-    }
-  });
+  pub fn dispose(self: &Rc<Self>, context: &rquickjs::Context) {
+    let state = self;
+    context.with(|ctx| {
+      for delegate in state.delegates.remove_matching(|_| true) {
+        delegate.release(&ctx);
+      }
+    });
+  }
 }
 
 #[cfg(test)]

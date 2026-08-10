@@ -43,7 +43,7 @@ fn setup(grants: &[&str]) -> Fixture {
     install_plugin_error(&ctx, &inu).unwrap();
     install_notifications(&ctx, host_dyn, grants, Lifecycle::new(), log.clone(), &inu).unwrap()
   });
-  let state = Disposing::new(&ctx, state, dispose);
+  let state = Disposing::new(&ctx, state, |ctx, state| state.dispose(ctx));
   (rt, ctx, host, state, logs)
 }
 
@@ -82,10 +82,10 @@ fn a_handler_is_called_with_the_account_and_then_the_events_own_arguments() {
   let (rt, ctx, host, state, logs) = setup(GRANTED);
   arm(&ctx);
   let token = host.registered.borrow()[0].0;
-  dispatch_notification(&rt, &ctx, &state, token, "closeChats", 1, "[-1001]");
-  dispatch_notification(&rt, &ctx, &state, token, "dialogsNeedReload", -1, "[true]");
+  state.dispatch(&rt, &ctx, token, "closeChats", 1, "[-1001]");
+  state.dispatch(&rt, &ctx, token, "dialogsNeedReload", -1, "[true]");
   // a payload the host could only encode as nulls still arrives, in place
-  dispatch_notification(&rt, &ctx, &state, token, "closeChats", 0, "[null,\"text\",4.5]");
+  state.dispatch(&rt, &ctx, token, "closeChats", 0, "[null,\"text\",4.5]");
   assert_eq!(
     eval_json(&ctx, "globalThis.__seen"),
     r#"[["closeChats",[1,-1001]],["dialogsNeedReload",[-1,true]],["closeChats",[0,null,"text",4.5]]]"#,
@@ -100,7 +100,7 @@ fn only_the_named_handler_runs() {
   let (rt, ctx, host, state, logs) = setup(GRANTED);
   arm(&ctx);
   let token = host.registered.borrow()[0].0;
-  dispatch_notification(&rt, &ctx, &state, token, "messagesDeleted", 0, "[]");
+  state.dispatch(&rt, &ctx, token, "messagesDeleted", 0, "[]");
   assert_eq!(eval_json(&ctx, "globalThis.__seen"), "[]");
   assert!(logs.borrow().is_empty(), "unexpected logs: {:?}", logs.borrow());
 }
@@ -123,7 +123,7 @@ fn disposing_unregisters_once_and_stops_the_dispatches() {
   let token = host.registered.borrow()[0].0;
   ctx.with(|ctx| ctx.eval::<(), _>("__d(); __d();").unwrap());
   assert_eq!(*host.unregistered.borrow(), vec![token], "a disposer called twice unregisters once");
-  dispatch_notification(&rt, &ctx, &state, token, "closeChats", 0, "[7]");
+  state.dispatch(&rt, &ctx, token, "closeChats", 0, "[7]");
   assert_eq!(eval_json(&ctx, "globalThis.__seen"), "[]");
 }
 
@@ -145,7 +145,7 @@ fn delegates_stack_and_each_gets_its_own_token() {
   assert_eq!(tokens.len(), 2);
   assert_ne!(tokens[0], tokens[1]);
   for token in tokens {
-    dispatch_notification(&rt, &ctx, &state, token, "closeChats", 0, "[]");
+    state.dispatch(&rt, &ctx, token, "closeChats", 0, "[]");
   }
   assert_eq!(eval_json(&ctx, "globalThis.__ran"), r#"["first","second"]"#);
 }
@@ -159,7 +159,7 @@ fn a_throwing_handler_is_a_fault() {
       .unwrap()
   });
   let token = host.registered.borrow()[0].0;
-  dispatch_notification(&rt, &ctx, &state, token, "closeChats", 0, "[]");
+  state.dispatch(&rt, &ctx, token, "closeChats", 0, "[]");
   let entry = logs.borrow().iter().find(|l| l.contains("bus-boom")).cloned();
   let entry = entry.expect("expected a diagnostic for the throwing handler");
   assert_eq!(
@@ -175,7 +175,7 @@ fn a_payload_that_is_not_json_is_an_ordinary_error() {
   let (rt, ctx, host, state, logs) = setup(GRANTED);
   arm(&ctx);
   let token = host.registered.borrow()[0].0;
-  dispatch_notification(&rt, &ctx, &state, token, "closeChats", 0, "not json");
+  state.dispatch(&rt, &ctx, token, "closeChats", 0, "not json");
   assert_eq!(eval_json(&ctx, "globalThis.__seen"), "[]");
   let entry = logs.borrow().first().cloned().expect("expected a diagnostic");
   assert_eq!(crate::classify_log(&entry).0, crate::LEVEL_ERROR);
@@ -229,7 +229,7 @@ fn registering_after_unload_began_is_a_no_op() {
   });
   assert_eq!(shape, "function");
   assert!(host.registered.borrow().is_empty());
-  dispatch_notification(&rt, &ctx, &state, 1, "closeChats", 0, "[]");
+  state.dispatch(&rt, &ctx, 1, "closeChats", 0, "[]");
   assert_eq!(eval_json(&ctx, "globalThis.__ran"), "0");
 }
 
@@ -238,7 +238,7 @@ fn registering_after_unload_began_is_a_no_op() {
 fn dispose_releases_the_callbacks_and_tells_the_host_to_stop_observing() {
   let (_rt, ctx, host, state, _logs) = setup(GRANTED);
   arm(&ctx);
-  dispose(&ctx, &state);
+  state.dispose(&ctx);
   assert!(state.delegates.is_empty());
   // the host is told through its own detach rather than one upcall per token: an engine being
   // torn down cannot answer another one. What this pins is that nothing is left in the engine
@@ -260,8 +260,8 @@ fn the_bundled_notifications_test_plugin_passes() {
     Err(e) => panic!("{e:?}"),
   });
   let token = host.registered.borrow().last().expect("the oracle registered nothing").0;
-  dispatch_notification(&rt, &ctx, &state, token, "dialogsNeedReload", 0, "[true]");
-  dispatch_notification(&rt, &ctx, &state, token, "updateInterfaces", -1, "[512,null]");
+  state.dispatch(&rt, &ctx, token, "dialogsNeedReload", 0, "[true]");
+  state.dispatch(&rt, &ctx, token, "updateInterfaces", -1, "[512,null]");
   let lines = lines.borrow().clone();
   crate::testing::harness::assert_oracle_exact(&lines, "notifications test done", 12);
   assert!(logs.borrow().is_empty(), "unexpected logs: {:?}", logs.borrow());

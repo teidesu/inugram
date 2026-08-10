@@ -401,98 +401,11 @@ pub struct Invocation<'a> {
   pub args: &'a [String],
 }
 
-pub fn dispatch_before(
-  rt: &Runtime,
-  context: &Context,
-  state: &Rc<XposedState>,
-  dispatch_id: i64,
-  site: i64,
-  call: &Invocation,
-) -> Vec<String> {
-  let Invocation { method, this, args } = *call;
-  let answer = context.with(|ctx| -> JsResult<Vec<String>> {
-    let hooks = state.snapshot(&ctx, site);
-    if hooks.is_empty() {
-      return Ok(proceed_with(false, args));
-    }
-
-    let context_object = build_context(&ctx, state, method, this, args)?;
-
-    let mut verdict = Verdict::Proceed;
-    for hook in &hooks {
-      let Some(before) = &hook.before else { continue };
-      run_callback(&ctx, state, before, &context_object, "before");
-      if let Verdict::Answered(wire) = read_context(&ctx, state, &context_object)? {
-        verdict = Verdict::Answered(wire);
-        break;
-      }
-    }
-
-    let wants_after = hooks.iter().any(|hook| hook.after.is_some());
-    if let Verdict::Answered(wire) = verdict {
-      let afters: Vec<&Function> = hooks.iter().filter_map(|hook| hook.after.as_ref()).collect();
-      let wire = run_after(&ctx, state, &afters, &context_object, &wire)?;
-      return Ok(vec!["A".to_string(), wire]);
-    }
-
-    let call_args = read_args(&ctx, state, &context_object)?;
-    if wants_after {
-      let after = hooks
-        .iter()
-        .filter_map(|hook| hook.after.as_ref())
-        .map(|f| Persistent::save(&ctx, f.clone()))
-        .collect();
-      state.pending.borrow_mut().insert(
-        dispatch_id,
-        PendingDispatch {
-          context: Persistent::save(&ctx, context_object),
-          after,
-        },
-      );
-    }
-    Ok(proceed_with(wants_after, &call_args))
-  });
-
-  pump_jobs(rt, context, state.log.as_ref());
-  answer.unwrap_or_else(|_| proceed_with(false, args))
-}
-
 fn proceed_with(wants_after: bool, args: &[String]) -> Vec<String> {
   let mut out = Vec::with_capacity(args.len() + 1);
   out.push(if wants_after { "P1" } else { "P0" }.to_string());
   out.extend(args.iter().cloned());
   out
-}
-
-pub fn dispatch_after(
-  rt: &Runtime,
-  context: &Context,
-  state: &Rc<XposedState>,
-  dispatch_id: i64,
-  result: &str,
-) -> String {
-  let answer = context.with(|ctx| -> JsResult<String> {
-    let Some(pending) = state.pending.borrow_mut().remove(&dispatch_id) else {
-      return Ok(result.to_string());
-    };
-    let context_object = pending.context.restore(&ctx)?;
-    let afters: Vec<Function> = pending.after.into_iter().filter_map(|f| f.restore(&ctx).ok()).collect();
-    run_after(&ctx, state, &afters.iter().collect::<Vec<_>>(), &context_object, result)
-  });
-  pump_jobs(rt, context, state.log.as_ref());
-  answer.unwrap_or_else(|_| result.to_string())
-}
-
-pub fn release_dispatch(context: &Context, state: &Rc<XposedState>, dispatch_id: i64) {
-  let Some(pending) = state.pending.borrow_mut().remove(&dispatch_id) else {
-    return;
-  };
-  context.with(|ctx| {
-    let _ = pending.context.restore(&ctx);
-    for f in pending.after {
-      let _ = f.restore(&ctx);
-    }
-  });
 }
 
 fn run_after<'js>(
@@ -580,18 +493,105 @@ fn publish_result<'js>(ctx: &Ctx<'js>, state: &Rc<XposedState>, context: &Object
   }
 }
 
-pub fn dispose(context: &Context, state: &Rc<XposedState>) {
-  context.with(|ctx| {
-    for hook in state.hooks.take_values() {
-      state.release(&ctx, hook);
-    }
-    for (_, pending) in state.pending.borrow_mut().drain() {
+impl XposedState {
+  pub fn dispatch_before(
+    self: &Rc<Self>,
+    rt: &Runtime,
+    context: &Context,
+    dispatch_id: i64,
+    site: i64,
+    call: &Invocation<'_>,
+  ) -> Vec<String> {
+    let state = self;
+    let Invocation { method, this, args } = *call;
+    let answer = context.with(|ctx| -> JsResult<Vec<String>> {
+      let hooks = state.snapshot(&ctx, site);
+      if hooks.is_empty() {
+        return Ok(proceed_with(false, args));
+      }
+
+      let context_object = build_context(&ctx, state, method, this, args)?;
+
+      let mut verdict = Verdict::Proceed;
+      for hook in &hooks {
+        let Some(before) = &hook.before else { continue };
+        run_callback(&ctx, state, before, &context_object, "before");
+        if let Verdict::Answered(wire) = read_context(&ctx, state, &context_object)? {
+          verdict = Verdict::Answered(wire);
+          break;
+        }
+      }
+
+      let wants_after = hooks.iter().any(|hook| hook.after.is_some());
+      if let Verdict::Answered(wire) = verdict {
+        let afters: Vec<&Function> = hooks.iter().filter_map(|hook| hook.after.as_ref()).collect();
+        let wire = run_after(&ctx, state, &afters, &context_object, &wire)?;
+        return Ok(vec!["A".to_string(), wire]);
+      }
+
+      let call_args = read_args(&ctx, state, &context_object)?;
+      if wants_after {
+        let after = hooks
+          .iter()
+          .filter_map(|hook| hook.after.as_ref())
+          .map(|f| Persistent::save(&ctx, f.clone()))
+          .collect();
+        state.pending.borrow_mut().insert(
+          dispatch_id,
+          PendingDispatch {
+            context: Persistent::save(&ctx, context_object),
+            after,
+          },
+        );
+      }
+      Ok(proceed_with(wants_after, &call_args))
+    });
+
+    pump_jobs(rt, context, state.log.as_ref());
+    answer.unwrap_or_else(|_| proceed_with(false, args))
+  }
+
+  pub fn dispatch_after(self: &Rc<Self>, rt: &Runtime, context: &Context, dispatch_id: i64, result: &str) -> String {
+    let state = self;
+    let answer = context.with(|ctx| -> JsResult<String> {
+      let Some(pending) = state.pending.borrow_mut().remove(&dispatch_id) else {
+        return Ok(result.to_string());
+      };
+      let context_object = pending.context.restore(&ctx)?;
+      let afters: Vec<Function> = pending.after.into_iter().filter_map(|f| f.restore(&ctx).ok()).collect();
+      run_after(&ctx, state, &afters.iter().collect::<Vec<_>>(), &context_object, result)
+    });
+    pump_jobs(rt, context, state.log.as_ref());
+    answer.unwrap_or_else(|_| result.to_string())
+  }
+
+  pub fn release_dispatch(self: &Rc<Self>, context: &Context, dispatch_id: i64) {
+    let state = self;
+    let Some(pending) = state.pending.borrow_mut().remove(&dispatch_id) else {
+      return;
+    };
+    context.with(|ctx| {
       let _ = pending.context.restore(&ctx);
       for f in pending.after {
         let _ = f.restore(&ctx);
       }
-    }
-  });
+    });
+  }
+
+  pub fn dispose(self: &Rc<Self>, context: &Context) {
+    let state = self;
+    context.with(|ctx| {
+      for hook in state.hooks.take_values() {
+        state.release(&ctx, hook);
+      }
+      for (_, pending) in state.pending.borrow_mut().drain() {
+        let _ = pending.context.restore(&ctx);
+        for f in pending.after {
+          let _ = f.restore(&ctx);
+        }
+      }
+    });
+  }
 }
 
 #[cfg(test)]

@@ -450,26 +450,6 @@ fn alloc_row_key(counts: &mut HashMap<String, u32>, ty: &str, id: Option<&str>, 
   Rc::from(format!("{base}#{occurrence}").as_str())
 }
 
-pub fn render_page(rt: &Runtime, context: &rquickjs::Context, state: &Rc<UiState>, page_id: i64) -> Option<String> {
-  if !state.pages.borrow().contains_key(&page_id) {
-    (state.log)(&format!("ui: render({page_id}): no such page (already disposed?)"));
-    return None;
-  }
-  let out = context.with(|ctx| match try_render(&ctx, state, page_id) {
-    Ok(json) => Some(json),
-    Err(rquickjs::Error::Exception) => {
-      (state.log)(&crate::fault(format_args!("ui: render failed: {}", format_exception(&ctx))));
-      None
-    }
-    Err(e) => {
-      (state.log)(&format!("ui: render failed: {e:?}"));
-      None
-    }
-  });
-  pump_jobs(rt, context, state.log.as_ref());
-  out
-}
-
 fn try_render<'js>(ctx: &Ctx<'js>, state: &Rc<UiState>, page_id: i64) -> JsResult<String> {
   let (items_fn, title, bottom_text, bottom_on_click, mut next_slot) = {
     let pages = state.pages.borrow();
@@ -643,58 +623,6 @@ fn make_anchor<'js>(ctx: &Ctx<'js>, state: &Rc<UiState>, page_id: i64, row: Rc<s
   Ok(anchor)
 }
 
-pub fn dispatch_ui_event(
-  rt: &Runtime,
-  context: &rquickjs::Context,
-  state: &Rc<UiState>,
-  page_id: i64,
-  slot: u32,
-  arg_json: &str,
-) {
-  context.with(|ctx| {
-    let found = {
-      let pages = state.pages.borrow();
-      pages
-        .get(&page_id)
-        .and_then(|def| def.callbacks.borrow().get(&slot).map(|entry| (entry.func.clone(), entry.row.clone())))
-    };
-    let Some((cb, row)) = found else { return };
-    let f = match cb.restore(&ctx) {
-      Ok(f) => f,
-      Err(e) => {
-        (state.log)(&format!("ui: failed to restore callback: {e:?}"));
-        return;
-      }
-    };
-    let anchor = match make_anchor(&ctx, state, page_id, row) {
-      Ok(a) => a,
-      Err(e) => {
-        (state.log)(&format!("ui: failed to build the anchor: {e:?}"));
-        return;
-      }
-    };
-    let result = if arg_json.is_empty() {
-      f.call::<_, Value>((anchor,))
-    } else {
-      match ctx.json_parse(arg_json) {
-        Ok(arg) => f.call::<_, Value>((arg, anchor)),
-        Err(e) => {
-          (state.log)(&format!("ui: bad event arg: {e:?}"));
-          return;
-        }
-      }
-    };
-    match result {
-      Ok(_) => {}
-      Err(rquickjs::Error::Exception) => {
-        (state.log)(&crate::fault(format_args!("ui callback threw: {}", format_exception(&ctx))));
-      }
-      Err(e) => (state.log)(&format!("ui callback failed: {e:?}")),
-    }
-  });
-  pump_jobs(rt, context, state.log.as_ref());
-}
-
 fn js_open_menu<'js>(ctx: &Ctx<'js>, state: &Rc<UiState>, page_id: i64, row: &str, items: Value<'js>) -> JsResult<()> {
   if !state.pages.borrow().contains_key(&page_id) {
     return crate::api::error::PluginErrorCode::HandleExpired
@@ -740,31 +668,6 @@ fn js_open_menu<'js>(ctx: &Ctx<'js>, state: &Rc<UiState>, page_id: i64, row: &st
   Ok(())
 }
 
-pub fn dispatch_menu_click(rt: &Runtime, context: &rquickjs::Context, state: &Rc<UiState>, menu_id: i64, slot: i32) {
-  context.with(|ctx| {
-    let Some(callbacks) = state.menus.borrow_mut().remove(&menu_id) else {
-      (state.log)(&format!("menuClick({menu_id}, {slot}): no such menu (already settled?)"));
-      return;
-    };
-    for (i, persistent) in callbacks.into_iter().enumerate() {
-      let f = match persistent.restore(&ctx) {
-        Ok(f) => f,
-        Err(_) => continue,
-      };
-      if i as i32 == slot {
-        match f.call::<_, Value>(()) {
-          Ok(_) => {}
-          Err(rquickjs::Error::Exception) => {
-            (state.log)(&crate::fault(format_args!("menu item callback threw: {}", format_exception(&ctx))));
-          }
-          Err(e) => (state.log)(&format!("menu item callback failed: {e:?}")),
-        }
-      }
-    }
-  });
-  pump_jobs(rt, context, state.log.as_ref());
-}
-
 fn js_prompt<'js>(ctx: &Ctx<'js>, state: &Rc<UiState>, opts: Object<'js>) -> JsResult<Value<'js>> {
   let out = Object::new(ctx.clone())?;
   out.set("title", req_str(ctx, &opts, "prompt", "title")?)?;
@@ -789,81 +692,186 @@ fn js_prompt<'js>(ctx: &Ctx<'js>, state: &Rc<UiState>, opts: Object<'js>) -> JsR
   Ok(promise.into_value())
 }
 
-pub fn resolve_prompt(
-  rt: &Runtime,
-  context: &rquickjs::Context,
-  state: &Rc<UiState>,
-  request_id: i64,
-  text: Option<&str>,
-) {
-  context.with(|ctx| {
-    use rquickjs::IntoJs;
-    if let Some(pending) = state.pending_prompts.borrow_mut().remove(&request_id) {
-      let value = match text {
-        Some(t) => t.into_js(&ctx),
-        None => Ok(Value::new_null(ctx.clone())),
+impl UiState {
+  pub fn render(self: &Rc<Self>, rt: &Runtime, context: &rquickjs::Context, page_id: i64) -> Option<String> {
+    let state = self;
+    if !state.pages.borrow().contains_key(&page_id) {
+      (state.log)(&format!("ui: render({page_id}): no such page (already disposed?)"));
+      return None;
+    }
+    let out = context.with(|ctx| match try_render(&ctx, state, page_id) {
+      Ok(json) => Some(json),
+      Err(rquickjs::Error::Exception) => {
+        (state.log)(&crate::fault(format_args!("ui: render failed: {}", format_exception(&ctx))));
+        None
+      }
+      Err(e) => {
+        (state.log)(&format!("ui: render failed: {e:?}"));
+        None
+      }
+    });
+    pump_jobs(rt, context, state.log.as_ref());
+    out
+  }
+
+  pub fn dispatch_event(
+    self: &Rc<Self>,
+    rt: &Runtime,
+    context: &rquickjs::Context,
+    page_id: i64,
+    slot: u32,
+    arg_json: &str,
+  ) {
+    let state = self;
+    context.with(|ctx| {
+      let found = {
+        let pages = state.pages.borrow();
+        pages
+          .get(&page_id)
+          .and_then(|def| def.callbacks.borrow().get(&slot).map(|entry| (entry.func.clone(), entry.row.clone())))
       };
-      match value {
-        Ok(v) => {
-          if pending.resolve_with(&ctx, v).is_err() {
-            (state.log)(&format!("prompt({request_id}) resolve failed: {}", format_exception(&ctx)));
+      let Some((cb, row)) = found else { return };
+      let f = match cb.restore(&ctx) {
+        Ok(f) => f,
+        Err(e) => {
+          (state.log)(&format!("ui: failed to restore callback: {e:?}"));
+          return;
+        }
+      };
+      let anchor = match make_anchor(&ctx, state, page_id, row) {
+        Ok(a) => a,
+        Err(e) => {
+          (state.log)(&format!("ui: failed to build the anchor: {e:?}"));
+          return;
+        }
+      };
+      let result = if arg_json.is_empty() {
+        f.call::<_, Value>((anchor,))
+      } else {
+        match ctx.json_parse(arg_json) {
+          Ok(arg) => f.call::<_, Value>((arg, anchor)),
+          Err(e) => {
+            (state.log)(&format!("ui: bad event arg: {e:?}"));
+            return;
           }
         }
-        Err(e) => {
-          pending.release(&ctx);
-          (state.log)(&format!("prompt({request_id}) text conversion failed: {e:?}"));
+      };
+      match result {
+        Ok(_) => {}
+        Err(rquickjs::Error::Exception) => {
+          (state.log)(&crate::fault(format_args!("ui callback threw: {}", format_exception(&ctx))));
         }
+        Err(e) => (state.log)(&format!("ui callback failed: {e:?}")),
       }
-    }
-  });
-  pump_jobs(rt, context, state.log.as_ref());
-}
+    });
+    pump_jobs(rt, context, state.log.as_ref());
+  }
 
-pub fn page_closed(rt: &Runtime, context: &rquickjs::Context, state: &Rc<UiState>, page_id: i64) {
-  context.with(|ctx| {
-    let (on_close, transient) = {
-      let pages = state.pages.borrow();
-      let Some(def) = pages.get(&page_id) else {
+  pub fn dispatch_menu_click(self: &Rc<Self>, rt: &Runtime, context: &rquickjs::Context, menu_id: i64, slot: i32) {
+    let state = self;
+    context.with(|ctx| {
+      let Some(callbacks) = state.menus.borrow_mut().remove(&menu_id) else {
+        (state.log)(&format!("menuClick({menu_id}, {slot}): no such menu (already settled?)"));
         return;
       };
-      for (_, entry) in def.callbacks.borrow_mut().drain() {
-        let _ = entry.func.restore(&ctx);
-      }
-      (def.on_close.as_ref().cloned(), def.transient)
-    };
-    if let Some(persistent) = on_close {
-      match persistent.restore(&ctx) {
-        Ok(f) => match f.call::<_, Value>(()) {
-          Ok(_) => {}
-          Err(rquickjs::Error::Exception) => {
-            (state.log)(&crate::fault(format_args!("onClose callback threw: {}", format_exception(&ctx))));
+      for (i, persistent) in callbacks.into_iter().enumerate() {
+        let f = match persistent.restore(&ctx) {
+          Ok(f) => f,
+          Err(_) => continue,
+        };
+        if i as i32 == slot {
+          match f.call::<_, Value>(()) {
+            Ok(_) => {}
+            Err(rquickjs::Error::Exception) => {
+              (state.log)(&crate::fault(format_args!("menu item callback threw: {}", format_exception(&ctx))));
+            }
+            Err(e) => (state.log)(&format!("menu item callback failed: {e:?}")),
           }
-          Err(e) => (state.log)(&format!("onClose callback failed: {e:?}")),
-        },
-        Err(e) => (state.log)(&format!("onClose: failed to restore callback: {e:?}")),
+        }
       }
-    }
-    if transient {
-      dispose_page(&ctx, state, page_id);
-    }
-  });
-  pump_jobs(rt, context, state.log.as_ref());
-}
+    });
+    pump_jobs(rt, context, state.log.as_ref());
+  }
 
-pub fn dispose(context: &rquickjs::Context, state: &Rc<UiState>) {
-  context.with(|ctx| {
-    for (_, def) in state.pages.borrow_mut().drain() {
-      release_page_def(&ctx, def);
-    }
-    for (_, callbacks) in state.menus.borrow_mut().drain() {
-      for p in callbacks {
-        let _ = p.restore(&ctx);
+  pub fn resolve_prompt(
+    self: &Rc<Self>,
+    rt: &Runtime,
+    context: &rquickjs::Context,
+    request_id: i64,
+    text: Option<&str>,
+  ) {
+    let state = self;
+    context.with(|ctx| {
+      use rquickjs::IntoJs;
+      if let Some(pending) = state.pending_prompts.borrow_mut().remove(&request_id) {
+        let value = match text {
+          Some(t) => t.into_js(&ctx),
+          None => Ok(Value::new_null(ctx.clone())),
+        };
+        match value {
+          Ok(v) => {
+            if pending.resolve_with(&ctx, v).is_err() {
+              (state.log)(&format!("prompt({request_id}) resolve failed: {}", format_exception(&ctx)));
+            }
+          }
+          Err(e) => {
+            pending.release(&ctx);
+            (state.log)(&format!("prompt({request_id}) text conversion failed: {e:?}"));
+          }
+        }
       }
-    }
-    for (_, pending) in state.pending_prompts.borrow_mut().drain() {
-      pending.release(&ctx);
-    }
-  });
+    });
+    pump_jobs(rt, context, state.log.as_ref());
+  }
+
+  pub fn close_page(self: &Rc<Self>, rt: &Runtime, context: &rquickjs::Context, page_id: i64) {
+    let state = self;
+    context.with(|ctx| {
+      let (on_close, transient) = {
+        let pages = state.pages.borrow();
+        let Some(def) = pages.get(&page_id) else {
+          return;
+        };
+        for (_, entry) in def.callbacks.borrow_mut().drain() {
+          let _ = entry.func.restore(&ctx);
+        }
+        (def.on_close.as_ref().cloned(), def.transient)
+      };
+      if let Some(persistent) = on_close {
+        match persistent.restore(&ctx) {
+          Ok(f) => match f.call::<_, Value>(()) {
+            Ok(_) => {}
+            Err(rquickjs::Error::Exception) => {
+              (state.log)(&crate::fault(format_args!("onClose callback threw: {}", format_exception(&ctx))));
+            }
+            Err(e) => (state.log)(&format!("onClose callback failed: {e:?}")),
+          },
+          Err(e) => (state.log)(&format!("onClose: failed to restore callback: {e:?}")),
+        }
+      }
+      if transient {
+        dispose_page(&ctx, state, page_id);
+      }
+    });
+    pump_jobs(rt, context, state.log.as_ref());
+  }
+
+  pub fn dispose(self: &Rc<Self>, context: &rquickjs::Context) {
+    let state = self;
+    context.with(|ctx| {
+      for (_, def) in state.pages.borrow_mut().drain() {
+        release_page_def(&ctx, def);
+      }
+      for (_, callbacks) in state.menus.borrow_mut().drain() {
+        for p in callbacks {
+          let _ = p.restore(&ctx);
+        }
+      }
+      for (_, pending) in state.pending_prompts.borrow_mut().drain() {
+        pending.release(&ctx);
+      }
+    });
+  }
 }
 
 #[cfg(test)]

@@ -439,7 +439,7 @@ pub(crate) fn setup_apis(grants: &[&str]) -> ApiFixture {
     let dialogs = crate::api::ui::dialogs::install_dialogs(&ctx, host.clone(), log.clone(), &inu).unwrap();
     (lifecycle, dialogs)
   });
-  let lifecycle = DisposeOnDrop::new(&ctx, lifecycle, crate::api::lifecycle::dispose);
-  let dialogs = DisposeOnDrop::new(&ctx, dialogs, crate::api::ui::dialogs::dispose);
+  let lifecycle = DisposeOnDrop::new(&ctx, lifecycle, |ctx, state| state.dispose(ctx));
+  let dialogs = DisposeOnDrop::new(&ctx, dialogs, |ctx, state| state.dispose(ctx));
   (rt, ctx, host, lifecycle, dialogs, logs)
 }

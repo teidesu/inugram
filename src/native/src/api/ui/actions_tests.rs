@@ -81,7 +81,7 @@ fn setup_with(lifecycle: Rc<Lifecycle>, grants: &[&str]) -> Fixture {
     let grants = crate::sandbox::grants::TestGrantHost::new(grants).as_host();
     install_actions(&ctx, host_dyn, lifecycle, None, grants, log, &inu).unwrap()
   });
-  let state = Disposing::new(&ctx, state, dispose);
+  let state = Disposing::new(&ctx, state, |ctx, state| state.dispose(ctx));
   (rt, ctx, host, state, logs)
 }
 
@@ -119,7 +119,7 @@ fn a_static_row_renders_without_running_plugin_code() {
            inu.registerChatAction({ id: 'a', text: 'Alpha', callback: () => { __log.push('a') } })"#,
   );
   assert_eq!(host.registered.borrow().len(), 1);
-  let json = render_actions(&rt, &ctx, &state, KIND_CHAT, CHAT_SURFACE).unwrap();
+  let json = state.render(&rt, &ctx, KIND_CHAT, CHAT_SURFACE).unwrap();
   assert_eq!(json, rows(&[row(1, "Alpha")]));
 }
 
@@ -138,7 +138,7 @@ fn a_dynamic_label_and_visible_see_the_surface() {
                id: 'b', text: 'never', visible: () => false, callback: () => {},
            })"#,
   );
-  let json = render_actions(&rt, &ctx, &state, KIND_MESSAGE, MESSAGE_SURFACE).unwrap();
+  let json = state.render(&rt, &ctx, KIND_MESSAGE, MESSAGE_SURFACE).unwrap();
   assert_eq!(json, rows(&[row(1, "msg 11+12 in -100")]));
 }
 
@@ -151,9 +151,9 @@ fn a_topic_is_absent_rather_than_zero_when_the_surface_has_none() {
                id: 'a', text: ctx => String(ctx.topicId === undefined), callback: () => {},
            })"#,
   );
-  let json = render_actions(&rt, &ctx, &state, KIND_CHAT, r#"{"accountId":0,"dialogId":5}"#).unwrap();
+  let json = state.render(&rt, &ctx, KIND_CHAT, r#"{"accountId":0,"dialogId":5}"#).unwrap();
   assert_eq!(json, rows(&[row(1, "true")]));
-  let json = render_actions(&rt, &ctx, &state, KIND_CHAT, CHAT_SURFACE).unwrap();
+  let json = state.render(&rt, &ctx, KIND_CHAT, CHAT_SURFACE).unwrap();
   assert_eq!(json, rows(&[row(1, "false")]));
 }
 
@@ -168,7 +168,7 @@ fn a_global_action_gets_no_dialog_at_all() {
                callback: () => {},
            })"#,
   );
-  let json = render_actions(&rt, &ctx, &state, KIND_GLOBAL, r#"{"accountId":2}"#).unwrap();
+  let json = state.render(&rt, &ctx, KIND_GLOBAL, r#"{"accountId":2}"#).unwrap();
   assert_eq!(json, rows(&[row(1, "false/false")]));
 }
 
@@ -181,7 +181,7 @@ fn rows_render_in_registration_order() {
                inu.registerChatAction({ id, text: id.toUpperCase(), callback: () => {} })
            }"#,
   );
-  let json = render_actions(&rt, &ctx, &state, KIND_CHAT, CHAT_SURFACE).unwrap();
+  let json = state.render(&rt, &ctx, KIND_CHAT, CHAT_SURFACE).unwrap();
   assert_eq!(json, rows(&[row(1, "C"), row(2, "A"), row(3, "B")]));
 }
 
@@ -195,7 +195,7 @@ fn re_registering_an_id_replaces_the_row_in_place_and_retires_its_token() {
            globalThis.__disposeFirst = null;
            inu.registerChatAction({ id: 'a', text: 'A2', callback: () => {} })"#,
   );
-  let json = render_actions(&rt, &ctx, &state, KIND_CHAT, CHAT_SURFACE).unwrap();
+  let json = state.render(&rt, &ctx, KIND_CHAT, CHAT_SURFACE).unwrap();
   assert_eq!(json, rows(&[row(3, "A2"), row(2, "B")]), "the replacement keeps its predecessor's position");
   assert_eq!(
     *host.unregistered.borrow(),
@@ -213,7 +213,7 @@ fn a_disposer_removes_the_row_and_tells_the_host_once() {
            inu.registerChatAction({ id: 'b', text: 'B', callback: () => {} });
            __d(); __d()"#,
   );
-  let json = render_actions(&rt, &ctx, &state, KIND_CHAT, CHAT_SURFACE).unwrap();
+  let json = state.render(&rt, &ctx, KIND_CHAT, CHAT_SURFACE).unwrap();
   assert_eq!(json, rows(&[row(2, "B")]));
   assert_eq!(*host.unregistered.borrow(), vec![(KIND_CHAT, 1)]);
 }
@@ -229,7 +229,7 @@ fn registering_after_unload_began_registers_nothing() {
            __d()"#,
   );
   assert!(host.registered.borrow().is_empty());
-  let json = render_actions(&rt, &ctx, &state, KIND_CHAT, CHAT_SURFACE).unwrap();
+  let json = state.render(&rt, &ctx, KIND_CHAT, CHAT_SURFACE).unwrap();
   assert_eq!(json, "[]");
 }
 
@@ -256,7 +256,7 @@ fn a_host_that_refuses_a_registration_leaves_nothing_behind() {
   *host.refuse_register.borrow_mut() = Some("too many rows".to_string());
   let err = eval_err(&ctx, "inu.registerChatAction({ id: 'a', text: ctx => 'A', callback: () => {} })");
   assert!(err.contains("too many rows"), "{err}");
-  let json = render_actions(&rt, &ctx, &state, KIND_CHAT, CHAT_SURFACE).unwrap();
+  let json = state.render(&rt, &ctx, KIND_CHAT, CHAT_SURFACE).unwrap();
   assert_eq!(json, "[]");
 }
 
@@ -325,7 +325,7 @@ fn a_keyed_re_registration_at_the_cap_replaces_rather_than_being_refused() {
            inu.registerChatAction({ id: 'a', text: 'A2', callback: () => {} })"#,
   );
   assert_eq!(host.row_count(KIND_CHAT), 8, "the replacement took the place its predecessor held");
-  let json = render_actions(&rt, &ctx, &state, KIND_CHAT, CHAT_SURFACE).unwrap();
+  let json = state.render(&rt, &ctx, KIND_CHAT, CHAT_SURFACE).unwrap();
   assert_eq!(
     json,
     rows(&[row(9, "A2"), row(2, "B"), row(3, "C"), row(4, "D"), row(5, "E"), row(6, "F"), row(7, "G"), row(8, "H"),])
@@ -345,7 +345,7 @@ fn a_row_whose_visible_throws_is_dropped_without_disabling_the_plugin() {
            inu.registerChatAction({ id: 'b', text: () => { throw new Error('bang') }, callback: () => {} });
            inu.registerChatAction({ id: 'c', text: 'C', callback: () => {} })"#,
   );
-  let json = render_actions(&rt, &ctx, &state, KIND_CHAT, CHAT_SURFACE).unwrap();
+  let json = state.render(&rt, &ctx, KIND_CHAT, CHAT_SURFACE).unwrap();
   assert_eq!(json, rows(&[row(3, "C")]), "the other rows still render");
   let logs = logs.borrow();
   assert!(logs.iter().any(|l| l.contains("boom")), "{logs:#?}");
@@ -363,7 +363,7 @@ fn a_callback_that_throws_is_the_plugins_fault() {
     &ctx,
     r#"inu.registerChatAction({ id: 'a', text: 'A', callback: () => { throw new Error('nope') } })"#,
   );
-  dispatch_action(&rt, &ctx, &state, KIND_CHAT, 1, CHAT_SURFACE);
+  state.dispatch(&rt, &ctx, KIND_CHAT, 1, CHAT_SURFACE);
   let logs = logs.borrow();
   assert!(logs.iter().any(|l| l.starts_with(crate::FAULT_PREFIX) && l.contains("nope")), "{logs:#?}");
 }
@@ -376,10 +376,10 @@ fn a_dispatch_for_a_disposed_row_does_nothing() {
     r#"globalThis.__log = [];
            globalThis.__d = inu.registerChatAction({ id: 'a', text: 'A', callback: () => { __log.push('ran') } })"#,
   );
-  dispatch_action(&rt, &ctx, &state, KIND_CHAT, 1, CHAT_SURFACE);
+  state.dispatch(&rt, &ctx, KIND_CHAT, 1, CHAT_SURFACE);
   assert_eq!(read_log(&ctx), r#"["ran"]"#);
   eval(&ctx, "__d()");
-  dispatch_action(&rt, &ctx, &state, KIND_CHAT, 1, CHAT_SURFACE);
+  state.dispatch(&rt, &ctx, KIND_CHAT, 1, CHAT_SURFACE);
   assert_eq!(read_log(&ctx), r#"["ran"]"#, "the stale row is inert");
   assert!(logs.borrow().is_empty());
 }
@@ -395,9 +395,9 @@ fn a_dispatch_for_a_replaced_row_does_not_reach_its_replacement() {
            inu.registerChatAction({ id: 'a', text: 'A', callback: () => { __log.push('first') } });
            inu.registerChatAction({ id: 'a', text: 'A2', callback: () => { __log.push('second') } })"#,
   );
-  dispatch_action(&rt, &ctx, &state, KIND_CHAT, 1, CHAT_SURFACE);
+  state.dispatch(&rt, &ctx, KIND_CHAT, 1, CHAT_SURFACE);
   assert_eq!(read_log(&ctx), "[]");
-  dispatch_action(&rt, &ctx, &state, KIND_CHAT, 2, CHAT_SURFACE);
+  state.dispatch(&rt, &ctx, KIND_CHAT, 2, CHAT_SURFACE);
   assert_eq!(read_log(&ctx), r#"["second"]"#);
 }
 
@@ -410,7 +410,7 @@ fn a_row_disposed_by_an_earlier_rows_visible_is_not_drawn() {
            inu.registerChatAction({ id: 'a', text: 'A', visible: () => { __d(); return true }, callback: () => {} });
            globalThis.__d = inu.registerChatAction({ id: 'b', text: 'B', callback: () => {} })"#,
   );
-  let json = render_actions(&rt, &ctx, &state, KIND_CHAT, CHAT_SURFACE).unwrap();
+  let json = state.render(&rt, &ctx, KIND_CHAT, CHAT_SURFACE).unwrap();
   assert_eq!(json, rows(&[row(1, "A")]));
 }
 
@@ -431,9 +431,9 @@ fn a_row_registered_mid_render_joins_the_next_one() {
                callback: () => {},
            })"#,
   );
-  let json = render_actions(&rt, &ctx, &state, KIND_CHAT, CHAT_SURFACE).unwrap();
+  let json = state.render(&rt, &ctx, KIND_CHAT, CHAT_SURFACE).unwrap();
   assert_eq!(json, rows(&[row(1, "A")]));
-  let json = render_actions(&rt, &ctx, &state, KIND_CHAT, CHAT_SURFACE).unwrap();
+  let json = state.render(&rt, &ctx, KIND_CHAT, CHAT_SURFACE).unwrap();
   assert_eq!(json, rows(&[row(1, "A"), row(2, "B")]));
 }
 
@@ -445,11 +445,8 @@ fn kinds_are_separate_registries() {
     r#"inu.registerChatAction({ id: 'a', text: 'chat', callback: () => {} });
            inu.registerMessageAction({ id: 'a', text: 'message', callback: () => {} })"#,
   );
-  assert_eq!(render_actions(&rt, &ctx, &state, KIND_CHAT, CHAT_SURFACE).unwrap(), rows(&[row(1, "chat")]));
-  assert_eq!(
-    render_actions(&rt, &ctx, &state, KIND_MESSAGE, MESSAGE_SURFACE).unwrap(),
-    rows(&[row(1, "message")])
-  );
+  assert_eq!(state.render(&rt, &ctx, KIND_CHAT, CHAT_SURFACE).unwrap(), rows(&[row(1, "chat")]));
+  assert_eq!(state.render(&rt, &ctx, KIND_MESSAGE, MESSAGE_SURFACE).unwrap(), rows(&[row(1, "message")]));
 }
 
 #[test]
@@ -468,7 +465,7 @@ fn the_editor_context_carries_the_draft_and_crosses_replace_and_send() {
            })"#,
   );
   let surface = r#"{"accountId":0,"dialogId":5,"surface":42,"draft":{"text":"hi there"}}"#;
-  dispatch_action(&rt, &ctx, &state, KIND_EDITOR, 1, surface);
+  state.dispatch(&rt, &ctx, KIND_EDITOR, 1, surface);
   assert_eq!(read_log(&ctx), r#"["hi there"]"#);
   let editor = host.editor.borrow();
   assert_eq!(editor.len(), 2);
@@ -501,7 +498,7 @@ fn reading_the_draft_needs_the_same_grant_get_draft_does() {
            })"#,
   );
   let surface = r#"{"accountId":0,"dialogId":5,"surface":42,"draft":{"text":"hi there"}}"#;
-  dispatch_action(&rt, &ctx, &state, KIND_EDITOR, 1, surface);
+  state.dispatch(&rt, &ctx, KIND_EDITOR, 1, surface);
   let log = read_log(&ctx);
   assert!(log.contains("not-granted"), "{log}");
   assert!(log.contains("account.read(draft)"), "{log}");
@@ -522,7 +519,7 @@ fn a_bad_editor_argument_is_an_invalid_argument_error() {
                },
            })"#,
   );
-  dispatch_action(&rt, &ctx, &state, KIND_EDITOR, 1, r#"{"accountId":0,"dialogId":5,"surface":1,"draft":{"text":""}}"#);
+  state.dispatch(&rt, &ctx, KIND_EDITOR, 1, r#"{"accountId":0,"dialogId":5,"surface":1,"draft":{"text":""}}"#);
   assert_eq!(read_log(&ctx), r#"["PluginError:invalid-argument","PluginError:invalid-argument"]"#);
   assert!(host.editor.borrow().is_empty());
 }
@@ -539,7 +536,7 @@ fn a_host_that_refuses_an_editor_op_throws_into_the_callback() {
                callback: ctx => { try { ctx.send('hi') } catch (e) { __log.push(e.message) } },
            })"#,
   );
-  dispatch_action(&rt, &ctx, &state, KIND_EDITOR, 1, r#"{"accountId":0,"dialogId":5,"surface":1,"draft":{"text":""}}"#);
+  state.dispatch(&rt, &ctx, KIND_EDITOR, 1, r#"{"accountId":0,"dialogId":5,"surface":1,"draft":{"text":""}}"#);
   assert_eq!(read_log(&ctx), r#"["the composer is gone"]"#);
 }
 
@@ -561,18 +558,14 @@ mod bundled_oracle {
       Err(e) => panic!("{e:?}"),
     });
 
-    assert_eq!(render_actions(&rt, &ctx, &state, KIND_CHAT, CHAT_SURFACE).unwrap(), rows(&[row(2, "Chat row")]),);
-    assert_eq!(
-      render_actions(&rt, &ctx, &state, KIND_MESSAGE, MESSAGE_SURFACE).unwrap(),
-      rows(&[row(1, "Message row")]),
-    );
-    dispatch_action(&rt, &ctx, &state, KIND_MESSAGE, 1, MESSAGE_SURFACE);
-    dispatch_action(&rt, &ctx, &state, KIND_PROFILE, 1, CHAT_SURFACE);
-    dispatch_action(&rt, &ctx, &state, KIND_GLOBAL, 1, r#"{"accountId":0}"#);
-    dispatch_action(
+    assert_eq!(state.render(&rt, &ctx, KIND_CHAT, CHAT_SURFACE).unwrap(), rows(&[row(2, "Chat row")]),);
+    assert_eq!(state.render(&rt, &ctx, KIND_MESSAGE, MESSAGE_SURFACE).unwrap(), rows(&[row(1, "Message row")]),);
+    state.dispatch(&rt, &ctx, KIND_MESSAGE, 1, MESSAGE_SURFACE);
+    state.dispatch(&rt, &ctx, KIND_PROFILE, 1, CHAT_SURFACE);
+    state.dispatch(&rt, &ctx, KIND_GLOBAL, 1, r#"{"accountId":0}"#);
+    state.dispatch(
       &rt,
       &ctx,
-      &state,
       KIND_EDITOR,
       1,
       r#"{"accountId":0,"dialogId":-100,"surface":1,"draft":{"text":"hello"}}"#,

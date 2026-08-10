@@ -371,8 +371,8 @@ fn setup_with_limit(grants: &[&str], transfer_limit: u64) -> Fixture {
     let writes = install_writes_with_limit(&ctx, deps, &shared, &accounts, &inu, transfer_limit).unwrap();
     (writes, reads, accounts)
   });
-  let writes = crate::testing::harness::DisposeOnDrop::new(&ctx, writes, dispose);
-  let reads = crate::testing::harness::DisposeOnDrop::new(&ctx, reads, crate::api::telegram::reads::dispose);
+  let writes = crate::testing::harness::DisposeOnDrop::new(&ctx, writes, |ctx, state| state.dispose(ctx));
+  let reads = crate::testing::harness::DisposeOnDrop::new(&ctx, reads, |ctx, state| state.dispose(ctx));
   let accounts = crate::testing::harness::DisposeOnDrop::new(&ctx, accounts, |ctx, state| state.dispose(ctx));
   (rt, ctx, host, writes, reads, accounts, dir)
 }
@@ -396,11 +396,11 @@ fn settle(rt: &Runtime, ctx: &Context, state: &Rc<WritesState>, host: &Rc<TestWr
       // terminal [11,11] can only have come from `finish` and an `abandon` in its place
       // leaves the plugin on the 8/11 the window was withholding
       for chunk in 1..=4 {
-        write_progress(rt, ctx, state, request_id, chunk * total / 5, total);
+        state.report_progress(rt, ctx, request_id, chunk * total / 5, total);
       }
     }
     let wire = host.answer(op, &arg, &values);
-    write_result(rt, ctx, state, request_id, &wire);
+    state.resolve_write(rt, ctx, request_id, &wire);
   }
   panic!("the host queue never drained");
 }
@@ -818,8 +818,8 @@ fn setup_send(grants: &[&str]) -> SendFixture {
     .unwrap();
     (rpc, reads, accounts)
   });
-  let rpc = crate::testing::harness::DisposeOnDrop::new(&ctx, rpc, crate::api::telegram::rpc::dispose);
-  let reads = crate::testing::harness::DisposeOnDrop::new(&ctx, reads, crate::api::telegram::reads::dispose);
+  let rpc = crate::testing::harness::DisposeOnDrop::new(&ctx, rpc, |ctx, state| state.dispose(ctx));
+  let reads = crate::testing::harness::DisposeOnDrop::new(&ctx, reads, |ctx, state| state.dispose(ctx));
   let accounts = crate::testing::harness::DisposeOnDrop::new(&ctx, accounts, |ctx, state| state.dispose(ctx));
   (rt, ctx, rpc_host, rpc, reads, accounts)
 }
@@ -835,16 +835,7 @@ fn run_one_send(fixture: &SendFixture, middleware: &str) -> Option<String> {
     ctx.eval::<(), _>(format!("inu.interceptSendMessage({middleware})")).unwrap();
   });
   let callback_id = *host.registered.borrow().last().expect("the middleware never registered");
-  crate::api::telegram::rpc::dispatch_rpc(
-    rt,
-    ctx,
-    rpc,
-    callback_id,
-    1,
-    "messages.sendMessage",
-    0,
-    &format!("J{A_SEND}"),
-  );
+  rpc.dispatch(rt, ctx, callback_id, 1, "messages.sendMessage", 0, &format!("J{A_SEND}"));
   host.next_calls.borrow().first().cloned()
 }
 

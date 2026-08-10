@@ -207,87 +207,86 @@ pub fn install_dialogs<'js>(
   Ok(state)
 }
 
-pub fn resolve_chooser(
-  rt: &Runtime,
-  context: &rquickjs::Context,
-  state: &Rc<DialogState>,
-  request_id: i64,
-  picked: Option<&str>,
-) {
-  context.with(|ctx| {
-    let Some((pending, multiple)) = state.pending_choosers.borrow_mut().remove(&request_id) else {
-      return;
-    };
-    let indices: Option<Vec<i32>> = picked.map(|list| {
-      list
-        .split(',')
-        .filter(|part| !part.is_empty())
-        .filter_map(|part| part.parse::<i32>().ok())
-        .collect()
-    });
-    let value = match (indices, multiple) {
-      (None, _) => Ok(Value::new_null(ctx.clone())),
-      (Some(indices), true) => rquickjs::Array::new(ctx.clone()).and_then(|array| {
-        for (i, index) in indices.iter().enumerate() {
-          array.set(i, *index)?;
-        }
-        Ok(array.into_value())
-      }),
-      (Some(indices), false) => match indices.first() {
-        Some(index) => rquickjs::IntoJs::into_js(*index, &ctx),
-        None => Ok(Value::new_null(ctx.clone())),
-      },
-    };
-    match value {
-      Ok(v) => {
-        if pending.resolve_with(&ctx, v).is_err() {
-          (state.log)(&format!("chooser({request_id}) resolve failed: {}", format_exception(&ctx)));
-        }
-      }
-      Err(e) => {
-        pending.release(&ctx);
-        (state.log)(&format!("chooser({request_id}) result conversion failed: {e:?}"));
-      }
-    }
-  });
-  pump_jobs(rt, context, state.log.as_ref());
-}
-
-pub fn resolve_dialog(
-  rt: &Runtime,
-  context: &rquickjs::Context,
-  state: &Rc<DialogState>,
-  request_id: i64,
-  result: &str,
-) {
-  context.with(|ctx| {
-    use rquickjs::IntoJs;
-    if let Some(pending) = state.pending_dialogs.borrow_mut().remove(&request_id) {
-      match result.into_js(&ctx) {
+impl DialogState {
+  pub fn resolve_chooser(
+    self: &Rc<Self>,
+    rt: &Runtime,
+    context: &rquickjs::Context,
+    request_id: i64,
+    picked: Option<&str>,
+  ) {
+    let state = self;
+    context.with(|ctx| {
+      let Some((pending, multiple)) = state.pending_choosers.borrow_mut().remove(&request_id) else {
+        return;
+      };
+      let indices: Option<Vec<i32>> = picked.map(|list| {
+        list
+          .split(',')
+          .filter(|part| !part.is_empty())
+          .filter_map(|part| part.parse::<i32>().ok())
+          .collect()
+      });
+      let value = match (indices, multiple) {
+        (None, _) => Ok(Value::new_null(ctx.clone())),
+        (Some(indices), true) => rquickjs::Array::new(ctx.clone()).and_then(|array| {
+          for (i, index) in indices.iter().enumerate() {
+            array.set(i, *index)?;
+          }
+          Ok(array.into_value())
+        }),
+        (Some(indices), false) => match indices.first() {
+          Some(index) => rquickjs::IntoJs::into_js(*index, &ctx),
+          None => Ok(Value::new_null(ctx.clone())),
+        },
+      };
+      match value {
         Ok(v) => {
           if pending.resolve_with(&ctx, v).is_err() {
-            (state.log)(&format!("dialog({request_id}) resolve failed: {}", format_exception(&ctx)));
+            (state.log)(&format!("chooser({request_id}) resolve failed: {}", format_exception(&ctx)));
           }
         }
         Err(e) => {
           pending.release(&ctx);
-          (state.log)(&format!("dialog({request_id}) result conversion failed: {e:?}"));
+          (state.log)(&format!("chooser({request_id}) result conversion failed: {e:?}"));
         }
       }
-    }
-  });
-  pump_jobs(rt, context, state.log.as_ref());
-}
+    });
+    pump_jobs(rt, context, state.log.as_ref());
+  }
 
-pub fn dispose(context: &rquickjs::Context, state: &Rc<DialogState>) {
-  context.with(|ctx| {
-    for (_, pending) in state.pending_dialogs.borrow_mut().drain() {
-      pending.release(&ctx);
-    }
-    for (_, (pending, _)) in state.pending_choosers.borrow_mut().drain() {
-      pending.release(&ctx);
-    }
-  });
+  pub fn resolve_dialog(self: &Rc<Self>, rt: &Runtime, context: &rquickjs::Context, request_id: i64, result: &str) {
+    let state = self;
+    context.with(|ctx| {
+      use rquickjs::IntoJs;
+      if let Some(pending) = state.pending_dialogs.borrow_mut().remove(&request_id) {
+        match result.into_js(&ctx) {
+          Ok(v) => {
+            if pending.resolve_with(&ctx, v).is_err() {
+              (state.log)(&format!("dialog({request_id}) resolve failed: {}", format_exception(&ctx)));
+            }
+          }
+          Err(e) => {
+            pending.release(&ctx);
+            (state.log)(&format!("dialog({request_id}) result conversion failed: {e:?}"));
+          }
+        }
+      }
+    });
+    pump_jobs(rt, context, state.log.as_ref());
+  }
+
+  pub fn dispose(self: &Rc<Self>, context: &rquickjs::Context) {
+    let state = self;
+    context.with(|ctx| {
+      for (_, pending) in state.pending_dialogs.borrow_mut().drain() {
+        pending.release(&ctx);
+      }
+      for (_, (pending, _)) in state.pending_choosers.borrow_mut().drain() {
+        pending.release(&ctx);
+      }
+    });
+  }
 }
 
 #[cfg(test)]

@@ -903,10 +903,6 @@ pub fn install_canvas<'js>(
   Ok(state)
 }
 
-pub fn attach_fs(state: &Rc<CanvasState>, fs: Rc<FsState>) {
-  *state.fs.borrow_mut() = Some(fs);
-}
-
 fn install_namespace<'js>(ctx: &Ctx<'js>, state: &Rc<CanvasState>, inu: &Object<'js>) -> JsResult<()> {
   let canvas = Object::new(ctx.clone())?;
 
@@ -1184,58 +1180,61 @@ fn parse_answer<'js>(ctx: &Ctx<'js>, wire: &str) -> JsResult<Object<'js>> {
     .ok_or_else(|| Exception::throw_message(ctx, "canvas: malformed host answer"))
 }
 
-pub fn dispose(context: &rquickjs::Context, state: &Rc<CanvasState>) {
-  context.with(|ctx| {
-    for (_, pending) in state.pending.borrow_mut().drain() {
-      if let Some(path) = pending.staged.as_ref() {
-        let _ = fs::remove_file(path);
+impl CanvasState {
+  pub fn attach_fs(self: &Rc<Self>, fs: Rc<FsState>) {
+    let state = self;
+    *state.fs.borrow_mut() = Some(fs);
+  }
+
+  pub fn resolve(self: &Rc<Self>, rt: &Runtime, context: &rquickjs::Context, request_id: i64, result_wire: &str) {
+    let state = self;
+    context.with(|ctx| {
+      let Some(pending) = take_pending(state, request_id) else {
+        return;
+      };
+      if let Some(built) = wire_error_to_js(&ctx, result_wire) {
+        match built {
+          Ok(value) => {
+            if pending.settle.reject_with_value(&ctx, value).is_err() {
+              (state.log)(&format!("canvas({request_id}) reject failed: {}", format_exception(&ctx)));
+            }
+          }
+          Err(e) => {
+            pending.settle.release(&ctx);
+            (state.log)(&format!("canvas({request_id}) error decode failed: {e:?}"));
+          }
+        }
+        return;
       }
-      pending.settle.release(&ctx);
-    }
-  });
+      let built = build_answer(&ctx, state, &pending.kind, result_wire);
+      match built {
+        Ok(value) => {
+          if pending.settle.resolve_with(&ctx, value).is_err() {
+            (state.log)(&format!("canvas({request_id}) resolve failed: {}", format_exception(&ctx)));
+          }
+        }
+        Err(_) => {
+          pending.settle.release(&ctx);
+          (state.log)(&format!("canvas({request_id}) bad result wire: {}", format_exception(&ctx)));
+        }
+      }
+    });
+    pump_jobs(rt, context, state.log.as_ref());
+  }
+
+  pub fn dispose(self: &Rc<Self>, context: &rquickjs::Context) {
+    let state = self;
+    context.with(|ctx| {
+      for (_, pending) in state.pending.borrow_mut().drain() {
+        if let Some(path) = pending.staged.as_ref() {
+          let _ = fs::remove_file(path);
+        }
+        pending.settle.release(&ctx);
+      }
+    });
+  }
 }
 
 #[cfg(test)]
 #[path = "tests.rs"]
 mod tests;
-
-pub fn canvas_result(
-  rt: &Runtime,
-  context: &rquickjs::Context,
-  state: &Rc<CanvasState>,
-  request_id: i64,
-  result_wire: &str,
-) {
-  context.with(|ctx| {
-    let Some(pending) = take_pending(state, request_id) else {
-      return;
-    };
-    if let Some(built) = wire_error_to_js(&ctx, result_wire) {
-      match built {
-        Ok(value) => {
-          if pending.settle.reject_with_value(&ctx, value).is_err() {
-            (state.log)(&format!("canvas({request_id}) reject failed: {}", format_exception(&ctx)));
-          }
-        }
-        Err(e) => {
-          pending.settle.release(&ctx);
-          (state.log)(&format!("canvas({request_id}) error decode failed: {e:?}"));
-        }
-      }
-      return;
-    }
-    let built = build_answer(&ctx, state, &pending.kind, result_wire);
-    match built {
-      Ok(value) => {
-        if pending.settle.resolve_with(&ctx, value).is_err() {
-          (state.log)(&format!("canvas({request_id}) resolve failed: {}", format_exception(&ctx)));
-        }
-      }
-      Err(_) => {
-        pending.settle.release(&ctx);
-        (state.log)(&format!("canvas({request_id}) bad result wire: {}", format_exception(&ctx)));
-      }
-    }
-  });
-  pump_jobs(rt, context, state.log.as_ref());
-}

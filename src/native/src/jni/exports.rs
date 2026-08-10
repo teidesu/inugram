@@ -341,10 +341,9 @@ pub extern "system" fn Java_desu_inugram_helpers_plugins_QuickJs_nativeXposedBef
       return std::ptr::null_mut();
     };
     let answer = match engine.xposed.as_ref() {
-      Some(state) => xposed::dispatch_before(
+      Some(state) => state.dispatch_before(
         &engine._rt,
         &engine.ctx,
-        state,
         dispatch_id,
         site,
         &xposed::Invocation {
@@ -378,7 +377,7 @@ pub extern "system" fn Java_desu_inugram_helpers_plugins_QuickJs_nativeXposedAft
     let result = jstring_to_string(env, &result);
     let answer = match get_engine(ptr) {
       Some(engine) => match engine.xposed.as_ref() {
-        Some(state) => xposed::dispatch_after(&engine._rt, &engine.ctx, state, dispatch_id, &result),
+        Some(state) => state.dispatch_after(&engine._rt, &engine.ctx, dispatch_id, &result),
         None => result,
       },
       None => result,
@@ -409,7 +408,7 @@ pub extern "system" fn Java_desu_inugram_helpers_plugins_QuickJs_nativeXposedRel
   let Some(state) = engine.xposed.as_ref() else {
     return;
   };
-  (xposed::release_dispatch(&engine.ctx, state, dispatch_id));
+  state.release_dispatch(&engine.ctx, dispatch_id);
 }
 
 #[no_mangle]
@@ -511,7 +510,7 @@ pub extern "system" fn Java_desu_inugram_helpers_plugins_QuickJs_nativeJvmCallba
   let Some(state) = engine.jvm.as_ref() else {
     return;
   };
-  (jvm::dispatch_callback(&engine._rt, &engine.ctx, state, callback_id as u32));
+  state.dispatch_callback(&engine._rt, &engine.ctx, callback_id as u32);
 }
 
 fn install_engine_fs(
@@ -541,7 +540,7 @@ fn install_engine_fs(
     })
     .map_err(|e| log(&format!("inu.fs failed to install: {e:?}")))
     .ok()?;
-  canvas::attach_fs(canvas, state);
+  canvas.attach_fs(state);
   Some(())
 }
 
@@ -560,7 +559,7 @@ pub extern "system" fn Java_desu_inugram_helpers_plugins_QuickJs_nativeCanvasRes
     };
     let state = &engine.canvas;
     let result_wire = jstring_to_string(env, &result_wire);
-    (canvas::canvas_result(&engine._rt, &engine.ctx, state, request_id, &result_wire));
+    state.resolve(&engine._rt, &engine.ctx, request_id, &result_wire);
   })
 }
 
@@ -579,7 +578,7 @@ pub extern "system" fn Java_desu_inugram_helpers_plugins_QuickJs_nativeFetchResu
     };
     let state = &engine.fetch;
     let result_wire = jstring_to_string(env, &result_wire);
-    (crate::api::io::fetch::fetch_result(&engine._rt, &engine.ctx, state, request_id, &result_wire));
+    state.resolve(&engine._rt, &engine.ctx, request_id, &result_wire);
   })
 }
 
@@ -594,7 +593,7 @@ pub extern "system" fn Java_desu_inugram_helpers_plugins_QuickJs_nativeRunTimers
     return;
   };
   let state = &engine.timers;
-  crate::api::timers::run_due(&engine._rt, &engine.ctx, state);
+  state.run_due(&engine._rt, &engine.ctx);
 }
 
 #[no_mangle]
@@ -609,8 +608,8 @@ pub extern "system" fn Java_desu_inugram_helpers_plugins_QuickJs_nativeAppVisibi
     return;
   };
 
-  crate::api::timers::set_visible(&engine.timers, visible);
-  crate::api::lifecycle::app_visibility_changed(&engine._rt, &engine.ctx, &engine.lifecycle_state, visible);
+  engine.timers.set_visible(visible);
+  engine.lifecycle_state.app_visibility_changed(&engine._rt, &engine.ctx, visible);
 }
 
 #[no_mangle]
@@ -626,7 +625,7 @@ pub extern "system" fn Java_desu_inugram_helpers_plugins_QuickJs_nativeUiRender(
       return std::ptr::null_mut();
     };
     let state = &engine.ui;
-    match crate::api::ui::pages::render_page(&engine._rt, &engine.ctx, state, page_id) {
+    match state.render(&engine._rt, &engine.ctx, page_id) {
       Some(json) => env.new_string(json).map(|j| j.into_raw()).unwrap_or(std::ptr::null_mut()),
       None => std::ptr::null_mut(),
     }
@@ -649,7 +648,7 @@ pub extern "system" fn Java_desu_inugram_helpers_plugins_QuickJs_nativeUiEvent(
     };
     let state = &engine.ui;
     let arg_json = jstring_to_string(env, &arg_json);
-    (crate::api::ui::pages::dispatch_ui_event(&engine._rt, &engine.ctx, state, page_id, slot as u32, &arg_json));
+    state.dispatch_event(&engine._rt, &engine.ctx, page_id, slot as u32, &arg_json);
   })
 }
 
@@ -666,7 +665,7 @@ pub extern "system" fn Java_desu_inugram_helpers_plugins_QuickJs_nativeUiMenuCli
     return;
   };
   let state = &engine.ui;
-  (crate::api::ui::pages::dispatch_menu_click(&engine._rt, &engine.ctx, state, menu_id, slot));
+  state.dispatch_menu_click(&engine._rt, &engine.ctx, menu_id, slot);
 }
 
 #[no_mangle]
@@ -681,7 +680,7 @@ pub extern "system" fn Java_desu_inugram_helpers_plugins_QuickJs_nativeUiPageClo
     return;
   };
   let state = &engine.ui;
-  (crate::api::ui::pages::page_closed(&engine._rt, &engine.ctx, state, page_id));
+  state.close_page(&engine._rt, &engine.ctx, page_id);
 }
 
 #[no_mangle]
@@ -699,7 +698,7 @@ pub extern "system" fn Java_desu_inugram_helpers_plugins_QuickJs_nativeRenderAct
     };
     let state = &engine.actions;
     let surface_json = jstring_to_string(env, &surface_json);
-    match crate::api::ui::actions::render_actions(&engine._rt, &engine.ctx, state, kind, &surface_json) {
+    match state.render(&engine._rt, &engine.ctx, kind, &surface_json) {
       Some(json) => env.new_string(json).map(|j| j.into_raw()).unwrap_or(std::ptr::null_mut()),
       None => std::ptr::null_mut(),
     }
@@ -722,7 +721,7 @@ pub extern "system" fn Java_desu_inugram_helpers_plugins_QuickJs_nativeDispatchA
     };
     let state = &engine.actions;
     let surface_json = jstring_to_string(env, &surface_json);
-    (crate::api::ui::actions::dispatch_action(&engine._rt, &engine.ctx, state, kind, token as u32, &surface_json));
+    state.dispatch(&engine._rt, &engine.ctx, kind, token as u32, &surface_json);
   })
 }
 
@@ -741,7 +740,7 @@ pub extern "system" fn Java_desu_inugram_helpers_plugins_QuickJs_nativeResolvePr
     };
     let state = &engine.ui;
     let text = if text.is_null() { None } else { Some(jstring_to_string(env, &text)) };
-    (crate::api::ui::pages::resolve_prompt(&engine._rt, &engine.ctx, state, request_id, text.as_deref()));
+    state.resolve_prompt(&engine._rt, &engine.ctx, request_id, text.as_deref());
   })
 }
 
@@ -760,7 +759,7 @@ pub extern "system" fn Java_desu_inugram_helpers_plugins_QuickJs_nativeResolveCh
     };
     let state = &engine.dialogs;
     let picked = if picked.is_null() { None } else { Some(jstring_to_string(env, &picked)) };
-    (crate::api::ui::dialogs::resolve_chooser(&engine._rt, &engine.ctx, state, request_id, picked.as_deref()));
+    state.resolve_chooser(&engine._rt, &engine.ctx, request_id, picked.as_deref());
   })
 }
 
@@ -780,7 +779,7 @@ pub extern "system" fn Java_desu_inugram_helpers_plugins_QuickJs_nativeDispatchS
     let state = &engine.screens;
     let change_json = jstring_to_string(env, &change_json);
     let stack_json = jstring_to_string(env, &stack_json);
-    (crate::api::ui::screens::dispatch_screen_change(&engine._rt, &engine.ctx, state, &change_json, &stack_json));
+    state.dispatch_change(&engine._rt, &engine.ctx, &change_json, &stack_json);
   })
 }
 
@@ -802,15 +801,7 @@ pub extern "system" fn Java_desu_inugram_helpers_plugins_QuickJs_nativeDispatchN
     let state = &engine.notifications;
     let name = jstring_to_string(env, &name);
     let args_json = jstring_to_string(env, &args_json);
-    (crate::api::platform::notifications::dispatch_notification(
-      &engine._rt,
-      &engine.ctx,
-      state,
-      callback_id as u32,
-      &name,
-      account,
-      &args_json,
-    ));
+    state.dispatch(&engine._rt, &engine.ctx, callback_id as u32, &name, account, &args_json);
   })
 }
 
@@ -829,7 +820,7 @@ pub extern "system" fn Java_desu_inugram_helpers_plugins_QuickJs_nativeResolveDi
     };
     let state = &engine.dialogs;
     let result = jstring_to_string(env, &result);
-    (crate::api::ui::dialogs::resolve_dialog(&engine._rt, &engine.ctx, state, request_id, &result));
+    state.resolve_dialog(&engine._rt, &engine.ctx, request_id, &result);
   })
 }
 
@@ -845,8 +836,8 @@ pub extern "system" fn Java_desu_inugram_helpers_plugins_QuickJs_nativeNotifyUnl
   };
   engine.lifecycle.begin_unload();
   engine.account.notify_unload(&engine._rt, &engine.ctx);
-  crate::api::lifecycle::notify_unload(&engine._rt, &engine.ctx, &engine.lifecycle_state);
-  crate::api::timers::notify_unload(&engine.ctx, &engine.timers);
+  engine.lifecycle_state.notify_unload(&engine._rt, &engine.ctx);
+  engine.timers.notify_unload(&engine.ctx);
 }
 
 #[no_mangle]
@@ -930,16 +921,7 @@ pub extern "system" fn Java_desu_inugram_helpers_plugins_QuickJs_nativeDispatchR
     let state = &engine.rpc;
     let method = jstring_to_string(env, &method);
     let request_wire = jstring_to_string(env, &request_wire);
-    (crate::api::telegram::rpc::dispatch_rpc(
-      &engine._rt,
-      &engine.ctx,
-      state,
-      callback_id as u32,
-      dispatch_id,
-      &method,
-      account_id,
-      &request_wire,
-    ));
+    state.dispatch(&engine._rt, &engine.ctx, callback_id as u32, dispatch_id, &method, account_id, &request_wire);
   })
 }
 
@@ -958,7 +940,7 @@ pub extern "system" fn Java_desu_inugram_helpers_plugins_QuickJs_nativeCompleteN
     };
     let state = &engine.rpc;
     let result_wire = jstring_to_string(env, &result_wire);
-    (crate::api::telegram::rpc::complete_next(&engine._rt, &engine.ctx, state, dispatch_id, &result_wire));
+    state.complete_next(&engine._rt, &engine.ctx, dispatch_id, &result_wire);
   })
 }
 
@@ -977,7 +959,7 @@ pub extern "system" fn Java_desu_inugram_helpers_plugins_QuickJs_nativeAbandonDi
     };
     let state = &engine.rpc;
     let reason_wire = jstring_to_string(env, &reason_wire);
-    (crate::api::telegram::rpc::abandon_dispatch(&engine._rt, &engine.ctx, state, dispatch_id, &reason_wire));
+    state.abandon_dispatch(&engine._rt, &engine.ctx, dispatch_id, &reason_wire);
   })
 }
 
@@ -996,7 +978,7 @@ pub extern "system" fn Java_desu_inugram_helpers_plugins_QuickJs_nativeResolveIn
     };
     let state = &engine.rpc;
     let result_wire = jstring_to_string(env, &result_wire);
-    (crate::api::telegram::rpc::resolve_invoke(&engine._rt, &engine.ctx, state, invoke_id, &result_wire));
+    state.resolve_invoke(&engine._rt, &engine.ctx, invoke_id, &result_wire);
   })
 }
 
@@ -1015,7 +997,7 @@ pub extern "system" fn Java_desu_inugram_helpers_plugins_QuickJs_nativeResolvePe
     };
     let state = &engine.reads;
     let result_wire = jstring_to_string(env, &result_wire);
-    (crate::api::telegram::reads::resolve_peer_result(&engine._rt, &engine.ctx, state, request_id, &result_wire));
+    state.resolve_peer(&engine._rt, &engine.ctx, request_id, &result_wire);
   })
 }
 
@@ -1034,7 +1016,7 @@ pub extern "system" fn Java_desu_inugram_helpers_plugins_QuickJs_nativeAccountFe
     };
     let state = &engine.reads;
     let result_wire = jstring_to_string(env, &result_wire);
-    (crate::api::telegram::reads::account_fetch_result(&engine._rt, &engine.ctx, state, request_id, &result_wire));
+    state.resolve_account_fetch(&engine._rt, &engine.ctx, request_id, &result_wire);
   })
 }
 
@@ -1053,7 +1035,7 @@ pub extern "system" fn Java_desu_inugram_helpers_plugins_QuickJs_nativeWriteResu
     };
     let state = &engine.writes;
     let result_wire = jstring_to_string(env, &result_wire);
-    (crate::api::telegram::writes::write_result(&engine._rt, &engine.ctx, state, request_id, &result_wire));
+    state.resolve_write(&engine._rt, &engine.ctx, request_id, &result_wire);
   })
 }
 
@@ -1071,7 +1053,7 @@ pub extern "system" fn Java_desu_inugram_helpers_plugins_QuickJs_nativeWriteProg
     return;
   };
   let state = &engine.writes;
-  (crate::api::telegram::writes::write_progress(&engine._rt, &engine.ctx, state, request_id, loaded, total));
+  state.report_progress(&engine._rt, &engine.ctx, request_id, loaded, total);
 }
 
 #[no_mangle]
@@ -1091,7 +1073,7 @@ pub extern "system" fn Java_desu_inugram_helpers_plugins_QuickJs_nativeDispatchU
     let state = &engine.rpc;
     let type_name = jstring_to_string(env, &type_name);
     let update_wire = jstring_to_string(env, &update_wire);
-    (crate::api::telegram::rpc::dispatch_update(&engine._rt, &engine.ctx, state, &type_name, account_id, &update_wire));
+    state.dispatch_update(&engine._rt, &engine.ctx, &type_name, account_id, &update_wire);
   })
 }
 
@@ -1110,7 +1092,7 @@ pub extern "system" fn Java_desu_inugram_helpers_plugins_QuickJs_nativeDispatchD
     };
     let state = &engine.deserialize;
     let object_wire = jstring_to_string(env, &object_wire);
-    (crate::api::telegram::deserialize::dispatch_middleware(&engine.ctx, state, callback_id as u32, &object_wire));
+    state.dispatch(&engine.ctx, callback_id as u32, &object_wire);
   })
 }
 
@@ -1133,16 +1115,15 @@ pub extern "system" fn Java_desu_inugram_helpers_plugins_QuickJs_nativeDispatchU
     let state = &engine.rpc;
     let type_name = jstring_to_string(env, &type_name);
     let update_wire = jstring_to_string(env, &update_wire);
-    (crate::api::telegram::rpc::dispatch_update_intercept(
+    state.dispatch_update_intercept(
       &engine._rt,
       &engine.ctx,
-      state,
       callback_id as u32,
       dispatch_id,
       &type_name,
       account_id,
       &update_wire,
-    ));
+    );
   })
 }
 
@@ -1158,7 +1139,7 @@ pub extern "system" fn Java_desu_inugram_helpers_plugins_QuickJs_nativeAbandonUp
     return;
   };
   let state = &engine.rpc;
-  (crate::api::telegram::rpc::abandon_update_dispatch(&engine._rt, &engine.ctx, state, dispatch_id));
+  state.abandon_update_dispatch(&engine._rt, &engine.ctx, dispatch_id);
 }
 
 #[no_mangle]
@@ -1242,25 +1223,25 @@ pub extern "system" fn Java_desu_inugram_helpers_plugins_QuickJs_nativeDestroy(
   ptr: jlong,
 ) {
   if let Some(engine) = remove_engine(ptr) {
-    crate::api::telegram::rpc::dispose(&engine.ctx, &engine.rpc);
-    crate::api::telegram::deserialize::dispose(&engine.ctx, &engine.deserialize);
-    crate::api::lifecycle::dispose(&engine.ctx, &engine.lifecycle_state);
-    crate::api::ui::dialogs::dispose(&engine.ctx, &engine.dialogs);
-    crate::api::ui::pages::dispose(&engine.ctx, &engine.ui);
-    crate::api::ui::screens::dispose(&engine.ctx, &engine.screens);
-    crate::api::ui::actions::dispose(&engine.ctx, &engine.actions);
-    crate::api::telegram::writes::dispose(&engine.ctx, &engine.writes);
-    crate::api::telegram::reads::dispose(&engine.ctx, &engine.reads);
+    engine.rpc.dispose(&engine.ctx);
+    engine.deserialize.dispose(&engine.ctx);
+    engine.lifecycle_state.dispose(&engine.ctx);
+    engine.dialogs.dispose(&engine.ctx);
+    engine.ui.dispose(&engine.ctx);
+    engine.screens.dispose(&engine.ctx);
+    engine.actions.dispose(&engine.ctx);
+    engine.writes.dispose(&engine.ctx);
+    engine.reads.dispose(&engine.ctx);
     engine.account.dispose(&engine.ctx);
-    crate::api::io::fetch::dispose(&engine.ctx, &engine.fetch);
-    canvas::dispose(&engine.ctx, &engine.canvas);
-    crate::api::timers::dispose(&engine.ctx, &engine.timers);
-    crate::api::platform::notifications::dispose(&engine.ctx, &engine.notifications);
+    engine.fetch.dispose(&engine.ctx);
+    engine.canvas.dispose(&engine.ctx);
+    engine.timers.dispose(&engine.ctx);
+    engine.notifications.dispose(&engine.ctx);
     if let Some(state) = engine.xposed.as_ref() {
-      xposed::dispose(&engine.ctx, &state);
+      state.dispose(&engine.ctx);
     }
     if let Some(state) = engine.jvm.as_ref() {
-      jvm::dispose(&engine.ctx, &state);
+      state.dispose(&engine.ctx);
     }
     engine.ctx.with(|ctx| {
       drop(engine.shared.clone().restore(&ctx));

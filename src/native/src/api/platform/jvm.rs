@@ -326,30 +326,34 @@ fn install_android_screen<'js>(ctx: &Ctx<'js>, state: &Rc<JvmState>, inu: &Objec
   Ok(())
 }
 
-pub fn dispatch_callback(rt: &Runtime, context: &Context, state: &Rc<JvmState>, callback_id: u32) {
-  context.with(|ctx| {
-    let Some(callback) = state.callbacks.restore(&ctx, callback_id) else {
-      return;
-    };
-    match callback.call::<_, Value>(()) {
-      Ok(_) => {}
-      Err(rquickjs::Error::Exception) => {
-        (state.log)(&crate::fault(format_args!("jvm.runnable callback threw: {}", format_exception(&ctx))));
+impl JvmState {
+  pub fn dispatch_callback(self: &Rc<Self>, rt: &Runtime, context: &Context, callback_id: u32) {
+    let state = self;
+    context.with(|ctx| {
+      let Some(callback) = state.callbacks.restore(&ctx, callback_id) else {
+        return;
+      };
+      match callback.call::<_, Value>(()) {
+        Ok(_) => {}
+        Err(rquickjs::Error::Exception) => {
+          (state.log)(&crate::fault(format_args!("jvm.runnable callback threw: {}", format_exception(&ctx))));
+        }
+        Err(e) => (state.log)(&format!("jvm.runnable callback failed: {e:?}")),
       }
-      Err(e) => (state.log)(&format!("jvm.runnable callback failed: {e:?}")),
-    }
-  });
-  pump_jobs(rt, context, state.log.as_ref());
-}
+    });
+    pump_jobs(rt, context, state.log.as_ref());
+  }
 
-pub fn dispose(context: &Context, state: &Rc<JvmState>) {
-  context.with(|ctx| {
-    state.callbacks.release_all(&ctx);
-    if let Some(prelude) = state.prelude.borrow_mut().take() {
-      let _ = prelude.mint.restore(&ctx);
-      let _ = prelude.id_of.restore(&ctx);
-    }
-  });
+  pub fn dispose(self: &Rc<Self>, context: &Context) {
+    let state = self;
+    context.with(|ctx| {
+      state.callbacks.release_all(&ctx);
+      if let Some(prelude) = state.prelude.borrow_mut().take() {
+        let _ = prelude.mint.restore(&ctx);
+        let _ = prelude.id_of.restore(&ctx);
+      }
+    });
+  }
 }
 
 #[cfg(test)]

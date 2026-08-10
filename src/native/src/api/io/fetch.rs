@@ -200,69 +200,67 @@ fn mint_body<'js>(ctx: &Ctx<'js>, body: &Object<'js>) -> JsResult<Value<'js>> {
   mint_app_file(ctx, &path, size, &mime, None, mtime)
 }
 
-pub fn fetch_result(
-  rt: &Runtime,
-  context: &rquickjs::Context,
-  state: &Rc<FetchState>,
-  request_id: i64,
-  result_wire: &str,
-) {
-  context.with(|ctx| {
-    let Some(settle) = state.pending.borrow_mut().remove(&request_id) else {
-      return;
-    };
-    if let Some(built) = wire_error_to_js(&ctx, result_wire) {
-      match built {
-        Ok(value) => {
-          if settle.reject_with_value(&ctx, value).is_err() {
-            (state.log)(&format!("fetch({request_id}) reject failed: {}", format_exception(&ctx)));
+impl FetchState {
+  pub fn resolve(self: &Rc<Self>, rt: &Runtime, context: &rquickjs::Context, request_id: i64, result_wire: &str) {
+    let state = self;
+    context.with(|ctx| {
+      let Some(settle) = state.pending.borrow_mut().remove(&request_id) else {
+        return;
+      };
+      if let Some(built) = wire_error_to_js(&ctx, result_wire) {
+        match built {
+          Ok(value) => {
+            if settle.reject_with_value(&ctx, value).is_err() {
+              (state.log)(&format!("fetch({request_id}) reject failed: {}", format_exception(&ctx)));
+            }
+          }
+          Err(e) => {
+            settle.release(&ctx);
+            (state.log)(&format!("fetch({request_id}) error decode failed: {e:?}"));
           }
         }
-        Err(e) => {
+        return;
+      }
+      let built = (|| -> JsResult<Value> {
+        let json = result_wire
+          .strip_prefix('J')
+          .ok_or_else(|| rquickjs::Exception::throw_message(&ctx, "fetch: malformed host response"))?;
+        let value = ctx.json_parse(json)?;
+        let object = value
+          .as_object()
+          .cloned()
+          .ok_or_else(|| rquickjs::Exception::throw_message(&ctx, "fetch: malformed host response"))?;
+        let body: Option<Object> = object.get("body")?;
+        let blob = match body {
+          Some(body) => mint_body(&ctx, &body)?,
+          None => Value::new_null(ctx.clone()),
+        };
+        object.set("body", blob)?;
+        Ok(object.into_value())
+      })();
+      match built {
+        Ok(value) => {
+          if settle.resolve_with(&ctx, value).is_err() {
+            (state.log)(&format!("fetch({request_id}) resolve failed: {}", format_exception(&ctx)));
+          }
+        }
+        Err(_) => {
           settle.release(&ctx);
-          (state.log)(&format!("fetch({request_id}) error decode failed: {e:?}"));
+          (state.log)(&format!("fetch({request_id}) bad result wire: {}", format_exception(&ctx)));
         }
       }
-      return;
-    }
-    let built = (|| -> JsResult<Value> {
-      let json = result_wire
-        .strip_prefix('J')
-        .ok_or_else(|| rquickjs::Exception::throw_message(&ctx, "fetch: malformed host response"))?;
-      let value = ctx.json_parse(json)?;
-      let object = value
-        .as_object()
-        .cloned()
-        .ok_or_else(|| rquickjs::Exception::throw_message(&ctx, "fetch: malformed host response"))?;
-      let body: Option<Object> = object.get("body")?;
-      let blob = match body {
-        Some(body) => mint_body(&ctx, &body)?,
-        None => Value::new_null(ctx.clone()),
-      };
-      object.set("body", blob)?;
-      Ok(object.into_value())
-    })();
-    match built {
-      Ok(value) => {
-        if settle.resolve_with(&ctx, value).is_err() {
-          (state.log)(&format!("fetch({request_id}) resolve failed: {}", format_exception(&ctx)));
-        }
-      }
-      Err(_) => {
-        settle.release(&ctx);
-        (state.log)(&format!("fetch({request_id}) bad result wire: {}", format_exception(&ctx)));
-      }
-    }
-  });
-  pump_jobs(rt, context, state.log.as_ref());
-}
+    });
+    pump_jobs(rt, context, state.log.as_ref());
+  }
 
-pub fn dispose(context: &rquickjs::Context, state: &Rc<FetchState>) {
-  context.with(|ctx| {
-    for (_, settle) in state.pending.borrow_mut().drain() {
-      settle.release(&ctx);
-    }
-  });
+  pub fn dispose(self: &Rc<Self>, context: &rquickjs::Context) {
+    let state = self;
+    context.with(|ctx| {
+      for (_, settle) in state.pending.borrow_mut().drain() {
+        settle.release(&ctx);
+      }
+    });
+  }
 }
 
 #[cfg(test)]

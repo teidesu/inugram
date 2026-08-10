@@ -161,7 +161,7 @@ fn the_bundled_api_test_plugin_passes() {
     )
     .unwrap()
   });
-  let _ui = crate::testing::harness::DisposeOnDrop::new(&ctx, ui, crate::api::ui::pages::dispose);
+  let _ui = crate::testing::harness::DisposeOnDrop::new(&ctx, ui, |ctx, state| state.dispose(ctx));
   let lines = crate::testing::harness::install_capturing_console(&ctx);
   ctx.with(|ctx| match ctx.eval::<(), _>(API_ORACLE) {
     Ok(()) => {}
@@ -170,8 +170,8 @@ fn the_bundled_api_test_plugin_passes() {
   });
 
   let request_id = host.dialogs.borrow().last().expect("a dialog was opened").0;
-  crate::api::ui::dialogs::resolve_dialog(&rt, &ctx, &dialogs, request_id, "positive");
-  crate::api::lifecycle::notify_unload(&rt, &ctx, &lifecycle);
+  dialogs.resolve_dialog(&rt, &ctx, request_id, "positive");
+  lifecycle.notify_unload(&rt, &ctx);
 
   let lines = lines.borrow().clone();
   crate::testing::harness::assert_oracle_exact(&lines, "api test done", 13);
