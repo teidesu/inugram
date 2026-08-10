@@ -10,7 +10,7 @@ use std::sync::Arc;
 use super::bridge::JniBridge;
 use super::env::{in_env, jstring_to_string, read_header, read_string_array};
 use super::log::{install_console, make_log};
-use super::{pump, Engine};
+use super::{get_engine, get_engine_mut, insert_engine, pump, remove_engine, Engine};
 use crate::api::canvas::{self, install_canvas, CanvasHost};
 use crate::api::error::{dispose_rejection_tracker, format_exception, install_plugin_error, install_rejection_tracker};
 use crate::api::globals::{install_globals, RandomHost};
@@ -75,7 +75,7 @@ pub extern "system" fn Java_desu_inugram_helpers_plugins_QuickJs_nativeCreate(
     apply_heap_limit(&rt);
 
     let views = TlViews::new(bridge.clone());
-    let engine = Box::new(Engine {
+    let engine = Engine {
       ctx,
       _rt: rt,
       bridge,
@@ -101,8 +101,9 @@ pub extern "system" fn Java_desu_inugram_helpers_plugins_QuickJs_nativeCreate(
       notifications: None,
       jvm: None,
       xposed: None,
-    });
-    Box::into_raw(engine) as jlong
+    };
+
+    insert_engine(engine)
   })
 }
 
@@ -116,7 +117,7 @@ pub extern "system" fn Java_desu_inugram_helpers_plugins_QuickJs_nativeInstallAp
   in_env(&mut env, (), |env| {
     let _deadline = arm_entry_deadline();
     let spill_dir = jstring_to_string(env, &spill_dir);
-    let Some(engine) = (unsafe { (ptr as *mut Engine).as_mut() }) else {
+    let Some(mut engine) = get_engine_mut(ptr) else {
       return;
     };
     let grants: Rc<dyn GrantHost> = engine.bridge.clone();
@@ -279,7 +280,7 @@ pub extern "system" fn Java_desu_inugram_helpers_plugins_QuickJs_nativeInstallAp
         Err(e) => log(&format!("fetch failed to install: {e:?}")),
       }
     }
-    pump(engine);
+    pump(&engine);
   })
 }
 
@@ -290,7 +291,7 @@ pub extern "system" fn Java_desu_inugram_helpers_plugins_QuickJs_nativeInstallJv
   ptr: jlong,
 ) {
   let _deadline = arm_entry_deadline();
-  let Some(engine) = (unsafe { (ptr as *mut Engine).as_mut() }) else {
+  let Some(mut engine) = get_engine_mut(ptr) else {
     return;
   };
   let host: Rc<dyn JvmHost> = engine.bridge.clone();
@@ -314,7 +315,7 @@ pub extern "system" fn Java_desu_inugram_helpers_plugins_QuickJs_nativeInstallXp
   ptr: jlong,
 ) {
   let _deadline = arm_entry_deadline();
-  let Some(engine) = (unsafe { (ptr as *mut Engine).as_mut() }) else {
+  let Some(mut engine) = get_engine_mut(ptr) else {
     return;
   };
   let log = make_log(engine.bridge.console.clone());
@@ -351,7 +352,7 @@ pub extern "system" fn Java_desu_inugram_helpers_plugins_QuickJs_nativeXposedBef
     let method_wire = jstring_to_string(env, &method_wire);
     let this_wire = jstring_to_string(env, &this_wire);
     let args = read_string_array(env, &args);
-    let Some(engine) = (unsafe { (ptr as *mut Engine).as_ref() }) else {
+    let Some(engine) = get_engine(ptr) else {
       return std::ptr::null_mut();
     };
     let answer = match engine.xposed.as_ref() {
@@ -390,7 +391,7 @@ pub extern "system" fn Java_desu_inugram_helpers_plugins_QuickJs_nativeXposedAft
   in_env(&mut env, std::ptr::null_mut(), |env| {
     let _deadline = arm_entry_deadline();
     let result = jstring_to_string(env, &result);
-    let answer = match unsafe { (ptr as *mut Engine).as_ref() } {
+    let answer = match get_engine(ptr) {
       Some(engine) => match engine.xposed.as_ref() {
         Some(state) => xposed::dispatch_after(&engine._rt, &engine.ctx, state, dispatch_id, &result),
         None => result,
@@ -417,7 +418,7 @@ pub extern "system" fn Java_desu_inugram_helpers_plugins_QuickJs_nativeXposedRel
   dispatch_id: jlong,
 ) {
   let _deadline = arm_entry_deadline();
-  let Some(engine) = (unsafe { (ptr as *mut Engine).as_ref() }) else {
+  let Some(engine) = get_engine(ptr) else {
     return;
   };
   let Some(state) = engine.xposed.as_ref() else {
@@ -519,7 +520,7 @@ pub extern "system" fn Java_desu_inugram_helpers_plugins_QuickJs_nativeJvmCallba
   callback_id: jint,
 ) {
   let _deadline = arm_entry_deadline();
-  let Some(engine) = (unsafe { (ptr as *mut Engine).as_ref() }) else {
+  let Some(engine) = get_engine(ptr) else {
     return;
   };
   let Some(state) = engine.jvm.as_ref() else {
@@ -542,7 +543,7 @@ pub extern "system" fn Java_desu_inugram_helpers_plugins_QuickJs_nativeInstallFs
     let _deadline = arm_entry_deadline();
     let dir = jstring_to_string(env, &dir);
     let android_dirs = jstring_to_string(env, &android_dirs);
-    let Some(engine) = (unsafe { (ptr as *mut Engine).as_mut() }) else {
+    let Some(mut engine) = get_engine_mut(ptr) else {
       return;
     };
     let Some(blobs) = engine.blobs.clone() else {
@@ -583,7 +584,7 @@ pub extern "system" fn Java_desu_inugram_helpers_plugins_QuickJs_nativeCanvasRes
 ) {
   in_env(&mut env, (), |env| {
     let _deadline = crate::sandbox::limits::arm_entry_deadline();
-    let Some(engine) = (unsafe { (ptr as *mut Engine).as_ref() }) else {
+    let Some(engine) = get_engine(ptr) else {
       return;
     };
     let Some(state) = engine.canvas.as_ref() else {
@@ -604,7 +605,7 @@ pub extern "system" fn Java_desu_inugram_helpers_plugins_QuickJs_nativeFetchResu
 ) {
   in_env(&mut env, (), |env| {
     let _deadline = crate::sandbox::limits::arm_entry_deadline();
-    let Some(engine) = (unsafe { (ptr as *mut Engine).as_ref() }) else {
+    let Some(engine) = get_engine(ptr) else {
       return;
     };
     let Some(state) = engine.fetch.as_ref() else {
@@ -622,7 +623,7 @@ pub extern "system" fn Java_desu_inugram_helpers_plugins_QuickJs_nativeRunTimers
   ptr: jlong,
 ) {
   let _deadline = crate::sandbox::limits::arm_entry_deadline();
-  let Some(engine) = (unsafe { (ptr as *mut Engine).as_ref() }) else {
+  let Some(engine) = get_engine(ptr) else {
     return;
   };
   let Some(state) = engine.timers.as_ref() else {
@@ -639,7 +640,7 @@ pub extern "system" fn Java_desu_inugram_helpers_plugins_QuickJs_nativeAppVisibi
   visible: jboolean,
 ) {
   let _deadline = arm_entry_deadline();
-  let Some(engine) = (unsafe { (ptr as *mut Engine).as_ref() }) else {
+  let Some(engine) = get_engine(ptr) else {
     return;
   };
 
@@ -660,7 +661,7 @@ pub extern "system" fn Java_desu_inugram_helpers_plugins_QuickJs_nativeUiRender(
 ) -> jstring {
   in_env(&mut env, std::ptr::null_mut(), |env| {
     let _deadline = crate::sandbox::limits::arm_entry_deadline();
-    let Some(engine) = (unsafe { (ptr as *mut Engine).as_ref() }) else {
+    let Some(engine) = get_engine(ptr) else {
       return std::ptr::null_mut();
     };
     let Some(state) = engine.ui.as_ref() else {
@@ -684,7 +685,7 @@ pub extern "system" fn Java_desu_inugram_helpers_plugins_QuickJs_nativeUiEvent(
 ) {
   in_env(&mut env, (), |env| {
     let _deadline = crate::sandbox::limits::arm_entry_deadline();
-    let Some(engine) = (unsafe { (ptr as *mut Engine).as_ref() }) else {
+    let Some(engine) = get_engine(ptr) else {
       return;
     };
     let Some(state) = engine.ui.as_ref() else {
@@ -704,7 +705,7 @@ pub extern "system" fn Java_desu_inugram_helpers_plugins_QuickJs_nativeUiMenuCli
   slot: jint,
 ) {
   let _deadline = crate::sandbox::limits::arm_entry_deadline();
-  let Some(engine) = (unsafe { (ptr as *mut Engine).as_ref() }) else {
+  let Some(engine) = get_engine(ptr) else {
     return;
   };
   let Some(state) = engine.ui.as_ref() else {
@@ -721,7 +722,7 @@ pub extern "system" fn Java_desu_inugram_helpers_plugins_QuickJs_nativeUiPageClo
   page_id: jlong,
 ) {
   let _deadline = crate::sandbox::limits::arm_entry_deadline();
-  let Some(engine) = (unsafe { (ptr as *mut Engine).as_ref() }) else {
+  let Some(engine) = get_engine(ptr) else {
     return;
   };
   let Some(state) = engine.ui.as_ref() else {
@@ -740,7 +741,7 @@ pub extern "system" fn Java_desu_inugram_helpers_plugins_QuickJs_nativeRenderAct
 ) -> jstring {
   in_env(&mut env, std::ptr::null_mut(), |env| {
     let _deadline = crate::sandbox::limits::arm_entry_deadline();
-    let Some(engine) = (unsafe { (ptr as *mut Engine).as_ref() }) else {
+    let Some(engine) = get_engine(ptr) else {
       return std::ptr::null_mut();
     };
     let Some(state) = engine.actions.as_ref() else {
@@ -765,7 +766,7 @@ pub extern "system" fn Java_desu_inugram_helpers_plugins_QuickJs_nativeDispatchA
 ) {
   in_env(&mut env, (), |env| {
     let _deadline = crate::sandbox::limits::arm_entry_deadline();
-    let Some(engine) = (unsafe { (ptr as *mut Engine).as_ref() }) else {
+    let Some(engine) = get_engine(ptr) else {
       return;
     };
     let Some(state) = engine.actions.as_ref() else {
@@ -786,7 +787,7 @@ pub extern "system" fn Java_desu_inugram_helpers_plugins_QuickJs_nativeResolvePr
 ) {
   in_env(&mut env, (), |env| {
     let _deadline = crate::sandbox::limits::arm_entry_deadline();
-    let Some(engine) = (unsafe { (ptr as *mut Engine).as_ref() }) else {
+    let Some(engine) = get_engine(ptr) else {
       return;
     };
     let Some(state) = engine.ui.as_ref() else {
@@ -807,7 +808,7 @@ pub extern "system" fn Java_desu_inugram_helpers_plugins_QuickJs_nativeResolveCh
 ) {
   in_env(&mut env, (), |env| {
     let _deadline = crate::sandbox::limits::arm_entry_deadline();
-    let Some(engine) = (unsafe { (ptr as *mut Engine).as_ref() }) else {
+    let Some(engine) = get_engine(ptr) else {
       return;
     };
     let Some(state) = engine.dialogs.as_ref() else {
@@ -828,7 +829,7 @@ pub extern "system" fn Java_desu_inugram_helpers_plugins_QuickJs_nativeDispatchS
 ) {
   in_env(&mut env, (), |env| {
     let _deadline = crate::sandbox::limits::arm_entry_deadline();
-    let Some(engine) = (unsafe { (ptr as *mut Engine).as_ref() }) else {
+    let Some(engine) = get_engine(ptr) else {
       return;
     };
     let Some(state) = engine.screens.as_ref() else {
@@ -852,7 +853,7 @@ pub extern "system" fn Java_desu_inugram_helpers_plugins_QuickJs_nativeDispatchN
 ) {
   in_env(&mut env, (), |env| {
     let _deadline = crate::sandbox::limits::arm_entry_deadline();
-    let Some(engine) = (unsafe { (ptr as *mut Engine).as_ref() }) else {
+    let Some(engine) = get_engine(ptr) else {
       return;
     };
     let Some(state) = engine.notifications.as_ref() else {
@@ -882,7 +883,7 @@ pub extern "system" fn Java_desu_inugram_helpers_plugins_QuickJs_nativeResolveDi
 ) {
   in_env(&mut env, (), |env| {
     let _deadline = crate::sandbox::limits::arm_entry_deadline();
-    let Some(engine) = (unsafe { (ptr as *mut Engine).as_ref() }) else {
+    let Some(engine) = get_engine(ptr) else {
       return;
     };
     let Some(state) = engine.dialogs.as_ref() else {
@@ -900,7 +901,7 @@ pub extern "system" fn Java_desu_inugram_helpers_plugins_QuickJs_nativeNotifyUnl
   ptr: jlong,
 ) {
   let _deadline = arm_entry_deadline();
-  let Some(engine) = (unsafe { (ptr as *mut Engine).as_ref() }) else {
+  let Some(engine) = get_engine(ptr) else {
     return;
   };
   engine.lifecycle.begin_unload();
@@ -923,7 +924,7 @@ pub extern "system" fn Java_desu_inugram_helpers_plugins_QuickJs_nativeAccountsC
   ptr: jlong,
 ) {
   let _deadline = crate::sandbox::limits::arm_entry_deadline();
-  let Some(engine) = (unsafe { (ptr as *mut Engine).as_ref() }) else {
+  let Some(engine) = get_engine(ptr) else {
     return;
   };
   let Some(state) = engine.account.as_ref() else {
@@ -939,7 +940,7 @@ pub extern "system" fn Java_desu_inugram_helpers_plugins_QuickJs_nativeInstallRp
   ptr: jlong,
 ) {
   let _deadline = arm_entry_deadline();
-  let Some(engine) = (unsafe { (ptr as *mut Engine).as_mut() }) else {
+  let Some(mut engine) = get_engine_mut(ptr) else {
     return;
   };
   let host: Rc<dyn RpcHost> = engine.bridge.clone();
@@ -980,7 +981,7 @@ pub extern "system" fn Java_desu_inugram_helpers_plugins_QuickJs_nativeInstallRp
     Ok((rules, state)) => {
       engine.deserialize = Some(rules);
       engine.rpc = Some(state);
-      pump(engine);
+      pump(&engine);
     }
     Err(e) => log(&format!("inu.interceptRpc/onUpdate failed to install: {e:?}")),
   }
@@ -999,7 +1000,7 @@ pub extern "system" fn Java_desu_inugram_helpers_plugins_QuickJs_nativeDispatchR
 ) {
   in_env(&mut env, (), |env| {
     let _deadline = crate::sandbox::limits::arm_entry_deadline();
-    let Some(engine) = (unsafe { (ptr as *mut Engine).as_ref() }) else {
+    let Some(engine) = get_engine(ptr) else {
       return;
     };
     let Some(state) = engine.rpc.as_ref() else {
@@ -1030,7 +1031,7 @@ pub extern "system" fn Java_desu_inugram_helpers_plugins_QuickJs_nativeCompleteN
 ) {
   in_env(&mut env, (), |env| {
     let _deadline = crate::sandbox::limits::arm_entry_deadline();
-    let Some(engine) = (unsafe { (ptr as *mut Engine).as_ref() }) else {
+    let Some(engine) = get_engine(ptr) else {
       return;
     };
     let Some(state) = engine.rpc.as_ref() else {
@@ -1051,7 +1052,7 @@ pub extern "system" fn Java_desu_inugram_helpers_plugins_QuickJs_nativeAbandonDi
 ) {
   in_env(&mut env, (), |env| {
     let _deadline = crate::sandbox::limits::arm_entry_deadline();
-    let Some(engine) = (unsafe { (ptr as *mut Engine).as_ref() }) else {
+    let Some(engine) = get_engine(ptr) else {
       return;
     };
     let Some(state) = engine.rpc.as_ref() else {
@@ -1072,7 +1073,7 @@ pub extern "system" fn Java_desu_inugram_helpers_plugins_QuickJs_nativeResolveIn
 ) {
   in_env(&mut env, (), |env| {
     let _deadline = crate::sandbox::limits::arm_entry_deadline();
-    let Some(engine) = (unsafe { (ptr as *mut Engine).as_ref() }) else {
+    let Some(engine) = get_engine(ptr) else {
       return;
     };
     let Some(state) = engine.rpc.as_ref() else {
@@ -1093,7 +1094,7 @@ pub extern "system" fn Java_desu_inugram_helpers_plugins_QuickJs_nativeResolvePe
 ) {
   in_env(&mut env, (), |env| {
     let _deadline = crate::sandbox::limits::arm_entry_deadline();
-    let Some(engine) = (unsafe { (ptr as *mut Engine).as_ref() }) else {
+    let Some(engine) = get_engine(ptr) else {
       return;
     };
     let Some(state) = engine.reads.as_ref() else {
@@ -1114,7 +1115,7 @@ pub extern "system" fn Java_desu_inugram_helpers_plugins_QuickJs_nativeAccountFe
 ) {
   in_env(&mut env, (), |env| {
     let _deadline = crate::sandbox::limits::arm_entry_deadline();
-    let Some(engine) = (unsafe { (ptr as *mut Engine).as_ref() }) else {
+    let Some(engine) = get_engine(ptr) else {
       return;
     };
     let Some(state) = engine.reads.as_ref() else {
@@ -1135,7 +1136,7 @@ pub extern "system" fn Java_desu_inugram_helpers_plugins_QuickJs_nativeWriteResu
 ) {
   in_env(&mut env, (), |env| {
     let _deadline = crate::sandbox::limits::arm_entry_deadline();
-    let Some(engine) = (unsafe { (ptr as *mut Engine).as_ref() }) else {
+    let Some(engine) = get_engine(ptr) else {
       return;
     };
     let Some(state) = engine.writes.as_ref() else {
@@ -1156,7 +1157,7 @@ pub extern "system" fn Java_desu_inugram_helpers_plugins_QuickJs_nativeWriteProg
   total: jlong,
 ) {
   let _deadline = crate::sandbox::limits::arm_entry_deadline();
-  let Some(engine) = (unsafe { (ptr as *mut Engine).as_ref() }) else {
+  let Some(engine) = get_engine(ptr) else {
     return;
   };
   let Some(state) = engine.writes.as_ref() else {
@@ -1176,7 +1177,7 @@ pub extern "system" fn Java_desu_inugram_helpers_plugins_QuickJs_nativeDispatchU
 ) {
   in_env(&mut env, (), |env| {
     let _deadline = crate::sandbox::limits::arm_entry_deadline();
-    let Some(engine) = (unsafe { (ptr as *mut Engine).as_ref() }) else {
+    let Some(engine) = get_engine(ptr) else {
       return;
     };
     let Some(state) = engine.rpc.as_ref() else {
@@ -1198,7 +1199,7 @@ pub extern "system" fn Java_desu_inugram_helpers_plugins_QuickJs_nativeDispatchD
 ) {
   in_env(&mut env, (), |env| {
     let _deadline = crate::sandbox::limits::arm_entry_deadline();
-    let Some(engine) = (unsafe { (ptr as *mut Engine).as_ref() }) else {
+    let Some(engine) = get_engine(ptr) else {
       return;
     };
     let Some(state) = engine.deserialize.as_ref() else {
@@ -1222,7 +1223,7 @@ pub extern "system" fn Java_desu_inugram_helpers_plugins_QuickJs_nativeDispatchU
 ) {
   in_env(&mut env, (), |env| {
     let _deadline = crate::sandbox::limits::arm_entry_deadline();
-    let Some(engine) = (unsafe { (ptr as *mut Engine).as_ref() }) else {
+    let Some(engine) = get_engine(ptr) else {
       return;
     };
     let Some(state) = engine.rpc.as_ref() else {
@@ -1251,7 +1252,7 @@ pub extern "system" fn Java_desu_inugram_helpers_plugins_QuickJs_nativeAbandonUp
   dispatch_id: jlong,
 ) {
   let _deadline = crate::sandbox::limits::arm_entry_deadline();
-  let Some(engine) = (unsafe { (ptr as *mut Engine).as_ref() }) else {
+  let Some(engine) = get_engine(ptr) else {
     return;
   };
   let Some(state) = engine.rpc.as_ref() else {
@@ -1275,7 +1276,7 @@ pub extern "system" fn Java_desu_inugram_helpers_plugins_QuickJs_nativeInstallIn
 ) {
   in_env(&mut env, (), |env| {
     let _deadline = arm_entry_deadline();
-    let Some(engine) = (unsafe { (ptr as *mut Engine).as_ref() }) else {
+    let Some(engine) = get_engine(ptr) else {
       return;
     };
     let info = Arc::new(InuInfo {
@@ -1303,7 +1304,7 @@ pub extern "system" fn Java_desu_inugram_helpers_plugins_QuickJs_nativeEvaluate(
 ) -> jstring {
   in_env(&mut env, std::ptr::null_mut(), |env| {
     let _deadline = crate::sandbox::limits::arm_eval_deadline();
-    let Some(engine) = (unsafe { (ptr as *mut Engine).as_ref() }) else {
+    let Some(engine) = get_engine(ptr) else {
       return std::ptr::null_mut();
     };
     let code = jstring_to_string(env, &code).into_bytes();
@@ -1322,7 +1323,7 @@ pub extern "system" fn Java_desu_inugram_helpers_plugins_QuickJs_nativeEvaluate(
       }
     });
 
-    pump(engine);
+    pump(&engine);
 
     match result {
       Ok(s) => env.new_string(s).map(|j| j.into_raw()).unwrap_or(std::ptr::null_mut()),
@@ -1340,8 +1341,7 @@ pub extern "system" fn Java_desu_inugram_helpers_plugins_QuickJs_nativeDestroy(
   _this: JObject,
   ptr: jlong,
 ) {
-  if ptr != 0 {
-    let mut engine = unsafe { Box::from_raw(ptr as *mut Engine) };
+  if let Some(mut engine) = remove_engine(ptr) {
     if let Some(state) = engine.rpc.take() {
       crate::api::telegram::rpc::dispose(&engine.ctx, &state);
     }
