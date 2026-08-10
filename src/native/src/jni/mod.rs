@@ -1,4 +1,4 @@
-use std::cell::{Ref, RefCell, RefMut};
+use std::cell::{Ref, RefCell};
 use std::rc::Rc;
 use std::sync::OnceLock;
 
@@ -10,7 +10,7 @@ use slotmap::{new_key_type, Key, KeyData, SlotMap};
 use crate::{
   api::{
     canvas::CanvasState,
-    io::{blob::BlobState, fetch::FetchState, fs::FsState},
+    io::fetch::FetchState,
     lifecycle::LifecycleState,
     platform::{jvm::JvmState, notifications::NotificationState, xposed::XposedState},
     telegram::{
@@ -21,7 +21,6 @@ use crate::{
       writes::WritesState,
     },
     timers::TimerState,
-    tl::proxy::TlViews,
     ui::{actions::ActionState, dialogs::DialogState, pages::UiState, screens::ScreenState},
   },
   sandbox::registry::Lifecycle,
@@ -64,11 +63,6 @@ pub(crate) fn get_engine(handle: jlong) -> Option<Ref<'static, Engine>> {
   Ref::filter_map(store.borrow(), |engines| engines.get(get_engine_key(handle))).ok()
 }
 
-pub(crate) fn get_engine_mut(handle: jlong) -> Option<RefMut<'static, Engine>> {
-  let store = get_engine_store()?;
-  RefMut::filter_map(store.borrow_mut(), |engines| engines.get_mut(get_engine_key(handle))).ok()
-}
-
 pub(crate) fn get_engine_key(handle: jlong) -> EngineKey {
   EngineKey::from(KeyData::from_ffi(handle as u64))
 }
@@ -83,34 +77,25 @@ pub(crate) struct Engine {
   pub(crate) bridge: Rc<JniBridge>,
   pub(crate) lifecycle: Rc<Lifecycle>,
   pub(crate) inu: Persistent<Object<'static>>,
-  pub(crate) views: Rc<TlViews>,
-  pub(crate) blobs: Option<Rc<BlobState>>,
-  pub(crate) shared: Option<Persistent<Object<'static>>>,
-  pub(crate) rpc: Option<Rc<RpcState>>,
-  pub(crate) deserialize: Option<Rc<DeserializeState>>,
-  pub(crate) lifecycle_state: Option<Rc<LifecycleState>>,
-  pub(crate) dialogs: Option<Rc<DialogState>>,
-  pub(crate) ui: Option<Rc<UiState>>,
-  pub(crate) screens: Option<Rc<ScreenState>>,
-  pub(crate) actions: Option<Rc<ActionState>>,
-  pub(crate) account: Option<Rc<AccountState>>,
-  pub(crate) reads: Option<Rc<ReadsState>>,
-  pub(crate) writes: Option<Rc<WritesState>>,
-  pub(crate) fs: Option<Rc<FsState>>,
-  pub(crate) fetch: Option<Rc<FetchState>>,
-  pub(crate) canvas: Option<Rc<CanvasState>>,
-  pub(crate) timers: Option<Rc<TimerState>>,
-  pub(crate) notifications: Option<Rc<NotificationState>>,
+  pub(crate) shared: Persistent<Object<'static>>,
+  pub(crate) rpc: Rc<RpcState>,
+  pub(crate) deserialize: Rc<DeserializeState>,
+  pub(crate) lifecycle_state: Rc<LifecycleState>,
+  pub(crate) dialogs: Rc<DialogState>,
+  pub(crate) ui: Rc<UiState>,
+  pub(crate) screens: Rc<ScreenState>,
+  pub(crate) actions: Rc<ActionState>,
+  pub(crate) account: Rc<AccountState>,
+  pub(crate) reads: Rc<ReadsState>,
+  pub(crate) writes: Rc<WritesState>,
+  pub(crate) fetch: Rc<FetchState>,
+  pub(crate) canvas: Rc<CanvasState>,
+  pub(crate) timers: Rc<TimerState>,
+  pub(crate) notifications: Rc<NotificationState>,
   pub(crate) jvm: Option<Rc<JvmState>>,
   pub(crate) xposed: Option<Rc<XposedState>>,
 }
 
 pub(crate) fn pump(engine: &Engine) {
-  if let Some(state) = engine.rpc.as_ref() {
-    pump_jobs(&engine._rt, &engine.ctx, state.log.as_ref());
-  } else if let Some(state) = engine.lifecycle_state.as_ref() {
-    pump_jobs(&engine._rt, &engine.ctx, state.log.as_ref());
-  } else {
-    pump_jobs(&engine._rt, &engine.ctx, &|_| {});
-  }
+  pump_jobs(&engine._rt, &engine.ctx, engine.rpc.log.as_ref());
 }

@@ -2,6 +2,7 @@ package desu.inugram.helpers.plugins.api
 
 import desu.inugram.core.plugins.FsQuota
 import desu.inugram.helpers.plugins.Plugin
+import desu.inugram.helpers.plugins.PluginBridge
 import desu.inugram.helpers.plugins.QuickJs
 import desu.inugram.helpers.plugins.io.PluginBlobs
 import desu.inugram.helpers.plugins.io.PluginFs
@@ -28,20 +29,21 @@ object EngineBindings {
      * and the `Account` handles it hangs its getters on, and `inu.xposed` mints every handle its
      * entry points take out of `inu.jvm`'s table.
      */
-    fun install(plugin: Plugin, engine: QuickJs) {
-        PluginJvm.install(engine)
-        PluginXposed.install(engine)
-        engine.installApi(PluginBlobs.dirFor(plugin.id))
-        // after installApi, which creates the blob table `fs.write` reads a `Blob` through. A plugin that declared no `fs` gets no bindings and no directory
+    fun start(plugin: Plugin, engine: QuickJs, bridge: PluginBridge) {
         val quota = FsQuota.forGrants(plugin.manifest.grants)
-        if (quota != null) {
-            engine.installFs(
-                PluginFs.dirFor(plugin.id),
-                quota,
-                PluginFs.isUnscoped(plugin.permissions),
-                PluginFs.androidDirs(),
-            )
-        }
+        engine.start(
+            bridge,
+            QuickJs.Config(
+                spillDir = PluginBlobs.dirFor(plugin.id),
+                fsDir = quota?.let { PluginFs.dirFor(plugin.id) } ?: "",
+                fsQuotaBytes = quota ?: 0,
+                fsUnscoped = PluginFs.isUnscoped(plugin.permissions),
+                installFs = quota != null,
+                androidDirs = PluginFs.androidDirs(),
+                installJvm = bridge.jvm != null,
+                installXposed = bridge.xposed != null,
+            ),
+        )
         // a plugin loaded while the app is hidden would otherwise tick unthrottled until the next transition; no callback can hear this, its own code not having run yet
         if (!PluginAppVisibility.isForeground) engine.appVisibilityChanged(false)
     }

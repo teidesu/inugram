@@ -202,7 +202,7 @@ fun startPlugin(name: String, vararg grants: String): Plugin {
 fun attachBridge(plugin: Plugin, engine: RecordingQuickJs) {
     val tl = TlHandles.attach(plugin, TlFilter.policyFor(plugin.permissions))
     val jvm = PluginJvm.listenerFor(plugin, engine, testAppScreen)
-    engine.start(PluginBridge(
+    val bridge = PluginBridge(
         core = DeviceMissing,
         rpc = PluginRpc.listenerFor(plugin, engine, tl),
         updates = PluginUpdates.listenerFor(plugin),
@@ -221,10 +221,20 @@ fun attachBridge(plugin: Plugin, engine: RecordingQuickJs) {
         notifications = PluginNotifications.listenerFor(plugin, engine),
         jvm = jvm,
         xposed = PluginXposed.listenerFor(plugin, engine, jvm),
-    ))
-    PluginJvm.install(engine)
-    PluginXposed.install(engine)
-    PluginRpc.install(engine)
+    )
+    engine.start(
+        bridge,
+        QuickJs.Config(
+            spillDir = "",
+            fsDir = "",
+            fsQuotaBytes = 0,
+            fsUnscoped = false,
+            installFs = false,
+            androidDirs = "",
+            installJvm = bridge.jvm != null,
+            installXposed = bridge.xposed != null,
+        ),
+    )
 }
 
 private object DeviceMissing : CoreListener, StorageListener, UiListener, PlatformListener, CanvasListener {

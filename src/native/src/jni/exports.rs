@@ -10,7 +10,7 @@ use std::sync::Arc;
 use super::bridge::JniBridge;
 use super::env::{in_env, jstring_to_string, read_header, read_string_array};
 use super::log::{install_console, make_log};
-use super::{get_engine, get_engine_mut, insert_engine, pump, remove_engine, Engine};
+use super::{get_engine, insert_engine, pump, remove_engine, Engine};
 use crate::api::canvas::{self, install_canvas, CanvasHost};
 use crate::api::error::{dispose_rejection_tracker, format_exception, install_plugin_error, install_rejection_tracker};
 use crate::api::globals::{install_globals, RandomHost};
@@ -20,15 +20,15 @@ use crate::api::io::fs::install_fs;
 use crate::api::io::kv::install_kv;
 use crate::api::lifecycle::install_lifecycle;
 use crate::api::platform::clipboard::install_clipboard;
-use crate::api::platform::jvm::{self, install_jvm, JvmHost};
+use crate::api::platform::jvm::{self, install_jvm};
 use crate::api::platform::notifications::{install_notifications, NotificationHost};
 use crate::api::platform::open_url::install_open_url;
-use crate::api::platform::xposed::{self, install_xposed, XposedHost};
+use crate::api::platform::xposed::{self, install_xposed};
 use crate::api::telegram::account::{install_account, AccountHost};
 use crate::api::telegram::deserialize::DeserializeHost;
-use crate::api::telegram::reads::{install_reads, ReadsHost, ReadsState};
+use crate::api::telegram::reads::{install_reads, ReadsHost};
 use crate::api::telegram::rpc::RpcHost;
-use crate::api::telegram::writes::{install_writes, WritesDeps, WritesHost, WritesState};
+use crate::api::telegram::writes::{install_writes, WritesDeps, WritesHost};
 use crate::api::timers::{install_timers, TimerHost};
 use crate::api::tl::message::install_message;
 use crate::api::tl::proxy::TlViews;
@@ -47,6 +47,14 @@ pub extern "system" fn Java_desu_inugram_helpers_plugins_QuickJs_nativeCreate(
   mut env: EnvUnowned,
   _this: JObject,
   listener: JObject,
+  spill_dir: JString,
+  fs_dir: JString,
+  fs_quota_bytes: jlong,
+  fs_unscoped: jboolean,
+  install_fs: jboolean,
+  android_dirs: JString,
+  install_jvm: jboolean,
+  install_xposed: jboolean,
 ) -> jlong {
   in_env(&mut env, 0, |env| {
     let Some(bridge) = JniBridge::new(env, &listener) else {
@@ -74,266 +82,243 @@ pub extern "system" fn Java_desu_inugram_helpers_plugins_QuickJs_nativeCreate(
     install_interrupt_handler(&rt, Arc::new(move |msg: &str| interrupt_log(msg)));
     apply_heap_limit(&rt);
 
-    let views = TlViews::new(bridge.clone());
-    let engine = Engine {
-      ctx,
-      _rt: rt,
-      bridge,
-      lifecycle: Lifecycle::new(),
-      inu,
-      views,
-      blobs: None,
-      shared: None,
-      rpc: None,
-      deserialize: None,
-      lifecycle_state: None,
-      dialogs: None,
-      ui: None,
-      screens: None,
-      actions: None,
-      account: None,
-      reads: None,
-      writes: None,
-      fs: None,
-      fetch: None,
-      canvas: None,
-      timers: None,
-      notifications: None,
-      jvm: None,
-      xposed: None,
-    };
+    let spill_dir = PathBuf::from(jstring_to_string(env, &spill_dir));
+    let fs_dir = PathBuf::from(jstring_to_string(env, &fs_dir));
+    let android_dirs = jstring_to_string(env, &android_dirs);
+    let install_fs_enabled = install_fs;
+    let install_jvm_enabled = install_jvm;
+    let install_xposed_enabled = install_xposed;
+    let Some(engine) = (|| -> Option<Engine> {
+      let _deadline = arm_entry_deadline();
+      let lifecycle = Lifecycle::new();
+      let log = make_log(bridge.console.clone());
+      let views = TlViews::new(bridge.clone());
 
+      let jvm = if install_jvm_enabled {
+        Some(install_engine_jvm(&ctx, &bridge, &lifecycle, &inu, log.as_ref())?)
+      } else {
+        None
+      };
+      let xposed = if install_xposed_enabled {
+        Some(install_engine_xposed(&ctx, &bridge, &lifecycle, &inu, log.as_ref(), jvm.clone())?)
+      } else {
+        None
+      };
+
+      let grants: Rc<dyn GrantHost> = bridge.clone();
+      let lifecycle_state = ctx
+        .with(|ctx| {
+          let inu = inu.clone().restore(&ctx)?;
+          install_lifecycle(&ctx, grants.clone(), lifecycle.clone(), log.clone(), &inu)
+        })
+        .map_err(|e| log(&format!("inu.onUnload failed to install: {e:?}")))
+        .ok()?;
+      let dialogs = ctx
+        .with(|ctx| {
+          let inu = inu.clone().restore(&ctx)?;
+          install_kv(&ctx, bridge.clone(), grants.clone(), &inu)?;
+          install_clipboard(&ctx, bridge.clone(), grants.clone(), &inu)?;
+          install_open_url(&ctx, bridge.clone(), grants.clone(), &inu)?;
+          install_dialogs(&ctx, bridge.clone(), log.clone(), &inu)
+        })
+        .map_err(|e| log(&format!("inu.kv/inu.ui failed to install: {e:?}")))
+        .ok()?;
+      let account_host: Rc<dyn AccountHost> = bridge.clone();
+      let account = ctx
+        .with(|ctx| {
+          let inu = inu.clone().restore(&ctx)?;
+          install_account(&ctx, account_host, grants, lifecycle.clone(), log.clone(), &inu)
+        })
+        .map_err(|e| log(&format!("inu.account failed to install: {e:?}")))
+        .ok()?;
+      let ui_host: Rc<dyn UiHost> = bridge.clone();
+      let ui = ctx
+        .with(|ctx| {
+          let inu = inu.clone().restore(&ctx)?;
+          install_ui(&ctx, ui_host, lifecycle.clone(), log.clone(), jvm.clone(), &inu)
+        })
+        .map_err(|e| log(&format!("inu.ui pages failed to install: {e:?}")))
+        .ok()?;
+      let icon_host: Rc<dyn IconHost> = bridge.clone();
+      ctx
+        .with(|ctx| {
+          let inu = inu.clone().restore(&ctx)?;
+          install_icons(&ctx, icon_host, jvm.clone(), &inu)
+        })
+        .map_err(|e| log(&format!("inu.icons failed to install: {e:?}")))
+        .ok()?;
+      let action_host: Rc<dyn ActionHost> = bridge.clone();
+      let action_grants: Rc<dyn GrantHost> = bridge.clone();
+      let actions = ctx
+        .with(|ctx| {
+          let inu = inu.clone().restore(&ctx)?;
+          install_actions(&ctx, action_host, lifecycle.clone(), Some(account.clone()), action_grants, log.clone(), &inu)
+        })
+        .map_err(|e| log(&format!("inu.register*Action failed to install: {e:?}")))
+        .ok()?;
+      let screen_host: Rc<dyn ScreenHost> = bridge.clone();
+      let screen_grants: Rc<dyn GrantHost> = bridge.clone();
+      let screens = ctx
+        .with(|ctx| {
+          let inu = inu.clone().restore(&ctx)?;
+          install_screens(&ctx, screen_host, screen_grants, Some(account.clone()), lifecycle.clone(), log.clone(), &inu)
+        })
+        .map_err(|e| log(&format!("inu.ui navigation failed to install: {e:?}")))
+        .ok()?;
+      let notification_host: Rc<dyn NotificationHost> = bridge.clone();
+      let notification_grants: Rc<dyn GrantHost> = bridge.clone();
+      let notifications = ctx
+        .with(|ctx| {
+          let inu = inu.clone().restore(&ctx)?;
+          install_notifications(&ctx, notification_host, notification_grants, lifecycle.clone(), log.clone(), &inu)
+        })
+        .map_err(|e| log(&format!("inu.android.addNotificationCenterDelegate failed to install: {e:?}")))
+        .ok()?;
+      let random_host: Rc<dyn RandomHost> = bridge.clone();
+      let external = ExternalMemory::new();
+      let blobs = ctx
+        .with(|ctx| install_globals(&ctx, random_host, &spill_dir, external.clone()))
+        .map_err(|e| log(&format!("sandbox globals failed to install: {e:?}")))
+        .ok()?;
+      let canvas_host: Rc<dyn CanvasHost> = bridge.clone();
+      let canvas = ctx
+        .with(|ctx| {
+          let inu = inu.clone().restore(&ctx)?;
+          install_canvas(&ctx, canvas_host, blobs.clone(), external.clone(), spill_dir.clone(), log.clone(), &inu)
+        })
+        .map_err(|e| log(&format!("inu.canvas failed to install: {e:?}")))
+        .ok()?;
+      let reads_host: Rc<dyn ReadsHost> = bridge.clone();
+      let writes_host: Rc<dyn WritesHost> = bridge.clone();
+      let grants: Rc<dyn GrantHost> = bridge.clone();
+      let (shared, reads, writes) = ctx
+        .with(|ctx| -> rquickjs::Result<_> {
+          let inu = inu.clone().restore(&ctx)?;
+          let utils_host: Rc<dyn UtilsHost> = bridge.clone();
+          let shared = install_utils_with_host(&ctx, utils_host, &inu)?;
+          install_message(&ctx, &shared, &inu)?;
+          let shared_root = Persistent::save(&ctx, shared.clone());
+          let reads =
+            install_reads(&ctx, reads_host, grants.clone(), views.clone(), &shared, &account, log.clone(), &inu)?;
+          let deps = WritesDeps {
+            host: writes_host,
+            grants,
+            views: views.clone(),
+            blobs: blobs.clone(),
+            stage_dir: spill_dir.clone(),
+            log: log.clone(),
+          };
+          let writes = install_writes(&ctx, deps, &shared, &account, &inu)?;
+          Ok((shared_root, reads, writes))
+        })
+        .map_err(|e| log(&format!("inu.utils/inu.Message/Account reads+writes failed to install: {e:?}")))
+        .ok()?;
+      let timer_host: Rc<dyn TimerHost> = bridge.clone();
+      let timers = ctx
+        .with(|ctx| install_timers(&ctx, timer_host, lifecycle.clone(), log.clone()))
+        .map_err(|e| log(&format!("timers failed to install: {e:?}")))
+        .ok()?;
+      let fetch_host: Rc<dyn FetchHost> = bridge.clone();
+      let fetch_grants: Rc<dyn GrantHost> = bridge.clone();
+      let fetch = ctx
+        .with(|ctx| {
+          let inu = inu.clone().restore(&ctx)?;
+          install_fetch(&ctx, fetch_host, fetch_grants, blobs.clone(), log.clone(), &inu)
+        })
+        .map_err(|e| log(&format!("fetch failed to install: {e:?}")))
+        .ok()?;
+      if install_fs_enabled {
+        install_engine_fs(
+          &ctx,
+          &bridge,
+          &inu,
+          &blobs,
+          &canvas,
+          &fs_dir,
+          fs_quota_bytes,
+          fs_unscoped,
+          &android_dirs,
+          log.as_ref(),
+        )?;
+      }
+      let (deserialize, rpc) =
+        install_engine_rpc(&ctx, &bridge, &inu, &views, &lifecycle, &account, &shared, log.as_ref())?;
+
+      Some(Engine {
+        ctx,
+        _rt: rt,
+        bridge,
+        lifecycle,
+        inu,
+        shared,
+        rpc,
+        deserialize,
+        lifecycle_state,
+        dialogs,
+        ui,
+        screens,
+        actions,
+        account,
+        reads,
+        writes,
+        fetch,
+        canvas,
+        timers,
+        notifications,
+        jvm,
+        xposed,
+      })
+    })() else {
+      return 0;
+    };
+    pump(&engine);
     insert_engine(engine)
   })
 }
 
-#[no_mangle]
-pub extern "system" fn Java_desu_inugram_helpers_plugins_QuickJs_nativeInstallApi(
-  mut env: EnvUnowned,
-  _this: JObject,
-  ptr: jlong,
-  spill_dir: JString,
-) {
-  in_env(&mut env, (), |env| {
-    let _deadline = arm_entry_deadline();
-    let spill_dir = jstring_to_string(env, &spill_dir);
-    let Some(mut engine) = get_engine_mut(ptr) else {
-      return;
-    };
-    let grants: Rc<dyn GrantHost> = engine.bridge.clone();
-    let log = make_log(engine.bridge.console.clone());
-
-    let lifecycle = engine.lifecycle.clone();
-
-    let installed = engine.ctx.with(|ctx| {
-      let inu = engine.inu.clone().restore(&ctx)?;
-      install_lifecycle(&ctx, grants.clone(), lifecycle.clone(), log.clone(), &inu)
-    });
-    match installed {
-      Ok(state) => engine.lifecycle_state = Some(state),
-      Err(e) => log(&format!("inu.onUnload failed to install: {e:?}")),
-    }
-    let installed = engine.ctx.with(|ctx| {
-      let inu = engine.inu.clone().restore(&ctx)?;
-      install_kv(&ctx, engine.bridge.clone(), grants.clone(), &inu)?;
-      install_clipboard(&ctx, engine.bridge.clone(), grants.clone(), &inu)?;
-      install_open_url(&ctx, engine.bridge.clone(), grants.clone(), &inu)?;
-      install_dialogs(&ctx, engine.bridge.clone(), log.clone(), &inu)
-    });
-    match installed {
-      Ok(state) => engine.dialogs = Some(state),
-      Err(e) => log(&format!("inu.kv/inu.ui failed to install: {e:?}")),
-    }
-    let account_host: Rc<dyn AccountHost> = engine.bridge.clone();
-    let installed = engine.ctx.with(|ctx| {
-      let inu = engine.inu.clone().restore(&ctx)?;
-      install_account(&ctx, account_host, grants, lifecycle.clone(), log.clone(), &inu)
-    });
-    match installed {
-      Ok(state) => engine.account = Some(state),
-      Err(e) => log(&format!("inu.account failed to install: {e:?}")),
-    }
-    let ui_host: Rc<dyn UiHost> = engine.bridge.clone();
-    let installed = engine.ctx.with(|ctx| {
-      let inu = engine.inu.clone().restore(&ctx)?;
-      install_ui(&ctx, ui_host, lifecycle.clone(), log.clone(), engine.jvm.clone(), &inu)
-    });
-    match installed {
-      Ok(state) => engine.ui = Some(state),
-      Err(e) => log(&format!("inu.ui pages failed to install: {e:?}")),
-    }
-    let icon_host: Rc<dyn IconHost> = engine.bridge.clone();
-    if let Err(e) = engine.ctx.with(|ctx| {
-      let inu = engine.inu.clone().restore(&ctx)?;
-      install_icons(&ctx, icon_host, engine.jvm.clone(), &inu)
-    }) {
-      log(&format!("inu.icons failed to install: {e:?}"));
-    }
-    let action_host: Rc<dyn ActionHost> = engine.bridge.clone();
-    let accounts = engine.account.clone();
-    let action_grants: Rc<dyn GrantHost> = engine.bridge.clone();
-    let installed = engine.ctx.with(|ctx| {
-      let inu = engine.inu.clone().restore(&ctx)?;
-      install_actions(&ctx, action_host, lifecycle.clone(), accounts, action_grants, log.clone(), &inu)
-    });
-    match installed {
-      Ok(state) => engine.actions = Some(state),
-      Err(e) => log(&format!("inu.register*Action failed to install: {e:?}")),
-    }
-    let screen_host: Rc<dyn ScreenHost> = engine.bridge.clone();
-    let screen_grants: Rc<dyn GrantHost> = engine.bridge.clone();
-    let accounts = engine.account.clone();
-    let installed = engine.ctx.with(|ctx| {
-      let inu = engine.inu.clone().restore(&ctx)?;
-      install_screens(&ctx, screen_host, screen_grants, accounts, lifecycle.clone(), log.clone(), &inu)
-    });
-    match installed {
-      Ok(state) => engine.screens = Some(state),
-      Err(e) => log(&format!("inu.ui navigation failed to install: {e:?}")),
-    }
-    let notification_host: Rc<dyn NotificationHost> = engine.bridge.clone();
-    let notification_grants: Rc<dyn GrantHost> = engine.bridge.clone();
-    let installed = engine.ctx.with(|ctx| {
-      let inu = engine.inu.clone().restore(&ctx)?;
-      install_notifications(&ctx, notification_host, notification_grants, lifecycle.clone(), log.clone(), &inu)
-    });
-    match installed {
-      Ok(state) => engine.notifications = Some(state),
-      Err(e) => log(&format!("inu.android.addNotificationCenterDelegate failed to install: {e:?}")),
-    }
-    let random_host: Rc<dyn RandomHost> = engine.bridge.clone();
-    let spill_dir = PathBuf::from(spill_dir);
-    let external = ExternalMemory::new();
-    let blobs = match engine.ctx.with(|ctx| install_globals(&ctx, random_host, &spill_dir, external.clone())) {
-      Ok(blobs) => Some(blobs),
-      Err(e) => {
-        log(&format!("sandbox globals failed to install: {e:?}"));
-        None
-      }
-    };
-    engine.blobs = blobs.clone();
-    if let Some(blobs) = blobs.clone() {
-      let canvas_host: Rc<dyn CanvasHost> = engine.bridge.clone();
-      let installed = engine.ctx.with(|ctx| {
-        let inu = engine.inu.clone().restore(&ctx)?;
-        install_canvas(&ctx, canvas_host, blobs, external.clone(), spill_dir.clone(), log.clone(), &inu)
-      });
-      match installed {
-        Ok(state) => engine.canvas = Some(state),
-        Err(e) => log(&format!("inu.canvas failed to install: {e:?}")),
-      }
-    }
-    let reads_host: Rc<dyn ReadsHost> = engine.bridge.clone();
-    let writes_host: Rc<dyn WritesHost> = engine.bridge.clone();
-    let grants: Rc<dyn GrantHost> = engine.bridge.clone();
-    let views = engine.views.clone();
-    let accounts = engine.account.clone();
-    type Surfaces = (Option<Rc<ReadsState>>, Option<Rc<WritesState>>);
-    let mut shared_root = None;
-    let installed = engine.ctx.with(|ctx| -> rquickjs::Result<Surfaces> {
-      let inu = engine.inu.clone().restore(&ctx)?;
-      let utils_host: Rc<dyn UtilsHost> = engine.bridge.clone();
-      let shared = install_utils_with_host(&ctx, utils_host, &inu)?;
-      install_message(&ctx, &shared, &inu)?;
-      shared_root = Some(Persistent::save(&ctx, shared.clone()));
-      let Some(accounts) = accounts.as_ref() else {
-        return Ok((None, None));
-      };
-      let reads = install_reads(&ctx, reads_host, grants.clone(), views.clone(), &shared, accounts, log.clone(), &inu)?;
-      let Some(blobs) = blobs else {
-        return Ok((Some(reads), None));
-      };
-      let deps = WritesDeps {
-        host: writes_host,
-        grants,
-        views,
-        blobs,
-        stage_dir: spill_dir.clone(),
-        log: log.clone(),
-      };
-      let writes = install_writes(&ctx, deps, &shared, accounts, &inu)?;
-      Ok((Some(reads), Some(writes)))
-    });
-    engine.shared = shared_root;
-    match installed {
-      Ok((reads, writes)) => {
-        engine.reads = reads;
-        engine.writes = writes;
-      }
-      Err(e) => log(&format!("inu.utils/inu.Message/Account reads+writes failed to install: {e:?}")),
-    }
-    let timer_host: Rc<dyn TimerHost> = engine.bridge.clone();
-    let installed = engine.ctx.with(|ctx| install_timers(&ctx, timer_host, lifecycle, log.clone()));
-    match installed {
-      Ok(state) => engine.timers = Some(state),
-      Err(e) => log(&format!("timers failed to install: {e:?}")),
-    }
-    let fetch_host: Rc<dyn FetchHost> = engine.bridge.clone();
-    let grants: Rc<dyn GrantHost> = engine.bridge.clone();
-    if let Some(blobs) = engine.blobs.clone() {
-      let installed = engine.ctx.with(|ctx| {
-        let inu = engine.inu.clone().restore(&ctx)?;
-        install_fetch(&ctx, fetch_host, grants, blobs, log.clone(), &inu)
-      });
-      match installed {
-        Ok(state) => engine.fetch = Some(state),
-        Err(e) => log(&format!("fetch failed to install: {e:?}")),
-      }
-    }
-    pump(&engine);
-  })
+fn install_engine_jvm(
+  ctx: &Context,
+  bridge: &Rc<JniBridge>,
+  lifecycle: &Rc<Lifecycle>,
+  inu: &Persistent<Object<'static>>,
+  log: &(dyn Fn(&str) + Send + Sync),
+) -> Option<Rc<jvm::JvmState>> {
+  ctx
+    .with(|ctx| {
+      let inu = inu.clone().restore(&ctx)?;
+      install_jvm(&ctx, bridge.clone(), bridge.clone(), lifecycle.clone(), make_log(bridge.console.clone()), &inu)
+    })
+    .map_err(|e| log(&format!("inu.jvm failed to install: {e:?}")))
+    .ok()
 }
 
-#[no_mangle]
-pub extern "system" fn Java_desu_inugram_helpers_plugins_QuickJs_nativeInstallJvm(
-  _env: EnvUnowned,
-  _this: JObject,
-  ptr: jlong,
-) {
-  let _deadline = arm_entry_deadline();
-  let Some(mut engine) = get_engine_mut(ptr) else {
-    return;
-  };
-  let host: Rc<dyn JvmHost> = engine.bridge.clone();
-  let grants: Rc<dyn GrantHost> = engine.bridge.clone();
-  let log = make_log(engine.bridge.console.clone());
-  let lifecycle = engine.lifecycle.clone();
-  let installed = engine.ctx.with(|ctx| {
-    let inu = engine.inu.clone().restore(&ctx)?;
-    install_jvm(&ctx, host, grants, lifecycle, log.clone(), &inu)
-  });
-  match installed {
-    Ok(state) => engine.jvm = Some(state),
-    Err(e) => log(&format!("inu.jvm failed to install: {e:?}")),
-  }
-}
-
-#[no_mangle]
-pub extern "system" fn Java_desu_inugram_helpers_plugins_QuickJs_nativeInstallXposed(
-  _env: EnvUnowned,
-  _this: JObject,
-  ptr: jlong,
-) {
-  let _deadline = arm_entry_deadline();
-  let Some(mut engine) = get_engine_mut(ptr) else {
-    return;
-  };
-  let log = make_log(engine.bridge.console.clone());
-  let Some(jvm) = engine.jvm.clone() else {
+fn install_engine_xposed(
+  ctx: &Context,
+  bridge: &Rc<JniBridge>,
+  lifecycle: &Rc<Lifecycle>,
+  inu: &Persistent<Object<'static>>,
+  log: &(dyn Fn(&str) + Send + Sync),
+  jvm: Option<Rc<jvm::JvmState>>,
+) -> Option<Rc<xposed::XposedState>> {
+  let Some(jvm) = jvm else {
     log("inu.xposed needs inu.jvm, which is not installed");
-    return;
+    return None;
   };
-  let host: Rc<dyn XposedHost> = engine.bridge.clone();
-  let grants: Rc<dyn GrantHost> = engine.bridge.clone();
-  let lifecycle = engine.lifecycle.clone();
-  let installed = engine.ctx.with(|ctx| {
-    let inu = engine.inu.clone().restore(&ctx)?;
-    install_xposed(&ctx, host, grants, lifecycle, jvm, log.clone(), &inu)
-  });
-  match installed {
-    Ok(state) => engine.xposed = Some(state),
-    Err(e) => log(&format!("inu.xposed failed to install: {e:?}")),
-  }
+  ctx
+    .with(|ctx| {
+      let inu = inu.clone().restore(&ctx)?;
+      install_xposed(
+        &ctx,
+        bridge.clone(),
+        bridge.clone(),
+        lifecycle.clone(),
+        jvm,
+        make_log(bridge.console.clone()),
+        &inu,
+      )
+    })
+    .map_err(|e| log(&format!("inu.xposed failed to install: {e:?}")))
+    .ok()
 }
 
 #[no_mangle]
@@ -529,49 +514,35 @@ pub extern "system" fn Java_desu_inugram_helpers_plugins_QuickJs_nativeJvmCallba
   (jvm::dispatch_callback(&engine._rt, &engine.ctx, state, callback_id as u32));
 }
 
-#[no_mangle]
-pub extern "system" fn Java_desu_inugram_helpers_plugins_QuickJs_nativeInstallFs(
-  mut env: EnvUnowned,
-  _this: JObject,
-  ptr: jlong,
-  dir: JString,
+fn install_engine_fs(
+  ctx: &Context,
+  bridge: &Rc<JniBridge>,
+  inu: &Persistent<Object<'static>>,
+  blobs: &Rc<crate::api::io::blob::BlobState>,
+  canvas: &Rc<canvas::CanvasState>,
+  dir: &Path,
   quota_bytes: jlong,
   unscoped: jboolean,
-  android_dirs: JString,
-) {
-  in_env(&mut env, (), |env| {
-    let _deadline = arm_entry_deadline();
-    let dir = jstring_to_string(env, &dir);
-    let android_dirs = jstring_to_string(env, &android_dirs);
-    let Some(mut engine) = get_engine_mut(ptr) else {
-      return;
-    };
-    let Some(blobs) = engine.blobs.clone() else {
-      return;
-    };
-    let grants: Rc<dyn GrantHost> = engine.bridge.clone();
-    let log = make_log(engine.bridge.console.clone());
-    let quota = if quota_bytes < 0 {
-      crate::api::io::fs::UNCAPPED
-    } else if quota_bytes == 0 {
-      crate::api::io::fs::DEFAULT_QUOTA_BYTES
-    } else {
-      quota_bytes as u64
-    };
-    let installed = engine.ctx.with(|ctx| {
-      let inu = engine.inu.clone().restore(&ctx)?;
-      install_fs(&ctx, grants, blobs, Path::new(&dir), quota, unscoped, &android_dirs, &inu)
-    });
-    match installed {
-      Ok(state) => {
-        if let Some(canvas) = engine.canvas.as_ref() {
-          canvas::attach_fs(canvas, state.clone());
-        }
-        engine.fs = Some(state);
-      }
-      Err(e) => log(&format!("inu.fs failed to install: {e:?}")),
-    }
-  })
+  android_dirs: &str,
+  log: &(dyn Fn(&str) + Send + Sync),
+) -> Option<()> {
+  let grants: Rc<dyn GrantHost> = bridge.clone();
+  let quota = if quota_bytes < 0 {
+    crate::api::io::fs::UNCAPPED
+  } else if quota_bytes == 0 {
+    crate::api::io::fs::DEFAULT_QUOTA_BYTES
+  } else {
+    quota_bytes as u64
+  };
+  let state = ctx
+    .with(|ctx| {
+      let inu = inu.clone().restore(&ctx)?;
+      install_fs(&ctx, grants, blobs.clone(), dir, quota, unscoped, android_dirs, &inu)
+    })
+    .map_err(|e| log(&format!("inu.fs failed to install: {e:?}")))
+    .ok()?;
+  canvas::attach_fs(canvas, state);
+  Some(())
 }
 
 #[no_mangle]
@@ -587,9 +558,7 @@ pub extern "system" fn Java_desu_inugram_helpers_plugins_QuickJs_nativeCanvasRes
     let Some(engine) = get_engine(ptr) else {
       return;
     };
-    let Some(state) = engine.canvas.as_ref() else {
-      return;
-    };
+    let state = &engine.canvas;
     let result_wire = jstring_to_string(env, &result_wire);
     (canvas::canvas_result(&engine._rt, &engine.ctx, state, request_id, &result_wire));
   })
@@ -608,9 +577,7 @@ pub extern "system" fn Java_desu_inugram_helpers_plugins_QuickJs_nativeFetchResu
     let Some(engine) = get_engine(ptr) else {
       return;
     };
-    let Some(state) = engine.fetch.as_ref() else {
-      return;
-    };
+    let state = &engine.fetch;
     let result_wire = jstring_to_string(env, &result_wire);
     (crate::api::io::fetch::fetch_result(&engine._rt, &engine.ctx, state, request_id, &result_wire));
   })
@@ -626,9 +593,7 @@ pub extern "system" fn Java_desu_inugram_helpers_plugins_QuickJs_nativeRunTimers
   let Some(engine) = get_engine(ptr) else {
     return;
   };
-  let Some(state) = engine.timers.as_ref() else {
-    return;
-  };
+  let state = &engine.timers;
   crate::api::timers::run_due(&engine._rt, &engine.ctx, state);
 }
 
@@ -644,12 +609,8 @@ pub extern "system" fn Java_desu_inugram_helpers_plugins_QuickJs_nativeAppVisibi
     return;
   };
 
-  if let Some(state) = engine.timers.as_ref() {
-    crate::api::timers::set_visible(state, visible);
-  }
-  if let Some(state) = engine.lifecycle_state.as_ref() {
-    crate::api::lifecycle::app_visibility_changed(&engine._rt, &engine.ctx, state, visible);
-  }
+  crate::api::timers::set_visible(&engine.timers, visible);
+  crate::api::lifecycle::app_visibility_changed(&engine._rt, &engine.ctx, &engine.lifecycle_state, visible);
 }
 
 #[no_mangle]
@@ -664,9 +625,7 @@ pub extern "system" fn Java_desu_inugram_helpers_plugins_QuickJs_nativeUiRender(
     let Some(engine) = get_engine(ptr) else {
       return std::ptr::null_mut();
     };
-    let Some(state) = engine.ui.as_ref() else {
-      return std::ptr::null_mut();
-    };
+    let state = &engine.ui;
     match crate::api::ui::pages::render_page(&engine._rt, &engine.ctx, state, page_id) {
       Some(json) => env.new_string(json).map(|j| j.into_raw()).unwrap_or(std::ptr::null_mut()),
       None => std::ptr::null_mut(),
@@ -688,9 +647,7 @@ pub extern "system" fn Java_desu_inugram_helpers_plugins_QuickJs_nativeUiEvent(
     let Some(engine) = get_engine(ptr) else {
       return;
     };
-    let Some(state) = engine.ui.as_ref() else {
-      return;
-    };
+    let state = &engine.ui;
     let arg_json = jstring_to_string(env, &arg_json);
     (crate::api::ui::pages::dispatch_ui_event(&engine._rt, &engine.ctx, state, page_id, slot as u32, &arg_json));
   })
@@ -708,9 +665,7 @@ pub extern "system" fn Java_desu_inugram_helpers_plugins_QuickJs_nativeUiMenuCli
   let Some(engine) = get_engine(ptr) else {
     return;
   };
-  let Some(state) = engine.ui.as_ref() else {
-    return;
-  };
+  let state = &engine.ui;
   (crate::api::ui::pages::dispatch_menu_click(&engine._rt, &engine.ctx, state, menu_id, slot));
 }
 
@@ -725,9 +680,7 @@ pub extern "system" fn Java_desu_inugram_helpers_plugins_QuickJs_nativeUiPageClo
   let Some(engine) = get_engine(ptr) else {
     return;
   };
-  let Some(state) = engine.ui.as_ref() else {
-    return;
-  };
+  let state = &engine.ui;
   (crate::api::ui::pages::page_closed(&engine._rt, &engine.ctx, state, page_id));
 }
 
@@ -744,9 +697,7 @@ pub extern "system" fn Java_desu_inugram_helpers_plugins_QuickJs_nativeRenderAct
     let Some(engine) = get_engine(ptr) else {
       return std::ptr::null_mut();
     };
-    let Some(state) = engine.actions.as_ref() else {
-      return std::ptr::null_mut();
-    };
+    let state = &engine.actions;
     let surface_json = jstring_to_string(env, &surface_json);
     match crate::api::ui::actions::render_actions(&engine._rt, &engine.ctx, state, kind, &surface_json) {
       Some(json) => env.new_string(json).map(|j| j.into_raw()).unwrap_or(std::ptr::null_mut()),
@@ -769,9 +720,7 @@ pub extern "system" fn Java_desu_inugram_helpers_plugins_QuickJs_nativeDispatchA
     let Some(engine) = get_engine(ptr) else {
       return;
     };
-    let Some(state) = engine.actions.as_ref() else {
-      return;
-    };
+    let state = &engine.actions;
     let surface_json = jstring_to_string(env, &surface_json);
     (crate::api::ui::actions::dispatch_action(&engine._rt, &engine.ctx, state, kind, token as u32, &surface_json));
   })
@@ -790,9 +739,7 @@ pub extern "system" fn Java_desu_inugram_helpers_plugins_QuickJs_nativeResolvePr
     let Some(engine) = get_engine(ptr) else {
       return;
     };
-    let Some(state) = engine.ui.as_ref() else {
-      return;
-    };
+    let state = &engine.ui;
     let text = if text.is_null() { None } else { Some(jstring_to_string(env, &text)) };
     (crate::api::ui::pages::resolve_prompt(&engine._rt, &engine.ctx, state, request_id, text.as_deref()));
   })
@@ -811,9 +758,7 @@ pub extern "system" fn Java_desu_inugram_helpers_plugins_QuickJs_nativeResolveCh
     let Some(engine) = get_engine(ptr) else {
       return;
     };
-    let Some(state) = engine.dialogs.as_ref() else {
-      return;
-    };
+    let state = &engine.dialogs;
     let picked = if picked.is_null() { None } else { Some(jstring_to_string(env, &picked)) };
     (crate::api::ui::dialogs::resolve_chooser(&engine._rt, &engine.ctx, state, request_id, picked.as_deref()));
   })
@@ -832,9 +777,7 @@ pub extern "system" fn Java_desu_inugram_helpers_plugins_QuickJs_nativeDispatchS
     let Some(engine) = get_engine(ptr) else {
       return;
     };
-    let Some(state) = engine.screens.as_ref() else {
-      return;
-    };
+    let state = &engine.screens;
     let change_json = jstring_to_string(env, &change_json);
     let stack_json = jstring_to_string(env, &stack_json);
     (crate::api::ui::screens::dispatch_screen_change(&engine._rt, &engine.ctx, state, &change_json, &stack_json));
@@ -856,9 +799,7 @@ pub extern "system" fn Java_desu_inugram_helpers_plugins_QuickJs_nativeDispatchN
     let Some(engine) = get_engine(ptr) else {
       return;
     };
-    let Some(state) = engine.notifications.as_ref() else {
-      return;
-    };
+    let state = &engine.notifications;
     let name = jstring_to_string(env, &name);
     let args_json = jstring_to_string(env, &args_json);
     (crate::api::platform::notifications::dispatch_notification(
@@ -886,9 +827,7 @@ pub extern "system" fn Java_desu_inugram_helpers_plugins_QuickJs_nativeResolveDi
     let Some(engine) = get_engine(ptr) else {
       return;
     };
-    let Some(state) = engine.dialogs.as_ref() else {
-      return;
-    };
+    let state = &engine.dialogs;
     let result = jstring_to_string(env, &result);
     (crate::api::ui::dialogs::resolve_dialog(&engine._rt, &engine.ctx, state, request_id, &result));
   })
@@ -905,16 +844,9 @@ pub extern "system" fn Java_desu_inugram_helpers_plugins_QuickJs_nativeNotifyUnl
     return;
   };
   engine.lifecycle.begin_unload();
-  if let Some(state) = engine.account.as_ref() {
-    state.notify_unload(&engine._rt, &engine.ctx);
-  }
-  if let Some(state) = engine.lifecycle_state.as_ref() {
-    crate::api::lifecycle::notify_unload(&engine._rt, &engine.ctx, state);
-  }
-  let Some(state) = engine.timers.as_ref() else {
-    return;
-  };
-  crate::api::timers::notify_unload(&engine.ctx, state);
+  engine.account.notify_unload(&engine._rt, &engine.ctx);
+  crate::api::lifecycle::notify_unload(&engine._rt, &engine.ctx, &engine.lifecycle_state);
+  crate::api::timers::notify_unload(&engine.ctx, &engine.timers);
 }
 
 #[no_mangle]
@@ -927,64 +859,56 @@ pub extern "system" fn Java_desu_inugram_helpers_plugins_QuickJs_nativeAccountsC
   let Some(engine) = get_engine(ptr) else {
     return;
   };
-  let Some(state) = engine.account.as_ref() else {
-    return;
-  };
+  let state = &engine.account;
   state.accounts_changed(&engine._rt, &engine.ctx);
 }
 
-#[no_mangle]
-pub extern "system" fn Java_desu_inugram_helpers_plugins_QuickJs_nativeInstallRpc(
-  _env: EnvUnowned,
-  _this: JObject,
-  ptr: jlong,
-) {
-  let _deadline = arm_entry_deadline();
-  let Some(mut engine) = get_engine_mut(ptr) else {
-    return;
-  };
-  let host: Rc<dyn RpcHost> = engine.bridge.clone();
-  let tl = engine.views.clone();
-  let grants: Rc<dyn GrantHost> = engine.bridge.clone();
-  let log = make_log(engine.bridge.console.clone());
-
-  let lifecycle = engine.lifecycle.clone();
-  let accounts = engine.account.clone();
-  let Some(shared) = engine.shared.clone() else {
-    log("inu.interceptRpc/onUpdate cannot install without inu.utils");
-    return;
-  };
-
-  let rules_host: Rc<dyn DeserializeHost> = engine.bridge.clone();
-  let rules_grants: Rc<dyn GrantHost> = engine.bridge.clone();
-  let rules_lifecycle = engine.lifecycle.clone();
-  let rules_tl = engine.views.clone();
-  let rules_log = log.clone();
-
-  let installed = engine.ctx.with(|ctx| {
-    let inu = engine.inu.clone().restore(&ctx)?;
-    let rules = crate::api::telegram::deserialize::install_deserialize(
-      &ctx,
-      rules_host,
-      rules_grants,
-      rules_lifecycle,
-      rules_tl,
-      rules_log,
-      &inu,
-    )?;
-    let shared = shared.restore(&ctx)?;
-    let rpc =
-      crate::api::telegram::rpc::install_rpc(&ctx, host, tl, grants, lifecycle, accounts, shared, log.clone(), &inu)?;
-    Ok::<_, rquickjs::Error>((rules, rpc))
-  });
-  match installed {
-    Ok((rules, state)) => {
-      engine.deserialize = Some(rules);
-      engine.rpc = Some(state);
-      pump(&engine);
-    }
-    Err(e) => log(&format!("inu.interceptRpc/onUpdate failed to install: {e:?}")),
-  }
+fn install_engine_rpc(
+  ctx: &Context,
+  bridge: &Rc<JniBridge>,
+  inu: &Persistent<Object<'static>>,
+  views: &Rc<TlViews>,
+  lifecycle: &Rc<Lifecycle>,
+  account: &Rc<crate::api::telegram::account::AccountState>,
+  shared: &Persistent<Object<'static>>,
+  log: &(dyn Fn(&str) + Send + Sync),
+) -> Option<(Rc<crate::api::telegram::deserialize::DeserializeState>, Rc<crate::api::telegram::rpc::RpcState>)> {
+  let host: Rc<dyn RpcHost> = bridge.clone();
+  let tl = views.clone();
+  let grants: Rc<dyn GrantHost> = bridge.clone();
+  let rules_host: Rc<dyn DeserializeHost> = bridge.clone();
+  let rules_grants: Rc<dyn GrantHost> = bridge.clone();
+  let rules_lifecycle = lifecycle.clone();
+  let rules_tl = views.clone();
+  let rules_log = make_log(bridge.console.clone());
+  ctx
+    .with(|ctx| {
+      let inu = inu.clone().restore(&ctx)?;
+      let rules = crate::api::telegram::deserialize::install_deserialize(
+        &ctx,
+        rules_host,
+        rules_grants,
+        rules_lifecycle,
+        rules_tl,
+        rules_log,
+        &inu,
+      )?;
+      let shared = shared.clone().restore(&ctx)?;
+      let rpc = crate::api::telegram::rpc::install_rpc(
+        &ctx,
+        host,
+        tl,
+        grants,
+        lifecycle.clone(),
+        Some(account.clone()),
+        shared,
+        make_log(bridge.console.clone()),
+        &inu,
+      )?;
+      Ok::<_, rquickjs::Error>((rules, rpc))
+    })
+    .map_err(|e| log(&format!("inu.interceptRpc/onUpdate failed to install: {e:?}")))
+    .ok()
 }
 
 #[no_mangle]
@@ -1003,9 +927,7 @@ pub extern "system" fn Java_desu_inugram_helpers_plugins_QuickJs_nativeDispatchR
     let Some(engine) = get_engine(ptr) else {
       return;
     };
-    let Some(state) = engine.rpc.as_ref() else {
-      return;
-    };
+    let state = &engine.rpc;
     let method = jstring_to_string(env, &method);
     let request_wire = jstring_to_string(env, &request_wire);
     (crate::api::telegram::rpc::dispatch_rpc(
@@ -1034,9 +956,7 @@ pub extern "system" fn Java_desu_inugram_helpers_plugins_QuickJs_nativeCompleteN
     let Some(engine) = get_engine(ptr) else {
       return;
     };
-    let Some(state) = engine.rpc.as_ref() else {
-      return;
-    };
+    let state = &engine.rpc;
     let result_wire = jstring_to_string(env, &result_wire);
     (crate::api::telegram::rpc::complete_next(&engine._rt, &engine.ctx, state, dispatch_id, &result_wire));
   })
@@ -1055,9 +975,7 @@ pub extern "system" fn Java_desu_inugram_helpers_plugins_QuickJs_nativeAbandonDi
     let Some(engine) = get_engine(ptr) else {
       return;
     };
-    let Some(state) = engine.rpc.as_ref() else {
-      return;
-    };
+    let state = &engine.rpc;
     let reason_wire = jstring_to_string(env, &reason_wire);
     (crate::api::telegram::rpc::abandon_dispatch(&engine._rt, &engine.ctx, state, dispatch_id, &reason_wire));
   })
@@ -1076,9 +994,7 @@ pub extern "system" fn Java_desu_inugram_helpers_plugins_QuickJs_nativeResolveIn
     let Some(engine) = get_engine(ptr) else {
       return;
     };
-    let Some(state) = engine.rpc.as_ref() else {
-      return;
-    };
+    let state = &engine.rpc;
     let result_wire = jstring_to_string(env, &result_wire);
     (crate::api::telegram::rpc::resolve_invoke(&engine._rt, &engine.ctx, state, invoke_id, &result_wire));
   })
@@ -1097,9 +1013,7 @@ pub extern "system" fn Java_desu_inugram_helpers_plugins_QuickJs_nativeResolvePe
     let Some(engine) = get_engine(ptr) else {
       return;
     };
-    let Some(state) = engine.reads.as_ref() else {
-      return;
-    };
+    let state = &engine.reads;
     let result_wire = jstring_to_string(env, &result_wire);
     (crate::api::telegram::reads::resolve_peer_result(&engine._rt, &engine.ctx, state, request_id, &result_wire));
   })
@@ -1118,9 +1032,7 @@ pub extern "system" fn Java_desu_inugram_helpers_plugins_QuickJs_nativeAccountFe
     let Some(engine) = get_engine(ptr) else {
       return;
     };
-    let Some(state) = engine.reads.as_ref() else {
-      return;
-    };
+    let state = &engine.reads;
     let result_wire = jstring_to_string(env, &result_wire);
     (crate::api::telegram::reads::account_fetch_result(&engine._rt, &engine.ctx, state, request_id, &result_wire));
   })
@@ -1139,9 +1051,7 @@ pub extern "system" fn Java_desu_inugram_helpers_plugins_QuickJs_nativeWriteResu
     let Some(engine) = get_engine(ptr) else {
       return;
     };
-    let Some(state) = engine.writes.as_ref() else {
-      return;
-    };
+    let state = &engine.writes;
     let result_wire = jstring_to_string(env, &result_wire);
     (crate::api::telegram::writes::write_result(&engine._rt, &engine.ctx, state, request_id, &result_wire));
   })
@@ -1160,9 +1070,7 @@ pub extern "system" fn Java_desu_inugram_helpers_plugins_QuickJs_nativeWriteProg
   let Some(engine) = get_engine(ptr) else {
     return;
   };
-  let Some(state) = engine.writes.as_ref() else {
-    return;
-  };
+  let state = &engine.writes;
   (crate::api::telegram::writes::write_progress(&engine._rt, &engine.ctx, state, request_id, loaded, total));
 }
 
@@ -1180,9 +1088,7 @@ pub extern "system" fn Java_desu_inugram_helpers_plugins_QuickJs_nativeDispatchU
     let Some(engine) = get_engine(ptr) else {
       return;
     };
-    let Some(state) = engine.rpc.as_ref() else {
-      return;
-    };
+    let state = &engine.rpc;
     let type_name = jstring_to_string(env, &type_name);
     let update_wire = jstring_to_string(env, &update_wire);
     (crate::api::telegram::rpc::dispatch_update(&engine._rt, &engine.ctx, state, &type_name, account_id, &update_wire));
@@ -1202,9 +1108,7 @@ pub extern "system" fn Java_desu_inugram_helpers_plugins_QuickJs_nativeDispatchD
     let Some(engine) = get_engine(ptr) else {
       return;
     };
-    let Some(state) = engine.deserialize.as_ref() else {
-      return;
-    };
+    let state = &engine.deserialize;
     let object_wire = jstring_to_string(env, &object_wire);
     (crate::api::telegram::deserialize::dispatch_middleware(&engine.ctx, state, callback_id as u32, &object_wire));
   })
@@ -1226,9 +1130,7 @@ pub extern "system" fn Java_desu_inugram_helpers_plugins_QuickJs_nativeDispatchU
     let Some(engine) = get_engine(ptr) else {
       return;
     };
-    let Some(state) = engine.rpc.as_ref() else {
-      return;
-    };
+    let state = &engine.rpc;
     let type_name = jstring_to_string(env, &type_name);
     let update_wire = jstring_to_string(env, &update_wire);
     (crate::api::telegram::rpc::dispatch_update_intercept(
@@ -1255,9 +1157,7 @@ pub extern "system" fn Java_desu_inugram_helpers_plugins_QuickJs_nativeAbandonUp
   let Some(engine) = get_engine(ptr) else {
     return;
   };
-  let Some(state) = engine.rpc.as_ref() else {
-    return;
-  };
+  let state = &engine.rpc;
   (crate::api::telegram::rpc::abandon_update_dispatch(&engine._rt, &engine.ctx, state, dispatch_id));
 }
 
@@ -1341,61 +1241,30 @@ pub extern "system" fn Java_desu_inugram_helpers_plugins_QuickJs_nativeDestroy(
   _this: JObject,
   ptr: jlong,
 ) {
-  if let Some(mut engine) = remove_engine(ptr) {
-    if let Some(state) = engine.rpc.take() {
-      crate::api::telegram::rpc::dispose(&engine.ctx, &state);
-    }
-    if let Some(state) = engine.deserialize.take() {
-      crate::api::telegram::deserialize::dispose(&engine.ctx, &state);
-    }
-    if let Some(state) = engine.lifecycle_state.take() {
-      crate::api::lifecycle::dispose(&engine.ctx, &state);
-    }
-    if let Some(state) = engine.dialogs.take() {
-      crate::api::ui::dialogs::dispose(&engine.ctx, &state);
-    }
-    if let Some(state) = engine.ui.take() {
-      crate::api::ui::pages::dispose(&engine.ctx, &state);
-    }
-    if let Some(state) = engine.screens.take() {
-      crate::api::ui::screens::dispose(&engine.ctx, &state);
-    }
-    if let Some(state) = engine.actions.take() {
-      crate::api::ui::actions::dispose(&engine.ctx, &state);
-    }
-    if let Some(state) = engine.writes.take() {
-      crate::api::telegram::writes::dispose(&engine.ctx, &state);
-    }
-    if let Some(state) = engine.reads.take() {
-      crate::api::telegram::reads::dispose(&engine.ctx, &state);
-    }
-    if let Some(state) = engine.account.take() {
-      state.dispose(&engine.ctx);
-    }
-    if let Some(state) = engine.fetch.take() {
-      crate::api::io::fetch::dispose(&engine.ctx, &state);
-    }
-    if let Some(state) = engine.canvas.take() {
-      canvas::dispose(&engine.ctx, &state);
-    }
-    if let Some(state) = engine.timers.take() {
-      crate::api::timers::dispose(&engine.ctx, &state);
-    }
-    if let Some(state) = engine.notifications.take() {
-      crate::api::platform::notifications::dispose(&engine.ctx, &state);
-    }
-    if let Some(state) = engine.xposed.take() {
+  if let Some(engine) = remove_engine(ptr) {
+    crate::api::telegram::rpc::dispose(&engine.ctx, &engine.rpc);
+    crate::api::telegram::deserialize::dispose(&engine.ctx, &engine.deserialize);
+    crate::api::lifecycle::dispose(&engine.ctx, &engine.lifecycle_state);
+    crate::api::ui::dialogs::dispose(&engine.ctx, &engine.dialogs);
+    crate::api::ui::pages::dispose(&engine.ctx, &engine.ui);
+    crate::api::ui::screens::dispose(&engine.ctx, &engine.screens);
+    crate::api::ui::actions::dispose(&engine.ctx, &engine.actions);
+    crate::api::telegram::writes::dispose(&engine.ctx, &engine.writes);
+    crate::api::telegram::reads::dispose(&engine.ctx, &engine.reads);
+    engine.account.dispose(&engine.ctx);
+    crate::api::io::fetch::dispose(&engine.ctx, &engine.fetch);
+    canvas::dispose(&engine.ctx, &engine.canvas);
+    crate::api::timers::dispose(&engine.ctx, &engine.timers);
+    crate::api::platform::notifications::dispose(&engine.ctx, &engine.notifications);
+    if let Some(state) = engine.xposed.as_ref() {
       xposed::dispose(&engine.ctx, &state);
     }
-    if let Some(state) = engine.jvm.take() {
+    if let Some(state) = engine.jvm.as_ref() {
       jvm::dispose(&engine.ctx, &state);
     }
-    if let Some(shared) = engine.shared.take() {
-      engine.ctx.with(|ctx| drop(shared.restore(&ctx)));
-    }
-    let inu = engine.inu;
     engine.ctx.with(|ctx| {
-      drop(inu.restore(&ctx));
+      drop(engine.shared.clone().restore(&ctx));
+      drop(engine.inu.clone().restore(&ctx));
       dispose_rejection_tracker(&ctx);
     });
   }

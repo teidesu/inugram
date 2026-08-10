@@ -96,10 +96,6 @@ object PluginXposed {
         return Session(plugin, engine)
     }
 
-    fun install(engine: QuickJs) {
-        if (engine.listener?.xposed != null) engine.installXposed()
-    }
-
     /** an ART entry point stays rewritten, so a site left behind dispatches into an engine that is gone */
     fun detach(engine: QuickJs) {
         (engine.listener?.xposed as? Session)?.close()
