@@ -1,5 +1,4 @@
 use crate::api::telegram::rpc::format_exception;
-use crate::api::ui::dialogs::resolve_chooser;
 use crate::testing::harness::setup_apis as setup;
 use rquickjs::Value;
 
@@ -97,7 +96,7 @@ fn the_bundled_shell_test_plugin_passes() {
 
   for picked in [Some("2"), Some("0,2"), None] {
     let request_id = host.choosers.borrow().last().expect("a chooser was opened").0;
-    resolve_chooser(&rt, &ctx, &dialogs, request_id, picked);
+    dialogs.resolve_chooser(&rt, &ctx, request_id, picked);
   }
 
   let lines = lines.borrow().clone();

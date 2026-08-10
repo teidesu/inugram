@@ -347,94 +347,6 @@ fn decode_result<'js>(ctx: &Ctx<'js>, state: &Rc<WritesState>, shape: Shape, wir
   }
 }
 
-pub fn write_result(
-  rt: &Runtime,
-  context: &rquickjs::Context,
-  state: &Rc<WritesState>,
-  request_id: i64,
-  result_wire: &str,
-) {
-  context.with(|ctx| {
-    let Some(pending) = take_pending(state, request_id) else {
-      return;
-    };
-    if let Some(built) = wire_error_to_js(&ctx, result_wire) {
-      if let Some(progress) = pending.progress.as_ref() {
-        progress.abandon(&ctx);
-      }
-      match built {
-        Ok(value) => {
-          if pending.settle.reject_with_value(&ctx, value).is_err() {
-            (state.log)(&format!("write({request_id}) reject failed: {}", format_exception(&ctx)));
-          }
-        }
-        Err(e) => {
-          pending.settle.release(&ctx);
-          (state.log)(&format!("write({request_id}) error decode failed: {e:?}"));
-        }
-      }
-      return;
-    }
-    if let Some(progress) = pending.progress.as_ref() {
-      let total = pending.last_total.get();
-      if total > 0 {
-        progress.finish(&ctx, total, total);
-      } else {
-        progress.abandon(&ctx);
-      }
-    }
-    match decode_result(&ctx, state, pending.shape, result_wire) {
-      Ok(value) => {
-        if pending.settle.resolve_with(&ctx, value).is_err() {
-          (state.log)(&format!("write({request_id}) resolve failed: {}", format_exception(&ctx)));
-        }
-      }
-      Err(_) => {
-        pending.settle.release(&ctx);
-        (state.log)(&format!("write({request_id}) bad result wire: {}", format_exception(&ctx)));
-      }
-    }
-  });
-  pump_jobs(rt, context, state.log.as_ref());
-}
-
-pub fn write_progress(
-  rt: &Runtime,
-  context: &rquickjs::Context,
-  state: &Rc<WritesState>,
-  request_id: i64,
-  loaded: i64,
-  total: i64,
-) {
-  context.with(|ctx| {
-    let progress = {
-      let table = state.pending.borrow();
-      let Some(pending) = table.get(&request_id) else {
-        return;
-      };
-      pending.last_total.set(total);
-      pending.progress.clone()
-    };
-    let Some(progress) = progress else { return };
-    progress.report(&ctx, loaded, total);
-  });
-  pump_jobs(rt, context, state.log.as_ref());
-}
-
-pub fn dispose(context: &rquickjs::Context, state: &Rc<WritesState>) {
-  context.with(|ctx| {
-    for (_, pending) in state.pending.borrow_mut().drain() {
-      if let Some(progress) = pending.progress.as_ref() {
-        progress.release(&ctx);
-      }
-      pending.settle.release(&ctx);
-      for path in &pending.staged {
-        let _ = fs::remove_file(path);
-      }
-    }
-  });
-}
-
 pub struct WritesDeps {
   pub host: Rc<dyn WritesHost>,
   pub grants: Rc<dyn GrantHost>,
@@ -521,6 +433,93 @@ pub(crate) fn install_writes_with_limit<'js>(
   accounts.set_prototype(ctx, &prototype);
 
   Ok(state)
+}
+
+impl WritesState {
+  pub fn resolve_write(self: &Rc<Self>, rt: &Runtime, context: &rquickjs::Context, request_id: i64, result_wire: &str) {
+    let state = self;
+    context.with(|ctx| {
+      let Some(pending) = take_pending(state, request_id) else {
+        return;
+      };
+      if let Some(built) = wire_error_to_js(&ctx, result_wire) {
+        if let Some(progress) = pending.progress.as_ref() {
+          progress.abandon(&ctx);
+        }
+        match built {
+          Ok(value) => {
+            if pending.settle.reject_with_value(&ctx, value).is_err() {
+              (state.log)(&format!("write({request_id}) reject failed: {}", format_exception(&ctx)));
+            }
+          }
+          Err(e) => {
+            pending.settle.release(&ctx);
+            (state.log)(&format!("write({request_id}) error decode failed: {e:?}"));
+          }
+        }
+        return;
+      }
+      if let Some(progress) = pending.progress.as_ref() {
+        let total = pending.last_total.get();
+        if total > 0 {
+          progress.finish(&ctx, total, total);
+        } else {
+          progress.abandon(&ctx);
+        }
+      }
+      match decode_result(&ctx, state, pending.shape, result_wire) {
+        Ok(value) => {
+          if pending.settle.resolve_with(&ctx, value).is_err() {
+            (state.log)(&format!("write({request_id}) resolve failed: {}", format_exception(&ctx)));
+          }
+        }
+        Err(_) => {
+          pending.settle.release(&ctx);
+          (state.log)(&format!("write({request_id}) bad result wire: {}", format_exception(&ctx)));
+        }
+      }
+    });
+    pump_jobs(rt, context, state.log.as_ref());
+  }
+
+  pub fn report_progress(
+    self: &Rc<Self>,
+    rt: &Runtime,
+    context: &rquickjs::Context,
+    request_id: i64,
+    loaded: i64,
+    total: i64,
+  ) {
+    let state = self;
+    context.with(|ctx| {
+      let progress = {
+        let table = state.pending.borrow();
+        let Some(pending) = table.get(&request_id) else {
+          return;
+        };
+        pending.last_total.set(total);
+        pending.progress.clone()
+      };
+      let Some(progress) = progress else { return };
+      progress.report(&ctx, loaded, total);
+    });
+    pump_jobs(rt, context, state.log.as_ref());
+  }
+
+  pub fn dispose(self: &Rc<Self>, context: &rquickjs::Context) {
+    let state = self;
+    context.with(|ctx| {
+      for (_, pending) in state.pending.borrow_mut().drain() {
+        if let Some(progress) = pending.progress.as_ref() {
+          progress.release(&ctx);
+        }
+        pending.settle.release(&ctx);
+        for path in &pending.staged {
+          let _ = fs::remove_file(path);
+        }
+      }
+    });
+  }
 }
 
 #[cfg(test)]

@@ -75,8 +75,8 @@ fn the_bundled_xposed_test_plugin_passes() {
     let state = install_xposed(&ctx, host.clone(), grants, lifecycle, jvm.clone(), log, &inu).unwrap();
     (state, jvm)
   });
-  let _jvm = DisposeOnDrop::new(&ctx, jvm, crate::api::platform::jvm::dispose);
-  let _state = DisposeOnDrop::new(&ctx, state, dispose);
+  let _jvm = DisposeOnDrop::new(&ctx, jvm, |ctx, state| state.dispose(ctx));
+  let _state = DisposeOnDrop::new(&ctx, state, |ctx, state| state.dispose(ctx));
 
   ctx.with(|ctx| match ctx.eval::<(), _>(ORACLE) {
     Ok(()) => {}
@@ -99,13 +99,13 @@ fn run_dispatch(
   args: &[String],
   original: &str,
 ) -> (String, Option<Vec<String>>) {
-  let answer = dispatch_before(rt, context, state, 1, site, &Invocation { method: "GM1", this: "N", args });
+  let answer = state.dispatch_before(rt, context, 1, site, &Invocation { method: "GM1", this: "N", args });
   if answer[0] == "A" {
     return (answer[1].clone(), None);
   }
   let called_with = answer[1..].to_vec();
   let result = if answer[0] == "P1" {
-    dispatch_after(rt, context, state, 1, original)
+    state.dispatch_after(rt, context, 1, original)
   } else {
     original.to_string()
   };
@@ -204,8 +204,8 @@ fn setup(grants: &[&str]) -> Fixture {
   });
 
   Fixture {
-    _xposed: crate::testing::harness::DisposeOnDrop::new(&ctx, state.clone(), dispose),
-    _jvm: crate::testing::harness::DisposeOnDrop::new(&ctx, jvm, crate::api::platform::jvm::dispose),
+    _xposed: crate::testing::harness::DisposeOnDrop::new(&ctx, state.clone(), |ctx, state| state.dispose(ctx)),
+    _jvm: crate::testing::harness::DisposeOnDrop::new(&ctx, jvm, |ctx, state| state.dispose(ctx)),
     rt,
     ctx,
     host,
@@ -575,7 +575,7 @@ fn disposing_the_engine_unhooks_everything_it_installed() {
          inu.xposed.hookMethod(c.getDeclaredMethod('isEmpty'), { before() {} })",
   );
 
-  dispose(&fixture.ctx, &fixture.state);
+  fixture.state.dispose(&fixture.ctx);
   assert_eq!(fixture.host.ops().iter().filter(|op| **op == OP_UNHOOK).count(), 2);
 }
 

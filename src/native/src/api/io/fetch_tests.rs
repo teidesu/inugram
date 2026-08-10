@@ -112,7 +112,7 @@ struct Fixture {
 impl Fixture {
   fn advance(&self, millis: u64) {
     self.clock.advance(millis);
-    crate::api::timers::run_due(&self.rt, &self.ctx, &self.timers);
+    self.timers.run_due(&self.rt, &self.ctx);
   }
 }
 
@@ -136,8 +136,8 @@ fn setup(grant: Option<&str>) -> Fixture {
     let state = install_fetch(&ctx, host_dyn, grants, blobs, log.clone(), &inu).unwrap();
     (timers, state)
   });
-  let timers = DisposingTimers::new(&ctx, timers, crate::api::timers::dispose);
-  let state = Disposing::new(&ctx, state, dispose);
+  let timers = DisposingTimers::new(&ctx, timers, |ctx, state| state.dispose(ctx));
+  let state = Disposing::new(&ctx, state, |ctx, state| state.dispose(ctx));
   Fixture { rt, ctx, host, dir, clock, timers, state }
 }
 
@@ -179,7 +179,7 @@ fn answer(f: &Fixture, request_id: i64, status: i32, headers: &str, body: &str) 
     r#"J{{"status":{status},"statusText":"OK","url":"https://api.example.com/x","headers":{headers},"body":{{"path":{:?},"type":"text/plain"}}}}"#,
     path.to_string_lossy(),
   );
-  fetch_result(&f.rt, &f.ctx, &f.state, request_id, &wire);
+  f.state.resolve(&f.rt, &f.ctx, request_id, &wire);
 }
 
 #[test]
@@ -585,14 +585,14 @@ mod bundled_oracle {
         answer_ok(&rt, &ctx, &state, &host.dir, request_id);
       }
       clock.advance(1000);
-      crate::api::timers::run_due(&rt, &ctx, &timers);
+      timers.run_due(&rt, &ctx);
       if lines.borrow().iter().any(|l| l == "fetch test done") {
         break;
       }
     }
 
-    dispose(&ctx, &state);
-    crate::api::timers::dispose(&ctx, &timers);
+    state.dispose(&ctx);
+    timers.dispose(&ctx);
     let lines = lines.borrow().clone();
     crate::testing::harness::assert_oracle_exact(&lines, "fetch test done", 35);
   }
@@ -606,6 +606,6 @@ mod bundled_oracle {
       r#"J{{"status":200,"statusText":"OK","url":"https://example.com/final","headers":{{"content-type":["application/json"],"set-cookie":["a=1","b=2"]}},"body":{{"path":{:?},"type":"application/json"}}}}"#,
       path.to_string_lossy(),
     );
-    fetch_result(rt, ctx, state, request_id, &wire);
+    state.resolve(rt, ctx, request_id, &wire);
   }
 }

@@ -17,7 +17,7 @@ fn unload_callbacks_run_in_order_and_survive_throws() {
       .unwrap();
   });
 
-  notify_unload(&rt, &ctx, &state);
+  state.notify_unload(&rt, &ctx);
   let ran: String = ctx.with(|ctx| ctx.eval("JSON.stringify(globalThis.__ran)").unwrap());
   assert_eq!(ran, "[1,3]");
   assert!(
@@ -46,7 +46,7 @@ fn unload_registrations_stack_and_a_disposer_drops_one() {
   });
   assert_eq!(state.unload_fns.len(), 2);
 
-  notify_unload(&rt, &ctx, &state);
+  state.notify_unload(&rt, &ctx);
   let ran: String = ctx.with(|ctx| ctx.eval("JSON.stringify(globalThis.__ran)").unwrap());
   assert_eq!(ran, "[1,3]");
 }
@@ -70,7 +70,7 @@ fn an_unload_callback_disposed_mid_notify_still_runs_and_a_new_one_never_does() 
       .unwrap();
   });
 
-  notify_unload(&rt, &ctx, &state);
+  state.notify_unload(&rt, &ctx);
   let ran: String = ctx.with(|ctx| ctx.eval("JSON.stringify(globalThis.__ran)").unwrap());
   assert_eq!(ran, r#"["first","second"]"#);
   let late: String = ctx.with(|ctx| ctx.eval("globalThis.__late").unwrap());
@@ -92,8 +92,8 @@ fn a_throwing_lifecycle_callback_faults() {
       .unwrap();
   });
 
-  app_visibility_changed(&rt, &ctx, &state, false);
-  notify_unload(&rt, &ctx, &state);
+  state.app_visibility_changed(&rt, &ctx, false);
+  state.notify_unload(&rt, &ctx);
 
   let seen: Vec<(i32, String)> = logs
     .borrow()
@@ -125,10 +125,10 @@ fn visibility_callbacks_fire_on_transitions_only() {
       .unwrap();
   });
 
-  app_visibility_changed(&rt, &ctx, &state, true);
-  app_visibility_changed(&rt, &ctx, &state, false);
-  app_visibility_changed(&rt, &ctx, &state, false);
-  app_visibility_changed(&rt, &ctx, &state, true);
+  state.app_visibility_changed(&rt, &ctx, true);
+  state.app_visibility_changed(&rt, &ctx, false);
+  state.app_visibility_changed(&rt, &ctx, false);
+  state.app_visibility_changed(&rt, &ctx, true);
   let modes: String = ctx.with(|ctx| ctx.eval("JSON.stringify(globalThis.__modes)").unwrap());
   assert_eq!(modes, r#"["background","foreground"]"#);
 }
@@ -153,7 +153,7 @@ fn visibility_without_the_grant_throws_and_registers_nothing() {
   });
   assert_eq!(caught, r#"[true,"not-granted","onAppVisibilityChange"]"#);
   assert!(state.visibility_fns.is_empty());
-  app_visibility_changed(&rt, &ctx, &state, false);
+  state.app_visibility_changed(&rt, &ctx, false);
 }
 
 #[test]
@@ -171,7 +171,7 @@ fn a_throwing_visibility_callback_is_logged_and_the_rest_still_run() {
       .unwrap();
   });
 
-  app_visibility_changed(&rt, &ctx, &state, false);
+  state.app_visibility_changed(&rt, &ctx, false);
   let ran: String = ctx.with(|ctx| ctx.eval("JSON.stringify(globalThis.__ran)").unwrap());
   assert_eq!(ran, r#"["second"]"#);
   assert!(
@@ -184,7 +184,7 @@ fn a_throwing_visibility_callback_is_logged_and_the_rest_still_run() {
   );
 
   ctx.with(|ctx| ctx.eval::<(), _>("__d(); __d();").unwrap());
-  app_visibility_changed(&rt, &ctx, &state, true);
+  state.app_visibility_changed(&rt, &ctx, true);
   let ran: String = ctx.with(|ctx| ctx.eval("JSON.stringify(globalThis.__ran)").unwrap());
   assert_eq!(ran, r#"["second"]"#, "a disposed registration hears nothing more");
 }

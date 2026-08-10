@@ -88,7 +88,7 @@ fn setup(grants: &[&str]) -> Fixture {
     )
     .unwrap()
   });
-  let state = DisposeOnDrop::new(&ctx, state, dispose);
+  let state = DisposeOnDrop::new(&ctx, state, |ctx, state| state.dispose(ctx));
   Fixture { _rt: rt, ctx, host, state }
 }
 
@@ -357,11 +357,11 @@ fn a_runnable_fires_its_callback_when_the_host_says_java_ran_it() {
   let f = setup(&["unsafe.jvm"]);
   f.ctx
     .with(|ctx| ctx.eval::<(), _>("globalThis.ran = 0; inu.jvm.runnable(() => { globalThis.ran++ })").unwrap());
-  dispatch_callback(&f._rt, &f.ctx, &f.state, 1);
-  dispatch_callback(&f._rt, &f.ctx, &f.state, 1);
+  f.state.dispatch_callback(&f._rt, &f.ctx, 1);
+  f.state.dispatch_callback(&f._rt, &f.ctx, 1);
   assert_eq!(eval(&f, "ran"), "2");
   // one nothing was ever registered for is a no-op rather than a failure
-  dispatch_callback(&f._rt, &f.ctx, &f.state, 99);
+  f.state.dispatch_callback(&f._rt, &f.ctx, 99);
   assert_eq!(eval(&f, "ran"), "2");
 }
 
@@ -371,7 +371,7 @@ fn a_runnable_made_during_unload_never_fires() {
   f.ctx.with(|ctx| ctx.eval::<(), _>("globalThis.ran = 0").unwrap());
   f.state.lifecycle.begin_unload();
   f.ctx.with(|ctx| ctx.eval::<(), _>("inu.jvm.runnable(() => { globalThis.ran++ })").unwrap());
-  dispatch_callback(&f._rt, &f.ctx, &f.state, 1);
+  f.state.dispatch_callback(&f._rt, &f.ctx, 1);
   assert_eq!(eval(&f, "ran"), "0");
 }
 
@@ -393,9 +393,9 @@ fn a_throwing_callback_is_the_plugins_fault() {
     )
     .unwrap()
   });
-  let state = DisposeOnDrop::new(&ctx, state, dispose);
+  let state = DisposeOnDrop::new(&ctx, state, |ctx, state| state.dispose(ctx));
   ctx.with(|ctx| ctx.eval::<(), _>("inu.jvm.runnable(() => { throw new Error('boom') })").unwrap());
-  dispatch_callback(&rt, &ctx, &state, 1);
+  state.dispatch_callback(&rt, &ctx, 1);
   let logged = logged.borrow().clone();
   assert_eq!(logged.len(), 1, "{logged:?}");
   assert!(logged[0].starts_with('\u{1}'), "a plugin's own throw must reach the host as a fault: {logged:?}");
@@ -446,7 +446,7 @@ mod bundled_oracle {
       )
       .unwrap()
     });
-    let state = DisposeOnDrop::new(&ctx, state, dispose);
+    let state = DisposeOnDrop::new(&ctx, state, |ctx, state| state.dispose(ctx));
     ctx.with(|ctx| match ctx.eval::<(), _>(ORACLE) {
       Ok(()) => {}
       Err(rquickjs::Error::Exception) => panic!("{}", format_exception(&ctx)),
@@ -454,7 +454,7 @@ mod bundled_oracle {
     });
     // the java object the oracle handed to `setOnClickListener` is "run" by the host, which is
     // the only thing that can fire a runnable
-    dispatch_callback(&rt, &ctx, &state, host.runnable_token());
+    state.dispatch_callback(&rt, &ctx, host.runnable_token());
     ctx.with(|ctx| {
       let done: Function = ctx.globals().get("__jvmDone").unwrap();
       done.call::<_, ()>(()).unwrap()

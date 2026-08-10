@@ -68,46 +68,54 @@ pub fn install_lifecycle<'js>(
   Ok(state)
 }
 
-pub fn app_visibility_changed(rt: &Runtime, context: &rquickjs::Context, state: &Rc<LifecycleState>, visible: bool) {
-  if state.visible.replace(visible) == visible {
-    return;
+impl LifecycleState {
+  pub fn app_visibility_changed(self: &Rc<Self>, rt: &Runtime, context: &rquickjs::Context, visible: bool) {
+    let state = self;
+    if state.visible.replace(visible) == visible {
+      return;
+    }
+    context.with(|ctx| {
+      let mode = if visible { "foreground" } else { "background" };
+      for f in state.visibility_fns.snapshot(&ctx) {
+        match f.call::<_, Value>((mode,)) {
+          Ok(_) => {}
+          Err(rquickjs::Error::Exception) => {
+            (state.log)(&crate::fault(format_args!(
+              "onAppVisibilityChange callback threw: {}",
+              format_exception(&ctx),
+            )));
+          }
+          Err(e) => (state.log)(&format!("onAppVisibilityChange callback failed: {e:?}")),
+        }
+      }
+    });
+    pump_jobs(rt, context, state.log.as_ref());
   }
-  context.with(|ctx| {
-    let mode = if visible { "foreground" } else { "background" };
-    for f in state.visibility_fns.snapshot(&ctx) {
-      match f.call::<_, Value>((mode,)) {
-        Ok(_) => {}
-        Err(rquickjs::Error::Exception) => {
-          (state.log)(&crate::fault(format_args!("onAppVisibilityChange callback threw: {}", format_exception(&ctx),)));
-        }
-        Err(e) => (state.log)(&format!("onAppVisibilityChange callback failed: {e:?}")),
-      }
-    }
-  });
-  pump_jobs(rt, context, state.log.as_ref());
-}
 
-pub fn notify_unload(rt: &Runtime, context: &rquickjs::Context, state: &Rc<LifecycleState>) {
-  state.lifecycle.begin_unload();
-  context.with(|ctx| {
-    for f in state.unload_fns.take_all(&ctx) {
-      match f.call::<_, Value>(()) {
-        Ok(_) => {}
-        Err(rquickjs::Error::Exception) => {
-          (state.log)(&crate::fault(format_args!("onUnload callback threw: {}", format_exception(&ctx))));
+  pub fn notify_unload(self: &Rc<Self>, rt: &Runtime, context: &rquickjs::Context) {
+    let state = self;
+    state.lifecycle.begin_unload();
+    context.with(|ctx| {
+      for f in state.unload_fns.take_all(&ctx) {
+        match f.call::<_, Value>(()) {
+          Ok(_) => {}
+          Err(rquickjs::Error::Exception) => {
+            (state.log)(&crate::fault(format_args!("onUnload callback threw: {}", format_exception(&ctx))));
+          }
+          Err(e) => (state.log)(&format!("onUnload callback failed: {e:?}")),
         }
-        Err(e) => (state.log)(&format!("onUnload callback failed: {e:?}")),
       }
-    }
-  });
-  pump_jobs(rt, context, state.log.as_ref());
-}
+    });
+    pump_jobs(rt, context, state.log.as_ref());
+  }
 
-pub fn dispose(context: &rquickjs::Context, state: &Rc<LifecycleState>) {
-  context.with(|ctx| {
-    state.unload_fns.release_all(&ctx);
-    state.visibility_fns.release_all(&ctx);
-  });
+  pub fn dispose(self: &Rc<Self>, context: &rquickjs::Context) {
+    let state = self;
+    context.with(|ctx| {
+      state.unload_fns.release_all(&ctx);
+      state.visibility_fns.release_all(&ctx);
+    });
+  }
 }
 
 #[cfg(test)]

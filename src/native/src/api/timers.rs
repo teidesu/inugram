@@ -190,72 +190,78 @@ fn sync_wake(state: &Rc<TimerState>) {
   }
 }
 
-pub fn set_visible(state: &Rc<TimerState>, visible: bool) {
-  if state.visible.replace(visible) == visible {
-    return;
-  }
-  if !visible {
-    state.hidden_since.set(state.host.now_ms());
-  }
-  sync_wake(state);
-}
-
 fn release_all(ctx: &Ctx<'_>, state: &Rc<TimerState>) {
   for timer in state.timers.remove_matching(|_| true) {
     timer.release(ctx);
   }
 }
 
-pub fn run_due(rt: &Runtime, context: &rquickjs::Context, state: &Rc<TimerState>) {
-  state.armed.set(None);
-  context.with(|ctx| {
-    if state.lifecycle.is_unloading() {
-      release_all(&ctx, state);
+impl TimerState {
+  pub fn set_visible(self: &Rc<Self>, visible: bool) {
+    let state = self;
+    if state.visible.replace(visible) == visible {
       return;
     }
-    let now = state.host.now_ms();
-    state.last_tick.set(now);
-    let mut due: Vec<Rc<Timer>> = state.timers.values().into_iter().filter(|t| t.due.get() <= now).collect();
-    due.sort_by_key(|t| (t.due.get(), t.seq.get()));
-
-    for timer in due {
-      if !state.timers.contains(timer.id) || timer.due.get() > now {
-        continue;
-      }
-      let saved = timer.callback.borrow().clone();
-      match timer.interval_ms {
-        Some(period) => {
-          timer.due.set(now.saturating_add(period));
-          timer.seq.set(state.next_seq());
-        }
-        None => {
-          state.timers.remove(timer.id);
-          timer.release(&ctx);
-        }
-      }
-      let Some(callback) = saved.and_then(|p| p.restore(&ctx).ok()) else {
-        continue;
-      };
-      match callback.call::<_, Value>(()) {
-        Ok(_) => {}
-        Err(rquickjs::Error::Exception) => {
-          (state.log)(&crate::fault(format_args!("timer callback threw: {}", format_exception(&ctx))));
-        }
-        Err(e) => (state.log)(&format!("timer callback failed: {e:?}")),
-      }
+    if !visible {
+      state.hidden_since.set(state.host.now_ms());
     }
-  });
-  sync_wake(state);
-  pump_jobs(rt, context, state.log.as_ref());
-}
+    sync_wake(state);
+  }
 
-pub fn notify_unload(context: &rquickjs::Context, state: &Rc<TimerState>) {
-  dispose(context, state);
-}
+  pub fn run_due(self: &Rc<Self>, rt: &Runtime, context: &rquickjs::Context) {
+    let state = self;
+    state.armed.set(None);
+    context.with(|ctx| {
+      if state.lifecycle.is_unloading() {
+        release_all(&ctx, state);
+        return;
+      }
+      let now = state.host.now_ms();
+      state.last_tick.set(now);
+      let mut due: Vec<Rc<Timer>> = state.timers.values().into_iter().filter(|t| t.due.get() <= now).collect();
+      due.sort_by_key(|t| (t.due.get(), t.seq.get()));
 
-pub fn dispose(context: &rquickjs::Context, state: &Rc<TimerState>) {
-  context.with(|ctx| release_all(&ctx, state));
-  sync_wake(state);
+      for timer in due {
+        if !state.timers.contains(timer.id) || timer.due.get() > now {
+          continue;
+        }
+        let saved = timer.callback.borrow().clone();
+        match timer.interval_ms {
+          Some(period) => {
+            timer.due.set(now.saturating_add(period));
+            timer.seq.set(state.next_seq());
+          }
+          None => {
+            state.timers.remove(timer.id);
+            timer.release(&ctx);
+          }
+        }
+        let Some(callback) = saved.and_then(|p| p.restore(&ctx).ok()) else {
+          continue;
+        };
+        match callback.call::<_, Value>(()) {
+          Ok(_) => {}
+          Err(rquickjs::Error::Exception) => {
+            (state.log)(&crate::fault(format_args!("timer callback threw: {}", format_exception(&ctx))));
+          }
+          Err(e) => (state.log)(&format!("timer callback failed: {e:?}")),
+        }
+      }
+    });
+    sync_wake(state);
+    pump_jobs(rt, context, state.log.as_ref());
+  }
+
+  pub fn notify_unload(self: &Rc<Self>, context: &rquickjs::Context) {
+    let state = self;
+    state.dispose(context);
+  }
+
+  pub fn dispose(self: &Rc<Self>, context: &rquickjs::Context) {
+    let state = self;
+    context.with(|ctx| release_all(&ctx, state));
+    sync_wake(state);
+  }
 }
 
 #[cfg(test)]

@@ -392,7 +392,7 @@ struct DisposeOnDrop {
 
 impl Drop for DisposeOnDrop {
   fn drop(&mut self) {
-    dispose(&self.ctx, &self.state);
+    self.state.dispose(&self.ctx);
   }
 }
 
@@ -470,7 +470,7 @@ fn settle(f: &Fixture, expr: &str) -> String {
 /// answers the asynchronous op the host is holding, the way `nativeCanvasResult` does
 fn answer(f: &Fixture, wire: &str) {
   let request = f.host.pending.borrow_mut().pop().expect("nothing pending");
-  canvas_result(&f._rt, &f.ctx, &f.state, request, wire);
+  f.state.resolve(&f._rt, &f.ctx, request, wire);
 }
 
 fn commands(f: &Fixture) -> Vec<Command> {
@@ -1438,7 +1438,7 @@ fn disposal_releases_every_promise_the_engine_still_holds() {
   let f = setup("dispose");
   run(&f, "inu.canvas.decode(new Uint8Array([1])); inu.canvas.loadFont('a', new Uint8Array([1]))");
   assert_eq!(f.state.pending.borrow().len(), 2);
-  dispose(&f.ctx, &f.state);
+  f.state.dispose(&f.ctx);
   assert!(f.state.pending.borrow().is_empty());
 }
 
@@ -1552,7 +1552,7 @@ mod bundled_oracle {
             }
           }
         };
-        canvas_result(&f._rt, &f.ctx, &f.state, request, &wire);
+        f.state.resolve(&f._rt, &f.ctx, request, &wire);
       }
     }
     panic!("the oracle never stopped waiting");

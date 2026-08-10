@@ -131,41 +131,6 @@ pub fn install_screens<'js>(
   Ok(state)
 }
 
-pub fn dispatch_screen_change(
-  rt: &Runtime,
-  context: &rquickjs::Context,
-  state: &Rc<ScreenState>,
-  change_json: &str,
-  stack_json: &str,
-) {
-  if state.changed_fns.is_empty() {
-    return;
-  }
-  context.with(|ctx| {
-    let event = match build_event(&ctx, state, change_json, stack_json) {
-      Ok(event) => event,
-      Err(rquickjs::Error::Exception) => {
-        (state.log)(&format!("onScreenChanged: bad change payload: {}", format_exception(&ctx)));
-        return;
-      }
-      Err(e) => {
-        (state.log)(&format!("onScreenChanged: bad change payload: {e:?}"));
-        return;
-      }
-    };
-    for f in state.changed_fns.snapshot(&ctx) {
-      match f.call::<_, Value>((event.clone(),)) {
-        Ok(_) => {}
-        Err(rquickjs::Error::Exception) => {
-          (state.log)(&crate::fault(format_args!("onScreenChanged callback threw: {}", format_exception(&ctx),)));
-        }
-        Err(e) => (state.log)(&format!("onScreenChanged callback failed: {e:?}")),
-      }
-    }
-  });
-  pump_jobs(rt, context, state.log.as_ref());
-}
-
 fn build_event<'js>(
   ctx: &Ctx<'js>,
   state: &Rc<ScreenState>,
@@ -188,13 +153,52 @@ fn build_event<'js>(
   builder.call((action, screen, previous, stack_json))
 }
 
-pub fn dispose(context: &rquickjs::Context, state: &Rc<ScreenState>) {
-  context.with(|ctx| {
-    state.changed_fns.release_all(&ctx);
-    if let Some(factory) = state.event_factory.borrow_mut().take() {
-      let _ = factory.restore(&ctx);
+impl ScreenState {
+  pub fn dispatch_change(
+    self: &Rc<Self>,
+    rt: &Runtime,
+    context: &rquickjs::Context,
+    change_json: &str,
+    stack_json: &str,
+  ) {
+    let state = self;
+    if state.changed_fns.is_empty() {
+      return;
     }
-  });
+    context.with(|ctx| {
+      let event = match build_event(&ctx, state, change_json, stack_json) {
+        Ok(event) => event,
+        Err(rquickjs::Error::Exception) => {
+          (state.log)(&format!("onScreenChanged: bad change payload: {}", format_exception(&ctx)));
+          return;
+        }
+        Err(e) => {
+          (state.log)(&format!("onScreenChanged: bad change payload: {e:?}"));
+          return;
+        }
+      };
+      for f in state.changed_fns.snapshot(&ctx) {
+        match f.call::<_, Value>((event.clone(),)) {
+          Ok(_) => {}
+          Err(rquickjs::Error::Exception) => {
+            (state.log)(&crate::fault(format_args!("onScreenChanged callback threw: {}", format_exception(&ctx),)));
+          }
+          Err(e) => (state.log)(&format!("onScreenChanged callback failed: {e:?}")),
+        }
+      }
+    });
+    pump_jobs(rt, context, state.log.as_ref());
+  }
+
+  pub fn dispose(self: &Rc<Self>, context: &rquickjs::Context) {
+    let state = self;
+    context.with(|ctx| {
+      state.changed_fns.release_all(&ctx);
+      if let Some(factory) = state.event_factory.borrow_mut().take() {
+        let _ = factory.restore(&ctx);
+      }
+    });
+  }
 }
 
 #[cfg(test)]

@@ -555,23 +555,6 @@ fn js_invoke_rpc<'js>(ctx: &Ctx<'js>, state: &Rc<RpcState>, slot: i32, obj: Valu
   Ok(promise.into_value())
 }
 
-pub fn resolve_invoke(
-  rt: &Runtime,
-  context: &rquickjs::Context,
-  state: &Rc<RpcState>,
-  invoke_id: i64,
-  result_wire: &str,
-) {
-  context.with(|ctx| {
-    if let Some(pending) = state.pending_invoke.borrow_mut().remove(&invoke_id) {
-      if let Err(e) = settle_from_wire(&ctx, &state.tl, pending, result_wire, ViewLife::Plugin) {
-        (state.log)(&format!("resolveInvoke({invoke_id}) failed: {e:?}"));
-      }
-    }
-  });
-  pump_jobs(rt, context, state.log.as_ref());
-}
-
 fn js_on_update<'js>(
   ctx: &Ctx<'js>,
   state: &Rc<RpcState>,
@@ -671,60 +654,6 @@ fn register_update_listener<'js>(
   })
 }
 
-pub fn dispatch_update(
-  rt: &Runtime,
-  context: &rquickjs::Context,
-  state: &Rc<RpcState>,
-  type_name: &str,
-  account_id: i32,
-  update_wire: &str,
-) {
-  context.with(|ctx| {
-    let value = match proxy::wire_to_js_value(&ctx, &state.tl, update_wire, ViewLife::Plugin) {
-      Ok(v) => v,
-      Err(e) => {
-        let msg = match e {
-          rquickjs::Error::Exception => format_exception(&ctx),
-          other => other.to_string(),
-        };
-        (state.log)(&format!("dispatchUpdate: bad update wire: {msg}"));
-        return;
-      }
-    };
-    let listening: Vec<UpdateReg> = state
-      .update_fns
-      .values()
-      .into_iter()
-      .filter(|reg| reg.types.iter().any(|t| t == type_name))
-      .collect();
-    if listening.is_empty() {
-      return;
-    }
-    let account = match dispatch_account(&ctx, &state.accounts, account_id) {
-      Ok(v) => v,
-      Err(e) => {
-        (state.log)(&format!("dispatchUpdate: cannot build the account handle: {e:?}"));
-        return;
-      }
-    };
-    for reg in listening {
-      let Ok(f) = reg.callback.restore(&ctx) else {
-        continue;
-      };
-      match f.call::<_, Value>((value.clone(), account.clone())) {
-        Ok(_) => {}
-        Err(rquickjs::Error::Exception) => {
-          (state.log)(&crate::fault(format_args!("onUpdate callback threw: {}", format_exception(&ctx))));
-        }
-        Err(e) => {
-          (state.log)(&format!("onUpdate callback failed: {e:?}"));
-        }
-      }
-    }
-  });
-  pump_jobs(rt, context, state.log.as_ref());
-}
-
 fn settle_update_verdict(state: &Rc<RpcState>, ustate: &Rc<UpdateDispatchState>, dispatch_id: i64, deliver: bool) {
   if ustate.settled.replace(true) {
     return;
@@ -805,50 +734,11 @@ fn try_dispatch_update_intercept<'js>(
   resolve_and_then(ctx, state, result_value, ok_fn, err_fn)
 }
 
-#[allow(clippy::too_many_arguments)]
-pub fn dispatch_update_intercept(
-  rt: &Runtime,
-  context: &rquickjs::Context,
-  state: &Rc<RpcState>,
-  callback_id: u32,
-  dispatch_id: i64,
-  type_name: &str,
-  account_id: i32,
-  update_wire: &str,
-) {
-  context.with(|ctx| {
-    if let Err(e) =
-      try_dispatch_update_intercept(&ctx, state, callback_id, dispatch_id, type_name, account_id, update_wire)
-    {
-      let msg = match e {
-        rquickjs::Error::Exception => format_exception(&ctx),
-        other => other.to_string(),
-      };
-      (state.log)(&format!("interceptUpdate({type_name}) dispatch failed, delivering: {msg}"));
-      if let Some(ustate) = state.remove_update_dispatch(dispatch_id) {
-        settle_update_verdict_after_removal(state, &ustate, dispatch_id);
-      } else {
-        state.host.on_update_verdict(dispatch_id, true);
-      }
-    }
-  });
-  pump_jobs(rt, context, state.log.as_ref());
-}
-
 fn settle_update_verdict_after_removal(state: &Rc<RpcState>, ustate: &Rc<UpdateDispatchState>, dispatch_id: i64) {
   if ustate.settled.replace(true) {
     return;
   }
   state.host.on_update_verdict(dispatch_id, true);
-}
-
-pub fn abandon_update_dispatch(rt: &Runtime, context: &rquickjs::Context, state: &Rc<RpcState>, dispatch_id: i64) {
-  context.with(|_ctx| {
-    if let Some(ustate) = state.remove_update_dispatch(dispatch_id) {
-      ustate.settled.set(true);
-    }
-  });
-  pump_jobs(rt, context, state.log.as_ref());
 }
 
 fn complete_dispatch(
@@ -991,121 +881,235 @@ fn try_dispatch_rpc<'js>(
   resolve_and_then(ctx, state, result_value, ok_fn, err_fn)
 }
 
-#[allow(clippy::too_many_arguments)]
-pub fn dispatch_rpc(
-  rt: &Runtime,
-  context: &rquickjs::Context,
-  state: &Rc<RpcState>,
-  callback_id: u32,
-  dispatch_id: i64,
-  method: &str,
-  account_id: i32,
-  request_wire: &str,
-) {
-  context.with(|ctx| {
-    if let Err(e) = try_dispatch_rpc(&ctx, state, callback_id, dispatch_id, method, account_id, request_wire) {
-      let msg = match e {
-        rquickjs::Error::Exception => format_exception(&ctx),
-        other => other.to_string(),
+impl RpcState {
+  pub fn resolve_invoke(self: &Rc<Self>, rt: &Runtime, context: &rquickjs::Context, invoke_id: i64, result_wire: &str) {
+    let state = self;
+    context.with(|ctx| {
+      if let Some(pending) = state.pending_invoke.borrow_mut().remove(&invoke_id) {
+        if let Err(e) = settle_from_wire(&ctx, &state.tl, pending, result_wire, ViewLife::Plugin) {
+          (state.log)(&format!("resolveInvoke({invoke_id}) failed: {e:?}"));
+        }
+      }
+    });
+    pump_jobs(rt, context, state.log.as_ref());
+  }
+
+  pub fn dispatch_update(
+    self: &Rc<Self>,
+    rt: &Runtime,
+    context: &rquickjs::Context,
+    type_name: &str,
+    account_id: i32,
+    update_wire: &str,
+  ) {
+    let state = self;
+    context.with(|ctx| {
+      let value = match proxy::wire_to_js_value(&ctx, &state.tl, update_wire, ViewLife::Plugin) {
+        Ok(v) => v,
+        Err(e) => {
+          let msg = match e {
+            rquickjs::Error::Exception => format_exception(&ctx),
+            other => other.to_string(),
+          };
+          (state.log)(&format!("dispatchUpdate: bad update wire: {msg}"));
+          return;
+        }
       };
-      (state.log)(&format!("interceptRpc({method}) dispatch failed: {msg}"));
-      let wire = proxy::encode_error(&msg);
-      let dstate = state.dispatches.borrow().get(&dispatch_id).cloned();
-      match dstate {
-        Some(dstate) => complete_dispatch(&ctx, state, &dstate, dispatch_id, &wire),
-        None => state.host.on_complete(dispatch_id, &wire),
+      let listening: Vec<UpdateReg> = state
+        .update_fns
+        .values()
+        .into_iter()
+        .filter(|reg| reg.types.iter().any(|t| t == type_name))
+        .collect();
+      if listening.is_empty() {
+        return;
       }
-    }
-  });
-  pump_jobs(rt, context, state.log.as_ref());
-}
-
-pub fn complete_next(
-  rt: &Runtime,
-  context: &rquickjs::Context,
-  state: &Rc<RpcState>,
-  dispatch_id: i64,
-  result_wire: &str,
-) {
-  context.with(|ctx| {
-    let dstate = match state.dispatches.borrow().get(&dispatch_id).cloned() {
-      Some(d) => d,
-      None => return,
-    };
-    *dstate.next_response.borrow_mut() = Some(result_wire.to_string());
-
-    if let Some(pending) = dstate.next_resolvers.borrow_mut().take() {
-      if let Err(e) = settle_from_wire(&ctx, &state.tl, pending, result_wire, ViewLife::Dispatch) {
-        (state.log)(&format!("completeNext({dispatch_id}) failed to settle next(): {e:?}"));
+      let account = match dispatch_account(&ctx, &state.accounts, account_id) {
+        Ok(v) => v,
+        Err(e) => {
+          (state.log)(&format!("dispatchUpdate: cannot build the account handle: {e:?}"));
+          return;
+        }
+      };
+      for reg in listening {
+        let Ok(f) = reg.callback.restore(&ctx) else {
+          continue;
+        };
+        match f.call::<_, Value>((value.clone(), account.clone())) {
+          Ok(_) => {}
+          Err(rquickjs::Error::Exception) => {
+            (state.log)(&crate::fault(format_args!("onUpdate callback threw: {}", format_exception(&ctx))));
+          }
+          Err(e) => {
+            (state.log)(&format!("onUpdate callback failed: {e:?}"));
+          }
+        }
       }
-    }
+    });
+    pump_jobs(rt, context, state.log.as_ref());
+  }
 
-    if dstate.want_passthrough.get() {
-      complete_dispatch(&ctx, state, &dstate, dispatch_id, result_wire);
-    }
-  });
-  pump_jobs(rt, context, state.log.as_ref());
-}
-
-pub fn abandon_dispatch(
-  rt: &Runtime,
-  context: &rquickjs::Context,
-  state: &Rc<RpcState>,
-  dispatch_id: i64,
-  reason_wire: &str,
-) {
-  context.with(|ctx| {
-    let removed = state.remove_dispatch(dispatch_id);
-    let Some(dstate) = removed else { return };
-    dstate.abandoned.set(true);
-    dstate
-      .timed_out
-      .set(proxy::wire_rpc_error(reason_wire).is_some_and(|(_, text)| text == CHAIN_TIMEOUT_TEXT));
-    dstate.settled.set(true);
-
-    let pending = dstate.next_resolvers.borrow_mut().take();
-    if let Some(pending) = pending {
-      if let Err(e) = pending.reject_with(&ctx, reason_wire) {
-        (state.log)(&format!("abandonDispatch({dispatch_id}) failed to reject next(): {e:?}"));
+  #[allow(clippy::too_many_arguments)]
+  pub fn dispatch_update_intercept(
+    self: &Rc<Self>,
+    rt: &Runtime,
+    context: &rquickjs::Context,
+    callback_id: u32,
+    dispatch_id: i64,
+    type_name: &str,
+    account_id: i32,
+    update_wire: &str,
+  ) {
+    let state = self;
+    context.with(|ctx| {
+      if let Err(e) =
+        try_dispatch_update_intercept(&ctx, state, callback_id, dispatch_id, type_name, account_id, update_wire)
+      {
+        let msg = match e {
+          rquickjs::Error::Exception => format_exception(&ctx),
+          other => other.to_string(),
+        };
+        (state.log)(&format!("interceptUpdate({type_name}) dispatch failed, delivering: {msg}"));
+        if let Some(ustate) = state.remove_update_dispatch(dispatch_id) {
+          settle_update_verdict_after_removal(state, &ustate, dispatch_id);
+        } else {
+          state.host.on_update_verdict(dispatch_id, true);
+        }
       }
-    }
-  });
-  pump_jobs(rt, context, state.log.as_ref());
-}
+    });
+    pump_jobs(rt, context, state.log.as_ref());
+  }
 
-pub fn dispose(context: &rquickjs::Context, state: &Rc<RpcState>) {
-  context.with(|ctx| {
-    state.intercept_fns.release_all(&ctx);
-    for reg in state.update_fns.remove_matching(|_| true) {
-      let _ = reg.callback.restore(&ctx);
-    }
-    for reg in state.intercept_update_fns.remove_matching(|_| true) {
-      let _ = reg.callback.restore(&ctx);
-    }
-    if let Some(build) = state.demux.borrow_mut().take() {
-      let _ = build.restore(&ctx);
-    }
-    if let Some(build) = state.send_wrap.borrow_mut().take() {
-      let _ = build.restore(&ctx);
-    }
-    if let Some(tools) = state.promise.borrow_mut().take() {
-      let _ = tools.ctor.restore(&ctx);
-      let _ = tools.resolve.restore(&ctx);
-      let _ = tools.then.restore(&ctx);
-    }
-    if let Some(accounts) = state.accounts.as_ref() {
-      let _ = accounts.take_prototype(&ctx);
-    }
-    state.drain_update_dispatches();
-    for (_, pending) in state.pending_invoke.borrow_mut().drain() {
-      pending.release(&ctx);
-    }
-    for (_, dstate) in state.drain_dispatches() {
+  pub fn abandon_update_dispatch(self: &Rc<Self>, rt: &Runtime, context: &rquickjs::Context, dispatch_id: i64) {
+    let state = self;
+    context.with(|_ctx| {
+      if let Some(ustate) = state.remove_update_dispatch(dispatch_id) {
+        ustate.settled.set(true);
+      }
+    });
+    pump_jobs(rt, context, state.log.as_ref());
+  }
+
+  #[allow(clippy::too_many_arguments)]
+  pub fn dispatch(
+    self: &Rc<Self>,
+    rt: &Runtime,
+    context: &rquickjs::Context,
+    callback_id: u32,
+    dispatch_id: i64,
+    method: &str,
+    account_id: i32,
+    request_wire: &str,
+  ) {
+    let state = self;
+    context.with(|ctx| {
+      if let Err(e) = try_dispatch_rpc(&ctx, state, callback_id, dispatch_id, method, account_id, request_wire) {
+        let msg = match e {
+          rquickjs::Error::Exception => format_exception(&ctx),
+          other => other.to_string(),
+        };
+        (state.log)(&format!("interceptRpc({method}) dispatch failed: {msg}"));
+        let wire = proxy::encode_error(&msg);
+        let dstate = state.dispatches.borrow().get(&dispatch_id).cloned();
+        match dstate {
+          Some(dstate) => complete_dispatch(&ctx, state, &dstate, dispatch_id, &wire),
+          None => state.host.on_complete(dispatch_id, &wire),
+        }
+      }
+    });
+    pump_jobs(rt, context, state.log.as_ref());
+  }
+
+  pub fn complete_next(
+    self: &Rc<Self>,
+    rt: &Runtime,
+    context: &rquickjs::Context,
+    dispatch_id: i64,
+    result_wire: &str,
+  ) {
+    let state = self;
+    context.with(|ctx| {
+      let dstate = match state.dispatches.borrow().get(&dispatch_id).cloned() {
+        Some(d) => d,
+        None => return,
+      };
+      *dstate.next_response.borrow_mut() = Some(result_wire.to_string());
+
       if let Some(pending) = dstate.next_resolvers.borrow_mut().take() {
+        if let Err(e) = settle_from_wire(&ctx, &state.tl, pending, result_wire, ViewLife::Dispatch) {
+          (state.log)(&format!("completeNext({dispatch_id}) failed to settle next(): {e:?}"));
+        }
+      }
+
+      if dstate.want_passthrough.get() {
+        complete_dispatch(&ctx, state, &dstate, dispatch_id, result_wire);
+      }
+    });
+    pump_jobs(rt, context, state.log.as_ref());
+  }
+
+  pub fn abandon_dispatch(
+    self: &Rc<Self>,
+    rt: &Runtime,
+    context: &rquickjs::Context,
+    dispatch_id: i64,
+    reason_wire: &str,
+  ) {
+    let state = self;
+    context.with(|ctx| {
+      let removed = state.remove_dispatch(dispatch_id);
+      let Some(dstate) = removed else { return };
+      dstate.abandoned.set(true);
+      dstate
+        .timed_out
+        .set(proxy::wire_rpc_error(reason_wire).is_some_and(|(_, text)| text == CHAIN_TIMEOUT_TEXT));
+      dstate.settled.set(true);
+
+      let pending = dstate.next_resolvers.borrow_mut().take();
+      if let Some(pending) = pending {
+        if let Err(e) = pending.reject_with(&ctx, reason_wire) {
+          (state.log)(&format!("abandonDispatch({dispatch_id}) failed to reject next(): {e:?}"));
+        }
+      }
+    });
+    pump_jobs(rt, context, state.log.as_ref());
+  }
+
+  pub fn dispose(self: &Rc<Self>, context: &rquickjs::Context) {
+    let state = self;
+    context.with(|ctx| {
+      state.intercept_fns.release_all(&ctx);
+      for reg in state.update_fns.remove_matching(|_| true) {
+        let _ = reg.callback.restore(&ctx);
+      }
+      for reg in state.intercept_update_fns.remove_matching(|_| true) {
+        let _ = reg.callback.restore(&ctx);
+      }
+      if let Some(build) = state.demux.borrow_mut().take() {
+        let _ = build.restore(&ctx);
+      }
+      if let Some(build) = state.send_wrap.borrow_mut().take() {
+        let _ = build.restore(&ctx);
+      }
+      if let Some(tools) = state.promise.borrow_mut().take() {
+        let _ = tools.ctor.restore(&ctx);
+        let _ = tools.resolve.restore(&ctx);
+        let _ = tools.then.restore(&ctx);
+      }
+      if let Some(accounts) = state.accounts.as_ref() {
+        let _ = accounts.take_prototype(&ctx);
+      }
+      state.drain_update_dispatches();
+      for (_, pending) in state.pending_invoke.borrow_mut().drain() {
         pending.release(&ctx);
       }
-    }
-  });
+      for (_, dstate) in state.drain_dispatches() {
+        if let Some(pending) = dstate.next_resolvers.borrow_mut().take() {
+          pending.release(&ctx);
+        }
+      }
+    });
+  }
 }
 
 #[cfg(test)]

@@ -36,7 +36,7 @@ fn setup() -> Fixture {
   let logs = crate::testing::harness::Logs::new();
   let log = crate::testing::harness::log_sink(&logs);
   let state = ctx.with(|ctx| install_timers(&ctx, host_dyn, lifecycle.clone(), log).unwrap());
-  let state = Disposing::new(&ctx, state, dispose);
+  let state = Disposing::new(&ctx, state, |ctx, state| state.dispose(ctx));
   (rt, ctx, host, lifecycle, state, logs)
 }
 
@@ -50,15 +50,15 @@ fn a_timeout_fires_once_its_delay_has_passed() {
   run(&ctx, "globalThis.__fired = []; setTimeout(() => __fired.push('a'), 50);");
 
   host.now.set(49);
-  run_due(&rt, &ctx, &state);
+  state.run_due(&rt, &ctx);
   assert_eq!(eval(&ctx, "JSON.stringify(__fired)"), "[]");
 
   host.now.set(50);
-  run_due(&rt, &ctx, &state);
+  state.run_due(&rt, &ctx);
   assert_eq!(eval(&ctx, "JSON.stringify(__fired)"), r#"["a"]"#);
 
   host.now.set(200);
-  run_due(&rt, &ctx, &state);
+  state.run_due(&rt, &ctx);
   assert_eq!(eval(&ctx, "JSON.stringify(__fired)"), r#"["a"]"#, "a timeout fires once");
   assert!(state.timers.is_empty());
 }
@@ -77,7 +77,7 @@ fn due_timers_fire_by_deadline_then_by_arming_order() {
         "#,
   );
   host.now.set(100);
-  run_due(&rt, &ctx, &state);
+  state.run_due(&rt, &ctx);
   assert_eq!(eval(&ctx, "JSON.stringify(__fired)"), r#"["now","first-of-10","second-of-10","late"]"#,);
 }
 
@@ -87,14 +87,14 @@ fn an_interval_repeats_and_a_missed_run_is_not_replayed() {
   run(&ctx, "globalThis.__ticks = 0; globalThis.__id = setInterval(() => { __ticks++; }, 100);");
 
   host.now.set(100);
-  run_due(&rt, &ctx, &state);
+  state.run_due(&rt, &ctx);
   host.now.set(200);
-  run_due(&rt, &ctx, &state);
+  state.run_due(&rt, &ctx);
   assert_eq!(eval(&ctx, "String(__ticks)"), "2");
 
   // nothing ticked for a while (the app was in the background): one catch-up run, not five
   host.now.set(700);
-  run_due(&rt, &ctx, &state);
+  state.run_due(&rt, &ctx);
   assert_eq!(eval(&ctx, "String(__ticks)"), "3");
   assert_eq!(eval(&ctx, "String(__id > 0)"), "true");
 
@@ -102,15 +102,15 @@ fn an_interval_repeats_and_a_missed_run_is_not_replayed() {
   // 300 + 100 would have been due long ago, 700 + 100 is not
   assert_eq!(*host.wakes.borrow().last().unwrap(), 100);
   host.now.set(799);
-  run_due(&rt, &ctx, &state);
+  state.run_due(&rt, &ctx);
   assert_eq!(eval(&ctx, "String(__ticks)"), "3", "re-armed from now, not from the missed deadline");
   host.now.set(800);
-  run_due(&rt, &ctx, &state);
+  state.run_due(&rt, &ctx);
   assert_eq!(eval(&ctx, "String(__ticks)"), "4");
 
   run(&ctx, "clearInterval(__id);");
   host.now.set(1500);
-  run_due(&rt, &ctx, &state);
+  state.run_due(&rt, &ctx);
   assert_eq!(eval(&ctx, "String(__ticks)"), "4");
   assert!(state.timers.is_empty());
 }
@@ -121,16 +121,16 @@ fn an_interval_asking_for_zero_repeats_at_the_floor() {
 
   let (rt, ctx, host, _lifecycle, state, _logs) = setup();
   run(&ctx, "globalThis.__ticks = 0; globalThis.__id = setInterval(() => { __ticks++; }, 0);");
-  run_due(&rt, &ctx, &state);
+  state.run_due(&rt, &ctx);
   assert_eq!(eval(&ctx, "String(__ticks)"), "1");
   // asking for zero must not have asked for the shared queue straight back
   assert_eq!(*host.wakes.borrow().last().unwrap(), floor as i64);
 
   host.now.set(floor - 1);
-  run_due(&rt, &ctx, &state);
+  state.run_due(&rt, &ctx);
   assert_eq!(eval(&ctx, "String(__ticks)"), "1", "the period is floored, not the first run");
   host.now.set(floor);
-  run_due(&rt, &ctx, &state);
+  state.run_due(&rt, &ctx);
   assert_eq!(eval(&ctx, "String(__ticks)"), "2");
 
   run(&ctx, "clearInterval(__id);");
@@ -149,7 +149,7 @@ fn clearing_from_inside_a_callback_stops_a_timer_due_in_the_same_tick() {
         "#,
   );
   host.now.set(50);
-  run_due(&rt, &ctx, &state);
+  state.run_due(&rt, &ctx);
   assert_eq!(eval(&ctx, "JSON.stringify(__fired)"), r#"["first"]"#);
 }
 
@@ -167,10 +167,10 @@ fn a_timer_armed_inside_a_callback_waits_for_the_next_tick() {
         "#,
   );
   host.now.set(10);
-  run_due(&rt, &ctx, &state);
+  state.run_due(&rt, &ctx);
   assert_eq!(eval(&ctx, "JSON.stringify(__fired)"), r#"["outer"]"#);
 
-  run_due(&rt, &ctx, &state);
+  state.run_due(&rt, &ctx);
   assert_eq!(eval(&ctx, "JSON.stringify(__fired)"), r#"["outer","inner"]"#);
 }
 
@@ -188,12 +188,12 @@ fn unloading_cancels_every_pending_timer() {
   assert!(!state.timers.is_empty());
 
   lifecycle.begin_unload();
-  notify_unload(&ctx, &state);
+  state.notify_unload(&ctx);
   assert!(state.timers.is_empty());
   assert_eq!(*host.wakes.borrow().last().unwrap(), CANCEL_WAKE);
 
   host.now.set(1000);
-  run_due(&rt, &ctx, &state);
+  state.run_due(&rt, &ctx);
   assert_eq!(eval(&ctx, "JSON.stringify(__fired)"), "[]");
 
   // and nothing can arm a new one afterwards
@@ -210,7 +210,7 @@ fn destroying_an_engine_that_was_never_unloaded_withdraws_its_wake() {
   run(&ctx, "setInterval(() => {}, 100);");
   assert_eq!(*host.wakes.borrow(), vec![100]);
 
-  dispose(&ctx, &state);
+  state.dispose(&ctx);
   assert!(state.timers.is_empty());
   assert_eq!(*host.wakes.borrow(), vec![100, CANCEL_WAKE]);
 }
@@ -228,14 +228,14 @@ fn the_host_is_woken_for_the_earliest_deadline_only() {
   assert_eq!(*host.wakes.borrow(), vec![500, 100]);
 
   host.now.set(100);
-  run_due(&rt, &ctx, &state);
+  state.run_due(&rt, &ctx);
   assert_eq!(*host.wakes.borrow(), vec![500, 100, 400], "the next wake is relative to now");
 
   run(&ctx, "clearTimeout(__a);");
   assert_eq!(*host.wakes.borrow(), vec![500, 100, 400, 800]);
 
   host.now.set(900);
-  run_due(&rt, &ctx, &state);
+  state.run_due(&rt, &ctx);
   assert!(state.timers.is_empty());
   assert_eq!(
     *host.wakes.borrow(),
@@ -257,11 +257,11 @@ fn backgrounding_floors_the_wheel_and_returning_lifts_it() {
   run(&ctx, "globalThis.__ticks = 0; setInterval(() => { __ticks++; }, 100);");
 
   host.now.set(100);
-  run_due(&rt, &ctx, &state);
+  state.run_due(&rt, &ctx);
   assert_eq!(*host.wakes.borrow().last().unwrap(), 100, "the foreground wake is the timer's own");
 
   host.now.set(200);
-  set_visible(&state, false);
+  state.set_visible(false);
   assert_eq!(
     *host.wakes.borrow().last().unwrap(),
     BACKGROUND_MIN_INTERVAL_MS as i64 - 100,
@@ -269,24 +269,24 @@ fn backgrounding_floors_the_wheel_and_returning_lifts_it() {
   );
 
   host.now.set(1100);
-  run_due(&rt, &ctx, &state);
+  state.run_due(&rt, &ctx);
   assert_eq!(eval(&ctx, "String(__ticks)"), "2", "ten missed periods collapse into one tick");
   assert_eq!(*host.wakes.borrow().last().unwrap(), BACKGROUND_MIN_INTERVAL_MS as i64);
 
   host.now.set(1150);
-  set_visible(&state, true);
+  state.set_visible(true);
   assert_eq!(*host.wakes.borrow().last().unwrap(), 50, "returning restores the timer's own deadline");
   host.now.set(1200);
-  run_due(&rt, &ctx, &state);
+  state.run_due(&rt, &ctx);
   assert_eq!(eval(&ctx, "String(__ticks)"), "3");
 }
 
 #[test]
 fn a_timer_armed_while_hidden_is_floored_too() {
   let (rt, ctx, host, _lifecycle, state, _logs) = setup();
-  set_visible(&state, false);
+  state.set_visible(false);
   host.now.set(500);
-  run_due(&rt, &ctx, &state);
+  state.run_due(&rt, &ctx);
 
   run(&ctx, "setTimeout(() => {}, 0);");
   assert_eq!(
@@ -300,14 +300,14 @@ fn a_timer_armed_while_hidden_is_floored_too() {
 fn a_long_hidden_app_drops_to_the_intensive_floor() {
   let (rt, ctx, host, _lifecycle, state, _logs) = setup();
   run(&ctx, "setInterval(() => {}, 100);");
-  set_visible(&state, false);
+  state.set_visible(false);
 
   host.now.set(BACKGROUND_INTENSIVE_AFTER_MS - 1);
-  run_due(&rt, &ctx, &state);
+  state.run_due(&rt, &ctx);
   assert_eq!(*host.wakes.borrow().last().unwrap(), BACKGROUND_MIN_INTERVAL_MS as i64);
 
   host.now.set(BACKGROUND_INTENSIVE_AFTER_MS);
-  run_due(&rt, &ctx, &state);
+  state.run_due(&rt, &ctx);
   assert_eq!(*host.wakes.borrow().last().unwrap(), BACKGROUND_INTENSIVE_INTERVAL_MS as i64);
 }
 
@@ -316,9 +316,9 @@ fn a_long_hidden_app_drops_to_the_intensive_floor() {
 #[test]
 fn a_dispatch_the_app_is_parked_behind_lifts_the_floor() {
   let (rt, ctx, host, lifecycle, state, _logs) = setup();
-  set_visible(&state, false);
+  state.set_visible(false);
   host.now.set(BACKGROUND_INTENSIVE_AFTER_MS);
-  run_due(&rt, &ctx, &state);
+  state.run_due(&rt, &ctx);
 
   lifecycle.set_blocking_dispatches(1);
   run(&ctx, "globalThis.__resumed = false; setTimeout(() => { __resumed = true; }, 50);");
@@ -329,7 +329,7 @@ fn a_dispatch_the_app_is_parked_behind_lifts_the_floor() {
   );
 
   host.now.set(BACKGROUND_INTENSIVE_AFTER_MS + 50);
-  run_due(&rt, &ctx, &state);
+  state.run_due(&rt, &ctx);
   assert_eq!(eval(&ctx, "String(__resumed)"), "true");
 
   lifecycle.set_blocking_dispatches(0);
@@ -345,17 +345,17 @@ fn a_dispatch_the_app_is_parked_behind_lifts_the_floor() {
 fn re_announcing_the_state_the_wheel_is_already_in_changes_nothing() {
   let (rt, ctx, host, _lifecycle, state, _logs) = setup();
   run(&ctx, "setInterval(() => {}, 100);");
-  set_visible(&state, false);
+  state.set_visible(false);
   host.now.set(BACKGROUND_INTENSIVE_AFTER_MS - 1);
-  run_due(&rt, &ctx, &state);
+  state.run_due(&rt, &ctx);
 
   let before = host.wakes.borrow().len();
-  set_visible(&state, false);
+  state.set_visible(false);
   assert_eq!(host.wakes.borrow().len(), before, "no re-arm");
 
   // and the clock the intensive stage is measured from was not restarted by it
   host.now.set(BACKGROUND_INTENSIVE_AFTER_MS);
-  run_due(&rt, &ctx, &state);
+  state.run_due(&rt, &ctx);
   assert_eq!(*host.wakes.borrow().last().unwrap(), BACKGROUND_INTENSIVE_INTERVAL_MS as i64);
 }
 
@@ -371,7 +371,7 @@ fn a_throwing_callback_is_logged_and_the_rest_still_run() {
         "#,
   );
   host.now.set(50);
-  run_due(&rt, &ctx, &state);
+  state.run_due(&rt, &ctx);
 
   assert_eq!(eval(&ctx, "JSON.stringify(__fired)"), r#"["after"]"#);
   assert!(
@@ -551,15 +551,15 @@ mod bundled_oracle {
       }
       wakes.wanted_at.set(None);
       let started = std::time::Instant::now();
-      run_due(&rt, &ctx, &timers);
+      timers.run_due(&rt, &ctx);
       let cost = started.elapsed().as_nanos();
       let cooldown = (cost / DUTY_PERCENT * (100 - DUTY_PERCENT)).div_ceil(1_000_000) as u64;
       ready_at = monotonic_now_ms() + cooldown.max(MIN_WAKE_GAP_MS);
     }
 
-    crate::api::lifecycle::notify_unload(&rt, &ctx, &api);
-    crate::api::lifecycle::dispose(&ctx, &api);
-    dispose(&ctx, &timers);
+    api.notify_unload(&rt, &ctx);
+    api.dispose(&ctx);
+    timers.dispose(&ctx);
 
     let lines = lines.borrow();
     crate::testing::harness::assert_oracle_exact(&lines, "timers test done", 5);
@@ -595,7 +595,7 @@ mod bundled_oracle {
       }
       host.now.set(at.max(host.now.get()));
       host.wanted_at.set(None);
-      run_due(rt, ctx, timers);
+      timers.run_due(rt, ctx);
     }
     host.now.set(to);
   }
@@ -609,8 +609,8 @@ mod bundled_oracle {
     timers: &Rc<TimerState>,
     visible: bool,
   ) {
-    set_visible(timers, visible);
-    crate::api::lifecycle::app_visibility_changed(rt, ctx, api, visible);
+    timers.set_visible(visible);
+    api.app_visibility_changed(rt, ctx, visible);
   }
 
   /// `inu.onAppVisibilityChange` and the background floor are one feature split across two
@@ -658,8 +658,8 @@ mod bundled_oracle {
     set_app_visible(&rt, &ctx, &api, &timers, false);
     set_app_visible(&rt, &ctx, &api, &timers, true);
 
-    crate::api::lifecycle::dispose(&ctx, &api);
-    dispose(&ctx, &timers);
+    api.dispose(&ctx);
+    timers.dispose(&ctx);
 
     let lines = lines.borrow();
     crate::testing::harness::assert_oracle_exact(&lines, "visibility test done", 12);

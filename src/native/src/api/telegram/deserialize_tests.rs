@@ -88,7 +88,7 @@ struct Fixture {
 
 impl Drop for Fixture {
   fn drop(&mut self) {
-    dispose(&self.ctx, &self.state);
+    self.state.dispose(&self.ctx);
   }
 }
 
@@ -217,7 +217,7 @@ fn a_dispatch_reaches_the_middleware_and_its_writes_cross() {
       )
       .unwrap();
   });
-  dispatch_middleware(&f.ctx, &f.state, 1, "HOW7");
+  f.state.dispatch(&f.ctx, 1, "HOW7");
   f.ctx.with(|ctx| {
     let seen: Vec<String> = ctx.eval("__seen").unwrap();
     assert_eq!(seen, vec!["user".to_string()]);
@@ -233,9 +233,9 @@ fn a_disposed_middleware_is_never_dispatched_again() {
       .eval::<(), _>("globalThis.__runs = 0; globalThis.__d = inu.interceptDeserialize(['user'], () => { __runs++ })")
       .unwrap();
   });
-  dispatch_middleware(&f.ctx, &f.state, 1, "HOW7");
+  f.state.dispatch(&f.ctx, 1, "HOW7");
   f.ctx.with(|ctx| ctx.eval::<(), _>("__d()").unwrap());
-  dispatch_middleware(&f.ctx, &f.state, 1, "HOW7");
+  f.state.dispatch(&f.ctx, 1, "HOW7");
   f.ctx.with(|ctx| assert_eq!(ctx.eval::<i32, _>("__runs").unwrap(), 1));
 }
 
@@ -248,7 +248,7 @@ fn a_throwing_middleware_is_a_fault() {
   f.ctx.with(|ctx| {
     ctx.eval::<(), _>("inu.interceptDeserialize(['user'], () => { throw new Error('boom') })").unwrap();
   });
-  dispatch_middleware(&f.ctx, &f.state, 1, "HOW7");
+  f.state.dispatch(&f.ctx, 1, "HOW7");
   let logs = f.logs.lock().unwrap();
   assert!(logs.iter().any(|line| line.starts_with("\u{1}") && line.contains("boom")), "{logs:?}",);
 }

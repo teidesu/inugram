@@ -446,7 +446,7 @@ fn setup(grants: &[&str]) -> Fixture {
       install_reads(&ctx, reads_host, grants, TlViews::new(tl_host), &shared, &accounts, log.clone(), &inu).unwrap();
     (state, accounts)
   });
-  let state = Disposing::new(&ctx, state, dispose);
+  let state = Disposing::new(&ctx, state, |ctx, state| state.dispose(ctx));
   let accounts = crate::testing::harness::DisposeOnDrop::new(&ctx, accounts, |ctx, state| state.dispose(ctx));
   (rt, ctx, host, state, accounts)
 }
@@ -477,14 +477,14 @@ fn settle(rt: &Runtime, ctx: &Context, state: &Rc<ReadsState>, host: &Rc<TestRea
     }
     if let Some((request_id, spec, kind)) = host.take_resolve() {
       let wire = host.answer_resolve(&spec, kind);
-      resolve_peer_result(rt, ctx, state, request_id, &wire);
+      state.resolve_peer(rt, ctx, request_id, &wire);
       continue;
     }
     let Some((request_id, op, arg)) = host.take_fetch() else {
       return;
     };
     let wire = host.answer_fetch(op, &arg);
-    account_fetch_result(rt, ctx, state, request_id, &wire);
+    state.resolve_account_fetch(rt, ctx, request_id, &wire);
   }
   panic!("the host queue never drained");
 }
@@ -1462,9 +1462,9 @@ mod grant_boundary {
       .unwrap();
       (reads_state, accounts, rpc_state)
     });
-    let reads_state = Disposing::new(&ctx, reads_state, dispose);
+    let reads_state = Disposing::new(&ctx, reads_state, |ctx, state| state.dispose(ctx));
     let accounts = crate::testing::harness::DisposeOnDrop::new(&ctx, accounts, |ctx, state| state.dispose(ctx));
-    let rpc_state = crate::testing::harness::DisposeOnDrop::new(&ctx, rpc_state, crate::api::telegram::rpc::dispose);
+    let rpc_state = crate::testing::harness::DisposeOnDrop::new(&ctx, rpc_state, |ctx, state| state.dispose(ctx));
 
     let lines = crate::testing::harness::install_capturing_console(&ctx);
     ctx.with(|ctx| match ctx.eval::<(), _>(ORACLE) {

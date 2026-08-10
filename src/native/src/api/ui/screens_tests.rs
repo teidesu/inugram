@@ -55,7 +55,7 @@ fn setup(grants: &[&str]) -> Fixture {
     let state = install_screens(&ctx, host_dyn, grants, Some(accounts.clone()), lifecycle, log.clone(), &inu).unwrap();
     (state, accounts)
   });
-  let state = Disposing::new(&ctx, state, dispose);
+  let state = Disposing::new(&ctx, state, |ctx, state| state.dispose(ctx));
   let accounts = AccountDisposing::new(&ctx, accounts, |ctx, state| state.dispose(ctx));
   (rt, ctx, host, state, accounts, logs)
 }
@@ -151,27 +151,19 @@ fn arm(ctx: &Context) {
 fn a_change_carries_action_screen_and_previous() {
   let (rt, ctx, _host, state, _accounts, logs) = setup(&["account.read(dialogs)"]);
   arm(&ctx);
-  dispatch_screen_change(
+  state.dispatch_change(
     &rt,
     &ctx,
-    &state,
     &format!(r#"{{"action":"push","screen":{CHAT},"previous":{DIALOGS}}}"#),
     &format!("[{DIALOGS},{CHAT}]"),
   );
-  dispatch_screen_change(
+  state.dispatch_change(
     &rt,
     &ctx,
-    &state,
     &format!(r#"{{"action":"pop","screen":{DIALOGS},"previous":{CHAT}}}"#),
     &format!("[{DIALOGS}]"),
   );
-  dispatch_screen_change(
-    &rt,
-    &ctx,
-    &state,
-    r#"{"action":"pop","screen":null,"previous":{"type":"dialogs","account":0}}"#,
-    "[]",
-  );
+  state.dispatch_change(&rt, &ctx, r#"{"action":"pop","screen":null,"previous":{"type":"dialogs","account":0}}"#, "[]");
   assert_eq!(
     eval_json(&ctx, "globalThis.__seen"),
     r#"[["push","chat","dialogs"],["pop","dialogs","chat"],["pop",null,"dialogs"]]"#,
@@ -183,10 +175,9 @@ fn a_change_carries_action_screen_and_previous() {
 fn the_stack_is_a_memoized_getter_over_what_the_host_sent() {
   let (rt, ctx, _host, state, _accounts, _logs) = setup(&["account.read(dialogs)"]);
   arm(&ctx);
-  dispatch_screen_change(
+  state.dispatch_change(
     &rt,
     &ctx,
-    &state,
     &format!(r#"{{"action":"push","screen":{CHAT},"previous":{DIALOGS}}}"#),
     &format!("[{DIALOGS},{CHAT}]"),
   );
@@ -207,10 +198,9 @@ fn a_plugin_that_never_touches_the_stack_never_materializes_it() {
   let (rt, ctx, _host, state, _accounts, logs) = setup(&[]);
   arm(&ctx);
   // a stack json nothing could parse: reaching it at all is the failure this pins
-  dispatch_screen_change(
+  state.dispatch_change(
     &rt,
     &ctx,
-    &state,
     &format!(r#"{{"action":"push","screen":{DIALOGS},"previous":null}}"#),
     "not json at all",
   );
@@ -227,7 +217,7 @@ fn a_plugin_that_never_touches_the_stack_never_materializes_it() {
 #[test]
 fn nothing_is_dispatched_and_nothing_parsed_without_a_registration() {
   let (rt, ctx, _host, state, _accounts, logs) = setup(&[]);
-  dispatch_screen_change(&rt, &ctx, &state, "not json at all", "not json either");
+  state.dispatch_change(&rt, &ctx, "not json at all", "not json either");
   assert!(logs.borrow().is_empty(), "unexpected logs: {:?}", logs.borrow());
   let _ = &ctx;
 }
@@ -248,7 +238,7 @@ fn registrations_stack_dispose_once_and_a_throw_faults() {
       .unwrap();
   });
   let change = format!(r#"{{"action":"push","screen":{DIALOGS},"previous":null}}"#);
-  dispatch_screen_change(&rt, &ctx, &state, &change, "[]");
+  state.dispatch_change(&rt, &ctx, &change, "[]");
   assert_eq!(eval_json(&ctx, "globalThis.__ran"), r#"["second","third"]"#);
   let entry = logs.borrow().iter().find(|l| l.contains("nav-boom")).cloned();
   let entry = entry.expect("expected a diagnostic for the throwing callback");
@@ -259,7 +249,7 @@ fn registrations_stack_dispose_once_and_a_throw_faults() {
   );
 
   ctx.with(|ctx| ctx.eval::<(), _>("__d(); __d();").unwrap());
-  dispatch_screen_change(&rt, &ctx, &state, &change, "[]");
+  state.dispatch_change(&rt, &ctx, &change, "[]");
   assert_eq!(
     eval_json(&ctx, "globalThis.__ran"),
     r#"["second","third","third"]"#,
@@ -283,13 +273,7 @@ fn registering_after_unload_began_is_a_no_op() {
   });
   assert_eq!(shape, "function");
   assert!(state.changed_fns.is_empty());
-  dispatch_screen_change(
-    &rt,
-    &ctx,
-    &state,
-    &format!(r#"{{"action":"push","screen":{DIALOGS},"previous":null}}"#),
-    "[]",
-  );
+  state.dispatch_change(&rt, &ctx, &format!(r#"{{"action":"push","screen":{DIALOGS},"previous":null}}"#), "[]");
   assert_eq!(eval_json(&ctx, "globalThis.__ran"), "0");
 }
 
@@ -334,7 +318,7 @@ fn the_bundled_nav_test_plugin_passes() {
     ),
   ] {
     *host.screen.borrow_mut() = format!("J{top}");
-    dispatch_screen_change(&rt, &ctx, &state, &change, &stack);
+    state.dispatch_change(&rt, &ctx, &change, &stack);
   }
 
   let lines = lines.borrow().clone();
@@ -346,7 +330,7 @@ fn the_bundled_nav_test_plugin_passes() {
 fn dispose_releases_the_callbacks_and_the_event_factory() {
   let (_rt, ctx, _host, state, _accounts, _logs) = setup(&[]);
   arm(&ctx);
-  dispose(&ctx, &state);
+  state.dispose(&ctx);
   assert!(state.changed_fns.is_empty());
   assert!(state.event_factory.borrow().is_none());
   // rt/ctx drop after this without aborting == roots were released

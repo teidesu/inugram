@@ -276,41 +276,6 @@ fn register_middleware<'js>(
   })
 }
 
-pub fn dispatch_middleware(
-  context: &rquickjs::Context,
-  state: &Rc<DeserializeState>,
-  callback_id: u32,
-  object_wire: &str,
-) {
-  context.with(|ctx| {
-    let Some(f) = state.middlewares.restore(&ctx, callback_id) else {
-      return;
-    };
-    let value = match proxy::wire_to_js_value(&ctx, &state.tl, object_wire, ViewLife::Dispatch) {
-      Ok(v) => v,
-      Err(e) => {
-        let msg = match e {
-          rquickjs::Error::Exception => format_exception(&ctx),
-          other => other.to_string(),
-        };
-        (state.log)(&format!("interceptDeserialize: bad object wire: {msg}"));
-        return;
-      }
-    };
-    match f.call::<_, Value>((value,)) {
-      Ok(_) => {}
-      Err(rquickjs::Error::Exception) => {
-        (state.log)(&crate::fault(format_args!("interceptDeserialize middleware threw: {}", format_exception(&ctx))));
-      }
-      Err(e) => (state.log)(&format!("interceptDeserialize middleware failed: {e:?}")),
-    }
-  });
-}
-
-pub fn dispose(context: &rquickjs::Context, state: &Rc<DeserializeState>) {
-  context.with(|ctx| state.middlewares.release_all(&ctx));
-}
-
 pub fn install_deserialize<'js>(
   ctx: &Ctx<'js>,
   host: Rc<dyn DeserializeHost>,
@@ -336,6 +301,40 @@ pub fn install_deserialize<'js>(
   })?;
   inu.set("interceptDeserialize", f)?;
   Ok(state)
+}
+
+impl DeserializeState {
+  pub fn dispatch(self: &Rc<Self>, context: &rquickjs::Context, callback_id: u32, object_wire: &str) {
+    let state = self;
+    context.with(|ctx| {
+      let Some(f) = state.middlewares.restore(&ctx, callback_id) else {
+        return;
+      };
+      let value = match proxy::wire_to_js_value(&ctx, &state.tl, object_wire, ViewLife::Dispatch) {
+        Ok(v) => v,
+        Err(e) => {
+          let msg = match e {
+            rquickjs::Error::Exception => format_exception(&ctx),
+            other => other.to_string(),
+          };
+          (state.log)(&format!("interceptDeserialize: bad object wire: {msg}"));
+          return;
+        }
+      };
+      match f.call::<_, Value>((value,)) {
+        Ok(_) => {}
+        Err(rquickjs::Error::Exception) => {
+          (state.log)(&crate::fault(format_args!("interceptDeserialize middleware threw: {}", format_exception(&ctx))));
+        }
+        Err(e) => (state.log)(&format!("interceptDeserialize middleware failed: {e:?}")),
+      }
+    });
+  }
+
+  pub fn dispose(self: &Rc<Self>, context: &rquickjs::Context) {
+    let state = self;
+    context.with(|ctx| state.middlewares.release_all(&ctx));
+  }
 }
 
 #[cfg(test)]

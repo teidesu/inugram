@@ -29,7 +29,7 @@ fn dialog_resolves_with_user_action() {
   let request_id = dialogs[0].0;
   drop(dialogs);
 
-  resolve_dialog(&rt, &ctx, &state, request_id, "positive");
+  state.resolve_dialog(&rt, &ctx, request_id, "positive");
   let result: String = ctx.with(|ctx| ctx.eval("globalThis.__result").unwrap());
   assert_eq!(result, "positive");
 }
@@ -130,17 +130,17 @@ fn chooser_resolves_an_index_a_list_or_null_by_mode() {
   let ids: Vec<i64> = host.choosers.borrow().iter().map(|(id, _)| *id).collect();
   assert_eq!(ids.len(), 4);
 
-  resolve_chooser(&rt, &ctx, &state, ids[0], Some("2"));
-  resolve_chooser(&rt, &ctx, &state, ids[1], Some("0,2"));
-  resolve_chooser(&rt, &ctx, &state, ids[2], None);
-  resolve_chooser(&rt, &ctx, &state, ids[3], Some(""));
+  state.resolve_chooser(&rt, &ctx, ids[0], Some("2"));
+  state.resolve_chooser(&rt, &ctx, ids[1], Some("0,2"));
+  state.resolve_chooser(&rt, &ctx, ids[2], None);
+  state.resolve_chooser(&rt, &ctx, ids[3], Some(""));
 
   let results: String = ctx.with(|ctx| ctx.eval("JSON.stringify(globalThis.__results)").unwrap());
   assert_eq!(results, r#"[["single",2],["multi",[0,2]],["dismissed",null],["none",[]]]"#);
   assert!(state.pending_choosers.borrow().is_empty());
 
   // a second settle for the same request finds nothing and must not throw
-  resolve_chooser(&rt, &ctx, &state, ids[0], Some("1"));
+  state.resolve_chooser(&rt, &ctx, ids[0], Some("1"));
   let unchanged: String = ctx.with(|ctx| ctx.eval("JSON.stringify(globalThis.__results.length)").unwrap());
   assert_eq!(unchanged, "4");
 }
@@ -211,6 +211,6 @@ fn dispose_releases_pending_dialog_and_unload_roots() {
   });
   assert_eq!(state.pending_dialogs.borrow().len(), 1);
   assert_eq!(state.pending_choosers.borrow().len(), 1);
-  dispose(&ctx, &state);
+  state.dispose(&ctx);
   // rt/ctx drop after this without aborting == roots were released
 }

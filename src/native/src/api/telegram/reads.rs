@@ -422,32 +422,31 @@ fn settle(
   pump_jobs(rt, context, state.log.as_ref());
 }
 
-pub fn resolve_peer_result(
-  rt: &Runtime,
-  context: &rquickjs::Context,
-  state: &Rc<ReadsState>,
-  request_id: i64,
-  result_wire: &str,
-) {
-  settle(rt, context, state, "resolvePeer", request_id, result_wire);
-}
+impl ReadsState {
+  pub fn resolve_peer(self: &Rc<Self>, rt: &Runtime, context: &rquickjs::Context, request_id: i64, result_wire: &str) {
+    let state = self;
+    settle(rt, context, state, "resolvePeer", request_id, result_wire);
+  }
 
-pub fn account_fetch_result(
-  rt: &Runtime,
-  context: &rquickjs::Context,
-  state: &Rc<ReadsState>,
-  request_id: i64,
-  result_wire: &str,
-) {
-  settle(rt, context, state, "accountFetch", request_id, result_wire);
-}
+  pub fn resolve_account_fetch(
+    self: &Rc<Self>,
+    rt: &Runtime,
+    context: &rquickjs::Context,
+    request_id: i64,
+    result_wire: &str,
+  ) {
+    let state = self;
+    settle(rt, context, state, "accountFetch", request_id, result_wire);
+  }
 
-pub fn dispose(context: &rquickjs::Context, state: &Rc<ReadsState>) {
-  context.with(|ctx| {
-    for (_, pending) in state.pending.borrow_mut().drain() {
-      pending.settle.release(&ctx);
-    }
-  });
+  pub fn dispose(self: &Rc<Self>, context: &rquickjs::Context) {
+    let state = self;
+    context.with(|ctx| {
+      for (_, pending) in state.pending.borrow_mut().drain() {
+        pending.settle.release(&ctx);
+      }
+    });
+  }
 }
 
 #[cfg(test)]

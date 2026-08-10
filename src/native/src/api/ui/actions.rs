@@ -263,39 +263,6 @@ fn editor_op<'js>(ctx: &Ctx<'js>, state: &Rc<ActionState>, op: i32, surface: i64
   }
 }
 
-pub fn render_actions(
-  rt: &Runtime,
-  context: &rquickjs::Context,
-  state: &Rc<ActionState>,
-  kind: i32,
-  surface_json: &str,
-) -> Option<String> {
-  let out = context.with(|ctx| {
-    let Some(registry) = state.registry(kind) else {
-      (state.log)(&format!("render: unknown action kind {kind}"));
-      return None;
-    };
-    let defs = registry.values();
-    if defs.is_empty() {
-      return Some("[]".to_string());
-    }
-    let context_obj = surface_context(&ctx, state, kind, surface_json)?;
-    match try_render(&ctx, state, kind, registry, defs, &context_obj) {
-      Ok(json) => Some(json),
-      Err(rquickjs::Error::Exception) => {
-        (state.log)(&crate::fault(format_args!("{}: render failed: {}", kind_name(kind), format_exception(&ctx))));
-        None
-      }
-      Err(e) => {
-        (state.log)(&format!("{}: render failed: {e:?}", kind_name(kind)));
-        None
-      }
-    }
-  });
-  pump_jobs(rt, context, state.log.as_ref());
-  out
-}
-
 fn surface_context<'js>(ctx: &Ctx<'js>, state: &Rc<ActionState>, kind: i32, surface_json: &str) -> Option<Object<'js>> {
   match build_context(ctx, state, kind, surface_json) {
     Ok(obj) => Some(obj),
@@ -365,52 +332,90 @@ fn render_one<'js>(ctx: &Ctx<'js>, def: &Rc<ActionDef>, context_obj: &Object<'js
   Ok(Some(text))
 }
 
-pub fn dispatch_action(
-  rt: &Runtime,
-  context: &rquickjs::Context,
-  state: &Rc<ActionState>,
-  kind: i32,
-  token: u32,
-  surface_json: &str,
-) {
-  context.with(|ctx| {
-    let Some(registry) = state.registry(kind) else {
-      return;
-    };
-    let Some(def) = registry.get(token) else {
-      return;
-    };
-    let callback = match def.callback.clone().restore(&ctx) {
-      Ok(f) => f,
-      Err(e) => {
-        (state.log)(&format!("{}: failed to restore callback: {e:?}", kind_name(kind)));
-        return;
+impl ActionState {
+  pub fn render(
+    self: &Rc<Self>,
+    rt: &Runtime,
+    context: &rquickjs::Context,
+    kind: i32,
+    surface_json: &str,
+  ) -> Option<String> {
+    let state = self;
+    let out = context.with(|ctx| {
+      let Some(registry) = state.registry(kind) else {
+        (state.log)(&format!("render: unknown action kind {kind}"));
+        return None;
+      };
+      let defs = registry.values();
+      if defs.is_empty() {
+        return Some("[]".to_string());
       }
-    };
-    let Some(context_obj) = surface_context(&ctx, state, kind, surface_json) else {
-      return;
-    };
-    match callback.call::<_, Value>((context_obj,)) {
-      Ok(_) => {}
-      Err(rquickjs::Error::Exception) => {
-        (state.log)(&crate::fault(format_args!("{} callback threw: {}", kind_name(kind), format_exception(&ctx))));
-      }
-      Err(e) => (state.log)(&format!("{} callback failed: {e:?}", kind_name(kind))),
-    }
-  });
-  pump_jobs(rt, context, state.log.as_ref());
-}
-
-pub fn dispose(context: &rquickjs::Context, state: &Rc<ActionState>) {
-  context.with(|ctx| {
-    for registry in &state.kinds {
-      for def in registry.remove_matching(|_| true) {
-        if let Ok(def) = Rc::try_unwrap(def) {
-          release_def(&ctx, def);
+      let context_obj = surface_context(&ctx, state, kind, surface_json)?;
+      match try_render(&ctx, state, kind, registry, defs, &context_obj) {
+        Ok(json) => Some(json),
+        Err(rquickjs::Error::Exception) => {
+          (state.log)(&crate::fault(format_args!("{}: render failed: {}", kind_name(kind), format_exception(&ctx))));
+          None
+        }
+        Err(e) => {
+          (state.log)(&format!("{}: render failed: {e:?}", kind_name(kind)));
+          None
         }
       }
-    }
-  });
+    });
+    pump_jobs(rt, context, state.log.as_ref());
+    out
+  }
+
+  pub fn dispatch(
+    self: &Rc<Self>,
+    rt: &Runtime,
+    context: &rquickjs::Context,
+    kind: i32,
+    token: u32,
+    surface_json: &str,
+  ) {
+    let state = self;
+    context.with(|ctx| {
+      let Some(registry) = state.registry(kind) else {
+        return;
+      };
+      let Some(def) = registry.get(token) else {
+        return;
+      };
+      let callback = match def.callback.clone().restore(&ctx) {
+        Ok(f) => f,
+        Err(e) => {
+          (state.log)(&format!("{}: failed to restore callback: {e:?}", kind_name(kind)));
+          return;
+        }
+      };
+      let Some(context_obj) = surface_context(&ctx, state, kind, surface_json) else {
+        return;
+      };
+      match callback.call::<_, Value>((context_obj,)) {
+        Ok(_) => {}
+        Err(rquickjs::Error::Exception) => {
+          (state.log)(&crate::fault(format_args!("{} callback threw: {}", kind_name(kind), format_exception(&ctx))));
+        }
+        Err(e) => (state.log)(&format!("{} callback failed: {e:?}", kind_name(kind))),
+      }
+    });
+    pump_jobs(rt, context, state.log.as_ref());
+  }
+
+  pub fn dispose(self: &Rc<Self>, context: &rquickjs::Context) {
+    let state = self;
+    context.with(|ctx| {
+      for registry in &state.kinds {
+        for def in registry.remove_matching(|_| true) {
+          if let Ok(def) = Rc::try_unwrap(def) {
+            release_def(&ctx, def);
+          }
+        }
+      }
+    });
+  }
 }
 
 #[cfg(test)]

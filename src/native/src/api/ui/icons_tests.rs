@@ -235,7 +235,7 @@ fn a_row_carries_its_icon_spec_into_the_render() {
     )
     .unwrap()
   });
-  let state = crate::testing::harness::DisposeOnDrop::new(&ctx, state, crate::api::ui::pages::dispose);
+  let state = crate::testing::harness::DisposeOnDrop::new(&ctx, state, |ctx, state| state.dispose(ctx));
   let page_id = ctx.with(|ctx| {
     ctx
       .eval::<f64, _>(
@@ -256,7 +256,7 @@ fn a_row_carries_its_icon_spec_into_the_render() {
       )
       .unwrap() as i64
   });
-  let json = crate::api::ui::pages::render_page(&rt, &ctx, &state, page_id).expect("render failed");
+  let json = state.render(&rt, &ctx, page_id).expect("render failed");
   assert!(json.contains(r#""text":"Curated","icon":"rmsg_settings""#), "{json}");
   assert!(json.contains(r#""text":"Native","icon":"rmsg_fave""#), "{json}");
   assert!(json.contains(r#""icon":"s<svg><path d=\"M0 0\"/></svg>""#), "{json}");
@@ -279,7 +279,7 @@ fn an_element_refuses_an_icon_it_was_not_handed() {
     )
     .unwrap()
   });
-  let _state = crate::testing::harness::DisposeOnDrop::new(&ctx, state, crate::api::ui::pages::dispose);
+  let _state = crate::testing::harness::DisposeOnDrop::new(&ctx, state, |ctx, state| state.dispose(ctx));
   let make = |icon: &str| format!("inu.ui.button({{ text: 'x', icon: {icon}, onClick: () => {{}} }})");
   assert_eq!(thrown_code(&ctx, &make("'msg_settings'")), "TypeError");
   assert_eq!(thrown_code(&ctx, &make("{}")), "TypeError");
@@ -332,7 +332,7 @@ mod bundled_oracle {
       crate::api::ui::pages::install_ui(&ctx, ui_host, crate::sandbox::registry::Lifecycle::new(), log, None, &inu)
         .unwrap()
     });
-    let ui = crate::testing::harness::DisposeOnDrop::new(&ctx, ui, crate::api::ui::pages::dispose);
+    let ui = crate::testing::harness::DisposeOnDrop::new(&ctx, ui, |ctx, state| state.dispose(ctx));
 
     let lines = crate::testing::harness::run_capturing_console(&rt, &ctx, ORACLE);
     drop(ui);

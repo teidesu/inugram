@@ -70,7 +70,7 @@ fn setup() -> Fixture {
     crate::api::error::install_plugin_error(&ctx, &inu).unwrap();
     install_ui(&ctx, host_dyn, Lifecycle::new(), log, None, &inu).unwrap()
   });
-  let state = Disposing::new(&ctx, state, dispose);
+  let state = Disposing::new(&ctx, state, |ctx, state| state.dispose(ctx));
   (rt, ctx, host, state, logs)
 }
 
@@ -111,7 +111,7 @@ fn build_full_page(ctx: &Context, host: &Rc<TestUiHost>) -> i64 {
 fn full_page_render_serializes_every_element() {
   let (rt, ctx, host, state, logs) = setup();
   let page_id = build_full_page(&ctx, &host);
-  let json = render_page(&rt, &ctx, &state, page_id).expect("render failed");
+  let json = state.render(&rt, &ctx, page_id).expect("render failed");
   assert_eq!(
     json,
     r#"{"title":"Test page","items":[{"type":"header","key":"t:header:General#1","text":"General"},{"type":"check","key":"t:check:Toggle#1","text":"Toggle","subtitle":"sub","checked":false,"onChange":1},{"type":"button","key":"t:button:Do it#1","text":"Do it","value":"now","danger":true,"onClick":2,"onSecondaryClick":3},{"type":"select","key":"t:select:Mode#1","text":"Mode","items":[{"text":"a"},{"text":"b","subtitle":"bee"}],"selected":0,"dialog":true,"onChange":4},{"type":"slider","key":"t:slider:Speed#1","text":"Speed","min":0,"max":2,"step":1,"value":1,"default":1,"labels":["0x","1x","2x"],"onChange":5},{"type":"separator","key":"t:separator:the end#1","text":"the end"}],"bottomButton":{"key":"b","text":"Save","onClick":6}}"#,
@@ -123,23 +123,23 @@ fn full_page_render_serializes_every_element() {
 fn events_update_state_and_rerender_uses_fresh_slots() {
   let (rt, ctx, host, state, _logs) = setup();
   let page_id = build_full_page(&ctx, &host);
-  render_page(&rt, &ctx, &state, page_id).unwrap();
+  state.render(&rt, &ctx, page_id).unwrap();
 
-  dispatch_ui_event(&rt, &ctx, &state, page_id, 1, "true");
-  dispatch_ui_event(&rt, &ctx, &state, page_id, 4, "1");
-  dispatch_ui_event(&rt, &ctx, &state, page_id, 2, "");
-  dispatch_ui_event(&rt, &ctx, &state, page_id, 6, "");
+  state.dispatch_event(&rt, &ctx, page_id, 1, "true");
+  state.dispatch_event(&rt, &ctx, page_id, 4, "1");
+  state.dispatch_event(&rt, &ctx, page_id, 2, "");
+  state.dispatch_event(&rt, &ctx, page_id, 6, "");
 
   let snapshot: String = ctx.with(|ctx| ctx.eval("JSON.stringify([__state.on, __state.sel, __state.log])").unwrap());
   assert_eq!(snapshot, r#"[true,1,["click","save"]]"#);
 
-  let json = render_page(&rt, &ctx, &state, page_id).unwrap();
+  let json = state.render(&rt, &ctx, page_id).unwrap();
   assert!(json.contains(r#""checked":true"#));
   assert!(json.contains(r#""selected":1"#));
   assert!(json.contains(r#""onChange":7"#), "slots must not restart: {json}");
 
   // slot from the first render is gone now - firing it must be a silent no-op
-  dispatch_ui_event(&rt, &ctx, &state, page_id, 1, "false");
+  state.dispatch_event(&rt, &ctx, page_id, 1, "false");
   let unchanged: bool = ctx.with(|ctx| ctx.eval("__state.on === true").unwrap());
   assert!(unchanged);
 }
@@ -171,8 +171,8 @@ fn the_anchor_opens_a_menu_over_its_own_row_and_a_click_dispatches() {
   });
 
   let page_id = *host.registered.borrow().last().unwrap();
-  render_page(&rt, &ctx, &state, page_id).unwrap();
-  dispatch_ui_event(&rt, &ctx, &state, page_id, 2, "");
+  state.render(&rt, &ctx, page_id).unwrap();
+  state.dispatch_event(&rt, &ctx, page_id, 2, "");
 
   let menus = host.menus.borrow();
   assert_eq!(menus.len(), 1);
@@ -185,7 +185,7 @@ fn the_anchor_opens_a_menu_over_its_own_row_and_a_click_dispatches() {
   let menu_id = menus[0].id;
   drop(menus);
 
-  dispatch_menu_click(&rt, &ctx, &state, menu_id, 1);
+  state.dispatch_menu_click(&rt, &ctx, menu_id, 1);
   let picked: String = ctx.with(|ctx| ctx.eval("globalThis.__picked").unwrap());
   assert_eq!(picked, "two");
   assert!(state.menus.borrow().is_empty());
@@ -211,11 +211,11 @@ fn menu_dismissed_without_click_releases_callbacks() {
       .unwrap();
   });
   let page_id = *host.registered.borrow().last().unwrap();
-  render_page(&rt, &ctx, &state, page_id).unwrap();
-  dispatch_ui_event(&rt, &ctx, &state, page_id, 1, "");
+  state.render(&rt, &ctx, page_id).unwrap();
+  state.dispatch_event(&rt, &ctx, page_id, 1, "");
   let menu_id = host.menus.borrow()[0].id;
 
-  dispatch_menu_click(&rt, &ctx, &state, menu_id, -1);
+  state.dispatch_menu_click(&rt, &ctx, menu_id, -1);
   let picked_is_null: bool = ctx.with(|ctx| ctx.eval("globalThis.__picked === null").unwrap());
   assert!(picked_is_null);
   assert!(state.menus.borrow().is_empty());
@@ -244,10 +244,10 @@ fn an_anchor_outlives_the_render_that_minted_it() {
       .unwrap();
   });
   let page_id = *host.registered.borrow().last().unwrap();
-  render_page(&rt, &ctx, &state, page_id).unwrap();
-  dispatch_ui_event(&rt, &ctx, &state, page_id, 1, "true");
+  state.render(&rt, &ctx, page_id).unwrap();
+  state.dispatch_event(&rt, &ctx, page_id, 1, "true");
   // the host re-renders after every event, which drops slot 1 and mints slot 2
-  let json = render_page(&rt, &ctx, &state, page_id).unwrap();
+  let json = state.render(&rt, &ctx, page_id).unwrap();
   assert!(json.contains(r#""onChange":2"#), "the re-render must reallocate slots: {json}");
 
   ctx.with(|ctx| {
@@ -277,8 +277,8 @@ fn an_anchor_whose_page_was_disposed_is_handle_expired() {
       .unwrap();
   });
   let page_id = *host.registered.borrow().last().unwrap();
-  render_page(&rt, &ctx, &state, page_id).unwrap();
-  dispatch_ui_event(&rt, &ctx, &state, page_id, 1, "");
+  state.render(&rt, &ctx, page_id).unwrap();
+  state.dispatch_event(&rt, &ctx, page_id, 1, "");
   assert_eq!(host.menus.borrow().len(), 0);
 
   let outcome: String = ctx.with(|ctx| {
@@ -319,10 +319,10 @@ fn a_menu_item_callback_gets_no_anchor() {
       .unwrap();
   });
   let page_id = *host.registered.borrow().last().unwrap();
-  render_page(&rt, &ctx, &state, page_id).unwrap();
-  dispatch_ui_event(&rt, &ctx, &state, page_id, 1, "");
+  state.render(&rt, &ctx, page_id).unwrap();
+  state.dispatch_event(&rt, &ctx, page_id, 1, "");
   let menu_id = host.menus.borrow()[0].id;
-  dispatch_menu_click(&rt, &ctx, &state, menu_id, 0);
+  state.dispatch_menu_click(&rt, &ctx, menu_id, 0);
 
   let argc: i32 = ctx.with(|ctx| ctx.eval("globalThis.__args").unwrap());
   assert_eq!(argc, 0);
@@ -356,10 +356,10 @@ fn every_item_callback_is_handed_an_anchor() {
       .unwrap();
   });
   let page_id = *host.registered.borrow().last().unwrap();
-  render_page(&rt, &ctx, &state, page_id).unwrap();
+  state.render(&rt, &ctx, page_id).unwrap();
   // slots in render order: check/checkLong, button/buttonLong, select/selectLong, slider, bottom
   for (slot, arg) in [(1, "true"), (2, ""), (3, ""), (4, ""), (5, "1"), (6, ""), (7, "1"), (8, "")] {
-    dispatch_ui_event(&rt, &ctx, &state, page_id, slot, arg);
+    state.dispatch_event(&rt, &ctx, page_id, slot, arg);
   }
   let seen: String = ctx.with(|ctx| ctx.eval("JSON.stringify(globalThis.__seen)").unwrap());
   assert_eq!(
@@ -390,7 +390,7 @@ fn a_row_key_is_stable_across_renders_and_unique_within_one() {
       .unwrap();
   });
   let page_id = *host.registered.borrow().last().unwrap();
-  let first = render_page(&rt, &ctx, &state, page_id).unwrap();
+  let first = state.render(&rt, &ctx, page_id).unwrap();
   assert!(first.contains(r#""key":"t:separator:#1""#), "{first}");
   assert!(first.contains(r#""key":"t:separator:#2""#), "two textless separators must not collide: {first}");
   assert!(first.contains(r#""key":"i:act#1""#), "{first}");
@@ -399,7 +399,7 @@ fn a_row_key_is_stable_across_renders_and_unique_within_one() {
   ctx.with(|ctx| {
     ctx.eval::<(), _>("globalThis.__extra = true;").unwrap();
   });
-  let second = render_page(&rt, &ctx, &state, page_id).unwrap();
+  let second = state.render(&rt, &ctx, page_id).unwrap();
   assert!(second.contains(r#""key":"i:act#1""#), "an explicit id is the row's identity: {second}");
   assert!(second.contains(r#""key":"t:header:Extra#1""#), "{second}");
 }
@@ -408,13 +408,13 @@ fn a_row_key_is_stable_across_renders_and_unique_within_one() {
 fn rendering_a_page_the_engine_no_longer_has_is_an_error_not_a_fault() {
   let (rt, ctx, host, state, logs) = setup();
   let page_id = build_full_page(&ctx, &host);
-  render_page(&rt, &ctx, &state, page_id).unwrap();
+  state.render(&rt, &ctx, page_id).unwrap();
   ctx.with(|ctx| ctx.eval::<(), _>("globalThis.__page.dispose();").unwrap());
   logs.borrow_mut().clear();
 
   // the host still has the page on screen and asks for one more render: that is the app
   // naming a page the engine dropped, not the plugin throwing
-  assert!(render_page(&rt, &ctx, &state, page_id).is_none());
+  assert!(state.render(&rt, &ctx, page_id).is_none());
   let entry = logs.borrow().first().cloned().expect("expected a logged diagnostic");
   assert_eq!(
     crate::classify_log(&entry).0,
@@ -444,8 +444,8 @@ fn prompt_resolves_with_text_and_null() {
   let (id1, id2) = (prompts[0].0, prompts[1].0);
   drop(prompts);
 
-  resolve_prompt(&rt, &ctx, &state, id1, Some("alice"));
-  resolve_prompt(&rt, &ctx, &state, id2, None);
+  state.resolve_prompt(&rt, &ctx, id1, Some("alice"));
+  state.resolve_prompt(&rt, &ctx, id2, None);
   let results: String = ctx.with(|ctx| ctx.eval("JSON.stringify(globalThis.__results)").unwrap());
   assert_eq!(results, r#"["alice",null]"#);
 }
@@ -501,8 +501,8 @@ fn a_java_object_reaches_open_page_native_view_and_drawable_icon() {
     let ui = install_ui(&ctx, host_dyn, Lifecycle::new(), log, Some(jvm.clone()), &inu).unwrap();
     (ui, jvm)
   });
-  let state = Disposing::new(&ctx, state, dispose);
-  let _jvm = crate::testing::harness::DisposeOnDrop::new(&ctx, jvm, crate::api::platform::jvm::dispose);
+  let state = Disposing::new(&ctx, state, |ctx, state| state.dispose(ctx));
+  let _jvm = crate::testing::harness::DisposeOnDrop::new(&ctx, jvm, |ctx, state| state.dispose(ctx));
 
   ctx.with(|ctx| {
     ctx.eval::<(), _>("globalThis.__obj = new (inu.jvm.cls('java.util.ArrayList'))();").unwrap();
@@ -532,7 +532,7 @@ fn a_java_object_reaches_open_page_native_view_and_drawable_icon() {
       )
       .unwrap()
   });
-  let rendered = render_page(&rt, &ctx, &state, page_id).unwrap();
+  let rendered = state.render(&rt, &ctx, page_id).unwrap();
   assert!(rendered.contains(r#""icon":"j"#), "{rendered}");
   assert_eq!(state.pages.borrow()[&page_id].retained_icon_values.borrow().len(), 1);
 
@@ -553,21 +553,21 @@ fn a_java_object_reaches_open_page_native_view_and_drawable_icon() {
 fn page_closed_fires_on_close_and_page_stays_reopenable() {
   let (rt, ctx, host, state, _logs) = setup();
   let page_id = build_full_page(&ctx, &host);
-  render_page(&rt, &ctx, &state, page_id).unwrap();
+  state.render(&rt, &ctx, page_id).unwrap();
 
-  page_closed(&rt, &ctx, &state, page_id);
+  state.close_page(&rt, &ctx, page_id);
   let closed: bool = ctx.with(|ctx| ctx.eval("__state.log.includes('close')").unwrap());
   assert!(closed);
 
   // render callbacks were released, but the page can be rendered again
-  assert!(render_page(&rt, &ctx, &state, page_id).is_some());
+  assert!(state.render(&rt, &ctx, page_id).is_some());
 }
 
 #[test]
 fn manual_dispose_releases_page_and_is_idempotent() {
   let (rt, ctx, host, state, logs) = setup();
   let page_id = build_full_page(&ctx, &host);
-  render_page(&rt, &ctx, &state, page_id).unwrap();
+  state.render(&rt, &ctx, page_id).unwrap();
 
   ctx.with(|ctx| {
     ctx
@@ -589,7 +589,7 @@ fn manual_dispose_releases_page_and_is_idempotent() {
   // something that is not a page at all stays a plain TypeError: no handle ever existed
   let type_err: String = ctx.with(|ctx| ctx.eval("globalThis.__typeErr").unwrap());
   assert_eq!(type_err, "TypeError");
-  assert!(render_page(&rt, &ctx, &state, page_id).is_none());
+  assert!(state.render(&rt, &ctx, page_id).is_none());
   logs.borrow_mut().clear();
   // rt/ctx drop after this without aborting == roots were released
   let _ = &rt;
@@ -614,15 +614,15 @@ fn transient_page_auto_disposes_on_close_after_on_close_fires() {
       .unwrap();
   });
   let page_id = *host.registered.borrow().last().unwrap();
-  render_page(&rt, &ctx, &state, page_id).unwrap();
+  state.render(&rt, &ctx, page_id).unwrap();
 
-  page_closed(&rt, &ctx, &state, page_id);
+  state.close_page(&rt, &ctx, page_id);
   let closed: i32 = ctx.with(|ctx| ctx.eval("globalThis.__closed").unwrap());
   assert_eq!(closed, 1);
   assert!(state.pages.borrow().is_empty());
 
   // a second close for the same id must be a silent no-op
-  page_closed(&rt, &ctx, &state, page_id);
+  state.close_page(&rt, &ctx, page_id);
   let closed: i32 = ctx.with(|ctx| ctx.eval("globalThis.__closed").unwrap());
   assert_eq!(closed, 1);
 }
@@ -643,7 +643,7 @@ fn throwing_items_fn_logs_and_returns_none() {
       .unwrap();
   });
   let page_id = *host.registered.borrow().last().unwrap();
-  assert!(render_page(&rt, &ctx, &state, page_id).is_none());
+  assert!(state.render(&rt, &ctx, page_id).is_none());
   let entry = logs.borrow().first().cloned().expect("expected a logged diagnostic");
   let (level, message) = crate::classify_log(&entry);
   assert_eq!(level, crate::LEVEL_FAULT, "a page whose render throws must disable the plugin");
@@ -667,10 +667,10 @@ fn a_throwing_page_callback_faults_where_a_stale_host_id_does_not() {
       .unwrap();
   });
   let page_id = *host.registered.borrow().last().unwrap();
-  render_page(&rt, &ctx, &state, page_id).expect("render failed");
+  state.render(&rt, &ctx, page_id).expect("render failed");
 
-  dispatch_ui_event(&rt, &ctx, &state, page_id, 1, "");
-  page_closed(&rt, &ctx, &state, page_id);
+  state.dispatch_event(&rt, &ctx, page_id, 1, "");
+  state.close_page(&rt, &ctx, page_id);
 
   let seen: Vec<(i32, String)> = logs
     .borrow()
@@ -689,7 +689,7 @@ fn a_throwing_page_callback_faults_where_a_stale_host_id_does_not() {
 
   // the host naming a menu the engine has already settled is a host bug; no plugin code ran
   logs.borrow_mut().clear();
-  dispatch_menu_click(&rt, &ctx, &state, 4242, 0);
+  state.dispatch_menu_click(&rt, &ctx, 4242, 0);
   let entry = logs.borrow().first().cloned().expect("expected a logged diagnostic");
   assert_eq!(crate::classify_log(&entry).0, crate::LEVEL_ERROR, "got: {entry:?}");
 }
@@ -753,7 +753,7 @@ fn a_slider_label_past_the_step_cap_is_refused_at_both_ends() {
       .unwrap();
   });
   let page_id = *host.registered.borrow().last().unwrap();
-  assert!(render_page(&rt, &ctx, &state, page_id).is_none(), "a forged element is refused too");
+  assert!(state.render(&rt, &ctx, page_id).is_none(), "a forged element is refused too");
 }
 
 #[test]
@@ -871,7 +871,7 @@ fn the_bundled_ui_test_plugin_passes() {
 fn dispose_with_open_everything_releases_roots() {
   let (rt, ctx, host, state, _logs) = setup();
   let page_id = build_full_page(&ctx, &host);
-  render_page(&rt, &ctx, &state, page_id).unwrap();
+  state.render(&rt, &ctx, page_id).unwrap();
   ctx.with(|ctx| {
     ctx.eval::<(), _>("inu.ui.prompt({ title: 'stuck' });").unwrap();
   });
@@ -889,10 +889,10 @@ fn dispose_with_open_everything_releases_roots() {
       .unwrap();
   });
   let page2 = *host.registered.borrow().last().unwrap();
-  render_page(&rt, &ctx, &state, page2).unwrap();
-  dispatch_ui_event(&rt, &ctx, &state, page2, 1, "");
+  state.render(&rt, &ctx, page2).unwrap();
+  state.dispatch_event(&rt, &ctx, page2, 1, "");
   assert_eq!(state.menus.borrow().len(), 1);
 
-  dispose(&ctx, &state);
+  state.dispose(&ctx);
   // rt/ctx drop after this without aborting == roots were released
 }
