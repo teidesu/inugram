@@ -14,6 +14,17 @@ package desu.inugram.helpers.plugins
  * double records are the ones opened. Nothing in the app subclasses it.
  */
 open class QuickJs {
+    data class Config(
+        val spillDir: String,
+        val fsDir: String,
+        val fsQuotaBytes: Long,
+        val fsUnscoped: Boolean,
+        val installFs: Boolean,
+        val androidDirs: String,
+        val installJvm: Boolean,
+        val installXposed: Boolean,
+    )
+
     /**
      * 0 until [start], and published as 0 again *before* the free: a `long` is not read atomically
      * off the owning thread, and one reader (the `inu.xposed` dispatch) is posted by an arbitrary
@@ -56,10 +67,21 @@ open class QuickJs {
      * creates the native context and hands rust the object it will call back into. Throws if the
      * lookup of any upcall fails, which is one wrong descriptor away and takes every plugin with it.
      */
-    open fun start(listener: PluginBridge) {
+    open fun start(listener: PluginBridge, config: Config) {
         check(ptr == 0L) { "QuickJs is already started" }
         this.listener = listener
-        ptr = nativeCreate(listener)
+        ptr = nativeCreate(
+            listener,
+            config.spillDir,
+            config.fsDir,
+            config.fsQuotaBytes,
+            config.fsUnscoped,
+            config.installFs,
+            config.androidDirs,
+            config.installJvm,
+            config.installXposed,
+        )
+        check(ptr != 0L) { "QuickJs initialization failed" }
     }
 
     open fun dispatchNotification(callbackId: Int, name: String, accountId: Int, argsJson: String) =
@@ -67,22 +89,6 @@ open class QuickJs {
 
     fun evaluate(code: String, filename: String = "<plugin>"): String? = requireLive { nativeEvaluate(it, code, filename) }
 
-    /** [spillDir] "" leaves the engine unable to spill blob content, which costs it only headroom */
-    fun installApi(spillDir: String) = requireLive { nativeInstallApi(it, spillDir) }
-
-    /**
-     * [dir] "" is a directory the host could not make, and every `inu.fs` call then fails rather
-     * than landing somewhere else. [quotaBytes] is [desu.inugram.core.plugins.FsQuota.UNCAPPED] under `unsafe.fs`, which is
-     * also what [unscoped] is, and turns the containment check off.
-     */
-    fun installFs(dir: String, quotaBytes: Long, unscoped: Boolean, androidDirs: String) =
-        requireLive { nativeInstallFs(it, dir, quotaBytes, unscoped, androidDirs) }
-
-    /** its own call because the host only makes it for a plugin holding `unsafe.jvm` */
-    open fun installJvm() = requireLive { nativeInstallJvm(it) }
-
-    /** after [installJvm]: every entry point takes a `JavaMethod`, which is a handle in that api's table */
-    open fun installXposed() = requireLive { nativeInstallXposed(it) }
 
     /**
      * **Call from globalQueue**: the thread that called the hooked method parks on the answer
@@ -149,9 +155,6 @@ open class QuickJs {
 
     /** the diff is the host's ([desu.inugram.core.plugins.ScreenStack]), so only call this for an actual change */
     fun dispatchScreenChange(changeJson: String, stackJson: String) = requireLive { nativeDispatchScreenChange(it, changeJson, stackJson) }
-
-    /** after [installApi], whose `inu.Message` the demuxed `inu.onNewMessage` family is built on */
-    open fun installRpc() = requireLive { nativeInstallRpc(it) }
 
     open fun resolvePeerResult(requestId: Long, resultWire: String) = requireLive { nativeResolvePeerResult(it, requestId, resultWire) }
 
@@ -225,7 +228,17 @@ open class QuickJs {
         nativeDestroy(live)
     }
 
-    private external fun nativeCreate(listener: PluginBridge): Long
+    private external fun nativeCreate(
+        listener: PluginBridge,
+        spillDir: String,
+        fsDir: String,
+        fsQuotaBytes: Long,
+        fsUnscoped: Boolean,
+        installFs: Boolean,
+        androidDirs: String,
+        installJvm: Boolean,
+        installXposed: Boolean,
+    ): Long
     private external fun nativeEvaluate(ptr: Long, code: String, filename: String): String?
     private external fun nativeInstallInfo(
         ptr: Long,
@@ -237,10 +250,6 @@ open class QuickJs {
         headerKeys: Array<String>,
         headerValues: Array<String>,
     )
-    private external fun nativeInstallApi(ptr: Long, spillDir: String)
-    private external fun nativeInstallFs(ptr: Long, dir: String, quotaBytes: Long, unscoped: Boolean, androidDirs: String)
-    private external fun nativeInstallJvm(ptr: Long)
-    private external fun nativeInstallXposed(ptr: Long)
     private external fun nativeXposedBefore(
         ptr: Long,
         dispatchId: Long,
@@ -271,7 +280,6 @@ open class QuickJs {
     private external fun nativeResolveChooser(ptr: Long, requestId: Long, picked: String?)
     private external fun nativeDispatchScreenChange(ptr: Long, changeJson: String, stackJson: String)
     private external fun nativeDispatchNotification(ptr: Long, callbackId: Int, name: String, accountId: Int, argsJson: String)
-    private external fun nativeInstallRpc(ptr: Long)
     private external fun nativeResolvePeerResult(ptr: Long, requestId: Long, resultWire: String)
     private external fun nativeAccountFetchResult(ptr: Long, requestId: Long, resultWire: String)
     private external fun nativeWriteResult(ptr: Long, requestId: Long, resultWire: String)

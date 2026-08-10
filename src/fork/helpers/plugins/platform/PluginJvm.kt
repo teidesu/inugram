@@ -82,10 +82,6 @@ object PluginJvm {
     fun listenerFor(plugin: Plugin, engine: QuickJs, screen: AppScreen): JvmListener? =
         if (plugin.permissions.has(GRANT)) Session(plugin, engine, screen) else null
 
-    fun install(engine: QuickJs) {
-        if (engine.listener?.jvm != null) engine.installJvm()
-    }
-
     /** the scope list already decided this: a handle only exists because [Session.checkClass] let it be minted */
     fun objectAt(engine: QuickJs, handle: Long): Any? = (engine.listener?.jvm as? Session)?.objectAt(handle)
 

@@ -374,7 +374,7 @@ object PluginManager {
         try {
             // this is what runs the JNI bridge's own wiring, which throws when a descriptor does
             // not resolve - and an exception escaping here would take globalQueue, and the app, down
-            engine.start(bridge)
+            EngineBindings.start(plugin, engine, bridge)
             engine.installInfo(
                 appVersion = BuildVars.BUILD_VERSION_STRING,
                 appBuild = appBuild,
@@ -383,8 +383,6 @@ object PluginManager {
                 language = LocaleController.getInstance().currentLocaleInfo?.langCode ?: "",
                 header = plugin.manifest.raw,
             )
-            EngineBindings.install(plugin, engine)
-            PluginRpc.install(engine)
             engine.evaluate(plugin.source, plugin.manifest.name)
             notifyChanged()
         } catch (e: Throwable) {

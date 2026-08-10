@@ -88,24 +88,15 @@ class RecordingQuickJs : QuickJs() {
     var onXposedBefore: ((XposedBefore) -> Array<String>?)? = null
     var onXposedAfter: ((XposedAfter) -> String)? = null
 
-    override fun start(listener: PluginBridge) {
+    override fun start(listener: PluginBridge, config: Config) {
         check(this.listener == null) { "QuickJs is already started" }
         this.listener = listener
+        rpcInstalled = true
+        jvmInstalled = config.installJvm
+        xposedInstalled = config.installXposed
     }
 
     override fun close() = Unit
-
-    override fun installRpc() {
-        rpcInstalled = true
-    }
-
-    override fun installJvm() {
-        jvmInstalled = true
-    }
-
-    override fun installXposed() {
-        xposedInstalled = true
-    }
 
     override fun xposedBefore(
         dispatchId: Long,

@@ -12,19 +12,22 @@ import desu.inugram.helpers.plugins.DeserializeListener
 import desu.inugram.helpers.plugins.EngineDispatch
 import desu.inugram.helpers.plugins.Plugin
 import desu.inugram.helpers.plugins.QuickJs
+import desu.inugram.helpers.plugins.telegram.PluginDeserialize.MIDDLEWARE_BUDGET_MS
+import desu.inugram.helpers.plugins.telegram.PluginDeserialize.apply
+import desu.inugram.helpers.plugins.telegram.PluginDeserialize.lock
 import desu.inugram.helpers.plugins.tl.TlFilter
 import desu.inugram.helpers.plugins.tl.TlHandles
 import desu.inugram.helpers.plugins.tl.TlReflect
-import java.lang.reflect.Field
-import java.util.concurrent.CountDownLatch
-import java.util.concurrent.TimeUnit
-import java.util.concurrent.atomic.AtomicBoolean
 import org.json.JSONArray
 import org.json.JSONException
 import org.json.JSONObject
 import org.telegram.messenger.Utilities
 import org.telegram.tgnet.TLObject
 import org.telegram.tgnet.TLRPC
+import java.lang.reflect.Field
+import java.util.concurrent.CountDownLatch
+import java.util.concurrent.TimeUnit
+import java.util.concurrent.atomic.AtomicBoolean
 
 /**
  * `inu.interceptDeserialize`, declarative tier (rust: `deserialize.rs`). A rule crosses once, at
@@ -343,6 +346,7 @@ object PluginDeserialize {
                 is String -> value.toLongOrNull()?.let { Coerced(it) }
                 else -> null
             }
+
             Integer.TYPE -> (value as? Number)?.let { Coerced(it.toInt()) }
             java.lang.Short.TYPE -> (value as? Number)?.let { Coerced(it.toShort()) }
             java.lang.Byte.TYPE -> (value as? Number)?.let { Coerced(it.toByte()) }
@@ -357,6 +361,7 @@ object PluginDeserialize {
     private fun describe(type: Class<*>): String = when (type) {
         java.lang.Long.TYPE, Integer.TYPE, java.lang.Short.TYPE, java.lang.Byte.TYPE ->
             "is a whole number, which the given value is not"
+
         java.lang.Double.TYPE, java.lang.Float.TYPE -> "is a number, which the given value is not"
         java.lang.Boolean.TYPE -> "is a boolean, which the given value is not"
         String::class.java -> "is a string, which the given value is not"

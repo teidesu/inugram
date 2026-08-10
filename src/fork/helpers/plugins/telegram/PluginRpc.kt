@@ -185,9 +185,6 @@ object PluginRpc {
         }
     }
 
-    /** `inu.interceptDeserialize` installs from inside this, so its listener has to be in place already */
-    fun install(engine: QuickJs) = engine.installRpc()
-
     /**
      * drops the plugin's interceptors and fails any dispatch waiting on its own middleware, so
      * [maybeIntercept]'s finalize-exactly-once contract still holds. The plugin's handle table
