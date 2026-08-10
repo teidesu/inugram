@@ -217,10 +217,7 @@ open class QuickJs {
         }
     }
 
-    /**
-     * the null is published *before* the free, or a runnable another thread posted spends the whole
-     * of `nativeDestroy` holding a pointer this has already handed to `Box::from_raw`
-     */
+    /** publishes the closed state before native teardown so a queued caller cannot use this handle */
     open fun close() {
         val live = ptr
         if (live == 0L) return
