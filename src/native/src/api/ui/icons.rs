@@ -124,6 +124,15 @@ pub fn opt_icon<'js>(
   jvm: Option<&Rc<JvmState>>,
 ) -> JsResult<Option<Icon<'js>>> {
   let value: Value = obj.get("icon").map_err(|_| Exception::throw_type(ctx, &format!("{what}: cannot read 'icon'")))?;
+  icon_from_value(ctx, value, what, jvm)
+}
+
+pub(crate) fn icon_from_value<'js>(
+  ctx: &Ctx<'js>,
+  value: Value<'js>,
+  what: &str,
+  jvm: Option<&Rc<JvmState>>,
+) -> JsResult<Option<Icon<'js>>> {
   if value.is_undefined() || value.is_null() {
     return Ok(None);
   }

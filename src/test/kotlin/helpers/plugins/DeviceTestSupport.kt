@@ -278,7 +278,15 @@ private object DeviceMissing : CoreListener, StorageListener, UiListener, Platfo
 
     override fun iconResolves(kind: Int, value: String) = no("icons")
 
-    override fun actionRegister(kind: Int, token: Int, id: String) = no("actions")
+    override fun actionRegister(
+        kind: Int,
+        token: Int,
+        id: String,
+        placements: Int,
+        text: String?,
+        icon: String?,
+        dynamicFields: Int,
+    ) = no("actions")
 
     override fun actionUnregister(kind: Int, token: Int) = no("actions")
 

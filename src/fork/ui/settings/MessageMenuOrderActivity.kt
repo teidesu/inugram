@@ -5,6 +5,7 @@ import desu.inugram.InuConfig
 import desu.inugram.helpers.InuUtils
 import desu.inugram.helpers.menu.MenuOrderEntry
 import desu.inugram.helpers.menu.MessageMenuConfig
+import desu.inugram.helpers.plugins.ui.PluginActions
 import org.telegram.messenger.LocaleController
 import org.telegram.messenger.R
 import org.telegram.ui.Components.BulletinFactory
@@ -17,6 +18,7 @@ class MessageMenuOrderActivity : MenuOrderActivity<MessageMenuConfig.Item>() {
     override val infoStringRes = R.string.InuMessageMenuOrderInfo
     override val headerStringRes = R.string.InuMessageMenuItems
     override val resetStringRes = R.string.InuMessageMenuReset
+    override val pluginActionKind = PluginActions.KIND_MESSAGE
 
     override fun getTitle(): CharSequence = LocaleController.getString(R.string.InuMessageMenuOrder)
 
@@ -58,6 +60,7 @@ class MessageMenuOrderActivity : MenuOrderActivity<MessageMenuConfig.Item>() {
             adapter.reorderSectionEnd()
         }
 
+        fillPluginSection(items, adapter)
         fillResetSection(items, adapter)
     }
 

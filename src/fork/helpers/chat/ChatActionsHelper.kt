@@ -12,13 +12,17 @@ import android.view.View
 import android.widget.FrameLayout
 import androidx.core.content.edit
 import desu.inugram.InuConfig
+import desu.inugram.helpers.plugins.ui.ActionKey
 import desu.inugram.helpers.plugins.ui.ActionRow
 import desu.inugram.helpers.menu.ChatMenuConfig
 import desu.inugram.helpers.menu.reorderByMenu
+import desu.inugram.helpers.menu.reorderByKeys
 import desu.inugram.helpers.plugins.tl.TlFilter
 import desu.inugram.helpers.plugins.tl.TlJson
 import desu.inugram.helpers.plugins.ui.ActionSurface
+import desu.inugram.helpers.plugins.ui.MessageActionSource
 import desu.inugram.helpers.plugins.ui.PluginActions
+import desu.inugram.helpers.plugins.ui.PluginIcons
 import desu.inugram.helpers.translate.TranslateHelper
 import desu.inugram.ui.showInputDialog
 import java.util.WeakHashMap
@@ -36,6 +40,7 @@ import org.telegram.messenger.UserObject
 import org.telegram.tgnet.TLRPC
 import org.telegram.ui.ActionBar.ActionBarMenu
 import org.telegram.ui.ActionBar.ActionBarMenuItem
+import org.telegram.ui.ActionBar.ActionBarMenuSubItem
 import org.telegram.ui.ActionBar.AlertDialog
 import org.telegram.ui.ActionBar.Theme
 import org.telegram.ui.AvatarPreviewer
@@ -72,6 +77,7 @@ object ChatActionsHelper {
     const val ACTION_ADMINISTRATORS = 518
     const val ACTION_PERMISSIONS = 519
     const val ACTION_INVITE_LINKS = 520
+    const val ACTION_PLUGIN_ACTIONS = 521
 
     // selection action mode
     const val ACTION_SELECT_RANGE = 1500
@@ -82,13 +88,24 @@ object ChatActionsHelper {
     const val ACTION_SEL_PIN = 1505
     const val ACTION_SEL_UNPIN = 1506
     const val ACTION_SEL_FORWARD_NO_QUOTE = 1507
+    private const val SELECTION_RENDER_DEBOUNCE_MS = 32L
 
     // --- chat header menu ---
 
     @JvmStatic
     fun reorder(lazyList: ArrayList<ActionBarMenuItem.Item>) {
         val entries = InuConfig.CHAT_MENU_ITEMS.value
-        val ordered = reorderByMenu(lazyList, entries) { ChatMenuConfig.Item.forId(it.id) }
+        val enabledRows = reorderByMenu(lazyList, entries) { ChatMenuConfig.Item.forId(it.id) }
+        val pluginKeys = enabledRows.mapNotNull { PluginActions.keyForOption(it.id) }
+        val order = PluginActions.mainOrder(
+            PluginActions.KIND_CHAT,
+            entries.filter { it.enabled }.map { it.item.key },
+            pluginKeys,
+        )
+        val ordered = reorderByKeys(enabledRows, order) { item ->
+            ChatMenuConfig.Item.forId(item.id)?.let { PluginActions.builtInOrderKey(it.key) }
+                ?: PluginActions.keyForOption(item.id)?.let(PluginActions::pluginOrderKey)
+        }
         lazyList.clear()
         lazyList.addAll(ordered)
     }
@@ -152,6 +169,28 @@ object ChatActionsHelper {
     // one entry per open chat; the rows a menu drew are what a click on it resolves against
     private val pluginRows = WeakHashMap<ChatActivity, List<ActionRow>>()
 
+    private class SelectionPluginMenu(
+        val overflow: ActionBarMenuItem,
+        val submenu: ItemOptions,
+        val actionsCell: ActionBarMenuSubItem,
+    ) {
+        val cells = HashMap<ActionKey, ActionBarMenuSubItem>()
+        var rows = emptyList<ActionRow>()
+        var surface: ActionSurface? = null
+        var generation = 0
+        var pending: Runnable? = null
+    }
+
+    private val selectionPluginMenus = WeakHashMap<ChatActivity, SelectionPluginMenu>()
+
+    fun onFragmentDestroy(activity: ChatActivity) {
+        pluginRows.remove(activity)
+        val state = selectionPluginMenus.remove(activity) ?: return
+        state.generation++
+        state.pending?.let(AndroidUtilities::cancelRunOnUIThread)
+        state.pending = null
+    }
+
     /**
      * The rows arrive one globalQueue hop later - an engine cannot be entered from the ui thread -
      * which is why they are rendered here, when the chat's menu is *built*, rather than when the
@@ -160,16 +199,47 @@ object ChatActionsHelper {
      */
     private fun addPluginItems(activity: ChatActivity, headerItem: ActionBarMenuItem) {
         pluginRows.remove(activity)
+        if (!InuConfig.PLUGINS_ENABLED.value) return
         if (!PluginActions.hasRows(PluginActions.KIND_CHAT)) return
         val surface = pluginSurface(activity)
         PluginActions.render(PluginActions.KIND_CHAT, surface) { rows ->
             if (activity.isFinished) return@render
             pluginRows[activity] = rows
-            rows.forEachIndexed { index, row ->
+            val enabled = rows.filter { PluginActions.isEnabled(it.key) }
+            for (row in enabled.filter { PluginActions.isPinned(it.key) }) {
+                val drawable = PluginIcons.resolveDrawable(activity.context, row.icon, row.owner)
                 headerItem.lazilyAddSubItem(
-                    PluginActions.optionIdAt(index), R.drawable.msg_settings_old, row.text,
+                    PluginActions.optionIdFor(row.key), if (drawable == null) R.drawable.msg_settings_old else 0, drawable, row.text, true, false,
                 )
             }
+            val submenuRows = PluginActions.orderRows(PluginActions.KIND_CHAT, enabled, false)
+            if (submenuRows.isEmpty()) return@render
+            val submenu = ItemOptions.swipeback(headerItem.popupLayout, activity.resourceProvider)
+            submenu.add(R.drawable.ic_ab_back, LocaleController.getString(R.string.Back)) {
+                headerItem.popupLayout.swipeBack?.closeForeground()
+            }
+            submenu.addGap()
+            for (row in submenuRows) {
+                val drawable = PluginIcons.resolveDrawable(activity.context, row.icon, row.owner)
+                if (drawable == null) {
+                    submenu.add(R.drawable.msg_settings_old, row.text) {
+                        PluginActions.dispatch(row, surface)
+                        headerItem.closeSubMenu()
+                    }
+                } else {
+                    submenu.add(drawable, row.text) {
+                        PluginActions.dispatch(row, surface)
+                        headerItem.closeSubMenu()
+                    }
+                }
+            }
+            headerItem.inu_lazilyAddSwipeBackItem(
+                ACTION_PLUGIN_ACTIONS,
+                R.drawable.msg_settings_old,
+                null,
+                LocaleController.getString(R.string.InuActions),
+                submenu.linearLayout,
+            )
         }
     }
 
@@ -293,6 +363,15 @@ object ChatActionsHelper {
     )
 
     private fun dispatchPluginItem(id: Int, activity: ChatActivity): Boolean {
+        if (activity.actionBar?.isActionModeShowed == true) {
+            val selection = selectionPluginMenus[activity]
+            val row = PluginActions.rowAt(selection?.rows.orEmpty(), id)
+            val surface = selection?.surface
+            if (row != null && surface != null) {
+                PluginActions.dispatch(row, surface)
+                return true
+            }
+        }
         val row = PluginActions.rowAt(pluginRows[activity].orEmpty(), id) ?: return false
         PluginActions.dispatch(row, pluginSurface(activity))
         return true
@@ -500,6 +579,40 @@ object ChatActionsHelper {
             R.drawable.msg_unpin,
             LocaleController.getString(R.string.UnpinMessage),
         )
+        val cells = HashMap<ActionKey, ActionBarMenuSubItem>()
+        if (InuConfig.PLUGINS_ENABLED.value) {
+            val registered = PluginActions.registeredRows(
+                PluginActions.KIND_MESSAGE,
+                PluginActions.MESSAGE_PLACEMENT_SELECTION,
+            )
+            val byKey = registered.associateBy { it.key }
+            for (key in PluginActions.orderMainKeys(PluginActions.KIND_MESSAGE, registered.map { it.key })) {
+                val row = byKey.getValue(key)
+                val drawable = PluginIcons.resolveDrawable(activity.context, row.icon, row.owner)
+                cells[key] = overflow.addSubItem(
+                    PluginActions.optionIdFor(key),
+                    if (drawable == null) R.drawable.msg_settings_old else 0,
+                    drawable,
+                    row.text ?: "…",
+                    true,
+                    false,
+                ).apply { visibility = View.GONE }
+            }
+        }
+        val submenu = ItemOptions.swipeback(overflow.popupLayout, activity.resourceProvider)
+        submenu.add(R.drawable.ic_ab_back, LocaleController.getString(R.string.Back)) {
+            overflow.popupLayout.swipeBack?.closeForeground()
+        }
+        submenu.addGap()
+        val actionsCell = overflow.addSwipeBackItem(
+            R.drawable.msg_settings_old,
+            null,
+            LocaleController.getString(R.string.InuActions),
+            submenu.linearLayout,
+        ).apply { visibility = View.GONE }
+        val pluginMenu = SelectionPluginMenu(overflow, submenu, actionsCell)
+        pluginMenu.cells.putAll(cells)
+        selectionPluginMenus[activity] = pluginMenu
         activity.actionModeViews.add(overflow)
     }
 
@@ -547,10 +660,102 @@ object ChatActionsHelper {
         overflow.setSubItemShown(ACTION_SEL_GALLERY, hasMedia)
         overflow.setSubItemShown(ACTION_SEL_PIN, canPin)
         overflow.setSubItemShown(ACTION_SEL_UNPIN, canUnpin)
-        actionMode.setItemVisibility(
-            ACTION_SELECTION_MENU,
-            if (canSave || canForward || canTranslate || hasMedia || canPin || canUnpin) View.VISIBLE else View.GONE,
+        updateSelectionPluginItems(
+            activity,
+            actionMode,
+            overflow,
+            canSave || canForward || canTranslate || hasMedia || canPin || canUnpin,
         )
+    }
+
+    private fun updateSelectionPluginItems(
+        activity: ChatActivity,
+        actionMode: ActionBarMenu,
+        overflow: ActionBarMenuItem,
+        builtInsVisible: Boolean,
+    ) {
+        val state = selectionPluginMenus[activity] ?: return
+        state.generation++
+        val generation = state.generation
+        state.pending?.let(AndroidUtilities::cancelRunOnUIThread)
+        state.pending = null
+        state.rows = emptyList()
+        state.surface = null
+        for (key in state.cells.keys) overflow.setSubItemShown(PluginActions.optionIdFor(key), false)
+        state.actionsCell.visibility = View.GONE
+        actionMode.setItemVisibility(ACTION_SELECTION_MENU, if (builtInsVisible) View.VISIBLE else View.GONE)
+
+        if (!InuConfig.PLUGINS_ENABLED.value) return
+        if (!PluginActions.hasRows(PluginActions.KIND_MESSAGE, PluginActions.MESSAGE_PLACEMENT_SELECTION)) return
+        val pending = Runnable {
+            if (selectionPluginMenus[activity] !== state || state.generation != generation) return@Runnable
+            state.pending = null
+            val messages = collectSelected(activity)
+                .sortedWith(compareBy<MessageObject> { it.messageOwner.date }.thenBy { it.dialogId }.thenBy { it.id })
+                .map { it.messageOwner }
+            if (messages.isEmpty()) return@Runnable
+            val surface = ActionSurface.message(
+                activity.currentAccount,
+                activity.dialogId,
+                activity.topicId,
+                MessageActionSource.SELECTION,
+                messages,
+            )
+            state.surface = surface
+            PluginActions.render(PluginActions.KIND_MESSAGE, surface) { rows ->
+                if (selectionPluginMenus[activity] !== state || state.generation != generation) return@render
+                if (activity.actionBar?.isActionModeShowed != true) return@render
+                state.rows = rows
+                val enabled = rows.filter { PluginActions.isEnabled(it.key) }
+                val pinnedByKey = enabled.filter { PluginActions.isPinned(it.key) }.associateBy { it.key }
+                val pinned = PluginActions.orderMainKeys(PluginActions.KIND_MESSAGE, pinnedByKey.keys.toList())
+                    .map { pinnedByKey.getValue(it) }
+                val visible = pinned.mapTo(HashSet()) { it.key }
+                for (key in state.cells.keys) {
+                    if (key !in visible) overflow.setSubItemShown(PluginActions.optionIdFor(key), false)
+                }
+                for (row in pinned) {
+                    val drawable = PluginIcons.resolveDrawable(activity.context, row.icon, row.owner)
+                    val cell = state.cells.getOrPut(row.key) {
+                        overflow.addSubItem(
+                            PluginActions.optionIdFor(row.key),
+                            if (drawable == null) R.drawable.msg_settings_old else 0,
+                            drawable,
+                            row.text,
+                            true,
+                            false,
+                        )
+                    }
+                    cell.setTextAndIcon(row.text, if (drawable == null) R.drawable.msg_settings_old else 0, drawable)
+                    overflow.setSubItemShown(PluginActions.optionIdFor(row.key), true)
+                }
+                while (state.submenu.linearLayout.childCount > 2) {
+                    state.submenu.linearLayout.removeViewAt(2)
+                }
+                val submenuRows = PluginActions.orderRows(PluginActions.KIND_MESSAGE, enabled, false)
+                for (row in submenuRows) {
+                    val drawable = PluginIcons.resolveDrawable(activity.context, row.icon, row.owner)
+                    if (drawable == null) {
+                        state.submenu.add(R.drawable.msg_settings_old, row.text) {
+                            dispatchPluginItem(PluginActions.optionIdFor(row.key), activity)
+                            overflow.closeSubMenu()
+                        }
+                    } else {
+                        state.submenu.add(drawable, row.text) {
+                            dispatchPluginItem(PluginActions.optionIdFor(row.key), activity)
+                            overflow.closeSubMenu()
+                        }
+                    }
+                }
+                state.actionsCell.visibility = if (submenuRows.isEmpty()) View.GONE else View.VISIBLE
+                actionMode.setItemVisibility(
+                    ACTION_SELECTION_MENU,
+                    if (builtInsVisible || enabled.isNotEmpty()) View.VISIBLE else View.GONE,
+                )
+            }
+        }
+        state.pending = pending
+        AndroidUtilities.runOnUIThread(pending, SELECTION_RENDER_DEBOUNCE_MS)
     }
 
     private inline fun forEachSelectedMessage(activity: ChatActivity, action: (MessageObject) -> Unit) {

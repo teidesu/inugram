@@ -410,6 +410,10 @@
     <string name="InuMotion">Motion</string>
     <string name="InuFormatting">Formatting</string>
     <string name="InuChatActions">Chat actions</string>
+    <string name="InuActions">Actions</string>
+    <string name="InuPluginActions">Plugin actions</string>
+    <string name="InuPinAction">Pin action</string>
+    <string name="InuUnpinAction">Unpin action</string>
     <string name="InuLinksAndBrowser">Links &amp; browser</string>
     <string name="InuStickers">Stickers</string>
     <string name="InuReactions">Reactions</string>

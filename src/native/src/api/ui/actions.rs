@@ -1,11 +1,16 @@
+use std::cell::RefCell;
 use std::rc::Rc;
 
+use rquickjs::function::Constructor;
 use rquickjs::object::Accessor;
 use rquickjs::{Array, Ctx, Exception, Function, Object, Persistent, Result as JsResult, Runtime, Value};
 
 use crate::api::error::PluginErrorCode;
+use crate::api::platform::jvm::JvmState;
 use crate::api::telegram::account::AccountState;
 use crate::api::telegram::rpc::{format_exception, pump_jobs};
+use crate::api::tl::proxy::json_parse_tl;
+use crate::api::ui::icons::{icon_from_value, Icon};
 use crate::sandbox::grants::{check_grant, GrantHost, MATCH_EXACT};
 use crate::sandbox::registry::{make_disposer, noop_disposer, Lifecycle, Registry, Token};
 use crate::utils::arguments::{field, opt_fn, req_fn, req_str};
@@ -15,6 +20,14 @@ pub const KIND_CHAT: i32 = 1;
 pub const KIND_MESSAGE: i32 = 2;
 pub const KIND_PROFILE: i32 = 3;
 pub const KIND_EDITOR: i32 = 4;
+
+pub const MESSAGE_PLACEMENT_BUBBLE: i32 = 1;
+pub const MESSAGE_PLACEMENT_SELECTION: i32 = 2;
+const ALL_PLACEMENTS: i32 = -1;
+
+pub const DYNAMIC_TEXT: i32 = 1;
+pub const DYNAMIC_ICON: i32 = 2;
+pub const DYNAMIC_VISIBLE: i32 = 4;
 
 const DRAFT_GRANT: &str = "account.read";
 const DRAFT_SCOPE: &str = "draft";
@@ -39,7 +52,16 @@ fn kind_name(kind: i32) -> &'static str {
 }
 
 pub trait ActionHost {
-  fn action_register(&self, kind: i32, token: u32, id: &str) -> Option<String>;
+  fn action_register(
+    &self,
+    kind: i32,
+    token: u32,
+    id: &str,
+    placements: i32,
+    text: Option<&str>,
+    icon: Option<&str>,
+    dynamic_fields: i32,
+  ) -> Option<String>;
   fn action_unregister(&self, kind: i32, token: u32);
   fn action_editor(&self, op: i32, surface: i64, payload_json: &str) -> Option<String>;
 }
@@ -49,9 +71,17 @@ enum Label {
   Dynamic(Persistent<Function<'static>>),
 }
 
+enum ActionIcon {
+  Static { spec: String, retained: Option<Persistent<Value<'static>>> },
+  Dynamic(Persistent<Function<'static>>),
+}
+
 struct ActionDef {
   token: Token,
+  placements: i32,
   label: Label,
+  icon: Option<ActionIcon>,
+  retained_icons: RefCell<Vec<Persistent<Value<'static>>>>,
   visible: Option<Persistent<Function<'static>>>,
   callback: Persistent<Function<'static>>,
 }
@@ -60,10 +90,43 @@ fn release_def(ctx: &Ctx<'_>, def: ActionDef) {
   if let Label::Dynamic(p) = def.label {
     let _ = p.restore(ctx);
   }
+  if let Some(icon) = def.icon {
+    match icon {
+      ActionIcon::Static { retained, .. } => {
+        if let Some(p) = retained {
+          let _ = p.restore(ctx);
+        }
+      }
+      ActionIcon::Dynamic(p) => {
+        let _ = p.restore(ctx);
+      }
+    }
+  }
+  for p in def.retained_icons.into_inner() {
+    let _ = p.restore(ctx);
+  }
   if let Some(p) = def.visible {
     let _ = p.restore(ctx);
   }
   let _ = def.callback.restore(ctx);
+}
+
+fn release_icon(ctx: &Ctx<'_>, icon: Option<ActionIcon>) {
+  match icon {
+    Some(ActionIcon::Static { retained: Some(p), .. }) => {
+      let _ = p.restore(ctx);
+    }
+    Some(ActionIcon::Dynamic(p)) => {
+      let _ = p.restore(ctx);
+    }
+    _ => {}
+  }
+}
+
+fn release_label(ctx: &Ctx<'_>, label: Label) {
+  if let Label::Dynamic(p) = label {
+    let _ = p.restore(ctx);
+  }
 }
 
 pub struct ActionState {
@@ -72,6 +135,7 @@ pub struct ActionState {
   log: crate::Log,
   accounts: Option<Rc<AccountState>>,
   grants: Rc<dyn GrantHost>,
+  jvm: Option<Rc<JvmState>>,
   kinds: Vec<Registry<Rc<ActionDef>>>,
 }
 
@@ -87,6 +151,7 @@ pub fn install_actions<'js>(
   lifecycle: Rc<Lifecycle>,
   accounts: Option<Rc<AccountState>>,
   grants: Rc<dyn GrantHost>,
+  jvm: Option<Rc<JvmState>>,
   log: crate::Log,
   inu: &Object<'js>,
 ) -> JsResult<Rc<ActionState>> {
@@ -96,6 +161,7 @@ pub fn install_actions<'js>(
     log,
     accounts,
     grants,
+    jvm,
     kinds: (0..KIND_COUNT).map(|_| Registry::default()).collect(),
   });
 
@@ -118,6 +184,7 @@ pub fn install_actions<'js>(
 fn js_register<'js>(ctx: &Ctx<'js>, state: &Rc<ActionState>, kind: i32, opts: Object<'js>) -> JsResult<Function<'js>> {
   let what = kind_name(kind);
   let id = req_str(ctx, &opts, what, "id")?;
+  let placements = if kind == KIND_MESSAGE { parse_message_placements(ctx, &opts, what)? } else { ALL_PLACEMENTS };
   let label = {
     let value = field(ctx, &opts, what, "text")?;
     match value.as_string() {
@@ -129,19 +196,45 @@ fn js_register<'js>(ctx: &Ctx<'js>, state: &Rc<ActionState>, kind: i32, opts: Ob
     }
   };
   let icon = field(ctx, &opts, what, "icon")?;
-  if !icon.is_undefined() && !icon.is_null() {
-    if let Label::Dynamic(p) = label {
-      let _ = p.restore(ctx);
+  let icon = if icon.is_undefined() || icon.is_null() {
+    None
+  } else if let Some(f) = icon.as_function() {
+    Some(ActionIcon::Dynamic(Persistent::save(ctx, f.clone())))
+  } else {
+    match icon_from_value(ctx, icon, what, state.jvm.as_ref()) {
+      Ok(Some(Icon { spec, retained_value })) => Some(ActionIcon::Static {
+        spec,
+        retained: retained_value.map(|value| Persistent::save(ctx, value)),
+      }),
+      Ok(None) => None,
+      Err(e) => {
+        if let Label::Dynamic(p) = label {
+          let _ = p.restore(ctx);
+        }
+        return Err(e);
+      }
     }
-    return PluginErrorCode::Unsupported.throw(ctx, &format!("{what}: an action row does not carry an icon yet"));
-  }
-  let visible = opt_fn(ctx, &opts, what, "visible")?;
-  let callback = req_fn(ctx, &opts, what, "callback")?;
+  };
+  let visible = match opt_fn(ctx, &opts, what, "visible") {
+    Ok(visible) => visible,
+    Err(e) => {
+      release_label(ctx, label);
+      release_icon(ctx, icon);
+      return Err(e);
+    }
+  };
+  let callback = match req_fn(ctx, &opts, what, "callback") {
+    Ok(callback) => callback,
+    Err(e) => {
+      release_label(ctx, label);
+      release_icon(ctx, icon);
+      return Err(e);
+    }
+  };
 
   if state.lifecycle.is_unloading() {
-    if let Label::Dynamic(p) = label {
-      let _ = p.restore(ctx);
-    }
+    release_label(ctx, label);
+    release_icon(ctx, icon);
     return noop_disposer(ctx);
   }
 
@@ -149,15 +242,29 @@ fn js_register<'js>(ctx: &Ctx<'js>, state: &Rc<ActionState>, kind: i32, opts: Ob
     return Err(Exception::throw_type(ctx, &format!("{what}: unknown action kind")));
   };
   let token = registry.alloc();
-  if let Some(err) = state.host.action_register(kind, token, &id) {
-    if let Label::Dynamic(p) = label {
-      let _ = p.restore(ctx);
-    }
+  let static_text = match &label {
+    Label::Static(text) => Some(text.as_str()),
+    Label::Dynamic(_) => None,
+  };
+  let static_icon = match &icon {
+    Some(ActionIcon::Static { spec, .. }) => Some(spec.as_str()),
+    _ => None,
+  };
+  let dynamic_fields = (if matches!(&label, Label::Dynamic(_)) { DYNAMIC_TEXT } else { 0 })
+    | (if matches!(&icon, Some(ActionIcon::Dynamic(_))) { DYNAMIC_ICON } else { 0 })
+    | (if visible.is_some() { DYNAMIC_VISIBLE } else { 0 });
+  if let Some(err) = state.host.action_register(kind, token, &id, placements, static_text, static_icon, dynamic_fields)
+  {
+    release_label(ctx, label);
+    release_icon(ctx, icon);
     return Err(ctx.throw(crate::api::error::host_error_to_js(ctx, &err)?));
   }
   let def = Rc::new(ActionDef {
     token,
+    placements,
     label,
+    icon,
+    retained_icons: RefCell::new(Vec::new()),
     visible: visible.map(|f| Persistent::save(ctx, f)),
     callback: Persistent::save(ctx, callback),
   });
@@ -182,8 +289,40 @@ fn js_register<'js>(ctx: &Ctx<'js>, state: &Rc<ActionState>, kind: i32, opts: Ob
   })
 }
 
-fn build_context<'js>(ctx: &Ctx<'js>, state: &Rc<ActionState>, kind: i32, surface_json: &str) -> JsResult<Object<'js>> {
-  let parsed: Value = ctx.json_parse(surface_json)?;
+fn parse_message_placements<'js>(ctx: &Ctx<'js>, opts: &Object<'js>, what: &str) -> JsResult<i32> {
+  let value: Value = opts.get("placements")?;
+  if value.is_undefined() {
+    return Ok(MESSAGE_PLACEMENT_BUBBLE);
+  }
+  let array = value
+    .as_array()
+    .ok_or_else(|| Exception::throw_type(ctx, &format!("{what}: 'placements' must be a non-empty array")))?;
+  if array.len() == 0 {
+    return Err(Exception::throw_type(ctx, &format!("{what}: 'placements' must not be empty")));
+  }
+  let mut placements = 0;
+  for value in array.iter::<Value>() {
+    let value = value?;
+    let placement = value
+      .as_string()
+      .ok_or_else(|| Exception::throw_type(ctx, &format!("{what}: placements must be 'bubble' or 'selection'")))?
+      .to_string()?;
+    placements |= match placement.as_str() {
+      "bubble" => MESSAGE_PLACEMENT_BUBBLE,
+      "selection" => MESSAGE_PLACEMENT_SELECTION,
+      _ => return Err(Exception::throw_type(ctx, &format!("{what}: unknown placement '{placement}'"))),
+    };
+  }
+  Ok(placements)
+}
+
+fn build_context<'js>(
+  ctx: &Ctx<'js>,
+  state: &Rc<ActionState>,
+  kind: i32,
+  surface_json: &str,
+) -> JsResult<(Object<'js>, i32)> {
+  let parsed = json_parse_tl(ctx, surface_json)?;
   let parsed = parsed.as_object().ok_or_else(|| Exception::throw_type(ctx, "action: malformed surface"))?;
 
   let out = Object::new(ctx.clone())?;
@@ -198,9 +337,28 @@ fn build_context<'js>(ctx: &Ctx<'js>, state: &Rc<ActionState>, kind: i32, surfac
     }
   }
   if kind == KIND_MESSAGE {
-    let ids: Value = parsed.get("messageIds")?;
-    let ids = ids.as_array().ok_or_else(|| Exception::throw_type(ctx, "action: malformed messageIds"))?;
-    out.set("messageIds", ids.clone())?;
+    let source: String = parsed.get("source")?;
+    let placement = match source.as_str() {
+      "bubble" => MESSAGE_PLACEMENT_BUBBLE,
+      "selection" => MESSAGE_PLACEMENT_SELECTION,
+      _ => return Err(Exception::throw_type(ctx, "action: malformed message source")),
+    };
+    let messages: Value = parsed.get("messages")?;
+    let messages = messages.as_array().ok_or_else(|| Exception::throw_type(ctx, "action: malformed messages"))?;
+    let inu: Object = ctx.globals().get("inu")?;
+    let message: Constructor = inu.get("Message")?;
+    let wrapped = Array::new(ctx.clone())?;
+    for (index, raw) in messages.iter::<Value>().enumerate() {
+      let raw = raw?;
+      if raw.as_object().is_none() {
+        return Err(Exception::throw_type(ctx, "action: malformed message"));
+      }
+      let wrapper: Object = message.construct((raw,))?;
+      wrapped.set(index, wrapper)?;
+    }
+    out.set("source", source)?;
+    out.set("messages", wrapped)?;
+    return Ok((out, placement));
   }
   if kind == KIND_EDITOR {
     if has_draft_grant(state) {
@@ -229,7 +387,7 @@ fn build_context<'js>(ctx: &Ctx<'js>, state: &Rc<ActionState>, kind: i32, surfac
       )?;
     }
   }
-  Ok(out)
+  Ok((out, ALL_PLACEMENTS))
 }
 
 fn editor_op<'js>(ctx: &Ctx<'js>, state: &Rc<ActionState>, op: i32, surface: i64, value: Value<'js>) -> JsResult<()> {
@@ -265,7 +423,12 @@ fn editor_op<'js>(ctx: &Ctx<'js>, state: &Rc<ActionState>, op: i32, surface: i64
   }
 }
 
-fn surface_context<'js>(ctx: &Ctx<'js>, state: &Rc<ActionState>, kind: i32, surface_json: &str) -> Option<Object<'js>> {
+fn surface_context<'js>(
+  ctx: &Ctx<'js>,
+  state: &Rc<ActionState>,
+  kind: i32,
+  surface_json: &str,
+) -> Option<(Object<'js>, i32)> {
   match build_context(ctx, state, kind, surface_json) {
     Ok(obj) => Some(obj),
     Err(rquickjs::Error::Exception) => {
@@ -285,19 +448,27 @@ fn try_render<'js>(
   kind: i32,
   registry: &Registry<Rc<ActionDef>>,
   defs: Vec<Rc<ActionDef>>,
-  context_obj: &Object<'js>,
+  context: &Value<'js>,
+  placement: i32,
+  settings: bool,
 ) -> JsResult<String> {
   let out = Array::new(ctx.clone())?;
   let mut index = 0;
   for def in defs {
+    if def.placements & placement == 0 {
+      continue;
+    }
     if !registry.contains(def.token) {
       continue;
     }
-    match render_one(ctx, &def, context_obj) {
-      Ok(Some(text)) => {
+    match render_one(ctx, state, kind, &def, context, settings) {
+      Ok(Some((text, icon))) => {
         let row = Object::new(ctx.clone())?;
         row.set("token", def.token)?;
         row.set("text", text)?;
+        if let Some(icon) = icon {
+          row.set("icon", icon)?;
+        }
         out.set(index, row)?;
         index += 1;
       }
@@ -315,23 +486,52 @@ fn try_render<'js>(
     .ok_or_else(|| Exception::throw_message(ctx, "render: serialization produced no output"))
 }
 
-fn render_one<'js>(ctx: &Ctx<'js>, def: &Rc<ActionDef>, context_obj: &Object<'js>) -> JsResult<Option<String>> {
-  if let Some(visible) = def.visible.as_ref() {
-    let visible = visible.clone().restore(ctx)?;
-    let verdict: Value = visible.call((context_obj.clone(),))?;
-    if !verdict.as_bool().unwrap_or(false) {
-      return Ok(None);
+fn render_one<'js>(
+  ctx: &Ctx<'js>,
+  state: &Rc<ActionState>,
+  kind: i32,
+  def: &Rc<ActionDef>,
+  context: &Value<'js>,
+  settings: bool,
+) -> JsResult<Option<(String, Option<String>)>> {
+  if !settings {
+    if let Some(visible) = def.visible.as_ref() {
+      let visible = visible.clone().restore(ctx)?;
+      let verdict: Value = visible.call((context.clone(),))?;
+      if !verdict.as_bool().unwrap_or(false) {
+        return Ok(None);
+      }
     }
   }
   let text = match &def.label {
     Label::Static(text) => text.clone(),
     Label::Dynamic(f) => {
       let f = f.clone().restore(ctx)?;
-      let text: rquickjs::Coerced<String> = f.call((context_obj.clone(),))?;
+      let text: rquickjs::Coerced<String> = f.call((context.clone(),))?;
       text.0
     }
   };
-  Ok(Some(text))
+  let icon = match def.icon.as_ref() {
+    None => None,
+    Some(ActionIcon::Static { spec, .. }) => Some(spec.clone()),
+    Some(ActionIcon::Dynamic(f)) => {
+      let f = f.clone().restore(ctx)?;
+      let value: Value = f.call((context.clone(),))?;
+      let Some(Icon { spec, retained_value }) = icon_from_value(ctx, value, kind_name(kind), state.jvm.as_ref())?
+      else {
+        return Ok(Some((text, None)));
+      };
+      if let Some(value) = retained_value {
+        let mut retained = def.retained_icons.borrow_mut();
+        if retained.len() == 4 {
+          let _ = retained.remove(0).restore(ctx);
+        }
+        retained.push(Persistent::save(ctx, value));
+      }
+      Some(spec)
+    }
+  };
+  Ok(Some((text, icon)))
 }
 
 impl ActionState {
@@ -352,8 +552,14 @@ impl ActionState {
       if defs.is_empty() {
         return Some("[]".to_string());
       }
-      let context_obj = surface_context(&ctx, state, kind, surface_json)?;
-      match try_render(&ctx, state, kind, registry, defs, &context_obj) {
+      let settings = surface_json == "null";
+      let (context, placement) = if settings {
+        (Value::new_null(ctx.clone()), ALL_PLACEMENTS)
+      } else {
+        let (context, placement) = surface_context(&ctx, state, kind, surface_json)?;
+        (context.into_value(), placement)
+      };
+      match try_render(&ctx, state, kind, registry, defs, &context, placement, settings) {
         Ok(json) => Some(json),
         Err(rquickjs::Error::Exception) => {
           (state.log)(&crate::fault(format_args!("{}: render failed: {}", kind_name(kind), format_exception(&ctx))));
@@ -392,9 +598,12 @@ impl ActionState {
           return;
         }
       };
-      let Some(context_obj) = surface_context(&ctx, state, kind, surface_json) else {
+      let Some((context_obj, placement)) = surface_context(&ctx, state, kind, surface_json) else {
         return;
       };
+      if def.placements & placement == 0 {
+        return;
+      }
       match callback.call::<_, Value>((context_obj,)) {
         Ok(_) => {}
         Err(rquickjs::Error::Exception) => {

@@ -68,6 +68,31 @@ class ActionRowsTest {
     }
 
     @Test
+    fun placementsAreCappedAndListedIndependently() {
+        val registry = ActionRegistry<Owner>(perKindLimit = 2)
+        val owner = Owner("a")
+        val bubble = 1
+        val selection = 2
+        assertNull(registry.register(owner, message, 1, "bubble-1", bubble))
+        assertNull(registry.register(owner, message, 2, "bubble-2", bubble))
+        assertNull(registry.register(owner, message, 3, "selection-1", selection))
+        assertNull(registry.register(owner, message, 4, "selection-2", selection))
+        assertNotNull(registry.register(owner, message, 5, "bubble-3", bubble))
+        assertNotNull(registry.register(owner, message, 6, "both", bubble or selection))
+
+        assertEquals(2, registry.count(owner, message, bubble))
+        assertEquals(2, registry.count(owner, message, selection))
+        assertEquals(
+            listOf(owner to "bubble-1", owner to "bubble-2"),
+            registry.idsInOrder(message, listOf(owner), bubble),
+        )
+        assertEquals(
+            listOf(owner to "selection-1", owner to "selection-2"),
+            registry.idsInOrder(message, listOf(owner), selection),
+        )
+    }
+
+    @Test
     fun reRegisteringAnIdSwapsItsTokenInPlaceRatherThanAddingARow() {
         val registry = ActionRegistry<Owner>()
         val a = Owner("a")
@@ -116,11 +141,36 @@ class ActionRowsTest {
         val render = { owner: Owner -> listOf(Row(owner, 1, owner.name)) }
         assertEquals(
             listOf(Row(a, 1, "a"), Row(c, 1, "c")),
-            registry.rowsInOrder(chat, listOf(a, b, c), render),
+            registry.rowsInOrder(chat, listOf(a, b, c), render = render),
         )
         assertEquals(
             listOf(Row(c, 1, "c"), Row(a, 1, "a")),
-            registry.rowsInOrder(chat, listOf(c, b, a), render),
+            registry.rowsInOrder(chat, listOf(c, b, a), render = render),
+        )
+    }
+
+    @Test
+    fun idsAndTokensCanBeResolvedInLiveOwnerOrder() {
+        val registry = ActionRegistry<Owner>()
+        val a = Owner("a")
+        val b = Owner("b")
+        registry.register(a, chat, 4, "first")
+        registry.register(a, chat, 7, "second")
+        registry.register(b, chat, 2, "third")
+
+        assertEquals("second", registry.idForToken(a, chat, 7))
+        assertEquals(listOf(b to "third", a to "first", a to "second"), registry.idsInOrder(chat, listOf(b, a)))
+    }
+
+    @Test
+    fun registrationsCarryCachedPresentationAndDynamicFields() {
+        val registry = ActionRegistry<Owner>()
+        val owner = Owner("a")
+        registry.register(owner, chat, 7, "row", text = "Static", icon = "rmsg_pin", dynamicFields = 4)
+
+        assertEquals(
+            listOf(ActionRegistration(owner, chat, "row", 7, 1, "Static", "rmsg_pin", 4)),
+            registry.registrationsInOrder(chat, listOf(owner)),
         )
     }
 

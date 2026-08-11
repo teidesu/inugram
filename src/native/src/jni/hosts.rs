@@ -315,11 +315,28 @@ impl XposedHost for JniBridge {
 }
 
 impl ActionHost for JniBridge {
-  fn action_register(&self, kind: i32, token: u32, id: &str) -> Option<String> {
+  fn action_register(
+    &self,
+    kind: i32,
+    token: u32,
+    id: &str,
+    placements: i32,
+    text: Option<&str>,
+    icon: Option<&str>,
+    dynamic_fields: i32,
+  ) -> Option<String> {
     self.call_refusal(
       "registerAction",
       self.on_action_register,
-      &[Arg::Int(kind), Arg::Int(token as i32), Arg::Str(id)],
+      &[
+        Arg::Int(kind),
+        Arg::Int(token as i32),
+        Arg::Str(id),
+        Arg::Int(placements),
+        Arg::OptStr(text),
+        Arg::OptStr(icon),
+        Arg::Int(dynamic_fields),
+      ],
     )
   }
 
