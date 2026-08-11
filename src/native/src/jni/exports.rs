@@ -249,8 +249,8 @@ pub extern "system" fn Java_desu_inugram_helpers_plugins_QuickJs_nativeCreate(
         _rt: rt,
         bridge,
         lifecycle,
-        inu,
-        shared,
+        inu: Some(inu),
+        shared: Some(shared),
         rpc,
         deserialize,
         lifecycle_state,
@@ -1169,7 +1169,7 @@ pub extern "system" fn Java_desu_inugram_helpers_plugins_QuickJs_nativeInstallIn
       header: read_header(env, &header_keys, &header_values),
     });
     let _ = engine.ctx.with(|ctx| {
-      let inu = engine.inu.clone().restore(&ctx)?;
+      let inu = engine.inu.as_ref().unwrap().clone().restore(&ctx)?;
       install_inu(&ctx, info, &inu)
     });
   })
@@ -1222,7 +1222,7 @@ pub extern "system" fn Java_desu_inugram_helpers_plugins_QuickJs_nativeDestroy(
   _this: JObject,
   ptr: jlong,
 ) {
-  if let Some(engine) = remove_engine(ptr) {
+  if let Some(mut engine) = remove_engine(ptr) {
     engine.rpc.dispose(&engine.ctx);
     engine.deserialize.dispose(&engine.ctx);
     engine.lifecycle_state.dispose(&engine.ctx);
@@ -1244,8 +1244,8 @@ pub extern "system" fn Java_desu_inugram_helpers_plugins_QuickJs_nativeDestroy(
       state.dispose(&engine.ctx);
     }
     engine.ctx.with(|ctx| {
-      drop(engine.shared.clone().restore(&ctx));
-      drop(engine.inu.clone().restore(&ctx));
+      drop(engine.shared.take().unwrap().restore(&ctx));
+      drop(engine.inu.take().unwrap().restore(&ctx));
       dispose_rejection_tracker(&ctx);
     });
   }
