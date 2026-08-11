@@ -803,8 +803,11 @@ declare namespace inu {
     dialogId: DialogId
     topicId?: number
   }
+  type MessageActionSource = 'bubble' | 'selection'
   interface MessageActionContext extends ChatActionContext {
-    messageIds: number[]
+    source: MessageActionSource
+    /** Oldest to newest. A bubble expands its album; a selection contains exactly what the user selected. */
+    messages: readonly Message[]
   }
   interface MessageEditorActionContext extends ChatActionContext {
     draft: TextWithEntities
@@ -812,20 +815,25 @@ declare namespace inu {
     send: (message: InputText) => void
   }
 
-  interface ActionOptions<Ctx> {
+  interface ActionOptions<Ctx, GetterCtx = Ctx> {
     id: string
-    text: string | ((ctx: Ctx) => string)
-    icon?: UIIcon | ((ctx: Ctx) => UIIcon)
+    text: string | ((ctx: GetterCtx) => string)
+    icon?: UIIcon | ((ctx: GetterCtx) => UIIcon)
     visible?: (ctx: Ctx) => boolean
     callback: (ctx: Ctx) => void
+  }
+
+  interface MessageActionOptions extends ActionOptions<MessageActionContext, MessageActionContext | null> {
+    /** Where the action is available. Defaults to `['bubble']`. */
+    placements?: readonly MessageActionSource[]
   }
 
   /** Renders in 150ms for every plugin's answer; at most 8 rows per menu per plugin. */
   function registerAction(options: ActionOptions<ActionContext>): Disposer
 
-  function registerChatAction(options: ActionOptions<ChatActionContext>): Disposer
+  function registerChatAction(options: ActionOptions<ChatActionContext, ChatActionContext | null>): Disposer
 
-  function registerMessageAction(options: ActionOptions<MessageActionContext>): Disposer
+  function registerMessageAction(options: MessageActionOptions): Disposer
 
   function registerProfileAction(options: ActionOptions<ChatActionContext>): Disposer
 

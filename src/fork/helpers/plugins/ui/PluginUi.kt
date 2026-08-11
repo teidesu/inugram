@@ -83,8 +83,15 @@ object PluginUi {
 
         override fun iconResolves(kind: Int, value: String): Boolean = PluginIcons.iconResolves(kind, value)
 
-        override fun actionRegister(kind: Int, token: Int, id: String): String? =
-            PluginActions.register(plugin, engine, kind, token, id)
+        override fun actionRegister(
+            kind: Int,
+            token: Int,
+            id: String,
+            placements: Int,
+            text: String?,
+            icon: String?,
+            dynamicFields: Int,
+        ): String? = PluginActions.register(plugin, engine, kind, token, id, placements, text, icon, dynamicFields)
 
         override fun actionUnregister(kind: Int, token: Int) = PluginActions.unregister(engine, kind, token)
 

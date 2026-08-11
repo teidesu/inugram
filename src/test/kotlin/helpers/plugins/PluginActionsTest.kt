@@ -1,7 +1,9 @@
 package desu.inugram.helpers.plugins
 
+import desu.inugram.helpers.plugins.ui.ActionKey
 import desu.inugram.helpers.plugins.ui.ActionRow
 import desu.inugram.helpers.plugins.ui.ActionSurface
+import desu.inugram.helpers.plugins.ui.MessageActionSource
 import desu.inugram.helpers.plugins.ui.PluginActions
 import kotlin.test.assertEquals
 import kotlin.test.assertNotNull
@@ -10,6 +12,7 @@ import kotlin.test.assertTrue
 import org.json.JSONObject
 import org.junit.Before
 import org.junit.Test
+import org.telegram.tgnet.TLRPC
 
 class PluginActionsTest {
     @Before
@@ -57,6 +60,89 @@ class PluginActionsTest {
     }
 
     @Test
+    fun static_rows_are_returned_without_entering_the_engine() {
+        val plugin = startPlugin("p")
+        PluginActions.register(
+            plugin,
+            plugin.js,
+            PluginActions.KIND_CHAT,
+            1,
+            "a",
+            text = "Static",
+            icon = "rmsg_pin",
+            dynamicFields = 0,
+        )
+
+        assertEquals(listOf("Static"), rendered(PluginActions.KIND_CHAT, chat))
+        assertEquals(0, plugin.js.actionRenders.size)
+    }
+
+    @Test
+    fun cached_and_dynamic_rows_are_merged_in_registration_order() {
+        val plugin = startPlugin("p")
+        PluginActions.register(
+            plugin,
+            plugin.js,
+            PluginActions.KIND_CHAT,
+            1,
+            "static",
+            text = "Static",
+            dynamicFields = 0,
+        )
+        PluginActions.register(
+            plugin,
+            plugin.js,
+            PluginActions.KIND_CHAT,
+            2,
+            "dynamic",
+            icon = "rmsg_pin",
+            dynamicFields = PluginActions.DYNAMIC_TEXT,
+        )
+        plugin.answers(2 to "Dynamic")
+
+        assertEquals(listOf("Static", "Dynamic"), rendered(PluginActions.KIND_CHAT, chat))
+        assertEquals(1, plugin.js.actionRenders.size)
+    }
+
+    @Test
+    fun settings_ignore_a_dynamic_visibility_getter() {
+        val plugin = startPlugin("p")
+        PluginActions.register(
+            plugin,
+            plugin.js,
+            PluginActions.KIND_CHAT,
+            1,
+            "a",
+            text = "Static",
+            dynamicFields = PluginActions.DYNAMIC_VISIBLE,
+        )
+
+        val rows = ArrayList<ActionRow>()
+        PluginActions.renderSettings(PluginActions.KIND_CHAT) { rows.addAll(it) }
+        settle()
+
+        assertEquals(listOf("Static"), rows.map { it.text })
+        assertEquals(0, plugin.js.actionRenders.size)
+    }
+
+    @Test
+    fun main_rows_follow_the_configured_order_and_append_unknown_rows() {
+        val a = ActionKey("p", PluginActions.KIND_MESSAGE, "a")
+        val b = ActionKey("p", PluginActions.KIND_MESSAGE, "b")
+        val c = ActionKey("p", PluginActions.KIND_MESSAGE, "c")
+        PluginActions.resetSettings(PluginActions.KIND_MESSAGE)
+        try {
+            PluginActions.setMainOrder(
+                PluginActions.KIND_MESSAGE,
+                listOf(PluginActions.pluginOrderKey(c), PluginActions.pluginOrderKey(a)),
+            )
+            assertEquals(listOf(c, a, b), PluginActions.orderMainKeys(PluginActions.KIND_MESSAGE, listOf(a, b, c)))
+        } finally {
+            PluginActions.resetSettings(PluginActions.KIND_MESSAGE)
+        }
+    }
+
+    @Test
     fun aRowWhoseEngineIsNoLongerListedDoesNothingWhenTapped() {
         val plugin = startPlugin("p")
         PluginActions.register(plugin, plugin.js, PluginActions.KIND_CHAT, 7, "a")
@@ -81,20 +167,57 @@ class PluginActionsTest {
     }
 
     @Test
-    fun theSurfaceCrossesUnchangedAndAMessageActionCarriesEveryIdOfTheBubble() {
+    fun message_surface_carries_filtered_raw_messages_for_native_wrapping() {
         val plugin = startPlugin("p")
-        PluginActions.register(plugin, plugin.js, PluginActions.KIND_MESSAGE, 1, "a")
+        PluginActions.register(
+            plugin,
+            plugin.js,
+            PluginActions.KIND_MESSAGE,
+            1,
+            "a",
+            PluginActions.MESSAGE_PLACEMENT_SELECTION,
+        )
         plugin.answers(1 to "row")
 
-        val surface = ActionSurface.message(0, 4242L, 99L, listOf(11, 12, 13))
+        val surface = ActionSurface.message(
+            0,
+            4242L,
+            99L,
+            MessageActionSource.SELECTION,
+            listOf(
+                TLRPC.TL_message().apply {
+                    id = 11
+                    date = 1
+                    message = "one"
+                    dialog_id = 4242L
+                    grouped_id = 7L
+                }.synced(),
+                TLRPC.TL_message().apply {
+                    id = 12
+                    date = 2
+                    message = "two"
+                    dialog_id = 4242L
+                    grouped_id = 7L
+                }.synced(),
+                TLRPC.TL_message().apply {
+                    id = 13
+                    date = 3
+                    message = "three"
+                    dialog_id = -99L
+                }.synced(),
+            ),
+        )
         rendered(PluginActions.KIND_MESSAGE, surface)
 
         assertEquals(1, plugin.js.actionRenders.size)
-        assertEquals(surface.json, plugin.js.actionRenders[0].second)
-        val json = JSONObject(surface.json)
+        val json = JSONObject(plugin.js.actionRenders[0].second)
         assertEquals(4242L, json.getLong("dialogId"))
         assertEquals(99L, json.getLong("topicId"))
-        assertEquals("[11,12,13]", json.getJSONArray("messageIds").toString())
+        assertEquals("selection", json.getString("source"))
+        val messages = json.getJSONArray("messages")
+        assertEquals(listOf(11, 12, 13), (0 until messages.length()).map { messages.getJSONObject(it).getInt("id") })
+        assertEquals("7", messages.getJSONObject(0).getString("grouped_id"))
+        assertEquals("-99", messages.getJSONObject(2).getString("dialog_id"))
     }
 
     @Test
@@ -125,6 +248,45 @@ class PluginActionsTest {
 
         PluginActions.detach(plugin.js)
         assertEquals(0, PluginActions.rowCount(PluginActions.KIND_CHAT))
+    }
+
+    @Test
+    fun message_placements_have_independent_counts() {
+        val plugin = startPlugin("p")
+        PluginActions.register(
+            plugin,
+            plugin.js,
+            PluginActions.KIND_MESSAGE,
+            1,
+            "selection",
+            PluginActions.MESSAGE_PLACEMENT_SELECTION,
+        )
+
+        assertEquals(0, PluginActions.rowCount(PluginActions.KIND_MESSAGE))
+        assertEquals(
+            1,
+            PluginActions.rowCount(PluginActions.KIND_MESSAGE, PluginActions.MESSAGE_PLACEMENT_SELECTION),
+        )
+    }
+
+    @Test
+    fun message_settings_include_selection_only_rows() {
+        val plugin = startPlugin("p")
+        PluginActions.register(
+            plugin,
+            plugin.js,
+            PluginActions.KIND_MESSAGE,
+            1,
+            "selection",
+            PluginActions.MESSAGE_PLACEMENT_SELECTION,
+        )
+        plugin.answers(1 to "selection")
+
+        val rows = ArrayList<ActionRow>()
+        PluginActions.renderSettings(PluginActions.KIND_MESSAGE) { rows.addAll(it) }
+        settle()
+
+        assertEquals(listOf("selection"), rows.map { it.text })
     }
 
     @Test

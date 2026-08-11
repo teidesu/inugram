@@ -252,6 +252,7 @@ most things are toggleable in `Settings → Inugram`, with sensible opinionated 
 - plugins can rewrite or cancel outgoing messages (`inu.interceptSendMessage`) and rewrite or drop incoming updates before the app applies them (`inu.interceptUpdate`)
 - plugins can rewrite TL objects as the app parses them, including rows read back out of the local cache (`inu.interceptDeserialize`) — declarative rules only, matched natively, and never over ids, secret chats or the account-takeover surface
 - plugins page in settings: engine toggle, install from file, enable/disable, reload, long-press reorder (middleware order)
+- chat/message plugin actions live under an Actions submenu by default; users can reorder, disable, or pin them into the main menus; message actions can also target the current message selection
 - "start in safe mode" launcher shortcut to boot without running any plugin
 
 ## 🐶 bugfixes (vs stock)

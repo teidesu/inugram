@@ -274,9 +274,9 @@ object ProfileHelper {
         val surface = ActionSurface.profile(currentAccount, dialogId)
         PluginActions.render(PluginActions.KIND_PROFILE, surface) { rows ->
             pluginRows[otherItem] = rows
-            rows.forEachIndexed { index, row ->
+            rows.forEach { row ->
                 otherItem.addSubItem(
-                    PluginActions.optionIdAt(index), R.drawable.msg_settings_old, row.text,
+                    PluginActions.optionIdFor(row.key), R.drawable.msg_settings_old, row.text,
                 )
             }
         }

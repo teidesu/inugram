@@ -112,7 +112,15 @@ interface UiListener {
     fun iconResolves(kind: Int, value: String): Boolean
 
     /** [kind] keeps in sync with rust `actions::KIND_*` */
-    fun actionRegister(kind: Int, token: Int, id: String): String?
+    fun actionRegister(
+        kind: Int,
+        token: Int,
+        id: String,
+        placements: Int,
+        text: String?,
+        icon: String?,
+        dynamicFields: Int,
+    ): String?
 
     fun actionUnregister(kind: Int, token: Int)
 
@@ -230,7 +238,7 @@ interface TlListener {
  * can screen those. See `PluginFetch`.
  */
 interface FetchListener {
-    /** [specJson] is `{method, headers: {name: [value...]}, redirect}` */
+    /** [specJson] is `{method, headers: {name: [ value... ]}, redirect}` */
     fun fetch(requestId: Long, url: String, specJson: String, body: ByteArray?): String?
 
     /** the engine has already settled the promise: this is about the socket, not the caller */

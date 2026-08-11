@@ -60,7 +60,7 @@ expectTypeError('a row without a callback is refused', () => {
   inu.registerChatAction({ id: 'no-callback', text: 'no callback' })
 })
 
-expectThrow('an icon is refused rather than quietly dropped', 'unsupported', () => {
+expectTypeError('an icon not minted by inu.icons is refused', () => {
   // @ts-expect-error
   inu.registerChatAction({ id: 'iconed', text: 'iconed', icon: 'settings', callback: () => {} })
 })
@@ -74,6 +74,7 @@ pass('disposing twice is a no-op')
 inu.registerChatAction({
   id: 'chat',
   text: (ctx) => {
+    if (ctx === null) return 'Chat row'
     check('a chat action names its dialog', ctx.dialogId === -100, String(ctx.dialogId))
     return 'Chat row'
   },
@@ -105,13 +106,27 @@ inu.registerChatAction({
 inu.registerMessageAction({
   id: 'message',
   text: 'Message row',
+  placements: ['bubble', 'selection'],
   callback: (ctx) => {
-    check(
-      'a message action names every id of the bubble',
-      ctx.messageIds.length === 2 && ctx.messageIds[0] === 11 && ctx.messageIds[1] === 12,
-      JSON.stringify(ctx.messageIds),
-    )
-    check('a topic the surface has none of is absent', ctx.topicId === undefined, String(ctx.topicId))
+    if (ctx.source === 'bubble') {
+      check(
+        'a bubble action names every message and its album',
+        ctx.messages.length === 2 &&
+          ctx.messages[0] instanceof inu.Message && ctx.messages[0].id === 11 && ctx.messages[0].groupedId === '77' &&
+          ctx.messages[1] instanceof inu.Message && ctx.messages[1].id === 12 && ctx.messages[1].groupedId === '77',
+        JSON.stringify(ctx.messages),
+      )
+      check('a topic the bubble surface has none of is absent', ctx.topicId === undefined, String(ctx.topicId))
+    } else {
+      check(
+        'a selection action keeps its source and each message dialog',
+        ctx.messages.length === 2 &&
+          ctx.messages[0] instanceof inu.Message && ctx.messages[0].dialogId === -200 && ctx.messages[0].id === 3 &&
+          ctx.messages[1] instanceof inu.Message && ctx.messages[1].dialogId === -100 && ctx.messages[1].id === 14,
+        `${ctx.source}: ${JSON.stringify(ctx.messages)}`,
+      )
+      check('a selection action names its topic', ctx.topicId === 7, String(ctx.topicId))
+    }
   },
 })
 

@@ -233,8 +233,8 @@ class DrawerLayoutAdapter(
         val pluginRows = DrawerHelper.globalActionRows
         if (pluginRows.isNotEmpty()) {
             items.add(null)
-            for ((index, row) in pluginRows.withIndex()) {
-                items.add(Item(PluginActions.optionIdAt(index), row.text, R.drawable.msg_settings_old))
+            for (row in pluginRows) {
+                items.add(Item(PluginActions.optionIdFor(row.key), row.text, R.drawable.msg_settings_old))
             }
         }
     }

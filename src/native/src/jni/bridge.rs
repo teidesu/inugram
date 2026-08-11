@@ -143,7 +143,10 @@ impl JniBridge {
       on_ui_invalidate: method("uiInvalidate", "(J)V")?,
       on_ui_open_menu: method("uiOpenMenu", "(JJLjava/lang/String;Ljava/lang/String;)Ljava/lang/String;")?,
       on_icon_resolves: method("iconResolves", "(ILjava/lang/String;)Z")?,
-      on_action_register: method("actionRegister", "(IILjava/lang/String;)Ljava/lang/String;")?,
+      on_action_register: method(
+        "actionRegister",
+        "(IILjava/lang/String;ILjava/lang/String;Ljava/lang/String;I)Ljava/lang/String;",
+      )?,
       on_action_unregister: method("actionUnregister", "(II)V")?,
       on_action_editor: method("actionEditor", "(IJLjava/lang/String;)Ljava/lang/String;")?,
       on_check_grant: method("onCheckGrant", "(Ljava/lang/String;Ljava/lang/String;I)Z")?,

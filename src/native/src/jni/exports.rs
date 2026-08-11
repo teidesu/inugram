@@ -152,7 +152,16 @@ pub extern "system" fn Java_desu_inugram_helpers_plugins_QuickJs_nativeCreate(
       let actions = ctx
         .with(|ctx| {
           let inu = inu.clone().restore(&ctx)?;
-          install_actions(&ctx, action_host, lifecycle.clone(), Some(account.clone()), action_grants, log.clone(), &inu)
+          install_actions(
+            &ctx,
+            action_host,
+            lifecycle.clone(),
+            Some(account.clone()),
+            action_grants,
+            jvm.clone(),
+            log.clone(),
+            &inu,
+          )
         })
         .map_err(|e| log(&format!("inu.register*Action failed to install: {e:?}")))
         .ok()?;
