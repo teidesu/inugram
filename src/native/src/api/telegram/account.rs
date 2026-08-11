@@ -389,27 +389,34 @@ pub fn install_account<'js>(
 
   {
     let state = state.clone();
-    let f = Function::new(ctx.clone(), move |ctx: Ctx<'js>, id: Opt<Value<'js>>| state.js_account(&ctx, id.0))?;
-    inu.set("account", f)?;
+    inu.set(
+      "account",
+      Function::new(ctx.clone(), move |ctx: Ctx<'js>, id: Opt<Value<'js>>| state.js_account(&ctx, id.0))?,
+    )?;
   }
   {
     let state = state.clone();
-    let f = Function::new(ctx.clone(), move |ctx: Ctx<'js>| -> JsResult<Value<'js>> {
-      check_grant(&ctx, &state.grants, "account.read", Some("self"), MATCH_EXACT)?;
-      state.build_account_infos(&ctx)
-    })?;
-    inu.set("accounts", f)?;
+    inu.set(
+      "accounts",
+      Function::new(ctx.clone(), move |ctx: Ctx<'js>| -> JsResult<Value<'js>> {
+        check_grant(&ctx, &state.grants, "account.read", Some("self"), MATCH_EXACT)?;
+        state.build_account_infos(&ctx)
+      })?,
+    )?;
   }
   {
     let state = state.clone();
-    let f = Function::new(ctx.clone(), move |ctx: Ctx<'js>, cb: Function<'js>| state.js_on_accounts_changed(&ctx, cb))?;
-    inu.set("onAccountsChanged", f)?;
+    inu.set(
+      "onAccountsChanged",
+      Function::new(ctx.clone(), move |ctx: Ctx<'js>, cb: Function<'js>| state.js_on_accounts_changed(&ctx, cb))?,
+    )?;
   }
   {
     let state = state.clone();
-    let f =
-      Function::new(ctx.clone(), move |ctx: Ctx<'js>, cb: Function<'js>| state.js_with_current_account(&ctx, cb))?;
-    inu.set("withCurrentAccount", f)?;
+    inu.set(
+      "withCurrentAccount",
+      Function::new(ctx.clone(), move |ctx: Ctx<'js>, cb: Function<'js>| state.js_with_current_account(&ctx, cb))?,
+    )?;
   }
   Ok(state)
 }

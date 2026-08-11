@@ -437,7 +437,7 @@ fn read_to_json<'js>(state: &ViewState, ctx: &Ctx<'js>, target: &Value<'js>) -> 
   }
   let host = state.views.host.clone();
   let handle = state.handle;
-  let f = Function::new(ctx.clone(), move |ctx: Ctx<'js>| -> JsResult<Value<'js>> {
+  let value = Function::new(ctx.clone(), move |ctx: Ctx<'js>| -> JsResult<Value<'js>> {
     match host.tl_copy(handle) {
       Some(json) => json_parse_tl(&ctx, &json),
       None => {
@@ -445,8 +445,8 @@ fn read_to_json<'js>(state: &ViewState, ctx: &Ctx<'js>, target: &Value<'js>) -> 
         PluginErrorCode::HandleExpired.throw(ctx, HANDLE_EXPIRED_MESSAGE)
       }
     }
-  })?;
-  let value = f.into_js(ctx)?;
+  })?
+  .into_js(ctx)?;
   if let Some(bag) = bag_write(state, ctx, target)? {
     cache_section(&bag, SECTION_PERM)?.set(TO_JSON_KEY, value.clone())?;
   }

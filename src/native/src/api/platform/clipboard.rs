@@ -24,20 +24,24 @@ pub fn install_clipboard<'js>(
   let clipboard = Object::new(ctx.clone())?;
   {
     let state2 = state.clone();
-    let f = Function::new(ctx.clone(), move |ctx: Ctx<'js>| -> JsResult<String> {
-      check_grant(&ctx, &state2.grants, "clipboard.read", None, MATCH_EXACT)?;
-      Ok(state2.host.read())
-    })?;
-    clipboard.set("read", f)?;
+    clipboard.set(
+      "read",
+      Function::new(ctx.clone(), move |ctx: Ctx<'js>| -> JsResult<String> {
+        check_grant(&ctx, &state2.grants, "clipboard.read", None, MATCH_EXACT)?;
+        Ok(state2.host.read())
+      })?,
+    )?;
   }
   {
     let state2 = state.clone();
-    let f = Function::new(ctx.clone(), move |ctx: Ctx<'js>, text: rquickjs::Coerced<String>| -> JsResult<()> {
-      check_grant(&ctx, &state2.grants, "clipboard.write", None, MATCH_EXACT)?;
-      state2.host.write(&text.0);
-      Ok(())
-    })?;
-    clipboard.set("write", f)?;
+    clipboard.set(
+      "write",
+      Function::new(ctx.clone(), move |ctx: Ctx<'js>, text: rquickjs::Coerced<String>| -> JsResult<()> {
+        check_grant(&ctx, &state2.grants, "clipboard.write", None, MATCH_EXACT)?;
+        state2.host.write(&text.0);
+        Ok(())
+      })?,
+    )?;
   }
   inu.set("clipboard", clipboard)?;
   Ok(())

@@ -4,7 +4,7 @@ use std::rc::Rc;
 use rquickjs::function::Args;
 use rquickjs::{Ctx, Exception, Function, Object, Persistent, Result as JsResult, Runtime, Value};
 
-use crate::api::error::host_error_to_js;
+use crate::api::error::{host_error_to_js, PluginErrorCode};
 use crate::api::telegram::rpc::{format_exception, pump_jobs};
 use crate::sandbox::grants::{check_grant, GrantHost, MATCH_EXACT};
 use crate::sandbox::registry::{make_disposer, noop_disposer, Lifecycle, Registry, Token};
@@ -77,10 +77,6 @@ pub fn install_notifications<'js>(
   Ok(state)
 }
 
-fn invalid<'js, T>(ctx: &Ctx<'js>, message: &str) -> JsResult<T> {
-  crate::api::error::PluginErrorCode::InvalidArgument.throw(ctx, message)
-}
-
 fn js_add_delegate<'js>(
   ctx: &Ctx<'js>,
   state: &Rc<NotificationState>,
@@ -92,19 +88,23 @@ fn js_add_delegate<'js>(
   check_grant(ctx, &state.grants, "unsafe.notificationCenter", None, MATCH_EXACT)?;
 
   let Some(handlers) = handlers.as_object() else {
-    return invalid(ctx, "addNotificationCenterDelegate: expected an object of handlers");
+    return PluginErrorCode::InvalidArgument
+      .throw(ctx, "addNotificationCenterDelegate: expected an object of handlers");
   };
   let mut entries: Vec<(String, Function<'js>)> = Vec::new();
   for key in handlers.keys::<String>() {
     let name = key?;
     let value: Value = handlers.get(name.as_str())?;
     let Some(callback) = value.as_function() else {
-      return invalid(ctx, &format!("addNotificationCenterDelegate: '{name}' is not a function"));
+      return {
+        let message: &str = &format!("addNotificationCenterDelegate: '{name}' is not a function");
+        PluginErrorCode::InvalidArgument.throw(ctx, message)
+      };
     };
     entries.push((name, callback.clone()));
   }
   if entries.is_empty() {
-    return invalid(ctx, "addNotificationCenterDelegate: no handlers");
+    return PluginErrorCode::InvalidArgument.throw(ctx, "addNotificationCenterDelegate: no handlers");
   }
 
   let names: Vec<String> = entries.iter().map(|(name, _)| name.clone()).collect();

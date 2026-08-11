@@ -35,41 +35,49 @@ pub fn install_utils_with_host<'js>(
 ) -> JsResult<Object<'js>> {
   let utils = Object::new(ctx.clone())?;
 
-  let f = Function::new(ctx.clone(), |ctx: Ctx<'js>, bytes: Value<'js>| {
-    read_bytes(&ctx, &bytes, "toBase64").map(|bytes| STANDARD.encode(bytes))
-  })?;
-  utils.set("toBase64", f)?;
+  utils.set(
+    "toBase64",
+    Function::new(ctx.clone(), |ctx: Ctx<'js>, bytes: Value<'js>| {
+      read_bytes(&ctx, &bytes, "toBase64").map(|bytes| STANDARD.encode(bytes))
+    })?,
+  )?;
 
-  let f = Function::new(ctx.clone(), |ctx: Ctx<'js>, text: String| -> JsResult<TypedArray<'js, u8>> {
-    let text: &str = &text;
-    let bytes = STANDARD.decode(text).ok().or_else(|| STANDARD_NO_PAD.decode(text).ok());
-    match bytes {
-      Some(bytes) => TypedArray::<u8>::new(ctx, bytes),
-      None => PluginErrorCode::InvalidArgument.throw(&ctx, "fromBase64: not base64"),
-    }
-  })?;
-  utils.set("fromBase64", f)?;
-
-  let f = Function::new(ctx.clone(), |ctx: Ctx<'js>, bytes: Value<'js>| {
-    read_bytes(&ctx, &bytes, "toHex").map(|bytes| {
-      let bytes: &[u8] = &bytes;
-      let mut out = String::with_capacity(bytes.len() * 2);
-      for byte in bytes {
-        out.push(HEX_DIGITS[(byte >> 4) as usize] as char);
-        out.push(HEX_DIGITS[(byte & 0x0f) as usize] as char);
+  utils.set(
+    "fromBase64",
+    Function::new(ctx.clone(), |ctx: Ctx<'js>, text: String| -> JsResult<TypedArray<'js, u8>> {
+      let text: &str = &text;
+      let bytes = STANDARD.decode(text).ok().or_else(|| STANDARD_NO_PAD.decode(text).ok());
+      match bytes {
+        Some(bytes) => TypedArray::<u8>::new(ctx, bytes),
+        None => PluginErrorCode::InvalidArgument.throw(&ctx, "fromBase64: not base64"),
       }
-      out
-    })
-  })?;
-  utils.set("toHex", f)?;
+    })?,
+  )?;
 
-  let f = Function::new(ctx.clone(), |ctx: Ctx<'js>, text: String| -> JsResult<TypedArray<'js, u8>> {
-    match decode_hex(&text) {
-      Some(bytes) => TypedArray::<u8>::new(ctx, bytes),
-      None => PluginErrorCode::InvalidArgument.throw(&ctx, "fromHex: expected hex digits, in pairs"),
-    }
-  })?;
-  utils.set("fromHex", f)?;
+  utils.set(
+    "toHex",
+    Function::new(ctx.clone(), |ctx: Ctx<'js>, bytes: Value<'js>| {
+      read_bytes(&ctx, &bytes, "toHex").map(|bytes| {
+        let bytes: &[u8] = &bytes;
+        let mut out = String::with_capacity(bytes.len() * 2);
+        for byte in bytes {
+          out.push(HEX_DIGITS[(byte >> 4) as usize] as char);
+          out.push(HEX_DIGITS[(byte & 0x0f) as usize] as char);
+        }
+        out
+      })
+    })?,
+  )?;
+
+  utils.set(
+    "fromHex",
+    Function::new(ctx.clone(), |ctx: Ctx<'js>, text: String| -> JsResult<TypedArray<'js, u8>> {
+      match decode_hex(&text) {
+        Some(bytes) => TypedArray::<u8>::new(ctx, bytes),
+        None => PluginErrorCode::InvalidArgument.throw(&ctx, "fromHex: expected hex digits, in pairs"),
+      }
+    })?,
+  )?;
 
   {
     let host = host.clone();
@@ -95,34 +103,40 @@ pub fn install_utils_with_host<'js>(
   }
   {
     let host = host.clone();
-    let f = Function::new(
-      ctx.clone(),
-      move |ctx: Ctx<'js>, value: Value<'js>, options: Opt<Value<'js>>| -> JsResult<String> {
-        let value = format_integer(&ctx, &value, "formatNumber", i64::MIN, i64::MAX)?;
-        let compact = match options.0 {
-          Some(options) if !options.is_undefined() && !options.is_null() => {
-            options.as_object().is_some_and(|options| options.get::<_, bool>("compact").unwrap_or(false))
-          }
-          _ => false,
-        };
-        Ok(host.format(if compact { FORMAT_COMPACT_NUMBER } else { FORMAT_NUMBER }, value))
-      },
+    utils.set(
+      "formatNumber",
+      Function::new(
+        ctx.clone(),
+        move |ctx: Ctx<'js>, value: Value<'js>, options: Opt<Value<'js>>| -> JsResult<String> {
+          let value = format_integer(&ctx, &value, "formatNumber", i64::MIN, i64::MAX)?;
+          let compact = match options.0 {
+            Some(options) if !options.is_undefined() && !options.is_null() => {
+              options.as_object().is_some_and(|options| options.get::<_, bool>("compact").unwrap_or(false))
+            }
+            _ => false,
+          };
+          Ok(host.format(if compact { FORMAT_COMPACT_NUMBER } else { FORMAT_NUMBER }, value))
+        },
+      )?,
     )?;
-    utils.set("formatNumber", f)?;
   }
   {
     let host = host.clone();
-    let f = Function::new(ctx.clone(), move |ctx: Ctx<'js>, value: Value<'js>| -> JsResult<String> {
-      Ok(host.format(FORMAT_FILE_SIZE, format_integer(&ctx, &value, "formatFileSize", i64::MIN, i64::MAX)?))
-    })?;
-    utils.set("formatFileSize", f)?;
+    utils.set(
+      "formatFileSize",
+      Function::new(ctx.clone(), move |ctx: Ctx<'js>, value: Value<'js>| -> JsResult<String> {
+        Ok(host.format(FORMAT_FILE_SIZE, format_integer(&ctx, &value, "formatFileSize", i64::MIN, i64::MAX)?))
+      })?,
+    )?;
   }
   {
     let host = host.clone();
-    let f = Function::new(ctx.clone(), move |ctx: Ctx<'js>, value: Value<'js>| -> JsResult<String> {
-      Ok(host.format(FORMAT_DURATION, format_integer(&ctx, &value, "formatDuration", 0, i32::MAX as i64)?))
-    })?;
-    utils.set("formatDuration", f)?;
+    utils.set(
+      "formatDuration",
+      Function::new(ctx.clone(), move |ctx: Ctx<'js>, value: Value<'js>| -> JsResult<String> {
+        Ok(host.format(FORMAT_DURATION, format_integer(&ctx, &value, "formatDuration", 0, i32::MAX as i64)?))
+      })?,
+    )?;
   }
 
   let plugin_error: Value = inu.get("PluginError")?;

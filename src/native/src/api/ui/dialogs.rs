@@ -4,6 +4,7 @@ use std::rc::Rc;
 
 use rquickjs::{Ctx, Exception, Function, Object, Result as JsResult, Runtime, Value};
 
+use crate::api::error::PluginErrorCode;
 use crate::api::telegram::rpc::{format_exception, pump_jobs, PendingSettle};
 use crate::sandbox::registry::RequestIds;
 
@@ -33,7 +34,7 @@ fn js_ui_dialog<'js>(ctx: &Ctx<'js>, state: &Rc<DialogState>, options: Value<'js
     match kind.as_deref() {
       Some("native") => {}
       Some(other) => {
-        return crate::api::error::PluginErrorCode::Unsupported.throw(
+        return PluginErrorCode::Unsupported.throw(
           ctx,
           &format!("dialog: a '{other}' element cannot be a dialog body; only inu.android.nativeView can"),
         );
@@ -187,21 +188,26 @@ pub fn install_dialogs<'js>(
   let ui = Object::new(ctx.clone())?;
   {
     let state2 = state.clone();
-    let f = Function::new(ctx.clone(), move |text: rquickjs::Coerced<String>| {
-      state2.host.toast(&text.0);
-    })?;
-    ui.set("toast", f)?;
+    ui.set(
+      "toast",
+      Function::new(ctx.clone(), move |text: rquickjs::Coerced<String>| {
+        state2.host.toast(&text.0);
+      })?,
+    )?;
   }
   {
     let state2 = state.clone();
-    let f = Function::new(ctx.clone(), move |ctx: Ctx<'js>, options: Value<'js>| js_ui_dialog(&ctx, &state2, options))?;
-    ui.set("dialog", f)?;
+    ui.set(
+      "dialog",
+      Function::new(ctx.clone(), move |ctx: Ctx<'js>, options: Value<'js>| js_ui_dialog(&ctx, &state2, options))?,
+    )?;
   }
   {
     let state2 = state.clone();
-    let f =
-      Function::new(ctx.clone(), move |ctx: Ctx<'js>, options: Object<'js>| js_ui_chooser(&ctx, &state2, options))?;
-    ui.set("chooser", f)?;
+    ui.set(
+      "chooser",
+      Function::new(ctx.clone(), move |ctx: Ctx<'js>, options: Object<'js>| js_ui_chooser(&ctx, &state2, options))?,
+    )?;
   }
   inu.set("ui", ui)?;
   Ok(state)

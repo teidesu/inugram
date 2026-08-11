@@ -907,37 +907,41 @@ fn install_namespace<'js>(ctx: &Ctx<'js>, state: &Rc<CanvasState>, inu: &Object<
   let canvas = Object::new(ctx.clone())?;
 
   let owned = state.clone();
-  let f = Function::new(
-    ctx.clone(),
-    move |ctx: Ctx<'js>, width: Opt<Coerced<f64>>, height: Opt<Coerced<f64>>| -> JsResult<Value<'js>> {
-      let (w, h) = (num(&width), num(&height));
-      if !finite(&[w, h]) {
-        return invalid(&ctx, "a canvas needs a width and a height");
-      }
-      let surface = create_surface(&ctx, &owned, w.trunc() as i32, h.trunc() as i32)?;
-      Ok(Class::instance(ctx.clone(), CanvasHandle(surface))?.into_value())
-    },
+  canvas.set(
+    "create",
+    Function::new(
+      ctx.clone(),
+      move |ctx: Ctx<'js>, width: Opt<Coerced<f64>>, height: Opt<Coerced<f64>>| -> JsResult<Value<'js>> {
+        let (w, h) = (num(&width), num(&height));
+        if !finite(&[w, h]) {
+          return invalid(&ctx, "a canvas needs a width and a height");
+        }
+        let surface = create_surface(&ctx, &owned, w.trunc() as i32, h.trunc() as i32)?;
+        Ok(Class::instance(ctx.clone(), CanvasHandle(surface))?.into_value())
+      },
+    )?,
   )?;
-  canvas.set("create", f)?;
 
   for (name, is_font) in [("decode", false), ("load", false), ("loadFont", true)] {
     let owned = state.clone();
-    let f = Function::new(
-      ctx.clone(),
-      move |ctx: Ctx<'js>, first: Opt<Value<'js>>, second: Opt<Value<'js>>| -> JsResult<Value<'js>> {
-        let (family, source) = if is_font {
-          let family = match first.0.as_ref().and_then(|v| v.as_string()) {
-            Some(s) => s.to_string()?,
-            None => return invalid(&ctx, "loadFont: the family name must be a string"),
+    canvas.set(
+      name,
+      Function::new(
+        ctx.clone(),
+        move |ctx: Ctx<'js>, first: Opt<Value<'js>>, second: Opt<Value<'js>>| -> JsResult<Value<'js>> {
+          let (family, source) = if is_font {
+            let family = match first.0.as_ref().and_then(|v| v.as_string()) {
+              Some(s) => s.to_string()?,
+              None => return invalid(&ctx, "loadFont: the family name must be a string"),
+            };
+            (family, second.0.unwrap_or_else(|| Value::new_undefined(ctx.clone())))
+          } else {
+            (String::new(), first.0.unwrap_or_else(|| Value::new_undefined(ctx.clone())))
           };
-          (family, second.0.unwrap_or_else(|| Value::new_undefined(ctx.clone())))
-        } else {
-          (String::new(), first.0.unwrap_or_else(|| Value::new_undefined(ctx.clone())))
-        };
-        start_async(&ctx, &owned, is_font, &family, &source)
-      },
+          start_async(&ctx, &owned, is_font, &family, &source)
+        },
+      )?,
     )?;
-    canvas.set(name, f)?;
   }
 
   inu.set("canvas", canvas)?;
@@ -1026,45 +1030,51 @@ fn install_canvas_members<'js>(ctx: &Ctx<'js>, state: &Rc<CanvasState>) -> JsRes
     )?;
   }
 
-  let f = Function::new(
-    ctx.clone(),
-    |ctx: Ctx<'js>, this: This<Class<'js, CanvasHandle>>, id: Opt<Coerced<String>>| -> JsResult<Value<'js>> {
-      match id.0.as_ref().map(|v| v.0.as_str()) {
-        Some("2d") => {}
-        _ => return invalid(&ctx, "getContext: only '2d' is available"),
-      }
-      let key = rquickjs::Symbol::new_global(ctx.clone(), CONTEXT_KEY)?;
-      let canvas = this.0.as_inner().clone();
-      let cached: Value = canvas.get(key.as_atom())?;
-      if Class::<Context2d>::from_value(&cached).is_ok() {
-        return Ok(cached);
-      }
-      let surface = this.0.borrow().0.clone();
-      let context = Class::instance(
-        ctx.clone(),
-        Context2d {
-          surface,
-          state: RefCell::new(DrawState::default()),
-          stack: RefCell::new(Vec::new()),
-          path: RefCell::new(Path::default()),
-        },
-      )?;
-      context.as_inner().prop("canvas", Property::from(canvas.clone()).enumerable())?;
-      canvas.prop(key.as_atom(), Property::from(context.as_value().clone()))?;
-      Ok(context.into_value())
-    },
+  define_method(
+    &proto,
+    "getContext",
+    Function::new(
+      ctx.clone(),
+      |ctx: Ctx<'js>, this: This<Class<'js, CanvasHandle>>, id: Opt<Coerced<String>>| -> JsResult<Value<'js>> {
+        match id.0.as_ref().map(|v| v.0.as_str()) {
+          Some("2d") => {}
+          _ => return invalid(&ctx, "getContext: only '2d' is available"),
+        }
+        let key = rquickjs::Symbol::new_global(ctx.clone(), CONTEXT_KEY)?;
+        let canvas = this.0.as_inner().clone();
+        let cached: Value = canvas.get(key.as_atom())?;
+        if Class::<Context2d>::from_value(&cached).is_ok() {
+          return Ok(cached);
+        }
+        let surface = this.0.borrow().0.clone();
+        let context = Class::instance(
+          ctx.clone(),
+          Context2d {
+            surface,
+            state: RefCell::new(DrawState::default()),
+            stack: RefCell::new(Vec::new()),
+            path: RefCell::new(Path::default()),
+          },
+        )?;
+        context.as_inner().prop("canvas", Property::from(canvas.clone()).enumerable())?;
+        canvas.prop(key.as_atom(), Property::from(context.as_value().clone()))?;
+        Ok(context.into_value())
+      },
+    )?,
   )?;
-  define_method(&proto, "getContext", f)?;
 
   let owned = state.clone();
-  let f = Function::new(
-    ctx.clone(),
-    move |ctx: Ctx<'js>, this: This<Class<'js, CanvasHandle>>, options: Opt<Value<'js>>| -> JsResult<Value<'js>> {
-      let surface = this.0.borrow().0.clone();
-      convert_to_blob(&ctx, &owned, &surface, options)
-    },
+  define_method(
+    &proto,
+    "convertToBlob",
+    Function::new(
+      ctx.clone(),
+      move |ctx: Ctx<'js>, this: This<Class<'js, CanvasHandle>>, options: Opt<Value<'js>>| -> JsResult<Value<'js>> {
+        let surface = this.0.borrow().0.clone();
+        convert_to_blob(&ctx, &owned, &surface, options)
+      },
+    )?,
   )?;
-  define_method(&proto, "convertToBlob", f)?;
   Ok(())
 }
 

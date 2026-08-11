@@ -17,7 +17,7 @@ use rquickjs::{
 
 use crate::api::error::{make_plugin_error, PluginErrorCode};
 use crate::sandbox::limits::{ExternalCharge, ExternalMemory, EXTERNAL_LIMIT_BYTES, HEAP_LIMIT_BYTES};
-use crate::utils::arguments::array_values;
+use crate::utils::arguments::{array_values, opt};
 use crate::utils::shape::{define_getter, define_method};
 
 pub const SPILL_THRESHOLD_BYTES: u64 = 2 * 1024 * 1024;
@@ -903,33 +903,36 @@ fn install_blob_members<'js>(ctx: &Ctx<'js>, proto: &Object<'js>) -> JsResult<()
     Ok::<_, rquickjs::Error>(handle.mime.clone())
   })?;
 
-  let f = Function::new(
-    ctx.clone(),
-    |ctx: Ctx<'js>,
-     this: This<Class<'js, BlobHandle>>,
-     start: Opt<Value<'js>>,
-     end: Opt<Value<'js>>,
-     content_type: Opt<Value<'js>>|
-     -> JsResult<Value<'js>> {
-      let coerce = |v: Option<Value<'js>>| -> JsResult<Option<f64>> {
-        v.map(|v| Ok(Coerced::<f64>::from_js(&ctx, v)?.0)).transpose()
-      };
-      let start = coerce(crate::utils::arguments::opt(start))?;
-      let end = coerce(crate::utils::arguments::opt(end))?;
-      let handle = this.0.borrow();
-      let backing = handle.live(&ctx)?;
-      let size = handle.size();
-      let from = clamp_index(start, size, 0);
-      let to = clamp_index(end, size, size).max(from);
-      let mime = match crate::utils::arguments::opt(content_type) {
-        Some(v) => normalize_mime(&Coerced::<String>::from_js(&ctx, v)?.0),
-        None => String::new(),
-      };
-      let slice = make_view(backing, handle.start + from, handle.start + to, mime, None);
-      Ok(Class::instance(ctx.clone(), slice)?.into_value())
-    },
+  define_method(
+    proto,
+    "slice",
+    Function::new(
+      ctx.clone(),
+      |ctx: Ctx<'js>,
+       this: This<Class<'js, BlobHandle>>,
+       start: Opt<Value<'js>>,
+       end: Opt<Value<'js>>,
+       content_type: Opt<Value<'js>>|
+       -> JsResult<Value<'js>> {
+        let coerce = |v: Option<Value<'js>>| -> JsResult<Option<f64>> {
+          v.map(|v| Ok(Coerced::<f64>::from_js(&ctx, v)?.0)).transpose()
+        };
+        let start = coerce(opt(start))?;
+        let end = coerce(opt(end))?;
+        let handle = this.0.borrow();
+        let backing = handle.live(&ctx)?;
+        let size = handle.size();
+        let from = clamp_index(start, size, 0);
+        let to = clamp_index(end, size, size).max(from);
+        let mime = match opt(content_type) {
+          Some(v) => normalize_mime(&Coerced::<String>::from_js(&ctx, v)?.0),
+          None => String::new(),
+        };
+        let slice = make_view(backing, handle.start + from, handle.start + to, mime, None);
+        Ok(Class::instance(ctx.clone(), slice)?.into_value())
+      },
+    )?,
   )?;
-  define_method(proto, "slice", f)?;
 
   for (name, kind) in [("bytes", ReadAs::Bytes), ("arrayBuffer", ReadAs::Buffer), ("text", ReadAs::Text)] {
     let f =
@@ -939,10 +942,13 @@ fn install_blob_members<'js>(ctx: &Ctx<'js>, proto: &Object<'js>) -> JsResult<()
     define_method(proto, name, f)?;
   }
 
-  let f = Function::new(ctx.clone(), |this: This<Class<'js, BlobHandle>>| {
-    this.0.borrow().dispose();
-  })?;
-  define_method(proto, "dispose", f)?;
+  define_method(
+    proto,
+    "dispose",
+    Function::new(ctx.clone(), |this: This<Class<'js, BlobHandle>>| {
+      this.0.borrow().dispose();
+    })?,
+  )?;
   Ok(())
 }
 

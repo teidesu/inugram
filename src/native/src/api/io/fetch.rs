@@ -1,5 +1,7 @@
 use std::cell::RefCell;
 use std::collections::HashMap;
+use std::fs;
+use std::path::PathBuf;
 use std::rc::Rc;
 
 use rquickjs::{Ctx, Function, Object, Result as JsResult, Runtime, TypedArray, Value};
@@ -9,6 +11,7 @@ use crate::api::io::blob::{export_for_host, mint_app_file, resolve_export, BlobS
 use crate::api::telegram::rpc::{format_exception, pump_jobs, PendingSettle};
 use crate::sandbox::grants::{check_grant, GrantHost, MATCH_DOMAIN};
 use crate::sandbox::registry::RequestIds;
+use crate::utils::prelude;
 
 const PRELUDE: &[u8] = include_bytes!(concat!(env!("OUT_DIR"), "/fetch.qbc"));
 
@@ -155,18 +158,22 @@ pub fn install_fetch<'js>(
   let natives = Object::new(ctx.clone())?;
   {
     let state = state.clone();
-    let f = Function::new(ctx.clone(), move |ctx: Ctx<'js>, url: String, spec: Value<'js>, body: Value<'js>| {
-      js_send(&ctx, &state, url, spec, body)
-    })?;
-    natives.set("send", f)?;
+    natives.set(
+      "send",
+      Function::new(ctx.clone(), move |ctx: Ctx<'js>, url: String, spec: Value<'js>, body: Value<'js>| {
+        js_send(&ctx, &state, url, spec, body)
+      })?,
+    )?;
   }
   {
     let state = state.clone();
-    let f = Function::new(ctx.clone(), move |request_id: i64| {
-      state.pending.borrow_mut().remove(&request_id);
-      state.host.abort(request_id);
-    })?;
-    natives.set("abort", f)?;
+    natives.set(
+      "abort",
+      Function::new(ctx.clone(), move |request_id: i64| {
+        state.pending.borrow_mut().remove(&request_id);
+        state.host.abort(request_id);
+      })?,
+    )?;
   }
 
   let plugin_error: Value = inu.get("PluginError")?;
@@ -176,7 +183,7 @@ pub fn install_fetch<'js>(
     timers.set(name, f)?;
   }
 
-  let factory = crate::utils::prelude::load(ctx, PRELUDE)?;
+  let factory = prelude::load(ctx, PRELUDE)?;
   factory.call::<_, ()>((natives, plugin_error, timers))?;
   Ok(state)
 }
@@ -184,8 +191,8 @@ pub fn install_fetch<'js>(
 fn mint_body<'js>(ctx: &Ctx<'js>, body: &Object<'js>) -> JsResult<Value<'js>> {
   let path: String = body.get("path")?;
   let mime: String = body.get("type").unwrap_or_default();
-  let path = std::path::PathBuf::from(path);
-  let (size, mtime) = match std::fs::metadata(&path) {
+  let path = PathBuf::from(path);
+  let (size, mtime) = match fs::metadata(&path) {
     Ok(meta) => (
       meta.len(),
       meta

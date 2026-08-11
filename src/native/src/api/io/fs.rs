@@ -460,109 +460,129 @@ pub fn install_fs<'js>(
 
   {
     let state = state.clone();
-    let f = Function::new(ctx.clone(), move |ctx: Ctx<'js>, path: String| -> JsResult<Value<'js>> {
-      gate(&ctx, &state)?;
-      op_read(&ctx, &state, &path).or_else(|fault| fault.throw(&ctx))
-    })?;
-    fs_obj.set("read", f)?;
+    fs_obj.set(
+      "read",
+      Function::new(ctx.clone(), move |ctx: Ctx<'js>, path: String| -> JsResult<Value<'js>> {
+        gate(&ctx, &state)?;
+        op_read(&ctx, &state, &path).or_else(|fault| fault.throw(&ctx))
+      })?,
+    )?;
   }
 
   for (name, append) in [("write", false), ("append", true)] {
     let state = state.clone();
-    let f = Function::new(ctx.clone(), move |ctx: Ctx<'js>, path: String, data: Value<'js>| -> JsResult<()> {
-      gate(&ctx, &state)?;
-      read_source(&state, &data)
-        .and_then(|source| op_write(&state, &path, source, append))
-        .or_else(|fault| fault.throw(&ctx))
-    })?;
-    fs_obj.set(name, f)?;
+    fs_obj.set(
+      name,
+      Function::new(ctx.clone(), move |ctx: Ctx<'js>, path: String, data: Value<'js>| -> JsResult<()> {
+        gate(&ctx, &state)?;
+        read_source(&state, &data)
+          .and_then(|source| op_write(&state, &path, source, append))
+          .or_else(|fault| fault.throw(&ctx))
+      })?,
+    )?;
   }
 
   {
     let state = state.clone();
-    let f = Function::new(ctx.clone(), move |ctx: Ctx<'js>, path: String| -> JsResult<()> {
-      gate(&ctx, &state)?;
-      op_mkdir(&state, &path).or_else(|fault| fault.throw(&ctx))
-    })?;
-    fs_obj.set("mkdir", f)?;
+    fs_obj.set(
+      "mkdir",
+      Function::new(ctx.clone(), move |ctx: Ctx<'js>, path: String| -> JsResult<()> {
+        gate(&ctx, &state)?;
+        op_mkdir(&state, &path).or_else(|fault| fault.throw(&ctx))
+      })?,
+    )?;
   }
 
   {
     let state = state.clone();
-    let f = Function::new(ctx.clone(), move |ctx: Ctx<'js>, path: String, options: Opt<Value<'js>>| -> JsResult<()> {
-      gate(&ctx, &state)?;
-      let recursive = match options.0.as_ref().and_then(|v| v.as_object()) {
-        Some(options) => options.get::<_, Option<bool>>("recursive")?.unwrap_or(false),
-        None => false,
-      };
-      op_rm(&state, &path, recursive).or_else(|fault| fault.throw(&ctx))
-    })?;
-    fs_obj.set("rm", f)?;
+    fs_obj.set(
+      "rm",
+      Function::new(ctx.clone(), move |ctx: Ctx<'js>, path: String, options: Opt<Value<'js>>| -> JsResult<()> {
+        gate(&ctx, &state)?;
+        let recursive = match options.0.as_ref().and_then(|v| v.as_object()) {
+          Some(options) => options.get::<_, Option<bool>>("recursive")?.unwrap_or(false),
+          None => false,
+        };
+        op_rm(&state, &path, recursive).or_else(|fault| fault.throw(&ctx))
+      })?,
+    )?;
   }
 
   {
     let state = state.clone();
-    let f = Function::new(ctx.clone(), move |ctx: Ctx<'js>, path: String| -> JsResult<bool> {
-      gate(&ctx, &state)?;
-      op_exists(&state, &path).or_else(|fault| fault.throw(&ctx))
-    })?;
-    fs_obj.set("exists", f)?;
+    fs_obj.set(
+      "exists",
+      Function::new(ctx.clone(), move |ctx: Ctx<'js>, path: String| -> JsResult<bool> {
+        gate(&ctx, &state)?;
+        op_exists(&state, &path).or_else(|fault| fault.throw(&ctx))
+      })?,
+    )?;
   }
 
   {
     let state = state.clone();
-    let f = Function::new(ctx.clone(), move |ctx: Ctx<'js>, path: String| -> JsResult<Vec<String>> {
-      gate(&ctx, &state)?;
-      op_readdir(&state, &path).or_else(|fault| fault.throw(&ctx))
-    })?;
-    fs_obj.set("readdir", f)?;
+    fs_obj.set(
+      "readdir",
+      Function::new(ctx.clone(), move |ctx: Ctx<'js>, path: String| -> JsResult<Vec<String>> {
+        gate(&ctx, &state)?;
+        op_readdir(&state, &path).or_else(|fault| fault.throw(&ctx))
+      })?,
+    )?;
   }
 
   {
     let state = state.clone();
-    let f = Function::new(ctx.clone(), move |ctx: Ctx<'js>, path: String| -> JsResult<Object<'js>> {
-      gate(&ctx, &state)?;
-      let stat = op_stat(&state, &path).or_else(|fault| fault.throw(&ctx))?;
-      let obj = Object::new(ctx.clone())?;
-      obj.set("isFile", stat.is_file)?;
-      obj.set("isDirectory", stat.is_directory)?;
-      obj.set("size", stat.size as f64)?;
-      obj.set("mtime", stat.mtime as f64)?;
-      obj.set("ctime", stat.ctime as f64)?;
-      Ok(obj)
-    })?;
-    fs_obj.set("stat", f)?;
+    fs_obj.set(
+      "stat",
+      Function::new(ctx.clone(), move |ctx: Ctx<'js>, path: String| -> JsResult<Object<'js>> {
+        gate(&ctx, &state)?;
+        let stat = op_stat(&state, &path).or_else(|fault| fault.throw(&ctx))?;
+        let obj = Object::new(ctx.clone())?;
+        obj.set("isFile", stat.is_file)?;
+        obj.set("isDirectory", stat.is_directory)?;
+        obj.set("size", stat.size as f64)?;
+        obj.set("mtime", stat.mtime as f64)?;
+        obj.set("ctime", stat.ctime as f64)?;
+        Ok(obj)
+      })?,
+    )?;
   }
 
   for (name, is_move) in [("copy", false), ("move", true)] {
     let state = state.clone();
-    let f = Function::new(ctx.clone(), move |ctx: Ctx<'js>, src: String, dest: String| -> JsResult<()> {
-      gate(&ctx, &state)?;
-      let done = if is_move { op_move(&state, &src, &dest) } else { op_copy(&state, &src, &dest) };
-      done.or_else(|fault| fault.throw(&ctx))
-    })?;
-    fs_obj.set(name, f)?;
+    fs_obj.set(
+      name,
+      Function::new(ctx.clone(), move |ctx: Ctx<'js>, src: String, dest: String| -> JsResult<()> {
+        gate(&ctx, &state)?;
+        let done = if is_move { op_move(&state, &src, &dest) } else { op_copy(&state, &src, &dest) };
+        done.or_else(|fault| fault.throw(&ctx))
+      })?,
+    )?;
   }
 
   {
     let state = state.clone();
-    let f = Function::new(ctx.clone(), move |ctx: Ctx<'js>| -> JsResult<f64> {
-      gate(&ctx, &state)?;
-      if state.root.as_os_str().is_empty() {
-        return Fault::Io("fs: this plugin has no storage directory".to_string()).throw(&ctx);
-      }
-      Ok(usage_of(&state) as f64)
-    })?;
-    fs_obj.set("usage", f)?;
+    fs_obj.set(
+      "usage",
+      Function::new(ctx.clone(), move |ctx: Ctx<'js>| -> JsResult<f64> {
+        gate(&ctx, &state)?;
+        if state.root.as_os_str().is_empty() {
+          return Fault::Io("fs: this plugin has no storage directory".to_string()).throw(&ctx);
+        }
+        Ok(usage_of(&state) as f64)
+      })?,
+    )?;
   }
 
   {
     let state = state.clone();
-    let f = Function::new(ctx.clone(), move |ctx: Ctx<'js>| -> JsResult<f64> {
-      gate(&ctx, &state)?;
-      Ok(if state.quota == UNCAPPED { f64::INFINITY } else { state.quota as f64 })
-    })?;
-    fs_obj.set("quota", f)?;
+    fs_obj.set(
+      "quota",
+      Function::new(ctx.clone(), move |ctx: Ctx<'js>| -> JsResult<f64> {
+        gate(&ctx, &state)?;
+        Ok(if state.quota == UNCAPPED { f64::INFINITY } else { state.quota as f64 })
+      })?,
+    )?;
   }
 
   inu.set("fs", fs_obj)?;
@@ -588,14 +608,16 @@ fn install_android_dirs<'js>(ctx: &Ctx<'js>, state: &Rc<FsState>, inu: &Object<'
   }
   {
     let state = state.clone();
-    let f = Function::new(ctx.clone(), move |ctx: Ctx<'js>, kind: String| -> JsResult<String> {
-      let Some(index) = ANDROID_DIR_NAMES.iter().position(|k| *k == kind) else {
-        return PluginErrorCode::InvalidArgument
-          .throw(&ctx, &format!("getMediaDir: '{kind}' is not one of {}", ANDROID_DIR_NAMES.join(", ")));
-      };
-      android_dir(&ctx, &state, 2 + index, "getMediaDir")
-    })?;
-    android.set("getMediaDir", f)?;
+    android.set(
+      "getMediaDir",
+      Function::new(ctx.clone(), move |ctx: Ctx<'js>, kind: String| -> JsResult<String> {
+        let Some(index) = ANDROID_DIR_NAMES.iter().position(|k| *k == kind) else {
+          return PluginErrorCode::InvalidArgument
+            .throw(&ctx, &format!("getMediaDir: '{kind}' is not one of {}", ANDROID_DIR_NAMES.join(", ")));
+        };
+        android_dir(&ctx, &state, 2 + index, "getMediaDir")
+      })?,
+    )?;
   }
   Ok(())
 }

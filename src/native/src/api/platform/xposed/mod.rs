@@ -279,80 +279,92 @@ pub fn install_xposed<'js>(
   let xposed = Object::new(ctx.clone())?;
   {
     let state = state.clone();
-    let f = Function::new(ctx.clone(), move |ctx: Ctx<'js>, method: Opt<Value<'js>>, hook: Opt<Value<'js>>| {
-      js_hook(
-        &ctx,
-        &state,
-        OP_HOOK,
-        method.0.unwrap_or_else(|| Value::new_undefined(ctx.clone())),
-        "",
-        hook.0.unwrap_or_else(|| Value::new_undefined(ctx.clone())),
-        "hookMethod",
-      )
-    })?;
-    xposed.set("hookMethod", f)?;
+    xposed.set(
+      "hookMethod",
+      Function::new(ctx.clone(), move |ctx: Ctx<'js>, method: Opt<Value<'js>>, hook: Opt<Value<'js>>| {
+        js_hook(
+          &ctx,
+          &state,
+          OP_HOOK,
+          method.0.unwrap_or_else(|| Value::new_undefined(ctx.clone())),
+          "",
+          hook.0.unwrap_or_else(|| Value::new_undefined(ctx.clone())),
+          "hookMethod",
+        )
+      })?,
+    )?;
   }
   {
     let state = state.clone();
-    let f = Function::new(
-      ctx.clone(),
-      move |ctx: Ctx<'js>, class: Opt<Value<'js>>, name: Opt<Value<'js>>, hook: Opt<Value<'js>>| {
-        let Some(name) = name
-          .0
-          .and_then(|name| name.as_string().and_then(|name| name.to_string().ok()))
-          .filter(|name| !name.is_empty())
-        else {
-          return PluginErrorCode::InvalidArgument.throw(&ctx, "hookAllOverloads: expected a method name");
-        };
+    xposed.set(
+      "hookAllOverloads",
+      Function::new(
+        ctx.clone(),
+        move |ctx: Ctx<'js>, class: Opt<Value<'js>>, name: Opt<Value<'js>>, hook: Opt<Value<'js>>| {
+          let Some(name) = name
+            .0
+            .and_then(|name| name.as_string().and_then(|name| name.to_string().ok()))
+            .filter(|name| !name.is_empty())
+          else {
+            return PluginErrorCode::InvalidArgument.throw(&ctx, "hookAllOverloads: expected a method name");
+          };
+          js_hook(
+            &ctx,
+            &state,
+            OP_HOOK_ALL,
+            class.0.unwrap_or_else(|| Value::new_undefined(ctx.clone())),
+            &name,
+            hook.0.unwrap_or_else(|| Value::new_undefined(ctx.clone())),
+            "hookAllOverloads",
+          )
+        },
+      )?,
+    )?;
+  }
+  {
+    let state = state.clone();
+    xposed.set(
+      "hookAllConstructors",
+      Function::new(ctx.clone(), move |ctx: Ctx<'js>, class: Opt<Value<'js>>, hook: Opt<Value<'js>>| {
         js_hook(
           &ctx,
           &state,
           OP_HOOK_ALL,
           class.0.unwrap_or_else(|| Value::new_undefined(ctx.clone())),
-          &name,
+          "",
           hook.0.unwrap_or_else(|| Value::new_undefined(ctx.clone())),
-          "hookAllOverloads",
+          "hookAllConstructors",
         )
-      },
+      })?,
     )?;
-    xposed.set("hookAllOverloads", f)?;
   }
   {
     let state = state.clone();
-    let f = Function::new(ctx.clone(), move |ctx: Ctx<'js>, class: Opt<Value<'js>>, hook: Opt<Value<'js>>| {
-      js_hook(
-        &ctx,
-        &state,
-        OP_HOOK_ALL,
-        class.0.unwrap_or_else(|| Value::new_undefined(ctx.clone())),
-        "",
-        hook.0.unwrap_or_else(|| Value::new_undefined(ctx.clone())),
-        "hookAllConstructors",
-      )
-    })?;
-    xposed.set("hookAllConstructors", f)?;
-  }
-  {
-    let state = state.clone();
-    let f = Function::new(
-      ctx.clone(),
-      move |ctx: Ctx<'js>, method: Opt<Value<'js>>, this: Opt<Value<'js>>, args: Opt<Value<'js>>| {
-        js_call_original(&ctx, &state, method.0.unwrap_or_else(|| Value::new_undefined(ctx.clone())), this, args)
-      },
+    xposed.set(
+      "callOriginalMethod",
+      Function::new(
+        ctx.clone(),
+        move |ctx: Ctx<'js>, method: Opt<Value<'js>>, this: Opt<Value<'js>>, args: Opt<Value<'js>>| {
+          js_call_original(&ctx, &state, method.0.unwrap_or_else(|| Value::new_undefined(ctx.clone())), this, args)
+        },
+      )?,
     )?;
-    xposed.set("callOriginalMethod", f)?;
   }
   {
     let state = state.clone();
-    let f = Function::new(ctx.clone(), move |ctx: Ctx<'js>, class: Opt<Value<'js>>| {
-      js_allocate(&ctx, &state, class.0.unwrap_or_else(|| Value::new_undefined(ctx.clone())))
-    })?;
-    xposed.set("allocateInstance", f)?;
+    xposed.set(
+      "allocateInstance",
+      Function::new(ctx.clone(), move |ctx: Ctx<'js>, class: Opt<Value<'js>>| {
+        js_allocate(&ctx, &state, class.0.unwrap_or_else(|| Value::new_undefined(ctx.clone())))
+      })?,
+    )?;
   }
   {
     let state = state.clone();
-    let f = Function::new(ctx.clone(), move |ctx: Ctx<'js>| js_disable_profile_saver(&ctx, &state))?;
-    xposed.set("disableProfileSaver", f)?;
+    xposed.set(
+      "disableProfileSaver",
+      Function::new(ctx.clone(), move |ctx: Ctx<'js>| js_disable_profile_saver(&ctx, &state))?,
+    )?;
   }
   inu.set("xposed", xposed)?;
 
@@ -449,22 +461,26 @@ fn build_context<'js>(
   object.set("__throwable", Value::new_null(ctx.clone()))?;
 
   {
-    let f = Function::new(ctx.clone(), |this: This<Object<'js>>, value: Value<'js>| -> JsResult<()> {
-      let null = Value::new_null(this.0.ctx().clone());
-      this.0.set("returnValue", value)?;
-      this.0.set("__throwable", null)?;
-      this.0.set("__answered", true)
-    })?;
-    object.set("setReturnValue", f)?;
+    object.set(
+      "setReturnValue",
+      Function::new(ctx.clone(), |this: This<Object<'js>>, value: Value<'js>| -> JsResult<()> {
+        let null = Value::new_null(this.0.ctx().clone());
+        this.0.set("returnValue", value)?;
+        this.0.set("__throwable", null)?;
+        this.0.set("__answered", true)
+      })?,
+    )?;
   }
   {
-    let f = Function::new(ctx.clone(), |this: This<Object<'js>>, value: Value<'js>| -> JsResult<()> {
-      let null = Value::new_null(this.0.ctx().clone());
-      this.0.set("returnValue", null)?;
-      this.0.set("__throwable", value)?;
-      this.0.set("__answered", true)
-    })?;
-    object.set("setThrowable", f)?;
+    object.set(
+      "setThrowable",
+      Function::new(ctx.clone(), |this: This<Object<'js>>, value: Value<'js>| -> JsResult<()> {
+        let null = Value::new_null(this.0.ctx().clone());
+        this.0.set("returnValue", null)?;
+        this.0.set("__throwable", value)?;
+        this.0.set("__answered", true)
+      })?,
+    )?;
   }
   Ok(object)
 }

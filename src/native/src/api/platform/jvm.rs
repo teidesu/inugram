@@ -10,6 +10,7 @@ use crate::api::error::{wire_error_to_js, PluginErrorCode};
 use crate::api::telegram::rpc::{format_exception, pump_jobs};
 use crate::sandbox::grants::{check_grant, GrantHost, MATCH_NAMESPACE};
 use crate::sandbox::registry::{CallbackRegistry, Lifecycle};
+use crate::utils::prelude;
 
 const PRELUDE: &[u8] = include_bytes!(concat!(env!("OUT_DIR"), "/jvm.qbc"));
 
@@ -260,38 +261,44 @@ pub fn install_jvm<'js>(
   }
   {
     let state = state.clone();
-    let f = Function::new(ctx.clone(), move |ctx: Ctx<'js>, op: i32, target: i64, name: String, args: Array<'js>| {
-      js_op(&ctx, &state, op, target, name, args)
-    })?;
-    natives.set("op", f)?;
+    natives.set(
+      "op",
+      Function::new(ctx.clone(), move |ctx: Ctx<'js>, op: i32, target: i64, name: String, args: Array<'js>| {
+        js_op(&ctx, &state, op, target, name, args)
+      })?,
+    )?;
   }
   {
     let state = state.clone();
-    let f = Function::new(ctx.clone(), move |ctx: Ctx<'js>, name: String| js_cls(&ctx, &state, name))?;
-    natives.set("cls", f)?;
+    natives.set("cls", Function::new(ctx.clone(), move |ctx: Ctx<'js>, name: String| js_cls(&ctx, &state, name))?)?;
   }
   {
     let state = state.clone();
-    let f =
-      Function::new(ctx.clone(), move |ctx: Ctx<'js>, callback: Function<'js>| js_runnable(&ctx, &state, callback))?;
-    natives.set("runnable", f)?;
+    natives.set(
+      "runnable",
+      Function::new(ctx.clone(), move |ctx: Ctx<'js>, callback: Function<'js>| js_runnable(&ctx, &state, callback))?,
+    )?;
   }
   {
     let state = state.clone();
-    let f = Function::new(ctx.clone(), move |ctx: Ctx<'js>, source: Value<'js>| js_load_dex(&ctx, &state, source))?;
-    natives.set("loadDex", f)?;
+    natives.set(
+      "loadDex",
+      Function::new(ctx.clone(), move |ctx: Ctx<'js>, source: Value<'js>| js_load_dex(&ctx, &state, source))?,
+    )?;
   }
   {
     let state = state.clone();
-    let f = Function::new(ctx.clone(), move |target: i64| {
-      state.host.jvm(OP_RELEASE, target, "", &[]);
-    })?;
-    natives.set("release", f)?;
+    natives.set(
+      "release",
+      Function::new(ctx.clone(), move |target: i64| {
+        state.host.jvm(OP_RELEASE, target, "", &[]);
+      })?,
+    )?;
   }
 
   let plugin_error: Value = inu.get("PluginError")?;
 
-  let factory = crate::utils::prelude::load(ctx, PRELUDE)?;
+  let factory = prelude::load(ctx, PRELUDE)?;
   let built: Object = factory.call((natives, plugin_error, ops))?;
   let jvm: Object = built.get("jvm")?;
   let mint: Function = built.get("mint")?;
@@ -317,11 +324,13 @@ fn install_android_screen<'js>(ctx: &Ctx<'js>, state: &Rc<JvmState>, inu: &Objec
   };
   for (name, op) in [("getCurrentFragment", OP_CURRENT_FRAGMENT), ("getCurrentActivity", OP_CURRENT_ACTIVITY)] {
     let state = state.clone();
-    let f = Function::new(ctx.clone(), move |ctx: Ctx<'js>| -> JsResult<Value<'js>> {
-      check_grant(&ctx, &state.grants, GRANT, None, MATCH_NAMESPACE)?;
-      ask(&ctx, &state, op, 0, "", &[])
-    })?;
-    android.set(name, f)?;
+    android.set(
+      name,
+      Function::new(ctx.clone(), move |ctx: Ctx<'js>| -> JsResult<Value<'js>> {
+        check_grant(&ctx, &state.grants, GRANT, None, MATCH_NAMESPACE)?;
+        ask(&ctx, &state, op, 0, "", &[])
+      })?,
+    )?;
   }
   Ok(())
 }

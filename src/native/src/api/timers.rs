@@ -90,17 +90,21 @@ pub fn install_timers<'js>(
   let globals = ctx.globals();
   for (name, repeats) in [("setTimeout", false), ("setInterval", true)] {
     let state2 = state.clone();
-    let f = Function::new(ctx.clone(), move |ctx: Ctx<'js>, callback: Value<'js>, delay: Opt<Coerced<f64>>| {
-      arm_timer(&ctx, &state2, name, callback, delay.0.map(|d| d.0), repeats)
-    })?;
-    globals.set(name, f)?;
+    globals.set(
+      name,
+      Function::new(ctx.clone(), move |ctx: Ctx<'js>, callback: Value<'js>, delay: Opt<Coerced<f64>>| {
+        arm_timer(&ctx, &state2, name, callback, delay.0.map(|d| d.0), repeats)
+      })?,
+    )?;
   }
   for name in ["clearTimeout", "clearInterval"] {
     let state2 = state.clone();
-    let f = Function::new(ctx.clone(), move |ctx: Ctx<'js>, id: Opt<Coerced<f64>>| {
-      clear_timer(&ctx, &state2, id.0.map(|i| i.0));
-    })?;
-    globals.set(name, f)?;
+    globals.set(
+      name,
+      Function::new(ctx.clone(), move |ctx: Ctx<'js>, id: Opt<Coerced<f64>>| {
+        clear_timer(&ctx, &state2, id.0.map(|i| i.0));
+      })?,
+    )?;
   }
 
   Ok(state)

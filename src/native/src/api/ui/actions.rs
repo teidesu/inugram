@@ -3,6 +3,7 @@ use std::rc::Rc;
 use rquickjs::object::Accessor;
 use rquickjs::{Array, Ctx, Exception, Function, Object, Persistent, Result as JsResult, Runtime, Value};
 
+use crate::api::error::PluginErrorCode;
 use crate::api::telegram::account::AccountState;
 use crate::api::telegram::rpc::{format_exception, pump_jobs};
 use crate::sandbox::grants::{check_grant, GrantHost, MATCH_EXACT};
@@ -106,8 +107,10 @@ pub fn install_actions<'js>(
     ("registerMessageEditorAction", KIND_EDITOR),
   ] {
     let state = state.clone();
-    let f = Function::new(ctx.clone(), move |ctx: Ctx<'js>, opts: Object<'js>| js_register(&ctx, &state, kind, opts))?;
-    inu.set(name, f)?;
+    inu.set(
+      name,
+      Function::new(ctx.clone(), move |ctx: Ctx<'js>, opts: Object<'js>| js_register(&ctx, &state, kind, opts))?,
+    )?;
   }
   Ok(state)
 }
@@ -130,8 +133,7 @@ fn js_register<'js>(ctx: &Ctx<'js>, state: &Rc<ActionState>, kind: i32, opts: Ob
     if let Label::Dynamic(p) = label {
       let _ = p.restore(ctx);
     }
-    return crate::api::error::PluginErrorCode::Unsupported
-      .throw(ctx, &format!("{what}: an action row does not carry an icon yet"));
+    return PluginErrorCode::Unsupported.throw(ctx, &format!("{what}: an action row does not carry an icon yet"));
   }
   let visible = opt_fn(ctx, &opts, what, "visible")?;
   let callback = req_fn(ctx, &opts, what, "callback")?;
@@ -219,10 +221,12 @@ fn build_context<'js>(ctx: &Ctx<'js>, state: &Rc<ActionState>, kind: i32, surfac
     let surface: i64 = parsed.get::<_, Option<f64>>("surface")?.unwrap_or(0.0) as i64;
     for (name, op) in [("replace", EDITOR_REPLACE), ("send", EDITOR_SEND)] {
       let state = state.clone();
-      let f = Function::new(ctx.clone(), move |ctx: Ctx<'js>, value: Value<'js>| {
-        editor_op(&ctx, &state, op, surface, value)
-      })?;
-      out.set(name, f)?;
+      out.set(
+        name,
+        Function::new(ctx.clone(), move |ctx: Ctx<'js>, value: Value<'js>| {
+          editor_op(&ctx, &state, op, surface, value)
+        })?,
+      )?;
     }
   }
   Ok(out)
@@ -236,21 +240,19 @@ fn editor_op<'js>(ctx: &Ctx<'js>, state: &Rc<ActionState>, op: i32, surface: i64
   } else if let Some(obj) = value.as_object() {
     let text: Value = obj.get("text")?;
     let Some(text) = text.as_string() else {
-      return crate::api::error::PluginErrorCode::InvalidArgument
+      return PluginErrorCode::InvalidArgument
         .throw(ctx, &format!("{what}: expected a string or {{ text, entities }}"));
     };
     payload.set("text", text.to_string()?)?;
     let entities: Value = obj.get("entities")?;
     if !entities.is_undefined() && !entities.is_null() {
       if entities.as_array().is_none() {
-        return crate::api::error::PluginErrorCode::InvalidArgument
-          .throw(ctx, &format!("{what}: entities must be an array"));
+        return PluginErrorCode::InvalidArgument.throw(ctx, &format!("{what}: entities must be an array"));
       }
       payload.set("entities", entities)?;
     }
   } else {
-    return crate::api::error::PluginErrorCode::InvalidArgument
-      .throw(ctx, &format!("{what}: expected a string or {{ text, entities }}"));
+    return PluginErrorCode::InvalidArgument.throw(ctx, &format!("{what}: expected a string or {{ text, entities }}"));
   }
   let json = ctx
     .json_stringify(payload.into_value())?

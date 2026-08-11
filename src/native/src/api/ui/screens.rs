@@ -95,30 +95,34 @@ pub fn install_screens<'js>(
 
   {
     let state2 = state.clone();
-    let f = Function::new(ctx.clone(), move |ctx: Ctx<'js>| -> JsResult<Value<'js>> {
-      let wire = state2.host.current_screen();
-      let Some(json) = wire.strip_prefix('J') else {
-        return Ok(Value::new_null(ctx.clone()));
-      };
-      let raw = ctx.json_parse(json)?;
-      build_screen(&ctx, &state2, &raw)
-    })?;
-    ui.set("getCurrentScreen", f)?;
+    ui.set(
+      "getCurrentScreen",
+      Function::new(ctx.clone(), move |ctx: Ctx<'js>| -> JsResult<Value<'js>> {
+        let wire = state2.host.current_screen();
+        let Some(json) = wire.strip_prefix('J') else {
+          return Ok(Value::new_null(ctx.clone()));
+        };
+        let raw = ctx.json_parse(json)?;
+        build_screen(&ctx, &state2, &raw)
+      })?,
+    )?;
   }
   {
     let state2 = state.clone();
-    let f = Function::new(ctx.clone(), move |ctx: Ctx<'js>, cb: Function<'js>| -> JsResult<Function<'js>> {
-      if state2.lifecycle.is_unloading() {
-        return noop_disposer(&ctx);
-      }
-      let token = state2.changed_fns.alloc();
-      state2.changed_fns.register(&ctx, token, None, cb);
-      let state = state2.clone();
-      make_disposer(&ctx, move |ctx| {
-        state.changed_fns.dispose(ctx, token);
-      })
-    })?;
-    ui.set("onScreenChanged", f)?;
+    ui.set(
+      "onScreenChanged",
+      Function::new(ctx.clone(), move |ctx: Ctx<'js>, cb: Function<'js>| -> JsResult<Function<'js>> {
+        if state2.lifecycle.is_unloading() {
+          return noop_disposer(&ctx);
+        }
+        let token = state2.changed_fns.alloc();
+        state2.changed_fns.register(&ctx, token, None, cb);
+        let state = state2.clone();
+        make_disposer(&ctx, move |ctx| {
+          state.changed_fns.dispose(ctx, token);
+        })
+      })?,
+    )?;
   }
 
   let factory: Function = ctx.eval::<Function, _>(EVENT_FACTORY_SRC)?;

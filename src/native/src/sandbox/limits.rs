@@ -4,6 +4,8 @@ use std::time::{Duration, Instant};
 
 use rquickjs::{Ctx, Result as JsResult, Runtime, Value};
 
+use crate::api::error::PluginErrorCode;
+
 pub const ENTRY_DEADLINE_MS: u64 = 2_000;
 
 pub const EVAL_DEADLINE_MS: u64 = 10_000;
@@ -150,11 +152,7 @@ impl ExternalMemory {
     if let Some(charge) = self.try_charge(ctx, bytes) {
       return Ok(charge);
     }
-    crate::api::error::PluginErrorCode::QuotaExceeded(
-      self.charged.get().saturating_add(bytes) as i64,
-      EXTERNAL_LIMIT_BYTES as i64,
-    )
-    .throw(
+    PluginErrorCode::QuotaExceeded(self.charged.get().saturating_add(bytes) as i64, EXTERNAL_LIMIT_BYTES as i64).throw(
       ctx,
       &format!(
         "this plugin holds {:.1} MB of native memory and asked for {:.1} MB more, past its ceiling of {} MB",
