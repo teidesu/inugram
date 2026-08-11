@@ -41,14 +41,20 @@ pub fn install_globals<'js>(
   let natives = Object::new(ctx.clone())?;
   natives.set("cloneBlob", blob::make_clone_fn(ctx)?)?;
 
-  let f = Function::new(ctx.clone(), |ctx: Ctx<'js>, input: String| TypedArray::<u8>::new(ctx, input.into_bytes()))?;
-  natives.set("encodeUtf8", f)?;
+  natives.set(
+    "encodeUtf8",
+    Function::new(ctx.clone(), |ctx: Ctx<'js>, input: String| TypedArray::<u8>::new(ctx, input.into_bytes()))?,
+  )?;
 
-  let f = Function::new(ctx.clone(), |ctx: Ctx<'js>, input: Value<'js>| decode_utf8(&ctx, input))?;
-  natives.set("decodeUtf8", f)?;
+  natives.set(
+    "decodeUtf8",
+    Function::new(ctx.clone(), |ctx: Ctx<'js>, input: Value<'js>| decode_utf8(&ctx, input))?,
+  )?;
 
-  let f = Function::new(ctx.clone(), move |ctx: Ctx<'js>, array: Value<'js>| random_fill(&ctx, host.as_ref(), array))?;
-  natives.set("randomFill", f)?;
+  natives.set(
+    "randomFill",
+    Function::new(ctx.clone(), move |ctx: Ctx<'js>, array: Value<'js>| random_fill(&ctx, host.as_ref(), array))?,
+  )?;
 
   let factory = crate::utils::prelude::load(ctx, PRELUDE)?;
   factory.call::<_, ()>((natives,))?;

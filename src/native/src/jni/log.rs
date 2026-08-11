@@ -44,11 +44,13 @@ pub(crate) fn install_console(ctx: &Ctx, bridge: Rc<JniBridge>) -> rquickjs::Res
   let console = Object::new(ctx.clone())?;
   for (name, level) in [("log", 0), ("info", 1), ("warn", 2), ("error", 3), ("debug", 4)] {
     let bridge = bridge.clone();
-    let f = Function::new(ctx.clone(), move |args: Rest<Coerced<String>>| {
-      let joined = args.0.iter().map(|c| c.0.as_str()).collect::<Vec<_>>().join(" ");
-      bridge.emit_console(level, &joined);
-    })?;
-    console.set(name, f)?;
+    console.set(
+      name,
+      Function::new(ctx.clone(), move |args: Rest<Coerced<String>>| {
+        let joined = args.0.iter().map(|c| c.0.as_str()).collect::<Vec<_>>().join(" ");
+        bridge.emit_console(level, &joined);
+      })?,
+    )?;
   }
   ctx.globals().set("console", console)?;
   Ok(())

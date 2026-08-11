@@ -390,23 +390,32 @@ pub(crate) fn install_writes_with_limit<'js>(
   let natives = Object::new(ctx.clone())?;
   {
     let state = state.clone();
-    let f = Function::new(
-      ctx.clone(),
-      move |ctx: Ctx<'js>, slot: i32, op: i32, arg: String, values: Array<'js>, on_progress: Option<Function<'js>>| {
-        js_write(&ctx, &state, slot, op, &arg, values, on_progress)
-      },
+    natives.set(
+      "write",
+      Function::new(
+        ctx.clone(),
+        move |ctx: Ctx<'js>,
+              slot: i32,
+              op: i32,
+              arg: String,
+              values: Array<'js>,
+              on_progress: Option<Function<'js>>| {
+          js_write(&ctx, &state, slot, op, &arg, values, on_progress)
+        },
+      )?,
     )?;
-    natives.set("write", f)?;
   }
   {
     let state = state.clone();
-    let f = Function::new(ctx.clone(), move |ctx: Ctx<'js>, slot: i32, message: Value<'js>| {
-      check_grant(&ctx, &state.grants, "account.read", Some("messages"), MATCH_EXACT)?;
-      let wire = js_value_to_wire(&ctx, message)?;
-      let answer = state.host.message_file(slot, &wire);
-      wire_to_js_value(&ctx, &state.views, &answer, ViewLife::Plugin)
-    })?;
-    natives.set("messageFile", f)?;
+    natives.set(
+      "messageFile",
+      Function::new(ctx.clone(), move |ctx: Ctx<'js>, slot: i32, message: Value<'js>| {
+        check_grant(&ctx, &state.grants, "account.read", Some("messages"), MATCH_EXACT)?;
+        let wire = js_value_to_wire(&ctx, message)?;
+        let answer = state.host.message_file(slot, &wire);
+        wire_to_js_value(&ctx, &state.views, &answer, ViewLife::Plugin)
+      })?,
+    )?;
   }
 
   let message: Value = inu.get("Message")?;

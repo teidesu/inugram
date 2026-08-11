@@ -110,23 +110,29 @@ pub fn install_url<'js>(ctx: &Ctx<'js>) -> JsResult<()> {
     },
   )?;
 
-  let f = Function::new(ctx.clone(), |input: Coerced<String>, base: Opt<Value<'js>>| {
-    let (input, base) = read_args(input, base);
-    parse(&input, base.as_deref()).is_ok()
-  })?;
-  define_method(&ctor, "canParse", f)?;
-
-  let f = Function::new(
-    ctx.clone(),
-    |ctx: Ctx<'js>, input: Coerced<String>, base: Opt<Value<'js>>| -> JsResult<Value<'js>> {
+  define_method(
+    &ctor,
+    "canParse",
+    Function::new(ctx.clone(), |input: Coerced<String>, base: Opt<Value<'js>>| {
       let (input, base) = read_args(input, base);
-      match parse(&input, base.as_deref()) {
-        Ok(url) => Ok(mint(&ctx, url)?.into_value()),
-        Err(_) => Ok(Value::new_null(ctx.clone())),
-      }
-    },
+      parse(&input, base.as_deref()).is_ok()
+    })?,
   )?;
-  define_method(&ctor, "parse", f)?;
+
+  define_method(
+    &ctor,
+    "parse",
+    Function::new(
+      ctx.clone(),
+      |ctx: Ctx<'js>, input: Coerced<String>, base: Opt<Value<'js>>| -> JsResult<Value<'js>> {
+        let (input, base) = read_args(input, base);
+        match parse(&input, base.as_deref()) {
+          Ok(url) => Ok(mint(&ctx, url)?.into_value()),
+          Err(_) => Ok(Value::new_null(ctx.clone())),
+        }
+      },
+    )?,
+  )?;
 
   ctx.globals().set("URL", ctor)?;
 

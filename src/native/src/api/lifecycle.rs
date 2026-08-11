@@ -34,35 +34,39 @@ pub fn install_lifecycle<'js>(
 
   {
     let state2 = state.clone();
-    let f = Function::new(ctx.clone(), move |ctx: Ctx<'js>, cb: Function<'js>| -> JsResult<Function<'js>> {
-      if state2.lifecycle.is_unloading() {
-        return noop_disposer(&ctx);
-      }
-      let token = state2.unload_fns.alloc();
-      state2.unload_fns.register(&ctx, token, None, cb);
-      let state = state2.clone();
-      make_disposer(&ctx, move |ctx| {
-        state.unload_fns.dispose(ctx, token);
-      })
-    })?;
-    inu.set("onUnload", f)?;
+    inu.set(
+      "onUnload",
+      Function::new(ctx.clone(), move |ctx: Ctx<'js>, cb: Function<'js>| -> JsResult<Function<'js>> {
+        if state2.lifecycle.is_unloading() {
+          return noop_disposer(&ctx);
+        }
+        let token = state2.unload_fns.alloc();
+        state2.unload_fns.register(&ctx, token, None, cb);
+        let state = state2.clone();
+        make_disposer(&ctx, move |ctx| {
+          state.unload_fns.dispose(ctx, token);
+        })
+      })?,
+    )?;
   }
 
   {
     let state2 = state.clone();
-    let f = Function::new(ctx.clone(), move |ctx: Ctx<'js>, cb: Function<'js>| -> JsResult<Function<'js>> {
-      if state2.lifecycle.is_unloading() {
-        return noop_disposer(&ctx);
-      }
-      check_grant(&ctx, &state2.grants, "onAppVisibilityChange", None, MATCH_EXACT)?;
-      let token = state2.visibility_fns.alloc();
-      state2.visibility_fns.register(&ctx, token, None, cb);
-      let state = state2.clone();
-      make_disposer(&ctx, move |ctx| {
-        state.visibility_fns.dispose(ctx, token);
-      })
-    })?;
-    inu.set("onAppVisibilityChange", f)?;
+    inu.set(
+      "onAppVisibilityChange",
+      Function::new(ctx.clone(), move |ctx: Ctx<'js>, cb: Function<'js>| -> JsResult<Function<'js>> {
+        if state2.lifecycle.is_unloading() {
+          return noop_disposer(&ctx);
+        }
+        check_grant(&ctx, &state2.grants, "onAppVisibilityChange", None, MATCH_EXACT)?;
+        let token = state2.visibility_fns.alloc();
+        state2.visibility_fns.register(&ctx, token, None, cb);
+        let state = state2.clone();
+        make_disposer(&ctx, move |ctx| {
+          state.visibility_fns.dispose(ctx, token);
+        })
+      })?,
+    )?;
   }
 
   Ok(state)

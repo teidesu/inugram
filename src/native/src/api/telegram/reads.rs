@@ -4,7 +4,7 @@ use std::rc::Rc;
 
 use rquickjs::{Array, Ctx, Function, IntoJs, Object, Result as JsResult, Runtime, Value};
 
-use crate::api::error::wire_error_to_js;
+use crate::api::error::{wire_error_to_js, PluginErrorCode};
 use crate::api::telegram::account::AccountState;
 use crate::api::telegram::rpc::{format_exception, pump_jobs, PendingSettle};
 use crate::api::tl::proxy::{wire_to_js_value, TlViews, ViewLife};
@@ -130,7 +130,7 @@ fn check_read_grant(ctx: &Ctx<'_>, state: &Rc<ReadsState>, op: i32, arg: &str) -
     return Ok(());
   }
   let Some(scope) = scope_of(op) else {
-    return crate::api::error::PluginErrorCode::InvalidArgument.throw(ctx, "unknown account read");
+    return PluginErrorCode::InvalidArgument.throw(ctx, "unknown account read");
   };
   check_grant(ctx, &state.grants, "account.read", Some(scope), MATCH_EXACT)?;
   check_self_grant(ctx, state, arg)
@@ -189,83 +189,103 @@ pub fn install_reads<'js>(
   let natives = Object::new(ctx.clone())?;
   {
     let state = state.clone();
-    let f = Function::new(ctx.clone(), move |ctx: Ctx<'js>, slot: i32| read_one(&ctx, &state, OP_ME, slot, ""))?;
-    natives.set("getMe", f)?;
+    natives.set(
+      "getMe",
+      Function::new(ctx.clone(), move |ctx: Ctx<'js>, slot: i32| read_one(&ctx, &state, OP_ME, slot, ""))?,
+    )?;
   }
   for (name, op) in [("getUser", OP_USER), ("getChat", OP_CHAT), ("getPeer", OP_PEER), ("getDialog", OP_DIALOG)] {
     let state = state.clone();
-    let f = Function::new(ctx.clone(), move |ctx: Ctx<'js>, slot: i32, spec: String| {
-      read_one(&ctx, &state, op, slot, &spec)
-    })?;
-    natives.set(name, f)?;
+    natives.set(
+      name,
+      Function::new(ctx.clone(), move |ctx: Ctx<'js>, slot: i32, spec: String| {
+        read_one(&ctx, &state, op, slot, &spec)
+      })?,
+    )?;
   }
   {
     let state = state.clone();
-    let f = Function::new(ctx.clone(), move |ctx: Ctx<'js>, slot: i32, spec: String, id: String| {
-      read_one(&ctx, &state, OP_MESSAGE, slot, &{
-        let parts: &[&str] = &[&spec, &id];
-        parts.join("\n")
-      })
-    })?;
-    natives.set("getMessage", f)?;
+    natives.set(
+      "getMessage",
+      Function::new(ctx.clone(), move |ctx: Ctx<'js>, slot: i32, spec: String, id: String| {
+        read_one(&ctx, &state, OP_MESSAGE, slot, &{
+          let parts: &[&str] = &[&spec, &id];
+          parts.join("\n")
+        })
+      })?,
+    )?;
   }
   for (name, op) in [("getUsers", OP_USERS), ("getChats", OP_CHATS)] {
     let state = state.clone();
-    let f = Function::new(ctx.clone(), move |ctx: Ctx<'js>, slot: i32, specs: String| {
-      read_many(&ctx, &state, op, slot, &specs)
-    })?;
-    natives.set(name, f)?;
+    natives.set(
+      name,
+      Function::new(ctx.clone(), move |ctx: Ctx<'js>, slot: i32, specs: String| {
+        read_many(&ctx, &state, op, slot, &specs)
+      })?,
+    )?;
   }
   {
     let state = state.clone();
-    let f = Function::new(ctx.clone(), move |ctx: Ctx<'js>, slot: i32, spec: String, ids: String| {
-      read_many(&ctx, &state, OP_MESSAGES, slot, &{
-        let parts: &[&str] = &[&spec, &ids];
-        parts.join("\n")
-      })
-    })?;
-    natives.set("getMessages", f)?;
+    natives.set(
+      "getMessages",
+      Function::new(ctx.clone(), move |ctx: Ctx<'js>, slot: i32, spec: String, ids: String| {
+        read_many(&ctx, &state, OP_MESSAGES, slot, &{
+          let parts: &[&str] = &[&spec, &ids];
+          parts.join("\n")
+        })
+      })?,
+    )?;
   }
   {
     let state = state.clone();
-    let f = Function::new(ctx.clone(), move |ctx: Ctx<'js>, slot: i32, spec: String, kind: i32| {
-      read_one(&ctx, &state, OP_INPUT_PEER, slot, &{
-        let parts: &[&str] = &[&spec, &kind.to_string()];
-        parts.join("\n")
-      })
-    })?;
-    natives.set("inputPeer", f)?;
+    natives.set(
+      "inputPeer",
+      Function::new(ctx.clone(), move |ctx: Ctx<'js>, slot: i32, spec: String, kind: i32| {
+        read_one(&ctx, &state, OP_INPUT_PEER, slot, &{
+          let parts: &[&str] = &[&spec, &kind.to_string()];
+          parts.join("\n")
+        })
+      })?,
+    )?;
   }
   {
     let state = state.clone();
-    let f = Function::new(ctx.clone(), move |ctx: Ctx<'js>, slot: i32, spec: String, kind: i32| {
-      js_resolve_peer(&ctx, &state, slot, &spec, kind)
-    })?;
-    natives.set("resolve", f)?;
+    natives.set(
+      "resolve",
+      Function::new(ctx.clone(), move |ctx: Ctx<'js>, slot: i32, spec: String, kind: i32| {
+        js_resolve_peer(&ctx, &state, slot, &spec, kind)
+      })?,
+    )?;
   }
   {
     let state = state.clone();
-    let f = Function::new(ctx.clone(), move |ctx: Ctx<'js>, _slot: i32| -> JsResult<()> {
-      check_grant(&ctx, &state.grants, "account.read", Some("peers"), MATCH_EXACT)
-    })?;
-    natives.set("checkPeers", f)?;
+    natives.set(
+      "checkPeers",
+      Function::new(ctx.clone(), move |ctx: Ctx<'js>, _slot: i32| -> JsResult<()> {
+        check_grant(&ctx, &state.grants, "account.read", Some("peers"), MATCH_EXACT)
+      })?,
+    )?;
   }
   {
     let state = state.clone();
-    let f = Function::new(ctx.clone(), move |ctx: Ctx<'js>, slot: i32, spec: String, topic: String| {
-      read_one(&ctx, &state, OP_DRAFT, slot, &{
-        let parts: &[&str] = &[&spec, &topic];
-        parts.join("\n")
-      })
-    })?;
-    natives.set("getDraft", f)?;
+    natives.set(
+      "getDraft",
+      Function::new(ctx.clone(), move |ctx: Ctx<'js>, slot: i32, spec: String, topic: String| {
+        read_one(&ctx, &state, OP_DRAFT, slot, &{
+          let parts: &[&str] = &[&spec, &topic];
+          parts.join("\n")
+        })
+      })?,
+    )?;
   }
   {
     let state = state.clone();
-    let f = Function::new(ctx.clone(), move |ctx: Ctx<'js>, slot: i32, op: i32, arg: String, cursor: String| {
-      js_fetch(&ctx, &state, slot, op, &arg, &cursor)
-    })?;
-    natives.set("fetch", f)?;
+    natives.set(
+      "fetch",
+      Function::new(ctx.clone(), move |ctx: Ctx<'js>, slot: i32, op: i32, arg: String, cursor: String| {
+        js_fetch(&ctx, &state, slot, op, &arg, &cursor)
+      })?,
+    )?;
   }
 
   let message: Value = inu.get("Message")?;
@@ -337,7 +357,7 @@ fn js_fetch<'js>(
         match state.cursors.payload_of(list, cursor) {
           Some(payload) => payload,
           None => {
-            return crate::api::error::PluginErrorCode::InvalidArgument
+            return PluginErrorCode::InvalidArgument
               .throw(ctx, "this cursor did not come from this list, or is too old to page from")
           }
         }

@@ -296,10 +296,12 @@ pub fn install_deserialize<'js>(
   });
 
   let state2 = state.clone();
-  let f = Function::new(ctx.clone(), move |ctx: Ctx<'js>, rules: Value<'js>, middleware: Opt<Value<'js>>| {
-    js_intercept_deserialize(&ctx, &state2, rules, middleware.0)
-  })?;
-  inu.set("interceptDeserialize", f)?;
+  inu.set(
+    "interceptDeserialize",
+    Function::new(ctx.clone(), move |ctx: Ctx<'js>, rules: Value<'js>, middleware: Opt<Value<'js>>| {
+      js_intercept_deserialize(&ctx, &state2, rules, middleware.0)
+    })?,
+  )?;
   Ok(state)
 }
 

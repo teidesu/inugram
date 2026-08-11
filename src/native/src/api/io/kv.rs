@@ -57,35 +57,40 @@ pub fn install_kv<'js>(
   let kv = Object::new(ctx.clone())?;
   for (name, op) in [("get", KV_GET), ("del", KV_DEL), ("has", KV_HAS)] {
     let state2 = state.clone();
-    let f = Function::new(ctx.clone(), move |ctx: Ctx<'js>, key: String| kv_call(&ctx, &state2, op, &key, ""))?;
-    kv.set(name, f)?;
+    kv.set(
+      name,
+      Function::new(ctx.clone(), move |ctx: Ctx<'js>, key: String| kv_call(&ctx, &state2, op, &key, ""))?,
+    )?;
   }
   for (name, op) in [("keys", KV_KEYS), ("clear", KV_CLEAR), ("getAll", KV_GET_ALL), ("usage", KV_USAGE)] {
     let state2 = state.clone();
-    let f = Function::new(ctx.clone(), move |ctx: Ctx<'js>| kv_call(&ctx, &state2, op, "", ""))?;
-    kv.set(name, f)?;
+    kv.set(name, Function::new(ctx.clone(), move |ctx: Ctx<'js>| kv_call(&ctx, &state2, op, "", ""))?)?;
   }
   {
     let state2 = state.clone();
-    let f = Function::new(ctx.clone(), move |ctx: Ctx<'js>, key: String, value: String| {
-      kv_call(&ctx, &state2, KV_SET, &key, &value)
-    })?;
-    kv.set("set", f)?;
+    kv.set(
+      "set",
+      Function::new(ctx.clone(), move |ctx: Ctx<'js>, key: String, value: String| {
+        kv_call(&ctx, &state2, KV_SET, &key, &value)
+      })?,
+    )?;
   }
   {
     let state2 = state.clone();
-    let f = Function::new(ctx.clone(), move |ctx: Ctx<'js>, values: Value<'js>| -> JsResult<Value<'js>> {
-      if !values.is_object() {
-        return Err(Exception::throw_type(&ctx, "kv.insertAll: expected an object"));
-      }
-      let json = ctx
-        .json_stringify(values)?
-        .map(|s| s.to_string())
-        .transpose()?
-        .ok_or_else(|| Exception::throw_type(&ctx, "kv.insertAll: expected an object"))?;
-      kv_call(&ctx, &state2, KV_INSERT_ALL, "", &json)
-    })?;
-    kv.set("insertAll", f)?;
+    kv.set(
+      "insertAll",
+      Function::new(ctx.clone(), move |ctx: Ctx<'js>, values: Value<'js>| -> JsResult<Value<'js>> {
+        if !values.is_object() {
+          return Err(Exception::throw_type(&ctx, "kv.insertAll: expected an object"));
+        }
+        let json = ctx
+          .json_stringify(values)?
+          .map(|s| s.to_string())
+          .transpose()?
+          .ok_or_else(|| Exception::throw_type(&ctx, "kv.insertAll: expected an object"))?;
+        kv_call(&ctx, &state2, KV_INSERT_ALL, "", &json)
+      })?,
+    )?;
   }
   inu.set("kv", kv)?;
   Ok(())

@@ -5,35 +5,38 @@ use super::*;
 pub(super) fn install_gradient_members<'js>(ctx: &Ctx<'js>) -> JsResult<()> {
   let proto = Class::<GradientHandle>::prototype(ctx)?
     .ok_or_else(|| Exception::throw_message(ctx, "CanvasGradient: the class has no prototype"))?;
-  let f = Function::new(
-    ctx.clone(),
-    |ctx: Ctx<'js>,
-     this: This<Class<'js, GradientHandle>>,
-     offset: Opt<Coerced<f64>>,
-     color: Opt<Coerced<String>>|
-     -> JsResult<()> {
-      let offset = num(&offset);
-      if !offset.is_finite() || !(0.0..=1.0).contains(&offset) {
-        return invalid(&ctx, "a colour stop's offset must be between 0 and 1");
-      }
-      let Some(text) = color.0 else {
-        return invalid(&ctx, "a colour stop needs a colour");
-      };
-      let Some(color) = parse_color(&text.0) else {
-        return invalid(&ctx, &format!("'{}' is not a colour", text.0));
-      };
-      let data = this.0.borrow().0.clone();
-      let mut stops = data.stops.borrow_mut();
-      if stops.len() >= MAX_GRADIENT_STOPS {
-        return PluginErrorCode::QuotaExceeded(stops.len() as i64 + 1, MAX_GRADIENT_STOPS as i64)
-          .throw(&ctx, &format!("a gradient may have at most {MAX_GRADIENT_STOPS} colour stops"));
-      }
-      let at = stops.partition_point(|(existing, _)| *existing <= offset);
-      stops.insert(at, (offset, color));
-      Ok(())
-    },
+  define_method(
+    &proto,
+    "addColorStop",
+    Function::new(
+      ctx.clone(),
+      |ctx: Ctx<'js>,
+       this: This<Class<'js, GradientHandle>>,
+       offset: Opt<Coerced<f64>>,
+       color: Opt<Coerced<String>>|
+       -> JsResult<()> {
+        let offset = num(&offset);
+        if !offset.is_finite() || !(0.0..=1.0).contains(&offset) {
+          return invalid(&ctx, "a colour stop's offset must be between 0 and 1");
+        }
+        let Some(text) = color.0 else {
+          return invalid(&ctx, "a colour stop needs a colour");
+        };
+        let Some(color) = parse_color(&text.0) else {
+          return invalid(&ctx, &format!("'{}' is not a colour", text.0));
+        };
+        let data = this.0.borrow().0.clone();
+        let mut stops = data.stops.borrow_mut();
+        if stops.len() >= MAX_GRADIENT_STOPS {
+          return PluginErrorCode::QuotaExceeded(stops.len() as i64 + 1, MAX_GRADIENT_STOPS as i64)
+            .throw(&ctx, &format!("a gradient may have at most {MAX_GRADIENT_STOPS} colour stops"));
+        }
+        let at = stops.partition_point(|(existing, _)| *existing <= offset);
+        stops.insert(at, (offset, color));
+        Ok(())
+      },
+    )?,
   )?;
-  define_method(&proto, "addColorStop", f)?;
   Ok(())
 }
 
@@ -74,11 +77,14 @@ pub(super) fn install_image_members<'js>(ctx: &Ctx<'js>) -> JsResult<()> {
     .ok_or_else(|| Exception::throw_message(ctx, "ImageBitmap: the class has no prototype"))?;
   define_getter(&proto, "width", |this: This<Class<'js, ImageHandle>>| this.0.borrow().0.width)?;
   define_getter(&proto, "height", |this: This<Class<'js, ImageHandle>>| this.0.borrow().0.height)?;
-  let f = Function::new(ctx.clone(), |ctx: Ctx<'js>, this: This<Class<'js, ImageHandle>>| {
-    let image = this.0.borrow().0.clone();
-    image.release(&ctx)
-  })?;
-  define_method(&proto, "dispose", f)?;
+  define_method(
+    &proto,
+    "dispose",
+    Function::new(ctx.clone(), |ctx: Ctx<'js>, this: This<Class<'js, ImageHandle>>| {
+      let image = this.0.borrow().0.clone();
+      image.release(&ctx)
+    })?,
+  )?;
   Ok(())
 }
 
@@ -694,16 +700,19 @@ pub(super) fn install_path_members<'js>(ctx: &Ctx<'js>, proto: &Object<'js>) -> 
   )?;
 
   for (name, command, kind) in [("fill", CMD_FILL, Some(PaintKind::Fill)), ("clip", CMD_CLIP, None)] {
-    let f = Function::new(
-      ctx.clone(),
-      move |ctx: Ctx<'js>, this: This<Class<'js, Context2d>>, rule: Opt<Value<'js>>| -> JsResult<()> {
-        let rule = fill_rule_of(&ctx, rule)?;
-        let this = this.0.borrow();
-        let path = this.path.borrow().clone();
-        draw_path(&ctx, &this, command, kind, rule, &path)
-      },
+    define_method(
+      proto,
+      name,
+      Function::new(
+        ctx.clone(),
+        move |ctx: Ctx<'js>, this: This<Class<'js, Context2d>>, rule: Opt<Value<'js>>| -> JsResult<()> {
+          let rule = fill_rule_of(&ctx, rule)?;
+          let this = this.0.borrow();
+          let path = this.path.borrow().clone();
+          draw_path(&ctx, &this, command, kind, rule, &path)
+        },
+      )?,
     )?;
-    define_method(proto, name, f)?;
   }
   define_method(
     proto,
@@ -766,26 +775,29 @@ pub(super) fn install_rect_members<'js>(ctx: &Ctx<'js>, proto: &Object<'js>) -> 
     ("fillRect", CMD_FILL, Some(PaintKind::Fill)),
     ("strokeRect", CMD_STROKE, Some(PaintKind::Stroke)),
   ] {
-    let f = Function::new(
-      ctx.clone(),
-      move |ctx: Ctx<'js>,
-            this: This<Class<'js, Context2d>>,
-            x: Opt<Coerced<f64>>,
-            y: Opt<Coerced<f64>>,
-            w: Opt<Coerced<f64>>,
-            h: Opt<Coerced<f64>>|
-            -> JsResult<()> {
-        let (x, y, w, h) = (num(&x), num(&y), num(&w), num(&h));
-        if !finite(&[x, y, w, h]) || w == 0.0 || h == 0.0 {
-          return Ok(());
-        }
-        let this = this.0.borrow();
-        let m = this.state.borrow().matrix;
-        let path = rect_path(&m, x, y, w, h);
-        draw_path(&ctx, &this, command, kind, 0, &path)
-      },
+    define_method(
+      proto,
+      name,
+      Function::new(
+        ctx.clone(),
+        move |ctx: Ctx<'js>,
+              this: This<Class<'js, Context2d>>,
+              x: Opt<Coerced<f64>>,
+              y: Opt<Coerced<f64>>,
+              w: Opt<Coerced<f64>>,
+              h: Opt<Coerced<f64>>|
+              -> JsResult<()> {
+          let (x, y, w, h) = (num(&x), num(&y), num(&w), num(&h));
+          if !finite(&[x, y, w, h]) || w == 0.0 || h == 0.0 {
+            return Ok(());
+          }
+          let this = this.0.borrow();
+          let m = this.state.borrow().matrix;
+          let path = rect_path(&m, x, y, w, h);
+          draw_path(&ctx, &this, command, kind, 0, &path)
+        },
+      )?,
     )?;
-    define_method(proto, name, f)?;
   }
   Ok(())
 }
@@ -828,25 +840,28 @@ pub(super) fn install_text_members<'js>(ctx: &Ctx<'js>, proto: &Object<'js>) -> 
   )?;
 
   for (name, kind) in [("fillText", PaintKind::Fill), ("strokeText", PaintKind::Stroke)] {
-    let f = Function::new(
-      ctx.clone(),
-      move |ctx: Ctx<'js>,
-            this: This<Class<'js, Context2d>>,
-            text: Opt<Coerced<String>>,
-            x: Opt<Coerced<f64>>,
-            y: Opt<Coerced<f64>>,
-            max_width: Opt<Coerced<f64>>|
-            -> JsResult<()> {
-        let Some(text) = text.0 else { return Ok(()) };
-        let (x, y) = (num(&x), num(&y));
-        if !finite(&[x, y]) {
-          return Ok(());
-        }
-        let max_width = max_width.0.map(|v| v.0).filter(|v| v.is_finite() && *v > 0.0);
-        draw_text(&ctx, &this.0.borrow(), kind, &text.0, x, y, max_width)
-      },
+    define_method(
+      proto,
+      name,
+      Function::new(
+        ctx.clone(),
+        move |ctx: Ctx<'js>,
+              this: This<Class<'js, Context2d>>,
+              text: Opt<Coerced<String>>,
+              x: Opt<Coerced<f64>>,
+              y: Opt<Coerced<f64>>,
+              max_width: Opt<Coerced<f64>>|
+              -> JsResult<()> {
+          let Some(text) = text.0 else { return Ok(()) };
+          let (x, y) = (num(&x), num(&y));
+          if !finite(&[x, y]) {
+            return Ok(());
+          }
+          let max_width = max_width.0.map(|v| v.0).filter(|v| v.is_finite() && *v > 0.0);
+          draw_text(&ctx, &this.0.borrow(), kind, &text.0, x, y, max_width)
+        },
+      )?,
     )?;
-    define_method(proto, name, f)?;
   }
 
   define_method(

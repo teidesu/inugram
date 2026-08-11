@@ -222,11 +222,15 @@ pub(crate) fn install_capturing_console(ctx: &Context) -> Arc<Logs> {
     let console = Object::new(ctx.clone()).unwrap();
     for name in ["log", "error", "warn", "info", "debug"] {
       let lines = lines.clone();
-      let f = Function::new(ctx.clone(), move |args: Rest<Coerced<String>>| {
-        lines.borrow_mut().push(args.0.iter().map(|a| a.0.as_str()).collect::<Vec<_>>().join(" "));
-      })
-      .unwrap();
-      console.set(name, f).unwrap();
+      console
+        .set(
+          name,
+          Function::new(ctx.clone(), move |args: Rest<Coerced<String>>| {
+            lines.borrow_mut().push(args.0.iter().map(|a| a.0.as_str()).collect::<Vec<_>>().join(" "));
+          })
+          .unwrap(),
+        )
+        .unwrap();
     }
     ctx.globals().set("console", console).unwrap();
   });

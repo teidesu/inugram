@@ -1,6 +1,8 @@
 use rquickjs::function::Opt;
 use rquickjs::{Array, Ctx, Exception, Function, Object, Result as JsResult, Value};
 
+use crate::api::error::PluginErrorCode;
+
 pub const ARRAY_LIMIT: usize = 65536;
 
 pub fn opt<'js>(value: Opt<Value<'js>>) -> Option<Value<'js>> {
@@ -19,8 +21,7 @@ pub fn array_values<'js>(ctx: &Ctx<'js>, array: &Array<'js>, what: &str) -> JsRe
 pub fn array_len(ctx: &Ctx<'_>, array: &Array<'_>, what: &str) -> JsResult<usize> {
   let len: f64 = array.as_object().get("length")?;
   if !(0.0..=ARRAY_LIMIT as f64).contains(&len) {
-    crate::api::error::PluginErrorCode::InvalidArgument
-      .throw(ctx, &format!("{what}: at most {ARRAY_LIMIT} elements"))?;
+    PluginErrorCode::InvalidArgument.throw(ctx, &format!("{what}: at most {ARRAY_LIMIT} elements"))?;
   }
   Ok(len as usize)
 }
