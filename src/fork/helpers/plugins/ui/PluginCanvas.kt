@@ -18,6 +18,7 @@ import android.graphics.SweepGradient
 import android.graphics.Typeface
 import android.os.Build
 import desu.inugram.core.plugins.PluginWire
+import desu.inugram.helpers.font.FontLibrary
 import desu.inugram.helpers.plugins.CanvasListener
 import desu.inugram.helpers.plugins.EngineDispatch
 import desu.inugram.helpers.plugins.Plugin
@@ -475,15 +476,21 @@ object PluginCanvas {
         }
 
         private fun typefaceFor(families: List<String>, weight: Int, italic: Boolean): Typeface {
-            val base = families.firstNotNullOfOrNull { fonts[it] }
-                ?: families.firstNotNullOfOrNull { family ->
-                    // `Typeface.create` never fails, so a family the device does not have comes back
-                    // as the default and there is nothing to tell it from a real match; taking the
-                    // first name that is not the default is the only way to honour the list
-                    val candidate = Typeface.create(family, Typeface.NORMAL)
-                    candidate.takeIf { it != Typeface.DEFAULT }
+            for (family in families) {
+                fonts.entries.firstOrNull { it.key.equals(family, ignoreCase = true) }?.value?.let {
+                    return createStyledTypeface(it, weight, italic)
                 }
-                ?: Typeface.DEFAULT
+                FontLibrary.getTypefaceByName(family, weight, italic)?.let { return it }
+                // `Typeface.create` never fails, so a family the device does not have comes back
+                // as the default and there is nothing to tell it from a real match.
+                Typeface.create(family, Typeface.NORMAL).takeIf { it != Typeface.DEFAULT }?.let {
+                    return createStyledTypeface(it, weight, italic)
+                }
+            }
+            return createStyledTypeface(Typeface.DEFAULT, weight, italic)
+        }
+
+        private fun createStyledTypeface(base: Typeface, weight: Int, italic: Boolean): Typeface {
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
                 return Typeface.create(base, weight.coerceIn(1, 1000), italic)
             }

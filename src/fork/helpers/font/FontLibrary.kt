@@ -685,6 +685,16 @@ object FontLibrary {
         is FontId.Builtin -> getBuiltinName(fontId.key) ?: fontId.key
     }
 
+    /** Resolves a canvas-style family name against imported and bundled fonts. */
+    fun getTypefaceByName(name: String, weight: Int, italic: Boolean): Typeface? {
+        if (name.isEmpty()) return null
+        synchronized(lock) {
+            families.values.firstOrNull { it.name.equals(name, ignoreCase = true) }
+        }?.resolve(weight, italic)?.let { return it }
+        val builtin = PaintTypeface.BUILT_IN_FONTS.firstOrNull { it.name.equals(name, ignoreCase = true) } ?: return null
+        return if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) Typeface.create(builtin.typeface, weight, italic) else builtin.typeface
+    }
+
     /** Preview typeface for any roster entry (null below API P). */
     fun getTypefaceFor(fontId: FontId): Typeface? {
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.P) return null
