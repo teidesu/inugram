@@ -262,7 +262,7 @@ pub(crate) fn assert_oracle_exact_skipping(lines: &[String], done: &str, count: 
 }
 
 fn header_lines(source: &str) -> impl Iterator<Item = &str> {
-  source.lines().take_while(|line| !line.contains("==/UserScript=="))
+  source.lines().take_while(|line| !line.contains("==/InuPlugin=="))
 }
 
 /// The grants a bundled oracle's *own manifest* asks for. Running it under these rather than a list

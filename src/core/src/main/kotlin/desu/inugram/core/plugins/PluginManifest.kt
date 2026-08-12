@@ -1,7 +1,7 @@
 package desu.inugram.core.plugins
 
 /**
- * Parsed userscript-style metadata header of a plugin. v0 only consumes the descriptive directives;
+ * Parsed InuPlugin-style metadata header of a plugin. v0 only consumes the descriptive directives;
  * [grants], [pluginApi], [platform] are parsed already so the engine layer can gate on them without
  * re-parsing.
  *
@@ -36,8 +36,8 @@ data class PluginManifest(
 class PluginManifestException(message: String) : Exception(message)
 
 object PluginManifestParser {
-    private val START = Regex("""^==UserScript==$""")
-    private val END = Regex("""^==/UserScript==$""")
+    private val START = Regex("""^==InuPlugin==$""")
+    private val END = Regex("""^==/InuPlugin==$""")
     private val DIRECTIVE = Regex("""^@(\S+)(?:\s+(.*))?$""")
 
     /** splits on commas that are not inside `(...)`, so scoped grants like `fetch(a,b)` stay one token */
@@ -89,8 +89,8 @@ object PluginManifestParser {
             }
         }
 
-        if (!inBlock) throw PluginManifestException("missing ==UserScript== metadata block")
-        if (!sawEnd) throw PluginManifestException("unterminated metadata block (missing ==/UserScript==)")
+        if (!inBlock) throw PluginManifestException("missing ==InuPlugin== metadata block")
+        if (!sawEnd) throw PluginManifestException("unterminated metadata block (missing ==/InuPlugin==)")
 
         val name = raw["name"]?.firstOrNull()?.takeIf { it.isNotBlank() }
             ?: throw PluginManifestException("missing @name")

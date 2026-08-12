@@ -1,4 +1,4 @@
-// ==UserScript==
+// ==InuPlugin==
 // @name         intercept test
 // @author       teidesu
 // @version      1.0
@@ -6,7 +6,7 @@
 // @grant        interceptRpc(help.getPromoData)
 // @plugin-api   1
 // @platform     android
-// ==/UserScript==
+// ==/InuPlugin==
 
 console.log('init intercept help.getPromoData test')
 inu.interceptRpc('help.getPromoData', (req) => {

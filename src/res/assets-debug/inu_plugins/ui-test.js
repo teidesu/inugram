@@ -1,4 +1,4 @@
-// ==UserScript==
+// ==InuPlugin==
 // @name         ui test
 // @author       teidesu
 // @version      1.0
@@ -6,7 +6,7 @@
 // @grant        kv
 // @plugin-api   1
 // @platform     android
-// ==/UserScript==
+// ==/InuPlugin==
 
 // the load-time half runs on its own and its count is checked exactly; the interactive half
 // reports as you touch the page, which is the only way an anchor or a menu can be exercised at all

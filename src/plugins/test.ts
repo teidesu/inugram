@@ -1,4 +1,4 @@
-// ==UserScript==
+// ==InuPlugin==
 // @name         settings test
 // @author       teidesu
 // @version      1.0
@@ -6,7 +6,7 @@
 // @grant        none
 // @plugin-api   1
 // @platform   android
-// ==/UserScript==
+// ==/InuPlugin==
 /// <reference path="./index.d.ts" />
 
 const { ui } = inu

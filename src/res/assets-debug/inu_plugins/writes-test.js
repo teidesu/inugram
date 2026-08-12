@@ -1,4 +1,4 @@
-// ==UserScript==
+// ==InuPlugin==
 // @name         writes test
 // @author       teidesu
 // @version      1.0
@@ -14,7 +14,7 @@
 // @grant        account.write(draft)
 // @plugin-api   1
 // @platform     android
-// ==/UserScript==
+// ==/InuPlugin==
 
 function pass(label, detail) {
   console.log(detail === undefined ? `PASS ${label}` : `PASS ${label}: ${detail}`)
