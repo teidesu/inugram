@@ -23,7 +23,6 @@ use crate::api::ui::icons::IconHost;
 use crate::api::ui::pages::UiHost;
 use crate::api::ui::screens::ScreenHost;
 use crate::api::ui::{OP_CHOOSER, OP_DIALOG, OP_PROMPT};
-use crate::sandbox::grants::GrantHost;
 
 use super::bridge::{Arg, JniBridge};
 
@@ -383,11 +382,5 @@ impl CanvasHost for JniBridge {
       Ok(None) => String::new(),
       Err(e) => e,
     }
-  }
-}
-
-impl GrantHost for JniBridge {
-  fn is_granted(&self, name: &str, target: Option<&str>, mode: i32) -> bool {
-    self.call_bool("checkGrant", self.on_check_grant, &[Arg::Str(name), Arg::OptStr(target), Arg::Int(mode)])
   }
 }

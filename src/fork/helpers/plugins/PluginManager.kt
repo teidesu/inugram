@@ -13,7 +13,6 @@ import desu.inugram.core.plugins.GrantValidator
 import desu.inugram.core.plugins.PluginInstalls
 import desu.inugram.core.plugins.PluginManifest
 import desu.inugram.core.plugins.PluginManifestParser
-import desu.inugram.core.plugins.ScopeMatch
 import desu.inugram.core.plugins.TlCtorIds
 import desu.inugram.helpers.plugins.PluginManager.fail
 import desu.inugram.helpers.plugins.PluginManager.init
@@ -335,17 +334,11 @@ object PluginManager {
         }
         val engine = QuickJs()
         val budget = LogBudget()
-        val permissions = plugin.permissions
         val timers = TimerThrottle(plugin, engine)::schedule
         val core = object : CoreListener {
             override fun onConsole(level: Int, message: String) {
                 if (level == QuickJs.LEVEL_FAULT) fail(plugin, PluginFailure.Site.RUNTIME, message, engine)
                 else logConsole(plugin, budget, level, message)
-            }
-
-            override fun onCheckGrant(name: String, target: String?, mode: Int): Boolean {
-                val match = ScopeMatch.entries.getOrNull(mode)
-                return if (target == null) permissions.has(name) else match != null && permissions.allows(name, target, match)
             }
 
             override fun onTimerSchedule(delayMs: Long) = timers(delayMs)

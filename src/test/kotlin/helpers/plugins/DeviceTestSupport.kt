@@ -236,6 +236,7 @@ fun attachBridge(plugin: Plugin, engine: RecordingQuickJs) {
             androidDirs = "",
             installJvm = bridge.jvm != null,
             installXposed = bridge.xposed != null,
+            grants = plugin.manifest.grants,
         ),
     )
 }
@@ -244,8 +245,6 @@ private object DeviceMissing : CoreListener, StorageListener, UiListener, Platfo
     private fun no(what: String): Nothing = throw UnsupportedOperationException("this suite has no $what")
 
     override fun onConsole(level: Int, message: String) = no("console")
-
-    override fun onCheckGrant(name: String, target: String?, mode: Int) = no("grant checker")
 
     override fun onTimerSchedule(delayMs: Long) = no("timer scheduler")
 
