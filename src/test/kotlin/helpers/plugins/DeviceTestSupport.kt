@@ -177,16 +177,19 @@ object testAppScreen : PluginJvm.AppScreen {
 }
 
 /** a running plugin with [grants], wired the way `PluginManager` does on start */
-fun startPlugin(name: String, vararg grants: String): Plugin {
+fun startPlugin(name: String, vararg grants: String): Plugin =
+    startPlugin(name, grants.toList()) {}
+
+fun startPlugin(name: String, grants: List<String>, configureEngine: (RecordingQuickJs) -> Unit): Plugin {
     testAppScreen.fragment = null
     testAppScreen.activity = null
     val plugin = Plugin(
         id = "%032x".format(name.hashCode().toLong() and 0xffffffffL),
         file = File("/dev/null"),
         source = "",
-        manifest = manifestOf(name, grants.toList()),
+        manifest = manifestOf(name, grants),
     )
-    plugin.engine = RecordingQuickJs()
+    plugin.engine = RecordingQuickJs().also(configureEngine)
     setInstalledPlugins(installedPlugins() + plugin)
     attachBridge(plugin, plugin.engine as RecordingQuickJs)
     return plugin

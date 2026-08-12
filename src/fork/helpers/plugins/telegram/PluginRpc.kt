@@ -696,7 +696,11 @@ object PluginRpc {
         sent.request.disableFree = true
         Utilities.stageQueue.postRunnable {
             // a cancel landed while this was queued: nothing will read the response, so it must not go out
-            if (sent.cancelled) return@postRunnable
+            if (sent.cancelled) {
+                // serialized with every other lease transition; the delegate that normally does it will never run
+                Utilities.globalQueue.postRunnable { endBypassLease(sent) }
+                return@postRunnable
+            }
             sent.reachedNative = true
             connectionsManager.sendRequestInternal(
                 sent.request,

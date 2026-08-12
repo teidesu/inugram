@@ -87,6 +87,7 @@ class RecordingQuickJs : QuickJs() {
 
     var onXposedBefore: ((XposedBefore) -> Array<String>?)? = null
     var onXposedAfter: ((XposedAfter) -> String)? = null
+    var xposedBudgetMillis = 1_000L
 
     override fun start(listener: PluginBridge, config: Config) {
         check(this.listener == null) { "QuickJs is already started" }
@@ -116,7 +117,7 @@ class RecordingQuickJs : QuickJs() {
         return onXposedAfter?.invoke(dispatch) ?: resultWire
     }
 
-    override fun xposedBudgetMs(): Long = 1_000
+    override fun xposedBudgetMs(): Long = xposedBudgetMillis
 
     override fun xposedRelease(dispatchId: Long) {
         xposedReleases.add(dispatchId)

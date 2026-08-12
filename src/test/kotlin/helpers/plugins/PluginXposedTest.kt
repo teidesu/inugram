@@ -53,6 +53,32 @@ class PluginXposedTest {
     }
 
     @Test
+    fun a_timed_out_before_phase_releases_after_state_it_parks_later() {
+        val plugin = startPlugin("xposed", listOf(scope, "unsafe.xposed(desu.inugram.jvmfixture.*)")) {
+            it.xposedBudgetMillis = 1
+        }
+        val engine = plugin.js
+        val originalFinished = CountDownLatch(1)
+        engine.onXposedBefore = {
+            assertTrue(originalFinished.await(1, TimeUnit.SECONDS))
+            arrayOf("P1", *it.args)
+        }
+
+        val cls = jvmHandleId(plugin.jvm(PluginJvm.OP_CLASS, name = JvmFixture::class.java.name))
+        val method = jvmHandleId(plugin.jvm(PluginJvm.OP_METHOD, cls, "sum(II)I"))
+        plugin.xposed(PluginXposed.OP_HOOK, method)
+        val sum = JvmFixture::class.java.getDeclaredMethod("sum", Int::class.java, Int::class.java)
+
+        assertEquals(3, invokeOffQueue {
+            (sum.invoke(null, 1, 2) as Int).also { originalFinished.countDown() }
+        })
+        drain()
+        assertEquals(listOf(engine.xposedBefores.single().dispatchId), engine.xposedReleases)
+
+        PluginXposed.detach(engine)
+    }
+
+    @Test
     fun xposedCanAllocateAndCallOriginalConstructors() {
         val plugin = startPlugin("xposed", scope, "unsafe.xposed(desu.inugram.jvmfixture.*)")
         val cls = jvmHandleId(plugin.jvm(PluginJvm.OP_CLASS, name = JvmFixture::class.java.name))

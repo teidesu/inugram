@@ -35,7 +35,10 @@ fn setup() -> Fixture {
   let lifecycle = Lifecycle::new();
   let logs = crate::testing::harness::Logs::new();
   let log = crate::testing::harness::log_sink(&logs);
-  let state = ctx.with(|ctx| install_timers(&ctx, host_dyn, lifecycle.clone(), log).unwrap());
+  let state = ctx.with(|ctx| {
+    crate::api::error::install_plugin_error(&ctx).unwrap();
+    install_timers(&ctx, host_dyn, lifecycle.clone(), log).unwrap()
+  });
   let state = Disposing::new(&ctx, state, |ctx, state| state.dispose(ctx));
   (rt, ctx, host, lifecycle, state, logs)
 }
@@ -419,6 +422,27 @@ fn a_non_function_callback_throws_a_type_error() {
     out,
     r#"["TypeError:setTimeout: callback must be a function","TypeError:setInterval: callback must be a function"]"#,
   );
+}
+
+#[test]
+fn live_timers_are_capped_and_clearing_one_restores_capacity() {
+  let (_rt, ctx, _host, _lifecycle, state, _logs) = setup();
+  let out = eval(
+    &ctx,
+    &format!(
+      r#"
+        const ids = [];
+        for (let i = 0; i < {TIMER_LIMIT}; i++) ids.push(setInterval(() => {{}}, 100));
+        let refused;
+        try {{ setTimeout(() => {{}}, 100); }} catch (e) {{ refused = [e.code, e.usage, e.quota]; }}
+        clearInterval(ids.pop());
+        const replacement = setTimeout(() => {{}}, 100);
+        JSON.stringify([refused, replacement > 0]);
+        "#,
+    ),
+  );
+  assert_eq!(out, format!(r#"[["quota-exceeded",{},{TIMER_LIMIT}],true]"#, TIMER_LIMIT + 1));
+  assert_eq!(state.timers.len(), TIMER_LIMIT);
 }
 
 #[test]

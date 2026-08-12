@@ -276,7 +276,11 @@ object PluginXposed {
 
             val id = nextDispatch.getAndIncrement()
             val before = await { engine.xposedBefore(id, site, request.method, request.receiver, request.args) }
-                ?: return runOriginal(site, receiver, args)
+            if (before == null) {
+                // the queued phase still finishes and may have parked after callbacks under this id
+                release(id)
+                return runOriginal(site, receiver, args)
+            }
             val wantsAfter = before.firstOrNull() == "P1"
             if (before.firstOrNull() == "A") {
                 val answer = answerOf(before.getOrNull(1) ?: PluginWire.encodeNull())

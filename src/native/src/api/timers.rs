@@ -6,6 +6,7 @@ use std::time::Instant;
 use rquickjs::function::Opt;
 use rquickjs::{Coerced, Ctx, Exception, Function, Persistent, Result as JsResult, Runtime, Value};
 
+use crate::api::error::PluginErrorCode;
 use crate::api::telegram::rpc::{format_exception, pump_jobs};
 use crate::sandbox::registry::{Lifecycle, Registry, Token};
 
@@ -14,6 +15,8 @@ pub const CANCEL_WAKE: i64 = -1;
 const MAX_DELAY_MS: u64 = i32::MAX as u64;
 
 const MIN_INTERVAL_MS: u64 = 4;
+
+const TIMER_LIMIT: usize = 512;
 
 pub const BACKGROUND_MIN_INTERVAL_MS: u64 = 1_000;
 
@@ -131,6 +134,11 @@ impl TimerState {
     };
     if self.lifecycle.is_unloading() {
       return Ok(0);
+    }
+    let wanted = self.timers.len().saturating_add(1);
+    if wanted > TIMER_LIMIT {
+      return PluginErrorCode::QuotaExceeded(wanted as i64, TIMER_LIMIT as i64)
+        .throw(ctx, &format!("{what}: this plugin may hold at most {TIMER_LIMIT} live timers"));
     }
 
     let delay = clamp_delay(delay);
