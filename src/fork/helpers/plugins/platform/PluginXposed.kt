@@ -252,7 +252,7 @@ object PluginXposed {
             // already inside the engine's queue: this is a hooked method plugin code reached, and parking here would be parking on ourselves
             if (Utilities.globalQueue as Any === Thread.currentThread() || dispatching.get() == true) {
                 Log.d(TAG, "[${plugin.manifest.name}] xposed site $site bypassed re-entry")
-                return runOriginal(site, receiver, args)
+                return runOriginal(site, receiver, args, originalArgs = true)
             }
             dispatching.set(true)
             return try {
@@ -279,7 +279,7 @@ object PluginXposed {
             if (before == null) {
                 // the queued phase still finishes and may have parked after callbacks under this id
                 release(id)
-                return runOriginal(site, receiver, args)
+                return runOriginal(site, receiver, args, originalArgs = true)
             }
             val wantsAfter = before.firstOrNull() == "P1"
             if (before.firstOrNull() == "A") {
@@ -366,21 +366,21 @@ object PluginXposed {
 
         private fun unhooked(cause: Throwable, site: Long, receiver: Any?, args: List<Any?>): Any? {
             Log.e(TAG, "[${plugin.manifest.name}] xposed dispatch failed; running the original", cause)
-            return runOriginal(site, receiver, args)
+            return runOriginal(site, receiver, args, originalArgs = true)
         }
 
-        private fun runOriginal(site: Long, receiver: Any?, args: List<Any?>): Any? {
+        private fun runOriginal(site: Long, receiver: Any?, args: List<Any?>, originalArgs: Boolean = false): Any? {
             val backup = sites[site]?.backup ?: return null
             return try {
                 when (backup) {
                     is Method -> {
-                        val converted = PluginJvm.convertArguments(backup.parameterTypes, args)
+                        val converted = if (originalArgs) args.toTypedArray() else PluginJvm.convertArguments(backup.parameterTypes, args)
                             ?: throw IllegalArgumentException("xposed: ${backup.name} does not take these arguments")
                         backup.isAccessible = true
                         backup.invoke(receiver, *converted)
                     }
                     is java.lang.reflect.Constructor<*> -> {
-                        val converted = PluginJvm.convertArguments(backup.parameterTypes, args)
+                        val converted = if (originalArgs) args.toTypedArray() else PluginJvm.convertArguments(backup.parameterTypes, args)
                             ?: throw IllegalArgumentException("xposed: constructor does not take these arguments")
                         backup.isAccessible = true
                         backup.newInstance(*converted)
