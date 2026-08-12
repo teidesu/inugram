@@ -32,9 +32,10 @@ declare class DOMException extends Error {
   readonly code: number
 }
 
+/** Timers share a per-plugin limit of 512 live timeout/interval registrations. */
 declare function setTimeout(callback: () => void, ms?: number): number
 declare function clearTimeout(id?: number): void
-/** an interval repeats every 4 ms at the fastest. */
+/** An interval repeats every 4 ms at the fastest and counts against the shared timer limit. */
 declare function setInterval(callback: () => void, ms?: number): number
 declare function clearInterval(id?: number): void
 declare function queueMicrotask(callback: () => void): void

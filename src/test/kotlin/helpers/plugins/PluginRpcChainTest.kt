@@ -363,6 +363,25 @@ class PluginRpcChainTest {
         assertEquals(0, connections().sent.size, "the abandoned sub-chain must not send after the app was answered")
     }
 
+    @Test
+    fun a_cancelled_queued_passthrough_releases_its_bypass_lease() {
+        val plugin = startPlugin("p", "interceptRpc(users.getUsers)")
+        assertNull(plugin.interceptRpc("users.getUsers"))
+        plugin.js.onDispatchRpc = {
+            plugin.next(it.dispatchId, it.requestWire)
+            plugin.complete(it.dispatchId, PluginWire.encodeJson("""{"_":"boolTrue"}"""))
+        }
+        val app = AppRequest()
+
+        assertTrue(send(app))
+        drain()
+        assertEquals(0, connections().sent.size)
+
+        assertTrue(send(app), "the cancelled send must not leave this request bypassing later chains")
+        drain()
+        assertEquals(2, plugin.js.dispatches.size)
+    }
+
     /**
      * the same rule one stage deeper, which is the only place `abandonBelow` is what does the work:
      * for the *first* stage `finalize` is the top-level one, so `collapseChain` removes every stage
