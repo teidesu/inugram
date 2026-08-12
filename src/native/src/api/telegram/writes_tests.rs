@@ -329,8 +329,8 @@ fn setup_with_limit(grants: &[&str], transfer_limit: u64) -> Fixture {
   let dir = tempdir::TempDir::new("stage");
   let empty = Rc::new(SelfOnlyReadsHost);
   let (writes, reads, accounts) = ctx.with(|ctx| {
-    let inu = crate::testing::harness::inu_namespace(&ctx);
-    install_plugin_error(&ctx, &inu).unwrap();
+    let inu = crate::testing::harness::get_api_globals(&ctx);
+    install_plugin_error(&ctx).unwrap();
     let accounts = crate::api::telegram::account::install_account(
       &ctx,
       TestAccountHost::with(ONE_ACCOUNT),
@@ -778,8 +778,8 @@ fn setup_send(grants: &[&str]) -> SendFixture {
   let peers = Rc::new(SelfOnlyReadsHost);
   let views = TlViews::new(TestWritesHost::new() as Rc<dyn TlHost>);
   let (rpc, reads, accounts) = ctx.with(|ctx| {
-    let inu = crate::testing::harness::inu_namespace(&ctx);
-    install_plugin_error(&ctx, &inu).unwrap();
+    let inu = crate::testing::harness::get_api_globals(&ctx);
+    install_plugin_error(&ctx).unwrap();
     let accounts = crate::api::telegram::account::install_account(
       &ctx,
       TestAccountHost::with(ONE_ACCOUNT),

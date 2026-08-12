@@ -373,7 +373,7 @@ pub fn install_account<'js>(
   grants: Rc<dyn GrantHost>,
   lifecycle: Rc<Lifecycle>,
   log: crate::Log,
-  inu: &Object<'js>,
+  globals: &crate::api::Globals<'js>,
 ) -> JsResult<Rc<AccountState>> {
   let state = Rc::new(AccountState {
     host,
@@ -389,14 +389,14 @@ pub fn install_account<'js>(
 
   {
     let state = state.clone();
-    inu.set(
+    globals.inu.set(
       "account",
       Function::new(ctx.clone(), move |ctx: Ctx<'js>, id: Opt<Value<'js>>| state.js_account(&ctx, id.0))?,
     )?;
   }
   {
     let state = state.clone();
-    inu.set(
+    globals.inu.set(
       "accounts",
       Function::new(ctx.clone(), move |ctx: Ctx<'js>| -> JsResult<Value<'js>> {
         check_grant(&ctx, &state.grants, "account.read", Some("self"), MATCH_EXACT)?;
@@ -406,14 +406,14 @@ pub fn install_account<'js>(
   }
   {
     let state = state.clone();
-    inu.set(
+    globals.inu.set(
       "onAccountsChanged",
       Function::new(ctx.clone(), move |ctx: Ctx<'js>, cb: Function<'js>| state.js_on_accounts_changed(&ctx, cb))?,
     )?;
   }
   {
     let state = state.clone();
-    inu.set(
+    globals.inu.set(
       "withCurrentAccount",
       Function::new(ctx.clone(), move |ctx: Ctx<'js>, cb: Function<'js>| state.js_with_current_account(&ctx, cb))?,
     )?;

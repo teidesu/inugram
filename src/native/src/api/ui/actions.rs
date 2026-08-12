@@ -153,7 +153,7 @@ pub fn install_actions<'js>(
   grants: Rc<dyn GrantHost>,
   jvm: Option<Rc<JvmState>>,
   log: crate::Log,
-  inu: &Object<'js>,
+  globals: &crate::api::Globals<'js>,
 ) -> JsResult<Rc<ActionState>> {
   let state = Rc::new(ActionState {
     host,
@@ -173,7 +173,7 @@ pub fn install_actions<'js>(
     ("registerMessageEditorAction", KIND_EDITOR),
   ] {
     let state = state.clone();
-    inu.set(
+    globals.inu.set(
       name,
       Function::new(ctx.clone(), move |ctx: Ctx<'js>, opts: Object<'js>| js_register(&ctx, &state, kind, opts))?,
     )?;
@@ -345,8 +345,8 @@ fn build_context<'js>(
     };
     let messages: Value = parsed.get("messages")?;
     let messages = messages.as_array().ok_or_else(|| Exception::throw_type(ctx, "action: malformed messages"))?;
-    let inu: Object = ctx.globals().get("inu")?;
-    let message: Constructor = inu.get("Message")?;
+    let globals = crate::api::Globals::get(ctx)?;
+    let message = globals.get_message(ctx)?;
     let wrapped = Array::new(ctx.clone())?;
     for (index, raw) in messages.iter::<Value>().enumerate() {
       let raw = raw?;

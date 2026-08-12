@@ -439,7 +439,7 @@ pub fn install_fs<'js>(
   quota: u64,
   unscoped: bool,
   android_dirs: &str,
-  inu: &Object<'js>,
+  globals: &crate::api::Globals<'js>,
 ) -> JsResult<Rc<FsState>> {
   let root = if root.as_os_str().is_empty() {
     PathBuf::new()
@@ -585,17 +585,17 @@ pub fn install_fs<'js>(
     )?;
   }
 
-  inu.set("fs", fs_obj)?;
-  install_android_dirs(ctx, &state, inu)?;
+  globals.inu.set("fs", fs_obj)?;
+  install_android_dirs(ctx, &state, globals)?;
   Ok(state)
 }
 
-fn install_android_dirs<'js>(ctx: &Ctx<'js>, state: &Rc<FsState>, inu: &Object<'js>) -> JsResult<()> {
-  let android: Object = match inu.get::<_, Object>("android") {
+fn install_android_dirs<'js>(ctx: &Ctx<'js>, state: &Rc<FsState>, globals: &crate::api::Globals<'js>) -> JsResult<()> {
+  let android: Object = match globals.inu.get::<_, Object>("android") {
     Ok(o) => o,
     Err(_) => {
       let o = Object::new(ctx.clone())?;
-      inu.set("android", o.clone())?;
+      globals.inu.set("android", o.clone())?;
       o
     }
   };

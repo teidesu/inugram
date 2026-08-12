@@ -14,8 +14,8 @@ fn setup() -> (Runtime, Context) {
   let rt = Runtime::new().unwrap();
   let ctx = Context::full(&rt).unwrap();
   ctx.with(|ctx| {
-    let inu = crate::testing::harness::inu_namespace(&ctx);
-    crate::api::error::install_plugin_error(&ctx, &inu).unwrap();
+    let inu = crate::testing::harness::get_api_globals(&ctx);
+    crate::api::error::install_plugin_error(&ctx).unwrap();
     install_utils_with_host(&ctx, Rc::new(TestUtilsHost), &inu).unwrap();
   });
   (rt, ctx)

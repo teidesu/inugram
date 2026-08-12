@@ -31,8 +31,8 @@ fn setup(missing: &[&str]) -> (Runtime, Context, Rc<TestIconHost>) {
   let host = TestIconHost::without(missing);
   let host_dyn: Rc<dyn IconHost> = host.clone();
   ctx.with(|ctx| {
-    let inu = crate::testing::harness::inu_namespace(&ctx);
-    crate::api::error::install_plugin_error(&ctx, &inu).unwrap();
+    let inu = crate::testing::harness::get_api_globals(&ctx);
+    crate::api::error::install_plugin_error(&ctx).unwrap();
     install_icons(&ctx, host_dyn, None, &inu).unwrap();
   });
   (rt, ctx, host)
@@ -231,7 +231,7 @@ fn a_row_carries_its_icon_spec_into_the_render() {
       crate::sandbox::registry::Lifecycle::new(),
       log,
       None,
-      &crate::testing::harness::inu_namespace(&ctx),
+      &crate::testing::harness::get_api_globals(&ctx),
     )
     .unwrap()
   });
@@ -275,7 +275,7 @@ fn an_element_refuses_an_icon_it_was_not_handed() {
       crate::sandbox::registry::Lifecycle::new(),
       log,
       None,
-      &crate::testing::harness::inu_namespace(&ctx),
+      &crate::testing::harness::get_api_globals(&ctx),
     )
     .unwrap()
   });
@@ -326,8 +326,8 @@ mod bundled_oracle {
     let ui_host: Rc<dyn crate::api::ui::pages::UiHost> = Rc::new(SilentUiHost);
     let log: crate::Log = std::sync::Arc::new(|_| {});
     let ui = ctx.with(|ctx| {
-      let inu = crate::testing::harness::inu_namespace(&ctx);
-      install_plugin_error(&ctx, &inu).unwrap();
+      let inu = crate::testing::harness::get_api_globals(&ctx);
+      install_plugin_error(&ctx).unwrap();
       install_icons(&ctx, icon_host, None, &inu).unwrap();
       crate::api::ui::pages::install_ui(&ctx, ui_host, crate::sandbox::registry::Lifecycle::new(), log, None, &inu)
         .unwrap()

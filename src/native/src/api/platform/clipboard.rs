@@ -18,7 +18,7 @@ pub fn install_clipboard<'js>(
   ctx: &Ctx<'js>,
   host: Rc<dyn ClipboardHost>,
   grants: Rc<dyn GrantHost>,
-  inu: &Object<'js>,
+  globals: &crate::api::Globals<'js>,
 ) -> JsResult<()> {
   let state = Rc::new(ClipboardState { host, grants });
   let clipboard = Object::new(ctx.clone())?;
@@ -43,7 +43,7 @@ pub fn install_clipboard<'js>(
       })?,
     )?;
   }
-  inu.set("clipboard", clipboard)?;
+  globals.inu.set("clipboard", clipboard)?;
   Ok(())
 }
 

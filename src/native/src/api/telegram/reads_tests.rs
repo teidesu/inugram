@@ -427,8 +427,8 @@ fn setup(grants: &[&str]) -> Fixture {
   let grants = TestGrantHost::new(grants).as_host();
   let log: crate::Log = std::sync::Arc::new(|_| {});
   let (state, accounts) = ctx.with(|ctx| {
-    let inu = crate::testing::harness::inu_namespace(&ctx);
-    install_plugin_error(&ctx, &inu).unwrap();
+    let inu = crate::testing::harness::get_api_globals(&ctx);
+    install_plugin_error(&ctx).unwrap();
     let accounts = crate::api::telegram::account::install_account(
       &ctx,
       TestAccountHost::with(ONE_ACCOUNT),
@@ -1419,10 +1419,10 @@ mod grant_boundary {
     // the order `nativeInstallApi`/`nativeInstallRpc` install in, which is what makes the
     // `Account` prototype and the demuxed events exist
     let (reads_state, accounts, rpc_state) = ctx.with(|ctx| {
-      let inu = crate::testing::harness::inu_namespace(&ctx);
-      install_plugin_error(&ctx, &inu).unwrap();
+      let inu = crate::testing::harness::get_api_globals(&ctx);
+      install_plugin_error(&ctx).unwrap();
       crate::api::lifecycle::install_lifecycle(&ctx, grants.clone(), lifecycle.clone(), log.clone(), &inu).unwrap();
-      let inu = crate::testing::harness::inu_namespace(&ctx);
+      let inu = crate::testing::harness::get_api_globals(&ctx);
       let kv_host: Rc<dyn KvHost> = boundary.clone();
       crate::api::io::kv::install_kv(&ctx, kv_host, grants.clone(), &inu).unwrap();
       let clipboard_host: Rc<dyn ClipboardHost> = boundary.clone();

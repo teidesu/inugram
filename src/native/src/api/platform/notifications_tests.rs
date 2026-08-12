@@ -39,8 +39,8 @@ fn setup(grants: &[&str]) -> Fixture {
   let logs = crate::testing::harness::Logs::new();
   let log = crate::testing::harness::log_sink(&logs);
   let state = ctx.with(|ctx| {
-    let inu = crate::testing::harness::inu_namespace(&ctx);
-    install_plugin_error(&ctx, &inu).unwrap();
+    let inu = crate::testing::harness::get_api_globals(&ctx);
+    install_plugin_error(&ctx).unwrap();
     install_notifications(&ctx, host_dyn, grants, Lifecycle::new(), log.clone(), &inu).unwrap()
   });
   let state = Disposing::new(&ctx, state, |ctx, state| state.dispose(ctx));

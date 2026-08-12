@@ -2,9 +2,9 @@ use std::cell::RefCell;
 use std::collections::HashMap;
 
 use rquickjs::function::Constructor;
-use rquickjs::{Coerced, Ctx, Object, Result as JsResult, Runtime, Value};
+use rquickjs::{Coerced, Ctx, Result as JsResult, Runtime, Value};
 
-use crate::api::telegram::rpc;
+use crate::api::{telegram::rpc, Globals};
 
 pub(crate) fn format_thrown<'js>(ctx: &Ctx<'js>, value: &Value<'js>) -> String {
   let message = describe_thrown(ctx, value);
@@ -169,8 +169,11 @@ impl<'a> PluginErrorCode<'a> {
   }
 }
 
-pub fn install_plugin_error<'js>(ctx: &Ctx<'js>, inu: &Object<'js>) -> JsResult<()> {
-  let ctor: Value = ctx.eval(
+pub fn install_plugin_error<'js>(ctx: &Ctx<'js>) -> JsResult<()> {
+  if ctx.userdata::<Globals>().is_some() {
+    return Ok(());
+  }
+  let ctor: Constructor = ctx.eval(
     r"(class PluginError extends Error {
       constructor(code, message) {
         super(message);
@@ -179,12 +182,7 @@ pub fn install_plugin_error<'js>(ctx: &Ctx<'js>, inu: &Object<'js>) -> JsResult<
       }
     })",
   )?;
-  inu.set("PluginError", ctor)?;
-  Ok(())
-}
-
-fn get_plugin_error_ctor<'js>(ctx: &Ctx<'js>) -> JsResult<Constructor<'js>> {
-  ctx.globals().get::<_, Object>("inu")?.get("PluginError")
+  Globals::install(ctx, ctor)
 }
 
 pub fn make_plugin_error<'js>(
@@ -195,7 +193,8 @@ pub fn make_plugin_error<'js>(
   usage: Option<i64>,
   quota: Option<i64>,
 ) -> JsResult<Value<'js>> {
-  let obj: Object<'js> = get_plugin_error_ctor(ctx)?.construct((code, message))?;
+  let globals = Globals::get(ctx)?;
+  let obj = globals.plugin_error.construct::<_, rquickjs::Object>((code, message))?;
   if let Some(grant) = grant {
     obj.set("grant", grant)?;
   }

@@ -176,7 +176,7 @@ pub fn install_dialogs<'js>(
   ctx: &Ctx<'js>,
   host: Rc<dyn DialogHost>,
   log: crate::Log,
-  inu: &Object<'js>,
+  globals: &crate::api::Globals<'js>,
 ) -> JsResult<Rc<DialogState>> {
   let state = Rc::new(DialogState {
     host,
@@ -209,7 +209,7 @@ pub fn install_dialogs<'js>(
       Function::new(ctx.clone(), move |ctx: Ctx<'js>, options: Object<'js>| js_ui_chooser(&ctx, &state2, options))?,
     )?;
   }
-  inu.set("ui", ui)?;
+  globals.inu.set("ui", ui)?;
   Ok(state)
 }
 

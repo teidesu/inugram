@@ -50,7 +50,7 @@ pub fn install_notifications<'js>(
   grants: Rc<dyn GrantHost>,
   lifecycle: Rc<Lifecycle>,
   log: crate::Log,
-  inu: &Object<'js>,
+  globals: &crate::api::Globals<'js>,
 ) -> JsResult<Rc<NotificationState>> {
   let state = Rc::new(NotificationState {
     host,
@@ -60,11 +60,11 @@ pub fn install_notifications<'js>(
     delegates: Registry::default(),
   });
 
-  let android: Object = match inu.get::<_, Object>("android") {
+  let android: Object = match globals.inu.get::<_, Object>("android") {
     Ok(o) => o,
     Err(_) => {
       let o = Object::new(ctx.clone())?;
-      inu.set("android", o.clone())?;
+      globals.inu.set("android", o.clone())?;
       o
     }
   };

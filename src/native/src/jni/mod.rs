@@ -76,7 +76,6 @@ pub(crate) struct Engine {
   pub(crate) _rt: Runtime,
   pub(crate) bridge: Rc<JniBridge>,
   pub(crate) lifecycle: Rc<Lifecycle>,
-  pub(crate) inu: Option<Persistent<Object<'static>>>,
   pub(crate) shared: Option<Persistent<Object<'static>>>,
   pub(crate) rpc: Rc<RpcState>,
   pub(crate) deserialize: Rc<DeserializeState>,

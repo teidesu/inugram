@@ -4,7 +4,7 @@ use rquickjs::{Context, Runtime};
 fn setup() -> (Runtime, Context) {
   let rt = Runtime::new().unwrap();
   let ctx = Context::full(&rt).unwrap();
-  ctx.with(|ctx| install_plugin_error(&ctx, &crate::testing::harness::inu_namespace(&ctx)).unwrap());
+  ctx.with(|ctx| install_plugin_error(&ctx).unwrap());
   (rt, ctx)
 }
 
@@ -62,6 +62,24 @@ fn plugin_error_wire_empty_fields_become_absent_props() {
       .unwrap()
   });
   assert_eq!(has_own, r#"["kv",false,false,true]"#);
+}
+
+#[test]
+fn replacing_inu_plugin_error_does_not_change_host_errors() {
+  let (_rt, ctx) = setup();
+  let got = ctx.with(|ctx| {
+    ctx
+      .eval::<(), _>(
+        "globalThis.__realPluginError = inu.PluginError; inu.PluginError = class Impostor extends Error {}",
+      )
+      .unwrap();
+    let value = make_plugin_error(&ctx, "internal", "boom", None, None, None).unwrap();
+    ctx.globals().set("e", value).unwrap();
+    ctx
+      .eval::<String, _>("[e instanceof __realPluginError, e instanceof inu.PluginError, e.code].join('|')")
+      .unwrap()
+  });
+  assert_eq!(got, "true|false|internal");
 }
 
 #[test]

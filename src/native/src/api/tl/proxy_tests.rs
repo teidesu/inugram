@@ -323,7 +323,7 @@ impl TlHost for FakeTlHost {
 fn make_ctx() -> (Runtime, Context) {
   let rt = Runtime::new().unwrap();
   let ctx = Context::full(&rt).unwrap();
-  ctx.with(|ctx| crate::api::error::install_plugin_error(&ctx, &crate::testing::harness::inu_namespace(&ctx)).unwrap());
+  ctx.with(|ctx| crate::api::error::install_plugin_error(&ctx).unwrap());
   (rt, ctx)
 }
 

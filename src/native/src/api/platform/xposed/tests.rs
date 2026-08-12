@@ -61,8 +61,8 @@ fn the_bundled_xposed_test_plugin_passes() {
   let lifecycle = Lifecycle::new();
   let log: std::sync::Arc<dyn Fn(&str) + Send + Sync> = std::sync::Arc::new(|_: &str| {});
   let (state, jvm) = ctx.with(|ctx| {
-    let inu = crate::testing::harness::inu_namespace(&ctx);
-    crate::api::error::install_plugin_error(&ctx, &inu).unwrap();
+    let inu = crate::testing::harness::get_api_globals(&ctx);
+    crate::api::error::install_plugin_error(&ctx).unwrap();
     let jvm = crate::api::platform::jvm::install_jvm(
       &ctx,
       OracleJvmHost::new().as_host(),
@@ -186,8 +186,8 @@ fn setup(grants: &[&str]) -> Fixture {
   let host = TestXposedHost::new();
 
   let (state, jvm) = ctx.with(|ctx| {
-    let inu = crate::testing::harness::inu_namespace(&ctx);
-    crate::api::error::install_plugin_error(&ctx, &inu).unwrap();
+    let inu = crate::testing::harness::get_api_globals(&ctx);
+    crate::api::error::install_plugin_error(&ctx).unwrap();
     let jvm = crate::api::platform::jvm::install_jvm(
       &ctx,
       OracleJvmHost::new().as_host(),

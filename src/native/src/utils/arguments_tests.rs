@@ -5,7 +5,7 @@ fn with_ctx(body: impl FnOnce(Ctx<'_>)) {
   let rt = Runtime::new().unwrap();
   let context = Context::full(&rt).unwrap();
   context.with(|ctx| {
-    crate::api::error::install_plugin_error(&ctx, &crate::testing::harness::inu_namespace(&ctx)).unwrap();
+    crate::api::error::install_plugin_error(&ctx).unwrap();
     body(ctx);
   });
 }
