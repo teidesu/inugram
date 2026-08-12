@@ -1,11 +1,11 @@
-// ==UserScript==
+// ==InuPlugin==
 // @name         canvas test
 // @author       teidesu
 // @version      1.0
 // @description  exercises inu.canvas: the context surface, the state stack, gradients and patterns, text, images and convertToBlob
 // @plugin-api   1
 // @platform     android
-// ==/UserScript==
+// ==/InuPlugin==
 
 function pass(label, detail) {
   console.log(detail === undefined ? `PASS ${label}` : `PASS ${label}: ${detail}`)

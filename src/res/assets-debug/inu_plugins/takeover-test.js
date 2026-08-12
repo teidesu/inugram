@@ -1,4 +1,4 @@
-// ==UserScript==
+// ==InuPlugin==
 // @name         takeover test
 // @author       teidesu
 // @version      1.0
@@ -7,7 +7,7 @@
 // @grant        interceptRpc
 // @plugin-api   1
 // @platform     android
-// ==/UserScript==
+// ==/InuPlugin==
 
 // an unscoped grant is what makes this worth testing: it satisfies every scope check, so the
 // takeover list is the only thing left standing between a plugin and the account

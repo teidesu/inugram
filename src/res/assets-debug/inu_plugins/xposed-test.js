@@ -1,4 +1,4 @@
-// ==UserScript==
+// ==InuPlugin==
 // @name         xposed test
 // @author       teidesu
 // @version      1.0
@@ -7,7 +7,7 @@
 // @grant        unsafe.xposed
 // @plugin-api   1
 // @platform     android
-// ==/UserScript==
+// ==/InuPlugin==
 
 // every entry point here takes a handle only `inu.jvm.cls` mints, so this file needs both grants
 // and says so. the jvm one is *scoped*, which is what makes the last assertion mean anything: a

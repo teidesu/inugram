@@ -1,4 +1,4 @@
-// ==UserScript==
+// ==InuPlugin==
 // @name         shell test
 // @author       teidesu
 // @version      1.0
@@ -8,7 +8,7 @@
 // @grant        clipboard.write
 // @plugin-api   1
 // @platform     android
-// ==/UserScript==
+// ==/InuPlugin==
 
 // the load-time half is everything that can run without touching the user's device: a refused url
 // opens nothing and a refused chooser shows nothing. the half that does something the user would

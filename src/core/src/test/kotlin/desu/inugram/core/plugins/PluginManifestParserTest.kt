@@ -8,7 +8,7 @@ import kotlin.test.assertFailsWith
 
 class PluginManifestParserTest {
     private val full = """
-        // ==UserScript==
+        // ==InuPlugin==
         // @name         My awesome plugin
         // @author       teidesu
         // @namespace    http://example.com
@@ -19,7 +19,7 @@ class PluginManifestParserTest {
         // @grant        none
         // @plugin-api   1
         // @platform   android
-        // ==/UserScript==
+        // ==/InuPlugin==
         /// <reference path="./index.d.ts" />
         console.log('hi')
     """.trimIndent()
@@ -60,12 +60,12 @@ class PluginManifestParserTest {
     fun grantsParsedAndDeduped() {
         val m = PluginManifestParser.parse(
             """
-            // ==UserScript==
+            // ==InuPlugin==
             // @name g
             // @grant kv, fetch
             // @grant kv
             // @grant clipboard.read
-            // ==/UserScript==
+            // ==/InuPlugin==
             """.trimIndent(),
         )
         assertEquals(listOf("kv", "fetch", "clipboard.read"), m.grants)
@@ -75,11 +75,11 @@ class PluginManifestParserTest {
     fun scopedGrantsKeepParenthesizedCommas() {
         val m = PluginManifestParser.parse(
             """
-            // ==UserScript==
+            // ==InuPlugin==
             // @name g
             // @grant interceptRpc(users.getUsers,channels.getChannels), kv
             // @grant fetch(google.com,bing.com)
-            // ==/UserScript==
+            // ==/InuPlugin==
             """.trimIndent(),
         )
         assertEquals(
@@ -93,9 +93,9 @@ class PluginManifestParserTest {
         assertFailsWith<PluginManifestException> {
             PluginManifestParser.parse(
                 """
-                // ==UserScript==
+                // ==InuPlugin==
                 // @author nobody
-                // ==/UserScript==
+                // ==/InuPlugin==
                 """.trimIndent(),
             )
         }
@@ -113,7 +113,7 @@ class PluginManifestParserTest {
         assertFailsWith<PluginManifestException> {
             PluginManifestParser.parse(
                 """
-                // ==UserScript==
+                // ==InuPlugin==
                 // @name x
                 console.log('oops')
                 """.trimIndent(),
@@ -130,10 +130,10 @@ class PluginManifestParserTest {
     fun directiveKeysAreCaseInsensitive() {
         val m = PluginManifestParser.parse(
             """
-            // ==UserScript==
+            // ==InuPlugin==
             // @Name Cased
             // @PLUGIN-API 2
-            // ==/UserScript==
+            // ==/InuPlugin==
             """.trimIndent(),
         )
         assertEquals("Cased", m.name)
@@ -144,10 +144,10 @@ class PluginManifestParserTest {
     fun toleratesWhitespaceAndBlankCommentLines() {
         val m = PluginManifestParser.parse(
             """
-              // ==UserScript==
+              // ==InuPlugin==
               //
               //   @name   spaced   out
-              // ==/UserScript==
+              // ==/InuPlugin==
             """.trimIndent(),
         )
         assertEquals("spaced   out", m.name)

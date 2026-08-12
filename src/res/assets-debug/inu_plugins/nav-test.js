@@ -1,4 +1,4 @@
-// ==UserScript==
+// ==InuPlugin==
 // @name         nav test
 // @author       teidesu
 // @version      1.0
@@ -6,7 +6,7 @@
 // @grant        account.read(dialogs)
 // @plugin-api   1
 // @platform     android
-// ==/UserScript==
+// ==/InuPlugin==
 
 // the load-time half runs on its own and its count is checked exactly; the rest reports as you
 // navigate, which is the only way a navigation event can be exercised at all. every check in it is

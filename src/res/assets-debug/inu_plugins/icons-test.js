@@ -1,11 +1,11 @@
-// ==UserScript==
+// ==InuPlugin==
 // @name         icons test
 // @author       teidesu
 // @version      1.0
 // @description  asserts inu.icons.common/svg and inu.android.resourceIcon, and shows the whole curated set in a settings page
 // @plugin-api   1
 // @platform     android
-// ==/UserScript==
+// ==/InuPlugin==
 /* eslint-disable eslint-comments/no-unlimited-disable */
 /* eslint-disable */
 

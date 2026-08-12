@@ -1,11 +1,11 @@
-// ==UserScript==
+// ==InuPlugin==
 // @name         utils test
 // @author       teidesu
 // @version      1.0
 // @description  asserts inu.utils: the base64/hex codecs, the formatters, and the peer id arithmetic
 // @plugin-api   1
 // @platform     android
-// ==/UserScript==
+// ==/InuPlugin==
 
 function pass(label, detail) {
   console.log(detail === undefined ? `PASS ${label}` : `PASS ${label}: ${detail}`)

@@ -1,4 +1,4 @@
-// ==UserScript==
+// ==InuPlugin==
 // @name         events test
 // @author       teidesu
 // @version      1.0
@@ -6,7 +6,7 @@
 // @grant        onUpdate(new_message,edit_message,delete_message,updateNewMessage,updateNewChannelMessage,updateEditMessage,updateEditChannelMessage,updateDeleteMessages,updateDeleteChannelMessages)
 // @plugin-api   1
 // @platform     android
-// ==/UserScript==
+// ==/InuPlugin==
 
 function pass(label, detail) {
   console.log(detail === undefined ? `PASS ${label}` : `PASS ${label}: ${detail}`)

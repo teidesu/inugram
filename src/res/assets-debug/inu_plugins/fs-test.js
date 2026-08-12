@@ -1,4 +1,4 @@
-// ==UserScript==
+// ==InuPlugin==
 // @name         fs test
 // @author       teidesu
 // @version      1.0
@@ -6,7 +6,7 @@
 // @plugin-api   1
 // @platform     android
 // @grant        fs(64kb)
-// ==/UserScript==
+// ==/InuPlugin==
 
 function pass(label, detail) {
   console.log(detail === undefined ? `PASS ${label}` : `PASS ${label}: ${detail}`)

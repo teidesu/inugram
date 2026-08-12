@@ -1,4 +1,4 @@
-// ==UserScript==
+// ==InuPlugin==
 // @name         deserialize test
 // @author       teidesu
 // @version      1.0
@@ -6,7 +6,7 @@
 // @grant        interceptDeserialize(userFull,user,message)
 // @plugin-api   1
 // @platform     android
-// ==/UserScript==
+// ==/InuPlugin==
 
 // the rewrite itself is only observable on a device: a rule takes effect on the next object the app
 // parses, and nothing a plugin can call makes that happen. what runs everywhere is the boundary -

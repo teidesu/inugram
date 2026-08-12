@@ -1,4 +1,4 @@
-// ==UserScript==
+// ==InuPlugin==
 // @name         accounts test
 // @author       teidesu
 // @version      1.0
@@ -8,7 +8,7 @@
 // @grant        invokeRpc(help.getConfig)
 // @plugin-api   1
 // @platform     android
-// ==/UserScript==
+// ==/InuPlugin==
 
 function pass(label, detail) {
   console.log(detail === undefined ? `PASS ${label}` : `PASS ${label}: ${detail}`)

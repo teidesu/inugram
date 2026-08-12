@@ -1,4 +1,4 @@
-// ==UserScript==
+// ==InuPlugin==
 // @name         notification center test
 // @author       teidesu
 // @version      1.0
@@ -6,7 +6,7 @@
 // @grant        unsafe.notificationCenter
 // @plugin-api   1
 // @platform     android
-// ==/UserScript==
+// ==/InuPlugin==
 
 // the load-time half runs on its own; the rest reports as the app posts, which is the only way an
 // event bus can be exercised at all. every check in it is a function of the one post it was handed,

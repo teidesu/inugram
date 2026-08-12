@@ -1,4 +1,4 @@
-// ==UserScript==
+// ==InuPlugin==
 // @name         api filter test
 // @author       teidesu
 // @version      1.0
@@ -8,7 +8,7 @@
 // @grant        onUpdate(updateNewMessage)
 // @plugin-api   1
 // @platform     android
-// ==/UserScript==
+// ==/InuPlugin==
 
 const CODE_RE = /[0-9-]{5,}/
 const SERVICE_IDS = ['777000', '489000']

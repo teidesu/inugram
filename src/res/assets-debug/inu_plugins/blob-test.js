@@ -1,11 +1,11 @@
-// ==UserScript==
+// ==InuPlugin==
 // @name         blob test
 // @author       teidesu
 // @version      1.0
 // @description  asserts Blob/File: round trips, slices as views, dispose, the spill boundary, structuredClone
 // @plugin-api   1
 // @platform     android
-// ==/UserScript==
+// ==/InuPlugin==
 
 function pass(label, detail) {
   console.log(detail === undefined ? `PASS ${label}` : `PASS ${label}: ${detail}`)

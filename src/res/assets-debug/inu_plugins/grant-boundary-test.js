@@ -1,4 +1,4 @@
-// ==UserScript==
+// ==InuPlugin==
 // @name         grant boundary test
 // @author       teidesu
 // @version      1.0
@@ -6,7 +6,7 @@
 // @grant        kv
 // @plugin-api   1
 // @platform     android
-// ==/UserScript==
+// ==/InuPlugin==
 
 async function expectDenied(label, expected, fn) {
   let error

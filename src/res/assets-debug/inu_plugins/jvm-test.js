@@ -1,4 +1,4 @@
-// ==UserScript==
+// ==InuPlugin==
 // @name         jvm test
 // @author       teidesu
 // @version      1.0
@@ -6,7 +6,7 @@
 // @grant        unsafe.jvm(java.lang.*,java.util.*)
 // @plugin-api   1
 // @platform     android
-// ==/UserScript==
+// ==/InuPlugin==
 
 // the grant is deliberately *scoped*, which is the only way to see the boundary at all: a plugin
 // holding the bare token reaches everything and every refusal below would read as a passing test of
