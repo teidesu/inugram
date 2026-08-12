@@ -2,10 +2,7 @@ use std::rc::Rc;
 
 use rquickjs::{Ctx, Exception, Function, Object, Result as JsResult, Value};
 
-use crate::api::{
-  error::PluginErrorCode,
-  platform::jvm::{self, JvmState},
-};
+use crate::api::{error::PluginErrorCode, platform::jvm::JvmState};
 
 pub const SVG_LIMIT_BYTES: usize = 64 * 1024;
 
@@ -154,7 +151,7 @@ pub(crate) fn icon_from_value<'js>(
     let Ok(expected) = handle.parse::<i64>() else {
       return Err(Exception::throw_type(ctx, &format!("{what}: 'icon' must come from inu.icons")));
     };
-    if jvm::handle_id(ctx, jvm, &retained_value)? != expected {
+    if jvm.handle_id(ctx, &retained_value)? != expected {
       return Err(Exception::throw_type(ctx, &format!("{what}: 'icon' must come from inu.icons")));
     }
     return Ok(Some(Icon {
@@ -236,7 +233,7 @@ fn js_svg<'js>(ctx: &Ctx<'js>, host: &Rc<dyn IconHost>, source: Value<'js>) -> J
 }
 
 fn js_drawable_icon<'js>(ctx: &Ctx<'js>, jvm: &Rc<JvmState>, drawable: Value<'js>) -> JsResult<Object<'js>> {
-  let handle = jvm::handle_id(ctx, jvm, &drawable)?;
+  let handle = jvm.handle_id(ctx, &drawable)?;
   if handle < 0 {
     return Err(Exception::throw_type(ctx, "android.drawableIcon: expected a java object from inu.jvm"));
   }

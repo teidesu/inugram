@@ -341,7 +341,7 @@ fn bind<'js>(
   life: ViewLife,
   id: i64,
 ) -> Value<'js> {
-  let value = wire_to_js_value(ctx, views, &encode_handle(is_vector, read_only, id), life).unwrap();
+  let value = views.wire_to_js_value(ctx, &encode_handle(is_vector, read_only, id), life).unwrap();
   ctx.globals().set(name, value.clone()).unwrap();
   value
 }
@@ -1065,7 +1065,7 @@ fn a_multi_byte_wire_is_an_error_not_a_panic() {
 
   ctx.with(|ctx| {
     for wire in ["", "é", "日本語", "H日1", "HОW1", "\u{1F600}"] {
-      assert!(wire_to_js_value(&ctx, &views, wire, ViewLife::Plugin).is_err(), "'{wire}' must decode to an error");
+      assert!(views.wire_to_js_value(&ctx, wire, ViewLife::Plugin).is_err(), "'{wire}' must decode to an error");
     }
 
     bind_object(&ctx, &views, "obj", ViewLife::Plugin, id);

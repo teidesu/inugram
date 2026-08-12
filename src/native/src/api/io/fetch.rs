@@ -7,9 +7,9 @@ use std::rc::Rc;
 use rquickjs::{Ctx, Function, Object, Result as JsResult, Runtime, TypedArray, Value};
 
 use crate::api::error::{host_error_to_js, wire_error_to_js, PluginErrorCode};
-use crate::api::io::blob::{export_for_host, mint_app_file, resolve_export, BlobState, BUILD_LIMIT_BYTES};
+use crate::api::io::blob::{mint_app_file, BlobState, BUILD_LIMIT_BYTES};
 use crate::api::telegram::rpc::{format_exception, pump_jobs, PendingSettle};
-use crate::sandbox::grants::{check_grant, GrantHost, MATCH_DOMAIN};
+use crate::sandbox::grants::{GrantHost, MATCH_DOMAIN};
 use crate::sandbox::registry::RequestIds;
 use crate::utils::prelude;
 
@@ -60,82 +60,84 @@ impl BodyError {
   }
 }
 
-fn read_body(state: &FetchState, value: &Value<'_>) -> Result<Option<Vec<u8>>, BodyError> {
-  if value.is_undefined() || value.is_null() {
-    return Ok(None);
-  }
-  if let Some(text) = value.as_string() {
-    let text = text.to_string().map_err(|e| BodyError::InvalidArgument(format!("fetch: {e:?}")))?;
-    return Ok(Some(text.into_bytes()));
-  }
-  if let Ok(typed) = TypedArray::<u8>::from_value(value.clone()) {
-    let Some(bytes) = typed.as_bytes() else {
-      return Err(BodyError::InvalidArgument("fetch: the body array is detached".to_string()));
-    };
-    return Ok(Some(bytes.to_vec()));
-  }
-  if let Some(wire) = export_for_host(&state.blobs, value) {
-    let id = wire
-      .strip_prefix('B')
-      .and_then(|rest| rest.split(':').next())
-      .and_then(|id| id.parse().ok())
-      .unwrap_or(0);
-    let Some(export) = resolve_export(&state.blobs, id) else {
-      return Err(BodyError::HandleExpired("fetch: the body blob is gone".to_string()));
-    };
-    if export.len() > BUILD_LIMIT_BYTES {
-      return Err(BodyError::QuotaExceeded {
-        usage: export.len(),
-        message: format!(
-          "fetch: a request body is capped at {BUILD_LIMIT_BYTES} bytes; use uploadFile for anything bigger"
-        ),
-      });
+impl FetchState {
+  fn read_body(&self, value: &Value<'_>) -> Result<Option<Vec<u8>>, BodyError> {
+    if value.is_undefined() || value.is_null() {
+      return Ok(None);
     }
-    let bytes = export
-      .read(0, export.len())
-      .map_err(|_| BodyError::HandleExpired("fetch: the body blob is gone".to_string()))?;
-    return Ok(Some(bytes));
-  }
-  if rquickjs::Class::<crate::api::io::blob::BlobHandle>::from_value(value).is_ok() {
-    return Err(BodyError::HandleExpired("fetch: the body blob was disposed".to_string()));
-  }
-  Err(BodyError::InvalidArgument("fetch: the body must be a string, a Uint8Array or a Blob".to_string()))
-}
-
-fn js_send<'js>(
-  ctx: &Ctx<'js>,
-  state: &Rc<FetchState>,
-  url: String,
-  spec: Value<'js>,
-  body: Value<'js>,
-) -> JsResult<Object<'js>> {
-  let spec_json = ctx.json_stringify(spec)?.map(|s| s.to_string()).transpose()?.unwrap_or_else(|| "{}".to_string());
-  let host = match parse_target(&url) {
-    Ok(host) => host,
-    Err(message) => return PluginErrorCode::InvalidArgument.throw(ctx, &message),
-  };
-  check_grant(ctx, &state.grants, "fetch", Some(&host), MATCH_DOMAIN)?;
-
-  let body = match read_body(state, &body) {
-    Ok(body) => body,
-    Err(error) => return error.code().throw(ctx, error.message()),
-  };
-
-  let request_id = state.next_request_id.alloc();
-  let (promise, settle) = PendingSettle::new(ctx)?;
-  state.pending.borrow_mut().insert(request_id, settle);
-
-  if let Some(err) = state.host.send(request_id, &url, &spec_json, body.as_deref()) {
-    if let Some(settle) = state.pending.borrow_mut().remove(&request_id) {
-      let value = host_error_to_js(ctx, &err)?;
-      settle.reject_with_value(ctx, value)?;
+    if let Some(text) = value.as_string() {
+      let text = text.to_string().map_err(|e| BodyError::InvalidArgument(format!("fetch: {e:?}")))?;
+      return Ok(Some(text.into_bytes()));
     }
+    if let Ok(typed) = TypedArray::<u8>::from_value(value.clone()) {
+      let Some(bytes) = typed.as_bytes() else {
+        return Err(BodyError::InvalidArgument("fetch: the body array is detached".to_string()));
+      };
+      return Ok(Some(bytes.to_vec()));
+    }
+    if let Some(wire) = self.blobs.export_for_host(value) {
+      let id = wire
+        .strip_prefix('B')
+        .and_then(|rest| rest.split(':').next())
+        .and_then(|id| id.parse().ok())
+        .unwrap_or(0);
+      let Some(export) = self.blobs.resolve_export(id) else {
+        return Err(BodyError::HandleExpired("fetch: the body blob is gone".to_string()));
+      };
+      if export.len() > BUILD_LIMIT_BYTES {
+        return Err(BodyError::QuotaExceeded {
+          usage: export.len(),
+          message: format!(
+            "fetch: a request body is capped at {BUILD_LIMIT_BYTES} bytes; use uploadFile for anything bigger"
+          ),
+        });
+      }
+      let bytes = export
+        .read(0, export.len())
+        .map_err(|_| BodyError::HandleExpired("fetch: the body blob is gone".to_string()))?;
+      return Ok(Some(bytes));
+    }
+    if rquickjs::Class::<crate::api::io::blob::BlobHandle>::from_value(value).is_ok() {
+      return Err(BodyError::HandleExpired("fetch: the body blob was disposed".to_string()));
+    }
+    Err(BodyError::InvalidArgument("fetch: the body must be a string, a Uint8Array or a Blob".to_string()))
   }
 
-  let handle = Object::new(ctx.clone())?;
-  handle.set("id", request_id)?;
-  handle.set("promise", promise)?;
-  Ok(handle)
+  fn js_send<'js>(
+    self: &Rc<Self>,
+    ctx: &Ctx<'js>,
+    url: String,
+    spec: Value<'js>,
+    body: Value<'js>,
+  ) -> JsResult<Object<'js>> {
+    let spec_json = ctx.json_stringify(spec)?.map(|s| s.to_string()).transpose()?.unwrap_or_else(|| "{}".to_string());
+    let host = match parse_target(&url) {
+      Ok(host) => host,
+      Err(message) => return PluginErrorCode::InvalidArgument.throw(ctx, &message),
+    };
+    self.grants.check_grant(ctx, "fetch", Some(&host), MATCH_DOMAIN)?;
+
+    let body = match self.read_body(&body) {
+      Ok(body) => body,
+      Err(error) => return error.code().throw(ctx, error.message()),
+    };
+
+    let request_id = self.next_request_id.alloc();
+    let (promise, settle) = PendingSettle::new(ctx)?;
+    self.pending.borrow_mut().insert(request_id, settle);
+
+    if let Some(err) = self.host.send(request_id, &url, &spec_json, body.as_deref()) {
+      if let Some(settle) = self.pending.borrow_mut().remove(&request_id) {
+        let value = host_error_to_js(ctx, &err)?;
+        settle.reject_with_value(ctx, value)?;
+      }
+    }
+
+    let handle = Object::new(ctx.clone())?;
+    handle.set("id", request_id)?;
+    handle.set("promise", promise)?;
+    Ok(handle)
+  }
 }
 
 pub fn install_fetch<'js>(
@@ -161,7 +163,7 @@ pub fn install_fetch<'js>(
     natives.set(
       "send",
       Function::new(ctx.clone(), move |ctx: Ctx<'js>, url: String, spec: Value<'js>, body: Value<'js>| {
-        js_send(&ctx, &state, url, spec, body)
+        state.js_send(&ctx, url, spec, body)
       })?,
     )?;
   }

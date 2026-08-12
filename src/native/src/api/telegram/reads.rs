@@ -7,8 +7,8 @@ use rquickjs::{Array, Ctx, Function, IntoJs, Object, Result as JsResult, Runtime
 use crate::api::error::{wire_error_to_js, PluginErrorCode};
 use crate::api::telegram::account::AccountState;
 use crate::api::telegram::rpc::{format_exception, pump_jobs, PendingSettle};
-use crate::api::tl::proxy::{wire_to_js_value, TlViews, ViewLife};
-use crate::sandbox::grants::{check_grant, GrantHost, MATCH_EXACT};
+use crate::api::tl::proxy::{TlViews, ViewLife};
+use crate::sandbox::grants::{GrantHost, MATCH_EXACT};
 use crate::sandbox::registry::RequestIds;
 use crate::utils::prelude;
 
@@ -125,44 +125,46 @@ struct PendingRead {
   shape: Shape,
 }
 
-fn check_read_grant(ctx: &Ctx<'_>, state: &Rc<ReadsState>, op: i32, arg: &str) -> JsResult<()> {
-  if op == OP_USER_FULL && arg == SPEC_SELF && state.grants.is_granted("account.read", Some("self"), MATCH_EXACT) {
-    return Ok(());
+impl ReadsState {
+  fn check_read_grant(&self, ctx: &Ctx<'_>, op: i32, arg: &str) -> JsResult<()> {
+    if op == OP_USER_FULL && arg == SPEC_SELF && self.grants.is_granted("account.read", Some("self"), MATCH_EXACT) {
+      return Ok(());
+    }
+    let Some(scope) = scope_of(op) else {
+      return PluginErrorCode::InvalidArgument.throw(ctx, "unknown account read");
+    };
+    self.grants.check_grant(ctx, "account.read", Some(scope), MATCH_EXACT)?;
+    self.check_self_grant(ctx, arg)
   }
-  let Some(scope) = scope_of(op) else {
-    return PluginErrorCode::InvalidArgument.throw(ctx, "unknown account read");
-  };
-  check_grant(ctx, &state.grants, "account.read", Some(scope), MATCH_EXACT)?;
-  check_self_grant(ctx, state, arg)
-}
 
-fn check_self_grant(ctx: &Ctx<'_>, state: &Rc<ReadsState>, arg: &str) -> JsResult<()> {
-  if !names_self(arg) {
-    return Ok(());
+  fn check_self_grant(&self, ctx: &Ctx<'_>, arg: &str) -> JsResult<()> {
+    if !names_self(arg) {
+      return Ok(());
+    }
+    self.grants.check_grant(ctx, "account.read", Some("self"), MATCH_EXACT)
   }
-  check_grant(ctx, &state.grants, "account.read", Some("self"), MATCH_EXACT)
+
+  fn read_wire(&self, ctx: &Ctx<'_>, op: i32, slot: i32, arg: &str) -> JsResult<String> {
+    self.check_read_grant(ctx, op, arg)?;
+    Ok(self.host.account_read(slot, op, arg))
+  }
+
+  fn read_one<'js>(&self, ctx: &Ctx<'js>, op: i32, slot: i32, arg: &str) -> JsResult<Value<'js>> {
+    let wire = self.read_wire(ctx, op, slot, arg)?;
+    self.views.wire_to_js_value(ctx, &wire, ViewLife::Plugin)
+  }
+
+  fn read_many<'js>(&self, ctx: &Ctx<'js>, op: i32, slot: i32, arg: &str) -> JsResult<Value<'js>> {
+    let wire = self.read_wire(ctx, op, slot, arg)?;
+    if let Some(built) = wire_error_to_js(ctx, &wire) {
+      return Err(ctx.throw(built?));
+    }
+    Ok(self.decode_list(ctx, &wire)?.into_value())
+  }
 }
 
 fn names_self(arg: &str) -> bool {
   arg.split(SEPARATOR).any(|part| part == SPEC_SELF)
-}
-
-fn read_wire(ctx: &Ctx<'_>, state: &Rc<ReadsState>, op: i32, slot: i32, arg: &str) -> JsResult<String> {
-  check_read_grant(ctx, state, op, arg)?;
-  Ok(state.host.account_read(slot, op, arg))
-}
-
-fn read_one<'js>(ctx: &Ctx<'js>, state: &Rc<ReadsState>, op: i32, slot: i32, arg: &str) -> JsResult<Value<'js>> {
-  let wire = read_wire(ctx, state, op, slot, arg)?;
-  wire_to_js_value(ctx, &state.views, &wire, ViewLife::Plugin)
-}
-
-fn read_many<'js>(ctx: &Ctx<'js>, state: &Rc<ReadsState>, op: i32, slot: i32, arg: &str) -> JsResult<Value<'js>> {
-  let wire = read_wire(ctx, state, op, slot, arg)?;
-  if let Some(built) = wire_error_to_js(ctx, &wire) {
-    return Err(ctx.throw(built?));
-  }
-  Ok(decode_list(ctx, state, &wire)?.into_value())
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -191,16 +193,14 @@ pub fn install_reads<'js>(
     let state = state.clone();
     natives.set(
       "getMe",
-      Function::new(ctx.clone(), move |ctx: Ctx<'js>, slot: i32| read_one(&ctx, &state, OP_ME, slot, ""))?,
+      Function::new(ctx.clone(), move |ctx: Ctx<'js>, slot: i32| state.read_one(&ctx, OP_ME, slot, ""))?,
     )?;
   }
   for (name, op) in [("getUser", OP_USER), ("getChat", OP_CHAT), ("getPeer", OP_PEER), ("getDialog", OP_DIALOG)] {
     let state = state.clone();
     natives.set(
       name,
-      Function::new(ctx.clone(), move |ctx: Ctx<'js>, slot: i32, spec: String| {
-        read_one(&ctx, &state, op, slot, &spec)
-      })?,
+      Function::new(ctx.clone(), move |ctx: Ctx<'js>, slot: i32, spec: String| state.read_one(&ctx, op, slot, &spec))?,
     )?;
   }
   {
@@ -208,7 +208,7 @@ pub fn install_reads<'js>(
     natives.set(
       "getMessage",
       Function::new(ctx.clone(), move |ctx: Ctx<'js>, slot: i32, spec: String, id: String| {
-        read_one(&ctx, &state, OP_MESSAGE, slot, &{
+        state.read_one(&ctx, OP_MESSAGE, slot, &{
           let parts: &[&str] = &[&spec, &id];
           parts.join("\n")
         })
@@ -220,7 +220,7 @@ pub fn install_reads<'js>(
     natives.set(
       name,
       Function::new(ctx.clone(), move |ctx: Ctx<'js>, slot: i32, specs: String| {
-        read_many(&ctx, &state, op, slot, &specs)
+        state.read_many(&ctx, op, slot, &specs)
       })?,
     )?;
   }
@@ -229,7 +229,7 @@ pub fn install_reads<'js>(
     natives.set(
       "getMessages",
       Function::new(ctx.clone(), move |ctx: Ctx<'js>, slot: i32, spec: String, ids: String| {
-        read_many(&ctx, &state, OP_MESSAGES, slot, &{
+        state.read_many(&ctx, OP_MESSAGES, slot, &{
           let parts: &[&str] = &[&spec, &ids];
           parts.join("\n")
         })
@@ -241,7 +241,7 @@ pub fn install_reads<'js>(
     natives.set(
       "inputPeer",
       Function::new(ctx.clone(), move |ctx: Ctx<'js>, slot: i32, spec: String, kind: i32| {
-        read_one(&ctx, &state, OP_INPUT_PEER, slot, &{
+        state.read_one(&ctx, OP_INPUT_PEER, slot, &{
           let parts: &[&str] = &[&spec, &kind.to_string()];
           parts.join("\n")
         })
@@ -253,7 +253,7 @@ pub fn install_reads<'js>(
     natives.set(
       "resolve",
       Function::new(ctx.clone(), move |ctx: Ctx<'js>, slot: i32, spec: String, kind: i32| {
-        js_resolve_peer(&ctx, &state, slot, &spec, kind)
+        state.js_resolve_peer(&ctx, slot, &spec, kind)
       })?,
     )?;
   }
@@ -262,7 +262,7 @@ pub fn install_reads<'js>(
     natives.set(
       "checkPeers",
       Function::new(ctx.clone(), move |ctx: Ctx<'js>, _slot: i32| -> JsResult<()> {
-        check_grant(&ctx, &state.grants, "account.read", Some("peers"), MATCH_EXACT)
+        state.grants.check_grant(&ctx, "account.read", Some("peers"), MATCH_EXACT)
       })?,
     )?;
   }
@@ -271,7 +271,7 @@ pub fn install_reads<'js>(
     natives.set(
       "getDraft",
       Function::new(ctx.clone(), move |ctx: Ctx<'js>, slot: i32, spec: String, topic: String| {
-        read_one(&ctx, &state, OP_DRAFT, slot, &{
+        state.read_one(&ctx, OP_DRAFT, slot, &{
           let parts: &[&str] = &[&spec, &topic];
           parts.join("\n")
         })
@@ -283,7 +283,7 @@ pub fn install_reads<'js>(
     natives.set(
       "fetch",
       Function::new(ctx.clone(), move |ctx: Ctx<'js>, slot: i32, op: i32, arg: String, cursor: String| {
-        js_fetch(&ctx, &state, slot, op, &arg, &cursor)
+        state.js_fetch(&ctx, slot, op, &arg, &cursor)
       })?,
     )?;
   }
@@ -308,144 +308,121 @@ pub fn install_reads<'js>(
   Ok(state)
 }
 
-fn js_resolve_peer<'js>(
-  ctx: &Ctx<'js>,
-  state: &Rc<ReadsState>,
-  slot: i32,
-  spec: &str,
-  kind: i32,
-) -> JsResult<Value<'js>> {
-  check_grant(ctx, &state.grants, "account.read", Some("peers"), MATCH_EXACT)?;
-  check_self_grant(ctx, state, spec)?;
-  park(ctx, state, Shape::Value, |request_id| state.host.resolve_peer(slot, request_id, spec, kind))
-}
-
-fn park<'js>(
-  ctx: &Ctx<'js>,
-  state: &Rc<ReadsState>,
-  shape: Shape,
-  ask: impl FnOnce(i64) -> Option<String>,
-) -> JsResult<Value<'js>> {
-  let request_id = state.next_request_id.alloc();
-  let (promise, settle) = PendingSettle::new(ctx)?;
-  state.pending.borrow_mut().insert(request_id, PendingRead { settle, shape });
-
-  if let Some(err) = ask(request_id) {
-    if let Some(pending) = state.pending.borrow_mut().remove(&request_id) {
-      let value = crate::api::error::host_error_to_js(ctx, &err)?;
-      pending.settle.reject_with_value(ctx, value)?;
-    }
+impl ReadsState {
+  fn js_resolve_peer<'js>(&self, ctx: &Ctx<'js>, slot: i32, spec: &str, kind: i32) -> JsResult<Value<'js>> {
+    self.grants.check_grant(ctx, "account.read", Some("peers"), MATCH_EXACT)?;
+    self.check_self_grant(ctx, spec)?;
+    self.park(ctx, Shape::Value, |request_id| self.host.resolve_peer(slot, request_id, spec, kind))
   }
-  Ok(promise.into_value())
-}
 
-fn js_fetch<'js>(
-  ctx: &Ctx<'js>,
-  state: &Rc<ReadsState>,
-  slot: i32,
-  op: i32,
-  arg: &str,
-  cursor: &str,
-) -> JsResult<Value<'js>> {
-  check_read_grant(ctx, state, op, arg)?;
-  let shape = shape_of(op);
-  let host_arg = match shape {
-    Shape::Page(list) => {
-      let payload = if cursor.is_empty() {
-        String::new()
-      } else {
-        match state.cursors.payload_of(list, cursor) {
-          Some(payload) => payload,
-          None => {
-            return PluginErrorCode::InvalidArgument
-              .throw(ctx, "this cursor did not come from this list, or is too old to page from")
-          }
-        }
-      };
-      {
-        let parts: &[&str] = &[arg, &payload];
-        parts.join("\n")
+  fn park<'js>(&self, ctx: &Ctx<'js>, shape: Shape, ask: impl FnOnce(i64) -> Option<String>) -> JsResult<Value<'js>> {
+    let request_id = self.next_request_id.alloc();
+    let (promise, settle) = PendingSettle::new(ctx)?;
+    self.pending.borrow_mut().insert(request_id, PendingRead { settle, shape });
+
+    if let Some(err) = ask(request_id) {
+      if let Some(pending) = self.pending.borrow_mut().remove(&request_id) {
+        let value = crate::api::error::host_error_to_js(ctx, &err)?;
+        pending.settle.reject_with_value(ctx, value)?;
       }
     }
-    _ => arg.to_string(),
-  };
-  park(ctx, state, shape, |request_id| state.host.account_fetch(slot, request_id, op, &host_arg))
-}
-
-fn decode_list<'js>(ctx: &Ctx<'js>, state: &Rc<ReadsState>, wire: &str) -> JsResult<Array<'js>> {
-  let array = Array::new(ctx.clone())?;
-  if wire.is_empty() {
-    return Ok(array);
+    Ok(promise.into_value())
   }
-  for (index, element) in wire.split(SEPARATOR).enumerate() {
-    array.set(index, wire_to_js_value(ctx, &state.views, element, ViewLife::Plugin)?)?;
-  }
-  Ok(array)
-}
 
-fn decode_result<'js>(ctx: &Ctx<'js>, state: &Rc<ReadsState>, shape: Shape, wire: &str) -> JsResult<Value<'js>> {
-  match shape {
-    Shape::Value => wire_to_js_value(ctx, &state.views, wire, ViewLife::Plugin),
-    Shape::List => Ok(decode_list(ctx, state, wire)?.into_value()),
-    Shape::Page(list) => {
-      let (payload, elements) = wire.split_once(SEPARATOR).unwrap_or((wire, ""));
-      let array = decode_list(ctx, state, elements)?;
-      let next = if payload.is_empty() {
-        Value::new_null(ctx.clone())
-      } else {
-        state.cursors.mint(list, payload).into_js(ctx)?
-      };
-      array.as_object().set("next", next)?;
-      Ok(array.into_value())
-    }
-  }
-}
-
-fn settle(
-  rt: &Runtime,
-  context: &rquickjs::Context,
-  state: &Rc<ReadsState>,
-  what: &str,
-  request_id: i64,
-  result_wire: &str,
-) {
-  context.with(|ctx| {
-    let Some(pending) = state.pending.borrow_mut().remove(&request_id) else {
-      return;
+  fn js_fetch<'js>(&self, ctx: &Ctx<'js>, slot: i32, op: i32, arg: &str, cursor: &str) -> JsResult<Value<'js>> {
+    self.check_read_grant(ctx, op, arg)?;
+    let shape = shape_of(op);
+    let host_arg = match shape {
+      Shape::Page(list) => {
+        let payload = if cursor.is_empty() {
+          String::new()
+        } else {
+          match self.cursors.payload_of(list, cursor) {
+            Some(payload) => payload,
+            None => {
+              return PluginErrorCode::InvalidArgument
+                .throw(ctx, "this cursor did not come from this list, or is too old to page from")
+            }
+          }
+        };
+        {
+          let parts: &[&str] = &[arg, &payload];
+          parts.join("\n")
+        }
+      }
+      _ => arg.to_string(),
     };
-    if let Some(built) = wire_error_to_js(&ctx, result_wire) {
-      match built {
-        Ok(value) => {
-          if pending.settle.reject_with_value(&ctx, value).is_err() {
-            (state.log)(&format!("{what}({request_id}) reject failed: {}", format_exception(&ctx)));
+    self.park(ctx, shape, |request_id| self.host.account_fetch(slot, request_id, op, &host_arg))
+  }
+
+  fn decode_list<'js>(&self, ctx: &Ctx<'js>, wire: &str) -> JsResult<Array<'js>> {
+    let array = Array::new(ctx.clone())?;
+    if wire.is_empty() {
+      return Ok(array);
+    }
+    for (index, element) in wire.split(SEPARATOR).enumerate() {
+      array.set(index, self.views.wire_to_js_value(ctx, element, ViewLife::Plugin)?)?;
+    }
+    Ok(array)
+  }
+
+  fn decode_result<'js>(&self, ctx: &Ctx<'js>, shape: Shape, wire: &str) -> JsResult<Value<'js>> {
+    match shape {
+      Shape::Value => self.views.wire_to_js_value(ctx, wire, ViewLife::Plugin),
+      Shape::List => Ok(self.decode_list(ctx, wire)?.into_value()),
+      Shape::Page(list) => {
+        let (payload, elements) = wire.split_once(SEPARATOR).unwrap_or((wire, ""));
+        let array = self.decode_list(ctx, elements)?;
+        let next = if payload.is_empty() {
+          Value::new_null(ctx.clone())
+        } else {
+          self.cursors.mint(list, payload).into_js(ctx)?
+        };
+        array.as_object().set("next", next)?;
+        Ok(array.into_value())
+      }
+    }
+  }
+
+  fn settle(&self, rt: &Runtime, context: &rquickjs::Context, what: &str, request_id: i64, result_wire: &str) {
+    context.with(|ctx| {
+      let Some(pending) = self.pending.borrow_mut().remove(&request_id) else {
+        return;
+      };
+      if let Some(built) = wire_error_to_js(&ctx, result_wire) {
+        match built {
+          Ok(value) => {
+            if pending.settle.reject_with_value(&ctx, value).is_err() {
+              (self.log)(&format!("{what}({request_id}) reject failed: {}", format_exception(&ctx)));
+            }
+          }
+          Err(e) => {
+            pending.settle.release(&ctx);
+            (self.log)(&format!("{what}({request_id}) error decode failed: {e:?}"));
           }
         }
-        Err(e) => {
+        return;
+      }
+      match self.decode_result(&ctx, pending.shape, result_wire) {
+        Ok(value) => {
+          if pending.settle.resolve_with(&ctx, value).is_err() {
+            (self.log)(&format!("{what}({request_id}) resolve failed: {}", format_exception(&ctx)));
+          }
+        }
+        Err(_) => {
           pending.settle.release(&ctx);
-          (state.log)(&format!("{what}({request_id}) error decode failed: {e:?}"));
+          (self.log)(&format!("{what}({request_id}) bad result wire: {}", format_exception(&ctx)));
         }
       }
-      return;
-    }
-    match decode_result(&ctx, state, pending.shape, result_wire) {
-      Ok(value) => {
-        if pending.settle.resolve_with(&ctx, value).is_err() {
-          (state.log)(&format!("{what}({request_id}) resolve failed: {}", format_exception(&ctx)));
-        }
-      }
-      Err(_) => {
-        pending.settle.release(&ctx);
-        (state.log)(&format!("{what}({request_id}) bad result wire: {}", format_exception(&ctx)));
-      }
-    }
-  });
-  pump_jobs(rt, context, state.log.as_ref());
+    });
+    pump_jobs(rt, context, self.log.as_ref());
+  }
 }
 
 impl ReadsState {
   pub fn resolve_peer(self: &Rc<Self>, rt: &Runtime, context: &rquickjs::Context, request_id: i64, result_wire: &str) {
     let state = self;
-    settle(rt, context, state, "resolvePeer", request_id, result_wire);
+    state.settle(rt, context, "resolvePeer", request_id, result_wire);
   }
 
   pub fn resolve_account_fetch(
@@ -456,7 +433,7 @@ impl ReadsState {
     result_wire: &str,
   ) {
     let state = self;
-    settle(rt, context, state, "accountFetch", request_id, result_wire);
+    state.settle(rt, context, "accountFetch", request_id, result_wire);
   }
 
   pub fn dispose(self: &Rc<Self>, context: &rquickjs::Context) {

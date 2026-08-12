@@ -95,6 +95,8 @@ pub(crate) struct Engine {
   pub(crate) xposed: Option<Rc<XposedState>>,
 }
 
-pub(crate) fn pump(engine: &Engine) {
-  pump_jobs(&engine._rt, &engine.ctx, engine.rpc.log.as_ref());
+impl Engine {
+  pub(crate) fn pump(&self) {
+    pump_jobs(&self._rt, &self.ctx, self.rpc.log.as_ref());
+  }
 }

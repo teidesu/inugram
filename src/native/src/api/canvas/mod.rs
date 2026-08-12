@@ -18,7 +18,7 @@ use rquickjs::{
 use crate::api::canvas::css::{parse_color, parse_font, Font};
 use crate::api::canvas::geometry::{finite, normalize_round_rect, ArcError, Matrix, Path, Verb};
 use crate::api::error::{wire_error_to_js, PluginErrorCode};
-use crate::api::io::blob::{self, mint_app_file, resolve_export, BlobHandle, BlobState, BUILD_LIMIT_BYTES};
+use crate::api::io::blob::{mint_app_file, BlobHandle, BlobState, BUILD_LIMIT_BYTES};
 use crate::api::io::fs::FsState;
 use crate::api::telegram::rpc::{format_exception, pump_jobs, PendingSettle};
 use crate::sandbox::limits::{ExternalCharge, ExternalMemory};
@@ -536,81 +536,83 @@ impl Context2d {
   }
 }
 
-fn encode_paint(
-  ctx: &Ctx<'_>,
-  out: &mut Encoder,
-  state: &DrawState,
-  style: &Style,
-  inverse: &Matrix,
-  blend_modes: bool,
-) -> JsResult<()> {
-  if state.composite as usize >= FIRST_BLEND_MODE && !blend_modes {
-    return PluginErrorCode::Unsupported.throw(
-      ctx,
-      &format!(
-        "'{}' needs android 10 or newer; check inu.info().sdk before using the blend modes",
-        COMPOSITE_MODES[state.composite as usize],
-      ),
-    );
+impl Encoder {
+  fn encode_paint(
+    &mut self,
+    ctx: &Ctx<'_>,
+    state: &DrawState,
+    style: &Style,
+    inverse: &Matrix,
+    blend_modes: bool,
+  ) -> JsResult<()> {
+    if state.composite as usize >= FIRST_BLEND_MODE && !blend_modes {
+      return PluginErrorCode::Unsupported.throw(
+        ctx,
+        &format!(
+          "'{}' needs android 10 or newer; check inu.info().sdk before using the blend modes",
+          COMPOSITE_MODES[state.composite as usize],
+        ),
+      );
+    }
+    self.f(state.alpha);
+    self.u8(state.composite);
+    let offset = inverse.apply_vector(state.shadow_offset.0, state.shadow_offset.1);
+    let scale = inverse.determinant().abs().sqrt();
+    self.f(state.shadow_blur * if scale.is_finite() && scale > 0.0 { scale } else { 1.0 });
+    self.f(offset.0);
+    self.f(offset.1);
+    self.i32(state.shadow_color);
+    self.encode_style(ctx, style)
   }
-  out.f(state.alpha);
-  out.u8(state.composite);
-  let offset = inverse.apply_vector(state.shadow_offset.0, state.shadow_offset.1);
-  let scale = inverse.determinant().abs().sqrt();
-  out.f(state.shadow_blur * if scale.is_finite() && scale > 0.0 { scale } else { 1.0 });
-  out.f(offset.0);
-  out.f(offset.1);
-  out.i32(state.shadow_color);
-  encode_style(ctx, out, style)
-}
 
-fn encode_style(ctx: &Ctx<'_>, out: &mut Encoder, style: &Style) -> JsResult<()> {
-  match style {
-    Style::Color(color) => {
-      out.u8(STYLE_COLOR);
-      out.i32(*color);
-    }
-    Style::Gradient(gradient) => {
-      out.u8(gradient.kind);
-      let count = match gradient.kind {
-        STYLE_LINEAR => 4,
-        STYLE_RADIAL => 6,
-        _ => 3,
-      };
-      for value in &gradient.coords[..count] {
-        out.f(*value);
+  fn encode_style(&mut self, ctx: &Ctx<'_>, style: &Style) -> JsResult<()> {
+    match style {
+      Style::Color(color) => {
+        self.u8(STYLE_COLOR);
+        self.i32(*color);
       }
-      let stops = gradient.stops.borrow();
-      out.u32(stops.len() as u32);
-      for (offset, color) in stops.iter() {
-        out.f(*offset);
-        out.i32(*color);
+      Style::Gradient(gradient) => {
+        self.u8(gradient.kind);
+        let count = match gradient.kind {
+          STYLE_LINEAR => 4,
+          STYLE_RADIAL => 6,
+          _ => 3,
+        };
+        for value in &gradient.coords[..count] {
+          self.f(*value);
+        }
+        let stops = gradient.stops.borrow();
+        self.u32(stops.len() as u32);
+        for (offset, color) in stops.iter() {
+          self.f(*offset);
+          self.i32(*color);
+        }
+      }
+      Style::Pattern(pattern) => {
+        if !pattern.source.alive() {
+          return expired(ctx, "the image behind this pattern was disposed");
+        }
+        self.u8(STYLE_PATTERN);
+        self.u8(pattern.source.kind());
+        self.i64(pattern.source.id());
+        self.sources.push(pattern.source.clone());
+        self.u8(pattern.repeat);
+        self.matrix(&pattern.transform.get());
       }
     }
-    Style::Pattern(pattern) => {
-      if !pattern.source.alive() {
-        return expired(ctx, "the image behind this pattern was disposed");
-      }
-      out.u8(STYLE_PATTERN);
-      out.u8(pattern.source.kind());
-      out.i64(pattern.source.id());
-      out.sources.push(pattern.source.clone());
-      out.u8(pattern.repeat);
-      out.matrix(&pattern.transform.get());
-    }
+    Ok(())
   }
-  Ok(())
-}
 
-fn encode_stroke(out: &mut Encoder, state: &DrawState) {
-  out.f(state.line_width);
-  out.u8(state.line_cap);
-  out.u8(state.line_join);
-  out.f(state.miter_limit);
-  out.f(state.dash_offset);
-  out.u32(state.dash.len() as u32);
-  for segment in &state.dash {
-    out.f(*segment);
+  fn encode_stroke(&mut self, state: &DrawState) {
+    self.f(state.line_width);
+    self.u8(state.line_cap);
+    self.u8(state.line_join);
+    self.f(state.miter_limit);
+    self.f(state.dash_offset);
+    self.u32(state.dash.len() as u32);
+    for segment in &state.dash {
+      self.f(*segment);
+    }
   }
 }
 
@@ -620,43 +622,38 @@ enum PaintKind {
   Stroke,
 }
 
-fn draw_path(
-  ctx: &Ctx<'_>,
-  this: &Context2d,
-  command: u8,
-  kind: Option<PaintKind>,
-  fill_rule: u8,
-  path: &Path,
-) -> JsResult<()> {
-  this.live(ctx)?;
-  let state = this.state.borrow();
-  let Some(inverse) = state.matrix.invert() else {
-    return Ok(());
-  };
-  if path.is_empty() {
-    return Ok(());
-  }
-  let blend_modes = this.surface.state.blend_modes.get();
-  let mut scratch = Encoder::default();
-  match kind {
-    Some(PaintKind::Fill) => encode_paint(ctx, &mut scratch, &state, &state.fill, &inverse, blend_modes)?,
-    Some(PaintKind::Stroke) => {
-      encode_paint(ctx, &mut scratch, &state, &state.stroke, &inverse, blend_modes)?;
-      encode_stroke(&mut scratch, &state);
+impl Context2d {
+  fn draw_path(&self, ctx: &Ctx<'_>, command: u8, kind: Option<PaintKind>, fill_rule: u8, path: &Path) -> JsResult<()> {
+    self.live(ctx)?;
+    let state = self.state.borrow();
+    let Some(inverse) = state.matrix.invert() else {
+      return Ok(());
+    };
+    if path.is_empty() {
+      return Ok(());
     }
-    None => {}
-  }
-  let matrix = state.matrix;
-  drop(state);
-  this.surface.record(ctx, |out| {
-    out.u8(command);
-    out.matrix(&matrix);
-    out.paint(&mut scratch);
-    if command == CMD_FILL || command == CMD_CLIP {
-      out.u8(fill_rule);
+    let blend_modes = self.surface.state.blend_modes.get();
+    let mut scratch = Encoder::default();
+    match kind {
+      Some(PaintKind::Fill) => scratch.encode_paint(ctx, &state, &state.fill, &inverse, blend_modes)?,
+      Some(PaintKind::Stroke) => {
+        scratch.encode_paint(ctx, &state, &state.stroke, &inverse, blend_modes)?;
+        scratch.encode_stroke(&state);
+      }
+      None => {}
     }
-    out.path(path, &inverse);
-  })
+    let matrix = state.matrix;
+    drop(state);
+    self.surface.record(ctx, |out| {
+      out.u8(command);
+      out.matrix(&matrix);
+      out.paint(&mut scratch);
+      if command == CMD_FILL || command == CMD_CLIP {
+        out.u8(fill_rule);
+      }
+      out.path(path, &inverse);
+    })
+  }
 }
 
 fn rect_path(m: &Matrix, x: f64, y: f64, w: f64, h: f64) -> Path {
@@ -716,60 +713,65 @@ fn format_color(color: i32) -> String {
   format!("rgba({r}, {g}, {b}, {alpha})")
 }
 
-fn font_wire(font: &Font) -> String {
-  format!(
-    "{}{FIELD}{}{FIELD}{}{FIELD}{}{FIELD}{}",
-    font.size,
-    font.weight,
-    u8::from(font.italic),
-    u8::from(font.small_caps),
-    font.families.join(&ITEM.to_string()),
-  )
+impl Font {
+  fn to_wire(&self) -> String {
+    format!(
+      "{}{FIELD}{}{FIELD}{}{FIELD}{}{FIELD}{}",
+      self.size,
+      self.weight,
+      u8::from(self.italic),
+      u8::from(self.small_caps),
+      self.families.join(&ITEM.to_string()),
+    )
+  }
 }
 
-fn stage_source<'js>(ctx: &Ctx<'js>, state: &Rc<CanvasState>, value: &Value<'js>) -> JsResult<(PathBuf, bool)> {
-  if let Ok(typed) = TypedArray::<u8>::from_value(value.clone()) {
-    let Some(bytes) = typed.as_bytes() else {
-      return invalid(ctx, "this Uint8Array is detached");
-    };
-    check_source_limit(ctx, bytes.len() as u64)?;
-    return Ok((write_staged(ctx, state, |file| file.write_all(bytes))?, true));
-  }
-  if rquickjs::Class::<BlobHandle>::from_value(value).is_ok() {
-    let Some(exported) = blob::export_for_host(&state.blobs, value) else {
-      return expired(ctx, "this blob has been disposed");
-    };
-    let Some(id) = exported.strip_prefix('B').and_then(|v| v.split(':').next()).and_then(|v| v.parse().ok()) else {
-      return PluginErrorCode::Internal.throw(ctx, "this blob could not be handed over");
-    };
-    let Some(export) = resolve_export(&state.blobs, id) else {
-      return expired(ctx, "this blob has been disposed");
-    };
-    let len = export.len();
-    check_source_limit(ctx, len)?;
-    let path = write_staged(ctx, state, |file| {
-      let mut at = 0u64;
-      while at < len {
-        let take = STAGE_CHUNK_BYTES.min(len - at);
-        let chunk = export
-          .read(at, take)
-          .map_err(|_| std::io::Error::other("this blob's content is no longer readable"))?;
-        file.write_all(&chunk)?;
-        at += take;
-      }
-      Ok(())
-    })?;
-    return Ok((path, true));
-  }
-  if let Some(object) = value.as_object() {
-    if let Some(path) = object.get::<_, Option<String>>("path")? {
-      let Some(fs) = state.fs.borrow().clone() else {
-        return PluginErrorCode::NotGranted("fs").throw(ctx, "naming a file needs @grant fs");
+impl CanvasState {
+  fn stage_source<'js>(self: &Rc<Self>, ctx: &Ctx<'js>, value: &Value<'js>) -> JsResult<(PathBuf, bool)> {
+    let state = self;
+    if let Ok(typed) = TypedArray::<u8>::from_value(value.clone()) {
+      let Some(bytes) = typed.as_bytes() else {
+        return invalid(ctx, "this Uint8Array is detached");
       };
-      return Ok((crate::api::io::fs::resolve_external(ctx, &fs, &path)?, false));
+      check_source_limit(ctx, bytes.len() as u64)?;
+      return Ok((state.write_staged(ctx, |file| file.write_all(bytes))?, true));
     }
+    if rquickjs::Class::<BlobHandle>::from_value(value).is_ok() {
+      let Some(exported) = state.blobs.export_for_host(value) else {
+        return expired(ctx, "this blob has been disposed");
+      };
+      let Some(id) = exported.strip_prefix('B').and_then(|v| v.split(':').next()).and_then(|v| v.parse().ok()) else {
+        return PluginErrorCode::Internal.throw(ctx, "this blob could not be handed over");
+      };
+      let Some(export) = state.blobs.resolve_export(id) else {
+        return expired(ctx, "this blob has been disposed");
+      };
+      let len = export.len();
+      check_source_limit(ctx, len)?;
+      let path = state.write_staged(ctx, |file| {
+        let mut at = 0u64;
+        while at < len {
+          let take = STAGE_CHUNK_BYTES.min(len - at);
+          let chunk = export
+            .read(at, take)
+            .map_err(|_| std::io::Error::other("this blob's content is no longer readable"))?;
+          file.write_all(&chunk)?;
+          at += take;
+        }
+        Ok(())
+      })?;
+      return Ok((path, true));
+    }
+    if let Some(object) = value.as_object() {
+      if let Some(path) = object.get::<_, Option<String>>("path")? {
+        let Some(fs) = state.fs.borrow().clone() else {
+          return PluginErrorCode::NotGranted("fs").throw(ctx, "naming a file needs @grant fs");
+        };
+        return Ok((fs.resolve_external(ctx, &path)?, false));
+      }
+    }
+    invalid(ctx, "expected a Blob, a Uint8Array or { path }")
   }
-  invalid(ctx, "expected a Blob, a Uint8Array or { path }")
 }
 
 fn check_source_limit(ctx: &Ctx<'_>, len: u64) -> JsResult<()> {
@@ -782,52 +784,54 @@ fn check_source_limit(ctx: &Ctx<'_>, len: u64) -> JsResult<()> {
   )
 }
 
-fn write_staged<'js>(
-  ctx: &Ctx<'js>,
-  state: &Rc<CanvasState>,
-  fill: impl FnOnce(&mut fs::File) -> std::io::Result<()>,
-) -> JsResult<PathBuf> {
-  if state.stage_dir.as_os_str().is_empty() {
-    return PluginErrorCode::Internal.throw(ctx, "this engine has no directory to stage a source in");
+impl CanvasState {
+  fn write_staged<'js>(
+    &self,
+    ctx: &Ctx<'js>,
+    fill: impl FnOnce(&mut fs::File) -> std::io::Result<()>,
+  ) -> JsResult<PathBuf> {
+    if self.stage_dir.as_os_str().is_empty() {
+      return PluginErrorCode::Internal.throw(ctx, "this engine has no directory to stage a source in");
+    }
+    let n = self.next_staged.alloc();
+    let path = self.stage_dir.join(format!("canvas-{n}.bin"));
+    let written = fs::create_dir_all(&self.stage_dir)
+      .and_then(|_| fs::File::create(&path))
+      .and_then(|mut file| fill(&mut file).and_then(|_| file.sync_all()));
+    if let Err(e) = written {
+      let _ = fs::remove_file(&path);
+      return PluginErrorCode::Internal.throw(ctx, &format!("staging this source failed: {e}"));
+    }
+    Ok(path)
   }
-  let n = state.next_staged.alloc();
-  let path = state.stage_dir.join(format!("canvas-{n}.bin"));
-  let written = fs::create_dir_all(&state.stage_dir)
-    .and_then(|_| fs::File::create(&path))
-    .and_then(|mut file| fill(&mut file).and_then(|_| file.sync_all()));
-  if let Err(e) = written {
-    let _ = fs::remove_file(&path);
-    return PluginErrorCode::Internal.throw(ctx, &format!("staging this source failed: {e}"));
-  }
-  Ok(path)
-}
 
-fn take_pending(state: &Rc<CanvasState>, request_id: i64) -> Option<Pending> {
-  let pending = state.pending.borrow_mut().remove(&request_id)?;
-  if let Some(path) = pending.staged.as_ref() {
-    let _ = fs::remove_file(path);
+  fn take_pending(&self, request_id: i64) -> Option<Pending> {
+    let pending = self.pending.borrow_mut().remove(&request_id)?;
+    if let Some(path) = pending.staged.as_ref() {
+      let _ = fs::remove_file(path);
+    }
+    Some(pending)
   }
-  Some(pending)
-}
 
-fn create_surface<'js>(ctx: &Ctx<'js>, state: &Rc<CanvasState>, width: i32, height: i32) -> JsResult<Rc<Surface>> {
-  check_dimensions(ctx, width, height)?;
-  let bytes = width as usize * height as usize * 4;
-  let charge = state.external.charge(ctx, bytes)?;
-  let id = state.next_id.alloc();
-  let answer = state.host.canvas(OP_CREATE, id, &format!("{width},{height}"), None);
-  throw_host_error(ctx, &answer)?;
-  let surface = Rc::new(Surface {
-    id,
-    width: Cell::new(width),
-    height: Cell::new(height),
-    alive: Cell::new(true),
-    charge: RefCell::new(Some(charge)),
-    commands: RefCell::new(Encoder::default()),
-    state: state.clone(),
-  });
-  state.track_surface(&surface);
-  Ok(surface)
+  fn create_surface<'js>(self: &Rc<Self>, ctx: &Ctx<'js>, width: i32, height: i32) -> JsResult<Rc<Surface>> {
+    check_dimensions(ctx, width, height)?;
+    let bytes = width as usize * height as usize * 4;
+    let charge = self.external.charge(ctx, bytes)?;
+    let id = self.next_id.alloc();
+    let answer = self.host.canvas(OP_CREATE, id, &format!("{width},{height}"), None);
+    throw_host_error(ctx, &answer)?;
+    let surface = Rc::new(Surface {
+      id,
+      width: Cell::new(width),
+      height: Cell::new(height),
+      alive: Cell::new(true),
+      charge: RefCell::new(Some(charge)),
+      commands: RefCell::new(Encoder::default()),
+      state: self.clone(),
+    });
+    self.track_surface(&surface);
+    Ok(surface)
+  }
 }
 
 fn check_dimensions(ctx: &Ctx<'_>, width: i32, height: i32) -> JsResult<()> {
@@ -840,22 +844,24 @@ fn check_dimensions(ctx: &Ctx<'_>, width: i32, height: i32) -> JsResult<()> {
   Ok(())
 }
 
-fn resize_surface(ctx: &Ctx<'_>, surface: &Rc<Surface>, width: i32, height: i32) -> JsResult<()> {
-  check_dimensions(ctx, width, height)?;
-  if width == surface.width.get() && height == surface.height.get() {
-    surface.commands.borrow_mut().clear();
-    let answer = surface.state.host.canvas(OP_CREATE, surface.id, &format!("{width},{height}"), None);
-    return throw_host_error(ctx, &answer);
+impl Surface {
+  fn resize(&self, ctx: &Ctx<'_>, width: i32, height: i32) -> JsResult<()> {
+    check_dimensions(ctx, width, height)?;
+    if width == self.width.get() && height == self.height.get() {
+      self.commands.borrow_mut().clear();
+      let answer = self.state.host.canvas(OP_CREATE, self.id, &format!("{width},{height}"), None);
+      return throw_host_error(ctx, &answer);
+    }
+    let bytes = width as usize * height as usize * 4;
+    let charge = self.state.external.charge(ctx, bytes)?;
+    self.commands.borrow_mut().clear();
+    let answer = self.state.host.canvas(OP_CREATE, self.id, &format!("{width},{height}"), None);
+    throw_host_error(ctx, &answer)?;
+    self.width.set(width);
+    self.height.set(height);
+    *self.charge.borrow_mut() = Some(charge);
+    Ok(())
   }
-  let bytes = width as usize * height as usize * 4;
-  let charge = surface.state.external.charge(ctx, bytes)?;
-  surface.commands.borrow_mut().clear();
-  let answer = surface.state.host.canvas(OP_CREATE, surface.id, &format!("{width},{height}"), None);
-  throw_host_error(ctx, &answer)?;
-  surface.width.set(width);
-  surface.height.set(height);
-  *surface.charge.borrow_mut() = Some(charge);
-  Ok(())
 }
 
 fn define_accessor<'js, G, GP, S, SP>(target: &Object<'js>, name: &str, get: G, set: S) -> JsResult<()>
@@ -894,237 +900,240 @@ pub fn install_canvas<'js>(
   let capabilities = state.host.canvas(OP_CAPABILITIES, 0, "", None);
   state.blend_modes.set(capabilities.contains("\"blend\":true"));
 
-  install_canvas_members(ctx, &state)?;
-  install_context_members(ctx, &state)?;
+  state.install_canvas_members(ctx)?;
+  install_context_members(ctx)?;
   install_gradient_members(ctx)?;
   install_pattern_members(ctx)?;
   install_image_members(ctx)?;
-  install_namespace(ctx, &state, globals)?;
+  state.install_namespace(ctx, globals)?;
   Ok(state)
 }
 
-fn install_namespace<'js>(ctx: &Ctx<'js>, state: &Rc<CanvasState>, globals: &crate::api::Globals<'js>) -> JsResult<()> {
-  let canvas = Object::new(ctx.clone())?;
+impl CanvasState {
+  fn install_namespace<'js>(self: &Rc<Self>, ctx: &Ctx<'js>, globals: &crate::api::Globals<'js>) -> JsResult<()> {
+    let canvas = Object::new(ctx.clone())?;
 
-  let owned = state.clone();
-  canvas.set(
-    "create",
-    Function::new(
-      ctx.clone(),
-      move |ctx: Ctx<'js>, width: Opt<Coerced<f64>>, height: Opt<Coerced<f64>>| -> JsResult<Value<'js>> {
-        let (w, h) = (num(&width), num(&height));
-        if !finite(&[w, h]) {
-          return invalid(&ctx, "a canvas needs a width and a height");
-        }
-        let surface = create_surface(&ctx, &owned, w.trunc() as i32, h.trunc() as i32)?;
-        Ok(Class::instance(ctx.clone(), CanvasHandle(surface))?.into_value())
-      },
-    )?,
-  )?;
-
-  for (name, is_font) in [("decode", false), ("load", false), ("loadFont", true)] {
-    let owned = state.clone();
+    let owned = self.clone();
     canvas.set(
-      name,
+      "create",
       Function::new(
         ctx.clone(),
-        move |ctx: Ctx<'js>, first: Opt<Value<'js>>, second: Opt<Value<'js>>| -> JsResult<Value<'js>> {
-          let (family, source) = if is_font {
-            let family = match first.0.as_ref().and_then(|v| v.as_string()) {
-              Some(s) => s.to_string()?,
-              None => return invalid(&ctx, "loadFont: the family name must be a string"),
-            };
-            (family, second.0.unwrap_or_else(|| Value::new_undefined(ctx.clone())))
-          } else {
-            (String::new(), first.0.unwrap_or_else(|| Value::new_undefined(ctx.clone())))
-          };
-          start_async(&ctx, &owned, is_font, &family, &source)
+        move |ctx: Ctx<'js>, width: Opt<Coerced<f64>>, height: Opt<Coerced<f64>>| -> JsResult<Value<'js>> {
+          let (w, h) = (num(&width), num(&height));
+          if !finite(&[w, h]) {
+            return invalid(&ctx, "a canvas needs a width and a height");
+          }
+          let surface = owned.create_surface(&ctx, w.trunc() as i32, h.trunc() as i32)?;
+          Ok(Class::instance(ctx.clone(), CanvasHandle(surface))?.into_value())
         },
       )?,
     )?;
-  }
 
-  globals.inu.set("canvas", canvas)?;
-  Ok(())
-}
-
-fn start_async<'js>(
-  ctx: &Ctx<'js>,
-  state: &Rc<CanvasState>,
-  is_font: bool,
-  family: &str,
-  source: &Value<'js>,
-) -> JsResult<Value<'js>> {
-  if is_font && family.is_empty() {
-    return invalid(ctx, "loadFont: the family name is empty");
-  }
-  let (path, staged) = stage_source(ctx, state, source)?;
-  let request_id = state.next_request.alloc();
-  let (promise, settle) = PendingSettle::new(ctx)?;
-
-  let (kind, op, id, arg) = if is_font {
-    let arg = format!("{request_id}{FIELD}{family}{FIELD}{}", path.to_string_lossy());
-    (PendingKind::Font, OP_LOAD_FONT, 0, arg)
-  } else {
-    let id = state.next_id.alloc();
-    let image = Rc::new(ImageData {
-      id,
-      width: 0,
-      height: 0,
-      alive: Cell::new(false),
-      owns_bitmap: Cell::new(false),
-      charge: RefCell::new(None),
-      state: state.clone(),
-    });
-    let arg = format!("{request_id}{FIELD}{}", path.to_string_lossy());
-    (PendingKind::Decode(image), OP_DECODE, id, arg)
-  };
-  state.pending.borrow_mut().insert(
-    request_id,
-    Pending {
-      kind,
-      settle,
-      staged: staged.then_some(path),
-    },
-  );
-  let answer = state.host.canvas(op, id, &arg, None);
-  if !answer.is_empty() {
-    if let Some(pending) = take_pending(state, request_id) {
-      match wire_error_to_js(ctx, &answer) {
-        Some(Ok(value)) => pending.settle.reject_with_value(ctx, value)?,
-        _ => {
-          let value = crate::api::error::make_plugin_error(ctx, "internal", &answer, None, None, None)?;
-          pending.settle.reject_with_value(ctx, value)?;
-        }
-      }
-    }
-  }
-  Ok(promise.into_value())
-}
-
-fn install_canvas_members<'js>(ctx: &Ctx<'js>, state: &Rc<CanvasState>) -> JsResult<()> {
-  let proto = Class::<CanvasHandle>::prototype(ctx)?
-    .ok_or_else(|| Exception::throw_message(ctx, "OffscreenCanvas: the class has no prototype"))?;
-
-  for (name, vertical) in [("width", false), ("height", true)] {
-    define_accessor(
-      &proto,
-      name,
-      move |this: This<Class<'js, CanvasHandle>>| {
-        let surface = this.0.borrow().0.clone();
-        if vertical {
-          surface.height.get()
-        } else {
-          surface.width.get()
-        }
-      },
-      move |ctx: Ctx<'js>, this: This<Class<'js, CanvasHandle>>, value: Coerced<f64>| -> JsResult<()> {
-        let surface = this.0.borrow().0.clone();
-        if !value.0.is_finite() {
-          return Ok(());
-        }
-        let value = value.0.trunc() as i32;
-        let (w, h) = if vertical { (surface.width.get(), value) } else { (value, surface.height.get()) };
-        resize_surface(&ctx, &surface, w, h)
-      },
-    )?;
-  }
-
-  define_method(
-    &proto,
-    "getContext",
-    Function::new(
-      ctx.clone(),
-      |ctx: Ctx<'js>, this: This<Class<'js, CanvasHandle>>, id: Opt<Coerced<String>>| -> JsResult<Value<'js>> {
-        match id.0.as_ref().map(|v| v.0.as_str()) {
-          Some("2d") => {}
-          _ => return invalid(&ctx, "getContext: only '2d' is available"),
-        }
-        let key = rquickjs::Symbol::new_global(ctx.clone(), CONTEXT_KEY)?;
-        let canvas = this.0.as_inner().clone();
-        let cached: Value = canvas.get(key.as_atom())?;
-        if Class::<Context2d>::from_value(&cached).is_ok() {
-          return Ok(cached);
-        }
-        let surface = this.0.borrow().0.clone();
-        let context = Class::instance(
+    for (name, is_font) in [("decode", false), ("load", false), ("loadFont", true)] {
+      let owned = self.clone();
+      canvas.set(
+        name,
+        Function::new(
           ctx.clone(),
-          Context2d {
-            surface,
-            state: RefCell::new(DrawState::default()),
-            stack: RefCell::new(Vec::new()),
-            path: RefCell::new(Path::default()),
+          move |ctx: Ctx<'js>, first: Opt<Value<'js>>, second: Opt<Value<'js>>| -> JsResult<Value<'js>> {
+            let (family, source) = if is_font {
+              let family = match first.0.as_ref().and_then(|v| v.as_string()) {
+                Some(s) => s.to_string()?,
+                None => return invalid(&ctx, "loadFont: the family name must be a string"),
+              };
+              (family, second.0.unwrap_or_else(|| Value::new_undefined(ctx.clone())))
+            } else {
+              (String::new(), first.0.unwrap_or_else(|| Value::new_undefined(ctx.clone())))
+            };
+            owned.start_async(&ctx, is_font, &family, &source)
           },
-        )?;
-        context.as_inner().prop("canvas", Property::from(canvas.clone()).enumerable())?;
-        canvas.prop(key.as_atom(), Property::from(context.as_value().clone()))?;
-        Ok(context.into_value())
-      },
-    )?,
-  )?;
-
-  let owned = state.clone();
-  define_method(
-    &proto,
-    "convertToBlob",
-    Function::new(
-      ctx.clone(),
-      move |ctx: Ctx<'js>, this: This<Class<'js, CanvasHandle>>, options: Opt<Value<'js>>| -> JsResult<Value<'js>> {
-        let surface = this.0.borrow().0.clone();
-        convert_to_blob(&ctx, &owned, &surface, options)
-      },
-    )?,
-  )?;
-  Ok(())
-}
-
-const ENCODINGS: [&str; 3] = ["image/png", "image/jpeg", "image/webp"];
-
-fn convert_to_blob<'js>(
-  ctx: &Ctx<'js>,
-  state: &Rc<CanvasState>,
-  surface: &Rc<Surface>,
-  options: Opt<Value<'js>>,
-) -> JsResult<Value<'js>> {
-  let mut mime = "image/png".to_string();
-  let mut quality = 0.92;
-  if let Some(options) = options.0.as_ref().and_then(|v| v.as_object()) {
-    if let Some(value) = options.get::<_, Option<Coerced<String>>>("type")? {
-      let value = value.0.to_ascii_lowercase();
-      if !ENCODINGS.contains(&value.as_str()) {
-        return invalid(ctx, &format!("'{value}' is not an encoding this canvas writes"));
-      }
-      mime = value;
+        )?,
+      )?;
     }
-    if let Some(value) = options.get::<_, Option<Coerced<f64>>>("quality")? {
-      if value.0.is_finite() && (0.0..=1.0).contains(&value.0) {
-        quality = value.0;
-      }
-    }
+
+    globals.inu.set("canvas", canvas)?;
+    Ok(())
   }
-  surface.flush(ctx)?;
-  let request_id = state.next_request.alloc();
-  let (promise, settle) = PendingSettle::new(ctx)?;
-  state.pending.borrow_mut().insert(
-    request_id,
-    Pending {
-      kind: PendingKind::Encode,
-      settle,
-      staged: None,
-    },
-  );
-  let arg = format!("{request_id}{FIELD}{mime}{FIELD}{quality}");
-  let answer = state.host.canvas(OP_ENCODE, surface.id, &arg, None);
-  if !answer.is_empty() {
-    if let Some(pending) = take_pending(state, request_id) {
-      let value = match wire_error_to_js(ctx, &answer) {
-        Some(Ok(value)) => value,
-        _ => crate::api::error::make_plugin_error(ctx, "internal", &answer, None, None, None)?,
-      };
-      pending.settle.reject_with_value(ctx, value)?;
+
+  fn start_async<'js>(
+    self: &Rc<Self>,
+    ctx: &Ctx<'js>,
+    is_font: bool,
+    family: &str,
+    source: &Value<'js>,
+  ) -> JsResult<Value<'js>> {
+    let state = self;
+    if is_font && family.is_empty() {
+      return invalid(ctx, "loadFont: the family name is empty");
     }
+    let (path, staged) = state.stage_source(ctx, source)?;
+    let request_id = state.next_request.alloc();
+    let (promise, settle) = PendingSettle::new(ctx)?;
+
+    let (kind, op, id, arg) = if is_font {
+      let arg = format!("{request_id}{FIELD}{family}{FIELD}{}", path.to_string_lossy());
+      (PendingKind::Font, OP_LOAD_FONT, 0, arg)
+    } else {
+      let id = state.next_id.alloc();
+      let image = Rc::new(ImageData {
+        id,
+        width: 0,
+        height: 0,
+        alive: Cell::new(false),
+        owns_bitmap: Cell::new(false),
+        charge: RefCell::new(None),
+        state: state.clone(),
+      });
+      let arg = format!("{request_id}{FIELD}{}", path.to_string_lossy());
+      (PendingKind::Decode(image), OP_DECODE, id, arg)
+    };
+    state.pending.borrow_mut().insert(
+      request_id,
+      Pending {
+        kind,
+        settle,
+        staged: staged.then_some(path),
+      },
+    );
+    let answer = state.host.canvas(op, id, &arg, None);
+    if !answer.is_empty() {
+      if let Some(pending) = state.take_pending(request_id) {
+        match wire_error_to_js(ctx, &answer) {
+          Some(Ok(value)) => pending.settle.reject_with_value(ctx, value)?,
+          _ => {
+            let value = crate::api::error::make_plugin_error(ctx, "internal", &answer, None, None, None)?;
+            pending.settle.reject_with_value(ctx, value)?;
+          }
+        }
+      }
+    }
+    Ok(promise.into_value())
   }
-  Ok(promise.into_value())
+
+  fn install_canvas_members<'js>(self: &Rc<Self>, ctx: &Ctx<'js>) -> JsResult<()> {
+    let proto = Class::<CanvasHandle>::prototype(ctx)?
+      .ok_or_else(|| Exception::throw_message(ctx, "OffscreenCanvas: the class has no prototype"))?;
+
+    for (name, vertical) in [("width", false), ("height", true)] {
+      define_accessor(
+        &proto,
+        name,
+        move |this: This<Class<'js, CanvasHandle>>| {
+          let surface = this.0.borrow().0.clone();
+          if vertical {
+            surface.height.get()
+          } else {
+            surface.width.get()
+          }
+        },
+        move |ctx: Ctx<'js>, this: This<Class<'js, CanvasHandle>>, value: Coerced<f64>| -> JsResult<()> {
+          let surface = this.0.borrow().0.clone();
+          if !value.0.is_finite() {
+            return Ok(());
+          }
+          let value = value.0.trunc() as i32;
+          let (w, h) = if vertical { (surface.width.get(), value) } else { (value, surface.height.get()) };
+          surface.resize(&ctx, w, h)
+        },
+      )?;
+    }
+
+    define_method(
+      &proto,
+      "getContext",
+      Function::new(
+        ctx.clone(),
+        |ctx: Ctx<'js>, this: This<Class<'js, CanvasHandle>>, id: Opt<Coerced<String>>| -> JsResult<Value<'js>> {
+          match id.0.as_ref().map(|v| v.0.as_str()) {
+            Some("2d") => {}
+            _ => return invalid(&ctx, "getContext: only '2d' is available"),
+          }
+          let key = rquickjs::Symbol::new_global(ctx.clone(), CONTEXT_KEY)?;
+          let canvas = this.0.as_inner().clone();
+          let cached: Value = canvas.get(key.as_atom())?;
+          if Class::<Context2d>::from_value(&cached).is_ok() {
+            return Ok(cached);
+          }
+          let surface = this.0.borrow().0.clone();
+          let context = Class::instance(
+            ctx.clone(),
+            Context2d {
+              surface,
+              state: RefCell::new(DrawState::default()),
+              stack: RefCell::new(Vec::new()),
+              path: RefCell::new(Path::default()),
+            },
+          )?;
+          context.as_inner().prop("canvas", Property::from(canvas.clone()).enumerable())?;
+          canvas.prop(key.as_atom(), Property::from(context.as_value().clone()))?;
+          Ok(context.into_value())
+        },
+      )?,
+    )?;
+
+    let owned = self.clone();
+    define_method(
+      &proto,
+      "convertToBlob",
+      Function::new(
+        ctx.clone(),
+        move |ctx: Ctx<'js>, this: This<Class<'js, CanvasHandle>>, options: Opt<Value<'js>>| -> JsResult<Value<'js>> {
+          let surface = this.0.borrow().0.clone();
+          owned.convert_to_blob(&ctx, &surface, options)
+        },
+      )?,
+    )?;
+    Ok(())
+  }
+
+  const ENCODINGS: [&str; 3] = ["image/png", "image/jpeg", "image/webp"];
+
+  fn convert_to_blob<'js>(
+    &self,
+    ctx: &Ctx<'js>,
+    surface: &Rc<Surface>,
+    options: Opt<Value<'js>>,
+  ) -> JsResult<Value<'js>> {
+    let mut mime = "image/png".to_string();
+    let mut quality = 0.92;
+    if let Some(options) = options.0.as_ref().and_then(|v| v.as_object()) {
+      if let Some(value) = options.get::<_, Option<Coerced<String>>>("type")? {
+        let value = value.0.to_ascii_lowercase();
+        if !Self::ENCODINGS.contains(&value.as_str()) {
+          return invalid(ctx, &format!("'{value}' is not an encoding this canvas writes"));
+        }
+        mime = value;
+      }
+      if let Some(value) = options.get::<_, Option<Coerced<f64>>>("quality")? {
+        if value.0.is_finite() && (0.0..=1.0).contains(&value.0) {
+          quality = value.0;
+        }
+      }
+    }
+    surface.flush(ctx)?;
+    let request_id = self.next_request.alloc();
+    let (promise, settle) = PendingSettle::new(ctx)?;
+    self.pending.borrow_mut().insert(
+      request_id,
+      Pending {
+        kind: PendingKind::Encode,
+        settle,
+        staged: None,
+      },
+    );
+    let arg = format!("{request_id}{FIELD}{mime}{FIELD}{quality}");
+    let answer = self.host.canvas(OP_ENCODE, surface.id, &arg, None);
+    if !answer.is_empty() {
+      if let Some(pending) = self.take_pending(request_id) {
+        let value = match wire_error_to_js(ctx, &answer) {
+          Some(Ok(value)) => value,
+          _ => crate::api::error::make_plugin_error(ctx, "internal", &answer, None, None, None)?,
+        };
+        pending.settle.reject_with_value(ctx, value)?;
+      }
+    }
+    Ok(promise.into_value())
+  }
 }
 
 use members::{install_context_members, install_gradient_members, install_image_members, install_pattern_members};
@@ -1132,50 +1141,52 @@ use members::{install_context_members, install_gradient_members, install_image_m
 #[path = "members.rs"]
 mod members;
 
-fn build_answer<'js>(ctx: &Ctx<'js>, state: &Rc<CanvasState>, kind: &PendingKind, wire: &str) -> JsResult<Value<'js>> {
-  match kind {
-    PendingKind::Font => Ok(Value::new_undefined(ctx.clone())),
-    PendingKind::Encode => {
-      let object = parse_answer(ctx, wire)?;
-      let path: String = object.get("path")?;
-      let mime: String = object.get("type").unwrap_or_default();
-      let path = PathBuf::from(path);
-      let (size, mtime) = match fs::metadata(&path) {
-        Ok(meta) => (
-          meta.len(),
-          meta
-            .modified()
-            .ok()
-            .and_then(|t| t.duration_since(std::time::UNIX_EPOCH).ok())
-            .map(|d| d.as_millis() as i64)
-            .unwrap_or(0),
-        ),
-        Err(_) => (0, 0),
-      };
-      mint_app_file(ctx, &path, size, &mime, None, mtime)
-    }
-    PendingKind::Decode(image) => {
-      let object = parse_answer(ctx, wire)?;
-      let width: i32 = object.get("width")?;
-      let height: i32 = object.get("height")?;
-      let bytes = width.max(0) as usize * height.max(0) as usize * 4;
-      let charge = match state.external.charge(ctx, bytes) {
-        Ok(charge) => charge,
-        Err(e) => {
-          state.host.canvas(OP_RELEASE_IMAGE, image.id, "", None);
-          return Err(e);
-        }
-      };
-      let handle = ImageData {
-        id: image.id,
-        width,
-        height,
-        alive: Cell::new(true),
-        owns_bitmap: Cell::new(true),
-        charge: RefCell::new(Some(charge)),
-        state: state.clone(),
-      };
-      Ok(Class::instance(ctx.clone(), ImageHandle(Rc::new(handle)))?.into_value())
+impl CanvasState {
+  fn build_answer<'js>(self: &Rc<Self>, ctx: &Ctx<'js>, kind: &PendingKind, wire: &str) -> JsResult<Value<'js>> {
+    match kind {
+      PendingKind::Font => Ok(Value::new_undefined(ctx.clone())),
+      PendingKind::Encode => {
+        let object = parse_answer(ctx, wire)?;
+        let path: String = object.get("path")?;
+        let mime: String = object.get("type").unwrap_or_default();
+        let path = PathBuf::from(path);
+        let (size, mtime) = match fs::metadata(&path) {
+          Ok(meta) => (
+            meta.len(),
+            meta
+              .modified()
+              .ok()
+              .and_then(|t| t.duration_since(std::time::UNIX_EPOCH).ok())
+              .map(|d| d.as_millis() as i64)
+              .unwrap_or(0),
+          ),
+          Err(_) => (0, 0),
+        };
+        mint_app_file(ctx, &path, size, &mime, None, mtime)
+      }
+      PendingKind::Decode(image) => {
+        let object = parse_answer(ctx, wire)?;
+        let width: i32 = object.get("width")?;
+        let height: i32 = object.get("height")?;
+        let bytes = width.max(0) as usize * height.max(0) as usize * 4;
+        let charge = match self.external.charge(ctx, bytes) {
+          Ok(charge) => charge,
+          Err(e) => {
+            self.host.canvas(OP_RELEASE_IMAGE, image.id, "", None);
+            return Err(e);
+          }
+        };
+        let handle = ImageData {
+          id: image.id,
+          width,
+          height,
+          alive: Cell::new(true),
+          owns_bitmap: Cell::new(true),
+          charge: RefCell::new(Some(charge)),
+          state: self.clone(),
+        };
+        Ok(Class::instance(ctx.clone(), ImageHandle(Rc::new(handle)))?.into_value())
+      }
     }
   }
 }
@@ -1199,7 +1210,7 @@ impl CanvasState {
   pub fn resolve(self: &Rc<Self>, rt: &Runtime, context: &rquickjs::Context, request_id: i64, result_wire: &str) {
     let state = self;
     context.with(|ctx| {
-      let Some(pending) = take_pending(state, request_id) else {
+      let Some(pending) = state.take_pending(request_id) else {
         return;
       };
       if let Some(built) = wire_error_to_js(&ctx, result_wire) {
@@ -1216,7 +1227,7 @@ impl CanvasState {
         }
         return;
       }
-      let built = build_answer(&ctx, state, &pending.kind, result_wire);
+      let built = state.build_answer(&ctx, &pending.kind, result_wire);
       match built {
         Ok(value) => {
           if pending.settle.resolve_with(&ctx, value).is_err() {

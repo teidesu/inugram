@@ -591,96 +591,100 @@ fn clamp_index(value: Option<f64>, size: u64, default: u64) -> u64 {
   value as u64
 }
 
-fn append_part<'js>(ctx: &Ctx<'js>, sink: &mut Accumulator, part: Value<'js>) -> JsResult<()> {
-  if let Ok(class) = Class::<BlobHandle>::from_value(&part) {
-    let (backing, start, end) = {
-      let handle = class.borrow();
-      (handle.live(ctx)?, handle.start, handle.end)
-    };
-    return match backing.copy_into(ctx, start, end, sink) {
-      Ok(()) => Ok(()),
-      Err(fault) => fault.throw(ctx),
-    };
-  }
-  if let Some(buffer) = ArrayBuffer::from_value(part.clone()) {
-    let Some(bytes) = buffer.as_bytes() else {
-      return Err(Exception::throw_type(ctx, "Blob: this ArrayBuffer is detached"));
-    };
-    return match sink.write(ctx, bytes) {
-      Ok(()) => Ok(()),
-      Err(fault) => fault.throw(ctx),
-    };
-  }
-  if append_buffer_view(ctx, sink, &part)? {
-    return Ok(());
-  }
-  let text = Coerced::<String>::from_js(ctx, part)?;
-  match sink.write(ctx, text.0.as_bytes()) {
-    Ok(()) => Ok(()),
-    Err(fault) => fault.throw(ctx),
-  }
-}
-
-fn append_buffer_view<'js>(ctx: &Ctx<'js>, sink: &mut Accumulator, value: &Value<'js>) -> JsResult<bool> {
-  let Some(object) = value.as_object() else {
-    return Ok(false);
-  };
-  let Ok(buffer) = object.get::<_, Value<'js>>("buffer") else {
-    return Ok(false);
-  };
-  let Some(buffer) = ArrayBuffer::from_value(buffer) else {
-    return Ok(false);
-  };
-  let offset = object.get::<_, Option<Coerced<f64>>>("byteOffset")?;
-  let length = object.get::<_, Option<Coerced<f64>>>("byteLength")?;
-  let (Some(offset), Some(length)) = (offset, length) else {
-    return Ok(false);
-  };
-  let Some(bytes) = buffer.as_bytes() else {
-    return Err(Exception::throw_type(ctx, "Blob: this view's buffer is detached"));
-  };
-  let start = offset.0.max(0.0) as usize;
-  let end = start.saturating_add(length.0.max(0.0) as usize);
-  let Some(window) = bytes.get(start..end) else {
-    return Err(Exception::throw_type(ctx, "Blob: this view was resized"));
-  };
-  match sink.write(ctx, window) {
-    Ok(()) => Ok(true),
-    Err(fault) => fault.throw(ctx),
-  }
-}
-
-fn build_blob<'js>(
-  ctx: &Ctx<'js>,
-  state: &Rc<BlobState>,
-  parts: Opt<Value<'js>>,
-  options: Opt<Value<'js>>,
-  meta: Option<FileMeta>,
-) -> JsResult<Value<'js>> {
-  let mime = read_mime_option(&options)?;
-  let mut sink = Accumulator::new(state.clone(), state.limits.build);
-  if let Some(parts) = parts.0 {
-    if !parts.is_undefined() && !parts.is_null() {
-      let Some(array) = parts.as_array() else {
-        return Err(Exception::throw_type(ctx, "Blob: expected an array of parts"));
+impl Accumulator {
+  fn append_part<'js>(&mut self, ctx: &Ctx<'js>, part: Value<'js>) -> JsResult<()> {
+    if let Ok(class) = Class::<BlobHandle>::from_value(&part) {
+      let (backing, start, end) = {
+        let handle = class.borrow();
+        (handle.live(ctx)?, handle.start, handle.end)
       };
-      for part in array_values(ctx, array, "Blob")? {
-        append_part(ctx, &mut sink, part)?;
-      }
+      return match backing.copy_into(ctx, start, end, self) {
+        Ok(()) => Ok(()),
+        Err(fault) => fault.throw(ctx),
+      };
+    }
+    if let Some(buffer) = ArrayBuffer::from_value(part.clone()) {
+      let Some(bytes) = buffer.as_bytes() else {
+        return Err(Exception::throw_type(ctx, "Blob: this ArrayBuffer is detached"));
+      };
+      return match self.write(ctx, bytes) {
+        Ok(()) => Ok(()),
+        Err(fault) => fault.throw(ctx),
+      };
+    }
+    if self.append_buffer_view(ctx, &part)? {
+      return Ok(());
+    }
+    let text = Coerced::<String>::from_js(ctx, part)?;
+    match self.write(ctx, text.0.as_bytes()) {
+      Ok(()) => Ok(()),
+      Err(fault) => fault.throw(ctx),
     }
   }
-  let backing = sink.finish();
-  let len = backing.len;
-  let handle = BlobHandle {
-    backing: RefCell::new(Some(backing)),
-    start: 0,
-    end: len,
-    mime,
-    owns_backing: true,
-    export_id: Cell::new(None),
-    meta,
-  };
-  Ok(Class::instance(ctx.clone(), handle)?.into_value())
+
+  fn append_buffer_view<'js>(&mut self, ctx: &Ctx<'js>, value: &Value<'js>) -> JsResult<bool> {
+    let Some(object) = value.as_object() else {
+      return Ok(false);
+    };
+    let Ok(buffer) = object.get::<_, Value<'js>>("buffer") else {
+      return Ok(false);
+    };
+    let Some(buffer) = ArrayBuffer::from_value(buffer) else {
+      return Ok(false);
+    };
+    let offset = object.get::<_, Option<Coerced<f64>>>("byteOffset")?;
+    let length = object.get::<_, Option<Coerced<f64>>>("byteLength")?;
+    let (Some(offset), Some(length)) = (offset, length) else {
+      return Ok(false);
+    };
+    let Some(bytes) = buffer.as_bytes() else {
+      return Err(Exception::throw_type(ctx, "Blob: this view's buffer is detached"));
+    };
+    let start = offset.0.max(0.0) as usize;
+    let end = start.saturating_add(length.0.max(0.0) as usize);
+    let Some(window) = bytes.get(start..end) else {
+      return Err(Exception::throw_type(ctx, "Blob: this view was resized"));
+    };
+    match self.write(ctx, window) {
+      Ok(()) => Ok(true),
+      Err(fault) => fault.throw(ctx),
+    }
+  }
+}
+
+impl BlobState {
+  fn build_blob<'js>(
+    self: &Rc<Self>,
+    ctx: &Ctx<'js>,
+    parts: Opt<Value<'js>>,
+    options: Opt<Value<'js>>,
+    meta: Option<FileMeta>,
+  ) -> JsResult<Value<'js>> {
+    let mime = read_mime_option(&options)?;
+    let mut sink = Accumulator::new(self.clone(), self.limits.build);
+    if let Some(parts) = parts.0 {
+      if !parts.is_undefined() && !parts.is_null() {
+        let Some(array) = parts.as_array() else {
+          return Err(Exception::throw_type(ctx, "Blob: expected an array of parts"));
+        };
+        for part in array_values(ctx, array, "Blob")? {
+          sink.append_part(ctx, part)?;
+        }
+      }
+    }
+    let backing = sink.finish();
+    let len = backing.len;
+    let handle = BlobHandle {
+      backing: RefCell::new(Some(backing)),
+      start: 0,
+      end: len,
+      mime,
+      owns_backing: true,
+      export_id: Cell::new(None),
+      meta,
+    };
+    Ok(Class::instance(ctx.clone(), handle)?.into_value())
+  }
 }
 
 fn now_millis() -> f64 {
@@ -730,48 +734,50 @@ struct Export {
   end: u64,
 }
 
-pub fn export_for_host(state: &Rc<BlobState>, value: &Value<'_>) -> Option<String> {
-  let class = Class::<BlobHandle>::from_value(value).ok()?;
-  let handle = class.borrow();
-  let backing = handle.backing.borrow().clone()?;
-  if !backing.alive() {
-    return None;
-  }
-  let mut exported = state.exported.borrow_mut();
-  if let Some(id) = handle.export_id.get() {
-    if exported.contains_key(&id) {
-      return Some(format!("B{id}:{}:{}", handle.start, handle.size()));
+impl BlobState {
+  pub fn export_for_host(&self, value: &Value<'_>) -> Option<String> {
+    let class = Class::<BlobHandle>::from_value(value).ok()?;
+    let handle = class.borrow();
+    let backing = handle.backing.borrow().clone()?;
+    if !backing.alive() {
+      return None;
     }
+    let mut exported = self.exported.borrow_mut();
+    if let Some(id) = handle.export_id.get() {
+      if exported.contains_key(&id) {
+        return Some(format!("B{id}:{}:{}", handle.start, handle.size()));
+      }
+    }
+    let id = self.next_export.get();
+    self.next_export.set(id + 1);
+    handle.export_id.set(Some(id));
+    if exported.len() >= EXPORT_SWEEP_AT {
+      exported.retain(|_, export| export.backing.strong_count() > 0);
+    }
+    exported.insert(
+      id,
+      Export {
+        backing: Rc::downgrade(&backing),
+        start: handle.start,
+        end: handle.end,
+      },
+    );
+    Some(format!("B{id}:{}:{}", handle.start, handle.size()))
   }
-  let id = state.next_export.get();
-  state.next_export.set(id + 1);
-  handle.export_id.set(Some(id));
-  if exported.len() >= EXPORT_SWEEP_AT {
-    exported.retain(|_, export| export.backing.strong_count() > 0);
-  }
-  exported.insert(
-    id,
-    Export {
-      backing: Rc::downgrade(&backing),
-      start: handle.start,
-      end: handle.end,
-    },
-  );
-  Some(format!("B{id}:{}:{}", handle.start, handle.size()))
-}
 
-pub fn resolve_export(state: &Rc<BlobState>, id: i64) -> Option<BlobExport> {
-  let mut exported = state.exported.borrow_mut();
-  let export = exported.get(&id)?;
-  let Some(backing) = export.backing.upgrade().filter(|backing| backing.alive()) else {
-    exported.remove(&id);
-    return None;
-  };
-  Some(BlobExport {
-    backing,
-    start: export.start,
-    end: export.end,
-  })
+  pub fn resolve_export(&self, id: i64) -> Option<BlobExport> {
+    let mut exported = self.exported.borrow_mut();
+    let export = exported.get(&id)?;
+    let Some(backing) = export.backing.upgrade().filter(|backing| backing.alive()) else {
+      exported.remove(&id);
+      return None;
+    };
+    Some(BlobExport {
+      backing,
+      start: export.start,
+      end: export.end,
+    })
+  }
 }
 
 pub struct BlobExport {
@@ -860,7 +866,7 @@ pub(crate) fn install_with_limits<'js>(
   let blob_ctor = Constructor::new_class::<BlobHandle, _, _>(
     ctx.clone(),
     move |ctx: Ctx<'js>, parts: Opt<Value<'js>>, options: Opt<Value<'js>>| {
-      build_blob(&ctx, &state2, parts, options, None)
+      state2.build_blob(&ctx, parts, options, None)
     },
   )?;
 
@@ -882,7 +888,7 @@ pub(crate) fn install_with_limits<'js>(
         name: sanitize_name(&name.0),
         last_modified,
       };
-      build_blob(&ctx, &state2, parts, options, Some(meta))
+      state2.build_blob(&ctx, parts, options, Some(meta))
     },
   )?;
 

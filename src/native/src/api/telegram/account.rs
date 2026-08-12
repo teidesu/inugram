@@ -7,7 +7,7 @@ use rquickjs::{Array, Ctx, Function, Object, Persistent, Result as JsResult, Run
 
 use crate::api::error::PluginErrorCode;
 use crate::api::telegram::rpc::pump_jobs;
-use crate::sandbox::grants::{check_grant, GrantHost, MATCH_EXACT};
+use crate::sandbox::grants::{GrantHost, MATCH_EXACT};
 use crate::sandbox::registry::{make_disposer, noop_disposer, CallbackRegistry, Lifecycle, Registry, Token};
 
 #[cfg(test)]
@@ -75,7 +75,7 @@ impl AccountState {
       let state = self.clone();
       let user_id = info.user_id;
       let get = move |ctx: Ctx<'js>| -> JsResult<f64> {
-        check_grant(&ctx, &state.grants, "account.read", Some("self"), MATCH_EXACT)?;
+        state.grants.check_grant(&ctx, "account.read", Some("self"), MATCH_EXACT)?;
         Ok(user_id as f64)
       };
       obj.prop("userId", Accessor::new_get(get).enumerable())?;
@@ -267,7 +267,7 @@ impl AccountState {
     if self.lifecycle.is_unloading() {
       return noop_disposer(ctx);
     }
-    check_grant(ctx, &self.grants, "account.read", Some("self"), MATCH_EXACT)?;
+    self.grants.check_grant(ctx, "account.read", Some("self"), MATCH_EXACT)?;
     let token = self.changed_fns.alloc();
     self.changed_fns.register(ctx, token, None, cb);
     let state = self.clone();
@@ -399,7 +399,7 @@ pub fn install_account<'js>(
     globals.inu.set(
       "accounts",
       Function::new(ctx.clone(), move |ctx: Ctx<'js>| -> JsResult<Value<'js>> {
-        check_grant(&ctx, &state.grants, "account.read", Some("self"), MATCH_EXACT)?;
+        state.grants.check_grant(&ctx, "account.read", Some("self"), MATCH_EXACT)?;
         state.build_account_infos(&ctx)
       })?,
     )?;

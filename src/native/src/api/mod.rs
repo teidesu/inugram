@@ -17,12 +17,17 @@ pub(crate) mod tl;
 pub(crate) mod ui;
 pub(crate) mod url;
 
-#[derive(Clone, JsLifetime)]
+#[derive(Clone)]
 pub(crate) struct Globals<'js> {
   pub(crate) inu: Object<'js>,
   pub(crate) plugin_error: Constructor<'js>,
   message: Rc<RefCell<Option<Constructor<'js>>>>,
   rpc_error: Rc<RefCell<Option<Constructor<'js>>>>,
+}
+
+// SAFETY: every JavaScript-lifetime-bound field uses the struct's `'js` lifetime.
+unsafe impl<'js> JsLifetime<'js> for Globals<'js> {
+  type Changed<'to> = Globals<'to>;
 }
 
 impl<'js> Globals<'js> {

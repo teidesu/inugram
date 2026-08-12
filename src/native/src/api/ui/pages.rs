@@ -58,28 +58,33 @@ struct UiPageDef {
   next_slot: Cell<u32>,
 }
 
-fn release_page_def(ctx: &Ctx<'_>, def: UiPageDef) {
-  let _ = def.items_fn.restore(ctx);
-  if let Some(p) = def.on_close {
-    let _ = p.restore(ctx);
-  }
-  if let Some(p) = def.bottom_on_click {
-    let _ = p.restore(ctx);
-  }
-  for (_, entry) in def.callbacks.into_inner() {
-    let _ = entry.func.restore(ctx);
-  }
-  for value in def.retained_icon_values.into_inner() {
-    let _ = value.restore(ctx);
+impl UiPageDef {
+  fn release(self, ctx: &Ctx<'_>) {
+    let _ = self.items_fn.restore(ctx);
+    if let Some(p) = self.on_close {
+      let _ = p.restore(ctx);
+    }
+    if let Some(p) = self.bottom_on_click {
+      let _ = p.restore(ctx);
+    }
+    for (_, entry) in self.callbacks.into_inner() {
+      let _ = entry.func.restore(ctx);
+    }
+    for value in self.retained_icon_values.into_inner() {
+      let _ = value.restore(ctx);
+    }
   }
 }
 
-fn dispose_page(ctx: &Ctx<'_>, state: &UiState, page_id: i64) {
-  if let Some(def) = state.pages.borrow_mut().remove(&page_id) {
-    release_page_def(ctx, def);
-  }
-  for registered in state.settings.remove_matching(|id| *id == page_id) {
-    state.host.ui_unregister_settings(registered);
+impl UiState {
+  fn dispose_page(&self, ctx: &Ctx<'_>, page_id: i64) {
+    let state = self;
+    if let Some(def) = state.pages.borrow_mut().remove(&page_id) {
+      def.release(ctx);
+    }
+    for registered in state.settings.remove_matching(|id| *id == page_id) {
+      state.host.ui_unregister_settings(registered);
+    }
   }
 }
 
@@ -280,165 +285,164 @@ pub fn install_ui<'js>(
     })?,
   )?;
 
-  {
-    let state2 = state.clone();
-    ui.set(
-      "settingsPage",
-      Function::new(ctx.clone(), move |ctx: Ctx<'js>, opts: Object<'js>| js_settings_page(&ctx, &state2, opts))?,
-    )?;
-  }
-  {
-    let state2 = state.clone();
-    ui.set(
-      "openPage",
-      Function::new(ctx.clone(), move |ctx: Ctx<'js>, page: Value<'js>| {
-        if let Some(handle) = java_handle(&ctx, &state2, &page)? {
-          if let Some(err) = state2.host.ui_open_fragment(handle) {
-            return Err(Exception::throw_message(&ctx, &err));
-          }
-          return Ok(());
-        }
-        let page_id = page_id_of(&ctx, &state2, &page, "openPage")?;
-        if let Some(err) = state2.host.ui_open_page(page_id) {
+  let state2 = state.clone();
+  ui.set(
+    "settingsPage",
+    Function::new(ctx.clone(), move |ctx: Ctx<'js>, opts: Object<'js>| state2.js_settings_page(&ctx, opts))?,
+  )?;
+
+  let state2 = state.clone();
+  ui.set(
+    "openPage",
+    Function::new(ctx.clone(), move |ctx: Ctx<'js>, page: Value<'js>| {
+      if let Some(handle) = state2.java_handle(&ctx, &page)? {
+        if let Some(err) = state2.host.ui_open_fragment(handle) {
           return Err(Exception::throw_message(&ctx, &err));
         }
-        Ok(())
-      })?,
-    )?;
-  }
-  {
-    let state2 = state.clone();
-    ui.set(
-      "prompt",
-      Function::new(ctx.clone(), move |ctx: Ctx<'js>, opts: Object<'js>| js_prompt(&ctx, &state2, opts))?,
-    )?;
-  }
-  {
-    let state2 = state.clone();
-    let android: Object = match globals.inu.get::<_, Object>("android") {
-      Ok(o) => o,
-      Err(_) => {
-        let o = Object::new(ctx.clone())?;
-        globals.inu.set("android", o.clone())?;
-        o
+        return Ok(());
       }
-    };
-    android.set(
-      "nativeView",
-      Function::new(ctx.clone(), move |ctx: Ctx<'js>, view: Value<'js>| {
-        let Some(handle) = java_handle(&ctx, &state2, &view)? else {
-          return Err(Exception::throw_type(&ctx, "nativeView: expected a java object from inu.jvm"));
-        };
-        let out = new_element(&ctx, "native")?;
-        out.set("handle", handle)?;
-        Ok(out)
-      })?,
-    )?;
-  }
-  {
-    let state2 = state.clone();
-    globals.inu.set(
-      "registerSettings",
-      Function::new(ctx.clone(), move |ctx: Ctx<'js>, page: Value<'js>| js_register_settings(&ctx, &state2, page))?,
-    )?;
-  }
+      let page_id = state2.page_id_of(&ctx, &page, "openPage")?;
+      if let Some(err) = state2.host.ui_open_page(page_id) {
+        return Err(Exception::throw_message(&ctx, &err));
+      }
+      Ok(())
+    })?,
+  )?;
+
+  let state2 = state.clone();
+  ui.set(
+    "prompt",
+    Function::new(ctx.clone(), move |ctx: Ctx<'js>, opts: Object<'js>| state2.js_prompt(&ctx, opts))?,
+  )?;
+
+  let state2 = state.clone();
+  let android: Object = match globals.inu.get::<_, Object>("android") {
+    Ok(o) => o,
+    Err(_) => {
+      let o = Object::new(ctx.clone())?;
+      globals.inu.set("android", o.clone())?;
+      o
+    }
+  };
+
+  android.set(
+    "nativeView",
+    Function::new(ctx.clone(), move |ctx: Ctx<'js>, view: Value<'js>| {
+      let Some(handle) = state2.java_handle(&ctx, &view)? else {
+        return Err(Exception::throw_type(&ctx, "nativeView: expected a java object from inu.jvm"));
+      };
+      let out = new_element(&ctx, "native")?;
+      out.set("handle", handle)?;
+      Ok(out)
+    })?,
+  )?;
+
+  let state2 = state.clone();
+  globals.inu.set(
+    "registerSettings",
+    Function::new(ctx.clone(), move |ctx: Ctx<'js>, page: Value<'js>| state2.js_register_settings(&ctx, page))?,
+  )?;
 
   Ok(state)
 }
 
-fn js_register_settings<'js>(ctx: &Ctx<'js>, state: &Rc<UiState>, page: Value<'js>) -> JsResult<Function<'js>> {
-  if state.lifecycle.is_unloading() {
-    return noop_disposer(ctx);
-  }
-  let page_id = page_id_of(ctx, state, &page, "registerSettings")?;
-  if !state.settings.is_empty() {
-    return Err(Exception::throw_message(
-      ctx,
-      "registerSettings: a settings page is already registered; dispose that registration first",
-    ));
-  }
-  let token = state.settings.alloc();
-  state.settings.insert(token, None, page_id);
-  state.host.ui_register_settings(page_id);
-
-  let state = state.clone();
-  make_disposer(ctx, move |_| {
-    if let Some(page_id) = state.settings.remove(token) {
-      state.host.ui_unregister_settings(page_id);
+impl UiState {
+  fn js_register_settings<'js>(self: &Rc<Self>, ctx: &Ctx<'js>, page: Value<'js>) -> JsResult<Function<'js>> {
+    let state = self;
+    if state.lifecycle.is_unloading() {
+      return noop_disposer(ctx);
     }
-  })
-}
+    let page_id = state.page_id_of(ctx, &page, "registerSettings")?;
+    if !state.settings.is_empty() {
+      return Err(Exception::throw_message(
+        ctx,
+        "registerSettings: a settings page is already registered; dispose that registration first",
+      ));
+    }
+    let token = state.settings.alloc();
+    state.settings.insert(token, None, page_id);
+    state.host.ui_register_settings(page_id);
 
-fn java_handle<'js>(ctx: &Ctx<'js>, state: &Rc<UiState>, value: &Value<'js>) -> JsResult<Option<i64>> {
-  let Some(jvm) = state.jvm.as_ref() else {
-    return Ok(None);
-  };
-  let id = crate::api::platform::jvm::handle_id(ctx, jvm, value)?;
-  Ok(if id < 0 { None } else { Some(id) })
-}
-
-fn page_id_of<'js>(ctx: &Ctx<'js>, state: &Rc<UiState>, page: &Value<'js>, what: &str) -> JsResult<i64> {
-  let id = page
-    .as_object()
-    .and_then(|o| o.get::<_, Option<f64>>(PAGE_ID_KEY).ok().flatten())
-    .ok_or_else(|| Exception::throw_type(ctx, &format!("{what}: expected a settings page")))? as i64;
-  if !state.pages.borrow().contains_key(&id) {
-    return PluginErrorCode::HandleExpired.throw(ctx, &format!("{what}: this page has been disposed"));
+    let state = state.clone();
+    make_disposer(ctx, move |_| {
+      if let Some(page_id) = state.settings.remove(token) {
+        state.host.ui_unregister_settings(page_id);
+      }
+    })
   }
-  Ok(id)
-}
 
-fn js_settings_page<'js>(ctx: &Ctx<'js>, state: &Rc<UiState>, opts: Object<'js>) -> JsResult<Object<'js>> {
-  let title = req_str(ctx, &opts, "settingsPage", "title")?;
-  let transient = opt_bool(ctx, &opts, "settingsPage", "transient")?;
-  let items_fn = req_fn(ctx, &opts, "settingsPage", "items")?;
-  let on_close = opt_fn(ctx, &opts, "settingsPage", "onClose")?;
+  fn java_handle<'js>(&self, ctx: &Ctx<'js>, value: &Value<'js>) -> JsResult<Option<i64>> {
+    let Some(jvm) = self.jvm.as_ref() else {
+      return Ok(None);
+    };
+    let id = jvm.handle_id(ctx, value)?;
+    Ok(if id < 0 { None } else { Some(id) })
+  }
 
-  let bottom: Value = field(ctx, &opts, "settingsPage", "bottomButton")?;
-  let (bottom_text, bottom_on_click) = if bottom.is_undefined() || bottom.is_null() {
-    (None, None)
-  } else {
-    let obj = bottom
+  fn page_id_of<'js>(&self, ctx: &Ctx<'js>, page: &Value<'js>, what: &str) -> JsResult<i64> {
+    let id = page
       .as_object()
-      .ok_or_else(|| Exception::throw_type(ctx, "settingsPage: 'bottomButton' must be an object"))?;
-    (Some(req_str(ctx, obj, "bottomButton", "text")?), Some(req_fn(ctx, obj, "bottomButton", "onClick")?))
-  };
-
-  let page_id = state.next_id.alloc();
-  if !state.lifecycle.is_unloading() {
-    state.pages.borrow_mut().insert(
-      page_id,
-      UiPageDef {
-        title,
-        transient,
-        items_fn: Persistent::save(ctx, items_fn),
-        on_close: on_close.map(|f| Persistent::save(ctx, f)),
-        bottom_text,
-        bottom_on_click: bottom_on_click.map(|f| Persistent::save(ctx, f)),
-        callbacks: RefCell::new(HashMap::new()),
-        retained_icon_values: RefCell::new(Vec::new()),
-        next_slot: Cell::new(1),
-      },
-    );
+      .and_then(|o| o.get::<_, Option<f64>>(PAGE_ID_KEY).ok().flatten())
+      .ok_or_else(|| Exception::throw_type(ctx, &format!("{what}: expected a settings page")))? as i64;
+    if !self.pages.borrow().contains_key(&id) {
+      return PluginErrorCode::HandleExpired.throw(ctx, &format!("{what}: this page has been disposed"));
+    }
+    Ok(id)
   }
 
-  let page = Object::new(ctx.clone())?;
-  page.set(PAGE_ID_KEY, page_id as f64)?;
-  let state2 = state.clone();
-  page.set(
-    "invalidate",
-    Function::new(ctx.clone(), move || {
-      state2.host.ui_invalidate(page_id);
-    })?,
-  )?;
-  let state2 = state.clone();
-  page.set(
-    "dispose",
-    Function::new(ctx.clone(), move |ctx: Ctx<'js>| {
-      dispose_page(&ctx, &state2, page_id);
-    })?,
-  )?;
-  Ok(page)
+  fn js_settings_page<'js>(self: &Rc<Self>, ctx: &Ctx<'js>, opts: Object<'js>) -> JsResult<Object<'js>> {
+    let state = self;
+    let title = req_str(ctx, &opts, "settingsPage", "title")?;
+    let transient = opt_bool(ctx, &opts, "settingsPage", "transient")?;
+    let items_fn = req_fn(ctx, &opts, "settingsPage", "items")?;
+    let on_close = opt_fn(ctx, &opts, "settingsPage", "onClose")?;
+
+    let bottom: Value = field(ctx, &opts, "settingsPage", "bottomButton")?;
+    let (bottom_text, bottom_on_click) = if bottom.is_undefined() || bottom.is_null() {
+      (None, None)
+    } else {
+      let obj = bottom
+        .as_object()
+        .ok_or_else(|| Exception::throw_type(ctx, "settingsPage: 'bottomButton' must be an object"))?;
+      (Some(req_str(ctx, obj, "bottomButton", "text")?), Some(req_fn(ctx, obj, "bottomButton", "onClick")?))
+    };
+
+    let page_id = state.next_id.alloc();
+    if !state.lifecycle.is_unloading() {
+      state.pages.borrow_mut().insert(
+        page_id,
+        UiPageDef {
+          title,
+          transient,
+          items_fn: Persistent::save(ctx, items_fn),
+          on_close: on_close.map(|f| Persistent::save(ctx, f)),
+          bottom_text,
+          bottom_on_click: bottom_on_click.map(|f| Persistent::save(ctx, f)),
+          callbacks: RefCell::new(HashMap::new()),
+          retained_icon_values: RefCell::new(Vec::new()),
+          next_slot: Cell::new(1),
+        },
+      );
+    }
+
+    let page = Object::new(ctx.clone())?;
+    page.set(PAGE_ID_KEY, page_id as f64)?;
+    let state2 = state.clone();
+    page.set(
+      "invalidate",
+      Function::new(ctx.clone(), move || {
+        state2.host.ui_invalidate(page_id);
+      })?,
+    )?;
+    let state2 = state.clone();
+    page.set(
+      "dispose",
+      Function::new(ctx.clone(), move |ctx: Ctx<'js>| {
+        state2.dispose_page(&ctx, page_id);
+      })?,
+    )?;
+    Ok(page)
+  }
 }
 
 fn alloc_row_key(counts: &mut HashMap<String, u32>, ty: &str, id: Option<&str>, text: Option<&str>) -> Rc<str> {
@@ -450,245 +454,250 @@ fn alloc_row_key(counts: &mut HashMap<String, u32>, ty: &str, id: Option<&str>, 
   Rc::from(format!("{base}#{occurrence}").as_str())
 }
 
-fn try_render<'js>(ctx: &Ctx<'js>, state: &Rc<UiState>, page_id: i64) -> JsResult<String> {
-  let (items_fn, title, bottom_text, bottom_on_click, mut next_slot) = {
-    let pages = state.pages.borrow();
-    let def = pages.get(&page_id).ok_or_else(|| Exception::throw_message(ctx, "render: unknown page"))?;
-    (
-      def.items_fn.clone().restore(ctx)?,
-      def.title.clone(),
-      def.bottom_text.clone(),
-      def.bottom_on_click.as_ref().map(|p| p.clone().restore(ctx)).transpose()?,
-      def.next_slot.get(),
-    )
-  };
+impl UiState {
+  fn try_render<'js>(&self, ctx: &Ctx<'js>, page_id: i64) -> JsResult<String> {
+    let state = self;
+    let (items_fn, title, bottom_text, bottom_on_click, mut next_slot) = {
+      let pages = state.pages.borrow();
+      let def = pages.get(&page_id).ok_or_else(|| Exception::throw_message(ctx, "render: unknown page"))?;
+      (
+        def.items_fn.clone().restore(ctx)?,
+        def.title.clone(),
+        def.bottom_text.clone(),
+        def.bottom_on_click.as_ref().map(|p| p.clone().restore(ctx)).transpose()?,
+        def.next_slot.get(),
+      )
+    };
 
-  let items_val: Value = items_fn.call(())?;
-  let items_arr = items_val
-    .as_array()
-    .ok_or_else(|| Exception::throw_type(ctx, "settingsPage: items() must return an array"))?;
+    let items_val: Value = items_fn.call(())?;
+    let items_arr = items_val
+      .as_array()
+      .ok_or_else(|| Exception::throw_type(ctx, "settingsPage: items() must return an array"))?;
 
-  let mut new_cbs: Vec<(u32, Rc<str>, Function<'js>)> = Vec::new();
-  let mut retained_icon_values: Vec<Value<'js>> = Vec::new();
-  let mut alloc_slot = |row: &Rc<str>, f: Function<'js>| -> u32 {
-    let slot = next_slot;
-    next_slot += 1;
-    new_cbs.push((slot, row.clone(), f));
-    slot
-  };
+    let mut new_cbs: Vec<(u32, Rc<str>, Function<'js>)> = Vec::new();
+    let mut retained_icon_values: Vec<Value<'js>> = Vec::new();
+    let mut alloc_slot = |row: &Rc<str>, f: Function<'js>| -> u32 {
+      let slot = next_slot;
+      next_slot += 1;
+      new_cbs.push((slot, row.clone(), f));
+      slot
+    };
 
-  let out_items = Array::new(ctx.clone())?;
-  let mut key_counts: HashMap<String, u32> = HashMap::new();
-  for (i, element) in items_arr.iter::<Value>().enumerate() {
-    let element = element?;
-    let obj = element
-      .as_object()
-      .filter(|o| o.get::<_, Option<String>>(ELEMENT_TAG).ok().flatten().is_some())
-      .ok_or_else(|| Exception::throw_type(ctx, "settingsPage: items() must return only inu.ui elements"))?;
-    let ty: String = obj.get(ELEMENT_TAG)?;
-    let row = alloc_row_key(
-      &mut key_counts,
-      &ty,
-      obj.get::<_, Option<String>>("id")?.as_deref(),
-      obj.get::<_, Option<String>>("text")?.as_deref(),
-    );
+    let out_items = Array::new(ctx.clone())?;
+    let mut key_counts: HashMap<String, u32> = HashMap::new();
+    for (i, element) in items_arr.iter::<Value>().enumerate() {
+      let element = element?;
+      let obj = element
+        .as_object()
+        .filter(|o| o.get::<_, Option<String>>(ELEMENT_TAG).ok().flatten().is_some())
+        .ok_or_else(|| Exception::throw_type(ctx, "settingsPage: items() must return only inu.ui elements"))?;
+      let ty: String = obj.get(ELEMENT_TAG)?;
+      let row = alloc_row_key(
+        &mut key_counts,
+        &ty,
+        obj.get::<_, Option<String>>("id")?.as_deref(),
+        obj.get::<_, Option<String>>("text")?.as_deref(),
+      );
 
-    let out = Object::new(ctx.clone())?;
-    out.set("type", ty.as_str())?;
-    out.set("key", row.as_ref())?;
-    match ty.as_str() {
-      "native" => {
-        out.set("handle", obj.get::<_, i64>("handle")?)?;
-      }
-      "header" | "separator" => {
-        set_opt(&out, "text", obj.get::<_, Option<String>>("text")?)?;
-      }
-      "check" => {
-        set_opt(&out, "id", obj.get::<_, Option<String>>("id")?)?;
-        out.set("text", obj.get::<_, String>("text")?)?;
-        set_opt(&out, "subtitle", obj.get::<_, Option<String>>("subtitle")?)?;
-        out.set("checked", obj.get::<_, bool>("checked")?)?;
-        out.set("onChange", alloc_slot(&row, obj.get::<_, Function>("onChange")?))?;
-        if let Some(f) = obj.get::<_, Option<Function>>("onSecondaryClick")? {
-          out.set("onSecondaryClick", alloc_slot(&row, f))?;
+      let out = Object::new(ctx.clone())?;
+      out.set("type", ty.as_str())?;
+      out.set("key", row.as_ref())?;
+      match ty.as_str() {
+        "native" => {
+          out.set("handle", obj.get::<_, i64>("handle")?)?;
         }
-      }
-      "button" => {
-        set_opt(&out, "id", obj.get::<_, Option<String>>("id")?)?;
-        out.set("text", obj.get::<_, String>("text")?)?;
-        set_opt(&out, "icon", obj.get::<_, Option<String>>("icon")?)?;
-        if let Some(value) = obj.get::<_, Option<Value>>(RETAINED_VALUE_TAG)? {
-          retained_icon_values.push(value);
+        "header" | "separator" => {
+          set_opt(&out, "text", obj.get::<_, Option<String>>("text")?)?;
         }
-        set_opt(&out, "subtitle", obj.get::<_, Option<String>>("subtitle")?)?;
-        set_opt(&out, "value", obj.get::<_, Option<String>>("value")?)?;
-        out.set("danger", obj.get::<_, bool>("danger")?)?;
-        out.set("onClick", alloc_slot(&row, obj.get::<_, Function>("onClick")?))?;
-        if let Some(f) = obj.get::<_, Option<Function>>("onSecondaryClick")? {
-          out.set("onSecondaryClick", alloc_slot(&row, f))?;
-        }
-      }
-      "select" => {
-        set_opt(&out, "id", obj.get::<_, Option<String>>("id")?)?;
-        out.set("text", obj.get::<_, String>("text")?)?;
-        set_opt(&out, "icon", obj.get::<_, Option<String>>("icon")?)?;
-        if let Some(value) = obj.get::<_, Option<Value>>(RETAINED_VALUE_TAG)? {
-          retained_icon_values.push(value);
-        }
-        out.set("items", obj.get::<_, Array>("items")?)?;
-        out.set("selected", obj.get::<_, i32>("selected")?)?;
-        out.set("dialog", obj.get::<_, bool>("dialog")?)?;
-        out.set("onChange", alloc_slot(&row, obj.get::<_, Function>("onChange")?))?;
-        if let Some(f) = obj.get::<_, Option<Function>>("onSecondaryClick")? {
-          out.set("onSecondaryClick", alloc_slot(&row, f))?;
-        }
-      }
-      "slider" => {
-        set_opt(&out, "id", obj.get::<_, Option<String>>("id")?)?;
-        set_opt(&out, "text", obj.get::<_, Option<String>>("text")?)?;
-        let min: f64 = obj.get("min")?;
-        let max: f64 = obj.get("max")?;
-        let step: f64 = obj.get("step")?;
-        out.set("min", min)?;
-        out.set("max", max)?;
-        out.set("step", step)?;
-        out.set("value", obj.get::<_, f64>("value")?)?;
-        set_opt(&out, "default", obj.get::<_, Option<f64>>("default")?)?;
-        if let Some(label) = obj.get::<_, Option<Function>>("label")? {
-          check_slider_steps(ctx, min, max, step)?;
-          let labels = Array::new(ctx.clone())?;
-          for s in 0..slider_steps(min, max, step) {
-            let v = (min + s as f64 * step).min(max);
-            let text: rquickjs::Coerced<String> = label.call((v,))?;
-            labels.set(s, text.0)?;
+        "check" => {
+          set_opt(&out, "id", obj.get::<_, Option<String>>("id")?)?;
+          out.set("text", obj.get::<_, String>("text")?)?;
+          set_opt(&out, "subtitle", obj.get::<_, Option<String>>("subtitle")?)?;
+          out.set("checked", obj.get::<_, bool>("checked")?)?;
+          out.set("onChange", alloc_slot(&row, obj.get::<_, Function>("onChange")?))?;
+          if let Some(f) = obj.get::<_, Option<Function>>("onSecondaryClick")? {
+            out.set("onSecondaryClick", alloc_slot(&row, f))?;
           }
-          out.set("labels", labels)?;
         }
-        out.set("onChange", alloc_slot(&row, obj.get::<_, Function>("onChange")?))?;
+        "button" => {
+          set_opt(&out, "id", obj.get::<_, Option<String>>("id")?)?;
+          out.set("text", obj.get::<_, String>("text")?)?;
+          set_opt(&out, "icon", obj.get::<_, Option<String>>("icon")?)?;
+          if let Some(value) = obj.get::<_, Option<Value>>(RETAINED_VALUE_TAG)? {
+            retained_icon_values.push(value);
+          }
+          set_opt(&out, "subtitle", obj.get::<_, Option<String>>("subtitle")?)?;
+          set_opt(&out, "value", obj.get::<_, Option<String>>("value")?)?;
+          out.set("danger", obj.get::<_, bool>("danger")?)?;
+          out.set("onClick", alloc_slot(&row, obj.get::<_, Function>("onClick")?))?;
+          if let Some(f) = obj.get::<_, Option<Function>>("onSecondaryClick")? {
+            out.set("onSecondaryClick", alloc_slot(&row, f))?;
+          }
+        }
+        "select" => {
+          set_opt(&out, "id", obj.get::<_, Option<String>>("id")?)?;
+          out.set("text", obj.get::<_, String>("text")?)?;
+          set_opt(&out, "icon", obj.get::<_, Option<String>>("icon")?)?;
+          if let Some(value) = obj.get::<_, Option<Value>>(RETAINED_VALUE_TAG)? {
+            retained_icon_values.push(value);
+          }
+          out.set("items", obj.get::<_, Array>("items")?)?;
+          out.set("selected", obj.get::<_, i32>("selected")?)?;
+          out.set("dialog", obj.get::<_, bool>("dialog")?)?;
+          out.set("onChange", alloc_slot(&row, obj.get::<_, Function>("onChange")?))?;
+          if let Some(f) = obj.get::<_, Option<Function>>("onSecondaryClick")? {
+            out.set("onSecondaryClick", alloc_slot(&row, f))?;
+          }
+        }
+        "slider" => {
+          set_opt(&out, "id", obj.get::<_, Option<String>>("id")?)?;
+          set_opt(&out, "text", obj.get::<_, Option<String>>("text")?)?;
+          let min: f64 = obj.get("min")?;
+          let max: f64 = obj.get("max")?;
+          let step: f64 = obj.get("step")?;
+          out.set("min", min)?;
+          out.set("max", max)?;
+          out.set("step", step)?;
+          out.set("value", obj.get::<_, f64>("value")?)?;
+          set_opt(&out, "default", obj.get::<_, Option<f64>>("default")?)?;
+          if let Some(label) = obj.get::<_, Option<Function>>("label")? {
+            check_slider_steps(ctx, min, max, step)?;
+            let labels = Array::new(ctx.clone())?;
+            for s in 0..slider_steps(min, max, step) {
+              let v = (min + s as f64 * step).min(max);
+              let text: rquickjs::Coerced<String> = label.call((v,))?;
+              labels.set(s, text.0)?;
+            }
+            out.set("labels", labels)?;
+          }
+          out.set("onChange", alloc_slot(&row, obj.get::<_, Function>("onChange")?))?;
+        }
+        other => {
+          return Err(Exception::throw_type(ctx, &format!("settingsPage: unknown element type '{other}'")));
+        }
       }
-      other => {
-        return Err(Exception::throw_type(ctx, &format!("settingsPage: unknown element type '{other}'")));
+      out_items.set(i, out)?;
+    }
+
+    let root = Object::new(ctx.clone())?;
+    root.set("title", title)?;
+    root.set("items", out_items)?;
+    if let (Some(text), Some(f)) = (bottom_text, bottom_on_click) {
+      let bottom = Object::new(ctx.clone())?;
+      bottom.set("key", BOTTOM_BUTTON_KEY)?;
+      bottom.set("text", text)?;
+      bottom.set("onClick", alloc_slot(&Rc::from(BOTTOM_BUTTON_KEY), f))?;
+      root.set("bottomButton", bottom)?;
+    }
+
+    {
+      let pages = state.pages.borrow();
+      if let Some(def) = pages.get(&page_id) {
+        let mut cbs = def.callbacks.borrow_mut();
+        for (_, entry) in cbs.drain() {
+          let _ = entry.func.restore(ctx);
+        }
+        for (slot, row, f) in new_cbs {
+          cbs.insert(slot, CallbackEntry { func: Persistent::save(ctx, f), row });
+        }
+        for value in def
+          .retained_icon_values
+          .replace(retained_icon_values.into_iter().map(|value| Persistent::save(ctx, value)).collect())
+        {
+          let _ = value.restore(ctx);
+        }
+        def.next_slot.set(next_slot);
       }
     }
-    out_items.set(i, out)?;
+
+    ctx
+      .json_stringify(root)?
+      .map(|s| s.to_string())
+      .transpose()?
+      .ok_or_else(|| Exception::throw_message(ctx, "render: serialization produced no output"))
   }
 
-  let root = Object::new(ctx.clone())?;
-  root.set("title", title)?;
-  root.set("items", out_items)?;
-  if let (Some(text), Some(f)) = (bottom_text, bottom_on_click) {
-    let bottom = Object::new(ctx.clone())?;
-    bottom.set("key", BOTTOM_BUTTON_KEY)?;
-    bottom.set("text", text)?;
-    bottom.set("onClick", alloc_slot(&Rc::from(BOTTOM_BUTTON_KEY), f))?;
-    root.set("bottomButton", bottom)?;
+  fn make_anchor<'js>(self: &Rc<Self>, ctx: &Ctx<'js>, page_id: i64, row: Rc<str>) -> JsResult<Object<'js>> {
+    let anchor = Object::new(ctx.clone())?;
+    let state = self.clone();
+    anchor.set(
+      "openMenu",
+      Function::new(ctx.clone(), move |ctx: Ctx<'js>, items: Value<'js>| {
+        state.js_open_menu(&ctx, page_id, &row, items)
+      })?,
+    )?;
+    Ok(anchor)
   }
 
-  {
-    let pages = state.pages.borrow();
-    if let Some(def) = pages.get(&page_id) {
-      let mut cbs = def.callbacks.borrow_mut();
-      for (_, entry) in cbs.drain() {
-        let _ = entry.func.restore(ctx);
-      }
-      for (slot, row, f) in new_cbs {
-        cbs.insert(slot, CallbackEntry { func: Persistent::save(ctx, f), row });
-      }
-      for value in def
-        .retained_icon_values
-        .replace(retained_icon_values.into_iter().map(|value| Persistent::save(ctx, value)).collect())
-      {
-        let _ = value.restore(ctx);
-      }
-      def.next_slot.set(next_slot);
+  fn js_open_menu<'js>(&self, ctx: &Ctx<'js>, page_id: i64, row: &str, items: Value<'js>) -> JsResult<()> {
+    let state = self;
+    if !state.pages.borrow().contains_key(&page_id) {
+      return PluginErrorCode::HandleExpired.throw(ctx, "openMenu: the page this anchor came from has been disposed");
     }
-  }
-
-  ctx
-    .json_stringify(root)?
-    .map(|s| s.to_string())
-    .transpose()?
-    .ok_or_else(|| Exception::throw_message(ctx, "render: serialization produced no output"))
-}
-
-fn make_anchor<'js>(ctx: &Ctx<'js>, state: &Rc<UiState>, page_id: i64, row: Rc<str>) -> JsResult<Object<'js>> {
-  let anchor = Object::new(ctx.clone())?;
-  let state = state.clone();
-  anchor.set(
-    "openMenu",
-    Function::new(ctx.clone(), move |ctx: Ctx<'js>, items: Value<'js>| {
-      js_open_menu(&ctx, &state, page_id, &row, items)
-    })?,
-  )?;
-  Ok(anchor)
-}
-
-fn js_open_menu<'js>(ctx: &Ctx<'js>, state: &Rc<UiState>, page_id: i64, row: &str, items: Value<'js>) -> JsResult<()> {
-  if !state.pages.borrow().contains_key(&page_id) {
-    return PluginErrorCode::HandleExpired.throw(ctx, "openMenu: the page this anchor came from has been disposed");
-  }
-  let arr = items.as_array().ok_or_else(|| Exception::throw_type(ctx, "openMenu: expected an array of items"))?;
-  let arr = crate::utils::arguments::array_values(ctx, arr, "openMenu")?;
-  if arr.is_empty() {
-    return Err(Exception::throw_type(ctx, "openMenu: items must not be empty"));
-  }
-
-  let out = Array::new(ctx.clone())?;
-  let mut callbacks: Vec<Function<'js>> = Vec::with_capacity(arr.len());
-  for (i, item) in arr.into_iter().enumerate() {
-    let obj = item.as_object().ok_or_else(|| Exception::throw_type(ctx, "openMenu: items must be objects"))?;
-    let entry = Object::new(ctx.clone())?;
-    entry.set("text", req_str(ctx, obj, "openMenu item", "text")?)?;
-    let checked: Value = field(ctx, obj, "openMenu item", "checked")?;
-    if !checked.is_undefined() && !checked.is_null() {
-      let checked = checked
-        .as_bool()
-        .ok_or_else(|| Exception::throw_type(ctx, "openMenu item: 'checked' must be a boolean"))?;
-      entry.set("checked", checked)?;
+    let arr = items.as_array().ok_or_else(|| Exception::throw_type(ctx, "openMenu: expected an array of items"))?;
+    let arr = crate::utils::arguments::array_values(ctx, arr, "openMenu")?;
+    if arr.is_empty() {
+      return Err(Exception::throw_type(ctx, "openMenu: items must not be empty"));
     }
-    entry.set("danger", opt_bool(ctx, obj, "openMenu item", "danger")?)?;
-    callbacks.push(req_fn(ctx, obj, "openMenu item", "onClick")?);
-    out.set(i, entry)?;
-  }
-  let json = ctx
-    .json_stringify(out)?
-    .map(|s| s.to_string())
-    .transpose()?
-    .ok_or_else(|| Exception::throw_message(ctx, "openMenu: serialization failed"))?;
 
-  let menu_id = state.next_id.alloc();
-  if let Some(err) = state.host.ui_open_menu(menu_id, page_id, row, &json) {
-    return Err(Exception::throw_message(ctx, &err));
-  }
-  state
-    .menus
-    .borrow_mut()
-    .insert(menu_id, callbacks.into_iter().map(|f| Persistent::save(ctx, f)).collect());
-  Ok(())
-}
-
-fn js_prompt<'js>(ctx: &Ctx<'js>, state: &Rc<UiState>, opts: Object<'js>) -> JsResult<Value<'js>> {
-  let out = Object::new(ctx.clone())?;
-  out.set("title", req_str(ctx, &opts, "prompt", "title")?)?;
-  set_opt(&out, "hint", opt_str(ctx, &opts, "prompt", "hint")?)?;
-  set_opt(&out, "value", opt_str(ctx, &opts, "prompt", "value")?)?;
-  out.set("selectAll", opt_bool(ctx, &opts, "prompt", "selectAll")?)?;
-  let json = ctx
-    .json_stringify(out)?
-    .map(|s| s.to_string())
-    .transpose()?
-    .ok_or_else(|| Exception::throw_message(ctx, "prompt: serialization failed"))?;
-
-  let request_id = state.next_id.alloc();
-  let (promise, pending) = PendingSettle::new(ctx)?;
-  state.pending_prompts.borrow_mut().insert(request_id, pending);
-
-  if let Some(err) = state.host.ui_prompt(request_id, &json) {
-    if let Some(pending) = state.pending_prompts.borrow_mut().remove(&request_id) {
-      pending.reject_with(ctx, &err)?;
+    let out = Array::new(ctx.clone())?;
+    let mut callbacks: Vec<Function<'js>> = Vec::with_capacity(arr.len());
+    for (i, item) in arr.into_iter().enumerate() {
+      let obj = item.as_object().ok_or_else(|| Exception::throw_type(ctx, "openMenu: items must be objects"))?;
+      let entry = Object::new(ctx.clone())?;
+      entry.set("text", req_str(ctx, obj, "openMenu item", "text")?)?;
+      let checked: Value = field(ctx, obj, "openMenu item", "checked")?;
+      if !checked.is_undefined() && !checked.is_null() {
+        let checked = checked
+          .as_bool()
+          .ok_or_else(|| Exception::throw_type(ctx, "openMenu item: 'checked' must be a boolean"))?;
+        entry.set("checked", checked)?;
+      }
+      entry.set("danger", opt_bool(ctx, obj, "openMenu item", "danger")?)?;
+      callbacks.push(req_fn(ctx, obj, "openMenu item", "onClick")?);
+      out.set(i, entry)?;
     }
+    let json = ctx
+      .json_stringify(out)?
+      .map(|s| s.to_string())
+      .transpose()?
+      .ok_or_else(|| Exception::throw_message(ctx, "openMenu: serialization failed"))?;
+
+    let menu_id = state.next_id.alloc();
+    if let Some(err) = state.host.ui_open_menu(menu_id, page_id, row, &json) {
+      return Err(Exception::throw_message(ctx, &err));
+    }
+    state
+      .menus
+      .borrow_mut()
+      .insert(menu_id, callbacks.into_iter().map(|f| Persistent::save(ctx, f)).collect());
+    Ok(())
   }
-  Ok(promise.into_value())
+
+  fn js_prompt<'js>(&self, ctx: &Ctx<'js>, opts: Object<'js>) -> JsResult<Value<'js>> {
+    let state = self;
+    let out = Object::new(ctx.clone())?;
+    out.set("title", req_str(ctx, &opts, "prompt", "title")?)?;
+    set_opt(&out, "hint", opt_str(ctx, &opts, "prompt", "hint")?)?;
+    set_opt(&out, "value", opt_str(ctx, &opts, "prompt", "value")?)?;
+    out.set("selectAll", opt_bool(ctx, &opts, "prompt", "selectAll")?)?;
+    let json = ctx
+      .json_stringify(out)?
+      .map(|s| s.to_string())
+      .transpose()?
+      .ok_or_else(|| Exception::throw_message(ctx, "prompt: serialization failed"))?;
+
+    let request_id = state.next_id.alloc();
+    let (promise, pending) = PendingSettle::new(ctx)?;
+    state.pending_prompts.borrow_mut().insert(request_id, pending);
+
+    if let Some(err) = state.host.ui_prompt(request_id, &json) {
+      if let Some(pending) = state.pending_prompts.borrow_mut().remove(&request_id) {
+        pending.reject_with(ctx, &err)?;
+      }
+    }
+    Ok(promise.into_value())
+  }
 }
 
 impl UiState {
@@ -698,7 +707,7 @@ impl UiState {
       (state.log)(&format!("ui: render({page_id}): no such page (already disposed?)"));
       return None;
     }
-    let out = context.with(|ctx| match try_render(&ctx, state, page_id) {
+    let out = context.with(|ctx| match state.try_render(&ctx, page_id) {
       Ok(json) => Some(json),
       Err(rquickjs::Error::Exception) => {
         (state.log)(&crate::fault(format_args!("ui: render failed: {}", format_exception(&ctx))));
@@ -737,7 +746,7 @@ impl UiState {
           return;
         }
       };
-      let anchor = match make_anchor(&ctx, state, page_id, row) {
+      let anchor = match state.make_anchor(&ctx, page_id, row) {
         Ok(a) => a,
         Err(e) => {
           (state.log)(&format!("ui: failed to build the anchor: {e:?}"));
@@ -849,7 +858,7 @@ impl UiState {
         }
       }
       if transient {
-        dispose_page(&ctx, state, page_id);
+        state.dispose_page(&ctx, page_id);
       }
     });
     pump_jobs(rt, context, state.log.as_ref());
@@ -859,7 +868,7 @@ impl UiState {
     let state = self;
     context.with(|ctx| {
       for (_, def) in state.pages.borrow_mut().drain() {
-        release_page_def(&ctx, def);
+        def.release(&ctx);
       }
       for (_, callbacks) in state.menus.borrow_mut().drain() {
         for p in callbacks {

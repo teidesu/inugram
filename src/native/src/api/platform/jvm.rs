@@ -8,7 +8,7 @@ use rquickjs::{
 
 use crate::api::error::{wire_error_to_js, PluginErrorCode};
 use crate::api::telegram::rpc::{format_exception, pump_jobs};
-use crate::sandbox::grants::{check_grant, GrantHost, MATCH_NAMESPACE};
+use crate::sandbox::grants::{GrantHost, MATCH_NAMESPACE};
 use crate::sandbox::registry::{CallbackRegistry, Lifecycle};
 use crate::utils::prelude;
 
@@ -67,164 +67,154 @@ fn throw_too_big<'js, T>(ctx: &Ctx<'js>, what: &str, size: usize, limit: usize) 
   }
 }
 
-pub(crate) fn handle_id<'js>(ctx: &Ctx<'js>, state: &Rc<JvmState>, value: &Value<'js>) -> JsResult<i64> {
-  let borrowed = state.prelude.borrow();
-  let Some(prelude) = borrowed.as_ref() else {
-    return Ok(-1);
-  };
-  let id_of = prelude.id_of.clone().restore(ctx)?;
-  id_of.call((value.clone(),))
-}
-
-pub(crate) fn arg_to_wire<'js>(ctx: &Ctx<'js>, state: &Rc<JvmState>, value: &Value<'js>) -> JsResult<String> {
-  if value.is_null() || value.is_undefined() {
-    return Ok("N".to_string());
-  }
-  if let Some(b) = value.as_bool() {
-    return Ok(if b { "B1" } else { "B0" }.to_string());
-  }
-  if let Some(i) = value.as_int() {
-    return Ok(format!("I{i}"));
-  }
-  if let Some(f) = value.as_float() {
-    if f.fract() == 0.0 && f.abs() <= 9_007_199_254_740_991.0 {
-      return Ok(format!("I{}", f as i64));
-    }
-    return Ok(format!("D{f}"));
-  }
-  if value.is_big_int() {
-    let text = Coerced::<String>::from_js(ctx, value.clone())?.0;
-    return match text.parse::<i64>() {
-      Ok(v) => Ok(format!("I{v}")),
-      Err(_) => PluginErrorCode::InvalidArgument.throw(ctx, &format!("jvm: {text} does not fit in a java long")),
+impl JvmState {
+  pub(crate) fn handle_id<'js>(&self, ctx: &Ctx<'js>, value: &Value<'js>) -> JsResult<i64> {
+    let borrowed = self.prelude.borrow();
+    let Some(prelude) = borrowed.as_ref() else {
+      return Ok(-1);
     };
+    let id_of = prelude.id_of.clone().restore(ctx)?;
+    id_of.call((value.clone(),))
   }
-  if let Some(s) = value.as_string() {
-    let s = s.to_string()?;
-    if !bounded(&s, VALUE_LIMIT_BYTES) {
-      return throw_too_big(ctx, "a string argument", s.len(), VALUE_LIMIT_BYTES);
+
+  pub(crate) fn arg_to_wire<'js>(&self, ctx: &Ctx<'js>, value: &Value<'js>) -> JsResult<String> {
+    if value.is_null() || value.is_undefined() {
+      return Ok("N".to_string());
     }
-    return Ok(format!("S{s}"));
-  }
-  if let Ok(typed) = TypedArray::<u8>::from_value(value.clone()) {
-    if let Some(bytes) = typed.as_bytes() {
-      if !bounded_bytes(bytes, VALUE_LIMIT_BYTES) {
-        return throw_too_big(ctx, "a byte[] argument", bytes.len(), VALUE_LIMIT_BYTES);
+    if let Some(b) = value.as_bool() {
+      return Ok(if b { "B1" } else { "B0" }.to_string());
+    }
+    if let Some(i) = value.as_int() {
+      return Ok(format!("I{i}"));
+    }
+    if let Some(f) = value.as_float() {
+      if f.fract() == 0.0 && f.abs() <= 9_007_199_254_740_991.0 {
+        return Ok(format!("I{}", f as i64));
       }
-      return Ok(format!("Y{}", base64::Engine::encode(&base64::engine::general_purpose::STANDARD, bytes)));
+      return Ok(format!("D{f}"));
     }
+    if value.is_big_int() {
+      let text = Coerced::<String>::from_js(ctx, value.clone())?.0;
+      return match text.parse::<i64>() {
+        Ok(v) => Ok(format!("I{v}")),
+        Err(_) => PluginErrorCode::InvalidArgument.throw(ctx, &format!("jvm: {text} does not fit in a java long")),
+      };
+    }
+    if let Some(s) = value.as_string() {
+      let s = s.to_string()?;
+      if !bounded(&s, VALUE_LIMIT_BYTES) {
+        return throw_too_big(ctx, "a string argument", s.len(), VALUE_LIMIT_BYTES);
+      }
+      return Ok(format!("S{s}"));
+    }
+    if let Ok(typed) = TypedArray::<u8>::from_value(value.clone()) {
+      if let Some(bytes) = typed.as_bytes() {
+        if !bounded_bytes(bytes, VALUE_LIMIT_BYTES) {
+          return throw_too_big(ctx, "a byte[] argument", bytes.len(), VALUE_LIMIT_BYTES);
+        }
+        return Ok(format!("Y{}", base64::Engine::encode(&base64::engine::general_purpose::STANDARD, bytes)));
+      }
+    }
+    let id = self.handle_id(ctx, value)?;
+    if id >= 0 {
+      return Ok(format!("G{id}"));
+    }
+    PluginErrorCode::InvalidArgument.throw(ctx, &format!("jvm: cannot hand a {} to java", value.type_of()))
   }
-  let id = handle_id(ctx, state, value)?;
-  if id >= 0 {
-    return Ok(format!("G{id}"));
-  }
-  PluginErrorCode::InvalidArgument.throw(ctx, &format!("jvm: cannot hand a {} to java", value.type_of()))
 }
 
 fn bounded_bytes(bytes: &[u8], limit: usize) -> bool {
   bytes.len() <= limit
 }
 
-pub(crate) fn wire_to_value<'js>(ctx: &Ctx<'js>, state: &Rc<JvmState>, wire: &str) -> JsResult<Value<'js>> {
-  if let Some(built) = wire_error_to_js(ctx, wire) {
-    return Err(ctx.throw(built?));
-  }
-  let mut chars = wire.chars();
-  let Some(tag) = chars.next() else {
-    return PluginErrorCode::Internal.throw(ctx, "jvm: the host answered with an empty wire");
-  };
-  let payload = chars.as_str();
-  if tag == 'I' {
-    let Ok(value) = payload.parse::<i64>() else {
-      return PluginErrorCode::Internal.throw(ctx, "jvm: the host answered with a bad int");
-    };
-    if value.unsigned_abs() > 9_007_199_254_740_991 {
-      return Value::new_big_int(ctx.clone(), value);
+impl JvmState {
+  pub(crate) fn wire_to_value<'js>(&self, ctx: &Ctx<'js>, wire: &str) -> JsResult<Value<'js>> {
+    if let Some(built) = wire_error_to_js(ctx, wire) {
+      return Err(ctx.throw(built?));
     }
-    return value.into_js(ctx);
-  }
-  if tag == 'G' {
-    let mut kind = payload.chars();
-    let Some(kind) = kind.next() else {
-      return PluginErrorCode::Internal.throw(ctx, "jvm: the host answered with a bad handle");
+    let mut chars = wire.chars();
+    let Some(tag) = chars.next() else {
+      return PluginErrorCode::Internal.throw(ctx, "jvm: the host answered with an empty wire");
     };
-    let Ok(id) = payload[kind.len_utf8()..].parse::<i64>() else {
-      return PluginErrorCode::Internal.throw(ctx, "jvm: the host answered with a bad handle");
-    };
-    let borrowed = state.prelude.borrow();
-    let Some(prelude) = borrowed.as_ref() else {
-      return PluginErrorCode::Internal.throw(ctx, "jvm: the prelude is not installed");
-    };
-    let mint = prelude.mint.clone().restore(ctx)?;
-    return mint.call((kind.to_string(), id));
-  }
-  match crate::api::tl::proxy::scalar_wire_to_js(ctx, tag, payload) {
-    Some(value) => value,
-    None => PluginErrorCode::Internal.throw(ctx, &format!("jvm: the host answered with an unknown tag '{tag}'")),
-  }
-}
-
-fn ask<'js>(
-  ctx: &Ctx<'js>,
-  state: &Rc<JvmState>,
-  op: i32,
-  target: i64,
-  name: &str,
-  args: &[String],
-) -> JsResult<Value<'js>> {
-  let wire = state.host.jvm(op, target, name, args);
-  wire_to_value(ctx, state, &wire)
-}
-
-fn js_op<'js>(
-  ctx: &Ctx<'js>,
-  state: &Rc<JvmState>,
-  op: i32,
-  target: i64,
-  name: String,
-  args: Array<'js>,
-) -> JsResult<Value<'js>> {
-  check_grant(ctx, &state.grants, GRANT, None, MATCH_NAMESPACE)?;
-  let mut wires = Vec::new();
-  for arg in crate::utils::arguments::array_values(ctx, &args, "jvm")? {
-    wires.push(arg_to_wire(ctx, state, &arg)?);
-  }
-  ask(ctx, state, op, target, &name, &wires)
-}
-
-fn js_cls<'js>(ctx: &Ctx<'js>, state: &Rc<JvmState>, name: String) -> JsResult<Value<'js>> {
-  check_grant(ctx, &state.grants, GRANT, Some(&name), MATCH_NAMESPACE)?;
-  ask(ctx, state, OP_CLASS, 0, &name, &[])
-}
-
-fn js_runnable<'js>(ctx: &Ctx<'js>, state: &Rc<JvmState>, callback: Function<'js>) -> JsResult<Value<'js>> {
-  check_grant(ctx, &state.grants, GRANT, None, MATCH_NAMESPACE)?;
-  let token = state.callbacks.alloc();
-  let handle = ask(ctx, state, OP_RUNNABLE, 0, "", &[format!("I{token}")])?;
-  if !state.lifecycle.is_unloading() {
-    state.callbacks.register(ctx, token, None, callback);
-  }
-  Ok(handle)
-}
-
-fn js_load_dex<'js>(ctx: &Ctx<'js>, state: &Rc<JvmState>, source: Value<'js>) -> JsResult<()> {
-  check_grant(ctx, &state.grants, GRANT, Some("*"), MATCH_NAMESPACE)?;
-  if let Some(path) = source.as_string() {
-    let path = path.to_string()?;
-    ask(ctx, state, OP_LOAD_DEX, 0, &path, &[])?;
-    return Ok(());
-  }
-  if let Ok(typed) = TypedArray::<u8>::from_value(source.clone()) {
-    if let Some(bytes) = typed.as_bytes() {
-      if !bounded_bytes(bytes, DEX_LIMIT_BYTES) {
-        return throw_too_big(ctx, "a dex", bytes.len(), DEX_LIMIT_BYTES);
+    let payload = chars.as_str();
+    if tag == 'I' {
+      let Ok(value) = payload.parse::<i64>() else {
+        return PluginErrorCode::Internal.throw(ctx, "jvm: the host answered with a bad int");
+      };
+      if value.unsigned_abs() > 9_007_199_254_740_991 {
+        return Value::new_big_int(ctx.clone(), value);
       }
-      let wire = format!("Y{}", base64::Engine::encode(&base64::engine::general_purpose::STANDARD, bytes));
-      ask(ctx, state, OP_LOAD_DEX, 0, "", &[wire])?;
+      return value.into_js(ctx);
+    }
+    if tag == 'G' {
+      let mut kind = payload.chars();
+      let Some(kind) = kind.next() else {
+        return PluginErrorCode::Internal.throw(ctx, "jvm: the host answered with a bad handle");
+      };
+      let Ok(id) = payload[kind.len_utf8()..].parse::<i64>() else {
+        return PluginErrorCode::Internal.throw(ctx, "jvm: the host answered with a bad handle");
+      };
+      let borrowed = self.prelude.borrow();
+      let Some(prelude) = borrowed.as_ref() else {
+        return PluginErrorCode::Internal.throw(ctx, "jvm: the prelude is not installed");
+      };
+      let mint = prelude.mint.clone().restore(ctx)?;
+      return mint.call((kind.to_string(), id));
+    }
+    match crate::api::tl::proxy::scalar_wire_to_js(ctx, tag, payload) {
+      Some(value) => value,
+      None => PluginErrorCode::Internal.throw(ctx, &format!("jvm: the host answered with an unknown tag '{tag}'")),
+    }
+  }
+
+  fn ask<'js>(&self, ctx: &Ctx<'js>, op: i32, target: i64, name: &str, args: &[String]) -> JsResult<Value<'js>> {
+    let wire = self.host.jvm(op, target, name, args);
+    self.wire_to_value(ctx, &wire)
+  }
+
+  fn js_op<'js>(&self, ctx: &Ctx<'js>, op: i32, target: i64, name: String, args: Array<'js>) -> JsResult<Value<'js>> {
+    self.grants.check_grant(ctx, GRANT, None, MATCH_NAMESPACE)?;
+    let mut wires = Vec::new();
+    for arg in crate::utils::arguments::array_values(ctx, &args, "jvm")? {
+      wires.push(self.arg_to_wire(ctx, &arg)?);
+    }
+    self.ask(ctx, op, target, &name, &wires)
+  }
+
+  fn js_cls<'js>(&self, ctx: &Ctx<'js>, name: String) -> JsResult<Value<'js>> {
+    self.grants.check_grant(ctx, GRANT, Some(&name), MATCH_NAMESPACE)?;
+    self.ask(ctx, OP_CLASS, 0, &name, &[])
+  }
+
+  fn js_runnable<'js>(&self, ctx: &Ctx<'js>, callback: Function<'js>) -> JsResult<Value<'js>> {
+    self.grants.check_grant(ctx, GRANT, None, MATCH_NAMESPACE)?;
+    let token = self.callbacks.alloc();
+    let handle = self.ask(ctx, OP_RUNNABLE, 0, "", &[format!("I{token}")])?;
+    if !self.lifecycle.is_unloading() {
+      self.callbacks.register(ctx, token, None, callback);
+    }
+    Ok(handle)
+  }
+
+  fn js_load_dex<'js>(&self, ctx: &Ctx<'js>, source: Value<'js>) -> JsResult<()> {
+    self.grants.check_grant(ctx, GRANT, Some("*"), MATCH_NAMESPACE)?;
+    if let Some(path) = source.as_string() {
+      let path = path.to_string()?;
+      self.ask(ctx, OP_LOAD_DEX, 0, &path, &[])?;
       return Ok(());
     }
+    if let Ok(typed) = TypedArray::<u8>::from_value(source.clone()) {
+      if let Some(bytes) = typed.as_bytes() {
+        if !bounded_bytes(bytes, DEX_LIMIT_BYTES) {
+          return throw_too_big(ctx, "a dex", bytes.len(), DEX_LIMIT_BYTES);
+        }
+        let wire = format!("Y{}", base64::Engine::encode(&base64::engine::general_purpose::STANDARD, bytes));
+        self.ask(ctx, OP_LOAD_DEX, 0, "", &[wire])?;
+        return Ok(());
+      }
+    }
+    PluginErrorCode::InvalidArgument.throw(ctx, "loadDex: expected an absolute path or a Uint8Array")
   }
-  PluginErrorCode::InvalidArgument.throw(ctx, "loadDex: expected an absolute path or a Uint8Array")
 }
 
 pub fn install_jvm<'js>(
@@ -264,26 +254,26 @@ pub fn install_jvm<'js>(
     natives.set(
       "op",
       Function::new(ctx.clone(), move |ctx: Ctx<'js>, op: i32, target: i64, name: String, args: Array<'js>| {
-        js_op(&ctx, &state, op, target, name, args)
+        state.js_op(&ctx, op, target, name, args)
       })?,
     )?;
   }
   {
     let state = state.clone();
-    natives.set("cls", Function::new(ctx.clone(), move |ctx: Ctx<'js>, name: String| js_cls(&ctx, &state, name))?)?;
+    natives.set("cls", Function::new(ctx.clone(), move |ctx: Ctx<'js>, name: String| state.js_cls(&ctx, name))?)?;
   }
   {
     let state = state.clone();
     natives.set(
       "runnable",
-      Function::new(ctx.clone(), move |ctx: Ctx<'js>, callback: Function<'js>| js_runnable(&ctx, &state, callback))?,
+      Function::new(ctx.clone(), move |ctx: Ctx<'js>, callback: Function<'js>| state.js_runnable(&ctx, callback))?,
     )?;
   }
   {
     let state = state.clone();
     natives.set(
       "loadDex",
-      Function::new(ctx.clone(), move |ctx: Ctx<'js>, source: Value<'js>| js_load_dex(&ctx, &state, source))?,
+      Function::new(ctx.clone(), move |ctx: Ctx<'js>, source: Value<'js>| state.js_load_dex(&ctx, source))?,
     )?;
   }
   {
@@ -308,35 +298,33 @@ pub fn install_jvm<'js>(
     id_of: Persistent::save(ctx, id_of),
   });
   globals.inu.set("jvm", jvm)?;
-  install_android_screen(ctx, &state, globals)?;
+  state.install_android_screen(ctx, globals)?;
 
   Ok(state)
 }
 
-fn install_android_screen<'js>(
-  ctx: &Ctx<'js>,
-  state: &Rc<JvmState>,
-  globals: &crate::api::Globals<'js>,
-) -> JsResult<()> {
-  let android: Object = match globals.inu.get::<_, Object>("android") {
-    Ok(o) => o,
-    Err(_) => {
-      let o = Object::new(ctx.clone())?;
-      globals.inu.set("android", o.clone())?;
-      o
+impl JvmState {
+  fn install_android_screen<'js>(self: &Rc<Self>, ctx: &Ctx<'js>, globals: &crate::api::Globals<'js>) -> JsResult<()> {
+    let android: Object = match globals.inu.get::<_, Object>("android") {
+      Ok(o) => o,
+      Err(_) => {
+        let o = Object::new(ctx.clone())?;
+        globals.inu.set("android", o.clone())?;
+        o
+      }
+    };
+    for (name, op) in [("getCurrentFragment", OP_CURRENT_FRAGMENT), ("getCurrentActivity", OP_CURRENT_ACTIVITY)] {
+      let state = self.clone();
+      android.set(
+        name,
+        Function::new(ctx.clone(), move |ctx: Ctx<'js>| -> JsResult<Value<'js>> {
+          state.grants.check_grant(&ctx, GRANT, None, MATCH_NAMESPACE)?;
+          state.ask(&ctx, op, 0, "", &[])
+        })?,
+      )?;
     }
-  };
-  for (name, op) in [("getCurrentFragment", OP_CURRENT_FRAGMENT), ("getCurrentActivity", OP_CURRENT_ACTIVITY)] {
-    let state = state.clone();
-    android.set(
-      name,
-      Function::new(ctx.clone(), move |ctx: Ctx<'js>| -> JsResult<Value<'js>> {
-        check_grant(&ctx, &state.grants, GRANT, None, MATCH_NAMESPACE)?;
-        ask(&ctx, &state, op, 0, "", &[])
-      })?,
-    )?;
+    Ok(())
   }
-  Ok(())
 }
 
 impl JvmState {

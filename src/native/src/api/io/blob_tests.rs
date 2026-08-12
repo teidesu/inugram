@@ -792,18 +792,18 @@ fn an_exported_id_carries_the_absolute_range_and_is_per_engine() {
   let (whole, slice) = f.ctx.with(|ctx| {
     let whole: Value = ctx.globals().get("__b").unwrap();
     let slice: Value = ctx.globals().get("__s").unwrap();
-    (export_for_host(&f.state, &whole).unwrap(), export_for_host(&f.state, &slice).unwrap())
+    (f.state.export_for_host(&whole).unwrap(), f.state.export_for_host(&slice).unwrap())
   });
   assert_eq!(whole, "B1:0:10");
   assert_eq!(slice, "B2:3:4");
-  assert!(resolve_export(&f.state, 2).is_some());
+  assert!(f.state.resolve_export(2).is_some());
   assert!(
-    resolve_export(&other.state, 2).is_none(),
+    other.state.resolve_export(2).is_none(),
     "an id is meaningless to any engine but the one that minted it",
   );
 
   run(&f, "__b.dispose();");
-  assert!(resolve_export(&f.state, 1).is_none(), "a disposed blob's id must not resolve to freed content",);
+  assert!(f.state.resolve_export(1).is_none(), "a disposed blob's id must not resolve to freed content",);
 }
 
 /// a plugin handing the same blob to the host in a loop must not grow the table forever: the
@@ -814,7 +814,7 @@ fn re_exporting_one_live_blob_reuses_its_id() {
   run(&f, "globalThis.__b = new Blob(['0123456789']);");
   let wires: Vec<String> = f.ctx.with(|ctx| {
     let blob: Value = ctx.globals().get("__b").unwrap();
-    (0..64).map(|_| export_for_host(&f.state, &blob).unwrap()).collect()
+    (0..64).map(|_| f.state.export_for_host(&blob).unwrap()).collect()
   });
 
   assert!(wires.iter().all(|w| w == &wires[0]), "got {:?}", &wires[..3]);
@@ -829,11 +829,11 @@ fn an_exported_id_reads_only_the_range_it_was_minted_for() {
   run(&f, "globalThis.__b = new Blob(['0123456789']); globalThis.__s = __b.slice(3, 7);");
   let wire = f.ctx.with(|ctx| {
     let slice: Value = ctx.globals().get("__s").unwrap();
-    export_for_host(&f.state, &slice).unwrap()
+    f.state.export_for_host(&slice).unwrap()
   });
   assert_eq!(wire, "B1:3:4");
 
-  let export = resolve_export(&f.state, 1).unwrap();
+  let export = f.state.resolve_export(1).unwrap();
   assert_eq!(export.len(), 4);
   assert_eq!(export.read(0, 4).ok().as_deref(), Some(&b"3456"[..]));
   assert_eq!(export.read(1, 2).ok().as_deref(), Some(&b"45"[..]));
@@ -849,7 +849,7 @@ fn the_export_table_drops_the_ids_whose_content_is_gone() {
     run(&f, "globalThis.__t = new Blob(['x']);");
     f.ctx.with(|ctx| {
       let value: Value = ctx.globals().get("__t").unwrap();
-      export_for_host(&f.state, &value).unwrap()
+      f.state.export_for_host(&value).unwrap()
     });
   }
   run(&f, "globalThis.__t = null;");
@@ -859,11 +859,11 @@ fn the_export_table_drops_the_ids_whose_content_is_gone() {
   run(&f, "globalThis.__t = new Blob(['y']);");
   let wire = f.ctx.with(|ctx| {
     let value: Value = ctx.globals().get("__t").unwrap();
-    export_for_host(&f.state, &value).unwrap()
+    f.state.export_for_host(&value).unwrap()
   });
   assert_eq!(f.state.exported_ids(), 1, "an insert-only table is a leak for the life of the engine",);
   assert_eq!(wire, format!("B{}:0:1", EXPORT_SWEEP_AT + 1));
-  assert!(resolve_export(&f.state, EXPORT_SWEEP_AT as i64 + 1).is_some());
+  assert!(f.state.resolve_export(EXPORT_SWEEP_AT as i64 + 1).is_some());
 }
 
 #[test]
@@ -872,12 +872,12 @@ fn an_exported_id_does_not_keep_its_content_alive() {
   run(&f, "globalThis.__b = new Blob(['x']);");
   let id = f.ctx.with(|ctx| {
     let value: Value = ctx.globals().get("__b").unwrap();
-    export_for_host(&f.state, &value).unwrap()
+    f.state.export_for_host(&value).unwrap()
   });
   assert_eq!(id, "B1:0:1");
   run(&f, "globalThis.__b = null;");
   f._rt.run_gc();
-  assert!(resolve_export(&f.state, 1).is_none());
+  assert!(f.state.resolve_export(1).is_none());
 }
 
 /// The bundled debug plugin is the only end-to-end check the engine's blob surface gets on a

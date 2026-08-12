@@ -9,8 +9,8 @@ use rquickjs::function::Opt;
 use rquickjs::{Ctx, Function, Object, Result as JsResult, TypedArray, Value};
 
 use crate::api::error::PluginErrorCode;
-use crate::api::io::blob::{export_for_host, resolve_export, BlobExport, BlobState, MATERIALIZE_LIMIT_BYTES};
-use crate::sandbox::grants::{check_grant, GrantHost, MATCH_EXACT};
+use crate::api::io::blob::{BlobExport, BlobState, MATERIALIZE_LIMIT_BYTES};
+use crate::sandbox::grants::{GrantHost, MATCH_EXACT};
 
 const COPY_CHUNK_BYTES: u64 = 256 * 1024;
 
@@ -92,37 +92,39 @@ fn io(what: &str, e: std::io::Error) -> Fault {
   }
 }
 
-fn resolve_path(state: &FsState, input: &str) -> FsResult<PathBuf> {
-  if state.root.as_os_str().is_empty() {
-    return Err(Fault::Io("fs: this plugin has no storage directory".to_string()));
-  }
-  if input.is_empty() {
-    return Err(Fault::Invalid("fs: the path is empty".to_string()));
-  }
-  if input.contains('\0') {
-    return Err(Fault::Invalid("fs: the path contains a NUL".to_string()));
+impl FsState {
+  fn resolve_path(&self, input: &str) -> FsResult<PathBuf> {
+    if self.root.as_os_str().is_empty() {
+      return Err(Fault::Io("fs: this plugin has no storage directory".to_string()));
+    }
+    if input.is_empty() {
+      return Err(Fault::Invalid("fs: the path is empty".to_string()));
+    }
+    if input.contains('\0') {
+      return Err(Fault::Invalid("fs: the path contains a NUL".to_string()));
+    }
+
+    let raw = Path::new(input);
+    if raw.is_absolute() && !self.unscoped {
+      return Err(Fault::Escape(raw.to_path_buf()));
+    }
+
+    let start = if raw.is_absolute() { PathBuf::from("/") } else { self.root.clone() };
+    let mut hops = 0;
+    let resolved = walk(start, raw, &mut hops)?;
+
+    if !self.unscoped && !resolved.starts_with(&self.root) {
+      return Err(Fault::Escape(resolved));
+    }
+    Ok(resolved)
   }
 
-  let raw = Path::new(input);
-  if raw.is_absolute() && !state.unscoped {
-    return Err(Fault::Escape(raw.to_path_buf()));
-  }
-
-  let start = if raw.is_absolute() { PathBuf::from("/") } else { state.root.clone() };
-  let mut hops = 0;
-  let resolved = walk(start, raw, &mut hops)?;
-
-  if !state.unscoped && !resolved.starts_with(&state.root) {
-    return Err(Fault::Escape(resolved));
-  }
-  Ok(resolved)
-}
-
-pub(crate) fn resolve_external(ctx: &Ctx<'_>, state: &Rc<FsState>, input: &str) -> JsResult<PathBuf> {
-  check_grant(ctx, &state.grants, state.grant(), None, MATCH_EXACT)?;
-  match resolve_path(state, input) {
-    Ok(path) => Ok(path),
-    Err(fault) => fault.throw(ctx),
+  pub(crate) fn resolve_external(&self, ctx: &Ctx<'_>, input: &str) -> JsResult<PathBuf> {
+    self.grants.check_grant(ctx, self.grant(), None, MATCH_EXACT)?;
+    match self.resolve_path(input) {
+      Ok(path) => Ok(path),
+      Err(fault) => fault.throw(ctx),
+    }
   }
 }
 
@@ -170,36 +172,38 @@ fn walk_usage(dir: &Path) -> u64 {
   total
 }
 
-fn usage_of(state: &FsState) -> u64 {
-  if let Some(cached) = state.usage.get() {
-    return cached;
+impl FsState {
+  fn usage(&self) -> u64 {
+    if let Some(cached) = self.usage.get() {
+      return cached;
+    }
+    let total = walk_usage(&self.root);
+    self.usage.set(Some(total));
+    total
   }
-  let total = walk_usage(&state.root);
-  state.usage.set(Some(total));
-  total
-}
 
-fn current_size(path: &Path) -> u64 {
-  fs::metadata(path).map(|meta| if meta.is_file() { meta.len() } else { 0 }).unwrap_or(0)
-}
+  fn current_size(path: &Path) -> u64 {
+    fs::metadata(path).map(|meta| if meta.is_file() { meta.len() } else { 0 }).unwrap_or(0)
+  }
 
-fn check_quota(state: &FsState, adding: u64, replacing: u64) -> FsResult<u64> {
-  let usage = usage_of(state);
-  let after = usage.saturating_sub(replacing).saturating_add(adding);
-  if state.unscoped {
-    return Ok(after);
+  fn check_quota(&self, adding: u64, replacing: u64) -> FsResult<u64> {
+    let usage = self.usage();
+    let after = usage.saturating_sub(replacing).saturating_add(adding);
+    if self.unscoped {
+      return Ok(after);
+    }
+    if after > self.quota {
+      return Err(Fault::Quota {
+        usage: after,
+        quota: self.quota,
+        message: format!(
+          "fs: this would leave {after} bytes in a directory capped at {}; ask for more with @grant fs(...)",
+          self.quota,
+        ),
+      });
+    }
+    Ok(after)
   }
-  if after > state.quota {
-    return Err(Fault::Quota {
-      usage: after,
-      quota: state.quota,
-      message: format!(
-        "fs: this would leave {after} bytes in a directory capped at {}; ask for more with @grant fs(...)",
-        state.quota,
-      ),
-    });
-  }
-  Ok(after)
 }
 
 enum Source {
@@ -233,111 +237,113 @@ impl Source {
   }
 }
 
-fn read_source(state: &FsState, value: &Value<'_>) -> FsResult<Source> {
-  if let Ok(typed) = TypedArray::<u8>::from_value(value.clone()) {
-    let Some(bytes) = typed.as_bytes() else {
-      return Err(Fault::Invalid("fs: the array is detached".to_string()));
+impl FsState {
+  fn read_source(&self, value: &Value<'_>) -> FsResult<Source> {
+    if let Ok(typed) = TypedArray::<u8>::from_value(value.clone()) {
+      let Some(bytes) = typed.as_bytes() else {
+        return Err(Fault::Invalid("fs: the array is detached".to_string()));
+      };
+      return Ok(Source::Bytes(bytes.to_vec()));
+    }
+    if let Some(export) = self.blob_export(value) {
+      return Ok(Source::Blob(export));
+    }
+    if rquickjs::Class::<crate::api::io::blob::BlobHandle>::from_value(value).is_ok() {
+      return Err(Fault::Gone("fs: the blob being written was disposed".to_string()));
+    }
+    Err(Fault::Invalid("fs: expected a Blob or a Uint8Array".to_string()))
+  }
+
+  fn blob_export(&self, value: &Value<'_>) -> Option<BlobExport> {
+    let wire = self.blobs.export_for_host(value)?;
+    let id = wire.strip_prefix('B')?.split(':').next()?.parse().ok()?;
+    self.blobs.resolve_export(id)
+  }
+
+  fn op_read<'js>(&self, ctx: &Ctx<'js>, path: &str) -> FsResult<Value<'js>> {
+    let path = self.resolve_path(path)?;
+    let meta = fs::metadata(&path).map_err(|e| io("read", e))?;
+    if !meta.is_file() {
+      return Err(Fault::Invalid(format!("read: '{}' is not a file", path.display())));
+    }
+    if meta.len() > MATERIALIZE_LIMIT_BYTES {
+      return Err(Fault::Quota {
+        usage: meta.len(),
+        quota: MATERIALIZE_LIMIT_BYTES,
+        message: format!(
+          "read: {} bytes is past the {MATERIALIZE_LIMIT_BYTES} one read may take into javascript",
+          meta.len(),
+        ),
+      });
+    }
+    let bytes = fs::read(&path).map_err(|e| io("read", e))?;
+    TypedArray::<u8>::new(ctx.clone(), bytes)
+      .map(|array| array.into_value())
+      .map_err(|e| Fault::Io(format!("read: {e:?}")))
+  }
+
+  fn op_write(&self, path: &str, source: Source, append: bool) -> FsResult<()> {
+    let what = if append { "append" } else { "write" };
+    let path = self.resolve_path(path)?;
+    if fs::metadata(&path).map(|meta| meta.is_dir()).unwrap_or(false) {
+      return Err(Fault::Invalid(format!("{what}: '{}' is a directory", path.display())));
+    }
+    let replacing = if append { 0 } else { Self::current_size(&path) };
+    let after = self.check_quota(source.len(), replacing)?;
+
+    let mut file = fs::OpenOptions::new()
+      .write(true)
+      .create(true)
+      .append(append)
+      .truncate(!append)
+      .open(&path)
+      .map_err(|e| io(what, e))?;
+    if let Err(e) = source.write_into(&mut file) {
+      self.usage.set(None);
+      return Err(e);
+    }
+    self.usage.set(Some(after));
+    Ok(())
+  }
+
+  fn op_mkdir(&self, path: &str) -> FsResult<()> {
+    let path = self.resolve_path(path)?;
+    fs::create_dir_all(&path).map_err(|e| io("mkdir", e))
+  }
+
+  fn op_rm(&self, path: &str, recursive: bool) -> FsResult<()> {
+    let path = self.resolve_path(path)?;
+    if path == self.root {
+      return Err(Fault::Invalid("rm: the plugin's own directory cannot be removed".to_string()));
+    }
+    let Ok(meta) = fs::symlink_metadata(&path) else {
+      return Ok(());
     };
-    return Ok(Source::Bytes(bytes.to_vec()));
+    self.usage.set(None);
+    if !meta.is_dir() {
+      return fs::remove_file(&path).map_err(|e| io("rm", e));
+    }
+    if recursive {
+      fs::remove_dir_all(&path).map_err(|e| io("rm", e))
+    } else {
+      fs::remove_dir(&path)
+        .map_err(|_| Fault::Invalid(format!("rm: '{}' is a directory; pass {{ recursive: true }}", path.display(),)))
+    }
   }
-  if let Some(export) = blob_export(state, value) {
-    return Ok(Source::Blob(export));
-  }
-  if rquickjs::Class::<crate::api::io::blob::BlobHandle>::from_value(value).is_ok() {
-    return Err(Fault::Gone("fs: the blob being written was disposed".to_string()));
-  }
-  Err(Fault::Invalid("fs: expected a Blob or a Uint8Array".to_string()))
-}
 
-fn blob_export(state: &FsState, value: &Value<'_>) -> Option<BlobExport> {
-  let wire = export_for_host(&state.blobs, value)?;
-  let id = wire.strip_prefix('B')?.split(':').next()?.parse().ok()?;
-  resolve_export(&state.blobs, id)
-}
-
-fn op_read<'js>(ctx: &Ctx<'js>, state: &FsState, path: &str) -> FsResult<Value<'js>> {
-  let path = resolve_path(state, path)?;
-  let meta = fs::metadata(&path).map_err(|e| io("read", e))?;
-  if !meta.is_file() {
-    return Err(Fault::Invalid(format!("read: '{}' is not a file", path.display())));
+  fn op_exists(&self, path: &str) -> FsResult<bool> {
+    let path = self.resolve_path(path)?;
+    Ok(fs::symlink_metadata(&path).is_ok())
   }
-  if meta.len() > MATERIALIZE_LIMIT_BYTES {
-    return Err(Fault::Quota {
-      usage: meta.len(),
-      quota: MATERIALIZE_LIMIT_BYTES,
-      message: format!(
-        "read: {} bytes is past the {MATERIALIZE_LIMIT_BYTES} one read may take into javascript",
-        meta.len(),
-      ),
-    });
-  }
-  let bytes = fs::read(&path).map_err(|e| io("read", e))?;
-  TypedArray::<u8>::new(ctx.clone(), bytes)
-    .map(|array| array.into_value())
-    .map_err(|e| Fault::Io(format!("read: {e:?}")))
-}
 
-fn op_write(state: &FsState, path: &str, source: Source, append: bool) -> FsResult<()> {
-  let what = if append { "append" } else { "write" };
-  let path = resolve_path(state, path)?;
-  if fs::metadata(&path).map(|meta| meta.is_dir()).unwrap_or(false) {
-    return Err(Fault::Invalid(format!("{what}: '{}' is a directory", path.display())));
+  fn op_readdir(&self, path: &str) -> FsResult<Vec<String>> {
+    let path = self.resolve_path(path)?;
+    let entries = fs::read_dir(&path).map_err(|e| io("readdir", e))?;
+    let mut names: Vec<String> =
+      entries.flatten().map(|entry| entry.file_name().to_string_lossy().into_owned()).collect();
+    names.sort();
+    Ok(names)
   }
-  let replacing = if append { 0 } else { current_size(&path) };
-  let after = check_quota(state, source.len(), replacing)?;
-
-  let mut file = fs::OpenOptions::new()
-    .write(true)
-    .create(true)
-    .append(append)
-    .truncate(!append)
-    .open(&path)
-    .map_err(|e| io(what, e))?;
-  if let Err(e) = source.write_into(&mut file) {
-    state.usage.set(None);
-    return Err(e);
-  }
-  state.usage.set(Some(after));
-  Ok(())
-}
-
-fn op_mkdir(state: &FsState, path: &str) -> FsResult<()> {
-  let path = resolve_path(state, path)?;
-  fs::create_dir_all(&path).map_err(|e| io("mkdir", e))
-}
-
-fn op_rm(state: &FsState, path: &str, recursive: bool) -> FsResult<()> {
-  let path = resolve_path(state, path)?;
-  if path == state.root {
-    return Err(Fault::Invalid("rm: the plugin's own directory cannot be removed".to_string()));
-  }
-  let Ok(meta) = fs::symlink_metadata(&path) else {
-    return Ok(());
-  };
-  state.usage.set(None);
-  if !meta.is_dir() {
-    return fs::remove_file(&path).map_err(|e| io("rm", e));
-  }
-  if recursive {
-    fs::remove_dir_all(&path).map_err(|e| io("rm", e))
-  } else {
-    fs::remove_dir(&path)
-      .map_err(|_| Fault::Invalid(format!("rm: '{}' is a directory; pass {{ recursive: true }}", path.display(),)))
-  }
-}
-
-fn op_exists(state: &FsState, path: &str) -> FsResult<bool> {
-  let path = resolve_path(state, path)?;
-  Ok(fs::symlink_metadata(&path).is_ok())
-}
-
-fn op_readdir(state: &FsState, path: &str) -> FsResult<Vec<String>> {
-  let path = resolve_path(state, path)?;
-  let entries = fs::read_dir(&path).map_err(|e| io("readdir", e))?;
-  let mut names: Vec<String> =
-    entries.flatten().map(|entry| entry.file_name().to_string_lossy().into_owned()).collect();
-  names.sort();
-  Ok(names)
 }
 
 struct Stat {
@@ -348,17 +354,19 @@ struct Stat {
   ctime: i64,
 }
 
-fn op_stat(state: &FsState, path: &str) -> FsResult<Stat> {
-  let path = resolve_path(state, path)?;
-  let meta = fs::metadata(&path).map_err(|e| io("stat", e))?;
-  let mtime = system_time_millis(meta.modified().ok());
-  Ok(Stat {
-    is_file: meta.is_file(),
-    is_directory: meta.is_dir(),
-    size: if meta.is_file() { meta.len() } else { 0 },
-    mtime,
-    ctime: unix_ctime_millis(&meta).unwrap_or(mtime),
-  })
+impl FsState {
+  fn op_stat(&self, path: &str) -> FsResult<Stat> {
+    let path = self.resolve_path(path)?;
+    let meta = fs::metadata(&path).map_err(|e| io("stat", e))?;
+    let mtime = system_time_millis(meta.modified().ok());
+    Ok(Stat {
+      is_file: meta.is_file(),
+      is_directory: meta.is_dir(),
+      size: if meta.is_file() { meta.len() } else { 0 },
+      mtime,
+      ctime: unix_ctime_millis(&meta).unwrap_or(mtime),
+    })
+  }
 }
 
 fn system_time_millis(time: Option<std::time::SystemTime>) -> i64 {
@@ -379,33 +387,35 @@ fn unix_ctime_millis(meta: &fs::Metadata) -> Option<i64> {
   Some(seconds.saturating_mul(1000).saturating_add(nanos / 1_000_000))
 }
 
-fn op_copy(state: &FsState, src: &str, dest: &str) -> FsResult<()> {
-  let src = resolve_path(state, src)?;
-  let dest = resolve_path(state, dest)?;
-  let meta = fs::metadata(&src).map_err(|e| io("copy", e))?;
-  if !meta.is_file() {
-    return Err(Fault::Invalid(format!("copy: '{}' is not a file", src.display())));
-  }
-  check_quota(state, meta.len(), current_size(&dest))?;
-  state.usage.set(None);
-  fs::copy(&src, &dest).map_err(|e| io("copy", e))?;
-  Ok(())
-}
-
-fn op_move(state: &FsState, src: &str, dest: &str) -> FsResult<()> {
-  let src = resolve_path(state, src)?;
-  let dest = resolve_path(state, dest)?;
-  if fs::symlink_metadata(&src).is_err() {
-    return Err(Fault::NotFound(format!("move: '{}' does not exist", src.display())));
-  }
-  state.usage.set(None);
-  match fs::rename(&src, &dest) {
-    Ok(()) => Ok(()),
-    Err(e) if e.raw_os_error() == Some(EXDEV) => {
-      copy_tree(&src, &dest).map_err(|e| io("move", e))?;
-      remove_tree(&src).map_err(|e| io("move", e))
+impl FsState {
+  fn op_copy(&self, src: &str, dest: &str) -> FsResult<()> {
+    let src = self.resolve_path(src)?;
+    let dest = self.resolve_path(dest)?;
+    let meta = fs::metadata(&src).map_err(|e| io("copy", e))?;
+    if !meta.is_file() {
+      return Err(Fault::Invalid(format!("copy: '{}' is not a file", src.display())));
     }
-    Err(e) => Err(io("move", e)),
+    self.check_quota(meta.len(), Self::current_size(&dest))?;
+    self.usage.set(None);
+    fs::copy(&src, &dest).map_err(|e| io("copy", e))?;
+    Ok(())
+  }
+
+  fn op_move(&self, src: &str, dest: &str) -> FsResult<()> {
+    let src = self.resolve_path(src)?;
+    let dest = self.resolve_path(dest)?;
+    if fs::symlink_metadata(&src).is_err() {
+      return Err(Fault::NotFound(format!("move: '{}' does not exist", src.display())));
+    }
+    self.usage.set(None);
+    match fs::rename(&src, &dest) {
+      Ok(()) => Ok(()),
+      Err(e) if e.raw_os_error() == Some(EXDEV) => {
+        copy_tree(&src, &dest).map_err(|e| io("move", e))?;
+        remove_tree(&src).map_err(|e| io("move", e))
+      }
+      Err(e) => Err(io("move", e)),
+    }
   }
 }
 
@@ -463,8 +473,8 @@ pub fn install_fs<'js>(
     fs_obj.set(
       "read",
       Function::new(ctx.clone(), move |ctx: Ctx<'js>, path: String| -> JsResult<Value<'js>> {
-        gate(&ctx, &state)?;
-        op_read(&ctx, &state, &path).or_else(|fault| fault.throw(&ctx))
+        state.gate(&ctx)?;
+        state.op_read(&ctx, &path).or_else(|fault| fault.throw(&ctx))
       })?,
     )?;
   }
@@ -474,9 +484,10 @@ pub fn install_fs<'js>(
     fs_obj.set(
       name,
       Function::new(ctx.clone(), move |ctx: Ctx<'js>, path: String, data: Value<'js>| -> JsResult<()> {
-        gate(&ctx, &state)?;
-        read_source(&state, &data)
-          .and_then(|source| op_write(&state, &path, source, append))
+        state.gate(&ctx)?;
+        state
+          .read_source(&data)
+          .and_then(|source| state.op_write(&path, source, append))
           .or_else(|fault| fault.throw(&ctx))
       })?,
     )?;
@@ -487,8 +498,8 @@ pub fn install_fs<'js>(
     fs_obj.set(
       "mkdir",
       Function::new(ctx.clone(), move |ctx: Ctx<'js>, path: String| -> JsResult<()> {
-        gate(&ctx, &state)?;
-        op_mkdir(&state, &path).or_else(|fault| fault.throw(&ctx))
+        state.gate(&ctx)?;
+        state.op_mkdir(&path).or_else(|fault| fault.throw(&ctx))
       })?,
     )?;
   }
@@ -498,12 +509,12 @@ pub fn install_fs<'js>(
     fs_obj.set(
       "rm",
       Function::new(ctx.clone(), move |ctx: Ctx<'js>, path: String, options: Opt<Value<'js>>| -> JsResult<()> {
-        gate(&ctx, &state)?;
+        state.gate(&ctx)?;
         let recursive = match options.0.as_ref().and_then(|v| v.as_object()) {
           Some(options) => options.get::<_, Option<bool>>("recursive")?.unwrap_or(false),
           None => false,
         };
-        op_rm(&state, &path, recursive).or_else(|fault| fault.throw(&ctx))
+        state.op_rm(&path, recursive).or_else(|fault| fault.throw(&ctx))
       })?,
     )?;
   }
@@ -513,8 +524,8 @@ pub fn install_fs<'js>(
     fs_obj.set(
       "exists",
       Function::new(ctx.clone(), move |ctx: Ctx<'js>, path: String| -> JsResult<bool> {
-        gate(&ctx, &state)?;
-        op_exists(&state, &path).or_else(|fault| fault.throw(&ctx))
+        state.gate(&ctx)?;
+        state.op_exists(&path).or_else(|fault| fault.throw(&ctx))
       })?,
     )?;
   }
@@ -524,8 +535,8 @@ pub fn install_fs<'js>(
     fs_obj.set(
       "readdir",
       Function::new(ctx.clone(), move |ctx: Ctx<'js>, path: String| -> JsResult<Vec<String>> {
-        gate(&ctx, &state)?;
-        op_readdir(&state, &path).or_else(|fault| fault.throw(&ctx))
+        state.gate(&ctx)?;
+        state.op_readdir(&path).or_else(|fault| fault.throw(&ctx))
       })?,
     )?;
   }
@@ -535,8 +546,8 @@ pub fn install_fs<'js>(
     fs_obj.set(
       "stat",
       Function::new(ctx.clone(), move |ctx: Ctx<'js>, path: String| -> JsResult<Object<'js>> {
-        gate(&ctx, &state)?;
-        let stat = op_stat(&state, &path).or_else(|fault| fault.throw(&ctx))?;
+        state.gate(&ctx)?;
+        let stat = state.op_stat(&path).or_else(|fault| fault.throw(&ctx))?;
         let obj = Object::new(ctx.clone())?;
         obj.set("isFile", stat.is_file)?;
         obj.set("isDirectory", stat.is_directory)?;
@@ -553,8 +564,8 @@ pub fn install_fs<'js>(
     fs_obj.set(
       name,
       Function::new(ctx.clone(), move |ctx: Ctx<'js>, src: String, dest: String| -> JsResult<()> {
-        gate(&ctx, &state)?;
-        let done = if is_move { op_move(&state, &src, &dest) } else { op_copy(&state, &src, &dest) };
+        state.gate(&ctx)?;
+        let done = if is_move { state.op_move(&src, &dest) } else { state.op_copy(&src, &dest) };
         done.or_else(|fault| fault.throw(&ctx))
       })?,
     )?;
@@ -565,11 +576,11 @@ pub fn install_fs<'js>(
     fs_obj.set(
       "usage",
       Function::new(ctx.clone(), move |ctx: Ctx<'js>| -> JsResult<f64> {
-        gate(&ctx, &state)?;
+        state.gate(&ctx)?;
         if state.root.as_os_str().is_empty() {
           return Fault::Io("fs: this plugin has no storage directory".to_string()).throw(&ctx);
         }
-        Ok(usage_of(&state) as f64)
+        Ok(state.usage() as f64)
       })?,
     )?;
   }
@@ -579,59 +590,61 @@ pub fn install_fs<'js>(
     fs_obj.set(
       "quota",
       Function::new(ctx.clone(), move |ctx: Ctx<'js>| -> JsResult<f64> {
-        gate(&ctx, &state)?;
+        state.gate(&ctx)?;
         Ok(if state.quota == UNCAPPED { f64::INFINITY } else { state.quota as f64 })
       })?,
     )?;
   }
 
   globals.inu.set("fs", fs_obj)?;
-  install_android_dirs(ctx, &state, globals)?;
+  state.install_android_dirs(ctx, globals)?;
   Ok(state)
 }
 
-fn install_android_dirs<'js>(ctx: &Ctx<'js>, state: &Rc<FsState>, globals: &crate::api::Globals<'js>) -> JsResult<()> {
-  let android: Object = match globals.inu.get::<_, Object>("android") {
-    Ok(o) => o,
-    Err(_) => {
-      let o = Object::new(ctx.clone())?;
-      globals.inu.set("android", o.clone())?;
-      o
+impl FsState {
+  fn install_android_dirs<'js>(self: &Rc<Self>, ctx: &Ctx<'js>, globals: &crate::api::Globals<'js>) -> JsResult<()> {
+    let android: Object = match globals.inu.get::<_, Object>("android") {
+      Ok(o) => o,
+      Err(_) => {
+        let o = Object::new(ctx.clone())?;
+        globals.inu.set("android", o.clone())?;
+        o
+      }
+    };
+
+    for (name, index) in [("getPluginsDir", 0usize), ("getCacheDir", 1)] {
+      let state = self.clone();
+      let f =
+        Function::new(ctx.clone(), move |ctx: Ctx<'js>| -> JsResult<String> { state.android_dir(&ctx, index, name) })?;
+      android.set(name, f)?;
     }
-  };
-
-  for (name, index) in [("getPluginsDir", 0usize), ("getCacheDir", 1)] {
-    let state = state.clone();
-    let f =
-      Function::new(ctx.clone(), move |ctx: Ctx<'js>| -> JsResult<String> { android_dir(&ctx, &state, index, name) })?;
-    android.set(name, f)?;
+    {
+      let state = self.clone();
+      android.set(
+        "getMediaDir",
+        Function::new(ctx.clone(), move |ctx: Ctx<'js>, kind: String| -> JsResult<String> {
+          let Some(index) = ANDROID_DIR_NAMES.iter().position(|k| *k == kind) else {
+            return PluginErrorCode::InvalidArgument
+              .throw(&ctx, &format!("getMediaDir: '{kind}' is not one of {}", ANDROID_DIR_NAMES.join(", ")));
+          };
+          state.android_dir(&ctx, 2 + index, "getMediaDir")
+        })?,
+      )?;
+    }
+    Ok(())
   }
-  {
-    let state = state.clone();
-    android.set(
-      "getMediaDir",
-      Function::new(ctx.clone(), move |ctx: Ctx<'js>, kind: String| -> JsResult<String> {
-        let Some(index) = ANDROID_DIR_NAMES.iter().position(|k| *k == kind) else {
-          return PluginErrorCode::InvalidArgument
-            .throw(&ctx, &format!("getMediaDir: '{kind}' is not one of {}", ANDROID_DIR_NAMES.join(", ")));
-        };
-        android_dir(&ctx, &state, 2 + index, "getMediaDir")
-      })?,
-    )?;
-  }
-  Ok(())
-}
 
-fn android_dir(ctx: &Ctx<'_>, state: &Rc<FsState>, index: usize, what: &str) -> JsResult<String> {
-  check_grant(ctx, &state.grants, "unsafe.fs", None, MATCH_EXACT)?;
-  match state.android_dirs.get(index) {
-    Some(path) if !path.is_empty() => Ok(path.clone()),
-    _ => PluginErrorCode::NotFound.throw(ctx, &format!("{what}: the app has no such directory")),
+  fn android_dir(&self, ctx: &Ctx<'_>, index: usize, what: &str) -> JsResult<String> {
+    self.grants.check_grant(ctx, "unsafe.fs", None, MATCH_EXACT)?;
+    match self.android_dirs.get(index) {
+      Some(path) if !path.is_empty() => Ok(path.clone()),
+      _ => PluginErrorCode::NotFound.throw(ctx, &format!("{what}: the app has no such directory")),
+    }
   }
-}
 
-fn gate(ctx: &Ctx<'_>, state: &Rc<FsState>) -> JsResult<()> {
-  check_grant(ctx, &state.grants, state.grant(), None, MATCH_EXACT)
+  fn gate(&self, ctx: &Ctx<'_>) -> JsResult<()> {
+    self.grants.check_grant(ctx, self.grant(), None, MATCH_EXACT)
+  }
 }
 
 #[cfg(test)]

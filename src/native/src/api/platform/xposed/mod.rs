@@ -9,8 +9,8 @@ use rquickjs::function::Opt;
 use rquickjs::{Array, Context, Ctx, Function, Object, Persistent, Result as JsResult, Runtime, Value};
 
 use crate::api::error::PluginErrorCode;
-use crate::api::platform::jvm::{arg_to_wire, handle_id, wire_to_value, JvmState};
-use crate::sandbox::grants::{check_grant, GrantHost, MATCH_NAMESPACE};
+use crate::api::platform::jvm::JvmState;
+use crate::sandbox::grants::{GrantHost, MATCH_NAMESPACE};
 use crate::sandbox::registry::{make_disposer, noop_disposer, Lifecycle, Registry};
 use crate::utils::arguments::array_values;
 use rquickjs::function::This;
@@ -96,24 +96,19 @@ struct Phase<'js> {
   after: Option<Function<'js>>,
 }
 
-fn ask<'js>(
-  ctx: &Ctx<'js>,
-  state: &Rc<XposedState>,
-  op: i32,
-  target: i64,
-  name: &str,
-  args: &[String],
-) -> JsResult<Value<'js>> {
-  let wire = state.host.xposed(op, target, name, args);
-  wire_to_value(ctx, &state.jvm, &wire)
-}
-
-fn require_handle<'js>(ctx: &Ctx<'js>, state: &Rc<XposedState>, value: &Value<'js>, what: &str) -> JsResult<i64> {
-  let id = handle_id(ctx, &state.jvm, value)?;
-  if id < 0 {
-    return PluginErrorCode::InvalidArgument.throw(ctx, &format!("xposed: {what} expected a java class or method"));
+impl XposedState {
+  fn ask<'js>(&self, ctx: &Ctx<'js>, op: i32, target: i64, name: &str, args: &[String]) -> JsResult<Value<'js>> {
+    let wire = self.host.xposed(op, target, name, args);
+    self.jvm.wire_to_value(ctx, &wire)
   }
-  Ok(id)
+
+  fn require_handle<'js>(&self, ctx: &Ctx<'js>, value: &Value<'js>, what: &str) -> JsResult<i64> {
+    let id = self.jvm.handle_id(ctx, value)?;
+    if id < 0 {
+      return PluginErrorCode::InvalidArgument.throw(ctx, &format!("xposed: {what} expected a java class or method"));
+    }
+    Ok(id)
+  }
 }
 
 fn sites_from<'js>(ctx: &Ctx<'js>, value: Value<'js>) -> JsResult<Vec<i64>> {
@@ -150,110 +145,112 @@ fn callbacks_of<'js>(ctx: &Ctx<'js>, hook: &Object<'js>, what: &str) -> JsResult
   Ok(Callbacks { before, after })
 }
 
-fn install_hooks<'js>(
-  ctx: &Ctx<'js>,
-  state: &Rc<XposedState>,
-  sites: Vec<i64>,
-  callbacks: Callbacks<'js>,
-) -> JsResult<Function<'js>> {
-  let mut tokens = Vec::with_capacity(sites.len());
-  for site in sites {
-    let token = state.hooks.alloc();
-    *state.sites.borrow_mut().entry(site).or_insert(0) += 1;
-    state.hooks.insert(
-      token,
-      None,
-      Hook {
-        site,
-        before: callbacks.before.clone().map(|f| Persistent::save(ctx, f)),
-        after: callbacks.after.clone().map(|f| Persistent::save(ctx, f)),
-      },
-    );
-    tokens.push(token);
-  }
+impl XposedState {
+  fn install_hooks<'js>(
+    self: &Rc<Self>,
+    ctx: &Ctx<'js>,
+    sites: Vec<i64>,
+    callbacks: Callbacks<'js>,
+  ) -> JsResult<Function<'js>> {
+    let mut tokens = Vec::with_capacity(sites.len());
+    for site in sites {
+      let token = self.hooks.alloc();
+      *self.sites.borrow_mut().entry(site).or_insert(0) += 1;
+      self.hooks.insert(
+        token,
+        None,
+        Hook {
+          site,
+          before: callbacks.before.clone().map(|f| Persistent::save(ctx, f)),
+          after: callbacks.after.clone().map(|f| Persistent::save(ctx, f)),
+        },
+      );
+      tokens.push(token);
+    }
 
-  let held = state.hooks.len();
-  if held > HOOK_LIMIT {
-    for token in &tokens {
-      if let Some(hook) = state.hooks.remove(*token) {
-        state.release(ctx, hook);
+    let held = self.hooks.len();
+    if held > HOOK_LIMIT {
+      for token in &tokens {
+        if let Some(hook) = self.hooks.remove(*token) {
+          self.release(ctx, hook);
+        }
       }
+      return PluginErrorCode::QuotaExceeded(held as i64, HOOK_LIMIT as i64)
+        .throw(ctx, &format!("xposed: this plugin may hold at most {HOOK_LIMIT} hooks"));
     }
-    return PluginErrorCode::QuotaExceeded(held as i64, HOOK_LIMIT as i64)
-      .throw(ctx, &format!("xposed: this plugin may hold at most {HOOK_LIMIT} hooks"));
-  }
 
-  let state = state.clone();
-  make_disposer(ctx, move |ctx| {
-    for token in &tokens {
-      if let Some(hook) = state.hooks.remove(*token) {
-        state.release(ctx, hook);
+    let state = self.clone();
+    make_disposer(ctx, move |ctx| {
+      for token in &tokens {
+        if let Some(hook) = state.hooks.remove(*token) {
+          state.release(ctx, hook);
+        }
       }
-    }
-  })
-}
-
-fn js_hook<'js>(
-  ctx: &Ctx<'js>,
-  state: &Rc<XposedState>,
-  op: i32,
-  target: Value<'js>,
-  name: &str,
-  hook: Value<'js>,
-  what: &str,
-) -> JsResult<Function<'js>> {
-  check_grant(ctx, &state.grants, GRANT, None, MATCH_NAMESPACE)?;
-  let Some(hook) = hook.as_object() else {
-    return PluginErrorCode::InvalidArgument.throw(ctx, &format!("{what}: expected a hook object"));
-  };
-  let callbacks = callbacks_of(ctx, hook, what)?;
-  if state.lifecycle.is_unloading() {
-    return noop_disposer(ctx);
+    })
   }
-  let target = require_handle(ctx, state, &target, "hook")?;
-  let answered = ask(ctx, state, op, target, name, &[])?;
-  let sites = sites_from(ctx, answered)?;
-  install_hooks(ctx, state, sites, callbacks)
-}
 
-fn js_call_original<'js>(
-  ctx: &Ctx<'js>,
-  state: &Rc<XposedState>,
-  method: Value<'js>,
-  this: Opt<Value<'js>>,
-  args: Opt<Value<'js>>,
-) -> JsResult<Value<'js>> {
-  check_grant(ctx, &state.grants, GRANT, None, MATCH_NAMESPACE)?;
-  let method = require_handle(ctx, state, &method, "callOriginalMethod")?;
-  let this = this
-    .0
-    .filter(|value| !value.is_null() && !value.is_undefined())
-    .unwrap_or_else(|| Value::new_null(ctx.clone()));
-  let args = match args.0.filter(|value| !value.is_null() && !value.is_undefined()) {
-    None => Vec::new(),
-    Some(args) => {
-      let Some(args) = args.as_array() else {
-        return PluginErrorCode::InvalidArgument.throw(ctx, "callOriginalMethod: expected an array of arguments");
-      };
-      array_values(ctx, args, "callOriginalMethod")?
+  fn js_hook<'js>(
+    self: &Rc<Self>,
+    ctx: &Ctx<'js>,
+    op: i32,
+    target: Value<'js>,
+    name: &str,
+    hook: Value<'js>,
+    what: &str,
+  ) -> JsResult<Function<'js>> {
+    self.grants.check_grant(ctx, GRANT, None, MATCH_NAMESPACE)?;
+    let Some(hook) = hook.as_object() else {
+      return PluginErrorCode::InvalidArgument.throw(ctx, &format!("{what}: expected a hook object"));
+    };
+    let callbacks = callbacks_of(ctx, hook, what)?;
+    if self.lifecycle.is_unloading() {
+      return noop_disposer(ctx);
     }
-  };
-  let mut wires = vec![arg_to_wire(ctx, &state.jvm, &this)?];
-  for arg in args {
-    wires.push(arg_to_wire(ctx, &state.jvm, &arg)?);
+    let target = self.require_handle(ctx, &target, "hook")?;
+    let answered = self.ask(ctx, op, target, name, &[])?;
+    let sites = sites_from(ctx, answered)?;
+    self.install_hooks(ctx, sites, callbacks)
   }
-  ask(ctx, state, OP_CALL_ORIGINAL, method, "", &wires)
-}
 
-fn js_allocate<'js>(ctx: &Ctx<'js>, state: &Rc<XposedState>, class: Value<'js>) -> JsResult<Value<'js>> {
-  check_grant(ctx, &state.grants, GRANT, None, MATCH_NAMESPACE)?;
-  let class = require_handle(ctx, state, &class, "allocateInstance")?;
-  ask(ctx, state, OP_ALLOCATE, class, "", &[])
-}
+  fn js_call_original<'js>(
+    &self,
+    ctx: &Ctx<'js>,
+    method: Value<'js>,
+    this: Opt<Value<'js>>,
+    args: Opt<Value<'js>>,
+  ) -> JsResult<Value<'js>> {
+    self.grants.check_grant(ctx, GRANT, None, MATCH_NAMESPACE)?;
+    let method = self.require_handle(ctx, &method, "callOriginalMethod")?;
+    let this = this
+      .0
+      .filter(|value| !value.is_null() && !value.is_undefined())
+      .unwrap_or_else(|| Value::new_null(ctx.clone()));
+    let args = match args.0.filter(|value| !value.is_null() && !value.is_undefined()) {
+      None => Vec::new(),
+      Some(args) => {
+        let Some(args) = args.as_array() else {
+          return PluginErrorCode::InvalidArgument.throw(ctx, "callOriginalMethod: expected an array of arguments");
+        };
+        array_values(ctx, args, "callOriginalMethod")?
+      }
+    };
+    let mut wires = vec![self.jvm.arg_to_wire(ctx, &this)?];
+    for arg in args {
+      wires.push(self.jvm.arg_to_wire(ctx, &arg)?);
+    }
+    self.ask(ctx, OP_CALL_ORIGINAL, method, "", &wires)
+  }
 
-fn js_disable_profile_saver<'js>(ctx: &Ctx<'js>, state: &Rc<XposedState>) -> JsResult<Value<'js>> {
-  check_grant(ctx, &state.grants, GRANT, None, MATCH_NAMESPACE)?;
-  ask(ctx, state, OP_DISABLE_PROFILE_SAVER, 0, "", &[])
+  fn js_allocate<'js>(&self, ctx: &Ctx<'js>, class: Value<'js>) -> JsResult<Value<'js>> {
+    self.grants.check_grant(ctx, GRANT, None, MATCH_NAMESPACE)?;
+    let class = self.require_handle(ctx, &class, "allocateInstance")?;
+    self.ask(ctx, OP_ALLOCATE, class, "", &[])
+  }
+
+  fn js_disable_profile_saver<'js>(&self, ctx: &Ctx<'js>) -> JsResult<Value<'js>> {
+    self.grants.check_grant(ctx, GRANT, None, MATCH_NAMESPACE)?;
+    self.ask(ctx, OP_DISABLE_PROFILE_SAVER, 0, "", &[])
+  }
 }
 
 pub fn install_xposed<'js>(
@@ -282,9 +279,8 @@ pub fn install_xposed<'js>(
     xposed.set(
       "hookMethod",
       Function::new(ctx.clone(), move |ctx: Ctx<'js>, method: Opt<Value<'js>>, hook: Opt<Value<'js>>| {
-        js_hook(
+        state.js_hook(
           &ctx,
-          &state,
           OP_HOOK,
           method.0.unwrap_or_else(|| Value::new_undefined(ctx.clone())),
           "",
@@ -308,9 +304,8 @@ pub fn install_xposed<'js>(
           else {
             return PluginErrorCode::InvalidArgument.throw(&ctx, "hookAllOverloads: expected a method name");
           };
-          js_hook(
+          state.js_hook(
             &ctx,
-            &state,
             OP_HOOK_ALL,
             class.0.unwrap_or_else(|| Value::new_undefined(ctx.clone())),
             &name,
@@ -326,9 +321,8 @@ pub fn install_xposed<'js>(
     xposed.set(
       "hookAllConstructors",
       Function::new(ctx.clone(), move |ctx: Ctx<'js>, class: Opt<Value<'js>>, hook: Opt<Value<'js>>| {
-        js_hook(
+        state.js_hook(
           &ctx,
-          &state,
           OP_HOOK_ALL,
           class.0.unwrap_or_else(|| Value::new_undefined(ctx.clone())),
           "",
@@ -345,7 +339,7 @@ pub fn install_xposed<'js>(
       Function::new(
         ctx.clone(),
         move |ctx: Ctx<'js>, method: Opt<Value<'js>>, this: Opt<Value<'js>>, args: Opt<Value<'js>>| {
-          js_call_original(&ctx, &state, method.0.unwrap_or_else(|| Value::new_undefined(ctx.clone())), this, args)
+          state.js_call_original(&ctx, method.0.unwrap_or_else(|| Value::new_undefined(ctx.clone())), this, args)
         },
       )?,
     )?;
@@ -355,7 +349,7 @@ pub fn install_xposed<'js>(
     xposed.set(
       "allocateInstance",
       Function::new(ctx.clone(), move |ctx: Ctx<'js>, class: Opt<Value<'js>>| {
-        js_allocate(&ctx, &state, class.0.unwrap_or_else(|| Value::new_undefined(ctx.clone())))
+        state.js_allocate(&ctx, class.0.unwrap_or_else(|| Value::new_undefined(ctx.clone())))
       })?,
     )?;
   }
@@ -363,7 +357,7 @@ pub fn install_xposed<'js>(
     let state = state.clone();
     xposed.set(
       "disableProfileSaver",
-      Function::new(ctx.clone(), move |ctx: Ctx<'js>| js_disable_profile_saver(&ctx, &state))?,
+      Function::new(ctx.clone(), move |ctx: Ctx<'js>| state.js_disable_profile_saver(&ctx))?,
     )?;
   }
   globals.inu.set("xposed", xposed)?;
@@ -376,34 +370,30 @@ enum Verdict {
   Answered(String),
 }
 
-fn read_context<'js>(ctx: &Ctx<'js>, state: &Rc<XposedState>, context: &Object<'js>) -> JsResult<Verdict> {
-  let answered: bool = context.get("__answered").unwrap_or(false);
-  if !answered {
-    return Ok(Verdict::Proceed);
-  }
-  let thrown: Option<Value> = context.get("__throwable").ok().flatten();
-  if let Some(thrown) = thrown {
-    if !thrown.is_null() && !thrown.is_undefined() {
-      return Ok(Verdict::Answered(format!("T{}", arg_to_wire(ctx, &state.jvm, &thrown)?)));
+impl XposedState {
+  fn read_context<'js>(&self, ctx: &Ctx<'js>, context: &Object<'js>) -> JsResult<Verdict> {
+    let answered: bool = context.get("__answered").unwrap_or(false);
+    if !answered {
+      return Ok(Verdict::Proceed);
     }
+    let thrown: Option<Value> = context.get("__throwable").ok().flatten();
+    if let Some(thrown) = thrown {
+      if !thrown.is_null() && !thrown.is_undefined() {
+        return Ok(Verdict::Answered(format!("T{}", self.jvm.arg_to_wire(ctx, &thrown)?)));
+      }
+    }
+    let value: Value = context.get("returnValue")?;
+    Ok(Verdict::Answered(self.jvm.arg_to_wire(ctx, &value)?))
   }
-  let value: Value = context.get("returnValue")?;
-  Ok(Verdict::Answered(arg_to_wire(ctx, &state.jvm, &value)?))
-}
 
-fn run_callback<'js>(
-  ctx: &Ctx<'js>,
-  state: &Rc<XposedState>,
-  callback: &Function<'js>,
-  context: &Object<'js>,
-  phase: &str,
-) {
-  match callback.call::<_, Value>((context.clone(),)) {
-    Ok(_) => {}
-    Err(rquickjs::Error::Exception) => {
-      (state.log)(&crate::fault(format_args!("xposed {phase} hook threw: {}", format_exception(ctx))));
+  fn run_callback<'js>(&self, ctx: &Ctx<'js>, callback: &Function<'js>, context: &Object<'js>, phase: &str) {
+    match callback.call::<_, Value>((context.clone(),)) {
+      Ok(_) => {}
+      Err(rquickjs::Error::Exception) => {
+        (self.log)(&crate::fault(format_args!("xposed {phase} hook threw: {}", format_exception(ctx))));
+      }
+      Err(e) => (self.log)(&format!("xposed {phase} hook failed: {e:?}")),
     }
-    Err(e) => (state.log)(&format!("xposed {phase} hook failed: {e:?}")),
   }
 }
 
@@ -420,91 +410,87 @@ fn proceed_with(wants_after: bool, args: &[String]) -> Vec<String> {
   out
 }
 
-fn run_after<'js>(
-  ctx: &Ctx<'js>,
-  state: &Rc<XposedState>,
-  afters: &[&Function<'js>],
-  context_object: &Object<'js>,
-  result: &str,
-) -> JsResult<String> {
-  if afters.is_empty() {
-    return Ok(result.to_string());
-  }
-  publish_result(ctx, state, context_object, result)?;
-  for after in afters {
-    run_callback(ctx, state, after, context_object, "after");
-  }
-  Ok(match read_context(ctx, state, context_object)? {
-    Verdict::Answered(wire) => wire,
-    Verdict::Proceed => result.to_string(),
-  })
-}
-
-fn build_context<'js>(
-  ctx: &Ctx<'js>,
-  state: &Rc<XposedState>,
-  method: &str,
-  this: &str,
-  args: &[String],
-) -> JsResult<Object<'js>> {
-  let object = Object::new(ctx.clone())?;
-  object.set("method", wire_to_value(ctx, &state.jvm, method)?)?;
-  object.set("thisObject", wire_to_value(ctx, &state.jvm, this)?)?;
-  let array = Array::new(ctx.clone())?;
-  for (index, arg) in args.iter().enumerate() {
-    array.set(index, wire_to_value(ctx, &state.jvm, arg)?)?;
-  }
-  object.set("args", array)?;
-  object.set("returnValue", Value::new_null(ctx.clone()))?;
-  object.set("throwable", Value::new_null(ctx.clone()))?;
-  object.set("__answered", false)?;
-  object.set("__throwable", Value::new_null(ctx.clone()))?;
-
-  {
-    object.set(
-      "setReturnValue",
-      Function::new(ctx.clone(), |this: This<Object<'js>>, value: Value<'js>| -> JsResult<()> {
-        let null = Value::new_null(this.0.ctx().clone());
-        this.0.set("returnValue", value)?;
-        this.0.set("__throwable", null)?;
-        this.0.set("__answered", true)
-      })?,
-    )?;
-  }
-  {
-    object.set(
-      "setThrowable",
-      Function::new(ctx.clone(), |this: This<Object<'js>>, value: Value<'js>| -> JsResult<()> {
-        let null = Value::new_null(this.0.ctx().clone());
-        this.0.set("returnValue", null)?;
-        this.0.set("__throwable", value)?;
-        this.0.set("__answered", true)
-      })?,
-    )?;
-  }
-  Ok(object)
-}
-
-fn read_args<'js>(ctx: &Ctx<'js>, state: &Rc<XposedState>, context: &Object<'js>) -> JsResult<Vec<String>> {
-  let array: Array = context.get("args")?;
-  let mut wires = Vec::new();
-  for value in array_values(ctx, &array, "xposed: 'args'")? {
-    wires.push(arg_to_wire(ctx, &state.jvm, &value)?);
-  }
-  Ok(wires)
-}
-
-fn publish_result<'js>(ctx: &Ctx<'js>, state: &Rc<XposedState>, context: &Object<'js>, result: &str) -> JsResult<()> {
-  context.set("__answered", false)?;
-  context.set("__throwable", Value::new_null(ctx.clone()))?;
-  match result.strip_prefix('T') {
-    Some(thrown) => {
-      context.set("returnValue", Value::new_null(ctx.clone()))?;
-      context.set("throwable", wire_to_value(ctx, &state.jvm, thrown)?)
+impl XposedState {
+  fn run_after<'js>(
+    &self,
+    ctx: &Ctx<'js>,
+    afters: &[&Function<'js>],
+    context_object: &Object<'js>,
+    result: &str,
+  ) -> JsResult<String> {
+    if afters.is_empty() {
+      return Ok(result.to_string());
     }
-    None => {
-      context.set("throwable", Value::new_null(ctx.clone()))?;
-      context.set("returnValue", wire_to_value(ctx, &state.jvm, result)?)
+    self.publish_result(ctx, context_object, result)?;
+    for after in afters {
+      self.run_callback(ctx, after, context_object, "after");
+    }
+    Ok(match self.read_context(ctx, context_object)? {
+      Verdict::Answered(wire) => wire,
+      Verdict::Proceed => result.to_string(),
+    })
+  }
+
+  fn build_context<'js>(&self, ctx: &Ctx<'js>, method: &str, this: &str, args: &[String]) -> JsResult<Object<'js>> {
+    let object = Object::new(ctx.clone())?;
+    object.set("method", self.jvm.wire_to_value(ctx, method)?)?;
+    object.set("thisObject", self.jvm.wire_to_value(ctx, this)?)?;
+    let array = Array::new(ctx.clone())?;
+    for (index, arg) in args.iter().enumerate() {
+      array.set(index, self.jvm.wire_to_value(ctx, arg)?)?;
+    }
+    object.set("args", array)?;
+    object.set("returnValue", Value::new_null(ctx.clone()))?;
+    object.set("throwable", Value::new_null(ctx.clone()))?;
+    object.set("__answered", false)?;
+    object.set("__throwable", Value::new_null(ctx.clone()))?;
+
+    {
+      object.set(
+        "setReturnValue",
+        Function::new(ctx.clone(), |this: This<Object<'js>>, value: Value<'js>| -> JsResult<()> {
+          let null = Value::new_null(this.0.ctx().clone());
+          this.0.set("returnValue", value)?;
+          this.0.set("__throwable", null)?;
+          this.0.set("__answered", true)
+        })?,
+      )?;
+    }
+    {
+      object.set(
+        "setThrowable",
+        Function::new(ctx.clone(), |this: This<Object<'js>>, value: Value<'js>| -> JsResult<()> {
+          let null = Value::new_null(this.0.ctx().clone());
+          this.0.set("returnValue", null)?;
+          this.0.set("__throwable", value)?;
+          this.0.set("__answered", true)
+        })?,
+      )?;
+    }
+    Ok(object)
+  }
+
+  fn read_args<'js>(&self, ctx: &Ctx<'js>, context: &Object<'js>) -> JsResult<Vec<String>> {
+    let array: Array = context.get("args")?;
+    let mut wires = Vec::new();
+    for value in array_values(ctx, &array, "xposed: 'args'")? {
+      wires.push(self.jvm.arg_to_wire(ctx, &value)?);
+    }
+    Ok(wires)
+  }
+
+  fn publish_result<'js>(&self, ctx: &Ctx<'js>, context: &Object<'js>, result: &str) -> JsResult<()> {
+    context.set("__answered", false)?;
+    context.set("__throwable", Value::new_null(ctx.clone()))?;
+    match result.strip_prefix('T') {
+      Some(thrown) => {
+        context.set("returnValue", Value::new_null(ctx.clone()))?;
+        context.set("throwable", self.jvm.wire_to_value(ctx, thrown)?)
+      }
+      None => {
+        context.set("throwable", Value::new_null(ctx.clone()))?;
+        context.set("returnValue", self.jvm.wire_to_value(ctx, result)?)
+      }
     }
   }
 }
@@ -526,13 +512,13 @@ impl XposedState {
         return Ok(proceed_with(false, args));
       }
 
-      let context_object = build_context(&ctx, state, method, this, args)?;
+      let context_object = state.build_context(&ctx, method, this, args)?;
 
       let mut verdict = Verdict::Proceed;
       for hook in &hooks {
         let Some(before) = &hook.before else { continue };
-        run_callback(&ctx, state, before, &context_object, "before");
-        if let Verdict::Answered(wire) = read_context(&ctx, state, &context_object)? {
+        state.run_callback(&ctx, before, &context_object, "before");
+        if let Verdict::Answered(wire) = state.read_context(&ctx, &context_object)? {
           verdict = Verdict::Answered(wire);
           break;
         }
@@ -541,11 +527,11 @@ impl XposedState {
       let wants_after = hooks.iter().any(|hook| hook.after.is_some());
       if let Verdict::Answered(wire) = verdict {
         let afters: Vec<&Function> = hooks.iter().filter_map(|hook| hook.after.as_ref()).collect();
-        let wire = run_after(&ctx, state, &afters, &context_object, &wire)?;
+        let wire = state.run_after(&ctx, &afters, &context_object, &wire)?;
         return Ok(vec!["A".to_string(), wire]);
       }
 
-      let call_args = read_args(&ctx, state, &context_object)?;
+      let call_args = state.read_args(&ctx, &context_object)?;
       if wants_after {
         let after = hooks
           .iter()
@@ -575,7 +561,7 @@ impl XposedState {
       };
       let context_object = pending.context.restore(&ctx)?;
       let afters: Vec<Function> = pending.after.into_iter().filter_map(|f| f.restore(&ctx).ok()).collect();
-      run_after(&ctx, state, &afters.iter().collect::<Vec<_>>(), &context_object, result)
+      state.run_after(&ctx, &afters.iter().collect::<Vec<_>>(), &context_object, result)
     });
     pump_jobs(rt, context, state.log.as_ref());
     answer.unwrap_or_else(|_| result.to_string())

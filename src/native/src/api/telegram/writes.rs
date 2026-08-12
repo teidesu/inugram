@@ -13,8 +13,8 @@ use crate::api::io::blob::{self, BlobHandle, BlobState};
 use crate::api::telegram::account::AccountState;
 use crate::api::telegram::progress::ProgressReporter;
 use crate::api::telegram::rpc::{format_exception, pump_jobs, PendingSettle};
-use crate::api::tl::proxy::{js_value_to_wire, wire_to_js_value, TlViews, ViewLife};
-use crate::sandbox::grants::{check_grant, GrantHost, MATCH_EXACT};
+use crate::api::tl::proxy::{js_value_to_wire, TlViews, ViewLife};
+use crate::sandbox::grants::{GrantHost, MATCH_EXACT};
 use crate::sandbox::registry::RequestIds;
 
 const PRELUDE: &[u8] = include_bytes!(concat!(env!("OUT_DIR"), "/writes.qbc"));
@@ -94,22 +94,24 @@ struct PendingWrite {
   staged: Vec<PathBuf>,
 }
 
-fn check_write_grant(ctx: &Ctx<'_>, state: &Rc<WritesState>, op: i32) -> JsResult<()> {
-  let Some((name, scope)) = grant_of(op) else {
-    return PluginErrorCode::InvalidArgument.throw(ctx, "unknown account write");
-  };
-  check_grant(ctx, &state.grants, name, Some(scope), MATCH_EXACT)
-}
-
-fn check_path_grant(ctx: &Ctx<'_>, state: &Rc<WritesState>, path: &str) -> JsResult<()> {
-  if Path::new(path).is_absolute() {
-    return check_grant(ctx, &state.grants, "unsafe.fs", None, MATCH_EXACT);
+impl WritesState {
+  fn check_write_grant(&self, ctx: &Ctx<'_>, op: i32) -> JsResult<()> {
+    let Some((name, scope)) = grant_of(op) else {
+      return PluginErrorCode::InvalidArgument.throw(ctx, "unknown account write");
+    };
+    self.grants.check_grant(ctx, name, Some(scope), MATCH_EXACT)
   }
-  check_grant(ctx, &state.grants, "fs", None, MATCH_EXACT)?;
-  PluginErrorCode::Unsupported.throw(
+
+  fn check_path_grant(&self, ctx: &Ctx<'_>, path: &str) -> JsResult<()> {
+    if Path::new(path).is_absolute() {
+      return self.grants.check_grant(ctx, "unsafe.fs", None, MATCH_EXACT);
+    }
+    self.grants.check_grant(ctx, "fs", None, MATCH_EXACT)?;
+    PluginErrorCode::Unsupported.throw(
     ctx,
     "a relative path needs the plugin's scoped directory, which arrives with inu.fs; pass a Blob, bytes, or an absolute path under unsafe.fs",
   )
+  }
 }
 
 struct Staged {
@@ -117,109 +119,113 @@ struct Staged {
   path: Option<PathBuf>,
 }
 
-fn stage_value<'js>(ctx: &Ctx<'js>, state: &Rc<WritesState>, value: &Value<'js>) -> JsResult<Staged> {
-  if let Some(object) = value.as_object() {
-    if let Some(path) = object.get::<_, Option<String>>("path")? {
-      if object.get::<_, Value>("_")?.is_undefined() {
-        check_path_grant(ctx, state, &path)?;
-        return Ok(Staged {
-          wire: file_wire(&path, "", ""),
-          path: None,
-        });
+impl WritesState {
+  fn stage_value<'js>(&self, ctx: &Ctx<'js>, value: &Value<'js>) -> JsResult<Staged> {
+    if let Some(object) = value.as_object() {
+      if let Some(path) = object.get::<_, Option<String>>("path")? {
+        if object.get::<_, Value>("_")?.is_undefined() {
+          self.check_path_grant(ctx, &path)?;
+          return Ok(Staged {
+            wire: file_wire(&path, "", ""),
+            path: None,
+          });
+        }
       }
     }
+    if rquickjs::Class::<BlobHandle>::from_value(value).is_ok() {
+      let Some(exported) = self.blobs.export_for_host(value) else {
+        return PluginErrorCode::HandleExpired.throw(ctx, "this blob has been disposed");
+      };
+      return self.stage_blob(ctx, value, &exported);
+    }
+    if let Ok(typed) = TypedArray::<u8>::from_value(value.clone()) {
+      let Some(bytes) = typed.as_bytes() else {
+        return PluginErrorCode::InvalidArgument.throw(ctx, "this Uint8Array is detached");
+      };
+      self.check_transfer_limit(ctx, bytes.len() as u64)?;
+      let path = self.write_staged(ctx, |file| file.write_all(bytes))?;
+      return Ok(Staged {
+        wire: file_wire(&path.to_string_lossy(), "", ""),
+        path: Some(path),
+      });
+    }
+    Ok(Staged {
+      wire: js_value_to_wire(ctx, value.clone())?,
+      path: None,
+    })
   }
-  if rquickjs::Class::<BlobHandle>::from_value(value).is_ok() {
-    let Some(exported) = blob::export_for_host(&state.blobs, value) else {
+
+  fn check_transfer_limit(&self, ctx: &Ctx<'_>, len: u64) -> JsResult<()> {
+    if len <= self.transfer_limit {
+      return Ok(());
+    }
+    PluginErrorCode::QuotaExceeded(
+      i64::try_from(len).unwrap_or(i64::MAX),
+      i64::try_from(self.transfer_limit).unwrap_or(i64::MAX),
+    )
+    .throw(
+      ctx,
+      &format!("this transfer is {len} bytes; at most {} may be staged at once", self.transfer_limit,),
+    )
+  }
+
+  fn stage_blob<'js>(&self, ctx: &Ctx<'js>, value: &Value<'js>, exported: &str) -> JsResult<Staged> {
+    let Some(id) = parse_export_id(exported) else {
+      return PluginErrorCode::Internal.throw(ctx, "this blob could not be handed over");
+    };
+    let Some(export) = self.blobs.resolve_export(id) else {
       return PluginErrorCode::HandleExpired.throw(ctx, "this blob has been disposed");
     };
-    return stage_blob(ctx, state, value, &exported);
-  }
-  if let Ok(typed) = TypedArray::<u8>::from_value(value.clone()) {
-    let Some(bytes) = typed.as_bytes() else {
-      return PluginErrorCode::InvalidArgument.throw(ctx, "this Uint8Array is detached");
-    };
-    check_transfer_limit(ctx, state, bytes.len() as u64)?;
-    let path = write_staged(ctx, state, |file| file.write_all(bytes))?;
-    return Ok(Staged {
-      wire: file_wire(&path.to_string_lossy(), "", ""),
+    let len = export.len();
+    self.check_transfer_limit(ctx, len)?;
+    let object = value.as_object().cloned();
+    let name = object.as_ref().and_then(|o| o.get::<_, Option<String>>("name").ok().flatten()).unwrap_or_default();
+    let mime = object.as_ref().and_then(|o| o.get::<_, Option<String>>("type").ok().flatten()).unwrap_or_default();
+
+    let path = self.write_staged(ctx, |file| {
+      let mut at = 0u64;
+      while at < len {
+        let take = STAGE_CHUNK_BYTES.min(len - at);
+        let chunk = export
+          .read(at, take)
+          .map_err(|_| std::io::Error::other("this blob's content is no longer readable"))?;
+        file.write_all(&chunk)?;
+        at += take;
+      }
+      Ok(())
+    })?;
+    Ok(Staged {
+      wire: file_wire(&path.to_string_lossy(), &name, &mime),
       path: Some(path),
-    });
+    })
   }
-  Ok(Staged {
-    wire: js_value_to_wire(ctx, value.clone())?,
-    path: None,
-  })
-}
-
-fn check_transfer_limit(ctx: &Ctx<'_>, state: &Rc<WritesState>, len: u64) -> JsResult<()> {
-  if len <= state.transfer_limit {
-    return Ok(());
-  }
-  PluginErrorCode::QuotaExceeded(
-    i64::try_from(len).unwrap_or(i64::MAX),
-    i64::try_from(state.transfer_limit).unwrap_or(i64::MAX),
-  )
-  .throw(
-    ctx,
-    &format!("this transfer is {len} bytes; at most {} may be staged at once", state.transfer_limit,),
-  )
-}
-
-fn stage_blob<'js>(ctx: &Ctx<'js>, state: &Rc<WritesState>, value: &Value<'js>, exported: &str) -> JsResult<Staged> {
-  let Some(id) = parse_export_id(exported) else {
-    return PluginErrorCode::Internal.throw(ctx, "this blob could not be handed over");
-  };
-  let Some(export) = blob::resolve_export(&state.blobs, id) else {
-    return PluginErrorCode::HandleExpired.throw(ctx, "this blob has been disposed");
-  };
-  let len = export.len();
-  check_transfer_limit(ctx, state, len)?;
-  let object = value.as_object().cloned();
-  let name = object.as_ref().and_then(|o| o.get::<_, Option<String>>("name").ok().flatten()).unwrap_or_default();
-  let mime = object.as_ref().and_then(|o| o.get::<_, Option<String>>("type").ok().flatten()).unwrap_or_default();
-
-  let path = write_staged(ctx, state, |file| {
-    let mut at = 0u64;
-    while at < len {
-      let take = STAGE_CHUNK_BYTES.min(len - at);
-      let chunk = export
-        .read(at, take)
-        .map_err(|_| std::io::Error::other("this blob's content is no longer readable"))?;
-      file.write_all(&chunk)?;
-      at += take;
-    }
-    Ok(())
-  })?;
-  Ok(Staged {
-    wire: file_wire(&path.to_string_lossy(), &name, &mime),
-    path: Some(path),
-  })
 }
 
 fn parse_export_id(exported: &str) -> Option<i64> {
   exported.strip_prefix('B')?.split(':').next()?.parse().ok()
 }
 
-fn write_staged<'js>(
-  ctx: &Ctx<'js>,
-  state: &Rc<WritesState>,
-  fill: impl FnOnce(&mut fs::File) -> std::io::Result<()>,
-) -> JsResult<PathBuf> {
-  if state.stage_dir.as_os_str().is_empty() {
-    return PluginErrorCode::Internal.throw(ctx, "this engine has no directory to stage a transfer in");
+impl WritesState {
+  fn write_staged<'js>(
+    &self,
+    ctx: &Ctx<'js>,
+    fill: impl FnOnce(&mut fs::File) -> std::io::Result<()>,
+  ) -> JsResult<PathBuf> {
+    if self.stage_dir.as_os_str().is_empty() {
+      return PluginErrorCode::Internal.throw(ctx, "this engine has no directory to stage a transfer in");
+    }
+    let n = self.next_staged.get() + 1;
+    self.next_staged.set(n);
+    let path = self.stage_dir.join(format!("transfer-{n}.bin"));
+    let written = fs::create_dir_all(&self.stage_dir)
+      .and_then(|()| fs::File::create(&path))
+      .and_then(|mut file| fill(&mut file).and_then(|()| file.sync_all()));
+    if let Err(e) = written {
+      let _ = fs::remove_file(&path);
+      return PluginErrorCode::Internal.throw(ctx, &format!("staging this transfer failed: {e}"));
+    }
+    Ok(path)
   }
-  let n = state.next_staged.get() + 1;
-  state.next_staged.set(n);
-  let path = state.stage_dir.join(format!("transfer-{n}.bin"));
-  let written = fs::create_dir_all(&state.stage_dir)
-    .and_then(|()| fs::File::create(&path))
-    .and_then(|mut file| fill(&mut file).and_then(|()| file.sync_all()));
-  if let Err(e) = written {
-    let _ = fs::remove_file(&path);
-    return PluginErrorCode::Internal.throw(ctx, &format!("staging this transfer failed: {e}"));
-  }
-  Ok(path)
 }
 
 fn file_wire(path: &str, name: &str, mime: &str) -> String {
@@ -246,103 +252,105 @@ pub(crate) fn json_string(value: &str) -> String {
   out
 }
 
-fn js_write<'js>(
-  ctx: &Ctx<'js>,
-  state: &Rc<WritesState>,
-  slot: i32,
-  op: i32,
-  arg: &str,
-  values: Array<'js>,
-  on_progress: Option<Function<'js>>,
-) -> JsResult<Value<'js>> {
-  check_write_grant(ctx, state, op)?;
+impl WritesState {
+  fn js_write<'js>(
+    &self,
+    ctx: &Ctx<'js>,
+    slot: i32,
+    op: i32,
+    arg: &str,
+    values: Array<'js>,
+    on_progress: Option<Function<'js>>,
+  ) -> JsResult<Value<'js>> {
+    self.check_write_grant(ctx, op)?;
 
-  let mut wires = Vec::new();
-  let mut staged = Vec::new();
-  let outcome = (|| -> JsResult<()> {
-    for value in crate::utils::arguments::array_values(ctx, &values, "account write")? {
-      let one = if matches!(op, OP_SEND_MEDIA | OP_SEND_MULTI_MEDIA | OP_UPLOAD_FILE) {
-        stage_value(ctx, state, &value)?
-      } else {
-        Staged {
-          wire: js_value_to_wire(ctx, value)?,
-          path: None,
+    let mut wires = Vec::new();
+    let mut staged = Vec::new();
+    let outcome = (|| -> JsResult<()> {
+      for value in crate::utils::arguments::array_values(ctx, &values, "account write")? {
+        let one = if matches!(op, OP_SEND_MEDIA | OP_SEND_MULTI_MEDIA | OP_UPLOAD_FILE) {
+          self.stage_value(ctx, &value)?
+        } else {
+          Staged {
+            wire: js_value_to_wire(ctx, value)?,
+            path: None,
+          }
+        };
+        if let Some(path) = one.path {
+          staged.push(path);
         }
-      };
-      if let Some(path) = one.path {
-        staged.push(path);
+        wires.push(one.wire);
       }
-      wires.push(one.wire);
+      Ok(())
+    })();
+    if let Err(e) = outcome {
+      for path in &staged {
+        let _ = fs::remove_file(path);
+      }
+      return Err(e);
     }
-    Ok(())
-  })();
-  if let Err(e) = outcome {
-    for path in &staged {
+
+    let request_id = self.next_request_id.alloc();
+    let (promise, settle) = PendingSettle::new(ctx)?;
+    let progress = on_progress.map(|callback| ProgressReporter::new(ctx, callback, self.log.clone()));
+    self.pending.borrow_mut().insert(
+      request_id,
+      PendingWrite {
+        settle,
+        shape: shape_of(op),
+        progress,
+        last_total: Cell::new(0),
+        staged,
+      },
+    );
+
+    if let Some(err) = self.host.account_write(slot, request_id, op, arg, &wires) {
+      if let Some(pending) = self.take_pending(request_id) {
+        let value = crate::api::error::host_error_to_js(ctx, &err)?;
+        if let Some(progress) = pending.progress.as_ref() {
+          progress.release(ctx);
+        }
+        pending.settle.reject_with_value(ctx, value)?;
+      }
+    }
+    Ok(promise.into_value())
+  }
+
+  fn take_pending(&self, request_id: i64) -> Option<PendingWrite> {
+    let pending = self.pending.borrow_mut().remove(&request_id)?;
+    for path in &pending.staged {
       let _ = fs::remove_file(path);
     }
-    return Err(e);
+    Some(pending)
   }
 
-  let request_id = state.next_request_id.alloc();
-  let (promise, settle) = PendingSettle::new(ctx)?;
-  let progress = on_progress.map(|callback| ProgressReporter::new(ctx, callback, state.log.clone()));
-  state.pending.borrow_mut().insert(
-    request_id,
-    PendingWrite {
-      settle,
-      shape: shape_of(op),
-      progress,
-      last_total: Cell::new(0),
-      staged,
-    },
-  );
-
-  if let Some(err) = state.host.account_write(slot, request_id, op, arg, &wires) {
-    if let Some(pending) = take_pending(state, request_id) {
-      let value = crate::api::error::host_error_to_js(ctx, &err)?;
-      if let Some(progress) = pending.progress.as_ref() {
-        progress.release(ctx);
-      }
-      pending.settle.reject_with_value(ctx, value)?;
+  fn decode_list<'js>(&self, ctx: &Ctx<'js>, wire: &str) -> JsResult<Array<'js>> {
+    let array = Array::new(ctx.clone())?;
+    if wire.is_empty() {
+      return Ok(array);
     }
+    for (index, element) in wire.split("\n").enumerate() {
+      array.set(index, self.views.wire_to_js_value(ctx, element, ViewLife::Plugin)?)?;
+    }
+    Ok(array)
   }
-  Ok(promise.into_value())
-}
 
-fn take_pending(state: &Rc<WritesState>, request_id: i64) -> Option<PendingWrite> {
-  let pending = state.pending.borrow_mut().remove(&request_id)?;
-  for path in &pending.staged {
-    let _ = fs::remove_file(path);
-  }
-  Some(pending)
-}
-
-fn decode_list<'js>(ctx: &Ctx<'js>, state: &Rc<WritesState>, wire: &str) -> JsResult<Array<'js>> {
-  let array = Array::new(ctx.clone())?;
-  if wire.is_empty() {
-    return Ok(array);
-  }
-  for (index, element) in wire.split("\n").enumerate() {
-    array.set(index, wire_to_js_value(ctx, &state.views, element, ViewLife::Plugin)?)?;
-  }
-  Ok(array)
-}
-
-fn decode_result<'js>(ctx: &Ctx<'js>, state: &Rc<WritesState>, shape: Shape, wire: &str) -> JsResult<Value<'js>> {
-  match shape {
-    Shape::Value => wire_to_js_value(ctx, &state.views, wire, ViewLife::Plugin),
-    Shape::List => Ok(decode_list(ctx, state, wire)?.into_value()),
-    Shape::File => {
-      let described = wire_to_js_value(ctx, &state.views, wire, ViewLife::Plugin)?;
-      let Some(object) = described.as_object() else {
-        return PluginErrorCode::Internal.throw(ctx, "the host described a download it did not make");
-      };
-      let path: String = object.get("path")?;
-      let size: f64 = object.get::<_, Option<f64>>("size")?.unwrap_or(0.0);
-      let mime: String = object.get::<_, Option<String>>("mime")?.unwrap_or_default();
-      let name: Option<String> = object.get::<_, Option<String>>("name")?.filter(|n| !n.is_empty());
-      let mtime: f64 = object.get::<_, Option<f64>>("mtime")?.unwrap_or(0.0);
-      blob::mint_app_file(ctx, Path::new(&path), size.max(0.0) as u64, &mime, name.as_deref(), mtime as i64)
+  fn decode_result<'js>(&self, ctx: &Ctx<'js>, shape: Shape, wire: &str) -> JsResult<Value<'js>> {
+    match shape {
+      Shape::Value => self.views.wire_to_js_value(ctx, wire, ViewLife::Plugin),
+      Shape::List => Ok(self.decode_list(ctx, wire)?.into_value()),
+      Shape::File => {
+        let described = self.views.wire_to_js_value(ctx, wire, ViewLife::Plugin)?;
+        let Some(object) = described.as_object() else {
+          return PluginErrorCode::Internal.throw(ctx, "the host described a download it did not make");
+        };
+        let path: String = object.get("path")?;
+        let size: f64 = object.get::<_, Option<f64>>("size")?.unwrap_or(0.0);
+        let mime: String = object.get::<_, Option<String>>("mime")?.unwrap_or_default();
+        let name: Option<String> = object.get::<_, Option<String>>("name")?.filter(|n| !n.is_empty());
+        let mtime: f64 = object.get::<_, Option<f64>>("mtime")?.unwrap_or(0.0);
+        blob::mint_app_file(ctx, Path::new(&path), size.max(0.0) as u64, &mime, name.as_deref(), mtime as i64)
+      }
     }
   }
 }
@@ -399,9 +407,7 @@ pub(crate) fn install_writes_with_limit<'js>(
               op: i32,
               arg: String,
               values: Array<'js>,
-              on_progress: Option<Function<'js>>| {
-          js_write(&ctx, &state, slot, op, &arg, values, on_progress)
-        },
+              on_progress: Option<Function<'js>>| { state.js_write(&ctx, slot, op, &arg, values, on_progress) },
       )?,
     )?;
   }
@@ -410,10 +416,10 @@ pub(crate) fn install_writes_with_limit<'js>(
     natives.set(
       "messageFile",
       Function::new(ctx.clone(), move |ctx: Ctx<'js>, slot: i32, message: Value<'js>| {
-        check_grant(&ctx, &state.grants, "account.read", Some("messages"), MATCH_EXACT)?;
+        state.grants.check_grant(&ctx, "account.read", Some("messages"), MATCH_EXACT)?;
         let wire = js_value_to_wire(&ctx, message)?;
         let answer = state.host.message_file(slot, &wire);
-        wire_to_js_value(&ctx, &state.views, &answer, ViewLife::Plugin)
+        state.views.wire_to_js_value(&ctx, &answer, ViewLife::Plugin)
       })?,
     )?;
   }
@@ -448,7 +454,7 @@ impl WritesState {
   pub fn resolve_write(self: &Rc<Self>, rt: &Runtime, context: &rquickjs::Context, request_id: i64, result_wire: &str) {
     let state = self;
     context.with(|ctx| {
-      let Some(pending) = take_pending(state, request_id) else {
+      let Some(pending) = state.take_pending(request_id) else {
         return;
       };
       if let Some(built) = wire_error_to_js(&ctx, result_wire) {
@@ -476,7 +482,7 @@ impl WritesState {
           progress.abandon(&ctx);
         }
       }
-      match decode_result(&ctx, state, pending.shape, result_wire) {
+      match state.decode_result(&ctx, pending.shape, result_wire) {
         Ok(value) => {
           if pending.settle.resolve_with(&ctx, value).is_err() {
             (state.log)(&format!("write({request_id}) resolve failed: {}", format_exception(&ctx)));

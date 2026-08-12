@@ -4,7 +4,7 @@ use std::rc::Rc;
 use rquickjs::{Ctx, Function, Object, Result as JsResult, Runtime, Value};
 
 use crate::api::telegram::rpc::{format_exception, pump_jobs};
-use crate::sandbox::grants::{check_grant, GrantHost, MATCH_EXACT};
+use crate::sandbox::grants::{GrantHost, MATCH_EXACT};
 use crate::sandbox::registry::{make_disposer, noop_disposer, CallbackRegistry, Lifecycle};
 
 pub struct LifecycleState {
@@ -32,42 +32,38 @@ pub fn install_lifecycle<'js>(
     visible: Cell::new(true),
   });
 
-  {
-    let state2 = state.clone();
-    globals.inu.set(
-      "onUnload",
-      Function::new(ctx.clone(), move |ctx: Ctx<'js>, cb: Function<'js>| -> JsResult<Function<'js>> {
-        if state2.lifecycle.is_unloading() {
-          return noop_disposer(&ctx);
-        }
-        let token = state2.unload_fns.alloc();
-        state2.unload_fns.register(&ctx, token, None, cb);
-        let state = state2.clone();
-        make_disposer(&ctx, move |ctx| {
-          state.unload_fns.dispose(ctx, token);
-        })
-      })?,
-    )?;
-  }
+  let state2 = state.clone();
+  globals.inu.set(
+    "onUnload",
+    Function::new(ctx.clone(), move |ctx: Ctx<'js>, cb: Function<'js>| -> JsResult<Function<'js>> {
+      if state2.lifecycle.is_unloading() {
+        return noop_disposer(&ctx);
+      }
+      let token = state2.unload_fns.alloc();
+      state2.unload_fns.register(&ctx, token, None, cb);
+      let state = state2.clone();
+      make_disposer(&ctx, move |ctx| {
+        state.unload_fns.dispose(ctx, token);
+      })
+    })?,
+  )?;
 
-  {
-    let state2 = state.clone();
-    globals.inu.set(
-      "onAppVisibilityChange",
-      Function::new(ctx.clone(), move |ctx: Ctx<'js>, cb: Function<'js>| -> JsResult<Function<'js>> {
-        if state2.lifecycle.is_unloading() {
-          return noop_disposer(&ctx);
-        }
-        check_grant(&ctx, &state2.grants, "onAppVisibilityChange", None, MATCH_EXACT)?;
-        let token = state2.visibility_fns.alloc();
-        state2.visibility_fns.register(&ctx, token, None, cb);
-        let state = state2.clone();
-        make_disposer(&ctx, move |ctx| {
-          state.visibility_fns.dispose(ctx, token);
-        })
-      })?,
-    )?;
-  }
+  let state2 = state.clone();
+  globals.inu.set(
+    "onAppVisibilityChange",
+    Function::new(ctx.clone(), move |ctx: Ctx<'js>, cb: Function<'js>| -> JsResult<Function<'js>> {
+      if state2.lifecycle.is_unloading() {
+        return noop_disposer(&ctx);
+      }
+      state2.grants.check_grant(&ctx, "onAppVisibilityChange", None, MATCH_EXACT)?;
+      let token = state2.visibility_fns.alloc();
+      state2.visibility_fns.register(&ctx, token, None, cb);
+      let state = state2.clone();
+      make_disposer(&ctx, move |ctx| {
+        state.visibility_fns.dispose(ctx, token);
+      })
+    })?,
+  )?;
 
   Ok(state)
 }

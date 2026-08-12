@@ -1,3 +1,4 @@
+#[cfg(test)]
 use std::rc::Rc;
 
 use rquickjs::{Ctx, Result as JsResult};
@@ -10,30 +11,24 @@ pub const MATCH_NAMESPACE: i32 = 2;
 
 pub trait GrantHost {
   fn is_granted(&self, name: &str, target: Option<&str>, mode: i32) -> bool;
+
+  fn check_grant(&self, ctx: &Ctx<'_>, name: &str, target: Option<&str>, mode: i32) -> JsResult<()> {
+    if self.is_granted(name, target, mode) {
+      return Ok(());
+    }
+    let token = grant_token(name, target);
+    {
+      let message: &str = &format!("missing grant: {token}");
+      let grant: &str = &token;
+      PluginErrorCode::NotGranted(grant).throw(ctx, message)
+    }
+  }
 }
 
 fn grant_token(name: &str, target: Option<&str>) -> String {
   match target {
     Some(target) => format!("{name}({target})"),
     None => name.to_string(),
-  }
-}
-
-pub fn check_grant(
-  ctx: &Ctx<'_>,
-  host: &Rc<dyn GrantHost>,
-  name: &str,
-  target: Option<&str>,
-  mode: i32,
-) -> JsResult<()> {
-  if host.is_granted(name, target, mode) {
-    return Ok(());
-  }
-  let token = grant_token(name, target);
-  {
-    let message: &str = &format!("missing grant: {token}");
-    let grant: &str = &token;
-    PluginErrorCode::NotGranted(grant).throw(ctx, message)
   }
 }
 
