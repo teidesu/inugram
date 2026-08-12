@@ -35,8 +35,12 @@ pub(crate) fn build_info_object<'js>(ctx: Ctx<'js>, info: &InuInfo) -> rquickjs:
   Ok(obj)
 }
 
-pub(crate) fn install_inu<'js>(ctx: &Ctx<'js>, info: Arc<InuInfo>, inu: &Object<'js>) -> rquickjs::Result<()> {
+pub(crate) fn install_inu<'js>(
+  ctx: &Ctx<'js>,
+  info: Arc<InuInfo>,
+  globals: &crate::api::Globals<'js>,
+) -> rquickjs::Result<()> {
   let info_fn = Function::new(ctx.clone(), move |ctx| build_info_object(ctx, &info))?;
-  inu.set("info", info_fn)?;
+  globals.inu.set("info", info_fn)?;
   Ok(())
 }

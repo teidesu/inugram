@@ -72,7 +72,7 @@ pub fn install_screens<'js>(
   accounts: Option<Rc<AccountState>>,
   lifecycle: Rc<Lifecycle>,
   log: crate::Log,
-  inu: &Object<'js>,
+  globals: &crate::api::Globals<'js>,
 ) -> JsResult<Rc<ScreenState>> {
   let state = Rc::new(ScreenState {
     host,
@@ -84,11 +84,11 @@ pub fn install_screens<'js>(
     event_factory: RefCell::new(None),
   });
 
-  let ui: Object = match inu.get::<_, Object>("ui") {
+  let ui: Object = match globals.inu.get::<_, Object>("ui") {
     Ok(o) => o,
     Err(_) => {
       let o = Object::new(ctx.clone())?;
-      inu.set("ui", o.clone())?;
+      globals.inu.set("ui", o.clone())?;
       o
     }
   };

@@ -361,9 +361,9 @@ pub fn install_writes<'js>(
   deps: WritesDeps,
   shared: &Object<'js>,
   accounts: &Rc<AccountState>,
-  inu: &Object<'js>,
+  globals: &crate::api::Globals<'js>,
 ) -> JsResult<Rc<WritesState>> {
-  install_writes_with_limit(ctx, deps, shared, accounts, inu, TRANSFER_LIMIT_BYTES)
+  install_writes_with_limit(ctx, deps, shared, accounts, globals, TRANSFER_LIMIT_BYTES)
 }
 
 pub(crate) fn install_writes_with_limit<'js>(
@@ -371,7 +371,7 @@ pub(crate) fn install_writes_with_limit<'js>(
   deps: WritesDeps,
   shared: &Object<'js>,
   accounts: &Rc<AccountState>,
-  inu: &Object<'js>,
+  globals: &crate::api::Globals<'js>,
   transfer_limit: u64,
 ) -> JsResult<Rc<WritesState>> {
   let state = Rc::new(WritesState {
@@ -418,8 +418,8 @@ pub(crate) fn install_writes_with_limit<'js>(
     )?;
   }
 
-  let message: Value = inu.get("Message")?;
-  let plugin_error: Value = inu.get("PluginError")?;
+  let message = globals.get_message(ctx)?;
+  let plugin_error = globals.plugin_error.clone();
 
   let reads = accounts.take_prototype(ctx);
   let ops = Object::new(ctx.clone())?;

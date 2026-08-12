@@ -224,7 +224,7 @@ pub fn install_ui<'js>(
   lifecycle: Rc<Lifecycle>,
   log: crate::Log,
   jvm: Option<Rc<crate::api::platform::jvm::JvmState>>,
-  inu: &Object<'js>,
+  globals: &crate::api::Globals<'js>,
 ) -> JsResult<Rc<UiState>> {
   let state = Rc::new(UiState {
     host,
@@ -238,11 +238,11 @@ pub fn install_ui<'js>(
     settings: Registry::default(),
   });
 
-  let ui: Object = match inu.get::<_, Object>("ui") {
+  let ui: Object = match globals.inu.get::<_, Object>("ui") {
     Ok(o) => o,
     Err(_) => {
       let o = Object::new(ctx.clone())?;
-      inu.set("ui", o.clone())?;
+      globals.inu.set("ui", o.clone())?;
       o
     }
   };
@@ -315,11 +315,11 @@ pub fn install_ui<'js>(
   }
   {
     let state2 = state.clone();
-    let android: Object = match inu.get::<_, Object>("android") {
+    let android: Object = match globals.inu.get::<_, Object>("android") {
       Ok(o) => o,
       Err(_) => {
         let o = Object::new(ctx.clone())?;
-        inu.set("android", o.clone())?;
+        globals.inu.set("android", o.clone())?;
         o
       }
     };
@@ -337,7 +337,7 @@ pub fn install_ui<'js>(
   }
   {
     let state2 = state.clone();
-    inu.set(
+    globals.inu.set(
       "registerSettings",
       Function::new(ctx.clone(), move |ctx: Ctx<'js>, page: Value<'js>| js_register_settings(&ctx, &state2, page))?,
     )?;

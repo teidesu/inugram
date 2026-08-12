@@ -157,7 +157,7 @@ fn the_bundled_api_test_plugin_passes() {
       crate::sandbox::registry::Lifecycle::new(),
       crate::testing::harness::log_sink(&crate::testing::harness::Logs::new()),
       None,
-      &crate::testing::harness::inu_namespace(&ctx),
+      &crate::testing::harness::get_api_globals(&ctx),
     )
     .unwrap()
   });

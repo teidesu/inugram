@@ -283,7 +283,7 @@ pub fn install_deserialize<'js>(
   lifecycle: Rc<Lifecycle>,
   tl: Rc<TlViews>,
   log: std::sync::Arc<dyn Fn(&str) + Send + Sync>,
-  inu: &Object<'js>,
+  globals: &crate::api::Globals<'js>,
 ) -> JsResult<Rc<DeserializeState>> {
   let state = Rc::new(DeserializeState {
     host,
@@ -296,7 +296,7 @@ pub fn install_deserialize<'js>(
   });
 
   let state2 = state.clone();
-  inu.set(
+  globals.inu.set(
     "interceptDeserialize",
     Function::new(ctx.clone(), move |ctx: Ctx<'js>, rules: Value<'js>, middleware: Opt<Value<'js>>| {
       js_intercept_deserialize(&ctx, &state2, rules, middleware.0)

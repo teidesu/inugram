@@ -19,9 +19,9 @@ pub fn install_open_url<'js>(
   ctx: &Ctx<'js>,
   host: Rc<dyn OpenUrlHost>,
   grants: Rc<dyn GrantHost>,
-  inu: &Object<'js>,
+  globals: &crate::api::Globals<'js>,
 ) -> JsResult<()> {
-  inu.set(
+  globals.inu.set(
     "openUrl",
     Function::new(ctx.clone(), move |ctx: Ctx<'js>, url: String| -> JsResult<()> {
       check_grant(&ctx, &grants, "openUrl", None, MATCH_EXACT)?;

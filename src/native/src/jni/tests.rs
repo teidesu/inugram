@@ -47,7 +47,7 @@ mod info_tests {
       language: "en".into(),
       header: crate::testing::harness::manifest_header(ORACLE),
     });
-    ctx.with(|ctx| install_inu(&ctx, info, &crate::testing::harness::inu_namespace(&ctx)).unwrap());
+    ctx.with(|ctx| install_inu(&ctx, info, &crate::testing::harness::get_api_globals(&ctx)).unwrap());
 
     let lines = crate::testing::harness::run_capturing_console(&rt, &ctx, ORACLE);
     crate::testing::harness::assert_oracle_exact(&lines, "info test done", 11);

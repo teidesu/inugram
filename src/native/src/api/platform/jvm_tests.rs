@@ -76,8 +76,8 @@ fn setup(grants: &[&str]) -> Fixture {
   let ctx = Context::full(&rt).unwrap();
   let host = TestJvmHost::new();
   let state = ctx.with(|ctx| {
-    let inu = crate::testing::harness::inu_namespace(&ctx);
-    install_plugin_error(&ctx, &inu).unwrap();
+    let inu = crate::testing::harness::get_api_globals(&ctx);
+    install_plugin_error(&ctx).unwrap();
     install_jvm(
       &ctx,
       host.as_host(),
@@ -381,8 +381,8 @@ fn a_throwing_callback_is_the_plugins_fault() {
   let ctx = Context::full(&rt).unwrap();
   let logged = crate::testing::harness::Logs::new();
   let state = ctx.with(|ctx| {
-    let inu = crate::testing::harness::inu_namespace(&ctx);
-    install_plugin_error(&ctx, &inu).unwrap();
+    let inu = crate::testing::harness::get_api_globals(&ctx);
+    install_plugin_error(&ctx).unwrap();
     install_jvm(
       &ctx,
       TestJvmHost::new().as_host(),
@@ -433,8 +433,8 @@ mod bundled_oracle {
     let lines = install_capturing_console(&ctx);
     let host = OracleJvmHost::new();
     let state = ctx.with(|ctx| {
-      let inu = crate::testing::harness::inu_namespace(&ctx);
-      install_plugin_error(&ctx, &inu).unwrap();
+      let inu = crate::testing::harness::get_api_globals(&ctx);
+      install_plugin_error(&ctx).unwrap();
       install_jvm(
         &ctx,
         host.as_host(),

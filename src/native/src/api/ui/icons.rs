@@ -249,7 +249,7 @@ pub fn install_icons<'js>(
   ctx: &Ctx<'js>,
   host: Rc<dyn IconHost>,
   jvm: Option<Rc<JvmState>>,
-  inu: &Object<'js>,
+  globals: &crate::api::Globals<'js>,
 ) -> JsResult<()> {
   let icons = Object::new(ctx.clone())?;
   {
@@ -266,13 +266,13 @@ pub fn install_icons<'js>(
       Function::new(ctx.clone(), move |ctx: Ctx<'js>, source: Value<'js>| js_svg(&ctx, &host, source))?,
     )?;
   }
-  inu.set("icons", icons)?;
+  globals.inu.set("icons", icons)?;
 
-  let android: Object = match inu.get::<_, Object>("android") {
+  let android: Object = match globals.inu.get::<_, Object>("android") {
     Ok(o) => o,
     Err(_) => {
       let o = Object::new(ctx.clone())?;
-      inu.set("android", o.clone())?;
+      globals.inu.set("android", o.clone())?;
       o
     }
   };

@@ -51,7 +51,7 @@ pub fn install_kv<'js>(
   ctx: &Ctx<'js>,
   host: Rc<dyn KvHost>,
   grants: Rc<dyn GrantHost>,
-  inu: &Object<'js>,
+  globals: &crate::api::Globals<'js>,
 ) -> JsResult<()> {
   let state = Rc::new(KvState { host, grants });
   let kv = Object::new(ctx.clone())?;
@@ -92,7 +92,7 @@ pub fn install_kv<'js>(
       })?,
     )?;
   }
-  inu.set("kv", kv)?;
+  globals.inu.set("kv", kv)?;
   Ok(())
 }
 

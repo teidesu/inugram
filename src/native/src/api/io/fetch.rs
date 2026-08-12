@@ -144,7 +144,7 @@ pub fn install_fetch<'js>(
   grants: Rc<dyn GrantHost>,
   blobs: Rc<BlobState>,
   log: crate::Log,
-  inu: &Object<'js>,
+  globals: &crate::api::Globals<'js>,
 ) -> JsResult<Rc<FetchState>> {
   let state = Rc::new(FetchState {
     host,
@@ -176,7 +176,7 @@ pub fn install_fetch<'js>(
     )?;
   }
 
-  let plugin_error: Value = inu.get("PluginError")?;
+  let plugin_error = globals.plugin_error.clone();
   let timers = Object::new(ctx.clone())?;
   for name in ["setTimeout", "clearTimeout"] {
     let f: Value = ctx.globals().get(name)?;

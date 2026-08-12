@@ -5,7 +5,7 @@ use rquickjs::{Context, Runtime};
 fn setup() -> (Runtime, Context) {
   let rt = Runtime::new().unwrap();
   let ctx = Context::full(&rt).unwrap();
-  ctx.with(|ctx| install_plugin_error(&ctx, &crate::testing::harness::inu_namespace(&ctx)).unwrap());
+  ctx.with(|ctx| install_plugin_error(&ctx).unwrap());
   (rt, ctx)
 }
 

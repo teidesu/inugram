@@ -66,8 +66,8 @@ fn setup() -> Fixture {
   let logs = crate::testing::harness::Logs::new();
   let log = crate::testing::harness::log_sink(&logs);
   let state = ctx.with(|ctx| {
-    let inu = crate::testing::harness::inu_namespace(&ctx);
-    crate::api::error::install_plugin_error(&ctx, &inu).unwrap();
+    let inu = crate::testing::harness::get_api_globals(&ctx);
+    crate::api::error::install_plugin_error(&ctx).unwrap();
     install_ui(&ctx, host_dyn, Lifecycle::new(), log, None, &inu).unwrap()
   });
   let state = Disposing::new(&ctx, state, |ctx, state| state.dispose(ctx));
@@ -486,8 +486,8 @@ fn a_java_object_reaches_open_page_native_view_and_drawable_icon() {
   let jvm_host = crate::api::platform::jvm::tests::testing::OracleJvmHost::new();
   let grants = crate::sandbox::grants::TestGrantHost::new(&["unsafe.jvm"]);
   let (state, jvm) = ctx.with(|ctx| {
-    let inu = crate::testing::harness::inu_namespace(&ctx);
-    crate::api::error::install_plugin_error(&ctx, &inu).unwrap();
+    let inu = crate::testing::harness::get_api_globals(&ctx);
+    crate::api::error::install_plugin_error(&ctx).unwrap();
     let jvm = crate::api::platform::jvm::install_jvm(
       &ctx,
       jvm_host.as_host(),

@@ -41,8 +41,8 @@ fn setup(grants: &[&str]) -> Fixture {
   let log = crate::testing::harness::log_sink(&logs);
   let lifecycle = Lifecycle::new();
   let (state, accounts) = ctx.with(|ctx| {
-    let inu = crate::testing::harness::inu_namespace(&ctx);
-    install_plugin_error(&ctx, &inu).unwrap();
+    let inu = crate::testing::harness::get_api_globals(&ctx);
+    install_plugin_error(&ctx).unwrap();
     let accounts = crate::api::telegram::account::install_account(
       &ctx,
       TestAccountHost::with(TWO_ACCOUNTS),

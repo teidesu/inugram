@@ -413,8 +413,8 @@ fn setup(name: &str) -> Fixture {
   let external = ExternalMemory::new();
   let host_dyn: Rc<dyn CanvasHost> = host.clone();
   let state = ctx.with(|ctx| {
-    let inu = crate::testing::harness::inu_namespace(&ctx);
-    install_plugin_error(&ctx, &inu).unwrap();
+    let inu = crate::testing::harness::get_api_globals(&ctx);
+    install_plugin_error(&ctx).unwrap();
     let blobs = crate::api::io::blob::install(&ctx, dir.path(), external.clone()).unwrap();
     install_canvas(&ctx, host_dyn, blobs, external, dir.path().to_path_buf(), std::sync::Arc::new(|_: &str| {}), &inu)
       .unwrap()
@@ -912,8 +912,8 @@ fn a_blend_mode_the_host_cannot_honour_is_refused_rather_than_approximated() {
   let external = ExternalMemory::new();
   let host_dyn: Rc<dyn CanvasHost> = host.clone();
   let state = ctx.with(|ctx| {
-    let inu = crate::testing::harness::inu_namespace(&ctx);
-    install_plugin_error(&ctx, &inu).unwrap();
+    let inu = crate::testing::harness::get_api_globals(&ctx);
+    install_plugin_error(&ctx).unwrap();
     let blobs = crate::api::io::blob::install(&ctx, dir.path(), external.clone()).unwrap();
     install_canvas(&ctx, host_dyn, blobs, external, dir.path().to_path_buf(), std::sync::Arc::new(|_: &str| {}), &inu)
       .unwrap()
@@ -1477,8 +1477,8 @@ mod bundled_oracle {
     let external = ExternalMemory::new();
     let host_dyn: Rc<dyn CanvasHost> = host.clone();
     let state = ctx.with(|ctx| {
-      let inu = crate::testing::harness::inu_namespace(&ctx);
-      install_plugin_error(&ctx, &inu).unwrap();
+      let inu = crate::testing::harness::get_api_globals(&ctx);
+      install_plugin_error(&ctx).unwrap();
       install_console(&ctx, lines.clone());
       let blobs = crate::api::io::blob::install(&ctx, dir.path(), external.clone()).unwrap();
       install_canvas(&ctx, host_dyn, blobs, external, dir.path().to_path_buf(), std::sync::Arc::new(|_: &str| {}), &inu)

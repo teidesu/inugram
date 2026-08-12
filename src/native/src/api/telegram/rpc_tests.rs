@@ -142,8 +142,8 @@ fn setup_logging(grants: &[&str]) -> LoggingFixture {
   let accounts_host: Rc<dyn crate::api::telegram::account::AccountHost> =
     crate::api::telegram::account::tests::TestAccountHost::with(crate::api::telegram::account::tests::TWO_ACCOUNTS);
   let state = ctx.with(|ctx| {
-    let inu = crate::testing::harness::inu_namespace(&ctx);
-    crate::api::error::install_plugin_error(&ctx, &inu).unwrap();
+    let inu = crate::testing::harness::get_api_globals(&ctx);
+    crate::api::error::install_plugin_error(&ctx).unwrap();
     // installApi runs before installRpc on a device, and the demuxed events read the
     // `inu.Message` it leaves behind
     let shared = crate::api::tl::utils::install_utils(&ctx, &inu).unwrap();
@@ -578,6 +578,29 @@ fn invoke_rejection_with_rpc_error_wire_is_an_rpc_error_instance() {
 }
 
 #[test]
+fn replacing_inu_rpc_error_does_not_change_host_errors() {
+  let (rt, ctx, host, state) = setup(&["invokeRpc"]);
+  ctx.with(|ctx| {
+    ctx
+      .eval::<(), _>(
+        r#"
+            globalThis.__realRpcError = inu.RpcError;
+            inu.RpcError = class Impostor extends Error {};
+            inu.invokeRpc({_:'foo.bar'}).catch(e => {
+                globalThis.__caught = [e instanceof __realRpcError, e instanceof inu.RpcError, e.code, e.text];
+            });
+            "#,
+      )
+      .unwrap();
+  });
+
+  let invoke_id = host.invoke_calls.borrow()[0].0;
+  state.resolve_invoke(&rt, &ctx, invoke_id, "R400:PEER_ID_INVALID");
+  let caught: String = ctx.with(|ctx| ctx.eval("JSON.stringify(globalThis.__caught)").unwrap());
+  assert_eq!(caught, r#"[true,false,400,"PEER_ID_INVALID"]"#);
+}
+
+#[test]
 fn null_completion_resolves_next_as_null_and_round_trips() {
   let (rt, ctx, host, state) = setup(&["interceptRpc"]);
   ctx.with(|ctx| {
@@ -834,8 +857,8 @@ fn without_the_account_api_a_dispatch_hands_over_undefined() {
   let grants = TestGrantHost::new(&["onUpdate", "interceptRpc"]);
   let log: crate::Log = std::sync::Arc::new(|_: &str| {});
   let state = ctx.with(|ctx| {
-    let inu = crate::testing::harness::inu_namespace(&ctx);
-    crate::api::error::install_plugin_error(&ctx, &inu).unwrap();
+    let inu = crate::testing::harness::get_api_globals(&ctx);
+    crate::api::error::install_plugin_error(&ctx).unwrap();
     let shared = crate::api::tl::utils::install_utils(&ctx, &inu).unwrap();
     crate::api::tl::message::install_message(&ctx, &shared, &inu).unwrap();
     install_rpc(&ctx, host_dyn, tl, grants.as_host(), Lifecycle::new(), None, shared, log, &inu).unwrap()
@@ -1666,8 +1689,8 @@ fn the_bundled_accounts_test_plugin_passes() {
     crate::api::telegram::account::tests::TestAccountHost::with(crate::api::telegram::account::tests::TWO_ACCOUNTS);
   let accounts_dyn: Rc<dyn crate::api::telegram::account::AccountHost> = accounts_host.clone();
   let (state, accounts) = ctx.with(|ctx| {
-    let inu = crate::testing::harness::inu_namespace(&ctx);
-    crate::api::error::install_plugin_error(&ctx, &inu).unwrap();
+    let inu = crate::testing::harness::get_api_globals(&ctx);
+    crate::api::error::install_plugin_error(&ctx).unwrap();
     let shared = crate::api::tl::utils::install_utils(&ctx, &inu).unwrap();
     crate::api::tl::message::install_message(&ctx, &shared, &inu).unwrap();
     let accounts = crate::api::telegram::account::install_account(
@@ -2566,8 +2589,8 @@ mod bundled_oracles {
     let accounts_host: Rc<dyn crate::api::telegram::account::AccountHost> =
       crate::api::telegram::account::tests::TestAccountHost::with(crate::api::telegram::account::tests::TWO_ACCOUNTS);
     let state = ctx.with(|ctx| {
-      let inu = crate::testing::harness::inu_namespace(&ctx);
-      crate::api::error::install_plugin_error(&ctx, &inu).unwrap();
+      let inu = crate::testing::harness::get_api_globals(&ctx);
+      crate::api::error::install_plugin_error(&ctx).unwrap();
       if with_globals {
         let random: Rc<dyn RandomHost> = Rc::new(CountingRandom::default());
         crate::api::globals::install_globals(

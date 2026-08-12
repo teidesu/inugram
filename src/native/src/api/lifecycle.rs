@@ -21,7 +21,7 @@ pub fn install_lifecycle<'js>(
   grants: Rc<dyn GrantHost>,
   lifecycle: Rc<Lifecycle>,
   log: crate::Log,
-  inu: &Object<'js>,
+  globals: &crate::api::Globals<'js>,
 ) -> JsResult<Rc<LifecycleState>> {
   let state = Rc::new(LifecycleState {
     grants,
@@ -34,7 +34,7 @@ pub fn install_lifecycle<'js>(
 
   {
     let state2 = state.clone();
-    inu.set(
+    globals.inu.set(
       "onUnload",
       Function::new(ctx.clone(), move |ctx: Ctx<'js>, cb: Function<'js>| -> JsResult<Function<'js>> {
         if state2.lifecycle.is_unloading() {
@@ -52,7 +52,7 @@ pub fn install_lifecycle<'js>(
 
   {
     let state2 = state.clone();
-    inu.set(
+    globals.inu.set(
       "onAppVisibilityChange",
       Function::new(ctx.clone(), move |ctx: Ctx<'js>, cb: Function<'js>| -> JsResult<Function<'js>> {
         if state2.lifecycle.is_unloading() {

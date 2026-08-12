@@ -24,14 +24,14 @@ pub trait UtilsHost {
 }
 
 #[cfg(test)]
-pub fn install_utils<'js>(ctx: &Ctx<'js>, inu: &Object<'js>) -> JsResult<Object<'js>> {
-  install_utils_with_host(ctx, Rc::new(UnavailableUtilsHost), inu)
+pub fn install_utils<'js>(ctx: &Ctx<'js>, globals: &crate::api::Globals<'js>) -> JsResult<Object<'js>> {
+  install_utils_with_host(ctx, Rc::new(UnavailableUtilsHost), globals)
 }
 
 pub fn install_utils_with_host<'js>(
   ctx: &Ctx<'js>,
   host: Rc<dyn UtilsHost>,
-  inu: &Object<'js>,
+  globals: &crate::api::Globals<'js>,
 ) -> JsResult<Object<'js>> {
   let utils = Object::new(ctx.clone())?;
 
@@ -139,12 +139,12 @@ pub fn install_utils_with_host<'js>(
     )?;
   }
 
-  let plugin_error: Value = inu.get("PluginError")?;
+  let plugin_error = globals.plugin_error.clone();
 
   let factory = crate::utils::prelude::load(ctx, PRELUDE)?;
   let shared: Object = factory.call((utils.clone(), plugin_error))?;
 
-  inu.set("utils", utils)?;
+  globals.inu.set("utils", utils)?;
   Ok(shared)
 }
 

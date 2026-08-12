@@ -263,7 +263,7 @@ pub fn install_xposed<'js>(
   lifecycle: Rc<Lifecycle>,
   jvm: Rc<JvmState>,
   log: crate::Log,
-  inu: &Object<'js>,
+  globals: &crate::api::Globals<'js>,
 ) -> JsResult<Rc<XposedState>> {
   let state = Rc::new(XposedState {
     host,
@@ -366,7 +366,7 @@ pub fn install_xposed<'js>(
       Function::new(ctx.clone(), move |ctx: Ctx<'js>| js_disable_profile_saver(&ctx, &state))?,
     )?;
   }
-  inu.set("xposed", xposed)?;
+  globals.inu.set("xposed", xposed)?;
 
   Ok(state)
 }

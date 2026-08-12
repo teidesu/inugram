@@ -183,17 +183,13 @@ impl RpcState {
   }
 }
 
-fn get_rpc_error_ctor<'js>(ctx: &Ctx<'js>) -> JsResult<rquickjs::function::Constructor<'js>> {
-  ctx.globals().get::<_, Object>("inu")?.get("RpcError")
-}
-
 pub(crate) fn make_rpc_error<'js>(ctx: &Ctx<'js>, code: i32, text: &str) -> JsResult<Value<'js>> {
-  get_rpc_error_ctor(ctx)?.construct((code, text))
+  crate::api::Globals::get(ctx)?.get_rpc_error(ctx)?.construct((code, text))
 }
 
 fn rpc_error_to_wire<'js>(ctx: &Ctx<'js>, value: &Value<'js>) -> Option<String> {
   let obj = value.as_object()?;
-  let ctor = get_rpc_error_ctor(ctx).ok()?;
+  let ctor = crate::api::Globals::get(ctx).ok()?.get_rpc_error(ctx).ok()?;
   if !obj.is_instance_of(ctor.into_value()) {
     return None;
   }
@@ -300,7 +296,7 @@ pub fn install_rpc<'js>(
   accounts: Option<Rc<AccountState>>,
   shared: Object<'js>,
   log: Log,
-  inu: &Object<'js>,
+  globals: &crate::api::Globals<'js>,
 ) -> JsResult<Rc<RpcState>> {
   let state = Rc::new(RpcState {
     host,
@@ -321,10 +317,8 @@ pub fn install_rpc<'js>(
     pending_invoke: RefCell::new(HashMap::new()),
   });
 
-  inu.set(
-    "RpcError",
-    ctx.eval::<Value, _>(
-      r"(class RpcError extends Error {
+  globals.set_rpc_error(ctx.eval(
+    r"(class RpcError extends Error {
         constructor(code, text) {
           super(code + ': ' + text);
           this.name = 'RpcError';
@@ -332,12 +326,11 @@ pub fn install_rpc<'js>(
           this.text = String(text ?? '');
         }
     })",
-    )?,
-  )?;
+  )?)?;
 
   {
     let state2 = state.clone();
-    inu.set(
+    globals.inu.set(
       "interceptRpc",
       Function::new(ctx.clone(), move |ctx: Ctx<'js>, methods: Value<'js>, cb: Function<'js>| {
         js_intercept_rpc(&ctx, &state2, methods, cb)
@@ -346,14 +339,14 @@ pub fn install_rpc<'js>(
   }
   {
     let state2 = state.clone();
-    inu.set(
+    globals.inu.set(
       "invokeRpc",
       Function::new(ctx.clone(), move |ctx: Ctx<'js>, obj: Value<'js>| js_invoke_rpc(&ctx, &state2, ANY_ACCOUNT, obj))?,
     )?;
   }
   {
     let state2 = state.clone();
-    inu.set(
+    globals.inu.set(
       "onUpdate",
       Function::new(ctx.clone(), move |ctx: Ctx<'js>, types: Value<'js>, cb: Function<'js>| {
         js_on_update(&ctx, &state2, types, cb)
@@ -362,15 +355,15 @@ pub fn install_rpc<'js>(
   }
   {
     let state2 = state.clone();
-    inu.set(
+    globals.inu.set(
       "interceptUpdate",
       Function::new(ctx.clone(), move |ctx: Ctx<'js>, types: Value<'js>, cb: Function<'js>| {
         js_intercept_update(&ctx, &state2, types, cb)
       })?,
     )?;
   }
-  install_demuxed_events(ctx, &state, inu)?;
-  install_send_message(ctx, &state, inu, shared)?;
+  install_demuxed_events(ctx, &state, globals)?;
+  install_send_message(ctx, &state, globals, shared)?;
   install_account_invoke(ctx, &state)?;
   Ok(state)
 }
@@ -414,12 +407,12 @@ fn install_account_invoke<'js>(ctx: &Ctx<'js>, state: &Rc<RpcState>) -> JsResult
 fn install_send_message<'js>(
   ctx: &Ctx<'js>,
   state: &Rc<RpcState>,
-  inu: &Object<'js>,
+  globals: &crate::api::Globals<'js>,
   shared: Object<'js>,
 ) -> JsResult<()> {
   let factory = prelude::load(ctx, SEND_PRELUDE)?;
-  let plugin_error: Value = ctx.globals().get::<_, Object>("inu")?.get("PluginError")?;
-  let rpc_error: Value = inu.get("RpcError")?;
+  let plugin_error = globals.plugin_error.clone();
+  let rpc_error = globals.get_rpc_error(ctx)?;
   let accounts = state.accounts.clone();
   let self_user_id = Function::new(ctx.clone(), move |account_id: i32| {
     accounts.as_ref().and_then(|accounts| accounts.self_user_id(account_id)).map(|id| id as f64)
@@ -428,16 +421,20 @@ fn install_send_message<'js>(
   *state.send_wrap.borrow_mut() = Some(Persistent::save(ctx, build));
 
   let state = state.clone();
-  inu.set(
+  globals.inu.set(
     "interceptSendMessage",
     Function::new(ctx.clone(), move |ctx: Ctx<'js>, cb: Function<'js>| js_intercept_send_message(&ctx, &state, cb))?,
   )?;
   Ok(())
 }
 
-fn install_demuxed_events<'js>(ctx: &Ctx<'js>, state: &Rc<RpcState>, inu: &Object<'js>) -> JsResult<()> {
+fn install_demuxed_events<'js>(
+  ctx: &Ctx<'js>,
+  state: &Rc<RpcState>,
+  globals: &crate::api::Globals<'js>,
+) -> JsResult<()> {
   let factory = prelude::load(ctx, EVENTS_PRELUDE)?;
-  let message: Value = inu.get("Message")?;
+  let message = globals.get_message(ctx)?;
   if !message.is_function() {
     return Err(Exception::throw_type(ctx, "the demuxed events need the inu.Message installApi installs"));
   }
@@ -446,7 +443,7 @@ fn install_demuxed_events<'js>(ctx: &Ctx<'js>, state: &Rc<RpcState>, inu: &Objec
 
   for (name, kind, types) in DEMUX_EVENTS {
     let state = state.clone();
-    inu.set(
+    globals.inu.set(
       name,
       Function::new(ctx.clone(), move |ctx: Ctx<'js>, cb: Function<'js>| js_on_demuxed(&ctx, &state, kind, types, cb))?,
     )?;

@@ -233,7 +233,7 @@ pub fn install_jvm<'js>(
   grants: Rc<dyn GrantHost>,
   lifecycle: Rc<Lifecycle>,
   log: crate::Log,
-  inu: &Object<'js>,
+  globals: &crate::api::Globals<'js>,
 ) -> JsResult<Rc<JvmState>> {
   let state = Rc::new(JvmState {
     host,
@@ -296,7 +296,7 @@ pub fn install_jvm<'js>(
     )?;
   }
 
-  let plugin_error: Value = inu.get("PluginError")?;
+  let plugin_error = globals.plugin_error.clone();
 
   let factory = prelude::load(ctx, PRELUDE)?;
   let built: Object = factory.call((natives, plugin_error, ops))?;
@@ -307,18 +307,22 @@ pub fn install_jvm<'js>(
     mint: Persistent::save(ctx, mint),
     id_of: Persistent::save(ctx, id_of),
   });
-  inu.set("jvm", jvm)?;
-  install_android_screen(ctx, &state, inu)?;
+  globals.inu.set("jvm", jvm)?;
+  install_android_screen(ctx, &state, globals)?;
 
   Ok(state)
 }
 
-fn install_android_screen<'js>(ctx: &Ctx<'js>, state: &Rc<JvmState>, inu: &Object<'js>) -> JsResult<()> {
-  let android: Object = match inu.get::<_, Object>("android") {
+fn install_android_screen<'js>(
+  ctx: &Ctx<'js>,
+  state: &Rc<JvmState>,
+  globals: &crate::api::Globals<'js>,
+) -> JsResult<()> {
+  let android: Object = match globals.inu.get::<_, Object>("android") {
     Ok(o) => o,
     Err(_) => {
       let o = Object::new(ctx.clone())?;
-      inu.set("android", o.clone())?;
+      globals.inu.set("android", o.clone())?;
       o
     }
   };

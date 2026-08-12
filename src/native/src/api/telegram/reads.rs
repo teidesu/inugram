@@ -174,7 +174,7 @@ pub fn install_reads<'js>(
   shared: &Object<'js>,
   accounts: &Rc<AccountState>,
   log: crate::Log,
-  inu: &Object<'js>,
+  globals: &crate::api::Globals<'js>,
 ) -> JsResult<Rc<ReadsState>> {
   let state = Rc::new(ReadsState {
     host,
@@ -288,8 +288,8 @@ pub fn install_reads<'js>(
     )?;
   }
 
-  let message: Value = inu.get("Message")?;
-  let plugin_error: Value = inu.get("PluginError")?;
+  let message = globals.get_message(ctx)?;
+  let plugin_error = globals.plugin_error.clone();
   let ops = Object::new(ctx.clone())?;
   for (name, op) in [
     ("userFull", OP_USER_FULL),

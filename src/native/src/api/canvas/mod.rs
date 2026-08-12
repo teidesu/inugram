@@ -875,7 +875,7 @@ pub fn install_canvas<'js>(
   external: Rc<ExternalMemory>,
   stage_dir: PathBuf,
   log: crate::Log,
-  inu: &Object<'js>,
+  globals: &crate::api::Globals<'js>,
 ) -> JsResult<Rc<CanvasState>> {
   let state = Rc::new(CanvasState {
     host,
@@ -899,11 +899,11 @@ pub fn install_canvas<'js>(
   install_gradient_members(ctx)?;
   install_pattern_members(ctx)?;
   install_image_members(ctx)?;
-  install_namespace(ctx, &state, inu)?;
+  install_namespace(ctx, &state, globals)?;
   Ok(state)
 }
 
-fn install_namespace<'js>(ctx: &Ctx<'js>, state: &Rc<CanvasState>, inu: &Object<'js>) -> JsResult<()> {
+fn install_namespace<'js>(ctx: &Ctx<'js>, state: &Rc<CanvasState>, globals: &crate::api::Globals<'js>) -> JsResult<()> {
   let canvas = Object::new(ctx.clone())?;
 
   let owned = state.clone();
@@ -944,7 +944,7 @@ fn install_namespace<'js>(ctx: &Ctx<'js>, state: &Rc<CanvasState>, inu: &Object<
     )?;
   }
 
-  inu.set("canvas", canvas)?;
+  globals.inu.set("canvas", canvas)?;
   Ok(())
 }
 
