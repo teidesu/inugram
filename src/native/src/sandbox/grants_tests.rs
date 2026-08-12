@@ -14,8 +14,8 @@ fn check_grant_throws_a_not_granted_error_naming_the_token() {
   let (_rt, ctx) = setup();
   let host: Rc<dyn GrantHost> = TestGrantHost::new(&["invokeRpc(users.getUsers)"]).as_host();
   ctx.with(|ctx| {
-    assert!(check_grant(&ctx, &host, "invokeRpc", Some("users.getUsers"), MATCH_EXACT).is_ok());
-    let err = check_grant(&ctx, &host, "invokeRpc", Some("messages.sendMessage"), MATCH_EXACT).unwrap_err();
+    assert!(host.check_grant(&ctx, "invokeRpc", Some("users.getUsers"), MATCH_EXACT).is_ok());
+    let err = host.check_grant(&ctx, "invokeRpc", Some("messages.sendMessage"), MATCH_EXACT).unwrap_err();
     assert!(matches!(err, rquickjs::Error::Exception));
     ctx.globals().set("e", ctx.catch()).unwrap();
     let got: String = ctx.eval("JSON.stringify([e.code, e.grant, e.message, e instanceof inu.PluginError])").unwrap();

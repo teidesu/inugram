@@ -448,12 +448,12 @@ impl crate::api::tl::proxy::TlHost for OneMessageTl {
 /// `tl_proxy` answers still agree.
 #[test]
 fn structured_clone_throws_on_a_tl_view() {
-  use crate::api::tl::proxy::{wire_to_js_value, TlHost, TlViews, ViewLife};
+  use crate::api::tl::proxy::{TlHost, TlViews, ViewLife};
 
   let (_rt, ctx, _host) = setup();
   let views = TlViews::new(Rc::new(OneMessageTl) as Rc<dyn TlHost>);
   let out = ctx.with(|ctx| {
-    let view = wire_to_js_value(&ctx, &views, "HOW1", ViewLife::Plugin).unwrap();
+    let view = views.wire_to_js_value(&ctx, "HOW1", ViewLife::Plugin).unwrap();
     ctx.globals().set("__view", view).unwrap();
     match ctx.eval::<String, _>(
       r#"

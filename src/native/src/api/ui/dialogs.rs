@@ -22,42 +22,44 @@ pub struct DialogState {
   pending_choosers: RefCell<HashMap<i64, (PendingSettle, bool)>>,
 }
 
-fn js_ui_dialog<'js>(ctx: &Ctx<'js>, state: &Rc<DialogState>, options: Value<'js>) -> JsResult<Value<'js>> {
-  let Some(obj) = options.as_object() else {
-    return Err(Exception::throw_type(ctx, "dialog: expected an options object"));
-  };
-  let body: Value = obj.get("body").map_err(|_| Exception::throw_type(ctx, "dialog: cannot read 'body'"))?;
-  if !body.is_undefined() && !body.is_null() {
-    let kind = body
-      .as_object()
-      .and_then(|o| o.get::<_, Option<String>>(crate::api::ui::pages::ELEMENT_TAG).ok().flatten());
-    match kind.as_deref() {
-      Some("native") => {}
-      Some(other) => {
-        return PluginErrorCode::Unsupported.throw(
-          ctx,
-          &format!("dialog: a '{other}' element cannot be a dialog body; only inu.android.nativeView can"),
-        );
+impl DialogState {
+  fn js_ui_dialog<'js>(self: &Rc<Self>, ctx: &Ctx<'js>, options: Value<'js>) -> JsResult<Value<'js>> {
+    let Some(obj) = options.as_object() else {
+      return Err(Exception::throw_type(ctx, "dialog: expected an options object"));
+    };
+    let body: Value = obj.get("body").map_err(|_| Exception::throw_type(ctx, "dialog: cannot read 'body'"))?;
+    if !body.is_undefined() && !body.is_null() {
+      let kind = body
+        .as_object()
+        .and_then(|o| o.get::<_, Option<String>>(crate::api::ui::pages::ELEMENT_TAG).ok().flatten());
+      match kind.as_deref() {
+        Some("native") => {}
+        Some(other) => {
+          return PluginErrorCode::Unsupported.throw(
+            ctx,
+            &format!("dialog: a '{other}' element cannot be a dialog body; only inu.android.nativeView can"),
+          );
+        }
+        None => return Err(Exception::throw_type(ctx, "dialog: 'body' is not an inu.ui element")),
       }
-      None => return Err(Exception::throw_type(ctx, "dialog: 'body' is not an inu.ui element")),
     }
-  }
-  let json = ctx
-    .json_stringify(options)?
-    .map(|s| s.to_string())
-    .transpose()?
-    .ok_or_else(|| Exception::throw_type(ctx, "dialog: expected an options object"))?;
+    let json = ctx
+      .json_stringify(options)?
+      .map(|s| s.to_string())
+      .transpose()?
+      .ok_or_else(|| Exception::throw_type(ctx, "dialog: expected an options object"))?;
 
-  let request_id = state.next_request_id.alloc();
-  let (promise, pending) = PendingSettle::new(ctx)?;
-  state.pending_dialogs.borrow_mut().insert(request_id, pending);
+    let request_id = self.next_request_id.alloc();
+    let (promise, pending) = PendingSettle::new(ctx)?;
+    self.pending_dialogs.borrow_mut().insert(request_id, pending);
 
-  if let Some(err) = state.host.dialog(request_id, &json) {
-    if let Some(pending) = state.pending_dialogs.borrow_mut().remove(&request_id) {
-      pending.reject_with(ctx, &err)?;
+    if let Some(err) = self.host.dialog(request_id, &json) {
+      if let Some(pending) = self.pending_dialogs.borrow_mut().remove(&request_id) {
+        pending.reject_with(ctx, &err)?;
+      }
     }
+    Ok(promise.into_value())
   }
-  Ok(promise.into_value())
 }
 
 fn opt_string<'js>(ctx: &Ctx<'js>, obj: &Object<'js>, what: &str, key: &str) -> JsResult<Option<String>> {
@@ -92,84 +94,89 @@ fn chooser_index(ctx: &Ctx<'_>, value: &Value<'_>, len: usize) -> JsResult<i32> 
   Ok(index)
 }
 
-fn js_ui_chooser<'js>(ctx: &Ctx<'js>, state: &Rc<DialogState>, opts: Object<'js>) -> JsResult<Value<'js>> {
-  let out = Object::new(ctx.clone())?;
-  if let Some(title) = opt_string(ctx, &opts, "chooser", "title")? {
-    out.set("title", title)?;
-  }
-  let multiple = opt_flag(ctx, &opts, "chooser", "multiple")?;
-  out.set("multiple", multiple)?;
-
-  let raw: Value = opts.get("items").map_err(|_| Exception::throw_type(ctx, "chooser: cannot read 'items'"))?;
-  let source = raw.as_array().ok_or_else(|| Exception::throw_type(ctx, "chooser: 'items' must be an array"))?;
-  let source = crate::utils::arguments::array_values(ctx, source, "chooser: 'items'")?;
-  if source.is_empty() {
-    return Err(Exception::throw_type(ctx, "chooser: 'items' must not be empty"));
-  }
-  let items = rquickjs::Array::new(ctx.clone())?;
-  for (i, item) in source.into_iter().enumerate() {
-    let entry = Object::new(ctx.clone())?;
-    if let Some(text) = item.as_string() {
-      entry.set("text", text.to_string()?)?;
-      entry.set("danger", false)?;
-    } else if let Some(obj) = item.as_object() {
-      let text = opt_string(ctx, obj, "chooser item", "text")?
-        .ok_or_else(|| Exception::throw_type(ctx, "chooser item: 'text' must be a string"))?;
-      entry.set("text", text)?;
-      if let Some(subtitle) = opt_string(ctx, obj, "chooser item", "subtitle")? {
-        entry.set("subtitle", subtitle)?;
-      }
-      entry.set("danger", opt_flag(ctx, obj, "chooser item", "danger")?)?;
-    } else {
-      return Err(Exception::throw_type(ctx, "chooser: items must be strings or { text, subtitle?, danger? } objects"));
+impl DialogState {
+  fn js_ui_chooser<'js>(self: &Rc<Self>, ctx: &Ctx<'js>, opts: Object<'js>) -> JsResult<Value<'js>> {
+    let out = Object::new(ctx.clone())?;
+    if let Some(title) = opt_string(ctx, &opts, "chooser", "title")? {
+      out.set("title", title)?;
     }
-    items.set(i, entry)?;
-  }
-  let len = items.len();
-  out.set("items", items)?;
+    let multiple = opt_flag(ctx, &opts, "chooser", "multiple")?;
+    out.set("multiple", multiple)?;
 
-  let selected: Value =
-    opts.get("selected").map_err(|_| Exception::throw_type(ctx, "chooser: cannot read 'selected'"))?;
-  let picked = rquickjs::Array::new(ctx.clone())?;
-  if !selected.is_undefined() && !selected.is_null() {
-    match (multiple, selected.as_array()) {
-      (true, Some(list)) => {
-        for (i, index) in
-          crate::utils::arguments::array_values(ctx, list, "chooser: 'selected'")?.into_iter().enumerate()
-        {
-          picked.set(i, chooser_index(ctx, &index, len)?)?;
+    let raw: Value = opts.get("items").map_err(|_| Exception::throw_type(ctx, "chooser: cannot read 'items'"))?;
+    let source = raw.as_array().ok_or_else(|| Exception::throw_type(ctx, "chooser: 'items' must be an array"))?;
+    let source = crate::utils::arguments::array_values(ctx, source, "chooser: 'items'")?;
+    if source.is_empty() {
+      return Err(Exception::throw_type(ctx, "chooser: 'items' must not be empty"));
+    }
+    let items = rquickjs::Array::new(ctx.clone())?;
+    for (i, item) in source.into_iter().enumerate() {
+      let entry = Object::new(ctx.clone())?;
+      if let Some(text) = item.as_string() {
+        entry.set("text", text.to_string()?)?;
+        entry.set("danger", false)?;
+      } else if let Some(obj) = item.as_object() {
+        let text = opt_string(ctx, obj, "chooser item", "text")?
+          .ok_or_else(|| Exception::throw_type(ctx, "chooser item: 'text' must be a string"))?;
+        entry.set("text", text)?;
+        if let Some(subtitle) = opt_string(ctx, obj, "chooser item", "subtitle")? {
+          entry.set("subtitle", subtitle)?;
         }
-      }
-      (true, None) => {
+        entry.set("danger", opt_flag(ctx, obj, "chooser item", "danger")?)?;
+      } else {
         return Err(Exception::throw_type(
           ctx,
-          "chooser: 'selected' must be an array of indices when 'multiple' is set",
-        ))
+          "chooser: items must be strings or { text, subtitle?, danger? } objects",
+        ));
       }
-      (false, Some(_)) => {
-        return Err(Exception::throw_type(ctx, "chooser: 'selected' must be a single index unless 'multiple' is set"))
+      items.set(i, entry)?;
+    }
+    let len = items.len();
+    out.set("items", items)?;
+
+    let selected: Value =
+      opts.get("selected").map_err(|_| Exception::throw_type(ctx, "chooser: cannot read 'selected'"))?;
+    let picked = rquickjs::Array::new(ctx.clone())?;
+    if !selected.is_undefined() && !selected.is_null() {
+      match (multiple, selected.as_array()) {
+        (true, Some(list)) => {
+          for (i, index) in
+            crate::utils::arguments::array_values(ctx, list, "chooser: 'selected'")?.into_iter().enumerate()
+          {
+            picked.set(i, chooser_index(ctx, &index, len)?)?;
+          }
+        }
+        (true, None) => {
+          return Err(Exception::throw_type(
+            ctx,
+            "chooser: 'selected' must be an array of indices when 'multiple' is set",
+          ))
+        }
+        (false, Some(_)) => {
+          return Err(Exception::throw_type(ctx, "chooser: 'selected' must be a single index unless 'multiple' is set"))
+        }
+        (false, None) => picked.set(0, chooser_index(ctx, &selected, len)?)?,
       }
-      (false, None) => picked.set(0, chooser_index(ctx, &selected, len)?)?,
     }
-  }
-  out.set("selected", picked)?;
+    out.set("selected", picked)?;
 
-  let json = ctx
-    .json_stringify(out.into_value())?
-    .map(|s| s.to_string())
-    .transpose()?
-    .ok_or_else(|| Exception::throw_message(ctx, "chooser: serialization failed"))?;
+    let json = ctx
+      .json_stringify(out.into_value())?
+      .map(|s| s.to_string())
+      .transpose()?
+      .ok_or_else(|| Exception::throw_message(ctx, "chooser: serialization failed"))?;
 
-  let request_id = state.next_request_id.alloc();
-  let (promise, pending) = PendingSettle::new(ctx)?;
-  state.pending_choosers.borrow_mut().insert(request_id, (pending, multiple));
+    let request_id = self.next_request_id.alloc();
+    let (promise, pending) = PendingSettle::new(ctx)?;
+    self.pending_choosers.borrow_mut().insert(request_id, (pending, multiple));
 
-  if let Some(err) = state.host.chooser(request_id, &json) {
-    if let Some((pending, _)) = state.pending_choosers.borrow_mut().remove(&request_id) {
-      pending.reject_with(ctx, &err)?;
+    if let Some(err) = self.host.chooser(request_id, &json) {
+      if let Some((pending, _)) = self.pending_choosers.borrow_mut().remove(&request_id) {
+        pending.reject_with(ctx, &err)?;
+      }
     }
+    Ok(promise.into_value())
   }
-  Ok(promise.into_value())
 }
 
 pub fn install_dialogs<'js>(
@@ -186,29 +193,25 @@ pub fn install_dialogs<'js>(
     pending_choosers: RefCell::new(HashMap::new()),
   });
   let ui = Object::new(ctx.clone())?;
-  {
-    let state2 = state.clone();
-    ui.set(
-      "toast",
-      Function::new(ctx.clone(), move |text: rquickjs::Coerced<String>| {
-        state2.host.toast(&text.0);
-      })?,
-    )?;
-  }
-  {
-    let state2 = state.clone();
-    ui.set(
-      "dialog",
-      Function::new(ctx.clone(), move |ctx: Ctx<'js>, options: Value<'js>| js_ui_dialog(&ctx, &state2, options))?,
-    )?;
-  }
-  {
-    let state2 = state.clone();
-    ui.set(
-      "chooser",
-      Function::new(ctx.clone(), move |ctx: Ctx<'js>, options: Object<'js>| js_ui_chooser(&ctx, &state2, options))?,
-    )?;
-  }
+  let state2 = state.clone();
+  ui.set(
+    "toast",
+    Function::new(ctx.clone(), move |text: rquickjs::Coerced<String>| {
+      state2.host.toast(&text.0);
+    })?,
+  )?;
+
+  let state2 = state.clone();
+  ui.set(
+    "dialog",
+    Function::new(ctx.clone(), move |ctx: Ctx<'js>, options: Value<'js>| state2.js_ui_dialog(&ctx, options))?,
+  )?;
+
+  let state2 = state.clone();
+  ui.set(
+    "chooser",
+    Function::new(ctx.clone(), move |ctx: Ctx<'js>, options: Object<'js>| state2.js_ui_chooser(&ctx, options))?,
+  )?;
   globals.inu.set("ui", ui)?;
   Ok(state)
 }

@@ -6,7 +6,7 @@ use rquickjs::{Ctx, Exception, Function, Object, Persistent, Result as JsResult,
 
 use crate::api::error::{host_error_to_js, PluginErrorCode};
 use crate::api::telegram::rpc::{format_exception, pump_jobs};
-use crate::sandbox::grants::{check_grant, GrantHost, MATCH_EXACT};
+use crate::sandbox::grants::{GrantHost, MATCH_EXACT};
 use crate::sandbox::registry::{make_disposer, noop_disposer, Lifecycle, Registry, Token};
 
 pub trait NotificationHost {
@@ -70,64 +70,63 @@ pub fn install_notifications<'js>(
   };
 
   let state2 = state.clone();
-  let f =
-    Function::new(ctx.clone(), move |ctx: Ctx<'js>, handlers: Value<'js>| js_add_delegate(&ctx, &state2, handlers))?;
-  android.set("addNotificationCenterDelegate", f)?;
+  android.set(
+    "addNotificationCenterDelegate",
+    Function::new(ctx.clone(), move |ctx: Ctx<'js>, handlers: Value<'js>| state2.js_add_delegate(&ctx, handlers))?,
+  )?;
 
   Ok(state)
 }
 
-fn js_add_delegate<'js>(
-  ctx: &Ctx<'js>,
-  state: &Rc<NotificationState>,
-  handlers: Value<'js>,
-) -> JsResult<Function<'js>> {
-  if state.lifecycle.is_unloading() {
-    return noop_disposer(ctx);
-  }
-  check_grant(ctx, &state.grants, "unsafe.notificationCenter", None, MATCH_EXACT)?;
+impl NotificationState {
+  fn js_add_delegate<'js>(self: &Rc<Self>, ctx: &Ctx<'js>, handlers: Value<'js>) -> JsResult<Function<'js>> {
+    if self.lifecycle.is_unloading() {
+      return noop_disposer(ctx);
+    }
+    self.grants.check_grant(ctx, "unsafe.notificationCenter", None, MATCH_EXACT)?;
 
-  let Some(handlers) = handlers.as_object() else {
-    return PluginErrorCode::InvalidArgument
-      .throw(ctx, "addNotificationCenterDelegate: expected an object of handlers");
-  };
-  let mut entries: Vec<(String, Function<'js>)> = Vec::new();
-  for key in handlers.keys::<String>() {
-    let name = key?;
-    let value: Value = handlers.get(name.as_str())?;
-    let Some(callback) = value.as_function() else {
-      return {
-        let message: &str = &format!("addNotificationCenterDelegate: '{name}' is not a function");
-        PluginErrorCode::InvalidArgument.throw(ctx, message)
+    let Some(handlers) = handlers.as_object() else {
+      return PluginErrorCode::InvalidArgument
+        .throw(ctx, "addNotificationCenterDelegate: expected an object of handlers");
+    };
+    let mut entries: Vec<(String, Function<'js>)> = Vec::new();
+    for key in handlers.keys::<String>() {
+      let name = key?;
+      let value: Value = handlers.get(name.as_str())?;
+      let Some(callback) = value.as_function() else {
+        return {
+          let message: &str = &format!("addNotificationCenterDelegate: '{name}' is not a function");
+          PluginErrorCode::InvalidArgument.throw(ctx, message)
+        };
       };
-    };
-    entries.push((name, callback.clone()));
-  }
-  if entries.is_empty() {
-    return PluginErrorCode::InvalidArgument.throw(ctx, "addNotificationCenterDelegate: no handlers");
-  }
+      entries.push((name, callback.clone()));
+    }
+    if entries.is_empty() {
+      return PluginErrorCode::InvalidArgument.throw(ctx, "addNotificationCenterDelegate: no handlers");
+    }
 
-  let names: Vec<String> = entries.iter().map(|(name, _)| name.clone()).collect();
-  let token = state.delegates.alloc();
-  if let Some(err) = state.host.notification_register(token, &names) {
-    let value = host_error_to_js(ctx, &err)?;
-    return Err(ctx.throw(value));
-  }
-  let delegate = Rc::new(Delegate {
-    handlers: RefCell::new(
-      entries.into_iter().map(|(name, callback)| (name, Persistent::save(ctx, callback))).collect(),
-    ),
-  });
-  state.delegates.insert(token, None, delegate);
+    let names: Vec<String> = entries.iter().map(|(name, _)| name.clone()).collect();
+    let token = self.delegates.alloc();
+    if let Some(err) = self.host.notification_register(token, &names) {
+      let value = host_error_to_js(ctx, &err)?;
+      return Err(ctx.throw(value));
+    }
+    let delegate = Rc::new(Delegate {
+      handlers: RefCell::new(
+        entries.into_iter().map(|(name, callback)| (name, Persistent::save(ctx, callback))).collect(),
+      ),
+    });
+    self.delegates.insert(token, None, delegate);
 
-  let state = state.clone();
-  make_disposer(ctx, move |ctx| {
-    let Some(delegate) = state.delegates.remove(token) else {
-      return;
-    };
-    delegate.release(ctx);
-    state.host.notification_unregister(token);
-  })
+    let state = self.clone();
+    make_disposer(ctx, move |ctx| {
+      let Some(delegate) = state.delegates.remove(token) else {
+        return;
+      };
+      delegate.release(ctx);
+      state.host.notification_unregister(token);
+    })
+  }
 }
 
 impl NotificationState {

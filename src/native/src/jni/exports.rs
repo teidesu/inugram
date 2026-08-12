@@ -10,7 +10,7 @@ use std::sync::Arc;
 use super::bridge::JniBridge;
 use super::env::{in_env, jstring_to_string, read_header, read_string_array};
 use super::log::{install_console, make_log};
-use super::{get_engine, insert_engine, pump, remove_engine, Engine};
+use super::{get_engine, insert_engine, remove_engine, Engine};
 use crate::api::canvas::{self, install_canvas, CanvasHost};
 use crate::api::error::{dispose_rejection_tracker, format_exception, install_plugin_error, install_rejection_tracker};
 use crate::api::globals::{install_globals, RandomHost};
@@ -283,7 +283,7 @@ pub extern "system" fn Java_desu_inugram_helpers_plugins_QuickJs_nativeCreate(
     })() else {
       return 0;
     };
-    pump(&engine);
+    engine.pump();
     insert_engine(engine)
   })
 }
@@ -1212,7 +1212,7 @@ pub extern "system" fn Java_desu_inugram_helpers_plugins_QuickJs_nativeEvaluate(
       }
     });
 
-    pump(&engine);
+    engine.pump();
 
     match result {
       Ok(s) => env.new_string(s).map(|j| j.into_raw()).unwrap_or(std::ptr::null_mut()),

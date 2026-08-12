@@ -6,8 +6,8 @@ use rquickjs::{Ctx, Function, Object, Result as JsResult, Value};
 use crate::api::error::{self, PluginErrorCode};
 use crate::api::telegram::rpc::format_exception;
 use crate::api::telegram::writes::json_string;
-use crate::api::tl::proxy::{self, TlViews, ViewLife};
-use crate::sandbox::grants::{check_grant, GrantHost, MATCH_EXACT};
+use crate::api::tl::proxy::{TlViews, ViewLife};
+use crate::sandbox::grants::{GrantHost, MATCH_EXACT};
 use crate::sandbox::registry::{make_disposer, noop_disposer, CallbackRegistry, Lifecycle, Registry};
 use crate::utils::arguments::array_values;
 
@@ -185,95 +185,97 @@ fn encode_rules(rules: &[Rule]) -> String {
   format!("[{}]", body.join(","))
 }
 
-fn live_rules(state: &DeserializeState) -> usize {
-  state.registrations.values().iter().sum()
-}
+impl DeserializeState {
+  fn live_rules(&self) -> usize {
+    self.registrations.values().iter().sum()
+  }
 
-fn js_intercept_deserialize<'js>(
-  ctx: &Ctx<'js>,
-  state: &Rc<DeserializeState>,
-  rules: Value<'js>,
-  middleware: Option<Value<'js>>,
-) -> JsResult<Function<'js>> {
-  if state.lifecycle.is_unloading() {
-    return noop_disposer(ctx);
-  }
-  if let Some(middleware) = middleware.filter(|value| !value.is_undefined()) {
-    return register_middleware(ctx, state, rules, middleware);
-  }
-  let parsed = read_rules(ctx, rules)?;
-  for rule in &parsed {
-    for name in &rule.types {
-      check_grant(ctx, &state.grants, GRANT, Some(name), MATCH_EXACT)?;
+  fn js_intercept_deserialize<'js>(
+    self: &Rc<Self>,
+    ctx: &Ctx<'js>,
+    rules: Value<'js>,
+    middleware: Option<Value<'js>>,
+  ) -> JsResult<Function<'js>> {
+    if self.lifecycle.is_unloading() {
+      return noop_disposer(ctx);
     }
-  }
-  let wanted = live_rules(state) + parsed.len();
-  if wanted > MAX_RULES {
-    return PluginErrorCode::QuotaExceeded(wanted as i64, MAX_RULES as i64)
-      .throw(ctx, &format!("{GRANT}: at most {MAX_RULES} rules may be live at once"));
-  }
-
-  let json = encode_rules(&parsed);
-  let callback_id = state.registrations.alloc();
-  if let Some(err) = state.host.on_rules_register(callback_id, &json) {
-    return Err(ctx.throw(error::host_error_to_js(ctx, &err)?));
-  }
-  state.registrations.insert(callback_id, None, parsed.len());
-
-  let state = state.clone();
-  make_disposer(ctx, move |_ctx| {
-    if state.registrations.remove(callback_id).is_some() {
-      state.host.on_rules_unregister(callback_id);
+    if let Some(middleware) = middleware.filter(|value| !value.is_undefined()) {
+      return self.register_middleware(ctx, rules, middleware);
     }
-  })
-}
+    let parsed = read_rules(ctx, rules)?;
+    for rule in &parsed {
+      for name in &rule.types {
+        self.grants.check_grant(ctx, GRANT, Some(name), MATCH_EXACT)?;
+      }
+    }
+    let wanted = self.live_rules() + parsed.len();
+    if wanted > MAX_RULES {
+      return PluginErrorCode::QuotaExceeded(wanted as i64, MAX_RULES as i64)
+        .throw(ctx, &format!("{GRANT}: at most {MAX_RULES} rules may be live at once"));
+    }
 
-fn register_middleware<'js>(
-  ctx: &Ctx<'js>,
-  state: &Rc<DeserializeState>,
-  objects: Value<'js>,
-  middleware: Value<'js>,
-) -> JsResult<Function<'js>> {
-  let Some(middleware) = middleware.as_function().cloned() else {
-    return refuse(ctx, "the middleware form takes a function");
-  };
-  let Some(array) = objects.as_array() else {
-    return refuse(ctx, "the middleware form takes an array of constructor names");
-  };
-  let mut types = Vec::new();
-  for item in array_values(ctx, array, "interceptDeserialize")? {
-    let Some(name) = item.as_string() else {
-      return refuse(ctx, "the middleware form's first argument must contain only constructor names");
+    let json = encode_rules(&parsed);
+    let callback_id = self.registrations.alloc();
+    if let Some(err) = self.host.on_rules_register(callback_id, &json) {
+      return Err(ctx.throw(error::host_error_to_js(ctx, &err)?));
+    }
+    self.registrations.insert(callback_id, None, parsed.len());
+
+    let state = self.clone();
+    make_disposer(ctx, move |_ctx| {
+      if state.registrations.remove(callback_id).is_some() {
+        state.host.on_rules_unregister(callback_id);
+      }
+    })
+  }
+
+  fn register_middleware<'js>(
+    self: &Rc<Self>,
+    ctx: &Ctx<'js>,
+    objects: Value<'js>,
+    middleware: Value<'js>,
+  ) -> JsResult<Function<'js>> {
+    let Some(middleware) = middleware.as_function().cloned() else {
+      return refuse(ctx, "the middleware form takes a function");
     };
-    types.push(name.to_string()?);
-  }
-  if types.is_empty() {
-    return refuse(ctx, "the middleware form names no constructor");
-  }
-  for name in &types {
-    check_grant(ctx, &state.grants, GRANT, Some(name), MATCH_EXACT)?;
-  }
-  let wanted = live_rules(state) + types.len();
-  if wanted > MAX_RULES {
-    return PluginErrorCode::QuotaExceeded(wanted as i64, MAX_RULES as i64)
-      .throw(ctx, &format!("{GRANT}: at most {MAX_RULES} rules may be live at once"));
-  }
-
-  let json: Vec<String> = types.iter().map(|t| json_string(t)).collect();
-  let callback_id = state.registrations.alloc();
-  if let Some(err) = state.host.on_middleware_register(callback_id, &format!("[{}]", json.join(","))) {
-    return Err(ctx.throw(error::host_error_to_js(ctx, &err)?));
-  }
-  state.registrations.insert(callback_id, None, types.len());
-  state.middlewares.register(ctx, callback_id, None, middleware);
-
-  let state = state.clone();
-  make_disposer(ctx, move |ctx| {
-    if state.registrations.remove(callback_id).is_some() {
-      state.middlewares.dispose(ctx, callback_id);
-      state.host.on_middleware_unregister(callback_id);
+    let Some(array) = objects.as_array() else {
+      return refuse(ctx, "the middleware form takes an array of constructor names");
+    };
+    let mut types = Vec::new();
+    for item in array_values(ctx, array, "interceptDeserialize")? {
+      let Some(name) = item.as_string() else {
+        return refuse(ctx, "the middleware form's first argument must contain only constructor names");
+      };
+      types.push(name.to_string()?);
     }
-  })
+    if types.is_empty() {
+      return refuse(ctx, "the middleware form names no constructor");
+    }
+    for name in &types {
+      self.grants.check_grant(ctx, GRANT, Some(name), MATCH_EXACT)?;
+    }
+    let wanted = self.live_rules() + types.len();
+    if wanted > MAX_RULES {
+      return PluginErrorCode::QuotaExceeded(wanted as i64, MAX_RULES as i64)
+        .throw(ctx, &format!("{GRANT}: at most {MAX_RULES} rules may be live at once"));
+    }
+
+    let json: Vec<String> = types.iter().map(|t| json_string(t)).collect();
+    let callback_id = self.registrations.alloc();
+    if let Some(err) = self.host.on_middleware_register(callback_id, &format!("[{}]", json.join(","))) {
+      return Err(ctx.throw(error::host_error_to_js(ctx, &err)?));
+    }
+    self.registrations.insert(callback_id, None, types.len());
+    self.middlewares.register(ctx, callback_id, None, middleware);
+
+    let state = self.clone();
+    make_disposer(ctx, move |ctx| {
+      if state.registrations.remove(callback_id).is_some() {
+        state.middlewares.dispose(ctx, callback_id);
+        state.host.on_middleware_unregister(callback_id);
+      }
+    })
+  }
 }
 
 pub fn install_deserialize<'js>(
@@ -299,7 +301,7 @@ pub fn install_deserialize<'js>(
   globals.inu.set(
     "interceptDeserialize",
     Function::new(ctx.clone(), move |ctx: Ctx<'js>, rules: Value<'js>, middleware: Opt<Value<'js>>| {
-      js_intercept_deserialize(&ctx, &state2, rules, middleware.0)
+      state2.js_intercept_deserialize(&ctx, rules, middleware.0)
     })?,
   )?;
   Ok(state)
@@ -312,7 +314,7 @@ impl DeserializeState {
       let Some(f) = state.middlewares.restore(&ctx, callback_id) else {
         return;
       };
-      let value = match proxy::wire_to_js_value(&ctx, &state.tl, object_wire, ViewLife::Dispatch) {
+      let value = match state.tl.wire_to_js_value(&ctx, object_wire, ViewLife::Dispatch) {
         Ok(v) => v,
         Err(e) => {
           let msg = match e {

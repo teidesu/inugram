@@ -93,7 +93,7 @@ pub fn install_timers<'js>(
     globals.set(
       name,
       Function::new(ctx.clone(), move |ctx: Ctx<'js>, callback: Value<'js>, delay: Opt<Coerced<f64>>| {
-        arm_timer(&ctx, &state2, name, callback, delay.0.map(|d| d.0), repeats)
+        state2.arm_timer(&ctx, name, callback, delay.0.map(|d| d.0), repeats)
       })?,
     )?;
   }
@@ -102,7 +102,7 @@ pub fn install_timers<'js>(
     globals.set(
       name,
       Function::new(ctx.clone(), move |ctx: Ctx<'js>, id: Opt<Coerced<f64>>| {
-        clear_timer(&ctx, &state2, id.0.map(|i| i.0));
+        state2.clear_timer(&ctx, id.0.map(|i| i.0));
       })?,
     )?;
   }
@@ -117,86 +117,88 @@ fn clamp_delay(delay: Option<f64>) -> u64 {
   }
 }
 
-fn arm_timer<'js>(
-  ctx: &Ctx<'js>,
-  state: &Rc<TimerState>,
-  what: &str,
-  callback: Value<'js>,
-  delay: Option<f64>,
-  repeats: bool,
-) -> JsResult<Token> {
-  let Some(callback) = callback.into_function() else {
-    return Err(Exception::throw_type(ctx, &format!("{what}: callback must be a function")));
-  };
-  if state.lifecycle.is_unloading() {
-    return Ok(0);
-  }
+impl TimerState {
+  fn arm_timer<'js>(
+    self: &Rc<Self>,
+    ctx: &Ctx<'js>,
+    what: &str,
+    callback: Value<'js>,
+    delay: Option<f64>,
+    repeats: bool,
+  ) -> JsResult<Token> {
+    let Some(callback) = callback.into_function() else {
+      return Err(Exception::throw_type(ctx, &format!("{what}: callback must be a function")));
+    };
+    if self.lifecycle.is_unloading() {
+      return Ok(0);
+    }
 
-  let delay = clamp_delay(delay);
-  let id = state.timers.alloc();
-  state.timers.insert(
-    id,
-    None,
-    Rc::new(Timer {
+    let delay = clamp_delay(delay);
+    let id = self.timers.alloc();
+    self.timers.insert(
       id,
-      callback: RefCell::new(Some(Persistent::save(ctx, callback))),
-      interval_ms: repeats.then(|| delay.max(MIN_INTERVAL_MS)),
-      due: Cell::new(state.host.now_ms().saturating_add(delay)),
-      seq: Cell::new(state.next_seq()),
-    }),
-  );
-  sync_wake(state);
-  Ok(id)
-}
-
-fn clear_timer(ctx: &Ctx<'_>, state: &Rc<TimerState>, id: Option<f64>) {
-  let Some(id) = id else { return };
-  if !(id.is_finite() && id >= 1.0 && id <= Token::MAX as f64) {
-    return;
+      None,
+      Rc::new(Timer {
+        id,
+        callback: RefCell::new(Some(Persistent::save(ctx, callback))),
+        interval_ms: repeats.then(|| delay.max(MIN_INTERVAL_MS)),
+        due: Cell::new(self.host.now_ms().saturating_add(delay)),
+        seq: Cell::new(self.next_seq()),
+      }),
+    );
+    self.sync_wake();
+    Ok(id)
   }
-  if let Some(timer) = state.timers.remove(id as Token) {
-    timer.release(ctx);
-    sync_wake(state);
-  }
-}
 
-fn tick_floor(state: &Rc<TimerState>, now: u64) -> Option<u64> {
-  if state.visible.get() || state.lifecycle.has_blocking_dispatches() {
-    return None;
-  }
-  let hidden_for = now.saturating_sub(state.hidden_since.get());
-  Some(if hidden_for >= BACKGROUND_INTENSIVE_AFTER_MS {
-    BACKGROUND_INTENSIVE_INTERVAL_MS
-  } else {
-    BACKGROUND_MIN_INTERVAL_MS
-  })
-}
-
-fn sync_wake(state: &Rc<TimerState>) {
-  let earliest = state.timers.values().iter().map(|t| t.due.get()).min();
-  match earliest {
-    None => {
-      if state.armed.replace(None).is_some() {
-        state.host.schedule_wake(CANCEL_WAKE);
-      }
+  fn clear_timer(self: &Rc<Self>, ctx: &Ctx<'_>, id: Option<f64>) {
+    let Some(id) = id else { return };
+    if !(id.is_finite() && id >= 1.0 && id <= Token::MAX as f64) {
+      return;
     }
-    Some(due) => {
-      let now = state.host.now_ms();
-      let due = match tick_floor(state, now) {
-        Some(floor) => due.max(state.last_tick.get().saturating_add(floor)),
-        None => due,
-      };
-      if state.armed.get() != Some(due) {
-        state.armed.set(Some(due));
-        state.host.schedule_wake(due.saturating_sub(now) as i64);
-      }
+    if let Some(timer) = self.timers.remove(id as Token) {
+      timer.release(ctx);
+      self.sync_wake();
     }
   }
-}
 
-fn release_all(ctx: &Ctx<'_>, state: &Rc<TimerState>) {
-  for timer in state.timers.remove_matching(|_| true) {
-    timer.release(ctx);
+  fn tick_floor(&self, now: u64) -> Option<u64> {
+    if self.visible.get() || self.lifecycle.has_blocking_dispatches() {
+      return None;
+    }
+    let hidden_for = now.saturating_sub(self.hidden_since.get());
+    Some(if hidden_for >= BACKGROUND_INTENSIVE_AFTER_MS {
+      BACKGROUND_INTENSIVE_INTERVAL_MS
+    } else {
+      BACKGROUND_MIN_INTERVAL_MS
+    })
+  }
+
+  fn sync_wake(&self) {
+    let earliest = self.timers.values().iter().map(|t| t.due.get()).min();
+    match earliest {
+      None => {
+        if self.armed.replace(None).is_some() {
+          self.host.schedule_wake(CANCEL_WAKE);
+        }
+      }
+      Some(due) => {
+        let now = self.host.now_ms();
+        let due = match self.tick_floor(now) {
+          Some(floor) => due.max(self.last_tick.get().saturating_add(floor)),
+          None => due,
+        };
+        if self.armed.get() != Some(due) {
+          self.armed.set(Some(due));
+          self.host.schedule_wake(due.saturating_sub(now) as i64);
+        }
+      }
+    }
+  }
+
+  fn release_all(&self, ctx: &Ctx<'_>) {
+    for timer in self.timers.remove_matching(|_| true) {
+      timer.release(ctx);
+    }
   }
 }
 
@@ -209,7 +211,7 @@ impl TimerState {
     if !visible {
       state.hidden_since.set(state.host.now_ms());
     }
-    sync_wake(state);
+    state.sync_wake();
   }
 
   pub fn run_due(self: &Rc<Self>, rt: &Runtime, context: &rquickjs::Context) {
@@ -217,7 +219,7 @@ impl TimerState {
     state.armed.set(None);
     context.with(|ctx| {
       if state.lifecycle.is_unloading() {
-        release_all(&ctx, state);
+        state.release_all(&ctx);
         return;
       }
       let now = state.host.now_ms();
@@ -252,7 +254,7 @@ impl TimerState {
         }
       }
     });
-    sync_wake(state);
+    state.sync_wake();
     pump_jobs(rt, context, state.log.as_ref());
   }
 
@@ -263,8 +265,8 @@ impl TimerState {
 
   pub fn dispose(self: &Rc<Self>, context: &rquickjs::Context) {
     let state = self;
-    context.with(|ctx| release_all(&ctx, state));
-    sync_wake(state);
+    context.with(|ctx| state.release_all(&ctx));
+    state.sync_wake();
   }
 }
 

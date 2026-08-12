@@ -69,6 +69,29 @@ impl TlViews {
   fn bump(&self) {
     self.epoch.set(self.epoch.get() + 1);
   }
+
+  pub fn wire_to_js_value<'js>(self: &Rc<Self>, ctx: &Ctx<'js>, wire: &str, life: ViewLife) -> JsResult<Value<'js>> {
+    if let Some(built) = crate::api::error::wire_error_to_js(ctx, wire) {
+      return Err(ctx.throw(built?));
+    }
+    let mut chars = wire.chars();
+    let Some(tag) = chars.next() else {
+      return throw_tl(ctx, "tl wire: empty value");
+    };
+    let payload = chars.as_str();
+    if let Some(scalar) = scalar_wire_to_js(ctx, tag, payload) {
+      return scalar;
+    }
+    match tag {
+      'H' => {
+        let (is_vector, read_only, id) =
+          parse_handle(payload).ok_or_else(|| Exception::throw_message(ctx, "tl wire: bad handle"))?;
+        build_proxy(ctx, self.clone(), is_vector, read_only, life, id)?.into_js(ctx)
+      }
+      'J' => json_parse_tl(ctx, payload),
+      other => throw_tl(ctx, &format!("tl wire: unknown tag '{other}'")),
+    }
+  }
 }
 
 #[derive(Clone, Copy, PartialEq, Eq)]
@@ -259,29 +282,6 @@ pub(crate) fn scalar_wire_to_js<'js>(ctx: &Ctx<'js>, tag: char, payload: &str) -
   })
 }
 
-pub fn wire_to_js_value<'js>(ctx: &Ctx<'js>, views: &Rc<TlViews>, wire: &str, life: ViewLife) -> JsResult<Value<'js>> {
-  if let Some(built) = crate::api::error::wire_error_to_js(ctx, wire) {
-    return Err(ctx.throw(built?));
-  }
-  let mut chars = wire.chars();
-  let Some(tag) = chars.next() else {
-    return throw_tl(ctx, "tl wire: empty value");
-  };
-  let payload = chars.as_str();
-  if let Some(scalar) = scalar_wire_to_js(ctx, tag, payload) {
-    return scalar;
-  }
-  match tag {
-    'H' => {
-      let (is_vector, read_only, id) =
-        parse_handle(payload).ok_or_else(|| Exception::throw_message(ctx, "tl wire: bad handle"))?;
-      build_proxy(ctx, views.clone(), is_vector, read_only, life, id)?.into_js(ctx)
-    }
-    'J' => json_parse_tl(ctx, payload),
-    other => throw_tl(ctx, &format!("tl wire: unknown tag '{other}'")),
-  }
-}
-
 pub fn js_value_to_wire<'js>(ctx: &Ctx<'js>, value: Value<'js>) -> JsResult<String> {
   if value.is_null() {
     return Ok("N".to_string());
@@ -324,133 +324,137 @@ fn read_bag<'js>(ctx: &Ctx<'js>, target: &Value<'js>) -> JsResult<Option<Object<
   )
 }
 
-fn bag_read<'js>(state: &ViewState, ctx: &Ctx<'js>, target: &Value<'js>) -> JsResult<Option<Object<'js>>> {
-  if !state.cacheable() {
-    return Ok(None);
+impl ViewState {
+  fn bag_read<'js>(&self, ctx: &Ctx<'js>, target: &Value<'js>) -> JsResult<Option<Object<'js>>> {
+    if !self.cacheable() {
+      return Ok(None);
+    }
+    read_bag(ctx, target)
   }
-  read_bag(ctx, target)
-}
 
-fn bag_write<'js>(state: &ViewState, ctx: &Ctx<'js>, target: &Value<'js>) -> JsResult<Option<Object<'js>>> {
-  if !state.cacheable() {
-    return Ok(None);
+  fn bag_write<'js>(&self, ctx: &Ctx<'js>, target: &Value<'js>) -> JsResult<Option<Object<'js>>> {
+    if !self.cacheable() {
+      return Ok(None);
+    }
+    if let Some(bag) = read_bag(ctx, target)? {
+      return Ok(Some(bag));
+    }
+    let Some(obj) = target.as_object() else {
+      return Ok(None);
+    };
+    let bag = new_section(ctx)?;
+    bag.set(SECTION_PERM, new_section(ctx)?)?;
+    bag.set(SECTION_VAL, new_section(ctx)?)?;
+    bag.set(SECTION_HAS, new_section(ctx)?)?;
+    obj.set(Symbol::new_global(ctx.clone(), CACHE_MARKER_DESCRIPTION)?.as_atom(), bag.clone())?;
+    Ok(Some(bag))
   }
-  if let Some(bag) = read_bag(ctx, target)? {
-    return Ok(Some(bag));
-  }
-  let Some(obj) = target.as_object() else {
-    return Ok(None);
-  };
-  let bag = new_section(ctx)?;
-  bag.set(SECTION_PERM, new_section(ctx)?)?;
-  bag.set(SECTION_VAL, new_section(ctx)?)?;
-  bag.set(SECTION_HAS, new_section(ctx)?)?;
-  obj.set(Symbol::new_global(ctx.clone(), CACHE_MARKER_DESCRIPTION)?.as_atom(), bag.clone())?;
-  Ok(Some(bag))
 }
 
 fn cache_section<'js>(bag: &Object<'js>, name: &str) -> JsResult<Object<'js>> {
   bag.get(name)
 }
 
-fn sync_epoch<'js>(state: &ViewState, ctx: &Ctx<'js>, target: &Value<'js>) -> JsResult<()> {
-  if !state.cacheable() {
-    return Ok(());
-  }
-  let epoch = state.views.epoch();
-  if state.stamp.get() == epoch {
-    return Ok(());
-  }
-  if let Some(bag) = read_bag(ctx, target)? {
-    bag.set(SECTION_VAL, new_section(ctx)?)?;
-    bag.set(SECTION_HAS, new_section(ctx)?)?;
-    bag.remove(KEYS_ENTRY)?;
-  }
-  state.stamp.set(epoch);
-  Ok(())
-}
-
-fn read_field<'js>(state: &ViewState, ctx: &Ctx<'js>, target: &Value<'js>, key: &str) -> JsResult<Value<'js>> {
-  sync_epoch(state, ctx, target)?;
-  let name = if key == "_" { SECTION_PERM } else { SECTION_VAL };
-  if let Some(bag) = bag_read(state, ctx, target)? {
-    let section = cache_section(&bag, name)?;
-    if section.contains_key(key)? {
-      return section.get(key);
+impl ViewState {
+  fn sync_epoch<'js>(&self, ctx: &Ctx<'js>, target: &Value<'js>) -> JsResult<()> {
+    if !self.cacheable() {
+      return Ok(());
     }
-  }
-  let wire = state.host().tl_get(state.handle, key);
-  let value = wire_to_js_value(ctx, &state.views, &wire, state.life)?;
-  if let Some(bag) = bag_write(state, ctx, target)? {
-    cache_section(&bag, name)?.set(key, value.clone())?;
-  }
-  Ok(value)
-}
-
-fn has_field<'js>(state: &ViewState, ctx: &Ctx<'js>, target: &Value<'js>, key: &str) -> JsResult<bool> {
-  sync_epoch(state, ctx, target)?;
-  if let Some(bag) = bag_read(state, ctx, target)? {
-    let section = cache_section(&bag, SECTION_HAS)?;
-    if section.contains_key(key)? {
-      return section.get(key);
+    let epoch = self.views.epoch();
+    if self.stamp.get() == epoch {
+      return Ok(());
     }
-  }
-  let present = match state.host().tl_has(state.handle, key) {
-    1 => true,
-    0 => false,
-    _ => return PluginErrorCode::HandleExpired.throw(ctx, HANDLE_EXPIRED_MESSAGE),
-  };
-  if let Some(bag) = bag_write(state, ctx, target)? {
-    cache_section(&bag, SECTION_HAS)?.set(key, present)?;
-  }
-  Ok(present)
-}
-
-fn write_field<'js>(state: &ViewState, ctx: &Ctx<'js>, target: &Value<'js>, key: &str, wire: &str) -> JsResult<bool> {
-  let result = state.host().tl_set(state.handle, key, wire);
-  state.views.bump();
-  sync_epoch(state, ctx, target)?;
-  match result {
-    None => Ok(true),
-    Some(err) => Err(ctx.throw(crate::api::error::host_error_to_js(ctx, &err)?)),
-  }
-}
-
-fn assign_property<'js>(
-  state: &ViewState,
-  ctx: &Ctx<'js>,
-  target: &Value<'js>,
-  prop: &Value<'js>,
-  value: Value<'js>,
-) -> JsResult<bool> {
-  let key = property_key_string(ctx, prop)?;
-  let wire = js_value_to_wire(ctx, value)?;
-  write_field(state, ctx, target, &key, &wire)
-}
-
-fn read_to_json<'js>(state: &ViewState, ctx: &Ctx<'js>, target: &Value<'js>) -> JsResult<Value<'js>> {
-  if let Some(bag) = bag_read(state, ctx, target)? {
-    let perm = cache_section(&bag, SECTION_PERM)?;
-    if perm.contains_key(TO_JSON_KEY)? {
-      return perm.get(TO_JSON_KEY);
+    if let Some(bag) = read_bag(ctx, target)? {
+      bag.set(SECTION_VAL, new_section(ctx)?)?;
+      bag.set(SECTION_HAS, new_section(ctx)?)?;
+      bag.remove(KEYS_ENTRY)?;
     }
+    self.stamp.set(epoch);
+    Ok(())
   }
-  let host = state.views.host.clone();
-  let handle = state.handle;
-  let value = Function::new(ctx.clone(), move |ctx: Ctx<'js>| -> JsResult<Value<'js>> {
-    match host.tl_copy(handle) {
-      Some(json) => json_parse_tl(&ctx, &json),
-      None => {
-        let ctx: &Ctx<'js> = &ctx;
-        PluginErrorCode::HandleExpired.throw(ctx, HANDLE_EXPIRED_MESSAGE)
+
+  fn read_field<'js>(&self, ctx: &Ctx<'js>, target: &Value<'js>, key: &str) -> JsResult<Value<'js>> {
+    self.sync_epoch(ctx, target)?;
+    let name = if key == "_" { SECTION_PERM } else { SECTION_VAL };
+    if let Some(bag) = self.bag_read(ctx, target)? {
+      let section = cache_section(&bag, name)?;
+      if section.contains_key(key)? {
+        return section.get(key);
       }
     }
-  })?
-  .into_js(ctx)?;
-  if let Some(bag) = bag_write(state, ctx, target)? {
-    cache_section(&bag, SECTION_PERM)?.set(TO_JSON_KEY, value.clone())?;
+    let wire = self.host().tl_get(self.handle, key);
+    let value = self.views.wire_to_js_value(ctx, &wire, self.life)?;
+    if let Some(bag) = self.bag_write(ctx, target)? {
+      cache_section(&bag, name)?.set(key, value.clone())?;
+    }
+    Ok(value)
   }
-  Ok(value)
+
+  fn has_field<'js>(&self, ctx: &Ctx<'js>, target: &Value<'js>, key: &str) -> JsResult<bool> {
+    self.sync_epoch(ctx, target)?;
+    if let Some(bag) = self.bag_read(ctx, target)? {
+      let section = cache_section(&bag, SECTION_HAS)?;
+      if section.contains_key(key)? {
+        return section.get(key);
+      }
+    }
+    let present = match self.host().tl_has(self.handle, key) {
+      1 => true,
+      0 => false,
+      _ => return PluginErrorCode::HandleExpired.throw(ctx, HANDLE_EXPIRED_MESSAGE),
+    };
+    if let Some(bag) = self.bag_write(ctx, target)? {
+      cache_section(&bag, SECTION_HAS)?.set(key, present)?;
+    }
+    Ok(present)
+  }
+
+  fn write_field<'js>(&self, ctx: &Ctx<'js>, target: &Value<'js>, key: &str, wire: &str) -> JsResult<bool> {
+    let result = self.host().tl_set(self.handle, key, wire);
+    self.views.bump();
+    self.sync_epoch(ctx, target)?;
+    match result {
+      None => Ok(true),
+      Some(err) => Err(ctx.throw(crate::api::error::host_error_to_js(ctx, &err)?)),
+    }
+  }
+
+  fn assign_property<'js>(
+    &self,
+    ctx: &Ctx<'js>,
+    target: &Value<'js>,
+    prop: &Value<'js>,
+    value: Value<'js>,
+  ) -> JsResult<bool> {
+    let key = property_key_string(ctx, prop)?;
+    let wire = js_value_to_wire(ctx, value)?;
+    self.write_field(ctx, target, &key, &wire)
+  }
+
+  fn read_to_json<'js>(&self, ctx: &Ctx<'js>, target: &Value<'js>) -> JsResult<Value<'js>> {
+    if let Some(bag) = self.bag_read(ctx, target)? {
+      let perm = cache_section(&bag, SECTION_PERM)?;
+      if perm.contains_key(TO_JSON_KEY)? {
+        return perm.get(TO_JSON_KEY);
+      }
+    }
+    let host = self.views.host.clone();
+    let handle = self.handle;
+    let value = Function::new(ctx.clone(), move |ctx: Ctx<'js>| -> JsResult<Value<'js>> {
+      match host.tl_copy(handle) {
+        Some(json) => json_parse_tl(&ctx, &json),
+        None => {
+          let ctx: &Ctx<'js> = &ctx;
+          PluginErrorCode::HandleExpired.throw(ctx, HANDLE_EXPIRED_MESSAGE)
+        }
+      }
+    })?
+    .into_js(ctx)?;
+    if let Some(bag) = self.bag_write(ctx, target)? {
+      cache_section(&bag, SECTION_PERM)?.set(TO_JSON_KEY, value.clone())?;
+    }
+    Ok(value)
+  }
 }
 
 fn keys_to_array<'js>(ctx: &Ctx<'js>, keys: &str) -> JsResult<Array<'js>> {
@@ -497,7 +501,7 @@ fn build_proxy<'js>(
               return encode_handle(state.is_vector, state.read_only, state.handle).into_js(&ctx);
             }
             if state.is_vector && sym == &Symbol::iterator(ctx.clone()) {
-              return make_vector_iterator(&ctx, &state)?.into_js(&ctx);
+              return state.make_vector_iterator(&ctx)?.into_js(&ctx);
             }
             return Ok(Value::new_undefined(ctx.clone()));
           }
@@ -505,11 +509,11 @@ fn build_proxy<'js>(
           if key == THEN_KEY {
             return Ok(Value::new_undefined(ctx.clone()));
           }
-          sync_epoch(&state, &ctx, &target)?;
+          state.sync_epoch(&ctx, &target)?;
           if key == TO_JSON_KEY {
-            return read_to_json(&state, &ctx, &target);
+            return state.read_to_json(&ctx, &target);
           }
-          read_field(&state, &ctx, &target, &key)
+          state.read_field(&ctx, &target, &key)
         },
       )?,
     )?;
@@ -536,7 +540,7 @@ fn build_proxy<'js>(
               PluginErrorCode::Forbidden.throw(ctx, READ_ONLY_MESSAGE)
             };
           }
-          assign_property(&state, &ctx, &target, &prop, value)
+          state.assign_property(&ctx, &target, &prop, value)
         },
       )?,
     )?;
@@ -559,7 +563,7 @@ fn build_proxy<'js>(
             return throw_tl(&ctx, "tl proxy: cannot define a symbol-keyed property");
           }
           let value = descriptor_value(&ctx, &descriptor)?;
-          assign_property(&state, &ctx, &target, &prop, value)
+          state.assign_property(&ctx, &target, &prop, value)
         },
       )?,
     )?;
@@ -585,7 +589,7 @@ fn build_proxy<'js>(
         if key == TO_JSON_KEY {
           return Ok(true);
         }
-        has_field(&state, &ctx, &target, &key)
+        state.has_field(&ctx, &target, &key)
       })?,
     )?;
   }
@@ -605,7 +609,7 @@ fn build_proxy<'js>(
           return throw_tl(&ctx, "tl proxy: cannot delete a symbol-keyed property");
         }
         let key = property_key_string(&ctx, &prop)?;
-        write_field(&state, &ctx, &target, &key, "N")
+        state.write_field(&ctx, &target, &key, "N")
       })?,
     )?;
   }
@@ -624,8 +628,8 @@ fn build_proxy<'js>(
           arr.set(len, "length")?;
           return Ok(arr);
         }
-        sync_epoch(&state, &ctx, &target)?;
-        if let Some(bag) = bag_read(&state, &ctx, &target)? {
+        state.sync_epoch(&ctx, &target)?;
+        if let Some(bag) = state.bag_read(&ctx, &target)? {
           if bag.contains_key(KEYS_ENTRY)? {
             return keys_to_array(&ctx, &bag.get::<_, String>(KEYS_ENTRY)?);
           }
@@ -636,7 +640,7 @@ fn build_proxy<'js>(
             PluginErrorCode::HandleExpired.throw(ctx, HANDLE_EXPIRED_MESSAGE)
           };
         };
-        if let Some(bag) = bag_write(&state, &ctx, &target)? {
+        if let Some(bag) = state.bag_write(&ctx, &target)? {
           bag.set(KEYS_ENTRY, keys.as_str())?;
         }
         keys_to_array(&ctx, &keys)
@@ -652,10 +656,10 @@ fn build_proxy<'js>(
           return Ok(Value::new_undefined(ctx.clone()));
         }
         let key = property_key_string(&ctx, &prop)?;
-        if !has_field(&state, &ctx, &target, &key)? {
+        if !state.has_field(&ctx, &target, &key)? {
           return Ok(Value::new_undefined(ctx.clone()));
         }
-        let value = read_field(&state, &ctx, &target, &key)?;
+        let value = state.read_field(&ctx, &target, &key)?;
         let descriptor = Object::new(ctx.clone())?;
         descriptor.set("value", value)?;
         descriptor.set("writable", !state.read_only)?;
@@ -701,30 +705,32 @@ fn vector_length<'js>(ctx: &Ctx<'js>, host: &dyn TlHost, handle: i64) -> JsResul
   }
 }
 
-fn make_vector_iterator<'js>(ctx: &Ctx<'js>, state: &Rc<ViewState>) -> JsResult<Function<'js>> {
-  let state = state.clone();
-  Function::new(ctx.clone(), move |ctx: Ctx<'js>| -> JsResult<Object<'js>> {
-    let index = Cell::new(0i64);
-    let state = state.clone();
-    let iterator = Object::new(ctx.clone())?;
-    let next_fn = Function::new(ctx.clone(), move |ctx: Ctx<'js>| -> JsResult<Object<'js>> {
-      let result = Object::new(ctx.clone())?;
-      let len = vector_length(&ctx, state.host(), state.handle)?;
-      let i = index.get();
-      if i >= len {
-        result.set("done", true)?;
-        result.set("value", Value::new_undefined(ctx.clone()))?;
-      } else {
-        index.set(i + 1);
-        let wire = state.host().tl_get(state.handle, &i.to_string());
-        result.set("done", false)?;
-        result.set("value", wire_to_js_value(&ctx, &state.views, &wire, state.life)?)?;
-      }
-      Ok(result)
-    })?;
-    iterator.set("next", next_fn)?;
-    Ok(iterator)
-  })
+impl ViewState {
+  fn make_vector_iterator<'js>(self: &Rc<Self>, ctx: &Ctx<'js>) -> JsResult<Function<'js>> {
+    let state = self.clone();
+    Function::new(ctx.clone(), move |ctx: Ctx<'js>| -> JsResult<Object<'js>> {
+      let index = Cell::new(0i64);
+      let state = state.clone();
+      let iterator = Object::new(ctx.clone())?;
+      let next_fn = Function::new(ctx.clone(), move |ctx: Ctx<'js>| -> JsResult<Object<'js>> {
+        let result = Object::new(ctx.clone())?;
+        let len = vector_length(&ctx, state.host(), state.handle)?;
+        let i = index.get();
+        if i >= len {
+          result.set("done", true)?;
+          result.set("value", Value::new_undefined(ctx.clone()))?;
+        } else {
+          index.set(i + 1);
+          let wire = state.host().tl_get(state.handle, &i.to_string());
+          result.set("done", false)?;
+          result.set("value", state.views.wire_to_js_value(&ctx, &wire, state.life)?)?;
+        }
+        Ok(result)
+      })?;
+      iterator.set("next", next_fn)?;
+      Ok(iterator)
+    })
+  }
 }
 
 #[cfg(test)]

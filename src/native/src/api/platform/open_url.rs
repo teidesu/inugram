@@ -4,7 +4,7 @@ use rquickjs::{Ctx, Function, Object, Result as JsResult};
 
 use crate::{
   api::error::PluginErrorCode,
-  sandbox::grants::{check_grant, GrantHost, MATCH_EXACT},
+  sandbox::grants::{GrantHost, MATCH_EXACT},
 };
 
 pub trait OpenUrlHost {
@@ -24,7 +24,7 @@ pub fn install_open_url<'js>(
   globals.inu.set(
     "openUrl",
     Function::new(ctx.clone(), move |ctx: Ctx<'js>, url: String| -> JsResult<()> {
-      check_grant(&ctx, &grants, "openUrl", None, MATCH_EXACT)?;
+      grants.check_grant(&ctx, "openUrl", None, MATCH_EXACT)?;
       if let Err(why) = screen_external_url(&url) {
         return PluginErrorCode::InvalidArgument.throw(&ctx, &why);
       }

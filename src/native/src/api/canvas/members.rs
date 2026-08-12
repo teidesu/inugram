@@ -88,7 +88,7 @@ pub(super) fn install_image_members<'js>(ctx: &Ctx<'js>) -> JsResult<()> {
   Ok(())
 }
 
-pub(super) fn install_context_members<'js>(ctx: &Ctx<'js>, _state: &Rc<CanvasState>) -> JsResult<()> {
+pub(super) fn install_context_members<'js>(ctx: &Ctx<'js>) -> JsResult<()> {
   let proto = Class::<Context2d>::prototype(ctx)?
     .ok_or_else(|| Exception::throw_message(ctx, "CanvasRenderingContext2D: the class has no prototype"))?;
 
@@ -709,7 +709,7 @@ pub(super) fn install_path_members<'js>(ctx: &Ctx<'js>, proto: &Object<'js>) -> 
           let rule = fill_rule_of(&ctx, rule)?;
           let this = this.0.borrow();
           let path = this.path.borrow().clone();
-          draw_path(&ctx, &this, command, kind, rule, &path)
+          this.draw_path(&ctx, command, kind, rule, &path)
         },
       )?,
     )?;
@@ -720,7 +720,7 @@ pub(super) fn install_path_members<'js>(ctx: &Ctx<'js>, proto: &Object<'js>) -> 
     Function::new(ctx.clone(), |ctx: Ctx<'js>, this: This<Class<'js, Context2d>>| -> JsResult<()> {
       let this = this.0.borrow();
       let path = this.path.borrow().clone();
-      draw_path(&ctx, &this, CMD_STROKE, Some(PaintKind::Stroke), 0, &path)
+      this.draw_path(&ctx, CMD_STROKE, Some(PaintKind::Stroke), 0, &path)
     })?,
   )?;
   Ok(())
@@ -794,7 +794,7 @@ pub(super) fn install_rect_members<'js>(ctx: &Ctx<'js>, proto: &Object<'js>) -> 
           let this = this.0.borrow();
           let m = this.state.borrow().matrix;
           let path = rect_path(&m, x, y, w, h);
-          draw_path(&ctx, &this, command, kind, 0, &path)
+          this.draw_path(&ctx, command, kind, 0, &path)
         },
       )?,
     )?;
@@ -858,7 +858,7 @@ pub(super) fn install_text_members<'js>(ctx: &Ctx<'js>, proto: &Object<'js>) -> 
             return Ok(());
           }
           let max_width = max_width.0.map(|v| v.0).filter(|v| v.is_finite() && *v > 0.0);
-          draw_text(&ctx, &this.0.borrow(), kind, &text.0, x, y, max_width)
+          this.0.borrow().draw_text(&ctx, kind, &text.0, x, y, max_width)
         },
       )?,
     )?;
@@ -875,7 +875,7 @@ pub(super) fn install_text_members<'js>(ctx: &Ctx<'js>, proto: &Object<'js>) -> 
         this.live(&ctx)?;
         let (font, align) = {
           let state = this.state.borrow();
-          (font_wire(&state.font), state.text_align)
+          (state.font.to_wire(), state.text_align)
         };
         let arg = format!("{font}{FIELD}{align}{FIELD}{text}");
         let answer = this.surface.state.host.canvas(OP_MEASURE, 0, &arg, None);
@@ -931,48 +931,50 @@ pub(super) fn install_text_members<'js>(ctx: &Ctx<'js>, proto: &Object<'js>) -> 
   Ok(())
 }
 
-fn draw_text(
-  ctx: &Ctx<'_>,
-  this: &Context2d,
-  kind: PaintKind,
-  text: &str,
-  x: f64,
-  y: f64,
-  max_width: Option<f64>,
-) -> JsResult<()> {
-  this.live(ctx)?;
-  let state = this.state.borrow();
-  let Some(inverse) = state.matrix.invert() else {
-    return Ok(());
-  };
-  let blend_modes = this.surface.state.blend_modes.get();
-  let style = if kind == PaintKind::Fill { &state.fill } else { &state.stroke };
-  let mut scratch = Encoder::default();
-  encode_paint(ctx, &mut scratch, &state, style, &inverse, blend_modes)?;
-  if kind == PaintKind::Stroke {
-    encode_stroke(&mut scratch, &state);
+impl Context2d {
+  fn draw_text(
+    &self,
+    ctx: &Ctx<'_>,
+    kind: PaintKind,
+    text: &str,
+    x: f64,
+    y: f64,
+    max_width: Option<f64>,
+  ) -> JsResult<()> {
+    self.live(ctx)?;
+    let state = self.state.borrow();
+    let Some(inverse) = state.matrix.invert() else {
+      return Ok(());
+    };
+    let blend_modes = self.surface.state.blend_modes.get();
+    let style = if kind == PaintKind::Fill { &state.fill } else { &state.stroke };
+    let mut scratch = Encoder::default();
+    scratch.encode_paint(ctx, &state, style, &inverse, blend_modes)?;
+    if kind == PaintKind::Stroke {
+      scratch.encode_stroke(&state);
+    }
+    let matrix = state.matrix;
+    let font = state.font.to_wire();
+    let (align, baseline) = (state.text_align, state.text_baseline);
+    drop(state);
+    let text = text.to_string();
+    self.surface.record(ctx, move |out| {
+      let mut scratch = scratch;
+      out.u8(CMD_TEXT);
+      out.matrix(&matrix);
+      out.u8(u8::from(kind == PaintKind::Stroke));
+      out.paint(&mut scratch);
+      let font = out.string(&font);
+      let text = out.string(&text);
+      out.u32(font);
+      out.u8(align);
+      out.u8(baseline);
+      out.f(x);
+      out.f(y);
+      out.f(max_width.unwrap_or(-1.0));
+      out.u32(text);
+    })
   }
-  let matrix = state.matrix;
-  let font = font_wire(&state.font);
-  let (align, baseline) = (state.text_align, state.text_baseline);
-  drop(state);
-  let text = text.to_string();
-  this.surface.record(ctx, move |out| {
-    let mut scratch = scratch;
-    out.u8(CMD_TEXT);
-    out.matrix(&matrix);
-    out.u8(u8::from(kind == PaintKind::Stroke));
-    out.paint(&mut scratch);
-    let font = out.string(&font);
-    let text = out.string(&text);
-    out.u32(font);
-    out.u8(align);
-    out.u8(baseline);
-    out.f(x);
-    out.f(y);
-    out.f(max_width.unwrap_or(-1.0));
-    out.u32(text);
-  })
 }
 
 pub(super) fn install_image_draw_members<'js>(ctx: &Ctx<'js>, proto: &Object<'js>) -> JsResult<()> {
@@ -1014,7 +1016,7 @@ pub(super) fn install_image_draw_members<'js>(ctx: &Ctx<'js>, proto: &Object<'js
         };
         let blend_modes = this.surface.state.blend_modes.get();
         let mut scratch = Encoder::default();
-        encode_paint(&ctx, &mut scratch, &state, &Style::Color(0), &inverse, blend_modes)?;
+        scratch.encode_paint(&ctx, &state, &Style::Color(0), &inverse, blend_modes)?;
         let matrix = state.matrix;
         drop(state);
         let (kind, id) = (source.kind(), source.id());
