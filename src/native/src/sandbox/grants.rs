@@ -1,4 +1,4 @@
-#[cfg(test)]
+use std::collections::{HashMap, HashSet};
 use std::rc::Rc;
 
 use rquickjs::{Ctx, Result as JsResult};
@@ -32,29 +32,40 @@ fn grant_token(name: &str, target: Option<&str>) -> String {
   }
 }
 
-#[cfg(test)]
-pub(crate) struct TestGrantHost {
-  allowed: std::collections::HashSet<(String, Option<String>)>,
+pub(crate) struct CachedGrantHost {
+  unscoped: HashSet<String>,
+  scoped: HashMap<String, Vec<String>>,
 }
 
-#[cfg(test)]
-impl TestGrantHost {
-  pub(crate) fn new(tokens: &[&str]) -> Rc<Self> {
-    let mut allowed = std::collections::HashSet::new();
+impl CachedGrantHost {
+  pub(crate) fn new<T: AsRef<str>>(tokens: impl IntoIterator<Item = T>) -> Rc<Self> {
+    let mut unscoped = HashSet::new();
+    let mut scoped: HashMap<String, Vec<String>> = HashMap::new();
     for token in tokens {
-      match token.split_once('(') {
-        Some((name, rest)) => {
-          let scopes = rest.trim_end_matches(')');
-          for scope in scopes.split(',').filter(|s| !s.is_empty()) {
-            allowed.insert((name.to_string(), Some(scope.to_string())));
+      let token = token.as_ref().trim();
+      if token.is_empty() {
+        continue;
+      }
+      match token.find('(') {
+        Some(open) if token.ends_with(')') => {
+          let name = token[..open].trim();
+          let scopes = token[open + 1..token.len() - 1].split(',').map(str::trim).filter(|scope| !scope.is_empty());
+          if name.is_empty() {
+            continue;
           }
+          let scopes = scopes.collect::<Vec<_>>();
+          if scopes.is_empty() {
+            continue;
+          }
+          scoped.entry(name.to_string()).or_default().extend(scopes.into_iter().map(str::to_string));
         }
         None => {
-          allowed.insert((token.to_string(), None));
+          unscoped.insert(token.to_string());
         }
+        _ => continue,
       }
     }
-    Rc::new(TestGrantHost { allowed })
+    Rc::new(CachedGrantHost { unscoped, scoped })
   }
 
   pub(crate) fn as_host(self: &Rc<Self>) -> Rc<dyn GrantHost> {
@@ -62,23 +73,21 @@ impl TestGrantHost {
   }
 }
 
-#[cfg(test)]
-impl GrantHost for TestGrantHost {
+impl GrantHost for CachedGrantHost {
   fn is_granted(&self, name: &str, target: Option<&str>, mode: i32) -> bool {
-    if self.allowed.contains(&(name.to_string(), None)) {
+    if self.unscoped.contains(name) {
       return true;
     }
     let Some(target) = target else {
-      return self.allowed.iter().any(|(granted, _)| granted == name);
+      return self.scoped.contains_key(name);
     };
-    self.allowed.iter().any(|(granted, scope)| {
-      let Some(scope) = scope else { return false };
-      granted == name && scope_matches(scope, target, mode)
-    })
+    self
+      .scoped
+      .get(name)
+      .is_some_and(|scopes| scopes.iter().any(|scope| scope_matches(scope, target, mode)))
   }
 }
 
-#[cfg(test)]
 fn scope_matches(scope: &str, target: &str, mode: i32) -> bool {
   let scope_lower = scope.to_ascii_lowercase();
   let target_lower = target.to_ascii_lowercase();
@@ -89,9 +98,13 @@ fn scope_matches(scope: &str, target: &str, mode: i32) -> bool {
       Some(prefix) => target.starts_with(&format!("{prefix}.")),
       None => scope == target,
     },
-    _ => scope == target,
+    MATCH_EXACT => scope == target,
+    _ => false,
   }
 }
+
+#[cfg(test)]
+pub(crate) type TestGrantHost = CachedGrantHost;
 
 #[cfg(test)]
 #[path = "grants_tests.rs"]

@@ -39,7 +39,7 @@ use crate::api::ui::icons::{install_icons, IconHost};
 use crate::api::ui::pages::{install_ui, UiHost};
 use crate::api::ui::screens::{install_screens, ScreenHost};
 use crate::api::Globals;
-use crate::sandbox::grants::GrantHost;
+use crate::sandbox::grants::{CachedGrantHost, GrantHost};
 use crate::sandbox::limits::{apply_heap_limit, arm_entry_deadline, install_interrupt_handler, ExternalMemory};
 use crate::sandbox::registry::Lifecycle;
 
@@ -56,6 +56,7 @@ pub extern "system" fn Java_desu_inugram_helpers_plugins_QuickJs_nativeCreate(
   android_dirs: JString,
   install_jvm: jboolean,
   install_xposed: jboolean,
+  grant_tokens: JObjectArray<JString>,
 ) -> jlong {
   in_env(&mut env, 0, |env| {
     let Some(bridge) = JniBridge::new(env, &listener) else {
@@ -86,6 +87,7 @@ pub extern "system" fn Java_desu_inugram_helpers_plugins_QuickJs_nativeCreate(
     let install_fs_enabled = install_fs;
     let install_jvm_enabled = install_jvm;
     let install_xposed_enabled = install_xposed;
+    let grants: Rc<dyn GrantHost> = CachedGrantHost::new(read_string_array(env, &grant_tokens)).as_host();
     let Some(engine) = (|| -> Option<Engine> {
       let _deadline = arm_entry_deadline();
       let lifecycle = Lifecycle::new();
@@ -93,17 +95,16 @@ pub extern "system" fn Java_desu_inugram_helpers_plugins_QuickJs_nativeCreate(
       let views = TlViews::new(bridge.clone());
 
       let jvm = if install_jvm_enabled {
-        Some(install_engine_jvm(&ctx, &bridge, &lifecycle, log.as_ref())?)
+        Some(install_engine_jvm(&ctx, &bridge, grants.clone(), &lifecycle, log.as_ref())?)
       } else {
         None
       };
       let xposed = if install_xposed_enabled {
-        Some(install_engine_xposed(&ctx, &bridge, &lifecycle, log.as_ref(), jvm.clone())?)
+        Some(install_engine_xposed(&ctx, &bridge, grants.clone(), &lifecycle, log.as_ref(), jvm.clone())?)
       } else {
         None
       };
 
-      let grants: Rc<dyn GrantHost> = bridge.clone();
       let lifecycle_state = ctx
         .with(|ctx| {
           let globals = Globals::get(&ctx)?;
@@ -125,7 +126,7 @@ pub extern "system" fn Java_desu_inugram_helpers_plugins_QuickJs_nativeCreate(
       let account = ctx
         .with(|ctx| {
           let globals = Globals::get(&ctx)?;
-          install_account(&ctx, account_host, grants, lifecycle.clone(), log.clone(), &globals)
+          install_account(&ctx, account_host, grants.clone(), lifecycle.clone(), log.clone(), &globals)
         })
         .map_err(|e| log(&format!("inu.account failed to install: {e:?}")))
         .ok()?;
@@ -146,7 +147,6 @@ pub extern "system" fn Java_desu_inugram_helpers_plugins_QuickJs_nativeCreate(
         .map_err(|e| log(&format!("inu.icons failed to install: {e:?}")))
         .ok()?;
       let action_host: Rc<dyn ActionHost> = bridge.clone();
-      let action_grants: Rc<dyn GrantHost> = bridge.clone();
       let actions = ctx
         .with(|ctx| {
           let globals = Globals::get(&ctx)?;
@@ -155,7 +155,7 @@ pub extern "system" fn Java_desu_inugram_helpers_plugins_QuickJs_nativeCreate(
             action_host,
             lifecycle.clone(),
             Some(account.clone()),
-            action_grants,
+            grants.clone(),
             jvm.clone(),
             log.clone(),
             &globals,
@@ -164,14 +164,13 @@ pub extern "system" fn Java_desu_inugram_helpers_plugins_QuickJs_nativeCreate(
         .map_err(|e| log(&format!("inu.register*Action failed to install: {e:?}")))
         .ok()?;
       let screen_host: Rc<dyn ScreenHost> = bridge.clone();
-      let screen_grants: Rc<dyn GrantHost> = bridge.clone();
       let screens = ctx
         .with(|ctx| {
           let globals = Globals::get(&ctx)?;
           install_screens(
             &ctx,
             screen_host,
-            screen_grants,
+            grants.clone(),
             Some(account.clone()),
             lifecycle.clone(),
             log.clone(),
@@ -181,11 +180,10 @@ pub extern "system" fn Java_desu_inugram_helpers_plugins_QuickJs_nativeCreate(
         .map_err(|e| log(&format!("inu.ui navigation failed to install: {e:?}")))
         .ok()?;
       let notification_host: Rc<dyn NotificationHost> = bridge.clone();
-      let notification_grants: Rc<dyn GrantHost> = bridge.clone();
       let notifications = ctx
         .with(|ctx| {
           let globals = Globals::get(&ctx)?;
-          install_notifications(&ctx, notification_host, notification_grants, lifecycle.clone(), log.clone(), &globals)
+          install_notifications(&ctx, notification_host, grants.clone(), lifecycle.clone(), log.clone(), &globals)
         })
         .map_err(|e| log(&format!("inu.android.addNotificationCenterDelegate failed to install: {e:?}")))
         .ok()?;
@@ -205,7 +203,6 @@ pub extern "system" fn Java_desu_inugram_helpers_plugins_QuickJs_nativeCreate(
         .ok()?;
       let reads_host: Rc<dyn ReadsHost> = bridge.clone();
       let writes_host: Rc<dyn WritesHost> = bridge.clone();
-      let grants: Rc<dyn GrantHost> = bridge.clone();
       let (shared, reads, writes) = ctx
         .with(|ctx| -> rquickjs::Result<_> {
           let globals = Globals::get(&ctx)?;
@@ -217,7 +214,7 @@ pub extern "system" fn Java_desu_inugram_helpers_plugins_QuickJs_nativeCreate(
             install_reads(&ctx, reads_host, grants.clone(), views.clone(), &shared, &account, log.clone(), &globals)?;
           let deps = WritesDeps {
             host: writes_host,
-            grants,
+            grants: grants.clone(),
             views: views.clone(),
             blobs: blobs.clone(),
             stage_dir: spill_dir.clone(),
@@ -234,28 +231,28 @@ pub extern "system" fn Java_desu_inugram_helpers_plugins_QuickJs_nativeCreate(
         .map_err(|e| log(&format!("timers failed to install: {e:?}")))
         .ok()?;
       let fetch_host: Rc<dyn FetchHost> = bridge.clone();
-      let fetch_grants: Rc<dyn GrantHost> = bridge.clone();
       let fetch = ctx
         .with(|ctx| {
           let globals = Globals::get(&ctx)?;
-          install_fetch(&ctx, fetch_host, fetch_grants, blobs.clone(), log.clone(), &globals)
+          install_fetch(&ctx, fetch_host, grants.clone(), blobs.clone(), log.clone(), &globals)
         })
         .map_err(|e| log(&format!("fetch failed to install: {e:?}")))
         .ok()?;
       if install_fs_enabled {
         install_engine_fs(
           &ctx,
-          &bridge,
           &blobs,
           &canvas,
           &fs_dir,
           fs_quota_bytes,
           fs_unscoped,
           &android_dirs,
+          grants.clone(),
           log.as_ref(),
         )?;
       }
-      let (deserialize, rpc) = install_engine_rpc(&ctx, &bridge, &views, &lifecycle, &account, &shared, log.as_ref())?;
+      let (deserialize, rpc) =
+        install_engine_rpc(&ctx, &bridge, grants.clone(), &views, &lifecycle, &account, &shared, log.as_ref())?;
 
       Some(Engine {
         ctx,
@@ -291,13 +288,14 @@ pub extern "system" fn Java_desu_inugram_helpers_plugins_QuickJs_nativeCreate(
 fn install_engine_jvm(
   ctx: &Context,
   bridge: &Rc<JniBridge>,
+  grants: Rc<dyn GrantHost>,
   lifecycle: &Rc<Lifecycle>,
   log: &(dyn Fn(&str) + Send + Sync),
 ) -> Option<Rc<jvm::JvmState>> {
   ctx
     .with(|ctx| {
       let globals = Globals::get(&ctx)?;
-      install_jvm(&ctx, bridge.clone(), bridge.clone(), lifecycle.clone(), make_log(bridge.console.clone()), &globals)
+      install_jvm(&ctx, bridge.clone(), grants, lifecycle.clone(), make_log(bridge.console.clone()), &globals)
     })
     .map_err(|e| log(&format!("inu.jvm failed to install: {e:?}")))
     .ok()
@@ -306,6 +304,7 @@ fn install_engine_jvm(
 fn install_engine_xposed(
   ctx: &Context,
   bridge: &Rc<JniBridge>,
+  grants: Rc<dyn GrantHost>,
   lifecycle: &Rc<Lifecycle>,
   log: &(dyn Fn(&str) + Send + Sync),
   jvm: Option<Rc<jvm::JvmState>>,
@@ -317,15 +316,7 @@ fn install_engine_xposed(
   ctx
     .with(|ctx| {
       let globals = Globals::get(&ctx)?;
-      install_xposed(
-        &ctx,
-        bridge.clone(),
-        bridge.clone(),
-        lifecycle.clone(),
-        jvm,
-        make_log(bridge.console.clone()),
-        &globals,
-      )
+      install_xposed(&ctx, bridge.clone(), grants, lifecycle.clone(), jvm, make_log(bridge.console.clone()), &globals)
     })
     .map_err(|e| log(&format!("inu.xposed failed to install: {e:?}")))
     .ok()
@@ -525,16 +516,15 @@ pub extern "system" fn Java_desu_inugram_helpers_plugins_QuickJs_nativeJvmCallba
 
 fn install_engine_fs(
   ctx: &Context,
-  bridge: &Rc<JniBridge>,
   blobs: &Rc<crate::api::io::blob::BlobState>,
   canvas: &Rc<canvas::CanvasState>,
   dir: &Path,
   quota_bytes: jlong,
   unscoped: jboolean,
   android_dirs: &str,
+  grants: Rc<dyn GrantHost>,
   log: &(dyn Fn(&str) + Send + Sync),
 ) -> Option<()> {
-  let grants: Rc<dyn GrantHost> = bridge.clone();
   let quota = if quota_bytes < 0 {
     crate::api::io::fs::UNCAPPED
   } else if quota_bytes == 0 {
@@ -866,6 +856,7 @@ pub extern "system" fn Java_desu_inugram_helpers_plugins_QuickJs_nativeAccountsC
 fn install_engine_rpc(
   ctx: &Context,
   bridge: &Rc<JniBridge>,
+  grants: Rc<dyn GrantHost>,
   views: &Rc<TlViews>,
   lifecycle: &Rc<Lifecycle>,
   account: &Rc<crate::api::telegram::account::AccountState>,
@@ -874,9 +865,7 @@ fn install_engine_rpc(
 ) -> Option<(Rc<crate::api::telegram::deserialize::DeserializeState>, Rc<crate::api::telegram::rpc::RpcState>)> {
   let host: Rc<dyn RpcHost> = bridge.clone();
   let tl = views.clone();
-  let grants: Rc<dyn GrantHost> = bridge.clone();
   let rules_host: Rc<dyn DeserializeHost> = bridge.clone();
-  let rules_grants: Rc<dyn GrantHost> = bridge.clone();
   let rules_lifecycle = lifecycle.clone();
   let rules_tl = views.clone();
   let rules_log = make_log(bridge.console.clone());
@@ -886,7 +875,7 @@ fn install_engine_rpc(
       let rules = crate::api::telegram::deserialize::install_deserialize(
         &ctx,
         rules_host,
-        rules_grants,
+        grants.clone(),
         rules_lifecycle,
         rules_tl,
         rules_log,

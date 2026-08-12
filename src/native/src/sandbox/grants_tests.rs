@@ -33,3 +33,12 @@ fn an_unscoped_grant_allows_any_target() {
   assert!(host.is_granted("interceptRpc", Some("users.getUsers"), MATCH_EXACT));
   assert!(!host.is_granted("invokeRpc", Some("users.getUsers"), MATCH_EXACT));
 }
+
+#[test]
+fn cached_grants_match_domains_and_namespaces() {
+  let host = CachedGrantHost::new(["fetch(Example.com)", "unsafe.jvm(java.lang.*)"]);
+  assert!(host.is_granted("fetch", Some("cdn.example.com"), MATCH_DOMAIN));
+  assert!(host.is_granted("unsafe.jvm", Some("java.lang.String"), MATCH_NAMESPACE));
+  assert!(!host.is_granted("unsafe.jvm", Some("java.io.File"), MATCH_NAMESPACE));
+  assert!(!host.is_granted("fetch", Some("example.com"), 99));
+}

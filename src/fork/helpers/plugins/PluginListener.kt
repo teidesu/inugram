@@ -42,13 +42,10 @@ interface PluginListener :
     fun onRandomBytes(count: Int): ByteArray
 }
 
-/** the three that belong to no subsystem: the engine's own diagnostics, gate and clock */
+/** the two that belong to no subsystem: the engine's own diagnostics and clock */
 interface CoreListener {
     /** 0=log 1=info 2=warn 3=error 4=debug, plus [QuickJs.LEVEL_FAULT] */
     fun onConsole(level: Int, message: String)
-
-    /** `target` is null for an unscoped check; `mode` is a [desu.inugram.core.plugins.ScopeMatch] ordinal */
-    fun onCheckGrant(name: String, target: String?, mode: Int): Boolean
 
     /** post a call to `runTimers` `delayMs` from now, withdrawing any earlier wake; negative only withdraws */
     fun onTimerSchedule(delayMs: Long)

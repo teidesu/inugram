@@ -23,6 +23,7 @@ open class QuickJs {
         val androidDirs: String,
         val installJvm: Boolean,
         val installXposed: Boolean,
+        val grants: List<String>,
     )
 
     /**
@@ -80,6 +81,7 @@ open class QuickJs {
             config.androidDirs,
             config.installJvm,
             config.installXposed,
+            config.grants.toTypedArray(),
         )
         check(ptr != 0L) { "QuickJs initialization failed" }
     }
@@ -238,6 +240,7 @@ open class QuickJs {
         androidDirs: String,
         installJvm: Boolean,
         installXposed: Boolean,
+        grants: Array<String>,
     ): Long
     private external fun nativeEvaluate(ptr: Long, code: String, filename: String): String?
     private external fun nativeInstallInfo(
