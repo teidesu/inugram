@@ -56,6 +56,7 @@ pub(crate) struct JniBridge {
   pub(crate) on_ui_invalidate: JMethodID,
   pub(crate) on_ui_open_menu: JMethodID,
   pub(crate) on_icon_resolves: JMethodID,
+  pub(crate) on_common_icon: JMethodID,
   pub(crate) on_action_register: JMethodID,
   pub(crate) on_action_unregister: JMethodID,
   pub(crate) on_action_editor: JMethodID,
@@ -142,6 +143,7 @@ impl JniBridge {
       on_ui_invalidate: method("uiInvalidate", "(J)V")?,
       on_ui_open_menu: method("uiOpenMenu", "(JJLjava/lang/String;Ljava/lang/String;)Ljava/lang/String;")?,
       on_icon_resolves: method("iconResolves", "(ILjava/lang/String;)Z")?,
+      on_common_icon: method("commonIcon", "(Ljava/lang/String;)Ljava/lang/String;")?,
       on_action_register: method(
         "actionRegister",
         "(IILjava/lang/String;ILjava/lang/String;Ljava/lang/String;I)Ljava/lang/String;",

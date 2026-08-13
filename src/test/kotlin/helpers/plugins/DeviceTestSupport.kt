@@ -280,6 +280,8 @@ private object DeviceMissing : CoreListener, StorageListener, UiListener, Platfo
 
     override fun iconResolves(kind: Int, value: String) = no("icons")
 
+    override fun commonIcon(name: String) = no("icons")
+
     override fun actionRegister(
         kind: Int,
         token: Int,

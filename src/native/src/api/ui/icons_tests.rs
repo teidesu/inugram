@@ -3,6 +3,22 @@ use std::cell::RefCell;
 
 use rquickjs::{Context, Runtime};
 
+/// the app's table, parsed out of the Kotlin that owns it - the fake host answers with exactly
+/// what `PluginUi.commonIcon` would, so what these tests exercise is the app's own vocabulary
+const COMMON_ICONS_KT: &str = include_str!("../../../../core/src/main/kotlin/desu/inugram/core/plugins/CommonIcons.kt");
+
+fn curated_table() -> Vec<(String, String)> {
+  let table: Vec<(String, String)> = COMMON_ICONS_KT
+    .lines()
+    .filter_map(|line| {
+      let (api, resource) = line.trim().strip_suffix("\",")?.split_once("\" to \"")?;
+      Some((api.strip_prefix('"')?.to_string(), resource.to_string()))
+    })
+    .collect();
+  assert!(!table.is_empty(), "CommonIcons.kt did not parse");
+  table
+}
+
 /// resolves everything except the names/sources a test deliberately withholds
 struct TestIconHost {
   missing: Vec<String>,
@@ -22,6 +38,10 @@ impl IconHost for TestIconHost {
   fn icon_resolves(&self, kind: i32, value: &str) -> bool {
     self.asked.borrow_mut().push((kind, value.to_string()));
     !self.missing.iter().any(|m| m == value)
+  }
+
+  fn common_icon(&self, name: &str) -> Option<String> {
+    curated_table().into_iter().find(|(api, _)| api == name).map(|(_, resource)| resource)
   }
 }
 
@@ -54,7 +74,8 @@ use crate::testing::harness::eval_string;
 
 #[test]
 fn the_curated_table_is_sorted_and_unique() {
-  for pair in COMMON_ICONS.windows(2) {
+  let table = curated_table();
+  for pair in table.windows(2) {
     assert!(pair[0].0 < pair[1].0, "{} is not before {}", pair[0].0, pair[1].0);
   }
 }
@@ -67,16 +88,16 @@ fn the_curated_table_is_exactly_what_the_contract_declares() {
   let at = CONTRACT.find("function common(").expect("icons.common is not declared");
   let decl = &CONTRACT[at..];
   let end = decl.find("): UIIcon").expect("icons.common has no return type");
-  let mut declared: Vec<&str> = decl[..end].split('\'').skip(1).step_by(2).collect();
+  let mut declared: Vec<String> = decl[..end].split('\'').skip(1).step_by(2).map(str::to_string).collect();
   declared.sort_unstable();
-  let known: Vec<&str> = COMMON_ICONS.iter().map(|(api, _)| *api).collect();
+  let known: Vec<String> = curated_table().into_iter().map(|(api, _)| api).collect();
   assert_eq!(declared, known);
 }
 
 #[test]
 fn every_curated_name_maps_to_a_bare_resource_name() {
-  for (api, resource) in COMMON_ICONS {
-    assert!(is_resource_name(resource), "{api} -> {resource}");
+  for (api, resource) in curated_table() {
+    assert!(is_resource_name(&resource), "{api} -> {resource}");
     // `IconsResources` swaps a stock id for the user's pack, so naming the variant
     // directly opts a plugin's icon out of the pack it is meant to follow
     assert!(!resource.ends_with("_solar"), "{api} -> {resource}");
@@ -117,12 +138,12 @@ fn an_svg_is_bounded_and_declaration_free() {
 #[test]
 fn every_curated_name_mints_an_icon() {
   let (_rt, ctx, host) = setup(&[]);
-  let names: Vec<&str> = COMMON_ICONS.iter().map(|(api, _)| *api).collect();
-  let list = names.iter().map(|n| format!("'{n}'")).collect::<Vec<_>>().join(",");
+  let table = curated_table();
+  let list = table.iter().map(|(api, _)| format!("'{api}'")).collect::<Vec<_>>().join(",");
   let specs = eval_string(&ctx, &format!("[{list}].map(n => inu.icons.common(n).__inuIcon).join(' ')"));
-  let expected: Vec<String> = COMMON_ICONS.iter().map(|(_, res)| format!("r{res}")).collect();
+  let expected: Vec<String> = table.iter().map(|(_, res)| format!("r{res}")).collect();
   assert_eq!(specs, expected.join(" "));
-  assert_eq!(host.asked.borrow().len(), COMMON_ICONS.len());
+  assert_eq!(host.asked.borrow().len(), table.len());
 }
 
 #[test]
@@ -315,6 +336,10 @@ mod bundled_oracle {
   impl IconHost for OracleHost {
     fn icon_resolves(&self, _kind: i32, value: &str) -> bool {
       !value.contains("no_such_drawable")
+    }
+
+    fn common_icon(&self, name: &str) -> Option<String> {
+      super::tests::curated_table().into_iter().find(|(api, _)| api == name).map(|(_, resource)| resource)
     }
   }
 

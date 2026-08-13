@@ -244,6 +244,14 @@ declare namespace inu {
     apiVersion: number
     layer: number
     language: string
+    /**
+     * The manifest's directives, one array entry per repeated key. `@icon` names the icon shown
+     * in the plugins list and accepts no remote urls - only `inu://{name}` where the name comes
+     * from the {@link icons.common} set, `tg://emoji?id={documentId}` for a custom emoji, or
+     * `tg://addstickers?set={slug}` for a sticker out of a set (`&idx={n}` picks by 0-based
+     * position, `&id={documentId}` by document id, neither picks the set's preview sticker).
+     * Anything else falls back to the default icon.
+     */
     header: Record<string, string[]>
   }
 

@@ -476,6 +476,10 @@ fn a_java_object_reaches_open_page_native_view_and_drawable_icon() {
     fn icon_resolves(&self, _kind: i32, _value: &str) -> bool {
       true
     }
+
+    fn common_icon(&self, _name: &str) -> Option<String> {
+      None
+    }
   }
 
   let rt = Runtime::new().unwrap();

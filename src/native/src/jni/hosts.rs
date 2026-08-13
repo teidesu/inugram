@@ -299,6 +299,10 @@ impl IconHost for JniBridge {
   fn icon_resolves(&self, kind: i32, value: &str) -> bool {
     self.call_bool("iconResolves", self.on_icon_resolves, &[Arg::Int(kind), Arg::Str(value)])
   }
+
+  fn common_icon(&self, name: &str) -> Option<String> {
+    self.call_string("commonIcon", self.on_common_icon, &[Arg::Str(name)]).ok().flatten()
+  }
 }
 
 impl JvmHost for JniBridge {

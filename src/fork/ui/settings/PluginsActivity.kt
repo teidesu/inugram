@@ -16,6 +16,7 @@ import desu.inugram.helpers.plugins.BootGuard
 import desu.inugram.helpers.InuUtils
 import desu.inugram.helpers.plugins.Plugin
 import desu.inugram.helpers.plugins.PluginManager
+import desu.inugram.helpers.plugins.ui.PluginManifestIcons
 import desu.inugram.helpers.plugins.ui.PluginUi
 import org.telegram.messenger.AndroidUtilities
 import org.telegram.messenger.LocaleController
@@ -261,8 +262,7 @@ class PluginRow(context: Context) : LinearLayout(context) {
     fun bind(plugin: Plugin, onMenu: (View) -> Unit, onToggle: (Boolean) -> Unit) {
         this.onToggle = onToggle
         this.onMenu = onMenu
-        // @icon is always a remote url; null path falls back to the placeholder thumb
-        icon.setImage(plugin.manifest.icon, ICON_FILTER, placeholder)
+        PluginManifestIcons.bindIcon(icon, plugin.manifest.icon, placeholder)
         title.text = plugin.manifest.name
         val failure = plugin.failure
         if (failure != null) {
@@ -285,6 +285,5 @@ class PluginRow(context: Context) : LinearLayout(context) {
 
     companion object {
         const val HEIGHT_DP = 64
-        private const val ICON_FILTER = "56_56"
     }
 }

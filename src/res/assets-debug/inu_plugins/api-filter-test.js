@@ -68,7 +68,7 @@ inu.invokeRpc({ _: 'help.getConfig' }).then(
     pass(label, `${Object.keys(config).length} other field(s) still readable`)
     halfDone()
   },
-  (e) => fail('invokeRpc help.getConfig', e),
+  e => fail('invokeRpc help.getConfig', e),
 )
 
 inu.invokeRpc({
@@ -101,13 +101,13 @@ inu.invokeRpc({
     pass(label)
     halfDone()
   },
-  (e) => fail('invokeRpc messages.getHistory', e),
+  e => fail('invokeRpc messages.getHistory', e),
 )
 
 function findServiceSender(message) {
   // mirrors ApiFilter.isServiceMessage, including fwd_from and the out rule: an oracle keyed on a
   // narrower predicate than the filter's is blind to exactly the messages the filter misses
-  const isService = (p) =>
+  const isService = p =>
     // long fields cross as strings
     p !== null && typeof p === 'object' && p._ === 'peerUser' && SERVICE_IDS.includes(String(p.user_id))
   if (isService(message.from_id)) return true
