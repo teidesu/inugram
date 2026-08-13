@@ -15,7 +15,7 @@ class PluginManifestParserTest {
         // @version      1.0
         // @description         This script rocks.
         // @description:zh-CN   这个脚本很棒！
-        // @icon https://my.cdn.com/icon.png
+        // @icon tg://addstickers?set=my_set&idx=0
         // @grant        none
         // @plugin-api   1
         // @platform   android
@@ -31,7 +31,7 @@ class PluginManifestParserTest {
         assertEquals("teidesu", m.author)
         assertEquals("1.0", m.version)
         assertEquals("This script rocks.", m.description)
-        assertEquals("https://my.cdn.com/icon.png", m.icon)
+        assertEquals("tg://addstickers?set=my_set&idx=0", m.icon)
         assertEquals(1, m.pluginApi)
         assertEquals("android", m.platform)
     }

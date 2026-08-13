@@ -53,7 +53,7 @@ object PluginIcons {
         }
     }
 
-    private fun drawableOf(context: Context, name: String): Drawable? {
+    fun drawableOf(context: Context, name: String): Drawable? {
         val id = resourceIdOf(name)
         if (id == 0) return null
         // through the context's own Resources rather than Context.getDrawable, which resolves against the base ContextImpl and walks past LaunchActivity's IconsResources override

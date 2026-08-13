@@ -108,6 +108,9 @@ interface UiListener {
     /** [kind] keeps in sync with rust `icons::KIND_*` */
     fun iconResolves(kind: Int, value: String): Boolean
 
+    /** the `inu.icons.common` table: the drawable name for a curated [name], null when unknown */
+    fun commonIcon(name: String): String?
+
     /** [kind] keeps in sync with rust `actions::KIND_*` */
     fun actionRegister(
         kind: Int,

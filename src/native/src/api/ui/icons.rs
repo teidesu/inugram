@@ -21,44 +21,9 @@ pub(crate) struct Icon<'js> {
 
 pub trait IconHost {
   fn icon_resolves(&self, kind: i32, value: &str) -> bool;
-}
 
-const COMMON_ICONS: &[(&str, &str)] = &[
-  ("archive", "msg_archive"),
-  ("bookmark", "msg_saved"),
-  ("bot", "msg_bot"),
-  ("channel", "msg_channel"),
-  ("check", "ic_ab_done"),
-  ("close", "msg_close"),
-  ("copy", "msg_copy"),
-  ("delete", "msg_delete"),
-  ("download", "msg_download"),
-  ("edit", "msg_edit"),
-  ("eye", "msg_views"),
-  ("eyeOff", "msg_archive_hide"),
-  ("forward", "msg_forward"),
-  ("group", "msg_groups"),
-  ("info", "msg_info"),
-  ("link", "msg_link"),
-  ("lock", "msg_secret"),
-  ("minus", "msg_remove"),
-  ("more", "ic_ab_other"),
-  ("mute", "msg_mute"),
-  ("pin", "msg_pin"),
-  ("plus", "msg_add"),
-  ("refresh", "msg_retry"),
-  ("reply", "menu_reply"),
-  ("search", "msg_search"),
-  ("settings", "msg_settings"),
-  ("share", "msg_share"),
-  ("star", "msg_fave"),
-  ("translate", "msg_translate"),
-  ("unmute", "msg_unmute"),
-  ("user", "msg_contacts"),
-];
-
-fn lookup_common(name: &str) -> Option<&'static str> {
-  COMMON_ICONS.binary_search_by(|(api, _)| (*api).cmp(name)).ok().map(|at| COMMON_ICONS[at].1)
+  /// the curated name -> drawable table lives in the host (`CommonIcons.kt`): None = unknown name
+  fn common_icon(&self, name: &str) -> Option<String>;
 }
 
 fn is_resource_name(name: &str) -> bool {
@@ -178,19 +143,19 @@ fn as_str<'js>(ctx: &Ctx<'js>, what: &str, value: &Value<'js>) -> JsResult<Strin
 
 fn js_common<'js>(ctx: &Ctx<'js>, host: &Rc<dyn IconHost>, name: Value<'js>) -> JsResult<Object<'js>> {
   let name = as_str(ctx, "icons.common", &name)?;
-  let Some(resource) = lookup_common(&name) else {
+  let Some(resource) = host.common_icon(&name).filter(|r| is_resource_name(r)) else {
     return {
       let message: &str = &format!("icons.common: unknown icon '{name}'");
       PluginErrorCode::InvalidArgument.throw(ctx, message)
     };
   };
-  if !host.icon_resolves(KIND_RESOURCE, resource) {
+  if !host.icon_resolves(KIND_RESOURCE, &resource) {
     return {
       let message: &str = &format!("icons.common: this app ships no '{resource}' for '{name}'");
       PluginErrorCode::NotFound.throw(ctx, message)
     };
   }
-  new_icon(ctx, resource_spec(resource))
+  new_icon(ctx, resource_spec(&resource))
 }
 
 fn js_resource_icon<'js>(ctx: &Ctx<'js>, host: &Rc<dyn IconHost>, name: Value<'js>) -> JsResult<Object<'js>> {

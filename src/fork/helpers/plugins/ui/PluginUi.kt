@@ -8,6 +8,7 @@ import android.util.Log
 import android.view.View
 import android.widget.LinearLayout
 import android.widget.Toast
+import desu.inugram.core.plugins.CommonIcons
 import desu.inugram.core.plugins.PluginWire
 import desu.inugram.helpers.plugins.EngineDispatch
 import desu.inugram.helpers.plugins.Plugin
@@ -82,6 +83,8 @@ object PluginUi {
             openMenu(plugin, engine, menuId, pageId, anchorKey, itemsJson)
 
         override fun iconResolves(kind: Int, value: String): Boolean = PluginIcons.iconResolves(kind, value)
+
+        override fun commonIcon(name: String): String? = CommonIcons.resolve(name)
 
         override fun actionRegister(
             kind: Int,
