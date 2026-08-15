@@ -251,9 +251,10 @@ most things are toggleable in `Settings → Inugram`, with sensible opinionated 
 - InuPlugin-style js plugins running on a rust engine (rquickjs/quickjs-ng) — exposes `console.*`, `inu.info()`, and an rpc bridge (`inu.interceptRpc`/`inu.invokeRpc`/`inu.onUpdate`) gated by `@grant` permissions
 - plugins can rewrite or cancel outgoing messages (`inu.interceptSendMessage`) and rewrite or drop incoming updates before the app applies them (`inu.interceptUpdate`)
 - plugins can rewrite TL objects as the app parses them, including rows read back out of the local cache (`inu.interceptDeserialize`) — declarative rules only, matched natively, and never over ids, secret chats or the account-takeover surface
-- plugins page in settings: engine toggle, install from file, enable/disable, reload, long-press reorder (middleware order)
+- plugins page in settings: engine toggle, install from file, enable/disable, reload, drag-handle reorder (middleware order)
+- per-plugin info page (tap a plugin row): name, author, version, localized description, requested permissions (user-readable descriptions, color-coded by danger tier), reload/remove; warns when the plugin code looks obfuscated or minified
 - chat/message plugin actions live under an Actions submenu by default; users can reorder, disable, or pin them into the main menus; message actions can also target the current message selection
-- "start in safe mode" launcher shortcut to boot without running any plugin
+- "start in safe mode" launcher shortcut to boot without running any plugin; active safe mode shows a banner on the plugins page with a restart button
 
 ## 🐶 bugfixes (vs stock)
 
