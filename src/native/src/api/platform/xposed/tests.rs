@@ -10,17 +10,31 @@ const ORACLE: &str = include_str!("../../../../../res/assets-debug/inu_plugins/x
 /// keyed by the method handle, because two hooks on one method are two hooks on *one site* and
 /// the ordering the oracle asserts is only a property of a shared one. `hookAll*` answers with
 /// a list, which is the shape the real host uses for an overload set.
-#[derive(Default)]
 struct OracleXposedHost {
   sites: RefCell<HashMap<i64, i64>>,
   next: RefCell<i64>,
+  jvm: Rc<OracleJvmHost>,
 }
 
+/// mirrors `PluginXposed.BOX_CLASSES`: the app host refuses these, so the fake must too for the
+/// oracle's refusal assertion to mean the same thing here and on a device
+const BOX_CLASSES: &[&str] = &[
+  "java.lang.Boolean",
+  "java.lang.Byte",
+  "java.lang.Character",
+  "java.lang.Short",
+  "java.lang.Integer",
+  "java.lang.Long",
+  "java.lang.Float",
+  "java.lang.Double",
+];
+
 impl OracleXposedHost {
-  fn new() -> Rc<Self> {
+  fn new(jvm: Rc<OracleJvmHost>) -> Rc<Self> {
     Rc::new(OracleXposedHost {
       sites: RefCell::new(HashMap::new()),
       next: RefCell::new(100),
+      jvm,
     })
   }
 
@@ -41,6 +55,11 @@ impl XposedHost for OracleXposedHost {
     match op {
       OP_HOOK => format!("S{}", self.site_for(target)),
       OP_HOOK_ALL => {
+        if let Some(name) = self.jvm.class_name(target) {
+          if BOX_CLASSES.contains(&name.as_str()) {
+            return format!("Punsupported\n\n\n\nxposed: {name} backs primitive boxing");
+          }
+        }
         let first = self.site_for(target);
         format!("S{first},{}", first + 500)
       }
@@ -55,7 +74,8 @@ fn the_bundled_xposed_test_plugin_passes() {
   let rt = Runtime::new().unwrap();
   let ctx = Context::full(&rt).unwrap();
   let lines = install_capturing_console(&ctx);
-  let host = OracleXposedHost::new();
+  let jvm_oracle = OracleJvmHost::new();
+  let host = OracleXposedHost::new(jvm_oracle.clone());
   // the plugin's own header, so a suite granting what the manifest forgot cannot pass
   let grants = crate::sandbox::grants::TestGrantHost::new(&manifest_grants(ORACLE)).as_host();
   let lifecycle = Lifecycle::new();
@@ -65,7 +85,7 @@ fn the_bundled_xposed_test_plugin_passes() {
     crate::api::error::install_plugin_error(&ctx).unwrap();
     let jvm = crate::api::platform::jvm::install_jvm(
       &ctx,
-      OracleJvmHost::new().as_host(),
+      jvm_oracle.as_host(),
       grants.clone(),
       lifecycle.clone(),
       log.clone(),
@@ -84,7 +104,7 @@ fn the_bundled_xposed_test_plugin_passes() {
     Err(e) => panic!("{e:?}"),
   });
   let lines = lines.borrow().clone();
-  assert_oracle_exact(&lines, "xposed test done", 6);
+  assert_oracle_exact(&lines, "xposed test done", 7);
 }
 
 /// One whole dispatch as a host runs it: the `before` phase on the queue, the original on the
