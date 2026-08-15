@@ -767,6 +767,8 @@
     <string name="InuPluginsEmpty">No plugins installed</string>
     <string name="InuPluginsLoadFromDisk">Load from file</string>
     <string name="InuPluginsReload">Reload</string>
+    <string name="InuPluginsViewSource">View source code</string>
+    <string name="InuPluginSourceTitle">Source code</string>
     <string name="InuPluginsRemove">Remove</string>
     <string name="InuPluginsByAuthor">by %1$s</string>
     <string name="InuPluginsPermissions">Permissions</string>
