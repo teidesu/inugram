@@ -7,7 +7,9 @@ import android.content.Intent
 import android.graphics.PorterDuff
 import android.graphics.PorterDuffColorFilter
 import android.view.Gravity
+import android.view.MotionEvent
 import android.view.View
+import android.widget.FrameLayout
 import android.widget.ImageView
 import android.widget.LinearLayout
 import android.widget.TextView
@@ -30,9 +32,11 @@ import org.telegram.ui.Components.LayoutHelper
 import org.telegram.ui.Components.Switch
 import org.telegram.ui.Components.UItem
 import org.telegram.ui.Components.UniversalAdapter
+import org.telegram.ui.Stories.recorder.ButtonWithCounterView
 
 class PluginsActivity : SettingsPageActivity() {
     private val rows = HashMap<String, PluginRow>()
+    private var safeModeBanner: WarningBanner? = null
     private var reorderSectionId = -1
 
     override fun getTitle(): CharSequence = LocaleController.getString(R.string.InuPlugins)
@@ -48,13 +52,27 @@ class PluginsActivity : SettingsPageActivity() {
     }
 
     override fun createView(context: Context): View {
+        safeModeBanner = null
         val view = super.createView(context)
         listView.allowReorder(true)
+        listView.setReorderLongPressEnabled(false)
         listView.listenReorder { id, items -> if (id == reorderSectionId) applyReorder(items) }
         return view
     }
 
     override fun fillItems(items: ArrayList<UItem>, adapter: UniversalAdapter) {
+        // the rows below still read as enabled, because they are: safe mode is about this session
+        // and nothing else, and a session that ran nothing has to say so somewhere
+        safeModeNotice()?.let { notice ->
+            val banner = safeModeBanner ?: WarningBanner(context, LocaleController.getString(R.string.InuRestartNow), {
+                parentActivity?.let { InuUtils.restartApp(it) }
+            }).also {
+                it.setTitle(LocaleController.getString(R.string.InuPluginsSafeMode))
+                safeModeBanner = it
+            }
+            banner.setText(notice)
+            items.add(UItem.asCustomShadow(SAFE_MODE_BANNER, banner))
+        }
         items.add(UItem.asShadow(LocaleController.getString(R.string.InuPluginsInfo)))
         items.add(
             mkTwoLineCheckItem(
@@ -64,9 +82,6 @@ class PluginsActivity : SettingsPageActivity() {
                 PluginManager.isEngineEnabled(),
             )
         )
-        // the rows below still read as enabled, because they are: safe mode is about this session
-        // and nothing else, and a session that ran nothing has to say so somewhere
-        safeModeNotice()?.let { items.add(UItem.asShadow(it)) }
 
         val plugins = PluginManager.plugins()
         if (plugins.isEmpty()) {
@@ -95,9 +110,24 @@ class PluginsActivity : SettingsPageActivity() {
         null -> null
     }
 
+    @SuppressLint("ClickableViewAccessibility")
     private fun buildRow(plugin: Plugin): UItem {
-        val row = rows.getOrPut(plugin.id) { PluginRow(context) }
-        row.bind(plugin, onMenu = { anchor -> showPluginOptions(plugin, anchor) }) { enabled ->
+        val row = rows.getOrPut(plugin.id) {
+            PluginRow(context).also { newRow ->
+                newRow.setOnReorderTouchListener { _, event ->
+                    if (event.actionMasked == MotionEvent.ACTION_DOWN) {
+                        val holder = listView.findContainingViewHolder(newRow) ?: return@setOnReorderTouchListener false
+                        listView.itemTouchHelper.startDrag(holder)
+                    }
+                    false
+                }
+            }
+        }
+        row.bind(
+            plugin,
+            onOpen = { presentFragment(PluginInfoActivity(plugin)) },
+            onMenu = { anchor -> showPluginOptions(plugin, anchor) },
+        ) { enabled ->
             PluginManager.setEnabled(plugin, enabled)
         }
         row.bindSettings(if (plugin.settingsPageId != null) ({ PluginUi.openRegisteredSettings(plugin) }) else null)
@@ -181,6 +211,7 @@ class PluginsActivity : SettingsPageActivity() {
     companion object {
         private val ENGINE_TOGGLE = InuUtils.generateId()
         private val BUTTON_LOAD = InuUtils.generateId()
+        private val SAFE_MODE_BANNER = InuUtils.generateId()
         private const val ITEM_BASE = 20000
         private const val REQ_LOAD = 31010
     }
@@ -188,6 +219,7 @@ class PluginsActivity : SettingsPageActivity() {
 
 @SuppressLint("ViewConstructor")
 class PluginRow(context: Context) : LinearLayout(context) {
+    private val handle: ImageView
     private val icon: BackupImageView
     private val placeholder = ResourcesCompat.getDrawable(resources, R.drawable.inu_tabler_code, null)?.mutate()?.apply {
         colorFilter = PorterDuffColorFilter(
@@ -200,6 +232,7 @@ class PluginRow(context: Context) : LinearLayout(context) {
     private val switch: Switch
     private val settingsButton: ImageView
     private var onToggle: ((Boolean) -> Unit)? = null
+    private var onOpen: (() -> Unit)? = null
     private var onMenu: ((View) -> Unit)? = null
 
     init {
@@ -207,18 +240,29 @@ class PluginRow(context: Context) : LinearLayout(context) {
         gravity = Gravity.CENTER_VERTICAL
         minimumHeight = AndroidUtilities.dp(HEIGHT_DP.toFloat())
         // the row consumes its own touches (making RecyclerListView's item-click skip it via
-        // interceptedByChild) so taps on the switch/settings children don't also open the menu
+        // interceptedByChild) so taps on the switch/settings/handle children don't also open
+        // the info page
         background = Theme.createSelectorWithBackgroundDrawable(
             Theme.getColor(Theme.key_windowBackgroundWhite),
             Theme.getColor(Theme.key_listSelector),
         )
-        setOnClickListener { onMenu?.invoke(this) }
+        setOnClickListener { onOpen?.invoke() }
+        setOnLongClickListener { onMenu?.invoke(this); true }
         val rtl = LocaleController.isRTL
+
+        handle = ImageView(context).apply {
+            scaleType = ImageView.ScaleType.CENTER
+            setImageResource(R.drawable.list_reorder)
+            colorFilter = PorterDuffColorFilter(Theme.getColor(Theme.key_stickers_menu), PorterDuff.Mode.MULTIPLY)
+            contentDescription = LocaleController.getString(R.string.FilterReorder)
+            isClickable = true
+        }
+        addView(handle, LayoutHelper.createLinear(40, 48, Gravity.CENTER_VERTICAL, if (rtl) 0 else 8, 0, if (rtl) 8 else 0, 0))
 
         icon = BackupImageView(context).apply {
             setRoundRadius(AndroidUtilities.dp(6f))
         }
-        addView(icon, LayoutHelper.createLinear(28, 28, Gravity.CENTER_VERTICAL, if (rtl) 0 else 18, 0, if (rtl) 18 else 14, 0))
+        addView(icon, LayoutHelper.createLinear(28, 28, Gravity.CENTER_VERTICAL, if (rtl) 0 else 8, 0, if (rtl) 8 else 14, 0))
 
         val textBlock = LinearLayout(context).apply { orientation = VERTICAL }
         title = TextView(context).apply {
@@ -259,8 +303,9 @@ class PluginRow(context: Context) : LinearLayout(context) {
         addView(switch, LayoutHelper.createLinear(37, 24, Gravity.CENTER_VERTICAL, if (rtl) 22 else 0, 0, if (rtl) 0 else 22, 0))
     }
 
-    fun bind(plugin: Plugin, onMenu: (View) -> Unit, onToggle: (Boolean) -> Unit) {
+    fun bind(plugin: Plugin, onOpen: () -> Unit, onMenu: (View) -> Unit, onToggle: (Boolean) -> Unit) {
         this.onToggle = onToggle
+        this.onOpen = onOpen
         this.onMenu = onMenu
         PluginManifestIcons.bindIcon(icon, plugin.manifest.icon, placeholder)
         title.text = plugin.manifest.name
@@ -281,6 +326,10 @@ class PluginRow(context: Context) : LinearLayout(context) {
     fun bindSettings(onOpen: (() -> Unit)?) {
         settingsButton.visibility = if (onOpen != null) VISIBLE else GONE
         settingsButton.setOnClickListener { onOpen?.invoke() }
+    }
+
+    fun setOnReorderTouchListener(listener: OnTouchListener) {
+        handle.setOnTouchListener(listener)
     }
 
     companion object {
