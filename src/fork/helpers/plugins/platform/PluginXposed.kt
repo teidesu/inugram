@@ -169,6 +169,12 @@ object PluginXposed {
             if (declaring.startsWith(ENGINE_PACKAGE)) {
                 refuse("forbidden", "xposed: $declaring is the plugin engine's own bridge")
             }
+            // lsplant's generated stub boxes its own primitive arguments through these classes
+            // (Integer.valueOf -> new Integer), so a hook on one re-enters the stub before any
+            // callback dispatch and overflows the stack on whatever thread boxes next
+            if (declaring in BOX_CLASSES) {
+                refuse("unsupported", "xposed: $declaring backs primitive boxing, which the hook stub itself uses, so a hook here would recurse until the stack is gone")
+            }
             if (!plugin.permissions.allows(GRANT, declaring, ScopeMatch.NAMESPACE)) {
                 refuse("not-granted", "xposed: $declaring is not in this plugin's $GRANT scope list", "$GRANT($declaring)")
             }
@@ -401,6 +407,17 @@ object PluginXposed {
     }
 
     private const val ENGINE_PACKAGE = "desu.inugram.helpers.plugins."
+
+    private val BOX_CLASSES = setOf(
+        "java.lang.Boolean",
+        "java.lang.Byte",
+        "java.lang.Character",
+        "java.lang.Short",
+        "java.lang.Integer",
+        "java.lang.Long",
+        "java.lang.Float",
+        "java.lang.Double",
+    )
 
     internal fun deoptimize(method: Member): Boolean = ensureReady() && Native.nativeDeoptimize(method)
 

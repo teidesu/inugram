@@ -504,6 +504,11 @@ pub(crate) mod testing {
       self.runnable.get()
     }
 
+    /// what `cls()` minted the handle for, so a sibling fake (xposed) can refuse by class
+    pub(crate) fn class_name(&self, id: i64) -> Option<String> {
+      self.classes.borrow().get(&id).cloned()
+    }
+
     fn mint(&self, kind: char) -> String {
       let id = self.next_id.get();
       self.next_id.set(id + 1);

@@ -1,6 +1,11 @@
 declare namespace inu {
   /**
    * A hook gets at most **250 ms per phase**; at most 512 hooks live at once.
+   *
+   * The eight primitive box classes (`java.lang.Integer` & co.) cannot be hooked: the hook
+   * machinery boxes its own arguments through them, so such a hook would recurse into itself.
+   * Registration fails with `unsupported`.
+   *
    * @needs-grant unsafe.xposed
    * @needs-grant unsafe.jvm
    */
