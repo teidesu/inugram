@@ -24,6 +24,10 @@ export const submodulePatches: SubmodulePatch[] = [
     submodule: 'TMessagesProj_App/jni/lsplant',
     patch: join(rootDir, 'patches-native/lsplant-c-abi.patch'),
   },
+  {
+    submodule: 'TMessagesProj_App/jni/lsplant',
+    patch: join(rootDir, 'patches-native/lsplant-unhook-backup-id.patch'),
+  },
 ]
 
 export const debugAppId = 'desu.inugram.beta'
