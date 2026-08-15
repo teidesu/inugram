@@ -1,6 +1,6 @@
 // ==InuPlugin==
 // @name         writes test
-// @author       teidesu
+// @author       @teidesu
 // @version      1.0
 // @description  asserts the Account write surface argues, gates and refuses what common.d.ts says
 // @grant        account.read(peers)
@@ -228,28 +228,28 @@ const SECRET = '4611686018427387911'
       )
       await acc.setReaction('me', sent.id, ['👍']).then(
         () => pass('setReaction resolves with nothing'),
-        (e) => skip('setReaction', e.code ?? e.message),
+        e => skip('setReaction', e.code ?? e.message),
       )
       await acc.editMessage('me', sent.id, 'inu writes-test (edited)').then(
-        (edited) => check('editMessage answers with the new text', edited.text.endsWith('(edited)'), edited.text),
-        (e) => skip('editMessage', e.code ?? e.message),
+        edited => check('editMessage answers with the new text', edited.text.endsWith('(edited)'), edited.text),
+        e => skip('editMessage', e.code ?? e.message),
       )
       await acc.deleteMessages('me', [sent.id], { revoke: true }).then(
-        (value) => check('deleteMessages resolves with nothing', value === undefined, String(value)),
-        (e) => skip('deleteMessages', e.code ?? e.message),
+        value => check('deleteMessages resolves with nothing', value === undefined, String(value)),
+        e => skip('deleteMessages', e.code ?? e.message),
       )
     }
     await acc.sendTyping('me', 'typing').then(
-      (value) => check('sendTyping resolves with nothing', value === undefined, String(value)),
-      (e) => skip('sendTyping', e.code ?? e.message),
+      value => check('sendTyping resolves with nothing', value === undefined, String(value)),
+      e => skip('sendTyping', e.code ?? e.message),
     )
     await acc.setDraft('me', 'inu writes-test draft').then(
-      (value) => check('setDraft resolves with nothing', value === undefined, String(value)),
-      (e) => skip('setDraft', e.code ?? e.message),
+      value => check('setDraft resolves with nothing', value === undefined, String(value)),
+      e => skip('setDraft', e.code ?? e.message),
     )
     await acc.setDraft('me', null).then(
       () => pass('and clearing it resolves too'),
-      (e) => skip('clearing the draft', e.code ?? e.message),
+      e => skip('clearing the draft', e.code ?? e.message),
     )
   }
 

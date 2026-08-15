@@ -4,6 +4,10 @@ import android.content.Context
 import android.graphics.Color
 import android.graphics.PorterDuff
 import android.graphics.PorterDuffColorFilter
+import android.text.SpannableStringBuilder
+import android.text.Spanned
+import android.text.TextPaint
+import android.text.style.ClickableSpan
 import android.view.Gravity
 import android.view.View
 import android.widget.FrameLayout
@@ -26,6 +30,7 @@ import org.telegram.messenger.R
 import org.telegram.ui.ActionBar.Theme
 import org.telegram.ui.Components.BackupImageView
 import org.telegram.ui.Components.LayoutHelper
+import org.telegram.ui.Components.LinkSpanDrawable
 import org.telegram.ui.Components.UItem
 import org.telegram.ui.Components.UniversalAdapter
 import org.telegram.ui.SettingsActivity
@@ -69,7 +74,10 @@ class PluginInfoActivity(private val plugin: Plugin) : SettingsPageActivity() {
     }
 
     override fun fillItems(items: ArrayList<UItem>, adapter: UniversalAdapter) {
-        val headerView = header ?: PluginInfoHeaderView(context).also { header = it }
+        val headerView = header ?: PluginInfoHeaderView(context).also {
+            header = it
+            it.onAuthorClick = { username -> messagesController.openByUserName(username, this, 0) }
+        }
         headerView.bind(plugin)
         items.add(UItem.asCustom(HEADER, headerView))
         val description = plugin.manifest.description(LocaleController.getInstance().currentLocaleInfo?.langCode)
@@ -106,6 +114,7 @@ class PluginInfoActivity(private val plugin: Plugin) : SettingsPageActivity() {
         if (plugin.settingsPageId != null) {
             items.add(UItem.asButton(BUTTON_SETTINGS, R.drawable.msg_settings, LocaleController.getString(R.string.Settings)))
         }
+        items.add(UItem.asButton(BUTTON_SOURCE, R.drawable.inu_tabler_code, LocaleController.getString(R.string.InuPluginsViewSource)))
         items.add(UItem.asButton(BUTTON_RELOAD, R.drawable.msg_reset, LocaleController.getString(R.string.InuPluginsReload)))
         items.add(UItem.asButton(BUTTON_REMOVE, R.drawable.msg_delete, LocaleController.getString(R.string.InuPluginsRemove)).red())
         items.add(UItem.asShadow(null))
@@ -114,6 +123,7 @@ class PluginInfoActivity(private val plugin: Plugin) : SettingsPageActivity() {
     override fun onClick(item: UItem, view: View, position: Int, x: Float, y: Float) {
         when (item.id) {
             BUTTON_SETTINGS -> PluginUi.openRegisteredSettings(plugin)
+            BUTTON_SOURCE -> showDialog(PluginSourceSheet(context, plugin))
             BUTTON_RELOAD -> PluginManager.reload(plugin)
             BUTTON_REMOVE -> {
                 PluginManager.remove(plugin)
@@ -126,6 +136,7 @@ class PluginInfoActivity(private val plugin: Plugin) : SettingsPageActivity() {
         private val HEADER = InuUtils.generateId()
         private val OBFUSCATION_BANNER = InuUtils.generateId()
         private val BUTTON_SETTINGS = InuUtils.generateId()
+        private val BUTTON_SOURCE = InuUtils.generateId()
         private val BUTTON_RELOAD = InuUtils.generateId()
         private val BUTTON_REMOVE = InuUtils.generateId()
         private const val GRANT_BASE = 20000
@@ -320,8 +331,10 @@ class PluginInfoHeaderView(context: Context) : LinearLayout(context) {
         typeface = AndroidUtilities.bold()
         gravity = Gravity.CENTER
     }
-    private val meta = TextView(context).apply {
+    var onAuthorClick: ((String) -> Unit)? = null
+    private val meta = LinkSpanDrawable.LinksTextView(context).apply {
         setTextColor(Theme.getColor(Theme.key_windowBackgroundWhiteGrayText))
+        setLinkTextColor(Theme.getColor(Theme.key_windowBackgroundWhiteLinkText))
         textSize = 14f
         gravity = Gravity.CENTER
     }
@@ -344,10 +357,31 @@ class PluginInfoHeaderView(context: Context) : LinearLayout(context) {
     fun bind(plugin: Plugin) {
         PluginManifestIcons.bindIcon(icon, plugin.manifest.icon, placeholder)
         name.text = plugin.manifest.name
-        val metaText = listOfNotNull(
-            plugin.manifest.version?.let { "v$it" },
-            plugin.manifest.author?.let { LocaleController.formatString(R.string.InuPluginsByAuthor, it) },
-        ).joinToString(" · ")
+        val metaText = SpannableStringBuilder()
+        plugin.manifest.version?.let { metaText.append("v$it") }
+        plugin.manifest.author?.let { author ->
+            if (metaText.isNotEmpty()) metaText.append(" · ")
+            val formatted = LocaleController.formatString(R.string.InuPluginsByAuthor, author)
+            val start = metaText.length
+            metaText.append(formatted)
+            val authorIndex = formatted.indexOf(author)
+            if (author.startsWith("@") && author.length > 1 && authorIndex >= 0) {
+                metaText.setSpan(
+                    object : ClickableSpan() {
+                        override fun onClick(widget: View) {
+                            onAuthorClick?.invoke(author.substring(1))
+                        }
+
+                        override fun updateDrawState(ds: TextPaint) {
+                            ds.color = ds.linkColor
+                        }
+                    },
+                    start + authorIndex,
+                    start + authorIndex + author.length,
+                    Spanned.SPAN_EXCLUSIVE_EXCLUSIVE,
+                )
+            }
+        }
         meta.text = metaText
         meta.visibility = if (metaText.isEmpty()) GONE else VISIBLE
         val fail = plugin.failure
