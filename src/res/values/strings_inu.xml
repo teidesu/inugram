@@ -56,6 +56,7 @@
     <string name="InuDisableRoundingInfo">1.2K -> 1,234</string>
     <string name="InuMaterial3">Material Design 3</string>
     <string name="InuMaterial3Switches">Switches</string>
+    <string name="InuMaterial3Sliders">Sliders</string>
     <string name="InuMaterial3Fabs">Floating buttons</string>
     <string name="InuMaterial3Sections">List items</string>
     <string name="InuMaterial3Avatars">Avatars</string>

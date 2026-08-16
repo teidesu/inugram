@@ -1,0 +1,146 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: polina4096 <polina4096@icloud.com>
+Date: Sun, 16 Aug 2026 19:18:57 +0400
+Subject: Material 3 style sliders
+
+---
+ .../telegram/ui/Components/SeekBarView.java   | 25 ++++++++-------
+ .../ui/Components/SlideChooseView.java        | 31 ++++++++++---------
+ 2 files changed, 31 insertions(+), 25 deletions(-)
+
+diff --git a/TMessagesProj/src/main/java/org/telegram/ui/Components/SeekBarView.java b/TMessagesProj/src/main/java/org/telegram/ui/Components/SeekBarView.java
+index 0000000..0000000 100644
+--- a/TMessagesProj/src/main/java/org/telegram/ui/Components/SeekBarView.java
++++ b/TMessagesProj/src/main/java/org/telegram/ui/Components/SeekBarView.java
+@@ -55,25 +55,25 @@ public class SeekBarView extends FrameLayout {
+     private final SeekBarAccessibilityDelegate seekBarAccessibilityDelegate;
+ 
+     private Paint innerPaint1;
+-    private Paint outerPaint1;
++    public Paint outerPaint1;
+     private int thumbSize;
+-    private int selectorWidth;
+-    private int thumbX;
+-    private AnimatedFloat animatedThumbX = new AnimatedFloat(this, 0, 60, CubicBezierInterpolator.EASE_OUT);
++    public int selectorWidth;
++    public int thumbX;
++    public AnimatedFloat animatedThumbX = new AnimatedFloat(this, 0, 60, CubicBezierInterpolator.EASE_OUT);
+     private int thumbDX;
+     private float progressToSet = -100;
+-    private float minProgress = -1;
++    public float minProgress = -1;
+     private boolean pressed, pressedDelayed;
+     public SeekBarViewDelegate delegate;
+     private boolean reportChanges;
+-    private float bufferedProgress;
++    public float bufferedProgress;
+     private Drawable hoverDrawable;
+     private long lastUpdateTime;
+     private float currentRadius;
+     private int[] pressedState = new int[]{android.R.attr.state_enabled, android.R.attr.state_pressed};
+-    private float transitionProgress = 1f;
+-    private int transitionThumbX;
+-    private int separatorsCount;
++    public float transitionProgress = 1f;
++    public int transitionThumbX;
++    public int separatorsCount;
+     private int lineWidthDp = 3;
+ 
+     private boolean twoSided;
+@@ -436,6 +436,9 @@ public class SeekBarView extends FrameLayout {
+ 
+     @Override
+     protected void onDraw(Canvas canvas) {
++        if (desu.inugram.helpers.theme.M3SliderHelper.drawSeekBar(this, canvas)) {
++            return;
++        }
+         int thumbX = this.thumbX;
+         if (!twoSided && separatorsCount > 1) {
+             float step = (getMeasuredWidth() - selectorWidth) / ((float) separatorsCount - 1f);
+@@ -534,7 +537,7 @@ public class SeekBarView extends FrameLayout {
+         }
+     }
+ 
+-    private ArrayList<Pair<Float, CharSequence>> timestamps;
++    public ArrayList<Pair<Float, CharSequence>> timestamps;
+     private CharSequence lastCaption;
+     private long lastDuration;
+ 
+@@ -894,7 +897,7 @@ public class SeekBarView extends FrameLayout {
+         return seekBarAccessibilityDelegate;
+     }
+ 
+-    private int getThemedColor(int key) {
++    public int getThemedColor(int key) {
+         return Theme.getColor(key, resourcesProvider);
+     }
+ }
+diff --git a/TMessagesProj/src/main/java/org/telegram/ui/Components/SlideChooseView.java b/TMessagesProj/src/main/java/org/telegram/ui/Components/SlideChooseView.java
+index 0000000..0000000 100644
+--- a/TMessagesProj/src/main/java/org/telegram/ui/Components/SlideChooseView.java
++++ b/TMessagesProj/src/main/java/org/telegram/ui/Components/SlideChooseView.java
+@@ -25,32 +25,32 @@ public class SlideChooseView extends View {
+ 
+     private Paint paint;
+     private Paint linePaint;
+-    private TextPaint textPaint;
++    public TextPaint textPaint;
+     private int lastDash;
+ 
+-    private int circleSize;
+-    private int gapSize;
+-    private int sideSide;
+-    private int lineSize;
++    public int circleSize;
++    public int gapSize;
++    public int sideSide;
++    public int lineSize;
+ 
+-    private int dashedFrom = -1;
++    public int dashedFrom = -1;
+ 
+-    private boolean moving;
++    public boolean moving;
+     private boolean startMoving;
+     private float xTouchDown;
+     private float yTouchDown;
+ 
+     private int startMovingPreset;
+ 
+-    private String[] optionsStr;
+-    private int[] optionsSizes;
+-    private Drawable[] leftDrawables;
++    public String[] optionsStr;
++    public int[] optionsSizes;
++    public Drawable[] leftDrawables;
+ 
+     private int selectedIndex;
+-    private int minIndex = Integer.MIN_VALUE;
++    public int minIndex = Integer.MIN_VALUE;
+     private float selectedIndexTouch;
+-    private AnimatedFloat selectedIndexAnimatedHolder = new AnimatedFloat(this, 120, CubicBezierInterpolator.DEFAULT);
+-    private AnimatedFloat movingAnimatedHolder = new AnimatedFloat(this, 150, CubicBezierInterpolator.DEFAULT);
++    public AnimatedFloat selectedIndexAnimatedHolder = new AnimatedFloat(this, 120, CubicBezierInterpolator.DEFAULT);
++    public AnimatedFloat movingAnimatedHolder = new AnimatedFloat(this, 150, CubicBezierInterpolator.DEFAULT);
+ 
+     private Callback callback;
+     private final Theme.ResourcesProvider resourcesProvider;
+@@ -222,6 +222,9 @@ public class SlideChooseView extends View {
+ 
+     @Override
+     protected void onDraw(Canvas canvas) {
++        if (desu.inugram.helpers.theme.M3SliderHelper.drawSlideChoose(this, canvas)) {
++            return;
++        }
+         float selectedIndexAnimated = selectedIndexAnimatedHolder.set(selectedIndex);
+         float movingAnimated = movingAnimatedHolder.set(moving ? 1 : 0);
+         int cy = getMeasuredHeight() / 2 + AndroidUtilities.dp(11);
+@@ -310,7 +313,7 @@ public class SlideChooseView extends View {
+         return selectedIndex;
+     }
+ 
+-    private int getThemedColor(int key) {
++    public int getThemedColor(int key) {
+         return Theme.getColor(key, resourcesProvider);
+     }
+ 
