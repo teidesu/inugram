@@ -150,6 +150,9 @@ object InuConfig {
     @JvmField
     val PLUGINS_STATE = StringItem("plugins_state", "", exportable = false)
 
+    @JvmField
+    val PLUGINS_COMPACT_LIST = BoolItem("plugins_compact_list", false)
+
     // snapshot of theme state before Monet was enabled, "day|night|autoNightType"; empty = none
     @JvmField
     val MONET_PREV = StringItem("monet_prev", "", exportable = false)

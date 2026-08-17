@@ -190,6 +190,7 @@ export const ICON_SELECTION: { pack: IconifyJSON, icons: string[], options?: Svg
       'file-diff',
       'text-wrap',
       'text-wrap-disabled',
+      'alert-triangle-filled',
     ],
   },
 ]

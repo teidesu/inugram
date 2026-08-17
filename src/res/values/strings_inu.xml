@@ -766,6 +766,7 @@
     <string name="InuPluginsInstalled">Installed</string>
     <string name="InuPluginsEmpty">No plugins installed</string>
     <string name="InuPluginsLoadFromDisk">Load from file</string>
+    <string name="InuPluginsCompactView">Compact view</string>
     <string name="InuPluginsReload">Reload</string>
     <string name="InuPluginsViewSource">View source code</string>
     <string name="InuPluginSourceTitle">Source code</string>
