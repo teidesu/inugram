@@ -53,6 +53,7 @@ import org.telegram.messenger.Utilities
 import org.telegram.tgnet.TLRPC
 import org.telegram.ui.LaunchActivity
 import java.util.IdentityHashMap
+import java.util.concurrent.CopyOnWriteArrayList
 import java.util.concurrent.CountDownLatch
 import java.util.concurrent.TimeUnit
 
@@ -94,7 +95,9 @@ object PluginManager {
     private var lateLoaded = false
     private var lateInited = false
 
-    var onChanged: (() -> Unit)? = null
+    // a set, not a slot: the plugins page and a plugin's info page can be mounted at once, and the
+    // fragment being revealed resumes before the one it replaced pauses
+    private val changeListeners = CopyOnWriteArrayList<() -> Unit>()
 
     fun init(context: Context) {
         PluginAppVisibility.watch(context)
@@ -198,6 +201,7 @@ object PluginManager {
         plugin.enabled = enabled
         if (enabled) plugin.failure = null
         PluginStore.persist(plugins)
+        notifyChanged()
         if (enabled) {
             if (isEngineEnabled() && !safeMode) run(plugin)
         } else {
@@ -235,13 +239,13 @@ object PluginManager {
      * always a *new* install, with its own identity and an empty store: nothing in the file is
      * matched against the installed set, so updating in place is what [reload] is for.
      */
-    fun import(suggestedName: String, source: String): String? {
+    fun import(suggestedName: String, source: String, enabled: Boolean = true): String? {
         val manifest = PluginManifestParser.parseOrNull(source)
             ?: return getString(R.string.InuPluginsErrorNoManifest)
         badGrants(manifest)?.let { return it }
         val target = PluginStore.fileFor(suggestedName)
         target.writeText(source)
-        val plugin = Plugin(PluginInstalls.mintId(), target, source, manifest)
+        val plugin = Plugin(PluginInstalls.mintId(), target, source, manifest).apply { this.enabled = enabled }
         plugins.add(plugin)
         PluginStore.persist(plugins)
         republishOrder()
@@ -292,13 +296,15 @@ object PluginManager {
     }
 
     /**
-     * why this app can't run [plugin], or null if it can. `@plugin-api` reads like minSdkVersion:
+     * why this app can't run a plugin declaring [manifest], or null if it can. Also the install
+     * flow's gate, which is why it is stated over a manifest rather than over an installed plugin.
+     *
+     * `@plugin-api` reads like minSdkVersion:
      * a level is never broken once shipped, so only a plugin asking for a level above ours is
      * refused - and refusing here, with a reason the user can read, beats failing later at whatever
      * call site happens to touch the missing api first.
      */
-    private fun incompatibility(plugin: Plugin): String? {
-        val manifest = plugin.manifest
+    fun incompatibility(manifest: PluginManifest): String? {
         val wanted = manifest.pluginApi
         if (wanted != null && wanted > PLUGIN_API_VERSION) {
             return formatString(R.string.InuPluginsErrorApiVersion, wanted, PLUGIN_API_VERSION)
@@ -328,7 +334,7 @@ object PluginManager {
     private fun start(plugin: Plugin) {
         if (plugin.engine != null) return
         if (!plugin.enabled || !isEngineEnabled() || safeMode) return
-        incompatibility(plugin)?.let {
+        incompatibility(plugin.manifest)?.let {
             fail(plugin, PluginFailure.Site.REFUSED, it)
             return
         }
@@ -419,6 +425,7 @@ object PluginManager {
         beforeClear()
         plugin.engine = null
         plugin.settingsPageId = null
+        notifyChanged()
     }
 
     private fun stop(plugin: Plugin) {
@@ -458,7 +465,7 @@ object PluginManager {
                 PluginStore.persist(plugins)
                 stop(plugin)
             }
-            onChanged?.invoke()
+            notifyChanged()
         }
     }
 
@@ -501,8 +508,17 @@ object PluginManager {
         enum class Verdict { PASS, LAST, DROP }
     }
 
-    private fun notifyChanged() {
-        AndroidUtilities.runOnUIThread { onChanged?.invoke() }
+    fun addOnChangedListener(listener: () -> Unit) {
+        changeListeners.addIfAbsent(listener)
+    }
+
+    fun removeOnChangedListener(listener: () -> Unit) {
+        changeListeners.remove(listener)
+    }
+
+    /** re-reads plugin state anywhere it is on screen; anything mutating a [Plugin] field owes it a call */
+    fun notifyChanged() {
+        AndroidUtilities.runOnUIThread { for (listener in changeListeners) listener() }
     }
 
     private fun registerSafeModeShortcut() {

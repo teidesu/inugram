@@ -18,6 +18,7 @@ import desu.inugram.InuConfig
 import desu.inugram.helpers.plugins.BootGuard
 import desu.inugram.helpers.InuUtils
 import desu.inugram.helpers.plugins.Plugin
+import desu.inugram.helpers.plugins.PluginImportHelper
 import desu.inugram.helpers.plugins.PluginManager
 import desu.inugram.helpers.plugins.ui.PluginManifestIcons
 import desu.inugram.helpers.plugins.ui.PluginUi
@@ -45,14 +46,16 @@ class PluginsActivity : SettingsPageActivity() {
 
     override fun getTitle(): CharSequence = LocaleController.getString(R.string.InuPlugins)
 
+    private val onPluginsChanged: () -> Unit = { listView?.adapter?.update(true) }
+
     override fun onResume() {
         super.onResume()
-        PluginManager.onChanged = { listView?.adapter?.update(true) }
+        PluginManager.addOnChangedListener(onPluginsChanged)
     }
 
     override fun onPause() {
         super.onPause()
-        PluginManager.onChanged = null
+        PluginManager.removeOnChangedListener(onPluginsChanged)
     }
 
     override fun createView(context: Context): View {
@@ -193,7 +196,7 @@ class PluginsActivity : SettingsPageActivity() {
 
     private fun showPluginOptions(plugin: Plugin, anchor: View) {
         ItemOptions.makeOptions(this, anchor)
-            .add(R.drawable.msg_reset, LocaleController.getString(R.string.InuPluginsReload)) {
+            .addIf(plugin.enabled, R.drawable.msg_reset, LocaleController.getString(R.string.InuPluginsReload)) {
                 PluginManager.reload(plugin)
             }
             .add(R.drawable.msg_delete, LocaleController.getString(R.string.InuPluginsRemove), true) {
@@ -239,12 +242,7 @@ class PluginsActivity : SettingsPageActivity() {
                     ).show()
                     return@runOnUIThread
                 }
-                val err = PluginManager.import(name, source)
-                if (err != null) {
-                    BulletinFactory.of(this).createErrorBulletin(err).show()
-                } else {
-                    listView.adapter.update(true)
-                }
+                PluginImportHelper.startImport(this, name, source)
             }
         }
     }
@@ -263,12 +261,7 @@ class PluginsActivity : SettingsPageActivity() {
 class PluginRow(context: Context, val compact: Boolean) : LinearLayout(context) {
     private val handle: ImageView
     private val icon: BackupImageView
-    private val placeholder = ResourcesCompat.getDrawable(resources, R.drawable.inu_tabler_code, null)?.mutate()?.apply {
-        colorFilter = PorterDuffColorFilter(
-            Theme.getColor(Theme.key_windowBackgroundWhiteGrayIcon),
-            PorterDuff.Mode.SRC_IN,
-        )
-    }
+    private val placeholder = PluginManifestIcons.createPlaceholder(context)
     private val title: TextView
     private val warningDrawable = ResourcesCompat.getDrawable(resources, R.drawable.inu_tabler_alert_triangle_filled, null)
         ?.mutate()
@@ -492,6 +485,7 @@ class PluginRow(context: Context, val compact: Boolean) : LinearLayout(context) 
                 it.visibility = if (text.isNullOrEmpty()) GONE else VISIBLE
             }
         }
+        reloadAction?.visibility = if (plugin.enabled) VISIBLE else GONE
         switch.setChecked(plugin.enabled, false)
     }
 

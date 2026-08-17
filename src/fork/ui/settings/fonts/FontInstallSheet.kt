@@ -2,10 +2,8 @@ package desu.inugram.ui.settings.fonts
 
 import android.content.Context
 import android.graphics.Typeface
-import android.graphics.drawable.Drawable
 import android.os.Build
 import android.text.Layout
-import android.text.TextUtils
 import android.util.TypedValue
 import android.view.Gravity
 import android.widget.LinearLayout
@@ -13,6 +11,7 @@ import android.widget.TextView
 import androidx.core.widget.NestedScrollView
 import desu.inugram.helpers.font.FontLibrary
 import desu.inugram.helpers.font.SfntParser
+import desu.inugram.ui.settings.createSheetButton
 import org.telegram.messenger.AndroidUtilities
 import org.telegram.messenger.FileLog
 import org.telegram.messenger.LocaleController
@@ -85,7 +84,7 @@ class FontInstallSheet(
             FontLibrary.InstallKind.ADD -> LocaleController.formatString(R.string.InuFontAddToFamily, status.familyName ?: "")
         }
 
-        val openBtn = makeButton(
+        val openBtn = createSheetButton(
             context, LocaleController.getString(R.string.InuFontOpenIn),
             background = Theme.createSimpleSelectorRoundRectDrawable(
                 AndroidUtilities.dp(21f), 0, Theme.getColor(Theme.key_dialogButtonSelector),
@@ -97,7 +96,7 @@ class FontInstallSheet(
             onOpen()
         }
 
-        val installBtn = makeButton(
+        val installBtn = createSheetButton(
             context, installText,
             background = Theme.AdaptiveRipple.filledRectByKey(Theme.key_featuredStickers_addButton, 21f),
             textColor = Theme.getColor(Theme.key_featuredStickers_buttonText),
@@ -128,25 +127,5 @@ class FontInstallSheet(
         }
         val weight = face.weight.toString()
         return if (face.italic) LocaleController.formatString(R.string.InuFontStyleItalicSuffix, weight) else weight
-    }
-
-    private fun makeButton(
-        context: Context,
-        text: CharSequence,
-        background: Drawable,
-        textColor: Int,
-        bold: Boolean,
-        onClick: () -> Unit,
-    ): TextView = TextView(context).apply {
-        this.text = text
-        isAllCaps = false
-        isSingleLine = true
-        ellipsize = TextUtils.TruncateAt.END
-        gravity = Gravity.CENTER
-        setTextSize(TypedValue.COMPLEX_UNIT_DIP, 14f)
-        setTextColor(textColor)
-        if (bold) typeface = AndroidUtilities.bold()
-        this.background = background
-        setOnClickListener { onClick() }
     }
 }
