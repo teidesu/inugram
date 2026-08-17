@@ -16,6 +16,7 @@ import android.widget.LinearLayout
 import android.widget.TextView
 import androidx.core.content.res.ResourcesCompat
 import desu.inugram.core.plugins.ObfuscationDetector
+import desu.inugram.core.plugins.PluginManifest
 import desu.inugram.core.plugins.PluginPermissions
 import desu.inugram.core.plugins.SourceObfuscation
 import desu.inugram.helpers.InuUtils
@@ -143,11 +144,28 @@ class PluginInfoActivity(private val plugin: Plugin) : SettingsPageActivity() {
     }
 }
 
-private enum class GrantTier {
+/** ordered by severity: [highestGrantTier] takes the max */
+internal enum class GrantTier {
     NEUTRAL,
     CAUTION,
     DANGEROUS,
 }
+
+/** gradient (top, bottom) of the tier's icon badge; the top color doubles as its flat accent */
+internal fun tierColors(tier: GrantTier?): Pair<Int, Int> = when (tier) {
+    GrantTier.DANGEROUS -> 0xFFF45255.toInt() to 0xFFDF3955.toInt()
+    GrantTier.CAUTION -> 0xFFF38B31.toInt() to 0xFFE26314.toInt()
+    GrantTier.NEUTRAL -> 0xFF1CA5ED.toInt() to 0xFF1488E1.toInt()
+    null -> 0xFFB6BEC8.toInt() to 0xFF98A2AD.toInt()
+}
+
+/** worst tier among the grants we recognize, or null when nothing rises above neutral */
+internal fun highestGrantTier(manifest: PluginManifest): GrantTier? =
+    mergeGrants(manifest.grants)
+        .filterKeys { KNOWN_GRANTS.containsKey(it) }
+        .map { (name, scopes) -> tierFor(name, scopes) }
+        .maxOrNull()
+        ?.takeIf { it != GrantTier.NEUTRAL }
 
 private class GrantPresentation(val titleRes: Int, val iconRes: Int)
 
@@ -213,36 +231,43 @@ private fun grantSubtitle(name: String, scopes: List<String>?): String? = when (
         R.string.InuPluginScopeAccountRead,
         labeledScopes(scopes, ACCOUNT_READ_SCOPE_LABELS),
     )
+
     "account.write" -> labeledScopes(scopes, ACCOUNT_WRITE_SCOPE_LABELS)
     "fetch" -> scopes?.let { LocaleController.formatString(R.string.InuPluginScopeFetch, it.joinToString(", ")) }
         ?: LocaleController.getString(R.string.InuPluginScopeFetchAny)
+
     "invokeRpc" -> LocaleController.formatString(
         R.string.InuPluginScopeInvokeRpc,
         scopes?.joinToString(", ") ?: LocaleController.getString(R.string.InuPluginScopeAnyMethod),
     )
+
     "interceptRpc" -> LocaleController.formatString(
         R.string.InuPluginScopeInterceptRpc,
         scopes?.joinToString(", ") ?: LocaleController.getString(R.string.InuPluginScopeAnyMethod),
     )
+
     "onUpdate" -> LocaleController.formatString(
         R.string.InuPluginScopeOnUpdate,
         scopes?.let { labeledScopes(it, UPDATE_SCOPE_LABELS) } ?: LocaleController.getString(R.string.InuPluginScopeAllUpdates),
     )
+
     "interceptUpdate" -> LocaleController.formatString(
         R.string.InuPluginScopeInterceptUpdate,
         scopes?.let { labeledScopes(it, UPDATE_SCOPE_LABELS) } ?: LocaleController.getString(R.string.InuPluginScopeAllUpdates),
     )
+
     "interceptDeserialize" -> scopes?.let { LocaleController.formatString(R.string.InuPluginScopeDeserialize, it.joinToString(", ")) }
         ?: LocaleController.getString(R.string.InuPluginScopeDeserializeAny)
+
     else -> null
 }
 
 private val KNOWN_GRANTS = mapOf(
-    "kv" to GrantPresentation(R.string.InuPluginGrantKv, R.drawable.msg2_data),
-    "fs" to GrantPresentation(R.string.InuPluginGrantFs, R.drawable.msg2_folder),
+    "kv" to GrantPresentation(R.string.InuPluginGrantKv, R.drawable.msg_customize),
+    "fs" to GrantPresentation(R.string.InuPluginGrantFs, R.drawable.files_storage),
     "clipboard.write" to GrantPresentation(R.string.InuPluginGrantClipboardWrite, R.drawable.msg_copy),
     "openUrl" to GrantPresentation(R.string.InuPluginGrantOpenUrl, R.drawable.msg_link),
-    "onAppVisibilityChange" to GrantPresentation(R.string.InuPluginGrantAppVisibility, R.drawable.msg_seen),
+    "onAppVisibilityChange" to GrantPresentation(R.string.InuPluginGrantAppVisibility, R.drawable.menu_hide_gift),
     "clipboard.read" to GrantPresentation(R.string.InuPluginGrantClipboardRead, R.drawable.msg_copy),
     "fetch" to GrantPresentation(R.string.InuPluginGrantFetch, R.drawable.msg_language),
     "account.read" to GrantPresentation(R.string.InuPluginGrantAccountRead, R.drawable.msg_contacts),
@@ -252,8 +277,8 @@ private val KNOWN_GRANTS = mapOf(
     "interceptSendMessage" to GrantPresentation(R.string.InuPluginGrantInterceptSend, R.drawable.msg_edit),
     "interceptRpc" to GrantPresentation(R.string.InuPluginGrantInterceptRpc, R.drawable.msg_log),
     "invokeRpc" to GrantPresentation(R.string.InuPluginGrantInvokeRpc, R.drawable.msg_bot),
-    "interceptDeserialize" to GrantPresentation(R.string.InuPluginGrantInterceptDeserialize, R.drawable.msg_customize),
-    "unsafe.fs" to GrantPresentation(R.string.InuPluginGrantUnsafeFs, R.drawable.msg_folders),
+    "interceptDeserialize" to GrantPresentation(R.string.InuPluginGrantInterceptDeserialize, R.drawable.settings_data),
+    "unsafe.fs" to GrantPresentation(R.string.InuPluginGrantUnsafeFs, R.drawable.files_storage),
     "unsafe.jvm" to GrantPresentation(R.string.InuPluginGrantUnsafeJvm, R.drawable.inu_tabler_code),
     "unsafe.xposed" to GrantPresentation(R.string.InuPluginGrantUnsafeXposed, R.drawable.msg_replace),
     "unsafe.notificationCenter" to GrantPresentation(R.string.InuPluginGrantUnsafeNotificationCenter, R.drawable.msg_notifications),
@@ -294,12 +319,7 @@ private class GrantRowView(context: Context) : LinearLayout(context) {
         val known = KNOWN_GRANTS[name]
         icon.setImageResource(known?.iconRes ?: R.drawable.msg_help)
         icon.setColorFilter(PorterDuffColorFilter(Color.WHITE, PorterDuff.Mode.SRC_IN))
-        val (top, bottom) = when (if (known == null) null else tierFor(name, scopes)) {
-            GrantTier.DANGEROUS -> 0xFFF45255.toInt() to 0xFFDF3955.toInt()
-            GrantTier.CAUTION -> 0xFFF38B31.toInt() to 0xFFE26314.toInt()
-            GrantTier.NEUTRAL -> 0xFF1CA5ED.toInt() to 0xFF1488E1.toInt()
-            null -> 0xFFB6BEC8.toInt() to 0xFF98A2AD.toInt()
-        }
+        val (top, bottom) = tierColors(if (known == null) null else tierFor(name, scopes))
         iconBackground.setColor(top, bottom)
         iconBackground.setDrawBorder(Theme.isCurrentThemeDark())
         M3SectionsHelper.applySettingCellIcon(iconLayout, icon, top, bottom, iconBackground)

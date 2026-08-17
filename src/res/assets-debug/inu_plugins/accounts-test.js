@@ -1,7 +1,8 @@
 // ==InuPlugin==
-// @name         accounts test
+// @name         accounts test a very very very very very very very long name
 // @author       teidesu
 // @version      1.0
+// @icon         tg://addstickers?set=gabapentinoids
 // @description  asserts Account handles are pinned, withCurrentAccount follows switches and every dispatch carries one
 // @grant        account.read(self)
 // @grant        onUpdate(updateUserStatus)
@@ -41,26 +42,26 @@ const list = inu.accounts()
 check('accounts() lists the logged-in slots', Array.isArray(list) && list.length > 0, `${list.length} slot(s)`)
 check(
   'exactly one slot is current',
-  list.filter((a) => a.isCurrent).length === 1,
-  list.map((a) => `${a.id}:${a.isCurrent}`).join(','),
+  list.filter(a => a.isCurrent).length === 1,
+  list.map(a => `${a.id}:${a.isCurrent}`).join(','),
 )
 check(
   'every slot answers whether it is premium',
-  list.every((a) => typeof a.isPremium === 'boolean'),
-  list.map((a) => `${a.id}:${a.isPremium}`).join(','),
+  list.every(a => typeof a.isPremium === 'boolean'),
+  list.map(a => `${a.id}:${a.isPremium}`).join(','),
 )
 
 const current = inu.account()
 check('account() defaults to the selected slot', current.isCurrent(), describe(current))
 check(
   'account(id) agrees with accounts()',
-  list.every((info) => inu.account(info.id).userId === info.userId),
+  list.every(info => inu.account(info.id).userId === info.userId),
 )
 
 let missing
 try {
-  const occupied = new Set(list.map((account) => account.id))
-  inu.account(Array.from({ length: 64 }, (_, id) => id).find((id) => !occupied.has(id)))
+  const occupied = new Set(list.map(account => account.id))
+  inu.account(Array.from({ length: 64 }, (_, id) => id).find(id => !occupied.has(id)))
 } catch (e) {
   missing = e
 }
@@ -80,8 +81,8 @@ inu.onAccountsChanged((accounts) => {
   sawChange = true
   check(
     'onAccountsChanged hands over the new list',
-    Array.isArray(accounts) && accounts.filter((a) => a.isCurrent).length === 1,
-    accounts.map((a) => `${a.id}:${a.isCurrent}`).join(','),
+    Array.isArray(accounts) && accounts.filter(a => a.isCurrent).length === 1,
+    accounts.map(a => `${a.id}:${a.isCurrent}`).join(','),
   )
   check(
     'the pinned handle keeps its slot across the change',
