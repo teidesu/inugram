@@ -209,7 +209,13 @@ if (typeof inu.ui?.settingsPage === 'function') {
           text: 'Run it',
           onClick: () => {
             const Thread = inu.jvm.cls('java.lang.Thread')
-            check('a real java call answers', typeof Thread.callStatic('currentThread') === 'object')
+            // not `Thread.currentThread()`: the scope list is matched against the runtime class,
+            // and on the engine's own queue that answers with the app's `DispatchQueue` - a class
+            // this plugin is deliberately not scoped to
+            check(
+              'a real java call answers',
+              typeof inu.jvm.cls('java.util.Locale').callStatic('getDefault') === 'object',
+            )
             expectPluginError('the runnable itself cannot be reached into', 'forbidden', null, () =>
               onClick.call('run'),
             )

@@ -51,7 +51,14 @@ declare interface JvmClassSpec {
 }
 
 declare namespace inu {
-  /** @needs-grant unsafe.jvm. Values are capped at 1048576 bytes in either direction; dex input has at most 8388608 bytes of dex. */
+  /**
+   * The scope list is matched against the *runtime* class of everything that crosses, return
+   * values included - a method's declared type says nothing about what it hands back. So
+   * `cls('java.lang.Thread').callStatic('currentThread')` answers with whatever subclass is
+   * actually running, and a plugin scoped to `java.lang.*` is refused it.
+   *
+   * @needs-grant unsafe.jvm. Values are capped at 1048576 bytes in either direction; dex input has at most 8388608 bytes of dex.
+   */
   namespace jvm {
     function runnable(callback: () => void): JavaObject
 
