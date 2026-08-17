@@ -14,7 +14,6 @@ import android.widget.FrameLayout
 import android.widget.ImageView
 import android.widget.LinearLayout
 import android.widget.TextView
-import androidx.core.content.res.ResourcesCompat
 import desu.inugram.core.plugins.ObfuscationDetector
 import desu.inugram.core.plugins.PluginManifest
 import desu.inugram.core.plugins.PluginPermissions
@@ -29,6 +28,7 @@ import org.telegram.messenger.AndroidUtilities
 import org.telegram.messenger.LocaleController
 import org.telegram.messenger.R
 import org.telegram.ui.ActionBar.Theme
+import org.telegram.ui.Cells.TextCheckCell
 import org.telegram.ui.Components.BackupImageView
 import org.telegram.ui.Components.LayoutHelper
 import org.telegram.ui.Components.LinkSpanDrawable
@@ -45,17 +45,19 @@ class PluginInfoActivity(private val plugin: Plugin) : SettingsPageActivity() {
 
     override fun getTitle(): CharSequence = plugin.manifest.name
 
+    private val onPluginChanged: () -> Unit = {
+        actionBar?.setTitle(plugin.manifest.name)
+        listView?.adapter?.update(true)
+    }
+
     override fun onResume() {
         super.onResume()
-        PluginManager.onChanged = {
-            actionBar?.setTitle(plugin.manifest.name)
-            listView?.adapter?.update(true)
-        }
+        PluginManager.addOnChangedListener(onPluginChanged)
     }
 
     override fun onPause() {
         super.onPause()
-        PluginManager.onChanged = null
+        PluginManager.removeOnChangedListener(onPluginChanged)
     }
 
     override fun createView(context: Context): View {
@@ -99,6 +101,12 @@ class PluginInfoActivity(private val plugin: Plugin) : SettingsPageActivity() {
             items.add(UItem.asCustomShadow(OBFUSCATION_BANNER, banner))
         }
 
+        items.add(
+            UItem.asRippleCheck(TOGGLE_ENABLED, LocaleController.getString(R.string.InuPluginsEnabled))
+                .setChecked(plugin.enabled)
+        )
+        items.add(UItem.asShadow(null))
+
         items.add(UItem.asHeader(LocaleController.getString(R.string.InuPluginsPermissions)))
         val grants = mergeGrants(plugin.manifest.grants)
         if (grants.isEmpty()) {
@@ -116,15 +124,22 @@ class PluginInfoActivity(private val plugin: Plugin) : SettingsPageActivity() {
             items.add(UItem.asButton(BUTTON_SETTINGS, R.drawable.msg_settings, LocaleController.getString(R.string.Settings)))
         }
         items.add(UItem.asButton(BUTTON_SOURCE, R.drawable.inu_tabler_code, LocaleController.getString(R.string.InuPluginsViewSource)))
-        items.add(UItem.asButton(BUTTON_RELOAD, R.drawable.msg_reset, LocaleController.getString(R.string.InuPluginsReload)))
+        // a reload only re-reads the file for a plugin that is going to run it
+        if (plugin.enabled) {
+            items.add(UItem.asButton(BUTTON_RELOAD, R.drawable.msg_reset, LocaleController.getString(R.string.InuPluginsReload)))
+        }
         items.add(UItem.asButton(BUTTON_REMOVE, R.drawable.msg_delete, LocaleController.getString(R.string.InuPluginsRemove)).red())
         items.add(UItem.asShadow(null))
     }
 
     override fun onClick(item: UItem, view: View, position: Int, x: Float, y: Float) {
         when (item.id) {
+            TOGGLE_ENABLED -> {
+                PluginManager.setEnabled(plugin, !plugin.enabled)
+                (view as? TextCheckCell)?.isChecked = plugin.enabled
+            }
             BUTTON_SETTINGS -> PluginUi.openRegisteredSettings(plugin)
-            BUTTON_SOURCE -> showDialog(PluginSourceSheet(context, plugin))
+            BUTTON_SOURCE -> showDialog(PluginSourceSheet(context, plugin.manifest.name, plugin.source))
             BUTTON_RELOAD -> PluginManager.reload(plugin)
             BUTTON_REMOVE -> {
                 PluginManager.remove(plugin)
@@ -135,6 +150,7 @@ class PluginInfoActivity(private val plugin: Plugin) : SettingsPageActivity() {
 
     companion object {
         private val HEADER = InuUtils.generateId()
+        private val TOGGLE_ENABLED = InuUtils.generateId()
         private val OBFUSCATION_BANNER = InuUtils.generateId()
         private val BUTTON_SETTINGS = InuUtils.generateId()
         private val BUTTON_SOURCE = InuUtils.generateId()
@@ -184,7 +200,7 @@ private fun tierFor(name: String, scopes: List<String>?): GrantTier = when {
 }
 
 /** merged by grant name in first-appearance order; `null` scopes = unscoped (full access) */
-private fun mergeGrants(tokens: List<String>): LinkedHashMap<String, List<String>?> {
+internal fun mergeGrants(tokens: List<String>): LinkedHashMap<String, List<String>?> {
     val merged = LinkedHashMap<String, List<String>?>()
     for (grant in tokens.mapNotNull { PluginPermissions.parseGrant(it) }) {
         if (grant.name !in merged) {
@@ -285,7 +301,7 @@ private val KNOWN_GRANTS = mapOf(
     "unsafe.disableApiFiltering" to GrantPresentation(R.string.InuPluginGrantUnsafeDisableApiFiltering, R.drawable.msg_block),
 )
 
-private class GrantRowView(context: Context) : LinearLayout(context) {
+internal class GrantRowView(context: Context) : LinearLayout(context) {
     private val iconBackground = SettingsActivity.SettingCell.Background()
     private val icon = ImageView(context).apply {
         scaleType = ImageView.ScaleType.FIT_CENTER
@@ -339,12 +355,7 @@ class PluginInfoHeaderView(context: Context) : LinearLayout(context) {
     private val icon = BackupImageView(context).apply {
         setRoundRadius(AndroidUtilities.dp(16f))
     }
-    private val placeholder = ResourcesCompat.getDrawable(resources, R.drawable.inu_tabler_code, null)?.mutate()?.apply {
-        colorFilter = PorterDuffColorFilter(
-            Theme.getColor(Theme.key_windowBackgroundWhiteGrayIcon),
-            PorterDuff.Mode.SRC_IN,
-        )
-    }
+    private val placeholder = PluginManifestIcons.createPlaceholder(context)
     private val name = TextView(context).apply {
         setTextColor(Theme.getColor(Theme.key_windowBackgroundWhiteBlackText))
         textSize = 20f

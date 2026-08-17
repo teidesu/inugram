@@ -13,7 +13,6 @@ import android.widget.ImageView
 import android.widget.LinearLayout
 import android.widget.TextView
 import androidx.recyclerview.widget.RecyclerView
-import desu.inugram.helpers.plugins.Plugin
 import org.telegram.messenger.AndroidUtilities
 import org.telegram.messenger.CodeHighlighting
 import org.telegram.messenger.LocaleController
@@ -24,7 +23,7 @@ import org.telegram.ui.Components.BulletinFactory
 import org.telegram.ui.Components.LayoutHelper
 import org.telegram.ui.Components.RecyclerListView
 
-class PluginSourceSheet(context: Context, private val plugin: Plugin) :
+class PluginSourceSheet(context: Context, private val name: String, private val source: String) :
     BottomSheetWithRecyclerListView(context, null, false, false, false, null) {
 
     init {
@@ -36,7 +35,6 @@ class PluginSourceSheet(context: Context, private val plugin: Plugin) :
     override fun createAdapter(listView: RecyclerListView): RecyclerListView.SelectionAdapter = Adapter()
 
     private fun buildHeader(context: Context): View {
-        val source = plugin.source
         val title = TextView(context).apply {
             setTextColor(Theme.getColor(Theme.key_dialogTextBlack))
             setTextSize(TypedValue.COMPLEX_UNIT_DIP, 20f)
@@ -47,7 +45,7 @@ class PluginSourceSheet(context: Context, private val plugin: Plugin) :
             setTextColor(Theme.getColor(Theme.key_dialogTextGray3))
             setTextSize(TypedValue.COMPLEX_UNIT_DIP, 13f)
             text = listOf(
-                plugin.manifest.name,
+                name,
                 AndroidUtilities.formatFileSize(source.toByteArray().size.toLong()),
             ).joinToString(" · ")
         }
@@ -79,7 +77,6 @@ class PluginSourceSheet(context: Context, private val plugin: Plugin) :
     }
 
     private fun buildCode(context: Context): View {
-        val source = plugin.source
         val code = TextView(context).apply {
             typeface = Typeface.MONOSPACE
             setTextSize(TypedValue.COMPLEX_UNIT_DIP, 12f)

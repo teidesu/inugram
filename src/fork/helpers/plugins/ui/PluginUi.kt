@@ -12,6 +12,7 @@ import desu.inugram.core.plugins.CommonIcons
 import desu.inugram.core.plugins.PluginWire
 import desu.inugram.helpers.plugins.EngineDispatch
 import desu.inugram.helpers.plugins.Plugin
+import desu.inugram.helpers.plugins.PluginManager
 import desu.inugram.helpers.plugins.QuickJs
 import desu.inugram.helpers.plugins.UiListener
 import desu.inugram.helpers.plugins.platform.PluginJvm
@@ -159,11 +160,14 @@ object PluginUi {
 
     fun registerSettings(plugin: Plugin, pageId: Long) {
         plugin.settingsPageId = pageId
+        PluginManager.notifyChanged()
     }
 
     /** guarded by the page id: disposing a page the plugin has already replaced must not clear it */
     fun unregisterSettings(plugin: Plugin, pageId: Long) {
-        if (plugin.settingsPageId == pageId) plugin.settingsPageId = null
+        if (plugin.settingsPageId != pageId) return
+        plugin.settingsPageId = null
+        PluginManager.notifyChanged()
     }
 
     fun invalidate(engine: QuickJs, pageId: Long) {

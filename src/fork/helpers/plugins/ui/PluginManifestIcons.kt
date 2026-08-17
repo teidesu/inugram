@@ -1,15 +1,18 @@
 package desu.inugram.helpers.plugins.ui
 
+import android.content.Context
 import android.graphics.PorterDuff
 import android.graphics.PorterDuffColorFilter
 import android.graphics.drawable.Drawable
 import android.net.Uri
+import androidx.core.content.res.ResourcesCompat
 import desu.inugram.core.plugins.CommonIcons
 import org.telegram.messenger.DocumentObject
 import org.telegram.messenger.FileLoader
 import org.telegram.messenger.ImageLocation
 import org.telegram.messenger.MediaDataController
 import org.telegram.messenger.MessageObject
+import org.telegram.messenger.R
 import org.telegram.messenger.UserConfig
 import org.telegram.tgnet.TLRPC
 import org.telegram.ui.ActionBar.Theme
@@ -31,6 +34,15 @@ import org.telegram.ui.Components.BackupImageView
  */
 object PluginManifestIcons {
     private const val FILTER = "56_56"
+
+    /** what every plugin surface draws when the manifest names no icon, or names one we can't resolve */
+    fun createPlaceholder(context: Context): Drawable? =
+        ResourcesCompat.getDrawable(context.resources, R.drawable.inu_tabler_code, null)?.mutate()?.apply {
+            colorFilter = PorterDuffColorFilter(
+                Theme.getColor(Theme.key_windowBackgroundWhiteGrayIcon),
+                PorterDuff.Mode.SRC_IN,
+            )
+        }
 
     fun bindIcon(view: BackupImageView, spec: String?, placeholder: Drawable?) {
         view.tag = spec
