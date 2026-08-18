@@ -504,7 +504,7 @@ mod bundled_oracle {
   use crate::api::io::fs::tests::{install_sandbox_globals, TestDir};
   use rquickjs::Context;
 
-  const ORACLE: &str = include_str!("../../../../res/assets-debug/inu_plugins/fetch-test.js");
+  const ORACLE: &str = include_str!("../../../../test/plugins/fetch-test.js");
 
   /// [`TestDomainGrants`] holds one `fetch` token, so a manifest that grew a second one has to be
   /// noticed here rather than silently running under the first

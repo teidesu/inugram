@@ -477,7 +477,7 @@ mod bundled_oracle {
   use rquickjs::Context;
   use std::collections::BTreeMap;
 
-  const ORACLE: &str = include_str!("../../../res/assets-debug/inu_plugins/timers-test.js");
+  const ORACLE: &str = include_str!("../../../test/plugins/timers-test.js");
 
   /// what the oracle's own pacing assertion is measured against. A **port** of
   /// `TimerThrottle`, not the thing itself: the throttle is java, lives on the app's
@@ -589,7 +589,7 @@ mod bundled_oracle {
     crate::testing::harness::assert_oracle_exact(&lines, "timers test done", 5);
   }
 
-  const VISIBILITY_ORACLE: &str = include_str!("../../../res/assets-debug/inu_plugins/visibility-test.js");
+  const VISIBILITY_ORACLE: &str = include_str!("../../../test/plugins/visibility-test.js");
 
   /// [`WakeHost`] on a clock the test moves. The visibility oracle's subject is *when* the wheel
   /// is allowed to tick, not what a tick costs, so a driver that sleeps would spend four real

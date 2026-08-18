@@ -6,8 +6,9 @@ into the worktree). `patches/` and `series` are export targets, not source of tr
 
 `src/` is named by role, never by language: `fork/` (main kotlin) + `fork-app/` (app module),
 `core/` (InuCore, jvm-testable), `native/` (rust engine), `plugins/` (plugin contract),
-`test/` (`kotlin/` device suite + `assets/` it reads as files), `vendor/` (copied-in third
-party), `res/` (resources). Each maps to a `forkSyncFiles` entry in `scripts/config.ts`.
+`test/` (`kotlin/` device suite, `assets/` it reads as files, `plugins/` the js oracles the device
+and rust suites both run), `vendor/` (copied-in third party), `res/` (resources). Each maps to a
+`forkSyncFiles` entry in `scripts/config.ts`.
 
 `FEATURES.md` is the user-facing list of fork features/bugfixes. Keep it in sync —
 when adding, removing or meaningfully changing a patch, update `FEATURES.md` in

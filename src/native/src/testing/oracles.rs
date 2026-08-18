@@ -12,7 +12,7 @@ const DEMOS: &[&str] = &["disable-ads.js"];
 const MARKER: &str = "test done";
 
 fn plugin_dir() -> PathBuf {
-  Path::new(env!("CARGO_MANIFEST_DIR")).join("../res/assets-debug/inu_plugins")
+  Path::new(env!("CARGO_MANIFEST_DIR")).join("../test/plugins")
 }
 
 fn bundled_plugins() -> Vec<(String, String)> {
@@ -33,7 +33,7 @@ fn bundled_plugins() -> Vec<(String, String)> {
 /// every plugin file some `.rs` in the crate pulls in with `include_str!`, by file name
 fn included_plugins() -> BTreeSet<String> {
   const MACRO: &str = "include_str!(";
-  const PREFIX: &str = "res/assets-debug/inu_plugins/";
+  const PREFIX: &str = "test/plugins/";
   let mut out = BTreeSet::new();
   let mut sources = vec![Path::new(env!("CARGO_MANIFEST_DIR")).join("src")];
   while let Some(dir) = sources.pop() {

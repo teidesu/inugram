@@ -29,7 +29,7 @@ mod info_tests {
     });
   }
 
-  const ORACLE: &str = include_str!("../../../res/assets-debug/inu_plugins/info-test.js");
+  const ORACLE: &str = include_str!("../../../test/plugins/info-test.js");
 
   /// The bundled oracle is the only test `inu.info()` gets on a device, and it needs no JNI to
   /// run here: [`install_inu`] is an ordinary crate function, and the header the app hands it is

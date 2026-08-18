@@ -934,10 +934,10 @@ fn run_bundled_oracle(source: &str, done: &str, count: usize) {
 
 #[test]
 fn the_bundled_writes_test_plugin_passes() {
-  run_bundled_oracle(include_str!("../../../../res/assets-debug/inu_plugins/writes-test.js"), "writes test done", 43);
+  run_bundled_oracle(include_str!("../../../../test/plugins/writes-test.js"), "writes test done", 43);
 }
 
 #[test]
 fn the_bundled_media_test_plugin_passes() {
-  run_bundled_oracle(include_str!("../../../../res/assets-debug/inu_plugins/media-test.js"), "media test done", 30);
+  run_bundled_oracle(include_str!("../../../../test/plugins/media-test.js"), "media test done", 30);
 }

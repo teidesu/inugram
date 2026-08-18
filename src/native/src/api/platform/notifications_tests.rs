@@ -246,7 +246,7 @@ fn dispose_releases_the_callbacks_and_tells_the_host_to_stop_observing() {
   // rt/ctx drop after this without aborting == the roots were released
 }
 
-const ORACLE: &str = include_str!("../../../../res/assets-debug/inu_plugins/notifications-test.js");
+const ORACLE: &str = include_str!("../../../../test/plugins/notifications-test.js");
 
 /// the bundled oracle is the only test this surface gets on a device, and every assertion in it
 /// is a function of what it was handed - so the posts it wants are synthesised here

@@ -15,5 +15,5 @@
     // `catch (e) { e.code }` is the shape common.d.ts tells plugin authors to write
     "useUnknownInCatchVariables": false
   },
-  "include": ["./*.d.ts", "../res/assets-debug/inu_plugins/*.js"]
+  "include": ["./*.d.ts", "../test/plugins/*.js"]
 }

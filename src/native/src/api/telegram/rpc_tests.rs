@@ -1635,7 +1635,7 @@ fn a_throwing_demuxed_handler_does_not_stop_the_next_one() {
 /// function of the updates handed to it, so it runs here against synthesised ones
 #[test]
 fn the_bundled_events_test_plugin_passes() {
-  const ORACLE: &str = include_str!("../../../../res/assets-debug/inu_plugins/events-test.js");
+  const ORACLE: &str = include_str!("../../../../test/plugins/events-test.js");
   let (rt, ctx, _host, state) = setup(&crate::testing::harness::manifest_grants(ORACLE));
   let lines = crate::testing::harness::install_capturing_console(&ctx);
   ctx.with(|ctx| match ctx.eval::<(), _>(ORACLE) {
@@ -1675,7 +1675,7 @@ fn the_bundled_events_test_plugin_passes() {
 /// here, so the count covers the whole file rather than its load-time third.
 #[test]
 fn the_bundled_accounts_test_plugin_passes() {
-  const ORACLE: &str = include_str!("../../../../res/assets-debug/inu_plugins/accounts-test.js");
+  const ORACLE: &str = include_str!("../../../../test/plugins/accounts-test.js");
   const SWITCHED: &str = r#"[{"id":0,"userId":111,"isCurrent":false,"isPremium":false},{"id":1,"userId":222,"isCurrent":true,"isPremium":true}]"#;
 
   let rt = Runtime::new().unwrap();
@@ -2058,7 +2058,7 @@ fn a_send_disposer_takes_the_stage_out_of_the_chain() {
 
 #[test]
 fn the_bundled_send_intercept_test_plugin_passes() {
-  const ORACLE: &str = include_str!("../../../../res/assets-debug/inu_plugins/send-intercept-test.js");
+  const ORACLE: &str = include_str!("../../../../test/plugins/send-intercept-test.js");
   let (rt, ctx, host, state) = setup(&crate::testing::harness::manifest_grants(ORACLE));
   let lines = crate::testing::harness::install_capturing_console(&ctx);
   ctx.with(|ctx| match ctx.eval::<(), _>(ORACLE) {
@@ -2234,7 +2234,7 @@ fn registering_an_update_interceptor_after_unload_began_is_a_no_op() {
 
 #[test]
 fn the_bundled_update_intercept_test_plugin_passes() {
-  const ORACLE: &str = include_str!("../../../../res/assets-debug/inu_plugins/update-intercept-test.js");
+  const ORACLE: &str = include_str!("../../../../test/plugins/update-intercept-test.js");
   let (rt, ctx, host, state) = setup(&crate::testing::harness::manifest_grants(ORACLE));
   let lines = crate::testing::harness::install_capturing_console(&ctx);
   ctx.with(|ctx| match ctx.eval::<(), _>(ORACLE) {
@@ -2627,10 +2627,10 @@ mod bundled_oracles {
     });
   }
 
-  const GLOBALS_ORACLE: &str = include_str!("../../../../res/assets-debug/inu_plugins/globals-test.js");
-  const LAZY_TL_ORACLE: &str = include_str!("../../../../res/assets-debug/inu_plugins/lazy-tl-test.js");
-  const TAKEOVER_ORACLE: &str = include_str!("../../../../res/assets-debug/inu_plugins/takeover-test.js");
-  const API_FILTER_ORACLE: &str = include_str!("../../../../res/assets-debug/inu_plugins/api-filter-test.js");
+  const GLOBALS_ORACLE: &str = include_str!("../../../../test/plugins/globals-test.js");
+  const LAZY_TL_ORACLE: &str = include_str!("../../../../test/plugins/lazy-tl-test.js");
+  const TAKEOVER_ORACLE: &str = include_str!("../../../../test/plugins/takeover-test.js");
+  const API_FILTER_ORACLE: &str = include_str!("../../../../test/plugins/api-filter-test.js");
 
   /// `help.getConfig` as the app would answer it, with the one field the takeover filter strips
   fn config_node() -> Rc<RefCell<Node>> {

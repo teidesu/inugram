@@ -1,9 +1,6 @@
 package desu.inugram.helpers.plugins
 
-import android.content.Context
-import android.content.pm.PackageInfo
 import android.util.Log
-import androidx.core.content.edit
 import desu.inugram.InuConfig
 import desu.inugram.core.plugins.PluginInstall
 import desu.inugram.core.plugins.PluginInstalls
@@ -12,7 +9,6 @@ import desu.inugram.helpers.plugins.io.PluginFs
 import java.io.File
 import org.json.JSONArray
 import org.json.JSONObject
-import org.telegram.messenger.BuildConfig
 
 /**
  * The installed set as it exists on disk: one `.js` file per install, plus the record in
@@ -30,45 +26,11 @@ import org.telegram.messenger.BuildConfig
  */
 object PluginStore {
     private const val TAG = "InuPluginStore"
-    private const val BUNDLED_DIR = "inu_plugins"
-    private const val BUNDLED_STAMP_KEY = "plugins_bundled_apk"
 
     val dir: File by lazy { PluginFs.storeDir() }
 
     /** kept out of [load]'s answer: a file that failed to load this boot must still be persisted */
     private var unloaded: List<PluginInstall> = emptyList()
-
-    /**
-     * debug-only. Skipped unless the apk changed, because this runs from
-     * `ApplicationLoader.onCreate` - the head of the notification path for a process a push woke,
-     * and unpacking the set is a read and a write each. The assets live *in* the apk, so a reinstall
-     * (what dev iteration is) bumps `lastUpdateTime`.
-     */
-    fun copyBundled(context: Context, packageInfo: PackageInfo?, appBuild: String) {
-        if (!BuildConfig.DEBUG) return
-        val stamp = packageInfo?.let { "$appBuild:${it.lastUpdateTime}" }
-        if (stamp != null && InuConfig.prefs.getString(BUNDLED_STAMP_KEY, null) == stamp) return
-        val names = try {
-            context.assets.list(BUNDLED_DIR)
-        } catch (e: Exception) {
-            Log.e(TAG, "list bundled plugins failed", e)
-            null
-        } ?: return
-        var complete = true
-        for (name in names) {
-            if (!name.endsWith(".js")) continue
-            try {
-                val text = context.assets.open("$BUNDLED_DIR/$name").use {
-                    it.readBytes().toString(Charsets.UTF_8)
-                }
-                File(dir, name).writeText(text)
-            } catch (e: Exception) {
-                complete = false
-                Log.e(TAG, "copy bundled plugin failed: $name", e)
-            }
-        }
-        if (stamp != null && complete) InuConfig.prefs.edit { putString(BUNDLED_STAMP_KEY, stamp) }
-    }
 
     /**
      * every install on disk that loads, in persisted order. A file nobody has a record for is a new

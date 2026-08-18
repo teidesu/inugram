@@ -75,7 +75,7 @@ fn open_url_and_the_two_clipboard_halves_are_three_separate_grants() {
   assert!(host.opened.borrow().is_empty(), "a refused openUrl must not reach the host");
 }
 
-const SHELL_ORACLE: &str = include_str!("../../../../res/assets-debug/inu_plugins/shell-test.js");
+const SHELL_ORACLE: &str = include_str!("../../../../test/plugins/shell-test.js");
 
 /// the bundled oracle is the only test this surface gets on a device. its load-time half runs
 /// on its own; the half a device reaches from a button is called here and answered, so the

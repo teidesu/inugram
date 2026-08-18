@@ -103,7 +103,6 @@ object PluginManager {
         PluginAppVisibility.watch(context)
         PluginAccounts.watch()
         PluginBlobs.scheduleSweep()
-        PluginStore.copyBundled(context, UpdateHelper.packageInfo, appBuild)
         plugins.addAll(PluginStore.load())
         PluginStore.persist(plugins)
         republishOrder()

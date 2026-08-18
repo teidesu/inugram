@@ -888,7 +888,7 @@ mod bundled_oracle {
   use super::*;
   use rquickjs::{Context, Runtime};
 
-  const ORACLE: &str = include_str!("../../../../res/assets-debug/inu_plugins/blob-test.js");
+  const ORACLE: &str = include_str!("../../../../test/plugins/blob-test.js");
 
   #[test]
   fn the_bundled_blob_test_plugin_passes() {

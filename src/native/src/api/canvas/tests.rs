@@ -1449,7 +1449,7 @@ fn disposal_releases_every_promise_the_engine_still_holds() {
 mod bundled_oracle {
   use super::*;
 
-  const ORACLE: &str = include_str!("../../../../res/assets-debug/inu_plugins/canvas-test.js");
+  const ORACLE: &str = include_str!("../../../../test/plugins/canvas-test.js");
 
   /// the host the oracle runs against: it answers the three asynchronous ops, and refuses the one
   /// decode whose content says to - which is how the suite reaches its rejection case without a

@@ -864,7 +864,7 @@ const KV_SHIM: &str = r#"
 #[test]
 fn the_bundled_ui_test_plugin_passes() {
   let (rt, ctx, host, _state, _logs) = setup();
-  let source = format!("{KV_SHIM}\n{}", include_str!("../../../../res/assets-debug/inu_plugins/ui-test.js"),);
+  let source = format!("{KV_SHIM}\n{}", include_str!("../../../../test/plugins/ui-test.js"),);
   let lines = crate::testing::harness::run_capturing_console(&rt, &ctx, &source);
 
   crate::testing::harness::assert_oracle_exact(&lines, "ui test done", 17);

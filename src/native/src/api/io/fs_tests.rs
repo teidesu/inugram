@@ -669,7 +669,7 @@ mod bundled_oracle {
   use crate::sandbox::grants::TestGrantHost;
   use rquickjs::{Context, Runtime};
 
-  const ORACLE: &str = include_str!("../../../../res/assets-debug/inu_plugins/fs-test.js");
+  const ORACLE: &str = include_str!("../../../../test/plugins/fs-test.js");
 
   /// `FsQuota.parseSize`'s shape, the one `GrantValidator` refuses an install over
   fn parse_grant_size(scope: &str) -> Option<u64> {

@@ -1257,7 +1257,7 @@ fn an_unanswered_read_is_released_at_dispose() {
 
 #[test]
 fn the_bundled_reads_test_plugin_passes() {
-  const ORACLE: &str = include_str!("../../../../res/assets-debug/inu_plugins/reads-test.js");
+  const ORACLE: &str = include_str!("../../../../test/plugins/reads-test.js");
   let (rt, ctx, host, state, _accounts) = setup(&crate::testing::harness::manifest_grants(ORACLE));
   let lines = crate::testing::harness::install_capturing_console(&ctx);
   ctx.with(|ctx| match ctx.eval::<(), _>(ORACLE) {
@@ -1275,7 +1275,7 @@ fn the_bundled_reads_test_plugin_passes() {
 
 #[test]
 fn the_bundled_async_reads_test_plugin_passes() {
-  const ORACLE: &str = include_str!("../../../../res/assets-debug/inu_plugins/async-reads-test.js");
+  const ORACLE: &str = include_str!("../../../../test/plugins/async-reads-test.js");
   let (rt, ctx, host, state, _accounts) = setup(&crate::testing::harness::manifest_grants(ORACLE));
   let lines = crate::testing::harness::install_capturing_console(&ctx);
   ctx.with(|ctx| match ctx.eval::<(), _>(ORACLE) {
@@ -1407,7 +1407,7 @@ mod grant_boundary {
 
   #[test]
   fn the_bundled_grant_boundary_test_plugin_passes() {
-    const ORACLE: &str = include_str!("../../../../res/assets-debug/inu_plugins/grant-boundary-test.js");
+    const ORACLE: &str = include_str!("../../../../test/plugins/grant-boundary-test.js");
     let rt = Runtime::new().unwrap();
     let ctx = Context::full(&rt).unwrap();
     let reads_host = TestReadsHost::new();
