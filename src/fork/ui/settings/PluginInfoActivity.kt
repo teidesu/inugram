@@ -1,6 +1,7 @@
 package desu.inugram.ui.settings
 
 import android.content.Context
+import android.graphics.Canvas
 import android.graphics.Color
 import android.graphics.PorterDuff
 import android.graphics.PorterDuffColorFilter
@@ -118,7 +119,7 @@ class PluginInfoActivity(private val plugin: Plugin) : SettingsPageActivity() {
         } else {
             grants.forEachIndexed { i, (name, scopes) ->
                 val row = grantRows.getOrPut(i) { GrantRowView(context) }
-                row.bind(name, scopes)
+                row.bind(name, scopes, divider = i != grants.lastIndex)
                 items.add(UItem.asCustom(GRANT_BASE + i, row))
             }
             items.add(UItem.asShadow(null))
@@ -329,7 +330,7 @@ internal class GrantRowView(context: Context) : LinearLayout(context) {
     }
     private val iconLayout = FrameLayout(context).apply {
         background = iconBackground
-        addView(icon, LayoutHelper.createFrame(24, 24, Gravity.CENTER))
+        addView(icon, LayoutHelper.createFrame(20, 20, Gravity.CENTER))
     }
     private val title = TextView(context).apply {
         setTextColor(Theme.getColor(Theme.key_windowBackgroundWhiteBlackText))
@@ -339,6 +340,7 @@ internal class GrantRowView(context: Context) : LinearLayout(context) {
         setTextColor(Theme.getColor(Theme.key_windowBackgroundWhiteGrayText))
         textSize = 13f
     }
+    private var needDivider = false
 
     init {
         orientation = HORIZONTAL
@@ -352,7 +354,23 @@ internal class GrantRowView(context: Context) : LinearLayout(context) {
         addView(textBlock, LayoutHelper.createLinear(0, LayoutHelper.WRAP_CONTENT, 1f, Gravity.CENTER_VERTICAL))
     }
 
-    fun bind(name: String, scopes: List<String>?) {
+    override fun dispatchDraw(canvas: Canvas) {
+        super.dispatchDraw(canvas)
+        if (!needDivider) return
+        // starts where the text column does, past the icon tile
+        val inset = AndroidUtilities.dp(DIVIDER_INSET_DP).toFloat()
+        val rtl = LocaleController.isRTL
+        val y = (height - 1).toFloat()
+        canvas.drawLine(if (rtl) 0f else inset, y, if (rtl) width - inset else width.toFloat(), y, Theme.dividerPaint)
+    }
+
+    /** [divider] only asks for one: md3 cards separate rows by shape instead */
+    fun bind(name: String, scopes: List<String>?, divider: Boolean) {
+        val needed = divider && !M3SectionsHelper.isEnabled()
+        if (needDivider != needed) {
+            needDivider = needed
+            invalidate()
+        }
         val known = KNOWN_GRANTS[name]
         val tier = if (known == null) null else tierFor(name, scopes)
         icon.setImageResource(known?.iconRes ?: R.drawable.msg_help)
@@ -389,6 +407,10 @@ internal class GrantRowView(context: Context) : LinearLayout(context) {
             Spanned.SPAN_EXCLUSIVE_EXCLUSIVE,
         )
         return sb.append(text)
+    }
+
+    companion object {
+        private const val DIVIDER_INSET_DP = 68f
     }
 }
 
