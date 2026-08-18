@@ -242,7 +242,7 @@ class PluginInstallSheet(
         } else {
             grants.forEachIndexed { i, (name, scopes) ->
                 val row = grantRows.getOrPut(i) { GrantRowView(context) }
-                row.bind(name, scopes)
+                row.bind(name, scopes, divider = i != grants.lastIndex)
                 items.add(UItem.asCustom(GRANT_BASE + i, row))
             }
             items.add(UItem.asShadow(null))

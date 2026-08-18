@@ -779,7 +779,7 @@
     <string name="InuPluginGrantFs">File storage</string>
     <string name="InuPluginGrantClipboardWrite">Write to clipboard</string>
     <string name="InuPluginGrantOpenUrl">Open links</string>
-    <string name="InuPluginGrantAppVisibility">App visibility</string>
+    <string name="InuPluginGrantAppVisibility">Monitor app visibility</string>
     <string name="InuPluginGrantClipboardRead">Read clipboard</string>
     <string name="InuPluginGrantFetch">Internet access</string>
     <string name="InuPluginGrantAccountRead">Read account data</string>

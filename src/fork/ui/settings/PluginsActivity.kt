@@ -4,6 +4,7 @@ import android.annotation.SuppressLint
 import android.app.Activity
 import android.content.Context
 import android.content.Intent
+import android.graphics.Canvas
 import android.graphics.PorterDuff
 import android.graphics.PorterDuffColorFilter
 import android.text.TextUtils
@@ -22,6 +23,7 @@ import desu.inugram.helpers.plugins.PluginImportHelper
 import desu.inugram.helpers.plugins.PluginManager
 import desu.inugram.helpers.plugins.ui.PluginManifestIcons
 import desu.inugram.helpers.plugins.ui.PluginUi
+import desu.inugram.helpers.theme.M3SectionsHelper
 import org.telegram.messenger.AndroidUtilities
 import org.telegram.messenger.LocaleController
 import org.telegram.messenger.R
@@ -117,12 +119,18 @@ class PluginsActivity : SettingsPageActivity() {
         )
 
         val plugins = PluginManager.plugins()
+        // md3 draws a header as its own detached row, so the card already ends there; the classic
+        // style needs the gap spelled out, or the engine toggle and the list read as one block
+        val classic = !M3SectionsHelper.isEnabled()
         if (plugins.isEmpty()) {
             items.add(UItem.asShadow(LocaleController.getString(R.string.InuPluginsEmpty)))
         } else {
+            if (classic) items.add(UItem.asShadow(null))
             items.add(UItem.asHeader(LocaleController.getString(R.string.InuPluginsInstalled)))
             reorderSectionId = adapter.reorderSectionStart()
-            for (plugin in plugins) items.add(buildRow(plugin))
+            plugins.forEachIndexed { i, plugin ->
+                items.add(buildRow(plugin, divider = classic && i != plugins.lastIndex))
+            }
             adapter.reorderSectionEnd()
         }
 
@@ -144,7 +152,7 @@ class PluginsActivity : SettingsPageActivity() {
     }
 
     @SuppressLint("ClickableViewAccessibility")
-    private fun buildRow(plugin: Plugin): UItem {
+    private fun buildRow(plugin: Plugin, divider: Boolean): UItem {
         val compact = InuConfig.PLUGINS_COMPACT_LIST.value
         var row = rows[plugin.id]
         if (row == null || row.compact != compact) {
@@ -171,6 +179,7 @@ class PluginsActivity : SettingsPageActivity() {
             onReload = { PluginManager.reload(plugin) },
             onRemove = { removePlugin(plugin) },
         )
+        row.setDivider(divider)
         val uitem = if (compact) UItem.asCustom(row, PluginRow.HEIGHT_DP) else UItem.asCustom(row)
         uitem.id = ITEM_BASE + (plugin.id.hashCode() and 0xffff)
         uitem.`object` = plugin
@@ -281,6 +290,7 @@ class PluginRow(context: Context, val compact: Boolean) : LinearLayout(context) 
     private var onToggle: ((Boolean) -> Unit)? = null
     private var onOpen: (() -> Unit)? = null
     private var onMenu: ((View) -> Unit)? = null
+    private var needDivider = false
 
     init {
         orientation = VERTICAL
@@ -512,6 +522,23 @@ class PluginRow(context: Context, val compact: Boolean) : LinearLayout(context) 
         removeAction?.setOnClickListener { onRemove() }
     }
 
+    /** classic-sections only: md3 cards separate rows by shape instead */
+    fun setDivider(value: Boolean) {
+        if (needDivider == value) return
+        needDivider = value
+        invalidate()
+    }
+
+    override fun dispatchDraw(canvas: Canvas) {
+        super.dispatchDraw(canvas)
+        if (!needDivider) return
+        // starts where the text column does, past the handle/icon gutter
+        val inset = AndroidUtilities.dp(if (compact) COMPACT_DIVIDER_INSET_DP else ROOMY_DIVIDER_INSET_DP).toFloat()
+        val rtl = LocaleController.isRTL
+        val y = (height - 1).toFloat()
+        canvas.drawLine(if (rtl) 0f else inset, y, if (rtl) width - inset else width.toFloat(), y, Theme.dividerPaint)
+    }
+
     fun setOnReorderTouchListener(listener: OnTouchListener) {
         handle.setOnTouchListener(listener)
     }
@@ -519,6 +546,8 @@ class PluginRow(context: Context, val compact: Boolean) : LinearLayout(context) 
     companion object {
         const val HEIGHT_DP = 64
         private const val ACTION_RADIUS_DP = 18
+        private const val COMPACT_DIVIDER_INSET_DP = 98f
+        private const val ROOMY_DIVIDER_INSET_DP = 60f
         private const val WARNING_SIZE_DP = 12.5f
         private const val WARNING_OFFSET_DP = 1.5f
     }
