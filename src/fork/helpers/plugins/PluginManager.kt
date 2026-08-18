@@ -239,10 +239,10 @@ object PluginManager {
      * always a *new* install, with its own identity and an empty store: nothing in the file is
      * matched against the installed set, so updating in place is what [reload] is for.
      */
-    fun import(suggestedName: String, source: String, enabled: Boolean = true): String? {
+    fun import(suggestedName: String, source: String, enabled: Boolean = true): ImportResult {
         val manifest = PluginManifestParser.parseOrNull(source)
-            ?: return getString(R.string.InuPluginsErrorNoManifest)
-        badGrants(manifest)?.let { return it }
+            ?: return ImportResult.Refused(getString(R.string.InuPluginsErrorNoManifest))
+        badGrants(manifest)?.let { return ImportResult.Refused(it) }
         val target = PluginStore.fileFor(suggestedName)
         target.writeText(source)
         val plugin = Plugin(PluginInstalls.mintId(), target, source, manifest).apply { this.enabled = enabled }
@@ -251,7 +251,13 @@ object PluginManager {
         republishOrder()
         notifyChanged()
         if (plugin.enabled && isEngineEnabled() && !safeMode) run(plugin)
-        return null
+        return ImportResult.Installed(plugin)
+    }
+
+    /** what was installed, so the caller can offer to undo it, or why nothing was */
+    sealed interface ImportResult {
+        class Installed(val plugin: Plugin) : ImportResult
+        class Refused(val reason: String) : ImportResult
     }
 
     fun remove(plugin: Plugin) {

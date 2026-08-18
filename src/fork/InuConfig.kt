@@ -153,6 +153,11 @@ object InuConfig {
     @JvmField
     val PLUGINS_COMPACT_LIST = BoolItem("plugins_compact_list", false)
 
+    // the "only install plugins you trust" warning was read and accepted: consent, not a
+    // preference, so it is never carried over by an import
+    @JvmField
+    val PLUGINS_TRUSTED = BoolItem("plugins_trusted", false, exportable = false)
+
     // snapshot of theme state before Monet was enabled, "day|night|autoNightType"; empty = none
     @JvmField
     val MONET_PREV = StringItem("monet_prev", "", exportable = false)

@@ -3,6 +3,7 @@ package desu.inugram.helpers.plugins
 import desu.inugram.core.plugins.ObfuscationDetector
 import desu.inugram.core.plugins.PluginManifestParser
 import desu.inugram.ui.settings.PluginInstallSheet
+import desu.inugram.ui.settings.PluginTrustSheet
 import org.telegram.messenger.AndroidUtilities
 import org.telegram.messenger.LocaleController.formatString
 import org.telegram.messenger.LocaleController.getString
@@ -54,21 +55,24 @@ object PluginImportHelper {
         val obfuscation = ObfuscationDetector.detect(source)
         AndroidUtilities.runOnUIThread {
             val context = fragment.context ?: fragment.parentActivity ?: return@runOnUIThread
-            fragment.showDialog(
-                PluginInstallSheet(context, manifest, source, obfuscation) { enable ->
-                    val error = PluginManager.import(fileName, source, enable)
-                    if (error != null) {
-                        showError(fragment, error)
-                    } else {
-                        BulletinFactory.of(fragment)
-                            .createSimpleBulletin(
-                                R.raw.contact_check,
-                                formatString(R.string.InuPluginInstalled, manifest.name),
-                            )
-                            .show()
+            // the per-plugin sheet says what this one asked for; what any plugin could do is read
+            // and accepted once, before the first install
+            PluginTrustSheet.requireConsent(context, fragment.resourceProvider) {
+                fragment.showDialog(
+                    PluginInstallSheet(context, fragment, manifest, source, obfuscation) { enable ->
+                        when (val result = PluginManager.import(fileName, source, enable)) {
+                            is PluginManager.ImportResult.Refused -> showError(fragment, result.reason)
+                            is PluginManager.ImportResult.Installed -> BulletinFactory.of(fragment)
+                                .createUndoBulletin(
+                                    formatString(R.string.InuPluginInstalled, manifest.name),
+                                    { PluginManager.remove(result.plugin) },
+                                    {},
+                                )
+                                .show()
+                        }
                     }
-                }
-            )
+                )
+            }
         }
     }
 

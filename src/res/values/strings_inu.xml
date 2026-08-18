@@ -795,6 +795,12 @@
     <string name="InuPluginGrantUnsafeXposed">App code hooks</string>
     <string name="InuPluginGrantUnsafeNotificationCenter">Internal event access</string>
     <string name="InuPluginGrantUnsafeDisableApiFiltering">Disable account protection</string>
+    <string name="InuPluginGrantUnsafeFsInfo">Access to all application files, unsandboxed</string>
+    <string name="InuPluginGrantUnsafeJvmInfo">Can run arbitrary code unsandboxed, limited to %1$s</string>
+    <string name="InuPluginGrantUnsafeJvmInfoAny">Can run arbitrary code unsandboxed</string>
+    <string name="InuPluginGrantUnsafeXposedInfo">Can replace methods of the app, changing how any part of it behaves</string>
+    <string name="InuPluginGrantUnsafeNotificationCenterInfo">Watches and posts the app\'s internal events</string>
+    <string name="InuPluginGrantUnsafeDisableApiFilteringInfo">Allows the plugin access to account-critical API calls</string>
     <string name="InuPluginGrantUnknown">Not recognized by this app version, has no effect</string>
     <string name="InuPluginScopeReadSelf">your profile</string>
     <string name="InuPluginScopeReadPeers">users and chats</string>
@@ -824,6 +830,16 @@
     <string name="InuPluginScopeAllUpdates">all updates</string>
     <string name="InuPluginScopeDeserialize">rewrite %1$s objects</string>
     <string name="InuPluginScopeDeserializeAny">rewrite any object</string>
+    <string name="InuPluginTrustTitle">Only install plugins you trust</string>
+    <string name="InuPluginTrustInfo">Plugins run in a sandbox and only get the permissions they declare, which the next screen lists.\nGranting them still lets a plugin:</string>
+    <string name="InuPluginTrust1Title">Act as you</string>
+    <string name="InuPluginTrust1Text">Account permissions read, send and delete messages under your name.</string>
+    <string name="InuPluginTrust2Title">Reach your data</string>
+    <string name="InuPluginTrust2Text">File and network permissions read chats, media and settings, and can send them anywhere.</string>
+    <string name="InuPluginTrust3Title">Leave the sandbox</string>
+    <string name="InuPluginTrust3Text">An unsafe permission drops the sandbox and runs code with everything the app itself can reach.</string>
+    <string name="InuPluginTrustWarning">A malicious plugin can take over your account</string>
+    <string name="InuPluginTrustAccept">I understand, continue</string>
     <string name="InuPluginObfuscatedTitle">Obfuscated code</string>
     <string name="InuPluginObfuscatedInfo">This plugin\'s code appears to be deliberately obfuscated. Obfuscation is often used to hide malicious behavior — only keep this plugin if you fully trust where it came from.</string>
     <string name="InuPluginMinifiedTitle">Minified code</string>
@@ -833,6 +849,7 @@
     <string name="InuPluginsSafeModeForced">No plugins are running in this session. Restart the app to run them again.</string>
     <string name="InuPluginsSafeModeCrashed">The app stopped last time while a plugin was starting, so no plugins are running in this session.</string>
     <string name="InuPluginInstall">Install</string>
+    <string name="InuPluginInstallTitle">Install plugin</string>
     <string name="InuPluginInstallEnable">Enable after installing</string>
     <string name="InuPluginInstalled">%1$s installed</string>
     <string name="InuPluginsErrorNoManifest">Not a valid plugin (missing metadata header)</string>
