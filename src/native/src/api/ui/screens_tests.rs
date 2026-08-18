@@ -277,7 +277,7 @@ fn registering_after_unload_began_is_a_no_op() {
   assert_eq!(eval_json(&ctx, "globalThis.__ran"), "0");
 }
 
-const ORACLE: &str = include_str!("../../../../res/assets-debug/inu_plugins/nav-test.js");
+const ORACLE: &str = include_str!("../../../../test/plugins/nav-test.js");
 
 /// the bundled oracle is the only test this surface gets on a device, and every assertion in it
 /// is a function of the change it was handed, so the four navigations it wants are synthesised

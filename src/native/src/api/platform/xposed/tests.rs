@@ -5,7 +5,7 @@ use crate::testing::harness::{assert_oracle_exact, install_capturing_console, ma
 use std::cell::{Cell, RefCell};
 use std::collections::HashMap;
 
-const ORACLE: &str = include_str!("../../../../../res/assets-debug/inu_plugins/xposed-test.js");
+const ORACLE: &str = include_str!("../../../../../test/plugins/xposed-test.js");
 
 /// keyed by the method handle, because two hooks on one method are two hooks on *one site* and
 /// the ordering the oracle asserts is only a property of a shared one. `hookAll*` answers with

@@ -64,10 +64,10 @@ export const forkSyncFiles: ForkSyncFile[] = [
     source: 'src/plugins/*.d.ts',
     target: 'TMessagesProj/src/androidTest/assets/plugins',
   },
-  // the bundled oracles, for the suites that read a plugin's own `@grant` line rather than
-  // restating it: the app ships these to a different module's debug assets
+  // the js oracles, for the suites that run one rather than restating what it asserts. Test assets
+  // only - the app itself ships none of them, so a debug build starts with no plugins installed
   {
-    source: 'src/res/assets-debug/inu_plugins/*',
+    source: 'src/test/plugins/*',
     target: 'TMessagesProj/src/androidTest/assets/inu_plugins',
   },
   // src/test/kotlin is synced into a kotlin source root, so what the suite needs as a *file* is
@@ -146,11 +146,6 @@ export const forkSyncFiles: ForkSyncFile[] = [
   {
     source: 'src/res/assets/*',
     target: 'TMessagesProj/src/main/assets',
-  },
-  // debug-only bundled test plugins; PluginManager copies them into the install dir on launch
-  {
-    source: 'src/res/assets-debug/inu_plugins/*',
-    target: 'TMessagesProj_App/src/debug/assets/inu_plugins',
   },
   {
     source: 'src/res/raw/*',

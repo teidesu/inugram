@@ -327,7 +327,7 @@ mod bundled_oracle {
   use crate::api::error::install_plugin_error;
   use rquickjs::{Context, Runtime};
 
-  const ORACLE: &str = include_str!("../../../../res/assets-debug/inu_plugins/icons-test.js");
+  const ORACLE: &str = include_str!("../../../../test/plugins/icons-test.js");
 
   /// exactly what the fake cannot answer for: a name no app ships, and a spec `check_svg` lets
   /// through. everything else resolves, so the oracle's `PASS`es are about the engine's rules

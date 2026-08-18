@@ -434,7 +434,7 @@ mod bundled_oracle {
   use rquickjs::{Context, Runtime};
   use std::cell::RefCell;
 
-  const ORACLE: &str = include_str!("../../../../res/assets-debug/inu_plugins/deserialize-test.js");
+  const ORACLE: &str = include_str!("../../../../test/plugins/deserialize-test.js");
 
   /// the refusals the oracle asks the host for, and the only thing this double decides. Every one
   /// of them is a verdict the real `PluginDeserialize` reaches for the same rule and the bridge

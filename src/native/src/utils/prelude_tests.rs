@@ -49,7 +49,7 @@ fn no_prelude_is_evaluated_from_source() {
       let argument = &text[index + "include_str!(\"".len()..];
       let argument = &argument[..argument.find('"').expect("unterminated include_str!")];
       assert!(
-        !argument.ends_with(".js") || argument.contains("assets-debug"),
+        !argument.ends_with(".js") || argument.contains("test/plugins"),
         "{path} reads {argument} as source; it should include_bytes! the OUT_DIR artifact"
       );
     }

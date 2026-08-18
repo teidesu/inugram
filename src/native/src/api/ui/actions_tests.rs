@@ -649,7 +649,7 @@ fn a_host_that_refuses_an_editor_op_throws_into_the_callback() {
 mod bundled_oracle {
   use super::*;
 
-  const ORACLE: &str = include_str!("../../../../res/assets-debug/inu_plugins/actions-test.js");
+  const ORACLE: &str = include_str!("../../../../test/plugins/actions-test.js");
 
   #[test]
   fn the_bundled_actions_test_plugin_passes() {

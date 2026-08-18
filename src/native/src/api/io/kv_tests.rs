@@ -139,7 +139,7 @@ fn kv_quota_error_wire_throws_a_plugin_error_with_usage_and_quota() {
   assert_eq!(caught, r#"["quota-exceeded","kv is full",1048600,1048576,"number"]"#);
 }
 
-const API_ORACLE: &str = include_str!("../../../../res/assets-debug/inu_plugins/api-test.js");
+const API_ORACLE: &str = include_str!("../../../../test/plugins/api-test.js");
 
 /// its last two halves are the ones a device only reaches through a person: the dialog settles
 /// when the user picks a button, and the unload callbacks run when the plugin is stopped. Both

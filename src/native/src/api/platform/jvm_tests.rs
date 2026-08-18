@@ -424,7 +424,7 @@ mod bundled_oracle {
   use crate::sandbox::grants::TestGrantHost;
   use crate::testing::harness::{assert_oracle_exact, install_capturing_console, manifest_grants, DisposeOnDrop};
 
-  const ORACLE: &str = include_str!("../../../../res/assets-debug/inu_plugins/jvm-test.js");
+  const ORACLE: &str = include_str!("../../../../test/plugins/jvm-test.js");
 
   #[test]
   fn the_bundled_jvm_test_plugin_passes() {
