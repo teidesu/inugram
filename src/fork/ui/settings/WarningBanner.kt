@@ -2,11 +2,13 @@ package desu.inugram.ui.settings
 
 import android.annotation.SuppressLint
 import android.content.Context
+import android.graphics.Color
 import android.view.Gravity
 import android.widget.FrameLayout
 import android.widget.ImageView
 import android.widget.LinearLayout
 import android.widget.TextView
+import androidx.core.graphics.ColorUtils
 import org.telegram.messenger.AndroidUtilities
 import org.telegram.messenger.R
 import org.telegram.ui.ActionBar.Theme
@@ -23,12 +25,17 @@ class WarningBanner(
     private val message: TextView
 
     init {
+        // the same orange the caution permissions are badged with, rather than the theme's own:
+        // a monet palette pulls key_color_orange towards the wallpaper and the card goes grey
+        val orange = tierColors(GrantTier.CAUTION).first
+        val dark = Theme.isCurrentThemeDark()
+        // opaque, and mixed with black/white rather than laid over the page at low alpha: this row
+        // sits on the list's grey background, and any translucent tint takes that grey with it
+        val fill = ColorUtils.blendARGB(orange, if (dark) Color.BLACK else Color.WHITE, if (dark) 0.76f else 0.86f)
+        val accent = ColorUtils.blendARGB(orange, if (dark) Color.WHITE else Color.BLACK, 0.25f)
         val card = LinearLayout(context).apply {
             orientation = LinearLayout.VERTICAL
-            background = Theme.createRoundRectDrawable(
-                AndroidUtilities.dp(12f),
-                Theme.multAlpha(Theme.getColor(Theme.key_color_orange), 0.15f),
-            )
+            background = Theme.createRoundRectDrawable(AndroidUtilities.dp(12f), fill)
             setPadding(AndroidUtilities.dp(16f), AndroidUtilities.dp(14f), AndroidUtilities.dp(16f), AndroidUtilities.dp(14f))
         }
 
@@ -37,12 +44,12 @@ class WarningBanner(
             gravity = Gravity.CENTER_VERTICAL
         }
         val icon = ImageView(context).apply {
-            setImageResource(R.drawable.msg_warning)
-            setColorFilter(Theme.getColor(Theme.key_color_orange))
+            setImageResource(R.drawable.inu_tabler_alert_triangle_filled)
+            setColorFilter(accent)
         }
         titleRow.addView(icon, LayoutHelper.createLinear(20, 20))
         title = TextView(context).apply {
-            setTextColor(Theme.getColor(Theme.key_color_orange))
+            setTextColor(accent)
             textSize = 15f
             typeface = AndroidUtilities.bold()
         }

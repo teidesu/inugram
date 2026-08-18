@@ -5,6 +5,7 @@ import android.graphics.PorterDuff
 import android.graphics.PorterDuffColorFilter
 import android.graphics.drawable.Drawable
 import android.net.Uri
+import android.util.Log
 import androidx.core.content.res.ResourcesCompat
 import desu.inugram.core.plugins.CommonIcons
 import org.telegram.messenger.DocumentObject
@@ -33,6 +34,7 @@ import org.telegram.ui.Components.BackupImageView
  * TODO: surface a warning for an unresolvable `@icon` instead of failing silently
  */
 object PluginManifestIcons {
+    private const val TAG = "InuPluginIcon"
     private const val FILTER = "56_56"
 
     /** what every plugin surface draws when the manifest names no icon, or names one we can't resolve */
@@ -44,36 +46,52 @@ object PluginManifestIcons {
             )
         }
 
-    fun bindIcon(view: BackupImageView, spec: String?, placeholder: Drawable?) {
+    /**
+     * True when the view ended up showing one of *our* glyphs, which is flat and takes [commonTint]
+     * - the caller is then free to put it on a badge. Everything else (an emoji, a sticker, the
+     * placeholder) brings its own colours and answers false.
+     */
+    fun bindIcon(
+        view: BackupImageView,
+        spec: String?,
+        placeholder: Drawable?,
+        commonTint: Int = Theme.getColor(Theme.key_windowBackgroundWhiteGrayIcon),
+    ): Boolean {
         view.tag = spec
         view.setAnimatedEmojiDrawable(null)
-        view.setColorFilter(null)
-        if (spec.isNullOrBlank()) {
-            view.setImageDrawable(placeholder)
-            return
-        }
+        // the tint goes on the receiver rather than on the drawable: under a round radius a bitmap
+        // is drawn through the receiver's own paint, which is handed the receiver's filter and
+        // *nulled* when there is none - so a filter set on the drawable is thrown away
+        view.setColorFilter(tintOf(Theme.getColor(Theme.key_windowBackgroundWhiteGrayIcon)))
+        // up front, not only on the `else` below: a sticker set is fetched, and a slug nobody can
+        // resolve answers with nothing at all rather than with a failure - so what a spec starts is
+        // never proof that it will finish
+        view.setImageDrawable(placeholder)
+        if (spec.isNullOrBlank()) return false
+        var common = false
         val bound = when {
-            spec.startsWith("inu://") -> bindCommon(view, spec.removePrefix("inu://"))
+            spec.startsWith("inu://") -> bindCommon(view, spec.removePrefix("inu://"), commonTint).also { common = it }
             spec.startsWith("tg://emoji?") -> bindEmoji(view, Uri.parse(spec))
             spec.startsWith("tg://addstickers?") -> bindSticker(view, spec, Uri.parse(spec))
             else -> false
         }
-        if (!bound) view.setImageDrawable(placeholder)
+        Log.d(TAG, "bindIcon: spec=$spec bound=$bound view=$view size=${view.width}x${view.height}")
+        return common
     }
 
-    private fun bindCommon(view: BackupImageView, name: String): Boolean {
+    private fun tintOf(color: Int) = PorterDuffColorFilter(color, PorterDuff.Mode.SRC_IN)
+
+    private fun bindCommon(view: BackupImageView, name: String, tint: Int): Boolean {
         val resource = CommonIcons.resolve(name) ?: return false
         val drawable = PluginIcons.drawableOf(view.context, resource)?.mutate() ?: return false
-        drawable.colorFilter = PorterDuffColorFilter(
-            Theme.getColor(Theme.key_windowBackgroundWhiteGrayIcon),
-            PorterDuff.Mode.SRC_IN,
-        )
+        view.setColorFilter(tintOf(tint))
         view.setImageDrawable(drawable)
         return true
     }
 
     private fun bindEmoji(view: BackupImageView, uri: Uri): Boolean {
         val documentId = uri.getQueryParameter("id")?.toLongOrNull() ?: return false
+        view.setColorFilter(null)
         view.setAnimatedEmojiDrawable(
             AnimatedEmojiDrawable.make(UserConfig.selectedAccount, AnimatedEmojiDrawable.CACHE_TYPE_MESSAGES, documentId),
         )
@@ -82,6 +100,7 @@ object PluginManifestIcons {
 
     private fun bindSticker(view: BackupImageView, spec: String, uri: Uri): Boolean {
         val slug = uri.getQueryParameter("set")?.takeIf { it.isNotBlank() } ?: return false
+        view.setColorFilter(null)
         val documentId = uri.getQueryParameter("id")?.toLongOrNull()
         val index = uri.getQueryParameter("idx")?.toIntOrNull()
         val input = TLRPC.TL_inputStickerSetShortName().apply { short_name = slug }

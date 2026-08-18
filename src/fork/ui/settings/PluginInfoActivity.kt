@@ -4,6 +4,8 @@ import android.content.Context
 import android.graphics.Color
 import android.graphics.PorterDuff
 import android.graphics.PorterDuffColorFilter
+import android.graphics.drawable.GradientDrawable
+import android.util.Log
 import android.text.SpannableStringBuilder
 import android.text.Spanned
 import android.text.TextPaint
@@ -20,6 +22,7 @@ import desu.inugram.core.plugins.PluginPermissions
 import desu.inugram.core.plugins.SourceObfuscation
 import desu.inugram.helpers.InuUtils
 import desu.inugram.helpers.plugins.Plugin
+import desu.inugram.helpers.plugins.PluginFailure
 import desu.inugram.helpers.plugins.PluginManager
 import desu.inugram.helpers.plugins.ui.PluginManifestIcons
 import desu.inugram.helpers.plugins.ui.PluginUi
@@ -30,6 +33,7 @@ import org.telegram.messenger.R
 import org.telegram.ui.ActionBar.Theme
 import org.telegram.ui.Cells.TextCheckCell
 import org.telegram.ui.Components.BackupImageView
+import org.telegram.ui.Components.ColoredImageSpan
 import org.telegram.ui.Components.LayoutHelper
 import org.telegram.ui.Components.LinkSpanDrawable
 import org.telegram.ui.Components.UItem
@@ -81,10 +85,16 @@ class PluginInfoActivity(private val plugin: Plugin) : SettingsPageActivity() {
             header = it
             it.onAuthorClick = { username -> messagesController.openByUserName(username, this, 0) }
         }
-        headerView.bind(plugin)
+        headerView.bind(plugin.manifest, plugin.failure)
         items.add(UItem.asCustom(HEADER, headerView))
         val description = plugin.manifest.description(LocaleController.getInstance().currentLocaleInfo?.langCode)
         items.add(UItem.asShadow(description))
+
+        items.add(
+            UItem.asRippleCheck(TOGGLE_ENABLED, LocaleController.getString(R.string.InuPluginsEnabled))
+                .setChecked(plugin.enabled)
+        )
+        items.add(UItem.asShadow(null))
 
         detectObfuscation()?.let { kind ->
             val banner = obfuscationBanner ?: WarningBanner(context).also { obfuscationBanner = it }
@@ -101,18 +111,12 @@ class PluginInfoActivity(private val plugin: Plugin) : SettingsPageActivity() {
             items.add(UItem.asCustomShadow(OBFUSCATION_BANNER, banner))
         }
 
-        items.add(
-            UItem.asRippleCheck(TOGGLE_ENABLED, LocaleController.getString(R.string.InuPluginsEnabled))
-                .setChecked(plugin.enabled)
-        )
-        items.add(UItem.asShadow(null))
-
         items.add(UItem.asHeader(LocaleController.getString(R.string.InuPluginsPermissions)))
-        val grants = mergeGrants(plugin.manifest.grants)
+        val grants = sortedGrants(plugin.manifest.grants)
         if (grants.isEmpty()) {
             items.add(UItem.asShadow(LocaleController.getString(R.string.InuPluginsPermissionsNone)))
         } else {
-            grants.entries.forEachIndexed { i, (name, scopes) ->
+            grants.forEachIndexed { i, (name, scopes) ->
                 val row = grantRows.getOrPut(i) { GrantRowView(context) }
                 row.bind(name, scopes)
                 items.add(UItem.asCustom(GRANT_BASE + i, row))
@@ -199,6 +203,15 @@ private fun tierFor(name: String, scopes: List<String>?): GrantTier = when {
     else -> GrantTier.NEUTRAL
 }
 
+/**
+ * What every permission list shows: worst tier first, so the red rows are the ones a user reads
+ * before deciding. A stable sort, so within a tier the manifest's own order survives.
+ */
+internal fun sortedGrants(tokens: List<String>): List<Pair<String, List<String>?>> =
+    mergeGrants(tokens)
+        .map { (name, scopes) -> name to scopes }
+        .sortedByDescending { (name, scopes) -> tierFor(name, scopes) }
+
 /** merged by grant name in first-appearance order; `null` scopes = unscoped (full access) */
 internal fun mergeGrants(tokens: List<String>): LinkedHashMap<String, List<String>?> {
     val merged = LinkedHashMap<String, List<String>?>()
@@ -275,6 +288,14 @@ private fun grantSubtitle(name: String, scopes: List<String>?): String? = when (
     "interceptDeserialize" -> scopes?.let { LocaleController.formatString(R.string.InuPluginScopeDeserialize, it.joinToString(", ")) }
         ?: LocaleController.getString(R.string.InuPluginScopeDeserializeAny)
 
+    "unsafe.fs" -> LocaleController.getString(R.string.InuPluginGrantUnsafeFsInfo)
+    "unsafe.jvm" -> scopes?.let { LocaleController.formatString(R.string.InuPluginGrantUnsafeJvmInfo, it.joinToString(", ")) }
+        ?: LocaleController.getString(R.string.InuPluginGrantUnsafeJvmInfoAny)
+
+    "unsafe.xposed" -> LocaleController.getString(R.string.InuPluginGrantUnsafeXposedInfo)
+    "unsafe.notificationCenter" -> LocaleController.getString(R.string.InuPluginGrantUnsafeNotificationCenterInfo)
+    "unsafe.disableApiFiltering" -> LocaleController.getString(R.string.InuPluginGrantUnsafeDisableApiFilteringInfo)
+
     else -> null
 }
 
@@ -333,9 +354,10 @@ internal class GrantRowView(context: Context) : LinearLayout(context) {
 
     fun bind(name: String, scopes: List<String>?) {
         val known = KNOWN_GRANTS[name]
+        val tier = if (known == null) null else tierFor(name, scopes)
         icon.setImageResource(known?.iconRes ?: R.drawable.msg_help)
         icon.setColorFilter(PorterDuffColorFilter(Color.WHITE, PorterDuff.Mode.SRC_IN))
-        val (top, bottom) = tierColors(if (known == null) null else tierFor(name, scopes))
+        val (top, bottom) = tierColors(tier)
         iconBackground.setColor(top, bottom)
         iconBackground.setDrawBorder(Theme.isCurrentThemeDark())
         M3SectionsHelper.applySettingCellIcon(iconLayout, icon, top, bottom, iconBackground)
@@ -346,8 +368,27 @@ internal class GrantRowView(context: Context) : LinearLayout(context) {
             title.text = LocaleController.getString(known.titleRes)
             grantSubtitle(name, scopes)
         }
-        subtitle.text = subtitleText
+        val dangerous = tier == GrantTier.DANGEROUS
+        subtitle.setTextColor(
+            if (dangerous) top else Theme.getColor(Theme.key_windowBackgroundWhiteGrayText),
+        )
+        subtitle.text = if (dangerous && subtitleText != null) warn(subtitleText, top) else subtitleText
         subtitle.visibility = if (subtitleText == null) GONE else VISIBLE
+    }
+
+    /** the explanation, marked with the same triangle the plugin's own row carries */
+    private fun warn(text: String, color: Int): CharSequence {
+        val sb = SpannableStringBuilder("\u200b  ")
+        sb.setSpan(
+            ColoredImageSpan(R.drawable.inu_tabler_alert_triangle_filled, ColoredImageSpan.ALIGN_CENTER).apply {
+                setSize(AndroidUtilities.dp(13f))
+                setOverrideColor(color)
+            },
+            0,
+            1,
+            Spanned.SPAN_EXCLUSIVE_EXCLUSIVE,
+        )
+        return sb.append(text)
     }
 }
 
@@ -355,6 +396,15 @@ class PluginInfoHeaderView(context: Context) : LinearLayout(context) {
     private val icon = BackupImageView(context).apply {
         setRoundRadius(AndroidUtilities.dp(16f))
     }
+    // one of our own glyphs is a flat silhouette, which at this size is a blob in whatever colour
+    // the theme's icons take; it gets an accent tile to sit on instead, like a launcher icon
+    private val badgeColor = Theme.getColor(Theme.key_featuredStickers_addButton)
+    private val badge = GradientDrawable().apply {
+        cornerRadius = AndroidUtilities.dp(20f).toFloat()
+        setColor(badgeColor)
+    }
+    private val glyphTint = Theme.getColor(Theme.key_featuredStickers_buttonText)
+    private val iconContainer = FrameLayout(context)
     private val placeholder = PluginManifestIcons.createPlaceholder(context)
     private val name = TextView(context).apply {
         setTextColor(Theme.getColor(Theme.key_windowBackgroundWhiteBlackText))
@@ -369,7 +419,7 @@ class PluginInfoHeaderView(context: Context) : LinearLayout(context) {
         textSize = 14f
         gravity = Gravity.CENTER
     }
-    private val failure = TextView(context).apply {
+    private val failureView = TextView(context).apply {
         setTextColor(Theme.getColor(Theme.key_text_RedRegular))
         textSize = 14f
         gravity = Gravity.CENTER
@@ -379,24 +429,39 @@ class PluginInfoHeaderView(context: Context) : LinearLayout(context) {
         orientation = VERTICAL
         setBackgroundColor(Theme.getColor(Theme.key_windowBackgroundWhite))
         setPadding(0, 0, 0, AndroidUtilities.dp(20f))
-        addView(icon, LayoutHelper.createLinear(72, 72, Gravity.CENTER_HORIZONTAL, 0f, 20f, 0f, 0f))
+        iconContainer.addView(icon, LayoutHelper.createFrame(72, 72, Gravity.CENTER))
+        addView(iconContainer, LayoutHelper.createLinear(72, 72, Gravity.CENTER_HORIZONTAL, 0f, 20f, 0f, 0f))
         addView(name, LayoutHelper.createLinear(LayoutHelper.WRAP_CONTENT, LayoutHelper.WRAP_CONTENT, Gravity.CENTER_HORIZONTAL, 20f, 12f, 20f, 0f))
         addView(meta, LayoutHelper.createLinear(LayoutHelper.WRAP_CONTENT, LayoutHelper.WRAP_CONTENT, Gravity.CENTER_HORIZONTAL, 20f, 4f, 20f, 0f))
-        addView(failure, LayoutHelper.createLinear(LayoutHelper.WRAP_CONTENT, LayoutHelper.WRAP_CONTENT, Gravity.CENTER_HORIZONTAL, 20f, 8f, 20f, 0f))
+        addView(failureView, LayoutHelper.createLinear(LayoutHelper.WRAP_CONTENT, LayoutHelper.WRAP_CONTENT, Gravity.CENTER_HORIZONTAL, 20f, 8f, 20f, 0f))
     }
 
-    fun bind(plugin: Plugin) {
-        PluginManifestIcons.bindIcon(icon, plugin.manifest.icon, placeholder)
-        name.text = plugin.manifest.name
+    override fun onLayout(changed: Boolean, l: Int, t: Int, r: Int, b: Int) {
+        super.onLayout(changed, l, t, r, b)
+        Log.d("InuPluginIcon", "header laid out ${width}x$height, icon ${icon.width}x${icon.height} vis=${icon.visibility}")
+    }
+
+    fun bind(manifest: PluginManifest, failure: PluginFailure?) {
+        val glyph = PluginManifestIcons.bindIcon(icon, manifest.icon, placeholder, glyphTint)
+        iconContainer.background = if (glyph) badge else null
+        val iconSize = AndroidUtilities.dp(if (glyph) 40f else 72f)
+        icon.layoutParams?.let { lp ->
+            if (lp.width != iconSize) {
+                lp.width = iconSize
+                lp.height = iconSize
+                icon.layoutParams = lp
+            }
+        }
+        name.text = manifest.name
         val metaText = SpannableStringBuilder()
-        plugin.manifest.version?.let { metaText.append("v$it") }
-        plugin.manifest.author?.let { author ->
+        manifest.version?.let { metaText.append("v$it") }
+        manifest.author?.let { author ->
             if (metaText.isNotEmpty()) metaText.append(" · ")
             val formatted = LocaleController.formatString(R.string.InuPluginsByAuthor, author)
             val start = metaText.length
             metaText.append(formatted)
             val authorIndex = formatted.indexOf(author)
-            if (author.startsWith("@") && author.length > 1 && authorIndex >= 0) {
+            if (onAuthorClick != null && author.startsWith("@") && author.length > 1 && authorIndex >= 0) {
                 metaText.setSpan(
                     object : ClickableSpan() {
                         override fun onClick(widget: View) {
@@ -415,8 +480,7 @@ class PluginInfoHeaderView(context: Context) : LinearLayout(context) {
         }
         meta.text = metaText
         meta.visibility = if (metaText.isEmpty()) GONE else VISIBLE
-        val fail = plugin.failure
-        failure.text = fail?.describe()
-        failure.visibility = if (fail == null) GONE else VISIBLE
+        failureView.text = failure?.describe()
+        failureView.visibility = if (failure == null) GONE else VISIBLE
     }
 }
