@@ -1,0 +1,197 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: avitoras <avitoras@outlook.com>
+Date: Thu, 20 Aug 2026 03:30:33 +0300
+Subject: refresh streamed audio album metadata before publishing to MediaSession
+
+---
+ .../telegram/messenger/MediaController.java   | 70 ++++++++++++++++++-
+ .../messenger/MusicPlayerService.java         |  7 +-
+ 2 files changed, 72 insertions(+), 5 deletions(-)
+
+diff --git a/TMessagesProj/src/main/java/org/telegram/messenger/MediaController.java b/TMessagesProj/src/main/java/org/telegram/messenger/MediaController.java
+index 0000000..0000000 100644
+--- a/TMessagesProj/src/main/java/org/telegram/messenger/MediaController.java
++++ b/TMessagesProj/src/main/java/org/telegram/messenger/MediaController.java
+@@ -62,6 +62,7 @@ import android.telephony.PhoneStateListener;
+ import android.telephony.TelephonyManager;
+ import android.text.TextUtils;
+ import android.util.Pair;
++import android.util.Log;
+ import android.util.SparseArray;
+ import android.view.HapticFeedbackConstants;
+ import android.view.TextureView;
+@@ -118,11 +119,13 @@ import java.io.FileOutputStream;
+ import java.io.IOException;
+ import java.io.InputStream;
+ import java.io.OutputStream;
++import java.io.RandomAccessFile;
+ import java.lang.reflect.Method;
+ import java.net.URLEncoder;
+ import java.nio.ByteBuffer;
+ import java.nio.ByteOrder;
+ import java.nio.channels.FileChannel;
++import java.nio.charset.StandardCharsets;
+ import java.util.ArrayList;
+ import java.util.Collections;
+ import java.util.HashMap;
+@@ -1027,6 +1030,7 @@ public class MediaController implements AudioManager.OnAudioFocusChangeListener,
+     private VideoPlayer emojiSoundPlayer = null;
+     private int emojiSoundPlayerNum = 0;
+     private boolean isStreamingCurrentAudio;
++    private String inu_streamingAlbum;
+     private int playerNum;
+     private String shouldSavePositionForCurrentAudio;
+     private long lastSaveTime;
+@@ -3709,6 +3713,7 @@ public class MediaController implements AudioManager.OnAudioFocusChangeListener,
+         lastSaveTime = 0;
+         playMusicAgain = false;
+         seekToProgressPending = 0;
++        inu_streamingAlbum = null;
+         File file = null;
+         boolean exists = false;
+         if (messageObject.messageOwner.attachPath != null && messageObject.messageOwner.attachPath.length() > 0) {
+@@ -3948,6 +3953,17 @@ public class MediaController implements AudioManager.OnAudioFocusChangeListener,
+                             lastProgress = seekTo;
+                             seekToProgressPending = 0;
+                         }
++                        if (playbackState == ExoPlayer.STATE_READY && isStreamingCurrentAudio && audioPlayer != null && audioPlayer.player != null) {
++                            CharSequence album = audioPlayer.player.getMediaMetadata().albumTitle;
++                            inu_streamingAlbum = album != null ? album.toString() : null;
++                            if (TextUtils.isEmpty(inu_streamingAlbum)) {
++                                FileStreamLoadOperation stream = FileStreamLoadOperation.allStreams.get(messageObject.getDocument().id);
++                                inu_streamingAlbum = inu_readFlacAlbum(stream != null ? stream.currentFile : null);
++                            }
++                            Log.d("InuAlbumMetadata", "stream ready metadata messageId=" + messageObject.getId() + " album=" + inu_streamingAlbum);
++                            inu_startMusicPlayerService();
++                            NotificationCenter.getInstance(messageObject.currentAccount).postNotificationName(NotificationCenter.messagePlayingPlayStateChanged, messageObject.getId());
++                        }
+                         if (audioPlayer != null && CastSync.isActive()) {
+                             audioPlayer.setMute(true);
+                         }
+@@ -4007,8 +4023,8 @@ public class MediaController implements AudioManager.OnAudioFocusChangeListener,
+                             "&name=" + URLEncoder.encode(FileLoader.getDocumentFileName(document), "UTF-8") +
+                             "&reference=" + Utilities.bytesToHex(document.file_reference != null ? document.file_reference : new byte[0]);
+                     Uri uri = Uri.parse("tg://" + messageObject.getFileName() + params);
+-                    audioPlayer.preparePlayer(uri, "other");
+                     isStreamingCurrentAudio = true;
++                    audioPlayer.preparePlayer(uri, "other");
+                 }
+                 if (messageObject.isVoice()) {
+                     String name = messageObject.getFileName();
+@@ -4161,7 +4177,7 @@ public class MediaController implements AudioManager.OnAudioFocusChangeListener,
+                 FileLog.e(e2);
+             }
+         }
+-        if (canStartMusicPlayerService()) {
++        if (canStartMusicPlayerService() && !(isStreamingCurrentAudio && messageObject.isMusic())) {
+             Intent intent = new Intent(ApplicationLoader.applicationContext, MusicPlayerService.class);
+             try {
+                 /*if (Build.VERSION.SDK_INT >= 26) {
+@@ -4172,7 +4188,7 @@ public class MediaController implements AudioManager.OnAudioFocusChangeListener,
+             } catch (Throwable e) {
+                 FileLog.e(e);
+             }
+-        } else {
++        } else if (!canStartMusicPlayerService()) {
+             Intent intent = new Intent(ApplicationLoader.applicationContext, MusicPlayerService.class);
+             ApplicationLoader.applicationContext.stopService(intent);
+         }
+@@ -4324,6 +4340,50 @@ public class MediaController implements AudioManager.OnAudioFocusChangeListener,
+     private boolean canStartMusicPlayerService() {
+         return playingMessageObject != null && (playingMessageObject.isMusic() || playingMessageObject.isVoice() || playingMessageObject.isRoundVideo()) && !playingMessageObject.isVoiceOnce() && !playingMessageObject.isRoundOnce();
+     }
++
++    private void inu_startMusicPlayerService() {
++        if (!canStartMusicPlayerService()) return;
++        try {
++            ApplicationLoader.applicationContext.startService(new Intent(ApplicationLoader.applicationContext, MusicPlayerService.class));
++        } catch (Throwable e) {
++            FileLog.e(e);
++        }
++    }
++
++    private String inu_readFlacAlbum(File file) {
++        if (file == null || file.length() < 8) return null;
++        try (RandomAccessFile input = new RandomAccessFile(file, "r")) {
++            if (input.readInt() != 0x664C6143) return null;
++            while (input.getFilePointer() + 4 <= input.length()) {
++                int header = input.readUnsignedByte();
++                int type = header & 0x7f;
++                int length = input.readUnsignedByte() << 16 | input.readUnsignedByte() << 8 | input.readUnsignedByte();
++                if (input.getFilePointer() + length > input.length()) return null;
++                if (type == 4) {
++                    byte[] data = new byte[length];
++                    input.readFully(data);
++                    ByteBuffer buffer = ByteBuffer.wrap(data).order(ByteOrder.LITTLE_ENDIAN);
++                    int vendorLength = buffer.getInt();
++                    if (vendorLength < 0 || vendorLength > buffer.remaining()) return null;
++                    buffer.position(buffer.position() + vendorLength);
++                    int count = buffer.getInt();
++                    for (int i = 0; i < count && buffer.remaining() >= 4; i++) {
++                        int commentLength = buffer.getInt();
++                        if (commentLength < 0 || commentLength > buffer.remaining()) return null;
++                        String comment = new String(data, buffer.position(), commentLength, StandardCharsets.UTF_8);
++                        buffer.position(buffer.position() + commentLength);
++                        if (comment.regionMatches(true, 0, "ALBUM=", 0, 6)) return comment.substring(6);
++                    }
++                    return null;
++                }
++                input.seek(input.getFilePointer() + length);
++                if ((header & 0x80) != 0) return null;
++            }
++        } catch (Exception e) {
++            Log.d("InuAlbumMetadata", "FLAC metadata parse failed", e);
++        }
++        return null;
++    }
+     
+     public void updateSilent(boolean value) {
+         isSilent = value;
+@@ -4363,6 +4423,10 @@ public class MediaController implements AudioManager.OnAudioFocusChangeListener,
+         return isStreamingCurrentAudio;
+     }
+ 
++    public String inu_getStreamingAlbum() {
++        return inu_streamingAlbum;
++    }
++
+     public boolean isCurrentPlayer(VideoPlayer player) {
+         return videoPlayer == player || audioPlayer == player;
+     }
+diff --git a/TMessagesProj/src/main/java/org/telegram/messenger/MusicPlayerService.java b/TMessagesProj/src/main/java/org/telegram/messenger/MusicPlayerService.java
+index 0000000..0000000 100644
+--- a/TMessagesProj/src/main/java/org/telegram/messenger/MusicPlayerService.java
++++ b/TMessagesProj/src/main/java/org/telegram/messenger/MusicPlayerService.java
+@@ -32,6 +32,7 @@ import android.net.Uri;
+ import android.os.Build;
+ import android.os.IBinder;
+ import android.text.TextUtils;
++import android.util.Log;
+ import android.view.View;
+ import android.widget.RemoteViews;
+ 
+@@ -354,6 +355,8 @@ public class MusicPlayerService extends Service implements NotificationCenter.No
+         String contentTitle = messageObject.getMusicTitle();
+         String contentText = messageObject.getMusicAuthor();
+         AudioInfo audioInfo = MediaController.getInstance().getAudioInfo();
++        String album = audioInfo != null && messageObject.isMusic() ? audioInfo.getAlbum() : MediaController.getInstance().inu_getStreamingAlbum();
++        Log.d("InuAlbumMetadata", "publishing MediaSession messageId=" + messageObject.getId() + " album=" + album);
+         Intent intent = new Intent(ApplicationLoader.applicationContext, LaunchActivity.class);
+         if (messageObject.isMusic()) {
+             intent.setAction("com.tmessages.openplayer");
+@@ -534,7 +537,7 @@ public class MusicPlayerService extends Service implements NotificationCenter.No
+                     .putString(MediaMetadataCompat.METADATA_KEY_ARTIST, contentText)
+                     .putLong(MediaMetadataCompat.METADATA_KEY_DURATION, duration)
+                     .putString(MediaMetadataCompat.METADATA_KEY_TITLE, contentTitle)
+-                    .putString(MediaMetadataCompat.METADATA_KEY_ALBUM, audioInfo != null && messageObject.isMusic() ? audioInfo.getAlbum() : null);
++                    .putString(MediaMetadataCompat.METADATA_KEY_ALBUM, album);
+             if (fullAlbumArt != null && !fullAlbumArt.isRecycled()) {
+                 meta.putBitmap(MediaMetadataCompat.METADATA_KEY_ALBUM_ART, fullAlbumArt);
+             }
+@@ -865,4 +868,4 @@ public class MusicPlayerService extends Service implements NotificationCenter.No
+             }
+         }
+     }
+-}
+\ No newline at end of file
++}
