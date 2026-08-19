@@ -10,6 +10,7 @@ most things are toggleable in `Settings → Inugram`, with sensible opinionated 
 ## appearance & general
 
 - navigation drawer instead of bottom tabs, like in older Telegram versions
+  - hides the redundant account list in settings (accounts are switchable from the drawer)
   - 🐶 an option to (ab)use predictive back to open the drawer
 - monet (material you) theme support - *based on [NagramX](https://github.com/risin42/NagramX)*, 🐶 improved. plus a quick switcher in appearance settings (light/dark/amoled/auto)
 - 🐶 classic ui mode for folders bar, shared media tabs, global search and chat elements (reverts the >12.6 "liquid glass" look)
