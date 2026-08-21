@@ -326,7 +326,8 @@ wrong name or flag, since the bridge and the typings only agree because one scri
 
 - `src/res/drawable/` (density-independent), `src/res/drawable-xxhdpi/` (bitmaps), `src/res/assets/`.
 - New asset dir → add path to `scripts/config.ts` → `forkSyncFiles`.
-- Icons: lucide pre-bundled; selection list in `scripts/config.ts` → `ICON_SELECTION`. Tabler pack preferred for visual consistency.
+- Icons: tabler pack (`@iconify-json/tabler`), selection list in `scripts/config.ts` → `ICON_SELECTION`; `pnpm run setup` writes them into the worktree as `inu_tabler_*`. Dropping a name from the list does **not** delete the generated file: remove it by hand, or it lingers and looks available.
+- **Eye icons: use stock's pair.** `msg_message` is the plain eye and `menu_hide_gift` the eye-with-slash. Both are named for where stock first used them, not for what they draw, so they don't turn up in a search for "eye": the fonts list (`FontsSettingsActivity`) and stock's gift menu both use them as the show/hide pair. Don't generate a new eye.
 
 ## Monet themes
 
