@@ -7,6 +7,7 @@ import android.graphics.LinearGradient
 import android.graphics.Paint
 import android.graphics.Shader
 import android.view.Gravity
+import android.view.View.MeasureSpec
 import android.widget.FrameLayout
 import android.widget.LinearLayout
 import androidx.recyclerview.widget.RecyclerView
@@ -73,6 +74,7 @@ class PluginInstallSheet(
     private var enableRow: TextCell? = null
     private val grantRows = HashMap<Int, GrantRowView>()
     private var enableNow = true
+    private var showKeptGrants = false
 
     private val buttons: ButtonsView
     private var seenEnd = false
@@ -138,6 +140,23 @@ class PluginInstallSheet(
         recyclerListView.addOnLayoutChangeListener { _, _, _, _, _, _, _, _, _ -> checkScrolledToEnd() }
 
         adapter.update(false)
+    }
+
+    /**
+     * takes the whole height the sheet is offered, instead of only as much as the list fills.
+     *
+     * `BottomSheet` measures its container `AT_MOST` and lays it out against the bottom edge, so a
+     * container that wraps sits lower the less it holds - and rises the moment its content outgrows
+     * the screen, carrying the entire sheet with it. Revealing the granted permissions crosses
+     * exactly that threshold. Its layout params say `MATCH_PARENT` already and are ignored: the
+     * container is measured by hand, and a minimum height is what that measurement still honours.
+     *
+     * Full height is what this sheet wants regardless - where it *rests* is the padding item's job,
+     * and that is a fixed fraction of the screen, so it rests in one place however long the list is.
+     */
+    override fun onPreMeasure(widthMeasureSpec: Int, heightMeasureSpec: Int) {
+        super.onPreMeasure(widthMeasureSpec, heightMeasureSpec)
+        containerView.minimumHeight = MeasureSpec.getSize(heightMeasureSpec)
     }
 
     override fun getTitle(): CharSequence = LocaleController.getString(
@@ -217,59 +236,41 @@ class PluginInstallSheet(
         val manifest = content.manifest
 
         items.add(UItem.asSpace(SPACE_TOP, dp(10f)))
+        // bound once, at creation: [fillItems] re-runs on every update, and re-binding the header
+        // restarts the icon load, which flashes the placeholder. None of it depends on sheet state
         val headerView = header ?: PluginInfoHeaderView(context).also {
             header = it
             it.onAuthorClick = { username ->
                 dismiss()
                 MessagesController.getInstance(currentAccount).openByUserName(username, content.fragment, 0)
             }
+            it.bind(manifest, null, content.previous?.version)
         }
-        headerView.bind(manifest, null, content.previous?.version)
         items.add(UItem.asCustom(HEADER, headerView))
         items.add(UItem.asShadow(manifest.description(LocaleController.getInstance().currentLocaleInfo?.langCode)))
 
         content.obfuscation?.let { kind ->
-            val banner = obfuscationBanner ?: WarningBanner(context).also { obfuscationBanner = it }
-            when (kind) {
-                SourceObfuscation.OBFUSCATED -> {
-                    banner.setTitle(LocaleController.getString(R.string.InuPluginObfuscatedTitle))
-                    banner.setText(LocaleController.getString(R.string.InuPluginObfuscatedInfo))
-                }
+            val banner = obfuscationBanner ?: WarningBanner(context).also { banner ->
+                obfuscationBanner = banner
+                when (kind) {
+                    SourceObfuscation.OBFUSCATED -> {
+                        banner.setTitle(LocaleController.getString(R.string.InuPluginObfuscatedTitle))
+                        banner.setText(LocaleController.getString(R.string.InuPluginObfuscatedInfo))
+                    }
 
-                SourceObfuscation.MINIFIED -> {
-                    banner.setTitle(LocaleController.getString(R.string.InuPluginMinifiedTitle))
-                    banner.setText(LocaleController.getString(R.string.InuPluginMinifiedInfo))
+                    SourceObfuscation.MINIFIED -> {
+                        banner.setTitle(LocaleController.getString(R.string.InuPluginMinifiedTitle))
+                        banner.setText(LocaleController.getString(R.string.InuPluginMinifiedInfo))
+                    }
                 }
             }
             items.add(UItem.asCustomShadow(OBFUSCATION_BANNER, banner))
         }
 
-        val grants = if (content.previous == null) {
-            sortedGrants(manifest.grants)
+        if (content.previous == null) {
+            fillPermissions(items, manifest)
         } else {
-            addedGrants(content.previous.grants, manifest.grants)
-        }
-        // an update that asks for nothing new says nothing about permissions at all: an unchanged
-        // list re-shown as if it were the question would train the user to click through it
-        if (content.previous == null || grants.isNotEmpty()) {
-            items.add(
-                UItem.asHeader(
-                    LocaleController.getString(
-                        if (content.previous != null) R.string.InuPluginUpdatePermissions
-                        else R.string.InuPluginsPermissions,
-                    ),
-                ),
-            )
-            if (grants.isEmpty()) {
-                items.add(UItem.asShadow(LocaleController.getString(R.string.InuPluginsPermissionsNone)))
-            } else {
-                grants.forEachIndexed { i, (name, scopes) ->
-                    val row = grantRows.getOrPut(i) { GrantRowView(context) }
-                    row.bind(name, scopes, divider = i != grants.lastIndex)
-                    items.add(UItem.asCustom(GRANT_BASE + i, row))
-                }
-                items.add(UItem.asShadow(null))
-            }
+            fillPermissionChanges(items, manifest, content.previous)
         }
 
         if (content.previous == null) {
@@ -293,10 +294,88 @@ class PluginInstallSheet(
         items.add(UItem.asShadow(null))
     }
 
+    private fun fillPermissions(items: ArrayList<UItem>, manifest: PluginManifest) {
+        items.add(UItem.asHeader(LocaleController.getString(R.string.InuPluginsPermissions)))
+        val grants = sortedGrants(manifest.grants)
+        if (grants.isEmpty()) {
+            items.add(UItem.asShadow(LocaleController.getString(R.string.InuPluginsPermissionsNone)))
+            return
+        }
+        addGrantRows(items, grants, GRANT_BASE)
+        items.add(UItem.asShadow(null))
+    }
+
+    /**
+     * an update asks a narrower question than an install: what changes. What does not is behind a
+     * button, so a user who wants to re-read it can, without the unchanged list being the thing
+     * they learn to click through.
+     */
+    private fun fillPermissionChanges(items: ArrayList<UItem>, manifest: PluginManifest, previous: PluginManifest) {
+        val added = findGrantsBeyond(previous.grants, manifest.grants)
+        val dropped = findGrantsBeyond(manifest.grants, previous.grants)
+        val kept = findGrantsKept(previous.grants, manifest.grants)
+
+        if (added.isNotEmpty()) {
+            items.add(UItem.asHeader(LocaleController.getString(R.string.InuPluginUpdatePermissions)))
+            addGrantRows(items, added, GRANT_BASE)
+            items.add(UItem.asShadow(null))
+        }
+        if (dropped.isNotEmpty()) {
+            items.add(UItem.asHeader(LocaleController.getString(R.string.InuPluginUpdatePermissionsDropped)))
+            addGrantRows(items, dropped, DROPPED_GRANT_BASE, dropped = true)
+            items.add(UItem.asShadow(null))
+        }
+        // a header renders as a card row of its own, so one is emitted only where rows follow it.
+        // with nothing to report, the note is what the section below is a footer of instead
+        val unchanged = added.isEmpty() && dropped.isEmpty()
+        val note = if (unchanged) LocaleController.getString(R.string.InuPluginUpdatePermissionsNone) else null
+        if (kept.isEmpty()) {
+            if (note != null) items.add(UItem.asShadow(note))
+            return
+        }
+        if (!showKeptGrants) {
+            items.add(
+                UItem.asButton(
+                    BUTTON_KEPT_GRANTS,
+                    R.drawable.msg_message,
+                    LocaleController.formatPluralString("InuPluginUpdatePermissionsKept", kept.size),
+                ),
+            )
+            items.add(UItem.asShadow(note))
+            return
+        }
+        items.add(UItem.asHeader(LocaleController.getString(R.string.InuPluginUpdatePermissionsKeptTitle)))
+        addGrantRows(items, kept, KEPT_GRANT_BASE)
+        items.add(UItem.asShadow(note))
+    }
+
+    /** [baseId] separates the caches as well as the item ids: one row view cannot be in two lists at once */
+    private fun addGrantRows(
+        items: ArrayList<UItem>,
+        grants: List<Pair<String, List<String>?>>,
+        baseId: Int,
+        dropped: Boolean = false,
+    ) {
+        grants.forEachIndexed { i, (name, scopes) ->
+            val row = grantRows.getOrPut(baseId + i) { GrantRowView(context) }
+            row.bind(name, scopes, divider = i != grants.lastIndex, dropped = dropped)
+            items.add(UItem.asCustom(baseId + i, row))
+        }
+    }
+
     private fun onItemClick(position: Int) {
         val content = this.content ?: return
         val item = adapter.getItem(position) ?: return
-        if (item.id == BUTTON_SOURCE) PluginSourceSheet(context, content.manifest.name, content.source).show()
+        when (item.id) {
+            BUTTON_SOURCE -> PluginSourceSheet(context, content.manifest.name, content.source).show()
+            // nothing here moves what is already on screen: the rows land below the fold, where
+            // the list was not scrollable before, and neither the scroll offset nor the sheet's top
+            // edge is a function of how much content is under them
+            BUTTON_KEPT_GRANTS -> {
+                showKeptGrants = true
+                adapter.update(true)
+            }
+        }
     }
 
     companion object {
@@ -305,6 +384,9 @@ class PluginInstallSheet(
         private val SPACE_TOP = InuUtils.generateId()
         private val TOGGLE_ENABLE = InuUtils.generateId()
         private val BUTTON_SOURCE = InuUtils.generateId()
+        private val BUTTON_KEPT_GRANTS = InuUtils.generateId()
         private const val GRANT_BASE = 20000
+        private const val DROPPED_GRANT_BASE = 21000
+        private const val KEPT_GRANT_BASE = 22000
     }
 }

@@ -855,6 +855,11 @@
     <string name="InuPluginUpdate">Update</string>
     <string name="InuPluginUpdateTitle">Update plugin</string>
     <string name="InuPluginUpdatePermissions">New permissions</string>
+    <string name="InuPluginUpdatePermissionsNone">This update doesn\'t ask for any new permissions.</string>
+    <string name="InuPluginUpdatePermissionsDropped">No longer requested</string>
+    <string name="InuPluginUpdatePermissionsKeptTitle">Already granted</string>
+    <string name="InuPluginUpdatePermissionsKept_one">Review %1$d already granted permission</string>
+    <string name="InuPluginUpdatePermissionsKept_other">Review %1$d already granted permissions</string>
     <string name="InuPluginUpdated">%1$s updated</string>
     <string name="InuPluginAlreadyInstalled">%1$s is already installed</string>
     <string name="InuPluginsErrorNoManifest">Not a valid plugin (missing metadata header)</string>

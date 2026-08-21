@@ -214,18 +214,39 @@ internal fun sortedGrants(tokens: List<String>): List<Pair<String, List<String>?
         .sortedByDescending { (name, scopes) -> tierFor(name, scopes) }
 
 /**
- * only what [current] asks for beyond [previous], for the sheet that confirms an update: a grant
- * whose name is new, or one that widened - either to more scopes or, from a scoped grant to an
- * unscoped one, to all of them. Same tier order as [sortedGrants].
+ * what [asked] wants that [baseline] does not cover: a grant whose name [baseline] lacks, or one
+ * that widened - to more scopes, or from a scoped grant to an unscoped one. Same tier order as
+ * [sortedGrants].
+ *
+ * The sheet confirming an update reads it both ways round: baseline first for what the new source
+ * newly asks for, asked first for what it gave up.
  */
-internal fun addedGrants(previous: List<String>, current: List<String>): List<Pair<String, List<String>?>> {
-    val had = mergeGrants(previous)
-    return mergeGrants(current).mapNotNull { (name, scopes) ->
+internal fun findGrantsBeyond(baseline: List<String>, asked: List<String>): List<Pair<String, List<String>?>> {
+    val had = mergeGrants(baseline)
+    return mergeGrants(asked).mapNotNull { (name, scopes) ->
         if (name !in had) return@mapNotNull name to scopes
         val hadScopes = had[name] ?: return@mapNotNull null
         if (scopes == null) return@mapNotNull name to null
         val added = scopes.filter { it !in hadScopes }
         if (added.isEmpty()) null else name to added
+    }.sortedByDescending { (name, scopes) -> tierFor(name, scopes) }
+}
+
+/**
+ * what an update leaves exactly as it was - held before and still asked for, so neither
+ * [findGrantsBeyond] direction lists it. A grant that only widened appears here too, narrowed to
+ * the part that was already granted, because that part is not what the update is asking about.
+ */
+internal fun findGrantsKept(previous: List<String>, current: List<String>): List<Pair<String, List<String>?>> {
+    val had = mergeGrants(previous)
+    return mergeGrants(current).mapNotNull { (name, scopes) ->
+        if (name !in had) return@mapNotNull null
+        val hadScopes = had[name]
+        // either side unscoped means the other side's scopes are all granted and all still asked for
+        if (hadScopes == null) return@mapNotNull name to scopes
+        if (scopes == null) return@mapNotNull name to hadScopes
+        val kept = scopes.filter { it in hadScopes }
+        if (kept.isEmpty()) null else name to kept
     }.sortedByDescending { (name, scopes) -> tierFor(name, scopes) }
 }
 
@@ -356,6 +377,7 @@ internal class GrantRowView(context: Context) : LinearLayout(context) {
         setTextColor(Theme.getColor(Theme.key_windowBackgroundWhiteGrayText))
         textSize = 13f
     }
+    private val textBlock = LinearLayout(context).apply { orientation = VERTICAL }
     private var needDivider = false
 
     init {
@@ -364,7 +386,6 @@ internal class GrantRowView(context: Context) : LinearLayout(context) {
         setBackgroundColor(Theme.getColor(Theme.key_windowBackgroundWhite))
         setPadding(AndroidUtilities.dp(22f), AndroidUtilities.dp(8f), AndroidUtilities.dp(22f), AndroidUtilities.dp(8f))
         addView(iconLayout, LayoutHelper.createLinear(28, 28, Gravity.CENTER_VERTICAL, 0f, 0f, 18f, 0f))
-        val textBlock = LinearLayout(context).apply { orientation = VERTICAL }
         textBlock.addView(title, LayoutHelper.createLinear(LayoutHelper.MATCH_PARENT, LayoutHelper.WRAP_CONTENT))
         textBlock.addView(subtitle, LayoutHelper.createLinear(LayoutHelper.MATCH_PARENT, LayoutHelper.WRAP_CONTENT, 0f, 2f, 0f, 0f))
         addView(textBlock, LayoutHelper.createLinear(0, LayoutHelper.WRAP_CONTENT, 1f, Gravity.CENTER_VERTICAL))
@@ -380,8 +401,14 @@ internal class GrantRowView(context: Context) : LinearLayout(context) {
         canvas.drawLine(if (rtl) 0f else inset, y, if (rtl) width - inset else width.toFloat(), y, Theme.dividerPaint)
     }
 
-    /** [divider] only asks for one: md3 cards separate rows by shape instead */
-    fun bind(name: String, scopes: List<String>?, divider: Boolean) {
+    /**
+     * [divider] only asks for one: md3 cards separate rows by shape instead.
+     *
+     * [dropped] is a permission the plugin is *giving up*, which is why it also drops the danger
+     * styling: a red "can take over your account" warning next to something being taken away reads
+     * as the opposite of what happened. The content dims, not the view, so the row keeps its fill.
+     */
+    fun bind(name: String, scopes: List<String>?, divider: Boolean, dropped: Boolean = false) {
         val needed = divider && !M3SectionsHelper.isEnabled()
         if (needDivider != needed) {
             needDivider = needed
@@ -402,12 +429,15 @@ internal class GrantRowView(context: Context) : LinearLayout(context) {
             title.text = LocaleController.getString(known.titleRes)
             grantSubtitle(name, scopes)
         }
-        val dangerous = tier == GrantTier.DANGEROUS
+        val dangerous = tier == GrantTier.DANGEROUS && !dropped
         subtitle.setTextColor(
             if (dangerous) top else Theme.getColor(Theme.key_windowBackgroundWhiteGrayText),
         )
         subtitle.text = if (dangerous && subtitleText != null) warn(subtitleText, top) else subtitleText
         subtitle.visibility = if (subtitleText == null) GONE else VISIBLE
+        val contentAlpha = if (dropped) 0.5f else 1f
+        iconLayout.alpha = contentAlpha
+        textBlock.alpha = contentAlpha
     }
 
     /** the explanation, marked with the same triangle the plugin's own row carries */
