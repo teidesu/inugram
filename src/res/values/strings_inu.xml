@@ -852,8 +852,14 @@
     <string name="InuPluginInstallTitle">Install plugin</string>
     <string name="InuPluginInstallEnable">Enable after installing</string>
     <string name="InuPluginInstalled">%1$s installed</string>
+    <string name="InuPluginUpdate">Update</string>
+    <string name="InuPluginUpdateTitle">Update plugin</string>
+    <string name="InuPluginUpdatePermissions">New permissions</string>
+    <string name="InuPluginUpdated">%1$s updated</string>
+    <string name="InuPluginAlreadyInstalled">%1$s is already installed</string>
     <string name="InuPluginsErrorNoManifest">Not a valid plugin (missing metadata header)</string>
     <string name="InuPluginsErrorRead">Couldn\'t read the selected file</string>
+    <string name="InuPluginsErrorWrite">Couldn\'t save the plugin file</string>
     <string name="InuPluginsErrorApiVersion">Needs a newer Inugram (plugin API %1$d, this app has %2$d)</string>
     <string name="InuPluginsErrorPlatform">Not made for this platform (needs %1$s)</string>
     <string name="InuPluginsErrorBadGrant">Invalid permissions requested (%1$s)</string>

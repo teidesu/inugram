@@ -4,7 +4,18 @@ import java.security.SecureRandom
 import kotlin.random.Random
 import kotlin.random.asKotlinRandom
 
-data class PluginInstall(val id: String, val file: String, val enabled: Boolean)
+/**
+ * [identity] is [PluginManifest.identity] as of the last time this install's file was read. Kept on
+ * the record rather than taken from the live manifest so that an install whose file no longer parses
+ * is still matchable: a re-import of a fixed file has to land back on this id, or the plugin's
+ * stores are orphaned behind a record nothing lists.
+ */
+data class PluginInstall(
+    val id: String,
+    val file: String,
+    val enabled: Boolean,
+    val identity: String? = null,
+)
 
 /** Install IDs are random. Do not derive them from manifest data because they name plugin storage. */
 object PluginInstalls {

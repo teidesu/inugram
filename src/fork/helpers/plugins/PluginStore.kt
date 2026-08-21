@@ -7,6 +7,7 @@ import desu.inugram.core.plugins.PluginInstalls
 import desu.inugram.core.plugins.PluginManifestParser
 import desu.inugram.helpers.plugins.io.PluginFs
 import java.io.File
+import java.io.IOException
 import org.json.JSONArray
 import org.json.JSONObject
 
@@ -43,6 +44,7 @@ object PluginStore {
         val files = dir.listFiles { f -> f.isFile && f.name.endsWith(".js") }
         if (files == null) {
             Log.e(TAG, "could not list $dir; keeping the persisted installs and skipping plugins")
+            unloaded = readPersisted()
             return emptyList()
         }
         val installs = PluginInstalls.reconcile(readPersisted(), files.map { it.name }.sorted())
@@ -71,12 +73,48 @@ object PluginStore {
     fun persist(plugins: List<Plugin>) {
         val arr = JSONArray()
         for (p in plugins) {
-            arr.put(JSONObject().put("id", p.id).put("file", p.file.name).put("enabled", p.enabled))
+            arr.put(record(p.id, p.file.name, p.enabled, p.manifest.identity))
         }
         for (install in unloaded) {
-            arr.put(JSONObject().put("id", install.id).put("file", install.file).put("enabled", install.enabled))
+            arr.put(record(install.id, install.file, install.enabled, install.identity))
         }
         InuConfig.PLUGINS_STATE.value = arr.toString()
+    }
+
+    private fun record(id: String, file: String, enabled: Boolean, identity: String?): JSONObject =
+        JSONObject().put("id", id).put("file", file).put("enabled", enabled).putOpt("identity", identity)
+
+    /**
+     * the record of an install that did not load this boot but whose file claims [identity].
+     *
+     * A plugin only lands here when its file stopped parsing, which is exactly when the user goes
+     * and re-imports a fixed copy. Nothing lists it, so reusing its id is also the only way its
+     * `kv`/`fs` stores are ever reachable again. It stays on the unloaded list until the caller has
+     * actually taken it over ([dropUnloaded]), or a failed import would strand the id anyway.
+     */
+    fun findUnloaded(identity: String): PluginInstall? = unloaded.firstOrNull { it.identity == identity }
+
+    /** hands a record found by [findUnloaded] over to the caller, so [persist] writes it only once */
+    fun dropUnloaded(install: PluginInstall) {
+        unloaded = unloaded - install
+    }
+
+    /**
+     * writes plugin source through a temporary file, because [file] may be an install that works:
+     * a write that dies halfway leaves the user with neither the old plugin nor the new one, and
+     * the bytes on disk are the only copy either has.
+     */
+    fun writeSource(file: File, source: String): Boolean {
+        val tmp = File(file.parentFile, "${file.name}.tmp")
+        return try {
+            tmp.writeText(source)
+            if (!tmp.renameTo(file)) throw IOException("rename to $file failed")
+            true
+        } catch (e: Exception) {
+            Log.e(TAG, "write failed: ${file.name}", e)
+            tmp.delete()
+            false
+        }
     }
 
     /** a free path under [dir] for [suggestedName]; the caller writes the source into it */
@@ -101,7 +139,12 @@ object PluginStore {
                 val o = arr.getJSONObject(i)
                 val file = o.optString("file")
                 if (file.isEmpty()) null
-                else PluginInstall(o.optString("id"), file, o.optBoolean("enabled", true))
+                else PluginInstall(
+                    o.optString("id"),
+                    file,
+                    o.optBoolean("enabled", true),
+                    o.optString("identity").takeIf { it.isNotEmpty() },
+                )
             }
         } catch (e: Exception) {
             Log.e(TAG, "bad plugins state", e)

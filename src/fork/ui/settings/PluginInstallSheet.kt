@@ -35,6 +35,11 @@ import org.telegram.ui.Components.UniversalAdapter
  *
  * Installing is gated on having *seen* the permissions: while the list still has something below
  * the fold, the confirm button scrolls instead of installing.
+ *
+ * A non-null [previous] makes it the confirmation for updating that installed plugin instead, which
+ * asks a narrower question: the permission list becomes only what the new source asks for *beyond*
+ * what is already granted, and there is no "enable after installing" - an update keeps the switch
+ * the user left it on.
  */
 class PluginInstallSheet(
     context: Context,
@@ -42,6 +47,7 @@ class PluginInstallSheet(
     manifest: PluginManifest,
     source: String,
     obfuscation: SourceObfuscation?,
+    previous: PluginManifest? = null,
     onInstall: (enable: Boolean) -> Unit,
 ) : BottomSheetWithRecyclerListView(
     context, fragment, false, true, false, false, false, ActionBarType.SLIDING, null,
@@ -51,6 +57,7 @@ class PluginInstallSheet(
         val source: String,
         val obfuscation: SourceObfuscation?,
         val fragment: BaseFragment,
+        val previous: PluginManifest?,
     )
 
     /**
@@ -58,7 +65,7 @@ class PluginInstallSheet(
      * constructor, which runs from `super()` - before any field of this class is assigned. That
      * first pass builds nothing, and `init` fills again once there is something to build.
      */
-    private val content: Content? = Content(manifest, source, obfuscation, fragment)
+    private val content: Content? = Content(manifest, source, obfuscation, fragment, previous)
 
     private lateinit var adapter: UniversalAdapter
     private var header: PluginInfoHeaderView? = null
@@ -97,7 +104,7 @@ class PluginInstallSheet(
         }
         val install = createSheetButton(
             context,
-            LocaleController.getString(R.string.InuPluginInstall),
+            LocaleController.getString(if (previous != null) R.string.InuPluginUpdate else R.string.InuPluginInstall),
             background = Theme.AdaptiveRipple.filledRectByKey(Theme.key_featuredStickers_addButton, 24f),
             textColor = Theme.getColor(Theme.key_featuredStickers_buttonText),
             bold = true,
@@ -133,7 +140,9 @@ class PluginInstallSheet(
         adapter.update(false)
     }
 
-    override fun getTitle(): CharSequence = LocaleController.getString(R.string.InuPluginInstallTitle)
+    override fun getTitle(): CharSequence = LocaleController.getString(
+        if (content?.previous != null) R.string.InuPluginUpdateTitle else R.string.InuPluginInstallTitle,
+    )
 
     override fun createAdapter(listView: RecyclerListView): RecyclerListView.SelectionAdapter {
         adapter = UniversalAdapter(recyclerListView, context, currentAccount, 0, false, this::fillItems, resourcesProvider)
@@ -215,7 +224,7 @@ class PluginInstallSheet(
                 MessagesController.getInstance(currentAccount).openByUserName(username, content.fragment, 0)
             }
         }
-        headerView.bind(manifest, null)
+        headerView.bind(manifest, null, content.previous?.version)
         items.add(UItem.asCustom(HEADER, headerView))
         items.add(UItem.asShadow(manifest.description(LocaleController.getInstance().currentLocaleInfo?.langCode)))
 
@@ -235,34 +244,51 @@ class PluginInstallSheet(
             items.add(UItem.asCustomShadow(OBFUSCATION_BANNER, banner))
         }
 
-        items.add(UItem.asHeader(LocaleController.getString(R.string.InuPluginsPermissions)))
-        val grants = sortedGrants(manifest.grants)
-        if (grants.isEmpty()) {
-            items.add(UItem.asShadow(LocaleController.getString(R.string.InuPluginsPermissionsNone)))
+        val grants = if (content.previous == null) {
+            sortedGrants(manifest.grants)
         } else {
-            grants.forEachIndexed { i, (name, scopes) ->
-                val row = grantRows.getOrPut(i) { GrantRowView(context) }
-                row.bind(name, scopes, divider = i != grants.lastIndex)
-                items.add(UItem.asCustom(GRANT_BASE + i, row))
+            addedGrants(content.previous.grants, manifest.grants)
+        }
+        // an update that asks for nothing new says nothing about permissions at all: an unchanged
+        // list re-shown as if it were the question would train the user to click through it
+        if (content.previous == null || grants.isNotEmpty()) {
+            items.add(
+                UItem.asHeader(
+                    LocaleController.getString(
+                        if (content.previous != null) R.string.InuPluginUpdatePermissions
+                        else R.string.InuPluginsPermissions,
+                    ),
+                ),
+            )
+            if (grants.isEmpty()) {
+                items.add(UItem.asShadow(LocaleController.getString(R.string.InuPluginsPermissionsNone)))
+            } else {
+                grants.forEachIndexed { i, (name, scopes) ->
+                    val row = grantRows.getOrPut(i) { GrantRowView(context) }
+                    row.bind(name, scopes, divider = i != grants.lastIndex)
+                    items.add(UItem.asCustom(GRANT_BASE + i, row))
+                }
+                items.add(UItem.asShadow(null))
             }
-            items.add(UItem.asShadow(null))
         }
 
-        val enable = enableRow ?: TextCell(context, 23, false, true, resourcesProvider).also { cell ->
-            enableRow = cell
-            cell.background = Theme.createSelectorDrawable(Theme.getColor(Theme.key_listSelector), Theme.RIPPLE_MASK_ALL)
-            cell.setOnClickListener {
-                enableNow = !enableNow
-                cell.setChecked(enableNow)
+        if (content.previous == null) {
+            val enable = enableRow ?: TextCell(context, 23, false, true, resourcesProvider).also { cell ->
+                enableRow = cell
+                cell.background = Theme.createSelectorDrawable(Theme.getColor(Theme.key_listSelector), Theme.RIPPLE_MASK_ALL)
+                cell.setOnClickListener {
+                    enableNow = !enableNow
+                    cell.setChecked(enableNow)
+                }
             }
+            enable.setTextAndCheckAndIcon(
+                LocaleController.getString(R.string.InuPluginInstallEnable),
+                enableNow,
+                R.drawable.msg2_animations,
+                false,
+            )
+            items.add(UItem.asCustom(TOGGLE_ENABLE, enable))
         }
-        enable.setTextAndCheckAndIcon(
-            LocaleController.getString(R.string.InuPluginInstallEnable),
-            enableNow,
-            R.drawable.msg2_animations,
-            false,
-        )
-        items.add(UItem.asCustom(TOGGLE_ENABLE, enable))
         items.add(UItem.asButton(BUTTON_SOURCE, R.drawable.inu_tabler_code, LocaleController.getString(R.string.InuPluginsViewSource)))
         items.add(UItem.asShadow(null))
     }
