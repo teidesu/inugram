@@ -5,8 +5,8 @@ package desu.inugram.core.plugins
  * [grants], [pluginApi], [platform] are parsed already so the engine layer can gate on them without
  * re-parsing.
  *
- * Nothing here is identity: that is [PluginInstall], minted at install time. [name] is a label, two
- * plugins may share one, and there is no `@namespace`.
+ * Nothing here keys storage: that is [PluginInstall.id], minted at install time. [identity] is only
+ * what decides whether a second file is an update of an installed plugin or a plugin of its own.
  */
 data class PluginManifest(
     val name: String,
@@ -21,6 +21,21 @@ data class PluginManifest(
     /** every directive, base key lowercased, in declaration order; backs `inu.info().header` */
     val raw: Map<String, List<String>>,
 ) {
+    /**
+     * what two files must agree on for one to be an update of the other. Both halves are required:
+     * a plugin with no [author] matches nothing, because [name] alone would let two unrelated
+     * plugins overwrite each other, and a false match costs a user the plugin they had.
+     *
+     * Not storage identity - a plugin that renames itself keeps its stores either way, it just
+     * stops being updatable in place by a file that carries the new name.
+     */
+    val identity: String? by lazy {
+        val normalizedAuthor = normalize(author ?: return@lazy null)
+        val normalizedName = normalize(name)
+        if (normalizedAuthor.isEmpty() || normalizedName.isEmpty()) null
+        else "$normalizedAuthor\u0000$normalizedName"
+    }
+
     fun description(lang: String?): String? {
         if (lang == null) return description
         val key = lang.lowercase()
@@ -30,6 +45,18 @@ data class PluginManifest(
             .firstOrNull { it.key.substringBefore('-') == primary }
             ?.let { return it.value }
         return description
+    }
+
+    private companion object {
+        private val WHITESPACE = Regex("\\s+")
+
+        // control characters are dropped rather than collapsed: they are invisible in the sheet that
+        // confirms an update, so a name carrying one would read as another plugin's and match it
+        fun normalize(value: String): String = value
+            .filterNot { it.isISOControl() && !it.isWhitespace() }
+            .trim()
+            .lowercase()
+            .replace(WHITESPACE, " ")
     }
 }
 

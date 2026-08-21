@@ -1,6 +1,7 @@
 package desu.inugram.core.plugins
 
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertNotEquals
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -34,6 +35,42 @@ class PluginManifestParserTest {
         assertEquals("tg://addstickers?set=my_set&idx=0", m.icon)
         assertEquals(1, m.pluginApi)
         assertEquals("android", m.platform)
+    }
+
+    private fun manifestOf(name: String, author: String?): PluginManifest = PluginManifestParser.parse(
+        buildString {
+            appendLine("// ==InuPlugin==")
+            appendLine("// @name $name")
+            if (author != null) appendLine("// @author $author")
+            appendLine("// ==/InuPlugin==")
+        },
+    )
+
+    @Test
+    fun identityIgnoresCaseAndSpacing() {
+        assertEquals(
+            manifestOf("My Plugin", "teidesu").identity,
+            manifestOf("my   plugin", "  TEIDESU ").identity,
+        )
+    }
+
+    @Test
+    fun identityDistinguishesNameAndAuthor() {
+        assertNotEquals(manifestOf("a", "b").identity, manifestOf("b", "a").identity)
+        assertNotEquals(manifestOf("plugin", "one").identity, manifestOf("plugin", "two").identity)
+    }
+
+    @Test
+    fun identityIgnoresInvisibleCharacters() {
+        assertEquals(
+            manifestOf("plugin", "teidesu").identity,
+            manifestOf("plu\u0000gin", "teide\u0007su").identity,
+        )
+    }
+
+    @Test
+    fun identityNeedsAnAuthor() {
+        assertNull(manifestOf("nameless", null).identity)
     }
 
     @Test

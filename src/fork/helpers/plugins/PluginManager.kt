@@ -52,6 +52,7 @@ import org.telegram.messenger.R
 import org.telegram.messenger.Utilities
 import org.telegram.tgnet.TLRPC
 import org.telegram.ui.LaunchActivity
+import java.io.File
 import java.util.IdentityHashMap
 import java.util.concurrent.CopyOnWriteArrayList
 import java.util.concurrent.CountDownLatch
@@ -232,30 +233,67 @@ object PluginManager {
         if (plugin.enabled && isEngineEnabled() && !safeMode) run(plugin)
     }
 
+    /** the installed plugin [manifest] would replace, or null when it is a plugin of its own */
+    fun findUpdateTarget(manifest: PluginManifest): Plugin? {
+        val identity = manifest.identity ?: return null
+        // the snapshot, because this is answered off the ui thread that mutates the list
+        return plugins().firstOrNull { it.manifest.identity == identity }
+    }
+
     /**
      * copies raw plugin source into the plugins dir, registers and (if applicable) runs it.
      *
-     * always a *new* install, with its own identity and an empty store: nothing in the file is
-     * matched against the installed set, so updating in place is what [reload] is for.
+     * a *new* install with an empty store, unless the source claims the identity of a record that
+     * did not load this boot - that one is nothing the user can see or remove, so its id is reused
+     * rather than stranded. A plugin that is merely installed and broken is [update]'s, not this.
      */
     fun import(suggestedName: String, source: String, enabled: Boolean = true): ImportResult {
         val manifest = PluginManifestParser.parseOrNull(source)
             ?: return ImportResult.Refused(getString(R.string.InuPluginsErrorNoManifest))
         badGrants(manifest)?.let { return ImportResult.Refused(it) }
-        val target = PluginStore.fileFor(suggestedName)
-        target.writeText(source)
-        val plugin = Plugin(PluginInstalls.mintId(), target, source, manifest).apply { this.enabled = enabled }
+        val reclaimed = manifest.identity?.let { PluginStore.findUnloaded(it) }
+        val target = if (reclaimed != null) File(PluginStore.dir, reclaimed.file) else PluginStore.fileFor(suggestedName)
+        if (!PluginStore.writeSource(target, source)) {
+            return ImportResult.Refused(getString(R.string.InuPluginsErrorWrite))
+        }
+        reclaimed?.let { PluginStore.dropUnloaded(it) }
+        val plugin = Plugin(reclaimed?.id ?: PluginInstalls.mintId(), target, source, manifest)
+            .apply { this.enabled = enabled }
+        val reversible = reclaimed == null
         plugins.add(plugin)
         PluginStore.persist(plugins)
         republishOrder()
         notifyChanged()
         if (plugin.enabled && isEngineEnabled() && !safeMode) run(plugin)
-        return ImportResult.Installed(plugin)
+        return ImportResult.Installed(plugin, reversible)
+    }
+
+    /**
+     * replaces an installed plugin's source in place: same install id, so the same `kv` and `fs`
+     * stores, the same place in the chain order and the same enabled bit. Returns why nothing was
+     * written, or null once the plugin is running the new source.
+     *
+     * The vetting is [reload]'s, which re-reads the file this just wrote - deliberately, so an
+     * update goes live through the one path that also has to survive a plugin failing to load.
+     */
+    fun update(plugin: Plugin, source: String): String? {
+        val manifest = PluginManifestParser.parseOrNull(source)
+            ?: return getString(R.string.InuPluginsErrorNoManifest)
+        incompatibility(manifest)?.let { return it }
+        if (!PluginStore.writeSource(plugin.file, source)) return getString(R.string.InuPluginsErrorWrite)
+        reload(plugin)
+        PluginStore.persist(plugins)
+        return null
     }
 
     /** what was installed, so the caller can offer to undo it, or why nothing was */
     sealed interface ImportResult {
-        class Installed(val plugin: Plugin) : ImportResult
+        /**
+         * [reversible] is false when this install took over the id of a record that did not load:
+         * [remove] would then wipe `kv`/`fs` that belong to what held the id before, so there is
+         * nothing to offer an undo of - the install is not its own inverse.
+         */
+        class Installed(val plugin: Plugin, val reversible: Boolean) : ImportResult
         class Refused(val reason: String) : ImportResult
     }
 

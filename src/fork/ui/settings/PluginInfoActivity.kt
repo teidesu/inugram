@@ -213,6 +213,22 @@ internal fun sortedGrants(tokens: List<String>): List<Pair<String, List<String>?
         .map { (name, scopes) -> name to scopes }
         .sortedByDescending { (name, scopes) -> tierFor(name, scopes) }
 
+/**
+ * only what [current] asks for beyond [previous], for the sheet that confirms an update: a grant
+ * whose name is new, or one that widened - either to more scopes or, from a scoped grant to an
+ * unscoped one, to all of them. Same tier order as [sortedGrants].
+ */
+internal fun addedGrants(previous: List<String>, current: List<String>): List<Pair<String, List<String>?>> {
+    val had = mergeGrants(previous)
+    return mergeGrants(current).mapNotNull { (name, scopes) ->
+        if (name !in had) return@mapNotNull name to scopes
+        val hadScopes = had[name] ?: return@mapNotNull null
+        if (scopes == null) return@mapNotNull name to null
+        val added = scopes.filter { it !in hadScopes }
+        if (added.isEmpty()) null else name to added
+    }.sortedByDescending { (name, scopes) -> tierFor(name, scopes) }
+}
+
 /** merged by grant name in first-appearance order; `null` scopes = unscoped (full access) */
 internal fun mergeGrants(tokens: List<String>): LinkedHashMap<String, List<String>?> {
     val merged = LinkedHashMap<String, List<String>?>()
@@ -463,7 +479,8 @@ class PluginInfoHeaderView(context: Context) : LinearLayout(context) {
         Log.d("InuPluginIcon", "header laid out ${width}x$height, icon ${icon.width}x${icon.height} vis=${icon.visibility}")
     }
 
-    fun bind(manifest: PluginManifest, failure: PluginFailure?) {
+    /** [previousVersion] is the installed plugin's, when this header is confirming an update over it */
+    fun bind(manifest: PluginManifest, failure: PluginFailure?, previousVersion: String? = null) {
         val glyph = PluginManifestIcons.bindIcon(icon, manifest.icon, placeholder, glyphTint)
         iconContainer.background = if (glyph) badge else null
         val iconSize = AndroidUtilities.dp(if (glyph) 40f else 72f)
@@ -476,7 +493,14 @@ class PluginInfoHeaderView(context: Context) : LinearLayout(context) {
         }
         name.text = manifest.name
         val metaText = SpannableStringBuilder()
-        manifest.version?.let { metaText.append("v$it") }
+        // the arrow is driven by the installed version, not the new one: a file that dropped
+        // @version still changed what is installed, and rendering nothing would read as "no version
+        // info" rather than as the update it is
+        if (previousVersion != null && previousVersion != manifest.version) {
+            metaText.append("v$previousVersion \u2192 ${manifest.version?.let { "v$it" } ?: "?"}")
+        } else {
+            manifest.version?.let { metaText.append("v$it") }
+        }
         manifest.author?.let { author ->
             if (metaText.isNotEmpty()) metaText.append(" · ")
             val formatted = LocaleController.formatString(R.string.InuPluginsByAuthor, author)
