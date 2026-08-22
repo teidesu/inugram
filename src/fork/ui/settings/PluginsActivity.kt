@@ -2,6 +2,7 @@ package desu.inugram.ui.settings
 
 import android.annotation.SuppressLint
 import android.app.Activity
+import android.app.Dialog
 import android.content.Context
 import android.content.Intent
 import android.graphics.Canvas
@@ -30,7 +31,9 @@ import org.telegram.messenger.R
 import org.telegram.messenger.Utilities
 import org.telegram.ui.ActionBar.ActionBar
 import org.telegram.ui.ActionBar.ActionBarMenuSubItem
+import org.telegram.ui.ActionBar.AlertDialog
 import org.telegram.ui.ActionBar.Theme
+import org.telegram.ui.Cells.NotificationsCheckCell
 import org.telegram.ui.Components.BackupImageView
 import org.telegram.ui.Components.BulletinFactory
 import org.telegram.ui.Components.ItemOptions
@@ -45,6 +48,7 @@ class PluginsActivity : SettingsPageActivity() {
     private var safeModeBanner: WarningBanner? = null
     private var reorderSectionId = -1
     private var compactItem: ActionBarMenuSubItem? = null
+    private var removeAllItem: ActionBarMenuSubItem? = null
 
     override fun getTitle(): CharSequence = LocaleController.getString(R.string.InuPlugins)
 
@@ -69,19 +73,23 @@ class PluginsActivity : SettingsPageActivity() {
 
         val otherItem = actionBar.createMenu().addItem(0, R.drawable.ic_ab_other)
         otherItem.contentDescription = LocaleController.getString(R.string.AccDescrMoreOptions)
-        compactItem = otherItem.addSubItem(
-            MENU_COMPACT,
-            0,
-            LocaleController.getString(R.string.InuPluginsCompactView),
-            true,
+        compactItem = otherItem.addSubItem(MENU_COMPACT, 0, null)
+        updateCompactItem()
+        removeAllItem = otherItem.addSubItem(
+            MENU_REMOVE_ALL,
+            R.drawable.msg_delete,
+            LocaleController.getString(R.string.InuPluginsRemoveAll),
         ).apply {
-            setChecked(InuConfig.PLUGINS_COMPACT_LIST.value)
+            val red = getThemedColor(Theme.key_text_RedBold)
+            setColors(red, red)
+            visibility = if (PluginManager.plugins().isEmpty()) View.GONE else View.VISIBLE
         }
         actionBar.setActionBarMenuOnItemClick(object : ActionBar.ActionBarMenuOnItemClick() {
             override fun onItemClick(id: Int) {
                 when (id) {
                     -1 -> finishFragment()
                     MENU_COMPACT -> toggleCompactList()
+                    MENU_REMOVE_ALL -> confirmRemoveAll()
                 }
             }
         })
@@ -90,9 +98,18 @@ class PluginsActivity : SettingsPageActivity() {
 
     private fun toggleCompactList() {
         InuConfig.PLUGINS_COMPACT_LIST.toggle()
-        compactItem?.setChecked(InuConfig.PLUGINS_COMPACT_LIST.value)
+        updateCompactItem()
         rows.clear()
         listView.adapter.update(true)
+    }
+
+    /** the item is the mode it switches to, so both its label and its icon flip with the state */
+    private fun updateCompactItem() {
+        val compact = InuConfig.PLUGINS_COMPACT_LIST.value
+        compactItem?.setTextAndIcon(
+            LocaleController.getString(if (compact) R.string.InuPluginsNormalView else R.string.InuPluginsCompactView),
+            if (compact) R.drawable.msg_media else R.drawable.msg_list,
+        )
     }
 
     override fun fillItems(items: ArrayList<UItem>, adapter: UniversalAdapter) {
@@ -119,6 +136,7 @@ class PluginsActivity : SettingsPageActivity() {
         )
 
         val plugins = PluginManager.plugins()
+        removeAllItem?.visibility = if (plugins.isEmpty()) View.GONE else View.VISIBLE
         // md3 draws a header as its own detached row, so the card already ends there; the classic
         // style needs the gap spelled out, or the engine toggle and the list read as one block
         val classic = !M3SectionsHelper.isEnabled()
@@ -195,7 +213,9 @@ class PluginsActivity : SettingsPageActivity() {
     override fun onClick(item: UItem, view: View, position: Int, x: Float, y: Float) {
         when (item.id) {
             ENGINE_TOGGLE -> {
-                PluginManager.toggleEngine()
+                // the switch has to animate before the rebind below sets it non-animated: an
+                // already-checked Switch ignores the second setChecked, so the animation survives
+                (view as? NotificationsCheckCell)?.isChecked = PluginManager.toggleEngine()
                 listView.adapter.update(true)
             }
             BUTTON_LOAD -> launchLoad()
@@ -218,6 +238,25 @@ class PluginsActivity : SettingsPageActivity() {
         PluginManager.remove(plugin)
         rows.remove(plugin.id)
         listView.adapter.update(true)
+    }
+
+    private fun confirmRemoveAll() {
+        val ctx = parentActivity ?: return
+        val plugins = PluginManager.plugins()
+        if (plugins.isEmpty()) return
+        val dialog = AlertDialog.Builder(ctx, resourceProvider)
+            .setTitle(LocaleController.getString(R.string.InuPluginsRemoveAll))
+            .setMessage(LocaleController.formatPluralString("InuPluginsRemoveAllConfirm", plugins.size))
+            .setNegativeButton(LocaleController.getString(R.string.Cancel), null)
+            .setPositiveButton(LocaleController.getString(R.string.Remove)) { _, _ ->
+                for (plugin in plugins) PluginManager.remove(plugin)
+                rows.clear()
+                listView.adapter.update(true)
+            }
+            .create()
+        showDialog(dialog)
+        (dialog.getButton(Dialog.BUTTON_POSITIVE) as? TextView)
+            ?.setTextColor(getThemedColor(Theme.key_text_RedBold))
     }
 
     private fun launchLoad() {
@@ -261,6 +300,7 @@ class PluginsActivity : SettingsPageActivity() {
         private val BUTTON_LOAD = InuUtils.generateId()
         private val SAFE_MODE_BANNER = InuUtils.generateId()
         private const val MENU_COMPACT = 1
+        private const val MENU_REMOVE_ALL = 2
         private const val ITEM_BASE = 20000
         private const val REQ_LOAD = 31010
     }
