@@ -768,10 +768,14 @@
     <string name="InuPluginsEmpty">No plugins installed</string>
     <string name="InuPluginsLoadFromDisk">Load from file</string>
     <string name="InuPluginsCompactView">Compact view</string>
+    <string name="InuPluginsNormalView">Normal view</string>
     <string name="InuPluginsReload">Reload</string>
     <string name="InuPluginsViewSource">View source code</string>
     <string name="InuPluginSourceTitle">Source code</string>
     <string name="InuPluginsRemove">Remove</string>
+    <string name="InuPluginsRemoveAll">Remove all plugins</string>
+    <string name="InuPluginsRemoveAllConfirm_one">Remove %d installed plugin, along with all of its data? This cannot be undone.</string>
+    <string name="InuPluginsRemoveAllConfirm_other">Remove all %d installed plugins, along with all of their data? This cannot be undone.</string>
     <string name="InuPluginsByAuthor">by %1$s</string>
     <string name="InuPluginsPermissions">Permissions</string>
     <string name="InuPluginsPermissionsNone">This plugin doesn\'t request any permissions</string>
