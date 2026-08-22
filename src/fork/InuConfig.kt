@@ -158,6 +158,11 @@ object InuConfig {
     @JvmField
     val PLUGINS_TRUSTED = BoolItem("plugins_trusted", false, exportable = false)
 
+    // the dev server warning was read and accepted, and the receiver is up: consent again, and one
+    // that grants anything with adb access an unreviewed install, so it is never carried over
+    @JvmField
+    val PLUGINS_DEV_MODE = BoolItem("plugins_dev_mode", false, exportable = false)
+
     // snapshot of theme state before Monet was enabled, "day|night|autoNightType"; empty = none
     @JvmField
     val MONET_PREV = StringItem("monet_prev", "", exportable = false)

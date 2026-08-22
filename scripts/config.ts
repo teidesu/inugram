@@ -31,6 +31,7 @@ export const submodulePatches: SubmodulePatch[] = [
 ]
 
 export const debugAppId = 'desu.inugram.beta'
+export const releaseAppId = 'desu.inugram'
 
 export interface ForkSyncFile {
   source: string
