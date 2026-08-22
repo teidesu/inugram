@@ -60,6 +60,9 @@ class Plugin(
     // written on the UI thread, read from globalQueue by every queued engine op
     @Volatile var enabled: Boolean = true
 
+    /** the source on disk came from the dev server, so it passed no trust or permission sheet */
+    @Volatile var dev: Boolean = false
+
     /** why the plugin isn't running, shown in the settings list; null when healthy */
     @Volatile var failure: PluginFailure? = null
 

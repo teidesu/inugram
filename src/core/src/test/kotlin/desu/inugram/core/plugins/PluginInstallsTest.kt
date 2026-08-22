@@ -92,6 +92,16 @@ class PluginInstallsTest {
     }
 
     @Test
+    fun reconcileKeepsTheDevBitOfARecordItRemints() {
+        val out = PluginInstalls.reconcile(
+            listOf(PluginInstall("nope", "p.js", true, "teidesu\u0000my plugin", dev = true)),
+            listOf("p.js"),
+            seeded(),
+        )
+        assertTrue(out[0].dev)
+    }
+
+    @Test
     fun reconcileKeepsOnlyTheFirstRecordPerFile() {
         val first = PluginInstall("a".repeat(32), "p.js", true)
         val out = PluginInstalls.reconcile(

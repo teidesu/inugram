@@ -9,12 +9,17 @@ import kotlin.random.asKotlinRandom
  * the record rather than taken from the live manifest so that an install whose file no longer parses
  * is still matchable: a re-import of a fixed file has to land back on this id, or the plugin's
  * stores are orphaned behind a record nothing lists.
+ *
+ * [dev] means the source now on disk arrived over the dev server rather than through the install
+ * flow, so it was never held to a trust or permission sheet. It is a property of the last write,
+ * not of the install: installing the same plugin normally clears it.
  */
 data class PluginInstall(
     val id: String,
     val file: String,
     val enabled: Boolean,
     val identity: String? = null,
+    val dev: Boolean = false,
 )
 
 /** Install IDs are random. Do not derive them from manifest data because they name plugin storage. */

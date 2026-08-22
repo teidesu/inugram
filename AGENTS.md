@@ -286,6 +286,16 @@ wrong name or flag, since the bridge and the typings only agree because one scri
 - `BootGuard` protects one plugin start, not a full process or pass. It must survive a process death during that plugin start.
 - A plugin reload updates in place. Do not derive identity from plugin name.
 
+### Dev server
+
+`PluginDevServer` + `scripts/push-plugin.ts`: `adb push` into `getExternalFilesDir("plugin-dev")`, then a `desu.inugram.plugins.DEV` broadcast installs or hot-reloads it. Off until `PLUGINS_DEV_MODE` is accepted through `PluginConsentSheet`.
+
+- It installs with no trust sheet and no permission review. Two things gate it and both must stay: the receiver only exists while the toggle is on, and it demands `android.permission.DUMP` of the sender (adb shell holds it; an app cannot be granted it).
+- Read source from the drop dir, never from a broadcast extra, and reject any file name that is not a plain name inside it.
+- Register after `PluginStore.load()`, so a push that arrives as the receiver goes up finds the installed set.
+- Reply through `setResultData` on the ordered broadcast - that string is what the script prints, so the receiver answers synchronously on the main thread.
+- The `dev` bit on `PluginInstall` describes the last bytes written, not the install: an ordinary update of a dev-pushed plugin clears it.
+
 ### Wires, TL, and ownership
 
 - Keep value wires and nullable error wires separate. A nullable error wire is a bare message or `P`/`R`, never an `E` wire.

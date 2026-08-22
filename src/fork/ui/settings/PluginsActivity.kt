@@ -20,6 +20,7 @@ import desu.inugram.InuConfig
 import desu.inugram.helpers.plugins.BootGuard
 import desu.inugram.helpers.InuUtils
 import desu.inugram.helpers.plugins.Plugin
+import desu.inugram.helpers.plugins.PluginDevServer
 import desu.inugram.helpers.plugins.PluginImportHelper
 import desu.inugram.helpers.plugins.PluginManager
 import desu.inugram.helpers.plugins.ui.PluginManifestIcons
@@ -46,6 +47,7 @@ import kotlin.math.ceil
 class PluginsActivity : SettingsPageActivity() {
     private val rows = HashMap<String, PluginRow>()
     private var safeModeBanner: WarningBanner? = null
+    private var devBanner: WarningBanner? = null
     private var reorderSectionId = -1
     private var compactItem: ActionBarMenuSubItem? = null
     private var removeAllItem: ActionBarMenuSubItem? = null
@@ -66,6 +68,7 @@ class PluginsActivity : SettingsPageActivity() {
 
     override fun createView(context: Context): View {
         safeModeBanner = null
+        devBanner = null
         val view = super.createView(context)
         listView.allowReorder(true)
         listView.setReorderLongPressEnabled(false)
@@ -125,6 +128,16 @@ class PluginsActivity : SettingsPageActivity() {
             banner.setText(notice)
             items.add(UItem.asCustomShadow(SAFE_MODE_BANNER, banner))
         }
+        if (InuConfig.PLUGINS_DEV_MODE.value) {
+            val banner = devBanner ?: WarningBanner(context, LocaleController.getString(R.string.InuPluginsDevModeTurnOff), {
+                setDevMode(false)
+            }).also {
+                it.setTitle(LocaleController.getString(R.string.InuPluginsDevMode))
+                it.setText(LocaleController.getString(R.string.InuPluginsDevModeBanner))
+                devBanner = it
+            }
+            items.add(UItem.asCustomShadow(DEV_BANNER, banner))
+        }
         items.add(UItem.asShadow(LocaleController.getString(R.string.InuPluginsInfo)))
         items.add(
             mkTwoLineCheckItem(
@@ -158,6 +171,14 @@ class PluginsActivity : SettingsPageActivity() {
                 BUTTON_LOAD,
                 R.drawable.msg_download,
                 LocaleController.getString(R.string.InuPluginsLoadFromDisk),
+            )
+        )
+        items.add(
+            mkTwoLineCheckItem(
+                DEV_TOGGLE,
+                R.string.InuPluginsDevMode,
+                R.string.InuPluginsDevModeInfo,
+                InuConfig.PLUGINS_DEV_MODE.value,
             )
         )
         items.add(UItem.asShadow(null))
@@ -218,6 +239,27 @@ class PluginsActivity : SettingsPageActivity() {
                 (view as? NotificationsCheckCell)?.isChecked = PluginManager.toggleEngine()
                 listView.adapter.update(true)
             }
+            DEV_TOGGLE -> {
+                if (InuConfig.PLUGINS_DEV_MODE.value) {
+                    (view as? NotificationsCheckCell)?.isChecked = false
+                    setDevMode(false)
+                } else {
+                    val ctx = context ?: parentActivity ?: return
+                    PluginConsentSheet.show(
+                        ctx,
+                        resourceProvider,
+                        titleRes = R.string.InuPluginsDevModeSheetTitle,
+                        infoRes = R.string.InuPluginsDevModeSheetInfo,
+                        features = listOf(
+                            PluginConsentSheet.Feature(R.drawable.msg2_devices, R.string.InuPluginsDevMode1Title, R.string.InuPluginsDevMode1Text),
+                            PluginConsentSheet.Feature(R.drawable.msg_permissions, R.string.InuPluginsDevMode2Title, R.string.InuPluginsDevMode2Text),
+                            PluginConsentSheet.Feature(R.drawable.inu_tabler_code, R.string.InuPluginsDevMode3Title, R.string.InuPluginsDevMode3Text),
+                        ),
+                        warningRes = R.string.InuPluginsDevModeSheetWarning,
+                        acceptRes = R.string.InuPluginsDevModeSheetAccept,
+                    ) { setDevMode(true) }
+                }
+            }
             BUTTON_LOAD -> launchLoad()
             // plugin rows handle their own clicks (see PluginRow's background comment)
         }
@@ -237,6 +279,13 @@ class PluginsActivity : SettingsPageActivity() {
     private fun removePlugin(plugin: Plugin) {
         PluginManager.remove(plugin)
         rows.remove(plugin.id)
+        listView.adapter.update(true)
+    }
+
+    private fun setDevMode(enabled: Boolean) {
+        InuConfig.PLUGINS_DEV_MODE.value = enabled
+        val ctx = context ?: parentActivity
+        if (ctx != null) PluginDevServer.sync(ctx)
         listView.adapter.update(true)
     }
 
@@ -299,6 +348,8 @@ class PluginsActivity : SettingsPageActivity() {
         private val ENGINE_TOGGLE = InuUtils.generateId()
         private val BUTTON_LOAD = InuUtils.generateId()
         private val SAFE_MODE_BANNER = InuUtils.generateId()
+        private val DEV_BANNER = InuUtils.generateId()
+        private val DEV_TOGGLE = InuUtils.generateId()
         private const val MENU_COMPACT = 1
         private const val MENU_REMOVE_ALL = 2
         private const val ITEM_BASE = 20000
@@ -506,7 +557,15 @@ class PluginRow(context: Context, val compact: Boolean) : LinearLayout(context) 
         this.onOpen = onOpen
         this.onMenu = onMenu
         PluginManifestIcons.bindIcon(icon, plugin.manifest.icon, placeholder)
-        title.text = plugin.manifest.name
+        title.text = if (plugin.dev) {
+            SettingsPageActivity.appendTag(
+                plugin.manifest.name,
+                LocaleController.getString(R.string.InuPluginsDevChip),
+                Theme.getColor(Theme.key_windowBackgroundWhiteBlueHeader),
+            )
+        } else {
+            plugin.manifest.name
+        }
         val tier = highestGrantTier(plugin.manifest)
         val warning = warningDrawable?.takeIf { tier != null }?.apply {
             colorFilter = PorterDuffColorFilter(tierColors(tier).first, PorterDuff.Mode.SRC_IN)

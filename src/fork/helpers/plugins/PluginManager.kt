@@ -69,7 +69,7 @@ object PluginManager {
     const val SAFE_MODE_ACTION = "desu.inugram.action.SAFE_MODE"
     private const val SAFE_MODE_SHORTCUT_ID = "inu_safe_mode"
     private const val TAG = "InuPlugin"
-    private const val PLUGIN_API_VERSION = 1
+    const val PLUGIN_API_VERSION = 1
     private const val PLATFORM = "android"
 
     private const val LOG_BUDGET = 200
@@ -107,6 +107,7 @@ object PluginManager {
         plugins.addAll(PluginStore.load())
         PluginStore.persist(plugins)
         republishOrder()
+        PluginDevServer.sync(context)
     }
 
     fun isEngineEnabled(): Boolean = InuConfig.PLUGINS_ENABLED.value
@@ -247,7 +248,7 @@ object PluginManager {
      * did not load this boot - that one is nothing the user can see or remove, so its id is reused
      * rather than stranded. A plugin that is merely installed and broken is [update]'s, not this.
      */
-    fun import(suggestedName: String, source: String, enabled: Boolean = true): ImportResult {
+    fun import(suggestedName: String, source: String, enabled: Boolean = true, dev: Boolean = false): ImportResult {
         val manifest = PluginManifestParser.parseOrNull(source)
             ?: return ImportResult.Refused(getString(R.string.InuPluginsErrorNoManifest))
         badGrants(manifest)?.let { return ImportResult.Refused(it) }
@@ -258,7 +259,10 @@ object PluginManager {
         }
         reclaimed?.let { PluginStore.dropUnloaded(it) }
         val plugin = Plugin(reclaimed?.id ?: PluginInstalls.mintId(), target, source, manifest)
-            .apply { this.enabled = enabled }
+            .apply {
+                this.enabled = enabled
+                this.dev = dev
+            }
         val reversible = reclaimed == null
         plugins.add(plugin)
         PluginStore.persist(plugins)
@@ -276,11 +280,12 @@ object PluginManager {
      * The vetting is [reload]'s, which re-reads the file this just wrote - deliberately, so an
      * update goes live through the one path that also has to survive a plugin failing to load.
      */
-    fun update(plugin: Plugin, source: String): String? {
+    fun update(plugin: Plugin, source: String, dev: Boolean = false): String? {
         val manifest = PluginManifestParser.parseOrNull(source)
             ?: return getString(R.string.InuPluginsErrorNoManifest)
         incompatibility(manifest)?.let { return it }
         if (!PluginStore.writeSource(plugin.file, source)) return getString(R.string.InuPluginsErrorWrite)
+        plugin.dev = dev
         reload(plugin)
         PluginStore.persist(plugins)
         return null

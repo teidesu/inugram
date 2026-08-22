@@ -299,21 +299,11 @@ abstract class SettingsPageActivity : UniversalFragment() {
         }
     }
 
-    protected fun addExperimentalSpan(string: CharSequence): CharSequence {
-        val tag = LocaleController.getString(R.string.InuExperimental)
-
-        val tagSpan = ExperimentalSpan()
-        tagSpan.color = Theme.getColor(Theme.key_windowBackgroundWhiteBlueHeader)
-        tagSpan.setText(tag)
-
-        val tagText = SpannableString(tag)
-        tagText.setSpan(tagSpan, 0, tagText.length, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
-
-        val text = SpannableStringBuilder(string)
-        text.append("  ")
-        text.append(tagText)
-        return text
-    }
+    protected fun addExperimentalSpan(string: CharSequence): CharSequence = appendTag(
+        string,
+        LocaleController.getString(R.string.InuExperimental),
+        Theme.getColor(Theme.key_windowBackgroundWhiteBlueHeader),
+    )
 
     override fun onLongClick(item: UItem, view: View, position: Int, x: Float, y: Float): Boolean {
         val opts = ItemOptions.makeOptions(this, view)
@@ -378,5 +368,20 @@ abstract class SettingsPageActivity : UniversalFragment() {
 
     companion object {
         private const val STICKY_BUTTON_HEIGHT = 64
+
+        /** [string] with a small pill of [tag] after it, the way settings badge an experiment */
+        fun appendTag(string: CharSequence, tag: CharSequence, color: Int): CharSequence {
+            val tagSpan = ExperimentalSpan()
+            tagSpan.color = color
+            tagSpan.setText(tag)
+
+            val tagText = SpannableString(tag)
+            tagText.setSpan(tagSpan, 0, tagText.length, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
+
+            val text = SpannableStringBuilder(string)
+            text.append("  ")
+            text.append(tagText)
+            return text
+        }
     }
 }

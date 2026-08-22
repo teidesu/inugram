@@ -62,7 +62,12 @@ object PluginStore {
                 Log.w(TAG, "no valid manifest: ${install.file}")
                 continue
             }
-            loaded.add(Plugin(install.id, file, source, manifest).apply { enabled = install.enabled })
+            loaded.add(
+                Plugin(install.id, file, source, manifest).apply {
+                    enabled = install.enabled
+                    dev = install.dev
+                }
+            )
         }
         // a file we could not load this boot keeps its record, or fixing it later would land it on a
         // fresh id and an empty store
@@ -73,16 +78,17 @@ object PluginStore {
     fun persist(plugins: List<Plugin>) {
         val arr = JSONArray()
         for (p in plugins) {
-            arr.put(record(p.id, p.file.name, p.enabled, p.manifest.identity))
+            arr.put(record(p.id, p.file.name, p.enabled, p.manifest.identity, p.dev))
         }
         for (install in unloaded) {
-            arr.put(record(install.id, install.file, install.enabled, install.identity))
+            arr.put(record(install.id, install.file, install.enabled, install.identity, install.dev))
         }
         InuConfig.PLUGINS_STATE.value = arr.toString()
     }
 
-    private fun record(id: String, file: String, enabled: Boolean, identity: String?): JSONObject =
+    private fun record(id: String, file: String, enabled: Boolean, identity: String?, dev: Boolean): JSONObject =
         JSONObject().put("id", id).put("file", file).put("enabled", enabled).putOpt("identity", identity)
+            .apply { if (dev) put("dev", true) }
 
     /**
      * the record of an install that did not load this boot but whose file claims [identity].
@@ -144,6 +150,7 @@ object PluginStore {
                     file,
                     o.optBoolean("enabled", true),
                     o.optString("identity").takeIf { it.isNotEmpty() },
+                    o.optBoolean("dev", false),
                 )
             }
         } catch (e: Exception) {
