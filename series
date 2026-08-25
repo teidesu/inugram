@@ -277,3 +277,4 @@ bugfix/video-stream-cancel-restart.patch
 feature/hd-bluetooth-call-audio.patch
 bugfix/video-bubble-progress.patch
 bugfix/glass-panel-keyboard-tint.patch
+feature/hdr-images.patch

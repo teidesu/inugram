@@ -1,0 +1,81 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Dubzer <me@dubzer.dev>
+Date: Tue, 25 Aug 2026 16:13:37 +0300
+Subject: Display Ultra HDR images on supported screens
+
+---
+ .../src/main/java/org/telegram/ui/PhotoViewer.java   | 12 +++++++++---
+ 1 file changed, 9 insertions(+), 3 deletions(-)
+
+diff --git a/TMessagesProj/src/main/java/org/telegram/ui/PhotoViewer.java b/TMessagesProj/src/main/java/org/telegram/ui/PhotoViewer.java
+index 0000000..0000000 100644
+--- a/TMessagesProj/src/main/java/org/telegram/ui/PhotoViewer.java
++++ b/TMessagesProj/src/main/java/org/telegram/ui/PhotoViewer.java
+@@ -884,7 +884,7 @@ public class PhotoViewer implements NotificationCenter.NotificationCenterDelegat
+ 
+     public BlurringShader.BlurManager blurManager;
+     private BlurringShader.StoryBlurDrawer shadowBlurer;
+-    private WindowManager.LayoutParams windowLayoutParams;
++    public WindowManager.LayoutParams windowLayoutParams;
+     public FrameLayoutDrawer containerView;
+     private PhotoViewerWebView photoViewerWebView;
+     public FrameLayout windowView;
+@@ -2012,8 +2012,8 @@ public class PhotoViewer implements NotificationCenter.NotificationCenterDelegat
+     private BlurringShader.ThumbBlurer centerBlur = new BlurringShader.ThumbBlurer(1, this::invalidateBlur);
+     private BlurringShader.ThumbBlurer rightBlur = new BlurringShader.ThumbBlurer(1, this::invalidateBlur);
+     private boolean leftImageIsVideo;
+-    private boolean centerImageIsVideo;
+-    private boolean centerImageIsLivePhoto;
++    public boolean centerImageIsVideo;
++    public boolean centerImageIsLivePhoto;
+     private boolean rightImageIsVideo;
+     private boolean centerImageTransformLocked = false;
+     private Matrix centerImageTransform = new Matrix();
+@@ -7791,6 +7791,7 @@ public class PhotoViewer implements NotificationCenter.NotificationCenterDelegat
+                 if (paintingOverlay.getVisibility() == View.VISIBLE) {
+                     containerView.requestLayout();
+                 }
++                desu.inugram.helpers.media.PhotoViewerHelper.updateHdrMode(this);
+             }
+             if (imageReceiver == centerImage && set && placeProvider != null && placeProvider.scaleToFill() && !ignoreDidSetImage && sendPhotoType != SELECT_TYPE_AVATAR && sendPhotoType != SELECT_TYPE_STICKER) {
+                 if (!wasLayout) {
+@@ -16000,6 +16001,7 @@ public class PhotoViewer implements NotificationCenter.NotificationCenterDelegat
+         }
+ 
+         if (!sameImage) {
++            desu.inugram.helpers.media.PhotoViewerHelper.clearHdrMode(this);
+             draggingDown = false;
+             translationX = 0;
+             translationY = 0;
+@@ -16157,6 +16159,7 @@ public class PhotoViewer implements NotificationCenter.NotificationCenterDelegat
+                 videoFrameBitmap = null;
+             }
+         }
++        desu.inugram.helpers.media.PhotoViewerHelper.updateHdrMode(this);
+         currentImageHasFace = 0;
+         currentImageFaceKey = null;
+         inu_waitingForFacesOpen = false;
+@@ -18231,6 +18234,7 @@ public class PhotoViewer implements NotificationCenter.NotificationCenterDelegat
+             qualityPicker.cancelButton.callOnClick();
+             return;
+         }
++        desu.inugram.helpers.media.PhotoViewerHelper.clearHdrMode(this);
+         isVisibleOrAnimating = false;
+         openedFullScreenVideo = false;
+         try {
+@@ -18923,6 +18927,7 @@ public class PhotoViewer implements NotificationCenter.NotificationCenterDelegat
+ 
+     public void onResume() {
+         redraw(0); //workaround for camera bug
++        desu.inugram.helpers.media.PhotoViewerHelper.updateHdrMode(this);
+         if (videoPlayer != null) {
+             videoPlayer.seekTo(videoPlayer.getCurrentPosition() + 1);
+             if (playerLooping) {
+@@ -18937,6 +18942,7 @@ public class PhotoViewer implements NotificationCenter.NotificationCenterDelegat
+     public void onConfigurationChanged(Configuration newConfig) {}
+ 
+     public void onPause() {
++        desu.inugram.helpers.media.PhotoViewerHelper.clearHdrMode(this);
+         if (currentAnimation != null) {
+             closePhoto(false, false);
+             return;

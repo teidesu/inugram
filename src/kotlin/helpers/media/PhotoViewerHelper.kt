@@ -1,8 +1,10 @@
 package desu.inugram.helpers.media
 
 import android.annotation.SuppressLint
+import android.content.pm.ActivityInfo
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
+import android.os.Build
 import android.util.TypedValue
 import android.view.View
 import android.widget.FrameLayout
@@ -36,6 +38,50 @@ object PhotoViewerHelper {
 
     private var footerGap: View? = null
     private var footerItem: ActionBarMenuSubItem? = null
+
+    @JvmStatic
+    fun clearHdrMode(viewer: PhotoViewer) {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.UPSIDE_DOWN_CAKE) return
+        setHdrMode(viewer, false)
+    }
+
+    @JvmStatic
+    fun updateHdrMode(viewer: PhotoViewer) {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.UPSIDE_DOWN_CAKE) return
+        if (
+            !InuConfig.HDR_IMAGES.value ||
+            viewer.centerImageIsVideo ||
+            viewer.centerImageIsLivePhoto ||
+            viewer.parentActivity?.display?.isHdr != true
+        ) {
+            clearHdrMode(viewer)
+            return
+        }
+
+        val bitmap = viewer.centerImage.bitmap
+        val enabled = bitmap != null && !bitmap.isRecycled && bitmap.hasGainmap()
+        setHdrMode(viewer, enabled)
+    }
+
+    private fun setHdrMode(viewer: PhotoViewer, enabled: Boolean) {
+        val params = viewer.windowLayoutParams ?: return
+        if (enabled) {
+            if (params.colorMode == ActivityInfo.COLOR_MODE_HDR) return
+            params.setColorMode(ActivityInfo.COLOR_MODE_HDR)
+        } else {
+            if (params.colorMode != ActivityInfo.COLOR_MODE_HDR) return
+            params.setColorMode(ActivityInfo.COLOR_MODE_DEFAULT)
+        }
+
+        val window = viewer.windowView ?: return
+        if (window.parent == null) return
+        val windowManager = viewer.parentActivity?.windowManager ?: return
+        try {
+            windowManager.updateViewLayout(window, params)
+        } catch (e: Exception) {
+            FileLog.e(e)
+        }
+    }
 
     @JvmStatic
     fun gifAsVideo(msg: MessageObject?): Boolean = msg != null && msg.isNewGif && InuConfig.GIF_SEEKBAR.value

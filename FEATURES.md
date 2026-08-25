@@ -154,6 +154,7 @@ most things are toggleable in `Settings → Inugram`, with sensible opinionated 
 
 ## photo viewer
 
+- ultra HDR photos with HDR-capable displays - *based on [NagramX](https://github.com/risin42/NagramX)*
 - "hide with spoiler" toggle
 - "copy photo" / "copy frame" menu actions
 - show dc + platform of the photo in menu

@@ -142,6 +142,9 @@ object InuConfig {
     @JvmField
     val PREDICTIVE_BACK_MODE = PredictiveBackModeItem()
 
+    @JvmField
+    val HDR_IMAGES = BoolItem("hdr_images", true, exportable = false)
+
     class TextSpoilerModeItem : IntItem("text_spoiler_mode", SIMPLE) {
         companion object {
             const val DEFAULT = 0
