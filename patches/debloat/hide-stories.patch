@@ -5,8 +5,9 @@ Subject: hide stories
 
 ---
  TMessagesProj/src/main/java/org/telegram/ui/ChatActivity.java   | 2 +-
+ TMessagesProj/src/main/java/org/telegram/ui/LaunchActivity.java | 2 +-
  .../main/java/org/telegram/ui/Stories/StoriesController.java    | 1 +
- 2 files changed, 2 insertions(+), 1 deletion(-)
+ 3 files changed, 3 insertions(+), 2 deletions(-)
 
 diff --git a/TMessagesProj/src/main/java/org/telegram/ui/ChatActivity.java b/TMessagesProj/src/main/java/org/telegram/ui/ChatActivity.java
 index 0000000..0000000 100644
@@ -21,6 +22,19 @@ index 0000000..0000000 100644
                  showDialog(new ShareAlert(getContext(), ChatActivity.this, arrayList, null, null, ChatObject.isChannel(currentChat), null, null, false, false, includeStory, null, themeDelegate) {
                      { includeStoryFromMessage = includeStory; }
                      @Override
+diff --git a/TMessagesProj/src/main/java/org/telegram/ui/LaunchActivity.java b/TMessagesProj/src/main/java/org/telegram/ui/LaunchActivity.java
+index 0000000..0000000 100644
+--- a/TMessagesProj/src/main/java/org/telegram/ui/LaunchActivity.java
++++ b/TMessagesProj/src/main/java/org/telegram/ui/LaunchActivity.java
+@@ -6132,7 +6132,7 @@ public class LaunchActivity extends BasePermissionsActivity implements INavigati
+ 
+     @Override
+     public boolean canSelectStories() {
+-        return photoPathsArray != null && photoPathsArray.size() == 1 || videoPath != null;
++        return !desu.inugram.InuConfig.HIDE_REPOST_TO_STORY.getValue() && (photoPathsArray != null && photoPathsArray.size() == 1 || videoPath != null);
+     }
+ 
+     @Override
 diff --git a/TMessagesProj/src/main/java/org/telegram/ui/Stories/StoriesController.java b/TMessagesProj/src/main/java/org/telegram/ui/Stories/StoriesController.java
 index 0000000..0000000 100644
 --- a/TMessagesProj/src/main/java/org/telegram/ui/Stories/StoriesController.java
