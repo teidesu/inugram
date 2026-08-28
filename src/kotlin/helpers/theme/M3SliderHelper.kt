@@ -65,20 +65,27 @@ object M3SliderHelper {
     private val path = Path()
     private val radii = FloatArray(8)
 
-    private class State(view: View) {
-        val handleWidth = AnimatedFloat(view, 0, 120, CubicBezierInterpolator.DEFAULT)
+    private class State {
+        // parentless on purpose: a parent-bound AnimatedFloat strongly retains the view, which
+        // would pin this entry's WeakHashMap key forever. The draw path invalidates instead.
+        val handleWidth = AnimatedFloat(0, 120, CubicBezierInterpolator.DEFAULT)
         var lastUpdateTime = 0L
     }
 
+    // per-view animation state; entries must not reference their key or they never get collected
     private val states = WeakHashMap<View, State>()
 
     private fun enabled() = InuConfig.MATERIAL3_SLIDERS.value
 
-    private fun stateFor(view: View) = states.getOrPut(view) { State(view) }
+    private fun stateFor(view: View) = states.getOrPut(view) { State() }
 
     /** Current animated handle width in px; narrows while dragging like the M3 pressed state. */
-    private fun handleWidth(view: View, dragging: Boolean): Float =
-        stateFor(view).handleWidth.set(AndroidUtilities.dpf2(if (dragging) HANDLE_WIDTH_PRESSED else HANDLE_WIDTH))
+    private fun handleWidth(view: View, dragging: Boolean): Float {
+        val anim = stateFor(view).handleWidth
+        val width = anim.set(AndroidUtilities.dpf2(if (dragging) HANDLE_WIDTH_PRESSED else HANDLE_WIDTH))
+        if (anim.isInProgress) view.invalidate()
+        return width
+    }
 
     @JvmStatic
     fun drawSeekBar(view: SeekBarView, canvas: Canvas): Boolean {
