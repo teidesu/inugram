@@ -49,7 +49,9 @@ object M3SliderHelper {
     private const val HANDLE_WIDTH = 4f
     private const val HANDLE_WIDTH_PRESSED = 2f
 
-    // spec is 44dp; clamped to the host view, which is 38dp tall in most settings rows
+    // spec is 44dp, deliberately reduced: settings hosts are only 38dp tall (44 would touch both
+    // edges) and SlideChooseView's labels sit ~20dp above its track (44 would overlap them).
+    // The min() against the host height in drawHandle is only a guard for shorter views.
     private const val HANDLE_HEIGHT = 28f
     private const val TICK_RADIUS = 2f
     private const val DIM_ALPHA = 0.5f
