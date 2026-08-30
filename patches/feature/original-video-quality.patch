@@ -5,12 +5,12 @@ Subject: "original" toggle in video quality selector to skip re-encoding
 
 ---
  .../telegram/messenger/MediaController.java   |  2 +-
- .../messenger/SendMessagesHelper.java         |  6 +++
- .../telegram/messenger/VideoEditedInfo.java   | 16 +++++-
- .../video/MediaCodecVideoConvertor.java       | 19 ++++---
+ .../messenger/SendMessagesHelper.java         |  6 ++
+ .../telegram/messenger/VideoEditedInfo.java   | 16 ++++-
+ .../video/MediaCodecVideoConvertor.java       | 24 +++++---
  .../ui/Components/VideoCompressButton.java    |  8 +++
- .../java/org/telegram/ui/PhotoViewer.java     | 54 +++++++++++++++----
- 6 files changed, 87 insertions(+), 18 deletions(-)
+ .../java/org/telegram/ui/PhotoViewer.java     | 58 +++++++++++++++----
+ 6 files changed, 93 insertions(+), 21 deletions(-)
 
 diff --git a/TMessagesProj/src/main/java/org/telegram/messenger/MediaController.java b/TMessagesProj/src/main/java/org/telegram/messenger/MediaController.java
 index 0000000..0000000 100644
@@ -135,7 +135,17 @@ index 0000000..0000000 100644
                      }
  
                      MediaFormat outputFormat = MediaFormat.createVideoFormat(outputMimeType, resultWidth, resultHeight);
-@@ -455,7 +457,7 @@ public class MediaCodecVideoConvertor {
+@@ -368,7 +370,8 @@ public class MediaCodecVideoConvertor {
+                 int videoIndex = MediaController.findTrack(extractor, false);
+                 int audioIndex = bitrate != -1 && !muted && volume > 0 ? MediaController.findTrack(extractor, true) : -1;
+                 boolean needConvertVideo = false;
+-                if (videoIndex >= 0 && !extractor.getTrackFormat(videoIndex).getString(MediaFormat.KEY_MIME).equals(MediaController.VIDEO_MIME_TYPE)) {
++                if (videoIndex >= 0 && !extractor.getTrackFormat(videoIndex).getString(MediaFormat.KEY_MIME).equals(MediaController.VIDEO_MIME_TYPE)
++                        && (!convertVideoParams.inu_preferHevc || convertVideoParams.inu_originalQualityNeedsConvert)) {
+                     needConvertVideo = true;
+                 }
+ 
+@@ -455,7 +458,7 @@ public class MediaCodecVideoConvertor {
                              }
  
                              if (encoder == null) {
@@ -144,7 +154,7 @@ index 0000000..0000000 100644
                              }
  
                              if (BuildVars.LOGS_ENABLED) {
-@@ -980,14 +982,17 @@ public class MediaCodecVideoConvertor {
+@@ -980,14 +983,17 @@ public class MediaCodecVideoConvertor {
          }
      }
  
@@ -165,19 +175,21 @@ index 0000000..0000000 100644
              if (outputMimeType.equals("video/hevc")) {
                  outputMimeType = "video/avc";
              }
-@@ -1570,6 +1575,7 @@ public class MediaCodecVideoConvertor {
+@@ -1570,6 +1576,8 @@ public class MediaCodecVideoConvertor {
          boolean muted;
          float volume;
          boolean isStory;
 +        boolean inu_preferHevc;
++        boolean inu_originalQualityNeedsConvert;
          StoryEntry.HDRInfo hdrInfo;
          public ArrayList<MixedSoundInfo> soundInfos = new ArrayList<MixedSoundInfo>();
          int account;
-@@ -1623,6 +1629,7 @@ public class MediaCodecVideoConvertor {
+@@ -1623,6 +1631,8 @@ public class MediaCodecVideoConvertor {
              params.muted = info.muted;
              params.volume = info.volume;
              params.isStory = info.isStory;
 +            params.inu_preferHevc = info.inu_preferHevc;
++            params.inu_originalQualityNeedsConvert = info.inu_originalQualityNeedsConvert;
              params.hdrInfo = info.hdrInfo;
              params.isDark = info.isDark;
              params.wallpaperPeerId = info.wallpaperPeerId;
@@ -220,7 +232,7 @@ index 0000000..0000000 100644
  
          Paint pickerBackgroundPaint = new Paint();
          pickerBackgroundPaint.setColor(0x7f000000);
-@@ -7628,6 +7630,7 @@ public class PhotoViewer implements NotificationCenter.NotificationCenterDelegat
+@@ -7628,11 +7630,12 @@ public class PhotoViewer implements NotificationCenter.NotificationCenterDelegat
          compressItem.setBackground(Theme.createInsetRoundRectDrawable(0x10FFFFFF, dp(22), dp(4), dp(6)));
  
          selectedCompression = selectCompression();
@@ -228,6 +240,12 @@ index 0000000..0000000 100644
          compressItem.setState(videoConvertSupported && compressionsCount > 1, muteVideo, Math.min(resultWidth, resultHeight));
          compressItem.setContentDescription(getString("AccDescrVideoQuality", R.string.AccDescrVideoQuality));
          itemsLayout.addView(compressItem, LayoutHelper.createLinear(48, 48));
+         compressItem.setOnClickListener(v -> {
+-            if (isCaptionOpen() || muteVideo) {
++            if (isCaptionOpen() || muteVideo && !inu_isOriginalVideoQuality()) {
+                 return;
+             }
+             if (currentIndex >= 0 && currentIndex < imagesArrLocals.size()) {
 @@ -9846,6 +9849,9 @@ public class PhotoViewer implements NotificationCenter.NotificationCenterDelegat
          videoEditedInfo.start = videoCutStart;
          videoEditedInfo.end = videoCutEnd;
@@ -270,7 +288,7 @@ index 0000000..0000000 100644
 +    private boolean inu_previousOriginalQualitySelected;
 +
 +    public boolean inu_originalVideoQualityAvailable() {
-+        return sendPhotoType != SELECT_TYPE_AVATAR && !centerImageIsLivePhoto && !muteVideo;
++        return sendPhotoType != SELECT_TYPE_AVATAR && !centerImageIsLivePhoto;
 +    }
 +
 +    private boolean inu_isOriginalVideoQuality() {
@@ -295,6 +313,15 @@ index 0000000..0000000 100644
      private long startTime;
      private long endTime;
      private float videoCutStart;
+@@ -21321,7 +21348,7 @@ public class PhotoViewer implements NotificationCenter.NotificationCenterDelegat
+                     actionBarContainer.setSubtitle(getString("SoundMuted", R.string.SoundMuted));
+                 }
+                 muteDrawable.setMuted(true, true);
+-                if (compressItem.getTag() != null) {
++                if (compressItem.getTag() != null && !inu_isOriginalVideoQuality()) {
+                     compressItem.setAlpha(0.5f);
+                     compressItem.setEnabled(false);
+                 }
 @@ -21348,11 +21375,12 @@ public class PhotoViewer implements NotificationCenter.NotificationCenterDelegat
          }
      }

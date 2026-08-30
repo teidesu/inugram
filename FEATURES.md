@@ -217,7 +217,7 @@ most things are toggleable in `Settings → Inugram`, with sensible opinionated 
 - faster downloads/uploads
 - auto-disable the configured proxy while a VPN is active
 - send MP4 files attached through Files as playable videos without conversion
-- original video quality option in quality picker when sending videos
+- original video quality option in quality picker, including audio removal without re-encoding video
 - remember last used settings in polls + reasonable defaults
 
 ## annoyances
