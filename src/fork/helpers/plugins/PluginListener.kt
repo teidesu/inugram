@@ -97,6 +97,8 @@ interface UiListener {
 
     fun uiOpenFragment(handle: Long): String?
 
+    fun uiOpenScreen(optionsJson: String): String?
+
     fun uiRegisterSettings(pageId: Long)
 
     fun uiUnregisterSettings(pageId: Long)

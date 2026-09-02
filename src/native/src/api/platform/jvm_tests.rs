@@ -59,6 +59,7 @@ impl JvmHost for TestJvmHost {
       OP_NEW | OP_RUNNABLE => self.mint('O'),
       OP_METHOD => self.mint('M'),
       OP_FIELD => self.mint('F'),
+      OP_BUNDLE_METHOD => "SputParcelable".to_string(),
       _ => "N".to_string(),
     }
   }
@@ -135,6 +136,41 @@ fn a_plugin_holding_no_jvm_grant_is_refused_at_every_entry_point() {
     assert!(error_code(&f, code).starts_with("not-granted|unsafe.jvm"), "{code}");
   }
   assert!(f.host.calls().is_empty());
+}
+
+#[test]
+fn android_bundle_maps_js_and_java_values_to_bundle_putters() {
+  let f = setup(&["unsafe.jvm"]);
+  assert_eq!(
+    error_code(
+      &f,
+      "const object = new (inu.jvm.cls('java.util.ArrayList'))(); \
+       inu.android.bundle({ enabled: true, count: 3, peer: 4n, ratio: 1.5, name: 'x', bytes: new Uint8Array([1, 2]), object })",
+    ),
+    "no-throw",
+  );
+  let calls = f.host.calls();
+  for expected in [
+    "putBoolean|Senabled,B1",
+    "putInt|Scount,I3",
+    "putLong|Speer,I4",
+    "putDouble|Sratio,D1.5",
+    "putString|Sname,Sx",
+    "putByteArray|Sbytes,Y",
+    "putParcelable|Sobject,G2",
+  ] {
+    assert!(calls.iter().any(|call| call.contains(expected)), "missing {expected} in {calls:?}");
+  }
+}
+
+#[test]
+fn android_bundle_rejects_unsupported_values_and_needs_bundle_scope() {
+  let scoped = setup(&["unsafe.jvm(java.util.*)"]);
+  assert_eq!(error_code(&scoped, "inu.android.bundle({ value: 1 })"), "not-granted|unsafe.jvm(android.os.Bundle)",);
+
+  let f = setup(&["unsafe.jvm"]);
+  assert_eq!(error_code(&f, "inu.android.bundle({ value: null })"), "invalid-argument|");
+  assert_eq!(error_code(&f, "inu.android.bundle({ value: [] })"), "invalid-argument|");
 }
 
 /// dex code never crosses this bridge again, so a scope list stops describing anything

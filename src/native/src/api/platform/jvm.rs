@@ -2,8 +2,8 @@ use std::cell::RefCell;
 use std::rc::Rc;
 
 use rquickjs::{
-  Array, Coerced, Context, Ctx, FromJs, Function, IntoJs, Object, Persistent, Result as JsResult, Runtime, TypedArray,
-  Value,
+  object::Filter, Array, Coerced, Context, Ctx, FromJs, Function, IntoJs, Object, Persistent, Result as JsResult,
+  Runtime, TypedArray, Value,
 };
 
 use crate::api::error::{wire_error_to_js, PluginErrorCode};
@@ -33,6 +33,7 @@ const OP_LOAD_DEX: i32 = 11;
 const OP_RELEASE: i32 = 12;
 const OP_CURRENT_FRAGMENT: i32 = 13;
 const OP_CURRENT_ACTIVITY: i32 = 14;
+const OP_BUNDLE_METHOD: i32 = 15;
 
 pub const GRANT: &str = "unsafe.jvm";
 
@@ -215,6 +216,69 @@ impl JvmState {
     }
     PluginErrorCode::InvalidArgument.throw(ctx, "loadDex: expected an absolute path or a Uint8Array")
   }
+
+  fn put_bundle_value<'js>(&self, ctx: &Ctx<'js>, bundle_id: i64, key: &str, value: &Value<'js>) -> JsResult<()> {
+    let method = if value.as_bool().is_some() {
+      "putBoolean"
+    } else if value.is_big_int() {
+      "putLong"
+    } else if value.as_int().is_some() {
+      "putInt"
+    } else if let Some(number) = value.as_float() {
+      if !number.is_finite() {
+        return PluginErrorCode::InvalidArgument.throw(ctx, &format!("bundle: '{key}' must be finite"));
+      }
+      if number.fract() == 0.0 && number.abs() <= 9_007_199_254_740_991.0 {
+        "putLong"
+      } else {
+        "putDouble"
+      }
+    } else if value.as_string().is_some() {
+      "putString"
+    } else if TypedArray::<u8>::from_value(value.clone()).is_ok() {
+      "putByteArray"
+    } else {
+      let handle = self.handle_id(ctx, value)?;
+      if handle < 0 {
+        return PluginErrorCode::InvalidArgument
+          .throw(ctx, &format!("bundle: '{key}' has unsupported type {}", value.type_of()));
+      }
+      let key_value = key.into_js(ctx)?;
+      let key_wire = self.arg_to_wire(ctx, &key_value)?;
+      let value_wire = format!("G{handle}");
+      let wire = self.host.jvm(OP_BUNDLE_METHOD, handle, "", &[]);
+      let method = self.wire_to_value(ctx, &wire)?;
+      let Some(method) = method.as_string() else {
+        return PluginErrorCode::InvalidArgument
+          .throw(ctx, &format!("bundle: '{key}' is not a Bundle-compatible java object"));
+      };
+      self.ask(ctx, OP_CALL, bundle_id, &method.to_string()?, &[key_wire, value_wire])?;
+      return Ok(());
+    };
+    let key_value = key.into_js(ctx)?;
+    let key_wire = self.arg_to_wire(ctx, &key_value)?;
+    let value_wire = self.arg_to_wire(ctx, value)?;
+    self.ask(ctx, OP_CALL, bundle_id, method, &[key_wire, value_wire])?;
+    Ok(())
+  }
+
+  fn js_bundle<'js>(&self, ctx: &Ctx<'js>, values: Value<'js>) -> JsResult<Value<'js>> {
+    let Some(values) = values.as_object() else {
+      return PluginErrorCode::InvalidArgument.throw(ctx, "bundle: expected an object");
+    };
+    if values.as_array().is_some() || self.handle_id(ctx, &values.clone().into_value())? >= 0 {
+      return PluginErrorCode::InvalidArgument.throw(ctx, "bundle: expected an object");
+    }
+    let class = self.js_cls(ctx, "android.os.Bundle".to_string())?;
+    let class_id = self.handle_id(ctx, &class)?;
+    let bundle = self.ask(ctx, OP_NEW, class_id, "", &[])?;
+    let bundle_id = self.handle_id(ctx, &bundle)?;
+    for entry in values.own_props::<String, Value>(Filter::new().string().enum_only()) {
+      let (key, value) = entry?;
+      self.put_bundle_value(ctx, bundle_id, &key, &value)?;
+    }
+    Ok(bundle)
+  }
 }
 
 pub fn install_jvm<'js>(
@@ -298,13 +362,13 @@ pub fn install_jvm<'js>(
     id_of: Persistent::save(ctx, id_of),
   });
   globals.inu.set("jvm", jvm)?;
-  state.install_android_screen(ctx, globals)?;
+  state.install_android(ctx, globals)?;
 
   Ok(state)
 }
 
 impl JvmState {
-  fn install_android_screen<'js>(self: &Rc<Self>, ctx: &Ctx<'js>, globals: &crate::api::Globals<'js>) -> JsResult<()> {
+  fn install_android<'js>(self: &Rc<Self>, ctx: &Ctx<'js>, globals: &crate::api::Globals<'js>) -> JsResult<()> {
     let android: Object = match globals.inu.get::<_, Object>("android") {
       Ok(o) => o,
       Err(_) => {
@@ -313,6 +377,11 @@ impl JvmState {
         o
       }
     };
+    let state = self.clone();
+    android.set(
+      "bundle",
+      Function::new(ctx.clone(), move |ctx: Ctx<'js>, values: Value<'js>| state.js_bundle(&ctx, values))?,
+    )?;
     for (name, op) in [("getCurrentFragment", OP_CURRENT_FRAGMENT), ("getCurrentActivity", OP_CURRENT_ACTIVITY)] {
       let state = self.clone();
       android.set(

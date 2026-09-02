@@ -1,6 +1,8 @@
 package desu.inugram.helpers.plugins
 
+import android.os.Bundle
 import android.util.Base64
+import android.util.SparseArray
 import desu.inugram.core.plugins.PluginWire
 import desu.inugram.helpers.plugins.platform.PluginJvm
 import desu.inugram.jvmfixture.JvmFixture
@@ -67,6 +69,21 @@ class PluginJvmTest {
 
         assertEquals(PluginWire.Value.Null, PluginWire.decode(plugin.jvm(PluginJvm.OP_CURRENT_FRAGMENT)))
         assertEquals(PluginWire.Value.Null, PluginWire.decode(plugin.jvm(PluginJvm.OP_CURRENT_ACTIVITY)))
+    }
+
+    @Test
+    fun bundle_method_uses_runtime_types() {
+        val plugin = startPlugin("reflective", "unsafe.jvm")
+        fun method(value: Any): String = stringOf(plugin.jvm(PluginJvm.OP_BUNDLE_METHOD, plugin.mint(value)))
+
+        assertEquals("putBundle", method(Bundle()))
+        assertEquals("putString", method("text"))
+        assertEquals("putIntArray", method(intArrayOf(1)))
+        assertEquals("putParcelableArray", method(arrayOf(Bundle())))
+        assertEquals("putStringArrayList", method(arrayListOf("one")))
+        assertEquals("putSerializable", method(arrayListOf<String>()))
+        assertEquals("putSparseParcelableArray", method(SparseArray<Bundle>().apply { put(1, Bundle()) }))
+        assertEquals(PluginWire.Value.Null, PluginWire.decode(plugin.jvm(PluginJvm.OP_BUNDLE_METHOD, plugin.mint(Any()))))
     }
 
     @Test

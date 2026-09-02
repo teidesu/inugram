@@ -270,6 +270,8 @@ private object DeviceMissing : CoreListener, StorageListener, UiListener, Platfo
 
     override fun uiOpenFragment(handle: Long) = no("ui")
 
+    override fun uiOpenScreen(optionsJson: String) = no("ui")
+
     override fun uiRegisterSettings(pageId: Long) = no("ui")
 
     override fun uiUnregisterSettings(pageId: Long) = no("ui")

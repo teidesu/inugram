@@ -1,6 +1,7 @@
 package desu.inugram.helpers.plugins.ui
 
 import android.content.Context
+import android.os.Bundle
 import android.text.SpannableString
 import android.text.Spanned
 import android.text.style.ForegroundColorSpan
@@ -16,6 +17,7 @@ import desu.inugram.helpers.plugins.PluginManager
 import desu.inugram.helpers.plugins.QuickJs
 import desu.inugram.helpers.plugins.UiListener
 import desu.inugram.helpers.plugins.platform.PluginJvm
+import desu.inugram.helpers.dialogs.DrawerHelper
 import desu.inugram.ui.settings.PluginSettingsActivity
 import desu.inugram.ui.settings.RadioDialogBuilder
 import desu.inugram.ui.showInputDialog
@@ -23,16 +25,22 @@ import org.json.JSONArray
 import org.json.JSONObject
 import org.telegram.messenger.AndroidUtilities
 import org.telegram.messenger.ApplicationLoader
+import org.telegram.messenger.DialogObject
 import org.telegram.messenger.LocaleController
+import org.telegram.messenger.MessagesController
 import org.telegram.messenger.R
+import org.telegram.messenger.UserConfig
 import org.telegram.messenger.Utilities
 import org.telegram.ui.ActionBar.AlertDialog
 import org.telegram.ui.ActionBar.BaseFragment
 import org.telegram.ui.ActionBar.Theme
+import org.telegram.ui.ChatActivity
 import org.telegram.ui.Cells.CheckBoxCell
 import org.telegram.ui.Components.ItemOptions
 import org.telegram.ui.Components.LayoutHelper
 import org.telegram.ui.LaunchActivity
+import org.telegram.ui.ProfileActivity
+import org.telegram.ui.SettingsActivity
 
 /**
  * Kotlin side of the settings-page ui bridge (rust: `ui.rs`): presents [PluginSettingsActivity]
@@ -73,6 +81,8 @@ object PluginUi {
         override fun uiOpenPage(pageId: Long): String? = openPage(plugin, engine, pageId)
 
         override fun uiOpenFragment(handle: Long): String? = openFragment(engine, handle)
+
+        override fun uiOpenScreen(optionsJson: String): String? = openScreen(optionsJson)
 
         override fun uiRegisterSettings(pageId: Long) = registerSettings(plugin, pageId)
 
@@ -154,6 +164,46 @@ object PluginUi {
         }
         AndroidUtilities.runOnUIThread {
             LaunchActivity.getSafeLastFragment()?.presentFragment(fragment)
+        }
+        return null
+    }
+
+    fun openScreen(optionsJson: String): String? {
+        val options = try {
+            JSONObject(optionsJson)
+        } catch (_: Exception) {
+            return PluginWire.encodePluginError("invalid-argument", "openPage: malformed screen")
+        }
+        val accountId = if (options.has("accountId")) options.optInt("accountId", -1) else UserConfig.selectedAccount
+        val controller = if (accountId in 0 until UserConfig.MAX_ACCOUNT_COUNT && UserConfig.isValidAccount(accountId)) {
+            MessagesController.getInstance(accountId)
+        } else {
+            return PluginWire.encodePluginError("not-found", "openPage: account #$accountId is not logged in")
+        }
+        val type = options.optString("type")
+        val dialogId = options.optLong("dialogId")
+        if ((type == "chat" || type == "profile") && DialogObject.isEncryptedDialog(dialogId)) {
+            return PluginWire.encodePluginError("forbidden", "openPage: secret chats are not available to plugins")
+        }
+        if ((type == "chat" || type == "profile") && controller.getUserOrChat(dialogId) == null) {
+            return PluginWire.encodePluginError("not-found", "openPage: dialog '$dialogId' is not cached")
+        }
+        AndroidUtilities.runOnUIThread {
+            val current = LaunchActivity.getSafeLastFragment() ?: return@runOnUIThread
+            val next = when (type) {
+                "chat" -> ChatActivity(Bundle().apply {
+                    if (dialogId > 0) putLong("user_id", dialogId) else putLong("chat_id", -dialogId)
+                    options.optInt("topicId").takeIf { it != 0 }?.let { putInt("message_id", it) }
+                })
+                "profile" -> ProfileActivity.of(dialogId)
+                "dialogs" -> DrawerHelper.createMainFragment()
+                "settings" -> SettingsActivity()
+                else -> return@runOnUIThread
+            }
+            next.setCurrentAccount(accountId)
+            if (type != "chat" || controller.checkCanOpenChat(next.arguments, current)) {
+                current.presentFragment(next)
+            }
         }
         return null
     }
