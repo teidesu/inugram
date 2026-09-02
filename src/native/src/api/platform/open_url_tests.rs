@@ -3,7 +3,7 @@ use crate::testing::harness::setup_apis as setup;
 use rquickjs::Value;
 
 #[test]
-fn open_url_accepts_http_and_https_and_refuses_every_other_shape() {
+fn open_url_accepts_http_https_and_tg_and_refuses_every_other_shape() {
   let (_rt, ctx, host, _lifecycle, _dialogs, _logs) = setup(&["openUrl"]);
   let outcomes: String = ctx.with(|ctx| {
     ctx
@@ -14,6 +14,7 @@ fn open_url_accepts_http_and_https_and_refuses_every_other_shape() {
               'HTTP://Example.COM',
               'http://[2001:db8::1]:8080/x',
               'tg://resolve?domain=telegram',
+              'tg://',
               'intent://scan/#Intent;scheme=zxing;end',
               'file:///data/data/org.telegram.messenger/files',
               'content://sms/inbox',
@@ -36,7 +37,7 @@ fn open_url_accepts_http_and_https_and_refuses_every_other_shape() {
   });
   assert_eq!(
     outcomes,
-    r#"["opened","opened","opened","invalid-argument","invalid-argument","invalid-argument","invalid-argument","invalid-argument","invalid-argument","invalid-argument","invalid-argument","invalid-argument","invalid-argument"]"#,
+    r#"["opened","opened","opened","opened","invalid-argument","invalid-argument","invalid-argument","invalid-argument","invalid-argument","invalid-argument","invalid-argument","invalid-argument","invalid-argument","invalid-argument"]"#,
   );
   assert_eq!(
     *host.opened.borrow(),
@@ -44,8 +45,9 @@ fn open_url_accepts_http_and_https_and_refuses_every_other_shape() {
       "https://example.com/a?b=1#c".to_string(),
       "HTTP://Example.COM".to_string(),
       "http://[2001:db8::1]:8080/x".to_string(),
+      "tg://resolve?domain=telegram".to_string(),
     ],
-    "only the three http(s) urls may reach the host",
+    "only http(s) and tg urls may reach the host",
   );
 }
 
@@ -102,6 +104,9 @@ fn the_bundled_shell_test_plugin_passes() {
   let lines = lines.borrow().clone();
   crate::testing::harness::assert_oracle_exact(&lines, "shell test done", 23);
   // what "did not throw" cannot say: the accepted url and the write reached the host
-  assert_eq!(*host.opened.borrow(), vec!["https://telegram.org/".to_string()]);
+  assert_eq!(
+    *host.opened.borrow(),
+    vec!["tg://resolve?domain=durov".to_string(), "https://telegram.org/".to_string()]
+  );
   assert_eq!(*host.writes.borrow(), vec!["inugram shell test".to_string()]);
 }

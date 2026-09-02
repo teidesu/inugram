@@ -67,10 +67,16 @@ check(
     typeof inu.ui.chooser === 'function',
 )
 
-// a scheme names an action rather than a page, so the allowlist is the only thing between a url
-// grant and "start any activity on the device with any extras"
+let deepLink = 'opened'
+try {
+  inu.openUrl('tg://resolve?domain=durov')
+} catch (e) {
+  deepLink = `${e.name}: ${e.message}`
+}
+check('openUrl accepts Telegram deep links', deepLink === 'opened', deepLink)
+
+// the allowlist is the only thing between a url grant and "start any activity on the device with any extras"
 for (const url of [
-  'tg://resolve?domain=durov',
   'intent://scan/#Intent;scheme=zxing;package=com.evil;end',
   'file:///data/data/org.telegram.messenger/files/plugins',
   'content://media/external/images/media/1',

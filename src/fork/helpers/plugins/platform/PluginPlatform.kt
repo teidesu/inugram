@@ -6,6 +6,7 @@ import android.content.Intent
 import android.util.Log
 import androidx.core.net.toUri
 import desu.inugram.helpers.plugins.PlatformListener
+import org.telegram.messenger.browser.Browser
 import org.telegram.messenger.AndroidUtilities
 import org.telegram.messenger.ApplicationLoader
 import org.telegram.messenger.LocaleController
@@ -45,10 +46,10 @@ object PluginPlatform {
     }
 
     /**
-     * Deliberately **not** `Browser.openUrl`, which appends the account's `autologin_token` to any
+     * External urls deliberately avoid `Browser.openUrl`, which appends the account's `autologin_token` to any
      * url whose host the server put in `autologinDomains` - precisely what the takeover filter
      * strips out of `config`. Routing a plugin's url through it would hand back what the filter took
-     * away, to a host the plugin chose.
+     * away, to a host the plugin chose. Telegram links use narrower entry points that never add it.
      *
      * With no ui this is a no-op: android refuses a background activity start.
      */
@@ -56,7 +57,17 @@ object PluginPlatform {
         AndroidUtilities.runOnUIThread {
             val context = LaunchActivity.instance ?: ApplicationLoader.applicationContext ?: return@runOnUIThread
             try {
-                val intent = Intent(Intent.ACTION_VIEW, url.toUri())
+                val uri = url.toUri()
+                val host = uri.host?.trimEnd('.')?.lowercase()
+                if (uri.scheme.equals("tg", ignoreCase = true) || host == "t.me") {
+                    Browser.openAsInternalIntent(context, url)
+                    return@runOnUIThread
+                }
+                if (host == "telegram.org" || host?.endsWith(".telegram.org") == true) {
+                    Browser.openInTelegramBrowser(context, url, null)
+                    return@runOnUIThread
+                }
+                val intent = Intent(Intent.ACTION_VIEW, uri)
                 intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
                 context.startActivity(intent)
             } catch (e: Exception) {

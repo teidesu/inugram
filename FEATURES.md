@@ -258,7 +258,7 @@ most things are toggleable in `Settings → Inugram`, with sensible opinionated 
 - before the very first install, a one-time warning (with a 10s confirm delay) spells out what any plugin can do to an account, however harmless it looks
 - per-plugin info page (tap a plugin row): name, author, version, localized description, requested permissions (user-readable descriptions, color-coded by danger tier), syntax-highlighted source code viewer, enable/disable, reload/remove; warns when the plugin code looks obfuscated or minified
 - chat/message plugin actions live under an Actions submenu by default; users can reorder, disable, or pin them into the main menus; message actions can also target the current message selection
-- plugins can open chats, topics, profiles, dialogs and settings; Android plugins can also build `Bundle` arguments from JS values for reflected fragments
+- plugins can open chats, topics, profiles, dialogs, settings and Telegram links; Android plugins can also build `Bundle` arguments from JS values for reflected fragments
 - "start in safe mode" launcher shortcut to boot without running any plugin; active safe mode shows a banner on the plugins page with a restart button
 - plugin developer mode (off by default, behind a warning sheet with a 10s confirm delay): `pnpm run push-plugin <file> [--watch] [--logs]` pushes a plugin over adb and the app installs or hot-reloads it in place, keeping its storage, order and enabled bit, and reports the result back to the terminal (and, when the app is on screen, as a bulletin); the receiver demands `android.permission.DUMP` of the sender, so the channel is adb's alone, plugins that arrived this way are badged "dev" in the list, and the plugins page shows a banner for as long as it is on
 
