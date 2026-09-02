@@ -191,6 +191,11 @@ declare type MismatchedRpcReturns<M extends tl.TypeRpcMethod['_'], All extends t
 declare type SharedRpcReturn<M extends tl.TypeRpcMethod['_']>
   = [MismatchedRpcReturns<M>] extends [never] ? tl.RpcCallReturn[M] : never
 
+declare interface InterceptRpcOptions {
+  /** Fail the app's RPC when the middleware returns an invalid TL value. The default logs and skips that middleware. */
+  strict?: boolean
+}
+
 declare type Disposer = () => void
 
 declare type DialogId = number
@@ -762,6 +767,7 @@ declare namespace inu {
       next: (request: Extract<tl.TypeRpcMethod, { _: M }>) => MaybePromise<tl.RpcCallReturn[M] | null>,
       account: Account,
     ) => MaybePromise<tl.RpcCallReturn[M] | null | undefined>,
+    options?: InterceptRpcOptions,
   ): Disposer
   function interceptRpc<M extends tl.TypeRpcMethod['_']>(
     methods: M[],
@@ -770,6 +776,7 @@ declare namespace inu {
       next: (request: Extract<tl.TypeRpcMethod, { _: M }>) => MaybePromise<SharedRpcReturn<M> | null>,
       account: Account,
     ) => MaybePromise<SharedRpcReturn<M> | null | undefined>,
+    options?: InterceptRpcOptions,
   ): Disposer
 
   /** `TLRPC.deserialize` bypasses interception for `messages.foundStickers`, `messages.foundStickersNotModified`, `users.users`, and `users.usersSlice`. At most 32 rules live at once; parsing is parked on the answer for at most 250ms. */

@@ -6,7 +6,7 @@ use rquickjs::Context;
 
 #[derive(Default)]
 struct TestHost {
-  registered: RefCell<Vec<(Vec<String>, u32, String)>>,
+  registered: RefCell<Vec<(Vec<String>, u32, String, bool)>>,
   unregistered: RefCell<Vec<u32>>,
   next_calls: RefCell<Vec<(i64, String)>>,
   invoke_calls: RefCell<Vec<(i64, i32, String)>>,
@@ -25,8 +25,8 @@ struct TestHost {
 }
 
 impl RpcHost for TestHost {
-  fn on_register(&self, methods: &[String], callback_id: u32, scope: &str) -> Option<String> {
-    self.registered.borrow_mut().push((methods.to_vec(), callback_id, scope.to_string()));
+  fn on_register(&self, methods: &[String], callback_id: u32, scope: &str, strict: bool) -> Option<String> {
+    self.registered.borrow_mut().push((methods.to_vec(), callback_id, scope.to_string(), strict));
     self.register_err.borrow().clone()
   }
   fn on_unregister(&self, callback_id: u32) {
@@ -732,8 +732,30 @@ fn intercept_registration_without_a_scoped_grant_throws_not_granted() {
 #[test]
 fn intercept_registration_with_a_scoped_grant_reaches_the_host() {
   let (_rt, ctx, host, _state) = setup(&["interceptRpc(users.getUsers)"]);
-  ctx.with(|ctx| ctx.eval::<(), _>("inu.interceptRpc('users.getUsers', () => {});").unwrap());
+  ctx.with(|ctx| {
+    ctx
+      .eval::<(), _>(
+        "inu.interceptRpc('users.getUsers', () => {}); inu.interceptRpc('users.getUsers', () => {}, { strict: true });",
+      )
+      .unwrap()
+  });
   assert_eq!(host.registered.borrow()[0].0, vec!["users.getUsers".to_string()]);
+  assert!(!host.registered.borrow()[0].3);
+  assert!(host.registered.borrow()[1].3);
+}
+
+#[test]
+fn intercept_options_reject_malformed_strict_values() {
+  let (_rt, ctx, host, _state) = setup(&["interceptRpc(users.getUsers)"]);
+  assert_eq!(
+    catch_json(&ctx, "inu.interceptRpc('users.getUsers', () => {}, true)"),
+    r#"[false,null,null,"interceptRpc: options must be an object"]"#,
+  );
+  assert_eq!(
+    catch_json(&ctx, "inu.interceptRpc('users.getUsers', () => {}, { strict: 'yes' })"),
+    r#"[false,null,null,"interceptRpc: options.strict must be a boolean"]"#,
+  );
+  assert!(host.registered.borrow().is_empty());
 }
 
 #[test]
@@ -1022,7 +1044,7 @@ fn a_plugin_throw_faults_where_a_host_failure_does_not() {
         inu.onUpdate('updateBar', async () => { throw new Error('unawaited'); });
         "#,
   );
-  let ids: Vec<u32> = host.registered.borrow().iter().map(|(_, id, _)| *id).collect();
+  let ids: Vec<u32> = host.registered.borrow().iter().map(|(_, id, _, _)| *id).collect();
 
   state.dispatch(&rt, &ctx, ids[0], 700, "foo.bar", 0, &wire_json(r#"{"_":"foo.bar"}"#));
   state.dispatch(&rt, &ctx, ids[1], 701, "foo.baz", 0, &wire_json(r#"{"_":"foo.baz"}"#));
@@ -1065,7 +1087,7 @@ fn an_rpc_error_out_of_a_stage_is_control_flow_not_a_fault() {
         inu.interceptRpc('foo.baz', async (req, next) => { await next(req); });
         "#,
   );
-  let ids: Vec<u32> = host.registered.borrow().iter().map(|(_, id, _)| *id).collect();
+  let ids: Vec<u32> = host.registered.borrow().iter().map(|(_, id, _, _)| *id).collect();
 
   state.dispatch(&rt, &ctx, ids[0], 800, "foo.bar", 0, &wire_json(r#"{"_":"foo.bar"}"#));
   // the host abandons the stage parked in await next(), exactly as a chain collapse does
@@ -2519,7 +2541,7 @@ mod bundled_oracles {
   }
 
   impl RpcHost for OracleHost {
-    fn on_register(&self, methods: &[String], callback_id: u32, _scope: &str) -> Option<String> {
+    fn on_register(&self, methods: &[String], callback_id: u32, _scope: &str, _strict: bool) -> Option<String> {
       for method in methods {
         if self.refused.borrow().contains(method) {
           return Some(plugin_error("forbidden", &format!("'{method}' is not interceptable")));
