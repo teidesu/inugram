@@ -262,7 +262,11 @@ declare namespace inu {
 
   function onUnload(callback: () => void): Disposer
 
-  /** @needs-grant openUrl */
+  /**
+   * Open a web URL, or an internal deeplink (t.me/telegram.org)
+   *
+   * @needs-grant openUrl
+   */
   function openUrl(url: string): void
 
   /** @needs-grant onAppVisibilityChange */
