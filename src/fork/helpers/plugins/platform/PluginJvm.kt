@@ -1,6 +1,12 @@
 package desu.inugram.helpers.plugins.platform
 
+import android.os.Bundle
+import android.os.IBinder
+import android.os.Parcelable
 import android.util.Base64
+import android.util.Size
+import android.util.SizeF
+import android.util.SparseArray
 import dalvik.system.DexClassLoader
 import desu.inugram.core.plugins.PluginInstalls
 import desu.inugram.core.plugins.PluginWire
@@ -10,6 +16,7 @@ import desu.inugram.helpers.plugins.JvmListener
 import desu.inugram.helpers.plugins.Plugin
 import desu.inugram.helpers.plugins.QuickJs
 import java.io.File
+import java.io.Serializable
 import java.lang.reflect.Executable
 import java.lang.reflect.Field
 import java.lang.reflect.InvocationTargetException
@@ -53,6 +60,7 @@ object PluginJvm {
     const val OP_RELEASE = 12
     const val OP_CURRENT_FRAGMENT = 13
     const val OP_CURRENT_ACTIVITY = 14
+    const val OP_BUNDLE_METHOD = 15
 
     const val GRANT = "unsafe.jvm"
 
@@ -190,7 +198,56 @@ object PluginJvm {
             // `encodeValue` mints through `checkClass`, so a plugin scoped to one package still cannot be handed a fragment from another
             OP_CURRENT_FRAGMENT -> encodeValue(screen.currentFragment())
             OP_CURRENT_ACTIVITY -> encodeValue(screen.currentActivity())
+            OP_BUNDLE_METHOD -> encodeValue(bundleMethod(at(target)))
             else -> PluginWire.encodeError("jvm: unknown op $op")
+        }
+
+        private fun bundleMethod(value: Any): String? = when (value) {
+            is Bundle -> "putBundle"
+            is Boolean -> "putBoolean"
+            is Byte -> "putByte"
+            is Char -> "putChar"
+            is Short -> "putShort"
+            is Int -> "putInt"
+            is Long -> "putLong"
+            is Float -> "putFloat"
+            is Double -> "putDouble"
+            is String -> "putString"
+            is CharSequence -> "putCharSequence"
+            is BooleanArray -> "putBooleanArray"
+            is ByteArray -> "putByteArray"
+            is ShortArray -> "putShortArray"
+            is CharArray -> "putCharArray"
+            is IntArray -> "putIntArray"
+            is LongArray -> "putLongArray"
+            is FloatArray -> "putFloatArray"
+            is DoubleArray -> "putDoubleArray"
+            is Array<*> -> value.javaClass.componentType?.let { component ->
+                when {
+                    String::class.java.isAssignableFrom(component) -> "putStringArray"
+                    CharSequence::class.java.isAssignableFrom(component) -> "putCharSequenceArray"
+                    Parcelable::class.java.isAssignableFrom(component) -> "putParcelableArray"
+                    else -> null
+                }
+            }
+            is ArrayList<*> -> when {
+                value.isNotEmpty() && value.all { it == null || it is Int } -> "putIntegerArrayList"
+                value.isNotEmpty() && value.all { it == null || it is String } -> "putStringArrayList"
+                value.isNotEmpty() && value.all { it == null || it is CharSequence } -> "putCharSequenceArrayList"
+                value.isNotEmpty() && value.all { it == null || it is Parcelable } -> "putParcelableArrayList"
+                else -> "putSerializable"
+            }
+            is SparseArray<*> -> if ((0 until value.size()).all { value.valueAt(it) == null || value.valueAt(it) is Parcelable }) {
+                "putSparseParcelableArray"
+            } else {
+                null
+            }
+            is IBinder -> "putBinder"
+            is Size -> "putSize"
+            is SizeF -> "putSizeF"
+            is Parcelable -> "putParcelable"
+            is Serializable -> "putSerializable"
+            else -> null
         }
 
         fun objectAt(handle: Long): Any? = if (live) handles[handle] else null

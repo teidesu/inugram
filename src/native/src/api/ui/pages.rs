@@ -35,6 +35,7 @@ pub trait UiHost {
   fn ui_prompt(&self, request_id: i64, options_json: &str) -> Option<String>;
   fn ui_open_page(&self, page_id: i64) -> Option<String>;
   fn ui_open_fragment(&self, handle: i64) -> Option<String>;
+  fn ui_open_screen(&self, options_json: &str) -> Option<String>;
   fn ui_register_settings(&self, page_id: i64);
   fn ui_unregister_settings(&self, page_id: i64);
   fn ui_invalidate(&self, page_id: i64);
@@ -300,6 +301,50 @@ pub fn install_ui<'js>(
           return Err(Exception::throw_message(&ctx, &err));
         }
         return Ok(());
+      }
+      if let Some(page) = page.as_object() {
+        if page.contains_key("type")? {
+          let kind: String = page.get("type")?;
+          if !matches!(kind.as_str(), "chat" | "profile" | "dialogs" | "settings") {
+            return PluginErrorCode::InvalidArgument.throw(&ctx, "openPage: unsupported screen type");
+          }
+          let out = Object::new(ctx.clone())?;
+          out.set("type", kind.clone())?;
+          if page.contains_key("account")? {
+            out.set("accountId", page.get::<_, i32>("account")?)?;
+          }
+          if matches!(kind.as_str(), "chat" | "profile") {
+            let dialog_id: f64 = page.get("dialogId")?;
+            if !dialog_id.is_finite()
+              || dialog_id.fract() != 0.0
+              || dialog_id == 0.0
+              || dialog_id.abs() > 9_007_199_254_740_991.0
+            {
+              return PluginErrorCode::InvalidArgument
+                .throw(&ctx, "openPage: 'dialogId' must be a non-zero safe integer");
+            }
+            out.set("dialogId", dialog_id)?;
+          }
+          if page.contains_key("topicId")? {
+            if kind != "chat" {
+              return PluginErrorCode::InvalidArgument.throw(&ctx, "openPage: 'topicId' is only valid for a chat");
+            }
+            let topic_id: f64 = page.get("topicId")?;
+            if !topic_id.is_finite() || topic_id.fract() != 0.0 || topic_id < 0.0 || topic_id > i32::MAX as f64 {
+              return PluginErrorCode::InvalidArgument
+                .throw(&ctx, "openPage: 'topicId' must be a non-negative signed 32-bit integer");
+            }
+            out.set("topicId", topic_id as i32)?;
+          }
+          let json = ctx
+            .json_stringify(out.into_value())?
+            .ok_or_else(|| Exception::throw_message(&ctx, "openPage: could not serialize the screen"))?
+            .to_string()?;
+          if let Some(err) = state2.host.ui_open_screen(&json) {
+            return Err(Exception::throw_message(&ctx, &err));
+          }
+          return Ok(());
+        }
       }
       let page_id = state2.page_id_of(&ctx, &page, "openPage")?;
       if let Some(err) = state2.host.ui_open_page(page_id) {

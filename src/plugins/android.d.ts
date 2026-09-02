@@ -9,6 +9,14 @@ declare namespace inu {
   }
 
   namespace android {
+    /**
+     * Creates an Android `Bundle`. Integer `number`s use `putInt`; use `bigint` for `putLong`.
+     * Other supported values are finite numbers, booleans, strings, `Uint8Array`s, and
+     * Bundle-compatible Java objects such as `Parcelable`, `IBinder`, and `Serializable` values.
+     * @needs-grant unsafe.jvm(android.os.Bundle)
+     */
+    function bundle(values: Record<string, boolean | number | bigint | string | Uint8Array | JavaObject>): JavaObject
+
     /** @needs-grant unsafe.fs */
     function getPluginsDir(): string
     /** @needs-grant unsafe.fs */

@@ -274,6 +274,10 @@ impl UiHost for JniBridge {
     self.call_refusal("openPage", self.on_ui_open_fragment, &[Arg::Long(handle)])
   }
 
+  fn ui_open_screen(&self, options_json: &str) -> Option<String> {
+    self.call_refusal("openPage", self.on_ui_open_screen, &[Arg::Str(options_json)])
+  }
+
   fn ui_register_settings(&self, page_id: i64) {
     self.call_void("registerSettingsPage", self.on_ui_register_settings, &[Arg::Long(page_id)]);
   }

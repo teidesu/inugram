@@ -633,6 +633,7 @@ declare namespace inu {
     }
 
     function openPage(page: UIPage): void
+    function openPage(screen: PageTarget): void
 
     function toast(text: string): void
 
@@ -666,6 +667,12 @@ declare namespace inu {
       topicId?: number
       account: Account
     }
+
+    type PageTarget =
+      | { type: 'chat', dialogId: DialogId, topicId?: number, account?: number }
+      | { type: 'profile', dialogId: DialogId, account?: number }
+      | { type: 'dialogs', account?: number }
+      | { type: 'settings', account?: number }
 
     function getCurrentScreen(): CurrentScreen | null
 

@@ -231,6 +231,9 @@ impl crate::api::ui::pages::UiHost for SilentUiHost {
   fn ui_open_page(&self, _: i64) -> Option<String> {
     None
   }
+  fn ui_open_screen(&self, _: &str) -> Option<String> {
+    None
+  }
   fn ui_register_settings(&self, _: i64) {}
   fn ui_unregister_settings(&self, _: i64) {}
   fn ui_invalidate(&self, _: i64) {}

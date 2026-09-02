@@ -6,6 +6,7 @@ struct TestUiHost {
   prompts: RefCell<Vec<(i64, String)>>,
   opened_pages: RefCell<Vec<i64>>,
   opened_fragments: RefCell<Vec<i64>>,
+  opened_screens: RefCell<Vec<String>>,
   registered: RefCell<Vec<i64>>,
   unregistered: RefCell<Vec<i64>>,
   invalidated: RefCell<Vec<i64>>,
@@ -30,6 +31,10 @@ impl UiHost for TestUiHost {
   }
   fn ui_open_fragment(&self, handle: i64) -> Option<String> {
     self.opened_fragments.borrow_mut().push(handle);
+    None
+  }
+  fn ui_open_screen(&self, options_json: &str) -> Option<String> {
+    self.opened_screens.borrow_mut().push(options_json.to_string());
     None
   }
   fn ui_register_settings(&self, page_id: i64) {
@@ -463,6 +468,41 @@ fn open_page_and_invalidate_reach_host() {
   let threw = ctx.with(|ctx| ctx.eval::<(), _>("inu.ui.openPage({})").is_err());
   assert!(threw);
   let _ = (&rt, page_id);
+}
+
+#[test]
+fn open_screen_validates_and_reaches_host() {
+  let (_rt, ctx, host, _state, _logs) = setup();
+  ctx.with(|ctx| {
+    ctx
+      .eval::<(), _>(
+        r#"
+          inu.ui.openPage({ type: 'chat', dialogId: -1001, topicId: 42, account: 2 })
+          inu.ui.openPage({ type: 'profile', dialogId: 7, account: 2 })
+          inu.ui.openPage({ type: 'dialogs', account: 2 })
+          inu.ui.openPage({ type: 'settings' })
+        "#,
+      )
+      .unwrap();
+  });
+  assert_eq!(
+    *host.opened_screens.borrow(),
+    vec![
+      r#"{"type":"chat","accountId":2,"dialogId":-1001,"topicId":42}"#,
+      r#"{"type":"profile","accountId":2,"dialogId":7}"#,
+      r#"{"type":"dialogs","accountId":2}"#,
+      r#"{"type":"settings"}"#,
+    ]
+  );
+
+  for source in [
+    "inu.ui.openPage({ type: 'other' })",
+    "inu.ui.openPage({ type: 'chat', dialogId: 0 })",
+    "inu.ui.openPage({ type: 'profile', dialogId: 1, topicId: 2 })",
+    "inu.ui.openPage({ type: 'profile', dialogId: 1, account: {} })",
+  ] {
+    assert!(ctx.with(|ctx| ctx.eval::<(), _>(source).is_err()), "accepted {source}");
+  }
 }
 
 /// the android members that take a real object take it as an `inu.jvm` handle and nothing
