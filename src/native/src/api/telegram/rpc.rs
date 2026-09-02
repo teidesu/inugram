@@ -2,7 +2,7 @@ use std::cell::{Cell, RefCell};
 use std::collections::HashMap;
 use std::rc::Rc;
 
-use rquickjs::function::This;
+use rquickjs::function::{Opt, This};
 use rquickjs::{Ctx, Exception, Function, Object, Persistent, Result as JsResult, Runtime, Value};
 
 use crate::api::error::{self, error_value_to_string, format_thrown, PluginErrorCode};
@@ -16,7 +16,7 @@ use crate::Log;
 pub(crate) use crate::api::error::format_exception;
 
 pub trait RpcHost {
-  fn on_register(&self, methods: &[String], callback_id: u32, scope: &str) -> Option<String>;
+  fn on_register(&self, methods: &[String], callback_id: u32, scope: &str, strict: bool) -> Option<String>;
   fn on_unregister(&self, callback_id: u32);
   fn on_invoke(&self, invoke_id: i64, slot: i32, request_wire: &str) -> Option<String>;
   fn on_next(&self, dispatch_id: i64, request_wire: &str) -> Option<String>;
@@ -329,9 +329,36 @@ pub fn install_rpc<'js>(
   let state2 = state.clone();
   globals.inu.set(
     "interceptRpc",
-    Function::new(ctx.clone(), move |ctx: Ctx<'js>, methods: Value<'js>, cb: Function<'js>| {
-      state2.js_intercept_rpc(&ctx, methods, cb)
-    })?,
+    Function::new(
+      ctx.clone(),
+      move |ctx: Ctx<'js>, methods: Value<'js>, cb: Function<'js>, options: Opt<Value<'js>>| {
+        let ctx: &Ctx<'js> = &ctx;
+        if state2.lifecycle.is_unloading() {
+          return noop_disposer(ctx);
+        }
+        let list = read_name_list(ctx, "interceptRpc", methods, "method")?;
+        for method in &list {
+          state2.grants.check_grant(ctx, "interceptRpc", Some(method), MATCH_EXACT)?;
+        }
+        let strict = match options.0 {
+          None => false,
+          Some(options) => {
+            let Some(options) = options.as_object() else {
+              return Err(Exception::throw_type(ctx, "interceptRpc: options must be an object"));
+            };
+            let strict: Value = options.get("strict")?;
+            if strict.is_undefined() {
+              false
+            } else {
+              strict
+                .as_bool()
+                .ok_or_else(|| Exception::throw_type(ctx, "interceptRpc: options.strict must be a boolean"))?
+            }
+          }
+        };
+        state2.register_intercept(ctx, list, "", strict, cb)
+      },
+    )?,
   )?;
 
   let state2 = state.clone();
@@ -419,7 +446,20 @@ impl RpcState {
     let state = self.clone();
     globals.inu.set(
       "interceptSendMessage",
-      Function::new(ctx.clone(), move |ctx: Ctx<'js>, cb: Function<'js>| state.js_intercept_send_message(&ctx, cb))?,
+      Function::new(ctx.clone(), move |ctx: Ctx<'js>, cb: Function<'js>| {
+        let ctx: &Ctx<'js> = &ctx;
+        if state.lifecycle.is_unloading() {
+          return noop_disposer(ctx);
+        }
+        state.grants.check_grant(ctx, SEND_SCOPE, None, MATCH_EXACT)?;
+        let build = match state.send_wrap.borrow().as_ref() {
+          Some(build) => build.clone().restore(ctx)?,
+          None => return Err(Exception::throw_type(ctx, "interceptSendMessage is not installed")),
+        };
+        let middleware: Function = build.call((cb,))?;
+        let list = SEND_METHODS.iter().map(ToString::to_string).collect();
+        state.register_intercept(ctx, list, SEND_SCOPE, true, middleware)
+      })?,
     )?;
     Ok(())
   }
@@ -467,45 +507,16 @@ fn read_name_list<'js>(ctx: &Ctx<'js>, what: &str, names: Value<'js>, noun: &str
 }
 
 impl RpcState {
-  fn js_intercept_rpc<'js>(
-    self: &Rc<Self>,
-    ctx: &Ctx<'js>,
-    methods: Value<'js>,
-    cb: Function<'js>,
-  ) -> JsResult<Function<'js>> {
-    if self.lifecycle.is_unloading() {
-      return noop_disposer(ctx);
-    }
-    let list = read_name_list(ctx, "interceptRpc", methods, "method")?;
-    for method in &list {
-      self.grants.check_grant(ctx, "interceptRpc", Some(method), MATCH_EXACT)?;
-    }
-    self.register_intercept(ctx, list, "", cb)
-  }
-
-  fn js_intercept_send_message<'js>(self: &Rc<Self>, ctx: &Ctx<'js>, cb: Function<'js>) -> JsResult<Function<'js>> {
-    if self.lifecycle.is_unloading() {
-      return noop_disposer(ctx);
-    }
-    self.grants.check_grant(ctx, SEND_SCOPE, None, MATCH_EXACT)?;
-    let build = match self.send_wrap.borrow().as_ref() {
-      Some(build) => build.clone().restore(ctx)?,
-      None => return Err(Exception::throw_type(ctx, "interceptSendMessage is not installed")),
-    };
-    let middleware: Function = build.call((cb,))?;
-    let list = SEND_METHODS.iter().map(ToString::to_string).collect();
-    self.register_intercept(ctx, list, SEND_SCOPE, middleware)
-  }
-
   fn register_intercept<'js>(
     self: &Rc<Self>,
     ctx: &Ctx<'js>,
     methods: Vec<String>,
     scope: &str,
+    strict: bool,
     middleware: Function<'js>,
   ) -> JsResult<Function<'js>> {
     let callback_id = self.intercept_fns.alloc();
-    if let Some(err) = self.host.on_register(&methods, callback_id, scope) {
+    if let Some(err) = self.host.on_register(&methods, callback_id, scope, strict) {
       return Err(ctx.throw(error::host_error_to_js(ctx, &err)?));
     }
     self.intercept_fns.register(ctx, callback_id, None, middleware);

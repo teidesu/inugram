@@ -143,9 +143,10 @@ interface PlatformListener {
 interface RpcListener {
     /**
      * [scope] is the grant to gate on: "" when every method in [methods] is its own scope, and
-     * `interceptSendMessage` for the narrowing of this chain that api is.
+     * `interceptSendMessage` for the narrowing of this chain that api is. [strict] fails malformed
+     * returns instead of logging and advancing past this stage.
      */
-    fun onRpcRegister(methods: Array<String>, callbackId: Int, scope: String): String?
+    fun onRpcRegister(methods: Array<String>, callbackId: Int, scope: String, strict: Boolean): String?
 
     fun onRpcUnregister(callbackId: Int)
 

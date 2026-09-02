@@ -52,7 +52,7 @@ import org.telegram.tgnet.tl.TL_update
  * reads it, so `disableFree` moves the free to the table).
  */
 object PluginRpc {
-    private class Interceptor(val plugin: Plugin, val callbackId: Int)
+    private class Interceptor(val plugin: Plugin, val callbackId: Int, val strict: Boolean)
 
     private class OriginalParams(
         val flags: Int,
@@ -74,9 +74,13 @@ object PluginRpc {
         val scopeId: Long,
         val method: String,
         val account: Int,
+        val request: TLObject,
         val finalize: (TLObject?, TLRPC.TL_error?, Long) -> Unit,
     ) {
         var responseTime = 0L
+        var nextStarted = false
+        var nextResult: PassthroughResult? = null
+        var skipped = false
     }
 
     /**
@@ -168,8 +172,8 @@ object PluginRpc {
         // snapshot: the account-less `inu.invokeRpc` names no account, and a plugin's requests must not jump slots on a switch
         val invokeAccount = UserConfig.selectedAccount
         return object : RpcListener {
-            override fun onRpcRegister(methods: Array<String>, callbackId: Int, scope: String): String? =
-                registerIntercept(plugin, methods, callbackId, scope)
+            override fun onRpcRegister(methods: Array<String>, callbackId: Int, scope: String, strict: Boolean): String? =
+                registerIntercept(plugin, methods, callbackId, scope, strict)
 
             override fun onRpcUnregister(callbackId: Int) =
                 unregisterIntercept(plugin, callbackId)
@@ -355,7 +359,7 @@ object PluginRpc {
      * api the engine gated on and [methods] is that api's fixed list. The takeover refusal applies
      * to both: it is a property of the method, not of how it was reached.
      */
-    private fun registerIntercept(plugin: Plugin, methods: Array<String>, callbackId: Int, scope: String): String? {
+    private fun registerIntercept(plugin: Plugin, methods: Array<String>, callbackId: Int, scope: String, strict: Boolean): String? {
         for (method in methods) {
             takeoverRefusal(plugin, method)?.let { return it }
         }
@@ -373,7 +377,7 @@ object PluginRpc {
         // the middleware twice per request off a single `next()`, against one budget, and
         // `releaseScope` twice. Same reason the update registrations take `types.toSet()`
         for (method in methods.toSet()) {
-            updated[method] = (updated[method].orEmpty()) + Interceptor(plugin, callbackId)
+            updated[method] = (updated[method].orEmpty()) + Interceptor(plugin, callbackId, strict)
         }
         publishInterceptors(updated)
         return null
@@ -497,7 +501,7 @@ object PluginRpc {
         val dispatchId = nextDispatchId++
         val method = TlNames.classNameToTlName(request.javaClass)
         pendingDispatches[dispatchId] =
-            PendingDispatch(interceptor.plugin, tl, connectionsManager, chain, index, params, scopeId, method, account, finalize)
+            PendingDispatch(interceptor.plugin, tl, connectionsManager, chain, index, params, scopeId, method, account, request, finalize)
         chains[scopeId]?.stages?.add(dispatchId)
         val requestHandle = tl.mintForScope(request, scopeId)
         engine.dispatchRpc(
@@ -630,6 +634,7 @@ object PluginRpc {
         }
         Utilities.globalQueue.postRunnable {
             if (pendingDispatches[dispatchId] !== pending) return@postRunnable
+            pending.nextStarted = true
             dispatchChain(
                 pending.connectionsManager,
                 pending.chain,
@@ -643,6 +648,13 @@ object PluginRpc {
                 Utilities.globalQueue.postRunnable {
                     // once the chain has collapsed this stage is gone, and completing it would mint into a released scope
                     if (pendingDispatches[dispatchId] !== pending) return@postRunnable
+                    val result = PassthroughResult(response, error, responseTime)
+                    pending.nextResult = result
+                    if (pending.skipped) {
+                        pendingDispatches.remove(dispatchId)
+                        pending.finalize(result.response, result.error, result.time)
+                        return@postRunnable
+                    }
                     val engine = pending.plugin.engine ?: return@postRunnable
                     engine.completeNext(dispatchId, encodeChainResult(pending.tl, response, error, pending.scopeId))
                 }
@@ -661,9 +673,49 @@ object PluginRpc {
         } catch (e: TlResultError) {
             error = e.error
         } catch (e: Exception) {
-            error = syntheticError("bad middleware response: ${e.message}")
+            handleBadMiddlewareResponse(dispatchId, pending, e, time)
+            return
         }
         settleStage(dispatchId, pending) { pending.finalize(response, error, time) }
+    }
+
+    private fun handleBadMiddlewareResponse(dispatchId: Long, pending: PendingDispatch, cause: Exception, time: Long) {
+        Utilities.globalQueue.postRunnable {
+            if (pendingDispatches[dispatchId] !== pending) return@postRunnable
+            val detail = cause.message ?: cause.toString()
+            val strict = pending.chain[pending.index].strict
+            Log.w(
+                TAG,
+                "[${pending.plugin.manifest.name}] '${pending.method}' returned an invalid TL response; " +
+                    (if (strict) "failing the RPC" else "skipping the middleware") + ": $detail",
+            )
+            if (strict) {
+                pendingDispatches.remove(dispatchId)
+                abandonBelow(dispatchId, pending, ABANDONED_WIRE)
+                pending.finalize(null, syntheticError("bad middleware response: $detail"), time)
+                return@postRunnable
+            }
+            val nextResult = pending.nextResult
+            if (nextResult != null) {
+                pendingDispatches.remove(dispatchId)
+                abandonBelow(dispatchId, pending, ABANDONED_WIRE)
+                pending.finalize(nextResult.response, nextResult.error, nextResult.time)
+            } else if (pending.nextStarted) {
+                pending.skipped = true
+            } else {
+                pendingDispatches.remove(dispatchId)
+                dispatchChain(
+                    pending.connectionsManager,
+                    pending.chain,
+                    pending.index + 1,
+                    pending.request,
+                    pending.params,
+                    pending.scopeId,
+                    pending.account,
+                    pending.finalize,
+                )
+            }
+        }
     }
 
     /**

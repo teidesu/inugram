@@ -265,6 +265,71 @@ class PluginRpcChainTest {
     }
 
     @Test
+    fun a_bad_response_skips_a_non_strict_middleware() {
+        val plugin = startPlugin("p", "interceptRpc(users.getUsers)")
+        assertNull(plugin.interceptRpc("users.getUsers"))
+        plugin.js.onDispatchRpc = {
+            plugin.complete(it.dispatchId, PluginWire.encodeJson("""{"_":"users.users","users":1}"""))
+        }
+        val app = AppRequest()
+
+        assertTrue(send(app))
+        drain()
+
+        val sent = connections().lastSent()!!
+        assertFalse(app.answered)
+        val response = TLRPC.TL_boolTrue()
+        sent.answer(response, null, 7L)
+        drain()
+
+        assertSame(response, app.response)
+        assertNull(app.error)
+    }
+
+    @Test
+    fun a_bad_response_fails_a_strict_middleware() {
+        val plugin = startPlugin("p", "interceptRpc(users.getUsers)")
+        assertNull(plugin.interceptRpc("users.getUsers", strict = true))
+        plugin.js.onDispatchRpc = {
+            plugin.complete(it.dispatchId, PluginWire.encodeJson("""{"_":"users.users","users":1}"""))
+        }
+        val app = AppRequest()
+
+        assertTrue(send(app))
+        drain()
+
+        assertTrue(app.answered)
+        assertNull(app.response)
+        assertEquals(-1000, app.error?.code)
+        assertTrue(app.error?.text?.startsWith("bad middleware response:") == true)
+        assertEquals(0, connections().sent.size)
+    }
+
+    @Test
+    fun a_bad_response_after_next_uses_the_downstream_result_without_sending_twice() {
+        val plugin = startPlugin("p", "interceptRpc(users.getUsers)")
+        assertNull(plugin.interceptRpc("users.getUsers"))
+        plugin.js.onDispatchRpc = {
+            plugin.next(it.dispatchId, it.requestWire)
+            plugin.complete(it.dispatchId, PluginWire.encodeJson("""{"_":"users.users","users":1}"""))
+        }
+        val app = AppRequest()
+
+        assertTrue(send(app))
+        drain()
+
+        assertEquals(1, connections().sent.size)
+        assertFalse(app.answered)
+        val response = TLRPC.TL_boolTrue()
+        connections().lastSent()!!.answer(response, null, 8L)
+        drain()
+
+        assertSame(response, app.response)
+        assertNull(app.error)
+        assertEquals(1, connections().sent.size)
+    }
+
+    @Test
     fun a_takeover_method_is_refused_even_under_an_unscoped_grant() {
         // an unscoped grant satisfies every scope check, so this refusal is the only thing between
         // `@grant interceptRpc` and auth.exportLoginToken

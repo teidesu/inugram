@@ -192,7 +192,7 @@ inu.onMessageDeleted((dialogId, messageIds, account) => {
 })
 inu.onUnload(seen)
 
-inu.interceptRpc('messages.getSponsoredMessages', () => ({ _: 'messages.sponsoredMessagesEmpty' }))
+inu.interceptRpc('messages.getSponsoredMessages', () => ({ _: 'messages.sponsoredMessagesEmpty' }), { strict: true })
 inu.interceptRpc('contacts.getSponsoredPeers', () => ({ _: 'contacts.sponsoredPeersEmpty' }))
 inu.interceptRpc('help.getPromoData', () => ({
   _: 'help.promoDataEmpty',

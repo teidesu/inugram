@@ -99,7 +99,7 @@ impl JniBridge {
     });
     let bridge = JniBridge {
       console,
-      on_rpc_register: method("onRpcRegister", "([Ljava/lang/String;ILjava/lang/String;)Ljava/lang/String;")?,
+      on_rpc_register: method("onRpcRegister", "([Ljava/lang/String;ILjava/lang/String;Z)Ljava/lang/String;")?,
       on_rpc_unregister: method("onRpcUnregister", "(I)V")?,
       on_invoke_rpc: method("onInvokeRpc", "(JILjava/lang/String;)Ljava/lang/String;")?,
       on_rpc_next: method("onRpcNext", "(JLjava/lang/String;)Ljava/lang/String;")?,

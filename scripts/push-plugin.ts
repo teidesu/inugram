@@ -109,7 +109,7 @@ async function push(targets: string[]) {
 
   await $`adb ${adb} shell mkdir -p ${remoteDir}`
   for (const target of changed) {
-    await $`adb ${adb} push ${target} ${remoteDir}/${basename(target)}`
+    await $({ quiet: true })`adb ${adb} push ${target} ${remoteDir}/${basename(target)}`
   }
   for (const target of changed) {
     report(await send({ cmd: 'install', file: basename(target) }))
