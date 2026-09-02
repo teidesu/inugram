@@ -15,20 +15,20 @@ diff --git a/TMessagesProj/src/main/java/org/telegram/messenger/SendMessagesHelp
 index 0000000..0000000 100644
 --- a/TMessagesProj/src/main/java/org/telegram/messenger/SendMessagesHelper.java
 +++ b/TMessagesProj/src/main/java/org/telegram/messenger/SendMessagesHelper.java
-@@ -1898,10 +1898,10 @@ public class SendMessagesHelper extends BaseController implements NotificationCe
+@@ -1907,10 +1907,10 @@ public class SendMessagesHelper extends BaseController implements NotificationCe
      }
  
-     public void sendSticker(TLRPC.Document document, String query, long peer, CharSequence caption, VideoEditedInfo videoEditedInfo, MessageObject replyToMsg, MessageObject replyToTopMsg, TL_stories.StoryItem storyItem, ChatActivity.ReplyQuote quote, MessageObject.SendAnimationData sendAnimationData, boolean notify, int scheduleDate, int scheduleRepeatPeriod, boolean updateStickersOrder, Object parentObject, String quick_reply_shortcut, int quick_reply_shortcut_id, long stars, long monoForumPeerId, MessageSuggestionParams suggestionParams) {
--        sendSticker(document, query, peer, caption, videoEditedInfo, replyToMsg, replyToTopMsg, storyItem, quote, sendAnimationData, notify, scheduleDate, scheduleRepeatPeriod, updateStickersOrder, parentObject, quick_reply_shortcut, quick_reply_shortcut_id, stars, monoForumPeerId, suggestionParams, false);
-+        sendSticker(document, query, peer, caption, videoEditedInfo, replyToMsg, replyToTopMsg, storyItem, quote, sendAnimationData, notify, scheduleDate, scheduleRepeatPeriod, updateStickersOrder, parentObject, quick_reply_shortcut, quick_reply_shortcut_id, stars, monoForumPeerId, suggestionParams, false, false);
+     public void sendSticker(TLRPC.Document document, String query, long peer, CharSequence caption, VideoEditedInfo videoEditedInfo, MessageObject replyToMsg, MessageObject replyToTopMsg, TL_stories.StoryItem storyItem, ChatActivity.ReplyQuote quote, MessageObject.SendAnimationData sendAnimationData, boolean notify, int scheduleDate, int scheduleRepeatPeriod, boolean updateStickersOrder, Object parentObject, SendMessageChatArguments sendMessageChatArguments, long stars, long monoForumPeerId, MessageSuggestionParams suggestionParams) {
+-        sendSticker(document, query, peer, caption, videoEditedInfo, replyToMsg, replyToTopMsg, storyItem, quote, sendAnimationData, notify, scheduleDate, scheduleRepeatPeriod, updateStickersOrder, parentObject, sendMessageChatArguments, stars, monoForumPeerId, suggestionParams, false);
++        sendSticker(document, query, peer, caption, videoEditedInfo, replyToMsg, replyToTopMsg, storyItem, quote, sendAnimationData, notify, scheduleDate, scheduleRepeatPeriod, updateStickersOrder, parentObject, sendMessageChatArguments, stars, monoForumPeerId, suggestionParams, false, false);
      }
  
--    public void sendSticker(TLRPC.Document document, String query, long peer, CharSequence caption, VideoEditedInfo videoEditedInfo, MessageObject replyToMsg, MessageObject replyToTopMsg, TL_stories.StoryItem storyItem, ChatActivity.ReplyQuote quote, MessageObject.SendAnimationData sendAnimationData, boolean notify, int scheduleDate, int scheduleRepeatPeriod, boolean updateStickersOrder, Object parentObject, String quick_reply_shortcut, int quick_reply_shortcut_id, long stars, long monoForumPeerId, MessageSuggestionParams suggestionParams, boolean invertMedia) {
-+    public void sendSticker(TLRPC.Document document, String query, long peer, CharSequence caption, VideoEditedInfo videoEditedInfo, MessageObject replyToMsg, MessageObject replyToTopMsg, TL_stories.StoryItem storyItem, ChatActivity.ReplyQuote quote, MessageObject.SendAnimationData sendAnimationData, boolean notify, int scheduleDate, int scheduleRepeatPeriod, boolean updateStickersOrder, Object parentObject, String quick_reply_shortcut, int quick_reply_shortcut_id, long stars, long monoForumPeerId, MessageSuggestionParams suggestionParams, boolean invertMedia, boolean hasMediaSpoilers) {
+-    public void sendSticker(TLRPC.Document document, String query, long peer, CharSequence caption, VideoEditedInfo videoEditedInfo, MessageObject replyToMsg, MessageObject replyToTopMsg, TL_stories.StoryItem storyItem, ChatActivity.ReplyQuote quote, MessageObject.SendAnimationData sendAnimationData, boolean notify, int scheduleDate, int scheduleRepeatPeriod, boolean updateStickersOrder, Object parentObject, SendMessageChatArguments sendMessageChatArguments, long stars, long monoForumPeerId, MessageSuggestionParams suggestionParams, boolean invertMedia) {
++    public void sendSticker(TLRPC.Document document, String query, long peer, CharSequence caption, VideoEditedInfo videoEditedInfo, MessageObject replyToMsg, MessageObject replyToTopMsg, TL_stories.StoryItem storyItem, ChatActivity.ReplyQuote quote, MessageObject.SendAnimationData sendAnimationData, boolean notify, int scheduleDate, int scheduleRepeatPeriod, boolean updateStickersOrder, Object parentObject, SendMessageChatArguments sendMessageChatArguments, long stars, long monoForumPeerId, MessageSuggestionParams suggestionParams, boolean invertMedia, boolean hasMediaSpoilers) {
          if (document == null) {
              return;
          }
-@@ -2024,6 +2024,7 @@ public class SendMessagesHelper extends BaseController implements NotificationCe
+@@ -2032,6 +2032,7 @@ public class SendMessagesHelper extends BaseController implements NotificationCe
                      sendMessageParams.suggestionParams = suggestionParams;
                      sendMessageParams.caption = caption != null ? caption.toString() : null;
                      sendMessageParams.invert_media = invertMedia;
@@ -36,7 +36,7 @@ index 0000000..0000000 100644
                      sendMessage(sendMessageParams);
                  });
              });
-@@ -2044,6 +2045,7 @@ public class SendMessagesHelper extends BaseController implements NotificationCe
+@@ -2051,6 +2052,7 @@ public class SendMessagesHelper extends BaseController implements NotificationCe
              sendMessageParams.monoForumPeer = monoForumPeerId;
              sendMessageParams.suggestionParams = suggestionParams;
              sendMessageParams.invert_media = invertMedia;
@@ -48,7 +48,7 @@ diff --git a/TMessagesProj/src/main/java/org/telegram/ui/ChatActivity.java b/TMe
 index 0000000..0000000 100644
 --- a/TMessagesProj/src/main/java/org/telegram/ui/ChatActivity.java
 +++ b/TMessagesProj/src/main/java/org/telegram/ui/ChatActivity.java
-@@ -19811,6 +19811,7 @@ public class ChatActivity extends BaseFragment implements
+@@ -19921,6 +19921,7 @@ public class ChatActivity extends BaseFragment implements
                  info.entities = entry.entities;
                  info.masks = entry.stickers;
                  info.ttl = entry.ttl;
@@ -60,7 +60,7 @@ diff --git a/TMessagesProj/src/main/java/org/telegram/ui/Components/ChatActivity
 index 0000000..0000000 100644
 --- a/TMessagesProj/src/main/java/org/telegram/ui/Components/ChatActivityEnterView.java
 +++ b/TMessagesProj/src/main/java/org/telegram/ui/Components/ChatActivityEnterView.java
-@@ -5561,6 +5561,7 @@ public class ChatActivityEnterView extends FrameLayout implements
+@@ -5578,6 +5578,7 @@ public class ChatActivityEnterView extends FrameLayout implements
                      info.entities = photoEntry.entities;
                      info.masks = photoEntry.stickers;
                      info.ttl = photoEntry.ttl;
@@ -68,12 +68,12 @@ index 0000000..0000000 100644
                      info.videoEditedInfo = videoEditedInfo;
                      info.canDeleteAfter = true;
                      photos.add(info);
-@@ -12195,7 +12196,7 @@ public class ChatActivityEnterView extends FrameLayout implements
+@@ -12248,7 +12249,7 @@ public class ChatActivityEnterView extends FrameLayout implements
  
-                                     SendMessagesHelper.prepareSendingMedia(AccountInstance.getInstance(currentAccount), photos, dialog_id, replyingMessageObject, getThreadMessage(), null, replyingQuote, false, false, editingMessageObject, notify, scheduleDate, scheduleRepeatPeriod, 0, false, null, parentFragment != null ? parentFragment.quickReplyShortcut : null, parentFragment != null ? parentFragment.getQuickReplyId() : 0, effectId, invertMedia, stars, getSendMonoForumPeerId(),  getSendMessageSuggestionParams());
+                                     SendMessagesHelper.prepareSendingMedia(AccountInstance.getInstance(currentAccount), photos, dialog_id, replyingMessageObject, getThreadMessage(), null, replyingQuote, false, false, editingMessageObject, notify, scheduleDate, scheduleRepeatPeriod, 0, false, null, parentFragment != null ? parentFragment.getMessageChatSendParams() : null, effectId, invertMedia, stars, getSendMonoForumPeerId(),  getSendMessageSuggestionParams());
                                  } else {
--                                    SendMessagesHelper.getInstance(currentAccount).sendSticker(document, query, dialog_id, entry != null ? entry.caption : null, videoEditedInfo, replyingMessageObject, getThreadMessage(), storyItem, replyingQuote, null, notify, scheduleDate, scheduleRepeatPeriod, false, parent, parentFragment != null ? parentFragment.quickReplyShortcut : null, parentFragment != null ? parentFragment.getQuickReplyId() : 0, stars, getSendMonoForumPeerId(), getSendMessageSuggestionParams(), invertMedia);
-+                                    SendMessagesHelper.getInstance(currentAccount).sendSticker(document, query, dialog_id, entry != null ? entry.caption : null, videoEditedInfo, replyingMessageObject, getThreadMessage(), storyItem, replyingQuote, null, notify, scheduleDate, scheduleRepeatPeriod, false, parent, parentFragment != null ? parentFragment.quickReplyShortcut : null, parentFragment != null ? parentFragment.getQuickReplyId() : 0, stars, getSendMonoForumPeerId(), getSendMessageSuggestionParams(), invertMedia, entry != null && entry.hasSpoiler);
+-                                    SendMessagesHelper.getInstance(currentAccount).sendSticker(document, query, dialog_id, entry != null ? entry.caption : null, videoEditedInfo, replyingMessageObject, getThreadMessage(), storyItem, replyingQuote, null, notify, scheduleDate, scheduleRepeatPeriod, false, parent, parentFragment != null ? parentFragment.getMessageChatSendParams() : null, stars, getSendMonoForumPeerId(), getSendMessageSuggestionParams(), invertMedia);
++                                    SendMessagesHelper.getInstance(currentAccount).sendSticker(document, query, dialog_id, entry != null ? entry.caption : null, videoEditedInfo, replyingMessageObject, getThreadMessage(), storyItem, replyingQuote, null, notify, scheduleDate, scheduleRepeatPeriod, false, parent, parentFragment != null ? parentFragment.getMessageChatSendParams() : null, stars, getSendMonoForumPeerId(), getSendMessageSuggestionParams(), invertMedia, entry != null && entry.hasSpoiler);
                                      MediaDataController.getInstance(currentAccount).addRecentGif(document, (int) (System.currentTimeMillis() / 1000), true);
                                      if (DialogObject.isEncryptedDialog(dialog_id)) {
                                          accountInstance.getMessagesController().saveGif(parent, document);
@@ -101,7 +101,7 @@ index 0000000..0000000 100644
          @Override
          public boolean isPhotoChecked(int index) {
              MediaController.PhotoEntry photoEntry = getPhotoEntryAtPosition(index);
-@@ -3267,7 +3273,7 @@ public class ChatAttachAlertPhotoLayout extends ChatAttachAlert.AttachAlertLayou
+@@ -3266,7 +3272,7 @@ public class ChatAttachAlertPhotoLayout extends ChatAttachAlert.AttachAlertLayou
                      parentAlert.delegate.didPressedButton(4, true, true, 0, 0, 0, parentAlert.isCaptionAbove(), false, payStars);
                  });
              }
@@ -110,7 +110,7 @@ index 0000000..0000000 100644
              if (parentAlert.getPhotoPreviewLayout() != null) {
                  parentAlert.getPhotoPreviewLayout().startMediaCrossfade();
              }
-@@ -3280,7 +3286,7 @@ public class ChatAttachAlertPhotoLayout extends ChatAttachAlert.AttachAlertLayou
+@@ -3279,7 +3285,7 @@ public class ChatAttachAlertPhotoLayout extends ChatAttachAlert.AttachAlertLayou
                      break;
                  }
              }
@@ -119,7 +119,7 @@ index 0000000..0000000 100644
              boolean finalSpoilersEnabled = spoilersEnabled;
              AndroidUtilities.runOnUIThread(()-> {
                  spoilerItem.setText(LocaleController.getString(finalSpoilersEnabled ? R.string.DisablePhotoSpoiler : R.string.EnablePhotoSpoiler));
-@@ -3306,7 +3312,7 @@ public class ChatAttachAlertPhotoLayout extends ChatAttachAlert.AttachAlertLayou
+@@ -3305,7 +3311,7 @@ public class ChatAttachAlertPhotoLayout extends ChatAttachAlert.AttachAlertLayou
              for (HashMap.Entry<Object, Object> entry : selectedPhotos.entrySet()) {
                  if (entry.getValue() instanceof MediaController.PhotoEntry) {
                      MediaController.PhotoEntry photoEntry = (MediaController.PhotoEntry) entry.getValue();
@@ -128,7 +128,7 @@ index 0000000..0000000 100644
                      photoEntry.isChatPreviewSpoilerRevealed = false;
                      photoEntry.isAttachSpoilerRevealed = false;
                      selectedIds.add(photoEntry.imageId);
-@@ -3316,7 +3322,7 @@ public class ChatAttachAlertPhotoLayout extends ChatAttachAlert.AttachAlertLayou
+@@ -3315,7 +3321,7 @@ public class ChatAttachAlertPhotoLayout extends ChatAttachAlert.AttachAlertLayou
              gridView.forAllChild(view -> {
                  if (view instanceof PhotoAttachPhotoCell) {
                      MediaController.PhotoEntry entry = ((PhotoAttachPhotoCell) view).getPhotoEntry();

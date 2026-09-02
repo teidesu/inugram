@@ -13,6 +13,8 @@ data class PluginActionSettings(
 )
 
 class PluginActionSettingsConfig(key: String) : InuConfig.Item<PluginActionSettings>(key, PluginActionSettings()) {
+    override val prefType = InuConfig.PrefType.STRING
+
     override fun read(prefs: SharedPreferences): PluginActionSettings {
         val source = prefs.getString(key, null) ?: return default
         return try {

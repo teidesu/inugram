@@ -5,32 +5,32 @@ Subject: build support stuff for fork-specific code: - added kotlin - bumped min
 
 ---
  .gitmodules                                   |   3 +
- TMessagesProj/build.gradle                    | 131 ++++------
- TMessagesProj/google-services.json            |  76 +-----
- TMessagesProj/proguard-rules.pro              |  13 +
+ TMessagesProj/build.gradle                    | 118 +++-------
+ TMessagesProj/google-services.json            |  76 ++-----
+ TMessagesProj/proguard-rules.pro              |  13 ++
  TMessagesProj/src/main/AndroidManifest.xml    |   7 +
  .../org/telegram/messenger/BuildVars.java     |  12 +-
  .../telegram/tgnet/ConnectionsManager.java    |   2 +-
- .../org/telegram/ui/PaymentFormActivity.java  |  28 +--
+ .../org/telegram/ui/PaymentFormActivity.java  |  28 ++-
  .../org/telegram/ui/SettingsActivity.java     |  24 +-
- TMessagesProj_App/build.gradle                | 237 +++++++++++-------
- TMessagesProj_App/google-services.json        |  76 +-----
- TMessagesProj_App/jni/CMakeLists.txt          |  13 +
+ TMessagesProj_App/build.gradle                | 212 ++++++++++--------
+ TMessagesProj_App/google-services.json        |  76 ++-----
+ TMessagesProj_App/jni/CMakeLists.txt          |  10 +
  TMessagesProj_AppTests/build.gradle           |   5 +-
- build.gradle                                  |  12 +-
+ build.gradle                                  |  14 +-
  gradle.properties                             |   2 +-
- settings.gradle                               |   5 +-
- 16 files changed, 289 insertions(+), 357 deletions(-)
+ settings.gradle                               |  40 +++-
+ 16 files changed, 284 insertions(+), 358 deletions(-)
  create mode 100644 TMessagesProj_App/jni/CMakeLists.txt
 
 diff --git a/.gitmodules b/.gitmodules
 index 0000000..0000000 100644
 --- a/.gitmodules
 +++ b/.gitmodules
-@@ -7,3 +7,6 @@
- [submodule "TMessagesProj/jni/third_party/ffmpeg"]
- 	path = TMessagesProj/jni/third_party/ffmpeg
- 	url = https://github.com/FFmpeg/FFmpeg.git
+@@ -28,3 +28,6 @@
+ [submodule "TMessagesProj/jni/third_party/libyuv"]
+ 	path = TMessagesProj/jni/third_party/libyuv
+ 	url = https://chromium.googlesource.com/libyuv/libyuv
 +[submodule "TMessagesProj_App/jni/lsplant"]
 +	path = TMessagesProj_App/jni/lsplant
 +	url = https://github.com/LSPosed/LSPlant.git
@@ -38,15 +38,15 @@ diff --git a/TMessagesProj/build.gradle b/TMessagesProj/build.gradle
 index 0000000..0000000 100644
 --- a/TMessagesProj/build.gradle
 +++ b/TMessagesProj/build.gradle
-@@ -1,6 +1,7 @@
- import org.gradle.nativeplatform.platform.internal.DefaultNativePlatform
- 
- apply plugin: 'com.android.library'
+@@ -15,6 +15,7 @@ idea {
+         ]
+     }
+ }
 +apply plugin: 'kotlin-android'
  
  repositories {
      mavenCentral()
-@@ -17,6 +18,7 @@ configurations.all {
+@@ -31,6 +32,7 @@ configurations.all {
  }
  
  dependencies {
@@ -54,22 +54,21 @@ index 0000000..0000000 100644
      implementation 'androidx.core:core:1.16.0'
      implementation 'androidx.palette:palette:1.0.0'
      implementation 'androidx.exifinterface:exifinterface:1.3.6'
-@@ -45,7 +47,7 @@ dependencies {
+@@ -59,7 +61,7 @@ dependencies {
      implementation 'com.google.android.gms:play-services-location:21.0.1'
      implementation 'com.google.android.gms:play-services-wallet:19.1.0'
      implementation 'com.googlecode.mp4parser:isoparser:1.0.6'
 -    implementation 'com.stripe:stripe-android:2.0.2'
 +    implementation 'com.stripe:stripe-android:11.3.0'
      implementation 'com.google.mlkit:language-id:17.0.6'
-     implementation 'com.android.billingclient:billing:7.1.1'
+     implementation 'com.android.billingclient:billing:8.0.0'
      implementation 'com.google.code.gson:gson:2.11.0'
-@@ -66,6 +68,15 @@ dependencies {
-     implementation "io.noties.markwon:inline-parser:4.6.2"
-     implementation "io.noties.markwon:ext-latex:4.6.2"
+@@ -83,6 +85,14 @@ dependencies {
+     }
+     api project(':jlatexmath')
  
 +    // inu
 +    implementation 'org.maplibre.gl:android-sdk:13.1.0'
-+    // the plugin bridge's unit tests run here, on a device, against the real stock classes
 +    androidTestImplementation 'androidx.test:runner:1.6.2'
 +    androidTestImplementation 'junit:junit:4.13.2'
 +    androidTestImplementation "org.jetbrains.kotlin:kotlin-test:2.1.20"
@@ -79,7 +78,7 @@ index 0000000..0000000 100644
  //    implementation 'com.google.mlkit:translate:17.0.3'
  
      constraints {
-@@ -77,8 +88,6 @@ dependencies {
+@@ -94,8 +104,6 @@ dependencies {
          }
      }
      implementation 'com.google.android.recaptcha:recaptcha:18.7.1'
@@ -87,21 +86,17 @@ index 0000000..0000000 100644
 -    coreLibraryDesugaring 'com.android.tools:desugar_jdk_libs:2.1.5'
  }
  
- def isWindows = String.valueOf(DefaultNativePlatform.currentOperatingSystem.toFamilyName() == OperatingSystemFamily.WINDOWS)
-@@ -88,6 +97,12 @@ android {
+ android {
+@@ -104,6 +112,8 @@ android {
      ndkVersion "27.2.12479018"
  
      sourceSets.main.jniLibs.srcDirs = ['./jni/']
-+    // inu: the plugin bridge's own suite, symlinked in from src/test/kotlin like src/fork is
 +    sourceSets.androidTest.kotlin.srcDirs += ['src/androidTest/kotlin']
-+    // this is a *library* module, so its androidTest apk is standalone rather than instrumenting the
-+    // app: nothing puts the app module's own jniLibs in it, and `QuickJs`'s class initializer loads
-+    // this one. Without it every suite that so much as names the class dies in <clinit>.
 +    sourceSets.androidTest.jniLibs.srcDirs += ["$rootDir/TMessagesProj_App/build/inuTestJniLibs"]
  
      externalNativeBuild {
          cmake {
-@@ -104,23 +119,32 @@ android {
+@@ -120,24 +130,29 @@ android {
      compileOptions {
          sourceCompatibility JavaVersion.VERSION_1_8
          targetCompatibility JavaVersion.VERSION_1_8
@@ -116,11 +111,7 @@ index 0000000..0000000 100644
      defaultConfig {
 -        minSdkVersion 21
 +        minSdkVersion 26
-         targetSdkVersion 35
-+        testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
-+        // scoped, because bouncycastle ships its own test classes inside the jar the app depends
-+        // on and the runner would otherwise sweep up ~21 of them (2 of which fail on their own)
-+        testInstrumentationRunnerArguments package: 'desu.inugram'
+         targetSdkVersion 36
  
 -        vectorDrawables.generatedDensities = ['mdpi', 'hdpi', 'xhdpi', 'xxhdpi']
 -
@@ -131,16 +122,17 @@ index 0000000..0000000 100644
  
          externalNativeBuild {
              cmake {
-                 version '3.10.2'
+                 version '3.22.1'
 -                arguments '-DANDROID_STL=c++_static', '-DANDROID_PLATFORM=android-21' //, '-DANDROID_SUPPORT_FLEXIBLE_PAGE_SIZES=ON'
 +                arguments '-DANDROID_STL=c++_static', '-DANDROID_PLATFORM=android-26' //, '-DANDROID_SUPPORT_FLEXIBLE_PAGE_SIZES=ON'
+                 targets 'tmessages.49'
 +                if (rootProject.ext.ccachePath) {
 +                    arguments += ["-DCMAKE_C_COMPILER_LAUNCHER=${rootProject.ext.ccachePath}", "-DCMAKE_CXX_COMPILER_LAUNCHER=${rootProject.ext.ccachePath}"]
 +                }
              }
          }
      }
-@@ -133,78 +157,14 @@ android {
+@@ -150,77 +165,13 @@ android {
              multiDexEnabled true
              proguardFiles getDefaultProguardFile('proguard-android.txt'), '../TMessagesProj/proguard-rules.pro', '../TMessagesProj/proguard-rules-beta.pro'
              ndk.debugSymbolLevel = 'FULL'
@@ -150,11 +142,11 @@ index 0000000..0000000 100644
 -            buildConfigField "boolean", "DEBUG_VERSION", "true"
 -            buildConfigField "boolean", "DEBUG_PRIVATE_VERSION", "true"
 -            buildConfigField "boolean", "BUNDLE", "false"
--            buildConfigField "boolean", "BUILD_HOST_IS_WINDOWS", isWindows
 -            buildConfigField "int", "VERSION_NUM", "0"
 -        }
 -
 -        HA_private {
+-            matchingFallbacks = ['release']
 -            jniDebuggable false
 -            minifyEnabled true
 -            multiDexEnabled true
@@ -170,11 +162,11 @@ index 0000000..0000000 100644
              buildConfigField "boolean", "DEBUG_VERSION", "true"
              buildConfigField "boolean", "DEBUG_PRIVATE_VERSION", "true"
              buildConfigField "boolean", "BUNDLE", "false"
-             buildConfigField "boolean", "BUILD_HOST_IS_WINDOWS", isWindows
 -            buildConfigField "int", "VERSION_NUM", "1"
 -        }
 -
 -        HA_public {
+-            matchingFallbacks = ['release']
 -            jniDebuggable false
 -            minifyEnabled true
 -            multiDexEnabled true
@@ -186,11 +178,11 @@ index 0000000..0000000 100644
 -            buildConfigField "boolean", "DEBUG_VERSION", "true"
 -            buildConfigField "boolean", "DEBUG_PRIVATE_VERSION", "false"
 -            buildConfigField "boolean", "BUNDLE", "false"
--            buildConfigField "boolean", "BUILD_HOST_IS_WINDOWS", isWindows
 -            buildConfigField "int", "VERSION_NUM", "4"
 -        }
 -
 -        HA_hardcore {
+-            matchingFallbacks = ['release']
 -            jniDebuggable false
 -            minifyEnabled true
 -            multiDexEnabled true
@@ -202,11 +194,11 @@ index 0000000..0000000 100644
 -            buildConfigField "boolean", "DEBUG_VERSION", "true"
 -            buildConfigField "boolean", "DEBUG_PRIVATE_VERSION", "true"
 -            buildConfigField "boolean", "BUNDLE", "false"
--            buildConfigField "boolean", "BUILD_HOST_IS_WINDOWS", isWindows
 -            buildConfigField "int", "VERSION_NUM", "5"
 -        }
 -
 -        standalone {
+-            matchingFallbacks = ['release']
 -            jniDebuggable false
 -            minifyEnabled true
 -            multiDexEnabled true
@@ -218,12 +210,11 @@ index 0000000..0000000 100644
 -            buildConfigField "boolean", "DEBUG_VERSION", "false"
 -            buildConfigField "boolean", "DEBUG_PRIVATE_VERSION", "false"
 -            buildConfigField "boolean", "BUNDLE", "false"
--            buildConfigField "boolean", "BUILD_HOST_IS_WINDOWS", isWindows
 -            buildConfigField "int", "VERSION_NUM", "6"
          }
  
          release {
-@@ -214,14 +174,14 @@ android {
+@@ -230,13 +181,13 @@ android {
              multiDexEnabled true
              proguardFiles getDefaultProguardFile('proguard-android.txt'), '../TMessagesProj/proguard-rules.pro'
              ndk.debugSymbolLevel = 'FULL'
@@ -237,12 +228,11 @@ index 0000000..0000000 100644
              buildConfigField "boolean", "DEBUG_VERSION", "false"
              buildConfigField "boolean", "DEBUG_PRIVATE_VERSION", "false"
              buildConfigField "boolean", "BUNDLE", "false"
-             buildConfigField "boolean", "BUILD_HOST_IS_WINDOWS", isWindows
 -            buildConfigField "int", "VERSION_NUM", "7"
          }
      }
  
-@@ -239,7 +199,6 @@ def getProps(String propName) {
+@@ -254,7 +205,6 @@ def getProps(String propName) {
          return "";
      }
  }
@@ -250,16 +240,11 @@ index 0000000..0000000 100644
  
  task checkVisibility {
      doFirst {
-@@ -261,4 +220,10 @@ task checkVisibility {
-     }
+@@ -277,3 +227,7 @@ task checkVisibility {
  }
  
--preBuild.dependsOn checkVisibility
-\ No newline at end of file
-+preBuild.dependsOn checkVisibility
+ preBuild.dependsOn checkVisibility
 +
-+// inu: the cargo build producing the libinu_native.so the androidTest apk packages lives in the app
-+// module, which does not otherwise take part in this module's test build
 +tasks.matching { it.name ==~ /merge.*AndroidTestJniLibFolders/ }.configureEach {
 +    dependsOn ':TMessagesProj_App:prepareInuTestJniLibs'
 +}
@@ -462,7 +447,7 @@ diff --git a/TMessagesProj/src/main/java/org/telegram/tgnet/ConnectionsManager.j
 index 0000000..0000000 100644
 --- a/TMessagesProj/src/main/java/org/telegram/tgnet/ConnectionsManager.java
 +++ b/TMessagesProj/src/main/java/org/telegram/tgnet/ConnectionsManager.java
-@@ -1045,7 +1045,7 @@ public class ConnectionsManager extends BaseController {
+@@ -1036,7 +1036,7 @@ public class ConnectionsManager extends BaseController {
          if (Build.VERSION.SDK_INT < 19) {
              return USE_IPV4_ONLY;
          }
@@ -598,13 +583,11 @@ index 0000000..0000000 100644
  
  repositories {
      mavenCentral()
-@@ -14,20 +15,36 @@ configurations.all {
+@@ -14,20 +15,31 @@ configurations.all {
      exclude group: 'androidx.recyclerview', module: 'recyclerview'
  }
  
 +configurations {
-+    // non-transitive: the aar is wanted for its .so alone, and its own dependencies would be
-+    // resolved into this configuration and break `singleFile` below
 +    shadowhookAar { transitive = false }
 +}
 +
@@ -613,15 +596,12 @@ index 0000000..0000000 100644
 -    coreLibraryDesugaring 'com.android.tools:desugar_jdk_libs:2.1.5'
      implementation files('../TMessagesProj/libs/libgsaverification-client.aar')
 +    implementation 'androidx.core:core:1.16.0'
-+    // the inline hooker behind lsplant. only libshadowhook.so is wanted, dlopened by the rust
-+    // engine; nothing links or imports it - so it is unpacked as a jniLib rather than depended on,
-+    // see the shadowhook block below.
 +    shadowhookAar 'com.bytedance.android:shadowhook:2.0.1'
  }
  
  android {
-     compileSdkVersion 35
-     buildToolsVersion '35.0.0'
+     compileSdkVersion 36
+     buildToolsVersion '36.0.0'
  
 -    defaultConfig.applicationId = APP_PACKAGE
 +    defaultConfig.applicationId = "desu.inugram"
@@ -637,7 +617,7 @@ index 0000000..0000000 100644
      lintOptions {
          disable 'MissingTranslation'
          disable 'ExtraTranslation'
-@@ -37,20 +54,11 @@ android {
+@@ -37,20 +49,11 @@ android {
      compileOptions {
          sourceCompatibility JavaVersion.VERSION_1_8
          targetCompatibility JavaVersion.VERSION_1_8
@@ -659,7 +639,7 @@ index 0000000..0000000 100644
              storePassword RELEASE_STORE_PASSWORD
              keyAlias RELEASE_KEY_ALIAS
              keyPassword RELEASE_KEY_PASSWORD
-@@ -61,7 +69,7 @@ android {
+@@ -61,7 +64,7 @@ android {
          debug {
              debuggable true
              jniDebuggable true
@@ -668,7 +648,7 @@ index 0000000..0000000 100644
              applicationIdSuffix ".beta"
              minifyEnabled false
              shrinkResources false
-@@ -70,18 +78,6 @@ android {
+@@ -70,18 +73,6 @@ android {
              ndk.debugSymbolLevel = 'FULL'
          }
  
@@ -687,7 +667,7 @@ index 0000000..0000000 100644
          release {
              debuggable false
              jniDebuggable false
-@@ -95,99 +91,49 @@ android {
+@@ -95,100 +86,50 @@ android {
      }
  
      sourceSets.debug {
@@ -701,8 +681,9 @@ index 0000000..0000000 100644
  
      sourceSets.release {
 -        manifest.srcFile '../TMessagesProj/config/release/AndroidManifest.xml'
--    }
--
++        manifest.srcFile '../TMessagesProj/config/release/AndroidManifest_SDK23.xml'
+     }
+ 
 -    flavorDimensions "minApi"
 -
 -    productFlavors {
@@ -749,9 +730,8 @@ index 0000000..0000000 100644
 -            }
 -            buildConfigField "boolean", "BUNDLE", "false"
 -        }
-+        manifest.srcFile '../TMessagesProj/config/release/AndroidManifest_SDK23.xml'
-     }
- 
+-    }
+-
 -    defaultConfig.versionCode = Integer.parseInt(APP_VERSION_CODE)
 +    defaultConfig.versionCode = rootProject.ext.verCode
  
@@ -772,14 +752,14 @@ index 0000000..0000000 100644
      defaultConfig {
 -        minSdkVersion 21
 +        minSdkVersion 26
-         targetSdkVersion 35
+         targetSdkVersion 36
 -        versionName APP_VERSION_NAME
 -        ndkVersion "27.2.12479018"
+-
+-        multiDexEnabled true
 +        versionName rootProject.ext.verName
 +        ndkVersion "29.0.14206865"
  
--        multiDexEnabled true
--
 -        vectorDrawables.generatedDensities = ['mdpi', 'hdpi', 'xhdpi', 'xxhdpi']
 +        ndk {
 +            abiFilters "arm64-v8a"
@@ -787,9 +767,11 @@ index 0000000..0000000 100644
  
          externalNativeBuild {
              cmake {
-                 version '3.10.2'
+                 version '3.22.1'
 -                arguments '-DANDROID_STL=c++_static', '-DANDROID_PLATFORM=android-21' // , '-DANDROID_SUPPORT_FLEXIBLE_PAGE_SIZES=ON'
+-                targets 'tmessages.49'
 +                arguments '-DANDROID_STL=c++_static', '-DANDROID_PLATFORM=android-26' // , '-DANDROID_SUPPORT_FLEXIBLE_PAGE_SIZES=ON'
++                targets 'lsplant'
 +                if (rootProject.ext.ccachePath) {
 +                    arguments += ["-DCMAKE_C_COMPILER_LAUNCHER=${rootProject.ext.ccachePath}", "-DCMAKE_CXX_COMPILER_LAUNCHER=${rootProject.ext.ccachePath}"]
 +                }
@@ -807,7 +789,7 @@ index 0000000..0000000 100644
      buildFeatures {
          buildConfig = true
      }
-@@ -196,6 +142,107 @@ android {
+@@ -197,6 +138,85 @@ android {
      lintOptions {
          checkReleaseBuilds false
      }
@@ -819,17 +801,9 @@ index 0000000..0000000 100644
  
  apply plugin: 'com.google.gms.google-services'
 +
-+// --- shadowhook (libshadowhook.so) ---
-+// unpacked from the aar instead of depended on. `implementation` would put it on the variant's
-+// runtime classpath, where `checkAarMetadata` enforces the `minCompileSdk=37` its manifest carries -
-+// and 37 is a *minor-versioned* platform (android-37.0) that AGP 8.6.1 predates and cannot resolve.
-+// Nothing links or imports the aar's classes.jar, so resolving it in a configuration of our own
-+// leaves that check with nothing to check and the .so is all that ships. Drop this block for a
-+// plain `implementation` once AGP is new enough to resolve android-37.0.
 +def shadowhookJniLibsDir = file("$buildDir/shadowhookJniLibs")
 +
 +tasks.register('unpackShadowhook', Copy) {
-+    // both: libshadowhook.so dlopens libshadowhook_nothing.so for its hook trampolines
 +    from({ zipTree(configurations.shadowhookAar.singleFile) }) {
 +        include 'jni/**/libshadowhook.so'
 +        include 'jni/**/libshadowhook_nothing.so'
@@ -844,17 +818,8 @@ index 0000000..0000000 100644
 +    dependsOn 'unpackShadowhook'
 +}
 +
-+// --- inugram rust plugin engine (libinu_native.so) ---
-+// builds the standalone rquickjs/quickjs-ng cdylib via cargo-ndk and packages it as a jniLib.
-+// build-env prerequisites: rustup + `rustup target add aarch64-linux-android`,
-+// `cargo install cargo-ndk`, and libclang (NDK-provided) for rquickjs' bindgen.
 +def rustModuleDir = file("$projectDir/native")
 +def rustJniLibsDir = file("$buildDir/rustJniLibs")
-+
-+// gradle (launched from Android Studio / a daemon) doesn't inherit the login shell PATH, so cargo
-+// isn't found by name. resolve the cargo binary from the usual toolchain locations, and prepend its
-+// dir + ~/.cargo/bin (where `cargo install cargo-ndk` lands the subcommand) to the task PATH.
-+// override with -Pcargo.bin=/path/to/cargo or the CARGO env var if your setup differs.
 +def userHome = System.getProperty('user.home')
 +def cargoHome = System.getenv('CARGO_HOME') ?: "$userHome/.cargo"
 +def cargoCandidates = [
@@ -862,9 +827,9 @@ index 0000000..0000000 100644
 +    project.findProperty('cargo.bin'),
 +    "$cargoHome/bin/cargo",
 +    "$userHome/.cargo/bin/cargo",
-+    "/etc/profiles/per-user/${System.getProperty('user.name')}/bin/cargo", // nix per-user profile
-+    "$userHome/.nix-profile/bin/cargo",                                     // nix home-manager
-+    "/run/current-system/sw/bin/cargo",                                     // nixos system profile
++    "/etc/profiles/per-user/${System.getProperty('user.name')}/bin/cargo",
++    "$userHome/.nix-profile/bin/cargo",
++    "/run/current-system/sw/bin/cargo",
 +    "/opt/homebrew/bin/cargo",
 +    "/usr/local/bin/cargo",
 +]
@@ -876,19 +841,16 @@ index 0000000..0000000 100644
 +    workingDir rustModuleDir
 +    environment 'ANDROID_NDK_HOME', android.ndkDirectory.absolutePath
 +    environment 'PATH', (cargoPathDirs + [System.getenv('PATH') ?: '']).join(File.pathSeparator)
-+    // bindgen needs *a* libclang to parse the quickjs headers (the android target/sysroot is supplied
-+    // separately by cargo-ndk). NDK r27+ no longer ships libclang.dylib, so search the NDK first, then
-+    // fall back to system libclang locations. override with -Plibclang.path=/dir if none are found.
 +    def prebuilt = file("${android.ndkDirectory}/toolchains/llvm/prebuilt")
 +    def ndkHost = prebuilt.listFiles()?.find { it.isDirectory() }
 +    def libclangCandidates = [
 +        project.findProperty('libclang.path'),
 +        ndkHost ? new File(ndkHost, 'lib').absolutePath : null,
 +        ndkHost ? new File(ndkHost, 'lib64').absolutePath : null,
-+        '/Library/Developer/CommandLineTools/usr/lib',                 // xcode command line tools
-+        '/opt/homebrew/opt/llvm/lib', '/usr/local/opt/llvm/lib',       // homebrew llvm
-+        '/run/current-system/sw/lib', "${System.getProperty('user.home')}/.nix-profile/lib", // nix
-+        '/usr/lib/llvm/lib', '/usr/lib',                               // linux distros
++        '/Library/Developer/CommandLineTools/usr/lib',
++        '/opt/homebrew/opt/llvm/lib', '/usr/local/opt/llvm/lib',
++        '/run/current-system/sw/lib', "${System.getProperty('user.home')}/.nix-profile/lib",
++        '/usr/lib/llvm/lib', '/usr/lib',
 +    ]
 +    def libclangDir = libclangCandidates.findAll { it }.find { dir ->
 +        def d = file(dir)
@@ -903,8 +865,6 @@ index 0000000..0000000 100644
 +    dependsOn 'buildInuNative'
 +}
 +
-+// inu: the bridge's standalone androidTest apk needs every library Xposed loads at runtime, not
-+// just the Rust JNI entrypoint it links against.
 +def inuTestJniLibsDir = file("$buildDir/inuTestJniLibs")
 +tasks.register('prepareInuTestJniLibs', Sync) {
 +    dependsOn 'buildInuNative', 'unpackShadowhook', 'mergeDebugNativeLibs'
@@ -1033,16 +993,13 @@ new file mode 100644
 index 0000000..0000000
 --- /dev/null
 +++ b/TMessagesProj_App/jni/CMakeLists.txt
-@@ -0,0 +1,13 @@
+@@ -0,0 +1,10 @@
 +cmake_minimum_required(VERSION 3.22.1)
 +project(inu_jni CXX C)
 +
 +# There are no sources here on purpose. liblsplant.so is lsplant's own target; the C entry points
-+# the rust engine dlopens come from patches-native/lsplant-c-abi.patch, applied to the submodule
-+# after `git submodule update --init`.
++# the rust engine dlopens come from patches-native/lsplant-c-abi.patch, applied to the submodule.
 +
-+# lsplant reads this in a POST_BUILD command but only defaults it further down its own file, so as a
-+# subdirectory it would strip to an empty path.
 +set(DEBUG_SYMBOLS_PATH ${CMAKE_BINARY_DIR}/symbols)
 +
 +set(LSPLANT_BUILD_SHARED ON CACHE BOOL "" FORCE)
@@ -1062,7 +1019,7 @@ index 0000000..0000000 100644
      androidTestImplementation "com.appmattus.fixture:fixture:1.2.0"
  }
  
-@@ -162,4 +162,3 @@ android {
+@@ -167,4 +167,3 @@ android {
          checkReleaseBuilds false
      }
  }
@@ -1071,16 +1028,21 @@ diff --git a/build.gradle b/build.gradle
 index 0000000..0000000 100644
 --- a/build.gradle
 +++ b/build.gradle
-@@ -10,9 +10,19 @@ buildscript {
+@@ -10,7 +10,7 @@ buildscript {
          classpath 'com.google.gms:google-services:4.3.15'
          classpath 'com.huawei.agconnect:agcp:1.9.1.301'
          classpath 'com.google.firebase:firebase-crashlytics-gradle:2.9.0'
--        classpath "org.jetbrains.kotlin:kotlin-gradle-plugin:1.9.20"
+-        classpath "org.jetbrains.kotlin:kotlin-gradle-plugin:2.1.0"
 +        classpath "org.jetbrains.kotlin:kotlin-gradle-plugin:2.1.20"
      }
  }
  repositories {
-     google()
+@@ -33,4 +33,14 @@ subprojects {
+             }
+         }
+     }
+-}
+\ No newline at end of file
 +}
 +
 +def commitId = System.getenv('COMMIT_ID')
@@ -1091,8 +1053,7 @@ index 0000000..0000000 100644
 +  stockVerCode = Integer.parseInt(APP_VERSION_CODE)
 +  buildDate = java.time.LocalDateTime.now().format(java.time.format.DateTimeFormatter.ISO_DATE)
 +  ccachePath = ['sh', '-c', 'command -v ccache'].execute().text.trim() ?: null
- }
-\ No newline at end of file
++}
 diff --git a/gradle.properties b/gradle.properties
 index 0000000..0000000 100644
 --- a/gradle.properties
@@ -1110,7 +1071,42 @@ diff --git a/settings.gradle b/settings.gradle
 index 0000000..0000000 100644
 --- a/settings.gradle
 +++ b/settings.gradle
-@@ -1,6 +1,3 @@
+@@ -1,8 +1,40 @@
++import java.nio.channels.FileChannel
++import java.nio.channels.FileLock
++import java.nio.file.StandardOpenOption
++
++abstract class InuBuildLock implements BuildService<Params>, AutoCloseable {
++    interface Params extends BuildServiceParameters {
++        Property<String> getLockPath()
++    }
++
++    private final FileChannel channel
++    private final FileLock lock
++
++    InuBuildLock() {
++        def file = new File(parameters.lockPath.get())
++        file.parentFile.mkdirs()
++        channel = FileChannel.open(file.toPath(), StandardOpenOption.CREATE, StandardOpenOption.WRITE)
++        def acquired = channel.tryLock()
++        if (acquired == null) {
++            println "> Waiting for another build to release ${file}"
++            acquired = channel.lock()
++        }
++        lock = acquired
++    }
++
++    @Override
++    void close() {
++        lock.release()
++        channel.close()
++    }
++}
++
++gradle.sharedServices.registerIfAbsent('inuBuildLock', InuBuildLock) {
++    parameters.lockPath = new File(settingsDir, '.gradle/inu-build.lock').absolutePath
++}.get()
++
  include ':TMessagesProj'
  include ':TMessagesProj_App'
 -include ':TMessagesProj_AppHuawei'
@@ -1118,3 +1114,5 @@ index 0000000..0000000 100644
 -include ':TMessagesProj_AppStandalone'
 -include ':TMessagesProj_AppTests'
 +include ':InuCore'
+ include ':jlatexmath'
+ project(':jlatexmath').projectDir = file('TMessagesProj/lib/jlatexmath/jlatexmath')

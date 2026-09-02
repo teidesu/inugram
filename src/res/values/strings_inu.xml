@@ -854,7 +854,7 @@
     <string name="InuPluginsDevModeSheetTitle">Turn on developer mode?</string>
     <string name="InuPluginsDevModeSheetInfo">It exists to develop plugins: your computer pushes a file over adb and the app installs it right away.\nWhile it is on:</string>
     <string name="InuPluginsDevMode1Title">Anything with adb</string>
-    <string name="InuPluginsDevMode1Text">Any computer you connect to, and anything already talking to this device over adb, can push a plugin.</string>
+    <string name="InuPluginsDevMode1Text">Any computer you connect to, and anything already talking to this device over adb (e.g. Shizuku), can push a plugin.</string>
     <string name="InuPluginsDevMode2Title">No permission review</string>
     <string name="InuPluginsDevMode2Text">A pushed plugin is installed and granted whatever it declares. No trust screen, no permission list, no undo.</string>
     <string name="InuPluginsDevMode3Title">Until you turn it off</string>
