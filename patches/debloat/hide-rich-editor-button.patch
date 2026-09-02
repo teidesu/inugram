@@ -11,7 +11,7 @@ diff --git a/TMessagesProj/src/main/java/org/telegram/ui/Components/ChatActivity
 index 0000000..0000000 100644
 --- a/TMessagesProj/src/main/java/org/telegram/ui/Components/ChatActivityEnterView.java
 +++ b/TMessagesProj/src/main/java/org/telegram/ui/Components/ChatActivityEnterView.java
-@@ -6164,7 +6164,7 @@ public class ChatActivityEnterView extends FrameLayout implements
+@@ -6147,7 +6147,7 @@ public class ChatActivityEnterView extends FrameLayout implements
  
      private boolean shownRichButton;
      private void showRichButton(boolean show_) {

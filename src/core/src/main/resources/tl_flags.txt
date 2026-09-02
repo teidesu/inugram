@@ -53,7 +53,7 @@ a0058751 can_save_credentials=2 password_missing=3 photo=5 native_provider=4 nat
 7bf6b15c can_save_credentials=2 password_missing=3 photo=5
 ffa0a496 mask_coords=0
 6a4ee832 update_app=0 entities=1
-5fb224d5 change_info=0 post_messages=1 edit_messages=2 delete_messages=3 ban_users=4 invite_users=5 pin_messages=7 add_admins=9 anonymous=10 manage_call=11 other=12 manage_topics=13 post_stories=14 edit_stories=15 delete_stories=16 manage_direct_messages=17 manage_ranks=18 manage_linked_peers=19
+5fb224d5 change_info=0 post_messages=1 edit_messages=2 delete_messages=3 ban_users=4 invite_users=5 pin_messages=7 add_admins=9 anonymous=10 manage_call=11 other=12 manage_topics=13 post_stories=14 edit_stories=15 delete_stories=16 manage_direct_messages=17 manage_ranks=18 manage_linked_peers=19 manage_welcome_messages=20
 5755785a min=0 results=1 total_voters=2
 c87024a2 min=0 results=1 total_voters=2 recent_voters=3
 badcc1a3 min=0 results=1 total_voters=2 recent_voters=3 solution=4 solution_entities=4
@@ -71,6 +71,8 @@ cde0ec40 channel=0 broadcast=1 isPublic=2 megagroup=3 request_needed=6 verified=
 ccbbce30 can_not_skip=0 document=1 url=2 sticker=3
 eeca5ce3 official=0 rtl=2 base_lang_code=1
 8c5adfd9 requested=0 via_chatlist=3 about=2 approved_by=1
+3630b85a can_stop=0 keep_on_stop=1
+52564893 can_stop=0 keep_on_stop=1
 f450f59b apple_signin_allowed=0 google_signin_allowed=1 reset_available_period=3 reset_pending_date=4
 a5491dea apple_signin_allowed=0 google_signin_allowed=1
 9fd736 nonce=0 play_integrity_project_id=2 play_integrity_nonce=2 receipt=1 push_timeout=1
@@ -119,11 +121,13 @@ c3878e23 hidden=0 name=1
 83d60fc2 comments=0 recent_repliers=1 channel_id=0 max_id=2 read_max_id=3
 ffda656d posts_between=0 start_delay=1 between_delay=2
 455b853d views=0 forwards=1 replies=2
-85dd99d1 resize=0 single_use=1 selective=2 is_persistent=4 placeholder=3
+85dd99d1 resize=0 single_use=1 selective=2 is_persistent=4 force_reply=5 placeholder=3
 a03e5b85 selective=2
 86b40b08 single_use=1 selective=2 placeholder=3
 3502758c resize=0 single_use=1 selective=2
 f4108aa0 single_use=1 selective=2
+b2b15770 force_reply=5
+58f7fcb6 force_reply=5
 2e94c3e7 storyItem=0
 50cc03d3 emojis=0 text_color=1
 939a4671 storyItem=0
@@ -142,11 +146,11 @@ f3474af6 can_set_username=7 has_scheduled=8 chat_photo=2 exported_invite=13 bot_
 56662e2e can_view_participants=3 can_set_username=6 can_set_stickers=7 hidden_prehistory=10 can_set_location=16 has_scheduled=19 can_view_stats=20 blocked=22 participants_count=0 admins_count=1 kicked_count=2 banned_count=2 online_count=13 exported_invite=23 migrated_from_chat_id=4 migrated_from_max_id=4 pinned_msg_id=5 stickerset=8 available_min_id=9 folder_id=11 linked_chat_id=14 location=15 slowmode_seconds=17 slowmode_next_send_date=18 stats_dc=12 call=21 ttl_period=24 pending_suggestions=25 groupcall_default_join_as=26 theme_emoticon=27 requests_pending=28 recent_requesters=28 default_send_as=29
 59cff963 can_view_participants=3 can_set_username=6 can_set_stickers=7 hidden_prehistory=10 can_set_location=16 has_scheduled=19 can_view_stats=20 blocked=22 participants_count=0 admins_count=1 kicked_count=2 banned_count=2 online_count=13 exported_invite=23 migrated_from_chat_id=4 migrated_from_max_id=4 pinned_msg_id=5 stickerset=8 available_min_id=9 folder_id=11 linked_chat_id=14 location=15 slowmode_seconds=17 slowmode_next_send_date=18 stats_dc=12 call=21 ttl_period=24 pending_suggestions=25 groupcall_default_join_as=26 theme_emoticon=27 requests_pending=28 recent_requesters=28
 e9b27a17 can_view_participants=3 can_set_username=6 can_set_stickers=7 hidden_prehistory=10 can_set_location=16 has_scheduled=19 can_view_stats=20 blocked=22 participants_count=0 admins_count=1 kicked_count=2 banned_count=2 online_count=13 exported_invite=23 migrated_from_chat_id=4 migrated_from_max_id=4 pinned_msg_id=5 stickerset=8 available_min_id=9 folder_id=11 linked_chat_id=14 location=15 slowmode_seconds=17 slowmode_next_send_date=18 stats_dc=12 call=21 ttl_period=24 pending_suggestions=25 groupcall_default_join_as=26 theme_emoticon=27
-2633421b can_set_username=7 has_scheduled=8 chat_photo=2 exported_invite=13 bot_info=3 pinned_msg_id=6 folder_id=11 call=12 ttl_period=14 groupcall_default_join_as=15 theme_emoticon=16 requests_pending=17 recent_requesters=17 available_reactions=18 reactions_limit=20
+2633421b can_set_username=7 has_scheduled=8 has_welcome_messages=21 chat_photo=2 exported_invite=13 bot_info=3 pinned_msg_id=6 folder_id=11 call=12 ttl_period=14 groupcall_default_join_as=15 theme_emoticon=16 requests_pending=17 recent_requesters=17 available_reactions=18 reactions_limit=20
 c9d31138 can_set_username=7 has_scheduled=8 chat_photo=2 exported_invite=13 bot_info=3 pinned_msg_id=6 folder_id=11 call=12 ttl_period=14 groupcall_default_join_as=15 theme_emoticon=16 requests_pending=17 recent_requesters=17 available_reactions=18
 d18ee226 can_set_username=7 has_scheduled=8 chat_photo=2 exported_invite=13 bot_info=3 pinned_msg_id=6 folder_id=11 call=12 ttl_period=14 groupcall_default_join_as=15 theme_emoticon=16 requests_pending=17 recent_requesters=17 available_reactions_legacy=18
 cbb7a507 admins_count=1 kicked_count=2 requests_pending=0
-a04e8d3a can_view_participants=3 can_set_username=6 can_set_stickers=7 hidden_prehistory=10 can_set_location=16 has_scheduled=19 can_view_stats=20 blocked=22 can_delete_channel=+0 antispam=+1 participants_hidden=+2 translations_disabled=+3 stories_pinned_available=+5 view_forum_as_messages=+6 restricted_sponsored=+11 can_view_revenue=+12 paid_media_allowed=+14 can_view_stars_revenue=+15 paid_reactions_available=+16 stargifts_available=+19 paid_messages_available=+20 participants_count=0 admins_count=1 kicked_count=2 banned_count=2 online_count=13 exported_invite=23 migrated_from_chat_id=4 migrated_from_max_id=4 pinned_msg_id=5 stickerset=8 available_min_id=9 folder_id=11 linked_chat_id=14 location=15 slowmode_seconds=17 slowmode_next_send_date=18 stats_dc=12 call=21 ttl_period=24 pending_suggestions=25 groupcall_default_join_as=26 theme_emoticon=27 requests_pending=28 recent_requesters=28 default_send_as=29 available_reactions=30 reactions_limit=+13 stories=+4 wallpaper=+7 boosts_applied=+8 boosts_unrestrict=+9 emojiset=+10 bot_verification=+17 stargifts_count=+18 send_paid_messages_stars=+21 main_tab=+22 guard_bot_id=+23
+a04e8d3a can_view_participants=3 can_set_username=6 can_set_stickers=7 hidden_prehistory=10 can_set_location=16 has_scheduled=19 can_view_stats=20 blocked=22 can_delete_channel=+0 antispam=+1 participants_hidden=+2 translations_disabled=+3 stories_pinned_available=+5 view_forum_as_messages=+6 restricted_sponsored=+11 can_view_revenue=+12 paid_media_allowed=+14 can_view_stars_revenue=+15 paid_reactions_available=+16 stargifts_available=+19 paid_messages_available=+20 has_welcome_messages=+24 participants_count=0 admins_count=1 kicked_count=2 banned_count=2 online_count=13 exported_invite=23 migrated_from_chat_id=4 migrated_from_max_id=4 pinned_msg_id=5 stickerset=8 available_min_id=9 folder_id=11 linked_chat_id=14 location=15 slowmode_seconds=17 slowmode_next_send_date=18 stats_dc=12 call=21 ttl_period=24 pending_suggestions=25 groupcall_default_join_as=26 theme_emoticon=27 requests_pending=28 recent_requesters=28 default_send_as=29 available_reactions=30 reactions_limit=+13 stories=+4 wallpaper=+7 boosts_applied=+8 boosts_unrestrict=+9 emojiset=+10 bot_verification=+17 stargifts_count=+18 send_paid_messages_stars=+21 main_tab=+22 guard_bot_id=+23
 e4e0b29d can_view_participants=3 can_set_username=6 can_set_stickers=7 hidden_prehistory=10 can_set_location=16 has_scheduled=19 can_view_stats=20 blocked=22 can_delete_channel=+0 antispam=+1 participants_hidden=+2 translations_disabled=+3 stories_pinned_available=+5 view_forum_as_messages=+6 restricted_sponsored=+11 can_view_revenue=+12 paid_media_allowed=+14 can_view_stars_revenue=+15 paid_reactions_available=+16 stargifts_available=+19 paid_messages_available=+20 participants_count=0 admins_count=1 kicked_count=2 banned_count=2 online_count=13 exported_invite=23 migrated_from_chat_id=4 migrated_from_max_id=4 pinned_msg_id=5 stickerset=8 available_min_id=9 folder_id=11 linked_chat_id=14 location=15 slowmode_seconds=17 slowmode_next_send_date=18 stats_dc=12 call=21 ttl_period=24 pending_suggestions=25 groupcall_default_join_as=26 theme_emoticon=27 requests_pending=28 recent_requesters=28 default_send_as=29 available_reactions=30 reactions_limit=+13 stories=+4 wallpaper=+7 boosts_applied=+8 boosts_unrestrict=+9 emojiset=+10 bot_verification=+17 stargifts_count=+18 send_paid_messages_stars=+21 main_tab=+22
 e07429de can_view_participants=3 can_set_username=6 can_set_stickers=7 hidden_prehistory=10 can_set_location=16 has_scheduled=19 can_view_stats=20 blocked=22 can_delete_channel=+0 antispam=+1 participants_hidden=+2 translations_disabled=+3 stories_pinned_available=+5 view_forum_as_messages=+6 restricted_sponsored=+11 can_view_revenue=+12 paid_media_allowed=+14 can_view_stars_revenue=+15 paid_reactions_available=+16 stargifts_available=+19 paid_messages_available=+20 participants_count=0 admins_count=1 kicked_count=2 banned_count=2 online_count=13 exported_invite=23 migrated_from_chat_id=4 migrated_from_max_id=4 pinned_msg_id=5 stickerset=8 available_min_id=9 folder_id=11 linked_chat_id=14 location=15 slowmode_seconds=17 slowmode_next_send_date=18 stats_dc=12 call=21 ttl_period=24 pending_suggestions=25 groupcall_default_join_as=26 theme_emoticon=27 requests_pending=28 recent_requesters=28 default_send_as=29 available_reactions=30 reactions_limit=+13 stories=+4 wallpaper=+7 boosts_applied=+8 boosts_unrestrict=+9 emojiset=+10 bot_verification=+17 stargifts_count=+18 send_paid_messages_stars=+21
 52d6806b can_view_participants=3 can_set_username=6 can_set_stickers=7 hidden_prehistory=10 can_set_location=16 has_scheduled=19 can_view_stats=20 blocked=22 can_delete_channel=+0 antispam=+1 participants_hidden=+2 translations_disabled=+3 stories_pinned_available=+5 view_forum_as_messages=+6 restricted_sponsored=+11 can_view_revenue=+12 paid_media_allowed=+14 can_view_stars_revenue=+15 paid_reactions_available=+16 stargifts_available=+19 paid_messages_available=+20 participants_count=0 admins_count=1 kicked_count=2 banned_count=2 online_count=13 exported_invite=23 migrated_from_chat_id=4 migrated_from_max_id=4 pinned_msg_id=5 stickerset=8 available_min_id=9 folder_id=11 linked_chat_id=14 location=15 slowmode_seconds=17 slowmode_next_send_date=18 stats_dc=12 call=21 ttl_period=24 pending_suggestions=25 groupcall_default_join_as=26 theme_emoticon=27 requests_pending=28 recent_requesters=28 default_send_as=29 available_reactions=30 reactions_limit=+13 stories=+4 wallpaper=+7 boosts_applied=+8 boosts_unrestrict=+9 emojiset=+10 bot_verification=+17 stargifts_count=+18
@@ -180,25 +184,6 @@ c3d5512f can_view_participants=3 can_set_username=6 participants_count=0 admins_
 fab31aa3 can_view_participants=3 participants_count=0 admins_count=1 kicked_count=2
 cacb6ae2 show_previews=0 silent=1 mute_until=2 sound=3 stories_muted=6 stories_hide_sender=7 stories_sound=8
 ad253d78 allow_flashcall=0 current_number=1 allow_app_hash=4 allow_missed_call=5 allow_firebase=7 unknown_number=9 logout_tokens=6 token=8 app_sandbox=8
-417efd8f style=10
-89c590f9 style=10
-d80c25ec style=10
-568a748 same_peer=0
-991399fc same_peer=0 style=10 peer_types=1
-93b9fbb5 same_peer=0 peer_types=1
-aa40f94d style=10
-f51006f9 style=10 fwd_text=0
-10b78d29 fwd_text=0
-68013e72 request_write_access=0 style=10 fwd_text=1
-d02e7fd4 request_write_access=0 fwd_text=1
-7a11d782 style=10 quiz=0
-bbc7515d quiz=0
-3fa53905 style=10
-7d5e07c7 style=10
-c0fd5d09 style=10
-e62bc960 requires_password=0 style=10
-35bbdb6b requires_password=0
-7d170cff style=10
 e831c556 video_start_ts=0
 de33b094 video_start_ts=0
 4366232e reply_markup=2
@@ -491,8 +476,7 @@ e58e95d2 revoke=0
 58943ee2 top_msg_id=0
 fef48f62 no_webpage=1 silent=5 background=6 clear_draft=7 noforwards=14 update_stickersets_order=15 invert_media=16 allow_paid_floodskip=19 reply_to=0 reply_markup=2 entities=3 schedule_date=10 schedule_repeat_period=24 send_as=13 quick_reply_shortcut=17 effect=18 allow_paid_stars=21 suggested_post=22 rich_message=23
 330e77f silent=5 background=6 clear_draft=7 noforwards=14 update_stickersets_order=15 invert_media=16 reply_to=0 reply_markup=2 entities=3 schedule_date=10 schedule_repeat_period=24 send_as=13 quick_reply_shortcut=17 effect=18 allow_paid_stars=21 suggested_post=22
-7852834e silent=5 background=6 clear_draft=7 noforwards=14 update_stickersets_order=15 invert_media=16 reply_to=0 reply_markup=2 entities=3 schedule_date=10 send_as=13 quick_reply_shortcut=17 effect=18
-41d41ade silent=5 background=6 with_my_score=8 drop_author=11 drop_media_captions=12 noforwards=14 top_msg_id=9 reply_to=22 schedule_date=10 schedule_repeat_period=24 send_as=13 quick_reply_shortcut=17 video_timestamp=20 allow_paid_stars=21 suggested_post=23
+13704a7c silent=5 background=6 with_my_score=8 drop_author=11 drop_media_captions=12 noforwards=14 allow_paid_floodskip=19 from_ephemeral=25 top_msg_id=9 reply_to=22 schedule_date=10 schedule_repeat_period=24 send_as=13 quick_reply_shortcut=17 effect=18 video_timestamp=20 allow_paid_stars=21 suggested_post=23
 6f09ac31 optional=0
 a2185cab revoke_history=0
 34a818 ttl_period=0
@@ -618,19 +602,15 @@ f78a0973 pinned=2
 e93cb772 inactive=0
 c8aa2cd2 inactive=0 has_settings=1 request_write_access=2
 d90d8dfe inactive=0 has_settings=1 request_write_access=2 show_in_attach_menu=3 show_in_side_menu=4 side_menu_disclaimer_needed=5 peer_types=3
-e846b1a0 style=10
 3e81e078 bot_managed=0 suggested_name=1 suggested_username=2
-5b0f15f5 style=10
-bcc4af10 style=10
 69f59d69 write_allowed=0
-4d22ff98 fullsize=1 fullscreen=2 query_id=0
+4d22ff98 fullsize=1 fullscreen=2 same_origin=3 query_id=0
 269dc2c1 from_bot_menu=4 silent=5 compact=7 fullscreen=8 url=1 start_param=3 theme_params=2 reply_to=0 send_as=13
 c9e01e7b compact=7 fullscreen=8 start_param=1 theme_params=0
 b0d81a83 silent=5 reply_to=0 send_as=13
 53618bce write_allowed=0 compact=7 fullscreen=8 start_param=1 theme_params=2
 413a3e73 from_switch_webview=1 from_side_menu=2 compact=7 fullscreen=8 url=3 start_param=4 theme_params=0
 c94511c msg_id=0
-e15c4370 style=10
 b2a7386b colors=0
 95fcd1d6 document=0
 eb50adf5 inactive=0 request_write_access=1
@@ -671,6 +651,7 @@ fb790393 boost_peer=0 message=1
 e8625e92 hide_name=0 include_upgrade=2 message=1
 4d818d5d keep_original_details=0
 dabab2ef message=0
+e9b0c658 ton=0 show_name=2 message=1
 ceaa3ea1 only_new_subscribers=0 refunded=2 additional_peers_count=3 months=4 stars=5 prize_description=1
 c6991068 only_new_subscribers=0 refunded=2 additional_peers_count=3 prize_description=1
 aa073beb only_new_subscribers=0 winners_are_visible=2 countries_iso2=1 prize_description=3 months=4 stars=5
@@ -694,6 +675,7 @@ f24de7fa name_hidden=0 saved=2 converted=3 upgraded=5 transferred=6 can_upgrade=
 d8f4f0a7 name_hidden=0 saved=2 converted=3 upgraded=5 transferred=6 can_upgrade=10 refunded=9 message=1 convert_stars=4 upgrade_msg_id=5 upgrade_stars=8
 8557637 name_hidden=0 saved=2 converted=3 message=1 convert_stars=4
 2ffe2f7a missed=0 active=1 video=4 duration=2 other_participants=3
+7e1c1187 upgrade=0 transferred=1 saved=2 refunded=5 prepaid_upgrade=11 assigned=13 from_offer=14 craft=16 name_hidden=17 can_export_at=3 transfer_stars=4 from_id=6 peer=7 saved_id=7 resale_amount=8 can_transfer_at=9 can_resell_at=10 drop_original_details_stars=12 can_craft_at=15 message=18
 e6c31522 upgrade=0 transferred=1 saved=2 refunded=5 prepaid_upgrade=11 assigned=13 from_offer=14 craft=16 can_export_at=3 transfer_stars=4 from_id=6 peer=7 saved_id=7 resale_amount=8 can_transfer_at=9 can_resell_at=10 drop_original_details_stars=12 can_craft_at=15
 95728543 upgrade=0 transferred=1 saved=2 refunded=5 prepaid_upgrade=11 assigned=13 from_offer=14 can_export_at=3 transfer_stars=4 from_id=6 peer=7 saved_id=7 resale_amount=8 can_transfer_at=9 can_resell_at=10 drop_original_details_stars=12
 774278d4 accepted=0 declined=1
@@ -736,15 +718,11 @@ e8e37e5 accepted=1 rejected=2 price=3 schedule_date=0
 3e0b5b6a query_is_free=0 wait_till=1
 22567115 query=0
 b26732a9 unsave=0 after_id=1
-4fdd3430 bg_primary=0 bg_danger=1 bg_success=2 icon=3
 44e56023 plays_left=0
 abbbd346 to_lang=0 tone=2
 90d7adfa diff_text=0
 8d7ae6af proofread=0 emojify=3 text=4 translate_to_lang=1 tone=2
 ba9ee679 theme_params=0
-d9c6dc1a out=0 top_msg_id=1 entities=2 media=3 reply_markup=4 reply_to=6
-68cbd09f query_id=0 entities=1 media=2 reply_markup=3 rich_message=4 reply_to=5
-3fa464c8 data=1
 57e28221 sensitive_enabled=0 sensitive_can_change=1
 b574b16b sensitive_enabled=0
 9a5c33e5 email=0 secure_settings=1
@@ -823,6 +801,13 @@ d766e3ea collapsed=0
 8c8219a8 reject=0
 bfe3dd3d reject=0
 9967ad0f unban=0
+dd27bee9 out=0 welcome=5 invert_media=7 noforwards=12 peer_id=9 top_msg_id=1 entities=2 media=3 reply_markup=4 reply_to=6 rich_message=8 chat_instance=10 anchor_msg_id=11
+8ef3e491 out=0 welcome=5 invert_media=7 top_msg_id=1 entities=2 media=3 reply_markup=4 reply_to=6 rich_message=8
+d9c6dc1a out=0 top_msg_id=1 entities=2 media=3 reply_markup=4 reply_to=6
+ba8d5f35 invert_media=6 welcome=7 anchor=9 peer=8 query_id=0 entities=1 media=2 reply_markup=3 rich_message=4 reply_to=5
+cf9c725b invert_media=5 welcome=6
+92f6e797 peer=0
+3fa464c8 data=1
 cecc1134 title=0 icon_emoji_id=1 closed=2 hidden=3
 2f98c3d5 title_missing=4 icon_color=0 icon_emoji_id=3 send_as=2
 98657f0d part=0 rtl=1 v2=2 views=3
@@ -831,13 +816,16 @@ f199a0a8 part=0 rtl=1 v2=2
 baf39d8b rtl=0 part=1
 e4c449fc rtl=0 noautolink=1 photos=2 documents=3 users=4
 a5b45e2b relative=0 short_time=1 long_time=2 short_date=3 long_date=4 day_of_week=5
+afc79cd6 style=0
+6d640318 align_left=0 align_center=1 align_right=2
+66d1670b collapsed=0
 1759c560 spoiler=1 url=0 webpage_id=0
 7c8fe7b6 autoplay=0 loop=1 spoiler=2
 d9d71866 autoplay=0 loop=1
 a8718dc5 full_width=0 allow_scrolling=3 url=1 html=2 poster_photo_id=4 w=5 h=5
 cde200d1 full_width=0 allow_scrolling=3 url=1 html=2 poster_photo_id=4
 d935d8fb full_width=0 allow_scrolling=3 url=1 html=2
-bf4dea82 bordered=0 striped=1
+bf4dea82 bordered=0 striped=1 compact=2
 34566b6a header=0 align_center=3 align_right=4 valign_middle=5 valign_bottom=6 text=7 colspan=1 rowspan=2
 1fd6f6c1 reversed=2 start=0 type=1
 76768bed open=0
@@ -846,6 +834,29 @@ b390dc08 title=0 description=1 photo_id=2 author=3 published_date=4
 8ff2d5f0 checkbox=0 checked=1 num=2 value=3 type=4
 2f58683c checkbox=0 checked=1
 63ca67aa checkbox=0 checked=1
+aacfff84 quiz=0
+3fe268fe name_requested=0 username_requested=1 photo_requested=2
+bfd02da2 fwd_text=0
+2955bc38 requires_password=0
+93773ff5 same_peer=0 peer_types=1
+9961bcb4 request_write_access=0 fwd_text=1 bot=2
+692a5488 style=0
+3c610bd bg_primary=0 bg_danger=1 bg_success=2 link=3
+4fdd3430 bg_primary=0 bg_danger=1 bg_success=2 icon=3
+11c1a322 style=10
+9c1c0c55 style=10
+89c590f9 style=10
+d80c25ec style=10
+f51006f9 style=10 mType=0
+10b78d29 mType=0
+68013e72 style=10
+3fa53905 style=10
+bcc4af10 style=10
+7d5e07c7 style=10
+c0fd5d09 style=10
+e846b1a0 style=10
+e62bc960 style=10
+991399fc style=10
 19a13f71 revoked=1 duration_months=0
 b4d5d859 next_offset=0
 dd0c66f2 duration_months=0 end_date=1 daily_revenue_per_user=2
@@ -1040,3 +1051,4 @@ b783982 presentation=0
 985d3abb via_chatlist=3 prev_participant=0 new_participant=1 invite=2
 c39a2ade open_external_browser=0 display_close_button=1
 140502d1 delete=1 open_external_browser=0
+7c1079d6 peer=0 chat_instance=1

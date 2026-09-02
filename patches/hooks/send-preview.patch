@@ -1,6 +1,6 @@
 From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
 From: alina sireneva <alina@tei.pet>
-Date: Sat, 8 Aug 2026 16:28:58 +0400
+Date: Wed, 2 Sep 2026 05:51:44 +0400
 Subject: hook for fork rows in the send preview sheet
 
 ---
@@ -11,7 +11,7 @@ diff --git a/TMessagesProj/src/main/java/org/telegram/ui/Components/ChatActivity
 index 0000000..0000000 100644
 --- a/TMessagesProj/src/main/java/org/telegram/ui/Components/ChatActivityEnterView.java
 +++ b/TMessagesProj/src/main/java/org/telegram/ui/Components/ChatActivityEnterView.java
-@@ -4875,6 +4875,7 @@ public class ChatActivityEnterView extends FrameLayout implements
+@@ -4894,6 +4894,7 @@ public class ChatActivityEnterView extends FrameLayout implements
          };
          messageSendPreview.setOnDismissListener(di -> {
              messageSendPreview = null;
@@ -19,7 +19,7 @@ index 0000000..0000000 100644
          });
  
          final boolean containsSendMessage = audioToSendMessageObject != null || messageEditText != null && !TextUtils.isEmpty(messageEditText.getText());
-@@ -5099,7 +5100,7 @@ public class ChatActivityEnterView extends FrameLayout implements
+@@ -5118,7 +5119,7 @@ public class ChatActivityEnterView extends FrameLayout implements
          }
          messageSendPreview.setItemOptions(options);
  

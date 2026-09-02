@@ -1,6 +1,6 @@
 From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
 From: alina sireneva <alina@tei.pet>
-Date: Fri, 7 Aug 2026 02:38:51 +0400
+Date: Wed, 2 Sep 2026 05:51:47 +0400
 Subject: Add the QuickJS plugin engine (hooks, action rows)
 
 ---
@@ -15,7 +15,7 @@ diff --git a/TMessagesProj/src/main/java/org/telegram/messenger/MessagesControll
 index 0000000..0000000 100644
 --- a/TMessagesProj/src/main/java/org/telegram/messenger/MessagesController.java
 +++ b/TMessagesProj/src/main/java/org/telegram/messenger/MessagesController.java
-@@ -16709,7 +16709,10 @@ public class MessagesController extends BaseController implements NotificationCe
+@@ -16800,7 +16800,10 @@ public class MessagesController extends BaseController implements NotificationCe
                          }
                      }
  
@@ -27,7 +27,7 @@ index 0000000..0000000 100644
                          boolean notifyAbountDifference = true;
                          if (res instanceof TLRPC.TL_updates_channelDifference || res instanceof TLRPC.TL_updates_channelDifferenceEmpty) {
                              if (!res.new_messages.isEmpty()) {
-@@ -16820,7 +16823,7 @@ public class MessagesController extends BaseController implements NotificationCe
+@@ -16911,7 +16914,7 @@ public class MessagesController extends BaseController implements NotificationCe
                                  NotificationCenter.getInstance(currentAccount).postNotificationName(NotificationCenter.onReceivedChannelDifference, channelId);
                              });
                          }
@@ -36,7 +36,7 @@ index 0000000..0000000 100644
                  });
              } else if (error != null) {
                  AndroidUtilities.runOnUIThread(() -> {
-@@ -16967,7 +16970,10 @@ public class MessagesController extends BaseController implements NotificationCe
+@@ -17058,7 +17061,10 @@ public class MessagesController extends BaseController implements NotificationCe
                              }
                          }
  
@@ -48,7 +48,7 @@ index 0000000..0000000 100644
                              if (!res.new_messages.isEmpty() || !res.new_encrypted_messages.isEmpty()) {
                                  LongSparseArray<ArrayList<MessageObject>> messages = new LongSparseArray<>();
                                  for (int b = 0; b < res.new_encrypted_messages.size(); b++) {
-@@ -17085,7 +17091,7 @@ public class MessagesController extends BaseController implements NotificationCe
+@@ -17176,7 +17182,7 @@ public class MessagesController extends BaseController implements NotificationCe
                              if (BuildVars.LOGS_ENABLED) {
                                  FileLog.d("received difference with date = " + getMessagesStorage().getLastDateValue() + " pts = " + getMessagesStorage().getLastPtsValue() + " seq = " + getMessagesStorage().getLastSeqValue() + " messages = " + res.new_messages.size() + " users = " + res.users.size() + " chats = " + res.chats.size() + " other updates = " + res.other_updates.size());
                              }
@@ -57,7 +57,7 @@ index 0000000..0000000 100644
                      });
                  }
              } else {
-@@ -17835,8 +17841,64 @@ public class MessagesController extends BaseController implements NotificationCe
+@@ -17926,8 +17932,64 @@ public class MessagesController extends BaseController implements NotificationCe
          }
      }
  
@@ -122,7 +122,7 @@ index 0000000..0000000 100644
          ArrayList<Long> needGetChannelsDiff = null;
          boolean needGetDiff = false;
          boolean needReceivedQueue = false;
-@@ -17937,54 +17999,7 @@ public class MessagesController extends BaseController implements NotificationCe
+@@ -18028,54 +18090,7 @@ public class MessagesController extends BaseController implements NotificationCe
                  needGetDiff = true;
              } else {
                  if (getMessagesStorage().getLastPtsValue() + updates.pts_count == updates.pts) {
@@ -178,7 +178,7 @@ index 0000000..0000000 100644
  
                      getMessagesStorage().setLastPtsValue(updates.pts);
                      boolean isDialogCreated = createdDialogIds.contains(message.dialog_id);
-@@ -18466,6 +18481,9 @@ public class MessagesController extends BaseController implements NotificationCe
+@@ -18554,6 +18569,9 @@ public class MessagesController extends BaseController implements NotificationCe
                  FileLog.d("process update " + baseUpdate.getClass().getSimpleName());
              }
              desu.inugram.InuHooks.onUpdate(baseUpdate, currentAccount);
@@ -192,7 +192,7 @@ diff --git a/TMessagesProj/src/main/java/org/telegram/tgnet/ConnectionsManager.j
 index 0000000..0000000 100644
 --- a/TMessagesProj/src/main/java/org/telegram/tgnet/ConnectionsManager.java
 +++ b/TMessagesProj/src/main/java/org/telegram/tgnet/ConnectionsManager.java
-@@ -382,7 +382,10 @@ public class ConnectionsManager extends BaseController {
+@@ -381,7 +381,10 @@ public class ConnectionsManager extends BaseController {
          return requestToken;
      }
  
@@ -204,7 +204,7 @@ index 0000000..0000000 100644
          if (BuildVars.LOGS_ENABLED) {
              FileLog.d("send request " + object + " with token = " + requestToken);
          }
-@@ -567,6 +570,7 @@ public class ConnectionsManager extends BaseController {
+@@ -566,6 +569,7 @@ public class ConnectionsManager extends BaseController {
  
      public void cancelRequest(int token, boolean notifyServer, Runnable onCancelled) {
          Utilities.stageQueue.postRunnable(() -> {
@@ -212,7 +212,7 @@ index 0000000..0000000 100644
              if (onCancelled != null) {
                  listenCancel(token, () -> {
                      Utilities.stageQueue.postRunnable(onCancelled);
-@@ -582,6 +586,7 @@ public class ConnectionsManager extends BaseController {
+@@ -581,6 +585,7 @@ public class ConnectionsManager extends BaseController {
  
      public void cancelRequestsForGuid(int guid) {
          Utilities.stageQueue.postRunnable(() -> {
@@ -220,7 +220,7 @@ index 0000000..0000000 100644
              native_cancelRequestsForGuid(currentAccount, guid);
          });
      }
-@@ -590,6 +595,7 @@ public class ConnectionsManager extends BaseController {
+@@ -589,6 +594,7 @@ public class ConnectionsManager extends BaseController {
          if (guid == 0) {
              return;
          }
@@ -246,7 +246,7 @@ diff --git a/TMessagesProj/src/main/java/org/telegram/ui/ChatActivity.java b/TMe
 index 0000000..0000000 100644
 --- a/TMessagesProj/src/main/java/org/telegram/ui/ChatActivity.java
 +++ b/TMessagesProj/src/main/java/org/telegram/ui/ChatActivity.java
-@@ -31958,6 +31958,7 @@ public class ChatActivity extends BaseFragment implements
+@@ -32205,6 +32205,7 @@ public class ChatActivity extends BaseFragment implements
                          }
                      }
                      scrimPopupWindowItems[a] = cell;
@@ -254,7 +254,7 @@ index 0000000..0000000 100644
                      if (option == OPTION_REMOVE_ADS) {
                          popupLayout.addView(new ActionBarPopupWindow.GapView(contentView.getContext(), themeDelegate), LayoutHelper.createLinear(LayoutHelper.MATCH_PARENT, 8));
                      }
-@@ -32396,10 +32397,11 @@ public class ChatActivity extends BaseFragment implements
+@@ -32644,10 +32645,11 @@ public class ChatActivity extends BaseFragment implements
                      }
                  }, 420);
              };

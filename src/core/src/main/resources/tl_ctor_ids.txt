@@ -322,6 +322,12 @@ c businessLocation ac5c1af7
 c businessRecipients 21108ff7
 c businessWeeklyOpen 120b1ab9
 c businessWorkHours 8c92b098
+c buttonTypeDefault c9dd90e9
+c buttonTypeRequestGeoLocation 9beee140
+c buttonTypeRequestPeer 4f58a237
+c buttonTypeRequestPhone df3d36f9
+c buttonTypeRequestPoll aacfff84
+c buttonTypeSimpleWebView c01a597a
 c channel aadfc8f cb44b1c 1981ea7e 1c32b11c 450b7115 4b1b7506 4df30834 678e9587 7482147e 8261ac61 83259464 8e87ccd8 94f592db a14dca52 c88974ac d31a961e d49f34c6 e00998b7 fe4478bd fe685355
 c channel_old 678e9587
 c channelAdminLogEvent 1fad68cd
@@ -666,11 +672,18 @@ c encryptedFile a8008cd8
 c encryptedFileEmpty c21f497e
 c encryptedMessage ed18c118
 c encryptedMessageService 23734b06
-m ephemeral.deleteMessage a3c0d511
+m ephemeral.deleteAllWelcomeMessages 734f9721
+m ephemeral.deleteMessage 92f6e797
+m ephemeral.deleteWelcomeMessage e882a9e1
+c ephemeral.editMessage cf9c725b
 m ephemeral.getCallbackAnswer 3fa464c8
+m ephemeral.getWelcomeMessages db9ac18d
 m ephemeral.reportMessage 8704f2bf
-m ephemeral.sendMessage 68cbd09f
-c ephemeralMessage d9c6dc1a
+m ephemeral.sendMessage ba8d5f35
+c ephemeral.welcomeMessages 104fc872
+c ephemeral.welcomeMessagesNotModified 59ffdb31
+c ephemeralMessage 8ef3e491 d9c6dc1a dd27bee9
+c ephemeralMessage_layer229_old 8ef3e491
 c error c4b9f9bb
 m exportBotToken 63b089
 c exportedChatlistInvite c5181ac
@@ -765,6 +778,16 @@ c highScore 73a379eb
 c importedContact c13e3c50
 c inlineBotSwitchPM 3c20629f
 c inlineBotWebView b57295d5
+c inlineButtonTypeBuy 48bad7a5
+c inlineButtonTypeCallback 2955bc38
+c inlineButtonTypeCopy b41d3272
+c inlineButtonTypeDisabled a438619d
+c inlineButtonTypeGame 5cd3709d
+c inlineButtonTypeSwitchInline 93773ff5
+c inlineButtonTypeUrl eca4f8d4
+c inlineButtonTypeUrlAuth bfd02da2
+c inlineButtonTypeUserProfile 3fa33fcf
+c inlineButtonTypeWebView 3bcab5b4
 c inlineQueryPeerTypeBotPM e3b2d0c
 c inlineQueryPeerTypeBroadcast 6334ee9a
 c inlineQueryPeerTypeChat d766c50a
@@ -785,6 +808,7 @@ c inputBusinessChatLink 11679fa7
 c inputBusinessGreetingMessage 194cb3b
 c inputBusinessIntro 9c469cd
 c inputBusinessRecipients 6f8b32aa
+c inputButtonTypeRequestPeer 3fe268fe
 c inputChannel afeb712e f35aec28
 c inputChannelEmpty ee8c1e86
 c inputChannelFromMessage 2a286531 5b934f9d
@@ -825,6 +849,8 @@ c inputGroupCall d8aa840f
 c inputGroupCallInviteMessage 8c10603f
 c inputGroupCallSlug fe06823f
 c inputGroupCallStream 598a92a
+c inputInlineButtonTypeUrlAuth 9961bcb4
+c inputInlineButtonTypeUserProfile 53f3ce5a
 c inputInvoiceChatInviteSubscription 34e793f1
 c inputInvoiceMessage c5b56859
 c inputInvoicePremiumAuthCode 3e77f614
@@ -835,12 +861,10 @@ c inputInvoiceStarGift e8625e92
 c inputInvoiceStarGiftAuctionBid 1ecafa10
 c inputInvoiceStarGiftDropOriginalDetails 923d8d1
 c inputInvoiceStarGiftPrepaidUpgrade 9a0b48b8
-c inputInvoiceStarGiftResale c39f5324
+c inputInvoiceStarGiftResale e9b0c658
 c inputInvoiceStarGiftTransfer 4a5f5bd9
 c inputInvoiceStarGiftUpgrade 4d818d5d
 c inputInvoiceStars 65f00ce3
-c inputKeyboardButtonUrlAuth 68013e72 d02e7fd4
-c inputKeyboardButtonUserProfile 7d5e07c7 e988037b
 c inputMediaAreaChannelPost 2271f2bf
 c inputMediaAreaVenue b282217f
 c inputMediaContact f8ab7dfb
@@ -1014,24 +1038,12 @@ c jsonNumber 2be0dfa4
 c jsonObject 99c1d49d
 c jsonObjectValue c0de1bd9
 c jsonString b71e767a
-c keyboardButton 7d170cff a2fa4880
-c keyboardButton_layer_223 a2fa4880
-c keyboardButtonBuy 3fa53905 afd93fbb
-c keyboardButtonCallback 35bbdb6b 683a5e46 e62bc960
-c keyboardButtonCopy 75d2698e bcc4af10
-c keyboardButtonGame 50f41ccf 89c590f9
-c keyboardButtonRequestGeoLocation aa40f94d fc796b3f
-c keyboardButtonRequestPeer d0b468c 53d7bfd8 5b0f15f5
-c keyboardButtonRequestPhone 417efd8f b16a6c29
-c keyboardButtonRequestPoll 7a11d782 bbc7515d
+c keyboardButton 2b78156 d0b468c 2f67a72f 417efd8f 53d7bfd8 5b0f15f5 7a11d782 7d170cff a0c0505c a2fa4880 aa40f94d b16a6c29 bbc7515d c9662d05 e15c4370 fc796b3f
 c keyboardButtonRow 77608b83
-c keyboardButtonSimpleWebView a0c0505c e15c4370
 c keyboardButtonStyle 4fdd3430
-c keyboardButtonSwitchInline 568a748 93b9fbb5 991399fc
-c keyboardButtonUrl 258aff05 d80c25ec
-c keyboardButtonUrlAuth 10b78d29 f51006f9
-c keyboardButtonUserProfile 308660c1 c0fd5d09
-c keyboardButtonWebView 13767230 e846b1a0
+c keyboardInlineButton 568a748 10b78d29 11c1a322 13767230 258aff05 308660c1 35bbdb6b 3fa53905 50f41ccf 68013e72 683a5e46 75d2698e 7d5e07c7 89c590f9 93b9fbb5 991399fc 9c1c0c55 afd93fbb bcc4af10 c0fd5d09 d02e7fd4 d80c25ec e62bc960 e846b1a0 e988037b f51006f9
+c keyboardInlineButton_legacy 9c1c0c55
+c keyboardInlineButtonRow 19420af6 77608b83
 c labeledPrice cb296bf8
 m langpack.getDifference cd984aa5
 m langpack.getLangPack 9ab5c58e
@@ -1080,6 +1092,7 @@ c messageActionChatEditPhoto 7fcb13a8
 c messageActionChatEditTitle b5a1ce5a
 c messageActionChatJoinedByLink 31224c3 f89cf5e8
 c messageActionChatJoinedByRequest ebbca3cb
+c messageActionChatJoinedViaCommunity 4a8bfe80
 c messageActionChatMigrateTo 51bdb021 e1037f92
 c messageActionConferenceCall 2ffe2f7a
 c messageActionContactSignUp f3f25f76
@@ -1124,7 +1137,7 @@ c messageActionSetSameChatWallPaper c0787d6d
 c messageActionStarGift 8557637 4717e8a4 9bb3ef44 d8f4f0a7 db596550 ea2c31d3 f24de7fa
 c messageActionStarGiftPurchaseOffer 774278d4
 c messageActionStarGiftPurchaseOfferDeclined 73ada76b
-c messageActionStarGiftUnique 26077b99 2e3ae60e 34f762f3 95728543 acdfcb81 e6c31522
+c messageActionStarGiftUnique 26077b99 2e3ae60e 34f762f3 7e1c1187 95728543 acdfcb81 e6c31522
 c messageActionSuggestBirthday 2c8f2a25
 c messageActionSuggestedPostApproval ee7a1596
 c messageActionSuggestedPostRefund 69f916f8
@@ -1284,7 +1297,7 @@ m messages.editExportedChatInvite bdca2f75
 m messages.editFactCheck 589ee75
 m messages.editForumTopic cecc1134
 m messages.editInlineBotMessage a423bb51
-m messages.editMessage 51e842e1 b106e66c
+m messages.editMessage 51e842e1 b106e66c cf9c725b
 m messages.editQuickReplyShortcut 5c003cef
 c messages.emojiGameDiceInfo 44e56023
 c messages.emojiGameOutcome da2ad647
@@ -1302,7 +1315,7 @@ c messages.featuredStickers be382906
 c messages.featuredStickersNotModified c6dc0c66
 c messages.forumTopics 367617d3
 m messages.forwardMessage 33963bf9
-m messages.forwardMessages 41d41ade
+m messages.forwardMessages 13704a7c
 c messages.foundStickers 82c9e290
 c messages.foundStickerSets 8af09dd2
 c messages.foundStickerSetsNotModified d54b65d
@@ -1442,7 +1455,6 @@ m messages.readMessageContents 36a73f77
 m messages.readPollVotes 1720b4d8
 m messages.readReactions 9ec44f93
 m messages.readSavedHistory ba4a3b5b
-m messages.receivedMessages 5a954c0
 c messages.receivedQueue 55a5bb66
 c messages.recentStickers 88d37c56
 c messages.recentStickersNotModified b17f890
@@ -1492,7 +1504,7 @@ m messages.sendEncryptedFile 5559481d
 m messages.sendEncryptedMultiMedia cacacaca
 m messages.sendEncryptedService 32d439a4
 m messages.sendInlineBotResult 3ebee86a c0cf7646
-m messages.sendMedia 330e77f 7852834e
+m messages.sendMedia 330e77f
 m messages.sendMessage fef48f62
 m messages.sendMultiMedia 1bf89d74 37b74355
 m messages.sendPaidReaction 58bbcb50
@@ -1583,13 +1595,15 @@ c page 556ec7aa 8dee6c44 8e3f9ebe 98657f0d ae891bec d7a19d69 f199a0a8
 c pageBlockAnchor ce0d37b0
 c pageBlockAudio 31b81a7f 804361ea
 c pageBlockAuthorDate 3d5b64f2 baafe5e0
-c pageBlockBlockquote 263d7c26
+c pageBlockBlockquote 263d7c26 66d1670b
 c pageBlockBlockquoteBlocks e6e47c4
+c pageBlockButtonRow 6d640318
 c pageBlockChannel ef1751b5
 c pageBlockCollage 8b31c4f 65a0fa4d
 c pageBlockCover 39f23300
 c pageBlockDetails 76768bed
 c pageBlockDivider db20b188
+c pageBlockDocument 38fa3ba3
 c pageBlockEmbed a8718dc5 cde200d1 d935d8fb
 c pageBlockEmbedPost 292c7be9 f259a80b
 c pageBlockFooter 48870999
@@ -1618,6 +1632,7 @@ c pageBlockThinking 3c29a3e2
 c pageBlockTitle 70abc3fd
 c pageBlockUnsupported 13567e8a
 c pageBlockVideo 7c8fe7b6 d9d71866
+c pageButton 692a5488
 c pageCaption 6f747657
 c pageListItemBlocks 25e073fc 63ca67aa
 c pageListItemBlocks_226 25e073fc
@@ -1905,7 +1920,8 @@ c recentMeUrlStickerSet bc0a57dc
 c recentMeUrlUnknown 46e1d13d
 c recentMeUrlUser b92c09e2
 c recentStory 711d692d
-c replyInlineMarkup 48a30254
+c replyInlineMarkup 48a30254 58f7fcb6 b2b15770
+c replyInlineMarkup_layer228_old 58f7fcb6
 c replyKeyboardForceReply 86b40b08 f4108aa0
 c replyKeyboardHide a03e5b85
 c replyKeyboardMarkup 3502758c 85dd99d1
@@ -1920,6 +1936,7 @@ c requirementToContactEmpty 50a9839
 c requirementToContactPaidMessages b4f67e93
 c requirementToContactPremium e581e4e9
 c restrictionReason d072acb4
+c richButtonStyle 3c610bd
 c richMessage baf39d8b
 c savedDialog bd87cb6c
 c savedReactionTag cb6ff828
@@ -1976,8 +1993,9 @@ c sendMessageHistoryImportAction dbda9246
 c sendMessageRecordAudioAction d52f73f7
 c sendMessageRecordRoundAction 88f27fbc
 c sendMessageRecordVideoAction a187d66f
-c sendMessageRichMessageDraftAction a2cb24f9
-c sendMessageTextDraftAction 376d975c
+c sendMessageRichMessageDraftAction 52564893
+c sendMessageStopDraftAction fbf902b0
+c sendMessageTextDraftAction 3630b85a
 c sendMessageTypingAction 16bf744e
 c sendMessageUploadAudioAction e6ac8a6f f351d7ab
 c sendMessageUploadAudioAction_old e6ac8a6f
@@ -2163,6 +2181,7 @@ c textAutoUrl ac6a83aa
 c textBankCard b956812d
 c textBold 6724abc4
 c textBotCommand 2ff29d3
+c textButton afc79cd6
 c textCashtag 7b9e1801
 c textConcat 7e6260d7
 c textCustomEmoji a26156c0
@@ -2252,6 +2271,7 @@ u updateEmojiGameInfo fb9c547a
 u updateEncryptedChatTyping 1710f156
 u updateEncryptedMessagesRead 38fe25b7
 u updateEncryption b4a2e88d
+u updateEphemeralBotCallbackQuery 7c1079d6
 u updateFavedStickers e511996d
 u updateFolderPeers 19360dc0
 u updateGeoLiveViewed 871fb939

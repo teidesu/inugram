@@ -90,10 +90,7 @@ import org.telegram.ui.Components.URLSpanUserMention
 import org.telegram.ui.Components.UndoView
 import org.telegram.ui.DialogsActivity
 import org.telegram.ui.LaunchActivity
-import java.io.File
-import java.util.Calendar
 import kotlin.math.ceil
-import kotlin.math.roundToInt
 
 object ChatHelper {
     private var skipNextReactionConfirm = false
