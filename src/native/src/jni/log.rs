@@ -2,7 +2,7 @@ use jni::objects::{Global, JMethodID, JObject, JValue};
 use jni::refs::IntoAuto;
 use jni::signature::{Primitive, ReturnType};
 use rquickjs::function::Rest;
-use rquickjs::{Coerced, Ctx, Function, Object};
+use rquickjs::{Ctx, Function, Object, Value};
 use std::rc::Rc;
 use std::sync::Arc;
 
@@ -40,14 +40,18 @@ pub(crate) fn make_log(console: Arc<ConsoleSink>) -> crate::Log {
   })
 }
 
-pub(crate) fn install_console(ctx: &Ctx, bridge: Rc<JniBridge>) -> rquickjs::Result<()> {
+fn format_console_value<'js>(ctx: &Ctx<'js>, value: &Value<'js>) -> String {
+  crate::api::error::format_thrown(ctx, value)
+}
+
+pub(crate) fn install_console<'js>(ctx: &Ctx<'js>, bridge: Rc<JniBridge>) -> rquickjs::Result<()> {
   let console = Object::new(ctx.clone())?;
   for (name, level) in [("log", 0), ("info", 1), ("warn", 2), ("error", 3), ("debug", 4)] {
     let bridge = bridge.clone();
     console.set(
       name,
-      Function::new(ctx.clone(), move |args: Rest<Coerced<String>>| {
-        let joined = args.0.iter().map(|c| c.0.as_str()).collect::<Vec<_>>().join(" ");
+      Function::new(ctx.clone(), move |ctx: Ctx<'js>, args: Rest<Value<'js>>| {
+        let joined = args.0.iter().map(|value| format_console_value(&ctx, value)).collect::<Vec<_>>().join(" ");
         bridge.emit_console(level, &joined);
       })?,
     )?;
@@ -55,3 +59,7 @@ pub(crate) fn install_console(ctx: &Ctx, bridge: Rc<JniBridge>) -> rquickjs::Res
   ctx.globals().set("console", console)?;
   Ok(())
 }
+
+#[cfg(test)]
+#[path = "log_tests.rs"]
+mod tests;
