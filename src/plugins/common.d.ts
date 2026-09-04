@@ -878,8 +878,19 @@ declare namespace inu {
     readonly editMessageId: number | null
   }
 
+  interface SendMessageFilter {
+    /** Compiled by Android's `java.util.regex.Pattern`; unsupported syntax rejects registration. */
+    text?: RegExp
+    isEdit?: boolean
+  }
+
   /** @needs-grant interceptSendMessage */
   function interceptSendMessage(
+    middleware: (message: OutgoingMessage, account: Account) => MaybePromise<'send' | 'drop'>,
+  ): Disposer
+  /** @needs-grant interceptSendMessage. Filters are checked before entering the plugin engine. */
+  function interceptSendMessage(
+    filter: SendMessageFilter,
     middleware: (message: OutgoingMessage, account: Account) => MaybePromise<'send' | 'drop'>,
   ): Disposer
 }

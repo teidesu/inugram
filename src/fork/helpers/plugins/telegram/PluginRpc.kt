@@ -19,9 +19,16 @@ import desu.inugram.helpers.plugins.tl.TlHandles
 import desu.inugram.helpers.plugins.tl.TlJson
 import java.util.Collections
 import java.util.IdentityHashMap
+import java.util.regex.Pattern
+import java.util.regex.PatternSyntaxException
 import org.json.JSONObject
 import org.telegram.messenger.KeepAliveJob
+import org.telegram.messenger.AndroidUtilities
+import org.telegram.messenger.MessageObject
 import org.telegram.messenger.MessagesController
+import org.telegram.messenger.MessagesStorage
+import org.telegram.messenger.NotificationCenter
+import org.telegram.messenger.SendMessagesHelper
 import org.telegram.messenger.UserConfig
 import org.telegram.messenger.Utilities
 import org.telegram.tgnet.ConnectionsManager
@@ -32,6 +39,7 @@ import org.telegram.tgnet.TLObject
 import org.telegram.tgnet.TLRPC
 import org.telegram.tgnet.WriteToSocketDelegate
 import org.telegram.tgnet.tl.TL_update
+import org.telegram.ui.ChatActivity
 
 /**
  * Wires `inu.interceptRpc`/`inu.invokeRpc` into the stock request pipeline. The arriving update
@@ -52,7 +60,29 @@ import org.telegram.tgnet.tl.TL_update
  * reads it, so `disableFree` moves the free to the table).
  */
 object PluginRpc {
-    private class Interceptor(val plugin: Plugin, val callbackId: Int, val strict: Boolean)
+    private class Interceptor(
+        val plugin: Plugin,
+        val callbackId: Int,
+        val strict: Boolean,
+        val scope: String,
+        val filter: SendFilter?,
+    )
+
+    private class SendFilter(val text: Pattern?, val textIsSticky: Boolean, val isEdit: Boolean?) {
+        fun matches(method: String, request: TLObject): Boolean {
+            if (isEdit != null && isEdit != (method == "messages.editMessage")) return false
+            if (text == null) return true
+            val value = when (request) {
+                is TLRPC.TL_messages_sendMessage -> request.message
+                is TLRPC.TL_messages_sendMedia -> request.message
+                is TLRPC.TL_messages_sendMultiMedia -> request.multi_media.firstOrNull()?.message
+                is TLRPC.TL_messages_editMessage -> request.message
+                else -> null
+            } ?: return false
+            val matcher = text.matcher(value)
+            return if (textIsSticky) matcher.lookingAt() else matcher.find()
+        }
+    }
 
     private class OriginalParams(
         val flags: Int,
@@ -63,6 +93,10 @@ object PluginRpc {
         val onQuickAck: QuickAckDelegate?,
         val onWriteToSocket: WriteToSocketDelegate?,
     )
+
+    private class OptimisticMessages(val account: Int, val messages: List<MessageObject>)
+
+    private class OptimisticText(val text: String, val entities: ArrayList<TLRPC.MessageEntity>)
 
     private class PendingDispatch(
         val plugin: Plugin,
@@ -84,8 +118,9 @@ object PluginRpc {
     }
 
     /**
-     * one top-level dispatch's deadline, shared by its whole chain. [remaining] is suspended while
-     * the request is really in flight, so a slow server is not charged to the plugins.
+     * one top-level dispatch's deadline, shared by its whole chain. Send-message chains get a
+     * longer budget because their promise is the user's visible pending send. [remaining] is
+     * suspended while a request is really in flight, so a slow server is not charged to plugins.
      *
      * [SystemClock.uptimeMillis] because that is what `Handler.postDelayed` counts in: it does not
      * advance in deep sleep, and any other clock would drift from the armed timer.
@@ -96,10 +131,12 @@ object PluginRpc {
         val chain: List<Interceptor>,
         val method: String,
         val request: TLObject,
+        val optimisticMessages: OptimisticMessages?,
         val finalize: (TLObject?, TLRPC.TL_error?, Long) -> Unit,
     ) {
+        val deadlineMillis = if (chain.any { it.scope == SEND_SCOPE }) SEND_CHAIN_BUDGET_MS else RPC_CHAIN_BUDGET_MS
         val stages = ArrayList<Long>()
-        var remaining = CHAIN_BUDGET_MS
+        var remaining = deadlineMillis
         var startedAt = 0L
         var timer: Runnable? = null
 
@@ -131,7 +168,9 @@ object PluginRpc {
     private class PassthroughResult(val response: TLObject?, val error: TLRPC.TL_error?, val time: Long)
 
     private const val TAG = "InuPluginRpc"
-    private const val CHAIN_BUDGET_MS = 10_000L
+    private const val SEND_SCOPE = "interceptSendMessage"
+    private const val RPC_CHAIN_BUDGET_MS = 10_000L
+    private const val SEND_CHAIN_BUDGET_MS = 60_000L
 
     private const val GUID_MEMORY = 512
     private const val SYNTHETIC_CODE = -1000
@@ -154,8 +193,8 @@ object PluginRpc {
     // [tokenKey] -> scope id, so an app-side cancel can find the chain still walking for that request
     private val chainsByToken = HashMap<Long, Long>()
     // [tokenKey] -> guid, for binds landing before there was a chain to hang them on: the app binds
-    // synchronously, usually before the request reached `sendRequestInternal`. bounded - an entry
-    // only has to outlive the walk to the passthrough, which the chain budget caps at 10 s
+    // synchronously, usually before the request reached `sendRequestInternal`. bounded so a burst
+    // of requests cannot grow it while their chains wait to be armed
     private val guidByToken = BoundedLru<Long, Int>(GUID_MEMORY)
     // scope id -> the passthrough response stock's free was suppressed for; that chain's finalize is the only consumer
     private val ownedResponses = HashMap<Long, TLObject>()
@@ -167,13 +206,83 @@ object PluginRpc {
     // every middleware twice, and the nested finalize freeing the response the outer one will walk.
     // counted, because one instance can be leased twice
     private val bypassed = IdentityHashMap<TLObject, Int>()
+    private val optimisticMessagesByRequest = IdentityHashMap<TLObject, OptimisticMessages>()
+
+    @JvmStatic
+    fun bindOptimisticMessage(request: TLObject, account: Int, message: MessageObject) =
+        bindOptimisticMessages(request, account, arrayListOf(message))
+
+    @JvmStatic
+    fun bindOptimisticMessages(request: TLObject, account: Int, messages: ArrayList<MessageObject>) {
+        val method = TlNames.classNameToTlName(request.javaClass)
+        if (interceptorsByMethod[method].orEmpty().none { it.scope == SEND_SCOPE && it.filter?.matches(method, request) != false }) return
+        synchronized(optimisticMessagesByRequest) {
+            optimisticMessagesByRequest[request] = OptimisticMessages(account, messages.toList())
+        }
+    }
+
+    @JvmStatic
+    fun isDroppedSendError(error: TLRPC.TL_error?): Boolean =
+        error?.code == SYNTHETIC_CODE && error.text == "MESSAGE_DROPPED_BY_PLUGIN"
+
+    @JvmStatic
+    fun handleDroppedSend(
+        helper: SendMessagesHelper,
+        account: Int,
+        message: TLRPC.Message,
+        scheduled: Boolean,
+        error: TLRPC.TL_error?,
+    ): Boolean {
+        if (!isDroppedSendError(error)) return false
+        removeDroppedMessage(helper, account, message, scheduled)
+        return true
+    }
+
+    @JvmStatic
+    fun handleDroppedSends(
+        helper: SendMessagesHelper,
+        account: Int,
+        messages: ArrayList<MessageObject>,
+        scheduled: Boolean,
+        error: TLRPC.TL_error?,
+    ): Boolean {
+        if (!isDroppedSendError(error)) return false
+        messages.forEach { removeDroppedMessage(helper, account, it.messageOwner, scheduled) }
+        return true
+    }
+
+    private fun removeDroppedMessage(helper: SendMessagesHelper, account: Int, message: TLRPC.Message, scheduled: Boolean) {
+        val mode = when {
+            scheduled -> ChatActivity.MODE_SCHEDULED
+            MessageObject.isWelcomeMessage(message) -> ChatActivity.MODE_WELCOME_MESSAGES
+            message.quick_reply_shortcut_id != 0 || message.quick_reply_shortcut != null -> ChatActivity.MODE_QUICK_REPLIES
+            else -> ChatActivity.MODE_DEFAULT
+        }
+        MessagesController.getInstance(account).deleteMessages(
+            arrayListOf(message.id),
+            null,
+            null,
+            message.dialog_id,
+            if (mode == ChatActivity.MODE_QUICK_REPLIES) message.quick_reply_shortcut_id else MessageObject.getTopicId(account, message, 0).toInt(),
+            false,
+            mode,
+            true,
+        )
+        helper.processSentMessage(message.id)
+        helper.removeFromSendingMessages(message.id, scheduled)
+    }
 
     fun listenerFor(plugin: Plugin, engine: QuickJs, tl: TlHandles): RpcListener {
         // snapshot: the account-less `inu.invokeRpc` names no account, and a plugin's requests must not jump slots on a switch
         val invokeAccount = UserConfig.selectedAccount
         return object : RpcListener {
-            override fun onRpcRegister(methods: Array<String>, callbackId: Int, scope: String, strict: Boolean): String? =
-                registerIntercept(plugin, methods, callbackId, scope, strict)
+            override fun onRpcRegister(
+                methods: Array<String>,
+                callbackId: Int,
+                scope: String,
+                strict: Boolean,
+                filterJson: String,
+            ): String? = registerIntercept(plugin, methods, callbackId, scope, strict, filterJson)
 
             override fun onRpcUnregister(callbackId: Int) =
                 unregisterIntercept(plugin, callbackId)
@@ -228,9 +337,19 @@ object PluginRpc {
     ): Boolean {
         // a leased request is ours however the entry got here, including stock's own re-send
         if (isBypassed(request)) return false
-        if (!hasInterceptors) return false
+        if (!hasInterceptors) {
+            synchronized(optimisticMessagesByRequest) { optimisticMessagesByRequest.remove(request) }
+            return false
+        }
         val tlName = TlNames.classNameToTlName(request.javaClass)
-        val chain = interceptorsByMethod[tlName]?.takeIf { it.isNotEmpty() } ?: return false
+        val chain = interceptorsByMethod[tlName]
+            ?.filter { it.filter?.matches(tlName, request) != false }
+            ?.takeIf { it.isNotEmpty() }
+            ?: run {
+                synchronized(optimisticMessagesByRequest) { optimisticMessagesByRequest.remove(request) }
+                return false
+            }
+        val optimisticMessages = synchronized(optimisticMessagesByRequest) { optimisticMessagesByRequest.remove(request) }
         val params = OriginalParams(flags, datacenterId, connectionType, immediate, requestToken, onQuickAck, onWriteToSocket)
         val requestKey = tokenKey(currentAccount, requestToken)
         Utilities.globalQueue.postRunnable {
@@ -256,7 +375,7 @@ object PluginRpc {
             }
             chainsByToken[requestKey] = scopeId
             // armed after the queue hop, so an app-side backlog isn't charged to the plugins
-            armChain(scopeId, connectionsManager, chain, tlName, request, requestKey, finalize)
+            armChain(scopeId, connectionsManager, chain, tlName, request, requestKey, optimisticMessages, finalize)
             dispatchChain(connectionsManager, chain, 0, request, params, scopeId, currentAccount, finalize)
         }
         return true
@@ -359,7 +478,14 @@ object PluginRpc {
      * api the engine gated on and [methods] is that api's fixed list. The takeover refusal applies
      * to both: it is a property of the method, not of how it was reached.
      */
-    private fun registerIntercept(plugin: Plugin, methods: Array<String>, callbackId: Int, scope: String, strict: Boolean): String? {
+    private fun registerIntercept(
+        plugin: Plugin,
+        methods: Array<String>,
+        callbackId: Int,
+        scope: String,
+        strict: Boolean,
+        filterJson: String,
+    ): String? {
         for (method in methods) {
             takeoverRefusal(plugin, method)?.let { return it }
         }
@@ -372,12 +498,36 @@ object PluginRpc {
                 return PluginWire.encodeNotGranted("interceptRpc", method)
             }
         }
+        val filter = if (filterJson.isEmpty()) {
+            null
+        } else try {
+            val json = JSONObject(filterJson)
+            val regex = json.optJSONObject("text")
+            val flags = regex?.optString("flags").orEmpty()
+            if (flags.any { it !in "dgimsuy" }) {
+                return PluginWire.encodePluginError("invalid-argument", "unsupported regular expression flags '$flags'")
+            }
+            var patternFlags = 0
+            if ('i' in flags) patternFlags = patternFlags or Pattern.CASE_INSENSITIVE or Pattern.UNICODE_CASE
+            if ('m' in flags) patternFlags = patternFlags or Pattern.MULTILINE
+            if ('s' in flags) patternFlags = patternFlags or Pattern.DOTALL
+            if ('u' in flags) patternFlags = patternFlags or Pattern.UNICODE_CHARACTER_CLASS
+            SendFilter(
+                regex?.getString("source")?.let { Pattern.compile(it, patternFlags) },
+                'y' in flags,
+                json.optBoolean("isEdit").takeIf { json.has("isEdit") },
+            )
+        } catch (e: PatternSyntaxException) {
+            return PluginWire.encodePluginError("invalid-argument", "invalid text regular expression: ${e.description}")
+        } catch (e: Exception) {
+            return PluginWire.encodePluginError("invalid-argument", "invalid send filter: ${e.message ?: e.toString()}")
+        }
         val updated = interceptorsByMethod.toMutableMap()
         // one registration is one stage however often its list names a method - a repeat would run
         // the middleware twice per request off a single `next()`, against one budget, and
         // `releaseScope` twice. Same reason the update registrations take `types.toSet()`
         for (method in methods.toSet()) {
-            updated[method] = (updated[method].orEmpty()) + Interceptor(plugin, callbackId, strict)
+            updated[method] = (updated[method].orEmpty()) + Interceptor(plugin, callbackId, strict, scope, filter)
         }
         publishInterceptors(updated)
         return null
@@ -475,7 +625,7 @@ object PluginRpc {
             pauseChainTimer(scopeId)
             val sent = SentRequest(request)
             armed.sent = sent
-            sendPassthrough(connectionsManager, account, sent, params, armed.guid) { response, error, responseTime ->
+            sendPassthrough(connectionsManager, account, sent, params, armed.guid, armed.optimisticMessages) { response, error, responseTime ->
                 // whatever it answered, this request cannot reach sendRequestInternal again
                 endBypassLease(sent)
                 val budget = chains[scopeId]
@@ -520,9 +670,10 @@ object PluginRpc {
         method: String,
         request: TLObject,
         requestKey: Long,
+        optimisticMessages: OptimisticMessages?,
         finalize: (TLObject?, TLRPC.TL_error?, Long) -> Unit,
     ) {
-        val budget = ChainBudget(scopeId, connectionsManager, chain, method, request, finalize)
+        val budget = ChainBudget(scopeId, connectionsManager, chain, method, request, optimisticMessages, finalize)
         budget.guid = takeGuid(requestKey)
         chains[scopeId] = budget
         startChainTimer(budget)
@@ -608,7 +759,7 @@ object PluginRpc {
     private fun expireChain(scopeId: Long) {
         val running = chains[scopeId]?.stages?.reversed()?.firstNotNullOfOrNull { pendingDispatches[it] }
         val budget = collapseChain(scopeId, TIMEOUT_WIRE) ?: return
-        Log.w(TAG, "[${running?.plugin?.manifest?.name}] '${budget.method}' ran past the chain's ${CHAIN_BUDGET_MS}ms budget")
+        Log.w(TAG, "[${running?.plugin?.manifest?.name}] '${budget.method}' ran past the chain's ${budget.deadlineMillis}ms budget")
         val sent = budget.passthrough
         if (sent != null) {
             budget.finalize(sent.response, sent.error, sent.time)
@@ -741,8 +892,10 @@ object PluginRpc {
         sent: SentRequest,
         params: OriginalParams,
         guid: Int,
+        optimisticMessages: OptimisticMessages?,
         finalize: (TLObject?, TLRPC.TL_error?, Long) -> Unit,
     ) {
+        syncOptimisticMessages(sent.request, optimisticMessages)
         markBypassed(sent.request)
         // stock frees the request the moment it has serialized it, gutting the writable view a parked stage holds. ownership moves to the chain; the free is in collapseChain
         sent.request.disableFree = true
@@ -772,6 +925,52 @@ object PluginRpc {
             )
             // native learns the token only now. stock's own bindRequestToGuid is skipped because it would come straight back through onRequestBoundToGuid
             if (guid != 0) ConnectionsManager.native_bindRequestToGuid(account, params.requestToken, guid)
+        }
+    }
+
+    private fun syncOptimisticMessages(request: TLObject, optimisticMessages: OptimisticMessages?) {
+        optimisticMessages ?: return
+        val texts = when (request) {
+            is TLRPC.TL_messages_sendMessage -> listOf(OptimisticText(request.message, ArrayList(request.entities)))
+            is TLRPC.TL_messages_sendMedia -> listOf(OptimisticText(request.message, ArrayList(request.entities)))
+            is TLRPC.TL_messages_sendMultiMedia -> request.multi_media.map { OptimisticText(it.message, ArrayList(it.entities)) }
+            is TLRPC.TL_messages_editMessage -> listOf(OptimisticText(request.message, ArrayList(request.entities)))
+            else -> return
+        }
+        AndroidUtilities.runOnUIThread {
+            optimisticMessages.messages.zip(texts).forEach { (message, text) ->
+                message.messageOwner.message = text.text
+                message.messageOwner.entities = text.entities
+                message.messageOwner.flags = if (text.entities.isEmpty()) {
+                    message.messageOwner.flags and TLRPC.MESSAGE_FLAG_HAS_ENTITIES.inv()
+                } else {
+                    message.messageOwner.flags or TLRPC.MESSAGE_FLAG_HAS_ENTITIES
+                }
+                message.updateMessageText()
+                message.resetLayout()
+                if (message.type != MessageObject.TYPE_TEXT) message.generateCaption()
+                val mode = when {
+                    message.scheduled -> ChatActivity.MODE_SCHEDULED
+                    MessageObject.isWelcomeMessage(message.messageOwner) -> ChatActivity.MODE_WELCOME_MESSAGES
+                    message.messageOwner.quick_reply_shortcut_id != 0 || message.messageOwner.quick_reply_shortcut != null ->
+                        ChatActivity.MODE_QUICK_REPLIES
+                    else -> ChatActivity.MODE_DEFAULT
+                }
+                MessagesStorage.getInstance(optimisticMessages.account).putMessages(
+                    arrayListOf(message.messageOwner),
+                    false,
+                    true,
+                    false,
+                    0,
+                    mode,
+                    message.messageOwner.quick_reply_shortcut_id.toLong(),
+                )
+                NotificationCenter.getInstance(optimisticMessages.account).postNotificationName(
+                    NotificationCenter.replaceMessagesObjects,
+                    message.dialogId,
+                    arrayListOf(message),
+                )
+            }
         }
     }
 

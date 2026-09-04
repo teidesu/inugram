@@ -316,7 +316,7 @@ val Plugin.js: RecordingQuickJs get() = engine as RecordingQuickJs
 
 /** the `inu.interceptRpc(methods)` a plugin's own JS would have called */
 fun Plugin.interceptRpc(vararg methods: String, callbackId: Int = 1, strict: Boolean = false): String? =
-    js.listener!!.onRpcRegister(arrayOf(*methods), callbackId, "", strict)
+    js.listener!!.onRpcRegister(arrayOf(*methods), callbackId, "", strict, "")
 
 /**
  * what the engine registers for `inu.interceptSendMessage`: the fixed method list `rpc.rs` owns
@@ -329,8 +329,8 @@ val SEND_METHODS = arrayOf(
     "messages.editMessage",
 )
 
-fun Plugin.interceptSendMessage(callbackId: Int = 1): String? =
-    js.listener!!.onRpcRegister(SEND_METHODS, callbackId, "interceptSendMessage", true)
+fun Plugin.interceptSendMessage(callbackId: Int = 1, filterJson: String = ""): String? =
+    js.listener!!.onRpcRegister(SEND_METHODS, callbackId, "interceptSendMessage", true, filterJson)
 
 /** the `inu.interceptUpdate(types, cb)` a plugin's own JS would have called */
 fun Plugin.interceptUpdate(vararg types: String, callbackId: Int = 1): String? =

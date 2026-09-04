@@ -148,7 +148,7 @@ interface RpcListener {
      * `interceptSendMessage` for the narrowing of this chain that api is. [strict] fails malformed
      * returns instead of logging and advancing past this stage.
      */
-    fun onRpcRegister(methods: Array<String>, callbackId: Int, scope: String, strict: Boolean): String?
+    fun onRpcRegister(methods: Array<String>, callbackId: Int, scope: String, strict: Boolean, filterJson: String): String?
 
     fun onRpcUnregister(callbackId: Int)
 

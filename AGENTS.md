@@ -309,7 +309,7 @@ wrong name or flag, since the bridge and the typings only agree because one scri
 - Keep rquickjs `parallel` disabled. Re-entry otherwise changes an abort into a deadlock.
 - Synchronous app hooks must post, block safely, or be unsupported. `PluginXposed` runs before/original/after with its declared budget and skips hooks on `globalQueue`. Hooks on the eight primitive box classes are refused: the lsplant stub boxes its own arguments through them and would recurse before any dispatch.
 - Return app responses on `stageQueue`; keep chain bookkeeping on `globalQueue`.
-- RPC chains have one 10-second budget per scope. On timeout, abandon deeper stages first, release handles last, and fail unless passthrough already replied.
+- Raw RPC chains have one 10-second budget per scope; chains containing `interceptSendMessage` get 60 seconds. On timeout, abandon deeper stages first, release handles last, and fail unless passthrough already replied.
 - Every chain continuation must verify that its pending dispatch is still current after a queue hop.
 - A bypass is a request lease. Keep it through stock retries; remove it when the delegate replies or cancellation removes the request.
 - The chain owns the request free after it sets `disableFree`; post that free to `stageQueue` after queued sends.

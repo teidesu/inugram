@@ -250,7 +250,7 @@ most things are toggleable in `Settings → Inugram`, with sensible opinionated 
 
 - InuPlugin-style js plugins running on a rust engine (rquickjs/quickjs-ng) — exposes `console.*`, `inu.info()`, and an rpc bridge (`inu.interceptRpc`/`inu.invokeRpc`/`inu.onUpdate`) gated by `@grant` permissions
 - invalid `interceptRpc` TL returns are logged and skip that middleware by default; `{ strict: true }` instead fails the app's RPC
-- plugins can rewrite or cancel outgoing messages (`inu.interceptSendMessage`) and rewrite or drop incoming updates before the app applies them (`inu.interceptUpdate`)
+- plugins can rewrite or cancel outgoing messages (`inu.interceptSendMessage`), with optional native text/edit filters, and rewrite or drop incoming updates before the app applies them (`inu.interceptUpdate`)
 - plugins can rewrite TL objects as the app parses them, including rows read back out of the local cache (`inu.interceptDeserialize`) — declarative rules only, matched natively, and never over ids, secret chats or the account-takeover surface
 - plugins page in settings: engine toggle, install from file, enable/disable, reload, drag-handle reorder (middleware order); roomy list by default (description + settings/reload/remove actions per plugin), compact single-row view via the overflow menu
 - install flow: tapping a `.inu.js` file in chat (or picking one from disk) opens a confirmation sheet with the plugin's name, description, requested permissions (worst first, dangerous ones explained), obfuscation/minification warnings, a source code viewer and an "enable after installing" toggle; the confirm button scrolls until the permissions have been seen, and installing can be undone from the bulletin; plugins this app can't run are refused with a readable reason

@@ -16,7 +16,14 @@ use crate::Log;
 pub(crate) use crate::api::error::format_exception;
 
 pub trait RpcHost {
-  fn on_register(&self, methods: &[String], callback_id: u32, scope: &str, strict: bool) -> Option<String>;
+  fn on_register(
+    &self,
+    methods: &[String],
+    callback_id: u32,
+    scope: &str,
+    strict: bool,
+    filter_json: &str,
+  ) -> Option<String>;
   fn on_unregister(&self, callback_id: u32);
   fn on_invoke(&self, invoke_id: i64, slot: i32, request_wire: &str) -> Option<String>;
   fn on_next(&self, dispatch_id: i64, request_wire: &str) -> Option<String>;
@@ -129,6 +136,7 @@ pub struct RpcState {
   intercept_update_fns: Registry<UpdateReg>,
   demux: RefCell<Option<Persistent<Function<'static>>>>,
   send_wrap: RefCell<Option<Persistent<Function<'static>>>>,
+  regexp_ctor: RefCell<Option<Persistent<Object<'static>>>>,
   promise: RefCell<Option<PromiseTools>>,
   dispatches: RefCell<HashMap<i64, Rc<DispatchState>>>,
   update_dispatches: RefCell<HashMap<i64, Rc<UpdateDispatchState>>>,
@@ -309,6 +317,7 @@ pub fn install_rpc<'js>(
     intercept_update_fns: Registry::default(),
     demux: RefCell::new(None),
     send_wrap: RefCell::new(None),
+    regexp_ctor: RefCell::new(Some(Persistent::save(ctx, ctx.globals().get::<_, Object>("RegExp")?))),
     promise: RefCell::new(Some(capture_promise_tools(ctx)?)),
     dispatches: RefCell::new(HashMap::new()),
     update_dispatches: RefCell::new(HashMap::new()),
@@ -356,7 +365,7 @@ pub fn install_rpc<'js>(
             }
           }
         };
-        state2.register_intercept(ctx, list, "", strict, cb)
+        state2.register_intercept(ctx, list, "", strict, "", cb)
       },
     )?,
   )?;
@@ -446,19 +455,75 @@ impl RpcState {
     let state = self.clone();
     globals.inu.set(
       "interceptSendMessage",
-      Function::new(ctx.clone(), move |ctx: Ctx<'js>, cb: Function<'js>| {
+      Function::new(ctx.clone(), move |ctx: Ctx<'js>, first: Value<'js>, second: Opt<Value<'js>>| {
         let ctx: &Ctx<'js> = &ctx;
         if state.lifecycle.is_unloading() {
           return noop_disposer(ctx);
         }
         state.grants.check_grant(ctx, SEND_SCOPE, None, MATCH_EXACT)?;
+        let (filter_json, cb) = match second.0 {
+          Some(callback) => {
+            let Some(callback) = callback.into_function() else {
+              return Err(Exception::throw_type(ctx, "interceptSendMessage: middleware must be a function"));
+            };
+            let Some(filter) = first.as_object() else {
+              return Err(Exception::throw_type(ctx, "interceptSendMessage: filter must be an object"));
+            };
+            let encoded = Object::new(ctx.clone())?;
+            let is_edit: Value = filter.get("isEdit")?;
+            if !is_edit.is_undefined() {
+              let Some(is_edit) = is_edit.as_bool() else {
+                return Err(Exception::throw_type(ctx, "interceptSendMessage: filter.isEdit must be a boolean"));
+              };
+              encoded.set("isEdit", is_edit)?;
+            }
+            let text: Value = filter.get("text")?;
+            if !text.is_undefined() {
+              let Some(text) = text.as_object() else {
+                return Err(Exception::throw_type(ctx, "interceptSendMessage: filter.text must be a RegExp"));
+              };
+              let regexp = state
+                .regexp_ctor
+                .borrow()
+                .as_ref()
+                .ok_or_else(|| Exception::throw_type(ctx, "interceptSendMessage is not installed"))?
+                .clone()
+                .restore(ctx)?;
+              if !text.is_instance_of(regexp.into_value()) {
+                return Err(Exception::throw_type(ctx, "interceptSendMessage: filter.text must be a RegExp"));
+              }
+              let source: String = text
+                .get("source")
+                .map_err(|_| Exception::throw_type(ctx, "interceptSendMessage: filter.text must be a RegExp"))?;
+              let flags: String = text
+                .get("flags")
+                .map_err(|_| Exception::throw_type(ctx, "interceptSendMessage: filter.text must be a RegExp"))?;
+              let regex = Object::new(ctx.clone())?;
+              regex.set("source", source)?;
+              regex.set("flags", flags)?;
+              encoded.set("text", regex)?;
+            }
+            let json = ctx
+              .json_stringify(encoded)?
+              .map(|value| value.to_string())
+              .transpose()?
+              .unwrap_or_else(|| "{}".to_string());
+            (json, callback)
+          }
+          None => {
+            let Some(callback) = first.into_function() else {
+              return Err(Exception::throw_type(ctx, "interceptSendMessage: middleware must be a function"));
+            };
+            (String::new(), callback)
+          }
+        };
         let build = match state.send_wrap.borrow().as_ref() {
           Some(build) => build.clone().restore(ctx)?,
           None => return Err(Exception::throw_type(ctx, "interceptSendMessage is not installed")),
         };
         let middleware: Function = build.call((cb,))?;
         let list = SEND_METHODS.iter().map(ToString::to_string).collect();
-        state.register_intercept(ctx, list, SEND_SCOPE, true, middleware)
+        state.register_intercept(ctx, list, SEND_SCOPE, true, &filter_json, middleware)
       })?,
     )?;
     Ok(())
@@ -513,10 +578,11 @@ impl RpcState {
     methods: Vec<String>,
     scope: &str,
     strict: bool,
+    filter_json: &str,
     middleware: Function<'js>,
   ) -> JsResult<Function<'js>> {
     let callback_id = self.intercept_fns.alloc();
-    if let Some(err) = self.host.on_register(&methods, callback_id, scope, strict) {
+    if let Some(err) = self.host.on_register(&methods, callback_id, scope, strict, filter_json) {
       return Err(ctx.throw(error::host_error_to_js(ctx, &err)?));
     }
     self.intercept_fns.register(ctx, callback_id, None, middleware);
@@ -1093,6 +1159,9 @@ impl RpcState {
       }
       if let Some(build) = state.send_wrap.borrow_mut().take() {
         let _ = build.restore(&ctx);
+      }
+      if let Some(regexp) = state.regexp_ctor.borrow_mut().take() {
+        let _ = regexp.restore(&ctx);
       }
       if let Some(tools) = state.promise.borrow_mut().take() {
         let _ = tools.ctor.restore(&ctx);

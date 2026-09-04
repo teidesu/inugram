@@ -731,7 +731,14 @@ struct TestRpcHost {
 }
 
 impl crate::api::telegram::rpc::RpcHost for TestRpcHost {
-  fn on_register(&self, _methods: &[String], callback_id: u32, _scope: &str, _strict: bool) -> Option<String> {
+  fn on_register(
+    &self,
+    _methods: &[String],
+    callback_id: u32,
+    _scope: &str,
+    _strict: bool,
+    _filter_json: &str,
+  ) -> Option<String> {
     self.registered.borrow_mut().push(callback_id);
     None
   }

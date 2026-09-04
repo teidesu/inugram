@@ -1370,7 +1370,14 @@ mod grant_boundary {
   }
 
   impl RpcHost for TestBoundaryHost {
-    fn on_register(&self, _methods: &[String], _callback_id: u32, _scope: &str, _strict: bool) -> Option<String> {
+    fn on_register(
+      &self,
+      _methods: &[String],
+      _callback_id: u32,
+      _scope: &str,
+      _strict: bool,
+      _filter_json: &str,
+    ) -> Option<String> {
       self.crossings.set(self.crossings.get() + 1);
       None
     }
