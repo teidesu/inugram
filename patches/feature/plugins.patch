@@ -5,11 +5,12 @@ Subject: Add the QuickJS plugin engine (hooks, action rows)
 
 ---
  .../messenger/MessagesController.java         | 122 ++++++++++--------
+ .../messenger/SendMessagesHelper.java         |  17 ++-
  .../telegram/tgnet/ConnectionsManager.java    |   8 +-
  .../java/org/telegram/tgnet/TLObject.java     |   3 +
  .../java/org/telegram/ui/ChatActivity.java    |   6 +-
  .../java/org/telegram/ui/LaunchActivity.java  |   1 +
- 5 files changed, 85 insertions(+), 55 deletions(-)
+ 6 files changed, 100 insertions(+), 57 deletions(-)
 
 diff --git a/TMessagesProj/src/main/java/org/telegram/messenger/MessagesController.java b/TMessagesProj/src/main/java/org/telegram/messenger/MessagesController.java
 index 0000000..0000000 100644
@@ -188,6 +189,76 @@ index 0000000..0000000 100644
              if (baseUpdate instanceof TL_update.TL_updateNewMessage || baseUpdate instanceof TL_update.TL_updateNewChannelMessage || baseUpdate instanceof TL_update.TL_updateNewScheduledMessage) {
                  TLRPC.Message message;
                  if (baseUpdate instanceof TL_update.TL_updateNewMessage) {
+diff --git a/TMessagesProj/src/main/java/org/telegram/messenger/SendMessagesHelper.java b/TMessagesProj/src/main/java/org/telegram/messenger/SendMessagesHelper.java
+index 0000000..0000000 100644
+--- a/TMessagesProj/src/main/java/org/telegram/messenger/SendMessagesHelper.java
++++ b/TMessagesProj/src/main/java/org/telegram/messenger/SendMessagesHelper.java
+@@ -1766,7 +1766,7 @@ public class SendMessagesHelper extends BaseController implements NotificationCe
+         return true;
+     }
+ 
+-    protected void processSentMessage(int id) {
++    public void processSentMessage(int id) {
+         int prevSize = unsentMessages.size();
+         unsentMessages.remove(id);
+         if (prevSize != 0 && unsentMessages.size() == 0) {
+@@ -7434,7 +7434,7 @@ public class SendMessagesHelper extends BaseController implements NotificationCe
+         }
+     }
+ 
+-    protected TLRPC.Message removeFromSendingMessages(int mid, boolean scheduled) {
++    public TLRPC.Message removeFromSendingMessages(int mid, boolean scheduled) {
+         TLRPC.Message message;
+         if (mid > 0) {
+             message = editingMessages.get(mid);
+@@ -7565,6 +7565,7 @@ public class SendMessagesHelper extends BaseController implements NotificationCe
+             return;
+         }
+ 
++        desu.inugram.helpers.plugins.telegram.PluginRpc.bindOptimisticMessages(request, currentAccount, msgObjs);
+         int reqId = getConnectionsManager().sendRequest(request, (response, error) -> {
+             if (error != null && FileRefController.isFileRefError(error.text)) {
+                 final int fileRefIndex = FileRefController.getFileRefErrorIndex(error.text);
+@@ -7835,6 +7836,9 @@ public class SendMessagesHelper extends BaseController implements NotificationCe
+                     }
+                     Utilities.stageQueue.postRunnable(() -> getMessagesController().processUpdates(updates, false));
+                 } else {
++                    if (desu.inugram.helpers.plugins.telegram.PluginRpc.handleDroppedSends(this, currentAccount, msgObjs, scheduled, error)) {
++                        return;
++                    }
+                     AlertsCreator.processError(currentAccount, error, null, request);
+                     isSentError = true;
+                 }
+@@ -7959,6 +7963,7 @@ public class SendMessagesHelper extends BaseController implements NotificationCe
+             return;
+         }
+ 
++        desu.inugram.helpers.plugins.telegram.PluginRpc.bindOptimisticMessage(req, currentAccount, msgObj);
+         newMsgObj.reqId = getConnectionsManager().sendRequest(req, (response, error) -> {
+             if (error != null && (req instanceof TLRPC.TL_messages_sendMedia || req instanceof TL_ephemeral.TL_sendMessage || req instanceof TLRPC.TL_messages_editMessage || req instanceof TLRPC.TL_messages_addPollAnswer) && FileRefController.isFileRefError(error.text)) {
+                 if (FileRefController.isFileRefErrorCover(error.text)) {
+@@ -8077,6 +8082,11 @@ public class SendMessagesHelper extends BaseController implements NotificationCe
+                         });
+ 
+                     } else {
++                        if (desu.inugram.helpers.plugins.telegram.PluginRpc.isDroppedSendError(error)) {
++                            removeFromSendingMessages(newMsgObj.id, scheduled);
++                            revertEditingMessageObject(msgObj);
++                            return;
++                        }
+                         AlertsCreator.processError(currentAccount, error, null, req);
+                         removeFromSendingMessages(newMsgObj.id, scheduled);
+                         revertEditingMessageObject(msgObj);
+@@ -8380,6 +8390,9 @@ public class SendMessagesHelper extends BaseController implements NotificationCe
+                             }
+                         }
+                     } else {
++                        if (desu.inugram.helpers.plugins.telegram.PluginRpc.handleDroppedSend(this, currentAccount, newMsgObj, scheduled, error)) {
++                            return;
++                        }
+                         AlertsCreator.processError(currentAccount, error, null, req);
+                         isSentError = true;
+                     }
 diff --git a/TMessagesProj/src/main/java/org/telegram/tgnet/ConnectionsManager.java b/TMessagesProj/src/main/java/org/telegram/tgnet/ConnectionsManager.java
 index 0000000..0000000 100644
 --- a/TMessagesProj/src/main/java/org/telegram/tgnet/ConnectionsManager.java

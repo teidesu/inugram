@@ -6,7 +6,7 @@ use rquickjs::Context;
 
 #[derive(Default)]
 struct TestHost {
-  registered: RefCell<Vec<(Vec<String>, u32, String, bool)>>,
+  registered: RefCell<Vec<(Vec<String>, u32, String, bool, String)>>,
   unregistered: RefCell<Vec<u32>>,
   next_calls: RefCell<Vec<(i64, String)>>,
   invoke_calls: RefCell<Vec<(i64, i32, String)>>,
@@ -25,8 +25,21 @@ struct TestHost {
 }
 
 impl RpcHost for TestHost {
-  fn on_register(&self, methods: &[String], callback_id: u32, scope: &str, strict: bool) -> Option<String> {
-    self.registered.borrow_mut().push((methods.to_vec(), callback_id, scope.to_string(), strict));
+  fn on_register(
+    &self,
+    methods: &[String],
+    callback_id: u32,
+    scope: &str,
+    strict: bool,
+    filter_json: &str,
+  ) -> Option<String> {
+    self.registered.borrow_mut().push((
+      methods.to_vec(),
+      callback_id,
+      scope.to_string(),
+      strict,
+      filter_json.to_string(),
+    ));
     self.register_err.borrow().clone()
   }
   fn on_unregister(&self, callback_id: u32) {
@@ -1044,7 +1057,7 @@ fn a_plugin_throw_faults_where_a_host_failure_does_not() {
         inu.onUpdate('updateBar', async () => { throw new Error('unawaited'); });
         "#,
   );
-  let ids: Vec<u32> = host.registered.borrow().iter().map(|(_, id, _, _)| *id).collect();
+  let ids: Vec<u32> = host.registered.borrow().iter().map(|(_, id, _, _, _)| *id).collect();
 
   state.dispatch(&rt, &ctx, ids[0], 700, "foo.bar", 0, &wire_json(r#"{"_":"foo.bar"}"#));
   state.dispatch(&rt, &ctx, ids[1], 701, "foo.baz", 0, &wire_json(r#"{"_":"foo.baz"}"#));
@@ -1087,7 +1100,7 @@ fn an_rpc_error_out_of_a_stage_is_control_flow_not_a_fault() {
         inu.interceptRpc('foo.baz', async (req, next) => { await next(req); });
         "#,
   );
-  let ids: Vec<u32> = host.registered.borrow().iter().map(|(_, id, _, _)| *id).collect();
+  let ids: Vec<u32> = host.registered.borrow().iter().map(|(_, id, _, _, _)| *id).collect();
 
   state.dispatch(&rt, &ctx, ids[0], 800, "foo.bar", 0, &wire_json(r#"{"_":"foo.bar"}"#));
   // the host abandons the stage parked in await next(), exactly as a chain collapse does
@@ -2063,6 +2076,15 @@ fn interceptsendmessage_is_gated_on_its_own_grant_and_not_on_the_methods_it_cove
 }
 
 #[test]
+fn interceptsendmessage_serializes_its_optional_filter_for_the_host() {
+  let (_rt, ctx, host, _state) = setup(&["interceptSendMessage"]);
+  eval(&ctx, "inu.interceptSendMessage({ text: /^\\.stats$/i, isEdit: false }, () => 'send')");
+  let registered = host.registered.borrow();
+  assert_eq!(registered.len(), 1);
+  assert_eq!(registered[0].4, r#"{"isEdit":false,"text":{"source":"^\\.stats$","flags":"i"}}"#);
+}
+
+#[test]
 fn a_send_disposer_takes_the_stage_out_of_the_chain() {
   let (rt, ctx, host, state) = setup(&["interceptSendMessage"]);
   eval(
@@ -2541,7 +2563,14 @@ mod bundled_oracles {
   }
 
   impl RpcHost for OracleHost {
-    fn on_register(&self, methods: &[String], callback_id: u32, _scope: &str, _strict: bool) -> Option<String> {
+    fn on_register(
+      &self,
+      methods: &[String],
+      callback_id: u32,
+      _scope: &str,
+      _strict: bool,
+      _filter_json: &str,
+    ) -> Option<String> {
       for method in methods {
         if self.refused.borrow().contains(method) {
           return Some(plugin_error("forbidden", &format!("'{method}' is not interceptable")));

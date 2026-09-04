@@ -27,11 +27,18 @@ use crate::api::ui::{OP_CHOOSER, OP_DIALOG, OP_PROMPT};
 use super::bridge::{Arg, JniBridge};
 
 impl RpcHost for JniBridge {
-  fn on_register(&self, methods: &[String], callback_id: u32, scope: &str, strict: bool) -> Option<String> {
+  fn on_register(
+    &self,
+    methods: &[String],
+    callback_id: u32,
+    scope: &str,
+    strict: bool,
+    filter_json: &str,
+  ) -> Option<String> {
     self.call_refusal(
       "interceptRpc",
       self.on_rpc_register,
-      &[Arg::Strs(methods), Arg::Int(callback_id as i32), Arg::Str(scope), Arg::Bool(strict)],
+      &[Arg::Strs(methods), Arg::Int(callback_id as i32), Arg::Str(scope), Arg::Bool(strict), Arg::Str(filter_json)],
     )
   }
 

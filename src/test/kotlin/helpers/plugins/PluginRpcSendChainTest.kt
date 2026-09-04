@@ -14,7 +14,7 @@ import org.telegram.tgnet.TLRPC
 
 /**
  * `interceptSendMessage` is a *narrowing* of the `interceptRpc` chain rather than a chain of its
- * own, which is what buys it the budget, the collapse, the cancel handling and the bypass lease for
+ * own, which is what buys it the collapse, cancel handling and bypass lease for
  * free. What this pins is the part of that claim only the host can answer: which grant it is gated
  * on, which methods it lands in, and that the two forms interleave in plugin-list order.
  */
@@ -63,6 +63,46 @@ class PluginRpcSendChainTest {
             drain()
         }
         assertEquals(4, plugin.js.dispatches.size)
+    }
+
+    @Test
+    fun send_filters_skip_the_engine_until_the_request_matches() {
+        val plugin = startPlugin("p", "interceptSendMessage")
+        assertNull(plugin.interceptSendMessage(filterJson = """{"text":{"source":"^\\.stats$","flags":"i"},"isEdit":false}"""))
+        plugin.js.onDispatchRpc = { plugin.complete(it.dispatchId, "R-1000:MESSAGE_DROPPED_BY_PLUGIN") }
+
+        val ordinary = TLRPC.TL_messages_sendMessage().apply { message = "hello" }
+        assertEquals(false, send(ordinary), "a rejected filter must stay on the Java fast path")
+        drain()
+        assertEquals(0, plugin.js.dispatches.size)
+
+        val edit = TLRPC.TL_messages_editMessage().apply { message = ".stats" }
+        assertEquals(false, send(edit), "isEdit=false must reject edits before entering the engine")
+        drain()
+        assertEquals(0, plugin.js.dispatches.size)
+
+        val command = TLRPC.TL_messages_sendMessage().apply { message = ".STATS" }
+        assertTrue(send(command))
+        drain()
+        assertEquals(1, plugin.js.dispatches.size)
+    }
+
+    @Test
+    fun a_send_interceptor_has_a_60_second_chain_deadline() {
+        val plugin = startPlugin("p", "interceptSendMessage")
+        assertNull(plugin.interceptSendMessage())
+        plugin.js.onDispatchRpc = {}
+        var completed = false
+
+        assertTrue(send(TLRPC.TL_messages_sendMessage()) { _, _ -> completed = true })
+        drain()
+        TestQueues.advanceBy(59_999)
+
+        assertEquals(false, completed)
+        assertEquals(1, plugin.js.dispatches.size)
+
+        TestQueues.advanceBy(1)
+        assertEquals(true, completed)
     }
 
     @Test

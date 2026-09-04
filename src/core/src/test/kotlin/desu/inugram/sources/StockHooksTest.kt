@@ -49,6 +49,28 @@ class StockHooksTest {
     }
 
     @Test
+    fun `a plugin-dropped send is removed instead of becoming a failed local message`() {
+        val source = stock("org/telegram/messenger/SendMessagesHelper.java")
+        val hook = "desu.inugram.helpers.plugins.telegram.PluginRpc.handleDroppedSend(this, currentAccount, newMsgObj, scheduled, error)"
+        val multiHook = "desu.inugram.helpers.plugins.telegram.PluginRpc.handleDroppedSends(this, currentAccount, msgObjs, scheduled, error)"
+        val editHook = "desu.inugram.helpers.plugins.telegram.PluginRpc.isDroppedSendError(error)"
+        assertTrue(source.contains("if ($hook) {\n                            return;"), "the dropped-send cleanup hook is gone")
+        assertTrue(source.contains("if ($multiHook) {\n                        return;"), "the dropped-album cleanup hook is gone")
+        assertTrue(source.contains("if ($editHook) {\n                            removeFromSendingMessages"), "the dropped-edit cleanup hook is gone")
+        assertTrue(
+            source.indexOf(hook) < source.indexOf("AlertsCreator.processError(currentAccount, error, null, req);", source.indexOf(hook)),
+            "a dropped send reached stock's failed-message handling before it could be removed",
+        )
+    }
+
+    @Test
+    fun `outgoing request rewrites are bound back to their optimistic messages`() {
+        val source = stock("org/telegram/messenger/SendMessagesHelper.java")
+        assertEquals(1, source.split("PluginRpc.bindOptimisticMessage(req, currentAccount, msgObj);").size - 1)
+        assertEquals(1, source.split("PluginRpc.bindOptimisticMessages(request, currentAccount, msgObjs);").size - 1)
+    }
+
+    @Test
     fun `every arriving batch is offered to the update chain before the app applies any of it`() {
         val body = bodyOf(
             stock("org/telegram/messenger/MessagesController.java"),
@@ -193,6 +215,11 @@ class StockHooksTest {
                 "org/telegram/messenger/MessagesController.java -> PluginUpdates.onDifference",
                 "org/telegram/messenger/MessagesController.java -> PluginUpdates.onDifference",
                 "org/telegram/messenger/MessagesController.java -> PluginUpdates.onUpdates",
+                "org/telegram/messenger/SendMessagesHelper.java -> PluginRpc.bindOptimisticMessage",
+                "org/telegram/messenger/SendMessagesHelper.java -> PluginRpc.bindOptimisticMessages",
+                "org/telegram/messenger/SendMessagesHelper.java -> PluginRpc.handleDroppedSend",
+                "org/telegram/messenger/SendMessagesHelper.java -> PluginRpc.handleDroppedSends",
+                "org/telegram/messenger/SendMessagesHelper.java -> PluginRpc.isDroppedSendError",
                 "org/telegram/tgnet/ConnectionsManager.java -> PluginRpc.maybeIntercept",
                 "org/telegram/tgnet/ConnectionsManager.java -> PluginRpc.onRequestBoundToGuid",
                 "org/telegram/tgnet/ConnectionsManager.java -> PluginRpc.onRequestCancelled",
