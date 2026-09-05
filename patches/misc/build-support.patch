@@ -5,7 +5,7 @@ Subject: build support stuff for fork-specific code: - added kotlin - bumped min
 
 ---
  .gitmodules                                   |   3 +
- TMessagesProj/build.gradle                    | 118 +++-------
+ TMessagesProj/build.gradle                    | 120 ++++------
  TMessagesProj/google-services.json            |  76 ++-----
  TMessagesProj/proguard-rules.pro              |  13 ++
  TMessagesProj/src/main/AndroidManifest.xml    |   7 +
@@ -20,7 +20,7 @@ Subject: build support stuff for fork-specific code: - added kotlin - bumped min
  build.gradle                                  |  14 +-
  gradle.properties                             |   2 +-
  settings.gradle                               |  40 +++-
- 16 files changed, 284 insertions(+), 358 deletions(-)
+ 16 files changed, 286 insertions(+), 358 deletions(-)
  create mode 100644 TMessagesProj_App/jni/CMakeLists.txt
 
 diff --git a/.gitmodules b/.gitmodules
@@ -96,7 +96,7 @@ index 0000000..0000000 100644
  
      externalNativeBuild {
          cmake {
-@@ -120,24 +130,29 @@ android {
+@@ -120,24 +130,31 @@ android {
      compileOptions {
          sourceCompatibility JavaVersion.VERSION_1_8
          targetCompatibility JavaVersion.VERSION_1_8
@@ -110,6 +110,8 @@ index 0000000..0000000 100644
  
      defaultConfig {
 -        minSdkVersion 21
++        testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
++        testInstrumentationRunnerArguments package: "desu.inugram"
 +        minSdkVersion 26
          targetSdkVersion 36
  
@@ -132,7 +134,7 @@ index 0000000..0000000 100644
              }
          }
      }
-@@ -150,77 +165,13 @@ android {
+@@ -150,77 +167,13 @@ android {
              multiDexEnabled true
              proguardFiles getDefaultProguardFile('proguard-android.txt'), '../TMessagesProj/proguard-rules.pro', '../TMessagesProj/proguard-rules-beta.pro'
              ndk.debugSymbolLevel = 'FULL'
@@ -214,7 +216,7 @@ index 0000000..0000000 100644
          }
  
          release {
-@@ -230,13 +181,13 @@ android {
+@@ -230,13 +183,13 @@ android {
              multiDexEnabled true
              proguardFiles getDefaultProguardFile('proguard-android.txt'), '../TMessagesProj/proguard-rules.pro'
              ndk.debugSymbolLevel = 'FULL'
@@ -232,7 +234,7 @@ index 0000000..0000000 100644
          }
      }
  
-@@ -254,7 +205,6 @@ def getProps(String propName) {
+@@ -254,7 +207,6 @@ def getProps(String propName) {
          return "";
      }
  }
@@ -240,7 +242,7 @@ index 0000000..0000000 100644
  
  task checkVisibility {
      doFirst {
-@@ -277,3 +227,7 @@ task checkVisibility {
+@@ -277,3 +229,7 @@ task checkVisibility {
  }
  
  preBuild.dependsOn checkVisibility

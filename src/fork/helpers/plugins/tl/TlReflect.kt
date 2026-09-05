@@ -11,9 +11,11 @@ import org.telegram.tgnet.tl.TL_aicompose
 import org.telegram.tgnet.tl.TL_bots
 import org.telegram.tgnet.tl.TL_chatlists
 import org.telegram.tgnet.tl.TL_communities
+import org.telegram.tgnet.tl.TL_ephemeral
 import org.telegram.tgnet.tl.TL_forum
 import org.telegram.tgnet.tl.TL_fragment
 import org.telegram.tgnet.tl.TL_iv
+import org.telegram.tgnet.tl.TL_keyboard
 import org.telegram.tgnet.tl.TL_payments
 import org.telegram.tgnet.tl.TL_phone
 import org.telegram.tgnet.tl.TL_stars
@@ -53,9 +55,11 @@ object TlReflect {
         TL_bots::class.java,
         TL_chatlists::class.java,
         TL_communities::class.java,
+        TL_ephemeral::class.java,
         TL_forum::class.java,
         TL_fragment::class.java,
         TL_iv::class.java,
+        TL_keyboard::class.java,
         TL_payments::class.java,
         TL_phone::class.java,
         TL_stars::class.java,
@@ -120,7 +124,7 @@ object TlReflect {
                 if (Modifier.isStatic(field.modifiers)) continue
                 if (field.isSynthetic) continue
                 if (field.name in EXCLUDED_FIELD_NAMES) continue
-                if (field.name !in map) map[field.name] = field
+                if (field.name !in map) map[field.name] = field.also { it.isAccessible = true }
             }
             current = current.superclass
         }

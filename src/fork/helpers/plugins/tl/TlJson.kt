@@ -111,7 +111,7 @@ object TlJson {
         val cls = TlReflect.classOf(tlName)
             ?: throw IllegalArgumentException("TlJson.fromJson: unknown TL type '$tlName'")
         val instance = try {
-            cls.getDeclaredConstructor().newInstance()
+            cls.getDeclaredConstructor().also { it.isAccessible = true }.newInstance()
         } catch (e: Exception) {
             throw IllegalArgumentException("TlJson.fromJson: cannot instantiate '$tlName': ${e.message}", e)
         }
