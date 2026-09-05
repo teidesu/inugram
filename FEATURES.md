@@ -249,6 +249,7 @@ most things are toggleable in `Settings → Inugram`, with sensible opinionated 
 ## 🐶 plugins (experimental, wip)
 
 - InuPlugin-style js plugins running on a rust engine (rquickjs/quickjs-ng) — exposes `console.*`, `inu.info()`, and an rpc bridge (`inu.interceptRpc`/`inu.invokeRpc`/`inu.onUpdate`) gated by `@grant` permissions
+- plugin TL construction includes keyboard/button and ephemeral-message types
 - invalid `interceptRpc` TL returns are logged and skip that middleware by default; `{ strict: true }` instead fails the app's RPC
 - plugins can rewrite or cancel outgoing messages (`inu.interceptSendMessage`), with optional native text/edit filters, and rewrite or drop incoming updates before the app applies them (`inu.interceptUpdate`)
 - plugins can rewrite TL objects as the app parses them, including rows read back out of the local cache (`inu.interceptDeserialize`) — declarative rules only, matched natively, and never over ids, secret chats or the account-takeover surface

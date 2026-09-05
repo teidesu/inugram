@@ -3,9 +3,11 @@ package desu.inugram.helpers.plugins
 import desu.inugram.core.plugins.TlCtorIds
 import desu.inugram.core.plugins.TlFlags
 import desu.inugram.core.plugins.TlNames
+import desu.inugram.helpers.plugins.tl.TlFilter
 import desu.inugram.helpers.plugins.tl.TlJson
 import desu.inugram.helpers.plugins.tl.TlReflect
 import java.lang.reflect.Modifier
+import kotlin.test.assertEquals
 import kotlin.test.assertTrue
 import org.json.JSONObject
 import org.junit.Test
@@ -30,9 +32,11 @@ class TlTablesTest {
         org.telegram.tgnet.tl.TL_bots::class.java,
         org.telegram.tgnet.tl.TL_chatlists::class.java,
         org.telegram.tgnet.tl.TL_communities::class.java,
+        org.telegram.tgnet.tl.TL_ephemeral::class.java,
         org.telegram.tgnet.tl.TL_forum::class.java,
         org.telegram.tgnet.tl.TL_fragment::class.java,
         org.telegram.tgnet.tl.TL_iv::class.java,
+        org.telegram.tgnet.tl.TL_keyboard::class.java,
         org.telegram.tgnet.tl.TL_payments::class.java,
         org.telegram.tgnet.tl.TL_phone::class.java,
         org.telegram.tgnet.tl.TL_stars::class.java,
@@ -95,6 +99,32 @@ class TlTablesTest {
             }
         }
         assertTrue(failures.isEmpty(), "${failures.size} of ${names.size} names failed: ${failures.take(5)}")
+    }
+
+    @Test
+    fun private_keyboard_types_round_trip_their_public_fields() {
+        val auth = TlJson.toJson(
+            TlJson.fromJson(JSONObject("""{"_":"inputInlineButtonTypeUrlAuth","url":"https://example.com","fwd_text":"Open","request_write_access":true}""")),
+            TlFilter.Policy(takeover = true, drafts = false),
+        )
+        assertEquals("https://example.com", auth.getString("url"))
+        assertEquals("Open", auth.getString("fwd_text"))
+        assertTrue(auth.getBoolean("request_write_access"))
+        assertTrue(!auth.has("flags"))
+
+        val peer = TlJson.toJson(
+            TlJson.fromJson(JSONObject("""{"_":"inputButtonTypeRequestPeer","button_id":7,"max_quantity":3,"name_requested":true}""")),
+            TlFilter.Policy(takeover = true, drafts = false),
+        )
+        assertEquals(7, peer.getInt("button_id"))
+        assertEquals(3, peer.getInt("max_quantity"))
+        assertTrue(peer.getBoolean("name_requested"))
+
+        val profile = TlJson.toJson(
+            TlJson.fromJson(JSONObject("""{"_":"inputInlineButtonTypeUserProfile","user_id":{"_":"inputUserSelf"}}""")),
+            TlFilter.Policy(takeover = true, drafts = false),
+        )
+        assertEquals("inputUserSelf", profile.getJSONObject("user_id").getString("_"))
     }
 
     private fun publicFieldNames(cls: Class<*>): Set<String> {

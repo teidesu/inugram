@@ -28,7 +28,7 @@ class PluginStateTest {
 
     @Test
     fun a_new_mutable_field_has_to_say_which_thread_owns_it() {
-        val known = setOf("parsed", "source", "manifest", "enabled", "failure", "engine", "settingsPageId")
+        val known = setOf("parsed", "source", "manifest", "enabled", "dev", "failure", "engine", "settingsPageId")
         val unknown = mutableFields().map { it.name } - known
         assertTrue(unknown.isEmpty(), "new mutable Plugin fields: $unknown")
     }
