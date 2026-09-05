@@ -118,7 +118,7 @@ pub extern "system" fn Java_desu_inugram_helpers_plugins_QuickJs_nativeCreate(
           install_kv(&ctx, bridge.clone(), grants.clone(), &globals)?;
           install_clipboard(&ctx, bridge.clone(), grants.clone(), &globals)?;
           install_open_url(&ctx, bridge.clone(), grants.clone(), &globals)?;
-          install_dialogs(&ctx, bridge.clone(), log.clone(), &globals)
+          install_dialogs(&ctx, bridge.clone(), jvm.clone(), log.clone(), &globals)
         })
         .map_err(|e| log(&format!("inu.kv/inu.ui failed to install: {e:?}")))
         .ok()?;

@@ -178,6 +178,87 @@ fn resource_icon_checks_shape_then_existence() {
 }
 
 #[test]
+fn preset_and_android_raw_animations_mint_the_same_icon_kind() {
+  let (_rt, ctx, host) = setup(&["missing_animation"]);
+  assert_eq!(eval_string(&ctx, "inu.icons.animation('success').__inuIcon"), "a0done");
+  assert_eq!(eval_string(&ctx, "inu.icons.animation('loading').__inuIcon"), "a0timer_3");
+  assert_eq!(eval_string(&ctx, "inu.android.rawAnimation('info').__inuIcon"), "a0info");
+  assert_eq!(eval_string(&ctx, "inu.android.rawAnimation('info', { loop: true }).__inuIcon"), "a1info");
+  assert_eq!(eval_string(&ctx, "inu.android.rawAnimation('info', { loop: 3 }).__inuIcon"), "an3:info");
+  assert_eq!(eval_string(&ctx, "inu.android.rawAnimation('info', { static: true }).__inuIcon"), "asinfo");
+  assert_eq!(
+    thrown_code(&ctx, "inu.android.rawAnimation('info', { loop: true, static: true })"),
+    "invalid-argument"
+  );
+  for loop_value in ["-1", "1.5", "65536"] {
+    assert_eq!(
+      thrown_code(&ctx, &format!("inu.android.rawAnimation('info', {{ loop: {loop_value} }})")),
+      "invalid-argument",
+    );
+  }
+  assert_eq!(thrown_code(&ctx, "inu.icons.animation('unknown')"), "invalid-argument");
+  assert_eq!(thrown_code(&ctx, "inu.android.rawAnimation('missing_animation')"), "not-found");
+  assert!(host.asked.borrow().iter().all(|(kind, _)| *kind == KIND_RAW_ANIMATION));
+}
+
+#[test]
+fn custom_emoji_requires_a_positive_int64_string() {
+  let (_rt, ctx, _host) = setup(&[]);
+  assert_eq!(eval_string(&ctx, "inu.icons.customEmoji('5361751237382052539').__inuIcon"), "e15361751237382052539");
+  assert_eq!(
+    eval_string(&ctx, "inu.icons.customEmoji('5361751237382052539', { loop: true }).__inuIcon"),
+    "e15361751237382052539",
+  );
+  assert_eq!(
+    eval_string(&ctx, "inu.icons.customEmoji('5361751237382052539', { static: true }).__inuIcon"),
+    "es5361751237382052539",
+  );
+  assert_eq!(
+    eval_string(&ctx, "inu.icons.customEmoji('5361751237382052539', { loop: false }).__inuIcon"),
+    "e05361751237382052539",
+  );
+  assert_eq!(
+    eval_string(&ctx, "inu.icons.customEmoji('5361751237382052539', { loop: 3 }).__inuIcon"),
+    "en3:5361751237382052539",
+  );
+  assert_eq!(thrown_code(&ctx, "inu.icons.customEmoji('5361751237382052539', { loop: 'yes' })"), "TypeError");
+  for bad in ["'0'", "'-1'", "'nope'", "42"] {
+    assert_ne!(thrown_code(&ctx, &format!("inu.icons.customEmoji({bad})")), "did-not-throw");
+  }
+}
+
+#[test]
+fn sticker_selector_is_explicit_and_bounded() {
+  let (_rt, ctx, _host) = setup(&[]);
+  assert_eq!(eval_string(&ctx, "inu.icons.sticker({ slug: 'dogs', index: 2 }).__inuIcon"), "t1i2\ndogs");
+  assert_eq!(
+    eval_string(&ctx, "inu.icons.sticker({ slug: 'dogs', id: '5361751237382052539' }).__inuIcon"),
+    "t1d5361751237382052539\ndogs",
+  );
+  assert_eq!(eval_string(&ctx, "inu.icons.sticker({ slug: 'dogs', emoji: '🐶' }).__inuIcon"), "t1e8J-Qtg\ndogs");
+  assert_eq!(
+    eval_string(&ctx, "inu.icons.sticker({ slug: 'dogs', index: 2, loop: true }).__inuIcon"),
+    "t1i2\ndogs"
+  );
+  assert_eq!(
+    eval_string(&ctx, "inu.icons.sticker({ slug: 'dogs', index: 2, static: true }).__inuIcon"),
+    "tsi2\ndogs"
+  );
+  assert_eq!(
+    eval_string(&ctx, "inu.icons.sticker({ slug: 'dogs', index: 2, loop: 3 }).__inuIcon"),
+    "tn3:i2\ndogs"
+  );
+  for bad in [
+    "{ slug: 'dogs' }",
+    "{ slug: 'dogs', index: 0, emoji: '🐶' }",
+    "{ slug: 'dogs', index: -1 }",
+    "{ slug: 'bad/slugs', index: 0 }",
+  ] {
+    assert_eq!(thrown_code(&ctx, &format!("inu.icons.sticker({bad})")), "invalid-argument");
+  }
+}
+
+#[test]
 fn svg_refuses_before_it_asks_the_host() {
   let (_rt, ctx, host) = setup(&[]);
   assert_eq!(thrown_code(&ctx, "inu.icons.svg('hello')"), "invalid-argument");
@@ -272,6 +353,9 @@ fn a_row_carries_its_icon_spec_into_the_render() {
                         items: ['a'], selected: 0, onChange: () => {} }),
                     inu.ui.button({ text: 'Inline', icon: inu.icons.svg('<svg><path d="M0 0"/></svg>'),
                         onClick: () => {} }),
+                    inu.ui.button({ text: 'Animation', icon: inu.icons.animation('success'), onClick: () => {} }),
+                    inu.ui.button({ text: 'Emoji', icon: inu.icons.customEmoji('5361751237382052539'), onClick: () => {} }),
+                    inu.ui.button({ text: 'Sticker', icon: inu.icons.sticker({ slug: 'dogs', index: 2 }), onClick: () => {} }),
                     inu.ui.button({ text: 'None', onClick: () => {} }),
                 ],
             });
@@ -284,6 +368,9 @@ fn a_row_carries_its_icon_spec_into_the_render() {
   assert!(json.contains(r#""text":"Curated","icon":"rmsg_settings""#), "{json}");
   assert!(json.contains(r#""text":"Native","icon":"rmsg_fave""#), "{json}");
   assert!(json.contains(r#""icon":"s<svg><path d=\"M0 0\"/></svg>""#), "{json}");
+  assert!(json.contains(r#""text":"Animation","icon":"a0done""#), "{json}");
+  assert!(json.contains(r#""text":"Emoji","icon":"e15361751237382052539""#), "{json}");
+  assert!(json.contains("\"text\":\"Sticker\",\"icon\":\"t1i2\\ndogs\""), "{json}");
   assert!(!json.contains(r#""text":"None","icon""#), "{json}");
 }
 
@@ -338,7 +425,7 @@ mod bundled_oracle {
 
   impl IconHost for OracleHost {
     fn icon_resolves(&self, _kind: i32, value: &str) -> bool {
-      !value.contains("no_such_drawable")
+      !value.contains("no_such")
     }
 
     fn common_icon(&self, name: &str) -> Option<String> {
@@ -365,6 +452,6 @@ mod bundled_oracle {
     let lines = crate::testing::harness::run_capturing_console(&rt, &ctx, ORACLE);
     drop(ui);
 
-    crate::testing::harness::assert_oracle_exact(&lines, "icons test done", 20);
+    crate::testing::harness::assert_oracle_exact(&lines, "icons test done", 30);
   }
 }

@@ -1,6 +1,8 @@
 package desu.inugram.ui.settings
 
 import android.content.Context
+import android.graphics.Color
+import android.graphics.drawable.ColorDrawable
 import android.text.TextUtils
 import android.view.View
 import desu.inugram.helpers.plugins.QuickJs
@@ -59,11 +61,15 @@ class ButtonCellFactory : UItem.UItemFactory<TextCell>() {
         // context, so the drawable follows the current theme and icon pack without the model
         // knowing either existed. the icon setter drops the cell's colour filter, which the
         // setColors below puts back - that is what tints it to the row
-        val icon = (item.`object` as? ButtonIcon)?.let { PluginIcons.resolveDrawable(cell.context, it.spec, it.engine) }
+        val icon = item.`object` as? ButtonIcon
         if (icon == null) {
+            PluginIcons.clearIcon(cell.imageView)
             cell.setTextAndValue(item.text, item.textValue, sameRow, divider)
         } else {
-            cell.setTextAndValueAndIcon(item.text, item.textValue, icon, divider)
+            cell.setTextAndValueAndIcon(item.text, item.textValue, ColorDrawable(Color.TRANSPARENT), divider)
+            if (!PluginIcons.setIcon(cell.imageView, icon.spec, icon.engine)) {
+                cell.setTextAndValue(item.text, item.textValue, sameRow, divider)
+            }
         }
         cell.setSubtitle(item.subtext)
         if (item.red) {

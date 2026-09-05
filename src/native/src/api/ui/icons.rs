@@ -1,6 +1,9 @@
 use std::rc::Rc;
 
-use rquickjs::{Ctx, Exception, Function, Object, Result as JsResult, Value};
+use base64::engine::general_purpose::URL_SAFE_NO_PAD;
+use base64::Engine;
+use rquickjs::function::Opt;
+use rquickjs::{Ctx, Exception, Function, IntoJs, Object, Result as JsResult, Value};
 
 use crate::api::{error::PluginErrorCode, platform::jvm::JvmState};
 
@@ -13,6 +16,10 @@ pub(crate) const RETAINED_VALUE_TAG: &str = "__inuRetainedIconValue";
 
 pub const KIND_RESOURCE: i32 = 0;
 pub const KIND_SVG: i32 = 1;
+pub const KIND_RAW_ANIMATION: i32 = 2;
+
+const STICKER_SLUG_LIMIT: usize = 64;
+const STICKER_EMOJI_LIMIT: usize = 64;
 
 pub(crate) struct Icon<'js> {
   pub(crate) spec: String,
@@ -64,10 +71,53 @@ fn svg_spec(source: &str) -> String {
   format!("s{source}")
 }
 
+fn is_positive_id(value: &str) -> bool {
+  value.parse::<i64>().is_ok_and(|id| id > 0)
+}
+
+fn is_sticker_slug(value: &str) -> bool {
+  !value.is_empty()
+    && value.len() <= STICKER_SLUG_LIMIT
+    && !value.as_bytes()[0].is_ascii_digit()
+    && value.bytes().all(|byte| byte.is_ascii_alphanumeric() || byte == b'_')
+}
+
+fn is_sticker_spec(spec: &str) -> bool {
+  let Some((selector, slug)) = spec.split_once('\n') else {
+    return false;
+  };
+  if !is_sticker_slug(slug) || selector.len() < 2 {
+    return false;
+  }
+  match selector.as_bytes()[0] {
+    b'i' => selector[1..].parse::<usize>().is_ok_and(|index| index <= u16::MAX as usize),
+    b'd' => is_positive_id(&selector[1..]),
+    b'e' => URL_SAFE_NO_PAD
+      .decode(&selector[1..])
+      .is_ok_and(|emoji| !emoji.is_empty() && emoji.len() <= STICKER_EMOJI_LIMIT && String::from_utf8(emoji).is_ok()),
+    _ => false,
+  }
+}
+
+fn animation_payload(spec: &str) -> Option<&str> {
+  let mode = spec.get(1..)?;
+  match mode.as_bytes().first()? {
+    b'0' | b'1' | b's' => mode.get(1..),
+    b'n' => {
+      let (count, payload) = mode.get(1..)?.split_once(':')?;
+      count.parse::<u16>().ok().filter(|count| *count > 0).map(|_| payload)
+    }
+    _ => None,
+  }
+}
+
 fn validate_spec<'js>(ctx: &Ctx<'js>, what: &str, spec: &str) -> JsResult<()> {
   let valid = match spec.as_bytes().first() {
     Some(b'r') => is_resource_name(&spec[1..]),
     Some(b's') => check_svg(&spec[1..]).is_ok(),
+    Some(b'a') => animation_payload(spec).is_some_and(is_resource_name),
+    Some(b'e') => animation_payload(spec).is_some_and(is_positive_id),
+    Some(b't') => animation_payload(spec).is_some_and(is_sticker_spec),
     _ => false,
   };
   if valid {
@@ -197,6 +247,161 @@ fn js_svg<'js>(ctx: &Ctx<'js>, host: &Rc<dyn IconHost>, source: Value<'js>) -> J
   new_icon(ctx, svg_spec(&source))
 }
 
+#[derive(Clone, Copy)]
+enum AnimationMode {
+  Once,
+  Forever,
+  Repeat(u16),
+  Static,
+}
+
+impl AnimationMode {
+  fn wire(self) -> String {
+    match self {
+      Self::Once => "0".to_string(),
+      Self::Forever => "1".to_string(),
+      Self::Repeat(count) => format!("n{count}:"),
+      Self::Static => "s".to_string(),
+    }
+  }
+}
+
+fn read_animation_mode<'js>(
+  ctx: &Ctx<'js>,
+  options: Opt<Value<'js>>,
+  what: &str,
+  loops_by_default: bool,
+) -> JsResult<AnimationMode> {
+  let Some(options) = options.0 else {
+    return Ok(if loops_by_default { AnimationMode::Forever } else { AnimationMode::Once });
+  };
+  let Some(options) = options.as_object() else {
+    return Err(Exception::throw_type(ctx, &format!("{what}: options must be an object")));
+  };
+  let loop_value: Value = options.get("loop")?;
+  let static_value: Value = options.get("static")?;
+  let loop_is_explicit = !loop_value.is_undefined();
+  let mode = if loop_value.is_undefined() {
+    if loops_by_default { AnimationMode::Forever } else { AnimationMode::Once }
+  } else if let Some(loop_animation) = loop_value.as_bool() {
+    if loop_animation { AnimationMode::Forever } else { AnimationMode::Once }
+  } else if let Some(repeats) = loop_value.as_number() {
+    if !repeats.is_finite() || repeats.fract() != 0.0 || !(0.0..=f64::from(u16::MAX)).contains(&repeats) {
+      return PluginErrorCode::InvalidArgument
+        .throw(ctx, &format!("{what}: options.loop must be an integer from 0 to {}", u16::MAX));
+    }
+    if repeats == 0.0 {
+      AnimationMode::Once
+    } else {
+      AnimationMode::Repeat(repeats as u16)
+    }
+  } else {
+    return Err(Exception::throw_type(
+      ctx,
+      &format!("{what}: options.loop must be a boolean or number"),
+    ));
+  };
+  let static_animation = if static_value.is_undefined() {
+    false
+  } else {
+    static_value
+      .as_bool()
+      .ok_or_else(|| Exception::throw_type(ctx, &format!("{what}: options.static must be a boolean")))?
+  };
+  if loop_is_explicit && !matches!(mode, AnimationMode::Once) && static_animation {
+    return PluginErrorCode::InvalidArgument
+      .throw(ctx, &format!("{what}: options.loop and options.static cannot both be true"));
+  }
+  Ok(if static_animation {
+    AnimationMode::Static
+  } else {
+    mode
+  })
+}
+
+fn js_raw_animation<'js>(
+  ctx: &Ctx<'js>,
+  host: &Rc<dyn IconHost>,
+  name: Value<'js>,
+  options: Opt<Value<'js>>,
+  what: &str,
+  loops_by_default: bool,
+) -> JsResult<Object<'js>> {
+  let name = as_str(ctx, what, &name)?;
+  if !is_resource_name(&name) {
+    return PluginErrorCode::InvalidArgument.throw(ctx, &format!("{what}: '{name}' is not a raw resource name"));
+  }
+  if !host.icon_resolves(KIND_RAW_ANIMATION, &name) {
+    return PluginErrorCode::NotFound.throw(ctx, &format!("{what}: no animation named '{name}'"));
+  }
+  let mode = read_animation_mode(ctx, options, what, loops_by_default)?;
+  new_icon(ctx, format!("a{}{name}", mode.wire()))
+}
+
+fn js_animation<'js>(ctx: &Ctx<'js>, host: &Rc<dyn IconHost>, name: Value<'js>) -> JsResult<Object<'js>> {
+  let preset = as_str(ctx, "icons.animation", &name)?;
+  let resource = match preset.as_str() {
+    "success" => "done",
+    "error" => "error",
+    "info" => "info",
+    "loading" => "timer_3",
+    _ => return PluginErrorCode::InvalidArgument.throw(ctx, &format!("icons.animation: unknown preset '{preset}'")),
+  };
+  js_raw_animation(ctx, host, resource.into_js(ctx)?, Opt(None), "icons.animation", false)
+}
+
+fn js_custom_emoji<'js>(ctx: &Ctx<'js>, id: Value<'js>, options: Opt<Value<'js>>) -> JsResult<Object<'js>> {
+  let id = as_str(ctx, "icons.customEmoji", &id)?;
+  if !is_positive_id(&id) {
+    return PluginErrorCode::InvalidArgument.throw(ctx, "icons.customEmoji: expected a positive int64 string");
+  }
+  let mode = read_animation_mode(ctx, options, "icons.customEmoji", true)?;
+  new_icon(ctx, format!("e{}{id}", mode.wire()))
+}
+
+fn js_sticker<'js>(ctx: &Ctx<'js>, options: Value<'js>) -> JsResult<Object<'js>> {
+  let Some(options) = options.as_object() else {
+    return Err(Exception::throw_type(ctx, "icons.sticker: expected an options object"));
+  };
+  let slug: String = options
+    .get("slug")
+    .map_err(|_| Exception::throw_type(ctx, "icons.sticker: 'slug' must be a string"))?;
+  if !is_sticker_slug(&slug) {
+    return PluginErrorCode::InvalidArgument.throw(ctx, "icons.sticker: invalid sticker-set slug");
+  }
+  let index: Value = options.get("index")?;
+  let emoji: Value = options.get("emoji")?;
+  let id: Value = options.get("id")?;
+  let count = [!index.is_undefined(), !emoji.is_undefined(), !id.is_undefined()]
+    .into_iter()
+    .filter(|selected| *selected)
+    .count();
+  if count != 1 {
+    return PluginErrorCode::InvalidArgument
+      .throw(ctx, "icons.sticker: provide exactly one of 'index', 'emoji', or 'id'");
+  }
+  let selector = if !index.is_undefined() {
+    let Some(index) = index.as_int().filter(|index| *index >= 0 && *index <= u16::MAX as i32) else {
+      return PluginErrorCode::InvalidArgument.throw(ctx, "icons.sticker: 'index' must be an integer from 0 to 65535");
+    };
+    format!("i{index}")
+  } else if !emoji.is_undefined() {
+    let emoji = as_str(ctx, "icons.sticker", &emoji)?;
+    if emoji.is_empty() || emoji.len() > STICKER_EMOJI_LIMIT {
+      return PluginErrorCode::InvalidArgument.throw(ctx, "icons.sticker: 'emoji' must be 1 to 64 UTF-8 bytes");
+    }
+    format!("e{}", URL_SAFE_NO_PAD.encode(emoji))
+  } else {
+    let id = as_str(ctx, "icons.sticker", &id)?;
+    if !is_positive_id(&id) {
+      return PluginErrorCode::InvalidArgument.throw(ctx, "icons.sticker: 'id' must be a positive int64 string");
+    }
+    format!("d{id}")
+  };
+  let mode = read_animation_mode(ctx, Opt(Some(options.clone().into_value())), "icons.sticker", true)?;
+  new_icon(ctx, format!("t{}{selector}\n{slug}", mode.wire()))
+}
+
 fn js_drawable_icon<'js>(ctx: &Ctx<'js>, jvm: &Rc<JvmState>, drawable: Value<'js>) -> JsResult<Object<'js>> {
   let handle = jvm.handle_id(ctx, &drawable)?;
   if handle < 0 {
@@ -224,6 +429,23 @@ pub fn install_icons<'js>(
   {
     let host = host.clone();
     icons.set(
+      "animation",
+      Function::new(ctx.clone(), move |ctx: Ctx<'js>, name: Value<'js>| js_animation(&ctx, &host, name))?,
+    )?;
+  }
+  icons.set(
+    "customEmoji",
+    Function::new(ctx.clone(), move |ctx: Ctx<'js>, id: Value<'js>, options: Opt<Value<'js>>| {
+      js_custom_emoji(&ctx, id, options)
+    })?,
+  )?;
+  icons.set(
+    "sticker",
+    Function::new(ctx.clone(), move |ctx: Ctx<'js>, options: Value<'js>| js_sticker(&ctx, options))?,
+  )?;
+  {
+    let host = host.clone();
+    icons.set(
       "svg",
       Function::new(ctx.clone(), move |ctx: Ctx<'js>, source: Value<'js>| js_svg(&ctx, &host, source))?,
     )?;
@@ -238,10 +460,22 @@ pub fn install_icons<'js>(
       o
     }
   };
-  android.set(
-    "resourceIcon",
-    Function::new(ctx.clone(), move |ctx: Ctx<'js>, name: Value<'js>| js_resource_icon(&ctx, &host, name))?,
-  )?;
+  {
+    let host = host.clone();
+    android.set(
+      "resourceIcon",
+      Function::new(ctx.clone(), move |ctx: Ctx<'js>, name: Value<'js>| js_resource_icon(&ctx, &host, name))?,
+    )?;
+  }
+  {
+    let host = host.clone();
+    android.set(
+      "rawAnimation",
+      Function::new(ctx.clone(), move |ctx: Ctx<'js>, name: Value<'js>, options: Opt<Value<'js>>| {
+        js_raw_animation(&ctx, &host, name, options, "android.rawAnimation", false)
+      })?,
+    )?;
+  }
   android.set(
     "drawableIcon",
     Function::new(ctx.clone(), move |ctx: Ctx<'js>, drawable: Value<'js>| match jvm.as_ref() {

@@ -206,11 +206,24 @@ object ChatActionsHelper {
             if (activity.isFinished) return@render
             pluginRows[activity] = rows
             val enabled = rows.filter { PluginActions.isEnabled(it.key) }
-            for (row in enabled.filter { PluginActions.isPinned(it.key) }) {
-                val drawable = PluginIcons.resolveDrawable(activity.context, row.icon, row.owner)
+            val pinned = enabled.filter { PluginActions.isPinned(it.key) }
+            for (row in pinned) {
                 headerItem.lazilyAddSubItem(
-                    PluginActions.optionIdFor(row.key), if (drawable == null) R.drawable.msg_settings_old else 0, drawable, row.text, true, false,
+                    PluginActions.optionIdFor(row.key), R.drawable.msg_settings_old, row.text,
                 )
+            }
+            if (pinned.isNotEmpty()) {
+                headerItem.popupLayout.addOnAttachStateChangeListener(object : View.OnAttachStateChangeListener {
+                    override fun onViewAttachedToWindow(view: View) {
+                        view.removeOnAttachStateChangeListener(this)
+                        for (row in pinned) {
+                            val cell = headerItem.getSubItem(PluginActions.optionIdFor(row.key)) as? ActionBarMenuSubItem ?: continue
+                            PluginIcons.setIcon(cell, row.text, row.icon, row.owner, R.drawable.msg_settings_old)
+                        }
+                    }
+
+                    override fun onViewDetachedFromWindow(view: View) = Unit
+                })
             }
             val submenuRows = PluginActions.orderRows(PluginActions.KIND_CHAT, enabled, false)
             if (submenuRows.isEmpty()) return@render
@@ -220,17 +233,15 @@ object ChatActionsHelper {
             }
             submenu.addGap()
             for (row in submenuRows) {
-                val drawable = PluginIcons.resolveDrawable(activity.context, row.icon, row.owner)
-                if (drawable == null) {
-                    submenu.add(R.drawable.msg_settings_old, row.text) {
-                        PluginActions.dispatch(row, surface)
-                        headerItem.closeSubMenu()
-                    }
-                } else {
-                    submenu.add(drawable, row.text) {
-                        PluginActions.dispatch(row, surface)
-                        headerItem.closeSubMenu()
-                    }
+                PluginIcons.addMenuItem(
+                    submenu,
+                    row.text,
+                    row.icon,
+                    row.owner,
+                    R.drawable.msg_settings_old,
+                ) {
+                    PluginActions.dispatch(row, surface)
+                    headerItem.closeSubMenu()
                 }
             }
             headerItem.inu_lazilyAddSwipeBackItem(
@@ -588,15 +599,14 @@ object ChatActionsHelper {
             val byKey = registered.associateBy { it.key }
             for (key in PluginActions.orderMainKeys(PluginActions.KIND_MESSAGE, registered.map { it.key })) {
                 val row = byKey.getValue(key)
-                val drawable = PluginIcons.resolveDrawable(activity.context, row.icon, row.owner)
                 cells[key] = overflow.addSubItem(
                     PluginActions.optionIdFor(key),
-                    if (drawable == null) R.drawable.msg_settings_old else 0,
-                    drawable,
+                    R.drawable.msg_settings_old,
                     row.text ?: "…",
-                    true,
-                    false,
-                ).apply { visibility = View.GONE }
+                ).apply {
+                    PluginIcons.setIcon(this, row.text ?: "…", row.icon, row.owner, R.drawable.msg_settings_old)
+                    visibility = View.GONE
+                }
             }
         }
         val submenu = ItemOptions.swipeback(overflow.popupLayout, activity.resourceProvider)
@@ -715,18 +725,14 @@ object ChatActionsHelper {
                     if (key !in visible) overflow.setSubItemShown(PluginActions.optionIdFor(key), false)
                 }
                 for (row in pinned) {
-                    val drawable = PluginIcons.resolveDrawable(activity.context, row.icon, row.owner)
                     val cell = state.cells.getOrPut(row.key) {
                         overflow.addSubItem(
                             PluginActions.optionIdFor(row.key),
-                            if (drawable == null) R.drawable.msg_settings_old else 0,
-                            drawable,
+                            R.drawable.msg_settings_old,
                             row.text,
-                            true,
-                            false,
                         )
                     }
-                    cell.setTextAndIcon(row.text, if (drawable == null) R.drawable.msg_settings_old else 0, drawable)
+                    PluginIcons.setIcon(cell, row.text, row.icon, row.owner, R.drawable.msg_settings_old)
                     overflow.setSubItemShown(PluginActions.optionIdFor(row.key), true)
                 }
                 while (state.submenu.linearLayout.childCount > 2) {
@@ -734,17 +740,15 @@ object ChatActionsHelper {
                 }
                 val submenuRows = PluginActions.orderRows(PluginActions.KIND_MESSAGE, enabled, false)
                 for (row in submenuRows) {
-                    val drawable = PluginIcons.resolveDrawable(activity.context, row.icon, row.owner)
-                    if (drawable == null) {
-                        state.submenu.add(R.drawable.msg_settings_old, row.text) {
-                            dispatchPluginItem(PluginActions.optionIdFor(row.key), activity)
-                            overflow.closeSubMenu()
-                        }
-                    } else {
-                        state.submenu.add(drawable, row.text) {
-                            dispatchPluginItem(PluginActions.optionIdFor(row.key), activity)
-                            overflow.closeSubMenu()
-                        }
+                    PluginIcons.addMenuItem(
+                        state.submenu,
+                        row.text,
+                        row.icon,
+                        row.owner,
+                        R.drawable.msg_settings_old,
+                    ) {
+                        dispatchPluginItem(PluginActions.optionIdFor(row.key), activity)
+                        overflow.closeSubMenu()
                     }
                 }
                 state.actionsCell.visibility = if (submenuRows.isEmpty()) View.GONE else View.VISIBLE

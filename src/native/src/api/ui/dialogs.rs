@@ -5,17 +5,21 @@ use std::rc::Rc;
 use rquickjs::{Ctx, Exception, Function, Object, Result as JsResult, Runtime, Value};
 
 use crate::api::error::PluginErrorCode;
+use crate::api::platform::jvm::JvmState;
 use crate::api::telegram::rpc::{format_exception, pump_jobs, PendingSettle};
+use crate::api::ui::icons;
 use crate::sandbox::registry::RequestIds;
 
 pub trait DialogHost {
   fn toast(&self, text: &str);
+  fn bulletin(&self, text: &str, icon_spec: &str) -> Option<String>;
   fn dialog(&self, request_id: i64, options_json: &str) -> Option<String>;
   fn chooser(&self, request_id: i64, options_json: &str) -> Option<String>;
 }
 
 pub struct DialogState {
   host: Rc<dyn DialogHost>,
+  jvm: Option<Rc<JvmState>>,
   log: crate::Log,
   next_request_id: RequestIds,
   pending_dialogs: RefCell<HashMap<i64, PendingSettle>>,
@@ -23,6 +27,22 @@ pub struct DialogState {
 }
 
 impl DialogState {
+  fn js_ui_bulletin<'js>(self: &Rc<Self>, ctx: &Ctx<'js>, options: Value<'js>) -> JsResult<()> {
+    let Some(options) = options.as_object() else {
+      return Err(Exception::throw_type(ctx, "bulletin: expected an options object"));
+    };
+    let text = opt_string(ctx, options, "bulletin", "text")?
+      .ok_or_else(|| Exception::throw_type(ctx, "bulletin: 'text' must be a string"))?;
+    let icon_value: Value =
+      options.get("icon").map_err(|_| Exception::throw_type(ctx, "bulletin: cannot read 'icon'"))?;
+    let icon = icons::icon_from_value(ctx, icon_value, "bulletin", self.jvm.as_ref())?
+      .ok_or_else(|| Exception::throw_type(ctx, "bulletin: 'icon' is required"))?;
+    if let Some(err) = self.host.bulletin(&text, &icon.spec) {
+      return Err(ctx.throw(crate::api::error::host_error_to_js(ctx, &err)?));
+    }
+    Ok(())
+  }
+
   fn js_ui_dialog<'js>(self: &Rc<Self>, ctx: &Ctx<'js>, options: Value<'js>) -> JsResult<Value<'js>> {
     let Some(obj) = options.as_object() else {
       return Err(Exception::throw_type(ctx, "dialog: expected an options object"));
@@ -182,11 +202,13 @@ impl DialogState {
 pub fn install_dialogs<'js>(
   ctx: &Ctx<'js>,
   host: Rc<dyn DialogHost>,
+  jvm: Option<Rc<JvmState>>,
   log: crate::Log,
   globals: &crate::api::Globals<'js>,
 ) -> JsResult<Rc<DialogState>> {
   let state = Rc::new(DialogState {
     host,
+    jvm,
     log,
     next_request_id: RequestIds::default(),
     pending_dialogs: RefCell::new(HashMap::new()),
@@ -199,6 +221,12 @@ pub fn install_dialogs<'js>(
     Function::new(ctx.clone(), move |text: rquickjs::Coerced<String>| {
       state2.host.toast(&text.0);
     })?,
+  )?;
+
+  let state2 = state.clone();
+  ui.set(
+    "bulletin",
+    Function::new(ctx.clone(), move |ctx: Ctx<'js>, options: Value<'js>| state2.js_ui_bulletin(&ctx, options))?,
   )?;
 
   let state2 = state.clone();

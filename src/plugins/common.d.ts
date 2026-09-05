@@ -618,7 +618,41 @@ declare namespace inu {
   type UIIcon = OpaqueType<'UIIcon'>
 
   namespace icons {
+    interface LottieOptions {
+      /** `true` loops forever; a number repeats that many times after the initial play. */
+      loop?: boolean | number
+      /** whether to force render this as a static image (i.e. render just the first frame for animated stickers) */
+      static?: boolean
+    }
 
+    /** UIIcon from a built-in common animation */
+    function animation(name: 'success' | 'error' | 'info' | 'loading'): UIIcon
+
+    /** UIIcon from a Telegram custom emoji (`id` is the custom emoji ID as a string) */
+    function customEmoji(id: string, options?: LottieOptions): UIIcon
+
+    type StickerOptions = { slug: string } & LottieOptions & (
+      | { index: number, emoji?: never, id?: never }
+      | { emoji: string, index?: never, id?: never }
+      | { id: string, index?: never, emoji?: never }
+    )
+
+    /**
+     * UIIcon from a Telegram sticker.
+     *
+     * `slug` is the slug of a stickerset, and to address a sticker you can use one of:
+     * - `index` - zero-based index of a sticker in the set
+     * - `emoji` - emoji the sticker represents
+     * - `id` - the sticker's id
+     *
+     * `id` is the most stable way to address a sticker, but none of them are *that* stable
+     * because indices might shift, emojis might change, and sticker with the ID might be deleted from the set.
+     *
+     * for use in interfaces it is highly recommended to use a set you control, or use custom emojis.
+     */
+    function sticker(options: StickerOptions): UIIcon
+
+    /** UIIcon from a built-in common icon */
     function common(
       name:
         | 'settings' | 'info' | 'search' | 'edit' | 'delete' | 'copy' | 'share' | 'download'
@@ -627,7 +661,7 @@ declare namespace inu {
         | 'plus' | 'minus' | 'check' | 'close' | 'more' | 'translate' | 'bookmark',
     ): UIIcon
 
-    /** **at most 64 KiB of source**. */
+    /** UIIcon from a custom SVG, **at most 64 KiB of source**. */
     function svg(source: string): UIIcon
   }
   namespace ui {
@@ -636,17 +670,44 @@ declare namespace inu {
       dispose(): void
     }
 
+    type PageTarget
+      = | { type: 'chat', dialogId: DialogId, topicId?: number, account?: number }
+        | { type: 'profile', dialogId: DialogId, account?: number }
+        | { type: 'dialogs', account?: number }
+        | { type: 'settings', account?: number }
+
+    /** open a page defined by the plugin */
     function openPage(page: UIPage): void
+    /** open a stock commonly used page */
     function openPage(screen: PageTarget): void
 
+    /** show a toast */
     function toast(text: string): void
+    /** show a bulletin (aka snackbar) */
+    function bulletin(options: {
+      text: string
+      icon: UIIcon
+    }): void
 
+    /**
+     * show a dialog
+     *
+     * returns a promise that resolves to the result of the dialog once it's dismissed,
+     * with either the name of the button pressed, or `'dismissed'` if the dialog was dismissed
+     * (e.g. by tapping outside of it, or by pressing the back button).
+     */
     function dialog(options: {
+      /** title of the dialog */
       title?: string
+      /** message of the dialog */
       message?: string
+      /** custom body of the dialog */
       body?: UIElement
+      /** text of the positive button, `undefined` to hide */
       positive?: string
+      /** text of the negative button, `undefined` to hide */
       negative?: string
+      /** text of the neutral button, `undefined` to hide */
       neutral?: string
     }): Promise<'positive' | 'negative' | 'neutral' | 'dismissed'>
 
@@ -671,12 +732,6 @@ declare namespace inu {
       topicId?: number
       account: Account
     }
-
-    type PageTarget =
-      | { type: 'chat', dialogId: DialogId, topicId?: number, account?: number }
-      | { type: 'profile', dialogId: DialogId, account?: number }
-      | { type: 'dialogs', account?: number }
-      | { type: 'settings', account?: number }
 
     function getCurrentScreen(): CurrentScreen | null
 

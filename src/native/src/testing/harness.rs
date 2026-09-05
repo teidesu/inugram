@@ -305,6 +305,7 @@ const KV_TEST_QUOTA: usize = 1 << 20;
 pub(crate) struct RecordingHost {
   pub(crate) store: RefCell<std::collections::BTreeMap<String, String>>,
   pub(crate) toasts: RefCell<Vec<String>>,
+  pub(crate) bulletins: RefCell<Vec<(String, String)>>,
   pub(crate) dialogs: RefCell<Vec<(i64, String)>>,
   pub(crate) fail_kv: RefCell<Option<String>>,
   pub(crate) fail_dialog: RefCell<Option<String>>,
@@ -375,6 +376,11 @@ impl DialogHost for RecordingHost {
     self.toasts.borrow_mut().push(text.to_string());
   }
 
+  fn bulletin(&self, text: &str, icon_spec: &str) -> Option<String> {
+    self.bulletins.borrow_mut().push((text.to_string(), icon_spec.to_string()));
+    None
+  }
+
   fn dialog(&self, request_id: i64, options_json: &str) -> Option<String> {
     if let Some(err) = self.fail_dialog.borrow().as_ref() {
       return Some(err.clone());
@@ -435,7 +441,7 @@ pub(crate) fn setup_apis(grants: &[&str]) -> ApiFixture {
     crate::api::io::kv::install_kv(&ctx, host.clone(), grants.clone(), &inu).unwrap();
     crate::api::platform::clipboard::install_clipboard(&ctx, host.clone(), grants.clone(), &inu).unwrap();
     crate::api::platform::open_url::install_open_url(&ctx, host.clone(), grants.clone(), &inu).unwrap();
-    let dialogs = crate::api::ui::dialogs::install_dialogs(&ctx, host.clone(), log.clone(), &inu).unwrap();
+    let dialogs = crate::api::ui::dialogs::install_dialogs(&ctx, host.clone(), None, log.clone(), &inu).unwrap();
     (lifecycle, dialogs)
   });
   let lifecycle = DisposeOnDrop::new(&ctx, lifecycle, |ctx, state| state.dispose(ctx));

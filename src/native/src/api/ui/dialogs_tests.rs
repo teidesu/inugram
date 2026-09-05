@@ -1,5 +1,18 @@
 use super::*;
 use crate::testing::harness::setup_apis as setup;
+use std::rc::Rc;
+
+struct BulletinIconHost;
+
+impl crate::api::ui::icons::IconHost for BulletinIconHost {
+  fn icon_resolves(&self, _kind: i32, _value: &str) -> bool {
+    true
+  }
+
+  fn common_icon(&self, name: &str) -> Option<String> {
+    (name == "info").then(|| "msg_info".to_string())
+  }
+}
 
 #[test]
 fn toast_reaches_host_coerced_to_string() {
@@ -8,6 +21,38 @@ fn toast_reaches_host_coerced_to_string() {
     ctx.eval::<(), _>("inu.ui.toast('hello'); inu.ui.toast(42);").unwrap();
   });
   assert_eq!(*host.toasts.borrow(), vec!["hello".to_string(), "42".to_string()]);
+}
+
+#[test]
+fn bulletin_reaches_host_with_ui_and_native_animation_icons() {
+  let (_rt, ctx, host, _lifecycle, _state, _logs) = setup(&[]);
+  ctx.with(|ctx| {
+    crate::api::ui::icons::install_icons(
+      &ctx,
+      Rc::new(BulletinIconHost),
+      None,
+      &crate::testing::harness::get_api_globals(&ctx),
+    )
+    .unwrap();
+    ctx
+      .eval::<(), _>(
+        "inu.ui.bulletin({ text: 'static', icon: inu.icons.common('info') }); \
+         inu.ui.bulletin({ text: 'animated', icon: inu.icons.animation('success') });",
+      )
+      .unwrap();
+  });
+  assert_eq!(
+    *host.bulletins.borrow(),
+    vec![("static".to_string(), "rmsg_info".to_string()), ("animated".to_string(), "a0done".to_string())],
+  );
+}
+
+#[test]
+fn bulletin_requires_text_and_an_icon() {
+  let (_rt, ctx, _host, _lifecycle, _state, _logs) = setup(&[]);
+  for source in ["inu.ui.bulletin({ icon: {} })", "inu.ui.bulletin({ text: 'x' })"] {
+    assert!(ctx.with(|ctx| ctx.eval::<(), _>(source).is_err()), "accepted {source}");
+  }
 }
 
 #[test]

@@ -1341,6 +1341,11 @@ mod grant_boundary {
       self.crossings.set(self.crossings.get() + 1);
     }
 
+    fn bulletin(&self, _text: &str, _icon_spec: &str) -> Option<String> {
+      self.crossings.set(self.crossings.get() + 1);
+      Some("no ui here".to_string())
+    }
+
     fn dialog(&self, _request_id: i64, _options_json: &str) -> Option<String> {
       self.crossings.set(self.crossings.get() + 1);
       Some("no ui here".to_string())
@@ -1437,7 +1442,7 @@ mod grant_boundary {
       let open_url_host: Rc<dyn OpenUrlHost> = boundary.clone();
       crate::api::platform::open_url::install_open_url(&ctx, open_url_host, grants.clone(), &inu).unwrap();
       let dialog_host: Rc<dyn DialogHost> = boundary.clone();
-      crate::api::ui::dialogs::install_dialogs(&ctx, dialog_host, log.clone(), &inu).unwrap();
+      crate::api::ui::dialogs::install_dialogs(&ctx, dialog_host, None, log.clone(), &inu).unwrap();
       let accounts = crate::api::telegram::account::install_account(
         &ctx,
         TestAccountHost::with(ONE_ACCOUNT),
