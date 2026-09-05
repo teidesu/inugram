@@ -1,6 +1,8 @@
 package desu.inugram.helpers.plugins.ui
 
 import android.content.Context
+import android.graphics.PorterDuff
+import android.graphics.PorterDuffColorFilter
 import android.os.Bundle
 import android.text.SpannableString
 import android.text.Spanned
@@ -36,6 +38,8 @@ import org.telegram.ui.ActionBar.BaseFragment
 import org.telegram.ui.ActionBar.Theme
 import org.telegram.ui.ChatActivity
 import org.telegram.ui.Cells.CheckBoxCell
+import org.telegram.ui.Components.Bulletin
+import org.telegram.ui.Components.BulletinFactory
 import org.telegram.ui.Components.ItemOptions
 import org.telegram.ui.Components.LayoutHelper
 import org.telegram.ui.LaunchActivity
@@ -45,7 +49,7 @@ import org.telegram.ui.SettingsActivity
 /**
  * Kotlin side of the settings-page ui bridge (rust: `ui.rs`): presents [PluginSettingsActivity]
  * pages, routes `page.invalidate()` to open pages, anchors `UIAnchor.openMenu` popups to the row
- * the anchor names, and shows the `inu.ui.dialog`/`prompt`/`chooser` modals.
+ * the anchor names, and shows bulletins plus the `inu.ui.dialog`/`prompt`/`chooser` modals.
  *
  * Threading: upcalls arrive on [Utilities.globalQueue]; anything view-touching hops to the UI
  * thread and settles back on globalQueue with the usual engine-identity check.
@@ -71,6 +75,45 @@ object PluginUi {
             AndroidUtilities.runOnUIThread {
                 Toast.makeText(ApplicationLoader.applicationContext, text, Toast.LENGTH_SHORT).show()
             }
+        }
+
+        override fun uiBulletin(text: String, iconSpec: String): String? {
+            val animation = PluginIcons.parseAnimationSpec(iconSpec).takeIf { iconSpec.startsWith('a') }
+            val animationName = animation?.value
+            val animationId = animationName?.let(PluginIcons::getRawAnimationResourceId) ?: 0
+            if (animationName != null && animationId == 0) {
+                return PluginWire.encodePluginError("not-found", "bulletin: animation '$animationName' is unavailable")
+            }
+            val retainedDrawable = if (iconSpec.startsWith('j')) {
+                PluginIcons.resolveImmediateDrawable(ApplicationLoader.applicationContext, iconSpec, engine)
+                    ?: return PluginWire.encodePluginError("handle-expired", "bulletin: drawable icon is gone")
+            } else {
+                null
+            }
+            AndroidUtilities.runOnUIThread {
+                val fragment = LaunchActivity.getSafeLastFragment()
+                val factory = fragment?.let { BulletinFactory.of(it) } ?: BulletinFactory.global()
+                val context = fragment?.parentActivity ?: ApplicationLoader.applicationContext
+                val largeAnimation = animation != null && !animation.isStatic &&
+                    (animation.repeatCount == 0 || animation.repeatCount == null)
+                val layout = Bulletin.LottieLayout(context, fragment?.resourceProvider)
+                if (iconSpec.isNotEmpty() && iconSpec[0] in "rset") {
+                    layout.imageView.colorFilter = PorterDuffColorFilter(
+                        Theme.getColor(Theme.key_undo_infoColor, fragment?.resourceProvider),
+                        PorterDuff.Mode.SRC_IN,
+                    )
+                }
+                if (retainedDrawable != null) {
+                    layout.imageView.setImageDrawable(retainedDrawable)
+                } else if (!PluginIcons.setIcon(layout.imageView, iconSpec, engine, if (largeAnimation) 36f else 24f)) {
+                    return@runOnUIThread
+                }
+                layout.textView.setSingleLine(false)
+                layout.textView.maxLines = 2
+                layout.textView.text = text
+                factory.create(layout, if (largeAnimation && text.length < 20) Bulletin.DURATION_SHORT else Bulletin.DURATION_LONG).show()
+            }
+            return null
         }
 
         override fun uiModal(op: Int, requestId: Long, optionsJson: String): String? =

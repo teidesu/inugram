@@ -84,6 +84,8 @@ interface UiListener {
 
     fun uiToast(text: String)
 
+    fun uiBulletin(text: String, iconSpec: String): String?
+
     /**
      * `inu.ui.dialog`/`prompt`/`chooser`, which are one member because they are one contract: null
      * means shown and settled later by the matching `resolve*` native, non-null an immediate

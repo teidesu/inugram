@@ -4,7 +4,6 @@ import android.annotation.SuppressLint
 import android.content.Context
 import android.graphics.PorterDuff
 import android.graphics.PorterDuffColorFilter
-import android.graphics.drawable.Drawable
 import android.text.TextUtils
 import android.view.Gravity
 import android.view.MotionEvent
@@ -18,6 +17,7 @@ import desu.inugram.helpers.InuUtils
 import desu.inugram.helpers.menu.MenuOrderConfig
 import desu.inugram.helpers.menu.MenuOrderEntry
 import desu.inugram.helpers.menu.MenuOrderItem
+import desu.inugram.helpers.plugins.QuickJs
 import desu.inugram.helpers.plugins.ui.ActionKey
 import desu.inugram.helpers.plugins.ui.ActionRow
 import desu.inugram.helpers.plugins.ui.PluginActions
@@ -28,6 +28,7 @@ import org.telegram.messenger.R
 import org.telegram.ui.ActionBar.Theme
 import org.telegram.ui.Cells.TextCell
 import org.telegram.ui.Components.LayoutHelper
+import org.telegram.ui.Components.RLottieImageView
 import org.telegram.ui.Components.Switch
 import org.telegram.ui.Components.UItem
 import org.telegram.ui.Components.UniversalAdapter
@@ -241,7 +242,8 @@ abstract class MenuOrderActivity<I : MenuOrderItem> : SettingsPageActivity() {
         row.bind(
             action.text,
             action.pluginName,
-            PluginIcons.resolveDrawable(context, action.icon, action.owner),
+            action.icon,
+            action.owner,
             R.drawable.msg_settings_old,
         )
         row.setSwitchVisible(true)
@@ -302,7 +304,7 @@ abstract class MenuOrderActivity<I : MenuOrderItem> : SettingsPageActivity() {
 @SuppressLint("ViewConstructor")
 class MenuOrderRow(context: Context, val mainHeightDp: Int = 50) : LinearLayout(context) {
     private val handle: ImageView
-    private val icon: ImageView
+    private val icon: RLottieImageView
     private val text: TextView
     private val subtitle: TextView
     private val switch: Switch
@@ -329,7 +331,7 @@ class MenuOrderRow(context: Context, val mainHeightDp: Int = 50) : LinearLayout(
         }
         main.addView(handle, LayoutHelper.createFrame(48, 48f, (if (rtl) Gravity.RIGHT else Gravity.LEFT) or Gravity.CENTER_VERTICAL, 4f, 0f, 4f, 0f))
 
-        icon = ImageView(context).apply {
+        icon = RLottieImageView(context).apply {
             scaleType = ImageView.ScaleType.CENTER
             colorFilter = PorterDuffColorFilter(Theme.getColor(Theme.key_windowBackgroundWhiteGrayIcon), PorterDuff.Mode.MULTIPLY)
         }
@@ -393,13 +395,14 @@ class MenuOrderRow(context: Context, val mainHeightDp: Int = 50) : LinearLayout(
     }
 
     fun bind(item: MenuOrderItem) {
+        PluginIcons.clearIcon(icon)
         icon.setImageResource(item.iconRes)
         text.text = LocaleController.getString(item.labelRes)
         subtitle.visibility = View.GONE
     }
 
-    fun bind(label: CharSequence, subtitle: CharSequence, drawable: Drawable?, fallbackIcon: Int) {
-        if (drawable != null) icon.setImageDrawable(drawable) else icon.setImageResource(fallbackIcon)
+    fun bind(label: CharSequence, subtitle: CharSequence, iconSpec: String?, owner: QuickJs, fallbackIcon: Int) {
+        if (!PluginIcons.setIcon(icon, iconSpec, owner)) icon.setImageResource(fallbackIcon)
         text.text = label
         this.subtitle.text = subtitle
         this.subtitle.visibility = View.VISIBLE

@@ -32,6 +32,9 @@ declare namespace inu {
     /** Refuses a name longer than 128 characters. */
     function resourceIcon(name: string): UIIcon
 
+    /** Resolves a Lottie JSON animation from Android `res/raw`. Refuses unknown names. */
+    function rawAnimation(name: string, options?: icons.LottieOptions): UIIcon
+
     /** @needs-grant unsafe.jvm. Retains the drawable while its settings page is rendered. */
     function drawableIcon(drawable: JavaObject): UIIcon
 

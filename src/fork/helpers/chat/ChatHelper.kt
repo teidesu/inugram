@@ -463,8 +463,7 @@ object ChatHelper {
         val key = PluginActions.keyForOption(option)
         val cached = key?.let(menu.registered::get)
         if (cached != null) {
-            val drawable = PluginIcons.resolveDrawable(cell.context, cached.icon, cached.owner)
-            cell.setTextAndIcon(cached.text ?: "…", if (drawable == null) R.drawable.msg_settings_old else 0, drawable)
+            PluginIcons.setIcon(cell, cached.text ?: "…", cached.icon, cached.owner, R.drawable.msg_settings_old)
         }
         // a menu the budget already gave up on is built *after* it settled, so its cells have
         // nobody left to fill them in and would sit there reading "…"
@@ -497,8 +496,7 @@ object ChatHelper {
             cell.visibility = View.GONE
             return
         }
-        val drawable = PluginIcons.resolveDrawable(cell.context, row.icon, row.owner)
-        cell.setTextAndIcon(row.text, if (drawable == null) R.drawable.msg_settings_old else 0, drawable)
+        PluginIcons.setIcon(cell, row.text, row.icon, row.owner, R.drawable.msg_settings_old)
     }
 
     private fun finishPluginItems(menu: MessageMenu) {
@@ -1577,17 +1575,15 @@ object ChatHelper {
             if (rows.isEmpty()) return true
             return openLongTapSubmenu(activity, popupLayout, cell) { submenu ->
                 for (row in rows) {
-                    val drawable = PluginIcons.resolveDrawable(activity.context, row.icon, row.owner)
-                    if (drawable == null) {
-                        submenu.add(R.drawable.msg_settings_old, row.text) {
-                            PluginActions.dispatch(row, menu.surface)
-                            activity.closeMenu()
-                        }
-                    } else {
-                        submenu.add(drawable, row.text) {
-                            PluginActions.dispatch(row, menu.surface)
-                            activity.closeMenu()
-                        }
+                    PluginIcons.addMenuItem(
+                        submenu,
+                        row.text,
+                        row.icon,
+                        row.owner,
+                        R.drawable.msg_settings_old,
+                    ) {
+                        PluginActions.dispatch(row, menu.surface)
+                        activity.closeMenu()
                     }
                 }
             }

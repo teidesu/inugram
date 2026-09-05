@@ -2,7 +2,7 @@
 // @name         icons test
 // @author       teidesu
 // @version      1.0
-// @description  asserts inu.icons.common/svg and inu.android.resourceIcon, and shows the whole curated set in a settings page
+// @description  asserts every UIIcon source and shows them in a settings page
 // @plugin-api   1
 // @platform     android
 // ==/InuPlugin==
@@ -89,6 +89,27 @@ expectThrow('a qualified resource reference is refused', 'invalid-argument', () 
   inu.android.resourceIcon('org.telegram.messenger:raw/notification'))
 expectThrow('and so is an empty name', 'invalid-argument', () => inu.android.resourceIcon(''))
 
+// -- animated icons --
+
+/** @type {Parameters<typeof inu.icons.animation>[0][]} */
+const ANIMATIONS = ['success', 'error', 'info', 'loading']
+check('all animation presets resolve', ANIMATIONS.every(name => inu.icons.animation(name) !== undefined))
+// @ts-expect-error not a preset
+expectThrow('an unknown animation preset is refused', 'invalid-argument', () => inu.icons.animation('unknown'))
+check('a raw animation the app ships resolves', inu.android.rawAnimation('done') !== undefined)
+expectThrow('a raw animation it does not ship is not-found', 'not-found', () =>
+  inu.android.rawAnimation('inu_no_such_animation_anywhere'))
+
+check('a custom emoji id builds an icon', inu.icons.customEmoji('5361751237382052539') !== undefined)
+check('a sticker index builds an icon', inu.icons.sticker({ slug: 'teidesu_favs', index: 2 }) !== undefined)
+check('a sticker emoji builds an icon', inu.icons.sticker({ slug: 'teidesu_favs', emoji: '🐶' }) !== undefined)
+check('a sticker document id builds an icon', inu.icons.sticker({ slug: 'teidesu_favs', id: '5361751237382052539' }) !== undefined)
+// @ts-expect-error selector required
+expectThrow('a sticker needs one selector', 'invalid-argument', () => inu.icons.sticker({ slug: 'teidesu_favs' }))
+expectThrow('a sticker refuses multiple selectors', 'invalid-argument', () =>
+  // @ts-expect-error selectors are exclusive
+  inu.icons.sticker({ slug: 'teidesu_favs', index: 2, emoji: '🐶' }))
+
 // -- icons.svg --
 
 const HEART = '<svg viewBox="0 0 24 24"><path d="M12 21C12 21 3 14 3 8.5 3 5.4 5.4 3 8.5 3 10.4 3 12 4.2 12 4.2 12 4.2 13.6 3 15.5 3 18.6 3 21 5.4 21 8.5 21 14 12 21 12 21Z"/></svg>'
@@ -171,6 +192,11 @@ const page = inu.ui.settingsPage({
       onClick: () => inu.ui.toast(`inu.icons.common('${name}')`),
     })),
     inu.ui.separator('these follow the app icon pack, so switching it in appearance settings changes them'),
+
+    inu.ui.header('Animated'),
+    inu.ui.button({ text: 'Success', icon: inu.icons.animation('success'), onClick: () => {} }),
+    inu.ui.button({ text: 'Custom emoji', icon: inu.icons.customEmoji('5361751237382052539'), onClick: () => {} }),
+    inu.ui.button({ text: 'Sticker', icon: inu.icons.sticker({ slug: 'teidesu_favs', index: 2 }), onClick: () => {} }),
 
     inu.ui.header('The other two'),
     inu.ui.select({

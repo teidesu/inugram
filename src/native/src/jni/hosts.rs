@@ -208,6 +208,10 @@ impl DialogHost for JniBridge {
     self.call_void("toast", self.on_ui_toast, &[Arg::Str(text)]);
   }
 
+  fn bulletin(&self, text: &str, icon_spec: &str) -> Option<String> {
+    self.call_refusal("bulletin", self.on_ui_bulletin, &[Arg::Str(text), Arg::Str(icon_spec)])
+  }
+
   fn dialog(&self, request_id: i64, options_json: &str) -> Option<String> {
     self.ui_modal(OP_DIALOG, request_id, options_json)
   }
