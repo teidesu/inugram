@@ -61,6 +61,10 @@ object PluginJvm {
     const val OP_CURRENT_ACTIVITY = 14
     const val OP_ROUTINE = 16
     const val OP_XPOSED_ROUTINE = 17
+    const val OP_PREPARE_CLASS = 18
+    const val OP_COPY_REF = 19
+    const val OP_LOAD_CLASS = 20
+    const val OP_CANCEL_CLASS = 21
     const val OP_BUNDLE_METHOD = 15
 
     const val GRANT = "unsafe.jvm"
@@ -129,7 +133,7 @@ object PluginJvm {
 
     internal fun bridgeFor(engine: QuickJs): ValueBridge? = engine.listener?.jvm as? ValueBridge
 
-    private class Refusal(val wire: String) : RuntimeException(null, null, false, false)
+    private class Refusal(val wire: String) : RuntimeException(PluginWire.describePluginError(wire), null, false, false)
 
     private fun refuse(code: String, message: String, grant: String? = null): Nothing =
         throw Refusal(PluginWire.encodePluginError(code, message, grant = grant))
@@ -152,6 +156,8 @@ object PluginJvm {
         private val loaders = ArrayList<ClassLoader>()
         private var dexCount = 0
         private val routinees = ArrayList<java.lang.ref.WeakReference<PluginJvmRoutine>>()
+        private val definedClasses = ArrayList<PluginJvmClass.Definition>()
+        private val pendingClasses = HashMap<Long, PluginJvmClass.Prepared>()
 
         @Volatile
         private var live = true
@@ -186,6 +192,67 @@ object PluginJvm {
                 writeField(fieldAt(target), self(decoded, 0), decoded.drop(1))
             }
             OP_RUNNABLE -> mintRunnable(args)
+            OP_COPY_REF -> encodeValue(at(target))
+            OP_PREPARE_CLASS -> {
+                if (!plugin.permissions.allows(GRANT, "*", ScopeMatch.NAMESPACE)) {
+                    refuse("not-granted", "defineClass requires the unscoped JVM grant", "$GRANT(*)")
+                }
+                if (definedClasses.size + pendingClasses.size >= 128) refuse("quota-exceeded", "defineClass: at most 128 classes per engine")
+                val previousLoaders = loaders.toList()
+                val parent = object : ClassLoader(PluginJvm::class.java.classLoader) {
+                    override fun findClass(name: String): Class<*> {
+                        for (loader in previousLoaders) {
+                            try { return Class.forName(name, false, loader) } catch (_: ClassNotFoundException) {}
+                        }
+                        throw ClassNotFoundException(name)
+                    }
+                }
+                val prepared = try {
+                    PluginJvmClass.prepare(name, decodeArgs(args), { type -> Class.forName(type, false, parent).also(::checkClass) }, parent) { callback, self, arguments ->
+                        check(live && EngineDispatch.isLive(plugin, engine)) { "defineClass: plugin has unloaded" }
+                        val inputs = ArrayList<String>()
+                        try {
+                            inputs.add(encodeValue(self))
+                            arguments.forEach { inputs.add(encodeValue(it)) }
+                            val result = engine.jvmMethod(callback, inputs[0], inputs.drop(1).toTypedArray())
+                            if (result.startsWith("E")) throw IllegalStateException(result.substring(1))
+                            readRoutineResult(result)
+                        } finally {
+                            for (wire in inputs) if (wire.startsWith("G")) handles.remove(wire.substring(2).toLong())
+                        }
+                    }
+                } catch (e: IllegalArgumentException) {
+                    refuse("invalid-argument", "defineClass: ${e.message}")
+                }
+                val ticket = nextId.getAndIncrement()
+                val metadata = prepared.getMetadata(ticket)
+                if (metadata.toByteArray(Charsets.UTF_8).size > VALUE_LIMIT_BYTES) {
+                    prepared.close()
+                    refuse("quota-exceeded", "defineClass: normalized metadata exceeds 1 MB")
+                }
+                pendingClasses[ticket] = prepared
+                PluginWire.encodeString(metadata)
+            }
+            OP_LOAD_CLASS -> {
+                if (!plugin.permissions.allows(GRANT, "*", ScopeMatch.NAMESPACE)) refuse("not-granted", "defineClass requires the unscoped JVM grant", "$GRANT(*)")
+                val prepared = pendingClasses.remove(target) ?: expired()
+                try {
+                    require(args.size == 1) { "expected class DEX bytes" }
+                    require(args[0].length <= ((DEX_LIMIT_BYTES + 2) / 3 * 4 + 1)) { "class DEX exceeds 8 MB" }
+                    val bytes = decodeArg(args[0]) as? ByteArray ?: throw IllegalArgumentException("expected class DEX bytes")
+                    val defined = prepared.load(bytes)
+                    definedClasses.add(defined)
+                    loaders.add(defined.type.classLoader!!)
+                    encodeValue(defined.type)
+                } catch (error: Throwable) {
+                    prepared.close()
+                    throw error
+                }
+            }
+            OP_CANCEL_CLASS -> {
+                pendingClasses.remove(target)?.close()
+                PluginWire.encodeNull()
+            }
             OP_ROUTINE -> createRoutine(name, args)
             OP_XPOSED_ROUTINE -> {
                 if (!plugin.permissions.has("unsafe.xposed")) refuse("not-granted", "xposed routine requires unsafe.xposed", "unsafe.xposed")
@@ -261,6 +328,10 @@ object PluginJvm {
 
         fun close() {
             live = false
+            definedClasses.forEach { it.close() }
+            definedClasses.clear()
+            pendingClasses.values.forEach { it.close() }
+            pendingClasses.clear()
             for (routine in routinees) routine.get()?.close()
             routinees.clear()
             handles.clear()
@@ -685,7 +756,12 @@ object PluginJvm {
             ) Converted(value) else null
 
             is Long -> fromLong(value, type)
+            is Byte -> fromLong(value.toLong(), type)
+            is Short -> fromLong(value.toLong(), type)
+            is Int -> fromLong(value.toLong(), type)
             is Double -> fromDouble(value, type)
+            is Float -> if (type.isInstance(value)) Converted(value) else fromDouble(value.toDouble(), type)
+            is Char -> if (type == Char::class.javaPrimitiveType || type.isInstance(value)) Converted(value) else fromLong(value.code.toLong(), type)
             is String -> when {
                 type == Char::class.javaPrimitiveType || type == java.lang.Character::class.java ->
                     if (value.length == 1) Converted(value[0]) else null

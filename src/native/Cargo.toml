@@ -8,6 +8,8 @@ publish = false
 crate-type = ["cdylib"]
 
 [dependencies]
+adler = "1.0"
+sha1 = "0.10"
 base64 = "0.23"
 # the canvas colour vocabulary. android's own `Color.parseColor` covers hex and ~140 names and
 # nothing else, so `rgb()`/`hsl()`/`hwb()`/`lab()` and the modern space-separated syntax would be a

@@ -10,9 +10,12 @@ use crate::api::error::{wire_error_to_js, PluginErrorCode};
 use crate::api::telegram::rpc::{format_exception, pump_jobs};
 use crate::sandbox::grants::{GrantHost, MATCH_NAMESPACE};
 use crate::sandbox::registry::{CallbackRegistry, Lifecycle};
+use crate::utils::arguments::array_values;
 use crate::utils::prelude;
 
 const PRELUDE: &[u8] = include_bytes!(concat!(env!("OUT_DIR"), "/jvm.qbc"));
+
+pub(crate) mod dex;
 
 pub trait JvmHost {
   fn jvm(&self, op: i32, target: i64, name: &str, args: &[String]) -> String;
@@ -36,6 +39,10 @@ const OP_CURRENT_ACTIVITY: i32 = 14;
 const OP_BUNDLE_METHOD: i32 = 15;
 const OP_ROUTINE: i32 = 16;
 const OP_XPOSED_ROUTINE: i32 = 17;
+const OP_PREPARE_CLASS: i32 = 18;
+const OP_COPY_REF: i32 = 19;
+const OP_LOAD_CLASS: i32 = 20;
+const OP_CANCEL_CLASS: i32 = 21;
 
 pub const GRANT: &str = "unsafe.jvm";
 
@@ -49,6 +56,7 @@ pub struct JvmState {
   lifecycle: Rc<Lifecycle>,
   log: crate::Log,
   callbacks: CallbackRegistry,
+  cleanup_callbacks: RefCell<std::collections::HashSet<u32>>,
   prelude: RefCell<Option<Prelude>>,
 }
 
@@ -72,6 +80,104 @@ fn throw_too_big<'js, T>(ctx: &Ctx<'js>, what: &str, size: usize, limit: usize) 
 }
 
 impl JvmState {
+  pub(crate) fn dispatch_method<'js>(
+    &self,
+    ctx: &Ctx<'js>,
+    callback_id: u32,
+    self_wire: &str,
+    args: &[String],
+  ) -> String {
+    let result = (|| {
+      let Some(callback) = self.callbacks.restore(ctx, callback_id) else {
+        return PluginErrorCode::HandleExpired.throw(ctx, "defineClass: callback has expired");
+      };
+      let read_argument = |wire: &str| {
+        if let Some(handle) = wire.strip_prefix('G') {
+          let id = handle.get(1..).and_then(|id| id.parse::<i64>().ok()).ok_or(rquickjs::Error::Unknown)?;
+          self.ask(ctx, OP_COPY_REF, id, "", &[])
+        } else {
+          self.wire_to_value(ctx, wire)
+        }
+      };
+      let mut call_args = rquickjs::function::Args::new(ctx.clone(), args.len() + 1);
+      call_args.push_arg(read_argument(self_wire)?)?;
+      for wire in args {
+        call_args.push_arg(read_argument(wire)?)?;
+      }
+      let value: Value = callback.call_arg(call_args)?;
+      if value.is_promise() {
+        return PluginErrorCode::InvalidArgument.throw(ctx, "defineClass: method bodies must be synchronous");
+      }
+      let id = self.handle_id(ctx, &value)?;
+      if id >= 0 {
+        Ok(self.host.jvm(OP_COPY_REF, id, "", &[]))
+      } else {
+        self.arg_to_wire(ctx, &value)
+      }
+    })();
+    match result {
+      Ok(wire) => wire,
+      Err(rquickjs::Error::Exception) => format!("E{}", format_exception(ctx)),
+      Err(error) => format!("EdefineClass: callback failed: {error}"),
+    }
+  }
+
+  fn js_define_class<'js>(&self, ctx: &Ctx<'js>, definition: String, values: Array<'js>) -> JsResult<Value<'js>> {
+    self.grants.check_grant(ctx, GRANT, Some("*"), MATCH_NAMESPACE)?;
+    if definition.len() > VALUE_LIMIT_BYTES {
+      return throw_too_big(ctx, "class definition", definition.len(), VALUE_LIMIT_BYTES);
+    }
+    let mut tokens = Vec::new();
+    let result = (|| {
+      let mut wires = Vec::new();
+      let mut bytes = 0usize;
+      for value in array_values(ctx, &values, "defineClass")? {
+        let is_handle = self.handle_id(ctx, &value)? >= 0;
+        let wire = if let Some(callback) = value.as_function().filter(|_| !is_handle) {
+          let token = self.callbacks.alloc();
+          self.callbacks.register(ctx, token, None, callback.clone());
+          tokens.push(token);
+          format!("I{token}")
+        } else {
+          self.arg_to_wire(ctx, &value)?
+        };
+        bytes = bytes.saturating_add(wire.len());
+        if bytes > VALUE_LIMIT_BYTES {
+          return throw_too_big(ctx, "class captures", bytes, VALUE_LIMIT_BYTES);
+        }
+        wires.push(wire);
+      }
+      let prepared = self.ask(ctx, OP_PREPARE_CLASS, 0, &definition, &wires)?;
+      let json = String::from_js(ctx, prepared)?;
+      let metadata = Object::from_js(ctx, ctx.json_parse(json)?)?;
+      let ticket: String = metadata.get("ticket")?;
+      let ticket = ticket.parse::<i64>().map_err(|_| rquickjs::Error::Unknown)?;
+      let result = (|| {
+        let name: String = metadata.get("name")?;
+        let superclass: String = metadata.get("superclass")?;
+        let interfaces: Vec<String> = metadata.get("interfaces")?;
+        let fields: Vec<Vec<String>> = metadata.get("fields")?;
+        let methods: Vec<Vec<String>> = metadata.get("methods")?;
+        let bytes = match dex::build(&name, &superclass, &interfaces, &fields, &methods) {
+          Ok(bytes) => bytes,
+          Err(error) => return PluginErrorCode::InvalidArgument.throw(ctx, &format!("defineClass: {error}")),
+        };
+        let wire = format!("Y{}", base64::Engine::encode(&base64::engine::general_purpose::STANDARD, bytes));
+        self.ask(ctx, OP_LOAD_CLASS, ticket, "", &[wire])
+      })();
+      if result.is_err() {
+        self.host.jvm(OP_CANCEL_CLASS, ticket, "", &[]);
+      }
+      result
+    })();
+    if result.is_err() {
+      for token in tokens {
+        self.callbacks.dispose(ctx, token);
+      }
+    }
+    result
+  }
+
   pub(crate) fn build_xposed_routine<'js>(&self, ctx: &Ctx<'js>, builder: Value<'js>) -> JsResult<Value<'js>> {
     let factory = self
       .prelude
@@ -198,7 +304,7 @@ impl JvmState {
     }
     let mut wires = Vec::new();
     let mut wire_bytes = 0usize;
-    for arg in crate::utils::arguments::array_values(ctx, &args, "jvm")? {
+    for arg in array_values(ctx, &args, "jvm")? {
       let wire = self.arg_to_wire(ctx, &arg)?;
       wire_bytes = wire_bytes.saturating_add(wire.len());
       if (op == OP_ROUTINE || op == OP_XPOSED_ROUTINE) && wire_bytes > VALUE_LIMIT_BYTES {
@@ -218,7 +324,10 @@ impl JvmState {
     self.grants.check_grant(ctx, GRANT, None, MATCH_NAMESPACE)?;
     let token = self.callbacks.alloc();
     let handle = self.ask(ctx, OP_RUNNABLE, 0, "", &[format!("I{token}")])?;
-    if !self.lifecycle.is_unloading() {
+    if !self.lifecycle.is_unloading() || self.lifecycle.is_cleaning_up() {
+      if self.lifecycle.is_cleaning_up() {
+        self.cleanup_callbacks.borrow_mut().insert(token);
+      }
       self.callbacks.register(ctx, token, None, callback);
     }
     Ok(handle)
@@ -322,10 +431,20 @@ pub fn install_jvm<'js>(
     lifecycle,
     log,
     callbacks: CallbackRegistry::default(),
+    cleanup_callbacks: RefCell::new(std::collections::HashSet::new()),
     prelude: RefCell::new(None),
   });
 
   let natives = Object::new(ctx.clone())?;
+  {
+    let state = state.clone();
+    natives.set(
+      "defineClass",
+      Function::new(ctx.clone(), move |ctx: Ctx<'js>, definition: String, values: Array<'js>| {
+        state.js_define_class(&ctx, definition, values)
+      })?,
+    )?;
+  }
   let ops = Object::new(ctx.clone())?;
   for (name, op) in [
     ("routine", OP_ROUTINE),
@@ -427,6 +546,10 @@ impl JvmState {
 }
 
 impl JvmState {
+  pub(crate) fn accepts_cleanup_callback(&self, callback_id: u32) -> bool {
+    self.lifecycle.is_cleaning_up() && self.cleanup_callbacks.borrow().contains(&callback_id)
+  }
+
   pub fn dispatch_callback(self: &Rc<Self>, rt: &Runtime, context: &Context, callback_id: u32) {
     let state = self;
     context.with(|ctx| {

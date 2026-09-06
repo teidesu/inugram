@@ -260,7 +260,12 @@ declare namespace inu {
     header: Record<string, string[]>
   }
 
-  function onUnload(callback: () => void): Disposer
+  /**
+   * Handlers run in registration order; returned promises share a 2-second cleanup window.
+   * Resources remain available until settlement/timeout. Ordinary callbacks and timers stop first.
+   * JVM runnables created during cleanup can run on the UI thread; existing callbacks stay stopped.
+   */
+  function onUnload(callback: () => void | Promise<void>): Disposer
 
   /**
    * Open a web URL, or an internal deeplink (t.me/telegram.org)

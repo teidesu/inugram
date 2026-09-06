@@ -417,6 +417,8 @@ pub fn install_xposed<'js>(
   Ok(state)
 }
 
+pub(crate) const KEEP_ORIGINAL: &str = "U";
+
 enum Verdict {
   Proceed,
   Answered(String),
@@ -471,7 +473,7 @@ impl XposedState {
     result: &str,
   ) -> JsResult<String> {
     if afters.is_empty() {
-      return Ok(result.to_string());
+      return Ok(KEEP_ORIGINAL.to_string());
     }
     self.publish_result(ctx, context_object, result)?;
     for after in afters {
@@ -479,7 +481,7 @@ impl XposedState {
     }
     Ok(match self.read_context(ctx, context_object)? {
       Verdict::Answered(wire) => wire,
-      Verdict::Proceed => result.to_string(),
+      Verdict::Proceed => KEEP_ORIGINAL.to_string(),
     })
   }
 
@@ -579,8 +581,8 @@ impl XposedState {
       let wants_after = hooks.iter().any(|hook| hook.after.is_some());
       if let Verdict::Answered(wire) = verdict {
         let afters: Vec<&Function> = hooks.iter().filter_map(|hook| hook.after.as_ref()).collect();
-        let wire = state.run_after(&ctx, &afters, &context_object, &wire)?;
-        return Ok(vec!["A".to_string(), wire]);
+        let after = state.run_after(&ctx, &afters, &context_object, &wire)?;
+        return Ok(vec!["A".to_string(), if after == KEEP_ORIGINAL { wire } else { after }]);
       }
 
       let call_args = state.read_args(&ctx, &context_object)?;
@@ -609,14 +611,14 @@ impl XposedState {
     let state = self;
     let answer = context.with(|ctx| -> JsResult<String> {
       let Some(pending) = state.pending.borrow_mut().remove(&dispatch_id) else {
-        return Ok(result.to_string());
+        return Ok(KEEP_ORIGINAL.to_string());
       };
       let context_object = pending.context.restore(&ctx)?;
       let afters: Vec<Function> = pending.after.into_iter().filter_map(|f| f.restore(&ctx).ok()).collect();
       state.run_after(&ctx, &afters.iter().collect::<Vec<_>>(), &context_object, result)
     });
     pump_jobs(rt, context, state.log.as_ref());
-    answer.unwrap_or_else(|_| result.to_string())
+    answer.unwrap_or_else(|_| KEEP_ORIGINAL.to_string())
   }
 
   pub fn release_dispatch(self: &Rc<Self>, context: &Context, dispatch_id: i64) {

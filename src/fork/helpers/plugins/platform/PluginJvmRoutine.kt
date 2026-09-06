@@ -40,6 +40,11 @@ internal class PluginJvmRoutine(
                 return Operand(reference, readIndex(value, 1, if (reference) index else values.size))
             }
             when (kind) {
+                "methodThis", "methodArgument", "methodSetResult" -> {
+                    val count = if (kind == "methodThis") 0 else 1
+                    require(node.length() == count + 1) { "routine: malformed method operation" }
+                    Operation(kind, "", List(count) { operand(it + 1) })
+                }
                 "hookThis", "hookMethod", "hookResult", "hookThrowable", "hookArgument", "hookSetArgument", "hookSetResult", "hookSetThrowable" -> {
                     require(hookMode) { "routine: hook operations require inu.xposed.routine" }
                     val count = when (kind) {
@@ -110,11 +115,12 @@ internal class PluginJvmRoutine(
         captured = null
     }
 
-    override fun run() = execute(null)
+    override fun run() { execute(null) }
 
-    internal fun execute(context: PluginHookContext?) {
-        val values = captured ?: return
-        if (!isLive()) return
+    internal fun execute(context: PluginHookContext?, methodSelf: Any? = null, methodArgs: Array<Any?>? = null): Any? {
+        val values = captured ?: return null
+        if (!isLive()) return null
+        var methodResult: Any? = null
         val results = arrayOfNulls<Any?>(operations.size)
         val locals = HashMap<String, Any?>()
         val evaluated = BooleanArray(operations.size)
@@ -129,6 +135,21 @@ internal class PluginJvmRoutine(
             fun value(operand: Operand): Any? = if (operand.reference) evaluate(operand.index) else values[operand.index]
             val result = try {
                 when (op.kind) {
+                    "methodThis" -> {
+                        check(methodArgs != null) { "routine: no method invocation" }
+                        validate(methodSelf)
+                    }
+                    "methodArgument" -> {
+                        val args = checkNotNull(methodArgs) { "routine: no method invocation" }
+                        val index = value(op.operands[0])
+                        require(index is Number && index.toDouble().isFinite() && index.toDouble() == index.toInt().toDouble() && index.toInt() in args.indices) { "routine: invalid method argument index" }
+                        validate(args[index.toInt()])
+                    }
+                    "methodSetResult" -> {
+                        check(methodArgs != null) { "routine: no method invocation" }
+                        methodResult = value(op.operands[0])
+                        null
+                    }
                     "hookThis" -> validate(requireNotNull(context).getThisObject())
                     "hookMethod" -> validate(requireNotNull(context).getMethod())
                     "hookResult" -> validate(requireNotNull(context).getReturnValue())
@@ -184,8 +205,10 @@ internal class PluginJvmRoutine(
         try {
             for (root in roots) evaluate(root)
         } catch (e: Exception) {
+            if (methodArgs != null) throw e
             Log.d("InuPluginRoutine", "routine failed", e)
         }
+        return methodResult
     }
 
     private fun getTruthiness(value: Any?): Boolean = when (value) {

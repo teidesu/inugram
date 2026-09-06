@@ -111,7 +111,7 @@ class RecordingQuickJs : QuickJs() {
     override fun xposedAfter(dispatchId: Long, resultWire: String): String {
         val dispatch = XposedAfter(dispatchId, resultWire)
         xposedAfters.add(dispatch)
-        return onXposedAfter?.invoke(dispatch) ?: resultWire
+        return onXposedAfter?.invoke(dispatch) ?: "U"
     }
 
     override fun xposedBudgetMs(): Long = xposedBudgetMillis

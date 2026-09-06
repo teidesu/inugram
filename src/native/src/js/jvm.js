@@ -136,6 +136,9 @@
       return token
     }
     const builder = {
+      getThisObject: () => node('methodThis', () => []),
+      getArgument: index => node('methodArgument', () => [operand(index)]),
+      setReturnValue: value => node('methodSetResult', () => [operand(value)]),
       get: name => node('getLocal', () => [named('get', name)]),
       set: (name, value) => node('setLocal', () => [named('set', name), operand(value)]),
       getField: (target, name) => node('get', () => [operand(target), named('getField', name)]),
@@ -193,14 +196,71 @@
       natives.loadDex(source)
     },
 
-    defineClass() {
-      throw new PluginError('unsupported', 'jvm.defineClass needs a js-to-dex compiler, which is not implemented')
+    defineClass(name, spec) {
+      named('defineClass', name)
+      if (!spec || typeof spec !== 'object' || Array.isArray(spec)) throw invalid('defineClass: expected a class specification')
+      for (const key of Object.keys(spec)) {
+        if (!['superclass', 'interfaces', 'fields', 'staticFields', 'methods', 'staticMethods', 'constructors'].includes(key)) throw invalid(`defineClass: unknown option ${key}`)
+      }
+      const values = []
+      const capture = value => { values.push(value); return values.length - 1 }
+      const typeList = value => {
+        if (value === undefined) return null
+        if (!Array.isArray(value) || value.some(type => typeof type !== 'string' || !type)) throw invalid('defineClass: params must be type names')
+        return value
+      }
+      const body = value => {
+        if (typeof value === 'function') return ['js', capture(value)]
+        if (idOf(value) >= 0) return ['routine', capture(value)]
+        throw invalid('defineClass: expected a JS function or JVM routine body')
+      }
+      const definition = { name, superclass: null, interfaces: [], fields: [], methods: [] }
+      if (spec.superclass !== undefined) {
+        handleOf(spec.superclass, 'defineClass superclass')
+        definition.superclass = capture(spec.superclass)
+      }
+      if (spec.interfaces !== undefined) {
+        if (!Array.isArray(spec.interfaces)) throw invalid('defineClass: interfaces must be an array')
+        definition.interfaces = spec.interfaces.map(value => { handleOf(value, 'defineClass interface'); return capture(value) })
+      }
+      for (const [key, isStatic] of [['fields', false], ['staticFields', true]]) {
+        if (spec[key] === undefined) continue
+        if (!spec[key] || typeof spec[key] !== 'object' || Array.isArray(spec[key])) throw invalid(`defineClass: invalid ${key}`)
+        for (const [field, type] of Object.entries(spec[key])) definition.fields.push([field, named('defineClass field type', type), isStatic])
+      }
+      for (const [key, isStatic] of [['methods', false], ['staticMethods', true]]) {
+        if (spec[key] === undefined) continue
+        if (!spec[key] || typeof spec[key] !== 'object' || Array.isArray(spec[key])) throw invalid(`defineClass: invalid ${key}`)
+        for (const [method, value] of Object.entries(spec[key])) {
+          const item = typeof value === 'function' ? { body: value } : value
+          if (!item || typeof item !== 'object' || Array.isArray(item)) throw invalid('defineClass: invalid method specification')
+          for (const key of Object.keys(item)) if (!['params', 'returns', 'body'].includes(key)) throw invalid(`defineClass: unknown method option ${key}`)
+          definition.methods.push({ name: method, params: typeList(item.params), returns: item.returns === undefined ? null : named('defineClass return type', item.returns), body: body(item.body), static: isStatic, constructor: false })
+        }
+      }
+      const constructors = spec.constructors === undefined ? [{}] : spec.constructors
+      if (!Array.isArray(constructors)) throw invalid('defineClass: constructors must be an array')
+      for (const item of constructors) {
+        if (!item || typeof item !== 'object' || Array.isArray(item)) throw invalid('defineClass: invalid constructor specification')
+        for (const key of Object.keys(item)) if (!['params', 'super', 'init'].includes(key)) throw invalid(`defineClass: unknown constructor option ${key}`)
+        const args = item.super === undefined ? [] : item.super
+        if (!Array.isArray(args)) throw invalid('defineClass: super must be an array')
+        const superArgs = args.map(value => {
+          if (!value || typeof value !== 'object' || Array.isArray(value) || Object.keys(value).length !== 1) throw invalid('defineClass: invalid super argument')
+          if (Object.hasOwn(value, 'arg') && Number.isInteger(value.arg) && value.arg >= 0) return { arg: value.arg }
+          if (Object.hasOwn(value, 'value') && typeof value.value !== 'function') return { value: capture(value.value) }
+          throw invalid('defineClass: expected super arg index or constant value')
+        })
+        definition.methods.push({ name: '<init>', params: typeList(item.params) ?? [], returns: 'void', body: item.init === undefined ? null : body(item.init), static: false, constructor: true, super: superArgs })
+      }
+      if (definition.methods.length > 256 || definition.fields.length > 256 || definition.interfaces.length > 64) throw invalid('defineClass: too many members or interfaces')
+      return natives.defineClass(JSON.stringify(definition), values)
     },
 
     callSuper() {
       throw new PluginError(
         'unsupported',
-        'jvm.callSuper can only run inside a defineClass method body, and defineClass is not implemented',
+        'jvm.callSuper is not implemented',
       )
     },
   })

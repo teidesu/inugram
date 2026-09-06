@@ -15,6 +15,7 @@ struct TestJvmHost {
   released: RefCell<Vec<i64>>,
   /// what the next op answers, in place of the default `N`
   answer: RefCell<Option<String>>,
+  load_answer: RefCell<Option<String>>,
 }
 
 impl TestJvmHost {
@@ -55,8 +56,10 @@ impl JvmHost for TestJvmHost {
       return answer;
     }
     match op {
+      OP_PREPARE_CLASS => "S{\"ticket\":\"9000\",\"name\":\"plugin.Prepared\",\"superclass\":\"Ljava/lang/Object;\",\"interfaces\":[],\"fields\":[],\"methods\":[]}".into(),
+      OP_LOAD_CLASS => self.load_answer.borrow_mut().take().unwrap_or_else(|| self.mint('C')),
       OP_CLASS => self.mint('C'),
-      OP_NEW | OP_RUNNABLE => self.mint('O'),
+      OP_NEW | OP_RUNNABLE | OP_ROUTINE | OP_XPOSED_ROUTINE | OP_COPY_REF => self.mint('O'),
       OP_METHOD => self.mint('M'),
       OP_FIELD => self.mint('F'),
       OP_BUNDLE_METHOD => "SputParcelable".to_string(),
@@ -207,9 +210,8 @@ fn a_dex_past_the_bound_is_refused_before_it_is_copied() {
 }
 
 #[test]
-fn the_two_deferred_members_refuse_rather_than_approximate() {
+fn call_super_refuses_rather_than_approximates() {
   let f = setup(&["unsafe.jvm"]);
-  assert_eq!(error_code(&f, "inu.jvm.defineClass('a/B', {})"), "unsupported|");
   assert_eq!(error_code(&f, "inu.jvm.callSuper({}, 'toString')"), "unsupported|");
   assert!(f.host.calls().is_empty());
 }
@@ -675,4 +677,141 @@ fn routine_locals_use_names_and_closed_builders_are_refused() {
     let error = eval(&f, code);
     assert!(error.contains("routine:") || error.contains("expected a name"), "{code}");
   }
+}
+
+#[test]
+fn define_class_serializes_members_and_registers_synchronous_bodies() {
+  let f = setup(&["unsafe.jvm"]);
+  assert_eq!(eval(&f, "typeof inu.jvm.defineClass('plugin.Test', { fields: { count: 'int' }, staticFields: { label: 'java.lang.String' }, methods: { add: { params: ['int'], returns: 'int', body: (self, value) => value + 2 } }, constructors: [{ params: ['int'], super: [], init: self => {} }] })"), "\"function\"");
+  let call = f.host.calls().into_iter().find(|call| call.starts_with("18|")).unwrap();
+  assert!(call.contains("\"fields\":[[\"count\",\"int\",false],[\"label\",\"java.lang.String\",true]]"));
+  assert!(call.contains("\"body\":[\"js\",0]"));
+  assert!(call.ends_with("|I1,I2"));
+  f.ctx.with(|ctx| {
+    assert_eq!(f.state.dispatch_method(&ctx, 1, "N", &["I40".into()]), "I42");
+  });
+}
+
+#[test]
+fn define_class_cleans_up_callbacks_when_the_host_refuses() {
+  let f = setup(&["unsafe.jvm"]);
+  f.host.answers("Pinvalid-argument\n\n\n\ninvalid class");
+  assert_eq!(
+    error_code(&f, "inu.jvm.defineClass('plugin.Bad', { methods: { run: self => 42 } })"),
+    "invalid-argument|"
+  );
+  f.ctx.with(|ctx| assert!(f.state.callbacks.restore(&ctx, 1).is_none()));
+}
+
+#[test]
+fn define_class_checks_its_grant_and_refuses_malformed_specs() {
+  let scoped = setup(&["unsafe.jvm(java.lang.*)"]);
+  assert_eq!(error_code(&scoped, "inu.jvm.defineClass('plugin.Test', {})"), "not-granted|unsafe.jvm(*)");
+  assert!(scoped.host.calls().is_empty());
+  let f = setup(&["unsafe.jvm"]);
+  for code in [
+    "inu.jvm.defineClass('plugin.Test', null)",
+    "inu.jvm.defineClass('plugin.Test', { typo: true })",
+    "inu.jvm.defineClass('plugin.Test', { interfaces: {} })",
+    "inu.jvm.defineClass('plugin.Test', { methods: { run: { body: 42 } } })",
+    "inu.jvm.defineClass('plugin.Test', { constructors: [{ super: [{ arg: -1 }] }] })",
+    "inu.jvm.defineClass('plugin.Test', { constructors: [{ super: [{ value: () => 1 }] }] })",
+  ] {
+    assert_eq!(error_code(&f, code), "invalid-argument|", "{code}");
+  }
+  assert!(f.host.calls().is_empty());
+}
+
+#[test]
+fn define_class_refuses_promise_results_and_transports_exceptions() {
+  let f = setup(&["unsafe.jvm"]);
+  eval(&f, "inu.jvm.defineClass('plugin.Test', { methods: { asyncResult: () => Promise.resolve(42), throwing: () => { throw Error('method failed') } } })");
+  f.ctx.with(|ctx| {
+    assert!(f.state.dispatch_method(&ctx, 1, "N", &[]).contains("must be synchronous"));
+    assert!(f.state.dispatch_method(&ctx, 2, "N", &[]).contains("method failed"));
+    assert!(f.state.dispatch_method(&ctx, 999, "N", &[]).contains("expired"));
+  });
+}
+
+#[test]
+fn method_routines_build_interpreted_receiver_argument_and_result_operations() {
+  let f = setup(&["unsafe.jvm"]);
+  eval(
+    &f,
+    "inu.jvm.routine(ops => [ops.getThisObject(), ops.setReturnValue(ops.math('+', ops.getArgument(0), 2))])",
+  );
+  let calls = f.host.calls();
+  assert_eq!(calls.len(), 1);
+  assert!(calls[0].contains("methodThis"));
+  assert!(calls[0].contains("methodArgument"));
+  assert!(calls[0].contains("methodSetResult"));
+}
+
+#[test]
+fn define_class_keeps_callable_java_classes_as_handles_and_routines_as_handles() {
+  let f = setup(&["unsafe.jvm"]);
+  eval(&f, "const base = inu.jvm.cls('java.lang.Object'); const body = inu.jvm.routine(ops => []); inu.jvm.defineClass('plugin.Test', { superclass: base, methods: { run: { body } } })");
+  let call = f.host.calls().into_iter().find(|call| call.starts_with("18|")).unwrap();
+  assert!(call.ends_with("|G1,G2"), "{call}");
+  assert!(f.state.callbacks.is_empty());
+}
+
+#[test]
+fn method_results_pin_a_fresh_java_reference_for_the_return_handoff() {
+  let f = setup(&["unsafe.jvm"]);
+  eval(&f, "inu.jvm.defineClass('plugin.Test', { methods: { echo: (self, value) => value } })");
+  f.ctx.with(|ctx| {
+    let wire = f.state.dispatch_method(&ctx, 1, "N", &["GO123".into()]);
+    assert!(wire.starts_with("GO"), "{wire}");
+  });
+  let calls = f.host.calls();
+  assert!(calls.iter().any(|call| call == "19|123||"));
+  assert_eq!(calls.iter().filter(|call| call.starts_with("19|")).count(), 2);
+}
+
+#[test]
+fn define_class_emits_between_preparation_and_loading() {
+  let f = setup(&["unsafe.jvm"]);
+  eval(&f, "inu.jvm.defineClass('plugin.Test', {})");
+  let calls = f.host.calls();
+  assert_eq!(calls.len(), 2);
+  assert!(calls[0].starts_with("18|0|"));
+  let encoded = calls[1].strip_prefix("20|9000||Y").unwrap();
+  let bytes = base64::Engine::decode(&base64::engine::general_purpose::STANDARD, encoded).unwrap();
+  assert!(bytes.starts_with(b"dex\n035\0"));
+  assert!(!calls.iter().any(|call| call.starts_with("21|")));
+}
+
+#[test]
+fn emission_and_load_failures_cancel_preparation_and_callbacks() {
+  let f = setup(&["unsafe.jvm"]);
+  f.host.answers("S{\"ticket\":\"9000\",\"name\":\"plugin.Bad\",\"superclass\":\"invalid\",\"interfaces\":[],\"fields\":[],\"methods\":[]}");
+  assert_eq!(
+    error_code(&f, "inu.jvm.defineClass('plugin.Bad', { methods: { run: () => {} } })"),
+    "invalid-argument|"
+  );
+  assert!(f.host.calls().iter().any(|call| call == "21|9000||"));
+  assert!(!f.host.calls().iter().any(|call| call.starts_with("20|")));
+  assert!(f.state.callbacks.is_empty());
+
+  let f = setup(&["unsafe.jvm"]);
+  *f.host.load_answer.borrow_mut() = Some("Pinvalid-argument\n\n\n\nload failed".into());
+  assert_eq!(
+    error_code(&f, "inu.jvm.defineClass('plugin.Bad', { methods: { run: () => {} } })"),
+    "invalid-argument|"
+  );
+  assert!(f.host.calls().iter().any(|call| call == "21|9000||"));
+  assert!(f.state.callbacks.is_empty());
+}
+
+#[test]
+fn only_runnables_created_during_cleanup_are_admitted_after_stop() {
+  let f = setup(&["unsafe.jvm"]);
+  eval(&f, "inu.jvm.runnable(() => {})");
+  f.state.lifecycle.begin_cleanup();
+  eval(&f, "inu.jvm.runnable(() => {})");
+  assert!(!f.state.accepts_cleanup_callback(1));
+  assert!(f.state.accepts_cleanup_callback(2));
+  f.state.lifecycle.finish_cleanup();
+  assert!(!f.state.accepts_cleanup_callback(2));
 }

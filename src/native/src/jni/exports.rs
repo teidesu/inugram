@@ -389,10 +389,10 @@ pub extern "system" fn Java_desu_inugram_helpers_plugins_QuickJs_nativeXposedAft
           Some(state) if engine.accepting_callbacks.get() => {
             state.dispatch_after(&engine._rt, &engine.ctx, dispatch_id, &result)
           }
-          _ => result,
+          _ => xposed::KEEP_ORIGINAL.to_string(),
         }
       }
-      None => result,
+      None => xposed::KEEP_ORIGINAL.to_string(),
     };
     env.new_string(answer).map(|j| j.into_raw()).unwrap_or(std::ptr::null_mut())
   })
@@ -527,7 +527,9 @@ pub extern "system" fn Java_desu_inugram_helpers_plugins_QuickJs_nativeJvmCallba
         return;
       }
     };
-    if !engine.accepting_callbacks.get() {
+    if !engine.accepting_callbacks.get()
+      && !engine.jvm.as_ref().is_some_and(|state| state.accepts_cleanup_callback(callback_id as u32))
+    {
       return;
     }
     let _deadline = arm_entry_deadline();
@@ -536,6 +538,35 @@ pub extern "system" fn Java_desu_inugram_helpers_plugins_QuickJs_nativeJvmCallba
       state.dispatch_callback(&engine._rt, &engine.ctx, callback_id as u32);
     }
   });
+}
+
+#[no_mangle]
+pub extern "system" fn Java_desu_inugram_helpers_plugins_QuickJs_nativeJvmMethod(
+  mut env: EnvUnowned,
+  _this: JObject,
+  ptr: jlong,
+  callback_id: jint,
+  self_wire: JString,
+  args: JObjectArray<JString>,
+) -> jstring {
+  in_env(&mut env, std::ptr::null_mut(), |env| {
+    let self_wire = jstring_to_string(env, &self_wire);
+    let args = read_string_array(env, &args);
+    let result = match try_enter_engine(ptr, Some(Duration::from_millis(xposed::HOOK_BUDGET_MS as u64))) {
+      Ok(engine) if engine.accepting_callbacks.get() => {
+        let _deadline = arm_entry_deadline();
+        let _caller = CallerEntry::new();
+        engine.ctx.with(|ctx| match engine.jvm.as_ref() {
+          Some(state) => state.dispatch_method(&ctx, callback_id as u32, &self_wire, &args),
+          None => "EdefineClass: JVM bridge has closed".to_string(),
+        })
+      }
+      Ok(_) | Err(EntryError::Closed) => "EdefineClass: plugin has unloaded".to_string(),
+      Err(EntryError::Busy) => "EdefineClass: engine is busy".to_string(),
+      Err(EntryError::Reentrant) => "EdefineClass: plugin engine is re-entered".to_string(),
+    };
+    env.new_string(result).map(|value| value.into_raw()).unwrap_or(std::ptr::null_mut())
+  })
 }
 
 #[no_mangle]
@@ -884,6 +915,21 @@ pub extern "system" fn Java_desu_inugram_helpers_plugins_QuickJs_nativeNotifyUnl
   engine.account.notify_unload(&engine._rt, &engine.ctx);
   engine.lifecycle_state.notify_unload(&engine._rt, &engine.ctx);
   engine.timers.notify_unload(&engine.ctx);
+}
+
+#[no_mangle]
+pub extern "system" fn Java_desu_inugram_helpers_plugins_QuickJs_nativePollUnload(
+  _env: EnvUnowned,
+  _this: JObject,
+  ptr: jlong,
+) -> jboolean {
+  let _deadline = arm_entry_deadline();
+  let engine = match try_enter_engine(ptr, Some(Duration::ZERO)) {
+    Ok(engine) => engine,
+    Err(EntryError::Closed) => return true,
+    Err(EntryError::Busy | EntryError::Reentrant) => return false,
+  };
+  engine.lifecycle_state.poll_unload(&engine._rt, &engine.ctx)
 }
 
 #[no_mangle]

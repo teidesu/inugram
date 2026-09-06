@@ -264,6 +264,7 @@ wrong name or flag, since the bridge and the typings only agree because one scri
 ### Layout
 
 - `src/native`: plugin API in `api/`, JNI in `jni/`, grants/limits/registry in `sandbox/`, internal plumbing in `utils/`.
+- Native implementation is Rust only. No C/C++ under `src/native`; C++ is limited to thin C ABI wrappers in LSPlant patches.
 - `src/fork/helpers/plugins`: host implementation. Its packages mirror native domains.
 - Build the `inu` object once in `nativeCreate`; pass it to every `install_*`.
 - `EngineBindings` owns install order. Do not move `QuickJs`: its package is part of JNI export names.
@@ -307,6 +308,7 @@ wrong name or flag, since the bridge and the typings only agree because one scri
 
 - Ordinary engine work runs on `Utilities.globalQueue`; JVM Runnables and Xposed phases enter on their caller thread through the native serialized engine lease. No engine-owned Rc/Persistent state may escape that lease.
 - Keep rquickjs `parallel` enabled. Reject recursive JNI entry before taking its runtime lock; promise jobs remain on globalQueue. Quiesce caller callbacks before host teardown.
+- `onUnload` promises share a 2-second cleanup phase. Only JVM runnables created during cleanup bypass stopped callback admission. Poll without holding the engine lease; defer reload starts and uninstall wipes until teardown completes.
 - Synchronous Xposed phases run on the hooked thread with bounded engine admission; busy/reentrant phases bypass. Hooks on the eight primitive box classes are refused: the lsplant stub boxes its own arguments through them and would recurse before any dispatch.
 - Return app responses on `stageQueue`; keep chain bookkeeping on `globalQueue`.
 - Raw RPC chains have one 10-second budget per scope; chains containing `interceptSendMessage` get 60 seconds. On timeout, abandon deeper stages first, release handles last, and fail unless passthrough already replied.

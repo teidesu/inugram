@@ -67,5 +67,5 @@ class PluginHookContext internal constructor(
 }
 
 internal class PluginXposedRoutine(private val program: PluginJvmRoutine) : java.util.function.Consumer<PluginHookContext> {
-    override fun accept(context: PluginHookContext) = program.execute(context)
+    override fun accept(context: PluginHookContext) { program.execute(context) }
 }
