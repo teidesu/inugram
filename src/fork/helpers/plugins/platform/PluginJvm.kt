@@ -60,6 +60,8 @@ object PluginJvm {
     const val OP_RELEASE = 12
     const val OP_CURRENT_FRAGMENT = 13
     const val OP_CURRENT_ACTIVITY = 14
+    const val OP_ROUTINE = 16
+    const val OP_XPOSED_ROUTINE = 17
     const val OP_BUNDLE_METHOD = 15
 
     const val GRANT = "unsafe.jvm"
@@ -150,6 +152,7 @@ object PluginJvm {
         private val nextId = AtomicLong(1)
         private val loaders = ArrayList<ClassLoader>()
         private var dexCount = 0
+        private val routinees = ArrayList<java.lang.ref.WeakReference<PluginJvmRoutine>>()
 
         @Volatile
         private var live = true
@@ -184,6 +187,11 @@ object PluginJvm {
                 writeField(fieldAt(target), self(decoded, 0), decoded.drop(1))
             }
             OP_RUNNABLE -> mintRunnable(args)
+            OP_ROUTINE -> createRoutine(name, args)
+            OP_XPOSED_ROUTINE -> {
+                if (!plugin.permissions.has("unsafe.xposed")) refuse("not-granted", "xposed routine requires unsafe.xposed", "unsafe.xposed")
+                createRoutine(name, args, hookMode = true)
+            }
             OP_LOAD_DEX -> {
                 // dex runs with the app's permissions and never crosses this bridge again. Only an unscoped grant, or a literal `*`, passes
                 if (!plugin.permissions.allows(GRANT, "*", ScopeMatch.NAMESPACE)) {
@@ -254,6 +262,8 @@ object PluginJvm {
 
         fun close() {
             live = false
+            for (routine in routinees) routine.get()?.close()
+            routinees.clear()
             handles.clear()
             loaders.clear()
         }
@@ -553,6 +563,35 @@ object PluginJvm {
                 if (!out.containsKey(key)) out[key] = method
             }
             return out.values.toList()
+        }
+
+        private fun readRoutineResult(wire: String): Any? {
+            if (!wire.startsWith("G")) return decodeArg(wire)
+            val id = wire.substring(2).toLong()
+            return try { at(id) } finally { handles.remove(id) }
+        }
+
+        private fun createRoutine(definition: String, args: Array<String>, hookMode: Boolean = false): String {
+            routinees.removeAll { it.get() == null }
+            if (routinees.size >= 512) refuse("quota-exceeded", "routine: at most 512 live routinees")
+            val values = decodeArgs(args).map { if (it is ByteArray) it.copyOf() else it }
+            val routine = try {
+                PluginJvmRoutine(definition, values, { live }, hookMode, { value -> readRoutineResult(encodeValue(value)) }) { kind, target, name, arguments ->
+                    val cls = target as? Class<*> ?: target.javaClass
+                    checkClass(cls)
+                    val receiver = target.takeUnless { it is Class<*> }
+                    val wire = when (kind) {
+                        "get" -> readField(findField(cls, name), receiver)
+                        "set" -> writeField(findField(cls, name), receiver, arguments)
+                        else -> callMethod(cls, receiver, name, arguments)
+                    }
+                    readRoutineResult(wire)
+                }
+            } catch (e: Exception) {
+                refuse("invalid-argument", "routine: ${e.message}")
+            }
+            routinees.add(java.lang.ref.WeakReference(routine))
+            return mint(if (hookMode) PluginXposedRoutine(routine) else routine, KIND_OBJECT)
         }
 
         private fun mintRunnable(args: Array<String>): String {

@@ -27,6 +27,8 @@ const OP_UNHOOK: i32 = 2;
 const OP_CALL_ORIGINAL: i32 = 3;
 const OP_ALLOCATE: i32 = 4;
 const OP_DISABLE_PROFILE_SAVER: i32 = 5;
+const OP_NATIVE_ADD: i32 = 6;
+const OP_NATIVE_REMOVE: i32 = 7;
 
 pub const GRANT: &str = "unsafe.xposed";
 
@@ -37,6 +39,7 @@ pub const HOOK_BUDGET_MS: i64 = 250;
 #[derive(Clone)]
 struct Hook {
   site: i64,
+  native_token: Option<u32>,
   before: Option<Persistent<Function<'static>>>,
   after: Option<Persistent<Function<'static>>>,
 }
@@ -59,6 +62,9 @@ struct PendingDispatch {
 
 impl XposedState {
   fn release(&self, ctx: &Ctx<'_>, hook: Hook) {
+    if let Some(token) = hook.native_token {
+      self.host.xposed(OP_NATIVE_REMOVE, hook.site, &token.to_string(), &[]);
+    }
     if let Some(before) = hook.before {
       let _ = before.restore(ctx);
     }
@@ -122,27 +128,49 @@ fn sites_from<'js>(ctx: &Ctx<'js>, value: Value<'js>) -> JsResult<Vec<i64>> {
 }
 
 struct Callbacks<'js> {
+  native_phases: Option<[String; 2]>,
   before: Option<Function<'js>>,
   after: Option<Function<'js>>,
 }
 
-fn callbacks_of<'js>(ctx: &Ctx<'js>, hook: &Object<'js>, what: &str) -> JsResult<Callbacks<'js>> {
-  let callback = |phase| -> JsResult<Option<Function<'js>>> {
-    let value: Value = hook.get(phase)?;
-    if value.is_undefined() {
-      return Ok(None);
-    }
-    let Some(callback) = value.as_function() else {
-      return PluginErrorCode::InvalidArgument.throw(ctx, &format!("{what}: {phase} must be a function"));
-    };
-    Ok(Some(callback.clone()))
+fn callbacks_of<'js>(ctx: &Ctx<'js>, jvm: &JvmState, hook: &Object<'js>, what: &str) -> JsResult<Callbacks<'js>> {
+  let mut callbacks = Callbacks {
+    before: None,
+    after: None,
+    native_phases: None,
   };
-  let before = callback("before")?;
-  let after = callback("after")?;
-  if before.is_none() && after.is_none() {
+  let mut wires = ["N".to_string(), "N".to_string()];
+  let mut has_native = false;
+  for (index, phase) in ["before", "after"].iter().enumerate() {
+    let value: Value = hook.get(*phase)?;
+    if value.is_undefined() {
+      continue;
+    }
+    let id = jvm.handle_id(ctx, &value)?;
+    if id >= 0 {
+      wires[index] = format!("G{id}");
+      has_native = true;
+    } else if let Some(callback) = value.as_function() {
+      if index == 0 {
+        callbacks.before = Some(callback.clone());
+      } else {
+        callbacks.after = Some(callback.clone());
+      }
+    } else {
+      return PluginErrorCode::InvalidArgument
+        .throw(ctx, &format!("{what}: {phase} must be a function, Java Runnable or Consumer"));
+    }
+  }
+  if has_native {
+    if callbacks.before.is_some() || callbacks.after.is_some() {
+      return PluginErrorCode::InvalidArgument
+        .throw(ctx, "xposed: cannot mix native phases and JS callbacks in one hook");
+    }
+    callbacks.native_phases = Some(wires);
+  } else if callbacks.before.is_none() && callbacks.after.is_none() {
     return PluginErrorCode::InvalidArgument.throw(ctx, "xposed: a hook needs a before or an after callback");
   }
-  Ok(Callbacks { before, after })
+  Ok(callbacks)
 }
 
 impl XposedState {
@@ -153,7 +181,7 @@ impl XposedState {
     callbacks: Callbacks<'js>,
   ) -> JsResult<Function<'js>> {
     let mut tokens = Vec::with_capacity(sites.len());
-    for site in sites {
+    for &site in &sites {
       let token = self.hooks.alloc();
       *self.sites.borrow_mut().entry(site).or_insert(0) += 1;
       self.hooks.insert(
@@ -161,11 +189,25 @@ impl XposedState {
         None,
         Hook {
           site,
+          native_token: callbacks.native_phases.as_ref().map(|_| token),
           before: callbacks.before.clone().map(|f| Persistent::save(ctx, f)),
           after: callbacks.after.clone().map(|f| Persistent::save(ctx, f)),
         },
       );
       tokens.push(token);
+      if let Some(native_phases) = &callbacks.native_phases {
+        if let Err(error) = self.ask(ctx, OP_NATIVE_ADD, site, &token.to_string(), native_phases) {
+          for token in &tokens {
+            if let Some(hook) = self.hooks.remove(*token) {
+              self.release(ctx, hook);
+            }
+          }
+          for orphan in sites.iter().skip(tokens.len()).filter(|site| !self.sites.borrow().contains_key(site)) {
+            self.host.xposed(OP_UNHOOK, *orphan, "", &[]);
+          }
+          return Err(error);
+        }
+      }
     }
 
     let held = self.hooks.len();
@@ -202,12 +244,12 @@ impl XposedState {
     let Some(hook) = hook.as_object() else {
       return PluginErrorCode::InvalidArgument.throw(ctx, &format!("{what}: expected a hook object"));
     };
-    let callbacks = callbacks_of(ctx, hook, what)?;
+    let callbacks = callbacks_of(ctx, &self.jvm, hook, what)?;
     if self.lifecycle.is_unloading() {
       return noop_disposer(ctx);
     }
     let target = self.require_handle(ctx, &target, "hook")?;
-    let answered = self.ask(ctx, op, target, name, &[])?;
+    let answered = self.ask(ctx, op, target, name, callbacks.native_phases.as_ref().map(|v| &v[..]).unwrap_or(&[]))?;
     let sites = sites_from(ctx, answered)?;
     self.install_hooks(ctx, sites, callbacks)
   }
@@ -358,6 +400,16 @@ pub fn install_xposed<'js>(
     xposed.set(
       "disableProfileSaver",
       Function::new(ctx.clone(), move |ctx: Ctx<'js>| state.js_disable_profile_saver(&ctx))?,
+    )?;
+  }
+  {
+    let state = state.clone();
+    xposed.set(
+      "routine",
+      Function::new(ctx.clone(), move |ctx: Ctx<'js>, builder: Value<'js>| {
+        state.grants.check_grant(&ctx, GRANT, None, MATCH_NAMESPACE)?;
+        state.jvm.build_xposed_routine(&ctx, builder)
+      })?,
     )?;
   }
   globals.inu.set("xposed", xposed)?;

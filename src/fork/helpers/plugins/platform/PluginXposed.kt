@@ -29,7 +29,10 @@ import org.telegram.messenger.Utilities
  * queue-confined bridge map and re-entering one is a `BorrowMutError` abort. So [Session.dispatch]
  * posts `before`, waits [budgetMs], **calls the original itself** (a hooked method may be one only
  * the ui thread may run), and posts `after`; past the budget the original runs as the app called it.
- * A dispatch reached from *inside* plugin code is already on globalQueue and skips the hooks.
+ * A JS dispatch reached from *inside* plugin code is already on globalQueue and skips the hooks.
+ * Native-only sites invoke Runnable.run() or Consumer.accept(context) on the calling thread, including globalQueue.
+ * JS-backed nativeHooks retain their asynchronous dispatch to globalQueue.
+ * Both modes bypass recursive dispatch. A site cannot mix JS and native hooks within one plugin.
  *
  * Values are [PluginJvm]'s, borrowed through [PluginJvm.ValueBridge] rather than kept twice.
  */
@@ -43,6 +46,8 @@ object PluginXposed {
     const val OP_CALL_ORIGINAL = 3
     const val OP_ALLOCATE = 4
     const val OP_DISABLE_PROFILE_SAVER = 5
+    const val OP_NATIVE_ADD = 6
+    const val OP_NATIVE_REMOVE = 7
 
     const val GRANT = "unsafe.xposed"
 
@@ -106,7 +111,11 @@ object PluginXposed {
     private fun refuse(code: String, message: String, grant: String? = null): Nothing =
         throw Refusal(PluginWire.encodePluginError(code, message, grant = grant))
 
-    private class Site(val target: Member, val backup: Member)
+    private class NativeHook(val token: String, val before: Any?, val after: Any?)
+
+    private class Site(val target: Member, val backup: Member, val native: Boolean) {
+        @Volatile var nativeHooks: List<NativeHook> = emptyList()
+    }
 
     private class Session(private val plugin: Plugin, private val engine: QuickJs) : XposedListener {
         // concurrent because [dispatch] reads this on whichever thread called the hooked method, while install/remove run on globalQueue
@@ -129,9 +138,23 @@ object PluginXposed {
         }
 
         private fun run(op: Int, target: Long, name: String, args: Array<String>): String = when (op) {
-            OP_HOOK -> PluginWire.encodeString(install(listOf(values.memberAt(target))))
-            OP_HOOK_ALL -> PluginWire.encodeString(install(overloads(values.classAt(target), name)))
+            OP_HOOK -> PluginWire.encodeString(install(listOf(values.memberAt(target)), args))
+            OP_HOOK_ALL -> PluginWire.encodeString(install(overloads(values.classAt(target), name), args))
             OP_UNHOOK -> uninstall(target)
+            OP_NATIVE_ADD -> {
+                val site = sites[target] ?: refuse("expired-handle", "xposed: hook site is gone")
+                if (!site.native) refuse("invalid-argument", "xposed: cannot add a native phase to a JS hook site")
+                val (before, after) = readNativeHooks(args)
+                if (site.nativeHooks.any { it.token == name }) refuse("invalid-argument", "xposed: duplicate native hook")
+                site.nativeHooks = site.nativeHooks + NativeHook(name, before, after)
+                PluginWire.encodeNull()
+            }
+            OP_NATIVE_REMOVE -> {
+                sites[target]?.let { site ->
+                    site.nativeHooks = site.nativeHooks.filterNot { it.token == name }
+                }
+                PluginWire.encodeNull()
+            }
             OP_CALL_ORIGINAL -> callOriginal(values.memberAt(target), args)
             OP_ALLOCATE -> allocate(values.classAt(target))
             OP_DISABLE_PROFILE_SAVER -> values.encode(ensureReady() && Native.nativeDisableProfileSaver())
@@ -151,14 +174,40 @@ object PluginXposed {
             return found
         }
 
-        private fun install(targets: List<Member>): String {
+        private fun readNativeHooks(args: Array<String>): Pair<Any?, Any?> {
+            if (args.size != 2) refuse("invalid-argument", "xposed: expected two native phases")
+            fun read(wire: String): Any? {
+                val value = values.decode(wire) ?: return null
+                if (value !is Runnable && value !is java.util.function.Consumer<*>) {
+                    refuse("invalid-argument", "xposed: phase must implement Runnable or Consumer")
+                }
+                return value
+            }
+            val before = read(args[0])
+            val after = read(args[1])
+            if (before == null && after == null) refuse("invalid-argument", "xposed: no native phases")
+            return before to after
+        }
+
+        private fun install(targets: List<Member>, args: Array<String>): String {
+            val native = args.isNotEmpty()
+            if (native) readNativeHooks(args)
+            for (member in targets) {
+                checkTarget(member)
+                if (sites.values.any { it.target == member && it.native != native }) {
+                    refuse("invalid-argument", "xposed: cannot mix native phases and JS hooks on the same method")
+                }
+            }
             if (!ensureReady()) {
                 refuse("unsupported", "xposed: method hooking is unavailable on this device")
             }
             val installed = ArrayList<Long>(targets.size)
-            for (member in targets) {
-                checkTarget(member)
-                installed.add(installOne(member))
+            val previous = sites.keys.toSet()
+            try {
+                for (member in targets) installed.add(installOne(member, native))
+            } catch (e: Throwable) {
+                for (site in installed) if (site !in previous) uninstall(site)
+                throw e
             }
             return installed.joinToString(",")
         }
@@ -187,7 +236,7 @@ object PluginXposed {
          * turn into an unhook after the first. `Member.equals` is value-based, so two reflective
          * lookups of one method answer the same key.
          */
-        private fun installOne(member: Member): Long {
+        private fun installOne(member: Member, native: Boolean): Long {
             sites.entries.firstOrNull { it.value.target == member }?.let { return it.key }
             val site = nextSite.getAndIncrement()
             val isStatic = java.lang.reflect.Modifier.isStatic(member.modifiers)
@@ -196,7 +245,7 @@ object PluginXposed {
             val backup = Native.nativeHook(member, hooker, callback)
                 ?: refuse("internal", "xposed: lsplant declined to hook $member")
             (backup as? java.lang.reflect.AccessibleObject)?.isAccessible = true
-            sites[site] = Site(member, backup)
+            sites[site] = Site(member, backup, native)
             Log.d(TAG, "[${plugin.manifest.name}] installed xposed site $site: $member")
             return site
         }
@@ -256,16 +305,50 @@ object PluginXposed {
          */
         fun dispatch(site: Long, receiver: Any?, args: List<Any?>): Any? {
             // already inside the engine's queue: this is a hooked method plugin code reached, and parking here would be parking on ourselves
-            if (Utilities.globalQueue as Any === Thread.currentThread() || dispatching.get() == true) {
+            if (dispatching.get() == true || (sites[site]?.native != true && Utilities.globalQueue as Any === Thread.currentThread())) {
                 Log.d(TAG, "[${plugin.manifest.name}] xposed site $site bypassed re-entry")
                 return runOriginal(site, receiver, args, originalArgs = true)
             }
             dispatching.set(true)
             return try {
                 Log.d(TAG, "[${plugin.manifest.name}] xposed site $site dispatching")
-                dispatchOnce(site, receiver, args)
+                if (sites[site]?.native == true) dispatchNativeHooks(site, receiver, args)
+                else dispatchOnce(site, receiver, args)
             } finally {
                 dispatching.remove()
+            }
+        }
+
+        private fun dispatchNativeHooks(site: Long, receiver: Any?, args: List<Any?>): Any? {
+            val entry = sites[site] ?: return runOriginal(site, receiver, args, originalArgs = true)
+            val hooks = entry.nativeHooks
+            val context = PluginHookContext(entry.target, receiver, args.toMutableList())
+            fun runPhase(before: Boolean) {
+                val deadline = System.nanoTime() + budgetMs * 1_000_000L
+                for (hook in hooks) {
+                    if (System.nanoTime() >= deadline) break
+                    try {
+                        when (val phase = if (before) hook.before else hook.after) {
+                            is java.util.function.Consumer<*> -> {
+                                @Suppress("UNCHECKED_CAST")
+                                (phase as java.util.function.Consumer<PluginHookContext>).accept(context)
+                            }
+                            is Runnable -> phase.run()
+                        }
+                    } catch (e: Throwable) {
+                        Log.d(TAG, "[${plugin.manifest.name}] native hook failed", e)
+                    }
+                    if (before && context.answered) break
+                }
+            }
+            return try {
+                runPhase(true)
+                if (!context.answered) context.outcome = runCatching { runOriginal(site, receiver, context.arguments, originalArgs = true) }
+                context.answered = false
+                runPhase(false)
+                context.outcome.getOrThrow()
+            } finally {
+                context.close()
             }
         }
 

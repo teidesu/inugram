@@ -261,6 +261,7 @@ most things are toggleable in `Settings → Inugram`, with sensible opinionated 
 - plugins can open chats, topics, profiles, dialogs, settings and Telegram links; Android plugins can also build `Bundle` arguments from JS values for reflected fragments
 - plugin UI icons support curated/static resources, inline SVG, Lottie animations, custom emoji and stickers
 - "start in safe mode" launcher shortcut to boot without running any plugin; active safe mode shows a banner on the plugins page with a restart button
+- plugins can build scoped JVM operation routines that execute on the destination thread without JS callbacks, with symbolic results, invocation-local variables, conditions, comparisons, short-circuit boolean logic, arithmetic, grant checks and unload cancellation; Xposed before/after phases accept Java Runnables or Consumers, with invocation-aware routines for editing arguments/results/throwables (JS-backed runnables retain asynchronous dispatch)
 - plugin developer mode (off by default, behind a warning sheet with a 10s confirm delay): `pnpm run push-plugin <file> [--watch] [--logs]` pushes a plugin over adb and the app installs or hot-reloads it in place, keeping its storage, order and enabled bit, and reports the result back to the terminal (and, when the app is on screen, as a bulletin); the receiver demands `android.permission.DUMP` of the sender, so the channel is adb's alone, plugins that arrived this way are badged "dev" in the list, and the plugins page shows a banner for as long as it is on
 
 ## 🐶 bugfixes (vs stock)
