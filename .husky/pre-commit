@@ -1,1 +1,2 @@
+unset $(git rev-parse --local-env-vars)
 pnpm tsx scripts/ci/pre-commit.ts
