@@ -90,6 +90,10 @@ export const forkSyncFiles: ForkSyncFile[] = [
     target: 'TMessagesProj/src/main/res/drawable',
   },
   {
+    source: 'src/res/drawable/material/*',
+    target: 'TMessagesProj/src/main/res/drawable',
+  },
+  {
     source: 'src/res/drawable/*.xml',
     target: 'TMessagesProj/src/main/res/drawable',
   },

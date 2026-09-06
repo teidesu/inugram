@@ -335,6 +335,7 @@
     <string name="InuIconReplacementOff">Varsayılan</string>
     <string name="InuIconReplacementSolar">@Design480 tarafından Solar</string>
     <string name="InuIconReplacementVkui">VK tarafından VKUI</string>
+    <string name="InuIconReplacementMaterial">Google tarafından Material Symbols</string>
 
     <string name="InuMapsHeader">Haritalar</string>
     <string name="InuMapProvider">Harita görünümü sağlayıcısı</string>

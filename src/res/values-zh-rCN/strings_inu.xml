@@ -261,6 +261,7 @@
     <string name="InuIconReplacementOff">默认</string>
     <string name="InuIconReplacementSolar">Solar by @Design480</string>
     <string name="InuIconReplacementVkui">VKUI by VK</string>
+    <string name="InuIconReplacementMaterial">Material Symbols by Google</string>
 
     <string name="InuMapsHeader">地图</string>
     <string name="InuMapProvider">地图视图提供方</string>

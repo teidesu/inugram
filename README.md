@@ -126,6 +126,7 @@ the audit reports later patches that fully revert an earlier patch or delete lin
 - Tabler icons by [Tabler Team](https://tabler.io/icons)
 - Solar icon pack by [480 Design](https://t.me/Design480)
 - VKUI icon pack by [VK](https://github.com/VKCOM/icons) (MIT), ported from [Catogram](https://github.com/Catogram/Catogram)
+- Material Symbols icon pack by [Google](https://github.com/material-design-icons/) (Apache-2.0)
 - AdGuard URL Tracking filter by [AdGuard](https://adguard.com/)
 
 this project is llm-assisted: a bunch of the code and the patches were (and will be) written by claude. this doesn't mean it's "ai slop", i still review all the code myself,

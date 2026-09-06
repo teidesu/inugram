@@ -19,7 +19,8 @@ import android.util.TypedValue
 import desu.inugram.InuConfig
 import java.io.InputStream
 
-class IconsResources(private val resources: Resources) : Resources(resources.assets, resources.displayMetrics, resources.configuration) {
+class IconsResources(private val resources: Resources) :
+    Resources(resources.assets, resources.displayMetrics, resources.configuration) {
     fun wrapsResources(resources: Resources): Boolean {
         return this.resources === resources
     }
@@ -42,18 +43,26 @@ class IconsResources(private val resources: Resources) : Resources(resources.ass
     @SuppressLint("UseCompatLoadingForDrawables")
     override fun getDrawable(id: Int, theme: Theme?): Drawable = resources.getDrawable(getConversion(id), theme)
 
-    override fun getDrawableForDensity(id: Int, density: Int): Drawable? = resources.getDrawableForDensity(getConversion(id), density)
-    override fun getDrawableForDensity(id: Int, density: Int, theme: Theme?): Drawable? = resources.getDrawableForDensity(getConversion(id), density, theme)
+    override fun getDrawableForDensity(id: Int, density: Int): Drawable? =
+        resources.getDrawableForDensity(getConversion(id), density)
+
+    override fun getDrawableForDensity(id: Int, density: Int, theme: Theme?): Drawable? =
+        resources.getDrawableForDensity(getConversion(id), density, theme)
+
     override fun getFloat(id: Int): Float = resources.getFloat(id)
     override fun getFont(id: Int): Typeface = resources.getFont(id)
     override fun getFraction(id: Int, base: Int, pbase: Int): Float = resources.getFraction(id, base, pbase)
-    override fun getIdentifier(name: String?, defType: String?, defPackage: String?): Int = resources.getIdentifier(name, defType, defPackage)
+    override fun getIdentifier(name: String?, defType: String?, defPackage: String?): Int =
+        resources.getIdentifier(name, defType, defPackage)
+
     override fun getIntArray(id: Int): IntArray = resources.getIntArray(id)
     override fun getInteger(id: Int): Int = resources.getInteger(id)
     override fun getLayout(id: Int): XmlResourceParser = resources.getLayout(id)
     override fun getMovie(id: Int): Movie? = resources.getMovie(id)
     override fun getQuantityString(id: Int, quantity: Int): String = resources.getQuantityString(id, quantity)
-    override fun getQuantityString(id: Int, quantity: Int, vararg formatArgs: Any): String = resources.getQuantityString(id, quantity, *formatArgs)
+    override fun getQuantityString(id: Int, quantity: Int, vararg formatArgs: Any): String =
+        resources.getQuantityString(id, quantity, *formatArgs)
+
     override fun getQuantityText(id: Int, quantity: Int): CharSequence = resources.getQuantityText(id, quantity)
     override fun getResourceEntryName(resid: Int): String = resources.getResourceEntryName(resid)
     override fun getResourceName(resid: Int): String = resources.getResourceName(resid)
@@ -65,23 +74,37 @@ class IconsResources(private val resources: Resources) : Resources(resources.ass
     override fun getText(id: Int): CharSequence = resources.getText(id)
     override fun getText(id: Int, def: CharSequence?): CharSequence = resources.getText(id, def)
     override fun getTextArray(id: Int): Array<CharSequence> = resources.getTextArray(id)
-    override fun getValue(id: Int, outValue: TypedValue, resolveRefs: Boolean) = resources.getValue(id, outValue, resolveRefs)
-    override fun getValue(name: String?, outValue: TypedValue, resolveRefs: Boolean) = resources.getValue(name, outValue, resolveRefs)
-    override fun getValueForDensity(id: Int, density: Int, outValue: TypedValue, resolveRefs: Boolean) = resources.getValueForDensity(id, density, outValue, resolveRefs)
+    override fun getValue(id: Int, outValue: TypedValue, resolveRefs: Boolean) =
+        resources.getValue(id, outValue, resolveRefs)
+
+    override fun getValue(name: String?, outValue: TypedValue, resolveRefs: Boolean) =
+        resources.getValue(name, outValue, resolveRefs)
+
+    override fun getValueForDensity(id: Int, density: Int, outValue: TypedValue, resolveRefs: Boolean) =
+        resources.getValueForDensity(id, density, outValue, resolveRefs)
+
     override fun getXml(id: Int): XmlResourceParser = resources.getXml(id)
-    override fun obtainAttributes(set: AttributeSet, attrs: IntArray): TypedArray = resources.obtainAttributes(set, attrs)
+    override fun obtainAttributes(set: AttributeSet, attrs: IntArray): TypedArray =
+        resources.obtainAttributes(set, attrs)
+
     override fun obtainTypedArray(id: Int): TypedArray = resources.obtainTypedArray(id)
     override fun openRawResource(id: Int): InputStream = resources.openRawResource(id)
     override fun openRawResource(id: Int, value: TypedValue): InputStream = resources.openRawResource(id, value)
     override fun openRawResourceFd(id: Int): AssetFileDescriptor? = resources.openRawResourceFd(id)
-    override fun parseBundleExtra(tagName: String, attrs: AttributeSet, outBundle: Bundle) = resources.parseBundleExtra(tagName, attrs, outBundle)
-    override fun parseBundleExtras(parser: XmlResourceParser, outBundle: Bundle) = resources.parseBundleExtras(parser, outBundle)
-    override fun updateConfiguration(config: Configuration?, metrics: DisplayMetrics?) = resources.updateConfiguration(config, metrics)
+    override fun parseBundleExtra(tagName: String, attrs: AttributeSet, outBundle: Bundle) =
+        resources.parseBundleExtra(tagName, attrs, outBundle)
+
+    override fun parseBundleExtras(parser: XmlResourceParser, outBundle: Bundle) =
+        resources.parseBundleExtras(parser, outBundle)
+
+    override fun updateConfiguration(config: Configuration?, metrics: DisplayMetrics?) =
+        resources.updateConfiguration(config, metrics)
 
     private fun getConversion(icon: Int): Int {
         return when (InuConfig.ICON_REPLACEMENT.value) {
             InuConfig.IconReplacementItem.SOLAR -> SolarIconPack.map(icon)
             InuConfig.IconReplacementItem.VKUI -> VkIconPack.map(icon)
+            InuConfig.IconReplacementItem.MATERIAL -> MaterialIconPack.map(icon)
             else -> icon
         }
     }

@@ -33,6 +33,7 @@ class AppearanceSettingsActivity : SettingsPageActivity() {
                 when (InuConfig.ICON_REPLACEMENT.value) {
                     InuConfig.IconReplacementItem.SOLAR -> LocaleController.getString(R.string.InuIconReplacementSolar)
                     InuConfig.IconReplacementItem.VKUI -> LocaleController.getString(R.string.InuIconReplacementVkui)
+                    InuConfig.IconReplacementItem.MATERIAL -> LocaleController.getString(R.string.InuIconReplacementMaterial)
                     else -> LocaleController.getString(R.string.InuIconReplacementOff)
                 }
             )
@@ -222,6 +223,7 @@ class AppearanceSettingsActivity : SettingsPageActivity() {
                     LocaleController.getString(R.string.InuIconReplacementOff),
                     LocaleController.getString(R.string.InuIconReplacementSolar),
                     LocaleController.getString(R.string.InuIconReplacementVkui),
+                    LocaleController.getString(R.string.InuIconReplacementMaterial),
                 ),
                 InuConfig.ICON_REPLACEMENT.value,
             ) { which ->
@@ -420,8 +422,16 @@ class AppearanceSettingsActivity : SettingsPageActivity() {
                 SearchRegistry.Entry("material3-sections", R.string.InuMaterial3Sections, TOGGLE_M3_SECTIONS_STYLE),
                 SearchRegistry.Entry("material3-avatars", R.string.InuMaterial3Avatars, TOGGLE_MATERIAL3_AVATARS),
                 SearchRegistry.Entry("m3-bottom-tabs", R.string.InuMaterial3BottomTabs, TOGGLE_M3_BOTTOM_TABS),
-                SearchRegistry.Entry("material-profile-actions", R.string.InuMaterialProfileActions, TOGGLE_MATERIAL_PROFILE_ACTIONS),
-                SearchRegistry.Entry("material3-navigation-animation", R.string.InuMaterial3NavigationAnimation, TOGGLE_M3_NAVIGATION_ANIMATION),
+                SearchRegistry.Entry(
+                    "material-profile-actions",
+                    R.string.InuMaterialProfileActions,
+                    TOGGLE_MATERIAL_PROFILE_ACTIONS
+                ),
+                SearchRegistry.Entry(
+                    "material3-navigation-animation",
+                    R.string.InuMaterial3NavigationAnimation,
+                    TOGGLE_M3_NAVIGATION_ANIMATION
+                ),
                 SearchRegistry.Entry("monet-theme", R.string.InuMonetTheme, BUTTON_MONET_THEME),
                 SearchRegistry.Entry("icon-replacement", R.string.InuIconReplacement, BUTTON_ICON_REPLACEMENT),
                 SearchRegistry.Entry("notification-icon", R.string.InuNotificationIcon, BUTTON_NOTIFICATION_ICON),
@@ -429,10 +439,26 @@ class AppearanceSettingsActivity : SettingsPageActivity() {
                 SearchRegistry.Entry("predictive-back-mode", R.string.InuPredictiveBack, BUTTON_PREDICTIVE_BACK_MODE),
                 SearchRegistry.Entry("navigation-drawer", R.string.InuNavigationDrawer, TOGGLE_NAVIGATION_DRAWER),
                 SearchRegistry.Entry("drawer-back-gesture", R.string.InuDrawerBackGesture, TOGGLE_DRAWER_BACK_GESTURE),
-                SearchRegistry.Entry("non-island-folders-bar", R.string.InuNonIslandFoldersBar, TOGGLE_NON_ISLAND_FOLDERS_BAR),
-                SearchRegistry.Entry("non-island-shared-media-tabs", R.string.InuNonIslandSharedMediaTabs, TOGGLE_NON_ISLAND_SHARED_MEDIA_TABS),
-                SearchRegistry.Entry("non-island-global-search", R.string.InuNonIslandGlobalSearch, TOGGLE_NON_ISLAND_GLOBAL_SEARCH),
-                SearchRegistry.Entry("non-island-chat-elements", R.string.InuNonIslandChatElements, TOGGLE_NON_ISLAND_CHAT_ELEMENTS),
+                SearchRegistry.Entry(
+                    "non-island-folders-bar",
+                    R.string.InuNonIslandFoldersBar,
+                    TOGGLE_NON_ISLAND_FOLDERS_BAR
+                ),
+                SearchRegistry.Entry(
+                    "non-island-shared-media-tabs",
+                    R.string.InuNonIslandSharedMediaTabs,
+                    TOGGLE_NON_ISLAND_SHARED_MEDIA_TABS
+                ),
+                SearchRegistry.Entry(
+                    "non-island-global-search",
+                    R.string.InuNonIslandGlobalSearch,
+                    TOGGLE_NON_ISLAND_GLOBAL_SEARCH
+                ),
+                SearchRegistry.Entry(
+                    "non-island-chat-elements",
+                    R.string.InuNonIslandChatElements,
+                    TOGGLE_NON_ISLAND_CHAT_ELEMENTS
+                ),
                 SearchRegistry.Entry("hide-fade-view", R.string.InuHideFadeView, TOGGLE_HIDE_FADE_VIEW),
             ),
         )

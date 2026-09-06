@@ -791,6 +791,7 @@ object InuConfig {
             const val OFF = 0
             const val SOLAR = 1
             const val VKUI = 2
+            const val MATERIAL = 3
         }
     }
 

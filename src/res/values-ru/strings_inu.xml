@@ -261,6 +261,7 @@
     <string name="InuIconReplacementOff">По умолчанию</string>
     <string name="InuIconReplacementSolar">Solar от @Design480</string>
     <string name="InuIconReplacementVkui">VKUI от VK</string>
+    <string name="InuIconReplacementMaterial">Material Symbols от Google</string>
 
     <string name="InuMapsHeader">Карты</string>
     <string name="InuMapProvider">Источник карт</string>
