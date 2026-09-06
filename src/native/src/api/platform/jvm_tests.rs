@@ -563,7 +563,7 @@ pub(crate) mod testing {
     fn jvm(&self, op: i32, target: i64, name: &str, args: &[String]) -> String {
       match op {
         OP_CLASS => self.mint_class(name),
-        OP_NEW => self.mint('O'),
+        OP_NEW | OP_ROUTINE | OP_XPOSED_ROUTINE => self.mint('O'),
         OP_METHOD => self.mint('M'),
         OP_FIELD => self.mint('F'),
         OP_RUNNABLE => {
@@ -608,5 +608,71 @@ pub(crate) mod testing {
         _ => "N".to_string(),
       }
     }
+  }
+}
+
+#[test]
+fn routinees_build_one_host_program_without_executing_members() {
+  let f = setup(&["unsafe.jvm"]);
+  assert_eq!(eval(&f, "globalThis.obj = new (inu.jvm.cls('test.Object'))(); undefined"), "undefined");
+  let before = f.host.calls().len();
+  eval(&f, "inu.jvm.routine(ops => { const x = ops.getField(obj, 'count'); return [ops.setField(obj, 'count', ops.math('+', x, 2))] })");
+  let calls = f.host.calls();
+  assert_eq!(calls.len(), before + 1);
+  assert!(calls.last().unwrap().starts_with("16|0|"));
+  assert!(calls.last().unwrap().contains("\"math\",\"+\""));
+}
+
+#[test]
+fn routine_tokens_are_scoped_and_builders_close_on_success_and_failure() {
+  let f = setup(&["unsafe.jvm"]);
+  eval(
+    &f,
+    "inu.jvm.routine(ops => { globalThis.saved = ops; globalThis.token = ops.math('+', 1, 2); return [token] })",
+  );
+  for code in [
+    "saved.math('+', 1, 2)",
+    "inu.jvm.routine(ops => [token])",
+    "inu.jvm.routine(ops => [ops.math('+', token, 2)])",
+    "inu.jvm.routine(ops => [ops.math('?', 1, 2)])",
+    "inu.jvm.routine(ops => Promise.resolve([]))",
+  ] {
+    assert!(eval(&f, code).contains("routine:"), "{code}");
+  }
+  eval(&f, "try { inu.jvm.routine(ops => { globalThis.failed = ops; throw Error('stop') }) } catch {} ");
+  assert!(eval(&f, "failed.math('+', 1, 2)").contains("closed"));
+}
+
+#[test]
+fn routine_comparisons_and_logic_build_symbolic_nodes() {
+  let f = setup(&["unsafe.jvm"]);
+  eval(&f, "inu.jvm.routine(ops => [ops.and(ops.compare('>', 3, 2), ops.or(false, ops.not(null)))])");
+  let calls = f.host.calls();
+  assert_eq!(calls.len(), 1);
+  for kind in ["compare", "and", "or", "not"] {
+    assert!(calls[0].contains(&format!("\"{kind}\"")));
+  }
+  assert!(eval(&f, "inu.jvm.routine(ops => [ops.compare('===', 1, 1)])").contains("unsupported comparison"));
+  eval(&f, "inu.jvm.routine(ops => { globalThis.foreign = ops.not(false); return [] })");
+  assert!(eval(&f, "inu.jvm.routine(ops => [ops.and(true, foreign)])").contains("foreign"));
+}
+
+#[test]
+fn routine_locals_use_names_and_closed_builders_are_refused() {
+  let f = setup(&["unsafe.jvm"]);
+  eval(&f, "inu.jvm.routine(ops => { globalThis.localOps = ops; return [ops.set('count', 1), ops.set('count', ops.math('+', ops.get('count'), 2))] })");
+  let calls = f.host.calls();
+  assert_eq!(calls.len(), 1);
+  for kind in ["getLocal", "setLocal"] {
+    assert!(calls[0].contains(&format!("\"{kind}\"")));
+  }
+  for code in [
+    "localOps.get('count')",
+    "localOps.set('count', 2)",
+    "inu.jvm.routine(ops => [ops.get('')])",
+    "inu.jvm.routine(ops => [ops.set(3, 2)])",
+  ] {
+    let error = eval(&f, code);
+    assert!(error.contains("routine:") || error.contains("expected a name"), "{code}");
   }
 }

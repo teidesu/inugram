@@ -28,6 +28,8 @@ class JvmFixture {
 
     private var secret: String = "private"
 
+    fun readCount(): Int = count
+
     fun echo(text: String): String = "echo:$text"
 
     fun width(value: Int): String = "int"

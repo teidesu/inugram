@@ -34,6 +34,8 @@ const OP_RELEASE: i32 = 12;
 const OP_CURRENT_FRAGMENT: i32 = 13;
 const OP_CURRENT_ACTIVITY: i32 = 14;
 const OP_BUNDLE_METHOD: i32 = 15;
+const OP_ROUTINE: i32 = 16;
+const OP_XPOSED_ROUTINE: i32 = 17;
 
 pub const GRANT: &str = "unsafe.jvm";
 
@@ -53,6 +55,7 @@ pub struct JvmState {
 struct Prelude {
   mint: Persistent<Function<'static>>,
   id_of: Persistent<Function<'static>>,
+  xposed_routine: Persistent<Function<'static>>,
 }
 
 fn bounded(value: &str, limit: usize) -> bool {
@@ -69,6 +72,18 @@ fn throw_too_big<'js, T>(ctx: &Ctx<'js>, what: &str, size: usize, limit: usize) 
 }
 
 impl JvmState {
+  pub(crate) fn build_xposed_routine<'js>(&self, ctx: &Ctx<'js>, builder: Value<'js>) -> JsResult<Value<'js>> {
+    let factory = self
+      .prelude
+      .borrow()
+      .as_ref()
+      .ok_or(rquickjs::Error::Unknown)?
+      .xposed_routine
+      .clone()
+      .restore(ctx)?;
+    factory.call((builder,))
+  }
+
   pub(crate) fn handle_id<'js>(&self, ctx: &Ctx<'js>, value: &Value<'js>) -> JsResult<i64> {
     let borrowed = self.prelude.borrow();
     let Some(prelude) = borrowed.as_ref() else {
@@ -175,9 +190,21 @@ impl JvmState {
 
   fn js_op<'js>(&self, ctx: &Ctx<'js>, op: i32, target: i64, name: String, args: Array<'js>) -> JsResult<Value<'js>> {
     self.grants.check_grant(ctx, GRANT, None, MATCH_NAMESPACE)?;
+    if op == OP_XPOSED_ROUTINE {
+      self.grants.check_grant(ctx, "unsafe.xposed", None, MATCH_NAMESPACE)?;
+    }
+    if name.len() > VALUE_LIMIT_BYTES {
+      return throw_too_big(ctx, "operation definition", name.len(), VALUE_LIMIT_BYTES);
+    }
     let mut wires = Vec::new();
+    let mut wire_bytes = 0usize;
     for arg in crate::utils::arguments::array_values(ctx, &args, "jvm")? {
-      wires.push(self.arg_to_wire(ctx, &arg)?);
+      let wire = self.arg_to_wire(ctx, &arg)?;
+      wire_bytes = wire_bytes.saturating_add(wire.len());
+      if (op == OP_ROUTINE || op == OP_XPOSED_ROUTINE) && wire_bytes > VALUE_LIMIT_BYTES {
+        return throw_too_big(ctx, "routine captures", wire_bytes, VALUE_LIMIT_BYTES);
+      }
+      wires.push(wire);
     }
     self.ask(ctx, op, target, &name, &wires)
   }
@@ -301,6 +328,8 @@ pub fn install_jvm<'js>(
   let natives = Object::new(ctx.clone())?;
   let ops = Object::new(ctx.clone())?;
   for (name, op) in [
+    ("routine", OP_ROUTINE),
+    ("xposedRoutine", OP_XPOSED_ROUTINE),
     ("construct", OP_NEW),
     ("get", OP_GET),
     ("set", OP_SET),
@@ -360,6 +389,7 @@ pub fn install_jvm<'js>(
   *state.prelude.borrow_mut() = Some(Prelude {
     mint: Persistent::save(ctx, mint),
     id_of: Persistent::save(ctx, id_of),
+    xposed_routine: Persistent::save(ctx, built.get::<_, Function>("xposedRoutine")?),
   });
   globals.inu.set("jvm", jvm)?;
   state.install_android(ctx, globals)?;
@@ -421,6 +451,7 @@ impl JvmState {
       if let Some(prelude) = state.prelude.borrow_mut().take() {
         let _ = prelude.mint.restore(&ctx);
         let _ = prelude.id_of.restore(&ctx);
+        let _ = prelude.xposed_routine.restore(&ctx);
       }
     });
   }

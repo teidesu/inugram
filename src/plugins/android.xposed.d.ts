@@ -11,20 +11,44 @@ declare namespace inu {
    */
   namespace xposed {
     interface MethodHookContext {
-      method: JavaMethod
-      thisObject: JavaObject | null
-      args: any[]
+      readonly method: JavaMethod
+      readonly thisObject: JavaObject | null
+      readonly args: any[]
 
-      returnValue: any
-      throwable: JavaObject | null
+      readonly returnValue: any
+      readonly throwable: JavaObject | null
 
-      setReturnValue: (value: any) => void
-      setThrowable: (throwable: JavaObject) => void
+      readonly setReturnValue: (value: any) => void
+      readonly setThrowable: (throwable: JavaObject) => void
     }
 
+    interface RoutineOps extends JvmRoutineOps {
+      getThisObject(): JvmRoutineValue
+      getMethod(): JvmRoutineValue
+      getArgument(index: number | JvmRoutineValue): JvmRoutineValue
+      setArgument(index: number | JvmRoutineValue, value: JvmRoutineOperand): JvmRoutineValue
+      getReturnValue(): JvmRoutineValue
+      getThrowable(): JvmRoutineValue
+      setReturnValue(value: JvmRoutineOperand): JvmRoutineValue
+      setThrowable(value: JavaObject | JvmRoutineValue): JvmRoutineValue
+    }
+
+    /**
+     * Build a Java Consumer<PluginHookContext> that runs on the hooked thread without JS callbacks.
+     * Includes JVM routine ops plus access to arguments, results and throwables.
+     * Setting a result/throwable in before skips the original; after hooks still run.
+     * Locals reset per phase. JVM routine limits and grant checks apply.
+     */
+    function routine(build: (ops: RoutineOps) => JvmRoutineValue[]): JavaObject
+
     interface MethodHook {
-      before?: (ctx: MethodHookContext) => void
-      after?: (ctx: MethodHookContext) => void
+      /**
+       * Accepts JS callbacks, Java Runnables or Consumers. Consumers receive the hook context.
+       * JS-backed Runnables remain asynchronous. Java exceptions are logged; changes stay applied.
+       * A plugin cannot mix JS and Java hooks on the same method.
+       */
+      before?: ((ctx: MethodHookContext) => void) | JavaObject
+      after?: ((ctx: MethodHookContext) => void) | JavaObject
     }
 
     function hookMethod(method: JavaMethod, hook: MethodHook): Disposer
