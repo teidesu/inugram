@@ -26,8 +26,8 @@ import kotlin.math.roundToInt
  * drawn in place of the stock thin-line + circle-thumb sliders when
  * [desu.inugram.InuConfig.MATERIAL3_SLIDERS] is on.
  *
- * Geometry follows the M3 spec (track 16dp r8, inside corners 2dp, handle 4x44 -> clamped,
- * 6dp handle gap, 4dp stop indicator/ticks).
+ * Geometry uses compact M3 proportions (track 12dp r6, inside corners 1.5dp, handle 3x24,
+ * 4dp handle gap, 3dp stop indicator/ticks) so it fits Telegram's dense layouts.
  *
  * Three consumers:
  * - [drawSeekBar] takes over [SeekBarView.onDraw] (settings sliders, music player, wallpaper dim…);
@@ -37,23 +37,23 @@ import kotlin.math.roundToInt
  * - [drawPlain] renders a plain 0..1 slider for fork views built on the low-level
  *   [org.telegram.ui.Components.SeekBar] (see [desu.inugram.ui.settings.SliderCell]).
  *
- * Touch handling, accessibility and progress state stay fully stock — this is draw-only.
+ * Touch handling, accessibility and progress state stay fully stock. Haptics on stepped sliders
+ * are limited to the tick positions selected by the same density rules used for drawing.
  */
 object M3SliderHelper {
-    private const val TRACK_HEIGHT = 16f
-    private const val OUTER_RADIUS = 8f
+    private const val TRACK_HEIGHT = 12f
+    private const val OUTER_RADIUS = 6f
 
     // corner facing the handle gap
-    private const val INNER_RADIUS = 2f
-    private const val GAP = 6f
-    private const val HANDLE_WIDTH = 4f
-    private const val HANDLE_WIDTH_PRESSED = 2f
+    private const val INNER_RADIUS = 1.5f
+    private const val GAP = 4f
+    private const val HANDLE_WIDTH = 3f
+    private const val HANDLE_WIDTH_PRESSED = 1.5f
 
-    // spec is 44dp, deliberately reduced: settings hosts are only 38dp tall (44 would touch both
-    // edges) and SlideChooseView's labels sit ~20dp above its track (44 would overlap them).
-    // The min() against the host height in drawHandle is only a guard for shorter views.
-    private const val HANDLE_HEIGHT = 28f
-    private const val TICK_RADIUS = 2f
+    // Compact enough for 38dp settings hosts and SlideChooseView's nearby label row. The min()
+    // against the host height in drawHandle remains a guard for shorter views.
+    private const val HANDLE_HEIGHT = 24f
+    private const val TICK_RADIUS = 1.5f
     private const val DIM_ALPHA = 0.5f
 
     // tick density limits; denser stops get subsampled (see tickCount)
@@ -161,7 +161,10 @@ object M3SliderHelper {
 
         val dots = tickCount(stepsCount - 1, right - left)
         if (dots > 0) {
-            drawTicks(canvas, left, right, cy, cx, hw, dots, view.getThemedColor(Theme.key_windowBackgroundWhite), activeColor, dimUntil)
+            drawTicks(
+                canvas, left, right, cy, cx, hw, dots, stepsCount - 1,
+                view.getThemedColor(Theme.key_windowBackgroundWhite), activeColor, dimUntil,
+            )
         } else {
             drawStopIndicator(canvas, right, cy, inactiveLeft, activeColor)
         }
@@ -309,7 +312,10 @@ object M3SliderHelper {
 
         val dots = tickCount(steps - 1, right - left)
         if (dots > 0) {
-            drawTicks(canvas, left, right, cy, cx, hw, dots, Theme.getColor(Theme.key_windowBackgroundWhite), activeColor, -Float.MAX_VALUE)
+            drawTicks(
+                canvas, left, right, cy, cx, hw, dots, steps - 1,
+                Theme.getColor(Theme.key_windowBackgroundWhite), activeColor, -Float.MAX_VALUE,
+            )
         } else {
             drawStopIndicator(canvas, right, cy, inactiveLeft, activeColor)
         }
@@ -322,8 +328,8 @@ object M3SliderHelper {
     /**
      * Number of tick dots for a stepped slider, laid out uniformly over the cap-inset span:
      * every stop when they fit under [MAX_TICK_COUNT] / [MIN_TICK_SPACING], otherwise thinned —
-     * preferring a count whose gaps land on real stops (interval count divisor), else plain
-     * evenly spaced marker dots. 0 = fewer than 3 dots fit — render as a continuous track.
+     * using the largest count whose gaps land evenly on real stops. 0 = fewer than 3 dots fit or
+     * no clean subdivision exists — render as a continuous track with only its stop indicator.
      */
     private fun tickCount(intervals: Int, spanPx: Float): Int {
         if (intervals < 1) return 0
@@ -338,7 +344,26 @@ object M3SliderHelper {
             if (intervals % (dots - 1) == 0) return dots
         }
 
-        return maxDots
+        return 0
+    }
+
+    /**
+     * Whether a stepped slider should vibrate at [stepIndex]. With M3 sliders off this preserves
+     * stock's haptic on every snap; with M3 on it returns true only for a rendered tick position.
+     */
+    @JvmStatic
+    fun shouldVibrateAtTick(stepIndex: Int, steps: Int, spanPx: Float): Boolean {
+        if (!enabled()) return true
+
+        val intervals = steps - 1
+        val dots = tickCount(intervals, spanPx)
+        if (dots == 0 || stepIndex !in 0..intervals) return false
+
+        for (j in 0 until dots) {
+            val tickStep = j * intervals / (dots - 1)
+            if (stepIndex == tickStep) return true
+        }
+        return false
     }
 
     private fun drawTicks(
@@ -349,6 +374,7 @@ object M3SliderHelper {
         cx: Float,
         hw: Float,
         dots: Int,
+        intervals: Int,
         onActiveColor: Int,
         onInactiveColor: Int,
         dimUntilX: Float,
@@ -356,15 +382,15 @@ object M3SliderHelper {
         val tickR = AndroidUtilities.dpf2(TICK_RADIUS)
         val gap = AndroidUtilities.dpf2(GAP)
 
-        // dots spread uniformly over the span inset by the cap radius: end dots sit concentric
-        // with the rounded caps and end gaps match the interior spacing. Dots therefore mark the
-        // range rather than exact stop pixels; the handle gap swallows the offset whenever the
-        // handle lands near one.
+        // Dots span the range inset by the cap radius, with every marker assigned to a real snap
+        // stop. End dots sit concentric with the rounded caps; the handle gap swallows the small
+        // cap inset whenever the handle lands on a marker.
         val endInset = AndroidUtilities.dpf2(OUTER_RADIUS)
         val l = left + endInset
         val r = right - endInset
         for (j in 0 until dots) {
-            val x = l + (r - l) * j / (dots - 1)
+            val tickStep = j * intervals / (dots - 1)
+            val x = l + (r - l) * tickStep / intervals
             if (abs(x - cx) < hw + gap + tickR) continue
 
             var color = if (x < cx) onActiveColor else onInactiveColor

@@ -4,9 +4,9 @@ Date: Sun, 16 Aug 2026 19:18:57 +0400
 Subject: Material 3 style sliders
 
 ---
- .../telegram/ui/Components/SeekBarView.java   | 25 ++++++++-------
+ .../telegram/ui/Components/SeekBarView.java   | 28 ++++++++++-------
  .../ui/Components/SlideChooseView.java        | 31 ++++++++++---------
- 2 files changed, 31 insertions(+), 25 deletions(-)
+ 2 files changed, 33 insertions(+), 26 deletions(-)
 
 diff --git a/TMessagesProj/src/main/java/org/telegram/ui/Components/SeekBarView.java b/TMessagesProj/src/main/java/org/telegram/ui/Components/SeekBarView.java
 index 0000000..0000000 100644
@@ -47,7 +47,17 @@ index 0000000..0000000 100644
      private int lineWidthDp = 3;
  
      private boolean twoSided;
-@@ -436,6 +436,9 @@ public class SeekBarView extends FrameLayout {
+@@ -349,7 +349,8 @@ public class SeekBarView extends FrameLayout {
+         }
+         if (separatorsCount > 1) {
+             int value = Math.round((separatorsCount - 1) * progress);
+-            if (!stop && value != lastValue) {
++            if (!stop && value != lastValue && desu.inugram.helpers.theme.M3SliderHelper.shouldVibrateAtTick(
++                    value, separatorsCount, getMeasuredWidth() - selectorWidth)) {
+                 AndroidUtilities.vibrateCursor(this);
+             }
+             lastValue = value;
+@@ -436,6 +437,9 @@ public class SeekBarView extends FrameLayout {
  
      @Override
      protected void onDraw(Canvas canvas) {
@@ -57,7 +67,7 @@ index 0000000..0000000 100644
          int thumbX = this.thumbX;
          if (!twoSided && separatorsCount > 1) {
              float step = (getMeasuredWidth() - selectorWidth) / ((float) separatorsCount - 1f);
-@@ -534,7 +537,7 @@ public class SeekBarView extends FrameLayout {
+@@ -534,7 +538,7 @@ public class SeekBarView extends FrameLayout {
          }
      }
  
@@ -66,7 +76,7 @@ index 0000000..0000000 100644
      private CharSequence lastCaption;
      private long lastDuration;
  
-@@ -894,7 +897,7 @@ public class SeekBarView extends FrameLayout {
+@@ -894,7 +898,7 @@ public class SeekBarView extends FrameLayout {
          return seekBarAccessibilityDelegate;
      }
  

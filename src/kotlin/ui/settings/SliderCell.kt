@@ -255,8 +255,13 @@ class SliderCell(
                         committedProgress = snapped
                         seekBar.setProgress(snapped)
 
-                        // step haptic like stock's, which only ticks mid-drag, not on release
-                        if (event.action != MotionEvent.ACTION_UP && event.action != MotionEvent.ACTION_CANCEL) {
+                        // Dense snap ranges draw only selected ticks; vibrate at those ticks rather
+                        // than at every intermediate snap. Keep releases silent like stock.
+                        val stepIndex = Math.round(snapped * (tickSteps - 1))
+                        val trackSpan = (width - AndroidUtilities.dp(24f)).toFloat()
+                        if (event.action != MotionEvent.ACTION_UP && event.action != MotionEvent.ACTION_CANCEL &&
+                            M3SliderHelper.shouldVibrateAtTick(stepIndex, tickSteps, trackSpan)
+                        ) {
                             AndroidUtilities.vibrateCursor(this)
                         }
 
