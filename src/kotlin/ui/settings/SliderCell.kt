@@ -247,6 +247,13 @@ class SliderCell(
                     }
 
                     snapDragging = event.action == MotionEvent.ACTION_DOWN || event.action == MotionEvent.ACTION_MOVE
+                    if (event.action == MotionEvent.ACTION_CANCEL) {
+                        // a cancel's coordinates are meaningless (parent intercepted); keep whatever
+                        // the preceding moves already committed and just drop the handle
+                        invalidate()
+                        return true
+                    }
+
                     val thumbWidth = AndroidUtilities.dp(24f)
                     val denom = (width - thumbWidth).coerceAtLeast(1).toFloat()
                     val raw = ((event.x - thumbWidth / 2f) / denom).coerceIn(0f, 1f)
@@ -259,7 +266,7 @@ class SliderCell(
                         // than at every intermediate snap. Keep releases silent like stock.
                         val stepIndex = Math.round(snapped * (tickSteps - 1))
                         val trackSpan = (width - AndroidUtilities.dp(24f)).toFloat()
-                        if (event.action != MotionEvent.ACTION_UP && event.action != MotionEvent.ACTION_CANCEL &&
+                        if (event.action != MotionEvent.ACTION_UP &&
                             M3SliderHelper.shouldVibrateAtTick(stepIndex, tickSteps, trackSpan)
                         ) {
                             AndroidUtilities.vibrateCursor(this)
