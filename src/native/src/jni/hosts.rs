@@ -1,6 +1,6 @@
 use crate::LEVEL_ERROR;
 
-use crate::api::canvas::CanvasHost;
+use crate::api::canvas::{CanvasHost, OP_DESTROY, OP_RELEASE_IMAGE};
 use crate::api::globals::RandomHost;
 use crate::api::io::fetch::FetchHost;
 use crate::api::io::kv::KvHost;
@@ -85,7 +85,6 @@ impl RpcHost for JniBridge {
     self.call_void("interceptUpdate", self.on_update_verdict, &[Arg::Long(dispatch_id), Arg::Bool(deliver)]);
   }
 }
-
 
 impl AccountHost for JniBridge {
   fn accounts(&self) -> Option<String> {
@@ -370,7 +369,8 @@ impl FetchHost for JniBridge {
 
 impl CanvasHost for JniBridge {
   fn canvas(&self, op: i32, id: i64, arg: &str, bytes: Option<&[u8]>) -> String {
-    match self.call_string("canvas", self.on_canvas, &[Arg::Int(op), Arg::Long(id), Arg::Str(arg), Arg::Bytes(bytes)]) {
+    let what = if matches!(op, OP_DESTROY | OP_RELEASE_IMAGE) { "canvasRelease" } else { "canvas" };
+    match self.call_string(what, self.on_canvas, &[Arg::Int(op), Arg::Long(id), Arg::Str(arg), Arg::Bytes(bytes)]) {
       Ok(Some(answer)) => answer,
       Ok(None) => String::new(),
       Err(e) => e,

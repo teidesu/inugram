@@ -5,7 +5,6 @@ import android.graphics.PorterDuff
 import android.graphics.PorterDuffColorFilter
 import android.graphics.drawable.Drawable
 import android.net.Uri
-import android.util.Log
 import androidx.core.content.res.ResourcesCompat
 import desu.inugram.core.plugins.CommonIcons
 import org.telegram.messenger.DocumentObject
@@ -34,7 +33,6 @@ import org.telegram.ui.Components.BackupImageView
  * TODO: surface a warning for an unresolvable `@icon` instead of failing silently
  */
 object PluginManifestIcons {
-    private const val TAG = "InuPluginIcon"
     private const val FILTER = "56_56"
 
     /** what every plugin surface draws when the manifest names no icon, or names one we can't resolve */
@@ -75,7 +73,6 @@ object PluginManifestIcons {
             spec.startsWith("tg://addstickers?") -> bindSticker(view, spec, Uri.parse(spec))
             else -> false
         }
-        Log.d(TAG, "bindIcon: spec=$spec bound=$bound view=$view size=${view.width}x${view.height}")
         return common
     }
 

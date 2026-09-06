@@ -275,6 +275,7 @@ object PluginRpc {
     fun listenerFor(plugin: Plugin, engine: QuickJs, tl: TlHandles): RpcListener {
         // snapshot: the account-less `inu.invokeRpc` names no account, and a plugin's requests must not jump slots on a switch
         val invokeAccount = UserConfig.selectedAccount
+        val onHost = EngineDispatch.createHostDispatcher { EngineDispatch.isLive(plugin, engine) }
         return object : RpcListener {
             override fun onRpcRegister(
                 methods: Array<String>,
@@ -285,7 +286,7 @@ object PluginRpc {
             ): String? = registerIntercept(plugin, methods, callbackId, scope, strict, filterJson)
 
             override fun onRpcUnregister(callbackId: Int) =
-                unregisterIntercept(plugin, callbackId)
+                onHost { unregisterIntercept(plugin, callbackId) }
 
             override fun onInvokeRpc(invokeId: Long, slot: Int, requestWire: String): String? =
                 invokeRpc(plugin, engine, tl, slot, invokeAccount, invokeId, requestWire)
@@ -294,7 +295,7 @@ object PluginRpc {
                 onNext(dispatchId, requestWire)
 
             override fun onRpcComplete(dispatchId: Long, resultWire: String) =
-                onComplete(dispatchId, resultWire)
+                onHost { onComplete(dispatchId, resultWire) }
         }
     }
 

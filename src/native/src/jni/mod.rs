@@ -1,8 +1,9 @@
-use std::cell::{Ref, RefCell};
+use std::cell::Cell;
+use std::ops::Deref;
 use std::rc::Rc;
-use std::sync::OnceLock;
+use std::sync::{Arc, Mutex, OnceLock};
+use std::time::Duration;
 
-use fragile::Fragile;
 use jni::sys::jlong;
 use rquickjs::{Context, Object, Persistent, Runtime};
 use slotmap::{new_key_type, Key, KeyData, SlotMap};
@@ -33,33 +34,63 @@ pub(crate) mod log;
 #[cfg(test)]
 mod tests;
 
+#[cfg(test)]
+#[path = "caller_thread_tests.rs"]
+mod caller_thread_tests;
+
 use bridge::JniBridge;
 
 new_key_type! {
   pub(crate) struct EngineKey;
 }
 
-// Initialized by `insert_engine` on Utilities.globalQueue. `Fragile` rejects access from every
-// other thread, preserving QuickJS's thread affinity while keeping one process-wide handle map.
-static ENGINES: OnceLock<Fragile<RefCell<SlotMap<EngineKey, Engine>>>> = OnceLock::new();
+mod serialized;
+use serialized::{EntryError, Lease, Serialized};
 
-fn get_engine_store() -> Option<&'static RefCell<SlotMap<EngineKey, Engine>>> {
-  ENGINES.get()?.try_get().ok()
+// SAFETY: the whole engine graph moves together. Its Rc/RefCell/Persistent values never leave
+// an entry lease; JNI hosts retain only integer handles and Java global references. A lease is
+// thread-bound and exclusive, including destruction. QuickJS uses its parallel runtime lock.
+// Do not return cloned engine state from a JNI entry or add externally shared Rc owners.
+pub(crate) struct TransferEngine(Engine);
+unsafe impl Send for TransferEngine {}
+
+impl Deref for TransferEngine {
+  type Target = Engine;
+  fn deref(&self) -> &Engine {
+    &self.0
+  }
 }
+
+static ENGINES: OnceLock<Mutex<SlotMap<EngineKey, Arc<Serialized<TransferEngine>>>>> = OnceLock::new();
 
 pub(crate) fn insert_engine(engine: Engine) -> jlong {
   ENGINES
-    .get_or_init(|| Fragile::new(RefCell::new(SlotMap::with_key())))
-    .get()
-    .borrow_mut()
-    .insert(engine)
+    .get_or_init(|| Mutex::new(SlotMap::with_key()))
+    .lock()
+    .unwrap_or_else(|e| e.into_inner())
+    .insert(Serialized::new(TransferEngine(engine)))
     .data()
     .as_ffi() as jlong
 }
 
-pub(crate) fn get_engine(handle: jlong) -> Option<Ref<'static, Engine>> {
-  let store = get_engine_store()?;
-  Ref::filter_map(store.borrow(), |engines| engines.get(get_engine_key(handle))).ok()
+fn get_engine(handle: jlong) -> Option<Lease<TransferEngine>> {
+  enter_engine(handle, None)
+}
+
+fn enter_engine(handle: jlong, timeout: Option<Duration>) -> Option<Lease<TransferEngine>> {
+  try_enter_engine(handle, timeout).ok()
+}
+
+fn try_enter_engine(handle: jlong, timeout: Option<Duration>) -> Result<Lease<TransferEngine>, EntryError> {
+  let slot = ENGINES
+    .get()
+    .ok_or(EntryError::Closed)?
+    .lock()
+    .unwrap_or_else(|e| e.into_inner())
+    .get(get_engine_key(handle))
+    .ok_or(EntryError::Closed)?
+    .clone();
+  slot.enter(timeout)
 }
 
 pub(crate) fn get_engine_key(handle: jlong) -> EngineKey {
@@ -67,10 +98,14 @@ pub(crate) fn get_engine_key(handle: jlong) -> EngineKey {
 }
 
 pub(crate) fn remove_engine(handle: jlong) -> Option<Engine> {
-  get_engine_store()?.borrow_mut().remove(get_engine_key(handle))
+  let slot = ENGINES.get()?.lock().unwrap_or_else(|e| e.into_inner()).get(get_engine_key(handle))?.clone();
+  let engine = slot.close().ok()??;
+  ENGINES.get()?.lock().unwrap_or_else(|e| e.into_inner()).remove(get_engine_key(handle));
+  Some(engine.0)
 }
 
 pub(crate) struct Engine {
+  pub(crate) accepting_callbacks: Cell<bool>,
   pub(crate) ctx: Context,
   pub(crate) _rt: Runtime,
   pub(crate) bridge: Rc<JniBridge>,
@@ -96,5 +131,25 @@ pub(crate) struct Engine {
 impl Engine {
   pub(crate) fn pump(&self) {
     pump_jobs(&self._rt, &self.ctx, self.rpc.log.as_ref());
+  }
+}
+
+thread_local! {
+  static CALLER_ENTRY: Cell<bool> = const { Cell::new(false) };
+}
+
+pub(crate) fn is_caller_entry() -> bool {
+  CALLER_ENTRY.with(|entry| entry.get())
+}
+
+struct CallerEntry(bool);
+impl CallerEntry {
+  fn new() -> Self {
+    Self(CALLER_ENTRY.with(|entry| entry.replace(true)))
+  }
+}
+impl Drop for CallerEntry {
+  fn drop(&mut self) {
+    CALLER_ENTRY.with(|entry| entry.set(self.0));
   }
 }

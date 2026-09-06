@@ -6,6 +6,7 @@ import desu.inugram.core.plugins.TlFlags
 import desu.inugram.core.plugins.TlNames
 import desu.inugram.core.plugins.PluginWire
 import desu.inugram.helpers.plugins.Plugin
+import desu.inugram.helpers.plugins.EngineDispatch
 import desu.inugram.helpers.plugins.QuickJs
 import desu.inugram.helpers.plugins.TlListener
 import java.lang.reflect.ParameterizedType
@@ -47,6 +48,7 @@ class TlHandles(private val policy: TlFilter.Policy) : TlListener {
         val flagOwner: Pair<TLObject, String>? = null,
     )
 
+    private val onHost = EngineDispatch.createHostDispatcher()
     private var nextHandle = 1L
     private val table = HashMap<Long, HandleEntry>()
 
@@ -164,7 +166,7 @@ class TlHandles(private val policy: TlFilter.Policy) : TlListener {
         }
     }
 
-    override fun tlRelease(handle: Long) {
+    override fun tlRelease(handle: Long) = onHost {
         table.remove(handle)?.let { freeIfOwned(it) }
     }
 

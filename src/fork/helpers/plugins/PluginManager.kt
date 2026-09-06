@@ -1,5 +1,6 @@
 package desu.inugram.helpers.plugins
 
+import java.util.concurrent.atomic.AtomicBoolean
 import android.content.Context
 import android.content.Intent
 import android.content.pm.ShortcutInfo
@@ -388,13 +389,21 @@ object PluginManager {
         val engine = QuickJs()
         val budget = LogBudget()
         val timers = TimerThrottle(plugin, engine)::schedule
+        val onHost = EngineDispatch.createHostDispatcher { EngineDispatch.isLive(plugin, engine) }
         val core = object : CoreListener {
+            private val faultReported = AtomicBoolean()
+
             override fun onConsole(level: Int, message: String) {
-                if (level == QuickJs.LEVEL_FAULT) fail(plugin, PluginFailure.Site.RUNTIME, message, engine)
-                else logConsole(plugin, budget, level, message)
+                if (level != QuickJs.LEVEL_FAULT) {
+                    logConsole(plugin, budget, level, message)
+                } else if (faultReported.compareAndSet(false, true)) {
+                    Utilities.globalQueue.postRunnable {
+                        if (plugin.engine === engine) fail(plugin, PluginFailure.Site.RUNTIME, message, engine)
+                    }
+                }
             }
 
-            override fun onTimerSchedule(delayMs: Long) = timers(delayMs)
+            override fun onTimerSchedule(delayMs: Long) = onHost { timers(delayMs) }
         }
         // built whole and handed over once: rust caches its method ids off `PluginBridge` at
         // `start`, and every ordering constraint among the installs after it is in `EngineBindings`
@@ -403,7 +412,7 @@ object PluginManager {
         val bridge = PluginBridge(
             core = core,
             rpc = PluginRpc.listenerFor(plugin, engine, tl),
-            updates = PluginUpdates.listenerFor(plugin),
+            updates = PluginUpdates.listenerFor(plugin, engine),
             tl = tl,
             storage = PluginKv.listenerFor(plugin),
             account = PluginAccounts.listenerFor(plugin, engine),
@@ -449,6 +458,7 @@ object PluginManager {
      * while `plugin.engine` still points at [engine], which is what [fail] reads.
      */
     private fun teardown(plugin: Plugin, engine: QuickJs, beforeClear: () -> Unit = {}) {
+        engine.stopCallbacks()
         // the plugin's handle table spans both, and is released last of the three: the abandons
         // each of them runs reject inside this plugin, and a continuation touching its own request
         // view must not find every field expired
@@ -477,6 +487,7 @@ object PluginManager {
         Utilities.globalQueue.postRunnable {
             val engine = plugin.engine ?: return@postRunnable
             try {
+                engine.stopCallbacks()
                 engine.notifyUnload()
             } catch (e: Throwable) {
                 fail(plugin, PluginFailure.Site.UNLOAD, e.message ?: e.toString(), engine)
@@ -537,12 +548,13 @@ object PluginManager {
         private var windowStart = 0L
         private var used = 0
 
+        @Synchronized
         fun charge(now: Long): Verdict {
             if (now - windowStart >= LOG_WINDOW_MS) {
                 windowStart = now
                 used = 0
             }
-            used++
+            if (used < LOG_BUDGET + 1) used++
             return when {
                 used < LOG_BUDGET -> Verdict.PASS
                 used == LOG_BUDGET -> Verdict.LAST

@@ -28,6 +28,19 @@ class TlHandlesLifetimeTest {
     }.synced()
 
     @Test
+    fun off_thread_release_waits_for_the_handle_table_queue() {
+        val handles = TlHandles(UNFILTERED)
+        val root = handles.mintForPlugin(message(), readOnly = true)
+        val caller = Thread { handles.tlRelease(root) }
+        caller.start()
+        caller.join(5000)
+        assertTrue(!caller.isAlive)
+        assertEquals(1L, (PluginWire.decode(handles.tlGet(root, "id")) as PluginWire.Value.IntNum).value)
+        drain()
+        assertPluginError("handle-expired", handles.tlGet(root, "id"))
+    }
+
+    @Test
     fun releasing_a_scope_invalidates_every_handle_minted_under_it_children_included() {
         val handles = TlHandles(UNFILTERED)
         val scope = TlHandles.newScope()

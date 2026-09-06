@@ -248,6 +248,8 @@ most things are toggleable in `Settings → Inugram`, with sensible opinionated 
 
 ## 🐶 plugins (experimental, wip)
 
+- Plugin JVM Runnables and Xposed JS hooks execute on the calling thread with serialized engine access; promise jobs stay on the engine queue and hosts manage their own queueing. Busy Runnables skip safely and off-thread canvas cleanup is queued.
+
 - InuPlugin-style js plugins running on a rust engine (rquickjs/quickjs-ng) — exposes `console.*`, `inu.info()`, and an rpc bridge (`inu.interceptRpc`/`inu.invokeRpc`/`inu.onUpdate`) gated by `@grant` permissions
 - plugin TL construction includes keyboard/button and ephemeral-message types
 - invalid `interceptRpc` TL returns are logged and skip that middleware by default; `{ strict: true }` instead fails the app's RPC

@@ -120,7 +120,7 @@ class PluginJvmRoutineTest {
         repeat(2) {
             task.run()
             assertEquals(6, fixture.count)
-            assertEquals(1L, fixture.payload)
+            assertEquals(1, fixture.payload)
         }
     }
 

@@ -205,12 +205,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "fragile"
-version = "2.1.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "8878864ba14bb86e818a412bfd6f18f9eabd4ec0f008a28e8f7eb61db532fcf9"
-
-[[package]]
 name = "glob"
 version = "0.3.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -352,7 +346,6 @@ version = "0.1.0"
 dependencies = [
  "base64",
  "csscolorparser",
- "fragile",
  "jni",
  "lzma-rs",
  "rquickjs",

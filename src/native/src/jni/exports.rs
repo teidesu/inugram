@@ -3,14 +3,18 @@ use jni::strings::JNIString;
 use jni::sys::{jboolean, jclass, jint, jlong, jobject, jstring};
 use jni::EnvUnowned;
 use rquickjs::{Coerced, Context, Object, Persistent, Result as JsResult, Runtime, Value};
+use std::cell::Cell;
 use std::path::{Path, PathBuf};
 use std::rc::Rc;
 use std::sync::Arc;
+use std::time::Duration;
 
 use super::bridge::JniBridge;
 use super::env::{in_env, jstring_to_string, read_header, read_string_array};
 use super::log::{install_console, make_log};
-use super::{get_engine, insert_engine, remove_engine, Engine};
+use super::{
+  enter_engine, get_engine, insert_engine, remove_engine, try_enter_engine, CallerEntry, Engine, EntryError,
+};
 use crate::api::canvas::{self, install_canvas, CanvasHost};
 use crate::api::error::{dispose_rejection_tracker, format_exception, install_plugin_error, install_rejection_tracker};
 use crate::api::globals::{install_globals, RandomHost};
@@ -39,7 +43,7 @@ use crate::api::ui::pages::{install_ui, UiHost};
 use crate::api::ui::screens::{install_screens, ScreenHost};
 use crate::api::Globals;
 use crate::sandbox::grants::{CachedGrantHost, GrantHost};
-use crate::sandbox::limits::{apply_heap_limit, arm_entry_deadline, install_interrupt_handler, ExternalMemory};
+use crate::sandbox::limits::{apply_heap_limit, arm, arm_entry_deadline, install_interrupt_handler, ExternalMemory};
 use crate::sandbox::registry::Lifecycle;
 
 #[no_mangle]
@@ -250,10 +254,10 @@ pub extern "system" fn Java_desu_inugram_helpers_plugins_QuickJs_nativeCreate(
           log.as_ref(),
         )?;
       }
-      let rpc =
-        install_engine_rpc(&ctx, &bridge, grants.clone(), &views, &lifecycle, &account, &shared, log.as_ref())?;
+      let rpc = install_engine_rpc(&ctx, &bridge, grants.clone(), &views, &lifecycle, &account, &shared, log.as_ref())?;
 
       Some(Engine {
+        accepting_callbacks: Cell::new(true),
         ctx,
         _rt: rt,
         bridge,
@@ -332,13 +336,17 @@ pub extern "system" fn Java_desu_inugram_helpers_plugins_QuickJs_nativeXposedBef
   args: JObjectArray<'local, JString<'local>>,
 ) -> jobject {
   in_env(&mut env, std::ptr::null_mut(), |env| {
-    let _deadline = arm_entry_deadline();
+    let _deadline = arm(xposed::HOOK_BUDGET_MS as u64);
     let method_wire = jstring_to_string(env, &method_wire);
     let this_wire = jstring_to_string(env, &this_wire);
     let args = read_string_array(env, &args);
-    let Some(engine) = get_engine(ptr) else {
+    let Some(engine) = enter_engine(ptr, Some(Duration::from_millis(xposed::HOOK_BUDGET_MS as u64))) else {
       return std::ptr::null_mut();
     };
+    if !engine.accepting_callbacks.get() {
+      return std::ptr::null_mut();
+    }
+    let _caller = CallerEntry::new();
     let answer = match engine.xposed.as_ref() {
       Some(state) => state.dispatch_before(
         &engine._rt,
@@ -372,13 +380,18 @@ pub extern "system" fn Java_desu_inugram_helpers_plugins_QuickJs_nativeXposedAft
   result: JString<'local>,
 ) -> jstring {
   in_env(&mut env, std::ptr::null_mut(), |env| {
-    let _deadline = arm_entry_deadline();
+    let _deadline = arm(xposed::HOOK_BUDGET_MS as u64);
     let result = jstring_to_string(env, &result);
-    let answer = match get_engine(ptr) {
-      Some(engine) => match engine.xposed.as_ref() {
-        Some(state) => state.dispatch_after(&engine._rt, &engine.ctx, dispatch_id, &result),
-        None => result,
-      },
+    let answer = match enter_engine(ptr, Some(Duration::from_millis(xposed::HOOK_BUDGET_MS as u64))) {
+      Some(engine) => {
+        let _caller = CallerEntry::new();
+        match engine.xposed.as_ref() {
+          Some(state) if engine.accepting_callbacks.get() => {
+            state.dispatch_after(&engine._rt, &engine.ctx, dispatch_id, &result)
+          }
+          _ => result,
+        }
+      }
       None => result,
     };
     env.new_string(answer).map(|j| j.into_raw()).unwrap_or(std::ptr::null_mut())
@@ -497,19 +510,55 @@ pub extern "system" fn Java_desu_inugram_helpers_plugins_platform_PluginXposed_0
 
 #[no_mangle]
 pub extern "system" fn Java_desu_inugram_helpers_plugins_QuickJs_nativeJvmCallback(
-  _env: EnvUnowned,
+  mut env: EnvUnowned,
   _this: JObject,
   ptr: jlong,
   callback_id: jint,
 ) {
-  let _deadline = arm_entry_deadline();
-  let Some(engine) = get_engine(ptr) else {
-    return;
-  };
-  let Some(state) = engine.jvm.as_ref() else {
-    return;
-  };
-  state.dispatch_callback(&engine._rt, &engine.ctx, callback_id as u32);
+  in_env(&mut env, (), |env| {
+    let engine = match try_enter_engine(ptr, Some(Duration::from_millis(xposed::HOOK_BUDGET_MS as u64))) {
+      Ok(engine) => engine,
+      Err(EntryError::Busy | EntryError::Closed) => return,
+      Err(EntryError::Reentrant) => {
+        let _ = env.throw_new(
+          JNIString::from("java/lang/IllegalStateException"),
+          JNIString::from("plugin engine is re-entered"),
+        );
+        return;
+      }
+    };
+    if !engine.accepting_callbacks.get() {
+      return;
+    }
+    let _deadline = arm_entry_deadline();
+    let _caller = CallerEntry::new();
+    if let Some(state) = engine.jvm.as_ref() {
+      state.dispatch_callback(&engine._rt, &engine.ctx, callback_id as u32);
+    }
+  });
+}
+
+#[no_mangle]
+pub extern "system" fn Java_desu_inugram_helpers_plugins_QuickJs_nativeStopCallbacks(
+  _env: EnvUnowned,
+  _this: JObject,
+  ptr: jlong,
+) {
+  if let Some(engine) = get_engine(ptr) {
+    engine.accepting_callbacks.set(false);
+  }
+}
+
+#[no_mangle]
+pub extern "system" fn Java_desu_inugram_helpers_plugins_QuickJs_nativePumpJobs(
+  _env: EnvUnowned,
+  _this: JObject,
+  ptr: jlong,
+) {
+  if let Some(engine) = get_engine(ptr) {
+    let _deadline = arm_entry_deadline();
+    engine.pump();
+  }
 }
 
 fn install_engine_fs(

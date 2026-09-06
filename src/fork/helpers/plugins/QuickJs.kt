@@ -1,10 +1,13 @@
 package desu.inugram.helpers.plugins
 
+import java.util.concurrent.atomic.AtomicBoolean
+import org.telegram.messenger.Utilities
+
 /**
  * JNI wrapper over an rquickjs (quickjs-ng) context; the engine itself is the rust crate in
  * src/native.
  *
- * NOT thread-safe: a context is created, used and closed on one thread.
+ * Native entries serialize access. Synchronous callbacks run on their caller thread.
  *
  * There are no upcalls here: rust calls [PluginBridge] directly, caching its method ids off that
  * class. So construction is two-phase - the listeners need this object, and [start] needs them.
@@ -27,9 +30,8 @@ open class QuickJs {
     )
 
     /**
-     * 0 until [start], and published as 0 again *before* the free: a `long` is not read atomically
-     * off the owning thread, and one reader (the `inu.xposed` dispatch) is posted by an arbitrary
-     * app thread, where a stale pointer is a use-after-free rather than a wrong answer.
+     * 0 until [start], published as 0 before teardown. Native validates this generation-tagged
+     * handle under the registry lock, including callers racing close().
      */
     @Volatile private var ptr: Long = 0
 
@@ -93,8 +95,7 @@ open class QuickJs {
 
 
     /**
-     * **Call from globalQueue**: the thread that called the hooked method parks on the answer
-     * rather than entering the engine itself. Answers `["A", wire]` to answer the call with `wire`,
+     * Runs on the hooked thread, with bounded engine admission. Answers `["A", wire]` to answer the call with `wire`,
      * or `["P0" | "P1", ...args]` to run the original with those args - `P1` also meaning
      * [xposedAfter] is owed a call for [dispatchId].
      */
@@ -104,18 +105,39 @@ open class QuickJs {
         methodWire: String,
         thisWire: String,
         args: Array<String>,
-    ): Array<String>? = ifLiveOr(null) { nativeXposedBefore(it, dispatchId, site, methodWire, thisWire, args) }
+    ): Array<String>? = try {
+        ifLiveOr(null) { nativeXposedBefore(it, dispatchId, site, methodWire, thisWire, args) }
+    } finally { scheduleJobs() }
 
     /** [resultWire] is what the original answered, `T`-prefixed when it threw */
-    open fun xposedAfter(dispatchId: Long, resultWire: String): String = ifLiveOr(resultWire) { nativeXposedAfter(it, dispatchId, resultWire) ?: resultWire }
+    open fun xposedAfter(dispatchId: Long, resultWire: String): String = try {
+        ifLiveOr(resultWire) { nativeXposedAfter(it, dispatchId, resultWire) ?: resultWire }
+    } finally { scheduleJobs() }
 
-    /** the waiting is the host's, but the number is rust's (`xposed::HOOK_BUDGET_MS`) so there is one of it */
+    /** Shared budget for native phases and Rust engine admission. */
     open fun xposedBudgetMs(): Long = nativeXposedBudgetMs()
 
     open fun xposedRelease(dispatchId: Long) = ifLive { nativeXposedRelease(it, dispatchId) }
 
-    /** **Post it**, never call it from inside the reflected call that handed the object over: that call is already inside this engine */
-    open fun jvmCallback(callbackId: Int) = ifLive { nativeJvmCallback(it, callbackId) }
+    /** Runs synchronously; native rejects recursive entry and admission past the hook budget. */
+    open fun jvmCallback(callbackId: Int) {
+        try { ifLive { nativeJvmCallback(it, callbackId) } }
+        finally { scheduleJobs() }
+    }
+
+    private val jobsScheduled = AtomicBoolean()
+
+    private fun scheduleJobs() {
+        if (!jobsScheduled.compareAndSet(false, true)) return
+        Utilities.globalQueue.postRunnable {
+            jobsScheduled.set(false)
+            ifLive { nativePumpJobs(it) }
+        }
+    }
+
+    /** Quiesce caller-thread callbacks before detaching any host state. */
+    fun stopCallbacks() = ifLive { nativeStopCallbacks(it) }
+
 
     /** [resultWire] is `J{status, statusText, url, headers, body: {path, type}}` or an error wire */
     open fun fetchResult(requestId: Long, resultWire: String) = requireLive { nativeFetchResult(it, requestId, resultWire) }
@@ -147,7 +169,7 @@ open class QuickJs {
 
     fun resolvePrompt(requestId: Long, text: String?) = requireLive { nativeResolvePrompt(it, requestId, text) }
 
-    /** never call it off [org.telegram.messenger.Utilities.globalQueue] */
+    /** never call it off [Utilities.globalQueue] */
     open fun renderActions(kind: Int, surfaceJson: String): String? = ifLiveOr(null) { nativeRenderActions(it, kind, surfaceJson) }
 
     open fun dispatchAction(kind: Int, token: Int, surfaceJson: String) = ifLive { nativeDispatchAction(it, kind, token, surfaceJson) }
@@ -264,6 +286,8 @@ open class QuickJs {
     private external fun nativeXposedRelease(ptr: Long, dispatchId: Long)
 
     private external fun nativeXposedBudgetMs(): Long
+    private external fun nativeStopCallbacks(ptr: Long)
+    private external fun nativePumpJobs(ptr: Long)
     private external fun nativeJvmCallback(ptr: Long, callbackId: Int)
     private external fun nativeFetchResult(ptr: Long, requestId: Long, resultWire: String)
 
