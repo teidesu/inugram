@@ -58,6 +58,12 @@ class AppearanceSettingsActivity : SettingsPageActivity() {
         )
         items.add(
             UItem.asCheck(
+                TOGGLE_MATERIAL3_SLIDERS,
+                LocaleController.getString(R.string.InuMaterial3Sliders)
+            ).setChecked(InuConfig.MATERIAL3_SLIDERS.value)
+        )
+        items.add(
+            UItem.asCheck(
                 TOGGLE_MATERIAL3_FABS,
                 LocaleController.getString(R.string.InuMaterial3Fabs)
             ).setChecked(InuConfig.MATERIAL3_FABS.value)
@@ -264,6 +270,12 @@ class AppearanceSettingsActivity : SettingsPageActivity() {
                 softRebuild()
             }
 
+            TOGGLE_MATERIAL3_SLIDERS -> {
+                val new = InuConfig.MATERIAL3_SLIDERS.toggle()
+                (view as? TextCheckCell)?.isChecked = new
+                invalidateVisibleRows()
+            }
+
             TOGGLE_MATERIAL3_FABS -> {
                 val new = InuConfig.MATERIAL3_FABS.toggle()
                 (view as? TextCheckCell)?.isChecked = new
@@ -378,6 +390,7 @@ class AppearanceSettingsActivity : SettingsPageActivity() {
         private val TOGGLE_DISABLE_GLASS_GLARE = InuUtils.generateId()
         private val TOGGLE_REDUCE_MENU_MOTION = InuUtils.generateId()
         private val TOGGLE_MATERIAL3_SWITCHES = InuUtils.generateId()
+        private val TOGGLE_MATERIAL3_SLIDERS = InuUtils.generateId()
         private val TOGGLE_MATERIAL3_FABS = InuUtils.generateId()
         private val TOGGLE_M3_SECTIONS_STYLE = InuUtils.generateId()
         private val TOGGLE_MATERIAL3_AVATARS = InuUtils.generateId()
@@ -416,6 +429,7 @@ class AppearanceSettingsActivity : SettingsPageActivity() {
                 SearchRegistry.Entry("disable-glass-glare", R.string.InuDisableGlassGlare, TOGGLE_DISABLE_GLASS_GLARE),
                 SearchRegistry.Entry("reduce-menu-motion", R.string.InuReduceMenuMotion, TOGGLE_REDUCE_MENU_MOTION),
                 SearchRegistry.Entry("material3-switches", R.string.InuMaterial3Switches, TOGGLE_MATERIAL3_SWITCHES),
+                SearchRegistry.Entry("material3-sliders", R.string.InuMaterial3Sliders, TOGGLE_MATERIAL3_SLIDERS),
                 SearchRegistry.Entry("material3-fabs", R.string.InuMaterial3Fabs, TOGGLE_MATERIAL3_FABS),
                 SearchRegistry.Entry("material3-sections", R.string.InuMaterial3Sections, TOGGLE_M3_SECTIONS_STYLE),
                 SearchRegistry.Entry("material3-avatars", R.string.InuMaterial3Avatars, TOGGLE_MATERIAL3_AVATARS),

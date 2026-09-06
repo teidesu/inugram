@@ -33,6 +33,7 @@ most things are toggleable in `Settings → Inugram`, with sensible opinionated 
 - 🐶 reduce menu motion: skip context menu stagger and reaction bar slide-in/scale animations
 - material 3:
   - switches
+  - sliders
   - fabs
   - predictive back
   - navigation animation

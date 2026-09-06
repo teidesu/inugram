@@ -123,6 +123,9 @@ object InuConfig {
     val MATERIAL3_SWITCHES = BoolItem("material3_switches", false)
 
     @JvmField
+    val MATERIAL3_SLIDERS = BoolItem("material3_sliders", false)
+
+    @JvmField
     val MATERIAL3_FABS = BoolItem("material3_fabs", true)
 
     @JvmField
