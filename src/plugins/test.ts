@@ -228,11 +228,6 @@ inu.xposed.hookMethod(
   { before: ctx => ctx.setReturnValue(false) },
 )
 
-inu.interceptDeserialize([{
-  type: 'user',
-  when: { self: true },
-  set: { premium: true },
-}])
 
 const FLAG_SECURE = 0x00002000
 
@@ -275,13 +270,6 @@ inu.xposed.hookMethod(
   { before: ctx => ctx.setReturnValue(null) },
 )
 
-inu.interceptDeserialize([{
-  type: 'userFull',
-  set: { noforwards_my_enabled: false, noforwards_peer_enabled: false },
-}, {
-  type: ['channel', 'message', 'storyItem'],
-  set: { noforwards: false },
-}])
 
 const GradientSpan = inu.jvm.defineClass('my/plugin/GradientSpan', {
   superclass: inu.jvm.cls('android/text/style/CharacterStyle'),

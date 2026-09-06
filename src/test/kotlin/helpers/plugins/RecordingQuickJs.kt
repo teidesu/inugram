@@ -13,7 +13,6 @@ package desu.inugram.helpers.plugins
  */
 class RecordingQuickJs : QuickJs() {
     class Dispatch(val callbackId: Int, val dispatchId: Long, val method: String, val accountId: Int, val requestWire: String)
-    class DeserializeDispatch(val callbackId: Int, val objectWire: String)
     class Completion(val dispatchId: Long, val resultWire: String)
     class Abandon(val dispatchId: Long, val reasonWire: String)
     class Update(val typeName: String, val accountId: Int, val updateWire: String)
@@ -29,7 +28,6 @@ class RecordingQuickJs : QuickJs() {
     class XposedBefore(val dispatchId: Long, val site: Long, val method: String, val receiver: String, val args: Array<String>)
     class XposedAfter(val dispatchId: Long, val resultWire: String)
 
-    val deserializeDispatches = ArrayList<DeserializeDispatch>()
     val dispatches = ArrayList<Dispatch>()
     val completions = ArrayList<Completion>()
     val abandons = ArrayList<Abandon>()
@@ -62,7 +60,6 @@ class RecordingQuickJs : QuickJs() {
         private set
 
     /** what this engine does with the view it is handed, standing in for the plugin's middleware */
-    var onDispatchDeserialize: ((DeserializeDispatch) -> Unit)? = null
 
     /** the middleware: called with every dispatch the host hands this engine */
     var onDispatchRpc: ((Dispatch) -> Unit)? = null
@@ -186,11 +183,6 @@ class RecordingQuickJs : QuickJs() {
         onDispatchUpdateIntercept?.invoke(dispatch)
     }
 
-    override fun dispatchDeserialize(callbackId: Int, objectWire: String) {
-        val dispatch = DeserializeDispatch(callbackId, objectWire)
-        deserializeDispatches.add(dispatch)
-        onDispatchDeserialize?.invoke(dispatch)
-    }
 
     override fun abandonUpdateDispatch(dispatchId: Long) {
         updateAbandons.add(dispatchId)

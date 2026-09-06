@@ -77,7 +77,7 @@ object TlFilter {
             // declares its own `message` rather than carrying a `Message` - so a check keyed on the
             // Message class walks past the very shape a login code reaches the device in. The update
             // fan-out never sees this because `PluginRpc.normalizeShortMessage` builds a synthetic
-            // `TL_message` first; `interceptDeserialize` materializes the real object.
+            // `TL_message` first; TL views can still represent the real object.
             is TLRPC.Updates -> ApiFilter.isServiceMessage(
                 fromUserId = (if (target.chat_id != 0L) target.from_id else target.user_id)
                     .takeIf { !target.out },

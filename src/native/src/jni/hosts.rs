@@ -10,7 +10,6 @@ use crate::api::platform::notifications::NotificationHost;
 use crate::api::platform::open_url::OpenUrlHost;
 use crate::api::platform::xposed::XposedHost;
 use crate::api::telegram::account::AccountHost;
-use crate::api::telegram::deserialize::DeserializeHost;
 use crate::api::telegram::reads::ReadsHost;
 use crate::api::telegram::rpc::RpcHost;
 use crate::api::telegram::writes::WritesHost;
@@ -87,31 +86,6 @@ impl RpcHost for JniBridge {
   }
 }
 
-impl DeserializeHost for JniBridge {
-  fn on_rules_register(&self, callback_id: u32, rules_json: &str) -> Option<String> {
-    self.call_refusal(
-      "interceptDeserialize",
-      self.on_deserialize_register,
-      &[Arg::Int(callback_id as i32), Arg::Str(rules_json)],
-    )
-  }
-
-  fn on_rules_unregister(&self, callback_id: u32) {
-    self.call_void("interceptDeserialize", self.on_deserialize_unregister, &[Arg::Int(callback_id as i32)]);
-  }
-
-  fn on_middleware_register(&self, callback_id: u32, types_json: &str) -> Option<String> {
-    self.call_refusal(
-      "interceptDeserialize",
-      self.on_deserialize_middleware_register,
-      &[Arg::Int(callback_id as i32), Arg::Str(types_json)],
-    )
-  }
-
-  fn on_middleware_unregister(&self, callback_id: u32) {
-    self.call_void("interceptDeserialize", self.on_deserialize_middleware_unregister, &[Arg::Int(callback_id as i32)]);
-  }
-}
 
 impl AccountHost for JniBridge {
   fn accounts(&self) -> Option<String> {

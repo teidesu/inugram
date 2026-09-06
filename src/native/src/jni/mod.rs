@@ -15,7 +15,6 @@ use crate::{
     platform::{jvm::JvmState, notifications::NotificationState, xposed::XposedState},
     telegram::{
       account::AccountState,
-      deserialize::DeserializeState,
       reads::ReadsState,
       rpc::{pump_jobs, RpcState},
       writes::WritesState,
@@ -78,7 +77,6 @@ pub(crate) struct Engine {
   pub(crate) lifecycle: Rc<Lifecycle>,
   pub(crate) shared: Option<Persistent<Object<'static>>>,
   pub(crate) rpc: Rc<RpcState>,
-  pub(crate) deserialize: Rc<DeserializeState>,
   pub(crate) lifecycle_state: Rc<LifecycleState>,
   pub(crate) dialogs: Rc<DialogState>,
   pub(crate) ui: Rc<UiState>,

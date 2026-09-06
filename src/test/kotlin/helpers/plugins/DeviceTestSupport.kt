@@ -7,7 +7,6 @@ import desu.inugram.helpers.plugins.io.PluginFetch
 import desu.inugram.helpers.plugins.platform.PluginJvm
 import desu.inugram.helpers.plugins.platform.PluginXposed
 import desu.inugram.helpers.plugins.platform.PluginNotifications
-import desu.inugram.helpers.plugins.telegram.PluginDeserialize
 import desu.inugram.helpers.plugins.telegram.PluginReads
 import desu.inugram.helpers.plugins.telegram.PluginRpc
 import desu.inugram.helpers.plugins.telegram.PluginUpdates
@@ -45,7 +44,6 @@ fun resetBridge() {
     RecordingConnectionsManager.reset()
     TestApp.reset()
     clearRpcState()
-    clearDeserializeRules()
 }
 
 /**
@@ -73,16 +71,6 @@ private val nextInstallId = java.util.concurrent.atomic.AtomicLong(1)
  * wrote it, which the JVM harness could not show: its `Context` was a fresh temp dir per test.
  */
 fun freshInstallId(): String = "%032x".format(nextInstallId.getAndIncrement() or (System.nanoTime() shl 16))
-
-private fun clearDeserializeRules() {
-    for (name in listOf("live", "liveMiddleware")) {
-        val field = PluginDeserialize::class.java.getDeclaredField(name).apply { isAccessible = true }
-        (field.get(PluginDeserialize) as MutableMap<*, *>).clear()
-    }
-    PluginDeserialize.rules = null
-    PluginDeserialize.middleware = null
-    PluginDeserialize.hot = false
-}
 
 private fun clearRpcState() {
     for (owner in listOf(PluginRpc, PluginUpdates)) {
@@ -210,7 +198,6 @@ fun attachBridge(plugin: Plugin, engine: RecordingQuickJs) {
         rpc = PluginRpc.listenerFor(plugin, engine, tl),
         updates = PluginUpdates.listenerFor(plugin),
         tl = tl,
-        deserialize = PluginDeserialize.listenerFor(plugin, engine),
         storage = DeviceMissing,
         account = object : AccountListener,
             ReadsListener by PluginReads.listenerFor(plugin, engine),

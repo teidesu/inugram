@@ -130,24 +130,6 @@ class StockHooksTest {
         )
     }
 
-    /**
-     * Nothing else notices this going away: the deserialize suite drives `PluginDeserialize.apply`
-     * directly, so the one thing that makes any of it reach a real object is the call site in stock.
-     */
-    @Test
-    fun `stock still calls the deserialize hook from the one place every TL object is parsed`() {
-        val source = stock("org/telegram/tgnet/TLObject.java")
-        val body = Regex(
-            """object\.readParams\(stream, exception\);(.*?)return object;""",
-            RegexOption.DOT_MATCHES_ALL,
-        ).find(source)?.groupValues?.get(1)
-        assertNotNull(body, "TLObject.TLdeserialize no longer has the shape the hook lives in")
-        assertTrue(
-            body.contains("PluginDeserialize.hot") && body.contains("PluginDeserialize.apply(object, constructor)"),
-            "the interceptDeserialize hook is gone from TLObject.TLdeserialize: $body",
-        )
-    }
-
     @Test
     fun `the difference walk is handed over at the top of its runnable, above the secret-chat decrypt`() {
         val source = stock("org/telegram/messenger/MessagesController.java")
@@ -224,8 +206,6 @@ class StockHooksTest {
                 "org/telegram/tgnet/ConnectionsManager.java -> PluginRpc.onRequestBoundToGuid",
                 "org/telegram/tgnet/ConnectionsManager.java -> PluginRpc.onRequestCancelled",
                 "org/telegram/tgnet/ConnectionsManager.java -> PluginRpc.onRequestsCancelledForGuid",
-                "org/telegram/tgnet/TLObject.java -> PluginDeserialize.apply",
-                "org/telegram/tgnet/TLObject.java -> PluginDeserialize.hot",
                 "org/telegram/ui/LaunchActivity.java -> PluginScreens.onFragmentStackChanged",
             ),
             found.sorted(),
@@ -234,32 +214,4 @@ class StockHooksTest {
         )
     }
 
-    @Test
-    fun `the constructors that bypass the deserialize hook are the ones the contract carves out`() {
-        val bypassing = sortedSetOf<String>()
-        File(stockRoot(), "org/telegram/tgnet").walkTopDown()
-            .filter { it.isFile && it.extension == "java" }
-            .forEach { file ->
-                val container = file.nameWithoutExtension
-                Regex("""(?<![.\w])deserialize\(new (\w+)\(\), stream, exception\)""")
-                    .findAll(file.readText())
-                    .forEach { bypassing.add(TlNames.classNameToTlName(container, it.groupValues[1])) }
-            }
-        assertEquals(
-            listOf("messages.foundStickers", "messages.foundStickersNotModified", "users.users", "users.usersSlice"),
-            bypassing.toList(),
-            "TLRPC.deserialize calls readParams itself, so what it parses never reaches " +
-                "interceptDeserialize; TLRPC.java is generated and cannot be hooked, so the blind set " +
-                "is documented in common.d.ts and has to be updated there when it moves",
-        )
-
-        val contract = File(forkRoot(), "src/plugins/common.d.ts").readText()
-        assertTrue(
-            contract.contains("`TLRPC.deserialize`"),
-            "the carve-out sentence is gone from common.d.ts, which still promises every object the app parses",
-        )
-        for (name in bypassing) {
-            assertTrue(contract.contains("`$name`"), "common.d.ts does not name `$name` as unreachable")
-        }
-    }
 }

@@ -24,49 +24,6 @@ class GrantValidatorTest {
     }
 
     @Test
-    fun interceptDeserializeAcceptsConstructorsAndTheUnscopedForm() {
-        assertEquals(emptyList<String>(), GrantValidator.validateGrants(listOf("interceptDeserialize(user,userFull)")))
-        assertEquals(emptyList<String>(), GrantValidator.validateGrants(listOf("interceptDeserialize")))
-    }
-
-    /** every way of narrowing this grant to nothing, which is what the validator is for */
-    @Test
-    fun interceptDeserializeRejectsScopesNoRuleCouldEverMatch() {
-        assertEquals(
-            listOf("unknown TL constructor 'not_a_type' in @grant interceptDeserialize"),
-            GrantValidator.validateGrants(listOf("interceptDeserialize(not_a_type)")),
-        )
-        assertEquals(
-            listOf("'users.getUsers' is an rpc method and is never deserialized"),
-            GrantValidator.validateGrants(listOf("interceptDeserialize(users.getUsers)")),
-        )
-        assertEquals(
-            listOf("'encryptedMessage' is secret-chat traffic and cannot be granted"),
-            GrantValidator.validateGrants(listOf("interceptDeserialize(encryptedMessage)")),
-        )
-        assertEquals(
-            listOf("'auth.authorization' is a takeover surface and cannot be granted"),
-            GrantValidator.validateGrants(listOf("interceptDeserialize(auth.authorization)")),
-        )
-        assertEquals(
-            listOf("'updateServiceNotification' is a takeover surface and cannot be granted"),
-            GrantValidator.validateGrants(listOf("interceptDeserialize(updateServiceNotification)")),
-        )
-    }
-
-    @Test
-    fun disableApiFilteringLiftsTheTakeoverScopesAndNotTheSecretOnes() {
-        assertEquals(
-            emptyList<String>(),
-            GrantValidator.validateGrants(listOf("interceptDeserialize(auth.authorization)", "unsafe.disableApiFiltering")),
-        )
-        assertEquals(
-            listOf("'encryptedMessage' is secret-chat traffic and cannot be granted"),
-            GrantValidator.validateGrants(listOf("interceptDeserialize(encryptedMessage)", "unsafe.disableApiFiltering")),
-        )
-    }
-
-    @Test
     fun onUpdateAcceptsScopedUpdateNamesAndTheSyntheticOnes() {
         assertEquals(emptyList<String>(), GrantValidator.validateGrants(listOf("onUpdate(updateNewMessage)")))
         assertEquals(emptyList<String>(), GrantValidator.validateGrants(listOf("onUpdate(new_message,edit_message,delete_message)")))

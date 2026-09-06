@@ -2,7 +2,6 @@ package desu.inugram.helpers.plugins.tl
 
 import android.util.Base64
 import android.util.SparseArray
-import desu.inugram.core.plugins.DeserializeGuards
 import desu.inugram.core.plugins.TlFlags
 import desu.inugram.core.plugins.TlNames
 import java.lang.reflect.ParameterizedType
@@ -76,34 +75,6 @@ object TlJson {
         else -> null
     }
 
-    /**
-     * The first [DeserializeGuards]-protected field a construct payload assigns, at any depth, or
-     * null. The guard is a rule about which slot a rewrite may land in, so it has to be applied to
-     * the value and not only to the name the value is assigned to: `d.peer.user_id = x` and
-     * `d.peer = { _: 'peerUser', user_id: x }` write the same slot, and only the first of them
-     * names a protected field.
-     */
-    internal fun findProtectedField(value: Any?): String? = when (value) {
-        is JSONObject -> {
-            var found: String? = null
-            val keys = value.keys()
-            while (found == null && keys.hasNext()) {
-                val key = keys.next()
-                found = if (DeserializeGuards.isProtectedField(key)) key else findProtectedField(value.get(key))
-            }
-            found
-        }
-        is JSONArray -> {
-            var found: String? = null
-            var index = 0
-            while (found == null && index < value.length()) {
-                found = findProtectedField(value.get(index))
-                index++
-            }
-            found
-        }
-        else -> null
-    }
 
     fun fromJson(json: JSONObject): TLObject {
         val tlName = json.optString("_", "")

@@ -25,7 +25,6 @@ use crate::api::platform::notifications::{install_notifications, NotificationHos
 use crate::api::platform::open_url::install_open_url;
 use crate::api::platform::xposed::{self, install_xposed};
 use crate::api::telegram::account::{install_account, AccountHost};
-use crate::api::telegram::deserialize::DeserializeHost;
 use crate::api::telegram::reads::{install_reads, ReadsHost};
 use crate::api::telegram::rpc::RpcHost;
 use crate::api::telegram::writes::{install_writes, WritesDeps, WritesHost};
@@ -251,7 +250,7 @@ pub extern "system" fn Java_desu_inugram_helpers_plugins_QuickJs_nativeCreate(
           log.as_ref(),
         )?;
       }
-      let (deserialize, rpc) =
+      let rpc =
         install_engine_rpc(&ctx, &bridge, grants.clone(), &views, &lifecycle, &account, &shared, log.as_ref())?;
 
       Some(Engine {
@@ -261,7 +260,6 @@ pub extern "system" fn Java_desu_inugram_helpers_plugins_QuickJs_nativeCreate(
         lifecycle,
         shared: Some(shared),
         rpc,
-        deserialize,
         lifecycle_state,
         dialogs,
         ui,
@@ -862,25 +860,12 @@ fn install_engine_rpc(
   account: &Rc<crate::api::telegram::account::AccountState>,
   shared: &Persistent<Object<'static>>,
   log: &(dyn Fn(&str) + Send + Sync),
-) -> Option<(Rc<crate::api::telegram::deserialize::DeserializeState>, Rc<crate::api::telegram::rpc::RpcState>)> {
+) -> Option<Rc<crate::api::telegram::rpc::RpcState>> {
   let host: Rc<dyn RpcHost> = bridge.clone();
   let tl = views.clone();
-  let rules_host: Rc<dyn DeserializeHost> = bridge.clone();
-  let rules_lifecycle = lifecycle.clone();
-  let rules_tl = views.clone();
-  let rules_log = make_log(bridge.console.clone());
   ctx
     .with(|ctx| {
       let globals = Globals::get(&ctx)?;
-      let rules = crate::api::telegram::deserialize::install_deserialize(
-        &ctx,
-        rules_host,
-        grants.clone(),
-        rules_lifecycle,
-        rules_tl,
-        rules_log,
-        &globals,
-      )?;
       let shared = shared.clone().restore(&ctx)?;
       let rpc = crate::api::telegram::rpc::install_rpc(
         &ctx,
@@ -893,7 +878,7 @@ fn install_engine_rpc(
         make_log(bridge.console.clone()),
         &globals,
       )?;
-      Ok::<_, rquickjs::Error>((rules, rpc))
+      Ok::<_, rquickjs::Error>(rpc)
     })
     .map_err(|e| log(&format!("inu.interceptRpc/onUpdate failed to install: {e:?}")))
     .ok()
@@ -1075,25 +1060,6 @@ pub extern "system" fn Java_desu_inugram_helpers_plugins_QuickJs_nativeDispatchU
 }
 
 #[no_mangle]
-pub extern "system" fn Java_desu_inugram_helpers_plugins_QuickJs_nativeDispatchDeserialize(
-  mut env: EnvUnowned,
-  _this: JObject,
-  ptr: jlong,
-  callback_id: jint,
-  object_wire: JString,
-) {
-  in_env(&mut env, (), |env| {
-    let _deadline = crate::sandbox::limits::arm_entry_deadline();
-    let Some(engine) = get_engine(ptr) else {
-      return;
-    };
-    let state = &engine.deserialize;
-    let object_wire = jstring_to_string(env, &object_wire);
-    state.dispatch(&engine.ctx, callback_id as u32, &object_wire);
-  })
-}
-
-#[no_mangle]
 pub extern "system" fn Java_desu_inugram_helpers_plugins_QuickJs_nativeDispatchUpdateIntercept(
   mut env: EnvUnowned,
   _this: JObject,
@@ -1221,7 +1187,6 @@ pub extern "system" fn Java_desu_inugram_helpers_plugins_QuickJs_nativeDestroy(
 ) {
   if let Some(mut engine) = remove_engine(ptr) {
     engine.rpc.dispose(&engine.ctx);
-    engine.deserialize.dispose(&engine.ctx);
     engine.lifecycle_state.dispose(&engine.ctx);
     engine.dialogs.dispose(&engine.ctx);
     engine.ui.dispose(&engine.ctx);

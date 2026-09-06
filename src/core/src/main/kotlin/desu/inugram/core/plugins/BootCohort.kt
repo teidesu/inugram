@@ -20,7 +20,6 @@ object BootCohort {
      */
     val HEADLESS_APIS: Set<String> = setOf(
         "interceptRpc",
-        "interceptDeserialize",
         "interceptUpdate",
         "interceptSendMessage",
         "onUpdate",

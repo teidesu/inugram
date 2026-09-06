@@ -31,7 +31,6 @@ import desu.inugram.helpers.plugins.platform.PluginNotifications
 import desu.inugram.helpers.plugins.platform.PluginPlatform
 import desu.inugram.helpers.plugins.platform.PluginXposed
 import desu.inugram.helpers.plugins.telegram.PluginAccounts
-import desu.inugram.helpers.plugins.telegram.PluginDeserialize
 import desu.inugram.helpers.plugins.telegram.PluginMedia
 import desu.inugram.helpers.plugins.telegram.PluginRpc
 import desu.inugram.helpers.plugins.telegram.PluginUpdates
@@ -406,7 +405,6 @@ object PluginManager {
             rpc = PluginRpc.listenerFor(plugin, engine, tl),
             updates = PluginUpdates.listenerFor(plugin),
             tl = tl,
-            deserialize = PluginDeserialize.listenerFor(plugin, engine),
             storage = PluginKv.listenerFor(plugin),
             account = PluginAccounts.listenerFor(plugin, engine),
             ui = PluginUi.listenerFor(plugin, engine),
@@ -462,7 +460,6 @@ object PluginManager {
         PluginUi.detach(engine)
         PluginActions.detach(engine)
         PluginNotifications.detach(engine)
-        PluginDeserialize.detach(engine)
         PluginCanvas.detach(engine)
         PluginXposed.detach(engine)
         PluginJvm.detach(engine)

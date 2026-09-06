@@ -5,7 +5,7 @@ Native-backed values have their own budget, 64 MB per plugin; API arrays have at
 
 Unknown grant names give no access. Unknown grant scopes reject installation.
 
-Sensitive plugin data is filtered. `TLRPC.deserialize` is outside interception. Takeover RPC methods are refused: `auth.*`, plus `account.`\{`getPasskeys`, `deletePasskey`, `registerPasskey`, `initPasskeyRegistration`, `registerDevice`, `unregisterDevice`, `deleteAccount`, `changePhone`, `getAuthorizations`, `resetAuthorization`, `acceptAuthorization`, `verifyPhone`, `verifyEmail`, `resetPassword`\}.
+Sensitive plugin data is filtered. Takeover RPC methods are refused: `auth.*`, plus `account.`\{`getPasskeys`, `deletePasskey`, `registerPasskey`, `initPasskeyRegistration`, `registerDevice`, `unregisterDevice`, `deleteAccount`, `changePhone`, `getAuthorizations`, `resetAuthorization`, `acceptAuthorization`, `verifyPhone`, `verifyEmail`, `resetPassword`\}.
 
 A plugin runs one JavaScript turn at a time. A callback has a time and memory limit.
 */
@@ -844,15 +844,6 @@ declare namespace inu {
     ) => MaybePromise<SharedRpcReturn<M> | null | undefined>,
     options?: InterceptRpcOptions,
   ): Disposer
-
-  /** `TLRPC.deserialize` bypasses interception for `messages.foundStickers`, `messages.foundStickersNotModified`, `users.users`, and `users.usersSlice`. At most 32 rules live at once; parsing is parked on the answer for at most 250ms. */
-  function interceptDeserialize(rules: {
-    type: string | string[]
-    when?: Record<string, string | number | boolean | null>
-    set: Record<string, string | number | boolean | null>
-  }[]): Disposer
-  /** @needs-grant interceptDeserialize */
-  function interceptDeserialize(objects: string[], middleware: (object: TLObject) => void): Disposer
 
   /** @needs-grant onUpdate(new_message) */
   function onNewMessage(callback: (message: Message, account: Account) => void): Disposer

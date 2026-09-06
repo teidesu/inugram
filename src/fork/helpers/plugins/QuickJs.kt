@@ -186,9 +186,6 @@ open class QuickJs {
     open fun dispatchUpdateIntercept(callbackId: Int, dispatchId: Long, typeName: String, accountId: Int, updateWire: String) =
         requireLive { nativeDispatchUpdateIntercept(it, callbackId, dispatchId, typeName, accountId, updateWire) }
 
-    /** returns once the middleware has: the thread that parsed [objectWire] is blocked on this */
-    open fun dispatchDeserialize(callbackId: Int, objectWire: String) = requireLive { nativeDispatchDeserialize(it, callbackId, objectWire) }
-
     /** nothing is rejected, but a middleware settling later can no longer drop an update the app already has */
     open fun abandonUpdateDispatch(dispatchId: Long) = requireLive { nativeAbandonUpdateDispatch(it, dispatchId) }
 
@@ -293,7 +290,6 @@ open class QuickJs {
     private external fun nativeResolveInvoke(ptr: Long, invokeId: Long, resultWire: String)
     private external fun nativeDispatchUpdate(ptr: Long, typeName: String, accountId: Int, updateWire: String)
     private external fun nativeDispatchUpdateIntercept(ptr: Long, callbackId: Int, dispatchId: Long, typeName: String, accountId: Int, updateWire: String)
-    private external fun nativeDispatchDeserialize(ptr: Long, callbackId: Int, objectWire: String)
     private external fun nativeAbandonUpdateDispatch(ptr: Long, dispatchId: Long)
     private external fun nativeAccountsChanged(ptr: Long)
     private external fun nativeRunTimers(ptr: Long)

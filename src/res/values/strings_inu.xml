@@ -793,7 +793,6 @@
     <string name="InuPluginGrantInterceptSend">Intercept outgoing messages</string>
     <string name="InuPluginGrantInterceptRpc">Intercept API requests</string>
     <string name="InuPluginGrantInvokeRpc">Raw API access</string>
-    <string name="InuPluginGrantInterceptDeserialize">Rewrite loaded data</string>
     <string name="InuPluginGrantUnsafeFs">Device file access</string>
     <string name="InuPluginGrantUnsafeJvm">Java code execution</string>
     <string name="InuPluginGrantUnsafeXposed">App code hooks</string>
@@ -832,8 +831,6 @@
     <string name="InuPluginScopeOnUpdate">watch %1$s</string>
     <string name="InuPluginScopeInterceptUpdate">intercept %1$s</string>
     <string name="InuPluginScopeAllUpdates">all updates</string>
-    <string name="InuPluginScopeDeserialize">rewrite %1$s objects</string>
-    <string name="InuPluginScopeDeserializeAny">rewrite any object</string>
     <string name="InuPluginTrustTitle">Only install plugins you trust</string>
     <string name="InuPluginTrustInfo">Plugins run in a sandbox and only get the permissions they declare, which the next screen lists.\nGranting them still lets a plugin:</string>
     <string name="InuPluginTrust1Title">Act as you</string>

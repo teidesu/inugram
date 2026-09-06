@@ -55,18 +55,6 @@ object GrantValidator {
                         problems.add("'$scope' is a takeover method and cannot be granted")
                     }
                 }
-                // a rule names a constructor the app *parses*, so the two ways of narrowing to nothing are naming a method and naming traffic the api refuses outright
-                "interceptDeserialize" -> for (scope in grant.scopes) {
-                    if (scope !in TlCtorIds.allNames) {
-                        problems.add("unknown TL constructor '$scope' in @grant interceptDeserialize")
-                    } else if (scope in TlCtorIds.methodNames) {
-                        problems.add("'$scope' is an rpc method and is never deserialized")
-                    } else if (DeserializeGuards.isSecretName(scope)) {
-                        problems.add("'$scope' is secret-chat traffic and cannot be granted")
-                    } else if (!bypassesFilter && (scope.startsWith("auth.") || scope in ApiFilter.HIDDEN_FIELDS)) {
-                        problems.add("'$scope' is a takeover surface and cannot be granted")
-                    }
-                }
                 "onUpdate" -> for (scope in grant.scopes) {
                     if (scope in UNDELIVERABLE_UPDATES && !bypassesFilter) {
                         problems.add("'$scope' is never delivered to plugins and cannot be granted")
