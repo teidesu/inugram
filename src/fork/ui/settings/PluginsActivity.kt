@@ -8,6 +8,10 @@ import android.content.Intent
 import android.graphics.Canvas
 import android.graphics.PorterDuff
 import android.graphics.PorterDuffColorFilter
+import android.text.SpannableStringBuilder
+import android.text.Spanned
+import android.text.TextPaint
+import android.text.style.ClickableSpan
 import android.text.TextUtils
 import android.view.Gravity
 import android.view.MotionEvent
@@ -38,6 +42,7 @@ import org.telegram.ui.Cells.NotificationsCheckCell
 import org.telegram.ui.Components.BackupImageView
 import org.telegram.ui.Components.BulletinFactory
 import org.telegram.ui.Components.ItemOptions
+import org.telegram.ui.Components.LinkSpanDrawable
 import org.telegram.ui.Components.LayoutHelper
 import org.telegram.ui.Components.Switch
 import org.telegram.ui.Components.UItem
@@ -209,6 +214,7 @@ class PluginsActivity : SettingsPageActivity() {
         row.bind(
             plugin,
             onOpen = { presentFragment(PluginInfoActivity(plugin)) },
+            onUsernameClick = { username -> messagesController.openByUserName(username, this, 0) },
             onMenu = { anchor -> showPluginOptions(plugin, anchor) },
         ) { enabled ->
             PluginManager.setEnabled(plugin, enabled)
@@ -380,6 +386,7 @@ class PluginRow(context: Context, val compact: Boolean) : LinearLayout(context) 
     private var removeAction: TextView? = null
     private var onToggle: ((Boolean) -> Unit)? = null
     private var onOpen: (() -> Unit)? = null
+    private var onUsernameClick: ((String) -> Unit)? = null
     private var onMenu: ((View) -> Unit)? = null
     private var needDivider = false
 
@@ -425,7 +432,8 @@ class PluginRow(context: Context, val compact: Boolean) : LinearLayout(context) 
             // keeps the warning off the switch once the name is long enough to ellipsize
             setPaddingRelative(0, 0, AndroidUtilities.dp(8f), 0)
         }
-        subtitle = TextView(context).apply {
+        subtitle = LinkSpanDrawable.LinksTextView(context).apply {
+            setLinkTextColor(Theme.getColor(Theme.key_windowBackgroundWhiteLinkText))
             setTextColor(Theme.getColor(Theme.key_windowBackgroundWhiteGrayText))
             textSize = 13f
             maxLines = if (compact) 2 else 1
@@ -485,7 +493,8 @@ class PluginRow(context: Context, val compact: Boolean) : LinearLayout(context) 
             titleRow.addView(textBlock, LayoutHelper.createLinear(0, LayoutHelper.WRAP_CONTENT, 1f, Gravity.CENTER_VERTICAL))
             titleRow.addView(switch, LayoutHelper.createLinear(37, 24, Gravity.CENTER_VERTICAL, if (rtl) 22 else 0, 0, if (rtl) 0 else 22, 0))
 
-            description = TextView(context).apply {
+            description = LinkSpanDrawable.LinksTextView(context).apply {
+                setLinkTextColor(Theme.getColor(Theme.key_windowBackgroundWhiteLinkText))
                 setTextColor(Theme.getColor(Theme.key_windowBackgroundWhiteGrayText))
                 textSize = 14f
                 maxLines = 3
@@ -552,9 +561,10 @@ class PluginRow(context: Context, val compact: Boolean) : LinearLayout(context) 
         )
     }
 
-    fun bind(plugin: Plugin, onOpen: () -> Unit, onMenu: (View) -> Unit, onToggle: (Boolean) -> Unit) {
+    fun bind(plugin: Plugin, onOpen: () -> Unit, onUsernameClick: (String) -> Unit, onMenu: (View) -> Unit, onToggle: (Boolean) -> Unit) {
         this.onToggle = onToggle
         this.onOpen = onOpen
+        this.onUsernameClick = onUsernameClick
         this.onMenu = onMenu
         PluginManifestIcons.bindIcon(icon, plugin.manifest.icon, placeholder)
         title.text = if (plugin.dev) {
@@ -578,25 +588,28 @@ class PluginRow(context: Context, val compact: Boolean) : LinearLayout(context) 
                 subtitle.text = failure.describe()
             } else {
                 subtitle.setTextColor(Theme.getColor(Theme.key_windowBackgroundWhiteGrayText))
-                subtitle.text = plugin.manifest.description
+                subtitle.text = linkUsernames(plugin.manifest.description
                     ?: plugin.manifest.author?.let { LocaleController.formatString(R.string.InuPluginsByAuthor, it) }
-                    ?: ""
+                    ?: "")
             }
         } else {
             val meta = buildMetaLine(plugin)
-            subtitle.text = meta
+            subtitle.text = linkUsernames(meta)
             subtitle.visibility = if (meta.isEmpty()) GONE else VISIBLE
             val text = failure?.describe()
                 ?: plugin.manifest.description(LocaleController.getInstance().currentLocaleInfo?.langCode)
             description?.let {
                 it.setTextColor(Theme.getColor(if (failure != null) Theme.key_text_RedRegular else Theme.key_windowBackgroundWhiteGrayText))
-                it.text = text ?: ""
+                it.text = if (failure == null) linkUsernames(text ?: "") else text ?: ""
                 it.visibility = if (text.isNullOrEmpty()) GONE else VISIBLE
             }
         }
         reloadAction?.visibility = if (plugin.enabled) VISIBLE else GONE
         switch.setChecked(plugin.enabled, false)
     }
+
+    private fun linkUsernames(text: String): CharSequence =
+        linkPluginUsernames(text) { username -> onUsernameClick?.invoke(username) }
 
     private fun buildMetaLine(plugin: Plugin): String {
         val parts = ArrayList<String>()

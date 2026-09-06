@@ -10,6 +10,7 @@ import android.util.Log
 import android.text.SpannableStringBuilder
 import android.text.Spanned
 import android.text.TextPaint
+import android.text.style.URLSpan
 import android.text.style.ClickableSpan
 import android.view.Gravity
 import android.view.View
@@ -29,6 +30,7 @@ import desu.inugram.helpers.plugins.ui.PluginManifestIcons
 import desu.inugram.helpers.plugins.ui.PluginUi
 import desu.inugram.helpers.theme.M3SectionsHelper
 import org.telegram.messenger.AndroidUtilities
+import org.telegram.messenger.MessageObject
 import org.telegram.messenger.LocaleController
 import org.telegram.messenger.R
 import org.telegram.ui.ActionBar.Theme
@@ -534,29 +536,38 @@ class PluginInfoHeaderView(context: Context) : LinearLayout(context) {
         manifest.author?.let { author ->
             if (metaText.isNotEmpty()) metaText.append(" · ")
             val formatted = LocaleController.formatString(R.string.InuPluginsByAuthor, author)
-            val start = metaText.length
-            metaText.append(formatted)
-            val authorIndex = formatted.indexOf(author)
-            if (onAuthorClick != null && author.startsWith("@") && author.length > 1 && authorIndex >= 0) {
-                metaText.setSpan(
-                    object : ClickableSpan() {
-                        override fun onClick(widget: View) {
-                            onAuthorClick?.invoke(author.substring(1))
-                        }
-
-                        override fun updateDrawState(ds: TextPaint) {
-                            ds.color = ds.linkColor
-                        }
-                    },
-                    start + authorIndex,
-                    start + authorIndex + author.length,
-                    Spanned.SPAN_EXCLUSIVE_EXCLUSIVE,
-                )
-            }
+            metaText.append(linkPluginUsernames(formatted) { username -> onAuthorClick?.invoke(username) })
         }
+
         meta.text = metaText
         meta.visibility = if (metaText.isEmpty()) GONE else VISIBLE
         failureView.text = failure?.describe()
         failureView.visibility = if (failure == null) GONE else VISIBLE
     }
+}
+
+internal fun linkPluginUsernames(text: String, onClick: (String) -> Unit): CharSequence {
+    val result = SpannableStringBuilder(text)
+    MessageObject.addUrlsByPattern(false, result, false, 0, 0, false)
+    for (span in result.getSpans(0, result.length, URLSpan::class.java)) {
+        val start = result.getSpanStart(span)
+        val end = result.getSpanEnd(span)
+        result.removeSpan(span)
+        if (!span.url.startsWith("@")) continue
+        result.setSpan(
+            object : ClickableSpan() {
+                override fun onClick(widget: View) {
+                    onClick(span.url.substring(1))
+                }
+
+                override fun updateDrawState(ds: TextPaint) {
+                    ds.color = ds.linkColor
+                }
+            },
+            start,
+            end,
+            Spanned.SPAN_EXCLUSIVE_EXCLUSIVE,
+        )
+    }
+    return result
 }
