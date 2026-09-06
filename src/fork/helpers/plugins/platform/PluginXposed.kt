@@ -101,7 +101,7 @@ object PluginXposed {
         (engine.listener?.xposed as? Session)?.close()
     }
 
-    private class Refusal(val wire: String) : RuntimeException(null, null, false, false)
+    private class Refusal(val wire: String) : RuntimeException(PluginWire.describePluginError(wire), null, false, false)
 
     private fun refuse(code: String, message: String, grant: String? = null): Nothing =
         throw Refusal(PluginWire.encodePluginError(code, message, grant = grant))
@@ -367,7 +367,7 @@ object PluginXposed {
             }
             val wantsAfter = before.firstOrNull() == "P1"
             if (before.firstOrNull() == "A") {
-                val answer = answerOf(before.getOrNull(1) ?: PluginWire.encodeNull())
+                val answer = answerOf(before.getOrNull(1) ?: PluginWire.encodeNull(), site, "before")
                     ?: return runOriginal(site, receiver, args)
                 return returnValue(site, answer)
             }
@@ -375,7 +375,7 @@ object PluginXposed {
             val callArgs = try {
                 before.drop(1).map { values.decode(it) }
             } catch (e: Throwable) {
-                Log.e(TAG, "[${plugin.manifest.name}] xposed: unreadable arguments; calling with the app's", e)
+                Log.e(TAG, "[${plugin.manifest.name}] xposed site $site (${sites[site]?.target}): unreadable arguments; calling with the app's", e)
                 args
             }
             val outcome = runCatching { runOriginal(site, receiver, callArgs) }
@@ -385,16 +385,16 @@ object PluginXposed {
             val wire = try {
                 wireOf(outcome)
             } catch (e: Throwable) {
-                Log.e(TAG, "[${plugin.manifest.name}] xposed: the result does not cross; skipping the after phase", e)
+                Log.e(TAG, "[${plugin.manifest.name}] xposed site $site (${sites[site]?.target}): the result does not cross; skipping the after phase", e)
                 release(id)
                 return outcome.getOrThrow()
             }
             val after = engine.xposedAfter(id, wire)
-            if (after == null) {
+            if (after == null || after == "U") {
                 release(id)
                 return outcome.getOrThrow()
             }
-            val answer = answerOf(after) ?: outcome
+            val answer = answerOf(after, site, "after") ?: outcome
             release(id)
             return returnValue(site, answer)
         }
@@ -409,7 +409,7 @@ object PluginXposed {
             outcome.fold({ values.encode(it) }, { "T" + values.encode(it) })
 
         /** a hook answering with a throwable is the plugin's decision and the app's to receive, while a wire this side could not decode is ours and may not surface in app code as one */
-        private fun answerOf(wire: String): Result<Any?>? {
+        private fun answerOf(wire: String, site: Long, phase: String): Result<Any?>? {
             val thrown = wire.removePrefix("T")
             return try {
                 if (thrown.length != wire.length) {
@@ -421,7 +421,7 @@ object PluginXposed {
                     Result.success(values.decode(wire))
                 }
             } catch (e: Throwable) {
-                Log.e(TAG, "[${plugin.manifest.name}] xposed: unreadable answer", e)
+                Log.e(TAG, "[${plugin.manifest.name}] xposed: unreadable $phase answer at site $site (${sites[site]?.target}); wire prefix=${wire.take(when { wire.startsWith("TG") -> 3; wire.startsWith("G") || wire.startsWith("T") -> 2; else -> 1 })}, length=${wire.length}", e)
                 null
             }
         }
@@ -434,7 +434,7 @@ object PluginXposed {
         }.getOrThrow()
 
         private fun unhooked(cause: Throwable, site: Long, receiver: Any?, args: List<Any?>): Any? {
-            Log.e(TAG, "[${plugin.manifest.name}] xposed dispatch failed; running the original", cause)
+            Log.e(TAG, "[${plugin.manifest.name}] xposed site $site (${sites[site]?.target}) dispatch failed; running the original", cause)
             return runOriginal(site, receiver, args, originalArgs = true)
         }
 

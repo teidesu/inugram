@@ -159,7 +159,7 @@ check(
 expectPluginError('loadDex needs the whole grant', 'not-granted', 'unsafe.jvm(*)', () =>
   inu.jvm.loadDex('/data/local/tmp/patch.dex'),
 )
-expectPluginError('defineClass is not implemented', 'unsupported', null, () =>
+expectPluginError('defineClass needs the whole grant', 'not-granted', 'unsafe.jvm(*)', () =>
   inu.jvm.defineClass('my/plugin/Span', {}),
 )
 expectPluginError('callSuper is not implemented', 'unsupported', null, () =>

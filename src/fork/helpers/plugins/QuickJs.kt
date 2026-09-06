@@ -109,9 +109,9 @@ open class QuickJs {
         ifLiveOr(null) { nativeXposedBefore(it, dispatchId, site, methodWire, thisWire, args) }
     } finally { scheduleJobs() }
 
-    /** [resultWire] is what the original answered, `T`-prefixed when it threw */
+    /** [resultWire] is what the original answered, `T`-prefixed when it threw; `U` preserves that outcome. */
     open fun xposedAfter(dispatchId: Long, resultWire: String): String = try {
-        ifLiveOr(resultWire) { nativeXposedAfter(it, dispatchId, resultWire) ?: resultWire }
+        ifLiveOr("U") { nativeXposedAfter(it, dispatchId, resultWire) ?: "U" }
     } finally { scheduleJobs() }
 
     /** Shared budget for native phases and Rust engine admission. */
@@ -124,6 +124,10 @@ open class QuickJs {
         try { ifLive { nativeJvmCallback(it, callbackId) } }
         finally { scheduleJobs() }
     }
+
+    open fun jvmMethod(callbackId: Int, self: String, args: Array<String>): String = try {
+        requireLive { nativeJvmMethod(it, callbackId, self, args) }
+    } finally { scheduleJobs() }
 
     private val jobsScheduled = AtomicBoolean()
 
@@ -158,6 +162,7 @@ open class QuickJs {
 
     /** call right before [close]; JS throws are logged, never propagated */
     fun notifyUnload() = requireLive { nativeNotifyUnload(it) }
+    fun pollUnload(): Boolean = ifLiveOr(true) { nativePollUnload(it) }
 
     fun uiRender(pageId: Long): String? = requireLive { nativeUiRender(it, pageId) }
 
@@ -289,11 +294,13 @@ open class QuickJs {
     private external fun nativeStopCallbacks(ptr: Long)
     private external fun nativePumpJobs(ptr: Long)
     private external fun nativeJvmCallback(ptr: Long, callbackId: Int)
+    private external fun nativeJvmMethod(ptr: Long, callbackId: Int, self: String, args: Array<String>): String
     private external fun nativeFetchResult(ptr: Long, requestId: Long, resultWire: String)
 
     private external fun nativeCanvasResult(ptr: Long, requestId: Long, resultWire: String)
     private external fun nativeResolveDialog(ptr: Long, requestId: Long, result: String)
     private external fun nativeNotifyUnload(ptr: Long)
+    private external fun nativePollUnload(ptr: Long): Boolean
     private external fun nativeUiRender(ptr: Long, pageId: Long): String?
     private external fun nativeUiEvent(ptr: Long, pageId: Long, slot: Int, argJson: String)
     private external fun nativeUiMenuClick(ptr: Long, menuId: Long, slot: Int)

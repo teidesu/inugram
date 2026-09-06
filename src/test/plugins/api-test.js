@@ -89,7 +89,7 @@ inu.ui
   })
 
 const unloaded = []
-inu.onUnload(() => unloaded.push(1))
+inu.onUnload(() => { unloaded.push(1) })
 inu.onUnload(() => {
   unloaded.push(2)
   throw new Error('unload boom (should be logged, not fatal)')

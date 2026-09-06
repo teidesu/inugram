@@ -187,3 +187,67 @@ fn a_throwing_visibility_callback_is_logged_and_the_rest_still_run() {
   let ran: String = ctx.with(|ctx| ctx.eval("JSON.stringify(globalThis.__ran)").unwrap());
   assert_eq!(ran, r#"["second"]"#, "a disposed registration hears nothing more");
 }
+
+#[test]
+fn unload_waits_for_returned_promises_without_holding_the_engine() {
+  let (rt, ctx, _host, state, _dialogs, _logs) = setup(&[]);
+  ctx.with(|ctx| {
+    ctx
+      .eval::<(), _>("inu.onUnload(() => new Promise(resolve => globalThis.finishUnload = resolve));")
+      .unwrap()
+  });
+  state.notify_unload(&rt, &ctx);
+  assert!(!state.poll_unload(&rt, &ctx));
+  ctx.with(|ctx| ctx.eval::<(), _>("finishUnload()").unwrap());
+  assert!(state.poll_unload(&rt, &ctx));
+  assert!(!state.lifecycle.is_cleaning_up());
+}
+
+#[test]
+fn unload_rejections_are_reported_and_do_not_skip_other_handlers() {
+  let (rt, ctx, _host, state, _dialogs, logs) = setup(&[]);
+  ctx.with(|ctx| ctx.eval::<(), _>("globalThis.ran = false; inu.onUnload(async () => { throw Error('async cleanup failed') }); inu.onUnload(async () => { ran = true });").unwrap());
+  state.notify_unload(&rt, &ctx);
+  assert!(state.poll_unload(&rt, &ctx));
+  let ran: bool = ctx.with(|ctx| ctx.eval("ran").unwrap());
+  assert!(ran);
+  assert!(logs
+    .borrow()
+    .iter()
+    .any(|message| message.contains("onUnload promise rejected") && message.contains("async cleanup failed")));
+}
+
+#[test]
+fn unload_notification_is_idempotent_and_timeout_ends_cleanup() {
+  let (rt, ctx, _host, state, _dialogs, logs) = setup(&[]);
+  ctx.with(|ctx| {
+    ctx
+      .eval::<(), _>("globalThis.count = 0; inu.onUnload(() => { count++; return new Promise(() => {}) });")
+      .unwrap()
+  });
+  state.notify_unload(&rt, &ctx);
+  state.notify_unload(&rt, &ctx);
+  assert!(!state.poll_unload(&rt, &ctx));
+  std::thread::sleep(std::time::Duration::from_millis(2010));
+  assert!(state.poll_unload(&rt, &ctx));
+  assert!(state.poll_unload(&rt, &ctx));
+  let count: i32 = ctx.with(|ctx| ctx.eval("count").unwrap());
+  assert_eq!(count, 1);
+  assert_eq!(logs.borrow().iter().filter(|message| message.contains("cleanup timed out")).count(), 1);
+}
+
+#[test]
+fn visibility_events_do_not_reenter_a_plugin_during_cleanup() {
+  let (rt, ctx, _host, state, _dialogs, _logs) = setup(&["onAppVisibilityChange"]);
+  ctx.with(|ctx| {
+    ctx
+      .eval::<(), _>(
+        "globalThis.calls = 0; inu.onAppVisibilityChange(() => calls++); inu.onUnload(() => new Promise(() => {}));",
+      )
+      .unwrap()
+  });
+  state.notify_unload(&rt, &ctx);
+  state.app_visibility_changed(&rt, &ctx, false);
+  let calls: i32 = ctx.with(|ctx| ctx.eval("calls").unwrap());
+  assert_eq!(calls, 0);
+}

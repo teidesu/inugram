@@ -162,6 +162,9 @@ impl ScreenState {
     stack_json: &str,
   ) {
     let state = self;
+    if state.lifecycle.is_unloading() {
+      return;
+    }
     if state.changed_fns.is_empty() {
       return;
     }

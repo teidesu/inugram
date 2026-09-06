@@ -156,6 +156,7 @@ impl CallbackRegistry {
 #[derive(Default)]
 pub struct Lifecycle {
   unloading: Cell<bool>,
+  cleanup_deadline: Cell<Option<std::time::Instant>>,
   blocking_dispatches: Cell<usize>,
 }
 
@@ -166,6 +167,19 @@ impl Lifecycle {
 
   pub fn begin_unload(&self) {
     self.unloading.set(true);
+  }
+
+  pub fn begin_cleanup(&self) {
+    self.begin_unload();
+    self.cleanup_deadline.set(Some(std::time::Instant::now() + std::time::Duration::from_secs(2)));
+  }
+
+  pub fn finish_cleanup(&self) {
+    self.cleanup_deadline.set(None);
+  }
+
+  pub fn is_cleaning_up(&self) -> bool {
+    self.cleanup_deadline.get().is_some_and(|deadline| std::time::Instant::now() < deadline)
   }
 
   pub fn is_unloading(&self) -> bool {

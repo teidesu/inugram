@@ -140,6 +140,9 @@ impl NotificationState {
     args_json: &str,
   ) {
     let state = self;
+    if state.lifecycle.is_unloading() {
+      return;
+    }
     context.with(|ctx| {
       let Some(delegate) = state.delegates.get(callback_id) else {
         return;

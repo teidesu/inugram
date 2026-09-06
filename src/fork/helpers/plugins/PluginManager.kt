@@ -303,9 +303,9 @@ object PluginManager {
     }
 
     fun remove(plugin: Plugin) {
-        stop(plugin)
-        // same queue as stop()'s runnable, so the wipe is ordered after the engine is gone
-        Utilities.globalQueue.postRunnable {
+        plugin.enabled = false
+        // same queue as stop()'s completion, so the wipe is ordered after the engine is gone
+        stop(plugin) {
             PluginKv.wipe(plugin.id)
             // stop() wiped these already if it was running; this covers the one that never was
             PluginBlobs.wipe(plugin.id)
@@ -374,8 +374,14 @@ object PluginManager {
         return formatString(R.string.InuPluginsErrorBadGrant, problems.joinToString("; "))
     }
 
+    private val stopping = java.util.IdentityHashMap<Plugin, MutableList<() -> Unit>>()
+
     private fun run(plugin: Plugin) {
-        Utilities.globalQueue.postRunnable { start(plugin) }
+        Utilities.globalQueue.postRunnable {
+            val pending = stopping[plugin]
+            if (pending != null) pending.add { start(plugin) }
+            else start(plugin)
+        }
     }
 
     /** globalQueue only */
@@ -483,16 +489,38 @@ object PluginManager {
         notifyChanged()
     }
 
-    private fun stop(plugin: Plugin) {
+    private fun stop(plugin: Plugin, after: () -> Unit = {}) {
         Utilities.globalQueue.postRunnable {
-            val engine = plugin.engine ?: return@postRunnable
+            stopping[plugin]?.let { it.add(after); return@postRunnable }
+            val engine = plugin.engine
+            if (engine == null) { after(); return@postRunnable }
+            stopping[plugin] = arrayListOf(after)
+            fun finish() {
+                try { teardown(plugin, engine) }
+                finally { stopping.remove(plugin)?.forEach { it() } }
+            }
             try {
                 engine.stopCallbacks()
                 engine.notifyUnload()
             } catch (e: Throwable) {
                 fail(plugin, PluginFailure.Site.UNLOAD, e.message ?: e.toString(), engine)
+                finish()
+                return@postRunnable
             }
-            teardown(plugin, engine)
+            val poll = object : Runnable {
+                override fun run() {
+                    try {
+                        if (!engine.pollUnload()) {
+                            Utilities.globalQueue.postRunnable(this, 16)
+                            return
+                        }
+                    } catch (e: Throwable) {
+                        fail(plugin, PluginFailure.Site.UNLOAD, e.message ?: e.toString(), engine)
+                    }
+                    finish()
+                }
+            }
+            poll.run()
         }
     }
 

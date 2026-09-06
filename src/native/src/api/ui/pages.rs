@@ -776,6 +776,9 @@ impl UiState {
     arg_json: &str,
   ) {
     let state = self;
+    if state.lifecycle.is_unloading() {
+      return;
+    }
     context.with(|ctx| {
       let found = {
         let pages = state.pages.borrow();

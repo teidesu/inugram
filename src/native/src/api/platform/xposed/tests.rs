@@ -125,7 +125,12 @@ fn run_dispatch(
   }
   let called_with = answer[1..].to_vec();
   let result = if answer[0] == "P1" {
-    state.dispatch_after(rt, context, 1, original)
+    let after = state.dispatch_after(rt, context, 1, original);
+    if after == KEEP_ORIGINAL {
+      original.to_string()
+    } else {
+      after
+    }
   } else {
     original.to_string()
   };
@@ -679,5 +684,34 @@ fn xposed_routinees_compile_context_operations_to_a_consumer() {
 fn xposed_routine_requires_its_grant_and_context_ops_are_not_generic_ops() {
   let fixture = setup(&["unsafe.jvm"]);
   assert!(fixture.eval_err("inu.xposed.routine(ops => [])").contains("unsafe.xposed"));
-  assert!(fixture.eval_err("inu.jvm.routine(ops => [ops.setReturnValue(null)])").contains("not a function"));
+  assert!(fixture.eval_err("inu.jvm.routine(ops => [ops.setThrowable(null)])").contains("not a function"));
+}
+
+#[test]
+fn unchanged_after_replies_use_a_verdict_not_the_inbound_value_wire() {
+  for original in ["GO9", "GC9", "TGO9", "I42", "N"] {
+    let fixture = granted();
+    fixture.eval("const method = inu.jvm.cls('java.lang.String').getDeclaredMethod('length'); inu.xposed.hookMethod(method, { after() {} });");
+    let before = fixture.state.dispatch_before(
+      &fixture.rt,
+      &fixture.ctx,
+      1,
+      100,
+      &Invocation { method: "GM1", this: "N", args: &[] },
+    );
+    assert_eq!(before[0], "P1");
+    assert_eq!(fixture.state.dispatch_after(&fixture.rt, &fixture.ctx, 1, original), KEEP_ORIGINAL);
+    assert!(fixture.state.pending.borrow().is_empty());
+  }
+}
+
+#[test]
+fn explicit_after_override_is_kept_even_when_its_wire_matches_the_original() {
+  let fixture = granted();
+  fixture.eval("const method = inu.jvm.cls('java.lang.String').getDeclaredMethod('length'); inu.xposed.hookMethod(method, { after(ctx) { ctx.setReturnValue(42) } });");
+  fixture
+    .state
+    .dispatch_before(&fixture.rt, &fixture.ctx, 1, 100, &Invocation { method: "GM1", this: "N", args: &[] });
+  assert_eq!(fixture.state.dispatch_after(&fixture.rt, &fixture.ctx, 1, "I42"), "I42");
+  assert_eq!(fixture.state.dispatch_after(&fixture.rt, &fixture.ctx, 999, "GO9"), KEEP_ORIGINAL);
 }

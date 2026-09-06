@@ -27,17 +27,24 @@ declare type JavaClass = OpaqueType<'JVMClass'> & {
 }
 
 declare type JvmColdMethod = (self: JavaObject, ...args: any[]) => any
+declare type JvmStaticMethod = (self: JavaClass, ...args: any[]) => any
 
 declare interface JvmColdMethodSpec {
   params?: string[]
   returns?: string
-  body: JvmColdMethod
+  body: JvmColdMethod | JvmRoutineRunnable
+}
+
+declare interface JvmStaticMethodSpec {
+  params?: string[]
+  returns?: string
+  body: JvmStaticMethod | JvmRoutineRunnable
 }
 
 declare interface JvmConstructorSpec {
   params?: string[]
   super?: ({ arg: number } | { value: any })[]
-  init?: (self: JavaObject, ...args: any[]) => void
+  init?: ((self: JavaObject, ...args: any[]) => void) | JvmRoutineRunnable
 }
 
 declare interface JvmClassSpec {
@@ -46,7 +53,7 @@ declare interface JvmClassSpec {
   fields?: Record<string, string>
   staticFields?: Record<string, string>
   methods?: Record<string, JvmColdMethod | JvmColdMethodSpec>
-  staticMethods?: Record<string, JvmColdMethod | JvmColdMethodSpec>
+  staticMethods?: Record<string, JvmStaticMethod | JvmStaticMethodSpec>
   constructors?: JvmConstructorSpec[]
 }
 
@@ -59,6 +66,12 @@ declare type JvmRoutineOperand
     | JavaObject | JavaClass | JavaMethod | JavaConstructor | JavaField | JvmRoutineValue
 
 declare interface JvmRoutineOps {
+  /** Only while used as a defineClass body/init. Static methods receive their JavaClass. */
+  getThisObject(): JvmRoutineValue
+  /** Zero-based method/constructor argument; fails outside a defineClass invocation. */
+  getArgument(index: number | JvmRoutineValue): JvmRoutineValue
+  /** Sets the method result; remaining roots still execute. Ignored for void methods/constructors. */
+  setReturnValue(value: JvmRoutineOperand): JvmRoutineValue
   /**
    * Reads an invocation-local variable; fails if no set has executed for this name.
    * Each read operation snapshots once.
@@ -114,6 +127,7 @@ declare namespace inu {
      * Create a `java.lang.Runnable` wrapping a JS function
      *
      * Runs synchronously on the calling thread, preserving closures.
+     * Runnables created inside async onUnload cleanup remain callable until cleanup ends.
      * Recursive JNI entry throws a Java IllegalStateException. Busy (250 ms) or closed engines skip the callback.
      * JVM/Xposed calls execute on that thread; promise jobs run later on globalQueue.
      * Do not synchronously wait for another queue that may need this engine.
@@ -126,10 +140,22 @@ declare namespace inu {
     /** Load a DEX file from a path or Uint8Array */
     function loadDex(path: string | Uint8Array): void
 
-    /** Define a Java class by its name and spec */
+    /**
+     * Define a public JVM class. Requires unscoped unsafe.jvm.
+     * Superclass defaults to Object; constructors default to one no-arg constructor calling super().
+     * Types accept primitive names, fully qualified class names, [] suffixes, or JVM type descriptors.
+     * Omitted method params/returns are inferred from an unambiguous inherited signature, otherwise ()void.
+     * Fields are public, initially Java's default values. Static bodies receive the JavaClass as self.
+     * Bodies/init accept synchronous JS functions or interpreted inu.jvm.routine objects.
+     * JS errors become Java IllegalStateException; void callbacks become no-ops after unload, other
+     * methods fail. Java calls cannot be interrupted; nested defined-method invocations share a
+     * 250 ms admission budget and allow at most 64 levels. JS callbacks obey the engine's reentry rule.
+     * Limits: 128 classes/engine, 256 fields and 256 methods/class (including constructors/covariant
+     * bridges), 64 interfaces, 64 parameters, 1 MB definitions/captures. Duplicate class names fail.
+     */
     function defineClass(name: string, spec: JvmClassSpec): JavaClass
 
-    /** Call a "super" method of a class instance */
+    /** Not implemented yet; throws unsupported. Constructor super arguments are supported by defineClass. */
     function callSuper(self: JavaObject, method: string, ...args: any[]): any
   }
 }

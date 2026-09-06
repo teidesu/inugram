@@ -47,6 +47,16 @@ object PluginWire {
 
     fun encodeExpired(): String = encodePluginError("handle-expired", HANDLE_EXPIRED_MESSAGE)
 
+    fun describePluginError(wire: String): String {
+        val error = decode(wire) as Value.PluginErr
+        return buildString {
+            append(error.code).append(": ").append(error.message)
+            error.grant?.let { append(" [grant=").append(it).append(']') }
+            error.usage?.let { append(" [usage=").append(it).append(']') }
+            error.quota?.let { append(" [quota=").append(it).append(']') }
+        }
+    }
+
     fun encodeNotGranted(name: String, scope: String? = null): String {
         val token = if (scope == null) name else "$name($scope)"
         return encodePluginError("not-granted", "missing grant: $token", grant = token)

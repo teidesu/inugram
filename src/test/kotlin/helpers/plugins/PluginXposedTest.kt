@@ -73,6 +73,32 @@ class PluginXposedTest {
     }
 
     @Test
+    fun unchanged_after_preserves_original_objects_and_boxed_types() {
+        val plugin = startPlugin("unchanged after", scope, "unsafe.xposed(desu.inugram.jvmfixture.*)")
+        val engine = plugin.js
+        engine.onXposedBefore = { arrayOf("P1") }
+        engine.onXposedAfter = { "U" }
+        val cls = jvmHandleId(plugin.jvm(PluginJvm.OP_CLASS, name = JvmFixture::class.java.name))
+        val method = jvmHandleId(plugin.jvm(PluginJvm.OP_METHOD, cls, "getPayload()Ljava/lang/Object;"))
+        plugin.xposed(PluginXposed.OP_HOOK, method)
+        val target = JvmFixture::class.java.getDeclaredMethod("getPayload")
+        val fixture = JvmFixture()
+        try {
+            for (value in listOf(JvmFixture(), 42L, null)) {
+                fixture.payload = value
+                assertEquals(1, invokeOffQueue { if (target.invoke(fixture) === value) 1 else 0 })
+            }
+            drain()
+            assertEquals(3, engine.xposedReleases.size)
+            fixture.payload = 42L
+            engine.onXposedAfter = { "I42" }
+            assertEquals(1, invokeOffQueue { if (target.invoke(fixture) is Int) 1 else 0 })
+        } finally {
+            PluginXposed.detach(engine)
+        }
+    }
+
+    @Test
     fun xposedCanAllocateAndCallOriginalConstructors() {
         val plugin = startPlugin("xposed", scope, "unsafe.xposed(desu.inugram.jvmfixture.*)")
         val cls = jvmHandleId(plugin.jvm(PluginJvm.OP_CLASS, name = JvmFixture::class.java.name))

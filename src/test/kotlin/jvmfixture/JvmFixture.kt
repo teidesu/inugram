@@ -27,6 +27,8 @@ class JvmFixture {
     /** whatever a test needs handed back, so the check on a *returned* class has something to refuse */
     @JvmField var payload: Any? = null
 
+    fun getPayload(): Any? = payload
+
     @JvmField val sealed: String = "cannot be assigned"
 
     private var secret: String = "private"

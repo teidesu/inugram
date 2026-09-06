@@ -593,6 +593,9 @@ impl ActionState {
     surface_json: &str,
   ) {
     let state = self;
+    if state.lifecycle.is_unloading() {
+      return;
+    }
     context.with(|ctx| {
       let Some(registry) = state.registry(kind) else {
         return;
