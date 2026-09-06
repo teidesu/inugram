@@ -20,8 +20,8 @@ package desu.inugram.helpers.plugins
  *   wire is forbidden: native cannot tell that tag from a message that happens to start with `E`,
  *   and would eat the first character. Return a bare message or a `P`/`R` wire.
  *
- * Every member is called synchronously on the engine's own thread, the one exception being
- * [XposedListener], which a hooked method's thread enters.
+ * Calls arrive synchronously on the thread executing JS. Void hosts handle their own queueing;
+ * queue-confined hosts returning values are only entered from the engine queue.
  */
 interface PluginListener :
     CoreListener,

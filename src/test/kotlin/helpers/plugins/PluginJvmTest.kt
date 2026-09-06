@@ -359,31 +359,22 @@ class PluginJvmTest {
     }
 
     @Test
-    fun aCallbackNeverRunsInsideTheCallThatHandedItOver() {
+    fun a_callback_dispatches_synchronously_to_its_engine() {
         val plugin = startPlugin("reflective", scoped)
         val handle = plugin.mint(JvmFixture())
         val runnable = idOf(plugin.jvm(PluginJvm.OP_RUNNABLE, name = "", args = arrayOf(PluginWire.encodeInt(7))))
-
-        // `runNow` calls `run()` before it returns, so the engine would be re-entered from inside
-        // its own upcall - which is a process abort, not an error
         assertEquals("ran", stringOf(plugin.jvm(PluginJvm.OP_CALL, handle, "runNow", "G$runnable")))
-        assertEquals(emptyList(), plugin.js.jvmCallbacks)
-
-        drain()
         assertEquals(listOf(7), plugin.js.jvmCallbacks)
     }
 
     @Test
-    fun aCallbackNeverFiresIntoASuccessorEngine() {
+    fun a_callback_never_fires_into_a_successor_engine() {
         val plugin = startPlugin("reflective", scoped)
-        val handle = plugin.mint(JvmFixture())
         val runnable = idOf(plugin.jvm(PluginJvm.OP_RUNNABLE, name = "", args = arrayOf(PluginWire.encodeInt(7))))
-        plugin.jvm(PluginJvm.OP_CALL, handle, "runNow", "G$runnable")
-
+        val task = PluginJvm.bridgeFor(plugin.js)!!.decode("G$runnable") as Runnable
         val stopped = plugin.js
-        // what a reload does: the engine is swapped and callback ids start again
         plugin.engine = RecordingQuickJs()
-        drain()
+        task.run()
         assertEquals(emptyList(), stopped.jvmCallbacks)
         assertEquals(emptyList(), plugin.js.jvmCallbacks)
     }

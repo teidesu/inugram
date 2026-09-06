@@ -1,5 +1,8 @@
 package desu.inugram.jvmfixture
 
+import java.util.concurrent.CountDownLatch
+import java.util.concurrent.TimeUnit
+
 /**
  * something for `PluginJvmTest` to reflect over. Deliberately **not** in
  * `desu.inugram.helpers.plugins`: that package is refused by `PluginJvm` whatever the grant says, so
@@ -59,6 +62,15 @@ class JvmFixture {
 
     companion object {
         @JvmField var tag: String = "static"
+
+        @JvmField var task: Runnable? = null
+        @JvmField var callbackEntered: CountDownLatch? = null
+        @JvmField var callbackRelease: CountDownLatch? = null
+
+        @JvmStatic fun awaitCallbackRelease() {
+            callbackEntered!!.countDown()
+            check(callbackRelease!!.await(5, TimeUnit.SECONDS))
+        }
 
         @JvmStatic fun make(): JvmFixture = JvmFixture()
 

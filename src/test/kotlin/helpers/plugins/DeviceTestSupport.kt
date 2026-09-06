@@ -34,6 +34,9 @@ fun resetBridge() {
     ApplicationLoader.applicationContext = deviceContext()
     goOffline()
     for (plugin in installedPlugins()) plugin.engine?.let {
+        it.stopCallbacks()
+        PluginXposed.detach(it)
+        PluginJvm.detach(it)
         PluginActions.detach(it)
         PluginNotifications.detach(it)
     }
@@ -190,13 +193,13 @@ fun startPlugin(name: String, grants: List<String>, configureEngine: (RecordingQ
  * though both compile here: their installs reach an `Activity` and a real engine. Nothing under
  * test touches them, so they refuse loudly instead of recording.
  */
-fun attachBridge(plugin: Plugin, engine: RecordingQuickJs) {
+fun attachBridge(plugin: Plugin, engine: QuickJs, core: CoreListener = DeviceMissing, canvas: CanvasListener = DeviceMissing) {
     val tl = TlHandles.attach(plugin, TlFilter.policyFor(plugin.permissions))
     val jvm = PluginJvm.listenerFor(plugin, engine, testAppScreen)
     val bridge = PluginBridge(
-        core = DeviceMissing,
+        core = core,
         rpc = PluginRpc.listenerFor(plugin, engine, tl),
-        updates = PluginUpdates.listenerFor(plugin),
+        updates = PluginUpdates.listenerFor(plugin, engine),
         tl = tl,
         storage = DeviceMissing,
         account = object : AccountListener,
@@ -207,7 +210,7 @@ fun attachBridge(plugin: Plugin, engine: RecordingQuickJs) {
         ui = DeviceMissing,
         platform = DeviceMissing,
         fetch = PluginFetch.listenerFor(plugin, engine),
-        canvas = DeviceMissing,
+        canvas = canvas,
         notifications = PluginNotifications.listenerFor(plugin, engine),
         jvm = jvm,
         xposed = PluginXposed.listenerFor(plugin, engine, jvm),

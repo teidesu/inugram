@@ -71,6 +71,7 @@ object PluginUi {
     private val openPages = HashMap<PageKey, MutableList<PluginSettingsActivity>>()
 
     fun listenerFor(plugin: Plugin, engine: QuickJs): UiListener = object : UiListener {
+        private val onHost = EngineDispatch.createHostDispatcher { EngineDispatch.isLive(plugin, engine) }
         override fun uiToast(text: String) {
             AndroidUtilities.runOnUIThread {
                 Toast.makeText(ApplicationLoader.applicationContext, text, Toast.LENGTH_SHORT).show()
@@ -127,9 +128,9 @@ object PluginUi {
 
         override fun uiOpenScreen(optionsJson: String): String? = openScreen(optionsJson)
 
-        override fun uiRegisterSettings(pageId: Long) = registerSettings(plugin, pageId)
+        override fun uiRegisterSettings(pageId: Long) = onHost { registerSettings(plugin, pageId) }
 
-        override fun uiUnregisterSettings(pageId: Long) = unregisterSettings(plugin, pageId)
+        override fun uiUnregisterSettings(pageId: Long) = onHost { unregisterSettings(plugin, pageId) }
 
         override fun uiInvalidate(pageId: Long) = invalidate(engine, pageId)
 
@@ -150,7 +151,7 @@ object PluginUi {
             dynamicFields: Int,
         ): String? = PluginActions.register(plugin, engine, kind, token, id, placements, text, icon, dynamicFields)
 
-        override fun actionUnregister(kind: Int, token: Int) = PluginActions.unregister(engine, kind, token)
+        override fun actionUnregister(kind: Int, token: Int) = onHost { PluginActions.unregister(engine, kind, token) }
 
         override fun actionEditor(op: Int, surface: Long, payloadJson: String): String? =
             PluginActions.editorOp(op, surface, payloadJson)

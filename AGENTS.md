@@ -305,9 +305,9 @@ wrong name or flag, since the bridge and the typings only agree because one scri
 
 ### Threads and RPC chains
 
-- Enter an engine only from `Utilities.globalQueue`. Never enter from a JNI callback or another app thread.
-- Keep rquickjs `parallel` disabled. Re-entry otherwise changes an abort into a deadlock.
-- Synchronous app hooks must post, block safely, or be unsupported. `PluginXposed` runs before/original/after with its declared budget and skips hooks on `globalQueue`. Hooks on the eight primitive box classes are refused: the lsplant stub boxes its own arguments through them and would recurse before any dispatch.
+- Ordinary engine work runs on `Utilities.globalQueue`; JVM Runnables and Xposed phases enter on their caller thread through the native serialized engine lease. No engine-owned Rc/Persistent state may escape that lease.
+- Keep rquickjs `parallel` enabled. Reject recursive JNI entry before taking its runtime lock; promise jobs remain on globalQueue. Quiesce caller callbacks before host teardown.
+- Synchronous Xposed phases run on the hooked thread with bounded engine admission; busy/reentrant phases bypass. Hooks on the eight primitive box classes are refused: the lsplant stub boxes its own arguments through them and would recurse before any dispatch.
 - Return app responses on `stageQueue`; keep chain bookkeeping on `globalQueue`.
 - Raw RPC chains have one 10-second budget per scope; chains containing `interceptSendMessage` get 60 seconds. On timeout, abandon deeper stages first, release handles last, and fail unless passthrough already replied.
 - Every chain continuation must verify that its pending dispatch is still current after a queue hop.

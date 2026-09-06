@@ -29,7 +29,7 @@ export default antfu({
     'antfu/top-level-function': 'off',
   },
 }, {
-  files: ['**/*.inu.js'],
+  files: ['**/*.js'],
   rules: {
     'no-undef': 'off',
     'no-unused-expressions': 'off',

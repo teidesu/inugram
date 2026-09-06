@@ -39,9 +39,8 @@ import org.telegram.messenger.Utilities
  *
  * Two rules are call-time rather than scope entries, an unscoped grant satisfying every scope
  * check: `loadDex` needs the whole grant, dex running with the app's permissions and never crossing
- * this bridge again; and [ENGINE_PACKAGE] is unreachable, a reflected call running on
- * [Utilities.globalQueue] inside a JNI upcall with the engine's `RefCell` already borrowed. The
- * latter guards one hop, not a boundary - `java.lang.reflect` walks around it.
+ * this bridge again; and [ENGINE_PACKAGE] is unreachable while a reflected call holds an engine
+ * lease. The latter guards one hop, not a boundary - `java.lang.reflect` walks around it.
  */
 object PluginJvm {
     // keep in sync with rust `jvm::OP_*` and `jvm.js`
@@ -603,10 +602,10 @@ object PluginJvm {
             return "G$KIND_OBJECT$id"
         }
 
-        /** **posted, never inline**: the reflected call that handed the object over may still be on the stack, inside the engine */
+        /** Native admission serializes callbacks and refuses recursive entry. */
         fun fire(callbackId: Int) {
             // `live` on top of the engine identity: a disposed runnable java kept hold of
-            EngineDispatch.onEngine(plugin, engine) { if (live) engine.jvmCallback(callbackId) }
+            if (live && EngineDispatch.isLive(plugin, engine)) engine.jvmCallback(callbackId)
         }
 
         private fun loadDex(path: String, args: Array<String>): String {

@@ -26,6 +26,18 @@ internal object EngineDispatch {
         }
     }
 
+    /** Host state stays on its creation queue; delayed work must still belong to the same engine. */
+    fun createHostDispatcher(isLive: () -> Boolean = { true }): (() -> Unit) -> Unit {
+        val owner = Thread.currentThread()
+        return { block ->
+            if (Thread.currentThread() === owner) {
+                if (isLive()) block()
+            } else {
+                Utilities.globalQueue.postRunnable { if (isLive()) block() }
+            }
+        }
+    }
+
     /**
      * [onEngine] for the settles that answer exactly one wire. [produce] throwing is the host's own
      * bad day rather than the plugin's, so it becomes an `internal` error wire naming [what] rather

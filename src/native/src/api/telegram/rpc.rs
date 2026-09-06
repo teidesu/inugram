@@ -8,6 +8,7 @@ use rquickjs::{Ctx, Exception, Function, Object, Persistent, Result as JsResult,
 use crate::api::error::{self, error_value_to_string, format_thrown, PluginErrorCode};
 use crate::api::telegram::account::{dispatch_account, AccountState};
 use crate::api::tl::proxy::{self, TlViews, ViewLife};
+use crate::jni::is_caller_entry;
 use crate::sandbox::grants::{GrantHost, MATCH_EXACT};
 use crate::sandbox::registry::{make_disposer, noop_disposer, CallbackRegistry, Lifecycle, Registry};
 use crate::utils::prelude;
@@ -279,6 +280,7 @@ fn capture_promise_tools(ctx: &Ctx<'_>) -> JsResult<PromiseTools> {
 }
 
 pub fn pump_jobs(rt: &Runtime, context: &rquickjs::Context, log: &dyn Fn(&str)) {
+  if is_caller_entry() { return; }
   loop {
     match rt.execute_pending_job() {
       Ok(true) => continue,

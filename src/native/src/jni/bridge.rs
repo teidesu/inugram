@@ -6,6 +6,7 @@ use jni::sys::jvalue;
 use jni::Env;
 use std::rc::Rc;
 use std::sync::Arc;
+use std::thread::{self, ThreadId};
 
 use super::log::ConsoleSink;
 use crate::LEVEL_ERROR;
@@ -13,6 +14,7 @@ use crate::LEVEL_ERROR;
 use super::env::{clear_exception, with_current_env};
 
 pub(crate) struct JniBridge {
+  owner_thread: ThreadId,
   pub(crate) target: Global<JObject<'static>>,
   pub(crate) console: Arc<ConsoleSink>,
   pub(crate) on_rpc_register: JMethodID,
@@ -96,6 +98,7 @@ impl JniBridge {
       on_console: method("onConsole", "(ILjava/lang/String;)V")?,
     });
     let bridge = JniBridge {
+      owner_thread: thread::current().id(),
       console,
       on_rpc_register: method(
         "onRpcRegister",
@@ -160,6 +163,15 @@ impl JniBridge {
     Some(Rc::new(bridge))
   }
 
+  fn check_host_thread(&self, what: &str) -> Result<(), String> {
+    if thread::current().id() != self.owner_thread && !matches!(what, "jvm" | "xposed" | "canvasRelease") {
+      let error = format!("{what}: this API requires globalQueue; unavailable in a caller-thread callback");
+      self.emit_console(LEVEL_ERROR, &error);
+      return Err(error);
+    }
+    Ok(())
+  }
+
   pub(crate) fn marshal<'l>(
     &self,
     env: &mut Env<'l>,
@@ -200,6 +212,7 @@ impl JniBridge {
     method: JMethodID,
     args: &[Arg<'_>],
   ) -> Result<Option<String>, String> {
+    self.check_host_thread(what)?;
     let marshalled = self.marshal(env, what, args)?;
     let jargs = jvalues(&marshalled);
     let result = unsafe { env.call_method_unchecked(&self.target, method, ReturnType::Object, &jargs) };
@@ -239,6 +252,9 @@ impl JniBridge {
   }
 
   pub(crate) fn call_bool(&self, what: &str, method: JMethodID, args: &[Arg<'_>]) -> bool {
+    if self.check_host_thread(what).is_err() {
+      return false;
+    }
     let answered = with_current_env(|env| {
       let marshalled = match self.marshal(env, what, args) {
         Ok(m) => m,
@@ -266,6 +282,9 @@ impl JniBridge {
   }
 
   pub(crate) fn call_int(&self, what: &str, method: JMethodID, args: &[Arg<'_>], fallback: i32) -> i32 {
+    if self.check_host_thread(what).is_err() {
+      return fallback;
+    }
     with_current_env(|env| {
       let Ok(marshalled) = self.marshal(env, what, args) else {
         return fallback;
@@ -282,6 +301,9 @@ impl JniBridge {
   }
 
   pub(crate) fn call_bytes(&self, what: &str, method: JMethodID, args: &[Arg<'_>], out: &mut [u8]) -> bool {
+    if self.check_host_thread(what).is_err() {
+      return false;
+    }
     with_current_env(|env| {
       let Ok(marshalled) = self.marshal(env, what, args) else {
         return false;

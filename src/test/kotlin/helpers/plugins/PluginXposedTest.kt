@@ -53,25 +53,19 @@ class PluginXposedTest {
     }
 
     @Test
-    fun a_timed_out_before_phase_releases_after_state_it_parks_later() {
+    fun a_refused_before_phase_runs_the_original_and_releases_the_dispatch() {
         val plugin = startPlugin("xposed", listOf(scope, "unsafe.xposed(desu.inugram.jvmfixture.*)")) {
             it.xposedBudgetMillis = 1
         }
         val engine = plugin.js
-        val originalFinished = CountDownLatch(1)
-        engine.onXposedBefore = {
-            assertTrue(originalFinished.await(1, TimeUnit.SECONDS))
-            arrayOf("P1", *it.args)
-        }
+        engine.onXposedBefore = { null }
 
         val cls = jvmHandleId(plugin.jvm(PluginJvm.OP_CLASS, name = JvmFixture::class.java.name))
         val method = jvmHandleId(plugin.jvm(PluginJvm.OP_METHOD, cls, "sum(II)I"))
         plugin.xposed(PluginXposed.OP_HOOK, method)
         val sum = JvmFixture::class.java.getDeclaredMethod("sum", Int::class.java, Int::class.java)
 
-        assertEquals(3, invokeOffQueue {
-            (sum.invoke(null, 1, 2) as Int).also { originalFinished.countDown() }
-        })
+        assertEquals(3, invokeOffQueue { sum.invoke(null, 1, 2) as Int })
         drain()
         assertEquals(listOf(engine.xposedBefores.single().dispatchId), engine.xposedReleases)
 

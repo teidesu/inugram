@@ -120,6 +120,7 @@ object PluginCanvas {
         throw Refusal(PluginWire.encodePluginError(code, message))
 
     private class Session(private val plugin: Plugin, private val engine: QuickJs) : CanvasListener {
+        private val onHost = EngineDispatch.createHostDispatcher()
         private val canvases = HashMap<Long, Surface>()
         private val images = HashMap<Long, Bitmap>()
         private val fonts = HashMap<String, Typeface>()
@@ -142,13 +143,19 @@ object PluginCanvas {
         private fun run(op: Int, id: Long, arg: String, bytes: ByteArray?): String = when (op) {
             OP_CAPABILITIES -> """J{"blend":${Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q}}"""
             OP_CREATE -> create(id, arg)
-            OP_DESTROY -> destroy(id)
+            OP_DESTROY -> {
+                onHost { destroy(id) }
+                ""
+            }
             OP_REPLAY -> replay(id, arg, bytes)
             OP_MEASURE -> measure(arg)
             OP_AVERAGE -> average(id, arg)
             OP_ENCODE -> encode(id, arg)
             OP_DECODE -> decode(id, arg)
-            OP_RELEASE_IMAGE -> releaseImage(id)
+            OP_RELEASE_IMAGE -> {
+                onHost { releaseImage(id) }
+                ""
+            }
             OP_LOAD_FONT -> loadFont(arg)
             else -> PluginWire.encodePluginError("invalid-argument", "canvas: unknown op $op")
         }

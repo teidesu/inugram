@@ -7,6 +7,7 @@ import desu.inugram.core.plugins.ScopeMatch
 import desu.inugram.core.plugins.TlCtorIds
 import desu.inugram.core.plugins.TlNames
 import desu.inugram.helpers.plugins.Plugin
+import desu.inugram.helpers.plugins.EngineDispatch
 import desu.inugram.helpers.plugins.PluginManager
 import desu.inugram.helpers.plugins.QuickJs
 import desu.inugram.helpers.plugins.UpdatesListener
@@ -73,22 +74,23 @@ object PluginUpdates {
     // a ring for the same reason: a parked batch is re-fed but not re-intercepted, so a verdict cleared after the hand-back would be lost and the update applied on the second pass
     private val droppedUpdates = BoundedIdentitySet<TLObject>(DISPATCH_MEMORY)
 
-    fun listenerFor(plugin: Plugin): UpdatesListener =
+    fun listenerFor(plugin: Plugin, engine: QuickJs): UpdatesListener =
         object : UpdatesListener {
+            private val onHost = EngineDispatch.createHostDispatcher { EngineDispatch.isLive(plugin, engine) }
             override fun onUpdateRegister(callbackId: Int, types: Array<String>, scope: String): String? =
                 registerUpdates(plugin, callbackId, types, scope)
 
             override fun onUpdateUnregister(callbackId: Int) =
-                unregisterUpdates(plugin, callbackId)
+                onHost { unregisterUpdates(plugin, callbackId) }
 
             override fun onInterceptUpdateRegister(callbackId: Int, types: Array<String>): String? =
                 registerInterceptUpdates(plugin, callbackId, types)
 
             override fun onInterceptUpdateUnregister(callbackId: Int) =
-                unregisterInterceptUpdates(plugin, callbackId)
+                onHost { unregisterInterceptUpdates(plugin, callbackId) }
 
             override fun onUpdateVerdict(dispatchId: Long, deliver: Boolean) =
-                onUpdateStageSettled(dispatchId, deliver)
+                onHost { onUpdateStageSettled(dispatchId, deliver) }
         }
 
     fun refreshOrder() {

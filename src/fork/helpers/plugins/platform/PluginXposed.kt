@@ -24,14 +24,8 @@ import org.telegram.messenger.Utilities
  * holding `unsafe.jvm`, so the property is structural: [Native] is private to this file, and the one
  * class lsplant can reach ([Hooker]) carries a rust-minted site id and no authority of its own.
  *
- * **A dispatch parks the calling thread; it does not enter the engine on it.** lsplant's callback
- * runs on whichever app thread called the hooked method, where entering an engine races every
- * queue-confined bridge map and re-entering one is a `BorrowMutError` abort. So [Session.dispatch]
- * posts `before`, waits [budgetMs], **calls the original itself** (a hooked method may be one only
- * the ui thread may run), and posts `after`; past the budget the original runs as the app called it.
- * A JS dispatch reached from *inside* plugin code is already on globalQueue and skips the hooks.
- * Native-only sites invoke Runnable.run() or Consumer.accept(context) on the calling thread, including globalQueue.
- * JS-backed nativeHooks retain their asynchronous dispatch to globalQueue.
+ * JS and native phases run synchronously on the hooked thread. Rust serializes engine entry;
+ * a busy or recursively entered engine bypasses the JS phase. Promise jobs run on globalQueue.
  * Both modes bypass recursive dispatch. A site cannot mix JS and native hooks within one plugin.
  *
  * Values are [PluginJvm]'s, borrowed through [PluginJvm.ValueBridge] rather than kept twice.
@@ -66,6 +60,7 @@ object PluginXposed {
     /** set at first use rather than at boot: `nativeInit` prefetches ART symbols and installs hooks of its own, a cost no plugin should pay for unasked */
     private var ready: Boolean? = null
 
+    @Synchronized
     private fun ensureReady(): Boolean = ready ?: runCatching {
         System.loadLibrary("lsplant")
         Native.nativeInit()
@@ -118,7 +113,7 @@ object PluginXposed {
     }
 
     private class Session(private val plugin: Plugin, private val engine: QuickJs) : XposedListener {
-        // concurrent because [dispatch] reads this on whichever thread called the hooked method, while install/remove run on globalQueue
+        // Dispatch may overlap installation/removal on another thread.
         private val sites = ConcurrentHashMap<Long, Site>()
         private val nextSite = AtomicLong(1)
         private val nextDispatch = AtomicLong(1)
@@ -214,7 +209,7 @@ object PluginXposed {
 
         private fun checkTarget(member: Member) {
             val declaring = member.declaringClass.name
-            // hooking into the engine's own package would re-enter this engine from inside a JNI upcall, which is a process abort rather than an error
+            // Do not expose the engine bridge through hooks.
             if (declaring.startsWith(ENGINE_PACKAGE)) {
                 refuse("forbidden", "xposed: $declaring is the plugin engine's own bridge")
             }
@@ -304,8 +299,8 @@ object PluginXposed {
          * original instead, as rust already does for a site whose hooks are gone.
          */
         fun dispatch(site: Long, receiver: Any?, args: List<Any?>): Any? {
-            // already inside the engine's queue: this is a hooked method plugin code reached, and parking here would be parking on ourselves
-            if (dispatching.get() == true || (sites[site]?.native != true && Utilities.globalQueue as Any === Thread.currentThread())) {
+            // Keep recursive calls to hooked methods on their original path.
+            if (dispatching.get() == true) {
                 Log.d(TAG, "[${plugin.manifest.name}] xposed site $site bypassed re-entry")
                 return runOriginal(site, receiver, args, originalArgs = true)
             }
@@ -364,9 +359,9 @@ object PluginXposed {
             }
 
             val id = nextDispatch.getAndIncrement()
-            val before = await { engine.xposedBefore(id, site, request.method, request.receiver, request.args) }
+            val before = engine.xposedBefore(id, site, request.method, request.receiver, request.args)
             if (before == null) {
-                // the queued phase still finishes and may have parked after callbacks under this id
+                // Admission failed or the engine has stopped accepting callbacks.
                 release(id)
                 return runOriginal(site, receiver, args, originalArgs = true)
             }
@@ -394,7 +389,7 @@ object PluginXposed {
                 release(id)
                 return outcome.getOrThrow()
             }
-            val after = await { engine.xposedAfter(id, wire) }
+            val after = engine.xposedAfter(id, wire)
             if (after == null) {
                 release(id)
                 return outcome.getOrThrow()
@@ -405,21 +400,6 @@ object PluginXposed {
         }
 
         private class Request(val method: String, val receiver: String, val args: Array<String>)
-
-        /** a phase that started still finishes and its writes still land; what expires is this thread's willingness to wait, not the work */
-        private fun <T> await(phase: () -> T): T? {
-            val latch = CountDownLatch(1)
-            val answer = AtomicReference<T?>(null)
-            Utilities.globalQueue.postRunnable {
-                try {
-                    answer.set(phase())
-                } finally {
-                    latch.countDown()
-                }
-            }
-            if (!latch.await(budgetMs, TimeUnit.MILLISECONDS)) return null
-            return answer.get()
-        }
 
         private fun release(id: Long) {
             Utilities.globalQueue.postRunnable { engine.xposedRelease(id) }

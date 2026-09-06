@@ -41,10 +41,14 @@ declare namespace inu {
      */
     function routine(build: (ops: RoutineOps) => JvmRoutineValue[]): JavaObject
 
+    /**
+     * JS phases run on the hooked thread. Busy/reentrant engine entry bypasses the phase.
+     * Promise jobs stay on globalQueue. Hosts handle void-call queueing; queue-bound reads are unavailable off it.
+     */
     interface MethodHook {
       /**
        * Accepts JS callbacks, Java Runnables or Consumers. Consumers receive the hook context.
-       * JS-backed Runnables remain asynchronous. Java exceptions are logged; changes stay applied.
+       * JS-backed Runnables execute synchronously; recursive engine entry is refused. Java exceptions are logged; changes stay applied.
        * A plugin cannot mix JS and Java hooks on the same method.
        */
       before?: ((ctx: MethodHookContext) => void) | JavaObject

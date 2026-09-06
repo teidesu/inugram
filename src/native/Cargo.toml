@@ -13,13 +13,12 @@ base64 = "0.23"
 # nothing else, so `rgb()`/`hsl()`/`hwb()`/`lab()` and the modern space-separated syntax would be a
 # parser of our own; the font shorthand still is one, there being no crate for it.
 csscolorparser = { version = "0.8", default-features = false, features = ["named-colors"] }
-fragile = { version = "2.1.0", default-features = false }
 jni = "0.22"
 # libart.so's real symtab ships xz-compressed in `.gnu_debugdata` on modern android, and the
 # prefix resolver lsplant demands has to read it. pure rust, so `elf.rs` stays unit-testable.
 lzma-rs = "0.3"
 # rquickjs bundles quickjs-ng; `bindgen` is required because it ships no prebuilt Android bindings.
-rquickjs = { version = "0.12", default-features = true, features = ["bindgen"] }
+rquickjs = { version = "0.12", default-features = true, features = ["bindgen", "parallel"] }
 slotmap = "1.1.1"
 url = "2.5.8"
 
