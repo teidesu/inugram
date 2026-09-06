@@ -7,10 +7,9 @@ Subject: Add the QuickJS plugin engine (hooks, action rows)
  .../messenger/MessagesController.java         | 122 ++++++++++--------
  .../messenger/SendMessagesHelper.java         |  17 ++-
  .../telegram/tgnet/ConnectionsManager.java    |   8 +-
- .../java/org/telegram/tgnet/TLObject.java     |   3 +
  .../java/org/telegram/ui/ChatActivity.java    |   6 +-
  .../java/org/telegram/ui/LaunchActivity.java  |   1 +
- 6 files changed, 100 insertions(+), 57 deletions(-)
+ 5 files changed, 97 insertions(+), 57 deletions(-)
 
 diff --git a/TMessagesProj/src/main/java/org/telegram/messenger/MessagesController.java b/TMessagesProj/src/main/java/org/telegram/messenger/MessagesController.java
 index 0000000..0000000 100644
@@ -297,20 +296,6 @@ index 0000000..0000000 100644
          }
 +        desu.inugram.helpers.plugins.telegram.PluginRpc.onRequestBoundToGuid(currentAccount, requestToken, guid);
          native_bindRequestToGuid(currentAccount, requestToken, guid);
-     }
- 
-diff --git a/TMessagesProj/src/main/java/org/telegram/tgnet/TLObject.java b/TMessagesProj/src/main/java/org/telegram/tgnet/TLObject.java
-index 0000000..0000000 100644
---- a/TMessagesProj/src/main/java/org/telegram/tgnet/TLObject.java
-+++ b/TMessagesProj/src/main/java/org/telegram/tgnet/TLObject.java
-@@ -103,6 +103,9 @@ public class TLObject {
-         }
- 
-         object.readParams(stream, exception);
-+        if (desu.inugram.helpers.plugins.telegram.PluginDeserialize.hot) {
-+            desu.inugram.helpers.plugins.telegram.PluginDeserialize.apply(object, constructor);
-+        }
-         return object;
      }
  
 diff --git a/TMessagesProj/src/main/java/org/telegram/ui/ChatActivity.java b/TMessagesProj/src/main/java/org/telegram/ui/ChatActivity.java

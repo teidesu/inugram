@@ -2,7 +2,6 @@ package desu.inugram.helpers.plugins.tl
 
 import android.util.Base64
 import android.util.SparseArray
-import desu.inugram.core.plugins.DeserializeGuards
 import desu.inugram.core.plugins.TlFlags
 import desu.inugram.core.plugins.TlNames
 import desu.inugram.core.plugins.PluginWire
@@ -40,8 +39,6 @@ class TlHandles(private val policy: TlFilter.Policy) : TlListener {
         val elementType: Type?,
         val scopeId: Long,
         val readOnly: Boolean,
-        // set on an `interceptDeserialize` middleware scope and inherited by every child: the object is on its way into the app's database, so [DeserializeGuards] applies
-        val guarded: Boolean = false,
         // an invokeRpc response, whose freeResources() stock skipped so this table could own it
         val owned: Boolean = false,
         // set only when target is a vector minted for a TLObject field, so a mutation through
@@ -54,17 +51,10 @@ class TlHandles(private val policy: TlFilter.Policy) : TlListener {
     private val table = HashMap<Long, HandleEntry>()
 
     // which handles a scope minted, so [releaseScope] costs that scope rather than the whole table.
-    // Not a nicety: `interceptDeserialize`'s middleware form opens a scope per object the *app*
-    // parses, and a plugin also holding thousands of plugin-lifetime handles would pay a full walk
-    // of them per parsed object
     private val handlesByScope = HashMap<Long, MutableList<Long>>()
 
     fun mintForScope(target: Any, scopeId: Long): Long =
         mint(target, elementType = null, scopeId = scopeId, readOnly = false)
-
-    /** the object is one the app just parsed and is about to keep, so every write through it runs [DeserializeGuards] */
-    fun mintForDeserialize(target: Any, scopeId: Long): Long =
-        mint(target, elementType = null, scopeId = scopeId, readOnly = false, guarded = true)
 
     /** [owned] marks a target this table must [TLObject.freeResources] itself, stock's own free having been suppressed to hand it over */
     fun mintForPlugin(target: Any, readOnly: Boolean, owned: Boolean = false): Long =
@@ -77,10 +67,9 @@ class TlHandles(private val policy: TlFilter.Policy) : TlListener {
         readOnly: Boolean,
         flagOwner: Pair<TLObject, String>? = null,
         owned: Boolean = false,
-        guarded: Boolean = false,
     ): Long {
         val handle = nextHandle++
-        table[handle] = HandleEntry(target, elementType, scopeId, readOnly, guarded, owned, flagOwner)
+        table[handle] = HandleEntry(target, elementType, scopeId, readOnly, owned, flagOwner)
         if (scopeId != PLUGIN_SCOPE) handlesByScope.getOrPut(scopeId) { ArrayList() }.add(handle)
         return handle
     }
@@ -210,9 +199,6 @@ class TlHandles(private val policy: TlFilter.Policy) : TlListener {
     private fun setObjectField(entry: HandleEntry, target: TLObject, key: String, wire: String): String? {
         val cls = target.javaClass
         if (key == "_") return "cannot assign to '_'"
-        if (entry.guarded && DeserializeGuards.isProtectedField(key)) {
-            return PluginWire.encodePluginError("forbidden", DeserializeGuards.protectedFieldReason(key))
-        }
         if (TlFlags.isFlagWord(cls, key)) {
             return "'$key' on '${TlNames.classNameToTlName(cls)}' is managed by the bridge - set the optional fields instead"
         }
@@ -232,7 +218,6 @@ class TlHandles(private val policy: TlFilter.Policy) : TlListener {
             field.type,
             key,
             allowPrimitiveClear = gated,
-            guarded = entry.guarded,
         )
         if (resolved.isError) return resolved.error
         return try {
@@ -270,7 +255,7 @@ class TlHandles(private val policy: TlFilter.Policy) : TlListener {
         if (index < 0 || index > target.size) return "vector index out of range: $index"
         val elementType = entry.elementType ?: return "vector element type is unknown"
         val resolved =
-            resolveSetValue(PluginWire.decode(wire), elementType, rawClassOf(elementType), "[$index]", guarded = entry.guarded)
+            resolveSetValue(PluginWire.decode(wire), elementType, rawClassOf(elementType), "[$index]")
         if (resolved.isError) return resolved.error
         if (index == target.size) target.add(resolved.value) else target[index] = resolved.value
         entry.flagOwner?.let { (obj, name) -> TlReflect.syncFlagBit(obj, name) }
@@ -302,12 +287,12 @@ class TlHandles(private val policy: TlFilter.Policy) : TlListener {
             // writable child of a read-only parent would be a mutable alias of an app object
             is TLObject -> PluginWire.encodeHandle(
                 vector = false,
-                id = mint(value, null, entry.scopeId, readOnly, guarded = entry.guarded),
+                id = mint(value, null, entry.scopeId, readOnly),
                 readOnly = readOnly,
             )
             is ArrayList<*> -> PluginWire.encodeHandle(
                 vector = true,
-                id = mint(value, elementTypeOf(declaredType), entry.scopeId, readOnly, flagOwner, guarded = entry.guarded),
+                id = mint(value, elementTypeOf(declaredType), entry.scopeId, readOnly, flagOwner),
                 readOnly = readOnly,
             )
             // map-shaped fields (TLRPC.Message.params) have no handle kind of their own, so they cross as a detached json snapshot
@@ -325,18 +310,12 @@ class TlHandles(private val policy: TlFilter.Policy) : TlListener {
     private fun ok(value: Any?) = Resolved(value, null)
     private fun err(message: String) = Resolved(null, message)
 
-    /**
-     * [guarded] is the deserialize scope's rule, and it lives here rather than at the two call
-     * sites because the guard is about the value: the name a payload is assigned to says nothing
-     * about the fields the payload itself carries, and a vector element has no name at all.
-     */
     private fun resolveSetValue(
         decoded: PluginWire.Value,
         genericType: Type,
         rawType: Class<*>,
         path: String,
         allowPrimitiveClear: Boolean = false,
-        guarded: Boolean = false,
     ): Resolved =
         when (decoded) {
             is PluginWire.Value.Null -> {
@@ -359,10 +338,7 @@ class TlHandles(private val policy: TlFilter.Policy) : TlListener {
             is PluginWire.Value.Handle -> {
                 val source = table[decoded.id] ?: return err(PluginWire.encodeExpired())
                 val instance = source.target
-                if (guarded) {
-                    // it carries the addressing fields of wherever it was parsed, and splicing it in is how those reach a slot they do not name
-                    err(PluginWire.encodePluginError("forbidden", SPLICE_MESSAGE))
-                } else if (source.readOnly) {
+                if (source.readOnly) {
                     err(PluginWire.encodePluginError("forbidden", READ_ONLY_MESSAGE))
                 } else if (!rawType.isInstance(instance)) {
                     err("type mismatch assigning handle at '$path': expected $rawType, got ${instance.javaClass}")
@@ -372,12 +348,7 @@ class TlHandles(private val policy: TlFilter.Policy) : TlListener {
             }
             is PluginWire.Value.Json -> try {
                 val parsed = JSONTokener(decoded.json).nextValue()
-                val protected = if (guarded) TlJson.findProtectedField(parsed) else null
-                if (protected != null) {
-                    err(PluginWire.encodePluginError("forbidden", DeserializeGuards.protectedFieldReason(protected)))
-                } else {
-                    ok(TlJson.jsonToValue(genericType, parsed, path))
-                }
+                ok(TlJson.jsonToValue(genericType, parsed, path))
             } catch (e: Exception) {
                 err(e.message ?: "construct failed at '$path'")
             }
@@ -413,9 +384,6 @@ class TlHandles(private val policy: TlFilter.Policy) : TlListener {
         // must stay byte-identical to READ_ONLY_MESSAGE in src/native/src/tl/proxy.rs:
         // the same refusal is raised on whichever side sees the write first
         const val READ_ONLY_MESSAGE = "this TL view is read-only; take a copy with toJSON() to edit it"
-
-        const val SPLICE_MESSAGE = "a live TL object cannot be assigned inside interceptDeserialize: it carries the " +
-            "addressing fields of wherever it was parsed - build the replacement as a plain object instead"
 
         // one dispatch's chain spans several plugins' tables and every one of them must release
         // the same scope id, so the counter can't live per-instance

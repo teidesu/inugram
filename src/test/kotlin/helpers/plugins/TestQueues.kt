@@ -50,8 +50,7 @@ object TestQueues {
      * where `lastSent()` then answers the app's request instead of the plugin's.
      *
      * So work stock posts from stock's own threads is dropped. Both halves of that are needed: the
-     * bridge itself posts here from threads a test does not run on - `interceptDeserialize`'s
-     * middleware parks the parsing thread on exactly such a post - and a test drives the ui thread
+     * bridge itself can post here from threads a test does not run on, and a test drives the ui thread
      * deliberately through `runOnMainSync`, so neither of those may be dropped.
      */
     @Synchronized

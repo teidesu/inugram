@@ -51,7 +51,7 @@ class TlFilterViewTest {
      * `Updates` rather than in a `Message` - so a redaction predicate keyed on the `Message` class
      * misses the one shape a login code reaches the device in. The update fan-out never shows this
      * object to a plugin (`PluginUpdates.normalizeShortMessage` builds a synthetic `TL_message` first),
-     * but `interceptDeserialize` materializes the real one.
+     * but TL views can still represent the real one.
      */
     @Test
     fun a_login_code_in_the_compressed_update_form_is_redacted_too() {

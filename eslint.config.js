@@ -29,8 +29,9 @@ export default antfu({
     'antfu/top-level-function': 'off',
   },
 }, {
-  files: ['src/native/**/*.js'],
+  files: ['**/*.inu.js'],
   rules: {
+    'no-undef': 'off',
     'no-unused-expressions': 'off',
   },
 })

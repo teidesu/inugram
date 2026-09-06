@@ -60,14 +60,19 @@ declare namespace inu {
    * @needs-grant unsafe.jvm. Values are capped at 1048576 bytes in either direction; dex input has at most 8388608 bytes of dex.
    */
   namespace jvm {
+    /** Create a java.lang.Runnable wrapping a JS function */
     function runnable(callback: () => void): JavaObject
 
+    /** Get a Java class by its FQN */
     function cls(name: string): JavaClass
 
+    /** Load a DEX file from a path or Uint8Array */
     function loadDex(path: string | Uint8Array): void
 
+    /** Define a Java class by its name and spec */
     function defineClass(name: string, spec: JvmClassSpec): JavaClass
 
+    /** Call a "super" method of a class instance */
     function callSuper(self: JavaObject, method: string, ...args: any[]): any
   }
 }

@@ -28,7 +28,6 @@ interface PluginListener :
     RpcListener,
     UpdatesListener,
     TlListener,
-    DeserializeListener,
     StorageListener,
     AccountListener,
     UiListener,
@@ -181,21 +180,6 @@ interface UpdatesListener {
 
     /** called from inside the engine, so the host must post rather than walk the chain on */
     fun onUpdateVerdict(dispatchId: Long, deliver: Boolean)
-}
-
-interface DeserializeListener {
-    /**
-     * [rulesJson] is a normalized `[{type, when, set}]`. Native has checked the grant and the
-     * shapes; what is left is what only the host knows - which constructors and fields exist,
-     * and which of them it refuses to let a rule rewrite.
-     */
-    fun onDeserializeRegister(callbackId: Int, rulesJson: String): String?
-
-    fun onDeserializeUnregister(callbackId: Int)
-
-    fun onDeserializeMiddlewareRegister(callbackId: Int, typesJson: String): String?
-
-    fun onDeserializeMiddlewareUnregister(callbackId: Int)
 }
 
 /**

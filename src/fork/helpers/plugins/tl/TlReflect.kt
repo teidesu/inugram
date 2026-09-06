@@ -29,7 +29,7 @@ import org.telegram.tgnet.tl.legacy.TL_legacy_message
  * flag words gating them.
  *
  * Every TL path in the host reads a field through [publicFields] - the live views in [TlHandles],
- * the snapshots in [TlJson], the rule compiler in `PluginDeserialize`, the draft check in
+ * the snapshots in [TlJson], the draft check in
  * [TlFilter] - so this is the hot one, and the caches are the reason: reflecting a class costs a
  * `declaredFields` walk per level and the answer never changes for the life of the process.
  *

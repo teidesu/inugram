@@ -196,7 +196,7 @@ private val ALWAYS_CAUTION_GRANTS = setOf("account.write", "interceptSendMessage
 
 /** scopable grants that read as neutral when narrowed, caution when granted without scopes */
 private val UNBOUNDED_CAUTION_GRANTS = setOf(
-    "fetch", "invokeRpc", "interceptRpc", "onUpdate", "interceptUpdate", "interceptDeserialize", "account.read",
+    "fetch", "invokeRpc", "interceptRpc", "onUpdate", "interceptUpdate", "account.read",
 )
 
 private fun tierFor(name: String, scopes: List<String>?): GrantTier = when {
@@ -325,8 +325,6 @@ private fun grantSubtitle(name: String, scopes: List<String>?): String? = when (
         scopes?.let { labeledScopes(it, UPDATE_SCOPE_LABELS) } ?: LocaleController.getString(R.string.InuPluginScopeAllUpdates),
     )
 
-    "interceptDeserialize" -> scopes?.let { LocaleController.formatString(R.string.InuPluginScopeDeserialize, it.joinToString(", ")) }
-        ?: LocaleController.getString(R.string.InuPluginScopeDeserializeAny)
 
     "unsafe.fs" -> LocaleController.getString(R.string.InuPluginGrantUnsafeFsInfo)
     "unsafe.jvm" -> scopes?.let { LocaleController.formatString(R.string.InuPluginGrantUnsafeJvmInfo, it.joinToString(", ")) }
@@ -354,7 +352,6 @@ private val KNOWN_GRANTS = mapOf(
     "interceptSendMessage" to GrantPresentation(R.string.InuPluginGrantInterceptSend, R.drawable.msg_edit),
     "interceptRpc" to GrantPresentation(R.string.InuPluginGrantInterceptRpc, R.drawable.msg_log),
     "invokeRpc" to GrantPresentation(R.string.InuPluginGrantInvokeRpc, R.drawable.msg_bot),
-    "interceptDeserialize" to GrantPresentation(R.string.InuPluginGrantInterceptDeserialize, R.drawable.settings_data),
     "unsafe.fs" to GrantPresentation(R.string.InuPluginGrantUnsafeFs, R.drawable.files_storage),
     "unsafe.jvm" to GrantPresentation(R.string.InuPluginGrantUnsafeJvm, R.drawable.inu_tabler_code),
     "unsafe.xposed" to GrantPresentation(R.string.InuPluginGrantUnsafeXposed, R.drawable.msg_replace),

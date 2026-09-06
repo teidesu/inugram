@@ -11,10 +11,8 @@ class BootCohortTest {
     @Test
     fun `a plugin the headless paths dispatch to boots early`() {
         assertTrue(cohort("interceptRpc(messages.sendMessage)"))
-        assertTrue(cohort("interceptDeserialize"))
         // the scoped form is the one plugins are told to use, and cold start is exactly when a
-        // deserialize rule has to already be there
-        assertTrue(cohort("interceptDeserialize(user,userFull)"))
+        // update interceptor has to already be there
         assertTrue(cohort("interceptUpdate(updateNewMessage)"))
         assertTrue(cohort("interceptSendMessage"))
         assertTrue(cohort("onUpdate(updateNewMessage)"))

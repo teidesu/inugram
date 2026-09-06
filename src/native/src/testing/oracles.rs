@@ -1,12 +1,6 @@
 use std::collections::BTreeSet;
 use std::path::{Path, PathBuf};
 
-/// Bundled plugins that are demonstrations rather than oracles: they print, they do not assert, and
-/// there is nothing for a run site to hold them to. Named one at a time on purpose - a demo that
-/// grows assertions has to be given a run site, and this list is what makes that a failing test
-/// rather than a judgement call.
-const DEMOS: &[&str] = &["disable-ads.js"];
-
 /// what an oracle prints on its own last line; [`crate::testing::harness::assert_oracle_exact`] is written
 /// around it, so a file carrying one is a file some test is meant to be driving to completion
 const MARKER: &str = "test done";
@@ -66,22 +60,12 @@ fn included_plugins() -> BTreeSet<String> {
 }
 
 #[test]
-fn every_bundled_oracle_has_a_run_site_and_every_demo_is_named() {
+fn every_bundled_oracle_has_a_run_site_and_marker() {
   let included = included_plugins();
   let mut unrun = Vec::new();
   let mut unmarked = Vec::new();
-  let mut demo_asserts = Vec::new();
-  let mut missing_demos: Vec<&str> = DEMOS.to_vec();
 
   for (name, source) in bundled_plugins() {
-    let is_demo = DEMOS.contains(&name.as_str());
-    missing_demos.retain(|d| *d != name);
-    if is_demo {
-      if source.contains(MARKER) {
-        demo_asserts.push(name);
-      }
-      continue;
-    }
     if !source.contains(MARKER) {
       unmarked.push(name.clone());
     }
@@ -91,13 +75,5 @@ fn every_bundled_oracle_has_a_run_site_and_every_demo_is_named() {
   }
 
   assert!(unrun.is_empty(), "bundled oracles no test ever runs: {unrun:?}");
-  assert!(
-    unmarked.is_empty(),
-    "bundled plugins with no '{MARKER}' marker that are not listed demos: {unmarked:?}",
-  );
-  assert!(
-    demo_asserts.is_empty(),
-    "these are listed as demos but assert something; give them a run site: {demo_asserts:?}",
-  );
-  assert!(missing_demos.is_empty(), "stale entries in the demo list: {missing_demos:?}");
+  assert!(unmarked.is_empty(), "bundled plugins with no '{MARKER}' marker: {unmarked:?}");
 }
