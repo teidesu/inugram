@@ -3,7 +3,6 @@ use jni::strings::JNIString;
 use jni::sys::{jboolean, jclass, jint, jlong, jobject, jstring};
 use jni::EnvUnowned;
 use rquickjs::{Coerced, Context, Object, Persistent, Result as JsResult, Runtime, Value};
-use std::cell::Cell;
 use std::path::{Path, PathBuf};
 use std::rc::Rc;
 use std::sync::Arc;
@@ -13,7 +12,8 @@ use super::bridge::JniBridge;
 use super::env::{in_env, jstring_to_string, read_header, read_string_array};
 use super::log::{install_console, make_log};
 use super::{
-  enter_engine, get_engine, insert_engine, remove_engine, try_enter_engine, CallerEntry, Engine, EntryError,
+  enter_engine, get_engine, insert_engine, remove_engine, stop_engine_callbacks, try_enter_engine, CallerEntry, Engine,
+  EntryError,
 };
 use crate::api::canvas::{self, install_canvas, CanvasHost};
 use crate::api::error::{dispose_rejection_tracker, format_exception, install_plugin_error, install_rejection_tracker};
@@ -257,7 +257,6 @@ pub extern "system" fn Java_desu_inugram_helpers_plugins_QuickJs_nativeCreate(
       let rpc = install_engine_rpc(&ctx, &bridge, grants.clone(), &views, &lifecycle, &account, &shared, log.as_ref())?;
 
       Some(Engine {
-        accepting_callbacks: Cell::new(true),
         ctx,
         _rt: rt,
         bridge,
@@ -343,7 +342,7 @@ pub extern "system" fn Java_desu_inugram_helpers_plugins_QuickJs_nativeXposedBef
     let Some(engine) = enter_engine(ptr, Some(Duration::from_millis(xposed::HOOK_BUDGET_MS as u64))) else {
       return std::ptr::null_mut();
     };
-    if !engine.accepting_callbacks.get() {
+    if !engine.is_admitting() {
       return std::ptr::null_mut();
     }
     let _caller = CallerEntry::new();
@@ -386,7 +385,7 @@ pub extern "system" fn Java_desu_inugram_helpers_plugins_QuickJs_nativeXposedAft
       Some(engine) => {
         let _caller = CallerEntry::new();
         match engine.xposed.as_ref() {
-          Some(state) if engine.accepting_callbacks.get() => {
+          Some(state) if engine.is_admitting() => {
             state.dispatch_after(&engine._rt, &engine.ctx, dispatch_id, &result)
           }
           _ => xposed::KEEP_ORIGINAL.to_string(),
@@ -527,7 +526,7 @@ pub extern "system" fn Java_desu_inugram_helpers_plugins_QuickJs_nativeJvmCallba
         return;
       }
     };
-    if !engine.accepting_callbacks.get()
+    if !engine.is_admitting()
       && !engine.jvm.as_ref().is_some_and(|state| state.accepts_cleanup_callback(callback_id as u32))
     {
       return;
@@ -553,7 +552,7 @@ pub extern "system" fn Java_desu_inugram_helpers_plugins_QuickJs_nativeJvmMethod
     let self_wire = jstring_to_string(env, &self_wire);
     let args = read_string_array(env, &args);
     let result = match try_enter_engine(ptr, Some(Duration::from_millis(xposed::HOOK_BUDGET_MS as u64))) {
-      Ok(engine) if engine.accepting_callbacks.get() => {
+      Ok(engine) if engine.is_admitting() => {
         let _deadline = arm_entry_deadline();
         let _caller = CallerEntry::new();
         engine.ctx.with(|ctx| match engine.jvm.as_ref() {
@@ -575,9 +574,7 @@ pub extern "system" fn Java_desu_inugram_helpers_plugins_QuickJs_nativeStopCallb
   _this: JObject,
   ptr: jlong,
 ) {
-  if let Some(engine) = get_engine(ptr) {
-    engine.accepting_callbacks.set(false);
-  }
+  stop_engine_callbacks(ptr);
 }
 
 #[no_mangle]

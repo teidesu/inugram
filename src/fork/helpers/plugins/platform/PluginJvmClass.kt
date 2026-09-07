@@ -31,9 +31,8 @@ internal object PluginJvmClass {
         fun invoke(self: Any?, args: Array<Any?>): Any? {
             if (superSources == null && returnType == Void.TYPE) return null
             check(superSources != null) { "defineClass: plugin has unloaded" }
-            val call = invocation.get() ?: Invocation()
+            val call = invocation.get() ?: Invocation().also(invocation::set)
             check(call.depth < 64 && System.nanoTime() < call.deadline) { "defineClass: invocation budget exceeded" }
-            invocation.set(call)
             call.depth++
             try {
                 val result = callback?.invoke(self ?: owner, args)
@@ -138,7 +137,7 @@ internal object PluginJvmClass {
             val fieldName = field.getString(0)
             checkName(fieldName)
             require(fieldNames.add(fieldName)) { "duplicate field: $fieldName" }
-            arrayOf(fieldName, getDescriptor(getType(field.getString(1))), if (field.getBoolean(2)) "1" else "0")
+            arrayOf(fieldName, PluginJvm.descriptorOf(getType(field.getString(1))), if (field.getBoolean(2)) "1" else "0")
         }
         val inherited = ArrayList<Method>()
         var current: Class<*>? = superclass
@@ -173,7 +172,7 @@ internal object PluginJvmClass {
                 require(Modifier.isStatic(base.modifiers) == isStatic) { "static/instance mismatch for $methodName" }
                 require(base.returnType == returns || !base.returnType.isPrimitive && base.returnType.isAssignableFrom(returns)) { "incompatible return type for $methodName" }
             }
-            val signature = methodName + params.joinToString(prefix = "(", postfix = ")") { getDescriptor(it) }
+            val signature = methodName + params.joinToString(prefix = "(", postfix = ")") { PluginJvm.descriptorOf(it) }
             require(signatures.add(signature)) { "duplicate method: $signature" }
             val body = if (method.isNull("body")) null else {
                 val bodySpec = method.getJSONArray("body")
@@ -212,9 +211,9 @@ internal object PluginJvmClass {
             }
             MethodSpec(methodName, params, returns, isStatic, superConstructor, sources, body)
         }.toMutableList()
-        val effectiveInherited = inherited.distinctBy { it.name + getDescriptor(it.returnType) + it.parameterTypes.joinToString { getDescriptor(it) } }
+        val effectiveInherited = inherited.distinctBy { it.name + PluginJvm.descriptorOf(it.returnType) + it.parameterTypes.joinToString { PluginJvm.descriptorOf(it) } }
         for (method in effectiveInherited.filter { Modifier.isAbstract(it.modifiers) }) {
-            val signature = method.name + method.parameterTypes.joinToString(prefix = "(", postfix = ")") { getDescriptor(it) }
+            val signature = method.name + method.parameterTypes.joinToString(prefix = "(", postfix = ")") { PluginJvm.descriptorOf(it) }
             require(signature in signatures || effectiveInherited.any { !Modifier.isAbstract(it.modifiers) && !Modifier.isStatic(it.modifiers) && it.name == method.name && it.parameterTypes.contentEquals(method.parameterTypes) && method.returnType.isAssignableFrom(it.returnType) }) { "abstract method needs implementation: $signature" }
         }
         for (method in methodSpecs.toList().filter { it.constructor == null && !it.isStatic }) {
@@ -231,9 +230,9 @@ internal object PluginJvmClass {
         }
         val methodData = methodSpecs.map { method ->
             val superParams = method.constructor?.parameterTypes ?: emptyArray()
-            (listOf(method.name, getDescriptor(method.returns), if (method.isStatic) "1" else "0", method.params.size.toString()) + method.params.map(::getDescriptor) + superParams.size.toString() + superParams.map(::getDescriptor)).toTypedArray()
+            (listOf(method.name, PluginJvm.descriptorOf(method.returns), if (method.isStatic) "1" else "0", method.params.size.toString()) + method.params.map(PluginJvm::descriptorOf) + superParams.size.toString() + superParams.map(PluginJvm::descriptorOf)).toTypedArray()
         }.toTypedArray()
-        return Prepared(name, getDescriptor(superclass), interfaces.map(::getDescriptor).toTypedArray(), fieldData, methodData, parent, targets)
+        return Prepared(name, PluginJvm.descriptorOf(superclass), interfaces.map(PluginJvm::descriptorOf).toTypedArray(), fieldData, methodData, parent, targets)
     }
 
     class Prepared(
@@ -284,18 +283,4 @@ internal object PluginJvmClass {
         }
         return to in widening
     }
-
-    private fun getDescriptor(type: Class<*>): String = when (type) {
-        Void.TYPE -> "V"
-        Boolean::class.javaPrimitiveType -> "Z"
-        Byte::class.javaPrimitiveType -> "B"
-        Char::class.javaPrimitiveType -> "C"
-        Short::class.javaPrimitiveType -> "S"
-        Int::class.javaPrimitiveType -> "I"
-        Long::class.javaPrimitiveType -> "J"
-        Float::class.javaPrimitiveType -> "F"
-        Double::class.javaPrimitiveType -> "D"
-        else -> if (type.isArray) type.name.replace('.', '/') else "L${type.name.replace('.', '/')};"
-    }
-
 }

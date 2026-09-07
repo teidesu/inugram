@@ -400,12 +400,9 @@ object PluginManager {
             private val faultReported = AtomicBoolean()
 
             override fun onConsole(level: Int, message: String) {
-                if (level != QuickJs.LEVEL_FAULT) {
-                    logConsole(plugin, budget, level, message)
-                } else if (faultReported.compareAndSet(false, true)) {
-                    Utilities.globalQueue.postRunnable {
-                        if (plugin.engine === engine) fail(plugin, PluginFailure.Site.RUNTIME, message, engine)
-                    }
+                logConsole(plugin, budget, level, message)
+                if (level == QuickJs.LEVEL_FAULT && faultReported.compareAndSet(false, true)) {
+                    EngineDispatch.onEngine(plugin, engine) { fail(plugin, PluginFailure.Site.RUNTIME, message, engine) }
                 }
             }
 
@@ -566,7 +563,7 @@ object PluginManager {
         }
         when (level) {
             2 -> Log.w(tag, message)
-            3 -> Log.e(tag, message)
+            3, QuickJs.LEVEL_FAULT -> Log.e(tag, message)
             else -> Log.d(tag, message)
         }
     }

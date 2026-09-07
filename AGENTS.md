@@ -310,6 +310,8 @@ wrong name or flag, since the bridge and the typings only agree because one scri
 - Keep rquickjs `parallel` enabled. Reject recursive JNI entry before taking its runtime lock; promise jobs remain on globalQueue. Quiesce caller callbacks before host teardown.
 - `onUnload` promises share a 2-second cleanup phase. Only JVM runnables created during cleanup bypass stopped callback admission. Poll without holding the engine lease; defer reload starts and uninstall wipes until teardown completes.
 - Synchronous Xposed phases run on the hooked thread with bounded engine admission; busy/reentrant phases bypass. Hooks on the eight primitive box classes are refused: the lsplant stub boxes its own arguments through them and would recurse before any dispatch.
+- `PluginXposed` shares one physical ART hook per member across engines. Keep session-local sites/handles independent; release the physical hook only after its last registration. Never hold the shared registry lock while dispatching plugin callbacks.
+- Xposed session recursion guards cover callback phases, not the original/remaining plugin chain: stock calls nested inside an original must still reach their own hooks.
 - Return app responses on `stageQueue`; keep chain bookkeeping on `globalQueue`.
 - Raw RPC chains have one 10-second budget per scope; chains containing `interceptSendMessage` get 60 seconds. On timeout, abandon deeper stages first, release handles last, and fail unless passthrough already replied.
 - Every chain continuation must verify that its pending dispatch is still current after a queue hop.

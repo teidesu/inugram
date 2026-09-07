@@ -1,7 +1,7 @@
 use std::cell::Cell;
 use std::rc::Rc;
 
-use rquickjs::{function::This, Ctx, Function, Object, Result as JsResult, Runtime, Value};
+use rquickjs::{function::This, Ctx, Function, Result as JsResult, Runtime, Value};
 
 use crate::api::telegram::rpc::{format_exception, pump_jobs};
 use crate::sandbox::grants::{GrantHost, MATCH_EXACT};

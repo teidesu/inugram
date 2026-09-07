@@ -850,7 +850,7 @@ object PluginJvm {
         return "($params)$returns"
     }
 
-    private fun descriptorOf(type: Class<*>): String = when {
+    internal fun descriptorOf(type: Class<*>): String = when {
         type == Void.TYPE -> "V"
         type == Boolean::class.javaPrimitiveType -> "Z"
         type == Byte::class.javaPrimitiveType -> "B"

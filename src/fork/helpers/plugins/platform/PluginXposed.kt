@@ -7,26 +7,26 @@ import desu.inugram.helpers.plugins.JvmListener
 import desu.inugram.helpers.plugins.Plugin
 import desu.inugram.helpers.plugins.QuickJs
 import desu.inugram.helpers.plugins.XposedListener
+import java.lang.reflect.Constructor
+import java.lang.reflect.Executable
 import java.lang.reflect.InvocationTargetException
 import java.lang.reflect.Member
 import java.lang.reflect.Method
 import java.util.concurrent.ConcurrentHashMap
-import java.util.concurrent.CountDownLatch
-import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicLong
-import java.util.concurrent.atomic.AtomicReference
 import org.telegram.messenger.Utilities
 
 /**
  * Kotlin side of `inu.xposed` (rust: `xposed::XposedHost`), per `android.xposed.d.ts`.
  *
- * **The registry is rust's.** A `XposedBridge` with `hook0` on it would *be* the grant for anyone
+ * **Callback registries are rust's; physical ART hooks are shared here.** A `XposedBridge` with `hook0` on it would *be* the grant for anyone
  * holding `unsafe.jvm`, so the property is structural: [Native] is private to this file, and the one
- * class lsplant can reach ([Hooker]) carries a rust-minted site id and no authority of its own.
+ * class lsplant can reach ([Hooker]) dispatches an existing shared site and has no installation authority.
  *
  * JS and native phases run synchronously on the hooked thread. Rust serializes engine entry;
  * a busy or recursively entered engine bypasses the JS phase. Promise jobs run on globalQueue.
- * Both modes bypass recursive dispatch. A site cannot mix JS and native hooks within one plugin.
+ * A plugin's own callback phases bypass that plugin only; the original and the other plugins'
+ * layers still dispatch. A site cannot mix JS and native hooks within one plugin.
  *
  * Values are [PluginJvm]'s, borrowed through [PluginJvm.ValueBridge] rather than kept twice.
  */
@@ -73,22 +73,54 @@ object PluginXposed {
     }
 
     /**
-     * Everything about it that matters is what it is *not*: it holds no callback list, decides
-     * nothing, and its [site] is a rust-minted token, so reaching this class buys the ability to run
-     * a hook that already exists - which calling the hooked method would have done anyway.
-     *
+     * The hooker only invokes an existing site; it cannot install hooks.
+     * Its closure retains the backup even if the last registration is removed mid-call.
      * [callback] must be `public Object callback(Object[])`; that signature is lsplant's.
      */
-    internal class Hooker(private val engine: QuickJs, private val site: Long, private val isStatic: Boolean) {
+    internal class Hooker(private val dispatch: (Array<Any?>) -> Any?) {
         @Suppress("unused")
-        fun callback(args: Array<Any?>): Any? {
-            // args[0] is the receiver for an instance method and there is no placeholder for a static one, so the split is the method's shape rather than the array's
-            val session = engine.listener?.xposed as? Session ?: return null
-            val receiver = if (isStatic) null else args.firstOrNull()
-            val rest = if (isStatic) args.toList() else args.drop(1)
-            return session.dispatch(site, receiver, rest)
+        fun callback(args: Array<Any?>): Any? = dispatch(args)
+    }
+
+    private val sharedSites = HashMap<Member, SharedSite>()
+
+    /** lsplant's backup is always a `Method`, a constructor's included: invoking it on a receiver runs the original `<init>` on that object */
+    private class SharedSite(val target: Member) {
+        @Volatile var backup: Method? = null
+        @Volatile var registrations: List<Site> = emptyList()
+
+        fun dispatch(receiver: Any?, args: List<Any?>): Any? {
+            val original = backup ?: synchronized(sharedSites) { checkNotNull(backup) }
+            val snapshot = registrations
+            fun next(index: Int, arguments: List<Any?>): Any? {
+                if (index == snapshot.size) return invokeOriginal(original, receiver, arguments)
+                val site = snapshot[index]
+                return site.session.dispatch(site, receiver, arguments) { next(index + 1, it) }
+            }
+            return next(0, args)
         }
     }
+
+    private fun invokeOriginal(backup: Method, receiver: Any?, args: List<Any?>): Any? = try {
+        backup.invoke(receiver, *args.toTypedArray())
+    } catch (e: InvocationTargetException) {
+        throw e.targetException
+    }
+
+    private fun callMember(member: Member, receiver: Any?, args: Array<Any?>): Any? = when (member) {
+        is Method -> {
+            member.isAccessible = true
+            member.invoke(receiver, *args)
+        }
+        is Constructor<*> -> {
+            member.isAccessible = true
+            member.newInstance(*args)
+        }
+        else -> refuse("invalid-argument", "xposed: callOriginalMethod needs a method or constructor")
+    }
+
+    private fun allocateInstance(cls: Class<*>): Any =
+        Native.nativeAllocateInstance(cls) ?: refuse("internal", "xposed: could not allocate ${cls.name}")
 
     /** [jvm] is a hard dependency rather than an implicit grant: every entry point takes a handle only `inu.jvm` mints */
     fun listenerFor(plugin: Plugin, engine: QuickJs, jvm: JvmListener?): XposedListener? {
@@ -108,17 +140,18 @@ object PluginXposed {
 
     private class NativeHook(val token: String, val before: Any?, val after: Any?)
 
-    private class Site(val target: Member, val backup: Member, val native: Boolean) {
+    private class Site(val session: Session, val id: Long, val shared: SharedSite, val native: Boolean) {
+        val target: Member get() = shared.target
         @Volatile var nativeHooks: List<NativeHook> = emptyList()
     }
 
     private class Session(private val plugin: Plugin, private val engine: QuickJs) : XposedListener {
-        // Dispatch may overlap installation/removal on another thread.
         private val sites = ConcurrentHashMap<Long, Site>()
         private val nextSite = AtomicLong(1)
         private val nextDispatch = AtomicLong(1)
         private val budgetMs = engine.xposedBudgetMs()
         private val dispatching = ThreadLocal<Boolean>()
+        @Volatile private var closed = false
 
         private val values: PluginJvm.ValueBridge
             get() = PluginJvm.bridgeFor(engine)
@@ -137,7 +170,7 @@ object PluginXposed {
             OP_HOOK_ALL -> PluginWire.encodeString(install(overloads(values.classAt(target), name), args))
             OP_UNHOOK -> uninstall(target)
             OP_NATIVE_ADD -> {
-                val site = sites[target] ?: refuse("expired-handle", "xposed: hook site is gone")
+                val site = sites[target] ?: refuse("handle-expired", "xposed: hook site is gone")
                 if (!site.native) refuse("invalid-argument", "xposed: cannot add a native phase to a JS hook site")
                 val (before, after) = readNativeHooks(args)
                 if (site.nativeHooks.any { it.token == name }) refuse("invalid-argument", "xposed: duplicate native hook")
@@ -209,7 +242,6 @@ object PluginXposed {
 
         private fun checkTarget(member: Member) {
             val declaring = member.declaringClass.name
-            // Do not expose the engine bridge through hooks.
             if (declaring.startsWith(ENGINE_PACKAGE)) {
                 refuse("forbidden", "xposed: $declaring is the plugin engine's own bridge")
             }
@@ -225,67 +257,81 @@ object PluginXposed {
         }
 
         /**
-         * One ART method is one site, however many hooks stand on it. A second `nativeHook` over an
-         * already-hooked method is undefined behaviour in lsplant (the second backup points into the
-         * first trampoline), and rust refcounts *per site*, which a fresh id per registration would
-         * turn into an unhook after the first. `Member.equals` is value-based, so two reflective
-         * lookups of one method answer the same key.
+         * One physical ART hook per method, with a session-local site for each plugin.
+         * Member.equals merges independent reflective lookups. Rust retains its per-site refcounts.
          */
         private fun installOne(member: Member, native: Boolean): Long {
-            sites.entries.firstOrNull { it.value.target == member }?.let { return it.key }
-            val site = nextSite.getAndIncrement()
-            val isStatic = java.lang.reflect.Modifier.isStatic(member.modifiers)
-            val hooker = Hooker(engine, site, isStatic)
-            val callback = Hooker::class.java.getDeclaredMethod("callback", Array<Any?>::class.java)
-            val backup = Native.nativeHook(member, hooker, callback)
-                ?: refuse("internal", "xposed: lsplant declined to hook $member")
-            (backup as? java.lang.reflect.AccessibleObject)?.isAccessible = true
-            sites[site] = Site(member, backup, native)
-            Log.d(TAG, "[${plugin.manifest.name}] installed xposed site $site: $member")
-            return site
+            val (site, plugins) = synchronized(sharedSites) {
+                if (closed) refuse("handle-expired", "xposed: session has closed")
+                sites.values.firstOrNull { it.target == member }?.let { return it.id }
+                val shared = sharedSites[member] ?: SharedSite(member).also { entry ->
+                    val isStatic = java.lang.reflect.Modifier.isStatic(member.modifiers)
+                    val hooker = Hooker { args ->
+                        // args[0] is the receiver for an instance method; static methods have no placeholder.
+                        entry.dispatch(if (isStatic) null else args.firstOrNull(), if (isStatic) args.toList() else args.drop(1))
+                    }
+                    val callback = Hooker::class.java.getDeclaredMethod("callback", Array<Any?>::class.java)
+                    val backup = Native.nativeHook(member, hooker, callback) as? Method
+                        ?: refuse("internal", "xposed: lsplant declined to hook $member")
+                    backup.isAccessible = true
+                    entry.backup = backup
+                    sharedSites[member] = entry
+                }
+                val site = Site(this, nextSite.getAndIncrement(), shared, native)
+                sites[site.id] = site
+                shared.registrations = shared.registrations + site
+                site to shared.registrations.size
+            }
+            Log.d(TAG, "[${plugin.manifest.name}] installed xposed site ${site.id}: $member ($plugins plugins)")
+            return site.id
         }
 
         private fun uninstall(site: Long): String {
             val removed = sites.remove(site) ?: return PluginWire.encodeNull()
-            Native.nativeUnhook(removed.target)
+            val shared = removed.shared
+            val declined = synchronized(sharedSites) {
+                shared.registrations = shared.registrations.filterNot { it === removed }
+                if (shared.registrations.isNotEmpty()) return@synchronized false
+                val unhooked = runCatching { Native.nativeUnhook(shared.target) }.getOrElse {
+                    Log.e(TAG, "xposed: failed to unhook ${shared.target}", it)
+                    false
+                }
+                if (unhooked || runCatching { !Native.nativeIsHooked(shared.target) }.getOrDefault(false)) {
+                    sharedSites.remove(shared.target)
+                    false
+                } else {
+                    true
+                }
+            }
+            if (declined) Log.e(TAG, "xposed: lsplant declined to unhook ${shared.target}; its dispatcher stays and calls the original")
             Log.d(TAG, "[${plugin.manifest.name}] removed xposed site $site: ${removed.target}")
             return PluginWire.encodeNull()
         }
 
-        /** its backup when this plugin hooked the method, and the method itself when it did not - the same call either way for the caller */
+        /** Resolve the shared backup even when only another plugin registered this method. */
         private fun callOriginal(member: Member, args: Array<String>): String {
-            val backup = sites.values.firstOrNull { it.target == member }?.backup
-            return invoke(backup ?: member, args)
+            val backup = synchronized(sharedSites) { sharedSites[member]?.backup } ?: return invoke(member, args)
+            checkTarget(member)
+            return invoke(backup, args, member)
         }
 
         private fun allocate(cls: Class<*>): String {
             checkTarget(cls.declaredConstructors.firstOrNull() ?: refuse("invalid-argument", "xposed: ${cls.name} has no constructor"))
-            return Native.nativeAllocateInstance(cls)?.let(values::encode)
-                ?: refuse("internal", "xposed: could not allocate ${cls.name}")
+            return values.encode(allocateInstance(cls))
         }
 
-        private fun invoke(member: Member, args: Array<String>): String {
+        /** [target] is the member the plugin named; [member] is what actually runs, its backup when hooked. A hooked constructor answers with the receiver it initialised. */
+        private fun invoke(member: Member, args: Array<String>, target: Member = member): String {
             val decoded = args.map { values.decode(it) }
-            val receiver = decoded.firstOrNull()
-            val parameters = when (member) {
-                is Method -> member.parameterTypes
-                is java.lang.reflect.Constructor<*> -> member.parameterTypes
-                else -> refuse("invalid-argument", "xposed: callOriginalMethod needs a method or constructor")
-            }
+            val parameters = (target as? Executable)?.parameterTypes
+                ?: refuse("invalid-argument", "xposed: callOriginalMethod needs a method or constructor")
+            val constructing = target is Constructor<*> && member is Method
+            val receiver = decoded.firstOrNull() ?: if (constructing) allocateInstance(target.declaringClass) else null
             val rest = PluginJvm.convertArguments(parameters, decoded.drop(1))
-                ?: refuse("invalid-argument", "xposed: ${member.name} does not take these arguments")
+                ?: refuse("invalid-argument", "xposed: ${target.name} does not take these arguments")
             return try {
-                values.encode(when (member) {
-                    is Method -> {
-                        member.isAccessible = true
-                        member.invoke(receiver, *rest)
-                    }
-                    is java.lang.reflect.Constructor<*> -> {
-                        member.isAccessible = true
-                        member.newInstance(*rest)
-                    }
-                    else -> error("unreachable")
-                })
+                val result = callMember(member, receiver, rest)
+                values.encode(if (constructing) receiver else result)
             } catch (e: InvocationTargetException) {
                 // the method's own outcome, handed back as a throwable rather than reported as this bridge failing
                 "T" + values.encode(e.targetException)
@@ -295,33 +341,33 @@ object PluginXposed {
         /**
          * The bridge's own failures may not escape here: this frame belongs to whichever stock
          * method the user just invoked, so a [Refusal] thrown while encoding an argument would
-         * surface as a message-less `RuntimeException` out of app code. It falls back to the
-         * original instead, as rust already does for a site whose hooks are gone.
+         * surface as a `RuntimeException` out of app code. A failed layer continues through the
+         * remaining plugins instead, eventually reaching the original exactly once.
          */
-        fun dispatch(site: Long, receiver: Any?, args: List<Any?>): Any? {
-            // Keep recursive calls to hooked methods on their original path.
+        fun dispatch(entry: Site, receiver: Any?, args: List<Any?>, next: (List<Any?>) -> Any?): Any? {
+            if (closed || sites[entry.id] !== entry) return next(args)
             if (dispatching.get() == true) {
-                Log.d(TAG, "[${plugin.manifest.name}] xposed site $site bypassed re-entry")
-                return runOriginal(site, receiver, args, originalArgs = true)
+                Log.d(TAG, "[${plugin.manifest.name}] xposed site ${entry.id} bypassed re-entry")
+                return next(args)
             }
-            dispatching.set(true)
-            return try {
-                Log.d(TAG, "[${plugin.manifest.name}] xposed site $site dispatching")
-                if (sites[site]?.native == true) dispatchNativeHooks(site, receiver, args)
-                else dispatchOnce(site, receiver, args)
-            } finally {
-                dispatching.remove()
-            }
+            Log.d(TAG, "[${plugin.manifest.name}] xposed site ${entry.id} dispatching")
+            return if (entry.native) dispatchNativeHooks(entry, receiver, args, next)
+            else dispatchOnce(entry, receiver, args, next)
         }
 
-        private fun dispatchNativeHooks(site: Long, receiver: Any?, args: List<Any?>): Any? {
-            val entry = sites[site] ?: return runOriginal(site, receiver, args, originalArgs = true)
+        private inline fun <T> runCallbackPhase(block: () -> T): T {
+            dispatching.set(true)
+            return try { block() } finally { dispatching.remove() }
+        }
+
+        private fun dispatchNativeHooks(entry: Site, receiver: Any?, args: List<Any?>, next: (List<Any?>) -> Any?): Any? {
+            val site = entry.id
             val hooks = entry.nativeHooks
             val context = PluginHookContext(entry.target, receiver, args.toMutableList())
-            fun runPhase(before: Boolean) {
+            fun runPhase(before: Boolean) = runCallbackPhase {
                 val deadline = System.nanoTime() + budgetMs * 1_000_000L
                 for (hook in hooks) {
-                    if (System.nanoTime() >= deadline) break
+                    if (closed || System.nanoTime() >= deadline) break
                     try {
                         when (val phase = if (before) hook.before else hook.after) {
                             is java.util.function.Consumer<*> -> {
@@ -331,14 +377,14 @@ object PluginXposed {
                             is Runnable -> phase.run()
                         }
                     } catch (e: Throwable) {
-                        Log.d(TAG, "[${plugin.manifest.name}] native hook failed", e)
+                        Log.d(TAG, "[${plugin.manifest.name}] native hook at site $site (${entry.target}) failed", e)
                     }
                     if (before && context.answered) break
                 }
             }
             return try {
                 runPhase(true)
-                if (!context.answered) context.outcome = runCatching { runOriginal(site, receiver, context.arguments, originalArgs = true) }
+                if (!context.answered) context.outcome = runCatching { next(context.arguments) }
                 context.answered = false
                 runPhase(false)
                 context.outcome.getOrThrow()
@@ -347,56 +393,73 @@ object PluginXposed {
             }
         }
 
-        private fun dispatchOnce(site: Long, receiver: Any?, args: List<Any?>): Any? {
+        private fun dispatchOnce(entry: Site, receiver: Any?, args: List<Any?>, next: (List<Any?>) -> Any?): Any? {
+            val site = entry.id
             val request = try {
-                Request(
-                    values.encode(sites[site]?.target),
-                    values.encode(receiver),
-                    args.map { values.encode(it) }.toTypedArray(),
-                )
+                runCallbackPhase {
+                    Request(values.encode(entry.target), values.encode(receiver), args.map { values.encode(it) }.toTypedArray())
+                }
             } catch (e: Throwable) {
-                return unhooked(e, site, receiver, args)
+                Log.e(TAG, "[${plugin.manifest.name}] xposed site $site (${entry.target}) dispatch failed; continuing", e)
+                return next(args)
             }
 
             val id = nextDispatch.getAndIncrement()
-            val before = engine.xposedBefore(id, site, request.method, request.receiver, request.args)
-            if (before == null) {
-                // Admission failed or the engine has stopped accepting callbacks.
-                release(id)
-                return runOriginal(site, receiver, args, originalArgs = true)
-            }
-            val wantsAfter = before.firstOrNull() == "P1"
-            if (before.firstOrNull() == "A") {
-                val answer = answerOf(before.getOrNull(1) ?: PluginWire.encodeNull(), site, "before")
-                    ?: return runOriginal(site, receiver, args)
-                return returnValue(site, answer)
-            }
+            var owed = false
+            try {
+                val before = try {
+                    runCallbackPhase { engine.xposedBefore(id, site, request.method, request.receiver, request.args) }
+                } catch (error: Throwable) {
+                    Log.e(TAG, "[${plugin.manifest.name}] xposed before failed at ${entry.target}; continuing", error)
+                    null
+                }
+                if (before == null) return next(args)
+                val wantsAfter = before.firstOrNull() == "P1"
+                owed = wantsAfter
+                if (before.firstOrNull() == "A") {
+                    val answer = answerOf(before.getOrNull(1) ?: PluginWire.encodeNull(), site, "before")
+                        ?: return next(args)
+                    val converted = try { convertReturn(entry, answer) } catch (error: Throwable) {
+                        Log.e(TAG, "[${plugin.manifest.name}] xposed invalid before result at ${entry.target}; continuing", error)
+                        return next(args)
+                    }
+                    return converted.getOrThrow()
+                }
 
-            val callArgs = try {
-                before.drop(1).map { values.decode(it) }
-            } catch (e: Throwable) {
-                Log.e(TAG, "[${plugin.manifest.name}] xposed site $site (${sites[site]?.target}): unreadable arguments; calling with the app's", e)
-                args
-            }
-            val outcome = runCatching { runOriginal(site, receiver, callArgs) }
-            if (!wantsAfter) return outcome.getOrThrow()
+                val callArgs = try {
+                    val wires = before.drop(1)
+                    require(wires.size == args.size) { "xposed: wrong argument count" }
+                    val parameters = (entry.target as Executable).parameterTypes
+                    wires.mapIndexed { index, wire ->
+                        val original = request.args[index]
+                        if (wire == original || original.startsWith("G") && wire == "G" + original.substring(2)) args[index]
+                        else requireNotNull(PluginJvm.convertArguments(arrayOf(parameters[index]), listOf(values.decode(wire)))) {
+                            "xposed: invalid argument $index"
+                        }[0]
+                    }
+                } catch (e: Throwable) {
+                    Log.e(TAG, "[${plugin.manifest.name}] xposed site $site (${entry.target}): unreadable arguments; calling with the app's", e)
+                    args
+                }
+                val outcome = runCatching { next(callArgs) }
+                if (!wantsAfter || closed || sites[site] !== entry) return outcome.getOrThrow()
 
-            // the phase is owed a call however this goes, or its GC roots outlive the dispatch
-            val wire = try {
-                wireOf(outcome)
-            } catch (e: Throwable) {
-                Log.e(TAG, "[${plugin.manifest.name}] xposed site $site (${sites[site]?.target}): the result does not cross; skipping the after phase", e)
-                release(id)
-                return outcome.getOrThrow()
+                val after = try {
+                    runCallbackPhase { engine.xposedAfter(id, wireOf(outcome)) }
+                } catch (error: Throwable) {
+                    Log.e(TAG, "[${plugin.manifest.name}] xposed after failed at ${entry.target}; preserving the outcome", error)
+                    null
+                }
+                if (after == null || after == "U") return outcome.getOrThrow()
+                val answer = answerOf(after, site, "after") ?: return outcome.getOrThrow()
+                val converted = try { convertReturn(entry, answer) } catch (error: Throwable) {
+                    Log.e(TAG, "[${plugin.manifest.name}] xposed invalid after result at ${entry.target}; preserving the outcome", error)
+                    outcome
+                }
+                return converted.getOrThrow()
+            } finally {
+                if (owed) release(id)
             }
-            val after = engine.xposedAfter(id, wire)
-            if (after == null || after == "U") {
-                release(id)
-                return outcome.getOrThrow()
-            }
-            val answer = answerOf(after, site, "after") ?: outcome
-            release(id)
-            return returnValue(site, answer)
         }
 
         private class Request(val method: String, val receiver: String, val args: Array<String>)
@@ -426,46 +489,23 @@ object PluginXposed {
             }
         }
 
-        private fun returnValue(site: Long, answer: Result<Any?>): Any? = answer.map { value ->
-            val type = (sites[site]?.backup as? Method)?.returnType ?: return@map null
+        private fun convertReturn(entry: Site, answer: Result<Any?>): Result<Any?> = answer.map { value ->
+            val type = (entry.target as? Method)?.returnType ?: return@map null
             if (type == Void.TYPE) return@map null
             PluginJvm.convertArguments(arrayOf(type), listOf(value))?.single()
                 ?: throw IllegalArgumentException("xposed: cannot return that from ${type.name}")
-        }.getOrThrow()
-
-        private fun unhooked(cause: Throwable, site: Long, receiver: Any?, args: List<Any?>): Any? {
-            Log.e(TAG, "[${plugin.manifest.name}] xposed site $site (${sites[site]?.target}) dispatch failed; running the original", cause)
-            return runOriginal(site, receiver, args, originalArgs = true)
-        }
-
-        private fun runOriginal(site: Long, receiver: Any?, args: List<Any?>, originalArgs: Boolean = false): Any? {
-            val backup = sites[site]?.backup ?: return null
-            return try {
-                when (backup) {
-                    is Method -> {
-                        val converted = if (originalArgs) args.toTypedArray() else PluginJvm.convertArguments(backup.parameterTypes, args)
-                            ?: throw IllegalArgumentException("xposed: ${backup.name} does not take these arguments")
-                        backup.isAccessible = true
-                        backup.invoke(receiver, *converted)
-                    }
-                    is java.lang.reflect.Constructor<*> -> {
-                        val converted = if (originalArgs) args.toTypedArray() else PluginJvm.convertArguments(backup.parameterTypes, args)
-                            ?: throw IllegalArgumentException("xposed: constructor does not take these arguments")
-                        backup.isAccessible = true
-                        backup.newInstance(*converted)
-                    }
-                    else -> null
-                }
-            } catch (e: InvocationTargetException) {
-                throw e.targetException
-            }
         }
 
         fun close() {
-            for (site in sites.values) {
-                runCatching { Native.nativeUnhook(site.target) }
+            val open = synchronized(sharedSites) {
+                closed = true
+                sites.keys.toList()
             }
-            sites.clear()
+            for (site in open) {
+                runCatching { uninstall(site) }.onFailure {
+                    Log.e(TAG, "[${plugin.manifest.name}] failed to remove site $site", it)
+                }
+            }
         }
     }
 

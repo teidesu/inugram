@@ -1,6 +1,7 @@
 use std::marker::PhantomData;
 use std::ops::Deref;
 use std::rc::Rc;
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Condvar, Mutex};
 use std::thread::{self, ThreadId};
 use std::time::{Duration, Instant};
@@ -21,6 +22,7 @@ struct State<T> {
 pub(super) struct Serialized<T> {
   state: Mutex<State<T>>,
   changed: Condvar,
+  admitting: AtomicBool,
 }
 
 impl<T> Serialized<T> {
@@ -32,7 +34,17 @@ impl<T> Serialized<T> {
         closed: false,
       }),
       changed: Condvar::new(),
+      admitting: AtomicBool::new(true),
     })
+  }
+
+  /// Flipped without the lease: the holder may be an app thread inside an unbounded Java call.
+  pub(super) fn stop_admitting(&self) {
+    self.admitting.store(false, Ordering::Release);
+  }
+
+  pub(super) fn is_admitting(&self) -> bool {
+    self.admitting.load(Ordering::Acquire)
   }
 
   pub(super) fn enter(self: &Arc<Self>, timeout: Option<Duration>) -> Result<Lease<T>, EntryError> {
@@ -83,6 +95,12 @@ pub(super) struct Lease<T> {
   slot: Arc<Serialized<T>>,
   value: Option<T>,
   thread: PhantomData<Rc<()>>,
+}
+
+impl<T> Lease<T> {
+  pub(super) fn is_admitting(&self) -> bool {
+    self.slot.is_admitting()
+  }
 }
 
 impl<T> Deref for Lease<T> {
