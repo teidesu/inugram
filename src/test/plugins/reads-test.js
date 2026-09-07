@@ -171,6 +171,58 @@ const NO_CHAT = -4242424242
     }
   }
 
+  // -- the chat list the app already holds --
+
+  // shape rather than content: the fake host seeds one dialog and one folder, a device has
+  // whatever the account has, and every assertion below has to hold for both
+  const cached = await acc.getDialogsCached()
+  check('getDialogsCached answers with an array', Array.isArray(cached), `${cached.length} dialogs`)
+  // @ts-expect-error - the point: a cached read is a plain array, with no cursor to page from
+  check('and never pages', cached.next === undefined)
+  check(
+    'every element is a dialog',
+    cached.every(dialog => typeof dialog?._ === 'string' && dialog._.startsWith('dialog')),
+    cached[0]?._,
+  )
+  check(
+    'the archive is not in the main list',
+    cached.every(dialog => !dialog.folder_id),
+    `${cached.filter(dialog => dialog.folder_id).length} archived`,
+  )
+  check(
+    'keeping the archive answers with at least as many',
+    (await acc.getDialogsCached({ archive: 'keep' })).length >= cached.length,
+  )
+  check('a limit caps the answer', (await acc.getDialogsCached({ limit: 1 })).length <= 1)
+
+  await expectRejects('an unknown archive mode is refused', 'invalid-argument', () =>
+    // @ts-expect-error - refused at runtime too, which is what this asserts
+    acc.getDialogsCached({ archive: 'both' }))
+  await expectRejects('archive and chatFolderId together are refused', 'invalid-argument', () =>
+    acc.getDialogsCached({ archive: 'keep', chatFolderId: 0 }))
+  await expectRejects('a negative chatFolderId is refused', 'invalid-argument', () =>
+    acc.getDialogsCached({ chatFolderId: -1 }))
+
+  const folders = await acc.getChatFoldersCached()
+  check('getChatFoldersCached answers with an array', Array.isArray(folders), `${folders.length} folders`)
+  const allChats = folders.find(folder => folder.isDefault)
+  check('and every account has the default folder', allChats !== undefined && allChats.id === 0, `${allChats?.id}`)
+  check(
+    'a folder carries a title, a count and its pins',
+    folders.every(folder =>
+      typeof folder.title?.text === 'string'
+      && typeof folder.dialogCount === 'number'
+      && Array.isArray(folder.pinned)),
+  )
+  check(
+    'a colour is an index into telegram\'s palette or nothing at all',
+    folders.every(folder => folder.colorIndex === null || (folder.colorIndex >= 0 && folder.colorIndex <= 7)),
+  )
+  check(
+    'the default folder is not a shared one',
+    allChats === undefined || allChats.isChatlist === false,
+  )
+
   // -- a username is the one thing that can be looked up --
 
   let telegram

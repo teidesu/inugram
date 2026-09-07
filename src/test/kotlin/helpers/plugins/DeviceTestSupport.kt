@@ -142,10 +142,14 @@ fun drain(): Int = TestQueues.drain()
  * them settles nothing on its own.
  */
 fun settle() {
-    repeat(8) {
+    // an empty drain is not idle on its own: the ui thread may still be holding the answer, and the
+    // flush that releases it posts back onto the queue that was just found empty
+    var idle = 0
+    repeat(16) {
         val ran = drain()
         flushUi()
-        if (ran == 0) return
+        idle = if (ran == 0) idle + 1 else 0
+        if (idle == 2) return
     }
 }
 

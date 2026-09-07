@@ -263,6 +263,13 @@ impl TestReadsHost {
         self.history_wire(parts[0], limit)
       }
       OP_DIALOGS => self.dialog_page_wire(parts.get(2).copied().unwrap_or("")),
+      // the selector is what the prelude builds, and `fetch_log` is where a test reads it back;
+      // the answer only has to be well formed for the array and object shapes to be exercised
+      OP_DIALOGS_CACHED => self.dialog_wire("S"),
+      OP_CHAT_FOLDERS => {
+        r#"J[{"id":0,"title":{"text":"All chats"},"emoticon":null,"colorIndex":null,"unreadCount":0,"dialogCount":1,"isDefault":true,"isChatlist":false,"pinned":[]}]"#
+          .to_string()
+      }
       // nothing in this fake is a forum, which is also the only answer a device gives for
       // every peer the oracle can name without a fixture
       OP_TOPICS => "Pinvalid-argument\n\n\n\nnot a forum".to_string(),
@@ -1270,7 +1277,7 @@ fn the_bundled_reads_test_plugin_passes() {
   // exact rather than a floor: nothing here may SKIP against this fake, so a block that
   // stopped running - or a fixture that stopped existing - would otherwise take its
   // assertions with it and still pass
-  crate::testing::harness::assert_oracle_exact(&lines, "reads test done", 52);
+  crate::testing::harness::assert_oracle_exact(&lines, "reads test done", 66);
 }
 
 #[test]
@@ -1498,4 +1505,118 @@ mod grant_boundary {
 
     drop((reads_state, accounts, rpc_state));
   }
+}
+
+/// the cached reads never leave the device, but they still go out through the fetch path - the app
+/// owns those lists on its ui thread - so the selector is what crosses and `fetch_log` records it
+#[test]
+fn a_cached_dialog_read_selects_the_main_list_by_default() {
+  let (rt, ctx, host, state, _accounts) = setup(ALL_GRANTS);
+  eval_void(&ctx, "inu.account().getDialogsCached()");
+  settle(&rt, &ctx, &state, &host);
+  // archive=exclude, no chat folder, no limit
+  assert_eq!(host.fetch_log.borrow().last().unwrap(), &(OP_DIALOGS_CACHED, "0\n-1\n0".to_string()));
+}
+
+#[test]
+fn an_archive_mode_crosses_as_its_number() {
+  for (mode, encoded) in [("exclude", "0"), ("only", "1"), ("keep", "2")] {
+    let (rt, ctx, host, state, _accounts) = setup(ALL_GRANTS);
+    eval_void(&ctx, &format!("inu.account().getDialogsCached({{ archive: '{mode}' }})"));
+    settle(&rt, &ctx, &state, &host);
+    assert_eq!(host.fetch_log.borrow().last().unwrap().1, format!("{encoded}\n-1\n0"), "mode: {mode}");
+  }
+}
+
+/// every async read rejects rather than throwing, whatever went wrong - a bad selector included
+#[test]
+fn an_unknown_archive_mode_never_reaches_the_host() {
+  let (rt, ctx, host, state, _accounts) = setup(ALL_GRANTS);
+  eval_void(
+    &ctx,
+    r#"globalThis.__out = [];
+       for (const mode of ['both', 'Exclude', 0, 'constructor']) {
+         inu.account().getDialogsCached({ archive: mode }).catch(e => __out.push(e.code))
+       }"#,
+  );
+  settle(&rt, &ctx, &state, &host);
+  assert_eq!(
+    eval_json(&ctx, "__out"),
+    r#"["invalid-argument","invalid-argument","invalid-argument","invalid-argument"]"#,
+  );
+  assert!(host.fetch_log.borrow().is_empty(), "a refused selector must not cross");
+}
+
+/// a folder has already decided whether it shows archived chats, so the default `'exclude'`
+/// layered on top would silently drop what that folder was set up to keep
+#[test]
+fn naming_both_archive_and_a_chat_folder_is_refused() {
+  let (rt, ctx, host, state, _accounts) = setup(ALL_GRANTS);
+  eval_void(
+    &ctx,
+    r#"globalThis.__out = [];
+       inu.account().getDialogsCached({ archive: 'keep', chatFolderId: 2 }).catch(e => __out.push(e.code))"#,
+  );
+  settle(&rt, &ctx, &state, &host);
+  assert_eq!(eval_json(&ctx, "__out"), r#"["invalid-argument"]"#);
+  assert!(host.fetch_log.borrow().is_empty());
+}
+
+/// folder `0` is "All chats" - a real folder - so absence cannot be spelled as zero
+#[test]
+fn a_chat_folder_id_crosses_and_zero_is_one_of_them() {
+  let (rt, ctx, host, state, _accounts) = setup(ALL_GRANTS);
+  eval_void(&ctx, "inu.account().getDialogsCached({ chatFolderId: 0 })");
+  settle(&rt, &ctx, &state, &host);
+  assert_eq!(host.fetch_log.borrow().last().unwrap().1, "0\n0\n0");
+  eval_void(&ctx, "inu.account().getDialogsCached({ chatFolderId: 3, limit: 20 })");
+  settle(&rt, &ctx, &state, &host);
+  assert_eq!(host.fetch_log.borrow().last().unwrap().1, "0\n3\n20");
+}
+
+#[test]
+fn a_negative_chat_folder_id_is_refused_rather_than_read_as_absence() {
+  let (rt, ctx, host, state, _accounts) = setup(ALL_GRANTS);
+  eval_void(
+    &ctx,
+    r#"globalThis.__out = [];
+       inu.account().getDialogsCached({ chatFolderId: -1 }).catch(e => __out.push(e.code))"#,
+  );
+  settle(&rt, &ctx, &state, &host);
+  assert_eq!(eval_json(&ctx, "__out"), r#"["invalid-argument"]"#);
+  assert!(host.fetch_log.borrow().is_empty());
+}
+
+#[test]
+fn the_cached_reads_gate_on_the_dialogs_scope() {
+  let (rt, ctx, host, state, _accounts) = setup(&["account.read(peers)"]);
+  eval_void(
+    &ctx,
+    r#"globalThis.__out = [];
+       const push = e => __out.push([e instanceof inu.PluginError, e.code, e.grant]);
+       inu.account().getDialogsCached().catch(push);
+       inu.account().getChatFoldersCached().catch(push);"#,
+  );
+  settle(&rt, &ctx, &state, &host);
+  assert_eq!(
+    eval_json(&ctx, "__out"),
+    r#"[[true,"not-granted","account.read(dialogs)"],[true,"not-granted","account.read(dialogs)"]]"#,
+  );
+  assert!(host.fetch_log.borrow().is_empty(), "a refused call must not reach the host");
+}
+
+/// a chat folder is app state rather than a TL object, so it crosses as plain json and arrives as
+/// an ordinary array - no handle, nothing to release
+#[test]
+fn chat_folders_arrive_as_plain_objects() {
+  let (rt, ctx, host, state, _accounts) = setup(ALL_GRANTS);
+  eval_void(
+    &ctx,
+    r#"globalThis.__out = [];
+       inu.account().getChatFoldersCached()
+         .then(list => __out.push(...list.map(f => [f.id, f.title.text, f.isDefault, f.pinned])))"#,
+  );
+  settle(&rt, &ctx, &state, &host);
+  assert_eq!(eval_json(&ctx, "__out"), r#"[[0,"All chats",true,[]]]"#);
+  assert_eq!(host.fetch_log.borrow().last().unwrap().0, OP_CHAT_FOLDERS);
 }
