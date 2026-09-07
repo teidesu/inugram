@@ -78,6 +78,15 @@ class JvmFixture {
 
         @JvmStatic fun sum(a: Int, b: Int): Int = a + b
 
+        @JvmField val sharedHookCalls = java.util.concurrent.atomic.AtomicInteger()
+
+        @JvmStatic fun computeHookSum(a: Int, b: Int): Int {
+            sharedHookCalls.incrementAndGet()
+            return a + b
+        }
+
+        @JvmStatic fun countHookDepth(depth: Int): Int = if (depth == 0) 0 else 1 + countHookDepth(depth - 1)
+
         /** a `Class` handed back from an in-scope member, so the check on one has something to refuse */
         @JvmStatic fun classOfSomethingElse(): Class<*> = ArrayList::class.java
     }

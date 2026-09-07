@@ -53,7 +53,7 @@ class PluginXposedTest {
     }
 
     @Test
-    fun a_refused_before_phase_runs_the_original_and_releases_the_dispatch() {
+    fun a_refused_before_phase_runs_the_original_and_owes_no_release() {
         val plugin = startPlugin("xposed", listOf(scope, "unsafe.xposed(desu.inugram.jvmfixture.*)")) {
             it.xposedBudgetMillis = 1
         }
@@ -67,7 +67,8 @@ class PluginXposedTest {
 
         assertEquals(3, invokeOffQueue { sum.invoke(null, 1, 2) as Int })
         drain()
-        assertEquals(listOf(engine.xposedBefores.single().dispatchId), engine.xposedReleases)
+        assertEquals(1, engine.xposedBefores.size)
+        assertTrue(engine.xposedReleases.isEmpty())
 
         PluginXposed.detach(engine)
     }

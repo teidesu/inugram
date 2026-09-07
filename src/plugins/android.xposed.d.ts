@@ -55,12 +55,20 @@ declare namespace inu {
       after?: ((ctx: MethodHookContext) => void) | JavaObject
     }
 
+    /**
+     * Plugins share one physical hook per method. Plugin layers nest in registration order:
+     * arguments flow forward through before phases, results back through after phases.
+     * A before answer skips subsequent plugins/the original. Contexts remain per-plugin.
+     * Reentrant callback dispatch bypasses that plugin; other methods called by the original still run their hooks.
+     * Disposing one plugin's site leaves the others installed; the last disposal unhooks ART.
+     */
     function hookMethod(method: JavaMethod, hook: MethodHook): Disposer
 
     function hookAllOverloads(cls: JavaClass, name: string, hook: MethodHook): Disposer
 
     function hookAllConstructors(cls: JavaClass, hook: MethodHook): Disposer
 
+    /** Bypasses every plugin's hook on this member, including hooks owned by other engines; a hooked member must be within this plugin's `unsafe.xposed` scope. */
     function callOriginalMethod(method: JavaMethod | JavaConstructor, thisObject: JavaObject | null, args: any[]): any
 
     function allocateInstance(cls: JavaClass): JavaObject

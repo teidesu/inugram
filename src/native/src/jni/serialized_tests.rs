@@ -54,3 +54,16 @@ fn close_waits_for_active_entry_and_rejects_later_entries() {
   assert_eq!(slot.enter(None).err(), Some(EntryError::Closed));
   assert_eq!(slot.close(), Ok(None));
 }
+
+#[test]
+fn admission_stops_while_another_thread_holds_the_lease() {
+  let slot = Serialized::new(42);
+  let lease = slot.enter(None).unwrap();
+  assert!(lease.is_admitting());
+  thread::scope(|scope| {
+    scope.spawn(|| slot.stop_admitting()).join().unwrap();
+  });
+  assert!(!lease.is_admitting());
+  drop(lease);
+  assert!(!slot.enter(None).unwrap().is_admitting());
+}

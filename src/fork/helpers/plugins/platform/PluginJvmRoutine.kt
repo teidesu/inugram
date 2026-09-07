@@ -132,7 +132,7 @@ internal class PluginJvmRoutine(
             failures[index]?.let { throw it }
             if (evaluated[index]) return results[index]
             val op = operations[index]
-            fun value(operand: Operand): Any? = if (operand.reference) evaluate(operand.index) else values[operand.index]
+            fun readOperand(operand: Operand): Any? = if (operand.reference) evaluate(operand.index) else values[operand.index]
             val result = try {
                 when (op.kind) {
                     "methodThis" -> {
@@ -141,13 +141,13 @@ internal class PluginJvmRoutine(
                     }
                     "methodArgument" -> {
                         val args = checkNotNull(methodArgs) { "routine: no method invocation" }
-                        val index = value(op.operands[0])
+                        val index = readOperand(op.operands[0])
                         require(index is Number && index.toDouble().isFinite() && index.toDouble() == index.toInt().toDouble() && index.toInt() in args.indices) { "routine: invalid method argument index" }
                         validate(args[index.toInt()])
                     }
                     "methodSetResult" -> {
                         check(methodArgs != null) { "routine: no method invocation" }
-                        methodResult = value(op.operands[0])
+                        methodResult = readOperand(op.operands[0])
                         null
                     }
                     "hookThis" -> validate(requireNotNull(context).getThisObject())
@@ -155,14 +155,14 @@ internal class PluginJvmRoutine(
                     "hookResult" -> validate(requireNotNull(context).getReturnValue())
                     "hookThrowable" -> validate(requireNotNull(context).getThrowable())
                     "hookArgument", "hookSetArgument" -> {
-                        val index = value(op.operands[0])
+                        val index = readOperand(op.operands[0])
                         require(index is Number && index.toDouble().isFinite() && index.toDouble() == index.toInt().toDouble()) { "xposed: expected an integer argument index" }
                         if (op.kind == "hookArgument") validate(requireNotNull(context).getArgument(index.toInt()))
-                        else { requireNotNull(context).setArgument(index.toInt(), value(op.operands[1])); null }
+                        else { requireNotNull(context).setArgument(index.toInt(), readOperand(op.operands[1])); null }
                     }
-                    "hookSetResult" -> { requireNotNull(context).setReturnValue(value(op.operands[0])); null }
+                    "hookSetResult" -> { requireNotNull(context).setReturnValue(readOperand(op.operands[0])); null }
                     "hookSetThrowable" -> {
-                        val throwable = value(op.operands[0])
+                        val throwable = readOperand(op.operands[0])
                         require(throwable is Throwable) { "xposed: expected a Throwable" }
                         requireNotNull(context).setThrowable(throwable)
                         null
@@ -171,7 +171,7 @@ internal class PluginJvmRoutine(
                         check(locals.containsKey(op.name)) { "routine: variable '${op.name}' is not initialized" }
                         locals[op.name]
                     }
-                    "setLocal" -> value(op.operands[0]).also { locals[op.name] = it }
+                    "setLocal" -> readOperand(op.operands[0]).also { locals[op.name] = it }
                     "attempt" -> {
                         try {
                             for (child in op.yes) evaluate(child)
@@ -181,17 +181,17 @@ internal class PluginJvmRoutine(
                         null
                     }
                     "when" -> {
-                        for (child in if (getTruthiness(value(op.operands[0]))) op.yes else op.no) evaluate(child)
+                        for (child in if (getTruthiness(readOperand(op.operands[0]))) op.yes else op.no) evaluate(child)
                         null
                     }
-                    "compare" -> compareValues(op.name, value(op.operands[0]), value(op.operands[1]))
-                    "and" -> getTruthiness(value(op.operands[0])) && getTruthiness(value(op.operands[1]))
-                    "or" -> getTruthiness(value(op.operands[0])) || getTruthiness(value(op.operands[1]))
-                    "not" -> !getTruthiness(value(op.operands[0]))
-                    "math" -> calculate(op.name, value(op.operands[0]), value(op.operands[1]))
+                    "compare" -> compareValues(op.name, readOperand(op.operands[0]), readOperand(op.operands[1]))
+                    "and" -> getTruthiness(readOperand(op.operands[0])) && getTruthiness(readOperand(op.operands[1]))
+                    "or" -> getTruthiness(readOperand(op.operands[0])) || getTruthiness(readOperand(op.operands[1]))
+                    "not" -> !getTruthiness(readOperand(op.operands[0]))
+                    "math" -> calculate(op.name, readOperand(op.operands[0]), readOperand(op.operands[1]))
                     else -> {
-                        val target = value(op.operands[0]) ?: error("routine: null receiver")
-                        invoke(op.kind, target, op.name, op.operands.drop(1).map(::value))
+                        val target = readOperand(op.operands[0]) ?: error("routine: null receiver")
+                        invoke(op.kind, target, op.name, op.operands.drop(1).map(::readOperand))
                     }
                 }
             } catch (e: Exception) {
@@ -231,9 +231,17 @@ internal class PluginJvmRoutine(
                 if (!a.isFinite() || !b.isFinite()) {
                     a.compareTo(b)
                 } else {
-                    val exactLeft = if (left is Float || left is Double) java.math.BigDecimal(a) else java.math.BigDecimal.valueOf(left.toLong())
-                    val exactRight = if (right is Float || right is Double) java.math.BigDecimal(b) else java.math.BigDecimal.valueOf(right.toLong())
-                    exactLeft.compareTo(exactRight)
+                    val leftIntegral = left !is Float && left !is Double
+                    val rightIntegral = right !is Float && right !is Double
+                    when {
+                        leftIntegral && rightIntegral -> left.toLong().compareTo(right.toLong())
+                        !leftIntegral && !rightIntegral -> a.compareTo(b)
+                        else -> {
+                            val exactLeft = if (leftIntegral) java.math.BigDecimal.valueOf(left.toLong()) else java.math.BigDecimal(a)
+                            val exactRight = if (rightIntegral) java.math.BigDecimal.valueOf(right.toLong()) else java.math.BigDecimal(b)
+                            exactLeft.compareTo(exactRight)
+                        }
+                    }
                 }
             }
             left is String && right is String -> left.compareTo(right)

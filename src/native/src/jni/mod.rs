@@ -81,16 +81,27 @@ fn enter_engine(handle: jlong, timeout: Option<Duration>) -> Option<Lease<Transf
   try_enter_engine(handle, timeout).ok()
 }
 
+fn engine_slot(handle: jlong) -> Result<Arc<Serialized<TransferEngine>>, EntryError> {
+  Ok(
+    ENGINES
+      .get()
+      .ok_or(EntryError::Closed)?
+      .lock()
+      .unwrap_or_else(|e| e.into_inner())
+      .get(get_engine_key(handle))
+      .ok_or(EntryError::Closed)?
+      .clone(),
+  )
+}
+
 fn try_enter_engine(handle: jlong, timeout: Option<Duration>) -> Result<Lease<TransferEngine>, EntryError> {
-  let slot = ENGINES
-    .get()
-    .ok_or(EntryError::Closed)?
-    .lock()
-    .unwrap_or_else(|e| e.into_inner())
-    .get(get_engine_key(handle))
-    .ok_or(EntryError::Closed)?
-    .clone();
-  slot.enter(timeout)
+  engine_slot(handle)?.enter(timeout)
+}
+
+fn stop_engine_callbacks(handle: jlong) {
+  if let Ok(slot) = engine_slot(handle) {
+    slot.stop_admitting();
+  }
 }
 
 pub(crate) fn get_engine_key(handle: jlong) -> EngineKey {
@@ -105,7 +116,6 @@ pub(crate) fn remove_engine(handle: jlong) -> Option<Engine> {
 }
 
 pub(crate) struct Engine {
-  pub(crate) accepting_callbacks: Cell<bool>,
   pub(crate) ctx: Context,
   pub(crate) _rt: Runtime,
   pub(crate) bridge: Rc<JniBridge>,
