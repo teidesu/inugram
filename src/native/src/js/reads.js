@@ -36,6 +36,20 @@
   // 0 is "no limit" for an iterator, which is what an omitted one means: it pages to the end
   const toLimit = (value, what) => Number(toCount(value, what, 'limit'))
 
+  // keep in sync with rust `reads::ARCHIVE_*` and Kotlin `PluginReads.ARCHIVE_*`
+  // a Map rather than an object literal: `archive` is plugin input, and a lookup on a literal
+  // answers for 'constructor' and friends too
+  const ARCHIVE = new Map([['exclude', 0], ['only', 1], ['keep', 2]])
+  // every chat folder id is a real one, `0` being "All chats", so absence needs a value of its own
+  const NO_CHAT_FOLDER = -1
+
+  const toArchive = (value, what) => {
+    if (value === undefined || value === null) return ARCHIVE.get('exclude')
+    const mode = ARCHIVE.get(value)
+    if (mode === undefined) throw invalid(`${what}: archive must be 'exclude', 'only' or 'keep'`)
+    return mode
+  }
+
   const toBatch = (value, what) => {
     const size = Number(toCount(value, what, 'batchSize'))
     return size === 0 ? BATCH_SIZE : size
@@ -225,6 +239,31 @@
           toCursor(opts.cursor, 'getDialogs'),
         ]
       })
+    },
+
+    getDialogsCached(options) {
+      return fetchWith(this, ops.dialogsCached, 'getDialogsCached', () => {
+        const opts = toOptions(options, 'getDialogsCached')
+        const folder = opts.chatFolderId
+        const named = folder !== undefined && folder !== null
+        if (named && opts.archive !== undefined && opts.archive !== null) {
+          // a folder carries its own "exclude archived" flag, so the default `'exclude'` would
+          // drop what that folder was set up to keep. Refusing beats answering the wrong list
+          throw invalid('getDialogsCached: name either archive or chatFolderId, not both')
+        }
+        return [
+          [
+            toArchive(opts.archive, 'getDialogsCached'),
+            named ? toCount(folder, 'getDialogsCached', 'chatFolderId') : NO_CHAT_FOLDER,
+            toCount(opts.limit, 'getDialogsCached', 'limit'),
+          ].join(SEPARATOR),
+          '',
+        ]
+      })
+    },
+
+    getChatFoldersCached() {
+      return fetchWith(this, ops.chatFolders, 'getChatFoldersCached', () => ['', ''])
     },
 
     getTopics(peer, options) {

@@ -360,6 +360,32 @@ declare namespace inu {
     isPremium: boolean
   }
 
+  /**
+   * A chat folder, as the folder tabs show it. This is app state rather than a TL object - the
+   * app keeps its own class for it, with the dialogs it currently resolves to - so it crosses as
+   * a plain object rather than a `tl.Type*` handle.
+   */
+  interface ChatFolder {
+    /** `0` is the "All chats" tab, which every account has and which cannot be edited. */
+    id: number
+    title: TextWithEntities
+    /**
+     * The folder's emoji, or `null` when it has none. Inugram-only: stock android drops the
+     * emoticon the server sends, and the fork keeps it in its own storage.
+     */
+    emoticon: string | null
+    /** Telegram's folder colour, `0`-`7` into its own palette - not an ARGB value. `null` when the folder has no colour. */
+    colorIndex: number | null
+    unreadCount: number
+    /** How many dialogs {@link Account.getDialogsCached} would answer for this folder right now. */
+    dialogCount: number
+    isDefault: boolean
+    /** A shared folder, added from an invite link. */
+    isChatlist: boolean
+    /** The folder's pinned dialogs, in the order they are pinned. */
+    pinned: DialogId[]
+  }
+
   /** @needs-grant account.read(self) */
   function accounts(): AccountInfo[]
 
@@ -437,6 +463,36 @@ declare namespace inu {
     }): Promise<Paged<tl.TypeDialog, 'dialogs'>>
     /** @needs-grant account.read(dialogs). `batchSize` defaults to (omitted, **100**, which is telegram's own page). */
     iterDialogs(options?: { folderId?: number, limit?: number, batchSize?: number }): AsyncIterableIterator<tl.TypeDialog>
+
+    /**
+     * The dialogs the app already holds in memory, ordered the way the chat list orders them:
+     * pinned first, then by date. Never goes to the network and never pages - one call answers
+     * the whole list, consistently.
+     *
+     * Asynchronous all the same: the app owns these lists on its ui thread and rebuilds them in
+     * place, so the read hops there rather than walking a list mid-rebuild. It resolves on the
+     * next turn, and cannot be called from a synchronous context such as an `inu.xposed` phase.
+     *
+     * `archive` picks what the answer covers: `'exclude'` (the default) is the main list, `'only'`
+     * the archive, `'keep'` both. `chatFolderId` narrows to one folder from
+     * {@link getChatFoldersCached} instead; a folder already decides for itself whether it shows
+     * archived chats, so naming both `archive` and `chatFolderId` is `invalid-argument`.
+     *
+     * @needs-grant account.read(dialogs)
+     */
+    getDialogsCached(options?: {
+      archive?: 'exclude' | 'only' | 'keep'
+      chatFolderId?: number
+      limit?: number
+    }): Promise<tl.TypeDialog[]>
+
+    /**
+     * The account's chat folders, in the order their tabs appear. Reads what
+     * {@link getDialogsCached} reads, and is asynchronous for the same reason.
+     *
+     * @needs-grant account.read(dialogs)
+     */
+    getChatFoldersCached(): Promise<ChatFolder[]>
 
     /** @needs-grant account.read(history) */
     getHistory(

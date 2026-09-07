@@ -10,7 +10,10 @@ import desu.inugram.helpers.plugins.tl.TlFilter
 import desu.inugram.helpers.plugins.tl.TlHandles
 import desu.inugram.helpers.plugins.tl.TlJson
 import desu.inugram.helpers.plugins.tl.TlReflect
+import desu.inugram.helpers.security.ParanoiaHelper
+import org.json.JSONArray
 import org.json.JSONObject
+import org.telegram.messenger.AndroidUtilities
 import org.telegram.messenger.DialogObject
 import org.telegram.messenger.MediaDataController
 import org.telegram.messenger.MessagesController
@@ -55,6 +58,16 @@ object PluginReads {
     const val OP_HISTORY = 13
     const val OP_DIALOGS = 14
     const val OP_TOPICS = 15
+    const val OP_DIALOGS_CACHED = 16
+    const val OP_CHAT_FOLDERS = 17
+
+    /** what `archive` selects, keep in sync with rust `reads::ARCHIVE_*` and `reads.js` */
+    private const val ARCHIVE_EXCLUDE = 0
+    private const val ARCHIVE_ONLY = 1
+    private const val ARCHIVE_KEEP = 2
+
+    /** `chatFolderId` is optional, and every folder id including `0` is a real one */
+    private const val NO_CHAT_FOLDER = -1
 
     private val SCOPE_BY_OP = mapOf(
         OP_ME to "self",
@@ -73,10 +86,15 @@ object PluginReads {
         OP_HISTORY to "history",
         OP_DIALOGS to "dialogs",
         OP_TOPICS to "dialogs",
+        OP_DIALOGS_CACHED to "dialogs",
+        OP_CHAT_FOLDERS to "dialogs",
     )
 
     /** what telegram itself accepts for one page, and what an omitted `limit` asks for */
     private const val PAGE_LIMIT = 100
+
+    /** the cap `common.d.ts` states for every api array, mirrored from rust `arguments::ARRAY_LIMIT` */
+    private const val ARRAY_LIMIT = 65536
 
     fun listenerFor(plugin: Plugin, engine: QuickJs): ReadsListener =
         object : ReadsListener {
@@ -315,6 +333,8 @@ object PluginReads {
                 OP_HISTORY -> fetchHistory(call)
                 OP_DIALOGS -> fetchDialogs(call)
                 OP_TOPICS -> fetchTopics(call)
+                OP_DIALOGS_CACHED -> fetchCachedDialogs(call)
+                OP_CHAT_FOLDERS -> fetchChatFolders(call)
                 else -> PluginWire.encodePluginError("internal", "account fetch: unknown op $op")
             }
         } catch (e: NotResolved) {
@@ -545,6 +565,124 @@ object PluginReads {
             }
             cursor + PeerSpecs.LIST_SEPARATOR + mintEach(call.handles, page.topics)
         }
+    }
+
+    /**
+     * The chat list the app already holds. No network - but asynchronous all the same, because
+     * `allDialogs`, `dialogsByFolder` and `dialogFilters` are plain `ArrayList`s the **ui thread**
+     * rebuilds: `sortDialogs` clears every folder list and refills it, so a globalQueue reader
+     * would be walking a list halfway through a rebuild. Hopping is what makes the read safe.
+     *
+     * The alternative - a snapshot the ui thread republishes - would put a copy of every list on
+     * `dialogsNeedReload`, which fires on every batch of arriving messages whether or not any
+     * plugin ever asks. This way the copy costs one hop per call and nothing at all when idle.
+     *
+     * `archive` and `chatFolderId` are exclusive, which `reads.js` refuses before this is reached:
+     * a folder has already decided whether it shows archived chats, so honouring the default
+     * `'exclude'` on top of one would quietly drop what that folder was set up to keep.
+     */
+    private fun fetchCachedDialogs(call: Fetch): String? {
+        val archive = call.int(0)
+        val chatFolderId = call.parts.getOrNull(1)?.toIntOrNull() ?: NO_CHAT_FOLDER
+        val limit = call.int(2)
+        AndroidUtilities.runOnUIThread {
+            val picked = if (chatFolderId != NO_CHAT_FOLDER) {
+                // `getDialogFilters`, not the field: it answers with the frozen list while the user
+                // is dragging tabs about, which is the one the folder tabs are showing
+                call.controller.getDialogFilters().firstOrNull { it.id == chatFolderId }?.dialogs
+            } else {
+                when (archive) {
+                    ARCHIVE_ONLY -> call.controller.getDialogs(1)
+                    ARCHIVE_KEEP -> call.controller.allDialogs
+                    else -> call.controller.getDialogs(0)
+                }
+            }
+            // the copy happens here, on the thread that owns the list; only the copy crosses back,
+            // and `answer` mints it on globalQueue where the handle table lives
+            val dialogs = picked?.let { copyDialogs(call.accountId, it, limit) }
+            answer(call) {
+                if (dialogs == null) {
+                    PluginWire.encodePluginError("not-found", "getDialogsCached: no chat folder #$chatFolderId")
+                } else {
+                    mintEach(call.handles, dialogs)
+                }
+            }
+        }
+        return null
+    }
+
+    private fun fetchChatFolders(call: Fetch): String? {
+        val policy = policyOf(call.plugin)
+        AndroidUtilities.runOnUIThread {
+            val json = chatFoldersJson(call.controller, call.accountId, policy)
+            answer(call) { PluginWire.encodeJson(json) }
+        }
+        return null
+    }
+
+    /**
+     * ui thread only. The archive row the app splices into `allDialogs` is a chat-list row rather
+     * than a dialog - `TL_dialogFolder` has no peer at all - so it does not belong in an answer
+     * typed as `tl.TypeDialog`.
+     *
+     * A secret chat goes for the reason every other read drops one: `common.d.ts` says plugin code
+     * never reaches them, and [PeerSpecs.dialogIdOf] answers `null` for one, so a dialog handed out
+     * here would carry an id nothing else on the surface accepts back. Their ids are *positive*,
+     * so nothing about the shape of one keeps it out on its own.
+     */
+    private fun copyDialogs(accountId: Int, source: List<TLRPC.Dialog>, limit: Int): List<TLRPC.Dialog> {
+        val cap = if (limit in 1 until ARRAY_LIMIT) limit else ARRAY_LIMIT
+        val out = ArrayList<TLRPC.Dialog>(minOf(source.size, cap))
+        for (dialog in source) {
+            if (out.size == cap) break
+            if (dialog == null) continue
+            if (DialogObject.isFolderDialogId(dialog.id) || DialogObject.isEncryptedDialog(dialog.id)) continue
+            if (ParanoiaHelper.isHidden(accountId, dialog.id)) continue
+            out.add(dialog)
+        }
+        return out
+    }
+
+    /**
+     * ui thread only. A chat folder is app state rather than a TL object - stock keeps its own
+     * class for it, with the dialogs it currently resolves to - so it crosses as plain json.
+     */
+    private fun chatFoldersJson(controller: MessagesController, accountId: Int, policy: TlFilter.Policy): String {
+        val out = JSONArray()
+        for (folder in controller.getDialogFilters()) {
+            val title = JSONObject().put("text", folder.name.orEmpty())
+            if (folder.entities.isNotEmpty()) {
+                // through the one materialization point every other read uses, so a filtering rule
+                // it gains later reaches a folder title too
+                val entities = JSONArray()
+                for (entity in folder.entities) entities.put(TlJson.toJson(entity, policy))
+                title.put("entities", entities)
+            }
+            val pinned = JSONArray()
+            // the value is the pin position, so a plugin sees them in the order they are pinned in
+            // rather than whatever order the sparse array happens to hold them
+            val pins = ArrayList<Long>(folder.pinnedDialogs.size())
+            for (index in 0 until folder.pinnedDialogs.size()) pins.add(folder.pinnedDialogs.keyAt(index))
+            pins.sortBy { folder.pinnedDialogs.get(it, Int.MAX_VALUE) }
+            for (id in pins) {
+                if (DialogObject.isEncryptedDialog(id) || ParanoiaHelper.isHidden(accountId, id)) continue
+                pinned.put(id)
+            }
+            out.put(
+                JSONObject()
+                    .put("id", folder.id)
+                    .put("title", title)
+                    .put("emoticon", folder.inu_emoticon?.takeIf { it.isNotEmpty() } ?: JSONObject.NULL)
+                    // stock writes -1 for "no colour", which is not an index into anything
+                    .put("colorIndex", if (folder.color < 0) JSONObject.NULL else folder.color)
+                    .put("unreadCount", folder.unreadCount)
+                    .put("dialogCount", copyDialogs(accountId, folder.dialogs, 0).size)
+                    .put("isDefault", folder.isDefault)
+                    .put("isChatlist", folder.isChatlist)
+                    .put("pinned", pinned),
+            )
+        }
+        return out.toString()
     }
 
     private fun peerDialogId(peer: TLRPC.Peer?): Long = when {

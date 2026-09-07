@@ -1,0 +1,224 @@
+package desu.inugram.helpers.plugins
+
+import desu.inugram.core.plugins.PluginWire
+import desu.inugram.helpers.plugins.telegram.PluginReads
+import kotlin.test.assertEquals
+import kotlin.test.assertFalse
+import kotlin.test.assertTrue
+import org.json.JSONArray
+import org.junit.Before
+import org.junit.Test
+import org.telegram.messenger.DialogObject
+import org.telegram.messenger.MessagesController
+import org.telegram.tgnet.TLRPC
+
+/**
+ * `getDialogsCached`/`getChatFoldersCached`: the chat list the app already holds.
+ *
+ * They are asynchronous for one reason, which is the subject here - `allDialogs`, `dialogsByFolder`
+ * and `dialogFilters` belong to the ui thread, so the read hops to it, copies, and settles back on
+ * globalQueue. Everything below drives that whole exchange through [settle] rather than reading
+ * anything itself.
+ */
+class PluginChatListTest {
+    // not `self`: inside a `TL_user` builder that name is the object's own boolean field
+    private val selfId = 100L
+
+    @Before
+    fun setUp() {
+        resetBridge()
+        TestApp.signInAs(0, TLRPC.TL_user().apply { id = selfId; access_hash = selfId * 10 })
+    }
+
+    private fun granted() = startPlugin("chat-list", "account.read(self,peers,dialogs)")
+
+    private var nextRequestId = 1L
+
+    /** one whole exchange: the fetch, the ui hop it posts, and the settle that comes back */
+    private fun fetch(plugin: Plugin, op: Int, arg: String): String {
+        val requestId = nextRequestId++
+        plugin.js.fetchResults.clear()
+        val inline = plugin.js.listener!!.accountFetch(0, requestId, op, arg)
+        // a refusal answers inline and never posts; everything else parks
+        if (inline != null) return inline
+        settle()
+        return plugin.js.fetchResults.single { it.requestId == requestId }.resultWire
+    }
+
+    /** `archive`, `chatFolderId`, `limit` - the selector `reads.js` builds */
+    private fun cached(plugin: Plugin, archive: Int = 0, folder: Int = -1, limit: Int = 0): List<String> {
+        val wire = fetch(plugin, PluginReads.OP_DIALOGS_CACHED, "$archive\n$folder\n$limit")
+        if (wire.isEmpty()) return emptyList()
+        assertFalse(wire.startsWith("P") || wire.startsWith("E"), "unexpected error: $wire")
+        return wire.split("\n")
+    }
+
+    private fun folders(plugin: Plugin): JSONArray {
+        val value = PluginWire.decode(fetch(plugin, PluginReads.OP_CHAT_FOLDERS, ""))
+        return JSONArray((value as PluginWire.Value.Json).json)
+    }
+
+    private fun dialog(id: Long, date: Int, folderId: Int = 0) = TLRPC.TL_dialog().apply {
+        this.id = id
+        peer = if (id > 0) TLRPC.TL_peerUser().apply { user_id = id } else TLRPC.TL_peerChat().apply { chat_id = -id }
+        last_message_date = date
+        folder_id = folderId
+    }
+
+    /** seeds the app's own lists on the thread that owns them */
+    private fun seed(main: List<TLRPC.Dialog>, archived: List<TLRPC.Dialog> = emptyList()) = onUi {
+        val controller = MessagesController.getInstance(0)
+        controller.allDialogs.clear()
+        controller.dialogsByFolder.put(0, ArrayList(main))
+        controller.dialogsByFolder.put(1, ArrayList(archived))
+        controller.allDialogs.addAll(main)
+        controller.allDialogs.addAll(archived)
+        for (dialog in main + archived) controller.dialogs_dict.put(dialog.id, dialog)
+    }
+
+    private fun seedFilter(filter: MessagesController.DialogFilter) = onUi {
+        val controller = MessagesController.getInstance(0)
+        controller.dialogFilters.clear()
+        controller.dialogFilters.add(filter)
+        controller.dialogFiltersById.put(filter.id, filter)
+    }
+
+    @Test
+    fun the_main_list_is_what_an_omitted_archive_answers() {
+        val plugin = granted()
+        seed(main = listOf(dialog(222, 30), dialog(333, 20)), archived = listOf(dialog(444, 10, folderId = 1)))
+        assertEquals(2, cached(plugin).size)
+        assertEquals(1, cached(plugin, archive = 1).size)
+        assertEquals(3, cached(plugin, archive = 2).size)
+    }
+
+    @Test
+    fun a_limit_cuts_the_answer_and_keeps_the_apps_order() {
+        val plugin = granted()
+        seed(main = listOf(dialog(222, 30), dialog(333, 20), dialog(444, 10)))
+        assertEquals(3, cached(plugin).size)
+        assertEquals(2, cached(plugin, limit = 2).size)
+    }
+
+    /**
+     * `TL_dialogFolder` is the archive *row* the app splices into `allDialogs`. It has no peer at
+     * all, so a plugin typing the answer as `tl.TypeDialog` would be handed something that cannot
+     * answer `dialogId`.
+     */
+    @Test
+    fun the_archive_row_is_not_a_dialog() {
+        val plugin = granted()
+        val row = TLRPC.TL_dialogFolder().apply {
+            id = DialogObject.makeFolderDialogId(1)
+            folder = TLRPC.TL_folder().apply { this.id = 1 }
+        }
+        seed(main = listOf(row, dialog(222, 30)))
+        assertEquals(1, cached(plugin).size)
+    }
+
+    /**
+     * common.d.ts: "secret chats, which plugin code never reaches at all". Their dialog ids are
+     * *positive*, so nothing about the shape of one keeps it out - and `PeerSpecs.dialogIdOf`
+     * answers `null` for one, so a dialog handed out here would carry an id the rest of the
+     * surface refuses back.
+     */
+    @Test
+    fun no_cached_read_reaches_a_secret_chat() {
+        val plugin = granted()
+        val secret = DialogObject.makeEncryptedDialogId(7)
+        seed(main = listOf(dialog(secret, 40), dialog(222, 30)))
+        assertEquals(1, cached(plugin).size)
+        assertEquals(1, cached(plugin, archive = 2).size)
+
+        seedFilter(
+            MessagesController.DialogFilter().apply {
+                id = 7
+                name = "Work"
+                dialogs.add(dialog(secret, 40))
+                pinnedDialogs.put(secret, 0)
+            },
+        )
+        assertEquals(0, cached(plugin, folder = 7).size)
+        val folder = folders(plugin).getJSONObject(0)
+        assertEquals("[]", folder.getJSONArray("pinned").toString())
+        assertEquals(0, folder.getInt("dialogCount"))
+    }
+
+    @Test
+    fun an_account_with_no_chat_list_yet_answers_empty_rather_than_failing() {
+        val plugin = granted()
+        seed(main = emptyList())
+        onUi { MessagesController.getInstance(0).dialogFilters.clear() }
+        assertTrue(cached(plugin).isEmpty())
+        assertEquals(0, folders(plugin).length())
+    }
+
+    @Test
+    fun a_chat_folder_carries_its_title_pins_and_count() {
+        val plugin = granted()
+        seed(main = listOf(dialog(222, 30)))
+        seedFilter(
+            MessagesController.DialogFilter().apply {
+                id = 7
+                name = "Work"
+                color = 3
+                unreadCount = 4
+                dialogs.add(dialog(222, 30))
+                pinnedDialogs.put(333, 1)
+                pinnedDialogs.put(222, 0)
+            },
+        )
+        val folder = folders(plugin).getJSONObject(0)
+        assertEquals(7, folder.getInt("id"))
+        assertEquals("Work", folder.getJSONObject("title").getString("text"))
+        assertEquals(3, folder.getInt("colorIndex"))
+        assertEquals(4, folder.getInt("unreadCount"))
+        assertEquals(1, folder.getInt("dialogCount"))
+        assertFalse(folder.getBoolean("isDefault"))
+        // by pin position, not by whatever order the sparse array holds them in
+        assertEquals("[222,333]", folder.getJSONArray("pinned").toString())
+    }
+
+    @Test
+    fun a_folder_with_no_colour_answers_null_rather_than_stocks_minus_one() {
+        val plugin = granted()
+        seedFilter(MessagesController.DialogFilter().apply { id = 0; name = "All chats"; color = -1 })
+        val folder = folders(plugin).getJSONObject(0)
+        assertTrue(folder.isNull("colorIndex"))
+        assertTrue(folder.getBoolean("isDefault"))
+    }
+
+    @Test
+    fun naming_a_chat_folder_answers_that_folders_own_dialogs() {
+        val plugin = granted()
+        seed(main = listOf(dialog(222, 30), dialog(333, 20)))
+        seedFilter(
+            MessagesController.DialogFilter().apply {
+                id = 7
+                name = "Work"
+                dialogs.add(dialog(333, 20))
+            },
+        )
+        assertEquals(1, cached(plugin, folder = 7).size)
+    }
+
+    @Test
+    fun an_unknown_chat_folder_is_not_found_rather_than_empty() {
+        val plugin = granted()
+        seed(main = listOf(dialog(222, 30)))
+        val error = PluginWire.decode(fetch(plugin, PluginReads.OP_DIALOGS_CACHED, "0\n99\n0"))
+        assertEquals("not-found", (error as PluginWire.Value.PluginErr).code)
+    }
+
+    /** the gate runs on the side that owns the data, and a refusal never reaches the ui thread */
+    @Test
+    fun both_cached_reads_refuse_without_the_dialogs_scope() {
+        val plugin = startPlugin("chat-list-ungranted", "account.read(peers)")
+        seed(main = listOf(dialog(222, 30)))
+        for ((op, arg) in listOf(PluginReads.OP_DIALOGS_CACHED to "0\n-1\n0", PluginReads.OP_CHAT_FOLDERS to "")) {
+            val error = PluginWire.decode(fetch(plugin, op, arg)) as PluginWire.Value.PluginErr
+            assertEquals("not-granted", error.code, "op $op")
+            assertEquals("account.read(dialogs)", error.grant)
+        }
+    }
+}
