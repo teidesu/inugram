@@ -456,6 +456,87 @@ class PluginJvmTest {
         )
     }
 
+    // --- member resolution cache ---
+
+    /** the process-wide member table on [PluginJvm], by reflection: the cache is the fix */
+    @Suppress("UNCHECKED_CAST")
+    private fun tableCache(): MutableMap<Any, Any> =
+        PluginJvm::class.java.getDeclaredField("tableCache").apply { isAccessible = true }
+            .get(PluginJvm) as MutableMap<Any, Any>
+
+    /**
+     * `getDeclaredMethods()`/`getMethods()` allocate fresh `Method` objects every call, so resolving
+     * one member of a deep class walked and allocated thousands - per call. It is memoized now, and
+     * a rescan would not fail loudly, it would just be slow again.
+     */
+    @Test
+    fun a_class_is_scanned_once_however_many_of_its_members_are_used() {
+        val plugin = startPlugin("reflective", scoped)
+        val handle = plugin.mint(JvmFixture())
+        tableCache().clear()
+        val before = tableCache().size
+        repeat(5) { assertEquals("echo:hi", stringOf(plugin.jvm(PluginJvm.OP_CALL, handle, "echo", PluginWire.encodeString("hi")))) }
+        assertEquals(before + 1, tableCache().size, "five calls must add exactly one entry")
+
+        // a different member, and a field rather than a method: the one table already answers it
+        repeat(5) { plugin.jvm(PluginJvm.OP_GET, handle, "tag") }
+        assertEquals(before + 1, tableCache().size, "another member of the same class must not rescan it")
+    }
+
+    /**
+     * `getMethods()`/`getFields()` were the walk's most expensive call and only interface members
+     * needed them, so the table reaches interfaces itself. A constant is inherited from one; a
+     * static declared on one is not.
+     */
+    @Test
+    fun the_table_reaches_interface_members_without_getfields() {
+        val plugin = startPlugin("reflective", scoped)
+        val handle = plugin.mint(JvmFixture())
+        assertEquals("stamped", stringOf(plugin.jvm(PluginJvm.OP_GET, handle, "STAMP")))
+
+        val wire = plugin.jvm(PluginJvm.OP_CALL, handle, "notInherited")
+        assertEquals("not-found", (PluginWire.decode(wire) as PluginWire.Value.PluginErr).code)
+    }
+
+    /** the answer is shared between plugins; the permission gate on what it picks is not */
+    @Test
+    fun a_cached_member_is_still_refused_to_a_plugin_without_the_grant() {
+        val allowed = startPlugin("reflective", scoped)
+        tableCache().clear()
+        val handle = allowed.mint(JvmFixture())
+        assertEquals("echo:hi", stringOf(allowed.jvm(PluginJvm.OP_CALL, handle, "echo", PluginWire.encodeString("hi"))))
+        assertTrue(tableCache().isNotEmpty(), "the first plugin must have populated the cache")
+
+        // `hashCode` resolves off java.lang.Object, which this plugin's scope list does not cover -
+        // and the cache must not turn that into an answer
+        assertGrantRefusal("unsafe.jvm(java.lang.Object)", allowed.jvm(PluginJvm.OP_CALL, handle, "hashCode"))
+    }
+
+    /** a name that does not exist is answered out of the table too, not rescanned per attempt */
+    @Test
+    fun a_missing_member_stays_a_miss() {
+        val plugin = startPlugin("reflective", scoped)
+        tableCache().clear()
+        val handle = plugin.mint(JvmFixture())
+        repeat(3) {
+            val wire = plugin.jvm(PluginJvm.OP_GET, handle, "noSuchField")
+            assertEquals("not-found", (PluginWire.decode(wire) as PluginWire.Value.PluginErr).code)
+        }
+        assertEquals(1, tableCache().size)
+    }
+
+    /** overload selection still happens per call, against the cached candidates */
+    @Test
+    fun caching_the_candidates_does_not_freeze_which_overload_is_picked() {
+        val plugin = startPlugin("reflective", scoped)
+        tableCache().clear()
+        val handle = plugin.mint(JvmFixture())
+        assertEquals("int", stringOf(plugin.jvm(PluginJvm.OP_CALL, handle, "width", PluginWire.encodeInt(5))))
+        assertEquals("double", stringOf(plugin.jvm(PluginJvm.OP_CALL, handle, "width", PluginWire.encodeDouble(1.5))))
+        assertEquals("int", stringOf(plugin.jvm(PluginJvm.OP_CALL, handle, "width", PluginWire.encodeInt(7))))
+        assertEquals(1, tableCache().size, "both overloads come out of the one cached scan")
+    }
+
     private fun Plugin.jvm(op: Int, target: Long = 0, name: String = "", vararg args: String): String =
         js.listener!!.jvm(op, target, name, arrayOf(*args))
 

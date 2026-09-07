@@ -201,7 +201,8 @@ class PluginSharedHooksTest {
     @Test fun the_original_recursing_into_itself_dispatches_every_level_to_every_plugin() {
         val first = createPlugin("recursion first")
         val second = createPlugin("recursion second")
-        val target = JvmFixture::class.java.getDeclaredMethod("countHookDepth", Int::class.java)
+        val target = Class.forName("desu.inugram.jvmfixture.JvmFixtureKt")
+            .getDeclaredMethod("countHookDepth", Int::class.java)
         first.js.onXposedBefore = { arrayOf("P1", it.args[0]) }
         second.js.onXposedBefore = { arrayOf("P1", it.args[0]) }
         try {
