@@ -485,24 +485,13 @@ object PluginJvm {
         }
 
         private fun findField(cls: Class<*>, name: String): Field {
-            var current: Class<*>? = cls
-            while (current != null) {
-                for (field in current.declaredFields) {
-                    if (field.name != name) continue
-                    checkMember(field)
-                    field.isAccessible = true
-                    return field
-                }
-                current = current.superclass
-            }
-            // interface constants are not on the superclass chain
-            for (field in cls.fields) {
-                if (field.name != name) continue
-                checkMember(field)
-                field.isAccessible = true
-                return field
-            }
-            refuse("not-found", "jvm: ${cls.name} has no field named $name")
+            val field = cachedField(cls, name)
+                ?: refuse("not-found", "jvm: ${cls.name} has no field named $name")
+            // on the member the scan picked, never inside it: the scan is shared between plugins
+            // and this is the gate that is not
+            checkMember(field)
+            field.isAccessible = true
+            return field
         }
 
         private fun readField(field: Field, self: Any?): String = encodeValue(field.get(self))
@@ -519,9 +508,9 @@ object PluginJvm {
         }
 
         private fun callMethod(cls: Class<*>, self: Any?, name: String, args: List<Any?>): String {
-            val method = resolve(cls, name, args, staticOnly = self == null)
-            method.isAccessible = true
-            return encodeValue(method.invoke(self, *convertAll(method.parameterTypes, args)))
+            val info = resolve(cls, name, args, staticOnly = self == null)
+            info.method.isAccessible = true
+            return encodeValue(info.method.invoke(self, *convertAll(info.params, args)))
         }
 
         private fun invokePinned(method: Member, args: List<Any?>): String {
@@ -544,60 +533,61 @@ object PluginJvm {
         }
 
         private fun construct(cls: Class<*>, args: List<Any?>): String {
-            val candidates = cls.declaredConstructors.filter { matches(it.parameterTypes, args) }
+            val candidates = cachedConstructors(cls).filter { matches(it.params, args) }
             val ctor = pick(candidates, "${cls.name} constructor", args)
-            ctor.isAccessible = true
-            return encodeValue(ctor.newInstance(*convertAll(ctor.parameterTypes, args)))
+            val member = ctor.member as java.lang.reflect.Constructor<*>
+            member.isAccessible = true
+            return encodeValue(member.newInstance(*convertAll(ctor.params, args)))
         }
 
         private fun resolvePinned(cls: Class<*>, name: String): Member {
             val descriptor = descriptorIn(name)
             val simple = simpleName(name)
             if (simple == "<init>") {
-                val candidates = cls.declaredConstructors.filter { descriptor == null || descriptorOf(it) == descriptor }
+                val candidates = cachedConstructors(cls).filter { descriptor == null || it.descriptor == descriptor }
                 if (candidates.isEmpty()) refuse("not-found", "jvm: ${cls.name} has no constructor named $name")
                 if (candidates.size > 1) refuse("invalid-argument", "jvm: ${cls.name} constructor is overloaded; pin one with a descriptor")
-                val constructor = candidates[0]
+                val constructor = candidates[0].member
                 checkMember(constructor)
                 return constructor
             }
             val candidates = candidateMethods(cls, simple)
-                .filter { descriptor == null || descriptorOf(it) == descriptor }
+                .filter { descriptor == null || it.descriptor == descriptor }
             if (candidates.isEmpty()) refuse("not-found", "jvm: ${cls.name} has no method named $name")
             if (candidates.size > 1) {
                 refuse(
                     "invalid-argument",
                     "jvm: ${cls.name}.$simple is overloaded; pin one with a descriptor, e.g. " +
-                        candidates.take(3).joinToString(", ") { "$simple${descriptorOf(it)}" },
+                        candidates.take(3).joinToString(", ") { "$simple${it.descriptor}" },
                 )
             }
-            val method = candidates[0]
+            val method = candidates[0].member
             checkMember(method)
             return method
         }
 
-        private fun resolve(cls: Class<*>, name: String, args: List<Any?>, staticOnly: Boolean): Method {
+        private fun resolve(cls: Class<*>, name: String, args: List<Any?>, staticOnly: Boolean): MemberInfo {
             val descriptor = descriptorIn(name)
             val simple = simpleName(name)
             var candidates = candidateMethods(cls, simple)
-            if (staticOnly) candidates = candidates.filter { Modifier.isStatic(it.modifiers) }
+            if (staticOnly) candidates = candidates.filter { Modifier.isStatic(it.member.modifiers) }
             if (descriptor != null) {
-                candidates = candidates.filter { descriptorOf(it) == descriptor }
+                candidates = candidates.filter { it.descriptor == descriptor }
                 if (candidates.isEmpty()) refuse("not-found", "jvm: ${cls.name} has no method $name")
                 // pinning an overload says *which* one, never that the arguments fit: without this `convertAll` turns whatever does not convert into a null and java reports it from somewhere else
-                candidates = candidates.filter { matches(it.parameterTypes, args) }
+                candidates = candidates.filter { matches(it.params, args) }
                 if (candidates.isEmpty()) {
                     refuse("invalid-argument", "jvm: ${cls.name}.$name does not take these arguments")
                 }
             } else {
-                candidates = candidates.filter { matches(it.parameterTypes, args) }
+                candidates = candidates.filter { matches(it.params, args) }
             }
-            val method = pick(candidates, "${cls.name}.$simple", args)
-            checkMember(method)
-            return method
+            val info = pick(candidates, "${cls.name}.$simple", args)
+            checkMember(info.member)
+            return info
         }
 
-        private fun <T : Executable> pick(candidates: List<T>, what: String, args: List<Any?>): T {
+        private fun pick(candidates: List<MemberInfo>, what: String, args: List<Any?>): MemberInfo {
             if (candidates.isEmpty()) {
                 refuse("not-found", "jvm: no $what takes ${args.size} argument(s) of these types")
             }
@@ -609,31 +599,13 @@ object PluginJvm {
                 refuse(
                     "invalid-argument",
                     "jvm: $what is ambiguous for these arguments; pin one with a descriptor, e.g. " +
-                        candidates.take(3).joinToString(", ") { descriptorOf(it) },
+                        candidates.take(3).joinToString(", ") { it.descriptor },
                 )
             }
             return narrowest[0]
         }
 
-        private fun candidateMethods(cls: Class<*>, name: String): List<Method> {
-            val out = LinkedHashMap<String, Method>()
-            var current: Class<*>? = cls
-            while (current != null) {
-                for (method in current.declaredMethods) {
-                    if (method.name != name) continue
-                    val key = descriptorOf(method)
-                    // the most derived override wins, and an interface default is only reached through `methods` below
-                    if (!out.containsKey(key)) out[key] = method
-                }
-                current = current.superclass
-            }
-            for (method in cls.methods) {
-                if (method.name != name) continue
-                val key = descriptorOf(method)
-                if (!out.containsKey(key)) out[key] = method
-            }
-            return out.values.toList()
-        }
+        private fun candidateMethods(cls: Class<*>, name: String): List<MemberInfo> = cachedMethods(cls, name)
 
         private fun readRoutineResult(wire: String): Any? {
             if (!wire.startsWith("G")) return decodeArg(wire)
@@ -801,9 +773,9 @@ object PluginJvm {
     }
 
     /** a narrower numeric parameter wins and a more derived reference type beats a less derived one; anything still tied is refused rather than picked */
-    private fun moreSpecific(a: Executable, b: Executable): Boolean {
-        val pa = a.parameterTypes
-        val pb = b.parameterTypes
+    private fun moreSpecific(a: MemberInfo, b: MemberInfo): Boolean {
+        val pa = a.params
+        val pb = b.params
         if (pa.size != pb.size) return false
         var strictly = false
         for (i in pa.indices) {
@@ -843,6 +815,100 @@ object PluginJvm {
         val open = name.indexOf('(')
         return if (open < 0) name else name.substring(0, open)
     }
+
+    /**
+     * Member resolution, memoized process-wide, one table per class.
+     *
+     * `Class.getDeclaredMethods()` and `getMethods()` allocate a fresh array of fresh `Method`
+     * objects on every call - ART interns none of it - so resolving one member of a deep class
+     * walks and allocates thousands. Measured on a device: one `TextView` call cost ~5ms against
+     * ~0.1ms for a constructor on the same class, and a constructor is the one path that never
+     * reaches here. A plugin building android views paid that per call.
+     *
+     * The table is keyed by class, not by (class, member): the walk costs the same whether it
+     * answers one name or every name, and a plugin touches a dozen members of the same view class.
+     * Keyed by member, laying out one label rescanned `TextView` ten times over.
+     *
+     * The walk reaches interfaces itself rather than through `getMethods()`, which on a view class
+     * is the single most expensive call here - it merges and dedups the whole public method set, of
+     * which everything but the interface members is already covered by the superclass chain.
+     *
+     * The scan decides nothing about permissions - every caller runs `checkMember` on the member it
+     * picks, and overload selection still happens per call against the candidates - so the answer is
+     * shared, including between plugins.
+     *
+     * An LRU rather than a weak map: a `Method` strongly references the class that declared it, so
+     * weak keys would never clear for the entries that matter. The bound is what keeps a plugin's
+     * own `defineClass` types - and the whole member table of every class it ever touched - from
+     * accumulating.
+     */
+    private const val CLASS_CACHE_LIMIT = 256
+
+    /**
+     * `Executable.getParameterTypes()` allocates a fresh array every call, and every invoke asks for
+     * it twice - once to check the arguments fit and once to convert them. The descriptor is a
+     * string built from it, and a pinned call names one. Both are settled when the table is built.
+     */
+    private class MemberInfo(val member: Executable, val descriptor: String, val params: Array<Class<*>>) {
+        constructor(member: Executable) : this(member, descriptorOf(member), member.parameterTypes)
+
+        val method: Method get() = member as Method
+    }
+
+    private class MemberTable(cls: Class<*>) {
+        val methods: Map<String, List<MemberInfo>>
+        val constructors: List<MemberInfo>
+        val fields: Map<String, Field>
+
+        init {
+            val methods = HashMap<String, LinkedHashMap<String, MemberInfo>>()
+            val fields = HashMap<String, Field>()
+            val interfaces = LinkedHashSet<Class<*>>()
+            var current: Class<*>? = cls
+            while (current != null) {
+                for (method in current.declaredMethods) {
+                    // the most derived override wins, so the chain is walked downwards-first
+                    val info = MemberInfo(method)
+                    methods.getOrPut(method.name) { LinkedHashMap() }.putIfAbsent(info.descriptor, info)
+                }
+                for (field in current.declaredFields) fields.putIfAbsent(field.name, field)
+                collectInterfaces(current, interfaces)
+                current = current.superclass
+            }
+            // defaults and constants, which are not on the superclass chain
+            for (itf in interfaces) {
+                for (method in itf.declaredMethods) {
+                    // an interface's static and private methods are not inherited by what implements it
+                    if (Modifier.isStatic(method.modifiers) || Modifier.isPrivate(method.modifiers)) continue
+                    val info = MemberInfo(method)
+                    methods.getOrPut(method.name) { LinkedHashMap() }.putIfAbsent(info.descriptor, info)
+                }
+                for (field in itf.declaredFields) fields.putIfAbsent(field.name, field)
+            }
+            this.methods = methods.mapValues { it.value.values.toList() }
+            this.constructors = cls.declaredConstructors.map { MemberInfo(it) }
+            this.fields = fields
+        }
+    }
+
+    private fun collectInterfaces(cls: Class<*>, out: MutableSet<Class<*>>) {
+        for (itf in cls.interfaces) if (out.add(itf)) collectInterfaces(itf, out)
+    }
+
+    private val tableCache: MutableMap<Class<*>, MemberTable> = java.util.Collections.synchronizedMap(
+        object : LinkedHashMap<Class<*>, MemberTable>(64, 0.75f, true) {
+            override fun removeEldestEntry(eldest: MutableMap.MutableEntry<Class<*>, MemberTable>): Boolean =
+                size > CLASS_CACHE_LIMIT
+        },
+    )
+
+    private fun tableOf(cls: Class<*>): MemberTable = tableCache.getOrPut(cls) { MemberTable(cls) }
+
+    private fun cachedMethods(cls: Class<*>, name: String): List<MemberInfo> = tableOf(cls).methods[name] ?: emptyList()
+
+    private fun cachedConstructors(cls: Class<*>): List<MemberInfo> = tableOf(cls).constructors
+
+    private fun cachedField(cls: Class<*>, name: String): Field? = tableOf(cls).fields[name]
 
     private fun descriptorOf(member: Executable): String {
         val params = member.parameterTypes.joinToString("") { descriptorOf(it) }
