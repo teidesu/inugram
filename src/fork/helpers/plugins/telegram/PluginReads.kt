@@ -408,6 +408,18 @@ object PluginReads {
 
     private fun notCached(spec: String): Nothing = refuse("not-found", "${PeerSpecs.describeSpec(spec)} is not cached")
 
+    /**
+     * a page cursor's payload, which rust mints and hands back opaque: what it means is decided
+     * here and nowhere else, so a `0` is both "the caller named no cursor" and "this page starts
+     * at the beginning", which telegram spells the same way.
+     */
+    @JvmInline
+    private value class Cursor(private val fields: List<String>) {
+        fun int(index: Int): Int = fields.getOrNull(index)?.toIntOrNull() ?: 0
+
+        fun long(index: Int): Long = fields.getOrNull(index)?.toLongOrNull() ?: 0L
+    }
+
     private class Fetch(
         val plugin: Plugin,
         val engine: QuickJs,
@@ -422,11 +434,12 @@ object PluginReads {
 
         val limit: Int get() = clampLimit(parts.getOrNull(1))
 
-        val offsets: List<String> get() = parts.getOrNull(2).orEmpty().split(',')
-
         fun int(index: Int): Int = parts.getOrNull(index)?.toIntOrNull() ?: 0
 
-        fun offset(index: Int): Int = offsets.getOrNull(index)?.toIntOrNull() ?: 0
+        fun fields(index: Int): List<String>? = parts.getOrNull(index)?.takeIf { it.isNotEmpty() }?.split(FIELD_SEPARATOR)
+
+        /** [at] is how many parts the op's own argument has, because rust appends the payload after them */
+        fun cursor(at: Int): Cursor = Cursor(parts.getOrNull(at).orEmpty().split(','))
 
         fun peer(spec: String = this.spec, kind: Int = PeerSpecs.KIND_PEER): TLObject =
             when (val built = PeerSpecs.buildInputPeer(controller, accountId, spec, kind)) {
@@ -522,12 +535,14 @@ object PluginReads {
 
     private fun fetchDialogs(call: Fetch): String? {
         val pageLimit = call.limit
+        val fields = call.fields(2)
+        val from = call.cursor(3)
         val request = TLRPC.TL_messages_getDialogs()
         request.folder_id = call.int(0)
         request.limit = pageLimit
-        request.offset_date = call.offset(0)
-        request.offset_id = call.offset(1)
-        val offsetDialog = call.offsets.getOrNull(2)?.toLongOrNull() ?: 0L
+        request.offset_date = from.int(0)
+        request.offset_id = from.int(1)
+        val offsetDialog = from.long(2)
         // through the one decoder, so a cursor whose peer left the cache pages from the date alone
         // rather than from the zero `access_hash` stock's own getInputPeer would invent
         request.offset_peer =
@@ -549,7 +564,7 @@ object PluginReads {
                 }?.date ?: 0
                 "$date,${last.top_message},$dialogId"
             }
-            cursor + PeerSpecs.LIST_SEPARATOR + mintEach(call.handles, page.dialogs)
+            cursor + PeerSpecs.LIST_SEPARATOR + mintEach(call.handles, page.dialogs, fields)
         }
     }
 
@@ -562,9 +577,10 @@ object PluginReads {
         val request = TL_forum.TL_messages_getForumTopics()
         request.peer = call.peer() as TLRPC.InputPeer
         request.limit = pageLimit
-        request.offset_date = call.offset(0)
-        request.offset_id = call.offset(1)
-        request.offset_topic = call.offset(2)
+        val from = call.cursor(2)
+        request.offset_date = from.int(0)
+        request.offset_id = from.int(1)
+        request.offset_topic = from.int(2)
         return send(call, request) { response ->
             val page = (response as? TLRPC.TL_messages_forumTopics) ?: return@send PeerSpecs.LIST_SEPARATOR
             call.cache(page.users, page.chats)

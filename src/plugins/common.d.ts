@@ -455,14 +455,25 @@ declare namespace inu {
     /** @needs-grant account.read(peers) */
     getChatFull(peer: InputPeerLike): Promise<tl.TypeChatFull | null>
 
-    /** @needs-grant account.read(dialogs) */
+    /**
+     * `fields` names the fields you are going to read, exactly as {@link getDialogsCached} takes
+     * them: their values cross with the dialogs rather than one at a time when you touch them.
+     *
+     * @needs-grant account.read(dialogs)
+     */
     getDialogs(options?: {
       folderId?: number
       limit?: number
+      fields?: readonly string[]
       cursor?: Cursor<'dialogs'>
     }): Promise<Paged<tl.TypeDialog, 'dialogs'>>
-    /** @needs-grant account.read(dialogs). `batchSize` defaults to (omitted, **100**, which is telegram's own page). */
-    iterDialogs(options?: { folderId?: number, limit?: number, batchSize?: number }): AsyncIterableIterator<tl.TypeDialog>
+    /** @needs-grant account.read(dialogs). `batchSize` defaults to (omitted, **100**, which is telegram's own page). `fields` is passed to every page. */
+    iterDialogs(options?: {
+      folderId?: number
+      limit?: number
+      batchSize?: number
+      fields?: readonly string[]
+    }): AsyncIterableIterator<tl.TypeDialog>
 
     /**
      * The dialogs the app already holds in memory, ordered the way the chat list orders them:
