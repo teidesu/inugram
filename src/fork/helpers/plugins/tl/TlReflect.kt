@@ -98,9 +98,24 @@ object TlReflect {
 
         val isScalar: Boolean = type == String::class.java || type.isPrimitive
 
+        /** which [Field] getter answers without boxing; [KIND_OTHER] has to go through `get` */
+        val kind: Int = when (type) {
+            java.lang.Long.TYPE -> KIND_LONG
+            Integer.TYPE -> KIND_INT
+            java.lang.Boolean.TYPE -> KIND_BOOL
+            java.lang.Double.TYPE -> KIND_DOUBLE
+            else -> KIND_OTHER
+        }
+
         fun isPresent(obj: TLObject): Boolean =
             wordField == null || gate == null || (wordField.getInt(obj) and (1 shl gate.bit)) != 0
     }
+
+    const val KIND_OTHER = 0
+    const val KIND_LONG = 1
+    const val KIND_INT = 2
+    const val KIND_BOOL = 3
+    const val KIND_DOUBLE = 4
 
     fun fieldInfos(cls: Class<*>): Map<String, FieldInfo> = infosByClass.getOrPut(cls) {
         val fields = publicFields(cls)

@@ -1,4 +1,5 @@
 use std::cell::{Cell, RefCell};
+use std::collections::HashMap;
 use std::rc::Rc;
 
 use base64::engine::general_purpose::STANDARD;
@@ -14,8 +15,39 @@ use crate::api::error::PluginErrorCode;
 
 const BYTES_MARKER_KEY: &str = "$inuBytes";
 
+/// what [`TlHost::read_field`] answers when it will not serve a read, sending it back to `tl_get`
+pub const ORDINAL_FALLBACK: i32 = -1;
+
+/// tags in the read buffer, mirrored in `TlHandles.kt`
+mod tag {
+  pub const NULL: u8 = 0;
+  pub const BOOL: u8 = 1;
+  pub const INT: u8 = 2;
+  pub const LONG: u8 = 3;
+  pub const DOUBLE: u8 = 4;
+  pub const STRING: u8 = 5;
+  pub const BYTES: u8 = 6;
+  pub const HANDLE: u8 = 7;
+  pub const HANDLE_PROJECTED: u8 = 8;
+}
+
 pub trait TlHost {
   fn tl_get(&self, handle: i64, key: &str) -> String;
+
+  /// the ordinal [`Self::read_field`] takes for this field, or [`ORDINAL_FALLBACK`]
+  fn tl_resolve_field(&self, _class_id: i32, _key: &str) -> i32 {
+    ORDINAL_FALLBACK
+  }
+
+  /// bytes written into [`Self::read_buffer`], or [`ORDINAL_FALLBACK`] to read it by name instead
+  fn tl_read_field(&self, _handle: i64, _class_id: i32, _ordinal: i32) -> i32 {
+    ORDINAL_FALLBACK
+  }
+
+  /// the host's reply buffer, valid until the next call into the host
+  fn read_buffer(&self) -> &[u8] {
+    &[]
+  }
   fn tl_set(&self, handle: i64, key: &str, value_wire: &str) -> Option<String>;
   fn tl_has(&self, handle: i64, key: &str) -> i32;
   fn tl_own_keys(&self, handle: i64) -> Option<String>;
@@ -33,6 +65,8 @@ struct HandleBox<'js> {
   is_vector: bool,
   read_only: bool,
   life: ViewLife,
+  /// what the handle's wire named, or [`ORDINAL_FALLBACK`] when it named nothing
+  class_id: i32,
   stamp: Cell<u64>,
   /// what survives a write anywhere: the type name and the `toJSON` function
   perm: RefCell<Option<Object<'js>>>,
@@ -109,15 +143,31 @@ impl<'js> TlShared<'js> {
 pub struct TlViews {
   host: Rc<dyn TlHost>,
   epoch: Cell<u64>,
+  /// `(class, field) -> ordinal`, a refusal included: neither answer ever changes for a class
+  ordinals: RefCell<HashMap<i32, HashMap<String, i32>>>,
 }
 
 impl TlViews {
   pub fn new(host: Rc<dyn TlHost>) -> Rc<Self> {
-    Rc::new(Self { host, epoch: Cell::new(0) })
+    Rc::new(Self { host, epoch: Cell::new(0), ordinals: RefCell::new(HashMap::new()) })
   }
 
   fn epoch(&self) -> u64 {
     self.epoch.get()
+  }
+
+  fn ordinal_of(&self, host: &dyn TlHost, class_id: i32, key: &str) -> i32 {
+    if let Some(known) = self.ordinals.borrow().get(&class_id).and_then(|fields| fields.get(key)) {
+      return *known;
+    }
+    let ordinal = host.tl_resolve_field(class_id, key);
+    self
+      .ordinals
+      .borrow_mut()
+      .entry(class_id)
+      .or_default()
+      .insert(key.to_string(), ordinal);
+    ordinal
   }
 
   fn bump(&self) {
@@ -138,9 +188,9 @@ impl TlViews {
     }
     match tag {
       'H' => {
-        let (is_vector, read_only, id, projection) =
+        let (is_vector, read_only, id, class_id, projection) =
           parse_handle(payload).ok_or_else(|| Exception::throw_message(ctx, "tl wire: bad handle"))?;
-        build_proxy(ctx, self.clone(), is_vector, read_only, life, id, projection)?.into_js(ctx)
+        build_proxy(ctx, self.clone(), is_vector, read_only, life, id, class_id, projection)?.into_js(ctx)
       }
       'J' => json_parse_tl(ctx, payload),
       other => throw_tl(ctx, &format!("tl wire: unknown tag '{other}'")),
@@ -187,11 +237,14 @@ const THEN_KEY: &str = "then";
 /// the object in hand, as JSON, so reading them never crosses. `PluginWire.encodeHandle` writes it.
 const PROJECTION_SEPARATOR: char = '|';
 
+/// mirrored by `PluginWire.CLASS_SEPARATOR`
+const CLASS_SEPARATOR: char = '.';
+
 fn encode_handle(is_vector: bool, read_only: bool, id: i64) -> String {
   format!("H{}{}{}", if is_vector { 'V' } else { 'O' }, if read_only { 'R' } else { 'W' }, id)
 }
 
-fn parse_handle(payload: &str) -> Option<(bool, bool, i64, Option<&str>)> {
+fn parse_handle(payload: &str) -> Option<(bool, bool, i64, i32, Option<&str>)> {
   let mut chars = payload.chars();
   let is_vector = match chars.next()? {
     'O' => false,
@@ -208,7 +261,87 @@ fn parse_handle(payload: &str) -> Option<(bool, bool, i64, Option<&str>)> {
     Some((id, projection)) => (id, Some(projection)),
     None => (rest, None),
   };
-  Some((is_vector, read_only, id.parse().ok()?, projection))
+  // the class id is written after the id, so a wire from a minter that names no class parses here
+  // exactly as it did before there was one
+  let (id, class_id) = match id.split_once(CLASS_SEPARATOR) {
+    Some((id, class_id)) => (id, class_id.parse().ok()?),
+    None => (id, ORDINAL_FALLBACK),
+  };
+  Some((is_vector, read_only, id.parse().ok()?, class_id, projection))
+}
+
+/// reads what [`TlHost::read_field`] wrote. Every length it trusts was written by the host beside
+/// the bytes it counts, so a short read is a bug on that side rather than a plugin's doing
+struct Reader<'a> {
+  bytes: &'a [u8],
+  at: usize,
+}
+
+impl<'a> Reader<'a> {
+  fn take(&mut self, count: usize) -> Option<&'a [u8]> {
+    let end = self.at.checked_add(count)?;
+    let slice = self.bytes.get(self.at..end)?;
+    self.at = end;
+    Some(slice)
+  }
+
+  fn u8(&mut self) -> Option<u8> {
+    self.take(1).map(|b| b[0])
+  }
+
+  fn i32(&mut self) -> Option<i32> {
+    self.take(4).and_then(|b| b.try_into().ok()).map(i32::from_le_bytes)
+  }
+
+  fn i64(&mut self) -> Option<i64> {
+    self.take(8).and_then(|b| b.try_into().ok()).map(i64::from_le_bytes)
+  }
+
+  fn f64(&mut self) -> Option<f64> {
+    self.take(8).and_then(|b| b.try_into().ok()).map(f64::from_le_bytes)
+  }
+
+  fn str(&mut self) -> Option<&'a str> {
+    let len = self.i32()?;
+    std::str::from_utf8(self.take(usize::try_from(len).ok()?)?).ok()
+  }
+}
+
+fn decode_read<'js>(
+  ctx: &Ctx<'js>,
+  views: &Rc<TlViews>,
+  life: ViewLife,
+  bytes: &[u8],
+) -> JsResult<Value<'js>> {
+  let mut reader = Reader { bytes, at: 0 };
+  let bad = || Exception::throw_message(ctx, "tl read: malformed reply");
+  let tag = reader.u8().ok_or_else(bad)?;
+  match tag {
+    tag::NULL => Ok(Value::new_null(ctx.clone())),
+    tag::BOOL => Ok(Value::new_bool(ctx.clone(), reader.u8().ok_or_else(bad)? != 0)),
+    tag::INT => reader.i32().ok_or_else(bad)?.into_js(ctx),
+    // a tl long is a string on this surface, as `android.tl.d.ts` types it
+    tag::LONG => reader.i64().ok_or_else(bad)?.to_string().into_js(ctx),
+    tag::DOUBLE => reader.f64().ok_or_else(bad)?.into_js(ctx),
+    tag::STRING => reader.str().ok_or_else(bad)?.into_js(ctx),
+    tag::BYTES => {
+      let len = reader.i32().ok_or_else(bad)?;
+      let bytes = reader.take(usize::try_from(len).map_err(|_| bad())?).ok_or_else(bad)?;
+      make_bytes_value(ctx, bytes.to_vec())
+    }
+    tag::HANDLE | tag::HANDLE_PROJECTED => {
+      let flags = reader.u8().ok_or_else(bad)?;
+      let id = reader.i64().ok_or_else(bad)?;
+      let class_id = reader.i32().ok_or_else(bad)?;
+      let projection = if tag == tag::HANDLE_PROJECTED {
+        Some(reader.str().ok_or_else(bad)?)
+      } else {
+        None
+      };
+      build_view(ctx, views.clone(), flags & 1 != 0, flags & 2 != 0, life, id, class_id, projection)?.into_js(ctx)
+    }
+    _ => Err(bad()),
+  }
 }
 
 pub fn encode_error(message: &str) -> String {
@@ -461,13 +594,35 @@ impl<'js> HandleBox<'js> {
         return Ok(value);
       }
     }
-    let wire = self.host().tl_get(self.handle, key);
-    let value = self.views.wire_to_js_value(ctx, &wire, self.life)?;
+    let value = match self.read_by_ordinal(ctx, key)? {
+      Some(value) => value,
+      None => {
+        let wire = self.host().tl_get(self.handle, key);
+        self.views.wire_to_js_value(ctx, &wire, self.life)?
+      }
+    };
     if self.cacheable() && !Self::reserved(key) {
       let section = if key == TYPE_KEY { self.perm(ctx)? } else { self.vol(ctx)? };
       section.set(key, value.clone())?;
     }
     Ok(value)
+  }
+
+  /// `None` when the host will not serve this field by ordinal and it has to be read by name
+  fn read_by_ordinal(&self, ctx: &Ctx<'js>, key: &str) -> JsResult<Option<Value<'js>>> {
+    if self.class_id == ORDINAL_FALLBACK {
+      return Ok(None);
+    }
+    let ordinal = self.views.ordinal_of(self.host(), self.class_id, key);
+    if ordinal == ORDINAL_FALLBACK {
+      return Ok(None);
+    }
+    let Ok(written) = usize::try_from(self.host().tl_read_field(self.handle, self.class_id, ordinal)) else {
+      return Ok(None);
+    };
+    let host = self.host();
+    let bytes = host.read_buffer().get(..written).ok_or_else(|| Exception::throw_message(ctx, "tl read: short reply"))?;
+    decode_read(ctx, &self.views, self.life, bytes).map(Some)
   }
 
   fn has_field(&self, ctx: &Ctx<'js>, key: &str) -> JsResult<bool> {
@@ -724,6 +879,7 @@ fn build_handler<'js>(ctx: &Ctx<'js>) -> JsResult<Object<'js>> {
   Ok(handler)
 }
 
+#[allow(clippy::too_many_arguments)]
 fn build_proxy<'js>(
   ctx: &Ctx<'js>,
   views: Rc<TlViews>,
@@ -731,9 +887,10 @@ fn build_proxy<'js>(
   read_only: bool,
   life: ViewLife,
   handle: i64,
+  class_id: i32,
   projection: Option<&str>,
 ) -> JsResult<Proxy<'js>> {
-  build_view(ctx, views, is_vector, read_only, life, handle, projection)
+  build_view(ctx, views, is_vector, read_only, life, handle, class_id, projection)
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -744,6 +901,7 @@ fn build_view<'js>(
   read_only: bool,
   life: ViewLife,
   handle: i64,
+  class_id: i32,
   projection: Option<&str>,
 ) -> JsResult<Proxy<'js>> {
   let (handler, _) = TlShared::get(ctx)?;
@@ -756,6 +914,7 @@ fn build_view<'js>(
       is_vector,
       read_only,
       life,
+      class_id,
       stamp: Cell::new(stamp),
       perm: RefCell::new(None),
       vol: RefCell::new(None),

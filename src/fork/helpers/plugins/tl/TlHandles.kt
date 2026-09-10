@@ -11,6 +11,7 @@ import desu.inugram.helpers.plugins.QuickJs
 import desu.inugram.helpers.plugins.TlListener
 import java.lang.reflect.ParameterizedType
 import java.lang.reflect.Type
+import java.nio.ByteBuffer
 import java.util.Collections
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.atomic.AtomicLong
@@ -132,6 +133,120 @@ class TlHandles(private val policy: TlFilter.Policy) : TlListener {
             else -> PluginWire.encodeError("internal: unsupported handle target ${target.javaClass}")
         }
     }
+
+    /**
+     * The by-ordinal read rust prefers over [tlGet]: no name to hash, no wire to build, and the
+     * value lands in [out] as bytes rather than as a string that both sides then parse.
+     *
+     * Answers [ORDINAL_FALLBACK] for anything it will not serve - an unknown handle, a class that
+     * is not the one the ordinal was resolved against, a value shape with no tag, a payload larger
+     * than the buffer - and rust reads that field through [tlGet] instead. Every refusal is
+     * therefore a slow read, never a wrong one.
+     */
+    override fun readField(handle: Long, classId: Int, ordinal: Int, out: ByteBuffer): Int {
+        val entry = table[handle] ?: return ORDINAL_FALLBACK
+        val target = entry.target as? TLObject ?: return ORDINAL_FALLBACK
+        // the id indexes its slot, so this costs an array read rather than the hash of a class.
+        // The class still has to be the one the handle holds, or a forged handle would turn an
+        // ordinal resolved for one class into a read of whatever field sits at that index on another
+        val slot = slotById(classId) ?: return ORDINAL_FALLBACK
+        if (slot.cls !== target.javaClass) return ORDINAL_FALLBACK
+        val info = slot.fields.getOrNull(ordinal) ?: return ORDINAL_FALLBACK
+        out.clear()
+        return try {
+            if (writeField(out, entry, target, info)) out.position() else ORDINAL_FALLBACK
+        } catch (e: java.nio.BufferOverflowException) {
+            ORDINAL_FALLBACK
+        }
+    }
+
+    override fun resolveField(classId: Int, key: String): Int =
+        slotById(classId)?.ordinals?.get(key) ?: ORDINAL_FALLBACK
+
+    private fun writeField(out: ByteBuffer, entry: HandleEntry, target: TLObject, info: TlReflect.FieldInfo): Boolean {
+        if (info.isFlagWord || TlFilter.hidesField(policy, info) || !info.isPresent(target)) {
+            out.put(TAG_NULL)
+            return true
+        }
+        // the unboxed getters, for the fields a plugin actually reads in bulk
+        when (info.kind) {
+            TlReflect.KIND_LONG -> {
+                out.put(TAG_LONG).putLong(info.field.getLong(target))
+                return true
+            }
+            TlReflect.KIND_INT -> {
+                out.put(TAG_INT).putInt(info.field.getInt(target))
+                return true
+            }
+            TlReflect.KIND_BOOL -> {
+                out.put(TAG_BOOL).put(if (info.field.getBoolean(target)) 1.toByte() else 0.toByte())
+                return true
+            }
+            TlReflect.KIND_DOUBLE -> {
+                out.put(TAG_DOUBLE).putDouble(info.field.getDouble(target))
+                return true
+            }
+        }
+        val raw = try {
+            info.field.get(target)
+        } catch (e: Exception) {
+            return false
+        }
+        val value = if (policy.takeover && info.redactedInTakeover) {
+            TlFilter.filterFieldValue(target, info.field.name, raw)
+        } else {
+            raw
+        }
+        val readOnly = entry.readOnly || (policy.takeover && info.sealedInTakeover)
+        when (value) {
+            null -> out.put(TAG_NULL)
+            is String -> putString(out.put(TAG_STRING), value)
+            is Long -> out.put(TAG_LONG).putLong(value)
+            is Int -> out.put(TAG_INT).putInt(value)
+            is Short -> out.put(TAG_INT).putInt(value.toInt())
+            is Byte -> out.put(TAG_INT).putInt(value.toInt())
+            is Boolean -> out.put(TAG_BOOL).put(if (value) 1.toByte() else 0.toByte())
+            is Double -> out.put(TAG_DOUBLE).putDouble(value)
+            is Float -> out.put(TAG_DOUBLE).putDouble(value.toDouble())
+            is ByteArray -> out.put(TAG_BYTES).putInt(value.size).put(value)
+            is TLObject -> putHandle(
+                out,
+                vector = false,
+                id = register(HandleEntry(value, null, entry.scopeId, readOnly)),
+                readOnly = readOnly,
+                classId = classIdOf(value.javaClass),
+            )
+            is ArrayList<*> -> putHandle(
+                out,
+                vector = true,
+                id = mint(
+                    value,
+                    elementTypeOf(info.genericType),
+                    entry.scopeId,
+                    readOnly,
+                    flagOwner = target to info.field.name,
+                ),
+                readOnly = readOnly,
+                classId = PluginWire.NO_CLASS,
+            )
+            // a json snapshot and every error shape stay on the by-name path, which already
+            // spells them out; neither is worth a tag of its own
+            else -> return false
+        }
+        return true
+    }
+
+    private fun putHandle(out: ByteBuffer, vector: Boolean, id: Long, readOnly: Boolean, classId: Int) {
+        val flags = (if (vector) 1 else 0) or (if (readOnly) 2 else 0)
+        out.put(TAG_HANDLE).put(flags.toByte()).putLong(id).putInt(classId)
+    }
+
+    private fun putString(out: ByteBuffer, value: String) {
+        val bytes = value.toByteArray(Charsets.UTF_8)
+        out.putInt(bytes.size).put(bytes)
+    }
+
+    fun classIdOf(cls: Class<*>): Int = slotOf(cls).id
 
     override fun tlSet(handle: Long, key: String, valueWire: String): String? {
         val entry = table[handle] ?: return PluginWire.encodeExpired()
@@ -358,6 +473,7 @@ class TlHandles(private val policy: TlFilter.Policy) : TlListener {
                 vector = false,
                 id = register(HandleEntry(value, null, entry.scopeId, readOnly)),
                 readOnly = readOnly,
+                classId = classIdOf(value.javaClass),
             )
             is ArrayList<*> -> PluginWire.encodeHandle(
                 vector = true,
@@ -460,6 +576,50 @@ class TlHandles(private val policy: TlFilter.Policy) : TlListener {
         // on every handle of a page of them, cross as one string and stay in the view's cache
         // whether or not the plugin ever reads it. Anything longer is left to the lazy read.
         private const val PROJECTION_STRING_LIMIT = 256
+
+        /**
+         * A class's fields in the order [TlReflect.fieldInfos] settled them, so rust can name one
+         * by index. The id indexes [slotsById], and both sides only ever agree about an id rust was
+         * handed on a handle wire.
+         */
+        private class ClassSlot(
+            val id: Int,
+            val cls: Class<*>,
+            val fields: Array<TlReflect.FieldInfo>,
+            val ordinals: Map<String, Int>,
+        )
+
+        private val slotsByClass = java.util.concurrent.ConcurrentHashMap<Class<*>, ClassSlot>()
+
+        // append-only, so a read by id never sees a half-built slot. Guarded by [slotLock] on write
+        @Volatile
+        private var slotsById: Array<ClassSlot> = emptyArray()
+        private val slotLock = Any()
+
+        private fun slotOf(cls: Class<*>): ClassSlot = slotsByClass[cls] ?: synchronized(slotLock) {
+            slotsByClass.getOrPut(cls) {
+                val infos = TlReflect.fieldInfos(cls)
+                val ordinals = HashMap<String, Int>(infos.size)
+                for ((index, name) in infos.keys.withIndex()) ordinals[name] = index
+                val slot = ClassSlot(slotsById.size, cls, infos.values.toTypedArray(), ordinals)
+                slotsById += slot
+                slot
+            }
+        }
+
+        private fun slotById(id: Int): ClassSlot? = slotsById.getOrNull(id)
+
+        const val ORDINAL_FALLBACK = -1
+
+        // mirrored in src/native/src/api/tl/proxy.rs
+        private const val TAG_NULL = 0.toByte()
+        private const val TAG_BOOL = 1.toByte()
+        private const val TAG_INT = 2.toByte()
+        private const val TAG_LONG = 3.toByte()
+        private const val TAG_DOUBLE = 4.toByte()
+        private const val TAG_STRING = 5.toByte()
+        private const val TAG_BYTES = 6.toByte()
+        private const val TAG_HANDLE = 7.toByte()
 
         private val quotedTypeNames = java.util.concurrent.ConcurrentHashMap<Class<*>, String>()
         private val typeOnlyProjections = java.util.concurrent.ConcurrentHashMap<Class<*>, String>()

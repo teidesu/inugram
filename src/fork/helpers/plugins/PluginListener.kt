@@ -216,6 +216,17 @@ interface TlListener {
     /** proxy `get` trap; `key == "_"` reads the TL type name, `"length"` a vector's size */
     fun tlGet(handle: Long, key: String): String
 
+    /**
+     * The same read as [tlGet], by field ordinal and into [out] as bytes. Answers the byte count,
+     * or [TlHandles.ORDINAL_FALLBACK] for anything it declines to serve, which sends rust back to
+     * [tlGet] for that field. [classId] is what the handle's wire named, and an implementation must
+     * refuse an ordinal whose class is not the one the handle actually holds.
+     */
+    fun readField(handle: Long, classId: Int, ordinal: Int, out: java.nio.ByteBuffer): Int
+
+    /** the ordinal [readField] takes for [key] on [classId], or [TlHandles.ORDINAL_FALLBACK] */
+    fun resolveField(classId: Int, key: String): Int
+
     /** [valueWire] is `N` for `deleteProperty` */
     fun tlSet(handle: Long, key: String, valueWire: String): String?
 
