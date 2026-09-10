@@ -1036,7 +1036,7 @@ fn handle_wire_roundtrip() {
   for is_vector in [false, true] {
     for read_only in [false, true] {
       let wire = encode_handle(is_vector, read_only, 42);
-      assert_eq!(parse_handle(&wire[1..]), Some((is_vector, read_only, 42, None)));
+      assert_eq!(parse_handle(&wire[1..]), Some((is_vector, read_only, 42, ORDINAL_FALLBACK, None)));
     }
   }
   assert_eq!(encode_handle(false, false, 1), "HOW1");

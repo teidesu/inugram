@@ -49,8 +49,25 @@ class PluginBridge(
     override fun onRandomBytes(count: Int): ByteArray =
         ByteArray(count).also { secureRandom.nextBytes(it) }
 
+    /**
+     * Where [TlListener.readField] puts a value and rust reads it, at the address it took once from
+     * this buffer. One per engine and reused by every read, which is safe because a TL read only
+     * ever originates from JS and the engine lease admits one thread at a time.
+     *
+     * Little-endian to match every other binary the engine carries. A value too big for it is
+     * refused by the writer rather than truncated, and read again through `tlGet`.
+     */
+    private val tlReplies: java.nio.ByteBuffer =
+        java.nio.ByteBuffer.allocateDirect(TL_REPLY_BYTES).order(java.nio.ByteOrder.LITTLE_ENDIAN)
+
+    fun tlBuffer(): java.nio.ByteBuffer = tlReplies
+
+    fun tlReadField(handle: Long, classId: Int, ordinal: Int): Int = tl.readField(handle, classId, ordinal, tlReplies)
+
     private companion object {
         val secureRandom = java.security.SecureRandom()
+
+        const val TL_REPLY_BYTES = 64 * 1024
     }
 }
 

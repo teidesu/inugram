@@ -1,4 +1,4 @@
-use jni::objects::{Auto, Global, JByteArray, JMethodID, JObject, JObjectArray, JString, JValue};
+use jni::objects::{Auto, Global, JByteArray, JByteBuffer, JMethodID, JObject, JObjectArray, JString, JValue};
 use jni::refs::IntoAuto;
 use jni::signature::{MethodSignature, Primitive, ReturnType, RuntimeMethodSignature};
 use jni::strings::JNIString;
@@ -35,6 +35,8 @@ const CALLER_THREAD_HOSTS: &[&str] = &[
   "openPage",
   "timerSchedule",
   "tlGet",
+  "tlReadField",
+  "tlResolveField",
   "tlSet",
   "tlHas",
   "tlOwnKeys",
@@ -42,6 +44,11 @@ const CALLER_THREAD_HOSTS: &[&str] = &[
   "tlRelease",
   "kv",
 ];
+
+thread_local! {
+  /// `thread::current()` clones a handle to answer this, and a callback asks on every call
+  static CURRENT_THREAD: ThreadId = thread::current().id();
+}
 
 pub(crate) struct JniBridge {
   owner_thread: ThreadId,
@@ -58,6 +65,8 @@ pub(crate) struct JniBridge {
   pub(crate) on_intercept_update_unregister: JMethodID,
   pub(crate) on_update_verdict: JMethodID,
   pub(crate) on_tl_get: JMethodID,
+  pub(crate) on_tl_read_field: JMethodID,
+  pub(crate) on_tl_resolve_field: JMethodID,
   pub(crate) on_tl_set: JMethodID,
   pub(crate) on_tl_has: JMethodID,
   pub(crate) on_tl_own_keys: JMethodID,
@@ -100,6 +109,12 @@ pub(crate) struct JniBridge {
   pub(crate) on_jvm: JMethodID,
   pub(crate) on_jvm_resolve: JMethodID,
   pub(crate) on_xposed: JMethodID,
+  /// where `tlReadField` puts a value. Written by the host and read here between the call and the
+  /// next one, which is exclusive because a TL read only ever runs under the engine lease
+  read_buffer: *mut u8,
+  read_buffer_len: usize,
+  /// what keeps the buffer, and so the address above, alive for as long as this bridge
+  _read_buffer_ref: Global<JObject<'static>>,
 }
 
 impl JniBridge {
@@ -107,6 +122,22 @@ impl JniBridge {
     let target = env.new_global_ref(this).ok()?;
     let console_target = env.new_global_ref(this).ok()?;
     let class = env.get_object_class(this).ok()?;
+
+    // taken before the id cache below borrows `env` for the rest of the constructor
+    let tl_buffer_sig = RuntimeMethodSignature::from_str("()Ljava/nio/ByteBuffer;").ok()?;
+    let tl_buffer = env
+      .get_method_id(&class, JNIString::from("tlBuffer"), MethodSignature::from(&tl_buffer_sig))
+      .ok()?;
+    let buffer = unsafe { env.call_method_unchecked(this, tl_buffer, ReturnType::Object, &[]) };
+    if clear_exception(env) {
+      return None;
+    }
+    let buffer = buffer.and_then(|value| value.l()).ok()?;
+    let read_buffer_ref = env.new_global_ref(&buffer).ok()?;
+    let buffer = unsafe { JByteBuffer::from_raw(env, buffer.into_raw()) }.auto();
+    let read_buffer = env.get_direct_buffer_address(&buffer).ok()?;
+    let read_buffer_len = env.get_direct_buffer_capacity(&buffer).ok()?;
+
     let mut method = |name: &str, sig: &str| {
       let parsed = RuntimeMethodSignature::from_str(sig).ok();
       let found = parsed
@@ -145,6 +176,8 @@ impl JniBridge {
       on_intercept_update_unregister: method("onInterceptUpdateUnregister", "(I)V")?,
       on_update_verdict: method("onUpdateVerdict", "(JZ)V")?,
       on_tl_get: method("tlGet", "(JLjava/lang/String;)Ljava/lang/String;")?,
+      on_tl_read_field: method("tlReadField", "(JII)I")?,
+      on_tl_resolve_field: method("resolveField", "(ILjava/lang/String;)I")?,
       on_tl_set: method("tlSet", "(JLjava/lang/String;Ljava/lang/String;)Ljava/lang/String;")?,
       on_tl_has: method("tlHas", "(JLjava/lang/String;)I")?,
       on_tl_own_keys: method("tlOwnKeys", "(J)Ljava/lang/String;")?,
@@ -191,12 +224,24 @@ impl JniBridge {
       on_jvm_resolve: method("jvmResolve", "(Ljava/lang/Object;Ljava/lang/String;I)[Ljava/lang/Object;")?,
       on_xposed: method("xposed", "(IJLjava/lang/String;[Ljava/lang/String;)Ljava/lang/String;")?,
       target,
+      read_buffer,
+      read_buffer_len,
+      _read_buffer_ref: read_buffer_ref,
     };
     Some(Rc::new(bridge))
   }
 
+  /// The bytes `tlReadField` just wrote. Sound because the buffer is a direct `ByteBuffer` the
+  /// host allocated once and this bridge pins, and because only one thread is ever inside a read.
+  pub(crate) fn read_buffer(&self) -> &[u8] {
+    if self.read_buffer.is_null() {
+      return &[];
+    }
+    unsafe { std::slice::from_raw_parts(self.read_buffer, self.read_buffer_len) }
+  }
+
   fn check_host_thread(&self, what: &str) -> Result<(), String> {
-    if thread::current().id() != self.owner_thread && !CALLER_THREAD_HOSTS.contains(&what) {
+    if CURRENT_THREAD.with(|id| *id) != self.owner_thread && !CALLER_THREAD_HOSTS.contains(&what) {
       let error = format!("{what}: this API requires globalQueue; unavailable in a caller-thread callback");
       self.emit_console(LEVEL_ERROR, &error);
       return Err(error);
@@ -311,6 +356,25 @@ impl JniBridge {
         false
       }
     }
+  }
+
+  /// [`Self::call_int`] for arguments that are already jni values: no [`Self::marshal`], and so
+  /// neither of the two vectors it and [`jvalues`] allocate. Worth having only where a call is made
+  /// per field rather than per request.
+  pub(crate) fn call_int_prims(&self, what: &str, method: JMethodID, args: &[jvalue], fallback: i32) -> i32 {
+    if self.check_host_thread(what).is_err() {
+      return fallback;
+    }
+    with_current_env(|env| {
+      let result =
+        unsafe { env.call_method_unchecked(&self.target, method, ReturnType::Primitive(Primitive::Int), args) };
+      // a pending exception aborts the process at the next jni call, so this is never skipped
+      if clear_exception(env) {
+        return fallback;
+      }
+      result.and_then(|v| v.i()).unwrap_or(fallback)
+    })
+    .unwrap_or(fallback)
   }
 
   pub(crate) fn call_int(&self, what: &str, method: JMethodID, args: &[Arg<'_>], fallback: i32) -> i32 {

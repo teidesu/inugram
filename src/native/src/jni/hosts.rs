@@ -14,7 +14,7 @@ use crate::api::telegram::reads::ReadsHost;
 use crate::api::telegram::rpc::RpcHost;
 use crate::api::telegram::writes::WritesHost;
 use crate::api::timers::TimerHost;
-use crate::api::tl::proxy::TlHost;
+use crate::api::tl::proxy::{TlHost, ORDINAL_FALLBACK};
 use crate::api::tl::utils::UtilsHost;
 use crate::api::ui::actions::ActionHost;
 use crate::api::ui::dialogs::DialogHost;
@@ -109,6 +109,28 @@ impl AccountHost for JniBridge {
 impl TlHost for JniBridge {
   fn tl_get(&self, handle: i64, key: &str) -> String {
     self.call_wire("tlGet", self.on_tl_get, &[Arg::Long(handle), Arg::Str(key)])
+  }
+
+  fn tl_resolve_field(&self, class_id: i32, key: &str) -> i32 {
+    self.call_int(
+      "tlResolveField",
+      self.on_tl_resolve_field,
+      &[Arg::Int(class_id), Arg::Str(key)],
+      ORDINAL_FALLBACK,
+    )
+  }
+
+  fn tl_read_field(&self, handle: i64, class_id: i32, ordinal: i32) -> i32 {
+    let args = [
+      JValue::Long(handle).as_jni(),
+      JValue::Int(class_id).as_jni(),
+      JValue::Int(ordinal).as_jni(),
+    ];
+    self.call_int_prims("tlReadField", self.on_tl_read_field, &args, ORDINAL_FALLBACK)
+  }
+
+  fn read_buffer(&self) -> &[u8] {
+    self.read_buffer()
   }
 
   fn tl_set(&self, handle: i64, key: &str, value_wire: &str) -> Option<String> {
