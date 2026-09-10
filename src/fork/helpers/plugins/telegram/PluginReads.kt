@@ -69,6 +69,9 @@ object PluginReads {
     /** `chatFolderId` is optional, and every folder id including `0` is a real one */
     private const val NO_CHAT_FOLDER = -1
 
+    /** what `fields` joins on, keep in sync with `reads.js`; a TL field name is a java identifier */
+    private const val FIELD_SEPARATOR = ","
+
     private val SCOPE_BY_OP = mapOf(
         OP_ME to "self",
         OP_USER to "peers",
@@ -156,20 +159,20 @@ object PluginReads {
     }
 
     /** the plugin asked for this object, so its scalars go with the handle: reading them is what it will do next */
-    internal fun mint(handles: TlHandles, value: TLObject?): String {
+    internal fun mint(handles: TlHandles, value: TLObject?, fields: List<String>? = null): String {
         if (value == null) return PluginWire.encodeNull()
         val id = handles.mintForPlugin(value, readOnly = true)
         return PluginWire.encodeHandle(
             vector = false,
             id = id,
             readOnly = true,
-            projection = handles.project(id),
+            projection = handles.project(id, fields),
             classId = handles.classIdOf(value.javaClass),
         )
     }
 
-    internal fun mintEach(handles: TlHandles, values: List<TLObject?>): String =
-        values.joinToString(PeerSpecs.LIST_SEPARATOR) { mint(handles, it) }
+    internal fun mintEach(handles: TlHandles, values: List<TLObject?>, fields: List<String>? = null): String =
+        values.joinToString(PeerSpecs.LIST_SEPARATOR) { mint(handles, it, fields) }
 
     /**
      * answering `'me'` tells a plugin *which* peer you are - the identity `account.read(self)` gates
@@ -594,6 +597,7 @@ object PluginReads {
         val archive = call.int(0)
         val chatFolderId = call.parts.getOrNull(1)?.toIntOrNull() ?: NO_CHAT_FOLDER
         val limit = call.int(2)
+        val fields = call.parts.getOrNull(3)?.takeIf { it.isNotEmpty() }?.split(FIELD_SEPARATOR)
         AndroidUtilities.runOnUIThread {
             val picked = if (chatFolderId != NO_CHAT_FOLDER) {
                 // `getDialogFilters`, not the field: it answers with the frozen list while the user
@@ -613,7 +617,7 @@ object PluginReads {
                 if (dialogs == null) {
                     PluginWire.encodePluginError("not-found", "getDialogsCached: no chat folder #$chatFolderId")
                 } else {
-                    mintEach(call.handles, dialogs)
+                    mintEach(call.handles, dialogs, fields)
                 }
             }
         }

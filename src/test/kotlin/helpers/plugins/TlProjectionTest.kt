@@ -147,6 +147,48 @@ class TlProjectionTest {
         assertEquals(77L, (message.peer_id as TLRPC.TL_peerUser).user_id)
     }
 
+    /**
+     * naming the fields overrides both rules: an object with children carries them anyway, and a
+     * fully-scalar one carries only what was named. What it carries still has to read as the field
+     * itself would, because rust serves it from the cache without asking.
+     */
+    @Test
+    fun naming_fields_carries_exactly_those_it_can() {
+        val handles = TlHandles(POLICY)
+        val handle = handles.mintForPlugin(dialog(), readOnly = true)
+        val projection = JSONObject(handles.project(handle, listOf("top_message", "unread_count", "pinned", "peer")))
+        assertEquals("dialog", projection.getString("_"))
+        // `peer` is a child, which no projection carries: it stays a lazy read rather than an error
+        assertEquals(setOf("_", "top_message", "unread_count", "pinned"), projection.keys().asSequence().toSet())
+        for (key in listOf("top_message", "unread_count", "pinned")) {
+            val expected = PluginWire.decode(handles.tlGet(handle, key))
+            when (expected) {
+                is PluginWire.Value.IntNum -> assertEquals(expected.value, projection.getLong(key), key)
+                is PluginWire.Value.Bool -> assertEquals(expected.value, projection.get(key), key)
+                else -> error("$key crossed as $expected")
+            }
+        }
+        assertTrue(PluginWire.decode(handles.tlGet(handle, "peer")) is PluginWire.Value.Handle)
+    }
+
+    @Test
+    fun naming_fields_narrows_a_fully_scalar_object_too() {
+        val handles = TlHandles(POLICY)
+        val handle = handles.mintForPlugin(rights(), readOnly = true)
+        val projection = JSONObject(handles.project(handle, listOf("until_date")))
+        assertEquals(setOf("_", "until_date"), projection.keys().asSequence().toSet())
+        assertEquals(900, projection.getInt("until_date"))
+    }
+
+    /** a name no field answers to leaves the projection with nothing but the type, never an error */
+    @Test
+    fun a_name_the_class_does_not_have_is_left_to_the_read() {
+        val handles = TlHandles(POLICY)
+        val handle = handles.mintForPlugin(dialog(), readOnly = true)
+        assertEquals(setOf("_"), JSONObject(handles.project(handle, listOf("not_a_field"))).keys().asSequence().toSet())
+        assertEquals(setOf("_"), JSONObject(handles.project(handle, emptyList())).keys().asSequence().toSet())
+    }
+
     @Test
     fun a_plugin_read_answers_a_projected_handle() {
         val plugin = startPlugin("projection", "account.read(self,peers,dialogs)")

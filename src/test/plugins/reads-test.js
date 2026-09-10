@@ -195,6 +195,36 @@ const NO_CHAT = -4242424242
   )
   check('a limit caps the answer', (await acc.getDialogsCached({ limit: 1 })).length <= 1)
 
+  // naming fields moves values onto the handle; what a dialog *answers* must not change, including
+  // for a field that was never named and one no projection can carry
+  const named = await acc.getDialogsCached({ archive: 'keep', fields: ['top_message', 'unread_count', 'peer'] })
+  const plain = await acc.getDialogsCached({ archive: 'keep' })
+  check('naming fields answers the same dialogs', named.length === plain.length, `${named.length} vs ${plain.length}`)
+  check(
+    'and every one of them reads the same, named or not',
+    named.every((dialog, at) =>
+      dialog.top_message === plain[at].top_message
+      && dialog.unread_count === plain[at].unread_count
+      && dialog.folder_id === plain[at].folder_id
+      && String(dialog.peer?._) === String(plain[at].peer?._)),
+  )
+  // a name the constructor does not have is the host's to ignore, not something to answer an error
+  // to: it carries what it can, and the dialogs come back exactly as they would have
+  const unknown = await acc.getDialogsCached({ archive: 'keep', fields: ['not_a_field'] })
+  check(
+    'a name no dialog has is carried by nobody and breaks nothing',
+    unknown.length === plain.length && unknown.every((dialog, at) => dialog.top_message === plain[at].top_message),
+  )
+
+  await expectRejects('a field name that is not a string is refused', 'invalid-argument', () =>
+    // @ts-expect-error - refused at runtime too, which is what this asserts
+    acc.getDialogsCached({ fields: [7] }))
+  await expectRejects('and one that could smuggle a separator is refused', 'invalid-argument', () =>
+    acc.getDialogsCached({ fields: ['top_message,peer'] }))
+  await expectRejects('fields must be an array', 'invalid-argument', () =>
+    // @ts-expect-error - refused at runtime too, which is what this asserts
+    acc.getDialogsCached({ fields: 'top_message' }))
+
   await expectRejects('an unknown archive mode is refused', 'invalid-argument', () =>
     // @ts-expect-error - refused at runtime too, which is what this asserts
     acc.getDialogsCached({ archive: 'both' }))
