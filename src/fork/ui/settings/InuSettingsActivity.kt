@@ -76,7 +76,7 @@ class InuSettingsActivity : SettingsPageActivity() {
             UItem.asButton(
                 BUTTON_PLUGINS,
                 R.drawable.inu_tabler_code,
-                LocaleController.getString(R.string.InuPlugins)
+                addExperimentalSpan(LocaleController.getString(R.string.InuPlugins))
             )
         )
         items.add(
