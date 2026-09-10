@@ -24,6 +24,22 @@ interface JvmContract {
 }
 
 /**
+ * Never touched by anything but `PluginJvmTest`'s initialization test, so its static block has not
+ * run when the plugin names it: naming must not run it, the first static use must.
+ */
+class JvmLazy {
+    companion object {
+        @JvmField var initializedBy: String = "nobody"
+
+        @JvmStatic fun whoInitialized(): String = initializedBy
+
+        init {
+            initializedBy = "clinit"
+        }
+    }
+}
+
+/**
  * something for `PluginJvmTest` to reflect over. Deliberately **not** in
  * `desu.inugram.helpers.plugins`: that package is refused by `PluginJvm` whatever the grant says, so
  * a fixture living there would make every test read as a passing test of the refusal.
@@ -44,7 +60,7 @@ class JvmFixture : JvmContract {
 
     @JvmField var big: Long = 9007199254740993L
 
-    /** whatever a test needs handed back, so the check on a *returned* class has something to refuse */
+    /** whatever a test needs handed back, so a returned reference has something to be */
     @JvmField var payload: Any? = null
 
     fun getPayload(): Any? = payload
@@ -52,6 +68,21 @@ class JvmFixture : JvmContract {
     @JvmField val sealed: String = "cannot be assigned"
 
     private var secret: String = "private"
+
+    /** which constructor ran, so a test can say which overload was picked */
+    @JvmField var madeBy: String = "noArg"
+
+    constructor()
+
+    constructor(count: Int) {
+        madeBy = "int"
+        this.count = count
+    }
+
+    constructor(big: Long) {
+        madeBy = "long"
+        this.big = big
+    }
 
     fun readCount(): Int = count
 
@@ -76,6 +107,10 @@ class JvmFixture : JvmContract {
     /** a member crossing back as an ordinary value, which `ctx.method` in `inu.xposed` also is */
     fun ownMethod(): java.lang.reflect.Method = JvmFixture::class.java.getDeclaredMethod("echo", String::class.java)
 
+    /** the same for a constructor, which `ctx.method` on a hooked constructor is */
+    fun ownConstructor(): java.lang.reflect.Constructor<*> =
+        JvmFixture::class.java.getDeclaredConstructor(Int::class.javaPrimitiveType)
+
     /** runs it *inside* the reflected call, which is the reentrancy every rule here is about */
     fun runNow(action: Runnable): String {
         action.run()
@@ -84,6 +119,9 @@ class JvmFixture : JvmContract {
 
     companion object {
         @JvmField var tag: String = "static"
+
+        /** the instance a test built, handed to its plugin through a static read so a test can set fields first */
+        @JvmField var shared: Any? = null
 
         @JvmField var task: Runnable? = null
         @JvmField var callbackEntered: CountDownLatch? = null
@@ -104,8 +142,5 @@ class JvmFixture : JvmContract {
             sharedHookCalls.incrementAndGet()
             return a + b
         }
-
-        /** a `Class` handed back from an in-scope member, so the check on one has something to refuse */
-        @JvmStatic fun classOfSomethingElse(): Class<*> = ArrayList::class.java
     }
 }

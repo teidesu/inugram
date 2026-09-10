@@ -1,4 +1,4 @@
-use std::cell::Cell;
+use std::cell::{Cell, RefCell};
 use std::rc::Rc;
 
 use base64::engine::general_purpose::STANDARD;
@@ -23,32 +23,86 @@ pub trait TlHost {
   fn tl_release(&self, handle: i64);
 }
 
-struct HandleBox {
-  host: Rc<dyn TlHost>,
+/// the proxy's target: everything a trap needs to know about the view, and the view's cache.
+///
+/// One handler object serves every view of a context ([`TlShared`]), so a trap recovers the view
+/// from its target rather than from a closure of its own, and a handle costs this and the proxy.
+struct HandleBox<'js> {
+  views: Rc<TlViews>,
   handle: i64,
+  is_vector: bool,
+  read_only: bool,
+  life: ViewLife,
+  stamp: Cell<u64>,
+  /// what survives a write anywhere: the type name and the `toJSON` function
+  perm: RefCell<Option<Object<'js>>>,
+  /// values under the field's name, presence under [`HAS_PREFIX`] + name, own keys under [`KEYS_ENTRY`]
+  vol: RefCell<Option<Object<'js>>>,
 }
 
-impl Drop for HandleBox {
+impl Drop for HandleBox<'_> {
   fn drop(&mut self) {
-    self.host.tl_release(self.handle);
+    self.views.host.tl_release(self.handle);
   }
 }
 
-impl<'js> Trace<'js> for HandleBox {
-  fn trace<'a>(&self, _tracer: Tracer<'a, 'js>) {}
+impl<'js> Trace<'js> for HandleBox<'js> {
+  fn trace<'a>(&self, tracer: Tracer<'a, 'js>) {
+    if let Ok(perm) = self.perm.try_borrow() {
+      perm.trace(tracer);
+    }
+    if let Ok(vol) = self.vol.try_borrow() {
+      vol.trace(tracer);
+    }
+  }
 }
 
-// SAFETY: `HandleBox` contains no JavaScript-lifetime-bound data.
-unsafe impl JsLifetime<'_> for HandleBox {
-  type Changed<'to> = Self;
+// SAFETY: every JavaScript-lifetime-bound field uses the struct's `'js` lifetime.
+unsafe impl<'js> JsLifetime<'js> for HandleBox<'js> {
+  type Changed<'to> = HandleBox<'to>;
 }
 
-impl<'js> JsClass<'js> for HandleBox {
+impl<'js> JsClass<'js> for HandleBox<'js> {
   const NAME: &'static str = "TlHandle";
   type Mutable = Readable;
 
   fn constructor(_ctx: &Ctx<'js>) -> JsResult<Option<Constructor<'js>>> {
     Ok(None)
+  }
+}
+
+/// per context: the one handler every view shares, and the symbols the traps compare against
+struct TlShared<'js> {
+  handler: Object<'js>,
+  marker: Symbol<'js>,
+}
+
+// SAFETY: every JavaScript-lifetime-bound field uses the struct's `'js` lifetime.
+unsafe impl<'js> JsLifetime<'js> for TlShared<'js> {
+  type Changed<'to> = TlShared<'to>;
+}
+
+/// the handler and marker are js values held in runtime userdata, which `UserDataMap::clear` drops
+/// after the context is freed: teardown has to let go of them while the context is still there
+pub fn dispose_tl_shared(ctx: &Ctx<'_>) {
+  drop(ctx.remove_userdata::<TlShared>());
+}
+
+impl<'js> TlShared<'js> {
+  fn get(ctx: &Ctx<'js>) -> JsResult<(Object<'js>, Symbol<'js>)> {
+    if let Some(shared) = ctx.userdata::<TlShared<'js>>() {
+      return Ok((shared.handler.clone(), shared.marker.clone()));
+    }
+    let marker = Symbol::new_global(ctx.clone(), HANDLE_MARKER_DESCRIPTION)?;
+    let handler = build_handler(ctx)?;
+    if ctx.store_userdata(TlShared { handler: handler.clone(), marker: marker.clone() }).is_err() {
+      return throw_tl(ctx, "tl proxy: the shared handler could not be installed");
+    }
+    Ok((handler, marker))
+  }
+
+  fn marker(ctx: &Ctx<'js>) -> JsResult<Symbol<'js>> {
+    Ok(Self::get(ctx)?.1)
   }
 }
 
@@ -84,9 +138,9 @@ impl TlViews {
     }
     match tag {
       'H' => {
-        let (is_vector, read_only, id) =
+        let (is_vector, read_only, id, projection) =
           parse_handle(payload).ok_or_else(|| Exception::throw_message(ctx, "tl wire: bad handle"))?;
-        build_proxy(ctx, self.clone(), is_vector, read_only, life, id)?.into_js(ctx)
+        build_proxy(ctx, self.clone(), is_vector, read_only, life, id, projection)?.into_js(ctx)
       }
       'J' => json_parse_tl(ctx, payload),
       other => throw_tl(ctx, &format!("tl wire: unknown tag '{other}'")),
@@ -100,16 +154,7 @@ pub enum ViewLife {
   Plugin,
 }
 
-struct ViewState {
-  views: Rc<TlViews>,
-  handle: i64,
-  is_vector: bool,
-  read_only: bool,
-  life: ViewLife,
-  stamp: Cell<u64>,
-}
-
-impl ViewState {
+impl HandleBox<'_> {
   fn cacheable(&self) -> bool {
     self.life == ViewLife::Plugin && !self.is_vector
   }
@@ -129,20 +174,27 @@ const DESCRIPTOR_MESSAGE: &str =
 const NOT_EXTENSIBLE_MESSAGE: &str = "a TL view cannot be sealed or frozen; take a copy with toJSON() to freeze it";
 
 const HANDLE_MARKER_DESCRIPTION: &str = "inu.tl.handle";
-const CACHE_MARKER_DESCRIPTION: &str = "inu.tl.cache";
 
-const SECTION_PERM: &str = "perm";
-const SECTION_VAL: &str = "val";
-const SECTION_HAS: &str = "has";
-const KEYS_ENTRY: &str = "keys";
+/// a field name never starts with one, so presence and values share the one cache object
+const HAS_PREFIX: char = '#';
+const RESERVED_PREFIX: char = '@';
+const KEYS_ENTRY: &str = "@keys";
+/// what marks a projected field as a view of its own rather than a value: the child's handle,
+/// with the rest of the object its projection. `TlHandles.appendChild` writes it.
+const HANDLE_ENTRY: &str = "@h";
+const TYPE_KEY: &str = "_";
 const TO_JSON_KEY: &str = "toJSON";
 const THEN_KEY: &str = "then";
+
+/// `HOR12` names a handle; `HOR12|{...}` also carries the scalar fields kotlin read while it had
+/// the object in hand, as JSON, so reading them never crosses. `PluginWire.encodeHandle` writes it.
+const PROJECTION_SEPARATOR: char = '|';
 
 fn encode_handle(is_vector: bool, read_only: bool, id: i64) -> String {
   format!("H{}{}{}", if is_vector { 'V' } else { 'O' }, if read_only { 'R' } else { 'W' }, id)
 }
 
-fn parse_handle(payload: &str) -> Option<(bool, bool, i64)> {
+fn parse_handle(payload: &str) -> Option<(bool, bool, i64, Option<&str>)> {
   let mut chars = payload.chars();
   let is_vector = match chars.next()? {
     'O' => false,
@@ -154,8 +206,12 @@ fn parse_handle(payload: &str) -> Option<(bool, bool, i64)> {
     'R' => true,
     _ => return None,
   };
-  let id: i64 = chars.as_str().parse().ok()?;
-  Some((is_vector, read_only, id))
+  let rest = chars.as_str();
+  let (id, projection) = match rest.split_once(PROJECTION_SEPARATOR) {
+    Some((id, projection)) => (id, Some(projection)),
+    None => (rest, None),
+  };
+  Some((is_vector, read_only, id.parse().ok()?, projection))
 }
 
 pub fn encode_error(message: &str) -> String {
@@ -199,7 +255,7 @@ fn base64_decode(s: &str) -> Option<Vec<u8>> {
   base64::Engine::decode(&STANDARD, s).ok()
 }
 
-fn make_bytes_value<'js>(ctx: &Ctx<'js>, bytes: Vec<u8>) -> JsResult<Value<'js>> {
+pub(crate) fn make_bytes_value<'js>(ctx: &Ctx<'js>, bytes: Vec<u8>) -> JsResult<Value<'js>> {
   let b64 = base64::Engine::encode(&STANDARD, &bytes);
   let arr = TypedArray::<u8>::new_copy(ctx.clone(), bytes)?;
   let to_json = Function::new(ctx.clone(), move |ctx: Ctx<'js>| -> JsResult<Object<'js>> {
@@ -302,7 +358,7 @@ fn try_read_marker<'js>(ctx: &Ctx<'js>, value: &Value<'js>) -> JsResult<Option<S
   let Some(obj) = value.as_object() else {
     return Ok(None);
   };
-  let key = Symbol::new_global(ctx.clone(), HANDLE_MARKER_DESCRIPTION)?;
+  let key = TlShared::marker(ctx)?;
   match obj.get::<_, Value>(key.as_atom()) {
     Ok(v) => Ok(v.as_string().and_then(|s| s.to_string().ok())),
     Err(_) => Ok(None),
@@ -313,89 +369,161 @@ fn new_section<'js>(ctx: &Ctx<'js>) -> JsResult<Object<'js>> {
   Object::new_proto(ctx.clone(), None)
 }
 
-fn read_bag<'js>(ctx: &Ctx<'js>, target: &Value<'js>) -> JsResult<Option<Object<'js>>> {
-  let Some(obj) = target.as_object() else {
-    return Ok(None);
-  };
-  Ok(
-    obj
-      .get::<_, Value>(Symbol::new_global(ctx.clone(), CACHE_MARKER_DESCRIPTION)?.as_atom())?
-      .into_object(),
-  )
-}
-
-impl ViewState {
-  fn bag_read<'js>(&self, ctx: &Ctx<'js>, target: &Value<'js>) -> JsResult<Option<Object<'js>>> {
-    if !self.cacheable() {
-      return Ok(None);
+impl<'js> HandleBox<'js> {
+  fn perm(&self, ctx: &Ctx<'js>) -> JsResult<Object<'js>> {
+    if let Some(perm) = self.perm.borrow().as_ref() {
+      return Ok(perm.clone());
     }
-    read_bag(ctx, target)
+    let perm = new_section(ctx)?;
+    *self.perm.borrow_mut() = Some(perm.clone());
+    Ok(perm)
   }
 
-  fn bag_write<'js>(&self, ctx: &Ctx<'js>, target: &Value<'js>) -> JsResult<Option<Object<'js>>> {
-    if !self.cacheable() {
-      return Ok(None);
+  fn vol(&self, ctx: &Ctx<'js>) -> JsResult<Object<'js>> {
+    if let Some(vol) = self.vol.borrow().as_ref() {
+      return Ok(vol.clone());
     }
-    if let Some(bag) = read_bag(ctx, target)? {
-      return Ok(Some(bag));
-    }
-    let Some(obj) = target.as_object() else {
+    let vol = new_section(ctx)?;
+    *self.vol.borrow_mut() = Some(vol.clone());
+    Ok(vol)
+  }
+
+  /// the names the cache and the wire use for themselves; a TL field is a java identifier and is none of them
+  fn reserved(key: &str) -> bool {
+    key.starts_with(HAS_PREFIX) || key.starts_with(RESERVED_PREFIX)
+  }
+
+  fn cached(&self, key: &str) -> JsResult<Option<Value<'js>>> {
+    let vol = self.vol.borrow();
+    let Some(vol) = vol.as_ref() else {
       return Ok(None);
     };
-    let bag = new_section(ctx)?;
-    bag.set(SECTION_PERM, new_section(ctx)?)?;
-    bag.set(SECTION_VAL, new_section(ctx)?)?;
-    bag.set(SECTION_HAS, new_section(ctx)?)?;
-    obj.set(Symbol::new_global(ctx.clone(), CACHE_MARKER_DESCRIPTION)?.as_atom(), bag.clone())?;
-    Ok(Some(bag))
+    if vol.contains_key(key)? {
+      return Ok(Some(vol.get(key)?));
+    }
+    Ok(None)
   }
-}
 
-fn cache_section<'js>(bag: &Object<'js>, name: &str) -> JsResult<Object<'js>> {
-  bag.get(name)
-}
+  fn cached_perm(&self, key: &str) -> JsResult<Option<Value<'js>>> {
+    let perm = self.perm.borrow();
+    let Some(perm) = perm.as_ref() else {
+      return Ok(None);
+    };
+    if perm.contains_key(key)? {
+      return Ok(Some(perm.get(key)?));
+    }
+    Ok(None)
+  }
 
-impl ViewState {
-  fn sync_epoch<'js>(&self, ctx: &Ctx<'js>, target: &Value<'js>) -> JsResult<()> {
+  /// a write anywhere invalidates every value: two views may name the same object
+  fn sync_epoch(&self) {
     if !self.cacheable() {
-      return Ok(());
+      return;
     }
     let epoch = self.views.epoch();
     if self.stamp.get() == epoch {
-      return Ok(());
+      return;
     }
-    if let Some(bag) = read_bag(ctx, target)? {
-      bag.set(SECTION_VAL, new_section(ctx)?)?;
-      bag.set(SECTION_HAS, new_section(ctx)?)?;
-      bag.remove(KEYS_ENTRY)?;
-    }
+    *self.vol.borrow_mut() = None;
     self.stamp.set(epoch);
+  }
+
+  /// the scalars kotlin sent with the handle become the cache, as if each had been read
+  fn adopt_projection(&self, ctx: &Ctx<'js>, json: &str) -> JsResult<()> {
+    let parsed = ctx.json_parse(json)?;
+    if parsed.is_array() {
+      return throw_tl(ctx, "tl wire: bad projection");
+    }
+    let Some(fields) = parsed.into_object() else {
+      return throw_tl(ctx, "tl wire: bad projection");
+    };
+    self.adopt_fields(ctx, fields)
+  }
+
+  /// [`HANDLE_ENTRY`] turns a projected field into a view of its own, built here rather than on
+  /// first read: the child owns its handle from that moment, and nothing else would ever free one.
+  fn adopt_fields(&self, ctx: &Ctx<'js>, fields: Object<'js>) -> JsResult<()> {
+    fields.set_prototype(None)?;
+    if fields.contains_key(TYPE_KEY)? {
+      let type_name: Value = fields.get(TYPE_KEY)?;
+      fields.remove(TYPE_KEY)?;
+      self.perm(ctx)?.set(TYPE_KEY, type_name)?;
+    }
+    let children: Vec<(String, Object<'js>)> = fields
+      .props::<String, Value<'js>>()
+      .filter_map(|entry| entry.ok())
+      .filter_map(|(key, value)| value.into_object().map(|object| (key, object)))
+      .collect();
+    for (key, child) in children {
+      fields.set(key, self.adopt_child(ctx, child)?)?;
+    }
+    *self.vol.borrow_mut() = Some(fields);
     Ok(())
   }
 
-  fn read_field<'js>(&self, ctx: &Ctx<'js>, target: &Value<'js>, key: &str) -> JsResult<Value<'js>> {
-    self.sync_epoch(ctx, target)?;
-    let name = if key == "_" { SECTION_PERM } else { SECTION_VAL };
-    if let Some(bag) = self.bag_read(ctx, target)? {
-      let section = cache_section(&bag, name)?;
-      if section.contains_key(key)? {
-        return section.get(key);
+  /// a view that adopts nothing must still let go of the handles a projection carried with it:
+  /// the host minted one per embedded child, and dropping the json would leave them with no owner
+  fn release_projection(&self, ctx: &Ctx<'js>, json: &str) {
+    let Ok(parsed) = ctx.json_parse(json) else {
+      return;
+    };
+    let Some(fields) = parsed.into_object() else {
+      return;
+    };
+    for entry in fields.props::<String, Value<'js>>() {
+      let Ok((_, value)) = entry else { continue };
+      let Some(child) = value.into_object() else { continue };
+      let Ok(wire) = child.get::<_, String>(HANDLE_ENTRY) else { continue };
+      if let Some((_, _, id, _)) = parse_handle(&wire) {
+        self.views.host.tl_release(id);
+      }
+    }
+  }
+
+  fn adopt_child(&self, ctx: &Ctx<'js>, child: Object<'js>) -> JsResult<Value<'js>> {
+    let Ok(wire) = child.get::<_, String>(HANDLE_ENTRY) else {
+      return throw_tl(ctx, "tl wire: bad projected child");
+    };
+    child.remove(HANDLE_ENTRY)?;
+    let Some((is_vector, read_only, id, None)) = parse_handle(&wire) else {
+      return throw_tl(ctx, "tl wire: bad projected child");
+    };
+    build_proxy_seeded(ctx, self.views.clone(), is_vector, read_only, self.life, id, Some(child))?.into_js(ctx)
+  }
+
+  fn read_field(&self, ctx: &Ctx<'js>, key: &str) -> JsResult<Value<'js>> {
+    self.sync_epoch();
+    if key == TYPE_KEY {
+      if let Some(value) = self.cached_perm(key)? {
+        return Ok(value);
+      }
+    } else if !Self::reserved(key) {
+      if let Some(value) = self.cached(key)? {
+        return Ok(value);
       }
     }
     let wire = self.host().tl_get(self.handle, key);
     let value = self.views.wire_to_js_value(ctx, &wire, self.life)?;
-    if let Some(bag) = self.bag_write(ctx, target)? {
-      cache_section(&bag, name)?.set(key, value.clone())?;
+    if self.cacheable() && !Self::reserved(key) {
+      let section = if key == TYPE_KEY { self.perm(ctx)? } else { self.vol(ctx)? };
+      section.set(key, value.clone())?;
     }
     Ok(value)
   }
 
-  fn has_field<'js>(&self, ctx: &Ctx<'js>, target: &Value<'js>, key: &str) -> JsResult<bool> {
-    self.sync_epoch(ctx, target)?;
-    if let Some(bag) = self.bag_read(ctx, target)? {
-      let section = cache_section(&bag, SECTION_HAS)?;
-      if section.contains_key(key)? {
-        return section.get(key);
+  fn has_field(&self, ctx: &Ctx<'js>, key: &str) -> JsResult<bool> {
+    self.sync_epoch();
+    if Self::reserved(key) {
+      return Ok(false);
+    }
+    let has_key = format!("{HAS_PREFIX}{key}");
+    if let Some(value) = self.cached(&has_key)? {
+      return Ok(value.as_bool().unwrap_or(false));
+    }
+    // a cached value proves the field is there; a cached null does not say which way the bit went
+    if let Some(value) = self.cached(key)? {
+      if !value.is_null() {
+        return Ok(true);
       }
     }
     let present = match self.host().tl_has(self.handle, key) {
@@ -403,40 +531,31 @@ impl ViewState {
       0 => false,
       _ => return PluginErrorCode::HandleExpired.throw(ctx, HANDLE_EXPIRED_MESSAGE),
     };
-    if let Some(bag) = self.bag_write(ctx, target)? {
-      cache_section(&bag, SECTION_HAS)?.set(key, present)?;
+    if self.cacheable() {
+      self.vol(ctx)?.set(has_key.as_str(), present)?;
     }
     Ok(present)
   }
 
-  fn write_field<'js>(&self, ctx: &Ctx<'js>, target: &Value<'js>, key: &str, wire: &str) -> JsResult<bool> {
+  fn write_field(&self, ctx: &Ctx<'js>, key: &str, wire: &str) -> JsResult<bool> {
     let result = self.host().tl_set(self.handle, key, wire);
     self.views.bump();
-    self.sync_epoch(ctx, target)?;
+    self.sync_epoch();
     match result {
       None => Ok(true),
       Some(err) => Err(ctx.throw(crate::api::error::host_error_to_js(ctx, &err)?)),
     }
   }
 
-  fn assign_property<'js>(
-    &self,
-    ctx: &Ctx<'js>,
-    target: &Value<'js>,
-    prop: &Value<'js>,
-    value: Value<'js>,
-  ) -> JsResult<bool> {
+  fn assign_property(&self, ctx: &Ctx<'js>, prop: &Value<'js>, value: Value<'js>) -> JsResult<bool> {
     let key = property_key_string(ctx, prop)?;
     let wire = js_value_to_wire(ctx, value)?;
-    self.write_field(ctx, target, &key, &wire)
+    self.write_field(ctx, &key, &wire)
   }
 
-  fn read_to_json<'js>(&self, ctx: &Ctx<'js>, target: &Value<'js>) -> JsResult<Value<'js>> {
-    if let Some(bag) = self.bag_read(ctx, target)? {
-      let perm = cache_section(&bag, SECTION_PERM)?;
-      if perm.contains_key(TO_JSON_KEY)? {
-        return perm.get(TO_JSON_KEY);
-      }
+  fn read_to_json(&self, ctx: &Ctx<'js>) -> JsResult<Value<'js>> {
+    if let Some(value) = self.cached_perm(TO_JSON_KEY)? {
+      return Ok(value);
     }
     let host = self.views.host.clone();
     let handle = self.handle;
@@ -450,10 +569,35 @@ impl ViewState {
       }
     })?
     .into_js(ctx)?;
-    if let Some(bag) = self.bag_write(ctx, target)? {
-      cache_section(&bag, SECTION_PERM)?.set(TO_JSON_KEY, value.clone())?;
+    if self.cacheable() {
+      self.perm(ctx)?.set(TO_JSON_KEY, value.clone())?;
     }
     Ok(value)
+  }
+
+  fn own_keys(&self, ctx: &Ctx<'js>) -> JsResult<Array<'js>> {
+    if self.is_vector {
+      let arr = Array::new(ctx.clone())?;
+      let len = vector_length(ctx, self.host(), self.handle)?.max(0) as usize;
+      for idx in 0..len {
+        arr.set(idx, idx.to_string())?;
+      }
+      arr.set(len, "length")?;
+      return Ok(arr);
+    }
+    self.sync_epoch();
+    if let Some(keys) = self.cached(KEYS_ENTRY)? {
+      if let Some(keys) = keys.as_string() {
+        return keys_to_array(ctx, &keys.to_string()?);
+      }
+    }
+    let Some(keys) = self.host().tl_own_keys(self.handle) else {
+      return PluginErrorCode::HandleExpired.throw(ctx, HANDLE_EXPIRED_MESSAGE);
+    };
+    if self.cacheable() {
+      self.vol(ctx)?.set(KEYS_ENTRY, keys.as_str())?;
+    }
+    keys_to_array(ctx, &keys)
   }
 }
 
@@ -465,6 +609,162 @@ fn keys_to_array<'js>(ctx: &Ctx<'js>, keys: &str) -> JsResult<Array<'js>> {
   Ok(arr)
 }
 
+fn box_of<'js>(ctx: &Ctx<'js>, target: &Value<'js>) -> JsResult<Class<'js, HandleBox<'js>>> {
+  target
+    .as_object()
+    .and_then(Class::<HandleBox>::from_object)
+    .ok_or_else(|| Exception::throw_message(ctx, "tl proxy: the target is not a TL handle"))
+}
+
+fn build_handler<'js>(ctx: &Ctx<'js>) -> JsResult<Object<'js>> {
+  let handler = Object::new(ctx.clone())?;
+
+  handler.set(
+    PredefinedAtom::Getter,
+    Function::new(
+      ctx.clone(),
+      |ctx: Ctx<'js>, target: Value<'js>, prop: Value<'js>, _receiver: Value<'js>| -> JsResult<Value<'js>> {
+        let handle = box_of(&ctx, &target)?;
+        let view = handle.borrow();
+        if let Some(sym) = prop.as_symbol() {
+          if sym == &TlShared::marker(&ctx)? {
+            return encode_handle(view.is_vector, view.read_only, view.handle).into_js(&ctx);
+          }
+          if view.is_vector && sym == &Symbol::iterator(ctx.clone()) {
+            drop(view);
+            return make_vector_iterator(&ctx, &handle)?.into_js(&ctx);
+          }
+          return Ok(Value::new_undefined(ctx.clone()));
+        }
+        let key = property_key_string(&ctx, &prop)?;
+        if key == THEN_KEY {
+          return Ok(Value::new_undefined(ctx.clone()));
+        }
+        if key == TO_JSON_KEY {
+          return view.read_to_json(&ctx);
+        }
+        view.read_field(&ctx, &key)
+      },
+    )?,
+  )?;
+
+  handler.set(
+    PredefinedAtom::Setter,
+    Function::new(
+      ctx.clone(),
+      |ctx: Ctx<'js>, target: Value<'js>, prop: Value<'js>, value: Value<'js>, _receiver: Value<'js>| -> JsResult<bool> {
+        let handle = box_of(&ctx, &target)?;
+        let view = handle.borrow();
+        if prop.as_symbol().is_some() {
+          return throw_tl(&ctx, "tl proxy: cannot set a symbol-keyed property");
+        }
+        if view.read_only {
+          let ctx: &Ctx<'js> = &ctx;
+          return PluginErrorCode::Forbidden.throw(ctx, READ_ONLY_MESSAGE);
+        }
+        view.assign_property(&ctx, &prop, value)
+      },
+    )?,
+  )?;
+
+  handler.set(
+    PredefinedAtom::DefineProperty,
+    Function::new(
+      ctx.clone(),
+      |ctx: Ctx<'js>, target: Value<'js>, prop: Value<'js>, descriptor: Value<'js>| -> JsResult<bool> {
+        let handle = box_of(&ctx, &target)?;
+        let view = handle.borrow();
+        if view.read_only {
+          let ctx: &Ctx<'js> = &ctx;
+          return PluginErrorCode::Forbidden.throw(ctx, READ_ONLY_MESSAGE);
+        }
+        if prop.as_symbol().is_some() {
+          return throw_tl(&ctx, "tl proxy: cannot define a symbol-keyed property");
+        }
+        let value = descriptor_value(&ctx, &descriptor)?;
+        view.assign_property(&ctx, &prop, value)
+      },
+    )?,
+  )?;
+
+  handler.set(
+    PredefinedAtom::Has,
+    Function::new(ctx.clone(), |ctx: Ctx<'js>, target: Value<'js>, prop: Value<'js>| -> JsResult<bool> {
+      let handle = box_of(&ctx, &target)?;
+      let view = handle.borrow();
+      if let Some(sym) = prop.as_symbol() {
+        if sym == &TlShared::marker(&ctx)? {
+          return Ok(true);
+        }
+        return Ok(view.is_vector && sym == &Symbol::iterator(ctx.clone()));
+      }
+      let key = property_key_string(&ctx, &prop)?;
+      if key == TO_JSON_KEY {
+        return Ok(true);
+      }
+      view.has_field(&ctx, &key)
+    })?,
+  )?;
+
+  handler.set(
+    PredefinedAtom::DeleteProperty,
+    Function::new(ctx.clone(), |ctx: Ctx<'js>, target: Value<'js>, prop: Value<'js>| -> JsResult<bool> {
+      let handle = box_of(&ctx, &target)?;
+      let view = handle.borrow();
+      if view.read_only {
+        let ctx: &Ctx<'js> = &ctx;
+        return PluginErrorCode::Forbidden.throw(ctx, READ_ONLY_MESSAGE);
+      }
+      if prop.as_symbol().is_some() {
+        return throw_tl(&ctx, "tl proxy: cannot delete a symbol-keyed property");
+      }
+      let key = property_key_string(&ctx, &prop)?;
+      view.write_field(&ctx, &key, "N")
+    })?,
+  )?;
+
+  handler.set(
+    PredefinedAtom::OwnKeys,
+    Function::new(ctx.clone(), |ctx: Ctx<'js>, target: Value<'js>| -> JsResult<Array<'js>> {
+      let handle = box_of(&ctx, &target)?;
+      let view = handle.borrow();
+      view.own_keys(&ctx)
+    })?,
+  )?;
+
+  handler.set(
+    PredefinedAtom::GetOwnPropertyDescriptor,
+    Function::new(ctx.clone(), |ctx: Ctx<'js>, target: Value<'js>, prop: Value<'js>| -> JsResult<Value<'js>> {
+      let handle = box_of(&ctx, &target)?;
+      let view = handle.borrow();
+      if prop.as_symbol().is_some() {
+        return Ok(Value::new_undefined(ctx.clone()));
+      }
+      let key = property_key_string(&ctx, &prop)?;
+      if !view.has_field(&ctx, &key)? {
+        return Ok(Value::new_undefined(ctx.clone()));
+      }
+      let value = view.read_field(&ctx, &key)?;
+      let descriptor = Object::new(ctx.clone())?;
+      descriptor.set("value", value)?;
+      descriptor.set("writable", !view.read_only)?;
+      descriptor.set("enumerable", true)?;
+      descriptor.set("configurable", true)?;
+      descriptor.into_js(&ctx)
+    })?,
+  )?;
+
+  handler.set(
+    PredefinedAtom::PreventExtensions,
+    Function::new(ctx.clone(), |ctx: Ctx<'js>, _target: Value<'js>| -> JsResult<bool> {
+      let ctx: &Ctx<'js> = &ctx;
+      PluginErrorCode::Unsupported.throw(ctx, NOT_EXTENSIBLE_MESSAGE)
+    })?,
+  )?;
+
+  Ok(handler)
+}
+
 fn build_proxy<'js>(
   ctx: &Ctx<'js>,
   views: Rc<TlViews>,
@@ -472,216 +772,64 @@ fn build_proxy<'js>(
   read_only: bool,
   life: ViewLife,
   handle: i64,
+  projection: Option<&str>,
 ) -> JsResult<Proxy<'js>> {
-  let target = Class::instance(ctx.clone(), HandleBox { host: views.host.clone(), handle })?;
-  let state = Rc::new(ViewState {
-    stamp: Cell::new(views.epoch()),
-    views,
-    handle,
-    is_vector,
-    read_only,
-    life,
-  });
-  let handler_obj = Object::new(ctx.clone())?;
+  build_view(ctx, views, is_vector, read_only, life, handle, projection, None)
+}
 
-  {
-    let state = state.clone();
-    handler_obj.set(
-      PredefinedAtom::Getter,
-      Function::new(
-        ctx.clone(),
-        move |ctx: Ctx<'js>, target: Value<'js>, prop: Value<'js>, _receiver: Value<'js>| -> JsResult<Value<'js>> {
-          if let Some(sym) = prop.as_symbol() {
-            if sym
-              == &{
-                let ctx: &Ctx<'js> = &ctx;
-                Symbol::new_global(ctx.clone(), HANDLE_MARKER_DESCRIPTION)
-              }?
-            {
-              return encode_handle(state.is_vector, state.read_only, state.handle).into_js(&ctx);
-            }
-            if state.is_vector && sym == &Symbol::iterator(ctx.clone()) {
-              return state.make_vector_iterator(&ctx)?.into_js(&ctx);
-            }
-            return Ok(Value::new_undefined(ctx.clone()));
-          }
-          let key = property_key_string(&ctx, &prop)?;
-          if key == THEN_KEY {
-            return Ok(Value::new_undefined(ctx.clone()));
-          }
-          state.sync_epoch(&ctx, &target)?;
-          if key == TO_JSON_KEY {
-            return state.read_to_json(&ctx, &target);
-          }
-          state.read_field(&ctx, &target, &key)
-        },
-      )?,
-    )?;
-  }
+/// the same, for a projection already parsed: a child arrives as part of its parent's object, so
+/// re-serializing it only to parse it again is work nobody needs
+fn build_proxy_seeded<'js>(
+  ctx: &Ctx<'js>,
+  views: Rc<TlViews>,
+  is_vector: bool,
+  read_only: bool,
+  life: ViewLife,
+  handle: i64,
+  fields: Option<Object<'js>>,
+) -> JsResult<Proxy<'js>> {
+  build_view(ctx, views, is_vector, read_only, life, handle, None, fields)
+}
 
-  {
-    let state = state.clone();
-    handler_obj.set(
-      PredefinedAtom::Setter,
-      Function::new(
-        ctx.clone(),
-        move |ctx: Ctx<'js>,
-              target: Value<'js>,
-              prop: Value<'js>,
-              value: Value<'js>,
-              _receiver: Value<'js>|
-              -> JsResult<bool> {
-          if prop.as_symbol().is_some() {
-            return throw_tl(&ctx, "tl proxy: cannot set a symbol-keyed property");
-          }
-          if state.read_only {
-            return {
-              let ctx: &Ctx<'js> = &ctx;
-              PluginErrorCode::Forbidden.throw(ctx, READ_ONLY_MESSAGE)
-            };
-          }
-          state.assign_property(&ctx, &target, &prop, value)
-        },
-      )?,
-    )?;
-  }
-
-  {
-    let state = state.clone();
-    handler_obj.set(
-      PredefinedAtom::DefineProperty,
-      Function::new(
-        ctx.clone(),
-        move |ctx: Ctx<'js>, target: Value<'js>, prop: Value<'js>, descriptor: Value<'js>| -> JsResult<bool> {
-          if state.read_only {
-            return {
-              let ctx: &Ctx<'js> = &ctx;
-              PluginErrorCode::Forbidden.throw(ctx, READ_ONLY_MESSAGE)
-            };
-          }
-          if prop.as_symbol().is_some() {
-            return throw_tl(&ctx, "tl proxy: cannot define a symbol-keyed property");
-          }
-          let value = descriptor_value(&ctx, &descriptor)?;
-          state.assign_property(&ctx, &target, &prop, value)
-        },
-      )?,
-    )?;
-  }
-
-  {
-    let state = state.clone();
-    handler_obj.set(
-      PredefinedAtom::Has,
-      Function::new(ctx.clone(), move |ctx: Ctx<'js>, target: Value<'js>, prop: Value<'js>| -> JsResult<bool> {
-        if let Some(sym) = prop.as_symbol() {
-          if sym
-            == &{
-              let ctx: &Ctx<'js> = &ctx;
-              Symbol::new_global(ctx.clone(), HANDLE_MARKER_DESCRIPTION)
-            }?
-          {
-            return Ok(true);
-          }
-          return Ok(state.is_vector && sym == &Symbol::iterator(ctx.clone()));
-        }
-        let key = property_key_string(&ctx, &prop)?;
-        if key == TO_JSON_KEY {
-          return Ok(true);
-        }
-        state.has_field(&ctx, &target, &key)
-      })?,
-    )?;
-  }
-
-  {
-    let state = state.clone();
-    handler_obj.set(
-      PredefinedAtom::DeleteProperty,
-      Function::new(ctx.clone(), move |ctx: Ctx<'js>, target: Value<'js>, prop: Value<'js>| -> JsResult<bool> {
-        if state.read_only {
-          return {
-            let ctx: &Ctx<'js> = &ctx;
-            PluginErrorCode::Forbidden.throw(ctx, READ_ONLY_MESSAGE)
-          };
-        }
-        if prop.as_symbol().is_some() {
-          return throw_tl(&ctx, "tl proxy: cannot delete a symbol-keyed property");
-        }
-        let key = property_key_string(&ctx, &prop)?;
-        state.write_field(&ctx, &target, &key, "N")
-      })?,
-    )?;
-  }
-
-  {
-    let state = state.clone();
-    handler_obj.set(
-      PredefinedAtom::OwnKeys,
-      Function::new(ctx.clone(), move |ctx: Ctx<'js>, target: Value<'js>| -> JsResult<Array<'js>> {
-        if state.is_vector {
-          let arr = Array::new(ctx.clone())?;
-          let len = vector_length(&ctx, state.host(), state.handle)?.max(0) as usize;
-          for idx in 0..len {
-            arr.set(idx, idx.to_string())?;
-          }
-          arr.set(len, "length")?;
-          return Ok(arr);
-        }
-        state.sync_epoch(&ctx, &target)?;
-        if let Some(bag) = state.bag_read(&ctx, &target)? {
-          if bag.contains_key(KEYS_ENTRY)? {
-            return keys_to_array(&ctx, &bag.get::<_, String>(KEYS_ENTRY)?);
-          }
-        }
-        let Some(keys) = state.host().tl_own_keys(state.handle) else {
-          return {
-            let ctx: &Ctx<'js> = &ctx;
-            PluginErrorCode::HandleExpired.throw(ctx, HANDLE_EXPIRED_MESSAGE)
-          };
-        };
-        if let Some(bag) = state.bag_write(&ctx, &target)? {
-          bag.set(KEYS_ENTRY, keys.as_str())?;
-        }
-        keys_to_array(&ctx, &keys)
-      })?,
-    )?;
-  }
-
-  {
-    handler_obj.set(
-      PredefinedAtom::GetOwnPropertyDescriptor,
-      Function::new(ctx.clone(), move |ctx: Ctx<'js>, target: Value<'js>, prop: Value<'js>| -> JsResult<Value<'js>> {
-        if prop.as_symbol().is_some() {
-          return Ok(Value::new_undefined(ctx.clone()));
-        }
-        let key = property_key_string(&ctx, &prop)?;
-        if !state.has_field(&ctx, &target, &key)? {
-          return Ok(Value::new_undefined(ctx.clone()));
-        }
-        let value = state.read_field(&ctx, &target, &key)?;
-        let descriptor = Object::new(ctx.clone())?;
-        descriptor.set("value", value)?;
-        descriptor.set("writable", !state.read_only)?;
-        descriptor.set("enumerable", true)?;
-        descriptor.set("configurable", true)?;
-        descriptor.into_js(&ctx)
-      })?,
-    )?;
-  }
-
-  handler_obj.set(
-    PredefinedAtom::PreventExtensions,
-    Function::new(ctx.clone(), |ctx: Ctx<'js>, _target: Value<'js>| -> JsResult<bool> {
-      {
-        let ctx: &Ctx<'js> = &ctx;
-        PluginErrorCode::Unsupported.throw(ctx, NOT_EXTENSIBLE_MESSAGE)
-      }
-    })?,
+#[allow(clippy::too_many_arguments)]
+fn build_view<'js>(
+  ctx: &Ctx<'js>,
+  views: Rc<TlViews>,
+  is_vector: bool,
+  read_only: bool,
+  life: ViewLife,
+  handle: i64,
+  projection: Option<&str>,
+  fields: Option<Object<'js>>,
+) -> JsResult<Proxy<'js>> {
+  let (handler, _) = TlShared::get(ctx)?;
+  let stamp = views.epoch();
+  let target = Class::instance(
+    ctx.clone(),
+    HandleBox {
+      views,
+      handle,
+      is_vector,
+      read_only,
+      life,
+      stamp: Cell::new(stamp),
+      perm: RefCell::new(None),
+      vol: RefCell::new(None),
+    },
   )?;
-
-  let handler = ProxyHandler::from_object(handler_obj)?;
-  Proxy::new(ctx.clone(), target, handler)
+  {
+    let view = target.borrow();
+    if view.cacheable() {
+      if let Some(json) = projection {
+        view.adopt_projection(ctx, json)?;
+      } else if let Some(fields) = fields {
+        view.adopt_fields(ctx, fields)?;
+      }
+    } else if let Some(json) = projection {
+      view.release_projection(ctx, json);
+    }
+  }
+  Proxy::new(ctx.clone(), target, ProxyHandler::from_object(handler)?)
 }
 
 fn property_key_string<'js>(ctx: &Ctx<'js>, prop: &Value<'js>) -> JsResult<String> {
@@ -705,32 +853,36 @@ fn vector_length<'js>(ctx: &Ctx<'js>, host: &dyn TlHost, handle: i64) -> JsResul
   }
 }
 
-impl ViewState {
-  fn make_vector_iterator<'js>(self: &Rc<Self>, ctx: &Ctx<'js>) -> JsResult<Function<'js>> {
-    let state = self.clone();
-    Function::new(ctx.clone(), move |ctx: Ctx<'js>| -> JsResult<Object<'js>> {
-      let index = Cell::new(0i64);
-      let state = state.clone();
-      let iterator = Object::new(ctx.clone())?;
-      let next_fn = Function::new(ctx.clone(), move |ctx: Ctx<'js>| -> JsResult<Object<'js>> {
-        let result = Object::new(ctx.clone())?;
-        let len = vector_length(&ctx, state.host(), state.handle)?;
-        let i = index.get();
-        if i >= len {
-          result.set("done", true)?;
-          result.set("value", Value::new_undefined(ctx.clone()))?;
-        } else {
-          index.set(i + 1);
-          let wire = state.host().tl_get(state.handle, &i.to_string());
-          result.set("done", false)?;
-          result.set("value", state.views.wire_to_js_value(&ctx, &wire, state.life)?)?;
-        }
-        Ok(result)
-      })?;
-      iterator.set("next", next_fn)?;
-      Ok(iterator)
-    })
-  }
+/// holds the target and not just the id: `for (const x of view.vec)` frees the iterable as soon as
+/// it has the iterator, and a view no parent caches would release its handle before the first `next`
+fn make_vector_iterator<'js>(ctx: &Ctx<'js>, target: &Class<'js, HandleBox<'js>>) -> JsResult<Function<'js>> {
+  let target = target.clone();
+  Function::new(ctx.clone(), move |ctx: Ctx<'js>| -> JsResult<Object<'js>> {
+    let index = Cell::new(0i64);
+    let target = target.clone();
+    let iterator = Object::new(ctx.clone())?;
+    let next_fn = Function::new(ctx.clone(), move |ctx: Ctx<'js>| -> JsResult<Object<'js>> {
+      let (views, handle, life) = {
+        let view = target.borrow();
+        (view.views.clone(), view.handle, view.life)
+      };
+      let result = Object::new(ctx.clone())?;
+      let len = vector_length(&ctx, views.host.as_ref(), handle)?;
+      let i = index.get();
+      if i >= len {
+        result.set("done", true)?;
+        result.set("value", Value::new_undefined(ctx.clone()))?;
+      } else {
+        index.set(i + 1);
+        let wire = views.host.tl_get(handle, &i.to_string());
+        result.set("done", false)?;
+        result.set("value", views.wire_to_js_value(&ctx, &wire, life)?)?;
+      }
+      Ok(result)
+    })?;
+    iterator.set("next", next_fn)?;
+    Ok(iterator)
+  })
 }
 
 #[cfg(test)]

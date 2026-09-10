@@ -44,11 +44,12 @@ class PluginJvmRoutineTest {
         assertEquals(7, fixture.count)
     }
 
-    @Test fun out_of_scope_results_stop_the_routine_before_writes() {
-        val plugin = startPlugin("routine", "unsafe.jvm(desu.inugram.jvmfixture.*)")
-        val fixture = JvmFixture().apply { payload = ArrayList<String>() }
+    /** an operand the bridge refuses to carry stops the routine where it stands, writes included */
+    @Test fun a_refused_result_stops_the_routine_before_writes() {
+        val plugin = startPlugin("routine", "unsafe.jvm")
+        val fixture = JvmFixture().apply { label = "x".repeat(PluginJvm.VALUE_LIMIT_BYTES + 1) }
         val target = "G" + PluginJvm.bridgeFor(plugin.js)!!.encode(fixture).substring(2)
-        val task = createRoutine(plugin, """{"nodes":[["get",[0,0],"payload"],["set",[0,0],"count",[0,1]]],"roots":[0,1]}""", target, "I99")
+        val task = createRoutine(plugin, """{"nodes":[["get",[0,0],"label"],["set",[0,0],"count",[0,1]]],"roots":[0,1]}""", target, "I99")
         task.run()
         assertEquals(3, fixture.count)
     }

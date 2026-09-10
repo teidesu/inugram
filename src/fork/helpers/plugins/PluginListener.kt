@@ -197,10 +197,18 @@ interface XposedListener {
 interface JvmListener {
     /**
      * [op] keeps in sync with rust `jvm::OP_*`. A handle answers as `G<kind><id>` but crosses
-     * back in an argument as `G<id>` with no kind: the side that owns the table is the side
-     * that knows.
+     * back in an argument as `G<id>` with no kind. The table behind an id is rust's
+     * (`QuickJs.jvmMint`/`jvmObjectAt`), so an id means the same thing on both sides.
      */
     fun jvm(op: Int, target: Long, name: String, args: Array<String>): String
+
+    /**
+     * member resolution for rust's call path, once per class and name: [mode] keeps in sync with
+     * rust `jvm::native::RESOLVE_*`, and the answer's layout is what `Native::resolve` reads -
+     * `["E", wire]`, `["M", className, (member, params, descriptor, static, refusal)*]`,
+     * or `["F", declaringClassName, field, type, descriptor, static, final, refusal, typeName, name]`.
+     */
+    fun jvmResolve(target: Any, name: String, mode: Int): Array<Any?>
 }
 
 /** one trap invocation each, never a whole object graph */

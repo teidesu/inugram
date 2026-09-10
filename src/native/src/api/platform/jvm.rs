@@ -1,9 +1,12 @@
 use std::cell::RefCell;
 use std::rc::Rc;
 
+use std::sync::Arc;
+
+use rquickjs::function::Rest;
 use rquickjs::{
-  object::Filter, Array, Coerced, Context, Ctx, FromJs, Function, IntoJs, Object, Persistent, Result as JsResult,
-  Runtime, TypedArray, Value,
+  object::Filter, Array, Class, Context, Ctx, FromJs, Function, IntoJs, Object, Persistent,
+  Result as JsResult, Runtime, TypedArray, Value,
 };
 
 use crate::api::error::{wire_error_to_js, PluginErrorCode};
@@ -16,9 +19,35 @@ use crate::utils::prelude;
 const PRELUDE: &[u8] = include_bytes!(concat!(env!("OUT_DIR"), "/jvm.qbc"));
 
 pub(crate) mod dex;
+pub(crate) mod native;
+pub(crate) mod refs;
 
+pub use native::JvmReflectHost;
+use native::{read_arg, Arg, HandleSpec, Native, Outcome};
+pub(crate) use refs::RefTable;
+use refs::{JvmRef, KIND_CLASS, KIND_CONSTRUCTOR, KIND_FIELD, KIND_METHOD};
+
+/// The string-wire side of `inu.jvm`: what needs kotlin's loaders, dex, routines, and the
+/// screen. The member ops (`OP_NEW`..`OP_MEMBER_SET`) reach it only from a harness without a vm -
+/// on a device they run in [`native`] and never cross as text.
 pub trait JvmHost {
   fn jvm(&self, op: i32, target: i64, name: &str, args: &[String]) -> String;
+}
+
+const HIDDEN_REF: &str = "__inuJvmRef";
+const HANDLE_EXPIRED: &str = "jvm: that handle was released; a plugin's handles do not outlive it";
+
+/// what a js value is a handle of: a `JvmRef` instance, or a class function carrying one
+pub(crate) fn ref_of<'js>(value: &Value<'js>) -> Option<Class<'js, JvmRef>> {
+  let object = value.as_object()?;
+  if let Some(handle) = Class::<JvmRef>::from_object(object) {
+    return Some(handle);
+  }
+  if !object.is_function() {
+    return None;
+  }
+  let carried: Value = object.get(HIDDEN_REF).ok()?;
+  carried.as_object().and_then(Class::<JvmRef>::from_object)
 }
 
 const OP_CLASS: i32 = 0;
@@ -33,7 +62,6 @@ const OP_MEMBER_GET: i32 = 8;
 const OP_MEMBER_SET: i32 = 9;
 const OP_RUNNABLE: i32 = 10;
 const OP_LOAD_DEX: i32 = 11;
-const OP_RELEASE: i32 = 12;
 const OP_CURRENT_FRAGMENT: i32 = 13;
 const OP_CURRENT_ACTIVITY: i32 = 14;
 const OP_BUNDLE_METHOD: i32 = 15;
@@ -58,19 +86,20 @@ pub struct JvmState {
   callbacks: CallbackRegistry,
   cleanup_callbacks: RefCell<std::collections::HashSet<u32>>,
   prelude: RefCell<Option<Prelude>>,
+  refs: Arc<RefTable>,
+  native: Option<Rc<Native>>,
 }
 
 struct Prelude {
-  mint: Persistent<Function<'static>>,
-  id_of: Persistent<Function<'static>>,
+  mint_class: Persistent<Function<'static>>,
+  object_proto: Persistent<Object<'static>>,
+  method_proto: Persistent<Object<'static>>,
+  constructor_proto: Persistent<Object<'static>>,
+  field_proto: Persistent<Object<'static>>,
   xposed_routine: Persistent<Function<'static>>,
 }
 
-fn bounded(value: &str, limit: usize) -> bool {
-  value.len() <= limit
-}
-
-fn throw_too_big<'js, T>(ctx: &Ctx<'js>, what: &str, size: usize, limit: usize) -> JsResult<T> {
+pub(super) fn throw_too_big<'js, T>(ctx: &Ctx<'js>, what: &str, size: usize, limit: usize) -> JsResult<T> {
   {
     let message: &str = &format!("jvm: {what} is {size} bytes, over the {limit} this bridge carries");
     let usage = size as i64;
@@ -94,7 +123,7 @@ impl JvmState {
       let read_argument = |wire: &str| {
         if let Some(handle) = wire.strip_prefix('G') {
           let id = handle.get(1..).and_then(|id| id.parse::<i64>().ok()).ok_or(rquickjs::Error::Unknown)?;
-          self.ask(ctx, OP_COPY_REF, id, "", &[])
+          self.copy_ref(ctx, id, handle.as_bytes()[0])
         } else {
           self.wire_to_value(ctx, wire)
         }
@@ -108,11 +137,9 @@ impl JvmState {
       if value.is_promise() {
         return PluginErrorCode::InvalidArgument.throw(ctx, "defineClass: method bodies must be synchronous");
       }
-      let id = self.handle_id(ctx, &value)?;
-      if id >= 0 {
-        Ok(self.host.jvm(OP_COPY_REF, id, "", &[]))
-      } else {
-        self.arg_to_wire(ctx, &value)
+      match ref_of(&value) {
+        Some(handle) => Ok(self.copy_wire(handle.borrow().id)),
+        None => self.arg_to_wire(ctx, &value),
       }
     })();
     match result {
@@ -123,7 +150,7 @@ impl JvmState {
   }
 
   fn js_define_class<'js>(&self, ctx: &Ctx<'js>, definition: String, values: Array<'js>) -> JsResult<Value<'js>> {
-    self.grants.check_grant(ctx, GRANT, Some("*"), MATCH_NAMESPACE)?;
+    self.grants.check_grant(ctx, GRANT, None, MATCH_NAMESPACE)?;
     if definition.len() > VALUE_LIMIT_BYTES {
       return throw_too_big(ctx, "class definition", definition.len(), VALUE_LIMIT_BYTES);
     }
@@ -132,7 +159,7 @@ impl JvmState {
       let mut wires = Vec::new();
       let mut bytes = 0usize;
       for value in array_values(ctx, &values, "defineClass")? {
-        let is_handle = self.handle_id(ctx, &value)? >= 0;
+        let is_handle = ref_of(&value).is_some();
         let wire = if let Some(callback) = value.as_function().filter(|_| !is_handle) {
           let token = self.callbacks.alloc();
           self.callbacks.register(ctx, token, None, callback.clone());
@@ -190,58 +217,204 @@ impl JvmState {
     factory.call((builder,))
   }
 
-  pub(crate) fn handle_id<'js>(&self, ctx: &Ctx<'js>, value: &Value<'js>) -> JsResult<i64> {
+  pub(crate) fn handle_id<'js>(&self, _ctx: &Ctx<'js>, value: &Value<'js>) -> JsResult<i64> {
+    Ok(ref_of(value).map(|handle| handle.borrow().id).unwrap_or(-1))
+  }
+
+  /// a second id for the reference behind [id], for a handoff whose original the other side
+  /// releases; a harness without a vm has no table entry and asks its host instead
+  fn copy_wire(&self, id: i64) -> String {
+    match self.refs.copy(id) {
+      Some(copy) => format!("GO{copy}"),
+      None if self.native.is_none() => self.host.jvm(OP_COPY_REF, id, "", &[]),
+      None => crate::api::tl::proxy::encode_error(HANDLE_EXPIRED),
+    }
+  }
+
+  fn copy_ref<'js>(&self, ctx: &Ctx<'js>, id: i64, kind: u8) -> JsResult<Value<'js>> {
+    match self.refs.copy(id) {
+      Some(copy) => self.make_handle(ctx, HandleSpec { id: copy, kind, class_key: None, pinned: None }),
+      None if self.native.is_none() => self.ask(ctx, OP_COPY_REF, id, "", &[]),
+      None => PluginErrorCode::HandleExpired.throw(ctx, HANDLE_EXPIRED),
+    }
+  }
+
+  /// the js object for a table entry: a class is a callable the prelude builds, the rest are
+  /// `JvmRef` instances on the prototype their kind gets
+  pub(crate) fn make_handle<'js>(&self, ctx: &Ctx<'js>, spec: HandleSpec) -> JsResult<Value<'js>> {
+    let handle = JvmRef::new(self.refs.clone(), spec.id);
+    handle.class_key.set(spec.class_key);
+    *handle.pinned.borrow_mut() = spec.pinned;
     let borrowed = self.prelude.borrow();
     let Some(prelude) = borrowed.as_ref() else {
-      return Ok(-1);
+      return PluginErrorCode::Internal.throw(ctx, "jvm: the prelude is not installed");
     };
-    let id_of = prelude.id_of.clone().restore(ctx)?;
-    id_of.call((value.clone(),))
+    let proto = match spec.kind {
+      KIND_CLASS => {
+        let instance = Class::instance(ctx.clone(), handle)?;
+        let mint_class = prelude.mint_class.clone().restore(ctx)?;
+        return mint_class.call((instance,));
+      }
+      KIND_METHOD => &prelude.method_proto,
+      KIND_CONSTRUCTOR => &prelude.constructor_proto,
+      KIND_FIELD => &prelude.field_proto,
+      _ => &prelude.object_proto,
+    };
+    let proto = proto.clone().restore(ctx)?;
+    Ok(Class::instance_proto(handle, proto)?.into_value())
+  }
+
+  fn outcome_to_value<'js>(&self, ctx: &Ctx<'js>, outcome: Outcome<'js>) -> JsResult<Value<'js>> {
+    match outcome {
+      Outcome::Value(value) => Ok(value),
+      Outcome::Handle(spec) => self.make_handle(ctx, spec),
+    }
+  }
+
+  fn handle_arg<'js>(&self, ctx: &Ctx<'js>, value: &Value<'js>, what: &str) -> JsResult<Class<'js, JvmRef>> {
+    match ref_of(value) {
+      Some(handle) => Ok(handle),
+      None => PluginErrorCode::InvalidArgument.throw(ctx, &format!("{what}: expected a java class, object, method or field")),
+    }
+  }
+
+  fn read_args<'js>(&self, ctx: &Ctx<'js>, values: &[Value<'js>]) -> JsResult<Vec<Arg<'js>>> {
+    values.iter().map(|value| read_arg(ctx, value)).collect()
+  }
+
+  /// the wire form of the same op, for a harness whose host is a fake heap
+  fn ask_op<'js>(&self, ctx: &Ctx<'js>, op: i32, target: &Class<'js, JvmRef>, name: &str, args: &[Value<'js>]) -> JsResult<Value<'js>> {
+    let mut wires = Vec::with_capacity(args.len());
+    for arg in args {
+      wires.push(self.arg_to_wire(ctx, arg)?);
+    }
+    self.ask(ctx, op, target.borrow().id, name, &wires)
+  }
+
+  pub(crate) fn js_call<'js>(&self, ctx: &Ctx<'js>, target: Value<'js>, name: String, args: Rest<Value<'js>>) -> JsResult<Value<'js>> {
+    self.grants.check_grant(ctx, GRANT, None, MATCH_NAMESPACE)?;
+    let target = self.handle_arg(ctx, &target, "call")?;
+    match &self.native {
+      Some(native) => {
+        let args = self.read_args(ctx, &args.0)?;
+        let outcome = native.call(ctx, &target, &name, &args)?;
+        self.outcome_to_value(ctx, outcome)
+      }
+      None => self.ask_op(ctx, OP_CALL, &target, &name, &args.0),
+    }
+  }
+
+  fn js_construct<'js>(&self, ctx: &Ctx<'js>, target: Value<'js>, args: Rest<Value<'js>>) -> JsResult<Value<'js>> {
+    self.grants.check_grant(ctx, GRANT, None, MATCH_NAMESPACE)?;
+    let target = self.handle_arg(ctx, &target, "new")?;
+    match &self.native {
+      Some(native) => {
+        let args = self.read_args(ctx, &args.0)?;
+        let outcome = native.construct(ctx, &target, &args)?;
+        self.outcome_to_value(ctx, outcome)
+      }
+      None => self.ask_op(ctx, OP_NEW, &target, "", &args.0),
+    }
+  }
+
+  fn js_get<'js>(&self, ctx: &Ctx<'js>, target: Value<'js>, name: String) -> JsResult<Value<'js>> {
+    self.grants.check_grant(ctx, GRANT, None, MATCH_NAMESPACE)?;
+    let target = self.handle_arg(ctx, &target, "getField")?;
+    match &self.native {
+      Some(native) => {
+        let outcome = native.get(ctx, &target, &name)?;
+        self.outcome_to_value(ctx, outcome)
+      }
+      None => self.ask_op(ctx, OP_GET, &target, &name, &[]),
+    }
+  }
+
+  fn js_set<'js>(&self, ctx: &Ctx<'js>, target: Value<'js>, name: String, value: Value<'js>) -> JsResult<()> {
+    self.grants.check_grant(ctx, GRANT, None, MATCH_NAMESPACE)?;
+    let target = self.handle_arg(ctx, &target, "setField")?;
+    match &self.native {
+      Some(native) => native.set(ctx, &target, &name, &read_arg(ctx, &value)?),
+      None => self.ask_op(ctx, OP_SET, &target, &name, &[value]).map(|_| ()),
+    }
+  }
+
+  fn js_method<'js>(&self, ctx: &Ctx<'js>, target: Value<'js>, name: String) -> JsResult<Value<'js>> {
+    self.grants.check_grant(ctx, GRANT, None, MATCH_NAMESPACE)?;
+    let target = self.handle_arg(ctx, &target, "getDeclaredMethod")?;
+    match &self.native {
+      Some(native) => {
+        let outcome = native.method(ctx, &target, &name)?;
+        self.outcome_to_value(ctx, outcome)
+      }
+      None => self.ask_op(ctx, OP_METHOD, &target, &name, &[]),
+    }
+  }
+
+  fn js_field<'js>(&self, ctx: &Ctx<'js>, target: Value<'js>, name: String) -> JsResult<Value<'js>> {
+    self.grants.check_grant(ctx, GRANT, None, MATCH_NAMESPACE)?;
+    let target = self.handle_arg(ctx, &target, "getDeclaredField")?;
+    match &self.native {
+      Some(native) => {
+        let outcome = native.field(ctx, &target, &name)?;
+        self.outcome_to_value(ctx, outcome)
+      }
+      None => self.ask_op(ctx, OP_FIELD, &target, &name, &[]),
+    }
+  }
+
+  fn js_invoke<'js>(&self, ctx: &Ctx<'js>, target: Value<'js>, receiver: Value<'js>, args: Rest<Value<'js>>) -> JsResult<Value<'js>> {
+    self.grants.check_grant(ctx, GRANT, None, MATCH_NAMESPACE)?;
+    let target = self.handle_arg(ctx, &target, "invoke")?;
+    match &self.native {
+      Some(native) => {
+        let receiver = read_arg(ctx, &receiver)?;
+        let args = self.read_args(ctx, &args.0)?;
+        let outcome = native.invoke_pinned(ctx, &target, &receiver, &args)?;
+        self.outcome_to_value(ctx, outcome)
+      }
+      None => {
+        let mut all = vec![receiver];
+        all.extend(args.0);
+        self.ask_op(ctx, OP_INVOKE, &target, "", &all)
+      }
+    }
+  }
+
+  fn js_member_get<'js>(&self, ctx: &Ctx<'js>, target: Value<'js>, receiver: Value<'js>) -> JsResult<Value<'js>> {
+    self.grants.check_grant(ctx, GRANT, None, MATCH_NAMESPACE)?;
+    let target = self.handle_arg(ctx, &target, "get")?;
+    match &self.native {
+      Some(native) => {
+        let receiver = read_arg(ctx, &receiver)?;
+        let outcome = native.member_get(ctx, &target, &receiver)?;
+        self.outcome_to_value(ctx, outcome)
+      }
+      None => self.ask_op(ctx, OP_MEMBER_GET, &target, "", &[receiver]),
+    }
+  }
+
+  fn js_member_set<'js>(&self, ctx: &Ctx<'js>, target: Value<'js>, receiver: Value<'js>, value: Value<'js>) -> JsResult<()> {
+    self.grants.check_grant(ctx, GRANT, None, MATCH_NAMESPACE)?;
+    let target = self.handle_arg(ctx, &target, "set")?;
+    match &self.native {
+      Some(native) => {
+        let receiver = read_arg(ctx, &receiver)?;
+        native.member_set(ctx, &target, &receiver, &read_arg(ctx, &value)?)
+      }
+      None => self.ask_op(ctx, OP_MEMBER_SET, &target, "", &[receiver, value]).map(|_| ()),
+    }
   }
 
   pub(crate) fn arg_to_wire<'js>(&self, ctx: &Ctx<'js>, value: &Value<'js>) -> JsResult<String> {
-    if value.is_null() || value.is_undefined() {
-      return Ok("N".to_string());
-    }
-    if let Some(b) = value.as_bool() {
-      return Ok(if b { "B1" } else { "B0" }.to_string());
-    }
-    if let Some(i) = value.as_int() {
-      return Ok(format!("I{i}"));
-    }
-    if let Some(f) = value.as_float() {
-      if f.fract() == 0.0 && f.abs() <= 9_007_199_254_740_991.0 {
-        return Ok(format!("I{}", f as i64));
-      }
-      return Ok(format!("D{f}"));
-    }
-    if value.is_big_int() {
-      let text = Coerced::<String>::from_js(ctx, value.clone())?.0;
-      return match text.parse::<i64>() {
-        Ok(v) => Ok(format!("I{v}")),
-        Err(_) => PluginErrorCode::InvalidArgument.throw(ctx, &format!("jvm: {text} does not fit in a java long")),
-      };
-    }
-    if let Some(s) = value.as_string() {
-      let s = s.to_string()?;
-      if !bounded(&s, VALUE_LIMIT_BYTES) {
-        return throw_too_big(ctx, "a string argument", s.len(), VALUE_LIMIT_BYTES);
-      }
-      return Ok(format!("S{s}"));
-    }
-    if let Ok(typed) = TypedArray::<u8>::from_value(value.clone()) {
-      if let Some(bytes) = typed.as_bytes() {
-        if !bounded_bytes(bytes, VALUE_LIMIT_BYTES) {
-          return throw_too_big(ctx, "a byte[] argument", bytes.len(), VALUE_LIMIT_BYTES);
-        }
-        return Ok(format!("Y{}", base64::Engine::encode(&base64::engine::general_purpose::STANDARD, bytes)));
-      }
-    }
-    let id = self.handle_id(ctx, value)?;
-    if id >= 0 {
-      return Ok(format!("G{id}"));
-    }
-    PluginErrorCode::InvalidArgument.throw(ctx, &format!("jvm: cannot hand a {} to java", value.type_of()))
+    Ok(match read_arg(ctx, value)? {
+      Arg::Null => "N".to_string(),
+      Arg::Bool(b) => if b { "B1" } else { "B0" }.to_string(),
+      Arg::Int(i) => format!("I{i}"),
+      Arg::Double(f) => format!("D{f}"),
+      Arg::Str(s) => format!("S{s}"),
+      Arg::Bytes(bytes) => format!("Y{}", base64::Engine::encode(&base64::engine::general_purpose::STANDARD, bytes)),
+      Arg::Ref(handle) => format!("G{}", handle.borrow().id),
+    })
   }
 }
 
@@ -276,12 +449,7 @@ impl JvmState {
       let Ok(id) = payload[kind.len_utf8()..].parse::<i64>() else {
         return PluginErrorCode::Internal.throw(ctx, "jvm: the host answered with a bad handle");
       };
-      let borrowed = self.prelude.borrow();
-      let Some(prelude) = borrowed.as_ref() else {
-        return PluginErrorCode::Internal.throw(ctx, "jvm: the prelude is not installed");
-      };
-      let mint = prelude.mint.clone().restore(ctx)?;
-      return mint.call((kind.to_string(), id));
+      return self.make_handle(ctx, HandleSpec { id, kind: kind as u8, class_key: None, pinned: None });
     }
     match crate::api::tl::proxy::scalar_wire_to_js(ctx, tag, payload) {
       Some(value) => value,
@@ -316,7 +484,7 @@ impl JvmState {
   }
 
   fn js_cls<'js>(&self, ctx: &Ctx<'js>, name: String) -> JsResult<Value<'js>> {
-    self.grants.check_grant(ctx, GRANT, Some(&name), MATCH_NAMESPACE)?;
+    self.grants.check_grant(ctx, GRANT, None, MATCH_NAMESPACE)?;
     self.ask(ctx, OP_CLASS, 0, &name, &[])
   }
 
@@ -334,7 +502,7 @@ impl JvmState {
   }
 
   fn js_load_dex<'js>(&self, ctx: &Ctx<'js>, source: Value<'js>) -> JsResult<()> {
-    self.grants.check_grant(ctx, GRANT, Some("*"), MATCH_NAMESPACE)?;
+    self.grants.check_grant(ctx, GRANT, None, MATCH_NAMESPACE)?;
     if let Some(path) = source.as_string() {
       let path = path.to_string()?;
       self.ask(ctx, OP_LOAD_DEX, 0, &path, &[])?;
@@ -353,7 +521,7 @@ impl JvmState {
     PluginErrorCode::InvalidArgument.throw(ctx, "loadDex: expected an absolute path or a Uint8Array")
   }
 
-  fn put_bundle_value<'js>(&self, ctx: &Ctx<'js>, bundle_id: i64, key: &str, value: &Value<'js>) -> JsResult<()> {
+  fn put_bundle_value<'js>(&self, ctx: &Ctx<'js>, bundle: &Value<'js>, key: &str, value: &Value<'js>) -> JsResult<()> {
     let method = if value.as_bool().is_some() {
       "putBoolean"
     } else if value.is_big_int() {
@@ -374,27 +542,21 @@ impl JvmState {
     } else if TypedArray::<u8>::from_value(value.clone()).is_ok() {
       "putByteArray"
     } else {
-      let handle = self.handle_id(ctx, value)?;
-      if handle < 0 {
+      let Some(handle) = ref_of(value) else {
         return PluginErrorCode::InvalidArgument
           .throw(ctx, &format!("bundle: '{key}' has unsupported type {}", value.type_of()));
-      }
-      let key_value = key.into_js(ctx)?;
-      let key_wire = self.arg_to_wire(ctx, &key_value)?;
-      let value_wire = format!("G{handle}");
-      let wire = self.host.jvm(OP_BUNDLE_METHOD, handle, "", &[]);
+      };
+      let wire = self.host.jvm(OP_BUNDLE_METHOD, handle.borrow().id, "", &[]);
       let method = self.wire_to_value(ctx, &wire)?;
       let Some(method) = method.as_string() else {
         return PluginErrorCode::InvalidArgument
           .throw(ctx, &format!("bundle: '{key}' is not a Bundle-compatible java object"));
       };
-      self.ask(ctx, OP_CALL, bundle_id, &method.to_string()?, &[key_wire, value_wire])?;
+      let method = method.to_string()?;
+      self.js_call(ctx, bundle.clone(), method, Rest(vec![key.into_js(ctx)?, value.clone()]))?;
       return Ok(());
     };
-    let key_value = key.into_js(ctx)?;
-    let key_wire = self.arg_to_wire(ctx, &key_value)?;
-    let value_wire = self.arg_to_wire(ctx, value)?;
-    self.ask(ctx, OP_CALL, bundle_id, method, &[key_wire, value_wire])?;
+    self.js_call(ctx, bundle.clone(), method.to_string(), Rest(vec![key.into_js(ctx)?, value.clone()]))?;
     Ok(())
   }
 
@@ -402,16 +564,14 @@ impl JvmState {
     let Some(values) = values.as_object() else {
       return PluginErrorCode::InvalidArgument.throw(ctx, "bundle: expected an object");
     };
-    if values.as_array().is_some() || self.handle_id(ctx, &values.clone().into_value())? >= 0 {
+    if values.as_array().is_some() || ref_of(&values.clone().into_value()).is_some() {
       return PluginErrorCode::InvalidArgument.throw(ctx, "bundle: expected an object");
     }
     let class = self.js_cls(ctx, "android.os.Bundle".to_string())?;
-    let class_id = self.handle_id(ctx, &class)?;
-    let bundle = self.ask(ctx, OP_NEW, class_id, "", &[])?;
-    let bundle_id = self.handle_id(ctx, &bundle)?;
+    let bundle = self.js_construct(ctx, class, Rest(Vec::new()))?;
     for entry in values.own_props::<String, Value>(Filter::new().string().enum_only()) {
       let (key, value) = entry?;
-      self.put_bundle_value(ctx, bundle_id, &key, &value)?;
+      self.put_bundle_value(ctx, &bundle, &key, &value)?;
     }
     Ok(bundle)
   }
@@ -420,11 +580,13 @@ impl JvmState {
 pub fn install_jvm<'js>(
   ctx: &Ctx<'js>,
   host: Rc<dyn JvmHost>,
+  reflect: Option<Rc<dyn JvmReflectHost>>,
   grants: Rc<dyn GrantHost>,
   lifecycle: Rc<Lifecycle>,
   log: crate::Log,
   globals: &crate::api::Globals<'js>,
 ) -> JsResult<Rc<JvmState>> {
+  let refs = RefTable::new();
   let state = Rc::new(JvmState {
     host,
     grants,
@@ -433,6 +595,8 @@ pub fn install_jvm<'js>(
     callbacks: CallbackRegistry::default(),
     cleanup_callbacks: RefCell::new(std::collections::HashSet::new()),
     prelude: RefCell::new(None),
+    native: reflect.map(|reflect| Native::new(reflect, refs.clone())),
+    refs,
   });
 
   let natives = Object::new(ctx.clone())?;
@@ -446,19 +610,7 @@ pub fn install_jvm<'js>(
     )?;
   }
   let ops = Object::new(ctx.clone())?;
-  for (name, op) in [
-    ("routine", OP_ROUTINE),
-    ("xposedRoutine", OP_XPOSED_ROUTINE),
-    ("construct", OP_NEW),
-    ("get", OP_GET),
-    ("set", OP_SET),
-    ("call", OP_CALL),
-    ("method", OP_METHOD),
-    ("field", OP_FIELD),
-    ("invoke", OP_INVOKE),
-    ("memberGet", OP_MEMBER_GET),
-    ("memberSet", OP_MEMBER_SET),
-  ] {
+  for (name, op) in [("routine", OP_ROUTINE), ("xposedRoutine", OP_XPOSED_ROUTINE)] {
     ops.set(name, op)?;
   }
   {
@@ -470,6 +622,83 @@ pub fn install_jvm<'js>(
       })?,
     )?;
   }
+  {
+    let state = state.clone();
+    natives.set(
+      "call",
+      Function::new(ctx.clone(), move |ctx: Ctx<'js>, target: Value<'js>, name: String, args: Rest<Value<'js>>| {
+        state.js_call(&ctx, target, name, args)
+      })?,
+    )?;
+  }
+  {
+    let state = state.clone();
+    natives.set(
+      "construct",
+      Function::new(ctx.clone(), move |ctx: Ctx<'js>, target: Value<'js>, args: Rest<Value<'js>>| {
+        state.js_construct(&ctx, target, args)
+      })?,
+    )?;
+  }
+  {
+    let state = state.clone();
+    natives.set(
+      "get",
+      Function::new(ctx.clone(), move |ctx: Ctx<'js>, target: Value<'js>, name: String| state.js_get(&ctx, target, name))?,
+    )?;
+  }
+  {
+    let state = state.clone();
+    natives.set(
+      "set",
+      Function::new(ctx.clone(), move |ctx: Ctx<'js>, target: Value<'js>, name: String, value: Value<'js>| {
+        state.js_set(&ctx, target, name, value)
+      })?,
+    )?;
+  }
+  {
+    let state = state.clone();
+    natives.set(
+      "method",
+      Function::new(ctx.clone(), move |ctx: Ctx<'js>, target: Value<'js>, name: String| state.js_method(&ctx, target, name))?,
+    )?;
+  }
+  {
+    let state = state.clone();
+    natives.set(
+      "field",
+      Function::new(ctx.clone(), move |ctx: Ctx<'js>, target: Value<'js>, name: String| state.js_field(&ctx, target, name))?,
+    )?;
+  }
+  {
+    let state = state.clone();
+    natives.set(
+      "invoke",
+      Function::new(ctx.clone(), move |ctx: Ctx<'js>, target: Value<'js>, receiver: Value<'js>, args: Rest<Value<'js>>| {
+        state.js_invoke(&ctx, target, receiver, args)
+      })?,
+    )?;
+  }
+  {
+    let state = state.clone();
+    natives.set(
+      "memberGet",
+      Function::new(ctx.clone(), move |ctx: Ctx<'js>, target: Value<'js>, receiver: Value<'js>| {
+        state.js_member_get(&ctx, target, receiver)
+      })?,
+    )?;
+  }
+  {
+    let state = state.clone();
+    natives.set(
+      "memberSet",
+      Function::new(ctx.clone(), move |ctx: Ctx<'js>, target: Value<'js>, receiver: Value<'js>, value: Value<'js>| {
+        state.js_member_set(&ctx, target, receiver, value)
+      })?,
+    )?;
+  }
+  natives.set("isRef", Function::new(ctx.clone(), |value: Value<'js>| ref_of(&value).is_some())?)?;
+  natives.set("hiddenRef", HIDDEN_REF)?;
   {
     let state = state.clone();
     natives.set("cls", Function::new(ctx.clone(), move |ctx: Ctx<'js>, name: String| state.js_cls(&ctx, name))?)?;
@@ -488,26 +717,19 @@ pub fn install_jvm<'js>(
       Function::new(ctx.clone(), move |ctx: Ctx<'js>, source: Value<'js>| state.js_load_dex(&ctx, source))?,
     )?;
   }
-  {
-    let state = state.clone();
-    natives.set(
-      "release",
-      Function::new(ctx.clone(), move |target: i64| {
-        state.host.jvm(OP_RELEASE, target, "", &[]);
-      })?,
-    )?;
-  }
 
   let plugin_error = globals.plugin_error.clone();
 
   let factory = prelude::load(ctx, PRELUDE)?;
   let built: Object = factory.call((natives, plugin_error, ops))?;
   let jvm: Object = built.get("jvm")?;
-  let mint: Function = built.get("mint")?;
-  let id_of: Function = built.get("idOf")?;
+  let protos: Object = built.get("protos")?;
   *state.prelude.borrow_mut() = Some(Prelude {
-    mint: Persistent::save(ctx, mint),
-    id_of: Persistent::save(ctx, id_of),
+    mint_class: Persistent::save(ctx, built.get::<_, Function>("mintClass")?),
+    object_proto: Persistent::save(ctx, protos.get::<_, Object>("object")?),
+    method_proto: Persistent::save(ctx, protos.get::<_, Object>("method")?),
+    constructor_proto: Persistent::save(ctx, protos.get::<_, Object>("constructor")?),
+    field_proto: Persistent::save(ctx, protos.get::<_, Object>("field")?),
     xposed_routine: Persistent::save(ctx, built.get::<_, Function>("xposedRoutine")?),
   });
   globals.inu.set("jvm", jvm)?;
@@ -572,11 +794,19 @@ impl JvmState {
     context.with(|ctx| {
       state.callbacks.release_all(&ctx);
       if let Some(prelude) = state.prelude.borrow_mut().take() {
-        let _ = prelude.mint.restore(&ctx);
-        let _ = prelude.id_of.restore(&ctx);
+        let _ = prelude.mint_class.restore(&ctx);
+        let _ = prelude.object_proto.restore(&ctx);
+        let _ = prelude.method_proto.restore(&ctx);
+        let _ = prelude.constructor_proto.restore(&ctx);
+        let _ = prelude.field_proto.restore(&ctx);
         let _ = prelude.xposed_routine.restore(&ctx);
       }
     });
+    state.refs.close();
+  }
+
+  pub(crate) fn refs(&self) -> &Arc<RefTable> {
+    &self.refs
   }
 }
 

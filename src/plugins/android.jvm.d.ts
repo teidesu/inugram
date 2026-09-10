@@ -8,7 +8,9 @@ declare type JavaMethod = OpaqueType<'JVMMethod'> & {
   invoke: (obj: JavaObject | null, ...args: any[]) => any
 }
 
-declare type JavaConstructor = OpaqueType<'JVMConstructor'> & {}
+declare type JavaConstructor = OpaqueType<'JVMConstructor'> & {
+  newInstance: (...args: any[]) => JavaObject
+}
 declare type JavaField = OpaqueType<'JVMField'> & {
   get: (obj: JavaObject | null) => any
   set: (obj: JavaObject | null, value: any) => void
@@ -105,10 +107,8 @@ declare interface JvmRoutineOps {
 
 declare namespace inu {
   /**
-   * The scope list is matched against the *runtime* class of everything that crosses, return
-   * values included - a method's declared type says nothing about what it hands back. So
-   * `cls('java.lang.Thread').callStatic('currentThread')` answers with whatever subclass is
-   * actually running, and a plugin scoped to `java.lang.*` is refused it.
+   * The grant takes no scope list: it reaches every class the app can, and the engine's own
+   * bridge package is the one thing it never reaches.
    *
    * @needs-grant unsafe.jvm. Values are capped at 1048576 bytes in either direction; dex input has at most 8388608 bytes of dex.
    */
@@ -141,7 +141,7 @@ declare namespace inu {
     function loadDex(path: string | Uint8Array): void
 
     /**
-     * Define a public JVM class. Requires unscoped unsafe.jvm.
+     * Define a public JVM class.
      * Superclass defaults to Object; constructors default to one no-arg constructor calling super().
      * Types accept primitive names, fully qualified class names, [] suffixes, or JVM type descriptors.
      * Omitted method params/returns are inferred from an unambiguous inherited signature, otherwise ()void.

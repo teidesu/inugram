@@ -1,6 +1,5 @@
 use super::*;
 use crate::api::platform::jvm::tests::testing::OracleJvmHost;
-use crate::sandbox::grants::MATCH_EXACT;
 use crate::testing::harness::{assert_oracle_exact, install_capturing_console, manifest_grants, DisposeOnDrop};
 use std::cell::{Cell, RefCell};
 use std::collections::HashMap;
@@ -86,6 +85,7 @@ fn the_bundled_xposed_test_plugin_passes() {
     let jvm = crate::api::platform::jvm::install_jvm(
       &ctx,
       jvm_oracle.as_host(),
+      None,
       grants.clone(),
       lifecycle.clone(),
       log.clone(),
@@ -120,6 +120,9 @@ fn run_dispatch(
   original: &str,
 ) -> (String, Option<Vec<String>>) {
   let answer = state.dispatch_before(rt, context, 1, site, &Invocation { method: "GM1", this: "N", args });
+  if answer.is_empty() {
+    return (original.to_string(), Some(args.to_vec()));
+  }
   if answer[0] == "A" {
     return (answer[1].clone(), None);
   }
@@ -218,6 +221,7 @@ fn setup(grants: &[&str]) -> Fixture {
     let jvm = crate::api::platform::jvm::install_jvm(
       &ctx,
       OracleJvmHost::new().as_host(),
+      None,
       grant_host.clone(),
       lifecycle.clone(),
       log.clone(),
@@ -450,6 +454,44 @@ fn a_disposer_called_twice_unhooks_once() {
   assert_eq!(fixture.host.ops().iter().filter(|op| **op == OP_UNHOOK).count(), 1);
 }
 
+/// nothing read the argument wires, so the answer must say so rather than echo them: the host
+/// releases what it minted, and a `P0` would tell it the engine had taken them
+#[test]
+fn a_site_with_no_hooks_answers_that_nothing_was_dispatched() {
+  let fixture = granted();
+  fixture.eval(
+    "const m = inu.jvm.cls('java.lang.String').getDeclaredMethod('length');
+         inu.xposed.hookMethod(m, { before() {} })()",
+  );
+  let answer = fixture.state.dispatch_before(
+    &fixture.rt,
+    &fixture.ctx,
+    1,
+    100,
+    &Invocation { method: "GM1", this: "N", args: &["GO9".to_string()] },
+  );
+  assert!(answer.is_empty(), "{answer:?}");
+}
+
+/// once the context is built the engine owns whatever the wires minted, so a failure past that
+/// point must not answer "nothing was dispatched": the host would release handles the plugin holds
+#[test]
+fn a_before_that_breaks_the_arguments_still_says_the_engine_took_the_wires() {
+  let fixture = granted();
+  fixture.eval(
+    "const m = inu.jvm.cls('java.lang.String').getDeclaredMethod('length');
+         inu.xposed.hookMethod(m, { before(ctx) { ctx.args = [{}] } })",
+  );
+  let answer = fixture.state.dispatch_before(
+    &fixture.rt,
+    &fixture.ctx,
+    1,
+    100,
+    &Invocation { method: "GM1", this: "N", args: &["GO9".to_string()] },
+  );
+  assert_eq!(answer.first().map(String::as_str), Some("P0"), "{answer:?}");
+}
+
 #[test]
 fn a_disposed_hook_stops_running_but_the_original_still_does() {
   let fixture = granted();
@@ -631,13 +673,6 @@ fn call_original_defaults_omitted_receiver_and_arguments() {
 }
 
 #[test]
-fn a_grant_scope_does_not_have_to_name_the_class_here() {
-  // the declaring class is the host's to check; an unscoped grant satisfies every scope check
-  let fixture = setup(&["unsafe.jvm", "unsafe.xposed"]);
-  assert!(fixture.state.grants.is_granted(GRANT, Some("anything"), MATCH_EXACT));
-}
-
-#[test]
 fn routine_hooks_register_native_phases_and_dispose_them() {
   let fixture = granted();
   fixture.eval("const method = inu.jvm.cls('test.Fixture').getDeclaredMethod('run'); const routine = inu.jvm.routine(ops => []); globalThis.off = inu.xposed.hookMethod(method, { before: routine, after: routine })");
@@ -713,5 +748,6 @@ fn explicit_after_override_is_kept_even_when_its_wire_matches_the_original() {
     .state
     .dispatch_before(&fixture.rt, &fixture.ctx, 1, 100, &Invocation { method: "GM1", this: "N", args: &[] });
   assert_eq!(fixture.state.dispatch_after(&fixture.rt, &fixture.ctx, 1, "I42"), "I42");
-  assert_eq!(fixture.state.dispatch_after(&fixture.rt, &fixture.ctx, 999, "GO9"), KEEP_ORIGINAL);
+  // an id nothing is pending for never reads the wire, so the host is told it still owns it
+  assert_eq!(fixture.state.dispatch_after(&fixture.rt, &fixture.ctx, 999, "GO9"), NOT_DISPATCHED);
 }

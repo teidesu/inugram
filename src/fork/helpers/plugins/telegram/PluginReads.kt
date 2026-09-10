@@ -155,9 +155,12 @@ object PluginReads {
         }
     }
 
-    internal fun mint(handles: TlHandles, value: TLObject?): String =
-        if (value == null) PluginWire.encodeNull()
-        else PluginWire.encodeHandle(vector = false, id = handles.mintForPlugin(value, readOnly = true), readOnly = true)
+    /** the plugin asked for this object, so its scalars go with the handle: reading them is what it will do next */
+    internal fun mint(handles: TlHandles, value: TLObject?): String {
+        if (value == null) return PluginWire.encodeNull()
+        val id = handles.mintForPlugin(value, readOnly = true)
+        return PluginWire.encodeHandle(vector = false, id = id, readOnly = true, projection = handles.projectScalars(id))
+    }
 
     internal fun mintEach(handles: TlHandles, values: List<TLObject?>): String =
         values.joinToString(PeerSpecs.LIST_SEPARATOR) { mint(handles, it) }

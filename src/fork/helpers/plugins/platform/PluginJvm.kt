@@ -10,7 +10,6 @@ import android.util.SparseArray
 import dalvik.system.DexClassLoader
 import desu.inugram.core.plugins.PluginInstalls
 import desu.inugram.core.plugins.PluginWire
-import desu.inugram.core.plugins.ScopeMatch
 import desu.inugram.helpers.plugins.EngineDispatch
 import desu.inugram.helpers.plugins.JvmListener
 import desu.inugram.helpers.plugins.Plugin
@@ -31,41 +30,30 @@ import org.telegram.messenger.Utilities
 /**
  * Kotlin side of `inu.jvm` (rust: `jvm.rs`).
  *
- * Scopes are checked here because this is the side that knows: the *runtime* class of every
- * reference minted and the *declaring* class of every member reached are heap facts rust cannot
- * see. A value that crosses is not checked - a value is data, and only a reference is a capability.
- * That buys reach, not safety: a scope naming `java.lang.reflect.*`, `java.lang.Class`,
- * `java.lang.ClassLoader` or `dalvik.system.*` is the same statement as the bare grant.
- *
- * Two rules are call-time rather than scope entries, an unscoped grant satisfying every scope
- * check: `loadDex` needs the whole grant, dex running with the app's permissions and never crossing
- * this bridge again; and [ENGINE_PACKAGE] is unreachable while a reflected call holds an engine
- * lease. The latter guards one hop, not a boundary - `java.lang.reflect` walks around it.
+ * The grant carries no scope list: it reaches every class the app can. [ENGINE_PACKAGE] is the one
+ * refusal, and it is a rule rather than a boundary - it guards the hop that would hand a plugin the
+ * engine's own objects while a reflected call holds an engine lease. `java.lang.reflect` walks
+ * around it.
  */
 object PluginJvm {
-    // keep in sync with rust `jvm::OP_*` and `jvm.js`
+    // keep in sync with rust `jvm::OP_*` and `jvm.js`; the member ops (`OP_NEW`..`OP_MEMBER_SET`, 1..9) are rust's and never reach this side
     const val OP_CLASS = 0
-    const val OP_NEW = 1
-    const val OP_GET = 2
-    const val OP_SET = 3
-    const val OP_CALL = 4
-    const val OP_METHOD = 5
-    const val OP_FIELD = 6
-    const val OP_INVOKE = 7
-    const val OP_MEMBER_GET = 8
-    const val OP_MEMBER_SET = 9
     const val OP_RUNNABLE = 10
     const val OP_LOAD_DEX = 11
-    const val OP_RELEASE = 12
     const val OP_CURRENT_FRAGMENT = 13
     const val OP_CURRENT_ACTIVITY = 14
     const val OP_ROUTINE = 16
     const val OP_XPOSED_ROUTINE = 17
     const val OP_PREPARE_CLASS = 18
-    const val OP_COPY_REF = 19
     const val OP_LOAD_CLASS = 20
     const val OP_CANCEL_CLASS = 21
     const val OP_BUNDLE_METHOD = 15
+
+    // keep in sync with rust `jvm::native::RESOLVE_*`
+    const val RESOLVE_METHODS = 0
+    const val RESOLVE_CONSTRUCTORS = 1
+    const val RESOLVE_FIELD = 2
+    const val RESOLVE_MEMBER = 3
 
     const val GRANT = "unsafe.jvm"
 
@@ -83,6 +71,7 @@ object PluginJvm {
     private const val KIND_CLASS = 'C'
     private const val KIND_OBJECT = 'O'
     private const val KIND_METHOD = 'M'
+    private const val KIND_CONSTRUCTOR = 'K'
     private const val KIND_FIELD = 'F'
 
     /** handed in rather than read here, so a test can put a screen in front of the api without an `Activity` */
@@ -95,7 +84,7 @@ object PluginJvm {
     fun listenerFor(plugin: Plugin, engine: QuickJs, screen: AppScreen): JvmListener? =
         if (plugin.permissions.has(GRANT)) Session(plugin, engine, screen) else null
 
-    /** the scope list already decided this: a handle only exists because [Session.checkClass] let it be minted */
+    /** [Session.checkClass] already let this be minted, which is the only way a handle exists */
     fun objectAt(engine: QuickJs, handle: Long): Any? = (engine.listener?.jvm as? Session)?.objectAt(handle)
 
     fun detach(engine: QuickJs) {
@@ -128,6 +117,9 @@ object PluginJvm {
 
         fun encode(value: Any?): String
 
+        /** forget a handle [encode] minted that never reached the engine, so the reference it holds goes with it */
+        fun release(wire: String)
+
         fun wireOf(failure: Throwable): String?
     }
 
@@ -150,9 +142,7 @@ object PluginJvm {
 
     private class Session(private val plugin: Plugin, private val engine: QuickJs, private val screen: AppScreen) :
         JvmListener, ValueBridge {
-        // concurrent because [ValueBridge] is reached from off globalQueue: `inu.xposed` encodes on the hooked method's own thread, and `PluginUi` resolves dialogs on the ui thread
-        private val handles = ConcurrentHashMap<Long, Any>()
-        private val nextId = AtomicLong(1)
+        private val nextTicket = AtomicLong(1)
         private val loaders = ArrayList<ClassLoader>()
         private var dexCount = 0
         private val routinees = ArrayList<java.lang.ref.WeakReference<PluginJvmRoutine>>()
@@ -174,29 +164,12 @@ object PluginJvm {
         }
 
         private fun handle(op: Int, target: Long, name: String, args: Array<String>): String = when (op) {
-            // the name before the lookup, so a class outside the scope list reads the same whether or not it exists
             OP_CLASS -> {
                 checkName(name)
                 encodeValue(classFor(name))
             }
-            OP_NEW -> construct(classHandleAt(target), decodeArgs(args))
-            OP_GET -> readField(findField(receiverClass(target), name), instanceAt(target))
-            OP_SET -> writeField(findField(receiverClass(target), name), instanceAt(target), decodeArgs(args))
-            OP_CALL -> callMethod(receiverClass(target), instanceAt(target), name, decodeArgs(args))
-            OP_METHOD -> mint(resolvePinned(classHandleAt(target), name), KIND_METHOD)
-            OP_FIELD -> mint(findField(classHandleAt(target), name), KIND_FIELD)
-            OP_INVOKE -> invokePinned(methodAt(target), decodeArgs(args))
-            OP_MEMBER_GET -> readField(fieldAt(target), self(decodeArgs(args), 0))
-            OP_MEMBER_SET -> {
-                val decoded = decodeArgs(args)
-                writeField(fieldAt(target), self(decoded, 0), decoded.drop(1))
-            }
             OP_RUNNABLE -> mintRunnable(args)
-            OP_COPY_REF -> encodeValue(at(target))
             OP_PREPARE_CLASS -> {
-                if (!plugin.permissions.allows(GRANT, "*", ScopeMatch.NAMESPACE)) {
-                    refuse("not-granted", "defineClass requires the unscoped JVM grant", "$GRANT(*)")
-                }
                 if (definedClasses.size + pendingClasses.size >= 128) refuse("quota-exceeded", "defineClass: at most 128 classes per engine")
                 val previousLoaders = loaders.toList()
                 val parent = object : ClassLoader(PluginJvm::class.java.classLoader) {
@@ -218,13 +191,13 @@ object PluginJvm {
                             if (result.startsWith("E")) throw IllegalStateException(result.substring(1))
                             readRoutineResult(result)
                         } finally {
-                            for (wire in inputs) if (wire.startsWith("G")) handles.remove(wire.substring(2).toLong())
+                            for (wire in inputs) if (wire.startsWith("G")) engine.jvmRelease(wire.substring(2).toLong())
                         }
                     }
                 } catch (e: IllegalArgumentException) {
                     refuse("invalid-argument", "defineClass: ${e.message}")
                 }
-                val ticket = nextId.getAndIncrement()
+                val ticket = nextTicket.getAndIncrement()
                 val metadata = prepared.getMetadata(ticket)
                 if (metadata.toByteArray(Charsets.UTF_8).size > VALUE_LIMIT_BYTES) {
                     prepared.close()
@@ -234,7 +207,6 @@ object PluginJvm {
                 PluginWire.encodeString(metadata)
             }
             OP_LOAD_CLASS -> {
-                if (!plugin.permissions.allows(GRANT, "*", ScopeMatch.NAMESPACE)) refuse("not-granted", "defineClass requires the unscoped JVM grant", "$GRANT(*)")
                 val prepared = pendingClasses.remove(target) ?: expired()
                 try {
                     require(args.size == 1) { "expected class DEX bytes" }
@@ -258,18 +230,7 @@ object PluginJvm {
                 if (!plugin.permissions.has("unsafe.xposed")) refuse("not-granted", "xposed routine requires unsafe.xposed", "unsafe.xposed")
                 createRoutine(name, args, hookMode = true)
             }
-            OP_LOAD_DEX -> {
-                // dex runs with the app's permissions and never crosses this bridge again. Only an unscoped grant, or a literal `*`, passes
-                if (!plugin.permissions.allows(GRANT, "*", ScopeMatch.NAMESPACE)) {
-                    refuse("not-granted", "loadDex: this needs $GRANT with no scope list", "$GRANT(*)")
-                }
-                loadDex(name, args)
-            }
-            OP_RELEASE -> {
-                handles.remove(target)
-                PluginWire.encodeNull()
-            }
-            // `encodeValue` mints through `checkClass`, so a plugin scoped to one package still cannot be handed a fragment from another
+            OP_LOAD_DEX -> loadDex(name, args)
             OP_CURRENT_FRAGMENT -> encodeValue(screen.currentFragment())
             OP_CURRENT_ACTIVITY -> encodeValue(screen.currentActivity())
             OP_BUNDLE_METHOD -> encodeValue(bundleMethod(at(target)))
@@ -324,7 +285,7 @@ object PluginJvm {
             else -> null
         }
 
-        fun objectAt(handle: Long): Any? = if (live) handles[handle] else null
+        fun objectAt(handle: Long): Any? = if (live) engine.jvmObjectAt(handle) else null
 
         fun close() {
             live = false
@@ -334,8 +295,82 @@ object PluginJvm {
             pendingClasses.clear()
             for (routine in routinees) routine.get()?.close()
             routinees.clear()
-            handles.clear()
+            engine.jvmCloseHandles()
             loaders.clear()
+        }
+
+        override fun jvmResolve(target: Any, name: String, mode: Int): Array<Any?> = try {
+            if (!live) expired()
+            when (mode) {
+                RESOLVE_METHODS -> {
+                    val cls = target as? Class<*> ?: refuse("invalid-argument", "jvm: that handle is not a class")
+                    val descriptor = descriptorIn(name)
+                    var candidates = candidateMethods(cls, simpleName(name))
+                    if (descriptor != null) candidates = candidates.filter { it.descriptor == descriptor }
+                    if (candidates.isEmpty()) refuse("not-found", "jvm: ${cls.name} has no method named $name")
+                    methodsAnswer(cls, candidates)
+                }
+                RESOLVE_CONSTRUCTORS -> {
+                    val cls = target as? Class<*> ?: refuse("invalid-argument", "jvm: that handle is not a class")
+                    var candidates = cachedConstructors(cls)
+                    if (name.isNotEmpty()) candidates = candidates.filter { it.descriptor == name }
+                    if (candidates.isEmpty()) refuse("not-found", "jvm: ${cls.name} has no constructor $name")
+                    methodsAnswer(cls, candidates)
+                }
+                RESOLVE_FIELD -> {
+                    val cls = target as? Class<*> ?: refuse("invalid-argument", "jvm: that handle is not a class")
+                    val field = cachedField(cls, name) ?: refuse("not-found", "jvm: ${cls.name} has no field named $name")
+                    fieldAnswer(field)
+                }
+                RESOLVE_MEMBER -> when (target) {
+                    is Field -> fieldAnswer(target)
+                    is Executable -> methodsAnswer(target.declaringClass, listOf(MemberInfo(target)))
+                    else -> refuse("invalid-argument", "jvm: that handle is not a method, constructor or field")
+                }
+                else -> refuse("internal", "jvm: unknown resolve mode $mode")
+            }
+        } catch (e: Refusal) {
+            arrayOf("E", e.wire)
+        } catch (e: Throwable) {
+            arrayOf("E", PluginWire.encodeError("jvm: ${describe(e)}"))
+        }
+
+        /** the verdict on the declaring class, per member: rust applies it to the one it picks */
+        private fun refusalOf(member: Member): String? = try {
+            checkMember(member)
+            null
+        } catch (e: Refusal) {
+            e.wire
+        }
+
+        private fun methodsAnswer(cls: Class<*>, candidates: List<MemberInfo>): Array<Any?> {
+            val answer = ArrayList<Any?>(2 + candidates.size * 5)
+            answer.add("M")
+            answer.add(cls.name)
+            for (info in candidates) {
+                answer.add(info.member)
+                answer.add(info.params)
+                answer.add(info.descriptor)
+                answer.add(Modifier.isStatic(info.member.modifiers))
+                answer.add(refusalOf(info.member))
+            }
+            return answer.toTypedArray()
+        }
+
+        /** the class named is the declaring one: it is what a refusal or a final-field message names */
+        private fun fieldAnswer(field: Field): Array<Any?> {
+            return arrayOf(
+                "F",
+                field.declaringClass.name,
+                field,
+                field.type,
+                descriptorOf(field.type),
+                Modifier.isStatic(field.modifiers),
+                Modifier.isFinal(field.modifiers),
+                refusalOf(field),
+                field.type.name,
+                field.name,
+            )
         }
 
         /** an array is checked by its element type: `[Ljava.lang.String;` is not a name any namespace list can hold */
@@ -347,12 +382,9 @@ object PluginJvm {
         }
 
         private fun checkName(name: String) {
-            // whatever the scopes say: this is the one hop that would put the engine's own objects in a plugin's hands
+            // the one hop that would put the engine's own objects in a plugin's hands
             if (name.startsWith("$ENGINE_PACKAGE.")) {
                 refuse("forbidden", "jvm: $name is the plugin engine's own bridge and is never reachable")
-            }
-            if (!plugin.permissions.allows(GRANT, name, ScopeMatch.NAMESPACE)) {
-                refuse("not-granted", "jvm: $name is not in this plugin's $GRANT scope list", "$GRANT($name)")
             }
         }
 
@@ -373,42 +405,29 @@ object PluginJvm {
 
         override fun encode(value: Any?): String = encodeValue(value)
 
+        override fun release(wire: String) {
+            // a throwable answer rides under a `T`, and its handle is the one that would be left behind
+            val handle = wire.removePrefix("T")
+            if (!handle.startsWith("G")) return
+            handle.drop(2).toLongOrNull()?.let { engine.jvmRelease(it) }
+        }
+
         override fun wireOf(failure: Throwable): String? = (failure as? Refusal)?.wire
 
+        /** the table is rust's, and a mint it refuses is one whose engine has already closed */
         private fun mint(value: Any, kind: Char): String {
-            val id = nextId.getAndIncrement()
-            handles[id] = value
+            val id = engine.jvmMint(value, kind)
+            if (id == 0L) expired()
             return "G$kind$id"
         }
 
         private fun expired(): Nothing =
             refuse("handle-expired", "jvm: that handle was released; a plugin's handles do not outlive it")
 
-        private fun at(target: Long): Any = handles[target] ?: expired()
+        private fun at(target: Long): Any = objectAt(target) ?: expired()
 
         private fun classHandleAt(target: Long): Class<*> = at(target) as? Class<*>
             ?: refuse("invalid-argument", "jvm: that handle is not a class")
-
-        private fun methodAt(target: Long): Member = at(target) as? Member
-            ?: refuse("invalid-argument", "jvm: that handle is not a method or constructor")
-
-        private fun fieldAt(target: Long): Field = at(target) as? Field
-            ?: refuse("invalid-argument", "jvm: that handle is not a field")
-
-        private fun receiverClass(target: Long): Class<*> {
-            val value = at(target)
-            return value as? Class<*> ?: value.javaClass
-        }
-
-        private fun instanceAt(target: Long): Any? = at(target).takeIf { it !is Class<*> }
-
-        private fun self(args: List<Any?>, index: Int): Any? {
-            val value = args.getOrNull(index)
-            if (value != null && value is Class<*>) {
-                refuse("invalid-argument", "jvm: a class is not a receiver")
-            }
-            return value
-        }
 
         private fun decodeArgs(args: Array<String>): List<Any?> = args.map { decodeArg(it) }
 
@@ -434,7 +453,29 @@ object PluginJvm {
             }
         }
 
-        private fun encodeValue(value: Any?): String = when (value) {
+        /** what may cross at all, whether it then crosses as a handle or stays on this side: a value within the size limit, of a class that is not the engine's own */
+        private fun checkValue(value: Any?) {
+            when (value) {
+                null, is Boolean, is Byte, is Short, is Int, is Long, is Float, is Double, is Char -> {}
+                is String -> {
+                    val size = value.toByteArray(Charsets.UTF_8).size
+                    if (size > VALUE_LIMIT_BYTES) tooBig("a string", size.toLong())
+                }
+                is ByteArray -> if (value.size > VALUE_LIMIT_BYTES) tooBig("a byte[]", value.size.toLong())
+                // a `Class` is checked as the class it *names*, or every one would be checked as `java.lang.Class`
+                is Class<*> -> checkClass(value)
+                // and a member by the class it *declares*
+                is Member -> checkMember(value)
+                else -> checkClass(value.javaClass)
+            }
+        }
+
+        private fun encodeValue(value: Any?): String {
+            checkValue(value)
+            return encodeChecked(value)
+        }
+
+        private fun encodeChecked(value: Any?): String = when (value) {
             null -> PluginWire.encodeNull()
             is Boolean -> PluginWire.encodeBool(value)
             is Byte -> PluginWire.encodeInt(value.toLong())
@@ -445,29 +486,13 @@ object PluginJvm {
             is Double -> PluginWire.encodeDouble(value)
             // a char is one character of text rather than its code point: that is what goes back into a `char` parameter unchanged
             is Char -> PluginWire.encodeString(value.toString())
-            is String -> {
-                val size = value.toByteArray(Charsets.UTF_8).size
-                if (size > VALUE_LIMIT_BYTES) tooBig("a string", size.toLong())
-                PluginWire.encodeString(value)
-            }
-            is ByteArray -> {
-                if (value.size > VALUE_LIMIT_BYTES) tooBig("a byte[]", value.size.toLong())
-                PluginWire.encodeBytes(Base64.encodeToString(value, Base64.NO_WRAP))
-            }
-            // a `Class` is checked as the class it *names*, or `getClass()` on something out of scope would be checked as `java.lang.Class`
-            is Class<*> -> {
-                checkClass(value)
-                mint(value, KIND_CLASS)
-            }
-            // and a member by the class it *declares*. The ops that skip [checkMember] can, because a member handle only exists if its declaring class was checked wherever one is minted
-            is Member -> {
-                checkMember(value)
-                mint(value, if (value is Method || value is java.lang.reflect.Constructor<*>) KIND_METHOD else if (value is Field) KIND_FIELD else KIND_OBJECT)
-            }
-            else -> {
-                checkClass(value.javaClass)
-                mint(value, KIND_OBJECT)
-            }
+            is String -> PluginWire.encodeString(value)
+            is ByteArray -> PluginWire.encodeBytes(Base64.encodeToString(value, Base64.NO_WRAP))
+            is Class<*> -> mint(value, KIND_CLASS)
+            is Method -> mint(value, KIND_METHOD)
+            is java.lang.reflect.Constructor<*> -> mint(value, KIND_CONSTRUCTOR)
+            is Field -> mint(value, KIND_FIELD)
+            else -> mint(value, KIND_OBJECT)
         }
 
         private fun classFor(name: String): Class<*> {
@@ -494,9 +519,9 @@ object PluginJvm {
             return field
         }
 
-        private fun readField(field: Field, self: Any?): String = encodeValue(field.get(self))
+        private fun readField(field: Field, self: Any?): Any? = field.get(self)
 
-        private fun writeField(field: Field, self: Any?, args: List<Any?>): String {
+        private fun writeField(field: Field, self: Any?, args: List<Any?>): Any? {
             if (args.size != 1) refuse("invalid-argument", "jvm: a field takes exactly one value")
             if (Modifier.isFinal(field.modifiers)) {
                 refuse("forbidden", "jvm: ${field.declaringClass.name}.${field.name} is final")
@@ -504,66 +529,13 @@ object PluginJvm {
             val value = convert(args[0], field.type)
                 ?: refuse("invalid-argument", "jvm: cannot assign that to a ${field.type.name}")
             field.set(self, value.value)
-            return PluginWire.encodeNull()
+            return null
         }
 
-        private fun callMethod(cls: Class<*>, self: Any?, name: String, args: List<Any?>): String {
+        private fun callMethod(cls: Class<*>, self: Any?, name: String, args: List<Any?>): Any? {
             val info = resolve(cls, name, args, staticOnly = self == null)
             info.method.isAccessible = true
-            return encodeValue(info.method.invoke(self, *convertAll(info.params, args)))
-        }
-
-        private fun invokePinned(method: Member, args: List<Any?>): String {
-            if (method is java.lang.reflect.Constructor<*>) {
-                val values = args.drop(1)
-                if (!matches(method.parameterTypes, values)) {
-                    refuse("invalid-argument", "jvm: ${method.declaringClass.name} constructor does not take these arguments")
-                }
-                method.isAccessible = true
-                return encodeValue(method.newInstance(*convertAll(method.parameterTypes, values)))
-            }
-            method as? Method ?: refuse("invalid-argument", "jvm: that handle is not a method or constructor")
-            val self = self(args, 0)
-            val rest = args.drop(1)
-            if (!matches(method.parameterTypes, rest)) {
-                refuse("invalid-argument", "jvm: ${describe(method)} does not take these arguments")
-            }
-            method.isAccessible = true
-            return encodeValue(method.invoke(self, *convertAll(method.parameterTypes, rest)))
-        }
-
-        private fun construct(cls: Class<*>, args: List<Any?>): String {
-            val candidates = cachedConstructors(cls).filter { matches(it.params, args) }
-            val ctor = pick(candidates, "${cls.name} constructor", args)
-            val member = ctor.member as java.lang.reflect.Constructor<*>
-            member.isAccessible = true
-            return encodeValue(member.newInstance(*convertAll(ctor.params, args)))
-        }
-
-        private fun resolvePinned(cls: Class<*>, name: String): Member {
-            val descriptor = descriptorIn(name)
-            val simple = simpleName(name)
-            if (simple == "<init>") {
-                val candidates = cachedConstructors(cls).filter { descriptor == null || it.descriptor == descriptor }
-                if (candidates.isEmpty()) refuse("not-found", "jvm: ${cls.name} has no constructor named $name")
-                if (candidates.size > 1) refuse("invalid-argument", "jvm: ${cls.name} constructor is overloaded; pin one with a descriptor")
-                val constructor = candidates[0].member
-                checkMember(constructor)
-                return constructor
-            }
-            val candidates = candidateMethods(cls, simple)
-                .filter { descriptor == null || it.descriptor == descriptor }
-            if (candidates.isEmpty()) refuse("not-found", "jvm: ${cls.name} has no method named $name")
-            if (candidates.size > 1) {
-                refuse(
-                    "invalid-argument",
-                    "jvm: ${cls.name}.$simple is overloaded; pin one with a descriptor, e.g. " +
-                        candidates.take(3).joinToString(", ") { "$simple${it.descriptor}" },
-                )
-            }
-            val method = candidates[0].member
-            checkMember(method)
-            return method
+            return info.method.invoke(self, *convertAll(info.params, args))
         }
 
         private fun resolve(cls: Class<*>, name: String, args: List<Any?>, staticOnly: Boolean): MemberInfo {
@@ -610,7 +582,17 @@ object PluginJvm {
         private fun readRoutineResult(wire: String): Any? {
             if (!wire.startsWith("G")) return decodeArg(wire)
             val id = wire.substring(2).toLong()
-            return try { at(id) } finally { handles.remove(id) }
+            return try { at(id) } finally { engine.jvmRelease(id) }
+        }
+
+        /**
+         * a routine reads java values without a wire between them, so this is where the wire's own
+         * checks and its one conversion happen: a char is one character of text everywhere a
+         * plugin can see one, and a routine must not be the place it is not.
+         */
+        private fun checkedOperand(value: Any?): Any? {
+            checkValue(value)
+            return if (value is Char) value.toString() else value
         }
 
         private fun createRoutine(definition: String, args: Array<String>, hookMode: Boolean = false): String {
@@ -618,16 +600,17 @@ object PluginJvm {
             if (routinees.size >= 512) refuse("quota-exceeded", "routine: at most 512 live routinees")
             val values = decodeArgs(args).map { if (it is ByteArray) it.copyOf() else it }
             val routine = try {
-                PluginJvmRoutine(definition, values, { live }, hookMode, { value -> readRoutineResult(encodeValue(value)) }) { kind, target, name, arguments ->
+                PluginJvmRoutine(definition, values, { live }, hookMode, ::checkedOperand) { kind, target, name, arguments ->
                     val cls = target as? Class<*> ?: target.javaClass
                     checkClass(cls)
                     val receiver = target.takeUnless { it is Class<*> }
-                    val wire = when (kind) {
+                    // the table is rust's, so encoding a result here would be a mint and a release across jni per operation
+                    val result = when (kind) {
                         "get" -> readField(findField(cls, name), receiver)
                         "set" -> writeField(findField(cls, name), receiver, arguments)
                         else -> callMethod(cls, receiver, name, arguments)
                     }
-                    readRoutineResult(wire)
+                    checkedOperand(result)
                 }
             } catch (e: Exception) {
                 refuse("invalid-argument", "routine: ${e.message}")
@@ -640,9 +623,7 @@ object PluginJvm {
             val callbackId = (decodeArg(args.firstOrNull() ?: "N") as? Long)
                 ?: refuse("internal", "jvm: runnable without a callback id")
             // not the app's object but one the engine made at the plugin's request. Reaching *into* it is still refused, being in [ENGINE_PACKAGE]
-            val id = nextId.getAndIncrement()
-            handles[id] = JsRunnable(this, callbackId.toInt())
-            return "G$KIND_OBJECT$id"
+            return mint(JsRunnable(this, callbackId.toInt()), KIND_OBJECT)
         }
 
         /** Native admission serializes callbacks and refuses recursive entry. */
@@ -817,7 +798,7 @@ object PluginJvm {
     }
 
     /**
-     * Member resolution, memoized process-wide, one table per class.
+     * Member resolution, memoized process-wide, one table per declaring class.
      *
      * `Class.getDeclaredMethods()` and `getMethods()` allocate a fresh array of fresh `Method`
      * objects on every call - ART interns none of it - so resolving one member of a deep class
@@ -825,17 +806,18 @@ object PluginJvm {
      * ~0.1ms for a constructor on the same class, and a constructor is the one path that never
      * reaches here. A plugin building android views paid that per call.
      *
-     * The table is keyed by class, not by (class, member): the walk costs the same whether it
-     * answers one name or every name, and a plugin touches a dozen members of the same view class.
-     * Keyed by member, laying out one label rescanned `TextView` ten times over.
+     * A table holds only what its class declares; a lookup composes the tables along the superclass
+     * chain and the interfaces, most derived first. So `View`'s table is scanned once and serves
+     * every widget, where a table of the whole inherited set rescanned `View` into each subclass.
+     * Keyed by class, not by (class, member): the scan costs the same whether it answers one name or
+     * every name, and a plugin touches a dozen members of the same view class.
      *
-     * The walk reaches interfaces itself rather than through `getMethods()`, which on a view class
-     * is the single most expensive call here - it merges and dedups the whole public method set, of
+     * Interfaces are reached through the tables rather than `getMethods()`, which on a view class is
+     * the single most expensive call here - it merges and dedups the whole public method set, of
      * which everything but the interface members is already covered by the superclass chain.
      *
-     * The scan decides nothing about permissions - every caller runs `checkMember` on the member it
-     * picks, and overload selection still happens per call against the candidates - so the answer is
-     * shared, including between plugins.
+     * The scan decides nothing about permissions, and overload selection still happens per call
+     * against the candidates, so the answer is shared, including between plugins.
      *
      * An LRU rather than a weak map: a `Method` strongly references the class that declared it, so
      * weak keys would never clear for the entries that matter. The bound is what keeps a plugin's
@@ -857,42 +839,27 @@ object PluginJvm {
 
     private class MemberTable(cls: Class<*>) {
         val methods: Map<String, List<MemberInfo>>
-        val constructors: List<MemberInfo>
-        val fields: Map<String, Field>
+        val constructors: List<MemberInfo> = cls.declaredConstructors.map { MemberInfo(it) }
+        val fields: Map<String, Field> = cls.declaredFields.associateBy { it.name }
+        val superclass: Class<*>? = cls.superclass
+        val interfaces: Array<Class<*>> = cls.interfaces
+
+        /**
+         * the tables a lookup on *this* class composes, settled on first use: the walk is the same
+         * every time, and a routine or a hook resolves a member per call rather than per class.
+         * Racing threads compute the same lists, so the write needs no lock.
+         */
+        @Volatile var lineage: Lineage? = null
+
+        /** what a lookup composes out of [lineage] for one name; an empty list is "this class has none" */
+        val composedMethods = ConcurrentHashMap<String, List<MemberInfo>>()
+        val composedFields = ConcurrentHashMap<String, List<Field>>()
 
         init {
-            val methods = HashMap<String, LinkedHashMap<String, MemberInfo>>()
-            val fields = HashMap<String, Field>()
-            val interfaces = LinkedHashSet<Class<*>>()
-            var current: Class<*>? = cls
-            while (current != null) {
-                for (method in current.declaredMethods) {
-                    // the most derived override wins, so the chain is walked downwards-first
-                    val info = MemberInfo(method)
-                    methods.getOrPut(method.name) { LinkedHashMap() }.putIfAbsent(info.descriptor, info)
-                }
-                for (field in current.declaredFields) fields.putIfAbsent(field.name, field)
-                collectInterfaces(current, interfaces)
-                current = current.superclass
-            }
-            // defaults and constants, which are not on the superclass chain
-            for (itf in interfaces) {
-                for (method in itf.declaredMethods) {
-                    // an interface's static and private methods are not inherited by what implements it
-                    if (Modifier.isStatic(method.modifiers) || Modifier.isPrivate(method.modifiers)) continue
-                    val info = MemberInfo(method)
-                    methods.getOrPut(method.name) { LinkedHashMap() }.putIfAbsent(info.descriptor, info)
-                }
-                for (field in itf.declaredFields) fields.putIfAbsent(field.name, field)
-            }
-            this.methods = methods.mapValues { it.value.values.toList() }
-            this.constructors = cls.declaredConstructors.map { MemberInfo(it) }
-            this.fields = fields
+            val methods = HashMap<String, ArrayList<MemberInfo>>()
+            for (method in cls.declaredMethods) methods.getOrPut(method.name) { ArrayList() }.add(MemberInfo(method))
+            this.methods = methods
         }
-    }
-
-    private fun collectInterfaces(cls: Class<*>, out: MutableSet<Class<*>>) {
-        for (itf in cls.interfaces) if (out.add(itf)) collectInterfaces(itf, out)
     }
 
     private val tableCache: MutableMap<Class<*>, MemberTable> = java.util.Collections.synchronizedMap(
@@ -904,11 +871,59 @@ object PluginJvm {
 
     private fun tableOf(cls: Class<*>): MemberTable = tableCache.getOrPut(cls) { MemberTable(cls) }
 
-    private fun cachedMethods(cls: Class<*>, name: String): List<MemberInfo> = tableOf(cls).methods[name] ?: emptyList()
+    /** the superclass chain, most derived first, then every interface any of them implements */
+    private class Lineage(val chain: List<MemberTable>, val interfaces: List<MemberTable>)
+
+    private fun lineageOf(cls: Class<*>): Lineage {
+        val table = tableOf(cls)
+        table.lineage?.let { return it }
+        val chain = ArrayList<MemberTable>()
+        val interfaces = LinkedHashMap<Class<*>, MemberTable>()
+        var current: MemberTable? = table
+        while (current != null) {
+            chain.add(current)
+            collectInterfaces(current, interfaces)
+            current = current.superclass?.let { tableOf(it) }
+        }
+        return Lineage(chain, interfaces.values.toList()).also { table.lineage = it }
+    }
+
+    private fun collectInterfaces(table: MemberTable, out: MutableMap<Class<*>, MemberTable>) {
+        for (itf in table.interfaces) {
+            if (out.containsKey(itf)) continue
+            val itfTable = tableOf(itf)
+            out[itf] = itfTable
+            collectInterfaces(itfTable, out)
+        }
+    }
+
+    private fun cachedMethods(cls: Class<*>, name: String): List<MemberInfo> {
+        val table = tableOf(cls)
+        table.composedMethods[name]?.let { return it }
+        val lineage = lineageOf(cls)
+        val byDescriptor = LinkedHashMap<String, MemberInfo>()
+        // the most derived override wins, so the chain is walked downwards-first
+        for (table in lineage.chain) for (info in table.methods[name].orEmpty()) byDescriptor.putIfAbsent(info.descriptor, info)
+        // defaults, which are not on the superclass chain; an interface's static and private methods are not inherited
+        for (table in lineage.interfaces) for (info in table.methods[name].orEmpty()) {
+            val modifiers = info.member.modifiers
+            if (Modifier.isStatic(modifiers) || Modifier.isPrivate(modifiers)) continue
+            byDescriptor.putIfAbsent(info.descriptor, info)
+        }
+        return byDescriptor.values.toList().also { table.composedMethods[name] = it }
+    }
 
     private fun cachedConstructors(cls: Class<*>): List<MemberInfo> = tableOf(cls).constructors
 
-    private fun cachedField(cls: Class<*>, name: String): Field? = tableOf(cls).fields[name]
+    private fun cachedField(cls: Class<*>, name: String): Field? {
+        val table = tableOf(cls)
+        table.composedFields[name]?.let { return it.firstOrNull() }
+        val lineage = lineageOf(cls)
+        val found = lineage.chain.firstNotNullOfOrNull { it.fields[name] }
+            ?: lineage.interfaces.firstNotNullOfOrNull { it.fields[name] }
+        table.composedFields[name] = listOfNotNull(found)
+        return found
+    }
 
     private fun descriptorOf(member: Executable): String {
         val params = member.parameterTypes.joinToString("") { descriptorOf(it) }

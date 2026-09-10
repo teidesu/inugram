@@ -4,6 +4,7 @@ import desu.inugram.core.plugins.TlFlags
 import desu.inugram.core.plugins.TlNames
 import java.lang.reflect.Field
 import java.lang.reflect.Modifier
+import org.json.JSONObject
 import org.telegram.tgnet.TLObject
 import org.telegram.tgnet.TLRPC
 import org.telegram.tgnet.tl.TL_account
@@ -71,6 +72,64 @@ object TlReflect {
 
     private val classesByTlName: Map<String, Class<out TLObject>> by lazy { buildClassIndex() }
     private val fieldsByClass = java.util.concurrent.ConcurrentHashMap<Class<*>, Map<String, Field>>()
+    private val infosByClass = java.util.concurrent.ConcurrentHashMap<Class<*>, Map<String, FieldInfo>>()
+    private val fullyScalarByClass = java.util.concurrent.ConcurrentHashMap<Class<*>, Boolean>()
+
+    /**
+     * everything a read decides from (class, name), settled once: `Field.getGenericType()` reparses
+     * the signature on every call, and the gate is three lookups. [wordField] is the flags word
+     * holding [gate]'s bit, `null` when the field is not gated.
+     */
+    class FieldInfo(
+        val field: Field,
+        val gate: TlFlags.Gate?,
+        val wordField: Field?,
+        val isFlagWord: Boolean,
+        val hiddenInTakeover: Boolean,
+        /** a draft rides on a `Dialog`, a `ForumTopic`, a `savedDialog` and `updateDraftMessage` as well as on `getDraft`, so this keys on the field's declared type */
+        val isDraft: Boolean,
+    ) {
+        val genericType: java.lang.reflect.Type = field.genericType
+        val type: Class<*> = field.type
+
+        val quotedName: String = JSONObject.quote(field.name)
+
+        val isScalar: Boolean = type == String::class.java || type.isPrimitive
+
+        fun isPresent(obj: TLObject): Boolean =
+            wordField == null || gate == null || (wordField.getInt(obj) and (1 shl gate.bit)) != 0
+    }
+
+    fun fieldInfos(cls: Class<*>): Map<String, FieldInfo> = infosByClass.getOrPut(cls) {
+        val fields = publicFields(cls)
+        val out = LinkedHashMap<String, FieldInfo>(fields.size)
+        for ((name, field) in fields) {
+            val gate = TlFlags.gateOf(cls, name)
+            out[name] = FieldInfo(
+                field = field,
+                gate = gate,
+                wordField = gate?.let { fields[TlFlags.wordName(it.word) ?: return@let null] },
+                isFlagWord = TlFlags.isFlagWord(cls, name),
+                hiddenInTakeover = TlFilter.hidesTakeoverField(cls, name),
+                isDraft = field.type == TLRPC.DraftMessage::class.java,
+            )
+        }
+        out
+    }
+
+    fun fieldInfo(cls: Class<*>, name: String): FieldInfo? = fieldInfos(cls)[name]
+
+    /**
+     * whether every field this class has is a scalar - `peerUser`, `inputPeerChat`,
+     * `documentAttributeVideo` and the like. Such an object is completely described by its scalars,
+     * so a projection of it is the whole object and a plugin never has to cross for one of its
+     * fields. Anything with a child of its own is not: projecting it would carry a handle whose own
+     * fields still cross, and the object graph has no bottom.
+     */
+    fun isFullyScalar(cls: Class<*>): Boolean = fullyScalarByClass.getOrPut(cls) {
+        val infos = fieldInfos(cls).values.filterNot { it.isFlagWord }
+        infos.isNotEmpty() && infos.all { it.isScalar }
+    }
 
     private fun buildClassIndex(): Map<String, Class<out TLObject>> {
         val out = HashMap<String, Class<out TLObject>>()

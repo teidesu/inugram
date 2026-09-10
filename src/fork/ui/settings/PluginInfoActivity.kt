@@ -327,8 +327,7 @@ private fun grantSubtitle(name: String, scopes: List<String>?): String? = when (
 
 
     "unsafe.fs" -> LocaleController.getString(R.string.InuPluginGrantUnsafeFsInfo)
-    "unsafe.jvm" -> scopes?.let { LocaleController.formatString(R.string.InuPluginGrantUnsafeJvmInfo, it.joinToString(", ")) }
-        ?: LocaleController.getString(R.string.InuPluginGrantUnsafeJvmInfoAny)
+    "unsafe.jvm" -> LocaleController.getString(R.string.InuPluginGrantUnsafeJvmInfo)
 
     "unsafe.xposed" -> LocaleController.getString(R.string.InuPluginGrantUnsafeXposedInfo)
     "unsafe.notificationCenter" -> LocaleController.getString(R.string.InuPluginGrantUnsafeNotificationCenterInfo)

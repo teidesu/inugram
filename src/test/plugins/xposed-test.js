@@ -3,16 +3,14 @@
 // @author       teidesu
 // @version      1.0
 // @description  asserts inu.xposed: the hook context, the verdicts, ordering and disposal
-// @grant        unsafe.jvm(java.lang.*)
+// @grant        unsafe.jvm
 // @grant        unsafe.xposed
 // @plugin-api   1
 // @platform     android
 // ==/InuPlugin==
 
 // every entry point here takes a handle only `inu.jvm.cls` mints, so this file needs both grants
-// and says so. the jvm one is *scoped*, which is what makes the last assertion mean anything: a
-// hook is allowed on a class the scope list does not name, because the scope was already spent
-// getting the method handle.
+// and says so.
 
 let ran = 0
 

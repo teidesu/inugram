@@ -197,7 +197,15 @@ fun startPlugin(name: String, grants: List<String>, configureEngine: (RecordingQ
  * though both compile here: their installs reach an `Activity` and a real engine. Nothing under
  * test touches them, so they refuse loudly instead of recording.
  */
-fun attachBridge(plugin: Plugin, engine: QuickJs, core: CoreListener = DeviceMissing, canvas: CanvasListener = DeviceMissing) {
+fun attachBridge(
+    plugin: Plugin,
+    engine: QuickJs,
+    core: CoreListener = DeviceMissing,
+    canvas: CanvasListener = DeviceMissing,
+    // most of the suite drives the reads listener directly and never asks; a test that goes through
+    // `inu.account(n)` needs the slot list the app would answer with
+    accountsJson: (() -> String)? = null,
+) {
     val tl = TlHandles.attach(plugin, TlFilter.policyFor(plugin.permissions))
     val jvm = PluginJvm.listenerFor(plugin, engine, testAppScreen)
     val bridge = PluginBridge(
@@ -209,7 +217,8 @@ fun attachBridge(plugin: Plugin, engine: QuickJs, core: CoreListener = DeviceMis
         account = object : AccountListener,
             ReadsListener by PluginReads.listenerFor(plugin, engine),
             WritesListener by PluginWrites.listenerFor(plugin, engine) {
-            override fun accounts(): String = throw UnsupportedOperationException("this suite has no accounts")
+            override fun accounts(): String =
+                accountsJson?.invoke() ?: throw UnsupportedOperationException("this suite has no accounts")
         },
         ui = DeviceMissing,
         platform = DeviceMissing,

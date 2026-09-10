@@ -56,6 +56,13 @@ class PluginWireTest {
     }
 
     @Test
+    fun `a projected handle carries its scalars after the id and decodes to the same handle`() {
+        val wire = PluginWire.encodeHandle(vector = false, id = 12L, readOnly = true, projection = """{"id":"5","date":9}""")
+        assertEquals("""HOR12|{"id":"5","date":9}""", wire)
+        assertEquals(PluginWire.Value.Handle(vector = false, id = 12L, readOnly = true), PluginWire.decode(wire))
+    }
+
+    @Test
     fun `rejects handles with an unknown kind or mode char`() {
         assertFailsWith<IllegalArgumentException> { PluginWire.decode("HXW1") }
         assertFailsWith<IllegalArgumentException> { PluginWire.decode("HOX1") }

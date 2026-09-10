@@ -88,6 +88,10 @@ impl FakeTlHost {
     self.counts.gets.borrow().len()
   }
 
+  fn sets_of(&self, key: &str) -> usize {
+    self.counts.sets.borrow().iter().filter(|k| k.as_str() == key).count()
+  }
+
   fn has_of(&self, key: &str) -> usize {
     self.counts.has.borrow().iter().filter(|k| k.as_str() == key).count()
   }
@@ -1032,7 +1036,7 @@ fn handle_wire_roundtrip() {
   for is_vector in [false, true] {
     for read_only in [false, true] {
       let wire = encode_handle(is_vector, read_only, 42);
-      assert_eq!(parse_handle(&wire[1..]), Some((is_vector, read_only, 42)));
+      assert_eq!(parse_handle(&wire[1..]), Some((is_vector, read_only, 42, None)));
     }
   }
   assert_eq!(encode_handle(false, false, 1), "HOW1");
@@ -1098,9 +1102,8 @@ fn dispatch_scoped_view_stores_nothing_on_its_target() {
     assert_eq!(host.gets_of("child"), 2);
 
     let target = proxy.as_proxy().unwrap().target().unwrap();
-    assert!(!target
-      .contains_key({ Symbol::new_global((&ctx).clone(), CACHE_MARKER_DESCRIPTION) }.unwrap().as_atom())
-      .unwrap());
+    let handle = Class::<HandleBox>::from_object(&target).unwrap();
+    assert!(handle.borrow().vol.borrow().is_none());
   });
 }
 
@@ -1167,6 +1170,55 @@ fn vector_elements_and_length_are_never_cached() {
   });
   rt.run_gc();
   assert_eq!(host.live_count(), before, "iterating must not retain a handle per element");
+}
+
+/// the cache keeps presence and the key list under names of its own; a plugin asking for one must
+/// see what any other absent field answers, not the bookkeeping
+#[test]
+fn the_caches_own_names_are_not_fields() {
+  let (_rt, ctx) = make_ctx();
+  let host = Rc::new(FakeTlHost::default());
+  let id = host.mint(object_entry("foo", &[("x", "I1")]));
+  let views = views_of(&host);
+
+  ctx.with(|ctx| {
+    bind_object(&ctx, &views, "obj", ViewLife::Plugin, id);
+    assert!(ctx.eval::<bool, _>("'x' in obj").unwrap());
+    assert_eq!(ctx.eval::<i64, _>("obj.x").unwrap(), 1);
+
+    let answers: String = ctx
+      .eval(
+        r##"JSON.stringify([
+             ...["#x", "@keys"].map((k) => { try { return String(obj[k]) } catch (e) { return e.message } }),
+             "#x" in obj,
+             "@keys" in obj,
+           ])"##,
+      )
+      .unwrap();
+    assert_eq!(answers, r##"["no such field '#x'","no such field '@keys'",false,false]"##);
+  });
+}
+
+/// a dispatch view caches nothing, so the vector `updates.updates` names lives only as long as the
+/// expression: the iterator has to hold it, or the handle is released before the first `next()`
+#[test]
+fn a_temporary_vector_survives_being_iterated() {
+  let (_rt, ctx) = make_ctx();
+  let host = Rc::new(FakeTlHost::default());
+  let items = Rc::new(RefCell::new(FakeEntry::Vector(vec![
+    FakeValue::Wire("I1".to_string()),
+    FakeValue::Wire("I2".to_string()),
+  ])));
+  let id = host.mint(nested_entry("updates", "updates", items));
+  let views = views_of(&host);
+
+  ctx.with(|ctx| {
+    bind_object(&ctx, &views, "obj", ViewLife::Dispatch, id);
+    let summed: i64 = ctx.eval("(() => { let s = 0; for (const u of obj.updates) s += u; return s })()").unwrap();
+    assert_eq!(summed, 3);
+    let spread: i64 = ctx.eval("[...obj.updates].reduce((a, b) => a + b, 0)").unwrap();
+    assert_eq!(spread, 3);
+  });
 }
 
 #[test]
@@ -1580,4 +1632,347 @@ fn write_clears_the_writing_views_bag_promptly() {
 
   rt.run_gc();
   assert_eq!(host.live_count(), 1, "the write must have dropped the cached child view");
+}
+
+/// a handle can arrive with the scalars kotlin already read: they are the cache, so reading them
+/// never crosses, and what was not sent is read the way it always was
+#[test]
+fn a_projected_handle_answers_its_scalars_without_the_host() {
+  let (_rt, ctx) = make_ctx();
+  let host = Rc::new(FakeTlHost::default());
+  let id = host.mint_read_only(object_entry("dialog", &[("id", "S5"), ("date", "I9"), ("draft", "N"), ("pinned", "B1")]));
+  let views = views_of(&host);
+
+  ctx.with(|ctx| {
+    let wire = format!("{}|{{\"_\":\"dialog\",\"id\":\"5\",\"date\":9,\"draft\":null}}", encode_handle(false, true, id));
+    let value = views.wire_to_js_value(&ctx, &wire, ViewLife::Plugin).unwrap();
+    ctx.globals().set("d", value).unwrap();
+
+    let read: String = ctx.eval("`${d._} ${d.id} ${d.date} ${d.draft}`").unwrap();
+    assert_eq!(read, "dialog 5 9 null");
+    assert_eq!(host.get_count(), 0, "projected scalars must not cross");
+
+    let present: bool = ctx.eval("'id' in d").unwrap();
+    assert!(present);
+    assert_eq!(host.has_count(), 0, "a cached value proves presence");
+    let absent: bool = ctx.eval("'draft' in d").unwrap();
+    assert!(absent, "the fake answers present for every field it holds");
+    assert_eq!(host.has_count(), 1, "a cached null cannot say which way the bit went");
+
+    let pinned: bool = ctx.eval("d.pinned").unwrap();
+    assert!(pinned);
+    assert_eq!(host.gets_of("pinned"), 1, "what was not projected is read as before");
+
+    let keys: Vec<String> = ctx.eval("Object.keys(d)").unwrap();
+    assert!(keys.contains(&"pinned".to_string()) && keys.contains(&"_".to_string()));
+    assert_eq!(host.own_keys_count(), 1, "the projection does not claim to be the whole object");
+  });
+}
+
+/// a write anywhere drops the projection with the rest of the cache; the type name survives it
+/// a peer, an inputPeer and their like are nothing but scalars, so kotlin sends the whole child
+/// with the parent: reading `d.peer.user_id` must cross for neither half
+#[test]
+fn a_projected_child_is_a_view_that_never_crosses() {
+  let (_rt, ctx) = make_ctx();
+  let host = Rc::new(FakeTlHost::default());
+  let child = host.mint_read_only(object_entry("peerUser", &[("user_id", "S7")]));
+  let parent = host.mint_read_only(nested_entry("dialog", "peer", Rc::new(RefCell::new(object_entry("peerUser", &[])))));
+  let views = views_of(&host);
+
+  ctx.with(|ctx| {
+    let wire = format!(
+      "{}|{{\"_\":\"dialog\",\"peer\":{{\"@h\":\"OR{child}\",\"_\":\"peerUser\",\"user_id\":\"7\"}}}}",
+      encode_handle(false, true, parent),
+    );
+    let value = views.wire_to_js_value(&ctx, &wire, ViewLife::Plugin).unwrap();
+    ctx.globals().set("d", value).unwrap();
+
+    let read: String = ctx.eval("`${d.peer._} ${d.peer.user_id}`").unwrap();
+    assert_eq!(read, "peerUser 7");
+    assert_eq!(host.get_count(), 0, "neither the child nor its fields may cross");
+
+    let same: bool = ctx.eval("d.peer === d.peer").unwrap();
+    assert!(same, "the child is cached like any other read");
+    let present: bool = ctx.eval("'peer' in d").unwrap();
+    assert!(present);
+    assert_eq!(host.has_count(), 0, "a projected child proves its own presence");
+
+    // the child is a view, not the plain object it crossed as
+    let json: String = ctx.eval("JSON.stringify(d.peer)").unwrap();
+    assert!(json.contains("peerUser"), "{json}");
+    let refused: String = ctx
+      .eval(r#"(() => { try { d.peer.user_id = "1"; return 'wrote' } catch (e) { return e.message } })()"#)
+      .unwrap();
+    assert!(refused.contains("read-only"), "{refused}");
+  });
+}
+
+/// a projected child is a view of the live object, not a snapshot of it: a write has to reach the
+/// host under the *child's* handle, and the value read back afterwards has to be the written one
+#[test]
+fn a_write_through_a_projected_child_reaches_the_host_and_invalidates() {
+  let (_rt, ctx) = make_ctx();
+  let host = Rc::new(FakeTlHost::default());
+  // the handle the projection carries and the parent's own field name the same object, exactly as
+  // `TlHandles.appendChild` mints it
+  let peer = Rc::new(RefCell::new(object_entry("peerUser", &[("user_id", "S7")])));
+  let child = host.mint_shared(peer.clone(), false);
+  let mut fields = HashMap::new();
+  fields.insert("top_message".to_string(), FakeValue::Wire("I3".to_string()));
+  fields.insert("peer".to_string(), FakeValue::Nested(peer.clone()));
+  let parent = host.mint(FakeEntry::Object { type_name: "dialog".to_string(), fields });
+  let views = views_of(&host);
+
+  ctx.with(|ctx| {
+    let wire = format!(
+      "{}|{{\"_\":\"dialog\",\"top_message\":3,\"peer\":{{\"@h\":\"OW{child}\",\"_\":\"peerUser\",\"user_id\":\"7\"}}}}",
+      encode_handle(false, false, parent),
+    );
+    let value = views.wire_to_js_value(&ctx, &wire, ViewLife::Plugin).unwrap();
+    ctx.globals().set("d", value).unwrap();
+    assert_eq!(ctx.eval::<String, _>("d.peer.user_id").unwrap(), "7");
+    assert_eq!(host.get_count(), 0);
+
+    ctx.eval::<(), _>(r#"d.peer.user_id = "9""#).unwrap();
+    assert_eq!(host.sets_of("user_id"), 1, "the write must cross, whatever the cache holds");
+    // the host owns the object, so what it answers now is what the write did
+    assert_eq!(ctx.eval::<String, _>("d.peer.user_id").unwrap(), "9");
+    assert_eq!(host.gets_of("user_id"), 1, "the projected value cannot survive the write");
+
+    // the parent's own projected fields go with it: one write invalidates every view
+    assert_eq!(ctx.eval::<i64, _>("d.top_message").unwrap(), 3);
+    assert_eq!(host.gets_of("top_message"), 1);
+  });
+}
+
+/// a read-only parent seals what it carries, or a projection would be a way around the mode
+#[test]
+fn a_projected_child_of_a_read_only_parent_refuses_writes() {
+  let (_rt, ctx) = make_ctx();
+  let host = Rc::new(FakeTlHost::default());
+  let child = host.mint_read_only(object_entry("peerUser", &[("user_id", "S7")]));
+  let parent = host.mint_read_only(object_entry("dialog", &[]));
+  let views = views_of(&host);
+
+  ctx.with(|ctx| {
+    let wire = format!(
+      "{}|{{\"_\":\"dialog\",\"peer\":{{\"@h\":\"OR{child}\",\"_\":\"peerUser\",\"user_id\":\"7\"}}}}",
+      encode_handle(false, true, parent),
+    );
+    let value = views.wire_to_js_value(&ctx, &wire, ViewLife::Plugin).unwrap();
+    ctx.globals().set("d", value).unwrap();
+    let refused: String = ctx
+      .eval(r#"(() => { try { d.peer.user_id = "9"; return 'wrote' } catch (e) { return e.message } })()"#)
+      .unwrap();
+    assert!(refused.contains("read-only"), "{refused}");
+    assert_eq!(host.sets_of("user_id"), 0, "a refused write must not reach the host");
+  });
+}
+
+/// the child owns its handle from the moment it is built, so the parent going away has to take it
+#[test]
+fn a_projected_child_is_released_with_its_parent() {
+  let (rt, ctx) = make_ctx();
+  let host = Rc::new(FakeTlHost::default());
+  let child = host.mint_read_only(object_entry("peerUser", &[("user_id", "S7")]));
+  let parent = host.mint_read_only(object_entry("dialog", &[]));
+  let views = views_of(&host);
+  assert_eq!(host.live_count(), 2);
+
+  ctx.with(|ctx| {
+    let wire = format!(
+      "{}|{{\"_\":\"dialog\",\"peer\":{{\"@h\":\"OR{child}\",\"_\":\"peerUser\",\"user_id\":\"7\"}}}}",
+      encode_handle(false, true, parent),
+    );
+    let value = views.wire_to_js_value(&ctx, &wire, ViewLife::Plugin).unwrap();
+    ctx.globals().set("d", value).unwrap();
+    // never read: the handle is still the child view's to release
+    ctx.eval::<(), _>("globalThis.d = undefined").unwrap();
+  });
+
+  rt.run_gc();
+  assert_eq!(host.live_count(), 0, "a child nobody read must not outlive its parent");
+}
+
+#[test]
+fn a_projected_child_without_a_handle_is_refused() {
+  let (_rt, ctx) = make_ctx();
+  let host = Rc::new(FakeTlHost::default());
+  let id = host.mint_read_only(object_entry("dialog", &[]));
+  let views = views_of(&host);
+
+  ctx.with(|ctx| {
+    for projection in ["{\"peer\":{\"user_id\":\"7\"}}", "{\"peer\":{\"@h\":\"nonsense\"}}", "{\"peer\":[1]}"] {
+      let wire = format!("{}|{projection}", encode_handle(false, true, id));
+      assert!(views.wire_to_js_value(&ctx, &wire, ViewLife::Plugin).is_err(), "{projection}");
+    }
+  });
+}
+
+#[test]
+fn a_projection_is_dropped_by_a_write_like_any_cached_value() {
+  let (_rt, ctx) = make_ctx();
+  let host = Rc::new(FakeTlHost::default());
+  let projected = host.mint_read_only(object_entry("dialog", &[("id", "S5")]));
+  let other = host.mint(object_entry("bar", &[("x", "I1")]));
+  let views = views_of(&host);
+
+  ctx.with(|ctx| {
+    let wire = format!("{}|{{\"_\":\"dialog\",\"id\":\"5\"}}", encode_handle(false, true, projected));
+    let value = views.wire_to_js_value(&ctx, &wire, ViewLife::Plugin).unwrap();
+    ctx.globals().set("d", value).unwrap();
+    bind_object(&ctx, &views, "other", ViewLife::Plugin, other);
+
+    let _: () = ctx.eval("other.x = 2").unwrap();
+    let id: String = ctx.eval("d.id").unwrap();
+    assert_eq!(id, "5");
+    assert_eq!(host.gets_of("id"), 1, "after a write the value is read again");
+    let type_name: String = ctx.eval("d._").unwrap();
+    assert_eq!(type_name, "dialog");
+    assert_eq!(host.gets_of("_"), 0, "the type name never changes");
+  });
+}
+
+/// a dispatch-lifetime view caches nothing, so it adopts nothing either
+#[test]
+fn a_dispatch_view_ignores_a_projection() {
+  let (_rt, ctx) = make_ctx();
+  let host = Rc::new(FakeTlHost::default());
+  let id = host.mint(object_entry("dialog", &[("id", "S5")]));
+  let views = views_of(&host);
+
+  ctx.with(|ctx| {
+    let wire = format!("{}|{{\"id\":\"stale\"}}", encode_handle(false, false, id));
+    let value = views.wire_to_js_value(&ctx, &wire, ViewLife::Dispatch).unwrap();
+    ctx.globals().set("d", value).unwrap();
+    let id: String = ctx.eval("d.id").unwrap();
+    assert_eq!(id, "5");
+    assert_eq!(host.gets_of("id"), 1);
+  });
+}
+
+/// nothing adopts a dispatch view's projection, so the handles it carried have to be let go here
+/// or nothing ever would
+#[test]
+fn a_dispatch_view_releases_the_children_a_projection_carried() {
+  let (_rt, ctx) = make_ctx();
+  let host = Rc::new(FakeTlHost::default());
+  let child = host.mint_read_only(object_entry("peerUser", &[("user_id", "S7")]));
+  let id = host.mint(object_entry("dialog", &[("id", "S5")]));
+  let views = views_of(&host);
+  assert_eq!(host.live_count(), 2);
+
+  ctx.with(|ctx| {
+    let wire = format!(
+      "{}|{{\"_\":\"dialog\",\"peer\":{{\"@h\":\"OR{child}\",\"_\":\"peerUser\",\"user_id\":\"7\"}}}}",
+      encode_handle(false, false, id),
+    );
+    let value = views.wire_to_js_value(&ctx, &wire, ViewLife::Dispatch).unwrap();
+    ctx.globals().set("d", value).unwrap();
+    assert_eq!(host.live_count(), 1, "the child nothing adopted must be released");
+    let id: String = ctx.eval("d.id").unwrap();
+    assert_eq!(id, "5", "and the view itself reads the way it always did");
+  });
+}
+
+#[test]
+fn a_malformed_projection_is_refused() {
+  let (_rt, ctx) = make_ctx();
+  let host = Rc::new(FakeTlHost::default());
+  let id = host.mint_read_only(object_entry("dialog", &[("id", "S5")]));
+  let views = views_of(&host);
+
+  ctx.with(|ctx| {
+    for bad in ["[1]", "not json", ""] {
+      let wire = format!("{}|{bad}", encode_handle(false, true, id));
+      assert!(views.wire_to_js_value(&ctx, &wire, ViewLife::Plugin).is_err(), "{bad:?}");
+    }
+  });
+}
+
+/// one handler serves every view of a context; a view costs its target and its proxy
+#[test]
+fn every_view_shares_one_handler() {
+  let (_rt, ctx) = make_ctx();
+  let host = Rc::new(FakeTlHost::default());
+  let a = host.mint(object_entry("a", &[]));
+  let b = host.mint_read_only(object_entry("b", &[]));
+  let views = views_of(&host);
+
+  ctx.with(|ctx| {
+    let a = bind(&ctx, &views, "a", false, false, ViewLife::Dispatch, a);
+    let b = bind(&ctx, &views, "b", true, true, ViewLife::Plugin, b);
+    let handler_a = a.as_proxy().unwrap().handler().unwrap();
+    let handler_b = b.as_proxy().unwrap().handler().unwrap();
+    assert_eq!(handler_a, handler_b);
+  });
+}
+
+/// Not a test: a benchmark of what a list answer costs to build and to read, on the rust side of
+/// the bridge alone (the fake host answers from memory). `cargo test --release bench_views -- --ignored --nocapture`.
+#[test]
+#[ignore]
+fn bench_views() {
+  let (_rt, ctx) = make_ctx();
+  let host = Rc::new(FakeTlHost::default());
+  let count = 200;
+  let views = views_of(&host);
+  let mint_all = || {
+    let mut wires = Vec::new();
+    for i in 0..count {
+      let peer = host.mint_read_only(object_entry("peerUser", &[("user_id", &format!("I{i}"))]));
+      let entry = Rc::new(RefCell::new(object_entry(
+        "dialog",
+        &[("id", &format!("S{i}")), ("last_message_date", &format!("I{}", 1_000_000 + i)), ("top_message", "I7")],
+      )));
+      let (peer_entry, _) = host.lookup(peer).unwrap();
+      add_nested(&entry, "peer", peer_entry);
+      let id = host.mint_shared(entry, true);
+      wires.push(encode_handle(false, true, id));
+    }
+    wires
+  };
+  let rounds = 6;
+  let mut build = Vec::new();
+  let mut cold = Vec::new();
+  let mut cached = Vec::new();
+  let mut nested = Vec::new();
+  for _ in 0..rounds {
+    let wires = mint_all();
+    ctx.with(|ctx| {
+      let started = std::time::Instant::now();
+      let array = Array::new(ctx.clone()).unwrap();
+      for (index, wire) in wires.iter().enumerate() {
+        array.set(index, views.wire_to_js_value(&ctx, wire, ViewLife::Plugin).unwrap()).unwrap();
+      }
+      ctx.globals().set("ds", array).unwrap();
+      build.push(started.elapsed());
+      let started = std::time::Instant::now();
+      if let Err(e) = ctx.eval::<(), _>("globalThis.s = 0; for (const d of ds) { s += d.id.length; s += d.last_message_date; }") {
+        panic!("{e}: {:?}", ctx.catch().as_exception().map(|x| x.message()));
+      }
+      cold.push(started.elapsed());
+      let started = std::time::Instant::now();
+      let _: () = ctx.eval("for (const d of ds) { s += d.id.length; s += d.last_message_date; }").unwrap();
+      cached.push(started.elapsed());
+      let started = std::time::Instant::now();
+      let _: () = ctx.eval("for (const d of ds) { s += d.peer.user_id; }").unwrap();
+      nested.push(started.elapsed());
+      let _: () = ctx.eval("ds = null").unwrap();
+    });
+    _rt.run_gc();
+  }
+  let median = |v: &mut Vec<std::time::Duration>| {
+    v.remove(0);
+    v.sort();
+    v[v.len() / 2].as_secs_f64() * 1000.0
+  };
+  println!(
+    "bench_views {count}: build={:.3}ms cold={:.3}ms cached={:.3}ms nested={:.3}ms",
+    median(&mut build),
+    median(&mut cold),
+    median(&mut cached),
+    median(&mut nested)
+  );
 }

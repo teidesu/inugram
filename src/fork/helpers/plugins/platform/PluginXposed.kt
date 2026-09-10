@@ -1,7 +1,6 @@
 package desu.inugram.helpers.plugins.platform
 
 import android.util.Log
-import desu.inugram.core.plugins.ScopeMatch
 import desu.inugram.core.plugins.PluginWire
 import desu.inugram.helpers.plugins.JvmListener
 import desu.inugram.helpers.plugins.Plugin
@@ -32,6 +31,9 @@ import org.telegram.messenger.Utilities
  */
 object PluginXposed {
     private const val TAG = "InuPluginXposed"
+
+    /** keep in sync with rust `xposed::NOT_DISPATCHED`: the after phase never ran, so it took nothing */
+    private const val NOT_DISPATCHED = "X"
 
     // keep in sync with rust `xposed::OP_*` and `xposed.js`
     const val OP_HOOK = 0
@@ -251,9 +253,6 @@ object PluginXposed {
             if (declaring in BOX_CLASSES) {
                 refuse("unsupported", "xposed: $declaring backs primitive boxing, which the hook stub itself uses, so a hook here would recurse until the stack is gone")
             }
-            if (!plugin.permissions.allows(GRANT, declaring, ScopeMatch.NAMESPACE)) {
-                refuse("not-granted", "xposed: $declaring is not in this plugin's $GRANT scope list", "$GRANT($declaring)")
-            }
         }
 
         /**
@@ -395,12 +394,16 @@ object PluginXposed {
 
         private fun dispatchOnce(entry: Site, receiver: Any?, args: List<Any?>, next: (List<Any?>) -> Any?): Any? {
             val site = entry.id
+            // a wire the engine never took stays minted in the reference table with nothing to drop it, so each one is released on the way out
+            val minted = ArrayList<String>(args.size + 2)
+            val encode = { value: Any? -> values.encode(value).also { minted.add(it) } }
             val request = try {
                 runCallbackPhase {
-                    Request(values.encode(entry.target), values.encode(receiver), args.map { values.encode(it) }.toTypedArray())
+                    Request(encode(entry.target), encode(receiver), args.map(encode).toTypedArray())
                 }
             } catch (e: Throwable) {
                 Log.e(TAG, "[${plugin.manifest.name}] xposed site $site (${entry.target}) dispatch failed; continuing", e)
+                releaseUntaken(minted)
                 return next(args)
             }
 
@@ -413,7 +416,10 @@ object PluginXposed {
                     Log.e(TAG, "[${plugin.manifest.name}] xposed before failed at ${entry.target}; continuing", error)
                     null
                 }
-                if (before == null) return next(args)
+                if (before == null) {
+                    releaseUntaken(minted)
+                    return next(args)
+                }
                 val wantsAfter = before.firstOrNull() == "P1"
                 owed = wantsAfter
                 if (before.firstOrNull() == "A") {
@@ -444,13 +450,20 @@ object PluginXposed {
                 val outcome = runCatching { next(callArgs) }
                 if (!wantsAfter || closed || sites[site] !== entry) return outcome.getOrThrow()
 
+                // the same hand-off the request wires make: the engine owns what it read, and a
+                // phase that never ran leaves this one minted with nothing to drop it
+                var outcomeWire: String? = null
                 val after = try {
-                    runCallbackPhase { engine.xposedAfter(id, wireOf(outcome)) }
+                    runCallbackPhase { engine.xposedAfter(id, wireOf(outcome).also { outcomeWire = it }) }
                 } catch (error: Throwable) {
                     Log.e(TAG, "[${plugin.manifest.name}] xposed after failed at ${entry.target}; preserving the outcome", error)
                     null
                 }
-                if (after == null || after == "U") return outcome.getOrThrow()
+                if (after == null || after == NOT_DISPATCHED) {
+                    releaseUntaken(listOfNotNull(outcomeWire))
+                    return outcome.getOrThrow()
+                }
+                if (after == "U") return outcome.getOrThrow()
                 val answer = answerOf(after, site, "after") ?: return outcome.getOrThrow()
                 val converted = try { convertReturn(entry, answer) } catch (error: Throwable) {
                     Log.e(TAG, "[${plugin.manifest.name}] xposed invalid after result at ${entry.target}; preserving the outcome", error)
@@ -460,6 +473,12 @@ object PluginXposed {
             } finally {
                 if (owed) release(id)
             }
+        }
+
+        /** this frame is app code's, so the bridge being gone is one more thing that may not surface here */
+        private fun releaseUntaken(wires: List<String>) {
+            val bridge = PluginJvm.bridgeFor(engine) ?: return
+            for (wire in wires) runCatching { bridge.release(wire) }
         }
 
         private class Request(val method: String, val receiver: String, val args: Array<String>)

@@ -506,7 +506,7 @@ fn open_screen_validates_and_reaches_host() {
 }
 
 /// the android members that take a real object take it as an `inu.jvm` handle and nothing
-/// else: what crosses is the id, so the scope list that let the handle be minted is still the
+/// else: what crosses is the id, so the grant that let the handle be minted is still the
 /// only thing that decided anything
 #[test]
 fn a_java_object_reaches_open_page_native_view_and_drawable_icon() {
@@ -535,6 +535,7 @@ fn a_java_object_reaches_open_page_native_view_and_drawable_icon() {
     let jvm = crate::api::platform::jvm::install_jvm(
       &ctx,
       jvm_host.as_host(),
+      None,
       grants.as_host(),
       Lifecycle::new(),
       log.clone(),

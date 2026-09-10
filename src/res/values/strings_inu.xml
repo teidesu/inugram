@@ -799,8 +799,7 @@
     <string name="InuPluginGrantUnsafeNotificationCenter">Internal event access</string>
     <string name="InuPluginGrantUnsafeDisableApiFiltering">Disable account protection</string>
     <string name="InuPluginGrantUnsafeFsInfo">Access to all application files, unsandboxed</string>
-    <string name="InuPluginGrantUnsafeJvmInfo">Can run arbitrary code unsandboxed, limited to %1$s</string>
-    <string name="InuPluginGrantUnsafeJvmInfoAny">Can run arbitrary code unsandboxed</string>
+    <string name="InuPluginGrantUnsafeJvmInfo">Can run arbitrary code unsandboxed</string>
     <string name="InuPluginGrantUnsafeXposedInfo">Can replace methods of the app, changing how any part of it behaves</string>
     <string name="InuPluginGrantUnsafeNotificationCenterInfo">Watches and posts the app\'s internal events</string>
     <string name="InuPluginGrantUnsafeDisableApiFilteringInfo">Allows the plugin access to account-critical API calls</string>

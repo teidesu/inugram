@@ -60,6 +60,10 @@ class PluginBridge(
 private object MissingJvm : JvmListener {
     override fun jvm(op: Int, target: Long, name: String, args: Array<String>): String =
         PluginWire.encodeError("internal: jvm listener not installed")
+
+    override fun jvmResolve(target: Any, name: String, mode: Int): Array<Any?> =
+        arrayOf("E", PluginWire.encodeError("internal: jvm listener not installed"))
+
 }
 
 private object MissingXposed : XposedListener {
