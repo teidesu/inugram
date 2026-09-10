@@ -3,11 +3,15 @@ package desu.inugram.helpers.plugins
 import desu.inugram.core.plugins.PluginWire
 import desu.inugram.helpers.plugins.tl.TlFilter
 import desu.inugram.helpers.plugins.tl.TlHandles
+import java.util.Collections
+import java.util.concurrent.ConcurrentHashMap
+import java.util.concurrent.CopyOnWriteArrayList
 import kotlin.test.assertEquals
 import kotlin.test.assertNotNull
 import kotlin.test.assertNull
 import kotlin.test.assertSame
 import kotlin.test.assertTrue
+import org.json.JSONObject
 import org.junit.Before
 import org.junit.Test
 import org.telegram.tgnet.TLRPC
@@ -181,5 +185,56 @@ class TlHandlesLifetimeTest {
         val target = message()
 
         assertSame(target, handles.resolveTlObject(handles.mintForScope(target, TlHandles.newScope())))
+    }
+
+    /**
+     * The table is reached from `globalQueue` and from whichever thread a JVM runnable or an Xposed
+     * phase entered on, so minting, reading and releasing a scope all have to overlap safely.
+     */
+    @Test
+    fun the_table_holds_up_under_minting_and_releasing_from_several_threads() {
+        val handles = TlHandles(UNFILTERED)
+        val minted = Collections.newSetFromMap(ConcurrentHashMap<Long, Boolean>())
+        val failures = CopyOnWriteArrayList<Throwable>()
+        val rounds = 400
+        val readers = (1..4).map { worker ->
+            Thread({
+                try {
+                    repeat(rounds) { round ->
+                        val target = TLRPC.TL_message().apply {
+                            id = round
+                            message = "m$worker"
+                            peer_id = peerUser(worker.toLong())
+                        }.synced()
+                        val handle = handles.mintForPlugin(target, readOnly = false)
+                        assertTrue(minted.add(handle), "handle $handle was minted twice")
+                        assertEquals(PluginWire.encodeInt(round.toLong()), handles.tlGet(handle, "id"))
+                        assertEquals(PluginWire.encodeString("m$worker"), handles.tlGet(handle, "message"))
+                        assertEquals("message", JSONObject(handles.project(handle)).getString("_"))
+                    }
+                } catch (e: Throwable) {
+                    failures.add(e)
+                }
+            }, "tl-reader-$worker")
+        }
+        val scopes = Thread({
+            try {
+                repeat(rounds) {
+                    val scope = TlHandles.newScope()
+                    val handle = handles.mintForScope(message(), scope)
+                    assertTrue(minted.add(handle), "handle $handle was minted twice")
+                    handles.releaseScope(scope)
+                    assertEquals(PluginWire.encodeExpired(), handles.tlGet(handle, "id"))
+                }
+            } catch (e: Throwable) {
+                failures.add(e)
+            }
+        }, "tl-scopes")
+        val workers = readers + scopes
+        workers.forEach { it.start() }
+        workers.forEach { it.join(30_000) }
+        workers.forEach { assertTrue(!it.isAlive, "${it.name} did not finish") }
+        assertTrue(failures.isEmpty(), failures.joinToString())
+        assertEquals(rounds * 5, minted.size)
     }
 }

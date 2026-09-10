@@ -12,7 +12,8 @@ import desu.inugram.helpers.plugins.TlListener
 import java.lang.reflect.ParameterizedType
 import java.lang.reflect.Type
 import java.util.Collections
-import java.util.IdentityHashMap
+import java.util.concurrent.ConcurrentHashMap
+import java.util.concurrent.atomic.AtomicLong
 import org.json.JSONArray
 import org.json.JSONObject
 import org.json.JSONTokener
@@ -27,9 +28,11 @@ import org.telegram.tgnet.TLObject
  * carrying the `inu.tl.handle` marker symbol, which a plugin can forge - a shared table would let
  * one plugin read another's objects by guessing an id.
  *
- * Touched only on [org.telegram.messenger.Utilities.globalQueue], so it needs no locking. Repeated
- * reads of one field mint a fresh handle each time; caching here would need an rquickjs
- * `Persistent`, and a GC root outliving the runtime aborts under `panic = "abort"`.
+ * Reached from `globalQueue` and from whichever thread a JVM runnable or an Xposed phase entered
+ * on, so [table] is concurrent and the mint/release pair that spans it and [handlesByScope] is
+ * serialized by [scopeLock]. Repeated reads of one field mint a fresh handle each time; caching
+ * here would need an rquickjs `Persistent`, and a GC root outliving the runtime aborts under
+ * `panic = "abort"`.
  *
  * Two lifetimes share the table: dispatch-scoped handles, hard-invalidated in bulk by
  * [releaseScope] whether or not JS still references them, and plugin-lifetime ones
@@ -50,10 +53,13 @@ class TlHandles(private val policy: TlFilter.Policy) : TlListener {
     )
 
     private val onHost = EngineDispatch.createHostDispatcher()
-    private var nextHandle = 1L
-    private val table = HashMap<Long, HandleEntry>()
+    private val nextHandle = AtomicLong(1)
+    private val table = ConcurrentHashMap<Long, HandleEntry>()
+
+    private val scopeLock = Any()
 
     // which handles a scope minted, so [releaseScope] costs that scope rather than the whole table.
+    // guarded by [scopeLock]
     private val handlesByScope = HashMap<Long, MutableList<Long>>()
 
     fun mintForScope(target: Any, scopeId: Long): Long =
@@ -70,17 +76,31 @@ class TlHandles(private val policy: TlFilter.Policy) : TlListener {
         readOnly: Boolean,
         flagOwner: Pair<TLObject, String>? = null,
         owned: Boolean = false,
-    ): Long {
-        val handle = nextHandle++
-        table[handle] = HandleEntry(target, elementType, scopeId, readOnly, owned, flagOwner)
-        if (scopeId != PLUGIN_SCOPE) handlesByScope.getOrPut(scopeId) { ArrayList() }.add(handle)
+    ): Long = register(HandleEntry(target, elementType, scopeId, readOnly, owned, flagOwner))
+
+    /**
+     * the table write and the scope's bookkeeping are one step under [scopeLock], so a
+     * [releaseScope] can never land between them and leave behind a scoped handle its bulk
+     * invalidation cannot reach. A read that *began* before the release can still mint into the
+     * scope after it; that one handle keeps its target until [releaseAll].
+     */
+    private fun register(entry: HandleEntry): Long {
+        val handle = nextHandle.getAndIncrement()
+        if (entry.scopeId == PLUGIN_SCOPE) {
+            table[handle] = entry
+            return handle
+        }
+        synchronized(scopeLock) {
+            table[handle] = entry
+            handlesByScope.getOrPut(entry.scopeId) { ArrayList() }.add(handle)
+        }
         return handle
     }
 
     fun releaseAll() {
+        synchronized(scopeLock) { handlesByScope.clear() }
         for (entry in table.values) freeIfOwned(entry)
         table.clear()
-        handlesByScope.clear()
     }
 
     private fun freeIfOwned(entry: HandleEntry) {
@@ -93,8 +113,10 @@ class TlHandles(private val policy: TlFilter.Policy) : TlListener {
 
     /** nothing is freed: only [mintForPlugin] sets `owned`, and it mints under [PLUGIN_SCOPE] */
     fun releaseScope(scopeId: Long) {
-        val handles = handlesByScope.remove(scopeId) ?: return
-        for (handle in handles) table.remove(handle)
+        synchronized(scopeLock) {
+            val handles = handlesByScope.remove(scopeId) ?: return
+            for (handle in handles) table.remove(handle)
+        }
     }
 
     fun resolveTlObject(handle: Long): TLObject? = table[handle]?.target as? TLObject
@@ -152,29 +174,29 @@ class TlHandles(private val policy: TlFilter.Policy) : TlListener {
     }
 
     /**
-     * the scalar fields of [target] as one JSON object, the way each would read on its own -
-     * hidden ones left out, a cleared bit as `null`, a long as a string - for a handle minted
-     * for a plugin's own read. Anything nested stays a lazy handle.
+     * what rides along with a handle minted for a plugin's own read. An object that is nothing but
+     * scalars ([TlReflect.isFullyScalar]) is carried whole, because one crossing then settles it for
+     * good; anything else carries its type name alone. Never a child, not even a child's type: a
+     * child is its own handle, and reflecting a parent's fields to find one costs more than the
+     * crossing it would save (measured on a Pixel 9: 7.1us a read against 31us to reflect a
+     * dialog's 22 fields).
      */
-    fun projectScalars(handle: Long): String {
+    fun project(handle: Long): String {
         val entry = table[handle] ?: return EMPTY_PROJECTION
         val target = entry.target as? TLObject ?: return EMPTY_PROJECTION
-        return StringBuilder(192).also { appendProjection(it, entry, target, children = true) }.toString()
+        val cls = target.javaClass
+        if (!TlReflect.isFullyScalar(cls)) return typeOnlyOf(cls)
+        return StringBuilder(96).also { appendProjection(it, target) }.toString()
     }
 
-    /**
-     * [children] embeds a field whose object is nothing but scalars ([TlReflect.isFullyScalar]) as a
-     * handle of its own plus its whole projection, so `d.peer.user_id` crosses for neither half. It
-     * is off one level down, where by that same rule there is nothing left to embed.
-     */
-    private fun appendProjection(out: StringBuilder, entry: HandleEntry, target: TLObject, children: Boolean) {
+    /** every field is a scalar, or this would not have been called */
+    private fun appendProjection(out: StringBuilder, target: TLObject) {
         val cls = target.javaClass
         out.append('{').append(TYPE_ENTRY).append(quotedTypeOf(cls))
         for ((name, info) in TlReflect.fieldInfos(cls)) {
             if (info.isFlagWord || TlFilter.hidesField(policy, info)) continue
-            if (!info.isScalar && !children) continue
             val value = if (info.isPresent(target)) info.field.get(target) else null
-            val filtered = if (policy.takeover) TlFilter.filterFieldValue(target, name, value) else value
+            val filtered = if (policy.takeover && info.redactedInTakeover) TlFilter.filterFieldValue(target, name, value) else value
             val start = out.length
             out.append(',').append(info.quotedName).append(':')
             val wrote = when (filtered) {
@@ -185,37 +207,12 @@ class TlHandles(private val policy: TlFilter.Policy) : TlListener {
                 is Double -> filtered.isFinite().also { if (it) out.append(filtered) }
                 is Float -> filtered.isFinite().also { if (it) out.append(filtered.toDouble()) }
                 is String -> (filtered.length <= PROJECTION_STRING_LIMIT).also { if (it) out.append(JSONObject.quote(filtered)) }
-                is TLObject -> TlReflect.isFullyScalar(filtered.javaClass).also {
-                    if (it) appendChild(out, entry, cls, name, filtered)
-                }
                 else -> false
             }
             if (!wrote) out.setLength(start)
         }
         out.append('}')
     }
-
-    /** the same handle the lazy read would have minted, with the same mode, and its own projection inline */
-    private fun appendChild(out: StringBuilder, entry: HandleEntry, ownerClass: Class<*>, key: String, child: TLObject) {
-        // the peer behind it decides redaction one level down, exactly as in [getObjectField]
-        val readOnly = entry.readOnly || (policy.takeover && TlFilter.decidesRedaction(ownerClass, key))
-        val id = mint(child, null, entry.scopeId, readOnly)
-        val childEntry = table.getValue(id)
-        val mark = out.length
-        appendProjection(out, childEntry, child, children = false)
-        out.insert(mark + 1, "\"$HANDLE_ENTRY\":\"${handlePayload(readOnly, id)}\",")
-    }
-
-    private fun handlePayload(readOnly: Boolean, id: Long): String = "O${if (readOnly) 'R' else 'W'}$id"
-
-    /**
-     * what a child handle carries when the read is the lazy one: everything, when the object is
-     * nothing but scalars and one crossing can settle it for good; its type name otherwise, because
-     * `_` is the field a plugin reads off a nested object more than any other.
-     */
-    private fun projectionOfChild(child: TLObject, entry: HandleEntry): String =
-        if (!TlReflect.isFullyScalar(child.javaClass)) typeOnlyOf(child.javaClass)
-        else StringBuilder(96).also { appendProjection(it, entry, child, children = false) }.toString()
 
     private fun quotedTypeOf(cls: Class<*>): String =
         quotedTypeNames.getOrPut(cls) { JSONObject.quote(TlNames.classNameToTlName(cls)) }
@@ -255,14 +252,15 @@ class TlHandles(private val policy: TlFilter.Policy) : TlListener {
         } catch (e: Exception) {
             return PluginWire.encodeError(e.message ?: "reflection get failed")
         }
-        val filtered = if (policy.takeover) TlFilter.filterFieldValue(target, key, value) else value
+        val filtered = if (policy.takeover && info.redactedInTakeover) TlFilter.filterFieldValue(target, key, value) else value
         return encodeFieldValue(
             entry,
             filtered,
             info.genericType,
-            flagOwner = target to key,
+            owner = target,
+            ownerField = key,
             // the peer behind it decides redaction one level down (`m.from_id.user_id = 0`), so the child is sealed even when the parent is writable
-            sealed = policy.takeover && TlFilter.decidesRedaction(cls, key),
+            sealed = policy.takeover && info.sealedInTakeover,
         )
     }
 
@@ -336,13 +334,14 @@ class TlHandles(private val policy: TlFilter.Policy) : TlListener {
         entry: HandleEntry,
         value: Any?,
         declaredType: Type,
-        flagOwner: Pair<TLObject, String>? = null,
+        owner: TLObject? = null,
+        ownerField: String? = null,
         sealed: Boolean = false,
     ): String {
         if (value == null) return PluginWire.encodeNull()
         val readOnly = entry.readOnly || sealed
         return when (value) {
-            is Long -> PluginWire.encodeString(value.toString())
+            is Long -> PluginWire.encodeLongAsString(value)
             is Int -> PluginWire.encodeInt(value.toLong())
             is Short -> PluginWire.encodeInt(value.toLong())
             is Byte -> PluginWire.encodeInt(value.toLong())
@@ -355,16 +354,20 @@ class TlHandles(private val policy: TlFilter.Policy) : TlListener {
             // rust infers a view's lifetime from the entry point rather than carrying it on the
             // wire, so another scope would let releaseScope kill a plugin-lifetime view, and a
             // writable child of a read-only parent would be a mutable alias of an app object
-            is TLObject -> {
-                val id = mint(value, null, entry.scopeId, readOnly)
-                val handle = PluginWire.encodeHandle(vector = false, id = id, readOnly = readOnly)
-                // a dispatch-scoped view caches nothing, so rust would drop whatever rode along
-                if (entry.scopeId != PLUGIN_SCOPE) handle
-                else handle + PluginWire.PROJECTION_SEPARATOR + projectionOfChild(value, table.getValue(id))
-            }
+            is TLObject -> PluginWire.encodeHandle(
+                vector = false,
+                id = register(HandleEntry(value, null, entry.scopeId, readOnly)),
+                readOnly = readOnly,
+            )
             is ArrayList<*> -> PluginWire.encodeHandle(
                 vector = true,
-                id = mint(value, elementTypeOf(declaredType), entry.scopeId, readOnly, flagOwner),
+                id = mint(
+                    value,
+                    elementTypeOf(declaredType),
+                    entry.scopeId,
+                    readOnly,
+                    flagOwner = if (owner != null && ownerField != null) owner to ownerField else null,
+                ),
                 readOnly = readOnly,
             )
             // map-shaped fields (TLRPC.Message.params) have no handle kind of their own, so they cross as a detached json snapshot
@@ -463,10 +466,9 @@ class TlHandles(private val policy: TlFilter.Policy) : TlListener {
 
         private const val EMPTY_PROJECTION = "{}"
 
-        // the keys a projection uses for itself, mirrored in src/native/src/api/tl/proxy.rs: a TL
-        // field name is a java identifier, so neither can collide with one
+        // the key a projection uses for itself, mirrored in src/native/src/api/tl/proxy.rs: a TL
+        // field name is a java identifier, so it cannot collide with one
         private const val TYPE_ENTRY = "\"_\":"
-        private const val HANDLE_ENTRY = "@h"
 
         // must stay byte-identical to READ_ONLY_MESSAGE in src/native/src/tl/proxy.rs:
         // the same refusal is raised on whichever side sees the write first
@@ -474,19 +476,19 @@ class TlHandles(private val policy: TlFilter.Policy) : TlListener {
 
         // one dispatch's chain spans several plugins' tables and every one of them must release
         // the same scope id, so the counter can't live per-instance
-        private var nextScopeId = 1L
+        private val nextScopeId = AtomicLong(1)
 
-        fun newScope(): Long = nextScopeId++
+        fun newScope(): Long = nextScopeId.getAndIncrement()
 
         fun of(engine: QuickJs): TlHandles =
             engine.listener?.tl as? TlHandles ?: throw IllegalStateException("no handle table")
 
-        private val byPlugin = HashMap<Plugin, TlHandles>()
+        private val byPlugin = ConcurrentHashMap<Plugin, TlHandles>()
 
         // `plugin.engine` is *not* this signal: it is cleared only after `engine.close()` and the
         // table only after the abandon loops, so between the two a chain restarted by one of those
         // abandons would read a leaving plugin as live and mint into an engine already unloading
-        private val detaching = Collections.newSetFromMap(IdentityHashMap<Plugin, Boolean>())
+        private val detaching = Collections.newSetFromMap(ConcurrentHashMap<Plugin, Boolean>())
 
         /** the plugin's own table, which every materialization for it mints into */
         fun attach(plugin: Plugin, policy: TlFilter.Policy): TlHandles =

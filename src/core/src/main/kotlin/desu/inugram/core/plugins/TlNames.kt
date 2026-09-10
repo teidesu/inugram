@@ -20,6 +20,11 @@ package desu.inugram.core.plugins
 object TlNames {
     private val LAYER_SUFFIX = Regex("_layer\\d+$")
 
+    fun prewarm() {
+        TL_NAME_OVERRIDES
+        TL_NAMESPACES
+    }
+
     fun isLayerVariant(className: String): Boolean = LAYER_SUFFIX.containsMatchIn(className)
 
     fun stripLayerSuffix(className: String): String = className.replace(LAYER_SUFFIX, "")

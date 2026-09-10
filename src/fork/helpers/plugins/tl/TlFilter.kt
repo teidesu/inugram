@@ -63,6 +63,11 @@ object TlFilter {
         return ApiFilter.HIDDEN_FIELDS[tlName]?.contains(key) == true
     }
 
+    /** the only field [filterFieldValue] ever touches: the message body on the shapes a login code arrives in */
+    fun canRedactField(cls: Class<*>, key: String): Boolean =
+        key == ApiFilter.REDACTED_MESSAGE_FIELD &&
+            (TLRPC.Message::class.java.isAssignableFrom(cls) || TLRPC.Updates::class.java.isAssignableFrom(cls))
+
     fun filterFieldValue(target: TLObject, key: String, value: Any?): Any? {
         if (key != ApiFilter.REDACTED_MESSAGE_FIELD || value !is String) return value
         val service = when (target) {

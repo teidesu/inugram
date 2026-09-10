@@ -37,6 +37,7 @@ import desu.inugram.helpers.plugins.telegram.PluginRpc
 import desu.inugram.helpers.plugins.telegram.PluginUpdates
 import desu.inugram.helpers.plugins.tl.TlFilter
 import desu.inugram.helpers.plugins.tl.TlHandles
+import desu.inugram.helpers.plugins.tl.TlReflect
 import desu.inugram.helpers.plugins.ui.PluginActions
 import desu.inugram.helpers.plugins.ui.PluginAppVisibility
 import desu.inugram.helpers.plugins.ui.PluginCanvas
@@ -146,7 +147,6 @@ object PluginManager {
                 loaded.countDown()
             }
         }
-        Utilities.globalQueue.postRunnable { TlCtorIds.allNames }
         loaded.await(BootCohort.EARLY_BUDGET_MILLIS, TimeUnit.MILLISECONDS)
     }
 
@@ -384,10 +384,23 @@ object PluginManager {
         }
     }
 
+    private var warmed = false
+
+    /** globalQueue only */
+    private fun warmTlTables() {
+        if (warmed) return
+        warmed = true
+        Utilities.globalQueue.postRunnable {
+            TlCtorIds.allNames
+            TlReflect.prewarm()
+        }
+    }
+
     /** globalQueue only */
     private fun start(plugin: Plugin) {
         if (plugin.engine != null) return
         if (!plugin.enabled || !isEngineEnabled() || safeMode) return
+        warmTlTables()
         incompatibility(plugin.manifest)?.let {
             fail(plugin, PluginFailure.Site.REFUSED, it)
             return

@@ -86,6 +86,8 @@ object TlReflect {
         val wordField: Field?,
         val isFlagWord: Boolean,
         val hiddenInTakeover: Boolean,
+        val sealedInTakeover: Boolean,
+        val redactedInTakeover: Boolean,
         /** a draft rides on a `Dialog`, a `ForumTopic`, a `savedDialog` and `updateDraftMessage` as well as on `getDraft`, so this keys on the field's declared type */
         val isDraft: Boolean,
     ) {
@@ -111,6 +113,8 @@ object TlReflect {
                 wordField = gate?.let { fields[TlFlags.wordName(it.word) ?: return@let null] },
                 isFlagWord = TlFlags.isFlagWord(cls, name),
                 hiddenInTakeover = TlFilter.hidesTakeoverField(cls, name),
+                sealedInTakeover = TlFilter.decidesRedaction(cls, name),
+                redactedInTakeover = TlFilter.canRedactField(cls, name),
                 isDraft = field.type == TLRPC.DraftMessage::class.java,
             )
         }
@@ -188,6 +192,17 @@ object TlReflect {
             current = current.superclass
         }
         map
+    }
+
+    /**
+     * every table a TL read consults is built on first use, and the first read a plugin makes is
+     * what pays for it (measured on a Pixel 9: 85ms, most of it parsing `tl_flags.txt` out of the
+     * apk). [PluginManager] calls this off the boot path so no read does.
+     */
+    fun prewarm() {
+        TlFlags.prewarm()
+        TlNames.prewarm()
+        classesByTlName
     }
 
     fun classOf(tlName: String): Class<out TLObject>? = classesByTlName[tlName]

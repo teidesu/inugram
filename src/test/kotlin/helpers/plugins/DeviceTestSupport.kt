@@ -202,6 +202,8 @@ fun attachBridge(
     engine: QuickJs,
     core: CoreListener = DeviceMissing,
     canvas: CanvasListener = DeviceMissing,
+    ui: UiListener = DeviceMissing,
+    storage: StorageListener = DeviceMissing,
     // most of the suite drives the reads listener directly and never asks; a test that goes through
     // `inu.account(n)` needs the slot list the app would answer with
     accountsJson: (() -> String)? = null,
@@ -213,14 +215,14 @@ fun attachBridge(
         rpc = PluginRpc.listenerFor(plugin, engine, tl),
         updates = PluginUpdates.listenerFor(plugin, engine),
         tl = tl,
-        storage = DeviceMissing,
+        storage = storage,
         account = object : AccountListener,
             ReadsListener by PluginReads.listenerFor(plugin, engine),
             WritesListener by PluginWrites.listenerFor(plugin, engine) {
             override fun accounts(): String =
                 accountsJson?.invoke() ?: throw UnsupportedOperationException("this suite has no accounts")
         },
-        ui = DeviceMissing,
+        ui = ui,
         platform = DeviceMissing,
         fetch = PluginFetch.listenerFor(plugin, engine),
         canvas = canvas,
@@ -244,7 +246,7 @@ fun attachBridge(
     )
 }
 
-private object DeviceMissing : CoreListener, StorageListener, UiListener, PlatformListener, CanvasListener {
+internal object DeviceMissing : CoreListener, StorageListener, UiListener, PlatformListener, CanvasListener {
     private fun no(what: String): Nothing = throw UnsupportedOperationException("this suite has no $what")
 
     override fun onConsole(level: Int, message: String) = no("console")
