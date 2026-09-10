@@ -96,12 +96,16 @@ class PluginRpcSendChainTest {
 
         assertTrue(send(TLRPC.TL_messages_sendMessage()) { _, _ -> completed = true })
         drain()
-        TestQueues.advanceBy(59_999)
+        // 55 seconds rather than one millisecond short of the deadline: the timer is armed off the
+        // queue's clock, which is real uptime plus the offset, so real time spent in the drain above
+        // counts against the margin. What this has to tell apart is the 60-second send budget from
+        // the 10-second raw one, and any margin below the difference does that
+        TestQueues.advanceBy(55_000)
 
         assertEquals(false, completed)
         assertEquals(1, plugin.js.dispatches.size)
 
-        TestQueues.advanceBy(1)
+        TestQueues.advanceBy(5_001)
         assertEquals(true, completed)
     }
 
