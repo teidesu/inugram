@@ -284,7 +284,7 @@ abstract class SettingsPageActivity : UniversalFragment() {
             textPaint.setAlpha(255)
 
             val x = _x + AndroidUtilities.dp(2f)
-            val y = _y - height + AndroidUtilities.dp(1f)
+            val y = (_y - layout!!.getLineBaseline(0)).toFloat()
             AndroidUtilities.rectTmp.set(x, y, x + width, y + height)
             val r = AndroidUtilities.dp(4.4f).toFloat()
             AndroidUtilities.rectTmp.inset(
