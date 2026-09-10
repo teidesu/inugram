@@ -237,6 +237,7 @@
           [
             toCount(opts.folderId, 'getDialogs', 'folderId'),
             toCount(opts.limit, 'getDialogs', 'limit'),
+            toFieldNames(opts.fields, 'getDialogs'),
           ].join(SEPARATOR),
           toCursor(opts.cursor, 'getDialogs'),
         ]
@@ -291,7 +292,12 @@
       let cursor
       let sent = 0
       for (;;) {
-        const page = await proto.getDialogs.call(this, { folderId: opts.folderId, limit: batch, cursor })
+        const page = await proto.getDialogs.call(this, {
+          folderId: opts.folderId,
+          limit: batch,
+          fields: opts.fields,
+          cursor,
+        })
         for (const dialog of page) {
           yield dialog
           if (++sent === limit) return

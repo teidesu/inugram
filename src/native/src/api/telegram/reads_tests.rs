@@ -262,7 +262,8 @@ impl TestReadsHost {
         let limit = parts.get(1).and_then(|l| l.parse().ok()).unwrap_or(0usize);
         self.history_wire(parts[0], limit)
       }
-      OP_DIALOGS => self.dialog_page_wire(parts.get(2).copied().unwrap_or("")),
+      // the cursor payload rust appends lands after the argument's own three parts
+      OP_DIALOGS => self.dialog_page_wire(parts.get(3).copied().unwrap_or("")),
       // the selector is what the prelude builds, and `fetch_log` is where a test reads it back;
       // the answer only has to be well formed for the array and object shapes to be exercised
       OP_DIALOGS_CACHED => self.dialog_wire("S"),
@@ -1001,7 +1002,31 @@ fn paging_hands_the_host_back_its_own_offsets_and_ends_at_a_short_page() {
   settle(&rt, &ctx, &state, &host);
   assert_eq!(eval_json(&ctx, "__out"), "[false,1,null]");
   let asked: Vec<String> = host.fetch_log.borrow().iter().map(|(_, arg)| arg.clone()).collect();
-  assert_eq!(asked, vec!["0\n2\n", "0\n2\n1715540640,7,111"], "the second page carries the host's own offsets");
+  assert_eq!(asked, vec!["0\n2\n\n", "0\n2\n\n1715540640,7,111"], "the second page carries the host's own offsets");
+}
+
+/// the same part `getDialogsCached` takes them in, so both dialog reads spell it one way. It sits
+/// before the cursor because rust appends that payload after whatever the argument already carries
+#[test]
+fn a_paged_dialog_read_names_fields_in_the_part_before_the_cursor() {
+  let (rt, ctx, host, state, _accounts) = setup(ASYNC_GRANTS);
+  eval_void(&ctx, "inu.account().getDialogs({ limit: 2, fields: ['top_message'] })");
+  settle(&rt, &ctx, &state, &host);
+  assert_eq!(host.fetch_log.borrow().last().unwrap().1, "0\n2\ntop_message\n");
+}
+
+/// an iterator names them on every page it asks for, or only the first would carry anything
+#[test]
+fn an_iterator_passes_fields_to_every_page() {
+  let (_out, asked) = run_ordered(
+    ASYNC_GRANTS,
+    r#"(async () => {
+         for await (const d of inu.account().iterDialogs({ batchSize: 2, fields: ['top_message'] })) __out.push(d._)
+       })()"#,
+  );
+  assert_eq!(asked.len(), 2);
+  assert_eq!(asked[0].1, "0\n2\ntop_message\n");
+  assert_eq!(asked[1].1, "0\n2\ntop_message\n1715540640,7,111");
 }
 
 #[test]
@@ -1078,7 +1103,7 @@ fn an_iterator_pages_until_the_list_runs_out() {
   // the fake answers one full page then a short one, so this is both pages and the stop
   assert_eq!(out, r#"["dialog","dialog","dialog","end"]"#);
   assert_eq!(asked.len(), 2, "the second page is the cursor's, and there is no third");
-  assert_eq!(asked[1].1, "0\n2\n1715540640,7,111", "it pages with the host's own offsets");
+  assert_eq!(asked[1].1, "0\n2\n\n1715540640,7,111", "it pages with the host's own offsets");
 }
 
 /// `limit` is a total and cuts the last page short, which is the difference between it and
@@ -1103,7 +1128,7 @@ fn an_iterator_uses_the_default_page_size() {
     "(async () => { for await (const d of inu.account().iterDialogs()) __out.push(d._) })()",
   );
   let stated = 100;
-  assert_eq!(asked[0].1, format!("0\n{stated}\n"), "the default batch is not the documented one");
+  assert_eq!(asked[0].1, format!("0\n{stated}\n\n"), "the default batch is not the documented one");
 }
 
 /// history has no cursor to hold, so the offset is this side's to advance - and a fake that

@@ -335,7 +335,7 @@ class PluginReadsAsyncTest {
     @Test
     fun a_cursor_s_offsets_are_what_the_next_page_is_asked_with() {
         val plugin = granted()
-        assertNull(fetch(plugin, PluginReads.OP_DIALOGS, "0\n2\n1715540640,9,$alice"))
+        assertNull(fetch(plugin, PluginReads.OP_DIALOGS, "0\n2\n\n1715540640,9,$alice"))
         val request = connections().lastSent()!!.request as TLRPC.TL_messages_getDialogs
         assertEquals(1715540640, request.offset_date)
         assertEquals(9, request.offset_id)
@@ -346,10 +346,26 @@ class PluginReadsAsyncTest {
     @Test
     fun a_cursor_whose_peer_left_the_cache_pages_from_the_date_alone() {
         val plugin = granted()
-        fetch(plugin, PluginReads.OP_DIALOGS, "0\n2\n1715540640,9,4242")
+        fetch(plugin, PluginReads.OP_DIALOGS, "0\n2\n\n1715540640,9,4242")
         val request = connections().lastSent()!!.request as TLRPC.TL_messages_getDialogs
         assertTrue(request.offset_peer is TLRPC.TL_inputPeerEmpty)
         assertEquals(1715540640, request.offset_date)
+    }
+
+    /** the part before the cursor, and what lands in it is what rides on every dialog of the page */
+    @Test
+    fun a_paged_dialog_read_projects_the_fields_it_was_asked_for() {
+        val plugin = granted()
+        fetch(plugin, PluginReads.OP_DIALOGS, "0\n5\ntop_message,peer\n")
+        answerWith(TLRPC.TL_messages_dialogs().apply { dialogs.add(dialog(alice, 9)) })
+        val element = settled(plugin).substringAfter("\n")
+        val projection = JSONObject(element.substringAfter(PluginWire.PROJECTION_SEPARATOR))
+        assertEquals(9, projection.getInt("top_message"))
+        // `peer` is a child, which no projection carries: it stays the lazy read it always was
+        assertEquals(setOf("_", "top_message"), projection.keys().asSequence().toSet())
+        val peerWire = fieldOf(plugin, element, "peer")
+        val userId = plugin.tl().tlGet(handleId(peerWire), "user_id")
+        assertEquals(PluginWire.Value.Str(alice.toString()), PluginWire.decode(userId))
     }
 
     @Test
