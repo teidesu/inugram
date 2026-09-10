@@ -478,12 +478,20 @@ declare namespace inu {
      * {@link getChatFoldersCached} instead; a folder already decides for itself whether it shows
      * archived chats, so naming both `archive` and `chatFolderId` is `invalid-argument`.
      *
+     * `fields` names the fields you are going to read, so their values cross with the dialogs
+     * themselves rather than one at a time when you touch them. It changes nothing about what a
+     * dialog answers - a field you did not name still reads, and so does one this could not carry
+     * (an object, a vector, a very long string, or no such field on that constructor). It is worth
+     * naming for a list you walk: reading two fields of a few hundred dialogs is a few hundred
+     * crossings otherwise.
+     *
      * @needs-grant account.read(dialogs)
      */
     getDialogsCached(options?: {
       archive?: 'exclude' | 'only' | 'keep'
       chatFolderId?: number
       limit?: number
+      fields?: readonly string[]
     }): Promise<tl.TypeDialog[]>
 
     /**

@@ -122,6 +122,21 @@
     return ids.map(id => toMessageId(id, what))
   }
 
+  // a TL field name is a java identifier, which is also what keeps one clear of the separators the
+  // wire joins on. Whether the object *has* the field is the host's business: it carries what it
+  // can and leaves the rest to the lazy read, so a name it does not know costs nothing but itself
+  const FIELD_NAME = /^[A-Za-z_]\w{0,63}$/
+
+  const toFieldNames = (value, what) => {
+    if (value === undefined || value === null) return ''
+    if (!Array.isArray(value)) throw invalid(`${what}: fields must be an array of field names`)
+    for (const name of value) {
+      if (typeof name !== 'string') throw invalid(`${what}: fields must be strings`)
+      if (!FIELD_NAME.test(name)) throw invalid(`${what}: not a field name: ${name}`)
+    }
+    return value.join(',')
+  }
+
   const NO_OPTIONS = Object.freeze({})
 
   const toOptions = (options, what) => {
@@ -213,6 +228,7 @@
     toMessageIds,
     toOptions,
     toCount,
+    toFieldNames,
     slotOf,
   }
 }

@@ -1,6 +1,8 @@
 (natives, shared, Message, PluginError, ops) => {
-  const { baseName, invalid, SEPARATOR, toSpec, toSpecList, toMessageId, toMessageIds, toOptions, toCount, slotOf }
-    = shared
+  const {
+    baseName, invalid, SEPARATOR, toSpec, toSpecList, toMessageId, toMessageIds, toOptions, toCount, toFieldNames,
+    slotOf,
+  } = shared
 
   // keep in sync with rust `reads::KIND_*` and Kotlin `PluginReads.KIND_*`
   const KIND_PEER = 0
@@ -256,6 +258,7 @@
             toArchive(opts.archive, 'getDialogsCached'),
             named ? toCount(folder, 'getDialogsCached', 'chatFolderId') : NO_CHAT_FOLDER,
             toCount(opts.limit, 'getDialogsCached', 'limit'),
+            toFieldNames(opts.fields, 'getDialogsCached'),
           ].join(SEPARATOR),
           '',
         ]

@@ -295,23 +295,35 @@ class TlHandles(private val policy: TlFilter.Policy) : TlListener {
      * child is its own handle, and reflecting a parent's fields to find one costs more than the
      * crossing it would save (measured on a Pixel 9: 7.1us a read against 31us to reflect a
      * dialog's 22 fields).
+     *
+     * [fields] is the caller naming what it will read, which overrides both rules: exactly those
+     * fields are carried, whatever the object is. A name this cannot carry - an object, a vector,
+     * an outsized string, no such field at all - simply writes nothing, and rust reads it the
+     * ordinary way, so a projection is never the reason a field is missing.
      */
-    fun project(handle: Long): String {
+    fun project(handle: Long, fields: List<String>? = null): String {
         val entry = table[handle] ?: return EMPTY_PROJECTION
         val target = entry.target as? TLObject ?: return EMPTY_PROJECTION
         val cls = target.javaClass
-        if (!TlReflect.isFullyScalar(cls)) return typeOnlyOf(cls)
-        return StringBuilder(96).also { appendProjection(it, target) }.toString()
+        val infos = TlReflect.fieldInfos(cls)
+        val picked = when {
+            fields == null -> if (TlReflect.isFullyScalar(cls)) infos.values else return typeOnlyOf(cls)
+            else -> fields.mapNotNull { infos[it] }.ifEmpty { return typeOnlyOf(cls) }
+        }
+        return StringBuilder(96).also { appendProjection(it, target, picked) }.toString()
     }
 
-    /** every field is a scalar, or this would not have been called */
-    private fun appendProjection(out: StringBuilder, target: TLObject) {
-        val cls = target.javaClass
-        out.append('{').append(TYPE_ENTRY).append(quotedTypeOf(cls))
-        for ((name, info) in TlReflect.fieldInfos(cls)) {
+    /** what [project] settled on: a field it cannot carry writes nothing and is left to a lazy read */
+    private fun appendProjection(out: StringBuilder, target: TLObject, infos: Collection<TlReflect.FieldInfo>) {
+        out.append('{').append(TYPE_ENTRY).append(quotedTypeOf(target.javaClass))
+        for (info in infos) {
             if (info.isFlagWord || TlFilter.hidesField(policy, info)) continue
             val value = if (info.isPresent(target)) info.field.get(target) else null
-            val filtered = if (policy.takeover && info.redactedInTakeover) TlFilter.filterFieldValue(target, name, value) else value
+            val filtered = if (policy.takeover && info.redactedInTakeover) {
+                TlFilter.filterFieldValue(target, info.field.name, value)
+            } else {
+                value
+            }
             val start = out.length
             out.append(',').append(info.quotedName).append(':')
             val wrote = when (filtered) {

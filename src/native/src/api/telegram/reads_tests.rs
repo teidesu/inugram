@@ -1277,7 +1277,7 @@ fn the_bundled_reads_test_plugin_passes() {
   // exact rather than a floor: nothing here may SKIP against this fake, so a block that
   // stopped running - or a fixture that stopped existing - would otherwise take its
   // assertions with it and still pass
-  crate::testing::harness::assert_oracle_exact(&lines, "reads test done", 66);
+  crate::testing::harness::assert_oracle_exact(&lines, "reads test done", 72);
 }
 
 #[test]
@@ -1515,7 +1515,7 @@ fn a_cached_dialog_read_selects_the_main_list_by_default() {
   eval_void(&ctx, "inu.account().getDialogsCached()");
   settle(&rt, &ctx, &state, &host);
   // archive=exclude, no chat folder, no limit
-  assert_eq!(host.fetch_log.borrow().last().unwrap(), &(OP_DIALOGS_CACHED, "0\n-1\n0".to_string()));
+  assert_eq!(host.fetch_log.borrow().last().unwrap(), &(OP_DIALOGS_CACHED, "0\n-1\n0\n".to_string()));
 }
 
 #[test]
@@ -1524,7 +1524,7 @@ fn an_archive_mode_crosses_as_its_number() {
     let (rt, ctx, host, state, _accounts) = setup(ALL_GRANTS);
     eval_void(&ctx, &format!("inu.account().getDialogsCached({{ archive: '{mode}' }})"));
     settle(&rt, &ctx, &state, &host);
-    assert_eq!(host.fetch_log.borrow().last().unwrap().1, format!("{encoded}\n-1\n0"), "mode: {mode}");
+    assert_eq!(host.fetch_log.borrow().last().unwrap().1, format!("{encoded}\n-1\n0\n"), "mode: {mode}");
   }
 }
 
@@ -1568,10 +1568,39 @@ fn a_chat_folder_id_crosses_and_zero_is_one_of_them() {
   let (rt, ctx, host, state, _accounts) = setup(ALL_GRANTS);
   eval_void(&ctx, "inu.account().getDialogsCached({ chatFolderId: 0 })");
   settle(&rt, &ctx, &state, &host);
-  assert_eq!(host.fetch_log.borrow().last().unwrap().1, "0\n0\n0");
+  assert_eq!(host.fetch_log.borrow().last().unwrap().1, "0\n0\n0\n");
   eval_void(&ctx, "inu.account().getDialogsCached({ chatFolderId: 3, limit: 20 })");
   settle(&rt, &ctx, &state, &host);
-  assert_eq!(host.fetch_log.borrow().last().unwrap().1, "0\n3\n20");
+  assert_eq!(host.fetch_log.borrow().last().unwrap().1, "0\n3\n20\n");
+}
+
+/// the names ride in a part of their own, comma-joined. Nothing about the wire knows which fields
+/// a constructor has: what to do with a name is the host's, and an unknown one is simply not carried
+#[test]
+fn named_fields_cross_as_a_part_of_their_own() {
+  let (rt, ctx, host, state, _accounts) = setup(ALL_GRANTS);
+  eval_void(&ctx, "inu.account().getDialogsCached({ fields: ['top_message', 'peer'] })");
+  settle(&rt, &ctx, &state, &host);
+  assert_eq!(host.fetch_log.borrow().last().unwrap().1, "0\n-1\n0\ntop_message,peer");
+}
+
+/// a name is a java identifier or it is refused, so nothing a plugin passes can smuggle a separator
+#[test]
+fn a_field_name_that_is_not_one_never_reaches_the_host() {
+  let (rt, ctx, host, state, _accounts) = setup(ALL_GRANTS);
+  eval_void(
+    &ctx,
+    r#"globalThis.__out = [];
+       for (const fields of [['a,b'], ['a\nb'], [''], [7], 'top_message', [{}]]) {
+         inu.account().getDialogsCached({ fields }).catch(e => __out.push(e.code))
+       }"#,
+  );
+  settle(&rt, &ctx, &state, &host);
+  assert_eq!(
+    eval_json(&ctx, "__out"),
+    r#"["invalid-argument","invalid-argument","invalid-argument","invalid-argument","invalid-argument","invalid-argument"]"#
+  );
+  assert!(host.fetch_log.borrow().is_empty());
 }
 
 #[test]
