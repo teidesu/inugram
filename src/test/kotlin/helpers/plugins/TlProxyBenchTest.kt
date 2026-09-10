@@ -146,7 +146,7 @@ class TlProxyBenchTest {
             plugin,
             desu.inugram.helpers.plugins.tl.TlFilter.policyFor(plugin.permissions),
         )
-        val one = handles.projectScalars(handles.mintForPlugin(dialog(1L, 1_000_001), readOnly = true))
+        val one = handles.project(handles.mintForPlugin(dialog(1L, 1_000_001), readOnly = true))
         val payload = (1..count).joinToString(",", "[", "]") { one }
         val fewKeys = "{\"a\":${JSONObject.quote("x".repeat(one.length - 12))}}"
         val numbers = (1..20).joinToString(",", "{", "}") { "\"f$it\":$it" }
@@ -207,21 +207,49 @@ class TlProxyBenchTest {
             desu.inugram.helpers.plugins.tl.TlFilter.policyFor(plugin.permissions),
         )
         val dialogs = (1..count).map { dialog(it.toLong(), 1_000_000 + it) }
-        fun median(round: (org.telegram.tgnet.TLObject) -> Unit): Double = (1..6).map {
+        fun rounds(round: (org.telegram.tgnet.TLObject) -> Unit): List<Double> = (1..6).map {
             val start = System.nanoTime()
             for (d in dialogs) round(d)
             (System.nanoTime() - start) / 1_000_000.0
-        }.drop(1).sorted()[2]
+        }
 
-        val mint = median { handles.mintForPlugin(it, readOnly = true) }
-        // what a plugin's own read pays: the handle, then the projection that rides on it
-        val project = median { handles.projectScalars(handles.mintForPlugin(it, readOnly = true)) }
-        val both = project
+        val mint = rounds { handles.mintForPlugin(it, readOnly = true) }
+        // what a plugin's own read pays: the handle, then the projection that rides on it. The
+        // first round is the one production gets: this runs once per sheet, interpreted
+        val project = rounds { handles.project(handles.mintForPlugin(it, readOnly = true)) }
         Log.i(
             "InuBench",
-            "host halves, $count dialogs: mint=${"%.2f".format(mint)}ms mint+project=${"%.2f".format(both)}ms" +
-                " (${"%.1f".format(project / count * 1000)}us each)",
+            "host halves, $count dialogs: mint=${"%.2f".format(mint.drop(1).sorted()[2])}ms" +
+                " mint+project cold=${"%.2f".format(project[0])}ms (${"%.1f".format(project[0] / count * 1000)}us each)" +
+                " warm=${"%.2f".format(project.drop(1).sorted()[2])}ms (${"%.1f".format(project.drop(1).sorted()[2] / count * 1000)}us each)" +
+                " rounds=${project.map { "%.1f".format(it) }}",
         )
+        run {
+            val cls = dialogs[0].javaClass
+            val infos = desu.inugram.helpers.plugins.tl.TlReflect.fieldInfos(cls)
+            val scalars = infos.values.count { it.isScalar && !it.isFlagWord }
+            val present = infos.values.count { !it.isFlagWord && it.isPresent(dialogs[0]) }
+            fun timed(what: String, body: () -> Unit) {
+                val rounds = (1..6).map {
+                    val start = System.nanoTime()
+                    for (d in dialogs) body()
+                    (System.nanoTime() - start) / 1_000_000.0
+                }
+                Log.i("InuBench", "  $what cold=${"%.1f".format(rounds[0])}ms warm=${"%.1f".format(rounds.drop(1).sorted()[2])}ms")
+            }
+            Log.i("InuBench", "TL_dialog: ${infos.size} fields, $scalars scalar, $present present on the sample")
+            val pre = dialogs.map { handles.mintForPlugin(it, readOnly = true) }
+            var sink = 0
+            timed("reflection only (isPresent + get)") {
+                for ((_, info) in infos) {
+                    if (info.isFlagWord) continue
+                    if (info.isPresent(dialogs[0])) sink += info.field.get(dialogs[0])?.hashCode() ?: 0
+                }
+            }
+            timed("project on a minted handle") { handles.project(pre[0]) }
+            timed("mintForPlugin only") { handles.mintForPlugin(dialogs[0], readOnly = true) }
+            assertEquals(sink, sink)
+        }
         val minted = dialogs.map { handles.mintForPlugin(it, readOnly = true) }
         // 40 rounds, reported as first and last: a read this small is interpreted until ART's jit
         // has seen it enough times, and the difference says whether a number is the code or the jit

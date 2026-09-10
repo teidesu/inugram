@@ -10,6 +10,10 @@ object TlFlags {
 
     private val table: Table by lazy { parse() }
 
+    fun prewarm() {
+        table
+    }
+
     private fun parse(): Table {
         val text = TlFlags::class.java.getResourceAsStream(RESOURCE)?.use { it.readBytes().toString(Charsets.UTF_8) }
             ?: throw IllegalStateException("$RESOURCE is missing from the classpath; run `pnpm run generate-tl-typings`")

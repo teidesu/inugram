@@ -179,9 +179,6 @@ const HANDLE_MARKER_DESCRIPTION: &str = "inu.tl.handle";
 const HAS_PREFIX: char = '#';
 const RESERVED_PREFIX: char = '@';
 const KEYS_ENTRY: &str = "@keys";
-/// what marks a projected field as a view of its own rather than a value: the child's handle,
-/// with the rest of the object its projection. `TlHandles.appendChild` writes it.
-const HANDLE_ENTRY: &str = "@h";
 const TYPE_KEY: &str = "_";
 const TO_JSON_KEY: &str = "toJSON";
 const THEN_KEY: &str = "then";
@@ -440,8 +437,8 @@ impl<'js> HandleBox<'js> {
     self.adopt_fields(ctx, fields)
   }
 
-  /// [`HANDLE_ENTRY`] turns a projected field into a view of its own, built here rather than on
-  /// first read: the child owns its handle from that moment, and nothing else would ever free one.
+  /// a projection carries scalars and a type name, never a child: a nested object is its own
+  /// handle, minted when the field is read.
   fn adopt_fields(&self, ctx: &Ctx<'js>, fields: Object<'js>) -> JsResult<()> {
     fields.set_prototype(None)?;
     if fields.contains_key(TYPE_KEY)? {
@@ -449,46 +446,8 @@ impl<'js> HandleBox<'js> {
       fields.remove(TYPE_KEY)?;
       self.perm(ctx)?.set(TYPE_KEY, type_name)?;
     }
-    let children: Vec<(String, Object<'js>)> = fields
-      .props::<String, Value<'js>>()
-      .filter_map(|entry| entry.ok())
-      .filter_map(|(key, value)| value.into_object().map(|object| (key, object)))
-      .collect();
-    for (key, child) in children {
-      fields.set(key, self.adopt_child(ctx, child)?)?;
-    }
     *self.vol.borrow_mut() = Some(fields);
     Ok(())
-  }
-
-  /// a view that adopts nothing must still let go of the handles a projection carried with it:
-  /// the host minted one per embedded child, and dropping the json would leave them with no owner
-  fn release_projection(&self, ctx: &Ctx<'js>, json: &str) {
-    let Ok(parsed) = ctx.json_parse(json) else {
-      return;
-    };
-    let Some(fields) = parsed.into_object() else {
-      return;
-    };
-    for entry in fields.props::<String, Value<'js>>() {
-      let Ok((_, value)) = entry else { continue };
-      let Some(child) = value.into_object() else { continue };
-      let Ok(wire) = child.get::<_, String>(HANDLE_ENTRY) else { continue };
-      if let Some((_, _, id, _)) = parse_handle(&wire) {
-        self.views.host.tl_release(id);
-      }
-    }
-  }
-
-  fn adopt_child(&self, ctx: &Ctx<'js>, child: Object<'js>) -> JsResult<Value<'js>> {
-    let Ok(wire) = child.get::<_, String>(HANDLE_ENTRY) else {
-      return throw_tl(ctx, "tl wire: bad projected child");
-    };
-    child.remove(HANDLE_ENTRY)?;
-    let Some((is_vector, read_only, id, None)) = parse_handle(&wire) else {
-      return throw_tl(ctx, "tl wire: bad projected child");
-    };
-    build_proxy_seeded(ctx, self.views.clone(), is_vector, read_only, self.life, id, Some(child))?.into_js(ctx)
   }
 
   fn read_field(&self, ctx: &Ctx<'js>, key: &str) -> JsResult<Value<'js>> {
@@ -774,21 +733,7 @@ fn build_proxy<'js>(
   handle: i64,
   projection: Option<&str>,
 ) -> JsResult<Proxy<'js>> {
-  build_view(ctx, views, is_vector, read_only, life, handle, projection, None)
-}
-
-/// the same, for a projection already parsed: a child arrives as part of its parent's object, so
-/// re-serializing it only to parse it again is work nobody needs
-fn build_proxy_seeded<'js>(
-  ctx: &Ctx<'js>,
-  views: Rc<TlViews>,
-  is_vector: bool,
-  read_only: bool,
-  life: ViewLife,
-  handle: i64,
-  fields: Option<Object<'js>>,
-) -> JsResult<Proxy<'js>> {
-  build_view(ctx, views, is_vector, read_only, life, handle, None, fields)
+  build_view(ctx, views, is_vector, read_only, life, handle, projection)
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -800,7 +745,6 @@ fn build_view<'js>(
   life: ViewLife,
   handle: i64,
   projection: Option<&str>,
-  fields: Option<Object<'js>>,
 ) -> JsResult<Proxy<'js>> {
   let (handler, _) = TlShared::get(ctx)?;
   let stamp = views.epoch();
@@ -819,14 +763,11 @@ fn build_view<'js>(
   )?;
   {
     let view = target.borrow();
+    // a view that caches nothing drops what rode along; a projection owns no handle to release
     if view.cacheable() {
       if let Some(json) = projection {
         view.adopt_projection(ctx, json)?;
-      } else if let Some(fields) = fields {
-        view.adopt_fields(ctx, fields)?;
       }
-    } else if let Some(json) = projection {
-      view.release_projection(ctx, json);
     }
   }
   Proxy::new(ctx.clone(), target, ProxyHandler::from_object(handler)?)

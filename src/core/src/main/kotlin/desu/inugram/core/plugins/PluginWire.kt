@@ -27,6 +27,7 @@ object PluginWire {
 
     fun encodeNull(): String = "N"
     fun encodeString(value: String): String = "S$value"
+    fun encodeLongAsString(value: Long): String = "S$value"
     fun encodeInt(value: Long): String = "I$value"
     fun encodeDouble(value: Double): String = "D$value"
     fun encodeBool(value: Boolean): String = if (value) "B1" else "B0"

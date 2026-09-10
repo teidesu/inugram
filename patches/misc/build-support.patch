@@ -13,14 +13,14 @@ Subject: build support stuff for fork-specific code: - added kotlin - bumped min
  .../telegram/tgnet/ConnectionsManager.java    |   2 +-
  .../org/telegram/ui/PaymentFormActivity.java  |  28 ++-
  .../org/telegram/ui/SettingsActivity.java     |  24 +-
- TMessagesProj_App/build.gradle                | 212 ++++++++++--------
+ TMessagesProj_App/build.gradle                | 213 ++++++++++--------
  TMessagesProj_App/google-services.json        |  76 ++-----
  TMessagesProj_App/jni/CMakeLists.txt          |  10 +
  TMessagesProj_AppTests/build.gradle           |   5 +-
  build.gradle                                  |  14 +-
  gradle.properties                             |   2 +-
  settings.gradle                               |  40 +++-
- 16 files changed, 286 insertions(+), 358 deletions(-)
+ 16 files changed, 287 insertions(+), 358 deletions(-)
  create mode 100644 TMessagesProj_App/jni/CMakeLists.txt
 
 diff --git a/.gitmodules b/.gitmodules
@@ -585,7 +585,7 @@ index 0000000..0000000 100644
  
  repositories {
      mavenCentral()
-@@ -14,20 +15,31 @@ configurations.all {
+@@ -14,20 +15,32 @@ configurations.all {
      exclude group: 'androidx.recyclerview', module: 'recyclerview'
  }
  
@@ -598,6 +598,7 @@ index 0000000..0000000 100644
 -    coreLibraryDesugaring 'com.android.tools:desugar_jdk_libs:2.1.5'
      implementation files('../TMessagesProj/libs/libgsaverification-client.aar')
 +    implementation 'androidx.core:core:1.16.0'
++    implementation 'androidx.profileinstaller:profileinstaller:1.4.1'
 +    shadowhookAar 'com.bytedance.android:shadowhook:2.0.1'
  }
  
@@ -619,7 +620,7 @@ index 0000000..0000000 100644
      lintOptions {
          disable 'MissingTranslation'
          disable 'ExtraTranslation'
-@@ -37,20 +49,11 @@ android {
+@@ -37,20 +50,11 @@ android {
      compileOptions {
          sourceCompatibility JavaVersion.VERSION_1_8
          targetCompatibility JavaVersion.VERSION_1_8
@@ -641,7 +642,7 @@ index 0000000..0000000 100644
              storePassword RELEASE_STORE_PASSWORD
              keyAlias RELEASE_KEY_ALIAS
              keyPassword RELEASE_KEY_PASSWORD
-@@ -61,7 +64,7 @@ android {
+@@ -61,7 +65,7 @@ android {
          debug {
              debuggable true
              jniDebuggable true
@@ -650,7 +651,7 @@ index 0000000..0000000 100644
              applicationIdSuffix ".beta"
              minifyEnabled false
              shrinkResources false
-@@ -70,18 +73,6 @@ android {
+@@ -70,18 +74,6 @@ android {
              ndk.debugSymbolLevel = 'FULL'
          }
  
@@ -669,7 +670,7 @@ index 0000000..0000000 100644
          release {
              debuggable false
              jniDebuggable false
-@@ -95,100 +86,50 @@ android {
+@@ -95,100 +87,50 @@ android {
      }
  
      sourceSets.debug {
@@ -791,7 +792,7 @@ index 0000000..0000000 100644
      buildFeatures {
          buildConfig = true
      }
-@@ -197,6 +138,85 @@ android {
+@@ -197,6 +139,85 @@ android {
      lintOptions {
          checkReleaseBuilds false
      }

@@ -18,7 +18,10 @@ import org.telegram.messenger.ApplicationLoader
  *
  * Results are PluginWire-tagged strings (`S`/`N`/`J`/`E`/`P`) - see
  * [desu.inugram.helpers.plugins.StorageListener.kv].
- * Called only on [org.telegram.messenger.Utilities.globalQueue] (the engines' thread).
+ *
+ * Holds nothing of its own, and `SharedPreferences` is thread-safe, so this answers on whichever
+ * thread asked. The quota check reads before it writes without a lock: a plugin racing itself can
+ * overshoot [MAX_BYTES] by one write, which the next write then refuses.
  */
 object PluginKv {
     private const val MAX_BYTES = 1 shl 20

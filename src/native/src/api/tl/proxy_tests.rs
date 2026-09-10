@@ -1669,146 +1669,10 @@ fn a_projected_handle_answers_its_scalars_without_the_host() {
   });
 }
 
-/// a write anywhere drops the projection with the rest of the cache; the type name survives it
-/// a peer, an inputPeer and their like are nothing but scalars, so kotlin sends the whole child
-/// with the parent: reading `d.peer.user_id` must cross for neither half
-#[test]
-fn a_projected_child_is_a_view_that_never_crosses() {
-  let (_rt, ctx) = make_ctx();
-  let host = Rc::new(FakeTlHost::default());
-  let child = host.mint_read_only(object_entry("peerUser", &[("user_id", "S7")]));
-  let parent = host.mint_read_only(nested_entry("dialog", "peer", Rc::new(RefCell::new(object_entry("peerUser", &[])))));
-  let views = views_of(&host);
 
-  ctx.with(|ctx| {
-    let wire = format!(
-      "{}|{{\"_\":\"dialog\",\"peer\":{{\"@h\":\"OR{child}\",\"_\":\"peerUser\",\"user_id\":\"7\"}}}}",
-      encode_handle(false, true, parent),
-    );
-    let value = views.wire_to_js_value(&ctx, &wire, ViewLife::Plugin).unwrap();
-    ctx.globals().set("d", value).unwrap();
 
-    let read: String = ctx.eval("`${d.peer._} ${d.peer.user_id}`").unwrap();
-    assert_eq!(read, "peerUser 7");
-    assert_eq!(host.get_count(), 0, "neither the child nor its fields may cross");
 
-    let same: bool = ctx.eval("d.peer === d.peer").unwrap();
-    assert!(same, "the child is cached like any other read");
-    let present: bool = ctx.eval("'peer' in d").unwrap();
-    assert!(present);
-    assert_eq!(host.has_count(), 0, "a projected child proves its own presence");
 
-    // the child is a view, not the plain object it crossed as
-    let json: String = ctx.eval("JSON.stringify(d.peer)").unwrap();
-    assert!(json.contains("peerUser"), "{json}");
-    let refused: String = ctx
-      .eval(r#"(() => { try { d.peer.user_id = "1"; return 'wrote' } catch (e) { return e.message } })()"#)
-      .unwrap();
-    assert!(refused.contains("read-only"), "{refused}");
-  });
-}
-
-/// a projected child is a view of the live object, not a snapshot of it: a write has to reach the
-/// host under the *child's* handle, and the value read back afterwards has to be the written one
-#[test]
-fn a_write_through_a_projected_child_reaches_the_host_and_invalidates() {
-  let (_rt, ctx) = make_ctx();
-  let host = Rc::new(FakeTlHost::default());
-  // the handle the projection carries and the parent's own field name the same object, exactly as
-  // `TlHandles.appendChild` mints it
-  let peer = Rc::new(RefCell::new(object_entry("peerUser", &[("user_id", "S7")])));
-  let child = host.mint_shared(peer.clone(), false);
-  let mut fields = HashMap::new();
-  fields.insert("top_message".to_string(), FakeValue::Wire("I3".to_string()));
-  fields.insert("peer".to_string(), FakeValue::Nested(peer.clone()));
-  let parent = host.mint(FakeEntry::Object { type_name: "dialog".to_string(), fields });
-  let views = views_of(&host);
-
-  ctx.with(|ctx| {
-    let wire = format!(
-      "{}|{{\"_\":\"dialog\",\"top_message\":3,\"peer\":{{\"@h\":\"OW{child}\",\"_\":\"peerUser\",\"user_id\":\"7\"}}}}",
-      encode_handle(false, false, parent),
-    );
-    let value = views.wire_to_js_value(&ctx, &wire, ViewLife::Plugin).unwrap();
-    ctx.globals().set("d", value).unwrap();
-    assert_eq!(ctx.eval::<String, _>("d.peer.user_id").unwrap(), "7");
-    assert_eq!(host.get_count(), 0);
-
-    ctx.eval::<(), _>(r#"d.peer.user_id = "9""#).unwrap();
-    assert_eq!(host.sets_of("user_id"), 1, "the write must cross, whatever the cache holds");
-    // the host owns the object, so what it answers now is what the write did
-    assert_eq!(ctx.eval::<String, _>("d.peer.user_id").unwrap(), "9");
-    assert_eq!(host.gets_of("user_id"), 1, "the projected value cannot survive the write");
-
-    // the parent's own projected fields go with it: one write invalidates every view
-    assert_eq!(ctx.eval::<i64, _>("d.top_message").unwrap(), 3);
-    assert_eq!(host.gets_of("top_message"), 1);
-  });
-}
-
-/// a read-only parent seals what it carries, or a projection would be a way around the mode
-#[test]
-fn a_projected_child_of_a_read_only_parent_refuses_writes() {
-  let (_rt, ctx) = make_ctx();
-  let host = Rc::new(FakeTlHost::default());
-  let child = host.mint_read_only(object_entry("peerUser", &[("user_id", "S7")]));
-  let parent = host.mint_read_only(object_entry("dialog", &[]));
-  let views = views_of(&host);
-
-  ctx.with(|ctx| {
-    let wire = format!(
-      "{}|{{\"_\":\"dialog\",\"peer\":{{\"@h\":\"OR{child}\",\"_\":\"peerUser\",\"user_id\":\"7\"}}}}",
-      encode_handle(false, true, parent),
-    );
-    let value = views.wire_to_js_value(&ctx, &wire, ViewLife::Plugin).unwrap();
-    ctx.globals().set("d", value).unwrap();
-    let refused: String = ctx
-      .eval(r#"(() => { try { d.peer.user_id = "9"; return 'wrote' } catch (e) { return e.message } })()"#)
-      .unwrap();
-    assert!(refused.contains("read-only"), "{refused}");
-    assert_eq!(host.sets_of("user_id"), 0, "a refused write must not reach the host");
-  });
-}
-
-/// the child owns its handle from the moment it is built, so the parent going away has to take it
-#[test]
-fn a_projected_child_is_released_with_its_parent() {
-  let (rt, ctx) = make_ctx();
-  let host = Rc::new(FakeTlHost::default());
-  let child = host.mint_read_only(object_entry("peerUser", &[("user_id", "S7")]));
-  let parent = host.mint_read_only(object_entry("dialog", &[]));
-  let views = views_of(&host);
-  assert_eq!(host.live_count(), 2);
-
-  ctx.with(|ctx| {
-    let wire = format!(
-      "{}|{{\"_\":\"dialog\",\"peer\":{{\"@h\":\"OR{child}\",\"_\":\"peerUser\",\"user_id\":\"7\"}}}}",
-      encode_handle(false, true, parent),
-    );
-    let value = views.wire_to_js_value(&ctx, &wire, ViewLife::Plugin).unwrap();
-    ctx.globals().set("d", value).unwrap();
-    // never read: the handle is still the child view's to release
-    ctx.eval::<(), _>("globalThis.d = undefined").unwrap();
-  });
-
-  rt.run_gc();
-  assert_eq!(host.live_count(), 0, "a child nobody read must not outlive its parent");
-}
-
-#[test]
-fn a_projected_child_without_a_handle_is_refused() {
-  let (_rt, ctx) = make_ctx();
-  let host = Rc::new(FakeTlHost::default());
-  let id = host.mint_read_only(object_entry("dialog", &[]));
-  let views = views_of(&host);
-
-  ctx.with(|ctx| {
-    for projection in ["{\"peer\":{\"user_id\":\"7\"}}", "{\"peer\":{\"@h\":\"nonsense\"}}", "{\"peer\":[1]}"] {
-      let wire = format!("{}|{projection}", encode_handle(false, true, id));
-      assert!(views.wire_to_js_value(&ctx, &wire, ViewLife::Plugin).is_err(), "{projection}");
-    }
-  });
-}
 
 #[test]
 fn a_projection_is_dropped_by_a_write_like_any_cached_value() {
@@ -1852,29 +1716,6 @@ fn a_dispatch_view_ignores_a_projection() {
   });
 }
 
-/// nothing adopts a dispatch view's projection, so the handles it carried have to be let go here
-/// or nothing ever would
-#[test]
-fn a_dispatch_view_releases_the_children_a_projection_carried() {
-  let (_rt, ctx) = make_ctx();
-  let host = Rc::new(FakeTlHost::default());
-  let child = host.mint_read_only(object_entry("peerUser", &[("user_id", "S7")]));
-  let id = host.mint(object_entry("dialog", &[("id", "S5")]));
-  let views = views_of(&host);
-  assert_eq!(host.live_count(), 2);
-
-  ctx.with(|ctx| {
-    let wire = format!(
-      "{}|{{\"_\":\"dialog\",\"peer\":{{\"@h\":\"OR{child}\",\"_\":\"peerUser\",\"user_id\":\"7\"}}}}",
-      encode_handle(false, false, id),
-    );
-    let value = views.wire_to_js_value(&ctx, &wire, ViewLife::Dispatch).unwrap();
-    ctx.globals().set("d", value).unwrap();
-    assert_eq!(host.live_count(), 1, "the child nothing adopted must be released");
-    let id: String = ctx.eval("d.id").unwrap();
-    assert_eq!(id, "5", "and the view itself reads the way it always did");
-  });
-}
 
 #[test]
 fn a_malformed_projection_is_refused() {

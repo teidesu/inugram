@@ -89,6 +89,14 @@ export const forkSyncFiles: ForkSyncFile[] = [
     target: 'TMessagesProj_App/native',
     directory: true,
   },
+  // ART baseline profile. A plugin action runs the bridge's read path a few hundred times and
+  // stops, under the JIT's threshold, so without this every crossing a user pays for runs
+  // interpreted (measured at 5-8x the compiled cost). Release builds AOT-compile the listed
+  // classes at install, through profileinstaller; the debuggable variant ignores it
+  {
+    source: 'src/profile/baseline-prof.txt',
+    target: 'TMessagesProj_App/src/main',
+  },
   {
     source: 'src/vendor/google_material',
     target: 'TMessagesProj/src/main/java/google_material',
