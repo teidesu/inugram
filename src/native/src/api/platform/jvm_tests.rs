@@ -12,7 +12,6 @@ use std::cell::Cell;
 struct TestJvmHost {
   calls: RefCell<Vec<String>>,
   next_id: Cell<i64>,
-  released: RefCell<Vec<i64>>,
   /// what the next op answers, in place of the default `N`
   answer: RefCell<Option<String>>,
   load_answer: RefCell<Option<String>>,
@@ -48,10 +47,6 @@ impl TestJvmHost {
 impl JvmHost for TestJvmHost {
   fn jvm(&self, op: i32, target: i64, name: &str, args: &[String]) -> String {
     self.calls.borrow_mut().push(format!("{op}|{target}|{name}|{}", args.join(",")));
-    if op == OP_RELEASE {
-      self.released.borrow_mut().push(target);
-      return "N".to_string();
-    }
     if let Some(answer) = self.answer.borrow_mut().take() {
       return answer;
     }
@@ -60,7 +55,7 @@ impl JvmHost for TestJvmHost {
       OP_LOAD_CLASS => self.load_answer.borrow_mut().take().unwrap_or_else(|| self.mint('C')),
       OP_CLASS => self.mint('C'),
       OP_NEW | OP_RUNNABLE | OP_ROUTINE | OP_XPOSED_ROUTINE | OP_COPY_REF => self.mint('O'),
-      OP_METHOD => self.mint('M'),
+      OP_METHOD => self.mint(if name.starts_with("<init>") { 'K' } else { 'M' }),
       OP_FIELD => self.mint('F'),
       OP_BUNDLE_METHOD => "SputParcelable".to_string(),
       _ => "N".to_string(),
@@ -85,6 +80,7 @@ fn setup(grants: &[&str]) -> Fixture {
     install_jvm(
       &ctx,
       host.as_host(),
+      None,
       TestGrantHost::new(grants).as_host(),
       Lifecycle::new(),
       std::sync::Arc::new(|_: &str| {}),
@@ -117,17 +113,6 @@ fn error_code(f: &Fixture, code: &str) -> String {
     );
     ctx.eval::<String, _>(script).unwrap()
   })
-}
-
-#[test]
-fn a_class_outside_the_scope_list_is_refused_before_anything_crosses() {
-  let f = setup(&["unsafe.jvm(java.util.*)"]);
-  assert_eq!(
-    error_code(&f, "inu.jvm.cls('android.app.Activity')"),
-    "not-granted|unsafe.jvm(android.app.Activity)",
-  );
-  assert!(f.host.calls().is_empty(), "a refused class must not reach the host");
-  assert_eq!(error_code(&f, "inu.jvm.cls('java.util.ArrayList')"), "no-throw");
 }
 
 #[test]
@@ -167,22 +152,14 @@ fn android_bundle_maps_js_and_java_values_to_bundle_putters() {
 }
 
 #[test]
-fn android_bundle_rejects_unsupported_values_and_needs_bundle_scope() {
-  let scoped = setup(&["unsafe.jvm(java.util.*)"]);
-  assert_eq!(error_code(&scoped, "inu.android.bundle({ value: 1 })"), "not-granted|unsafe.jvm(android.os.Bundle)",);
-
+fn android_bundle_rejects_unsupported_values() {
   let f = setup(&["unsafe.jvm"]);
   assert_eq!(error_code(&f, "inu.android.bundle({ value: null })"), "invalid-argument|");
   assert_eq!(error_code(&f, "inu.android.bundle({ value: [] })"), "invalid-argument|");
 }
 
-/// dex code never crosses this bridge again, so a scope list stops describing anything
 #[test]
-fn load_dex_needs_the_whole_grant_and_not_a_scoped_one() {
-  let scoped = setup(&["unsafe.jvm(java.util.*)"]);
-  assert_eq!(error_code(&scoped, "inu.jvm.loadDex('/data/local/tmp/x.dex')"), "not-granted|unsafe.jvm(*)",);
-  assert!(scoped.host.calls().is_empty(), "a refused dex must not reach the host");
-
+fn load_dex_needs_the_grant() {
   let whole = setup(&["unsafe.jvm"]);
   assert_eq!(error_code(&whole, "inu.jvm.loadDex('/data/local/tmp/x.dex')"), "no-throw");
   assert_eq!(whole.host.calls(), vec![format!("{OP_LOAD_DEX}|0|/data/local/tmp/x.dex|")]);
@@ -358,21 +335,21 @@ fn a_host_error_wire_throws_the_typed_error_it_names() {
   assert_eq!(error_code(&f, "o.getField('x')"), "Error|");
 }
 
+/// the table is the plugin's only hold on a java reference, and a handle whose js side is gone is
+/// one nothing can name again - so the reference goes with it, without a finalizer job
 #[test]
-fn a_handle_whose_js_side_is_gone_is_released_to_the_host() {
+fn a_handle_whose_js_side_is_gone_releases_its_reference() {
   let f = setup(&["unsafe.jvm"]);
+  let id = f.state.refs().mint(jni::objects::Global::null(), b'O').unwrap();
+  assert_eq!(f.state.refs().len(), 1);
   f.ctx.with(|ctx| {
-    // the class stays reachable, so the only handle that can be collected is the object's
-    ctx
-      .eval::<(), _>("globalThis.C = inu.jvm.cls('java.util.ArrayList'); globalThis.o = new C(); globalThis.o = null")
-      .unwrap()
+    let handle = f.state.wire_to_value(&ctx, &format!("GO{id}")).unwrap();
+    ctx.globals().set("o", handle).unwrap();
+    assert_eq!(f.state.refs().len(), 1, "a live handle keeps its entry");
+    ctx.eval::<(), _>("globalThis.o = null").unwrap();
   });
   f._rt.run_gc();
-  // the finalizer is a job, so it lands on the next drain rather than inside run_gc
-  while f._rt.is_job_pending() {
-    f._rt.execute_pending_job().ok();
-  }
-  assert_eq!(*f.host.released.borrow(), vec![2], "the object handle must have been released");
+  assert_eq!(f.state.refs().len(), 0, "the object handle must have released its reference");
 }
 
 #[test]
@@ -424,6 +401,7 @@ fn a_throwing_callback_is_the_plugins_fault() {
     install_jvm(
       &ctx,
       TestJvmHost::new().as_host(),
+      None,
       TestGrantHost::new(&["unsafe.jvm"]).as_host(),
       Lifecycle::new(),
       crate::testing::harness::log_sink(&logged),
@@ -476,6 +454,7 @@ mod bundled_oracle {
       install_jvm(
         &ctx,
         host.as_host(),
+        None,
         // the plugin's own header, so a suite granting what the manifest forgot cannot pass
         TestGrantHost::new(&manifest_grants(ORACLE)).as_host(),
         Lifecycle::new(),
@@ -501,7 +480,7 @@ mod bundled_oracle {
       rt.execute_pending_job().ok();
     }
     let lines = lines.borrow().clone();
-    assert_oracle_exact(&lines, "jvm test done", 31);
+    assert_oracle_exact(&lines, "jvm test done", 29);
   }
 }
 
@@ -512,13 +491,14 @@ mod bundled_oracle {
 pub(crate) mod testing {
   use super::*;
   use std::cell::{Cell, RefCell};
-  use std::collections::HashMap;
+  use std::collections::{HashMap, HashSet};
 
   #[derive(Default)]
   pub(crate) struct OracleJvmHost {
     next_id: Cell<i64>,
     runnable: Cell<u32>,
     classes: RefCell<HashMap<i64, String>>,
+    constructors: RefCell<HashSet<i64>>,
     list_size: Cell<i32>,
   }
 
@@ -528,6 +508,7 @@ pub(crate) mod testing {
         next_id: Cell::new(1),
         runnable: Cell::new(0),
         classes: RefCell::new(HashMap::new()),
+        constructors: RefCell::new(HashSet::new()),
         list_size: Cell::new(0),
       })
     }
@@ -553,6 +534,13 @@ pub(crate) mod testing {
       format!("G{kind}{id}")
     }
 
+    fn mint_constructor(&self) -> String {
+      let id = self.next_id.get();
+      self.next_id.set(id + 1);
+      self.constructors.borrow_mut().insert(id);
+      format!("GK{id}")
+    }
+
     fn mint_class(&self, name: &str) -> String {
       let id = self.next_id.get();
       self.next_id.set(id + 1);
@@ -566,7 +554,13 @@ pub(crate) mod testing {
       match op {
         OP_CLASS => self.mint_class(name),
         OP_NEW | OP_ROUTINE | OP_XPOSED_ROUTINE => self.mint('O'),
-        OP_METHOD => self.mint('M'),
+        OP_METHOD => {
+          if name.starts_with("<init>") {
+            self.mint_constructor()
+          } else {
+            self.mint('M')
+          }
+        }
         OP_FIELD => self.mint('F'),
         OP_RUNNABLE => {
           if let Some(token) = args.first().and_then(|a| a.strip_prefix('I')).and_then(|t| t.parse().ok()) {
@@ -583,11 +577,6 @@ pub(crate) mod testing {
           "TAG" => "Sinugram".to_string(),
           "digest" => "YAQID".to_string(),
           "serialVersionUID" => "I9007199254740993".to_string(),
-          // the far side of the same scope list: only the host knows the runtime class of
-          // what it is about to hand over
-          "out" => "Pnot-granted\nunsafe.jvm(java.io.PrintStream)\n\n\n\
-                              java.io.PrintStream is not in this plugin's unsafe.jvm scope list"
-            .to_string(),
           _ => "N".to_string(),
         },
         OP_CALL => match name {
@@ -602,6 +591,7 @@ pub(crate) mod testing {
           "boom" => "Ejava.lang.IllegalStateException: boom".to_string(),
           _ => "N".to_string(),
         },
+        OP_INVOKE if self.constructors.borrow().contains(&target) => self.mint('O'),
         OP_INVOKE => {
           self.list_size.set(self.list_size.get() + 1);
           "B1".to_string()
@@ -704,10 +694,7 @@ fn define_class_cleans_up_callbacks_when_the_host_refuses() {
 }
 
 #[test]
-fn define_class_checks_its_grant_and_refuses_malformed_specs() {
-  let scoped = setup(&["unsafe.jvm(java.lang.*)"]);
-  assert_eq!(error_code(&scoped, "inu.jvm.defineClass('plugin.Test', {})"), "not-granted|unsafe.jvm(*)");
-  assert!(scoped.host.calls().is_empty());
+fn define_class_refuses_malformed_specs() {
   let f = setup(&["unsafe.jvm"]);
   for code in [
     "inu.jvm.defineClass('plugin.Test', null)",

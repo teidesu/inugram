@@ -14,6 +14,7 @@ object GrantValidator {
         "onAppVisibilityChange",
         "interceptSendMessage",
         "unsafe.fs",
+        "unsafe.jvm",
         "unsafe.xposed",
         "unsafe.notificationCenter",
         "unsafe.disableApiFiltering",
@@ -28,9 +29,6 @@ object GrantValidator {
 
     /** every way of getting a domain wrong - `fetch(https://a.com)`, `fetch(a.com/path)`, `fetch(a.com:443)` - is a scope that can never match a host */
     private val DOMAIN = Regex("""[A-Za-z0-9](?:[A-Za-z0-9-]*[A-Za-z0-9])?(?:\.[A-Za-z0-9](?:[A-Za-z0-9-]*[A-Za-z0-9])?)*""")
-
-    /** a java binary name or a namespace ending in `.*`; anything else matches no class under [ScopeMatch.NAMESPACE] */
-    private val JVM_SCOPE = Regex("""\*|[A-Za-z_$][A-Za-z0-9_$]*(\.[A-Za-z_$][A-Za-z0-9_$]*)*(\.\*)?""")
 
     fun validateGrants(tokens: List<String>): List<String> {
         val problems = mutableListOf<String>()
@@ -82,11 +80,6 @@ object GrantValidator {
                 "fetch" -> for (scope in grant.scopes) {
                     if (!DOMAIN.matches(scope)) {
                         problems.add("'$scope' is not a domain in @grant fetch")
-                    }
-                }
-                "unsafe.jvm" -> for (scope in grant.scopes) {
-                    if (!JVM_SCOPE.matches(scope)) {
-                        problems.add("'$scope' is not a class or namespace in @grant unsafe.jvm")
                     }
                 }
                 "fs" -> for (scope in grant.scopes) {

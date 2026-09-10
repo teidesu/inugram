@@ -57,12 +57,14 @@ class PluginXposedConsumerTest {
         assertEquals("recovered", boom.invoke(fixture))
     }
 
-    @Test fun argument_reads_enforce_runtime_class_scopes() {
-        val plugin = startPlugin("scoped-consumer", "unsafe.jvm(desu.inugram.jvmfixture.*)", "unsafe.xposed")
+    /** an argument the bridge will not carry stops the consumer, so the original answers untouched */
+    @Test fun argument_reads_the_bridge_refuses_stop_the_consumer() {
+        val plugin = startPlugin("consumer", "unsafe.jvm", "unsafe.xposed")
         val before = createConsumer(plugin, """{"nodes":[["hookArgument",[0,0]],["hookSetResult",[0,1]]],"roots":[0,1]}""", "I0", "Sblocked")
         val method = JvmFixture::class.java.getDeclaredMethod("boxed", Any::class.java)
         install(plugin, method, before = before)
-        assertEquals("java.util.ArrayList", method.invoke(JvmFixture(), ArrayList<String>()))
+        val oversized = "x".repeat(PluginJvm.VALUE_LIMIT_BYTES + 1)
+        assertEquals("java.lang.String", method.invoke(JvmFixture(), oversized))
     }
 
     @Test fun consumers_can_set_and_clear_throwables() {

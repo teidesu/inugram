@@ -50,19 +50,18 @@ object TlFilter {
     private val hiddenTypeByClass = ConcurrentHashMap<Class<*>, String>()
 
     fun hidesField(policy: Policy, cls: Class<*>, key: String): Boolean =
-        (policy.takeover && hidesTakeoverField(cls, key)) || (!policy.drafts && isDraftField(cls, key))
+        TlReflect.fieldInfo(cls, key)?.let { hidesField(policy, it) } ?: false
 
-    private fun hidesTakeoverField(cls: Class<*>, key: String): Boolean {
+    fun hidesField(policy: Policy, info: TlReflect.FieldInfo): Boolean =
+        (policy.takeover && info.hiddenInTakeover) || (!policy.drafts && info.isDraft)
+
+    internal fun hidesTakeoverField(cls: Class<*>, key: String): Boolean {
         val tlName = hiddenTypeByClass.getOrPut(cls) {
             findConstructorId(cls)?.let { hiddenTypeByCtorId[it] } ?: ""
         }
         if (tlName.isEmpty()) return false
         return ApiFilter.HIDDEN_FIELDS[tlName]?.contains(key) == true
     }
-
-    /** a draft rides on a `Dialog`, a `ForumTopic`, a `savedDialog` and `updateDraftMessage` as well as on `getDraft`, so this keys on the field's declared type */
-    private fun isDraftField(cls: Class<*>, key: String): Boolean =
-        TlReflect.publicFields(cls)[key]?.type == TLRPC.DraftMessage::class.java
 
     fun filterFieldValue(target: TLObject, key: String, value: Any?): Any? {
         if (key != ApiFilter.REDACTED_MESSAGE_FIELD || value !is String) return value

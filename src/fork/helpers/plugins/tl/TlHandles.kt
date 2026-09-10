@@ -14,6 +14,7 @@ import java.lang.reflect.Type
 import java.util.Collections
 import java.util.IdentityHashMap
 import org.json.JSONArray
+import org.json.JSONObject
 import org.json.JSONTokener
 import org.telegram.tgnet.TLObject
 
@@ -145,13 +146,81 @@ class TlHandles(private val policy: TlFilter.Policy) : TlListener {
 
     /** `in` and `Object.keys` have to agree with reads: no flag words, no cleared-bit fields, nothing [TlFilter] hides */
     private fun isVisibleField(target: TLObject, key: String): Boolean {
-        val cls = target.javaClass
-        if (!TlReflect.publicFields(cls).containsKey(key)) return false
-        if (TlFlags.isFlagWord(cls, key)) return false
-        if (TlFilter.hidesField(policy, cls, key)) return false
-        val gate = TlFlags.gateOf(cls, key) ?: return true
-        return TlReflect.isBitSet(target, cls, gate)
+        val info = TlReflect.fieldInfo(target.javaClass, key) ?: return false
+        if (info.isFlagWord || TlFilter.hidesField(policy, info)) return false
+        return info.isPresent(target)
     }
+
+    /**
+     * the scalar fields of [target] as one JSON object, the way each would read on its own -
+     * hidden ones left out, a cleared bit as `null`, a long as a string - for a handle minted
+     * for a plugin's own read. Anything nested stays a lazy handle.
+     */
+    fun projectScalars(handle: Long): String {
+        val entry = table[handle] ?: return EMPTY_PROJECTION
+        val target = entry.target as? TLObject ?: return EMPTY_PROJECTION
+        return StringBuilder(192).also { appendProjection(it, entry, target, children = true) }.toString()
+    }
+
+    /**
+     * [children] embeds a field whose object is nothing but scalars ([TlReflect.isFullyScalar]) as a
+     * handle of its own plus its whole projection, so `d.peer.user_id` crosses for neither half. It
+     * is off one level down, where by that same rule there is nothing left to embed.
+     */
+    private fun appendProjection(out: StringBuilder, entry: HandleEntry, target: TLObject, children: Boolean) {
+        val cls = target.javaClass
+        out.append('{').append(TYPE_ENTRY).append(quotedTypeOf(cls))
+        for ((name, info) in TlReflect.fieldInfos(cls)) {
+            if (info.isFlagWord || TlFilter.hidesField(policy, info)) continue
+            if (!info.isScalar && !children) continue
+            val value = if (info.isPresent(target)) info.field.get(target) else null
+            val filtered = if (policy.takeover) TlFilter.filterFieldValue(target, name, value) else value
+            val start = out.length
+            out.append(',').append(info.quotedName).append(':')
+            val wrote = when (filtered) {
+                null -> out.append("null").let { true }
+                // a long is a string: a plugin reads one back as a bigint, and JSON has no such number
+                is Long -> out.append('"').append(filtered).append('"').let { true }
+                is Int, is Short, is Byte, is Boolean -> out.append(filtered).let { true }
+                is Double -> filtered.isFinite().also { if (it) out.append(filtered) }
+                is Float -> filtered.isFinite().also { if (it) out.append(filtered.toDouble()) }
+                is String -> (filtered.length <= PROJECTION_STRING_LIMIT).also { if (it) out.append(JSONObject.quote(filtered)) }
+                is TLObject -> TlReflect.isFullyScalar(filtered.javaClass).also {
+                    if (it) appendChild(out, entry, cls, name, filtered)
+                }
+                else -> false
+            }
+            if (!wrote) out.setLength(start)
+        }
+        out.append('}')
+    }
+
+    /** the same handle the lazy read would have minted, with the same mode, and its own projection inline */
+    private fun appendChild(out: StringBuilder, entry: HandleEntry, ownerClass: Class<*>, key: String, child: TLObject) {
+        // the peer behind it decides redaction one level down, exactly as in [getObjectField]
+        val readOnly = entry.readOnly || (policy.takeover && TlFilter.decidesRedaction(ownerClass, key))
+        val id = mint(child, null, entry.scopeId, readOnly)
+        val childEntry = table.getValue(id)
+        val mark = out.length
+        appendProjection(out, childEntry, child, children = false)
+        out.insert(mark + 1, "\"$HANDLE_ENTRY\":\"${handlePayload(readOnly, id)}\",")
+    }
+
+    private fun handlePayload(readOnly: Boolean, id: Long): String = "O${if (readOnly) 'R' else 'W'}$id"
+
+    /**
+     * what a child handle carries when the read is the lazy one: everything, when the object is
+     * nothing but scalars and one crossing can settle it for good; its type name otherwise, because
+     * `_` is the field a plugin reads off a nested object more than any other.
+     */
+    private fun projectionOfChild(child: TLObject, entry: HandleEntry): String =
+        if (!TlReflect.isFullyScalar(child.javaClass)) typeOnlyOf(child.javaClass)
+        else StringBuilder(96).also { appendProjection(it, entry, child, children = false) }.toString()
+
+    private fun quotedTypeOf(cls: Class<*>): String =
+        quotedTypeNames.getOrPut(cls) { JSONObject.quote(TlNames.classNameToTlName(cls)) }
+
+    private fun typeOnlyOf(cls: Class<*>): String = typeOnlyProjections.getOrPut(cls) { "{$TYPE_ENTRY${quotedTypeOf(cls)}}" }
 
     override fun tlCopy(handle: Long): String? {
         val entry = table[handle] ?: return null
@@ -173,17 +242,16 @@ class TlHandles(private val policy: TlFilter.Policy) : TlListener {
     private fun getObjectField(entry: HandleEntry, target: TLObject, key: String): String {
         val cls = target.javaClass
         if (key == "_") return PluginWire.encodeString(TlNames.classNameToTlName(cls))
-        if (TlFlags.isFlagWord(cls, key)) return PluginWire.encodeNull()
-        // a filtered-out field reads as absent, exactly like a cleared flag bit, never as an error
-        if (TlFilter.hidesField(policy, cls, key)) return PluginWire.encodeNull()
-        val field = TlReflect.publicFields(cls)[key]
+        val info = TlReflect.fieldInfo(cls, key)
             ?: return PluginWire.encodeError("no such field '$key' on '${TlNames.classNameToTlName(cls)}'")
+        if (info.isFlagWord) return PluginWire.encodeNull()
+        // a filtered-out field reads as absent, exactly like a cleared flag bit, never as an error
+        if (TlFilter.hidesField(policy, info)) return PluginWire.encodeNull()
         // a field whose bit is clear isn't there, whatever the java slot happens to hold - stock
         // parks placeholders in some of them (`photo = new TL_photoEmpty()`)
-        val gate = TlFlags.gateOf(cls, key)
-        if (gate != null && !TlReflect.isBitSet(target, cls, gate)) return PluginWire.encodeNull()
+        if (!info.isPresent(target)) return PluginWire.encodeNull()
         val value = try {
-            field.get(target)
+            info.field.get(target)
         } catch (e: Exception) {
             return PluginWire.encodeError(e.message ?: "reflection get failed")
         }
@@ -191,7 +259,7 @@ class TlHandles(private val policy: TlFilter.Policy) : TlListener {
         return encodeFieldValue(
             entry,
             filtered,
-            field.genericType,
+            info.genericType,
             flagOwner = target to key,
             // the peer behind it decides redaction one level down (`m.from_id.user_id = 0`), so the child is sealed even when the parent is writable
             sealed = policy.takeover && TlFilter.decidesRedaction(cls, key),
@@ -287,11 +355,13 @@ class TlHandles(private val policy: TlFilter.Policy) : TlListener {
             // rust infers a view's lifetime from the entry point rather than carrying it on the
             // wire, so another scope would let releaseScope kill a plugin-lifetime view, and a
             // writable child of a read-only parent would be a mutable alias of an app object
-            is TLObject -> PluginWire.encodeHandle(
-                vector = false,
-                id = mint(value, null, entry.scopeId, readOnly),
-                readOnly = readOnly,
-            )
+            is TLObject -> {
+                val id = mint(value, null, entry.scopeId, readOnly)
+                val handle = PluginWire.encodeHandle(vector = false, id = id, readOnly = readOnly)
+                // a dispatch-scoped view caches nothing, so rust would drop whatever rode along
+                if (entry.scopeId != PLUGIN_SCOPE) handle
+                else handle + PluginWire.PROJECTION_SEPARATOR + projectionOfChild(value, table.getValue(id))
+            }
             is ArrayList<*> -> PluginWire.encodeHandle(
                 vector = true,
                 id = mint(value, elementTypeOf(declaredType), entry.scopeId, readOnly, flagOwner),
@@ -382,6 +452,21 @@ class TlHandles(private val policy: TlFilter.Policy) : TlListener {
 
     companion object {
         private const val PLUGIN_SCOPE = 0L
+
+        // a projection is meant to carry what is cheap to carry: a message body or a bio would ride
+        // on every handle of a page of them, cross as one string and stay in the view's cache
+        // whether or not the plugin ever reads it. Anything longer is left to the lazy read.
+        private const val PROJECTION_STRING_LIMIT = 256
+
+        private val quotedTypeNames = java.util.concurrent.ConcurrentHashMap<Class<*>, String>()
+        private val typeOnlyProjections = java.util.concurrent.ConcurrentHashMap<Class<*>, String>()
+
+        private const val EMPTY_PROJECTION = "{}"
+
+        // the keys a projection uses for itself, mirrored in src/native/src/api/tl/proxy.rs: a TL
+        // field name is a java identifier, so neither can collide with one
+        private const val TYPE_ENTRY = "\"_\":"
+        private const val HANDLE_ENTRY = "@h"
 
         // must stay byte-identical to READ_ONLY_MESSAGE in src/native/src/tl/proxy.rs:
         // the same refusal is raised on whichever side sees the write first

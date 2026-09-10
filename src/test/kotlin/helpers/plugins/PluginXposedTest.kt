@@ -13,14 +13,14 @@ import org.junit.Before
 import org.junit.Test
 
 class PluginXposedTest {
-    private val scope = "unsafe.jvm(desu.inugram.jvmfixture.*)"
+    private val jvm = "unsafe.jvm"
 
     @Before
     fun setUp() = resetBridge()
 
     @Test
     fun aHookRunsBeforeOriginalAndAfterOnTheCallingThreadThenUnhooks() {
-        val plugin = startPlugin("xposed", scope, "unsafe.xposed(desu.inugram.jvmfixture.*)")
+        val plugin = startPlugin("xposed", jvm, "unsafe.xposed")
         val engine = plugin.js
         val order = ArrayList<String>()
         engine.onXposedBefore = {
@@ -32,8 +32,7 @@ class PluginXposedTest {
             PluginWire.encodeInt(17)
         }
 
-        val cls = jvmHandleId(plugin.jvm(PluginJvm.OP_CLASS, name = JvmFixture::class.java.name))
-        val method = jvmHandleId(plugin.jvm(PluginJvm.OP_METHOD, cls, "sum(II)I"))
+        val method = memberHandle(plugin, JvmFixture::class.java.getDeclaredMethod("sum", Int::class.java, Int::class.java))
         val site = stringOf(plugin.xposed(PluginXposed.OP_HOOK, method)).toLong()
 
         assertTrue(engine.xposedInstalled)
@@ -54,16 +53,14 @@ class PluginXposedTest {
 
     @Test
     fun a_refused_before_phase_runs_the_original_and_owes_no_release() {
-        val plugin = startPlugin("xposed", listOf(scope, "unsafe.xposed(desu.inugram.jvmfixture.*)")) {
+        val plugin = startPlugin("xposed", listOf(jvm, "unsafe.xposed")) {
             it.xposedBudgetMillis = 1
         }
         val engine = plugin.js
         engine.onXposedBefore = { null }
 
-        val cls = jvmHandleId(plugin.jvm(PluginJvm.OP_CLASS, name = JvmFixture::class.java.name))
-        val method = jvmHandleId(plugin.jvm(PluginJvm.OP_METHOD, cls, "sum(II)I"))
-        plugin.xposed(PluginXposed.OP_HOOK, method)
         val sum = JvmFixture::class.java.getDeclaredMethod("sum", Int::class.java, Int::class.java)
+        plugin.xposed(PluginXposed.OP_HOOK, memberHandle(plugin, sum))
 
         assertEquals(3, invokeOffQueue { sum.invoke(null, 1, 2) as Int })
         drain()
@@ -73,16 +70,48 @@ class PluginXposedTest {
         PluginXposed.detach(engine)
     }
 
+    /**
+     * a wire is a mint into the engine's reference table, and only a phase that read it can drop
+     * it: a refused or absent phase leaves every wire the dispatch minted with nothing to free it
+     */
+    @Test
+    fun a_phase_that_never_ran_leaves_no_wire_behind() {
+        val plugin = startPlugin("xposed leaks", jvm, "unsafe.xposed")
+        val engine = plugin.js
+        val target = JvmFixture::class.java.getDeclaredMethod("getPayload")
+        plugin.xposed(PluginXposed.OP_HOOK, memberHandle(plugin, target))
+        val fixture = JvmFixture()
+        fixture.payload = JvmFixture()
+        try {
+            engine.onXposedBefore = { null }
+            val settled = engine.liveHandles
+            assertEquals(1, invokeOffQueue { if (target.invoke(fixture) === fixture.payload) 1 else 0 })
+            drain()
+            assertEquals(settled, engine.liveHandles, "the before phase refused, so it took nothing")
+
+            engine.onXposedBefore = { arrayOf("P1") }
+            engine.onXposedAfter = { null }
+            assertEquals(1, invokeOffQueue { if (target.invoke(fixture) === fixture.payload) 1 else 0 })
+            drain()
+            assertEquals(settled, engine.liveHandles, "the after phase never ran, so it took nothing")
+
+            engine.onXposedAfter = { "X" }
+            assertEquals(1, invokeOffQueue { if (target.invoke(fixture) === fixture.payload) 1 else 0 })
+            drain()
+            assertEquals(settled, engine.liveHandles, "a not-dispatched answer is the same hand-off")
+        } finally {
+            PluginXposed.detach(engine)
+        }
+    }
+
     @Test
     fun unchanged_after_preserves_original_objects_and_boxed_types() {
-        val plugin = startPlugin("unchanged after", scope, "unsafe.xposed(desu.inugram.jvmfixture.*)")
+        val plugin = startPlugin("unchanged after", jvm, "unsafe.xposed")
         val engine = plugin.js
         engine.onXposedBefore = { arrayOf("P1") }
         engine.onXposedAfter = { "U" }
-        val cls = jvmHandleId(plugin.jvm(PluginJvm.OP_CLASS, name = JvmFixture::class.java.name))
-        val method = jvmHandleId(plugin.jvm(PluginJvm.OP_METHOD, cls, "getPayload()Ljava/lang/Object;"))
-        plugin.xposed(PluginXposed.OP_HOOK, method)
         val target = JvmFixture::class.java.getDeclaredMethod("getPayload")
+        plugin.xposed(PluginXposed.OP_HOOK, memberHandle(plugin, target))
         val fixture = JvmFixture()
         try {
             for (value in listOf(JvmFixture(), 42L, null)) {
@@ -101,20 +130,21 @@ class PluginXposedTest {
 
     @Test
     fun xposedCanAllocateAndCallOriginalConstructors() {
-        val plugin = startPlugin("xposed", scope, "unsafe.xposed(desu.inugram.jvmfixture.*)")
+        val plugin = startPlugin("xposed", jvm, "unsafe.xposed")
         val cls = jvmHandleId(plugin.jvm(PluginJvm.OP_CLASS, name = JvmFixture::class.java.name))
 
+        val bridge = PluginJvm.bridgeFor(plugin.js)!!
         val allocated = jvmHandleId(plugin.xposed(PluginXposed.OP_ALLOCATE, cls))
-        assertEquals(0, intOf(plugin.jvm(PluginJvm.OP_GET, allocated, "count")))
+        assertEquals(0, (bridge.decode("G$allocated") as JvmFixture).count)
 
-        val constructor = jvmHandleId(plugin.jvm(PluginJvm.OP_METHOD, cls, "<init>()V"))
+        val constructor = memberHandle(plugin, JvmFixture::class.java.getDeclaredConstructor())
         val constructed = jvmHandleId(plugin.xposed(PluginXposed.OP_CALL_ORIGINAL, constructor, PluginWire.encodeNull()))
-        assertEquals(3, intOf(plugin.jvm(PluginJvm.OP_GET, constructed, "count")))
+        assertEquals(3, (bridge.decode("G$constructed") as JvmFixture).count)
     }
 
     @Test
     fun xposedCanDisableProfileSaver() {
-        val plugin = startPlugin("xposed", scope, "unsafe.xposed(desu.inugram.jvmfixture.*)")
+        val plugin = startPlugin("xposed", jvm, "unsafe.xposed")
         val result = plugin.xposed(PluginXposed.OP_DISABLE_PROFILE_SAVER, 0)
         assertTrue(PluginWire.decode(result) is PluginWire.Value.Bool)
     }
@@ -190,6 +220,10 @@ class PluginXposedTest {
         js.listener!!.xposed(op, target, name, arrayOf(*args))
 
     private fun intOf(wire: String): Long = (PluginWire.decode(wire) as PluginWire.Value.IntNum).value
+
+    /** the handle `getDeclaredMethod` would answer with: a member, minted the way any reference is */
+    private fun memberHandle(plugin: Plugin, member: java.lang.reflect.Member): Long =
+        jvmHandleId(PluginJvm.bridgeFor(plugin.js)!!.encode(member))
 
     private fun jvmHandleId(wire: String): Long {
         assertTrue(wire.length > 2 && wire[0] == 'G', "not a jvm handle: $wire")

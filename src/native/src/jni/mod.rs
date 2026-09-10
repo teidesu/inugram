@@ -61,16 +61,28 @@ impl Deref for TransferEngine {
   }
 }
 
-static ENGINES: OnceLock<Mutex<SlotMap<EngineKey, Arc<Serialized<TransferEngine>>>>> = OnceLock::new();
+/// the lease-free part of an engine's slot: what a java thread reaches without entering the
+/// engine, which is how `PluginJvm` encodes a reference while the engine is busy elsewhere
+struct EngineSlot {
+  engine: Arc<Serialized<TransferEngine>>,
+  jvm_refs: Option<Arc<crate::api::platform::jvm::RefTable>>,
+}
+
+static ENGINES: OnceLock<Mutex<SlotMap<EngineKey, EngineSlot>>> = OnceLock::new();
 
 pub(crate) fn insert_engine(engine: Engine) -> jlong {
+  let jvm_refs = engine.jvm.as_ref().map(|state| state.refs().clone());
   ENGINES
     .get_or_init(|| Mutex::new(SlotMap::with_key()))
     .lock()
     .unwrap_or_else(|e| e.into_inner())
-    .insert(Serialized::new(TransferEngine(engine)))
+    .insert(EngineSlot { engine: Serialized::new(TransferEngine(engine)), jvm_refs })
     .data()
     .as_ffi() as jlong
+}
+
+pub(crate) fn engine_jvm_refs(handle: jlong) -> Option<Arc<crate::api::platform::jvm::RefTable>> {
+  ENGINES.get()?.lock().unwrap_or_else(|e| e.into_inner()).get(get_engine_key(handle))?.jvm_refs.clone()
 }
 
 fn get_engine(handle: jlong) -> Option<Lease<TransferEngine>> {
@@ -90,6 +102,7 @@ fn engine_slot(handle: jlong) -> Result<Arc<Serialized<TransferEngine>>, EntryEr
       .unwrap_or_else(|e| e.into_inner())
       .get(get_engine_key(handle))
       .ok_or(EntryError::Closed)?
+      .engine
       .clone(),
   )
 }
@@ -109,7 +122,7 @@ pub(crate) fn get_engine_key(handle: jlong) -> EngineKey {
 }
 
 pub(crate) fn remove_engine(handle: jlong) -> Option<Engine> {
-  let slot = ENGINES.get()?.lock().unwrap_or_else(|e| e.into_inner()).get(get_engine_key(handle))?.clone();
+  let slot = ENGINES.get()?.lock().unwrap_or_else(|e| e.into_inner()).get(get_engine_key(handle))?.engine.clone();
   let engine = slot.close().ok()??;
   ENGINES.get()?.lock().unwrap_or_else(|e| e.into_inner()).remove(get_engine_key(handle));
   Some(engine.0)

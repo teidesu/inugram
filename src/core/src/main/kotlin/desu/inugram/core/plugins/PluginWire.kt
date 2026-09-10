@@ -33,6 +33,16 @@ object PluginWire {
     fun encodeBytes(base64: String): String = "Y$base64"
     fun encodeHandle(vector: Boolean, id: Long, readOnly: Boolean): String =
         "H${if (vector) "V" else "O"}${if (readOnly) "R" else "W"}$id"
+
+    /**
+     * a handle plus the scalar fields already read off the object, as a JSON object: rust seeds the
+     * view's cache with them, so reading one never crosses. [projection] must not contain a newline,
+     * the list separator; `JSONObject` never emits a raw one.
+     */
+    fun encodeHandle(vector: Boolean, id: Long, readOnly: Boolean, projection: String): String =
+        "${encodeHandle(vector, id, readOnly)}$PROJECTION_SEPARATOR$projection"
+
+    const val PROJECTION_SEPARATOR = '|'
     fun encodeJson(json: String): String = "J$json"
     fun encodeError(message: String): String = "E$message"
     fun encodeRpcError(code: Int, text: String): String = "R$code:$text"
@@ -79,7 +89,8 @@ object PluginWire {
                 if ((kind != 'O' && kind != 'V') || (mode != 'W' && mode != 'R')) {
                     throw IllegalArgumentException("PluginWire.decode: bad handle payload '$payload'")
                 }
-                Value.Handle(vector = kind == 'V', id = payload.substring(2).toLong(), readOnly = mode == 'R')
+                val id = payload.substring(2).substringBefore(PROJECTION_SEPARATOR)
+                Value.Handle(vector = kind == 'V', id = id.toLong(), readOnly = mode == 'R')
             }
             'J' -> Value.Json(payload)
             'E' -> Value.Error(payload)

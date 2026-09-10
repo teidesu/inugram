@@ -68,6 +68,7 @@ pub(crate) struct JniBridge {
   pub(crate) on_notification_register: JMethodID,
   pub(crate) on_notification_unregister: JMethodID,
   pub(crate) on_jvm: JMethodID,
+  pub(crate) on_jvm_resolve: JMethodID,
   pub(crate) on_xposed: JMethodID,
 }
 
@@ -157,6 +158,7 @@ impl JniBridge {
       on_notification_register: method("register", "(I[Ljava/lang/String;)Ljava/lang/String;")?,
       on_notification_unregister: method("unregister", "(I)V")?,
       on_jvm: method("jvm", "(IJLjava/lang/String;[Ljava/lang/String;)Ljava/lang/String;")?,
+      on_jvm_resolve: method("jvmResolve", "(Ljava/lang/Object;Ljava/lang/String;I)[Ljava/lang/Object;")?,
       on_xposed: method("xposed", "(IJLjava/lang/String;[Ljava/lang/String;)Ljava/lang/String;")?,
       target,
     };

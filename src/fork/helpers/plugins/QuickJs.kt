@@ -97,7 +97,8 @@ open class QuickJs {
     /**
      * Runs on the hooked thread, with bounded engine admission. Answers `["A", wire]` to answer the call with `wire`,
      * or `["P0" | "P1", ...args]` to run the original with those args - `P1` also meaning
-     * [xposedAfter] is owed a call for [dispatchId].
+     * [xposedAfter] is owed a call for [dispatchId]. `null` means the phase never ran, so nothing
+     * took the argument wires and whatever the caller minted for them is still the caller's.
      */
     open fun xposedBefore(
         dispatchId: Long,
@@ -109,9 +110,13 @@ open class QuickJs {
         ifLiveOr(null) { nativeXposedBefore(it, dispatchId, site, methodWire, thisWire, args) }
     } finally { scheduleJobs() }
 
-    /** [resultWire] is what the original answered, `T`-prefixed when it threw; `U` preserves that outcome. */
-    open fun xposedAfter(dispatchId: Long, resultWire: String): String = try {
-        ifLiveOr("U") { nativeXposedAfter(it, dispatchId, resultWire) ?: "U" }
+    /**
+     * [resultWire] is what the original answered, `T`-prefixed when it threw; `U` preserves that
+     * outcome. `X`, or `null`, means the after phase never ran, so nothing took [resultWire] and
+     * whatever it minted is still the caller's to release.
+     */
+    open fun xposedAfter(dispatchId: Long, resultWire: String): String? = try {
+        ifLiveOr(null) { nativeXposedAfter(it, dispatchId, resultWire) }
     } finally { scheduleJobs() }
 
     /** Shared budget for native phases and Rust engine admission. */
@@ -128,6 +133,18 @@ open class QuickJs {
     open fun jvmMethod(callbackId: Int, self: String, args: Array<String>): String = try {
         requireLive { nativeJvmMethod(it, callbackId, self, args) }
     } finally { scheduleJobs() }
+
+    /**
+     * The reference table behind `inu.jvm` handles is rust's; these reach it from any thread and
+     * without the engine lease. [kind] is the handle kind char; 0 means the table has closed.
+     */
+    open fun jvmMint(value: Any, kind: Char): Long = ifLiveOr(0L) { nativeJvmMint(it, value, kind.code) }
+
+    open fun jvmObjectAt(id: Long): Any? = ifLiveOr(null) { nativeJvmObjectAt(it, id) }
+
+    open fun jvmRelease(id: Long) = ifLive { nativeJvmRelease(it, id) }
+
+    open fun jvmCloseHandles() = ifLive { nativeJvmClose(it) }
 
     private val jobsScheduled = AtomicBoolean()
 
@@ -295,6 +312,10 @@ open class QuickJs {
     private external fun nativePumpJobs(ptr: Long)
     private external fun nativeJvmCallback(ptr: Long, callbackId: Int)
     private external fun nativeJvmMethod(ptr: Long, callbackId: Int, self: String, args: Array<String>): String
+    private external fun nativeJvmMint(ptr: Long, value: Any, kind: Int): Long
+    private external fun nativeJvmObjectAt(ptr: Long, id: Long): Any?
+    private external fun nativeJvmRelease(ptr: Long, id: Long)
+    private external fun nativeJvmClose(ptr: Long)
     private external fun nativeFetchResult(ptr: Long, requestId: Long, resultWire: String)
 
     private external fun nativeCanvasResult(ptr: Long, requestId: Long, resultWire: String)

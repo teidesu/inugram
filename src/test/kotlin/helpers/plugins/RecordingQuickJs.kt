@@ -83,7 +83,7 @@ class RecordingQuickJs : QuickJs() {
     var onRenderActions: ((Int, String) -> String?)? = null
 
     var onXposedBefore: ((XposedBefore) -> Array<String>?)? = null
-    var onXposedAfter: ((XposedAfter) -> String)? = null
+    var onXposedAfter: ((XposedAfter) -> String?)? = null
     var xposedBudgetMillis = 1_000L
 
     override fun start(listener: PluginBridge, config: Config) {
@@ -96,6 +96,39 @@ class RecordingQuickJs : QuickJs() {
 
     override fun close() = Unit
 
+    /**
+     * `inu.jvm`'s reference table, which a started engine keeps in rust: these are the one group of
+     * native members a recording engine cannot simply refuse, because `PluginJvm` mints through them
+     * whenever *java* hands a value over - an `inu.xposed` hook argument, a routine's operand - and
+     * that half runs without an engine at all. Ids are the engine's own either way, so a test that
+     * asserts one plugin cannot name another's is asserting the same thing here.
+     */
+    private val handles = java.util.concurrent.ConcurrentHashMap<Long, Any>()
+    private val nextHandle = java.util.concurrent.atomic.AtomicLong(1)
+
+    @Volatile private var handlesOpen = true
+
+    override fun jvmMint(value: Any, kind: Char): Long {
+        if (!handlesOpen) return 0
+        val id = nextHandle.getAndIncrement()
+        handles[id] = value
+        return id
+    }
+
+    override fun jvmObjectAt(id: Long): Any? = handles[id]
+
+    override fun jvmRelease(id: Long) {
+        handles.remove(id)
+    }
+
+    /** what a leak looks like from outside: a wire minted for a phase that never read it */
+    val liveHandles: Int get() = handles.size
+
+    override fun jvmCloseHandles() {
+        handlesOpen = false
+        handles.clear()
+    }
+
     override fun xposedBefore(
         dispatchId: Long,
         site: Long,
@@ -105,13 +138,31 @@ class RecordingQuickJs : QuickJs() {
     ): Array<String>? {
         val dispatch = XposedBefore(dispatchId, site, methodWire, thisWire, args)
         xposedBefores.add(dispatch)
-        return onXposedBefore?.invoke(dispatch)
+        val answer = onXposedBefore?.invoke(dispatch)
+        if (answer != null) take(methodWire, thisWire, *args)
+        return answer
     }
 
-    override fun xposedAfter(dispatchId: Long, resultWire: String): String {
+    override fun xposedAfter(dispatchId: Long, resultWire: String): String? {
         val dispatch = XposedAfter(dispatchId, resultWire)
         xposedAfters.add(dispatch)
-        return onXposedAfter?.invoke(dispatch) ?: "U"
+        val hook = onXposedAfter
+        val answer = if (hook == null) "U" else hook(dispatch)
+        // "X" is rust `xposed::NOT_DISPATCHED`: the phase never ran, so it read nothing
+        if (answer != null && answer != "X") take(resultWire)
+        return answer
+    }
+
+    /**
+     * a phase that answers has read its wires into handles the engine then owns, so the double
+     * drops them here the way a real engine's garbage collector eventually would - without this
+     * nothing models the hand-off `PluginXposed` relies on, and every dispatch would look like a leak
+     */
+    private fun take(vararg wires: String) {
+        for (wire in wires) {
+            val handle = wire.removePrefix("T")
+            if (handle.startsWith("G")) handle.drop(2).toLongOrNull()?.let(::jvmRelease)
+        }
     }
 
     override fun xposedBudgetMs(): Long = xposedBudgetMillis

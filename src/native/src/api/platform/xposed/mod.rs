@@ -1,7 +1,7 @@
 pub(crate) mod elf;
 pub(crate) mod lsplant;
 
-use std::cell::RefCell;
+use std::cell::{Cell, RefCell};
 use std::collections::HashMap;
 use std::rc::Rc;
 
@@ -419,6 +419,11 @@ pub fn install_xposed<'js>(
 
 pub(crate) const KEEP_ORIGINAL: &str = "U";
 
+/// the after phase never ran, so nothing here took the result wire: the host still owns whatever
+/// it minted for it. Distinct from [`KEEP_ORIGINAL`], which is a hook's own answer *after* the
+/// wire was read into a handle the engine owns.
+pub(crate) const NOT_DISPATCHED: &str = "X";
+
 enum Verdict {
   Proceed,
   Answered(String),
@@ -560,12 +565,17 @@ impl XposedState {
   ) -> Vec<String> {
     let state = self;
     let Invocation { method, this, args } = *call;
+    // set the moment the wires are about to be read into handles the engine owns: from there on a
+    // failure may answer anything but "nothing was dispatched", or the host would release them
+    let taken = Cell::new(false);
     let answer = context.with(|ctx| -> JsResult<Vec<String>> {
       let hooks = state.snapshot(&ctx, site);
       if hooks.is_empty() {
-        return Ok(proceed_with(false, args));
+        // nothing here read the argument wires, so the host is told it still owns them
+        return Ok(Vec::new());
       }
 
+      taken.set(true);
       let context_object = state.build_context(&ctx, method, this, args)?;
 
       let mut verdict = Verdict::Proceed;
@@ -604,21 +614,31 @@ impl XposedState {
     });
 
     pump_jobs(rt, context, state.log.as_ref());
-    answer.unwrap_or_else(|_| proceed_with(false, args))
+    // a dispatch that never started leaves the wires the host's; one that failed after reading them
+    // proceeds with the arguments it was given, the engine keeping what it took
+    answer.unwrap_or_else(|_| if taken.get() { proceed_with(false, args) } else { Vec::new() })
   }
 
   pub fn dispatch_after(self: &Rc<Self>, rt: &Runtime, context: &Context, dispatch_id: i64, result: &str) -> String {
     let state = self;
+    // as in `dispatch_before`: once `run_after` has published the result the engine owns whatever
+    // the wire minted, and the host must not be told the phase never ran
+    let taken = Cell::new(false);
     let answer = context.with(|ctx| -> JsResult<String> {
       let Some(pending) = state.pending.borrow_mut().remove(&dispatch_id) else {
-        return Ok(KEEP_ORIGINAL.to_string());
+        return Ok(NOT_DISPATCHED.to_string());
       };
       let context_object = pending.context.restore(&ctx)?;
       let afters: Vec<Function> = pending.after.into_iter().filter_map(|f| f.restore(&ctx).ok()).collect();
+      // `run_after` answers an empty set without publishing, so nothing would have read the wire
+      if afters.is_empty() {
+        return Ok(NOT_DISPATCHED.to_string());
+      }
+      taken.set(true);
       state.run_after(&ctx, &afters.iter().collect::<Vec<_>>(), &context_object, result)
     });
     pump_jobs(rt, context, state.log.as_ref());
-    answer.unwrap_or_else(|_| KEEP_ORIGINAL.to_string())
+    answer.unwrap_or_else(|_| if taken.get() { KEEP_ORIGINAL.to_string() } else { NOT_DISPATCHED.to_string() })
   }
 
   pub fn release_dispatch(self: &Rc<Self>, context: &Context, dispatch_id: i64) {

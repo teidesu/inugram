@@ -68,7 +68,7 @@ declare namespace inu {
 
     function hookAllConstructors(cls: JavaClass, hook: MethodHook): Disposer
 
-    /** Bypasses every plugin's hook on this member, including hooks owned by other engines; a hooked member must be within this plugin's `unsafe.xposed` scope. */
+    /** Bypasses every plugin's hook on this member, including hooks owned by other engines. */
     function callOriginalMethod(method: JavaMethod | JavaConstructor, thisObject: JavaObject | null, args: any[]): any
 
     function allocateInstance(cls: JavaClass): JavaObject

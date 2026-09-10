@@ -5,7 +5,7 @@ use crate::api::globals::RandomHost;
 use crate::api::io::fetch::FetchHost;
 use crate::api::io::kv::KvHost;
 use crate::api::platform::clipboard::ClipboardHost;
-use crate::api::platform::jvm::JvmHost;
+use crate::api::platform::jvm::{JvmHost, JvmReflectHost};
 use crate::api::platform::notifications::NotificationHost;
 use crate::api::platform::open_url::OpenUrlHost;
 use crate::api::platform::xposed::XposedHost;
@@ -24,6 +24,10 @@ use crate::api::ui::screens::ScreenHost;
 use crate::api::ui::{OP_CHOOSER, OP_DIALOG, OP_PROMPT};
 
 use super::bridge::{Arg, JniBridge};
+use super::env::clear_exception;
+use jni::objects::{JObject, JObjectArray, JValue};
+use jni::signature::ReturnType;
+use jni::Env;
 
 impl RpcHost for JniBridge {
   fn on_register(
@@ -296,6 +300,32 @@ impl IconHost for JniBridge {
 impl JvmHost for JniBridge {
   fn jvm(&self, op: i32, target: i64, name: &str, args: &[String]) -> String {
     self.call_wire("jvm", self.on_jvm, &[Arg::Int(op), Arg::Long(target), Arg::Str(name), Arg::Strs(args)])
+  }
+}
+
+impl JvmReflectHost for JniBridge {
+  fn jvm_resolve<'l>(
+    &self,
+    env: &mut Env<'l>,
+    target: &JObject,
+    name: &str,
+    mode: i32,
+  ) -> Result<JObjectArray<'l, JObject<'l>>, String> {
+    let name = Self::new_jstring(env, "jvmResolve", name)?;
+    let args = [
+      JValue::Object(target).as_jni(),
+      JValue::Object(&*name).as_jni(),
+      JValue::Int(mode).as_jni(),
+    ];
+    let result = unsafe { env.call_method_unchecked(&self.target, self.on_jvm_resolve, ReturnType::Object, &args) };
+    if clear_exception(env) {
+      return Err("jvmResolve: host callback threw".to_string());
+    }
+    let obj = result.and_then(|v| v.l()).map_err(|e| format!("jvmResolve: {e}"))?;
+    if obj.is_null() {
+      return Err("jvmResolve: host returned null".to_string());
+    }
+    Ok(unsafe { JObjectArray::<JObject>::from_raw(env, obj.into_raw() as jni::sys::jobjectArray) })
   }
 }
 

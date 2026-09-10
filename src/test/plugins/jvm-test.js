@@ -3,15 +3,13 @@
 // @author       teidesu
 // @version      1.0
 // @description  asserts inu.jvm: the class namespace scope, what values cross, handles, runnables and what refuses
-// @grant        unsafe.jvm(java.lang.*,java.util.*)
+// @grant        unsafe.jvm
 // @plugin-api   1
 // @platform     android
 // ==/InuPlugin==
 
-// the grant is deliberately *scoped*, which is the only way to see the boundary at all: a plugin
-// holding the bare token reaches everything and every refusal below would read as a passing test of
-// nothing. `java.util.*` and `java.lang.*` are what this file touches; `android.*` is what it does
-// not, and every refusal it asserts is one of those two facts.
+// the grant reaches every class the app can, so nothing below refuses for want of reach: what it
+// asserts is what crosses, what a handle is, and what the engine itself will not hand over.
 
 let ran = 0
 
@@ -46,7 +44,7 @@ function expectPluginError(label, code, grant, fn) {
 
 // exact, not a floor: most of what follows is a refusal, and a member that stopped existing refuses
 // too - so the surface is asserted positively first and the count is what catches the rest
-const EXPECTED = 30
+const EXPECTED = 28
 const before = ran
 
 check(
@@ -63,24 +61,12 @@ check(
 const ArrayList = inu.jvm.cls('java.util.ArrayList')
 const Integer = inu.jvm.cls('java.lang.Integer')
 const Long = inu.jvm.cls('java.lang.Long')
-check('a class inside the scope list resolves', typeof ArrayList === 'function')
+check('a class resolves', typeof ArrayList === 'function')
 
 // a class is callable because `new cls(...)` is how the contract builds one
 const list = new ArrayList()
 check('new gives a java object', typeof list === 'object' && typeof list.call === 'function')
 
-expectPluginError(
-  'a class outside the scope list is refused',
-  'not-granted',
-  'unsafe.jvm(android.app.Activity)',
-  () => inu.jvm.cls('android.app.Activity'),
-)
-expectPluginError(
-  'a namespace the scope list only prefixes is refused',
-  'not-granted',
-  'unsafe.jvm(java.utility.Fake)',
-  () => inu.jvm.cls('java.utility.Fake'),
-)
 expectPluginError('cls takes a name', 'invalid-argument', null, () => inu.jvm.cls(''))
 
 // -- values on their way out --
@@ -98,15 +84,6 @@ check('a java long reads as a bigint', typeof big === 'bigint' && big === 922337
 
 const clone = list.call('clone')
 check('a java object return is a handle of its own', typeof clone === 'object' && clone !== list)
-
-// the host is what knows the runtime class of what it is about to hand over, so this is the same
-// scope list refusing on the far side of the bridge
-expectPluginError(
-  'a value whose class is outside the scope list is refused',
-  'not-granted',
-  null,
-  () => inu.jvm.cls('java.lang.System').getStaticField('out'),
-)
 
 // -- values on their way in --
 
@@ -137,6 +114,17 @@ check('getDeclaredField gives something readable', size.get(list) === 4, `${size
 size.set(list, 4)
 pass('a field can be assigned through its handle')
 
+const sizedCtor = ArrayList.getDeclaredConstructor('(I)V')
+check('a declared constructor builds an object', typeof sizedCtor.newInstance(10) === 'object')
+check(
+  'a constructor and a method do not share a shape',
+  Object.keys(Object.getPrototypeOf(sizedCtor)).join() === 'newInstance' &&
+    Object.keys(Object.getPrototypeOf(add)).join() === 'invoke',
+)
+expectPluginError('getDeclaredConstructor takes a descriptor', 'invalid-argument', null, () =>
+  ArrayList.getDeclaredConstructor('add'),
+)
+
 check('a static field reads', Integer.getStaticField('MAX_VALUE') === 2147483647)
 check('a static method answers', Integer.callStatic('valueOf', 1) === 1)
 
@@ -154,14 +142,6 @@ check(
   `${thrown}`,
 )
 
-// -- what refuses whatever the scope list says --
-
-expectPluginError('loadDex needs the whole grant', 'not-granted', 'unsafe.jvm(*)', () =>
-  inu.jvm.loadDex('/data/local/tmp/patch.dex'),
-)
-expectPluginError('defineClass needs the whole grant', 'not-granted', 'unsafe.jvm(*)', () =>
-  inu.jvm.defineClass('my/plugin/Span', {}),
-)
 expectPluginError('callSuper is not implemented', 'unsupported', null, () =>
   inu.jvm.callSuper(list, 'toString'),
 )
@@ -209,9 +189,6 @@ if (typeof inu.ui?.settingsPage === 'function') {
           text: 'Run it',
           onClick: () => {
             const Thread = inu.jvm.cls('java.lang.Thread')
-            // not `Thread.currentThread()`: the scope list is matched against the runtime class,
-            // and on the engine's own queue that answers with the app's `DispatchQueue` - a class
-            // this plugin is deliberately not scoped to
             check(
               'a real java call answers',
               typeof inu.jvm.cls('java.util.Locale').callStatic('getDefault') === 'object',

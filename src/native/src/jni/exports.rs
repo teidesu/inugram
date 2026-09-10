@@ -12,8 +12,8 @@ use super::bridge::JniBridge;
 use super::env::{in_env, jstring_to_string, read_header, read_string_array};
 use super::log::{install_console, make_log};
 use super::{
-  enter_engine, get_engine, insert_engine, remove_engine, stop_engine_callbacks, try_enter_engine, CallerEntry, Engine,
-  EntryError,
+  engine_jvm_refs, enter_engine, get_engine, insert_engine, remove_engine, stop_engine_callbacks, try_enter_engine,
+  CallerEntry, Engine, EntryError,
 };
 use crate::api::canvas::{self, install_canvas, CanvasHost};
 use crate::api::error::{dispose_rejection_tracker, format_exception, install_plugin_error, install_rejection_tracker};
@@ -296,7 +296,16 @@ fn install_engine_jvm(
   ctx
     .with(|ctx| {
       let globals = Globals::get(&ctx)?;
-      install_jvm(&ctx, bridge.clone(), grants, lifecycle.clone(), make_log(bridge.console.clone()), &globals)
+      let reflect: Rc<dyn jvm::JvmReflectHost> = bridge.clone();
+      install_jvm(
+        &ctx,
+        bridge.clone(),
+        Some(reflect),
+        grants,
+        lifecycle.clone(),
+        make_log(bridge.console.clone()),
+        &globals,
+      )
     })
     .map_err(|e| log(&format!("inu.jvm failed to install: {e:?}")))
     .ok()
@@ -358,8 +367,11 @@ pub extern "system" fn Java_desu_inugram_helpers_plugins_QuickJs_nativeXposedBef
           args: &args,
         },
       ),
-      None => std::iter::once("P0".to_string()).chain(args.iter().cloned()).collect(),
+      None => Vec::new(),
     };
+    if answer.is_empty() {
+      return std::ptr::null_mut();
+    }
     match JniBridge::new_jstring_array(env, "xposedBefore", &answer) {
       Ok(array) => array.unwrap().into_raw(),
       Err(e) => {
@@ -388,10 +400,10 @@ pub extern "system" fn Java_desu_inugram_helpers_plugins_QuickJs_nativeXposedAft
           Some(state) if engine.is_admitting() => {
             state.dispatch_after(&engine._rt, &engine.ctx, dispatch_id, &result)
           }
-          _ => xposed::KEEP_ORIGINAL.to_string(),
+          _ => xposed::NOT_DISPATCHED.to_string(),
         }
       }
-      None => xposed::KEEP_ORIGINAL.to_string(),
+      None => xposed::NOT_DISPATCHED.to_string(),
     };
     env.new_string(answer).map(|j| j.into_raw()).unwrap_or(std::ptr::null_mut())
   })
@@ -566,6 +578,62 @@ pub extern "system" fn Java_desu_inugram_helpers_plugins_QuickJs_nativeJvmMethod
     };
     env.new_string(result).map(|value| value.into_raw()).unwrap_or(std::ptr::null_mut())
   })
+}
+
+/// The four below reach the reference table without the engine lease: `PluginJvm` encodes and
+/// decodes from whichever thread holds a value, and may be doing so while the engine is leased to
+/// another. `kind` is the handle kind byte; the answer is the id, or 0 once the table has closed.
+#[no_mangle]
+pub extern "system" fn Java_desu_inugram_helpers_plugins_QuickJs_nativeJvmMint(
+  mut env: EnvUnowned,
+  _this: JObject,
+  ptr: jlong,
+  value: JObject,
+  kind: jint,
+) -> jlong {
+  in_env(&mut env, 0, |env| {
+    let Some(refs) = engine_jvm_refs(ptr) else {
+      return 0;
+    };
+    let Ok(global) = env.new_global_ref(&value) else {
+      return 0;
+    };
+    refs.mint(global, kind as u8).unwrap_or(0)
+  })
+}
+
+#[no_mangle]
+pub extern "system" fn Java_desu_inugram_helpers_plugins_QuickJs_nativeJvmObjectAt(
+  mut env: EnvUnowned,
+  _this: JObject,
+  ptr: jlong,
+  id: jlong,
+) -> jobject {
+  in_env(&mut env, std::ptr::null_mut(), |env| {
+    let Some(entry) = engine_jvm_refs(ptr).and_then(|refs| refs.get(id)) else {
+      return std::ptr::null_mut();
+    };
+    env.new_local_ref(entry.obj.as_obj()).map(|local| local.into_raw()).unwrap_or(std::ptr::null_mut())
+  })
+}
+
+#[no_mangle]
+pub extern "system" fn Java_desu_inugram_helpers_plugins_QuickJs_nativeJvmRelease(
+  _env: EnvUnowned,
+  _this: JObject,
+  ptr: jlong,
+  id: jlong,
+) {
+  if let Some(refs) = engine_jvm_refs(ptr) {
+    refs.release(id);
+  }
+}
+
+#[no_mangle]
+pub extern "system" fn Java_desu_inugram_helpers_plugins_QuickJs_nativeJvmClose(_env: EnvUnowned, _this: JObject, ptr: jlong) {
+  if let Some(refs) = engine_jvm_refs(ptr) {
+    refs.close();
+  }
 }
 
 #[no_mangle]
@@ -1300,6 +1368,7 @@ pub extern "system" fn Java_desu_inugram_helpers_plugins_QuickJs_nativeDestroy(
     engine.ctx.with(|ctx| {
       drop(engine.shared.take().unwrap().restore(&ctx));
       drop(ctx.remove_userdata::<Globals>().unwrap());
+      crate::api::tl::proxy::dispose_tl_shared(&ctx);
       dispose_rejection_tracker(&ctx);
     });
   }

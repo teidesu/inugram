@@ -150,23 +150,17 @@ class GrantValidatorTest {
         assertEquals(emptyList<String>(), GrantValidator.validateGrants(listOf("kv", "openUrl", "unsafe.jvm")))
     }
 
+    /** the grant reaches every class there is, so a scope list on it described nothing */
     @Test
-    fun jvmAcceptsClassesAndNamespacesOnly() {
+    fun jvmTakesNoScopes() {
+        assertEquals(emptyList<String>(), GrantValidator.validateGrants(listOf("unsafe.jvm")))
         assertEquals(
-            emptyList<String>(),
-            GrantValidator.validateGrants(listOf("unsafe.jvm(java.util.*,java.lang.String,*)")),
+            listOf("grant 'unsafe.jvm' takes no scopes"),
+            GrantValidator.validateGrants(listOf("unsafe.jvm(java.util.*)")),
         )
         assertEquals(
-            listOf("'java/util/List' is not a class or namespace in @grant unsafe.jvm"),
-            GrantValidator.validateGrants(listOf("unsafe.jvm(java/util/List)")),
-        )
-        assertEquals(
-            listOf("'java.util.' is not a class or namespace in @grant unsafe.jvm"),
-            GrantValidator.validateGrants(listOf("unsafe.jvm(java.util.)")),
-        )
-        assertEquals(
-            listOf("'java.util*' is not a class or namespace in @grant unsafe.jvm"),
-            GrantValidator.validateGrants(listOf("unsafe.jvm(java.util*)")),
+            listOf("grant 'unsafe.jvm' takes no scopes"),
+            GrantValidator.validateGrants(listOf("unsafe.jvm(*)")),
         )
     }
 
