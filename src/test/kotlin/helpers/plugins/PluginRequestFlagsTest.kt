@@ -57,7 +57,7 @@ class PluginRequestFlagsTest {
     private fun write(plugin: Plugin, op: Int, arg: JSONObject): String? =
         plugin.js.listener!!.accountWrite(0, 1L, op, arg.toString(), emptyArray())
 
-    private fun send(peer: String) = JSONObject().put("peer", peer).put("text", "hi")
+    private fun send(peer: String) = JSONObject().put("peer", peer).put("text", "hi").put("optimistic", false)
 
     @Test
     fun a_send_carrying_a_reply_entities_and_a_schedule_sets_their_bits() {

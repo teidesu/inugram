@@ -156,6 +156,8 @@ object PluginWrites {
 
         fun flag(key: String): Boolean = json.optBoolean(key, false)
 
+        fun optedIn(key: String): Boolean = json.optBoolean(key, true)
+
         // android's org.json answers `optString` with the four characters "null" for a json null, where the reference implementation the bridge tests run against answers the fallback
         fun text(): String = if (json.isNull("text")) "" else json.optString("text")
 
@@ -257,6 +259,25 @@ object PluginWrites {
     }
 
     private fun sendMessage(call: Call): String? {
+        if (call.optedIn("optimistic") && PluginOptimisticSend.canSend(call)) {
+            return PluginOptimisticSend.sendText(call) { answerRefusals(call) { sendMessageRequest(call) } }
+        }
+        return sendMessageRequest(call)
+    }
+
+    /**
+     * a path the composer handed back runs on globalQueue with nothing above it to catch a
+     * [Refused], and a write that refuses still owes its promise an answer
+     */
+    internal fun answerRefusals(call: Call, block: () -> Unit) {
+        try {
+            block()
+        } catch (e: Refused) {
+            answer(call) { e.wire }
+        }
+    }
+
+    private fun sendMessageRequest(call: Call): String? {
         val request = TLRPC.TL_messages_sendMessage()
         request.peer = call.peer() as TLRPC.InputPeer
         request.message = call.text()

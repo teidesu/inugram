@@ -216,6 +216,9 @@ object PluginRpc {
 
     @JvmStatic
     fun bindOptimisticMessages(request: TLObject, account: Int, messages: ArrayList<MessageObject>) {
+        // a send a plugin asked the composer to draw is still a plugin's own write, so it takes the
+        // same lease [sendWithoutInterceptors] takes, released when that send settles
+        if (messages.any { PluginOptimisticSend.claimRequest(request, it) }) markBypassed(request)
         val method = TlNames.classNameToTlName(request.javaClass)
         if (interceptorsByMethod[method].orEmpty().none { it.scope == SEND_SCOPE && it.filter?.matches(method, request) != false }) return
         synchronized(optimisticMessagesByRequest) {
@@ -566,6 +569,8 @@ object PluginRpc {
         }
         hasInterceptors = interceptorsByMethod.isNotEmpty()
     }
+
+    internal fun releasePluginSend(request: TLObject) = releaseBypass(request)
 
     private fun markBypassed(request: TLObject) {
         synchronized(bypassed) { bypassed[request] = (bypassed[request] ?: 0) + 1 }

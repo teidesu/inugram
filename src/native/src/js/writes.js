@@ -36,6 +36,12 @@
     return value
   }
 
+  const toOptedIn = (value, what, field) => {
+    if (value === undefined || value === null) return true
+    if (typeof value !== 'boolean') throw invalid(`${what}: ${field} must be a boolean`)
+    return value
+  }
+
   const toName = (value, what, field) => {
     if (value === undefined || value === null) return ''
     if (typeof value !== 'string') throw invalid(`${what}: ${field} must be a string`)
@@ -130,6 +136,7 @@
             peer: toSpec(peer),
             ...body,
             ...sendOptions(opts, 'sendMessage'),
+            optimistic: toOptedIn(opts.optimistic, 'sendMessage', 'optimistic'),
             noWebpage: toFlag(opts.noWebpage, 'sendMessage', 'noWebpage'),
             clearDraft: toFlag(opts.clearDraft, 'sendMessage', 'clearDraft'),
           },
@@ -150,6 +157,7 @@
             peer: toSpec(peer),
             ...caption,
             ...sendOptions(opts, 'sendMedia'),
+            optimistic: toOptedIn(opts.optimistic, 'sendMedia', 'optimistic'),
             asDocument: toFlag(opts.asDocument, 'sendMedia', 'asDocument'),
             fileName: toName(opts.fileName, 'sendMedia', 'fileName'),
           },

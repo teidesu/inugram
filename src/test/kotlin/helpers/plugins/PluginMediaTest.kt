@@ -333,7 +333,7 @@ class PluginMediaTest {
             write(
                 plugin,
                 PluginWrites.OP_SEND_MEDIA,
-                JSONObject().put("peer", "D$alice").put("text", ""),
+                JSONObject().put("peer", "D$alice").put("text", "").put("optimistic", false),
                 arrayOf(stagedWire(staged, "payload.bin", "")),
             ),
         )
@@ -411,7 +411,7 @@ class PluginMediaTest {
             write(
                 plugin,
                 PluginWrites.OP_SEND_MEDIA,
-                JSONObject().put("peer", "D$alice").put("text", "look"),
+                JSONObject().put("peer", "D$alice").put("text", "look").put("optimistic", false),
                 arrayOf(stagedWire(staged, "payload.bin", "application/octet-stream")),
             ),
         )
@@ -440,7 +440,7 @@ class PluginMediaTest {
             write(
                 plugin,
                 PluginWrites.OP_SEND_MEDIA,
-                JSONObject().put("peer", "D$alice").put("text", ""),
+                JSONObject().put("peer", "D$alice").put("text", "").put("optimistic", false),
                 arrayOf(stagedWire(first, "cat.jpg", "image/jpeg")),
             ),
         )
@@ -455,7 +455,7 @@ class PluginMediaTest {
             write(
                 plugin,
                 PluginWrites.OP_SEND_MEDIA,
-                JSONObject().put("peer", "D$alice").put("text", "").put("asDocument", true),
+                JSONObject().put("peer", "D$alice").put("text", "").put("asDocument", true).put("optimistic", false),
                 arrayOf(stagedWire(second, "cat.jpg", "image/jpeg")),
                 requestId = 2,
             ),

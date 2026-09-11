@@ -605,6 +605,21 @@ object PluginReads {
         return null
     }
 
+    /**
+     * what the app already holds for [ids] - memory, then `messages_v2` - for a caller that needs it
+     * now. Never reaches the network, so a miss is an answer rather than a wait: [done] runs on
+     * globalQueue either way.
+     */
+    internal fun loadLocalMessages(accountId: Int, dialogId: Long, ids: List<Int>, done: (Map<Int, TLRPC.Message>) -> Unit) {
+        val controller = MessagesController.getInstance(accountId)
+        val cached = ids.mapNotNull { id -> cachedMessage(controller, dialogId, id)?.let { id to it } }.toMap()
+        if (cached.size == ids.size) return done(cached)
+        MessagesStorage.getInstance(accountId).storageQueue.postRunnable {
+            val stored = readStoredMessages(accountId, dialogId, ids.filterNot(cached::containsKey))
+            Utilities.globalQueue.postRunnable { done(cached + stored) }
+        }
+    }
+
     private fun answerMessages(call: Fetch, ids: List<Int>, found: Map<Int, TLRPC.Message>) {
         answer(call) { mintEach(call.handles, ids.map(found::get)) }
     }

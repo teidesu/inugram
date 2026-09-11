@@ -164,6 +164,15 @@ object PluginMedia {
         }
     }
 
+    /**
+     * `onProgress` for a send the composer owns: stock uploads from the same staged path, so the
+     * same transfer reports it. It only reports - what settles the promise is the message coming
+     * back - so the done and failed events do nothing but stop the observer.
+     */
+    internal fun watchUpload(call: Call, path: String) {
+        observe(Transfer(call, path, upload = true) { _, _ -> })
+    }
+
     /** one operation reports the same `InputFile` instance to every waiter, so the name goes on a copy */
     private fun named(input: TLRPC.InputFile, name: String): TLRPC.InputFile {
         val copy = if (input is TLRPC.TL_inputFileBig) TLRPC.TL_inputFileBig() else TLRPC.TL_inputFile()
@@ -181,6 +190,23 @@ object PluginMedia {
         else null
         val count = items?.length() ?: 1
         if (call.values.size != count) refuse("invalid-argument", "sendMedia: item and file counts disagree")
+        if (!album && call.optedIn("optimistic") && PluginOptimisticSend.canSend(call)) {
+            val wire = call.values.first()
+            if (wire.startsWith(FILE_TAG)) {
+                val source = stagedFile(call, wire)
+                val name = call.json.optString("fileName").ifEmpty { source.name.ifEmpty { source.path.name } }
+                val mime = source.mime.ifEmpty { mimeOfName(name) }
+                watchUpload(call, source.path.absolutePath)
+                return PluginOptimisticSend.sendMedia(call, source.path, name, mime, call.flag("asDocument")) {
+                    PluginWrites.answerRefusals(call) { sendByRequest(call, peer, items, count) }
+                }
+            }
+        }
+        sendByRequest(call, peer, items, count)
+        return null
+    }
+
+    private fun sendByRequest(call: Call, peer: TLRPC.InputPeer, items: org.json.JSONArray?, count: Int) {
         val medias = arrayOfNulls<TLRPC.InputMedia>(count)
         var remaining = count
         for (index in 0 until count) {
@@ -205,7 +231,6 @@ object PluginMedia {
                 }
             }
         }
-        return null
     }
 
     private fun sendResolved(
