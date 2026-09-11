@@ -427,6 +427,10 @@ impl crate::api::tl::proxy::TlHost for OneMessageTl {
     Some("not writable in this fixture".to_string())
   }
 
+  fn tl_set_bytes(&self, _handle: i64, _key: &str, _value: &[u8]) -> Option<String> {
+    Some("not writable in this fixture".to_string())
+  }
+
   fn tl_has(&self, _handle: i64, key: &str) -> i32 {
     i32::from(key == "message")
   }

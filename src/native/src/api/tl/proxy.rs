@@ -50,6 +50,9 @@ pub trait TlHost {
     &[]
   }
   fn tl_set(&self, handle: i64, key: &str, value_wire: &str) -> Option<String>;
+  /// the write half of `TAG_BYTES`: a `Uint8Array` assignment goes over as a java `byte[]` rather
+  /// than base64 in [`tl_set`]'s wire, which is what reads have always done
+  fn tl_set_bytes(&self, handle: i64, key: &str, value: &[u8]) -> Option<String>;
   fn tl_has(&self, handle: i64, key: &str) -> i32;
   fn tl_own_keys(&self, handle: i64) -> Option<String>;
   fn tl_copy(&self, handle: i64) -> Option<String>;
@@ -660,7 +663,10 @@ impl<'js> HandleBox<'js> {
   }
 
   fn write_field(&self, ctx: &Ctx<'js>, key: &str, wire: &str) -> JsResult<bool> {
-    let result = self.host().tl_set(self.handle, key, wire);
+    self.finish_write(ctx, self.host().tl_set(self.handle, key, wire))
+  }
+
+  fn finish_write(&self, ctx: &Ctx<'js>, result: Option<String>) -> JsResult<bool> {
     self.views.bump();
     self.sync_epoch();
     match result {
@@ -671,6 +677,13 @@ impl<'js> HandleBox<'js> {
 
   fn assign_property(&self, ctx: &Ctx<'js>, prop: &Value<'js>, value: Value<'js>) -> JsResult<bool> {
     let key = property_key_string(ctx, prop)?;
+    if let Some(bytes) = TypedArray::<u8>::from_value(value.clone())
+      .ok()
+      .and_then(|array| array.as_bytes().map(<[u8]>::to_vec))
+    {
+      let result = self.host().tl_set_bytes(self.handle, &key, &bytes);
+      return self.finish_write(ctx, result);
+    }
     let wire = js_value_to_wire(ctx, value)?;
     self.write_field(ctx, &key, &wire)
   }

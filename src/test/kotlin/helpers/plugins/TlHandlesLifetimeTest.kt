@@ -168,6 +168,31 @@ class TlHandlesLifetimeTest {
         assertEquals(PluginWire.Value.Null, PluginWire.decode(handles.tlGet(root, "post_author")))
     }
 
+    /**
+     * the write half of `TAG_BYTES`: bytes arrive beside the wire rather than base64'd into it,
+     * and land on the field as the array the plugin assigned
+     */
+    @Test
+    fun assigning_bytes_lands_them_without_a_wire() {
+        val handles = TlHandles(UNFILTERED)
+        val target = TLRPC.TL_inputDocument()
+        val root = handles.mintForScope(target, TlHandles.newScope())
+        val payload = byteArrayOf(1, 2, 250.toByte())
+
+        assertNull(handles.tlSetBytes(root, "file_reference", payload))
+        assertTrue(payload.contentEquals(target.file_reference))
+
+        assertNotNull(handles.tlSetBytes(root, "id", payload), "a field that is not bytes must refuse them")
+        assertNotNull(handles.tlSetBytes(root, "no_such_field", payload))
+
+        val readOnly = handles.mintForPlugin(TLRPC.TL_inputDocument(), readOnly = true)
+        assertPluginError("forbidden", assertNotNull(handles.tlSetBytes(readOnly, "file_reference", payload)))
+
+        handles.tlRelease(root)
+        drain()
+        assertPluginError("handle-expired", assertNotNull(handles.tlSetBytes(root, "file_reference", payload)))
+    }
+
     @Test
     fun flag_words_are_never_readable_writable_or_enumerable() {
         val handles = TlHandles(UNFILTERED)

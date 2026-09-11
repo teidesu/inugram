@@ -248,15 +248,31 @@ class TlHandles(private val policy: TlFilter.Policy) : TlListener {
 
     fun classIdOf(cls: Class<*>): Int = slotOf(cls).id
 
-    override fun tlSet(handle: Long, key: String, valueWire: String): String? {
+    override fun tlSet(handle: Long, key: String, valueWire: String): String? =
+        applySet(handle, key, SetSource.Wire(PluginWire.decode(valueWire)))
+
+    override fun tlSetBytes(handle: Long, key: String, value: ByteArray): String? =
+        applySet(handle, key, SetSource.Bytes(value))
+
+    /**
+     * where a write's value came from. The wire carries every shape a set can take; [Bytes] is the
+     * one that would have cost a base64 round trip to put there, so it arrives beside the wire
+     * rather than inside it - the mirror of `TAG_BYTES` on the read side.
+     */
+    private sealed class SetSource {
+        class Wire(val decoded: PluginWire.Value) : SetSource()
+        class Bytes(val value: ByteArray) : SetSource()
+    }
+
+    private fun applySet(handle: Long, key: String, source: SetSource): String? {
         val entry = table[handle] ?: return PluginWire.encodeExpired()
         // the rust traps already refuse a read-only view; this is the same refusal on the side that owns the mode, so a forged wire can't write either
         if (entry.readOnly) return PluginWire.encodePluginError("forbidden", READ_ONLY_MESSAGE)
         @Suppress("UNCHECKED_CAST")
         return try {
             when (val target = entry.target) {
-                is TLObject -> setObjectField(entry, target, key, valueWire)
-                is ArrayList<*> -> setVectorProp(entry, target as ArrayList<Any?>, key, valueWire)
+                is TLObject -> setObjectField(entry, target, key, source)
+                is ArrayList<*> -> setVectorProp(entry, target as ArrayList<Any?>, key, source)
                 else -> "internal: unsupported handle target ${target.javaClass}"
             }
         } catch (e: Exception) {
@@ -391,7 +407,7 @@ class TlHandles(private val policy: TlFilter.Policy) : TlListener {
         )
     }
 
-    private fun setObjectField(entry: HandleEntry, target: TLObject, key: String, wire: String): String? {
+    private fun setObjectField(entry: HandleEntry, target: TLObject, key: String, source: SetSource): String? {
         val cls = target.javaClass
         if (key == "_") return "cannot assign to '_'"
         if (TlFlags.isFlagWord(cls, key)) {
@@ -407,13 +423,7 @@ class TlHandles(private val policy: TlFilter.Policy) : TlListener {
         val field = TlReflect.publicFields(cls)[key]
             ?: return "no such field '$key' on '${TlNames.classNameToTlName(cls)}'"
         val gated = TlFlags.gateOf(cls, key) != null
-        val resolved = resolveSetValue(
-            PluginWire.decode(wire),
-            field.genericType,
-            field.type,
-            key,
-            allowPrimitiveClear = gated,
-        )
+        val resolved = resolveSetValue(source, field.genericType, field.type, key, allowPrimitiveClear = gated)
         if (resolved.isError) return resolved.error
         return try {
             field.set(target, resolved.value)
@@ -432,11 +442,10 @@ class TlHandles(private val policy: TlFilter.Policy) : TlListener {
         return encodeFieldValue(entry, target[index], entry.elementType ?: Any::class.java)
     }
 
-    private fun setVectorProp(entry: HandleEntry, target: ArrayList<Any?>, key: String, wire: String): String? {
+    private fun setVectorProp(entry: HandleEntry, target: ArrayList<Any?>, key: String, source: SetSource): String? {
         if (key == "length") {
             // `vec.length = n` always crosses as a `J`-tagged JSON number, never a raw `I` tag, so `Value.IntNum` alone is unreachable
-            val decoded = PluginWire.decode(wire)
-            val newLength = when (decoded) {
+            val newLength = when (val decoded = (source as? SetSource.Wire)?.decoded) {
                 is PluginWire.Value.IntNum -> decoded.value.toInt()
                 is PluginWire.Value.Json -> (JSONTokener(decoded.json).nextValue() as? Number)?.toInt()
                 else -> null
@@ -449,8 +458,7 @@ class TlHandles(private val policy: TlFilter.Policy) : TlListener {
         val index = key.toIntOrNull() ?: return "no such property '$key' on a TL vector"
         if (index < 0 || index > target.size) return "vector index out of range: $index"
         val elementType = entry.elementType ?: return "vector element type is unknown"
-        val resolved =
-            resolveSetValue(PluginWire.decode(wire), elementType, rawClassOf(elementType), "[$index]")
+        val resolved = resolveSetValue(source, elementType, rawClassOf(elementType), "[$index]")
         if (resolved.isError) return resolved.error
         if (index == target.size) target.add(resolved.value) else target[index] = resolved.value
         entry.flagOwner?.let { (obj, name) -> TlReflect.syncFlagBit(obj, name) }
@@ -514,13 +522,21 @@ class TlHandles(private val policy: TlFilter.Policy) : TlListener {
     private fun err(message: String) = Resolved(null, message)
 
     private fun resolveSetValue(
-        decoded: PluginWire.Value,
+        source: SetSource,
         genericType: Type,
         rawType: Class<*>,
         path: String,
         allowPrimitiveClear: Boolean = false,
-    ): Resolved =
-        when (decoded) {
+    ): Resolved {
+        val decoded = when (source) {
+            is SetSource.Bytes -> return if (rawType == ByteArray::class.java) {
+                ok(source.value)
+            } else {
+                err("type mismatch assigning bytes at '$path': expected $rawType")
+            }
+            is SetSource.Wire -> source.decoded
+        }
+        return when (decoded) {
             is PluginWire.Value.Null -> {
                 if (!rawType.isPrimitive) {
                     ok(null)
@@ -557,6 +573,7 @@ class TlHandles(private val policy: TlFilter.Policy) : TlListener {
             }
             else -> err("unsupported set payload at '$path'")
         }
+    }
 
     private fun zeroValueOf(rawType: Class<*>): Any = when (rawType) {
         java.lang.Integer.TYPE -> 0
