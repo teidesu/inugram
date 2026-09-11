@@ -77,9 +77,9 @@ pub(super) fn install_image_members<'js>(ctx: &Ctx<'js>) -> JsResult<()> {
     .ok_or_else(|| Exception::throw_message(ctx, "ImageBitmap: the class has no prototype"))?;
   define_getter(&proto, "width", |this: This<Class<'js, ImageHandle>>| this.0.borrow().0.width)?;
   define_getter(&proto, "height", |this: This<Class<'js, ImageHandle>>| this.0.borrow().0.height)?;
-  define_method(
+  crate::utils::shape::define_disposable(
+    ctx,
     &proto,
-    "dispose",
     Function::new(ctx.clone(), |ctx: Ctx<'js>, this: This<Class<'js, ImageHandle>>| {
       let image = this.0.borrow().0.clone();
       image.release(&ctx)

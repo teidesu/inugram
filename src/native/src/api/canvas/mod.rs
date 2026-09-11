@@ -23,7 +23,7 @@ use crate::api::io::fs::FsState;
 use crate::api::telegram::rpc::{format_exception, pump_jobs, PendingSettle};
 use crate::sandbox::limits::{ExternalCharge, ExternalMemory};
 use crate::sandbox::registry::RequestIds;
-use crate::utils::shape::{define_getter, define_method};
+use crate::utils::shape::{define_disposable, define_getter, define_method};
 
 pub const MAX_DIMENSION: i32 = 8192;
 
@@ -288,6 +288,17 @@ impl Drop for Surface {
 }
 
 impl Surface {
+  /// what [`Drop`] does, reached early. Every op guards on `alive`, so a context over a disposed
+  /// canvas and a pattern made from one both answer `handle-expired` rather than a dead host id.
+  fn free(&self) {
+    if !self.alive.replace(false) {
+      return;
+    }
+    self.commands.borrow_mut().clear();
+    self.state.host.canvas(OP_DESTROY, self.id, "", None);
+    self.charge.borrow_mut().take();
+  }
+
   fn flush(&self, ctx: &Ctx<'_>) -> JsResult<()> {
     let (bytes, strings, _sources) = {
       let mut commands = self.commands.borrow_mut();
@@ -1013,6 +1024,14 @@ impl CanvasState {
   fn install_canvas_members<'js>(self: &Rc<Self>, ctx: &Ctx<'js>) -> JsResult<()> {
     let proto = Class::<CanvasHandle>::prototype(ctx)?
       .ok_or_else(|| Exception::throw_message(ctx, "OffscreenCanvas: the class has no prototype"))?;
+
+    {
+      let f = Function::new(ctx.clone(), move |this: This<Class<'js, CanvasHandle>>| {
+        let surface = this.0.borrow().0.clone();
+        surface.free();
+      })?;
+      define_disposable(ctx, &proto, f)?;
+    }
 
     for (name, vertical) in [("width", false), ("height", true)] {
       define_accessor(

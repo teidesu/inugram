@@ -1425,6 +1425,39 @@ fn a_replay_the_host_refused_raises_where_the_drawing_happened() {
 }
 
 #[test]
+fn disposing_a_canvas_lets_its_bitmap_go_and_expires_what_was_drawing_on_it() {
+  let f = setup("canvas-dispose");
+  run(&f, "globalThis.c = inu.canvas.create(8, 8); globalThis.x = c.getContext('2d')");
+  run(&f, "c.dispose()");
+  let destroys = |f: &Fixture| f.host.log.borrow().calls.iter().filter(|(op, ..)| *op == OP_DESTROY).count();
+  assert_eq!(destroys(&f), 1);
+  run(&f, "c.dispose()");
+  assert_eq!(destroys(&f), 1, "a second dispose destroyed it twice");
+  assert_eq!(eval(&f, "(() => { try { x.fillRect(0,0,1,1); return 'drew' } catch (e) { return e.code } })()"), "handle-expired");
+}
+
+/// quickjs-ng ships explicit resource management, so every handle that frees a host resource is
+/// also a `using` resource - and the symbol is the very same function as the named method
+#[test]
+fn the_handles_are_using_resources() {
+  let f = setup("using");
+  assert_eq!(
+    eval(&f, "`${[Blob.prototype, inu.canvas.create(1,1).constructor.prototype].every(p => p[Symbol.dispose] === p.dispose)}`"),
+    "true",
+  );
+  assert_eq!(
+    eval(&f, "`${Object.keys(Blob.prototype).includes('dispose') && !Object.getOwnPropertySymbols(Blob.prototype).some(s => Object.propertyIsEnumerable.call(Blob.prototype, s))}`"),
+    "true",
+  );
+
+  let destroys = |f: &Fixture| f.host.log.borrow().calls.iter().filter(|(op, ..)| *op == OP_DESTROY).count();
+  let before = destroys(&f);
+  run(&f, "{ using c = inu.canvas.create(4, 4); globalThis.seen = c.width }");
+  assert_eq!(eval(&f, "`${seen}`"), "4");
+  assert_eq!(destroys(&f) - before, 1, "the block exit disposed it");
+}
+
+#[test]
 fn a_dropped_canvas_tells_the_host_to_let_its_bitmap_go() {
   let f = setup("destroy");
   run(&f, "globalThis.c = inu.canvas.create(8, 8); globalThis.c = null");
