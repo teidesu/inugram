@@ -207,6 +207,8 @@ fun attachBridge(
     // most of the suite drives the reads listener directly and never asks; a test that goes through
     // `inu.account(n)` needs the slot list the app would answer with
     accountsJson: (() -> String)? = null,
+    // blobs and canvas sources spill to disk; a suite that stages one needs somewhere to put it
+    spillDir: String = "",
 ) {
     val tl = TlHandles.attach(plugin, TlFilter.policyFor(plugin.permissions))
     val jvm = PluginJvm.listenerFor(plugin, engine, testAppScreen)
@@ -233,7 +235,7 @@ fun attachBridge(
     engine.start(
         bridge,
         QuickJs.Config(
-            spillDir = "",
+            spillDir = spillDir,
             fsDir = "",
             fsQuotaBytes = 0,
             fsUnscoped = false,
