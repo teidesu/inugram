@@ -105,7 +105,7 @@ async function expectDenied(label, expected, fn) {
     ['getUsers', 'peers', () => account.getUsers([])],
     ['getChats', 'peers', () => account.getChats([])],
     ['getDialog', 'dialogs', () => account.getDialog('me')],
-    ['getMessage', 'messages', () => account.getMessage('me', 1)],
+    ['getMessagesCached', 'messages', () => account.getMessagesCached('me', 1)],
     ['resolvePeerCached', 'peers', () => account.resolvePeerCached('me')],
     ['resolvePeer', 'peers', () => account.resolvePeer('@telegram')],
     // the reads that may go to the network are refused before anything is sent, and the argument

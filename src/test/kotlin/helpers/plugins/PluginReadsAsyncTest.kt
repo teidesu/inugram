@@ -3,6 +3,8 @@ package desu.inugram.helpers.plugins
 import desu.inugram.core.plugins.PluginWire
 import desu.inugram.helpers.plugins.telegram.PluginReads
 import desu.inugram.helpers.plugins.telegram.PluginRpc
+import java.util.concurrent.CountDownLatch
+import java.util.concurrent.TimeUnit
 import kotlin.test.assertEquals
 import kotlin.test.assertNotNull
 import kotlin.test.assertNull
@@ -11,7 +13,9 @@ import org.json.JSONObject
 import org.junit.Before
 import org.junit.Test
 import org.telegram.messenger.MediaDataController
+import org.telegram.SQLite.SQLiteDatabase
 import org.telegram.messenger.MessagesController
+import org.telegram.messenger.MessagesStorage
 import org.telegram.messenger.UserConfig
 import org.telegram.tgnet.TLObject
 import org.telegram.tgnet.TLRPC
@@ -74,6 +78,156 @@ class PluginReadsAsyncTest {
 
     private fun fieldOf(plugin: Plugin, wire: String, key: String): String =
         plugin.tl().tlGet(handleId(wire), key)
+
+    /**
+     * `getMessages` hops to `MessagesStorage`'s own queue, which the harness does not drive - so
+     * unlike every other read here, the request appears on a thread this test does not own.
+     */
+    private fun awaitSent(): RecordingConnectionsManager.Sent {
+        repeat(200) {
+            drain()
+            connections().lastSent()?.let { return it }
+            Thread.sleep(10)
+        }
+        throw AssertionError("the fetch never reached the network")
+    }
+
+    private fun message(id: Int, peer: TLRPC.Peer, text: String) =
+        TLRPC.TL_message().apply {
+            this.id = id
+            peer_id = peer
+            message = text
+        }.synced()
+
+    private fun answerMessages(vararg messages: TLRPC.Message) {
+        answerWith(TLRPC.TL_messages_messages().apply { this.messages.addAll(messages) })
+    }
+
+    /** the storage hop settles on its own thread too, so the single result has to be waited for */
+    private fun awaitSettled(plugin: Plugin): String {
+        repeat(200) {
+            drain()
+            if (plugin.js.fetchResults.isNotEmpty()) return plugin.js.fetchResults.single().resultWire
+            Thread.sleep(10)
+        }
+        throw AssertionError("the fetch never settled")
+    }
+
+    /** stock's own queue, which the harness does not replace: this really runs against the database */
+    private fun onStorage(block: (SQLiteDatabase) -> Unit) {
+        val storage = MessagesStorage.getInstance(0)
+        val latch = CountDownLatch(1)
+        var failure: Throwable? = null
+        storage.storageQueue.postRunnable {
+            try {
+                block(assertNotNull(storage.getDatabase(), "the test process has no database"))
+            } catch (e: Throwable) {
+                failure = e
+            } finally {
+                latch.countDown()
+            }
+        }
+        assertTrue(latch.await(10, TimeUnit.SECONDS), "the storage queue never ran")
+        failure?.let { throw it }
+    }
+
+    /**
+     * The step between memory and the network, and the one no fake can stand in for: a real row in
+     * stock's own `messages_v2`, read back through the query the fetch actually runs.
+     */
+    @Test
+    fun a_message_only_sqlite_has_is_read_from_disk_without_a_request() {
+        val plugin = granted()
+        val mid = 987654
+        onStorage { database ->
+            val state = database.executeFast(
+                "REPLACE INTO messages_v2 (mid, uid, read_state, send_state, date, data, out, ttl, media, imp, " +
+                    "mention, forwards, thread_reply_id, is_channel, reply_to_message_id, group_id, reply_to_story_id) " +
+                    "VALUES(?, ?, 0, 0, 0, ?, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0)",
+            )
+            state.bindInteger(1, mid)
+            state.bindLong(2, alice)
+            state.bindTlObject(3, message(mid, peerUser(alice), "from disk"))
+            state.step()
+            state.dispose()
+        }
+        try {
+            assertNull(fetch(plugin, PluginReads.OP_FETCH_MESSAGES, "D$alice\n$mid"))
+            assertEquals("from disk", stringOf(fieldOf(plugin, awaitSettled(plugin), "message")))
+            assertTrue(connections().sent.isEmpty(), "what sqlite already had must not cost a request")
+
+            // the row is not a channel's, so the common box reaches it with no peer named
+            plugin.js.fetchResults.clear()
+            assertNull(fetch(plugin, PluginReads.OP_FETCH_MESSAGES, "D0\n$mid", requestId = 2L))
+            assertEquals("from disk", stringOf(fieldOf(plugin, awaitSettled(plugin), "message")))
+            assertTrue(connections().sent.isEmpty())
+        } finally {
+            onStorage { it.executeFast("DELETE FROM messages_v2 WHERE mid = $mid").stepThis().dispose() }
+        }
+    }
+
+    @Test
+    fun getMessages_answers_from_memory_without_sending_anything() {
+        val plugin = granted()
+        TestApp.cacheDialogMessage(0, self, message(7, peerUser(self), "hi"))
+
+        assertNull(fetch(plugin, PluginReads.OP_FETCH_MESSAGES, "S\n7"))
+        drain()
+        assertTrue(connections().sent.isEmpty(), "what memory already had must not cost a request")
+        assertEquals("hi", stringOf(fieldOf(plugin, settled(plugin), "message")))
+    }
+
+    @Test
+    fun an_uncached_message_is_fetched_and_a_miss_stays_null_in_place() {
+        val plugin = granted()
+        assertNull(fetch(plugin, PluginReads.OP_FETCH_MESSAGES, "D$alice\n7\n8"))
+
+        val sent = awaitSent()
+        val request = sent.request as TLRPC.TL_messages_getMessages
+        assertEquals(listOf(7, 8), request.id.toList(), "a user dialog's ids are common-box ids")
+
+        answerMessages(message(7, peerUser(alice), "found"))
+        val wires = settled(plugin).split("\n")
+        assertEquals(2, wires.size)
+        assertEquals("found", stringOf(fieldOf(plugin, wires[0], "message")))
+        assertEquals("N", wires[1], "an id the account cannot see is a null in its own slot")
+    }
+
+    @Test
+    fun a_channel_names_itself_because_its_ids_mean_nothing_without_it() {
+        val plugin = granted()
+        assertNull(fetch(plugin, PluginReads.OP_FETCH_MESSAGES, "D-$channel\n9"))
+
+        val request = awaitSent().request as TLRPC.TL_channels_getMessages
+        assertEquals(channel, (request.channel as TLRPC.TL_inputChannel).channel_id)
+        assertEquals(listOf(9), request.id.toList())
+
+        answerMessages(message(9, peerChannel(channel), "chan"))
+        assertEquals("chan", stringOf(fieldOf(plugin, settled(plugin), "message")))
+    }
+
+    @Test
+    fun the_common_box_sends_no_peer_at_all() {
+        val plugin = granted()
+        assertNull(fetch(plugin, PluginReads.OP_FETCH_MESSAGES, "D0\n7"))
+
+        val request = awaitSent().request as TLRPC.TL_messages_getMessages
+        assertEquals(listOf(7), request.id.toList())
+
+        answerMessages(message(7, peerUser(alice), "boxed"))
+        assertEquals("boxed", stringOf(fieldOf(plugin, settled(plugin), "message")))
+    }
+
+    /** the server answers by id, so a named peer still has to check what came back belongs to it */
+    @Test
+    fun a_message_from_another_dialog_is_not_the_answer() {
+        val plugin = granted()
+        assertNull(fetch(plugin, PluginReads.OP_FETCH_MESSAGES, "D$alice\n7"))
+        awaitSent()
+
+        answerMessages(message(7, peerUser(self), "someone else's"))
+        assertEquals("N", settled(plugin))
+    }
 
     @Test
     fun every_async_read_checks_its_own_scope_on_the_side_that_owns_the_data() {

@@ -232,10 +232,8 @@ class PluginReadsTest {
         })
     }
 
-    private fun cacheMessage(dialogId: Long, message: TLRPC.Message) {
-        val controller = MessagesController.getInstance(0)
-        controller.dialogMessage.put(dialogId, arrayListOf(MessageObject(0, message, false, false)))
-    }
+    private fun cacheMessage(dialogId: Long, message: TLRPC.Message) =
+        TestApp.cacheDialogMessage(0, dialogId, message)
 
     @Test
     fun a_dialog_and_its_cached_message_read_back() {
@@ -248,6 +246,29 @@ class PluginReadsTest {
         val message = read(plugin, PluginReads.OP_MESSAGE, "S\n7")
         assertEquals("hi", stringOf(fieldOf(plugin, message, "message")))
         assertEquals("N", read(plugin, PluginReads.OP_MESSAGE, "S\n8"), "only what the app has in memory")
+    }
+
+    @Test
+    fun the_common_box_answers_without_a_peer_and_a_channel_is_not_in_it() {
+        val plugin = granted()
+        cacheMessage(self, TLRPC.TL_message().apply { id = 7; message = "hi"; peer_id = peerUser(self) }.synced())
+
+        assertEquals(
+            "hi",
+            stringOf(fieldOf(plugin, read(plugin, PluginReads.OP_MESSAGE, "D0\n7"), "message")),
+            "a user dialog's ids are common-box ids",
+        )
+        assertEquals("N", read(plugin, PluginReads.OP_MESSAGE, "D0\n8"))
+
+        // a channel numbers its own messages, so the common box must not hand one back for an id
+        // that only collides with it
+        cacheMessage(-1001L, TLRPC.TL_message().apply { id = 9; message = "chan"; peer_id = peerChannel(1001L) }.synced())
+        assertEquals("N", read(plugin, PluginReads.OP_MESSAGE, "D0\n9"))
+        assertEquals(
+            "chan",
+            stringOf(fieldOf(plugin, read(plugin, PluginReads.OP_MESSAGE, "D-1001\n9"), "message")),
+            "naming the channel still reads it",
+        )
     }
 
     @Test

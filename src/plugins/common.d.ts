@@ -421,15 +421,44 @@ declare namespace inu {
     getPeer(peer: InputPeerLike): tl.TypeUser | tl.TypeChat | null
     /** @needs-grant account.read(dialogs) */
     getDialog(peer: InputPeerLike): tl.TypeDialog | null
-    /** @needs-grant account.read(messages) */
-    getMessage(peer: InputPeerLike, messageId: number): Message | null
-
     /** @needs-grant account.read(peers) */
     getUsers(peers: InputPeerLike[]): (tl.TypeUser | null)[]
     /** @needs-grant account.read(peers) */
     getChats(peers: InputPeerLike[]): (tl.TypeChat | null)[]
-    /** @needs-grant account.read(messages) */
-    getMessages(peer: InputPeerLike, messageIds: number[]): (Message | null)[]
+
+    /**
+     * The messages the app already holds in memory, which is far less than it holds at all: only
+     * the chat list's own last message per dialog lives there. A message the user is looking at
+     * right now is **not** in memory in any form this can reach - it belongs to the chat screen
+     * that drew it - so a miss here says nothing about whether the message exists. Use
+     * {@link getMessages} for that; this is for the one case where a synchronous answer is worth
+     * more than a complete one.
+     *
+     * `peer` may be `0` - the *common message box* - for a message in a user chat or a basic
+     * group, which share one id space per account. A channel or supergroup numbers its own
+     * messages, so those must name their peer.
+     *
+     * @needs-grant account.read(messages)
+     */
+    getMessagesCached(peer: InputPeerLike, messageId: number): Message | null
+    getMessagesCached(peer: InputPeerLike, messageIds: number[]): (Message | null)[]
+
+    /**
+     * Messages by id: memory first, then the app's own sqlite, then the network for whatever is
+     * left. A message the app has ever loaded answers from disk without a request; one it has not
+     * costs a `messages.getMessages`/`channels.getMessages`. An id that does not exist, or that
+     * this account cannot see, answers `null` in the place it was asked about.
+     *
+     * `peer` may be `0` - the *common message box*, a dialog id no dialog has. Telegram numbers
+     * every user chat and basic group out of one sequence per account, so an id from one of those
+     * identifies a message on its own. A channel or supergroup numbers its own messages from 1 and
+     * must name its peer; asking the common box for a channel's id answers the *other* message
+     * that happens to hold that number, or `null`. Everywhere else `0` is simply a miss.
+     *
+     * @needs-grant account.read(messages)
+     */
+    getMessages(peer: InputPeerLike, messageId: number): Promise<Message | null>
+    getMessages(peer: InputPeerLike, messageIds: number[]): Promise<(Message | null)[]>
 
     /** @needs-grant account.read(messages) */
     getMessageFile(message: Message | tl.TypeMessage): { path: string, exists: boolean } | null

@@ -67,7 +67,7 @@ const NO_CHAT = -4242424242
 
   // -- what is not a peer never reaches the host --
 
-  for (const bad of [0, '0', null, undefined, {}, [], 1.5, 'not a name!', '@', true, NaN]) {
+  for (const bad of [null, undefined, {}, [], 1.5, 'not a name!', '@', true, NaN]) {
     const label = typeof bad === 'string' ? `'${bad}'` : String(bad)
     // @ts-expect-error
     expectThrows(`getUser(${label}) is refused`, 'invalid-argument', () => acc.getUser(bad))
@@ -76,9 +76,10 @@ const NO_CHAT = -4242424242
   expectThrows('getUsers wants an array', 'invalid-argument', () => acc.getUsers('me'))
   // @ts-expect-error
   expectThrows('getChats wants an array', 'invalid-argument', () => acc.getChats(NO_CHAT))
-  expectThrows('getMessage wants an integer id', 'invalid-argument', () => acc.getMessage('me', 1.5))
+  expectThrows('getMessagesCached wants an integer id', 'invalid-argument', () => acc.getMessagesCached('me', 1.5))
   // @ts-expect-error
-  expectThrows('getMessages wants an array', 'invalid-argument', () => acc.getMessages('me', 7))
+  expectThrows('getMessagesCached refuses a peer that names nothing', 'invalid-argument', () => acc.getMessagesCached(null, 7))
+  await expectRejects('getMessages wants an integer id', 'invalid-argument', () => acc.getMessages('me', 1.5))
 
   // the slot comes off the handle, so a torn-off method is a named mistake rather than a read
   // against slot 0
@@ -88,10 +89,12 @@ const NO_CHAT = -4242424242
   // -- a miss is null, everywhere --
 
   check('getUser misses as null', acc.getUser(NOBODY) === null)
+  // `0` is a dialog id nothing has, which the message reads give a meaning and nothing else does
+  check('getUser(0) is a miss rather than a refusal', acc.getUser(0) === null)
   check('getChat misses as null', acc.getChat(NO_CHAT) === null)
   check('getPeer misses as null', acc.getPeer(NOBODY) === null)
   check('getDialog misses as null', acc.getDialog(NO_CHAT) === null)
-  check('getMessage misses as null', acc.getMessage(NO_CHAT, 7) === null)
+  check('getMessagesCached misses as null', acc.getMessagesCached(NO_CHAT, 7) === null)
   check('resolvePeerCached misses as null', acc.resolvePeerCached(NOBODY) === null)
 
   // -- batches keep their misses in place --
@@ -112,9 +115,16 @@ const NO_CHAT = -4242424242
   // the batch getters are per kind, so the one peer that certainly exists is still not a chat
   check('getChats does not answer for a user', chats[1] === null)
 
-  const messages = acc.getMessages('me', [7, 999999999])
-  check('getMessages keeps its shape', Array.isArray(messages) && messages.length === 2)
+  const messages = acc.getMessagesCached('me', [7, 999999999])
+  check('getMessagesCached keeps its shape', Array.isArray(messages) && messages.length === 2)
   check('a message miss is null in place', messages[1] === null)
+
+  // one id is one answer and a list is a list, on both halves - the async one goes to storage and
+  // then the network, so a miss here means the id exists nowhere rather than "not in memory"
+  const fetchedOne = await acc.getMessages('me', 999999999)
+  check('getMessages(id) answers one value', fetchedOne === null || fetchedOne instanceof inu.Message)
+  const fetchedMany = await acc.getMessages('me', [999999999])
+  check('getMessages([id]) answers an array', Array.isArray(fetchedMany) && fetchedMany.length === 1)
 
   // -- myself --
 
@@ -156,18 +166,22 @@ const NO_CHAT = -4242424242
     check('getDialog is a dialog', String(dialog._).startsWith('dialog'), dialog._)
     const top = dialog.top_message
     if (typeof top !== 'number' || top === 0) {
-      skip('getMessage', 'saved messages has no cached top message')
+      skip('getMessagesCached', 'saved messages has no cached top message')
     } else {
-      const message = acc.getMessage('me', top)
+      const message = acc.getMessagesCached('me', top)
       if (message === null) {
-        skip('getMessage', `message ${top} is not in the message cache`)
+        skip('getMessagesCached', `message ${top} is not in the message cache`)
       } else {
-        check('getMessage wraps in inu.Message', message instanceof inu.Message)
+        check('getMessagesCached wraps in inu.Message', message instanceof inu.Message)
         check('the wrapper reads its own id', message.id === top, `${message.id} vs ${top}`)
         check('the raw message is a message', String(message.raw._).startsWith('message'), message.raw._)
-        const both = acc.getMessages('me', [top, 999999999])
-        check('getMessages wraps too', both[0] instanceof inu.Message && both[1] === null)
+        const both = acc.getMessagesCached('me', [top, 999999999])
+        check('getMessagesCached wraps too', both[0] instanceof inu.Message && both[1] === null)
       }
+      // saved messages is a user dialog, so its ids are common-box ids: the same message answers
+      // without a peer at all
+      const viaBox = await acc.getMessages(0, top)
+      check('the common box answers for a user dialog', viaBox === null || viaBox.id === top)
     }
   }
 

@@ -81,17 +81,14 @@
 
   const toSpec = (peer) => {
     if (typeof peer === 'number') {
-      if (!Number.isInteger(peer) || peer === 0) throw invalid(`not a dialog id: ${peer}`)
+      if (!Number.isInteger(peer)) throw invalid(`not a dialog id: ${peer}`)
       return `D${peer}`
     }
     if (typeof peer === 'string') {
       if (peer === 'me' || peer === 'self') return 'S'
       // the decimal-string form keeps its digits rather than going through Number, which is the
       // one path where an id could arrive past 2^53 (int64 fields are strings on a TL snapshot)
-      if (DIGITS.test(peer)) {
-        if (/^-?0+$/.test(peer)) throw invalid(`not a dialog id: ${peer}`)
-        return `D${peer}`
-      }
+      if (DIGITS.test(peer)) return `D${peer}`
       const username = peer.charCodeAt(0) === 64 ? peer.slice(1) : peer
       if (!USERNAME.test(username)) throw invalid(`not a username: ${peer}`)
       return `U${username.toLowerCase()}`

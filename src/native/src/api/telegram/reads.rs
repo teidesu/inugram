@@ -40,6 +40,7 @@ const OP_DIALOGS: i32 = 14;
 const OP_TOPICS: i32 = 15;
 const OP_DIALOGS_CACHED: i32 = 16;
 const OP_CHAT_FOLDERS: i32 = 17;
+const OP_FETCH_MESSAGES: i32 = 18;
 
 const SEPARATOR: char = '\n';
 
@@ -49,7 +50,7 @@ fn scope_of(op: i32) -> Option<&'static str> {
   Some(match op {
     OP_ME => "self",
     OP_DIALOG | OP_DIALOGS | OP_TOPICS | OP_DIALOGS_CACHED | OP_CHAT_FOLDERS => "dialogs",
-    OP_MESSAGE | OP_MESSAGES => "messages",
+    OP_MESSAGE | OP_MESSAGES | OP_FETCH_MESSAGES => "messages",
     OP_HISTORY => "history",
     OP_DRAFT => "draft",
     OP_USER | OP_CHAT | OP_PEER | OP_USERS | OP_CHATS | OP_INPUT_PEER | OP_USER_FULL | OP_CHAT_FULL => "peers",
@@ -66,7 +67,7 @@ enum Shape {
 
 fn shape_of(op: i32) -> Shape {
   match op {
-    OP_HISTORY | OP_DIALOGS_CACHED => Shape::List,
+    OP_HISTORY | OP_DIALOGS_CACHED | OP_FETCH_MESSAGES => Shape::List,
     OP_DIALOGS => Shape::Page(LIST_DIALOGS),
     OP_TOPICS => Shape::Page(LIST_TOPICS),
     _ => Shape::Value,
@@ -297,6 +298,7 @@ pub fn install_reads<'js>(
     ("userFull", OP_USER_FULL),
     ("chatFull", OP_CHAT_FULL),
     ("history", OP_HISTORY),
+    ("messages", OP_FETCH_MESSAGES),
     ("dialogs", OP_DIALOGS),
     ("topics", OP_TOPICS),
     ("dialogsCached", OP_DIALOGS_CACHED),

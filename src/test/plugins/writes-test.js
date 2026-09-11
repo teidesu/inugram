@@ -62,11 +62,13 @@ const SECRET = '4611686018427387911'
 
   // -- every write fails asynchronously, whatever went wrong --
 
-  for (const bad of [0, '0', null, undefined, {}, [], 1.5, 'not a name!', true]) {
+  for (const bad of [null, undefined, {}, [], 1.5, 'not a name!', true]) {
     const shown = JSON.stringify(bad) ?? String(bad)
     // @ts-expect-error
     await expectRejects(`sendMessage(${shown}) rejects`, 'invalid-argument', () => acc.sendMessage(bad, 'hi'))
   }
+  // `0` is a dialog id nothing has rather than a malformed one, so it is the miss it names
+  await expectRejects('sendMessage(0) is a miss, not a refusal', 'not-found', () => acc.sendMessage(0, 'hi'))
   await expectRejects('a torn-off sendMessage rejects', 'invalid-argument', () => {
     const { sendMessage } = acc
     return sendMessage(NOBODY, 'hi')
