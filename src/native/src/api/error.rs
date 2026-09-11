@@ -7,20 +7,24 @@ use rquickjs::{Coerced, Ctx, Result as JsResult, Runtime, Value};
 use crate::api::{telegram::rpc, Globals};
 
 pub(crate) fn format_thrown<'js>(ctx: &Ctx<'js>, value: &Value<'js>) -> String {
-  let message = describe_thrown(ctx, value);
+  let message = crate::sandbox::limits::describe_heap_exhaustion(value)
+    .unwrap_or_else(|| describe_value(ctx, value, "JS exception"));
   let _ = ctx.catch();
   message
 }
 
-fn describe_thrown<'js>(ctx: &Ctx<'js>, value: &Value<'js>) -> String {
+pub(crate) fn format_logged<'js>(ctx: &Ctx<'js>, value: &Value<'js>) -> String {
+  let message = describe_value(ctx, value, "[unprintable value]");
+  let _ = ctx.catch();
+  message
+}
+
+fn describe_value<'js>(ctx: &Ctx<'js>, value: &Value<'js>, fallback: &str) -> String {
   use rquickjs::FromJs;
 
-  if let Some(message) = crate::sandbox::limits::describe_heap_exhaustion(value) {
-    return message;
-  }
   let mut message = Coerced::<String>::from_js(ctx, value.clone())
     .map(|coerced| coerced.0)
-    .unwrap_or_else(|_| "JS exception".to_string());
+    .unwrap_or_else(|_| fallback.to_string());
   if let Some(object) = value.as_object() {
     if let Ok(stack) = object.get::<_, String>("stack") {
       if !stack.is_empty() {
