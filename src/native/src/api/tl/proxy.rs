@@ -4,6 +4,7 @@ use std::rc::Rc;
 
 use base64::engine::general_purpose::STANDARD;
 use rquickjs::atom::PredefinedAtom;
+use rquickjs::function::This;
 use rquickjs::class::{JsClass, Readable, Trace, Tracer};
 use rquickjs::proxy::ProxyHandler;
 use rquickjs::{
@@ -327,7 +328,7 @@ fn decode_read<'js>(
     tag::BYTES => {
       let len = reader.i32().ok_or_else(bad)?;
       let bytes = reader.take(usize::try_from(len).map_err(|_| bad())?).ok_or_else(bad)?;
-      make_bytes_value(ctx, bytes.to_vec())
+      make_bytes_value(ctx, bytes)
     }
     tag::HANDLE | tag::HANDLE_PROJECTED => {
       let flags = reader.u8().ok_or_else(bad)?;
@@ -385,14 +386,21 @@ fn base64_decode(s: &str) -> Option<Vec<u8>> {
   base64::Engine::decode(&STANDARD, s).ok()
 }
 
-pub(crate) fn make_bytes_value<'js>(ctx: &Ctx<'js>, bytes: Vec<u8>) -> JsResult<Value<'js>> {
-  let b64 = base64::Engine::encode(&STANDARD, &bytes);
+/// the base64 is built from `this` when `toJSON` is actually called, not up front: an `invokeRaw`
+/// response is whatever the method answered, and eagerly encoding one would cost a full pass and
+/// keep a string 4/3 its size alive for as long as the array
+pub(crate) fn make_bytes_value<'js>(ctx: &Ctx<'js>, bytes: &[u8]) -> JsResult<Value<'js>> {
   let arr = TypedArray::<u8>::new_copy(ctx.clone(), bytes)?;
-  let to_json = Function::new(ctx.clone(), move |ctx: Ctx<'js>| -> JsResult<Object<'js>> {
-    let wrapper = Object::new(ctx.clone())?;
-    wrapper.set(BYTES_MARKER_KEY, b64.as_str())?;
-    Ok(wrapper)
-  })?;
+  let to_json =
+    Function::new(ctx.clone(), |ctx: Ctx<'js>, this: This<TypedArray<'js, u8>>| -> JsResult<Object<'js>> {
+      let wrapper = Object::new(ctx.clone())?;
+      let Some(bytes) = this.0.as_bytes() else {
+        return Err(Exception::throw_type(&ctx, "these bytes are gone: their buffer was detached"));
+      };
+      let b64 = base64::Engine::encode(&STANDARD, bytes);
+      wrapper.set(BYTES_MARKER_KEY, b64.as_str())?;
+      Ok(wrapper)
+    })?;
   arr.set(TO_JSON_KEY, to_json)?;
   arr.into_js(ctx)
 }
@@ -412,7 +420,7 @@ fn revive_bytes<'js>(ctx: &Ctx<'js>, value: Value<'js>) -> JsResult<Value<'js>> 
   let keys: Vec<String> = obj.own_keys(Filter::new().string().enum_only()).collect::<JsResult<_>>()?;
   if keys.iter().any(|k| k == BYTES_MARKER_KEY) {
     return match obj.get::<_, Option<String>>(BYTES_MARKER_KEY)?.as_deref().and_then(base64_decode) {
-      Some(bytes) => make_bytes_value(ctx, bytes),
+      Some(bytes) => make_bytes_value(ctx, &bytes),
       None => Ok(value),
     };
   }
@@ -461,7 +469,7 @@ pub(crate) fn scalar_wire_to_js<'js>(ctx: &Ctx<'js>, tag: char, payload: &str) -
       .and_then(|n| n.into_js(ctx)),
     'B' => Ok(Value::new_bool(ctx.clone(), payload == "1")),
     'Y' => match base64::Engine::decode(&STANDARD, payload).ok() {
-      Some(bytes) => make_bytes_value(ctx, bytes),
+      Some(bytes) => make_bytes_value(ctx, &bytes),
       None => Err(Exception::throw_message(ctx, "tl wire: bad base64")),
     },
     _ => return None,

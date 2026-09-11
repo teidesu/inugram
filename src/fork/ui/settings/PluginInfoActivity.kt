@@ -192,7 +192,7 @@ internal fun highestGrantTier(manifest: PluginManifest): GrantTier? =
 
 private class GrantPresentation(val titleRes: Int, val iconRes: Int)
 
-private val ALWAYS_CAUTION_GRANTS = setOf("account.write", "interceptSendMessage", "clipboard.read")
+private val ALWAYS_CAUTION_GRANTS = setOf("account.write", "interceptSendMessage", "clipboard.read", "takeout")
 
 /** scopable grants that read as neutral when narrowed, caution when granted without scopes */
 private val UNBOUNDED_CAUTION_GRANTS = setOf(
@@ -326,7 +326,9 @@ private fun grantSubtitle(name: String, scopes: List<String>?): String? = when (
     )
 
 
+    "takeout" -> LocaleController.getString(R.string.InuPluginGrantTakeoutInfo)
     "unsafe.fs" -> LocaleController.getString(R.string.InuPluginGrantUnsafeFsInfo)
+    "unsafe.invokeRaw" -> LocaleController.getString(R.string.InuPluginGrantUnsafeInvokeRawInfo)
     "unsafe.jvm" -> LocaleController.getString(R.string.InuPluginGrantUnsafeJvmInfo)
 
     "unsafe.xposed" -> LocaleController.getString(R.string.InuPluginGrantUnsafeXposedInfo)
@@ -351,7 +353,9 @@ private val KNOWN_GRANTS = mapOf(
     "interceptSendMessage" to GrantPresentation(R.string.InuPluginGrantInterceptSend, R.drawable.msg_edit),
     "interceptRpc" to GrantPresentation(R.string.InuPluginGrantInterceptRpc, R.drawable.msg_log),
     "invokeRpc" to GrantPresentation(R.string.InuPluginGrantInvokeRpc, R.drawable.msg_bot),
+    "takeout" to GrantPresentation(R.string.InuPluginGrantTakeout, R.drawable.msg_download),
     "unsafe.fs" to GrantPresentation(R.string.InuPluginGrantUnsafeFs, R.drawable.files_storage),
+    "unsafe.invokeRaw" to GrantPresentation(R.string.InuPluginGrantUnsafeInvokeRaw, R.drawable.msg_bot),
     "unsafe.jvm" to GrantPresentation(R.string.InuPluginGrantUnsafeJvm, R.drawable.inu_tabler_code),
     "unsafe.xposed" to GrantPresentation(R.string.InuPluginGrantUnsafeXposed, R.drawable.msg_replace),
     "unsafe.notificationCenter" to GrantPresentation(R.string.InuPluginGrantUnsafeNotificationCenter, R.drawable.msg_notifications),

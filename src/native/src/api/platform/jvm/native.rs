@@ -1435,7 +1435,7 @@ impl Native {
         if bytes.len() > VALUE_LIMIT_BYTES {
           return Err(OpError::Js(too_big::<()>(ctx, "a byte[]", bytes.len()).unwrap_err()));
         }
-        return Ok(Outcome::Value(crate::api::tl::proxy::make_bytes_value(ctx, bytes)?));
+        return Ok(Outcome::Value(crate::api::tl::proxy::make_bytes_value(ctx, &bytes)?));
       }
       // a `Class` is checked as the class it *names*, and a member by the class it declares
       Shape::Class => (KIND_CLASS, self.key_of(env, known, &obj)?),

@@ -18,6 +18,7 @@ class RecordingQuickJs : QuickJs() {
     class Update(val typeName: String, val accountId: Int, val updateWire: String)
     class UpdateDispatch(val callbackId: Int, val dispatchId: Long, val typeName: String, val accountId: Int, val updateWire: String)
     class Invoke(val invokeId: Long, val resultWire: String)
+    class InvokeBytes(val invokeId: Long, val response: ByteArray)
     class PeerResult(val requestId: Long, val resultWire: String)
     class FetchResult(val requestId: Long, val resultWire: String)
     class HttpResult(val requestId: Long, val resultWire: String)
@@ -35,6 +36,7 @@ class RecordingQuickJs : QuickJs() {
     val updateDispatches = ArrayList<UpdateDispatch>()
     val updateAbandons = ArrayList<Long>()
     val invokes = ArrayList<Invoke>()
+    val invokeBytes = ArrayList<InvokeBytes>()
     val peerResults = ArrayList<PeerResult>()
     val fetchResults = ArrayList<FetchResult>()
     val httpResults = ArrayList<HttpResult>()
@@ -222,6 +224,10 @@ class RecordingQuickJs : QuickJs() {
 
     override fun resolveInvoke(invokeId: Long, resultWire: String) {
         invokes.add(Invoke(invokeId, resultWire))
+    }
+
+    override fun resolveInvokeBytes(invokeId: Long, response: ByteArray) {
+        invokeBytes.add(InvokeBytes(invokeId, response))
     }
 
     override fun dispatchUpdate(typeName: String, accountId: Int, updateWire: String) {

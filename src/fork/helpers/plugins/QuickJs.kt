@@ -223,6 +223,10 @@ open class QuickJs {
 
     open fun resolveInvoke(invokeId: Long, resultWire: String) = requireLive { nativeResolveInvoke(it, invokeId, resultWire) }
 
+    /** `invokeRaw`'s answer: the response body, which becomes the plugin's `Uint8Array` as it is */
+    open fun resolveInvokeBytes(invokeId: Long, response: ByteArray) =
+        requireLive { nativeResolveInvokeBytes(it, invokeId, response) }
+
     /** only for a type some registration named; the payload is decoded either way, since nothing else frees its handle */
     open fun dispatchUpdate(typeName: String, accountId: Int, updateWire: String) = requireLive { nativeDispatchUpdate(it, typeName, accountId, updateWire) }
 
@@ -340,6 +344,7 @@ open class QuickJs {
     private external fun nativeCompleteNext(ptr: Long, dispatchId: Long, resultWire: String)
     private external fun nativeAbandonDispatch(ptr: Long, dispatchId: Long, reasonWire: String)
     private external fun nativeResolveInvoke(ptr: Long, invokeId: Long, resultWire: String)
+    private external fun nativeResolveInvokeBytes(ptr: Long, invokeId: Long, response: ByteArray)
     private external fun nativeDispatchUpdate(ptr: Long, typeName: String, accountId: Int, updateWire: String)
     private external fun nativeDispatchUpdateIntercept(ptr: Long, callbackId: Int, dispatchId: Long, typeName: String, accountId: Int, updateWire: String)
     private external fun nativeAbandonUpdateDispatch(ptr: Long, dispatchId: Long)

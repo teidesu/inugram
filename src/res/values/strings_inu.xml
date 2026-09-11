@@ -793,12 +793,16 @@
     <string name="InuPluginGrantInterceptSend">Intercept outgoing messages</string>
     <string name="InuPluginGrantInterceptRpc">Intercept API requests</string>
     <string name="InuPluginGrantInvokeRpc">Raw API access</string>
+    <string name="InuPluginGrantTakeout">Data export sessions</string>
     <string name="InuPluginGrantUnsafeFs">Device file access</string>
+    <string name="InuPluginGrantUnsafeInvokeRaw">Unchecked API access</string>
     <string name="InuPluginGrantUnsafeJvm">Java code execution</string>
     <string name="InuPluginGrantUnsafeXposed">App code hooks</string>
     <string name="InuPluginGrantUnsafeNotificationCenter">Internal event access</string>
     <string name="InuPluginGrantUnsafeDisableApiFiltering">Disable account protection</string>
+    <string name="InuPluginGrantTakeoutInfo">Can export your data without the usual rate limits, after you approve it</string>
     <string name="InuPluginGrantUnsafeFsInfo">Access to all application files, unsandboxed</string>
+    <string name="InuPluginGrantUnsafeInvokeRawInfo">Can send any API request, bypassing the method filter</string>
     <string name="InuPluginGrantUnsafeJvmInfo">Can run arbitrary code unsandboxed</string>
     <string name="InuPluginGrantUnsafeXposedInfo">Can replace methods of the app, changing how any part of it behaves</string>
     <string name="InuPluginGrantUnsafeNotificationCenterInfo">Watches and posts the app\'s internal events</string>

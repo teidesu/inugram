@@ -10,6 +10,8 @@ struct TestHost {
   unregistered: RefCell<Vec<u32>>,
   next_calls: RefCell<Vec<(i64, String)>>,
   invoke_calls: RefCell<Vec<(i64, i32, String)>>,
+  raw_calls: RefCell<Vec<(i64, i32, Vec<u8>)>>,
+  takeout_calls: RefCell<Vec<(i64, i32, i32, String, String)>>,
   update_registered: RefCell<Vec<(u32, Vec<String>, String)>>,
   update_unregistered: RefCell<Vec<u32>>,
   intercept_update_registered: RefCell<Vec<(u32, Vec<String>)>>,
@@ -47,6 +49,14 @@ impl RpcHost for TestHost {
   }
   fn on_invoke(&self, invoke_id: i64, slot: i32, request_wire: &str) -> Option<String> {
     self.invoke_calls.borrow_mut().push((invoke_id, slot, request_wire.to_string()));
+    None
+  }
+  fn on_invoke_raw(&self, invoke_id: i64, slot: i32, method: &[u8]) -> Option<String> {
+    self.raw_calls.borrow_mut().push((invoke_id, slot, method.to_vec()));
+    None
+  }
+  fn on_takeout(&self, invoke_id: i64, slot: i32, op: i32, takeout_id: &str, arg: &str) -> Option<String> {
+    self.takeout_calls.borrow_mut().push((invoke_id, slot, op, takeout_id.to_string(), arg.to_string()));
     None
   }
   fn on_next(&self, dispatch_id: i64, request_wire: &str) -> Option<String> {
@@ -2588,6 +2598,12 @@ mod bundled_oracles {
       self.invokes.borrow_mut().push((invoke_id, slot, method));
       None
     }
+    fn on_invoke_raw(&self, _invoke_id: i64, _slot: i32, _method: &[u8]) -> Option<String> {
+      Some(plugin_error("unsupported", "the oracle host sends no raw requests"))
+    }
+    fn on_takeout(&self, _invoke_id: i64, _slot: i32, _op: i32, _takeout_id: &str, _arg: &str) -> Option<String> {
+      Some(plugin_error("unsupported", "the oracle host opens no takeout sessions"))
+    }
     fn on_next(&self, dispatch_id: i64, request_wire: &str) -> Option<String> {
       let method = method_of(self, request_wire);
       let expected = self.chain_method.borrow().clone();
@@ -2819,4 +2835,110 @@ mod bundled_oracles {
       ],
     )
   }
+}
+
+/// bytes are the whole method, so the only thing rust decides about them is that they *are* bytes:
+/// anything else reaches `js_value_to_wire` as json and is caught by the tag it came back with
+#[test]
+fn invoke_raw_sends_bytes_and_refuses_everything_else() {
+  let (_rt, ctx, host, _state) = setup(&["unsafe.invokeRaw", "account.read(self)"]);
+  eval(&ctx, "inu.invokeRaw(new Uint8Array([0x2e, 0xfd, 0xa9, 0xac, 1]))");
+  eval(&ctx, "inu.account(1).invokeRaw(new Uint8Array([1, 2, 3, 4]))");
+
+  let calls = host.raw_calls.borrow().clone();
+  assert_eq!(calls.iter().map(|(_, slot, _)| *slot).collect::<Vec<_>>(), vec![ANY_ACCOUNT, 1]);
+  // the bytes reach the host as bytes: nothing base64s them on the way
+  assert_eq!(calls[0].2, vec![0x2e, 0xfd, 0xa9, 0xac, 1]);
+  assert_eq!(calls[1].2, vec![1, 2, 3, 4]);
+
+  assert_eq!(
+    catch_json(&ctx, "inu.invokeRaw({ _: 'foo.bar' })"),
+    r#"[true,"invalid-argument",null,"invokeRaw: expected the serialized method as a Uint8Array"]"#,
+  );
+  assert_eq!(host.raw_calls.borrow().len(), 2);
+}
+
+#[test]
+fn invoke_raw_without_its_grant_throws_not_granted() {
+  let (_rt, ctx, host, _state) = setup(&["invokeRpc"]);
+  assert_eq!(
+    catch_json(&ctx, "inu.invokeRaw(new Uint8Array([1, 2, 3, 4]))"),
+    r#"[true,"not-granted","unsafe.invokeRaw","missing grant: unsafe.invokeRaw"]"#,
+  );
+  assert!(host.raw_calls.borrow().is_empty());
+}
+
+#[test]
+fn invoke_raw_resolves_with_the_response_bytes() {
+  let (rt, ctx, host, state) = setup(&["unsafe.invokeRaw"]);
+  eval(
+    &ctx,
+    "globalThis.__raw = null; inu.invokeRaw(new Uint8Array([1, 2, 3, 4])).then(r => { globalThis.__raw = r; })",
+  );
+  let invoke_id = host.raw_calls.borrow()[0].0;
+  state.resolve_invoke_bytes(&rt, &ctx, invoke_id, &[5, 6, 7, 8]);
+  assert_eq!(
+    eval_json(&ctx, "[Array.from(globalThis.__raw), globalThis.__raw instanceof Uint8Array]"),
+    "[[5,6,7,8],true]"
+  );
+}
+
+#[test]
+fn a_takeout_session_carries_its_id_into_every_op() {
+  let (rt, ctx, host, state) = setup(&["takeout", "invokeRpc(messages.getHistory)", "account.read(self)"]);
+  eval(
+    &ctx,
+    r#"
+        globalThis.__session = null;
+        inu.account(1).initTakeoutSession({ messageUsers: true, fileMaxSize: 1500000 })
+          .then(s => { globalThis.__session = s; });
+        "#,
+  );
+
+  let init = host.takeout_calls.borrow()[0].clone();
+  assert_eq!((init.1, init.2, init.3.as_str()), (1, OP_TAKEOUT_INIT, ""));
+  assert_eq!(
+    init.4,
+    r#"{"contacts":false,"messageUsers":true,"messageChats":false,"messageMegagroups":false,"messageChannels":false,"fileMaxSize":"1500000"}"#,
+  );
+
+  state.resolve_invoke(&rt, &ctx, init.0, "S8123456789");
+  assert_eq!(eval_json(&ctx, "globalThis.__session.id"), r#""8123456789""#);
+
+  eval(&ctx, "globalThis.__session.invokeRpc({ _: 'messages.getHistory' }); globalThis.__session.finish()");
+  let calls = host.takeout_calls.borrow().clone();
+  assert_eq!(
+    calls.iter().map(|(_, slot, op, id, arg)| (*slot, *op, id.clone(), arg.clone())).collect::<Vec<_>>(),
+    vec![
+      (1, OP_TAKEOUT_INIT, String::new(), init.4.clone()),
+      (1, OP_TAKEOUT_INVOKE, "8123456789".to_string(), wire_json(r#"{"_":"messages.getHistory"}"#)),
+      (1, OP_TAKEOUT_FINISH, "8123456789".to_string(), "1".to_string()),
+    ],
+  );
+}
+
+/// a session is not a way around the method list: wrapping a call checks the same scope the
+/// unwrapped call would have
+#[test]
+fn a_wrapped_call_still_needs_its_method_grant() {
+  let (rt, ctx, host, state) = setup(&["takeout", "invokeRpc(users.getUsers)", "account.read(self)"]);
+  eval(&ctx, "inu.account(1).initTakeoutSession().then(s => { globalThis.__s = s; })");
+  let init_id = host.takeout_calls.borrow()[0].0;
+  state.resolve_invoke(&rt, &ctx, init_id, "S77");
+
+  assert_eq!(
+    catch_json(&ctx, "globalThis.__s.invokeRpc({ _: 'messages.getHistory' })"),
+    r#"[true,"not-granted","invokeRpc(messages.getHistory)","missing grant: invokeRpc(messages.getHistory)"]"#,
+  );
+  assert_eq!(host.takeout_calls.borrow().len(), 1, "the refused call must never reach the host");
+}
+
+#[test]
+fn takeout_without_its_grant_throws_not_granted() {
+  let (_rt, ctx, host, _state) = setup(&["invokeRpc", "account.read(self)"]);
+  assert_eq!(
+    catch_json(&ctx, "inu.account(1).initTakeoutSession()"),
+    r#"[true,"not-granted","takeout","missing grant: takeout"]"#,
+  );
+  assert!(host.takeout_calls.borrow().is_empty());
 }

@@ -746,6 +746,12 @@ impl crate::api::telegram::rpc::RpcHost for TestRpcHost {
   fn on_invoke(&self, _invoke_id: i64, _slot: i32, _request_wire: &str) -> Option<String> {
     Some("Pforbidden\n\n\n\nthis fake sends nothing".to_string())
   }
+  fn on_invoke_raw(&self, _invoke_id: i64, _slot: i32, _method: &[u8]) -> Option<String> {
+    Some("Pforbidden\n\n\n\nthis fake sends nothing".to_string())
+  }
+  fn on_takeout(&self, _invoke_id: i64, _slot: i32, _op: i32, _takeout_id: &str, _arg: &str) -> Option<String> {
+    Some("Pforbidden\n\n\n\nthis fake sends nothing".to_string())
+  }
   fn on_next(&self, _dispatch_id: i64, request_wire: &str) -> Option<String> {
     self.next_calls.borrow_mut().push(request_wire.to_string());
     None

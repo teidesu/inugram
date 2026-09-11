@@ -53,6 +53,22 @@ impl RpcHost for JniBridge {
     self.call_refusal("invokeRpc", self.on_invoke_rpc, &[Arg::Long(invoke_id), Arg::Int(slot), Arg::Str(request_wire)])
   }
 
+  fn on_invoke_raw(&self, invoke_id: i64, slot: i32, method: &[u8]) -> Option<String> {
+    self.call_refusal(
+      "invokeRaw",
+      self.on_invoke_raw,
+      &[Arg::Long(invoke_id), Arg::Int(slot), Arg::Bytes(Some(method))],
+    )
+  }
+
+  fn on_takeout(&self, invoke_id: i64, slot: i32, op: i32, takeout_id: &str, arg: &str) -> Option<String> {
+    self.call_refusal(
+      "takeout",
+      self.on_takeout,
+      &[Arg::Long(invoke_id), Arg::Int(slot), Arg::Int(op), Arg::Str(takeout_id), Arg::Str(arg)],
+    )
+  }
+
   fn on_next(&self, dispatch_id: i64, request_wire: &str) -> Option<String> {
     self.call_refusal("next()", self.on_rpc_next, &[Arg::Long(dispatch_id), Arg::Str(request_wire)])
   }
