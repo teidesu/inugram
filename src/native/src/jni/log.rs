@@ -41,7 +41,7 @@ pub(crate) fn make_log(console: Arc<ConsoleSink>) -> crate::Log {
 }
 
 fn format_console_value<'js>(ctx: &Ctx<'js>, value: &Value<'js>) -> String {
-  crate::api::error::format_thrown(ctx, value)
+  crate::api::error::format_logged(ctx, value)
 }
 
 pub(crate) fn install_console<'js>(ctx: &Ctx<'js>, bridge: Rc<JniBridge>) -> rquickjs::Result<()> {
