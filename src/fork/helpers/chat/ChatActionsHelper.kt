@@ -90,6 +90,9 @@ object ChatActionsHelper {
     const val ACTION_SEL_FORWARD_NO_QUOTE = 1507
     private const val SELECTION_RENDER_DEBOUNCE_MS = 32L
 
+    /** the back row and the gap under it, which every plugin submenu keeps across a rebuild */
+    private const val SUBMENU_HEADER_CELLS = 2
+
     // --- chat header menu ---
 
     @JvmStatic
@@ -167,7 +170,17 @@ object ChatActionsHelper {
     // --- plugin rows (inu.registerChatAction) ---
 
     // one entry per open chat; the rows a menu drew are what a click on it resolves against
-    private val pluginRows = WeakHashMap<ChatActivity, List<ActionRow>>()
+    private class ChatPluginMenu(val headerItem: ActionBarMenuItem, val surface: ActionSurface) {
+        var rows = emptyList<ActionRow>()
+        var pinnedKeys = emptyList<ActionKey>()
+        var submenu: ItemOptions? = null
+        var swipeBackShown = false
+        var generation = 0
+        var pendingIconBinder: View.OnAttachStateChangeListener? = null
+    }
+
+    private val pluginMenus = WeakHashMap<ChatActivity, ChatPluginMenu>()
+    private var watchingActions = false
 
     private class SelectionPluginMenu(
         val overflow: ActionBarMenuItem,
@@ -184,7 +197,7 @@ object ChatActionsHelper {
     private val selectionPluginMenus = WeakHashMap<ChatActivity, SelectionPluginMenu>()
 
     fun onFragmentDestroy(activity: ChatActivity) {
-        pluginRows.remove(activity)
+        pluginMenus.remove(activity)
         val state = selectionPluginMenus.remove(activity) ?: return
         state.generation++
         state.pending?.let(AndroidUtilities::cancelRunOnUIThread)
@@ -198,52 +211,141 @@ object ChatActionsHelper {
      * every time the submenu opens, so rows added after this returns still show up.
      */
     private fun addPluginItems(activity: ChatActivity, headerItem: ActionBarMenuItem) {
-        pluginRows.remove(activity)
+        pluginMenus.remove(activity)
         if (!InuConfig.PLUGINS_ENABLED.value) return
+        val state = ChatPluginMenu(headerItem, pluginSurface(activity))
+        pluginMenus[activity] = state
+        watchPluginActions()
         if (!PluginActions.hasRows(PluginActions.KIND_CHAT)) return
-        val surface = pluginSurface(activity)
-        PluginActions.render(PluginActions.KIND_CHAT, surface) { rows ->
-            if (activity.isFinished) return@render
-            pluginRows[activity] = rows
+        refreshPluginItems(activity, state)
+    }
+
+    /**
+     * this menu is built once and lives as long as the chat, so a plugin that registers, drops or
+     * renames a row while it is on screen - a reload, which dev mode does on every push - would
+     * otherwise be answered by rows drawn for an engine that is gone.
+     */
+    private fun watchPluginActions() {
+        if (watchingActions) return
+        watchingActions = true
+        PluginActions.watchCounts {
+            for ((activity, state) in pluginMenus.entries.toList()) {
+                if (activity.isFinished) continue
+                refreshPluginItems(activity, state)
+            }
+        }
+    }
+
+    private fun refreshPluginItems(activity: ChatActivity, state: ChatPluginMenu) {
+        val headerItem = state.headerItem
+        // a render with no dynamic rows answers without leaving the ui thread, so two refreshes can
+        // land out of order
+        state.generation++
+        val generation = state.generation
+        PluginActions.render(PluginActions.KIND_CHAT, state.surface) { rows ->
+            if (activity.isFinished || pluginMenus[activity] !== state) return@render
+            if (state.generation != generation) return@render
+            state.rows = rows
             val enabled = rows.filter { PluginActions.isEnabled(it.key) }
             val pinned = enabled.filter { PluginActions.isPinned(it.key) }
+            val pinnedKeys = pinned.map { it.key }
+            for (key in state.pinnedKeys) {
+                if (key !in pinnedKeys) headerItem.hideSubItem(PluginActions.optionIdFor(key))
+            }
             for (row in pinned) {
-                headerItem.lazilyAddSubItem(
-                    PluginActions.optionIdFor(row.key), R.drawable.msg_settings_old, row.text,
-                )
-            }
-            if (pinned.isNotEmpty()) {
-                headerItem.popupLayout.addOnAttachStateChangeListener(object : View.OnAttachStateChangeListener {
-                    override fun onViewAttachedToWindow(view: View) {
-                        view.removeOnAttachStateChangeListener(this)
-                        for (row in pinned) {
-                            val cell = headerItem.getSubItem(PluginActions.optionIdFor(row.key)) as? ActionBarMenuSubItem ?: continue
-                            PluginIcons.setIcon(cell, row.text, row.icon, row.owner, R.drawable.msg_settings_old)
-                        }
-                    }
-
-                    override fun onViewDetachedFromWindow(view: View) = Unit
-                })
-            }
-            val submenuRows = PluginActions.orderRows(PluginActions.KIND_CHAT, enabled, false)
-            if (submenuRows.isEmpty()) return@render
-            val submenu = ItemOptions.swipeback(headerItem.popupLayout, activity.resourceProvider)
-            submenu.add(R.drawable.ic_ab_back, LocaleController.getString(R.string.Back)) {
-                headerItem.popupLayout.swipeBack?.closeForeground()
-            }
-            submenu.addGap()
-            for (row in submenuRows) {
-                PluginIcons.addMenuItem(
-                    submenu,
-                    row.text,
-                    row.icon,
-                    row.owner,
-                    R.drawable.msg_settings_old,
-                ) {
-                    PluginActions.dispatch(row, surface)
-                    headerItem.closeSubMenu()
+                val id = PluginActions.optionIdFor(row.key)
+                if (headerItem.hasSubItem(id)) {
+                    headerItem.showSubItem(id)
+                } else {
+                    headerItem.lazilyAddSubItem(id, R.drawable.msg_settings_old, row.text)
                 }
             }
+            state.pinnedKeys = pinnedKeys
+            bindPluginIcons(state, pinned)
+            updatePluginSubmenu(activity, state, PluginActions.orderRows(PluginActions.KIND_CHAT, enabled, false))
+        }
+    }
+
+    /**
+     * a lazy row has no cell until the menu is laid out, which is the first time it opens - so the
+     * rest waits for that. At most one wait is outstanding: it holds the rows it would bind, and
+     * with them the engines that drew them.
+     */
+    private fun bindPluginIcons(state: ChatPluginMenu, rows: List<ActionRow>) {
+        val headerItem = state.headerItem
+        // `getSubItem` reads the layout without creating it, and every row this menu has is lazy,
+        // so nothing else would have
+        val popupLayout = headerItem.popupLayout
+        state.pendingIconBinder?.let {
+            popupLayout.removeOnAttachStateChangeListener(it)
+            state.pendingIconBinder = null
+        }
+        if (rows.isEmpty()) return
+        val unbound = ArrayList<ActionRow>()
+        for (row in rows) {
+            val cell = headerItem.getSubItem(PluginActions.optionIdFor(row.key)) as? ActionBarMenuSubItem
+            if (cell == null) unbound.add(row)
+            else PluginIcons.setIcon(cell, row.text, row.icon, row.owner, R.drawable.msg_settings_old)
+        }
+        if (unbound.isEmpty()) return
+        val binder = object : View.OnAttachStateChangeListener {
+            override fun onViewAttachedToWindow(view: View) {
+                view.removeOnAttachStateChangeListener(this)
+                if (state.pendingIconBinder === this) state.pendingIconBinder = null
+                for (row in unbound) {
+                    val cell = headerItem.getSubItem(PluginActions.optionIdFor(row.key)) as? ActionBarMenuSubItem ?: continue
+                    PluginIcons.setIcon(cell, row.text, row.icon, row.owner, R.drawable.msg_settings_old)
+                }
+            }
+
+            override fun onViewDetachedFromWindow(view: View) = Unit
+        }
+        state.pendingIconBinder = binder
+        popupLayout.addOnAttachStateChangeListener(binder)
+    }
+
+    /** the back row and the gap under it stay; a plugin row takes its icon's resources with it */
+    private fun clearSubmenuRows(submenu: ItemOptions) {
+        val layout = submenu.linearLayout
+        while (layout.childCount > SUBMENU_HEADER_CELLS) {
+            val cell = layout.getChildAt(SUBMENU_HEADER_CELLS)
+            if (cell is ActionBarMenuSubItem) PluginIcons.clearIcon(cell.imageView)
+            layout.removeViewAt(SUBMENU_HEADER_CELLS)
+        }
+    }
+
+    private fun updatePluginSubmenu(activity: ChatActivity, state: ChatPluginMenu, rows: List<ActionRow>) {
+        val headerItem = state.headerItem
+        if (rows.isEmpty()) {
+            if (state.swipeBackShown) headerItem.hideSubItem(ACTION_PLUGIN_ACTIONS)
+            state.swipeBackShown = false
+            // the cells that are left would otherwise hold the engine that drew them until the chat closes
+            state.submenu?.let(::clearSubmenuRows)
+            return
+        }
+        val submenu = state.submenu ?: ItemOptions.swipeback(headerItem.popupLayout, activity.resourceProvider).apply {
+            add(R.drawable.ic_ab_back, LocaleController.getString(R.string.Back)) {
+                headerItem.popupLayout.swipeBack?.closeForeground()
+            }
+            addGap()
+            state.submenu = this
+        }
+        clearSubmenuRows(submenu)
+        for (row in rows) {
+            PluginIcons.addMenuItem(
+                submenu,
+                row.text,
+                row.icon,
+                row.owner,
+                R.drawable.msg_settings_old,
+            ) {
+                PluginActions.dispatch(row, state.surface)
+                headerItem.closeSubMenu()
+            }
+        }
+        if (headerItem.hasSubItem(ACTION_PLUGIN_ACTIONS)) {
+            headerItem.showSubItem(ACTION_PLUGIN_ACTIONS)
+        } else {
             headerItem.inu_lazilyAddSwipeBackItem(
                 ACTION_PLUGIN_ACTIONS,
                 R.drawable.msg_settings_old,
@@ -252,6 +354,7 @@ object ChatActionsHelper {
                 submenu.linearLayout,
             )
         }
+        state.swipeBackShown = true
     }
 
     /**
@@ -383,8 +486,9 @@ object ChatActionsHelper {
                 return true
             }
         }
-        val row = PluginActions.rowAt(pluginRows[activity].orEmpty(), id) ?: return false
-        PluginActions.dispatch(row, pluginSurface(activity))
+        val state = pluginMenus[activity] ?: return false
+        val row = PluginActions.rowAt(state.rows, id) ?: return false
+        PluginActions.dispatch(row, state.surface)
         return true
     }
 
@@ -735,9 +839,7 @@ object ChatActionsHelper {
                     PluginIcons.setIcon(cell, row.text, row.icon, row.owner, R.drawable.msg_settings_old)
                     overflow.setSubItemShown(PluginActions.optionIdFor(row.key), true)
                 }
-                while (state.submenu.linearLayout.childCount > 2) {
-                    state.submenu.linearLayout.removeViewAt(2)
-                }
+                clearSubmenuRows(state.submenu)
                 val submenuRows = PluginActions.orderRows(PluginActions.KIND_MESSAGE, enabled, false)
                 for (row in submenuRows) {
                     PluginIcons.addMenuItem(
