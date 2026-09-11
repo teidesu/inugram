@@ -1093,7 +1093,8 @@ object FontLibrary {
     // Bumped (UI thread only) whenever the editor roster changes; in-flight PaintTypeface roster
     // builds compare against it at commit time and drop stale results.
     @Volatile
-    private var rosterGeneration = 0
+    var rosterGeneration = 0
+        private set
 
     /** True if no roster change happened since [generation] was handed out by [buildEditorRoster]. */
     @JvmStatic

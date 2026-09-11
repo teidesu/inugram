@@ -124,6 +124,11 @@ object PluginCanvas {
         private val canvases = HashMap<Long, Surface>()
         private val images = HashMap<Long, Bitmap>()
         private val fonts = HashMap<String, Typeface>()
+        private val typefaces = HashMap<String, Typeface>()
+        private var typefaceRoster = FontLibrary.rosterGeneration
+        private val scratch = Paint(Paint.ANTI_ALIAS_FLAG)
+        private val scratchBounds = Rect()
+        private val scratchMetrics = Paint.FontMetrics()
         private var nextFile = 0L
 
         private class Surface(val bitmap: Bitmap) {
@@ -473,13 +478,28 @@ object PluginCanvas {
         }
 
         private fun applyFont(paint: Paint, wire: String) {
-            val fields = wire.split(FIELD)
-            paint.textSize = fields.getOrNull(0)?.toFloatOrNull() ?: 10f
-            val weight = fields.getOrNull(1)?.toIntOrNull() ?: 400
-            val italic = fields.getOrNull(2) == "1"
+            val sizeEnd = wire.indexOf(FIELD)
+            if (sizeEnd < 0) {
+                paint.textSize = 10f
+                paint.isFakeBoldText = false
+                paint.typeface = Typeface.DEFAULT
+                return
+            }
+            paint.textSize = wire.substring(0, sizeEnd).toFloatOrNull() ?: 10f
             paint.isFakeBoldText = false
-            val families = fields.getOrNull(4)?.split(ITEM).orEmpty().filter { it.isNotEmpty() }
-            paint.typeface = typefaceFor(families, weight, italic)
+            if (!FontLibrary.isRosterCurrent(typefaceRoster)) {
+                typefaces.clear()
+                typefaceRoster = FontLibrary.rosterGeneration
+            }
+            // every measure and every text command carries the same font, and resolving one reaches
+            // the font roster, whose entries answer their name through the localized strings
+            paint.typeface = typefaces.getOrPut(wire.substring(sizeEnd + 1)) {
+                val fields = wire.split(FIELD)
+                val weight = fields.getOrNull(1)?.toIntOrNull() ?: 400
+                val italic = fields.getOrNull(2) == "1"
+                val families = fields.getOrNull(4)?.split(ITEM).orEmpty().filter { it.isNotEmpty() }
+                typefaceFor(families, weight, italic)
+            }
         }
 
         private fun typefaceFor(families: List<String>, weight: Int, italic: Boolean): Typeface {
@@ -511,7 +531,8 @@ object PluginCanvas {
         }
 
         private fun baselineOffset(paint: Paint, baseline: Int): Float {
-            val metrics = paint.fontMetrics
+            val metrics = scratchMetrics
+            paint.getFontMetrics(metrics)
             return when (baseline) {
                 0 -> -metrics.top
                 1 -> -metrics.ascent * 0.8f
@@ -521,24 +542,36 @@ object PluginCanvas {
             }
         }
 
+        /** the index of the [n]th separator in [arg], counting from one */
+        private fun separatorAt(arg: String, n: Int): Int {
+            var at = -1
+            repeat(n) {
+                at = arg.indexOf(FIELD, at + 1)
+                if (at < 0) refuse("internal", "canvas: malformed measure")
+            }
+            return at
+        }
+
         private fun measure(arg: String): String {
-            val fields = arg.split(FIELD)
             // the font wire is five fields of its own, then the alignment, then the text - which may
             // contain anything, including a field separator, so it is taken as the tail
-            val font = fields.take(5).joinToString(FIELD.toString())
-            val align = fields.getOrNull(5)?.toIntOrNull() ?: 0
-            val text = fields.drop(6).joinToString(FIELD.toString())
-            val paint = Paint(Paint.ANTI_ALIAS_FLAG)
+            val fontEnd = separatorAt(arg, 5)
+            val alignEnd = separatorAt(arg, 6)
+            val font = arg.substring(0, fontEnd)
+            val align = arg.substring(fontEnd + 1, alignEnd).toIntOrNull() ?: 0
+            val text = arg.substring(alignEnd + 1)
+            val paint = scratch
             applyFont(paint, font)
             val width = paint.measureText(text)
-            val bounds = Rect()
+            val bounds = scratchBounds
             paint.getTextBounds(text, 0, text.length, bounds)
             val anchor = when (align) {
                 3, 1 -> width
                 4 -> width / 2f
                 else -> 0f
             }
-            val metrics = paint.fontMetrics
+            val metrics = scratchMetrics
+            paint.getFontMetrics(metrics)
             return "J" + JSONObject()
                 .put("width", width.toDouble())
                 .put("actualBoundingBoxLeft", (anchor - bounds.left).toDouble())
@@ -651,7 +684,7 @@ object PluginCanvas {
                 val loaded = runCatching { Typeface.createFromFile(path) }
                 EngineDispatch.onEngine(plugin, engine) {
                     val wire = loaded.fold(
-                        onSuccess = { fonts[family] = it; "" },
+                        onSuccess = { fonts[family] = it; typefaces.clear(); "" },
                         onFailure = { PluginWire.encodePluginError("invalid-argument", "canvas: this is not a font file") },
                     )
                     engine.canvasResult(requestId, wire)
@@ -707,6 +740,7 @@ object PluginCanvas {
             for (image in images.values) image.recycle()
             images.clear()
             fonts.clear()
+            typefaces.clear()
         }
     }
 
