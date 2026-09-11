@@ -230,6 +230,27 @@ impl TestReadsHost {
       .join(&SEPARATOR.to_string())
   }
 
+  /// id 7 exists wherever it is asked for, including the common box; everything else is a `null`
+  /// in the slot it was asked about, which is what the fetch has to keep lined up
+  fn messages_wire(&self, parts: Vec<&str>) -> String {
+    if parts[0] != "D0" && self.dialog_id(parts[0]).and_then(|id| self.entity(id)).is_none() {
+      return NOT_CACHED.to_string();
+    }
+    parts[1..]
+      .iter()
+      .map(|id| {
+        if *id != "7" {
+          return "N".to_string();
+        }
+        self.handle_wire(FakeObject {
+          name: "message".to_string(),
+          fields: vec![("id".to_string(), "I7".to_string()), ("message".to_string(), "Shello".to_string())],
+        })
+      })
+      .collect::<Vec<_>>()
+      .join(&SEPARATOR.to_string())
+  }
+
   fn dialog_page_wire(&self, payload: &str) -> String {
     // one full page, then one short one - which is what makes `next` go null exactly once
     if payload.is_empty() {
@@ -262,6 +283,7 @@ impl TestReadsHost {
         let limit = parts.get(1).and_then(|l| l.parse().ok()).unwrap_or(0usize);
         self.history_wire(parts[0], limit)
       }
+      OP_FETCH_MESSAGES => self.messages_wire(parts),
       // the cursor payload rust appends lands after the argument's own three parts
       OP_DIALOGS => self.dialog_page_wire(parts.get(3).copied().unwrap_or("")),
       // the selector is what the prelude builds, and `fetch_log` is where a test reads it back;
@@ -507,8 +529,8 @@ fn every_getter_gates_on_its_own_account_read_scope() {
   for (call, scope) in [
     ("inu.account().getMe()", "self"),
     ("inu.account().getDialog('me')", "dialogs"),
-    ("inu.account().getMessage('me', 7)", "messages"),
-    ("inu.account().getMessages('me', [7])", "messages"),
+    ("inu.account().getMessagesCached('me', 7)", "messages"),
+    ("inu.account().getMessagesCached('me', [7])", "messages"),
   ] {
     assert_eq!(
       catch_json(&ctx, call),
@@ -547,7 +569,7 @@ fn naming_yourself_takes_the_self_scope_on_top_of_the_reads_own() {
     "getPeer('self')",
     "getUsers([222, 'me'])",
     "getDialog('me')",
-    "getMessage('me', 7)",
+    "getMessagesCached('me', 7)",
     "getDraft('me')",
     "resolvePeerCached('me')",
     "resolvePeerCached({ _: 'user', id: '111', self: true })",
@@ -622,7 +644,7 @@ fn an_input_peer_like_is_normalized_before_it_crosses() {
 #[test]
 fn a_peer_that_names_nothing_is_an_invalid_argument_and_never_crosses() {
   let (_rt, ctx, host, _state, _accounts) = setup(ALL_GRANTS);
-  for peer in ["0", "'0'", "null", "undefined", "{}", "[]", "1.5", "'not a name!'", "'@'", "true", "NaN"] {
+  for peer in ["null", "undefined", "{}", "[]", "1.5", "'not a name!'", "'@'", "true", "NaN"] {
     let caught = catch_json(&ctx, &format!("inu.account().getUser({peer})"));
     assert!(caught.starts_with(r#"[true,"invalid-argument""#), "peer {peer}: {caught}");
   }
@@ -637,7 +659,7 @@ fn a_miss_is_null_rather_than_an_error() {
       &ctx,
       r#"(() => { const a = inu.account(); return [
                 a.getUser(4242), a.getChat(-4242), a.getPeer(4242), a.getDialog(-4242),
-                a.getMessage(-4242, 7), a.resolvePeerCached(4242),
+                a.getMessagesCached(-4242, 7), a.resolvePeerCached(4242),
             ] })()"#
     ),
     "[null,null,null,null,null,null]",
@@ -724,13 +746,51 @@ fn a_message_comes_back_wrapped_and_a_miss_stays_null() {
     eval_json(
       &ctx,
       r#"(() => {
-                const m = inu.account().getMessage('me', 7);
-                return [m instanceof inu.Message, m.id, m.text, m.raw._, inu.account().getMessage('me', 8)];
+                const m = inu.account().getMessagesCached('me', 7);
+                return [m instanceof inu.Message, m.id, m.text, m.raw._, inu.account().getMessagesCached('me', 8)];
             })()"#
     ),
     r#"[true,7,"hello","message",null]"#,
   );
-  assert_eq!(eval_json(&ctx, "inu.account().getMessages('me', [7, 8]).map((m) => m && m.id)"), "[7,null]",);
+  assert_eq!(
+    eval_json(&ctx, "inu.account().getMessagesCached('me', [7, 8]).map((m) => m && m.id)"),
+    "[7,null]",
+  );
+}
+
+/// `0` crosses as the dialog id it is. The message reads give it a meaning - the common box - and
+/// everywhere else it is a dialog nothing has, which is a miss rather than a refusal
+#[test]
+fn zero_is_a_dialog_id_that_only_the_message_reads_give_a_meaning() {
+  let (_rt, ctx, host, _state, _accounts) = setup(ALL_GRANTS);
+  eval_void(&ctx, "inu.account().getMessagesCached(0, 7); inu.account().getMessagesCached(0, [7, 8]);");
+  {
+    let reads = host.reads.borrow();
+    assert_eq!(reads[0].2, "D0\n7");
+    assert_eq!(reads[1].2, "D0\n7\n8");
+  }
+  // the string form is the same id, and neither is a refusal any more
+  assert_eq!(eval_json(&ctx, "inu.account().getUser(0)"), "null");
+  assert_eq!(eval_json(&ctx, "inu.account().getDialog('0')"), "null");
+  assert_eq!(host.reads.borrow().last().unwrap().2, "D0");
+}
+
+/// one id is one answer and a list is a list, on both halves
+#[test]
+fn the_message_reads_take_one_id_or_a_list_of_them() {
+  let (_rt, ctx, _host, _state, _accounts) = setup(ALL_GRANTS);
+  assert_eq!(eval_json(&ctx, "inu.account().getMessagesCached('me', 7).id"), "7");
+  assert_eq!(eval_json(&ctx, "inu.account().getMessagesCached('me', [7]).length"), "1");
+
+  let out = run_async(
+    ASYNC_GRANTS,
+    r#"const a = inu.account();
+           a.getMessages('me', 7).then((m) => __out.push(m === null ? 'null' : `one:${m.id}`));
+           a.getMessages('me', [7, 8]).then((list) => __out.push(`many:${list.map((m) => m && m.id).join(',')}`));
+           a.getMessages(0, 7).then((m) => __out.push(`box:${m && m.id}`));
+           a.getMessages(4242, [7]).catch((e) => __out.push(e.code));"#,
+  );
+  assert_eq!(out, r#"["box:7","many:7,","not-found","one:7"]"#);
 }
 
 #[test]
@@ -949,7 +1009,7 @@ fn a_bad_argument_rejects_rather_than_throws() {
     ASYNC_GRANTS,
     r#"const a = inu.account();
            const push = (label) => (e) => __out.push(`${label}:${e.code}`);
-           a.getHistory(0).catch(push('peer'));
+           a.getHistory(null).catch(push('peer'));
            a.getHistory('me', { limit: -1 }).catch(push('limit'));
            a.getHistory('me', { offsetId: 1.5 }).catch(push('offsetId'));
            a.getDialogs('main').catch(push('options'));
@@ -1306,7 +1366,7 @@ fn the_bundled_reads_test_plugin_passes() {
   // exact rather than a floor: nothing here may SKIP against this fake, so a block that
   // stopped running - or a fixture that stopped existing - would otherwise take its
   // assertions with it and still pass
-  crate::testing::harness::assert_oracle_exact(&lines, "reads test done", 72);
+  crate::testing::harness::assert_oracle_exact(&lines, "reads test done", 75);
 }
 
 #[test]
@@ -1327,7 +1387,7 @@ fn the_bundled_async_reads_test_plugin_passes() {
   crate::testing::harness::assert_oracle_exact_skipping(
     &lines,
     "async reads test done",
-    35,
+    37,
     &[
       "SKIP the service chat: no telegram chat here",
       "SKIP getTopics answers with a page: no forum among the first 100 dialogs",

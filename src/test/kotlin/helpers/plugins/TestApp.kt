@@ -5,6 +5,7 @@ import java.io.File
 import org.telegram.messenger.FileLoader
 import org.telegram.messenger.ImageLocation
 import org.telegram.messenger.MediaDataController
+import org.telegram.messenger.MessageObject
 import org.telegram.messenger.MessagesController
 import org.telegram.messenger.UserConfig
 import org.telegram.tgnet.TLRPC
@@ -51,6 +52,7 @@ object TestApp {
             val controller = MessagesController.getInstance(account)
             controller.dialogs_dict.clear()
             controller.dialogMessage.clear()
+            controller.dialogMessagesByIds.clear()
             clearMap(controller, "users")
             clearMap(controller, "chats")
             clearMap(controller, "objectsByUsernames")
@@ -128,6 +130,15 @@ object TestApp {
         val controller = MessagesController.getInstance(account)
         val field = MessagesController::class.java.getDeclaredField("fullChats").apply { isAccessible = true }
         (field.get(controller) as LongSparseArray<TLRPC.ChatFull>).put(chatId, full)
+    }
+
+    /** both views the app keeps of its chat list's own messages, the way `loadDialogs` fills them */
+    fun cacheDialogMessage(account: Int, dialogId: Long, message: TLRPC.Message) {
+        touch(account)
+        val controller = MessagesController.getInstance(account)
+        val cached = MessageObject(account, message, false, false)
+        controller.dialogMessage.put(dialogId, arrayListOf(cached))
+        controller.dialogMessagesByIds.put(message.id, cached)
     }
 
     fun putDialog(dialog: TLRPC.Dialog, account: Int = 0) {

@@ -1,6 +1,15 @@
 (natives, shared, Message, PluginError, ops) => {
   const {
-    baseName, invalid, SEPARATOR, toSpec, toSpecList, toMessageId, toMessageIds, toOptions, toCount, toFieldNames,
+    baseName,
+    invalid,
+    SEPARATOR,
+    toSpec,
+    toSpecList,
+    toMessageId,
+    toMessageIds,
+    toOptions,
+    toCount,
+    toFieldNames,
     slotOf,
   } = shared
 
@@ -135,11 +144,6 @@
       return natives.getDialog(slotOf(this, 'getDialog'), toSpec(peer))
     },
 
-    getMessage(peer, messageId) {
-      const slot = slotOf(this, 'getMessage')
-      return wrap(natives.getMessage(slot, toSpec(peer), toMessageId(messageId, 'getMessage')))
-    },
-
     getUsers(peers) {
       return natives.getUsers(slotOf(this, 'getUsers'), toSpecList(peers, 'getUsers'))
     },
@@ -148,10 +152,25 @@
       return natives.getChats(slotOf(this, 'getChats'), toSpecList(peers, 'getChats'))
     },
 
+    getMessagesCached(peer, messageIds) {
+      const slot = slotOf(this, 'getMessagesCached')
+      const spec = toSpec(peer)
+      if (!Array.isArray(messageIds)) {
+        return wrap(natives.getMessage(slot, spec, toMessageId(messageIds, 'getMessagesCached')))
+      }
+      const ids = toMessageIds(messageIds, 'getMessagesCached').join(SEPARATOR)
+      return natives.getMessages(slot, spec, ids).map(wrap)
+    },
+
     getMessages(peer, messageIds) {
-      const slot = slotOf(this, 'getMessages')
-      const ids = toMessageIds(messageIds, 'getMessages').join(SEPARATOR)
-      return natives.getMessages(slot, toSpec(peer), ids).map(wrap)
+      const one = !Array.isArray(messageIds)
+      return fetchWith(this, ops.messages, 'getMessages', () => {
+        const spec = toSpec(peer)
+        const ids = one
+          ? [toMessageId(messageIds, 'getMessages')]
+          : toMessageIds(messageIds, 'getMessages')
+        return [[spec, ...ids].join(SEPARATOR), '']
+      }).then(messages => (one ? wrap(messages[0] ?? null) : messages.map(wrap)))
     },
 
     resolvePeerCached(peer) {

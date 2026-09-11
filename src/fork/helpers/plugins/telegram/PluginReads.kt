@@ -14,9 +14,12 @@ import desu.inugram.helpers.security.ParanoiaHelper
 import org.json.JSONArray
 import org.json.JSONObject
 import org.telegram.messenger.AndroidUtilities
+import org.telegram.messenger.ChatObject
 import org.telegram.messenger.DialogObject
 import org.telegram.messenger.MediaDataController
+import org.telegram.messenger.MessageObject
 import org.telegram.messenger.MessagesController
+import org.telegram.messenger.MessagesStorage
 import org.telegram.messenger.UserConfig
 import org.telegram.messenger.Utilities
 import org.telegram.tgnet.ConnectionsManager
@@ -60,6 +63,7 @@ object PluginReads {
     const val OP_TOPICS = 15
     const val OP_DIALOGS_CACHED = 16
     const val OP_CHAT_FOLDERS = 17
+    const val OP_FETCH_MESSAGES = 18
 
     /** what `archive` selects, keep in sync with rust `reads::ARCHIVE_*` and `reads.js` */
     private const val ARCHIVE_EXCLUDE = 0
@@ -91,10 +95,18 @@ object PluginReads {
         OP_TOPICS to "dialogs",
         OP_DIALOGS_CACHED to "dialogs",
         OP_CHAT_FOLDERS to "dialogs",
+        OP_FETCH_MESSAGES to "messages",
     )
 
     /** what telegram itself accepts for one page, and what an omitted `limit` asks for */
     private const val PAGE_LIMIT = 100
+
+    /**
+     * The dialog id the message reads read as the common message box rather than as a dialog:
+     * telegram numbers every user chat and basic group out of one sequence per account, so an id
+     * from one of those names a message on its own. No dialog has it, and nothing else accepts it.
+     */
+    private const val COMMON_BOX = 0L
 
     /** the cap `common.d.ts` states for every api array, mirrored from rust `arguments::ARRAY_LIMIT` */
     private const val ARRAY_LIMIT = 65536
@@ -218,13 +230,38 @@ object PluginReads {
         messageId: Int?,
     ): TLRPC.Message? {
         if (messageId == null) return null
-        val id = PeerSpecs.dialogIdOf(controller, accountId, spec) ?: return null
-        val cached = controller.dialogMessage.get(id) ?: return null
-        for (message in cached) {
-            if (message != null && message.getId() == messageId) return message.messageOwner
-        }
-        return null
+        val dialogId = PeerSpecs.dialogIdOf(controller, accountId, spec) ?: return null
+        return cachedMessage(controller, dialogId.takeIf { it != COMMON_BOX }, messageId)
     }
+
+    /**
+     * What [MessagesController] holds is the chat list's own last message per dialog and nothing
+     * else, in two views of the same objects: [MessagesController.dialogMessage] keyed by dialog,
+     * and [MessagesController.dialogMessagesByIds] keyed by the bare message id.
+     *
+     * The second is the one the common box wants, and also the one that needs guarding: a channel
+     * numbers its own messages from 1, so every channel's ids collide there with every other
+     * channel's and with the common box. Whatever it answers therefore only counts once the dialog
+     * it actually belongs to is the dialog that was asked about - and a common-box read
+     * ([dialogId] null) refuses a channel message outright rather than handing back whichever one
+     * happens to carry that number.
+     */
+    private fun cachedMessage(controller: MessagesController, dialogId: Long?, messageId: Int): TLRPC.Message? {
+        if (dialogId != null) {
+            val cached = controller.dialogMessage.get(dialogId)
+            if (cached != null) {
+                for (message in cached) {
+                    if (message != null && message.getId() == messageId) return message.messageOwner
+                }
+            }
+        }
+        val byId = controller.dialogMessagesByIds.get(messageId)?.messageOwner ?: return null
+        if (dialogId != null) return byId.takeIf { MessageObject.getDialogId(it) == dialogId }
+        return byId.takeIf { isCommonBox(it) }
+    }
+
+    /** a channel's messages are numbered per channel; everything else shares one sequence per account */
+    private fun isCommonBox(message: TLRPC.Message): Boolean = (message.peer_id?.channel_id ?: 0L) == 0L
 
     /** a fresh `InputPeer`/`InputUser`/`InputChannel` as plain json, never a handle over the whole user or chat behind it */
     private fun inputPeerWire(
@@ -347,6 +384,7 @@ object PluginReads {
                 OP_TOPICS -> fetchTopics(call)
                 OP_DIALOGS_CACHED -> fetchCachedDialogs(call)
                 OP_CHAT_FOLDERS -> fetchChatFolders(call)
+                OP_FETCH_MESSAGES -> fetchMessages(call)
                 else -> PluginWire.encodePluginError("internal", "account fetch: unknown op $op")
             }
         } catch (e: NotResolved) {
@@ -530,6 +568,119 @@ object PluginReads {
             val messages = (response as? TLRPC.messages_Messages) ?: return@send ""
             call.cache(messages.users, messages.chats)
             mintEach(call.handles, messages.messages)
+        }
+    }
+
+    /**
+     * Memory, then the app's sqlite, then the network for whatever neither had. Each step narrows
+     * the id list it hands on, and exactly one [answer] is reached however far it gets.
+     */
+    private fun fetchMessages(call: Fetch): String? {
+        val spec = call.spec
+        val named = PeerSpecs.dialogIdOf(call.controller, call.accountId, spec) ?: notCached(spec)
+        val dialogId = named.takeIf { it != COMMON_BOX }
+        val ids = call.parts.drop(1).map {
+            it.toIntOrNull() ?: refuse("invalid-argument", "getMessages: '$it' is not a message id")
+        }
+        val cached = ids.mapNotNull { id -> cachedMessage(call.controller, dialogId, id)?.let { id to it } }.toMap()
+        if (cached.size == ids.size) {
+            answerMessages(call, ids, cached)
+            return null
+        }
+
+        val accountId = call.accountId
+        MessagesStorage.getInstance(accountId).storageQueue.postRunnable {
+            val stored = readStoredMessages(accountId, dialogId, ids.filterNot(cached::containsKey))
+            // back to globalQueue before anything touches the controller, the handle table or an rpc
+            Utilities.globalQueue.postRunnable {
+                val known = cached + stored
+                val missing = ids.filterNot(known::containsKey)
+                if (missing.isEmpty()) {
+                    answerMessages(call, ids, known)
+                } else {
+                    requestMessages(call, dialogId, ids, known, missing)
+                }
+            }
+        }
+        return null
+    }
+
+    private fun answerMessages(call: Fetch, ids: List<Int>, found: Map<Int, TLRPC.Message>) {
+        answer(call) { mintEach(call.handles, ids.map(found::get)) }
+    }
+
+    /**
+     * `messages_v2` is keyed by `(mid, uid)` and carries `is_channel`, which is how stock itself
+     * reads a common-box message by id alone. Every id here came through `toMessageId`, so it is an
+     * integer before it reaches the statement.
+     */
+    private fun readStoredMessages(accountId: Int, dialogId: Long?, ids: List<Int>): Map<Int, TLRPC.Message> {
+        if (ids.isEmpty()) return emptyMap()
+        val database = MessagesStorage.getInstance(accountId).getDatabase() ?: return emptyMap()
+        val selfId = UserConfig.getInstance(accountId).getClientUserId()
+        val scope = if (dialogId != null) "uid = $dialogId" else "is_channel = 0"
+        val found = HashMap<Int, TLRPC.Message>()
+        try {
+            val cursor = database.queryFinalized(
+                "SELECT data, mid, date, uid FROM messages_v2 WHERE mid IN (${ids.joinToString(",")}) AND $scope",
+            )
+            try {
+                while (cursor.next()) {
+                    val data = cursor.byteBufferValue(0) ?: continue
+                    val message = TLRPC.Message.TLdeserialize(data, data.readInt32(false), false)
+                    message?.readAttachPath(data, selfId)
+                    data.reuse()
+                    if (message == null) continue
+                    message.id = cursor.intValue(1)
+                    message.date = cursor.intValue(2)
+                    message.dialog_id = cursor.longValue(3)
+                    found[message.id] = message
+                }
+            } finally {
+                cursor.dispose()
+            }
+        } catch (e: Exception) {
+            // stock's own thread, and a read that failed here is a miss the network step covers
+            return found
+        }
+        return found
+    }
+
+    /**
+     * `channels.getMessages` for a channel, because its ids mean nothing without it, and
+     * `messages.getMessages` for everything else - including a named user or basic group, whose
+     * ids are common-box ids anyway. A named peer still filters what comes back, so an id that
+     * belongs to a different dialog answers `null` rather than that other message.
+     */
+    private fun requestMessages(
+        call: Fetch,
+        dialogId: Long?,
+        ids: List<Int>,
+        known: Map<Int, TLRPC.Message>,
+        missing: List<Int>,
+    ) {
+        val chat = dialogId?.takeIf { it < 0 }?.let { call.controller.getChat(-it) }
+        val request: TLObject = if (chat != null && ChatObject.isChannel(chat)) {
+            TLRPC.TL_channels_getMessages().apply {
+                channel = call.peer(kind = PeerSpecs.KIND_CHANNEL) as TLRPC.InputChannel
+                id.addAll(missing)
+            }
+        } else {
+            TLRPC.TL_messages_getMessages().apply { id.addAll(missing) }
+        }
+        try {
+            send(call, request) { response ->
+                val messages = response as? TLRPC.messages_Messages ?: return@send mintEach(call.handles, ids.map(known::get))
+                call.cache(messages.users, messages.chats)
+                // an id the account cannot see comes back as `messageEmpty`, which is a `null` in
+                // the slot it was asked about rather than a message
+                val fetched = messages.messages
+                    .filter { it !is TLRPC.TL_messageEmpty && (dialogId == null || MessageObject.getDialogId(it) == dialogId) }
+                    .associateBy { it.id }
+                mintEach(call.handles, ids.map { known[it] ?: fetched[it] })
+            }
+        } catch (e: NotResolved) {
+            answer(call) { e.wire }
         }
     }
 

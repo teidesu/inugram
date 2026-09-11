@@ -42,7 +42,13 @@ object PeerSpecs {
         return MessagesController.getInstance(accountId)
     }
 
-    /** `null` when the spec names a username the app has never seen; never fetches */
+    /**
+     * `null` when the spec names a username the app has never seen; never fetches.
+     *
+     * `0` is a dialog id no dialog has, and the message reads give it a meaning of its own - the
+     * common message box, the one sequence telegram numbers every user chat and basic group out
+     * of. Everything else treats it as the miss it is, and [buildInputPeer] refuses it outright.
+     */
     fun dialogIdOf(controller: MessagesController, accountId: Int, spec: String): Long? {
         if (spec.isEmpty()) return null
         val payload = spec.substring(1)

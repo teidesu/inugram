@@ -85,7 +85,7 @@ inu.withCurrentAccount((account) => {
   console.log(`logged in as ${me.first_name} (@${me.username ?? 'none'})`)
 
   const saved: tl.TypeDialog | null = account.getDialog('me')
-  const top = saved === null || saved._ !== 'dialog' ? null : account.getMessage(saved.peer, saved.top_message)
+  const top = saved === null || saved._ !== 'dialog' ? null : account.getMessagesCached(saved.peer, saved.top_message)
   if (top !== null) console.log(`last saved message: ${top.text.slice(0, 40)}`)
 
   const contacts: (tl.TypeUser | null)[] = account.getUsers(['me', '@durov', 777000])

@@ -75,7 +75,9 @@ const SERVICE_PEER = 777000
 
   // -- an async member fails asynchronously, whatever the argument got wrong --
 
-  await expectRejects('getHistory of a non-peer', 'invalid-argument', () => acc.getHistory(0))
+  // @ts-expect-error
+  await expectRejects('getHistory of a non-peer', 'invalid-argument', () => acc.getHistory(null))
+  await expectRejects('getHistory of dialog 0 is a miss', 'not-found', () => acc.getHistory(0))
   await expectRejects('a negative limit', 'invalid-argument', () => acc.getHistory('me', { limit: -1 }))
   await expectRejects('a fractional offsetId', 'invalid-argument', () => acc.getHistory('me', { offsetId: 1.5 }))
   // @ts-expect-error
@@ -84,7 +86,9 @@ const SERVICE_PEER = 777000
   await expectRejects('getUserFull of a non-peer', 'invalid-argument', () => acc.getUserFull(null))
 
   // getDraft is the one synchronous member of this group, so it throws where the rest reject
-  expectThrows('getDraft of a non-peer', 'invalid-argument', () => acc.getDraft(0))
+  // @ts-expect-error
+  expectThrows('getDraft of a non-peer', 'invalid-argument', () => acc.getDraft(null))
+  check('getDraft of dialog 0 is a miss', acc.getDraft(0) === null)
 
   // -- what no amount of resolving would fix --
 

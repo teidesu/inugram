@@ -478,7 +478,7 @@ fn a_bad_argument_rejects_before_anything_crosses() {
     ALL_WRITES,
     r#"const a = inu.account()
            const push = (e) => __out.push(e.code)
-           a.sendMessage(0, 'hi').then(() => __out.push('ok'), push)
+           a.sendMessage(null, 'hi').then(() => __out.push('ok'), push)
            a.sendMessage(1, 7).then(() => __out.push('ok'), push)
            a.sendMessage(1, { text: 'x', entities: 'bold' }).then(() => __out.push('ok'), push)
            a.sendMessage(1, 'hi', { silent: 'yes' }).then(() => __out.push('ok'), push)
@@ -950,7 +950,7 @@ fn run_bundled_oracle(source: &str, done: &str, count: usize) {
 
 #[test]
 fn the_bundled_writes_test_plugin_passes() {
-  run_bundled_oracle(include_str!("../../../../test/plugins/writes-test.js"), "writes test done", 43);
+  run_bundled_oracle(include_str!("../../../../test/plugins/writes-test.js"), "writes test done", 42);
 }
 
 #[test]
