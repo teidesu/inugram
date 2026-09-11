@@ -30,6 +30,7 @@ struct FakeCounts {
   gets: RefCell<Vec<String>>,
   has: RefCell<Vec<String>>,
   sets: RefCell<Vec<String>>,
+  byte_sets: RefCell<Vec<(String, Vec<u8>)>>,
   own_keys: Cell<u32>,
 }
 
@@ -233,6 +234,17 @@ impl TlHost for FakeTlHost {
     result
   }
 
+  /// the host stores what it was handed; recording it separately is how a test says the bytes
+  /// never went through `tl_set`'s wire
+  fn tl_set_bytes(&self, handle: i64, key: &str, value: &[u8]) -> Option<String> {
+    self.counts.byte_sets.borrow_mut().push((key.to_string(), value.to_vec()));
+    self.tl_set(
+      handle,
+      key,
+      &format!("Y{}", base64::Engine::encode(&base64::engine::general_purpose::STANDARD, value)),
+    )
+  }
+
   fn tl_set(&self, handle: i64, key: &str, value_wire: &str) -> Option<String> {
     self.counts.sets.borrow_mut().push(key.to_string());
     let (entry_rc, read_only) = self.lookup(handle)?;
@@ -378,6 +390,24 @@ fn object_reads_type_name_fields_has_and_own_keys() {
     keys.sort();
     assert_eq!(keys, vec!["_".to_string(), "name".to_string(), "x".to_string()]);
   });
+}
+
+/// the write half of `TAG_BYTES`: a `Uint8Array` reaches the host as bytes, never as base64 in a
+/// wire string, and everything that is not one still takes the wire
+#[test]
+fn assigning_a_uint8array_crosses_as_bytes() {
+  let (_rt, ctx) = make_ctx();
+  let host = Rc::new(FakeTlHost::default());
+  let id = host.mint(object_entry("foo", &[]));
+  let views = views_of(&host);
+
+  ctx.with(|ctx| {
+    bind_object(&ctx, &views, "obj", ViewLife::Dispatch, id);
+    ctx.eval::<(), _>("obj.bytes = new Uint8Array([1, 2, 250]); obj.name = 'not bytes'").unwrap();
+  });
+
+  // exactly one write took the byte path, and it is the one holding bytes
+  assert_eq!(host.counts.byte_sets.borrow().clone(), vec![("bytes".to_string(), vec![1u8, 2, 250])]);
 }
 
 #[test]

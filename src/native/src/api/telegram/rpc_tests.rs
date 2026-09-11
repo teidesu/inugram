@@ -106,6 +106,13 @@ impl TlHost for TestHost {
     self.tl_fields.borrow_mut().insert(key.to_string(), value_wire.to_string());
     None
   }
+  fn tl_set_bytes(&self, handle: i64, key: &str, value: &[u8]) -> Option<String> {
+    self.tl_set(
+      handle,
+      key,
+      &format!("Y{}", base64::Engine::encode(&base64::engine::general_purpose::STANDARD, value)),
+    )
+  }
   fn tl_has(&self, handle: i64, key: &str) -> i32 {
     if handle != TEST_HANDLE {
       return -1;
@@ -2470,6 +2477,14 @@ mod bundled_oracles {
         }
       };
       result
+    }
+
+    fn tl_set_bytes(&self, handle: i64, key: &str, value: &[u8]) -> Option<String> {
+      self.tl_set(
+        handle,
+        key,
+        &format!("Y{}", base64::Engine::encode(&base64::engine::general_purpose::STANDARD, value)),
+      )
     }
 
     fn tl_set(&self, handle: i64, key: &str, value_wire: &str) -> Option<String> {

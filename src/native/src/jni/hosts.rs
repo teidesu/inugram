@@ -153,6 +153,10 @@ impl TlHost for JniBridge {
     self.call_refusal("tlSet", self.on_tl_set, &[Arg::Long(handle), Arg::Str(key), Arg::Str(value_wire)])
   }
 
+  fn tl_set_bytes(&self, handle: i64, key: &str, value: &[u8]) -> Option<String> {
+    self.call_refusal("tlSetBytes", self.on_tl_set_bytes, &[Arg::Long(handle), Arg::Str(key), Arg::Bytes(Some(value))])
+  }
+
   fn tl_has(&self, handle: i64, key: &str) -> i32 {
     self.call_int("tlHas", self.on_tl_has, &[Arg::Long(handle), Arg::Str(key)], -1)
   }

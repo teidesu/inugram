@@ -258,6 +258,9 @@ impl TlHost for TestWritesHost {
   fn tl_set(&self, _handle: i64, _key: &str, _value: &str) -> Option<String> {
     Some("Pforbidden\n\n\n\nthe fake host takes no writes".to_string())
   }
+  fn tl_set_bytes(&self, _handle: i64, _key: &str, _value: &[u8]) -> Option<String> {
+    Some("Pforbidden\n\n\n\nthe fake host takes no writes".to_string())
+  }
   fn tl_has(&self, handle: i64, key: &str) -> i32 {
     self.handles.has(handle, key)
   }

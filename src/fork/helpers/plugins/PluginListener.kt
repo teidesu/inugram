@@ -250,6 +250,9 @@ interface TlListener {
     /** [valueWire] is `N` for `deleteProperty` */
     fun tlSet(handle: Long, key: String, valueWire: String): String?
 
+    /** assigning a `Uint8Array`, which crosses as bytes the way [readField] answers one */
+    fun tlSetBytes(handle: Long, key: String, value: ByteArray): String?
+
     /** proxy `has`/`getOwnPropertyDescriptor` existence probe: 1 = present, 0 = absent, -1 = expired */
     fun tlHas(handle: Long, key: String): Int
 
