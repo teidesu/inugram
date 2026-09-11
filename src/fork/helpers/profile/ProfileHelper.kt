@@ -15,6 +15,7 @@ import android.widget.Toast
 import androidx.collection.LongSparseArray
 import androidx.core.graphics.ColorUtils
 import desu.inugram.InuConfig
+import desu.inugram.helpers.plugins.ui.ActionKey
 import desu.inugram.helpers.plugins.ui.ActionRow
 import desu.inugram.helpers.WebAppHelper
 import desu.inugram.helpers.chat.BlockedMessagesHelper
@@ -41,6 +42,7 @@ import org.telegram.messenger.support.LongSparseLongArray
 import org.telegram.tgnet.TLObject
 import org.telegram.tgnet.TLRPC
 import org.telegram.ui.ActionBar.ActionBarMenuItem
+import org.telegram.ui.ActionBar.ActionBarMenuSubItem
 import org.telegram.ui.ActionBar.AlertDialog
 import org.telegram.ui.ActionBar.BaseFragment
 import org.telegram.ui.ActionBar.Theme
@@ -260,8 +262,18 @@ object ProfileHelper {
 
     // --- plugin rows (inu.registerProfileAction) ---
 
-    // keyed by the menu the rows were drawn into, since a profile is rebuilt rather than reused
-    private val pluginRows = WeakHashMap<ActionBarMenuItem, List<ActionRow>>()
+    /**
+     * keyed by the menu the rows were drawn into, since a profile is rebuilt rather than reused.
+     * The state never holds that menu back: it is this map's key, and a weak one.
+     */
+    private class ProfilePluginMenu(val surface: ActionSurface) {
+        var rows = emptyList<ActionRow>()
+        var shownKeys = emptyList<ActionKey>()
+        var generation = 0
+    }
+
+    private val pluginMenus = WeakHashMap<ActionBarMenuItem, ProfilePluginMenu>()
+    private var watchingActions = false
 
     /**
      * The rows land one globalQueue hop later (an engine cannot be entered from the ui thread), so
@@ -269,22 +281,57 @@ object ProfileHelper {
      * before the user taps the overflow.
      */
     private fun addPluginItems(otherItem: ActionBarMenuItem, currentAccount: Int, dialogId: Long) {
-        pluginRows.remove(otherItem)
+        val state = ProfilePluginMenu(ActionSurface.profile(currentAccount, dialogId))
+        pluginMenus[otherItem] = state
+        watchPluginActions()
         if (!PluginActions.hasRows(PluginActions.KIND_PROFILE)) return
-        val surface = ActionSurface.profile(currentAccount, dialogId)
-        PluginActions.render(PluginActions.KIND_PROFILE, surface) { rows ->
-            pluginRows[otherItem] = rows
-            rows.forEach { row ->
-                otherItem.addSubItem(
-                    PluginActions.optionIdFor(row.key), R.drawable.msg_settings_old, row.text,
-                )
+        refreshPluginItems(otherItem, state)
+    }
+
+    /**
+     * a profile's menu is built when it opens and lives as long as it, so a plugin that registers
+     * or drops a row while it is on screen - a reload, which dev mode does on every push - would
+     * otherwise be answered by rows drawn for an engine that is gone.
+     */
+    private fun watchPluginActions() {
+        if (watchingActions) return
+        watchingActions = true
+        PluginActions.watchCounts {
+            for ((otherItem, state) in pluginMenus.entries.toList()) refreshPluginItems(otherItem, state)
+        }
+    }
+
+    private fun refreshPluginItems(otherItem: ActionBarMenuItem, state: ProfilePluginMenu) {
+        // a render with no dynamic rows answers without leaving the ui thread, so two refreshes can
+        // land out of order
+        state.generation++
+        val generation = state.generation
+        PluginActions.render(PluginActions.KIND_PROFILE, state.surface) { rows ->
+            if (pluginMenus[otherItem] !== state || state.generation != generation) return@render
+            state.rows = rows
+            val keys = rows.map { it.key }
+            for (key in state.shownKeys) {
+                if (key !in keys) otherItem.hideSubItem(PluginActions.optionIdFor(key))
             }
+            for (row in rows) {
+                val id = PluginActions.optionIdFor(row.key)
+                if (otherItem.hasSubItem(id)) {
+                    // the cell outlives the engine that drew it, so a reload may have renamed it
+                    (otherItem.getSubItem(id) as? ActionBarMenuSubItem)
+                        ?.setTextAndIcon(row.text, R.drawable.msg_settings_old)
+                    otherItem.showSubItem(id)
+                } else {
+                    otherItem.addSubItem(id, R.drawable.msg_settings_old, row.text)
+                }
+            }
+            state.shownKeys = keys
         }
     }
 
     private fun dispatchPluginItem(id: Int, otherItem: ActionBarMenuItem?, currentAccount: Int, dialogId: Long): Boolean {
-        val row = PluginActions.rowAt(pluginRows[otherItem].orEmpty(), id) ?: return false
-        PluginActions.dispatch(row, ActionSurface.profile(currentAccount, dialogId))
+        val state = pluginMenus[otherItem] ?: return false
+        val row = PluginActions.rowAt(state.rows, id) ?: return false
+        PluginActions.dispatch(row, state.surface)
         return true
     }
 

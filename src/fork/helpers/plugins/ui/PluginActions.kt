@@ -323,20 +323,24 @@ object PluginActions {
     }
 
     /**
-     * the user tapped [row]. The engine that drew it is re-checked on the way in: a plugin
-     * disabled, uninstalled or reloaded while its menu was open has an engine nothing lists any
-     * more, and the row does nothing rather than reaching whatever took its token.
+     * the user tapped [row]. The row is resolved to a live registration on the way in, by key
+     * rather than by the engine that drew it: a reload leaves menus that outlive it holding rows
+     * whose engine nothing lists any more, and the same key on the new engine answers for them.
+     * A key nothing registers - the plugin was disabled, uninstalled, or dropped that action -
+     * does nothing rather than reaching whatever took its token.
      */
     fun dispatch(row: ActionRow, surface: ActionSurface) {
         Utilities.globalQueue.postRunnable {
-            val plugin = PluginManager.plugins().firstOrNull { it.engine === row.owner } ?: return@postRunnable
+            val live = registeredRows.getOrElse(row.key.kind) { emptyList() }
+                .firstOrNull { it.key == row.key } ?: return@postRunnable
+            val plugin = PluginManager.plugins().firstOrNull { it.engine === live.owner } ?: return@postRunnable
             val surfaceJson = try {
                 surface.getJson(plugin.permissions)
             } catch (e: Exception) {
                 Log.e(TAG, "cannot serialize action surface for ${plugin.manifest.name}", e)
                 return@postRunnable
             }
-            row.owner.dispatchAction(surface.kind, row.token, surfaceJson)
+            live.owner.dispatchAction(surface.kind, live.token, surfaceJson)
         }
     }
 
