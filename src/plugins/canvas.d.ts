@@ -20,7 +20,9 @@ declare interface ImageBitmap {
   readonly width: number
   readonly height: number
 
+  /** Frees the decoded bitmap now, rather than when the collector gets to it. Also `using`-able. */
   dispose(): void
+  [Symbol.dispose](): void
 }
 
 declare interface TextMetrics {
@@ -126,6 +128,13 @@ declare interface OffscreenCanvas {
   height: number
   getContext(contextId: '2d'): CanvasRenderingContext2D
   convertToBlob(options?: { type?: 'image/png' | 'image/jpeg' | 'image/webp', quality?: number }): Promise<Blob>
+
+  /**
+   * Frees the backing bitmap now, rather than when the collector gets to it. Its context, and any
+   * pattern made from it, answer `handle-expired` afterwards. Also `using`-able.
+   */
+  dispose(): void
+  [Symbol.dispose](): void
 }
 
 declare namespace inu {

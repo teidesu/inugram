@@ -130,7 +130,13 @@ declare class Blob {
   /** `text()` stops at 8 MB**. */
   text(): Promise<string>
 
+  /**
+   * Frees the content now. Dropping the last reference frees it too, whenever the collector gets
+   * to it - this is the eager path, and it is also `[Symbol.dispose]`, so `using` works:
+   * `using png = await canvas.convertToBlob()`.
+   */
   dispose(): void
+  [Symbol.dispose](): void
 }
 
 declare class File extends Blob {

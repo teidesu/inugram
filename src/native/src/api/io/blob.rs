@@ -948,9 +948,9 @@ fn install_blob_members<'js>(ctx: &Ctx<'js>, proto: &Object<'js>) -> JsResult<()
     define_method(proto, name, f)?;
   }
 
-  define_method(
+  crate::utils::shape::define_disposable(
+    ctx,
     proto,
-    "dispose",
     Function::new(ctx.clone(), |this: This<Class<'js, BlobHandle>>| {
       this.0.borrow().dispose();
     })?,
