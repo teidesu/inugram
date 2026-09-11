@@ -1,4 +1,4 @@
-use jni::objects::{JClass, JObject, JObjectArray, JString};
+use jni::objects::{JByteArray, JClass, JObject, JObjectArray, JString};
 use jni::strings::JNIString;
 use jni::sys::{jboolean, jclass, jint, jlong, jobject, jstring};
 use jni::EnvUnowned;
@@ -1121,6 +1121,26 @@ pub extern "system" fn Java_desu_inugram_helpers_plugins_QuickJs_nativeResolveIn
     let state = &engine.rpc;
     let result_wire = jstring_to_string(env, &result_wire);
     state.resolve_invoke(&engine._rt, &engine.ctx, invoke_id, &result_wire);
+  })
+}
+
+#[no_mangle]
+pub extern "system" fn Java_desu_inugram_helpers_plugins_QuickJs_nativeResolveInvokeBytes(
+  mut env: EnvUnowned,
+  _this: JObject,
+  ptr: jlong,
+  invoke_id: jlong,
+  response: JByteArray,
+) {
+  in_env(&mut env, (), |env| {
+    let _deadline = crate::sandbox::limits::arm_entry_deadline();
+    let Some(engine) = get_engine(ptr) else {
+      return;
+    };
+    let Ok(bytes) = env.convert_byte_array(&response) else {
+      return;
+    };
+    engine.rpc.resolve_invoke_bytes(&engine._rt, &engine.ctx, invoke_id, &bytes);
   })
 }
 

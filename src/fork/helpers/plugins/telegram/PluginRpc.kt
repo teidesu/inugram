@@ -169,6 +169,8 @@ object PluginRpc {
 
     private const val TAG = "InuPluginRpc"
     private const val SEND_SCOPE = "interceptSendMessage"
+    private const val RAW_GRANT = "unsafe.invokeRaw"
+    private const val TAKEOUT_GRANT = "takeout"
     private const val RPC_CHAIN_BUDGET_MS = 10_000L
     private const val SEND_CHAIN_BUDGET_MS = 60_000L
 
@@ -296,6 +298,12 @@ object PluginRpc {
 
             override fun onRpcComplete(dispatchId: Long, resultWire: String) =
                 onHost { onComplete(dispatchId, resultWire) }
+
+            override fun onInvokeRaw(invokeId: Long, slot: Int, method: ByteArray): String? =
+                invokeRaw(plugin, engine, slot, invokeAccount, invokeId, method)
+
+            override fun onTakeout(invokeId: Long, slot: Int, op: Int, takeoutId: String, arg: String): String? =
+                takeout(plugin, engine, tl, slot, invokeAccount, invokeId, op, takeoutId, arg)
         }
     }
 
@@ -995,18 +1003,162 @@ object PluginRpc {
             return PluginWire.encodeNotGranted("invokeRpc", tlName)
         }
         // last, so a takeover method stays refused whichever slot it was aimed at. The slot is not the host's to trust: a plugin can call `invokeRpc` through any object carrying an `id`
-        val account = if (slot == QuickJs.ANY_ACCOUNT) startedOn else slot
-        if (account < 0 || account >= UserConfig.MAX_ACCOUNT_COUNT || !UserConfig.isValidAccount(account)) {
-            return PluginWire.encodePluginError("invalid-argument", "invokeRpc: no account in slot $account")
+        val account = try {
+            invokeAccountOrRefusal("invokeRpc", slot, startedOn)
+        } catch (e: Exception) {
+            return decodeFailureWire("invokeRpc", e)
         }
+        sendInvoke(plugin, engine, account, request) { response, error ->
+            engine.resolveInvoke(invokeId, encodeInvokeResult(tl, response, error))
+        }
+        return null
+    }
+
+    /**
+     * every settled `invokeRpc`-shaped call, whatever built the request. [settle] runs on the
+     * engine's own runnable and owes the engine exactly one answer; a path that does not hand its
+     * response to [TlHandles] must release it there rather than leaving stock's suppressed free
+     * unanswered.
+     */
+    private fun sendInvoke(
+        plugin: Plugin,
+        engine: QuickJs,
+        account: Int,
+        request: TLObject,
+        settle: (TLObject?, TLRPC.TL_error?) -> Unit,
+    ) {
         sendWithoutInterceptors(account, request, 0) { response, error ->
             // stageQueue, where freeResources() runs the moment this delegate returns - before the runnable below mints a handle. ownership moves here
             response?.disableFree = true
             EngineDispatch.onEngine(plugin, engine, onDropped = { releaseUnowned(response) }) {
-                engine.resolveInvoke(invokeId, encodeInvokeResult(tl, response, error))
+                settle(response, error)
+            }
+        }
+    }
+
+    /** the slot a call names, or the refusal wire for one that names no live account */
+    private fun invokeAccountOrRefusal(prefix: String, slot: Int, startedOn: Int): Int {
+        val account = if (slot == QuickJs.ANY_ACCOUNT) startedOn else slot
+        if (account < 0 || account >= UserConfig.MAX_ACCOUNT_COUNT || !UserConfig.isValidAccount(account)) {
+            throw DecodeFault("invalid-argument", "$prefix: no account in slot $account")
+        }
+        return account
+    }
+
+    /**
+     * `inu.invokeRaw`. The bytes are a whole method, so the only thing the host can say about them
+     * is the constructor they open with - which is enough to keep the takeover refusal honest, and
+     * is all it is used for. A payload naming a constructor no layer this build knows is sent as
+     * written: reaching a method stock has no class for is the point of the api.
+     */
+    private fun invokeRaw(
+        plugin: Plugin,
+        engine: QuickJs,
+        slot: Int,
+        startedOn: Int,
+        invokeId: Long,
+        method: ByteArray,
+    ): String? {
+        if (!plugin.permissions.has(RAW_GRANT)) return PluginWire.encodeNotGranted(RAW_GRANT)
+        val request = RawTlRequest(method)
+        val constructor = request.constructorId()
+            ?: return PluginWire.encodePluginError("invalid-argument", "invokeRaw: a method is at least its 4-byte constructor id")
+        // an empty answer is the api working as intended: a constructor no layer this build knows is exactly what a plugin comes here for. Every name claiming the id is asked, since a legacy variant sharing it is named apart from the live constructor
+        for (named in TlCtorIds.namesOf(constructor)) takeoverRefusal(plugin, named)?.let { return it }
+        val account = try {
+            invokeAccountOrRefusal("invokeRaw", slot, startedOn)
+        } catch (e: Exception) {
+            return decodeFailureWire("invokeRaw", e)
+        }
+        sendInvoke(plugin, engine, account, request) { response, error ->
+            releaseUnowned(response)
+            when {
+                error != null -> engine.resolveInvoke(invokeId, PluginWire.encodeRpcError(error.code, error.text ?: ""))
+                response is RawTlResponse -> engine.resolveInvokeBytes(invokeId, response.bytes)
+                else -> engine.resolveInvoke(invokeId, PluginWire.encodeNull())
             }
         }
         return null
+    }
+
+    /**
+     * every takeout op. A session is its id and nothing else, so the host keeps no state for one:
+     * the plugin carries the id it was given, and a forged one is refused by the server rather than
+     * by us. What is checked here is that the plugin may open a session at all, and - for a wrapped
+     * call - that it could have made that same call unwrapped.
+     */
+    private fun takeout(
+        plugin: Plugin,
+        engine: QuickJs,
+        tl: TlHandles,
+        slot: Int,
+        startedOn: Int,
+        invokeId: Long,
+        op: Int,
+        takeoutId: String,
+        arg: String,
+    ): String? {
+        if (!plugin.permissions.has(TAKEOUT_GRANT)) return PluginWire.encodeNotGranted(TAKEOUT_GRANT)
+        val request: TLObject
+        val account: Int
+        val encode: (TLObject?, TLRPC.TL_error?) -> String
+        try {
+            when (op) {
+                RpcListener.OP_TAKEOUT_INIT -> {
+                    request = buildTakeoutInit(JSONObject(arg))
+                    encode = ::encodeTakeoutId
+                }
+                RpcListener.OP_TAKEOUT_FINISH -> {
+                    request = TakeoutWrapper(parseTakeoutId(takeoutId), TakeoutFinishRequest(arg == "1"))
+                    encode = ::encodeTakeoutFinished
+                }
+
+                RpcListener.OP_TAKEOUT_INVOKE -> {
+                    val query = decodeTlObject(tl, arg)
+                    val queryName = TlNames.classNameToTlName(query.javaClass)
+                    takeoverRefusal(plugin, queryName)?.let { return it }
+                    if (!plugin.permissions.allows("invokeRpc", queryName, ScopeMatch.EXACT)) {
+                        return PluginWire.encodeNotGranted("invokeRpc", queryName)
+                    }
+                    request = TakeoutWrapper(parseTakeoutId(takeoutId), query)
+                    encode = { response, error -> encodeInvokeResult(tl, response, error) }
+                }
+                else -> throw DecodeFault("invalid-argument", "unknown takeout op $op")
+            }
+            account = invokeAccountOrRefusal("takeout", slot, startedOn)
+        } catch (e: Exception) {
+            return decodeFailureWire("takeout", e)
+        }
+        sendInvoke(plugin, engine, account, request) { response, error ->
+            engine.resolveInvoke(invokeId, encode(response, error))
+        }
+        return null
+    }
+
+    private fun buildTakeoutInit(options: JSONObject): TakeoutInitRequest = TakeoutInitRequest().apply {
+        contacts = options.optBoolean("contacts")
+        messageUsers = options.optBoolean("messageUsers")
+        messageChats = options.optBoolean("messageChats")
+        messageMegagroups = options.optBoolean("messageMegagroups")
+        messageChannels = options.optBoolean("messageChannels")
+        fileMaxSize = options.optString("fileMaxSize").toLongOrNull() ?: 0L
+        files = fileMaxSize > 0L
+    }
+
+    private fun parseTakeoutId(id: String): Long =
+        id.toLongOrNull() ?: throw DecodeFault("invalid-argument", "'$id' is not a takeout session id")
+
+    private fun encodeTakeoutId(response: TLObject?, error: TLRPC.TL_error?): String {
+        releaseUnowned(response)
+        if (error != null) return PluginWire.encodeRpcError(error.code, error.text ?: "")
+        if (response !is TakeoutSession) return PluginWire.encodeNull()
+        return PluginWire.encodeLongAsString(response.id)
+    }
+
+    private fun encodeTakeoutFinished(response: TLObject?, error: TLRPC.TL_error?): String {
+        releaseUnowned(response)
+        if (error != null) return PluginWire.encodeRpcError(error.code, error.text ?: "")
+        return PluginWire.encodeBool(response is TLRPC.TL_boolTrue)
     }
 
     private class TlResultError(val error: TLRPC.TL_error) : Exception("${error.code}: ${error.text}")

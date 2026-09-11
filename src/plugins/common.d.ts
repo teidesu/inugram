@@ -661,6 +661,47 @@ declare namespace inu {
 
     /** @needs-grant invokeRpc */
     invokeRpc<T extends tl.TypeRpcMethod>(params: T): Promise<tl.RpcCallReturn[T['_']] | null>
+
+    /** @needs-grant unsafe.invokeRaw */
+    invokeRaw(method: Uint8Array): Promise<Uint8Array | null>
+
+    /**
+     * Open a takeout session, the export mode telegram's own data export uses: it lifts the flood
+     * limits history reads otherwise hit, and the server asks the user to approve it from another
+     * session first - until they do, this rejects with `TAKEOUT_INIT_DELAY_X`.
+     *
+     * Telegram keeps the session until {@link TakeoutSession.finish}, so finish the one you
+     * opened rather than leaving it behind.
+     *
+     * `fileMaxSize` is what the session will accept as a single file, and naming it is what asks
+     * for file access at all.
+     *
+     * @needs-grant takeout
+     */
+    initTakeoutSession(options?: {
+      contacts?: boolean
+      messageUsers?: boolean
+      messageChats?: boolean
+      messageMegagroups?: boolean
+      messageChannels?: boolean
+      fileMaxSize?: number
+    }): Promise<TakeoutSession>
+  }
+
+  /**
+   * A live takeout session. Calls made through it are wrapped in `invokeWithTakeout`, which is
+   * the only difference from {@link Account.invokeRpc} - including the grants, so a method still
+   * needs its own `invokeRpc` scope.
+   */
+  interface TakeoutSession {
+    /** the session's int64 id, as a string */
+    readonly id: string
+
+    /** @needs-grant takeout, plus `invokeRpc` for the method being called */
+    invokeRpc<T extends tl.TypeRpcMethod>(params: T): Promise<tl.RpcCallReturn[T['_']] | null>
+
+    /** closes the session server-side; `success` defaults to `true`. @needs-grant takeout */
+    finish(success?: boolean): Promise<boolean>
   }
 
   namespace utils {
@@ -904,6 +945,21 @@ declare namespace inu {
 
   /** @needs-grant invokeRpc */
   function invokeRpc<T extends tl.TypeRpcMethod>(params: T): Promise<tl.RpcCallReturn[T['_']] | null>
+
+  /**
+   * Send a method this build has no class for, as the bytes of the whole method - its constructor
+   * id first, then its arguments - and get the response back the same way, constructor id
+   * included. An rpc error still rejects as {@link RpcError}, and a request the app answered with
+   * nothing at all resolves `null`.
+   *
+   * Nothing about the payload is interpreted, so nothing about it is checked either: the api
+   * filter can only read the constructor the bytes open with, and refuses a takeover method by
+   * that alone - one no layer this build knows is sent as written, which is what this is for.
+   * What the bytes mean past the constructor is the plugin's to get right.
+   *
+   * @needs-grant unsafe.invokeRaw
+   */
+  function invokeRaw(method: Uint8Array): Promise<Uint8Array | null>
 
   /** @needs-grant interceptRpc */
   function interceptRpc<M extends tl.TypeRpcMethod['_']>(

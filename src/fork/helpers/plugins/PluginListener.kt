@@ -160,6 +160,26 @@ interface RpcListener {
 
     fun onRpcComplete(dispatchId: Long, resultWire: String)
 
+    /**
+     * `inu.invokeRaw`: [method] is a whole serialized method, constructor id first, and the answer
+     * comes back through [QuickJs.resolveInvokeBytes]. Bytes both ways, since that is all this api
+     * ever carries and base64 in a wire string would cost two conversions and 2.7x the payload.
+     */
+    fun onInvokeRaw(invokeId: Long, slot: Int, method: ByteArray): String?
+
+    /**
+     * one takeout session op, all of which settle the invoke the way [onInvokeRpc] does.
+     * [takeoutId] is the session's decimal id, empty for [OP_TAKEOUT_INIT]. [arg] is the options
+     * json for [OP_TAKEOUT_INIT], "1"/"0" for [OP_TAKEOUT_FINISH], and the request wire for
+     * [OP_TAKEOUT_INVOKE].
+     */
+    fun onTakeout(invokeId: Long, slot: Int, op: Int, takeoutId: String, arg: String): String?
+
+    companion object {
+        const val OP_TAKEOUT_INIT = 0
+        const val OP_TAKEOUT_FINISH = 1
+        const val OP_TAKEOUT_INVOKE = 2
+    }
 }
 
 /** the arriving update stream, which is [PluginUpdates] rather than [PluginRpc]: a different table in rust too */

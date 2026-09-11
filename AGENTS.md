@@ -279,6 +279,7 @@ wrong name or flag, since the bridge and the typings only agree because one scri
 - Install IDs are minted at install. Do not derive them from a manifest. They key `kv` and `fs`; uninstall must wipe all per-install stores from `PluginManager.remove`.
 - Keep API surfaces installed unless the API itself requires a grant. A missing member must return `not-granted` when the contract says it exists.
 - `TlFlags`, `TlNames`, and generated TL tables come only from `pnpm run generate-tl-typings`. Never edit generated tables or `TLRPC.java`.
+- The takeout classes in `telegram/TakeoutRequests.kt` are the one hand-written corner of the schema, because stock never exports and declares none of them. They stay out of `TlReflect`'s class index and compute their own flag words: a plugin reaches them through `account.initTakeoutSession()`, never by naming a constructor. Anything else stock is missing belongs in `invokeRaw`, not in another hand-written class.
 
 ### Boot and lifecycle
 
@@ -328,6 +329,9 @@ wrong name or flag, since the bridge and the typings only agree because one scri
 - Xposed session recursion guards cover callback phases, not the original/remaining plugin chain: stock calls nested inside an original must still reach their own hooks.
 - An xposed phase answers whether it *read* the host's wires, not whether it succeeded: an empty `dispatch_before` answer and `NOT_DISPATCHED` mean the host still owns what it minted and releases it (`PluginXposed.releaseUntaken`). Once the context is built, or the result published, every outcome including a failure must say the engine took them.
 - Return app responses on `stageQueue`; keep chain bookkeeping on `globalQueue`.
+- `invokeRaw` (`unsafe.invokeRaw`) and every takeout op reuse `invokeRpc`'s pending table; only what builds the request and what answers the engine differ. A path that does not hand its response to `TlHandles` must `releaseUnowned` it, since stock's own free was already suppressed.
+- `invokeRaw` is the one api that carries bytes and nothing else, so it crosses as a java `byte[]` (`Arg::Bytes`, as `fetch` sends its body) and answers through `resolveInvokeBytes`, not as base64 in a wire string: that would cost two conversions and ~2.7x the payload in each direction. The `Y` wire stays right for a TL *field* - those are small and already inside a wire.
+- Wrapping a call in a takeout session never widens what it may call: the inner method is checked against `invokeRpc`'s scopes and the takeover list in rust *and* in the host. `invokeRaw` can only read the constructor its bytes open with, and refuses a takeover method by that alone.
 - Raw RPC chains have one 10-second budget per scope; chains containing `interceptSendMessage` get 60 seconds. On timeout, abandon deeper stages first, release handles last, and fail unless passthrough already replied.
 - Every chain continuation must verify that its pending dispatch is still current after a queue hop.
 - A bypass is a request lease. Keep it through stock retries; remove it when the delegate replies or cancellation removes the request.

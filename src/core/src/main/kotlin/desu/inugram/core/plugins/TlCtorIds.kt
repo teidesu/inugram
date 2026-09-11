@@ -8,7 +8,18 @@ object TlCtorIds {
         val ids: Map<String, Set<Int>>,
         val methodNames: Set<String>,
         val updateNames: Set<String>,
-    )
+    ) {
+        /**
+         * every id back to every name that claims it. A legacy variant shares its id with the live
+         * constructor it replaced, and which of the two a caller would have seen first is hash
+         * order, so the answer is the whole set: a question asked of one name must be asked of all.
+         */
+        val namesById: Map<Int, Set<String>> by lazy {
+            val out = HashMap<Int, MutableSet<String>>(ids.size * 2)
+            for ((name, set) in ids) for (id in set) out.getOrPut(id) { LinkedHashSet() }.add(name)
+            out
+        }
+    }
 
     private val table: Table by lazy { parse() }
 
@@ -35,6 +46,9 @@ object TlCtorIds {
     }
 
     fun idsOf(name: String): Set<Int>? = table.ids[name]
+
+    /** every name a constructor id is declared under, empty when no layer this build knows declares it */
+    fun namesOf(id: Int): Set<String> = table.namesById[id].orEmpty()
 
     val methodNames: Set<String> get() = table.methodNames
     val updateNames: Set<String> get() = table.updateNames

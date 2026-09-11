@@ -1426,6 +1426,16 @@ mod grant_boundary {
       None
     }
 
+    fn on_invoke_raw(&self, _invoke_id: i64, _slot: i32, _method: &[u8]) -> Option<String> {
+      self.crossings.set(self.crossings.get() + 1);
+      None
+    }
+
+    fn on_takeout(&self, _invoke_id: i64, _slot: i32, _op: i32, _takeout_id: &str, _arg: &str) -> Option<String> {
+      self.crossings.set(self.crossings.get() + 1);
+      None
+    }
+
     fn on_next(&self, _dispatch_id: i64, _request_wire: &str) -> Option<String> {
       None
     }

@@ -3,7 +3,7 @@ use std::collections::HashMap;
 use std::rc::Rc;
 
 use rquickjs::function::{Opt, This};
-use rquickjs::{Ctx, Exception, Function, Object, Persistent, Result as JsResult, Runtime, Value};
+use rquickjs::{Ctx, Exception, Function, Object, Persistent, Result as JsResult, Runtime, TypedArray, Value};
 
 use crate::api::error::{self, error_value_to_string, format_thrown, PluginErrorCode};
 use crate::api::telegram::account::{dispatch_account, AccountState};
@@ -27,6 +27,8 @@ pub trait RpcHost {
   ) -> Option<String>;
   fn on_unregister(&self, callback_id: u32);
   fn on_invoke(&self, invoke_id: i64, slot: i32, request_wire: &str) -> Option<String>;
+  fn on_invoke_raw(&self, invoke_id: i64, slot: i32, method: &[u8]) -> Option<String>;
+  fn on_takeout(&self, invoke_id: i64, slot: i32, op: i32, takeout_id: &str, arg: &str) -> Option<String>;
   fn on_next(&self, dispatch_id: i64, request_wire: &str) -> Option<String>;
   fn on_complete(&self, dispatch_id: i64, result_wire: &str);
   fn on_update_register(&self, callback_id: u32, types: &[String], scope: &str) -> Option<String>;
@@ -110,6 +112,14 @@ const DEMUX_EVENTS: [(&str, &str, &[&str]); 3] = [
 ];
 
 pub const ANY_ACCOUNT: i32 = -1;
+
+/// keep in step with `RpcListener` in src/fork/helpers/plugins/PluginListener.kt
+pub const OP_TAKEOUT_INIT: i32 = 0;
+pub const OP_TAKEOUT_FINISH: i32 = 1;
+pub const OP_TAKEOUT_INVOKE: i32 = 2;
+
+const RAW_GRANT: &str = "unsafe.invokeRaw";
+const TAKEOUT_GRANT: &str = "takeout";
 
 const EVENTS_PRELUDE: &[u8] = include_bytes!(concat!(env!("OUT_DIR"), "/events.qbc"));
 const SEND_PRELUDE: &[u8] = include_bytes!(concat!(env!("OUT_DIR"), "/send_message.qbc"));
@@ -380,6 +390,12 @@ pub fn install_rpc<'js>(
 
   let state2 = state.clone();
   globals.inu.set(
+    "invokeRaw",
+    Function::new(ctx.clone(), move |ctx: Ctx<'js>, bytes: Value<'js>| state2.js_invoke_raw(&ctx, ANY_ACCOUNT, bytes))?,
+  )?;
+
+  let state2 = state.clone();
+  globals.inu.set(
     "onUpdate",
     Function::new(ctx.clone(), move |ctx: Ctx<'js>, types: Value<'js>, cb: Function<'js>| {
       state2.js_on_update(&ctx, types, cb)
@@ -413,18 +429,30 @@ impl RpcState {
       Function::new(
         ctx.clone(),
         move |ctx: Ctx<'js>, this: This<Value<'js>>, obj: Value<'js>| -> JsResult<Value<'js>> {
-          let slot = this
-            .0
-            .as_object()
-            .and_then(|handle| handle.get::<_, Value>("id").ok())
-            .and_then(|id| id.as_number())
-            .filter(|id| id.fract() == 0.0 && *id >= 0.0)
-            .map(|id| id as i32);
-          let Some(slot) = slot else {
-            return PluginErrorCode::InvalidArgument
-              .throw(&ctx, "invokeRpc: not called on an account handle; use inu.account().invokeRpc(...)");
-          };
+          let slot = account_slot(&ctx, &this, "invokeRpc")?;
           state2.js_invoke_rpc(&ctx, slot, obj)
+        },
+      )?,
+    )?;
+    let state2 = state.clone();
+    prototype.set(
+      "invokeRaw",
+      Function::new(
+        ctx.clone(),
+        move |ctx: Ctx<'js>, this: This<Value<'js>>, bytes: Value<'js>| -> JsResult<Value<'js>> {
+          let slot = account_slot(&ctx, &this, "invokeRaw")?;
+          state2.js_invoke_raw(&ctx, slot, bytes)
+        },
+      )?,
+    )?;
+    let state2 = state.clone();
+    prototype.set(
+      "initTakeoutSession",
+      Function::new(
+        ctx.clone(),
+        move |ctx: Ctx<'js>, this: This<Value<'js>>, options: Opt<Value<'js>>| -> JsResult<Value<'js>> {
+          let slot = account_slot(&ctx, &this, "initTakeoutSession")?;
+          state2.js_init_takeout(&ctx, slot, options.0)
         },
       )?,
     )?;
@@ -609,21 +637,163 @@ fn read_method_name<'js>(ctx: &Ctx<'js>, obj: &Value<'js>) -> JsResult<String> {
   }
 }
 
+/// the slot an account handle names, which is the `id` the handle carries and nothing else
+fn account_slot<'js>(ctx: &Ctx<'js>, this: &This<Value<'js>>, what: &str) -> JsResult<i32> {
+  let slot = this
+    .0
+    .as_object()
+    .and_then(|handle| handle.get::<_, Value>("id").ok())
+    .and_then(|id| id.as_number())
+    .filter(|id| id.fract() == 0.0 && *id >= 0.0)
+    .map(|id| id as i32);
+  match slot {
+    Some(slot) => Ok(slot),
+    None => {
+      let message: &str = &format!("{what}: not called on an account handle; use inu.account().{what}(...)");
+      PluginErrorCode::InvalidArgument.throw(ctx, message)
+    }
+  }
+}
+
+fn takeout_options_json<'js>(ctx: &Ctx<'js>, options: Option<Value<'js>>) -> JsResult<String> {
+  let Some(options) = options.and_then(|value| value.into_object()) else {
+    return Ok("{}".to_string());
+  };
+  let flag = |name: &str| -> JsResult<bool> { Ok(options.get::<_, Option<bool>>(name)?.unwrap_or(false)) };
+  let file_max_size = match options.get::<_, Value>("fileMaxSize") {
+    Ok(value) if !value.is_undefined() && !value.is_null() => match value.as_number() {
+      Some(size) if size.fract() == 0.0 && size > 0.0 => size as i64,
+      _ => {
+        return PluginErrorCode::InvalidArgument
+          .throw(ctx, "initTakeoutSession: fileMaxSize must be a positive integer")
+      }
+    },
+    _ => 0,
+  };
+  Ok(format!(
+    concat!(
+      r#"{{"contacts":{},"messageUsers":{},"messageChats":{},"messageMegagroups":{},"#,
+      r#""messageChannels":{},"fileMaxSize":"{}"}}"#
+    ),
+    flag("contacts")?,
+    flag("messageUsers")?,
+    flag("messageChats")?,
+    flag("messageMegagroups")?,
+    flag("messageChannels")?,
+    file_max_size,
+  ))
+}
+
 impl RpcState {
+  /// the half every invoke shares: a promise the host settles later through `resolveInvoke`, and a
+  /// refusal the host answers immediately rejecting it instead.
+  fn begin_invoke<'js>(
+    &self,
+    ctx: &Ctx<'js>,
+    send: impl FnOnce(i64) -> Option<String>,
+  ) -> JsResult<rquickjs::Promise<'js>> {
+    let invoke_id = self.alloc_invoke_id();
+    let (promise, pending) = PendingSettle::new(ctx)?;
+    self.pending_invoke.borrow_mut().insert(invoke_id, pending);
+
+    if let Some(err) = send(invoke_id) {
+      if let Some(pending) = self.pending_invoke.borrow_mut().remove(&invoke_id) {
+        pending.reject_with(ctx, &err)?;
+      }
+    }
+    Ok(promise)
+  }
+
   fn js_invoke_rpc<'js>(&self, ctx: &Ctx<'js>, slot: i32, obj: Value<'js>) -> JsResult<Value<'js>> {
     let method = read_method_name(ctx, &obj)?;
     self.grants.check_grant(ctx, "invokeRpc", Some(&method), MATCH_EXACT)?;
 
     let wire = proxy::js_value_to_wire(ctx, obj)?;
-    let invoke_id = self.alloc_invoke_id();
-    let (promise, pending) = PendingSettle::new(ctx)?;
-    self.pending_invoke.borrow_mut().insert(invoke_id, pending);
+    Ok(self.begin_invoke(ctx, |invoke_id| self.host.on_invoke(invoke_id, slot, &wire))?.into_value())
+  }
 
-    if let Some(err) = self.host.on_invoke(invoke_id, slot, &wire) {
-      if let Some(pending) = self.pending_invoke.borrow_mut().remove(&invoke_id) {
-        pending.reject_with(ctx, &err)?;
-      }
-    }
+  /// the one api whose payload is bytes and nothing else, in both directions: it crosses as a
+  /// java `byte[]` and comes back through `resolveInvokeBytes`, never as base64 in a wire string.
+  fn js_invoke_raw<'js>(&self, ctx: &Ctx<'js>, slot: i32, bytes: Value<'js>) -> JsResult<Value<'js>> {
+    self.grants.check_grant(ctx, RAW_GRANT, None, MATCH_EXACT)?;
+    let Some(method) = TypedArray::<u8>::from_value(bytes).ok().and_then(|array| array.as_bytes().map(<[u8]>::to_vec))
+    else {
+      return PluginErrorCode::InvalidArgument.throw(ctx, "invokeRaw: expected the serialized method as a Uint8Array");
+    };
+    Ok(self.begin_invoke(ctx, |invoke_id| self.host.on_invoke_raw(invoke_id, slot, &method))?.into_value())
+  }
+
+  fn js_init_takeout<'js>(
+    self: &Rc<Self>,
+    ctx: &Ctx<'js>,
+    slot: i32,
+    options: Option<Value<'js>>,
+  ) -> JsResult<Value<'js>> {
+    self.grants.check_grant(ctx, TAKEOUT_GRANT, None, MATCH_EXACT)?;
+    let options = takeout_options_json(ctx, options)?;
+    let promise =
+      self.begin_invoke(ctx, |invoke_id| self.host.on_takeout(invoke_id, slot, OP_TAKEOUT_INIT, "", &options))?;
+
+    // the host answers the id alone; the session it stands for is built here, where the state that
+    // has to outlive the call already lives
+    let state = self.clone();
+    let build = Function::new(ctx.clone(), move |ctx: Ctx<'js>, id: Option<String>| -> JsResult<Value<'js>> {
+      // the host answers null when the server sent back something that was not a session at all
+      let Some(id) = id else {
+        return PluginErrorCode::Unsupported.throw(&ctx, "initTakeoutSession: the server answered no session");
+      };
+      state.build_takeout_session(&ctx, slot, id)
+    })?;
+    let then: Function = promise.get("then")?;
+    then.call((This(promise.clone()), build))
+  }
+
+  fn build_takeout_session<'js>(self: &Rc<Self>, ctx: &Ctx<'js>, slot: i32, id: String) -> JsResult<Value<'js>> {
+    let session = Object::new(ctx.clone())?;
+    session.set("id", id.clone())?;
+
+    let state = self.clone();
+    let owned = id.clone();
+    session.set(
+      "invokeRpc",
+      Function::new(ctx.clone(), move |ctx: Ctx<'js>, obj: Value<'js>| -> JsResult<Value<'js>> {
+        state.js_takeout_invoke(&ctx, slot, &owned, obj)
+      })?,
+    )?;
+
+    let state = self.clone();
+    let owned = id;
+    session.set(
+      "finish",
+      Function::new(ctx.clone(), move |ctx: Ctx<'js>, success: Opt<bool>| -> JsResult<Value<'js>> {
+        state.js_takeout_finish(&ctx, slot, &owned, success.0.unwrap_or(true))
+      })?,
+    )?;
+
+    let object_ctor: Object = ctx.globals().get("Object")?;
+    let freeze: Function = object_ctor.get("freeze")?;
+    freeze.call::<_, Value>((session.clone(),))?;
+    Ok(session.into_value())
+  }
+
+  /// a wrapped call is the same call: it is checked against the same `invokeRpc` scopes, here and
+  /// again in the host
+  fn js_takeout_invoke<'js>(&self, ctx: &Ctx<'js>, slot: i32, id: &str, obj: Value<'js>) -> JsResult<Value<'js>> {
+    self.grants.check_grant(ctx, TAKEOUT_GRANT, None, MATCH_EXACT)?;
+    let method = read_method_name(ctx, &obj)?;
+    self.grants.check_grant(ctx, "invokeRpc", Some(&method), MATCH_EXACT)?;
+
+    let wire = proxy::js_value_to_wire(ctx, obj)?;
+    let promise =
+      self.begin_invoke(ctx, |invoke_id| self.host.on_takeout(invoke_id, slot, OP_TAKEOUT_INVOKE, id, &wire))?;
+    Ok(promise.into_value())
+  }
+
+  fn js_takeout_finish<'js>(&self, ctx: &Ctx<'js>, slot: i32, id: &str, success: bool) -> JsResult<Value<'js>> {
+    self.grants.check_grant(ctx, TAKEOUT_GRANT, None, MATCH_EXACT)?;
+    let arg = if success { "1" } else { "0" };
+    let promise =
+      self.begin_invoke(ctx, |invoke_id| self.host.on_takeout(invoke_id, slot, OP_TAKEOUT_FINISH, id, arg))?;
     Ok(promise.into_value())
   }
 
@@ -960,6 +1130,28 @@ impl RpcState {
         if let Err(e) = pending.settle_from_wire(&ctx, &state.tl, result_wire, ViewLife::Plugin) {
           (state.log)(&format!("resolveInvoke({invoke_id}) failed: {e:?}"));
         }
+      }
+    });
+    pump_jobs(rt, context, state.log.as_ref());
+  }
+
+  /// `invokeRaw`'s answer, which is the response body and nothing else: no wire is built for it
+  /// and the `Uint8Array` is filled from the array the host handed over
+  pub fn resolve_invoke_bytes(
+    self: &Rc<Self>,
+    rt: &Runtime,
+    context: &rquickjs::Context,
+    invoke_id: i64,
+    response: &[u8],
+  ) {
+    let state = self;
+    context.with(|ctx| {
+      let Some(pending) = state.pending_invoke.borrow_mut().remove(&invoke_id) else {
+        return;
+      };
+      let settled = proxy::make_bytes_value(&ctx, response).and_then(|value| pending.resolve_with(&ctx, value));
+      if let Err(e) = settled {
+        (state.log)(&format!("resolveInvokeBytes({invoke_id}) failed: {e:?}"));
       }
     });
     pump_jobs(rt, context, state.log.as_ref());

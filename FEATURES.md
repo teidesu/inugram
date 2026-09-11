@@ -252,6 +252,8 @@ most things are toggleable in `Settings → Inugram`, with sensible opinionated 
 
 - InuPlugin-style js plugins running on a rust engine (rquickjs/quickjs-ng) — exposes `console.*`, `inu.info()`, and an rpc bridge (`inu.interceptRpc`/`inu.invokeRpc`/`inu.onUpdate`) gated by `@grant` permissions
 - plugin TL construction includes keyboard/button and ephemeral-message types
+- plugins can open telegram takeout (data export) sessions — `account.initTakeoutSession()` answers a session whose calls go out wrapped in `invokeWithTakeout`, lifting the flood limits bulk history reads hit; each wrapped call still needs the same `invokeRpc` permission as an unwrapped one, and the session is closed with `finish()`
+- plugins holding `unsafe.invokeRaw` can send methods this build has no class for as raw bytes (`inu.invokeRaw`), response bytes included; account-takeover methods are still refused by the constructor the payload opens with
 - invalid `interceptRpc` TL returns are logged and skip that middleware by default; `{ strict: true }` instead fails the app's RPC
 - plugins can rewrite or cancel outgoing messages (`inu.interceptSendMessage`), with optional native text/edit filters, and rewrite or drop incoming updates before the app applies them (`inu.interceptUpdate`)
 - plugins page in settings: engine toggle, install from file, enable/disable, reload, drag-handle reorder (middleware order); roomy list by default (description + settings/reload/remove actions per plugin), compact single-row view via the overflow menu
