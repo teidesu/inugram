@@ -66,7 +66,7 @@ class PluginWriteValuesTest {
         0,
         1L,
         PluginWrites.OP_SEND_MEDIA,
-        JSONObject().put("peer", "D$alice").put("text", "").toString(),
+        JSONObject().put("peer", "D$alice").put("text", "").put("optimistic", false).toString(),
         arrayOf(wire),
     )
 

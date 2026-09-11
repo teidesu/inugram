@@ -608,6 +608,18 @@ declare namespace inu {
       sendAs?: InputPeerLike
 
       clearDraft?: boolean
+
+      /**
+       * Show the message in the chat straight away, the way the app's own send does, rather than
+       * only once the server has answered. **On by default.** The promise still resolves with the
+       * server's message either way; this only decides whether there is a bubble in the meantime.
+       *
+       * Two things turn this off on their own: a `sendAs` peer, which has no place in the app's
+       * send, and a `replyToMessageId` naming a message the app does not already hold, which it
+       * needs in order to draw the quote. The app's send also clears the chat's draft, which the
+       * request path does not.
+       */
+      optimistic?: boolean
     }): Promise<Message>
 
     /** @needs-grant account.write(send) */
@@ -621,6 +633,21 @@ declare namespace inu {
       fileName?: string
       sendAs?: InputPeerLike
       onProgress?: ProgressCallback
+
+      /**
+       * Upload and show the message the way the app's own send does: the bubble appears with its
+       * progress before the upload starts, and a failure is retryable from the chat. **On by
+       * default.** The promise still resolves with the server's message either way.
+       *
+       * Three things turn this off on their own: a `sendAs` peer, a `file` that is already a
+       * `TypeInputFile` or `TypeInputMedia` rather than bytes or a path, and a `replyToMessageId`
+       * naming a message the app does not already hold, which it needs to draw the quote.
+       *
+       * An image goes up as a photo, so the app resizes and re-encodes it the way it does any
+       * photo you send. Pass `asDocument` to ship the exact bytes. The app's send also clears the
+       * chat's draft, which the request path does not.
+       */
+      optimistic?: boolean
     }): Promise<Message>
 
     /** @needs-grant account.write(send) */

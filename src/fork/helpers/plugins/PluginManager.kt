@@ -33,6 +33,7 @@ import desu.inugram.helpers.plugins.platform.PluginPlatform
 import desu.inugram.helpers.plugins.platform.PluginXposed
 import desu.inugram.helpers.plugins.telegram.PluginAccounts
 import desu.inugram.helpers.plugins.telegram.PluginMedia
+import desu.inugram.helpers.plugins.telegram.PluginOptimisticSend
 import desu.inugram.helpers.plugins.telegram.PluginRpc
 import desu.inugram.helpers.plugins.telegram.PluginUpdates
 import desu.inugram.helpers.plugins.tl.TlFilter
@@ -483,6 +484,7 @@ object PluginManager {
         PluginUpdates.detach(plugin)
         TlHandles.endDetach(plugin)
         PluginMedia.detach(plugin)
+        PluginOptimisticSend.detach(plugin)
         PluginUi.detach(engine)
         PluginActions.detach(engine)
         PluginNotifications.detach(engine)

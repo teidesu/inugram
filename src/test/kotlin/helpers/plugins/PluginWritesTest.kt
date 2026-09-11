@@ -62,9 +62,12 @@ class PluginWritesTest {
         account: Int = 0,
     ): String? = plugin.js.listener!!.accountWrite(account, requestId, op, arg.toString(), values)
 
+    // this suite is about the request the write surface builds, which is the `optimistic: false`
+    // half; the composer half has its own
     private fun send(peer: String, text: String = "hi") = JSONObject()
         .put("peer", peer)
         .put("text", text)
+        .put("optimistic", false)
 
     /** the wire the engine was settled with, once the queues have run */
     private fun settled(plugin: Plugin): String {
