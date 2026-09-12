@@ -9,6 +9,7 @@ import desu.inugram.helpers.plugins.platform.PluginXposed
 import desu.inugram.helpers.plugins.platform.PluginNotifications
 import desu.inugram.helpers.plugins.telegram.PluginReads
 import desu.inugram.helpers.plugins.telegram.PluginRpc
+import desu.inugram.helpers.plugins.telegram.PluginSendHold
 import desu.inugram.helpers.plugins.telegram.PluginUpdates
 import desu.inugram.helpers.plugins.telegram.PluginWrites
 import desu.inugram.helpers.plugins.tl.TlFilter
@@ -76,7 +77,7 @@ private val nextInstallId = java.util.concurrent.atomic.AtomicLong(1)
 fun freshInstallId(): String = "%032x".format(nextInstallId.getAndIncrement() or (System.nanoTime() shl 16))
 
 private fun clearRpcState() {
-    for (owner in listOf(PluginRpc, PluginUpdates)) {
+    for (owner in listOf(PluginRpc, PluginUpdates, PluginSendHold)) {
         for (field in owner.javaClass.declaredFields) {
             field.isAccessible = true
             when (field.name) {

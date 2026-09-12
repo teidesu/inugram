@@ -2040,6 +2040,24 @@ fn an_async_send_middleware_is_awaited_before_the_request_goes_out() {
   assert!(next.unwrap().contains(r#""message":"awaited""#));
 }
 
+/// the host draws a send's local message only after a verdict it can expect in time, so an `async`
+/// middleware is declared as one at registration rather than discovered when it is too late
+#[test]
+fn an_async_send_middleware_registers_itself_as_deferred() {
+  let (_rt, ctx, host, _state) = setup(&["interceptSendMessage"]);
+  eval(&ctx, "inu.interceptSendMessage(async () => 'send');");
+  eval(&ctx, r#"inu.interceptSendMessage({ text: /^\./ }, async () => 'send');"#);
+  eval(&ctx, "inu.interceptSendMessage(() => 'send');");
+  eval(&ctx, r#"inu.interceptSendMessage({ text: /^\./ }, () => 'send');"#);
+
+  let registered = host.registered.borrow();
+  let json: Vec<&str> = registered.iter().map(|entry| entry.4.as_str()).collect();
+  assert_eq!(json[0], r#"{"deferred":true}"#);
+  assert!(json[1].contains(r#""deferred":true"#), "a filtered async middleware is deferred too: {}", json[1]);
+  assert_eq!(json[2], "", "a synchronous middleware registers nothing it did not ask for");
+  assert!(!json[3].contains("deferred"), "a synchronous middleware is not deferred: {}", json[3]);
+}
+
 /// `next()` refuses to rewrite the method the app is already awaiting a response type for, so a
 /// length change is refused where it is decidable rather than at the bridge
 #[test]
