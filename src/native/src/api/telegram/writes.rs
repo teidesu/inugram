@@ -38,6 +38,7 @@ const OP_SET_DRAFT: i32 = 9;
 const OP_DOWNLOAD_MEDIA: i32 = 10;
 const OP_DOWNLOAD_MEDIA_TO_FILE: i32 = 11;
 const OP_UPLOAD_FILE: i32 = 12;
+const OP_SET_SEND_MEDIA: i32 = 13;
 
 pub const TRANSFER_LIMIT_BYTES: u64 = 256 * 1024 * 1024;
 
@@ -45,7 +46,7 @@ const STAGE_CHUNK_BYTES: u64 = 1024 * 1024;
 
 fn grant_of(op: i32) -> Option<(&'static str, &'static str)> {
   Some(match op {
-    OP_SEND_MESSAGE | OP_SEND_MEDIA | OP_SEND_MULTI_MEDIA | OP_UPLOAD_FILE => ("account.write", "send"),
+    OP_SEND_MESSAGE | OP_SEND_MEDIA | OP_SEND_MULTI_MEDIA | OP_UPLOAD_FILE | OP_SET_SEND_MEDIA => ("account.write", "send"),
     OP_EDIT_MESSAGE => ("account.write", "edit"),
     OP_DELETE_MESSAGES => ("account.write", "delete"),
     OP_FORWARD_MESSAGES => ("account.write", "forward"),
@@ -268,7 +269,7 @@ impl WritesState {
     let mut staged = Vec::new();
     let outcome = (|| -> JsResult<()> {
       for value in crate::utils::arguments::array_values(ctx, &values, "account write")? {
-        let one = if matches!(op, OP_SEND_MEDIA | OP_SEND_MULTI_MEDIA | OP_UPLOAD_FILE) {
+        let one = if matches!(op, OP_SEND_MEDIA | OP_SEND_MULTI_MEDIA | OP_UPLOAD_FILE | OP_SET_SEND_MEDIA) {
           self.stage_value(ctx, &value)?
         } else {
           Staged {
@@ -442,6 +443,7 @@ pub(crate) fn install_writes_with_limit<'js>(
   ops.set("downloadMedia", OP_DOWNLOAD_MEDIA)?;
   ops.set("downloadMediaToFile", OP_DOWNLOAD_MEDIA_TO_FILE)?;
   ops.set("uploadFile", OP_UPLOAD_FILE)?;
+  ops.set("setSendMedia", OP_SET_SEND_MEDIA)?;
 
   let factory = crate::utils::prelude::load(ctx, PRELUDE)?;
   let prototype: Object = factory.call((natives, shared.clone(), message, plugin_error, reads, ops))?;

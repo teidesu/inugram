@@ -19,12 +19,14 @@ import desu.inugram.helpers.plugins.tl.TlHandles
 import desu.inugram.helpers.plugins.tl.TlJson
 import java.util.Collections
 import java.util.IdentityHashMap
+import java.util.concurrent.ConcurrentHashMap
 import java.util.regex.Pattern
 import java.util.regex.PatternSyntaxException
 import org.json.JSONObject
 import org.telegram.messenger.KeepAliveJob
 import org.telegram.messenger.AndroidUtilities
 import org.telegram.messenger.MessageObject
+import org.telegram.messenger.MediaDataController
 import org.telegram.messenger.MessagesController
 import org.telegram.messenger.MessagesStorage
 import org.telegram.messenger.NotificationCenter
@@ -105,7 +107,14 @@ object PluginRpc {
         val onWriteToSocket: WriteToSocketDelegate?,
     )
 
-    private class OptimisticMessages(val account: Int, val messages: List<MessageObject>)
+    private class OptimisticMessages(
+        val account: Int,
+        val messages: List<MessageObject>,
+        /** the draft this send is about to clear, when it has one, so a verdict can still clear it */
+        val draft: DraftKey?,
+    )
+
+    private class DraftKey(val dialogId: Long, val threadId: Long)
 
     private class OptimisticText(val text: String, val entities: ArrayList<TLRPC.MessageEntity>)
 
@@ -156,6 +165,9 @@ object PluginRpc {
         var guid = 0
 
         var sent: SentRequest? = null
+
+        /** what `message.setMedia()` named, put on the local message instead of a passthrough */
+        var media: PluginSendMorph.Media? = null
     }
 
     /**
@@ -188,6 +200,20 @@ object PluginRpc {
 
     private const val GUID_MEMORY = 512
     private const val SYNTHETIC_CODE = -1000
+    /**
+     * what a verdict is dressed as for the app, whose request delegate has no other vocabulary for
+     * "this send did not happen". Minted where the app is answered, and read by nothing: the error
+     * carries a verdict to the composer's error path, it does not name one.
+     */
+    private const val MORPHED_TEXT = "MESSAGE_MORPHED_BY_PLUGIN"
+    private const val DROPPED_TEXT = "MESSAGE_DROPPED_BY_PLUGIN"
+
+    /**
+     * how long an armed verdict waits for the error path it was armed for. Nothing but a queue hop
+     * stands between the two, so this is only reached when that path never ran at all, and it is
+     * what keeps neither the entry nor a `setMedia` copy waiting on a send that is not coming.
+     */
+    private const val VERDICT_TTL_MILLIS = 30_000L
     private const val TIMEOUT_TEXT = "INTERCEPTOR_TIMEOUT"
     private const val ABANDONED_TEXT = "INTERCEPTOR_ABANDONED"
     private val TIMEOUT_WIRE = PluginWire.encodeRpcError(SYNTHETIC_CODE, TIMEOUT_TEXT)
@@ -213,6 +239,34 @@ object PluginRpc {
     // scope id -> the passthrough response stock's free was suppressed for; that chain's finalize is the only consumer
     private val ownedResponses = HashMap<Long, TLObject>()
 
+    /**
+     * what a chain decided about the request itself, as opposed to what it answered for it.
+     *
+     * A *response* is a middleware's to substitute - catching what `next()` rejected with and
+     * answering something else is what middleware is for. A *verdict* is not: it is the decision
+     * that this send is not happening, and by the time it is made the app already owes the local
+     * message an unwind. So it is recorded on the chain where it is decided and read where the app
+     * is answered, and a stage above the deciding one cannot revoke it by swallowing a rejection.
+     */
+    private sealed interface ChainVerdict {
+        object Dropped : ChainVerdict
+
+        class TakenOver(val media: PluginSendMorph.Media) : ChainVerdict
+    }
+
+    // scope id -> what that chain decided, until its finalize reads it. globalQueue only
+    private val chainVerdicts = HashMap<Long, ChainVerdict>()
+
+    /**
+     * [sendKey] -> the verdict the composer's error path owes a local message. Armed as the app is
+     * answered and consumed by [handleDroppedSend]; what the error itself says is only how that
+     * path is reached, never how it decides.
+     */
+    private val sendVerdicts = ConcurrentHashMap<Long, ChainVerdict>()
+
+    /** every account mints its local ids out of the same descending sequence, so an id alone names two messages */
+    private fun sendKey(account: Int, id: Int): Long = (account.toLong() shl 32) or (id.toLong() and 0xffffffffL)
+
     // requests we re-issued (chain passthrough / invokeRpc), which must not re-enter maybeIntercept.
     // a *lease* rather than something the first send consumes: on CONNECTION_NOT_INITED stock
     // re-sends the very object with a fresh token and no delegate call, so a lease ending at the
@@ -235,8 +289,42 @@ object PluginRpc {
         if (interceptorsByMethod[method].orEmpty().none { it.scope == SEND_SCOPE && it.filter?.matches(method, request) != false }) {
             return PluginSendHold.release(account, messages)
         }
+        val draft = messages.firstOrNull()?.let { draftAwaitingClear(account, it) }
         synchronized(optimisticMessagesByRequest) {
-            optimisticMessagesByRequest[request] = OptimisticMessages(account, messages.toList())
+            optimisticMessagesByRequest[request] = OptimisticMessages(account, messages.toList(), draft)
+        }
+    }
+
+    /**
+     * stock clears the dialog's draft a few lines after the call this is made from, so this is the
+     * last moment a draft that is about to go can still be seen. Only its key is kept: what a
+     * verdict owes the server is an empty draft, never the one the user typed.
+     */
+    private fun draftAwaitingClear(account: Int, message: MessageObject): DraftKey? {
+        val dialogId = message.dialogId
+        if (dialogId == 0L) return null
+        val threadId = draftThreadOf(message.messageOwner)
+        val existing = MediaDataController.getInstance(account).getDraft(dialogId, threadId) ?: return null
+        return if (existing is TLRPC.TL_draftMessageEmpty) null else DraftKey(dialogId, threadId)
+    }
+
+    /** bit 1 of a reply header is what carries the topic's root id, which is the draft's own thread */
+    private fun draftThreadOf(message: TLRPC.Message?): Long {
+        val replyTo = message?.reply_to ?: return 0L
+        return if ((replyTo.flags and 2) != 0) replyTo.reply_to_top_id.toLong() else 0L
+    }
+
+    /**
+     * stock clears the local draft as it hands a send to the network, but the server's own copy
+     * goes with the `clear_draft` flag on the request itself - the one a verdict means never goes
+     * out. The re-send a takeover makes carries `clear_draft = false` too, stock reading a retry as
+     * a send whose draft went with the first attempt. So the server is told here instead, or the
+     * draft comes back on the next sync and the command the user sent reappears in the composer.
+     */
+    private fun clearServerDraft(account: Int, draft: DraftKey) {
+        AndroidUtilities.runOnUIThread {
+            MediaDataController.getInstance(account)
+                .saveDraft(draft.dialogId, draft.threadId, "", null, null, null, null, 0L, false, true)
         }
     }
 
@@ -253,22 +341,52 @@ object PluginRpc {
         }
     }
 
-    @JvmStatic
-    fun isDroppedSendError(error: TLRPC.TL_error?): Boolean =
-        error?.code == SYNTHETIC_CODE && error.text == "MESSAGE_DROPPED_BY_PLUGIN"
+    /**
+     * `message.setMedia()`: the chain this dispatch belongs to puts the media on its local message
+     * instead of sending the request it is walking. Refused when the dispatch is not this plugin's
+     * own live one, when there is no local message to put it on - a send a plugin built itself has
+     * none - and when that message is itself the answer to a `setMedia`, which is what stops a
+     * middleware answering its own re-send forever.
+     */
+    internal fun holdMedia(plugin: Plugin, dispatchId: Long, media: PluginSendMorph.Media) {
+        val pending = pendingDispatches[dispatchId]
+        if (pending == null || pending.plugin !== plugin) {
+            PluginWrites.refuse("invalid-argument", "setMedia: this send is no longer being intercepted")
+        }
+        val budget = chains[pending.scopeId]
+            ?: PluginWrites.refuse("invalid-argument", "setMedia: this send is no longer being intercepted")
+        val message = budget.optimisticMessages?.messages?.singleOrNull()
+            ?: PluginWrites.refuse("unsupported", "setMedia: this send has no local message of its own to put media on")
+        if (PluginSendMorph.isMorphed(message)) {
+            PluginWrites.refuse("unsupported", "setMedia: this message already took its media from a plugin")
+        }
+        // a second setMedia replaces the first, whose copy nothing will claim
+        budget.media?.path?.delete()
+        budget.media = media
+    }
 
+    /** whether a chain's verdict, rather than a failed send, is what this message is being answered with */
     @JvmStatic
     fun handleDroppedSend(
         helper: SendMessagesHelper,
         account: Int,
         message: TLRPC.Message,
         scheduled: Boolean,
-        error: TLRPC.TL_error?,
     ): Boolean {
-        if (!isDroppedSendError(error)) return false
-        removeDroppedMessage(helper, account, message, scheduled)
-        return true
+        val verdict = sendVerdicts.remove(sendKey(account, message.id)) ?: return false
+        return when (verdict) {
+            is ChainVerdict.Dropped -> {
+                removeDroppedMessage(helper, account, message, scheduled)
+                true
+            }
+            is ChainVerdict.TakenOver -> PluginSendMorph.takeOver(helper, account, message, scheduled, verdict.media)
+        }
     }
+
+    /** the same for an edit, whose unwind is the composer putting the message back as it was */
+    @JvmStatic
+    fun handleDroppedEdit(account: Int, messageId: Int): Boolean =
+        sendVerdicts.remove(sendKey(account, messageId)) is ChainVerdict.Dropped
 
     @JvmStatic
     fun handleDroppedSends(
@@ -276,12 +394,9 @@ object PluginRpc {
         account: Int,
         messages: ArrayList<MessageObject>,
         scheduled: Boolean,
-        error: TLRPC.TL_error?,
-    ): Boolean {
-        if (!isDroppedSendError(error)) return false
-        messages.forEach { removeDroppedMessage(helper, account, it.messageOwner, scheduled) }
-        return true
-    }
+    ): Boolean =
+        // `count`, not `any`: every message owed a verdict must get one, short-circuiting skips the rest
+        messages.count { handleDroppedSend(helper, account, it.messageOwner, scheduled) } > 0
 
     private fun removeDroppedMessage(helper: SendMessagesHelper, account: Int, message: TLRPC.Message, scheduled: Boolean) {
         val mode = when {
@@ -387,9 +502,25 @@ object PluginRpc {
         val requestKey = tokenKey(currentAccount, requestToken)
         Utilities.globalQueue.postRunnable {
             val scopeId = TlHandles.newScope()
-            val finalize: (TLObject?, TLRPC.TL_error?, Long) -> Unit = { response, error, responseTime ->
+            // what a verdict on this chain unwinds: the messages the composer drew, or - for an
+            // edit, which draws none - the one the request names, read before a stage can rewrite it
+            val unwound = optimisticMessages?.messages?.map { it.id }
+                ?: listOfNotNull((request as? TLRPC.TL_messages_editMessage)?.id)
+            val finalize: (TLObject?, TLRPC.TL_error?, Long) -> Unit = { chainResponse, chainError, responseTime ->
+                // the chain's own decision, told to the app here rather than through the value the
+                // stages above answered with - which is theirs to substitute, and this is not
+                val verdict = chainVerdicts.remove(scopeId)
+                armVerdict(optimisticMessages?.account ?: currentAccount, unwound, verdict)
+                if (verdict != null) optimisticMessages?.draft?.let { clearServerDraft(optimisticMessages.account, it) }
+                val response = if (verdict == null) chainResponse else null
+                // the composer's error path is the one that unwinds a local send, and it needs an error to run
+                val error = when (verdict) {
+                    null -> chainError
+                    is ChainVerdict.Dropped -> syntheticError(DROPPED_TEXT)
+                    is ChainVerdict.TakenOver -> syntheticError(MORPHED_TEXT)
+                }
                 // a drop is the one outcome whose local message is about to be deleted rather than drawn
-                optimisticMessages?.let { PluginSendHold.settle(it.account, it.messages, !isDroppedSendError(error)) }
+                optimisticMessages?.let { PluginSendHold.settle(it.account, it.messages, verdict !is ChainVerdict.Dropped) }
                 // earns its keep when the *first* stage's plugin is stopped, the ones below it still running
                 collapseChain(scopeId, ABANDONED_WIRE)
                 chainsByToken.remove(requestKey)
@@ -405,7 +536,7 @@ object PluginRpc {
                             MessagesController.getInstance(currentAccount).processUpdates(response, false)
                         }
                     }
-                    freeChainResponse(response, owned)
+                    freeChainResponse(chainResponse, owned)
                 }
             }
             chainsByToken[requestKey] = scopeId
@@ -668,6 +799,19 @@ object PluginRpc {
             // deliberately not. Sending anyway would also strand this [SentRequest]: nothing holds
             // it, so the collapse could neither cancel it, end its lease, nor free the request
             val armed = chains[scopeId] ?: return
+            val media = armed.media
+            // the caption is the send's own text as the chain left it, which is where a media request carries one
+            if (media != null) captionOf(request)?.let { (text, entities) ->
+                media.caption = text
+                media.entities = entities
+            }
+            if (media != null && armed.optimisticMessages?.messages?.size == 1) {
+                // the media moves to the verdict, so a collapse no longer owes its copy a delete
+                armed.media = null
+                chainVerdicts[scopeId] = ChainVerdict.TakenOver(media)
+                finalize(null, null, connectionsManager.currentTimeMillis)
+                return
+            }
             pauseChainTimer(scopeId)
             val sent = SentRequest(request)
             armed.sent = sent
@@ -754,6 +898,9 @@ object PluginRpc {
      */
     private fun collapseChain(scopeId: Long, reasonWire: String): ChainBudget? {
         val budget = chains.remove(scopeId) ?: return null
+        // a setMedia the chain never reached the end of: its copy is owned by nothing else
+        budget.media?.path?.delete()
+        budget.media = null
         budget.timer?.let { Utilities.globalQueue.cancelRunnable(it) }
         budget.timer = null
         for (dispatchId in budget.stages.reversed()) {
@@ -873,7 +1020,37 @@ object PluginRpc {
             handleBadMiddlewareResponse(dispatchId, pending, e, time)
             return
         }
-        settleStage(dispatchId, pending) { pending.finalize(response, error, time) }
+        settleStage(dispatchId, pending) {
+            // read once, here, where the stage that authored it is known: a verdict is typed onto
+            // the chain rather than left as an error for the app to recognize by its text, which
+            // any stage above this one could have written for itself
+            if (isDropVerdict(error) && pending.chain[pending.index].scope == SEND_SCOPE) {
+                chainVerdicts[pending.scopeId] = ChainVerdict.Dropped
+            }
+            pending.finalize(response, error, time)
+        }
+    }
+
+    /** what the send prelude answers a `drop` with, which only a send interceptor's own stage may say */
+    private fun isDropVerdict(error: TLRPC.TL_error?): Boolean =
+        error?.code == SYNTHETIC_CODE && error.text == DROPPED_TEXT
+
+    /**
+     * a verdict reaches the app as one entry per message it unwinds, which is what the composer's
+     * error path is handed. A [ChainVerdict.TakenOver] names exactly one by construction, the chain
+     * end having recorded it only for a send that drew a single message.
+     */
+    private fun armVerdict(account: Int, ids: List<Int>, verdict: ChainVerdict?) {
+        if (verdict == null) return
+        for (id in ids) {
+            val key = sendKey(account, id)
+            sendVerdicts[key] = verdict
+            Utilities.globalQueue.postRunnable({ discardVerdict(sendVerdicts.remove(key)) }, VERDICT_TTL_MILLIS)
+        }
+    }
+
+    private fun discardVerdict(verdict: ChainVerdict?) {
+        if (verdict is ChainVerdict.TakenOver) verdict.media.path.delete()
     }
 
     private fun handleBadMiddlewareResponse(dispatchId: Long, pending: PendingDispatch, cause: Exception, time: Long) {
@@ -974,6 +1151,13 @@ object PluginRpc {
             // native learns the token only now. stock's own bindRequestToGuid is skipped because it would come straight back through onRequestBoundToGuid
             if (guid != 0) ConnectionsManager.native_bindRequestToGuid(account, params.requestToken, guid)
         }
+    }
+
+    /** where each of the send methods carries its text, so a caption survives whatever the chain made of it */
+    private fun captionOf(request: TLObject): Pair<String, ArrayList<TLRPC.MessageEntity>>? = when (request) {
+        is TLRPC.TL_messages_sendMessage -> request.message to ArrayList(request.entities)
+        is TLRPC.TL_messages_sendMedia -> request.message to ArrayList(request.entities)
+        else -> null
     }
 
     private fun syncOptimisticMessages(request: TLObject, optimisticMessages: OptimisticMessages?) {

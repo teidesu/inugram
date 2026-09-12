@@ -318,9 +318,9 @@ object PluginMedia {
 
     private const val FILE_TAG = "F"
 
-    private class Source(val path: File, val name: String, val mime: String)
+    internal class Source(val path: File, val name: String, val mime: String)
 
-    private fun stagedFile(call: Call, wire: String): Source {
+    internal fun stagedFile(call: Call, wire: String): Source {
         if (!wire.startsWith(FILE_TAG)) refuse("invalid-argument", "expected a Blob, bytes or { path }")
         val json = JSONObject(wire.substring(1))
         val path = File(json.optString("path"))
@@ -364,7 +364,7 @@ object PluginMedia {
         "json" to "application/json", "zip" to "application/zip",
     )
 
-    private fun mimeOfName(name: String): String {
+    internal fun mimeOfName(name: String): String {
         val extension = name.substringAfterLast('.', "").lowercase()
         return MIME_BY_EXTENSION[extension] ?: "application/octet-stream"
     }

@@ -1087,7 +1087,8 @@ impl RpcState {
     };
 
     let account = dispatch_account(ctx, &state.accounts, account_id)?;
-    let call_result = middleware.call::<_, Value>((request_value, next_fn, account));
+    // the fourth argument is the send prelude's; the raw `interceptRpc` form takes three and ignores it
+    let call_result = middleware.call::<_, Value>((request_value, next_fn, account, dispatch_id as f64));
     let result_value = match call_result {
       Ok(v) => v,
       Err(rquickjs::Error::Exception) => {

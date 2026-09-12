@@ -51,9 +51,9 @@ class StockHooksTest {
     @Test
     fun `a plugin-dropped send is removed instead of becoming a failed local message`() {
         val source = stock("org/telegram/messenger/SendMessagesHelper.java")
-        val hook = "desu.inugram.helpers.plugins.telegram.PluginRpc.handleDroppedSend(this, currentAccount, newMsgObj, scheduled, error)"
-        val multiHook = "desu.inugram.helpers.plugins.telegram.PluginRpc.handleDroppedSends(this, currentAccount, msgObjs, scheduled, error)"
-        val editHook = "desu.inugram.helpers.plugins.telegram.PluginRpc.isDroppedSendError(error)"
+        val hook = "desu.inugram.helpers.plugins.telegram.PluginRpc.handleDroppedSend(this, currentAccount, newMsgObj, scheduled)"
+        val multiHook = "desu.inugram.helpers.plugins.telegram.PluginRpc.handleDroppedSends(this, currentAccount, msgObjs, scheduled)"
+        val editHook = "desu.inugram.helpers.plugins.telegram.PluginRpc.handleDroppedEdit(currentAccount, newMsgObj.id)"
         assertTrue(source.contains("if ($hook) {\n                            return;"), "the dropped-send cleanup hook is gone")
         assertTrue(source.contains("if ($multiHook) {\n                        return;"), "the dropped-album cleanup hook is gone")
         assertTrue(source.contains("if ($editHook) {\n                            removeFromSendingMessages"), "the dropped-edit cleanup hook is gone")
@@ -199,9 +199,10 @@ class StockHooksTest {
                 "org/telegram/messenger/MessagesController.java -> PluginUpdates.onUpdates",
                 "org/telegram/messenger/SendMessagesHelper.java -> PluginRpc.bindOptimisticMessage",
                 "org/telegram/messenger/SendMessagesHelper.java -> PluginRpc.bindOptimisticMessages",
+                "org/telegram/messenger/SendMessagesHelper.java -> PluginRpc.handleDroppedEdit",
                 "org/telegram/messenger/SendMessagesHelper.java -> PluginRpc.handleDroppedSend",
                 "org/telegram/messenger/SendMessagesHelper.java -> PluginRpc.handleDroppedSends",
-                "org/telegram/messenger/SendMessagesHelper.java -> PluginRpc.isDroppedSendError",
+                "org/telegram/messenger/SendMessagesHelper.java -> PluginSendHold.draw",
                 "org/telegram/tgnet/ConnectionsManager.java -> PluginRpc.maybeIntercept",
                 "org/telegram/tgnet/ConnectionsManager.java -> PluginRpc.onRequestBoundToGuid",
                 "org/telegram/tgnet/ConnectionsManager.java -> PluginRpc.onRequestCancelled",
