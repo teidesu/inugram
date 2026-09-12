@@ -1,7 +1,10 @@
 package desu.inugram.helpers.plugins.telegram
 
+import desu.inugram.helpers.plugins.EngineDispatch
+
 import desu.inugram.helpers.plugins.AccountListener
 import desu.inugram.helpers.plugins.Plugin
+import desu.inugram.helpers.plugins.PluginSession
 import desu.inugram.helpers.plugins.PluginManager
 import desu.inugram.helpers.plugins.QuickJs
 import desu.inugram.helpers.plugins.ReadsListener
@@ -17,9 +20,9 @@ object PluginAccounts {
     private var watching = false
     private var lastAccounts: String? = null
 
-    fun listenerFor(plugin: Plugin, engine: QuickJs): AccountListener {
-        val reads = PluginReads.listenerFor(plugin, engine)
-        val writes = PluginWrites.listenerFor(plugin, engine)
+    fun listenerFor(session: PluginSession): AccountListener {
+        val reads = PluginReads.listenerFor(session)
+        val writes = PluginWrites.listenerFor(session)
         return object : AccountListener, ReadsListener by reads, WritesListener by writes {
             override fun accounts(): String = accountsJson()
         }
@@ -34,7 +37,7 @@ object PluginAccounts {
                 val current = accountsJson()
                 if (current == lastAccounts) return@NotificationCenterDelegate
                 lastAccounts = current
-                Utilities.globalQueue.postRunnable {
+                EngineDispatch.scheduler.postRunnable {
                     for (plugin in PluginManager.plugins()) plugin.engine?.notifyAccountsChanged()
                 }
             }

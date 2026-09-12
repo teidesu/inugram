@@ -10,7 +10,8 @@ use rquickjs::{
 };
 
 use crate::api::error::{wire_error_to_js, PluginErrorCode};
-use crate::api::telegram::rpc::{format_exception, pump_jobs};
+use crate::api::error::format_exception;
+use crate::runtime::{pump_jobs};
 use crate::sandbox::grants::{GrantHost, MATCH_NAMESPACE};
 use crate::sandbox::registry::{CallbackRegistry, Lifecycle};
 use crate::utils::arguments::array_values;

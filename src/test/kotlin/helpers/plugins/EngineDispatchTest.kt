@@ -10,8 +10,8 @@ class EngineDispatchTest {
 
     @Test fun host_dispatch_preserves_owner_thread_and_drops_stale_work() {
         val plugin = startPlugin("host-dispatch")
-        val engine = plugin.engine!!
-        val onHost = EngineDispatch.createHostDispatcher { EngineDispatch.isLive(plugin, engine) }
+        val session = plugin.session!!
+        val onHost = EngineDispatch.createHostDispatcher { session.isCurrent() }
         val owner = Thread.currentThread()
         val seen = ArrayList<Thread>()
         onHost { seen.add(Thread.currentThread()) }
@@ -27,7 +27,7 @@ class EngineDispatchTest {
         stale.start()
         stale.join(5000)
         assertTrue(!stale.isAlive)
-        plugin.engine = RecordingQuickJs()
+        plugin.session = PluginSession(plugin, RecordingQuickJs())
         drain()
         assertEquals(listOf(owner, owner), seen)
     }

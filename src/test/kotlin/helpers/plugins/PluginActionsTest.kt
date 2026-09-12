@@ -37,8 +37,8 @@ class PluginActionsTest {
     fun rowsFollowThePluginListRatherThanTheOrderRegistrationsArrived() {
         val second = startPlugin("second")
         val first = startPlugin("first")
-        PluginActions.register(second, second.js, PluginActions.KIND_CHAT, 1, "b")
-        PluginActions.register(first, first.js, PluginActions.KIND_CHAT, 1, "a")
+        PluginActions.register(second.session!!, PluginActions.KIND_CHAT, 1, "b")
+        PluginActions.register(first.session!!, PluginActions.KIND_CHAT, 1, "a")
         second.answers(1 to "second")
         first.answers(1 to "first")
 
@@ -51,7 +51,7 @@ class PluginActionsTest {
     @Test
     fun aSecretChatIsNeverRenderedAndNoEngineIsEvenAsked() {
         val plugin = startPlugin("p")
-        PluginActions.register(plugin, plugin.js, PluginActions.KIND_CHAT, 1, "a")
+        PluginActions.register(plugin.session!!, PluginActions.KIND_CHAT, 1, "a")
         plugin.answers(1 to "row")
 
         val secret = ActionSurface.chat(0, DialogObjectIds.ENCRYPTED, null)
@@ -63,8 +63,7 @@ class PluginActionsTest {
     fun static_rows_are_returned_without_entering_the_engine() {
         val plugin = startPlugin("p")
         PluginActions.register(
-            plugin,
-            plugin.js,
+            plugin.session!!,
             PluginActions.KIND_CHAT,
             1,
             "a",
@@ -81,8 +80,7 @@ class PluginActionsTest {
     fun cached_and_dynamic_rows_are_merged_in_registration_order() {
         val plugin = startPlugin("p")
         PluginActions.register(
-            plugin,
-            plugin.js,
+            plugin.session!!,
             PluginActions.KIND_CHAT,
             1,
             "static",
@@ -90,8 +88,7 @@ class PluginActionsTest {
             dynamicFields = 0,
         )
         PluginActions.register(
-            plugin,
-            plugin.js,
+            plugin.session!!,
             PluginActions.KIND_CHAT,
             2,
             "dynamic",
@@ -108,8 +105,7 @@ class PluginActionsTest {
     fun settings_ignore_a_dynamic_visibility_getter() {
         val plugin = startPlugin("p")
         PluginActions.register(
-            plugin,
-            plugin.js,
+            plugin.session!!,
             PluginActions.KIND_CHAT,
             1,
             "a",
@@ -145,7 +141,7 @@ class PluginActionsTest {
     @Test
     fun aRowWhoseEngineIsNoLongerListedDoesNothingWhenTapped() {
         val plugin = startPlugin("p")
-        PluginActions.register(plugin, plugin.js, PluginActions.KIND_CHAT, 7, "a")
+        PluginActions.register(plugin.session!!, PluginActions.KIND_CHAT, 7, "a")
         plugin.answers(7 to "row")
 
         val rows = ArrayList<ActionRow>()
@@ -170,8 +166,7 @@ class PluginActionsTest {
     fun message_surface_carries_filtered_raw_messages_for_native_wrapping() {
         val plugin = startPlugin("p")
         PluginActions.register(
-            plugin,
-            plugin.js,
+            plugin.session!!,
             PluginActions.KIND_MESSAGE,
             1,
             "a",
@@ -224,8 +219,8 @@ class PluginActionsTest {
     fun anEngineThatCouldNotAnswerContributesNothingAndTheRestStillDraw() {
         val broken = startPlugin("broken")
         val fine = startPlugin("fine")
-        PluginActions.register(broken, broken.js, PluginActions.KIND_CHAT, 1, "a")
-        PluginActions.register(fine, fine.js, PluginActions.KIND_CHAT, 1, "b")
+        PluginActions.register(broken.session!!, PluginActions.KIND_CHAT, 1, "a")
+        PluginActions.register(fine.session!!, PluginActions.KIND_CHAT, 1, "b")
         broken.js.onRenderActions = { _, _ -> null }
         fine.answers(1 to "fine")
 
@@ -237,8 +232,8 @@ class PluginActionsTest {
         val plugin = startPlugin("p")
         assertEquals(0, PluginActions.rowCount(PluginActions.KIND_CHAT))
 
-        assertNull(PluginActions.register(plugin, plugin.js, PluginActions.KIND_CHAT, 1, "a"))
-        assertNull(PluginActions.register(plugin, plugin.js, PluginActions.KIND_CHAT, 2, "b"))
+        assertNull(PluginActions.register(plugin.session!!, PluginActions.KIND_CHAT, 1, "a"))
+        assertNull(PluginActions.register(plugin.session!!, PluginActions.KIND_CHAT, 2, "b"))
         assertEquals(2, PluginActions.rowCount(PluginActions.KIND_CHAT))
         assertEquals(0, PluginActions.rowCount(PluginActions.KIND_MESSAGE))
         assertTrue(plugin.js.actionRenders.isEmpty())
@@ -254,8 +249,7 @@ class PluginActionsTest {
     fun message_placements_have_independent_counts() {
         val plugin = startPlugin("p")
         PluginActions.register(
-            plugin,
-            plugin.js,
+            plugin.session!!,
             PluginActions.KIND_MESSAGE,
             1,
             "selection",
@@ -273,8 +267,7 @@ class PluginActionsTest {
     fun message_settings_include_selection_only_rows() {
         val plugin = startPlugin("p")
         PluginActions.register(
-            plugin,
-            plugin.js,
+            plugin.session!!,
             PluginActions.KIND_MESSAGE,
             1,
             "selection",
@@ -294,9 +287,9 @@ class PluginActionsTest {
         val cap = 8
         val plugin = startPlugin("p")
         for (token in 1..cap) {
-            assertNull(PluginActions.register(plugin, plugin.js, PluginActions.KIND_CHAT, token, "row$token"))
+            assertNull(PluginActions.register(plugin.session!!, PluginActions.KIND_CHAT, token, "row$token"))
         }
-        assertNotNull(PluginActions.register(plugin, plugin.js, PluginActions.KIND_CHAT, cap + 1, "over"))
+        assertNotNull(PluginActions.register(plugin.session!!, PluginActions.KIND_CHAT, cap + 1, "over"))
         assertEquals(cap, PluginActions.rowCount(PluginActions.KIND_CHAT))
     }
 
@@ -304,14 +297,14 @@ class PluginActionsTest {
     fun theNinthRowIsRefusedButUpdatingOneOfTheEightIsNot() {
         val plugin = startPlugin("p")
         for (token in 1..8) {
-            assertNull(PluginActions.register(plugin, plugin.js, PluginActions.KIND_CHAT, token, "row$token"))
+            assertNull(PluginActions.register(plugin.session!!, PluginActions.KIND_CHAT, token, "row$token"))
         }
-        assertNotNull(PluginActions.register(plugin, plugin.js, PluginActions.KIND_CHAT, 9, "row9"))
+        assertNotNull(PluginActions.register(plugin.session!!, PluginActions.KIND_CHAT, 9, "row9"))
         assertEquals(8, PluginActions.rowCount(PluginActions.KIND_CHAT))
 
         // the engine allocates the replacement's token first and retires the displaced one after,
         // which is what a count-only cap would refuse
-        assertNull(PluginActions.register(plugin, plugin.js, PluginActions.KIND_CHAT, 10, "row1"))
+        assertNull(PluginActions.register(plugin.session!!, PluginActions.KIND_CHAT, 10, "row1"))
         PluginActions.unregister(plugin.js, PluginActions.KIND_CHAT, 1)
         assertEquals(8, PluginActions.rowCount(PluginActions.KIND_CHAT))
     }
@@ -319,7 +312,7 @@ class PluginActionsTest {
     @Test
     fun aDetachedEngineIsNeitherCountedNorAskedNorDispatchedTo() {
         val plugin = startPlugin("p")
-        PluginActions.register(plugin, plugin.js, PluginActions.KIND_CHAT, 1, "a")
+        PluginActions.register(plugin.session!!, PluginActions.KIND_CHAT, 1, "a")
         plugin.answers(1 to "row")
 
         PluginActions.detach(plugin.js)

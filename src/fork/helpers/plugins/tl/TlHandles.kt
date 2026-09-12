@@ -29,7 +29,7 @@ import org.telegram.tgnet.TLObject
  * carrying the `inu.tl.handle` marker symbol, which a plugin can forge - a shared table would let
  * one plugin read another's objects by guessing an id.
  *
- * Reached from `globalQueue` and from whichever thread a JVM runnable or an Xposed phase entered
+ * Reached from the plugin queue and from whichever thread a JVM runnable or an Xposed phase entered
  * on, so [table] is concurrent and the mint/release pair that spans it and [handlesByScope] is
  * serialized by [scopeLock]. Repeated reads of one field mint a fresh handle each time; caching
  * here would need an rquickjs `Persistent`, and a GC root outliving the runtime aborts under
@@ -669,37 +669,5 @@ class TlHandles(private val policy: TlFilter.Policy) : TlListener {
 
         fun newScope(): Long = nextScopeId.getAndIncrement()
 
-        fun of(engine: QuickJs): TlHandles =
-            engine.listener?.tl as? TlHandles ?: throw IllegalStateException("no handle table")
-
-        private val byPlugin = ConcurrentHashMap<Plugin, TlHandles>()
-
-        // `plugin.engine` is *not* this signal: it is cleared only after `engine.close()` and the
-        // table only after the abandon loops, so between the two a chain restarted by one of those
-        // abandons would read a leaving plugin as live and mint into an engine already unloading
-        private val detaching = Collections.newSetFromMap(ConcurrentHashMap<Plugin, Boolean>())
-
-        /** the plugin's own table, which every materialization for it mints into */
-        fun attach(plugin: Plugin, policy: TlFilter.Policy): TlHandles =
-            TlHandles(policy).also { byPlugin[plugin] = it }
-
-        fun of(plugin: Plugin): TlHandles? = byPlugin[plugin]
-
-        /** [of], but null once the plugin is on its way out - see [detaching] */
-        fun attached(plugin: Plugin): TlHandles? = if (plugin in detaching) null else byPlugin[plugin]
-
-        fun beginDetach(plugin: Plugin) {
-            detaching.add(plugin)
-        }
-
-        /**
-         * last of the whole teardown, and that is the rule: the abandons above it reject inside this
-         * plugin too, and a continuation touching its own request view must not find every field
-         * expired.
-         */
-        fun endDetach(plugin: Plugin) {
-            byPlugin.remove(plugin)?.releaseAll()
-            detaching.remove(plugin)
-        }
     }
 }

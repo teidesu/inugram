@@ -1,11 +1,14 @@
 package desu.inugram.helpers.plugins.ui
 
+import desu.inugram.helpers.plugins.EngineDispatch
+
 import android.util.Log
 import desu.inugram.InuConfig
 import desu.inugram.core.plugins.ActionRegistration
 import desu.inugram.core.plugins.ActionRegistry
 import desu.inugram.core.plugins.PluginWire
 import desu.inugram.helpers.plugins.Plugin
+import desu.inugram.helpers.plugins.PluginSession
 import desu.inugram.helpers.plugins.PluginManager
 import desu.inugram.helpers.plugins.QuickJs
 import java.util.concurrent.CopyOnWriteArrayList
@@ -46,7 +49,7 @@ data class RegisteredActionRow(
  * Kotlin side of `inu.register*Action` (rust: `actions.rs`): rows a plugin contributes to menus the
  * app owns.
  *
- * Dynamic getters are rendered on [Utilities.globalQueue]. Static presentation is cached during
+ * Dynamic getters are rendered on [EngineDispatch.scheduler]. Static presentation is cached during
  * registration, so rows without relevant getters never enter an engine.
  */
 object PluginActions {
@@ -96,7 +99,7 @@ object PluginActions {
      * would not appear until something else rebuilt it.
      *
      * Copy-on-write: a screen registers from the ui thread while [publishCounts] reads the list from
-     * an upcall on [Utilities.globalQueue].
+     * an upcall on [EngineDispatch.scheduler].
      */
     private val onCountsChanged = CopyOnWriteArrayList<() -> Unit>()
 
@@ -115,8 +118,7 @@ object PluginActions {
     }
 
     fun register(
-        plugin: Plugin,
-        engine: QuickJs,
+        session: PluginSession,
         kind: Int,
         token: Int,
         id: String,
@@ -125,9 +127,9 @@ object PluginActions {
         icon: String? = null,
         dynamicFields: Int = DYNAMIC_ALL,
     ): String? {
-        val refusal = registry.register(engine, kind, token, id, placements, text, icon, dynamicFields)
+        val refusal = registry.register(session.engine, kind, token, id, placements, text, icon, dynamicFields)
         if (refusal != null) {
-            Log.w(TAG, "[${plugin.manifest.name}] refused an action row: $refusal")
+            Log.w(TAG, "[${session.manifest.name}] refused an action row: $refusal")
             // a `P` wire, so the cap refusal carries its own code: every other answer this upcall can give is a JNI-level failure, and reporting those as `quota-exceeded` tells a plugin it is at a limit it is nowhere near
             return PluginWire.encodePluginError("quota-exceeded", refusal)
         }
@@ -273,34 +275,37 @@ object PluginActions {
             AndroidUtilities.runOnUIThread { onRows(emptyList()) }
             return
         }
-        render(kind, surface.placements, false, { plugin -> surface.getJson(plugin.permissions) }, onRows)
+        render(kind, surface.placements, false, { session -> surface.getJson(session.permissions) }, onRows)
     }
 
     private fun render(
         kind: Int,
         placements: Int,
         settings: Boolean,
-        getSurfaceJson: (Plugin) -> String,
+        getSurfaceJson: (PluginSession) -> String,
         onRows: (List<ActionRow>) -> Unit,
     ) {
-        val plugins = PluginManager.plugins().mapNotNull { plugin -> plugin.engine?.let { plugin to it } }
+        val plugins = PluginManager.plugins().mapNotNull { plugin -> plugin.session?.takeIf { it.canDispatch() } }
         val cached = registeredRows.getOrElse(kind) { emptyList() }
-        val registrations = plugins.flatMap { (_, engine) ->
-            cached.filter { it.owner === engine && it.placements and placements != 0 }
+        val registrations = plugins.flatMap { session ->
+            cached.filter { it.owner === session.engine && it.placements and placements != 0 }
         }
         val relevantFields = if (settings) DYNAMIC_PRESENTATION else DYNAMIC_ALL
         if (registrations.none { it.dynamicFields and relevantFields != 0 }) {
             AndroidUtilities.runOnUIThread { onRows(registrations.mapNotNull(::getStaticRow)) }
             return
         }
-        Utilities.globalQueue.postRunnable {
+        EngineDispatch.scheduler.postRunnable {
             val dynamicRows = HashMap<Pair<QuickJs, Int>, DynamicRow>()
-            for ((plugin, engine) in plugins) {
+            for (session in plugins) {
+                if (!session.canDispatch()) continue
+                val plugin = session.plugin
+                val engine = session.engine
                 if (registrations.none { it.owner === engine && it.dynamicFields and relevantFields != 0 }) continue
                 val surfaceJson = try {
-                    getSurfaceJson(plugin)
+                    getSurfaceJson(session)
                 } catch (e: Exception) {
-                    Log.e(TAG, "cannot serialize action surface for ${plugin.manifest.name}", e)
+                    Log.e(TAG, "cannot serialize action surface for ${session.manifest.name}", e)
                     continue
                 }
                 val rows = engine.renderActions(kind, surfaceJson)?.let(::parseDynamicRows) ?: continue
@@ -330,14 +335,14 @@ object PluginActions {
      * does nothing rather than reaching whatever took its token.
      */
     fun dispatch(row: ActionRow, surface: ActionSurface) {
-        Utilities.globalQueue.postRunnable {
+        EngineDispatch.scheduler.postRunnable {
             val live = registeredRows.getOrElse(row.key.kind) { emptyList() }
                 .firstOrNull { it.key == row.key } ?: return@postRunnable
-            val plugin = PluginManager.plugins().firstOrNull { it.engine === live.owner } ?: return@postRunnable
+            val session = PluginManager.plugins().mapNotNull { it.session }.firstOrNull { it.engine === live.owner } ?: return@postRunnable
             val surfaceJson = try {
-                surface.getJson(plugin.permissions)
+                surface.getJson(session.permissions)
             } catch (e: Exception) {
-                Log.e(TAG, "cannot serialize action surface for ${plugin.manifest.name}", e)
+                Log.e(TAG, "cannot serialize action surface for ${session.manifest.name}", e)
                 return@postRunnable
             }
             live.owner.dispatchAction(surface.kind, live.token, surfaceJson)
@@ -362,12 +367,12 @@ object PluginActions {
      * stopped or reloaded engine inert.
      */
     private fun publishCounts() {
-        val plugins = PluginManager.plugins().mapNotNull { plugin -> plugin.engine?.let { plugin to it } }
-        val order = plugins.map { it.second }
+        val plugins = PluginManager.plugins().mapNotNull { plugin -> plugin.session?.takeIf { it.canDispatch() } }
+        val order = plugins.map { it.engine }
         val rows = List(KIND_COUNT) { kind ->
             registry.registrationsInOrder(kind, order).mapNotNull { registration ->
-                val plugin = plugins.firstOrNull { it.second === registration.owner }?.first ?: return@mapNotNull null
-                registration.toRegisteredRow(plugin)
+                val session = plugins.firstOrNull { it.engine === registration.owner } ?: return@mapNotNull null
+                registration.toRegisteredRow(session)
             }
         }
         val ids = List(KIND_COUNT) { kind -> rows[kind].filter { it.placements and getDefaultPlacements(kind) != 0 }.map { it.key } }
@@ -404,12 +409,12 @@ object PluginActions {
         }
     }
 
-    private fun ActionRegistration<QuickJs>.toRegisteredRow(plugin: Plugin) = RegisteredActionRow(
+    private fun ActionRegistration<QuickJs>.toRegisteredRow(session: PluginSession) = RegisteredActionRow(
         owner,
         token,
-        ActionKey(plugin.id, kind, id),
+        ActionKey(session.plugin.id, kind, id),
         text,
-        plugin.manifest.name,
+        session.manifest.name,
         icon,
         placements,
         dynamicFields,

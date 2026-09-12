@@ -6,7 +6,8 @@ use rquickjs::{Ctx, Exception, Function, Object, Result as JsResult, Runtime, Va
 
 use crate::api::error::PluginErrorCode;
 use crate::api::platform::jvm::JvmState;
-use crate::api::telegram::rpc::{format_exception, pump_jobs, PendingSettle};
+use crate::api::error::format_exception;
+use crate::runtime::{pump_jobs, PendingSettle};
 use crate::api::ui::icons;
 use crate::sandbox::registry::RequestIds;
 

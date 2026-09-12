@@ -17,9 +17,9 @@ class PluginCallerThreadTest {
     @Test fun real_js_runnable_keeps_its_closure_and_executes_on_the_caller() {
         val plugin = startPlugin("caller-thread", "unsafe.jvm", "unsafe.xposed")
         val engine = QuickJs()
-        plugin.engine = engine
+        plugin.session = PluginSession(plugin, engine)
         val logs = CopyOnWriteArrayList<String>()
-        attachBridge(plugin, engine, object : CoreListener {
+        attachBridge(plugin.session!!, object : CoreListener {
             override fun onConsole(level: Int, message: String) { logs.add(message) }
             override fun onTimerSchedule(delayMs: Long) = Unit
         })
@@ -87,7 +87,7 @@ class PluginCallerThreadTest {
             PluginJvm.detach(engine)
             engine.close()
             JvmFixture.task = null
-            plugin.engine = null
+            plugin.session = null
         }
     }
 
@@ -98,14 +98,13 @@ class PluginCallerThreadTest {
     @Test fun the_calls_a_caller_thread_may_make_answer_on_it() {
         val plugin = startPlugin("caller-ui", "unsafe.jvm", "kv")
         val engine = QuickJs()
-        plugin.engine = engine
+        plugin.session = PluginSession(plugin, engine)
         val logs = CopyOnWriteArrayList<String>()
         val toasts = CopyOnWriteArrayList<String>()
         val onHost = EngineDispatch.createHostDispatcher()
-        val timers = TimerThrottle(plugin, engine)::schedule
+        val timers = TimerThrottle(plugin.session!!)::schedule
         attachBridge(
-            plugin,
-            engine,
+            plugin.session!!,
             object : CoreListener {
                 override fun onConsole(level: Int, message: String) { logs.add(message) }
                 override fun onTimerSchedule(delayMs: Long) = onHost { timers(delayMs) }
@@ -115,7 +114,7 @@ class PluginCallerThreadTest {
                     toasts.add("$text@${Thread.currentThread().name}")
                 }
             },
-            storage = PluginKv.listenerFor(plugin),
+            storage = PluginKv.listenerFor(plugin.session!!),
         )
         logs.clear()
         try {
@@ -156,7 +155,7 @@ class PluginCallerThreadTest {
             PluginJvm.detach(engine)
             engine.close()
             JvmFixture.task = null
-            plugin.engine = null
+            plugin.session = null
         }
     }
 

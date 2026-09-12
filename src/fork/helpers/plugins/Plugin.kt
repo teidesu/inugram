@@ -45,7 +45,7 @@ class Plugin(
 ) {
     private class ParsedGrants(val of: PluginManifest, val permissions: PluginPermissions)
 
-    // one field, because both halves are read from globalQueue and from stageQueue (PluginRpc's
+    // one field, because both halves are read from the plugin queue and from stageQueue (PluginRpc's
     // chainFor, off onUpdates): as two plain writes the identity could publish ahead of the
     // permissions, and a reload that dropped a grant would still authorize an interceptor on it
     @Volatile private var parsed: ParsedGrants? = null
@@ -57,7 +57,7 @@ class Plugin(
             return PluginPermissions.parse(current.grants).also { parsed = ParsedGrants(current, it) }
         }
 
-    // written on the UI thread, read from globalQueue by every queued engine op
+    // written on the UI thread, read from the plugin queue by every queued engine op
     @Volatile var enabled: Boolean = true
 
     /** the source on disk came from the dev server, so it passed no trust or permission sheet; UI-thread owned */
@@ -67,16 +67,18 @@ class Plugin(
     @Volatile var failure: PluginFailure? = null
 
     /**
-     * non-null while the plugin is running. written only on globalQueue, but read from the ui thread
+     * non-null while the plugin is running. written only on the plugin queue, but read from the ui thread
      * too - `PluginActions.render` takes the live order there before it posts.
      */
-    @Volatile var engine: QuickJs? = null
+    @Volatile var session: PluginSession? = null
+
+    val engine: QuickJs? get() = session?.engine
 
     /**
      * the page id passed to `inu.registerSettings`, backing the settings button in the plugins
-     * list. set on globalQueue during evaluation, read from the UI thread; cleared on stop.
+     * list. set on the plugin queue during evaluation, read from the UI thread; cleared on stop.
      */
-    @Volatile var settingsPageId: Long? = null
+    val settingsPageId: Long? get() = session?.settingsPageId
 
     val running: Boolean get() = engine != null
 }

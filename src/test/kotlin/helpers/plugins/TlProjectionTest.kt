@@ -192,7 +192,7 @@ class TlProjectionTest {
     @Test
     fun a_plugin_read_answers_a_projected_handle() {
         val plugin = startPlugin("projection", "account.read(self,peers,dialogs)")
-        val handles = TlHandles.attach(plugin, POLICY)
+        val handles = plugin.session!!.tl
         val wire = desu.inugram.helpers.plugins.telegram.PluginReads.mint(handles, dialog())
         val separator = wire.indexOf(PluginWire.PROJECTION_SEPARATOR)
         assertTrue(separator > 0, wire)

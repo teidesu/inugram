@@ -144,7 +144,7 @@ class PluginNotificationsTest {
         plugin.observe("dialogsNeedReload", callbackId = 1)
         plugin.observe("updateInterfaces", callbackId = 2)
         assertTrue(pluginObserverCount() > 0)
-        PluginNotifications.detach(plugin.js)
+        PluginNotifications.detach(plugin.session!!)
         flushUi()
         assertEquals(0, pluginObserverCount(), "an unloaded engine must not be reachable from the centre")
     }
@@ -165,7 +165,7 @@ class PluginNotificationsTest {
         plugin.observe("dialogsNeedReload")
         post(NotificationCenter.getInstance(0), NotificationCenter.dialogsNeedReload)
         val engine = plugin.js
-        plugin.engine = null
+        plugin.session = null
         drain()
         assertEquals(0, engine.notifications.size)
     }

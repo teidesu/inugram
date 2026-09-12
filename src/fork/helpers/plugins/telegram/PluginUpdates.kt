@@ -2,11 +2,13 @@ package desu.inugram.helpers.plugins.telegram
 
 import android.util.Log
 import desu.inugram.core.plugins.BoundedIdentitySet
+import desu.inugram.core.plugins.DispatchDeadline
 import desu.inugram.core.plugins.PluginWire
 import desu.inugram.core.plugins.ScopeMatch
 import desu.inugram.core.plugins.TlCtorIds
 import desu.inugram.core.plugins.TlNames
 import desu.inugram.helpers.plugins.Plugin
+import desu.inugram.helpers.plugins.PluginSession
 import desu.inugram.helpers.plugins.EngineDispatch
 import desu.inugram.helpers.plugins.PluginManager
 import desu.inugram.helpers.plugins.QuickJs
@@ -26,7 +28,7 @@ import org.telegram.tgnet.tl.TL_update
  * Wires `inu.onUpdate`/`inu.interceptUpdate` into the app's arriving update stream (rust:
  * `tg/rpc.rs`, whose `update_dispatches` is a table of its own).
  *
- * Everything here runs on [Utilities.globalQueue] except the hand-back, which is
+ * Everything here runs on [EngineDispatch.scheduler] except the hand-back, which is
  * [Utilities.stageQueue] because that is the only queue `processUpdates` may run on: it mutates
  * pts/seq with no locking, and stock's own tail runs it there.
  *
@@ -74,27 +76,27 @@ object PluginUpdates {
     // a ring for the same reason: a parked batch is re-fed but not re-intercepted, so a verdict cleared after the hand-back would be lost and the update applied on the second pass
     private val droppedUpdates = BoundedIdentitySet<TLObject>(DISPATCH_MEMORY)
 
-    fun listenerFor(plugin: Plugin, engine: QuickJs): UpdatesListener =
+    fun listenerFor(session: PluginSession): UpdatesListener =
         object : UpdatesListener {
-            private val onHost = EngineDispatch.createHostDispatcher { EngineDispatch.isLive(plugin, engine) }
+            private val onHost = EngineDispatch.createHostDispatcher { session.isCurrent() }
             override fun onUpdateRegister(callbackId: Int, types: Array<String>, scope: String): String? =
-                registerUpdates(plugin, callbackId, types, scope)
+                registerUpdates(session, callbackId, types, scope)
 
             override fun onUpdateUnregister(callbackId: Int) =
-                onHost { unregisterUpdates(plugin, callbackId) }
+                onHost { unregisterUpdates(session, callbackId) }
 
             override fun onInterceptUpdateRegister(callbackId: Int, types: Array<String>): String? =
-                registerInterceptUpdates(plugin, callbackId, types)
+                registerInterceptUpdates(session, callbackId, types)
 
             override fun onInterceptUpdateUnregister(callbackId: Int) =
-                onHost { unregisterInterceptUpdates(plugin, callbackId) }
+                onHost { unregisterInterceptUpdates(session, callbackId) }
 
             override fun onUpdateVerdict(dispatchId: Long, deliver: Boolean) =
                 onHost { onUpdateStageSettled(dispatchId, deliver) }
         }
 
     fun refreshOrder() {
-        Utilities.globalQueue.postRunnable {
+        EngineDispatch.scheduler.postRunnable {
             publishUpdateRegs(updateRegs)
             publishUpdateInterceptors(updateInterceptRegs)
         }
@@ -104,12 +106,12 @@ object PluginUpdates {
      * A batch parked on this plugin is **delivered**, never failed: a drop is final and nothing
      * re-requests what it took, so producing one out of an unload would lose the user's messages.
      */
-    fun detach(plugin: Plugin) {
-        publishUpdateRegs(updateRegs.filter { it.plugin !== plugin })
-        publishUpdateInterceptors(updateInterceptRegs.filter { it.plugin !== plugin })
-        for (dispatchId in pendingUpdateDispatches.filterValues { it.stagePlugin === plugin }.keys.toList()) {
+    fun detach(session: PluginSession) {
+        publishUpdateRegs(updateRegs.filter { it.session !== session })
+        publishUpdateInterceptors(updateInterceptRegs.filter { it.session !== session })
+        for (dispatchId in pendingUpdateDispatches.filterValues { it.stageSession === session }.keys.toList()) {
             val batch = pendingUpdateDispatches.remove(dispatchId) ?: continue
-            plugin.engine?.abandonUpdateDispatch(dispatchId)
+            batch.stageSession?.engine?.abandonUpdateDispatch(dispatchId)
             advanceBatch(batch)
         }
     }
@@ -122,18 +124,18 @@ object PluginUpdates {
      * name otherwise. `common.d.ts` keeps the two vocabularies apart, so it is not derivable.
      */
     private class UpdateReg(
-        val plugin: Plugin,
+        val session: PluginSession,
         val callbackId: Int,
         val types: Set<String>,
         val grantScope: String?,
     )
 
-    private class UpdateListener(val plugin: Plugin) {
+    private class UpdateListener(val session: PluginSession) {
         val grantScopes = HashSet<String>()
     }
 
     /** the scopes here are the constructors, unlike `onUpdate`'s */
-    private class UpdateInterceptor(val plugin: Plugin, val callbackId: Int, val types: Set<String>)
+    private class UpdateInterceptor(val session: PluginSession, val callbackId: Int, val types: Set<String>)
 
     /**
      * [arrival] is what the app holds - the `Update` itself, or the `Message` a difference carries
@@ -185,8 +187,8 @@ object PluginUpdates {
         var stage = 0
         var dispatchId = 0L
 
-        var stagePlugin: Plugin? = null
-        var timer: Runnable? = null
+        var stageSession: PluginSession? = null
+        val deadline = DispatchDeadline(EngineDispatch.scheduler, UPDATE_BUDGET_MS) { expireBatch(this) }
         var expired = false
         var finished = false
 
@@ -201,7 +203,7 @@ object PluginUpdates {
      * [scope] empty is the raw form, where each constructor is its own grant scope; otherwise it is
      * the demuxed event name and [types] is that event's fixed list.
      */
-    private fun registerUpdates(plugin: Plugin, callbackId: Int, types: Array<String>, scope: String): String? {
+    private fun registerUpdates(session: PluginSession, callbackId: Int, types: Array<String>, scope: String): String? {
         for (type in types) {
             if (type !in TlCtorIds.updateNames) {
                 return PluginWire.encodePluginError("unknown-constructor", "onUpdate: unknown update type '$type'")
@@ -209,35 +211,35 @@ object PluginUpdates {
         }
         val grantScope = scope.ifEmpty { null }
         for (target in grantScope?.let { listOf(it) } ?: types.toList()) {
-            if (!plugin.permissions.allows("onUpdate", target, ScopeMatch.EXACT)) {
+            if (!session.permissions.allows("onUpdate", target, ScopeMatch.EXACT)) {
                 return PluginWire.encodeNotGranted("onUpdate", target)
             }
         }
-        publishUpdateRegs(updateRegs + UpdateReg(plugin, callbackId, types.toSet(), grantScope))
+        publishUpdateRegs(updateRegs + UpdateReg(session, callbackId, types.toSet(), grantScope))
         return null
     }
 
-    private fun unregisterUpdates(plugin: Plugin, callbackId: Int) {
-        publishUpdateRegs(updateRegs.filter { it.plugin !== plugin || it.callbackId != callbackId })
+    private fun unregisterUpdates(session: PluginSession, callbackId: Int) {
+        publishUpdateRegs(updateRegs.filter { it.session !== session || it.callbackId != callbackId })
     }
 
     /** every `interceptUpdate` scope is a constructor name - there is no demuxed form over it */
-    private fun registerInterceptUpdates(plugin: Plugin, callbackId: Int, types: Array<String>): String? {
+    private fun registerInterceptUpdates(session: PluginSession, callbackId: Int, types: Array<String>): String? {
         for (type in types) {
             if (type !in TlCtorIds.updateNames) {
                 return PluginWire.encodePluginError("unknown-constructor", "interceptUpdate: unknown update type '$type'")
             }
-            if (!plugin.permissions.allows("interceptUpdate", type, ScopeMatch.EXACT)) {
+            if (!session.permissions.allows("interceptUpdate", type, ScopeMatch.EXACT)) {
                 return PluginWire.encodeNotGranted("interceptUpdate", type)
             }
         }
-        publishUpdateInterceptors(updateInterceptRegs + UpdateInterceptor(plugin, callbackId, types.toSet()))
+        publishUpdateInterceptors(updateInterceptRegs + UpdateInterceptor(session, callbackId, types.toSet()))
         return null
     }
 
-    private fun unregisterInterceptUpdates(plugin: Plugin, callbackId: Int) {
+    private fun unregisterInterceptUpdates(session: PluginSession, callbackId: Int) {
         publishUpdateInterceptors(
-            updateInterceptRegs.filter { it.plugin !== plugin || it.callbackId != callbackId }
+            updateInterceptRegs.filter { it.session !== session || it.callbackId != callbackId }
         )
     }
 
@@ -246,12 +248,12 @@ object PluginUpdates {
         val order = PluginManager.orderIndex()
         updateRegs = updated
         val byType = HashMap<String, MutableList<UpdateListener>>()
-        for (reg in updated.sortedBy { order[it.plugin] ?: Int.MAX_VALUE }) {
+        for (reg in updated.sortedBy { order[it.session.plugin] ?: Int.MAX_VALUE }) {
             for (type in reg.types) {
                 val listening = byType.getOrPut(type) { mutableListOf() }
                 // one dispatch per plugin however many of its registrations named this type; the engine fans out from a single handle
-                val listener = listening.firstOrNull { it.plugin === reg.plugin }
-                    ?: UpdateListener(reg.plugin).also { listening.add(it) }
+                val listener = listening.firstOrNull { it.session === reg.session }
+                    ?: UpdateListener(reg.session).also { listening.add(it) }
                 listener.grantScopes.add(reg.grantScope ?: type)
             }
         }
@@ -266,7 +268,7 @@ object PluginUpdates {
         val order = PluginManager.orderIndex()
         updateInterceptRegs = updated
         val byType = HashMap<String, MutableList<UpdateInterceptor>>()
-        for (reg in updated.sortedBy { order[it.plugin] ?: Int.MAX_VALUE }) {
+        for (reg in updated.sortedBy { order[it.session.plugin] ?: Int.MAX_VALUE }) {
             for (type in reg.types) byType.getOrPut(type) { mutableListOf() }.add(reg)
         }
         updateInterceptorsByType = byType
@@ -283,7 +285,7 @@ object PluginUpdates {
      * does not line up is moved into a fresh wrapper stock parks, so by the time anything posted
      * from here runs the list may be empty. The fan-out then takes a stageQueue hop, so plugins
      * read the objects after `processUpdateArray` backfilled them rather than racing those writes -
-     * and the two hops are the only happens-before edge to globalQueue.
+     * and the two hops are the only happens-before edge to the plugin queue.
      */
     @JvmStatic
     fun onUpdates(controller: MessagesController, updates: TLRPC.Updates, account: Int, fromQueue: Boolean): Boolean {
@@ -310,7 +312,7 @@ object PluginUpdates {
         val queue = updateQueues.getOrPut(batch.account) { ArrayDeque() }
         queue.addLast(batch)
         // ordering is why an unclaimed batch is queued too: the app applies updates in arrival order
-        if (queue.size == 1) Utilities.globalQueue.postRunnable { runBatch(batch) }
+        if (queue.size == 1) EngineDispatch.scheduler.postRunnable { runBatch(batch) }
         return true
     }
 
@@ -340,7 +342,7 @@ object PluginUpdates {
         val listening = updateInterceptorsByType[tlName] ?: return emptyList()
         val serviceNotification = update is TL_update.TL_updateServiceNotification
         return listening.filter { interceptor ->
-            val permissions = interceptor.plugin.permissions
+            val permissions = interceptor.session.permissions
             (!serviceNotification || permissions.has("unsafe.disableApiFiltering")) &&
                 permissions.allows("interceptUpdate", tlName, ScopeMatch.EXACT)
         }
@@ -360,9 +362,7 @@ object PluginUpdates {
 
     private fun runBatch(batch: UpdateBatch) {
         batch.scopeId = TlHandles.newScope()
-        val timer = Runnable { expireBatch(batch) }
-        batch.timer = timer
-        Utilities.globalQueue.postRunnable(timer, UPDATE_BUDGET_MS)
+        batch.deadline.resume()
         advanceBatch(batch)
     }
 
@@ -377,12 +377,13 @@ object PluginUpdates {
                 continue
             }
             batch.stage++
-            val engine = interceptor.plugin.engine
-            val tl = TlHandles.attached(interceptor.plugin)
-            if (engine == null || tl == null) continue
+            val session = interceptor.session
+            if (!session.canDispatch()) continue
+            val engine = session.engine
+            val tl = session.tl
             val dispatchId = nextDispatchId++
             batch.dispatchId = dispatchId
-            batch.stagePlugin = interceptor.plugin
+            batch.stageSession = session
             pendingUpdateDispatches[dispatchId] = batch
             val handle = tl.mintForScope(unit.update, batch.scopeId)
             engine.dispatchUpdateIntercept(
@@ -399,9 +400,9 @@ object PluginUpdates {
 
     /** posted, not run inline: this arrives from inside the engine's own JNI upcall, and the next stage may be the same engine */
     private fun onUpdateStageSettled(dispatchId: Long, deliver: Boolean) {
-        Utilities.globalQueue.postRunnable {
+        EngineDispatch.scheduler.postRunnable {
             val batch = pendingUpdateDispatches.remove(dispatchId) ?: return@postRunnable
-            batch.stagePlugin = null
+            batch.stageSession = null
             if (!deliver) {
                 // a drop ends the chain for that update, exactly as a short-circuiting request stage ends its own
                 batch.dropped.add(batch.units[batch.index].update)
@@ -419,22 +420,21 @@ object PluginUpdates {
         if (batch.finished) return
         batch.expired = true
         val dispatchId = batch.dispatchId
-        val stagePlugin = batch.stagePlugin
+        val stageSession = batch.stageSession
         if (dispatchId != 0L && pendingUpdateDispatches.remove(dispatchId) === batch) {
-            stagePlugin?.engine?.abandonUpdateDispatch(dispatchId)
+            stageSession?.engine?.abandonUpdateDispatch(dispatchId)
         }
-        Log.w(TAG, "[${stagePlugin?.manifest?.name}] an update batch ran past the ${UPDATE_BUDGET_MS}ms budget")
+        Log.w(TAG, "[${stageSession?.manifest?.name}] an update batch ran past the ${UPDATE_BUDGET_MS}ms budget")
         finishBatch(batch)
     }
 
     private fun finishBatch(batch: UpdateBatch) {
         if (batch.finished) return
         batch.finished = true
-        batch.timer?.let { Utilities.globalQueue.cancelRunnable(it) }
-        batch.timer = null
+        batch.deadline.cancel()
         // before the hand-back, so no view can still read an update the app is about to apply
-        for (plugin in batch.units.flatMap { it.chain }.map { it.plugin }.distinct()) {
-            TlHandles.of(plugin)?.releaseScope(batch.scopeId)
+        for (session in batch.units.flatMap { it.chain }.map { it.session }.distinct()) {
+            session.tl.releaseScope(batch.scopeId)
         }
         Utilities.stageQueue.postRunnable { deliverBatch(batch) }
     }
@@ -480,7 +480,7 @@ object PluginUpdates {
         if (queue.firstOrNull() !== batch) return
         queue.removeFirst()
         val next = queue.firstOrNull()
-        if (next == null) updateQueues.remove(batch.account) else Utilities.globalQueue.postRunnable { runBatch(next) }
+        if (next == null) updateQueues.remove(batch.account) else EngineDispatch.scheduler.postRunnable { runBatch(next) }
     }
 
     /**
@@ -592,7 +592,7 @@ object PluginUpdates {
     private fun fanOut(batch: List<UnpackedUpdate>, account: Int) {
         if (batch.isEmpty()) return
         Utilities.stageQueue.postRunnable {
-            Utilities.globalQueue.postRunnable {
+            EngineDispatch.scheduler.postRunnable {
                 for (unpacked in batch) {
                     // a dropped update is still in the batch the app was handed, marked rather than removed, and never happened for observers either
                     if (unpacked.update in droppedUpdates) continue
@@ -661,13 +661,14 @@ object PluginUpdates {
         if (isSecretChatUpdate(update)) return
         val serviceNotification = update is TL_update.TL_updateServiceNotification
         for (listener in listening) {
-            val plugin = listener.plugin
-            val engine = plugin.engine ?: continue
-            val tl = TlHandles.of(plugin) ?: continue
+            val session = listener.session
+            if (!session.canDispatch()) continue
+            val engine = session.engine
+            val tl = session.tl
             // carries a login code with no peer to redact against. per-plugin rather than in the unpack loop, so the bypass grant lifts it like the other three
-            if (serviceNotification && !plugin.permissions.has("unsafe.disableApiFiltering")) continue
+            if (serviceNotification && !session.permissions.has("unsafe.disableApiFiltering")) continue
             // over the scopes that actually authorized this plugin for this constructor - a demuxed registration holds its event's scope, and the two never imply each other
-            if (listener.grantScopes.none { plugin.permissions.allows("onUpdate", it, ScopeMatch.EXACT) }) continue
+            if (listener.grantScopes.none { session.permissions.allows("onUpdate", it, ScopeMatch.EXACT) }) continue
             val handle = tl.mintForPlugin(update, readOnly = true)
             engine.dispatchUpdate(tlName, account, PluginWire.encodeHandle(vector = false, id = handle, readOnly = true))
         }

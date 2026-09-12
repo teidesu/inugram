@@ -15,7 +15,8 @@ use crate::sandbox::registry::{make_disposer, noop_disposer, Lifecycle, Registry
 use crate::utils::arguments::array_values;
 use rquickjs::function::This;
 
-use crate::api::telegram::rpc::{format_exception, pump_jobs};
+use crate::api::error::format_exception;
+use crate::runtime::{pump_jobs};
 
 pub trait XposedHost {
   fn xposed(&self, op: i32, target: i64, name: &str, args: &[String]) -> String;

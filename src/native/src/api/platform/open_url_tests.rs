@@ -1,4 +1,4 @@
-use crate::api::telegram::rpc::format_exception;
+use crate::api::error::format_exception;
 use crate::testing::harness::setup_apis as setup;
 use rquickjs::Value;
 

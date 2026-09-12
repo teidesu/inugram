@@ -22,6 +22,7 @@ import desu.inugram.helpers.font.FontLibrary
 import desu.inugram.helpers.plugins.CanvasListener
 import desu.inugram.helpers.plugins.EngineDispatch
 import desu.inugram.helpers.plugins.Plugin
+import desu.inugram.helpers.plugins.PluginSession
 import desu.inugram.helpers.plugins.QuickJs
 import desu.inugram.helpers.plugins.io.PluginBlobs
 import java.io.File
@@ -48,7 +49,7 @@ import org.json.JSONObject
  *
  * The listener is a JNI upcall, so it runs on the queue the engine lives on. The three slow ops
  * (encoding a bitmap, decoding one, reading a font file) hop to [work] and come back through
- * [QuickJs.canvasResult] on globalQueue.
+ * [QuickJs.canvasResult] on the plugin queue.
  */
 object PluginCanvas {
     // keep in sync with rust `canvas::OP_*`
@@ -100,9 +101,9 @@ object PluginCanvas {
         })
     }
 
-    fun listenerFor(plugin: Plugin, engine: QuickJs): CanvasListener = Session(plugin, engine)
+    fun listenerFor(session: PluginSession): CanvasListener = Session(session)
 
-    /** call on globalQueue as the engine stops: every bitmap it holds is native memory */
+    /** call on the plugin queue as the engine stops: every bitmap it holds is native memory */
     fun detach(engine: QuickJs) {
         (engine.listener?.canvas as? Session)?.close()
     }
@@ -119,7 +120,7 @@ object PluginCanvas {
     private fun refuse(code: String, message: String): Nothing =
         throw Refusal(PluginWire.encodePluginError(code, message))
 
-    private class Session(private val plugin: Plugin, private val engine: QuickJs) : CanvasListener {
+    private class Session(private val session: PluginSession) : CanvasListener {
         private val onHost = EngineDispatch.createHostDispatcher()
         private val canvases = HashMap<Long, Surface>()
         private val images = HashMap<Long, Bitmap>()
@@ -682,12 +683,12 @@ object PluginCanvas {
             val path = fields.drop(2).joinToString(FIELD.toString())
             work.execute {
                 val loaded = runCatching { Typeface.createFromFile(path) }
-                EngineDispatch.onEngine(plugin, engine) {
+                EngineDispatch.onEngine(session) {
                     val wire = loaded.fold(
                         onSuccess = { fonts[family] = it; typefaces.clear(); "" },
                         onFailure = { PluginWire.encodePluginError("invalid-argument", "canvas: this is not a font file") },
                     )
-                    engine.canvasResult(requestId, wire)
+                    session.engine.canvasResult(requestId, wire)
                 }
             }
             return ""
@@ -698,14 +699,14 @@ object PluginCanvas {
             work.execute {
                 val result = runCatching(produce)
                 val bitmap = result.getOrNull()
-                EngineDispatch.onEngine(plugin, engine, onDropped = { bitmap?.recycle() }) {
+                EngineDispatch.onEngine(session, onDropped = { bitmap?.recycle() }) {
                     if (bitmap == null) {
                         val message = result.exceptionOrNull()?.message ?: "the decode failed"
-                        engine.canvasResult(requestId, PluginWire.encodePluginError("invalid-argument", "canvas: $message"))
+                        session.engine.canvasResult(requestId, PluginWire.encodePluginError("invalid-argument", "canvas: $message"))
                         return@onEngine
                     }
                     images[imageId] = bitmap
-                    engine.canvasResult(
+                    session.engine.canvasResult(
                         requestId,
                         "J" + JSONObject().put("width", bitmap.width).put("height", bitmap.height).toString(),
                     )
@@ -722,12 +723,12 @@ object PluginCanvas {
                 } catch (e: Throwable) {
                     PluginWire.encodePluginError("internal", "canvas: ${e.message ?: e.toString()}")
                 }
-                EngineDispatch.onEngine(plugin, engine) { engine.canvasResult(requestId, wire) }
+                EngineDispatch.onEngine(session) { session.engine.canvasResult(requestId, wire) }
             }
         }
 
         private fun encodedDir(): File? {
-            val root = PluginBlobs.dirFor(plugin.id)
+            val root = PluginBlobs.dirFor(session.plugin.id)
             if (root.isEmpty()) return null
             val dir = File(root, ENCODED_DIR)
             if (!dir.isDirectory && !dir.mkdirs()) return null

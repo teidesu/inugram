@@ -5,6 +5,7 @@ import desu.inugram.core.plugins.PluginWire
 import desu.inugram.core.plugins.ScopeMatch
 import desu.inugram.helpers.plugins.EngineDispatch
 import desu.inugram.helpers.plugins.Plugin
+import desu.inugram.helpers.plugins.PluginSession
 import desu.inugram.helpers.plugins.QuickJs
 import desu.inugram.helpers.plugins.WritesListener
 import desu.inugram.helpers.plugins.tl.TlHandles
@@ -31,7 +32,7 @@ import org.telegram.tgnet.tl.TL_update
  * [writePeer], which refuses an encrypted dialog id. Structural rather than repeated: a write that
  * skipped either would have to build its own request *and* its own peer.
  *
- * Called on [Utilities.globalQueue] from a JNI upcall, and like [PluginReads] never answers inline.
+ * Called on [EngineDispatch.scheduler] from a JNI upcall, and like [PluginReads] never answers inline.
  * What a write resolves with is minted read-only: a sent message is the app's own state the moment
  * `processUpdates` has applied it.
  */
@@ -74,7 +75,7 @@ object PluginWrites {
         OP_DOWNLOAD_MEDIA_TO_FILE to ("account.read" to "messages"),
     )
 
-    fun listenerFor(plugin: Plugin, engine: QuickJs): WritesListener =
+    fun listenerFor(session: PluginSession): WritesListener =
         object : WritesListener {
             override fun accountWrite(
                 accountId: Int,
@@ -82,15 +83,14 @@ object PluginWrites {
                 op: Int,
                 arg: String,
                 values: Array<String>,
-            ): String? = write(plugin, engine, accountId, requestId, op, arg, values)
+            ): String? = write(session, accountId, requestId, op, arg, values)
 
             override fun messageFile(accountId: Int, value: String): String =
-                PluginMedia.messageFile(plugin, engine, accountId, value)
+                PluginMedia.messageFile(session, accountId, value)
         }
 
     private fun write(
-        plugin: Plugin,
-        engine: QuickJs,
+        session: PluginSession,
         accountId: Int,
         requestId: Long,
         op: Int,
@@ -99,14 +99,14 @@ object PluginWrites {
     ): String? {
         val grant = GRANT_BY_OP[op] ?: return PluginWire.encodePluginError("internal", "account write: unknown op $op")
         // the engine's own check_grant already ran in native; this is the second gate, on the side that owns the data
-        if (!plugin.permissions.allows(grant.first, grant.second, ScopeMatch.EXACT)) {
+        if (!session.permissions.allows(grant.first, grant.second, ScopeMatch.EXACT)) {
             return PluginWire.encodeNotGranted(grant.first, grant.second)
         }
         val controller = PeerSpecs.controllerFor(accountId)
             ?: return PluginWire.encodePluginError("not-found", "account write: no account is logged in as #$accountId")
         return try {
             val json = JSONObject(arg)
-            val call = Call(plugin, engine, controller, accountId, requestId, json, values)
+            val call = Call(session, controller, accountId, requestId, json, values)
             when (op) {
                 OP_SEND_MESSAGE -> sendMessage(call)
                 OP_SEND_MEDIA, OP_SEND_MULTI_MEDIA -> PluginMedia.sendMedia(call, album = op == OP_SEND_MULTI_MEDIA)
@@ -144,8 +144,7 @@ object PluginWrites {
     internal fun refuse(code: String, message: String): Nothing = throw Refused(PluginWire.encodePluginError(code, message))
 
     internal class Call(
-        val plugin: Plugin,
-        val engine: QuickJs,
+        val session: PluginSession,
         val controller: MessagesController,
         val accountId: Int,
         val requestId: Long,
@@ -155,11 +154,15 @@ object PluginWrites {
         fun peer(key: String = "peer", kind: Int = PeerSpecs.KIND_PEER): TLObject =
             writePeer(controller, accountId, json.optString(key), kind)
 
-        fun int(key: String): Int = json.optString(key).toIntOrNull() ?: 0
+        fun int(key: String): Int = if (json.isNull(key)) 0 else {
+            json.optString(key).toIntOrNull() ?: refuse("invalid-argument", "$key: expected a 32-bit integer")
+        }
 
-        fun flag(key: String): Boolean = json.optBoolean(key, false)
+        fun flag(key: String): Boolean = if (json.isNull(key)) false else {
+            json.get(key) as? Boolean ?: refuse("invalid-argument", "$key: expected a boolean")
+        }
 
-        fun optedIn(key: String): Boolean = json.optBoolean(key, true)
+        fun optedIn(key: String): Boolean = if (json.isNull(key)) true else flag(key)
 
         // android's org.json answers `optString` with the four characters "null" for a json null, where the reference implementation the bridge tests run against answers the fallback
         fun text(): String = if (json.isNull("text")) "" else json.optString("text")
@@ -178,7 +181,7 @@ object PluginWrites {
         TlReflect.syncFlagsDeep(request)
         val flags = ConnectionsManager.RequestFlagFailOnServerErrors
         PluginRpc.sendWithoutInterceptors(call.accountId, request, flags) { response, error ->
-            // stageQueue frees the response the moment this returns, before [answer]'s runnable reads it on globalQueue, so ownership moves here
+            // stageQueue frees the response the moment this returns, before [answer]'s runnable reads it on the plugin queue, so ownership moves here
             response?.disableFree = true
             if (response is TLRPC.Updates) {
                 // `processUpdates` removes the entries it applied from this very list, and the answer below is built out of it
@@ -221,7 +224,7 @@ object PluginWrites {
 
     /** [release] gives back whatever the settle borrowed, and runs on the stale path too: an obligation dropped because the plugin reloaded is still an obligation */
     internal fun answer(call: Call, release: () -> Unit = {}, produce: () -> String) {
-        EngineDispatch.onEngine(call.plugin, call.engine, onDropped = release) {
+        EngineDispatch.onEngine(call.session, onDropped = release) {
             val wire = EngineDispatch.wireOf("account write") {
                 try {
                     produce()
@@ -229,7 +232,7 @@ object PluginWrites {
                     e.wire
                 }
             }
-            call.engine.writeResult(call.requestId, wire)
+            call.session.engine.writeResult(call.requestId, wire)
             release()
         }
     }
@@ -243,19 +246,19 @@ object PluginWrites {
      * owns - and a `show_previews = false` whose bit is set reads as absent. [readValue] is the
      * counterpart for the ops that only *name* an object.
      */
-    internal fun tlValue(engine: QuickJs, wire: String): TLObject {
+    internal fun tlValue(handles: TlHandles, wire: String): TLObject {
         val decoded = PluginWire.decode(wire)
-        if (decoded is PluginWire.Value.Handle && TlHandles.of(engine).isReadOnly(decoded.id)) {
+        if (decoded is PluginWire.Value.Handle && handles.isReadOnly(decoded.id)) {
             refuse("forbidden", TlHandles.READ_ONLY_MESSAGE)
         }
-        return readValue(engine, decoded)
+        return readValue(handles, decoded)
     }
 
     /** read-only is the normal shape here: everything an `Account` hands over is read-only, so the message a download names is one */
-    internal fun readValue(engine: QuickJs, wire: String): TLObject = readValue(engine, PluginWire.decode(wire))
+    internal fun readValue(handles: TlHandles, wire: String): TLObject = readValue(handles, PluginWire.decode(wire))
 
-    private fun readValue(engine: QuickJs, decoded: PluginWire.Value): TLObject = when (decoded) {
-        is PluginWire.Value.Handle -> TlHandles.of(engine).resolveTlObject(decoded.id)
+    private fun readValue(handles: TlHandles, decoded: PluginWire.Value): TLObject = when (decoded) {
+        is PluginWire.Value.Handle -> handles.resolveTlObject(decoded.id)
             ?: refuse("handle-expired", PluginWire.HANDLE_EXPIRED_MESSAGE)
         is PluginWire.Value.Json -> TlJson.fromJson(JSONObject(decoded.json))
         else -> refuse("invalid-argument", "expected a TL object")
@@ -269,7 +272,7 @@ object PluginWrites {
     }
 
     /**
-     * a path the composer handed back runs on globalQueue with nothing above it to catch a
+     * a path the composer handed back runs on the plugin queue with nothing above it to catch a
      * [Refused], and a write that refuses still owes its promise an answer
      */
     internal fun answerRefusals(call: Call, block: () -> Unit) {
@@ -430,7 +433,7 @@ object PluginWrites {
         val out = ArrayList<TLRPC.MessageEntity>()
         val array = json.optJSONArray("entities") ?: return out
         for (index in 0 until array.length()) {
-            val one = array.optJSONObject(index) ?: continue
+            val one = array.optJSONObject(index) ?: refuse("invalid-argument", "entities[$index]: expected an object")
             val entity = TlJson.fromJson(one) as? TLRPC.MessageEntity
                 ?: refuse("invalid-argument", "'${one.optString("_")}' is not a message entity")
             out.add(entity)
@@ -449,7 +452,7 @@ object PluginWrites {
 
     /** `updateShortSentMessage` carries only what changed, so the rest is rebuilt from the request - as the app does, from the local message it had already drawn */
     internal fun messageWire(call: Call, response: TLObject?, randomId: Long, text: String): String {
-        val handles = TlHandles.of(call.engine)
+        val handles = call.session.tl
         val message = when (response) {
             is TLRPC.TL_updateShortSentMessage -> shortSentMessage(call, response, randomId, text)
             is TLRPC.Updates -> response.updates.firstNotNullOfOrNull { messageOf(it) }
@@ -461,7 +464,7 @@ object PluginWrites {
     }
 
     internal fun messagesWire(call: Call, response: TLObject?): String {
-        val handles = TlHandles.of(call.engine)
+        val handles = call.session.tl
         val updates = (response as? TLRPC.Updates)?.updates ?: return ""
         return PluginReads.mintEach(handles, updates.mapNotNull { messageOf(it) })
     }

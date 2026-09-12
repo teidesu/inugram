@@ -1,5 +1,7 @@
 package desu.inugram.helpers.plugins.ui
 
+import desu.inugram.helpers.plugins.EngineDispatch
+
 import desu.inugram.core.plugins.ScreenChangeAction
 import desu.inugram.core.plugins.ScreenRef
 import desu.inugram.core.plugins.ScreenStack
@@ -23,7 +25,7 @@ import org.telegram.ui.ProfileActivity
  * either, so what happened is [ScreenStack.diff]'s to derive.
  *
  * It runs on the ui thread, where the fragment stack lives and is the only place it may be read,
- * publishes an immutable snapshot and posts the dispatch to [Utilities.globalQueue].
+ * publishes an immutable snapshot and posts the dispatch to [EngineDispatch.scheduler].
  * [currentScreenWire] answers off that snapshot without hopping, `getCurrentScreen()` being a
  * synchronous getter.
  *
@@ -50,7 +52,7 @@ object PluginScreens {
             .put("previous", previous.lastOrNull()?.let(::toJson) ?: JSONObject.NULL)
             .toString()
         val stackJson = JSONArray().apply { next.forEach { put(toJson(it)) } }.toString()
-        Utilities.globalQueue.postRunnable {
+        EngineDispatch.scheduler.postRunnable {
             for (plugin in PluginManager.plugins()) {
                 plugin.engine?.dispatchScreenChange(change, stackJson)
             }

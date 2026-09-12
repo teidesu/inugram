@@ -6,6 +6,7 @@ import desu.inugram.core.plugins.PluginWire
 import desu.inugram.helpers.plugins.EngineDispatch
 import desu.inugram.helpers.plugins.FetchListener
 import desu.inugram.helpers.plugins.Plugin
+import desu.inugram.helpers.plugins.PluginSession
 import desu.inugram.helpers.plugins.QuickJs
 import java.io.File
 import java.io.InputStream
@@ -61,7 +62,10 @@ object PluginFetch {
         })
     }
 
-    private val flights = ConcurrentHashMap<String, Flight>()
+    /** a reload restarts request ids at 1, so two engines of one plugin can have a request #1 in the air, and the older finishing would take the newer one's entry off the map */
+    private data class FlightKey(val session: PluginSession, val requestId: Long)
+
+    private val flights = ConcurrentHashMap<FlightKey, Flight>()
     private val used = ConcurrentHashMap<String, AtomicLong>()
 
     /** four hops run at once on [transfers], and two reading the same clock would write one file */
@@ -84,7 +88,7 @@ object PluginFetch {
         }
     }
 
-    fun listenerFor(plugin: Plugin, engine: QuickJs): FetchListener =
+    fun listenerFor(session: PluginSession): FetchListener =
         object : FetchListener {
             override fun fetch(requestId: Long, url: String, specJson: String, body: ByteArray?): String? {
                 val spec = try {
@@ -92,26 +96,25 @@ object PluginFetch {
                 } catch (e: Exception) {
                     return PluginWire.encodePluginError("invalid-argument", "fetch: ${e.message}")
                 }
-                val bodiesDir = bodiesDir(plugin.id)
+                val bodiesDir = bodiesDir(session.plugin.id)
                     ?: return PluginWire.encodePluginError("internal", "fetch: there is nowhere to put a response body")
-                val key = flightKey(plugin.id, engine, requestId)
+                val key = FlightKey(session, requestId)
                 val flight = Flight()
                 flights[key] = flight
-                val permissions = plugin.permissions
                 transfers.execute {
                     val delivery = try {
-                        exchange(permissions, plugin.id, url, spec, body, bodiesDir, flight)
+                        exchange(session.permissions, session.plugin.id, url, spec, body, bodiesDir, flight)
                     } catch (e: Throwable) {
                         Delivery(PluginWire.encodePluginError("internal", "fetch: ${e.message ?: e.toString()}"), null)
                     }
                     flights.remove(key)
-                    Utilities.globalQueue.postRunnable { deliver(plugin, engine, requestId, delivery, flight) }
+                    EngineDispatch.scheduler.postRunnable { deliver(session, requestId, delivery, flight) }
                 }
                 return null
             }
 
             override fun abort(requestId: Long) {
-                flights.remove(flightKey(plugin.id, engine, requestId))?.cancel()
+                flights.remove(FlightKey(session, requestId))?.cancel()
             }
         }
 
@@ -127,25 +130,21 @@ object PluginFetch {
      * the plugin reloaded onto another engine whose request ids restart (identity, not just null),
      * or it aborted - which it does *after* settling its own promise.
      */
-    fun deliver(plugin: Plugin, engine: QuickJs, requestId: Long, delivery: Delivery, flight: Flight) {
-        if (!EngineDispatch.isLive(plugin, engine) || flight.cancelled) delivery.drop()
-        else engine.fetchResult(requestId, delivery.wire)
+    fun deliver(session: PluginSession, requestId: Long, delivery: Delivery, flight: Flight) {
+        if (!session.isCurrent() || flight.cancelled) delivery.drop()
+        else session.engine.fetchResult(requestId, delivery.wire)
     }
 
     /** [PluginBlobs.wipe] already deletes the tree; this is what gives the budget back */
     fun wipe(installId: String) {
         used.remove(installId)
         for ((key, flight) in flights) {
-            if (key.startsWith("$installId:")) {
+            if (key.session.plugin.id == installId) {
                 flights.remove(key)
                 flight.cancel()
             }
         }
     }
-
-    /** a reload restarts request ids at 1, so two engines of one plugin can have a request #1 in the air, and the older finishing would take the newer one's entry off the map */
-    private fun flightKey(installId: String, engine: QuickJs, requestId: Long) =
-        "$installId:${System.identityHashCode(engine)}:$requestId"
 
     fun budgetFor(installId: String): AtomicLong = used.getOrPut(installId) { AtomicLong(0) }
 

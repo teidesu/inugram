@@ -84,6 +84,62 @@ class PluginRpcChainTest {
     }
 
     @Test
+    fun detaching_an_old_session_keeps_the_replacement_registrations() {
+        val plugin = passthroughPlugin()
+        val old = plugin.session!!
+        old.stopDispatching()
+        plugin.session = PluginSession(plugin, RecordingQuickJs())
+        attachBridge(plugin.session!!)
+        assertNull(plugin.interceptRpc("users.getUsers"))
+        PluginRpc.detach(old)
+        assertTrue(send(AppRequest()))
+        drain()
+        assertEquals(1, plugin.js.dispatches.size)
+        assertTrue((old.engine as RecordingQuickJs).dispatches.isEmpty())
+    }
+
+    @Test
+    fun a_queued_chain_cannot_dispatch_old_ids_into_a_reloaded_engine() {
+        val plugin = passthroughPlugin()
+        val old = plugin.session!!
+        val app = AppRequest()
+        assertTrue(send(app))
+        old.stopDispatching()
+        PluginRpc.detach(plugin.session!!)
+        old.tl.releaseAll()
+        plugin.session = PluginSession(plugin, RecordingQuickJs())
+        attachBridge(plugin.session!!)
+        assertNull(plugin.interceptRpc("users.getUsers"))
+        drain()
+        assertTrue(plugin.js.dispatches.isEmpty())
+        assertTrue((old.engine as RecordingQuickJs).dispatches.isEmpty())
+        assertSame(app.request, connections().lastSent()!!.request)
+    }
+
+    @Test
+    fun a_future_chain_stage_keeps_its_original_session() {
+        val first = passthroughPlugin("first")
+        first.js.onDispatchRpc = null
+        val second = passthroughPlugin("second")
+        val app = AppRequest()
+        assertTrue(send(app))
+        drain()
+        val old = second.session!!
+        old.stopDispatching()
+        PluginRpc.detach(second.session!!)
+        old.tl.releaseAll()
+        second.session = PluginSession(second, RecordingQuickJs())
+        attachBridge(second.session!!)
+        assertNull(second.interceptRpc("users.getUsers"))
+        val pending = first.js.dispatches.single()
+        assertNull(first.next(pending.dispatchId, pending.requestWire))
+        drain()
+        assertTrue(second.js.dispatches.isEmpty())
+        assertTrue((old.engine as RecordingQuickJs).dispatches.isEmpty())
+        assertSame(app.request, connections().lastSent()!!.request)
+    }
+
+    @Test
     fun a_chain_forwards_the_request_for_real_and_answers_the_app_with_what_came_back() {
         passthroughPlugin()
         val app = AppRequest()
@@ -548,7 +604,7 @@ class PluginRpcChainTest {
         )
     }
 
-    /** the same ordering in `PluginManager.teardown`, where `TlHandles.endDetach` is what has to come last */
+    /** the same ordering in `PluginManager.teardown`, where `session.tl.releaseAll` is what has to come last */
     @Test
     fun a_stage_detach_rejects_can_still_read_its_own_request() {
         // two registrations put one plugin in the chain twice, which is what gives detach a stage of

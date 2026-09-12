@@ -370,12 +370,12 @@ class PluginFetchTest {
         val budget = AtomicLong(0)
         val kept = bodyHop(200, null, 900, budget)
         val plugin = startPlugin("fetch-reload", "fetch")
-        val stale = plugin.js
-        plugin.engine = RecordingQuickJs()
+        val stale = plugin.session!!
+        plugin.session = PluginSession(plugin, RecordingQuickJs())
 
-        PluginFetch.deliver(plugin, stale, 7, PluginFetch.Delivery("J{}", kept), PluginFetch.Flight())
+        PluginFetch.deliver(stale, 7, PluginFetch.Delivery("J{}", kept), PluginFetch.Flight())
 
-        assertTrue(stale.httpResults.isEmpty(), "a stale engine must not be settled")
+        assertTrue((stale.engine as RecordingQuickJs).httpResults.isEmpty(), "a stale engine must not be settled")
         assertTrue(plugin.js.httpResults.isEmpty(), "and neither must the new one, whose ids restart")
         assertFalse(kept.bodyFile!!.exists())
         assertEquals(0L, budget.get())
@@ -387,7 +387,7 @@ class PluginFetchTest {
         val kept = bodyHop(200, null, 900, budget)
         val plugin = startPlugin("fetch-live", "fetch")
 
-        PluginFetch.deliver(plugin, plugin.js, 7, PluginFetch.Delivery("J{}", kept), PluginFetch.Flight())
+        PluginFetch.deliver(plugin.session!!, 7, PluginFetch.Delivery("J{}", kept), PluginFetch.Flight())
 
         assertEquals(listOf(7L), plugin.js.httpResults.map { it.requestId })
         assertTrue(kept.bodyFile!!.exists(), "the blob the plugin is handed is over this file")
@@ -407,7 +407,7 @@ class PluginFetchTest {
         val flight = PluginFetch.Flight()
         flight.cancel()
 
-        PluginFetch.deliver(plugin, plugin.js, 7, PluginFetch.Delivery("J{}", kept), flight)
+        PluginFetch.deliver(plugin.session!!, 7, PluginFetch.Delivery("J{}", kept), flight)
 
         assertTrue(plugin.js.httpResults.isEmpty())
         assertFalse(kept.bodyFile!!.exists())

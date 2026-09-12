@@ -1,9 +1,11 @@
 package desu.inugram.helpers.plugins.telegram
 
+import desu.inugram.helpers.plugins.tl.TlHandles
 import desu.inugram.core.plugins.PluginWire
 import desu.inugram.core.plugins.ScopeMatch
 import desu.inugram.helpers.plugins.EngineDispatch
 import desu.inugram.helpers.plugins.Plugin
+import desu.inugram.helpers.plugins.PluginSession
 import desu.inugram.helpers.plugins.QuickJs
 import desu.inugram.helpers.plugins.telegram.PluginWrites.Call
 import desu.inugram.helpers.plugins.telegram.PluginWrites.refuse
@@ -53,16 +55,16 @@ object PluginMedia {
     /**
      * every transfer still listening, per plugin. A transfer settles from a [NotificationCenter]
      * event and there is no event for one stock never started, so without this the observer - and
-     * through it the engine - would outlive the plugin. Touched from globalQueue and the ui thread.
+     * through it the engine - would outlive the plugin. Touched from the plugin queue and the ui thread.
      */
-    private val live = HashMap<Plugin, MutableSet<Transfer>>()
+    private val live = HashMap<PluginSession, MutableSet<Transfer>>()
 
-    fun messageFile(plugin: Plugin, engine: QuickJs, accountId: Int, value: String): String {
-        if (!plugin.permissions.allows("account.read", "messages", ScopeMatch.EXACT)) {
+    fun messageFile(session: PluginSession, accountId: Int, value: String): String {
+        if (!session.permissions.allows("account.read", "messages", ScopeMatch.EXACT)) {
             return PluginWire.encodeNotGranted("account.read", "messages")
         }
         return try {
-            val message = messageOf(engine, value)
+            val message = messageOf(session.tl, value)
             if (mediaFile(message) == null) return PluginWire.encodeNull()
             val path = FileLoader.getInstance(accountId).getPathToMessage(message)
                 ?: return PluginWire.encodeNull()
@@ -78,7 +80,7 @@ object PluginMedia {
     }
 
     internal fun download(call: Call, toFile: Boolean): String? {
-        val message = messageOf(call.engine, call.values.firstOrNull() ?: refuse("invalid-argument", "no message"))
+        val message = messageOf(call.session.tl, call.values.firstOrNull() ?: refuse("invalid-argument", "no message"))
         val media = mediaFile(message) ?: refuse("invalid-argument", "this message has no media to download")
         val loader = FileLoader.getInstance(call.accountId)
         val already = loader.getPathToMessage(message)
@@ -137,7 +139,7 @@ object PluginMedia {
         upload(call, source) { input ->
             PluginWrites.answer(call) {
                 if (input == null) PluginWire.encodePluginError("internal", "uploadFile: the upload failed")
-                else PluginWire.encodeJson(TlJson.toJson(input, TlFilter.policyFor(call.plugin.permissions)).toString())
+                else PluginWire.encodeJson(TlJson.toJson(input, TlFilter.policyFor(call.session.permissions)).toString())
             }
         }
         return null
@@ -213,7 +215,7 @@ object PluginMedia {
             val describe = items?.optJSONObject(index) ?: call.json
             resolveMedia(call, call.values[index], describe) { media ->
                 // back onto the engine's queue before the counter is touched: an item already uploaded answers inline while one still going up answers from the ui thread
-                Utilities.globalQueue.postRunnable {
+                EngineDispatch.scheduler.postRunnable {
                     medias[index] = media
                     remaining--
                     if (remaining > 0) return@postRunnable
@@ -277,7 +279,7 @@ object PluginMedia {
 
     private fun resolveMedia(call: Call, wire: String, describe: JSONObject, done: (TLRPC.InputMedia?) -> Unit) {
         if (!wire.startsWith(FILE_TAG)) {
-            when (val given = PluginWrites.tlValue(call.engine, wire)) {
+            when (val given = PluginWrites.tlValue(call.session.tl, wire)) {
                 is TLRPC.InputMedia -> return done(given)
                 is TLRPC.InputFile -> return done(uploadedMedia(given, describe, "", ""))
                 else -> refuse("invalid-argument", "sendMedia: '${given.javaClass.simpleName}' is not a file")
@@ -331,8 +333,8 @@ object PluginMedia {
     }
 
     // a transfer only names its message (stock reads the media off it and refreshes its file reference from it), so a read-only handle is the normal argument here
-    private fun messageOf(engine: QuickJs, wire: String): TLRPC.Message =
-        PluginWrites.readValue(engine, wire) as? TLRPC.Message
+    private fun messageOf(handles: TlHandles, wire: String): TLRPC.Message =
+        PluginWrites.readValue(handles, wire) as? TLRPC.Message
             ?: refuse("invalid-argument", "expected a message")
 
     private sealed class Downloadable(val fileName: String) {
@@ -371,7 +373,7 @@ object PluginMedia {
 
     /** stock reports every transfer through [NotificationCenter] keyed by the name it gave the file. Added and removed on the ui thread, the only thread that centre may be touched from */
     private fun observe(transfer: Transfer) {
-        synchronized(live) { live.getOrPut(transfer.call.plugin) { LinkedHashSet() }.add(transfer) }
+        synchronized(live) { live.getOrPut(transfer.call.session) { LinkedHashSet() }.add(transfer) }
         AndroidUtilities.runOnUIThread {
             val centre = NotificationCenter.getInstance(transfer.call.accountId)
             val observer = NotificationCenter.NotificationCenterDelegate { id, _, args ->
@@ -394,8 +396,8 @@ object PluginMedia {
     }
 
     private fun report(transfer: Transfer, loaded: Long, total: Long) {
-        val engine = transfer.call.engine
-        EngineDispatch.onEngine(transfer.call.plugin, engine) {
+        val engine = transfer.call.session.engine
+        EngineDispatch.onEngine(transfer.call.session) {
             engine.writeProgress(transfer.call.requestId, loaded, total)
         }
     }
@@ -408,9 +410,9 @@ object PluginMedia {
 
     private fun release(transfer: Transfer) {
         synchronized(live) {
-            val mine = live[transfer.call.plugin] ?: return@synchronized
+            val mine = live[transfer.call.session] ?: return@synchronized
             mine.remove(transfer)
-            if (mine.isEmpty()) live.remove(transfer.call.plugin)
+            if (mine.isEmpty()) live.remove(transfer.call.session)
         }
         stopObserving(transfer)
     }
@@ -431,8 +433,8 @@ object PluginMedia {
     }
 
     /** there is no event for a transfer stock declined to start, so an unloaded plugin's observers would sit on the centre for the life of the process */
-    internal fun detach(plugin: Plugin) {
-        val mine = synchronized(live) { live.remove(plugin) } ?: return
+    internal fun detach(session: PluginSession) {
+        val mine = synchronized(live) { live.remove(session) } ?: return
         for (transfer in mine) stopObserving(transfer)
     }
 }

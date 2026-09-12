@@ -450,7 +450,7 @@ class PluginWritesTest {
         val stale = plugin.js
         connections().lastSent()!!.answer(updatesWith(sentMessage(1, "hi")), null, 0L)
         // a reload between the answer and the settle: request ids restart on the new engine
-        plugin.engine = RecordingQuickJs()
+        plugin.session = PluginSession(plugin, RecordingQuickJs())
         drain()
         assertTrue(stale.writeResults.isEmpty(), "a stale settle reached a dead engine")
     }

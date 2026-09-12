@@ -13,6 +13,7 @@ import desu.inugram.core.plugins.PluginWire
 import desu.inugram.helpers.plugins.EngineDispatch
 import desu.inugram.helpers.plugins.JvmListener
 import desu.inugram.helpers.plugins.Plugin
+import desu.inugram.helpers.plugins.PluginSession
 import desu.inugram.helpers.plugins.QuickJs
 import java.io.File
 import java.io.Serializable
@@ -81,8 +82,8 @@ object PluginJvm {
     }
 
     /** nothing at all for a plugin without the grant: the api is the whole app */
-    fun listenerFor(plugin: Plugin, engine: QuickJs, screen: AppScreen): JvmListener? =
-        if (plugin.permissions.has(GRANT)) Session(plugin, engine, screen) else null
+    fun listenerFor(session: PluginSession, screen: AppScreen): JvmListener? =
+        if (session.permissions.has(GRANT)) Session(session, screen) else null
 
     /** [Session.checkClass] already let this be minted, which is the only way a handle exists */
     fun objectAt(engine: QuickJs, handle: Long): Any? = (engine.listener?.jvm as? Session)?.objectAt(handle)
@@ -140,7 +141,7 @@ object PluginJvm {
             )
         )
 
-    private class Session(private val plugin: Plugin, private val engine: QuickJs, private val screen: AppScreen) :
+    private class Session(private val session: PluginSession, private val screen: AppScreen) :
         JvmListener, ValueBridge {
         private val nextTicket = AtomicLong(1)
         private val loaders = ArrayList<ClassLoader>()
@@ -182,16 +183,16 @@ object PluginJvm {
                 }
                 val prepared = try {
                     PluginJvmClass.prepare(name, decodeArgs(args), { type -> Class.forName(type, false, parent).also(::checkClass) }, parent) { callback, self, arguments ->
-                        check(live && EngineDispatch.isLive(plugin, engine)) { "defineClass: plugin has unloaded" }
+                        check(live && session.isCurrent()) { "defineClass: plugin has unloaded" }
                         val inputs = ArrayList<String>()
                         try {
                             inputs.add(encodeValue(self))
                             arguments.forEach { inputs.add(encodeValue(it)) }
-                            val result = engine.jvmMethod(callback, inputs[0], inputs.drop(1).toTypedArray())
+                            val result = session.engine.jvmMethod(callback, inputs[0], inputs.drop(1).toTypedArray())
                             if (result.startsWith("E")) throw IllegalStateException(result.substring(1))
                             readRoutineResult(result)
                         } finally {
-                            for (wire in inputs) if (wire.startsWith("G")) engine.jvmRelease(wire.substring(2).toLong())
+                            for (wire in inputs) if (wire.startsWith("G")) session.engine.jvmRelease(wire.substring(2).toLong())
                         }
                     }
                 } catch (e: IllegalArgumentException) {
@@ -227,7 +228,7 @@ object PluginJvm {
             }
             OP_ROUTINE -> createRoutine(name, args)
             OP_XPOSED_ROUTINE -> {
-                if (!plugin.permissions.has("unsafe.xposed")) refuse("not-granted", "xposed routine requires unsafe.xposed", "unsafe.xposed")
+                if (!session.permissions.has("unsafe.xposed")) refuse("not-granted", "xposed routine requires unsafe.xposed", "unsafe.xposed")
                 createRoutine(name, args, hookMode = true)
             }
             OP_LOAD_DEX -> loadDex(name, args)
@@ -285,7 +286,7 @@ object PluginJvm {
             else -> null
         }
 
-        fun objectAt(handle: Long): Any? = if (live) engine.jvmObjectAt(handle) else null
+        fun objectAt(handle: Long): Any? = if (live) session.engine.jvmObjectAt(handle) else null
 
         fun close() {
             live = false
@@ -295,7 +296,7 @@ object PluginJvm {
             pendingClasses.clear()
             for (routine in routinees) routine.get()?.close()
             routinees.clear()
-            engine.jvmCloseHandles()
+            session.engine.jvmCloseHandles()
             loaders.clear()
         }
 
@@ -409,14 +410,14 @@ object PluginJvm {
             // a throwable answer rides under a `T`, and its handle is the one that would be left behind
             val handle = wire.removePrefix("T")
             if (!handle.startsWith("G")) return
-            handle.drop(2).toLongOrNull()?.let { engine.jvmRelease(it) }
+            handle.drop(2).toLongOrNull()?.let { session.engine.jvmRelease(it) }
         }
 
         override fun wireOf(failure: Throwable): String? = (failure as? Refusal)?.wire
 
         /** the table is rust's, and a mint it refuses is one whose engine has already closed */
         private fun mint(value: Any, kind: Char): String {
-            val id = engine.jvmMint(value, kind)
+            val id = session.engine.jvmMint(value, kind)
             if (id == 0L) expired()
             return "G$kind$id"
         }
@@ -582,7 +583,7 @@ object PluginJvm {
         private fun readRoutineResult(wire: String): Any? {
             if (!wire.startsWith("G")) return decodeArg(wire)
             val id = wire.substring(2).toLong()
-            return try { at(id) } finally { engine.jvmRelease(id) }
+            return try { at(id) } finally { session.engine.jvmRelease(id) }
         }
 
         /**
@@ -629,7 +630,7 @@ object PluginJvm {
         /** Native admission serializes callbacks and refuses recursive entry. */
         fun fire(callbackId: Int) {
             // `live` on top of the engine identity: a disposed runnable java kept hold of
-            if (live && EngineDispatch.isLive(plugin, engine)) engine.jvmCallback(callbackId)
+            if (live && session.isCurrent()) session.engine.jvmCallback(callbackId)
         }
 
         private fun loadDex(path: String, args: Array<String>): String {
@@ -670,7 +671,7 @@ object PluginJvm {
             if (bytes.size > DEX_LIMIT_BYTES) {
                 refuse("quota-exceeded", "loadDex: ${bytes.size} bytes is over the $DEX_LIMIT_BYTES this api loads")
             }
-            val dir = dexDir(plugin.id)
+            val dir = dexDir(session.plugin.id)
             if (!dir.isDirectory && !dir.mkdirs()) refuse("internal", "loadDex: could not make ${dir.path}")
             val file = File(dir, "staged_${dexCount++}.dex")
             // the counter restarts per engine while the directory outlives it, so after a reload this name is a read-only file the previous session left

@@ -39,7 +39,7 @@ class PluginWriteValuesTest {
     private fun granted() = startPlugin("writes", "account.write(send)", "account.read(messages)")
 
     private fun handleFor(plugin: Plugin, value: TLObject, readOnly: Boolean): String {
-        val handles = TlHandles.of(plugin.js)
+        val handles = plugin.session!!.tl
         return PluginWire.encodeHandle(vector = false, id = handles.mintForPlugin(value, readOnly), readOnly = readOnly)
     }
 
@@ -69,6 +69,19 @@ class PluginWriteValuesTest {
         JSONObject().put("peer", "D$alice").put("text", "").put("optimistic", false).toString(),
         arrayOf(wire),
     )
+
+    @Test
+    fun invalid_write_options_fail_before_sending() {
+        val plugin = granted()
+        for ((key, value) in listOf("scheduleDate" to "2147483648", "silent" to "true", "optimistic" to "false")) {
+            val json = JSONObject().put("peer", "D$alice").put("text", "hello")
+                .put("optimistic", false).put(key, value)
+            val refusal = plugin.js.listener!!.accountWrite(0, 1L, PluginWrites.OP_SEND_MESSAGE, json.toString(), emptyArray())
+            assertPluginError("invalid-argument", refusal)
+        }
+        drain()
+        assertTrue(connections().sent.isEmpty())
+    }
 
     @Test
     fun a_media_a_send_carries_may_not_be_a_handle_onto_the_app_s_own_object() {

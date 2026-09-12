@@ -14,16 +14,16 @@ use crate::LEVEL_ERROR;
 use super::env::{clear_exception, with_current_env};
 
 /// What a callback arriving on its caller's thread may still reach. Everything else keeps host
-/// state that only `Utilities.globalQueue` touches, and a plain `HashMap` is what it keeps it in.
+/// state that only the plugin queue touches, and a plain `HashMap` is what it keeps it in.
 /// A member here either holds no state, guards its own, or hands it to
-/// `EngineDispatch.createHostDispatcher`, which posts to `globalQueue` when the caller is not it;
+/// `EngineDispatch.createHostDispatcher`, which posts to the plugin queue when the caller is not it;
 /// what it reads of stock is concurrent, and what it shows it posts to the ui thread itself, so
 /// the answer is still decided on this thread and a refusal still reaches the plugin.
 ///
 /// This gates only the calls that answer something: `call_void` has nothing to answer a refusal
 /// with, so a void host is never asked and the void names below are here for the contract rather
 /// than for the check. Every one of them hands its work to `EngineDispatch.createHostDispatcher`
-/// or to the ui thread on the kotlin side, which is what actually keeps them off `globalQueue`.
+/// or to the ui thread on the kotlin side, which is what actually keeps them off the plugin queue.
 const CALLER_THREAD_HOSTS: &[&str] = &[
   "jvm",
   "xposed",
@@ -249,7 +249,7 @@ impl JniBridge {
 
   fn check_host_thread(&self, what: &str) -> Result<(), String> {
     if CURRENT_THREAD.with(|id| *id) != self.owner_thread && !CALLER_THREAD_HOSTS.contains(&what) {
-      let error = format!("{what}: this API requires globalQueue; unavailable in a caller-thread callback");
+      let error = format!("{what}: this API requires the plugin queue; unavailable in a caller-thread callback");
       self.emit_console(LEVEL_ERROR, &error);
       return Err(error);
     }

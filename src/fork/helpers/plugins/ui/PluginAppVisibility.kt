@@ -1,5 +1,7 @@
 package desu.inugram.helpers.plugins.ui
 
+import desu.inugram.helpers.plugins.EngineDispatch
+
 import android.app.Activity
 import android.app.Application
 import android.content.Context
@@ -12,7 +14,7 @@ object PluginAppVisibility {
     // an activity restarting across a configuration change stops before its replacement starts, so the count blips through zero
     private const val BACKGROUND_DEBOUNCE_MS = 700L
 
-    // UI-thread state read from globalQueue, hence @Volatile. false until an activity says otherwise: a process a push woke has no ui and never will
+    // UI-thread state read from the plugin queue, hence @Volatile. false until an activity says otherwise: a process a push woke has no ui and never will
     @Volatile
     private var foreground = false
 
@@ -55,7 +57,7 @@ object PluginAppVisibility {
     private fun publish(visible: Boolean) {
         if (foreground == visible) return
         foreground = visible
-        Utilities.globalQueue.postRunnable {
+        EngineDispatch.scheduler.postRunnable {
             for (plugin in PluginManager.plugins()) plugin.engine?.appVisibilityChanged(visible)
         }
     }

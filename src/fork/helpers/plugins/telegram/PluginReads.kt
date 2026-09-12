@@ -4,6 +4,7 @@ import desu.inugram.core.plugins.PluginWire
 import desu.inugram.core.plugins.ScopeMatch
 import desu.inugram.helpers.plugins.EngineDispatch
 import desu.inugram.helpers.plugins.Plugin
+import desu.inugram.helpers.plugins.PluginSession
 import desu.inugram.helpers.plugins.QuickJs
 import desu.inugram.helpers.plugins.ReadsListener
 import desu.inugram.helpers.plugins.tl.TlFilter
@@ -31,7 +32,7 @@ import org.telegram.tgnet.tl.TL_forum
  * Kotlin side of the `Account` read surface (rust: `reads.rs`). [read] is a lookup in what
  * [MessagesController] already holds; [resolve] and [fetch] may go to the network.
  *
- * Called on [Utilities.globalQueue] from a JNI upcall, so **an asynchronous op never answers
+ * Called on [EngineDispatch.scheduler] from a JNI upcall, so **an asynchronous op never answers
  * inline**: settling re-enters the engine, which from inside an upcall is a process abort.
  * Everything goes through [answer], which posts.
  *
@@ -76,6 +77,19 @@ object PluginReads {
     /** what `fields` joins on, keep in sync with `reads.js`; a TL field name is a java identifier */
     private const val FIELD_SEPARATOR = ","
 
+    /** what telegram itself accepts for one page, and what an omitted `limit` asks for */
+    private const val PAGE_LIMIT = 100
+
+    /**
+     * The dialog id the message reads read as the common message box rather than as a dialog:
+     * telegram numbers every user chat and basic group out of one sequence per account, so an id
+     * from one of those names a message on its own. No dialog has it, and nothing else accepts it.
+     */
+    private const val COMMON_BOX = 0L
+
+    /** the cap `common.d.ts` states for every api array, mirrored from rust `arguments::ARRAY_LIMIT` */
+    private const val ARRAY_LIMIT = 65536
+
     private val SCOPE_BY_OP = mapOf(
         OP_ME to "self",
         OP_USER to "peers",
@@ -98,41 +112,27 @@ object PluginReads {
         OP_FETCH_MESSAGES to "messages",
     )
 
-    /** what telegram itself accepts for one page, and what an omitted `limit` asks for */
-    private const val PAGE_LIMIT = 100
-
-    /**
-     * The dialog id the message reads read as the common message box rather than as a dialog:
-     * telegram numbers every user chat and basic group out of one sequence per account, so an id
-     * from one of those names a message on its own. No dialog has it, and nothing else accepts it.
-     */
-    private const val COMMON_BOX = 0L
-
-    /** the cap `common.d.ts` states for every api array, mirrored from rust `arguments::ARRAY_LIMIT` */
-    private const val ARRAY_LIMIT = 65536
-
-    fun listenerFor(plugin: Plugin, engine: QuickJs): ReadsListener =
+    fun listenerFor(session: PluginSession): ReadsListener =
         object : ReadsListener {
             override fun accountRead(accountId: Int, op: Int, arg: String): String =
-                read(plugin, engine, accountId, op, arg)
+                read(session, accountId, op, arg)
 
             override fun resolvePeer(accountId: Int, requestId: Long, spec: String, kind: Int): String? =
-                resolve(plugin, engine, accountId, requestId, spec, kind)
+                resolve(session, accountId, requestId, spec, kind)
 
             override fun accountFetch(accountId: Int, requestId: Long, op: Int, arg: String): String? =
-                fetch(plugin, engine, accountId, requestId, op, arg)
+                fetch(session, accountId, requestId, op, arg)
         }
 
-    private fun read(plugin: Plugin, engine: QuickJs, accountId: Int, op: Int, arg: String): String {
+    private fun read(session: PluginSession, accountId: Int, op: Int, arg: String): String {
         val scope = SCOPE_BY_OP[op] ?: return PluginWire.encodeError("account read: unknown op $op")
         // the engine's own check_grant already ran in native; this is the same belt-and-braces
         // second gate PluginKv keeps, on the side that owns the data
-        if (!plugin.permissions.allows("account.read", scope, ScopeMatch.EXACT)) {
+        if (!session.permissions.allows("account.read", scope, ScopeMatch.EXACT)) {
             return PluginWire.encodeNotGranted("account.read", scope)
         }
-        if (!allowsSelf(plugin, arg)) return PluginWire.encodeNotGranted("account.read", "self")
-        val handles = engine.listener?.tl as? TlHandles
-            ?: return PluginWire.encodePluginError("internal", "account read: no handle table")
+        if (!allowsSelf(session, arg)) return PluginWire.encodeNotGranted("account.read", "self")
+        val handles = session.tl
         val controller = PeerSpecs.controllerFor(accountId)
             ?: return PluginWire.encodePluginError("not-found", "account read: no account is logged in as #$accountId")
         return try {
@@ -154,11 +154,11 @@ object PluginReads {
                 }
                 OP_INPUT_PEER -> {
                     val (spec, rest) = PeerSpecs.splitOnce(arg)
-                    inputPeerWire(controller, accountId, spec, rest.toIntOrNull() ?: PeerSpecs.KIND_PEER, policyOf(plugin))
+                    inputPeerWire(controller, accountId, spec, rest.toIntOrNull() ?: PeerSpecs.KIND_PEER, policyOf(session))
                 }
                 OP_DRAFT -> {
                     val (spec, rest) = PeerSpecs.splitOnce(arg)
-                    draftWire(controller, accountId, spec, rest.toLongOrNull() ?: 0L, policyOf(plugin))
+                    draftWire(controller, accountId, spec, rest.toLongOrNull() ?: 0L, policyOf(session))
                 }
                 else -> PluginWire.encodeError("account read: unknown op $op")
             }
@@ -191,8 +191,8 @@ object PluginReads {
      * on. Without it a plugin holding one `Account` per slot rebuilds `inu.accounts()` out of
      * `getUser('me').id`. Checked after the op's own scope, and mirrored in `reads.rs`.
      */
-    private fun allowsSelf(plugin: Plugin, arg: String): Boolean =
-        !PeerSpecs.namesSelf(arg) || plugin.permissions.allows("account.read", "self", ScopeMatch.EXACT)
+    private fun allowsSelf(session: PluginSession, arg: String): Boolean =
+        !PeerSpecs.namesSelf(arg) || session.permissions.allows("account.read", "self", ScopeMatch.EXACT)
 
     private fun findUser(controller: MessagesController, accountId: Int, spec: String): TLRPC.User? {
         val id = PeerSpecs.dialogIdOf(controller, accountId, spec) ?: return null
@@ -276,7 +276,7 @@ object PluginReads {
         is PeerSpecs.Built.Peer -> PluginWire.encodeJson(TlJson.toJson(built.value, policy).toString())
     }
 
-    private fun policyOf(plugin: Plugin): TlFilter.Policy = TlFilter.policyFor(plugin.permissions)
+    private fun policyOf(session: PluginSession): TlFilter.Policy = TlFilter.policyFor(session.permissions)
 
     /** a `TextWithEntities`, the shape `setDraft` takes back: the rest of a draft is app state rather than the text the input field shows */
     private fun draftWire(
@@ -301,15 +301,14 @@ object PluginReads {
 
     /** only for a username: an id with no cached entity has no `access_hash` anywhere reachable, the server handing those out attached to an entity rather than on request */
     private fun resolve(
-        plugin: Plugin,
-        engine: QuickJs,
+        session: PluginSession,
         accountId: Int,
         requestId: Long,
         spec: String,
         kind: Int,
     ): String? {
-        if (!plugin.permissions.allows("account.read", "peers", ScopeMatch.EXACT)) return PluginWire.encodeNotGranted("account.read", "peers")
-        if (!allowsSelf(plugin, spec)) return PluginWire.encodeNotGranted("account.read", "self")
+        if (!session.permissions.allows("account.read", "peers", ScopeMatch.EXACT)) return PluginWire.encodeNotGranted("account.read", "peers")
+        if (!allowsSelf(session, spec)) return PluginWire.encodeNotGranted("account.read", "self")
         val controller = PeerSpecs.controllerFor(accountId)
             ?: return PluginWire.encodePluginError("not-found", "resolvePeer: no account is logged in as #$accountId")
         if (spec.isEmpty() || spec[0] != PeerSpecs.SPEC_USERNAME) {
@@ -326,11 +325,10 @@ object PluginReads {
         // through the bypass lease, or a plugin holding interceptRpc(contacts.resolveUsername) that resolves from inside its own middleware dispatches into itself without bound
         PluginRpc.sendWithoutInterceptors(accountId, request, flags) { response, error ->
             EngineDispatch.settle(
-                plugin,
-                engine,
+                session,
                 "resolvePeer",
-                produce = { settleWire(controller, accountId, response, error, spec, kind, policyOf(plugin)) },
-                deliver = { engine.resolvePeerResult(requestId, it) },
+                produce = { settleWire(controller, accountId, response, error, spec, kind, policyOf(session)) },
+                deliver = { session.engine.resolvePeerResult(requestId, it) },
             )
         }
         return null
@@ -362,19 +360,18 @@ object PluginReads {
     }
 
     private fun fetch(
-        plugin: Plugin,
-        engine: QuickJs,
+        session: PluginSession,
         accountId: Int,
         requestId: Long,
         op: Int,
         arg: String,
     ): String? {
         val scope = SCOPE_BY_OP[op] ?: return PluginWire.encodePluginError("internal", "account fetch: unknown op $op")
-        if (!allowsFetch(plugin, op, arg)) return PluginWire.encodeNotGranted("account.read", scope)
-        if (!allowsSelf(plugin, arg)) return PluginWire.encodeNotGranted("account.read", "self")
+        if (!allowsFetch(session, op, arg)) return PluginWire.encodeNotGranted("account.read", scope)
+        if (!allowsSelf(session, arg)) return PluginWire.encodeNotGranted("account.read", "self")
         val controller = PeerSpecs.controllerFor(accountId)
             ?: return PluginWire.encodePluginError("not-found", "account fetch: no account is logged in as #$accountId")
-        val call = Fetch(plugin, engine, controller, accountId, requestId, PeerSpecs.splitList(arg))
+        val call = Fetch(session, controller, accountId, requestId, PeerSpecs.splitList(arg))
         return try {
             when (op) {
                 OP_USER_FULL -> fetchUserFull(call)
@@ -395,24 +392,23 @@ object PluginReads {
     }
 
     /** `getUserFull` on *yourself* is the one read allowed under `account.read(self)` alone, and "yourself" is the spec rather than a dialog id that happens to be yours */
-    private fun allowsFetch(plugin: Plugin, op: Int, arg: String): Boolean {
+    private fun allowsFetch(session: PluginSession, op: Int, arg: String): Boolean {
         if (op == OP_USER_FULL && arg.length == 1 && arg[0] == PeerSpecs.SPEC_SELF &&
-            plugin.permissions.allows("account.read", "self", ScopeMatch.EXACT)
+            session.permissions.allows("account.read", "self", ScopeMatch.EXACT)
         ) {
             return true
         }
         val scope = SCOPE_BY_OP[op] ?: return false
-        return plugin.permissions.allows("account.read", scope, ScopeMatch.EXACT)
+        return session.permissions.allows("account.read", scope, ScopeMatch.EXACT)
     }
 
     /** after a reload the plugin runs on a new engine whose request ids restart, so a stale settle must not reach it */
     private fun answer(call: Fetch, produce: () -> String) {
         EngineDispatch.settle(
-            call.plugin,
-            call.engine,
+            call.session,
             "account fetch",
             produce = produce,
-            deliver = { call.engine.accountFetchResult(call.requestId, it) },
+            deliver = { call.session.engine.accountFetchResult(call.requestId, it) },
         )
     }
 
@@ -459,14 +455,13 @@ object PluginReads {
     }
 
     private class Fetch(
-        val plugin: Plugin,
-        val engine: QuickJs,
+        val session: PluginSession,
         val controller: MessagesController,
         val accountId: Int,
         val requestId: Long,
         val parts: List<String>,
     ) {
-        val handles: TlHandles get() = TlHandles.of(engine)
+        val handles: TlHandles get() = session.tl
 
         val spec: String get() = parts.firstOrNull().orEmpty()
 
@@ -591,8 +586,8 @@ object PluginReads {
         val accountId = call.accountId
         MessagesStorage.getInstance(accountId).storageQueue.postRunnable {
             val stored = readStoredMessages(accountId, dialogId, ids.filterNot(cached::containsKey))
-            // back to globalQueue before anything touches the controller, the handle table or an rpc
-            Utilities.globalQueue.postRunnable {
+            // back to the plugin queue before anything touches the controller, the handle table or an rpc
+            EngineDispatch.scheduler.postRunnable {
                 val known = cached + stored
                 val missing = ids.filterNot(known::containsKey)
                 if (missing.isEmpty()) {
@@ -616,7 +611,7 @@ object PluginReads {
         if (cached.size == ids.size) return done(cached)
         MessagesStorage.getInstance(accountId).storageQueue.postRunnable {
             val stored = readStoredMessages(accountId, dialogId, ids.filterNot(cached::containsKey))
-            Utilities.globalQueue.postRunnable { done(cached + stored) }
+            EngineDispatch.scheduler.postRunnable { done(cached + stored) }
         }
     }
 
@@ -793,7 +788,7 @@ object PluginReads {
                 }
             }
             // the copy happens here, on the thread that owns the list; only the copy crosses back,
-            // and `answer` mints it on globalQueue where the handle table lives
+            // and `answer` mints it on the plugin queue where the handle table lives
             val dialogs = picked?.let { copyDialogs(call.accountId, it, limit) }
             answer(call) {
                 if (dialogs == null) {
@@ -807,7 +802,7 @@ object PluginReads {
     }
 
     private fun fetchChatFolders(call: Fetch): String? {
-        val policy = policyOf(call.plugin)
+        val policy = policyOf(call.session)
         AndroidUtilities.runOnUIThread {
             val json = chatFoldersJson(call.controller, call.accountId, policy)
             answer(call) { PluginWire.encodeJson(json) }

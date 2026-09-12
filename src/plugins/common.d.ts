@@ -1155,10 +1155,9 @@ declare namespace inu {
   /**
    * @needs-grant interceptSendMessage
    *
-   * A synchronous middleware that answers within ~100ms drops a message before it is ever drawn;
-   * past that the app has already shown the bubble and removes it again. An `async` middleware is
-   * never waited on, so its dropped messages always flash: keep the handler synchronous if that
-   * matters.
+   * A middleware that answers within ~100ms drops a message before it is ever drawn.
+   * Longer work shows a pending bubble, which is updated or removed when the chain settles.
+   * This applies equally to synchronous and async functions.
    *
    * A `drop` is a verdict, not a response, and the two behave differently in a chain. An
    * `interceptRpc` middleware wrapping this one may catch what its `next()` rejects with and answer
@@ -1172,8 +1171,8 @@ declare namespace inu {
   /**
    * @needs-grant interceptSendMessage. Filters are checked before entering the plugin engine.
    *
-   * Same timing as the unfiltered form: a synchronous middleware that answers within ~100ms drops a
-   * message before it is ever drawn, and an `async` one is never waited on.
+   * Same timing as the unfiltered form: a verdict within ~100ms can suppress the bubble;
+   * longer work shows a pending bubble until the chain settles.
    */
   function interceptSendMessage(
     filter: SendMessageFilter,

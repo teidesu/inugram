@@ -47,6 +47,28 @@ class PluginRpcUpdateChainTest {
     }
 
     @Test
+    fun a_future_update_stage_cannot_dispatch_into_a_reloaded_engine() {
+        val first = verdictPlugin("first", true, "updateNewMessage")
+        first.js.onDispatchUpdateIntercept = null
+        val second = verdictPlugin("second", true, "updateNewMessage")
+        val batch = batchOf(newMessage(1))
+        assertTrue(deliverUpdates(batch))
+        drain()
+        val old = second.session!!
+        old.stopDispatching()
+        PluginUpdates.detach(second.session!!)
+        old.tl.releaseAll()
+        second.session = PluginSession(second, RecordingQuickJs())
+        attachBridge(second.session!!)
+        assertNull(second.interceptUpdate("updateNewMessage"))
+        first.updateVerdict(first.js.updateDispatches.single().dispatchId, true)
+        drain()
+        assertTrue(second.js.updateDispatches.isEmpty())
+        assertTrue((old.engine as RecordingQuickJs).updateDispatches.isEmpty())
+        assertSame(batch, applied().single())
+    }
+
+    @Test
     fun a_batch_nobody_claims_is_left_with_the_app() {
         verdictPlugin("p", true, "updateUserTyping")
 
@@ -278,7 +300,7 @@ class PluginRpcUpdateChainTest {
         drain()
         assertEquals(0, applied().size)
 
-        Utilities.globalQueue.postRunnable { detachPlugin(plugin) }
+        EngineDispatch.scheduler.postRunnable { detachPlugin(plugin) }
         drain()
 
         assertEquals(1, applied().single().updates.size)
@@ -302,7 +324,7 @@ class PluginRpcUpdateChainTest {
         drain()
         assertEquals(1, plugin.js.updateDispatches.size, "one stage at a time")
 
-        Utilities.globalQueue.postRunnable { detachPlugin(plugin) }
+        EngineDispatch.scheduler.postRunnable { detachPlugin(plugin) }
         drain()
 
         assertEquals(1, plugin.js.updateDispatches.size, "the second unit must not enter a dying engine")

@@ -3,6 +3,8 @@ package desu.inugram.helpers.plugins.telegram
 import android.util.Log
 import desu.inugram.core.plugins.PluginWire
 import desu.inugram.helpers.plugins.Plugin
+import desu.inugram.helpers.plugins.PluginSession
+import desu.inugram.helpers.plugins.EngineDispatch
 import desu.inugram.helpers.plugins.telegram.PluginWrites.Call
 import desu.inugram.helpers.plugins.telegram.PluginWrites.refuse
 import desu.inugram.helpers.plugins.tl.TlHandles
@@ -212,6 +214,7 @@ object PluginOptimisticSend {
         if (replyId == 0 && topicId == 0) return done(null, null)
         val wanted = listOf(replyId, topicId).filter { it != 0 }.distinct()
         PluginReads.loadLocalMessages(call.accountId, dialogId, wanted) { found ->
+            if (!call.session.isCurrent()) return@loadLocalMessages
             // a post into a topic with no reply of its own replies to the topic's root message
             val anchor = found[if (replyId != 0) replyId else topicId]
             val top = if (topicId != 0) found[topicId] else null
@@ -242,6 +245,8 @@ object PluginOptimisticSend {
      */
     private fun onUi(token: String, block: () -> Unit) {
         AndroidUtilities.runOnUIThread {
+            val entry = synchronized(pending) { pending[token] } ?: return@runOnUIThread
+            if (!entry.call.session.isCurrent()) return@runOnUIThread
             try {
                 block()
             } catch (e: Throwable) {
@@ -295,7 +300,7 @@ object PluginOptimisticSend {
     private fun onSent(token: String, args: Array<Any?>) {
         val message = args.getOrNull(2) as? TLRPC.Message ?: return
         if (tokenOf(message) != token) return
-        settle(token) { call -> PluginReads.mint(TlHandles.of(call.engine), message) }
+        settle(token) { call -> PluginReads.mint(call.session.tl, message) }
     }
 
     private fun onFailed(token: String, entry: Pending, args: Array<Any?>) {
@@ -343,9 +348,9 @@ object PluginOptimisticSend {
 
 
     /** a plugin that stopped while a send was in flight leaves nothing behind to answer */
-    internal fun detach(plugin: Plugin) {
+    internal fun detach(session: PluginSession) {
         val dropped = synchronized(pending) {
-            val mine = pending.filterValues { it.call.plugin === plugin }
+            val mine = pending.filterValues { it.call.session === session }
             for (token in mine.keys) pending.remove(token)
             mine.values
         }

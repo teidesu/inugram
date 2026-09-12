@@ -6,21 +6,12 @@ use rquickjs::{Array, Ctx, Function, IntoJs, Object, Result as JsResult, Runtime
 
 use crate::api::error::{wire_error_to_js, PluginErrorCode};
 use crate::api::telegram::account::AccountState;
-use crate::api::telegram::rpc::{format_exception, pump_jobs, PendingSettle};
+use crate::api::error::format_exception;
+use crate::runtime::{pump_jobs, PendingSettle};
 use crate::api::tl::proxy::{TlViews, ViewLife};
 use crate::sandbox::grants::{GrantHost, MATCH_EXACT};
 use crate::sandbox::registry::RequestIds;
 use crate::utils::prelude;
-
-const PRELUDE: &[u8] = include_bytes!(concat!(env!("OUT_DIR"), "/reads.qbc"));
-
-pub trait ReadsHost {
-  fn account_read(&self, account_id: i32, op: i32, arg: &str) -> String;
-
-  fn resolve_peer(&self, account_id: i32, request_id: i64, spec: &str, kind: i32) -> Option<String>;
-
-  fn account_fetch(&self, account_id: i32, request_id: i64, op: i32, arg: &str) -> Option<String>;
-}
 
 const OP_ME: i32 = 0;
 const OP_USER: i32 = 1;
@@ -41,6 +32,16 @@ const OP_TOPICS: i32 = 15;
 const OP_DIALOGS_CACHED: i32 = 16;
 const OP_CHAT_FOLDERS: i32 = 17;
 const OP_FETCH_MESSAGES: i32 = 18;
+
+const PRELUDE: &[u8] = include_bytes!(concat!(env!("OUT_DIR"), "/reads.qbc"));
+
+pub trait ReadsHost {
+  fn account_read(&self, account_id: i32, op: i32, arg: &str) -> String;
+
+  fn resolve_peer(&self, account_id: i32, request_id: i64, spec: &str, kind: i32) -> Option<String>;
+
+  fn account_fetch(&self, account_id: i32, request_id: i64, op: i32, arg: &str) -> Option<String>;
+}
 
 const SEPARATOR: char = '\n';
 

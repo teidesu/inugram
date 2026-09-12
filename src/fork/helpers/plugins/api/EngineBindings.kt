@@ -2,6 +2,7 @@ package desu.inugram.helpers.plugins.api
 
 import desu.inugram.core.plugins.FsQuota
 import desu.inugram.helpers.plugins.Plugin
+import desu.inugram.helpers.plugins.PluginSession
 import desu.inugram.helpers.plugins.PluginBridge
 import desu.inugram.helpers.plugins.QuickJs
 import desu.inugram.helpers.plugins.io.PluginBlobs
@@ -21,7 +22,7 @@ import org.telegram.ui.LaunchActivity
  */
 object EngineBindings {
     /** the app screen is here rather than in `PluginJvm`, which reaches no `Activity` of its own */
-    fun jvmListenerFor(plugin: Plugin, engine: QuickJs) = PluginJvm.listenerFor(plugin, engine, AppScreen)
+    fun jvmListenerFor(session: PluginSession) = PluginJvm.listenerFor(session, AppScreen)
 
     /**
      * Everything the engine's own bindings need in place, in the one order that works: the read
@@ -29,24 +30,24 @@ object EngineBindings {
      * and the `Account` handles it hangs its getters on, and `inu.xposed` mints every handle its
      * entry points take out of `inu.jvm`'s table.
      */
-    fun start(plugin: Plugin, engine: QuickJs, bridge: PluginBridge) {
-        val quota = FsQuota.forGrants(plugin.manifest.grants)
-        engine.start(
+    fun start(session: PluginSession, bridge: PluginBridge) {
+        val quota = FsQuota.forGrants(session.manifest.grants)
+        session.engine.start(
             bridge,
             QuickJs.Config(
-                spillDir = PluginBlobs.dirFor(plugin.id),
-                fsDir = quota?.let { PluginFs.dirFor(plugin.id) } ?: "",
+                spillDir = PluginBlobs.dirFor(session.plugin.id),
+                fsDir = quota?.let { PluginFs.dirFor(session.plugin.id) } ?: "",
                 fsQuotaBytes = quota ?: 0,
-                fsUnscoped = PluginFs.isUnscoped(plugin.permissions),
+                fsUnscoped = PluginFs.isUnscoped(session.permissions),
                 installFs = quota != null,
                 androidDirs = PluginFs.androidDirs(),
                 installJvm = bridge.jvm != null,
                 installXposed = bridge.xposed != null,
-                grants = plugin.manifest.grants,
+                grants = session.manifest.grants,
             ),
         )
         // a plugin loaded while the app is hidden would otherwise tick unthrottled until the next transition; no callback can hear this, its own code not having run yet
-        if (!PluginAppVisibility.isForeground) engine.appVisibilityChanged(false)
+        if (!PluginAppVisibility.isForeground) session.engine.appVisibilityChanged(false)
     }
 
     /** read live rather than off a snapshot, which would be a strong reference to a screen the user has already left. Here rather than in `PluginJvm`, which reaches no `Activity` of its own */

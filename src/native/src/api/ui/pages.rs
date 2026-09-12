@@ -5,7 +5,8 @@ use std::rc::Rc;
 use rquickjs::{Array, Ctx, Exception, Function, Object, Persistent, Result as JsResult, Runtime, Value};
 
 use crate::api::error::PluginErrorCode;
-use crate::api::telegram::rpc::{format_exception, pump_jobs, PendingSettle};
+use crate::api::error::format_exception;
+use crate::runtime::{pump_jobs, PendingSettle};
 use crate::api::ui::icons::{opt_icon, Icon, RETAINED_VALUE_TAG};
 use crate::sandbox::registry::{make_disposer, noop_disposer, Lifecycle, Registry, RequestIds};
 use crate::utils::arguments::{field, opt_bool, opt_fn, opt_num, opt_str, req_bool, req_fn, req_num, req_str};

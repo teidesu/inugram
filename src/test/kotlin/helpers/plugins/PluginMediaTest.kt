@@ -376,7 +376,7 @@ class PluginMediaTest {
         settle()
         assertTrue(pluginObserverCount(centre()) >= 2, "neither transfer is listening")
 
-        PluginMedia.detach(plugin)
+        PluginMedia.detach(plugin.session!!)
         settle()
         assertEquals(
             0,
@@ -394,7 +394,7 @@ class PluginMediaTest {
         assertNull(write(plugin, PluginWrites.OP_DOWNLOAD_MEDIA, JSONObject(), arrayOf(messageWire(message))))
         settle()
 
-        PluginMedia.detach(plugin)
+        PluginMedia.detach(plugin.session!!)
         settle()
         target.writeText("hello world")
         centre().postOnUi(NotificationCenter.fileLoaded, fileNameOf(message), target)

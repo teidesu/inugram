@@ -38,7 +38,7 @@ open class QuickJs {
     /**
      * Every native call below picks one of these two, and which one is a claim about the caller.
      *
-     * [requireLive] is for a call whose caller has already passed [EngineDispatch.isLive] - a closed
+     * [requireLive] is for a call whose caller has already passed [PluginSession.isCurrent] - a closed
      * engine there is a bug in the caller, not a race, and throwing is how it gets found. [ifLive]
      * and [ifLiveOr] are for the ones reachable with no such gate: a hooked method's own thread, the
      * notification centre, a timer wake, a menu render on the ui thread. Those may find the engine
@@ -150,7 +150,7 @@ open class QuickJs {
 
     private fun scheduleJobs() {
         if (!jobsScheduled.compareAndSet(false, true)) return
-        Utilities.globalQueue.postRunnable {
+        EngineDispatch.scheduler.postRunnable {
             jobsScheduled.set(false)
             ifLive { nativePumpJobs(it) }
         }
@@ -191,7 +191,7 @@ open class QuickJs {
 
     fun resolvePrompt(requestId: Long, text: String?) = requireLive { nativeResolvePrompt(it, requestId, text) }
 
-    /** never call it off [Utilities.globalQueue] */
+    /** never call it off [EngineDispatch.scheduler] */
     open fun renderActions(kind: Int, surfaceJson: String): String? = ifLiveOr(null) { nativeRenderActions(it, kind, surfaceJson) }
 
     open fun dispatchAction(kind: Int, token: Int, surfaceJson: String) = ifLive { nativeDispatchAction(it, kind, token, surfaceJson) }

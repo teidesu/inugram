@@ -1,6 +1,8 @@
 package desu.inugram.helpers.plugins
 
 import desu.inugram.core.plugins.PluginWire
+import desu.inugram.core.plugins.DispatchScheduler
+import org.telegram.messenger.DispatchQueue
 import org.telegram.messenger.Utilities
 
 /**
@@ -16,13 +18,19 @@ import org.telegram.messenger.Utilities
  * to recycle, a response whose free stock suppressed, a fetched body's bytes.
  */
 internal object EngineDispatch {
-    /** is [plugin] still running on [engine]? Identity, not null: a reload swaps the instance. */
-    fun isLive(plugin: Plugin, engine: QuickJs): Boolean = plugin.engine === engine
+    private val queue = DispatchQueue("inuPlugins")
+    var scheduler: DispatchScheduler = object : DispatchScheduler {
+        override fun nowMillis(): Long = android.os.SystemClock.uptimeMillis()
+        override fun postRunnable(task: Runnable, delayMillis: Long) {
+            queue.postRunnable(task, delayMillis)
+        }
+        override fun cancel(task: Runnable) = queue.cancelRunnable(task)
+    }
 
-    /** post [block] to `globalQueue`, and run it only if the plugin is still on this engine */
-    fun onEngine(plugin: Plugin, engine: QuickJs, onDropped: () -> Unit = {}, block: () -> Unit) {
-        Utilities.globalQueue.postRunnable {
-            if (isLive(plugin, engine)) block() else onDropped()
+    /** post [block] to the plugin queue, and run it only if the plugin is still on this engine */
+    fun onEngine(session: PluginSession, onDropped: () -> Unit = {}, block: () -> Unit) {
+        scheduler.postRunnable {
+            if (session.isCurrent()) block() else onDropped()
         }
     }
 
@@ -33,7 +41,7 @@ internal object EngineDispatch {
             if (Thread.currentThread() === owner) {
                 if (isLive()) block()
             } else {
-                Utilities.globalQueue.postRunnable { if (isLive()) block() }
+                scheduler.postRunnable { if (isLive()) block() }
             }
         }
     }
@@ -41,16 +49,15 @@ internal object EngineDispatch {
     /**
      * [onEngine] for the settles that answer exactly one wire. [produce] throwing is the host's own
      * bad day rather than the plugin's, so it becomes an `internal` error wire naming [what] rather
-     * than escaping onto `globalQueue`.
+     * than escaping onto the plugin queue.
      */
     fun settle(
-        plugin: Plugin,
-        engine: QuickJs,
+        session: PluginSession,
         what: String,
         onDropped: () -> Unit = {},
         produce: () -> String,
         deliver: (String) -> Unit,
-    ) = onEngine(plugin, engine, onDropped) { deliver(wireOf(what, produce)) }
+    ) = onEngine(session, onDropped) { deliver(wireOf(what, produce)) }
 
     fun wireOf(what: String, produce: () -> String): String = try {
         produce()

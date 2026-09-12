@@ -117,18 +117,17 @@ class PluginSendHoldTest {
     }
 
     /**
-     * a middleware that answers out of a promise says so at registration, and a verdict nothing can
-     * expect in time is not one to wait for
+     * a middleware may resolve a promise immediately; the grace window depends on its verdict
      */
     @Test
-    fun a_deferred_middleware_holds_nothing_back() {
+    fun a_quick_verdict_is_held_regardless_of_callback_syntax() {
         val plugin = startPlugin("p", "interceptSendMessage")
-        assertNull(plugin.interceptSendMessage(filterJson = """{"deferred":true}"""))
+        assertNull(plugin.interceptSendMessage())
         dropping(plugin)
 
         onUi {
             SendMessagesHelper.getInstance(0).sendMessage(SendMessageParams.of("ordinary", alice))
-            assertEquals(listOf("ordinary"), drawn, "an async middleware was waited on")
+            assertTrue(drawn.isEmpty(), "the message was drawn before the verdict could arrive")
         }
     }
 

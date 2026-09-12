@@ -106,7 +106,7 @@ fn installing_into_a_context_without_the_intrinsics_refuses() {
       panic!("a base context must be refused");
     };
     assert!(matches!(err, rquickjs::Error::Exception), "got: {err:?}");
-    crate::api::telegram::rpc::format_exception(&ctx)
+    crate::api::error::format_exception(&ctx)
   });
   assert!(message.contains("Context::full"), "got: {message}");
   assert!(REQUIRED_INTRINSICS.iter().any(|name| message.contains(&format!("no '{name}'"))), "got: {message}",);
@@ -473,7 +473,7 @@ fn structured_clone_throws_on_a_tl_view() {
     ) {
       Ok(s) => s,
       Err(rquickjs::Error::Exception) => {
-        panic!("{}", crate::api::telegram::rpc::format_exception(&ctx))
+        panic!("{}", crate::api::error::format_exception(&ctx))
       }
       Err(e) => panic!("{e:?}"),
     }

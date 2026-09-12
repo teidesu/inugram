@@ -230,7 +230,7 @@ class PluginRpcUpdatesTest {
             .apply { isAccessible = true }
             .get(PluginUpdates) as Map<String, List<Any>>
         val listener = byType[type]!!.single { entry ->
-            entry.javaClass.getDeclaredField("plugin").apply { isAccessible = true }.get(entry) === plugin
+            entry.javaClass.getDeclaredField("session").apply { isAccessible = true }.get(entry) === plugin.session
         }
         val scopes = listener.javaClass.getDeclaredField("grantScopes")
             .apply { isAccessible = true }
