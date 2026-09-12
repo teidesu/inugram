@@ -66,19 +66,30 @@ object PluginRpc {
         val strict: Boolean,
         val scope: String,
         val filter: SendFilter?,
+        /** the middleware answers out of a promise, so nothing waits on its verdict */
+        val deferred: Boolean,
     )
 
     private class SendFilter(val text: Pattern?, val textIsSticky: Boolean, val isEdit: Boolean?) {
         fun matches(method: String, request: TLObject): Boolean {
             if (isEdit != null && isEdit != (method == "messages.editMessage")) return false
+            return matchesText(
+                when (request) {
+                    is TLRPC.TL_messages_sendMessage -> request.message
+                    is TLRPC.TL_messages_sendMedia -> request.message
+                    is TLRPC.TL_messages_sendMultiMedia -> request.multi_media.firstOrNull()?.message
+                    is TLRPC.TL_messages_editMessage -> request.message
+                    else -> null
+                }
+            )
+        }
+
+        /** everything this can decide before the request exists, which is everything but the method */
+        fun matchesSend(text: String?): Boolean = isEdit != true && matchesText(text)
+
+        private fun matchesText(value: String?): Boolean {
             if (text == null) return true
-            val value = when (request) {
-                is TLRPC.TL_messages_sendMessage -> request.message
-                is TLRPC.TL_messages_sendMedia -> request.message
-                is TLRPC.TL_messages_sendMultiMedia -> request.multi_media.firstOrNull()?.message
-                is TLRPC.TL_messages_editMessage -> request.message
-                else -> null
-            } ?: return false
+            value ?: return false
             val matcher = text.matcher(value)
             return if (textIsSticky) matcher.lookingAt() else matcher.find()
         }
@@ -169,6 +180,7 @@ object PluginRpc {
 
     private const val TAG = "InuPluginRpc"
     private const val SEND_SCOPE = "interceptSendMessage"
+    private val SEND_METHODS = arrayOf("messages.sendMessage", "messages.sendMedia", "messages.sendMultiMedia")
     private const val RAW_GRANT = "unsafe.invokeRaw"
     private const val TAKEOUT_GRANT = "takeout"
     private const val RPC_CHAIN_BUDGET_MS = 10_000L
@@ -220,9 +232,24 @@ object PluginRpc {
         // same lease [sendWithoutInterceptors] takes, released when that send settles
         if (messages.any { PluginOptimisticSend.claimRequest(request, it) }) markBypassed(request)
         val method = TlNames.classNameToTlName(request.javaClass)
-        if (interceptorsByMethod[method].orEmpty().none { it.scope == SEND_SCOPE && it.filter?.matches(method, request) != false }) return
+        if (interceptorsByMethod[method].orEmpty().none { it.scope == SEND_SCOPE && it.filter?.matches(method, request) != false }) {
+            return PluginSendHold.release(account, messages)
+        }
         synchronized(optimisticMessagesByRequest) {
             optimisticMessagesByRequest[request] = OptimisticMessages(account, messages.toList())
+        }
+    }
+
+    /**
+     * whether a middleware could still claim a send the composer has only just minted, decided off
+     * what a [SendFilter] can read before there is a request: [PluginSendHold] parks a draw on it.
+     */
+    internal fun maySendBeIntercepted(text: String?): Boolean {
+        if (!hasInterceptors) return false
+        return SEND_METHODS.any { method ->
+            interceptorsByMethod[method].orEmpty().any {
+                !it.deferred && it.scope == SEND_SCOPE && it.filter?.matchesSend(text) != false
+            }
         }
     }
 
@@ -348,25 +375,21 @@ object PluginRpc {
         currentAccount: Int,
     ): Boolean {
         // a leased request is ours however the entry got here, including stock's own re-send
-        if (isBypassed(request)) return false
-        if (!hasInterceptors) {
-            synchronized(optimisticMessagesByRequest) { optimisticMessagesByRequest.remove(request) }
-            return false
-        }
+        if (isBypassed(request)) return unintercepted(request)
+        if (!hasInterceptors) return unintercepted(request)
         val tlName = TlNames.classNameToTlName(request.javaClass)
         val chain = interceptorsByMethod[tlName]
             ?.filter { it.filter?.matches(tlName, request) != false }
             ?.takeIf { it.isNotEmpty() }
-            ?: run {
-                synchronized(optimisticMessagesByRequest) { optimisticMessagesByRequest.remove(request) }
-                return false
-            }
+            ?: return unintercepted(request)
         val optimisticMessages = synchronized(optimisticMessagesByRequest) { optimisticMessagesByRequest.remove(request) }
         val params = OriginalParams(flags, datacenterId, connectionType, immediate, requestToken, onQuickAck, onWriteToSocket)
         val requestKey = tokenKey(currentAccount, requestToken)
         Utilities.globalQueue.postRunnable {
             val scopeId = TlHandles.newScope()
             val finalize: (TLObject?, TLRPC.TL_error?, Long) -> Unit = { response, error, responseTime ->
+                // a drop is the one outcome whose local message is about to be deleted rather than drawn
+                optimisticMessages?.let { PluginSendHold.settle(it.account, it.messages, !isDroppedSendError(error)) }
                 // earns its keep when the *first* stage's plugin is stopped, the ones below it still running
                 collapseChain(scopeId, ABANDONED_WIRE)
                 chainsByToken.remove(requestKey)
@@ -391,6 +414,13 @@ object PluginRpc {
             dispatchChain(connectionsManager, chain, 0, request, params, scopeId, currentAccount, finalize)
         }
         return true
+    }
+
+    /** no chain will walk this request, so a draw parked on the chance of one is owed its release */
+    private fun unintercepted(request: TLObject): Boolean {
+        val optimistic = synchronized(optimisticMessagesByRequest) { optimisticMessagesByRequest.remove(request) }
+        optimistic?.let { PluginSendHold.release(it.account, it.messages) }
+        return false
     }
 
     /**
@@ -510,10 +540,12 @@ object PluginRpc {
                 return PluginWire.encodeNotGranted("interceptRpc", method)
             }
         }
+        var deferred = false
         val filter = if (filterJson.isEmpty()) {
             null
         } else try {
             val json = JSONObject(filterJson)
+            deferred = json.optBoolean("deferred")
             val regex = json.optJSONObject("text")
             val flags = regex?.optString("flags").orEmpty()
             if (flags.any { it !in "dgimsuy" }) {
@@ -539,7 +571,7 @@ object PluginRpc {
         // the middleware twice per request off a single `next()`, against one budget, and
         // `releaseScope` twice. Same reason the update registrations take `types.toSet()`
         for (method in methods.toSet()) {
-            updated[method] = (updated[method].orEmpty()) + Interceptor(plugin, callbackId, strict, scope, filter)
+            updated[method] = (updated[method].orEmpty()) + Interceptor(plugin, callbackId, strict, scope, filter, deferred)
         }
         publishInterceptors(updated)
         return null
@@ -910,6 +942,8 @@ object PluginRpc {
         finalize: (TLObject?, TLRPC.TL_error?, Long) -> Unit,
     ) {
         syncOptimisticMessages(sent.request, optimisticMessages)
+        // the chain kept it, so what the composer minted is drawn - behind the rewrite above, which took the same ui hop
+        optimisticMessages?.let { PluginSendHold.release(it.account, it.messages) }
         markBypassed(sent.request)
         // stock frees the request the moment it has serialized it, gutting the writable view a parked stage holds. ownership moves to the chain; the free is in collapseChain
         sent.request.disableFree = true

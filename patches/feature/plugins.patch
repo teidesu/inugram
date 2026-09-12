@@ -5,11 +5,11 @@ Subject: Add the QuickJS plugin engine (hooks, action rows)
 
 ---
  .../messenger/MessagesController.java         | 122 ++++++++++--------
- .../messenger/SendMessagesHelper.java         |  17 ++-
+ .../messenger/SendMessagesHelper.java         |  22 +++-
  .../telegram/tgnet/ConnectionsManager.java    |   8 +-
- .../java/org/telegram/ui/ChatActivity.java    |   6 +-
+ .../java/org/telegram/ui/ChatActivity.java    |   8 +-
  .../java/org/telegram/ui/LaunchActivity.java  |   1 +
- 5 files changed, 97 insertions(+), 57 deletions(-)
+ 5 files changed, 99 insertions(+), 62 deletions(-)
 
 diff --git a/TMessagesProj/src/main/java/org/telegram/messenger/MessagesController.java b/TMessagesProj/src/main/java/org/telegram/messenger/MessagesController.java
 index 0000000..0000000 100644
@@ -201,7 +201,19 @@ index 0000000..0000000 100644
          int prevSize = unsentMessages.size();
          unsentMessages.remove(id);
          if (prevSize != 0 && unsentMessages.size() == 0) {
-@@ -7434,7 +7434,7 @@ public class SendMessagesHelper extends BaseController implements NotificationCe
+@@ -5187,10 +5187,7 @@ public class SendMessagesHelper extends BaseController implements NotificationCe
+                     mode = 0;
+                 }
+                 MessagesStorage.getInstance(currentAccount).putMessages(arr, false, true, false, 0, mode, threadMessageId);
+-                MessagesController.getInstance(currentAccount).updateInterfaceWithMessages(peer, objArr, mode);
+-                if (scheduleDate == 0) {
+-                    NotificationCenter.getInstance(currentAccount).postNotificationName(NotificationCenter.dialogsNeedReload);
+-                }
++                desu.inugram.helpers.plugins.telegram.PluginSendHold.draw(currentAccount, peer, objArr, mode, scheduleDate);
+             } else {
+                 String key = "group_" + groupId;
+                 ArrayList<DelayedMessage> arrayList = delayedMessages.get(key);
+@@ -7434,7 +7431,7 @@ public class SendMessagesHelper extends BaseController implements NotificationCe
          }
      }
  
@@ -210,7 +222,7 @@ index 0000000..0000000 100644
          TLRPC.Message message;
          if (mid > 0) {
              message = editingMessages.get(mid);
-@@ -7565,6 +7565,7 @@ public class SendMessagesHelper extends BaseController implements NotificationCe
+@@ -7565,6 +7562,7 @@ public class SendMessagesHelper extends BaseController implements NotificationCe
              return;
          }
  
@@ -218,7 +230,7 @@ index 0000000..0000000 100644
          int reqId = getConnectionsManager().sendRequest(request, (response, error) -> {
              if (error != null && FileRefController.isFileRefError(error.text)) {
                  final int fileRefIndex = FileRefController.getFileRefErrorIndex(error.text);
-@@ -7835,6 +7836,9 @@ public class SendMessagesHelper extends BaseController implements NotificationCe
+@@ -7835,6 +7833,9 @@ public class SendMessagesHelper extends BaseController implements NotificationCe
                      }
                      Utilities.stageQueue.postRunnable(() -> getMessagesController().processUpdates(updates, false));
                  } else {
@@ -228,7 +240,7 @@ index 0000000..0000000 100644
                      AlertsCreator.processError(currentAccount, error, null, request);
                      isSentError = true;
                  }
-@@ -7959,6 +7963,7 @@ public class SendMessagesHelper extends BaseController implements NotificationCe
+@@ -7959,6 +7960,7 @@ public class SendMessagesHelper extends BaseController implements NotificationCe
              return;
          }
  
@@ -236,7 +248,7 @@ index 0000000..0000000 100644
          newMsgObj.reqId = getConnectionsManager().sendRequest(req, (response, error) -> {
              if (error != null && (req instanceof TLRPC.TL_messages_sendMedia || req instanceof TL_ephemeral.TL_sendMessage || req instanceof TLRPC.TL_messages_editMessage || req instanceof TLRPC.TL_messages_addPollAnswer) && FileRefController.isFileRefError(error.text)) {
                  if (FileRefController.isFileRefErrorCover(error.text)) {
-@@ -8077,6 +8082,11 @@ public class SendMessagesHelper extends BaseController implements NotificationCe
+@@ -8077,6 +8079,11 @@ public class SendMessagesHelper extends BaseController implements NotificationCe
                          });
  
                      } else {
@@ -248,7 +260,7 @@ index 0000000..0000000 100644
                          AlertsCreator.processError(currentAccount, error, null, req);
                          removeFromSendingMessages(newMsgObj.id, scheduled);
                          revertEditingMessageObject(msgObj);
-@@ -8380,6 +8390,9 @@ public class SendMessagesHelper extends BaseController implements NotificationCe
+@@ -8380,6 +8387,9 @@ public class SendMessagesHelper extends BaseController implements NotificationCe
                              }
                          }
                      } else {
@@ -302,6 +314,15 @@ diff --git a/TMessagesProj/src/main/java/org/telegram/ui/ChatActivity.java b/TMe
 index 0000000..0000000 100644
 --- a/TMessagesProj/src/main/java/org/telegram/ui/ChatActivity.java
 +++ b/TMessagesProj/src/main/java/org/telegram/ui/ChatActivity.java
+@@ -437,7 +437,7 @@ public class ChatActivity extends BaseFragment implements
+     private WallpaperBitmapProvider wallpaperBitmapProvider = new WallpaperBitmapProvider();
+ 
+     private ChatActivityFadeView chatActivityFadeView;
+-    protected ChatActivityEnterView chatActivityEnterView;
++    public ChatActivityEnterView chatActivityEnterView;
+     private ChatActivityEnterTopView chatActivityEnterTopView;
+     private ChatReplyContainer replyLayout;
+     private int chatActivityEnterViewAnimateFromTop;
 @@ -32205,6 +32205,7 @@ public class ChatActivity extends BaseFragment implements
                          }
                      }

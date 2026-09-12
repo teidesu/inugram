@@ -1128,11 +1128,23 @@ declare namespace inu {
     isEdit?: boolean
   }
 
-  /** @needs-grant interceptSendMessage */
+  /**
+   * @needs-grant interceptSendMessage
+   *
+   * A synchronous middleware that answers within ~100ms drops a message before it is ever drawn;
+   * past that the app has already shown the bubble and removes it again. An `async` middleware is
+   * never waited on, so its dropped messages always flash: keep the handler synchronous if that
+   * matters.
+   */
   function interceptSendMessage(
     middleware: (message: OutgoingMessage, account: Account) => MaybePromise<'send' | 'drop'>,
   ): Disposer
-  /** @needs-grant interceptSendMessage. Filters are checked before entering the plugin engine. */
+  /**
+   * @needs-grant interceptSendMessage. Filters are checked before entering the plugin engine.
+   *
+   * Same timing as the unfiltered form: a synchronous middleware that answers within ~100ms drops a
+   * message before it is ever drawn, and an `async` one is never waited on.
+   */
   function interceptSendMessage(
     filter: SendMessageFilter,
     middleware: (message: OutgoingMessage, account: Account) => MaybePromise<'send' | 'drop'>,

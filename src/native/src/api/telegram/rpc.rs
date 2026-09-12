@@ -129,6 +129,19 @@ const SEND_METHODS: [&str; 4] =
 
 const SEND_SCOPE: &str = "interceptSendMessage";
 
+/// whether a middleware answers later: the host does not hold a local message back for a verdict
+/// that will not be there in time, so a deferred one is registered as such and never waited on
+fn is_async_function<'js>(callback: &Function<'js>) -> bool {
+  callback
+    .clone()
+    .into_value()
+    .into_object()
+    .and_then(|function| function.get::<_, Value<'js>>("constructor").ok())
+    .and_then(Value::into_object)
+    .and_then(|ctor| ctor.get::<_, String>("name").ok())
+    .is_some_and(|name| name == "AsyncFunction")
+}
+
 #[derive(Default)]
 struct UpdateDispatchState {
   settled: Cell<bool>,
@@ -496,6 +509,7 @@ impl RpcState {
             let Some(callback) = callback.into_function() else {
               return Err(Exception::throw_type(ctx, "interceptSendMessage: middleware must be a function"));
             };
+            let deferred = is_async_function(&callback);
             let Some(filter) = first.as_object() else {
               return Err(Exception::throw_type(ctx, "interceptSendMessage: filter must be an object"));
             };
@@ -533,6 +547,9 @@ impl RpcState {
               regex.set("flags", flags)?;
               encoded.set("text", regex)?;
             }
+            if deferred {
+              encoded.set("deferred", true)?;
+            }
             let json = ctx
               .json_stringify(encoded)?
               .map(|value| value.to_string())
@@ -544,7 +561,8 @@ impl RpcState {
             let Some(callback) = first.into_function() else {
               return Err(Exception::throw_type(ctx, "interceptSendMessage: middleware must be a function"));
             };
-            (String::new(), callback)
+            let json = if is_async_function(&callback) { r#"{"deferred":true}"#.to_string() } else { String::new() };
+            (json, callback)
           }
         };
         let build = match state.send_wrap.borrow().as_ref() {
