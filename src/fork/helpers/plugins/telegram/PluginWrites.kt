@@ -52,6 +52,7 @@ object PluginWrites {
     const val OP_DOWNLOAD_MEDIA = 10
     const val OP_DOWNLOAD_MEDIA_TO_FILE = 11
     const val OP_UPLOAD_FILE = 12
+    const val OP_SET_SEND_MEDIA = 13
 
     /** batch results join their handles with this; keep in sync with rust `writes::SEPARATOR` */
     const val LIST_SEPARATOR = "\n"
@@ -61,6 +62,7 @@ object PluginWrites {
         OP_SEND_MEDIA to ("account.write" to "send"),
         OP_SEND_MULTI_MEDIA to ("account.write" to "send"),
         OP_UPLOAD_FILE to ("account.write" to "send"),
+        OP_SET_SEND_MEDIA to ("account.write" to "send"),
         OP_EDIT_MESSAGE to ("account.write" to "edit"),
         OP_DELETE_MESSAGES to ("account.write" to "delete"),
         OP_FORWARD_MESSAGES to ("account.write" to "forward"),
@@ -118,6 +120,7 @@ object PluginWrites {
                 OP_DOWNLOAD_MEDIA -> PluginMedia.download(call, toFile = false)
                 OP_DOWNLOAD_MEDIA_TO_FILE -> PluginMedia.download(call, toFile = true)
                 OP_UPLOAD_FILE -> PluginMedia.uploadFile(call)
+                OP_SET_SEND_MEDIA -> PluginSendMorph.setMedia(call)
                 else -> PluginWire.encodePluginError("internal", "account write: unknown op $op")
             }
         } catch (e: Refused) {

@@ -138,7 +138,7 @@
     for (let i = 0; i < length; i++) items[i].media = value[i]
   }
 
-  const buildOutgoing = (raw, shape, account) => {
+  const buildOutgoing = (raw, shape, account, dispatchId) => {
     const message = {
       get peer() {
         const peer = raw.peer
@@ -209,6 +209,18 @@
         writeMedia(raw, shape, value)
       },
 
+      /**
+       * the media this send carries, as a file to be staged rather than one already uploaded: the
+       * app's own local message grows or swaps its media in place, so the app is what uploads it
+       * and draws the progress on the bubble it already drew
+       */
+      setMedia(file, options) {
+        if (shape.edit) throw unsupported('an edit carries no media to replace')
+        if (shape.media === 'album') throw unsupported(`an album's media cannot be replaced; drop it and send your own`)
+        if (file === null || typeof file !== 'object') throw invalid('setMedia: expected a Blob, bytes or { path }')
+        return shared.setSendMedia(account, dispatchId, file, options)
+      },
+
       get isEdit() {
         return shape.edit
       },
@@ -221,12 +233,14 @@
     return Object.seal(message)
   }
 
-  return middleware => async (raw, next, account) => {
+  return middleware => async (raw, next, account, dispatchId) => {
     const shape = SHAPES[baseName(raw)]
     // the host only ever dispatches the four, so this is a shape the engine does not know rather
     // than a plugin error: pass it on untouched instead of failing the user's send over it
     if (shape === undefined) return next(raw)
-    const verdict = await middleware(buildOutgoing(raw, shape, account), account)
+    const verdict = await middleware(buildOutgoing(raw, shape, account, dispatchId), account)
+    // a `setMedia` send resolves this with null: the request is never sent, the app taking the
+    // message over instead, and the host tells it so itself rather than through this value
     if (verdict === 'send') return next(raw)
     if (verdict !== 'drop') {
       // a plain Error rather than an `RpcError`, which is why this reads as the plugin's fault and

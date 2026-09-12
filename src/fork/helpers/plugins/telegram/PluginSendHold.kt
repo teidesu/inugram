@@ -50,6 +50,8 @@ object PluginSendHold {
                 NotificationCenter.getInstance(account).postNotificationName(NotificationCenter.dialogsNeedReload)
             }
         }
+        // a send growing into media is already on screen: what it wants is the change animation
+        if (PluginSendMorph.redrawInstead(account, peer, messages, scheduleDate)) return
         val holding = PluginRpc.maySendBeIntercepted(messages.firstOrNull()?.messageOwner?.message)
         // a send behind a parked one waits too, or the two would arrive out of order
         if (!holding && held.none { it.account == account && it.peer == peer }) return show.run()

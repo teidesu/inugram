@@ -1120,6 +1120,30 @@ declare namespace inu {
     media: tl.TypeInputMedia[]
     readonly isEdit: boolean
     readonly editMessageId: number | null
+
+    /**
+     * Gives this send its media as a file to stage, **on the message the app already drew** rather
+     * than as a send of your own: that bubble grows or swaps its media in place, and the app is
+     * what uploads the file and draws the progress on it. Works on a text send and on a single
+     * media send; an album or an edit throws `unsupported`.
+     *
+     * The caption is this message's own `text`, so set that rather than passing one here. Await it:
+     * it resolves once the file is staged, and rejects if the file cannot be read — so a failure is
+     * yours to handle rather than a send that fails afterwards. Return `'send'` once it resolves,
+     * since the request you were handed never goes out and `'drop'` discards the media with it.
+     *
+     * Because it never goes out, there is no response: the `next()` an `interceptRpc` middleware
+     * above this one awaits resolves with `null` rather than with `Updates`.
+     *
+     * The message is re-sent, so it reaches send middleware a second time as a `messages.sendMedia`
+     * — carrying a mark that refuses a second `setMedia`, which is what stops this recursing.
+     * Replacing the media of a send that already has some costs the upload the app already did.
+     */
+    setMedia(file: Blob | Uint8Array | { path: string }, options?: {
+      fileName?: string
+      /** send an image as a file rather than recompressing it into a photo */
+      asDocument?: boolean
+    }): Promise<void>
   }
 
   interface SendMessageFilter {
@@ -1135,6 +1159,12 @@ declare namespace inu {
    * past that the app has already shown the bubble and removes it again. An `async` middleware is
    * never waited on, so its dropped messages always flash: keep the handler synchronous if that
    * matters.
+   *
+   * A `drop` is a verdict, not a response, and the two behave differently in a chain. An
+   * `interceptRpc` middleware wrapping this one may catch what its `next()` rejects with and answer
+   * something else, which is how a failed request is retried or given a fallback. It cannot do that
+   * to a verdict: the send is already being unwound when the verdict is made, so the app acts on it
+   * whatever the stages above return.
    */
   function interceptSendMessage(
     middleware: (message: OutgoingMessage, account: Account) => MaybePromise<'send' | 'drop'>,

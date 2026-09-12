@@ -117,6 +117,23 @@
   // writing `await acc.readHistory(...) === undefined` is entitled to see
   const voidly = promise => promise.then(() => undefined)
 
+  // `message.setMedia()`, reached from the send prelude rather than from a plugin: the same staged
+  // file write every media send is, and the host matches the dispatch to the local message the
+  // composer already drew. The caption is the send's own text, so it is not named here
+  shared.setSendMedia = (account, dispatchId, file, options) =>
+    voidly(startWrite(account, ops.setSendMedia, 'setMedia', () => {
+      const opts = toOptions(options, 'setMedia')
+      return [
+        {
+          dispatch: dispatchId,
+          asDocument: toFlag(opts.asDocument, 'setMedia', 'asDocument'),
+          fileName: toName(opts.fileName, 'setMedia', 'fileName'),
+        },
+        [toFile(file, 'setMedia')],
+        null,
+      ]
+    }))
+
   /** the options every send shares, so one shape reaches the host however it was called */
   const sendOptions = (opts, what) => ({
     replyTo: toCount(opts.replyToMessageId, what, 'replyToMessageId'),

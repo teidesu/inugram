@@ -169,11 +169,11 @@ object PluginOptimisticSend {
      * what stock does with an image the composer was given: a photo unless it was asked for a file,
      * and never for webp, a sticker being a document however it looks
      */
-    private fun asPhoto(mime: String, asDocument: Boolean): Boolean =
+    internal fun asPhoto(mime: String, asDocument: Boolean): Boolean =
         !asDocument && mime.startsWith("image/") && mime != "image/webp"
 
     /** the same shape the request path uploads: mime and a name, and nothing stock only knows how to read off a gallery pick */
-    private fun documentOf(path: File, name: String, mime: String): TLRPC.TL_document =
+    internal fun documentOf(path: File, name: String, mime: String): TLRPC.TL_document =
         TLRPC.TL_document().apply {
             dc_id = 0
             id = 0

@@ -234,7 +234,7 @@ index 0000000..0000000 100644
                      }
                      Utilities.stageQueue.postRunnable(() -> getMessagesController().processUpdates(updates, false));
                  } else {
-+                    if (desu.inugram.helpers.plugins.telegram.PluginRpc.handleDroppedSends(this, currentAccount, msgObjs, scheduled, error)) {
++                    if (desu.inugram.helpers.plugins.telegram.PluginRpc.handleDroppedSends(this, currentAccount, msgObjs, scheduled)) {
 +                        return;
 +                    }
                      AlertsCreator.processError(currentAccount, error, null, request);
@@ -252,7 +252,7 @@ index 0000000..0000000 100644
                          });
  
                      } else {
-+                        if (desu.inugram.helpers.plugins.telegram.PluginRpc.isDroppedSendError(error)) {
++                        if (desu.inugram.helpers.plugins.telegram.PluginRpc.handleDroppedEdit(currentAccount, newMsgObj.id)) {
 +                            removeFromSendingMessages(newMsgObj.id, scheduled);
 +                            revertEditingMessageObject(msgObj);
 +                            return;
@@ -264,7 +264,7 @@ index 0000000..0000000 100644
                              }
                          }
                      } else {
-+                        if (desu.inugram.helpers.plugins.telegram.PluginRpc.handleDroppedSend(this, currentAccount, newMsgObj, scheduled, error)) {
++                        if (desu.inugram.helpers.plugins.telegram.PluginRpc.handleDroppedSend(this, currentAccount, newMsgObj, scheduled)) {
 +                            return;
 +                        }
                          AlertsCreator.processError(currentAccount, error, null, req);
