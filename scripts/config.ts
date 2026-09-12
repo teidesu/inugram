@@ -69,6 +69,10 @@ export const forkSyncFiles: ForkSyncFile[] = [
     target: 'TMessagesProj/src/main/res/values-tr',
   },
   {
+    source: 'src/res/values-uk/strings_inu.xml',
+    target: 'TMessagesProj/src/main/res/values-uk',
+  },
+  {
     source: 'src/res/drawable/icplaceholder.jpg',
     target: 'TMessagesProj/src/main/res/drawable',
     replace: true,
