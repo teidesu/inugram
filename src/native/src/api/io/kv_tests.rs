@@ -165,7 +165,7 @@ fn the_bundled_api_test_plugin_passes() {
   let lines = crate::testing::harness::install_capturing_console(&ctx);
   ctx.with(|ctx| match ctx.eval::<(), _>(API_ORACLE) {
     Ok(()) => {}
-    Err(rquickjs::Error::Exception) => panic!("{}", crate::api::telegram::rpc::format_exception(&ctx)),
+    Err(rquickjs::Error::Exception) => panic!("{}", crate::api::error::format_exception(&ctx)),
     Err(e) => panic!("{e:?}"),
   });
 

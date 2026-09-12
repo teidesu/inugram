@@ -6,7 +6,7 @@ use rquickjs::object::Accessor;
 use rquickjs::{Array, Ctx, Function, Object, Persistent, Result as JsResult, Runtime, Value};
 
 use crate::api::error::PluginErrorCode;
-use crate::api::telegram::rpc::pump_jobs;
+use crate::runtime::pump_jobs;
 use crate::sandbox::grants::{GrantHost, MATCH_EXACT};
 use crate::sandbox::registry::{make_disposer, noop_disposer, CallbackRegistry, Lifecycle, Registry, Token};
 
@@ -118,7 +118,7 @@ impl AccountState {
       }
       Err(e) => {
         let msg = match e {
-          rquickjs::Error::Exception => crate::api::telegram::rpc::format_exception(ctx),
+          rquickjs::Error::Exception => crate::api::error::format_exception(ctx),
           other => other.to_string(),
         };
         (self.log)(&format!("accounts: unreadable host snapshot: {msg}"));
@@ -185,7 +185,7 @@ impl AccountState {
       Err(rquickjs::Error::Exception) => {
         (self.log)(&crate::fault(format_args!(
           "withCurrentAccount teardown threw: {}",
-          crate::api::telegram::rpc::format_exception(ctx),
+          crate::api::error::format_exception(ctx),
         )));
       }
       Err(e) => (self.log)(&format!("withCurrentAccount teardown failed: {e:?}")),
@@ -230,7 +230,7 @@ impl AccountState {
       Err(rquickjs::Error::Exception) => {
         (self.log)(&crate::fault(format_args!(
           "withCurrentAccount callback threw: {}",
-          crate::api::telegram::rpc::format_exception(ctx),
+          crate::api::error::format_exception(ctx),
         )));
       }
       Err(e) => (self.log)(&format!("withCurrentAccount callback failed: {e:?}")),
@@ -294,7 +294,7 @@ impl AccountState {
           Err(rquickjs::Error::Exception) => {
             (self.log)(&crate::fault(format_args!(
               "onAccountsChanged callback threw: {}",
-              crate::api::telegram::rpc::format_exception(&ctx),
+              crate::api::error::format_exception(&ctx),
             )));
           }
           Err(e) => (self.log)(&format!("onAccountsChanged callback failed: {e:?}")),

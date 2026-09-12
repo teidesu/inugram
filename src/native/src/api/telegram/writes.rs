@@ -12,18 +12,11 @@ use crate::api::error::{wire_error_to_js, PluginErrorCode};
 use crate::api::io::blob::{self, BlobHandle, BlobState};
 use crate::api::telegram::account::AccountState;
 use crate::api::telegram::progress::ProgressReporter;
-use crate::api::telegram::rpc::{format_exception, pump_jobs, PendingSettle};
+use crate::api::error::format_exception;
+use crate::runtime::{pump_jobs, PendingSettle};
 use crate::api::tl::proxy::{js_value_to_wire, TlViews, ViewLife};
 use crate::sandbox::grants::{GrantHost, MATCH_EXACT};
 use crate::sandbox::registry::RequestIds;
-
-const PRELUDE: &[u8] = include_bytes!(concat!(env!("OUT_DIR"), "/writes.qbc"));
-
-pub trait WritesHost {
-  fn account_write(&self, account_id: i32, request_id: i64, op: i32, arg: &str, values: &[String]) -> Option<String>;
-
-  fn message_file(&self, account_id: i32, value: &str) -> String;
-}
 
 const OP_SEND_MESSAGE: i32 = 0;
 const OP_SEND_MEDIA: i32 = 1;
@@ -39,6 +32,14 @@ const OP_DOWNLOAD_MEDIA: i32 = 10;
 const OP_DOWNLOAD_MEDIA_TO_FILE: i32 = 11;
 const OP_UPLOAD_FILE: i32 = 12;
 const OP_SET_SEND_MEDIA: i32 = 13;
+
+const PRELUDE: &[u8] = include_bytes!(concat!(env!("OUT_DIR"), "/writes.qbc"));
+
+pub trait WritesHost {
+  fn account_write(&self, account_id: i32, request_id: i64, op: i32, arg: &str, values: &[String]) -> Option<String>;
+
+  fn message_file(&self, account_id: i32, value: &str) -> String;
+}
 
 pub const TRANSFER_LIMIT_BYTES: u64 = 256 * 1024 * 1024;
 
@@ -58,6 +59,7 @@ fn grant_of(op: i32) -> Option<(&'static str, &'static str)> {
     _ => return None,
   })
 }
+
 
 #[derive(Clone, Copy, PartialEq, Eq)]
 enum Shape {

@@ -39,7 +39,9 @@ fun resetBridge() {
         PluginXposed.detach(it)
         PluginJvm.detach(it)
         PluginActions.detach(it)
-        PluginNotifications.detach(it)
+        PluginNotifications.detach(plugin.session!!)
+        plugin.session!!.stopDispatching()
+        plugin.session!!.tl.releaseAll()
     }
     flushUi()
     clearPluginObservers()
@@ -92,16 +94,8 @@ private fun clearRpcState() {
             }
         }
     }
-    // the per-plugin handle tables, which moved out of PluginRpc into TlHandles' companion and are
-    // reached the same way for the same reason: a table left behind is another test's plugin
-    val companion = TlHandles.Companion
-    for (field in companion.javaClass.declaredFields) {
-        field.isAccessible = true
-        when (val value = field.get(companion)) {
-            is MutableMap<*, *> -> value.clear()
-            is MutableCollection<*> -> value.clear()
-        }
-    }
+    // Per-session handle tables are released in resetBridge before dropping the installed plugins.
+
 }
 
 /**
@@ -185,22 +179,21 @@ fun startPlugin(name: String, grants: List<String>, configureEngine: (RecordingQ
         source = "",
         manifest = manifestOf(name, grants),
     )
-    plugin.engine = RecordingQuickJs().also(configureEngine)
+    plugin.session = PluginSession(plugin, RecordingQuickJs().also(configureEngine))
     setInstalledPlugins(installedPlugins() + plugin)
-    attachBridge(plugin, plugin.engine as RecordingQuickJs)
+    attachBridge(plugin.session!!)
     return plugin
 }
 
 /**
- * builds [engine]'s [PluginBridge] and runs the installs, the way `PluginManager.start` does.
+ * builds [session]'s [PluginBridge] and runs the installs, the way `PluginManager.start` does.
  *
  * Storage, ui, platform, and canvas come from [DeviceMissing] rather than their owners even
  * though both compile here: their installs reach an `Activity` and a real engine. Nothing under
  * test touches them, so they refuse loudly instead of recording.
  */
 fun attachBridge(
-    plugin: Plugin,
-    engine: QuickJs,
+    session: PluginSession,
     core: CoreListener = DeviceMissing,
     canvas: CanvasListener = DeviceMissing,
     ui: UiListener = DeviceMissing,
@@ -211,29 +204,29 @@ fun attachBridge(
     // blobs and canvas sources spill to disk; a suite that stages one needs somewhere to put it
     spillDir: String = "",
 ) {
-    val tl = TlHandles.attach(plugin, TlFilter.policyFor(plugin.permissions))
-    val jvm = PluginJvm.listenerFor(plugin, engine, testAppScreen)
+    val tl = session.tl
+    val jvm = PluginJvm.listenerFor(session, testAppScreen)
     val bridge = PluginBridge(
         core = core,
-        rpc = PluginRpc.listenerFor(plugin, engine, tl),
-        updates = PluginUpdates.listenerFor(plugin, engine),
+        rpc = PluginRpc.listenerFor(session),
+        updates = PluginUpdates.listenerFor(session),
         tl = tl,
         storage = storage,
         account = object : AccountListener,
-            ReadsListener by PluginReads.listenerFor(plugin, engine),
-            WritesListener by PluginWrites.listenerFor(plugin, engine) {
+            ReadsListener by PluginReads.listenerFor(session),
+            WritesListener by PluginWrites.listenerFor(session) {
             override fun accounts(): String =
                 accountsJson?.invoke() ?: throw UnsupportedOperationException("this suite has no accounts")
         },
         ui = ui,
         platform = DeviceMissing,
-        fetch = PluginFetch.listenerFor(plugin, engine),
+        fetch = PluginFetch.listenerFor(session),
         canvas = canvas,
-        notifications = PluginNotifications.listenerFor(plugin, engine),
+        notifications = PluginNotifications.listenerFor(session),
         jvm = jvm,
-        xposed = PluginXposed.listenerFor(plugin, engine, jvm),
+        xposed = PluginXposed.listenerFor(session, jvm),
     )
-    engine.start(
+    session.engine.start(
         bridge,
         QuickJs.Config(
             spillDir = spillDir,
@@ -244,7 +237,7 @@ fun attachBridge(
             androidDirs = "",
             installJvm = bridge.jvm != null,
             installXposed = bridge.xposed != null,
-            grants = plugin.manifest.grants,
+            grants = session.manifest.grants,
         ),
     )
 }
@@ -377,7 +370,7 @@ fun Plugin.complete(dispatchId: Long, resultWire: String) =
 fun Plugin.tl(): TlListener = js.listener!!
 
 /** the handle table a plugin's materializations mint into, so a test can ask what a wire points at */
-fun tlTableOf(plugin: Plugin): TlHandles? = TlHandles.of(plugin)
+fun tlTableOf(plugin: Plugin): TlHandles? = plugin.session?.tl
 
 /**
  * every observer the *bridge* is holding, on every centre a post could come from. The app's own
@@ -535,8 +528,8 @@ fun List<Any>.toJsonArray(): org.json.JSONArray {
  * field of its own request expired.
  */
 fun detachPlugin(plugin: Plugin) {
-    TlHandles.beginDetach(plugin)
-    PluginRpc.detach(plugin)
-    PluginUpdates.detach(plugin)
-    TlHandles.endDetach(plugin)
+    plugin.session!!.stopDispatching()
+    PluginRpc.detach(plugin.session!!)
+    PluginUpdates.detach(plugin.session!!)
+    plugin.session!!.tl.releaseAll()
 }

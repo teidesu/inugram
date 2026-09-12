@@ -64,7 +64,7 @@ import java.util.concurrent.TimeUnit
  * Owns the running plugins: which of them are loaded, when each one starts and stops, and what
  * happens when one throws. The installed set on disk is [PluginStore]'s.
  *
- * Every engine op is funnelled through [Utilities.globalQueue] so each engine keeps its
+ * Every engine op is funnelled through [EngineDispatch.scheduler] so each engine keeps its
  * same-thread invariant; structural list/flag mutations happen on the UI thread.
  */
 object PluginManager {
@@ -141,7 +141,7 @@ object PluginManager {
         booted = true
         if (!isEngineEnabled()) return
         val loaded = CountDownLatch(1)
-        Utilities.globalQueue.postRunnable {
+        EngineDispatch.scheduler.postRunnable {
             try {
                 runPass { it.enabled && BootCohort.bootsEarly(it.permissions) }
             } finally {
@@ -160,7 +160,7 @@ object PluginManager {
         if (lateLoaded) return
         lateLoaded = true
         if (!isEngineEnabled()) return
-        Utilities.globalQueue.postRunnable { runPass { it.enabled } }
+        EngineDispatch.scheduler.postRunnable { runPass { it.enabled } }
     }
 
     /** the guard is armed around each plugin's own code and nothing else; [start] no-ops on a running plugin, so the late pass is the early one's remainder */
@@ -378,7 +378,7 @@ object PluginManager {
     private val stopping = java.util.IdentityHashMap<Plugin, MutableList<() -> Unit>>()
 
     private fun run(plugin: Plugin) {
-        Utilities.globalQueue.postRunnable {
+        EngineDispatch.scheduler.postRunnable {
             val pending = stopping[plugin]
             if (pending != null) pending.add { start(plugin) }
             else start(plugin)
@@ -387,17 +387,17 @@ object PluginManager {
 
     private var warmed = false
 
-    /** globalQueue only */
+    /** plugin queue only */
     private fun warmTlTables() {
         if (warmed) return
         warmed = true
-        Utilities.globalQueue.postRunnable {
+        EngineDispatch.scheduler.postRunnable {
             TlCtorIds.allNames
             TlReflect.prewarm()
         }
     }
 
-    /** globalQueue only */
+    /** plugin queue only */
     private fun start(plugin: Plugin) {
         if (plugin.engine != null) return
         if (!plugin.enabled || !isEngineEnabled() || safeMode) return
@@ -406,17 +406,18 @@ object PluginManager {
             fail(plugin, PluginFailure.Site.REFUSED, it)
             return
         }
-        val engine = QuickJs()
+        val session = PluginSession(plugin, QuickJs())
+        plugin.session = session
         val budget = LogBudget()
-        val timers = TimerThrottle(plugin, engine)::schedule
-        val onHost = EngineDispatch.createHostDispatcher { EngineDispatch.isLive(plugin, engine) }
+        val timers = TimerThrottle(session)::schedule
+        val onHost = EngineDispatch.createHostDispatcher(session::isCurrent)
         val core = object : CoreListener {
             private val faultReported = AtomicBoolean()
 
             override fun onConsole(level: Int, message: String) {
-                logConsole(plugin, budget, level, message)
+                logConsole(session, budget, level, message)
                 if (level == QuickJs.LEVEL_FAULT && faultReported.compareAndSet(false, true)) {
-                    EngineDispatch.onEngine(plugin, engine) { fail(plugin, PluginFailure.Site.RUNTIME, message, engine) }
+                    EngineDispatch.onEngine(session) { fail(session, PluginFailure.Site.RUNTIME, message) }
                 }
             }
 
@@ -424,43 +425,42 @@ object PluginManager {
         }
         // built whole and handed over once: rust caches its method ids off `PluginBridge` at
         // `start`, and every ordering constraint among the installs after it is in `EngineBindings`
-        val jvm = EngineBindings.jvmListenerFor(plugin, engine)
-        val tl = TlHandles.attach(plugin, TlFilter.policyFor(plugin.permissions))
+        val jvm = EngineBindings.jvmListenerFor(session)
+        val tl = session.tl
         val bridge = PluginBridge(
             core = core,
-            rpc = PluginRpc.listenerFor(plugin, engine, tl),
-            updates = PluginUpdates.listenerFor(plugin, engine),
+            rpc = PluginRpc.listenerFor(session),
+            updates = PluginUpdates.listenerFor(session),
             tl = tl,
-            storage = PluginKv.listenerFor(plugin),
-            account = PluginAccounts.listenerFor(plugin, engine),
-            ui = PluginUi.listenerFor(plugin, engine),
+            storage = PluginKv.listenerFor(session),
+            account = PluginAccounts.listenerFor(session),
+            ui = PluginUi.listenerFor(session),
             platform = PluginPlatform.listenerFor(),
-            fetch = PluginFetch.listenerFor(plugin, engine),
-            canvas = PluginCanvas.listenerFor(plugin, engine),
-            notifications = PluginNotifications.listenerFor(plugin, engine),
+            fetch = PluginFetch.listenerFor(session),
+            canvas = PluginCanvas.listenerFor(session),
+            notifications = PluginNotifications.listenerFor(session),
             jvm = jvm,
-            xposed = PluginXposed.listenerFor(plugin, engine, jvm),
+            xposed = PluginXposed.listenerFor(session, jvm),
         )
-        plugin.engine = engine
         try {
             // this is what runs the JNI bridge's own wiring, which throws when a descriptor does
             // not resolve - and an exception escaping here would take globalQueue, and the app, down
-            EngineBindings.start(plugin, engine, bridge)
-            engine.installInfo(
+            EngineBindings.start(session, bridge)
+            session.engine.installInfo(
                 appVersion = BuildVars.BUILD_VERSION_STRING,
                 appBuild = appBuild,
                 apiVersion = PLUGIN_API_VERSION,
                 layer = TLRPC.LAYER,
                 language = LocaleController.getInstance().currentLocaleInfo?.langCode ?: "",
-                header = plugin.manifest.raw,
+                header = session.manifest.raw,
             )
-            engine.evaluate(plugin.source, plugin.manifest.name)
+            session.engine.evaluate(session.source, session.manifest.name)
             notifyChanged()
         } catch (e: Throwable) {
-            teardown(plugin, engine) {
+            teardown(session) {
                 // before the field is cleared, which is what [fail] reads to decide the fault is
                 // still this plugin's
-                fail(plugin, PluginFailure.Site.LOAD, e.message ?: e.toString(), engine)
+                fail(session, PluginFailure.Site.LOAD, e.message ?: e.toString())
             }
         }
     }
@@ -474,60 +474,61 @@ object PluginManager {
      * which is when rust lets go of the descriptors it holds per spill file. [beforeClear] runs
      * while `plugin.engine` still points at [engine], which is what [fail] reads.
      */
-    private fun teardown(plugin: Plugin, engine: QuickJs, beforeClear: () -> Unit = {}) {
-        engine.stopCallbacks()
+    private fun teardown(session: PluginSession, beforeClear: () -> Unit = {}) {
+        session.engine.stopCallbacks()
         // the plugin's handle table spans both, and is released last of the three: the abandons
         // each of them runs reject inside this plugin, and a continuation touching its own request
         // view must not find every field expired
-        TlHandles.beginDetach(plugin)
-        PluginRpc.detach(plugin)
-        PluginUpdates.detach(plugin)
-        TlHandles.endDetach(plugin)
-        PluginMedia.detach(plugin)
-        PluginOptimisticSend.detach(plugin)
-        PluginUi.detach(engine)
-        PluginActions.detach(engine)
-        PluginNotifications.detach(engine)
-        PluginCanvas.detach(engine)
-        PluginXposed.detach(engine)
-        PluginJvm.detach(engine)
-        engine.close()
-        PluginBlobs.wipe(plugin.id)
-        PluginFetch.wipe(plugin.id)
-        PluginCanvas.wipe(plugin.id)
+        session.stopDispatching()
+        PluginRpc.detach(session)
+        PluginUpdates.detach(session)
+        session.tl.releaseAll()
+        PluginMedia.detach(session)
+        PluginOptimisticSend.detach(session)
+        PluginUi.detach(session)
+        PluginActions.detach(session.engine)
+        PluginNotifications.detach(session)
+        PluginCanvas.detach(session.engine)
+        PluginXposed.detach(session.engine)
+        PluginJvm.detach(session.engine)
+        session.engine.close()
+        PluginBlobs.wipe(session.plugin.id)
+        PluginFetch.wipe(session.plugin.id)
+        PluginCanvas.wipe(session.plugin.id)
         beforeClear()
-        plugin.engine = null
-        plugin.settingsPageId = null
+        session.plugin.session = null
+        session.settingsPageId = null
         notifyChanged()
     }
 
     private fun stop(plugin: Plugin, after: () -> Unit = {}) {
-        Utilities.globalQueue.postRunnable {
+        EngineDispatch.scheduler.postRunnable {
             stopping[plugin]?.let { it.add(after); return@postRunnable }
-            val engine = plugin.engine
-            if (engine == null) { after(); return@postRunnable }
+            val session = plugin.session
+            if (session == null) { after(); return@postRunnable }
             stopping[plugin] = arrayListOf(after)
             fun finish() {
-                try { teardown(plugin, engine) }
+                try { teardown(session) }
                 finally { stopping.remove(plugin)?.forEach { it() } }
             }
             try {
-                engine.stopCallbacks()
-                engine.notifyUnload()
+                session.stopDispatching()
+                session.engine.stopCallbacks()
+                session.engine.notifyUnload()
             } catch (e: Throwable) {
-                fail(plugin, PluginFailure.Site.UNLOAD, e.message ?: e.toString(), engine)
+                fail(session, PluginFailure.Site.UNLOAD, e.message ?: e.toString())
                 finish()
                 return@postRunnable
             }
             val poll = object : Runnable {
                 override fun run() {
                     try {
-                        if (!engine.pollUnload()) {
-                            Utilities.globalQueue.postRunnable(this, 16)
+                        if (!session.engine.pollUnload()) {
+                            EngineDispatch.scheduler.postRunnable(this, 16)
                             return
                         }
                     } catch (e: Throwable) {
-                        fail(plugin, PluginFailure.Site.UNLOAD, e.message ?: e.toString(), engine)
+                        fail(session, PluginFailure.Site.UNLOAD, e.message ?: e.toString())
                     }
                     finish()
                 }
@@ -542,16 +543,19 @@ object PluginManager {
      *
      * both hops are load-bearing. a fault arrives from inside a JNI upcall, with the engine's
      * `RefCell` already borrowed, so nothing here may re-enter it; and [stop] only ever reaches the
-     * engine through [Utilities.globalQueue], which is also where every in-flight dispatch of that
+     * engine through [EngineDispatch.scheduler], which is also where every in-flight dispatch of that
      * plugin runs, so the two can't interleave inside one engine.
      *
      * The verdict is taken on the queue that owns [Plugin.engine] rather than in the post: a
-     * reload's `onUnload` throwing is reported from the teardown, which is a `globalQueue` runnable,
+     * reload's `onUnload` throwing is reported from the teardown, which is a the plugin queue runnable,
      * while this settles on the ui thread - so by the time it landed the successor would already be
      * running and be switched off over an engine that no longer exists.
      */
-    private fun fail(plugin: Plugin, at: PluginFailure.Site, detail: String, engine: QuickJs? = null) {
-        if (engine != null && plugin.engine !== engine) return
+    private fun fail(session: PluginSession, at: PluginFailure.Site, detail: String) {
+        if (session.isCurrent()) fail(session.plugin, at, detail)
+    }
+
+    private fun fail(plugin: Plugin, at: PluginFailure.Site, detail: String) {
         Log.e(TAG, "[${plugin.manifest.name}] $at: $detail")
         val failure = PluginFailure(at, detail)
         AndroidUtilities.runOnUIThread {
@@ -565,8 +569,8 @@ object PluginManager {
         }
     }
 
-    private fun logConsole(plugin: Plugin, budget: LogBudget, level: Int, message: String) {
-        val tag = "$TAG/${plugin.manifest.name}"
+    private fun logConsole(session: PluginSession, budget: LogBudget, level: Int, message: String) {
+        val tag = "$TAG/${session.manifest.name}"
         when (budget.charge(SystemClock.uptimeMillis())) {
             LogBudget.Verdict.DROP -> return
             LogBudget.Verdict.LAST -> {

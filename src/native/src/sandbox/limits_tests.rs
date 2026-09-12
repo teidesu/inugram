@@ -13,7 +13,7 @@ fn setup() -> (Runtime, Context, std::sync::Arc<crate::testing::harness::Logs>) 
 fn eval(ctx: &Context, code: &str) -> Result<(), String> {
   ctx.with(|ctx| {
     ctx.eval::<(), _>(code).map_err(|e| match e {
-      rquickjs::Error::Exception => crate::api::telegram::rpc::format_exception(&ctx),
+      rquickjs::Error::Exception => crate::api::error::format_exception(&ctx),
       other => other.to_string(),
     })
   })
@@ -65,7 +65,7 @@ fn a_spinning_microtask_is_interrupted() {
   let log = crate::testing::harness::log_sink(&logs);
 
   eval(&ctx, "Promise.resolve().then(() => { while (true) {} });").unwrap();
-  crate::api::telegram::rpc::pump_jobs(&rt, &ctx, log.as_ref());
+  crate::runtime::pump_jobs(&rt, &ctx, log.as_ref());
 
   assert!(armed.tripped());
 }
@@ -90,7 +90,7 @@ fn honest_work_within_the_real_entry_budget_is_never_interrupted() {
         "#,
   )
   .unwrap();
-  crate::api::telegram::rpc::pump_jobs(&rt, &ctx, log.as_ref());
+  crate::runtime::pump_jobs(&rt, &ctx, log.as_ref());
 
   assert!(!armed.tripped());
   assert!(logs.borrow().is_empty(), "got: {:?}", logs.borrow());
@@ -231,7 +231,7 @@ mod memory_tests {
   fn eval(ctx: &Context, code: &str) -> Result<String, String> {
     ctx.with(|ctx| match ctx.eval::<Value, _>(code) {
       Ok(value) => Ok(rquickjs::Coerced::<String>::from_js(&ctx, value).map(|c| c.0).unwrap_or_default()),
-      Err(rquickjs::Error::Exception) => Err(crate::api::telegram::rpc::format_exception(&ctx)),
+      Err(rquickjs::Error::Exception) => Err(crate::api::error::format_exception(&ctx)),
       Err(e) => Err(e.to_string()),
     })
   }

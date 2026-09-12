@@ -5,6 +5,7 @@ import android.content.SharedPreferences
 import desu.inugram.core.plugins.PluginInstalls
 import desu.inugram.core.plugins.PluginWire
 import desu.inugram.helpers.plugins.Plugin
+import desu.inugram.helpers.plugins.PluginSession
 import desu.inugram.helpers.plugins.StorageListener
 import org.json.JSONArray
 import org.json.JSONObject
@@ -36,10 +37,10 @@ object PluginKv {
     const val OP_HAS = 7
     const val OP_USAGE = 8
 
-    fun listenerFor(plugin: Plugin): StorageListener = object : StorageListener {
+    fun listenerFor(session: PluginSession): StorageListener = object : StorageListener {
         override fun kv(op: Int, key: String, value: String): String {
-            if (!plugin.permissions.has("kv")) return PluginWire.encodeNotGranted("kv")
-            return handleOp(plugin.id, op, key, value)
+            if (!session.permissions.has("kv")) return PluginWire.encodeNotGranted("kv")
+            return handleOp(session.plugin.id, op, key, value)
         }
     }
 

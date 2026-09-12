@@ -53,7 +53,7 @@ object PluginBlobs {
     }
 
     /**
-     * permanently deletes a plugin's spills. call on globalQueue *after* its engine is closed:
+     * permanently deletes a plugin's spills. call on the plugin queue *after* its engine is closed:
      * rust holds an open descriptor per spill until the context is dropped.
      */
     fun wipe(installId: String) {

@@ -619,8 +619,8 @@ class PluginReadsAsyncTest {
         val plugin = granted()
         fetch(plugin, PluginReads.OP_USER_FULL, "D$alice")
         val stale = plugin.js
-        plugin.engine = RecordingQuickJs()
-        attachBridge(plugin, plugin.js)
+        plugin.session = PluginSession(plugin, RecordingQuickJs())
+        attachBridge(plugin.session!!)
 
         answerWith(TLRPC.TL_users_userFull().apply { full_user = TLRPC.TL_userFull() })
         drain()

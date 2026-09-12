@@ -40,10 +40,9 @@ class TlProxyBenchTest {
     private fun engineFor(): Plugin {
         val plugin = startPlugin("tl-bench", "account.read(self,peers,dialogs)")
         val engine = QuickJs()
-        plugin.engine = engine
+        plugin.session = PluginSession(plugin, engine)
         attachBridge(
-            plugin,
-            engine,
+            plugin.session!!,
             object : CoreListener {
                 override fun onConsole(level: Int, message: String) {
                     Log.d("InuBench", message)
@@ -142,10 +141,7 @@ class TlProxyBenchTest {
         val count = 200
         seed(count)
         val plugin = engineFor()
-        val handles = desu.inugram.helpers.plugins.tl.TlHandles.attach(
-            plugin,
-            desu.inugram.helpers.plugins.tl.TlFilter.policyFor(plugin.permissions),
-        )
+        val handles = plugin.session!!.tl
         val one = handles.project(handles.mintForPlugin(dialog(1L, 1_000_001), readOnly = true))
         val payload = (1..count).joinToString(",", "[", "]") { one }
         val fewKeys = "{\"a\":${JSONObject.quote("x".repeat(one.length - 12))}}"
@@ -202,10 +198,7 @@ class TlProxyBenchTest {
         val count = 200
         seed(count)
         val plugin = engineFor()
-        val handles = desu.inugram.helpers.plugins.tl.TlHandles.attach(
-            plugin,
-            desu.inugram.helpers.plugins.tl.TlFilter.policyFor(plugin.permissions),
-        )
+        val handles = plugin.session!!.tl
         val dialogs = (1..count).map { dialog(it.toLong(), 1_000_000 + it) }
         fun rounds(round: (org.telegram.tgnet.TLObject) -> Unit): List<Double> = (1..6).map {
             val start = System.nanoTime()

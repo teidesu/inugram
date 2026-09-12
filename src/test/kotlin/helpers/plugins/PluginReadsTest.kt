@@ -439,8 +439,8 @@ class PluginReadsTest {
         val plugin = granted()
         resolve(plugin, "Utelegram")
         val stale = plugin.js
-        plugin.engine = RecordingQuickJs()
-        attachBridge(plugin, plugin.js)
+        plugin.session = PluginSession(plugin, RecordingQuickJs())
+        attachBridge(plugin.session!!)
 
         connections().lastSent()!!.answer(TLRPC.TL_contacts_resolvedPeer(), null, 0L)
         drain()

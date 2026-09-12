@@ -20,7 +20,8 @@ use crate::api::canvas::geometry::{finite, normalize_round_rect, ArcError, Matri
 use crate::api::error::{wire_error_to_js, PluginErrorCode};
 use crate::api::io::blob::{mint_app_file, BlobHandle, BlobState, BUILD_LIMIT_BYTES};
 use crate::api::io::fs::FsState;
-use crate::api::telegram::rpc::{format_exception, pump_jobs, PendingSettle};
+use crate::api::error::format_exception;
+use crate::runtime::{pump_jobs, PendingSettle};
 use crate::sandbox::limits::{ExternalCharge, ExternalMemory};
 use crate::sandbox::registry::RequestIds;
 use crate::utils::shape::{define_disposable, define_getter, define_method};

@@ -11,11 +11,8 @@ import org.telegram.messenger.Utilities
  * which is what a `Handler` gives a single queue and the only cross-queue property the bridge may
  * depend on - and nothing runs until [drain].
  *
- * Time is the device's real [android.os.SystemClock] plus an offset [advanceBy] moves, so a test can
- * reach a timeout without waiting for it. The offset is **this queue's alone**: `PluginRpc` reads
- * `SystemClock.uptimeMillis()` directly for the budget it suspends across a passthrough, and that
- * arithmetic sees real elapsed time here rather than the jump. So advancing decides *what fires*,
- * never how much budget a resumed chain is left with.
+ * Time is the device's real clock plus an offset [advanceBy] moves. EngineDispatch's scheduler
+ * reads this same clock, so suspending and resuming a chain budget uses the elapsed test time.
  */
 object TestQueues {
     private class Task(val runnable: Runnable, val due: Long, val seq: Long, val queue: String)
@@ -25,6 +22,7 @@ object TestQueues {
     private var offset = 0L
     private var saved: List<DispatchQueue>? = null
     private var testThread: Thread? = null
+    private var savedScheduler: desu.inugram.core.plugins.DispatchScheduler? = null
 
     private class Recording(private val label: String) : DispatchQueue(label, false) {
         override fun postRunnable(runnable: Runnable): Boolean = postRunnable(runnable, 0)
@@ -101,6 +99,14 @@ object TestQueues {
     }
 
     fun install() {
+        if (savedScheduler == null) savedScheduler = EngineDispatch.scheduler
+        EngineDispatch.scheduler = object : desu.inugram.core.plugins.DispatchScheduler {
+            override fun nowMillis(): Long = now()
+            override fun postRunnable(task: Runnable, delayMillis: Long) {
+                TestQueues.post(task, delayMillis, "pluginQueue")
+            }
+            override fun cancel(task: Runnable) = TestQueues.cancel(task)
+        }
         if (saved == null) {
             saved = listOf(Utilities.globalQueue, Utilities.stageQueue, Utilities.cacheClearQueue)
         }
@@ -118,6 +124,8 @@ object TestQueues {
     }
 
     fun restore() {
+        savedScheduler?.let { EngineDispatch.scheduler = it }
+        savedScheduler = null
         saved?.let { (global, stage, cacheClear) ->
             Utilities.globalQueue = global
             Utilities.stageQueue = stage

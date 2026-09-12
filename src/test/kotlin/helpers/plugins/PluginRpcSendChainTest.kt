@@ -115,7 +115,7 @@ class PluginRpcSendChainTest {
         assertNull(plugin.interceptSendMessage())
         var answered = false
 
-        Utilities.globalQueue.postRunnable {
+        EngineDispatch.scheduler.postRunnable {
             PluginRpc.sendWithoutInterceptors(0, TLRPC.TL_messages_sendMessage(), 0) { _, _ -> answered = true }
         }
         drain()
@@ -193,7 +193,7 @@ class PluginRpcSendChainTest {
         assertNull(plugin.interceptSendMessage())
         plugin.js.onDispatchRpc = { plugin.next(it.dispatchId, it.requestWire) }
 
-        Utilities.globalQueue.postRunnable { detachPlugin(plugin) }
+        EngineDispatch.scheduler.postRunnable { detachPlugin(plugin) }
         drain()
 
         val request = TLRPC.TL_messages_sendMessage()

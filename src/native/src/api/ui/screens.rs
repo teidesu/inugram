@@ -4,7 +4,8 @@ use std::rc::Rc;
 use rquickjs::{Array, Ctx, Function, Object, Persistent, Result as JsResult, Runtime, Value};
 
 use crate::api::telegram::account::{self, AccountState};
-use crate::api::telegram::rpc::{format_exception, pump_jobs};
+use crate::api::error::format_exception;
+use crate::runtime::{pump_jobs};
 use crate::sandbox::grants::{GrantHost, MATCH_EXACT};
 use crate::sandbox::registry::{make_disposer, noop_disposer, CallbackRegistry, Lifecycle};
 

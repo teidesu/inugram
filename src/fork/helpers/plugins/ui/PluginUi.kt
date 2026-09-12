@@ -15,6 +15,7 @@ import desu.inugram.core.plugins.CommonIcons
 import desu.inugram.core.plugins.PluginWire
 import desu.inugram.helpers.plugins.EngineDispatch
 import desu.inugram.helpers.plugins.Plugin
+import desu.inugram.helpers.plugins.PluginSession
 import desu.inugram.helpers.plugins.PluginManager
 import desu.inugram.helpers.plugins.QuickJs
 import desu.inugram.helpers.plugins.UiListener
@@ -51,8 +52,8 @@ import org.telegram.ui.SettingsActivity
  * pages, routes `page.invalidate()` to open pages, anchors `UIAnchor.openMenu` popups to the row
  * the anchor names, and shows bulletins plus the `inu.ui.dialog`/`prompt`/`chooser` modals.
  *
- * Threading: upcalls arrive on [Utilities.globalQueue]; anything view-touching hops to the UI
- * thread and settles back on globalQueue with the usual engine-identity check.
+ * Threading: upcalls arrive on [EngineDispatch.scheduler]; anything view-touching hops to the UI
+ * thread and settles back on the plugin queue with the usual engine-identity check.
  */
 object PluginUi {
     private const val TAG = "InuPluginUi"
@@ -63,15 +64,15 @@ object PluginUi {
     const val OP_CHOOSER = 2
 
     // UI-thread state: open page views, keyed per engine so page ids can't cross plugins
-    private class PageKey(val engine: QuickJs, val pageId: Long) {
+    private class PageKey(val session: PluginSession, val pageId: Long) {
         override fun equals(other: Any?): Boolean =
-            other is PageKey && other.engine === engine && other.pageId == pageId
-        override fun hashCode(): Int = System.identityHashCode(engine) * 31 + pageId.hashCode()
+            other is PageKey && other.session === session && other.pageId == pageId
+        override fun hashCode(): Int = System.identityHashCode(session) * 31 + pageId.hashCode()
     }
     private val openPages = HashMap<PageKey, MutableList<PluginSettingsActivity>>()
 
-    fun listenerFor(plugin: Plugin, engine: QuickJs): UiListener = object : UiListener {
-        private val onHost = EngineDispatch.createHostDispatcher { EngineDispatch.isLive(plugin, engine) }
+    fun listenerFor(session: PluginSession): UiListener = object : UiListener {
+        private val onHost = EngineDispatch.createHostDispatcher { session.isCurrent() }
         override fun uiToast(text: String) {
             AndroidUtilities.runOnUIThread {
                 Toast.makeText(ApplicationLoader.applicationContext, text, Toast.LENGTH_SHORT).show()
@@ -86,7 +87,7 @@ object PluginUi {
                 return PluginWire.encodePluginError("not-found", "bulletin: animation '$animationName' is unavailable")
             }
             val retainedDrawable = if (iconSpec.startsWith('j')) {
-                PluginIcons.resolveImmediateDrawable(ApplicationLoader.applicationContext, iconSpec, engine)
+                PluginIcons.resolveImmediateDrawable(ApplicationLoader.applicationContext, iconSpec, session.engine)
                     ?: return PluginWire.encodePluginError("handle-expired", "bulletin: drawable icon is gone")
             } else {
                 null
@@ -106,7 +107,7 @@ object PluginUi {
                 }
                 if (retainedDrawable != null) {
                     layout.imageView.setImageDrawable(retainedDrawable)
-                } else if (!PluginIcons.setIcon(layout.imageView, iconSpec, engine, if (largeAnimation) 36f else 24f)) {
+                } else if (!PluginIcons.setIcon(layout.imageView, iconSpec, session.engine, if (largeAnimation) 36f else 24f)) {
                     return@runOnUIThread
                 }
                 layout.textView.setSingleLine(false)
@@ -118,24 +119,24 @@ object PluginUi {
         }
 
         override fun uiModal(op: Int, requestId: Long, optionsJson: String): String? =
-            modal(plugin, engine, op, requestId, optionsJson)
+            modal(session, op, requestId, optionsJson)
 
         override fun uiCurrentScreen(): String = PluginScreens.currentScreenWire()
 
-        override fun uiOpenPage(pageId: Long): String? = openPage(plugin, engine, pageId)
+        override fun uiOpenPage(pageId: Long): String? = openPage(session, pageId)
 
-        override fun uiOpenFragment(handle: Long): String? = openFragment(engine, handle)
+        override fun uiOpenFragment(handle: Long): String? = openFragment(session.engine, handle)
 
         override fun uiOpenScreen(optionsJson: String): String? = openScreen(optionsJson)
 
-        override fun uiRegisterSettings(pageId: Long) = onHost { registerSettings(plugin, pageId) }
+        override fun uiRegisterSettings(pageId: Long) = onHost { registerSettings(session, pageId) }
 
-        override fun uiUnregisterSettings(pageId: Long) = onHost { unregisterSettings(plugin, pageId) }
+        override fun uiUnregisterSettings(pageId: Long) = onHost { unregisterSettings(session, pageId) }
 
-        override fun uiInvalidate(pageId: Long) = invalidate(engine, pageId)
+        override fun uiInvalidate(pageId: Long) = invalidate(session, pageId)
 
         override fun uiOpenMenu(menuId: Long, pageId: Long, anchorKey: String, itemsJson: String): String? =
-            openMenu(plugin, engine, menuId, pageId, anchorKey, itemsJson)
+            openMenu(session, menuId, pageId, anchorKey, itemsJson)
 
         override fun iconResolves(kind: Int, value: String): Boolean = PluginIcons.iconResolves(kind, value)
 
@@ -149,26 +150,26 @@ object PluginUi {
             text: String?,
             icon: String?,
             dynamicFields: Int,
-        ): String? = PluginActions.register(plugin, engine, kind, token, id, placements, text, icon, dynamicFields)
+        ): String? = PluginActions.register(session, kind, token, id, placements, text, icon, dynamicFields)
 
-        override fun actionUnregister(kind: Int, token: Int) = onHost { PluginActions.unregister(engine, kind, token) }
+        override fun actionUnregister(kind: Int, token: Int) = onHost { PluginActions.unregister(session.engine, kind, token) }
 
         override fun actionEditor(op: Int, surface: Long, payloadJson: String): String? =
             PluginActions.editorOp(op, surface, payloadJson)
     }
 
     fun onPageOpened(activity: PluginSettingsActivity) {
-        openPages.getOrPut(PageKey(activity.engine, activity.pageId)) { mutableListOf() }.add(activity)
+        openPages.getOrPut(PageKey(activity.session, activity.pageId)) { mutableListOf() }.add(activity)
     }
 
     fun onPageClosed(activity: PluginSettingsActivity) {
-        val key = PageKey(activity.engine, activity.pageId)
+        val key = PageKey(activity.session, activity.pageId)
         val list = openPages[key] ?: return
         list.remove(activity)
         if (list.isNotEmpty()) return
         openPages.remove(key)
-        EngineDispatch.onEngine(activity.plugin, activity.engine) {
-            activity.engine.uiPageClosed(activity.pageId)
+        EngineDispatch.onEngine(activity.session) {
+            activity.session.engine.uiPageClosed(activity.pageId)
         }
     }
 
@@ -177,9 +178,9 @@ object PluginUi {
      * no page. The key is dropped before the fragment is, so the teardown that follows does not
      * try to tell the (by then closed) engine that its page closed.
      */
-    fun detach(engine: QuickJs) {
+    fun detach(session: PluginSession) {
         AndroidUtilities.runOnUIThread {
-            val mine = openPages.filterKeys { it.engine === engine }
+            val mine = openPages.filterKeys { it.session === session }
             for ((key, list) in mine) {
                 openPages.remove(key)
                 // not finishFragment(), which closes whatever is on top: a plugin page can be buried under one the user opened from it
@@ -188,10 +189,10 @@ object PluginUi {
         }
     }
 
-    fun openPage(plugin: Plugin, engine: QuickJs, pageId: Long): String? {
+    fun openPage(session: PluginSession, pageId: Long): String? {
         AndroidUtilities.runOnUIThread {
             val fragment = LaunchActivity.getSafeLastFragment() ?: return@runOnUIThread
-            fragment.presentFragment(PluginSettingsActivity(plugin, engine, pageId))
+            fragment.presentFragment(PluginSettingsActivity(session, pageId))
         }
         return null
     }
@@ -252,21 +253,21 @@ object PluginUi {
         return null
     }
 
-    fun registerSettings(plugin: Plugin, pageId: Long) {
-        plugin.settingsPageId = pageId
+    fun registerSettings(session: PluginSession, pageId: Long) {
+        session.settingsPageId = pageId
         PluginManager.notifyChanged()
     }
 
     /** guarded by the page id: disposing a page the plugin has already replaced must not clear it */
-    fun unregisterSettings(plugin: Plugin, pageId: Long) {
-        if (plugin.settingsPageId != pageId) return
-        plugin.settingsPageId = null
+    fun unregisterSettings(session: PluginSession, pageId: Long) {
+        if (session.settingsPageId != pageId) return
+        session.settingsPageId = null
         PluginManager.notifyChanged()
     }
 
-    fun invalidate(engine: QuickJs, pageId: Long) {
+    fun invalidate(session: PluginSession, pageId: Long) {
         AndroidUtilities.runOnUIThread {
-            openPages[PageKey(engine, pageId)]?.lastOrNull()?.requestRender()
+            openPages[PageKey(session, pageId)]?.lastOrNull()?.requestRender()
         }
     }
 
@@ -275,7 +276,7 @@ object PluginUi {
      * re-rendered and the row's view been recycled onto another row. So a row no longer on screen
      * leaves the menu unopened and settled as dismissed - the same answer as tapping outside.
      */
-    fun openMenu(plugin: Plugin, engine: QuickJs, menuId: Long, pageId: Long, anchorKey: String, itemsJson: String): String? {
+    fun openMenu(session: PluginSession, menuId: Long, pageId: Long, anchorKey: String, itemsJson: String): String? {
         val items = try {
             parseMenuItems(itemsJson)
         } catch (e: Exception) {
@@ -283,9 +284,9 @@ object PluginUi {
         }
         AndroidUtilities.runOnUIThread {
             fun settle(slot: Int) {
-                EngineDispatch.onEngine(plugin, engine) { engine.uiMenuClick(menuId, slot) }
+                EngineDispatch.onEngine(session) { session.engine.uiMenuClick(menuId, slot) }
             }
-            val activity = openPages[PageKey(engine, pageId)]?.lastOrNull()
+            val activity = openPages[PageKey(session, pageId)]?.lastOrNull()
             val anchorView = activity?.anchorViewFor(anchorKey)
             if (activity == null || anchorView == null || activity.parentActivity == null || !anchorView.isAttachedToWindow) {
                 settle(-1)
@@ -329,31 +330,28 @@ object PluginUi {
         }
     }
 
-    fun modal(plugin: Plugin, engine: QuickJs, op: Int, requestId: Long, optionsJson: String): String? = when (op) {
+    fun modal(session: PluginSession, op: Int, requestId: Long, optionsJson: String): String? = when (op) {
         OP_DIALOG -> showModal(
-            plugin,
-            engine,
+            session,
             "dialog",
             dismissed = "dismissed",
-            resolve = { engine.resolveDialog(requestId, it) },
+            resolve = { session.engine.resolveDialog(requestId, it) },
             prepare = { JSONObject(optionsJson) },
-        ) { options, settle -> showDialog(engine, options, settle) }
+        ) { options, settle -> showDialog(session.engine, options, settle) }
 
         OP_PROMPT -> showModal<JSONObject, String?>(
-            plugin,
-            engine,
+            session,
             "prompt",
             dismissed = null,
-            resolve = { engine.resolvePrompt(requestId, it) },
+            resolve = { session.engine.resolvePrompt(requestId, it) },
             prepare = { JSONObject(optionsJson) },
         ) { options, settle -> showPrompt(options, settle) }
 
         OP_CHOOSER -> showModal<ChooserSpec, String?>(
-            plugin,
-            engine,
+            session,
             "chooser",
             dismissed = null,
-            resolve = { engine.resolveChooser(requestId, it) },
+            resolve = { session.engine.resolveChooser(requestId, it) },
             prepare = { ChooserSpec(JSONObject(optionsJson)) },
         ) { spec, settle -> showChooser(spec, settle) }
 
@@ -368,8 +366,7 @@ object PluginUi {
      * case it has no ui to attach to.
      */
     private fun <S, T> showModal(
-        plugin: Plugin,
-        engine: QuickJs,
+        session: PluginSession,
         name: String,
         dismissed: T,
         resolve: (T) -> Unit,
@@ -386,7 +383,7 @@ object PluginUi {
             val settle: (T) -> Unit = { result ->
                 if (!settled) {
                     settled = true
-                    EngineDispatch.onEngine(plugin, engine) { resolve(result) }
+                    EngineDispatch.onEngine(session) { resolve(result) }
                 }
             }
             try {
@@ -560,10 +557,10 @@ object PluginUi {
     }
 
     fun openRegisteredSettings(plugin: Plugin) {
-        Utilities.globalQueue.postRunnable {
-            val engine = plugin.engine ?: return@postRunnable
-            val pageId = plugin.settingsPageId ?: return@postRunnable
-            val err = openPage(plugin, engine, pageId)
+        EngineDispatch.scheduler.postRunnable {
+            val session = plugin.session ?: return@postRunnable
+            val pageId = session.settingsPageId ?: return@postRunnable
+            val err = openPage(session, pageId)
             if (err != null) Log.e(TAG, "openRegisteredSettings: $err")
         }
     }

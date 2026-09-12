@@ -50,8 +50,8 @@ class PluginJvmTest {
     private fun engineFor(vararg grants: String, name: String = "reflective"): Plugin {
         val plugin = startPlugin(name, *grants)
         val engine = QuickJs()
-        plugin.engine = engine
-        attachBridge(plugin, engine, object : CoreListener {
+        plugin.session = PluginSession(plugin, engine)
+        attachBridge(plugin.session!!, object : CoreListener {
             override fun onConsole(level: Int, message: String) = Unit
             override fun onTimerSchedule(delayMs: Long) = Unit
         })
@@ -349,7 +349,7 @@ class PluginJvmTest {
         val runnable = idOf(plugin.jvm(PluginJvm.OP_RUNNABLE, name = "", args = arrayOf(PluginWire.encodeInt(7))))
         val task = PluginJvm.bridgeFor(plugin.js)!!.decode("G$runnable") as Runnable
         val stopped = plugin.js
-        plugin.engine = RecordingQuickJs()
+        plugin.session = PluginSession(plugin, RecordingQuickJs())
         task.run()
         assertEquals(emptyList(), stopped.jvmCallbacks)
         assertEquals(emptyList(), plugin.js.jvmCallbacks)

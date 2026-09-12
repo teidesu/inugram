@@ -63,7 +63,7 @@ object PluginSendMorph {
             call.flag("asDocument"),
         )
         try {
-            PluginRpc.holdMedia(call.plugin, call.json.optLong("dispatch", -1L), media)
+            PluginRpc.holdMedia(call.session, call.json.optLong("dispatch", -1L), media)
         } catch (e: Throwable) {
             owned.delete()
             throw e

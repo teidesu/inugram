@@ -260,8 +260,8 @@ class PluginSharedHooksTest {
         val plugins = listOf(createPlugin("real first"), createPlugin("real second"))
         val engines = plugins.map { plugin ->
             QuickJs().also { engine ->
-                plugin.engine = engine
-                attachBridge(plugin, engine, object : CoreListener {
+                plugin.session = PluginSession(plugin, engine)
+                attachBridge(plugin.session!!, object : CoreListener {
                     override fun onConsole(level: Int, message: String) = Unit
                     override fun onTimerSchedule(delayMs: Long) = Unit
                 })
@@ -292,7 +292,7 @@ class PluginSharedHooksTest {
                 PluginXposed.detach(engine)
                 PluginJvm.detach(engine)
                 engine.close()
-                plugins[index].engine = null
+                plugins[index].session = null
             }
         }
     }

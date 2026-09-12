@@ -7,7 +7,8 @@ use rquickjs::{Array, Ctx, Exception, Function, Object, Persistent, Result as Js
 use crate::api::error::PluginErrorCode;
 use crate::api::platform::jvm::JvmState;
 use crate::api::telegram::account::AccountState;
-use crate::api::telegram::rpc::{format_exception, pump_jobs};
+use crate::api::error::format_exception;
+use crate::runtime::{pump_jobs};
 use crate::api::tl::proxy::json_parse_tl;
 use crate::api::ui::icons::{icon_from_value, Icon};
 use crate::sandbox::grants::{GrantHost, MATCH_EXACT};

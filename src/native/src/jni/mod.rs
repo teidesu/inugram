@@ -1,3 +1,4 @@
+use crate::runtime::pump_jobs;
 use std::cell::Cell;
 use std::ops::Deref;
 use std::rc::Rc;
@@ -17,7 +18,7 @@ use crate::{
     telegram::{
       account::AccountState,
       reads::ReadsState,
-      rpc::{pump_jobs, RpcState},
+      rpc::RpcState,
       writes::WritesState,
     },
     timers::TimerState,

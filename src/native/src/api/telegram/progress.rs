@@ -3,7 +3,7 @@ use std::rc::Rc;
 
 use rquickjs::{Ctx, Function, Persistent, Value};
 
-use crate::api::telegram::rpc::format_exception;
+use crate::api::error::format_exception;
 use crate::api::timers::monotonic_now_ms;
 
 pub const PROGRESS_INTERVAL_MS: u64 = 100;

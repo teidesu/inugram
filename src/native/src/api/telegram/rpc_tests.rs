@@ -2004,6 +2004,15 @@ fn a_dropped_send_never_goes_out_and_the_app_is_told_it_failed() {
 }
 
 #[test]
+fn quick_async_validation_drops_during_the_initial_job_drain() {
+  let (rt, ctx, host, state) = setup(&["interceptSendMessage"]);
+  eval(&ctx, "inu.interceptSendMessage(async () => 'drop');");
+  let (next, complete) = run_send(&rt, &ctx, &state, &host, "messages.sendMessage", SEND_TEXT);
+  assert_eq!(next, None);
+  assert_eq!(complete.as_deref(), Some("R-1000:MESSAGE_DROPPED_BY_PLUGIN"));
+}
+
+#[test]
 fn a_throwing_send_middleware_drops_the_send_and_is_the_plugins_fault() {
   let (rt, ctx, host, state, logs) = setup_logging(&["interceptSendMessage"]);
   eval(&ctx, "inu.interceptSendMessage(() => { throw new Error('boom') });");
@@ -2040,22 +2049,17 @@ fn an_async_send_middleware_is_awaited_before_the_request_goes_out() {
   assert!(next.unwrap().contains(r#""message":"awaited""#));
 }
 
-/// the host draws a send's local message only after a verdict it can expect in time, so an `async`
-/// middleware is declared as one at registration rather than discovered when it is too late
+/// Callback syntax does not predict whether a verdict will arrive before the draw deadline.
 #[test]
-fn an_async_send_middleware_registers_itself_as_deferred() {
+fn async_and_sync_send_middleware_register_the_same_filter() {
   let (_rt, ctx, host, _state) = setup(&["interceptSendMessage"]);
   eval(&ctx, "inu.interceptSendMessage(async () => 'send');");
   eval(&ctx, r#"inu.interceptSendMessage({ text: /^\./ }, async () => 'send');"#);
   eval(&ctx, "inu.interceptSendMessage(() => 'send');");
   eval(&ctx, r#"inu.interceptSendMessage({ text: /^\./ }, () => 'send');"#);
-
   let registered = host.registered.borrow();
-  let json: Vec<&str> = registered.iter().map(|entry| entry.4.as_str()).collect();
-  assert_eq!(json[0], r#"{"deferred":true}"#);
-  assert!(json[1].contains(r#""deferred":true"#), "a filtered async middleware is deferred too: {}", json[1]);
-  assert_eq!(json[2], "", "a synchronous middleware registers nothing it did not ask for");
-  assert!(!json[3].contains("deferred"), "a synchronous middleware is not deferred: {}", json[3]);
+  assert_eq!(registered[0].4, registered[2].4);
+  assert_eq!(registered[1].4, registered[3].4);
 }
 
 /// `next()` refuses to rewrite the method the app is already awaiting a response type for, so a

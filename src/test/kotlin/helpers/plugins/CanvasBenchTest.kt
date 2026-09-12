@@ -44,17 +44,16 @@ class CanvasBenchTest {
     private fun engineFor(): Plugin {
         val plugin = startPlugin("canvas-bench")
         val engine = QuickJs()
-        plugin.engine = engine
+        plugin.session = PluginSession(plugin, engine)
         attachBridge(
-            plugin,
-            engine,
+            plugin.session!!,
             core = object : CoreListener {
                 override fun onConsole(level: Int, message: String) {
                     Log.d("InuBench", message)
                 }
                 override fun onTimerSchedule(delayMs: Long) = Unit
             },
-            canvas = PluginCanvas.listenerFor(plugin, engine),
+            canvas = PluginCanvas.listenerFor(plugin.session!!),
             spillDir = desu.inugram.helpers.plugins.io.PluginBlobs.dirFor(plugin.id),
         )
         engines.add(engine)
@@ -293,7 +292,7 @@ class CanvasBenchTest {
     @Test
     fun bench_host_listener() {
         val plugin = engineFor()
-        val listener = PluginCanvas.listenerFor(plugin, plugin.engine as QuickJs)
+        val listener = PluginCanvas.listenerFor(plugin.session!!)
         val field = '\u001e'
         val arg = "48.0${field}400${field}0${field}0${field}serif${field}0${field}$text"
         val count = 200

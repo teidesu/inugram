@@ -26,7 +26,7 @@ object PluginImportHelper {
     fun isPluginFileName(name: String): Boolean = name.lowercase().endsWith(SUFFIX)
 
     fun startImportFromFile(fragment: BaseFragment, file: File, displayName: String) {
-        Utilities.globalQueue.postRunnable {
+        EngineDispatch.scheduler.postRunnable {
             val source = runCatching { file.readText() }.getOrNull()
             if (source == null) {
                 AndroidUtilities.runOnUIThread { showError(fragment, getString(R.string.InuPluginsErrorRead)) }
@@ -38,10 +38,10 @@ object PluginImportHelper {
 
     /** [fileName] only suggests the name on disk; identity is minted at install */
     fun startImport(fragment: BaseFragment, fileName: String, source: String) {
-        Utilities.globalQueue.postRunnable { present(fragment, fileName, source) }
+        EngineDispatch.scheduler.postRunnable { present(fragment, fileName, source) }
     }
 
-    /** globalQueue only */
+    /** plugin queue only */
     private fun present(fragment: BaseFragment, fileName: String, source: String) {
         val manifest = PluginManifestParser.parseOrNull(source)
         if (manifest == null) {

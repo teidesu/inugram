@@ -5,6 +5,7 @@ pub type Log = Arc<dyn Fn(&str) + Send + Sync>;
 mod api;
 mod jni;
 mod sandbox;
+mod runtime;
 #[cfg(test)]
 mod testing;
 mod utils;

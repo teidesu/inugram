@@ -4,6 +4,7 @@ import android.os.SystemClock
 import android.util.Log
 import desu.inugram.core.plugins.BoundedIdentitySet
 import desu.inugram.core.plugins.BoundedLru
+import desu.inugram.core.plugins.DispatchDeadline
 import desu.inugram.core.plugins.PluginWire
 import desu.inugram.core.plugins.ScopeMatch
 import desu.inugram.core.plugins.TakeoverMethods
@@ -11,6 +12,7 @@ import desu.inugram.core.plugins.TlCtorIds
 import desu.inugram.core.plugins.TlNames
 import desu.inugram.helpers.plugins.EngineDispatch
 import desu.inugram.helpers.plugins.Plugin
+import desu.inugram.helpers.plugins.PluginSession
 import desu.inugram.helpers.plugins.PluginManager
 import desu.inugram.helpers.plugins.QuickJs
 import desu.inugram.helpers.plugins.RpcListener
@@ -47,7 +49,7 @@ import org.telegram.ui.ChatActivity
  * Wires `inu.interceptRpc`/`inu.invokeRpc` into the stock request pipeline. The arriving update
  * stream is [PluginUpdates]; the two share only [TlHandles] and this file's queue rules.
  *
- * All chain orchestration happens on [Utilities.globalQueue], so there is no locking. Stronger than
+ * All chain orchestration happens on [EngineDispatch.scheduler], so there is no locking. Stronger than
  * that: an engine is entered **only from a globalQueue runnable, never from inside a JNI upcall** -
  * `Context::with` takes the runtime's `RefCell`, so re-entering the same engine from a callback it
  * is running is a `BorrowMutError` panicking out of an `extern "system"` fn, i.e. a process abort.
@@ -63,13 +65,12 @@ import org.telegram.ui.ChatActivity
  */
 object PluginRpc {
     private class Interceptor(
-        val plugin: Plugin,
+        val session: PluginSession,
         val callbackId: Int,
         val strict: Boolean,
         val scope: String,
+        /** presentation waits for the verdict up to its grace deadline */
         val filter: SendFilter?,
-        /** the middleware answers out of a promise, so nothing waits on its verdict */
-        val deferred: Boolean,
     )
 
     private class SendFilter(val text: Pattern?, val textIsSticky: Boolean, val isEdit: Boolean?) {
@@ -119,15 +120,9 @@ object PluginRpc {
     private class OptimisticText(val text: String, val entities: ArrayList<TLRPC.MessageEntity>)
 
     private class PendingDispatch(
-        val plugin: Plugin,
-        val tl: TlHandles,
-        val connectionsManager: ConnectionsManager,
-        val chain: List<Interceptor>,
+        val session: PluginSession,
+        val operation: RpcChain,
         val index: Int,
-        val params: OriginalParams,
-        val scopeId: Long,
-        val method: String,
-        val account: Int,
         val request: TLObject,
         val finalize: (TLObject?, TLRPC.TL_error?, Long) -> Unit,
     ) {
@@ -139,26 +134,31 @@ object PluginRpc {
 
     /**
      * one top-level dispatch's deadline, shared by its whole chain. Send-message chains get a
-     * longer budget because their promise is the user's visible pending send. [remaining] is
+     * longer budget because their promise is the user's visible pending send. The deadline is
      * suspended while a request is really in flight, so a slow server is not charged to plugins.
      *
      * [SystemClock.uptimeMillis] because that is what `Handler.postDelayed` counts in: it does not
      * advance in deep sleep, and any other clock would drift from the armed timer.
      */
-    private class ChainBudget(
+    private class RpcChain(
         val scopeId: Long,
         val connectionsManager: ConnectionsManager,
         val chain: List<Interceptor>,
         val method: String,
         val request: TLObject,
         val optimisticMessages: OptimisticMessages?,
+        val params: OriginalParams,
+        val account: Int,
         val finalize: (TLObject?, TLRPC.TL_error?, Long) -> Unit,
     ) {
         val deadlineMillis = if (chain.any { it.scope == SEND_SCOPE }) SEND_CHAIN_BUDGET_MS else RPC_CHAIN_BUDGET_MS
         val stages = ArrayList<Long>()
-        var remaining = deadlineMillis
-        var startedAt = 0L
-        var timer: Runnable? = null
+        val deadline = DispatchDeadline(EngineDispatch.scheduler, deadlineMillis) { expireChain(scopeId) }
+        var completed = false
+        // the passthrough response stock's free was suppressed for; that chain's finalize is the only consumer
+        var ownedResponse: TLObject? = null
+        // what that chain decided, until its finalize reads it. plugin queue only
+        var verdict: ChainVerdict? = null
 
         var passthrough: PassthroughResult? = null
 
@@ -228,7 +228,7 @@ object PluginRpc {
     // its own space: rust keeps interceptRpc and interceptUpdate dispatches in different tables
     private var nextDispatchId = 1L
     private val pendingDispatches = HashMap<Long, PendingDispatch>()
-    private val chains = HashMap<Long, ChainBudget>()
+    private val chains = HashMap<Long, RpcChain>()
 
     // [tokenKey] -> scope id, so an app-side cancel can find the chain still walking for that request
     private val chainsByToken = HashMap<Long, Long>()
@@ -236,8 +236,6 @@ object PluginRpc {
     // synchronously, usually before the request reached `sendRequestInternal`. bounded so a burst
     // of requests cannot grow it while their chains wait to be armed
     private val guidByToken = BoundedLru<Long, Int>(GUID_MEMORY)
-    // scope id -> the passthrough response stock's free was suppressed for; that chain's finalize is the only consumer
-    private val ownedResponses = HashMap<Long, TLObject>()
 
     /**
      * what a chain decided about the request itself, as opposed to what it answered for it.
@@ -253,9 +251,6 @@ object PluginRpc {
 
         class TakenOver(val media: PluginSendMorph.Media) : ChainVerdict
     }
-
-    // scope id -> what that chain decided, until its finalize reads it. globalQueue only
-    private val chainVerdicts = HashMap<Long, ChainVerdict>()
 
     /**
      * [sendKey] -> the verdict the composer's error path owes a local message. Armed as the app is
@@ -336,7 +331,7 @@ object PluginRpc {
         if (!hasInterceptors) return false
         return SEND_METHODS.any { method ->
             interceptorsByMethod[method].orEmpty().any {
-                !it.deferred && it.scope == SEND_SCOPE && it.filter?.matchesSend(text) != false
+                it.session.canDispatch() && it.scope == SEND_SCOPE && it.filter?.matchesSend(text) != false
             }
         }
     }
@@ -348,12 +343,12 @@ object PluginRpc {
      * none - and when that message is itself the answer to a `setMedia`, which is what stops a
      * middleware answering its own re-send forever.
      */
-    internal fun holdMedia(plugin: Plugin, dispatchId: Long, media: PluginSendMorph.Media) {
+    internal fun holdMedia(session: PluginSession, dispatchId: Long, media: PluginSendMorph.Media) {
         val pending = pendingDispatches[dispatchId]
-        if (pending == null || pending.plugin !== plugin) {
+        if (pending == null || pending.session !== session) {
             PluginWrites.refuse("invalid-argument", "setMedia: this send is no longer being intercepted")
         }
-        val budget = chains[pending.scopeId]
+        val budget = chains[pending.operation.scopeId]
             ?: PluginWrites.refuse("invalid-argument", "setMedia: this send is no longer being intercepted")
         val message = budget.optimisticMessages?.messages?.singleOrNull()
             ?: PluginWrites.refuse("unsupported", "setMedia: this send has no local message of its own to put media on")
@@ -419,10 +414,10 @@ object PluginRpc {
         helper.removeFromSendingMessages(message.id, scheduled)
     }
 
-    fun listenerFor(plugin: Plugin, engine: QuickJs, tl: TlHandles): RpcListener {
+    fun listenerFor(session: PluginSession): RpcListener {
         // snapshot: the account-less `inu.invokeRpc` names no account, and a plugin's requests must not jump slots on a switch
         val invokeAccount = UserConfig.selectedAccount
-        val onHost = EngineDispatch.createHostDispatcher { EngineDispatch.isLive(plugin, engine) }
+        val onHost = EngineDispatch.createHostDispatcher { session.isCurrent() }
         return object : RpcListener {
             override fun onRpcRegister(
                 methods: Array<String>,
@@ -430,13 +425,13 @@ object PluginRpc {
                 scope: String,
                 strict: Boolean,
                 filterJson: String,
-            ): String? = registerIntercept(plugin, methods, callbackId, scope, strict, filterJson)
+            ): String? = registerIntercept(session, methods, callbackId, scope, strict, filterJson)
 
             override fun onRpcUnregister(callbackId: Int) =
-                onHost { unregisterIntercept(plugin, callbackId) }
+                onHost { unregisterIntercept(session, callbackId) }
 
             override fun onInvokeRpc(invokeId: Long, slot: Int, requestWire: String): String? =
-                invokeRpc(plugin, engine, tl, slot, invokeAccount, invokeId, requestWire)
+                invokeRpc(session, slot, invokeAccount, invokeId, requestWire)
 
             override fun onRpcNext(dispatchId: Long, requestWire: String): String? =
                 onNext(dispatchId, requestWire)
@@ -445,32 +440,32 @@ object PluginRpc {
                 onHost { onComplete(dispatchId, resultWire) }
 
             override fun onInvokeRaw(invokeId: Long, slot: Int, method: ByteArray): String? =
-                invokeRaw(plugin, engine, slot, invokeAccount, invokeId, method)
+                invokeRaw(session, slot, invokeAccount, invokeId, method)
 
             override fun onTakeout(invokeId: Long, slot: Int, op: Int, takeoutId: String, arg: String): String? =
-                takeout(plugin, engine, tl, slot, invokeAccount, invokeId, op, takeoutId, arg)
+                takeout(session, slot, invokeAccount, invokeId, op, takeoutId, arg)
         }
     }
 
     /**
      * drops the plugin's interceptors and fails any dispatch waiting on its own middleware, so
      * [maybeIntercept]'s finalize-exactly-once contract still holds. The plugin's handle table
-     * outlives this and is released by [TlHandles.endDetach], since the abandons below reject
+     * outlives this and is released by [TlHandles.releaseAll], since the abandons below reject
      * inside this plugin too and a continuation touching its own request view must not find every
      * field expired.
      */
-    fun detach(plugin: Plugin) {
+    fun detach(session: PluginSession) {
         publishInterceptors(
             interceptorsByMethod
-                .mapValues { (_, list) -> list.filter { it.plugin !== plugin } }
+                .mapValues { (_, list) -> list.filter { it.session !== session } }
                 .filterValues { it.isNotEmpty() }
         )
         // ascending dispatch id is chain order, so each chain's shallowest stage takes the ones below it down
-        val stale = pendingDispatches.filterValues { it.plugin === plugin }.keys.sorted()
+        val stale = pendingDispatches.filterValues { it.session === session }.keys.sorted()
         for (dispatchId in stale) {
             val pending = pendingDispatches.remove(dispatchId) ?: continue
             abandonBelow(dispatchId, pending, ABANDONED_WIRE)
-            pending.finalize(null, syntheticError("plugin '${plugin.manifest.name}' was stopped"), completionTime(pending))
+            pending.finalize(null, syntheticError("plugin '${session.manifest.name}' was stopped"), completionTime(pending))
         }
     }
 
@@ -500,16 +495,20 @@ object PluginRpc {
         val optimisticMessages = synchronized(optimisticMessagesByRequest) { optimisticMessagesByRequest.remove(request) }
         val params = OriginalParams(flags, datacenterId, connectionType, immediate, requestToken, onQuickAck, onWriteToSocket)
         val requestKey = tokenKey(currentAccount, requestToken)
-        Utilities.globalQueue.postRunnable {
+        EngineDispatch.scheduler.postRunnable {
             val scopeId = TlHandles.newScope()
             // what a verdict on this chain unwinds: the messages the composer drew, or - for an
             // edit, which draws none - the one the request names, read before a stage can rewrite it
             val unwound = optimisticMessages?.messages?.map { it.id }
                 ?: listOfNotNull((request as? TLRPC.TL_messages_editMessage)?.id)
-            val finalize: (TLObject?, TLRPC.TL_error?, Long) -> Unit = { chainResponse, chainError, responseTime ->
+            lateinit var operation: RpcChain
+            val finalize: (TLObject?, TLRPC.TL_error?, Long) -> Unit = finalize@{ chainResponse, chainError, responseTime ->
+                if (operation.completed) return@finalize
+                operation.completed = true
                 // the chain's own decision, told to the app here rather than through the value the
                 // stages above answered with - which is theirs to substitute, and this is not
-                val verdict = chainVerdicts.remove(scopeId)
+                val verdict = operation.verdict
+                operation.verdict = null
                 armVerdict(optimisticMessages?.account ?: currentAccount, unwound, verdict)
                 if (verdict != null) optimisticMessages?.draft?.let { clearServerDraft(optimisticMessages.account, it) }
                 val response = if (verdict == null) chainResponse else null
@@ -524,7 +523,8 @@ object PluginRpc {
                 // earns its keep when the *first* stage's plugin is stopped, the ones below it still running
                 collapseChain(scopeId, ABANDONED_WIRE)
                 chainsByToken.remove(requestKey)
-                val owned = ownedResponses.remove(scopeId)
+                val owned = operation.ownedResponse
+                operation.ownedResponse = null
                 // stageQueue, where processUpdates() is documented to run and mutates pts/seq without locking
                 Utilities.stageQueue.postRunnable {
                     // mirrors the stock else-if in sendRequestInternal's listen() callback
@@ -541,8 +541,11 @@ object PluginRpc {
             }
             chainsByToken[requestKey] = scopeId
             // armed after the queue hop, so an app-side backlog isn't charged to the plugins
-            armChain(scopeId, connectionsManager, chain, tlName, request, requestKey, optimisticMessages, finalize)
-            dispatchChain(connectionsManager, chain, 0, request, params, scopeId, currentAccount, finalize)
+            operation = RpcChain(scopeId, connectionsManager, chain, tlName, request, optimisticMessages, params, currentAccount, finalize)
+            operation.guid = takeGuid(requestKey)
+            chains[scopeId] = operation
+            operation.deadline.resume()
+            dispatchChain(operation, 0, request, finalize)
         }
         return true
     }
@@ -567,7 +570,7 @@ object PluginRpc {
     @JvmStatic
     fun onRequestCancelled(account: Int, requestToken: Int, notifyServer: Boolean, onCancelled: Runnable?) {
         if (!hasInterceptors) return
-        Utilities.globalQueue.postRunnable {
+        EngineDispatch.scheduler.postRunnable {
             cancelChain(tokenKey(account, requestToken), notifyServer, onCancelled)
         }
     }
@@ -576,7 +579,7 @@ object PluginRpc {
     @JvmStatic
     fun onRequestsCancelledForGuid(account: Int, guid: Int) {
         if (!hasInterceptors || guid == 0) return
-        Utilities.globalQueue.postRunnable {
+        EngineDispatch.scheduler.postRunnable {
             val account64 = account.toLong()
             val keys = chainsByToken.keys.filter { key ->
                 key ushr 32 == account64 && chains[chainsByToken[key]]?.guid == guid
@@ -591,7 +594,7 @@ object PluginRpc {
     fun onRequestBoundToGuid(account: Int, requestToken: Int, guid: Int) {
         if (!hasInterceptors || guid == 0) return
         val key = tokenKey(account, requestToken)
-        Utilities.globalQueue.postRunnable {
+        EngineDispatch.scheduler.postRunnable {
             val budget = chainsByToken[key]?.let { chains[it] }
             if (budget == null) {
                 rememberGuid(key, guid)
@@ -616,7 +619,13 @@ object PluginRpc {
     private fun cancelChain(key: Long, notifyServer: Boolean, onCancelled: Runnable?) {
         val scopeId = chainsByToken.remove(key) ?: return
         val budget = collapseChain(scopeId, ABANDONED_WIRE)
-        releaseUnowned(ownedResponses.remove(scopeId))
+        budget?.let {
+            it.completed = true
+            discardVerdict(it.verdict)
+            it.verdict = null
+            releaseUnowned(it.ownedResponse)
+            it.ownedResponse = null
+        }
         val sent = budget?.sent
         if (sent == null) {
             // no send was even posted, and the collapse means none can follow
@@ -652,7 +661,7 @@ object PluginRpc {
      * to both: it is a property of the method, not of how it was reached.
      */
     private fun registerIntercept(
-        plugin: Plugin,
+        session: PluginSession,
         methods: Array<String>,
         callbackId: Int,
         scope: String,
@@ -660,23 +669,21 @@ object PluginRpc {
         filterJson: String,
     ): String? {
         for (method in methods) {
-            takeoverRefusal(plugin, method)?.let { return it }
+            takeoverRefusal(session.permissions, method)?.let { return it }
         }
         if (scope.isNotEmpty()) {
-            if (!plugin.permissions.has(scope)) {
+            if (!session.permissions.has(scope)) {
                 return PluginWire.encodeNotGranted(scope)
             }
         } else for (method in methods) {
-            if (!plugin.permissions.allows("interceptRpc", method, ScopeMatch.EXACT)) {
+            if (!session.permissions.allows("interceptRpc", method, ScopeMatch.EXACT)) {
                 return PluginWire.encodeNotGranted("interceptRpc", method)
             }
         }
-        var deferred = false
         val filter = if (filterJson.isEmpty()) {
             null
         } else try {
             val json = JSONObject(filterJson)
-            deferred = json.optBoolean("deferred")
             val regex = json.optJSONObject("text")
             val flags = regex?.optString("flags").orEmpty()
             if (flags.any { it !in "dgimsuy" }) {
@@ -702,22 +709,22 @@ object PluginRpc {
         // the middleware twice per request off a single `next()`, against one budget, and
         // `releaseScope` twice. Same reason the update registrations take `types.toSet()`
         for (method in methods.toSet()) {
-            updated[method] = (updated[method].orEmpty()) + Interceptor(plugin, callbackId, strict, scope, filter, deferred)
+            updated[method] = (updated[method].orEmpty()) + Interceptor(session, callbackId, strict, scope, filter)
         }
         publishInterceptors(updated)
         return null
     }
 
-    private fun unregisterIntercept(plugin: Plugin, callbackId: Int) {
+    private fun unregisterIntercept(session: PluginSession, callbackId: Int) {
         publishInterceptors(
             interceptorsByMethod
-                .mapValues { (_, list) -> list.filter { it.plugin !== plugin || it.callbackId != callbackId } }
+                .mapValues { (_, list) -> list.filter { it.session !== session || it.callbackId != callbackId } }
                 .filterValues { it.isNotEmpty() }
         )
     }
 
     fun refreshChainOrder() {
-        Utilities.globalQueue.postRunnable { publishInterceptors(interceptorsByMethod) }
+        EngineDispatch.scheduler.postRunnable { publishInterceptors(interceptorsByMethod) }
     }
 
     /**
@@ -728,7 +735,7 @@ object PluginRpc {
     private fun publishInterceptors(updated: Map<String, List<Interceptor>>) {
         val order = PluginManager.orderIndex()
         interceptorsByMethod = updated.mapValues { (_, list) ->
-            list.sortedBy { order[it.plugin] ?: Int.MAX_VALUE }
+            list.sortedBy { order[it.session.plugin] ?: Int.MAX_VALUE }
         }
         hasInterceptors = interceptorsByMethod.isNotEmpty()
     }
@@ -778,27 +785,23 @@ object PluginRpc {
      * refused regardless of grants: install-time validation only sees the scopes a grant *names*,
      * so an unscoped `@grant invokeRpc` would otherwise reach `auth.exportLoginToken`.
      */
-    private fun takeoverRefusal(plugin: Plugin, method: String): String? {
+    private fun takeoverRefusal(permissions: desu.inugram.core.plugins.PluginPermissions, method: String): String? {
         if (!TakeoverMethods.isBlocked(method)) return null
-        if (plugin.permissions.has("unsafe.disableApiFiltering")) return null
+        if (permissions.has("unsafe.disableApiFiltering")) return null
         return PluginWire.encodePluginError("forbidden", "'$method' is an account-takeover method and is never available to plugins")
     }
 
     private fun dispatchChain(
-        connectionsManager: ConnectionsManager,
-        chain: List<Interceptor>,
+        operation: RpcChain,
         index: Int,
         request: TLObject,
-        params: OriginalParams,
-        scopeId: Long,
-        account: Int,
         finalize: (TLObject?, TLRPC.TL_error?, Long) -> Unit,
     ) {
-        if (index >= chain.size) {
+        if (index >= operation.chain.size) {
             // the chain is gone, so the app has already been answered - or, for a cancel,
             // deliberately not. Sending anyway would also strand this [SentRequest]: nothing holds
             // it, so the collapse could neither cancel it, end its lease, nor free the request
-            val armed = chains[scopeId] ?: return
+            val armed = chains[operation.scopeId] ?: return
             val media = armed.media
             // the caption is the send's own text as the chain left it, which is where a media request carries one
             if (media != null) captionOf(request)?.let { (text, entities) ->
@@ -808,86 +811,58 @@ object PluginRpc {
             if (media != null && armed.optimisticMessages?.messages?.size == 1) {
                 // the media moves to the verdict, so a collapse no longer owes its copy a delete
                 armed.media = null
-                chainVerdicts[scopeId] = ChainVerdict.TakenOver(media)
-                finalize(null, null, connectionsManager.currentTimeMillis)
+                armed.verdict = ChainVerdict.TakenOver(media)
+                finalize(null, null, operation.connectionsManager.currentTimeMillis)
                 return
             }
-            pauseChainTimer(scopeId)
+            pauseChainTimer(operation.scopeId)
             val sent = SentRequest(request)
             armed.sent = sent
-            sendPassthrough(connectionsManager, account, sent, params, armed.guid, armed.optimisticMessages) { response, error, responseTime ->
+            sendPassthrough(operation.connectionsManager, operation.account, sent, operation.params, armed.guid, armed.optimisticMessages) { response, error, responseTime ->
                 // whatever it answered, this request cannot reach sendRequestInternal again
                 endBypassLease(sent)
-                val budget = chains[scopeId]
+                val budget = chains[operation.scopeId]
                 if (budget == null) {
                     // the chain collapsed while the request was out, so nothing will consume this response
                     releaseUnowned(response)
                     return@sendPassthrough
                 }
-                if (response != null) ownedResponses[scopeId] = response
+                if (response != null) budget.ownedResponse = response
                 budget.passthrough = PassthroughResult(response, error, responseTime)
-                resumeChainTimer(scopeId)
+                resumeChainTimer(operation.scopeId)
                 finalize(response, error, responseTime)
             }
             return
         }
-        val interceptor = chain[index]
-        val engine = interceptor.plugin.engine
-        val tl = TlHandles.attached(interceptor.plugin)
-        if (engine == null || tl == null) {
-            dispatchChain(connectionsManager, chain, index + 1, request, params, scopeId, account, finalize)
+        val interceptor = operation.chain[index]
+        val session = interceptor.session
+        if (!session.canDispatch()) {
+            dispatchChain(operation, index + 1, request, finalize)
             return
         }
+        val engine = session.engine
+        val tl = session.tl
         val dispatchId = nextDispatchId++
-        val method = TlNames.classNameToTlName(request.javaClass)
+        val method = operation.method
         pendingDispatches[dispatchId] =
-            PendingDispatch(interceptor.plugin, tl, connectionsManager, chain, index, params, scopeId, method, account, request, finalize)
-        chains[scopeId]?.stages?.add(dispatchId)
-        val requestHandle = tl.mintForScope(request, scopeId)
+            PendingDispatch(session, operation, index, request, finalize)
+        chains[operation.scopeId]?.stages?.add(dispatchId)
+        val requestHandle = tl.mintForScope(request, operation.scopeId)
         engine.dispatchRpc(
             interceptor.callbackId,
             dispatchId,
             method,
-            account,
+            operation.account,
             PluginWire.encodeHandle(vector = false, id = requestHandle, readOnly = false),
         )
     }
 
-    private fun armChain(
-        scopeId: Long,
-        connectionsManager: ConnectionsManager,
-        chain: List<Interceptor>,
-        method: String,
-        request: TLObject,
-        requestKey: Long,
-        optimisticMessages: OptimisticMessages?,
-        finalize: (TLObject?, TLRPC.TL_error?, Long) -> Unit,
-    ) {
-        val budget = ChainBudget(scopeId, connectionsManager, chain, method, request, optimisticMessages, finalize)
-        budget.guid = takeGuid(requestKey)
-        chains[scopeId] = budget
-        startChainTimer(budget)
-    }
-
-    private fun startChainTimer(budget: ChainBudget) {
-        val timer = Runnable { expireChain(budget.scopeId) }
-        budget.timer = timer
-        budget.startedAt = SystemClock.uptimeMillis()
-        Utilities.globalQueue.postRunnable(timer, budget.remaining)
-    }
-
     private fun pauseChainTimer(scopeId: Long) {
-        val budget = chains[scopeId] ?: return
-        val timer = budget.timer ?: return
-        Utilities.globalQueue.cancelRunnable(timer)
-        budget.timer = null
-        budget.remaining -= SystemClock.uptimeMillis() - budget.startedAt
+        chains[scopeId]?.deadline?.pause()
     }
 
     private fun resumeChainTimer(scopeId: Long) {
-        val budget = chains[scopeId] ?: return
-        if (budget.timer != null) return
-        startChainTimer(budget)
+        chains[scopeId]?.deadline?.resume()
     }
 
     /**
@@ -896,23 +871,22 @@ object PluginRpc {
      * once all are abandoned are the scope's handles invalidated - the other order leaves that same
      * continuation reading handle-expired off every field of its own request.
      */
-    private fun collapseChain(scopeId: Long, reasonWire: String): ChainBudget? {
+    private fun collapseChain(scopeId: Long, reasonWire: String): RpcChain? {
         val budget = chains.remove(scopeId) ?: return null
         // a setMedia the chain never reached the end of: its copy is owned by nothing else
         budget.media?.path?.delete()
         budget.media = null
-        budget.timer?.let { Utilities.globalQueue.cancelRunnable(it) }
-        budget.timer = null
+        budget.deadline.cancel()
         for (dispatchId in budget.stages.reversed()) {
             val pending = pendingDispatches.remove(dispatchId) ?: continue
-            pending.plugin.engine?.abandonDispatch(dispatchId, reasonWire)
+            pending.session.takeIf { it.isCurrent() }?.engine?.abandonDispatch(dispatchId, reasonWire)
         }
         // covers handles stashed across an await; each stage minted into its own plugin's table
-        for (interceptor in budget.chain) TlHandles.of(interceptor.plugin)?.releaseScope(scopeId)
+        for (interceptor in budget.chain) interceptor.session.tl.releaseScope(scopeId)
         // the free stock does the instant it has serialized a request, deferred to here because no
         // view can read it any more. Keyed on the chain, not the send: a stage that short-circuits
         // owes the free too. On stageQueue, which orders it behind a send this chain may still have
-        // queued there - freeing from globalQueue could hand the buffers back mid-serializeToStream.
+        // queued there - freeing from the plugin queue could hand the buffers back mid-serializeToStream.
         // The lease is deliberately not dropped with it: a collapse does not end the flight
         budget.sent?.cancelled = true
         // a middleware may have handed next() a request it built, and that is the instance disableFree went on
@@ -930,13 +904,13 @@ object PluginRpc {
 
     /** settling a stage answers *upward*, so without this the ones below keep advancing and the real request still goes out */
     private fun abandonBelow(dispatchId: Long, pending: PendingDispatch, reasonWire: String) {
-        val budget = chains[pending.scopeId] ?: return
+        val budget = chains[pending.operation.scopeId] ?: return
         val at = budget.stages.indexOf(dispatchId)
         if (at < 0) return
         val below = budget.stages.subList(at + 1, budget.stages.size)
         for (deeperId in below.reversed()) {
             val deeper = pendingDispatches.remove(deeperId) ?: continue
-            deeper.plugin.engine?.abandonDispatch(deeperId, reasonWire)
+            deeper.session.takeIf { it.isCurrent() }?.engine?.abandonDispatch(deeperId, reasonWire)
         }
         below.clear()
     }
@@ -952,7 +926,7 @@ object PluginRpc {
     private fun expireChain(scopeId: Long) {
         val running = chains[scopeId]?.stages?.reversed()?.firstNotNullOfOrNull { pendingDispatches[it] }
         val budget = collapseChain(scopeId, TIMEOUT_WIRE) ?: return
-        Log.w(TAG, "[${running?.plugin?.manifest?.name}] '${budget.method}' ran past the chain's ${budget.deadlineMillis}ms budget")
+        Log.w(TAG, "[${running?.session?.manifest?.name}] '${budget.method}' ran past the chain's ${budget.deadlineMillis}ms budget")
         val sent = budget.passthrough
         if (sent != null) {
             budget.finalize(sent.response, sent.error, sent.time)
@@ -964,32 +938,28 @@ object PluginRpc {
     private fun onNext(dispatchId: Long, requestWire: String): String? {
         val pending = pendingDispatches[dispatchId] ?: return PluginWire.encodePluginError("internal", "next(): unknown dispatch")
         val nextRequest = try {
-            decodeTlObject(pending.tl, requestWire)
+            decodeTlObject(pending.session.tl, requestWire)
         } catch (e: Exception) {
             return decodeFailureWire("next()", e)
         }
         // next() may rewrite fields but never the method: the app awaits that method's response type, and a swap would turn any interceptRpc grant into an unscoped send primitive
         val nextMethod = TlNames.classNameToTlName(nextRequest.javaClass)
-        if (nextMethod != pending.method) {
+        if (nextMethod != pending.operation.method) {
             return PluginWire.encodePluginError(
                 "forbidden",
-                "next(): expected a '${pending.method}' request, got '$nextMethod' - rewrite the request's fields rather than replacing it",
+                "next(): expected a '${pending.operation.method}' request, got '$nextMethod' - rewrite the request's fields rather than replacing it",
             )
         }
-        Utilities.globalQueue.postRunnable {
+        EngineDispatch.scheduler.postRunnable {
             if (pendingDispatches[dispatchId] !== pending) return@postRunnable
             pending.nextStarted = true
             dispatchChain(
-                pending.connectionsManager,
-                pending.chain,
+                pending.operation,
                 pending.index + 1,
                 nextRequest,
-                pending.params,
-                pending.scopeId,
-                pending.account,
             ) { response, error, responseTime ->
                 pending.responseTime = responseTime
-                Utilities.globalQueue.postRunnable {
+                EngineDispatch.scheduler.postRunnable {
                     // once the chain has collapsed this stage is gone, and completing it would mint into a released scope
                     if (pendingDispatches[dispatchId] !== pending) return@postRunnable
                     val result = PassthroughResult(response, error, responseTime)
@@ -999,8 +969,8 @@ object PluginRpc {
                         pending.finalize(result.response, result.error, result.time)
                         return@postRunnable
                     }
-                    val engine = pending.plugin.engine ?: return@postRunnable
-                    engine.completeNext(dispatchId, encodeChainResult(pending.tl, response, error, pending.scopeId))
+                    val engine = pending.session.takeIf { it.isCurrent() }?.engine ?: return@postRunnable
+                    engine.completeNext(dispatchId, encodeChainResult(pending.session.tl, response, error, pending.operation.scopeId))
                 }
             }
         }
@@ -1013,7 +983,7 @@ object PluginRpc {
         var response: TLObject? = null
         var error: TLRPC.TL_error? = null
         try {
-            response = decodeTlValueOrError(pending.tl, resultWire)
+            response = decodeTlValueOrError(pending.session.tl, resultWire)
         } catch (e: TlResultError) {
             error = e.error
         } catch (e: Exception) {
@@ -1024,8 +994,8 @@ object PluginRpc {
             // read once, here, where the stage that authored it is known: a verdict is typed onto
             // the chain rather than left as an error for the app to recognize by its text, which
             // any stage above this one could have written for itself
-            if (isDropVerdict(error) && pending.chain[pending.index].scope == SEND_SCOPE) {
-                chainVerdicts[pending.scopeId] = ChainVerdict.Dropped
+            if (isDropVerdict(error) && pending.operation.chain[pending.index].scope == SEND_SCOPE) {
+                chains[pending.operation.scopeId]?.verdict = ChainVerdict.Dropped
             }
             pending.finalize(response, error, time)
         }
@@ -1045,7 +1015,7 @@ object PluginRpc {
         for (id in ids) {
             val key = sendKey(account, id)
             sendVerdicts[key] = verdict
-            Utilities.globalQueue.postRunnable({ discardVerdict(sendVerdicts.remove(key)) }, VERDICT_TTL_MILLIS)
+            EngineDispatch.scheduler.postRunnable({ discardVerdict(sendVerdicts.remove(key)) }, VERDICT_TTL_MILLIS)
         }
     }
 
@@ -1054,13 +1024,13 @@ object PluginRpc {
     }
 
     private fun handleBadMiddlewareResponse(dispatchId: Long, pending: PendingDispatch, cause: Exception, time: Long) {
-        Utilities.globalQueue.postRunnable {
+        EngineDispatch.scheduler.postRunnable {
             if (pendingDispatches[dispatchId] !== pending) return@postRunnable
             val detail = cause.message ?: cause.toString()
-            val strict = pending.chain[pending.index].strict
+            val strict = pending.operation.chain[pending.index].strict
             Log.w(
                 TAG,
-                "[${pending.plugin.manifest.name}] '${pending.method}' returned an invalid TL response; " +
+                "[${pending.session.manifest.name}] '${pending.operation.method}' returned an invalid TL response; " +
                     (if (strict) "failing the RPC" else "skipping the middleware") + ": $detail",
             )
             if (strict) {
@@ -1079,13 +1049,9 @@ object PluginRpc {
             } else {
                 pendingDispatches.remove(dispatchId)
                 dispatchChain(
-                    pending.connectionsManager,
-                    pending.chain,
+                    pending.operation,
                     pending.index + 1,
                     pending.request,
-                    pending.params,
-                    pending.scopeId,
-                    pending.account,
                     pending.finalize,
                 )
             }
@@ -1098,7 +1064,7 @@ object PluginRpc {
      * and would answer the app a second time.
      */
     private fun settleStage(dispatchId: Long, pending: PendingDispatch, settle: () -> Unit) {
-        Utilities.globalQueue.postRunnable {
+        EngineDispatch.scheduler.postRunnable {
             if (pendingDispatches.remove(dispatchId) !== pending) return@postRunnable
             // a stage that called next() without awaiting it settles with live stages beneath it, which would keep walking toward the real send
             abandonBelow(dispatchId, pending, ABANDONED_WIRE)
@@ -1107,7 +1073,7 @@ object PluginRpc {
     }
 
     private fun completionTime(pending: PendingDispatch): Long =
-        if (pending.responseTime != 0L) pending.responseTime else pending.connectionsManager.currentTimeMillis
+        if (pending.responseTime != 0L) pending.responseTime else pending.operation.connectionsManager.currentTimeMillis
 
     private fun sendPassthrough(
         connectionsManager: ConnectionsManager,
@@ -1128,7 +1094,7 @@ object PluginRpc {
             // a cancel landed while this was queued: nothing will read the response, so it must not go out
             if (sent.cancelled) {
                 // serialized with every other lease transition; the delegate that normally does it will never run
-                Utilities.globalQueue.postRunnable { endBypassLease(sent) }
+                EngineDispatch.scheduler.postRunnable { endBypassLease(sent) }
                 return@postRunnable
             }
             sent.reachedNative = true
@@ -1138,7 +1104,7 @@ object PluginRpc {
                 RequestDelegateTimestamp { response, error, responseTime ->
                     // stock frees the response the moment this delegate returns, handing upload.getFile's NativeByteBuffer back to a pool - gutting the object the chain is about to walk up
                     response?.disableFree = true
-                    Utilities.globalQueue.postRunnable { finalize(response, error, responseTime) }
+                    EngineDispatch.scheduler.postRunnable { finalize(response, error, responseTime) }
                 },
                 params.onQuickAck,
                 params.onWriteToSocket,
@@ -1207,22 +1173,20 @@ object PluginRpc {
     }
 
     private fun invokeRpc(
-        plugin: Plugin,
-        engine: QuickJs,
-        tl: TlHandles,
+        session: PluginSession,
         slot: Int,
         startedOn: Int,
         invokeId: Long,
         requestWire: String,
     ): String? {
         val request = try {
-            decodeTlObject(tl, requestWire)
+            decodeTlObject(session.tl, requestWire)
         } catch (e: Exception) {
             return decodeFailureWire("invokeRpc", e)
         }
         val tlName = TlNames.classNameToTlName(request.javaClass)
-        takeoverRefusal(plugin, tlName)?.let { return it }
-        if (!plugin.permissions.allows("invokeRpc", tlName, ScopeMatch.EXACT)) {
+        takeoverRefusal(session.permissions, tlName)?.let { return it }
+        if (!session.permissions.allows("invokeRpc", tlName, ScopeMatch.EXACT)) {
             return PluginWire.encodeNotGranted("invokeRpc", tlName)
         }
         // last, so a takeover method stays refused whichever slot it was aimed at. The slot is not the host's to trust: a plugin can call `invokeRpc` through any object carrying an `id`
@@ -1231,8 +1195,8 @@ object PluginRpc {
         } catch (e: Exception) {
             return decodeFailureWire("invokeRpc", e)
         }
-        sendInvoke(plugin, engine, account, request) { response, error ->
-            engine.resolveInvoke(invokeId, encodeInvokeResult(tl, response, error))
+        sendInvoke(session, account, request) { response, error ->
+            session.engine.resolveInvoke(invokeId, encodeInvokeResult(session.tl, response, error))
         }
         return null
     }
@@ -1244,8 +1208,7 @@ object PluginRpc {
      * unanswered.
      */
     private fun sendInvoke(
-        plugin: Plugin,
-        engine: QuickJs,
+        session: PluginSession,
         account: Int,
         request: TLObject,
         settle: (TLObject?, TLRPC.TL_error?) -> Unit,
@@ -1253,7 +1216,7 @@ object PluginRpc {
         sendWithoutInterceptors(account, request, 0) { response, error ->
             // stageQueue, where freeResources() runs the moment this delegate returns - before the runnable below mints a handle. ownership moves here
             response?.disableFree = true
-            EngineDispatch.onEngine(plugin, engine, onDropped = { releaseUnowned(response) }) {
+            EngineDispatch.onEngine(session, onDropped = { releaseUnowned(response) }) {
                 settle(response, error)
             }
         }
@@ -1275,30 +1238,29 @@ object PluginRpc {
      * written: reaching a method stock has no class for is the point of the api.
      */
     private fun invokeRaw(
-        plugin: Plugin,
-        engine: QuickJs,
+        session: PluginSession,
         slot: Int,
         startedOn: Int,
         invokeId: Long,
         method: ByteArray,
     ): String? {
-        if (!plugin.permissions.has(RAW_GRANT)) return PluginWire.encodeNotGranted(RAW_GRANT)
+        if (!session.permissions.has(RAW_GRANT)) return PluginWire.encodeNotGranted(RAW_GRANT)
         val request = RawTlRequest(method)
         val constructor = request.constructorId()
             ?: return PluginWire.encodePluginError("invalid-argument", "invokeRaw: a method is at least its 4-byte constructor id")
         // an empty answer is the api working as intended: a constructor no layer this build knows is exactly what a plugin comes here for. Every name claiming the id is asked, since a legacy variant sharing it is named apart from the live constructor
-        for (named in TlCtorIds.namesOf(constructor)) takeoverRefusal(plugin, named)?.let { return it }
+        for (named in TlCtorIds.namesOf(constructor)) takeoverRefusal(session.permissions, named)?.let { return it }
         val account = try {
             invokeAccountOrRefusal("invokeRaw", slot, startedOn)
         } catch (e: Exception) {
             return decodeFailureWire("invokeRaw", e)
         }
-        sendInvoke(plugin, engine, account, request) { response, error ->
+        sendInvoke(session, account, request) { response, error ->
             releaseUnowned(response)
             when {
-                error != null -> engine.resolveInvoke(invokeId, PluginWire.encodeRpcError(error.code, error.text ?: ""))
-                response is RawTlResponse -> engine.resolveInvokeBytes(invokeId, response.bytes)
-                else -> engine.resolveInvoke(invokeId, PluginWire.encodeNull())
+                error != null -> session.engine.resolveInvoke(invokeId, PluginWire.encodeRpcError(error.code, error.text ?: ""))
+                response is RawTlResponse -> session.engine.resolveInvokeBytes(invokeId, response.bytes)
+                else -> session.engine.resolveInvoke(invokeId, PluginWire.encodeNull())
             }
         }
         return null
@@ -1311,9 +1273,7 @@ object PluginRpc {
      * call - that it could have made that same call unwrapped.
      */
     private fun takeout(
-        plugin: Plugin,
-        engine: QuickJs,
-        tl: TlHandles,
+        session: PluginSession,
         slot: Int,
         startedOn: Int,
         invokeId: Long,
@@ -1321,7 +1281,7 @@ object PluginRpc {
         takeoutId: String,
         arg: String,
     ): String? {
-        if (!plugin.permissions.has(TAKEOUT_GRANT)) return PluginWire.encodeNotGranted(TAKEOUT_GRANT)
+        if (!session.permissions.has(TAKEOUT_GRANT)) return PluginWire.encodeNotGranted(TAKEOUT_GRANT)
         val request: TLObject
         val account: Int
         val encode: (TLObject?, TLRPC.TL_error?) -> String
@@ -1337,14 +1297,14 @@ object PluginRpc {
                 }
 
                 RpcListener.OP_TAKEOUT_INVOKE -> {
-                    val query = decodeTlObject(tl, arg)
+                    val query = decodeTlObject(session.tl, arg)
                     val queryName = TlNames.classNameToTlName(query.javaClass)
-                    takeoverRefusal(plugin, queryName)?.let { return it }
-                    if (!plugin.permissions.allows("invokeRpc", queryName, ScopeMatch.EXACT)) {
+                    takeoverRefusal(session.permissions, queryName)?.let { return it }
+                    if (!session.permissions.allows("invokeRpc", queryName, ScopeMatch.EXACT)) {
                         return PluginWire.encodeNotGranted("invokeRpc", queryName)
                     }
                     request = TakeoutWrapper(parseTakeoutId(takeoutId), query)
-                    encode = { response, error -> encodeInvokeResult(tl, response, error) }
+                    encode = { response, error -> encodeInvokeResult(session.tl, response, error) }
                 }
                 else -> throw DecodeFault("invalid-argument", "unknown takeout op $op")
             }
@@ -1352,8 +1312,8 @@ object PluginRpc {
         } catch (e: Exception) {
             return decodeFailureWire("takeout", e)
         }
-        sendInvoke(plugin, engine, account, request) { response, error ->
-            engine.resolveInvoke(invokeId, encode(response, error))
+        sendInvoke(session, account, request) { response, error ->
+            session.engine.resolveInvoke(invokeId, encode(response, error))
         }
         return null
     }

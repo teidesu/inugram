@@ -4,6 +4,7 @@ import desu.inugram.core.plugins.PluginWire
 import desu.inugram.helpers.plugins.EngineDispatch
 import desu.inugram.helpers.plugins.NotificationListener
 import desu.inugram.helpers.plugins.Plugin
+import desu.inugram.helpers.plugins.PluginSession
 import desu.inugram.helpers.plugins.QuickJs
 import java.lang.reflect.Modifier
 import org.json.JSONArray
@@ -45,27 +46,26 @@ object PluginNotifications {
     private val namesById: Map<Int, String> by lazy { idsByName.entries.associate { (name, id) -> id to name } }
 
     private class Registration(
-        val plugin: Plugin,
-        val engine: QuickJs,
+        val session: PluginSession,
         val callbackId: Int,
         val ids: IntArray,
     ) {
         var observer: NotificationCenter.NotificationCenterDelegate? = null
     }
 
-    private val live = HashMap<QuickJs, MutableList<Registration>>()
+    private val live = HashMap<PluginSession, MutableList<Registration>>()
 
-    fun listenerFor(plugin: Plugin, engine: QuickJs): NotificationListener =
+    fun listenerFor(session: PluginSession): NotificationListener =
         object : NotificationListener {
             override fun register(callbackId: Int, events: Array<String>): String? =
-                startObserving(plugin, engine, callbackId, events)
+                startObserving(session, callbackId, events)
 
-            override fun unregister(callbackId: Int) = stopObserving(engine, callbackId)
+            override fun unregister(callbackId: Int) = stopObserving(session, callbackId)
         }
 
-    private fun startObserving(plugin: Plugin, engine: QuickJs, callbackId: Int, events: Array<String>): String? {
+    private fun startObserving(session: PluginSession, callbackId: Int, events: Array<String>): String? {
         // the engine's own check_grant already ran in native; this is the second gate, on the side that owns the data
-        if (!plugin.permissions.has("unsafe.notificationCenter")) {
+        if (!session.permissions.has("unsafe.notificationCenter")) {
             return PluginWire.encodeNotGranted("unsafe.notificationCenter")
         }
         val ids = IntArray(events.size)
@@ -74,8 +74,8 @@ object PluginNotifications {
             ids[index] = idsByName[events[index]]
                 ?: return PluginWire.encodePluginError("invalid-argument", "no notification named '${events[index]}'")
         }
-        val registration = Registration(plugin, engine, callbackId, ids)
-        synchronized(live) { live.getOrPut(engine) { ArrayList() }.add(registration) }
+        val registration = Registration(session, callbackId, ids)
+        synchronized(live) { live.getOrPut(session) { ArrayList() }.add(registration) }
         AndroidUtilities.runOnUIThread {
             val observer = NotificationCenter.NotificationCenterDelegate { id, accountId, args ->
                 deliver(registration, id, accountId, args)
@@ -99,18 +99,18 @@ object PluginNotifications {
     private fun deliver(registration: Registration, id: Int, accountId: Int, args: Array<Any?>) {
         val name = namesById[id] ?: return
         val payload = encodeArgs(args)
-        val engine = registration.engine
-        EngineDispatch.onEngine(registration.plugin, engine) {
+        val engine = registration.session.engine
+        EngineDispatch.onEngine(registration.session) {
             engine.dispatchNotification(registration.callbackId, name, accountId, payload)
         }
     }
 
-    private fun stopObserving(engine: QuickJs, callbackId: Int) {
+    private fun stopObserving(session: PluginSession, callbackId: Int) {
         val registration = synchronized(live) {
-            val mine = live[engine] ?: return
+            val mine = live[session] ?: return
             val found = mine.firstOrNull { it.callbackId == callbackId } ?: return
             mine.remove(found)
-            if (mine.isEmpty()) live.remove(engine)
+            if (mine.isEmpty()) live.remove(session)
             found
         }
         removeObserver(registration)
@@ -127,8 +127,8 @@ object PluginNotifications {
         }
     }
 
-    internal fun detach(engine: QuickJs) {
-        val mine = synchronized(live) { live.remove(engine) } ?: return
+    internal fun detach(session: PluginSession) {
+        val mine = synchronized(live) { live.remove(session) } ?: return
         for (registration in mine) removeObserver(registration)
     }
 

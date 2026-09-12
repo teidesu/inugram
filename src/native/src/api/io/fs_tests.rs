@@ -736,7 +736,7 @@ mod bundled_oracle {
       match ctx.eval::<(), _>(ORACLE) {
         Ok(()) => {}
         Err(rquickjs::Error::Exception) => {
-          panic!("{}", crate::api::telegram::rpc::format_exception(&ctx))
+          panic!("{}", crate::api::error::format_exception(&ctx))
         }
         Err(e) => panic!("{e:?}"),
       }

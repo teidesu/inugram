@@ -8,7 +8,7 @@ use rquickjs::{Ctx, Exception, Function, Object, Persistent, Result as JsResult,
 use crate::api::error::{self, error_value_to_string, format_thrown, PluginErrorCode};
 use crate::api::telegram::account::{dispatch_account, AccountState};
 use crate::api::tl::proxy::{self, TlViews, ViewLife};
-use crate::jni::is_caller_entry;
+use crate::runtime::{pump_jobs, PendingSettle};
 use crate::sandbox::grants::{GrantHost, MATCH_EXACT};
 use crate::sandbox::registry::{make_disposer, noop_disposer, CallbackRegistry, Lifecycle, Registry};
 use crate::utils::prelude;
@@ -36,54 +36,6 @@ pub trait RpcHost {
   fn on_intercept_update_register(&self, callback_id: u32, types: &[String]) -> Option<String>;
   fn on_intercept_update_unregister(&self, callback_id: u32);
   fn on_update_verdict(&self, dispatch_id: i64, deliver: bool);
-}
-
-pub(crate) struct PendingSettle {
-  pub(crate) resolve: Persistent<Function<'static>>,
-  pub(crate) reject: Persistent<Function<'static>>,
-}
-
-impl PendingSettle {
-  pub(crate) fn new<'js>(ctx: &Ctx<'js>) -> JsResult<(rquickjs::Promise<'js>, Self)> {
-    let (promise, resolve, reject) = rquickjs::Promise::new(ctx)?;
-    Ok((
-      promise,
-      PendingSettle {
-        resolve: Persistent::save(ctx, resolve),
-        reject: Persistent::save(ctx, reject),
-      },
-    ))
-  }
-
-  pub(crate) fn reject_with(self, ctx: &Ctx<'_>, msg: &str) -> JsResult<()> {
-    let error_val = match error::host_error_to_js(ctx, msg) {
-      Ok(v) => v,
-      Err(e) => {
-        self.release(ctx);
-        return Err(e);
-      }
-    };
-    self.reject_with_value(ctx, error_val)
-  }
-
-  pub(crate) fn reject_with_value<'js>(self, ctx: &Ctx<'js>, value: Value<'js>) -> JsResult<()> {
-    let reject = self.reject.restore(ctx)?;
-    let _ = self.resolve.restore(ctx);
-    reject.call::<_, Value>((value,))?;
-    Ok(())
-  }
-
-  pub(crate) fn resolve_with<'js>(self, ctx: &Ctx<'js>, value: Value<'js>) -> JsResult<()> {
-    let resolve = self.resolve.restore(ctx)?;
-    let _ = self.reject.restore(ctx);
-    resolve.call::<_, Value>((value,))?;
-    Ok(())
-  }
-
-  pub(crate) fn release(self, ctx: &Ctx<'_>) {
-    let _ = self.resolve.restore(ctx);
-    let _ = self.reject.restore(ctx);
-  }
 }
 
 const CHAIN_TIMEOUT_TEXT: &str = "INTERCEPTOR_TIMEOUT";
@@ -128,19 +80,6 @@ const SEND_METHODS: [&str; 4] =
   ["messages.sendMessage", "messages.sendMedia", "messages.sendMultiMedia", "messages.editMessage"];
 
 const SEND_SCOPE: &str = "interceptSendMessage";
-
-/// whether a middleware answers later: the host does not hold a local message back for a verdict
-/// that will not be there in time, so a deferred one is registered as such and never waited on
-fn is_async_function<'js>(callback: &Function<'js>) -> bool {
-  callback
-    .clone()
-    .into_value()
-    .into_object()
-    .and_then(|function| function.get::<_, Value<'js>>("constructor").ok())
-    .and_then(Value::into_object)
-    .and_then(|ctor| ctor.get::<_, String>("name").ok())
-    .is_some_and(|name| name == "AsyncFunction")
-}
 
 #[derive(Default)]
 struct UpdateDispatchState {
@@ -300,21 +239,6 @@ fn capture_promise_tools(ctx: &Ctx<'_>) -> JsResult<PromiseTools> {
     resolve: Persistent::save(ctx, resolve),
     then: Persistent::save(ctx, then),
   })
-}
-
-pub fn pump_jobs(rt: &Runtime, context: &rquickjs::Context, log: &dyn Fn(&str)) {
-  if is_caller_entry() { return; }
-  loop {
-    match rt.execute_pending_job() {
-      Ok(true) => continue,
-      Ok(false) => break,
-      Err(e) => {
-        log(&format!("unhandled error running microtask: {e:?}"));
-        break;
-      }
-    }
-  }
-  context.with(|ctx| error::report_rejections(&ctx));
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -509,7 +433,6 @@ impl RpcState {
             let Some(callback) = callback.into_function() else {
               return Err(Exception::throw_type(ctx, "interceptSendMessage: middleware must be a function"));
             };
-            let deferred = is_async_function(&callback);
             let Some(filter) = first.as_object() else {
               return Err(Exception::throw_type(ctx, "interceptSendMessage: filter must be an object"));
             };
@@ -547,9 +470,6 @@ impl RpcState {
               regex.set("flags", flags)?;
               encoded.set("text", regex)?;
             }
-            if deferred {
-              encoded.set("deferred", true)?;
-            }
             let json = ctx
               .json_stringify(encoded)?
               .map(|value| value.to_string())
@@ -561,8 +481,7 @@ impl RpcState {
             let Some(callback) = first.into_function() else {
               return Err(Exception::throw_type(ctx, "interceptSendMessage: middleware must be a function"));
             };
-            let json = if is_async_function(&callback) { r#"{"deferred":true}"#.to_string() } else { String::new() };
-            (json, callback)
+            (String::new(), callback)
           }
         };
         let build = match state.send_wrap.borrow().as_ref() {

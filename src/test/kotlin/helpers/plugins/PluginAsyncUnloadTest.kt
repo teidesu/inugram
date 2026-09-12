@@ -14,8 +14,8 @@ class PluginAsyncUnloadTest {
     @Test fun cleanup_runnable_resolves_unload_after_the_original_entry_returns() {
         val plugin = startPlugin("async cleanup", "unsafe.jvm")
         val engine = QuickJs()
-        plugin.engine = engine
-        attachBridge(plugin, engine, object : CoreListener {
+        plugin.session = PluginSession(plugin, engine)
+        attachBridge(plugin.session!!, object : CoreListener {
             override fun onConsole(level: Int, message: String) = Unit
             override fun onTimerSchedule(delayMs: Long) = Unit
         })
@@ -49,7 +49,7 @@ class PluginAsyncUnloadTest {
             PluginJvm.detach(engine)
             engine.close()
             JvmFixture.task = null
-            plugin.engine = null
+            plugin.session = null
         }
     }
 }

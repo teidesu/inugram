@@ -13,8 +13,8 @@ class PluginJvmClassTest {
     private fun runWithEngine(code: String, after: (QuickJs) -> Unit = {}) {
         val plugin = startPlugin("defined class", "unsafe.jvm")
         val engine = QuickJs()
-        plugin.engine = engine
-        attachBridge(plugin, engine, object : CoreListener {
+        plugin.session = PluginSession(plugin, engine)
+        attachBridge(plugin.session!!, object : CoreListener {
             override fun onConsole(level: Int, message: String) = Unit
             override fun onTimerSchedule(delayMs: Long) = Unit
         })
@@ -26,7 +26,7 @@ class PluginJvmClassTest {
             PluginJvm.detach(engine)
             engine.close()
             JvmFixture.task = null
-            plugin.engine = null
+            plugin.session = null
         }
     }
 
