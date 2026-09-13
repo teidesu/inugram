@@ -1,5 +1,7 @@
 package desu.inugram.helpers.plugins.platform
 
+import desu.inugram.core.plugins.PluginRefusal
+import desu.inugram.core.plugins.PluginWire.refuse
 import desu.inugram.helpers.plugins.EngineDispatch
 
 import android.util.Log
@@ -138,11 +140,6 @@ object PluginXposed {
         (engine.listener?.xposed as? Session)?.close()
     }
 
-    private class Refusal(val wire: String) : RuntimeException(PluginWire.describePluginError(wire), null, false, false)
-
-    private fun refuse(code: String, message: String, grant: String? = null): Nothing =
-        throw Refusal(PluginWire.encodePluginError(code, message, grant = grant))
-
     private class NativeHook(val token: String, val before: Any?, val after: Any?)
 
     private class Site(val session: Session, val id: Long, val shared: SharedSite, val native: Boolean) {
@@ -164,7 +161,7 @@ object PluginXposed {
 
         override fun xposed(op: Int, target: Long, name: String, args: Array<String>): String = try {
             run(op, target, name, args)
-        } catch (e: Refusal) {
+        } catch (e: PluginRefusal) {
             e.wire
         } catch (e: Throwable) {
             values.wireOf(e) ?: PluginWire.encodePluginError("internal", "xposed: ${e.javaClass.simpleName}: ${e.message}")
@@ -342,7 +339,7 @@ object PluginXposed {
 
         /**
          * The bridge's own failures may not escape here: this frame belongs to whichever stock
-         * method the user just invoked, so a [Refusal] thrown while encoding an argument would
+         * method the user just invoked, so a [PluginRefusal] thrown while encoding an argument would
          * surface as a `RuntimeException` out of app code. A failed layer continues through the
          * remaining plugins instead, eventually reaching the original exactly once.
          */

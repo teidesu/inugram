@@ -46,7 +46,7 @@ internal object PluginFilePicker {
         val options = try {
             JSONObject(optionsJson)
         } catch (e: Exception) {
-            return "pickFile: ${e.message}"
+            return PluginWire.encodePluginError("invalid-argument", "pickFile: ${e.message}")
         }
         val multiple = options.optBoolean("multiple")
         val types = options.optJSONArray("accept")?.let { array ->
@@ -66,7 +66,7 @@ internal object PluginFilePicker {
         val options = try {
             JSONObject(optionsJson)
         } catch (e: Exception) {
-            return "saveFile: ${e.message}"
+            return PluginWire.encodePluginError("invalid-argument", "saveFile: ${e.message}")
         }
         val source = File(options.optString("path"))
         val name = options.optString("fileName").ifEmpty { "file" }

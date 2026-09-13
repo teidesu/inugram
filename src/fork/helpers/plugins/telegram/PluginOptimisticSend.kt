@@ -1,12 +1,13 @@
 package desu.inugram.helpers.plugins.telegram
 
+import desu.inugram.core.plugins.PluginRefusal
 import android.util.Log
 import desu.inugram.core.plugins.PluginWire
 import desu.inugram.helpers.plugins.Plugin
 import desu.inugram.helpers.plugins.PluginSession
 import desu.inugram.helpers.plugins.EngineDispatch
 import desu.inugram.helpers.plugins.telegram.PluginWrites.Call
-import desu.inugram.helpers.plugins.telegram.PluginWrites.refuse
+import desu.inugram.core.plugins.PluginWire.refuse
 import desu.inugram.helpers.plugins.tl.TlHandles
 import java.io.File
 import org.telegram.messenger.AndroidUtilities
@@ -123,7 +124,7 @@ object PluginOptimisticSend {
     ) {
         val upload = try {
             PluginMedia.takeForUpload(call, source, name)
-        } catch (e: PluginWrites.Refused) {
+        } catch (e: PluginRefusal) {
             PluginWrites.answer(call) { e.wire }
             return
         }

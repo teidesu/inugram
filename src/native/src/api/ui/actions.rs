@@ -426,7 +426,7 @@ impl ActionState {
       .transpose()?
       .ok_or_else(|| Exception::throw_message(ctx, &format!("{what}: serialization failed")))?;
     match self.host.action_editor(op, surface, &json) {
-      Some(err) => Err(Exception::throw_message(ctx, &err)),
+      Some(err) => Err(ctx.throw(crate::api::error::host_error_to_js(ctx, &err)?)),
       None => Ok(()),
     }
   }

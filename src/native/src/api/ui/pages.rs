@@ -4,6 +4,7 @@ use std::rc::Rc;
 
 use rquickjs::{Array, Ctx, Exception, Function, Object, Persistent, Result as JsResult, Runtime, Value};
 
+use crate::api::error::host_error_to_js;
 use crate::api::error::format_exception;
 use crate::api::error::PluginErrorCode;
 use crate::api::ui::icons::{opt_icon, Icon, RETAINED_VALUE_TAG};
@@ -297,7 +298,7 @@ pub fn install_ui<'js>(
     Function::new(ctx.clone(), move |ctx: Ctx<'js>, page: Value<'js>| {
       if let Some(handle) = state2.java_handle(&ctx, &page)? {
         if let Some(err) = state2.host.ui_open_fragment(handle) {
-          return Err(Exception::throw_message(&ctx, &err));
+          return Err(ctx.throw(host_error_to_js(&ctx, &err)?));
         }
         return Ok(());
       }
@@ -340,14 +341,14 @@ pub fn install_ui<'js>(
             .ok_or_else(|| Exception::throw_message(&ctx, "openPage: could not serialize the screen"))?
             .to_string()?;
           if let Some(err) = state2.host.ui_open_screen(&json) {
-            return Err(Exception::throw_message(&ctx, &err));
+            return Err(ctx.throw(host_error_to_js(&ctx, &err)?));
           }
           return Ok(());
         }
       }
       let page_id = state2.page_id_of(&ctx, &page, "openPage")?;
       if let Some(err) = state2.host.ui_open_page(page_id) {
-        return Err(Exception::throw_message(&ctx, &err));
+        return Err(ctx.throw(host_error_to_js(&ctx, &err)?));
       }
       Ok(())
     })?,
@@ -715,7 +716,7 @@ impl UiState {
 
     let menu_id = state.next_id.alloc();
     if let Some(err) = state.host.ui_open_menu(menu_id, page_id, row, &json) {
-      return Err(Exception::throw_message(ctx, &err));
+      return Err(ctx.throw(host_error_to_js(ctx, &err)?));
     }
     state
       .menus

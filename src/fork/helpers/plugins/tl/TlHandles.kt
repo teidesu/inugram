@@ -273,7 +273,7 @@ class TlHandles(private val policy: TlFilter.Policy) : TlListener {
             when (val target = entry.target) {
                 is TLObject -> setObjectField(entry, target, key, source)
                 is ArrayList<*> -> setVectorProp(entry, target as ArrayList<Any?>, key, source)
-                else -> "internal: unsupported handle target ${target.javaClass}"
+                else -> PluginWire.encodePluginError("internal", "unsupported handle target ${target.javaClass}")
             }
         } catch (e: Exception) {
             // a plugin picks the assigned value and rust re-emits whatever string it hangs off the marker symbol, so a malformed wire is plugin input, not a bug
@@ -409,19 +409,19 @@ class TlHandles(private val policy: TlFilter.Policy) : TlListener {
 
     private fun setObjectField(entry: HandleEntry, target: TLObject, key: String, source: SetSource): String? {
         val cls = target.javaClass
-        if (key == "_") return "cannot assign to '_'"
+        if (key == "_") return invalidSet("cannot assign to '_'")
         if (TlFlags.isFlagWord(cls, key)) {
-            return "'$key' on '${TlNames.classNameToTlName(cls)}' is managed by the bridge - set the optional fields instead"
+            return invalidSet("'$key' on '${TlNames.classNameToTlName(cls)}' is managed by the bridge - set the optional fields instead")
         }
         // the same refusal a nonexistent field gets: without this the write lands on the app's live object while every read path still reports the field absent
         if (TlFilter.hidesField(policy, cls, key)) {
-            return "no such field '$key' on '${TlNames.classNameToTlName(cls)}'"
+            return invalidSet("no such field '$key' on '${TlNames.classNameToTlName(cls)}'")
         }
         if (policy.takeover && TlFilter.decidesRedaction(cls, key)) {
             return PluginWire.encodePluginError("forbidden", "'$key' is sealed while api filtering is on: login code redaction is keyed on it")
         }
         val field = TlReflect.publicFields(cls)[key]
-            ?: return "no such field '$key' on '${TlNames.classNameToTlName(cls)}'"
+            ?: return invalidSet("no such field '$key' on '${TlNames.classNameToTlName(cls)}'")
         val gated = TlFlags.gateOf(cls, key) != null
         val resolved = resolveSetValue(source, field.genericType, field.type, key, allowPrimitiveClear = gated)
         if (resolved.isError) return resolved.error
@@ -431,7 +431,7 @@ class TlHandles(private val policy: TlFilter.Policy) : TlListener {
             TlReflect.syncFlagBit(target, key)
             null
         } catch (e: Exception) {
-            e.message ?: "reflection set failed"
+            PluginWire.encodePluginError("internal", e.message ?: "reflection set failed")
         }
     }
 
@@ -449,15 +449,15 @@ class TlHandles(private val policy: TlFilter.Policy) : TlListener {
                 is PluginWire.Value.IntNum -> decoded.value.toInt()
                 is PluginWire.Value.Json -> (JSONTokener(decoded.json).nextValue() as? Number)?.toInt()
                 else -> null
-            } ?: return "vector length must be an integer"
-            if (newLength < 0 || newLength > target.size) return "vector length can only shrink (${target.size} -> $newLength not allowed)"
+            } ?: return invalidSet("vector length must be an integer")
+            if (newLength < 0 || newLength > target.size) return invalidSet("vector length can only shrink (${target.size} -> $newLength not allowed)")
             while (target.size > newLength) target.removeAt(target.size - 1)
             entry.flagOwner?.let { (obj, name) -> TlReflect.syncFlagBit(obj, name) }
             return null
         }
-        val index = key.toIntOrNull() ?: return "no such property '$key' on a TL vector"
-        if (index < 0 || index > target.size) return "vector index out of range: $index"
-        val elementType = entry.elementType ?: return "vector element type is unknown"
+        val index = key.toIntOrNull() ?: return invalidSet("no such property '$key' on a TL vector")
+        if (index < 0 || index > target.size) return invalidSet("vector index out of range: $index")
+        val elementType = entry.elementType ?: return PluginWire.encodePluginError("internal", "vector element type is unknown")
         val resolved = resolveSetValue(source, elementType, rawClassOf(elementType), "[$index]")
         if (resolved.isError) return resolved.error
         if (index == target.size) target.add(resolved.value) else target[index] = resolved.value
@@ -514,12 +514,16 @@ class TlHandles(private val policy: TlFilter.Policy) : TlListener {
         }
     }
 
+    /** [error] is the refusal wire a failed set answers with */
     private class Resolved(val value: Any?, val error: String?) {
         val isError: Boolean get() = error != null
     }
 
     private fun ok(value: Any?) = Resolved(value, null)
-    private fun err(message: String) = Resolved(null, message)
+    private fun err(message: String) = Resolved(null, invalidSet(message))
+    private fun refused(wire: String) = Resolved(null, wire)
+
+    private fun invalidSet(message: String): String = PluginWire.encodePluginError("invalid-argument", message)
 
     private fun resolveSetValue(
         source: SetSource,
@@ -555,10 +559,10 @@ class TlHandles(private val policy: TlFilter.Policy) : TlListener {
                 }
             }
             is PluginWire.Value.Handle -> {
-                val source = table[decoded.id] ?: return err(PluginWire.encodeExpired())
+                val source = table[decoded.id] ?: return refused(PluginWire.encodeExpired())
                 val instance = source.target
                 if (source.readOnly) {
-                    err(PluginWire.encodePluginError("forbidden", READ_ONLY_MESSAGE))
+                    refused(PluginWire.encodePluginError("forbidden", READ_ONLY_MESSAGE))
                 } else if (!rawType.isInstance(instance)) {
                     err("type mismatch assigning handle at '$path': expected $rawType, got ${instance.javaClass}")
                 } else {

@@ -1,5 +1,7 @@
 package desu.inugram.helpers.plugins.telegram
 
+import desu.inugram.core.plugins.PluginRefusal
+import desu.inugram.core.plugins.PluginWire.refuse
 import android.util.Log
 import desu.inugram.core.plugins.PluginWire
 import desu.inugram.core.plugins.ScopeMatch
@@ -123,7 +125,7 @@ object PluginWrites {
                 OP_SET_SEND_MEDIA -> PluginSendMorph.setMedia(call)
                 else -> PluginWire.encodePluginError("internal", "account write: unknown op $op")
             }
-        } catch (e: Refused) {
+        } catch (e: PluginRefusal) {
             e.wire
         } catch (e: Exception) {
             PluginWire.encodePluginError("internal", "account write: ${e.message ?: e.toString()}")
@@ -139,9 +141,6 @@ object PluginWrites {
     private fun isChannelPeer(peer: TLObject): Boolean =
         peer is TLRPC.TL_inputPeerChannel || peer is TLRPC.TL_inputPeerChannelFromMessage
 
-    internal class Refused(val wire: String) : Exception()
-
-    internal fun refuse(code: String, message: String): Nothing = throw Refused(PluginWire.encodePluginError(code, message))
 
     internal class Call(
         val session: PluginSession,
@@ -217,7 +216,7 @@ object PluginWrites {
                 "not-found",
                 "${PeerSpecs.describeSpec(spec)} is not cached; resolve it with resolvePeer() first",
             )
-            is PeerSpecs.Built.WrongKind -> throw Refused(PeerSpecs.wrongKind(spec, built.kind))
+            is PeerSpecs.Built.WrongKind -> throw PluginRefusal(PeerSpecs.wrongKind(spec, built.kind))
             is PeerSpecs.Built.Peer -> built.value
         }
     }
@@ -227,7 +226,7 @@ object PluginWrites {
         EngineDispatch.settle(call.session, QuickJs.SETTLE_WRITES, call.requestId, "account write", release) {
             try {
                 produce()
-            } catch (e: Refused) {
+            } catch (e: PluginRefusal) {
                 e.wire
             }
         }
@@ -269,12 +268,12 @@ object PluginWrites {
 
     /**
      * a path the composer handed back runs on the plugin queue with nothing above it to catch a
-     * [Refused], and a write that refuses still owes its promise an answer
+     * [PluginRefusal], and a write that refuses still owes its promise an answer
      */
     internal fun answerRefusals(call: Call, block: () -> Unit) {
         try {
             block()
-        } catch (e: Refused) {
+        } catch (e: PluginRefusal) {
             answer(call) { e.wire }
         }
     }

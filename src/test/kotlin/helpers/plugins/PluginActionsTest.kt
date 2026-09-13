@@ -323,7 +323,7 @@ class PluginActionsTest {
     @Test
     fun anEditorOpNamingAComposerThatIsGoneIsRefusedRatherThanDroppedSilently() {
         val refusal = PluginActions.editorOp(PluginActions.EDITOR_REPLACE, 404L, """{"text":"hi"}""")
-        assertEquals("the composer this action came from is gone", refusal)
+        assertPluginError("handle-expired", refusal)
     }
 }
 

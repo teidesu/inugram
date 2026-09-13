@@ -1,5 +1,7 @@
 package desu.inugram.helpers.plugins.telegram
 
+import desu.inugram.core.plugins.PluginRefusal
+import desu.inugram.core.plugins.PluginWire.refuse
 import desu.inugram.core.plugins.PluginWire
 import desu.inugram.core.plugins.ScopeMatch
 import desu.inugram.helpers.plugins.EngineDispatch
@@ -381,7 +383,7 @@ object PluginReads {
                 OP_FETCH_MESSAGES -> fetchMessages(call)
                 else -> PluginWire.encodePluginError("internal", "account fetch: unknown op $op")
             }
-        } catch (e: NotResolved) {
+        } catch (e: PluginRefusal) {
             e.wire
         } catch (e: Exception) {
             PluginWire.encodePluginError("internal", "account fetch: ${e.message ?: e.toString()}")
@@ -427,10 +429,7 @@ object PluginReads {
         return if (limit in 1..PAGE_LIMIT) limit else PAGE_LIMIT
     }
 
-    private class NotResolved(val wire: String) : Exception()
 
-    private fun refuse(code: String, message: String): Nothing =
-        throw NotResolved(PluginWire.encodePluginError(code, message))
 
     private fun notCached(spec: String): Nothing = refuse("not-found", "${PeerSpecs.describeSpec(spec)} is not cached")
 
@@ -472,7 +471,7 @@ object PluginReads {
                     "not-found",
                     "${PeerSpecs.describeSpec(spec)} is not cached; resolve it with resolvePeer() first",
                 )
-                is PeerSpecs.Built.WrongKind -> throw NotResolved(PeerSpecs.wrongKind(spec, built.kind))
+                is PeerSpecs.Built.WrongKind -> throw PluginRefusal(PeerSpecs.wrongKind(spec, built.kind))
                 is PeerSpecs.Built.Peer -> built.value
             }
 
@@ -501,7 +500,7 @@ object PluginReads {
     private fun fetchChatFull(call: Fetch): String? {
         val spec = call.spec
         val dialogId = PeerSpecs.dialogIdOf(call.controller, call.accountId, spec) ?: notCached(spec)
-        if (dialogId >= 0) throw NotResolved(PeerSpecs.wrongKind(spec, PeerSpecs.KIND_CHANNEL))
+        if (dialogId >= 0) throw PluginRefusal(PeerSpecs.wrongKind(spec, PeerSpecs.KIND_CHANNEL))
         val cached = call.controller.getChatFull(-dialogId)
         if (cached != null) {
             answer(call) { mint(call.handles, cached) }
@@ -681,7 +680,7 @@ object PluginReads {
                     .associateBy { it.id }
                 mintEach(call.handles, ids.map { known[it] ?: fetched[it] })
             }
-        } catch (e: NotResolved) {
+        } catch (e: PluginRefusal) {
             answer(call) { e.wire }
         }
     }

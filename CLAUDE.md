@@ -162,7 +162,8 @@ Rust and Kotlin; do not add a schema/code-generation layer for them.
   reject unknown scopes for known grants. Existing API members return `not-granted`
   unless the API itself requires a grant merely to be installed.
 - Value wires and nullable error wires differ: error-only results are null on
-  success, otherwise a bare message or `P`/`R` wire, never an `E` wire.
+  success, otherwise a `P`/`R` wire, never an `E` wire. A bare message is `internal`.
+  Kotlin refuses by throwing `PluginRefusal` (`PluginWire.refuse`).
 - TL handles are per-session. Interceptor handles expire with the dispatch;
   invoke results and observed updates live with the session. App-owned objects and
   observed updates are read-only. Reject forged, expired, and read-only writes. Minting and scope bookkeeping must be atomic

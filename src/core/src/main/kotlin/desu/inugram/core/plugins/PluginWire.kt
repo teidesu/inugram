@@ -1,5 +1,11 @@
 package desu.inugram.core.plugins
 
+/**
+ * a host's refusal, carrying the error wire the engine is answered with: thrown where the refusal
+ * is decided and caught where the host answers, which is what keeps every refusal one shape
+ */
+class PluginRefusal(val wire: String) : RuntimeException(wire, null, false, false)
+
 /** Keep tags synchronized with `src/native/src/tl/proxy.rs`. */
 object PluginWire {
     sealed class Value {
@@ -65,6 +71,9 @@ object PluginWire {
     ): String = "P$code\n${grant.orEmpty()}\n${usage?.toString().orEmpty()}\n${quota?.toString().orEmpty()}\n$message"
 
     fun encodeExpired(): String = encodePluginError("handle-expired", HANDLE_EXPIRED_MESSAGE)
+
+    fun refuse(code: String, message: String, grant: String? = null): Nothing =
+        throw PluginRefusal(encodePluginError(code, message, grant = grant))
 
     fun describePluginError(wire: String): String {
         val error = decode(wire) as Value.PluginErr

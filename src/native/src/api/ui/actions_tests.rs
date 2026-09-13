@@ -392,8 +392,8 @@ fn the_row_cap_reaches_the_plugin_as_a_quota_exceeded_plugin_error() {
 }
 
 /// the other half of that rule. `action_register` answers a JNI-level failure the same way
-/// every other upcall does, and reporting one as `quota-exceeded` tells a plugin to back off a
-/// row count it is nowhere near while blaming the author for the host's bad day.
+/// every other upcall does - as `internal` - and reporting one as `quota-exceeded` tells a plugin
+/// to back off a row count it is nowhere near while blaming the author for the host's bad day.
 #[test]
 fn a_host_failure_is_not_reported_to_the_plugin_as_a_quota() {
   let (_rt, ctx, host, _state, _logs) = setup();
@@ -406,13 +406,13 @@ fn a_host_failure_is_not_reported_to_the_plugin_as_a_quota() {
                        inu.registerChatAction({ id: 'a', text: 'A', callback: () => {} });
                        return 'did not throw';
                    } catch (e) {
-                       return `${e instanceof inu.PluginError}:${e.message.includes('JNI env unavailable')}`;
+                       return `${e instanceof inu.PluginError}:${e.code}:${e.message.includes('JNI env unavailable')}`;
                    }
                })()"#,
       )
       .unwrap()
   });
-  assert_eq!(code, "false:true");
+  assert_eq!(code, "true:internal:true");
 }
 
 /// re-registering an id is the documented way to change a row, and the replacement's token is

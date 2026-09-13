@@ -94,14 +94,14 @@ fn malformed_plugin_error_wire_is_not_an_error_wire() {
 }
 
 #[test]
-fn host_error_falls_back_to_a_plain_error() {
+fn a_bare_host_refusal_is_an_internal_plugin_error() {
   let (_rt, ctx) = setup();
   let got = ctx.with(|ctx| {
     let value = host_error_to_js(&ctx, "Plugin host unavailable").unwrap();
     ctx.globals().set("e", value).unwrap();
     ctx.eval::<String, _>("e.name + '|' + e.message + '|' + (e instanceof inu.PluginError)").unwrap()
   });
-  assert_eq!(got, "Error|Plugin host unavailable|false");
+  assert_eq!(got, "PluginError|Plugin host unavailable|true");
 }
 
 #[test]
@@ -117,7 +117,7 @@ fn a_bare_host_message_keeps_its_leading_tag_letter() {
       let value = host_error_to_js(&ctx, message).unwrap();
       ctx.globals().set("e", value).unwrap();
       let got: String = ctx.eval("e.name + '|' + e.message + '|' + (e instanceof inu.PluginError)").unwrap();
-      assert_eq!(got, format!("Error|{message}|false"));
+      assert_eq!(got, format!("PluginError|{message}|true"));
     }
     // the same string on a value channel, where the tag is mandatory, is still an `E` wire
     assert!(wire_error_to_js(&ctx, "Error while assigning 'peer'").is_some());

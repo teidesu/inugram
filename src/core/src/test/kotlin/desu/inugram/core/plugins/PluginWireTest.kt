@@ -6,6 +6,15 @@ import kotlin.test.assertFailsWith
 
 class PluginWireTest {
     @Test
+    fun `a refusal carries the plugin error wire it was decided with`() {
+        val refusal = assertFailsWith<PluginRefusal> { PluginWire.refuse("not-granted", "missing grant: kv", grant = "kv") }
+        assertEquals(
+            PluginWire.Value.PluginErr(code = "not-granted", message = "missing grant: kv", grant = "kv"),
+            PluginWire.decode(refusal.wire),
+        )
+    }
+
+    @Test
     fun `round-trips null`() {
         assertEquals(PluginWire.Value.Null, PluginWire.decode(PluginWire.encodeNull()))
     }

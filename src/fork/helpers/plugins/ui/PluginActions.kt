@@ -149,11 +149,13 @@ object PluginActions {
     }
 
     fun editorOp(op: Int, surface: Long, payloadJson: String): String? {
-        if (surface !in liveEditorSurfaces) return "the composer this action came from is gone"
+        if (surface !in liveEditorSurfaces) {
+            return PluginWire.encodePluginError("handle-expired", "the composer this action came from is gone")
+        }
         val payload = try {
             JSONObject(payloadJson)
         } catch (e: Exception) {
-            return "action: ${e.message}"
+            return PluginWire.encodePluginError("invalid-argument", "action: ${e.message}")
         }
         val text = payload.optString("text")
         val entities = payload.optJSONArray("entities")?.toString()

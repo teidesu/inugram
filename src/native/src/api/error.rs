@@ -260,10 +260,12 @@ pub fn wire_error_to_js<'js>(ctx: &Ctx<'js>, wire: &str) -> Option<JsResult<Valu
   structured_error_to_js(ctx, wire)
 }
 
+/// an error channel's refusal: a `P`/`R` wire as the host built it, and anything else - which the
+/// host never sends on purpose, it being what the bridge's own failures read as - `internal`
 pub fn host_error_to_js<'js>(ctx: &Ctx<'js>, err: &str) -> JsResult<Value<'js>> {
   match structured_error_to_js(ctx, err) {
     Some(value) => value,
-    None => make_error(ctx, err),
+    None => make_plugin_error(ctx, "internal", err, None, None, None),
   }
 }
 

@@ -1,5 +1,6 @@
 package desu.inugram.helpers.plugins.telegram
 
+import desu.inugram.core.plugins.PluginRefusal
 import android.os.SystemClock
 import android.util.Log
 import desu.inugram.core.plugins.BoundedIdentitySet
@@ -346,14 +347,14 @@ object PluginRpc {
     internal fun holdMedia(session: PluginSession, dispatchId: Long, media: PluginSendMorph.Media) {
         val pending = pendingDispatches[dispatchId]
         if (pending == null || pending.session !== session) {
-            PluginWrites.refuse("invalid-argument", "setMedia: this send is no longer being intercepted")
+            PluginWire.refuse("invalid-argument", "setMedia: this send is no longer being intercepted")
         }
         val budget = chains[pending.operation.scopeId]
-            ?: PluginWrites.refuse("invalid-argument", "setMedia: this send is no longer being intercepted")
+            ?: PluginWire.refuse("invalid-argument", "setMedia: this send is no longer being intercepted")
         val message = budget.optimisticMessages?.messages?.singleOrNull()
-            ?: PluginWrites.refuse("unsupported", "setMedia: this send has no local message of its own to put media on")
+            ?: PluginWire.refuse("unsupported", "setMedia: this send has no local message of its own to put media on")
         if (PluginSendMorph.isMorphed(message)) {
-            PluginWrites.refuse("unsupported", "setMedia: this message already took its media from a plugin")
+            PluginWire.refuse("unsupported", "setMedia: this message already took its media from a plugin")
         }
         // a second setMedia replaces the first, whose copy nothing will claim
         budget.media?.upload?.discard()
@@ -1226,7 +1227,7 @@ object PluginRpc {
     private fun invokeAccountOrRefusal(prefix: String, slot: Int, startedOn: Int): Int {
         val account = if (slot == QuickJs.ANY_ACCOUNT) startedOn else slot
         if (account < 0 || account >= UserConfig.MAX_ACCOUNT_COUNT || !UserConfig.isValidAccount(account)) {
-            throw DecodeFault("invalid-argument", "$prefix: no account in slot $account")
+            PluginWire.refuse("invalid-argument", "$prefix: no account in slot $account")
         }
         return account
     }
@@ -1306,7 +1307,7 @@ object PluginRpc {
                     request = TakeoutWrapper(parseTakeoutId(takeoutId), query)
                     encode = { response, error -> encodeInvokeResult(session.tl, response, error) }
                 }
-                else -> throw DecodeFault("invalid-argument", "unknown takeout op $op")
+                else -> PluginWire.refuse("invalid-argument", "unknown takeout op $op")
             }
             account = invokeAccountOrRefusal("takeout", slot, startedOn)
         } catch (e: Exception) {
@@ -1334,7 +1335,7 @@ object PluginRpc {
     }
 
     private fun parseTakeoutId(id: String): Long =
-        id.toLongOrNull() ?: throw DecodeFault("invalid-argument", "'$id' is not a takeout session id")
+        id.toLongOrNull() ?: PluginWire.refuse("invalid-argument", "'$id' is not a takeout session id")
 
     private fun encodeTakeoutId(response: TLObject?, error: TLRPC.TL_error?): String {
         releaseUnowned(response)
@@ -1351,32 +1352,32 @@ object PluginRpc {
 
     private class TlResultError(val error: TLRPC.TL_error) : Exception("${error.code}: ${error.text}")
 
-    private class DecodeFault(val code: String, message: String) : Exception(message)
 
     private fun decodeTlObject(tl: TlHandles, wire: String): TLObject = when (val decoded = PluginWire.decode(wire)) {
         is PluginWire.Value.Handle -> {
-            if (tl.isReadOnly(decoded.id)) throw DecodeFault("forbidden", TlHandles.READ_ONLY_MESSAGE)
+            if (tl.isReadOnly(decoded.id)) PluginWire.refuse("forbidden", TlHandles.READ_ONLY_MESSAGE)
             tl.resolveTlObject(decoded.id)
-                ?: throw DecodeFault("handle-expired", PluginWire.HANDLE_EXPIRED_MESSAGE)
+                ?: PluginWire.refuse("handle-expired", PluginWire.HANDLE_EXPIRED_MESSAGE)
         }
         is PluginWire.Value.Json -> constructTlObject(JSONObject(decoded.json))
-        else -> throw DecodeFault("invalid-argument", "expected a TL object")
+        else -> PluginWire.refuse("invalid-argument", "expected a TL object")
     }
 
     private fun constructTlObject(json: JSONObject): TLObject {
         val tlName = json.optString("_", "")
-        if (tlName.isEmpty()) throw DecodeFault("invalid-argument", "a constructed TL object needs a '_' type name")
-        if (TlCtorIds.idsOf(tlName) == null) throw DecodeFault("unknown-constructor", "unknown TL type '$tlName'")
+        if (tlName.isEmpty()) PluginWire.refuse("invalid-argument", "a constructed TL object needs a '_' type name")
+        if (TlCtorIds.idsOf(tlName) == null) PluginWire.refuse("unknown-constructor", "unknown TL type '$tlName'")
         return try {
             TlJson.fromJson(json)
         } catch (e: Exception) {
-            throw DecodeFault("invalid-argument", e.message ?: e.toString())
+            PluginWire.refuse("invalid-argument", e.message ?: e.toString())
         }
     }
 
-    private fun decodeFailureWire(prefix: String, e: Exception): String = when (e) {
-        is DecodeFault -> PluginWire.encodePluginError(e.code, "$prefix: ${e.message}")
-        else -> PluginWire.encodePluginError("invalid-argument", "$prefix: ${e.message}")
+    private fun decodeFailureWire(prefix: String, e: Exception): String {
+        val refused = (e as? PluginRefusal)?.let { PluginWire.decode(it.wire) as? PluginWire.Value.PluginErr }
+            ?: return PluginWire.encodePluginError("invalid-argument", "$prefix: ${e.message}")
+        return PluginWire.encodePluginError(refused.code, "$prefix: ${refused.message}", refused.grant)
     }
 
     private fun decodeTlValueOrError(tl: TlHandles, wire: String): TLObject? = when (val decoded = PluginWire.decode(wire)) {
