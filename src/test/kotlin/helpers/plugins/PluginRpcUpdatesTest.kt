@@ -46,6 +46,24 @@ class PluginRpcUpdatesTest {
         assertTrue(handleOf(plugin.js.updates[0].updateWire).readOnly, "an app-owned object is never writable")
     }
 
+    /** the wire a read mints: the class for ordinal reads, the scalars so reading them never crosses */
+    @Test
+    fun an_observed_update_carries_its_class_and_its_scalars() {
+        val plugin = listener("updateNewMessage")
+        val update = newMessage(1)
+
+        deliverUpdates(batchOf(update), 0)
+        drain()
+
+        val wire = plugin.js.updates.single().updateWire
+        val id = handleId(wire)
+        val tl = plugin.session!!.tl
+        assertEquals(
+            PluginWire.encodeHandle(vector = false, id = id, readOnly = true, projection = tl.project(id), classId = tl.classIdOf(update.javaClass)),
+            wire,
+        )
+    }
+
     @Test
     fun a_plugin_that_named_another_constructor_gets_nothing() {
         val plugin = listener("updateUserTyping")

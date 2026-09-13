@@ -1,5 +1,6 @@
 package desu.inugram.helpers.plugins
 
+import desu.inugram.core.plugins.PluginWire
 import desu.inugram.helpers.plugins.telegram.PluginUpdates
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
@@ -99,8 +100,14 @@ class PluginRpcUpdateChainTest {
         deliverUpdates(batchOf(update))
         drain()
 
-        val handle = handleOf(plugin.js.updateDispatches[0].updateWire)
+        val wire = plugin.js.updateDispatches[0].updateWire
+        val handle = handleOf(wire)
         assertFalse(handle.readOnly, "rewriting in place is the point of this api")
+        assertEquals(
+            PluginWire.encodeHandle(vector = false, id = handle.id, readOnly = false, classId = plugin.session!!.tl.classIdOf(update.javaClass)),
+            wire,
+            "a dispatch view caches nothing, so no scalars ride along",
+        )
         assertNull(plugin.resolved(handle.id), "the batch's scope is released before the app applies it")
     }
 
