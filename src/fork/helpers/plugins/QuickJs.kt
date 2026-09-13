@@ -202,6 +202,10 @@ open class QuickJs {
     /** [picked] null == dismissed, else a comma-separated index list - one in single mode, any number in multiple */
     fun resolveChooser(requestId: Long, picked: String?) = requireLive { nativeResolveChooser(it, requestId, picked) }
 
+    /** [answer] is the picked files as json or `"1"`/`"0"` for a save; [error] replaces it with a rejection */
+    fun resolveFileRequest(requestId: Long, answer: String?, error: String?) =
+        requireLive { nativeResolveFileRequest(it, requestId, answer, error) }
+
     /** the diff is the host's ([desu.inugram.core.plugins.ScreenStack]), so only call this for an actual change */
     fun dispatchScreenChange(changeJson: String, stackJson: String) = requireLive { nativeDispatchScreenChange(it, changeJson, stackJson) }
 
@@ -325,7 +329,6 @@ open class QuickJs {
     private external fun nativeJvmRelease(ptr: Long, id: Long)
     private external fun nativeJvmClose(ptr: Long)
     private external fun nativeFetchResult(ptr: Long, requestId: Long, resultWire: String)
-
     private external fun nativeCanvasResult(ptr: Long, requestId: Long, resultWire: String)
     private external fun nativeResolveDialog(ptr: Long, requestId: Long, result: String)
     private external fun nativeNotifyUnload(ptr: Long)
@@ -338,6 +341,7 @@ open class QuickJs {
     private external fun nativeDispatchAction(ptr: Long, kind: Int, token: Int, surfaceJson: String)
     private external fun nativeResolvePrompt(ptr: Long, requestId: Long, text: String?)
     private external fun nativeResolveChooser(ptr: Long, requestId: Long, picked: String?)
+    private external fun nativeResolveFileRequest(ptr: Long, requestId: Long, answer: String?, error: String?)
     private external fun nativeDispatchScreenChange(ptr: Long, changeJson: String, stackJson: String)
     private external fun nativeDispatchNotification(ptr: Long, callbackId: Int, name: String, accountId: Int, argsJson: String)
     private external fun nativeResolvePeerResult(ptr: Long, requestId: Long, resultWire: String)

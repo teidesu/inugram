@@ -1,3 +1,4 @@
+use crate::api::ui::files::FilesState;
 use crate::runtime::pump_jobs;
 use std::cell::Cell;
 use std::ops::Deref;
@@ -15,12 +16,7 @@ use crate::{
     io::fetch::FetchState,
     lifecycle::LifecycleState,
     platform::{jvm::JvmState, notifications::NotificationState, xposed::XposedState},
-    telegram::{
-      account::AccountState,
-      reads::ReadsState,
-      rpc::RpcState,
-      writes::WritesState,
-    },
+    telegram::{account::AccountState, reads::ReadsState, rpc::RpcState, writes::WritesState},
     timers::TimerState,
     ui::{actions::ActionState, dialogs::DialogState, pages::UiState, screens::ScreenState},
   },
@@ -78,13 +74,22 @@ pub(crate) fn insert_engine(engine: Engine) -> jlong {
     .get_or_init(|| Mutex::new(SlotMap::with_key()))
     .lock()
     .unwrap_or_else(|e| e.into_inner())
-    .insert(EngineSlot { engine: Serialized::new(TransferEngine(engine)), jvm_refs })
+    .insert(EngineSlot {
+      engine: Serialized::new(TransferEngine(engine)),
+      jvm_refs,
+    })
     .data()
     .as_ffi() as jlong
 }
 
 pub(crate) fn engine_jvm_refs(handle: jlong) -> Option<Arc<crate::api::platform::jvm::RefTable>> {
-  ENGINES.get()?.lock().unwrap_or_else(|e| e.into_inner()).get(get_engine_key(handle))?.jvm_refs.clone()
+  ENGINES
+    .get()?
+    .lock()
+    .unwrap_or_else(|e| e.into_inner())
+    .get(get_engine_key(handle))?
+    .jvm_refs
+    .clone()
 }
 
 fn get_engine(handle: jlong) -> Option<Lease<TransferEngine>> {
@@ -147,6 +152,7 @@ pub(crate) struct Engine {
   pub(crate) writes: Rc<WritesState>,
   pub(crate) fetch: Rc<FetchState>,
   pub(crate) canvas: Rc<CanvasState>,
+  pub(crate) files: Rc<FilesState>,
   pub(crate) timers: Rc<TimerState>,
   pub(crate) notifications: Rc<NotificationState>,
   pub(crate) jvm: Option<Rc<JvmState>>,

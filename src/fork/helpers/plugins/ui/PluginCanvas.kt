@@ -18,6 +18,7 @@ import android.graphics.SweepGradient
 import android.graphics.Typeface
 import android.os.Build
 import desu.inugram.core.plugins.PluginWire
+import desu.inugram.helpers.font.FontId
 import desu.inugram.helpers.font.FontLibrary
 import desu.inugram.helpers.plugins.CanvasListener
 import desu.inugram.helpers.plugins.EngineDispatch
@@ -32,6 +33,7 @@ import java.nio.ByteOrder
 import java.util.concurrent.Executor
 import java.util.concurrent.Executors
 import java.util.concurrent.ThreadFactory
+import org.json.JSONArray
 import org.json.JSONObject
 
 /**
@@ -73,6 +75,7 @@ object PluginCanvas {
     const val OP_ENCODER_FINISH = 15
     const val OP_ENCODER_DESTROY = 16
     const val OP_ANIMATION_NEXT = 17
+    const val OP_LIST_FONTS = 18
 
     private const val FIELD = '\u001e'
     private const val ITEM = '\u001f'
@@ -189,6 +192,7 @@ object PluginCanvas {
                 ""
             }
             OP_LOAD_FONT -> loadFont(arg)
+            OP_LIST_FONTS -> listFonts(arg)
             OP_DECODE_ANIMATION -> decodeAnimation(id, arg)
             OP_ANIMATION_FRAME -> animationFrame(id, arg)
             OP_ANIMATION_NEXT -> animationNext(id, arg)
@@ -730,6 +734,42 @@ object PluginCanvas {
                     )
                     session.engine.canvasResult(requestId, wire)
                 }
+            }
+            return ""
+        }
+
+        /**
+         * The families a `ctx.font` resolves to: whatever this plugin loaded for itself, then the
+         * app's own roster, whose entries answer their name through the localized strings. The roster
+         * carries the device's own families only while the app is set to include them, which is the
+         * app's setting and not this one's. Off the engine's queue, the roster being read from disk.
+         */
+        private fun listFonts(arg: String): String {
+            val requestId = arg.toLongOrNull() ?: refuse("internal", "canvas: malformed request")
+            val own = fonts.keys.toList()
+            submit(requestId) {
+                val out = JSONArray()
+                for (name in own) {
+                    out.put(JSONObject().put("name", name).put("source", "plugin").put("hidden", false))
+                }
+                for (font in FontLibrary.getCachedRoster()) {
+                    val name = FontLibrary.getFontName(font)
+                    // a name this plugin loaded is that font, since that is the one `typefaceFor`
+                    // picks, so listing the roster's too would be two entries nothing can tell apart
+                    if (own.any { it.equals(name, ignoreCase = true) }) continue
+                    val source = when (font) {
+                        is FontId.Builtin -> "builtin"
+                        is FontId.System -> "device"
+                        is FontId.Family -> "imported"
+                    }
+                    out.put(
+                        JSONObject()
+                            .put("name", name)
+                            .put("source", source)
+                            .put("hidden", FontLibrary.isHidden(font)),
+                    )
+                }
+                "J$out"
             }
             return ""
         }

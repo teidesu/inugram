@@ -110,6 +110,34 @@ impl BlobState {
     })
   }
 
+  /// Takes a file the host already wrote as this plugin's spilled content: nothing is copied, the
+  /// bytes count against the spill budget like any other, and the file is deleted when the blob is.
+  fn adopt_spill(self: &Rc<Self>, ctx: &Ctx<'_>, path: &Path, len: u64) -> Result<SpillFile, BlobFault> {
+    if self.open_spills.get() >= self.limits.spill_files {
+      ctx.run_gc();
+    }
+    if self.open_spills.get() >= self.limits.spill_files {
+      return Err(BlobFault::Quota {
+        usage: self.open_spills.get() as u64 + 1,
+        quota: self.limits.spill_files as u64,
+        message: format!(
+          "this plugin already holds {} blobs too large to keep in memory, which is all the open files it may have; dispose the ones it is done with",
+          self.open_spills.get(),
+        ),
+      });
+    }
+    let file = fs::OpenOptions::new().read(true).open(path).map_err(io_fault)?;
+    self.open_spills.set(self.open_spills.get() + 1);
+    let spill = SpillFile {
+      state: self.clone(),
+      file,
+      path: path.to_path_buf(),
+      charged: Cell::new(0),
+    };
+    spill.reserve(ctx, len)?;
+    Ok(spill)
+  }
+
   fn release_spill(&self, bytes: u64) {
     self.spilled.set(self.spilled.get().saturating_sub(bytes));
     self.open_spills.set(self.open_spills.get().saturating_sub(1));
@@ -689,6 +717,44 @@ impl BlobState {
 
 fn now_millis() -> f64 {
   SystemTime::now().duration_since(UNIX_EPOCH).map(|d| d.as_millis() as f64).unwrap_or(0.0)
+}
+
+/// A file the host wrote for this plugin alone, handed over as a `File` that owns it: reading it is
+/// reading the file, and disposing the handle deletes it.
+pub fn mint_owned_file<'js>(
+  ctx: &Ctx<'js>,
+  blobs: &Rc<BlobState>,
+  path: &Path,
+  size: u64,
+  mime: &str,
+  name: &str,
+  mtime_ms: i64,
+) -> JsResult<Value<'js>> {
+  let spill = match blobs.adopt_spill(ctx, path, size) {
+    Ok(spill) => spill,
+    Err(fault) => return fault.throw(ctx),
+  };
+  let backing = Rc::new(Backing {
+    kind: RefCell::new(BackingKind::Spill(spill)),
+    len: size,
+  });
+  let handle = BlobHandle {
+    backing: RefCell::new(Some(backing)),
+    start: 0,
+    end: size,
+    mime: normalize_mime(mime),
+    owns_backing: true,
+    export_id: Cell::new(None),
+    meta: Some(FileMeta {
+      name: sanitize_name(name),
+      last_modified: mtime_ms as f64,
+    }),
+  };
+  let instance = Class::instance(ctx.clone(), handle)?;
+  if let Some(proto) = file_prototype(ctx)? {
+    instance.as_inner().set_prototype(Some(&proto))?;
+  }
+  Ok(instance.into_value())
 }
 
 pub fn mint_app_file<'js>(

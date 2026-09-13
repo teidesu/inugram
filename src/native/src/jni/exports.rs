@@ -19,6 +19,7 @@ use crate::api::canvas::{self, install_canvas, CanvasHost};
 use crate::api::error::{dispose_rejection_tracker, format_exception, install_plugin_error, install_rejection_tracker};
 use crate::api::globals::{install_globals, RandomHost};
 use crate::api::info::{install_inu, InuInfo};
+use crate::api::io::blob::BlobState;
 use crate::api::io::fetch::{install_fetch, FetchHost};
 use crate::api::io::fs::install_fs;
 use crate::api::io::kv::install_kv;
@@ -38,6 +39,7 @@ use crate::api::tl::proxy::TlViews;
 use crate::api::tl::utils::{install_utils_with_host, UtilsHost};
 use crate::api::ui::actions::{install_actions, ActionHost};
 use crate::api::ui::dialogs::install_dialogs;
+use crate::api::ui::files::{install_files, FilesHost, FilesState};
 use crate::api::ui::icons::{install_icons, IconHost};
 use crate::api::ui::pages::{install_ui, UiHost};
 use crate::api::ui::screens::{install_screens, ScreenHost};
@@ -206,6 +208,21 @@ pub extern "system" fn Java_desu_inugram_helpers_plugins_QuickJs_nativeCreate(
         })
         .map_err(|e| log(&format!("inu.canvas failed to install: {e:?}")))
         .ok()?;
+      let files_host: Rc<dyn FilesHost> = bridge.clone();
+      let files = ctx
+        .with(|ctx| {
+          let globals = Globals::get(&ctx)?;
+          install_files(
+            &ctx,
+            files_host,
+            blobs.clone(),
+            if transfer_dir.as_os_str().is_empty() { spill_dir.clone() } else { transfer_dir.clone() },
+            log.clone(),
+            &globals,
+          )
+        })
+        .map_err(|e| log(&format!("inu.ui.pickFile failed to install: {e:?}")))
+        .ok()?;
       let reads_host: Rc<dyn ReadsHost> = bridge.clone();
       let writes_host: Rc<dyn WritesHost> = bridge.clone();
       let (shared, reads, writes) = ctx
@@ -248,6 +265,7 @@ pub extern "system" fn Java_desu_inugram_helpers_plugins_QuickJs_nativeCreate(
           &ctx,
           &blobs,
           &canvas,
+          &files,
           &fs_dir,
           fs_quota_bytes,
           fs_unscoped,
@@ -275,6 +293,7 @@ pub extern "system" fn Java_desu_inugram_helpers_plugins_QuickJs_nativeCreate(
         writes,
         fetch,
         canvas,
+        files,
         timers,
         notifications,
         jvm,
@@ -663,8 +682,9 @@ pub extern "system" fn Java_desu_inugram_helpers_plugins_QuickJs_nativePumpJobs(
 
 fn install_engine_fs(
   ctx: &Context,
-  blobs: &Rc<crate::api::io::blob::BlobState>,
+  blobs: &Rc<BlobState>,
   canvas: &Rc<canvas::CanvasState>,
+  files: &Rc<FilesState>,
   dir: &Path,
   quota_bytes: jlong,
   unscoped: jboolean,
@@ -686,7 +706,8 @@ fn install_engine_fs(
     })
     .map_err(|e| log(&format!("inu.fs failed to install: {e:?}")))
     .ok()?;
-  canvas.attach_fs(state);
+  canvas.attach_fs(state.clone());
+  files.attach_fs(state);
   Some(())
 }
 
@@ -906,6 +927,27 @@ pub extern "system" fn Java_desu_inugram_helpers_plugins_QuickJs_nativeResolveCh
     let state = &engine.dialogs;
     let picked = if picked.is_null() { None } else { Some(jstring_to_string(env, &picked)) };
     state.resolve_chooser(&engine._rt, &engine.ctx, request_id, picked.as_deref());
+  })
+}
+
+#[no_mangle]
+pub extern "system" fn Java_desu_inugram_helpers_plugins_QuickJs_nativeResolveFileRequest(
+  mut env: EnvUnowned,
+  _this: JObject,
+  ptr: jlong,
+  request_id: jlong,
+  answer: JString,
+  error: JString,
+) {
+  in_env(&mut env, (), |env| {
+    let _deadline = crate::sandbox::limits::arm_entry_deadline();
+    let Some(engine) = get_engine(ptr) else {
+      return;
+    };
+    let state = &engine.files;
+    let answer = if answer.is_null() { String::new() } else { jstring_to_string(env, &answer) };
+    let error = if error.is_null() { None } else { Some(jstring_to_string(env, &error)) };
+    state.resolve(&engine._rt, &engine.ctx, request_id, &answer, error.as_deref());
   })
 }
 
@@ -1374,6 +1416,7 @@ pub extern "system" fn Java_desu_inugram_helpers_plugins_QuickJs_nativeDestroy(
     engine.lifecycle_state.dispose(&engine.ctx);
     engine.dialogs.dispose(&engine.ctx);
     engine.ui.dispose(&engine.ctx);
+    engine.files.dispose(&engine.ctx);
     engine.screens.dispose(&engine.ctx);
     engine.actions.dispose(&engine.ctx);
     engine.writes.dispose(&engine.ctx);

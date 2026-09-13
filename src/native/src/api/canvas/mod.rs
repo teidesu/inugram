@@ -4,7 +4,6 @@ pub(crate) mod geometry;
 use std::cell::{Cell, RefCell};
 use std::collections::HashMap;
 use std::fs;
-use std::io::Write;
 use std::path::PathBuf;
 use std::rc::{Rc, Weak};
 
@@ -12,14 +11,15 @@ use rquickjs::class::{JsClass, Readable, Trace, Tracer};
 use rquickjs::function::{Constructor, Opt, Rest, This};
 use rquickjs::object::{Accessor, Property};
 use rquickjs::{
-  Class, Coerced, Ctx, Exception, FromJs, Function, JsLifetime, Object, Result as JsResult, Runtime, TypedArray, Value,
+  Class, Coerced, Ctx, Exception, FromJs, Function, JsLifetime, Object, Result as JsResult, Runtime, Value,
 };
 
 use crate::api::canvas::css::{parse_color, parse_font, Font};
 use crate::api::canvas::geometry::{finite, normalize_round_rect, ArcError, Matrix, Path, Verb};
 use crate::api::error::format_exception;
 use crate::api::error::{wire_error_to_js, PluginErrorCode};
-use crate::api::io::blob::{mint_app_file, BlobHandle, BlobState, BUILD_LIMIT_BYTES};
+use crate::api::io::blob::{mint_app_file, BlobState, BUILD_LIMIT_BYTES};
+use crate::api::io::staging::{SourceStager, StagedSource};
 use crate::api::io::fs::FsState;
 use crate::runtime::{pump_jobs, PendingSettle};
 use crate::sandbox::limits::{ExternalCharge, ExternalMemory};
@@ -34,7 +34,6 @@ pub const MAX_SOURCE_BYTES: u64 = BUILD_LIMIT_BYTES;
 
 const FLUSH_AT_BYTES: usize = 1024 * 1024;
 
-const STAGE_CHUNK_BYTES: u64 = 256 * 1024;
 
 pub const OP_CREATE: i32 = 0;
 pub const OP_DESTROY: i32 = 1;
@@ -54,6 +53,7 @@ pub const OP_ENCODER_FRAME: i32 = 14;
 pub const OP_ENCODER_FINISH: i32 = 15;
 pub const OP_ENCODER_DESTROY: i32 = 16;
 pub const OP_ANIMATION_NEXT: i32 = 17;
+pub const OP_LIST_FONTS: i32 = 18;
 
 pub const MAX_ANIMATIONS: usize = 4;
 pub const MAX_ENCODERS: usize = 2;
@@ -612,6 +612,8 @@ enum PendingKind {
   },
   /// the request answers nothing, and the promise resolves `undefined`
   Ack,
+  /// the request answers with json, and the promise resolves whatever it parses to
+  Json,
   Animation {
     id: i64,
     /// held here so a decode that never opens deletes the source it staged
@@ -635,15 +637,12 @@ struct Pending {
 
 pub struct CanvasState {
   host: Rc<dyn CanvasHost>,
-  blobs: Rc<BlobState>,
-  fs: RefCell<Option<Rc<FsState>>>,
+  sources: SourceStager,
   external: Rc<ExternalMemory>,
   log: crate::Log,
-  stage_dir: PathBuf,
   blend_modes: Cell<bool>,
   next_id: RequestIds,
   next_request: RequestIds,
-  next_staged: RequestIds,
   pending: RefCell<HashMap<i64, Pending>>,
   surfaces: RefCell<Vec<Weak<Surface>>>,
   animations: RefCell<Vec<Weak<AnimationData>>>,
@@ -917,84 +916,6 @@ impl Font {
 }
 
 impl CanvasState {
-  fn stage_source<'js>(self: &Rc<Self>, ctx: &Ctx<'js>, value: &Value<'js>) -> JsResult<(PathBuf, bool)> {
-    let state = self;
-    if let Ok(typed) = TypedArray::<u8>::from_value(value.clone()) {
-      let Some(bytes) = typed.as_bytes() else {
-        return invalid(ctx, "this Uint8Array is detached");
-      };
-      check_source_limit(ctx, bytes.len() as u64)?;
-      return Ok((state.write_staged(ctx, |file| file.write_all(bytes))?, true));
-    }
-    if rquickjs::Class::<BlobHandle>::from_value(value).is_ok() {
-      let Some(exported) = state.blobs.export_for_host(value) else {
-        return expired(ctx, "this blob has been disposed");
-      };
-      let Some(id) = exported.strip_prefix('B').and_then(|v| v.split(':').next()).and_then(|v| v.parse().ok()) else {
-        return PluginErrorCode::Internal.throw(ctx, "this blob could not be handed over");
-      };
-      let Some(export) = state.blobs.resolve_export(id) else {
-        return expired(ctx, "this blob has been disposed");
-      };
-      let len = export.len();
-      check_source_limit(ctx, len)?;
-      let path = state.write_staged(ctx, |file| {
-        let mut at = 0u64;
-        while at < len {
-          let take = STAGE_CHUNK_BYTES.min(len - at);
-          let chunk = export
-            .read(at, take)
-            .map_err(|_| std::io::Error::other("this blob's content is no longer readable"))?;
-          file.write_all(&chunk)?;
-          at += take;
-        }
-        Ok(())
-      })?;
-      return Ok((path, true));
-    }
-    if let Some(object) = value.as_object() {
-      if let Some(path) = object.get::<_, Option<String>>("path")? {
-        let Some(fs) = state.fs.borrow().clone() else {
-          return PluginErrorCode::NotGranted("fs").throw(ctx, "naming a file needs @grant fs");
-        };
-        return Ok((fs.resolve_external(ctx, &path)?, false));
-      }
-    }
-    invalid(ctx, "expected a Blob, a Uint8Array or { path }")
-  }
-}
-
-fn check_source_limit(ctx: &Ctx<'_>, len: u64) -> JsResult<()> {
-  if len <= MAX_SOURCE_BYTES {
-    return Ok(());
-  }
-  PluginErrorCode::QuotaExceeded(len as i64, MAX_SOURCE_BYTES as i64).throw(
-    ctx,
-    &format!("this source is {len} bytes; at most {} may be handed to inu.canvas in one call", MAX_SOURCE_BYTES,),
-  )
-}
-
-impl CanvasState {
-  fn write_staged<'js>(
-    &self,
-    ctx: &Ctx<'js>,
-    fill: impl FnOnce(&mut fs::File) -> std::io::Result<()>,
-  ) -> JsResult<PathBuf> {
-    if self.stage_dir.as_os_str().is_empty() {
-      return PluginErrorCode::Internal.throw(ctx, "this engine has no directory to stage a source in");
-    }
-    let n = self.next_staged.alloc();
-    let path = self.stage_dir.join(format!("canvas-{n}.bin"));
-    let written = fs::create_dir_all(&self.stage_dir)
-      .and_then(|_| fs::File::create(&path))
-      .and_then(|mut file| fill(&mut file).and_then(|_| file.sync_all()));
-    if let Err(e) = written {
-      let _ = fs::remove_file(&path);
-      return PluginErrorCode::Internal.throw(ctx, &format!("staging this source failed: {e}"));
-    }
-    Ok(path)
-  }
-
   fn take_pending(&self, request_id: i64) -> Option<Pending> {
     self.pending.borrow_mut().remove(&request_id)
   }
@@ -1077,15 +998,12 @@ pub fn install_canvas<'js>(
 ) -> JsResult<Rc<CanvasState>> {
   let state = Rc::new(CanvasState {
     host,
-    blobs,
-    fs: RefCell::new(None),
+    sources: SourceStager::new(blobs, stage_dir, "canvas", MAX_SOURCE_BYTES, "inu.canvas"),
     external,
     log,
-    stage_dir,
     blend_modes: Cell::new(false),
     next_id: RequestIds::default(),
     next_request: RequestIds::default(),
-    next_staged: RequestIds::default(),
     pending: RefCell::new(HashMap::new()),
     surfaces: RefCell::new(Vec::new()),
     animations: RefCell::new(Vec::new()),
@@ -1167,6 +1085,14 @@ impl CanvasState {
       })?,
     )?;
 
+    let owned = self.clone();
+    canvas.set(
+      "listFonts",
+      Function::new(ctx.clone(), move |ctx: Ctx<'js>| -> JsResult<Value<'js>> {
+        owned.start_op(&ctx, PendingKind::Json, OP_LIST_FONTS, 0, &|request_id| request_id.to_string(), None)
+      })?,
+    )?;
+
     globals.inu.set("canvas", canvas)?;
     Ok(())
   }
@@ -1199,7 +1125,7 @@ impl CanvasState {
         check_dimensions(ctx, width, height)?;
       }
     }
-    let (path, staged) = state.stage_source(ctx, source)?;
+    let StagedSource { path, owned } = state.sources.stage(ctx, source)?;
     let id = state.next_id.alloc();
     let describe =
       |request_id: i64| format!("{request_id}{FIELD}{width}{FIELD}{height}{FIELD}{}", path.to_string_lossy());
@@ -1207,7 +1133,7 @@ impl CanvasState {
       ctx,
       PendingKind::Animation {
         id,
-        staged: staged.then(|| StagedFile(path.clone())),
+        staged: owned.then(|| StagedFile(path.clone())),
       },
       OP_DECODE_ANIMATION,
       id,
@@ -1296,7 +1222,7 @@ impl CanvasState {
     if is_font && family.is_empty() {
       return invalid(ctx, "loadFont: the family name is empty");
     }
-    let (path, staged) = state.stage_source(ctx, source)?;
+    let StagedSource { path, owned } = state.sources.stage(ctx, source)?;
     let (kind, op, id) = if is_font {
       (PendingKind::Ack, OP_LOAD_FONT, 0)
     } else {
@@ -1311,7 +1237,7 @@ impl CanvasState {
         format!("{request_id}{FIELD}{}", path.to_string_lossy())
       }
     };
-    state.start_op(ctx, kind, op, id, &describe, staged.then(|| StagedFile(path.clone())))
+    state.start_op(ctx, kind, op, id, &describe, owned.then(|| StagedFile(path.clone())))
   }
 
   /// the placeholder a decode's answer takes its id from; it owns no bitmap until the host answers
@@ -1495,6 +1421,12 @@ impl CanvasState {
   fn build_answer<'js>(self: &Rc<Self>, ctx: &Ctx<'js>, kind: &mut PendingKind, wire: &str) -> JsResult<Value<'js>> {
     match kind {
       PendingKind::Ack | PendingKind::EncoderFrame { .. } => Ok(Value::new_undefined(ctx.clone())),
+      PendingKind::Json => {
+        let json = wire
+          .strip_prefix('J')
+          .ok_or_else(|| Exception::throw_message(ctx, "canvas: malformed host answer"))?;
+        ctx.json_parse(json)
+      }
       PendingKind::Animation { id, staged } => {
         let object = parse_answer(ctx, wire)?;
         let width: i32 = object.get("width")?;
@@ -1632,7 +1564,7 @@ fn parse_answer<'js>(ctx: &Ctx<'js>, wire: &str) -> JsResult<Object<'js>> {
 impl CanvasState {
   pub fn attach_fs(self: &Rc<Self>, fs: Rc<FsState>) {
     let state = self;
-    *state.fs.borrow_mut() = Some(fs);
+    state.sources.attach_fs(fs);
   }
 
   pub fn resolve(self: &Rc<Self>, rt: &Runtime, context: &rquickjs::Context, request_id: i64, result_wire: &str) {

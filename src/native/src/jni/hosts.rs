@@ -18,6 +18,7 @@ use crate::api::tl::proxy::{TlHost, ORDINAL_FALLBACK};
 use crate::api::tl::utils::UtilsHost;
 use crate::api::ui::actions::ActionHost;
 use crate::api::ui::dialogs::DialogHost;
+use crate::api::ui::files::FilesHost;
 use crate::api::ui::icons::IconHost;
 use crate::api::ui::pages::UiHost;
 use crate::api::ui::screens::ScreenHost;
@@ -128,20 +129,11 @@ impl TlHost for JniBridge {
   }
 
   fn tl_resolve_field(&self, class_id: i32, key: &str) -> i32 {
-    self.call_int(
-      "tlResolveField",
-      self.on_tl_resolve_field,
-      &[Arg::Int(class_id), Arg::Str(key)],
-      ORDINAL_FALLBACK,
-    )
+    self.call_int("tlResolveField", self.on_tl_resolve_field, &[Arg::Int(class_id), Arg::Str(key)], ORDINAL_FALLBACK)
   }
 
   fn tl_read_field(&self, handle: i64, class_id: i32, ordinal: i32) -> i32 {
-    let args = [
-      JValue::Long(handle).as_jni(),
-      JValue::Int(class_id).as_jni(),
-      JValue::Int(ordinal).as_jni(),
-    ];
+    let args = [JValue::Long(handle).as_jni(), JValue::Int(class_id).as_jni(), JValue::Int(ordinal).as_jni()];
     self.call_int_prims("tlReadField", self.on_tl_read_field, &args, ORDINAL_FALLBACK)
   }
 
@@ -291,6 +283,12 @@ impl NotificationHost for JniBridge {
   }
 }
 
+impl FilesHost for JniBridge {
+  fn ui_files(&self, op: i32, request_id: i64, options_json: &str) -> Option<String> {
+    self.ui_modal(op, request_id, options_json)
+  }
+}
+
 impl UiHost for JniBridge {
   fn ui_prompt(&self, request_id: i64, options_json: &str) -> Option<String> {
     self.ui_modal(OP_PROMPT, request_id, options_json)
@@ -354,11 +352,7 @@ impl JvmReflectHost for JniBridge {
     mode: i32,
   ) -> Result<JObjectArray<'l, JObject<'l>>, String> {
     let name = Self::new_jstring(env, "jvmResolve", name)?;
-    let args = [
-      JValue::Object(target).as_jni(),
-      JValue::Object(&*name).as_jni(),
-      JValue::Int(mode).as_jni(),
-    ];
+    let args = [JValue::Object(target).as_jni(), JValue::Object(&*name).as_jni(), JValue::Int(mode).as_jni()];
     let result = unsafe { env.call_method_unchecked(&self.target, self.on_jvm_resolve, ReturnType::Object, &args) };
     if clear_exception(env) {
       return Err("jvmResolve: host callback threw".to_string());
