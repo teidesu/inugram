@@ -2,7 +2,8 @@ use std::fs;
 use std::path::PathBuf;
 use std::rc::Rc;
 
-use rquickjs::{Ctx, Function, Object, Result as JsResult, Runtime, TypedArray, Value};
+use rquickjs::convert::Coerced;
+use rquickjs::{Ctx, Exception, Function, Object, Result as JsResult, Runtime, TypedArray, Value};
 
 use crate::api::error::PluginErrorCode;
 use crate::api::io::blob::{mint_app_file, BlobState, BUILD_LIMIT_BYTES};
@@ -12,8 +13,15 @@ use crate::utils::prelude;
 
 const PRELUDE: &[u8] = include_bytes!(concat!(env!("OUT_DIR"), "/fetch.qbc"));
 
+pub struct Spec {
+  pub method: String,
+  pub redirect: String,
+  /// `name, value` pairs, names lowercased, in the order the plugin wrote them
+  pub headers: Vec<String>,
+}
+
 pub trait FetchHost {
-  fn send(&self, request_id: i64, url: &str, spec_json: &str, body: Option<&[u8]>) -> Option<String>;
+  fn send(&self, request_id: i64, url: &str, spec: &Spec, body: Option<&[u8]>) -> Option<String>;
 
   fn abort(&self, request_id: i64);
 }
@@ -28,6 +36,68 @@ pub struct FetchState {
 
 fn parse_target(url: &str) -> Result<String, String> {
   crate::api::url::parse_http_url("fetch", url)
+}
+
+/// rfc7230's token, which is what a header name and a method are allowed to be
+fn is_token(value: &str) -> bool {
+  !value.is_empty() && value.bytes().all(|b| b.is_ascii_alphanumeric() || b"!#$%&'*+-.^_`|~".contains(&b))
+}
+
+/// headers the transport owns: okhttp has no restricted-name list of its own and supplies `Host`
+/// only when it is absent, so one of these from a plugin goes on the wire
+const RESERVED_HEADERS: [&str; 8] =
+  ["host", "content-length", "connection", "transfer-encoding", "upgrade", "keep-alive", "te", "trailer"];
+
+const REDIRECT_MODES: [&str; 3] = ["follow", "manual", "error"];
+
+fn coerce_string<'js>(ctx: &Ctx<'js>, value: Value<'js>) -> JsResult<String> {
+  Ok(value.get::<Coerced<String>>().map_err(|_| Exception::throw_type(ctx, "fetch: expected a string"))?.0)
+}
+
+fn read_spec<'js>(ctx: &Ctx<'js>, method: Value<'js>, headers: Value<'js>, redirect: Value<'js>) -> JsResult<Spec> {
+  let invalid = |message: String| PluginErrorCode::InvalidArgument.throw::<Spec>(ctx, &message);
+  let redirect = if redirect.is_undefined() { "follow".to_string() } else { coerce_string(ctx, redirect)? };
+  if !REDIRECT_MODES.contains(&redirect.as_str()) {
+    return invalid(format!("fetch: '{redirect}' is not a redirect mode"));
+  }
+  let method = if method.is_undefined() { "GET".to_string() } else { coerce_string(ctx, method)? };
+  if !is_token(&method) {
+    return invalid(format!("fetch: '{method}' is not a method"));
+  }
+  let mut pairs = Vec::new();
+  if !headers.is_undefined() && !headers.is_null() {
+    let Some(object) = headers.as_object() else {
+      return invalid("fetch: headers must be an object".to_string());
+    };
+    for key in object.keys::<String>() {
+      let key = key?;
+      if !is_token(&key) {
+        return invalid(format!("fetch: '{key}' is not a header name"));
+      }
+      let name = key.to_ascii_lowercase();
+      if RESERVED_HEADERS.contains(&name.as_str()) {
+        return invalid(format!("fetch: the '{key}' header belongs to the transport"));
+      }
+      let value: Value = object.get(&key)?;
+      let values = match value.as_array() {
+        Some(array) => array.iter::<Value>().collect::<JsResult<Vec<_>>>()?,
+        None => vec![value],
+      };
+      for one in values {
+        let Some(text) = one.as_string() else {
+          return invalid(format!("fetch: the '{key}' header must be a string"));
+        };
+        let text = text.to_string()?;
+        // a line break in a value is a second header, and a request the plugin did not write
+        if text.chars().any(|c| (c < ' ' && c != '\t') || c == '\u{7f}') {
+          return invalid(format!("fetch: the '{key}' header has a control character in it"));
+        }
+        pairs.push(name.clone());
+        pairs.push(text);
+      }
+    }
+  }
+  Ok(Spec { method: method.to_ascii_uppercase(), redirect, headers: pairs })
 }
 
 enum BodyError {
@@ -103,10 +173,9 @@ impl FetchState {
     self: &Rc<Self>,
     ctx: &Ctx<'js>,
     url: String,
-    spec: Value<'js>,
+    spec: Spec,
     body: Value<'js>,
   ) -> JsResult<Object<'js>> {
-    let spec_json = ctx.json_stringify(spec)?.map(|s| s.to_string()).transpose()?.unwrap_or_else(|| "{}".to_string());
     let host = match parse_target(&url) {
       Ok(host) => host,
       Err(message) => return PluginErrorCode::InvalidArgument.throw(ctx, &message),
@@ -121,7 +190,7 @@ impl FetchState {
     let mut request_id = 0;
     let promise = self.pending.park(ctx, (), |id| {
       request_id = id;
-      self.host.send(id, &url, &spec_json, body.as_deref())
+      self.host.send(id, &url, &spec, body.as_deref())
     })?;
 
     let handle = Object::new(ctx.clone())?;
@@ -152,9 +221,13 @@ pub fn install_fetch<'js>(
     let state = state.clone();
     natives.set(
       "send",
-      Function::new(ctx.clone(), move |ctx: Ctx<'js>, url: String, spec: Value<'js>, body: Value<'js>| {
-        state.js_send(&ctx, url, spec, body)
-      })?,
+      Function::new(
+        ctx.clone(),
+        move |ctx: Ctx<'js>, url: String, method: Value<'js>, headers: Value<'js>, redirect: Value<'js>, body: Value<'js>| {
+          let spec = read_spec(&ctx, method, headers, redirect)?;
+          state.js_send(&ctx, url, spec, body)
+        },
+      )?,
     )?;
   }
   {

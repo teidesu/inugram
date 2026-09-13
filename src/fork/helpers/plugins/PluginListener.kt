@@ -272,8 +272,8 @@ interface TlListener {
  * can screen those. See `PluginFetch`.
  */
 interface FetchListener {
-    /** [specJson] is `{method, headers: {name: [ value... ]}, redirect}` */
-    fun fetch(requestId: Long, url: String, specJson: String, body: ByteArray?): String?
+    /** [headers] is `name, value` pairs with lowercased names; rust has checked all of it */
+    fun fetch(requestId: Long, url: String, method: String, redirect: String, headers: Array<String>, body: ByteArray?): String?
 
     /** the engine has already settled the promise: this is about the socket, not the caller */
     fun abort(requestId: Long)

@@ -3,49 +3,12 @@
 
   const invalid = message => new PluginError('invalid-argument', message)
 
-  // rfc7230's token, which is what a header name is allowed to be
-  const TOKEN = /^[!#$%&'*+\-.^\w`|~]+$/
-
-  // headers the transport owns: setting one of these from here either does nothing or makes the
-  // request lie about its own framing
-  const RESERVED = new Set([
-    'host',
-    'content-length',
-    'connection',
-    'transfer-encoding',
-    'upgrade',
-    'keep-alive',
-    'te',
-    'trailer',
-  ])
-
-  const REDIRECT_MODES = new Set(['follow', 'manual', 'error'])
 
   // null-prototype: `constructor` and `toString` are header names rfc7230 allows, and on a plain
   // object `name in out` answers for the whole prototype chain - so the first one of those would
   // read as a repeat and concat `Object.prototype.constructor`. `__proto__` is worse: assigning it
   // on a plain object sets the prototype instead of adding a header, and the header vanishes
   const headerMap = () => Object.create(null)
-
-  const normalizeHeaders = (raw) => {
-    if (raw === undefined || raw === null) return headerMap()
-    if (typeof raw !== 'object') throw invalid('fetch: headers must be an object')
-    const out = headerMap()
-    for (const key of Object.keys(raw)) {
-      if (!TOKEN.test(key)) throw invalid(`fetch: '${key}' is not a header name`)
-      const name = key.toLowerCase()
-      if (RESERVED.has(name)) throw invalid(`fetch: the '${key}' header belongs to the transport`)
-      const value = raw[key]
-      const values = Array.isArray(value) ? value : [value]
-      for (const one of values) {
-        if (typeof one !== 'string') throw invalid(`fetch: the '${key}' header must be a string`)
-        // a newline in a value is a second header, and a request the plugin did not write
-        if (/[\r\n\0]/.test(one)) throw invalid(`fetch: the '${key}' header has a line break in it`)
-      }
-      out[name] = name in out ? out[name].concat(values) : values.slice()
-    }
-    return out
-  }
 
   // a header that appeared once is a string and one that repeated is an array, which is the whole
   // reason `HeadersInit` is a plain record rather than the spec's `Headers`
@@ -102,18 +65,14 @@
     }
   }
 
-  const buildSpec = (init) => {
-    if (init === undefined || init === null) return { method: 'GET', headers: {}, redirect: 'follow' }
+  const readInit = (init) => {
+    if (init === undefined || init === null) return {}
     if (typeof init !== 'object') throw invalid('fetch: the second argument must be an options object')
-    const redirect = init.redirect === undefined ? 'follow' : String(init.redirect)
-    if (!REDIRECT_MODES.has(redirect)) throw invalid(`fetch: '${redirect}' is not a redirect mode`)
-    const method = init.method === undefined ? 'GET' : String(init.method).toUpperCase()
-    if (!TOKEN.test(method)) throw invalid(`fetch: '${init.method}' is not a method`)
-    return { method, headers: normalizeHeaders(init.headers), redirect }
+    return init
   }
 
   const readTimeout = (init) => {
-    const raw = init === undefined || init === null ? undefined : init.timeout
+    const raw = init.timeout
     if (raw === undefined || raw === null) return undefined
     if (typeof raw !== 'number' || !Number.isFinite(raw) || raw <= 0) {
       throw invalid('fetch: timeout must be a positive number of milliseconds')
@@ -122,7 +81,7 @@
   }
 
   const readSignal = (init) => {
-    const signal = init === undefined || init === null ? undefined : init.signal
+    const signal = init.signal
     if (signal === undefined || signal === null) return undefined
     if (typeof signal.addEventListener !== 'function' || typeof signal.aborted !== 'boolean') {
       throw invalid('fetch: signal must be an AbortSignal')
@@ -130,19 +89,19 @@
     return signal
   }
 
-  const send = (url, init) => {
-    const spec = buildSpec(init)
+  const send = (url, raw) => {
+    const init = readInit(raw)
     const timeout = readTimeout(init)
     const signal = readSignal(init)
-    const body = init === undefined || init === null ? undefined : init.body
+    const body = init.body
 
     if (signal !== undefined && signal.aborted) {
       return Promise.reject(new PluginError('aborted', 'the request was aborted'))
     }
 
-    // the spec crosses as an object: `JSON.stringify` is writable and shared with plugin code, so
-    // serializing it here would let a plugin hand the host a spec none of the above ran on
-    const started = natives.send(String(url), spec, body)
+    // method, headers and redirect are checked natively: this prelude shares its realm with the
+    // plugin, which can reassign `RegExp.prototype.test` or `Array.prototype.toJSON` under any check made here
+    const started = natives.send(String(url), init.method, init.headers, init.redirect, body)
 
     return new Promise((resolve, reject) => {
       let settled = false

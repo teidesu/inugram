@@ -222,7 +222,7 @@ impl JniBridge {
       on_random_bytes: method("onRandomBytes", "(I)[B")?,
       on_timer_schedule: method("onTimerSchedule", "(J)V")?,
       on_canvas: method("canvas", "(IJLjava/lang/String;[B)Ljava/lang/String;")?,
-      on_fetch: method("fetch", "(JLjava/lang/String;Ljava/lang/String;[B)Ljava/lang/String;")?,
+      on_fetch: method("fetch", "(JLjava/lang/String;Ljava/lang/String;Ljava/lang/String;[Ljava/lang/String;[B)Ljava/lang/String;")?,
       on_fetch_abort: method("abort", "(J)V")?,
       on_notification_register: method("register", "(I[Ljava/lang/String;)Ljava/lang/String;")?,
       on_notification_unregister: method("unregister", "(I)V")?,
