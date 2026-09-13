@@ -849,13 +849,12 @@ object PluginRpc : SessionResource {
         pendingDispatches[dispatchId] =
             PendingDispatch(session, operation, index, request, finalize)
         chains[operation.scopeId]?.stages?.add(dispatchId)
-        val requestHandle = tl.mintForScope(request, operation.scopeId)
         engine.dispatchRpc(
             interceptor.callbackId,
             dispatchId,
             method,
             operation.account,
-            PluginWire.encodeHandle(vector = false, id = requestHandle, readOnly = false),
+            tl.mintWireForScope(request, operation.scopeId),
         )
     }
 
@@ -1397,7 +1396,7 @@ object PluginRpc : SessionResource {
     private fun encodeChainResult(tl: TlHandles, response: TLObject?, error: TLRPC.TL_error?, scopeId: Long): String {
         if (error != null) return PluginWire.encodeRpcError(error.code, error.text ?: "")
         if (response == null) return PluginWire.encodeNull()
-        return PluginWire.encodeHandle(vector = false, id = tl.mintForScope(response, scopeId), readOnly = false)
+        return tl.mintWireForScope(response, scopeId)
     }
 
     private fun encodeInvokeResult(tl: TlHandles, response: TLObject?, error: TLRPC.TL_error?): String {
@@ -1407,11 +1406,7 @@ object PluginRpc : SessionResource {
             return PluginWire.encodeRpcError(error.code, error.text ?: "")
         }
         if (response == null) return PluginWire.encodeNull()
-        return PluginWire.encodeHandle(
-            vector = false,
-            id = tl.mintForPlugin(response, readOnly = false, owned = true),
-            readOnly = false,
-        )
+        return tl.mintWireForPlugin(response, readOnly = false, owned = true)
     }
 
     internal fun releaseUnowned(response: TLObject?) {

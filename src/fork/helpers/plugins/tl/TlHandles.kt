@@ -70,6 +70,19 @@ class TlHandles(private val policy: TlFilter.Policy) : TlListener {
     fun mintForPlugin(target: Any, readOnly: Boolean, owned: Boolean = false): Long =
         mint(target, elementType = null, scopeId = PLUGIN_SCOPE, readOnly = readOnly, owned = owned)
 
+    /**
+     * a top-level handle as a wire: its class always, so ordinal reads take the fast path, and its
+     * scalars too, which rust caches on a plugin-lifetime view
+     */
+    fun mintWireForPlugin(target: TLObject, readOnly: Boolean, owned: Boolean = false, fields: List<String>? = null): String {
+        val id = mintForPlugin(target, readOnly, owned)
+        return PluginWire.encodeHandle(vector = false, id = id, readOnly = readOnly, projection = project(id, fields), classId = classIdOf(target.javaClass))
+    }
+
+    /** [mintWireForPlugin] for a dispatch view, which caches nothing and so is sent no scalars */
+    fun mintWireForScope(target: TLObject, scopeId: Long): String =
+        PluginWire.encodeHandle(vector = false, id = mintForScope(target, scopeId), readOnly = false, classId = classIdOf(target.javaClass))
+
     private fun mint(
         target: Any,
         elementType: Type?,

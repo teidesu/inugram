@@ -386,13 +386,12 @@ object PluginUpdates : SessionResource {
             batch.dispatchId = dispatchId
             batch.stageSession = session
             pendingUpdateDispatches[dispatchId] = batch
-            val handle = tl.mintForScope(unit.update, batch.scopeId)
             engine.dispatchUpdateIntercept(
                 interceptor.callbackId,
                 dispatchId,
                 unit.tlName,
                 batch.account,
-                PluginWire.encodeHandle(vector = false, id = handle, readOnly = false),
+                tl.mintWireForScope(unit.update, batch.scopeId),
             )
             return
         }
@@ -670,8 +669,7 @@ object PluginUpdates : SessionResource {
             if (serviceNotification && !session.permissions.has("unsafe.disableApiFiltering")) continue
             // over the scopes that actually authorized this plugin for this constructor - a demuxed registration holds its event's scope, and the two never imply each other
             if (listener.grantScopes.none { session.permissions.allows("onUpdate", it, ScopeMatch.EXACT) }) continue
-            val handle = tl.mintForPlugin(update, readOnly = true)
-            engine.dispatchUpdate(tlName, account, PluginWire.encodeHandle(vector = false, id = handle, readOnly = true))
+            engine.dispatchUpdate(tlName, account, tl.mintWireForPlugin(update, readOnly = true))
         }
     }
 

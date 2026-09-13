@@ -142,14 +142,7 @@ object PluginReads {
     /** the plugin asked for this object, so its scalars go with the handle: reading them is what it will do next */
     internal fun mint(handles: TlHandles, value: TLObject?, fields: List<String>? = null): String {
         if (value == null) return PluginWire.encodeNull()
-        val id = handles.mintForPlugin(value, readOnly = true)
-        return PluginWire.encodeHandle(
-            vector = false,
-            id = id,
-            readOnly = true,
-            projection = handles.project(id, fields),
-            classId = handles.classIdOf(value.javaClass),
-        )
+        return handles.mintWireForPlugin(value, readOnly = true, fields = fields)
     }
 
     internal fun mintEach(handles: TlHandles, values: List<TLObject?>, fields: List<String>? = null): String =
