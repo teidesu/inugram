@@ -4,9 +4,7 @@ import desu.inugram.core.plugins.PluginWire
 import desu.inugram.helpers.plugins.telegram.PluginWrites.Call
 import desu.inugram.helpers.plugins.telegram.PluginWrites.refuse
 import java.io.File
-import java.util.UUID
 import org.telegram.messenger.AndroidUtilities
-import org.telegram.messenger.FileLoader
 import org.telegram.messenger.MessageObject
 import org.telegram.messenger.MessagesController
 import org.telegram.messenger.NotificationCenter
@@ -38,11 +36,14 @@ object PluginSendMorph {
     private const val MORPHED_KEY = "inu_plugin_morphed"
 
     internal class Media(
-        val path: File,
+        val upload: PluginMedia.Upload,
         val name: String,
         val mime: String,
         val asDocument: Boolean,
+        /** read where the file is taken, since the composer reads this back on the ui thread */
+        val described: PluginMedia.LocalDescription,
     ) {
+        val path: File get() = upload.file
         var caption: String = ""
         var entities: ArrayList<TLRPC.MessageEntity> = ArrayList()
     }
@@ -53,39 +54,22 @@ object PluginSendMorph {
     internal fun setMedia(call: Call): String? {
         val wire = call.values.firstOrNull() ?: refuse("invalid-argument", "setMedia: no file")
         val source = PluginMedia.stagedFile(call, wire)
-        val name = call.json.optString("fileName").ifEmpty { source.name.ifEmpty { source.path.name } }
+        val name = PluginMedia.getFileName(source, call.json.optString("fileName"))
         // rust deletes what it staged the moment this write answers, and the composer uploads long after that
-        val owned = copyForUpload(source.path, name)
-        val media = Media(
-            owned,
-            name,
-            source.mime.ifEmpty { PluginMedia.mimeOfName(name) },
-            call.flag("asDocument"),
-        )
+        val upload = PluginMedia.takeForUpload(call, source.path, name)
+        val mime = source.mime.ifEmpty { PluginMedia.mimeOfName(name) }
+        val asDocument = call.flag("asDocument")
+        val media = Media(upload, name, mime, asDocument, PluginMedia.describeLocalDocument(upload.file, mime, asDocument))
         try {
             PluginRpc.holdMedia(call.session, call.json.optLong("dispatch", -1L), media)
         } catch (e: Throwable) {
-            owned.delete()
+            upload.discard()
             throw e
         }
         // what this returns is an error wire or nothing; the answer goes back through [answer],
         // which is also what keeps the settle out of this upcall and off the engine's own thread
         PluginWrites.answer(call) { PluginWire.encodeNull() }
         return null
-    }
-
-    private fun copyForUpload(source: File, name: String): File {
-        val dir = FileLoader.getDirectory(FileLoader.MEDIA_DIR_CACHE)
-            ?: refuse("internal", "setMedia: there is no cache directory to copy this file into")
-        val extension = name.substringAfterLast('.', "")
-        val target = File(dir, "inu_plugin_send_${UUID.randomUUID()}" + if (extension.isEmpty()) "" else ".$extension")
-        try {
-            source.copyTo(target, overwrite = true)
-        } catch (e: Exception) {
-            target.delete()
-            refuse("internal", "setMedia: this file could not be copied: ${e.message ?: e.toString()}")
-        }
-        return target
     }
 
     /** whether this message may still take media, which it may not if it is already the answer to one */
@@ -109,6 +93,7 @@ object PluginSendMorph {
             helper.sendMessage(SendMessagesHelper.SendMessageParams.of(retry))
             // the composer draws inside that call, so an id still here is one whose draw never came
             morphing.remove(message.id)
+            if (media.upload.owned) PluginSentFiles.track(account, message.id, media.path)
         }
         return true
     }
@@ -150,7 +135,7 @@ object PluginSendMorph {
             }
         } else {
             TLRPC.TL_messageMediaDocument().apply {
-                document = PluginOptimisticSend.documentOf(media.path, media.name, media.mime)
+                document = PluginOptimisticSend.documentOf(media.path, media.name, media.mime, media.described)
                 flags = flags or 1
             }
         }

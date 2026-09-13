@@ -126,7 +126,9 @@ Rust and Kotlin; do not add a schema/code-generation layer for them.
 - Native API code lives in `src/native/src/api`, JNI in `jni`, grants/limits in
   `sandbox`, and shared promise/job machinery in `runtime.rs`. Host code lives in
   `src/fork/helpers/plugins`. Native implementation is Rust; C++ is limited to
-  thin LSPlant ABI wrappers in patches.
+  thin LSPlant ABI wrappers in patches. Hot per-pixel loops go in the
+  `src/native/yuv` crate, which the release profile builds for speed while the
+  engine is built for size.
 - `EngineBindings` owns installation order. Build `inu` once in `nativeCreate`.
   `PluginStore` owns installed files; `PluginManager` owns running sessions;
   `PluginRpc` owns RPC chains; `PluginUpdates` owns updates; `TlReflect` owns TL

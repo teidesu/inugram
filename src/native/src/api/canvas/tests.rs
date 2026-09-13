@@ -104,7 +104,12 @@ impl CanvasHost for OracleHost {
         self.log.borrow_mut().released.push(id);
         String::new()
       }
-      OP_ENCODE | OP_DECODE | OP_LOAD_FONT => {
+      OP_RELEASE_ANIMATION | OP_ENCODER_DESTROY => {
+        self.log.borrow_mut().released.push(id);
+        String::new()
+      }
+      OP_ENCODE | OP_DECODE | OP_LOAD_FONT | OP_DECODE_ANIMATION | OP_ANIMATION_FRAME | OP_ANIMATION_NEXT
+      | OP_ENCODER_CREATE | OP_ENCODER_FRAME | OP_ENCODER_FINISH => {
         let request = arg.split(FIELD).next().and_then(|v| v.parse().ok()).unwrap_or(0);
         self.pending.borrow_mut().push(request);
         self.reply.borrow().clone().unwrap_or_default()
@@ -468,6 +473,12 @@ fn settle(f: &Fixture, expr: &str) -> String {
 }
 
 /// answers the asynchronous op the host is holding, the way `nativeCanvasResult` does
+fn pump(f: &Fixture) {
+  while f._rt.is_job_pending() {
+    f._rt.execute_pending_job().ok();
+  }
+}
+
 fn answer(f: &Fixture, wire: &str) {
   let request = f.host.pending.borrow_mut().pop().expect("nothing pending");
   f.state.resolve(&f._rt, &f.ctx, request, wire);
@@ -502,7 +513,10 @@ fn draw(f: &Fixture, body: &str) -> Vec<Command> {
 #[test]
 fn the_namespace_carries_exactly_what_the_contract_declares() {
   let f = setup("namespace");
-  assert_eq!(eval(&f, "Object.keys(inu.canvas).sort().join(',')"), "create,decode,load,loadFont");
+  assert_eq!(
+    eval(&f, "Object.keys(inu.canvas).sort().join(',')"),
+    "create,createEncoder,decode,decodeAnimation,load,loadFont",
+  );
 }
 
 #[test]
@@ -1433,7 +1447,10 @@ fn disposing_a_canvas_lets_its_bitmap_go_and_expires_what_was_drawing_on_it() {
   assert_eq!(destroys(&f), 1);
   run(&f, "c.dispose()");
   assert_eq!(destroys(&f), 1, "a second dispose destroyed it twice");
-  assert_eq!(eval(&f, "(() => { try { x.fillRect(0,0,1,1); return 'drew' } catch (e) { return e.code } })()"), "handle-expired");
+  assert_eq!(
+    eval(&f, "(() => { try { x.fillRect(0,0,1,1); return 'drew' } catch (e) { return e.code } })()"),
+    "handle-expired"
+  );
 }
 
 /// quickjs-ng ships explicit resource management, so every handle that frees a host resource is
@@ -1442,7 +1459,10 @@ fn disposing_a_canvas_lets_its_bitmap_go_and_expires_what_was_drawing_on_it() {
 fn the_handles_are_using_resources() {
   let f = setup("using");
   assert_eq!(
-    eval(&f, "`${[Blob.prototype, inu.canvas.create(1,1).constructor.prototype].every(p => p[Symbol.dispose] === p.dispose)}`"),
+    eval(
+      &f,
+      "`${[Blob.prototype, inu.canvas.create(1,1).constructor.prototype].every(p => p[Symbol.dispose] === p.dispose)}`"
+    ),
     "true",
   );
   assert_eq!(
@@ -1590,4 +1610,403 @@ mod bundled_oracle {
     }
     panic!("the oracle never stopped waiting");
   }
+}
+
+/// the shape every animation test starts from: one open decoder, `globalThis.a`
+fn open_animation(f: &Fixture, name: &str, shape: &str) {
+  run(f, &format!("globalThis.p = inu.canvas.decodeAnimation(new Uint8Array([1,2,3]))"));
+  answer(f, shape);
+  assert_eq!(settle(f, "p.then(a => (globalThis.a = a, 1))"), "ok:Number", "{name}");
+}
+
+const GIF_SHAPE: &str = r#"J{"width":320,"height":240,"frameCount":24,"duration":2000,"fps":12}"#;
+
+#[test]
+fn an_animation_answers_the_shape_the_host_read_and_frees_the_decoder_when_disposed() {
+  let f = setup("animation");
+  open_animation(&f, "gif", GIF_SHAPE);
+  assert_eq!(
+    eval(&f, "`${a.width}x${a.height} ${a.frameCount}f ${a.duration}ms ${a.fps}fps`"),
+    "320x240 24f 2000ms 12fps"
+  );
+  run(&f, "a.dispose()");
+  assert_eq!(f.host.log.borrow().released.len(), 1);
+  run(&f, "a.dispose()");
+  assert_eq!(f.host.log.borrow().released.len(), 1, "a second dispose released it twice");
+}
+
+#[test]
+fn a_frame_is_asked_of_the_animation_and_mints_an_image_of_its_own() {
+  let f = setup("animation-frame");
+  open_animation(&f, "gif", GIF_SHAPE);
+  let animation = f.host.log.borrow().calls.iter().rev().find(|(op, ..)| *op == OP_DECODE_ANIMATION).unwrap().1;
+  run(&f, "globalThis.q = a.frame(7)");
+  let calls = f.host.log.borrow().calls.clone();
+  let (_, id, arg) = calls.iter().rev().find(|(op, ..)| *op == OP_ANIMATION_FRAME).unwrap();
+  assert_eq!(*id, animation, "the frame was asked of something other than its animation");
+  let fields: Vec<&str> = arg.split(FIELD).collect();
+  assert_ne!(fields[1], "0", "the frame was given no image of its own to land in");
+  assert_eq!(fields[2], "7");
+  answer(&f, r#"J{"width":320,"height":240,"timestamp":583}"#);
+  assert_eq!(settle(&f, "q.then(i => (globalThis.f = i, i.constructor.name))"), "ok:String");
+  assert_eq!(eval(&f, "`${f.width}x${f.height}@${f.timestamp}`"), "320x240@583");
+}
+
+#[test]
+fn an_animation_is_read_in_order_by_iterating_it_until_the_source_ends() {
+  let f = setup("animation-iterate");
+  open_animation(&f, "gif", GIF_SHAPE);
+  run(
+    &f,
+    r#"
+        globalThis.seen = []
+        globalThis.p = (async () => {
+          for await (using frame of a) seen.push(`${frame.width}x${frame.height}@${frame.timestamp}`)
+          return seen.length
+        })()
+        "#,
+  );
+  answer(&f, r#"J{"width":320,"height":240,"timestamp":0}"#);
+  pump(&f);
+  answer(&f, r#"J{"width":320,"height":240,"timestamp":83}"#);
+  pump(&f);
+  answer(&f, r#"J{"end":true}"#);
+  assert_eq!(settle(&f, "p"), "ok:Number");
+  assert_eq!(eval(&f, "seen.join(' ')"), "320x240@0 320x240@83");
+  let calls = f.host.log.borrow().calls.clone();
+  let asked: Vec<&(i32, i64, String)> = calls.iter().filter(|(op, ..)| *op == OP_ANIMATION_NEXT).collect();
+  assert_eq!(
+    asked.len(),
+    3,
+    "the host was asked for the next frame a different number of times than the loop ran"
+  );
+  assert_ne!(asked[0].2.split(FIELD).nth(1).unwrap(), "0", "the frame was given no image of its own to land in");
+  // and each frame the loop disposed gave its bitmap back
+  assert_eq!(f.host.log.borrow().released.len(), 2, "a frame the loop was done with was not released");
+}
+
+#[test]
+fn a_frame_outside_the_animation_is_refused_without_asking_the_host() {
+  let f = setup("animation-range");
+  open_animation(&f, "gif", GIF_SHAPE);
+  for index in ["-1", "24", "1e9"] {
+    assert!(refusal(&f, &format!("a.frame({index})")).starts_with("invalid-argument:"), "frame({index})");
+  }
+  let calls = f.host.log.borrow().calls.clone();
+  assert!(!calls.iter().any(|(op, ..)| *op == OP_ANIMATION_FRAME), "the host was asked anyway");
+}
+
+#[test]
+fn a_frame_of_a_disposed_animation_is_handle_expired() {
+  let f = setup("animation-expired");
+  open_animation(&f, "gif", GIF_SHAPE);
+  run(&f, "a.dispose()");
+  assert!(refusal(&f, "a.frame(0)").starts_with("handle-expired:"));
+}
+
+/// The decoder reads the file for as long as it is open, so the staged copy cannot go away with the
+/// request that opened it - which is what happens to every other staged source.
+#[test]
+fn an_animations_staged_source_outlives_the_request_and_goes_with_the_decoder() {
+  let f = setup("animation-stage");
+  run(&f, "globalThis.p = inu.canvas.decodeAnimation(new Uint8Array([1,2,3,4]))");
+  let calls = f.host.log.borrow().calls.clone();
+  let (_, _, arg) = calls.iter().rev().find(|(op, ..)| *op == OP_DECODE_ANIMATION).unwrap();
+  let path = arg.split(FIELD).nth(3).unwrap().to_string();
+  assert!(std::fs::metadata(&path).is_ok(), "nothing was staged at {path}");
+  answer(&f, GIF_SHAPE);
+  settle(&f, "p.then(a => (globalThis.a = a, 1))");
+  assert!(std::fs::metadata(&path).is_ok(), "the decoder's own source was deleted under it");
+  run(&f, "a.dispose()");
+  assert!(std::fs::metadata(&path).is_err(), "the staged copy outlived the decoder");
+}
+
+#[test]
+fn an_animation_the_host_could_not_open_deletes_what_it_staged() {
+  let f = setup("animation-refused");
+  *f.host.fail.borrow_mut() = Some((OP_DECODE_ANIMATION, "Pinvalid-argument\n\n\n\nnot an animation".to_string()));
+  run(&f, "globalThis.p = inu.canvas.decodeAnimation(new Uint8Array([1,2,3,4]))");
+  let calls = f.host.log.borrow().calls.clone();
+  let (_, _, arg) = calls.iter().rev().find(|(op, ..)| *op == OP_DECODE_ANIMATION).unwrap();
+  let path = arg.split(FIELD).nth(3).unwrap().to_string();
+  assert_eq!(settle(&f, "p"), "invalid-argument:not an animation");
+  assert!(std::fs::metadata(&path).is_err(), "the staged copy outlived the failed open");
+}
+
+/// zero is the source's own size, which the host resolves: a video has one, a lottie gets stock's
+#[test]
+fn a_decode_size_is_passed_along_and_defaults_to_the_sources_own() {
+  let f = setup("animation-size");
+  run(&f, "inu.canvas.decodeAnimation(new Uint8Array([1]))");
+  run(&f, "inu.canvas.decodeAnimation(new Uint8Array([1]), { width: 128, height: 96 })");
+  let calls = f.host.log.borrow().calls.clone();
+  let asked: Vec<Vec<&str>> = calls
+    .iter()
+    .filter(|(op, ..)| *op == OP_DECODE_ANIMATION)
+    .map(|(_, _, arg)| arg.split(FIELD).collect())
+    .collect();
+  assert_eq!((asked[0][1], asked[0][2]), ("0", "0"));
+  assert_eq!((asked[1][1], asked[1][2]), ("128", "96"));
+  assert!(
+    refusal(&f, "inu.canvas.decodeAnimation(new Uint8Array([1]), { width: 128 })").starts_with("invalid-argument:")
+  );
+}
+
+#[test]
+fn only_so_many_animations_may_be_open_at_once() {
+  let f = setup("animation-limit");
+  for _ in 0..MAX_ANIMATIONS {
+    run(&f, "globalThis.p = inu.canvas.decodeAnimation(new Uint8Array([1]))");
+    answer(&f, GIF_SHAPE);
+    settle(&f, "p.then(a => (globalThis.kept = (globalThis.kept ?? []), globalThis.kept.push(a), 1))");
+  }
+  assert!(refusal(&f, "inu.canvas.decodeAnimation(new Uint8Array([1]))").starts_with("quota-exceeded:"));
+  // and one given back makes room again
+  run(&f, "globalThis.kept.pop().dispose()");
+  run(&f, "globalThis.p = inu.canvas.decodeAnimation(new Uint8Array([1]))");
+  // that one is still opening, so the room it took is gone even before it answers
+  assert!(refusal(&f, "inu.canvas.decodeAnimation(new Uint8Array([1]))").starts_with("quota-exceeded:"));
+  answer(&f, GIF_SHAPE);
+  settle(&f, "p.then(a => (globalThis.kept.push(a), 1))");
+  run(&f, "globalThis.kept.pop().dispose()");
+  run(&f, "globalThis.p = inu.canvas.decodeAnimation(new Uint8Array([1]))");
+  answer(&f, GIF_SHAPE);
+  assert_eq!(settle(&f, "p.then(() => 1)"), "ok:Number");
+}
+
+fn open_encoder(f: &Fixture, options: &str) -> String {
+  run(f, &format!("globalThis.p = inu.canvas.createEncoder({options})"));
+  answer(f, "");
+  settle(f, "p.then(e => (globalThis.e = e, 1))")
+}
+
+#[test]
+fn an_encoder_is_asked_for_with_everything_the_host_needs_to_configure_it() {
+  let f = setup("encoder");
+  assert_eq!(open_encoder(&f, "{ width: 320, height: 240, fps: 25, bitrate: 900000 }"), "ok:Number");
+  let calls = f.host.log.borrow().calls.clone();
+  let (_, _, arg) = calls.iter().rev().find(|(op, ..)| *op == OP_ENCODER_CREATE).unwrap();
+  let fields: Vec<&str> = arg.split(FIELD).collect();
+  assert_eq!(&fields[1..6], &["video/mp4", "320", "240", "25", "900000"]);
+  assert_eq!(eval(&f, "`${e.width}x${e.height}`"), "320x240");
+}
+
+#[test]
+fn an_encoder_refuses_what_a_device_encoder_cannot_take() {
+  let f = setup("encoder-refuse");
+  for options in [
+    "{ width: 321, height: 240 }",
+    "{ width: 320, height: 241 }",
+    "{ width: 0, height: 240 }",
+    "{ width: 320 }",
+    "{}",
+    "{ width: 320, height: 240, type: 'image/gif' }",
+    "{ width: 320, height: 240, fps: 0 }",
+    "{ width: 320, height: 240, fps: 1000 }",
+    "{ width: 320, height: 240, bitrate: -1 }",
+    // an i32 is what the device's encoder is configured with, and this is past one
+    "{ width: 320, height: 240, bitrate: 3e9 }",
+  ] {
+    assert!(
+      refusal(&f, &format!("inu.canvas.createEncoder({options})")).starts_with("invalid-argument:"),
+      "createEncoder({options})",
+    );
+  }
+  let calls = f.host.log.borrow().calls.clone();
+  assert!(!calls.iter().any(|(op, ..)| *op == OP_ENCODER_CREATE), "the host was asked anyway");
+}
+
+#[test]
+fn a_frame_flushes_what_was_drawn_and_names_the_source_with_its_length() {
+  let f = setup("encoder-frame");
+  open_encoder(&f, "{ width: 320, height: 240, fps: 20 }");
+  run(
+    &f,
+    r#"
+        globalThis.c = inu.canvas.create(320, 240)
+        c.getContext('2d').fillRect(0, 0, 8, 8)
+        globalThis.q = e.addFrame(c)
+        "#,
+  );
+  assert_eq!(f.host.log.borrow().commands.len(), 1, "the drawing was not flushed before the frame");
+  let calls = f.host.log.borrow().calls.clone();
+  let (_, _, arg) = calls.iter().rev().find(|(op, ..)| *op == OP_ENCODER_FRAME).unwrap();
+  let fields: Vec<&str> = arg.split(FIELD).collect();
+  assert_eq!(fields[1], SOURCE_CANVAS.to_string(), "the canvas was not named as a canvas");
+  assert_eq!(fields[3], "50", "a frame with no duration of its own is one frame at the encoder's rate");
+  answer(&f, "");
+  assert_eq!(settle(&f, "q"), "ok:undefined");
+  // and a duration of its own is passed as given
+  run(&f, "e.addFrame(c, 33)");
+  let calls = f.host.log.borrow().calls.clone();
+  let (_, _, arg) = calls.iter().rev().find(|(op, ..)| *op == OP_ENCODER_FRAME).unwrap();
+  assert_eq!(arg.split(FIELD).nth(3).unwrap(), "33");
+}
+
+#[test]
+fn a_frame_may_be_an_image_as_well_as_a_canvas() {
+  let f = setup("encoder-frame-image");
+  open_encoder(&f, "{ width: 320, height: 240 }");
+  run(&f, "globalThis.p = inu.canvas.decode(new Uint8Array([1]))");
+  answer(&f, r#"J{"width":320,"height":240}"#);
+  settle(&f, "p.then(i => (globalThis.img = i, 1))");
+  run(&f, "e.addFrame(img)");
+  let calls = f.host.log.borrow().calls.clone();
+  let (_, _, arg) = calls.iter().rev().find(|(op, ..)| *op == OP_ENCODER_FRAME).unwrap();
+  assert_eq!(arg.split(FIELD).nth(1).unwrap(), SOURCE_IMAGE.to_string());
+  run(&f, "img.dispose()");
+  assert!(refusal(&f, "e.addFrame(img)").starts_with("handle-expired:"));
+}
+
+#[test]
+fn finishing_answers_a_blob_over_the_file_the_host_wrote_and_spends_the_encoder() {
+  let f = setup("encoder-finish");
+  let out = f._dir.path().join("out.mp4");
+  std::fs::write(&out, b"mp4 bytes!").unwrap();
+  open_encoder(&f, "{ width: 320, height: 240 }");
+  run(&f, "globalThis.c = inu.canvas.create(320, 240); e.addFrame(c)");
+  answer(&f, "");
+  run(&f, "globalThis.q = e.finish()");
+  answer(&f, &format!(r#"J{{"path":"{}","type":"video/mp4"}}"#, out.to_string_lossy()));
+  assert_eq!(settle(&f, "q.then(b => (globalThis.mp4 = b, b.constructor.name))"), "ok:String");
+  assert_eq!(eval(&f, "`${mp4.size}|${mp4.type}`"), "10|video/mp4");
+  assert!(refusal(&f, "e.addFrame(c)").starts_with("handle-expired:"));
+  assert!(refusal(&f, "e.finish()").starts_with("handle-expired:"));
+}
+
+#[test]
+fn an_encoder_with_no_frames_has_nothing_to_finish() {
+  let f = setup("encoder-empty");
+  open_encoder(&f, "{ width: 320, height: 240 }");
+  assert!(refusal(&f, "e.finish()").starts_with("invalid-argument:"));
+  let calls = f.host.log.borrow().calls.clone();
+  assert!(!calls.iter().any(|(op, ..)| *op == OP_ENCODER_FINISH), "the host was asked anyway");
+}
+
+#[test]
+fn a_disposed_encoder_gives_the_host_its_encoder_back_and_takes_no_more_frames() {
+  let f = setup("encoder-dispose");
+  open_encoder(&f, "{ width: 320, height: 240 }");
+  run(&f, "globalThis.c = inu.canvas.create(320, 240); e.dispose()");
+  assert_eq!(f.host.log.borrow().released.len(), 1);
+  assert!(refusal(&f, "e.addFrame(c)").starts_with("handle-expired:"));
+  run(&f, "e.dispose()");
+  assert_eq!(f.host.log.borrow().released.len(), 1, "a second dispose released it twice");
+}
+
+#[test]
+fn only_so_many_encoders_may_be_open_at_once() {
+  let f = setup("encoder-limit");
+  for _ in 0..MAX_ENCODERS {
+    run(&f, "globalThis.p = inu.canvas.createEncoder({ width: 320, height: 240 })");
+    answer(&f, "");
+    settle(&f, "p.then(e => (globalThis.kept = (globalThis.kept ?? []), globalThis.kept.push(e), 1))");
+  }
+  assert!(refusal(&f, "inu.canvas.createEncoder({ width: 320, height: 240 })").starts_with("quota-exceeded:"));
+  run(&f, "globalThis.kept.pop().dispose()");
+  run(&f, "globalThis.p = inu.canvas.createEncoder({ width: 320, height: 240 })");
+  // that one is still opening, so a plugin that never awaits cannot slip past the limit
+  assert!(refusal(&f, "inu.canvas.createEncoder({ width: 320, height: 240 })").starts_with("quota-exceeded:"));
+  answer(&f, "");
+  assert_eq!(settle(&f, "p.then(() => 1)"), "ok:Number");
+}
+
+#[test]
+fn queued_encoder_frames_are_charged_until_consumed_after_an_early_ack() {
+  let f = setup("encoder-frame-charge");
+  open_encoder(&f, "{ width: 1024, height: 1024 }");
+  run(&f, "globalThis.c = inu.canvas.create(1024, 1024)");
+  let baseline = f.state.external.charged_bytes();
+  run(&f, "globalThis.q = e.addFrame(c)");
+  let request = *f.host.pending.borrow().last().unwrap();
+  assert_eq!(f.state.external.charged_bytes(), baseline + 4 * 1024 * 1024);
+  f.state.resolve(&f._rt, &f.ctx, request, "A");
+  assert_eq!(settle(&f, "q"), "ok:undefined");
+  assert_eq!(f.state.external.charged_bytes(), baseline + 4 * 1024 * 1024);
+  answer(&f, "");
+  assert_eq!(f.state.external.charged_bytes(), baseline);
+  f.state.resolve(&f._rt, &f.ctx, request, "A");
+  assert_eq!(f.state.external.charged_bytes(), baseline, "a late ack revived the frame");
+}
+
+#[test]
+fn a_fast_encoder_producer_hits_the_quota_before_more_pixels_reach_the_host() {
+  let f = setup("encoder-frame-quota");
+  open_encoder(&f, "{ width: 1024, height: 1024 }");
+  run(&f, "globalThis.c = inu.canvas.create(1024, 1024)");
+  let baseline = f.state.external.charged_bytes();
+  assert!(refusal(&f, "for (let i = 0; i < 100; i++) e.addFrame(c)").starts_with("quota-exceeded:"));
+  let accepted = f.host.log.borrow().calls.iter().filter(|(op, ..)| *op == OP_ENCODER_FRAME).count();
+  assert!(accepted > 0 && accepted < 100);
+  assert_eq!(f.state.external.charged_bytes(), baseline + accepted * 4 * 1024 * 1024);
+  while !f.host.pending.borrow().is_empty() {
+    answer(&f, "");
+  }
+  assert_eq!(f.state.external.charged_bytes(), baseline);
+  run(&f, "e.addFrame(c)");
+  answer(&f, "");
+}
+
+#[test]
+fn a_refused_encoder_frame_returns_its_charge() {
+  let f = setup("encoder-frame-refused");
+  open_encoder(&f, "{ width: 320, height: 240 }");
+  run(&f, "globalThis.c = inu.canvas.create(320, 240)");
+  let baseline = f.state.external.charged_bytes();
+  *f.host.fail.borrow_mut() = Some((OP_ENCODER_FRAME, "Pinternal\n\n\n\nframe refused".to_string()));
+  assert_eq!(settle(&f, "e.addFrame(c)"), "internal:frame refused");
+  assert_eq!(f.state.external.charged_bytes(), baseline);
+}
+
+#[test]
+fn disposing_an_encoder_keeps_queued_pixels_charged_until_the_host_releases_them() {
+  let f = setup("encoder-frame-dispose");
+  open_encoder(&f, "{ width: 320, height: 240 }");
+  run(&f, "globalThis.c = inu.canvas.create(320, 240); globalThis.q = e.addFrame(c)");
+  let charged = f.state.external.charged_bytes();
+  run(&f, "e.dispose()");
+  assert_eq!(f.state.external.charged_bytes(), charged);
+  let request = *f.host.pending.borrow().last().unwrap();
+  f.state.resolve(&f._rt, &f.ctx, request, "APinternal\n\n\n\nclosed");
+  assert_eq!(settle(&f, "q"), "internal:closed");
+  assert_eq!(f.state.external.charged_bytes(), charged);
+  answer(&f, "Pinternal\n\n\n\nclosed");
+  assert_eq!(f.state.external.charged_bytes(), 320 * 240 * 4);
+}
+
+#[test]
+fn finishing_keeps_the_encoder_alive_without_a_javascript_reference() {
+  let f = setup("encoder-finish-retain");
+  open_encoder(&f, "{ width: 320, height: 240 }");
+  run(&f, "globalThis.c = inu.canvas.create(320, 240); e.addFrame(c)");
+  answer(&f, "");
+  run(&f, "globalThis.q = e.finish(); globalThis.e = null; globalThis.p = null");
+  f._rt.run_gc();
+  assert!(!f.host.log.borrow().calls.iter().any(|(op, ..)| *op == OP_ENCODER_DESTROY));
+  let out = f._dir.path().join("finished.mp4");
+  std::fs::write(&out, b"encoded").unwrap();
+  answer(&f, &format!(r#"J{{"path":"{}","type":"video/mp4"}}"#, out.to_string_lossy()));
+  assert_eq!(settle(&f, "q"), "ok:Blob");
+  assert_eq!(f.host.log.borrow().calls.iter().filter(|(op, ..)| *op == OP_ENCODER_DESTROY).count(), 1);
+}
+
+#[test]
+fn encoder_buffer_reservations_are_checked_before_opening_the_host() {
+  let f = setup("encoder-open-quota");
+  assert!(refusal(&f, "inu.canvas.createEncoder({ width: 8192, height: 8192 })").starts_with("quota-exceeded:"));
+  assert!(!f.host.log.borrow().calls.iter().any(|(op, ..)| *op == OP_ENCODER_CREATE));
+  assert_eq!(f.state.external.charged_bytes(), 0);
+}
+
+#[test]
+fn stopping_releases_early_acknowledged_frames() {
+  let f = setup("encoder-stop");
+  open_encoder(&f, "{ width: 320, height: 240 }");
+  run(&f, "globalThis.c = inu.canvas.create(320, 240); e.addFrame(c)");
+  let request = *f.host.pending.borrow().last().unwrap();
+  f.state.resolve(&f._rt, &f.ctx, request, "A");
+  run(&f, "globalThis.e = null; globalThis.p = null; c.dispose()");
+  f.state.dispose(&f.ctx);
+  assert!(f.state.pending.borrow().is_empty());
+  assert_eq!(f.state.external.charged_bytes(), 0);
 }

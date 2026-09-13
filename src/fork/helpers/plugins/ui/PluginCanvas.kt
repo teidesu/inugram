@@ -26,8 +26,10 @@ import desu.inugram.helpers.plugins.PluginSession
 import desu.inugram.helpers.plugins.QuickJs
 import desu.inugram.helpers.plugins.io.PluginBlobs
 import java.io.File
+import java.util.ArrayDeque
 import java.nio.ByteBuffer
 import java.nio.ByteOrder
+import java.util.concurrent.Executor
 import java.util.concurrent.Executors
 import java.util.concurrent.ThreadFactory
 import org.json.JSONObject
@@ -63,6 +65,14 @@ object PluginCanvas {
     const val OP_RELEASE_IMAGE = 7
     const val OP_LOAD_FONT = 8
     const val OP_CAPABILITIES = 9
+    const val OP_DECODE_ANIMATION = 10
+    const val OP_ANIMATION_FRAME = 11
+    const val OP_RELEASE_ANIMATION = 12
+    const val OP_ENCODER_CREATE = 13
+    const val OP_ENCODER_FRAME = 14
+    const val OP_ENCODER_FINISH = 15
+    const val OP_ENCODER_DESTROY = 16
+    const val OP_ANIMATION_NEXT = 17
 
     private const val FIELD = '\u001e'
     private const val ITEM = '\u001f'
@@ -124,6 +134,21 @@ object PluginCanvas {
         private val onHost = EngineDispatch.createHostDispatcher()
         private val canvases = HashMap<Long, Surface>()
         private val images = HashMap<Long, Bitmap>()
+        private val animations = HashMap<Long, PluginAnimationDecoder>()
+        private val encoders = HashMap<Long, Pipeline>()
+
+        /**
+         * An encoder and the frames the plugin has handed it that are not yet encoded. `addFrame`
+         * resolves when the encoder has room for the next frame rather than when this one is
+         * done, which is what lets a plugin that awaits each frame keep the decoder, the drawing
+         * and the encoder all busy at once; a frame that fails to encode fails the next thing the
+         * plugin asks of the encoder, since the frame's own promise may already be gone.
+         */
+        private class Pipeline(val encoder: PluginVideoEncoder) {
+            var inFlight = 0
+            val waiting = ArrayDeque<Long>()
+            var failure: String? = null
+        }
         private val fonts = HashMap<String, Typeface>()
         private val typefaces = HashMap<String, Typeface>()
         private var typefaceRoster = FontLibrary.rosterGeneration
@@ -131,13 +156,14 @@ object PluginCanvas {
         private val scratchBounds = Rect()
         private val scratchMetrics = Paint.FontMetrics()
         private var nextFile = 0L
+        private val hostStats = PluginCanvasStats("canvas host")
 
         private class Surface(val bitmap: Bitmap) {
             val canvas = Canvas(bitmap)
         }
 
         override fun canvas(op: Int, id: Long, arg: String, bytes: ByteArray?): String = try {
-            run(op, id, arg, bytes)
+            hostStats.time("op.$op") { run(op, id, arg, bytes) }
         } catch (e: Refusal) {
             e.wire
         } catch (e: OutOfMemoryError) {
@@ -163,6 +189,20 @@ object PluginCanvas {
                 ""
             }
             OP_LOAD_FONT -> loadFont(arg)
+            OP_DECODE_ANIMATION -> decodeAnimation(id, arg)
+            OP_ANIMATION_FRAME -> animationFrame(id, arg)
+            OP_ANIMATION_NEXT -> animationNext(id, arg)
+            OP_RELEASE_ANIMATION -> {
+                onHost { releaseAnimation(id) }
+                ""
+            }
+            OP_ENCODER_CREATE -> createEncoder(id, arg)
+            OP_ENCODER_FRAME -> encoderFrame(id, arg)
+            OP_ENCODER_FINISH -> encoderFinish(id, arg)
+            OP_ENCODER_DESTROY -> {
+                onHost { releaseEncoder(id) }
+                ""
+            }
             else -> PluginWire.encodePluginError("invalid-argument", "canvas: unknown op $op")
         }
 
@@ -696,35 +736,202 @@ object PluginCanvas {
 
         /** the decode half of [submit]: the bitmap has to land in this session's table, not in js */
         private fun submitBitmap(requestId: Long, imageId: Long, produce: () -> Bitmap) {
-            work.execute {
+            submitOwned(requestId, work, produce, discard = Bitmap::recycle) { bitmap ->
+                images[imageId] = bitmap
+                "J" + JSONObject().put("width", bitmap.width).put("height", bitmap.height).toString()
+            }
+        }
+
+        /**
+         * [submit] for a request that answers with something this session then owns - a bitmap, a
+         * decoder, an encoder. It is built off the engine queue and registered on it, and a session
+         * that stopped in between frees it rather than leaking it.
+         */
+        private fun <T> submitOwned(
+            requestId: Long,
+            on: Executor,
+            produce: () -> T,
+            discard: (T) -> Unit,
+            register: (T) -> String,
+        ) {
+            val submitted = System.nanoTime()
+            on.execute {
+                hostStats.add("host.queueWait", System.nanoTime() - submitted)
                 val result = runCatching(produce)
-                val bitmap = result.getOrNull()
-                EngineDispatch.onEngine(session, onDropped = { bitmap?.recycle() }) {
-                    if (bitmap == null) {
-                        val message = result.exceptionOrNull()?.message ?: "the decode failed"
-                        session.engine.canvasResult(requestId, PluginWire.encodePluginError("invalid-argument", "canvas: $message"))
-                        return@onEngine
+                val produced = System.nanoTime()
+                EngineDispatch.onEngine(session, onDropped = { result.getOrNull()?.let(discard) }) {
+                    hostStats.add("host.engineHop", System.nanoTime() - produced)
+                    val wire = hostStats.time("host.register") {
+                        result.fold(
+                            onSuccess = register,
+                            onFailure = { PluginWire.encodePluginError("invalid-argument", "canvas: ${it.message ?: "the decode failed"}") },
+                        )
                     }
-                    images[imageId] = bitmap
-                    session.engine.canvasResult(
-                        requestId,
-                        "J" + JSONObject().put("width", bitmap.width).put("height", bitmap.height).toString(),
-                    )
+                    hostStats.time("host.canvasResult") { session.engine.canvasResult(requestId, wire) }
                 }
             }
         }
 
-        private fun submit(requestId: Long, produce: () -> String) {
-            work.execute {
-                val wire = try {
-                    produce()
-                } catch (e: OutOfMemoryError) {
-                    PluginWire.encodePluginError("quota-exceeded", "canvas: out of memory")
-                } catch (e: Throwable) {
-                    PluginWire.encodePluginError("internal", "canvas: ${e.message ?: e.toString()}")
-                }
+        private fun submit(requestId: Long, on: Executor = work, produce: () -> String) {
+            val submitted = System.nanoTime()
+            on.execute {
+                hostStats.add("host.queueWait", System.nanoTime() - submitted)
+                val wire = runCatching(produce).getOrElse(::wireOf)
                 EngineDispatch.onEngine(session) { session.engine.canvasResult(requestId, wire) }
             }
+        }
+
+        private fun decodeAnimation(id: Long, arg: String): String {
+            val fields = arg.split(FIELD)
+            val requestId = fields.getOrNull(0)?.toLongOrNull() ?: refuse("internal", "canvas: malformed request")
+            val width = fields.getOrNull(1)?.toIntOrNull() ?: refuse("internal", "canvas: malformed size")
+            val height = fields.getOrNull(2)?.toIntOrNull() ?: refuse("internal", "canvas: malformed size")
+            val path = fields.drop(3).joinToString(FIELD.toString())
+            submitOwned(
+                requestId,
+                work,
+                produce = { PluginAnimationDecoder.open(work, path, width, height) },
+                discard = PluginAnimationDecoder::close,
+            ) { decoder ->
+                animations[id] = decoder
+                "J" + JSONObject()
+                    .put("width", decoder.width)
+                    .put("height", decoder.height)
+                    .put("frameCount", decoder.frameCount)
+                    .put("duration", decoder.duration)
+                    .put("fps", decoder.fps)
+                    .toString()
+            }
+            return ""
+        }
+
+        private fun animationFrame(id: Long, arg: String): String {
+            val fields = arg.split(FIELD)
+            val requestId = fields.getOrNull(0)?.toLongOrNull() ?: refuse("internal", "canvas: malformed request")
+            val imageId = fields.getOrNull(1)?.toLongOrNull() ?: refuse("internal", "canvas: malformed request")
+            val index = fields.getOrNull(2)?.toIntOrNull() ?: refuse("internal", "canvas: malformed request")
+            val decoder = animations[id] ?: refuse("handle-expired", "canvas: that animation is gone")
+            submitFrame(requestId, imageId, decoder) { decoder.frame(index) }
+            return ""
+        }
+
+        private fun animationNext(id: Long, arg: String): String {
+            val fields = arg.split(FIELD)
+            val requestId = fields.getOrNull(0)?.toLongOrNull() ?: refuse("internal", "canvas: malformed request")
+            val imageId = fields.getOrNull(1)?.toLongOrNull() ?: refuse("internal", "canvas: malformed request")
+            val decoder = animations[id] ?: refuse("handle-expired", "canvas: that animation is gone")
+            submitFrame(requestId, imageId, decoder) { decoder.next() }
+            return ""
+        }
+
+        /** [submitBitmap] for a decoder's frame, which carries its timestamp and may be the end of the source */
+        private fun submitFrame(
+            requestId: Long,
+            imageId: Long,
+            decoder: PluginAnimationDecoder,
+            produce: () -> PluginAnimationDecoder.Frame?,
+        ) {
+            submitOwned(requestId, decoder.queue, produce, discard = { it?.bitmap?.recycle() }) { frame ->
+                if (frame == null) return@submitOwned "J" + JSONObject().put("end", true).toString()
+                images[imageId] = frame.bitmap
+                "J" + JSONObject()
+                    .put("width", frame.bitmap.width)
+                    .put("height", frame.bitmap.height)
+                    .put("timestamp", frame.timestampMs)
+                    .toString()
+            }
+        }
+
+        private fun releaseAnimation(id: Long): String {
+            animations.remove(id)?.close()
+            return ""
+        }
+
+        private fun createEncoder(id: Long, arg: String): String {
+            val fields = arg.split(FIELD)
+            val requestId = fields.getOrNull(0)?.toLongOrNull() ?: refuse("internal", "canvas: malformed request")
+            val mime = fields.getOrNull(1)
+            if (mime != "video/mp4") refuse("invalid-argument", "canvas: '$mime' is not an encoding this device writes")
+            val width = fields.getOrNull(2)?.toIntOrNull() ?: refuse("internal", "canvas: malformed size")
+            val height = fields.getOrNull(3)?.toIntOrNull() ?: refuse("internal", "canvas: malformed size")
+            val fps = fields.getOrNull(4)?.toIntOrNull() ?: refuse("internal", "canvas: malformed request")
+            val bitrate = fields.getOrNull(5)?.toLongOrNull() ?: refuse("internal", "canvas: malformed request")
+            val dir = encodedDir() ?: refuse("internal", "canvas: there is nowhere to write the result")
+            val output = File(dir, "out-${++nextFile}.mp4")
+            submitOwned(
+                requestId,
+                work,
+                produce = { PluginVideoEncoder.open(work, output, width, height, fps, bitrate) },
+                discard = PluginVideoEncoder::close,
+            ) { encoder ->
+                encoders[id] = Pipeline(encoder)
+                ""
+            }
+            return ""
+        }
+
+        private fun encoderFrame(id: Long, arg: String): String {
+            val fields = arg.split(FIELD)
+            val requestId = fields.getOrNull(0)?.toLongOrNull() ?: refuse("internal", "canvas: malformed request")
+            val kind = fields.getOrNull(1)?.toIntOrNull() ?: refuse("internal", "canvas: malformed request")
+            val sourceId = fields.getOrNull(2)?.toLongOrNull() ?: refuse("internal", "canvas: malformed request")
+            val duration = fields.getOrNull(3)?.toDoubleOrNull() ?: refuse("internal", "canvas: malformed request")
+            val pipeline = encoders[id] ?: refuse("handle-expired", "canvas: that encoder is gone")
+            pipeline.failure?.let { throw Refusal(it) }
+            val source = if (kind == SOURCE_CANVAS) {
+                surfaceOf(sourceId).bitmap
+            } else {
+                images[sourceId] ?: refuse("handle-expired", "canvas: that image is gone")
+            }
+            val encoder = pipeline.encoder
+            val pixels = hostStats.time("host.snapshot") { encoder.snapshot(source) }
+            pipeline.inFlight++
+            val submitted = System.nanoTime()
+            encoder.queue.execute {
+                hostStats.add("host.queueWait", System.nanoTime() - submitted)
+                val result = runCatching { encoder.addFrame(pixels, duration) }
+                EngineDispatch.onEngine(session) {
+                    pipeline.inFlight--
+                    result.exceptionOrNull()?.let { failed ->
+                        if (pipeline.failure == null) pipeline.failure = wireOf(failed)
+                    }
+                    session.engine.canvasResult(requestId, pipeline.failure ?: "")
+                    pipeline.waiting.poll()?.let { answerFrame(pipeline, it) }
+                }
+            }
+            if (pipeline.inFlight <= PluginVideoEncoder.FRAMES_IN_FLIGHT) {
+                EngineDispatch.onEngine(session) { answerFrame(pipeline, requestId) }
+            } else {
+                pipeline.waiting.add(requestId)
+            }
+            return ""
+        }
+
+        /** a frame's promise settles with whatever the encoder has to say by then, or with nothing */
+        private fun answerFrame(pipeline: Pipeline, requestId: Long) {
+            session.engine.canvasResult(requestId, "A" + (pipeline.failure ?: ""))
+        }
+
+        private fun wireOf(failed: Throwable): String = when (failed) {
+            is OutOfMemoryError -> PluginWire.encodePluginError("quota-exceeded", "canvas: out of memory")
+            else -> PluginWire.encodePluginError("internal", "canvas: ${failed.message ?: failed.toString()}")
+        }
+
+        private fun encoderFinish(id: Long, arg: String): String {
+            val requestId = arg.toLongOrNull() ?: refuse("internal", "canvas: malformed request")
+            val pipeline = encoders[id] ?: refuse("handle-expired", "canvas: that encoder is gone")
+            pipeline.failure?.let { throw Refusal(it) }
+            submit(requestId, pipeline.encoder.queue) {
+                val file = pipeline.encoder.finish()
+                "J" + JSONObject().put("path", file.absolutePath).put("type", "video/mp4").toString()
+            }
+            return ""
+        }
+
+        private fun releaseEncoder(id: Long): String {
+            encoders.remove(id)?.encoder?.close()
+            hostStats.dump()
+            return ""
         }
 
         private fun encodedDir(): File? {
@@ -740,6 +947,10 @@ object PluginCanvas {
             canvases.clear()
             for (image in images.values) image.recycle()
             images.clear()
+            for (animation in animations.values) animation.close()
+            animations.clear()
+            for (pipeline in encoders.values) pipeline.encoder.close()
+            encoders.clear()
             fonts.clear()
             typefaces.clear()
         }

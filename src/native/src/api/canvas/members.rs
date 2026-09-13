@@ -1037,3 +1037,154 @@ pub(super) fn install_image_draw_members<'js>(ctx: &Ctx<'js>, proto: &Object<'js
   )?;
   Ok(())
 }
+
+pub(super) fn install_animation_members<'js>(ctx: &Ctx<'js>) -> JsResult<()> {
+  let proto = Class::<AnimationHandle>::prototype(ctx)?
+    .ok_or_else(|| Exception::throw_message(ctx, "AnimatedImage: the class has no prototype"))?;
+  define_getter(&proto, "width", |this: This<Class<'js, AnimationHandle>>| this.0.borrow().0.width)?;
+  define_getter(&proto, "height", |this: This<Class<'js, AnimationHandle>>| this.0.borrow().0.height)?;
+  define_getter(&proto, "frameCount", |this: This<Class<'js, AnimationHandle>>| this.0.borrow().0.frame_count)?;
+  define_getter(&proto, "duration", |this: This<Class<'js, AnimationHandle>>| this.0.borrow().0.duration)?;
+  define_getter(&proto, "fps", |this: This<Class<'js, AnimationHandle>>| this.0.borrow().0.fps)?;
+
+  define_method(
+    &proto,
+    "frame",
+    Function::new(
+      ctx.clone(),
+      |ctx: Ctx<'js>, this: This<Class<'js, AnimationHandle>>, index: Opt<Coerced<f64>>| -> JsResult<Value<'js>> {
+        let animation = this.0.borrow().0.clone();
+        if !animation.alive.get() {
+          return expired(&ctx, "this animation is gone");
+        }
+        let index = num(&index);
+        if !index.is_finite() || index < 0.0 || index.trunc() as i64 >= animation.frame_count as i64 {
+          return invalid(
+            &ctx,
+            &format!("frame: this animation has frames 0 to {}", animation.frame_count.saturating_sub(1)),
+          );
+        }
+        let index = index.trunc() as i32;
+        let state = animation.state.clone();
+        let image = state.blank_image();
+        let image_id = image.id;
+        let describe = |request_id: i64| format!("{request_id}{FIELD}{image_id}{FIELD}{index}");
+        let kind = PendingKind::Frame { image, sequential: false };
+        state.start_op(&ctx, kind, OP_ANIMATION_FRAME, animation.id, &describe, None)
+      },
+    )?,
+  )?;
+
+  // the frame after the last one read, as an iterator result: `for await` over the animation
+  define_method(
+    &proto,
+    "next",
+    Function::new(ctx.clone(), |ctx: Ctx<'js>, this: This<Class<'js, AnimationHandle>>| -> JsResult<Value<'js>> {
+      let animation = this.0.borrow().0.clone();
+      if !animation.alive.get() {
+        return expired(&ctx, "this animation is gone");
+      }
+      let state = animation.state.clone();
+      let image = state.blank_image();
+      let image_id = image.id;
+      let describe = |request_id: i64| format!("{request_id}{FIELD}{image_id}");
+      let kind = PendingKind::Frame { image, sequential: true };
+      state.start_op(&ctx, kind, OP_ANIMATION_NEXT, animation.id, &describe, None)
+    })?,
+  )?;
+  proto.prop(
+    rquickjs::Symbol::async_iterator(ctx.clone()),
+    Property::from(Function::new(ctx.clone(), |this: This<Value<'js>>| -> Value<'js> { this.0 })?)
+      .writable()
+      .configurable(),
+  )?;
+
+  crate::utils::shape::define_disposable(
+    ctx,
+    &proto,
+    Function::new(ctx.clone(), |this: This<Class<'js, AnimationHandle>>| {
+      this.0.borrow().0.free();
+    })?,
+  )?;
+  Ok(())
+}
+
+pub(super) fn install_encoder_members<'js>(ctx: &Ctx<'js>) -> JsResult<()> {
+  let proto = Class::<EncoderHandle>::prototype(ctx)?
+    .ok_or_else(|| Exception::throw_message(ctx, "VideoEncoder: the class has no prototype"))?;
+  define_getter(&proto, "width", |this: This<Class<'js, EncoderHandle>>| this.0.borrow().0.width)?;
+  define_getter(&proto, "height", |this: This<Class<'js, EncoderHandle>>| this.0.borrow().0.height)?;
+
+  define_method(
+    &proto,
+    "addFrame",
+    Function::new(
+      ctx.clone(),
+      |ctx: Ctx<'js>,
+       this: This<Class<'js, EncoderHandle>>,
+       source: Opt<Value<'js>>,
+       duration: Opt<Coerced<f64>>|
+       -> JsResult<Value<'js>> {
+        let encoder = this.0.borrow().0.clone();
+        encoder.writable(&ctx)?;
+        let frames = encoder.frames.get();
+        if frames >= MAX_ENCODER_FRAMES {
+          return PluginErrorCode::QuotaExceeded(frames as i64 + 1, MAX_ENCODER_FRAMES as i64)
+            .throw(&ctx, &format!("a video may have at most {MAX_ENCODER_FRAMES} frames"));
+        }
+        let Some(value) = source.0 else {
+          return invalid(&ctx, "addFrame: expected an image");
+        };
+        let source = image_source(&ctx, &value)?;
+        if let ImageSource::Canvas(canvas) = &source {
+          canvas.flush(&ctx)?;
+        }
+        let millis = match duration.0.as_ref().map(|v| v.0) {
+          None => 1000.0 / encoder.fps as f64,
+          Some(value) if value.is_finite() && value > 0.0 => value,
+          Some(_) => return invalid(&ctx, "addFrame: a frame's duration must be a positive number"),
+        };
+        let (kind, id) = (source.kind(), source.id());
+        let describe = |request_id: i64| format!("{request_id}{FIELD}{kind}{FIELD}{id}{FIELD}{millis}");
+        let state = encoder.state.clone();
+        let frame = encoder.start_frame(&ctx)?;
+        let answer = state.start_op(
+          &ctx,
+          PendingKind::EncoderFrame { _frame: frame },
+          OP_ENCODER_FRAME,
+          encoder.id,
+          &describe,
+          None,
+        )?;
+        encoder.frames.set(frames + 1);
+        Ok(answer)
+      },
+    )?,
+  )?;
+
+  define_method(
+    &proto,
+    "finish",
+    Function::new(ctx.clone(), |ctx: Ctx<'js>, this: This<Class<'js, EncoderHandle>>| -> JsResult<Value<'js>> {
+      let encoder = this.0.borrow().0.clone();
+      encoder.writable(&ctx)?;
+      if encoder.frames.get() == 0 {
+        return invalid(&ctx, "finish: this video has no frames");
+      }
+      encoder.finished.set(true);
+      let state = encoder.state.clone();
+      let describe = |request_id: i64| format!("{request_id}");
+      let id = encoder.id;
+      state.start_op(&ctx, PendingKind::FinishEncoder { _encoder: encoder }, OP_ENCODER_FINISH, id, &describe, None)
+    })?,
+  )?;
+
+  crate::utils::shape::define_disposable(
+    ctx,
+    &proto,
+    Function::new(ctx.clone(), |this: This<Class<'js, EncoderHandle>>| {
+      this.0.borrow().0.free();
+    })?,
+  )?;
+  Ok(())
+}

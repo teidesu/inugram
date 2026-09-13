@@ -19,6 +19,8 @@ import org.telegram.messenger.Utilities
 open class QuickJs {
     data class Config(
         val spillDir: String,
+        /** where a send's or an upload's file is staged; "" stages beside the spills */
+        val transferDir: String,
         val fsDir: String,
         val fsQuotaBytes: Long,
         val fsUnscoped: Boolean,
@@ -76,6 +78,7 @@ open class QuickJs {
         ptr = nativeCreate(
             listener,
             config.spillDir,
+            config.transferDir,
             config.fsDir,
             config.fsQuotaBytes,
             config.fsUnscoped,
@@ -278,6 +281,7 @@ open class QuickJs {
     private external fun nativeCreate(
         listener: PluginBridge,
         spillDir: String,
+        transferDir: String,
         fsDir: String,
         fsQuotaBytes: Long,
         fsUnscoped: Boolean,
@@ -367,5 +371,9 @@ open class QuickJs {
         init {
             System.loadLibrary("inu_native")
         }
+
+        /** for a class with natives of its own in the same library: touching the companion loads it */
+        @JvmStatic
+        fun ensureLoaded() = Unit
     }
 }

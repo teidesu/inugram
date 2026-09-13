@@ -32,6 +32,7 @@ pub(crate) mod env;
 pub(crate) mod exports;
 pub(crate) mod hosts;
 pub(crate) mod log;
+pub(crate) mod pixels;
 #[cfg(test)]
 mod tests;
 

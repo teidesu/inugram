@@ -1,6 +1,6 @@
 use std::rc::Rc;
 
-use rquickjs::{Ctx, Function, Object, Result as JsResult};
+use rquickjs::{Ctx, Function, Result as JsResult};
 
 use crate::{
   api::error::PluginErrorCode,

@@ -10,6 +10,7 @@ import desu.inugram.helpers.plugins.telegram.PluginWrites.refuse
 import desu.inugram.helpers.plugins.tl.TlHandles
 import java.io.File
 import org.telegram.messenger.AndroidUtilities
+import org.telegram.messenger.FileLoader
 import org.telegram.messenger.MessageObject
 import org.telegram.messenger.MessagesController
 import org.telegram.messenger.NotificationCenter
@@ -41,7 +42,7 @@ object PluginOptimisticSend {
 
     private const val TAG = "InuPluginSend"
 
-    private class Pending(val call: Call, val dialogId: Long) {
+    private class Pending(val call: Call, val dialogId: Long, val upload: PluginMedia.Upload?) {
         var localId: Int = 0
         var request: TLObject? = null
         var settled = false
@@ -71,7 +72,7 @@ object PluginOptimisticSend {
     }
 
     private fun startText(call: Call, dialogId: Long, replyTo: MessageObject?, replyToTop: MessageObject?) {
-        val token = register(call, dialogId)
+        val token = register(call, dialogId, null)
         onUi(token) {
             val params = SendMessagesHelper.SendMessageParams.of(
                 call.text(),
@@ -95,15 +96,16 @@ object PluginOptimisticSend {
 
     internal fun sendMedia(
         call: Call,
-        path: File,
+        source: File,
         name: String,
         mime: String,
         asDocument: Boolean,
+        described: PluginMedia.LocalDescription,
         fallback: () -> Unit,
     ): String? {
         val dialogId = dialogIdOf(call)
         resolveReply(call, dialogId, fallback) { replyTo, replyToTop ->
-            startMedia(call, dialogId, path, name, mime, asDocument, replyTo, replyToTop)
+            startMedia(call, dialogId, source, name, mime, asDocument, described, replyTo, replyToTop)
         }
         return null
     }
@@ -111,14 +113,23 @@ object PluginOptimisticSend {
     private fun startMedia(
         call: Call,
         dialogId: Long,
-        path: File,
+        source: File,
         name: String,
         mime: String,
         asDocument: Boolean,
+        described: PluginMedia.LocalDescription,
         replyTo: MessageObject?,
         replyToTop: MessageObject?,
     ) {
-        val token = register(call, dialogId)
+        val upload = try {
+            PluginMedia.takeForUpload(call, source, name)
+        } catch (e: PluginWrites.Refused) {
+            PluginWrites.answer(call) { e.wire }
+            return
+        }
+        PluginMedia.watchUpload(call, upload.file.absolutePath)
+        val path = upload.file
+        val token = register(call, dialogId, upload)
         val caption = call.text()
         val entities = PluginWrites.entitiesOf(call.json).takeIf { it.isNotEmpty() }
         onUi(token) {
@@ -144,7 +155,7 @@ object PluginOptimisticSend {
                 )
             } else {
                 SendMessagesHelper.SendMessageParams.of(
-                    documentOf(path, name, mime),
+                    documentOf(path, name, mime, described),
                     null,
                     path.absolutePath,
                     dialogId,
@@ -175,7 +186,12 @@ object PluginOptimisticSend {
         !asDocument && mime.startsWith("image/") && mime != "image/webp"
 
     /** the same shape the request path uploads: mime and a name, and nothing stock only knows how to read off a gallery pick */
-    internal fun documentOf(path: File, name: String, mime: String): TLRPC.TL_document =
+    internal fun documentOf(
+        path: File,
+        name: String,
+        mime: String,
+        described: PluginMedia.LocalDescription,
+    ): TLRPC.TL_document =
         TLRPC.TL_document().apply {
             dc_id = 0
             id = 0
@@ -184,6 +200,11 @@ object PluginOptimisticSend {
             size = path.length()
             file_reference = ByteArray(0)
             attributes.add(TLRPC.TL_documentAttributeFilename().apply { file_name = name.ifEmpty { path.name } })
+            attributes.addAll(described.attributes)
+            described.thumb?.let {
+                thumbs.add(it)
+                flags = flags or 1
+            }
         }
 
     private fun dialogIdOf(call: Call): Long {
@@ -228,8 +249,8 @@ object PluginOptimisticSend {
 
     private fun objectOf(accountId: Int, message: TLRPC.Message) = MessageObject(accountId, message, true, true)
 
-    private fun register(call: Call, dialogId: Long): String {
-        val entry = Pending(call, dialogId)
+    private fun register(call: Call, dialogId: Long, upload: PluginMedia.Upload?): String {
+        val entry = Pending(call, dialogId, upload)
         val token = synchronized(pending) {
             val token = "p${++nextToken}"
             pending[token] = entry
@@ -251,7 +272,7 @@ object PluginOptimisticSend {
                 block()
             } catch (e: Throwable) {
                 Log.e(TAG, "an optimistic send could not be drawn", e)
-                fail(token, "the send could not be started")
+                fail(token, "the send could not be started")?.let(::discardUndrawn)
             }
         }
     }
@@ -293,7 +314,9 @@ object PluginOptimisticSend {
         @Suppress("UNCHECKED_CAST")
         val messages = args.getOrNull(1) as? ArrayList<MessageObject> ?: return
         for (message in messages) {
-            if (tokenOf(message.messageOwner) == token) entry.localId = message.id
+            if (tokenOf(message.messageOwner) != token) continue
+            entry.localId = message.id
+            entry.upload?.takeIf { it.owned }?.let { PluginSentFiles.track(entry.call.accountId, message.id, it.file) }
         }
     }
 
@@ -301,6 +324,11 @@ object PluginOptimisticSend {
         val message = args.getOrNull(2) as? TLRPC.Message ?: return
         if (tokenOf(message) != token) return
         settle(token) { call -> PluginReads.mint(call.session.tl, message) }
+    }
+
+    /** ui thread only, where a draw is: a file the composer drew a message for is that message's to retry from */
+    private fun discardUndrawn(entry: Pending) {
+        if (entry.localId == 0) entry.upload?.discard()
     }
 
     private fun onFailed(token: String, entry: Pending, args: Array<Any?>) {
@@ -333,10 +361,10 @@ object PluginOptimisticSend {
     private fun fail(token: String, message: String) =
         settle(token) { PluginWire.encodePluginError("internal", message) }
 
-    private fun settle(token: String, produce: (Call) -> String) {
+    private fun settle(token: String, produce: (Call) -> String): Pending? {
         val entry = synchronized(pending) {
-            val entry = pending[token] ?: return
-            if (entry.settled) return
+            val entry = pending[token] ?: return null
+            if (entry.settled) return null
             entry.settled = true
             pending.remove(token)
             entry
@@ -344,6 +372,7 @@ object PluginOptimisticSend {
         entry.request?.let { PluginRpc.releasePluginSend(it) }
         stopObserving(entry.call.accountId, entry)
         PluginWrites.answer(entry.call) { produce(entry.call) }
+        return entry
     }
 
 
@@ -357,6 +386,8 @@ object PluginOptimisticSend {
         for (entry in dropped) {
             entry.request?.let { PluginRpc.releasePluginSend(it) }
             stopObserving(entry.call.accountId, entry)
+            // behind a composer call that may be drawing this very send on the ui thread right now
+            AndroidUtilities.runOnUIThread { discardUndrawn(entry) }
         }
     }
 }

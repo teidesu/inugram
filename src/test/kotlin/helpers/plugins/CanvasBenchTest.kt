@@ -41,40 +41,8 @@ class CanvasBenchTest {
         engines.clear()
     }
 
-    private fun engineFor(): Plugin {
-        val plugin = startPlugin("canvas-bench")
-        val engine = QuickJs()
-        plugin.session = PluginSession(plugin, engine)
-        attachBridge(
-            plugin.session!!,
-            core = object : CoreListener {
-                override fun onConsole(level: Int, message: String) {
-                    Log.d("InuBench", message)
-                }
-                override fun onTimerSchedule(delayMs: Long) = Unit
-            },
-            canvas = PluginCanvas.listenerFor(plugin.session!!),
-            spillDir = desu.inugram.helpers.plugins.io.PluginBlobs.dirFor(plugin.id),
-        )
-        engines.add(engine)
-        return plugin
-    }
-
-    private fun Plugin.js(code: String): String = engine!!.evaluate(code.trimIndent()) ?: "null"
-
-    private fun Plugin.await(code: String) {
-        js("globalThis.done = false; globalThis.failure = null; ($code).catch((e) => { globalThis.failure = String(e && e.stack || e); globalThis.done = true })")
-        repeat(200) {
-            settle()
-            if (js("String(globalThis.done)") == "true") {
-                val failure = js("String(globalThis.failure)")
-                if (failure != "null") error(failure)
-                return
-            }
-            Thread.sleep(20)
-        }
-        error("promise never settled")
-    }
+    private fun engineFor(): Plugin =
+        canvasEngine("canvas-bench") { Log.d("InuBench", it) }.also { engines.add(it.engine!!) }
 
     private fun us(timings: JSONObject, key: String, count: Int) =
         "%.1fus".format(timings.getDouble(key) / count * 1000)
@@ -216,6 +184,107 @@ class CanvasBenchTest {
                 " encodeJpeg=${"%.2f".format(timings.getDouble("encodeJpeg"))}ms (${timings.getInt("jpegBytes")}b)",
         )
         assertTrue(timings.getInt("pngBytes") > 0)
+    }
+
+    /**
+     * the shape of one animated demotivator: a 720x720 source at 12fps, decoded and drawn into a
+     * 616x800 frame that is then encoded. Three variants say where the time goes: decoding at the
+     * target size against decoding whole and drawing down, and awaiting each frame against
+     * letting the encoder queue run ahead. The kotlin side of each is dumped under `InuCanvasStats`.
+     */
+    @Test
+    fun bench_animation_pipeline() {
+        val plugin = engineFor()
+        plugin.await(
+            """
+            (async () => {
+              globalThis.t = {}
+              const frames = 120
+              const sourceSide = 720
+              // the source: a square moving across a filled background, at the size a gif might be
+              let start = performance.now()
+              {
+                using canvas = inu.canvas.create(sourceSide, sourceSide)
+                const ctx = canvas.getContext('2d')
+                using encoder = await inu.canvas.createEncoder({ width: sourceSide, height: sourceSide, fps: 12 })
+                for (let i = 0; i < frames; i++) {
+                  ctx.fillStyle = `hsl(${'$'}{i * 3}, 60%, 40%)`
+                  ctx.fillRect(0, 0, sourceSide, sourceSide)
+                  ctx.fillStyle = '#ffffff'
+                  ctx.fillRect((i * 5) % sourceSide, 200, 120, 120)
+                  await encoder.addFrame(canvas)
+                }
+                globalThis.source = await encoder.finish()
+              }
+              t.makeSource = performance.now() - start
+              t.sourceBytes = source.size
+
+              const side = 360
+              const border = 20
+              const width = 616
+              const height = 800
+              const run = async (label, decodeSize, awaitEach) => {
+                const r = { frames: 0, decode: 0, draw: 0, encode: 0 }
+                const total = performance.now()
+                using animation = await inu.canvas.decodeAnimation(source, decodeSize)
+                using canvas = inu.canvas.create(width, height)
+                const ctx = canvas.getContext('2d')
+                ctx.fillStyle = '#000000'
+                ctx.fillRect(0, 0, width, height)
+                ctx.fillStyle = '#ffffff'
+                ctx.fillRect(border, border, side + 10, side + 10)
+                ctx.font = '48px serif'
+                ctx.textAlign = 'center'
+                ctx.fillText(${JSONObject.quote(text)}, width / 2, height - 60)
+                using encoder = await inu.canvas.createEncoder({ width, height, fps: 12 })
+                const pending = []
+                let s = performance.now()
+                for await (using frame of animation) {
+                  r.decode += performance.now() - s
+                  s = performance.now()
+                  ctx.drawImage(frame, border + 5, border + 5, side, side)
+                  r.draw += performance.now() - s
+                  s = performance.now()
+                  const p = encoder.addFrame(canvas)
+                  if (awaitEach) await p; else pending.push(p)
+                  r.encode += performance.now() - s
+                  r.frames++
+                  s = performance.now()
+                }
+                s = performance.now()
+                await Promise.all(pending)
+                using out = await encoder.finish()
+                r.finish = performance.now() - s
+                r.bytes = out.size
+                r.total = performance.now() - total
+                t[label] = r
+              }
+              await run('warm', { width: side, height: side }, true)
+              await run('scaledAwait', { width: side, height: side }, true)
+              await run('wholeAwait', undefined, true)
+              await run('scaledQueued', { width: side, height: side }, false)
+            })()
+            """,
+            timeoutMillis = 180_000,
+            // the harness drains the plugin queue from here, so a slow poll is a hop the app never has
+            pollMillis = 1,
+        )
+        val t = JSONObject(plugin.js("JSON.stringify(t)"))
+        Log.i("InuBench", "animation source: ${"%.0f".format(t.getDouble("makeSource"))}ms for 120 frames of 720x720 (${t.getInt("sourceBytes")}b)")
+        for (label in listOf("scaledAwait", "wholeAwait", "scaledQueued")) {
+            val r = t.getJSONObject(label)
+            val n = r.getInt("frames").coerceAtLeast(1)
+            Log.i(
+                "InuBench",
+                "animation $label: ${r.getInt("frames")} frames total=${"%.0f".format(r.getDouble("total"))}ms" +
+                    " perFrame=${"%.2f".format(r.getDouble("total") / n)}ms" +
+                    " decodeAwait=${"%.2f".format(r.getDouble("decode") / n)}ms" +
+                    " draw=${"%.2f".format(r.getDouble("draw") / n)}ms" +
+                    " encodeAwait=${"%.2f".format(r.getDouble("encode") / n)}ms" +
+                    " finish=${"%.0f".format(r.getDouble("finish"))}ms (${r.getInt("bytes")}b)",
+            )
+            assertTrue(r.getInt("frames") > 100, "$label read ${r.getInt("frames")} frames")
+        }
     }
 
     /** the same platform calls with no engine: whatever is left over is what the bridge costs */

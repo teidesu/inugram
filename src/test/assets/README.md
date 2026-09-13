@@ -27,3 +27,7 @@ They cover interfaces, instance/static methods, dispatch fields, primitive
 boxing/unboxing, arrays, wide arguments/results, and constructor range calls.
 Native tests compare production output byte-for-byte. ART execution is covered
 by the separate device class-definition suite, not established by these fixtures.
+
+`canvas-variable-delay.gif` is a 16x16, three-frame gif whose frames last 900, 100, and 200 ms,
+so `inu.canvas.decodeAnimation` is checked against timestamps a fixed frame rate could not
+produce.

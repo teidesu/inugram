@@ -52,6 +52,7 @@ pub extern "system" fn Java_desu_inugram_helpers_plugins_QuickJs_nativeCreate(
   _this: JObject,
   listener: JObject,
   spill_dir: JString,
+  transfer_dir: JString,
   fs_dir: JString,
   fs_quota_bytes: jlong,
   fs_unscoped: jboolean,
@@ -85,6 +86,7 @@ pub extern "system" fn Java_desu_inugram_helpers_plugins_QuickJs_nativeCreate(
     apply_heap_limit(&rt);
 
     let spill_dir = PathBuf::from(jstring_to_string(env, &spill_dir));
+    let transfer_dir = PathBuf::from(jstring_to_string(env, &transfer_dir));
     let fs_dir = PathBuf::from(jstring_to_string(env, &fs_dir));
     let android_dirs = jstring_to_string(env, &android_dirs);
     let install_fs_enabled = install_fs;
@@ -220,7 +222,7 @@ pub extern "system" fn Java_desu_inugram_helpers_plugins_QuickJs_nativeCreate(
             grants: grants.clone(),
             views: views.clone(),
             blobs: blobs.clone(),
-            stage_dir: spill_dir.clone(),
+            stage_dir: if transfer_dir.as_os_str().is_empty() { spill_dir.clone() } else { transfer_dir.clone() },
             log: log.clone(),
           };
           let writes = install_writes(&ctx, deps, &shared, &account, &globals)?;
@@ -397,9 +399,7 @@ pub extern "system" fn Java_desu_inugram_helpers_plugins_QuickJs_nativeXposedAft
       Some(engine) => {
         let _caller = CallerEntry::new();
         match engine.xposed.as_ref() {
-          Some(state) if engine.is_admitting() => {
-            state.dispatch_after(&engine._rt, &engine.ctx, dispatch_id, &result)
-          }
+          Some(state) if engine.is_admitting() => state.dispatch_after(&engine._rt, &engine.ctx, dispatch_id, &result),
           _ => xposed::NOT_DISPATCHED.to_string(),
         }
       }
@@ -630,7 +630,11 @@ pub extern "system" fn Java_desu_inugram_helpers_plugins_QuickJs_nativeJvmReleas
 }
 
 #[no_mangle]
-pub extern "system" fn Java_desu_inugram_helpers_plugins_QuickJs_nativeJvmClose(_env: EnvUnowned, _this: JObject, ptr: jlong) {
+pub extern "system" fn Java_desu_inugram_helpers_plugins_QuickJs_nativeJvmClose(
+  _env: EnvUnowned,
+  _this: JObject,
+  ptr: jlong,
+) {
   if let Some(refs) = engine_jvm_refs(ptr) {
     refs.close();
   }

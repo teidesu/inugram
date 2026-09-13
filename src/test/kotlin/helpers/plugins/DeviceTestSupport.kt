@@ -148,6 +148,48 @@ fun settle() {
     }
 }
 
+/**
+ * A real engine with the real rasterizer behind it, for a suite whose subject is what the platform
+ * does rather than what the bridge records. The caller owns it: `stopCallbacks`,
+ * `PluginCanvas.detach` and `close`, in that order.
+ */
+fun canvasEngine(name: String, onLog: (String) -> Unit = {}): Plugin {
+    val plugin = startPlugin(name)
+    plugin.session = PluginSession(plugin, QuickJs())
+    attachBridge(
+        plugin.session!!,
+        core = object : CoreListener {
+            override fun onConsole(level: Int, message: String) = onLog(message)
+            override fun onTimerSchedule(delayMs: Long) = Unit
+        },
+        canvas = desu.inugram.helpers.plugins.ui.PluginCanvas.listenerFor(plugin.session!!),
+        spillDir = desu.inugram.helpers.plugins.io.PluginBlobs.dirFor(plugin.id),
+    )
+    return plugin
+}
+
+fun Plugin.js(code: String): String = engine!!.evaluate(code.trimIndent()) ?: "null"
+
+/** runs a promise-returning expression to settlement, failing the test with whatever it rejected with */
+fun Plugin.await(code: String, timeoutMillis: Long = 20_000, pollMillis: Long = 20) {
+    js(
+        "globalThis.done = false; globalThis.failure = null; ($code)"
+            + ".then(() => { globalThis.done = true })"
+            + ".catch((e) => { globalThis.failure = String(e && e.stack || e); globalThis.done = true })",
+    )
+    val deadline = System.currentTimeMillis() + timeoutMillis
+    while (System.currentTimeMillis() < deadline) {
+        settle()
+        if (js("String(globalThis.done)") == "true") {
+            val failure = js("String(globalThis.failure)")
+            if (failure != "null") error(failure)
+            return
+        }
+        Thread.sleep(pollMillis)
+    }
+    error("promise never settled")
+}
+
 fun connections(account: Int = 0): RecordingConnectionsManager = RecordingConnectionsManager.forAccount(account)
 
 /** moves the queues' clock forward, so a test reaches a timeout without waiting for it */
@@ -203,6 +245,7 @@ fun attachBridge(
     accountsJson: (() -> String)? = null,
     // blobs and canvas sources spill to disk; a suite that stages one needs somewhere to put it
     spillDir: String = "",
+    transferDir: String = "",
 ) {
     val tl = session.tl
     val jvm = PluginJvm.listenerFor(session, testAppScreen)
@@ -230,6 +273,7 @@ fun attachBridge(
         bridge,
         QuickJs.Config(
             spillDir = spillDir,
+            transferDir = transferDir,
             fsDir = "",
             fsQuotaBytes = 0,
             fsUnscoped = false,
