@@ -76,8 +76,9 @@ const TAKEOUT_GRANT: &str = "takeout";
 const EVENTS_PRELUDE: &[u8] = include_bytes!(concat!(env!("OUT_DIR"), "/events.qbc"));
 const SEND_PRELUDE: &[u8] = include_bytes!(concat!(env!("OUT_DIR"), "/send_message.qbc"));
 
-const SEND_METHODS: [&str; 4] =
-  ["messages.sendMessage", "messages.sendMedia", "messages.sendMultiMedia", "messages.editMessage"];
+/// keep in step with `SYNTHETIC_CODE`/`DROPPED_TEXT` in src/fork/helpers/plugins/telegram/PluginRpc.kt
+pub(crate) const DROP_CODE: i32 = -1000;
+pub(crate) const DROP_TEXT: &str = "MESSAGE_DROPPED_BY_PLUGIN";
 
 const SEND_SCOPE: &str = "interceptSendMessage";
 
@@ -99,6 +100,7 @@ pub struct RpcState {
   intercept_update_fns: Registry<UpdateReg>,
   demux: RefCell<Option<Persistent<Function<'static>>>>,
   send_wrap: RefCell<Option<Persistent<Function<'static>>>>,
+  send_methods: RefCell<Vec<String>>,
   regexp_ctor: RefCell<Option<Persistent<Object<'static>>>>,
   promise: RefCell<Option<PromiseTools>>,
   dispatches: RefCell<HashMap<i64, Rc<DispatchState>>>,
@@ -266,6 +268,7 @@ pub fn install_rpc<'js>(
     intercept_update_fns: Registry::default(),
     demux: RefCell::new(None),
     send_wrap: RefCell::new(None),
+    send_methods: RefCell::new(Vec::new()),
     regexp_ctor: RefCell::new(Some(Persistent::save(ctx, ctx.globals().get::<_, Object>("RegExp")?))),
     promise: RefCell::new(Some(capture_promise_tools(ctx)?)),
     dispatches: RefCell::new(HashMap::new()),
@@ -416,7 +419,9 @@ impl RpcState {
     let self_user_id = Function::new(ctx.clone(), move |account_id: i32| {
       accounts.as_ref().and_then(|accounts| accounts.self_user_id(account_id)).map(|id| id as f64)
     })?;
-    let build: Function = factory.call((shared, plugin_error, rpc_error, self_user_id))?;
+    let built: Object = factory.call((shared, plugin_error, rpc_error, self_user_id, DROP_CODE, DROP_TEXT))?;
+    let build: Function = built.get("wrap")?;
+    *self.send_methods.borrow_mut() = built.get("methods")?;
     *self.send_wrap.borrow_mut() = Some(Persistent::save(ctx, build));
 
     let state = self.clone();
@@ -489,7 +494,7 @@ impl RpcState {
           None => return Err(Exception::throw_type(ctx, "interceptSendMessage is not installed")),
         };
         let middleware: Function = build.call((cb,))?;
-        let list = SEND_METHODS.iter().map(ToString::to_string).collect();
+        let list = state.send_methods.borrow().clone();
         state.register_intercept(ctx, list, SEND_SCOPE, true, &filter_json, middleware)
       })?,
     )?;
