@@ -1,5 +1,6 @@
 package desu.inugram.helpers.plugins
 
+import desu.inugram.core.plugins.PluginRefusal
 import desu.inugram.core.plugins.EgressPolicy
 import desu.inugram.core.plugins.PluginPermissions
 import desu.inugram.core.plugins.PluginWire
@@ -42,47 +43,13 @@ class PluginFetchTest {
         return (decoded as PluginWire.Value.PluginErr).code
     }
 
-    /**
-     * `fetch.js` states these refusals too, but it is evaluated into the plugin's own realm and the
-     * spec reaches this side as text, so this is the check that decides. Android's
-     * `HttpURLConnection` is okhttp, which has no restricted-name list of its own: a forged `Host`
-     * or `Transfer-Encoding` goes on the wire.
-     */
     @Test
-    fun a_spec_naming_a_header_the_transport_owns_is_refused() {
-        for (name in listOf(
-            "host", "Host", "content-length", "connection", "transfer-encoding", "upgrade", "keep-alive", "te",
-            "trailer",
-        )) {
-            assertFailsWith<IllegalArgumentException>(name) {
-                PluginFetch.Spec.parse("""{"method":"GET","headers":{"$name":["x"]},"redirect":"follow"}""")
-            }
-        }
-    }
-
-    @Test
-    fun a_spec_whose_header_name_value_method_or_redirect_mode_is_malformed_is_refused() {
-        for (json in listOf(
-            """{"headers":{"x y":["a"]}}""",
-            """{"headers":{"x-one:":["a"]}}""",
-            """{"headers":{"":["a"]}}""",
-            """{"headers":{"x-one":["a\r\nx-two: b"]}}""",
-            """{"headers":{"x-one":["a"],"X-One":["b"]}}""",
-            """{"method":"GET /x HTTP/1.1"}""",
-            """{"redirect":"whatever"}""",
-        )) {
-            assertFailsWith<IllegalArgumentException>(json) { PluginFetch.Spec.parse(json) }
-        }
-    }
-
-    @Test
-    fun an_ordinary_spec_parses_lowercasing_names_and_keeping_repeats() {
-        val spec = PluginFetch.Spec.parse(
-            """{"method":"POST","headers":{"X-One":["a"],"x-many":["b","c"]},"redirect":"manual"}""",
-        )
+    fun a_spec_groups_repeated_names_and_refuses_a_line_break_that_got_past_the_engine() {
+        val spec = PluginFetch.Spec.of("POST", "manual", arrayOf("x-one", "a", "x-many", "b", "x-many", "c"))
         assertEquals("POST", spec.method)
         assertEquals("manual", spec.redirect)
         assertEquals(mapOf("x-one" to listOf("a"), "x-many" to listOf("b", "c")), spec.headers)
+        assertFailsWith<PluginRefusal> { PluginFetch.Spec.of("GET", "follow", arrayOf("x-one", "a\r\nhost: b")) }
     }
 
     private class Recorder(private val script: Map<String, PluginFetch.Hop>) : PluginFetch.Transport {

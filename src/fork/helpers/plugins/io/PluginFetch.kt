@@ -1,5 +1,6 @@
 package desu.inugram.helpers.plugins.io
 
+import desu.inugram.core.plugins.PluginRefusal
 import desu.inugram.core.plugins.EgressPolicy
 import desu.inugram.core.plugins.PluginPermissions
 import desu.inugram.core.plugins.PluginWire
@@ -90,12 +91,15 @@ object PluginFetch {
 
     fun listenerFor(session: PluginSession): FetchListener =
         object : FetchListener {
-            override fun fetch(requestId: Long, url: String, specJson: String, body: ByteArray?): String? {
-                val spec = try {
-                    Spec.parse(specJson)
-                } catch (e: Exception) {
-                    return PluginWire.encodePluginError("invalid-argument", "fetch: ${e.message}")
-                }
+            override fun fetch(
+                requestId: Long,
+                url: String,
+                method: String,
+                redirect: String,
+                headers: Array<String>,
+                body: ByteArray?,
+            ): String? {
+                val spec = Spec.of(method, redirect, headers)
                 val bodiesDir = bodiesDir(session.plugin.id)
                     ?: return PluginWire.encodePluginError("internal", "fetch: there is nowhere to put a response body")
                 val key = FlightKey(session, requestId)
@@ -158,52 +162,16 @@ object PluginFetch {
 
     class Spec(val method: String, val headers: Map<String, List<String>>, val redirect: String) {
         companion object {
-            /** rfc7230's token, which is what a header name and a method are allowed to be */
-            private val TOKEN = Regex("^[!#$%&'*+\\-.^_`|~0-9a-zA-Z]+$")
-
-            /**
-             * headers the transport owns: one of these set from a plugin either does nothing or
-             * makes the request lie about its own framing. Android's `HttpURLConnection` is okhttp,
-             * which has no restricted-name list of its own and supplies `Host` only when it is
-             * absent, so a forged one does go on the wire.
-             */
-            private val RESERVED = setOf(
-                "host", "content-length", "connection", "transfer-encoding", "upgrade", "keep-alive", "te", "trailer",
-            )
-
-            private val REDIRECT_MODES = setOf("follow", "manual", "error")
-
-            /**
-             * `fetch.js` checks all of this too, for the error message - but it is evaluated into
-             * the plugin's own realm and hands the spec over as text, so its checks are advisory and
-             * these are the ones that decide. Same reasoning as `api::json_stringify` not reading
-             * `globalThis.JSON`: a refusal a plugin can reassign is not a refusal.
-             */
-            fun parse(json: String): Spec {
-                val obj = JSONObject(json)
-                val headers = LinkedHashMap<String, List<String>>()
-                val raw = obj.optJSONObject("headers")
-                if (raw != null) {
-                    for (key in raw.keys()) {
-                        require(TOKEN.matches(key)) { "'$key' is not a header name" }
-                        val name = key.lowercase()
-                        require(name !in RESERVED) { "the '$key' header belongs to the transport" }
-                        require(name !in headers) { "the '$key' header is repeated" }
-                        val values = raw.getJSONArray(key)
-                        headers[name] = (0 until values.length()).map {
-                            val value = values.getString(it)
-                            // a newline in a value is a second header, and a request nobody wrote
-                            require(value.none { c -> c < ' ' && c != '\t' || c == '\u007f' }) {
-                                "the '$key' header has a control character in it"
-                            }
-                            value
-                        }
+            fun of(method: String, redirect: String, pairs: Array<String>): Spec {
+                val headers = LinkedHashMap<String, MutableList<String>>()
+                for (at in 0 until pairs.size / 2) {
+                    val value = pairs[at * 2 + 1]
+                    // what okhttp would put on the wire as a second header line
+                    if (value.any { it == '\r' || it == '\n' }) {
+                        throw PluginRefusal(PluginWire.encodePluginError("internal", "fetch: a header value with a line break reached the transport"))
                     }
+                    headers.getOrPut(pairs[at * 2]) { ArrayList() }.add(value)
                 }
-                val method = obj.optString("method", "GET")
-                require(TOKEN.matches(method)) { "'$method' is not a method" }
-                val redirect = obj.optString("redirect", "follow")
-                require(redirect in REDIRECT_MODES) { "'$redirect' is not a redirect mode" }
                 return Spec(method, headers, redirect)
             }
         }

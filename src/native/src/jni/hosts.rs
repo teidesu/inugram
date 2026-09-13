@@ -420,11 +420,18 @@ impl TimerHost for JniBridge {
 }
 
 impl FetchHost for JniBridge {
-  fn send(&self, request_id: i64, url: &str, spec_json: &str, body: Option<&[u8]>) -> Option<String> {
+  fn send(&self, request_id: i64, url: &str, spec: &crate::api::io::fetch::Spec, body: Option<&[u8]>) -> Option<String> {
     self.call_refusal(
       "fetch",
       self.on_fetch,
-      &[Arg::Long(request_id), Arg::Str(url), Arg::Str(spec_json), Arg::Bytes(body)],
+      &[
+        Arg::Long(request_id),
+        Arg::Str(url),
+        Arg::Str(&spec.method),
+        Arg::Str(&spec.redirect),
+        Arg::Strs(&spec.headers),
+        Arg::Bytes(body),
+      ],
     )
   }
 

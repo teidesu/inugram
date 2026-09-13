@@ -61,11 +61,11 @@ struct TestFetchHost {
 }
 
 impl FetchHost for TestFetchHost {
-  fn send(&self, request_id: i64, url: &str, spec_json: &str, body: Option<&[u8]>) -> Option<String> {
+  fn send(&self, request_id: i64, url: &str, spec: &Spec, body: Option<&[u8]>) -> Option<String> {
     self.sent.borrow_mut().push(Sent {
       id: request_id,
       url: url.to_string(),
-      spec: spec_json.to_string(),
+      spec: format!("{} {} {:?}", spec.method, spec.redirect, spec.headers),
       body: body.map(<[u8]>::to_vec),
     });
     self.refuse.borrow().clone()
@@ -280,27 +280,52 @@ fn the_spec_carries_the_method_headers_and_redirect_mode() {
   );
   let sent = f.host.sent.borrow();
   assert_eq!(sent[0].url, "https://example.com/x");
-  assert_eq!(
-    sent[0].spec,
-    r#"{"method":"POST","headers":{"x-one":["a"],"x-many":["b","c"]},"redirect":"manual"}"#,
-  );
+  assert_eq!(sent[0].spec, r#"POST manual ["x-one", "a", "x-many", "b", "x-many", "c"]"#);
   assert_eq!(sent[0].body.as_deref(), Some(b"hello".as_slice()));
 }
 
-/// the prelude runs in the plugin's realm, so a spec it serialized itself would be whatever the
-/// plugin's `JSON.stringify` felt like returning - and the refusals `normalizeHeaders` states would
-/// be advisory
+/// the prelude runs in the plugin's realm, so a check made there is one the plugin can switch off
 #[test]
-fn reassigning_json_stringify_does_not_decide_what_the_host_is_sent() {
+fn a_plugin_that_patches_its_realm_still_cannot_forge_a_header() {
   let f = setup(Some("fetch"));
   start(
     &f,
     r#"(() => {
-            JSON.stringify = () => '{"method":"POST","headers":{"host":["internal.corp"]},"redirect":"follow"}'
-            return fetch('https://example.com/x', { headers: { 'X-One': 'a' } })
+            RegExp.prototype.test = () => true
+            Array.prototype.toJSON = () => ['internal.corp']
+            JSON.stringify = () => '{"headers":{"host":["internal.corp"]}}'
+            return fetch('https://example.com/x', { headers: { 'X-One': ['a\r\nHost: internal.corp'] } })
         })()"#,
   );
-  assert_eq!(f.host.sent.borrow()[0].spec, r#"{"method":"GET","headers":{"x-one":["a"]},"redirect":"follow"}"#);
+  assert!(out(&f).starts_with("PluginError|invalid-argument|"), "{}", out(&f));
+  assert!(f.host.sent.borrow().is_empty());
+}
+
+#[test]
+fn a_malformed_header_name_value_or_method_never_crosses() {
+  let f = setup(Some("fetch"));
+  for init in [
+    r#"{ headers: { 'x y': 'a' } }"#,
+    r#"{ headers: { 'x-one:': 'a' } }"#,
+    r#"{ headers: { '': 'a' } }"#,
+    r#"{ headers: { 'x-one': 'a\u0000b' } }"#,
+    r#"{ headers: { 'x-one': 'a\u007fb' } }"#,
+    r#"{ headers: { 'x-one': 7 } }"#,
+    r#"{ headers: 'x-one: a' }"#,
+    r#"{ method: 'GET /x HTTP/1.1' }"#,
+  ] {
+    start(&f, &format!("fetch('https://example.com/x', {init})"));
+    assert!(out(&f).starts_with("PluginError|invalid-argument|"), "{init}: {}", out(&f));
+  }
+  assert!(f.host.sent.borrow().is_empty());
+}
+
+/// names are case-insensitive, so two spellings of one are one header with both values
+#[test]
+fn header_names_are_lowercased_and_a_tab_is_an_ordinary_value_character() {
+  let f = setup(Some("fetch"));
+  start(&f, "fetch('https://example.com/x', { headers: { 'X-One': 'a', 'x-one': ['b\tc'] } })");
+  assert_eq!(f.host.sent.borrow()[0].spec, r#"GET follow ["x-one", "a", "x-one", "b\tc"]"#);
 }
 
 #[test]
@@ -524,7 +549,7 @@ mod bundled_oracle {
   }
 
   impl FetchHost for OracleHost {
-    fn send(&self, request_id: i64, url: &str, _spec_json: &str, _body: Option<&[u8]>) -> Option<String> {
+    fn send(&self, request_id: i64, url: &str, _spec: &Spec, _body: Option<&[u8]>) -> Option<String> {
       if url.contains("/refuse") {
         return Some("Pforbidden\n\n\n\nthat address is not a place this api goes".to_string());
       }
