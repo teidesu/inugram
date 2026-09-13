@@ -74,7 +74,7 @@ fn dialog_resolves_with_user_action() {
   let request_id = dialogs[0].0;
   drop(dialogs);
 
-  state.resolve_dialog(&rt, &ctx, request_id, "positive");
+  state.settle(&rt, &ctx, request_id, "Spositive");
   let result: String = ctx.with(|ctx| ctx.eval("globalThis.__result").unwrap());
   assert_eq!(result, "positive");
 }
@@ -100,7 +100,7 @@ fn dialog_body_is_refused_rather_than_silently_dropped() {
   });
   assert_eq!(code, "true:unsupported");
   assert!(host.dialogs.borrow().is_empty(), "nothing is shown for a refused dialog");
-  assert!(state.pending_dialogs.borrow().is_empty(), "and nothing is left pending");
+  assert!(state.pending.is_empty(), "and nothing is left pending");
 }
 
 #[test]
@@ -120,7 +120,7 @@ fn dialog_host_error_rejects() {
   pump_jobs(&rt, &ctx, &|_| {});
   let err: String = ctx.with(|ctx| ctx.eval("globalThis.__err").unwrap());
   assert_eq!(err, "no ui");
-  assert!(state.pending_dialogs.borrow().is_empty());
+  assert!(state.pending.is_empty());
 }
 
 #[test]
@@ -175,17 +175,17 @@ fn chooser_resolves_an_index_a_list_or_null_by_mode() {
   let ids: Vec<i64> = host.choosers.borrow().iter().map(|(id, _)| *id).collect();
   assert_eq!(ids.len(), 4);
 
-  state.resolve_chooser(&rt, &ctx, ids[0], Some("2"));
-  state.resolve_chooser(&rt, &ctx, ids[1], Some("0,2"));
-  state.resolve_chooser(&rt, &ctx, ids[2], None);
-  state.resolve_chooser(&rt, &ctx, ids[3], Some(""));
+  state.settle(&rt, &ctx, ids[0], "J[2]");
+  state.settle(&rt, &ctx, ids[1], "J[0,2]");
+  state.settle(&rt, &ctx, ids[2], "N");
+  state.settle(&rt, &ctx, ids[3], "J[]");
 
   let results: String = ctx.with(|ctx| ctx.eval("JSON.stringify(globalThis.__results)").unwrap());
   assert_eq!(results, r#"[["single",2],["multi",[0,2]],["dismissed",null],["none",[]]]"#);
-  assert!(state.pending_choosers.borrow().is_empty());
+  assert!(state.pending.is_empty());
 
   // a second settle for the same request finds nothing and must not throw
-  state.resolve_chooser(&rt, &ctx, ids[0], Some("1"));
+  state.settle(&rt, &ctx, ids[0], "J[1]");
   let unchanged: String = ctx.with(|ctx| ctx.eval("JSON.stringify(globalThis.__results.length)").unwrap());
   assert_eq!(unchanged, "4");
 }
@@ -236,7 +236,7 @@ fn chooser_host_error_rejects() {
   pump_jobs(&rt, &ctx, &|_| {});
   let err: String = ctx.with(|ctx| ctx.eval("globalThis.__err").unwrap());
   assert_eq!(err, "no ui");
-  assert!(state.pending_choosers.borrow().is_empty());
+  assert!(state.pending.is_empty());
 }
 
 #[test]
@@ -254,8 +254,74 @@ fn dispose_releases_pending_dialog_and_unload_roots() {
       )
       .unwrap();
   });
-  assert_eq!(state.pending_dialogs.borrow().len(), 1);
-  assert_eq!(state.pending_choosers.borrow().len(), 1);
+  assert_eq!(state.pending.len(), 2);
   state.dispose(&ctx);
   // rt/ctx drop after this without aborting == roots were released
+}
+
+#[test]
+fn prompt_resolves_with_text_and_null() {
+  let (rt, ctx, host, _lifecycle, state, _logs) = setup(&[]);
+  ctx.with(|ctx| {
+    ctx
+      .eval::<(), _>(
+        r#"
+            globalThis.__results = [];
+            inu.ui.prompt({ title: 'Name?', hint: 'h', value: 'v', selectAll: true })
+                .then(r => { globalThis.__results.push(r); });
+            inu.ui.prompt({ title: 'Again?' }).then(r => { globalThis.__results.push(r); });
+            "#,
+      )
+      .unwrap();
+  });
+  let prompts = host.prompts.borrow().clone();
+  assert_eq!(prompts.len(), 2);
+  assert_eq!(prompts[0].1, r#"{"title":"Name?","hint":"h","value":"v","selectAll":true}"#);
+
+  state.settle(&rt, &ctx, prompts[0].0, "Salice");
+  state.settle(&rt, &ctx, prompts[1].0, "N");
+  let results: String = ctx.with(|ctx| ctx.eval("JSON.stringify(globalThis.__results)").unwrap());
+  assert_eq!(results, r#"["alice",null]"#);
+  assert!(state.pending.is_empty());
+}
+
+/// every modal shares one table and one wire, so an error the host answers with rejects whichever
+/// kind it was, and an answer it cannot read rejects rather than leaving the promise hanging
+#[test]
+fn a_modal_answer_that_is_an_error_or_unreadable_rejects() {
+  let (rt, ctx, host, _lifecycle, state, _logs) = setup(&[]);
+  ctx.with(|ctx| {
+    ctx
+      .eval::<(), _>(
+        r#"
+            globalThis.__results = [];
+            const push = tag => [r => globalThis.__results.push([tag, 'ok', r]), e => globalThis.__results.push([tag, e.code ?? e.name])];
+            inu.ui.dialog({}).then(...push('dialog'));
+            inu.ui.prompt({ title: 't' }).then(...push('prompt'));
+            inu.ui.chooser({ items: ['a'] }).then(...push('chooser'));
+            "#,
+      )
+      .unwrap();
+  });
+  let (dialog, prompt, chooser) = (host.dialogs.borrow()[0].0, host.prompts.borrow()[0].0, host.choosers.borrow()[0].0);
+  state.settle(&rt, &ctx, dialog, "Punsupported\n\n\n\nno screen");
+  state.settle(&rt, &ctx, prompt, "Zgarbage");
+  state.settle(&rt, &ctx, chooser, "J[not json");
+  let results: String = ctx.with(|ctx| ctx.eval("JSON.stringify(globalThis.__results)").unwrap());
+  assert_eq!(results, r#"[["dialog","unsupported"],["prompt","Error"],["chooser","SyntaxError"]]"#);
+  assert!(state.pending.is_empty());
+}
+
+#[test]
+fn dispose_with_every_modal_open_releases_roots() {
+  let (_rt, ctx, host, _lifecycle, state, _logs) = setup(&[]);
+  ctx.with(|ctx| {
+    ctx
+      .eval::<(), _>("inu.ui.dialog({}); inu.ui.prompt({ title: 'stuck' }); inu.ui.chooser({ items: ['a'] });")
+      .unwrap();
+  });
+  assert_eq!((host.dialogs.borrow().len(), host.prompts.borrow().len(), host.choosers.borrow().len()), (1, 1, 1));
+  assert_eq!(state.pending.len(), 3);
+  state.dispose(&ctx);
+  assert!(state.pending.is_empty());
 }

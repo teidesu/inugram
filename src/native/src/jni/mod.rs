@@ -1,5 +1,7 @@
 use crate::api::ui::files::FilesState;
-use crate::runtime::pump_jobs;
+use crate::runtime::{
+  pump_jobs, SETTLE_CANVAS, SETTLE_FETCH, SETTLE_FILES, SETTLE_INVOKE, SETTLE_MODAL, SETTLE_READS, SETTLE_WRITES,
+};
 use std::cell::Cell;
 use std::ops::Deref;
 use std::rc::Rc;
@@ -162,6 +164,27 @@ pub(crate) struct Engine {
 impl Engine {
   pub(crate) fn pump(&self) {
     pump_jobs(&self._rt, &self.ctx, self.rpc.log.as_ref());
+  }
+
+  pub(crate) fn settle(&self, api: i32, request_id: i64, wire: &str) {
+    let (rt, ctx) = (&self._rt, &self.ctx);
+    match api {
+      SETTLE_FETCH => self.fetch.settle(rt, ctx, request_id, wire),
+      SETTLE_CANVAS => self.canvas.settle(rt, ctx, request_id, wire),
+      SETTLE_MODAL => self.dialogs.settle(rt, ctx, request_id, wire),
+      SETTLE_FILES => self.files.settle(rt, ctx, request_id, wire),
+      SETTLE_READS => self.reads.settle(rt, ctx, request_id, wire),
+      SETTLE_WRITES => self.writes.settle(rt, ctx, request_id, wire),
+      SETTLE_INVOKE => self.rpc.settle(rt, ctx, request_id, wire),
+      _ => (self.rpc.log)(&format!("settle: there is no api {api} to answer request {request_id}")),
+    }
+  }
+
+  pub(crate) fn settle_bytes(&self, api: i32, request_id: i64, bytes: &[u8]) {
+    match api {
+      SETTLE_INVOKE => self.rpc.settle_bytes(&self._rt, &self.ctx, request_id, bytes),
+      _ => (self.rpc.log)(&format!("settle: api {api} does not answer request {request_id} with bytes")),
+    }
   }
 }
 

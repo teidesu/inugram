@@ -314,6 +314,7 @@ pub(crate) struct RecordingHost {
   pub(crate) writes: RefCell<Vec<String>>,
   pub(crate) choosers: RefCell<Vec<(i64, String)>>,
   pub(crate) fail_chooser: RefCell<Option<String>>,
+  pub(crate) prompts: RefCell<Vec<(i64, String)>>,
 }
 
 impl KvHost for RecordingHost {
@@ -394,6 +395,11 @@ impl DialogHost for RecordingHost {
       return Some(err.clone());
     }
     self.choosers.borrow_mut().push((request_id, options_json.to_string()));
+    None
+  }
+
+  fn prompt(&self, request_id: i64, options_json: &str) -> Option<String> {
+    self.prompts.borrow_mut().push((request_id, options_json.to_string()));
     None
   }
 }

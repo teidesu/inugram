@@ -1,7 +1,20 @@
+use std::cell::RefCell;
+use std::collections::HashMap;
+
 use rquickjs::{Ctx, Function, Persistent, Result as JsResult, Runtime, Value};
 
 use crate::api::error;
 use crate::jni::is_caller_entry;
+use crate::sandbox::registry::RequestIds;
+
+/// which table a host's answer settles; keep in step with `QuickJs.SETTLE_*`
+pub(crate) const SETTLE_FETCH: i32 = 0;
+pub(crate) const SETTLE_CANVAS: i32 = 1;
+pub(crate) const SETTLE_MODAL: i32 = 2;
+pub(crate) const SETTLE_FILES: i32 = 3;
+pub(crate) const SETTLE_READS: i32 = 4;
+pub(crate) const SETTLE_WRITES: i32 = 5;
+pub(crate) const SETTLE_INVOKE: i32 = 6;
 
 pub(crate) struct PendingSettle {
   pub(crate) resolve: Persistent<Function<'static>>,
@@ -67,3 +80,174 @@ pub fn pump_jobs(rt: &Runtime, context: &rquickjs::Context, log: &dyn Fn(&str)) 
   }
   context.with(|ctx| error::report_rejections(&ctx));
 }
+
+/// what a parked request holds besides its promise, and what becomes of it once the request is over
+pub(crate) trait Parked: Sized {
+  /// the request failed: refused before it crossed, or answered with an error
+  fn reject(self, _ctx: &Ctx<'_>) {}
+
+  /// the engine is going away with the request still out
+  fn release(self, _ctx: &Ctx<'_>) {}
+}
+
+impl Parked for () {}
+
+struct Entry<T> {
+  settle: Option<PendingSettle>,
+  parked: T,
+}
+
+/// Every request a host answers later, one table per api: the id it crosses under, the promise it
+/// settles, and whatever the api keeps until then. A settle for an id that is not here - answered
+/// twice, or after an abort - is dropped.
+pub(crate) struct PendingTable<T: Parked> {
+  ids: RequestIds,
+  entries: RefCell<HashMap<i64, Entry<T>>>,
+}
+
+impl<T: Parked> Default for PendingTable<T> {
+  fn default() -> Self {
+    PendingTable {
+      ids: RequestIds::default(),
+      entries: RefCell::new(HashMap::new()),
+    }
+  }
+}
+
+impl<T: Parked> PendingTable<T> {
+  /// registers the request before [`ask`] tells the host about it, so an answer arriving from inside
+  /// the ask still finds it; a refusal [`ask`] returns rejects the same promise
+  pub(crate) fn park<'js>(
+    &self,
+    ctx: &Ctx<'js>,
+    parked: T,
+    ask: impl FnOnce(i64) -> Option<String>,
+  ) -> JsResult<rquickjs::Promise<'js>> {
+    let id = self.ids.alloc();
+    let (promise, settle) = PendingSettle::new(ctx)?;
+    self.entries.borrow_mut().insert(id, Entry { settle: Some(settle), parked });
+    if let Some(refusal) = ask(id) {
+      let removed = self.entries.borrow_mut().remove(&id);
+      if let Some(entry) = removed {
+        entry.parked.reject(ctx);
+        if let Some(settle) = entry.settle {
+          settle.reject_with(ctx, &refusal)?;
+        }
+      }
+    }
+    Ok(promise)
+  }
+
+  /// Settles a request with the host's [`wire`]: an error wire rejects, anything else is [`decode`]d.
+  pub(crate) fn settle<'js>(
+    &self,
+    ctx: &Ctx<'js>,
+    id: i64,
+    wire: &str,
+    keep: bool,
+    decode: impl FnOnce(&Ctx<'js>, &mut T, &str) -> JsResult<Value<'js>>,
+  ) -> Result<(), String> {
+    self.settle_with(ctx, id, keep, |ctx, parked| {
+      if let Some(error) = error::wire_error_to_js(ctx, wire) {
+        return Err(ctx.throw(error?));
+      }
+      decode(ctx, parked, wire)
+    })
+  }
+
+  /// Settles a request with whatever [`produce`] makes of it. What it throws rejects the promise, and
+  /// so does an answer it cannot read at all, since a promise left hanging is worse than either.
+  ///
+  /// [`keep`] settles the promise but holds on to what was parked until a later settle for the same
+  /// id, which is how an answer arrives in two halves.
+  pub(crate) fn settle_with<'js>(
+    &self,
+    ctx: &Ctx<'js>,
+    id: i64,
+    keep: bool,
+    produce: impl FnOnce(&Ctx<'js>, &mut T) -> JsResult<Value<'js>>,
+  ) -> Result<(), String> {
+    let removed = self.entries.borrow_mut().remove(&id);
+    let Some(mut entry) = removed else {
+      return Ok(());
+    };
+    let Some(settle) = entry.settle.take() else {
+      if keep {
+        self.entries.borrow_mut().insert(id, entry);
+      } else {
+        entry.parked.release(ctx);
+      }
+      return Ok(());
+    };
+    let produced = produce(ctx, &mut entry.parked);
+    let rejection = match &produced {
+      Ok(_) => None,
+      Err(e) if e.is_exception() => Some(Ok(ctx.catch())),
+      Err(e) => Some(error::make_plugin_error(
+        ctx,
+        "internal",
+        &format!("the host's answer could not be read: {e}"),
+        None,
+        None,
+        None,
+      )),
+    };
+    if keep {
+      self.entries.borrow_mut().insert(id, entry);
+    } else if rejection.is_none() {
+      drop(entry);
+    } else {
+      entry.parked.reject(ctx);
+    }
+    let settled = match (produced, rejection) {
+      (Ok(value), _) => settle.resolve_with(ctx, value),
+      (Err(_), Some(Ok(value))) => settle.reject_with_value(ctx, value),
+      (Err(_), Some(Err(e))) | (Err(e), None) => {
+        settle.release(ctx);
+        return Err(format!("{e:?}"));
+      }
+    };
+    settled.map_err(|_| error::format_exception(ctx))
+  }
+
+  /// drops a request nobody will read the answer to, without settling it
+  pub(crate) fn forget(&self, ctx: &Ctx<'_>, id: i64) {
+    let removed = self.entries.borrow_mut().remove(&id);
+    if let Some(entry) = removed {
+      if let Some(settle) = entry.settle {
+        settle.release(ctx);
+      }
+      entry.parked.release(ctx);
+    }
+  }
+
+  pub(crate) fn with_parked<R>(&self, id: i64, read: impl FnOnce(&T) -> R) -> Option<R> {
+    self.entries.borrow().get(&id).map(|entry| read(&entry.parked))
+  }
+
+  pub(crate) fn count(&self, matches: impl Fn(&T) -> bool) -> usize {
+    self.entries.borrow().values().filter(|entry| matches(&entry.parked)).count()
+  }
+
+  pub(crate) fn is_empty(&self) -> bool {
+    self.entries.borrow().is_empty()
+  }
+
+  pub(crate) fn len(&self) -> usize {
+    self.entries.borrow().len()
+  }
+
+  pub(crate) fn dispose(&self, ctx: &Ctx<'_>) {
+    let drained: Vec<_> = self.entries.borrow_mut().drain().collect();
+    for (_, entry) in drained {
+      if let Some(settle) = entry.settle {
+        settle.release(ctx);
+      }
+      entry.parked.release(ctx);
+    }
+  }
+}
+
+#[cfg(test)]
+#[path = "runtime_tests.rs"]
+mod runtime_tests;

@@ -1,4 +1,5 @@
 use super::*;
+use std::cell::RefCell;
 use crate::{
   api::io::fs::tests::{install_sandbox_globals, TestDir},
   testing::harness::DisposeOnDrop,
@@ -89,8 +90,8 @@ fn asked(f: &Fixture) -> (i32, i64, String) {
   f.host.asks.borrow().last().cloned().expect("the host was never asked")
 }
 
-fn answer(f: &Fixture, request_id: i64, wire: &str, error: Option<&str>) {
-  f._state.resolve(&f._rt, &f.ctx, request_id, wire, error);
+fn answer(f: &Fixture, request_id: i64, wire: &str) {
+  f._state.settle(&f._rt, &f.ctx, request_id, wire);
 }
 
 /// pumps the microtask queue and reports what `globalThis.out` settled to
@@ -138,8 +139,7 @@ fn what_the_picker_answers_becomes_a_file_over_the_copy_the_host_made() {
   answer(
     &f,
     request,
-    &format!(r#"[{{"path":"{}","name":"Cool.ttf","type":"font/ttf"}}]"#, one.to_string_lossy()),
-    None,
+    &format!(r#"J[{{"path":"{}","name":"Cool.ttf","type":"font/ttf"}}]"#, one.to_string_lossy()),
   );
 
   assert_eq!(settled(&f), "Cool.ttf");
@@ -158,8 +158,7 @@ fn a_picked_file_belongs_to_the_plugin_and_the_copy_goes_when_the_file_does() {
   answer(
     &f,
     request,
-    &format!(r#"[{{"path":"{}","name":"owned.bin","type":""}}]"#, one.to_string_lossy()),
-    None,
+    &format!(r#"J[{{"path":"{}","name":"owned.bin","type":""}}]"#, one.to_string_lossy()),
   );
   assert_eq!(settled(&f), "owned.bin");
   assert!(one.exists(), "the copy was taken away while the plugin still held it");
@@ -181,11 +180,10 @@ fn only_the_files_a_pick_asked_for_are_taken() {
     &f,
     request,
     &format!(
-      r#"[{{"path":"{}","name":"a.bin","type":""}},{{"path":"{}","name":"b.bin","type":""}}]"#,
+      r#"J[{{"path":"{}","name":"a.bin","type":""}},{{"path":"{}","name":"b.bin","type":""}}]"#,
       one.to_string_lossy(),
       two.to_string_lossy(),
     ),
-    None,
   );
   assert_eq!(settled(&f), "a.bin");
 }
@@ -194,7 +192,7 @@ fn only_the_files_a_pick_asked_for_are_taken() {
 fn an_answer_this_cannot_read_rejects_rather_than_leaving_the_promise_hanging() {
   let f = setup("pick-garbage", &[]);
   let request = pick(&f, "{}");
-  answer(&f, request, "not json at all", None);
+  answer(&f, request, "not json at all");
   assert!(settled(&f).starts_with("undefined:"), "a malformed answer did not reject");
 
   // and a copy that is not there any more is a failure, not the cancellation an empty answer is
@@ -203,8 +201,7 @@ fn an_answer_this_cannot_read_rejects_rather_than_leaving_the_promise_hanging() 
   answer(
     &f,
     request,
-    &format!(r#"[{{"path":"{}","name":"gone.bin","type":""}}]"#, gone.to_string_lossy()),
-    None,
+    &format!(r#"J[{{"path":"{}","name":"gone.bin","type":""}}]"#, gone.to_string_lossy()),
   );
   assert_eq!(settled(&f), "internal:pickFile: the copy of this file is gone");
 }
@@ -213,11 +210,11 @@ fn an_answer_this_cannot_read_rejects_rather_than_leaving_the_promise_hanging() 
 fn picking_nothing_is_null_for_one_file_and_empty_for_many() {
   let f = setup("pick-cancel", &[]);
   let request = pick(&f, "{}");
-  answer(&f, request, "[]", None);
+  answer(&f, request, "J[]");
   assert_eq!(settled(&f), "null");
 
   let request = pick(&f, "{ multiple: true }");
-  answer(&f, request, "[]", None);
+  answer(&f, request, "J[]");
   assert_eq!(settled(&f), "[0]");
 }
 
@@ -233,7 +230,7 @@ fn a_pick_the_host_refuses_rejects_with_what_it_said() {
 fn a_pick_that_fails_after_the_dialog_rejects_too() {
   let f = setup("pick-failed", &[]);
   let request = pick(&f, "{}");
-  answer(&f, request, "", Some("Pinternal\n\n\n\npickFile: this file could not be read"));
+  answer(&f, request, "Pinternal\n\n\n\npickFile: this file could not be read");
   assert_eq!(settled(&f), "internal:pickFile: this file could not be read");
 }
 
@@ -276,7 +273,7 @@ fn a_save_hands_the_host_the_content_written_out_and_answers_whether_it_happened
   let staged = PathBuf::from(field(&options, "path"));
   assert_eq!(std::fs::read(&staged).unwrap(), b"saved bytes");
 
-  answer(&f, request, "1", None);
+  answer(&f, request, "B1");
   assert_eq!(settled(&f), "true");
   // what was staged for the host is deleted with the request that staged it
   assert!(!staged.exists(), "{} was left behind", staged.display());
@@ -286,7 +283,7 @@ fn a_save_hands_the_host_the_content_written_out_and_answers_whether_it_happened
 fn a_save_the_user_backed_out_of_is_false_rather_than_a_failure() {
   let f = setup("save-cancel", &[]);
   let request = save(&f, "new Uint8Array([1, 2, 3])", "{}");
-  answer(&f, request, "0", None);
+  answer(&f, request, "B0");
   assert_eq!(settled(&f), "false");
 }
 
@@ -294,7 +291,7 @@ fn a_save_the_user_backed_out_of_is_false_rather_than_a_failure() {
 fn a_save_that_failed_rejects_so_it_is_told_apart_from_one_the_user_declined() {
   let f = setup("save-failed", &[]);
   let request = save(&f, "new Uint8Array([1])", "{}");
-  answer(&f, request, "", Some("Pinternal\n\n\n\nsaveFile: the file could not be written"));
+  answer(&f, request, "Pinternal\n\n\n\nsaveFile: the file could not be written");
   assert_eq!(settled(&f), "internal:saveFile: the file could not be written");
 }
 
@@ -305,7 +302,7 @@ fn a_named_file_is_saved_from_where_it_is_rather_than_copied_first() {
   let request = save(&f, "{ path: 'own.txt' }", "{}");
   assert_eq!(PathBuf::from(field(&asked(&f).2, "path")), f.dir.path().canonicalize().unwrap().join("own.txt"),);
 
-  answer(&f, request, "1", None);
+  answer(&f, request, "B1");
   assert_eq!(settled(&f), "true");
   // and it stays where it is: only a copy this staged is this one's to delete
   assert!(f.dir.path().join("own.txt").exists());

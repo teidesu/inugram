@@ -481,7 +481,7 @@ fn pump(f: &Fixture) {
 
 fn answer(f: &Fixture, wire: &str) {
   let request = f.host.pending.borrow_mut().pop().expect("nothing pending");
-  f.state.resolve(&f._rt, &f.ctx, request, wire);
+  f.state.settle(&f._rt, &f.ctx, request, wire);
 }
 
 fn commands(f: &Fixture) -> Vec<Command> {
@@ -1275,7 +1275,7 @@ fn a_decode_the_host_refused_settles_as_a_rejection_and_leaves_nothing_charged()
   let f = setup("decode-refused");
   *f.host.fail.borrow_mut() = Some((OP_DECODE, "Pinvalid-argument\n\n\n\nnot an image".to_string()));
   assert_eq!(settle(&f, "inu.canvas.decode(new Uint8Array([1,2,3]))"), "invalid-argument:not an image",);
-  assert!(f.state.pending.borrow().is_empty());
+  assert!(f.state.pending.is_empty());
 }
 
 #[test]
@@ -1504,9 +1504,9 @@ fn a_dropped_canvas_tells_the_host_to_let_its_bitmap_go() {
 fn disposal_releases_every_promise_the_engine_still_holds() {
   let f = setup("dispose");
   run(&f, "inu.canvas.decode(new Uint8Array([1])); inu.canvas.loadFont('a', new Uint8Array([1]))");
-  assert_eq!(f.state.pending.borrow().len(), 2);
+  assert_eq!(f.state.pending.len(), 2);
   f.state.dispose(&f.ctx);
-  assert!(f.state.pending.borrow().is_empty());
+  assert!(f.state.pending.is_empty());
 }
 
 /// Runs `canvas-test.js`, which is the only thing that can tell a member that behaves from one that
@@ -1619,7 +1619,7 @@ mod bundled_oracle {
             }
           }
         };
-        f.state.resolve(&f._rt, &f.ctx, request, &wire);
+        f.state.settle(&f._rt, &f.ctx, request, &wire);
       }
     }
     panic!("the oracle never stopped waiting");
@@ -1934,12 +1934,12 @@ fn queued_encoder_frames_are_charged_until_consumed_after_an_early_ack() {
   run(&f, "globalThis.q = e.addFrame(c)");
   let request = *f.host.pending.borrow().last().unwrap();
   assert_eq!(f.state.external.charged_bytes(), baseline + 4 * 1024 * 1024);
-  f.state.resolve(&f._rt, &f.ctx, request, "A");
+  f.state.settle(&f._rt, &f.ctx, request, "A");
   assert_eq!(settle(&f, "q"), "ok:undefined");
   assert_eq!(f.state.external.charged_bytes(), baseline + 4 * 1024 * 1024);
   answer(&f, "");
   assert_eq!(f.state.external.charged_bytes(), baseline);
-  f.state.resolve(&f._rt, &f.ctx, request, "A");
+  f.state.settle(&f._rt, &f.ctx, request, "A");
   assert_eq!(f.state.external.charged_bytes(), baseline, "a late ack revived the frame");
 }
 
@@ -1981,7 +1981,7 @@ fn disposing_an_encoder_keeps_queued_pixels_charged_until_the_host_releases_them
   run(&f, "e.dispose()");
   assert_eq!(f.state.external.charged_bytes(), charged);
   let request = *f.host.pending.borrow().last().unwrap();
-  f.state.resolve(&f._rt, &f.ctx, request, "APinternal\n\n\n\nclosed");
+  f.state.settle(&f._rt, &f.ctx, request, "APinternal\n\n\n\nclosed");
   assert_eq!(settle(&f, "q"), "internal:closed");
   assert_eq!(f.state.external.charged_bytes(), charged);
   answer(&f, "Pinternal\n\n\n\nclosed");
@@ -2018,9 +2018,9 @@ fn stopping_releases_early_acknowledged_frames() {
   open_encoder(&f, "{ width: 320, height: 240 }");
   run(&f, "globalThis.c = inu.canvas.create(320, 240); e.addFrame(c)");
   let request = *f.host.pending.borrow().last().unwrap();
-  f.state.resolve(&f._rt, &f.ctx, request, "A");
+  f.state.settle(&f._rt, &f.ctx, request, "A");
   run(&f, "globalThis.e = null; globalThis.p = null; c.dispose()");
   f.state.dispose(&f.ctx);
-  assert!(f.state.pending.borrow().is_empty());
+  assert!(f.state.pending.is_empty());
   assert_eq!(f.state.external.charged_bytes(), 0);
 }

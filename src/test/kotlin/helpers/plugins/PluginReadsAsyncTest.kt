@@ -69,7 +69,7 @@ class PluginReadsAsyncTest {
     /** what the engine hands back to JS once the whole exchange has settled */
     private fun settled(plugin: Plugin): String {
         drain()
-        return plugin.js.fetchResults.single().resultWire
+        return plugin.js.readResults.single().resultWire
     }
 
     private fun answerWith(response: TLObject?, error: TLRPC.TL_error? = null) {
@@ -107,7 +107,7 @@ class PluginReadsAsyncTest {
     private fun awaitSettled(plugin: Plugin): String {
         repeat(200) {
             drain()
-            if (plugin.js.fetchResults.isNotEmpty()) return plugin.js.fetchResults.single().resultWire
+            if (plugin.js.readResults.isNotEmpty()) return plugin.js.readResults.single().resultWire
             Thread.sleep(10)
         }
         throw AssertionError("the fetch never settled")
@@ -157,7 +157,7 @@ class PluginReadsAsyncTest {
             assertTrue(connections().sent.isEmpty(), "what sqlite already had must not cost a request")
 
             // the row is not a channel's, so the common box reaches it with no peer named
-            plugin.js.fetchResults.clear()
+            plugin.js.readResults.clear()
             assertNull(fetch(plugin, PluginReads.OP_FETCH_MESSAGES, "D0\n$mid", requestId = 2L))
             assertEquals("from disk", stringOf(fieldOf(plugin, awaitSettled(plugin), "message")))
             assertTrue(connections().sent.isEmpty())
@@ -398,7 +398,7 @@ class PluginReadsAsyncTest {
             messages.add(serviceMessage("Login code: 12345", id = 9))
         })
         drain()
-        val wire = plugin.js.fetchResults.single().resultWire
+        val wire = plugin.js.readResults.single().resultWire
         assertEquals("Login code: *****", stringOf(fieldOf(plugin, wire, "message")))
     }
 
@@ -624,8 +624,8 @@ class PluginReadsAsyncTest {
 
         answerWith(TLRPC.TL_users_userFull().apply { full_user = TLRPC.TL_userFull() })
         drain()
-        assertTrue(stale.fetchResults.isEmpty())
-        assertTrue(plugin.js.fetchResults.isEmpty())
+        assertTrue(stale.readResults.isEmpty())
+        assertTrue(plugin.js.readResults.isEmpty())
     }
 
     @Test

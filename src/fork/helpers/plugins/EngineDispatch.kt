@@ -47,17 +47,25 @@ internal object EngineDispatch {
     }
 
     /**
-     * [onEngine] for the settles that answer exactly one wire. [produce] throwing is the host's own
-     * bad day rather than the plugin's, so it becomes an `internal` error wire naming [what] rather
-     * than escaping onto the plugin queue.
+     * [onEngine] for a request the host answers with one wire, into the [QuickJs.settle] table [api].
+     * [produce] throwing is the host's own bad day rather than the plugin's, so it becomes an
+     * `internal` error wire naming [what] rather than escaping onto the plugin queue. [release] runs
+     * once whichever way it went: after the settle, or in its place when the plugin moved on.
      */
     fun settle(
         session: PluginSession,
+        api: Int,
+        requestId: Long,
         what: String,
-        onDropped: () -> Unit = {},
+        release: () -> Unit = {},
         produce: () -> String,
-        deliver: (String) -> Unit,
-    ) = onEngine(session, onDropped) { deliver(wireOf(what, produce)) }
+    ) = onEngine(session, release) {
+        try {
+            session.engine.settle(api, requestId, wireOf(what, produce))
+        } finally {
+            release()
+        }
+    }
 
     fun wireOf(what: String, produce: () -> String): String = try {
         produce()

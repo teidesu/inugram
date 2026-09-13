@@ -163,11 +163,16 @@ open class QuickJs {
     fun stopCallbacks() = ifLive { nativeStopCallbacks(it) }
 
 
-    /** [resultWire] is `J{status, statusText, url, headers, body: {path, type}}` or an error wire */
-    open fun fetchResult(requestId: Long, resultWire: String) = requireLive { nativeFetchResult(it, requestId, resultWire) }
+    /**
+     * the one way a request the host took is answered: [api] is one of [SETTLE_FETCH]..[SETTLE_INVOKE],
+     * naming the table [requestId] belongs to, and [wire] is a value wire or an error wire. A request
+     * that is no longer outstanding - aborted, or answered already - drops the settle.
+     */
+    open fun settle(api: Int, requestId: Long, wire: String) = requireLive { nativeSettle(it, api, requestId, wire) }
 
-    /** `J{path, type}` for an encode, `J{width, height}` for a decode, `""` for a font, or an error wire */
-    fun canvasResult(requestId: Long, resultWire: String) = requireLive { nativeCanvasResult(it, requestId, resultWire) }
+    /** [settle] for the one answer that is bytes and nothing else: `invokeRaw`'s response body */
+    open fun settleBytes(api: Int, requestId: Long, bytes: ByteArray) =
+        requireLive { nativeSettleBytes(it, api, requestId, bytes) }
 
     fun runTimers() = ifLive { nativeRunTimers(it) }
 
@@ -177,8 +182,6 @@ open class QuickJs {
      * in it.
      */
     fun appVisibilityChanged(visible: Boolean) = requireLive { nativeAppVisibilityChanged(it, visible) }
-
-    fun resolveDialog(requestId: Long, result: String) = requireLive { nativeResolveDialog(it, requestId, result) }
 
     /** call right before [close]; JS throws are logged, never propagated */
     fun notifyUnload() = requireLive { nativeNotifyUnload(it) }
@@ -192,30 +195,13 @@ open class QuickJs {
 
     fun uiPageClosed(pageId: Long) = requireLive { nativeUiPageClosed(it, pageId) }
 
-    fun resolvePrompt(requestId: Long, text: String?) = requireLive { nativeResolvePrompt(it, requestId, text) }
-
     /** never call it off [EngineDispatch.scheduler] */
     open fun renderActions(kind: Int, surfaceJson: String): String? = ifLiveOr(null) { nativeRenderActions(it, kind, surfaceJson) }
 
     open fun dispatchAction(kind: Int, token: Int, surfaceJson: String) = ifLive { nativeDispatchAction(it, kind, token, surfaceJson) }
 
-    /** [picked] null == dismissed, else a comma-separated index list - one in single mode, any number in multiple */
-    fun resolveChooser(requestId: Long, picked: String?) = requireLive { nativeResolveChooser(it, requestId, picked) }
-
-    /** [answer] is the picked files as json or `"1"`/`"0"` for a save; [error] replaces it with a rejection */
-    fun resolveFileRequest(requestId: Long, answer: String?, error: String?) =
-        requireLive { nativeResolveFileRequest(it, requestId, answer, error) }
-
     /** the diff is the host's ([desu.inugram.core.plugins.ScreenStack]), so only call this for an actual change */
     fun dispatchScreenChange(changeJson: String, stackJson: String) = requireLive { nativeDispatchScreenChange(it, changeJson, stackJson) }
-
-    open fun resolvePeerResult(requestId: Long, resultWire: String) = requireLive { nativeResolvePeerResult(it, requestId, resultWire) }
-
-    /** [resultWire] is a single value, or (for a paged op) the cursor payload followed by the elements */
-    open fun accountFetchResult(requestId: Long, resultWire: String) = requireLive { nativeAccountFetchResult(it, requestId, resultWire) }
-
-    /** [resultWire] is a single value, or the `J{path,size,mime,name,mtime}` a `File` is minted from */
-    open fun writeResult(requestId: Long, resultWire: String) = requireLive { nativeWriteResult(it, requestId, resultWire) }
 
     /** native coalesces these on a time interval, so calling it per chunk is what the contract expects */
     open fun writeProgress(requestId: Long, loaded: Long, total: Long) = ifLive { nativeWriteProgress(it, requestId, loaded, total) }
@@ -227,12 +213,6 @@ open class QuickJs {
 
     /** the host has already answered the app, so no completion comes back */
     open fun abandonDispatch(dispatchId: Long, reasonWire: String) = requireLive { nativeAbandonDispatch(it, dispatchId, reasonWire) }
-
-    open fun resolveInvoke(invokeId: Long, resultWire: String) = requireLive { nativeResolveInvoke(it, invokeId, resultWire) }
-
-    /** `invokeRaw`'s answer: the response body, which becomes the plugin's `Uint8Array` as it is */
-    open fun resolveInvokeBytes(invokeId: Long, response: ByteArray) =
-        requireLive { nativeResolveInvokeBytes(it, invokeId, response) }
 
     /** only for a type some registration named; the payload is decoded either way, since nothing else frees its handle */
     open fun dispatchUpdate(typeName: String, accountId: Int, updateWire: String) = requireLive { nativeDispatchUpdate(it, typeName, accountId, updateWire) }
@@ -328,9 +308,6 @@ open class QuickJs {
     private external fun nativeJvmObjectAt(ptr: Long, id: Long): Any?
     private external fun nativeJvmRelease(ptr: Long, id: Long)
     private external fun nativeJvmClose(ptr: Long)
-    private external fun nativeFetchResult(ptr: Long, requestId: Long, resultWire: String)
-    private external fun nativeCanvasResult(ptr: Long, requestId: Long, resultWire: String)
-    private external fun nativeResolveDialog(ptr: Long, requestId: Long, result: String)
     private external fun nativeNotifyUnload(ptr: Long)
     private external fun nativePollUnload(ptr: Long): Boolean
     private external fun nativeUiRender(ptr: Long, pageId: Long): String?
@@ -339,24 +316,18 @@ open class QuickJs {
     private external fun nativeUiPageClosed(ptr: Long, pageId: Long)
     private external fun nativeRenderActions(ptr: Long, kind: Int, surfaceJson: String): String?
     private external fun nativeDispatchAction(ptr: Long, kind: Int, token: Int, surfaceJson: String)
-    private external fun nativeResolvePrompt(ptr: Long, requestId: Long, text: String?)
-    private external fun nativeResolveChooser(ptr: Long, requestId: Long, picked: String?)
-    private external fun nativeResolveFileRequest(ptr: Long, requestId: Long, answer: String?, error: String?)
     private external fun nativeDispatchScreenChange(ptr: Long, changeJson: String, stackJson: String)
     private external fun nativeDispatchNotification(ptr: Long, callbackId: Int, name: String, accountId: Int, argsJson: String)
-    private external fun nativeResolvePeerResult(ptr: Long, requestId: Long, resultWire: String)
-    private external fun nativeAccountFetchResult(ptr: Long, requestId: Long, resultWire: String)
-    private external fun nativeWriteResult(ptr: Long, requestId: Long, resultWire: String)
     private external fun nativeWriteProgress(ptr: Long, requestId: Long, loaded: Long, total: Long)
     private external fun nativeDispatchRpc(ptr: Long, callbackId: Int, dispatchId: Long, method: String, accountId: Int, requestWire: String)
     private external fun nativeCompleteNext(ptr: Long, dispatchId: Long, resultWire: String)
     private external fun nativeAbandonDispatch(ptr: Long, dispatchId: Long, reasonWire: String)
-    private external fun nativeResolveInvoke(ptr: Long, invokeId: Long, resultWire: String)
-    private external fun nativeResolveInvokeBytes(ptr: Long, invokeId: Long, response: ByteArray)
     private external fun nativeDispatchUpdate(ptr: Long, typeName: String, accountId: Int, updateWire: String)
     private external fun nativeDispatchUpdateIntercept(ptr: Long, callbackId: Int, dispatchId: Long, typeName: String, accountId: Int, updateWire: String)
     private external fun nativeAbandonUpdateDispatch(ptr: Long, dispatchId: Long)
     private external fun nativeAccountsChanged(ptr: Long)
+    private external fun nativeSettle(ptr: Long, api: Int, requestId: Long, wire: String)
+    private external fun nativeSettleBytes(ptr: Long, api: Int, requestId: Long, bytes: ByteArray)
     private external fun nativeRunTimers(ptr: Long)
     private external fun nativeAppVisibilityChanged(ptr: Long, visible: Boolean)
     private external fun nativeDestroy(ptr: Long)
@@ -370,6 +341,19 @@ open class QuickJs {
 
         /** [RpcListener.onInvokeRpc]'s slot for the account-less `inu.invokeRpc` (rust: `ANY_ACCOUNT`) */
         const val ANY_ACCOUNT = -1
+
+        /**
+         * the tables [settle] answers into; keep in step with rust `runtime::SETTLE_*`. A modal is a
+         * dialog (`S` and the button), a prompt (`S` and the text, or `N`) or a chooser (`N`, or `J`
+         * and the picked indices); a file request is a pick (`J` and the copies) or a save (`B1`/`B0`).
+         */
+        const val SETTLE_FETCH = 0
+        const val SETTLE_CANVAS = 1
+        const val SETTLE_MODAL = 2
+        const val SETTLE_FILES = 3
+        const val SETTLE_READS = 4
+        const val SETTLE_WRITES = 5
+        const val SETTLE_INVOKE = 6
 
         // standalone rust cdylib (rquickjs); separate from the stock tmessages.NN lib
         init {

@@ -1,4 +1,6 @@
 use super::*;
+use std::cell::RefCell;
+use crate::api::error::format_exception;
 use crate::api::error::install_plugin_error;
 use crate::api::telegram::account::tests::TestAccountHost;
 use crate::api::tl::proxy::TlHost;
@@ -511,14 +513,14 @@ fn settle(rt: &Runtime, ctx: &Context, state: &Rc<ReadsState>, host: &Rc<TestRea
     }
     if let Some((request_id, spec, kind)) = host.take_resolve() {
       let wire = host.answer_resolve(&spec, kind);
-      state.resolve_peer(rt, ctx, request_id, &wire);
+      state.settle(rt, ctx, request_id, &wire);
       continue;
     }
     let Some((request_id, op, arg)) = host.take_fetch() else {
       return;
     };
     let wire = host.answer_fetch(op, &arg);
-    state.resolve_account_fetch(rt, ctx, request_id, &wire);
+    state.settle(rt, ctx, request_id, &wire);
   }
   panic!("the host queue never drained");
 }
@@ -1449,6 +1451,11 @@ mod grant_boundary {
     }
 
     fn chooser(&self, _request_id: i64, _options_json: &str) -> Option<String> {
+      self.crossings.set(self.crossings.get() + 1);
+      Some("no ui here".to_string())
+    }
+
+    fn prompt(&self, _request_id: i64, _options_json: &str) -> Option<String> {
       self.crossings.set(self.crossings.get() + 1);
       Some("no ui here".to_string())
     }

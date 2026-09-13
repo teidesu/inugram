@@ -1,30 +1,36 @@
-use std::cell::RefCell;
-use std::collections::HashMap;
 use std::rc::Rc;
 
 use rquickjs::{Ctx, Exception, Function, Object, Result as JsResult, Runtime, Value};
 
-use crate::api::error::format_exception;
 use crate::api::error::PluginErrorCode;
 use crate::api::platform::jvm::JvmState;
 use crate::api::ui::icons;
-use crate::runtime::{pump_jobs, PendingSettle};
-use crate::sandbox::registry::RequestIds;
+use crate::api::tl::proxy::plain_wire_to_js;
+use crate::runtime::{pump_jobs, Parked, PendingTable};
+use crate::utils::arguments::{opt_bool, opt_str, req_str};
 
 pub trait DialogHost {
   fn toast(&self, text: &str);
   fn bulletin(&self, text: &str, icon_spec: &str) -> Option<String>;
   fn dialog(&self, request_id: i64, options_json: &str) -> Option<String>;
   fn chooser(&self, request_id: i64, options_json: &str) -> Option<String>;
+  fn prompt(&self, request_id: i64, options_json: &str) -> Option<String>;
 }
+
+/// what a modal answers once the user is done with it
+enum Modal {
+  Dialog,
+  Prompt,
+  Chooser { multiple: bool },
+}
+
+impl Parked for Modal {}
 
 pub struct DialogState {
   host: Rc<dyn DialogHost>,
   jvm: Option<Rc<JvmState>>,
   log: crate::Log,
-  next_request_id: RequestIds,
-  pending_dialogs: RefCell<HashMap<i64, PendingSettle>>,
-  pending_choosers: RefCell<HashMap<i64, (PendingSettle, bool)>>,
+  pending: PendingTable<Modal>,
 }
 
 impl DialogState {
@@ -70,16 +76,7 @@ impl DialogState {
       .transpose()?
       .ok_or_else(|| Exception::throw_type(ctx, "dialog: expected an options object"))?;
 
-    let request_id = self.next_request_id.alloc();
-    let (promise, pending) = PendingSettle::new(ctx)?;
-    self.pending_dialogs.borrow_mut().insert(request_id, pending);
-
-    if let Some(err) = self.host.dialog(request_id, &json) {
-      if let Some(pending) = self.pending_dialogs.borrow_mut().remove(&request_id) {
-        pending.reject_with(ctx, &err)?;
-      }
-    }
-    Ok(promise.into_value())
+    Ok(self.pending.park(ctx, Modal::Dialog, |request_id| self.host.dialog(request_id, &json))?.into_value())
   }
 }
 
@@ -187,16 +184,26 @@ impl DialogState {
       .transpose()?
       .ok_or_else(|| Exception::throw_message(ctx, "chooser: serialization failed"))?;
 
-    let request_id = self.next_request_id.alloc();
-    let (promise, pending) = PendingSettle::new(ctx)?;
-    self.pending_choosers.borrow_mut().insert(request_id, (pending, multiple));
+    let modal = Modal::Chooser { multiple };
+    Ok(self.pending.park(ctx, modal, |request_id| self.host.chooser(request_id, &json))?.into_value())
+  }
 
-    if let Some(err) = self.host.chooser(request_id, &json) {
-      if let Some((pending, _)) = self.pending_choosers.borrow_mut().remove(&request_id) {
-        pending.reject_with(ctx, &err)?;
-      }
+  fn js_prompt<'js>(self: &Rc<Self>, ctx: &Ctx<'js>, opts: Object<'js>) -> JsResult<Value<'js>> {
+    let out = Object::new(ctx.clone())?;
+    out.set("title", req_str(ctx, &opts, "prompt", "title")?)?;
+    if let Some(hint) = opt_str(ctx, &opts, "prompt", "hint")? {
+      out.set("hint", hint)?;
     }
-    Ok(promise.into_value())
+    if let Some(value) = opt_str(ctx, &opts, "prompt", "value")? {
+      out.set("value", value)?;
+    }
+    out.set("selectAll", opt_bool(ctx, &opts, "prompt", "selectAll")?)?;
+    let json = ctx
+      .json_stringify(out)?
+      .map(|s| s.to_string())
+      .transpose()?
+      .ok_or_else(|| Exception::throw_message(ctx, "prompt: serialization failed"))?;
+    Ok(self.pending.park(ctx, Modal::Prompt, |request_id| self.host.prompt(request_id, &json))?.into_value())
   }
 }
 
@@ -211,9 +218,7 @@ pub fn install_dialogs<'js>(
     host,
     jvm,
     log,
-    next_request_id: RequestIds::default(),
-    pending_dialogs: RefCell::new(HashMap::new()),
-    pending_choosers: RefCell::new(HashMap::new()),
+    pending: PendingTable::default(),
   });
   let ui = Object::new(ctx.clone())?;
   let state2 = state.clone();
@@ -241,89 +246,41 @@ pub fn install_dialogs<'js>(
     "chooser",
     Function::new(ctx.clone(), move |ctx: Ctx<'js>, options: Object<'js>| state2.js_ui_chooser(&ctx, options))?,
   )?;
+
+  let state2 = state.clone();
+  ui.set(
+    "prompt",
+    Function::new(ctx.clone(), move |ctx: Ctx<'js>, options: Object<'js>| state2.js_prompt(&ctx, options))?,
+  )?;
   globals.inu.set("ui", ui)?;
   Ok(state)
 }
 
 impl DialogState {
-  pub fn resolve_chooser(
-    self: &Rc<Self>,
-    rt: &Runtime,
-    context: &rquickjs::Context,
-    request_id: i64,
-    picked: Option<&str>,
-  ) {
+  /// every modal answers a plain wire: a dialog the button's name, a prompt the text or `N`, and a
+  /// chooser `N` or the picked indices - of which a single-choice chooser resolves the first
+  pub fn settle(self: &Rc<Self>, rt: &Runtime, context: &rquickjs::Context, request_id: i64, result_wire: &str) {
     let state = self;
     context.with(|ctx| {
-      let Some((pending, multiple)) = state.pending_choosers.borrow_mut().remove(&request_id) else {
-        return;
-      };
-      let indices: Option<Vec<i32>> = picked.map(|list| {
-        list
-          .split(',')
-          .filter(|part| !part.is_empty())
-          .filter_map(|part| part.parse::<i32>().ok())
-          .collect()
+      let settled = state.pending.settle(&ctx, request_id, result_wire, false, |ctx, modal, wire| {
+        let value = plain_wire_to_js(ctx, wire)?;
+        match (modal, value.as_array()) {
+          (Modal::Chooser { multiple: false }, Some(picked)) => {
+            let first: Value = picked.get(0)?;
+            Ok(if first.is_undefined() { Value::new_null(ctx.clone()) } else { first })
+          }
+          _ => Ok(value),
+        }
       });
-      let value = match (indices, multiple) {
-        (None, _) => Ok(Value::new_null(ctx.clone())),
-        (Some(indices), true) => rquickjs::Array::new(ctx.clone()).and_then(|array| {
-          for (i, index) in indices.iter().enumerate() {
-            array.set(i, *index)?;
-          }
-          Ok(array.into_value())
-        }),
-        (Some(indices), false) => match indices.first() {
-          Some(index) => rquickjs::IntoJs::into_js(*index, &ctx),
-          None => Ok(Value::new_null(ctx.clone())),
-        },
-      };
-      match value {
-        Ok(v) => {
-          if pending.resolve_with(&ctx, v).is_err() {
-            (state.log)(&format!("chooser({request_id}) resolve failed: {}", format_exception(&ctx)));
-          }
-        }
-        Err(e) => {
-          pending.release(&ctx);
-          (state.log)(&format!("chooser({request_id}) result conversion failed: {e:?}"));
-        }
-      }
-    });
-    pump_jobs(rt, context, state.log.as_ref());
-  }
-
-  pub fn resolve_dialog(self: &Rc<Self>, rt: &Runtime, context: &rquickjs::Context, request_id: i64, result: &str) {
-    let state = self;
-    context.with(|ctx| {
-      use rquickjs::IntoJs;
-      if let Some(pending) = state.pending_dialogs.borrow_mut().remove(&request_id) {
-        match result.into_js(&ctx) {
-          Ok(v) => {
-            if pending.resolve_with(&ctx, v).is_err() {
-              (state.log)(&format!("dialog({request_id}) resolve failed: {}", format_exception(&ctx)));
-            }
-          }
-          Err(e) => {
-            pending.release(&ctx);
-            (state.log)(&format!("dialog({request_id}) result conversion failed: {e:?}"));
-          }
-        }
+      if let Err(why) = settled {
+        (state.log)(&format!("modal({request_id}) settle failed: {why}"));
       }
     });
     pump_jobs(rt, context, state.log.as_ref());
   }
 
   pub fn dispose(self: &Rc<Self>, context: &rquickjs::Context) {
-    let state = self;
-    context.with(|ctx| {
-      for (_, pending) in state.pending_dialogs.borrow_mut().drain() {
-        pending.release(&ctx);
-      }
-      for (_, (pending, _)) in state.pending_choosers.borrow_mut().drain() {
-        pending.release(&ctx);
-      }
-    });
+    context.with(|ctx| self.pending.dispose(&ctx));
   }
 }
 

@@ -230,6 +230,10 @@ impl DialogHost for JniBridge {
   fn chooser(&self, request_id: i64, options_json: &str) -> Option<String> {
     self.ui_modal(OP_CHOOSER, request_id, options_json)
   }
+
+  fn prompt(&self, request_id: i64, options_json: &str) -> Option<String> {
+    self.ui_modal(OP_PROMPT, request_id, options_json)
+  }
 }
 
 impl OpenUrlHost for JniBridge {
@@ -290,10 +294,6 @@ impl FilesHost for JniBridge {
 }
 
 impl UiHost for JniBridge {
-  fn ui_prompt(&self, request_id: i64, options_json: &str) -> Option<String> {
-    self.ui_modal(OP_PROMPT, request_id, options_json)
-  }
-
   fn ui_open_page(&self, page_id: i64) -> Option<String> {
     self.call_refusal("openPage", self.on_ui_open_page, &[Arg::Long(page_id)])
   }

@@ -8,7 +8,7 @@ use rquickjs::{Ctx, Exception, Function, Object, Persistent, Result as JsResult,
 use crate::api::error::{self, error_value_to_string, format_thrown, PluginErrorCode};
 use crate::api::telegram::account::{dispatch_account, AccountState};
 use crate::api::tl::proxy::{self, TlViews, ViewLife};
-use crate::runtime::{pump_jobs, PendingSettle};
+use crate::runtime::{pump_jobs, PendingSettle, PendingTable};
 use crate::sandbox::grants::{GrantHost, MATCH_EXACT};
 use crate::sandbox::registry::{make_disposer, noop_disposer, CallbackRegistry, Lifecycle, Registry};
 use crate::utils::prelude;
@@ -94,7 +94,6 @@ pub struct RpcState {
   lifecycle: Rc<Lifecycle>,
   accounts: Option<Rc<AccountState>>,
   pub(crate) log: Log,
-  next_invoke_id: Cell<i64>,
   intercept_fns: CallbackRegistry,
   update_fns: Registry<UpdateReg>,
   intercept_update_fns: Registry<UpdateReg>,
@@ -105,15 +104,7 @@ pub struct RpcState {
   promise: RefCell<Option<PromiseTools>>,
   dispatches: RefCell<HashMap<i64, Rc<DispatchState>>>,
   update_dispatches: RefCell<HashMap<i64, Rc<UpdateDispatchState>>>,
-  pending_invoke: RefCell<HashMap<i64, PendingSettle>>,
-}
-
-impl RpcState {
-  fn alloc_invoke_id(&self) -> i64 {
-    let id = self.next_invoke_id.get();
-    self.next_invoke_id.set(id + 1);
-    id
-  }
+  invokes: PendingTable<()>,
 }
 
 impl RpcState {
@@ -262,7 +253,6 @@ pub fn install_rpc<'js>(
     lifecycle,
     accounts,
     log,
-    next_invoke_id: Cell::new(1),
     intercept_fns: CallbackRegistry::default(),
     update_fns: Registry::default(),
     intercept_update_fns: Registry::default(),
@@ -273,7 +263,7 @@ pub fn install_rpc<'js>(
     promise: RefCell::new(Some(capture_promise_tools(ctx)?)),
     dispatches: RefCell::new(HashMap::new()),
     update_dispatches: RefCell::new(HashMap::new()),
-    pending_invoke: RefCell::new(HashMap::new()),
+    invokes: PendingTable::default(),
   });
 
   globals.set_rpc_error(ctx.eval(
@@ -627,23 +617,14 @@ fn takeout_options_json<'js>(ctx: &Ctx<'js>, options: Option<Value<'js>>) -> JsR
 }
 
 impl RpcState {
-  /// the half every invoke shares: a promise the host settles later through `resolveInvoke`, and a
+  /// the half every invoke shares: a promise the host settles later through [`Self::settle`], and a
   /// refusal the host answers immediately rejecting it instead.
   fn begin_invoke<'js>(
     &self,
     ctx: &Ctx<'js>,
     send: impl FnOnce(i64) -> Option<String>,
   ) -> JsResult<rquickjs::Promise<'js>> {
-    let invoke_id = self.alloc_invoke_id();
-    let (promise, pending) = PendingSettle::new(ctx)?;
-    self.pending_invoke.borrow_mut().insert(invoke_id, pending);
-
-    if let Some(err) = send(invoke_id) {
-      if let Some(pending) = self.pending_invoke.borrow_mut().remove(&invoke_id) {
-        pending.reject_with(ctx, &err)?;
-      }
-    }
-    Ok(promise)
+    self.invokes.park(ctx, (), send)
   }
 
   fn js_invoke_rpc<'js>(&self, ctx: &Ctx<'js>, slot: i32, obj: Value<'js>) -> JsResult<Value<'js>> {
@@ -655,7 +636,7 @@ impl RpcState {
   }
 
   /// the one api whose payload is bytes and nothing else, in both directions: it crosses as a
-  /// java `byte[]` and comes back through `resolveInvokeBytes`, never as base64 in a wire string.
+  /// java `byte[]` and comes back through [`Self::settle_bytes`], never as base64 in a wire string.
   fn js_invoke_raw<'js>(&self, ctx: &Ctx<'js>, slot: i32, bytes: Value<'js>) -> JsResult<Value<'js>> {
     self.grants.check_grant(ctx, RAW_GRANT, None, MATCH_EXACT)?;
     let Some(method) = TypedArray::<u8>::from_value(bytes).ok().and_then(|array| array.as_bytes().map(<[u8]>::to_vec))
@@ -1066,13 +1047,14 @@ impl RpcState {
 }
 
 impl RpcState {
-  pub fn resolve_invoke(self: &Rc<Self>, rt: &Runtime, context: &rquickjs::Context, invoke_id: i64, result_wire: &str) {
+  pub fn settle(self: &Rc<Self>, rt: &Runtime, context: &rquickjs::Context, invoke_id: i64, result_wire: &str) {
     let state = self;
     context.with(|ctx| {
-      if let Some(pending) = state.pending_invoke.borrow_mut().remove(&invoke_id) {
-        if let Err(e) = pending.settle_from_wire(&ctx, &state.tl, result_wire, ViewLife::Plugin) {
-          (state.log)(&format!("resolveInvoke({invoke_id}) failed: {e:?}"));
-        }
+      let settled = state.invokes.settle(&ctx, invoke_id, result_wire, false, |ctx, _, wire| {
+        state.tl.wire_to_js_value(ctx, wire, ViewLife::Plugin)
+      });
+      if let Err(why) = settled {
+        (state.log)(&format!("invoke({invoke_id}) settle failed: {why}"));
       }
     });
     pump_jobs(rt, context, state.log.as_ref());
@@ -1080,21 +1062,12 @@ impl RpcState {
 
   /// `invokeRaw`'s answer, which is the response body and nothing else: no wire is built for it
   /// and the `Uint8Array` is filled from the array the host handed over
-  pub fn resolve_invoke_bytes(
-    self: &Rc<Self>,
-    rt: &Runtime,
-    context: &rquickjs::Context,
-    invoke_id: i64,
-    response: &[u8],
-  ) {
+  pub fn settle_bytes(self: &Rc<Self>, rt: &Runtime, context: &rquickjs::Context, invoke_id: i64, response: &[u8]) {
     let state = self;
     context.with(|ctx| {
-      let Some(pending) = state.pending_invoke.borrow_mut().remove(&invoke_id) else {
-        return;
-      };
-      let settled = proxy::make_bytes_value(&ctx, response).and_then(|value| pending.resolve_with(&ctx, value));
-      if let Err(e) = settled {
-        (state.log)(&format!("resolveInvokeBytes({invoke_id}) failed: {e:?}"));
+      let settled = state.invokes.settle_with(&ctx, invoke_id, false, |ctx, _| proxy::make_bytes_value(ctx, response));
+      if let Err(why) = settled {
+        (state.log)(&format!("invokeRaw({invoke_id}) settle failed: {why}"));
       }
     });
     pump_jobs(rt, context, state.log.as_ref());
@@ -1309,9 +1282,7 @@ impl RpcState {
         let _ = accounts.take_prototype(&ctx);
       }
       state.drain_update_dispatches();
-      for (_, pending) in state.pending_invoke.borrow_mut().drain() {
-        pending.release(&ctx);
-      }
+      state.invokes.dispose(&ctx);
       for (_, dstate) in state.drain_dispatches() {
         if let Some(pending) = dstate.next_resolvers.borrow_mut().take() {
           pending.release(&ctx);

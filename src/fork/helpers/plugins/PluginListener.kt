@@ -86,9 +86,9 @@ interface UiListener {
     fun uiBulletin(text: String, iconSpec: String): String?
 
     /**
-     * `inu.ui.dialog`/`prompt`/`chooser`, which are one member because they are one contract: null
-     * means shown and settled later by the matching `resolve*` native, non-null an immediate
-     * refusal. [op] keeps in sync with rust `api::ui::OP_*`.
+     * `inu.ui.dialog`/`prompt`/`chooser`/`pickFile`/`saveFile`, which are one member because they are
+     * one contract: null means shown and settled later through [QuickJs.settle], non-null an
+     * immediate refusal. [op] keeps in sync with rust `api::ui::OP_*`.
      */
     fun uiModal(op: Int, requestId: Long, optionsJson: String): String?
 
@@ -162,7 +162,7 @@ interface RpcListener {
 
     /**
      * `inu.invokeRaw`: [method] is a whole serialized method, constructor id first, and the answer
-     * comes back through [QuickJs.resolveInvokeBytes]. Bytes both ways, since that is all this api
+     * comes back through [QuickJs.settleBytes]. Bytes both ways, since that is all this api
      * ever carries and base64 in a wire string would cost two conversions and 2.7x the payload.
      */
     fun onInvokeRaw(invokeId: Long, slot: Int, method: ByteArray): String?

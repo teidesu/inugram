@@ -8,6 +8,7 @@ import android.util.Log
 import desu.inugram.core.plugins.PluginWire
 import desu.inugram.helpers.plugins.EngineDispatch
 import desu.inugram.helpers.plugins.PluginSession
+import desu.inugram.helpers.plugins.QuickJs
 import desu.inugram.helpers.plugins.io.PluginBlobs
 import java.io.File
 import org.json.JSONArray
@@ -78,12 +79,10 @@ internal object PluginFilePicker {
                 putExtra(Intent.EXTRA_TITLE, name)
             }
         }) { data ->
-            val target = data?.data ?: return@launch Answer("0")
+            val target = data?.data ?: return@launch PluginWire.encodeBool(false)
             copyOut(source, target)
         }
     }
-
-    private class Answer(val wire: String?, val error: String? = null)
 
     /**
      * The one shape both take: hand the device an intent from the ui thread, wait for the result on
@@ -96,12 +95,12 @@ internal object PluginFilePicker {
         requestId: Long,
         name: String,
         intent: () -> Intent,
-        answer: (Intent?) -> Answer,
+        answer: (Intent?) -> String,
     ): String? {
         AndroidUtilities.runOnUIThread {
             val activity = LaunchActivity.instance
             if (activity == null || activity.isFinishing) {
-                settle(session, requestId, Answer(null, PluginWire.encodePluginError("unsupported", "$name: there is no screen to open a picker over")))
+                settle(session, requestId, name, PluginWire.encodePluginError("unsupported", "$name: there is no screen to open a picker over"))
                 return@runOnUIThread
             }
             nextRequest = (nextRequest + 1) % REQUEST_SPAN
@@ -114,13 +113,15 @@ internal object PluginFilePicker {
                     val ok = args.getOrNull(1) == Activity.RESULT_OK
                     val data = args.getOrNull(2) as? Intent
                     Utilities.globalQueue.postRunnable {
-                        val result = if (!ok) Answer(if (name == "saveFile") "0" else "[]") else try {
+                        val result = if (!ok) {
+                            if (name == "saveFile") PluginWire.encodeBool(false) else PluginWire.encodeJson("[]")
+                        } else try {
                             answer(data)
                         } catch (e: Throwable) {
                             Log.e(TAG, "$name failed", e)
-                            Answer(null, PluginWire.encodePluginError("internal", "$name: ${e.message ?: e.toString()}"))
+                            PluginWire.encodePluginError("internal", "$name: ${e.message ?: e.toString()}")
                         }
-                        settle(session, requestId, result)
+                        settle(session, requestId, name, result)
                     }
                 }
             }
@@ -131,14 +132,14 @@ internal object PluginFilePicker {
             } catch (e: Throwable) {
                 center.removeObserver(observer, NotificationCenter.onActivityResultReceived)
                 Log.e(TAG, "$name could not be opened", e)
-                settle(session, requestId, Answer(null, PluginWire.encodePluginError("unsupported", "$name: this device has no file picker")))
+                settle(session, requestId, name, PluginWire.encodePluginError("unsupported", "$name: this device has no file picker"))
             }
         }
         return null
     }
 
-    private fun settle(session: PluginSession, requestId: Long, result: Answer) {
-        EngineDispatch.onEngine(session) { session.engine.resolveFileRequest(requestId, result.wire, result.error) }
+    private fun settle(session: PluginSession, requestId: Long, name: String, wire: String) {
+        EngineDispatch.settle(session, QuickJs.SETTLE_FILES, requestId, name) { wire }
     }
 
     private fun urisOf(data: Intent?): List<Uri> {
@@ -152,16 +153,16 @@ internal object PluginFilePicker {
      * The copies the plugin is handed, or nothing at all: a pick that fails halfway leaves no file
      * behind, and neither does a picker that answered with more files than were asked for.
      */
-    private fun copyIn(session: PluginSession, uris: List<Uri>, multiple: Boolean): Answer {
+    private fun copyIn(session: PluginSession, uris: List<Uri>, multiple: Boolean): String {
         val wanted = if (multiple) uris else uris.take(1)
-        if (wanted.isEmpty()) return Answer("[]")
+        if (wanted.isEmpty()) return PluginWire.encodeJson("[]")
         val root = PluginBlobs.dirFor(session.plugin.id)
         if (root.isEmpty()) {
-            return Answer(null, PluginWire.encodePluginError("internal", "pickFile: there is nowhere to copy the file to"))
+            return PluginWire.encodePluginError("internal", "pickFile: there is nowhere to copy the file to")
         }
         val dir = File(root, "picked")
         if (!dir.isDirectory && !dir.mkdirs()) {
-            return Answer(null, PluginWire.encodePluginError("internal", "pickFile: there is nowhere to copy the file to"))
+            return PluginWire.encodePluginError("internal", "pickFile: there is nowhere to copy the file to")
         }
         val copies = ArrayList<File>()
         val out = JSONArray()
@@ -181,7 +182,7 @@ internal object PluginFilePicker {
             }
             if (failure != null) {
                 for (copy in copies) copy.delete()
-                return Answer(null, failure)
+                return failure
             }
             out.put(
                 JSONObject()
@@ -190,7 +191,7 @@ internal object PluginFilePicker {
                     .put("type", described.mime),
             )
         }
-        return Answer(out.toString())
+        return PluginWire.encodeJson(out.toString())
     }
 
     /**
@@ -230,12 +231,12 @@ internal object PluginFilePicker {
         "pickFile: '$name' is over $MAX_PICK_BYTES bytes ($size so far), which is more than may be picked at once",
     )
 
-    private fun copyOut(source: File, target: Uri): Answer {
+    private fun copyOut(source: File, target: Uri): String {
         val resolver = ApplicationLoader.applicationContext.contentResolver
         val stream = resolver.openOutputStream(target)
-            ?: return Answer(null, PluginWire.encodePluginError("internal", "saveFile: the file could not be written"))
+            ?: return PluginWire.encodePluginError("internal", "saveFile: the file could not be written")
         stream.use { out -> source.inputStream().use { it.copyTo(out) } }
-        return Answer("1")
+        return PluginWire.encodeBool(true)
     }
 
     private class Described(val name: String, val mime: String, val size: Long)

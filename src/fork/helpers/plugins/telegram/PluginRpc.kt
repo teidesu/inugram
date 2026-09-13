@@ -1196,7 +1196,7 @@ object PluginRpc {
             return decodeFailureWire("invokeRpc", e)
         }
         sendInvoke(session, account, request) { response, error ->
-            session.engine.resolveInvoke(invokeId, encodeInvokeResult(session.tl, response, error))
+            settleInvoke(session, invokeId, "invokeRpc") { encodeInvokeResult(session.tl, response, error) }
         }
         return null
     }
@@ -1258,9 +1258,9 @@ object PluginRpc {
         sendInvoke(session, account, request) { response, error ->
             releaseUnowned(response)
             when {
-                error != null -> session.engine.resolveInvoke(invokeId, PluginWire.encodeRpcError(error.code, error.text ?: ""))
-                response is RawTlResponse -> session.engine.resolveInvokeBytes(invokeId, response.bytes)
-                else -> session.engine.resolveInvoke(invokeId, PluginWire.encodeNull())
+                error != null -> settleInvoke(session, invokeId, "invokeRaw") { PluginWire.encodeRpcError(error.code, error.text ?: "") }
+                response is RawTlResponse -> session.engine.settleBytes(QuickJs.SETTLE_INVOKE, invokeId, response.bytes)
+                else -> settleInvoke(session, invokeId, "invokeRaw") { PluginWire.encodeNull() }
             }
         }
         return null
@@ -1313,9 +1313,14 @@ object PluginRpc {
             return decodeFailureWire("takeout", e)
         }
         sendInvoke(session, account, request) { response, error ->
-            session.engine.resolveInvoke(invokeId, encode(response, error))
+            settleInvoke(session, invokeId, "takeout") { encode(response, error) }
         }
         return null
+    }
+
+    /** already on the plugin queue: [sendInvoke] made the hop, and checked the session on the way */
+    private fun settleInvoke(session: PluginSession, invokeId: Long, what: String, produce: () -> String) {
+        session.engine.settle(QuickJs.SETTLE_INVOKE, invokeId, EngineDispatch.wireOf(what, produce))
     }
 
     private fun buildTakeoutInit(options: JSONObject): TakeoutInitRequest = TakeoutInitRequest().apply {

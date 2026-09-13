@@ -1,5 +1,4 @@
-use std::cell::{Cell, RefCell};
-use std::collections::HashMap;
+use std::cell::Cell;
 use std::fs;
 use std::io::Write;
 use std::path::{Path, PathBuf};
@@ -7,15 +6,14 @@ use std::rc::Rc;
 
 use rquickjs::{Array, Ctx, Function, Object, Result as JsResult, Runtime, TypedArray, Value};
 
-use crate::api::error::format_exception;
-use crate::api::error::{wire_error_to_js, PluginErrorCode};
+use crate::api::error::PluginErrorCode;
 use crate::api::io::blob::{self, BlobHandle, BlobState};
 use crate::api::telegram::account::AccountState;
 use crate::api::telegram::progress::ProgressReporter;
 use crate::api::tl::proxy::{js_value_to_wire, TlViews, ViewLife};
-use crate::runtime::{pump_jobs, PendingSettle};
+use crate::api::io::staging::StagedFile;
+use crate::runtime::{pump_jobs, Parked, PendingTable};
 use crate::sandbox::grants::{GrantHost, MATCH_EXACT};
-use crate::sandbox::registry::RequestIds;
 
 const OP_SEND_MESSAGE: i32 = 0;
 const OP_SEND_MEDIA: i32 = 1;
@@ -84,17 +82,29 @@ pub struct WritesState {
   stage_dir: PathBuf,
   log: crate::Log,
   transfer_limit: u64,
-  next_request_id: RequestIds,
   next_staged: Cell<u64>,
-  pending: RefCell<HashMap<i64, PendingWrite>>,
+  pending: PendingTable<PendingWrite>,
 }
 
 struct PendingWrite {
-  settle: PendingSettle,
   shape: Shape,
   progress: Option<Rc<ProgressReporter>>,
   last_total: Cell<i64>,
-  staged: Vec<PathBuf>,
+  _staged: Vec<StagedFile>,
+}
+
+impl Parked for PendingWrite {
+  fn reject(self, ctx: &Ctx<'_>) {
+    if let Some(progress) = self.progress {
+      progress.abandon(ctx);
+    }
+  }
+
+  fn release(self, ctx: &Ctx<'_>) {
+    if let Some(progress) = self.progress {
+      progress.release(ctx);
+    }
+  }
 }
 
 impl WritesState {
@@ -267,51 +277,23 @@ impl WritesState {
           }
         };
         if let Some(path) = one.path {
-          staged.push(path);
+          staged.push(StagedFile(path));
         }
         wires.push(one.wire);
       }
       Ok(())
     })();
-    if let Err(e) = outcome {
-      for path in &staged {
-        let _ = fs::remove_file(path);
-      }
-      return Err(e);
-    }
+    outcome?;
 
-    let request_id = self.next_request_id.alloc();
-    let (promise, settle) = PendingSettle::new(ctx)?;
-    let progress = on_progress.map(|callback| ProgressReporter::new(ctx, callback, self.log.clone()));
-    self.pending.borrow_mut().insert(
-      request_id,
-      PendingWrite {
-        settle,
-        shape: shape_of(op),
-        progress,
-        last_total: Cell::new(0),
-        staged,
-      },
-    );
-
-    if let Some(err) = self.host.account_write(slot, request_id, op, arg, &wires) {
-      if let Some(pending) = self.take_pending(request_id) {
-        let value = crate::api::error::host_error_to_js(ctx, &err)?;
-        if let Some(progress) = pending.progress.as_ref() {
-          progress.release(ctx);
-        }
-        pending.settle.reject_with_value(ctx, value)?;
-      }
-    }
+    let parked = PendingWrite {
+      shape: shape_of(op),
+      progress: on_progress.map(|callback| ProgressReporter::new(ctx, callback, self.log.clone())),
+      last_total: Cell::new(0),
+      _staged: staged,
+    };
+    let promise =
+      self.pending.park(ctx, parked, |request_id| self.host.account_write(slot, request_id, op, arg, &wires))?;
     Ok(promise.into_value())
-  }
-
-  fn take_pending(&self, request_id: i64) -> Option<PendingWrite> {
-    let pending = self.pending.borrow_mut().remove(&request_id)?;
-    for path in &pending.staged {
-      let _ = fs::remove_file(path);
-    }
-    Some(pending)
   }
 
   fn decode_list<'js>(&self, ctx: &Ctx<'js>, wire: &str) -> JsResult<Array<'js>> {
@@ -380,9 +362,8 @@ pub(crate) fn install_writes_with_limit<'js>(
     stage_dir: deps.stage_dir,
     log: deps.log,
     transfer_limit,
-    next_request_id: RequestIds::default(),
     next_staged: Cell::new(0),
-    pending: RefCell::new(HashMap::new()),
+    pending: PendingTable::default(),
   });
 
   let natives = Object::new(ctx.clone())?;
@@ -442,47 +423,22 @@ pub(crate) fn install_writes_with_limit<'js>(
 }
 
 impl WritesState {
-  pub fn resolve_write(self: &Rc<Self>, rt: &Runtime, context: &rquickjs::Context, request_id: i64, result_wire: &str) {
+  pub fn settle(self: &Rc<Self>, rt: &Runtime, context: &rquickjs::Context, request_id: i64, result_wire: &str) {
     let state = self;
     context.with(|ctx| {
-      let Some(pending) = state.take_pending(request_id) else {
-        return;
-      };
-      if let Some(built) = wire_error_to_js(&ctx, result_wire) {
-        if let Some(progress) = pending.progress.as_ref() {
-          progress.abandon(&ctx);
-        }
-        match built {
-          Ok(value) => {
-            if pending.settle.reject_with_value(&ctx, value).is_err() {
-              (state.log)(&format!("write({request_id}) reject failed: {}", format_exception(&ctx)));
-            }
-          }
-          Err(e) => {
-            pending.settle.release(&ctx);
-            (state.log)(&format!("write({request_id}) error decode failed: {e:?}"));
+      let settled = state.pending.settle(&ctx, request_id, result_wire, false, |ctx, pending, wire| {
+        if let Some(progress) = pending.progress.take() {
+          let total = pending.last_total.get();
+          if total > 0 {
+            progress.finish(ctx, total, total);
+          } else {
+            progress.abandon(ctx);
           }
         }
-        return;
-      }
-      if let Some(progress) = pending.progress.as_ref() {
-        let total = pending.last_total.get();
-        if total > 0 {
-          progress.finish(&ctx, total, total);
-        } else {
-          progress.abandon(&ctx);
-        }
-      }
-      match state.decode_result(&ctx, pending.shape, result_wire) {
-        Ok(value) => {
-          if pending.settle.resolve_with(&ctx, value).is_err() {
-            (state.log)(&format!("write({request_id}) resolve failed: {}", format_exception(&ctx)));
-          }
-        }
-        Err(_) => {
-          pending.settle.release(&ctx);
-          (state.log)(&format!("write({request_id}) bad result wire: {}", format_exception(&ctx)));
-        }
+        state.decode_result(ctx, pending.shape, wire)
+      });
+      if let Err(why) = settled {
+        (state.log)(&format!("write({request_id}) settle failed: {why}"));
       }
     });
     pump_jobs(rt, context, state.log.as_ref());
@@ -498,33 +454,19 @@ impl WritesState {
   ) {
     let state = self;
     context.with(|ctx| {
-      let progress = {
-        let table = state.pending.borrow();
-        let Some(pending) = table.get(&request_id) else {
-          return;
-        };
+      let progress = state.pending.with_parked(request_id, |pending| {
         pending.last_total.set(total);
         pending.progress.clone()
-      };
-      let Some(progress) = progress else { return };
-      progress.report(&ctx, loaded, total);
+      });
+      if let Some(Some(progress)) = progress {
+        progress.report(&ctx, loaded, total);
+      }
     });
     pump_jobs(rt, context, state.log.as_ref());
   }
 
   pub fn dispose(self: &Rc<Self>, context: &rquickjs::Context) {
-    let state = self;
-    context.with(|ctx| {
-      for (_, pending) in state.pending.borrow_mut().drain() {
-        if let Some(progress) = pending.progress.as_ref() {
-          progress.release(&ctx);
-        }
-        pending.settle.release(&ctx);
-        for path in &pending.staged {
-          let _ = fs::remove_file(path);
-        }
-      }
-    });
+    context.with(|ctx| self.pending.dispose(&ctx));
   }
 }
 

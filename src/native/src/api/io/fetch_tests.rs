@@ -1,4 +1,5 @@
 use super::*;
+use std::cell::RefCell;
 use crate::api::error::install_plugin_error;
 use crate::api::io::fs::tests::{install_sandbox_globals, TestDir};
 use rquickjs::Context;
@@ -179,7 +180,7 @@ fn answer(f: &Fixture, request_id: i64, status: i32, headers: &str, body: &str) 
     r#"J{{"status":{status},"statusText":"OK","url":"https://api.example.com/x","headers":{headers},"body":{{"path":{:?},"type":"text/plain"}}}}"#,
     path.to_string_lossy(),
   );
-  f.state.resolve(&f.rt, &f.ctx, request_id, &wire);
+  f.state.settle(&f.rt, &f.ctx, request_id, &wire);
 }
 
 #[test]
@@ -606,6 +607,6 @@ mod bundled_oracle {
       r#"J{{"status":200,"statusText":"OK","url":"https://example.com/final","headers":{{"content-type":["application/json"],"set-cookie":["a=1","b=2"]}},"body":{{"path":{:?},"type":"application/json"}}}}"#,
       path.to_string_lossy(),
     );
-    state.resolve(rt, ctx, request_id, &wire);
+    state.settle(rt, ctx, request_id, &wire);
   }
 }

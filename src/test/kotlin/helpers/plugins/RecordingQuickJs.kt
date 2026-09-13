@@ -19,8 +19,8 @@ class RecordingQuickJs : QuickJs() {
     class UpdateDispatch(val callbackId: Int, val dispatchId: Long, val typeName: String, val accountId: Int, val updateWire: String)
     class Invoke(val invokeId: Long, val resultWire: String)
     class InvokeBytes(val invokeId: Long, val response: ByteArray)
-    class PeerResult(val requestId: Long, val resultWire: String)
-    class FetchResult(val requestId: Long, val resultWire: String)
+    class Settle(val api: Int, val requestId: Long, val wire: String)
+    class ReadResult(val requestId: Long, val resultWire: String)
     class HttpResult(val requestId: Long, val resultWire: String)
     class WriteResult(val requestId: Long, val resultWire: String)
     class WriteProgress(val requestId: Long, val loaded: Long, val total: Long)
@@ -37,8 +37,8 @@ class RecordingQuickJs : QuickJs() {
     val updateAbandons = ArrayList<Long>()
     val invokes = ArrayList<Invoke>()
     val invokeBytes = ArrayList<InvokeBytes>()
-    val peerResults = ArrayList<PeerResult>()
-    val fetchResults = ArrayList<FetchResult>()
+    val settles = ArrayList<Settle>()
+    val readResults = ArrayList<ReadResult>()
     val httpResults = ArrayList<HttpResult>()
     val writeResults = ArrayList<WriteResult>()
     val writeProgress = ArrayList<WriteProgress>()
@@ -183,23 +183,23 @@ class RecordingQuickJs : QuickJs() {
         onDispatchRpc?.invoke(dispatch)
     }
 
-    override fun resolvePeerResult(requestId: Long, resultWire: String) {
-        peerResults.add(PeerResult(requestId, resultWire))
+    /** sorted by table, so a suite reads the answers of the api it drives */
+    override fun settle(api: Int, requestId: Long, wire: String) {
+        when (api) {
+            SETTLE_READS -> readResults.add(ReadResult(requestId, wire))
+            SETTLE_FETCH -> httpResults.add(HttpResult(requestId, wire))
+            SETTLE_WRITES -> {
+                val result = WriteResult(requestId, wire)
+                writeResults.add(result)
+                onWriteResult?.invoke(result)
+            }
+            SETTLE_INVOKE -> invokes.add(Invoke(requestId, wire))
+            else -> settles.add(Settle(api, requestId, wire))
+        }
     }
 
-    override fun accountFetchResult(requestId: Long, resultWire: String) {
-        fetchResults.add(FetchResult(requestId, resultWire))
-    }
-
-    /** the global `fetch`, as opposed to [accountFetchResult]'s `Account` reads */
-    override fun fetchResult(requestId: Long, resultWire: String) {
-        httpResults.add(HttpResult(requestId, resultWire))
-    }
-
-    override fun writeResult(requestId: Long, resultWire: String) {
-        val result = WriteResult(requestId, resultWire)
-        writeResults.add(result)
-        onWriteResult?.invoke(result)
+    override fun settleBytes(api: Int, requestId: Long, bytes: ByteArray) {
+        invokeBytes.add(InvokeBytes(requestId, bytes))
     }
 
     override fun writeProgress(requestId: Long, loaded: Long, total: Long) {
@@ -220,14 +220,6 @@ class RecordingQuickJs : QuickJs() {
         val abandon = Abandon(dispatchId, reasonWire)
         abandons.add(abandon)
         onAbandonDispatch?.invoke(abandon)
-    }
-
-    override fun resolveInvoke(invokeId: Long, resultWire: String) {
-        invokes.add(Invoke(invokeId, resultWire))
-    }
-
-    override fun resolveInvokeBytes(invokeId: Long, response: ByteArray) {
-        invokeBytes.add(InvokeBytes(invokeId, response))
     }
 
     override fun dispatchUpdate(typeName: String, accountId: Int, updateWire: String) {

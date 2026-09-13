@@ -393,7 +393,7 @@ class PluginReadsTest {
         )
         drain()
 
-        val settled = plugin.js.peerResults.single()
+        val settled = plugin.js.readResults.single()
         assertEquals(1L, settled.requestId)
         assertEquals("inputPeerChannel", jsonOf(settled.resultWire).getString("_"))
         assertEquals(
@@ -409,7 +409,7 @@ class PluginReadsTest {
         resolve(plugin, "Utelegram")
         connections().lastSent()!!.answer(null, TLRPC.TL_error().apply { code = 420; text = "FLOOD_WAIT_5" }, 0L)
         drain()
-        val decoded = PluginWire.decode(plugin.js.peerResults.single().resultWire) as PluginWire.Value.RpcError
+        val decoded = PluginWire.decode(plugin.js.readResults.single().resultWire) as PluginWire.Value.RpcError
         assertEquals(420, decoded.code)
         assertEquals("FLOOD_WAIT_5", decoded.text)
     }
@@ -427,7 +427,7 @@ class PluginReadsTest {
             0L,
         )
         drain()
-        assertPluginError("invalid-argument", plugin.js.peerResults.single().resultWire)
+        assertPluginError("invalid-argument", plugin.js.readResults.single().resultWire)
     }
 
     /**
@@ -444,8 +444,8 @@ class PluginReadsTest {
 
         connections().lastSent()!!.answer(TLRPC.TL_contacts_resolvedPeer(), null, 0L)
         drain()
-        assertTrue(stale.peerResults.isEmpty())
-        assertTrue(plugin.js.peerResults.isEmpty())
+        assertTrue(stale.readResults.isEmpty())
+        assertTrue(plugin.js.readResults.isEmpty())
     }
 
     @Test

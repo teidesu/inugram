@@ -1,4 +1,6 @@
 use super::*;
+use std::cell::RefCell;
+use crate::api::error::format_exception;
 use crate::api::error::install_plugin_error;
 use crate::api::globals::RandomHost;
 use crate::api::telegram::account::tests::TestAccountHost;
@@ -389,7 +391,7 @@ fn settle(rt: &Runtime, ctx: &Context, state: &Rc<WritesState>, host: &Rc<TestWr
       }
     }
     let wire = host.answer(op, &arg, &values);
-    state.resolve_write(rt, ctx, request_id, &wire);
+    state.settle(rt, ctx, request_id, &wire);
   }
   panic!("the host queue never drained");
 }

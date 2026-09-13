@@ -496,7 +496,7 @@ fn invoke_rpc_resolves_and_rejects() {
 
   assert_eq!(host.invoke_calls.borrow().len(), 1);
   let invoke_id = host.invoke_calls.borrow()[0].0;
-  state.resolve_invoke(&rt, &ctx, invoke_id, &wire_json(r#"{"_":"foo.bar","ok":true}"#));
+  state.settle(&rt, &ctx, invoke_id, &wire_json(r#"{"_":"foo.bar","ok":true}"#));
   let ok: String = ctx.with(|ctx| ctx.eval::<String, _>("JSON.stringify(globalThis.__ok)").unwrap());
   assert_eq!(ok, r#"{"_":"foo.bar","ok":true}"#);
 
@@ -507,7 +507,7 @@ fn invoke_rpc_resolves_and_rejects() {
   });
   assert_eq!(host.invoke_calls.borrow().len(), 2);
   let invoke_id2 = host.invoke_calls.borrow()[1].0;
-  state.resolve_invoke(&rt, &ctx, invoke_id2, "EBAD_REQUEST: oops");
+  state.settle(&rt, &ctx, invoke_id2, "EBAD_REQUEST: oops");
   let err: String = ctx.with(|ctx| ctx.eval::<String, _>("globalThis.__err").unwrap());
   assert_eq!(err, "BAD_REQUEST: oops");
 }
@@ -602,7 +602,7 @@ fn invoke_rejection_with_rpc_error_wire_is_an_rpc_error_instance() {
   });
 
   let invoke_id = host.invoke_calls.borrow()[0].0;
-  state.resolve_invoke(&rt, &ctx, invoke_id, "R-503:Timeout");
+  state.settle(&rt, &ctx, invoke_id, "R-503:Timeout");
   let caught: String = ctx.with(|ctx| ctx.eval("JSON.stringify(globalThis.__caught)").unwrap());
   assert_eq!(caught, r#"{"isRpc":true,"code":-503,"text":"Timeout"}"#);
 }
@@ -625,7 +625,7 @@ fn replacing_inu_rpc_error_does_not_change_host_errors() {
   });
 
   let invoke_id = host.invoke_calls.borrow()[0].0;
-  state.resolve_invoke(&rt, &ctx, invoke_id, "R400:PEER_ID_INVALID");
+  state.settle(&rt, &ctx, invoke_id, "R400:PEER_ID_INVALID");
   let caught: String = ctx.with(|ctx| ctx.eval("JSON.stringify(globalThis.__caught)").unwrap());
   assert_eq!(caught, r#"[true,false,400,"PEER_ID_INVALID"]"#);
 }
@@ -673,7 +673,7 @@ fn invoke_result_handle_resolves_to_a_writable_plugin_lifetime_view() {
   });
 
   let invoke_id = host.invoke_calls.borrow()[0].0;
-  state.resolve_invoke(&rt, &ctx, invoke_id, &format!("HOW{TEST_HANDLE}"));
+  state.settle(&rt, &ctx, invoke_id, &format!("HOW{TEST_HANDLE}"));
 
   ctx.with(|ctx| {
     assert_eq!(ctx.eval::<String, _>("globalThis.__got._").unwrap(), "foo.bar");
@@ -948,7 +948,7 @@ fn invoke_rejection_with_a_plugin_error_wire_carries_usage_and_quota() {
   });
 
   let invoke_id = host.invoke_calls.borrow()[0].0;
-  state.resolve_invoke(&rt, &ctx, invoke_id, "Pquota-exceeded\n\n64\n32\ntoo big");
+  state.settle(&rt, &ctx, invoke_id, "Pquota-exceeded\n\n64\n32\ntoo big");
   let caught: String = ctx.with(|ctx| ctx.eval("JSON.stringify(globalThis.__caught)").unwrap());
   assert_eq!(caught, r#"[true,"quota-exceeded",64,32,"number","too big"]"#);
 }
@@ -1208,7 +1208,7 @@ fn a_panicking_test_body_still_releases_its_roots() {
   });
   state.dispatch(&rt, &ctx, 1, 970, "foo.bar", 0, &wire_json(r#"{"_":"foo.bar"}"#));
   assert_eq!(engine.intercept_fns.len(), 1);
-  assert_eq!(engine.pending_invoke.borrow().len(), 1);
+  assert_eq!(engine.invokes.len(), 1);
   assert_eq!(engine.dispatches.borrow().len(), 1);
 
   let panicked = std::panic::catch_unwind(std::panic::AssertUnwindSafe(move || {
@@ -1218,7 +1218,7 @@ fn a_panicking_test_body_still_releases_its_roots() {
 
   assert!(panicked.is_err());
   assert!(engine.intercept_fns.is_empty(), "disposal must run on the unwind path");
-  assert!(engine.pending_invoke.borrow().is_empty());
+  assert!(engine.invokes.is_empty());
   assert!(engine.dispatches.borrow().is_empty());
 }
 
@@ -2757,7 +2757,7 @@ mod bundled_oracles {
 
     let (invoke_id, _, _) = host.invokes.borrow()[0].clone();
     let view = host.mint(&config_node(), false);
-    state.resolve_invoke(&rt, &ctx, invoke_id, &view);
+    state.settle(&rt, &ctx, invoke_id, &view);
 
     let lines = lines.borrow();
     crate::testing::harness::assert_oracle_exact(&lines, "globals test done", 38);
@@ -2773,7 +2773,7 @@ mod bundled_oracles {
     // refused as a *writable* view's field value, and it needs one to try it on
     let (invoke_id, _, _) = host.invokes.borrow()[0].clone();
     let config = host.mint(&config_node(), false);
-    state.resolve_invoke(&rt, &ctx, invoke_id, &config);
+    state.settle(&rt, &ctx, invoke_id, &config);
 
     let update = object(
       "updateNewMessage",
@@ -2831,7 +2831,7 @@ mod bundled_oracles {
         "messages.getHistory" => host.mint(&history_node(), false),
         other => panic!("the oracle asked for {other}"),
       };
-      state.resolve_invoke(&rt, &ctx, invoke_id, &answer);
+      state.settle(&rt, &ctx, invoke_id, &answer);
     }
 
     let update = object("updateNewMessage", &[("message", node(&service_message_node()))]);
@@ -2913,7 +2913,7 @@ fn invoke_raw_resolves_with_the_response_bytes() {
     "globalThis.__raw = null; inu.invokeRaw(new Uint8Array([1, 2, 3, 4])).then(r => { globalThis.__raw = r; })",
   );
   let invoke_id = host.raw_calls.borrow()[0].0;
-  state.resolve_invoke_bytes(&rt, &ctx, invoke_id, &[5, 6, 7, 8]);
+  state.settle_bytes(&rt, &ctx, invoke_id, &[5, 6, 7, 8]);
   assert_eq!(
     eval_json(&ctx, "[Array.from(globalThis.__raw), globalThis.__raw instanceof Uint8Array]"),
     "[[5,6,7,8],true]"
@@ -2939,7 +2939,7 @@ fn a_takeout_session_carries_its_id_into_every_op() {
     r#"{"contacts":false,"messageUsers":true,"messageChats":false,"messageMegagroups":false,"messageChannels":false,"fileMaxSize":"1500000"}"#,
   );
 
-  state.resolve_invoke(&rt, &ctx, init.0, "S8123456789");
+  state.settle(&rt, &ctx, init.0, "S8123456789");
   assert_eq!(eval_json(&ctx, "globalThis.__session.id"), r#""8123456789""#);
 
   eval(&ctx, "globalThis.__session.invokeRpc({ _: 'messages.getHistory' }); globalThis.__session.finish()");
@@ -2961,7 +2961,7 @@ fn a_wrapped_call_still_needs_its_method_grant() {
   let (rt, ctx, host, state) = setup(&["takeout", "invokeRpc(users.getUsers)", "account.read(self)"]);
   eval(&ctx, "inu.account(1).initTakeoutSession().then(s => { globalThis.__s = s; })");
   let init_id = host.takeout_calls.borrow()[0].0;
-  state.resolve_invoke(&rt, &ctx, init_id, "S77");
+  state.settle(&rt, &ctx, init_id, "S77");
 
   assert_eq!(
     catch_json(&ctx, "globalThis.__s.invokeRpc({ _: 'messages.getHistory' })"),

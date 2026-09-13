@@ -303,9 +303,6 @@ fn an_svg_that_parses_carries_its_source_to_the_host() {
 pub(crate) struct SilentUiHost;
 
 impl crate::api::ui::pages::UiHost for SilentUiHost {
-  fn ui_prompt(&self, _: i64, _: &str) -> Option<String> {
-    None
-  }
   fn ui_open_fragment(&self, _: i64) -> Option<String> {
     None
   }
