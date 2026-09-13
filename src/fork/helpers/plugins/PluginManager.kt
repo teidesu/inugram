@@ -485,6 +485,7 @@ object PluginManager {
         PluginOptimisticSend,
         PluginUi,
         PluginFilePicker,
+        PluginFetch,
         PluginActions,
         PluginNotifications,
         PluginCanvas,

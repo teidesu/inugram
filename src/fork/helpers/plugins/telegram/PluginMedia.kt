@@ -1,5 +1,6 @@
 package desu.inugram.helpers.plugins.telegram
 
+import desu.inugram.core.plugins.OwnerRegistry
 import desu.inugram.helpers.plugins.SessionResource
 import desu.inugram.core.plugins.PluginRefusal
 import desu.inugram.helpers.media.MediaSendHelper
@@ -62,7 +63,7 @@ object PluginMedia : SessionResource {
      * event and there is no event for one stock never started, so without this the observer - and
      * through it the engine - would outlive the plugin. Touched from the plugin queue and the ui thread.
      */
-    private val live = HashMap<PluginSession, MutableSet<Transfer>>()
+    private val live = OwnerRegistry<PluginSession, Transfer>()
 
     private const val DOWNLOAD_TAG = "InuDownload"
 
@@ -507,7 +508,7 @@ object PluginMedia : SessionResource {
 
     /** stock reports every transfer through [NotificationCenter] keyed by the name it gave the file. Added and removed on the ui thread, the only thread that centre may be touched from */
     private fun observe(transfer: Transfer) {
-        synchronized(live) { live.getOrPut(transfer.call.session) { LinkedHashSet() }.add(transfer) }
+        live.add(transfer.call.session, transfer)
         AndroidUtilities.runOnUIThread {
             val centre = NotificationCenter.getInstance(transfer.call.accountId)
             val observer = NotificationCenter.NotificationCenterDelegate { id, _, args ->
@@ -551,11 +552,7 @@ object PluginMedia : SessionResource {
     }
 
     private fun release(transfer: Transfer) {
-        synchronized(live) {
-            val mine = live[transfer.call.session] ?: return@synchronized
-            mine.remove(transfer)
-            if (mine.isEmpty()) live.remove(transfer.call.session)
-        }
+        live.remove(transfer.call.session) { it === transfer }
         stopObserving(transfer)
     }
 
@@ -576,7 +573,8 @@ object PluginMedia : SessionResource {
 
     /** there is no event for a transfer stock declined to start, so an unloaded plugin's observers would sit on the centre for the life of the process */
     override fun detach(session: PluginSession) {
-        val mine = synchronized(live) { live.remove(session) } ?: return
+        val mine = live.take(session)
+        if (mine.isEmpty()) return
         android.util.Log.d(DOWNLOAD_TAG, "detach: dropping ${mine.size} live transfers: ${mine.map { it.fileName }}")
         for (transfer in mine) stopObserving(transfer)
     }
