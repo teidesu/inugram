@@ -35,10 +35,10 @@ class PluginChatListTest {
     private var nextRequestId = 1L
 
     /** one whole exchange: the fetch, the ui hop it posts, and the settle that comes back */
-    private fun fetch(plugin: Plugin, op: Int, arg: String): String {
+    private fun fetch(plugin: Plugin, op: Int, args: String): String {
         val requestId = nextRequestId++
         plugin.js.readResults.clear()
-        val inline = plugin.js.listener!!.accountFetch(0, requestId, op, arg)
+        val inline = plugin.js.listener!!.accountFetch(0, requestId, op, "", args, "")
         // a refusal answers inline and never posts; everything else parks
         if (inline != null) return inline
         settle()
@@ -46,15 +46,15 @@ class PluginChatListTest {
     }
 
     /** `archive`, `chatFolderId`, `limit` - the selector `reads.js` builds */
-    private fun cached(plugin: Plugin, archive: Int = 0, folder: Int = -1, limit: Int = 0): List<String> {
-        val wire = fetch(plugin, PluginReads.OP_DIALOGS_CACHED, "$archive\n$folder\n$limit")
+    private fun cached(plugin: Plugin, archive: Int = 0, folder: Int? = null, limit: Int = 0): List<String> {
+        val wire = fetch(plugin, PluginReads.OP_DIALOGS_CACHED, "{\"archive\":$archive,\"chatFolderId\":${folder ?: "null"},\"limit\":$limit}")
         if (wire.isEmpty()) return emptyList()
         assertFalse(wire.startsWith("P") || wire.startsWith("E"), "unexpected error: $wire")
         return wire.split("\n")
     }
 
     private fun folders(plugin: Plugin): JSONArray {
-        val value = PluginWire.decode(fetch(plugin, PluginReads.OP_CHAT_FOLDERS, ""))
+        val value = PluginWire.decode(fetch(plugin, PluginReads.OP_CHAT_FOLDERS, "{}"))
         return JSONArray((value as PluginWire.Value.Json).json)
     }
 
@@ -206,7 +206,7 @@ class PluginChatListTest {
     fun an_unknown_chat_folder_is_not_found_rather_than_empty() {
         val plugin = granted()
         seed(main = listOf(dialog(222, 30)))
-        val error = PluginWire.decode(fetch(plugin, PluginReads.OP_DIALOGS_CACHED, "0\n99\n0"))
+        val error = PluginWire.decode(fetch(plugin, PluginReads.OP_DIALOGS_CACHED, "{\"archive\":0,\"chatFolderId\":99,\"limit\":0}"))
         assertEquals("not-found", (error as PluginWire.Value.PluginErr).code)
     }
 
@@ -215,7 +215,7 @@ class PluginChatListTest {
     fun both_cached_reads_refuse_without_the_dialogs_scope() {
         val plugin = startPlugin("chat-list-ungranted", "account.read(peers)")
         seed(main = listOf(dialog(222, 30)))
-        for ((op, arg) in listOf(PluginReads.OP_DIALOGS_CACHED to "0\n-1\n0", PluginReads.OP_CHAT_FOLDERS to "")) {
+        for ((op, arg) in listOf(PluginReads.OP_DIALOGS_CACHED to "{\"archive\":0,\"chatFolderId\":null,\"limit\":0}", PluginReads.OP_CHAT_FOLDERS to "{}")) {
             val error = PluginWire.decode(fetch(plugin, op, arg)) as PluginWire.Value.PluginErr
             assertEquals("not-granted", error.code, "op $op")
             assertEquals("account.read(dialogs)", error.grant)

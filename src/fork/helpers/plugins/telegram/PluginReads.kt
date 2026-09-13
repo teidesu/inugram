@@ -76,9 +76,6 @@ object PluginReads {
     /** `chatFolderId` is optional, and every folder id including `0` is a real one */
     private const val NO_CHAT_FOLDER = -1
 
-    /** what `fields` joins on, keep in sync with `reads.js`; a TL field name is a java identifier */
-    private const val FIELD_SEPARATOR = ","
-
     /** what telegram itself accepts for one page, and what an omitted `limit` asks for */
     private const val PAGE_LIMIT = 100
 
@@ -122,8 +119,8 @@ object PluginReads {
             override fun resolvePeer(accountId: Int, requestId: Long, spec: String, kind: Int): String? =
                 resolve(session, accountId, requestId, spec, kind)
 
-            override fun accountFetch(accountId: Int, requestId: Long, op: Int, arg: String): String? =
-                fetch(session, accountId, requestId, op, arg)
+            override fun accountFetch(accountId: Int, requestId: Long, op: Int, peer: String, args: String, cursor: String): String? =
+                fetch(session, accountId, requestId, op, peer, args, cursor)
         }
 
     private fun read(session: PluginSession, accountId: Int, op: Int, arg: String): String {
@@ -363,15 +360,17 @@ object PluginReads {
         accountId: Int,
         requestId: Long,
         op: Int,
-        arg: String,
+        peer: String,
+        args: String,
+        cursor: String,
     ): String? {
         val scope = SCOPE_BY_OP[op] ?: return PluginWire.encodePluginError("internal", "account fetch: unknown op $op")
-        if (!allowsFetch(session, op, arg)) return PluginWire.encodeNotGranted("account.read", scope)
-        if (!allowsSelf(session, arg)) return PluginWire.encodeNotGranted("account.read", "self")
+        if (!allowsFetch(session, op, peer)) return PluginWire.encodeNotGranted("account.read", scope)
+        if (!allowsSelf(session, peer)) return PluginWire.encodeNotGranted("account.read", "self")
         val controller = PeerSpecs.controllerFor(accountId)
             ?: return PluginWire.encodePluginError("not-found", "account fetch: no account is logged in as #$accountId")
-        val call = Fetch(session, controller, accountId, requestId, PeerSpecs.splitList(arg))
         return try {
+            val call = Fetch(session, controller, accountId, requestId, peer, JSONObject(args), cursor)
             when (op) {
                 OP_USER_FULL -> fetchUserFull(call)
                 OP_CHAT_FULL -> fetchChatFull(call)
@@ -391,8 +390,8 @@ object PluginReads {
     }
 
     /** `getUserFull` on *yourself* is the one read allowed under `account.read(self)` alone, and "yourself" is the spec rather than a dialog id that happens to be yours */
-    private fun allowsFetch(session: PluginSession, op: Int, arg: String): Boolean {
-        if (op == OP_USER_FULL && arg.length == 1 && arg[0] == PeerSpecs.SPEC_SELF &&
+    private fun allowsFetch(session: PluginSession, op: Int, peer: String): Boolean {
+        if (op == OP_USER_FULL && peer.length == 1 && peer[0] == PeerSpecs.SPEC_SELF &&
             session.permissions.allows("account.read", "self", ScopeMatch.EXACT)
         ) {
             return true
@@ -424,10 +423,7 @@ object PluginReads {
         return null
     }
 
-    private fun clampLimit(raw: String?): Int {
-        val limit = raw?.toIntOrNull() ?: 0
-        return if (limit in 1..PAGE_LIMIT) limit else PAGE_LIMIT
-    }
+    private fun clampLimit(limit: Int): Int = if (limit in 1..PAGE_LIMIT) limit else PAGE_LIMIT
 
 
 
@@ -450,20 +446,15 @@ object PluginReads {
         val controller: MessagesController,
         val accountId: Int,
         val requestId: Long,
-        val parts: List<String>,
-    ) {
+        val spec: String,
+        args: JSONObject,
+        cursor: String,
+    ) : JsonArgs(args) {
         val handles: TlHandles get() = session.tl
 
-        val spec: String get() = parts.firstOrNull().orEmpty()
+        val limit: Int get() = clampLimit(int("limit"))
 
-        val limit: Int get() = clampLimit(parts.getOrNull(1))
-
-        fun int(index: Int): Int = parts.getOrNull(index)?.toIntOrNull() ?: 0
-
-        fun fields(index: Int): List<String>? = parts.getOrNull(index)?.takeIf { it.isNotEmpty() }?.split(FIELD_SEPARATOR)
-
-        /** [at] is how many parts the op's own argument has, because rust appends the payload after them */
-        fun cursor(at: Int): Cursor = Cursor(parts.getOrNull(at).orEmpty().split(','))
+        val from = Cursor(cursor.split(','))
 
         fun peer(spec: String = this.spec, kind: Int = PeerSpecs.KIND_PEER): TLObject =
             when (val built = PeerSpecs.buildInputPeer(controller, accountId, spec, kind)) {
@@ -526,10 +517,10 @@ object PluginReads {
     private fun fetchHistory(call: Fetch): String? {
         val peer = call.peer() as TLRPC.InputPeer
         val pageLimit = call.limit
-        val offsetId = call.int(2)
-        val minId = call.int(3)
-        val maxId = call.int(4)
-        val topicId = call.int(5)
+        val offsetId = call.int("offsetId")
+        val minId = call.int("minId")
+        val maxId = call.int("maxId")
+        val topicId = call.int("topicId")
         // a topic is a thread, and its history is `messages.getReplies` - the same rpc the app sends
         // when a forum topic is opened
         val request: TLObject = if (topicId > 0) {
@@ -565,9 +556,7 @@ object PluginReads {
         val spec = call.spec
         val named = PeerSpecs.dialogIdOf(call.controller, call.accountId, spec) ?: notCached(spec)
         val dialogId = named.takeIf { it != COMMON_BOX }
-        val ids = call.parts.drop(1).map {
-            it.toIntOrNull() ?: refuse("invalid-argument", "getMessages: '$it' is not a message id")
-        }
+        val ids = call.ints("ids")
         val cached = ids.mapNotNull { id -> cachedMessage(call.controller, dialogId, id)?.let { id to it } }.toMap()
         if (cached.size == ids.size) {
             answerMessages(call, ids, cached)
@@ -687,10 +676,10 @@ object PluginReads {
 
     private fun fetchDialogs(call: Fetch): String? {
         val pageLimit = call.limit
-        val fields = call.fields(2)
-        val from = call.cursor(3)
+        val fields = call.strings("fields")
+        val from = call.from
         val request = TLRPC.TL_messages_getDialogs()
-        request.folder_id = call.int(0)
+        request.folder_id = call.int("folderId")
         request.limit = pageLimit
         request.offset_date = from.int(0)
         request.offset_id = from.int(1)
@@ -729,7 +718,7 @@ object PluginReads {
         val request = TL_forum.TL_messages_getForumTopics()
         request.peer = call.peer() as TLRPC.InputPeer
         request.limit = pageLimit
-        val from = call.cursor(2)
+        val from = call.from
         request.offset_date = from.int(0)
         request.offset_id = from.int(1)
         request.offset_topic = from.int(2)
@@ -762,10 +751,10 @@ object PluginReads {
      * `'exclude'` on top of one would quietly drop what that folder was set up to keep.
      */
     private fun fetchCachedDialogs(call: Fetch): String? {
-        val archive = call.int(0)
-        val chatFolderId = call.parts.getOrNull(1)?.toIntOrNull() ?: NO_CHAT_FOLDER
-        val limit = call.int(2)
-        val fields = call.parts.getOrNull(3)?.takeIf { it.isNotEmpty() }?.split(FIELD_SEPARATOR)
+        val archive = call.int("archive")
+        val chatFolderId = if (call.json.isNull("chatFolderId")) NO_CHAT_FOLDER else call.int("chatFolderId")
+        val limit = call.int("limit")
+        val fields = call.strings("fields")
         AndroidUtilities.runOnUIThread {
             val picked = if (chatFolderId != NO_CHAT_FOLDER) {
                 // `getDialogFilters`, not the field: it answers with the frozen list while the user

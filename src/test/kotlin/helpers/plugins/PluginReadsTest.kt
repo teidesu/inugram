@@ -139,7 +139,7 @@ class PluginReadsTest {
                 "op $op answered for 'me' without the self scope: $decoded",
             )
         }
-        assertPluginError("not-granted", reads(plugin).accountFetch(0, 1L, PluginReads.OP_HISTORY, "S\n10\n0\n0\n0\n0"))
+        assertPluginError("not-granted", reads(plugin).accountFetch(0, 1L, PluginReads.OP_HISTORY, "S", "{\"limit\":10}", ""))
         assertPluginError("not-granted", resolve(plugin, "S"))
 
         // an id is not an identity: being told *which* peer is you is the part that is gated

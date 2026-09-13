@@ -108,10 +108,15 @@
     return peers.map(peer => toSpec(peer)).join(SEPARATOR)
   }
 
+  // telegram's ids, counts and dates are int32 on the wire; a wider value is refused rather than wrapped
+  const INT32_MAX = 2147483647
+
   const toMessageId = (id, what) => {
     const value = toNumber(id)
-    if (value === null || !Number.isInteger(value)) throw invalid(`${what}: message id must be an integer`)
-    return String(value)
+    if (value === null || !Number.isInteger(value) || Math.abs(value) > INT32_MAX) {
+      throw invalid(`${what}: message id must be a 32-bit integer`)
+    }
+    return value
   }
 
   const toMessageIds = (ids, what) => {
@@ -125,13 +130,13 @@
   const FIELD_NAME = /^[A-Za-z_]\w{0,63}$/
 
   const toFieldNames = (value, what) => {
-    if (value === undefined || value === null) return ''
+    if (value === undefined || value === null) return null
     if (!Array.isArray(value)) throw invalid(`${what}: fields must be an array of field names`)
     for (const name of value) {
       if (typeof name !== 'string') throw invalid(`${what}: fields must be strings`)
       if (!FIELD_NAME.test(name)) throw invalid(`${what}: not a field name: ${name}`)
     }
-    return value.join(',')
+    return [...value]
   }
 
   const NO_OPTIONS = Object.freeze({})
@@ -145,12 +150,12 @@
   // 0 is "whatever the host's default is", which is what an omitted option means for every one of
   // these: the ceilings are telegram's and belong on the side that talks to it
   const toCount = (value, what, field) => {
-    if (value === undefined || value === null) return '0'
+    if (value === undefined || value === null) return 0
     const count = toNumber(value)
-    if (count === null || !Number.isInteger(count) || count < 0) {
-      throw invalid(`${what}: ${field} must be a non-negative integer`)
+    if (count === null || !Number.isInteger(count) || count < 0 || count > INT32_MAX) {
+      throw invalid(`${what}: ${field} must be a non-negative 32-bit integer`)
     }
-    return String(count)
+    return count
   }
 
   // the account a method acts on is the handle it was called through, never anything captured: one

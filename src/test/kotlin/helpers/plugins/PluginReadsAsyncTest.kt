@@ -63,8 +63,15 @@ class PluginReadsAsyncTest {
 
     private fun reads(plugin: Plugin): ReadsListener = plugin.js.listener!!
 
-    private fun fetch(plugin: Plugin, op: Int, arg: String, requestId: Long = 1L, account: Int = 0): String? =
-        reads(plugin).accountFetch(account, requestId, op, arg)
+    private fun fetch(
+        plugin: Plugin,
+        op: Int,
+        peer: String,
+        args: String = "{}",
+        cursor: String = "",
+        requestId: Long = 1L,
+        account: Int = 0,
+    ): String? = reads(plugin).accountFetch(account, requestId, op, peer, args, cursor)
 
     /** what the engine hands back to JS once the whole exchange has settled */
     private fun settled(plugin: Plugin): String {
@@ -152,13 +159,13 @@ class PluginReadsAsyncTest {
             state.dispose()
         }
         try {
-            assertNull(fetch(plugin, PluginReads.OP_FETCH_MESSAGES, "D$alice\n$mid"))
+            assertNull(fetch(plugin, PluginReads.OP_FETCH_MESSAGES, "D$alice", "{\"ids\":[$mid]}"))
             assertEquals("from disk", stringOf(fieldOf(plugin, awaitSettled(plugin), "message")))
             assertTrue(connections().sent.isEmpty(), "what sqlite already had must not cost a request")
 
             // the row is not a channel's, so the common box reaches it with no peer named
             plugin.js.readResults.clear()
-            assertNull(fetch(plugin, PluginReads.OP_FETCH_MESSAGES, "D0\n$mid", requestId = 2L))
+            assertNull(fetch(plugin, PluginReads.OP_FETCH_MESSAGES, "D0", "{\"ids\":[$mid]}", requestId = 2L))
             assertEquals("from disk", stringOf(fieldOf(plugin, awaitSettled(plugin), "message")))
             assertTrue(connections().sent.isEmpty())
         } finally {
@@ -171,7 +178,7 @@ class PluginReadsAsyncTest {
         val plugin = granted()
         TestApp.cacheDialogMessage(0, self, message(7, peerUser(self), "hi"))
 
-        assertNull(fetch(plugin, PluginReads.OP_FETCH_MESSAGES, "S\n7"))
+        assertNull(fetch(plugin, PluginReads.OP_FETCH_MESSAGES, "S", "{\"ids\":[7]}"))
         drain()
         assertTrue(connections().sent.isEmpty(), "what memory already had must not cost a request")
         assertEquals("hi", stringOf(fieldOf(plugin, settled(plugin), "message")))
@@ -180,7 +187,7 @@ class PluginReadsAsyncTest {
     @Test
     fun an_uncached_message_is_fetched_and_a_miss_stays_null_in_place() {
         val plugin = granted()
-        assertNull(fetch(plugin, PluginReads.OP_FETCH_MESSAGES, "D$alice\n7\n8"))
+        assertNull(fetch(plugin, PluginReads.OP_FETCH_MESSAGES, "D$alice", "{\"ids\":[7,8]}"))
 
         val sent = awaitSent()
         val request = sent.request as TLRPC.TL_messages_getMessages
@@ -196,7 +203,7 @@ class PluginReadsAsyncTest {
     @Test
     fun a_channel_names_itself_because_its_ids_mean_nothing_without_it() {
         val plugin = granted()
-        assertNull(fetch(plugin, PluginReads.OP_FETCH_MESSAGES, "D-$channel\n9"))
+        assertNull(fetch(plugin, PluginReads.OP_FETCH_MESSAGES, "D-$channel", "{\"ids\":[9]}"))
 
         val request = awaitSent().request as TLRPC.TL_channels_getMessages
         assertEquals(channel, (request.channel as TLRPC.TL_inputChannel).channel_id)
@@ -209,7 +216,7 @@ class PluginReadsAsyncTest {
     @Test
     fun the_common_box_sends_no_peer_at_all() {
         val plugin = granted()
-        assertNull(fetch(plugin, PluginReads.OP_FETCH_MESSAGES, "D0\n7"))
+        assertNull(fetch(plugin, PluginReads.OP_FETCH_MESSAGES, "D0", "{\"ids\":[7]}"))
 
         val request = awaitSent().request as TLRPC.TL_messages_getMessages
         assertEquals(listOf(7), request.id.toList())
@@ -222,7 +229,7 @@ class PluginReadsAsyncTest {
     @Test
     fun a_message_from_another_dialog_is_not_the_answer() {
         val plugin = granted()
-        assertNull(fetch(plugin, PluginReads.OP_FETCH_MESSAGES, "D$alice\n7"))
+        assertNull(fetch(plugin, PluginReads.OP_FETCH_MESSAGES, "D$alice", "{\"ids\":[7]}"))
         awaitSent()
 
         answerMessages(message(7, peerUser(self), "someone else's"))
@@ -232,9 +239,9 @@ class PluginReadsAsyncTest {
     @Test
     fun every_async_read_checks_its_own_scope_on_the_side_that_owns_the_data() {
         val plugin = startPlugin("narrow", "account.read(peers)")
-        assertPluginError("not-granted", fetch(plugin, PluginReads.OP_HISTORY, "S\n10\n0\n0\n0\n0"))
-        assertPluginError("not-granted", fetch(plugin, PluginReads.OP_DIALOGS, "0\n10\n"))
-        assertPluginError("not-granted", fetch(plugin, PluginReads.OP_TOPICS, "D-$forum\n10\n"))
+        assertPluginError("not-granted", fetch(plugin, PluginReads.OP_HISTORY, "S", "{\"limit\":10}"))
+        assertPluginError("not-granted", fetch(plugin, PluginReads.OP_DIALOGS, "", "{\"limit\":10}"))
+        assertPluginError("not-granted", fetch(plugin, PluginReads.OP_TOPICS, "D-$forum", "{\"limit\":10}"))
         assertPluginError("not-granted", reads(plugin).accountRead(0, PluginReads.OP_DRAFT, "S\n0"))
         assertTrue(connections().sent.isEmpty(), "a refused read must not reach the network")
     }
@@ -242,7 +249,7 @@ class PluginReadsAsyncTest {
     @Test
     fun the_refusal_names_the_grant_that_would_have_allowed_it() {
         val plugin = startPlugin("none")
-        val decoded = PluginWire.decode(fetch(plugin, PluginReads.OP_HISTORY, "S\n10\n0\n0\n0\n0")!!)
+        val decoded = PluginWire.decode(fetch(plugin, PluginReads.OP_HISTORY, "S", "{\"limit\":10}")!!)
         assertEquals("account.read(history)", (decoded as PluginWire.Value.PluginErr).grant)
     }
 
@@ -259,8 +266,8 @@ class PluginReadsAsyncTest {
         assertPluginError("not-granted", fetch(plugin, PluginReads.OP_USER_FULL, "D$alice"))
         // and it buys that one op, not every op that can be pointed at yourself
         assertPluginError("not-granted", fetch(plugin, PluginReads.OP_CHAT_FULL, "S"))
-        assertPluginError("not-granted", fetch(plugin, PluginReads.OP_HISTORY, "S\n10\n0\n0\n0\n0"))
-        assertPluginError("not-granted", fetch(plugin, PluginReads.OP_TOPICS, "S\n10\n"))
+        assertPluginError("not-granted", fetch(plugin, PluginReads.OP_HISTORY, "S", "{\"limit\":10}"))
+        assertPluginError("not-granted", fetch(plugin, PluginReads.OP_TOPICS, "S", "{\"limit\":10}"))
     }
 
     @Test
@@ -333,7 +340,7 @@ class PluginReadsAsyncTest {
     @Test
     fun getHistory_sends_messages_getHistory_and_answers_one_wire_per_message() {
         val plugin = granted()
-        assertNull(fetch(plugin, PluginReads.OP_HISTORY, "D$alice\n7\n42\n0\n0\n0"))
+        assertNull(fetch(plugin, PluginReads.OP_HISTORY, "D$alice", "{\"limit\":7,\"offsetId\":42}"))
 
         val request = connections().lastSent()!!.request as TLRPC.TL_messages_getHistory
         assertEquals(alice, (request.peer as TLRPC.TL_inputPeerUser).user_id)
@@ -353,7 +360,7 @@ class PluginReadsAsyncTest {
     @Test
     fun an_empty_history_is_an_empty_wire_rather_than_one_empty_element() {
         val plugin = granted()
-        fetch(plugin, PluginReads.OP_HISTORY, "D$alice\n0\n0\n0\n0\n0")
+        fetch(plugin, PluginReads.OP_HISTORY, "D$alice", "{\"limit\":0}")
         answerWith(TLRPC.TL_messages_messages())
         assertEquals("", settled(plugin))
     }
@@ -362,7 +369,7 @@ class PluginReadsAsyncTest {
     @Test
     fun a_topic_s_history_is_messages_getReplies() {
         val plugin = granted()
-        fetch(plugin, PluginReads.OP_HISTORY, "D-$forum\n10\n0\n0\n0\n5")
+        fetch(plugin, PluginReads.OP_HISTORY, "D-$forum", "{\"limit\":10,\"topicId\":5}")
         val request = connections().lastSent()!!.request as TLRPC.TL_messages_getReplies
         assertEquals(5, request.msg_id)
         assertEquals(10, request.limit)
@@ -371,14 +378,22 @@ class PluginReadsAsyncTest {
     @Test
     fun a_limit_past_what_telegram_accepts_is_clamped_rather_than_sent() {
         val plugin = granted()
-        fetch(plugin, PluginReads.OP_HISTORY, "D$alice\n5000\n0\n0\n0\n0")
+        fetch(plugin, PluginReads.OP_HISTORY, "D$alice", "{\"limit\":5000}")
         assertEquals(100, (connections().lastSent()!!.request as TLRPC.TL_messages_getHistory).limit)
+    }
+
+    @Test
+    fun an_argument_past_int32_is_refused_rather_than_wrapped_or_read_as_zero() {
+        val plugin = granted()
+        assertPluginError("invalid-argument", fetch(plugin, PluginReads.OP_HISTORY, "D$alice", "{\"offsetId\":2147483648}"))
+        assertPluginError("invalid-argument", fetch(plugin, PluginReads.OP_FETCH_MESSAGES, "D$alice", "{\"ids\":[7,1e21]}"))
+        assertTrue(connections().sent.isEmpty())
     }
 
     @Test
     fun history_for_a_peer_with_nothing_cached_is_refused_before_it_is_sent() {
         val plugin = granted()
-        assertPluginError("not-found", fetch(plugin, PluginReads.OP_HISTORY, "D4242\n10\n0\n0\n0\n0"))
+        assertPluginError("not-found", fetch(plugin, PluginReads.OP_HISTORY, "D4242", "{\"limit\":10}"))
         assertTrue(connections().sent.isEmpty())
     }
 
@@ -389,11 +404,11 @@ class PluginReadsAsyncTest {
     @Test
     fun a_login_code_fetched_from_the_service_peer_comes_back_redacted() {
         val plugin = granted()
-        fetch(plugin, PluginReads.OP_HISTORY, "D777000\n10\n0\n0\n0\n0")
+        fetch(plugin, PluginReads.OP_HISTORY, "D777000", "{\"limit\":10}")
         TestApp.putUser(account = 0, user = user(777000L, "telegram"))
         // the peer is only cached after the send, so re-issue it now that it resolves
         resetSends()
-        assertNull(fetch(plugin, PluginReads.OP_HISTORY, "D777000\n10\n0\n0\n0\n0", requestId = 2L))
+        assertNull(fetch(plugin, PluginReads.OP_HISTORY, "D777000", "{\"limit\":10}", requestId = 2L))
         answerWith(TLRPC.TL_messages_messages().apply {
             messages.add(serviceMessage("Login code: 12345", id = 9))
         })
@@ -412,7 +427,7 @@ class PluginReadsAsyncTest {
     fun a_login_code_with_no_sender_field_is_redacted_and_your_own_text_in_that_chat_is_not() {
         val plugin = granted()
         TestApp.putUser(account = 0, user = user(777000L, "telegram"))
-        assertNull(fetch(plugin, PluginReads.OP_HISTORY, "D777000\n10\n0\n0\n0\n0"))
+        assertNull(fetch(plugin, PluginReads.OP_HISTORY, "D777000", "{\"limit\":10}"))
         answerWith(TLRPC.TL_messages_messages().apply {
             messages.add(TLRPC.TL_message().apply {
                 id = 9
@@ -435,7 +450,7 @@ class PluginReadsAsyncTest {
     fun the_filter_is_off_for_a_plugin_that_disabled_it() {
         val plugin = granted("unsafe.disableApiFiltering")
         TestApp.putUser(account = 0, user = user(777000L, "telegram"))
-        assertNull(fetch(plugin, PluginReads.OP_HISTORY, "D777000\n10\n0\n0\n0\n0"))
+        assertNull(fetch(plugin, PluginReads.OP_HISTORY, "D777000", "{\"limit\":10}"))
         answerWith(TLRPC.TL_messages_messages().apply {
             messages.add(serviceMessage("Login code: 12345", id = 9))
         })
@@ -454,7 +469,7 @@ class PluginReadsAsyncTest {
     @Test
     fun a_full_page_of_dialogs_carries_a_cursor_built_from_its_last_row() {
         val plugin = granted()
-        assertNull(fetch(plugin, PluginReads.OP_DIALOGS, "1\n2\n"))
+        assertNull(fetch(plugin, PluginReads.OP_DIALOGS, "", "{\"folderId\":1,\"limit\":2}"))
 
         val request = connections().lastSent()!!.request as TLRPC.TL_messages_getDialogs
         assertEquals(1, request.folder_id)
@@ -476,12 +491,12 @@ class PluginReadsAsyncTest {
     @Test
     fun a_short_slice_and_a_non_slice_both_end_the_list() {
         val plugin = granted()
-        fetch(plugin, PluginReads.OP_DIALOGS, "0\n5\n")
+        fetch(plugin, PluginReads.OP_DIALOGS, "", "{\"limit\":5}")
         answerWith(TLRPC.TL_messages_dialogsSlice().apply { dialogs.add(dialog(alice, 9)) })
         assertEquals("", settled(plugin).split("\n")[0], "a slice shorter than the limit is the end")
 
         val second = granted()
-        fetch(second, PluginReads.OP_DIALOGS, "0\n1\n")
+        fetch(second, PluginReads.OP_DIALOGS, "", "{\"limit\":1}")
         answerWith(TLRPC.TL_messages_dialogs().apply { dialogs.add(dialog(alice, 9)) })
         assertEquals("", settled(second).split("\n")[0], "a non-slice answer is the whole list")
     }
@@ -489,7 +504,7 @@ class PluginReadsAsyncTest {
     @Test
     fun a_cursor_s_offsets_are_what_the_next_page_is_asked_with() {
         val plugin = granted()
-        assertNull(fetch(plugin, PluginReads.OP_DIALOGS, "0\n2\n\n1715540640,9,$alice"))
+        assertNull(fetch(plugin, PluginReads.OP_DIALOGS, "", "{\"limit\":2}", "1715540640,9,$alice"))
         val request = connections().lastSent()!!.request as TLRPC.TL_messages_getDialogs
         assertEquals(1715540640, request.offset_date)
         assertEquals(9, request.offset_id)
@@ -500,7 +515,7 @@ class PluginReadsAsyncTest {
     @Test
     fun a_cursor_whose_peer_left_the_cache_pages_from_the_date_alone() {
         val plugin = granted()
-        fetch(plugin, PluginReads.OP_DIALOGS, "0\n2\n\n1715540640,9,4242")
+        fetch(plugin, PluginReads.OP_DIALOGS, "", "{\"limit\":2}", "1715540640,9,4242")
         val request = connections().lastSent()!!.request as TLRPC.TL_messages_getDialogs
         assertTrue(request.offset_peer is TLRPC.TL_inputPeerEmpty)
         assertEquals(1715540640, request.offset_date)
@@ -510,7 +525,7 @@ class PluginReadsAsyncTest {
     @Test
     fun a_paged_dialog_read_projects_the_fields_it_was_asked_for() {
         val plugin = granted()
-        fetch(plugin, PluginReads.OP_DIALOGS, "0\n5\ntop_message,peer\n")
+        fetch(plugin, PluginReads.OP_DIALOGS, "", "{\"limit\":5,\"fields\":[\"top_message\",\"peer\"]}")
         answerWith(TLRPC.TL_messages_dialogs().apply { dialogs.add(dialog(alice, 9)) })
         val element = settled(plugin).substringAfter("\n")
         val projection = JSONObject(element.substringAfter(PluginWire.PROJECTION_SEPARATOR))
@@ -525,7 +540,7 @@ class PluginReadsAsyncTest {
     @Test
     fun an_empty_page_is_a_bare_separator_rather_than_one_empty_element() {
         val plugin = granted()
-        fetch(plugin, PluginReads.OP_DIALOGS, "0\n5\n")
+        fetch(plugin, PluginReads.OP_DIALOGS, "", "{\"limit\":5}")
         answerWith(TLRPC.TL_messages_dialogs())
         assertEquals("\n", settled(plugin))
     }
@@ -533,16 +548,16 @@ class PluginReadsAsyncTest {
     @Test
     fun getTopics_refuses_anything_that_is_not_a_forum_before_it_sends() {
         val plugin = granted()
-        assertPluginError("invalid-argument", fetch(plugin, PluginReads.OP_TOPICS, "D-$channel\n10\n"))
-        assertPluginError("invalid-argument", fetch(plugin, PluginReads.OP_TOPICS, "D$alice\n10\n"))
-        assertPluginError("not-found", fetch(plugin, PluginReads.OP_TOPICS, "D-4242\n10\n"))
+        assertPluginError("invalid-argument", fetch(plugin, PluginReads.OP_TOPICS, "D-$channel", "{\"limit\":10}"))
+        assertPluginError("invalid-argument", fetch(plugin, PluginReads.OP_TOPICS, "D$alice", "{\"limit\":10}"))
+        assertPluginError("not-found", fetch(plugin, PluginReads.OP_TOPICS, "D-4242", "{\"limit\":10}"))
         assertTrue(connections().sent.isEmpty())
     }
 
     @Test
     fun a_page_of_topics_carries_a_cursor_built_from_its_last_topic() {
         val plugin = granted()
-        assertNull(fetch(plugin, PluginReads.OP_TOPICS, "D-$forum\n2\n"))
+        assertNull(fetch(plugin, PluginReads.OP_TOPICS, "D-$forum", "{\"limit\":2}"))
 
         val request = connections().lastSent()!!.request as TL_forum.TL_messages_getForumTopics
         assertEquals(forum, (request.peer as TLRPC.TL_inputPeerChannel).channel_id)
@@ -562,7 +577,7 @@ class PluginReadsAsyncTest {
     @Test
     fun a_topic_cursor_s_offsets_are_what_the_next_page_is_asked_with() {
         val plugin = granted()
-        fetch(plugin, PluginReads.OP_TOPICS, "D-$forum\n2\n1715540000,11,7")
+        fetch(plugin, PluginReads.OP_TOPICS, "D-$forum", "{\"limit\":2}", "1715540000,11,7")
         val request = connections().lastSent()!!.request as TL_forum.TL_messages_getForumTopics
         assertEquals(1715540000, request.offset_date)
         assertEquals(11, request.offset_id)
@@ -631,8 +646,8 @@ class PluginReadsAsyncTest {
     @Test
     fun a_slot_nobody_is_logged_into_answers_not_found_rather_than_reading_slot_zero() {
         val plugin = granted()
-        assertPluginError("not-found", fetch(plugin, PluginReads.OP_HISTORY, "S\n10\n0\n0\n0\n0", account = 3))
-        assertNotNull(fetch(plugin, PluginReads.OP_DIALOGS, "0\n10\n", account = 3))
+        assertPluginError("not-found", fetch(plugin, PluginReads.OP_HISTORY, "S", "{\"limit\":10}", account = 3))
+        assertNotNull(fetch(plugin, PluginReads.OP_DIALOGS, "", "{\"limit\":10}", account = 3))
         assertTrue(connections(3).sent.isEmpty())
     }
 }
