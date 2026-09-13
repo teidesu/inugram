@@ -1,111 +1,6 @@
 use super::*;
 use crate::api::platform::jvm::tests::testing::OracleJvmHost;
-use crate::testing::harness::{assert_oracle_exact, install_capturing_console, manifest_grants, DisposeOnDrop};
 use std::cell::{Cell, RefCell};
-use std::collections::HashMap;
-
-const ORACLE: &str = include_str!("../../../../../test/plugins/xposed-test.js");
-
-/// keyed by the method handle, because two hooks on one method are two hooks on *one site* and
-/// the ordering the oracle asserts is only a property of a shared one. `hookAll*` answers with
-/// a list, which is the shape the real host uses for an overload set.
-struct OracleXposedHost {
-  sites: RefCell<HashMap<i64, i64>>,
-  next: RefCell<i64>,
-  jvm: Rc<OracleJvmHost>,
-}
-
-/// mirrors `PluginXposed.BOX_CLASSES`: the app host refuses these, so the fake must too for the
-/// oracle's refusal assertion to mean the same thing here and on a device
-const BOX_CLASSES: &[&str] = &[
-  "java.lang.Boolean",
-  "java.lang.Byte",
-  "java.lang.Character",
-  "java.lang.Short",
-  "java.lang.Integer",
-  "java.lang.Long",
-  "java.lang.Float",
-  "java.lang.Double",
-];
-
-impl OracleXposedHost {
-  fn new(jvm: Rc<OracleJvmHost>) -> Rc<Self> {
-    Rc::new(OracleXposedHost {
-      sites: RefCell::new(HashMap::new()),
-      next: RefCell::new(100),
-      jvm,
-    })
-  }
-
-  fn site_for(&self, target: i64) -> i64 {
-    if let Some(site) = self.sites.borrow().get(&target) {
-      return *site;
-    }
-    let mut next = self.next.borrow_mut();
-    let site = *next;
-    *next += 1;
-    self.sites.borrow_mut().insert(target, site);
-    site
-  }
-}
-
-impl XposedHost for OracleXposedHost {
-  fn xposed(&self, op: i32, target: i64, _name: &str, _args: &[String]) -> String {
-    match op {
-      OP_HOOK => format!("S{}", self.site_for(target)),
-      OP_HOOK_ALL => {
-        if let Some(name) = self.jvm.class_name(target) {
-          if BOX_CLASSES.contains(&name.as_str()) {
-            return format!("Punsupported\n\n\n\nxposed: {name} backs primitive boxing");
-          }
-        }
-        let first = self.site_for(target);
-        format!("S{first},{}", first + 500)
-      }
-      OP_CALL_ORIGINAL => "I3".to_string(),
-      _ => "N".to_string(),
-    }
-  }
-}
-
-#[test]
-fn the_bundled_xposed_test_plugin_passes() {
-  let rt = Runtime::new().unwrap();
-  let ctx = Context::full(&rt).unwrap();
-  let lines = install_capturing_console(&ctx);
-  let jvm_oracle = OracleJvmHost::new();
-  let host = OracleXposedHost::new(jvm_oracle.clone());
-  // the plugin's own header, so a suite granting what the manifest forgot cannot pass
-  let grants = crate::sandbox::grants::TestGrantHost::new(&manifest_grants(ORACLE)).as_host();
-  let lifecycle = Lifecycle::new();
-  let log: std::sync::Arc<dyn Fn(&str) + Send + Sync> = std::sync::Arc::new(|_: &str| {});
-  let (state, jvm) = ctx.with(|ctx| {
-    let inu = crate::testing::harness::get_api_globals(&ctx);
-    crate::api::error::install_plugin_error(&ctx).unwrap();
-    let jvm = crate::api::platform::jvm::install_jvm(
-      &ctx,
-      jvm_oracle.as_host(),
-      None,
-      grants.clone(),
-      lifecycle.clone(),
-      log.clone(),
-      &inu,
-    )
-    .unwrap();
-    let state = install_xposed(&ctx, host.clone(), grants, lifecycle, jvm.clone(), log, &inu).unwrap();
-    (state, jvm)
-  });
-  let _jvm = DisposeOnDrop::new(&ctx, jvm, |ctx, state| state.dispose(ctx));
-  let _state = DisposeOnDrop::new(&ctx, state, |ctx, state| state.dispose(ctx));
-
-  ctx.with(|ctx| match ctx.eval::<(), _>(ORACLE) {
-    Ok(()) => {}
-    Err(rquickjs::Error::Exception) => panic!("{}", format_exception(&ctx)),
-    Err(e) => panic!("{e:?}"),
-  });
-  let lines = lines.borrow().clone();
-  assert_oracle_exact(&lines, "xposed test done", 7);
-}
 
 /// One whole dispatch as a host runs it: the `before` phase on the queue, the original on the
 /// thread that called the hooked method, then the `after` phase. Mirrors
@@ -228,6 +123,10 @@ fn setup(grants: &[&str]) -> Fixture {
       &inu,
     )
     .unwrap();
+    for (name, wire) in [("stringLength", "GM900"), ("stringIsEmpty", "GM901"), ("fixtureRun", "GM902"), ("runtimeException", "GO903")] {
+      let handle = jvm.wire_to_value(&ctx, wire).unwrap();
+      ctx.globals().set(name, handle).unwrap();
+    }
     let state =
       install_xposed(&ctx, host.as_host(), grant_host.clone(), lifecycle.clone(), jvm.clone(), log.clone(), &inu)
         .unwrap();
@@ -285,7 +184,7 @@ fn granted() -> Fixture {
 fn hooking_needs_the_grant() {
   let fixture = setup(&["unsafe.jvm"]);
   let message = fixture.eval_err(
-    "const m = inu.jvm.cls('java.lang.String').getDeclaredMethod('length');
+    "const m = stringLength;
          inu.xposed.hookMethod(m, { before() {} })",
   );
   assert!(message.contains("unsafe.xposed"), "{message}");
@@ -297,7 +196,7 @@ fn a_before_hook_runs_and_the_original_is_called() {
   let fixture = granted();
   fixture.eval(
     "globalThis.seen = [];
-         const m = inu.jvm.cls('java.lang.String').getDeclaredMethod('length');
+         const m = stringLength;
          inu.xposed.hookMethod(m, { before(ctx) { seen.push(ctx.args[0]) } })",
   );
 
@@ -312,7 +211,7 @@ fn a_before_hook_runs_and_the_original_is_called() {
 fn set_return_value_in_before_skips_the_original() {
   let fixture = granted();
   fixture.eval(
-    "const m = inu.jvm.cls('java.lang.String').getDeclaredMethod('length');
+    "const m = stringLength;
          inu.xposed.hookMethod(m, { before(ctx) { ctx.setReturnValue(42) } })",
   );
 
@@ -324,8 +223,8 @@ fn set_return_value_in_before_skips_the_original() {
 fn set_throwable_clears_a_return_value_an_earlier_hook_set() {
   let fixture = granted();
   fixture.eval(
-    "const m = inu.jvm.cls('java.lang.String').getDeclaredMethod('length');
-         const t = new (inu.jvm.cls('java.lang.RuntimeException'))('no');
+    "const m = stringLength;
+         const t = runtimeException;
          inu.xposed.hookMethod(m, { before(ctx) { ctx.setReturnValue(1); ctx.setThrowable(t) } })",
   );
 
@@ -338,7 +237,7 @@ fn mutating_args_changes_what_the_original_is_called_with() {
   // `android.xposed.d.ts` calls the array live, which is only true if it is read back
   let fixture = granted();
   fixture.eval(
-    "const m = inu.jvm.cls('java.lang.String').getDeclaredMethod('length');
+    "const m = stringLength;
          inu.xposed.hookMethod(m, { before(ctx) { ctx.args[0] = 99 } })",
   );
 
@@ -352,7 +251,7 @@ fn an_after_hook_sees_the_original_result_and_may_replace_it() {
   *fixture.host.original.borrow_mut() = "I5".to_string();
   fixture.eval(
     "globalThis.saw = null;
-         const m = inu.jvm.cls('java.lang.String').getDeclaredMethod('length');
+         const m = stringLength;
          inu.xposed.hookMethod(m, {
            after(ctx) { saw = ctx.returnValue; ctx.setReturnValue(ctx.returnValue * 2) },
          })",
@@ -367,7 +266,7 @@ fn an_after_that_sets_nothing_leaves_the_original_result() {
   let fixture = granted();
   *fixture.host.original.borrow_mut() = "I5".to_string();
   fixture.eval(
-    "const m = inu.jvm.cls('java.lang.String').getDeclaredMethod('length');
+    "const m = stringLength;
          inu.xposed.hookMethod(m, { after() {} })",
   );
 
@@ -382,7 +281,7 @@ fn a_before_verdict_does_not_leak_into_the_after_phase() {
   *fixture.host.original.borrow_mut() = "I5".to_string();
   fixture.eval(
     "globalThis.saw = 'unset';
-         const m = inu.jvm.cls('java.lang.String').getDeclaredMethod('length');
+         const m = stringLength;
          inu.xposed.hookMethod(m, { before() {}, after(ctx) { saw = ctx.returnValue } })",
   );
 
@@ -397,7 +296,7 @@ fn a_thrown_original_reaches_after_as_a_throwable_rather_than_a_return_value() {
   *fixture.host.original.borrow_mut() = "TGO9".to_string();
   fixture.eval(
     "globalThis.threw = null; globalThis.returned = 'unset';
-         const m = inu.jvm.cls('java.lang.String').getDeclaredMethod('length');
+         const m = stringLength;
          inu.xposed.hookMethod(m, {
            after(ctx) { threw = ctx.throwable; returned = ctx.returnValue },
          })",
@@ -414,7 +313,7 @@ fn hooks_run_in_registration_order() {
   let fixture = granted();
   fixture.eval(
     "globalThis.order = [];
-         const m = inu.jvm.cls('java.lang.String').getDeclaredMethod('length');
+         const m = stringLength;
          inu.xposed.hookMethod(m, { before() { order.push('a') }, after() { order.push('c') } });
          inu.xposed.hookMethod(m, { before() { order.push('b') }, after() { order.push('d') } })",
   );
@@ -431,7 +330,7 @@ fn two_hooks_on_one_site_uninstall_only_when_the_last_goes() {
   // both registrations answer with the same site, which is what two hooks on one method is
   *fixture.host.sites.borrow_mut() = vec!["S100".to_string(), "S100".to_string()];
   fixture.eval(
-    "const m = inu.jvm.cls('java.lang.String').getDeclaredMethod('length');
+    "const m = stringLength;
          globalThis.a = inu.xposed.hookMethod(m, { before() {} });
          globalThis.b = inu.xposed.hookMethod(m, { before() {} });
          a()",
@@ -447,7 +346,7 @@ fn two_hooks_on_one_site_uninstall_only_when_the_last_goes() {
 fn a_disposer_called_twice_unhooks_once() {
   let fixture = granted();
   fixture.eval(
-    "const m = inu.jvm.cls('java.lang.String').getDeclaredMethod('length');
+    "const m = stringLength;
          const off = inu.xposed.hookMethod(m, { before() {} });
          off(); off(); off()",
   );
@@ -460,7 +359,7 @@ fn a_disposer_called_twice_unhooks_once() {
 fn a_site_with_no_hooks_answers_that_nothing_was_dispatched() {
   let fixture = granted();
   fixture.eval(
-    "const m = inu.jvm.cls('java.lang.String').getDeclaredMethod('length');
+    "const m = stringLength;
          inu.xposed.hookMethod(m, { before() {} })()",
   );
   let answer = fixture.state.dispatch_before(
@@ -483,7 +382,7 @@ fn a_site_with_no_hooks_answers_that_nothing_was_dispatched() {
 fn a_before_that_breaks_the_arguments_still_says_the_engine_took_the_wires() {
   let fixture = granted();
   fixture.eval(
-    "const m = inu.jvm.cls('java.lang.String').getDeclaredMethod('length');
+    "const m = stringLength;
          inu.xposed.hookMethod(m, { before(ctx) { ctx.args = [{}] } })",
   );
   let answer = fixture.state.dispatch_before(
@@ -505,7 +404,7 @@ fn a_disposed_hook_stops_running_but_the_original_still_does() {
   let fixture = granted();
   fixture.eval(
     "globalThis.runs = 0;
-         const m = inu.jvm.cls('java.lang.String').getDeclaredMethod('length');
+         const m = stringLength;
          const off = inu.xposed.hookMethod(m, { before() { runs++ } });
          off()",
   );
@@ -520,7 +419,7 @@ fn a_hook_disposed_mid_dispatch_still_finishes_the_run_in_flight() {
   *fixture.host.sites.borrow_mut() = vec!["S100".to_string(), "S100".to_string()];
   fixture.eval(
     "globalThis.second = 0;
-         const m = inu.jvm.cls('java.lang.String').getDeclaredMethod('length');
+         const m = stringLength;
          globalThis.off = null;
          inu.xposed.hookMethod(m, { before() { off() } });
          off = inu.xposed.hookMethod(m, { before() { second++ } })",
@@ -539,7 +438,7 @@ fn a_hook_registered_mid_dispatch_joins_from_the_next_one() {
   *fixture.host.sites.borrow_mut() = vec!["S100".to_string(), "S100".to_string()];
   fixture.eval(
     "globalThis.late = 0;
-         const m = inu.jvm.cls('java.lang.String').getDeclaredMethod('length');
+         const m = stringLength;
          let added = false;
          inu.xposed.hookMethod(m, {
            before() {
@@ -560,7 +459,7 @@ fn a_hook_registered_mid_dispatch_joins_from_the_next_one() {
 fn a_throwing_hook_is_a_fault_and_the_original_still_runs() {
   let fixture = granted();
   fixture.eval(
-    "const m = inu.jvm.cls('java.lang.String').getDeclaredMethod('length');
+    "const m = stringLength;
          inu.xposed.hookMethod(m, { before() { throw new Error('boom') } })",
   );
 
@@ -578,7 +477,7 @@ fn a_throwing_hook_is_a_fault_and_the_original_still_runs() {
 fn a_hook_with_neither_callback_is_refused_before_anything_is_installed() {
   let fixture = granted();
   let message = fixture.eval_err(
-    "const m = inu.jvm.cls('java.lang.String').getDeclaredMethod('length');
+    "const m = stringLength;
          inu.xposed.hookMethod(m, {})",
   );
   assert!(message.contains("before or an after"), "{message}");
@@ -590,11 +489,11 @@ fn hook_arguments_are_checked_without_a_js_prelude() {
   let fixture = granted();
   for (source, expected) in [
     (
-      "(() => { const m = inu.jvm.cls('java.lang.String').getDeclaredMethod('length'); inu.xposed.hookMethod(m, null) })()",
+      "(() => { const m = stringLength; inu.xposed.hookMethod(m, null) })()",
       "expected a hook object",
     ),
     (
-      "(() => { const m = inu.jvm.cls('java.lang.String').getDeclaredMethod('length'); inu.xposed.hookMethod(m, { before: 1 }) })()",
+      "(() => { const m = stringLength; inu.xposed.hookMethod(m, { before: 1 }) })()",
       "before must be a function",
     ),
     (
@@ -634,7 +533,7 @@ fn registering_after_unload_began_is_a_no_op_returning_a_disposer() {
   let fixture = granted();
   fixture.lifecycle.begin_unload();
   fixture.eval(
-    "const m = inu.jvm.cls('java.lang.String').getDeclaredMethod('length');
+    "const m = stringLength;
          const off = inu.xposed.hookMethod(m, { before() {} });
          if (typeof off !== 'function') throw new Error('no disposer');
          off()",
@@ -647,9 +546,8 @@ fn disposing_the_engine_unhooks_everything_it_installed() {
   // an ART entry point stays rewritten, so a hook left behind dispatches into a dead engine
   let fixture = granted();
   fixture.eval(
-    "const c = inu.jvm.cls('java.lang.String');
-         inu.xposed.hookMethod(c.getDeclaredMethod('length'), { before() {} });
-         inu.xposed.hookMethod(c.getDeclaredMethod('isEmpty'), { before() {} })",
+    "inu.xposed.hookMethod(stringLength, { before() {} });
+         inu.xposed.hookMethod(stringIsEmpty, { before() {} })",
   );
 
   fixture.state.dispose(&fixture.ctx);
@@ -660,7 +558,7 @@ fn disposing_the_engine_unhooks_everything_it_installed() {
 fn call_original_needs_the_grant_and_passes_the_receiver_first() {
   let fixture = granted();
   fixture.eval(
-    "const m = inu.jvm.cls('java.lang.String').getDeclaredMethod('length');
+    "const m = stringLength;
          inu.xposed.callOriginalMethod(m, null, [1, 'two'])",
   );
   let calls = fixture.host.calls.borrow();
@@ -672,7 +570,7 @@ fn call_original_needs_the_grant_and_passes_the_receiver_first() {
 fn call_original_defaults_omitted_receiver_and_arguments() {
   let fixture = granted();
   fixture.eval(
-    "const m = inu.jvm.cls('java.lang.String').getDeclaredMethod('length');
+    "const m = stringLength;
          inu.xposed.callOriginalMethod(m)",
   );
   let calls = fixture.host.calls.borrow();
@@ -683,7 +581,7 @@ fn call_original_defaults_omitted_receiver_and_arguments() {
 #[test]
 fn routine_hooks_register_native_phases_and_dispose_them() {
   let fixture = granted();
-  fixture.eval("const method = inu.jvm.cls('test.Fixture').getDeclaredMethod('run'); const routine = inu.jvm.routine(ops => []); globalThis.off = inu.xposed.hookMethod(method, { before: routine, after: routine })");
+  fixture.eval("const method = fixtureRun; const routine = inu.jvm.routine(ops => []); globalThis.off = inu.xposed.hookMethod(method, { before: routine, after: routine })");
   assert_eq!(fixture.host.ops(), vec![OP_HOOK, OP_NATIVE_ADD]);
   let calls = fixture.host.calls.borrow();
   assert_eq!(calls[0].3.len(), 2);
@@ -696,7 +594,7 @@ fn routine_hooks_register_native_phases_and_dispose_them() {
 #[test]
 fn mixed_runnable_and_js_phases_are_refused_before_installation() {
   let fixture = granted();
-  let error = fixture.eval_err("const method = inu.jvm.cls('test.Fixture').getDeclaredMethod('run'); inu.xposed.hookMethod(method, { before: inu.jvm.routine(ops => []), after() {} })");
+  let error = fixture.eval_err("const method = fixtureRun; inu.xposed.hookMethod(method, { before: inu.jvm.routine(ops => []), after() {} })");
   assert!(error.contains("cannot mix"));
   assert!(fixture.host.ops().is_empty());
 }
@@ -717,7 +615,7 @@ fn a_rejected_runnable_registration_cleans_up_every_new_site() {
 #[test]
 fn xposed_routinees_compile_context_operations_to_a_consumer() {
   let fixture = granted();
-  fixture.eval("const method = inu.jvm.cls('test.Fixture').getDeclaredMethod('run'); const consumer = inu.xposed.routine(ops => [ops.setArgument(0, ops.getArgument(1)), ops.setReturnValue(ops.getReturnValue())]); globalThis.disposeConsumer = inu.xposed.hookMethod(method, { before: consumer })");
+  fixture.eval("const method = fixtureRun; const consumer = inu.xposed.routine(ops => [ops.setArgument(0, ops.getArgument(1)), ops.setReturnValue(ops.getReturnValue())]); globalThis.disposeConsumer = inu.xposed.hookMethod(method, { before: consumer })");
   assert_eq!(fixture.host.ops(), vec![OP_HOOK, OP_NATIVE_ADD]);
   fixture.eval("disposeConsumer()");
   assert!(fixture.host.ops().contains(&OP_NATIVE_REMOVE));
@@ -734,7 +632,7 @@ fn xposed_routine_requires_its_grant_and_context_ops_are_not_generic_ops() {
 fn unchanged_after_replies_use_a_verdict_not_the_inbound_value_wire() {
   for original in ["GO9", "GC9", "TGO9", "I42", "N"] {
     let fixture = granted();
-    fixture.eval("const method = inu.jvm.cls('java.lang.String').getDeclaredMethod('length'); inu.xposed.hookMethod(method, { after() {} });");
+    fixture.eval("const method = stringLength; inu.xposed.hookMethod(method, { after() {} });");
     let before = fixture.state.dispatch_before(
       &fixture.rt,
       &fixture.ctx,
@@ -751,7 +649,7 @@ fn unchanged_after_replies_use_a_verdict_not_the_inbound_value_wire() {
 #[test]
 fn explicit_after_override_is_kept_even_when_its_wire_matches_the_original() {
   let fixture = granted();
-  fixture.eval("const method = inu.jvm.cls('java.lang.String').getDeclaredMethod('length'); inu.xposed.hookMethod(method, { after(ctx) { ctx.setReturnValue(42) } });");
+  fixture.eval("const method = stringLength; inu.xposed.hookMethod(method, { after(ctx) { ctx.setReturnValue(42) } });");
   fixture
     .state
     .dispatch_before(&fixture.rt, &fixture.ctx, 1, 100, &Invocation { method: "GM1", this: "N", args: &[] });

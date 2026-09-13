@@ -510,6 +510,7 @@ fn a_java_object_reaches_open_page_native_view_and_drawable_icon() {
       &inu,
     )
     .unwrap();
+    ctx.globals().set("__obj", jvm.wire_to_value(&ctx, "GO900").unwrap()).unwrap();
     crate::api::ui::icons::install_icons(&ctx, Rc::new(IconHost), Some(jvm.clone()), &inu).unwrap();
     let ui = install_ui(&ctx, host_dyn, Lifecycle::new(), log, Some(jvm.clone()), &inu).unwrap();
     (ui, jvm)
@@ -518,7 +519,6 @@ fn a_java_object_reaches_open_page_native_view_and_drawable_icon() {
   let _jvm = crate::testing::harness::DisposeOnDrop::new(&ctx, jvm, |ctx, state| state.dispose(ctx));
 
   ctx.with(|ctx| {
-    ctx.eval::<(), _>("globalThis.__obj = new (inu.jvm.cls('java.util.ArrayList'))();").unwrap();
     ctx.eval::<(), _>("inu.ui.openPage(globalThis.__obj);").unwrap();
   });
   assert_eq!(host.opened_fragments.borrow().len(), 1, "a java object never reached the fragment path");

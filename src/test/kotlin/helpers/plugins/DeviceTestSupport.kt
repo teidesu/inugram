@@ -173,11 +173,11 @@ fun canvasEngine(name: String, onLog: (String) -> Unit = {}): Plugin {
  * closed engine in the next test
  */
 /** [startPlugin] on a real engine rather than a recorder, for a test that evaluates plugin code; pair it with [closeEngine] */
-fun startEngine(name: String, vararg grants: String): Plugin {
+fun startEngine(name: String, vararg grants: String, onLog: (String) -> Unit = {}): Plugin {
     val plugin = startPlugin(name, *grants)
     plugin.session = PluginSession(plugin, QuickJs())
     attachBridge(plugin.session!!, object : CoreListener {
-        override fun onConsole(level: Int, message: String) = Unit
+        override fun onConsole(level: Int, message: String) = onLog(message)
         override fun onTimerSchedule(delayMs: Long) = Unit
     })
     return plugin
@@ -503,6 +503,26 @@ fun contract(): String = contractAsset("common.d.ts")
 fun bundledPlugin(name: String): String =
     InstrumentationRegistry.getInstrumentation()
         .context.assets.open("inu_plugins/$name").bufferedReader().use { it.readText() }
+
+data class Oracle(val plugin: Plugin, val lines: List<String>)
+
+/** a bundled oracle evaluated on a real engine under its own manifest's grants, so a grant the header forgot fails here too */
+fun startOracle(name: String): Oracle {
+    val source = bundledPlugin(name)
+    val lines = java.util.Collections.synchronizedList(ArrayList<String>())
+    val grants = desu.inugram.core.plugins.PluginManifestParser.parse(source).grants
+    val plugin = startEngine(name, *grants.toTypedArray(), onLog = { lines.add(it) })
+    plugin.engine!!.evaluate(source)
+    return Oracle(plugin, lines)
+}
+
+/** the device twin of rust's `assert_oracle_exact`: no failure, no skip, finished, and exactly [count] passes */
+fun assertOracleExact(lines: List<String>, done: String, count: Int) {
+    val snapshot = synchronized(lines) { lines.toList() }
+    kotlin.test.assertTrue(snapshot.none { it.startsWith("FAIL") || it.startsWith("SKIP") }, snapshot.joinToString("\n"))
+    kotlin.test.assertTrue(done in snapshot, "the oracle did not finish: $snapshot")
+    kotlin.test.assertEquals(count, snapshot.count { it.startsWith("PASS") }, snapshot.joinToString("\n"))
+}
 
 /** `src/test/assets`, for what the suite needs as a file rather than as source */
 fun testAsset(name: String): ByteArray =

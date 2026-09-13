@@ -59,9 +59,37 @@ fn included_plugins() -> BTreeSet<String> {
   out
 }
 
+/// every plugin file a device test runs through `startOracle`, for an oracle that needs a real vm
+fn device_run_plugins() -> BTreeSet<String> {
+  const CALL: &str = "startOracle(\"";
+  let mut out = BTreeSet::new();
+  let mut sources = vec![Path::new(env!("CARGO_MANIFEST_DIR")).join("../test/kotlin")];
+  while let Some(dir) = sources.pop() {
+    for entry in std::fs::read_dir(dir).expect("a device test directory") {
+      let path = entry.expect("a directory entry").path();
+      if path.is_dir() {
+        sources.push(path);
+        continue;
+      }
+      if path.extension().is_none_or(|e| e != "kt") {
+        continue;
+      }
+      let source = std::fs::read_to_string(&path).expect("a readable kotlin source");
+      for (offset, _) in source.match_indices(CALL) {
+        let rest = &source[offset + CALL.len()..];
+        if let Some(end) = rest.find('"') {
+          out.insert(rest[..end].to_string());
+        }
+      }
+    }
+  }
+  out
+}
+
 #[test]
 fn every_bundled_oracle_has_a_run_site_and_marker() {
-  let included = included_plugins();
+  let mut included = included_plugins();
+  included.extend(device_run_plugins());
   let mut unrun = Vec::new();
   let mut unmarked = Vec::new();
 

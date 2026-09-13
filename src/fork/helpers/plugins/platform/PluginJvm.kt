@@ -40,7 +40,7 @@ import org.telegram.messenger.Utilities
  * around it.
  */
 object PluginJvm : SessionResource {
-    // keep in sync with rust `jvm::OP_*` and `jvm.js`; the member ops (`OP_NEW`..`OP_MEMBER_SET`, 1..9) are rust's and never reach this side
+    // keep in sync with rust `jvm::OP_*` and `jvm.js`; member access is rust's own, through cached jni ids, and never reaches this side
     const val OP_CLASS = 0
     const val OP_RUNNABLE = 10
     const val OP_LOAD_DEX = 11

@@ -19,6 +19,17 @@ class PluginXposedTest {
     fun setUp() = resetBridge()
 
     @Test
+    fun the_bundled_xposed_oracle_passes() {
+        val (plugin, lines) = startOracle("xposed-test.js")
+        try {
+            assertOracleExact(lines, "xposed test done", 7)
+        } finally {
+            PluginXposed.detach(plugin.session!!)
+            closeEngine(plugin)
+        }
+    }
+
+    @Test
     fun aHookRunsBeforeOriginalAndAfterOnTheCallingThreadThenUnhooks() {
         val plugin = startPlugin("xposed", jvm, "unsafe.xposed")
         val engine = plugin.js

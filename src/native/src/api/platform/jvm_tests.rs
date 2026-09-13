@@ -54,9 +54,7 @@ impl JvmHost for TestJvmHost {
       OP_PREPARE_CLASS => "S{\"ticket\":\"9000\",\"name\":\"plugin.Prepared\",\"superclass\":\"Ljava/lang/Object;\",\"interfaces\":[],\"fields\":[],\"methods\":[]}".into(),
       OP_LOAD_CLASS => self.load_answer.borrow_mut().take().unwrap_or_else(|| self.mint('C')),
       OP_CLASS => self.mint('C'),
-      OP_NEW | OP_RUNNABLE | OP_ROUTINE | OP_XPOSED_ROUTINE | OP_COPY_REF => self.mint('O'),
-      OP_METHOD => self.mint(if name.starts_with("<init>") { 'K' } else { 'M' }),
-      OP_FIELD => self.mint('F'),
+      OP_RUNNABLE | OP_ROUTINE | OP_XPOSED_ROUTINE => self.mint('O'),
       OP_BUNDLE_METHOD => "SputParcelable".to_string(),
       _ => "N".to_string(),
     }
@@ -127,38 +125,6 @@ fn a_plugin_holding_no_jvm_grant_is_refused_at_every_entry_point() {
 }
 
 #[test]
-fn android_bundle_maps_js_and_java_values_to_bundle_putters() {
-  let f = setup(&["unsafe.jvm"]);
-  assert_eq!(
-    error_code(
-      &f,
-      "const object = new (inu.jvm.cls('java.util.ArrayList'))(); \
-       inu.android.bundle({ enabled: true, count: 3, peer: 4n, ratio: 1.5, name: 'x', bytes: new Uint8Array([1, 2]), object })",
-    ),
-    "no-throw",
-  );
-  let calls = f.host.calls();
-  for expected in [
-    "putBoolean|Senabled,B1",
-    "putInt|Scount,I3",
-    "putLong|Speer,I4",
-    "putDouble|Sratio,D1.5",
-    "putString|Sname,Sx",
-    "putByteArray|Sbytes,Y",
-    "putParcelable|Sobject,G2",
-  ] {
-    assert!(calls.iter().any(|call| call.contains(expected)), "missing {expected} in {calls:?}");
-  }
-}
-
-#[test]
-fn android_bundle_rejects_unsupported_values() {
-  let f = setup(&["unsafe.jvm"]);
-  assert_eq!(error_code(&f, "inu.android.bundle({ value: null })"), "invalid-argument|");
-  assert_eq!(error_code(&f, "inu.android.bundle({ value: [] })"), "invalid-argument|");
-}
-
-#[test]
 fn load_dex_needs_the_grant() {
   let whole = setup(&["unsafe.jvm"]);
   assert_eq!(error_code(&whole, "inu.jvm.loadDex('/data/local/tmp/x.dex')"), "no-throw");
@@ -186,112 +152,74 @@ fn a_dex_past_the_bound_is_refused_before_it_is_copied() {
   assert_eq!(error_code(&f, &code), "no-throw");
 }
 
-#[test]
-fn call_super_refuses_rather_than_approximates() {
-  let f = setup(&["unsafe.jvm"]);
-  assert_eq!(error_code(&f, "inu.jvm.callSuper({}, 'toString')"), "unsupported|");
-  assert!(f.host.calls().is_empty());
+/// a java object handle the way the host hands one over, for a test that needs something to name
+fn object_handle(f: &Fixture, name: &str) {
+  f.ctx.with(|ctx| {
+    let handle = f.state.wire_to_value(&ctx, "GO7").unwrap();
+    ctx.globals().set(name, handle).unwrap();
+  });
 }
 
-#[test]
-fn the_shorthands_reach_the_host_as_the_ops_they_name() {
-  let f = setup(&["unsafe.jvm"]);
-  f.ctx.with(|ctx| {
-    ctx
-      .eval::<(), _>(
-        r#"
-            const cls = inu.jvm.cls('java.util.ArrayList')
-            const obj = new cls(4)
-            obj.getField('size')
-            obj.setField('size', 2)
-            obj.call('add', 'x')
-            cls.getStaticField('EMPTY')
-            cls.setStaticField('EMPTY', null)
-            cls.callStatic('of', 1, 2)
-            "#,
-      )
-      .unwrap()
-  });
-  assert_eq!(
-    f.host.calls(),
-    vec![
-      format!("{OP_CLASS}|0|java.util.ArrayList|"),
-      format!("{OP_NEW}|1||I4"),
-      format!("{OP_GET}|2|size|"),
-      format!("{OP_SET}|2|size|I2"),
-      format!("{OP_CALL}|2|add|Sx"),
-      format!("{OP_GET}|1|EMPTY|"),
-      format!("{OP_SET}|1|EMPTY|N"),
-      format!("{OP_CALL}|1|of|I1,I2"),
-    ],
-  );
+fn thrown_code(ctx: &Ctx<'_>) -> String {
+  let thrown = ctx.catch();
+  thrown.as_object().and_then(|o| o.get::<_, Option<String>>("code").ok().flatten()).unwrap_or_else(|| "Error".to_string())
 }
 
-#[test]
-fn a_method_and_a_field_handle_carry_their_receiver_as_the_first_argument() {
-  let f = setup(&["unsafe.jvm"]);
+/// what a value [code] evaluates to crosses as, or the code of the refusal
+fn wire_of(f: &Fixture, code: &str) -> String {
   f.ctx.with(|ctx| {
-    ctx
-      .eval::<(), _>(
-        r#"
-            const cls = inu.jvm.cls('java.util.ArrayList')
-            const obj = new cls()
-            cls.getDeclaredMethod('add').invoke(obj, 'x')
-            cls.getDeclaredField('size').get(obj)
-            cls.getDeclaredField('size').set(null, 3)
-            "#,
-      )
-      .unwrap()
-  });
-  let calls = f.host.calls();
-  assert_eq!(calls[2], format!("{OP_METHOD}|1|add|"));
-  assert_eq!(calls[3], format!("{OP_INVOKE}|3||G2,Sx"));
-  assert_eq!(calls[5], format!("{OP_MEMBER_GET}|4||G2"));
-  assert_eq!(calls[7], format!("{OP_MEMBER_SET}|5||N,I3"));
+    let value: Value = ctx.eval(code).unwrap();
+    match f.state.arg_to_wire(&ctx, &value) {
+      Ok(wire) => wire,
+      Err(rquickjs::Error::Exception) => thrown_code(&ctx),
+      Err(e) => panic!("{e:?}"),
+    }
+  })
+}
+
+/// [probe] run over what [wire] decodes to, or the code of the refusal
+fn decoded(f: &Fixture, wire: &str, probe: &str) -> String {
+  f.ctx.with(|ctx| match f.state.wire_to_value(&ctx, wire) {
+    Ok(value) => {
+      ctx.globals().set("v", value).unwrap();
+      ctx.eval::<String, _>(probe).unwrap()
+    }
+    Err(rquickjs::Error::Exception) => thrown_code(&ctx),
+    Err(e) => panic!("{e:?}"),
+  })
 }
 
 #[test]
 fn only_values_java_can_be_handed_without_guessing_cross() {
   let f = setup(&["unsafe.jvm"]);
-  f.ctx
-    .with(|ctx| ctx.eval::<(), _>("globalThis.o = new (inu.jvm.cls('java.util.ArrayList'))()").unwrap());
+  object_handle(&f, "o");
   for (code, wire) in [
-    ("o.call('m', null)", "N"),
-    ("o.call('m', undefined)", "N"),
-    ("o.call('m', true)", "B1"),
-    ("o.call('m', 7)", "I7"),
-    ("o.call('m', 7.0)", "I7"),
-    ("o.call('m', 1.5)", "D1.5"),
-    ("o.call('m', 'x')", "Sx"),
-    ("o.call('m', 9007199254740993n)", "I9007199254740993"),
-    ("o.call('m', new Uint8Array([0]))", "YAA=="),
-    ("o.call('m', o)", "G2"),
+    ("null", "N"),
+    ("undefined", "N"),
+    ("true", "B1"),
+    ("7", "I7"),
+    ("7.0", "I7"),
+    ("1.5", "D1.5"),
+    ("'x'", "Sx"),
+    ("9007199254740993n", "I9007199254740993"),
+    ("new Uint8Array([0])", "YAA=="),
+    ("o", "G7"),
   ] {
-    f.host.calls.borrow_mut().clear();
-    assert_eq!(eval(&f, code), "null", "{code}");
-    assert_eq!(f.host.calls()[0], format!("{OP_CALL}|2|m|{wire}"), "{code}");
+    assert_eq!(wire_of(&f, code), wire, "{code}");
   }
-  for code in [
-    "o.call('m', {})",
-    "o.call('m', [])",
-    "o.call('m', () => {})",
-    "o.call('m', Symbol())",
-    // wider than a java long, which `to_i64` would have truncated
-    "o.call('m', 92233720368547758070n)",
-  ] {
-    assert_eq!(error_code(&f, code), "invalid-argument|", "{code}");
+  // wider than a java long, which `to_i64` would have truncated
+  for code in ["({})", "[]", "(() => {})", "Symbol()", "92233720368547758070n"] {
+    assert_eq!(wire_of(&f, code), "invalid-argument", "{code}");
   }
 }
 
 #[test]
-fn a_value_past_the_bound_is_refused_in_either_direction() {
+fn a_value_past_the_bound_is_refused() {
   let f = setup(&["unsafe.jvm"]);
-  f.ctx
-    .with(|ctx| ctx.eval::<(), _>("globalThis.o = new (inu.jvm.cls('java.util.ArrayList'))()").unwrap());
   let over = VALUE_LIMIT_BYTES + 1;
-  assert_eq!(error_code(&f, &format!("o.call('m', 'x'.repeat({over}))")), "quota-exceeded|");
-  assert_eq!(error_code(&f, &format!("o.call('m', new Uint8Array({over}))")), "quota-exceeded|");
-  assert_eq!(error_code(&f, &format!("o.call('m', 'x'.repeat({VALUE_LIMIT_BYTES}))")), "no-throw");
+  assert_eq!(wire_of(&f, &format!("'x'.repeat({over})")), "quota-exceeded");
+  assert_eq!(wire_of(&f, &format!("new Uint8Array({over})")), "quota-exceeded");
+  assert!(wire_of(&f, &format!("'x'.repeat({VALUE_LIMIT_BYTES})")).starts_with('S'));
 }
 
 /// a java `long` is 64 bits and an `access_hash` uses all of them, so the alternative to a
@@ -299,40 +227,44 @@ fn a_value_past_the_bound_is_refused_in_either_direction() {
 #[test]
 fn a_long_that_a_js_number_cannot_hold_arrives_as_a_bigint() {
   let f = setup(&["unsafe.jvm"]);
-  f.ctx
-    .with(|ctx| ctx.eval::<(), _>("globalThis.o = new (inu.jvm.cls('java.util.ArrayList'))()").unwrap());
-  f.host.answers("I9007199254740993");
-  assert_eq!(eval(&f, "((v) => typeof v + ':' + v)(o.getField('h'))"), r#""bigint:9007199254740993""#);
-  f.host.answers("I9007199254740991");
-  assert_eq!(eval(&f, "typeof o.getField('h')"), r#""number""#);
-  f.host.answers("I-9007199254740993");
-  assert_eq!(eval(&f, "typeof o.getField('h')"), r#""bigint""#);
+  assert_eq!(decoded(&f, "I9007199254740993", "typeof v + ':' + v"), "bigint:9007199254740993");
+  assert_eq!(decoded(&f, "I9007199254740991", "typeof v"), "number");
+  assert_eq!(decoded(&f, "I-9007199254740993", "typeof v"), "bigint");
 }
 
 #[test]
 fn every_scalar_the_host_answers_with_decodes_the_way_the_tl_bridge_decodes_it() {
   let f = setup(&["unsafe.jvm"]);
-  f.ctx
-    .with(|ctx| ctx.eval::<(), _>("globalThis.o = new (inu.jvm.cls('java.util.ArrayList'))()").unwrap());
   for (wire, expected) in
     [("N", "null"), ("Shello", r#""hello""#), ("I42", "42"), ("D1.5", "1.5"), ("B1", "true"), ("B0", "false")]
   {
-    f.host.answers(wire);
-    assert_eq!(eval(&f, "o.getField('x')"), expected, "{wire}");
+    assert_eq!(decoded(&f, wire, "JSON.stringify(v)"), expected, "{wire}");
   }
-  f.host.answers("YAAEC");
-  assert_eq!(eval(&f, "Array.from(o.getField('x')).join(',')"), r#""0,1,2""#);
+  assert_eq!(decoded(&f, "YAAEC", "Array.from(v).join(',')"), "0,1,2");
 }
 
 #[test]
 fn a_host_error_wire_throws_the_typed_error_it_names() {
   let f = setup(&["unsafe.jvm"]);
-  f.ctx
-    .with(|ctx| ctx.eval::<(), _>("globalThis.o = new (inu.jvm.cls('java.util.ArrayList'))()").unwrap());
-  f.host.answers("Phandle-expired\n\n\n\ngone");
-  assert_eq!(error_code(&f, "o.getField('x')"), "handle-expired|");
-  f.host.answers("Ejava.lang.IllegalStateException: nope");
-  assert_eq!(error_code(&f, "o.getField('x')"), "Error|");
+  assert_eq!(decoded(&f, "Phandle-expired\n\n\n\ngone", "''"), "handle-expired");
+  assert_eq!(decoded(&f, "Ejava.lang.IllegalStateException: nope", "''"), "Error");
+}
+
+#[test]
+fn member_access_without_a_vm_is_refused_rather_than_asked_of_the_host() {
+  let f = setup(&["unsafe.jvm"]);
+  object_handle(&f, "o");
+  for code in ["o.getField('x')", "o.call('m')", "new (inu.jvm.cls('java.lang.Object'))()"] {
+    assert_eq!(error_code(&f, code), "unsupported|", "{code}");
+  }
+  assert!(f.host.calls().iter().all(|call| call.starts_with(&format!("{OP_CLASS}|"))));
+}
+
+#[test]
+fn call_super_refuses_rather_than_approximates() {
+  let f = setup(&["unsafe.jvm"]);
+  assert_eq!(error_code(&f, "inu.jvm.callSuper({}, 'toString')"), "unsupported|");
+  assert!(f.host.calls().is_empty());
 }
 
 /// the table is the plugin's only hold on a java reference, and a handle whose js side is gone is
@@ -422,8 +354,7 @@ fn a_throwing_callback_is_the_plugins_fault() {
 #[test]
 fn a_handle_cannot_be_forged_out_of_what_js_can_see() {
   let f = setup(&["unsafe.jvm"]);
-  f.ctx
-    .with(|ctx| ctx.eval::<(), _>("globalThis.o = new (inu.jvm.cls('java.util.ArrayList'))()").unwrap());
+  object_handle(&f, "o");
   assert_eq!(eval(&f, "JSON.stringify([Object.keys(o), Object.getOwnPropertySymbols(o).length])"), r#""[[],0]""#,);
   assert_eq!(error_code(&f, "({ ...o }).getField('x')"), "TypeError|");
 }
@@ -432,100 +363,28 @@ fn a_handle_cannot_be_forged_out_of_what_js_can_see() {
 /// runs is one nobody notices going green on a broken engine. The host below stands in for
 /// `PluginJvm` - what it cannot stand in for (real reflection, the per-class scope checks, dex)
 /// is pinned in `PluginJvmTest` instead.
-#[cfg(test)]
-mod bundled_oracle {
-  use super::testing::OracleJvmHost;
-  use super::*;
-  use crate::api::error::install_plugin_error;
-  use crate::sandbox::grants::TestGrantHost;
-  use crate::testing::harness::{assert_oracle_exact, install_capturing_console, manifest_grants, DisposeOnDrop};
-
-  const ORACLE: &str = include_str!("../../../../test/plugins/jvm-test.js");
-
-  #[test]
-  fn the_bundled_jvm_test_plugin_passes() {
-    let rt = Runtime::new().unwrap();
-    let ctx = Context::full(&rt).unwrap();
-    let lines = install_capturing_console(&ctx);
-    let host = OracleJvmHost::new();
-    let state = ctx.with(|ctx| {
-      let inu = crate::testing::harness::get_api_globals(&ctx);
-      install_plugin_error(&ctx).unwrap();
-      install_jvm(
-        &ctx,
-        host.as_host(),
-        None,
-        // the plugin's own header, so a suite granting what the manifest forgot cannot pass
-        TestGrantHost::new(&manifest_grants(ORACLE)).as_host(),
-        Lifecycle::new(),
-        std::sync::Arc::new(|_: &str| {}),
-        &inu,
-      )
-      .unwrap()
-    });
-    let state = DisposeOnDrop::new(&ctx, state, |ctx, state| state.dispose(ctx));
-    ctx.with(|ctx| match ctx.eval::<(), _>(ORACLE) {
-      Ok(()) => {}
-      Err(rquickjs::Error::Exception) => panic!("{}", format_exception(&ctx)),
-      Err(e) => panic!("{e:?}"),
-    });
-    // the java object the oracle handed to `setOnClickListener` is "run" by the host, which is
-    // the only thing that can fire a runnable
-    state.dispatch_callback(&rt, &ctx, host.runnable_token());
-    ctx.with(|ctx| {
-      let done: Function = ctx.globals().get("__jvmDone").unwrap();
-      done.call::<_, ()>(()).unwrap()
-    });
-    while rt.is_job_pending() {
-      rt.execute_pending_job().ok();
-    }
-    let lines = lines.borrow().clone();
-    assert_oracle_exact(&lines, "jvm test done", 29);
-  }
-}
-
 /// The `JvmHost` a suite that only needs handles minted runs against: the same wire, with an answer
 /// per op rather than a settable one. Shared with `xposed`, whose every entry point takes a handle
 /// this is what mints.
 #[cfg(test)]
 pub(crate) mod testing {
   use super::*;
-  use std::cell::{Cell, RefCell};
-  use std::collections::{HashMap, HashSet};
+  use std::cell::Cell;
 
   #[derive(Default)]
   pub(crate) struct OracleJvmHost {
     next_id: Cell<i64>,
-    runnable: Cell<u32>,
-    classes: RefCell<HashMap<i64, String>>,
-    constructors: RefCell<HashSet<i64>>,
-    list_size: Cell<i32>,
   }
 
   impl OracleJvmHost {
     pub(crate) fn new() -> Rc<Self> {
       Rc::new(OracleJvmHost {
         next_id: Cell::new(1),
-        runnable: Cell::new(0),
-        classes: RefCell::new(HashMap::new()),
-        constructors: RefCell::new(HashSet::new()),
-        list_size: Cell::new(0),
       })
     }
 
     pub(crate) fn as_host(self: &Rc<Self>) -> Rc<dyn JvmHost> {
       self.clone()
-    }
-
-    /// the callback id the oracle's `runnable` was minted with, i.e. what java running it
-    /// would come back as
-    pub(crate) fn runnable_token(&self) -> u32 {
-      self.runnable.get()
-    }
-
-    /// what `cls()` minted the handle for, so a sibling fake (xposed) can refuse by class
-    pub(crate) fn class_name(&self, id: i64) -> Option<String> {
-      self.classes.borrow().get(&id).cloned()
     }
 
     fn mint(&self, kind: char) -> String {
@@ -534,69 +393,13 @@ pub(crate) mod testing {
       format!("G{kind}{id}")
     }
 
-    fn mint_constructor(&self) -> String {
-      let id = self.next_id.get();
-      self.next_id.set(id + 1);
-      self.constructors.borrow_mut().insert(id);
-      format!("GK{id}")
-    }
-
-    fn mint_class(&self, name: &str) -> String {
-      let id = self.next_id.get();
-      self.next_id.set(id + 1);
-      self.classes.borrow_mut().insert(id, name.to_string());
-      format!("GC{id}")
-    }
   }
 
   impl JvmHost for OracleJvmHost {
-    fn jvm(&self, op: i32, target: i64, name: &str, args: &[String]) -> String {
+    fn jvm(&self, op: i32, _target: i64, _name: &str, _args: &[String]) -> String {
       match op {
-        OP_CLASS => self.mint_class(name),
-        OP_NEW | OP_ROUTINE | OP_XPOSED_ROUTINE => self.mint('O'),
-        OP_METHOD => {
-          if name.starts_with("<init>") {
-            self.mint_constructor()
-          } else {
-            self.mint('M')
-          }
-        }
-        OP_FIELD => self.mint('F'),
-        OP_RUNNABLE => {
-          if let Some(token) = args.first().and_then(|a| a.strip_prefix('I')).and_then(|t| t.parse().ok()) {
-            self.runnable.set(token);
-          }
-          self.mint('O')
-        }
-        OP_GET => match name {
-          "size" => format!("I{}", self.list_size.get()),
-          "MAX_VALUE" if self.classes.borrow().get(&target).is_some_and(|class| class == "java.lang.Long") => {
-            "I9223372036854775807".to_string()
-          }
-          "MAX_VALUE" => "I2147483647".to_string(),
-          "TAG" => "Sinugram".to_string(),
-          "digest" => "YAQID".to_string(),
-          "serialVersionUID" => "I9007199254740993".to_string(),
-          _ => "N".to_string(),
-        },
-        OP_CALL => match name {
-          "toString" => "S[1, 2, x]".to_string(),
-          "add" => {
-            self.list_size.set(self.list_size.get() + 1);
-            "B1".to_string()
-          }
-          "valueOf" => "I1".to_string(),
-          "parseInt" => "Ejava.lang.NumberFormatException: For input string: \"NaN\"".to_string(),
-          "clone" => self.mint('O'),
-          "boom" => "Ejava.lang.IllegalStateException: boom".to_string(),
-          _ => "N".to_string(),
-        },
-        OP_INVOKE if self.constructors.borrow().contains(&target) => self.mint('O'),
-        OP_INVOKE => {
-          self.list_size.set(self.list_size.get() + 1);
-          "B1".to_string()
-        }
-        OP_MEMBER_GET => format!("I{}", self.list_size.get()),
+        OP_CLASS => self.mint('C'),
+        OP_RUNNABLE | OP_ROUTINE | OP_XPOSED_ROUTINE => self.mint('O'),
         _ => "N".to_string(),
       }
     }
@@ -606,7 +409,7 @@ pub(crate) mod testing {
 #[test]
 fn routinees_build_one_host_program_without_executing_members() {
   let f = setup(&["unsafe.jvm"]);
-  assert_eq!(eval(&f, "globalThis.obj = new (inu.jvm.cls('test.Object'))(); undefined"), "undefined");
+  object_handle(&f, "obj");
   let before = f.host.calls().len();
   eval(&f, "inu.jvm.routine(ops => { const x = ops.getField(obj, 'count'); return [ops.setField(obj, 'count', ops.math('+', x, 2))] })");
   let calls = f.host.calls();
@@ -741,19 +544,6 @@ fn define_class_keeps_callable_java_classes_as_handles_and_routines_as_handles()
   let call = f.host.calls().into_iter().find(|call| call.starts_with("18|")).unwrap();
   assert!(call.ends_with("|G1,G2"), "{call}");
   assert!(f.state.callbacks.is_empty());
-}
-
-#[test]
-fn method_results_pin_a_fresh_java_reference_for_the_return_handoff() {
-  let f = setup(&["unsafe.jvm"]);
-  eval(&f, "inu.jvm.defineClass('plugin.Test', { methods: { echo: (self, value) => value } })");
-  f.ctx.with(|ctx| {
-    let wire = f.state.dispatch_method(&ctx, 1, "N", &["GO123".into()]);
-    assert!(wire.starts_with("GO"), "{wire}");
-  });
-  let calls = f.host.calls();
-  assert!(calls.iter().any(|call| call == "19|123||"));
-  assert_eq!(calls.iter().filter(|call| call.starts_with("19|")).count(), 2);
 }
 
 #[test]
