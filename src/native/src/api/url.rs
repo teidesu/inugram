@@ -3,38 +3,43 @@ use std::cell::RefCell;
 use rquickjs::class::{JsClass, Readable, Trace, Tracer};
 use rquickjs::function::{Constructor, Opt, This};
 use rquickjs::{Array, Coerced, Ctx, Exception, Function, JsLifetime, Object, Result as JsResult, Value};
-use url::{form_urlencoded, Url};
+use url::{form_urlencoded, Host, Url};
 
 use crate::utils::shape::{define_accessor, define_getter, define_method};
 
 const PRELUDE: &[u8] = include_bytes!(concat!(env!("OUT_DIR"), "/url.qbc"));
 
-pub fn parse_http_url(api: &str, url: &str) -> Result<String, String> {
-  if url.chars().any(|c| c.is_whitespace() || c.is_control()) {
-    return Err(format!("{api}: a url may not contain whitespace or control characters"));
+/// refuses the spellings whose meaning depends on which parser reads them, before any parser
+/// does: the whatwg parser behind [`Url`] strips tabs and newlines, reads `\\` as `/`, and skips
+/// any number of slashes after a special scheme, while the host's `java.net.URI` does none of that
+pub(crate) fn screen_url_spelling(api: &str, url: &str) -> Result<(), String> {
+  if url.chars().any(|c| c.is_whitespace() || c.is_control() || c == '\\') {
+    return Err(format!("{api}: a url may not contain whitespace, control characters or backslashes"));
   }
-  let Some((scheme, rest)) = url.split_once("://") else {
-    return Err(format!("{api}: the url has no scheme"));
-  };
-  let scheme = scheme.to_ascii_lowercase();
+  if let Some((_, rest)) = url.split_once("://") {
+    if rest.starts_with('/') {
+      return Err(format!("{api}: the url has no host"));
+    }
+    if rest.split(['/', '?', '#']).next().unwrap_or_default().contains('@') {
+      return Err(format!("{api}: a url with userinfo in it is refused"));
+    }
+  }
+  Ok(())
+}
+
+pub fn parse_http_url(api: &str, url: &str) -> Result<String, String> {
+  screen_url_spelling(api, url)?;
+  let parsed = Url::parse(url).map_err(|e| format!("{api}: this is not a url: {e}"))?;
+  let scheme = parsed.scheme();
   if scheme != "http" && scheme != "https" {
     return Err(format!("{api}: '{scheme}' is not a scheme this api speaks; http and https only"));
   }
-  let authority = rest.split(['/', '?', '#']).next().unwrap_or_default();
-  if authority.contains('@') {
-    return Err(format!("{api}: a url with userinfo in it is refused"));
-  }
-  if authority.contains('\\') {
-    return Err(format!("{api}: a url with a backslash in its authority is refused"));
-  }
-  let host = match authority.strip_prefix('[') {
-    Some(rest) => match rest.split_once(']') {
-      Some((inside, _)) => inside,
-      None => return Err(format!("{api}: the url has an unterminated ipv6 literal")),
-    },
-    None => authority.split(':').next().unwrap_or_default(),
+  let host = match parsed.host() {
+    Some(Host::Domain(domain)) => domain.trim_end_matches('.').to_string(),
+    Some(Host::Ipv4(address)) => address.to_string(),
+    Some(Host::Ipv6(address)) => address.to_string(),
+    None => String::new(),
   };
-  let host = host.trim_end_matches('.').to_ascii_lowercase();
   if host.is_empty() {
     return Err(format!("{api}: the url has no host"));
   }

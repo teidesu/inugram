@@ -12,9 +12,7 @@ pub trait OpenUrlHost {
 }
 
 pub(crate) fn screen_external_url(url: &str) -> Result<(), String> {
-  if url.chars().any(|c| c.is_whitespace() || c.is_control()) {
-    return Err("openUrl: a url may not contain whitespace or control characters".to_string());
-  }
+  crate::api::url::screen_url_spelling("openUrl", url)?;
   if let Some((scheme, rest)) = url.split_once(':') {
     if scheme.eq_ignore_ascii_case("tg") {
       let action = rest

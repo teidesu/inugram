@@ -39,6 +39,15 @@ mod screen {
     assert_eq!(parse_http_url("fetch", "https://[::1]:8080/x"), Ok("::1".to_string()));
   }
 
+  /// what a grant is matched against is the host the connection would use, so the spellings a
+  /// resolver reads as the same address or name answer that one form
+  #[test]
+  fn alternate_host_spellings_answer_their_canonical_form() {
+    assert_eq!(parse_http_url("fetch", "http://0x7f.1/"), Ok("127.0.0.1".to_string()));
+    assert_eq!(parse_http_url("fetch", "https://Bücher.de/"), Ok("xn--bcher-kva.de".to_string()));
+    assert_eq!(parse_http_url("fetch", "https://[0:0::1]/"), Ok("::1".to_string()));
+  }
+
   #[test]
   fn the_ambiguous_spellings_stay_refused_now_that_a_real_parser_is_in_the_binary() {
     for url in [
@@ -50,6 +59,11 @@ mod screen {
       "tg://resolve?domain=x",
       "intent://x#Intent;end",
       "//example.com/",
+      "https:///example.com/",
+      "https://@evil.com/",
+      "https://ok.com:pw@evil.com/",
+      "http://[::1/",
+      "https://./",
     ] {
       assert!(parse_http_url("fetch", url).is_err(), "{url} must not pass the screen");
     }
