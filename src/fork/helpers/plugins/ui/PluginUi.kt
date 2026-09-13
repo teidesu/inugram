@@ -282,7 +282,7 @@ object PluginUi {
         val items = try {
             parseMenuItems(itemsJson)
         } catch (e: Exception) {
-            return "openMenu: ${e.message}"
+            return PluginWire.encodePluginError("invalid-argument", "openMenu: ${e.message}")
         }
         AndroidUtilities.runOnUIThread {
             fun settle(slot: Int) {
@@ -364,7 +364,7 @@ object PluginUi {
 
         OP_SAVE_FILE -> PluginFilePicker.save(session, requestId, optionsJson)
 
-        else -> "modal: unknown op $op"
+        else -> PluginWire.encodePluginError("internal", "modal: unknown op $op")
     }
 
     /**
@@ -385,7 +385,7 @@ object PluginUi {
         val prepared = try {
             prepare()
         } catch (e: Exception) {
-            return "$name: ${e.message}"
+            return PluginWire.encodePluginError("invalid-argument", "$name: ${e.message}")
         }
         AndroidUtilities.runOnUIThread {
             var settled = false

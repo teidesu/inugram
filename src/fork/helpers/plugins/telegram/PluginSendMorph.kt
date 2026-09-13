@@ -2,7 +2,7 @@ package desu.inugram.helpers.plugins.telegram
 
 import desu.inugram.core.plugins.PluginWire
 import desu.inugram.helpers.plugins.telegram.PluginWrites.Call
-import desu.inugram.helpers.plugins.telegram.PluginWrites.refuse
+import desu.inugram.core.plugins.PluginWire.refuse
 import java.io.File
 import org.telegram.messenger.AndroidUtilities
 import org.telegram.messenger.MessageObject

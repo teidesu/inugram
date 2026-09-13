@@ -40,13 +40,13 @@ function refuses(write) {
 }
 
 // a *stripped* field is the other refusal, and common.d.ts says which: "assigning one is refused
-// the way assigning a field the type does not have is", so an ordinary error rather than the
-// `forbidden` PluginError a sealed field earns
+// the way assigning a field the type does not have is", so `invalid-argument` rather than the
+// `forbidden` a sealed field earns
 function refusesAsAbsent(write) {
   try {
     write()
   } catch (e) {
-    return !(e instanceof inu.PluginError)
+    return e instanceof inu.PluginError && e.code === 'invalid-argument'
   }
   return false
 }

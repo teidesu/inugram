@@ -117,14 +117,19 @@ class TlHandlesLifetimeTest {
         val root = handles.mintForScope(request, TlHandles.newScope())
         val vector = handleId(handles.tlGet(root, "id"))
 
-        assertEquals("vector length can only shrink (2 -> 5 not allowed)", handles.tlSet(vector, "length", PluginWire.encodeJson("5")))
+        assertRefused("vector length can only shrink (2 -> 5 not allowed)", handles.tlSet(vector, "length", PluginWire.encodeJson("5")))
         assertNull(handles.tlSet(vector, "length", PluginWire.encodeJson("1")))
         assertEquals(1, request.id.size)
 
         // index == size is the push
         assertNull(handles.tlSet(vector, "1", PluginWire.encodeJson("""{"_":"inputUserSelf"}""")))
         assertEquals(2, request.id.size)
-        assertEquals("vector index out of range: 5", handles.tlSet(vector, "5", PluginWire.encodeJson("""{"_":"inputUserSelf"}""")))
+        assertRefused("vector index out of range: 5", handles.tlSet(vector, "5", PluginWire.encodeJson("""{"_":"inputUserSelf"}""")))
+    }
+
+    private fun assertRefused(message: String, wire: String?) {
+        assertPluginError("invalid-argument", wire)
+        assertEquals(message, (PluginWire.decode(wire!!) as PluginWire.Value.PluginErr).message)
     }
 
     /** counts what the real [org.telegram.tgnet.TLObject] does not: how often it was freed */

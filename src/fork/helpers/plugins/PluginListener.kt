@@ -16,9 +16,11 @@ package desu.inugram.helpers.plugins
  *
  * - a **value** channel (`String`) always carries a [desu.inugram.core.plugins.PluginWire] value:
  *   `S`/`N`/`J<json>`, `H<O|V><W|R><id>` for a live handle, or `E`/`P`/`R` for an error.
- * - an **error** channel (`String?`) carries nothing but errors, so null means SUCCESS and an `E`
- *   wire is forbidden: native cannot tell that tag from a message that happens to start with `E`,
- *   and would eat the first character. Return a bare message or a `P`/`R` wire.
+ * - an **error** channel (`String?`) carries nothing but errors, so null means SUCCESS and anything
+ *   else is a `P`/`R` wire, usually thrown as [desu.inugram.core.plugins.PluginRefusal] where the
+ *   refusal is decided. An `E` wire is forbidden: native cannot tell that tag from a message that
+ *   happens to start with `E`. Anything that is not a `P`/`R` wire reaches the plugin as `internal`,
+ *   which is what the bridge's own failures are.
  *
  * Calls arrive synchronously on the thread executing JS. Void hosts handle their own queueing;
  * queue-confined hosts returning values are only entered from the engine queue.

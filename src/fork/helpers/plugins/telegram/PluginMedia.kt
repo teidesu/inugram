@@ -1,5 +1,6 @@
 package desu.inugram.helpers.plugins.telegram
 
+import desu.inugram.core.plugins.PluginRefusal
 import desu.inugram.helpers.media.MediaSendHelper
 import desu.inugram.helpers.plugins.io.PluginTransfers
 import desu.inugram.helpers.plugins.ui.PluginAnimationDecoder
@@ -11,7 +12,7 @@ import desu.inugram.helpers.plugins.Plugin
 import desu.inugram.helpers.plugins.PluginSession
 import desu.inugram.helpers.plugins.QuickJs
 import desu.inugram.helpers.plugins.telegram.PluginWrites.Call
-import desu.inugram.helpers.plugins.telegram.PluginWrites.refuse
+import desu.inugram.core.plugins.PluginWire.refuse
 import desu.inugram.helpers.plugins.tl.TlFilter
 import desu.inugram.helpers.plugins.tl.TlJson
 import java.io.File
@@ -80,7 +81,7 @@ object PluginMedia {
             json.put("path", path.absolutePath)
             json.put("exists", path.exists() && path.length() > 0)
             PluginWire.encodeJson(json.toString())
-        } catch (e: PluginWrites.Refused) {
+        } catch (e: PluginRefusal) {
             e.wire
         } catch (e: Exception) {
             PluginWire.encodePluginError("internal", "getMessageFile: ${e.message ?: e.toString()}")
@@ -262,7 +263,7 @@ object PluginMedia {
                     } else {
                         try {
                             sendResolved(call, peer, medias.filterNotNull(), items)
-                        } catch (e: PluginWrites.Refused) {
+                        } catch (e: PluginRefusal) {
                             PluginWrites.answer(call) { e.wire }
                         }
                     }

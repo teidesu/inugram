@@ -1,5 +1,7 @@
 package desu.inugram.helpers.plugins.platform
 
+import desu.inugram.core.plugins.PluginRefusal
+import desu.inugram.core.plugins.PluginWire.refuse
 import android.os.Bundle
 import android.os.IBinder
 import android.os.Parcelable
@@ -126,13 +128,8 @@ object PluginJvm {
 
     internal fun bridgeFor(engine: QuickJs): ValueBridge? = engine.listener?.jvm as? ValueBridge
 
-    private class Refusal(val wire: String) : RuntimeException(PluginWire.describePluginError(wire), null, false, false)
-
-    private fun refuse(code: String, message: String, grant: String? = null): Nothing =
-        throw Refusal(PluginWire.encodePluginError(code, message, grant = grant))
-
     private fun tooBig(what: String, size: Long): Nothing =
-        throw Refusal(
+        throw PluginRefusal(
             PluginWire.encodePluginError(
                 "quota-exceeded",
                 "jvm: $what is $size bytes, over the $VALUE_LIMIT_BYTES this bridge carries",
@@ -155,7 +152,7 @@ object PluginJvm {
 
         override fun jvm(op: Int, target: Long, name: String, args: Array<String>): String = try {
             if (!live) expired() else handle(op, target, name, args)
-        } catch (e: Refusal) {
+        } catch (e: PluginRefusal) {
             e.wire
         } catch (e: InvocationTargetException) {
             // a java exception is not part of this api's taxonomy, so it arrives as a plain Error rather than a PluginError
@@ -330,7 +327,7 @@ object PluginJvm {
                 }
                 else -> refuse("internal", "jvm: unknown resolve mode $mode")
             }
-        } catch (e: Refusal) {
+        } catch (e: PluginRefusal) {
             arrayOf("E", e.wire)
         } catch (e: Throwable) {
             arrayOf("E", PluginWire.encodeError("jvm: ${describe(e)}"))
@@ -340,7 +337,7 @@ object PluginJvm {
         private fun refusalOf(member: Member): String? = try {
             checkMember(member)
             null
-        } catch (e: Refusal) {
+        } catch (e: PluginRefusal) {
             e.wire
         }
 
@@ -413,7 +410,7 @@ object PluginJvm {
             handle.drop(2).toLongOrNull()?.let { session.engine.jvmRelease(it) }
         }
 
-        override fun wireOf(failure: Throwable): String? = (failure as? Refusal)?.wire
+        override fun wireOf(failure: Throwable): String? = (failure as? PluginRefusal)?.wire
 
         /** the table is rust's, and a mint it refuses is one whose engine has already closed */
         private fun mint(value: Any, kind: Char): String {
@@ -638,7 +635,7 @@ object PluginJvm {
             val length = file.length()
             if (length == 0L) refuse("invalid-argument", "loadDex: ${file.name} is empty")
             if (length > DEX_LIMIT_BYTES) {
-                throw Refusal(
+                throw PluginRefusal(
                     PluginWire.encodePluginError(
                         "quota-exceeded",
                         "loadDex: ${file.name} is $length bytes, over the $DEX_LIMIT_BYTES this api loads",

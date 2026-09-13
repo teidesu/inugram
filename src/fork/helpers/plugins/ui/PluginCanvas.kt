@@ -1,5 +1,7 @@
 package desu.inugram.helpers.plugins.ui
 
+import desu.inugram.core.plugins.PluginRefusal
+import desu.inugram.core.plugins.PluginWire.refuse
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
 import android.graphics.BlendMode
@@ -128,11 +130,6 @@ object PluginCanvas {
         File(root, ENCODED_DIR).deleteRecursively()
     }
 
-    private class Refusal(val wire: String) : RuntimeException(null, null, false, false)
-
-    private fun refuse(code: String, message: String): Nothing =
-        throw Refusal(PluginWire.encodePluginError(code, message))
-
     private class Session(private val session: PluginSession) : CanvasListener {
         private val onHost = EngineDispatch.createHostDispatcher()
         private val canvases = HashMap<Long, Surface>()
@@ -166,7 +163,7 @@ object PluginCanvas {
 
         override fun canvas(op: Int, id: Long, arg: String, bytes: ByteArray?): String = try {
             run(op, id, arg, bytes)
-        } catch (e: Refusal) {
+        } catch (e: PluginRefusal) {
             e.wire
         } catch (e: OutOfMemoryError) {
             PluginWire.encodePluginError("quota-exceeded", "canvas: out of memory")
@@ -908,7 +905,7 @@ object PluginCanvas {
             val sourceId = fields.getOrNull(2)?.toLongOrNull() ?: refuse("internal", "canvas: malformed request")
             val duration = fields.getOrNull(3)?.toDoubleOrNull() ?: refuse("internal", "canvas: malformed request")
             val pipeline = encoders[id] ?: refuse("handle-expired", "canvas: that encoder is gone")
-            pipeline.failure?.let { throw Refusal(it) }
+            pipeline.failure?.let { throw PluginRefusal(it) }
             val source = if (kind == SOURCE_CANVAS) {
                 surfaceOf(sourceId).bitmap
             } else {
@@ -949,7 +946,7 @@ object PluginCanvas {
         private fun encoderFinish(id: Long, arg: String): String {
             val requestId = arg.toLongOrNull() ?: refuse("internal", "canvas: malformed request")
             val pipeline = encoders[id] ?: refuse("handle-expired", "canvas: that encoder is gone")
-            pipeline.failure?.let { throw Refusal(it) }
+            pipeline.failure?.let { throw PluginRefusal(it) }
             submit(requestId, pipeline.encoder.queue) {
                 val file = pipeline.encoder.finish()
                 "J" + JSONObject().put("path", file.absolutePath).put("type", "video/mp4").toString()

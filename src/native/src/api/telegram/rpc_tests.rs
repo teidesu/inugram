@@ -2517,7 +2517,7 @@ mod bundled_oracles {
       // the two refusals differ, and `common.d.ts` says so: a stripped field is refused the
       // way a field the type does not have is, a sealed one with `forbidden`
       if self.hidden.borrow().contains(key) {
-        return Some(format!("no such field '{key}'"));
+        return Some(format!("Pinvalid-argument\n\n\n\nno such field '{key}'"));
       }
       if self.sealed.borrow().contains(key) {
         return Some(plugin_error("forbidden", &format!("'{key}' is sealed while api filtering is on")));
