@@ -48,13 +48,6 @@ class PluginNotificationsTest {
     }
 
     @Test
-    fun a_plugin_without_the_grant_observes_nothing() {
-        val plugin = startPlugin("notifications")
-        assertPluginError("not-granted", plugin.observe("dialogsNeedReload"))
-        assertEquals(0, pluginObserverCount())
-    }
-
-    @Test
     fun an_accepted_registration_observes_every_centre_a_post_could_come_from() {
         val plugin = granted()
         assertNull(plugin.observe("dialogsNeedReload", "updateInterfaces"))

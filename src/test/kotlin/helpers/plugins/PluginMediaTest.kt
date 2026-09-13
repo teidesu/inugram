@@ -104,12 +104,6 @@ class PluginMediaTest {
     }
 
     @Test
-    fun getmessagefile_is_gated_on_the_messages_scope_on_the_side_that_owns_the_data() {
-        val plugin = startPlugin("media", "account.write(send)")
-        assertPluginError("not-granted", plugin.js.listener!!.messageFile(0, messageWire(withMedia())))
-    }
-
-    @Test
     fun media_already_on_disk_resolves_without_asking_the_loader_for_it() {
         val plugin = granted()
         val message = withMedia()

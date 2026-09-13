@@ -197,29 +197,6 @@ class PluginWritesTest {
     }
 
     @Test
-    fun every_op_is_gated_on_its_own_scope_on_the_side_that_owns_the_data() {
-        val plugin = startPlugin("writes", "account.write(send)")
-        val refused = mapOf(
-            PluginWrites.OP_EDIT_MESSAGE to "edit",
-            PluginWrites.OP_DELETE_MESSAGES to "delete",
-            PluginWrites.OP_FORWARD_MESSAGES to "forward",
-            PluginWrites.OP_SET_REACTION to "react",
-            PluginWrites.OP_READ_HISTORY to "read",
-            PluginWrites.OP_SEND_TYPING to "typing",
-            PluginWrites.OP_SET_DRAFT to "draft",
-        )
-        for ((op, scope) in refused) {
-            val wire = write(plugin, op, send("D$alice"))
-            assertPluginError("not-granted", wire)
-            assertTrue(wire!!.contains("account.write($scope)"), "op $op named the wrong grant: $wire")
-        }
-        // the one it does hold reaches the network
-        assertNull(write(plugin, PluginWrites.OP_SEND_MESSAGE, send("D$alice")))
-        drain()
-        assertEquals(1, connections().sent.size)
-    }
-
-    @Test
     fun a_send_carries_its_text_entities_reply_and_schedule() {
         val plugin = granted()
         val entity = JSONObject().put("_", "messageEntityBold").put("offset", 0).put("length", 2)

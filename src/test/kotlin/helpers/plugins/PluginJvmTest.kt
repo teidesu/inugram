@@ -48,14 +48,8 @@ class PluginJvmTest {
 
     /** a plugin on a real engine: the member ops have no listener form, so this is the only way to reach them */
     private fun engineFor(vararg grants: String, name: String = "reflective"): Plugin {
-        val plugin = startPlugin(name, *grants)
-        val engine = QuickJs()
-        plugin.session = PluginSession(plugin, engine)
-        attachBridge(plugin.session!!, object : CoreListener {
-            override fun onConsole(level: Int, message: String) = Unit
-            override fun onTimerSchedule(delayMs: Long) = Unit
-        })
-        engines.add(engine)
+        val plugin = startEngine(name, *grants)
+        engines.add(plugin.session!!.engine)
         return plugin
     }
 

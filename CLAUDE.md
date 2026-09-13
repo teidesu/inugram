@@ -159,7 +159,10 @@ Rust and Kotlin; do not add a schema/code-generation layer for them.
 - Rust calls `PluginBridge`/`PluginListener`. `QuickJs` package and JNI signatures
   are ABI: update both sides when changing them.
 - Grants have no `inu.` prefix. Checks fail closed; ignore unknown grant names but
-  reject unknown scopes for known grants. Existing API members return `not-granted`
+  reject unknown scopes for known grants.
+  `PluginPermissions` parses a manifest once; the engine gets `name, scope` pairs and
+  makes every check. The host re-checks only what it alone knows: update types, a
+  takeout's inner method, egress hops. `test/grants/scope-matches.tsv` pins both matchers. Existing API members return `not-granted`
   unless the API itself requires a grant merely to be installed.
 - Value wires and nullable error wires differ: error-only results are null on
   success, otherwise a `P`/`R` wire, never an `E` wire. A bare message is `internal`.

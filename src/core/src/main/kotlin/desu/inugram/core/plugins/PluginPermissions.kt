@@ -20,6 +20,11 @@ class PluginPermissions private constructor(private val grants: List<Grant>) {
 
     fun has(name: String): Boolean = grantedApis.contains(name)
 
+    /** what the engine is handed: `name, scope` pairs, an unscoped grant's scope being empty */
+    fun toPairs(): List<String> = grants.flatMap { grant ->
+        if (grant.scopes.isEmpty()) listOf(grant.name, "") else grant.scopes.flatMap { listOf(grant.name, it) }
+    }
+
     fun allows(name: String, target: String, match: ScopeMatch): Boolean {
         if (unscopedApis.contains(name)) return true
         val matching = byName[name] ?: return false

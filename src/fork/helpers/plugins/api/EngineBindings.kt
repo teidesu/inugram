@@ -45,7 +45,7 @@ object EngineBindings {
                 androidDirs = PluginFs.androidDirs(),
                 installJvm = bridge.jvm != null,
                 installXposed = bridge.xposed != null,
-                grants = session.manifest.grants,
+                grants = session.permissions,
             ),
         )
         // a plugin loaded while the app is hidden would otherwise tick unthrottled until the next transition; no callback can hear this, its own code not having run yet

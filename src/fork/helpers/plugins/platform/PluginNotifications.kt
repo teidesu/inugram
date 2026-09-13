@@ -64,10 +64,6 @@ object PluginNotifications {
         }
 
     private fun startObserving(session: PluginSession, callbackId: Int, events: Array<String>): String? {
-        // the engine's own check_grant already ran in native; this is the second gate, on the side that owns the data
-        if (!session.permissions.has("unsafe.notificationCenter")) {
-            return PluginWire.encodeNotGranted("unsafe.notificationCenter")
-        }
         val ids = IntArray(events.size)
         for (index in events.indices) {
             // a closed vocabulary: a name this app does not have is refused rather than silently never firing, which a plugin could not tell from an event that never happened

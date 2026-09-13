@@ -6,7 +6,6 @@ import desu.inugram.helpers.plugins.io.PluginTransfers
 import desu.inugram.helpers.plugins.ui.PluginAnimationDecoder
 import desu.inugram.helpers.plugins.tl.TlHandles
 import desu.inugram.core.plugins.PluginWire
-import desu.inugram.core.plugins.ScopeMatch
 import desu.inugram.helpers.plugins.EngineDispatch
 import desu.inugram.helpers.plugins.Plugin
 import desu.inugram.helpers.plugins.PluginSession
@@ -67,9 +66,6 @@ object PluginMedia {
     private const val DOWNLOAD_TAG = "InuDownload"
 
     fun messageFile(session: PluginSession, accountId: Int, value: String): String {
-        if (!session.permissions.allows("account.read", "messages", ScopeMatch.EXACT)) {
-            return PluginWire.encodeNotGranted("account.read", "messages")
-        }
         return try {
             val message = messageOf(session.tl, value)
             val media = mediaFile(message) ?: return PluginWire.encodeNull()

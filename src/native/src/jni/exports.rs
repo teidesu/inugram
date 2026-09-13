@@ -94,7 +94,7 @@ pub extern "system" fn Java_desu_inugram_helpers_plugins_QuickJs_nativeCreate(
     let install_fs_enabled = install_fs;
     let install_jvm_enabled = install_jvm;
     let install_xposed_enabled = install_xposed;
-    let grants: Rc<dyn GrantHost> = CachedGrantHost::new(read_string_array(env, &grant_tokens)).as_host();
+    let grants: Rc<dyn GrantHost> = CachedGrantHost::from_pairs(&read_string_array(env, &grant_tokens)).as_host();
     let Some(engine) = (|| -> Option<Engine> {
       let _deadline = arm_entry_deadline();
       let lifecycle = Lifecycle::new();

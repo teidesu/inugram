@@ -237,40 +237,6 @@ class PluginReadsAsyncTest {
     }
 
     @Test
-    fun every_async_read_checks_its_own_scope_on_the_side_that_owns_the_data() {
-        val plugin = startPlugin("narrow", "account.read(peers)")
-        assertPluginError("not-granted", fetch(plugin, PluginReads.OP_HISTORY, "S", "{\"limit\":10}"))
-        assertPluginError("not-granted", fetch(plugin, PluginReads.OP_DIALOGS, "", "{\"limit\":10}"))
-        assertPluginError("not-granted", fetch(plugin, PluginReads.OP_TOPICS, "D-$forum", "{\"limit\":10}"))
-        assertPluginError("not-granted", reads(plugin).accountRead(0, PluginReads.OP_DRAFT, "S\n0"))
-        assertTrue(connections().sent.isEmpty(), "a refused read must not reach the network")
-    }
-
-    @Test
-    fun the_refusal_names_the_grant_that_would_have_allowed_it() {
-        val plugin = startPlugin("none")
-        val decoded = PluginWire.decode(fetch(plugin, PluginReads.OP_HISTORY, "S", "{\"limit\":10}")!!)
-        assertEquals("account.read(history)", (decoded as PluginWire.Value.PluginErr).grant)
-    }
-
-    /**
-     * `getUserFull` on yourself is the one read `account.read(self)` alone opens, and only for the
-     * spec that says "myself" - the engine gates before any peer is resolved, so a dialog id that
-     * happens to be yours cannot be the same thing
-     */
-    @Test
-    fun getUserFull_on_yourself_needs_only_the_self_scope_and_only_spelled_as_yourself() {
-        val plugin = startPlugin("selfonly", "account.read(self)")
-        assertNull(fetch(plugin, PluginReads.OP_USER_FULL, "S"), "'me' is allowed under self alone")
-        assertPluginError("not-granted", fetch(plugin, PluginReads.OP_USER_FULL, "D$self"))
-        assertPluginError("not-granted", fetch(plugin, PluginReads.OP_USER_FULL, "D$alice"))
-        // and it buys that one op, not every op that can be pointed at yourself
-        assertPluginError("not-granted", fetch(plugin, PluginReads.OP_CHAT_FULL, "S"))
-        assertPluginError("not-granted", fetch(plugin, PluginReads.OP_HISTORY, "S", "{\"limit\":10}"))
-        assertPluginError("not-granted", fetch(plugin, PluginReads.OP_TOPICS, "S", "{\"limit\":10}"))
-    }
-
-    @Test
     fun getUserFull_answers_from_the_app_s_own_cache_without_sending_anything() {
         val plugin = granted()
         val full = TLRPC.TL_userFull().apply { id = alice; about = "bio" }.synced()

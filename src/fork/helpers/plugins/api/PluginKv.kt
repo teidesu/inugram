@@ -39,7 +39,6 @@ object PluginKv {
 
     fun listenerFor(session: PluginSession): StorageListener = object : StorageListener {
         override fun kv(op: Int, key: String, value: String): String {
-            if (!session.permissions.has("kv")) return PluginWire.encodeNotGranted("kv")
             return handleOp(session.plugin.id, op, key, value)
         }
     }
