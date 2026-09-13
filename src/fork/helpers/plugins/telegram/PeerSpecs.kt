@@ -70,9 +70,6 @@ object PeerSpecs {
     }
 
     /** the spec vocabulary makes this exact: nothing else an op sends (ids, counts, a cursor) is `S` */
-    fun namesSelf(arg: String): Boolean =
-        arg.splitToSequence(LIST_SEPARATOR).any { it.length == 1 && it[0] == SPEC_SELF }
-
     fun splitOnce(arg: String): Pair<String, String> {
         val at = arg.indexOf(LIST_SEPARATOR)
         return if (at < 0) arg to "" else arg.substring(0, at) to arg.substring(at + 1)

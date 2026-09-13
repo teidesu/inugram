@@ -210,15 +210,4 @@ class PluginChatListTest {
         assertEquals("not-found", (error as PluginWire.Value.PluginErr).code)
     }
 
-    /** the gate runs on the side that owns the data, and a refusal never reaches the ui thread */
-    @Test
-    fun both_cached_reads_refuse_without_the_dialogs_scope() {
-        val plugin = startPlugin("chat-list-ungranted", "account.read(peers)")
-        seed(main = listOf(dialog(222, 30)))
-        for ((op, arg) in listOf(PluginReads.OP_DIALOGS_CACHED to "{\"archive\":0,\"chatFolderId\":null,\"limit\":0}", PluginReads.OP_CHAT_FOLDERS to "{}")) {
-            val error = PluginWire.decode(fetch(plugin, op, arg)) as PluginWire.Value.PluginErr
-            assertEquals("not-granted", error.code, "op $op")
-            assertEquals("account.read(dialogs)", error.grant)
-        }
-    }
 }

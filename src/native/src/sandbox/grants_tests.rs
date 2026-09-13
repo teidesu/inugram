@@ -42,3 +42,33 @@ fn cached_grants_match_domains_and_namespaces() {
   assert!(!host.is_granted("unsafe.jvm", Some("java.io.File"), MATCH_NAMESPACE));
   assert!(!host.is_granted("fetch", Some("example.com"), 99));
 }
+
+/// the same table `PluginPermissionsTest` reads, so the two matchers cannot drift apart silently
+#[test]
+fn scope_matching_agrees_with_the_host_s_table() {
+  const TABLE: &str = include_str!("../../../test/grants/scope-matches.tsv");
+  let mut rows = 0;
+  for line in TABLE.lines().filter(|l| !l.starts_with('#') && !l.is_empty()) {
+    let [scope, target, mode, granted]: [&str; 4] = line.split('\t').collect::<Vec<_>>().try_into().unwrap();
+    let mode = match mode {
+      "exact" => MATCH_EXACT,
+      "domain" => MATCH_DOMAIN,
+      "namespace" => MATCH_NAMESPACE,
+      other => panic!("unknown mode {other}"),
+    };
+    let host = CachedGrantHost::from_pairs(&["x", scope]);
+    assert_eq!(host.is_granted("x", Some(target), mode), granted == "true", "{line}");
+    rows += 1;
+  }
+  assert!(rows > 10);
+}
+
+#[test]
+fn an_empty_scope_in_a_pair_is_an_unscoped_grant() {
+  let host = CachedGrantHost::from_pairs(&["kv", "", "fetch", "a.com", "fetch", "b.com"]);
+  assert!(host.is_granted("kv", Some("anything"), MATCH_EXACT));
+  assert!(host.is_granted("fetch", Some("x.b.com"), MATCH_DOMAIN));
+  assert!(!host.is_granted("fetch", Some("c.com"), MATCH_DOMAIN));
+  assert!(host.is_granted("fetch", None, MATCH_EXACT));
+  assert!(!host.is_granted("clipboard", None, MATCH_EXACT));
+}

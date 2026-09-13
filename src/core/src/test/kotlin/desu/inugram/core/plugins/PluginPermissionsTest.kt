@@ -4,6 +4,8 @@ import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
+import desu.inugram.sources.forkRoot
+import java.io.File
 import org.junit.Test
 
 class PluginPermissionsTest {
@@ -130,5 +132,24 @@ class PluginPermissionsTest {
     fun starWildcardMatchesEverything() {
         val p = PluginPermissions.parse(listOf("jvm.cls(*)"))
         assertTrue(p.allows("jvm.cls", "any.Class", ScopeMatch.NAMESPACE))
+    }
+
+    @Test
+    fun theEngineIsHandedOnePairPerScopeAndAnEmptyScopeForAnUnscopedGrant() {
+        val permissions = PluginPermissions.parse(listOf("kv", "fetch( a.com , b.com )", "fetch(evil.com", "x()"))
+        assertEquals(listOf("kv", "", "fetch", "a.com", "fetch", "b.com"), permissions.toPairs())
+    }
+
+    /** the same table rust's `grants_tests` reads, so the two matchers cannot drift apart silently */
+    @Test
+    fun scopeMatchingAgreesWithTheEnginesTable() {
+        val rows = File(forkRoot(), "src/test/grants/scope-matches.tsv").readLines()
+            .filter { it.isNotEmpty() && !it.startsWith("#") }
+        assertTrue(rows.size > 10)
+        for (row in rows) {
+            val (scope, target, mode, granted) = row.split('\t')
+            val match = ScopeMatch.valueOf(mode.uppercase())
+            assertEquals(row, granted == "true", PluginPermissions.parse(listOf("x($scope)")).allows("x", target, match))
+        }
     }
 }

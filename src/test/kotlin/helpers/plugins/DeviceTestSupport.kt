@@ -172,13 +172,28 @@ fun canvasEngine(name: String, onLog: (String) -> Unit = {}): Plugin {
  * the engine closes, so a canvas answer still queued behind it is dropped instead of reaching a
  * closed engine in the next test
  */
-fun closeCanvasEngine(plugin: Plugin) {
+/** [startPlugin] on a real engine rather than a recorder, for a test that evaluates plugin code; pair it with [closeEngine] */
+fun startEngine(name: String, vararg grants: String): Plugin {
+    val plugin = startPlugin(name, *grants)
+    plugin.session = PluginSession(plugin, QuickJs())
+    attachBridge(plugin.session!!, object : CoreListener {
+        override fun onConsole(level: Int, message: String) = Unit
+        override fun onTimerSchedule(delayMs: Long) = Unit
+    })
+    return plugin
+}
+
+fun closeEngine(plugin: Plugin) {
     val session = plugin.session ?: return
     session.engine.stopCallbacks()
     session.stopDispatching()
-    desu.inugram.helpers.plugins.ui.PluginCanvas.detach(session.engine)
     session.engine.close()
     plugin.session = null
+}
+
+fun closeCanvasEngine(plugin: Plugin) {
+    plugin.session?.let { desu.inugram.helpers.plugins.ui.PluginCanvas.detach(it.engine) }
+    closeEngine(plugin)
 }
 
 fun Plugin.js(code: String): String = engine!!.evaluate(code.trimIndent()) ?: "null"
@@ -294,7 +309,7 @@ fun attachBridge(
             androidDirs = "",
             installJvm = bridge.jvm != null,
             installXposed = bridge.xposed != null,
-            grants = session.manifest.grants,
+            grants = session.permissions,
         ),
     )
 }

@@ -4,7 +4,6 @@ import desu.inugram.core.plugins.PluginRefusal
 import desu.inugram.core.plugins.PluginWire.refuse
 import android.util.Log
 import desu.inugram.core.plugins.PluginWire
-import desu.inugram.core.plugins.ScopeMatch
 import desu.inugram.helpers.plugins.EngineDispatch
 import desu.inugram.helpers.plugins.Plugin
 import desu.inugram.helpers.plugins.PluginSession
@@ -60,23 +59,6 @@ object PluginWrites {
     /** batch results join their handles with this; keep in sync with rust `writes::SEPARATOR` */
     const val LIST_SEPARATOR = "\n"
 
-    private val GRANT_BY_OP = mapOf(
-        OP_SEND_MESSAGE to ("account.write" to "send"),
-        OP_SEND_MEDIA to ("account.write" to "send"),
-        OP_SEND_MULTI_MEDIA to ("account.write" to "send"),
-        OP_UPLOAD_FILE to ("account.write" to "send"),
-        OP_SET_SEND_MEDIA to ("account.write" to "send"),
-        OP_EDIT_MESSAGE to ("account.write" to "edit"),
-        OP_DELETE_MESSAGES to ("account.write" to "delete"),
-        OP_FORWARD_MESSAGES to ("account.write" to "forward"),
-        OP_SET_REACTION to ("account.write" to "react"),
-        OP_READ_HISTORY to ("account.write" to "read"),
-        OP_SEND_TYPING to ("account.write" to "typing"),
-        OP_SET_DRAFT to ("account.write" to "draft"),
-        OP_DOWNLOAD_MEDIA to ("account.read" to "messages"),
-        OP_DOWNLOAD_MEDIA_TO_FILE to ("account.read" to "messages"),
-    )
-
     fun listenerFor(session: PluginSession): WritesListener =
         object : WritesListener {
             override fun accountWrite(
@@ -99,11 +81,6 @@ object PluginWrites {
         arg: String,
         values: Array<String>,
     ): String? {
-        val grant = GRANT_BY_OP[op] ?: return PluginWire.encodePluginError("internal", "account write: unknown op $op")
-        // the engine's own check_grant already ran in native; this is the second gate, on the side that owns the data
-        if (!session.permissions.allows(grant.first, grant.second, ScopeMatch.EXACT)) {
-            return PluginWire.encodeNotGranted(grant.first, grant.second)
-        }
         val controller = PeerSpecs.controllerFor(accountId)
             ?: return PluginWire.encodePluginError("not-found", "account write: no account is logged in as #$accountId")
         return try {

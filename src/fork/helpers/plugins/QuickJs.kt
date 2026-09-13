@@ -1,5 +1,6 @@
 package desu.inugram.helpers.plugins
 
+import desu.inugram.core.plugins.PluginPermissions
 import java.util.concurrent.atomic.AtomicBoolean
 import org.telegram.messenger.Utilities
 
@@ -28,7 +29,7 @@ open class QuickJs {
         val androidDirs: String,
         val installJvm: Boolean,
         val installXposed: Boolean,
-        val grants: List<String>,
+        val grants: PluginPermissions,
     )
 
     /**
@@ -86,7 +87,7 @@ open class QuickJs {
             config.androidDirs,
             config.installJvm,
             config.installXposed,
-            config.grants.toTypedArray(),
+            config.grants.toPairs().toTypedArray(),
         )
         check(ptr != 0L) { "QuickJs initialization failed" }
     }

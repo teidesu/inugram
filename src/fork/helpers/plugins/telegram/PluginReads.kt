@@ -3,7 +3,6 @@ package desu.inugram.helpers.plugins.telegram
 import desu.inugram.core.plugins.PluginRefusal
 import desu.inugram.core.plugins.PluginWire.refuse
 import desu.inugram.core.plugins.PluginWire
-import desu.inugram.core.plugins.ScopeMatch
 import desu.inugram.helpers.plugins.EngineDispatch
 import desu.inugram.helpers.plugins.Plugin
 import desu.inugram.helpers.plugins.PluginSession
@@ -89,28 +88,6 @@ object PluginReads {
     /** the cap `common.d.ts` states for every api array, mirrored from rust `arguments::ARRAY_LIMIT` */
     private const val ARRAY_LIMIT = 65536
 
-    private val SCOPE_BY_OP = mapOf(
-        OP_ME to "self",
-        OP_USER to "peers",
-        OP_CHAT to "peers",
-        OP_PEER to "peers",
-        OP_DIALOG to "dialogs",
-        OP_MESSAGE to "messages",
-        OP_USERS to "peers",
-        OP_CHATS to "peers",
-        OP_MESSAGES to "messages",
-        OP_INPUT_PEER to "peers",
-        OP_DRAFT to "draft",
-        OP_USER_FULL to "peers",
-        OP_CHAT_FULL to "peers",
-        OP_HISTORY to "history",
-        OP_DIALOGS to "dialogs",
-        OP_TOPICS to "dialogs",
-        OP_DIALOGS_CACHED to "dialogs",
-        OP_CHAT_FOLDERS to "dialogs",
-        OP_FETCH_MESSAGES to "messages",
-    )
-
     fun listenerFor(session: PluginSession): ReadsListener =
         object : ReadsListener {
             override fun accountRead(accountId: Int, op: Int, arg: String): String =
@@ -124,13 +101,6 @@ object PluginReads {
         }
 
     private fun read(session: PluginSession, accountId: Int, op: Int, arg: String): String {
-        val scope = SCOPE_BY_OP[op] ?: return PluginWire.encodeError("account read: unknown op $op")
-        // the engine's own check_grant already ran in native; this is the same belt-and-braces
-        // second gate PluginKv keeps, on the side that owns the data
-        if (!session.permissions.allows("account.read", scope, ScopeMatch.EXACT)) {
-            return PluginWire.encodeNotGranted("account.read", scope)
-        }
-        if (!allowsSelf(session, arg)) return PluginWire.encodeNotGranted("account.read", "self")
         val handles = session.tl
         val controller = PeerSpecs.controllerFor(accountId)
             ?: return PluginWire.encodePluginError("not-found", "account read: no account is logged in as #$accountId")
@@ -184,14 +154,6 @@ object PluginReads {
 
     internal fun mintEach(handles: TlHandles, values: List<TLObject?>, fields: List<String>? = null): String =
         values.joinToString(PeerSpecs.LIST_SEPARATOR) { mint(handles, it, fields) }
-
-    /**
-     * answering `'me'` tells a plugin *which* peer you are - the identity `account.read(self)` gates
-     * on. Without it a plugin holding one `Account` per slot rebuilds `inu.accounts()` out of
-     * `getUser('me').id`. Checked after the op's own scope, and mirrored in `reads.rs`.
-     */
-    private fun allowsSelf(session: PluginSession, arg: String): Boolean =
-        !PeerSpecs.namesSelf(arg) || session.permissions.allows("account.read", "self", ScopeMatch.EXACT)
 
     private fun findUser(controller: MessagesController, accountId: Int, spec: String): TLRPC.User? {
         val id = PeerSpecs.dialogIdOf(controller, accountId, spec) ?: return null
@@ -306,8 +268,6 @@ object PluginReads {
         spec: String,
         kind: Int,
     ): String? {
-        if (!session.permissions.allows("account.read", "peers", ScopeMatch.EXACT)) return PluginWire.encodeNotGranted("account.read", "peers")
-        if (!allowsSelf(session, spec)) return PluginWire.encodeNotGranted("account.read", "self")
         val controller = PeerSpecs.controllerFor(accountId)
             ?: return PluginWire.encodePluginError("not-found", "resolvePeer: no account is logged in as #$accountId")
         if (spec.isEmpty() || spec[0] != PeerSpecs.SPEC_USERNAME) {
@@ -364,9 +324,6 @@ object PluginReads {
         args: String,
         cursor: String,
     ): String? {
-        val scope = SCOPE_BY_OP[op] ?: return PluginWire.encodePluginError("internal", "account fetch: unknown op $op")
-        if (!allowsFetch(session, op, peer)) return PluginWire.encodeNotGranted("account.read", scope)
-        if (!allowsSelf(session, peer)) return PluginWire.encodeNotGranted("account.read", "self")
         val controller = PeerSpecs.controllerFor(accountId)
             ?: return PluginWire.encodePluginError("not-found", "account fetch: no account is logged in as #$accountId")
         return try {
@@ -389,16 +346,6 @@ object PluginReads {
         }
     }
 
-    /** `getUserFull` on *yourself* is the one read allowed under `account.read(self)` alone, and "yourself" is the spec rather than a dialog id that happens to be yours */
-    private fun allowsFetch(session: PluginSession, op: Int, peer: String): Boolean {
-        if (op == OP_USER_FULL && peer.length == 1 && peer[0] == PeerSpecs.SPEC_SELF &&
-            session.permissions.allows("account.read", "self", ScopeMatch.EXACT)
-        ) {
-            return true
-        }
-        val scope = SCOPE_BY_OP[op] ?: return false
-        return session.permissions.allows("account.read", scope, ScopeMatch.EXACT)
-    }
 
     /** after a reload the plugin runs on a new engine whose request ids restart, so a stale settle must not reach it */
     private fun answer(call: Fetch, produce: () -> String) {
