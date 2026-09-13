@@ -186,7 +186,7 @@ class CanvasBenchTest {
      * the shape of one animated demotivator: a 720x720 source at 12fps, decoded and drawn into a
      * 616x800 frame that is then encoded. Three variants say where the time goes: decoding at the
      * target size against decoding whole and drawing down, and awaiting each frame against
-     * letting the encoder queue run ahead. The kotlin side of each is dumped under `InuCanvasStats`.
+     * letting the encoder queue run ahead.
      */
     @Test
     fun bench_animation_pipeline() {
