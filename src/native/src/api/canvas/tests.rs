@@ -72,9 +72,62 @@ impl OracleHost {
   }
 }
 
+/// a side request's fields in the order `PluginCanvas` reads them, joined so a test can pick one out
+fn render_request(op: i32, arg: &str, bytes: Option<&[u8]>) -> String {
+  if matches!(
+    op,
+    OP_REPLAY | OP_DESTROY | OP_RELEASE_IMAGE | OP_RELEASE_ANIMATION | OP_ENCODER_DESTROY | OP_CAPABILITIES
+  ) {
+    return arg.to_string();
+  }
+  let table = decode_table(arg);
+  let mut r = Reader { bytes: bytes.expect("a side request carries its fields as bytes"), at: 0 };
+  let text = |r: &mut Reader| table[r.u32() as usize].clone();
+  let mut out: Vec<String> = Vec::new();
+  match op {
+    OP_CREATE => out.extend([r.i32().to_string(), r.i32().to_string()]),
+    OP_AVERAGE => out.extend([r.f().to_string(), r.f().to_string(), r.f().to_string(), r.f().to_string()]),
+    OP_MEASURE => {
+      out.push(text(&mut r));
+      out.push(r.u8().to_string());
+      out.push(text(&mut r));
+    }
+    _ => {
+      out.push(r.i64().to_string());
+      match op {
+        OP_ENCODE => {
+          out.push(text(&mut r));
+          out.push(r.f().to_string());
+        }
+        OP_DECODE => out.push(text(&mut r)),
+        OP_LOAD_FONT => {
+          out.push(text(&mut r));
+          out.push(text(&mut r));
+        }
+        OP_DECODE_ANIMATION => {
+          out.extend([r.i32().to_string(), r.i32().to_string()]);
+          out.push(text(&mut r));
+        }
+        OP_ANIMATION_FRAME => out.extend([r.i64().to_string(), r.i32().to_string()]),
+        OP_ANIMATION_NEXT => out.push(r.i64().to_string()),
+        OP_ENCODER_CREATE => {
+          out.push(text(&mut r));
+          out.extend([r.i32().to_string(), r.i32().to_string(), r.i32().to_string(), r.i64().to_string()]);
+        }
+        OP_ENCODER_FRAME => out.extend([r.u8().to_string(), r.i64().to_string(), r.f().to_string()]),
+        _ => {}
+      }
+    }
+  }
+  assert_eq!(r.at, r.bytes.len(), "op {op} carried bytes the host does not read");
+  let separator = if matches!(op, OP_CREATE | OP_AVERAGE) { ",".to_string() } else { FIELD.to_string() };
+  out.join(&separator)
+}
+
 impl CanvasHost for OracleHost {
   fn canvas(&self, op: i32, id: i64, arg: &str, bytes: Option<&[u8]>) -> String {
-    self.log.borrow_mut().calls.push((op, id, arg.to_string()));
+    let rendered = render_request(op, arg, bytes);
+    self.log.borrow_mut().calls.push((op, id, rendered.clone()));
     if let Some((failing, message)) = self.fail.borrow().as_ref() {
       if *failing == op {
         return message.clone();
@@ -110,7 +163,7 @@ impl CanvasHost for OracleHost {
       }
       OP_ENCODE | OP_DECODE | OP_LOAD_FONT | OP_LIST_FONTS | OP_DECODE_ANIMATION | OP_ANIMATION_FRAME
       | OP_ANIMATION_NEXT | OP_ENCODER_CREATE | OP_ENCODER_FRAME | OP_ENCODER_FINISH => {
-        let request = arg.split(FIELD).next().and_then(|v| v.parse().ok()).unwrap_or(0);
+        let request = rendered.split(FIELD).next().and_then(|v| v.parse().ok()).unwrap_or(0);
         self.pending.borrow_mut().push(request);
         self.reply.borrow().clone().unwrap_or_default()
       }

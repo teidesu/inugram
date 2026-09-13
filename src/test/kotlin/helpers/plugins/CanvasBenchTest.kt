@@ -7,6 +7,8 @@ import android.graphics.Rect
 import android.util.Log
 import desu.inugram.helpers.plugins.ui.PluginCanvas
 import java.io.ByteArrayOutputStream
+import java.nio.ByteBuffer
+import java.nio.ByteOrder
 import org.json.JSONObject
 import org.junit.After
 import org.junit.Before
@@ -364,8 +366,10 @@ class CanvasBenchTest {
     fun bench_host_listener() {
         val plugin = engineFor()
         val listener = PluginCanvas.listenerFor(plugin.session!!)
-        val field = '\u001e'
-        val arg = "48.0${field}400${field}0${field}0${field}serif${field}0${field}$text"
+        val font = "48.0\u001e400\u001e0\u001e0\u001eserif"
+        val table = listOf(font, text).joinToString("") { "${it.length}\u001f$it" }
+        val fields = ByteBuffer.allocate(9).order(ByteOrder.LITTLE_ENDIAN).putInt(0).put(0).putInt(1).array()
+        val size = ByteBuffer.allocate(8).order(ByteOrder.LITTLE_ENDIAN).putInt(64).putInt(64).array()
         val count = 200
 
         fun rounds(round: () -> Unit): Double = (1..3).map {
@@ -374,12 +378,7 @@ class CanvasBenchTest {
             (System.nanoTime() - start) / 1_000_000.0
         }.last()
 
-        val measure = rounds { listener.canvas(PluginCanvas.OP_MEASURE, 0, arg, null) }
-        val split = rounds {
-            val fields = arg.split(field)
-            fields.take(5).joinToString(field.toString())
-            fields.drop(6).joinToString(field.toString())
-        }
+        val measure = rounds { listener.canvas(PluginCanvas.OP_MEASURE, 0, table, fields) }
         val library = rounds { desu.inugram.helpers.font.FontLibrary.getTypefaceByName("serif", 400, false) }
         val byName = rounds { android.graphics.Typeface.create("serif", android.graphics.Typeface.NORMAL) }
         val styled = rounds {
@@ -388,14 +387,13 @@ class CanvasBenchTest {
         var id = 0L
         val create = rounds {
             id++
-            listener.canvas(PluginCanvas.OP_CREATE, id, "64,64", null)
+            listener.canvas(PluginCanvas.OP_CREATE, id, "", size)
             listener.canvas(PluginCanvas.OP_DESTROY, id, "", null)
         }
         Log.i(
             "InuBench",
             "host listener, $count each:" +
                 " measure=${"%.1f".format(measure / count * 1000)}us" +
-                " argSplit=${"%.1f".format(split / count * 1000)}us" +
                 " fontLibraryByName=${"%.1f".format(library / count * 1000)}us" +
                 " typefaceCreateByName=${"%.1f".format(byName / count * 1000)}us" +
                 " typefaceCreateStyled=${"%.1f".format(styled / count * 1000)}us" +
