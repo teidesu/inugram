@@ -179,11 +179,11 @@ impl ReadsHost for JniBridge {
     )
   }
 
-  fn account_fetch(&self, account_id: i32, request_id: i64, op: i32, arg: &str) -> Option<String> {
+  fn account_fetch(&self, account_id: i32, request_id: i64, op: i32, peer: &str, args: &str, cursor: &str) -> Option<String> {
     self.call_refusal(
       "accountFetch",
       self.on_account_fetch,
-      &[Arg::Int(account_id), Arg::Long(request_id), Arg::Int(op), Arg::Str(arg)],
+      &[Arg::Int(account_id), Arg::Long(request_id), Arg::Int(op), Arg::Str(peer), Arg::Str(args), Arg::Str(cursor)],
     )
   }
 }

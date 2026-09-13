@@ -45,14 +45,12 @@
   const RESOLVE_CONCURRENCY = 8
 
   // 0 is "no limit" for an iterator, which is what an omitted one means: it pages to the end
-  const toLimit = (value, what) => Number(toCount(value, what, 'limit'))
+  const toLimit = (value, what) => toCount(value, what, 'limit')
 
   // keep in sync with rust `reads::ARCHIVE_*` and Kotlin `PluginReads.ARCHIVE_*`
   // a Map rather than an object literal: `archive` is plugin input, and a lookup on a literal
   // answers for 'constructor' and friends too
   const ARCHIVE = new Map([['exclude', 0], ['only', 1], ['keep', 2]])
-  // every chat folder id is a real one, `0` being "All chats", so absence needs a value of its own
-  const NO_CHAT_FOLDER = -1
 
   const toArchive = (value, what) => {
     if (value === undefined || value === null) return ARCHIVE.get('exclude')
@@ -62,7 +60,7 @@
   }
 
   const toBatch = (value, what) => {
-    const size = Number(toCount(value, what, 'batchSize'))
+    const size = toCount(value, what, 'batchSize')
     return size === 0 ? BATCH_SIZE : size
   }
 
@@ -78,8 +76,8 @@
   const fetchWith = (account, op, what, build) => {
     try {
       const slot = slotOf(account, what)
-      const [arg, cursor] = build()
-      return natives.fetch(slot, op, arg, cursor)
+      const [peer, args, cursor = ''] = build()
+      return natives.fetch(slot, op, peer, JSON.stringify(args), cursor)
     } catch (e) {
       return Promise.reject(e)
     }
@@ -169,7 +167,7 @@
         const ids = one
           ? [toMessageId(messageIds, 'getMessages')]
           : toMessageIds(messageIds, 'getMessages')
-        return [[spec, ...ids].join(SEPARATOR), '']
+        return [spec, { ids }]
       }).then(messages => (one ? wrap(messages[0] ?? null) : messages.map(wrap)))
     },
 
@@ -221,30 +219,29 @@
     getDraft(peer, options) {
       const slot = slotOf(this, 'getDraft')
       const opts = toOptions(options, 'getDraft')
-      return natives.getDraft(slot, toSpec(peer), toCount(opts.topicId, 'getDraft', 'topicId'))
+      return natives.getDraft(slot, toSpec(peer), String(toCount(opts.topicId, 'getDraft', 'topicId')))
     },
 
     getUserFull(peer) {
-      return fetchWith(this, ops.userFull, 'getUserFull', () => [toSpec(peer), ''])
+      return fetchWith(this, ops.userFull, 'getUserFull', () => [toSpec(peer), {}])
     },
 
     getChatFull(peer) {
-      return fetchWith(this, ops.chatFull, 'getChatFull', () => [toSpec(peer), ''])
+      return fetchWith(this, ops.chatFull, 'getChatFull', () => [toSpec(peer), {}])
     },
 
     getHistory(peer, options) {
       return fetchWith(this, ops.history, 'getHistory', () => {
         const opts = toOptions(options, 'getHistory')
         return [
-          [
-            toSpec(peer),
-            toCount(opts.limit, 'getHistory', 'limit'),
-            toCount(opts.offsetId, 'getHistory', 'offsetId'),
-            toCount(opts.minId, 'getHistory', 'minId'),
-            toCount(opts.maxId, 'getHistory', 'maxId'),
-            toCount(opts.topicId, 'getHistory', 'topicId'),
-          ].join(SEPARATOR),
-          '',
+          toSpec(peer),
+          {
+            limit: toCount(opts.limit, 'getHistory', 'limit'),
+            offsetId: toCount(opts.offsetId, 'getHistory', 'offsetId'),
+            minId: toCount(opts.minId, 'getHistory', 'minId'),
+            maxId: toCount(opts.maxId, 'getHistory', 'maxId'),
+            topicId: toCount(opts.topicId, 'getHistory', 'topicId'),
+          },
         ]
       }).then(messages => messages.map(wrap))
     },
@@ -253,11 +250,12 @@
       return fetchWith(this, ops.dialogs, 'getDialogs', () => {
         const opts = toOptions(options, 'getDialogs')
         return [
-          [
-            toCount(opts.folderId, 'getDialogs', 'folderId'),
-            toCount(opts.limit, 'getDialogs', 'limit'),
-            toFieldNames(opts.fields, 'getDialogs'),
-          ].join(SEPARATOR),
+          '',
+          {
+            folderId: toCount(opts.folderId, 'getDialogs', 'folderId'),
+            limit: toCount(opts.limit, 'getDialogs', 'limit'),
+            fields: toFieldNames(opts.fields, 'getDialogs'),
+          },
           toCursor(opts.cursor, 'getDialogs'),
         ]
       })
@@ -274,26 +272,27 @@
           throw invalid('getDialogsCached: name either archive or chatFolderId, not both')
         }
         return [
-          [
-            toArchive(opts.archive, 'getDialogsCached'),
-            named ? toCount(folder, 'getDialogsCached', 'chatFolderId') : NO_CHAT_FOLDER,
-            toCount(opts.limit, 'getDialogsCached', 'limit'),
-            toFieldNames(opts.fields, 'getDialogsCached'),
-          ].join(SEPARATOR),
           '',
+          {
+            archive: toArchive(opts.archive, 'getDialogsCached'),
+            chatFolderId: named ? toCount(folder, 'getDialogsCached', 'chatFolderId') : null,
+            limit: toCount(opts.limit, 'getDialogsCached', 'limit'),
+            fields: toFieldNames(opts.fields, 'getDialogsCached'),
+          },
         ]
       })
     },
 
     getChatFoldersCached() {
-      return fetchWith(this, ops.chatFolders, 'getChatFoldersCached', () => ['', ''])
+      return fetchWith(this, ops.chatFolders, 'getChatFoldersCached', () => ['', {}])
     },
 
     getTopics(peer, options) {
       return fetchWith(this, ops.topics, 'getTopics', () => {
         const opts = toOptions(options, 'getTopics')
         return [
-          [toSpec(peer), toCount(opts.limit, 'getTopics', 'limit')].join(SEPARATOR),
+          toSpec(peer),
+          { limit: toCount(opts.limit, 'getTopics', 'limit') },
           toCursor(opts.cursor, 'getTopics'),
         ]
       })
@@ -330,7 +329,7 @@
       const opts = toOptions(options, 'iterHistory')
       const limit = toLimit(opts.limit, 'iterHistory')
       const batch = toBatch(opts.batchSize, 'iterHistory')
-      let offsetId = Number(toCount(opts.offsetId, 'iterHistory', 'offsetId'))
+      let offsetId = toCount(opts.offsetId, 'iterHistory', 'offsetId')
       let sent = 0
       for (;;) {
         const page = await proto.getHistory.call(this, peer, {

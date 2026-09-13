@@ -191,7 +191,7 @@ impl JniBridge {
       on_tl_release: method("tlRelease", "(J)V")?,
       on_account_read: method("accountRead", "(IILjava/lang/String;)Ljava/lang/String;")?,
       on_resolve_peer: method("resolvePeer", "(IJLjava/lang/String;I)Ljava/lang/String;")?,
-      on_account_fetch: method("accountFetch", "(IJILjava/lang/String;)Ljava/lang/String;")?,
+      on_account_fetch: method("accountFetch", "(IJILjava/lang/String;Ljava/lang/String;Ljava/lang/String;)Ljava/lang/String;")?,
       on_account_write: method("accountWrite", "(IJILjava/lang/String;[Ljava/lang/String;)Ljava/lang/String;")?,
       on_message_file: method("messageFile", "(ILjava/lang/String;)Ljava/lang/String;")?,
       on_kv: method("kv", "(ILjava/lang/String;Ljava/lang/String;)Ljava/lang/String;")?,

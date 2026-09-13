@@ -147,26 +147,16 @@ object PluginWrites {
         val controller: MessagesController,
         val accountId: Int,
         val requestId: Long,
-        val json: JSONObject,
+        json: JSONObject,
         val values: Array<String>,
-    ) {
+    ) : JsonArgs(json) {
         fun peer(key: String = "peer", kind: Int = PeerSpecs.KIND_PEER): TLObject =
             writePeer(controller, accountId, json.optString(key), kind)
-
-        fun int(key: String): Int = if (json.isNull(key)) 0 else {
-            json.optString(key).toIntOrNull() ?: refuse("invalid-argument", "$key: expected a 32-bit integer")
-        }
-
-        fun flag(key: String): Boolean = if (json.isNull(key)) false else {
-            json.get(key) as? Boolean ?: refuse("invalid-argument", "$key: expected a boolean")
-        }
-
-        fun optedIn(key: String): Boolean = if (json.isNull(key)) true else flag(key)
 
         // android's org.json answers `optString` with the four characters "null" for a json null, where the reference implementation the bridge tests run against answers the fallback
         fun text(): String = if (json.isNull("text")) "" else json.optString("text")
 
-        fun ids(): List<Int> = intList(json.optJSONArray("ids"))
+        fun ids(): List<Int> = ints("ids")
     }
 
     /**
@@ -434,15 +424,6 @@ object PluginWrites {
             val entity = TlJson.fromJson(one) as? TLRPC.MessageEntity
                 ?: refuse("invalid-argument", "'${one.optString("_")}' is not a message entity")
             out.add(entity)
-        }
-        return out
-    }
-
-    private fun intList(array: JSONArray?): List<Int> {
-        if (array == null) return emptyList()
-        val out = ArrayList<Int>(array.length())
-        for (index in 0 until array.length()) {
-            out.add(array.optString(index).toIntOrNull() ?: refuse("invalid-argument", "not a message id"))
         }
         return out
     }

@@ -38,7 +38,7 @@ pub trait ReadsHost {
 
   fn resolve_peer(&self, account_id: i32, request_id: i64, spec: &str, kind: i32) -> Option<String>;
 
-  fn account_fetch(&self, account_id: i32, request_id: i64, op: i32, arg: &str) -> Option<String>;
+  fn account_fetch(&self, account_id: i32, request_id: i64, op: i32, peer: &str, args: &str, cursor: &str) -> Option<String>;
 }
 
 const SEPARATOR: char = '\n';
@@ -204,11 +204,8 @@ pub fn install_reads<'js>(
     let state = state.clone();
     natives.set(
       "getMessage",
-      Function::new(ctx.clone(), move |ctx: Ctx<'js>, slot: i32, spec: String, id: String| {
-        state.read_one(&ctx, OP_MESSAGE, slot, &{
-          let parts: &[&str] = &[&spec, &id];
-          parts.join("\n")
-        })
+      Function::new(ctx.clone(), move |ctx: Ctx<'js>, slot: i32, spec: String, id: i32| {
+        state.read_one(&ctx, OP_MESSAGE, slot, &format!("{spec}{SEPARATOR}{id}"))
       })?,
     )?;
   }
@@ -279,8 +276,8 @@ pub fn install_reads<'js>(
     let state = state.clone();
     natives.set(
       "fetch",
-      Function::new(ctx.clone(), move |ctx: Ctx<'js>, slot: i32, op: i32, arg: String, cursor: String| {
-        state.js_fetch(&ctx, slot, op, &arg, &cursor)
+      Function::new(ctx.clone(), move |ctx: Ctx<'js>, slot: i32, op: i32, peer: String, args: String, cursor: String| {
+        state.js_fetch(&ctx, slot, op, &peer, &args, &cursor)
       })?,
     )?;
   }
@@ -319,30 +316,28 @@ impl ReadsState {
     Ok(self.pending.park(ctx, shape, ask)?.into_value())
   }
 
-  fn js_fetch<'js>(&self, ctx: &Ctx<'js>, slot: i32, op: i32, arg: &str, cursor: &str) -> JsResult<Value<'js>> {
-    self.check_read_grant(ctx, op, arg)?;
+  fn js_fetch<'js>(
+    &self,
+    ctx: &Ctx<'js>,
+    slot: i32,
+    op: i32,
+    peer: &str,
+    args: &str,
+    cursor: &str,
+  ) -> JsResult<Value<'js>> {
+    self.check_read_grant(ctx, op, peer)?;
     let shape = shape_of(op);
-    let host_arg = match shape {
-      Shape::Page(list) => {
-        let payload = if cursor.is_empty() {
-          String::new()
-        } else {
-          match self.cursors.payload_of(list, cursor) {
-            Some(payload) => payload,
-            None => {
-              return PluginErrorCode::InvalidArgument
-                .throw(ctx, "this cursor did not come from this list, or is too old to page from")
-            }
-          }
-        };
-        {
-          let parts: &[&str] = &[arg, &payload];
-          parts.join("\n")
+    let payload = match shape {
+      Shape::Page(list) if !cursor.is_empty() => match self.cursors.payload_of(list, cursor) {
+        Some(payload) => payload,
+        None => {
+          return PluginErrorCode::InvalidArgument
+            .throw(ctx, "this cursor did not come from this list, or is too old to page from")
         }
-      }
-      _ => arg.to_string(),
+      },
+      _ => String::new(),
     };
-    self.park(ctx, shape, |request_id| self.host.account_fetch(slot, request_id, op, &host_arg))
+    self.park(ctx, shape, |request_id| self.host.account_fetch(slot, request_id, op, peer, args, &payload))
   }
 
   fn decode_list<'js>(&self, ctx: &Ctx<'js>, wire: &str) -> JsResult<Array<'js>> {

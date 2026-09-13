@@ -39,7 +39,7 @@ struct TestReadsHost {
   reads: RefCell<Vec<(i32, i32, String)>>,
   resolves: RefCell<Vec<(i64, String, i32)>>,
   fetches: RefCell<Vec<(i64, i32, String)>>,
-  /// every fetch that ever crossed, never drained - `fetches` is the queue, this is the record
+  /// every fetch that ever crossed as `peer|args|cursor`, never drained - `fetches` is the queue, this is the record
   fetch_log: RefCell<Vec<(i32, String)>>,
 }
 
@@ -234,14 +234,14 @@ impl TestReadsHost {
 
   /// id 7 exists wherever it is asked for, including the common box; everything else is a `null`
   /// in the slot it was asked about, which is what the fetch has to keep lined up
-  fn messages_wire(&self, parts: Vec<&str>) -> String {
-    if parts[0] != "D0" && self.dialog_id(parts[0]).and_then(|id| self.entity(id)).is_none() {
+  fn messages_wire(&self, spec: &str, ids: &[i64]) -> String {
+    if spec != "D0" && self.dialog_id(spec).and_then(|id| self.entity(id)).is_none() {
       return NOT_CACHED.to_string();
     }
-    parts[1..]
+    ids
       .iter()
       .map(|id| {
-        if *id != "7" {
+        if *id != 7 {
           return "N".to_string();
         }
         self.handle_wire(FakeObject {
@@ -264,17 +264,19 @@ impl TestReadsHost {
   }
 
   /// what the host answers a fetch with, once the test has decided to let it through
-  fn answer_fetch(&self, op: i32, arg: &str) -> String {
-    let parts: Vec<&str> = arg.split(SEPARATOR).collect();
+  fn answer_fetch(&self, op: i32, crossed: &str) -> String {
+    let mut parts = crossed.splitn(3, '|');
+    let (peer, args, cursor) = (parts.next().unwrap(), parts.next().unwrap(), parts.next().unwrap());
+    let args: serde_json::Value = serde_json::from_str(args).expect("fetch args are json");
     match op {
-      OP_USER_FULL => match self.dialog_id(parts[0]).filter(|id| *id > 0).and_then(|id| self.entity(id)) {
+      OP_USER_FULL => match self.dialog_id(peer).filter(|id| *id > 0).and_then(|id| self.entity(id)) {
         None => NOT_CACHED.to_string(),
         Some(entity) => self.handle_wire(FakeObject {
           name: "userFull".to_string(),
           fields: vec![("id".to_string(), format!("S{}", entity.id)), ("about".to_string(), "Sbio".to_string())],
         }),
       },
-      OP_CHAT_FULL => match self.dialog_id(parts[0]).filter(|id| *id < 0).and_then(|id| self.entity(id)) {
+      OP_CHAT_FULL => match self.dialog_id(peer).filter(|id| *id < 0).and_then(|id| self.entity(id)) {
         None => wrong_kind(KIND_CHANNEL),
         Some(entity) => self.handle_wire(FakeObject {
           name: "channelFull".to_string(),
@@ -282,12 +284,14 @@ impl TestReadsHost {
         }),
       },
       OP_HISTORY => {
-        let limit = parts.get(1).and_then(|l| l.parse().ok()).unwrap_or(0usize);
-        self.history_wire(parts[0], limit)
+        let limit = args["limit"].as_u64().unwrap_or(0) as usize;
+        self.history_wire(peer, limit)
       }
-      OP_FETCH_MESSAGES => self.messages_wire(parts),
-      // the cursor payload rust appends lands after the argument's own three parts
-      OP_DIALOGS => self.dialog_page_wire(parts.get(3).copied().unwrap_or("")),
+      OP_FETCH_MESSAGES => {
+        let ids: Vec<i64> = args["ids"].as_array().unwrap().iter().map(|id| id.as_i64().unwrap()).collect();
+        self.messages_wire(peer, &ids)
+      }
+      OP_DIALOGS => self.dialog_page_wire(cursor),
       // the selector is what the prelude builds, and `fetch_log` is where a test reads it back;
       // the answer only has to be well formed for the array and object shapes to be exercised
       OP_DIALOGS_CACHED => self.dialog_wire("S"),
@@ -402,11 +406,12 @@ impl ReadsHost for TestReadsHost {
     None
   }
 
-  fn account_fetch(&self, _account_id: i32, request_id: i64, op: i32, arg: &str) -> Option<String> {
+  fn account_fetch(&self, _account_id: i32, request_id: i64, op: i32, peer: &str, args: &str, cursor: &str) -> Option<String> {
     // parked for the same reason a resolve is: answering here would re-enter the context
     // this call is already inside
-    self.fetch_log.borrow_mut().push((op, arg.to_string()));
-    self.fetches.borrow_mut().push((request_id, op, arg.to_string()));
+    let crossed = format!("{peer}|{args}|{cursor}");
+    self.fetch_log.borrow_mut().push((op, crossed.clone()));
+    self.fetches.borrow_mut().push((request_id, op, crossed));
     None
   }
 }
@@ -737,7 +742,7 @@ fn a_drafts_topic_id_reaches_the_host() {
   assert_eq!(host.reads.borrow().last().unwrap().2, "S\n0");
   assert_eq!(
     catch_json(&ctx, "inu.account().getDraft('me', { topicId: -1 })"),
-    r#"[true,"invalid-argument",null,"getDraft: topicId must be a non-negative integer"]"#,
+    r#"[true,"invalid-argument",null,"getDraft: topicId must be a non-negative 32-bit integer"]"#,
   );
 }
 
@@ -1067,19 +1072,18 @@ fn paging_hands_the_host_back_its_own_offsets_and_ends_at_a_short_page() {
   let asked: Vec<String> = host.fetch_log.borrow().iter().map(|(_, arg)| arg.clone()).collect();
   assert_eq!(
     asked,
-    vec!["0\n2\n\n", "0\n2\n\n1715540640,7,111"],
+    vec![r#"|{"folderId":0,"limit":2,"fields":null}|"#, r#"|{"folderId":0,"limit":2,"fields":null}|1715540640,7,111"#],
     "the second page carries the host's own offsets"
   );
 }
 
-/// the same part `getDialogsCached` takes them in, so both dialog reads spell it one way. It sits
-/// before the cursor because rust appends that payload after whatever the argument already carries
+/// the same key `getDialogsCached` takes them in, so both dialog reads spell it one way
 #[test]
-fn a_paged_dialog_read_names_fields_in_the_part_before_the_cursor() {
+fn a_paged_dialog_read_names_fields_beside_its_cursor() {
   let (rt, ctx, host, state, _accounts) = setup(ASYNC_GRANTS);
   eval_void(&ctx, "inu.account().getDialogs({ limit: 2, fields: ['top_message'] })");
   settle(&rt, &ctx, &state, &host);
-  assert_eq!(host.fetch_log.borrow().last().unwrap().1, "0\n2\ntop_message\n");
+  assert_eq!(host.fetch_log.borrow().last().unwrap().1, r#"|{"folderId":0,"limit":2,"fields":["top_message"]}|"#);
 }
 
 /// an iterator names them on every page it asks for, or only the first would carry anything
@@ -1092,8 +1096,8 @@ fn an_iterator_passes_fields_to_every_page() {
        })()"#,
   );
   assert_eq!(asked.len(), 2);
-  assert_eq!(asked[0].1, "0\n2\ntop_message\n");
-  assert_eq!(asked[1].1, "0\n2\ntop_message\n1715540640,7,111");
+  assert_eq!(asked[0].1, r#"|{"folderId":0,"limit":2,"fields":["top_message"]}|"#);
+  assert_eq!(asked[1].1, r#"|{"folderId":0,"limit":2,"fields":["top_message"]}|1715540640,7,111"#);
 }
 
 #[test]
@@ -1170,7 +1174,7 @@ fn an_iterator_pages_until_the_list_runs_out() {
   // the fake answers one full page then a short one, so this is both pages and the stop
   assert_eq!(out, r#"["dialog","dialog","dialog","end"]"#);
   assert_eq!(asked.len(), 2, "the second page is the cursor's, and there is no third");
-  assert_eq!(asked[1].1, "0\n2\n\n1715540640,7,111", "it pages with the host's own offsets");
+  assert_eq!(asked[1].1, r#"|{"folderId":0,"limit":2,"fields":null}|1715540640,7,111"#, "it pages with the host's own offsets");
 }
 
 /// `limit` is a total and cuts the last page short, which is the difference between it and
@@ -1195,7 +1199,11 @@ fn an_iterator_uses_the_default_page_size() {
     "(async () => { for await (const d of inu.account().iterDialogs()) __out.push(d._) })()",
   );
   let stated = 100;
-  assert_eq!(asked[0].1, format!("0\n{stated}\n\n"), "the default batch is not the documented one");
+  assert_eq!(
+    asked[0].1,
+    format!(r#"|{{"folderId":0,"limit":{stated},"fields":null}}|"#),
+    "the default batch is not the documented one"
+  );
 }
 
 /// history has no cursor to hold, so the offset is this side's to advance - and a fake that
@@ -1210,8 +1218,14 @@ fn iter_history_advances_the_offset_and_stops_when_it_stops_moving() {
            })()"#,
   );
   assert_eq!(out, r#"[100,99,100,99,"end"]"#);
-  let offsets: Vec<&str> = asked.iter().map(|(_, arg)| arg.split(SEPARATOR).nth(2).unwrap()).collect();
-  assert_eq!(offsets, vec!["0", "99"], "the second page starts below the first page's oldest id");
+  let offsets: Vec<i64> = asked
+    .iter()
+    .map(|(_, crossed)| {
+      let args: serde_json::Value = serde_json::from_str(crossed.split('|').nth(1).unwrap()).unwrap();
+      args["offsetId"].as_i64().unwrap()
+    })
+    .collect();
+  assert_eq!(offsets, vec![0, 99], "the second page starts below the first page's oldest id");
   assert_eq!(asked.len(), 2, "a page that did not move the offset is the end of the history");
 }
 
@@ -1622,7 +1636,10 @@ fn a_cached_dialog_read_selects_the_main_list_by_default() {
   eval_void(&ctx, "inu.account().getDialogsCached()");
   settle(&rt, &ctx, &state, &host);
   // archive=exclude, no chat folder, no limit
-  assert_eq!(host.fetch_log.borrow().last().unwrap(), &(OP_DIALOGS_CACHED, "0\n-1\n0\n".to_string()));
+  assert_eq!(
+    host.fetch_log.borrow().last().unwrap(),
+    &(OP_DIALOGS_CACHED, r#"|{"archive":0,"chatFolderId":null,"limit":0,"fields":null}|"#.to_string())
+  );
 }
 
 #[test]
@@ -1631,7 +1648,11 @@ fn an_archive_mode_crosses_as_its_number() {
     let (rt, ctx, host, state, _accounts) = setup(ALL_GRANTS);
     eval_void(&ctx, &format!("inu.account().getDialogsCached({{ archive: '{mode}' }})"));
     settle(&rt, &ctx, &state, &host);
-    assert_eq!(host.fetch_log.borrow().last().unwrap().1, format!("{encoded}\n-1\n0\n"), "mode: {mode}");
+    assert_eq!(
+      host.fetch_log.borrow().last().unwrap().1,
+      format!(r#"|{{"archive":{encoded},"chatFolderId":null,"limit":0,"fields":null}}|"#),
+      "mode: {mode}"
+    );
   }
 }
 
@@ -1675,20 +1696,23 @@ fn a_chat_folder_id_crosses_and_zero_is_one_of_them() {
   let (rt, ctx, host, state, _accounts) = setup(ALL_GRANTS);
   eval_void(&ctx, "inu.account().getDialogsCached({ chatFolderId: 0 })");
   settle(&rt, &ctx, &state, &host);
-  assert_eq!(host.fetch_log.borrow().last().unwrap().1, "0\n0\n0\n");
+  assert_eq!(host.fetch_log.borrow().last().unwrap().1, r#"|{"archive":0,"chatFolderId":0,"limit":0,"fields":null}|"#);
   eval_void(&ctx, "inu.account().getDialogsCached({ chatFolderId: 3, limit: 20 })");
   settle(&rt, &ctx, &state, &host);
-  assert_eq!(host.fetch_log.borrow().last().unwrap().1, "0\n3\n20\n");
+  assert_eq!(host.fetch_log.borrow().last().unwrap().1, r#"|{"archive":0,"chatFolderId":3,"limit":20,"fields":null}|"#);
 }
 
-/// the names ride in a part of their own, comma-joined. Nothing about the wire knows which fields
-/// a constructor has: what to do with a name is the host's, and an unknown one is simply not carried
+/// Nothing about the wire knows which fields a constructor has: what to do with a name is the
+/// host's, and an unknown one is simply not carried
 #[test]
-fn named_fields_cross_as_a_part_of_their_own() {
+fn named_fields_cross_as_an_array() {
   let (rt, ctx, host, state, _accounts) = setup(ALL_GRANTS);
   eval_void(&ctx, "inu.account().getDialogsCached({ fields: ['top_message', 'peer'] })");
   settle(&rt, &ctx, &state, &host);
-  assert_eq!(host.fetch_log.borrow().last().unwrap().1, "0\n-1\n0\ntop_message,peer");
+  assert_eq!(
+    host.fetch_log.borrow().last().unwrap().1,
+    r#"|{"archive":0,"chatFolderId":null,"limit":0,"fields":["top_message","peer"]}|"#
+  );
 }
 
 /// a name is a java identifier or it is refused, so nothing a plugin passes can smuggle a separator
@@ -1708,6 +1732,31 @@ fn a_field_name_that_is_not_one_never_reaches_the_host() {
     r#"["invalid-argument","invalid-argument","invalid-argument","invalid-argument","invalid-argument","invalid-argument"]"#
   );
   assert!(host.fetch_log.borrow().is_empty());
+}
+
+/// telegram's ids and counts are int32, so a wider one is refused where it is written rather than
+/// wrapped or read as zero by the host
+#[test]
+fn an_integer_past_int32_never_reaches_the_host() {
+  let (rt, ctx, host, state, _accounts) = setup(ALL_GRANTS);
+  eval_void(
+    &ctx,
+    r#"globalThis.__out = [];
+       const push = e => __out.push(e.code);
+       const a = inu.account();
+       a.getHistory('me', { limit: 2 ** 31 }).catch(push);
+       a.getHistory('me', { offsetId: 1e21 }).catch(push);
+       a.getMessages('me', [2 ** 31]).catch(push);
+       a.getDialogsCached({ chatFolderId: '99999999999' }).catch(push);
+       try { a.getMessagesCached('me', -(2 ** 31) - 1) } catch (e) { push(e) }"#,
+  );
+  settle(&rt, &ctx, &state, &host);
+  assert_eq!(
+    eval_json(&ctx, "__out"),
+    r#"["invalid-argument","invalid-argument","invalid-argument","invalid-argument","invalid-argument"]"#
+  );
+  assert!(host.fetch_log.borrow().is_empty());
+  assert!(host.reads.borrow().is_empty());
 }
 
 #[test]

@@ -70,7 +70,8 @@ interface ReadsListener {
 
     fun resolvePeer(accountId: Int, requestId: Long, spec: String, kind: Int): String?
 
-    fun accountFetch(accountId: Int, requestId: Long, op: Int, arg: String): String?
+    /** [peer] is a spec or empty, [args] the op's JSON object, [cursor] a page payload this side minted or empty */
+    fun accountFetch(accountId: Int, requestId: Long, op: Int, peer: String, args: String, cursor: String): String?
 }
 
 interface WritesListener {

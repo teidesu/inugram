@@ -231,7 +231,7 @@ impl ReadsHost for SelfOnlyReadsHost {
     Some("Pnot-found\n\n\n\nnot cached".to_string())
   }
 
-  fn account_fetch(&self, _a: i32, _r: i64, _o: i32, _g: &str) -> Option<String> {
+  fn account_fetch(&self, _a: i32, _r: i64, _o: i32, _p: &str, _g: &str, _c: &str) -> Option<String> {
     Some("Pnot-found\n\n\n\nnot cached".to_string())
   }
 }
@@ -454,8 +454,8 @@ fn a_peer_crosses_as_a_spec_and_the_options_as_scalars() {
   assert_eq!(*op, OP_SEND_MESSAGE);
   assert!(arg.contains(r#""peer":"Udurov""#), "got: {arg}");
   assert!(arg.contains(r#""sendAs":"D-1001""#), "got: {arg}");
-  assert!(arg.contains(r#""replyTo":"5""#) && arg.contains(r#""topicId":"9""#), "got: {arg}");
-  assert!(arg.contains(r#""silent":true"#) && arg.contains(r#""scheduleDate":"100""#), "got: {arg}");
+  assert!(arg.contains(r#""replyTo":5"#) && arg.contains(r#""topicId":9"#), "got: {arg}");
+  assert!(arg.contains(r#""silent":true"#) && arg.contains(r#""scheduleDate":100"#), "got: {arg}");
   assert!(values.is_empty(), "a text send carries no values");
   assert_eq!(out, r#"["sent"]"#);
 }
