@@ -295,4 +295,42 @@ class TlProxyBenchTest {
         assertEquals(count, last.getInt("kinds"))
         assertEquals(count - count / 4, last.getInt("users"))
     }
+    /**
+     * many small async reads at once, so what dominates is the settle path each one takes - the host
+     * call, the queue hop back, the native settle and the promise job - rather than the payload
+     */
+    @Test
+    fun bench_settle_round_trips() {
+        val count = 200
+        seed(1)
+        val plugin = engineFor()
+        val rounds = (1..6).map {
+            val start = System.nanoTime()
+            plugin.await(
+                """
+                (() => {
+                  const t0 = performance.now();
+                  const all = [];
+                  for (let i = 0; i < $count; i++) all.push(inu.account(0).getDialogsCached({ archive: 'keep' }));
+                  globalThis.submit = performance.now() - t0;
+                  Promise.all(all).then((lists) => {
+                    globalThis.settled = lists.length;
+                    globalThis.done = true;
+                  });
+                })()
+                """,
+            )
+            val total = (System.nanoTime() - start) / 1_000_000.0
+            assertEquals(count, plugin.js("globalThis.settled").toInt())
+            total to plugin.js("globalThis.submit").toDouble()
+        }
+        val warm = rounds.drop(1)
+        val total = warm.map { it.first }.sorted()[warm.size / 2]
+        val submit = warm.map { it.second }.sorted()[warm.size / 2]
+        Log.i(
+            "InuBench",
+            "settle round trips, $count at once, median of ${warm.size}: total=${"%.2f".format(total)}ms" +
+                " submit=${"%.2f".format(submit)}ms perSettle=${"%.1f".format(total / count * 1000)}us",
+        )
+    }
 }

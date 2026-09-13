@@ -26,7 +26,7 @@ import kotlin.test.assertTrue
  * path reads to describe it as an animation rather than as a file.
  */
 class PluginCanvasAnimationTest {
-    private val engines = ArrayList<QuickJs>()
+    private val plugins = ArrayList<Plugin>()
 
     @Before
     fun setUp() {
@@ -35,19 +35,15 @@ class PluginCanvasAnimationTest {
 
     @After
     fun tearDown() {
-        for (engine in engines) {
-            engine.stopCallbacks()
-            PluginCanvas.detach(engine)
-            engine.close()
-        }
-        engines.clear()
+        plugins.forEach(::closeCanvasEngine)
+        plugins.clear()
     }
 
     /** the store is named after the plugin, so a run starts with whatever the last one wrote gone */
     private fun engineFor(): Plugin =
         canvasEngine("canvas-animation") { Log.d(TAG, it) }.also {
             PluginCanvas.wipe(it.id)
-            engines.add(it.engine!!)
+            plugins.add(it)
         }
 
     private fun encodedFiles(plugin: Plugin): List<File> =
