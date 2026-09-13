@@ -1,5 +1,6 @@
 package desu.inugram.helpers.plugins.ui
 
+import desu.inugram.core.plugins.OwnerRegistry
 import desu.inugram.helpers.plugins.SessionResource
 import android.app.Activity
 import android.content.Intent
@@ -43,16 +44,18 @@ internal object PluginFilePicker : SessionResource {
 
     private var nextRequest = 0
 
-    /** ui thread only: the result observers a plugin is still waiting on */
-    private val waiting = HashMap<PluginSession, MutableList<NotificationCenter.NotificationCenterDelegate>>()
+    /** the result observers a plugin is still waiting on */
+    private val waiting = OwnerRegistry<PluginSession, NotificationCenter.NotificationCenterDelegate>()
 
     /** a copy made for a plugin nobody is waiting for any more is deleted rather than left in its spill directory */
     private class Picked(val wire: String, val copies: List<File> = emptyList())
 
     override fun detach(session: PluginSession) {
+        val observers = waiting.take(session)
+        if (observers.isEmpty()) return
         AndroidUtilities.runOnUIThread {
             val center = NotificationCenter.getGlobalInstance()
-            waiting.remove(session)?.forEach { center.removeObserver(it, NotificationCenter.onActivityResultReceived) }
+            observers.forEach { center.removeObserver(it, NotificationCenter.onActivityResultReceived) }
         }
     }
 
@@ -124,7 +127,7 @@ internal object PluginFilePicker : SessionResource {
                 override fun didReceivedNotification(id: Int, account: Int, vararg args: Any?) {
                     if (args.getOrNull(0) != code) return
                     center.removeObserver(this, NotificationCenter.onActivityResultReceived)
-                    waiting[session]?.remove(this)
+                    waiting.remove(session) { it === this }
                     val ok = args.getOrNull(1) == Activity.RESULT_OK
                     val data = args.getOrNull(2) as? Intent
                     Utilities.globalQueue.postRunnable {
@@ -141,13 +144,13 @@ internal object PluginFilePicker : SessionResource {
                 }
             }
             center.addObserver(observer, NotificationCenter.onActivityResultReceived)
-            waiting.getOrPut(session) { ArrayList() }.add(observer)
+            waiting.add(session, observer)
             try {
                 @Suppress("DEPRECATION")
                 activity.startActivityForResult(intent(), code)
             } catch (e: Throwable) {
                 center.removeObserver(observer, NotificationCenter.onActivityResultReceived)
-                waiting[session]?.remove(observer)
+                waiting.remove(session) { it === observer }
                 Log.e(TAG, "$name could not be opened", e)
                 settle(session, requestId, name, Picked(PluginWire.encodePluginError("unsupported", "$name: this device has no file picker")))
             }

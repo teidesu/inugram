@@ -1,5 +1,7 @@
 package desu.inugram.helpers.plugins.io
 
+import desu.inugram.helpers.plugins.SessionResource
+import desu.inugram.core.plugins.OwnerRegistry
 import desu.inugram.core.plugins.PluginRefusal
 import desu.inugram.core.plugins.EgressPolicy
 import desu.inugram.core.plugins.PluginPermissions
@@ -40,7 +42,7 @@ import org.telegram.messenger.Utilities
  * nothing decrements is one a remote server drives to the ceiling by answering every request with a
  * 302 and a big body.
  */
-object PluginFetch {
+object PluginFetch : SessionResource {
     /** past this, a chain is a loop somebody else is running. Same number chromium uses. */
     private const val MAX_REDIRECTS = 20
 
@@ -63,10 +65,10 @@ object PluginFetch {
         })
     }
 
-    /** a reload restarts request ids at 1, so two engines of one plugin can have a request #1 in the air, and the older finishing would take the newer one's entry off the map */
-    private data class FlightKey(val session: PluginSession, val requestId: Long)
+    private class InFlight(val requestId: Long, val flight: Flight)
 
-    private val flights = ConcurrentHashMap<FlightKey, Flight>()
+    /** per session rather than per plugin: a reload restarts request ids at 1, so two engines of one plugin can each have a request #1 in the air */
+    private val flights = OwnerRegistry<PluginSession, InFlight>()
     private val used = ConcurrentHashMap<String, AtomicLong>()
 
     /** four hops run at once on [transfers], and two reading the same clock would write one file */
@@ -102,23 +104,22 @@ object PluginFetch {
                 val spec = Spec.of(method, redirect, headers)
                 val bodiesDir = bodiesDir(session.plugin.id)
                     ?: return PluginWire.encodePluginError("internal", "fetch: there is nowhere to put a response body")
-                val key = FlightKey(session, requestId)
                 val flight = Flight()
-                flights[key] = flight
+                flights.add(session, InFlight(requestId, flight))
                 transfers.execute {
                     val delivery = try {
                         exchange(session.permissions, session.plugin.id, url, spec, body, bodiesDir, flight)
                     } catch (e: Throwable) {
                         Delivery(PluginWire.encodePluginError("internal", "fetch: ${e.message ?: e.toString()}"), null)
                     }
-                    flights.remove(key)
+                    flights.remove(session) { it.flight === flight }
                     EngineDispatch.scheduler.postRunnable { deliver(session, requestId, delivery, flight) }
                 }
                 return null
             }
 
             override fun abort(requestId: Long) {
-                flights.remove(FlightKey(session, requestId))?.cancel()
+                flights.remove(session) { it.requestId == requestId }?.flight?.cancel()
             }
         }
 
@@ -139,15 +140,15 @@ object PluginFetch {
         else session.engine.settle(QuickJs.SETTLE_FETCH, requestId, delivery.wire)
     }
 
+    /** a stopped plugin's requests stop with it, rather than finishing into a directory its teardown deletes */
+    override fun detach(session: PluginSession) {
+        for (inFlight in flights.take(session)) inFlight.flight.cancel()
+    }
+
     /** [PluginBlobs.wipe] already deletes the tree; this is what gives the budget back */
     fun wipe(installId: String) {
         used.remove(installId)
-        for ((key, flight) in flights) {
-            if (key.session.plugin.id == installId) {
-                flights.remove(key)
-                flight.cancel()
-            }
-        }
+        for (inFlight in flights.takeWhere { it.plugin.id == installId }) inFlight.flight.cancel()
     }
 
     fun budgetFor(installId: String): AtomicLong = used.getOrPut(installId) { AtomicLong(0) }

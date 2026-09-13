@@ -1,5 +1,6 @@
 package desu.inugram.helpers.plugins.platform
 
+import desu.inugram.core.plugins.OwnerRegistry
 import desu.inugram.helpers.plugins.SessionResource
 import desu.inugram.core.plugins.PluginWire
 import desu.inugram.helpers.plugins.EngineDispatch
@@ -54,7 +55,7 @@ object PluginNotifications : SessionResource {
         var observer: NotificationCenter.NotificationCenterDelegate? = null
     }
 
-    private val live = HashMap<PluginSession, MutableList<Registration>>()
+    private val live = OwnerRegistry<PluginSession, Registration>()
 
     fun listenerFor(session: PluginSession): NotificationListener =
         object : NotificationListener {
@@ -72,7 +73,7 @@ object PluginNotifications : SessionResource {
                 ?: return PluginWire.encodePluginError("invalid-argument", "no notification named '${events[index]}'")
         }
         val registration = Registration(session, callbackId, ids)
-        synchronized(live) { live.getOrPut(session) { ArrayList() }.add(registration) }
+        live.add(session, registration)
         AndroidUtilities.runOnUIThread {
             val observer = NotificationCenter.NotificationCenterDelegate { id, accountId, args ->
                 deliver(registration, id, accountId, args)
@@ -103,13 +104,7 @@ object PluginNotifications : SessionResource {
     }
 
     private fun stopObserving(session: PluginSession, callbackId: Int) {
-        val registration = synchronized(live) {
-            val mine = live[session] ?: return
-            val found = mine.firstOrNull { it.callbackId == callbackId } ?: return
-            mine.remove(found)
-            if (mine.isEmpty()) live.remove(session)
-            found
-        }
+        val registration = live.remove(session) { it.callbackId == callbackId } ?: return
         removeObserver(registration)
     }
 
@@ -125,8 +120,7 @@ object PluginNotifications : SessionResource {
     }
 
     override fun detach(session: PluginSession) {
-        val mine = synchronized(live) { live.remove(session) } ?: return
-        for (registration in mine) removeObserver(registration)
+        for (registration in live.take(session)) removeObserver(registration)
     }
 
     private fun encodeArgs(args: Array<Any?>): String {
