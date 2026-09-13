@@ -18,26 +18,22 @@ import kotlin.test.assertTrue
  * would be a list of names that draw as the default face.
  */
 class PluginCanvasFontsTest {
-    private val engines = ArrayList<QuickJs>()
+    private val plugins = ArrayList<Plugin>()
 
     @Before
     fun setUp() = resetBridge()
 
     @After
     fun tearDown() {
-        for (engine in engines) {
-            engine.stopCallbacks()
-            PluginCanvas.detach(engine)
-            engine.close()
-        }
-        engines.clear()
+        plugins.forEach(::closeCanvasEngine)
+        plugins.clear()
     }
 
     /** a name of its own per engine: the install id is the name's, and wiping one live store would take another's */
     private fun engineFor(name: String = "canvas-fonts"): Plugin =
         canvasEngine(name) { Log.d(TAG, it) }.also {
             PluginCanvas.wipe(it.id)
-            engines.add(it.engine!!)
+            plugins.add(it)
         }
 
     @Test

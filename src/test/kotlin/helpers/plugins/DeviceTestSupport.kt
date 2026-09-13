@@ -150,8 +150,7 @@ fun settle() {
 
 /**
  * A real engine with the real rasterizer behind it, for a suite whose subject is what the platform
- * does rather than what the bridge records. The caller owns it: `stopCallbacks`,
- * `PluginCanvas.detach` and `close`, in that order.
+ * does rather than what the bridge records. The caller owns it and hands it to [closeCanvasEngine].
  */
 fun canvasEngine(name: String, onLog: (String) -> Unit = {}): Plugin {
     val plugin = startPlugin(name)
@@ -168,6 +167,20 @@ fun canvasEngine(name: String, onLog: (String) -> Unit = {}): Plugin {
     return plugin
 }
 
+/**
+ * what `PluginManager.teardown` does for a [canvasEngine]: the session stops being current before
+ * the engine closes, so a canvas answer still queued behind it is dropped instead of reaching a
+ * closed engine in the next test
+ */
+fun closeCanvasEngine(plugin: Plugin) {
+    val session = plugin.session ?: return
+    session.engine.stopCallbacks()
+    session.stopDispatching()
+    desu.inugram.helpers.plugins.ui.PluginCanvas.detach(session.engine)
+    session.engine.close()
+    plugin.session = null
+}
+
 fun Plugin.js(code: String): String = engine!!.evaluate(code.trimIndent()) ?: "null"
 
 /** runs a promise-returning expression to settlement, failing the test with whatever it rejected with */
@@ -175,7 +188,7 @@ fun Plugin.await(code: String, timeoutMillis: Long = 20_000, pollMillis: Long = 
     js(
         "globalThis.done = false; globalThis.failure = null; ($code)"
             + ".then(() => { globalThis.done = true })"
-            + ".catch((e) => { globalThis.failure = String(e && e.stack || e); globalThis.done = true })",
+            + ".catch((e) => { globalThis.failure = e && e.stack ? String(e) + '\\n' + e.stack : String(e); globalThis.done = true })",
     )
     val deadline = System.currentTimeMillis() + timeoutMillis
     while (System.currentTimeMillis() < deadline) {

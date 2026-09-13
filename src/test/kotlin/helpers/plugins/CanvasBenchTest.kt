@@ -23,7 +23,7 @@ import kotlin.test.assertTrue
  * calls with no engine at all, so a slow op says which side it is.
  */
 class CanvasBenchTest {
-    private val engines = ArrayList<QuickJs>()
+    private val plugins = ArrayList<Plugin>()
     private val text = "Когда ты понял что это всё"
 
     @Before
@@ -33,16 +33,12 @@ class CanvasBenchTest {
 
     @After
     fun tearDown() {
-        for (engine in engines) {
-            engine.stopCallbacks()
-            PluginCanvas.detach(engine)
-            engine.close()
-        }
-        engines.clear()
+        plugins.forEach(::closeCanvasEngine)
+        plugins.clear()
     }
 
     private fun engineFor(): Plugin =
-        canvasEngine("canvas-bench") { Log.d("InuBench", it) }.also { engines.add(it.engine!!) }
+        canvasEngine("canvas-bench") { Log.d("InuBench", it) }.also { plugins.add(it) }
 
     private fun us(timings: JSONObject, key: String, count: Int) =
         "%.1fus".format(timings.getDouble(key) / count * 1000)
@@ -223,6 +219,7 @@ class CanvasBenchTest {
               const border = 20
               const width = 616
               const height = 800
+              const queueWindow = 8
               const run = async (label, decodeSize, awaitEach) => {
                 const r = { frames: 0, decode: 0, draw: 0, encode: 0 }
                 const total = performance.now()
@@ -246,7 +243,12 @@ class CanvasBenchTest {
                   r.draw += performance.now() - s
                   s = performance.now()
                   const p = encoder.addFrame(canvas)
-                  if (awaitEach) await p; else pending.push(p)
+                  if (awaitEach) await p
+                  else {
+                    pending.push(p)
+                    // each unsettled frame holds a frame of pixels against the native memory ceiling
+                    if (pending.length >= queueWindow) await pending.shift()
+                  }
                   r.encode += performance.now() - s
                   r.frames++
                   s = performance.now()
