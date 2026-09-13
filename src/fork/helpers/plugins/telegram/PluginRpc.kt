@@ -1330,7 +1330,7 @@ object PluginRpc {
         messageChats = options.optBoolean("messageChats")
         messageMegagroups = options.optBoolean("messageMegagroups")
         messageChannels = options.optBoolean("messageChannels")
-        fileMaxSize = options.optString("fileMaxSize").toLongOrNull() ?: 0L
+        fileMaxSize = options.optLong("fileMaxSize")
         files = fileMaxSize > 0L
     }
 

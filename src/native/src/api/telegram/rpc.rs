@@ -592,7 +592,7 @@ fn takeout_options_json<'js>(ctx: &Ctx<'js>, options: Option<Value<'js>>) -> JsR
     return Ok("{}".to_string());
   };
   let flag = |name: &str| -> JsResult<bool> { Ok(options.get::<_, Option<bool>>(name)?.unwrap_or(false)) };
-  let file_max_size = match options.get::<_, Value>("fileMaxSize") {
+  let file_max_size: i64 = match options.get::<_, Value>("fileMaxSize") {
     Ok(value) if !value.is_undefined() && !value.is_null() => match value.as_number() {
       Some(size) if size.fract() == 0.0 && size > 0.0 => size as i64,
       _ => {
@@ -602,18 +602,16 @@ fn takeout_options_json<'js>(ctx: &Ctx<'js>, options: Option<Value<'js>>) -> JsR
     },
     _ => 0,
   };
-  Ok(format!(
-    concat!(
-      r#"{{"contacts":{},"messageUsers":{},"messageChats":{},"messageMegagroups":{},"#,
-      r#""messageChannels":{},"fileMaxSize":"{}"}}"#
-    ),
-    flag("contacts")?,
-    flag("messageUsers")?,
-    flag("messageChats")?,
-    flag("messageMegagroups")?,
-    flag("messageChannels")?,
-    file_max_size,
-  ))
+  let out = Object::new(ctx.clone())?;
+  for name in ["contacts", "messageUsers", "messageChats", "messageMegagroups", "messageChannels"] {
+    out.set(name, flag(name)?)?;
+  }
+  out.set("fileMaxSize", file_max_size as f64)?;
+  ctx
+    .json_stringify(out)?
+    .map(|s| s.to_string())
+    .transpose()?
+    .ok_or_else(|| Exception::throw_message(ctx, "initTakeoutSession: serialization failed"))
 }
 
 impl RpcState {

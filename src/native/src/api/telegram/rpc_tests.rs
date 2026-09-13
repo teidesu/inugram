@@ -2936,7 +2936,7 @@ fn a_takeout_session_carries_its_id_into_every_op() {
   assert_eq!((init.1, init.2, init.3.as_str()), (1, OP_TAKEOUT_INIT, ""));
   assert_eq!(
     init.4,
-    r#"{"contacts":false,"messageUsers":true,"messageChats":false,"messageMegagroups":false,"messageChannels":false,"fileMaxSize":"1500000"}"#,
+    r#"{"contacts":false,"messageUsers":true,"messageChats":false,"messageMegagroups":false,"messageChannels":false,"fileMaxSize":1500000}"#,
   );
 
   state.settle(&rt, &ctx, init.0, "S8123456789");
