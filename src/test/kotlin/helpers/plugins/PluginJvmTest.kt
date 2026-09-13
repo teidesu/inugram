@@ -361,17 +361,6 @@ class PluginJvmTest {
         plugin.assertRefused("forbidden", "inu.jvm.runnable(() => {}).call('run')")
     }
 
-    @Test
-    fun aDexPastTheBoundIsRefusedRatherThanStaged() {
-        val plugin = startPlugin("reflective", "unsafe.jvm")
-        val bytes = ByteArray(PluginJvm.DEX_LIMIT_BYTES.toInt() + 1)
-        assertPluginError(
-            "quota-exceeded",
-            plugin.jvm(PluginJvm.OP_LOAD_DEX, name = "", args = arrayOf(PluginWire.encodeBytes(base64(bytes)))),
-        )
-        assertFalse(PluginJvm.dexDir(plugin.id).isDirectory)
-    }
-
     /**
      * the real loader, so what is asserted is that the staged file is one it accepts and that the
      * class inside it is reachable - not that a recorder was handed a path

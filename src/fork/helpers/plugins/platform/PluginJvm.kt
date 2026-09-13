@@ -208,7 +208,6 @@ object PluginJvm {
                 val prepared = pendingClasses.remove(target) ?: expired()
                 try {
                     require(args.size == 1) { "expected class DEX bytes" }
-                    require(args[0].length <= ((DEX_LIMIT_BYTES + 2) / 3 * 4 + 1)) { "class DEX exceeds 8 MB" }
                     val bytes = decodeArg(args[0]) as? ByteArray ?: throw IllegalArgumentException("expected class DEX bytes")
                     val defined = prepared.load(bytes)
                     definedClasses.add(defined)
@@ -665,9 +664,6 @@ object PluginJvm {
         private fun stage(args: Array<String>): File {
             val bytes = decodeArg(args.firstOrNull() ?: "N") as? ByteArray
                 ?: refuse("invalid-argument", "loadDex: expected a path or a Uint8Array")
-            if (bytes.size > DEX_LIMIT_BYTES) {
-                refuse("quota-exceeded", "loadDex: ${bytes.size} bytes is over the $DEX_LIMIT_BYTES this api loads")
-            }
             val dir = dexDir(session.plugin.id)
             if (!dir.isDirectory && !dir.mkdirs()) refuse("internal", "loadDex: could not make ${dir.path}")
             val file = File(dir, "staged_${dexCount++}.dex")

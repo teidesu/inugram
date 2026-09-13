@@ -38,7 +38,7 @@ impl DialogState {
     let Some(options) = options.as_object() else {
       return Err(Exception::throw_type(ctx, "bulletin: expected an options object"));
     };
-    let text = opt_string(ctx, options, "bulletin", "text")?
+    let text = opt_str(ctx, options, "bulletin", "text")?
       .ok_or_else(|| Exception::throw_type(ctx, "bulletin: 'text' must be a string"))?;
     let icon_value: Value =
       options.get("icon").map_err(|_| Exception::throw_type(ctx, "bulletin: cannot read 'icon'"))?;
@@ -80,26 +80,6 @@ impl DialogState {
   }
 }
 
-fn opt_string<'js>(ctx: &Ctx<'js>, obj: &Object<'js>, what: &str, key: &str) -> JsResult<Option<String>> {
-  let value: Value = obj.get(key).map_err(|_| Exception::throw_type(ctx, &format!("{what}: cannot read '{key}'")))?;
-  if value.is_undefined() || value.is_null() {
-    return Ok(None);
-  }
-  match value.as_string() {
-    Some(s) => Ok(Some(s.to_string()?)),
-    None => Err(Exception::throw_type(ctx, &format!("{what}: '{key}' must be a string"))),
-  }
-}
-
-fn opt_flag<'js>(ctx: &Ctx<'js>, obj: &Object<'js>, what: &str, key: &str) -> JsResult<bool> {
-  let value: Value = obj.get(key).map_err(|_| Exception::throw_type(ctx, &format!("{what}: cannot read '{key}'")))?;
-  if value.is_undefined() || value.is_null() {
-    return Ok(false);
-  }
-  value
-    .as_bool()
-    .ok_or_else(|| Exception::throw_type(ctx, &format!("{what}: '{key}' must be a boolean")))
-}
 
 fn chooser_index(ctx: &Ctx<'_>, value: &Value<'_>, len: usize) -> JsResult<i32> {
   let index = value
@@ -115,10 +95,10 @@ fn chooser_index(ctx: &Ctx<'_>, value: &Value<'_>, len: usize) -> JsResult<i32> 
 impl DialogState {
   fn js_ui_chooser<'js>(self: &Rc<Self>, ctx: &Ctx<'js>, opts: Object<'js>) -> JsResult<Value<'js>> {
     let out = Object::new(ctx.clone())?;
-    if let Some(title) = opt_string(ctx, &opts, "chooser", "title")? {
+    if let Some(title) = opt_str(ctx, &opts, "chooser", "title")? {
       out.set("title", title)?;
     }
-    let multiple = opt_flag(ctx, &opts, "chooser", "multiple")?;
+    let multiple = opt_bool(ctx, &opts, "chooser", "multiple")?;
     out.set("multiple", multiple)?;
 
     let raw: Value = opts.get("items").map_err(|_| Exception::throw_type(ctx, "chooser: cannot read 'items'"))?;
@@ -134,13 +114,13 @@ impl DialogState {
         entry.set("text", text.to_string()?)?;
         entry.set("danger", false)?;
       } else if let Some(obj) = item.as_object() {
-        let text = opt_string(ctx, obj, "chooser item", "text")?
+        let text = opt_str(ctx, obj, "chooser item", "text")?
           .ok_or_else(|| Exception::throw_type(ctx, "chooser item: 'text' must be a string"))?;
         entry.set("text", text)?;
-        if let Some(subtitle) = opt_string(ctx, obj, "chooser item", "subtitle")? {
+        if let Some(subtitle) = opt_str(ctx, obj, "chooser item", "subtitle")? {
           entry.set("subtitle", subtitle)?;
         }
-        entry.set("danger", opt_flag(ctx, obj, "chooser item", "danger")?)?;
+        entry.set("danger", opt_bool(ctx, obj, "chooser item", "danger")?)?;
       } else {
         return Err(Exception::throw_type(
           ctx,
