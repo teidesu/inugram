@@ -1,5 +1,6 @@
 use std::rc::Rc;
 
+use crate::runtime::Dispose;
 use rquickjs::{Ctx, Exception, Function, Object, Result as JsResult, Runtime, Value};
 
 use crate::api::error::PluginErrorCode;
@@ -259,7 +260,10 @@ impl DialogState {
     pump_jobs(rt, context, state.log.as_ref());
   }
 
-  pub fn dispose(self: &Rc<Self>, context: &rquickjs::Context) {
+}
+
+impl Dispose for DialogState {
+  fn dispose(&self, context: &rquickjs::Context) {
     context.with(|ctx| self.pending.dispose(&ctx));
   }
 }

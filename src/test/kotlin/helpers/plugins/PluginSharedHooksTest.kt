@@ -56,11 +56,11 @@ class PluginSharedHooksTest {
             second.js.onXposedBefore = { arrayOf("P1", "I1", "I2") }
             second.js.onXposedAfter = { "I30" }
             assertEquals(30, method.invoke(null, 1, 2))
-            PluginXposed.detach(second.js)
+            PluginXposed.detach(second.session!!)
             assertFalse(PluginXposed.isHooked(method))
             assertEquals(3, method.invoke(null, 1, 2))
         } finally {
-            for (plugin in listOf(first, second, observer)) PluginXposed.detach(plugin.js)
+            for (plugin in listOf(first, second, observer)) PluginXposed.detach(plugin.session!!)
         }
     }
 
@@ -84,8 +84,8 @@ class PluginSharedHooksTest {
             assertTrue(second.js.xposedBefores.isEmpty())
             assertTrue(second.js.xposedAfters.isEmpty())
         } finally {
-            PluginXposed.detach(first.js)
-            PluginXposed.detach(second.js)
+            PluginXposed.detach(first.session!!)
+            PluginXposed.detach(second.session!!)
         }
     }
 
@@ -101,8 +101,8 @@ class PluginSharedHooksTest {
             assertEquals(0, JvmFixture.sharedHookCalls.get())
             assertTrue(second.js.xposedBefores.isEmpty())
         } finally {
-            PluginXposed.detach(first.js)
-            PluginXposed.detach(second.js)
+            PluginXposed.detach(first.session!!)
+            PluginXposed.detach(second.session!!)
         }
     }
 
@@ -121,9 +121,9 @@ class PluginSharedHooksTest {
             install(second, target)
             worker.start()
             assertTrue(JvmFixture.callbackEntered!!.await(5, TimeUnit.SECONDS))
-            PluginXposed.detach(first.js)
+            PluginXposed.detach(first.session!!)
             assertTrue(PluginXposed.isHooked(target))
-            PluginXposed.detach(second.js)
+            PluginXposed.detach(second.session!!)
             assertFalse(PluginXposed.isHooked(target))
             JvmFixture.callbackRelease!!.countDown()
             worker.join(5000)
@@ -134,8 +134,8 @@ class PluginSharedHooksTest {
         } finally {
             JvmFixture.callbackRelease!!.countDown()
             worker.join(5000)
-            PluginXposed.detach(first.js)
-            PluginXposed.detach(second.js)
+            PluginXposed.detach(first.session!!)
+            PluginXposed.detach(second.session!!)
         }
     }
 
@@ -154,8 +154,8 @@ class PluginSharedHooksTest {
                 assertSame(value, target.invoke(instance))
             }
         } finally {
-            PluginXposed.detach(first.js)
-            PluginXposed.detach(second.js)
+            PluginXposed.detach(first.session!!)
+            PluginXposed.detach(second.session!!)
         }
     }
 
@@ -171,8 +171,8 @@ class PluginSharedHooksTest {
             assertEquals(3, instance.count)
             assertTrue(first.js.xposedBefores.isEmpty())
         } finally {
-            PluginXposed.detach(first.js)
-            PluginXposed.detach(caller.js)
+            PluginXposed.detach(first.session!!)
+            PluginXposed.detach(caller.session!!)
         }
     }
 
@@ -193,8 +193,8 @@ class PluginSharedHooksTest {
             assertTrue(second.js.xposedBefores.isEmpty())
             assertTrue(first.js.xposedAfters.isEmpty())
         } finally {
-            PluginXposed.detach(first.js)
-            PluginXposed.detach(second.js)
+            PluginXposed.detach(first.session!!)
+            PluginXposed.detach(second.session!!)
         }
     }
 
@@ -213,8 +213,8 @@ class PluginSharedHooksTest {
             assertEquals(4, second.js.xposedBefores.size)
             assertEquals(4, first.js.xposedAfters.size)
         } finally {
-            PluginXposed.detach(first.js)
-            PluginXposed.detach(second.js)
+            PluginXposed.detach(first.session!!)
+            PluginXposed.detach(second.session!!)
         }
     }
 
@@ -231,8 +231,8 @@ class PluginSharedHooksTest {
             assertEquals(4, method.invoke(null, 1, 2))
             assertEquals(1, JvmFixture.sharedHookCalls.get())
         } finally {
-            PluginXposed.detach(first.js)
-            PluginXposed.detach(second.js)
+            PluginXposed.detach(first.session!!)
+            PluginXposed.detach(second.session!!)
         }
     }
 
@@ -252,7 +252,7 @@ class PluginSharedHooksTest {
             assertEquals(listOf("outer", "inner"), seen)
             assertEquals(1, JvmFixture.sharedHookCalls.get())
         } finally {
-            PluginXposed.detach(plugin.js)
+            PluginXposed.detach(plugin.session!!)
         }
     }
 
@@ -281,16 +281,18 @@ class PluginSharedHooksTest {
             assertEquals(36, method.invoke(null, 1, 2))
             assertEquals(1, JvmFixture.sharedHookCalls.get())
             engines[0].stopCallbacks()
-            PluginXposed.detach(engines[0])
-            PluginJvm.detach(engines[0])
+            PluginXposed.detach(plugins[0].session!!)
+            PluginJvm.detach(plugins[0].session!!)
             engines[0].close()
             assertTrue(PluginXposed.isHooked(method))
             assertEquals(15, method.invoke(null, 1, 2))
         } finally {
             engines.forEachIndexed { index, engine ->
                 engine.stopCallbacks()
-                PluginXposed.detach(engine)
-                PluginJvm.detach(engine)
+                plugins[index].session?.let {
+                    PluginXposed.detach(it)
+                    PluginJvm.detach(it)
+                }
                 engine.close()
                 plugins[index].session = null
             }

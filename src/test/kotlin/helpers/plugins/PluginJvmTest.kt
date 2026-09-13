@@ -24,7 +24,7 @@ import org.junit.Test
 class PluginJvmTest {
     private val fixtureClass = JvmFixture::class.java.name
     private val scoped = "unsafe.jvm"
-    private val engines = ArrayList<QuickJs>()
+    private val sessions = ArrayList<PluginSession>()
 
     @Before
     fun setUp() {
@@ -38,18 +38,18 @@ class PluginJvmTest {
 
     @After
     fun tearDown() {
-        for (engine in engines) {
-            engine.stopCallbacks()
-            PluginJvm.detach(engine)
-            engine.close()
+        for (session in sessions) {
+            session.engine.stopCallbacks()
+            PluginJvm.detach(session)
+            session.engine.close()
         }
-        engines.clear()
+        sessions.clear()
     }
 
     /** a plugin on a real engine: the member ops have no listener form, so this is the only way to reach them */
     private fun engineFor(vararg grants: String, name: String = "reflective"): Plugin {
         val plugin = startEngine(name, *grants)
-        engines.add(plugin.session!!.engine)
+        sessions.add(plugin.session!!)
         return plugin
     }
 
@@ -161,7 +161,7 @@ class PluginJvmTest {
 
         // detach closes the session rather than unhooking it: the bridge is fixed for the life of
         // the engine, and `PluginManager` closes the engine on the same runnable
-        PluginJvm.detach(plugin.engine!!)
+        PluginJvm.detach(plugin.session!!)
         plugin.assertRefused("handle-expired", "o.getField('count')")
         plugin.assertRefused("handle-expired", "F.getStaticField('tag')")
     }

@@ -46,7 +46,7 @@ class PluginAsyncUnloadTest {
             assertEquals("after", JvmFixture.tag)
         } finally {
             engine.stopCallbacks()
-            PluginJvm.detach(engine)
+            PluginJvm.detach(plugin.session!!)
             engine.close()
             JvmFixture.task = null
             plugin.session = null

@@ -1241,24 +1241,7 @@ pub extern "system" fn Java_desu_inugram_helpers_plugins_QuickJs_nativeDestroy(
   ptr: jlong,
 ) {
   if let Some(mut engine) = remove_engine(ptr) {
-    engine.rpc.dispose(&engine.ctx);
-    engine.lifecycle_state.dispose(&engine.ctx);
-    engine.dialogs.dispose(&engine.ctx);
-    engine.ui.dispose(&engine.ctx);
-    engine.files.dispose(&engine.ctx);
-    engine.screens.dispose(&engine.ctx);
-    engine.actions.dispose(&engine.ctx);
-    engine.writes.dispose(&engine.ctx);
-    engine.reads.dispose(&engine.ctx);
-    engine.account.dispose(&engine.ctx);
-    engine.fetch.dispose(&engine.ctx);
-    engine.canvas.dispose(&engine.ctx);
-    engine.timers.dispose(&engine.ctx);
-    engine.notifications.dispose(&engine.ctx);
-    if let Some(state) = engine.xposed.as_ref() {
-      state.dispose(&engine.ctx);
-    }
-    if let Some(state) = engine.jvm.as_ref() {
+    for state in engine.disposables() {
       state.dispose(&engine.ctx);
     }
     engine.ctx.with(|ctx| {

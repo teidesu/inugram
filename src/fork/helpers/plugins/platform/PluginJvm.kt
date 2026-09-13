@@ -1,5 +1,6 @@
 package desu.inugram.helpers.plugins.platform
 
+import desu.inugram.helpers.plugins.SessionResource
 import desu.inugram.core.plugins.PluginRefusal
 import desu.inugram.core.plugins.PluginWire.refuse
 import android.os.Bundle
@@ -38,7 +39,7 @@ import org.telegram.messenger.Utilities
  * engine's own objects while a reflected call holds an engine lease. `java.lang.reflect` walks
  * around it.
  */
-object PluginJvm {
+object PluginJvm : SessionResource {
     // keep in sync with rust `jvm::OP_*` and `jvm.js`; the member ops (`OP_NEW`..`OP_MEMBER_SET`, 1..9) are rust's and never reach this side
     const val OP_CLASS = 0
     const val OP_RUNNABLE = 10
@@ -90,8 +91,8 @@ object PluginJvm {
     /** [Session.checkClass] already let this be minted, which is the only way a handle exists */
     fun objectAt(engine: QuickJs, handle: Long): Any? = (engine.listener?.jvm as? Session)?.objectAt(handle)
 
-    fun detach(engine: QuickJs) {
-        (engine.listener?.jvm as? Session)?.close()
+    override fun detach(session: PluginSession) {
+        (session.engine.listener?.jvm as? Session)?.close()
     }
 
     fun dexDir(installId: String): File {

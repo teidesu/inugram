@@ -1,4 +1,5 @@
 use crate::api::ui::files::FilesState;
+use crate::runtime::Dispose;
 use crate::runtime::{
   pump_jobs, SETTLE_CANVAS, SETTLE_FETCH, SETTLE_FILES, SETTLE_INVOKE, SETTLE_MODAL, SETTLE_READS, SETTLE_WRITES,
 };
@@ -162,6 +163,29 @@ pub(crate) struct Engine {
 }
 
 impl Engine {
+  /// in the order they are released
+  pub(crate) fn disposables(&self) -> Vec<&dyn Dispose> {
+    let mut all: Vec<&dyn Dispose> = vec![
+      &*self.rpc,
+      &*self.lifecycle_state,
+      &*self.dialogs,
+      &*self.ui,
+      &*self.files,
+      &*self.screens,
+      &*self.actions,
+      &*self.writes,
+      &*self.reads,
+      &*self.account,
+      &*self.fetch,
+      &*self.canvas,
+      &*self.timers,
+      &*self.notifications,
+    ];
+    all.extend(self.xposed.as_deref().map(|state| state as &dyn Dispose));
+    all.extend(self.jvm.as_deref().map(|state| state as &dyn Dispose));
+    all
+  }
+
   pub(crate) fn pump(&self) {
     pump_jobs(&self._rt, &self.ctx, self.rpc.log.as_ref());
   }

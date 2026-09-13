@@ -1,4 +1,5 @@
 use std::fs;
+use crate::runtime::Dispose;
 use std::path::PathBuf;
 use std::rc::Rc;
 
@@ -172,9 +173,6 @@ impl FilesState {
   }
 
   /// a plugin torn down mid-picker leaves the dialog on screen and nothing to answer it
-  pub fn dispose(self: &Rc<Self>, context: &rquickjs::Context) {
-    context.with(|ctx| self.pending.dispose(&ctx));
-  }
 
   /// One `File` per copy the host made, owning it the way a spilled blob owns its file: the content
   /// counts against this plugin's spill budget and the copy is deleted when the handle is. Nothing
@@ -210,6 +208,12 @@ impl FilesState {
       Ok(first) if !first.is_undefined() => Ok(first),
       _ => Ok(Value::new_null(ctx.clone())),
     }
+  }
+}
+
+impl Dispose for FilesState {
+  fn dispose(&self, context: &rquickjs::Context) {
+    context.with(|ctx| self.pending.dispose(&ctx));
   }
 }
 

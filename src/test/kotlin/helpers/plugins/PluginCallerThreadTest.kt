@@ -83,8 +83,8 @@ class PluginCallerThreadTest {
             assertTrue(logs.isEmpty(), logs.toString())
         } finally {
             engine.stopCallbacks()
-            PluginXposed.detach(engine)
-            PluginJvm.detach(engine)
+            PluginXposed.detach(plugin.session!!)
+            PluginJvm.detach(plugin.session!!)
             engine.close()
             JvmFixture.task = null
             plugin.session = null
@@ -152,7 +152,7 @@ class PluginCallerThreadTest {
             assertTrue(logs.any { it.contains("getCurrentScreen: this API requires the plugin queue") }, logs.toString())
         } finally {
             engine.stopCallbacks()
-            PluginJvm.detach(engine)
+            PluginJvm.detach(plugin.session!!)
             engine.close()
             JvmFixture.task = null
             plugin.session = null

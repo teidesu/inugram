@@ -1,3 +1,4 @@
+use crate::runtime::Dispose;
 use std::collections::HashMap;
 use std::ops::Deref;
 use std::rc::Rc;

@@ -1,4 +1,5 @@
 use std::cell::{Cell, RefCell};
+use crate::runtime::Dispose;
 use std::collections::HashMap;
 use std::rc::Rc;
 
@@ -863,7 +864,10 @@ impl UiState {
     pump_jobs(rt, context, state.log.as_ref());
   }
 
-  pub fn dispose(self: &Rc<Self>, context: &rquickjs::Context) {
+}
+
+impl Dispose for UiState {
+  fn dispose(&self, context: &rquickjs::Context) {
     let state = self;
     context.with(|ctx| {
       for (_, def) in state.pages.borrow_mut().drain() {

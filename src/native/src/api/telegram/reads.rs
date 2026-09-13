@@ -1,4 +1,5 @@
 use std::cell::{Cell, RefCell};
+use crate::runtime::Dispose;
 use std::collections::VecDeque;
 use std::rc::Rc;
 
@@ -385,7 +386,10 @@ impl ReadsState {
     pump_jobs(rt, context, state.log.as_ref());
   }
 
-  pub fn dispose(self: &Rc<Self>, context: &rquickjs::Context) {
+}
+
+impl Dispose for ReadsState {
+  fn dispose(&self, context: &rquickjs::Context) {
     context.with(|ctx| self.pending.dispose(&ctx));
   }
 }

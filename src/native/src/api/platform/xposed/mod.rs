@@ -1,6 +1,7 @@
 pub(crate) mod elf;
 pub(crate) mod lsplant;
 
+use crate::runtime::Dispose;
 use std::cell::{Cell, RefCell};
 use std::collections::HashMap;
 use std::rc::Rc;
@@ -655,7 +656,10 @@ impl XposedState {
     });
   }
 
-  pub fn dispose(self: &Rc<Self>, context: &Context) {
+}
+
+impl Dispose for XposedState {
+  fn dispose(&self, context: &rquickjs::Context) {
     let state = self;
     context.with(|ctx| {
       for hook in state.hooks.take_values() {

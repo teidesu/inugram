@@ -1,5 +1,6 @@
 package desu.inugram.helpers.plugins.telegram
 
+import desu.inugram.helpers.plugins.SessionResource
 import android.util.Log
 import desu.inugram.core.plugins.BoundedIdentitySet
 import desu.inugram.core.plugins.DispatchDeadline
@@ -42,7 +43,7 @@ import org.telegram.tgnet.tl.TL_update
  * A payload reaching a plugin is read-only and plugin-lifetime for `onUpdate`, writable and
  * scope-invalidated for an `interceptUpdate` stage. Both mint into the plugin's own [TlHandles].
  */
-object PluginUpdates {
+object PluginUpdates : SessionResource {
     private const val TAG = "InuPluginUpdates"
 
     /** a tenth of a send's: the app's whole arriving batch is parked behind this */
@@ -106,7 +107,7 @@ object PluginUpdates {
      * A batch parked on this plugin is **delivered**, never failed: a drop is final and nothing
      * re-requests what it took, so producing one out of an unload would lose the user's messages.
      */
-    fun detach(session: PluginSession) {
+    override fun detach(session: PluginSession) {
         publishUpdateRegs(updateRegs.filter { it.session !== session })
         publishUpdateInterceptors(updateInterceptRegs.filter { it.session !== session })
         for (dispatchId in pendingUpdateDispatches.filterValues { it.stageSession === session }.keys.toList()) {

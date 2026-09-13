@@ -10,7 +10,7 @@ import org.junit.Test
 class PluginJvmClassTest {
     @Before fun setUp() = resetBridge()
 
-    private fun runWithEngine(code: String, after: (QuickJs) -> Unit = {}) {
+    private fun runWithEngine(code: String, after: (QuickJs, PluginSession) -> Unit = { _, _ -> }) {
         val plugin = startPlugin("defined class", "unsafe.jvm")
         val engine = QuickJs()
         plugin.session = PluginSession(plugin, engine)
@@ -20,10 +20,10 @@ class PluginJvmClassTest {
         })
         try {
             assertEquals("ok", engine.evaluate(code.trimIndent()))
-            after(engine)
+            after(engine, plugin.session!!)
         } finally {
             engine.stopCallbacks()
-            PluginJvm.detach(engine)
+            PluginJvm.detach(plugin.session!!)
             engine.close()
             JvmFixture.task = null
             plugin.session = null
@@ -66,11 +66,11 @@ class PluginJvmClassTest {
         instance.call('run');
         inu.jvm.cls('desu.inugram.jvmfixture.JvmFixture').setStaticField('task', instance);
         'ok';
-    """) { engine ->
+    """) { engine, session ->
         val task = JvmFixture.task!!
         task.run()
         engine.stopCallbacks()
-        PluginJvm.detach(engine)
+        PluginJvm.detach(session)
         task.run()
     }
 

@@ -1,4 +1,5 @@
 use std::cell::{Cell, RefCell};
+use crate::runtime::Dispose;
 use std::collections::HashMap;
 use std::rc::Rc;
 
@@ -1252,7 +1253,10 @@ impl RpcState {
     pump_jobs(rt, context, state.log.as_ref());
   }
 
-  pub fn dispose(self: &Rc<Self>, context: &rquickjs::Context) {
+}
+
+impl Dispose for RpcState {
+  fn dispose(&self, context: &rquickjs::Context) {
     let state = self;
     context.with(|ctx| {
       state.intercept_fns.release_all(&ctx);

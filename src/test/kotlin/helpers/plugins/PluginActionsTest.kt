@@ -241,7 +241,7 @@ class PluginActionsTest {
         PluginActions.unregister(plugin.js, PluginActions.KIND_CHAT, 1)
         assertEquals(1, PluginActions.rowCount(PluginActions.KIND_CHAT))
 
-        PluginActions.detach(plugin.js)
+        PluginActions.detach(plugin.session!!)
         assertEquals(0, PluginActions.rowCount(PluginActions.KIND_CHAT))
     }
 
@@ -315,7 +315,7 @@ class PluginActionsTest {
         PluginActions.register(plugin.session!!, PluginActions.KIND_CHAT, 1, "a")
         plugin.answers(1 to "row")
 
-        PluginActions.detach(plugin.js)
+        PluginActions.detach(plugin.session!!)
         assertEquals(emptyList(), rendered(PluginActions.KIND_CHAT, chat))
         assertEquals(0, plugin.js.actionRenders.size)
     }
