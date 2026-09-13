@@ -62,6 +62,8 @@ object PluginUi {
     const val OP_DIALOG = 0
     const val OP_PROMPT = 1
     const val OP_CHOOSER = 2
+    const val OP_PICK_FILE = 3
+    const val OP_SAVE_FILE = 4
 
     // UI-thread state: open page views, keyed per engine so page ids can't cross plugins
     private class PageKey(val session: PluginSession, val pageId: Long) {
@@ -354,6 +356,10 @@ object PluginUi {
             resolve = { session.engine.resolveChooser(requestId, it) },
             prepare = { ChooserSpec(JSONObject(optionsJson)) },
         ) { spec, settle -> showChooser(spec, settle) }
+
+        OP_PICK_FILE -> PluginFilePicker.pick(session, requestId, optionsJson)
+
+        OP_SAVE_FILE -> PluginFilePicker.save(session, requestId, optionsJson)
 
         else -> "modal: unknown op $op"
     }

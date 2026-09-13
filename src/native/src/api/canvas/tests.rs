@@ -108,8 +108,8 @@ impl CanvasHost for OracleHost {
         self.log.borrow_mut().released.push(id);
         String::new()
       }
-      OP_ENCODE | OP_DECODE | OP_LOAD_FONT | OP_DECODE_ANIMATION | OP_ANIMATION_FRAME | OP_ANIMATION_NEXT
-      | OP_ENCODER_CREATE | OP_ENCODER_FRAME | OP_ENCODER_FINISH => {
+      OP_ENCODE | OP_DECODE | OP_LOAD_FONT | OP_LIST_FONTS | OP_DECODE_ANIMATION | OP_ANIMATION_FRAME
+      | OP_ANIMATION_NEXT | OP_ENCODER_CREATE | OP_ENCODER_FRAME | OP_ENCODER_FINISH => {
         let request = arg.split(FIELD).next().and_then(|v| v.parse().ok()).unwrap_or(0);
         self.pending.borrow_mut().push(request);
         self.reply.borrow().clone().unwrap_or_default()
@@ -515,7 +515,7 @@ fn the_namespace_carries_exactly_what_the_contract_declares() {
   let f = setup("namespace");
   assert_eq!(
     eval(&f, "Object.keys(inu.canvas).sort().join(',')"),
-    "create,createEncoder,decode,decodeAnimation,load,loadFont",
+    "create,createEncoder,decode,decodeAnimation,listFonts,load,loadFont",
   );
 }
 
@@ -1339,6 +1339,20 @@ fn loading_a_font_settles_with_nothing_and_names_the_family_to_the_host() {
   assert_eq!(arg.split(FIELD).nth(1).unwrap(), "My Face");
   answer(&f, "");
   assert_eq!(settle(&f, "p"), "ok:undefined");
+}
+
+#[test]
+fn the_font_list_is_whatever_the_host_answers_with() {
+  let f = setup("font-list");
+  run(&f, "globalThis.p = inu.canvas.listFonts()");
+  answer(
+    &f,
+    r#"J[{"name":"Roboto","source":"builtin","hidden":false},{"name":"My Face","source":"plugin","hidden":false}]"#,
+  );
+  assert_eq!(settle(&f, "p.then(list => (globalThis.fonts = list, list.length))"), "ok:Number");
+  assert_eq!(eval(&f, "String(fonts.length)"), "2");
+  assert_eq!(eval(&f, "`${fonts[0].name}|${fonts[0].source}|${fonts[0].hidden}`"), "Roboto|builtin|false");
+  assert_eq!(eval(&f, "fonts[1].name"), "My Face");
 }
 
 #[test]

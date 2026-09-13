@@ -1096,7 +1096,7 @@ declare namespace inu {
     /**
      * save a file to the device storage, opening a "save as" dialog
      *
-     * @needs-grant fs
+     * @needs-grant fs to name a file
      * @param content the file to save
      * @returns `true` if the user chose to save the file, `false` if they chose not to
      */

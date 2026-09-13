@@ -291,7 +291,12 @@ declare namespace inu {
 
     function loadFont(family: string, source: Blob | Uint8Array | { path: string }): Promise<void>
 
-    /** list of fonts available for use in {@link CanvasRenderingContext2D.font} */
+    /**
+     * list of fonts available for use in {@link CanvasRenderingContext2D.font}
+     *
+     * The list is the app's own font roster, so `device` families are in it only while the app is set
+     * to include them; a name outside the list may still resolve, as a device family or as nothing.
+     */
     function listFonts(): Promise<FontEntry[]>
   }
 }
