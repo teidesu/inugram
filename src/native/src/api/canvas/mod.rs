@@ -82,6 +82,13 @@ pub trait CanvasHost {
   fn canvas(&self, op: i32, id: i64, arg: &str, bytes: Option<&[u8]>) -> String;
 }
 
+/// a side request in the replay's own shape: the fields `fill` writes, strings through the table
+fn ask(host: &dyn CanvasHost, op: i32, id: i64, fill: impl FnOnce(&mut Encoder)) -> String {
+  let mut args = Encoder::default();
+  fill(&mut args);
+  host.canvas(op, id, &encode_table(&args.strings), Some(&args.bytes))
+}
+
 const COMPOSITE_MODES: [&str; 26] = [
   "source-over",
   "source-in",
@@ -191,6 +198,11 @@ impl Encoder {
     for v in [m.a, m.b, m.c, m.d, m.e, m.f] {
       self.f(v);
     }
+  }
+
+  fn text(&mut self, value: &str) {
+    let index = self.string(value);
+    self.u32(index);
   }
 
   fn string(&mut self, value: &str) -> u32 {
@@ -918,7 +930,10 @@ impl CanvasState {
     let bytes = width as usize * height as usize * 4;
     let charge = self.external.charge(ctx, bytes)?;
     let id = self.next_id.alloc();
-    let answer = self.host.canvas(OP_CREATE, id, &format!("{width},{height}"), None);
+    let answer = ask(&*self.host, OP_CREATE, id, |args| {
+      args.i32(width);
+      args.i32(height);
+    });
     throw_host_error(ctx, &answer)?;
     let surface = Rc::new(Surface {
       id,
@@ -949,13 +964,19 @@ impl Surface {
     check_dimensions(ctx, width, height)?;
     if width == self.width.get() && height == self.height.get() {
       self.commands.borrow_mut().clear();
-      let answer = self.state.host.canvas(OP_CREATE, self.id, &format!("{width},{height}"), None);
+      let answer = ask(&*self.state.host, OP_CREATE, self.id, |args| {
+      args.i32(width);
+      args.i32(height);
+    });
       return throw_host_error(ctx, &answer);
     }
     let bytes = width as usize * height as usize * 4;
     let charge = self.state.external.charge(ctx, bytes)?;
     self.commands.borrow_mut().clear();
-    let answer = self.state.host.canvas(OP_CREATE, self.id, &format!("{width},{height}"), None);
+    let answer = ask(&*self.state.host, OP_CREATE, self.id, |args| {
+      args.i32(width);
+      args.i32(height);
+    });
     throw_host_error(ctx, &answer)?;
     self.width.set(width);
     self.height.set(height);
@@ -1075,7 +1096,7 @@ impl CanvasState {
     canvas.set(
       "listFonts",
       Function::new(ctx.clone(), move |ctx: Ctx<'js>| -> JsResult<Value<'js>> {
-        owned.start_op(&ctx, PendingKind::Json, OP_LIST_FONTS, 0, &|request_id| request_id.to_string(), None)
+        owned.start_op(&ctx, PendingKind::Json, OP_LIST_FONTS, 0, &|_| {}, None)
       })?,
     )?;
 
@@ -1113,8 +1134,11 @@ impl CanvasState {
     }
     let StagedSource { path, owned } = state.sources.stage(ctx, source)?;
     let id = state.next_id.alloc();
-    let describe =
-      |request_id: i64| format!("{request_id}{FIELD}{width}{FIELD}{height}{FIELD}{}", path.to_string_lossy());
+    let describe = |args: &mut Encoder| {
+      args.i32(width);
+      args.i32(height);
+      args.text(&path.to_string_lossy());
+    };
     state.start_op(
       ctx,
       PendingKind::Animation {
@@ -1179,8 +1203,13 @@ impl CanvasState {
       bitrate = value.0.trunc() as i64;
     }
     let id = state.next_id.alloc();
-    let describe =
-      |request_id: i64| format!("{request_id}{FIELD}{mime}{FIELD}{width}{FIELD}{height}{FIELD}{fps}{FIELD}{bitrate}");
+    let describe = |args: &mut Encoder| {
+      args.text(&mime);
+      args.i32(width);
+      args.i32(height);
+      args.i32(fps);
+      args.i64(bitrate);
+    };
     state.start_op(
       ctx,
       PendingKind::Encoder {
@@ -1216,12 +1245,11 @@ impl CanvasState {
       let id = image.id;
       (PendingKind::Decode(image), OP_DECODE, id)
     };
-    let describe = |request_id: i64| {
+    let describe = |args: &mut Encoder| {
       if is_font {
-        format!("{request_id}{FIELD}{family}{FIELD}{}", path.to_string_lossy())
-      } else {
-        format!("{request_id}{FIELD}{}", path.to_string_lossy())
+        args.text(family);
       }
+      args.text(&path.to_string_lossy());
     };
     state.start_op(ctx, kind, op, id, &describe, owned.then(|| StagedFile(path.clone())))
   }
@@ -1251,13 +1279,16 @@ impl CanvasState {
     kind: PendingKind,
     op: i32,
     id: i64,
-    describe: &dyn Fn(i64) -> String,
+    describe: &dyn Fn(&mut Encoder),
     staged: Option<StagedFile>,
   ) -> JsResult<Value<'js>> {
     let state = self;
     let request = CanvasRequest { kind, _staged: staged };
     let promise = state.pending.park(ctx, request, |request_id| {
-      let answer = state.host.canvas(op, id, &describe(request_id), None);
+      let answer = ask(&*state.host, op, id, |args| {
+        args.i64(request_id);
+        describe(args);
+      });
       (!answer.is_empty()).then_some(answer)
     })?;
     Ok(promise.into_value())
@@ -1372,7 +1403,10 @@ impl CanvasState {
       }
     }
     surface.flush(ctx)?;
-    let describe = |request_id: i64| format!("{request_id}{FIELD}{mime}{FIELD}{quality}");
+    let describe = |args: &mut Encoder| {
+      args.text(&mime);
+      args.f(quality);
+    };
     self.start_op(ctx, PendingKind::Encode, OP_ENCODE, surface.id, &describe, None)
   }
 }

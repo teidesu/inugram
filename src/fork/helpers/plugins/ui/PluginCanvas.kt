@@ -171,45 +171,47 @@ object PluginCanvas {
             PluginWire.encodePluginError("internal", "canvas: ${e.javaClass.simpleName}: ${e.message}")
         }
 
-        private fun run(op: Int, id: Long, arg: String, bytes: ByteArray?): String = when (op) {
+        private fun run(op: Int, id: Long, arg: String, bytes: ByteArray?): String {
+            val reader = Reader(bytes ?: NO_BYTES, arg)
+            return when (op) {
             OP_CAPABILITIES -> """J{"blend":${Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q}}"""
-            OP_CREATE -> create(id, arg)
+            OP_CREATE -> create(id, reader)
             OP_DESTROY -> {
                 onHost { destroy(id) }
                 ""
             }
-            OP_REPLAY -> replay(id, arg, bytes)
-            OP_MEASURE -> measure(arg)
-            OP_AVERAGE -> average(id, arg)
-            OP_ENCODE -> encode(id, arg)
-            OP_DECODE -> decode(id, arg)
+            OP_REPLAY -> replay(id, reader)
+            OP_MEASURE -> measure(reader)
+            OP_AVERAGE -> average(id, reader)
+            OP_ENCODE -> encode(id, reader)
+            OP_DECODE -> decode(id, reader)
             OP_RELEASE_IMAGE -> {
                 onHost { releaseImage(id) }
                 ""
             }
-            OP_LOAD_FONT -> loadFont(arg)
-            OP_LIST_FONTS -> listFonts(arg)
-            OP_DECODE_ANIMATION -> decodeAnimation(id, arg)
-            OP_ANIMATION_FRAME -> animationFrame(id, arg)
-            OP_ANIMATION_NEXT -> animationNext(id, arg)
+            OP_LOAD_FONT -> loadFont(reader)
+            OP_LIST_FONTS -> listFonts(reader)
+            OP_DECODE_ANIMATION -> decodeAnimation(id, reader)
+            OP_ANIMATION_FRAME -> animationFrame(id, reader)
+            OP_ANIMATION_NEXT -> animationNext(id, reader)
             OP_RELEASE_ANIMATION -> {
                 onHost { releaseAnimation(id) }
                 ""
             }
-            OP_ENCODER_CREATE -> createEncoder(id, arg)
-            OP_ENCODER_FRAME -> encoderFrame(id, arg)
-            OP_ENCODER_FINISH -> encoderFinish(id, arg)
+            OP_ENCODER_CREATE -> createEncoder(id, reader)
+            OP_ENCODER_FRAME -> encoderFrame(id, reader)
+            OP_ENCODER_FINISH -> encoderFinish(id, reader)
             OP_ENCODER_DESTROY -> {
                 onHost { releaseEncoder(id) }
                 ""
             }
             else -> PluginWire.encodePluginError("invalid-argument", "canvas: unknown op $op")
+            }
         }
 
-        private fun create(id: Long, arg: String): String {
-            val parts = arg.split(',')
-            val width = parts.getOrNull(0)?.toIntOrNull() ?: refuse("internal", "canvas: malformed size")
-            val height = parts.getOrNull(1)?.toIntOrNull() ?: refuse("internal", "canvas: malformed size")
+        private fun create(id: Long, reader: Reader): String {
+            val width = reader.i32()
+            val height = reader.i32()
             canvases.remove(id)?.bitmap?.recycle()
             val bitmap = Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888)
             bitmap.eraseColor(0)
@@ -230,30 +232,9 @@ object PluginCanvas {
             return ""
         }
 
-        /**
-         * The replay wire's string table, `<length>ITEM<content>` per entry. Length-prefixed
-         * because an entry is text a plugin chose - a `fillText` argument, a css family name - so
-         * there is no separator it cannot contain.
-         */
-        internal fun decodeTable(strings: String): List<String> {
-            val out = ArrayList<String>()
-            var at = 0
-            while (at < strings.length) {
-                val separator = strings.indexOf(ITEM, at)
-                if (separator < 0) break
-                val length = strings.substring(at, separator).toIntOrNull() ?: break
-                val start = separator + 1
-                val end = (start + length).coerceIn(start, strings.length)
-                out.add(strings.substring(start, end))
-                at = end
-            }
-            return out
-        }
 
-        private fun replay(id: Long, strings: String, bytes: ByteArray?): String {
+        private fun replay(id: Long, reader: Reader): String {
             val surface = surfaceOf(id)
-            val table = decodeTable(strings)
-            val reader = Reader(bytes ?: ByteArray(0))
             while (reader.has()) {
                 when (val command = reader.u8()) {
                     CMD_SAVE -> surface.canvas.save()
@@ -268,7 +249,7 @@ object PluginCanvas {
                     CMD_FILL -> fillOrStroke(surface.canvas, reader, stroked = false)
                     CMD_STROKE -> fillOrStroke(surface.canvas, reader, stroked = true)
                     CMD_CLEAR -> clear(surface.canvas, reader)
-                    CMD_TEXT -> text(surface.canvas, reader, table)
+                    CMD_TEXT -> text(surface.canvas, reader)
                     CMD_IMAGE -> image(surface.canvas, reader)
                     else -> refuse("internal", "canvas: unknown command $command")
                 }
@@ -310,18 +291,18 @@ object PluginCanvas {
             canvas.restore()
         }
 
-        private fun text(canvas: Canvas, reader: Reader, table: List<String>) {
+        private fun text(canvas: Canvas, reader: Reader) {
             val matrix = reader.matrix()
             val stroked = reader.u8() == 1
             val paint = reader.paint()
             val stroke = if (stroked) reader.stroke() else null
-            val font = table.getOrNull(reader.u32()) ?: refuse("internal", "canvas: no font in the table")
+            val font = reader.text()
             val align = reader.u8()
             val baseline = reader.u8()
             val x = reader.f()
             val y = reader.f()
             val maxWidth = reader.f()
-            val body = table.getOrNull(reader.u32()) ?: refuse("internal", "canvas: no text in the table")
+            val body = reader.text()
 
             val brush = buildPaint(paint, stroke)
             applyFont(brush, font)
@@ -583,24 +564,10 @@ object PluginCanvas {
             }
         }
 
-        /** the index of the [n]th separator in [arg], counting from one */
-        private fun separatorAt(arg: String, n: Int): Int {
-            var at = -1
-            repeat(n) {
-                at = arg.indexOf(FIELD, at + 1)
-                if (at < 0) refuse("internal", "canvas: malformed measure")
-            }
-            return at
-        }
-
-        private fun measure(arg: String): String {
-            // the font wire is five fields of its own, then the alignment, then the text - which may
-            // contain anything, including a field separator, so it is taken as the tail
-            val fontEnd = separatorAt(arg, 5)
-            val alignEnd = separatorAt(arg, 6)
-            val font = arg.substring(0, fontEnd)
-            val align = arg.substring(fontEnd + 1, alignEnd).toIntOrNull() ?: 0
-            val text = arg.substring(alignEnd + 1)
+        private fun measure(reader: Reader): String {
+            val font = reader.text()
+            val align = reader.u8()
+            val text = reader.text()
             val paint = scratch
             applyFont(paint, font)
             val width = paint.measureText(text)
@@ -624,10 +591,9 @@ object PluginCanvas {
                 .toString()
         }
 
-        private fun average(id: Long, arg: String): String {
+        private fun average(id: Long, reader: Reader): String {
             val surface = surfaceOf(id)
-            val parts = arg.split(',').map { it.toFloatOrNull() ?: 0f }
-            if (parts.size < 4) refuse("internal", "canvas: malformed region")
+            val parts = FloatArray(4) { reader.f() }
             var left = parts[0]
             var top = parts[1]
             var right = parts[0] + parts[2]
@@ -667,12 +633,11 @@ object PluginCanvas {
             return "J$json"
         }
 
-        private fun encode(id: Long, arg: String): String {
+        private fun encode(id: Long, reader: Reader): String {
             val surface = surfaceOf(id)
-            val fields = arg.split(FIELD)
-            val requestId = fields.getOrNull(0)?.toLongOrNull() ?: refuse("internal", "canvas: malformed request")
-            val mime = fields.getOrNull(1).orEmpty()
-            val quality = fields.getOrNull(2)?.toFloatOrNull() ?: 0.92f
+            val requestId = reader.i64()
+            val mime = reader.text()
+            val quality = reader.f()
             val dir = encodedDir() ?: refuse("internal", "canvas: there is nowhere to write the result")
             val format = when (mime) {
                 "image/jpeg" -> Bitmap.CompressFormat.JPEG
@@ -705,10 +670,9 @@ object PluginCanvas {
                 Bitmap.CompressFormat.WEBP
             }
 
-        private fun decode(id: Long, arg: String): String {
-            val fields = arg.split(FIELD)
-            val requestId = fields.getOrNull(0)?.toLongOrNull() ?: refuse("internal", "canvas: malformed request")
-            val path = fields.drop(1).joinToString(FIELD.toString())
+        private fun decode(id: Long, reader: Reader): String {
+            val requestId = reader.i64()
+            val path = reader.text()
             submitBitmap(requestId, id) {
                 BitmapFactory.decodeFile(path)
                     ?: throw IllegalArgumentException("this is not an image the device can decode")
@@ -716,11 +680,10 @@ object PluginCanvas {
             return ""
         }
 
-        private fun loadFont(arg: String): String {
-            val fields = arg.split(FIELD)
-            val requestId = fields.getOrNull(0)?.toLongOrNull() ?: refuse("internal", "canvas: malformed request")
-            val family = fields.getOrNull(1).orEmpty()
-            val path = fields.drop(2).joinToString(FIELD.toString())
+        private fun loadFont(reader: Reader): String {
+            val requestId = reader.i64()
+            val family = reader.text()
+            val path = reader.text()
             work.execute {
                 val loaded = runCatching { Typeface.createFromFile(path) }
                 EngineDispatch.onEngine(session) {
@@ -740,8 +703,8 @@ object PluginCanvas {
          * carries the device's own families only while the app is set to include them, which is the
          * app's setting and not this one's. Off the engine's queue, the roster being read from disk.
          */
-        private fun listFonts(arg: String): String {
-            val requestId = arg.toLongOrNull() ?: refuse("internal", "canvas: malformed request")
+        private fun listFonts(reader: Reader): String {
+            val requestId = reader.i64()
             val own = fonts.keys.toList()
             submit(requestId) {
                 val out = JSONArray()
@@ -809,12 +772,11 @@ object PluginCanvas {
             }
         }
 
-        private fun decodeAnimation(id: Long, arg: String): String {
-            val fields = arg.split(FIELD)
-            val requestId = fields.getOrNull(0)?.toLongOrNull() ?: refuse("internal", "canvas: malformed request")
-            val width = fields.getOrNull(1)?.toIntOrNull() ?: refuse("internal", "canvas: malformed size")
-            val height = fields.getOrNull(2)?.toIntOrNull() ?: refuse("internal", "canvas: malformed size")
-            val path = fields.drop(3).joinToString(FIELD.toString())
+        private fun decodeAnimation(id: Long, reader: Reader): String {
+            val requestId = reader.i64()
+            val width = reader.i32()
+            val height = reader.i32()
+            val path = reader.text()
             submitOwned(
                 requestId,
                 work,
@@ -833,20 +795,18 @@ object PluginCanvas {
             return ""
         }
 
-        private fun animationFrame(id: Long, arg: String): String {
-            val fields = arg.split(FIELD)
-            val requestId = fields.getOrNull(0)?.toLongOrNull() ?: refuse("internal", "canvas: malformed request")
-            val imageId = fields.getOrNull(1)?.toLongOrNull() ?: refuse("internal", "canvas: malformed request")
-            val index = fields.getOrNull(2)?.toIntOrNull() ?: refuse("internal", "canvas: malformed request")
+        private fun animationFrame(id: Long, reader: Reader): String {
+            val requestId = reader.i64()
+            val imageId = reader.i64()
+            val index = reader.i32()
             val decoder = animations[id] ?: refuse("handle-expired", "canvas: that animation is gone")
             submitFrame(requestId, imageId, decoder) { decoder.frame(index) }
             return ""
         }
 
-        private fun animationNext(id: Long, arg: String): String {
-            val fields = arg.split(FIELD)
-            val requestId = fields.getOrNull(0)?.toLongOrNull() ?: refuse("internal", "canvas: malformed request")
-            val imageId = fields.getOrNull(1)?.toLongOrNull() ?: refuse("internal", "canvas: malformed request")
+        private fun animationNext(id: Long, reader: Reader): String {
+            val requestId = reader.i64()
+            val imageId = reader.i64()
             val decoder = animations[id] ?: refuse("handle-expired", "canvas: that animation is gone")
             submitFrame(requestId, imageId, decoder) { decoder.next() }
             return ""
@@ -875,15 +835,14 @@ object PluginCanvas {
             return ""
         }
 
-        private fun createEncoder(id: Long, arg: String): String {
-            val fields = arg.split(FIELD)
-            val requestId = fields.getOrNull(0)?.toLongOrNull() ?: refuse("internal", "canvas: malformed request")
-            val mime = fields.getOrNull(1)
+        private fun createEncoder(id: Long, reader: Reader): String {
+            val requestId = reader.i64()
+            val mime = reader.text()
             if (mime != "video/mp4") refuse("invalid-argument", "canvas: '$mime' is not an encoding this device writes")
-            val width = fields.getOrNull(2)?.toIntOrNull() ?: refuse("internal", "canvas: malformed size")
-            val height = fields.getOrNull(3)?.toIntOrNull() ?: refuse("internal", "canvas: malformed size")
-            val fps = fields.getOrNull(4)?.toIntOrNull() ?: refuse("internal", "canvas: malformed request")
-            val bitrate = fields.getOrNull(5)?.toLongOrNull() ?: refuse("internal", "canvas: malformed request")
+            val width = reader.i32()
+            val height = reader.i32()
+            val fps = reader.i32()
+            val bitrate = reader.i64()
             val dir = encodedDir() ?: refuse("internal", "canvas: there is nowhere to write the result")
             val output = File(dir, "out-${++nextFile}.mp4")
             submitOwned(
@@ -898,12 +857,11 @@ object PluginCanvas {
             return ""
         }
 
-        private fun encoderFrame(id: Long, arg: String): String {
-            val fields = arg.split(FIELD)
-            val requestId = fields.getOrNull(0)?.toLongOrNull() ?: refuse("internal", "canvas: malformed request")
-            val kind = fields.getOrNull(1)?.toIntOrNull() ?: refuse("internal", "canvas: malformed request")
-            val sourceId = fields.getOrNull(2)?.toLongOrNull() ?: refuse("internal", "canvas: malformed request")
-            val duration = fields.getOrNull(3)?.toDoubleOrNull() ?: refuse("internal", "canvas: malformed request")
+        private fun encoderFrame(id: Long, reader: Reader): String {
+            val requestId = reader.i64()
+            val kind = reader.u8()
+            val sourceId = reader.i64()
+            val duration = reader.f().toDouble()
             val pipeline = encoders[id] ?: refuse("handle-expired", "canvas: that encoder is gone")
             pipeline.failure?.let { throw PluginRefusal(it) }
             val source = if (kind == SOURCE_CANVAS) {
@@ -943,8 +901,8 @@ object PluginCanvas {
             else -> PluginWire.encodePluginError("internal", "canvas: ${failed.message ?: failed.toString()}")
         }
 
-        private fun encoderFinish(id: Long, arg: String): String {
-            val requestId = arg.toLongOrNull() ?: refuse("internal", "canvas: malformed request")
+        private fun encoderFinish(id: Long, reader: Reader): String {
+            val requestId = reader.i64()
             val pipeline = encoders[id] ?: refuse("handle-expired", "canvas: that encoder is gone")
             pipeline.failure?.let { throw PluginRefusal(it) }
             submit(requestId, pipeline.encoder.queue) {
@@ -1007,8 +965,34 @@ object PluginCanvas {
         val dash: FloatArray,
     )
 
-    private class Reader(bytes: ByteArray) {
+    /**
+     * The replay wire's string table, `<length>ITEM<content>` per entry. Length-prefixed
+     * because an entry is text a plugin chose - a `fillText` argument, a css family name - so
+     * there is no separator it cannot contain.
+     */
+    internal fun decodeTable(strings: String): List<String> {
+        val out = ArrayList<String>()
+        var at = 0
+        while (at < strings.length) {
+            val separator = strings.indexOf(ITEM, at)
+            if (separator < 0) break
+            val length = strings.substring(at, separator).toIntOrNull() ?: break
+            val start = separator + 1
+            val end = (start + length).coerceIn(start, strings.length)
+            out.add(strings.substring(start, end))
+            at = end
+        }
+        return out
+    }
+
+    private val NO_BYTES = ByteArray(0)
+
+    /** a replay or a side request: fields in little-endian order, strings as indices into [strings]' table */
+    private class Reader(bytes: ByteArray, private val strings: String = "") {
         private val buffer: ByteBuffer = ByteBuffer.wrap(bytes).order(ByteOrder.LITTLE_ENDIAN)
+        private val table: List<String> by lazy { decodeTable(strings) }
+
+        fun text(): String = table.getOrNull(u32()) ?: refuse("internal", "canvas: no such entry in the string table")
 
         fun has(): Boolean = buffer.hasRemaining()
         fun u8(): Int = buffer.get().toInt() and 0xff

@@ -877,8 +877,11 @@ pub(super) fn install_text_members<'js>(ctx: &Ctx<'js>, proto: &Object<'js>) -> 
           let state = this.state.borrow();
           (state.font.to_wire(), state.text_align)
         };
-        let arg = format!("{font}{FIELD}{align}{FIELD}{text}");
-        let answer = this.surface.state.host.canvas(OP_MEASURE, 0, &arg, None);
+        let answer = ask(&*this.surface.state.host, OP_MEASURE, 0, |args| {
+          args.text(&font);
+          args.u8(align);
+          args.text(&text);
+        });
         let json = match answer.strip_prefix('J') {
           Some(json) => json,
           None => {
@@ -915,8 +918,11 @@ pub(super) fn install_text_members<'js>(ctx: &Ctx<'js>, proto: &Object<'js>) -> 
           region
         };
         this.surface.flush(&ctx)?;
-        let arg = format!("{},{},{},{}", region.0, region.1, region.2, region.3);
-        let answer = this.surface.state.host.canvas(OP_AVERAGE, this.surface.id, &arg, None);
+        let answer = ask(&*this.surface.state.host, OP_AVERAGE, this.surface.id, |args| {
+          for v in [region.0, region.1, region.2, region.3] {
+            args.f(v);
+          }
+        });
         let json = match answer.strip_prefix('J') {
           Some(json) => json,
           None => {
@@ -1068,7 +1074,10 @@ pub(super) fn install_animation_members<'js>(ctx: &Ctx<'js>) -> JsResult<()> {
         let state = animation.state.clone();
         let image = state.blank_image();
         let image_id = image.id;
-        let describe = |request_id: i64| format!("{request_id}{FIELD}{image_id}{FIELD}{index}");
+        let describe = |args: &mut Encoder| {
+          args.i64(image_id);
+          args.i32(index);
+        };
         let kind = PendingKind::Frame { image, sequential: false };
         state.start_op(&ctx, kind, OP_ANIMATION_FRAME, animation.id, &describe, None)
       },
@@ -1087,7 +1096,7 @@ pub(super) fn install_animation_members<'js>(ctx: &Ctx<'js>) -> JsResult<()> {
       let state = animation.state.clone();
       let image = state.blank_image();
       let image_id = image.id;
-      let describe = |request_id: i64| format!("{request_id}{FIELD}{image_id}");
+      let describe = |args: &mut Encoder| args.i64(image_id);
       let kind = PendingKind::Frame { image, sequential: true };
       state.start_op(&ctx, kind, OP_ANIMATION_NEXT, animation.id, &describe, None)
     })?,
@@ -1145,7 +1154,11 @@ pub(super) fn install_encoder_members<'js>(ctx: &Ctx<'js>) -> JsResult<()> {
           Some(_) => return invalid(&ctx, "addFrame: a frame's duration must be a positive number"),
         };
         let (kind, id) = (source.kind(), source.id());
-        let describe = |request_id: i64| format!("{request_id}{FIELD}{kind}{FIELD}{id}{FIELD}{millis}");
+        let describe = |args: &mut Encoder| {
+          args.u8(kind);
+          args.i64(id);
+          args.f(millis);
+        };
         let state = encoder.state.clone();
         let frame = encoder.start_frame(&ctx)?;
         let answer = state.start_op(
@@ -1173,9 +1186,8 @@ pub(super) fn install_encoder_members<'js>(ctx: &Ctx<'js>) -> JsResult<()> {
       }
       encoder.finished.set(true);
       let state = encoder.state.clone();
-      let describe = |request_id: i64| format!("{request_id}");
       let id = encoder.id;
-      state.start_op(&ctx, PendingKind::FinishEncoder { _encoder: encoder }, OP_ENCODER_FINISH, id, &describe, None)
+      state.start_op(&ctx, PendingKind::FinishEncoder { _encoder: encoder }, OP_ENCODER_FINISH, id, &|_| {}, None)
     })?,
   )?;
 
