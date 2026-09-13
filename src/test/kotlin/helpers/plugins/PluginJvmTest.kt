@@ -1,5 +1,6 @@
 package desu.inugram.helpers.plugins
 
+import org.json.JSONArray
 import android.os.Bundle
 import android.util.Base64
 import android.util.SparseArray
@@ -134,14 +135,30 @@ class PluginJvmTest {
         val plugin = engineFor("unsafe.jvm")
         JvmFixture.shared = JvmFixture()
         assertEquals(
-            "7,text,true,[1,2,3]",
+            "7,text,true,[1,2,3],4,1.5",
             plugin.js(
                 """
-                const b = inu.android.bundle({ n: 7, s: 'text', f: true, y: new Uint8Array([1, 2, 3]) });
-                [b.call('getInt', 'n'), b.call('getString', 's'), b.call('getBoolean', 'f'), JSON.stringify(Array.from(b.call('getByteArray', 'y')))].join(',')
+                const b = inu.android.bundle({ n: 7, s: 'text', f: true, y: new Uint8Array([1, 2, 3]), peer: 4n, ratio: 1.5 });
+                [b.call('getInt', 'n'), b.call('getString', 's'), b.call('getBoolean', 'f'), JSON.stringify(Array.from(b.call('getByteArray', 'y'))), b.call('getLong', 'peer'), b.call('getDouble', 'ratio')].join(',')
                 """,
             ),
         )
+        plugin.assertRefused("invalid-argument", "inu.android.bundle({ value: null })")
+        plugin.assertRefused("invalid-argument", "inu.android.bundle({ value: [] })")
+    }
+
+    /** the oracle's runnable is handed to a real thread, which is the only thing that can run one */
+    @Test
+    fun the_bundled_jvm_oracle_passes() {
+        val (plugin, lines) = startOracle("jvm-test.js")
+        sessions.add(plugin.session!!)
+        plugin.js("new (inu.jvm.cls('java.lang.Thread'))(onClick).call('start')")
+        val deadline = System.nanoTime() + 5_000_000_000
+        while (plugin.js("clicks") != "1" && System.nanoTime() < deadline) {
+            if (drain() == 0) Thread.sleep(10)
+        }
+        plugin.js("__jvmDone()")
+        assertOracleExact(lines, "jvm test done", 29)
     }
 
     @Test
@@ -151,6 +168,36 @@ class PluginJvmTest {
 
         for (name in listOf(PluginJvm::class.java.name, QuickJs::class.java.name, "$PLUGIN_PACKAGE.PluginKv")) {
             assertPluginError("forbidden", plugin.jvm(PluginJvm.OP_CLASS, name = name))
+        }
+    }
+
+    /**
+     * a direct call converts in rust (`jvm/native.rs`) and a routine in [PluginJvm.convertArguments]:
+     * the same value handed to the same overloads must land on the same one, or be refused by both
+     */
+    @Test
+    fun aRoutineAndADirectCallPickTheSameOverloadForEveryValue() {
+        val plugin = engineWith()
+        val methods = listOf("width", "boxed", "echo", "sized")
+        for (value in listOf("7", "7.0", "1.5", "2 ** 40", "9007199254740993n", "'x'", "true", "null", "new Uint8Array([1, 2])")) {
+            val outcome = JSONArray(plugin.js("""
+                (() => {
+                  const describe = (run) => { try { return 'V' + String(run()) } catch (e) { return 'P' + e.code } }
+                  const methods = ${JSONArray(methods)}
+                  const direct = methods.map((m) => describe(() => o.call(m, $value)))
+                  const routed = methods.map((m) => describe(() => {
+                    o.setField('payload', 'unset')
+                    o.call('runNow', inu.jvm.routine((ops) => [ops.setField(o, 'payload', ops.call(o, m, $value))]))
+                    return o.getField('payload')
+                  }))
+                  return JSON.stringify([direct, routed])
+                })()
+            """))
+            for (index in methods.indices) {
+                val direct = outcome.getJSONArray(0).getString(index).let { if (it.startsWith("P")) "refused" else it }
+                val routed = outcome.getJSONArray(1).getString(index).let { if (it == "Vunset" || it.startsWith("P")) "refused" else it }
+                assertEquals(direct, routed, "${methods[index]}($value)")
+            }
         }
     }
 

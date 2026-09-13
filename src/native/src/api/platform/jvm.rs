@@ -30,8 +30,7 @@ pub(crate) use refs::RefTable;
 use refs::{JvmRef, KIND_CLASS, KIND_CONSTRUCTOR, KIND_FIELD, KIND_METHOD};
 
 /// The string-wire side of `inu.jvm`: what needs kotlin's loaders, dex, routines, and the
-/// screen. The member ops (`OP_NEW`..`OP_MEMBER_SET`) reach it only from a harness without a vm -
-/// on a device they run in [`native`] and never cross as text.
+/// screen. Member access runs in [`native`] and never crosses as text.
 pub trait JvmHost {
   fn jvm(&self, op: i32, target: i64, name: &str, args: &[String]) -> String;
 }
@@ -53,15 +52,6 @@ pub(crate) fn ref_of<'js>(value: &Value<'js>) -> Option<Class<'js, JvmRef>> {
 }
 
 const OP_CLASS: i32 = 0;
-const OP_NEW: i32 = 1;
-const OP_GET: i32 = 2;
-const OP_SET: i32 = 3;
-const OP_CALL: i32 = 4;
-const OP_METHOD: i32 = 5;
-const OP_FIELD: i32 = 6;
-const OP_INVOKE: i32 = 7;
-const OP_MEMBER_GET: i32 = 8;
-const OP_MEMBER_SET: i32 = 9;
 const OP_RUNNABLE: i32 = 10;
 const OP_LOAD_DEX: i32 = 11;
 const OP_CURRENT_FRAGMENT: i32 = 13;
@@ -70,7 +60,6 @@ const OP_BUNDLE_METHOD: i32 = 15;
 const OP_ROUTINE: i32 = 16;
 const OP_XPOSED_ROUTINE: i32 = 17;
 const OP_PREPARE_CLASS: i32 = 18;
-const OP_COPY_REF: i32 = 19;
 const OP_LOAD_CLASS: i32 = 20;
 const OP_CANCEL_CLASS: i32 = 21;
 
@@ -219,16 +208,23 @@ impl JvmState {
     factory.call((builder,))
   }
 
+  /// member access runs through cached jni ids, and there is no text form of it to fall back to
+  fn native<'js>(&self, ctx: &Ctx<'js>) -> JsResult<&Native> {
+    match self.native.as_deref() {
+      Some(native) => Ok(native),
+      None => PluginErrorCode::Unsupported.throw(ctx, "jvm: member access needs a java vm"),
+    }
+  }
+
   pub(crate) fn handle_id<'js>(&self, _ctx: &Ctx<'js>, value: &Value<'js>) -> JsResult<i64> {
     Ok(ref_of(value).map(|handle| handle.borrow().id).unwrap_or(-1))
   }
 
   /// a second id for the reference behind [id], for a handoff whose original the other side
-  /// releases; a harness without a vm has no table entry and asks its host instead
+  /// releases
   fn copy_wire(&self, id: i64) -> String {
     match self.refs.copy(id) {
       Some(copy) => format!("GO{copy}"),
-      None if self.native.is_none() => self.host.jvm(OP_COPY_REF, id, "", &[]),
       None => crate::api::tl::proxy::encode_error(HANDLE_EXPIRED),
     }
   }
@@ -244,7 +240,6 @@ impl JvmState {
           pinned: None,
         },
       ),
-      None if self.native.is_none() => self.ask(ctx, OP_COPY_REF, id, "", &[]),
       None => PluginErrorCode::HandleExpired.throw(ctx, HANDLE_EXPIRED),
     }
   }
@@ -294,21 +289,6 @@ impl JvmState {
     values.iter().map(|value| read_arg(ctx, value)).collect()
   }
 
-  /// the wire form of the same op, for a harness whose host is a fake heap
-  fn ask_op<'js>(
-    &self,
-    ctx: &Ctx<'js>,
-    op: i32,
-    target: &Class<'js, JvmRef>,
-    name: &str,
-    args: &[Value<'js>],
-  ) -> JsResult<Value<'js>> {
-    let mut wires = Vec::with_capacity(args.len());
-    for arg in args {
-      wires.push(self.arg_to_wire(ctx, arg)?);
-    }
-    self.ask(ctx, op, target.borrow().id, name, &wires)
-  }
 
   pub(crate) fn js_call<'js>(
     &self,
@@ -319,72 +299,50 @@ impl JvmState {
   ) -> JsResult<Value<'js>> {
     self.grants.check_grant(ctx, GRANT, None, MATCH_NAMESPACE)?;
     let target = self.handle_arg(ctx, &target, "call")?;
-    match &self.native {
-      Some(native) => {
-        let args = self.read_args(ctx, &args.0)?;
-        let outcome = native.call(ctx, &target, &name, &args)?;
-        self.outcome_to_value(ctx, outcome)
-      }
-      None => self.ask_op(ctx, OP_CALL, &target, &name, &args.0),
-    }
+    let native = self.native(ctx)?;
+      let args = self.read_args(ctx, &args.0)?;
+      let outcome = native.call(ctx, &target, &name, &args)?;
+      self.outcome_to_value(ctx, outcome)
   }
 
   fn js_construct<'js>(&self, ctx: &Ctx<'js>, target: Value<'js>, args: Rest<Value<'js>>) -> JsResult<Value<'js>> {
     self.grants.check_grant(ctx, GRANT, None, MATCH_NAMESPACE)?;
     let target = self.handle_arg(ctx, &target, "new")?;
-    match &self.native {
-      Some(native) => {
-        let args = self.read_args(ctx, &args.0)?;
-        let outcome = native.construct(ctx, &target, &args)?;
-        self.outcome_to_value(ctx, outcome)
-      }
-      None => self.ask_op(ctx, OP_NEW, &target, "", &args.0),
-    }
+    let native = self.native(ctx)?;
+      let args = self.read_args(ctx, &args.0)?;
+      let outcome = native.construct(ctx, &target, &args)?;
+      self.outcome_to_value(ctx, outcome)
   }
 
   fn js_get<'js>(&self, ctx: &Ctx<'js>, target: Value<'js>, name: String) -> JsResult<Value<'js>> {
     self.grants.check_grant(ctx, GRANT, None, MATCH_NAMESPACE)?;
     let target = self.handle_arg(ctx, &target, "getField")?;
-    match &self.native {
-      Some(native) => {
-        let outcome = native.get(ctx, &target, &name)?;
-        self.outcome_to_value(ctx, outcome)
-      }
-      None => self.ask_op(ctx, OP_GET, &target, &name, &[]),
-    }
+    let native = self.native(ctx)?;
+      let outcome = native.get(ctx, &target, &name)?;
+      self.outcome_to_value(ctx, outcome)
   }
 
   fn js_set<'js>(&self, ctx: &Ctx<'js>, target: Value<'js>, name: String, value: Value<'js>) -> JsResult<()> {
     self.grants.check_grant(ctx, GRANT, None, MATCH_NAMESPACE)?;
     let target = self.handle_arg(ctx, &target, "setField")?;
-    match &self.native {
-      Some(native) => native.set(ctx, &target, &name, &read_arg(ctx, &value)?),
-      None => self.ask_op(ctx, OP_SET, &target, &name, &[value]).map(|_| ()),
-    }
+    let native = self.native(ctx)?;
+    native.set(ctx, &target, &name, &read_arg(ctx, &value)?)
   }
 
   fn js_method<'js>(&self, ctx: &Ctx<'js>, target: Value<'js>, name: String) -> JsResult<Value<'js>> {
     self.grants.check_grant(ctx, GRANT, None, MATCH_NAMESPACE)?;
     let target = self.handle_arg(ctx, &target, "getDeclaredMethod")?;
-    match &self.native {
-      Some(native) => {
-        let outcome = native.method(ctx, &target, &name)?;
-        self.outcome_to_value(ctx, outcome)
-      }
-      None => self.ask_op(ctx, OP_METHOD, &target, &name, &[]),
-    }
+    let native = self.native(ctx)?;
+      let outcome = native.method(ctx, &target, &name)?;
+      self.outcome_to_value(ctx, outcome)
   }
 
   fn js_field<'js>(&self, ctx: &Ctx<'js>, target: Value<'js>, name: String) -> JsResult<Value<'js>> {
     self.grants.check_grant(ctx, GRANT, None, MATCH_NAMESPACE)?;
     let target = self.handle_arg(ctx, &target, "getDeclaredField")?;
-    match &self.native {
-      Some(native) => {
-        let outcome = native.field(ctx, &target, &name)?;
-        self.outcome_to_value(ctx, outcome)
-      }
-      None => self.ask_op(ctx, OP_FIELD, &target, &name, &[]),
-    }
+    let native = self.native(ctx)?;
+      let outcome = native.field(ctx, &target, &name)?;
+      self.outcome_to_value(ctx, outcome)
   }
 
   fn js_invoke<'js>(
@@ -396,32 +354,20 @@ impl JvmState {
   ) -> JsResult<Value<'js>> {
     self.grants.check_grant(ctx, GRANT, None, MATCH_NAMESPACE)?;
     let target = self.handle_arg(ctx, &target, "invoke")?;
-    match &self.native {
-      Some(native) => {
-        let receiver = read_arg(ctx, &receiver)?;
-        let args = self.read_args(ctx, &args.0)?;
-        let outcome = native.invoke_pinned(ctx, &target, &receiver, &args)?;
-        self.outcome_to_value(ctx, outcome)
-      }
-      None => {
-        let mut all = vec![receiver];
-        all.extend(args.0);
-        self.ask_op(ctx, OP_INVOKE, &target, "", &all)
-      }
-    }
+    let native = self.native(ctx)?;
+      let receiver = read_arg(ctx, &receiver)?;
+      let args = self.read_args(ctx, &args.0)?;
+      let outcome = native.invoke_pinned(ctx, &target, &receiver, &args)?;
+      self.outcome_to_value(ctx, outcome)
   }
 
   fn js_member_get<'js>(&self, ctx: &Ctx<'js>, target: Value<'js>, receiver: Value<'js>) -> JsResult<Value<'js>> {
     self.grants.check_grant(ctx, GRANT, None, MATCH_NAMESPACE)?;
     let target = self.handle_arg(ctx, &target, "get")?;
-    match &self.native {
-      Some(native) => {
-        let receiver = read_arg(ctx, &receiver)?;
-        let outcome = native.member_get(ctx, &target, &receiver)?;
-        self.outcome_to_value(ctx, outcome)
-      }
-      None => self.ask_op(ctx, OP_MEMBER_GET, &target, "", &[receiver]),
-    }
+    let native = self.native(ctx)?;
+      let receiver = read_arg(ctx, &receiver)?;
+      let outcome = native.member_get(ctx, &target, &receiver)?;
+      self.outcome_to_value(ctx, outcome)
   }
 
   fn js_member_set<'js>(
@@ -433,13 +379,9 @@ impl JvmState {
   ) -> JsResult<()> {
     self.grants.check_grant(ctx, GRANT, None, MATCH_NAMESPACE)?;
     let target = self.handle_arg(ctx, &target, "set")?;
-    match &self.native {
-      Some(native) => {
-        let receiver = read_arg(ctx, &receiver)?;
-        native.member_set(ctx, &target, &receiver, &read_arg(ctx, &value)?)
-      }
-      None => self.ask_op(ctx, OP_MEMBER_SET, &target, "", &[receiver, value]).map(|_| ()),
-    }
+    let native = self.native(ctx)?;
+      let receiver = read_arg(ctx, &receiver)?;
+      native.member_set(ctx, &target, &receiver, &read_arg(ctx, &value)?)
   }
 
   pub(crate) fn arg_to_wire<'js>(&self, ctx: &Ctx<'js>, value: &Value<'js>) -> JsResult<String> {
