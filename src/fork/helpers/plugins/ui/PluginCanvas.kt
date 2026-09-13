@@ -159,14 +159,13 @@ object PluginCanvas {
         private val scratchBounds = Rect()
         private val scratchMetrics = Paint.FontMetrics()
         private var nextFile = 0L
-        private val hostStats = PluginCanvasStats("canvas host")
 
         private class Surface(val bitmap: Bitmap) {
             val canvas = Canvas(bitmap)
         }
 
         override fun canvas(op: Int, id: Long, arg: String, bytes: ByteArray?): String = try {
-            hostStats.time("op.$op") { run(op, id, arg, bytes) }
+            run(op, id, arg, bytes)
         } catch (e: Refusal) {
             e.wire
         } catch (e: OutOfMemoryError) {
@@ -794,28 +793,20 @@ object PluginCanvas {
             discard: (T) -> Unit,
             register: (T) -> String,
         ) {
-            val submitted = System.nanoTime()
             on.execute {
-                hostStats.add("host.queueWait", System.nanoTime() - submitted)
                 val result = runCatching(produce)
-                val produced = System.nanoTime()
                 EngineDispatch.onEngine(session, onDropped = { result.getOrNull()?.let(discard) }) {
-                    hostStats.add("host.engineHop", System.nanoTime() - produced)
-                    val wire = hostStats.time("host.register") {
-                        result.fold(
-                            onSuccess = register,
-                            onFailure = { PluginWire.encodePluginError("invalid-argument", "canvas: ${it.message ?: "the decode failed"}") },
-                        )
-                    }
-                    hostStats.time("host.canvasResult") { session.engine.canvasResult(requestId, wire) }
+                    val wire = result.fold(
+                        onSuccess = register,
+                        onFailure = { PluginWire.encodePluginError("invalid-argument", "canvas: ${it.message ?: "the decode failed"}") },
+                    )
+                    session.engine.canvasResult(requestId, wire)
                 }
             }
         }
 
         private fun submit(requestId: Long, on: Executor = work, produce: () -> String) {
-            val submitted = System.nanoTime()
             on.execute {
-                hostStats.add("host.queueWait", System.nanoTime() - submitted)
                 val wire = runCatching(produce).getOrElse(::wireOf)
                 EngineDispatch.onEngine(session) { session.engine.canvasResult(requestId, wire) }
             }
@@ -924,11 +915,9 @@ object PluginCanvas {
                 images[sourceId] ?: refuse("handle-expired", "canvas: that image is gone")
             }
             val encoder = pipeline.encoder
-            val pixels = hostStats.time("host.snapshot") { encoder.snapshot(source) }
+            val pixels = encoder.snapshot(source)
             pipeline.inFlight++
-            val submitted = System.nanoTime()
             encoder.queue.execute {
-                hostStats.add("host.queueWait", System.nanoTime() - submitted)
                 val result = runCatching { encoder.addFrame(pixels, duration) }
                 EngineDispatch.onEngine(session) {
                     pipeline.inFlight--
@@ -970,7 +959,6 @@ object PluginCanvas {
 
         private fun releaseEncoder(id: Long): String {
             encoders.remove(id)?.encoder?.close()
-            hostStats.dump()
             return ""
         }
 

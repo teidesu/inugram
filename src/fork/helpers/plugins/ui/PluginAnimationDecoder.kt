@@ -22,7 +22,6 @@ import org.telegram.ui.Components.RLottieNative
  */
 internal sealed class PluginAnimationDecoder(shared: Executor) {
     val queue: Executor = SerialExecutor(shared)
-    val stats = PluginCanvasStats("decoder ${javaClass.simpleName}")
 
     class Frame(val bitmap: Bitmap, val timestampMs: Int)
 
@@ -54,12 +53,11 @@ internal sealed class PluginAnimationDecoder(shared: Executor) {
     fun close() {
         if (closed) return
         closed = true
-        stats.dump()
         if (runCatching { queue.execute { release() } }.isFailure) release()
     }
 
     protected fun newFrame(width: Int, height: Int): Bitmap =
-        stats.time("frame.alloc") { Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888) }
+        Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888)
 
     private class Lottie(
         shared: Executor,
@@ -75,7 +73,7 @@ internal sealed class PluginAnimationDecoder(shared: Executor) {
         override fun frame(index: Int): Frame {
             val bitmap = newFrame(width, height)
             // anything below zero drew nothing, and the bitmap is still the blank one we allocated
-            if (stats.time("lottie.render") { lottie.getFrame(index, bitmap, true) } < 0) {
+            if (lottie.getFrame(index, bitmap, true) < 0) {
                 bitmap.recycle()
                 throw IllegalArgumentException("frame $index did not render")
             }
@@ -139,13 +137,13 @@ internal sealed class PluginAnimationDecoder(shared: Executor) {
             val bitmap = newFrame(decodeWidth, decodeHeight)
             // ffmpeg answers zero when it decoded nothing, and the bitmap stays the blank one: the
             // frame count is a duration times a rate, so a source can run out before it is reached
-            if (stats.time("ffmpeg.decode") { decode(bitmap) } == 0) {
+            if (decode(bitmap) == 0) {
                 bitmap.recycle()
                 throw NoFrame(index)
             }
             nextIndex = index + 1
-            val sized = stats.time("frame.scale") { scaleTo(bitmap, frameWidth, frameHeight) }
-            val turned = stats.time("frame.rotate") { turn(sized, rotation) }
+            val sized = scaleTo(bitmap, frameWidth, frameHeight)
+            val turned = turn(sized, rotation)
             return Frame(turned, video.getProgress(TimeUnit.MILLISECONDS))
         }
 
@@ -162,7 +160,7 @@ internal sealed class PluginAnimationDecoder(shared: Executor) {
 
         override fun frame(index: Int): Frame {
             read = true
-            return Frame(stats.time("still.copy") { source.copy(Bitmap.Config.ARGB_8888, false) }, 0)
+            return Frame(source.copy(Bitmap.Config.ARGB_8888, false), 0)
         }
 
         override fun next(): Frame? = if (read) null else frame(0)

@@ -3,7 +3,6 @@ package desu.inugram.helpers.plugins.telegram
 import desu.inugram.helpers.media.MediaSendHelper
 import desu.inugram.helpers.plugins.io.PluginTransfers
 import desu.inugram.helpers.plugins.ui.PluginAnimationDecoder
-import desu.inugram.helpers.plugins.ui.PluginCanvasStats
 import desu.inugram.helpers.plugins.tl.TlHandles
 import desu.inugram.core.plugins.PluginWire
 import desu.inugram.core.plugins.ScopeMatch
@@ -426,12 +425,10 @@ object PluginMedia {
     internal fun describeLocalDocument(file: File, mime: String, asDocument: Boolean, withThumb: Boolean = true): LocalDescription {
         if (asDocument || !mime.startsWith("video/")) return LocalDescription.NONE
         val path = file.absolutePath
-        val stats = PluginCanvasStats("describe ${file.name}")
-        val video = stats.time("describe.attribute") { MediaSendHelper.describeVideo(path, isEncrypted = false) }
+        val video = MediaSendHelper.describeVideo(path, isEncrypted = false)
             ?: return LocalDescription.NONE
         val attributes = if (video.hasAudio) listOf(video.attribute) else listOf(video.attribute, TLRPC.TL_documentAttributeAnimated())
-        val thumb = if (withThumb) stats.time("describe.thumb") { coverOf(path, stats) } else null
-        stats.dump()
+        val thumb = if (withThumb) coverOf(path) else null
         return LocalDescription(attributes, thumb)
     }
 
@@ -441,10 +438,10 @@ object PluginMedia {
      * before its bubble draws, and ffmpeg decodes it straight at the cover's size. The platform
      * stays as the fallback for what ffmpeg refuses.
      */
-    private fun coverOf(path: String, stats: PluginCanvasStats): TLRPC.PhotoSize? {
-        val frame = stats.time("cover.ffmpeg") { PluginAnimationDecoder.readFirstFrame(path, THUMB_SIDE) }
-            ?: stats.time("cover.platform") { MediaSendHelper.readFirstFrame(path) }
-        return stats.time("cover.save") { MediaSendHelper.saveVideoThumb(frame, isEncrypted = false) }
+    private fun coverOf(path: String): TLRPC.PhotoSize? {
+        val frame = PluginAnimationDecoder.readFirstFrame(path, THUMB_SIDE)
+            ?: MediaSendHelper.readFirstFrame(path)
+        return MediaSendHelper.saveVideoThumb(frame, isEncrypted = false)
     }
 
     /** the side stock saves a video's cover at, outside a secret chat */

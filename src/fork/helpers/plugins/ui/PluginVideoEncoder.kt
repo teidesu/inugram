@@ -34,7 +34,6 @@ internal class PluginVideoEncoder private constructor(
     shared: Executor,
 ) {
     val queue: Executor = SerialExecutor(shared)
-    val stats = PluginCanvasStats("encoder ${width}x$height")
 
     private val info = MediaCodec.BufferInfo()
     private val spare = ArrayDeque<ByteBuffer>()
@@ -59,10 +58,10 @@ internal class PluginVideoEncoder private constructor(
      */
     fun snapshot(source: Bitmap): ByteBuffer {
         val buffer = synchronized(spare) { spare.poll() }
-            ?: stats.time("snapshot.allocBuffer") { ByteBuffer.allocateDirect(width * height * 4) }
-        val fitted = stats.time("snapshot.fit") { fit(source) }
+            ?: ByteBuffer.allocateDirect(width * height * 4)
+        val fitted = fit(source)
         buffer.clear()
-        stats.time("snapshot.copyPixels") { fitted.copyPixelsToBuffer(buffer) }
+        fitted.copyPixelsToBuffer(buffer)
         return buffer
     }
 
@@ -72,14 +71,13 @@ internal class PluginVideoEncoder private constructor(
             failure?.let { throw it }
             var attempts = INPUT_ATTEMPTS
             while (true) {
-                stats.time("encode.drain") { drain(false) }
-                val index = stats.time("encode.dequeueInput") { codec.dequeueInputBuffer(TIMEOUT_US) }
+                drain(false)
+                val index = codec.dequeueInputBuffer(TIMEOUT_US)
                 if (index >= 0) {
-                    val length = stats.time("encode.yuv") { write(index, pixels) }
-                    stats.time("encode.queueInput") { codec.queueInputBuffer(index, 0, length, presentationUs, 0) }
+                    val length = write(index, pixels)
+                    codec.queueInputBuffer(index, 0, length, presentationUs, 0)
                     break
                 }
-                stats.add("encode.inputStarved", 0)
                 if (--attempts <= 0) throw IllegalStateException("the encoder never asked for a frame")
             }
             presentationUs += (durationMs * 1000.0).toLong().coerceAtLeast(1L)
@@ -104,18 +102,15 @@ internal class PluginVideoEncoder private constructor(
             drain(false)
             if (--attempts <= 0) throw IllegalStateException("the encoder never asked for a frame")
         }
-        stats.time("finish.drain") { drain(true) }
+        drain(true)
         if (!muxing) throw IllegalStateException("the encoder wrote no video")
         info.set(0, 0, presentationUs, MediaCodec.BUFFER_FLAG_END_OF_STREAM)
-        stats.time("finish.endSample") { muxer.writeSampleData(track, ByteBuffer.allocate(0), info) }
-        stats.time("finish.release") {
-            codec.stop()
-            codec.release()
-            muxer.stop()
-            muxer.release()
-        }
+        muxer.writeSampleData(track, ByteBuffer.allocate(0), info)
+        codec.stop()
+        codec.release()
+        muxer.stop()
+        muxer.release()
         finished = true
-        stats.dump()
         return output
     }
 
@@ -216,14 +211,12 @@ internal class PluginVideoEncoder private constructor(
      * length the frame was written at - not `w * h * 3 / 2`, since a plane the device gave us may
      * be padded to a stride of its own - or `-1`.
      */
-    private fun convert(pixels: ByteBuffer, y: Plane, u: Plane, v: Plane): Int = stats.time("encode.yuv.native") {
-        NativePixels.rgbaToYuv420(
-            pixels, width, height,
-            y.buffer, y.offset, y.rowStride, y.pixelStride,
-            u.buffer, u.offset, u.rowStride, u.pixelStride,
-            v.buffer, v.offset, v.rowStride, v.pixelStride,
-        )
-    }
+    private fun convert(pixels: ByteBuffer, y: Plane, u: Plane, v: Plane): Int = NativePixels.rgbaToYuv420(
+        pixels, width, height,
+        y.buffer, y.offset, y.rowStride, y.pixelStride,
+        u.buffer, u.offset, u.rowStride, u.pixelStride,
+        v.buffer, v.offset, v.rowStride, v.pixelStride,
+    )
 
     private fun drain(untilEnd: Boolean) {
         val deadline = System.currentTimeMillis() + DRAIN_DEADLINE_MILLIS
@@ -244,7 +237,7 @@ internal class PluginVideoEncoder private constructor(
             if (info.size > 0 && info.flags and MediaCodec.BUFFER_FLAG_CODEC_CONFIG == 0) {
                 if (!muxing) startMuxing()
                 info.flags = info.flags and MediaCodec.BUFFER_FLAG_END_OF_STREAM.inv()
-                stats.time("drain.mux") { muxer.writeSampleData(track, buffer, info) }
+                muxer.writeSampleData(track, buffer, info)
             }
             codec.releaseOutputBuffer(status, false)
             if (end) return
