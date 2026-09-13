@@ -1,15 +1,10 @@
-((shared, PluginError, RpcError, selfUserId) => {
+((shared, PluginError, RpcError, selfUserId, DROP_CODE, DROP_TEXT) => {
   const { baseName, toNumber, peerDialogId, invalid } = shared
 
   const unsupported = message => new PluginError('unsupported', message)
 
-  // what the app is told when a middleware drops the send. the app is awaiting a response for a
-  // request it will never get one for, so it has to be an rpc error, and the synthetic code is the
-  // one `PluginRpc` tears a chain down with
-  const DROP_CODE = -1000
-  const DROP_TEXT = 'MESSAGE_DROPPED_BY_PLUGIN'
-
-  // the four requests one `OutgoingMessage` covers, and what each of them can carry. read off the
+  // the requests one `OutgoingMessage` covers, which are the methods the middleware registers for,
+  // and what each of them can carry. read off the
   // method rather than probed per field: a flag-gated field that is *clear* is omitted from reads
   // exactly like one the constructor never declared, so `'silent' in raw` cannot tell "this send is
   // not silent" from "an edit has no such field"
@@ -233,9 +228,12 @@
     return Object.seal(message)
   }
 
-  return middleware => async (raw, next, account, dispatchId) => {
+  // a drop answers the app with `DROP_CODE`/`DROP_TEXT`: it is awaiting a response for a request
+  // it will never get one for, so it has to be an rpc error, and the code is the one `PluginRpc`
+  // tears a chain down with
+  const wrap = middleware => async (raw, next, account, dispatchId) => {
     const shape = SHAPES[baseName(raw)]
-    // the host only ever dispatches the four, so this is a shape the engine does not know rather
+    // the host only ever dispatches `SHAPES`' own methods, so this is a shape the engine does not know rather
     // than a plugin error: pass it on untouched instead of failing the user's send over it
     if (shape === undefined) return next(raw)
     const verdict = await middleware(buildOutgoing(raw, shape, account, dispatchId), account)
@@ -250,4 +248,6 @@
     }
     return new RpcError(DROP_CODE, DROP_TEXT)
   }
+
+  return { wrap, methods: Object.keys(SHAPES) }
 })

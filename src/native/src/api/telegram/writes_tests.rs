@@ -962,3 +962,28 @@ fn the_bundled_writes_test_plugin_passes() {
 fn the_bundled_media_test_plugin_passes() {
   run_bundled_oracle(include_str!("../../../../test/plugins/media-test.js"), "media test done", 30);
 }
+
+const WRITES_JS: &str = include_str!("../../js/writes.js");
+const PLUGIN_WRITES_KT: &str = include_str!("../../../../fork/helpers/plugins/telegram/PluginWrites.kt");
+
+fn quoted_names(block: &str) -> std::collections::BTreeSet<String> {
+  block.split(['\'', '"']).skip(1).step_by(2).map(str::to_string).collect()
+}
+
+/// the prelude refuses an action before it crosses and the host refuses one it has no action for,
+/// so a name on only one side is either unreachable or a refusal the plugin was promised it would not get
+#[test]
+fn the_typing_actions_match_the_host_s() {
+  let js = WRITES_JS.split("const TYPING_ACTIONS = new Set([").nth(1).unwrap().split("])").next().unwrap();
+  let kt = PLUGIN_WRITES_KT
+    .split("private fun typingAction(name: String)")
+    .nth(1)
+    .unwrap()
+    .split("else ->")
+    .next()
+    .unwrap();
+  let kt: std::collections::BTreeSet<String> =
+    kt.lines().filter_map(|line| line.trim().strip_prefix('"')?.split('"').next().map(str::to_string)).collect();
+  assert!(!kt.is_empty());
+  assert_eq!(quoted_names(js), kt);
+}

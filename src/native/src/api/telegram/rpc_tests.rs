@@ -2979,3 +2979,18 @@ fn takeout_without_its_grant_throws_not_granted() {
   );
   assert!(host.takeout_calls.borrow().is_empty());
 }
+
+const PLUGIN_RPC_KT: &str = include_str!("../../../../fork/helpers/plugins/telegram/PluginRpc.kt");
+
+fn kotlin_const<'a>(source: &'a str, name: &str) -> &'a str {
+  let marker = format!("const val {name} = ");
+  let at = source.find(&marker).unwrap_or_else(|| panic!("PluginRpc.kt declares no {name}")) + marker.len();
+  source[at..].lines().next().unwrap().trim().trim_matches('"')
+}
+
+/// a drop is recognized on the host by exactly this code and text, so the two sides must agree
+#[test]
+fn the_drop_sentinel_is_the_one_the_host_recognizes() {
+  assert_eq!(kotlin_const(PLUGIN_RPC_KT, "SYNTHETIC_CODE"), DROP_CODE.to_string());
+  assert_eq!(kotlin_const(PLUGIN_RPC_KT, "DROPPED_TEXT"), DROP_TEXT);
+}

@@ -188,6 +188,15 @@ class PluginWritesTest {
     }
 
     @Test
+    fun an_unknown_typing_action_is_refused_rather_than_sent_as_typing() {
+        val plugin = granted()
+        assertPluginError("invalid-argument", write(plugin, PluginWrites.OP_SEND_TYPING, send("D$alice").put("action", "dancing")))
+        assertNull(write(plugin, PluginWrites.OP_SEND_TYPING, send("D$alice").put("action", "typing")))
+        drain()
+        assertEquals(1, connections().sent.size, "only the known action went out")
+    }
+
+    @Test
     fun every_op_is_gated_on_its_own_scope_on_the_side_that_owns_the_data() {
         val plugin = startPlugin("writes", "account.write(send)")
         val refused = mapOf(

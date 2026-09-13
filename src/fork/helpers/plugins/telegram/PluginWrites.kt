@@ -400,7 +400,9 @@ object PluginWrites {
         return send(call, request) { PluginWire.encodeNull() }
     }
 
+    /** keep the names in step with `TYPING_ACTIONS` in `writes.js`, which refuses the rest before they cross */
     private fun typingAction(name: String): TLRPC.SendMessageAction = when (name) {
+        "typing" -> TLRPC.TL_sendMessageTypingAction()
         "cancel" -> TLRPC.TL_sendMessageCancelAction()
         "recordVideo" -> TLRPC.TL_sendMessageRecordVideoAction()
         "uploadVideo" -> TLRPC.TL_sendMessageUploadVideoAction()
@@ -410,7 +412,7 @@ object PluginWrites {
         "uploadDocument" -> TLRPC.TL_sendMessageUploadDocumentAction()
         "chooseSticker" -> TLRPC.TL_sendMessageChooseStickerAction()
         "chooseContact" -> TLRPC.TL_sendMessageChooseContactAction()
-        else -> TLRPC.TL_sendMessageTypingAction()
+        else -> refuse("invalid-argument", "sendTyping: unknown action '$name'")
     }
 
     internal fun replyTo(call: Call): TLRPC.InputReplyTo? {
