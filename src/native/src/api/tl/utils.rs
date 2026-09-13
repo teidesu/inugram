@@ -8,8 +8,6 @@ use crate::api::error::PluginErrorCode;
 
 const PRELUDE: &[u8] = include_bytes!(concat!(env!("OUT_DIR"), "/utils.qbc"));
 
-const HEX_DIGITS: &[u8; 16] = b"0123456789abcdef";
-
 pub const FORMAT_DATE: i32 = 0;
 pub const FORMAT_TIME: i32 = 1;
 pub const FORMAT_DATE_TIME: i32 = 2;
@@ -56,25 +54,15 @@ pub fn install_utils_with_host<'js>(
 
   utils.set(
     "toHex",
-    Function::new(ctx.clone(), |ctx: Ctx<'js>, bytes: Value<'js>| {
-      read_bytes(&ctx, &bytes, "toHex").map(|bytes| {
-        let bytes: &[u8] = &bytes;
-        let mut out = String::with_capacity(bytes.len() * 2);
-        for byte in bytes {
-          out.push(HEX_DIGITS[(byte >> 4) as usize] as char);
-          out.push(HEX_DIGITS[(byte & 0x0f) as usize] as char);
-        }
-        out
-      })
-    })?,
+    Function::new(ctx.clone(), |ctx: Ctx<'js>, bytes: Value<'js>| read_bytes(&ctx, &bytes, "toHex").map(hex::encode))?,
   )?;
 
   utils.set(
     "fromHex",
     Function::new(ctx.clone(), |ctx: Ctx<'js>, text: String| -> JsResult<TypedArray<'js, u8>> {
-      match decode_hex(&text) {
-        Some(bytes) => TypedArray::<u8>::new(ctx, bytes),
-        None => PluginErrorCode::InvalidArgument.throw(&ctx, "fromHex: expected hex digits, in pairs"),
+      match hex::decode(&text) {
+        Ok(bytes) => TypedArray::<u8>::new(ctx, bytes),
+        Err(_) => PluginErrorCode::InvalidArgument.throw(&ctx, "fromHex: expected hex digits, in pairs"),
       }
     })?,
   )?;
@@ -181,20 +169,6 @@ fn read_bytes<'js>(ctx: &Ctx<'js>, value: &Value<'js>, what: &str) -> JsResult<V
     return Err(Exception::throw_type(ctx, &format!("{what}: the array is detached")));
   };
   Ok(bytes.to_vec())
-}
-
-fn decode_hex(text: &str) -> Option<Vec<u8>> {
-  let digits = text.as_bytes();
-  if !digits.len().is_multiple_of(2) {
-    return None;
-  }
-  let mut out = Vec::with_capacity(digits.len() / 2);
-  for pair in digits.chunks_exact(2) {
-    let high = (pair[0] as char).to_digit(16)?;
-    let low = (pair[1] as char).to_digit(16)?;
-    out.push((high * 16 + low) as u8);
-  }
-  Some(out)
 }
 
 #[cfg(test)]

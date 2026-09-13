@@ -40,11 +40,8 @@ fn code_of(ctx: &Context, code: &str) -> String {
 #[test]
 fn the_bundled_utils_test_plugin_passes() {
   let (rt, ctx) = setup();
-  let lines = crate::testing::harness::run_capturing_console(
-    &rt,
-    &ctx,
-    include_str!("../../../../test/plugins/utils-test.js"),
-  );
+  let lines =
+    crate::testing::harness::run_capturing_console(&rt, &ctx, include_str!("../../../../test/plugins/utils-test.js"));
   crate::testing::harness::assert_oracle_exact(&lines, "utils test done", 83);
 }
 

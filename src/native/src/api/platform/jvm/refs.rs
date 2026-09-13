@@ -112,7 +112,12 @@ pub(crate) struct JvmRef {
 
 impl JvmRef {
   pub(crate) fn new(refs: Arc<RefTable>, id: i64) -> Self {
-    Self { id, refs, class_key: Cell::new(None), pinned: RefCell::new(None) }
+    Self {
+      id,
+      refs,
+      class_key: Cell::new(None),
+      pinned: RefCell::new(None),
+    }
   }
 }
 

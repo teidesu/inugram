@@ -129,9 +129,8 @@ impl JniBridge {
 
     // taken before the id cache below borrows `env` for the rest of the constructor
     let tl_buffer_sig = RuntimeMethodSignature::from_str("()Ljava/nio/ByteBuffer;").ok()?;
-    let tl_buffer = env
-      .get_method_id(&class, JNIString::from("tlBuffer"), MethodSignature::from(&tl_buffer_sig))
-      .ok()?;
+    let tl_buffer =
+      env.get_method_id(&class, JNIString::from("tlBuffer"), MethodSignature::from(&tl_buffer_sig)).ok()?;
     let buffer = unsafe { env.call_method_unchecked(this, tl_buffer, ReturnType::Object, &[]) };
     if clear_exception(env) {
       return None;

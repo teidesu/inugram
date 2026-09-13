@@ -3,6 +3,17 @@ type SyntheticTable = (&'static str, Vec<(&'static str, u64, bool)>);
 
 use super::*;
 
+const ELF_MAGIC: [u8; 4] = [0x7f, b'E', b'L', b'F'];
+const ELFCLASS64: u8 = 2;
+const ELFDATA2LSB: u8 = 1;
+const EV_CURRENT: u8 = 1;
+const EHDR_SIZE: usize = 64;
+const SHDR_SIZE: usize = 64;
+const SYM_SIZE: usize = 24;
+const SHN_UNDEF: u16 = 0;
+const SHT_SYMTAB: u32 = 2;
+const SHT_DYNSYM: u32 = 11;
+
 /// Builds an ELF64 image with the symbol tables described, plus an optional `.gnu_debugdata`
 /// section holding a second such image.
 struct Builder {
@@ -78,6 +89,7 @@ impl Builder {
     image[0..4].copy_from_slice(&ELF_MAGIC);
     image[4] = ELFCLASS64;
     image[5] = ELFDATA2LSB;
+    image[6] = EV_CURRENT;
 
     for (index, blob) in blobs.iter().enumerate() {
       let offset = image.len() as u64;

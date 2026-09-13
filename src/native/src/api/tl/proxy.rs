@@ -4,8 +4,8 @@ use std::rc::Rc;
 
 use base64::engine::general_purpose::STANDARD;
 use rquickjs::atom::PredefinedAtom;
-use rquickjs::function::This;
 use rquickjs::class::{JsClass, Readable, Trace, Tracer};
+use rquickjs::function::This;
 use rquickjs::proxy::ProxyHandler;
 use rquickjs::{
   Array, Class, Constructor, Ctx, Exception, Filter, Function, IntoJs, JsLifetime, Object, Proxy, Result as JsResult,
@@ -133,7 +133,13 @@ impl<'js> TlShared<'js> {
     }
     let marker = Symbol::new_global(ctx.clone(), HANDLE_MARKER_DESCRIPTION)?;
     let handler = build_handler(ctx)?;
-    if ctx.store_userdata(TlShared { handler: handler.clone(), marker: marker.clone() }).is_err() {
+    if ctx
+      .store_userdata(TlShared {
+        handler: handler.clone(),
+        marker: marker.clone(),
+      })
+      .is_err()
+    {
       return throw_tl(ctx, "tl proxy: the shared handler could not be installed");
     }
     Ok((handler, marker))
@@ -153,7 +159,11 @@ pub struct TlViews {
 
 impl TlViews {
   pub fn new(host: Rc<dyn TlHost>) -> Rc<Self> {
-    Rc::new(Self { host, epoch: Cell::new(0), ordinals: RefCell::new(HashMap::new()) })
+    Rc::new(Self {
+      host,
+      epoch: Cell::new(0),
+      ordinals: RefCell::new(HashMap::new()),
+    })
   }
 
   fn epoch(&self) -> u64 {
@@ -165,12 +175,7 @@ impl TlViews {
       return *known;
     }
     let ordinal = host.tl_resolve_field(class_id, key);
-    self
-      .ordinals
-      .borrow_mut()
-      .entry(class_id)
-      .or_default()
-      .insert(key.to_string(), ordinal);
+    self.ordinals.borrow_mut().entry(class_id).or_default().insert(key.to_string(), ordinal);
     ordinal
   }
 
@@ -311,12 +316,7 @@ impl<'a> Reader<'a> {
   }
 }
 
-fn decode_read<'js>(
-  ctx: &Ctx<'js>,
-  views: &Rc<TlViews>,
-  life: ViewLife,
-  bytes: &[u8],
-) -> JsResult<Value<'js>> {
+fn decode_read<'js>(ctx: &Ctx<'js>, views: &Rc<TlViews>, life: ViewLife, bytes: &[u8]) -> JsResult<Value<'js>> {
   let mut reader = Reader { bytes, at: 0 };
   let bad = || Exception::throw_message(ctx, "tl read: malformed reply");
   let tag = reader.u8().ok_or_else(bad)?;
@@ -337,11 +337,7 @@ fn decode_read<'js>(
       let flags = reader.u8().ok_or_else(bad)?;
       let id = reader.i64().ok_or_else(bad)?;
       let class_id = reader.i32().ok_or_else(bad)?;
-      let projection = if tag == tag::HANDLE_PROJECTED {
-        Some(reader.str().ok_or_else(bad)?)
-      } else {
-        None
-      };
+      let projection = if tag == tag::HANDLE_PROJECTED { Some(reader.str().ok_or_else(bad)?) } else { None };
       build_view(ctx, views.clone(), flags & 1 != 0, flags & 2 != 0, life, id, class_id, projection)?.into_js(ctx)
     }
     _ => Err(bad()),
@@ -632,7 +628,10 @@ impl<'js> HandleBox<'js> {
       return Ok(None);
     };
     let host = self.host();
-    let bytes = host.read_buffer().get(..written).ok_or_else(|| Exception::throw_message(ctx, "tl read: short reply"))?;
+    let bytes = host
+      .read_buffer()
+      .get(..written)
+      .ok_or_else(|| Exception::throw_message(ctx, "tl read: short reply"))?;
     decode_read(ctx, &self.views, self.life, bytes).map(Some)
   }
 
@@ -787,7 +786,12 @@ fn build_handler<'js>(ctx: &Ctx<'js>) -> JsResult<Object<'js>> {
     PredefinedAtom::Setter,
     Function::new(
       ctx.clone(),
-      |ctx: Ctx<'js>, target: Value<'js>, prop: Value<'js>, value: Value<'js>, _receiver: Value<'js>| -> JsResult<bool> {
+      |ctx: Ctx<'js>,
+       target: Value<'js>,
+       prop: Value<'js>,
+       value: Value<'js>,
+       _receiver: Value<'js>|
+       -> JsResult<bool> {
         let handle = box_of(&ctx, &target)?;
         let view = handle.borrow();
         if prop.as_symbol().is_some() {

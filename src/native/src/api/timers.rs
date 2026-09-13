@@ -6,9 +6,9 @@ use std::time::Instant;
 use rquickjs::function::Opt;
 use rquickjs::{Coerced, Ctx, Exception, Function, Persistent, Result as JsResult, Runtime, Value};
 
-use crate::api::error::PluginErrorCode;
 use crate::api::error::format_exception;
-use crate::runtime::{pump_jobs};
+use crate::api::error::PluginErrorCode;
+use crate::runtime::pump_jobs;
 use crate::sandbox::registry::{Lifecycle, Registry, Token};
 
 pub const CANCEL_WAKE: i64 = -1;

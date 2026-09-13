@@ -5,13 +5,13 @@ use std::sync::Arc;
 
 use rquickjs::function::Rest;
 use rquickjs::{
-  object::Filter, Array, Class, Context, Ctx, FromJs, Function, IntoJs, Object, Persistent,
-  Result as JsResult, Runtime, TypedArray, Value,
+  object::Filter, Array, Class, Context, Ctx, FromJs, Function, IntoJs, Object, Persistent, Result as JsResult,
+  Runtime, TypedArray, Value,
 };
 
-use crate::api::error::{wire_error_to_js, PluginErrorCode};
 use crate::api::error::format_exception;
-use crate::runtime::{pump_jobs};
+use crate::api::error::{wire_error_to_js, PluginErrorCode};
+use crate::runtime::pump_jobs;
 use crate::sandbox::grants::{GrantHost, MATCH_NAMESPACE};
 use crate::sandbox::registry::{CallbackRegistry, Lifecycle};
 use crate::utils::arguments::array_values;
@@ -234,7 +234,15 @@ impl JvmState {
 
   fn copy_ref<'js>(&self, ctx: &Ctx<'js>, id: i64, kind: u8) -> JsResult<Value<'js>> {
     match self.refs.copy(id) {
-      Some(copy) => self.make_handle(ctx, HandleSpec { id: copy, kind, class_key: None, pinned: None }),
+      Some(copy) => self.make_handle(
+        ctx,
+        HandleSpec {
+          id: copy,
+          kind,
+          class_key: None,
+          pinned: None,
+        },
+      ),
       None if self.native.is_none() => self.ask(ctx, OP_COPY_REF, id, "", &[]),
       None => PluginErrorCode::HandleExpired.throw(ctx, HANDLE_EXPIRED),
     }
@@ -275,7 +283,9 @@ impl JvmState {
   fn handle_arg<'js>(&self, ctx: &Ctx<'js>, value: &Value<'js>, what: &str) -> JsResult<Class<'js, JvmRef>> {
     match ref_of(value) {
       Some(handle) => Ok(handle),
-      None => PluginErrorCode::InvalidArgument.throw(ctx, &format!("{what}: expected a java class, object, method or field")),
+      None => {
+        PluginErrorCode::InvalidArgument.throw(ctx, &format!("{what}: expected a java class, object, method or field"))
+      }
     }
   }
 
@@ -284,7 +294,14 @@ impl JvmState {
   }
 
   /// the wire form of the same op, for a harness whose host is a fake heap
-  fn ask_op<'js>(&self, ctx: &Ctx<'js>, op: i32, target: &Class<'js, JvmRef>, name: &str, args: &[Value<'js>]) -> JsResult<Value<'js>> {
+  fn ask_op<'js>(
+    &self,
+    ctx: &Ctx<'js>,
+    op: i32,
+    target: &Class<'js, JvmRef>,
+    name: &str,
+    args: &[Value<'js>],
+  ) -> JsResult<Value<'js>> {
     let mut wires = Vec::with_capacity(args.len());
     for arg in args {
       wires.push(self.arg_to_wire(ctx, arg)?);
@@ -292,7 +309,13 @@ impl JvmState {
     self.ask(ctx, op, target.borrow().id, name, &wires)
   }
 
-  pub(crate) fn js_call<'js>(&self, ctx: &Ctx<'js>, target: Value<'js>, name: String, args: Rest<Value<'js>>) -> JsResult<Value<'js>> {
+  pub(crate) fn js_call<'js>(
+    &self,
+    ctx: &Ctx<'js>,
+    target: Value<'js>,
+    name: String,
+    args: Rest<Value<'js>>,
+  ) -> JsResult<Value<'js>> {
     self.grants.check_grant(ctx, GRANT, None, MATCH_NAMESPACE)?;
     let target = self.handle_arg(ctx, &target, "call")?;
     match &self.native {
@@ -363,7 +386,13 @@ impl JvmState {
     }
   }
 
-  fn js_invoke<'js>(&self, ctx: &Ctx<'js>, target: Value<'js>, receiver: Value<'js>, args: Rest<Value<'js>>) -> JsResult<Value<'js>> {
+  fn js_invoke<'js>(
+    &self,
+    ctx: &Ctx<'js>,
+    target: Value<'js>,
+    receiver: Value<'js>,
+    args: Rest<Value<'js>>,
+  ) -> JsResult<Value<'js>> {
     self.grants.check_grant(ctx, GRANT, None, MATCH_NAMESPACE)?;
     let target = self.handle_arg(ctx, &target, "invoke")?;
     match &self.native {
@@ -394,7 +423,13 @@ impl JvmState {
     }
   }
 
-  fn js_member_set<'js>(&self, ctx: &Ctx<'js>, target: Value<'js>, receiver: Value<'js>, value: Value<'js>) -> JsResult<()> {
+  fn js_member_set<'js>(
+    &self,
+    ctx: &Ctx<'js>,
+    target: Value<'js>,
+    receiver: Value<'js>,
+    value: Value<'js>,
+  ) -> JsResult<()> {
     self.grants.check_grant(ctx, GRANT, None, MATCH_NAMESPACE)?;
     let target = self.handle_arg(ctx, &target, "set")?;
     match &self.native {
@@ -450,7 +485,15 @@ impl JvmState {
       let Ok(id) = payload[kind.len_utf8()..].parse::<i64>() else {
         return PluginErrorCode::Internal.throw(ctx, "jvm: the host answered with a bad handle");
       };
-      return self.make_handle(ctx, HandleSpec { id, kind: kind as u8, class_key: None, pinned: None });
+      return self.make_handle(
+        ctx,
+        HandleSpec {
+          id,
+          kind: kind as u8,
+          class_key: None,
+          pinned: None,
+        },
+      );
     }
     match crate::api::tl::proxy::scalar_wire_to_js(ctx, tag, payload) {
       Some(value) => value,
@@ -645,7 +688,9 @@ pub fn install_jvm<'js>(
     let state = state.clone();
     natives.set(
       "get",
-      Function::new(ctx.clone(), move |ctx: Ctx<'js>, target: Value<'js>, name: String| state.js_get(&ctx, target, name))?,
+      Function::new(ctx.clone(), move |ctx: Ctx<'js>, target: Value<'js>, name: String| {
+        state.js_get(&ctx, target, name)
+      })?,
     )?;
   }
   {
@@ -661,23 +706,30 @@ pub fn install_jvm<'js>(
     let state = state.clone();
     natives.set(
       "method",
-      Function::new(ctx.clone(), move |ctx: Ctx<'js>, target: Value<'js>, name: String| state.js_method(&ctx, target, name))?,
+      Function::new(ctx.clone(), move |ctx: Ctx<'js>, target: Value<'js>, name: String| {
+        state.js_method(&ctx, target, name)
+      })?,
     )?;
   }
   {
     let state = state.clone();
     natives.set(
       "field",
-      Function::new(ctx.clone(), move |ctx: Ctx<'js>, target: Value<'js>, name: String| state.js_field(&ctx, target, name))?,
+      Function::new(ctx.clone(), move |ctx: Ctx<'js>, target: Value<'js>, name: String| {
+        state.js_field(&ctx, target, name)
+      })?,
     )?;
   }
   {
     let state = state.clone();
     natives.set(
       "invoke",
-      Function::new(ctx.clone(), move |ctx: Ctx<'js>, target: Value<'js>, receiver: Value<'js>, args: Rest<Value<'js>>| {
-        state.js_invoke(&ctx, target, receiver, args)
-      })?,
+      Function::new(
+        ctx.clone(),
+        move |ctx: Ctx<'js>, target: Value<'js>, receiver: Value<'js>, args: Rest<Value<'js>>| {
+          state.js_invoke(&ctx, target, receiver, args)
+        },
+      )?,
     )?;
   }
   {

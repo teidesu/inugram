@@ -752,10 +752,7 @@ fn a_message_comes_back_wrapped_and_a_miss_stays_null() {
     ),
     r#"[true,7,"hello","message",null]"#,
   );
-  assert_eq!(
-    eval_json(&ctx, "inu.account().getMessagesCached('me', [7, 8]).map((m) => m && m.id)"),
-    "[7,null]",
-  );
+  assert_eq!(eval_json(&ctx, "inu.account().getMessagesCached('me', [7, 8]).map((m) => m && m.id)"), "[7,null]",);
 }
 
 /// `0` crosses as the dialog id it is. The message reads give it a meaning - the common box - and
@@ -1066,7 +1063,11 @@ fn paging_hands_the_host_back_its_own_offsets_and_ends_at_a_short_page() {
   settle(&rt, &ctx, &state, &host);
   assert_eq!(eval_json(&ctx, "__out"), "[false,1,null]");
   let asked: Vec<String> = host.fetch_log.borrow().iter().map(|(_, arg)| arg.clone()).collect();
-  assert_eq!(asked, vec!["0\n2\n\n", "0\n2\n\n1715540640,7,111"], "the second page carries the host's own offsets");
+  assert_eq!(
+    asked,
+    vec!["0\n2\n\n", "0\n2\n\n1715540640,7,111"],
+    "the second page carries the host's own offsets"
+  );
 }
 
 /// the same part `getDialogsCached` takes them in, so both dialog reads spell it one way. It sits

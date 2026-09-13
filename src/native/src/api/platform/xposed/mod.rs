@@ -16,7 +16,7 @@ use crate::utils::arguments::array_values;
 use rquickjs::function::This;
 
 use crate::api::error::format_exception;
-use crate::runtime::{pump_jobs};
+use crate::runtime::pump_jobs;
 
 pub trait XposedHost {
   fn xposed(&self, op: i32, target: i64, name: &str, args: &[String]) -> String;

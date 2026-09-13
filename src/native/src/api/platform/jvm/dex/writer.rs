@@ -76,15 +76,8 @@ fn align_buffer(out: &mut Vec<u8>) {
     out.push(0);
   }
 }
-fn write_uleb(out: &mut Vec<u8>, mut value: u32) {
-  loop {
-    let b = (value & 127) as u8;
-    value >>= 7;
-    out.push(b | if value != 0 { 128 } else { 0 });
-    if value == 0 {
-      break;
-    }
-  }
+fn write_uleb(out: &mut Vec<u8>, value: u32) {
+  leb128::write::unsigned(out, value.into()).expect("writing to a Vec cannot fail");
 }
 fn write_mutf8(out: &mut Vec<u8>, text: &str) {
   write_uleb(out, text.encode_utf16().count() as u32);

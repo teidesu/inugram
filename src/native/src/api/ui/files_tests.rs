@@ -155,7 +155,12 @@ fn a_picked_file_belongs_to_the_plugin_and_the_copy_goes_when_the_file_does() {
   let one = f.dir.path().join("owned.bin");
   std::fs::write(&one, b"picked content").unwrap();
   let request = pick(&f, "{}");
-  answer(&f, request, &format!(r#"[{{"path":"{}","name":"owned.bin","type":""}}]"#, one.to_string_lossy()), None);
+  answer(
+    &f,
+    request,
+    &format!(r#"[{{"path":"{}","name":"owned.bin","type":""}}]"#, one.to_string_lossy()),
+    None,
+  );
   assert_eq!(settled(&f), "owned.bin");
   assert!(one.exists(), "the copy was taken away while the plugin still held it");
 
@@ -195,7 +200,12 @@ fn an_answer_this_cannot_read_rejects_rather_than_leaving_the_promise_hanging() 
   // and a copy that is not there any more is a failure, not the cancellation an empty answer is
   let request = pick(&f, "{}");
   let gone = f.dir.path().join("gone.bin");
-  answer(&f, request, &format!(r#"[{{"path":"{}","name":"gone.bin","type":""}}]"#, gone.to_string_lossy()), None);
+  answer(
+    &f,
+    request,
+    &format!(r#"[{{"path":"{}","name":"gone.bin","type":""}}]"#, gone.to_string_lossy()),
+    None,
+  );
   assert_eq!(settled(&f), "internal:pickFile: the copy of this file is gone");
 }
 
