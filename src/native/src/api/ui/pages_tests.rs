@@ -648,12 +648,13 @@ fn transient_page_auto_disposes_on_close_after_on_close_fires() {
       .eval::<(), _>(
         r#"
             globalThis.__closed = 0;
-            inu.registerSettings(inu.ui.settingsPage({
+            globalThis.__page = inu.ui.settingsPage({
                 title: 't',
                 transient: true,
                 items: () => [inu.ui.button({ text: 'r', onClick: () => {} })],
                 onClose: () => { globalThis.__closed++; },
-            }));
+            });
+            inu.registerSettings(globalThis.__page);
             "#,
       )
       .unwrap();
@@ -670,6 +671,21 @@ fn transient_page_auto_disposes_on_close_after_on_close_fires() {
   state.close_page(&rt, &ctx, page_id);
   let closed: i32 = ctx.with(|ctx| ctx.eval("globalThis.__closed").unwrap());
   assert_eq!(closed, 1);
+
+  // and reopening the one page a plugin kept says why it is gone, that being the easy mistake
+  let refused: String = ctx.with(|ctx| {
+    ctx
+      .eval(
+        r#"
+            (() => {
+                try { inu.ui.openPage(globalThis.__page); return 'opened'; }
+                catch (e) { return String(e.message ?? e); }
+            })()
+            "#,
+      )
+      .unwrap()
+  });
+  assert!(refused.contains("declared transient"), "{refused}");
 }
 
 #[test]

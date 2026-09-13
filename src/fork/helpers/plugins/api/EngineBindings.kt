@@ -6,6 +6,7 @@ import desu.inugram.helpers.plugins.PluginSession
 import desu.inugram.helpers.plugins.PluginBridge
 import desu.inugram.helpers.plugins.QuickJs
 import desu.inugram.helpers.plugins.io.PluginBlobs
+import desu.inugram.helpers.plugins.io.PluginTransfers
 import desu.inugram.helpers.plugins.io.PluginFs
 import desu.inugram.helpers.plugins.platform.PluginJvm
 import desu.inugram.helpers.plugins.platform.PluginXposed
@@ -36,6 +37,7 @@ object EngineBindings {
             bridge,
             QuickJs.Config(
                 spillDir = PluginBlobs.dirFor(session.plugin.id),
+                transferDir = PluginTransfers.dirFor(session.plugin.id),
                 fsDir = quota?.let { PluginFs.dirFor(session.plugin.id) } ?: "",
                 fsQuotaBytes = quota ?: 0,
                 fsUnscoped = PluginFs.isUnscoped(session.permissions),

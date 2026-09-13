@@ -1,7 +1,11 @@
 package desu.inugram.helpers.plugins
 
+import desu.inugram.helpers.plugins.io.PluginTransfers
 import desu.inugram.helpers.plugins.telegram.PluginWrites
+import desu.inugram.helpers.plugins.telegram.PluginMedia
 import kotlin.test.assertEquals
+import kotlin.test.assertFalse
+import kotlin.test.assertNotEquals
 import kotlin.test.assertNotNull
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
@@ -206,23 +210,94 @@ class PluginOptimisticSendTest {
         assertTrue(localMessages().none { it.id < 0 }, "a quote with nothing in it was drawn")
     }
 
+    /**
+     * what rust staged is deleted the moment the write answers, and a local message goes on pointing
+     * at the file it was sent from, so what the composer is handed is a copy the app owns - named the
+     * way the send names it, which is also the only thing that tells the loader an mp4 is an animation
+     */
     @Test
     fun media_is_handed_to_the_app_to_upload_rather_than_uploaded_first() {
         val plugin = granted("fs")
         val staged = File(scratch, "optimistic.bin").apply { writeText("12345") }
         val wire = "F" + JSONObject()
             .put("path", staged.absolutePath)
-            .put("name", "payload.bin")
-            .put("mime", "application/octet-stream")
+            .put("name", "payload.mp4")
+            .put("mime", "video/mp4")
             .toString()
 
         assertNull(write(plugin, PluginWrites.OP_SEND_MEDIA, send(text = "look"), arrayOf(wire)))
         settle()
 
-        assertTrue(
-            TestApp.fileLoader(0).uploads.any { it.contains("optimistic.bin") },
-            "the app was never asked to upload the staged file: ${TestApp.fileLoader(0).uploads}",
+        val uploaded = assertNotNull(
+            TestApp.fileLoader(0).uploads.singleOrNull(),
+            "the app was asked to upload ${TestApp.fileLoader(0).uploads}",
         )
-        assertTrue(localMessages().any { it.id < 0 }, "no local message was drawn for the media send")
+        assertNotEquals(staged.absolutePath, uploaded, "the composer was handed the file rust staged")
+        assertTrue(uploaded.endsWith(".mp4"), "the copy lost the name the send gave it: $uploaded")
+        assertEquals("12345", File(uploaded).readText())
+        val local = assertNotNull(
+            localMessages().firstOrNull { it.id < 0 },
+            "no local message was drawn for the media send",
+        )
+        assertEquals(uploaded, local.attachPath, "the drawn message reads its media from somewhere else")
+    }
+
+    @Test
+    fun an_unnamed_mp4_blob_gets_an_animation_extension() {
+        val plugin = granted("fs")
+        val staged = File(scratch, "transfer-1.bin").apply { writeText("12345") }
+        val wire = "F" + JSONObject()
+            .put("path", staged.absolutePath)
+            .put("name", "")
+            .put("mime", "video/mp4")
+        assertNull(write(plugin, PluginWrites.OP_SEND_MEDIA, send(text = "look"), arrayOf(wire)))
+        settle()
+        val uploaded = TestApp.fileLoader(0).uploads.single()
+        assertTrue(uploaded.endsWith(".mp4"), uploaded)
+        val local = localMessages().first { it.id < 0 }
+        assertEquals(uploaded, local.attachPath)
+        val filename = local.media.document.attributes.filterIsInstance<TLRPC.TL_documentAttributeFilename>().single()
+        assertEquals("transfer-1.mp4", filename.file_name)
+        val source = PluginMedia.Source(staged, "", "video/mp4")
+        assertEquals("chosen.bin", PluginMedia.getFileName(source, "chosen.bin"))
+        assertEquals("original.webm", PluginMedia.getFileName(PluginMedia.Source(staged, "original.webm", "video/webm"), ""))
+        assertEquals("transfer-1.bin", PluginMedia.getFileName(PluginMedia.Source(staged, "", ""), ""))
+    }
+
+    @Test
+    fun a_staged_transfer_is_moved_to_the_composer_rather_than_copied() {
+        val plugin = granted("fs")
+        val staged = File(PluginTransfers.dirFor(plugin.id), "transfer-7.bin").apply { writeText("12345") }
+        val wire = "F" + JSONObject()
+            .put("path", staged.absolutePath)
+            .put("name", "payload.mp4")
+            .put("mime", "video/mp4")
+            .toString()
+
+        assertNull(write(plugin, PluginWrites.OP_SEND_MEDIA, send(text = "look"), arrayOf(wire)))
+        settle()
+
+        val uploaded = assertNotNull(TestApp.fileLoader(0).uploads.singleOrNull(), "nothing was uploaded")
+        assertFalse(staged.exists(), "the staged transfer was copied rather than taken")
+        assertTrue(uploaded.endsWith(".mp4"), "the taken file lost the name the send gave it: $uploaded")
+        assertEquals("12345", File(uploaded).readText())
+    }
+
+    @Test
+    fun a_path_the_plugin_named_is_uploaded_from_where_it_is() {
+        val plugin = granted("fs")
+        val own = File(scratch, "clip.mp4").apply { writeText("12345") }
+        val wire = "F" + JSONObject()
+            .put("path", own.absolutePath)
+            .put("name", "clip.mp4")
+            .put("mime", "video/mp4")
+            .toString()
+
+        assertNull(write(plugin, PluginWrites.OP_SEND_MEDIA, send(text = "look"), arrayOf(wire)))
+        settle()
+
+        assertEquals(listOf(own.absolutePath), TestApp.fileLoader(0).uploads, "the plugin's own file was copied")
+        assertTrue(own.exists(), "the plugin's own file was moved")
+        assertEquals(own.absolutePath, localMessages().first { it.id < 0 }.attachPath)
     }
 }

@@ -430,10 +430,15 @@ fn mkdir_makes_parents_and_readdir_names_only_children() {
         inu.fs.mkdir('a/b/c')
         inu.fs.write('a/b/c/z.txt', new Uint8Array([1]))
         inu.fs.write('a/b/c/a.txt', new Uint8Array([1]))
+        inu.fs.mkdir('a/b/c/d')
         JSON.stringify([inu.fs.readdir('a/b/c'), inu.fs.readdir('a')])
         "#,
   );
-  assert_eq!(got, r#"[["a.txt","z.txt"],["b"]]"#);
+  // a directory among the files names both, and names only what the entries are called
+  assert_eq!(got, r#"[["a.txt","d","z.txt"],["b"]]"#);
+  // which is what leaves telling the two apart to `stat`
+  assert_eq!(eval(&f, "String(inu.fs.stat('a/b/c/d').isDirectory)"), "true");
+  assert_eq!(eval(&f, "String(inu.fs.stat('a/b/c/a.txt').isFile)"), "true");
 }
 
 #[test]

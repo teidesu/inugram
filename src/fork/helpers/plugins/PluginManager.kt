@@ -25,6 +25,7 @@ import desu.inugram.helpers.plugins.PluginManager.stop
 import desu.inugram.helpers.plugins.api.EngineBindings
 import desu.inugram.helpers.plugins.api.PluginKv
 import desu.inugram.helpers.plugins.io.PluginBlobs
+import desu.inugram.helpers.plugins.io.PluginTransfers
 import desu.inugram.helpers.plugins.io.PluginFetch
 import desu.inugram.helpers.plugins.io.PluginFs
 import desu.inugram.helpers.plugins.platform.PluginJvm
@@ -106,6 +107,7 @@ object PluginManager {
         PluginAppVisibility.watch(context)
         PluginAccounts.watch()
         PluginBlobs.scheduleSweep()
+        PluginTransfers.scheduleSweep()
         plugins.addAll(PluginStore.load())
         PluginStore.persist(plugins)
         republishOrder()
@@ -310,6 +312,7 @@ object PluginManager {
             PluginKv.wipe(plugin.id)
             // stop() wiped these already if it was running; this covers the one that never was
             PluginBlobs.wipe(plugin.id)
+            PluginTransfers.wipe(plugin.id)
             PluginFetch.wipe(plugin.id)
             PluginCanvas.wipe(plugin.id)
             // the one plugin-owned tree meant to outlive its engine, so uninstall is the only thing
@@ -493,6 +496,7 @@ object PluginManager {
         PluginJvm.detach(session.engine)
         session.engine.close()
         PluginBlobs.wipe(session.plugin.id)
+        PluginTransfers.wipe(session.plugin.id)
         PluginFetch.wipe(session.plugin.id)
         PluginCanvas.wipe(session.plugin.id)
         beforeClear()

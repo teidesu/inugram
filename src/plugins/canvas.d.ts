@@ -16,11 +16,12 @@ declare interface DOMMatrix2DInit {
   f?: number
 }
 
+/** an opaque pointer to a decoded image */
 declare interface ImageBitmap {
   readonly width: number
   readonly height: number
 
-  /** Frees the decoded bitmap now, rather than when the collector gets to it. Also `using`-able. */
+  /** dispose the bitmap and the underlying memory */
   dispose(): void
   [Symbol.dispose](): void
 }
@@ -46,12 +47,23 @@ declare type GlobalCompositeOperation
     | 'difference' | 'exclusion'
     | 'hue' | 'saturation' | 'color' | 'luminosity'
 
+/**
+ * a 2d context for drawing on an offscreen canvas
+ *
+ * the supported api is a strict subset of the web api,
+ * if something is not correctly implemented comparet to the browser,
+ * it is a plugin engine bug, please report it
+ */
 declare interface CanvasRenderingContext2D {
+  /** the canvas this context is drawing on */
   readonly canvas: OffscreenCanvas
+  /** save the current state */
   save(): void
+  /** restore the last saved state */
   restore(): void
-
+  /** reset the state to default */
   reset(): void
+
   scale(x: number, y: number): void
   rotate(angle: number): void
   translate(x: number, y: number): void
@@ -123,16 +135,119 @@ declare interface CanvasRenderingContext2D {
   ): void
 }
 
+/** an offscreen canvas that can be drawn on, semantically similar to web OffscreenCanvas */
 declare interface OffscreenCanvas {
+  /** canvas width */
   width: number
+  /** canvas height */
   height: number
+  /** get a 2d context for drawing on the canvas */
   getContext(contextId: '2d'): CanvasRenderingContext2D
-  convertToBlob(options?: { type?: 'image/png' | 'image/jpeg' | 'image/webp', quality?: number }): Promise<Blob>
+
+  /** render the canvas into a Blob with an image */
+  convertToBlob(options?: {
+    type?: 'image/png' | 'image/jpeg' | 'image/webp'
+    quality?: number
+  }): Promise<Blob>
+
+  /** dispose the canvas */
+  dispose(): void
+  [Symbol.dispose](): void
+}
+
+/** one family of {@link inu.canvas.listFonts} */
+declare interface FontEntry {
+  /** name of the font, to be used in {@link CanvasRenderingContext2D.font} */
+  readonly name: string
 
   /**
-   * Frees the backing bitmap now, rather than when the collector gets to it. Its context, and any
-   * pattern made from it, answer `handle-expired` afterwards. Also `using`-able.
+   * where the family comes from:
+   * - `builtin` - bundled with the app
+   * - `imported` - was manually added by the user
+   * - `device` - system's built-in font
+   * - `plugin` - loaded by this plugin.
    */
+  readonly source: 'builtin' | 'imported' | 'device' | 'plugin'
+
+  /** whether the font is hidden from the painter roster */
+  readonly hidden: boolean
+}
+
+/** one frame of an {@link AnimatedImage} */
+declare interface AnimationFrame extends ImageBitmap {
+  /** ms from the start of the animation */
+  readonly timestamp: number
+}
+
+/**
+ * An animated source (tgs/webm/mp4), opened for frame-by-frame reading.
+ *
+ * **Limits: at most 4 at once per plugin.**
+ *
+ * It is an async iterable of its frames in order:
+ *
+ * ```js
+ * for await (using frame of animation) ctx.drawImage(frame, 0, 0)
+ * ```
+ */
+declare interface AnimatedImage extends AsyncIterableIterator<AnimationFrame> {
+  /** frame width (note: will match the one asked for, if any) */
+  readonly width: number
+  /** frame height (note: will match the one asked for, if any) */
+  readonly height: number
+  /**
+   * total number of frames.
+   *
+   * for variable-rate gifs, this value is estimated from {@link duration} and {@link fps},
+   * making it an upper bound
+   */
+  readonly frameCount: number
+  /** animation duration in milliseconds, `0` when not available */
+  readonly duration: number
+  /** animation fps rate, `0` when not available */
+  readonly fps: number
+
+  /** read the next frame */
+  next(): Promise<IteratorResult<AnimationFrame, undefined>>
+
+  /**
+   * read a frame by its specific index
+   *
+   * note that video codecs are not optimized for random access, so skipping forward
+   * will require decoding intermediate frames from the key frame
+   */
+  frame(index: number): Promise<AnimationFrame>
+
+  /** dispose the reader */
+  dispose(): void
+  [Symbol.dispose](): void
+}
+
+/**
+ * A video encoder, one frame at a time.
+ *
+ * **Limits: at most 2 at once per plugin, at most 3600 frames**.
+ *
+ * currently the only supported output is a slient mp4.
+ */
+declare interface VideoEncoder {
+  readonly width: number
+  readonly height: number
+
+  /**
+   * append a frame to the video
+   *
+   * when the source does not match the encoder's dimensions, it is scaled to fit
+   *
+   * @param source the image to append
+   * @param durationMs defaults to one frame at the `fps` the encoder was created with
+   */
+  addFrame(source: CanvasImageSource, durationMs?: number): Promise<void>
+
+  /** finalize the encoder and return a Blob with the video */
+  finish(): Promise<Blob>
+
+  /** cancel encoding and dispose the encoder */
   dispose(): void
   [Symbol.dispose](): void
 }
@@ -145,6 +260,38 @@ declare namespace inu {
     /** @needs-grant fs */
     function load(file: { path: string }): Promise<ImageBitmap>
 
+    /**
+     * Opens an animated source (tgs/webm/mp4) for reading.
+     *
+     * @needs-grant fs to name a file
+     */
+    function decodeAnimation(
+      source: Blob | Uint8Array | { path: string },
+      options?: {
+        /** width to decode at */
+        width?: number
+        /** height to decode at */
+        height?: number
+      },
+    ): Promise<AnimatedImage>
+
+    /** create a video encoder */
+    function createEncoder(options: {
+      /** mime type of the output file */
+      type?: 'video/mp4'
+      /** width of the output video */
+      width: number
+      /** height of the output video */
+      height: number
+      /** frames per second */
+      fps?: number
+      /** bitrate in bits per second */
+      bitrate?: number
+    }): Promise<VideoEncoder>
+
     function loadFont(family: string, source: Blob | Uint8Array | { path: string }): Promise<void>
+
+    /** list of fonts available for use in {@link CanvasRenderingContext2D.font} */
+    function listFonts(): Promise<FontEntry[]>
   }
 }

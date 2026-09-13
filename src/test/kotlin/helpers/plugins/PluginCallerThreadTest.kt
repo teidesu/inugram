@@ -149,7 +149,7 @@ class PluginCallerThreadTest {
                 fixture.setStaticField('task', inu.jvm.runnable(() => { inu.ui.getCurrentScreen(); }));
             """.trimIndent())
             runOnCaller("screen-caller")
-            assertTrue(logs.any { it.contains("getCurrentScreen: this API requires globalQueue") }, logs.toString())
+            assertTrue(logs.any { it.contains("getCurrentScreen: this API requires the plugin queue") }, logs.toString())
         } finally {
             engine.stopCallbacks()
             PluginJvm.detach(engine)

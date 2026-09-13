@@ -17,10 +17,10 @@ use rquickjs::{
 
 use crate::api::canvas::css::{parse_color, parse_font, Font};
 use crate::api::canvas::geometry::{finite, normalize_round_rect, ArcError, Matrix, Path, Verb};
+use crate::api::error::format_exception;
 use crate::api::error::{wire_error_to_js, PluginErrorCode};
 use crate::api::io::blob::{mint_app_file, BlobHandle, BlobState, BUILD_LIMIT_BYTES};
 use crate::api::io::fs::FsState;
-use crate::api::error::format_exception;
 use crate::runtime::{pump_jobs, PendingSettle};
 use crate::sandbox::limits::{ExternalCharge, ExternalMemory};
 use crate::sandbox::registry::RequestIds;
@@ -46,6 +46,25 @@ pub const OP_DECODE: i32 = 6;
 pub const OP_RELEASE_IMAGE: i32 = 7;
 pub const OP_LOAD_FONT: i32 = 8;
 pub const OP_CAPABILITIES: i32 = 9;
+pub const OP_DECODE_ANIMATION: i32 = 10;
+pub const OP_ANIMATION_FRAME: i32 = 11;
+pub const OP_RELEASE_ANIMATION: i32 = 12;
+pub const OP_ENCODER_CREATE: i32 = 13;
+pub const OP_ENCODER_FRAME: i32 = 14;
+pub const OP_ENCODER_FINISH: i32 = 15;
+pub const OP_ENCODER_DESTROY: i32 = 16;
+pub const OP_ANIMATION_NEXT: i32 = 17;
+
+pub const MAX_ANIMATIONS: usize = 4;
+pub const MAX_ENCODERS: usize = 2;
+pub const MAX_ENCODER_FRAMES: u32 = 3600;
+pub const MAX_FPS: i32 = 120;
+pub const MAX_ENCODER_BITRATE: i64 = 100_000_000;
+
+const DEFAULT_ENCODER_FPS: i32 = 12;
+
+// PluginVideoEncoder retains three pixel buffers and one bitmap for scaling.
+const ENCODER_SPARE_BUFFERS: usize = 3;
 
 const FIELD: char = '\u{1e}';
 const ITEM: char = '\u{1f}';
@@ -366,6 +385,136 @@ pub struct ImageHandle(Rc<ImageData>);
 pub struct GradientHandle(Rc<GradientData>);
 pub struct PatternHandle(Rc<PatternData>);
 
+/// A source staged for the host, owned by whatever outlives the staging. Dropping it removes the
+/// file, so a request that fails anywhere leaves nothing behind.
+struct StagedFile(PathBuf);
+
+impl Drop for StagedFile {
+  fn drop(&mut self) {
+    let _ = fs::remove_file(&self.0);
+  }
+}
+
+/// something the session counts while it is open, so a disposed handle stops counting before the
+/// collector reaches it
+trait Live {
+  fn is_live(&self) -> bool;
+}
+
+fn count_live<T: Live>(list: &RefCell<Vec<Weak<T>>>) -> usize {
+  let mut list = list.borrow_mut();
+  list.retain(|weak| weak.upgrade().is_some_and(|value| value.is_live()));
+  list.len()
+}
+
+pub struct AnimationData {
+  id: i64,
+  width: i32,
+  height: i32,
+  frame_count: i32,
+  duration: i32,
+  fps: i32,
+  alive: Cell<bool>,
+  charge: RefCell<Option<ExternalCharge>>,
+  staged: RefCell<Option<StagedFile>>,
+  state: Rc<CanvasState>,
+}
+
+impl Live for AnimationData {
+  fn is_live(&self) -> bool {
+    self.alive.get()
+  }
+}
+
+impl Drop for AnimationData {
+  fn drop(&mut self) {
+    self.free();
+  }
+}
+
+impl AnimationData {
+  fn free(&self) {
+    if !self.alive.replace(false) {
+      return;
+    }
+    self.state.host.canvas(OP_RELEASE_ANIMATION, self.id, "", None);
+    self.charge.borrow_mut().take();
+    self.staged.borrow_mut().take();
+  }
+}
+
+pub struct EncoderData {
+  id: i64,
+  width: i32,
+  height: i32,
+  fps: i32,
+  frames: Cell<u32>,
+  in_flight: Cell<usize>,
+  finished: Cell<bool>,
+  alive: Cell<bool>,
+  charge: RefCell<Option<ExternalCharge>>,
+  state: Rc<CanvasState>,
+}
+
+impl Live for EncoderData {
+  fn is_live(&self) -> bool {
+    self.alive.get()
+  }
+}
+
+impl Drop for EncoderData {
+  fn drop(&mut self) {
+    self.free();
+  }
+}
+
+impl EncoderData {
+  fn free(&self) {
+    if !self.alive.replace(false) {
+      return;
+    }
+    self.state.host.canvas(OP_ENCODER_DESTROY, self.id, "", None);
+    if self.in_flight.get() == 0 {
+      self.charge.borrow_mut().take();
+    }
+  }
+
+  fn start_frame(self: &Rc<Self>, ctx: &Ctx<'_>) -> JsResult<EncoderFrame> {
+    let charge = self.state.external.charge(ctx, self.width as usize * self.height as usize * 4)?;
+    self.in_flight.set(self.in_flight.get() + 1);
+    Ok(EncoderFrame { encoder: self.clone(), _charge: charge })
+  }
+
+  fn writable(&self, ctx: &Ctx<'_>) -> JsResult<()> {
+    if !self.alive.get() {
+      return expired(ctx, "this encoder is gone");
+    }
+    if self.finished.get() {
+      return expired(ctx, "this encoder has already been finished");
+    }
+    Ok(())
+  }
+}
+
+struct EncoderFrame {
+  encoder: Rc<EncoderData>,
+  _charge: ExternalCharge,
+}
+
+impl Drop for EncoderFrame {
+  fn drop(&mut self) {
+    let encoder = &self.encoder;
+    let in_flight = encoder.in_flight.get() - 1;
+    encoder.in_flight.set(in_flight);
+    if !encoder.alive.get() && in_flight == 0 {
+      encoder.charge.borrow_mut().take();
+    }
+  }
+}
+
+pub struct AnimationHandle(Rc<AnimationData>);
+pub struct EncoderHandle(Rc<EncoderData>);
+
 #[derive(Clone)]
 struct DrawState {
   matrix: Matrix,
@@ -444,17 +593,44 @@ opaque_class!(ImageHandle, "ImageBitmap");
 opaque_class!(GradientHandle, "CanvasGradient");
 opaque_class!(PatternHandle, "CanvasPattern");
 opaque_class!(Context2d, "CanvasRenderingContext2D");
+opaque_class!(AnimationHandle, "AnimatedImage");
+opaque_class!(EncoderHandle, "VideoEncoder");
 
 enum PendingKind {
   Encode,
+  FinishEncoder {
+    _encoder: Rc<EncoderData>,
+  },
+  EncoderFrame {
+    _frame: EncoderFrame,
+  },
   Decode(Rc<ImageData>),
-  Font,
+  /// a decoder's frame: an image carrying its timestamp, or - asked sequentially - the end of the source
+  Frame {
+    image: Rc<ImageData>,
+    sequential: bool,
+  },
+  /// the request answers nothing, and the promise resolves `undefined`
+  Ack,
+  Animation {
+    id: i64,
+    /// held here so a decode that never opens deletes the source it staged
+    staged: Option<StagedFile>,
+  },
+  Encoder {
+    id: i64,
+    width: i32,
+    height: i32,
+    fps: i32,
+    charge: Option<ExternalCharge>,
+  },
 }
 
 struct Pending {
   kind: PendingKind,
-  settle: PendingSettle,
-  staged: Option<PathBuf>,
+  settle: Option<PendingSettle>,
+  /// never read: it is here so that settling the request, however it settles, deletes the source
+  _staged: Option<StagedFile>,
 }
 
 pub struct CanvasState {
@@ -470,6 +646,8 @@ pub struct CanvasState {
   next_staged: RequestIds,
   pending: RefCell<HashMap<i64, Pending>>,
   surfaces: RefCell<Vec<Weak<Surface>>>,
+  animations: RefCell<Vec<Weak<AnimationData>>>,
+  encoders: RefCell<Vec<Weak<EncoderData>>>,
 }
 
 impl CanvasState {
@@ -818,11 +996,13 @@ impl CanvasState {
   }
 
   fn take_pending(&self, request_id: i64) -> Option<Pending> {
-    let pending = self.pending.borrow_mut().remove(&request_id)?;
-    if let Some(path) = pending.staged.as_ref() {
-      let _ = fs::remove_file(path);
-    }
-    Some(pending)
+    self.pending.borrow_mut().remove(&request_id)
+  }
+
+  /// What the host is already opening: a create only becomes live once it answers, so counting the
+  /// live ones alone would let a plugin that never awaits start as many at once as it liked.
+  fn count_starting(&self, matches: fn(&PendingKind) -> bool) -> usize {
+    self.pending.borrow().values().filter(|pending| matches(&pending.kind)).count()
   }
 
   fn create_surface<'js>(self: &Rc<Self>, ctx: &Ctx<'js>, width: i32, height: i32) -> JsResult<Rc<Surface>> {
@@ -908,6 +1088,8 @@ pub fn install_canvas<'js>(
     next_staged: RequestIds::default(),
     pending: RefCell::new(HashMap::new()),
     surfaces: RefCell::new(Vec::new()),
+    animations: RefCell::new(Vec::new()),
+    encoders: RefCell::new(Vec::new()),
   });
   let capabilities = state.host.canvas(OP_CAPABILITIES, 0, "", None);
   state.blend_modes.set(capabilities.contains("\"blend\":true"));
@@ -917,6 +1099,8 @@ pub fn install_canvas<'js>(
   install_gradient_members(ctx)?;
   install_pattern_members(ctx)?;
   install_image_members(ctx)?;
+  install_animation_members(ctx)?;
+  install_encoder_members(ctx)?;
   state.install_namespace(ctx, globals)?;
   Ok(state)
 }
@@ -963,8 +1147,142 @@ impl CanvasState {
       )?;
     }
 
+    let owned = self.clone();
+    canvas.set(
+      "decodeAnimation",
+      Function::new(
+        ctx.clone(),
+        move |ctx: Ctx<'js>, source: Opt<Value<'js>>, options: Opt<Value<'js>>| -> JsResult<Value<'js>> {
+          let source = source.0.unwrap_or_else(|| Value::new_undefined(ctx.clone()));
+          owned.decode_animation(&ctx, &source, options)
+        },
+      )?,
+    )?;
+
+    let owned = self.clone();
+    canvas.set(
+      "createEncoder",
+      Function::new(ctx.clone(), move |ctx: Ctx<'js>, options: Opt<Value<'js>>| -> JsResult<Value<'js>> {
+        owned.create_encoder(&ctx, options)
+      })?,
+    )?;
+
     globals.inu.set("canvas", canvas)?;
     Ok(())
+  }
+
+  fn decode_animation<'js>(
+    self: &Rc<Self>,
+    ctx: &Ctx<'js>,
+    source: &Value<'js>,
+    options: Opt<Value<'js>>,
+  ) -> JsResult<Value<'js>> {
+    let state = self;
+    let open =
+      count_live(&state.animations) + state.count_starting(|kind| matches!(kind, PendingKind::Animation { .. }));
+    if open >= MAX_ANIMATIONS {
+      return PluginErrorCode::QuotaExceeded(MAX_ANIMATIONS as i64 + 1, MAX_ANIMATIONS as i64)
+        .throw(ctx, &format!("at most {MAX_ANIMATIONS} animations may be open at once"));
+    }
+    let mut width = 0;
+    let mut height = 0;
+    if let Some(options) = options.0.as_ref().and_then(|v| v.as_object()) {
+      for (name, slot) in [("width", &mut width), ("height", &mut height)] {
+        if let Some(value) = options.get::<_, Option<Coerced<f64>>>(name)? {
+          if !value.0.is_finite() {
+            return invalid(ctx, &format!("decodeAnimation: '{name}' must be a number"));
+          }
+          *slot = value.0.trunc() as i32;
+        }
+      }
+      if width != 0 || height != 0 {
+        check_dimensions(ctx, width, height)?;
+      }
+    }
+    let (path, staged) = state.stage_source(ctx, source)?;
+    let id = state.next_id.alloc();
+    let describe =
+      |request_id: i64| format!("{request_id}{FIELD}{width}{FIELD}{height}{FIELD}{}", path.to_string_lossy());
+    state.start_op(
+      ctx,
+      PendingKind::Animation {
+        id,
+        staged: staged.then(|| StagedFile(path.clone())),
+      },
+      OP_DECODE_ANIMATION,
+      id,
+      &describe,
+      None,
+    )
+  }
+
+  const ENCODINGS_VIDEO: [&str; 1] = ["video/mp4"];
+
+  fn create_encoder<'js>(self: &Rc<Self>, ctx: &Ctx<'js>, options: Opt<Value<'js>>) -> JsResult<Value<'js>> {
+    let state = self;
+    let open = count_live(&state.encoders) + state.count_starting(|kind| matches!(kind, PendingKind::Encoder { .. }));
+    if open >= MAX_ENCODERS {
+      return PluginErrorCode::QuotaExceeded(MAX_ENCODERS as i64 + 1, MAX_ENCODERS as i64)
+        .throw(ctx, &format!("at most {MAX_ENCODERS} encoders may be open at once"));
+    }
+    let Some(options) = options.0.as_ref().and_then(|v| v.as_object()) else {
+      return invalid(ctx, "createEncoder: expected a width and a height");
+    };
+    let mut mime = "video/mp4".to_string();
+    if let Some(value) = options.get::<_, Option<Coerced<String>>>("type")? {
+      let value = value.0.to_ascii_lowercase();
+      if !Self::ENCODINGS_VIDEO.contains(&value.as_str()) {
+        return invalid(ctx, &format!("'{value}' is not an encoding this canvas writes"));
+      }
+      mime = value;
+    }
+    let mut size = [0i32; 2];
+    for (name, slot) in [("width", 0), ("height", 1)] {
+      let Some(value) = options.get::<_, Option<Coerced<f64>>>(name)? else {
+        return invalid(ctx, &format!("createEncoder: '{name}' is required"));
+      };
+      if !value.0.is_finite() {
+        return invalid(ctx, &format!("createEncoder: '{name}' must be a number"));
+      }
+      size[slot] = value.0.trunc() as i32;
+    }
+    let [width, height] = size;
+    check_dimensions(ctx, width, height)?;
+    if width % 2 != 0 || height % 2 != 0 {
+      return invalid(ctx, "createEncoder: a video's width and height must both be even");
+    }
+    let mut fps = DEFAULT_ENCODER_FPS;
+    if let Some(value) = options.get::<_, Option<Coerced<f64>>>("fps")? {
+      let rounded = if value.0.is_finite() { value.0.trunc() as i32 } else { 0 };
+      if !(1..=MAX_FPS).contains(&rounded) {
+        return invalid(ctx, &format!("createEncoder: 'fps' must be between 1 and {MAX_FPS}"));
+      }
+      fps = rounded;
+    }
+    let mut bitrate = 0i64;
+    if let Some(value) = options.get::<_, Option<Coerced<f64>>>("bitrate")? {
+      if !value.0.is_finite() || value.0 < 1.0 || value.0 > MAX_ENCODER_BITRATE as f64 {
+        return invalid(ctx, &format!("createEncoder: 'bitrate' must be between 1 and {MAX_ENCODER_BITRATE}"));
+      }
+      bitrate = value.0.trunc() as i64;
+    }
+    let id = state.next_id.alloc();
+    let describe =
+      |request_id: i64| format!("{request_id}{FIELD}{mime}{FIELD}{width}{FIELD}{height}{FIELD}{fps}{FIELD}{bitrate}");
+    state.start_op(
+      ctx,
+      PendingKind::Encoder {
+        id,
+        width,
+        height,
+        fps,
+        charge: Some(state.external.charge(ctx, width as usize * height as usize * 4 * (ENCODER_SPARE_BUFFERS + 1))?),
+      },
+      OP_ENCODER_CREATE,
+      id,
+      &describe,
+      None,
+    )
   }
 
   fn start_async<'js>(
@@ -979,43 +1297,72 @@ impl CanvasState {
       return invalid(ctx, "loadFont: the family name is empty");
     }
     let (path, staged) = state.stage_source(ctx, source)?;
+    let (kind, op, id) = if is_font {
+      (PendingKind::Ack, OP_LOAD_FONT, 0)
+    } else {
+      let image = state.blank_image();
+      let id = image.id;
+      (PendingKind::Decode(image), OP_DECODE, id)
+    };
+    let describe = |request_id: i64| {
+      if is_font {
+        format!("{request_id}{FIELD}{family}{FIELD}{}", path.to_string_lossy())
+      } else {
+        format!("{request_id}{FIELD}{}", path.to_string_lossy())
+      }
+    };
+    state.start_op(ctx, kind, op, id, &describe, staged.then(|| StagedFile(path.clone())))
+  }
+
+  /// the placeholder a decode's answer takes its id from; it owns no bitmap until the host answers
+  fn blank_image(self: &Rc<Self>) -> Rc<ImageData> {
+    Rc::new(ImageData {
+      id: self.next_id.alloc(),
+      width: 0,
+      height: 0,
+      alive: Cell::new(false),
+      owns_bitmap: Cell::new(false),
+      charge: RefCell::new(None),
+      state: self.clone(),
+    })
+  }
+
+  /// Every asynchronous canvas op, start to promise: the request is registered before the host is
+  /// told about it, and an answer the host refuses on the spot rejects that same promise.
+  ///
+  /// `staged` is a source the host reads *during* the op, which is every case but an animation -
+  /// that one holds its file for as long as its decoder does, so it passes `None` here and keeps
+  /// the [`StagedFile`] on its own pending kind instead.
+  fn start_op<'js>(
+    self: &Rc<Self>,
+    ctx: &Ctx<'js>,
+    kind: PendingKind,
+    op: i32,
+    id: i64,
+    describe: &dyn Fn(i64) -> String,
+    staged: Option<StagedFile>,
+  ) -> JsResult<Value<'js>> {
+    let state = self;
     let request_id = state.next_request.alloc();
     let (promise, settle) = PendingSettle::new(ctx)?;
-
-    let (kind, op, id, arg) = if is_font {
-      let arg = format!("{request_id}{FIELD}{family}{FIELD}{}", path.to_string_lossy());
-      (PendingKind::Font, OP_LOAD_FONT, 0, arg)
-    } else {
-      let id = state.next_id.alloc();
-      let image = Rc::new(ImageData {
-        id,
-        width: 0,
-        height: 0,
-        alive: Cell::new(false),
-        owns_bitmap: Cell::new(false),
-        charge: RefCell::new(None),
-        state: state.clone(),
-      });
-      let arg = format!("{request_id}{FIELD}{}", path.to_string_lossy());
-      (PendingKind::Decode(image), OP_DECODE, id, arg)
-    };
+    let arg = describe(request_id);
     state.pending.borrow_mut().insert(
       request_id,
       Pending {
         kind,
-        settle,
-        staged: staged.then_some(path),
+        settle: Some(settle),
+        _staged: staged,
       },
     );
     let answer = state.host.canvas(op, id, &arg, None);
     if !answer.is_empty() {
       if let Some(pending) = state.take_pending(request_id) {
-        match wire_error_to_js(ctx, &answer) {
-          Some(Ok(value)) => pending.settle.reject_with_value(ctx, value)?,
-          _ => {
-            let value = crate::api::error::make_plugin_error(ctx, "internal", &answer, None, None, None)?;
-            pending.settle.reject_with_value(ctx, value)?;
-          }
+        let value = match wire_error_to_js(ctx, &answer) {
+          Some(Ok(value)) => value,
+          _ => crate::api::error::make_plugin_error(ctx, "internal", &answer, None, None, None)?,
+        };
+        if let Some(settle) = pending.settle {
+          settle.reject_with_value(ctx, value)?;
         }
       }
     }
@@ -1109,7 +1456,7 @@ impl CanvasState {
   const ENCODINGS: [&str; 3] = ["image/png", "image/jpeg", "image/webp"];
 
   fn convert_to_blob<'js>(
-    &self,
+    self: &Rc<Self>,
     ctx: &Ctx<'js>,
     surface: &Rc<Surface>,
     options: Opt<Value<'js>>,
@@ -1131,41 +1478,67 @@ impl CanvasState {
       }
     }
     surface.flush(ctx)?;
-    let request_id = self.next_request.alloc();
-    let (promise, settle) = PendingSettle::new(ctx)?;
-    self.pending.borrow_mut().insert(
-      request_id,
-      Pending {
-        kind: PendingKind::Encode,
-        settle,
-        staged: None,
-      },
-    );
-    let arg = format!("{request_id}{FIELD}{mime}{FIELD}{quality}");
-    let answer = self.host.canvas(OP_ENCODE, surface.id, &arg, None);
-    if !answer.is_empty() {
-      if let Some(pending) = self.take_pending(request_id) {
-        let value = match wire_error_to_js(ctx, &answer) {
-          Some(Ok(value)) => value,
-          _ => crate::api::error::make_plugin_error(ctx, "internal", &answer, None, None, None)?,
-        };
-        pending.settle.reject_with_value(ctx, value)?;
-      }
-    }
-    Ok(promise.into_value())
+    let describe = |request_id: i64| format!("{request_id}{FIELD}{mime}{FIELD}{quality}");
+    self.start_op(ctx, PendingKind::Encode, OP_ENCODE, surface.id, &describe, None)
   }
 }
 
-use members::{install_context_members, install_gradient_members, install_image_members, install_pattern_members};
+use members::{
+  install_animation_members, install_context_members, install_encoder_members, install_gradient_members,
+  install_image_members, install_pattern_members,
+};
 
 #[path = "members.rs"]
 mod members;
 
 impl CanvasState {
-  fn build_answer<'js>(self: &Rc<Self>, ctx: &Ctx<'js>, kind: &PendingKind, wire: &str) -> JsResult<Value<'js>> {
+  fn build_answer<'js>(self: &Rc<Self>, ctx: &Ctx<'js>, kind: &mut PendingKind, wire: &str) -> JsResult<Value<'js>> {
     match kind {
-      PendingKind::Font => Ok(Value::new_undefined(ctx.clone())),
-      PendingKind::Encode => {
+      PendingKind::Ack | PendingKind::EncoderFrame { .. } => Ok(Value::new_undefined(ctx.clone())),
+      PendingKind::Animation { id, staged } => {
+        let object = parse_answer(ctx, wire)?;
+        let width: i32 = object.get("width")?;
+        let height: i32 = object.get("height")?;
+        let bytes = width.max(0) as usize * height.max(0) as usize * 4;
+        let charge = match self.external.charge(ctx, bytes) {
+          Ok(charge) => charge,
+          Err(e) => {
+            self.host.canvas(OP_RELEASE_ANIMATION, *id, "", None);
+            return Err(e);
+          }
+        };
+        let animation = Rc::new(AnimationData {
+          id: *id,
+          width,
+          height,
+          frame_count: object.get("frameCount")?,
+          duration: object.get("duration")?,
+          fps: object.get("fps")?,
+          alive: Cell::new(true),
+          charge: RefCell::new(Some(charge)),
+          staged: RefCell::new(staged.take()),
+          state: self.clone(),
+        });
+        self.animations.borrow_mut().push(Rc::downgrade(&animation));
+        Ok(Class::instance(ctx.clone(), AnimationHandle(animation))?.into_value())
+      }
+      PendingKind::Encoder { id, width, height, fps, charge } => {
+        let encoder = Rc::new(EncoderData {
+          id: *id,
+          width: *width,
+          height: *height,
+          fps: *fps,
+          frames: Cell::new(0),
+          in_flight: Cell::new(0),
+          finished: Cell::new(false),
+          alive: Cell::new(true),
+          charge: RefCell::new(charge.take()),
+          state: self.clone(),
+        });
+        self.encoders.borrow_mut().push(Rc::downgrade(&encoder));
+        Ok(Class::instance(ctx.clone(), EncoderHandle(encoder))?.into_value())
+      }
+      PendingKind::Encode | PendingKind::FinishEncoder { .. } => {
         let object = parse_answer(ctx, wire)?;
         let path: String = object.get("path")?;
         let mime: String = object.get("type").unwrap_or_default();
@@ -1186,29 +1559,64 @@ impl CanvasState {
       }
       PendingKind::Decode(image) => {
         let object = parse_answer(ctx, wire)?;
-        let width: i32 = object.get("width")?;
-        let height: i32 = object.get("height")?;
-        let bytes = width.max(0) as usize * height.max(0) as usize * 4;
-        let charge = match self.external.charge(ctx, bytes) {
-          Ok(charge) => charge,
-          Err(e) => {
-            self.host.canvas(OP_RELEASE_IMAGE, image.id, "", None);
-            return Err(e);
+        Ok(self.decoded_image(ctx, image, &object)?.into_value())
+      }
+      PendingKind::Frame { image, sequential } => {
+        let object = parse_answer(ctx, wire)?;
+        // only a sequential read ends this way: a frame asked for by index that is not there is
+        // refused by the host with an error wire, so `end` on one is a malformed answer
+        if object.get::<_, Option<bool>>("end")?.unwrap_or(false) {
+          if !*sequential {
+            return invalid(ctx, "frame: the host ended an indexed read");
           }
-        };
-        let handle = ImageData {
-          id: image.id,
-          width,
-          height,
-          alive: Cell::new(true),
-          owns_bitmap: Cell::new(true),
-          charge: RefCell::new(Some(charge)),
-          state: self.clone(),
-        };
-        Ok(Class::instance(ctx.clone(), ImageHandle(Rc::new(handle)))?.into_value())
+          return Ok(iteration(ctx, Value::new_undefined(ctx.clone()), true)?.into_value());
+        }
+        let handle = self.decoded_image(ctx, image, &object)?;
+        handle.set("timestamp", object.get::<_, f64>("timestamp")?)?;
+        if *sequential {
+          return Ok(iteration(ctx, handle.into_value(), false)?.into_value());
+        }
+        Ok(handle.into_value())
       }
     }
   }
+
+  /// the image a decode answered with, charged and registered as this session's
+  fn decoded_image<'js>(
+    self: &Rc<Self>,
+    ctx: &Ctx<'js>,
+    image: &Rc<ImageData>,
+    object: &Object<'js>,
+  ) -> JsResult<Class<'js, ImageHandle>> {
+    let width: i32 = object.get("width")?;
+    let height: i32 = object.get("height")?;
+    let bytes = width.max(0) as usize * height.max(0) as usize * 4;
+    let charge = match self.external.charge(ctx, bytes) {
+      Ok(charge) => charge,
+      Err(e) => {
+        self.host.canvas(OP_RELEASE_IMAGE, image.id, "", None);
+        return Err(e);
+      }
+    };
+    let handle = ImageData {
+      id: image.id,
+      width,
+      height,
+      alive: Cell::new(true),
+      owns_bitmap: Cell::new(true),
+      charge: RefCell::new(Some(charge)),
+      state: self.clone(),
+    };
+    Class::instance(ctx.clone(), ImageHandle(Rc::new(handle)))
+  }
+}
+
+/// an iterator result, which is what an async iterator's `next` resolves with
+fn iteration<'js>(ctx: &Ctx<'js>, value: Value<'js>, done: bool) -> JsResult<Object<'js>> {
+  let result = Object::new(ctx.clone())?;
+  result.set("value", value)?;
+  result.set("done", done)?;
+  Ok(result)
 }
 
 fn parse_answer<'js>(ctx: &Ctx<'js>, wire: &str) -> JsResult<Object<'js>> {
@@ -1230,34 +1638,35 @@ impl CanvasState {
   pub fn resolve(self: &Rc<Self>, rt: &Runtime, context: &rquickjs::Context, request_id: i64, result_wire: &str) {
     let state = self;
     context.with(|ctx| {
-      let Some(pending) = state.take_pending(request_id) else {
+      let Some(mut pending) = state.take_pending(request_id) else {
         return;
       };
-      if let Some(built) = wire_error_to_js(&ctx, result_wire) {
-        match built {
-          Ok(value) => {
-            if pending.settle.reject_with_value(&ctx, value).is_err() {
-              (state.log)(&format!("canvas({request_id}) reject failed: {}", format_exception(&ctx)));
-            }
-          }
-          Err(e) => {
-            pending.settle.release(&ctx);
-            (state.log)(&format!("canvas({request_id}) error decode failed: {e:?}"));
-          }
+      // A-prefixed answers acknowledge queue admission; the ordinary answer releases the pixels.
+      let early = matches!(&pending.kind, PendingKind::EncoderFrame { .. }) && result_wire.starts_with('A');
+      let wire = if early { &result_wire[1..] } else { result_wire };
+      let Some(settle) = pending.settle.take() else {
+        if early {
+          state.pending.borrow_mut().insert(request_id, pending);
         }
         return;
+      };
+      let built = match wire_error_to_js(&ctx, wire) {
+        Some(value) => value.map(|value| (false, value)),
+        None => state.build_answer(&ctx, &mut pending.kind, wire).map(|value| (true, value)),
+      };
+      if early {
+        state.pending.borrow_mut().insert(request_id, pending);
+      } else {
+        drop(pending);
       }
-      let built = state.build_answer(&ctx, &pending.kind, result_wire);
-      match built {
-        Ok(value) => {
-          if pending.settle.resolve_with(&ctx, value).is_err() {
-            (state.log)(&format!("canvas({request_id}) resolve failed: {}", format_exception(&ctx)));
-          }
-        }
-        Err(_) => {
-          pending.settle.release(&ctx);
-          (state.log)(&format!("canvas({request_id}) bad result wire: {}", format_exception(&ctx)));
-        }
+      let settled = match built {
+        Ok((true, value)) => settle.resolve_with(&ctx, value),
+        Ok((false, value)) => settle.reject_with_value(&ctx, value),
+        Err(e) if e.is_exception() => settle.reject_with_value(&ctx, ctx.catch()),
+        Err(e) => settle.reject_with(&ctx, &format!("canvas: malformed host answer: {e}")),
+      };
+      if settled.is_err() {
+        (state.log)(&format!("canvas({request_id}) settle failed: {}", format_exception(&ctx)));
       }
     });
     pump_jobs(rt, context, state.log.as_ref());
@@ -1267,10 +1676,9 @@ impl CanvasState {
     let state = self;
     context.with(|ctx| {
       for (_, pending) in state.pending.borrow_mut().drain() {
-        if let Some(path) = pending.staged.as_ref() {
-          let _ = fs::remove_file(path);
+        if let Some(settle) = pending.settle {
+          settle.release(&ctx);
         }
-        pending.settle.release(&ctx);
       }
     });
   }

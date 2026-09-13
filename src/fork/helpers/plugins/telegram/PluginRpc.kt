@@ -356,7 +356,7 @@ object PluginRpc {
             PluginWrites.refuse("unsupported", "setMedia: this message already took its media from a plugin")
         }
         // a second setMedia replaces the first, whose copy nothing will claim
-        budget.media?.path?.delete()
+        budget.media?.upload?.discard()
         budget.media = media
     }
 
@@ -874,7 +874,7 @@ object PluginRpc {
     private fun collapseChain(scopeId: Long, reasonWire: String): RpcChain? {
         val budget = chains.remove(scopeId) ?: return null
         // a setMedia the chain never reached the end of: its copy is owned by nothing else
-        budget.media?.path?.delete()
+        budget.media?.upload?.discard()
         budget.media = null
         budget.deadline.cancel()
         for (dispatchId in budget.stages.reversed()) {
@@ -1020,7 +1020,7 @@ object PluginRpc {
     }
 
     private fun discardVerdict(verdict: ChainVerdict?) {
-        if (verdict is ChainVerdict.TakenOver) verdict.media.path.delete()
+        if (verdict is ChainVerdict.TakenOver) verdict.media.upload.discard()
     }
 
     private fun handleBadMiddlewareResponse(dispatchId: Long, pending: PendingDispatch, cause: Exception, time: Long) {

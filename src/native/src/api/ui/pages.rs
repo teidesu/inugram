@@ -30,6 +30,7 @@ fn check_slider_steps<'js>(ctx: &Ctx<'js>, min: f64, max: f64, step: f64) -> JsR
 
 pub(crate) const ELEMENT_TAG: &str = "__inuUi";
 const PAGE_ID_KEY: &str = "__inuPageId";
+const PAGE_TRANSIENT_KEY: &str = "__inuPageTransient";
 const BOTTOM_BUTTON_KEY: &str = "b";
 
 pub trait UiHost {
@@ -431,7 +432,16 @@ impl UiState {
       .and_then(|o| o.get::<_, Option<f64>>(PAGE_ID_KEY).ok().flatten())
       .ok_or_else(|| Exception::throw_type(ctx, &format!("{what}: expected a settings page")))? as i64;
     if !self.pages.borrow().contains_key(&id) {
-      return PluginErrorCode::HandleExpired.throw(ctx, &format!("{what}: this page has been disposed"));
+      let transient = page
+        .as_object()
+        .and_then(|o| o.get::<_, Option<bool>>(PAGE_TRANSIENT_KEY).ok().flatten())
+        .unwrap_or(false);
+      let why = if transient {
+        "this page was declared transient, so closing it disposed it; build a fresh page per open"
+      } else {
+        "this page has been disposed"
+      };
+      return PluginErrorCode::HandleExpired.throw(ctx, &format!("{what}: {why}"));
     }
     Ok(id)
   }
@@ -473,6 +483,9 @@ impl UiState {
 
     let page = Object::new(ctx.clone())?;
     page.set(PAGE_ID_KEY, page_id as f64)?;
+    if transient {
+      page.set(PAGE_TRANSIENT_KEY, true)?;
+    }
     let state2 = state.clone();
     page.set(
       "invalidate",

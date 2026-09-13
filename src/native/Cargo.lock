@@ -407,6 +407,7 @@ dependencies = [
  "sha1",
  "slotmap",
  "url",
+ "yuv",
 ]
 
 [[package]]
@@ -1064,6 +1065,15 @@ dependencies = [
  "quote",
  "syn 2.0.119",
  "synstructure",
+]
+
+[[package]]
+name = "yuv"
+version = "0.8.18"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "6ee07950d2f109605ec02cf0208fd5c33d05a36940b9c0cbe7bfd2a8d3b5d390"
+dependencies = [
+ "num-traits",
 ]
 
 [[package]]

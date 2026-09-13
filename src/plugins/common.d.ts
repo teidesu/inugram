@@ -408,73 +408,104 @@ declare namespace inu {
   type Paged<T, List extends string> = T[] & { next: Cursor<List> | null }
 
   interface Account {
-
+    /** opaque slot of the account */
     readonly id: number
 
-    /** @needs-grant account.read(self) */
+    /**
+     * id of the user this account represents
+     *
+     * @needs-grant account.read(self)
+     */
     readonly userId: number
 
+    /** whether this is the currently active account */
     isCurrent(): boolean
 
-    /** @needs-grant account.read(self) */
+    /**
+     * get the user this account represents
+     *
+     * @needs-grant account.read(self)
+     */
     getMe(): tl.TypeUser | null
 
-    /** @needs-grant account.read(peers) */
+    /**
+     * get a user (cached, this method never does a network call, and returns `null` on miss)
+     *
+     * @needs-grant account.read(peers)
+     */
     getUser(peer: InputPeerLike): tl.TypeUser | null
-    /** @needs-grant account.read(peers) */
+    /**
+     * get a chat (cached, this method never does a network call, and returns `null` on miss)
+     *
+     * @needs-grant account.read(peers)
+     */
     getChat(peer: InputPeerLike): tl.TypeChat | null
-    /** @needs-grant account.read(peers) */
+    /**
+     * get a user or a chat (cached, this method never does a network call, and returns `null` on miss)
+     *
+     * @needs-grant account.read(peers)
+     */
     getPeer(peer: InputPeerLike): tl.TypeUser | tl.TypeChat | null
-    /** @needs-grant account.read(dialogs) */
+    /**
+     * get a dialog with a specific peer (cached, this method never does a network call, and returns `null` on miss)
+     *
+     * @needs-grant account.read(dialogs)
+     */
     getDialog(peer: InputPeerLike): tl.TypeDialog | null
-    /** @needs-grant account.read(peers) */
+    /**
+     * get one or more users (cached, this method never does a network call, and returns `null` on miss)
+     *
+     * @needs-grant account.read(peers)
+     */
     getUsers(peers: InputPeerLike[]): (tl.TypeUser | null)[]
-    /** @needs-grant account.read(peers) */
+    /**
+     * get one or more chats (cached, this method never does a network call, and returns `null` on miss)
+     * @needs-grant account.read(peers
+     */
     getChats(peers: InputPeerLike[]): (tl.TypeChat | null)[]
 
     /**
-     * The messages the app already holds in memory, which is far less than it holds at all: only
-     * the chat list's own last message per dialog lives there. A message the user is looking at
-     * right now is **not** in memory in any form this can reach - it belongs to the chat screen
-     * that drew it - so a miss here says nothing about whether the message exists. Use
-     * {@link getMessages} for that; this is for the one case where a synchronous answer is worth
-     * more than a complete one.
-     *
-     * `peer` may be `0` - the *common message box* - for a message in a user chat or a basic
-     * group, which share one id space per account. A channel or supergroup numbers its own
-     * messages, so those must name their peer.
+     * get one or more messages, cached. returns `null` on miss
      *
      * @needs-grant account.read(messages)
+     * @peer the dialog, or `0` for the common message box (dms, legacy groups)
+     * @messageId the message to get
      */
     getMessagesCached(peer: InputPeerLike, messageId: number): Message | null
     getMessagesCached(peer: InputPeerLike, messageIds: number[]): (Message | null)[]
 
     /**
-     * Messages by id: memory first, then the app's own sqlite, then the network for whatever is
-     * left. A message the app has ever loaded answers from disk without a request; one it has not
-     * costs a `messages.getMessages`/`channels.getMessages`. An id that does not exist, or that
-     * this account cannot see, answers `null` in the place it was asked about.
-     *
-     * `peer` may be `0` - the *common message box*, a dialog id no dialog has. Telegram numbers
-     * every user chat and basic group out of one sequence per account, so an id from one of those
-     * identifies a message on its own. A channel or supergroup numbers its own messages from 1 and
-     * must name its peer; asking the common box for a channel's id answers the *other* message
-     * that happens to hold that number, or `null`. Everywhere else `0` is simply a miss.
+     * get one or more messages, *always* fetching them from the server
      *
      * @needs-grant account.read(messages)
+     * @peer the dialog, or `0` for the common message box (dms, legacy groups)
+     * @messageId the message to get
      */
     getMessages(peer: InputPeerLike, messageId: number): Promise<Message | null>
     getMessages(peer: InputPeerLike, messageIds: number[]): Promise<(Message | null)[]>
 
-    /** @needs-grant account.read(messages) */
+    /**
+     * get an app-owned file representing the attachment of a message
+     *
+     * @needs-grant account.read(messages)
+     */
     getMessageFile(message: Message | tl.TypeMessage): { path: string, exists: boolean } | null
 
-    /** @needs-grant account.read(messages) */
+    /**
+     * download a message's attachment to a File
+     *
+     * @needs-grant account.read(messages)
+     */
     downloadMedia(message: Message | tl.TypeMessage, options?: {
+      /** download progress callback */
       onProgress?: ProgressCallback
     }): Promise<File>
 
-    /** @needs-grant account.read(messages) */
+    /**
+     * download a message's attachment to a file, and return the path
+     *
+     * @needs-grant account.read(messages)
+     */
     downloadMediaToFile(message: Message | tl.TypeMessage, options?: {
       onProgress?: ProgressCallback
     }): Promise<{ path: string }>
@@ -595,106 +626,200 @@ declare namespace inu {
     /** @needs-grant account.read(peers). Resolves at most **8 in flight**. */
     resolvePeerMany(peers: InputPeerLike[]): Promise<(tl.TypeInputPeer | null)[]>
 
-    /** @needs-grant account.write(send) */
+    /**
+     * send a text message
+     *
+     * @needs-grant account.write(send)
+     * @param peer the dialog
+     * @param text the message text
+     */
     sendMessage(peer: InputPeerLike, text: InputText, options?: {
+      /** reply to a message by its id */
       replyToMessageId?: number
-
+      /** send the message to a specific topic */
       topicId?: number
+      /** send a message without sound */
       silent?: boolean
-
+      /** instead of sending, schedule the message for a future date (unix timestamp in seconds) */
       scheduleDate?: number
+      /** do not generate webpage previews */
       noWebpage?: boolean
-
+      /** "send as" a channel. defaults to the user-preferred sender */
       sendAs?: InputPeerLike
 
+      /**
+       * whether to clear the draft after sending
+       *
+       * @default true
+       */
       clearDraft?: boolean
 
       /**
-       * Show the message in the chat straight away, the way the app's own send does, rather than
-       * only once the server has answered. **On by default.** The promise still resolves with the
-       * server's message either way; this only decides whether there is a bubble in the meantime.
+       * when `true`, the message is shown in the ui right away,
+       * similarly to how it would look like if the user had sent it,
+       * showing the progress.
        *
-       * Two things turn this off on their own: a `sendAs` peer, which has no place in the app's
-       * send, and a `replyToMessageId` naming a message the app does not already hold, which it
-       * needs in order to draw the quote. The app's send also clears the chat's draft, which the
-       * request path does not.
+       * incompatible with `sendAs` and in some cases `replyToMessageId`
+       *
+       * @default true
        */
       optimistic?: boolean
     }): Promise<Message>
 
-    /** @needs-grant account.write(send) */
-    sendMedia(peer: InputPeerLike, file: Blob | Uint8Array | tl.TypeInputFile | tl.TypeInputMedia | { path: string }, options?: {
-      caption?: InputText
-      replyToMessageId?: number
-      topicId?: number
-      silent?: boolean
-      scheduleDate?: number
-      asDocument?: boolean
-      fileName?: string
-      sendAs?: InputPeerLike
-      onProgress?: ProgressCallback
-
-      /**
-       * Upload and show the message the way the app's own send does: the bubble appears with its
-       * progress before the upload starts, and a failure is retryable from the chat. **On by
-       * default.** The promise still resolves with the server's message either way.
-       *
-       * Three things turn this off on their own: a `sendAs` peer, a `file` that is already a
-       * `TypeInputFile` or `TypeInputMedia` rather than bytes or a path, and a `replyToMessageId`
-       * naming a message the app does not already hold, which it needs to draw the quote.
-       *
-       * An image goes up as a photo, so the app resizes and re-encodes it the way it does any
-       * photo you send. Pass `asDocument` to ship the exact bytes. The app's send also clears the
-       * chat's draft, which the request path does not.
-       */
-      optimistic?: boolean
-    }): Promise<Message>
-
-    /** @needs-grant account.write(send) */
-    sendMultiMedia(peer: InputPeerLike, items: {
-      file: Blob | Uint8Array | tl.TypeInputFile | tl.TypeInputMedia | { path: string }
-      caption?: InputText
-      fileName?: string
-      asDocument?: boolean
-    }[], options?: {
+    /**
+     * send a message containing a media
+     *
+     * @needs-grant account.write(send)
+     * @param peer the dialog
+     * @param file the media file
+     */
+    sendMedia(
+      peer: InputPeerLike, file: Blob | Uint8Array | tl.TypeInputFile | tl.TypeInputMedia | { path: string },
+      options?: {
+        /** caption for the media */
+        caption?: InputText
+        /** reply to a message by its id */
         replyToMessageId?: number
+        /** send the message to a specific topic */
         topicId?: number
+        /** send a message without sound */
         silent?: boolean
+        /** instead of sending, schedule the message for a future date (unix timestamp in seconds) */
         scheduleDate?: number
+        /** force send the message as a document, instead of auto-detecting its type by mime */
+        asDocument?: boolean
+        /** file name for the media */
+        fileName?: string
+        /** "send as" a channel. defaults to the user-preferred sender */
         sendAs?: InputPeerLike
+        /** upload progress callback */
         onProgress?: ProgressCallback
-      }): Promise<Message[]>
 
-    /** @needs-grant account.write(edit) */
+        /**
+         * when `true`, the message is shown in the ui right away,
+         * similarly to how it would look like if the user had sent it,
+         * showing the upload progress.
+         *
+         * incompatible with `sendAs` and in some cases `replyToMessageId`
+         *
+         * @default true
+         */
+        optimistic?: boolean
+      }): Promise<Message>
+
+    /**
+     * send an album
+     *
+     * @needs-grant account.write(send)
+     * @param peer the dialog
+     * @param items the media files
+     */
+    sendMultiMedia(
+      peer: InputPeerLike,
+      items: {
+        /** the media file */
+        file: Blob | Uint8Array | tl.TypeInputFile | tl.TypeInputMedia | { path: string }
+        /** caption for the media */
+        caption?: InputText
+        /** file name for the media */
+        fileName?: string
+        /** whether to send the media as a document, instead of auto-detecting its type by mime */
+        asDocument?: boolean
+      }[],
+      options?: {
+        /** reply to a message by its id */
+        replyToMessageId?: number
+        /** send the message to a specific topic */
+        topicId?: number
+        /** send a message without sound */
+        silent?: boolean
+        /** instead of sending, schedule the message for a future date (unix timestamp in seconds) */
+        scheduleDate?: number
+        /** "send as" a channel. defaults to the user-preferred sender */
+        sendAs?: InputPeerLike
+        /** upload progress callback */
+        onProgress?: ProgressCallback
+      }
+    ): Promise<Message[]>
+
+    /**
+     * edit a message
+     *
+     * @needs-grant account.write(edit)
+     * @param peer the dialog
+     * @param messageId the message to edit
+     * @param text the new message text
+     */
     editMessage(peer: InputPeerLike, messageId: number, text: InputText, options?: {
+      /** do not generate webpage previews */
       noWebpage?: boolean
     }): Promise<Message>
 
-    /** @needs-grant account.write(delete) */
+    /**
+     * delete one or more messages
+     *
+     * @needs-grant account.write(delete)
+     * @param peer the dialog to delete from
+     * @param messageIds the messages to delete
+     */
     deleteMessages(peer: InputPeerLike, messageIds: number[], options?: {
-
+      /** "delete for everyone", only applies to legacy groups and dms */
       revoke?: boolean
     }): Promise<void>
 
-    /** @needs-grant account.write(forward) */
+    /**
+     * forward one or more messages
+     *
+     * @needs-grant account.write(forward)
+     * @param fromPeer the dialog to forward from
+     * @param messageIds the messages to forward
+     * @param toPeer the dialog to forward to
+     */
     forwardMessages(fromPeer: InputPeerLike, messageIds: number[], toPeer: InputPeerLike, options?: {
+      /** send a message without sound */
       silent?: boolean
+      /** instead of sending, schedule the message for a future date (unix timestamp in seconds) */
       scheduleDate?: number
+      /** send the message to a specific topic */
       topicId?: number
-
+      /** whether to send "without author" */
       dropAuthor?: boolean
+      /** whether to send "without caption" (implies `dropAuthor`) */
       dropCaption?: boolean
     }): Promise<Message[]>
 
-    /** @needs-grant account.write(react) */
+    /**
+     * send or retract a reaction on a message
+     *
+     * @needs-grant account.write(react)
+     * @param peer the dialog
+     * @param messageId the message to update reactions for
+     * @param reactions the reactions to apply (the full list)
+     */
     setReaction(peer: InputPeerLike, messageId: number, reactions: (string | { customEmojiId: string })[], options?: {
+      /** whether to send the new reaction as "big" */
       big?: boolean
     }): Promise<void>
 
-    /** @needs-grant account.write(read) */
-    readHistory(peer: InputPeerLike, options?: { maxId?: number, topicId?: number }): Promise<void>
+    /**
+     * mark messages as read
+     *
+     * @needs-grant account.write(read)
+     */
+    readHistory(peer: InputPeerLike, options?: {
+      /** the last message to mark as read */
+      maxId?: number
+      /** read the messages in a specific topic */
+      topicId?: number
+    }): Promise<void>
 
-    /** @needs-grant account.write(typing) */
+    /**
+     * send a typing status
+     *
+     * @needs-grant account.write(typing)
+     * @param peer the dialog
+     * @param action the action to send
+     */
     sendTyping(
       peer: InputPeerLike,
       action?:
@@ -709,6 +834,7 @@ declare namespace inu {
         | 'chooseSticker'
         | 'chooseContact',
       options?: {
+        /** send the typing status to a specific topic */
         topicId?: number
       }
     ): Promise<void>
@@ -721,22 +847,32 @@ declare namespace inu {
       replyToMessageId?: number
     }): Promise<void>
 
-    /** @needs-grant invokeRpc */
+    /**
+     * invoke a raw mtproto rpc method
+     *
+     * @needs-grant invokeRpc
+     */
     invokeRpc<T extends tl.TypeRpcMethod>(params: T): Promise<tl.RpcCallReturn[T['_']] | null>
 
-    /** @needs-grant unsafe.invokeRaw */
+    /**
+     * invoke a raw mtproto rpc method, given its TL serialization,
+     * and return the TL serialization of the server's response
+     *
+     * ⚠️ this method is primarily intended for **advanced users**, primarily
+     * for cases where you want to call a method that is not yet supported by the current
+     * app's layer. beware that can cause the app to crash or otherwise misbehave,
+     * due to the server "bumping" the layer. in almost all cases, you should use
+     * {@link invokeRpc} instead.
+     *
+     * @needs-grant unsafe.invokeRaw
+     */
     invokeRaw(method: Uint8Array): Promise<Uint8Array | null>
 
     /**
-     * Open a takeout session, the export mode telegram's own data export uses: it lifts the flood
-     * limits history reads otherwise hit, and the server asks the user to approve it from another
-     * session first - until they do, this rejects with `TAKEOUT_INIT_DELAY_X`.
+     * open a takeout session, which increases the rate limits for history reads
      *
      * Telegram keeps the session until {@link TakeoutSession.finish}, so finish the one you
      * opened rather than leaving it behind.
-     *
-     * `fileMaxSize` is what the session will accept as a single file, and naming it is what asks
-     * for file access at all.
      *
      * @needs-grant takeout
      */
@@ -751,15 +887,17 @@ declare namespace inu {
   }
 
   /**
-   * A live takeout session. Calls made through it are wrapped in `invokeWithTakeout`, which is
-   * the only difference from {@link Account.invokeRpc} - including the grants, so a method still
-   * needs its own `invokeRpc` scope.
+   * a takeout session
    */
   interface TakeoutSession {
     /** the session's int64 id, as a string */
     readonly id: string
 
-    /** @needs-grant takeout, plus `invokeRpc` for the method being called */
+    /**
+     * invoke a raw mtproto rpc method, wrapped in `invokeWithTakeout`
+     *
+     * @needs-grant takeout, plus `invokeRpc` for the method being called
+     */
     invokeRpc<T extends tl.TypeRpcMethod>(params: T): Promise<tl.RpcCallReturn[T['_']] | null>
 
     /** closes the session server-side; `success` defaults to `true`. @needs-grant takeout */
@@ -767,32 +905,40 @@ declare namespace inu {
   }
 
   namespace utils {
+    /** convert an array of bytes to base64 */
     function toBase64(bytes: Uint8Array): string
+    /** convert base64 to an array of bytes */
     function fromBase64(base64: string): Uint8Array
+    /** convert an array of bytes to hex */
     function toHex(bytes: Uint8Array): string
+    /** convert hex to an array of bytes */
     function fromHex(hex: string): Uint8Array
 
-    /** Telegram-localized date text. `unix` must be a safe integer Unix timestamp in seconds. */
+    /** app-localized date text. `unix` must be a safe integer Unix timestamp in seconds. */
     function formatDate(unix: number, style?: 'date' | 'time' | 'dateTime' | 'relative'): string
 
-    /** Telegram-localized integer text. `compact` uses Telegram's million formatter. */
+    /** app-localized integer text. `compact` uses Telegram's million formatter. */
     function formatNumber(value: number, options?: { compact?: boolean }): string
 
-    /** Telegram-localized file size text. `bytes` must be a safe integer. */
+    /** app-localized file size text. `bytes` must be a safe integer. */
     function formatFileSize(bytes: number): string
 
-    /** Telegram's clock-style duration text. `seconds` must be a non-negative signed 32-bit integer. */
+    /** app's clock-style duration text. `seconds` must be a non-negative signed 32-bit integer. */
     function formatDuration(seconds: number): string
 
     namespace peers {
+      /** convert a peer object to a dialog id */
       function toDialogId(peer: PeerLikeObject): DialogId
+      /** parse a dialog id */
       function parseDialogId(id: DialogId | string): {
         type: 'user' | 'chat'
         id: number
       }
-
+      /** convert a user or chat object to an input peer */
       function toInputPeer(userOrChat: tl.TypeUser | tl.TypeChat): tl.TypeInputPeer
+      /** convert a peer object to a bot api id */
       function toBotApiId(peer: PeerLikeObject): number
+      /** convert a bot api id to a dialog id */
       function fromBotApiId(id: DialogId | string): DialogId
     }
   }
@@ -934,6 +1080,33 @@ declare namespace inu {
       selectAll?: boolean
     }): Promise<string | null>
 
+    /** open a file picker, returning the File the user chose (or `null` if they chose nothing) */
+    function pickFile(options?: {
+      /** mime types to accept */
+      accept?: string[]
+      /** whether to allow multiple files */
+      multiple?: false
+    }): Promise<File | null>
+    /** open a file picker, returning the File-s the user chose (or `[]` if they chose nothing) */
+    function pickFile(options: {
+      accept?: string[]
+      multiple: true
+    }): Promise<File[]>
+
+    /**
+     * save a file to the device storage, opening a "save as" dialog
+     *
+     * @needs-grant fs
+     * @param content the file to save
+     * @returns `true` if the user chose to save the file, `false` if they chose not to
+     */
+    function saveFile(content: Blob | Uint8Array | { path: string }, options?: {
+      /** recommended file name */
+      fileName?: string
+      /** mime type */
+      type?: string
+    }): Promise<boolean>
+
     interface UIAnchor {
       openMenu(items: {
         text: string
@@ -993,6 +1166,11 @@ declare namespace inu {
 
     function settingsPage(options: {
       title: string
+      /**
+       * Disposes the page as soon as it closes, after {@link onClose} has returned: for a page
+       * built per open, whose definition is of no use once the user navigates back. A page opened
+       * more than once must not ask for this - opening a disposed page is `handle-expired`.
+       */
       transient?: boolean
       items: () => UIElement[]
       bottomButton?: {
@@ -1138,6 +1316,10 @@ declare namespace inu {
      * The message is re-sent, so it reaches send middleware a second time as a `messages.sendMedia`
      * — carrying a mark that refuses a second `setMedia`, which is what stops this recursing.
      * Replacing the media of a send that already has some costs the upload the app already did.
+     *
+     * A `{ path }` is uploaded from where it is, after this resolves, so leave the file in place:
+     * the app retries a failed send from it too. It is copied instead when its extension disagrees
+     * with the name it is sent under.
      */
     setMedia(file: Blob | Uint8Array | { path: string }, options?: {
       fileName?: string
