@@ -1,156 +1,62 @@
+use object::elf::{FileHeader64, SHT_DYNSYM, SHT_SYMTAB};
+use object::read::elf::{FileHeader, SectionHeader, Sym, SymbolTable};
+use object::LittleEndian;
 use std::collections::HashMap;
 use std::ffi::{c_char, c_void};
 #[cfg(target_os = "android")]
 use std::ffi::{c_int, CStr};
 use std::fs;
-use std::ops::Range;
 
-const ELF_MAGIC: [u8; 4] = [0x7f, b'E', b'L', b'F'];
-const ELFCLASS64: u8 = 2;
-const ELFDATA2LSB: u8 = 1;
+type Header = FileHeader64<LittleEndian>;
 
-const EHDR_SIZE: usize = 64;
-const SHDR_SIZE: usize = 64;
-const SYM_SIZE: usize = 24;
-
-const SHT_SYMTAB: u32 = 2;
-const SHT_DYNSYM: u32 = 11;
-
-const SHN_UNDEF: u16 = 0;
-
-fn read_u16(bytes: &[u8], at: usize) -> Option<u16> {
-  Some(u16::from_le_bytes(bytes.get(at..at + 2)?.try_into().ok()?))
+fn read_tables(image: &[u8]) -> Vec<SymbolTable<'_, Header>> {
+  let Ok(header) = Header::parse(image) else {
+    return Vec::new();
+  };
+  let Ok(sections) = header.endian().and_then(|endian| header.sections(endian, image)) else {
+    return Vec::new();
+  };
+  sections
+    .enumerate()
+    .filter(|(_, section)| matches!(section.sh_type(LittleEndian), SHT_SYMTAB | SHT_DYNSYM))
+    .filter_map(|(index, section)| SymbolTable::parse(LittleEndian, image, &sections, index, section).ok())
+    .collect()
 }
 
-fn read_u32(bytes: &[u8], at: usize) -> Option<u32> {
-  Some(u32::from_le_bytes(bytes.get(at..at + 4)?.try_into().ok()?))
-}
-
-fn read_u64(bytes: &[u8], at: usize) -> Option<u64> {
-  Some(u64::from_le_bytes(bytes.get(at..at + 8)?.try_into().ok()?))
-}
-
-fn range_of(offset: u64, size: u64, len: usize) -> Option<Range<usize>> {
-  let start = usize::try_from(offset).ok()?;
-  let end = start.checked_add(usize::try_from(size).ok()?)?;
-  (end <= len).then_some(start..end)
-}
-
-struct Section {
-  name: u32,
-  kind: u32,
-  offset: u64,
-  size: u64,
-  link: u32,
-  entsize: u64,
-}
-
-fn read_sections(image: &[u8]) -> Option<(Vec<Section>, usize)> {
-  if image.get(..4)? != ELF_MAGIC || image.get(4)? != &ELFCLASS64 || image.get(5)? != &ELFDATA2LSB {
-    return None;
-  }
-
-  let shoff = read_u64(image, 0x28)?;
-  let shentsize = read_u16(image, 0x3a)? as usize;
-  let shnum = read_u16(image, 0x3c)? as usize;
-  let shstrndx = read_u16(image, 0x3e)? as usize;
-  if shoff < EHDR_SIZE as u64 || shentsize < SHDR_SIZE || shnum == 0 {
-    return None;
-  }
-
-  let table = range_of(shoff, (shentsize * shnum) as u64, image.len())?;
-  let mut sections = Vec::with_capacity(shnum);
-  for index in 0..shnum {
-    let at = table.start + index * shentsize;
-    sections.push(Section {
-      name: read_u32(image, at)?,
-      kind: read_u32(image, at + 4)?,
-      offset: read_u64(image, at + 0x18)?,
-      size: read_u64(image, at + 0x20)?,
-      link: read_u32(image, at + 0x28)?,
-      entsize: read_u64(image, at + 0x38)?,
-    });
-  }
-
-  Some((sections, shstrndx))
-}
-
-fn section_name(strings: &[u8], at: u32) -> Option<&str> {
-  let tail = strings.get(at as usize..)?;
-  let end = tail.iter().position(|byte| *byte == 0)?;
-  std::str::from_utf8(&tail[..end]).ok()
-}
-
-struct Table {
-  debug: bool,
-  symbols: Range<usize>,
-  strings: Range<usize>,
+fn read_debugdata(image: &[u8]) -> Option<Vec<u8>> {
+  let header = Header::parse(image).ok()?;
+  let sections = header.sections(header.endian().ok()?, image).ok()?;
+  let (_, section) = sections.section_by_name(LittleEndian, b".gnu_debugdata")?;
+  decompress_xz(section.data(LittleEndian, image).ok()?)
 }
 
 pub struct Symbols {
   image: Vec<u8>,
   debug: Vec<u8>,
-  tables: Vec<Table>,
 }
 
 impl Symbols {
   pub fn parse(image: Vec<u8>) -> Option<Symbols> {
-    let mut symbols = Symbols {
-      image,
-      debug: Vec::new(),
-      tables: Vec::new(),
-    };
-
-    let (sections, shstrndx) = read_sections(&symbols.image)?;
-    let names = sections
-      .get(shstrndx)
-      .and_then(|section| range_of(section.offset, section.size, symbols.image.len()))
-      .map(|range| symbols.image[range].to_vec())
-      .unwrap_or_default();
-
-    let debugdata = sections
-      .iter()
-      .find(|section| section_name(&names, section.name) == Some(".gnu_debugdata"))
-      .and_then(|section| range_of(section.offset, section.size, symbols.image.len()));
-    if let Some(range) = debugdata {
-      symbols.debug = decompress_xz(&symbols.image[range]).unwrap_or_default();
-    }
-
-    symbols.tables = collect_tables(&symbols.image, false, &sections);
-    if !symbols.debug.is_empty() {
-      if let Some((debug_sections, _)) = read_sections(&symbols.debug) {
-        let mut from_debug = collect_tables(&symbols.debug, true, &debug_sections);
-        symbols.tables.append(&mut from_debug);
-      }
-    }
-
-    (!symbols.tables.is_empty()).then_some(symbols)
-  }
-
-  fn buffer(&self, table: &Table) -> &[u8] {
-    if table.debug {
-      &self.debug
-    } else {
-      &self.image
-    }
+    let debug = read_debugdata(&image).unwrap_or_default();
+    let symbols = Symbols { image, debug };
+    (!read_tables(&symbols.image).is_empty() || !read_tables(&symbols.debug).is_empty()).then_some(symbols)
   }
 
   fn find(&self, matches: impl Fn(&str) -> bool) -> Option<u64> {
-    for table in &self.tables {
-      let buffer = self.buffer(table);
-      let entries = &buffer[table.symbols.clone()];
-      let strings = &buffer[table.strings.clone()];
-
-      for entry in entries.chunks_exact(SYM_SIZE) {
-        let value = read_u64(entry, 8)?;
-        if value == 0 || read_u16(entry, 6)? == SHN_UNDEF {
-          continue;
-        }
-        let Some(name) = section_name(strings, read_u32(entry, 0)?) else {
-          continue;
-        };
-        if matches(name) {
-          return Some(value);
+    for image in [&self.image, &self.debug] {
+      for table in read_tables(image) {
+        for symbol in table.symbols() {
+          let value = symbol.st_value(LittleEndian);
+          if value == 0 || symbol.is_undefined(LittleEndian) {
+            continue;
+          }
+          let Some(name) = symbol.name(LittleEndian, table.strings()).ok().and_then(|n| std::str::from_utf8(n).ok())
+          else {
+            continue;
+          };
+          if matches(name) {
+            return Some(value);
+          }
         }
       }
     }
@@ -164,29 +70,6 @@ impl Symbols {
   pub fn prefix(&self, prefix: &str) -> Option<u64> {
     self.find(|candidate| candidate.starts_with(prefix))
   }
-}
-
-fn collect_tables(image: &[u8], debug: bool, sections: &[Section]) -> Vec<Table> {
-  let mut tables = Vec::new();
-  for section in sections {
-    if section.kind != SHT_SYMTAB && section.kind != SHT_DYNSYM {
-      continue;
-    }
-    if section.entsize as usize != SYM_SIZE {
-      continue;
-    }
-    let Some(strtab) = sections.get(section.link as usize) else {
-      continue;
-    };
-    let Some(symbols) = range_of(section.offset, section.size, image.len()) else {
-      continue;
-    };
-    let Some(strings) = range_of(strtab.offset, strtab.size, image.len()) else {
-      continue;
-    };
-    tables.push(Table { debug, symbols, strings });
-  }
-  tables
 }
 
 fn decompress_xz(compressed: &[u8]) -> Option<Vec<u8>> {

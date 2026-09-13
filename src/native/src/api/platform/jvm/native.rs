@@ -484,7 +484,12 @@ pub(crate) struct Native {
 
 impl Native {
   pub(crate) fn new(host: Rc<dyn JvmReflectHost>, refs: Arc<RefTable>) -> Rc<Self> {
-    Rc::new(Self { host, refs, classes: RefCell::new(Vec::new()), by_hash: RefCell::new(HashMap::new()) })
+    Rc::new(Self {
+      host,
+      refs,
+      classes: RefCell::new(Vec::new()),
+      by_hash: RefCell::new(HashMap::new()),
+    })
   }
 
   fn with_env<'js, T>(
@@ -517,7 +522,6 @@ impl Native {
       ),
     }
   }
-
 
   fn key_of(&self, env: &mut Env, known: &WellKnown, cls: &JObject) -> OpResult<usize> {
     let hash = unsafe {
@@ -857,7 +861,11 @@ impl Native {
         let cls = self.class_of(env, key)?;
         let mode = if constructors { RESOLVE_CONSTRUCTORS } else { RESOLVE_METHODS };
         let answer = match self.resolve(ctx, env, known, &cls, name, mode)? {
-          Ok((class_name, candidates, _)) => Ok(Rc::new(Plan { class_name, candidates, picks: RefCell::new(HashMap::new()) })),
+          Ok((class_name, candidates, _)) => Ok(Rc::new(Plan {
+            class_name,
+            candidates,
+            picks: RefCell::new(HashMap::new()),
+          })),
           Err(wire) => Err(wire),
         };
         let mut classes = self.classes.borrow_mut();
@@ -916,14 +924,15 @@ impl Native {
     let pinned = match self.resolve(ctx, env, known, entry.obj.as_obj(), "", RESOLVE_MEMBER)? {
       Ok((_, _, Some(field))) => Pinned::Field(field),
       Ok((_, candidates, None)) if candidates.len() == 1 => Pinned::Method(candidates[0].clone()),
-      Ok(_) => return throw(ctx, PluginErrorCode::InvalidArgument, "jvm: that handle is not a method, constructor or field"),
+      Ok(_) => {
+        return throw(ctx, PluginErrorCode::InvalidArgument, "jvm: that handle is not a method, constructor or field")
+      }
       Err(wire) => return throw_wire(ctx, &wire),
     };
     let pinned = Rc::new(pinned);
     *handle.borrow().pinned.borrow_mut() = Some(pinned.clone());
     Ok(pinned)
   }
-
 
   fn matches(&self, ctx: &Ctx<'_>, env: &mut Env, param: &ParamKind, arg: &Arg<'_>) -> OpResult<bool> {
     Ok(match (param, arg) {
@@ -973,12 +982,7 @@ impl Native {
     })
   }
 
-  fn boxed_value<'l>(
-    env: &mut Env<'l>,
-    known: &WellKnown,
-    kind: BoxKind,
-    value: JValue,
-  ) -> OpResult<JObject<'l>> {
+  fn boxed_value<'l>(env: &mut Env<'l>, known: &WellKnown, kind: BoxKind, value: JValue) -> OpResult<JObject<'l>> {
     let (_, cls, value_of, _) = known.boxed(kind);
     Ok(unsafe { env.call_static_method_unchecked(cls, *value_of, JavaType::Object, &[value.as_jni()])? }.l()?)
   }
@@ -1213,7 +1217,6 @@ impl Native {
     Ok(narrowest.remove(0))
   }
 
-
   fn invoke<'l>(
     &self,
     ctx: &Ctx<'_>,
@@ -1271,9 +1274,11 @@ impl Native {
       return Ok(());
     }
     let name = unsafe { env.call_method_unchecked(owner, known.class_get_name, JavaType::Object, &[])? }.l()?;
-    let loader = unsafe { env.call_method_unchecked(owner, known.class_get_class_loader, JavaType::Object, &[])? }.l()?;
+    let loader =
+      unsafe { env.call_method_unchecked(owner, known.class_get_class_loader, JavaType::Object, &[])? }.l()?;
     let args = [JValue::Object(&name).as_jni(), JValue::Bool(true).as_jni(), JValue::Object(&loader).as_jni()];
-    let loaded = unsafe { env.call_static_method_unchecked(&known.class, known.class_for_name, JavaType::Object, &args) };
+    let loaded =
+      unsafe { env.call_static_method_unchecked(&known.class, known.class_for_name, JavaType::Object, &args) };
     match loaded {
       Ok(_) => {
         initialized.set(true);
@@ -1362,7 +1367,6 @@ impl Native {
     drop(prepared);
     Ok(())
   }
-
 
   fn unbox<'l>(env: &mut Env<'l>, known: &WellKnown, kind: BoxKind, obj: &JObject) -> OpResult<JValueOwned<'l>> {
     let ty = match kind {
@@ -1461,7 +1465,6 @@ impl Native {
     Ok(Outcome::Handle(HandleSpec { id, kind, class_key, pinned: None }))
   }
 
-
   fn receiver_of(entry: &Entry) -> Option<&JObject<'static>> {
     if entry.kind == KIND_CLASS {
       None
@@ -1508,12 +1511,7 @@ impl Native {
     })
   }
 
-  pub(crate) fn get<'js>(
-    &self,
-    ctx: &Ctx<'js>,
-    target: &Class<'js, JvmRef>,
-    name: &str,
-  ) -> JsResult<Outcome<'js>> {
+  pub(crate) fn get<'js>(&self, ctx: &Ctx<'js>, target: &Class<'js, JvmRef>, name: &str) -> JsResult<Outcome<'js>> {
     self.with_env(ctx, |env, known| {
       let entry = self.entry_of(ctx, target)?;
       let key = self.class_key_of(ctx, env, known, target, &entry)?;
@@ -1539,12 +1537,7 @@ impl Native {
   }
 
   /// `getDeclaredMethod`/`getDeclaredConstructor`: one member, minted with its plan attached
-  pub(crate) fn method<'js>(
-    &self,
-    ctx: &Ctx<'js>,
-    target: &Class<'js, JvmRef>,
-    name: &str,
-  ) -> JsResult<Outcome<'js>> {
+  pub(crate) fn method<'js>(&self, ctx: &Ctx<'js>, target: &Class<'js, JvmRef>, name: &str) -> JsResult<Outcome<'js>> {
     self.with_env(ctx, |env, known| {
       let entry = self.entry_of(ctx, target)?;
       if entry.kind != KIND_CLASS {
@@ -1581,16 +1574,16 @@ impl Native {
       let Some(id) = self.refs.mint(member, kind) else {
         return throw(ctx, PluginErrorCode::HandleExpired, "jvm: this plugin's handles have been released");
       };
-      Ok(Outcome::Handle(HandleSpec { id, kind, class_key: None, pinned: Some(Rc::new(Pinned::Method(candidate))) }))
+      Ok(Outcome::Handle(HandleSpec {
+        id,
+        kind,
+        class_key: None,
+        pinned: Some(Rc::new(Pinned::Method(candidate))),
+      }))
     })
   }
 
-  pub(crate) fn field<'js>(
-    &self,
-    ctx: &Ctx<'js>,
-    target: &Class<'js, JvmRef>,
-    name: &str,
-  ) -> JsResult<Outcome<'js>> {
+  pub(crate) fn field<'js>(&self, ctx: &Ctx<'js>, target: &Class<'js, JvmRef>, name: &str) -> JsResult<Outcome<'js>> {
     self.with_env(ctx, |env, known| {
       let entry = self.entry_of(ctx, target)?;
       if entry.kind != KIND_CLASS {
@@ -1605,7 +1598,12 @@ impl Native {
       let Some(id) = self.refs.mint(field, KIND_FIELD) else {
         return throw(ctx, PluginErrorCode::HandleExpired, "jvm: this plugin's handles have been released");
       };
-      Ok(Outcome::Handle(HandleSpec { id, kind: KIND_FIELD, class_key: None, pinned: Some(Rc::new(Pinned::Field(plan))) }))
+      Ok(Outcome::Handle(HandleSpec {
+        id,
+        kind: KIND_FIELD,
+        class_key: None,
+        pinned: Some(Rc::new(Pinned::Field(plan))),
+      }))
     })
   }
 
@@ -1659,7 +1657,9 @@ impl Native {
       let receiver = match &candidate.id {
         MethodId::Constructor(_) => None,
         MethodId::Static(_) => self.receiver_arg(ctx, env, receiver, None)?,
-        MethodId::Instance(_) => self.receiver_arg(ctx, env, receiver, Some((&candidate.owner, &candidate.descriptor)))?,
+        MethodId::Instance(_) => {
+          self.receiver_arg(ctx, env, receiver, Some((&candidate.owner, &candidate.descriptor)))?
+        }
       };
       if !self.fits(ctx, env, candidate, args)? {
         let what = if candidate.is_constructor() { "constructor" } else { &candidate.descriptor };

@@ -52,7 +52,9 @@ impl PendingSettle {
 }
 
 pub fn pump_jobs(rt: &Runtime, context: &rquickjs::Context, log: &dyn Fn(&str)) {
-  if is_caller_entry() { return; }
+  if is_caller_entry() {
+    return;
+  }
   loop {
     match rt.execute_pending_job() {
       Ok(true) => continue,
@@ -65,4 +67,3 @@ pub fn pump_jobs(rt: &Runtime, context: &rquickjs::Context, log: &dyn Fn(&str)) 
   }
   context.with(|ctx| error::report_rejections(&ctx));
 }
-

@@ -187,6 +187,7 @@ fn fixtures_built_and_dropped_concurrently_share_one_root() {
 #[test]
 fn a_dot_dot_is_resolved_before_containment_is_checked() {
   let f = scoped("dotdot");
+  fs::create_dir(f.dir.path().join("a")).unwrap();
   // the classic bypass: the string starts with the root, the path does not stay in it
   assert_eq!(code_of(&f, "inu.fs.read('a/../../secret.txt')"), "not-granted");
   assert_eq!(code_of(&f, "inu.fs.write('../escaped.txt', new Uint8Array([1]))"), "not-granted");
@@ -196,7 +197,7 @@ fn a_dot_dot_is_resolved_before_containment_is_checked() {
 #[test]
 fn a_dot_dot_that_comes_back_is_allowed() {
   let f = scoped("dotdot-back");
-  eval(&f, "inu.fs.write('a.txt', new TextEncoder().encode('hi')); 'ok'");
+  eval(&f, "inu.fs.mkdir('sub'); inu.fs.write('a.txt', new TextEncoder().encode('hi')); 'ok'");
   assert_eq!(
     eval(&f, "new TextDecoder().decode(inu.fs.read('sub/../a.txt'))"),
     "hi",
@@ -243,7 +244,7 @@ fn a_symlink_inside_the_directory_still_works() {
   let f = scoped("symlink-inside");
   fs::create_dir(f.dir.path().join("real")).unwrap();
   fs::write(f.dir.path().join("real/x.txt"), b"inside").unwrap();
-  std::os::unix::fs::symlink(f.dir.path().join("real"), f.dir.path().join("link")).unwrap();
+  std::os::unix::fs::symlink("real", f.dir.path().join("link")).unwrap();
   assert_eq!(eval(&f, "new TextDecoder().decode(inu.fs.read('link/x.txt'))"), "inside");
 }
 
@@ -261,8 +262,8 @@ fn a_dot_dot_after_a_symlink_pops_the_resolved_parent() {
 #[test]
 fn a_symlink_cycle_terminates() {
   let f = scoped("symlink-cycle");
-  std::os::unix::fs::symlink(f.dir.path().join("b"), f.dir.path().join("a")).unwrap();
-  std::os::unix::fs::symlink(f.dir.path().join("a"), f.dir.path().join("b")).unwrap();
+  std::os::unix::fs::symlink("b", f.dir.path().join("a")).unwrap();
+  std::os::unix::fs::symlink("a", f.dir.path().join("b")).unwrap();
   assert_eq!(code_of(&f, "inu.fs.read('a')"), "invalid-argument");
 }
 

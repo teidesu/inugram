@@ -1670,11 +1670,13 @@ fn write_clears_the_writing_views_bag_promptly() {
 fn a_projected_handle_answers_its_scalars_without_the_host() {
   let (_rt, ctx) = make_ctx();
   let host = Rc::new(FakeTlHost::default());
-  let id = host.mint_read_only(object_entry("dialog", &[("id", "S5"), ("date", "I9"), ("draft", "N"), ("pinned", "B1")]));
+  let id =
+    host.mint_read_only(object_entry("dialog", &[("id", "S5"), ("date", "I9"), ("draft", "N"), ("pinned", "B1")]));
   let views = views_of(&host);
 
   ctx.with(|ctx| {
-    let wire = format!("{}|{{\"_\":\"dialog\",\"id\":\"5\",\"date\":9,\"draft\":null}}", encode_handle(false, true, id));
+    let wire =
+      format!("{}|{{\"_\":\"dialog\",\"id\":\"5\",\"date\":9,\"draft\":null}}", encode_handle(false, true, id));
     let value = views.wire_to_js_value(&ctx, &wire, ViewLife::Plugin).unwrap();
     ctx.globals().set("d", value).unwrap();
 
@@ -1698,11 +1700,6 @@ fn a_projected_handle_answers_its_scalars_without_the_host() {
     assert_eq!(host.own_keys_count(), 1, "the projection does not claim to be the whole object");
   });
 }
-
-
-
-
-
 
 #[test]
 fn a_projection_is_dropped_by_a_write_like_any_cached_value() {
@@ -1745,7 +1742,6 @@ fn a_dispatch_view_ignores_a_projection() {
     assert_eq!(host.gets_of("id"), 1);
   });
 }
-
 
 #[test]
 fn a_malformed_projection_is_refused() {
@@ -1820,7 +1816,9 @@ fn bench_views() {
       ctx.globals().set("ds", array).unwrap();
       build.push(started.elapsed());
       let started = std::time::Instant::now();
-      if let Err(e) = ctx.eval::<(), _>("globalThis.s = 0; for (const d of ds) { s += d.id.length; s += d.last_message_date; }") {
+      if let Err(e) =
+        ctx.eval::<(), _>("globalThis.s = 0; for (const d of ds) { s += d.id.length; s += d.last_message_date; }")
+      {
         panic!("{e}: {:?}", ctx.catch().as_exception().map(|x| x.message()));
       }
       cold.push(started.elapsed());

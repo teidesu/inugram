@@ -19,8 +19,8 @@ use crate::api::canvas::geometry::{finite, normalize_round_rect, ArcError, Matri
 use crate::api::error::format_exception;
 use crate::api::error::{wire_error_to_js, PluginErrorCode};
 use crate::api::io::blob::{mint_app_file, BlobState, BUILD_LIMIT_BYTES};
-use crate::api::io::staging::{SourceStager, StagedSource};
 use crate::api::io::fs::FsState;
+use crate::api::io::staging::{SourceStager, StagedSource};
 use crate::runtime::{pump_jobs, PendingSettle};
 use crate::sandbox::limits::{ExternalCharge, ExternalMemory};
 use crate::sandbox::registry::RequestIds;
@@ -33,7 +33,6 @@ pub const MAX_GRADIENT_STOPS: usize = 256;
 pub const MAX_SOURCE_BYTES: u64 = BUILD_LIMIT_BYTES;
 
 const FLUSH_AT_BYTES: usize = 1024 * 1024;
-
 
 pub const OP_CREATE: i32 = 0;
 pub const OP_DESTROY: i32 = 1;

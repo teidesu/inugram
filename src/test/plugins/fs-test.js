@@ -117,7 +117,7 @@ function main() {
   check('doubled separators collapse', text.decode(inu.fs.read('deep//x.txt')) === 'deep')
   check("'.' segments collapse", text.decode(inu.fs.read('./deep/./x.txt')) === 'deep')
 
-  for (const escape of ['../outside.txt', 'deep/../../outside.txt', '../../etc/hosts', 'a/b/../../../x']) {
+  for (const escape of ['../outside.txt', 'deep/../../outside.txt', '../../etc/hosts', 'deep/../deep/../../x']) {
     expectThrow(`'${escape}' cannot leave the directory`, 'not-granted', () => inu.fs.read(escape))
   }
   expectThrow('and neither can a write', 'not-granted', () => inu.fs.write('../outside.txt', bytes.encode('x')))

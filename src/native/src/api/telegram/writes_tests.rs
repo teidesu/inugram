@@ -66,7 +66,7 @@ impl TestWritesHost {
   /// the message a send or an edit resolves with. Its text is read back out of the request,
   /// so a call whose text never crossed cannot answer with one that matches.
   fn sent_message_wire(&self, arg: &str, id: i32) -> String {
-    let text = serde_lite::parse(arg).get("text");
+    let text = read_json_field(arg, "text");
     self.handle_wire(
       "message",
       vec![("id", format!("I{id}")), ("message", format!("S{text}")), ("out", "B1".to_string())],
@@ -136,13 +136,13 @@ impl TestWritesHost {
         let path = self.media_path();
         format!(
           "J{{\"path\":{},\"size\":{},\"mime\":\"text/plain\",\"name\":\"note.txt\",\"mtime\":{}}}",
-          json_string(&path.to_string_lossy()),
+          serde_json::to_string(&path.to_string_lossy()).unwrap(),
           CONTENT.len(),
           self.media_mtime(),
         )
       }
       OP_DOWNLOAD_MEDIA_TO_FILE => {
-        format!("J{{\"path\":{}}}", json_string(&self.media_path().to_string_lossy()))
+        format!("J{{\"path\":{}}}", serde_json::to_string(&self.media_path().to_string_lossy()).unwrap())
       }
       OP_UPLOAD_FILE => {
         // the staged file is read *here*, which is the assertion this fake exists for:
@@ -150,17 +150,16 @@ impl TestWritesHost {
         let Some(staged) = values.first().and_then(|w| w.strip_prefix('F')) else {
           return "Pinvalid-argument\n\n\n\nnot a staged file".to_string();
         };
-        let described: serde_lite::Json = serde_lite::parse(staged);
-        let path = described.get("path");
+        let path = read_json_field(staged, "path");
         let Ok(bytes) = fs::read(&path) else {
           return "Pnot-found\n\n\n\nthe staged file is not there".to_string();
         };
-        let requested = serde_lite::parse(arg).get("fileName");
-        let name = if requested.is_empty() { described.get("name") } else { requested };
+        let requested = read_json_field(arg, "fileName");
+        let name = if requested.is_empty() { read_json_field(staged, "name") } else { requested };
         format!(
           "J{{\"_\":\"inputFile\",\"id\":\"1\",\"parts\":{},\"name\":{},\"md5_checksum\":\"\"}}",
           bytes.len(),
-          json_string(&name),
+          serde_json::to_string(&name).unwrap(),
         )
       }
       OP_SEND_MESSAGE | OP_SEND_MEDIA | OP_EDIT_MESSAGE => self.sent_message_wire(arg, 7),
@@ -169,25 +168,9 @@ impl TestWritesHost {
   }
 }
 
-/// the two fields these tests read out of a flat json object, without a json crate
-mod serde_lite {
-  pub struct Json(pub String);
-
-  pub fn parse(text: &str) -> Json {
-    Json(text.to_string())
-  }
-
-  impl Json {
-    pub fn get(&self, key: &str) -> String {
-      let needle = format!("\"{key}\":\"");
-      let Some(at) = self.0.find(&needle) else {
-        return String::new();
-      };
-      let rest = &self.0[at + needle.len()..];
-      let end = rest.find('"').unwrap_or(0);
-      rest[..end].replace("\\\\", "\\").replace("\\\"", "\"")
-    }
-  }
+fn read_json_field(text: &str, key: &str) -> String {
+  let value: serde_json::Value = serde_json::from_str(text).unwrap_or_default();
+  value[key].as_str().unwrap_or_default().to_string()
 }
 
 impl WritesHost for TestWritesHost {
@@ -210,7 +193,10 @@ impl WritesHost for TestWritesHost {
     if !value.contains("messageMediaDocument") {
       return "N".to_string();
     }
-    format!("J{{\"path\":{},\"exists\":true}}", json_string(&self.media_path().to_string_lossy()),)
+    format!(
+      "J{{\"path\":{},\"exists\":true}}",
+      serde_json::to_string(&self.media_path().to_string_lossy()).unwrap(),
+    )
   }
 }
 
@@ -541,6 +527,25 @@ fn a_blob_reaches_the_host_as_a_file_and_the_staged_copy_does_not_outlive_the_ca
     "a staged copy outlived its transfer: {:?}",
     left.iter().map(|e| e.file_name()).collect::<Vec<_>>(),
   );
+}
+
+#[test]
+fn the_plugins_prototype_cannot_rewrite_the_file_the_host_is_handed() {
+  let (out, host) = run_async(
+    ALL_WRITES,
+    r#"Object.prototype.toJSON = function () { return { path: '/data/secret', name: 'forged', mime: '' } }
+       Object.defineProperty(Object.prototype, 'mime', { set() {}, configurable: true })
+       const sent = inu.account().uploadFile(new File([new Uint8Array([1])], 'payload.bin'))
+       delete Object.prototype.toJSON
+       delete Object.prototype.mime
+       sent.then(() => __out.push('ok'), (e) => __out.push(e.code))"#,
+  );
+  assert_eq!(out, r#"["ok"]"#);
+  let calls = host.calls.borrow();
+  let (_, _, values) = calls.first().expect("the upload must cross");
+  assert!(!values[0].contains("/data/secret"), "the plugin chose the path: {}", values[0]);
+  assert!(values[0].contains("\"name\":\"payload.bin\""), "got: {}", values[0]);
+  assert!(values[0].contains("\"mime\":"), "a prototype setter swallowed a field: {}", values[0]);
 }
 
 /// what a test reads back out of a rejected transfer: the code, and the two numbers

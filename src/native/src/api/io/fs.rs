@@ -1,10 +1,13 @@
 use std::cell::Cell;
+use std::ffi::OsStr;
 use std::fs;
 use std::io::Write;
 use std::path::{Component, Path, PathBuf};
 use std::rc::Rc;
 use std::time::UNIX_EPOCH;
 
+use cap_std::ambient_authority;
+use cap_std::fs::Dir;
 use rquickjs::function::Opt;
 use rquickjs::{Ctx, Function, Object, Result as JsResult, TypedArray, Value};
 
@@ -14,20 +17,38 @@ use crate::sandbox::grants::{GrantHost, MATCH_EXACT};
 
 const COPY_CHUNK_BYTES: u64 = 256 * 1024;
 
-const MAX_SYMLINK_HOPS: u32 = 40;
-
 pub const DEFAULT_QUOTA_BYTES: u64 = 50 * 1024 * 1024;
 
 pub const UNCAPPED: u64 = u64::MAX;
 
 const EXDEV: i32 = 18;
 
+#[cfg(target_os = "macos")]
+const ELOOP: i32 = 62;
+#[cfg(not(target_os = "macos"))]
+const ELOOP: i32 = 40;
+
 pub const ANDROID_DIR_NAMES: [&str; 5] = ["files", "images", "videos", "audios", "documents"];
+
+enum Storage {
+  Missing,
+  Confined { root: PathBuf, dir: Dir },
+  Ambient { root: PathBuf },
+}
+
+impl Storage {
+  fn root(&self) -> Option<&Path> {
+    match self {
+      Storage::Missing => None,
+      Storage::Confined { root, .. } | Storage::Ambient { root } => Some(root),
+    }
+  }
+}
 
 pub struct FsState {
   grants: Rc<dyn GrantHost>,
   blobs: Rc<BlobState>,
-  root: PathBuf,
+  storage: Storage,
   quota: u64,
   unscoped: bool,
   usage: Cell<Option<u64>>,
@@ -54,7 +75,7 @@ const TEST_ANDROID_DIRS: &str = r#"/data/plugins
 /media/documents"#;
 
 enum Fault {
-  Escape(PathBuf),
+  Escape(String),
   Invalid(String),
   NotFound(String),
   Quota { usage: u64, quota: u64, message: String },
@@ -65,10 +86,8 @@ enum Fault {
 impl Fault {
   fn throw<T>(self, ctx: &Ctx<'_>) -> JsResult<T> {
     match self {
-      Fault::Escape(path) => PluginErrorCode::NotGranted("unsafe.fs").throw(
-        ctx,
-        &format!("'{}' is outside this plugin's directory; only @grant unsafe.fs reaches there", path.display(),),
-      ),
+      Fault::Escape(path) => PluginErrorCode::NotGranted("unsafe.fs")
+        .throw(ctx, &format!("'{path}' is outside this plugin's directory; only @grant unsafe.fs reaches there")),
       Fault::Invalid(message) => PluginErrorCode::InvalidArgument.throw(ctx, &message),
       Fault::NotFound(message) => PluginErrorCode::NotFound.throw(ctx, &message),
       Fault::Quota { usage, quota, message } => PluginErrorCode::QuotaExceeded(
@@ -79,6 +98,10 @@ impl Fault {
       Fault::Io(message) => PluginErrorCode::Internal.throw(ctx, &message),
       Fault::Gone(message) => PluginErrorCode::HandleExpired.throw(ctx, &message),
     }
+  }
+
+  fn is_refusal(&self) -> bool {
+    matches!(self, Fault::Escape(_) | Fault::Invalid(_))
   }
 }
 
@@ -92,68 +115,209 @@ fn io(what: &str, e: std::io::Error) -> Fault {
   }
 }
 
-impl FsState {
-  fn resolve_path(&self, input: &str) -> FsResult<PathBuf> {
-    if self.root.as_os_str().is_empty() {
-      return Err(Fault::Io("fs: this plugin has no storage directory".to_string()));
+/// cap-std reports a path leaving its directory as a synthesized `PermissionDenied` with no OS error
+fn io_at(what: &str, path: &str, e: std::io::Error) -> Fault {
+  match e.kind() {
+    std::io::ErrorKind::PermissionDenied if e.raw_os_error().is_none() => Fault::Escape(path.to_string()),
+    _ if e.raw_os_error() == Some(ELOOP) => {
+      Fault::Invalid(format!("{what}: too many symbolic links resolving '{path}'"))
     }
+    _ => io(what, e),
+  }
+}
+
+struct Entry {
+  is_file: bool,
+  is_dir: bool,
+  len: u64,
+  mtime: i64,
+  ctime: i64,
+}
+
+impl Entry {
+  fn of_ambient(meta: &fs::Metadata) -> Entry {
+    use std::os::unix::fs::MetadataExt;
+    let mtime = system_time_millis(meta.modified().ok());
+    Entry {
+      is_file: meta.is_file(),
+      is_dir: meta.is_dir(),
+      len: meta.len(),
+      mtime,
+      ctime: unix_ctime_millis(meta.ctime(), meta.ctime_nsec()).unwrap_or(mtime),
+    }
+  }
+
+  fn of_confined(meta: &cap_std::fs::Metadata) -> Entry {
+    use cap_std::fs::MetadataExt;
+    let mtime = system_time_millis(meta.modified().ok().map(|time| time.into_std()));
+    Entry {
+      is_file: meta.is_file(),
+      is_dir: meta.is_dir(),
+      len: meta.len(),
+      mtime,
+      ctime: unix_ctime_millis(meta.ctime(), meta.ctime_nsec()).unwrap_or(mtime),
+    }
+  }
+}
+
+enum Target<'a> {
+  Confined { root: &'a Path, dir: &'a Dir, path: PathBuf },
+  Ambient(PathBuf),
+}
+
+fn mismatched_storage() -> std::io::Error {
+  std::io::Error::other("the two paths are in different storage")
+}
+
+impl Target<'_> {
+  fn join(&self, name: &OsStr) -> Self {
+    match self {
+      Target::Confined { root, dir, path } => Target::Confined { root, dir, path: path.join(name) },
+      Target::Ambient(path) => Target::Ambient(path.join(name)),
+    }
+  }
+
+  fn metadata(&self) -> std::io::Result<Entry> {
+    match self {
+      Target::Confined { dir, path, .. } => dir.metadata(path).map(|meta| Entry::of_confined(&meta)),
+      Target::Ambient(path) => fs::metadata(path).map(|meta| Entry::of_ambient(&meta)),
+    }
+  }
+
+  fn is_directory_itself(&self) -> std::io::Result<bool> {
+    match self {
+      Target::Confined { dir, path, .. } => dir.symlink_metadata(path).map(|meta| meta.is_dir()),
+      Target::Ambient(path) => fs::symlink_metadata(path).map(|meta| meta.is_dir()),
+    }
+  }
+
+  fn size(&self) -> u64 {
+    self.metadata().map(|entry| if entry.is_file { entry.len } else { 0 }).unwrap_or(0)
+  }
+
+  fn is_root(&self) -> bool {
+    match self {
+      Target::Confined { dir, path, .. } => {
+        dir.canonicalize(path).is_ok_and(|canonical| canonical.components().all(|c| c == Component::CurDir))
+      }
+      Target::Ambient(_) => false,
+    }
+  }
+
+  fn read(&self) -> std::io::Result<Vec<u8>> {
+    match self {
+      Target::Confined { dir, path, .. } => dir.read(path),
+      Target::Ambient(path) => fs::read(path),
+    }
+  }
+
+  fn open_for_write(&self, append: bool) -> std::io::Result<fs::File> {
+    match self {
+      Target::Confined { dir, path, .. } => {
+        let mut options = cap_std::fs::OpenOptions::new();
+        options.write(true).create(true).append(append).truncate(!append);
+        dir.open_with(path, &options).map(cap_std::fs::File::into_std)
+      }
+      Target::Ambient(path) => {
+        fs::OpenOptions::new().write(true).create(true).append(append).truncate(!append).open(path)
+      }
+    }
+  }
+
+  fn create_dir_all(&self) -> std::io::Result<()> {
+    match self {
+      Target::Confined { dir, path, .. } => dir.create_dir_all(path),
+      Target::Ambient(path) => fs::create_dir_all(path),
+    }
+  }
+
+  fn remove_file(&self) -> std::io::Result<()> {
+    match self {
+      Target::Confined { dir, path, .. } => dir.remove_file(path),
+      Target::Ambient(path) => fs::remove_file(path),
+    }
+  }
+
+  fn remove_dir(&self) -> std::io::Result<()> {
+    match self {
+      Target::Confined { dir, path, .. } => dir.remove_dir(path),
+      Target::Ambient(path) => fs::remove_dir(path),
+    }
+  }
+
+  fn remove_dir_all(&self) -> std::io::Result<()> {
+    match self {
+      Target::Confined { dir, path, .. } => dir.remove_dir_all(path),
+      Target::Ambient(path) => fs::remove_dir_all(path),
+    }
+  }
+
+  fn read_dir_names(&self) -> std::io::Result<Vec<std::ffi::OsString>> {
+    match self {
+      Target::Confined { dir, path, .. } => Ok(dir.read_dir(path)?.flatten().map(|entry| entry.file_name()).collect()),
+      Target::Ambient(path) => Ok(fs::read_dir(path)?.flatten().map(|entry| entry.file_name()).collect()),
+    }
+  }
+
+  fn copy_to(&self, to: &Target<'_>) -> std::io::Result<()> {
+    match (self, to) {
+      (Target::Confined { dir, path, .. }, Target::Confined { dir: to_dir, path: to_path, .. }) => {
+        let mut reader = dir.open(path)?.into_std();
+        let mut options = cap_std::fs::OpenOptions::new();
+        options.write(true).create(true).truncate(true);
+        let mut writer = to_dir.open_with(to_path, &options)?.into_std();
+        std::io::copy(&mut reader, &mut writer).map(|_| ())
+      }
+      (Target::Ambient(path), Target::Ambient(to_path)) => fs::copy(path, to_path).map(|_| ()),
+      _ => Err(mismatched_storage()),
+    }
+  }
+
+  fn rename_to(&self, to: &Target<'_>) -> std::io::Result<()> {
+    match (self, to) {
+      (Target::Confined { dir, path, .. }, Target::Confined { dir: to_dir, path: to_path, .. }) => {
+        dir.rename(path, to_dir, to_path)
+      }
+      (Target::Ambient(path), Target::Ambient(to_path)) => fs::rename(path, to_path),
+      _ => Err(mismatched_storage()),
+    }
+  }
+}
+
+impl FsState {
+  fn resolve_path(&self, input: &str) -> FsResult<Target<'_>> {
+    let Some(root) = self.storage.root() else {
+      return Err(Fault::Io("fs: this plugin has no storage directory".to_string()));
+    };
     if input.is_empty() {
       return Err(Fault::Invalid("fs: the path is empty".to_string()));
     }
     if input.contains('\0') {
       return Err(Fault::Invalid("fs: the path contains a NUL".to_string()));
     }
-
     let raw = Path::new(input);
-    if raw.is_absolute() && !self.unscoped {
-      return Err(Fault::Escape(raw.to_path_buf()));
+    match &self.storage {
+      Storage::Confined { root, dir } if !raw.is_absolute() => {
+        Ok(Target::Confined { root, dir, path: raw.to_path_buf() })
+      }
+      Storage::Confined { .. } => Err(Fault::Escape(input.to_string())),
+      _ => Ok(Target::Ambient(root.join(raw))),
     }
-
-    let start = if raw.is_absolute() { PathBuf::from("/") } else { self.root.clone() };
-    let mut hops = 0;
-    let resolved = walk(start, raw, &mut hops)?;
-
-    if !self.unscoped && !resolved.starts_with(&self.root) {
-      return Err(Fault::Escape(resolved));
-    }
-    Ok(resolved)
   }
 
   pub(crate) fn resolve_external(&self, ctx: &Ctx<'_>, input: &str) -> JsResult<PathBuf> {
     self.grants.check_grant(ctx, self.grant(), None, MATCH_EXACT)?;
-    match self.resolve_path(input) {
+    let resolved = self.resolve_path(input).and_then(|target| match target {
+      Target::Confined { root, dir, path } => {
+        dir.canonicalize(&path).map(|canonical| root.join(canonical)).map_err(|e| io_at("fs", input, e))
+      }
+      Target::Ambient(path) => Ok(path),
+    });
+    match resolved {
       Ok(path) => Ok(path),
       Err(fault) => fault.throw(ctx),
     }
   }
-}
-
-fn walk(mut current: PathBuf, path: &Path, hops: &mut u32) -> FsResult<PathBuf> {
-  for component in path.components() {
-    match component {
-      Component::Prefix(_) => return Err(Fault::Invalid("fs: the path has a drive prefix".to_string())),
-      Component::RootDir => current = PathBuf::from("/"),
-      Component::CurDir => {}
-      Component::ParentDir => {
-        current.pop();
-      }
-      Component::Normal(name) => {
-        let next = current.join(name);
-        let is_link = fs::symlink_metadata(&next).map(|meta| meta.file_type().is_symlink()).unwrap_or(false);
-        if !is_link {
-          current = next;
-          continue;
-        }
-        *hops += 1;
-        if *hops > MAX_SYMLINK_HOPS {
-          return Err(Fault::Invalid(format!("fs: too many symbolic links resolving '{}'", path.display(),)));
-        }
-        let target = fs::read_link(&next).map_err(|e| io("fs", e))?;
-        current = walk(current, &target, hops)?;
-      }
-    }
-  }
-  Ok(current)
 }
 
 fn walk_usage(dir: &Path) -> u64 {
@@ -177,13 +341,9 @@ impl FsState {
     if let Some(cached) = self.usage.get() {
       return cached;
     }
-    let total = walk_usage(&self.root);
+    let total = self.storage.root().map(walk_usage).unwrap_or(0);
     self.usage.set(Some(total));
     total
-  }
-
-  fn current_size(path: &Path) -> u64 {
-    fs::metadata(path).map(|meta| if meta.is_file() { meta.len() } else { 0 }).unwrap_or(0)
   }
 
   fn check_quota(&self, adding: u64, replacing: u64) -> FsResult<u64> {
@@ -260,44 +420,38 @@ impl FsState {
     self.blobs.resolve_export(id)
   }
 
-  fn op_read<'js>(&self, ctx: &Ctx<'js>, path: &str) -> FsResult<Value<'js>> {
-    let path = self.resolve_path(path)?;
-    let meta = fs::metadata(&path).map_err(|e| io("read", e))?;
-    if !meta.is_file() {
-      return Err(Fault::Invalid(format!("read: '{}' is not a file", path.display())));
+  fn op_read<'js>(&self, ctx: &Ctx<'js>, input: &str) -> FsResult<Value<'js>> {
+    let target = self.resolve_path(input)?;
+    let entry = target.metadata().map_err(|e| io_at("read", input, e))?;
+    if !entry.is_file {
+      return Err(Fault::Invalid(format!("read: '{input}' is not a file")));
     }
-    if meta.len() > MATERIALIZE_LIMIT_BYTES {
+    if entry.len > MATERIALIZE_LIMIT_BYTES {
       return Err(Fault::Quota {
-        usage: meta.len(),
+        usage: entry.len,
         quota: MATERIALIZE_LIMIT_BYTES,
         message: format!(
           "read: {} bytes is past the {MATERIALIZE_LIMIT_BYTES} one read may take into javascript",
-          meta.len(),
+          entry.len,
         ),
       });
     }
-    let bytes = fs::read(&path).map_err(|e| io("read", e))?;
+    let bytes = target.read().map_err(|e| io_at("read", input, e))?;
     TypedArray::<u8>::new(ctx.clone(), bytes)
       .map(|array| array.into_value())
       .map_err(|e| Fault::Io(format!("read: {e:?}")))
   }
 
-  fn op_write(&self, path: &str, source: Source, append: bool) -> FsResult<()> {
+  fn op_write(&self, input: &str, source: Source, append: bool) -> FsResult<()> {
     let what = if append { "append" } else { "write" };
-    let path = self.resolve_path(path)?;
-    if fs::metadata(&path).map(|meta| meta.is_dir()).unwrap_or(false) {
-      return Err(Fault::Invalid(format!("{what}: '{}' is a directory", path.display())));
+    let target = self.resolve_path(input)?;
+    if target.metadata().is_ok_and(|entry| entry.is_dir) {
+      return Err(Fault::Invalid(format!("{what}: '{input}' is a directory")));
     }
-    let replacing = if append { 0 } else { Self::current_size(&path) };
+    let replacing = if append { 0 } else { target.size() };
     let after = self.check_quota(source.len(), replacing)?;
 
-    let mut file = fs::OpenOptions::new()
-      .write(true)
-      .create(true)
-      .append(append)
-      .truncate(!append)
-      .open(&path)
-      .map_err(|e| io(what, e))?;
+    let mut file = target.open_for_write(append).map_err(|e| io_at(what, input, e))?;
     if let Err(e) = source.write_into(&mut file) {
       self.usage.set(None);
       return Err(e);
@@ -306,66 +460,71 @@ impl FsState {
     Ok(())
   }
 
-  fn op_mkdir(&self, path: &str) -> FsResult<()> {
-    let path = self.resolve_path(path)?;
-    fs::create_dir_all(&path).map_err(|e| io("mkdir", e))
+  fn op_mkdir(&self, input: &str) -> FsResult<()> {
+    self.resolve_path(input)?.create_dir_all().map_err(|e| io_at("mkdir", input, e))
   }
 
-  fn op_rm(&self, path: &str, recursive: bool) -> FsResult<()> {
-    let path = self.resolve_path(path)?;
-    if path == self.root {
+  fn op_rm(&self, input: &str, recursive: bool) -> FsResult<()> {
+    let target = self.resolve_path(input)?;
+    let is_root = match &target {
+      Target::Ambient(path) => self.storage.root().is_some_and(|root| fs::canonicalize(path).is_ok_and(|c| c == root)),
+      Target::Confined { .. } => target.is_root(),
+    };
+    if is_root {
       return Err(Fault::Invalid("rm: the plugin's own directory cannot be removed".to_string()));
     }
-    let Ok(meta) = fs::symlink_metadata(&path) else {
-      return Ok(());
+    let is_dir = match target.is_directory_itself() {
+      Ok(is_dir) => is_dir,
+      Err(e) => {
+        let fault = io_at("rm", input, e);
+        return if fault.is_refusal() { Err(fault) } else { Ok(()) };
+      }
     };
     self.usage.set(None);
-    if !meta.is_dir() {
-      return fs::remove_file(&path).map_err(|e| io("rm", e));
+    if !is_dir {
+      return target.remove_file().map_err(|e| io_at("rm", input, e));
     }
     if recursive {
-      fs::remove_dir_all(&path).map_err(|e| io("rm", e))
+      target.remove_dir_all().map_err(|e| io_at("rm", input, e))
     } else {
-      fs::remove_dir(&path)
-        .map_err(|_| Fault::Invalid(format!("rm: '{}' is a directory; pass {{ recursive: true }}", path.display(),)))
+      target
+        .remove_dir()
+        .map_err(|_| Fault::Invalid(format!("rm: '{input}' is a directory; pass {{ recursive: true }}")))
     }
   }
 
-  fn op_exists(&self, path: &str) -> FsResult<bool> {
-    let path = self.resolve_path(path)?;
-    Ok(fs::symlink_metadata(&path).is_ok())
+  fn op_exists(&self, input: &str) -> FsResult<bool> {
+    match self.resolve_path(input)?.metadata() {
+      Ok(_) => Ok(true),
+      Err(e) => {
+        let fault = io_at("exists", input, e);
+        if fault.is_refusal() {
+          Err(fault)
+        } else {
+          Ok(false)
+        }
+      }
+    }
   }
 
-  fn op_readdir(&self, path: &str) -> FsResult<Vec<String>> {
-    let path = self.resolve_path(path)?;
-    let entries = fs::read_dir(&path).map_err(|e| io("readdir", e))?;
-    let mut names: Vec<String> =
-      entries.flatten().map(|entry| entry.file_name().to_string_lossy().into_owned()).collect();
+  fn op_readdir(&self, input: &str) -> FsResult<Vec<String>> {
+    let target = self.resolve_path(input)?;
+    let mut names: Vec<String> = target
+      .read_dir_names()
+      .map_err(|e| io_at("readdir", input, e))?
+      .into_iter()
+      .map(|name| name.to_string_lossy().into_owned())
+      .collect();
     names.sort();
     Ok(names)
   }
-}
 
-struct Stat {
-  is_file: bool,
-  is_directory: bool,
-  size: u64,
-  mtime: i64,
-  ctime: i64,
-}
-
-impl FsState {
-  fn op_stat(&self, path: &str) -> FsResult<Stat> {
-    let path = self.resolve_path(path)?;
-    let meta = fs::metadata(&path).map_err(|e| io("stat", e))?;
-    let mtime = system_time_millis(meta.modified().ok());
-    Ok(Stat {
-      is_file: meta.is_file(),
-      is_directory: meta.is_dir(),
-      size: if meta.is_file() { meta.len() } else { 0 },
-      mtime,
-      ctime: unix_ctime_millis(&meta).unwrap_or(mtime),
-    })
+  fn op_stat(&self, input: &str) -> FsResult<Entry> {
+    let mut entry = self.resolve_path(input)?.metadata().map_err(|e| io_at("stat", input, e))?;
+    if !entry.is_file {
+      entry.len = 0;
+    }
+    Ok(entry)
   }
 }
 
@@ -377,10 +536,7 @@ fn system_time_millis(time: Option<std::time::SystemTime>) -> i64 {
   }
 }
 
-fn unix_ctime_millis(meta: &fs::Metadata) -> Option<i64> {
-  use std::os::unix::fs::MetadataExt;
-  let seconds = meta.ctime();
-  let nanos = meta.ctime_nsec();
+fn unix_ctime_millis(seconds: i64, nanos: i64) -> Option<i64> {
   if seconds == 0 && nanos == 0 {
     return None;
   }
@@ -388,55 +544,57 @@ fn unix_ctime_millis(meta: &fs::Metadata) -> Option<i64> {
 }
 
 impl FsState {
-  fn op_copy(&self, src: &str, dest: &str) -> FsResult<()> {
-    let src = self.resolve_path(src)?;
-    let dest = self.resolve_path(dest)?;
-    let meta = fs::metadata(&src).map_err(|e| io("copy", e))?;
-    if !meta.is_file() {
-      return Err(Fault::Invalid(format!("copy: '{}' is not a file", src.display())));
+  fn op_copy(&self, src_input: &str, dest_input: &str) -> FsResult<()> {
+    let src = self.resolve_path(src_input)?;
+    let dest = self.resolve_path(dest_input)?;
+    let entry = src.metadata().map_err(|e| io_at("copy", src_input, e))?;
+    if !entry.is_file {
+      return Err(Fault::Invalid(format!("copy: '{src_input}' is not a file")));
     }
-    self.check_quota(meta.len(), Self::current_size(&dest))?;
+    self.check_quota(entry.len, dest.size())?;
     self.usage.set(None);
-    fs::copy(&src, &dest).map_err(|e| io("copy", e))?;
-    Ok(())
+    src.copy_to(&dest).map_err(|e| io_at("copy", dest_input, e))
   }
 
-  fn op_move(&self, src: &str, dest: &str) -> FsResult<()> {
-    let src = self.resolve_path(src)?;
-    let dest = self.resolve_path(dest)?;
-    if fs::symlink_metadata(&src).is_err() {
-      return Err(Fault::NotFound(format!("move: '{}' does not exist", src.display())));
+  fn op_move(&self, src_input: &str, dest_input: &str) -> FsResult<()> {
+    let src = self.resolve_path(src_input)?;
+    let dest = self.resolve_path(dest_input)?;
+    if let Err(e) = src.is_directory_itself() {
+      let fault = io_at("move", src_input, e);
+      return Err(if fault.is_refusal() {
+        fault
+      } else {
+        Fault::NotFound(format!("move: '{src_input}' does not exist"))
+      });
     }
     self.usage.set(None);
-    match fs::rename(&src, &dest) {
+    match src.rename_to(&dest) {
       Ok(()) => Ok(()),
       Err(e) if e.raw_os_error() == Some(EXDEV) => {
-        copy_tree(&src, &dest).map_err(|e| io("move", e))?;
-        remove_tree(&src).map_err(|e| io("move", e))
+        copy_tree(&src, &dest).map_err(|e| io_at("move", dest_input, e))?;
+        remove_tree(&src).map_err(|e| io_at("move", src_input, e))
       }
-      Err(e) => Err(io("move", e)),
+      Err(e) => Err(io_at("move", dest_input, e)),
     }
   }
 }
 
-fn copy_tree(src: &Path, dest: &Path) -> std::io::Result<()> {
-  if !fs::metadata(src)?.is_dir() {
-    fs::copy(src, dest)?;
-    return Ok(());
+fn copy_tree(src: &Target<'_>, dest: &Target<'_>) -> std::io::Result<()> {
+  if !src.metadata()?.is_dir {
+    return src.copy_to(dest);
   }
-  fs::create_dir_all(dest)?;
-  for entry in fs::read_dir(src)? {
-    let entry = entry?;
-    copy_tree(&entry.path(), &dest.join(entry.file_name()))?;
+  dest.create_dir_all()?;
+  for name in src.read_dir_names()? {
+    copy_tree(&src.join(&name), &dest.join(&name))?;
   }
   Ok(())
 }
 
-fn remove_tree(path: &Path) -> std::io::Result<()> {
-  if fs::metadata(path)?.is_dir() {
-    fs::remove_dir_all(path)
+fn remove_tree(target: &Target<'_>) -> std::io::Result<()> {
+  if target.metadata()?.is_dir {
+    target.remove_dir_all()
   } else {
-    fs::remove_file(path)
+    target.remove_file()
   }
 }
 
@@ -451,15 +609,11 @@ pub fn install_fs<'js>(
   android_dirs: &str,
   globals: &crate::api::Globals<'js>,
 ) -> JsResult<Rc<FsState>> {
-  let root = if root.as_os_str().is_empty() {
-    PathBuf::new()
-  } else {
-    fs::canonicalize(root).unwrap_or_else(|_| root.to_path_buf())
-  };
+  let storage = open_storage(root, unscoped);
   let state = Rc::new(FsState {
     grants,
     blobs,
-    root,
+    storage,
     quota,
     unscoped,
     usage: Cell::new(None),
@@ -550,8 +704,8 @@ pub fn install_fs<'js>(
         let stat = state.op_stat(&path).or_else(|fault| fault.throw(&ctx))?;
         let obj = Object::new(ctx.clone())?;
         obj.set("isFile", stat.is_file)?;
-        obj.set("isDirectory", stat.is_directory)?;
-        obj.set("size", stat.size as f64)?;
+        obj.set("isDirectory", stat.is_dir)?;
+        obj.set("size", stat.len as f64)?;
         obj.set("mtime", stat.mtime as f64)?;
         obj.set("ctime", stat.ctime as f64)?;
         Ok(obj)
@@ -577,7 +731,7 @@ pub fn install_fs<'js>(
       "usage",
       Function::new(ctx.clone(), move |ctx: Ctx<'js>| -> JsResult<f64> {
         state.gate(&ctx)?;
-        if state.root.as_os_str().is_empty() {
+        if state.storage.root().is_none() {
           return Fault::Io("fs: this plugin has no storage directory".to_string()).throw(&ctx);
         }
         Ok(state.usage() as f64)
@@ -599,6 +753,24 @@ pub fn install_fs<'js>(
   globals.inu.set("fs", fs_obj)?;
   state.install_android_dirs(ctx, globals)?;
   Ok(state)
+}
+
+fn open_storage(root: &Path, unscoped: bool) -> Storage {
+  if root.as_os_str().is_empty() {
+    return Storage::Missing;
+  }
+  if unscoped {
+    return Storage::Ambient {
+      root: fs::canonicalize(root).unwrap_or_else(|_| root.to_path_buf()),
+    };
+  }
+  let opened = fs::create_dir_all(root)
+    .and_then(|()| fs::canonicalize(root))
+    .and_then(|root| Dir::open_ambient_dir(&root, ambient_authority()).map(|dir| (root, dir)));
+  match opened {
+    Ok((root, dir)) => Storage::Confined { root, dir },
+    Err(_) => Storage::Missing,
+  }
 }
 
 impl FsState {

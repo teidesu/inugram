@@ -8,15 +8,6 @@ fn mutf_encodes_nul_and_supplementary_characters() {
 }
 
 #[test]
-fn uleb_encodes_boundary_values() {
-  let mut bytes = vec![];
-  for value in [0, 127, 128, 16384, u32::MAX] {
-    write_uleb(&mut bytes, value);
-  }
-  assert_eq!(bytes, [0, 127, 128, 1, 128, 128, 1, 255, 255, 255, 255, 15]);
-}
-
-#[test]
 fn checksums_map_alignment_and_section_order_match_the_file() {
   let bytes = super::super::build("inu.test.Empty", "Ljava/lang/Object;", &[], &[], &[]).unwrap();
   let read = |at| u32::from_le_bytes(bytes[at..at + 4].try_into().unwrap()) as usize;

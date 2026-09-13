@@ -4,7 +4,7 @@ use std::rc::Rc;
 use rquickjs::{function::This, Ctx, Function, Result as JsResult, Runtime, Value};
 
 use crate::api::error::format_exception;
-use crate::runtime::{pump_jobs};
+use crate::runtime::pump_jobs;
 use crate::sandbox::grants::{GrantHost, MATCH_EXACT};
 use crate::sandbox::registry::{make_disposer, noop_disposer, CallbackRegistry, Lifecycle};
 

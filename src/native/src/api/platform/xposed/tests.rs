@@ -468,7 +468,11 @@ fn a_site_with_no_hooks_answers_that_nothing_was_dispatched() {
     &fixture.ctx,
     1,
     100,
-    &Invocation { method: "GM1", this: "N", args: &["GO9".to_string()] },
+    &Invocation {
+      method: "GM1",
+      this: "N",
+      args: &["GO9".to_string()],
+    },
   );
   assert!(answer.is_empty(), "{answer:?}");
 }
@@ -487,7 +491,11 @@ fn a_before_that_breaks_the_arguments_still_says_the_engine_took_the_wires() {
     &fixture.ctx,
     1,
     100,
-    &Invocation { method: "GM1", this: "N", args: &["GO9".to_string()] },
+    &Invocation {
+      method: "GM1",
+      this: "N",
+      args: &["GO9".to_string()],
+    },
   );
   assert_eq!(answer.first().map(String::as_str), Some("P0"), "{answer:?}");
 }

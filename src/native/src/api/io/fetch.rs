@@ -6,9 +6,9 @@ use std::rc::Rc;
 
 use rquickjs::{Ctx, Function, Object, Result as JsResult, Runtime, TypedArray, Value};
 
+use crate::api::error::format_exception;
 use crate::api::error::{host_error_to_js, wire_error_to_js, PluginErrorCode};
 use crate::api::io::blob::{mint_app_file, BlobState, BUILD_LIMIT_BYTES};
-use crate::api::error::format_exception;
 use crate::runtime::{pump_jobs, PendingSettle};
 use crate::sandbox::grants::{GrantHost, MATCH_DOMAIN};
 use crate::sandbox::registry::RequestIds;

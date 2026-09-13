@@ -151,13 +151,7 @@ impl FilesState {
     state.start(ctx, OP_SAVE_FILE, out, Pending::Save { _staged: owned.then(|| StagedFile(path)) })
   }
 
-  fn start<'js>(
-    self: &Rc<Self>,
-    ctx: &Ctx<'js>,
-    op: i32,
-    options: Object<'js>,
-    kind: Pending,
-  ) -> JsResult<Value<'js>> {
+  fn start<'js>(self: &Rc<Self>, ctx: &Ctx<'js>, op: i32, options: Object<'js>, kind: Pending) -> JsResult<Value<'js>> {
     let state = self;
     let json = ctx
       .json_stringify(options)?
@@ -216,7 +210,14 @@ impl FilesState {
         }
         Err(e) => {
           (state.log)(&format!("ui: files({request_id}) answer unreadable: {e:?}"));
-          match crate::api::error::make_plugin_error(&ctx, "internal", "the picker's answer could not be read", None, None, None) {
+          match crate::api::error::make_plugin_error(
+            &ctx,
+            "internal",
+            "the picker's answer could not be read",
+            None,
+            None,
+            None,
+          ) {
             Ok(value) => {
               if settle.reject_with_value(&ctx, value).is_err() {
                 (state.log)(&format!("ui: files({request_id}) reject failed: {}", format_exception(&ctx)));

@@ -282,9 +282,17 @@ fn read_animation_mode<'js>(
   let static_value: Value = options.get("static")?;
   let loop_is_explicit = !loop_value.is_undefined();
   let mode = if loop_value.is_undefined() {
-    if loops_by_default { AnimationMode::Forever } else { AnimationMode::Once }
+    if loops_by_default {
+      AnimationMode::Forever
+    } else {
+      AnimationMode::Once
+    }
   } else if let Some(loop_animation) = loop_value.as_bool() {
-    if loop_animation { AnimationMode::Forever } else { AnimationMode::Once }
+    if loop_animation {
+      AnimationMode::Forever
+    } else {
+      AnimationMode::Once
+    }
   } else if let Some(repeats) = loop_value.as_number() {
     if !repeats.is_finite() || repeats.fract() != 0.0 || !(0.0..=f64::from(u16::MAX)).contains(&repeats) {
       return PluginErrorCode::InvalidArgument
@@ -296,10 +304,7 @@ fn read_animation_mode<'js>(
       AnimationMode::Repeat(repeats as u16)
     }
   } else {
-    return Err(Exception::throw_type(
-      ctx,
-      &format!("{what}: options.loop must be a boolean or number"),
-    ));
+    return Err(Exception::throw_type(ctx, &format!("{what}: options.loop must be a boolean or number")));
   };
   let static_animation = if static_value.is_undefined() {
     false
@@ -312,11 +317,7 @@ fn read_animation_mode<'js>(
     return PluginErrorCode::InvalidArgument
       .throw(ctx, &format!("{what}: options.loop and options.static cannot both be true"));
   }
-  Ok(if static_animation {
-    AnimationMode::Static
-  } else {
-    mode
-  })
+  Ok(if static_animation { AnimationMode::Static } else { mode })
 }
 
 fn js_raw_animation<'js>(

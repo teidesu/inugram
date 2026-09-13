@@ -26,11 +26,8 @@ const INCOMING: &str = r#"{
 #[test]
 fn the_bundled_message_test_plugin_passes() {
   let (rt, ctx) = setup();
-  let lines = crate::testing::harness::run_capturing_console(
-    &rt,
-    &ctx,
-    include_str!("../../../../test/plugins/message-test.js"),
-  );
+  let lines =
+    crate::testing::harness::run_capturing_console(&rt, &ctx, include_str!("../../../../test/plugins/message-test.js"));
   // this fixture is `inu.Message` alone, which is the whole point of the surface being pure;
   // the oracle's live half is `rpc.rs`'s to answer
   crate::testing::harness::assert_oracle_exact_skipping(

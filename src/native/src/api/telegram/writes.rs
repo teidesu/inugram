@@ -1,6 +1,5 @@
 use std::cell::{Cell, RefCell};
 use std::collections::HashMap;
-use std::fmt::Write as _;
 use std::fs;
 use std::io::Write;
 use std::path::{Path, PathBuf};
@@ -8,13 +7,13 @@ use std::rc::Rc;
 
 use rquickjs::{Array, Ctx, Function, Object, Result as JsResult, Runtime, TypedArray, Value};
 
+use crate::api::error::format_exception;
 use crate::api::error::{wire_error_to_js, PluginErrorCode};
 use crate::api::io::blob::{self, BlobHandle, BlobState};
 use crate::api::telegram::account::AccountState;
 use crate::api::telegram::progress::ProgressReporter;
-use crate::api::error::format_exception;
-use crate::runtime::{pump_jobs, PendingSettle};
 use crate::api::tl::proxy::{js_value_to_wire, TlViews, ViewLife};
+use crate::runtime::{pump_jobs, PendingSettle};
 use crate::sandbox::grants::{GrantHost, MATCH_EXACT};
 use crate::sandbox::registry::RequestIds;
 
@@ -47,7 +46,9 @@ const STAGE_CHUNK_BYTES: u64 = 1024 * 1024;
 
 fn grant_of(op: i32) -> Option<(&'static str, &'static str)> {
   Some(match op {
-    OP_SEND_MESSAGE | OP_SEND_MEDIA | OP_SEND_MULTI_MEDIA | OP_UPLOAD_FILE | OP_SET_SEND_MEDIA => ("account.write", "send"),
+    OP_SEND_MESSAGE | OP_SEND_MEDIA | OP_SEND_MULTI_MEDIA | OP_UPLOAD_FILE | OP_SET_SEND_MEDIA => {
+      ("account.write", "send")
+    }
     OP_EDIT_MESSAGE => ("account.write", "edit"),
     OP_DELETE_MESSAGES => ("account.write", "delete"),
     OP_FORWARD_MESSAGES => ("account.write", "forward"),
@@ -59,7 +60,6 @@ fn grant_of(op: i32) -> Option<(&'static str, &'static str)> {
     _ => return None,
   })
 }
-
 
 #[derive(Clone, Copy, PartialEq, Eq)]
 enum Shape {
@@ -129,7 +129,7 @@ impl WritesState {
         if object.get::<_, Value>("_")?.is_undefined() {
           self.check_path_grant(ctx, &path)?;
           return Ok(Staged {
-            wire: file_wire(&path, "", ""),
+            wire: file_wire(ctx, &path, "", "")?,
             path: None,
           });
         }
@@ -148,7 +148,7 @@ impl WritesState {
       self.check_transfer_limit(ctx, bytes.len() as u64)?;
       let path = self.write_staged(ctx, |file| file.write_all(bytes))?;
       return Ok(Staged {
-        wire: file_wire(&path.to_string_lossy(), "", ""),
+        wire: file_wire(ctx, &path.to_string_lossy(), "", "")?,
         path: Some(path),
       });
     }
@@ -198,7 +198,7 @@ impl WritesState {
       Ok(())
     })?;
     Ok(Staged {
-      wire: file_wire(&path.to_string_lossy(), &name, &mime),
+      wire: file_wire(ctx, &path.to_string_lossy(), &name, &mime)?,
       path: Some(path),
     })
   }
@@ -231,28 +231,15 @@ impl WritesState {
   }
 }
 
-fn file_wire(path: &str, name: &str, mime: &str) -> String {
-  format!("F{{\"path\":{},\"name\":{},\"mime\":{}}}", json_string(path), json_string(name), json_string(mime),)
-}
-
-pub(crate) fn json_string(value: &str) -> String {
-  let mut out = String::with_capacity(value.len() + 2);
-  out.push('"');
-  for c in value.chars() {
-    match c {
-      '"' => out.push_str("\\\""),
-      '\\' => out.push_str("\\\\"),
-      '\n' => out.push_str("\\n"),
-      '\r' => out.push_str("\\r"),
-      '\t' => out.push_str("\\t"),
-      c if (c as u32) < 0x20 => {
-        write!(out, "\\u{:04x}", c as u32).expect("writing to a String cannot fail");
-      }
-      c => out.push(c),
-    }
+fn file_wire(ctx: &Ctx<'_>, path: &str, name: &str, mime: &str) -> JsResult<String> {
+  let described = Object::new_proto(ctx.clone(), None)?;
+  described.set("path", path)?;
+  described.set("name", name)?;
+  described.set("mime", mime)?;
+  match ctx.json_stringify(described)? {
+    Some(json) => Ok(format!("F{}", json.to_string()?)),
+    None => PluginErrorCode::Internal.throw(ctx, "this file could not be described to the app"),
   }
-  out.push('"');
-  out
 }
 
 impl WritesState {

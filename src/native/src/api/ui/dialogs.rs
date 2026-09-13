@@ -4,11 +4,11 @@ use std::rc::Rc;
 
 use rquickjs::{Ctx, Exception, Function, Object, Result as JsResult, Runtime, Value};
 
+use crate::api::error::format_exception;
 use crate::api::error::PluginErrorCode;
 use crate::api::platform::jvm::JvmState;
-use crate::api::error::format_exception;
-use crate::runtime::{pump_jobs, PendingSettle};
 use crate::api::ui::icons;
+use crate::runtime::{pump_jobs, PendingSettle};
 use crate::sandbox::registry::RequestIds;
 
 pub trait DialogHost {

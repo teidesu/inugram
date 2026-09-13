@@ -248,7 +248,7 @@ impl Backing {
         bytes.get(start as usize..end as usize).map(<[u8]>::to_vec).ok_or_else(disposed_backing)
       }
       BackingKind::Spill(spill) => {
-        read_exact_at(&spill.file, start, len as usize).map_err(|e| BlobFault::Io(format!("spilled blob: {e}")))
+        read_range(&spill.file, start, len as usize).map_err(|e| BlobFault::Io(format!("spilled blob: {e}")))
       }
       BackingKind::AppFile { path, mtime_ms } => {
         let file = fs::File::open(path).map_err(|_| vanished())?;
@@ -256,7 +256,7 @@ impl Backing {
         if meta.len() < self.len || mtime_millis(&meta) != *mtime_ms {
           return Err(vanished());
         }
-        read_exact_at(&file, start, len as usize).map_err(|_| vanished())
+        read_range(&file, start, len as usize).map_err(|_| vanished())
       }
     }
   }
@@ -313,17 +313,9 @@ fn mtime_millis(meta: &fs::Metadata) -> i64 {
   }
 }
 
-fn read_exact_at(file: &fs::File, mut offset: u64, len: usize) -> std::io::Result<Vec<u8>> {
+fn read_range(file: &fs::File, offset: u64, len: usize) -> std::io::Result<Vec<u8>> {
   let mut buf = vec![0u8; len];
-  let mut done = 0;
-  while done < len {
-    let read = file.read_at(&mut buf[done..], offset)?;
-    if read == 0 {
-      return Err(std::io::Error::new(std::io::ErrorKind::UnexpectedEof, "the content ended before the range did"));
-    }
-    done += read;
-    offset += read as u64;
-  }
+  file.read_exact_at(&mut buf, offset)?;
   Ok(buf)
 }
 

@@ -4,9 +4,9 @@ use std::rc::Rc;
 use rquickjs::function::Args;
 use rquickjs::{Ctx, Exception, Function, Object, Persistent, Result as JsResult, Runtime, Value};
 
-use crate::api::error::{host_error_to_js, PluginErrorCode};
 use crate::api::error::format_exception;
-use crate::runtime::{pump_jobs};
+use crate::api::error::{host_error_to_js, PluginErrorCode};
+use crate::runtime::pump_jobs;
 use crate::sandbox::grants::{GrantHost, MATCH_EXACT};
 use crate::sandbox::registry::{make_disposer, noop_disposer, Lifecycle, Registry, Token};
 
