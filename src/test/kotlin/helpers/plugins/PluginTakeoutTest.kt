@@ -62,7 +62,7 @@ class PluginTakeoutTest {
                 0,
                 RpcListener.OP_TAKEOUT_INIT,
                 "",
-                initOptions("contacts" to true, "fileMaxSize" to "1500000"),
+                initOptions("contacts" to true, "fileMaxSize" to 1500000),
             ),
         )
         drain()
