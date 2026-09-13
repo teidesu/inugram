@@ -40,7 +40,7 @@ class PluginXposedConsumerTest {
         assertEquals(13, method.invoke(null, 1, 2))
         assertTrue(plugin.js.xposedBefores.isEmpty())
         assertTrue(plugin.js.xposedAfters.isEmpty())
-        PluginXposed.detach(plugin.js)
+        PluginXposed.detach(plugin.session!!)
         assertEquals(3, method.invoke(null, 1, 2))
     }
 

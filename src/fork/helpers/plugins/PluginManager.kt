@@ -1,5 +1,6 @@
 package desu.inugram.helpers.plugins
 
+import desu.inugram.helpers.plugins.ui.PluginFilePicker
 import java.util.concurrent.atomic.AtomicBoolean
 import android.content.Context
 import android.content.Intent
@@ -477,23 +478,29 @@ object PluginManager {
      * which is when rust lets go of the descriptors it holds per spill file. [beforeClear] runs
      * while `plugin.engine` still points at [engine], which is what [fail] reads.
      */
+    private val CHAIN_OWNERS: List<SessionResource> = listOf(PluginRpc, PluginUpdates)
+
+    private val SESSION_RESOURCES: List<SessionResource> = listOf(
+        PluginMedia,
+        PluginOptimisticSend,
+        PluginUi,
+        PluginFilePicker,
+        PluginActions,
+        PluginNotifications,
+        PluginCanvas,
+        PluginXposed,
+        PluginJvm,
+    )
+
     private fun teardown(session: PluginSession, beforeClear: () -> Unit = {}) {
         session.engine.stopCallbacks()
         // the plugin's handle table spans both, and is released last of the three: the abandons
         // each of them runs reject inside this plugin, and a continuation touching its own request
         // view must not find every field expired
         session.stopDispatching()
-        PluginRpc.detach(session)
-        PluginUpdates.detach(session)
+        for (owner in CHAIN_OWNERS) owner.detach(session)
         session.tl.releaseAll()
-        PluginMedia.detach(session)
-        PluginOptimisticSend.detach(session)
-        PluginUi.detach(session)
-        PluginActions.detach(session.engine)
-        PluginNotifications.detach(session)
-        PluginCanvas.detach(session.engine)
-        PluginXposed.detach(session.engine)
-        PluginJvm.detach(session.engine)
+        for (resource in SESSION_RESOURCES) resource.detach(session)
         session.engine.close()
         PluginBlobs.wipe(session.plugin.id)
         PluginTransfers.wipe(session.plugin.id)

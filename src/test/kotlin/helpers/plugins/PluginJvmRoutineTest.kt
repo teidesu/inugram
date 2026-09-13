@@ -39,7 +39,7 @@ class PluginJvmRoutineTest {
         assertEquals(5, fixture.count)
         task.run()
         assertEquals(7, fixture.count)
-        PluginJvm.detach(plugin.js)
+        PluginJvm.detach(plugin.session!!)
         task.run()
         assertEquals(7, fixture.count)
     }

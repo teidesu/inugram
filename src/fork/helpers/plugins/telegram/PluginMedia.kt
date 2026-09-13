@@ -1,5 +1,6 @@
 package desu.inugram.helpers.plugins.telegram
 
+import desu.inugram.helpers.plugins.SessionResource
 import desu.inugram.core.plugins.PluginRefusal
 import desu.inugram.helpers.media.MediaSendHelper
 import desu.inugram.helpers.plugins.io.PluginTransfers
@@ -38,7 +39,7 @@ import org.telegram.tgnet.TLRPC
  * here and the numbers a plugin sees are the transfer's own. Anything a send is handed has already
  * become a file: stock's uploader takes a path, and blob content is only readable from rust.
  */
-object PluginMedia {
+object PluginMedia : SessionResource {
     /** stock names every file it moves and reports it through the same three events, carrying the name first and the payload second */
     private class Transfer(
         val call: Call,
@@ -574,7 +575,7 @@ object PluginMedia {
     }
 
     /** there is no event for a transfer stock declined to start, so an unloaded plugin's observers would sit on the centre for the life of the process */
-    internal fun detach(session: PluginSession) {
+    override fun detach(session: PluginSession) {
         val mine = synchronized(live) { live.remove(session) } ?: return
         android.util.Log.d(DOWNLOAD_TAG, "detach: dropping ${mine.size} live transfers: ${mine.map { it.fileName }}")
         for (transfer in mine) stopObserving(transfer)

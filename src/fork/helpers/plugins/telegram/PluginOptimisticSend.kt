@@ -1,5 +1,6 @@
 package desu.inugram.helpers.plugins.telegram
 
+import desu.inugram.helpers.plugins.SessionResource
 import desu.inugram.core.plugins.PluginRefusal
 import android.util.Log
 import desu.inugram.core.plugins.PluginWire
@@ -34,7 +35,7 @@ import org.telegram.tgnet.TLRPC
  * [NotificationCenter] rather than a delegate, so a send is tracked by a token in the message's
  * `params`, which stock carries through its retries and its own storage.
  */
-object PluginOptimisticSend {
+object PluginOptimisticSend : SessionResource {
     /**
      * stock persists `Message.params` and hands them back on every retry of the same message, which
      * is what makes a key in there an identity the whole send can be followed by
@@ -378,7 +379,7 @@ object PluginOptimisticSend {
 
 
     /** a plugin that stopped while a send was in flight leaves nothing behind to answer */
-    internal fun detach(session: PluginSession) {
+    override fun detach(session: PluginSession) {
         val dropped = synchronized(pending) {
             val mine = pending.filterValues { it.call.session === session }
             for (token in mine.keys) pending.remove(token)

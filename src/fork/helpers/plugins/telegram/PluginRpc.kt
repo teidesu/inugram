@@ -1,5 +1,6 @@
 package desu.inugram.helpers.plugins.telegram
 
+import desu.inugram.helpers.plugins.SessionResource
 import desu.inugram.core.plugins.PluginRefusal
 import android.os.SystemClock
 import android.util.Log
@@ -64,7 +65,7 @@ import org.telegram.ui.ChatActivity
  * for an intercept chain, writable and plugin-lifetime for an `invokeRpc` result (nobody app-side
  * reads it, so `disableFree` moves the free to the table).
  */
-object PluginRpc {
+object PluginRpc : SessionResource {
     private class Interceptor(
         val session: PluginSession,
         val callbackId: Int,
@@ -455,7 +456,7 @@ object PluginRpc {
      * inside this plugin too and a continuation touching its own request view must not find every
      * field expired.
      */
-    fun detach(session: PluginSession) {
+    override fun detach(session: PluginSession) {
         publishInterceptors(
             interceptorsByMethod
                 .mapValues { (_, list) -> list.filter { it.session !== session } }

@@ -34,14 +34,14 @@ import org.telegram.tgnet.TLRPC
 fun resetBridge() {
     ApplicationLoader.applicationContext = deviceContext()
     goOffline()
-    for (plugin in installedPlugins()) plugin.engine?.let {
-        it.stopCallbacks()
-        PluginXposed.detach(it)
-        PluginJvm.detach(it)
-        PluginActions.detach(it)
-        PluginNotifications.detach(plugin.session!!)
-        plugin.session!!.stopDispatching()
-        plugin.session!!.tl.releaseAll()
+    for (plugin in installedPlugins()) plugin.session?.let { session ->
+        session.engine.stopCallbacks()
+        PluginXposed.detach(session)
+        PluginJvm.detach(session)
+        PluginActions.detach(session)
+        PluginNotifications.detach(session)
+        session.stopDispatching()
+        session.tl.releaseAll()
     }
     flushUi()
     clearPluginObservers()
@@ -192,7 +192,7 @@ fun closeEngine(plugin: Plugin) {
 }
 
 fun closeCanvasEngine(plugin: Plugin) {
-    plugin.session?.let { desu.inugram.helpers.plugins.ui.PluginCanvas.detach(it.engine) }
+    plugin.session?.let { desu.inugram.helpers.plugins.ui.PluginCanvas.detach(it) }
     closeEngine(plugin)
 }
 

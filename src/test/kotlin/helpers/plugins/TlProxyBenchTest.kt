@@ -19,7 +19,7 @@ import kotlin.test.assertEquals
  */
 class TlProxyBenchTest {
     private val selfId = 100L
-    private val engines = ArrayList<QuickJs>()
+    private val sessions = ArrayList<PluginSession>()
 
     @Before
     fun setUp() {
@@ -29,12 +29,12 @@ class TlProxyBenchTest {
 
     @After
     fun tearDown() {
-        for (engine in engines) {
-            engine.stopCallbacks()
-            desu.inugram.helpers.plugins.platform.PluginJvm.detach(engine)
-            engine.close()
+        for (session in sessions) {
+            session.engine.stopCallbacks()
+            desu.inugram.helpers.plugins.platform.PluginJvm.detach(session)
+            session.engine.close()
         }
-        engines.clear()
+        sessions.clear()
     }
 
     private fun engineFor(): Plugin {
@@ -51,7 +51,7 @@ class TlProxyBenchTest {
             },
             accountsJson = { """[{"id":0,"userId":$selfId,"isCurrent":true,"isPremium":false}]""" },
         )
-        engines.add(engine)
+        sessions.add(plugin.session!!)
         return plugin
     }
 

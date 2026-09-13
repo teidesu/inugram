@@ -52,7 +52,7 @@ class PluginCallerSafetyTest {
             JvmFixture.callbackRelease!!.countDown()
             owner?.join(5000)
             engine.stopCallbacks()
-            PluginJvm.detach(engine)
+            PluginJvm.detach(plugin.session!!)
             engine.close()
             JvmFixture.task = null
             JvmFixture.callbackEntered = null
@@ -87,8 +87,8 @@ class PluginCallerSafetyTest {
             assertEquals(0, surfaces.size)
         } finally {
             engine.stopCallbacks()
-            PluginCanvas.detach(engine)
-            PluginJvm.detach(engine)
+            PluginCanvas.detach(plugin.session!!)
+            PluginJvm.detach(plugin.session!!)
             engine.close()
             JvmFixture.task = null
             plugin.session = null

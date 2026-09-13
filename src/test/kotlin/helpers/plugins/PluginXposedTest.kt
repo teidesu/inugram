@@ -48,7 +48,7 @@ class PluginXposedTest {
         assertEquals(3, sum.invoke(null, 1, 2))
         assertEquals(1, engine.xposedBefores.size)
 
-        PluginXposed.detach(engine)
+        PluginXposed.detach(plugin.session!!)
     }
 
     @Test
@@ -67,7 +67,7 @@ class PluginXposedTest {
         assertEquals(1, engine.xposedBefores.size)
         assertTrue(engine.xposedReleases.isEmpty())
 
-        PluginXposed.detach(engine)
+        PluginXposed.detach(plugin.session!!)
     }
 
     /**
@@ -100,7 +100,7 @@ class PluginXposedTest {
             drain()
             assertEquals(settled, engine.liveHandles, "a not-dispatched answer is the same hand-off")
         } finally {
-            PluginXposed.detach(engine)
+            PluginXposed.detach(plugin.session!!)
         }
     }
 
@@ -124,7 +124,7 @@ class PluginXposedTest {
             engine.onXposedAfter = { "I42" }
             assertEquals(1, invokeOffQueue { if (target.invoke(fixture) is Int) 1 else 0 })
         } finally {
-            PluginXposed.detach(engine)
+            PluginXposed.detach(plugin.session!!)
         }
     }
 

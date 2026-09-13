@@ -1,5 +1,6 @@
 package desu.inugram.helpers.plugins.ui
 
+import desu.inugram.helpers.plugins.SessionResource
 import android.app.Activity
 import android.content.Intent
 import android.net.Uri
@@ -28,7 +29,7 @@ import org.telegram.ui.LaunchActivity
  * The content is copied rather than read through the uri it arrived as: that uri's permission lasts
  * as long as the picker's own result, while the `File` the plugin holds outlives it.
  */
-internal object PluginFilePicker {
+internal object PluginFilePicker : SessionResource {
     private const val TAG = "InuPluginFiles"
 
     /** what the app's cache can reasonably take a copy of, and what a plugin may be handed at once */
@@ -41,6 +42,19 @@ internal object PluginFilePicker {
     private const val REQUEST_SPAN = 0x80
 
     private var nextRequest = 0
+
+    /** ui thread only: the result observers a plugin is still waiting on */
+    private val waiting = HashMap<PluginSession, MutableList<NotificationCenter.NotificationCenterDelegate>>()
+
+    /** a copy made for a plugin nobody is waiting for any more is deleted rather than left in its spill directory */
+    private class Picked(val wire: String, val copies: List<File> = emptyList())
+
+    override fun detach(session: PluginSession) {
+        AndroidUtilities.runOnUIThread {
+            val center = NotificationCenter.getGlobalInstance()
+            waiting.remove(session)?.forEach { center.removeObserver(it, NotificationCenter.onActivityResultReceived) }
+        }
+    }
 
     fun pick(session: PluginSession, requestId: Long, optionsJson: String): String? {
         val options = try {
@@ -79,8 +93,8 @@ internal object PluginFilePicker {
                 putExtra(Intent.EXTRA_TITLE, name)
             }
         }) { data ->
-            val target = data?.data ?: return@launch PluginWire.encodeBool(false)
-            copyOut(source, target)
+            val target = data?.data ?: return@launch Picked(PluginWire.encodeBool(false))
+            Picked(copyOut(source, target))
         }
     }
 
@@ -95,12 +109,12 @@ internal object PluginFilePicker {
         requestId: Long,
         name: String,
         intent: () -> Intent,
-        answer: (Intent?) -> String,
+        answer: (Intent?) -> Picked,
     ): String? {
         AndroidUtilities.runOnUIThread {
             val activity = LaunchActivity.instance
             if (activity == null || activity.isFinishing) {
-                settle(session, requestId, name, PluginWire.encodePluginError("unsupported", "$name: there is no screen to open a picker over"))
+                settle(session, requestId, name, Picked(PluginWire.encodePluginError("unsupported", "$name: there is no screen to open a picker over")))
                 return@runOnUIThread
             }
             nextRequest = (nextRequest + 1) % REQUEST_SPAN
@@ -110,36 +124,41 @@ internal object PluginFilePicker {
                 override fun didReceivedNotification(id: Int, account: Int, vararg args: Any?) {
                     if (args.getOrNull(0) != code) return
                     center.removeObserver(this, NotificationCenter.onActivityResultReceived)
+                    waiting[session]?.remove(this)
                     val ok = args.getOrNull(1) == Activity.RESULT_OK
                     val data = args.getOrNull(2) as? Intent
                     Utilities.globalQueue.postRunnable {
                         val result = if (!ok) {
-                            if (name == "saveFile") PluginWire.encodeBool(false) else PluginWire.encodeJson("[]")
+                            Picked(if (name == "saveFile") PluginWire.encodeBool(false) else PluginWire.encodeJson("[]"))
                         } else try {
                             answer(data)
                         } catch (e: Throwable) {
                             Log.e(TAG, "$name failed", e)
-                            PluginWire.encodePluginError("internal", "$name: ${e.message ?: e.toString()}")
+                            Picked(PluginWire.encodePluginError("internal", "$name: ${e.message ?: e.toString()}"))
                         }
                         settle(session, requestId, name, result)
                     }
                 }
             }
             center.addObserver(observer, NotificationCenter.onActivityResultReceived)
+            waiting.getOrPut(session) { ArrayList() }.add(observer)
             try {
                 @Suppress("DEPRECATION")
                 activity.startActivityForResult(intent(), code)
             } catch (e: Throwable) {
                 center.removeObserver(observer, NotificationCenter.onActivityResultReceived)
+                waiting[session]?.remove(observer)
                 Log.e(TAG, "$name could not be opened", e)
-                settle(session, requestId, name, PluginWire.encodePluginError("unsupported", "$name: this device has no file picker"))
+                settle(session, requestId, name, Picked(PluginWire.encodePluginError("unsupported", "$name: this device has no file picker")))
             }
         }
         return null
     }
 
-    private fun settle(session: PluginSession, requestId: Long, name: String, wire: String) {
-        EngineDispatch.settle(session, QuickJs.SETTLE_FILES, requestId, name) { wire }
+    private fun settle(session: PluginSession, requestId: Long, name: String, picked: Picked) {
+        EngineDispatch.onEngine(session, onDropped = { picked.copies.forEach(File::delete) }) {
+            session.engine.settle(QuickJs.SETTLE_FILES, requestId, picked.wire)
+        }
     }
 
     private fun urisOf(data: Intent?): List<Uri> {
@@ -153,16 +172,16 @@ internal object PluginFilePicker {
      * The copies the plugin is handed, or nothing at all: a pick that fails halfway leaves no file
      * behind, and neither does a picker that answered with more files than were asked for.
      */
-    private fun copyIn(session: PluginSession, uris: List<Uri>, multiple: Boolean): String {
+    private fun copyIn(session: PluginSession, uris: List<Uri>, multiple: Boolean): Picked {
         val wanted = if (multiple) uris else uris.take(1)
-        if (wanted.isEmpty()) return PluginWire.encodeJson("[]")
+        if (wanted.isEmpty()) return Picked(PluginWire.encodeJson("[]"))
         val root = PluginBlobs.dirFor(session.plugin.id)
         if (root.isEmpty()) {
-            return PluginWire.encodePluginError("internal", "pickFile: there is nowhere to copy the file to")
+            return Picked(PluginWire.encodePluginError("internal", "pickFile: there is nowhere to copy the file to"))
         }
         val dir = File(root, "picked")
         if (!dir.isDirectory && !dir.mkdirs()) {
-            return PluginWire.encodePluginError("internal", "pickFile: there is nowhere to copy the file to")
+            return Picked(PluginWire.encodePluginError("internal", "pickFile: there is nowhere to copy the file to"))
         }
         val copies = ArrayList<File>()
         val out = JSONArray()
@@ -182,7 +201,7 @@ internal object PluginFilePicker {
             }
             if (failure != null) {
                 for (copy in copies) copy.delete()
-                return failure
+                return Picked(failure)
             }
             out.put(
                 JSONObject()
@@ -191,7 +210,7 @@ internal object PluginFilePicker {
                     .put("type", described.mime),
             )
         }
-        return PluginWire.encodeJson(out.toString())
+        return Picked(PluginWire.encodeJson(out.toString()), copies)
     }
 
     /**

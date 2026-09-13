@@ -1,3 +1,4 @@
+use crate::runtime::Dispose;
 use super::*;
 use crate::api::tl::proxy;
 use crate::testing::harness::setup_apis as setup;

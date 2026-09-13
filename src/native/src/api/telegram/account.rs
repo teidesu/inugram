@@ -1,4 +1,5 @@
 use std::cell::{Cell, RefCell};
+use crate::runtime::Dispose;
 use std::rc::Rc;
 
 use rquickjs::function::Opt;
@@ -248,20 +249,6 @@ impl AccountState {
     pump_jobs(rt, context, self.log.as_ref());
   }
 
-  pub(crate) fn dispose(&self, context: &rquickjs::Context) {
-    context.with(|ctx| {
-      if let Some(prototype) = self.prototype.borrow_mut().take() {
-        let _ = prototype.restore(&ctx);
-      }
-      self.changed_fns.release_all(&ctx);
-      for scope in self.scopes.remove_matching(|_| true) {
-        scope.release_callback(&ctx);
-        if let Some(teardown) = scope.teardown.borrow_mut().take() {
-          let _ = teardown.restore(&ctx);
-        }
-      }
-    });
-  }
 
   fn js_on_accounts_changed<'js>(self: &Rc<Self>, ctx: &Ctx<'js>, cb: Function<'js>) -> JsResult<Function<'js>> {
     if self.lifecycle.is_unloading() {
@@ -325,6 +312,23 @@ impl AccountState {
 
   fn is_live(&self, scope: &Rc<CurrentScope>) -> bool {
     self.scopes.contains(scope.token)
+  }
+}
+
+impl Dispose for AccountState {
+  fn dispose(&self, context: &rquickjs::Context) {
+    context.with(|ctx| {
+      if let Some(prototype) = self.prototype.borrow_mut().take() {
+        let _ = prototype.restore(&ctx);
+      }
+      self.changed_fns.release_all(&ctx);
+      for scope in self.scopes.remove_matching(|_| true) {
+        scope.release_callback(&ctx);
+        if let Some(teardown) = scope.teardown.borrow_mut().take() {
+          let _ = teardown.restore(&ctx);
+        }
+      }
+    });
   }
 }
 

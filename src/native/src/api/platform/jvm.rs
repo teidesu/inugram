@@ -1,4 +1,5 @@
 use std::cell::RefCell;
+use crate::runtime::Dispose;
 use std::rc::Rc;
 
 use std::sync::Arc;
@@ -842,7 +843,14 @@ impl JvmState {
     pump_jobs(rt, context, state.log.as_ref());
   }
 
-  pub fn dispose(self: &Rc<Self>, context: &Context) {
+
+  pub(crate) fn refs(&self) -> &Arc<RefTable> {
+    &self.refs
+  }
+}
+
+impl Dispose for JvmState {
+  fn dispose(&self, context: &rquickjs::Context) {
     let state = self;
     context.with(|ctx| {
       state.callbacks.release_all(&ctx);
@@ -856,10 +864,6 @@ impl JvmState {
       }
     });
     state.refs.close();
-  }
-
-  pub(crate) fn refs(&self) -> &Arc<RefTable> {
-    &self.refs
   }
 }
 

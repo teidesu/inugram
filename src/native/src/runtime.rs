@@ -82,6 +82,11 @@ pub fn pump_jobs(rt: &Runtime, context: &rquickjs::Context, log: &dyn Fn(&str)) 
 }
 
 /// what a parked request holds besides its promise, and what becomes of it once the request is over
+/// state an engine lets go of at `nativeDestroy`, while its runtime is still there to release into
+pub(crate) trait Dispose {
+  fn dispose(&self, context: &rquickjs::Context);
+}
+
 pub(crate) trait Parked: Sized {
   /// the request failed: refused before it crossed, or answered with an error
   fn reject(self, _ctx: &Ctx<'_>) {}

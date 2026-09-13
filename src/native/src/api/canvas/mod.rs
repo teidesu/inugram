@@ -1,6 +1,7 @@
 pub(crate) mod css;
 pub(crate) mod geometry;
 
+use crate::runtime::Dispose;
 use std::cell::{Cell, RefCell};
 use std::collections::HashMap;
 use std::fs;
@@ -1590,7 +1591,10 @@ impl CanvasState {
     pump_jobs(rt, context, state.log.as_ref());
   }
 
-  pub fn dispose(self: &Rc<Self>, context: &rquickjs::Context) {
+}
+
+impl Dispose for CanvasState {
+  fn dispose(&self, context: &rquickjs::Context) {
     context.with(|ctx| self.pending.dispose(&ctx));
   }
 }

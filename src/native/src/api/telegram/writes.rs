@@ -1,4 +1,5 @@
 use std::cell::Cell;
+use crate::runtime::Dispose;
 use std::fs;
 use std::io::Write;
 use std::path::{Path, PathBuf};
@@ -465,7 +466,10 @@ impl WritesState {
     pump_jobs(rt, context, state.log.as_ref());
   }
 
-  pub fn dispose(self: &Rc<Self>, context: &rquickjs::Context) {
+}
+
+impl Dispose for WritesState {
+  fn dispose(&self, context: &rquickjs::Context) {
     context.with(|ctx| self.pending.dispose(&ctx));
   }
 }

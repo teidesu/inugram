@@ -1,4 +1,5 @@
 use std::cell::{Cell, RefCell};
+use crate::runtime::Dispose;
 use std::rc::Rc;
 use std::sync::OnceLock;
 use std::time::Instant;
@@ -272,7 +273,10 @@ impl TimerState {
     state.dispose(context);
   }
 
-  pub fn dispose(self: &Rc<Self>, context: &rquickjs::Context) {
+}
+
+impl Dispose for TimerState {
+  fn dispose(&self, context: &rquickjs::Context) {
     let state = self;
     context.with(|ctx| state.release_all(&ctx));
     state.sync_wake();

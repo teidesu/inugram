@@ -1,5 +1,6 @@
 package desu.inugram.helpers.plugins.ui
 
+import desu.inugram.helpers.plugins.SessionResource
 import desu.inugram.helpers.plugins.EngineDispatch
 
 import android.util.Log
@@ -52,7 +53,7 @@ data class RegisteredActionRow(
  * Dynamic getters are rendered on [EngineDispatch.scheduler]. Static presentation is cached during
  * registration, so rows without relevant getters never enter an engine.
  */
-object PluginActions {
+object PluginActions : SessionResource {
     private const val TAG = "InuPluginActions"
 
     // keep in sync with rust `actions::KIND_*`
@@ -143,8 +144,8 @@ object PluginActions {
     }
 
     /** the engine is going away; everything it drew is inert from here on */
-    fun detach(engine: QuickJs) {
-        registry.forget(engine)
+    override fun detach(session: PluginSession) {
+        registry.forget(session.engine)
         publishCounts()
     }
 

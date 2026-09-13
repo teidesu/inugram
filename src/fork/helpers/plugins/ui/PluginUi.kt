@@ -1,5 +1,6 @@
 package desu.inugram.helpers.plugins.ui
 
+import desu.inugram.helpers.plugins.SessionResource
 import android.content.Context
 import android.graphics.PorterDuff
 import android.graphics.PorterDuffColorFilter
@@ -55,7 +56,7 @@ import org.telegram.ui.SettingsActivity
  * Threading: upcalls arrive on [EngineDispatch.scheduler]; anything view-touching hops to the UI
  * thread and settles back on the plugin queue with the usual engine-identity check.
  */
-object PluginUi {
+object PluginUi : SessionResource {
     private const val TAG = "InuPluginUi"
 
     // keep in sync with rust `api::ui::OP_*`
@@ -180,7 +181,7 @@ object PluginUi {
      * no page. The key is dropped before the fragment is, so the teardown that follows does not
      * try to tell the (by then closed) engine that its page closed.
      */
-    fun detach(session: PluginSession) {
+    override fun detach(session: PluginSession) {
         AndroidUtilities.runOnUIThread {
             val mine = openPages.filterKeys { it.session === session }
             for ((key, list) in mine) {

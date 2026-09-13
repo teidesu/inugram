@@ -1,4 +1,5 @@
 use std::cell::RefCell;
+use crate::runtime::Dispose;
 use std::rc::Rc;
 
 use rquickjs::{Array, Ctx, Function, Object, Persistent, Result as JsResult, Runtime, Value};
@@ -194,7 +195,10 @@ impl ScreenState {
     pump_jobs(rt, context, state.log.as_ref());
   }
 
-  pub fn dispose(self: &Rc<Self>, context: &rquickjs::Context) {
+}
+
+impl Dispose for ScreenState {
+  fn dispose(&self, context: &rquickjs::Context) {
     let state = self;
     context.with(|ctx| {
       state.changed_fns.release_all(&ctx);

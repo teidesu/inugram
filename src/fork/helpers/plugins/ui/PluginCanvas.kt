@@ -1,5 +1,6 @@
 package desu.inugram.helpers.plugins.ui
 
+import desu.inugram.helpers.plugins.SessionResource
 import desu.inugram.core.plugins.PluginRefusal
 import desu.inugram.core.plugins.PluginWire.refuse
 import android.graphics.Bitmap
@@ -57,7 +58,7 @@ import org.json.JSONObject
  * (encoding a bitmap, decoding one, reading a font file) hop to [work] and come back through
  * [QuickJs.settle] on the plugin queue.
  */
-object PluginCanvas {
+object PluginCanvas : SessionResource {
     // keep in sync with rust `canvas::OP_*`
     const val OP_CREATE = 0
     const val OP_DESTROY = 1
@@ -119,8 +120,8 @@ object PluginCanvas {
     fun listenerFor(session: PluginSession): CanvasListener = Session(session)
 
     /** call on the plugin queue as the engine stops: every bitmap it holds is native memory */
-    fun detach(engine: QuickJs) {
-        (engine.listener?.canvas as? Session)?.close()
+    override fun detach(session: PluginSession) {
+        (session.engine.listener?.canvas as? Session)?.close()
     }
 
     /** deletes whatever `convertToBlob` wrote for a plugin being uninstalled */

@@ -1,4 +1,5 @@
 use std::cell::RefCell;
+use crate::runtime::Dispose;
 use std::rc::Rc;
 
 use rquickjs::object::Accessor;
@@ -627,7 +628,10 @@ impl ActionState {
     pump_jobs(rt, context, state.log.as_ref());
   }
 
-  pub fn dispose(self: &Rc<Self>, context: &rquickjs::Context) {
+}
+
+impl Dispose for ActionState {
+  fn dispose(&self, context: &rquickjs::Context) {
     let state = self;
     context.with(|ctx| {
       for registry in &state.kinds {

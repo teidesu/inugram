@@ -1,4 +1,5 @@
 use std::fs;
+use crate::runtime::Dispose;
 use std::path::PathBuf;
 use std::rc::Rc;
 
@@ -300,7 +301,10 @@ impl FetchState {
     pump_jobs(rt, context, state.log.as_ref());
   }
 
-  pub fn dispose(self: &Rc<Self>, context: &rquickjs::Context) {
+}
+
+impl Dispose for FetchState {
+  fn dispose(&self, context: &rquickjs::Context) {
     context.with(|ctx| self.pending.dispose(&ctx));
   }
 }

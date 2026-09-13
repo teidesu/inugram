@@ -1,5 +1,6 @@
 package desu.inugram.helpers.plugins.platform
 
+import desu.inugram.helpers.plugins.SessionResource
 import desu.inugram.core.plugins.PluginRefusal
 import desu.inugram.core.plugins.PluginWire.refuse
 import desu.inugram.helpers.plugins.EngineDispatch
@@ -34,7 +35,7 @@ import org.telegram.messenger.Utilities
  *
  * Values are [PluginJvm]'s, borrowed through [PluginJvm.ValueBridge] rather than kept twice.
  */
-object PluginXposed {
+object PluginXposed : SessionResource {
     private const val TAG = "InuPluginXposed"
 
     /** keep in sync with rust `xposed::NOT_DISPATCHED`: the after phase never ran, so it took nothing */
@@ -136,8 +137,8 @@ object PluginXposed {
     }
 
     /** an ART entry point stays rewritten, so a site left behind dispatches into an engine that is gone */
-    fun detach(engine: QuickJs) {
-        (engine.listener?.xposed as? Session)?.close()
+    override fun detach(session: PluginSession) {
+        (session.engine.listener?.xposed as? Session)?.close()
     }
 
     private class NativeHook(val token: String, val before: Any?, val after: Any?)

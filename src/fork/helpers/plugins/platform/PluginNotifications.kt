@@ -1,5 +1,6 @@
 package desu.inugram.helpers.plugins.platform
 
+import desu.inugram.helpers.plugins.SessionResource
 import desu.inugram.core.plugins.PluginWire
 import desu.inugram.helpers.plugins.EngineDispatch
 import desu.inugram.helpers.plugins.NotificationListener
@@ -30,7 +31,7 @@ import org.telegram.messenger.Utilities
  * strongly and one of these closes over the [QuickJs] it dispatches into, so one left behind keeps
  * an unloaded plugin's engine alive for the life of the process.
  */
-object PluginNotifications {
+object PluginNotifications : SessionResource {
     /** read off the class rather than generated: the names are stock's own, so a rebase moves this with them and there is no table to regenerate */
     private val idsByName: Map<String, Int> by lazy {
         val out = HashMap<String, Int>()
@@ -123,7 +124,7 @@ object PluginNotifications {
         }
     }
 
-    internal fun detach(session: PluginSession) {
+    override fun detach(session: PluginSession) {
         val mine = synchronized(live) { live.remove(session) } ?: return
         for (registration in mine) removeObserver(registration)
     }
