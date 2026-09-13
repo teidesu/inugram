@@ -9,7 +9,6 @@ import android.graphics.drawable.ColorDrawable
 import android.graphics.drawable.Drawable
 import android.util.Base64
 import android.view.View
-import desu.inugram.core.plugins.IconSpec
 import desu.inugram.helpers.plugins.QuickJs
 import desu.inugram.helpers.plugins.platform.PluginJvm
 import org.telegram.messenger.AndroidUtilities
@@ -269,7 +268,6 @@ object PluginIcons {
     }
 
     private fun resourceIdOf(name: String): Int {
-        if (!IconSpec.isResourceName(name)) return 0
         val context = ApplicationLoader.applicationContext ?: return 0
         return synchronized(resourceIds) {
             resourceIds.getOrPut(name) {
@@ -279,7 +277,6 @@ object PluginIcons {
     }
 
     fun getRawAnimationResourceId(name: String): Int {
-        if (!IconSpec.isResourceName(name)) return 0
         val context = ApplicationLoader.applicationContext ?: return 0
         return synchronized(rawResourceIds) {
             rawResourceIds.getOrPut(name) {
@@ -309,7 +306,6 @@ object PluginIcons {
      * not make anything of it.
      */
     private fun maskOf(source: String): Bitmap? = synchronized(svgMasks) {
-        if (!IconSpec.isSvgSource(source)) return@synchronized null
         svgMasks[source] ?: run {
             val size = AndroidUtilities.dp(ICON_DP)
             val bitmap = SvgHelper.getBitmap(source, size, size, true) ?: return@run null
