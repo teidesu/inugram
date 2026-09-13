@@ -224,16 +224,12 @@ object PluginWrites {
 
     /** [release] gives back whatever the settle borrowed, and runs on the stale path too: an obligation dropped because the plugin reloaded is still an obligation */
     internal fun answer(call: Call, release: () -> Unit = {}, produce: () -> String) {
-        EngineDispatch.onEngine(call.session, onDropped = release) {
-            val wire = EngineDispatch.wireOf("account write") {
-                try {
-                    produce()
-                } catch (e: Refused) {
-                    e.wire
-                }
+        EngineDispatch.settle(call.session, QuickJs.SETTLE_WRITES, call.requestId, "account write", release) {
+            try {
+                produce()
+            } catch (e: Refused) {
+                e.wire
             }
-            call.session.engine.writeResult(call.requestId, wire)
-            release()
         }
     }
 

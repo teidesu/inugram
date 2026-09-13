@@ -132,7 +132,7 @@ object PluginFetch {
      */
     fun deliver(session: PluginSession, requestId: Long, delivery: Delivery, flight: Flight) {
         if (!session.isCurrent() || flight.cancelled) delivery.drop()
-        else session.engine.fetchResult(requestId, delivery.wire)
+        else session.engine.settle(QuickJs.SETTLE_FETCH, requestId, delivery.wire)
     }
 
     /** [PluginBlobs.wipe] already deletes the tree; this is what gives the budget back */

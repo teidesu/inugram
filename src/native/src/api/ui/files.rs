@@ -1,5 +1,3 @@
-use std::cell::RefCell;
-use std::collections::HashMap;
 use std::fs;
 use std::path::PathBuf;
 use std::rc::Rc;
@@ -7,13 +5,13 @@ use std::rc::Rc;
 use rquickjs::function::Opt;
 use rquickjs::{Array, Ctx, Exception, Function, Object, Result as JsResult, Runtime, Value};
 
-use crate::api::error::{format_exception, PluginErrorCode};
+use crate::api::error::PluginErrorCode;
 use crate::api::io::blob::{mint_owned_file, BlobState, BUILD_LIMIT_BYTES};
 use crate::api::io::fs::FsState;
-use crate::api::io::staging::{SourceStager, StagedSource};
+use crate::api::io::staging::{SourceStager, StagedFile, StagedSource};
 use crate::api::ui::{OP_PICK_FILE, OP_SAVE_FILE};
-use crate::runtime::{pump_jobs, PendingSettle};
-use crate::sandbox::registry::RequestIds;
+use crate::api::tl::proxy::plain_wire_to_js;
+use crate::runtime::{pump_jobs, Parked, PendingTable};
 use crate::utils::arguments::opt_bool;
 
 /// at most this many types may be named in `accept`, a picker offering more being a picker offering
@@ -25,28 +23,21 @@ pub trait FilesHost {
   fn ui_files(&self, op: i32, request_id: i64, options_json: &str) -> Option<String>;
 }
 
-enum Pending {
+enum FileRequest {
   /// a pick, and whether the caller asked for more than one file
   Pick { multiple: bool },
   /// a save, and the file staged for the host to copy out of
   Save { _staged: Option<StagedFile> },
 }
 
-struct StagedFile(PathBuf);
-
-impl Drop for StagedFile {
-  fn drop(&mut self) {
-    let _ = fs::remove_file(&self.0);
-  }
-}
+impl Parked for FileRequest {}
 
 pub struct FilesState {
   host: Rc<dyn FilesHost>,
   blobs: Rc<BlobState>,
   sources: SourceStager,
   log: crate::Log,
-  next_id: RequestIds,
-  pending: RefCell<HashMap<i64, (Pending, PendingSettle)>>,
+  pending: PendingTable<FileRequest>,
 }
 
 pub fn install_files<'js>(
@@ -62,8 +53,7 @@ pub fn install_files<'js>(
     blobs: blobs.clone(),
     sources: SourceStager::new(blobs, stage_dir, "save", BUILD_LIMIT_BYTES, "inu.ui.saveFile"),
     log,
-    next_id: RequestIds::default(),
-    pending: RefCell::new(HashMap::new()),
+    pending: PendingTable::default(),
   });
 
   let ui: Object = match globals.inu.get::<_, Object>("ui") {
@@ -128,7 +118,7 @@ impl FilesState {
       }
     }
     out.set("multiple", multiple)?;
-    state.start(ctx, OP_PICK_FILE, out, Pending::Pick { multiple })
+    state.start(ctx, OP_PICK_FILE, out, FileRequest::Pick { multiple })
   }
 
   fn save<'js>(
@@ -148,84 +138,34 @@ impl FilesState {
     }
     let StagedSource { path, owned } = state.sources.stage(ctx, content)?;
     out.set("path", path.to_string_lossy().to_string())?;
-    state.start(ctx, OP_SAVE_FILE, out, Pending::Save { _staged: owned.then(|| StagedFile(path)) })
+    state.start(ctx, OP_SAVE_FILE, out, FileRequest::Save { _staged: owned.then(|| StagedFile(path)) })
   }
 
-  fn start<'js>(self: &Rc<Self>, ctx: &Ctx<'js>, op: i32, options: Object<'js>, kind: Pending) -> JsResult<Value<'js>> {
+  fn start<'js>(self: &Rc<Self>, ctx: &Ctx<'js>, op: i32, options: Object<'js>, kind: FileRequest) -> JsResult<Value<'js>> {
     let state = self;
     let json = ctx
       .json_stringify(options)?
       .map(|s| s.to_string())
       .transpose()?
       .ok_or_else(|| Exception::throw_message(ctx, "ui: serialization failed"))?;
-    let request_id = state.next_id.alloc();
-    let (promise, settle) = PendingSettle::new(ctx)?;
-    state.pending.borrow_mut().insert(request_id, (kind, settle));
-    if let Some(err) = state.host.ui_files(op, request_id, &json) {
-      if let Some((_, settle)) = state.pending.borrow_mut().remove(&request_id) {
-        settle.reject_with(ctx, &err)?;
-      }
-    }
-    Ok(promise.into_value())
+    Ok(state.pending.park(ctx, kind, |request_id| state.host.ui_files(op, request_id, &json))?.into_value())
   }
 
-  /// The one way either request answers: `answer` is what the host made of it - the files a pick
-  /// chose, or whether a save happened - and `error` an error wire that replaces it.
-  pub fn resolve(
-    self: &Rc<Self>,
-    rt: &Runtime,
-    context: &rquickjs::Context,
-    request_id: i64,
-    answer: &str,
-    error: Option<&str>,
-  ) {
+  /// A pick answers `J` and the copies it made, a save `B1` or `B0` for whether it happened, and
+  /// either may answer an error wire instead.
+  pub fn settle(self: &Rc<Self>, rt: &Runtime, context: &rquickjs::Context, request_id: i64, result_wire: &str) {
     let state = self;
     context.with(|ctx| {
-      let Some((kind, settle)) = state.pending.borrow_mut().remove(&request_id) else {
-        return;
-      };
-      if let Some(error) = error {
-        if settle.reject_with(&ctx, error).is_err() {
-          (state.log)(&format!("ui: files({request_id}) reject failed: {}", format_exception(&ctx)));
+      let settled = state.pending.settle(&ctx, request_id, result_wire, false, |ctx, request, wire| match request {
+        FileRequest::Pick { multiple } => {
+          let json =
+            wire.strip_prefix('J').ok_or_else(|| Exception::throw_message(ctx, "pickFile: malformed host answer"))?;
+          state.picked(ctx, json, *multiple)
         }
-        return;
-      }
-      let value = match kind {
-        Pending::Pick { multiple } => state.picked(&ctx, answer, multiple),
-        Pending::Save { .. } => Ok(Value::new_bool(ctx.clone(), answer == "1")),
-      };
-      match value {
-        Ok(value) => {
-          if settle.resolve_with(&ctx, value).is_err() {
-            (state.log)(&format!("ui: files({request_id}) resolve failed: {}", format_exception(&ctx)));
-          }
-        }
-        // an answer this cannot read is still an answer: a promise left hanging is worse than a
-        // rejection, and what it threw reading it says more than anything made up here would
-        Err(rquickjs::Error::Exception) => {
-          let thrown = ctx.catch();
-          if settle.reject_with_value(&ctx, thrown).is_err() {
-            (state.log)(&format!("ui: files({request_id}) reject failed: {}", format_exception(&ctx)));
-          }
-        }
-        Err(e) => {
-          (state.log)(&format!("ui: files({request_id}) answer unreadable: {e:?}"));
-          match crate::api::error::make_plugin_error(
-            &ctx,
-            "internal",
-            "the picker's answer could not be read",
-            None,
-            None,
-            None,
-          ) {
-            Ok(value) => {
-              if settle.reject_with_value(&ctx, value).is_err() {
-                (state.log)(&format!("ui: files({request_id}) reject failed: {}", format_exception(&ctx)));
-              }
-            }
-            Err(_) => settle.release(&ctx),
-          }
-        }
+        FileRequest::Save { .. } => plain_wire_to_js(ctx, wire),
+      });
+      if let Err(why) = settled {
+        (state.log)(&format!("ui: files({request_id}) settle failed: {why}"));
       }
     });
     pump_jobs(rt, context, state.log.as_ref());
@@ -233,12 +173,7 @@ impl FilesState {
 
   /// a plugin torn down mid-picker leaves the dialog on screen and nothing to answer it
   pub fn dispose(self: &Rc<Self>, context: &rquickjs::Context) {
-    let state = self;
-    context.with(|ctx| {
-      for (_, (_, settle)) in state.pending.borrow_mut().drain() {
-        settle.release(&ctx);
-      }
-    });
+    context.with(|ctx| self.pending.dispose(&ctx));
   }
 
   /// One `File` per copy the host made, owning it the way a spilled blob owns its file: the content

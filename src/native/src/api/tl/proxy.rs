@@ -454,6 +454,19 @@ pub(crate) fn json_stringify_tl<'js>(ctx: &Ctx<'js>, value: Value<'js>) -> JsRes
   }
 }
 
+/// a value wire that names no handle: a scalar, or `J` and its json
+pub(crate) fn plain_wire_to_js<'js>(ctx: &Ctx<'js>, wire: &str) -> JsResult<Value<'js>> {
+  let Some(tag) = wire.chars().next() else {
+    return Err(Exception::throw_message(ctx, "wire: empty value"));
+  };
+  let payload = &wire[tag.len_utf8()..];
+  if tag == 'J' {
+    return ctx.json_parse(payload);
+  }
+  scalar_wire_to_js(ctx, tag, payload)
+    .unwrap_or_else(|| Err(Exception::throw_message(ctx, &format!("wire: '{tag}' is not a plain value"))))
+}
+
 pub(crate) fn scalar_wire_to_js<'js>(ctx: &Ctx<'js>, tag: char, payload: &str) -> Option<JsResult<Value<'js>>> {
   Some(match tag {
     'N' => Ok(Value::new_null(ctx.clone())),

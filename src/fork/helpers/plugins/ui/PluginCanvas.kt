@@ -53,7 +53,7 @@ import org.json.JSONObject
  *
  * The listener is a JNI upcall, so it runs on the queue the engine lives on. The three slow ops
  * (encoding a bitmap, decoding one, reading a font file) hop to [work] and come back through
- * [QuickJs.canvasResult] on the plugin queue.
+ * [QuickJs.settle] on the plugin queue.
  */
 object PluginCanvas {
     // keep in sync with rust `canvas::OP_*`
@@ -731,7 +731,7 @@ object PluginCanvas {
                         onSuccess = { fonts[family] = it; typefaces.clear(); "" },
                         onFailure = { PluginWire.encodePluginError("invalid-argument", "canvas: this is not a font file") },
                     )
-                    session.engine.canvasResult(requestId, wire)
+                    session.engine.settle(QuickJs.SETTLE_CANVAS, requestId, wire)
                 }
             }
             return ""
@@ -800,7 +800,7 @@ object PluginCanvas {
                         onSuccess = register,
                         onFailure = { PluginWire.encodePluginError("invalid-argument", "canvas: ${it.message ?: "the decode failed"}") },
                     )
-                    session.engine.canvasResult(requestId, wire)
+                    session.engine.settle(QuickJs.SETTLE_CANVAS, requestId, wire)
                 }
             }
         }
@@ -808,7 +808,7 @@ object PluginCanvas {
         private fun submit(requestId: Long, on: Executor = work, produce: () -> String) {
             on.execute {
                 val wire = runCatching(produce).getOrElse(::wireOf)
-                EngineDispatch.onEngine(session) { session.engine.canvasResult(requestId, wire) }
+                EngineDispatch.onEngine(session) { session.engine.settle(QuickJs.SETTLE_CANVAS, requestId, wire) }
             }
         }
 
@@ -924,7 +924,7 @@ object PluginCanvas {
                     result.exceptionOrNull()?.let { failed ->
                         if (pipeline.failure == null) pipeline.failure = wireOf(failed)
                     }
-                    session.engine.canvasResult(requestId, pipeline.failure ?: "")
+                    session.engine.settle(QuickJs.SETTLE_CANVAS, requestId, pipeline.failure ?: "")
                     pipeline.waiting.poll()?.let { answerFrame(pipeline, it) }
                 }
             }
@@ -938,7 +938,7 @@ object PluginCanvas {
 
         /** a frame's promise settles with whatever the encoder has to say by then, or with nothing */
         private fun answerFrame(pipeline: Pipeline, requestId: Long) {
-            session.engine.canvasResult(requestId, "A" + (pipeline.failure ?: ""))
+            session.engine.settle(QuickJs.SETTLE_CANVAS, requestId, "A" + (pipeline.failure ?: ""))
         }
 
         private fun wireOf(failed: Throwable): String = when (failed) {

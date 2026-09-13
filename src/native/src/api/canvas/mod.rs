@@ -16,12 +16,12 @@ use rquickjs::{
 
 use crate::api::canvas::css::{parse_color, parse_font, Font};
 use crate::api::canvas::geometry::{finite, normalize_round_rect, ArcError, Matrix, Path, Verb};
-use crate::api::error::format_exception;
 use crate::api::error::{wire_error_to_js, PluginErrorCode};
 use crate::api::io::blob::{mint_app_file, BlobState, BUILD_LIMIT_BYTES};
 use crate::api::io::fs::FsState;
 use crate::api::io::staging::{SourceStager, StagedSource};
-use crate::runtime::{pump_jobs, PendingSettle};
+use crate::api::io::staging::StagedFile;
+use crate::runtime::{pump_jobs, Parked, PendingTable};
 use crate::sandbox::limits::{ExternalCharge, ExternalMemory};
 use crate::sandbox::registry::RequestIds;
 use crate::utils::shape::{define_disposable, define_getter, define_method};
@@ -386,14 +386,6 @@ pub struct PatternHandle(Rc<PatternData>);
 
 /// A source staged for the host, owned by whatever outlives the staging. Dropping it removes the
 /// file, so a request that fails anywhere leaves nothing behind.
-struct StagedFile(PathBuf);
-
-impl Drop for StagedFile {
-  fn drop(&mut self) {
-    let _ = fs::remove_file(&self.0);
-  }
-}
-
 /// something the session counts while it is open, so a disposed handle stops counting before the
 /// collector reaches it
 trait Live {
@@ -627,12 +619,13 @@ enum PendingKind {
   },
 }
 
-struct Pending {
+struct CanvasRequest {
   kind: PendingKind,
-  settle: Option<PendingSettle>,
   /// never read: it is here so that settling the request, however it settles, deletes the source
   _staged: Option<StagedFile>,
 }
+
+impl Parked for CanvasRequest {}
 
 pub struct CanvasState {
   host: Rc<dyn CanvasHost>,
@@ -641,8 +634,7 @@ pub struct CanvasState {
   log: crate::Log,
   blend_modes: Cell<bool>,
   next_id: RequestIds,
-  next_request: RequestIds,
-  pending: RefCell<HashMap<i64, Pending>>,
+  pending: PendingTable<CanvasRequest>,
   surfaces: RefCell<Vec<Weak<Surface>>>,
   animations: RefCell<Vec<Weak<AnimationData>>>,
   encoders: RefCell<Vec<Weak<EncoderData>>>,
@@ -915,14 +907,10 @@ impl Font {
 }
 
 impl CanvasState {
-  fn take_pending(&self, request_id: i64) -> Option<Pending> {
-    self.pending.borrow_mut().remove(&request_id)
-  }
-
   /// What the host is already opening: a create only becomes live once it answers, so counting the
   /// live ones alone would let a plugin that never awaits start as many at once as it liked.
   fn count_starting(&self, matches: fn(&PendingKind) -> bool) -> usize {
-    self.pending.borrow().values().filter(|pending| matches(&pending.kind)).count()
+    self.pending.count(|request| matches(&request.kind))
   }
 
   fn create_surface<'js>(self: &Rc<Self>, ctx: &Ctx<'js>, width: i32, height: i32) -> JsResult<Rc<Surface>> {
@@ -1002,8 +990,7 @@ pub fn install_canvas<'js>(
     log,
     blend_modes: Cell::new(false),
     next_id: RequestIds::default(),
-    next_request: RequestIds::default(),
-    pending: RefCell::new(HashMap::new()),
+    pending: PendingTable::default(),
     surfaces: RefCell::new(Vec::new()),
     animations: RefCell::new(Vec::new()),
     encoders: RefCell::new(Vec::new()),
@@ -1268,29 +1255,11 @@ impl CanvasState {
     staged: Option<StagedFile>,
   ) -> JsResult<Value<'js>> {
     let state = self;
-    let request_id = state.next_request.alloc();
-    let (promise, settle) = PendingSettle::new(ctx)?;
-    let arg = describe(request_id);
-    state.pending.borrow_mut().insert(
-      request_id,
-      Pending {
-        kind,
-        settle: Some(settle),
-        _staged: staged,
-      },
-    );
-    let answer = state.host.canvas(op, id, &arg, None);
-    if !answer.is_empty() {
-      if let Some(pending) = state.take_pending(request_id) {
-        let value = match wire_error_to_js(ctx, &answer) {
-          Some(Ok(value)) => value,
-          _ => crate::api::error::make_plugin_error(ctx, "internal", &answer, None, None, None)?,
-        };
-        if let Some(settle) = pending.settle {
-          settle.reject_with_value(ctx, value)?;
-        }
-      }
-    }
+    let request = CanvasRequest { kind, _staged: staged };
+    let promise = state.pending.park(ctx, request, |request_id| {
+      let answer = state.host.canvas(op, id, &describe(request_id), None);
+      (!answer.is_empty()).then_some(answer)
+    })?;
     Ok(promise.into_value())
   }
 
@@ -1566,52 +1535,29 @@ impl CanvasState {
     state.sources.attach_fs(fs);
   }
 
-  pub fn resolve(self: &Rc<Self>, rt: &Runtime, context: &rquickjs::Context, request_id: i64, result_wire: &str) {
+  /// an encoder frame answers twice: an `A`-prefixed answer once the host has admitted it to its
+  /// queue, which settles the promise, and an ordinary one once the pixels are consumed
+  pub fn settle(self: &Rc<Self>, rt: &Runtime, context: &rquickjs::Context, request_id: i64, result_wire: &str) {
     let state = self;
     context.with(|ctx| {
-      let Some(mut pending) = state.take_pending(request_id) else {
-        return;
-      };
-      // A-prefixed answers acknowledge queue admission; the ordinary answer releases the pixels.
-      let early = matches!(&pending.kind, PendingKind::EncoderFrame { .. }) && result_wire.starts_with('A');
+      let early = result_wire.starts_with('A')
+        && state
+          .pending
+          .with_parked(request_id, |request| matches!(request.kind, PendingKind::EncoderFrame { .. }))
+          .unwrap_or(false);
       let wire = if early { &result_wire[1..] } else { result_wire };
-      let Some(settle) = pending.settle.take() else {
-        if early {
-          state.pending.borrow_mut().insert(request_id, pending);
-        }
-        return;
-      };
-      let built = match wire_error_to_js(&ctx, wire) {
-        Some(value) => value.map(|value| (false, value)),
-        None => state.build_answer(&ctx, &mut pending.kind, wire).map(|value| (true, value)),
-      };
-      if early {
-        state.pending.borrow_mut().insert(request_id, pending);
-      } else {
-        drop(pending);
-      }
-      let settled = match built {
-        Ok((true, value)) => settle.resolve_with(&ctx, value),
-        Ok((false, value)) => settle.reject_with_value(&ctx, value),
-        Err(e) if e.is_exception() => settle.reject_with_value(&ctx, ctx.catch()),
-        Err(e) => settle.reject_with(&ctx, &format!("canvas: malformed host answer: {e}")),
-      };
-      if settled.is_err() {
-        (state.log)(&format!("canvas({request_id}) settle failed: {}", format_exception(&ctx)));
+      let settled = state
+        .pending
+        .settle(&ctx, request_id, wire, early, |ctx, request, wire| state.build_answer(ctx, &mut request.kind, wire));
+      if let Err(why) = settled {
+        (state.log)(&format!("canvas({request_id}) settle failed: {why}"));
       }
     });
     pump_jobs(rt, context, state.log.as_ref());
   }
 
   pub fn dispose(self: &Rc<Self>, context: &rquickjs::Context) {
-    let state = self;
-    context.with(|ctx| {
-      for (_, pending) in state.pending.borrow_mut().drain() {
-        if let Some(settle) = pending.settle {
-          settle.release(&ctx);
-        }
-      }
-    });
+    context.with(|ctx| self.pending.dispose(&ctx));
   }
 }
 

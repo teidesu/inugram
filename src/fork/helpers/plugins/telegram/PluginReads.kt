@@ -324,12 +324,9 @@ object PluginReads {
         val flags = ConnectionsManager.RequestFlagFailOnServerErrors
         // through the bypass lease, or a plugin holding interceptRpc(contacts.resolveUsername) that resolves from inside its own middleware dispatches into itself without bound
         PluginRpc.sendWithoutInterceptors(accountId, request, flags) { response, error ->
-            EngineDispatch.settle(
-                session,
-                "resolvePeer",
-                produce = { settleWire(controller, accountId, response, error, spec, kind, policyOf(session)) },
-                deliver = { session.engine.resolvePeerResult(requestId, it) },
-            )
+            EngineDispatch.settle(session, QuickJs.SETTLE_READS, requestId, "resolvePeer") {
+                settleWire(controller, accountId, response, error, spec, kind, policyOf(session))
+            }
         }
         return null
     }
@@ -404,12 +401,7 @@ object PluginReads {
 
     /** after a reload the plugin runs on a new engine whose request ids restart, so a stale settle must not reach it */
     private fun answer(call: Fetch, produce: () -> String) {
-        EngineDispatch.settle(
-            call.session,
-            "account fetch",
-            produce = produce,
-            deliver = { call.session.engine.accountFetchResult(call.requestId, it) },
-        )
+        EngineDispatch.settle(call.session, QuickJs.SETTLE_READS, call.requestId, "account fetch", produce = produce)
     }
 
     /**

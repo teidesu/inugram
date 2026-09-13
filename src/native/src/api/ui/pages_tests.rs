@@ -3,7 +3,6 @@ use rquickjs::Context;
 
 #[derive(Default)]
 struct TestUiHost {
-  prompts: RefCell<Vec<(i64, String)>>,
   opened_pages: RefCell<Vec<i64>>,
   opened_fragments: RefCell<Vec<i64>>,
   opened_screens: RefCell<Vec<String>>,
@@ -21,10 +20,6 @@ struct Menu {
 }
 
 impl UiHost for TestUiHost {
-  fn ui_prompt(&self, request_id: i64, options_json: &str) -> Option<String> {
-    self.prompts.borrow_mut().push((request_id, options_json.to_string()));
-    None
-  }
   fn ui_open_page(&self, page_id: i64) -> Option<String> {
     self.opened_pages.borrow_mut().push(page_id);
     None
@@ -426,33 +421,6 @@ fn rendering_a_page_the_engine_no_longer_has_is_an_error_not_a_fault() {
     crate::LEVEL_ERROR,
     "disposing your own open page must not disable the plugin: {entry}",
   );
-}
-
-#[test]
-fn prompt_resolves_with_text_and_null() {
-  let (rt, ctx, host, state, _logs) = setup();
-  ctx.with(|ctx| {
-    ctx
-      .eval::<(), _>(
-        r#"
-            globalThis.__results = [];
-            inu.ui.prompt({ title: 'Name?', hint: 'h', value: 'v', selectAll: true })
-                .then(r => { globalThis.__results.push(r); });
-            inu.ui.prompt({ title: 'Again?' }).then(r => { globalThis.__results.push(r); });
-            "#,
-      )
-      .unwrap();
-  });
-  let prompts = host.prompts.borrow();
-  assert_eq!(prompts.len(), 2);
-  assert_eq!(prompts[0].1, r#"{"title":"Name?","hint":"h","value":"v","selectAll":true}"#);
-  let (id1, id2) = (prompts[0].0, prompts[1].0);
-  drop(prompts);
-
-  state.resolve_prompt(&rt, &ctx, id1, Some("alice"));
-  state.resolve_prompt(&rt, &ctx, id2, None);
-  let results: String = ctx.with(|ctx| ctx.eval("JSON.stringify(globalThis.__results)").unwrap());
-  assert_eq!(results, r#"["alice",null]"#);
 }
 
 #[test]
@@ -920,7 +888,22 @@ const KV_SHIM: &str = r#"
 /// tells those apart
 #[test]
 fn the_bundled_ui_test_plugin_passes() {
-  let (rt, ctx, host, _state, _logs) = setup();
+  let rt = Runtime::new().unwrap();
+  let ctx = Context::full(&rt).unwrap();
+  let host = Rc::new(TestUiHost::default());
+  let host_dyn: Rc<dyn UiHost> = host.clone();
+  let logs = crate::testing::harness::Logs::new();
+  let log = crate::testing::harness::log_sink(&logs);
+  // `inu.ui` is one object: the dialogs install it and the pages install into it, as an engine does
+  let (dialogs, state) = ctx.with(|ctx| {
+    let inu = crate::testing::harness::get_api_globals(&ctx);
+    crate::api::error::install_plugin_error(&ctx).unwrap();
+    let modal_host = Rc::new(crate::testing::harness::RecordingHost::default());
+    let dialogs = crate::api::ui::dialogs::install_dialogs(&ctx, modal_host, None, log.clone(), &inu).unwrap();
+    (dialogs, install_ui(&ctx, host_dyn, Lifecycle::new(), log, None, &inu).unwrap())
+  });
+  let _state = Disposing::new(&ctx, state, |ctx, state| state.dispose(ctx));
+  let _dialogs = crate::testing::harness::DisposeOnDrop::new(&ctx, dialogs, |ctx, state| state.dispose(ctx));
   let source = format!("{KV_SHIM}\n{}", include_str!("../../../../test/plugins/ui-test.js"),);
   let lines = crate::testing::harness::run_capturing_console(&rt, &ctx, &source);
 
@@ -933,9 +916,6 @@ fn dispose_with_open_everything_releases_roots() {
   let (rt, ctx, host, state, _logs) = setup();
   let page_id = build_full_page(&ctx, &host);
   state.render(&rt, &ctx, page_id).unwrap();
-  ctx.with(|ctx| {
-    ctx.eval::<(), _>("inu.ui.prompt({ title: 'stuck' });").unwrap();
-  });
   // leave a menu open too
   ctx.with(|ctx| {
     ctx

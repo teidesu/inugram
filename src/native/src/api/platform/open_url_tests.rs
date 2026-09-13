@@ -96,9 +96,9 @@ fn the_bundled_shell_test_plugin_passes() {
     ctx.eval::<Value, _>("globalThis.__shell()").unwrap();
   });
 
-  for picked in [Some("2"), Some("0,2"), None] {
+  for picked in ["J[2]", "J[0,2]", "N"] {
     let request_id = host.choosers.borrow().last().expect("a chooser was opened").0;
-    dialogs.resolve_chooser(&rt, &ctx, request_id, picked);
+    dialogs.settle(&rt, &ctx, request_id, picked);
   }
 
   let lines = lines.borrow().clone();

@@ -337,7 +337,7 @@ object PluginUi {
             session,
             "dialog",
             dismissed = "dismissed",
-            resolve = { session.engine.resolveDialog(requestId, it) },
+            resolve = { session.engine.settle(QuickJs.SETTLE_MODAL, requestId, PluginWire.encodeString(it)) },
             prepare = { JSONObject(optionsJson) },
         ) { options, settle -> showDialog(session.engine, options, settle) }
 
@@ -345,15 +345,18 @@ object PluginUi {
             session,
             "prompt",
             dismissed = null,
-            resolve = { session.engine.resolvePrompt(requestId, it) },
+            resolve = { session.engine.settle(QuickJs.SETTLE_MODAL, requestId, it?.let(PluginWire::encodeString) ?: PluginWire.encodeNull()) },
             prepare = { JSONObject(optionsJson) },
         ) { options, settle -> showPrompt(options, settle) }
 
-        OP_CHOOSER -> showModal<ChooserSpec, String?>(
+        OP_CHOOSER -> showModal<ChooserSpec, List<Int>?>(
             session,
             "chooser",
             dismissed = null,
-            resolve = { session.engine.resolveChooser(requestId, it) },
+            resolve = { picked ->
+                val wire = picked?.let { PluginWire.encodeJson(JSONArray(it).toString()) } ?: PluginWire.encodeNull()
+                session.engine.settle(QuickJs.SETTLE_MODAL, requestId, wire)
+            },
             prepare = { ChooserSpec(JSONObject(optionsJson)) },
         ) { spec, settle -> showChooser(spec, settle) }
 
@@ -459,7 +462,7 @@ object PluginUi {
     }
 
     /** one dialog for both modes, the engine having normalized `selected` into a list */
-    private fun showChooser(spec: ChooserSpec, settle: (String?) -> Unit) {
+    private fun showChooser(spec: ChooserSpec, settle: (List<Int>?) -> Unit) {
         val activity = LaunchActivity.instance
         if (activity == null || activity.isFinishing) {
             settle(null)
@@ -516,14 +519,14 @@ object PluginUi {
         title: String?,
         items: List<ChooserItem>,
         selected: Int?,
-        settle: (String?) -> Unit,
+        settle: (List<Int>?) -> Unit,
     ): AlertDialog {
         val builder = RadioDialogBuilder(context, theme)
         if (title != null) builder.setTitle(title)
         builder.setItems(
             items.map { RadioDialogBuilder.Item(chooserLabel(it, theme), it.subtitle) },
             selected ?: -1,
-        ) { _, index -> settle(index.toString()) }
+        ) { _, index -> settle(listOf(index)) }
         builder.setNegativeButton(LocaleController.getString(R.string.Cancel), null)
         return builder.create()
     }
@@ -534,7 +537,7 @@ object PluginUi {
         title: String?,
         items: List<ChooserItem>,
         selected: Set<Int>,
-        settle: (String?) -> Unit,
+        settle: (List<Int>?) -> Unit,
     ): AlertDialog {
         val ticked = selected.toMutableSet()
         val container = LinearLayout(context).apply { orientation = LinearLayout.VERTICAL }
@@ -556,7 +559,7 @@ object PluginUi {
         if (title != null) builder.setTitle(title)
         builder.setView(container)
         builder.setPositiveButton(LocaleController.getString(R.string.OK)) { _, _ ->
-            settle(ticked.sorted().joinToString(","))
+            settle(ticked.sorted())
         }
         builder.setNegativeButton(LocaleController.getString(R.string.Cancel), null)
         return builder.create()

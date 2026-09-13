@@ -37,12 +37,12 @@ class PluginChatListTest {
     /** one whole exchange: the fetch, the ui hop it posts, and the settle that comes back */
     private fun fetch(plugin: Plugin, op: Int, arg: String): String {
         val requestId = nextRequestId++
-        plugin.js.fetchResults.clear()
+        plugin.js.readResults.clear()
         val inline = plugin.js.listener!!.accountFetch(0, requestId, op, arg)
         // a refusal answers inline and never posts; everything else parks
         if (inline != null) return inline
         settle()
-        return plugin.js.fetchResults.single { it.requestId == requestId }.resultWire
+        return plugin.js.readResults.single { it.requestId == requestId }.resultWire
     }
 
     /** `archive`, `chatFolderId`, `limit` - the selector `reads.js` builds */

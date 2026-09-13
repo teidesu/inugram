@@ -7,7 +7,7 @@ use rquickjs::{Array, Ctx, Exception, Function, Object, Persistent, Result as Js
 use crate::api::error::format_exception;
 use crate::api::error::PluginErrorCode;
 use crate::api::ui::icons::{opt_icon, Icon, RETAINED_VALUE_TAG};
-use crate::runtime::{pump_jobs, PendingSettle};
+use crate::runtime::pump_jobs;
 use crate::sandbox::registry::{make_disposer, noop_disposer, Lifecycle, Registry, RequestIds};
 use crate::utils::arguments::{field, opt_bool, opt_fn, opt_num, opt_str, req_bool, req_fn, req_num, req_str};
 
@@ -34,7 +34,6 @@ const PAGE_TRANSIENT_KEY: &str = "__inuPageTransient";
 const BOTTOM_BUTTON_KEY: &str = "b";
 
 pub trait UiHost {
-  fn ui_prompt(&self, request_id: i64, options_json: &str) -> Option<String>;
   fn ui_open_page(&self, page_id: i64) -> Option<String>;
   fn ui_open_fragment(&self, handle: i64) -> Option<String>;
   fn ui_open_screen(&self, options_json: &str) -> Option<String>;
@@ -99,7 +98,6 @@ pub struct UiState {
   next_id: RequestIds,
   pages: RefCell<HashMap<i64, UiPageDef>>,
   menus: RefCell<HashMap<i64, Vec<Persistent<Function<'static>>>>>,
-  pending_prompts: RefCell<HashMap<i64, PendingSettle>>,
   settings: Registry<i64>,
 }
 
@@ -242,7 +240,6 @@ pub fn install_ui<'js>(
     next_id: RequestIds::default(),
     pages: RefCell::new(HashMap::new()),
     menus: RefCell::new(HashMap::new()),
-    pending_prompts: RefCell::new(HashMap::new()),
     settings: Registry::default(),
   });
 
@@ -354,12 +351,6 @@ pub fn install_ui<'js>(
       }
       Ok(())
     })?,
-  )?;
-
-  let state2 = state.clone();
-  ui.set(
-    "prompt",
-    Function::new(ctx.clone(), move |ctx: Ctx<'js>, opts: Object<'js>| state2.js_prompt(&ctx, opts))?,
   )?;
 
   let state2 = state.clone();
@@ -733,30 +724,6 @@ impl UiState {
     Ok(())
   }
 
-  fn js_prompt<'js>(&self, ctx: &Ctx<'js>, opts: Object<'js>) -> JsResult<Value<'js>> {
-    let state = self;
-    let out = Object::new(ctx.clone())?;
-    out.set("title", req_str(ctx, &opts, "prompt", "title")?)?;
-    set_opt(&out, "hint", opt_str(ctx, &opts, "prompt", "hint")?)?;
-    set_opt(&out, "value", opt_str(ctx, &opts, "prompt", "value")?)?;
-    out.set("selectAll", opt_bool(ctx, &opts, "prompt", "selectAll")?)?;
-    let json = ctx
-      .json_stringify(out)?
-      .map(|s| s.to_string())
-      .transpose()?
-      .ok_or_else(|| Exception::throw_message(ctx, "prompt: serialization failed"))?;
-
-    let request_id = state.next_id.alloc();
-    let (promise, pending) = PendingSettle::new(ctx)?;
-    state.pending_prompts.borrow_mut().insert(request_id, pending);
-
-    if let Some(err) = state.host.ui_prompt(request_id, &json) {
-      if let Some(pending) = state.pending_prompts.borrow_mut().remove(&request_id) {
-        pending.reject_with(ctx, &err)?;
-      }
-    }
-    Ok(promise.into_value())
-  }
 }
 
 impl UiState {
@@ -863,37 +830,6 @@ impl UiState {
     pump_jobs(rt, context, state.log.as_ref());
   }
 
-  pub fn resolve_prompt(
-    self: &Rc<Self>,
-    rt: &Runtime,
-    context: &rquickjs::Context,
-    request_id: i64,
-    text: Option<&str>,
-  ) {
-    let state = self;
-    context.with(|ctx| {
-      use rquickjs::IntoJs;
-      if let Some(pending) = state.pending_prompts.borrow_mut().remove(&request_id) {
-        let value = match text {
-          Some(t) => t.into_js(&ctx),
-          None => Ok(Value::new_null(ctx.clone())),
-        };
-        match value {
-          Ok(v) => {
-            if pending.resolve_with(&ctx, v).is_err() {
-              (state.log)(&format!("prompt({request_id}) resolve failed: {}", format_exception(&ctx)));
-            }
-          }
-          Err(e) => {
-            pending.release(&ctx);
-            (state.log)(&format!("prompt({request_id}) text conversion failed: {e:?}"));
-          }
-        }
-      }
-    });
-    pump_jobs(rt, context, state.log.as_ref());
-  }
-
   pub fn close_page(self: &Rc<Self>, rt: &Runtime, context: &rquickjs::Context, page_id: i64) {
     let state = self;
     context.with(|ctx| {
@@ -936,9 +872,6 @@ impl UiState {
         for p in callbacks {
           let _ = p.restore(&ctx);
         }
-      }
-      for (_, pending) in state.pending_prompts.borrow_mut().drain() {
-        pending.release(&ctx);
       }
     });
   }

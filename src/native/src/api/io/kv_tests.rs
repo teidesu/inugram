@@ -170,7 +170,7 @@ fn the_bundled_api_test_plugin_passes() {
   });
 
   let request_id = host.dialogs.borrow().last().expect("a dialog was opened").0;
-  dialogs.resolve_dialog(&rt, &ctx, request_id, "positive");
+  dialogs.settle(&rt, &ctx, request_id, "Spositive");
   lifecycle.notify_unload(&rt, &ctx);
 
   let lines = lines.borrow().clone();

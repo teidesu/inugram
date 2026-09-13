@@ -13,6 +13,15 @@ use crate::sandbox::registry::RequestIds;
 
 const CHUNK_BYTES: u64 = 256 * 1024;
 
+/// a file this engine wrote out for the host, deleted with whatever holds it
+pub struct StagedFile(pub PathBuf);
+
+impl Drop for StagedFile {
+  fn drop(&mut self) {
+    let _ = fs::remove_file(&self.0);
+  }
+}
+
 /// a source the host is about to read, and whether this staged it: a file a plugin named is the
 /// plugin's own and stays where it is, while a blob's content was copied out for the host to reach
 pub struct StagedSource {

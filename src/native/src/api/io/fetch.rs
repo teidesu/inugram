@@ -1,17 +1,13 @@
-use std::cell::RefCell;
-use std::collections::HashMap;
 use std::fs;
 use std::path::PathBuf;
 use std::rc::Rc;
 
 use rquickjs::{Ctx, Function, Object, Result as JsResult, Runtime, TypedArray, Value};
 
-use crate::api::error::format_exception;
-use crate::api::error::{host_error_to_js, wire_error_to_js, PluginErrorCode};
+use crate::api::error::PluginErrorCode;
 use crate::api::io::blob::{mint_app_file, BlobState, BUILD_LIMIT_BYTES};
-use crate::runtime::{pump_jobs, PendingSettle};
+use crate::runtime::{pump_jobs, PendingTable};
 use crate::sandbox::grants::{GrantHost, MATCH_DOMAIN};
-use crate::sandbox::registry::RequestIds;
 use crate::utils::prelude;
 
 const PRELUDE: &[u8] = include_bytes!(concat!(env!("OUT_DIR"), "/fetch.qbc"));
@@ -27,8 +23,7 @@ pub struct FetchState {
   grants: Rc<dyn GrantHost>,
   blobs: Rc<BlobState>,
   log: crate::Log,
-  next_request_id: RequestIds,
-  pending: RefCell<HashMap<i64, PendingSettle>>,
+  pending: PendingTable<()>,
 }
 
 fn parse_target(url: &str) -> Result<String, String> {
@@ -123,16 +118,11 @@ impl FetchState {
       Err(error) => return error.code().throw(ctx, error.message()),
     };
 
-    let request_id = self.next_request_id.alloc();
-    let (promise, settle) = PendingSettle::new(ctx)?;
-    self.pending.borrow_mut().insert(request_id, settle);
-
-    if let Some(err) = self.host.send(request_id, &url, &spec_json, body.as_deref()) {
-      if let Some(settle) = self.pending.borrow_mut().remove(&request_id) {
-        let value = host_error_to_js(ctx, &err)?;
-        settle.reject_with_value(ctx, value)?;
-      }
-    }
+    let mut request_id = 0;
+    let promise = self.pending.park(ctx, (), |id| {
+      request_id = id;
+      self.host.send(id, &url, &spec_json, body.as_deref())
+    })?;
 
     let handle = Object::new(ctx.clone())?;
     handle.set("id", request_id)?;
@@ -154,8 +144,7 @@ pub fn install_fetch<'js>(
     grants,
     blobs,
     log,
-    next_request_id: RequestIds::default(),
-    pending: RefCell::new(HashMap::new()),
+    pending: PendingTable::default(),
   });
 
   let natives = Object::new(ctx.clone())?;
@@ -172,8 +161,8 @@ pub fn install_fetch<'js>(
     let state = state.clone();
     natives.set(
       "abort",
-      Function::new(ctx.clone(), move |request_id: i64| {
-        state.pending.borrow_mut().remove(&request_id);
+      Function::new(ctx.clone(), move |ctx: Ctx<'js>, request_id: i64| {
+        state.pending.forget(&ctx, request_id);
         state.host.abort(request_id);
       })?,
     )?;
@@ -211,65 +200,35 @@ fn mint_body<'js>(ctx: &Ctx<'js>, body: &Object<'js>) -> JsResult<Value<'js>> {
 }
 
 impl FetchState {
-  pub fn resolve(self: &Rc<Self>, rt: &Runtime, context: &rquickjs::Context, request_id: i64, result_wire: &str) {
+  pub fn settle(self: &Rc<Self>, rt: &Runtime, context: &rquickjs::Context, request_id: i64, result_wire: &str) {
     let state = self;
     context.with(|ctx| {
-      let Some(settle) = state.pending.borrow_mut().remove(&request_id) else {
-        return;
-      };
-      if let Some(built) = wire_error_to_js(&ctx, result_wire) {
-        match built {
-          Ok(value) => {
-            if settle.reject_with_value(&ctx, value).is_err() {
-              (state.log)(&format!("fetch({request_id}) reject failed: {}", format_exception(&ctx)));
-            }
-          }
-          Err(e) => {
-            settle.release(&ctx);
-            (state.log)(&format!("fetch({request_id}) error decode failed: {e:?}"));
-          }
-        }
-        return;
-      }
-      let built = (|| -> JsResult<Value> {
-        let json = result_wire
+      let settled = state.pending.settle(&ctx, request_id, result_wire, false, |ctx, _, wire| {
+        let json = wire
           .strip_prefix('J')
-          .ok_or_else(|| rquickjs::Exception::throw_message(&ctx, "fetch: malformed host response"))?;
+          .ok_or_else(|| rquickjs::Exception::throw_message(ctx, "fetch: malformed host response"))?;
         let value = ctx.json_parse(json)?;
         let object = value
           .as_object()
           .cloned()
-          .ok_or_else(|| rquickjs::Exception::throw_message(&ctx, "fetch: malformed host response"))?;
+          .ok_or_else(|| rquickjs::Exception::throw_message(ctx, "fetch: malformed host response"))?;
         let body: Option<Object> = object.get("body")?;
         let blob = match body {
-          Some(body) => mint_body(&ctx, &body)?,
+          Some(body) => mint_body(ctx, &body)?,
           None => Value::new_null(ctx.clone()),
         };
         object.set("body", blob)?;
         Ok(object.into_value())
-      })();
-      match built {
-        Ok(value) => {
-          if settle.resolve_with(&ctx, value).is_err() {
-            (state.log)(&format!("fetch({request_id}) resolve failed: {}", format_exception(&ctx)));
-          }
-        }
-        Err(_) => {
-          settle.release(&ctx);
-          (state.log)(&format!("fetch({request_id}) bad result wire: {}", format_exception(&ctx)));
-        }
+      });
+      if let Err(why) = settled {
+        (state.log)(&format!("fetch({request_id}) settle failed: {why}"));
       }
     });
     pump_jobs(rt, context, state.log.as_ref());
   }
 
   pub fn dispose(self: &Rc<Self>, context: &rquickjs::Context) {
-    let state = self;
-    context.with(|ctx| {
-      for (_, settle) in state.pending.borrow_mut().drain() {
-        settle.release(&ctx);
-      }
-    });
+    context.with(|ctx| self.pending.dispose(&ctx));
   }
 }
 

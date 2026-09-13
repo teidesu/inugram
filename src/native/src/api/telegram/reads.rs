@@ -1,16 +1,14 @@
 use std::cell::{Cell, RefCell};
-use std::collections::{HashMap, VecDeque};
+use std::collections::VecDeque;
 use std::rc::Rc;
 
 use rquickjs::{Array, Ctx, Function, IntoJs, Object, Result as JsResult, Runtime, Value};
 
-use crate::api::error::format_exception;
 use crate::api::error::{wire_error_to_js, PluginErrorCode};
 use crate::api::telegram::account::AccountState;
 use crate::api::tl::proxy::{TlViews, ViewLife};
-use crate::runtime::{pump_jobs, PendingSettle};
+use crate::runtime::{pump_jobs, Parked, PendingTable};
 use crate::sandbox::grants::{GrantHost, MATCH_EXACT};
-use crate::sandbox::registry::RequestIds;
 use crate::utils::prelude;
 
 const OP_ME: i32 = 0;
@@ -119,15 +117,11 @@ pub struct ReadsState {
   grants: Rc<dyn GrantHost>,
   views: Rc<TlViews>,
   log: crate::Log,
-  next_request_id: RequestIds,
-  pending: RefCell<HashMap<i64, PendingRead>>,
+  pending: PendingTable<Shape>,
   cursors: Cursors,
 }
 
-struct PendingRead {
-  settle: PendingSettle,
-  shape: Shape,
-}
+impl Parked for Shape {}
 
 impl ReadsState {
   fn check_read_grant(&self, ctx: &Ctx<'_>, op: i32, arg: &str) -> JsResult<()> {
@@ -187,8 +181,7 @@ pub fn install_reads<'js>(
     grants,
     views,
     log,
-    next_request_id: RequestIds::default(),
-    pending: RefCell::new(HashMap::new()),
+    pending: PendingTable::default(),
     cursors: Cursors::default(),
   });
 
@@ -323,17 +316,7 @@ impl ReadsState {
   }
 
   fn park<'js>(&self, ctx: &Ctx<'js>, shape: Shape, ask: impl FnOnce(i64) -> Option<String>) -> JsResult<Value<'js>> {
-    let request_id = self.next_request_id.alloc();
-    let (promise, settle) = PendingSettle::new(ctx)?;
-    self.pending.borrow_mut().insert(request_id, PendingRead { settle, shape });
-
-    if let Some(err) = ask(request_id) {
-      if let Some(pending) = self.pending.borrow_mut().remove(&request_id) {
-        let value = crate::api::error::host_error_to_js(ctx, &err)?;
-        pending.settle.reject_with_value(ctx, value)?;
-      }
-    }
-    Ok(promise.into_value())
+    Ok(self.pending.park(ctx, shape, ask)?.into_value())
   }
 
   fn js_fetch<'js>(&self, ctx: &Ctx<'js>, slot: i32, op: i32, arg: &str, cursor: &str) -> JsResult<Value<'js>> {
@@ -391,65 +374,24 @@ impl ReadsState {
     }
   }
 
-  fn settle(&self, rt: &Runtime, context: &rquickjs::Context, what: &str, request_id: i64, result_wire: &str) {
-    context.with(|ctx| {
-      let Some(pending) = self.pending.borrow_mut().remove(&request_id) else {
-        return;
-      };
-      if let Some(built) = wire_error_to_js(&ctx, result_wire) {
-        match built {
-          Ok(value) => {
-            if pending.settle.reject_with_value(&ctx, value).is_err() {
-              (self.log)(&format!("{what}({request_id}) reject failed: {}", format_exception(&ctx)));
-            }
-          }
-          Err(e) => {
-            pending.settle.release(&ctx);
-            (self.log)(&format!("{what}({request_id}) error decode failed: {e:?}"));
-          }
-        }
-        return;
-      }
-      match self.decode_result(&ctx, pending.shape, result_wire) {
-        Ok(value) => {
-          if pending.settle.resolve_with(&ctx, value).is_err() {
-            (self.log)(&format!("{what}({request_id}) resolve failed: {}", format_exception(&ctx)));
-          }
-        }
-        Err(_) => {
-          pending.settle.release(&ctx);
-          (self.log)(&format!("{what}({request_id}) bad result wire: {}", format_exception(&ctx)));
-        }
-      }
-    });
-    pump_jobs(rt, context, self.log.as_ref());
-  }
 }
 
 impl ReadsState {
-  pub fn resolve_peer(self: &Rc<Self>, rt: &Runtime, context: &rquickjs::Context, request_id: i64, result_wire: &str) {
+  pub fn settle(self: &Rc<Self>, rt: &Runtime, context: &rquickjs::Context, request_id: i64, result_wire: &str) {
     let state = self;
-    state.settle(rt, context, "resolvePeer", request_id, result_wire);
-  }
-
-  pub fn resolve_account_fetch(
-    self: &Rc<Self>,
-    rt: &Runtime,
-    context: &rquickjs::Context,
-    request_id: i64,
-    result_wire: &str,
-  ) {
-    let state = self;
-    state.settle(rt, context, "accountFetch", request_id, result_wire);
+    context.with(|ctx| {
+      let settled = state.pending.settle(&ctx, request_id, result_wire, false, |ctx, shape, wire| {
+        state.decode_result(ctx, *shape, wire)
+      });
+      if let Err(why) = settled {
+        (state.log)(&format!("account read({request_id}) settle failed: {why}"));
+      }
+    });
+    pump_jobs(rt, context, state.log.as_ref());
   }
 
   pub fn dispose(self: &Rc<Self>, context: &rquickjs::Context) {
-    let state = self;
-    context.with(|ctx| {
-      for (_, pending) in state.pending.borrow_mut().drain() {
-        pending.settle.release(&ctx);
-      }
-    });
+    context.with(|ctx| self.pending.dispose(&ctx));
   }
 }
 

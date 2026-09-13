@@ -711,41 +711,44 @@ fn install_engine_fs(
   Some(())
 }
 
+/// the one way a host answers a request it took: [`api`] names the table, see `QuickJs.SETTLE_*`
 #[no_mangle]
-pub extern "system" fn Java_desu_inugram_helpers_plugins_QuickJs_nativeCanvasResult(
+pub extern "system" fn Java_desu_inugram_helpers_plugins_QuickJs_nativeSettle(
   mut env: EnvUnowned,
   _this: JObject,
   ptr: jlong,
+  api: jint,
   request_id: jlong,
-  result_wire: JString,
+  wire: JString,
 ) {
   in_env(&mut env, (), |env| {
-    let _deadline = crate::sandbox::limits::arm_entry_deadline();
+    let _deadline = arm_entry_deadline();
     let Some(engine) = get_engine(ptr) else {
       return;
     };
-    let state = &engine.canvas;
-    let result_wire = jstring_to_string(env, &result_wire);
-    state.resolve(&engine._rt, &engine.ctx, request_id, &result_wire);
+    let wire = jstring_to_string(env, &wire);
+    engine.settle(api, request_id, &wire);
   })
 }
 
 #[no_mangle]
-pub extern "system" fn Java_desu_inugram_helpers_plugins_QuickJs_nativeFetchResult(
+pub extern "system" fn Java_desu_inugram_helpers_plugins_QuickJs_nativeSettleBytes(
   mut env: EnvUnowned,
   _this: JObject,
   ptr: jlong,
+  api: jint,
   request_id: jlong,
-  result_wire: JString,
+  bytes: JByteArray,
 ) {
   in_env(&mut env, (), |env| {
-    let _deadline = crate::sandbox::limits::arm_entry_deadline();
+    let _deadline = arm_entry_deadline();
     let Some(engine) = get_engine(ptr) else {
       return;
     };
-    let state = &engine.fetch;
-    let result_wire = jstring_to_string(env, &result_wire);
-    state.resolve(&engine._rt, &engine.ctx, request_id, &result_wire);
+    let Ok(bytes) = env.convert_byte_array(&bytes) else {
+      return;
+    };
+    engine.settle_bytes(api, request_id, &bytes);
   })
 }
 
@@ -893,65 +896,6 @@ pub extern "system" fn Java_desu_inugram_helpers_plugins_QuickJs_nativeDispatchA
 }
 
 #[no_mangle]
-pub extern "system" fn Java_desu_inugram_helpers_plugins_QuickJs_nativeResolvePrompt(
-  mut env: EnvUnowned,
-  _this: JObject,
-  ptr: jlong,
-  request_id: jlong,
-  text: JString,
-) {
-  in_env(&mut env, (), |env| {
-    let _deadline = crate::sandbox::limits::arm_entry_deadline();
-    let Some(engine) = get_engine(ptr) else {
-      return;
-    };
-    let state = &engine.ui;
-    let text = if text.is_null() { None } else { Some(jstring_to_string(env, &text)) };
-    state.resolve_prompt(&engine._rt, &engine.ctx, request_id, text.as_deref());
-  })
-}
-
-#[no_mangle]
-pub extern "system" fn Java_desu_inugram_helpers_plugins_QuickJs_nativeResolveChooser(
-  mut env: EnvUnowned,
-  _this: JObject,
-  ptr: jlong,
-  request_id: jlong,
-  picked: JString,
-) {
-  in_env(&mut env, (), |env| {
-    let _deadline = crate::sandbox::limits::arm_entry_deadline();
-    let Some(engine) = get_engine(ptr) else {
-      return;
-    };
-    let state = &engine.dialogs;
-    let picked = if picked.is_null() { None } else { Some(jstring_to_string(env, &picked)) };
-    state.resolve_chooser(&engine._rt, &engine.ctx, request_id, picked.as_deref());
-  })
-}
-
-#[no_mangle]
-pub extern "system" fn Java_desu_inugram_helpers_plugins_QuickJs_nativeResolveFileRequest(
-  mut env: EnvUnowned,
-  _this: JObject,
-  ptr: jlong,
-  request_id: jlong,
-  answer: JString,
-  error: JString,
-) {
-  in_env(&mut env, (), |env| {
-    let _deadline = crate::sandbox::limits::arm_entry_deadline();
-    let Some(engine) = get_engine(ptr) else {
-      return;
-    };
-    let state = &engine.files;
-    let answer = if answer.is_null() { String::new() } else { jstring_to_string(env, &answer) };
-    let error = if error.is_null() { None } else { Some(jstring_to_string(env, &error)) };
-    state.resolve(&engine._rt, &engine.ctx, request_id, &answer, error.as_deref());
-  })
-}
-
-#[no_mangle]
 pub extern "system" fn Java_desu_inugram_helpers_plugins_QuickJs_nativeDispatchScreenChange(
   mut env: EnvUnowned,
   _this: JObject,
@@ -990,25 +934,6 @@ pub extern "system" fn Java_desu_inugram_helpers_plugins_QuickJs_nativeDispatchN
     let name = jstring_to_string(env, &name);
     let args_json = jstring_to_string(env, &args_json);
     state.dispatch(&engine._rt, &engine.ctx, callback_id as u32, &name, account, &args_json);
-  })
-}
-
-#[no_mangle]
-pub extern "system" fn Java_desu_inugram_helpers_plugins_QuickJs_nativeResolveDialog(
-  mut env: EnvUnowned,
-  _this: JObject,
-  ptr: jlong,
-  request_id: jlong,
-  result: JString,
-) {
-  in_env(&mut env, (), |env| {
-    let _deadline = crate::sandbox::limits::arm_entry_deadline();
-    let Some(engine) = get_engine(ptr) else {
-      return;
-    };
-    let state = &engine.dialogs;
-    let result = jstring_to_string(env, &result);
-    state.resolve_dialog(&engine._rt, &engine.ctx, request_id, &result);
   })
 }
 
@@ -1148,102 +1073,6 @@ pub extern "system" fn Java_desu_inugram_helpers_plugins_QuickJs_nativeAbandonDi
     let state = &engine.rpc;
     let reason_wire = jstring_to_string(env, &reason_wire);
     state.abandon_dispatch(&engine._rt, &engine.ctx, dispatch_id, &reason_wire);
-  })
-}
-
-#[no_mangle]
-pub extern "system" fn Java_desu_inugram_helpers_plugins_QuickJs_nativeResolveInvoke(
-  mut env: EnvUnowned,
-  _this: JObject,
-  ptr: jlong,
-  invoke_id: jlong,
-  result_wire: JString,
-) {
-  in_env(&mut env, (), |env| {
-    let _deadline = crate::sandbox::limits::arm_entry_deadline();
-    let Some(engine) = get_engine(ptr) else {
-      return;
-    };
-    let state = &engine.rpc;
-    let result_wire = jstring_to_string(env, &result_wire);
-    state.resolve_invoke(&engine._rt, &engine.ctx, invoke_id, &result_wire);
-  })
-}
-
-#[no_mangle]
-pub extern "system" fn Java_desu_inugram_helpers_plugins_QuickJs_nativeResolveInvokeBytes(
-  mut env: EnvUnowned,
-  _this: JObject,
-  ptr: jlong,
-  invoke_id: jlong,
-  response: JByteArray,
-) {
-  in_env(&mut env, (), |env| {
-    let _deadline = crate::sandbox::limits::arm_entry_deadline();
-    let Some(engine) = get_engine(ptr) else {
-      return;
-    };
-    let Ok(bytes) = env.convert_byte_array(&response) else {
-      return;
-    };
-    engine.rpc.resolve_invoke_bytes(&engine._rt, &engine.ctx, invoke_id, &bytes);
-  })
-}
-
-#[no_mangle]
-pub extern "system" fn Java_desu_inugram_helpers_plugins_QuickJs_nativeResolvePeerResult(
-  mut env: EnvUnowned,
-  _this: JObject,
-  ptr: jlong,
-  request_id: jlong,
-  result_wire: JString,
-) {
-  in_env(&mut env, (), |env| {
-    let _deadline = crate::sandbox::limits::arm_entry_deadline();
-    let Some(engine) = get_engine(ptr) else {
-      return;
-    };
-    let state = &engine.reads;
-    let result_wire = jstring_to_string(env, &result_wire);
-    state.resolve_peer(&engine._rt, &engine.ctx, request_id, &result_wire);
-  })
-}
-
-#[no_mangle]
-pub extern "system" fn Java_desu_inugram_helpers_plugins_QuickJs_nativeAccountFetchResult(
-  mut env: EnvUnowned,
-  _this: JObject,
-  ptr: jlong,
-  request_id: jlong,
-  result_wire: JString,
-) {
-  in_env(&mut env, (), |env| {
-    let _deadline = crate::sandbox::limits::arm_entry_deadline();
-    let Some(engine) = get_engine(ptr) else {
-      return;
-    };
-    let state = &engine.reads;
-    let result_wire = jstring_to_string(env, &result_wire);
-    state.resolve_account_fetch(&engine._rt, &engine.ctx, request_id, &result_wire);
-  })
-}
-
-#[no_mangle]
-pub extern "system" fn Java_desu_inugram_helpers_plugins_QuickJs_nativeWriteResult(
-  mut env: EnvUnowned,
-  _this: JObject,
-  ptr: jlong,
-  request_id: jlong,
-  result_wire: JString,
-) {
-  in_env(&mut env, (), |env| {
-    let _deadline = crate::sandbox::limits::arm_entry_deadline();
-    let Some(engine) = get_engine(ptr) else {
-      return;
-    };
-    let state = &engine.writes;
-    let result_wire = jstring_to_string(env, &result_wire);
-    state.resolve_write(&engine._rt, &engine.ctx, request_id, &result_wire);
   })
 }
 
