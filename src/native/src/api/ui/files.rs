@@ -179,8 +179,7 @@ impl FilesState {
     let parsed = ctx.json_parse(answer)?;
     let array = parsed.as_array().ok_or_else(|| Exception::throw_message(ctx, "pickFile: malformed host answer"))?;
     let files = Array::new(ctx.clone())?;
-    let mut count = 0;
-    for entry in array.iter::<Object>() {
+    for (index, entry) in array.iter::<Object>().enumerate() {
       let entry = entry?;
       let path: String = entry.get("path")?;
       let name: String = entry.get("name")?;
@@ -196,8 +195,7 @@ impl FilesState {
         .and_then(|t| t.duration_since(std::time::UNIX_EPOCH).ok())
         .map(|d| d.as_millis() as i64)
         .unwrap_or(0);
-      files.set(count, mint_owned_file(ctx, &self.blobs, &path, meta.len(), &mime, &name, mtime)?)?;
-      count += 1;
+      files.set(index, mint_owned_file(ctx, &self.blobs, &path, meta.len(), &mime, &name, mtime)?)?;
     }
     if multiple {
       return Ok(files.into_value());

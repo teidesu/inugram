@@ -304,7 +304,7 @@ fn parse_message_placements<'js>(ctx: &Ctx<'js>, opts: &Object<'js>, what: &str)
   let array = value
     .as_array()
     .ok_or_else(|| Exception::throw_type(ctx, &format!("{what}: 'placements' must be a non-empty array")))?;
-  if array.len() == 0 {
+  if array.is_empty() {
     return Err(Exception::throw_type(ctx, &format!("{what}: 'placements' must not be empty")));
   }
   let mut placements = 0;

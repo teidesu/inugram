@@ -222,8 +222,8 @@ struct PluginErrorWire<'a> {
 fn parse_optional_int(s: &str) -> Option<Option<i64>> {
   if s.is_empty() {
     return Some(None);
-  };
-  return s.parse().ok().map(Some);
+  }
+  s.parse().ok().map(Some)
 }
 
 fn parse_plugin_error(payload: &str) -> Option<PluginErrorWire<'_>> {
