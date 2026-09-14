@@ -16,7 +16,7 @@ class PluginLogBudgetTest {
         val workers = List(8) {
             Thread {
                 repeat(1000) {
-                    when (charge.invoke(budget, 1000L).toString()) {
+                    when (charge.invoke(budget, 1000L)!!.toString()) {
                         "PASS" -> passed.incrementAndGet()
                         "LAST" -> last.incrementAndGet()
                         "DROP" -> dropped.incrementAndGet()
@@ -32,6 +32,6 @@ class PluginLogBudgetTest {
         assertEquals(199, passed.get())
         assertEquals(1, last.get())
         assertEquals(7800, dropped.get())
-        assertEquals("PASS", charge.invoke(budget, 10_000L).toString())
+        assertEquals("PASS", charge.invoke(budget, 10_000L)!!.toString())
     }
 }
