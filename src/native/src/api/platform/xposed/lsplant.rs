@@ -47,7 +47,6 @@ struct LSPlant {
   hook: LSPlantHook,
   unhook: LSPlantUnHook,
   is_hooked: LSPlantOnObject,
-  deoptimize: LSPlantOnObject,
 }
 
 struct Native {
@@ -244,7 +243,6 @@ fn load() -> Option<Native> {
     hook: unsafe { dlsym(lsplant_lib, "LSPlantHookC")? },
     unhook: unsafe { dlsym(lsplant_lib, "LSPlantUnHookC")? },
     is_hooked: unsafe { dlsym(lsplant_lib, "LSPlantIsHookedC")? },
-    deoptimize: unsafe { dlsym(lsplant_lib, "LSPlantDeoptimizeC")? },
   };
 
   let art_name = CString::new("libart.so").ok()?;
@@ -302,11 +300,6 @@ pub unsafe fn unhook(env: &mut Env, target: jobject) -> bool {
 pub unsafe fn is_hooked(env: &mut Env, target: jobject) -> bool {
   let Some(native) = native() else { return false };
   (native.lsplant.is_hooked)(env.get_raw(), target)
-}
-
-pub unsafe fn deoptimize(env: &mut Env, method: jobject) -> bool {
-  let Some(native) = native() else { return false };
-  (native.lsplant.deoptimize)(env.get_raw(), method)
 }
 
 extern "C" fn ignore_profile_saver() -> bool {
