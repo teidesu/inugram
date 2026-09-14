@@ -309,3 +309,15 @@ fn get_all_keeps_a_key_named_like_the_prototype() {
   assert_eq!(kv.eval("Object.keys(inu.kv.getAll())"), r#"["__proto__"]"#);
   assert_eq!(kv.eval("inu.kv.getAll()['__proto__']"), "x");
 }
+
+#[test]
+fn keys_defines_its_elements_past_an_array_prototype_setter() {
+  let file = TempPath::default();
+  let kv = open(&file.0, &["kv"]);
+  kv.eval("inu.kv.set('a', '1')");
+  let listed = kv.eval(
+    "Object.defineProperty(Array.prototype, '0', { set(v) { inu.kv.set('seen', v) }, configurable: true }); \
+     const keys = inu.kv.keys(); delete Array.prototype[0]; JSON.stringify([keys.length, inu.kv.get('seen')])",
+  );
+  assert_eq!(listed, r#"[1,null]"#);
+}
