@@ -468,15 +468,6 @@ object PluginManager {
         }
     }
 
-    /**
-     * drops every subsystem this engine reached, closes it, and reclaims what it left on disk.
-     *
-     * The order is load-bearing twice over and both loads are why this is one function rather than
-     * a sequence written out at each of the two sites that need it: `inu.xposed` reads `inu.jvm`'s
-     * handle table while taking its hooks down, and the three `wipe`s can only run after `close()`,
-     * which is when rust lets go of the descriptors it holds per spill file. [beforeClear] runs
-     * while `plugin.engine` still points at [engine], which is what [fail] reads.
-     */
     private val CHAIN_OWNERS: List<SessionResource> = listOf(PluginRpc, PluginUpdates)
 
     private val SESSION_RESOURCES: List<SessionResource> = listOf(
@@ -492,6 +483,15 @@ object PluginManager {
         PluginJvm,
     )
 
+    /**
+     * drops every subsystem this engine reached, closes it, and reclaims what it left on disk.
+     *
+     * The order is load-bearing twice over and both loads are why this is one function rather than
+     * a sequence written out at each of the two sites that need it: `inu.xposed` reads `inu.jvm`'s
+     * handle table while taking its hooks down, and the three `wipe`s can only run after `close()`,
+     * which is when rust lets go of the descriptors it holds per spill file. [beforeClear] runs
+     * while `plugin.engine` still points at [engine], which is what [fail] reads.
+     */
     private fun teardown(session: PluginSession, beforeClear: () -> Unit = {}) {
         session.engine.stopCallbacks()
         // the plugin's handle table spans both, and is released last of the three: the abandons
