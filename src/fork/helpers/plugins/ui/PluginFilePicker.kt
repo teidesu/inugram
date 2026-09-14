@@ -34,7 +34,7 @@ internal object PluginFilePicker : SessionResource {
     private const val TAG = "InuPluginFiles"
 
     /** what the app's cache can reasonably take a copy of, and what a plugin may be handed at once */
-    private const val MAX_PICK_BYTES = 256L * 1024 * 1024
+    internal const val MAX_PICK_BYTES = 256L * 1024 * 1024
 
     private const val COPY_CHUNK_BYTES = 256 * 1024
 
@@ -48,7 +48,7 @@ internal object PluginFilePicker : SessionResource {
     private val waiting = OwnerRegistry<PluginSession, NotificationCenter.NotificationCenterDelegate>()
 
     /** a copy made for a plugin nobody is waiting for any more is deleted rather than left in its spill directory */
-    private class Picked(val wire: String, val copies: List<File> = emptyList())
+    internal class Picked(val wire: String, val copies: List<File> = emptyList())
 
     override fun detach(session: PluginSession) {
         val observers = waiting.take(session)
@@ -175,7 +175,7 @@ internal object PluginFilePicker : SessionResource {
      * The copies the plugin is handed, or nothing at all: a pick that fails halfway leaves no file
      * behind, and neither does a picker that answered with more files than were asked for.
      */
-    private fun copyIn(session: PluginSession, uris: List<Uri>, multiple: Boolean): Picked {
+    internal fun copyIn(session: PluginSession, uris: List<Uri>, multiple: Boolean): Picked {
         val wanted = if (multiple) uris else uris.take(1)
         if (wanted.isEmpty()) return Picked(PluginWire.encodeJson("[]"))
         val root = PluginBlobs.dirFor(session.plugin.id)
