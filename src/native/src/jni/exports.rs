@@ -504,17 +504,6 @@ pub extern "system" fn Java_desu_inugram_helpers_plugins_platform_PluginXposed_0
 }
 
 #[no_mangle]
-pub extern "system" fn Java_desu_inugram_helpers_plugins_platform_PluginXposed_00024Native_nativeMakeInheritable<
-  'local,
->(
-  mut env: EnvUnowned<'local>,
-  _this: JObject<'local>,
-  target: JObject<'local>,
-) -> jboolean {
-  in_env(&mut env, false, |env| unsafe { xposed::lsplant::make_inheritable(env, target.as_raw()) })
-}
-
-#[no_mangle]
 pub extern "system" fn Java_desu_inugram_helpers_plugins_platform_PluginXposed_00024Native_nativeAllocateInstance<
   'local,
 >(

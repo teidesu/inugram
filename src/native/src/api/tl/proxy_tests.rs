@@ -89,10 +89,6 @@ impl FakeTlHost {
     self.counts.gets.borrow().len()
   }
 
-  fn sets_of(&self, key: &str) -> usize {
-    self.counts.sets.borrow().iter().filter(|k| k.as_str() == key).count()
-  }
-
   fn has_of(&self, key: &str) -> usize {
     self.counts.has.borrow().iter().filter(|k| k.as_str() == key).count()
   }

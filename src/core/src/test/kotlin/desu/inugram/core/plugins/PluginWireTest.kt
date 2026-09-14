@@ -191,15 +191,4 @@ class PluginWireTest {
     fun `an unscoped refusal carries the bare grant name`() {
         assertEquals("Pnot-granted\nkv\n\n\nmissing grant: kv", PluginWire.encodeNotGranted("kv"))
     }
-    @Test
-    fun `describes refusal code message and optional details`() {
-        assertEquals(
-            "invalid-argument: jvm: malformed handle argument",
-            PluginWire.describePluginError(PluginWire.encodePluginError("invalid-argument", "jvm: malformed handle argument")),
-        )
-        assertEquals(
-            "quota-exceeded: too large [grant=unsafe.jvm] [usage=12] [quota=8]",
-            PluginWire.describePluginError(PluginWire.encodePluginError("quota-exceeded", "too large", "unsafe.jvm", 12, 8)),
-        )
-    }
 }

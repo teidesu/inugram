@@ -234,10 +234,12 @@ impl<T: Parked> PendingTable<T> {
     self.entries.borrow().values().filter(|entry| matches(&entry.parked)).count()
   }
 
+  #[cfg(test)]
   pub(crate) fn is_empty(&self) -> bool {
     self.entries.borrow().is_empty()
   }
 
+  #[cfg(test)]
   pub(crate) fn len(&self) -> usize {
     self.entries.borrow().len()
   }

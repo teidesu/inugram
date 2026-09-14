@@ -62,19 +62,6 @@ class ActionRegistry<T : Any>(private val perKindLimit: Int = DEFAULT_PER_KIND_L
     fun count(owner: T, kind: Int, placements: Int = ALL_PLACEMENTS): Int =
         rows[owner]?.get(kind)?.values?.count { it.placements and placements != 0 } ?: 0
 
-    fun tokenFor(owner: T, kind: Int, id: String): Int? = rows[owner]?.get(kind)?.get(id)?.token
-
-    fun idForToken(owner: T, kind: Int, token: Int): String? =
-        rows[owner]?.get(kind)?.entries?.firstOrNull { it.value.token == token }?.key
-
-    fun idsInOrder(kind: Int, order: List<T>, placements: Int = ALL_PLACEMENTS): List<Pair<T, String>> = buildList {
-        for (owner in order) {
-            for ((id, value) in rows[owner]?.get(kind).orEmpty()) {
-                if (value.placements and placements != 0) add(owner to id)
-            }
-        }
-    }
-
     fun registrationsInOrder(
         kind: Int,
         order: List<T>,
@@ -90,20 +77,6 @@ class ActionRegistry<T : Any>(private val perKindLimit: Int = DEFAULT_PER_KIND_L
 
     fun size(kind: Int, order: List<T>, placements: Int = ALL_PLACEMENTS): Int =
         order.sumOf { count(it, kind, placements) }
-
-    fun <R> rowsInOrder(
-        kind: Int,
-        order: List<T>,
-        placements: Int = ALL_PLACEMENTS,
-        render: (T) -> List<R>?,
-    ): List<R> {
-        val out = mutableListOf<R>()
-        for (owner in order) {
-            if (count(owner, kind, placements) == 0) continue
-            out.addAll(render(owner).orEmpty())
-        }
-        return out
-    }
 
     companion object {
         const val DEFAULT_PER_KIND_LIMIT = 8

@@ -11,7 +11,11 @@ class ActionRowsTest {
         override fun toString(): String = name
     }
 
-    private data class Row(val owner: Owner, val token: Int, val text: String)
+    private fun ActionRegistry<Owner>.ids(kind: Int, order: List<Owner>, placements: Int = -1): List<Pair<Owner, String>> =
+        registrationsInOrder(kind, order, placements).map { it.owner to it.id }
+
+    private fun ActionRegistry<Owner>.tokenOf(owner: Owner, kind: Int, id: String): Int =
+        registrationsInOrder(kind, listOf(owner)).single { it.id == id }.token
 
     private val chat = 1
     private val message = 2
@@ -84,11 +88,11 @@ class ActionRowsTest {
         assertEquals(2, registry.count(owner, message, selection))
         assertEquals(
             listOf(owner to "bubble-1", owner to "bubble-2"),
-            registry.idsInOrder(message, listOf(owner), bubble),
+            registry.ids(message, listOf(owner), bubble),
         )
         assertEquals(
             listOf(owner to "selection-1", owner to "selection-2"),
-            registry.idsInOrder(message, listOf(owner), selection),
+            registry.ids(message, listOf(owner), selection),
         )
     }
 
@@ -99,11 +103,11 @@ class ActionRowsTest {
         assertNull(registry.register(a, chat, 1, "one"))
         assertNull(registry.register(a, chat, 2, "one"))
         assertEquals(1, registry.count(a, chat))
-        assertEquals(2, registry.tokenFor(a, chat, "one"))
+        assertEquals(2, registry.tokenOf(a, chat, "one"))
 
         registry.unregister(a, chat, 1)
         assertEquals("retiring the displaced token does not take the replacement with it", 1, registry.count(a, chat))
-        assertEquals(2, registry.tokenFor(a, chat, "one"))
+        assertEquals(2, registry.tokenOf(a, chat, "one"))
     }
 
     @Test
@@ -114,7 +118,7 @@ class ActionRowsTest {
         assertNull(registry.register(a, chat, 2, "two"))
         assertNull("updating a row is how a plugin changes it, and the cap must not forbid that", registry.register(a, chat, 3, "one"))
         assertEquals(2, registry.count(a, chat))
-        assertEquals(3, registry.tokenFor(a, chat, "one"))
+        assertEquals(3, registry.tokenOf(a, chat, "one"))
         assertNotNull("a genuinely new row is still refused", registry.register(a, chat, 4, "three"))
     }
 
@@ -138,15 +142,8 @@ class ActionRowsTest {
         registry.register(a, chat, 1, "a")
         registry.register(a, chat, 2, "a2")
 
-        val render = { owner: Owner -> listOf(Row(owner, 1, owner.name)) }
-        assertEquals(
-            listOf(Row(a, 1, "a"), Row(c, 1, "c")),
-            registry.rowsInOrder(chat, listOf(a, b, c), render = render),
-        )
-        assertEquals(
-            listOf(Row(c, 1, "c"), Row(a, 1, "a")),
-            registry.rowsInOrder(chat, listOf(c, b, a), render = render),
-        )
+        assertEquals(listOf(a to "a", a to "a2", c to "c"), registry.ids(chat, listOf(a, b, c)))
+        assertEquals(listOf(c to "c", a to "a", a to "a2"), registry.ids(chat, listOf(c, b, a)))
     }
 
     @Test
@@ -158,8 +155,8 @@ class ActionRowsTest {
         registry.register(a, chat, 7, "second")
         registry.register(b, chat, 2, "third")
 
-        assertEquals("second", registry.idForToken(a, chat, 7))
-        assertEquals(listOf(b to "third", a to "first", a to "second"), registry.idsInOrder(chat, listOf(b, a)))
+        assertEquals("second", registry.registrationsInOrder(chat, listOf(a)).single { it.token == 7 }.id)
+        assertEquals(listOf(b to "third", a to "first", a to "second"), registry.ids(chat, listOf(b, a)))
     }
 
     @Test
@@ -175,50 +172,14 @@ class ActionRowsTest {
     }
 
     @Test
-    fun anOwnerMissingFromTheOrderIsNeitherAskedNorDrawn() {
+    fun anOwnerMissingFromTheOrderIsNotDrawn() {
         val registry = ActionRegistry<Owner>()
         val a = Owner("a")
         val gone = Owner("gone")
         registry.register(a, chat, 1, "a")
         registry.register(gone, chat, 1, "gone")
 
-        val asked = mutableListOf<Owner>()
-        val out = registry.rowsInOrder(chat, listOf(a)) { owner ->
-            asked.add(owner)
-            listOf(Row(owner, 1, owner.name))
-        }
-        assertEquals(listOf(a), asked)
-        assertEquals(listOf(Row(a, 1, "a")), out)
+        assertEquals(listOf(a to "a"), registry.ids(chat, listOf(a)))
         assertEquals("a menu reserves no room for an owner that is gone", 1, registry.size(chat, listOf(a)))
-    }
-
-    @Test
-    fun anOwnerWithNoRowsOfThatKindIsNotAsked() {
-        val registry = ActionRegistry<Owner>()
-        val a = Owner("a")
-        val b = Owner("b")
-        registry.register(a, chat, 1, "a")
-        registry.register(b, message, 1, "b")
-
-        val asked = mutableListOf<Owner>()
-        registry.rowsInOrder(chat, listOf(a, b)) { owner ->
-            asked.add(owner)
-            emptyList<Row>()
-        }
-        assertEquals(listOf(a), asked)
-    }
-
-    @Test
-    fun anEngineThatCouldNotAnswerContributesNothingAndDoesNotStopTheRest() {
-        val registry = ActionRegistry<Owner>()
-        val a = Owner("a")
-        val b = Owner("b")
-        registry.register(a, chat, 1, "a")
-        registry.register(b, chat, 1, "b")
-
-        val out = registry.rowsInOrder(chat, listOf(a, b)) { owner ->
-            if (owner === a) null else listOf(Row(owner, 1, "B"))
-        }
-        assertEquals(listOf(Row(b, 1, "B")), out)
     }
 }
