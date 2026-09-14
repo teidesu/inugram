@@ -76,9 +76,8 @@ object PluginActions : SessionResource {
     private const val DYNAMIC_PRESENTATION = DYNAMIC_TEXT or DYNAMIC_ICON
     private const val DYNAMIC_ALL = DYNAMIC_PRESENTATION or DYNAMIC_VISIBLE
 
-    // keep in sync with rust `actions::EDITOR_*`
+    // keep in sync with rust `actions::EDITOR_*`; anything but replace sends
     const val EDITOR_REPLACE = 0
-    const val EDITOR_SEND = 1
 
     /** globalQueue is shared with every other engine op, so the wait has to be bounded by something other than the plugins' own good behaviour */
     const val RENDER_BUDGET_MS = 150L

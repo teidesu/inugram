@@ -495,15 +495,6 @@ pub extern "system" fn Java_desu_inugram_helpers_plugins_platform_PluginXposed_0
 }
 
 #[no_mangle]
-pub extern "system" fn Java_desu_inugram_helpers_plugins_platform_PluginXposed_00024Native_nativeDeoptimize<'local>(
-  mut env: EnvUnowned<'local>,
-  _this: JObject<'local>,
-  method: JObject<'local>,
-) -> jboolean {
-  in_env(&mut env, false, |env| unsafe { xposed::lsplant::deoptimize(env, method.as_raw()) })
-}
-
-#[no_mangle]
 pub extern "system" fn Java_desu_inugram_helpers_plugins_platform_PluginXposed_00024Native_nativeAllocateInstance<
   'local,
 >(

@@ -59,7 +59,6 @@ object PluginXposed : SessionResource {
         external fun nativeHook(target: Member, hooker: Any, callback: Method): Member?
         external fun nativeUnhook(target: Member): Boolean
         external fun nativeIsHooked(target: Member): Boolean
-        external fun nativeDeoptimize(method: Member): Boolean
         external fun nativeAllocateInstance(target: Class<*>): Any?
         external fun nativeDisableProfileSaver(): Boolean
     }
@@ -540,8 +539,6 @@ object PluginXposed : SessionResource {
         "java.lang.Float",
         "java.lang.Double",
     )
-
-    internal fun deoptimize(method: Member): Boolean = ensureReady() && Native.nativeDeoptimize(method)
 
     internal fun isHooked(method: Member): Boolean = ensureReady() && Native.nativeIsHooked(method)
 }
