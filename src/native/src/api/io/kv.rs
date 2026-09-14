@@ -362,7 +362,7 @@ pub fn install_kv<'js>(
       let store = s.open_store(&ctx)?;
       let array = Array::new(ctx.clone())?;
       for (index, key) in store.entries.keys().enumerate() {
-        array.set(index, key.as_str())?;
+        array.prop(index as u32, Property::from(key.as_str()).writable().enumerable().configurable())?;
       }
       Ok(array)
     })?,
