@@ -7,7 +7,7 @@ import org.telegram.messenger.Utilities
  * The app's two dispatch queues, made deterministic for the length of a test.
  *
  * [Utilities.globalQueue]/[Utilities.stageQueue] are `volatile` and not `final`, so a test swaps its
- * own in and puts the app's back in `@After`. Both share one ordering - (due time, then post order),
+ * own in. Both share one ordering - (due time, then post order),
  * which is what a `Handler` gives a single queue and the only cross-queue property the bridge may
  * depend on - and nothing runs until [drain].
  *
@@ -15,20 +15,18 @@ import org.telegram.messenger.Utilities
  * reads this same clock, so suspending and resuming a chain budget uses the elapsed test time.
  */
 object TestQueues {
-    private class Task(val runnable: Runnable, val due: Long, val seq: Long, val queue: String)
+    private class Task(val runnable: Runnable, val due: Long, val seq: Long)
 
     private val pending = ArrayList<Task>()
     private var nextSeq = 1L
     private var offset = 0L
-    private var saved: List<DispatchQueue>? = null
     private var testThread: Thread? = null
-    private var savedScheduler: desu.inugram.core.plugins.DispatchScheduler? = null
 
-    private class Recording(private val label: String) : DispatchQueue(label, false) {
+    private class Recording(label: String) : DispatchQueue(label, false) {
         override fun postRunnable(runnable: Runnable): Boolean = postRunnable(runnable, 0)
 
         override fun postRunnable(runnable: Runnable, delay: Long): Boolean {
-            post(runnable, delay, label)
+            post(runnable, delay)
             return true
         }
 
@@ -52,11 +50,11 @@ object TestQueues {
      * deliberately through `runOnMainSync`, so neither of those may be dropped.
      */
     @Synchronized
-    private fun post(runnable: Runnable, delay: Long, queue: String) {
+    private fun post(runnable: Runnable, delay: Long) {
         val current = Thread.currentThread()
         val driven = current === testThread || current === android.os.Looper.getMainLooper().thread
         if (!driven && !runnable.javaClass.name.startsWith("desu.inugram.")) return
-        pending.add(Task(runnable, now() + delay, nextSeq++, queue))
+        pending.add(Task(runnable, now() + delay, nextSeq++))
     }
 
     @Synchronized
@@ -99,16 +97,12 @@ object TestQueues {
     }
 
     fun install() {
-        if (savedScheduler == null) savedScheduler = EngineDispatch.scheduler
         EngineDispatch.scheduler = object : desu.inugram.core.plugins.DispatchScheduler {
             override fun nowMillis(): Long = now()
             override fun postRunnable(task: Runnable, delayMillis: Long) {
-                TestQueues.post(task, delayMillis, "pluginQueue")
+                TestQueues.post(task, delayMillis)
             }
             override fun cancel(task: Runnable) = TestQueues.cancel(task)
-        }
-        if (saved == null) {
-            saved = listOf(Utilities.globalQueue, Utilities.stageQueue, Utilities.cacheClearQueue)
         }
         synchronized(this) {
             pending.clear()
@@ -123,18 +117,6 @@ object TestQueues {
         Utilities.cacheClearQueue = Recording("cacheClearQueue")
     }
 
-    fun restore() {
-        savedScheduler?.let { EngineDispatch.scheduler = it }
-        savedScheduler = null
-        saved?.let { (global, stage, cacheClear) ->
-            Utilities.globalQueue = global
-            Utilities.stageQueue = stage
-            Utilities.cacheClearQueue = cacheClear
-        }
-        saved = null
-        synchronized(this) { pending.clear() }
-    }
-
     /** runs everything already due, including what those runnables post, without waiting */
     fun drain(): Int {
         var ran = 0
@@ -144,7 +126,4 @@ object TestQueues {
             ran++
         }
     }
-
-    @Synchronized
-    fun pendingQueues(): List<String> = pending.map { it.queue }
 }
