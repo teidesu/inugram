@@ -47,7 +47,7 @@
   // 0 is "no limit" for an iterator, which is what an omitted one means: it pages to the end
   const toLimit = (value, what) => toCount(value, what, 'limit')
 
-  // keep in sync with rust `reads::ARCHIVE_*` and Kotlin `PluginReads.ARCHIVE_*`
+  // keep in sync with Kotlin `PluginReads.ARCHIVE_*`, which reads anything else as exclude
   // a Map rather than an object literal: `archive` is plugin input, and a lookup on a literal
   // answers for 'constructor' and friends too
   const ARCHIVE = new Map([['exclude', 0], ['only', 1], ['keep', 2]])

@@ -20,7 +20,7 @@ use crate::utils::arguments::opt_bool;
 const MAX_ACCEPT_TYPES: usize = 32;
 
 pub trait FilesHost {
-  /// both answer through [`FilesState::resolve`]; the return is the refusal of the ask itself
+  /// both answer through [`FilesState::settle`]; the return is the refusal of the ask itself
   fn ui_files(&self, op: i32, request_id: i64, options_json: &str) -> Option<String>;
 }
 

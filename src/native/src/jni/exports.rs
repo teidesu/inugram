@@ -702,7 +702,7 @@ fn install_engine_fs(
   Some(())
 }
 
-/// the one way a host answers a request it took: [`api`] names the table, see `QuickJs.SETTLE_*`
+/// the one way a host answers a request it took: `api` names the table, see `QuickJs.SETTLE_*`
 #[no_mangle]
 pub extern "system" fn Java_desu_inugram_helpers_plugins_QuickJs_nativeSettle(
   mut env: EnvUnowned,

@@ -23,12 +23,12 @@ import org.telegram.ui.Components.UniversalAdapter
 import org.telegram.ui.Stories.recorder.ButtonWithCounterView
 
 /**
- * Generic host for a plugin-defined settings page (`inu.ui.settingsPage`; rust: `ui.rs`). The
+ * Generic host for a plugin-defined settings page (`inu.ui.settingsPage`; rust: `pages.rs`). The
  * page is a declarative model: [requestRender] asks the engine (on the plugin queue) for the current
  * element tree as JSON, [fillItems] maps it onto UItems, and every user interaction dispatches a
  * callback slot back into JS followed by an automatic re-render.
  *
- * Row identity is the `key` the engine stamps on every element (`ui.rs`'s `alloc_row_key`), which
+ * Row identity is the `key` the engine stamps on every element (`pages.rs`'s `alloc_row_key`), which
  * is also what a `UIAnchor` names; here it is hashed to the stable int the list differ wants.
  */
 class PluginSettingsActivity(

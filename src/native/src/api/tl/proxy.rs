@@ -16,7 +16,7 @@ use crate::api::error::PluginErrorCode;
 
 const BYTES_MARKER_KEY: &str = "$inuBytes";
 
-/// what [`TlHost::read_field`] answers when it will not serve a read, sending it back to `tl_get`
+/// what [`TlHost::tl_read_field`] answers when it will not serve a read, sending it back to `tl_get`
 pub const ORDINAL_FALLBACK: i32 = -1;
 
 /// tags in the read buffer, mirrored in `TlHandles.kt`
@@ -35,7 +35,7 @@ mod tag {
 pub trait TlHost {
   fn tl_get(&self, handle: i64, key: &str) -> String;
 
-  /// the ordinal [`Self::read_field`] takes for this field, or [`ORDINAL_FALLBACK`]
+  /// the ordinal [`Self::tl_read_field`] takes for this field, or [`ORDINAL_FALLBACK`]
   fn tl_resolve_field(&self, _class_id: i32, _key: &str) -> i32 {
     ORDINAL_FALLBACK
   }
@@ -51,7 +51,7 @@ pub trait TlHost {
   }
   fn tl_set(&self, handle: i64, key: &str, value_wire: &str) -> Option<String>;
   /// the write half of `TAG_BYTES`: a `Uint8Array` assignment goes over as a java `byte[]` rather
-  /// than base64 in [`tl_set`]'s wire, which is what reads have always done
+  /// than base64 in [`Self::tl_set`]'s wire, which is what reads have always done
   fn tl_set_bytes(&self, handle: i64, key: &str, value: &[u8]) -> Option<String>;
   fn tl_has(&self, handle: i64, key: &str) -> i32;
   fn tl_own_keys(&self, handle: i64) -> Option<String>;
@@ -279,7 +279,7 @@ fn parse_handle(payload: &str) -> Option<(bool, bool, i64, i32, Option<&str>)> {
   Some((is_vector, read_only, id.parse().ok()?, class_id, projection))
 }
 
-/// reads what [`TlHost::read_field`] wrote. Every length it trusts was written by the host beside
+/// reads what [`TlHost::tl_read_field`] wrote. Every length it trusts was written by the host beside
 /// the bytes it counts, so a short read is a bug on that side rather than a plugin's doing
 struct Reader<'a> {
   bytes: &'a [u8],

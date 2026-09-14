@@ -49,7 +49,7 @@ import org.telegram.ui.ProfileActivity
 import org.telegram.ui.SettingsActivity
 
 /**
- * Kotlin side of the settings-page ui bridge (rust: `ui.rs`): presents [PluginSettingsActivity]
+ * Kotlin side of the settings-page ui bridge (rust: `pages.rs`): presents [PluginSettingsActivity]
  * pages, routes `page.invalidate()` to open pages, anchors `UIAnchor.openMenu` popups to the row
  * the anchor names, and shows bulletins plus the `inu.ui.dialog`/`prompt`/`chooser` modals.
  *
