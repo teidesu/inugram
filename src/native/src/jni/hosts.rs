@@ -345,7 +345,7 @@ impl JvmReflectHost for JniBridge {
     mode: i32,
   ) -> Result<JObjectArray<'l, JObject<'l>>, String> {
     let name = Self::new_jstring(env, "jvmResolve", name)?;
-    let args = [JValue::Object(target).as_jni(), JValue::Object(&*name).as_jni(), JValue::Int(mode).as_jni()];
+    let args = [JValue::Object(target).as_jni(), JValue::Object(&name).as_jni(), JValue::Int(mode).as_jni()];
     let result = unsafe { env.call_method_unchecked(&self.target, self.on_jvm_resolve, ReturnType::Object, &args) };
     if clear_exception(env) {
       return Err("jvmResolve: host callback threw".to_string());

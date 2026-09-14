@@ -167,10 +167,7 @@ pub fn parse_font(text: &str) -> Option<Font> {
       "small-caps" => font.small_caps = true,
       "ultra-condensed" | "extra-condensed" | "condensed" | "semi-condensed" | "semi-expanded" | "expanded"
       | "extra-expanded" | "ultra-expanded" => {}
-      _ => match parse_weight(&lower) {
-        Some(weight) => font.weight = weight,
-        None => return None,
-      },
+      _ => font.weight = parse_weight(&lower)?,
     }
   }
 

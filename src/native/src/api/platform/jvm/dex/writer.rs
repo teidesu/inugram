@@ -72,7 +72,7 @@ fn write_u32_at(out: &mut [u8], at: usize, value: u32) {
   out[at..at + 4].copy_from_slice(&value.to_le_bytes());
 }
 fn align_buffer(out: &mut Vec<u8>) {
-  while out.len() % 4 != 0 {
+  while !out.len().is_multiple_of(4) {
     out.push(0);
   }
 }
