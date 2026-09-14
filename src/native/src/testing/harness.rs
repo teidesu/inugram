@@ -4,13 +4,9 @@ use std::ops::Deref;
 use std::rc::Rc;
 use std::sync::{Arc, Mutex, MutexGuard};
 
-use crate::api::io::kv::{
-  KvHost, KV_CLEAR, KV_DEL, KV_GET, KV_GET_ALL, KV_HAS, KV_INSERT_ALL, KV_KEYS, KV_SET, KV_USAGE,
-};
 use crate::api::lifecycle::LifecycleState;
 use crate::api::platform::clipboard::ClipboardHost;
 use crate::api::platform::open_url::OpenUrlHost;
-use crate::api::tl::proxy;
 use crate::api::ui::dialogs::{DialogHost, DialogState};
 use crate::sandbox::grants::TestGrantHost;
 use crate::sandbox::registry::Lifecycle;
@@ -297,18 +293,12 @@ pub(crate) fn manifest_header(source: &str) -> Vec<(String, String)> {
 /// The four surfaces that answer to one upcall each, faked together: [`setup_apis`] installs all of
 /// them over one of these, because each is a handful of members and the two bundled oracles reach
 /// across them. `fail_*` holds a verbatim error wire to answer with.
-/// `PluginKv.MAX_BYTES`. Mirrored rather than shared: the host is java's, and the oracle only
-/// asks that a store which enforces *some* cap answers the wire this side decodes.
-const KV_TEST_QUOTA: usize = 1 << 20;
-
-/// in-memory kv + recorded ui calls; `fail_kv` holds a verbatim error wire to answer with
 #[derive(Default)]
 pub(crate) struct RecordingHost {
-  pub(crate) store: RefCell<std::collections::BTreeMap<String, String>>,
+  pub(crate) kv_file: TempPath,
   pub(crate) toasts: RefCell<Vec<String>>,
   pub(crate) bulletins: RefCell<Vec<(String, String)>>,
   pub(crate) dialogs: RefCell<Vec<(i64, String)>>,
-  pub(crate) fail_kv: RefCell<Option<String>>,
   pub(crate) fail_dialog: RefCell<Option<String>>,
   pub(crate) opened: RefCell<Vec<String>>,
   pub(crate) clipboard: RefCell<String>,
@@ -316,61 +306,6 @@ pub(crate) struct RecordingHost {
   pub(crate) choosers: RefCell<Vec<(i64, String)>>,
   pub(crate) fail_chooser: RefCell<Option<String>>,
   pub(crate) prompts: RefCell<Vec<(i64, String)>>,
-}
-
-impl KvHost for RecordingHost {
-  fn kv(&self, op: i32, key: &str, value: &str) -> String {
-    if let Some(wire) = self.fail_kv.borrow().as_ref() {
-      return wire.clone();
-    }
-    let mut store = self.store.borrow_mut();
-    match op {
-      KV_GET => match store.get(key) {
-        Some(v) => format!("S{v}"),
-        None => "N".to_string(),
-      },
-      KV_SET => {
-        let mut total: usize = store.iter().filter(|(k, _)| k.as_str() != key).map(|(k, v)| k.len() + v.len()).sum();
-        total += key.len() + value.len();
-        if total > KV_TEST_QUOTA {
-          return format!("Pquota-exceeded\n\n{total}\n{KV_TEST_QUOTA}\nkv: 1 MB per-plugin quota exceeded");
-        }
-        store.insert(key.to_string(), value.to_string());
-        "N".to_string()
-      }
-      KV_DEL => {
-        store.remove(key);
-        "N".to_string()
-      }
-      KV_KEYS => {
-        let keys: Vec<String> = store.keys().map(|k| format!("\"{k}\"")).collect();
-        format!("J[{}]", keys.join(","))
-      }
-      KV_CLEAR => {
-        store.clear();
-        "N".to_string()
-      }
-      KV_GET_ALL => {
-        let entries: Vec<String> = store.iter().map(|(k, v)| format!("\"{k}\":\"{v}\"")).collect();
-        format!("J{{{}}}", entries.join(","))
-      }
-      KV_INSERT_ALL => {
-        // value is a JSON object of string->string; cheap parse good enough for tests
-        let trimmed = value.trim_start_matches('{').trim_end_matches('}');
-        for pair in trimmed.split(',').filter(|p| !p.is_empty()) {
-          let (k, v) = pair.split_once(':').unwrap();
-          store.insert(k.trim_matches('"').to_string(), v.trim_matches('"').to_string());
-        }
-        "N".to_string()
-      }
-      KV_HAS => format!("J{}", store.contains_key(key)),
-      KV_USAGE => {
-        let total: usize = store.iter().map(|(k, v)| k.len() + v.len()).sum();
-        format!("J{total}")
-      }
-      _ => proxy::encode_error("unknown op"),
-    }
-  }
 }
 
 impl DialogHost for RecordingHost {
@@ -433,6 +368,25 @@ pub(crate) type ApiFixture = (
   std::sync::Arc<Logs>,
 );
 
+/// a path in the temp dir that is one test's alone, removed with it along with anything staged beside it
+pub(crate) struct TempPath(pub(crate) std::path::PathBuf);
+
+impl Default for TempPath {
+  fn default() -> Self {
+    static NEXT: std::sync::atomic::AtomicUsize = std::sync::atomic::AtomicUsize::new(0);
+    let serial = NEXT.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+    TempPath(std::env::temp_dir().join(format!("inu-test-{}-{serial}", std::process::id())))
+  }
+}
+
+impl Drop for TempPath {
+  fn drop(&mut self) {
+    let _ = std::fs::remove_file(&self.0);
+    let _ = std::fs::remove_dir_all(&self.0);
+    let _ = std::fs::remove_file(crate::api::io::kv::staged_path(&self.0));
+  }
+}
+
 pub(crate) fn setup_apis(grants: &[&str]) -> ApiFixture {
   let rt = Runtime::new().unwrap();
   let ctx = Context::full(&rt).unwrap();
@@ -445,7 +399,7 @@ pub(crate) fn setup_apis(grants: &[&str]) -> ApiFixture {
     crate::api::error::install_plugin_error(&ctx).unwrap();
     let lifecycle =
       crate::api::lifecycle::install_lifecycle(&ctx, grants.clone(), Lifecycle::new(), log.clone(), &inu).unwrap();
-    crate::api::io::kv::install_kv(&ctx, host.clone(), grants.clone(), &inu).unwrap();
+    crate::api::io::kv::install_kv(&ctx, host.kv_file.0.clone(), grants.clone(), &inu).unwrap();
     crate::api::platform::clipboard::install_clipboard(&ctx, host.clone(), grants.clone(), &inu).unwrap();
     crate::api::platform::open_url::install_open_url(&ctx, host.clone(), grants.clone(), &inu).unwrap();
     let dialogs = crate::api::ui::dialogs::install_dialogs(&ctx, host.clone(), None, log.clone(), &inu).unwrap();

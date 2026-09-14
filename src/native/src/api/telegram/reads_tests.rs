@@ -6,7 +6,6 @@ use crate::api::telegram::account::tests::TestAccountHost;
 use crate::api::tl::proxy::TlHost;
 use crate::sandbox::grants::TestGrantHost;
 use rquickjs::Context;
-use std::collections::HashMap;
 
 // the kinds `reads.js` sends and Kotlin `PluginReads.KIND_*` receives; only the fake host has a
 // reason to name them on this side, since the engine passes the number straight through
@@ -1417,8 +1416,6 @@ fn the_bundled_async_reads_test_plugin_passes() {
 /// module growing a copy of the other four.
 mod grant_boundary {
   use super::*;
-  use crate::api::io::kv::KvHost;
-  use crate::api::io::kv::{KV_GET, KV_SET};
   use crate::api::platform::clipboard::ClipboardHost;
   use crate::api::platform::open_url::OpenUrlHost;
   use crate::api::telegram::rpc::RpcHost;
@@ -1429,24 +1426,7 @@ mod grant_boundary {
   /// other member has to be refused before it could reach any of this
   #[derive(Default)]
   struct TestBoundaryHost {
-    kv: RefCell<HashMap<String, String>>,
     crossings: Cell<usize>,
-  }
-
-  impl KvHost for TestBoundaryHost {
-    fn kv(&self, op: i32, key: &str, value: &str) -> String {
-      match op {
-        KV_GET => match self.kv.borrow().get(key) {
-          Some(found) => format!("S{found}"),
-          None => "N".to_string(),
-        },
-        KV_SET => {
-          self.kv.borrow_mut().insert(key.to_string(), value.to_string());
-          "N".to_string()
-        }
-        _ => "Einternal: unexpected kv op".to_string(),
-      }
-    }
   }
 
   impl DialogHost for TestBoundaryHost {
@@ -1558,13 +1538,13 @@ mod grant_boundary {
 
     // the order `nativeInstallApi`/`nativeInstallRpc` install in, which is what makes the
     // `Account` prototype and the demuxed events exist
+    let kv_file = crate::testing::harness::TempPath::default();
     let (reads_state, accounts, rpc_state) = ctx.with(|ctx| {
       let inu = crate::testing::harness::get_api_globals(&ctx);
       install_plugin_error(&ctx).unwrap();
       crate::api::lifecycle::install_lifecycle(&ctx, grants.clone(), lifecycle.clone(), log.clone(), &inu).unwrap();
       let inu = crate::testing::harness::get_api_globals(&ctx);
-      let kv_host: Rc<dyn KvHost> = boundary.clone();
-      crate::api::io::kv::install_kv(&ctx, kv_host, grants.clone(), &inu).unwrap();
+      crate::api::io::kv::install_kv(&ctx, kv_file.0.clone(), grants.clone(), &inu).unwrap();
       let clipboard_host: Rc<dyn ClipboardHost> = boundary.clone();
       crate::api::platform::clipboard::install_clipboard(&ctx, clipboard_host, grants.clone(), &inu).unwrap();
       let open_url_host: Rc<dyn OpenUrlHost> = boundary.clone();

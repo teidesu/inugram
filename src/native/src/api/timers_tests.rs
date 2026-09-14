@@ -471,11 +471,8 @@ fn a_nonsense_delay_is_taken_as_zero_and_a_huge_one_is_clamped() {
 #[cfg(test)]
 mod bundled_oracle {
   use super::*;
-  use crate::api::io::kv::KvHost;
-  use crate::api::io::kv::{KV_DEL, KV_GET, KV_SET};
   use crate::sandbox::grants::TestGrantHost;
   use rquickjs::Context;
-  use std::collections::BTreeMap;
 
   const ORACLE: &str = include_str!("../../../test/plugins/timers-test.js");
 
@@ -487,32 +484,6 @@ mod bundled_oracle {
   /// the wheel's, and that is here.
   const DUTY_PERCENT: u128 = 10;
   const MIN_WAKE_GAP_MS: u64 = 4;
-
-  #[derive(Default)]
-  struct OracleKvHost {
-    store: RefCell<BTreeMap<String, String>>,
-  }
-
-  impl KvHost for OracleKvHost {
-    fn kv(&self, op: i32, key: &str, value: &str) -> String {
-      let mut store = self.store.borrow_mut();
-      match op {
-        KV_GET => match store.get(key) {
-          Some(v) => format!("S{v}"),
-          None => "N".to_string(),
-        },
-        KV_SET => {
-          store.insert(key.to_string(), value.to_string());
-          "N".to_string()
-        }
-        KV_DEL => {
-          store.remove(key);
-          "N".to_string()
-        }
-        _ => crate::api::tl::proxy::encode_error("the oracle asks for nothing else"),
-      }
-    }
-  }
 
   /// the wake the engine last asked for, in real `monotonic_now_ms` terms
   #[derive(Default)]
@@ -537,7 +508,7 @@ mod bundled_oracle {
     let lifecycle = Lifecycle::new();
     let wakes = Rc::new(WakeHost::default());
     let wakes_dyn: Rc<dyn TimerHost> = wakes.clone();
-    let kv_host: Rc<dyn KvHost> = Rc::new(OracleKvHost::default());
+    let kv_file = crate::testing::harness::TempPath::default();
     let grants = TestGrantHost::new(&crate::testing::harness::manifest_grants(ORACLE)).as_host();
     let log: crate::Log = std::sync::Arc::new(|_| {});
 
@@ -547,7 +518,7 @@ mod bundled_oracle {
       let api =
         crate::api::lifecycle::install_lifecycle(&ctx, grants.clone(), lifecycle.clone(), log.clone(), &inu).unwrap();
       let inu = crate::testing::harness::get_api_globals(&ctx);
-      crate::api::io::kv::install_kv(&ctx, kv_host, grants, &inu).unwrap();
+      crate::api::io::kv::install_kv(&ctx, kv_file.0.clone(), grants, &inu).unwrap();
       let timers = install_timers(&ctx, wakes_dyn, lifecycle.clone(), log.clone()).unwrap();
       (api, timers)
     });
@@ -647,7 +618,7 @@ mod bundled_oracle {
     let lifecycle = Lifecycle::new();
     let wakes = Rc::new(SteppedWakeHost::default());
     let wakes_dyn: Rc<dyn TimerHost> = wakes.clone();
-    let kv_host: Rc<dyn KvHost> = Rc::new(OracleKvHost::default());
+    let kv_file = crate::testing::harness::TempPath::default();
     let grants = TestGrantHost::new(&crate::testing::harness::manifest_grants(VISIBILITY_ORACLE)).as_host();
     let log: crate::Log = std::sync::Arc::new(|_| {});
 
@@ -657,7 +628,7 @@ mod bundled_oracle {
       let api =
         crate::api::lifecycle::install_lifecycle(&ctx, grants.clone(), lifecycle.clone(), log.clone(), &inu).unwrap();
       let inu = crate::testing::harness::get_api_globals(&ctx);
-      crate::api::io::kv::install_kv(&ctx, kv_host, grants, &inu).unwrap();
+      crate::api::io::kv::install_kv(&ctx, kv_file.0.clone(), grants, &inu).unwrap();
       let timers = install_timers(&ctx, wakes_dyn, lifecycle.clone(), log.clone()).unwrap();
       (api, timers)
     });

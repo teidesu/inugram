@@ -114,12 +114,11 @@ class PluginCallerThreadTest {
                     toasts.add("$text@${Thread.currentThread().name}")
                 }
             },
-            storage = PluginKv.listenerFor(plugin.session!!),
+            kvPath = PluginKv.pathFor(plugin.id),
         )
         logs.clear()
         try {
-            // `kv` answers a value, so it is one of the hosts the gate really did refuse; `toast`
-            // is void and was never asked, and rides along only to show the void path still works
+            // `kv` is engine state reached under the caller's lease; `toast` is a void host call
             engine.evaluate("""
                 const fixture = inu.jvm.cls('desu.inugram.jvmfixture.JvmFixture');
                 fixture.setStaticField('task', inu.jvm.runnable(() => {
@@ -154,6 +153,7 @@ class PluginCallerThreadTest {
             engine.stopCallbacks()
             PluginJvm.detach(plugin.session!!)
             engine.close()
+            PluginKv.wipe(plugin.id)
             JvmFixture.task = null
             plugin.session = null
         }
