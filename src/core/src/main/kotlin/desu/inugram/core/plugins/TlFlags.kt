@@ -40,8 +40,6 @@ object TlFlags {
         return Table(words, out)
     }
 
-    val flagWords: List<String> get() = table.words
-
     fun isFlagWord(cls: Class<*>, name: String): Boolean {
         if (name !in table.words) return false
         return gatesOf(cls) != null

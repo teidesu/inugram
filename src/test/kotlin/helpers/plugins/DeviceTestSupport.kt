@@ -530,12 +530,6 @@ fun assertOracleExact(lines: List<String>, done: String, count: Int) {
 fun testAsset(name: String): ByteArray =
     InstrumentationRegistry.getInstrumentation().context.assets.open("inu/$name").use { it.readBytes() }
 
-/** `src/plugins/fs.d.ts`, which states `inu.fs`'s own numbers */
-fun fsContract(): String = contractAsset("fs.d.ts")
-
-/** `src/plugins/android.jvm.d.ts`, which states `inu.jvm`'s own numbers */
-fun jvmContract(): String = contractAsset("android.jvm.d.ts")
-
 /**
  * the app's `processUpdates` hook, driven the way stock drives it. `true` means the batch was taken
  * over: the app was handed nothing and gets it back later.

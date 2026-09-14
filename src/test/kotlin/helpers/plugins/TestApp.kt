@@ -124,14 +124,6 @@ object TestApp {
         (field.get(controller) as LongSparseArray<TLRPC.UserFull>).put(userId, full)
     }
 
-    @Suppress("UNCHECKED_CAST")
-    fun putChatFull(chatId: Long, full: TLRPC.ChatFull, account: Int = 0) {
-        touch(account)
-        val controller = MessagesController.getInstance(account)
-        val field = MessagesController::class.java.getDeclaredField("fullChats").apply { isAccessible = true }
-        (field.get(controller) as LongSparseArray<TLRPC.ChatFull>).put(chatId, full)
-    }
-
     /** both views the app keeps of its chat list's own messages, the way `loadDialogs` fills them */
     fun cacheDialogMessage(account: Int, dialogId: Long, message: TLRPC.Message) {
         touch(account)
@@ -139,11 +131,6 @@ object TestApp {
         val cached = MessageObject(account, message, false, false)
         controller.dialogMessage.put(dialogId, arrayListOf(cached))
         controller.dialogMessagesByIds.put(message.id, cached)
-    }
-
-    fun putDialog(dialog: TLRPC.Dialog, account: Int = 0) {
-        touch(account)
-        MessagesController.getInstance(account).dialogs_dict.put(dialog.id, dialog)
     }
 
     /** stock's own `saveDraft` goes to the database and the network; the cache is what is read */
