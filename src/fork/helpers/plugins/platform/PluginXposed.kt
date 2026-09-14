@@ -60,7 +60,6 @@ object PluginXposed : SessionResource {
         external fun nativeUnhook(target: Member): Boolean
         external fun nativeIsHooked(target: Member): Boolean
         external fun nativeDeoptimize(method: Member): Boolean
-        external fun nativeMakeInheritable(target: Class<*>): Boolean
         external fun nativeAllocateInstance(target: Class<*>): Any?
         external fun nativeDisableProfileSaver(): Boolean
     }
@@ -543,8 +542,6 @@ object PluginXposed : SessionResource {
     )
 
     internal fun deoptimize(method: Member): Boolean = ensureReady() && Native.nativeDeoptimize(method)
-
-    internal fun makeInheritable(cls: Class<*>): Boolean = ensureReady() && Native.nativeMakeInheritable(cls)
 
     internal fun isHooked(method: Member): Boolean = ensureReady() && Native.nativeIsHooked(method)
 }

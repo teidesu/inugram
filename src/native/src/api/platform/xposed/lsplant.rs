@@ -33,7 +33,6 @@ type LSPlantInit = unsafe extern "C" fn(*mut RawJNIEnv, *const LSPlantInitInfoC)
 type LSPlantHook = unsafe extern "C" fn(*mut RawJNIEnv, jobject, jobject, jobject) -> jobject;
 type LSPlantUnHook = unsafe extern "C" fn(*mut RawJNIEnv, jobject) -> bool;
 type LSPlantOnObject = unsafe extern "C" fn(*mut RawJNIEnv, jobject) -> bool;
-type LSPlantOnClass = unsafe extern "C" fn(*mut RawJNIEnv, jclass) -> bool;
 type SetHiddenApiExemptions = unsafe extern "C" fn(*mut RawJNIEnv, jclass, jobjectArray);
 
 struct Shadowhook {
@@ -49,7 +48,6 @@ struct LSPlant {
   unhook: LSPlantUnHook,
   is_hooked: LSPlantOnObject,
   deoptimize: LSPlantOnObject,
-  make_inheritable: LSPlantOnClass,
 }
 
 struct Native {
@@ -247,7 +245,6 @@ fn load() -> Option<Native> {
     unhook: unsafe { dlsym(lsplant_lib, "LSPlantUnHookC")? },
     is_hooked: unsafe { dlsym(lsplant_lib, "LSPlantIsHookedC")? },
     deoptimize: unsafe { dlsym(lsplant_lib, "LSPlantDeoptimizeC")? },
-    make_inheritable: unsafe { dlsym(lsplant_lib, "LSPlantMakeClassInheritableC")? },
   };
 
   let art_name = CString::new("libart.so").ok()?;
@@ -310,11 +307,6 @@ pub unsafe fn is_hooked(env: &mut Env, target: jobject) -> bool {
 pub unsafe fn deoptimize(env: &mut Env, method: jobject) -> bool {
   let Some(native) = native() else { return false };
   (native.lsplant.deoptimize)(env.get_raw(), method)
-}
-
-pub unsafe fn make_inheritable(env: &mut Env, target: jclass) -> bool {
-  let Some(native) = native() else { return false };
-  (native.lsplant.make_inheritable)(env.get_raw(), target)
 }
 
 extern "C" fn ignore_profile_saver() -> bool {

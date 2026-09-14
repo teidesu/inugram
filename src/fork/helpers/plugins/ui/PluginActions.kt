@@ -86,9 +86,7 @@ object PluginActions : SessionResource {
     private val registry = ActionRegistry<QuickJs>()
 
     @Volatile private var counts = IntArray(KIND_COUNT)
-    @Volatile private var registered = List(KIND_COUNT) { emptyList<ActionKey>() }
     @Volatile private var selectionCount = 0
-    @Volatile private var selectionRegistered = emptyList<ActionKey>()
     @Volatile private var registeredRows = List(KIND_COUNT) { emptyList<RegisteredActionRow>() }
 
     private val optionIds = HashMap<ActionKey, Int>()
@@ -187,10 +185,6 @@ object PluginActions : SessionResource {
         else counts.getOrElse(kind) { 0 }
 
     fun hasRows(kind: Int, placements: Int = getDefaultPlacements(kind)): Boolean = rowCount(kind, placements) > 0
-
-    fun registeredKeys(kind: Int, placements: Int = getDefaultPlacements(kind)): List<ActionKey> =
-        if (kind == KIND_MESSAGE && placements == MESSAGE_PLACEMENT_SELECTION) selectionRegistered
-        else registered.getOrElse(kind) { emptyList() }
 
     fun registeredRows(kind: Int, placements: Int = getDefaultPlacements(kind)): List<RegisteredActionRow> {
         val rows = registeredRows.getOrElse(kind) { emptyList() }
@@ -378,16 +372,9 @@ object PluginActions : SessionResource {
                 registration.toRegisteredRow(session)
             }
         }
-        val ids = List(KIND_COUNT) { kind -> rows[kind].filter { it.placements and getDefaultPlacements(kind) != 0 }.map { it.key } }
-        val selected = rows[KIND_MESSAGE]
-            .filter { it.placements and MESSAGE_PLACEMENT_SELECTION != 0 }
-            .map { it.key }
-        val updated = IntArray(KIND_COUNT) { ids[it].size }
-        if (updated.contentEquals(counts) && ids == registered && selected == selectionRegistered && rows == registeredRows) return
-        counts = updated
-        registered = ids
-        selectionCount = selected.size
-        selectionRegistered = selected
+        if (rows == registeredRows) return
+        counts = IntArray(KIND_COUNT) { kind -> rows[kind].count { it.placements and getDefaultPlacements(kind) != 0 } }
+        selectionCount = rows[KIND_MESSAGE].count { it.placements and MESSAGE_PLACEMENT_SELECTION != 0 }
         registeredRows = rows
         if (onCountsChanged.isEmpty()) return
         AndroidUtilities.runOnUIThread { for (redraw in onCountsChanged) redraw() }
