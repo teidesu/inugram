@@ -60,7 +60,7 @@ class PluginFsTest {
 
         assertEquals(store.absolutePath, dirs[0])
         assertTrue(store.isDirectory)
-        val scopedRoot = File(PluginFs.dirFor(validId)).parentFile
+        val scopedRoot = File(PluginFs.dirFor(validId)).parentFile!!
         assertFalse(dirs[0] == scopedRoot.absolutePath, "the fs roots are not the plugin store")
     }
 
@@ -77,7 +77,7 @@ class PluginFsTest {
     fun wipe_only_ever_deletes_the_directory_of_a_well_formed_id() {
         val path = PluginFs.dirFor(validId)
         File(path, "kept.txt").writeText("data")
-        val root = File(path).parentFile
+        val root = File(path).parentFile!!
 
         PluginFs.wipe("../..")
         assertTrue(File(path).isDirectory, "a malformed id must not delete anything")

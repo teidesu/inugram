@@ -37,7 +37,7 @@ class PluginBlobsTest {
     @Test
     fun wipe_only_ever_deletes_the_directory_of_a_well_formed_id() {
         val path = PluginBlobs.dirFor(validId)
-        val root = File(path).parentFile.parentFile
+        val root = File(path).parentFile!!.parentFile!!
         assertTrue(root.isDirectory)
 
         PluginBlobs.wipe("../..")
@@ -50,7 +50,7 @@ class PluginBlobsTest {
     @Test
     fun sweep_drops_other_processes_sessions_and_keeps_this_one_s() {
         val mine = File(PluginBlobs.dirFor(validId))
-        val stale = File(mine.parentFile.parentFile, "some-dead-process/$validId")
+        val stale = File(mine.parentFile!!.parentFile, "some-dead-process/$validId")
         assertTrue(stale.mkdirs())
 
         PluginBlobs.scheduleSweep()
@@ -60,6 +60,6 @@ class PluginBlobsTest {
 
         assertTrue(mine.isDirectory)
         assertFalse(stale.exists())
-        assertEquals(1, mine.parentFile.parentFile.listFiles()!!.size)
+        assertEquals(1, mine.parentFile!!.parentFile!!.listFiles()!!.size)
     }
 }
