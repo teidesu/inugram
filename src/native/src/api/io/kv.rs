@@ -1,4 +1,4 @@
-use std::cell::RefCell;
+use std::cell::{RefCell, RefMut};
 use std::collections::BTreeMap;
 use std::fs::{self, File, OpenOptions};
 use std::io::{self, Write};
@@ -262,7 +262,7 @@ struct KvState {
 
 impl KvState {
   /// opened on first use: most plugins holding the grant touch it rarely, and a boot pays for none of them
-  fn with_store<'js, T>(&self, ctx: &Ctx<'js>, run: impl FnOnce(&mut Store) -> JsResult<T>) -> JsResult<T> {
+  fn open_store(&self, ctx: &Ctx<'_>) -> JsResult<RefMut<'_, Store>> {
     self.grants.check_grant(ctx, "kv", None, MATCH_EXACT)?;
     if self.path.as_os_str().is_empty() {
       return PluginErrorCode::Internal.throw(ctx, "kv: this plugin has no store");
@@ -274,16 +274,16 @@ impl KvState {
         Err(e) => return throw_io(ctx, e),
       }
     }
-    run(slot.as_mut().expect("opened above"))
+    Ok(RefMut::map(slot, |slot| slot.as_mut().expect("opened above")))
   }
 
   fn set_all<'js>(&self, ctx: &Ctx<'js>, pairs: &[(String, String)]) -> JsResult<Value<'js>> {
-    self.with_store(ctx, |store| match store.set_all(pairs) {
+    match self.open_store(ctx)?.set_all(pairs) {
       Ok(()) => Ok(Value::new_undefined(ctx.clone())),
       Err(Refusal::Quota(used)) => PluginErrorCode::QuotaExceeded(used as i64, QUOTA_BYTES as i64)
         .throw(ctx, "kv: 1 MB per-plugin quota exceeded"),
       Err(Refusal::Io(e)) => throw_io(ctx, e),
-    })
+    }
   }
 }
 
@@ -329,17 +329,17 @@ pub fn install_kv<'js>(
   kv.set(
     "get",
     Function::new(ctx.clone(), move |ctx: Ctx<'js>, key: String| {
-      s.with_store(&ctx, |store| match store.entries.get(&key) {
+      match s.open_store(&ctx)?.entries.get(&key) {
         Some(value) => value.as_str().into_js(&ctx),
         None => Ok(Value::new_null(ctx.clone())),
-      })
+      }
     })?,
   )?;
   let s = state.clone();
   kv.set(
     "has",
-    Function::new(ctx.clone(), move |ctx: Ctx<'js>, key: String| {
-      s.with_store(&ctx, |store| Ok(store.entries.contains_key(&key)))
+    Function::new(ctx.clone(), move |ctx: Ctx<'js>, key: String| -> JsResult<bool> {
+      Ok(s.open_store(&ctx)?.entries.contains_key(&key))
     })?,
   )?;
   let s = state.clone();
@@ -351,38 +351,40 @@ pub fn install_kv<'js>(
   kv.set(
     "del",
     Function::new(ctx.clone(), move |ctx: Ctx<'js>, key: String| {
-      s.with_store(&ctx, |store| undefined_or_io(&ctx, store.delete(&key)))
+      let done = s.open_store(&ctx)?.delete(&key);
+      undefined_or_io(&ctx, done)
     })?,
   )?;
   let s = state.clone();
   kv.set(
     "keys",
-    Function::new(ctx.clone(), move |ctx: Ctx<'js>| {
-      s.with_store(&ctx, |store| {
-        let array = Array::new(ctx.clone())?;
-        for (index, key) in store.entries.keys().enumerate() {
-          array.set(index, key.as_str())?;
-        }
-        Ok(array)
-      })
+    Function::new(ctx.clone(), move |ctx: Ctx<'js>| -> JsResult<Array<'js>> {
+      let store = s.open_store(&ctx)?;
+      let array = Array::new(ctx.clone())?;
+      for (index, key) in store.entries.keys().enumerate() {
+        array.set(index, key.as_str())?;
+      }
+      Ok(array)
     })?,
   )?;
   let s = state.clone();
   kv.set(
     "clear",
-    Function::new(ctx.clone(), move |ctx: Ctx<'js>| s.with_store(&ctx, |store| undefined_or_io(&ctx, store.clear())))?,
+    Function::new(ctx.clone(), move |ctx: Ctx<'js>| {
+      let done = s.open_store(&ctx)?.clear();
+      undefined_or_io(&ctx, done)
+    })?,
   )?;
   let s = state.clone();
   kv.set(
     "getAll",
-    Function::new(ctx.clone(), move |ctx: Ctx<'js>| {
-      s.with_store(&ctx, |store| {
-        let all = Object::new(ctx.clone())?;
-        for (key, value) in &store.entries {
-          all.prop(key.as_str(), Property::from(value.as_str()).writable().enumerable().configurable())?;
-        }
-        Ok(all)
-      })
+    Function::new(ctx.clone(), move |ctx: Ctx<'js>| -> JsResult<Object<'js>> {
+      let store = s.open_store(&ctx)?;
+      let all = Object::new(ctx.clone())?;
+      for (key, value) in &store.entries {
+        all.prop(key.as_str(), Property::from(value.as_str()).writable().enumerable().configurable())?;
+      }
+      Ok(all)
     })?,
   )?;
   let s = state.clone();
@@ -397,7 +399,7 @@ pub fn install_kv<'js>(
   let s = state;
   kv.set(
     "usage",
-    Function::new(ctx.clone(), move |ctx: Ctx<'js>| s.with_store(&ctx, |store| Ok(store.used as f64)))?,
+    Function::new(ctx.clone(), move |ctx: Ctx<'js>| -> JsResult<f64> { Ok(s.open_store(&ctx)?.used as f64) })?,
   )?;
   globals.inu.set("kv", kv)?;
   Ok(())
