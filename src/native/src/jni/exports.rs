@@ -60,6 +60,7 @@ pub extern "system" fn Java_desu_inugram_helpers_plugins_QuickJs_nativeCreate(
   fs_unscoped: jboolean,
   install_fs: jboolean,
   android_dirs: JString,
+  kv_path: JString,
   install_jvm: jboolean,
   install_xposed: jboolean,
   grant_tokens: JObjectArray<JString>,
@@ -91,6 +92,7 @@ pub extern "system" fn Java_desu_inugram_helpers_plugins_QuickJs_nativeCreate(
     let transfer_dir = PathBuf::from(jstring_to_string(env, &transfer_dir));
     let fs_dir = PathBuf::from(jstring_to_string(env, &fs_dir));
     let android_dirs = jstring_to_string(env, &android_dirs);
+    let kv_path = PathBuf::from(jstring_to_string(env, &kv_path));
     let install_fs_enabled = install_fs;
     let install_jvm_enabled = install_jvm;
     let install_xposed_enabled = install_xposed;
@@ -122,7 +124,7 @@ pub extern "system" fn Java_desu_inugram_helpers_plugins_QuickJs_nativeCreate(
       let dialogs = ctx
         .with(|ctx| {
           let globals = Globals::get(&ctx)?;
-          install_kv(&ctx, bridge.clone(), grants.clone(), &globals)?;
+          install_kv(&ctx, kv_path.clone(), grants.clone(), &globals)?;
           install_clipboard(&ctx, bridge.clone(), grants.clone(), &globals)?;
           install_open_url(&ctx, bridge.clone(), grants.clone(), &globals)?;
           install_dialogs(&ctx, bridge.clone(), jvm.clone(), log.clone(), &globals)

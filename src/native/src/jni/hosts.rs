@@ -3,7 +3,6 @@ use crate::LEVEL_ERROR;
 use crate::api::canvas::{CanvasHost, OP_DESTROY, OP_RELEASE_IMAGE};
 use crate::api::globals::RandomHost;
 use crate::api::io::fetch::FetchHost;
-use crate::api::io::kv::KvHost;
 use crate::api::platform::clipboard::ClipboardHost;
 use crate::api::platform::jvm::{JvmHost, JvmReflectHost};
 use crate::api::platform::notifications::NotificationHost;
@@ -199,12 +198,6 @@ impl WritesHost for JniBridge {
 
   fn message_file(&self, account_id: i32, value: &str) -> String {
     self.call_wire("getMessageFile", self.on_message_file, &[Arg::Int(account_id), Arg::Str(value)])
-  }
-}
-
-impl KvHost for JniBridge {
-  fn kv(&self, op: i32, key: &str, value: &str) -> String {
-    self.call_wire("kv", self.on_kv, &[Arg::Int(op), Arg::Str(key), Arg::Str(value)])
   }
 }
 

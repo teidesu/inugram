@@ -43,7 +43,6 @@ const CALLER_THREAD_HOSTS: &[&str] = &[
   "tlOwnKeys",
   "tlCopy",
   "tlRelease",
-  "kv",
 ];
 
 thread_local! {
@@ -81,7 +80,6 @@ pub(crate) struct JniBridge {
   pub(crate) on_account_fetch: JMethodID,
   pub(crate) on_account_write: JMethodID,
   pub(crate) on_message_file: JMethodID,
-  pub(crate) on_kv: JMethodID,
   pub(crate) on_accounts: JMethodID,
   pub(crate) on_ui_toast: JMethodID,
   pub(crate) on_ui_bulletin: JMethodID,
@@ -194,7 +192,6 @@ impl JniBridge {
       on_account_fetch: method("accountFetch", "(IJILjava/lang/String;Ljava/lang/String;Ljava/lang/String;)Ljava/lang/String;")?,
       on_account_write: method("accountWrite", "(IJILjava/lang/String;[Ljava/lang/String;)Ljava/lang/String;")?,
       on_message_file: method("messageFile", "(ILjava/lang/String;)Ljava/lang/String;")?,
-      on_kv: method("kv", "(ILjava/lang/String;Ljava/lang/String;)Ljava/lang/String;")?,
       on_accounts: method("accounts", "()Ljava/lang/String;")?,
       on_ui_toast: method("uiToast", "(Ljava/lang/String;)V")?,
       on_ui_bulletin: method("uiBulletin", "(Ljava/lang/String;Ljava/lang/String;)Ljava/lang/String;")?,

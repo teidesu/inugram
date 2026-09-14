@@ -436,7 +436,6 @@ object PluginManager {
             rpc = PluginRpc.listenerFor(session),
             updates = PluginUpdates.listenerFor(session),
             tl = tl,
-            storage = PluginKv.listenerFor(session),
             account = PluginAccounts.listenerFor(session),
             ui = PluginUi.listenerFor(session),
             platform = PluginPlatform.listenerFor(),

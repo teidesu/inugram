@@ -30,7 +30,6 @@ interface PluginListener :
     RpcListener,
     UpdatesListener,
     TlListener,
-    StorageListener,
     AccountListener,
     UiListener,
     PlatformListener,
@@ -50,12 +49,6 @@ interface CoreListener {
 
     /** post a call to `runTimers` `delayMs` from now, withdrawing any earlier wake; negative only withdraws */
     fun onTimerSchedule(delayMs: Long)
-}
-
-interface StorageListener {
-    /** [op] keeps in sync with rust `api::KV_*`; unused [key]/[value] arrive as "" */
-    fun kv(op: Int, key: String, value: String): String
-
 }
 
 interface AccountListener : ReadsListener, WritesListener {

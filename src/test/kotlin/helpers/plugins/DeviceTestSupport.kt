@@ -173,13 +173,17 @@ fun canvasEngine(name: String, onLog: (String) -> Unit = {}): Plugin {
  * closed engine in the next test
  */
 /** [startPlugin] on a real engine rather than a recorder, for a test that evaluates plugin code; pair it with [closeEngine] */
-fun startEngine(name: String, vararg grants: String, onLog: (String) -> Unit = {}): Plugin {
+fun startEngine(name: String, vararg grants: String, kvPath: String = "", onLog: (String) -> Unit = {}): Plugin {
     val plugin = startPlugin(name, *grants)
     plugin.session = PluginSession(plugin, QuickJs())
-    attachBridge(plugin.session!!, object : CoreListener {
-        override fun onConsole(level: Int, message: String) = onLog(message)
-        override fun onTimerSchedule(delayMs: Long) = Unit
-    })
+    attachBridge(
+        plugin.session!!,
+        object : CoreListener {
+            override fun onConsole(level: Int, message: String) = onLog(message)
+            override fun onTimerSchedule(delayMs: Long) = Unit
+        },
+        kvPath = kvPath,
+    )
     return plugin
 }
 
@@ -267,13 +271,13 @@ fun attachBridge(
     core: CoreListener = DeviceMissing,
     canvas: CanvasListener = DeviceMissing,
     ui: UiListener = DeviceMissing,
-    storage: StorageListener = DeviceMissing,
     // most of the suite drives the reads listener directly and never asks; a test that goes through
     // `inu.account(n)` needs the slot list the app would answer with
     accountsJson: (() -> String)? = null,
     // blobs and canvas sources spill to disk; a suite that stages one needs somewhere to put it
     spillDir: String = "",
     transferDir: String = "",
+    kvPath: String = "",
 ) {
     val tl = session.tl
     val jvm = PluginJvm.listenerFor(session, testAppScreen)
@@ -282,7 +286,6 @@ fun attachBridge(
         rpc = PluginRpc.listenerFor(session),
         updates = PluginUpdates.listenerFor(session),
         tl = tl,
-        storage = storage,
         account = object : AccountListener,
             ReadsListener by PluginReads.listenerFor(session),
             WritesListener by PluginWrites.listenerFor(session) {
@@ -307,6 +310,7 @@ fun attachBridge(
             fsUnscoped = false,
             installFs = false,
             androidDirs = "",
+            kvPath = kvPath,
             installJvm = bridge.jvm != null,
             installXposed = bridge.xposed != null,
             grants = session.permissions,
@@ -314,7 +318,7 @@ fun attachBridge(
     )
 }
 
-internal object DeviceMissing : CoreListener, StorageListener, UiListener, PlatformListener, CanvasListener {
+internal object DeviceMissing : CoreListener, UiListener, PlatformListener, CanvasListener {
     private fun no(what: String): Nothing = throw UnsupportedOperationException("this suite has no $what")
 
     override fun onConsole(level: Int, message: String) = no("console")
@@ -322,8 +326,6 @@ internal object DeviceMissing : CoreListener, StorageListener, UiListener, Platf
     override fun onTimerSchedule(delayMs: Long) = no("timer scheduler")
 
     override fun canvas(op: Int, id: Long, arg: String, bytes: ByteArray?) = no("canvas")
-
-    override fun kv(op: Int, key: String, value: String) = no("kv")
 
     override fun uiToast(text: String) = no("ui")
 
