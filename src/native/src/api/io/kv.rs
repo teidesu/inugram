@@ -5,6 +5,7 @@ use std::io::{self, Write};
 use std::path::{Path, PathBuf};
 use std::rc::Rc;
 
+use rquickjs::object::Property;
 use rquickjs::{Array, Ctx, Function, IntoJs, Object, Result as JsResult, Value};
 
 use crate::api::error::PluginErrorCode;
@@ -78,7 +79,8 @@ impl Store {
       self.entries.insert(key.clone(), value.clone());
     }
     self.used = used;
-    self.compact_if_sparse().map_err(Refusal::Io)
+    self.compact_if_sparse();
+    Ok(())
   }
 
   fn delete(&mut self, key: &str) -> io::Result<()> {
@@ -89,7 +91,8 @@ impl Store {
     self.append(&[Change::Del(key)])?;
     self.entries.remove(key);
     self.used -= freed;
-    self.compact_if_sparse()
+    self.compact_if_sparse();
+    Ok(())
   }
 
   fn clear(&mut self) -> io::Result<()> {
@@ -108,10 +111,14 @@ impl Store {
   fn append(&mut self, changes: &[Change]) -> io::Result<()> {
     let frame = encode_frame(changes);
     if self.log.is_none() {
-      let mut file = OpenOptions::new().create(true).truncate(true).write(true).open(&self.path)?;
-      file.write_all(MAGIC)?;
-      self.log = Some(OpenOptions::new().append(true).open(&self.path)?);
-      self.log_bytes = MAGIC.len() as u64;
+      if self.entries.is_empty() {
+        let mut file = OpenOptions::new().create(true).truncate(true).write(true).open(&self.path)?;
+        file.write_all(MAGIC)?;
+        self.log = Some(OpenOptions::new().append(true).open(&self.path)?);
+        self.log_bytes = MAGIC.len() as u64;
+      } else {
+        self.compact()?;
+      }
     }
     let log = self.log.as_mut().expect("opened above");
     if let Err(e) = log.write_all(&frame) {
@@ -125,12 +132,11 @@ impl Store {
     Ok(())
   }
 
-  fn compact_if_sparse(&mut self) -> io::Result<()> {
+  fn compact_if_sparse(&mut self) {
     let live = (MAGIC.len() + FRAME_HEADER + self.used + self.entries.len() * 9) as u64;
     if self.log_bytes > COMPACT_FLOOR && self.log_bytes > live * 2 {
-      self.compact()?;
+      let _ = self.compact();
     }
-    Ok(())
   }
 
   /// the whole store as one frame, synced before the rename so a crash cannot leave the rename
@@ -373,7 +379,7 @@ pub fn install_kv<'js>(
       s.with_store(&ctx, |store| {
         let all = Object::new(ctx.clone())?;
         for (key, value) in &store.entries {
-          all.set(key.as_str(), value.as_str())?;
+          all.prop(key.as_str(), Property::from(value.as_str()).writable().enumerable().configurable())?;
         }
         Ok(all)
       })

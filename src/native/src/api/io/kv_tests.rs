@@ -278,3 +278,34 @@ fn the_bundled_api_test_plugin_passes() {
   assert_eq!(host.dialogs.borrow().len(), 1);
   assert_eq!(*host.toasts.borrow(), vec!["api-test loaded (run #1)".to_string(), "dialog: positive".to_string()],);
 }
+
+#[test]
+fn a_write_after_the_log_was_lost_keeps_everything_already_stored() {
+  let file = TempPath::default();
+  let mut store = Store::open(&file.0).unwrap();
+  assert!(store.set_all(&[("a".to_string(), "1".to_string())]).is_ok());
+  store.log = None;
+  assert!(store.set_all(&[("b".to_string(), "2".to_string())]).is_ok());
+  drop(store);
+  assert_eq!(open(&file.0, &["kv"]).eval("inu.kv.getAll()"), r#"{"a":"1","b":"2"}"#);
+}
+
+#[test]
+fn a_delete_after_the_log_was_lost_keeps_the_other_entries() {
+  let file = TempPath::default();
+  let mut store = Store::open(&file.0).unwrap();
+  assert!(store.set_all(&[("a".to_string(), "1".to_string()), ("b".to_string(), "2".to_string())]).is_ok());
+  store.log = None;
+  store.delete("a").unwrap();
+  drop(store);
+  assert_eq!(open(&file.0, &["kv"]).eval("inu.kv.getAll()"), r#"{"b":"2"}"#);
+}
+
+#[test]
+fn get_all_keeps_a_key_named_like_the_prototype() {
+  let file = TempPath::default();
+  let kv = open(&file.0, &["kv"]);
+  kv.eval("inu.kv.set('__proto__', 'x')");
+  assert_eq!(kv.eval("Object.keys(inu.kv.getAll())"), r#"["__proto__"]"#);
+  assert_eq!(kv.eval("inu.kv.getAll()['__proto__']"), "x");
+}
