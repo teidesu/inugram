@@ -67,8 +67,7 @@ object PluginReads {
     const val OP_CHAT_FOLDERS = 17
     const val OP_FETCH_MESSAGES = 18
 
-    /** what `archive` selects, keep in sync with rust `reads::ARCHIVE_*` and `reads.js` */
-    private const val ARCHIVE_EXCLUDE = 0
+    /** what `archive` selects past exclude (`0`), keep in sync with `reads.js` */
     private const val ARCHIVE_ONLY = 1
     private const val ARCHIVE_KEEP = 2
 

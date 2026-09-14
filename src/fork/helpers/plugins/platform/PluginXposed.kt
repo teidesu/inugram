@@ -41,7 +41,7 @@ object PluginXposed : SessionResource {
     /** keep in sync with rust `xposed::NOT_DISPATCHED`: the after phase never ran, so it took nothing */
     private const val NOT_DISPATCHED = "X"
 
-    // keep in sync with rust `xposed::OP_*` and `xposed.js`
+    // keep in sync with rust `xposed::OP_*`
     const val OP_HOOK = 0
     const val OP_HOOK_ALL = 1
     const val OP_UNHOOK = 2

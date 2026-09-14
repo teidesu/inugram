@@ -86,7 +86,7 @@ impl RpcHost for TestHost {
 }
 
 /// the single handle [`TestHost`] answers `TlHost` upcalls for; anything else reads as expired.
-/// `tl_proxy.rs` owns the exhaustive trap tests - these only cover which wires reach JS as views.
+/// `tl/proxy.rs` owns the exhaustive trap tests - these only cover which wires reach JS as views.
 const TEST_HANDLE: i64 = 77;
 
 impl TlHost for TestHost {

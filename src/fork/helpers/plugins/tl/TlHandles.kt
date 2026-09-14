@@ -21,7 +21,7 @@ import org.json.JSONTokener
 import org.telegram.tgnet.TLObject
 
 /**
- * Handle table backing the live-proxy TL bridge (rust: `tl_proxy.rs`): JS holds a lazy `Proxy` over
+ * Handle table backing the live-proxy TL bridge (rust: `tl/proxy.rs`): JS holds a lazy `Proxy` over
  * a handle id whose traps round-trip through [TlListener], never an eager snapshot of the
  * object graph.
  *

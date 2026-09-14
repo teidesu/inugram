@@ -220,7 +220,7 @@ impl JvmState {
     Ok(ref_of(value).map(|handle| handle.borrow().id).unwrap_or(-1))
   }
 
-  /// a second id for the reference behind [id], for a handoff whose original the other side
+  /// a second id for the reference behind `id`, for a handoff whose original the other side
   /// releases
   fn copy_wire(&self, id: i64) -> String {
     match self.refs.copy(id) {

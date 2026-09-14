@@ -16,7 +16,7 @@ import org.junit.Before
 import org.junit.Test
 import org.telegram.tgnet.TLRPC
 
-/** handle lifetime, mode inheritance and per-plugin isolation - the rules `tl_proxy.rs` relies on. */
+/** handle lifetime, mode inheritance and per-plugin isolation - the rules `tl/proxy.rs` relies on. */
 class TlHandlesLifetimeTest {
     /** nothing here is about what a plugin may see, so every view is built with both rules off */
     private val UNFILTERED = TlFilter.Policy(takeover = false, drafts = true)

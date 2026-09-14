@@ -40,7 +40,7 @@ import org.json.JSONArray
 import org.json.JSONObject
 
 /**
- * The rasterizer behind `inu.canvas` (rust: `canvas.rs`), per `src/plugins/canvas.d.ts`.
+ * The rasterizer behind `inu.canvas` (rust: `canvas/mod.rs`), per `src/plugins/canvas.d.ts`.
  *
  * **The engine decides, this paints.** Everything with a rule in the spec is settled in rust before
  * a byte crosses; what arrives is a command buffer of move/line/cubic/close, each command carrying

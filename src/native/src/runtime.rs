@@ -120,8 +120,8 @@ impl<T: Parked> Default for PendingTable<T> {
 }
 
 impl<T: Parked> PendingTable<T> {
-  /// registers the request before [`ask`] tells the host about it, so an answer arriving from inside
-  /// the ask still finds it; a refusal [`ask`] returns rejects the same promise
+  /// registers the request before `ask` tells the host about it, so an answer arriving from inside
+  /// the ask still finds it; a refusal `ask` returns rejects the same promise
   pub(crate) fn park<'js>(
     &self,
     ctx: &Ctx<'js>,
@@ -143,7 +143,7 @@ impl<T: Parked> PendingTable<T> {
     Ok(promise)
   }
 
-  /// Settles a request with the host's [`wire`]: an error wire rejects, anything else is [`decode`]d.
+  /// Settles a request with the host's `wire`: an error wire rejects, anything else is `decode`d.
   pub(crate) fn settle<'js>(
     &self,
     ctx: &Ctx<'js>,
@@ -160,10 +160,10 @@ impl<T: Parked> PendingTable<T> {
     })
   }
 
-  /// Settles a request with whatever [`produce`] makes of it. What it throws rejects the promise, and
+  /// Settles a request with whatever `produce` makes of it. What it throws rejects the promise, and
   /// so does an answer it cannot read at all, since a promise left hanging is worse than either.
   ///
-  /// [`keep`] settles the promise but holds on to what was parked until a later settle for the same
+  /// `keep` settles the promise but holds on to what was parked until a later settle for the same
   /// id, which is how an answer arrives in two halves.
   pub(crate) fn settle_with<'js>(
     &self,
