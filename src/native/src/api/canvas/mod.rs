@@ -397,8 +397,6 @@ pub struct ImageHandle(Rc<ImageData>);
 pub struct GradientHandle(Rc<GradientData>);
 pub struct PatternHandle(Rc<PatternData>);
 
-/// A source staged for the host, owned by whatever outlives the staging. Dropping it removes the
-/// file, so a request that fails anywhere leaves nothing behind.
 /// something the session counts while it is open, so a disposed handle stops counting before the
 /// collector reaches it
 trait Live {

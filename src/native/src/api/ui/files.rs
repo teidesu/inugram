@@ -172,8 +172,6 @@ impl FilesState {
     pump_jobs(rt, context, state.log.as_ref());
   }
 
-  /// a plugin torn down mid-picker leaves the dialog on screen and nothing to answer it
-
   /// One `File` per copy the host made, owning it the way a spilled blob owns its file: the content
   /// counts against this plugin's spill budget and the copy is deleted when the handle is. Nothing
   /// else on the device is reachable through it, the picker's permission being the user's one-shot.
