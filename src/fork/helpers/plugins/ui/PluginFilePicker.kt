@@ -50,12 +50,11 @@ internal object PluginFilePicker : SessionResource {
     /** a copy made for a plugin nobody is waiting for any more is deleted rather than left in its spill directory */
     internal class Picked(val wire: String, val copies: List<File> = emptyList())
 
+    /** on the ui thread: a picker [launch] posted before this teardown registers its observer there first */
     override fun detach(session: PluginSession) {
-        val observers = waiting.take(session)
-        if (observers.isEmpty()) return
         AndroidUtilities.runOnUIThread {
             val center = NotificationCenter.getGlobalInstance()
-            observers.forEach { center.removeObserver(it, NotificationCenter.onActivityResultReceived) }
+            waiting.take(session).forEach { center.removeObserver(it, NotificationCenter.onActivityResultReceived) }
         }
     }
 
