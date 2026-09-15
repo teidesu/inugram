@@ -225,7 +225,7 @@ open class QuickJs {
         requireLive { nativeDispatchUpdateIntercept(it, callbackId, dispatchId, typeName, accountId, updateWire) }
 
     /** nothing is rejected, but a middleware settling later can no longer drop an update the app already has */
-    open fun abandonUpdateDispatch(dispatchId: Long) = requireLive { nativeAbandonUpdateDispatch(it, dispatchId) }
+    open fun abandonUpdateDispatch(dispatchId: Long, reasonWire: String) = requireLive { nativeAbandonUpdateDispatch(it, dispatchId, reasonWire) }
 
     fun notifyAccountsChanged() = requireLive { nativeAccountsChanged(it) }
 
@@ -328,7 +328,7 @@ open class QuickJs {
     private external fun nativeAbandonDispatch(ptr: Long, dispatchId: Long, reasonWire: String)
     private external fun nativeDispatchUpdate(ptr: Long, typeName: String, accountId: Int, updateWire: String)
     private external fun nativeDispatchUpdateIntercept(ptr: Long, callbackId: Int, dispatchId: Long, typeName: String, accountId: Int, updateWire: String)
-    private external fun nativeAbandonUpdateDispatch(ptr: Long, dispatchId: Long)
+    private external fun nativeAbandonUpdateDispatch(ptr: Long, dispatchId: Long, reasonWire: String)
     private external fun nativeAccountsChanged(ptr: Long)
     private external fun nativeSettle(ptr: Long, api: Int, requestId: Long, wire: String)
     private external fun nativeSettleBytes(ptr: Long, api: Int, requestId: Long, bytes: ByteArray)

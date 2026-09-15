@@ -238,7 +238,13 @@
     // the host only ever dispatches `SHAPES`' own methods, so this is a shape the engine does not know rather
     // than a plugin error: pass it on untouched instead of failing the user's send over it
     if (shape === undefined) return next()
-    const verdict = await middleware({ message: buildOutgoing(raw, shape, account, dispatchId), account })
+    const verdict = await middleware({
+      message: buildOutgoing(raw, shape, account, dispatchId),
+      account,
+      get signal() {
+        return context.signal
+      },
+    })
     // a `setMedia` send resolves this with null: the request is never sent, the app taking the
     // message over instead, and the host tells it so itself rather than through this value
     if (verdict === 'send') return next()

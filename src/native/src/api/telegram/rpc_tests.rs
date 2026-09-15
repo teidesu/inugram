@@ -1,8 +1,23 @@
 use super::*;
 use crate::api::error::install_rejection_tracker;
+use crate::api::globals::RandomHost;
 use crate::api::tl::proxy::TlHost;
 use crate::sandbox::grants::TestGrantHost;
 use rquickjs::Context;
+
+/// counts up from a seed, so `crypto.getRandomValues` really writes through and two draws differ
+#[derive(Default)]
+struct CountingRandom(Cell<u8>);
+
+impl RandomHost for CountingRandom {
+  fn random_bytes(&self, out: &mut [u8]) -> bool {
+    for byte in out.iter_mut() {
+      self.0.set(self.0.get().wrapping_add(1));
+      *byte = self.0.get();
+    }
+    true
+  }
+}
 
 #[derive(Default)]
 struct TestHost {
@@ -160,6 +175,16 @@ use crate::testing::harness::eval_json;
 
 /// like [`setup`] but captures every `log()` upcall so tests can assert on emitted diagnostics
 fn setup_logging(grants: &[&str]) -> LoggingFixture {
+  setup_fixture(grants, false)
+}
+
+/// like [`setup`] with the sandbox globals installed first, as on a device, so `AbortController` exists
+fn setup_with_globals(grants: &[&str]) -> (Runtime, Context, Rc<TestHost>, Disposing) {
+  let (rt, ctx, host, state, _log) = setup_fixture(grants, true);
+  (rt, ctx, host, state)
+}
+
+fn setup_fixture(grants: &[&str], with_globals: bool) -> LoggingFixture {
   let rt = Runtime::new().unwrap();
   let ctx = Context::full(&rt).unwrap();
   let host = Rc::new(TestHost::default());
@@ -174,6 +199,16 @@ fn setup_logging(grants: &[&str]) -> LoggingFixture {
   let state = ctx.with(|ctx| {
     let inu = crate::testing::harness::get_api_globals(&ctx);
     crate::api::error::install_plugin_error(&ctx).unwrap();
+    if with_globals {
+      let random: Rc<dyn RandomHost> = Rc::new(CountingRandom::default());
+      crate::api::globals::install_globals(
+        &ctx,
+        random,
+        std::path::Path::new(""),
+        crate::sandbox::limits::ExternalMemory::new(),
+      )
+      .unwrap();
+    }
     // installApi runs before installRpc on a device, and the demuxed events read the
     // `inu.Message` it leaves behind
     let shared = crate::api::tl::utils::install_utils(&ctx, &inu).unwrap();
@@ -434,6 +469,57 @@ fn next_after_a_non_timeout_teardown_does_not_blame_the_budget() {
     catch_json(&ctx, "globalThis.__next({ _: 'foo.bar' })"),
     r#"[true,"aborted",null,"next(): the interceptor chain was torn down and this stage was abandoned"]"#,
   );
+}
+
+#[test]
+fn abandoning_a_stage_aborts_its_signal_before_rejecting_next() {
+  let (rt, ctx, _host, state) = setup_with_globals(&["interceptRpc"]);
+  eval(
+    &ctx,
+    r#"
+        globalThis.__order = [];
+        inu.interceptRpc('foo.bar', async ({ signal }, next) => {
+            signal.addEventListener('abort', () => {
+                __order.push(['abort', signal.reason instanceof inu.PluginError, signal.reason.code, signal.reason.message]);
+            });
+            try { return await next(); } catch (e) { __order.push(['next', e.text]); throw e; }
+        });
+        "#,
+  );
+
+  state.dispatch(&rt, &ctx, 1, 960, "foo.bar", 0, &wire_json(r#"{"_":"foo.bar"}"#));
+  state.abandon_dispatch(&rt, &ctx, 960, "R-1000:INTERCEPTOR_CANCELLED");
+
+  assert_eq!(
+    eval_json(&ctx, "__order"),
+    r#"[["abort",true,"aborted","the app cancelled the request and this stage was abandoned"],["next","INTERCEPTOR_CANCELLED"]]"#,
+  );
+}
+
+#[test]
+fn a_signal_first_read_after_its_stage_timed_out_is_already_aborted() {
+  let (rt, ctx, _host, state) = setup_with_globals(&["interceptRpc"]);
+  eval(&ctx, "inu.interceptRpc('foo.bar', (context) => { globalThis.__context = context; return new Promise(() => {}); });");
+
+  state.dispatch(&rt, &ctx, 1, 961, "foo.bar", 0, &wire_json(r#"{"_":"foo.bar"}"#));
+  state.abandon_dispatch(&rt, &ctx, 961, "R-1000:INTERCEPTOR_TIMEOUT");
+
+  assert_eq!(
+    eval_json(&ctx, "[__context.signal.aborted, __context.signal.reason.code, __context.signal === __context.signal]"),
+    r#"[true,"timed-out",true]"#,
+  );
+}
+
+#[test]
+fn the_signal_of_a_stage_that_completed_never_aborts() {
+  let (rt, ctx, host, state) = setup_with_globals(&["interceptRpc"]);
+  eval(&ctx, "inu.interceptRpc('foo.bar', ({ signal }) => { globalThis.__signal = signal; return { _: 'foo.bar' }; });");
+
+  state.dispatch(&rt, &ctx, 1, 962, "foo.bar", 0, &wire_json(r#"{"_":"foo.bar"}"#));
+  assert_eq!(host.completes.borrow().len(), 1);
+  state.abandon_dispatch(&rt, &ctx, 962, "R-1000:INTERCEPTOR_ABANDONED");
+
+  assert_eq!(eval_json(&ctx, "__signal.aborted"), "false");
 }
 
 #[test]
@@ -2283,10 +2369,37 @@ fn a_middleware_settling_after_its_stage_was_abandoned_answers_nothing() {
   dispatch_intercept(&rt, &ctx, &state, &host, 5, "updateNewMessage", NEW_MESSAGE);
   assert!(host.verdicts.borrow().is_empty(), "a parked middleware has not answered yet");
 
-  state.abandon_update_dispatch(&rt, &ctx, 5);
+  state.abandon_update_dispatch(&rt, &ctx, 5, "R-1000:INTERCEPTOR_TIMEOUT");
   eval(&ctx, "__settle('drop')");
   pump_jobs(&rt, &ctx, &|_| {});
   assert!(host.verdicts.borrow().is_empty(), "the abandoned stage answered anyway");
+}
+
+#[test]
+fn an_update_middleware_signal_aborts_when_the_batch_times_out() {
+  let (rt, ctx, host, state) = setup_with_globals(&["interceptUpdate(updateNewMessage)"]);
+  eval(
+    &ctx,
+    "globalThis.__reason = null; inu.interceptUpdate('updateNewMessage', ({ signal }) => { signal.addEventListener('abort', () => { __reason = signal.reason.code }); return new Promise(() => {}); });",
+  );
+  dispatch_intercept(&rt, &ctx, &state, &host, 5, "updateNewMessage", NEW_MESSAGE);
+
+  state.abandon_update_dispatch(&rt, &ctx, 5, "R-1000:INTERCEPTOR_TIMEOUT");
+
+  assert_eq!(eval_json(&ctx, "__reason"), r#""timed-out""#);
+}
+
+#[test]
+fn a_send_middleware_signal_aborts_when_the_send_is_cancelled() {
+  let (rt, ctx, host, state) = setup_with_globals(&["interceptSendMessage"]);
+  eval(&ctx, "globalThis.__signal = null; inu.interceptSendMessage(({ signal }) => { __signal = signal; return new Promise(() => {}); });");
+  let callback_id = send_callback_id(&host);
+
+  state.dispatch(&rt, &ctx, callback_id, 970, "messages.sendMessage", 0, &wire_json(SEND_TEXT));
+  assert_eq!(eval_json(&ctx, "__signal.aborted"), "false");
+  state.abandon_dispatch(&rt, &ctx, 970, "R-1000:INTERCEPTOR_CANCELLED");
+
+  assert_eq!(eval_json(&ctx, "[__signal.aborted, __signal.reason.code]"), r#"[true,"aborted"]"#);
 }
 
 #[test]
@@ -2678,19 +2791,6 @@ mod bundled_oracles {
     fn on_update_verdict(&self, _dispatch_id: i64, _deliver: bool) {}
   }
 
-  /// counts up from a seed, so `crypto.getRandomValues` really writes through and two draws differ
-  #[derive(Default)]
-  struct CountingRandom(Cell<u8>);
-
-  impl RandomHost for CountingRandom {
-    fn random_bytes(&self, out: &mut [u8]) -> bool {
-      for byte in out.iter_mut() {
-        self.0.set(self.0.get().wrapping_add(1));
-        *byte = self.0.get();
-      }
-      true
-    }
-  }
 
   type Disposing = crate::testing::harness::DisposeOnDrop<RpcState>;
   type Fixture = (Runtime, Context, Rc<OracleHost>, Disposing, std::sync::Arc<crate::testing::harness::Logs>);

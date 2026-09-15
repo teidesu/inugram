@@ -147,7 +147,7 @@ pub enum PluginErrorCode<'a> {
 }
 
 impl<'a> PluginErrorCode<'a> {
-  fn name(self) -> &'static str {
+  pub(crate) fn name(self) -> &'static str {
     match self {
       Self::InvalidArgument => "invalid-argument",
       Self::NotFound => "not-found",

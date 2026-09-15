@@ -207,7 +207,7 @@ class PluginRpcChainTest {
         assertTrue(cancelled, "stock hangs onCancelled off callbacks only the passthrough creates")
         assertEquals(0, connections().sent.size, "a cancelled chain must not put its request on the wire")
         assertFalse(app.answered, "stock drops a cancelled request's delegate too")
-        assertEquals(1, plugin.js.abandons.size)
+        assertEquals("R-1000:INTERCEPTOR_CANCELLED", plugin.js.abandons.single().reasonWire)
     }
 
     @Test
@@ -241,7 +241,7 @@ class PluginRpcChainTest {
         PluginRpc.onRequestsCancelledForGuid(0, 4242)
         drain()
 
-        assertEquals(1, plugin.js.abandons.size)
+        assertEquals("R-1000:INTERCEPTOR_CANCELLED", plugin.js.abandons.single().reasonWire)
         assertEquals(0, connections().sent.size)
     }
 

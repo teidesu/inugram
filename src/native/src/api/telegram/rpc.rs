@@ -3,7 +3,8 @@ use crate::runtime::Dispose;
 use std::collections::HashMap;
 use std::rc::Rc;
 
-use rquickjs::function::{Opt, This};
+use rquickjs::function::{Constructor, Opt, This};
+use rquickjs::object::{Accessor, Property};
 use rquickjs::{Ctx, Exception, Function, Object, Persistent, Result as JsResult, Runtime, TypedArray, Value};
 
 use crate::api::error::{self, error_value_to_string, format_thrown, PluginErrorCode};
@@ -40,13 +41,95 @@ pub trait RpcHost {
 }
 
 const CHAIN_TIMEOUT_TEXT: &str = "INTERCEPTOR_TIMEOUT";
+const CHAIN_CANCELLED_TEXT: &str = "INTERCEPTOR_CANCELLED";
+
+#[derive(Clone, Copy)]
+enum Abandon {
+  Cancelled,
+  TimedOut,
+  TornDown,
+}
+
+impl Abandon {
+  fn from_wire(reason_wire: &str) -> Self {
+    match proxy::wire_rpc_error(reason_wire) {
+      Some((_, CHAIN_TIMEOUT_TEXT)) => Self::TimedOut,
+      Some((_, CHAIN_CANCELLED_TEXT)) => Self::Cancelled,
+      _ => Self::TornDown,
+    }
+  }
+
+  fn code(self) -> PluginErrorCode<'static> {
+    match self {
+      Self::TimedOut => PluginErrorCode::TimedOut,
+      Self::Cancelled | Self::TornDown => PluginErrorCode::Aborted,
+    }
+  }
+
+  fn message(self) -> &'static str {
+    match self {
+      Self::Cancelled => "the app cancelled the request and this stage was abandoned",
+      Self::TimedOut => "the interceptor chain's budget expired and this stage was abandoned",
+      Self::TornDown => "the interceptor chain was torn down and this stage was abandoned",
+    }
+  }
+
+  fn to_error<'js>(self, ctx: &Ctx<'js>) -> JsResult<Value<'js>> {
+    error::make_plugin_error(ctx, self.code().name(), self.message(), None, None, None)
+  }
+}
+
+#[derive(Default)]
+struct DispatchSignal {
+  controller: RefCell<Option<Persistent<Object<'static>>>>,
+  abandoned: Cell<Option<Abandon>>,
+  finished: Cell<bool>,
+}
+
+impl DispatchSignal {
+  fn read<'js>(&self, ctx: &Ctx<'js>, ctor: &Constructor<'js>) -> JsResult<Value<'js>> {
+    let stored = self.controller.borrow().clone();
+    if let Some(controller) = stored {
+      return controller.restore(ctx)?.get("signal");
+    }
+    let controller: Object = ctor.construct(())?;
+    if let Some(abandon) = self.abandoned.get() {
+      abort_controller(ctx, &controller, abandon)?;
+    } else if !self.finished.get() {
+      *self.controller.borrow_mut() = Some(Persistent::save(ctx, controller.clone()));
+    }
+    controller.get("signal")
+  }
+
+  fn abandon(&self, ctx: &Ctx<'_>, abandon: Abandon) -> JsResult<()> {
+    self.abandoned.set(Some(abandon));
+    self.finished.set(true);
+    let controller = self.controller.borrow_mut().take();
+    match controller {
+      Some(controller) => abort_controller(ctx, &controller.restore(ctx)?, abandon),
+      None => Ok(()),
+    }
+  }
+
+  fn finish(&self, ctx: &Ctx<'_>) {
+    self.finished.set(true);
+    let controller = self.controller.borrow_mut().take();
+    if let Some(controller) = controller {
+      let _ = controller.restore(ctx);
+    }
+  }
+}
+
+fn abort_controller<'js>(ctx: &Ctx<'js>, controller: &Object<'js>, abandon: Abandon) -> JsResult<()> {
+  let abort: Function = controller.get("abort")?;
+  abort.call((This(controller.clone()), abandon.to_error(ctx)?))
+}
 
 #[derive(Default)]
 struct DispatchState {
   called: Cell<bool>,
   settled: Cell<bool>,
-  abandoned: Cell<bool>,
-  timed_out: Cell<bool>,
+  signal: Rc<DispatchSignal>,
   want_passthrough: Cell<bool>,
   next_response: RefCell<Option<String>>,
   next_resolvers: RefCell<Option<PendingSettle>>,
@@ -61,6 +144,7 @@ impl DispatchState {
     if let Some(request) = self.request.borrow_mut().take() {
       let _ = request.restore(ctx);
     }
+    self.signal.finish(ctx);
   }
 }
 
@@ -98,6 +182,7 @@ const SEND_SCOPE: &str = "interceptSendMessage";
 #[derive(Default)]
 struct UpdateDispatchState {
   settled: Cell<bool>,
+  signal: Rc<DispatchSignal>,
 }
 
 pub struct RpcState {
@@ -114,6 +199,7 @@ pub struct RpcState {
   send_wrap: RefCell<Option<Persistent<Function<'static>>>>,
   send_methods: RefCell<Vec<String>>,
   regexp_ctor: RefCell<Option<Persistent<Object<'static>>>>,
+  abort_controller: RefCell<Option<Persistent<Constructor<'static>>>>,
   promise: RefCell<Option<PromiseTools>>,
   dispatches: RefCell<HashMap<i64, Rc<DispatchState>>>,
   update_dispatches: RefCell<HashMap<i64, Rc<UpdateDispatchState>>>,
@@ -149,9 +235,26 @@ impl RpcState {
     removed
   }
 
-  fn drain_update_dispatches(&self) {
-    self.update_dispatches.borrow_mut().clear();
+  fn drain_update_dispatches(&self, ctx: &Ctx<'_>) {
+    let drained: Vec<_> = self.update_dispatches.borrow_mut().drain().collect();
     self.sync_blocking();
+    for (_, ustate) in drained {
+      ustate.signal.finish(ctx);
+    }
+  }
+
+  fn define_signal<'js>(self: &Rc<Self>, context: &Object<'js>, signal: &Rc<DispatchSignal>) -> JsResult<()> {
+    let state = self.clone();
+    let signal = signal.clone();
+    let get = move |ctx: Ctx<'js>, this: This<Object<'js>>| -> JsResult<Value<'js>> {
+      let Some(ctor) = state.abort_controller.borrow().clone() else {
+        return PluginErrorCode::Unsupported.throw(&ctx, "signal: AbortController is not installed");
+      };
+      let value = signal.read(&ctx, &ctor.restore(&ctx)?)?;
+      this.0.prop("signal", Property::from(value.clone()).enumerable())?;
+      Ok(value)
+    };
+    context.prop("signal", Accessor::new_get(get).enumerable().configurable())
   }
 
   fn sync_blocking(&self) {
@@ -273,6 +376,9 @@ pub fn install_rpc<'js>(
     send_wrap: RefCell::new(None),
     send_methods: RefCell::new(Vec::new()),
     regexp_ctor: RefCell::new(Some(Persistent::save(ctx, ctx.globals().get::<_, Object>("RegExp")?))),
+    abort_controller: RefCell::new(
+      ctx.globals().get::<_, Option<Constructor>>("AbortController")?.map(|ctor| Persistent::save(ctx, ctor)),
+    ),
     promise: RefCell::new(Some(capture_promise_tools(ctx)?)),
     dispatches: RefCell::new(HashMap::new()),
     update_dispatches: RefCell::new(HashMap::new()),
@@ -832,11 +938,12 @@ impl RpcState {
 }
 
 impl RpcState {
-  fn settle_update_verdict(&self, ustate: &Rc<UpdateDispatchState>, dispatch_id: i64, deliver: bool) {
+  fn settle_update_verdict(&self, ctx: &Ctx<'_>, ustate: &Rc<UpdateDispatchState>, dispatch_id: i64, deliver: bool) {
     if ustate.settled.replace(true) {
       return;
     }
     self.remove_update_dispatch(dispatch_id);
+    ustate.signal.finish(ctx);
     self.host.on_update_verdict(dispatch_id, deliver);
   }
 
@@ -855,13 +962,14 @@ impl RpcState {
       (state.log)(&format!(
         "interceptUpdate({type_name}): dispatch {dispatch_id} names disposed interceptor {callback_id}, delivering"
       ));
-      state.settle_update_verdict(&ustate, dispatch_id, true);
+      state.settle_update_verdict(ctx, &ustate, dispatch_id, true);
       return Ok(());
     };
     let middleware = reg.callback.restore(ctx)?;
     let context = Object::new(ctx.clone())?;
     context.set("update", state.tl.wire_to_js_value(ctx, update_wire, ViewLife::Dispatch)?)?;
     context.set("account", dispatch_account(ctx, &state.accounts, account_id)?)?;
+    state.define_signal(&context, &ustate.signal)?;
 
     state.insert_update_dispatch(dispatch_id, ustate.clone());
     let call_result = middleware.call::<_, Value>((context,));
@@ -873,7 +981,7 @@ impl RpcState {
           "interceptUpdate({type_name}) middleware threw, delivering: {}",
           format_thrown(ctx, &caught)
         )));
-        state.settle_update_verdict(&ustate, dispatch_id, true);
+        state.settle_update_verdict(ctx, &ustate, dispatch_id, true);
         return Ok(());
       }
       Err(e) => return Err(e),
@@ -896,7 +1004,7 @@ impl RpcState {
             true
           }
         };
-        state.settle_update_verdict(&ustate, dispatch_id, deliver);
+        state.settle_update_verdict(&ctx, &ustate, dispatch_id, deliver);
       })?
     };
     let err_fn = {
@@ -908,22 +1016,23 @@ impl RpcState {
           "interceptUpdate({type_name}) middleware rejected, delivering: {}",
           format_thrown(&ctx, &value)
         )));
-        state.settle_update_verdict(&ustate, dispatch_id, true);
+        state.settle_update_verdict(&ctx, &ustate, dispatch_id, true);
       })?
     };
     state.resolve_and_then(ctx, result_value, ok_fn, err_fn)
   }
 
-  fn settle_update_verdict_after_removal(&self, ustate: &Rc<UpdateDispatchState>, dispatch_id: i64) {
+  fn settle_update_verdict_after_removal(&self, ctx: &Ctx<'_>, ustate: &Rc<UpdateDispatchState>, dispatch_id: i64) {
     if ustate.settled.replace(true) {
       return;
     }
+    ustate.signal.finish(ctx);
     self.host.on_update_verdict(dispatch_id, true);
   }
 
   fn complete_dispatch(&self, ctx: &Ctx<'_>, dstate: &Rc<DispatchState>, dispatch_id: i64, result_wire: &str) {
     if dstate.settled.replace(true) {
-      if dstate.abandoned.get() {
+      if dstate.signal.abandoned.get().is_some() {
         (self.log)(&format!("interceptRpc: dispatch {dispatch_id} settled after being abandoned, result dropped"));
       }
       return;
@@ -970,19 +1079,8 @@ impl RpcState {
       let state = state.clone();
       let dstate = dstate.clone();
       Function::new(ctx.clone(), move |ctx: Ctx<'js>, req: Opt<Value<'js>>| -> JsResult<Value<'js>> {
-        if dstate.abandoned.get() {
-          let (code, message) = if dstate.timed_out.get() {
-            (
-              error::PluginErrorCode::TimedOut,
-              "next(): the interceptor chain's budget expired and this stage was abandoned",
-            )
-          } else {
-            (
-              error::PluginErrorCode::Aborted,
-              "next(): the interceptor chain was torn down and this stage was abandoned",
-            )
-          };
-          return code.throw(&ctx, message);
+        if let Some(abandon) = dstate.signal.abandoned.get() {
+          return abandon.code().throw(&ctx, &format!("next(): {}", abandon.message()));
         }
         if dstate.settled.get() {
           return PluginErrorCode::InvalidArgument.throw(&ctx, "next(): this dispatch already settled");
@@ -1012,6 +1110,7 @@ impl RpcState {
     let context = Object::new(ctx.clone())?;
     context.set("request", request_value)?;
     context.set("account", dispatch_account(ctx, &state.accounts, account_id)?)?;
+    state.define_signal(&context, &dstate.signal)?;
     // the third argument is the send prelude's; the raw `interceptRpc` form takes two and ignores it
     let call_result = middleware.call::<_, Value>((context, next_fn, dispatch_id as f64));
     let result_value = match call_result {
@@ -1170,7 +1269,7 @@ impl RpcState {
         };
         (state.log)(&format!("interceptUpdate({type_name}) dispatch failed, delivering: {msg}"));
         if let Some(ustate) = state.remove_update_dispatch(dispatch_id) {
-          state.settle_update_verdict_after_removal(&ustate, dispatch_id);
+          state.settle_update_verdict_after_removal(&ctx, &ustate, dispatch_id);
         } else {
           state.host.on_update_verdict(dispatch_id, true);
         }
@@ -1179,11 +1278,20 @@ impl RpcState {
     pump_jobs(rt, context, state.log.as_ref());
   }
 
-  pub fn abandon_update_dispatch(self: &Rc<Self>, rt: &Runtime, context: &rquickjs::Context, dispatch_id: i64) {
+  pub fn abandon_update_dispatch(
+    self: &Rc<Self>,
+    rt: &Runtime,
+    context: &rquickjs::Context,
+    dispatch_id: i64,
+    reason_wire: &str,
+  ) {
     let state = self;
-    context.with(|_ctx| {
+    context.with(|ctx| {
       if let Some(ustate) = state.remove_update_dispatch(dispatch_id) {
         ustate.settled.set(true);
+        if let Err(e) = ustate.signal.abandon(&ctx, Abandon::from_wire(reason_wire)) {
+          (state.log)(&format!("abandonUpdateDispatch({dispatch_id}) failed to abort the signal: {e:?}"));
+        }
       }
     });
     pump_jobs(rt, context, state.log.as_ref());
@@ -1258,11 +1366,10 @@ impl RpcState {
     context.with(|ctx| {
       let removed = state.remove_dispatch(dispatch_id);
       let Some(dstate) = removed else { return };
-      dstate.abandoned.set(true);
-      dstate
-        .timed_out
-        .set(proxy::wire_rpc_error(reason_wire).is_some_and(|(_, text)| text == CHAIN_TIMEOUT_TEXT));
       dstate.settled.set(true);
+      if let Err(e) = dstate.signal.abandon(&ctx, Abandon::from_wire(reason_wire)) {
+        (state.log)(&format!("abandonDispatch({dispatch_id}) failed to abort the signal: {e:?}"));
+      }
 
       let pending = dstate.next_resolvers.borrow_mut().take();
       if let Some(pending) = pending {
@@ -1297,6 +1404,9 @@ impl Dispose for RpcState {
       if let Some(regexp) = state.regexp_ctor.borrow_mut().take() {
         let _ = regexp.restore(&ctx);
       }
+      if let Some(ctor) = state.abort_controller.borrow_mut().take() {
+        let _ = ctor.restore(&ctx);
+      }
       if let Some(tools) = state.promise.borrow_mut().take() {
         let _ = tools.ctor.restore(&ctx);
         let _ = tools.resolve.restore(&ctx);
@@ -1305,7 +1415,7 @@ impl Dispose for RpcState {
       if let Some(accounts) = state.accounts.as_ref() {
         let _ = accounts.take_prototype(&ctx);
       }
-      state.drain_update_dispatches();
+      state.drain_update_dispatches(&ctx);
       state.invokes.dispose(&ctx);
       for (_, dstate) in state.drain_dispatches() {
         dstate.release(&ctx);

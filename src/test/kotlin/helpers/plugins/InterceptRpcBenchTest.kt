@@ -44,6 +44,7 @@ class InterceptRpcBenchTest {
     private val middlewares = mapOf(
         "explicitNext" to "({ request }, next) => next(request)",
         "defaultNext" to "(_, next) => next()",
+        "readsSignal" to "({ signal }, next) => { signal.aborted; return next() }",
     )
 
     private fun runChains(count: Int): Long {
@@ -72,13 +73,21 @@ class InterceptRpcBenchTest {
         val engine = plugin.engine!!
         val chains = 300
         val lines = ArrayList<String>()
-        for ((name, middleware) in middlewares) {
+        val timings = middlewares.keys.associateWith { ArrayList<Long>() }
+        fun runVariant(middleware: String, count: Int): Long {
             engine.evaluate("globalThis.dispose = inu.interceptRpc('users.getUsers', $middleware)")
             drain()
-            runChains(50)
-            val rounds = (1..5).map { runChains(chains) }.sorted()
+            val elapsed = runChains(count)
             engine.evaluate("dispose()")
             drain()
+            return elapsed
+        }
+        for (middleware in middlewares.values) runVariant(middleware, 50)
+        repeat(5) {
+            for ((name, middleware) in middlewares) timings.getValue(name) += runVariant(middleware, chains)
+        }
+        for ((name, rounds) in timings) {
+            rounds.sort()
             lines += "$name=%.1fus".format(rounds[rounds.size / 2] / 1000.0 / chains)
         }
         Log.i("InuBench", "interceptRpc chain, per request, median of 5x$chains: ${lines.joinToString(" ")}")
