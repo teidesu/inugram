@@ -200,7 +200,7 @@ fn middleware_transforms_request_then_passes_through_next_response() {
     ctx
       .eval::<(), _>(
         r#"
-            inu.interceptRpc('foo.bar', (req, next) => {
+            inu.interceptRpc('foo.bar', ({ request: req }, next) => {
                 req.x = req.x + 1;
                 return next(req);
             });
@@ -223,13 +223,27 @@ fn middleware_transforms_request_then_passes_through_next_response() {
 }
 
 #[test]
+fn next_without_a_request_forwards_the_one_the_middleware_was_handed() {
+  let (rt, ctx, host, state) = setup(&["interceptRpc"]);
+  ctx.with(|ctx| {
+    ctx
+      .eval::<(), _>("inu.interceptRpc('foo.bar', ({ request }, next) => { request.x = request.x + 1; return next(); });")
+      .unwrap();
+  });
+
+  state.dispatch(&rt, &ctx, 1, 100, "foo.bar", 0, &wire_json(r#"{"_":"foo.bar","x":1}"#));
+
+  assert_eq!(host.next_calls.borrow().as_slice(), [(100, wire_json(r#"{"_":"foo.bar","x":2}"#))]);
+}
+
+#[test]
 fn middleware_returns_undefined_without_awaiting_passes_through_next() {
   let (rt, ctx, host, state) = setup(&["interceptRpc"]);
   ctx.with(|ctx| {
     ctx
       .eval::<(), _>(
         r#"
-            inu.interceptRpc('foo.bar', (req, next) => {
+            inu.interceptRpc('foo.bar', ({ request: req }, next) => {
                 next(req);
             });
             "#,
@@ -253,7 +267,7 @@ fn short_circuit_without_next() {
     ctx
       .eval::<(), _>(
         r#"
-            inu.interceptRpc('foo.bar', (req, next) => {
+            inu.interceptRpc('foo.bar', ({ request: req }, next) => {
                 return { _: 'foo.bar', short: true };
             });
             "#,
@@ -276,7 +290,7 @@ fn async_middleware_promise_result() {
     ctx
       .eval::<(), _>(
         r#"
-            inu.interceptRpc('foo.bar', async (req, next) => {
+            inu.interceptRpc('foo.bar', async ({ request: req }, next) => {
                 await Promise.resolve();
                 return { _: 'foo.bar', async: true };
             });
@@ -299,7 +313,7 @@ fn next_called_twice_throws_type_error() {
     ctx
       .eval::<(), _>(
         r#"
-            inu.interceptRpc('foo.bar', (req, next) => {
+            inu.interceptRpc('foo.bar', ({ request: req }, next) => {
                 next(req);
                 next(req);
             });
@@ -325,7 +339,7 @@ fn abandon_rejects_the_parked_next_with_the_supplied_wire() {
       .eval::<(), _>(
         r#"
             globalThis.__caught = null;
-            inu.interceptRpc('foo.bar', async (req, next) => {
+            inu.interceptRpc('foo.bar', async ({ request: req }, next) => {
                 try { return await next(req); } catch (e) {
                     globalThis.__caught = [e instanceof inu.RpcError, e.code, e.text];
                     throw e;
@@ -352,7 +366,7 @@ fn a_middleware_settling_after_abandon_never_completes() {
     ctx
       .eval::<(), _>(
         r#"
-            inu.interceptRpc('foo.bar', async (req, next) => {
+            inu.interceptRpc('foo.bar', async ({ request: req }, next) => {
                 try { await next(req); } catch (e) {}
                 return { _: 'foo.bar', late: true };
             });
@@ -379,7 +393,7 @@ fn next_after_abandon_throws_timed_out() {
     ctx
       .eval::<(), _>(
         r#"
-            inu.interceptRpc('foo.bar', (req, next) => {
+            inu.interceptRpc('foo.bar', ({ request: req }, next) => {
                 globalThis.__next = next;
                 return new Promise(() => {});
             });
@@ -404,7 +418,7 @@ fn next_after_a_non_timeout_teardown_does_not_blame_the_budget() {
     ctx
       .eval::<(), _>(
         r#"
-            inu.interceptRpc('foo.bar', (req, next) => {
+            inu.interceptRpc('foo.bar', ({ request: req }, next) => {
                 globalThis.__next = next;
                 return new Promise(() => {});
             });
@@ -429,7 +443,7 @@ fn next_after_its_own_settle_throws_invalid_argument() {
     ctx
       .eval::<(), _>(
         r#"
-            inu.interceptRpc('foo.bar', (req, next) => {
+            inu.interceptRpc('foo.bar', ({ request: req }, next) => {
                 globalThis.__next = next;
                 return { _: 'foo.bar', short: true };
             });
@@ -520,7 +534,7 @@ fn rpc_error_wire_rejects_as_rpc_error_instance_and_rethrow_round_trips() {
       .eval::<(), _>(
         r#"
             globalThis.__caught = null;
-            inu.interceptRpc('foo.bar', async (req, next) => {
+            inu.interceptRpc('foo.bar', async ({ request: req }, next) => {
                 try {
                     return await next(req);
                 } catch (e) {
@@ -550,7 +564,7 @@ fn thrown_rpc_error_completes_with_r_wire() {
     ctx
       .eval::<(), _>(
         r#"
-            inu.interceptRpc('foo.bar', (req, next) => {
+            inu.interceptRpc('foo.bar', ({ request: req }, next) => {
                 throw new inu.RpcError(420, 'FLOOD_WAIT_3');
             });
             "#,
@@ -571,7 +585,7 @@ fn returned_rpc_error_completes_with_r_wire() {
     ctx
       .eval::<(), _>(
         r#"
-            inu.interceptRpc('foo.bar', (req, next) => {
+            inu.interceptRpc('foo.bar', ({ request: req }, next) => {
                 return new inu.RpcError(403, 'FORBIDDEN');
             });
             "#,
@@ -638,7 +652,7 @@ fn null_completion_resolves_next_as_null_and_round_trips() {
       .eval::<(), _>(
         r#"
             globalThis.__got = 'unset';
-            inu.interceptRpc('foo.bar', async (req, next) => {
+            inu.interceptRpc('foo.bar', async ({ request: req }, next) => {
                 const r = await next(req);
                 globalThis.__got = r;
                 return r;
@@ -886,7 +900,7 @@ fn an_interceptor_is_handed_the_account_the_request_is_on() {
     &ctx,
     r#"
         globalThis.__seen = null;
-        inu.interceptRpc('foo.bar', (req, next, account) => {
+        inu.interceptRpc('foo.bar', ({ request: req, account }, next) => {
             __seen = [account.id, account.userId, account.isCurrent()];
             return next(req);
         });
@@ -922,7 +936,7 @@ fn without_the_account_api_a_dispatch_hands_over_undefined() {
     r#"
         globalThis.__seen = [];
         inu.onUpdate('updateNewMessage', (u, account) => { __seen.push(typeof account); });
-        inu.interceptRpc('foo.bar', (req, next, account) => { __seen.push(typeof account); return next(req); });
+        inu.interceptRpc('foo.bar', ({ request: req, account }, next) => { __seen.push(typeof account); return next(req); });
         "#,
   );
   state.dispatch_update(&rt, &ctx, UPDATE_TYPE, 0, UPDATE_WIRE);
@@ -961,7 +975,7 @@ fn a_plugin_error_wire_from_the_host_rejects_next_as_a_plugin_error() {
       .eval::<(), _>(
         r#"
             globalThis.__caught = null;
-            inu.interceptRpc('foo.bar', async (req, next) => {
+            inu.interceptRpc('foo.bar', async ({ request: req }, next) => {
                 try { return await next(req); } catch (e) {
                     globalThis.__caught = [e instanceof inu.PluginError, e.code, e.grant];
                     return { _: 'foo.bar' };
@@ -983,7 +997,7 @@ fn a_plugin_error_wire_from_the_host_rejects_next_as_a_plugin_error() {
 fn registration_rejected_drops_callback() {
   let (_rt, ctx, _host, state) = setup(&["interceptRpc"]);
   *_host.register_err.borrow_mut() = Some("not granted".to_string());
-  let threw = ctx.with(|ctx| ctx.eval::<(), _>("inu.interceptRpc('foo.bar', (req,next) => req);").is_err());
+  let threw = ctx.with(|ctx| ctx.eval::<(), _>("inu.interceptRpc('foo.bar', ({ request: req }, next) => req);").is_err());
   assert!(threw);
   assert!(state.intercept_fns.is_empty());
 }
@@ -995,7 +1009,7 @@ fn middleware_error_rejects_next_and_completes_with_error_wire() {
     ctx
       .eval::<(), _>(
         r#"
-            inu.interceptRpc('foo.bar', (req, next) => {
+            inu.interceptRpc('foo.bar', ({ request: req }, next) => {
                 return next(req).catch(e => ({ _: 'foo.bar', caught: e.message }));
             });
             "#,
@@ -1018,7 +1032,7 @@ fn throwing_interceptor_is_logged_and_completes_with_error() {
     ctx
       .eval::<(), _>(
         r#"
-            inu.interceptRpc('foo.bar', (req, next) => {
+            inu.interceptRpc('foo.bar', ({ request: req }, next) => {
                 throw new Error('kaboom');
             });
             "#,
@@ -1114,7 +1128,7 @@ fn an_rpc_error_out_of_a_stage_is_control_flow_not_a_fault() {
     &ctx,
     r#"
         inu.interceptRpc('foo.bar', () => { throw new inu.RpcError(420, 'FLOOD_WAIT_3'); });
-        inu.interceptRpc('foo.baz', async (req, next) => { await next(req); });
+        inu.interceptRpc('foo.baz', async ({ request: req }, next) => { await next(req); });
         "#,
   );
   let ids: Vec<u32> = host.registered.borrow().iter().map(|(_, id, _, _, _)| *id).collect();
@@ -1136,7 +1150,7 @@ fn a_spinning_middleware_is_interrupted_and_the_request_is_still_answered() {
   let (rt, ctx, host, state, logs) = setup_logging(&["interceptRpc"]);
   crate::sandbox::limits::install_interrupt_handler(&rt, std::sync::Arc::new(|_: &str| {}));
   ctx.with(|ctx| {
-    ctx.eval::<(), _>("inu.interceptRpc('foo.bar', (req, next) => { while (true) {} });").unwrap();
+    ctx.eval::<(), _>("inu.interceptRpc('foo.bar', ({ request: req }, next) => { while (true) {} });").unwrap();
   });
 
   {
@@ -1164,7 +1178,7 @@ fn rejecting_interceptor_is_logged_and_completes_with_error() {
     ctx
       .eval::<(), _>(
         r#"
-            inu.interceptRpc('foo.bar', async (req, next) => {
+            inu.interceptRpc('foo.bar', async ({ request: req }, next) => {
                 throw new Error('async-boom');
             });
             "#,
@@ -1200,7 +1214,7 @@ fn a_panicking_test_body_still_releases_its_roots() {
     ctx
       .eval::<(), _>(
         r#"
-            inu.interceptRpc('foo.bar', (req, next) => new Promise(() => {}));
+            inu.interceptRpc('foo.bar', ({ request: req }, next) => new Promise(() => {}));
             inu.invokeRpc({ _: 'foo.baz' });
             "#,
       )
@@ -1403,7 +1417,7 @@ fn registering_after_unload_began_is_a_no_op_returning_a_no_op_disposer() {
         globalThis.__ran = [];
         globalThis.__shapes = [
             typeof inu.onUpdate('updateNewMessage', () => { __ran.push('update'); }),
-            typeof inu.interceptRpc('foo.bar', (req, next) => next(req)),
+            typeof inu.interceptRpc('foo.bar', ({ request: req }, next) => next(req)),
         ];
         inu.onUpdate('updateNewMessage', () => {})();
         "#,
@@ -1802,7 +1816,7 @@ fn intercept_disposer_unregisters_once_and_a_later_dispatch_passes_through() {
     &ctx,
     r#"
         globalThis.__ran = 0;
-        globalThis.__d = inu.interceptRpc('foo.bar', (req, next) => { __ran++; return next(req); });
+        globalThis.__d = inu.interceptRpc('foo.bar', ({ request: req }, next) => { __ran++; return next(req); });
         "#,
   );
   let callback_id = host.registered.borrow()[0].1;
@@ -1832,7 +1846,7 @@ fn intercept_disposer_unregisters_once_and_a_later_dispatch_passes_through() {
 #[test]
 fn a_passthrough_dispatch_the_host_refuses_completes_with_that_error() {
   let (rt, ctx, host, state) = setup(&["interceptRpc"]);
-  eval(&ctx, "globalThis.__d = inu.interceptRpc('foo.bar', (req, next) => next(req)); __d();");
+  eval(&ctx, "globalThis.__d = inu.interceptRpc('foo.bar', ({ request: req }, next) => next(req)); __d();");
   *host.next_err.borrow_mut() = Some("R420:FLOOD_WAIT_5".to_string());
 
   state.dispatch(&rt, &ctx, 1, 981, "foo.bar", 0, &wire_json(r#"{"_":"foo.bar"}"#));
@@ -1847,7 +1861,7 @@ fn an_interceptor_disposing_itself_mid_dispatch_still_finishes_that_dispatch() {
   eval(
     &ctx,
     r#"
-        globalThis.__d = inu.interceptRpc('foo.bar', async (req, next) => {
+        globalThis.__d = inu.interceptRpc('foo.bar', async ({ request: req }, next) => {
             globalThis.__d();
             const r = await next(req);
             return { _: 'foo.bar', finished: true };
@@ -1919,7 +1933,7 @@ fn one_outgoing_shape_covers_all_four_send_methods() {
     &ctx,
     r#"
         globalThis.__seen = [];
-        inu.interceptSendMessage((m) => {
+        inu.interceptSendMessage(({ message: m }) => {
             __seen.push({
                 peer: m.peer,
                 text: m.text.text,
@@ -1960,7 +1974,7 @@ fn reading_the_peer_of_a_saved_messages_send_needs_no_grant() {
     &ctx,
     r#"
         globalThis.__seen = null;
-        inu.interceptSendMessage((m) => { __seen = m.peer; return 'send' });
+        inu.interceptSendMessage(({ message: m }) => { __seen = m.peer; return 'send' });
         "#,
   );
   let to_self = r#"{"_":"messages.sendMessage","peer":{"_":"inputPeerSelf"},"message":"note","random_id":"1"}"#;
@@ -1976,7 +1990,7 @@ fn a_rewrite_reaches_the_request_that_actually_goes_out() {
   let (rt, ctx, host, state) = setup(&["interceptSendMessage"]);
   eval(
     &ctx,
-    r#"inu.interceptSendMessage((m) => {
+    r#"inu.interceptSendMessage(({ message: m }) => {
             m.text = { text: 'rewritten', entities: [{ _: 'messageEntityBold', offset: 0, length: 2 }] };
             m.silent = true;
             m.replyToMessageId = 11;
@@ -2039,7 +2053,7 @@ fn an_async_send_middleware_is_awaited_before_the_request_goes_out() {
   let (rt, ctx, host, state) = setup(&["interceptSendMessage"]);
   eval(
     &ctx,
-    r#"inu.interceptSendMessage(async (m) => {
+    r#"inu.interceptSendMessage(async ({ message: m }) => {
             await Promise.resolve();
             m.text = 'awaited';
             return 'send';
@@ -2071,7 +2085,7 @@ fn media_may_be_replaced_but_not_added_or_removed() {
     &ctx,
     r#"
         globalThis.__errors = [];
-        inu.interceptSendMessage((m) => {
+        inu.interceptSendMessage(({ message: m }) => {
             try { m.media = [{ _: 'inputMediaEmpty' }] } catch (e) { __errors.push([e.code, m.isEdit]) }
             return 'send';
         });
@@ -2092,7 +2106,7 @@ fn a_topic_only_reply_does_not_read_as_a_reply_anyone_wrote() {
     &ctx,
     r#"
         globalThis.__seen = [];
-        inu.interceptSendMessage((m) => {
+        inu.interceptSendMessage(({ message: m }) => {
             __seen.push([m.replyToMessageId, m.topicId]);
             return 'send';
         });
@@ -2203,7 +2217,7 @@ fn an_update_interceptor_names_its_constructors_and_answers_a_verdict() {
   let (rt, ctx, host, state) = setup(&["interceptUpdate(updateNewMessage)"]);
   eval(
     &ctx,
-    "globalThis.__seen = []; inu.interceptUpdate('updateNewMessage', (u) => { __seen.push(u.message.id); return 'deliver' });",
+    "globalThis.__seen = []; inu.interceptUpdate('updateNewMessage', ({ update: u }) => { __seen.push(u.message.id); return 'deliver' });",
   );
   assert_eq!(host.intercept_update_registered.borrow()[0].1, vec!["updateNewMessage".to_string()],);
   dispatch_intercept(&rt, &ctx, &state, &host, 5, "updateNewMessage", NEW_MESSAGE);
@@ -2223,7 +2237,7 @@ fn a_drop_verdict_reaches_the_host_as_one() {
 fn an_update_view_is_writable_and_the_write_reaches_the_app_s_object() {
   let (rt, ctx, host, state) = setup(&["interceptUpdate(updateNewMessage)"]);
   host.tl_fields.borrow_mut().insert("pts".to_string(), "J9".to_string());
-  eval(&ctx, "inu.interceptUpdate('updateNewMessage', (u) => { u.pts = 12; return 'deliver' });");
+  eval(&ctx, "inu.interceptUpdate('updateNewMessage', ({ update: u }) => { u.pts = 12; return 'deliver' });");
   dispatch_intercept(&rt, &ctx, &state, &host, 5, "updateNewMessage", "HOW77");
   assert_eq!(host.tl_fields.borrow().get("pts").map(String::as_str), Some("J12"));
   assert_eq!(host.verdicts.borrow().as_slice(), [(5, true)]);

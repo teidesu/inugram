@@ -40,7 +40,7 @@ function halfDone() {
 
   const label = 'refuses intercepting auth.exportLoginToken'
   try {
-    inu.interceptRpc('auth.exportLoginToken', (req, next) => next(req))
+    inu.interceptRpc('auth.exportLoginToken', ({ request: req }, next) => next(req))
     console.error(`FAIL ${label}: registration was accepted`)
   } catch (e) {
     if (e instanceof inu.PluginError && e.code === 'forbidden') console.log(`PASS ${label}`)
@@ -52,7 +52,7 @@ function halfDone() {
 // next() forwards the call it intercepted, so swapping the method would turn any interceptRpc
 // grant into an unscoped send primitive
 let checkedSwap = false
-inu.interceptRpc('help.getConfig', async (req, next) => {
+inu.interceptRpc('help.getConfig', async ({ request: req }, next) => {
   if (checkedSwap) return next(req)
   checkedSwap = true
 

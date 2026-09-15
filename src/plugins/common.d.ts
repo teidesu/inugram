@@ -1208,22 +1208,28 @@ declare namespace inu {
    */
   function invokeRaw(method: Uint8Array): Promise<Uint8Array | null>
 
+  interface RpcMiddlewareContext<M extends tl.TypeRpcMethod['_']> {
+    request: Extract<tl.TypeRpcMethod, { _: M }>
+    account: Account
+  }
+
+  /** `next()` without a request forwards `context.request`, including any changes made to it */
+  type RpcNext<M extends tl.TypeRpcMethod['_'], R> = (request?: Extract<tl.TypeRpcMethod, { _: M }>) => MaybePromise<R | null>
+
   /** @needs-grant interceptRpc */
   function interceptRpc<M extends tl.TypeRpcMethod['_']>(
     method: M,
     middleware: (
-      request: Extract<tl.TypeRpcMethod, { _: M }>,
-      next: (request: Extract<tl.TypeRpcMethod, { _: M }>) => MaybePromise<tl.RpcCallReturn[M] | null>,
-      account: Account,
+      context: RpcMiddlewareContext<M>,
+      next: RpcNext<M, tl.RpcCallReturn[M]>,
     ) => MaybePromise<tl.RpcCallReturn[M] | null | undefined>,
     options?: InterceptRpcOptions,
   ): Disposer
   function interceptRpc<M extends tl.TypeRpcMethod['_']>(
     methods: M[],
     middleware: (
-      request: Extract<tl.TypeRpcMethod, { _: M }>,
-      next: (request: Extract<tl.TypeRpcMethod, { _: M }>) => MaybePromise<SharedRpcReturn<M> | null>,
-      account: Account,
+      context: RpcMiddlewareContext<M>,
+      next: RpcNext<M, SharedRpcReturn<M>>,
     ) => MaybePromise<SharedRpcReturn<M> | null | undefined>,
     options?: InterceptRpcOptions,
   ): Disposer
@@ -1243,13 +1249,15 @@ declare namespace inu {
     callback: (update: Extract<tl.TypeUpdate, { _: U }>, account: Account) => void,
   ): Disposer
 
+  interface UpdateMiddlewareContext<U extends tl.TypeUpdate['_']> {
+    update: Extract<tl.TypeUpdate, { _: U }>
+    account: Account
+  }
+
   /** @needs-grant interceptUpdate */
   function interceptUpdate<U extends tl.TypeUpdate['_']>(
     types: U | U[],
-    middleware: (
-      update: Extract<tl.TypeUpdate, { _: U }>,
-      account: Account,
-    ) => MaybePromise<'deliver' | 'drop'>,
+    middleware: (context: UpdateMiddlewareContext<U>) => MaybePromise<'deliver' | 'drop'>,
   ): Disposer
 
   interface ActionContext {
@@ -1335,6 +1343,11 @@ declare namespace inu {
     }): Promise<void>
   }
 
+  interface SendMessageContext {
+    message: OutgoingMessage
+    account: Account
+  }
+
   interface SendMessageFilter {
     /** Compiled by Android's `java.util.regex.Pattern`; unsupported syntax rejects registration. */
     text?: RegExp
@@ -1355,7 +1368,7 @@ declare namespace inu {
    * whatever the stages above return.
    */
   function interceptSendMessage(
-    middleware: (message: OutgoingMessage, account: Account) => MaybePromise<'send' | 'drop'>,
+    middleware: (context: SendMessageContext) => MaybePromise<'send' | 'drop'>,
   ): Disposer
   /**
    * @needs-grant interceptSendMessage. Filters are checked before entering the plugin engine.
@@ -1365,6 +1378,6 @@ declare namespace inu {
    */
   function interceptSendMessage(
     filter: SendMessageFilter,
-    middleware: (message: OutgoingMessage, account: Account) => MaybePromise<'send' | 'drop'>,
+    middleware: (context: SendMessageContext) => MaybePromise<'send' | 'drop'>,
   ): Disposer
 }

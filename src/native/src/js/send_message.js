@@ -231,15 +231,17 @@
   // a drop answers the app with `DROP_CODE`/`DROP_TEXT`: it is awaiting a response for a request
   // it will never get one for, so it has to be an rpc error, and the code is the one `PluginRpc`
   // tears a chain down with
-  const wrap = middleware => async (raw, next, account, dispatchId) => {
+  const wrap = middleware => async (context, next, dispatchId) => {
+    const raw = context.request
+    const account = context.account
     const shape = SHAPES[baseName(raw)]
     // the host only ever dispatches `SHAPES`' own methods, so this is a shape the engine does not know rather
     // than a plugin error: pass it on untouched instead of failing the user's send over it
-    if (shape === undefined) return next(raw)
-    const verdict = await middleware(buildOutgoing(raw, shape, account, dispatchId), account)
+    if (shape === undefined) return next()
+    const verdict = await middleware({ message: buildOutgoing(raw, shape, account, dispatchId), account })
     // a `setMedia` send resolves this with null: the request is never sent, the app taking the
     // message over instead, and the host tells it so itself rather than through this value
-    if (verdict === 'send') return next(raw)
+    if (verdict === 'send') return next()
     if (verdict !== 'drop') {
       // a plain Error rather than an `RpcError`, which is why this reads as the plugin's fault and
       // `drop` does not: the verdict is what makes the choice total, so a path that returns nothing

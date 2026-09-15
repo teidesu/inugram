@@ -50,6 +50,18 @@ struct DispatchState {
   want_passthrough: Cell<bool>,
   next_response: RefCell<Option<String>>,
   next_resolvers: RefCell<Option<PendingSettle>>,
+  request: RefCell<Option<Persistent<Value<'static>>>>,
+}
+
+impl DispatchState {
+  fn release(&self, ctx: &Ctx<'_>) {
+    if let Some(pending) = self.next_resolvers.borrow_mut().take() {
+      pending.release(ctx);
+    }
+    if let Some(request) = self.request.borrow_mut().take() {
+      let _ = request.restore(ctx);
+    }
+  }
 }
 
 #[derive(Clone)]
@@ -847,11 +859,12 @@ impl RpcState {
       return Ok(());
     };
     let middleware = reg.callback.restore(ctx)?;
-    let update = state.tl.wire_to_js_value(ctx, update_wire, ViewLife::Dispatch)?;
-    let account = dispatch_account(ctx, &state.accounts, account_id)?;
+    let context = Object::new(ctx.clone())?;
+    context.set("update", state.tl.wire_to_js_value(ctx, update_wire, ViewLife::Dispatch)?)?;
+    context.set("account", dispatch_account(ctx, &state.accounts, account_id)?)?;
 
     state.insert_update_dispatch(dispatch_id, ustate.clone());
-    let call_result = middleware.call::<_, Value>((update, account));
+    let call_result = middleware.call::<_, Value>((context,));
     let result_value = match call_result {
       Ok(v) => v,
       Err(rquickjs::Error::Exception) => {
@@ -916,9 +929,7 @@ impl RpcState {
       return;
     }
     self.remove_dispatch(dispatch_id);
-    if let Some(pending) = dstate.next_resolvers.borrow_mut().take() {
-      pending.release(ctx);
-    }
+    dstate.release(ctx);
     self.host.on_complete(dispatch_id, result_wire);
   }
 
@@ -952,12 +963,13 @@ impl RpcState {
     let request_value = state.tl.wire_to_js_value(ctx, request_wire, ViewLife::Dispatch)?;
 
     let dstate = Rc::new(DispatchState::default());
+    *dstate.request.borrow_mut() = Some(Persistent::save(ctx, request_value.clone()));
     state.insert_dispatch(dispatch_id, dstate.clone());
 
     let next_fn = {
       let state = state.clone();
       let dstate = dstate.clone();
-      Function::new(ctx.clone(), move |ctx: Ctx<'js>, req: Value<'js>| -> JsResult<Value<'js>> {
+      Function::new(ctx.clone(), move |ctx: Ctx<'js>, req: Opt<Value<'js>>| -> JsResult<Value<'js>> {
         if dstate.abandoned.get() {
           let (code, message) = if dstate.timed_out.get() {
             (
@@ -978,6 +990,13 @@ impl RpcState {
         if dstate.called.replace(true) {
           return Err(Exception::throw_type(&ctx, "next() may only be called once"));
         }
+        let req = match req.0.filter(|req| !req.is_undefined()) {
+          Some(req) => req,
+          None => match dstate.request.borrow().clone() {
+            Some(request) => request.restore(&ctx)?,
+            None => return PluginErrorCode::InvalidArgument.throw(&ctx, "next(): this dispatch already settled"),
+          },
+        };
         let wire = proxy::js_value_to_wire(&ctx, req)?;
         let (promise, pending) = PendingSettle::new(&ctx)?;
         *dstate.next_resolvers.borrow_mut() = Some(pending);
@@ -990,9 +1009,11 @@ impl RpcState {
       })?
     };
 
-    let account = dispatch_account(ctx, &state.accounts, account_id)?;
-    // the fourth argument is the send prelude's; the raw `interceptRpc` form takes three and ignores it
-    let call_result = middleware.call::<_, Value>((request_value, next_fn, account, dispatch_id as f64));
+    let context = Object::new(ctx.clone())?;
+    context.set("request", request_value)?;
+    context.set("account", dispatch_account(ctx, &state.accounts, account_id)?)?;
+    // the third argument is the send prelude's; the raw `interceptRpc` form takes two and ignores it
+    let call_result = middleware.call::<_, Value>((context, next_fn, dispatch_id as f64));
     let result_value = match call_result {
       Ok(v) => v,
       Err(rquickjs::Error::Exception) => {
@@ -1249,6 +1270,7 @@ impl RpcState {
           (state.log)(&format!("abandonDispatch({dispatch_id}) failed to reject next(): {e:?}"));
         }
       }
+      dstate.release(&ctx);
     });
     pump_jobs(rt, context, state.log.as_ref());
   }
@@ -1286,9 +1308,7 @@ impl Dispose for RpcState {
       state.drain_update_dispatches();
       state.invokes.dispose(&ctx);
       for (_, dstate) in state.drain_dispatches() {
-        if let Some(pending) = dstate.next_resolvers.borrow_mut().take() {
-          pending.release(&ctx);
-        }
+        dstate.release(&ctx);
       }
     });
   }
