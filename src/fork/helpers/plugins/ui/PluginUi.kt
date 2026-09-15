@@ -429,14 +429,20 @@ object PluginUi : SessionResource {
         options.optString("neutral").takeIf { it.isNotEmpty() }?.let {
             builder.setNeutralButton(it) { _, _ -> settle("neutral") }
         }
-        val dialog = builder.create()
         // buttons settle first (their click listeners run before dismissal), so this only
         // catches back-press / outside-tap / activity teardown
-        dialog.setOnDismissListener { settle("dismissed") }
-        val fragment = LaunchActivity.getSafeLastFragment()
-        // BaseFragment.showDialog returns null when it refuses to show (mid-transition
-        // etc.) - without the fallback the promise would hang forever
-        if (fragment?.showDialog(dialog) == null) dialog.show()
+        presentModal(LaunchActivity.getSafeLastFragment(), builder.create()) { settle("dismissed") }
+    }
+
+    /**
+     * BaseFragment.showDialog replaces the dialog's own dismiss listener, and returns null when it
+     * refuses to show (mid-transition etc.) - either way a promise would otherwise hang forever
+     */
+    private fun presentModal(fragment: BaseFragment?, dialog: AlertDialog, onDismiss: () -> Unit) {
+        if (fragment?.showDialog(dialog) { onDismiss() } == null) {
+            dialog.setOnDismissListener { onDismiss() }
+            dialog.show()
+        }
     }
 
     private fun showPrompt(options: JSONObject, settle: (String?) -> Unit) {
@@ -476,8 +482,7 @@ object PluginUi : SessionResource {
         } else {
             buildSingleChooser(activity, theme, spec.title, spec.items, spec.selected.firstOrNull(), settle)
         }
-        dialog.setOnDismissListener { settle(null) }
-        if (fragment?.showDialog(dialog) == null) dialog.show()
+        presentModal(fragment, dialog) { settle(null) }
     }
 
     private class ChooserSpec(options: JSONObject) {
