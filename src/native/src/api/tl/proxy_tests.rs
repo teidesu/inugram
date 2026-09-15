@@ -1841,3 +1841,49 @@ fn bench_views() {
     median(&mut nested)
   );
 }
+
+fn log_view(host: &Rc<FakeTlHost>, is_vector: bool, id: i64) -> Vec<String> {
+  let (_rt, ctx) = make_ctx();
+  let views = views_of(host);
+  let lines = crate::testing::harness::install_capturing_console(&ctx);
+  ctx.with(|ctx| {
+    bind(&ctx, &views, "view", is_vector, false, ViewLife::Dispatch, id);
+    ctx.eval::<(), _>("console.log(view)").unwrap();
+  });
+  let lines = lines.borrow();
+  lines.clone()
+}
+
+#[test]
+fn console_prints_a_view_as_its_type_and_fields() {
+  let host = Rc::new(FakeTlHost::default());
+  let peer = Rc::new(RefCell::new(object_entry("peerUser", &[("user_id", "I7")])));
+  let message = Rc::new(RefCell::new(object_entry("message", &[("id", "I5"), ("message", "Shi")])));
+  add_nested(&message, "peer_id", peer);
+  let id = host.mint_shared(message, false);
+  assert_eq!(log_view(&host, false, id), vec!["message { id: 5, message: 'hi', peer_id: peerUser { user_id: 7 } }"]);
+}
+
+#[test]
+fn console_prints_a_vector_view_as_an_array() {
+  let host = Rc::new(FakeTlHost::default());
+  let peer = Rc::new(RefCell::new(object_entry("peerUser", &[("user_id", "I7")])));
+  let id = host.mint(FakeEntry::Vector(vec![FakeValue::Wire("I1".to_string()), FakeValue::Nested(peer)]));
+  assert_eq!(log_view(&host, true, id), vec!["[ 1, peerUser { user_id: 7 } ]"]);
+}
+
+#[test]
+fn console_collapses_a_view_nested_past_two_levels_to_its_type() {
+  let host = Rc::new(FakeTlHost::default());
+  let d = Rc::new(RefCell::new(object_entry("d.type", &[("x", "I1")])));
+  let c = Rc::new(RefCell::new(nested_entry("c.type", "d", d)));
+  let b = Rc::new(RefCell::new(nested_entry("b.type", "c", c)));
+  let id = host.mint(nested_entry("a.type", "b", b));
+  assert_eq!(log_view(&host, false, id), vec!["a.type { b: b.type { c: c.type { d: [d.type] } } }"]);
+}
+
+#[test]
+fn console_prints_an_expired_view_without_throwing() {
+  let host = Rc::new(FakeTlHost::default());
+  assert_eq!(log_view(&host, false, 999), vec![format!("[TL view: {HANDLE_EXPIRED_MESSAGE}]")]);
+}

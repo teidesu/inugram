@@ -76,7 +76,8 @@ pub extern "system" fn Java_desu_inugram_helpers_plugins_QuickJs_nativeCreate(
     };
 
     let installed = ctx.with(|ctx| -> JsResult<()> {
-      install_console(&ctx, bridge.clone())?;
+      let console_bridge = bridge.clone();
+      install_console(&ctx, move |level, line| console_bridge.emit_console(level, line))?;
       install_plugin_error(&ctx)
     });
     if installed.is_err() {

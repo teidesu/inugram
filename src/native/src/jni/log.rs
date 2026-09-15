@@ -1,15 +1,13 @@
 use jni::objects::{Global, JMethodID, JObject, JValue};
 use jni::refs::IntoAuto;
 use jni::signature::{Primitive, ReturnType};
-use rquickjs::function::Rest;
-use rquickjs::{Ctx, Function, Object, Value};
-use std::rc::Rc;
+use rquickjs::{Ctx, Function, Object, Result as JsResult};
 use std::sync::Arc;
 
 use super::env::{clear_exception, with_current_env};
 use crate::classify_log;
 
-use super::bridge::JniBridge;
+const PRELUDE: &[u8] = include_bytes!(concat!(env!("OUT_DIR"), "/console.qbc"));
 
 pub(crate) struct ConsoleSink {
   pub(crate) target: Global<JObject<'static>>,
@@ -40,24 +38,11 @@ pub(crate) fn make_log(console: Arc<ConsoleSink>) -> crate::Log {
   })
 }
 
-fn format_console_value<'js>(ctx: &Ctx<'js>, value: &Value<'js>) -> String {
-  crate::api::error::format_logged(ctx, value)
-}
-
-pub(crate) fn install_console<'js>(ctx: &Ctx<'js>, bridge: Rc<JniBridge>) -> rquickjs::Result<()> {
-  let console = Object::new(ctx.clone())?;
-  for (name, level) in [("log", 0), ("info", 1), ("warn", 2), ("error", 3), ("debug", 4)] {
-    let bridge = bridge.clone();
-    console.set(
-      name,
-      Function::new(ctx.clone(), move |ctx: Ctx<'js>, args: Rest<Value<'js>>| {
-        let joined = args.0.iter().map(|value| format_console_value(&ctx, value)).collect::<Vec<_>>().join(" ");
-        bridge.emit_console(level, &joined);
-      })?,
-    )?;
-  }
-  ctx.globals().set("console", console)?;
-  Ok(())
+pub(crate) fn install_console<'js>(ctx: &Ctx<'js>, emit: impl Fn(i32, &str) + 'static) -> JsResult<()> {
+  let emit = Function::new(ctx.clone(), move |level: i32, line: String| emit(level, &line))?;
+  let factory = crate::utils::prelude::load(ctx, PRELUDE)?;
+  let console: Object = factory.call((emit,))?;
+  ctx.globals().set("console", console)
 }
 
 #[cfg(test)]

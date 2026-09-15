@@ -6,6 +6,7 @@ use rquickjs::{
 };
 
 const PRELUDES: &[(&str, &str, &str)] = &[
+  ("console", "<inu:console>", "src/js/console.js"),
   ("globals", "<inu:globals>", "src/js/globals.js"),
   ("url", "<inu:url>", "src/js/url.js"),
   ("fetch", "<inu:fetch>", "src/js/fetch.js"),

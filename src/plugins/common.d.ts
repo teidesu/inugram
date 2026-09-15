@@ -10,6 +10,11 @@ Sensitive plugin data is filtered. Takeover RPC methods are refused: `auth.*`, p
 A plugin runs one JavaScript turn at a time. A callback has a time and memory limit.
 */
 
+/**
+ * Prints like Node's `util.inspect`: a string argument as-is, anything else inspected two levels deep.
+ * A leading string with more arguments after it formats them through `%s %d %i %f %j %o %O %c %%`.
+ * A TL view prints as its type name and present fields.
+ */
 declare const console: {
   log(...args: any[]): void
   info(...args: any[]): void

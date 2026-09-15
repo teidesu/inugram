@@ -10,8 +10,7 @@ use crate::api::platform::open_url::OpenUrlHost;
 use crate::api::ui::dialogs::{DialogHost, DialogState};
 use crate::sandbox::grants::TestGrantHost;
 use crate::sandbox::registry::Lifecycle;
-use rquickjs::function::Rest;
-use rquickjs::{Coerced, Context, Ctx, Function, Object, Runtime};
+use rquickjs::{Context, Ctx, Runtime};
 use std::cell::{Cell, RefCell};
 
 /// One TL object behind a fake handle: its constructor name, and each field already as a wire.
@@ -210,21 +209,9 @@ pub(crate) fn run_capturing_console(rt: &Runtime, ctx: &Context, source: &str) -
 /// host has fed it something: install this, evaluate the source, drive the host, then read the lines.
 pub(crate) fn install_capturing_console(ctx: &Context) -> Arc<Logs> {
   let lines = Logs::new();
+  let sink = lines.clone();
   ctx.with(|ctx| {
-    let console = Object::new(ctx.clone()).unwrap();
-    for name in ["log", "error", "warn", "info", "debug"] {
-      let lines = lines.clone();
-      console
-        .set(
-          name,
-          Function::new(ctx.clone(), move |args: Rest<Coerced<String>>| {
-            lines.borrow_mut().push(args.0.iter().map(|a| a.0.as_str()).collect::<Vec<_>>().join(" "));
-          })
-          .unwrap(),
-        )
-        .unwrap();
-    }
-    ctx.globals().set("console", console).unwrap();
+    crate::jni::log::install_console(&ctx, move |_level, line| sink.borrow_mut().push(line.to_string())).unwrap()
   });
   lines
 }

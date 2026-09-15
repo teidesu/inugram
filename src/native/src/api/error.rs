@@ -13,12 +13,6 @@ pub(crate) fn format_thrown<'js>(ctx: &Ctx<'js>, value: &Value<'js>) -> String {
   message
 }
 
-pub(crate) fn format_logged<'js>(ctx: &Ctx<'js>, value: &Value<'js>) -> String {
-  let message = describe_value(ctx, value, "[unprintable value]");
-  let _ = ctx.catch();
-  message
-}
-
 fn describe_value<'js>(ctx: &Ctx<'js>, value: &Value<'js>, fallback: &str) -> String {
   use rquickjs::FromJs;
 
