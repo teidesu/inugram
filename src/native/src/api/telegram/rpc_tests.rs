@@ -2078,9 +2078,7 @@ fn one_outgoing_shape_covers_all_four_send_methods() {
 }
 
 /// a send to Saved Messages carries `inputPeerSelf`, the one peer form `peer` cannot read out
-/// of the request itself. Resolving it through the account handle's own `userId` costs
-/// `account.read(self)`, which this plugin does not hold - and a getter that throws here does
-/// not fail the plugin, it fails the *user's* message and switches the plugin off.
+/// of the request itself, so it resolves through the account handle's own `userId`.
 #[test]
 fn reading_the_peer_of_a_saved_messages_send_needs_no_grant() {
   let (rt, ctx, host, state) = setup(&["interceptSendMessage"]);

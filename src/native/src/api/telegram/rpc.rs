@@ -524,11 +524,7 @@ impl RpcState {
     let factory = prelude::load(ctx, SEND_PRELUDE)?;
     let plugin_error = globals.plugin_error.clone();
     let rpc_error = globals.get_rpc_error(ctx)?;
-    let accounts = self.accounts.clone();
-    let self_user_id = Function::new(ctx.clone(), move |account_id: i32| {
-      accounts.as_ref().and_then(|accounts| accounts.self_user_id(account_id)).map(|id| id as f64)
-    })?;
-    let built: Object = factory.call((shared, plugin_error, rpc_error, self_user_id, DROP_CODE, DROP_TEXT))?;
+    let built: Object = factory.call((shared, plugin_error, rpc_error, DROP_CODE, DROP_TEXT))?;
     let build: Function = built.get("wrap")?;
     *self.send_methods.borrow_mut() = built.get("methods")?;
     *self.send_wrap.borrow_mut() = Some(Persistent::save(ctx, build));

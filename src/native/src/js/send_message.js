@@ -1,4 +1,4 @@
-((shared, PluginError, RpcError, selfUserId, DROP_CODE, DROP_TEXT) => {
+((shared, PluginError, RpcError, DROP_CODE, DROP_TEXT) => {
   const { baseName, toNumber, peerDialogId, invalid } = shared
 
   const unsupported = message => new PluginError('unsupported', message)
@@ -137,14 +137,7 @@
     const message = {
       get peer() {
         const peer = raw.peer
-        // `inputPeerSelf` is the account itself, and `account.userId` is gated on
-        // `account.read(self)`: reading it here would throw out of a getter the contract says needs
-        // no grant, failing the user's own send to Saved Messages and faulting the plugin for it
-        if (baseName(peer) === 'inputPeerSelf') {
-          const id = selfUserId(account.id)
-          if (id === null || id === undefined) throw invalid(`peer: this account's own id is not known`)
-          return id
-        }
+        if (baseName(peer) === 'inputPeerSelf') return account.userId
         const id = peerDialogId(peer)
         if (id === null) throw invalid(`peer: the request carries no readable peer`)
         return id
