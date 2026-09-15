@@ -1012,6 +1012,9 @@ impl RpcState {
       let ustate = ustate.clone();
       let type_name = type_name.to_string();
       Function::new(ctx.clone(), move |ctx: Ctx<'js>, value: Value<'js>| {
+        if ustate.signal.abandoned.get().is_some() {
+          return;
+        }
         (state.log)(&crate::fault(format_args!(
           "interceptUpdate({type_name}) middleware rejected, delivering: {}",
           format_thrown(&ctx, &value)
@@ -1032,9 +1035,6 @@ impl RpcState {
 
   fn complete_dispatch(&self, ctx: &Ctx<'_>, dstate: &Rc<DispatchState>, dispatch_id: i64, result_wire: &str) {
     if dstate.settled.replace(true) {
-      if dstate.signal.abandoned.get().is_some() {
-        (self.log)(&format!("interceptRpc: dispatch {dispatch_id} settled after being abandoned, result dropped"));
-      }
       return;
     }
     self.remove_dispatch(dispatch_id);
@@ -1154,6 +1154,9 @@ impl RpcState {
       let dstate = dstate.clone();
       let method = method.to_string();
       Function::new(ctx.clone(), move |ctx: Ctx<'js>, value: Value<'js>| -> JsResult<()> {
+        if dstate.signal.abandoned.get().is_some() {
+          return Ok(());
+        }
         (state.log)(&describe_stage_failure(&ctx, format_args!("interceptRpc({method}) callback rejected"), &value));
         let wire = thrown_to_result_wire(&ctx, &value);
         state.complete_dispatch(&ctx, &dstate, dispatch_id, &wire);

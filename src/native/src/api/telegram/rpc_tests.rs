@@ -414,11 +414,39 @@ fn a_middleware_settling_after_abandon_never_completes() {
   state.abandon_dispatch(&rt, &ctx, 951, "R-1000:INTERCEPTOR_TIMEOUT");
 
   assert!(host.completes.borrow().is_empty(), "an abandoned dispatch must never answer the host");
-  assert!(
-    logs.borrow().iter().any(|l| l.contains("settled after being abandoned")),
-    "expected a logged diagnostic, got: {:?}",
-    logs.borrow(),
+  assert!(logs.borrow().is_empty(), "abandoning is the host's decision, not the plugin's fault: {:?}", logs.borrow());
+}
+
+#[test]
+fn a_middleware_rethrowing_its_abandoned_next_logs_nothing() {
+  let (rt, ctx, host, state, logs) = setup_logging(&["interceptRpc"]);
+  eval(
+    &ctx,
+    "inu.interceptRpc('foo.bar', async (_, next) => { const response = await next(); return response; });",
   );
+
+  state.dispatch(&rt, &ctx, 1, 953, "foo.bar", 0, &wire_json(r#"{"_":"foo.bar"}"#));
+  state.abandon_dispatch(&rt, &ctx, 953, "R-1000:INTERCEPTOR_CANCELLED");
+
+  assert!(host.completes.borrow().is_empty());
+  assert!(logs.borrow().is_empty(), "an app cancel is not the plugin's fault: {:?}", logs.borrow());
+}
+
+#[test]
+fn an_update_middleware_rejecting_after_it_was_abandoned_logs_nothing() {
+  let (rt, ctx, host, state, logs) = setup_logging(&["interceptUpdate(updateNewMessage)"]);
+  eval(
+    &ctx,
+    "globalThis.__reject = null; inu.interceptUpdate('updateNewMessage', () => new Promise((_, reject) => { __reject = reject }));",
+  );
+  dispatch_intercept(&rt, &ctx, &state, &host, 5, "updateNewMessage", NEW_MESSAGE);
+
+  state.abandon_update_dispatch(&rt, &ctx, 5, "R-1000:INTERCEPTOR_TIMEOUT");
+  eval(&ctx, "__reject(new Error('gave up'))");
+  pump_jobs(&rt, &ctx, &|_| {});
+
+  assert!(host.verdicts.borrow().is_empty());
+  assert!(logs.borrow().is_empty(), "the stage was already abandoned: {:?}", logs.borrow());
 }
 
 #[test]
