@@ -46,6 +46,7 @@ import desu.inugram.helpers.plugins.ui.PluginAppVisibility
 import desu.inugram.helpers.plugins.ui.PluginCanvas
 import desu.inugram.helpers.plugins.ui.PluginUi
 import desu.inugram.helpers.update.UpdateHelper
+import desu.inugram.ui.settings.PluginInfoActivity
 import org.telegram.messenger.AndroidUtilities
 import org.telegram.messenger.ApplicationLoader
 import org.telegram.messenger.BuildVars
@@ -55,6 +56,7 @@ import org.telegram.messenger.LocaleController.getString
 import org.telegram.messenger.R
 import org.telegram.messenger.Utilities
 import org.telegram.tgnet.TLRPC
+import org.telegram.ui.Components.BulletinFactory
 import org.telegram.ui.LaunchActivity
 import java.io.File
 import java.util.IdentityHashMap
@@ -576,9 +578,22 @@ object PluginManager {
                 plugin.enabled = false
                 PluginStore.persist(plugins)
                 stop(plugin)
+                announceCrash(plugin, failure)
             }
             notifyChanged()
         }
+    }
+
+    private fun announceCrash(plugin: Plugin, failure: PluginFailure) {
+        if (!PluginAppVisibility.isForeground) return
+        BulletinFactory.global().createSimpleBulletin(
+            R.raw.error,
+            formatString(R.string.InuPluginCrashed, plugin.manifest.name),
+            failure.describe(),
+            getString(R.string.ViewAction),
+        ) {
+            if (plugin in plugins) LaunchActivity.getSafeLastFragment()?.presentFragment(PluginInfoActivity(plugin))
+        }.show()
     }
 
     private fun logConsole(session: PluginSession, budget: LogBudget, level: Int, message: String) {

@@ -882,6 +882,7 @@
     <string name="InuPluginUpdatePermissionsKept_one">Review %1$d already granted permission</string>
     <string name="InuPluginUpdatePermissionsKept_other">Review %1$d already granted permissions</string>
     <string name="InuPluginUpdated">%1$s updated</string>
+    <string name="InuPluginCrashed">%1$s crashed and was turned off</string>
     <string name="InuPluginAlreadyInstalled">%1$s is already installed</string>
     <string name="InuPluginsErrorNoManifest">Not a valid plugin (missing metadata header)</string>
     <string name="InuPluginsErrorRead">Couldn\'t read the selected file</string>
