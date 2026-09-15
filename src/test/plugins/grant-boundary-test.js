@@ -100,7 +100,6 @@ async function expectDenied(label, expected, fn) {
 
   for (const [label, scope, call] of [
     ['getMe', 'self', () => account.getMe()],
-    ['userId', 'self', () => account.userId],
     ['getUser', 'peers', () => account.getUser('me')],
     ['getUsers', 'peers', () => account.getUsers([])],
     ['getChats', 'peers', () => account.getChats([])],

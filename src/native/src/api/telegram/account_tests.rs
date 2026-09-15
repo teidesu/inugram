@@ -71,27 +71,15 @@ fn account_needs_no_grant_and_defaults_to_the_selected_slot() {
   );
 }
 
-/// `inu.accounts()` sits behind `account.read(self)` because a user id is the user's identity;
-/// an ungated `userId` on a handle a plugin can mint per slot would hand it over anyway
 #[test]
-fn user_id_needs_the_self_grant_on_every_handle() {
-  let (_rt, denied, _host, _state, _logs) = setup(&[], TWO_ACCOUNTS);
-  assert_eq!(
-    catch_json(&denied, "inu.account().userId"),
-    r#"[true,"not-granted","account.read(self)","missing grant: account.read(self)"]"#,
-  );
-  assert_eq!(
-    catch_json(&denied, "inu.account(1).userId"),
-    r#"[true,"not-granted","account.read(self)","missing grant: account.read(self)"]"#,
-  );
-  assert_eq!(
-    catch_json(&denied, "inu.withCurrentAccount((a) => { globalThis.__x = a.userId; })"),
-    "no-throw",
-    "the scope still runs; only the read inside it is refused",
-  );
-
-  let (_rt, ctx, _host, _state, _logs) = setup(&["account.read(self)"], TWO_ACCOUNTS);
+fn user_id_needs_no_grant() {
+  let (_rt, ctx, _host, _state, _logs) = setup(&[], TWO_ACCOUNTS);
   assert_eq!(eval_json(&ctx, "[inu.account().userId, inu.account(1).userId]"), "[111,222]");
+  assert_eq!(
+    eval_json(&ctx, "Object.getOwnPropertyDescriptor(inu.account(), 'userId').value"),
+    "111",
+    "a plain data property, not an accessor",
+  );
 }
 
 #[test]

@@ -3,7 +3,6 @@ use crate::runtime::Dispose;
 use std::rc::Rc;
 
 use rquickjs::function::Opt;
-use rquickjs::object::Accessor;
 use rquickjs::{Array, Ctx, Function, Object, Persistent, Result as JsResult, Runtime, Value};
 
 use crate::api::error::PluginErrorCode;
@@ -72,25 +71,13 @@ impl AccountState {
       obj.set_prototype(Some(&prototype.restore(ctx)?))?;
     }
     obj.set("id", info.id)?;
-    {
-      let state = self.clone();
-      let user_id = info.user_id;
-      let get = move |ctx: Ctx<'js>| -> JsResult<f64> {
-        state.grants.check_grant(&ctx, "account.read", Some("self"), MATCH_EXACT)?;
-        Ok(user_id as f64)
-      };
-      obj.prop("userId", Accessor::new_get(get).enumerable())?;
-    }
+    obj.set("userId", info.user_id as f64)?;
     let state = self.clone();
     let id = info.id;
     let is_current =
       Function::new(ctx.clone(), move || state.accounts.borrow().iter().any(|a| a.id == id && a.is_current))?;
     obj.set("isCurrent", is_current)?;
     Ok(obj.into_value())
-  }
-
-  pub(crate) fn self_user_id(&self, account_id: i32) -> Option<i64> {
-    self.find(account_id).map(|info| info.user_id)
   }
 
   fn build_account_infos<'js>(&self, ctx: &Ctx<'js>) -> JsResult<Value<'js>> {

@@ -416,11 +416,7 @@ declare namespace inu {
     /** opaque slot of the account */
     readonly id: number
 
-    /**
-     * id of the user this account represents
-     *
-     * @needs-grant account.read(self)
-     */
+    /** id of the user this account represents */
     readonly userId: number
 
     /** whether this is the currently active account */

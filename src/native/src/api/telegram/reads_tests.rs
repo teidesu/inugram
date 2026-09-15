@@ -1597,7 +1597,7 @@ mod grant_boundary {
     }
 
     let lines = lines.borrow().clone();
-    crate::testing::harness::assert_oracle_exact(&lines, "grant boundary test done", 24);
+    crate::testing::harness::assert_oracle_exact(&lines, "grant boundary test done", 23);
     // the point of the oracle, restated where it can be checked: a refusal is decided in the
     // engine, so nothing it asserts on ever reached a host at all
     assert!(reads_host.reads.borrow().is_empty(), "an ungranted read crossed");
