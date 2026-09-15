@@ -140,14 +140,14 @@ async function runShell() {
   check('openUrl accepts an https url', opened === 'no-throw', opened)
 
   const one = await inu.ui.chooser({
-    title: 'pick the third one',
+    title: 'select the third one, then OK',
     items: ['first', { text: 'second', subtitle: 'with a subtitle' }, { text: 'third', danger: true }],
     selected: 1,
   })
   check('a single-select chooser resolves to the index', one === 2, JSON.stringify(one))
 
   const many = await inu.ui.chooser({
-    title: 'pick the first and the last',
+    title: 'keep the first and the last, then OK',
     items: ['first', 'second', 'third'],
     multiple: true,
     selected: [0, 2],
@@ -158,7 +158,7 @@ async function runShell() {
     JSON.stringify(many),
   )
 
-  const none = await inu.ui.chooser({ title: 'dismiss this one', items: ['first'] })
+  const none = await inu.ui.chooser({ title: 'select it, then cancel', items: ['first'] })
   check('a dismissed chooser resolves to null', none === null, JSON.stringify(none))
 
   console.log('shell test done')

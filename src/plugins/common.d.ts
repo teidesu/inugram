@@ -1040,6 +1040,13 @@ declare namespace inu {
       neutral?: string
     }): Promise<'positive' | 'negative' | 'neutral' | 'dismissed'>
 
+    /**
+     * show a list of choices; tapping one only changes the selection, and the OK button submits it
+     *
+     * resolves to the selected index (or a list of indices with `multiple`),
+     * or `null` if the chooser was cancelled or dismissed.
+     * without `multiple`, OK stays disabled until something is selected
+     */
     function chooser(options: {
       title?: string
       items: (string | { text: string, subtitle?: string, danger?: boolean })[]

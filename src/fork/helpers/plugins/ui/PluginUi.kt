@@ -23,7 +23,6 @@ import desu.inugram.helpers.plugins.UiListener
 import desu.inugram.helpers.plugins.platform.PluginJvm
 import desu.inugram.helpers.dialogs.DrawerHelper
 import desu.inugram.ui.settings.PluginSettingsActivity
-import desu.inugram.ui.settings.RadioDialogBuilder
 import desu.inugram.ui.showInputDialog
 import org.json.JSONArray
 import org.json.JSONObject
@@ -40,6 +39,7 @@ import org.telegram.ui.ActionBar.BaseFragment
 import org.telegram.ui.ActionBar.Theme
 import org.telegram.ui.ChatActivity
 import org.telegram.ui.Cells.CheckBoxCell
+import org.telegram.ui.Cells.RadioColorCell
 import org.telegram.ui.Components.Bulletin
 import org.telegram.ui.Components.BulletinFactory
 import org.telegram.ui.Components.ItemOptions
@@ -476,13 +476,7 @@ object PluginUi : SessionResource {
             return
         }
         val fragment = LaunchActivity.getSafeLastFragment()
-        val theme = fragment?.resourceProvider
-        val dialog = if (spec.multiple) {
-            buildMultiChooser(activity, theme, spec.title, spec.items, spec.selected, settle)
-        } else {
-            buildSingleChooser(activity, theme, spec.title, spec.items, spec.selected.firstOrNull(), settle)
-        }
-        presentModal(fragment, dialog) { settle(null) }
+        presentModal(fragment, buildChooser(activity, fragment?.resourceProvider, spec, settle)) { settle(null) }
     }
 
     private class ChooserSpec(options: JSONObject) {
@@ -519,56 +513,64 @@ object PluginUi : SessionResource {
         return text
     }
 
-    private fun buildSingleChooser(
+    private fun buildChooser(
         context: Context,
         theme: Theme.ResourcesProvider?,
-        title: String?,
-        items: List<ChooserItem>,
-        selected: Int?,
+        spec: ChooserSpec,
         settle: (List<Int>?) -> Unit,
     ): AlertDialog {
-        val builder = RadioDialogBuilder(context, theme)
-        if (title != null) builder.setTitle(title)
-        builder.setItems(
-            items.map { RadioDialogBuilder.Item(chooserLabel(it, theme), it.subtitle) },
-            selected ?: -1,
-        ) { _, index -> settle(listOf(index)) }
-        builder.setNegativeButton(LocaleController.getString(R.string.Cancel), null)
-        return builder.create()
-    }
-
-    private fun buildMultiChooser(
-        context: Context,
-        theme: Theme.ResourcesProvider?,
-        title: String?,
-        items: List<ChooserItem>,
-        selected: Set<Int>,
-        settle: (List<Int>?) -> Unit,
-    ): AlertDialog {
-        val ticked = selected.toMutableSet()
+        val picked = spec.selected.toMutableSet()
         val container = LinearLayout(context).apply { orientation = LinearLayout.VERTICAL }
-        items.forEachIndexed { index, item ->
-            val cell = CheckBoxCell(context, CheckBoxCell.TYPE_CHECK_BOX_DEFAULT, 21, theme)
-            cell.setText(chooserLabel(item, theme), item.subtitle.orEmpty(), index in ticked, false)
+        val setters = spec.items.mapIndexed { index, item ->
+            val label = chooserLabel(item, theme)
+            val (cell, setChecked) = if (spec.multiple) {
+                val cell = CheckBoxCell(context, CheckBoxCell.TYPE_CHECK_BOX_DEFAULT, 21, theme)
+                cell.setText(label, item.subtitle.orEmpty(), index in picked, false)
+                cell to { checked: Boolean -> cell.setChecked(checked, true) }
+            } else {
+                val cell = RadioColorCell(context, theme)
+                cell.setPadding(AndroidUtilities.dp(4f), 0, AndroidUtilities.dp(4f), 0)
+                cell.setCheckColor(
+                    Theme.getColor(Theme.key_radioBackground, theme),
+                    Theme.getColor(Theme.key_dialogRadioBackgroundChecked, theme),
+                )
+                if (item.subtitle == null) {
+                    cell.setTextAndValue(label, index in picked)
+                } else {
+                    cell.setTextAndText2AndValue(label, item.subtitle, index in picked)
+                }
+                cell to { checked: Boolean -> cell.setChecked(checked, true) }
+            }
             cell.background = Theme.createSelectorDrawable(
                 Theme.getColor(Theme.key_listSelector, theme),
                 Theme.RIPPLE_MASK_ALL,
             )
-            cell.setOnClickListener {
-                val now = !cell.isChecked
-                cell.setChecked(now, true)
-                if (now) ticked.add(index) else ticked.remove(index)
-            }
-            container.addView(cell, LayoutHelper.createLinear(LayoutHelper.MATCH_PARENT, 50))
+            container.addView(cell, LayoutHelper.createLinear(LayoutHelper.MATCH_PARENT, if (spec.multiple) 50 else LayoutHelper.WRAP_CONTENT))
+            setChecked
         }
         val builder = AlertDialog.Builder(context, theme)
-        if (title != null) builder.setTitle(title)
+        spec.title?.let { builder.setTitle(it) }
         builder.setView(container)
-        builder.setPositiveButton(LocaleController.getString(R.string.OK)) { _, _ ->
-            settle(ticked.sorted())
-        }
+        builder.setPositiveButton(LocaleController.getString(R.string.OK)) { _, _ -> settle(picked.sorted()) }
         builder.setNegativeButton(LocaleController.getString(R.string.Cancel), null)
-        return builder.create()
+        val dialog = builder.create()
+        val updateSubmit = { dialog.getButton(AlertDialog.BUTTON_POSITIVE)?.isEnabled = spec.multiple || picked.isNotEmpty() }
+        dialog.setOnShowListener { updateSubmit() }
+        setters.forEachIndexed { index, setChecked ->
+            container.getChildAt(index).setOnClickListener {
+                if (spec.multiple) {
+                    if (index in picked) picked.remove(index) else picked.add(index)
+                    setChecked(index in picked)
+                } else if (index !in picked) {
+                    picked.forEach { setters[it](false) }
+                    picked.clear()
+                    picked.add(index)
+                    setChecked(true)
+                }
+                updateSubmit()
+            }
+        }
+        return dialog
     }
 
     fun openRegisteredSettings(plugin: Plugin) {
