@@ -65,7 +65,7 @@ const seen = []
 // the rewrite below is visible here
 const rewritten = []
 
-inu.interceptUpdate(['updateNewMessage', 'updateEditMessage'], (update, account) => {
+inu.interceptUpdate(['updateNewMessage', 'updateEditMessage'], ({ update, account }) => {
   const arrived = update.message.message
   seen.push({
     type: update._,

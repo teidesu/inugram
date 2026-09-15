@@ -61,7 +61,7 @@ inu.registerSettings(ui.settingsPage({
   ],
 }))
 
-inu.interceptRpc('messages.getHistory', async (req, next) => {
+inu.interceptRpc('messages.getHistory', async ({ request: req }, next) => {
   const history = await next(req)
   if (history === null || history._ === 'messages.messagesNotModified') return history
   for (const raw of history.messages ?? []) {
@@ -199,7 +199,7 @@ inu.interceptRpc('help.getPromoData', () => ({
   expires: Math.floor(Date.now() / 1000) + 86400,
 }))
 
-inu.interceptSendMessage(async (message, account) => {
+inu.interceptSendMessage(async ({ message, account }) => {
   if (message.isEdit) return 'send'
   const text = message.text.text.trim()
   if (text === '/nope') return 'drop'
@@ -211,7 +211,7 @@ inu.interceptSendMessage(async (message, account) => {
   return 'send'
 })
 
-inu.interceptUpdate(['updateNewMessage', 'updateNewChannelMessage'], (update) => {
+inu.interceptUpdate(['updateNewMessage', 'updateNewChannelMessage'], ({ update }) => {
   const message = new inu.Message(update.message)
   if (message.text.includes('spoilers ahead')) return 'drop'
   update.message.message = message.text.replace(/\bteh\b/g, 'the')

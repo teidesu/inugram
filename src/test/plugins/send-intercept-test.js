@@ -46,7 +46,7 @@ const seen = []
 const refusals = []
 const silentRefusals = []
 
-inu.interceptSendMessage((m, account) => {
+inu.interceptSendMessage(({ message: m, account }) => {
   seen.push({
     peer: m.peer,
     text: m.text.text,

@@ -45,7 +45,7 @@ async function expectDenied(label, expected, fn) {
   await expectDenied(
     'interceptRpc',
     { code: 'not-granted', grant: 'interceptRpc(users.getUsers)' },
-    () => inu.interceptRpc('users.getUsers', (req, next) => next(req)),
+    () => inu.interceptRpc('users.getUsers', ({ request: req }, next) => next(req)),
   )
 
   await expectDenied(

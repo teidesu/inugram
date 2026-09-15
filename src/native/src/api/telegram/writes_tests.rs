@@ -869,7 +869,7 @@ fn out_of(ctx: &Context) -> String {
 #[test]
 fn retargeting_a_send_writes_the_peer_the_account_resolved_and_never_the_bare_id() {
   let fixture = setup_send(&["interceptSendMessage", "account.read(peers)"]);
-  let next = run_one_send(&fixture, "(m) => { m.peer = 111; return 'send' }").expect("the send never went out");
+  let next = run_one_send(&fixture, "({ message: m }) => { m.peer = 111; return 'send' }").expect("the send never went out");
   assert!(
     next.contains(r#""peer":{"_":"inputPeerUser","user_id":"111","access_hash":"1110"}"#),
     "the retarget must write the resolved InputPeer, not the dialog id: {next}",
@@ -880,7 +880,7 @@ fn retargeting_a_send_writes_the_peer_the_account_resolved_and_never_the_bare_id
 #[test]
 fn a_topic_retarget_writes_the_reply_that_lands_the_message_in_it() {
   let fixture = setup_send(&["interceptSendMessage", "account.read(peers)"]);
-  let next = run_one_send(&fixture, "(m) => { m.topicId = 12; return 'send' }").expect("the send never went out");
+  let next = run_one_send(&fixture, "({ message: m }) => { m.topicId = 12; return 'send' }").expect("the send never went out");
   // a post into a topic with no reply of its own addresses the topic's own root message,
   // which is what makes it land in the topic at all
   assert!(
@@ -889,7 +889,7 @@ fn a_topic_retarget_writes_the_reply_that_lands_the_message_in_it() {
   );
 
   let fixture = setup_send(&["interceptSendMessage", "account.read(peers)"]);
-  let next = run_one_send(&fixture, "(m) => { m.replyToMessageId = 33; m.topicId = 12; return 'send' }")
+  let next = run_one_send(&fixture, "({ message: m }) => { m.replyToMessageId = 33; m.topicId = 12; return 'send' }")
     .expect("the send never went out");
   assert!(
     next.contains(r#""reply_to":{"_":"inputReplyToMessage","reply_to_msg_id":33,"top_msg_id":12}"#),
@@ -902,7 +902,7 @@ fn retargeting_at_a_peer_the_app_has_never_seen_is_not_found_and_leaves_the_send
   let fixture = setup_send(&["interceptSendMessage", "account.read(peers)"]);
   let next = run_one_send(
     &fixture,
-    "(m) => { try { m.peer = 4242424242 } catch (e) { __out.push([e.code, m.peer]) } return 'send' }",
+    "({ message: m }) => { try { m.peer = 4242424242 } catch (e) { __out.push([e.code, m.peer]) } return 'send' }",
   )
   .expect("the send never went out");
   assert_eq!(out_of(&fixture.1), r#"[["not-found",7]]"#, "the original peer must survive a failed retarget");
@@ -914,7 +914,7 @@ fn retargeting_needs_the_read_grant_on_top_of_the_apis_own() {
   let fixture = setup_send(&["interceptSendMessage"]);
   let next = run_one_send(
     &fixture,
-    "(m) => { try { m.peer = 111 } catch (e) { __out.push([e.code, e.grant]) } return 'send' }",
+    "({ message: m }) => { try { m.peer = 111 } catch (e) { __out.push([e.code, e.grant]) } return 'send' }",
   )
   .expect("the send never went out");
   assert_eq!(out_of(&fixture.1), r#"[["not-granted","account.read(peers)"]]"#);
@@ -926,7 +926,7 @@ fn what_a_retarget_refuses_outright() {
   let fixture = setup_send(&["interceptSendMessage", "account.read(peers)"]);
   run_one_send(
     &fixture,
-    r#"(m) => {
+    r#"({ message: m }) => {
              for (const bad of [0, null, undefined, 'me', {}]) {
                try { m.peer = bad; __out.push('accepted') } catch (e) { __out.push(e.code) }
              }
