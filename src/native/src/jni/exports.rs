@@ -1129,17 +1129,21 @@ pub extern "system" fn Java_desu_inugram_helpers_plugins_QuickJs_nativeDispatchU
 
 #[no_mangle]
 pub extern "system" fn Java_desu_inugram_helpers_plugins_QuickJs_nativeAbandonUpdateDispatch(
-  _env: EnvUnowned,
+  mut env: EnvUnowned,
   _this: JObject,
   ptr: jlong,
   dispatch_id: jlong,
+  reason_wire: JString,
 ) {
-  let _deadline = crate::sandbox::limits::arm_entry_deadline();
-  let Some(engine) = get_engine(ptr) else {
-    return;
-  };
-  let state = &engine.rpc;
-  state.abandon_update_dispatch(&engine._rt, &engine.ctx, dispatch_id);
+  in_env(&mut env, (), |env| {
+    let _deadline = crate::sandbox::limits::arm_entry_deadline();
+    let Some(engine) = get_engine(ptr) else {
+      return;
+    };
+    let state = &engine.rpc;
+    let reason_wire = jstring_to_string(env, &reason_wire);
+    state.abandon_update_dispatch(&engine._rt, &engine.ctx, dispatch_id, &reason_wire);
+  })
 }
 
 #[no_mangle]

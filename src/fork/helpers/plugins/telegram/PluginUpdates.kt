@@ -112,7 +112,7 @@ object PluginUpdates : SessionResource {
         publishUpdateInterceptors(updateInterceptRegs.filter { it.session !== session })
         for (dispatchId in pendingUpdateDispatches.filterValues { it.stageSession === session }.keys.toList()) {
             val batch = pendingUpdateDispatches.remove(dispatchId) ?: continue
-            batch.stageSession?.engine?.abandonUpdateDispatch(dispatchId)
+            batch.stageSession?.engine?.abandonUpdateDispatch(dispatchId, PluginRpc.ABANDONED_WIRE)
             advanceBatch(batch)
         }
     }
@@ -422,7 +422,7 @@ object PluginUpdates : SessionResource {
         val dispatchId = batch.dispatchId
         val stageSession = batch.stageSession
         if (dispatchId != 0L && pendingUpdateDispatches.remove(dispatchId) === batch) {
-            stageSession?.engine?.abandonUpdateDispatch(dispatchId)
+            stageSession?.engine?.abandonUpdateDispatch(dispatchId, PluginRpc.TIMEOUT_WIRE)
         }
         Log.w(TAG, "[${stageSession?.manifest?.name}] an update batch ran past the ${UPDATE_BUDGET_MS}ms budget")
         finishBatch(batch)

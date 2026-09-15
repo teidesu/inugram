@@ -1211,6 +1211,11 @@ declare namespace inu {
   interface RpcMiddlewareContext<M extends tl.TypeRpcMethod['_']> {
     request: Extract<tl.TypeRpcMethod, { _: M }>
     account: Account
+    /**
+     * Aborted once this stage no longer matters: the app cancelled the request, the chain's budget
+     * ran out, or the chain was torn down. `reason` is a {@link PluginError} coded `aborted` or `timed-out`.
+     */
+    readonly signal: AbortSignal
   }
 
   /** `next()` without a request forwards `context.request`, including any changes made to it */
@@ -1252,6 +1257,11 @@ declare namespace inu {
   interface UpdateMiddlewareContext<U extends tl.TypeUpdate['_']> {
     update: Extract<tl.TypeUpdate, { _: U }>
     account: Account
+    /**
+     * Aborted once the update is delivered without waiting for this stage: its budget ran out or the
+     * plugin stopped. `reason` is a {@link PluginError} coded `aborted` or `timed-out`.
+     */
+    readonly signal: AbortSignal
   }
 
   /** @needs-grant interceptUpdate */
@@ -1346,6 +1356,11 @@ declare namespace inu {
   interface SendMessageContext {
     message: OutgoingMessage
     account: Account
+    /**
+     * Aborted once this send no longer matters: the user cancelled it, the chain's budget ran out,
+     * or the chain was torn down. `reason` is a {@link PluginError} coded `aborted` or `timed-out`.
+     */
+    readonly signal: AbortSignal
   }
 
   interface SendMessageFilter {

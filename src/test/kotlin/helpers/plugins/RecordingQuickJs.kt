@@ -233,7 +233,7 @@ class RecordingQuickJs : QuickJs() {
     }
 
 
-    override fun abandonUpdateDispatch(dispatchId: Long) {
+    override fun abandonUpdateDispatch(dispatchId: Long, reasonWire: String) {
         updateAbandons.add(dispatchId)
     }
 

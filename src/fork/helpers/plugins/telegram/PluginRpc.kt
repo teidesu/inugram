@@ -218,8 +218,10 @@ object PluginRpc : SessionResource {
     private const val VERDICT_TTL_MILLIS = 30_000L
     private const val TIMEOUT_TEXT = "INTERCEPTOR_TIMEOUT"
     private const val ABANDONED_TEXT = "INTERCEPTOR_ABANDONED"
-    private val TIMEOUT_WIRE = PluginWire.encodeRpcError(SYNTHETIC_CODE, TIMEOUT_TEXT)
-    private val ABANDONED_WIRE = PluginWire.encodeRpcError(SYNTHETIC_CODE, ABANDONED_TEXT)
+    private const val CANCELLED_TEXT = "INTERCEPTOR_CANCELLED"
+    internal val TIMEOUT_WIRE = PluginWire.encodeRpcError(SYNTHETIC_CODE, TIMEOUT_TEXT)
+    internal val ABANDONED_WIRE = PluginWire.encodeRpcError(SYNTHETIC_CODE, ABANDONED_TEXT)
+    private val CANCELLED_WIRE = PluginWire.encodeRpcError(SYNTHETIC_CODE, CANCELLED_TEXT)
 
     // fast-path gate read from arbitrary stageQueue threads before paying for a globalQueue hop
     @Volatile private var hasInterceptors = false
@@ -620,7 +622,7 @@ object PluginRpc : SessionResource {
      */
     private fun cancelChain(key: Long, notifyServer: Boolean, onCancelled: Runnable?) {
         val scopeId = chainsByToken.remove(key) ?: return
-        val budget = collapseChain(scopeId, ABANDONED_WIRE)
+        val budget = collapseChain(scopeId, CANCELLED_WIRE)
         budget?.let {
             it.completed = true
             discardVerdict(it.verdict)
