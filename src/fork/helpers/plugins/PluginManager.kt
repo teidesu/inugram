@@ -290,6 +290,7 @@ object PluginManager {
         incompatibility(manifest)?.let { return it }
         if (!PluginStore.writeSource(plugin.file, source)) return getString(R.string.InuPluginsErrorWrite)
         plugin.dev = dev
+        if (dev && !plugin.enabled && plugin.failure?.disables == true) plugin.enabled = true
         reload(plugin)
         PluginStore.persist(plugins)
         return null

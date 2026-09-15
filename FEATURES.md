@@ -272,7 +272,7 @@ most things are toggleable in `Settings → Inugram`, with sensible opinionated 
 - Android plugins can define JVM subclasses and interface implementations with instance/static fields, constructors, and JS or interpreted-routine method bodies (`inu.jvm.defineClass`)
 - JVM method hooks compose across plugins; unloading one plugin leaves the others' hooks active
 - plugin unload handlers can await cleanup for up to two seconds, including UI-thread JVM runnables; reload and uninstall wait before replacing the engine or wiping its storage
-- plugin developer mode (off by default, behind a warning sheet with a 10s confirm delay): `pnpm run push-plugin <file> [--watch] [--logs]` pushes a plugin over adb and the app installs or hot-reloads it in place, keeping its storage, order and enabled bit, and reports the result back to the terminal (and, when the app is on screen, as a bulletin); the receiver demands `android.permission.DUMP` of the sender, so the channel is adb's alone, plugins that arrived this way are badged "dev" in the list, and the plugins page shows a banner for as long as it is on
+- plugin developer mode (off by default, behind a warning sheet with a 10s confirm delay): `pnpm run push-plugin <file> [--watch] [--logs]` pushes a plugin over adb and the app installs or hot-reloads it in place, keeping its storage, order and enabled bit (a plugin a crash switched off is switched back on), and reports the result back to the terminal (and, when the app is on screen, as a bulletin); the receiver demands `android.permission.DUMP` of the sender, so the channel is adb's alone, plugins that arrived this way are badged "dev" in the list, and the plugins page shows a banner for as long as it is on
 
 ## 🐶 bugfixes (vs stock)
 
