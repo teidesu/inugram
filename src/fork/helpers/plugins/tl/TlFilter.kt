@@ -3,7 +3,7 @@ package desu.inugram.helpers.plugins.tl
 import desu.inugram.core.plugins.ApiFilter
 import desu.inugram.core.plugins.PluginPermissions
 import desu.inugram.core.plugins.ScopeMatch
-import desu.inugram.core.plugins.TlCtorIds
+import desu.inugram.core.plugins.TlTables
 import java.lang.reflect.Modifier
 import java.util.concurrent.ConcurrentHashMap
 import org.telegram.tgnet.TLObject
@@ -41,7 +41,7 @@ object TlFilter {
     internal fun indexByCtorId(names: Set<String>): Map<Int, String> {
         val out = HashMap<Int, String>()
         for (name in names) {
-            for (id in TlCtorIds.idsOf(name).orEmpty()) out[id] = name
+            for (id in TlTables.idsOf(name).orEmpty()) out[id] = name
         }
         return out
     }

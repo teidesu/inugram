@@ -103,7 +103,7 @@ class ApiFilterTest {
     fun filteredTypesStillExistInTheSchema() {
         // regression: a rename in TLRPC.java must not silently empty the filter
         for (name in ApiFilter.HIDDEN_FIELDS.keys) {
-            assertTrue("$name missing from TlCtorIds.allNames", name in TlCtorIds.allNames)
+            assertTrue("$name missing from TlTables.allNames", name in TlTables.allNames)
         }
     }
 

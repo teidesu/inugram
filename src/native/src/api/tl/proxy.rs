@@ -30,6 +30,7 @@ mod tag {
   pub const BYTES: u8 = 6;
   pub const HANDLE: u8 = 7;
   pub const HANDLE_PROJECTED: u8 = 8;
+  pub const INT53: u8 = 9;
 }
 
 pub trait TlHost {
@@ -324,8 +325,9 @@ fn decode_read<'js>(ctx: &Ctx<'js>, views: &Rc<TlViews>, life: ViewLife, bytes: 
     tag::NULL => Ok(Value::new_null(ctx.clone())),
     tag::BOOL => Ok(Value::new_bool(ctx.clone(), reader.u8().ok_or_else(bad)? != 0)),
     tag::INT => reader.i32().ok_or_else(bad)?.into_js(ctx),
-    // a tl long is a string on this surface, as `android.tl.d.ts` types it
+    // a tl long is a string on this surface, as `android.tl.d.ts` types it, unless it is one that fits in a js number
     tag::LONG => reader.i64().ok_or_else(bad)?.to_string().into_js(ctx),
+    tag::INT53 => (reader.i64().ok_or_else(bad)? as f64).into_js(ctx),
     tag::DOUBLE => reader.f64().ok_or_else(bad)?.into_js(ctx),
     tag::STRING => reader.str().ok_or_else(bad)?.into_js(ctx),
     tag::BYTES => {

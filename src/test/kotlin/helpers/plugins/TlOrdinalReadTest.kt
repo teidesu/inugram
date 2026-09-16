@@ -63,6 +63,7 @@ class TlOrdinalReadTest {
             2 -> PluginWire.Value.IntNum(buffer.int.toLong())
             // a tl long crosses as a string, so this is what the by-name path spells too
             3 -> PluginWire.Value.Str(buffer.long.toString())
+            9 -> PluginWire.Value.IntNum(buffer.long)
             4 -> PluginWire.Value.DoubleNum(buffer.double)
             5 -> PluginWire.Value.Str(readUtf8())
             6 -> PluginWire.Value.Bytes(
@@ -85,7 +86,8 @@ class TlOrdinalReadTest {
     fun every_field_reads_the_same_by_ordinal_as_by_name() {
         val handles = TlHandles(POLICY)
         var checked = 0
-        for (target in listOf(message(), rights(), TLRPC.TL_peerUser().apply { user_id = 7L }.synced())) {
+        val inputPeer = TLRPC.TL_inputPeerUser().apply { user_id = 7L; access_hash = Long.MIN_VALUE }.synced()
+        for (target in listOf(message(), rights(), TLRPC.TL_peerUser().apply { user_id = 7L }.synced(), inputPeer)) {
             val handle = handles.mintForPlugin(target, readOnly = true)
             for (key in desu.inugram.helpers.plugins.tl.TlReflect.fieldInfos(target.javaClass).keys) {
                 val (byName, byOrdinal) = readBoth(handles, handle, target, key)
@@ -133,7 +135,7 @@ class TlOrdinalReadTest {
 
         val ordinal = handles.resolveField(classId, "user_id")
         val written = handles.readField(child.id, classId, ordinal, buffer)
-        assertEquals(PluginWire.Value.Str("5000000001"), decodeBinary(written))
+        assertEquals(PluginWire.Value.IntNum(5_000_000_001L), decodeBinary(written))
     }
 
     @Test

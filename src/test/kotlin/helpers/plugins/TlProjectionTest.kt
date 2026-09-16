@@ -66,12 +66,18 @@ class TlProjectionTest {
         assertTrue(checked > 10, "a chatBannedRights is 20-odd scalars, checked $checked")
     }
 
-    /** a boolean's bit is its value, so an unset one reads `null` rather than `false`, on both paths */
+    /**
+     * an int53 long is a number and any other long a string; a boolean's bit is its value, so an
+     * unset one reads `null` rather than `false`, on both paths
+     */
     @Test
-    fun a_long_is_a_string_and_a_cleared_bit_is_null() {
+    fun a_long_is_a_number_only_when_int53_and_a_cleared_bit_is_null() {
         val handles = TlHandles(POLICY)
-        val peer = projected(TLRPC.TL_peerUser().apply { user_id = 5_000_000_001L }.synced())
-        assertEquals("5000000001", peer.getString("user_id"))
+        // InputPeer declares an object `peer`, so only a projection that names its fields carries them
+        val inputPeer = TLRPC.TL_inputPeerUser().apply { user_id = 5_000_000_001L; access_hash = Long.MIN_VALUE }.synced()
+        val peer = JSONObject(handles.project(handles.mintForPlugin(inputPeer, readOnly = true), listOf("user_id", "access_hash")))
+        assertEquals(5_000_000_001L, peer.get("user_id"))
+        assertEquals(Long.MIN_VALUE.toString(), peer.get("access_hash"))
 
         val handle = handles.mintForPlugin(rights(), readOnly = true)
         val projection = JSONObject(handles.project(handle))
@@ -127,7 +133,7 @@ class TlProjectionTest {
 
         assertNull(handles.tlSet(child.id, "user_id", PluginWire.encodeJson("\"77\"")))
         assertEquals(77L, (message.peer_id as TLRPC.TL_peerUser).user_id, "the write must reach the app's object")
-        assertEquals(PluginWire.Value.Str("77"), PluginWire.decode(handles.tlGet(child.id, "user_id")))
+        assertEquals(PluginWire.Value.IntNum(77L), PluginWire.decode(handles.tlGet(child.id, "user_id")))
     }
 
     /** an interceptor's view caches nothing, so nothing rides along for a write to go stale against */

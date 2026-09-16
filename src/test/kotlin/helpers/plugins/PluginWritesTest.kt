@@ -370,7 +370,7 @@ class PluginWritesTest {
         connections().lastSent()!!.answer(short, null, 0L)
 
         val handle = handleOf(settled(plugin))
-        assertEquals("S100", plugin.tl().tlGet(handle.id, "from_id").let {
+        assertEquals("I100", plugin.tl().tlGet(handle.id, "from_id").let {
             plugin.tl().tlGet(handleOf(it).id, "user_id")
         })
     }

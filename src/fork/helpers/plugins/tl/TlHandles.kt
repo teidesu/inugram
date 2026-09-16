@@ -51,6 +51,8 @@ class TlHandles(private val policy: TlFilter.Policy) : TlListener {
         // this handle (push, length=) can resync the owning object's flag bit; syncFlagBit is a
         // no-op when the field isn't gated
         val flagOwner: Pair<TLObject, String>? = null,
+        // a vector minted for an int53 field, whose elements cross as numbers
+        val int53: Boolean = false,
     )
 
     private val onHost = EngineDispatch.createHostDispatcher()
@@ -90,7 +92,8 @@ class TlHandles(private val policy: TlFilter.Policy) : TlListener {
         readOnly: Boolean,
         flagOwner: Pair<TLObject, String>? = null,
         owned: Boolean = false,
-    ): Long = register(HandleEntry(target, elementType, scopeId, readOnly, owned, flagOwner))
+        int53: Boolean = false,
+    ): Long = register(HandleEntry(target, elementType, scopeId, readOnly, owned, flagOwner, int53))
 
     /**
      * the table write and the scope's bookkeeping are one step under [scopeLock], so a
@@ -184,7 +187,7 @@ class TlHandles(private val policy: TlFilter.Policy) : TlListener {
         // the unboxed getters, for the fields a plugin actually reads in bulk
         when (info.kind) {
             TlReflect.KIND_LONG -> {
-                out.put(TAG_LONG).putLong(info.field.getLong(target))
+                out.put(if (info.isInt53) TAG_INT53 else TAG_LONG).putLong(info.field.getLong(target))
                 return true
             }
             TlReflect.KIND_INT -> {
@@ -214,7 +217,7 @@ class TlHandles(private val policy: TlFilter.Policy) : TlListener {
         when (value) {
             null -> out.put(TAG_NULL)
             is String -> putString(out.put(TAG_STRING), value)
-            is Long -> out.put(TAG_LONG).putLong(value)
+            is Long -> out.put(if (info.isInt53) TAG_INT53 else TAG_LONG).putLong(value)
             is Int -> out.put(TAG_INT).putInt(value)
             is Short -> out.put(TAG_INT).putInt(value.toInt())
             is Byte -> out.put(TAG_INT).putInt(value.toInt())
@@ -238,6 +241,7 @@ class TlHandles(private val policy: TlFilter.Policy) : TlListener {
                     entry.scopeId,
                     readOnly,
                     flagOwner = target to info.field.name,
+                    int53 = info.isInt53,
                 ),
                 readOnly = readOnly,
                 classId = PluginWire.NO_CLASS,
@@ -357,8 +361,8 @@ class TlHandles(private val policy: TlFilter.Policy) : TlListener {
             out.append(',').append(info.quotedName).append(':')
             val wrote = when (filtered) {
                 null -> out.append("null").let { true }
-                // a long is a string: a plugin reads one back as a bigint, and JSON has no such number
-                is Long -> out.append('"').append(filtered).append('"').let { true }
+                // a long is a string: JSON has no number that holds one, unless the field is int53
+                is Long -> if (info.isInt53) out.append(filtered).let { true } else out.append('"').append(filtered).append('"').let { true }
                 is Int, is Short, is Byte, is Boolean -> out.append(filtered).let { true }
                 is Double -> filtered.isFinite().also { if (it) out.append(filtered) }
                 is Float -> filtered.isFinite().also { if (it) out.append(filtered.toDouble()) }
@@ -381,7 +385,7 @@ class TlHandles(private val policy: TlFilter.Policy) : TlListener {
             is TLObject -> TlJson.toJson(target, policy).toString()
             is ArrayList<*> -> {
                 val arr = JSONArray()
-                for (item in target) if (item != null) TlJson.valueToJson(item, policy)?.let { arr.put(it) }
+                for (item in target) if (item != null) TlJson.valueToJson(item, policy, entry.int53)?.let { arr.put(it) }
                 arr.toString()
             }
             else -> null
@@ -417,6 +421,7 @@ class TlHandles(private val policy: TlFilter.Policy) : TlListener {
             ownerField = key,
             // the peer behind it decides redaction one level down (`m.from_id.user_id = 0`), so the child is sealed even when the parent is writable
             sealed = policy.takeover && info.sealedInTakeover,
+            int53 = info.isInt53,
         )
     }
 
@@ -452,7 +457,7 @@ class TlHandles(private val policy: TlFilter.Policy) : TlListener {
         if (key == "length") return PluginWire.encodeInt(target.size.toLong())
         val index = key.toIntOrNull() ?: return PluginWire.encodeError("no such property '$key' on a TL vector")
         if (index < 0 || index >= target.size) return PluginWire.encodeError("vector index out of range: $index")
-        return encodeFieldValue(entry, target[index], entry.elementType ?: Any::class.java)
+        return encodeFieldValue(entry, target[index], entry.elementType ?: Any::class.java, int53 = entry.int53)
     }
 
     private fun setVectorProp(entry: HandleEntry, target: ArrayList<Any?>, key: String, source: SetSource): String? {
@@ -485,11 +490,12 @@ class TlHandles(private val policy: TlFilter.Policy) : TlListener {
         owner: TLObject? = null,
         ownerField: String? = null,
         sealed: Boolean = false,
+        int53: Boolean = false,
     ): String {
         if (value == null) return PluginWire.encodeNull()
         val readOnly = entry.readOnly || sealed
         return when (value) {
-            is Long -> PluginWire.encodeLongAsString(value)
+            is Long -> if (int53) PluginWire.encodeInt(value) else PluginWire.encodeLongAsString(value)
             is Int -> PluginWire.encodeInt(value.toLong())
             is Short -> PluginWire.encodeInt(value.toLong())
             is Byte -> PluginWire.encodeInt(value.toLong())
@@ -516,6 +522,7 @@ class TlHandles(private val policy: TlFilter.Policy) : TlListener {
                     entry.scopeId,
                     readOnly,
                     flagOwner = if (owner != null && ownerField != null) owner to ownerField else null,
+                    int53 = int53,
                 ),
                 readOnly = readOnly,
             )
@@ -666,6 +673,7 @@ class TlHandles(private val policy: TlFilter.Policy) : TlListener {
         private const val TAG_STRING = 5.toByte()
         private const val TAG_BYTES = 6.toByte()
         private const val TAG_HANDLE = 7.toByte()
+        private const val TAG_INT53 = 9.toByte()
 
         private val quotedTypeNames = java.util.concurrent.ConcurrentHashMap<Class<*>, String>()
         private val typeOnlyProjections = java.util.concurrent.ConcurrentHashMap<Class<*>, String>()

@@ -149,7 +149,7 @@ const NO_CHAT = -4242424242
   // -- an input peer in hand is the answer --
 
   /** @type {tl.RawInputPeerUser} */
-  const built = { _: 'inputPeerUser', user_id: '222', access_hash: '22' }
+  const built = { _: 'inputPeerUser', user_id: 222, access_hash: '22' }
   check('resolvePeerCached passes one through', acc.resolvePeerCached(built) === built)
   check('resolvePeer passes one through', (await acc.resolvePeer(built)) === built)
 

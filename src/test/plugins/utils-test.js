@@ -122,12 +122,14 @@ for (const [what, format] of formatters) {
 /** @type {tl.RawChatPhotoEmpty} */
 const EMPTY_PHOTO = { _: 'chatPhotoEmpty' }
 
-equals('toDialogId of a user', peers.toDialogId({ _: 'peerUser', user_id: '777000' }), 777000)
-equals('toDialogId of a basic group', peers.toDialogId({ _: 'peerChat', chat_id: '123' }), -123)
-equals('toDialogId of a channel', peers.toDialogId({ _: 'peerChannel', channel_id: '456' }), -456)
-equals('toDialogId of an InputPeer', peers.toDialogId({ _: 'inputPeerChannel', channel_id: '456', access_hash: '1' }), -456)
-equals('toDialogId of a User', peers.toDialogId({ _: 'user', id: '42' }), 42)
-equals('toDialogId of a Chat', peers.toDialogId({ _: 'channelForbidden', id: '7', access_hash: '1', title: 'x' }), -7)
+equals('toDialogId of a user', peers.toDialogId({ _: 'peerUser', user_id: 777000 }), 777000)
+equals('toDialogId of a basic group', peers.toDialogId({ _: 'peerChat', chat_id: 123 }), -123)
+equals('toDialogId of a channel', peers.toDialogId({ _: 'peerChannel', channel_id: 456 }), -456)
+equals('toDialogId of an InputPeer', peers.toDialogId({ _: 'inputPeerChannel', channel_id: 456, access_hash: '1' }), -456)
+equals('toDialogId of a User', peers.toDialogId({ _: 'user', id: 42 }), 42)
+equals('toDialogId of a Chat', peers.toDialogId({ _: 'channelForbidden', id: 7, access_hash: '1', title: 'x' }), -7)
+// @ts-expect-error
+equals('toDialogId still reads an id written as a decimal string', peers.toDialogId({ _: 'peerUser', user_id: '777000' }), 777000)
 
 equals('parseDialogId of a user', peers.parseDialogId(777000), { type: 'user', id: 777000 })
 equals('parseDialogId of a chat', peers.parseDialogId(-456), { type: 'chat', id: 456 })
@@ -135,25 +137,25 @@ equals('parseDialogId takes the string form', peers.parseDialogId('-456'), { typ
 
 equals(
   'toInputPeer of a user',
-  peers.toInputPeer({ _: 'user', id: '42', access_hash: '99' }),
-  { _: 'inputPeerUser', user_id: '42', access_hash: '99' },
+  peers.toInputPeer({ _: 'user', id: 42, access_hash: '99' }),
+  { _: 'inputPeerUser', user_id: 42, access_hash: '99' },
 )
-equals('toInputPeer of yourself', peers.toInputPeer({ _: 'user', id: '1', self: true }), { _: 'inputPeerSelf' })
+equals('toInputPeer of yourself', peers.toInputPeer({ _: 'user', id: 1, self: true }), { _: 'inputPeerSelf' })
 equals(
   'toInputPeer of a basic group',
-  peers.toInputPeer({ _: 'chat', id: '123', title: 'x', photo: EMPTY_PHOTO, participants_count: 1, date: 0, version: 0 }),
-  { _: 'inputPeerChat', chat_id: '123' },
+  peers.toInputPeer({ _: 'chat', id: 123, title: 'x', photo: EMPTY_PHOTO, participants_count: 1, date: 0, version: 0 }),
+  { _: 'inputPeerChat', chat_id: 123 },
 )
 equals(
   'toInputPeer of a channel',
-  peers.toInputPeer({ _: 'channel', id: '456', access_hash: '11', title: 'x', photo: EMPTY_PHOTO, date: 0 }),
-  { _: 'inputPeerChannel', channel_id: '456', access_hash: '11' },
+  peers.toInputPeer({ _: 'channel', id: 456, access_hash: '11', title: 'x', photo: EMPTY_PHOTO, date: 0 }),
+  { _: 'inputPeerChannel', channel_id: 456, access_hash: '11' },
 )
 
 equals('toBotApiId offsets channels and only channels', [
-  peers.toBotApiId({ _: 'peerUser', user_id: '42' }),
-  peers.toBotApiId({ _: 'peerChat', chat_id: '123' }),
-  peers.toBotApiId({ _: 'peerChannel', channel_id: '456' }),
+  peers.toBotApiId({ _: 'peerUser', user_id: 42 }),
+  peers.toBotApiId({ _: 'peerChat', chat_id: 123 }),
+  peers.toBotApiId({ _: 'peerChannel', channel_id: 456 }),
 ], [42, -123, -1000000000456])
 equals('fromBotApiId undoes it', [
   peers.fromBotApiId(42),
@@ -163,9 +165,9 @@ equals('fromBotApiId undoes it', [
 
 /** @type {tl.TypePeer[]} */
 const roundTrip = [
-  { _: 'peerUser', user_id: '42' },
-  { _: 'peerChat', chat_id: '123' },
-  { _: 'peerChannel', channel_id: '1234567890' },
+  { _: 'peerUser', user_id: 42 },
+  { _: 'peerChat', chat_id: 123 },
+  { _: 'peerChannel', channel_id: 1234567890 },
 ]
 for (const peer of roundTrip) {
   const trip = peers.fromBotApiId(peers.toBotApiId(peer))
@@ -177,7 +179,7 @@ expectThrow('toDialogId refuses inputPeerSelf, which names no id', 'invalid-argu
 expectThrow('toDialogId refuses a plain number', 'invalid-argument', () => peers.toDialogId(42))
 expectThrow('parseDialogId refuses a username', 'invalid-argument', () => peers.parseDialogId('me'))
 // @ts-expect-error
-expectThrow('toInputPeer refuses a Peer, which carries no access_hash', 'invalid-argument', () => peers.toInputPeer({ _: 'peerUser', user_id: '1' }))
+expectThrow('toInputPeer refuses a Peer, which carries no access_hash', 'invalid-argument', () => peers.toInputPeer({ _: 'peerUser', user_id: 1 }))
 
 // a lookup keyed on a TL name must not answer for Object.prototype's own members
 // @ts-expect-error

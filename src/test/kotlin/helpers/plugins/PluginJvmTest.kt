@@ -423,7 +423,10 @@ class PluginJvmTest {
         assertEquals("loaded from dex", plugin.js("inu.jvm.cls('$PROBE_CLASS').callStatic('greet')"))
 
         PluginJvm.wipe(plugin.id)
-        assertFalse(PluginJvm.dexDir(plugin.id).exists())
+        // ART writes a loaded dex's vdex from a background thread, creating `oat/<isa>` as it goes, so a
+        // wipe racing it can see that tree come back; the dex itself must not
+        val left = PluginJvm.dexDir(plugin.id).walkTopDown().filter { it.isFile && it.extension == "dex" }.toList()
+        assertTrue(left.isEmpty(), "left behind: $left")
     }
 
     @Test

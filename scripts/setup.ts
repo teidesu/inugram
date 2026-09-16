@@ -1,6 +1,7 @@
 import fs from 'node:fs/promises'
 import { join } from 'node:path'
 import { ICON_SELECTION, patchesDir, rootDir, worktreeDir } from './config.js'
+import { generateTl } from './generate-tl.js'
 import {
   applySubmodulePatches,
   cd,
@@ -218,6 +219,7 @@ if (noStgit) {
   await ensureAdGuardFilter()
   await linkForkSource(worktreeDir)
   await generateIconDrawables(worktreeDir)
+  await generateTl()
   success('Flat setup complete')
 } else {
   const expectedPatches = seriesEntries.map(patchNameFromSeriesEntry)
@@ -237,5 +239,6 @@ if (noStgit) {
   await cd(worktreeDir)`git config submodule.TMessagesProj_App/jni/lsplant.ignore all`
   const linkedAny = await linkForkSource(worktreeDir)
   const generatedAny = await generateIconDrawables(worktreeDir)
-  success(linkedAny || generatedAny || syncedSubmodules || patchedSubmodules ? 'Setup complete' : 'Up to date')
+  const generatedTl = await generateTl()
+  success(linkedAny || generatedAny || generatedTl || syncedSubmodules || patchedSubmodules ? 'Setup complete' : 'Up to date')
 }

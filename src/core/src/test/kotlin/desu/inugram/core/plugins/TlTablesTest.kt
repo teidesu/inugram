@@ -5,38 +5,38 @@ import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
-class TlCtorIdsTest {
+class TlTablesTest {
     @Test
     fun messageResolvesToASetWithLegacyVariantsIncluded() {
-        val ids = TlCtorIds.idsOf("message")
+        val ids = TlTables.idsOf("message")
         assertTrue(ids != null && ids.size > 1)
     }
 
     @Test
     fun updateServiceNotificationIsAKnownUpdate() {
-        assertTrue("updateServiceNotification" in TlCtorIds.updateNames)
-        assertEquals(1, TlCtorIds.idsOf("updateServiceNotification")?.size)
+        assertTrue("updateServiceNotification" in TlTables.updateNames)
+        assertEquals(1, TlTables.idsOf("updateServiceNotification")?.size)
     }
 
     @Test
     fun usersGetUsersIsAKnownMethod() {
-        assertTrue("users.getUsers" in TlCtorIds.methodNames)
+        assertTrue("users.getUsers" in TlTables.methodNames)
     }
 
     @Test
     fun unknownNameResolvesToNull() {
-        assertNull(TlCtorIds.idsOf("this.does.not.exist"))
-        assertEquals(emptySet<String>(), TlCtorIds.namesOf(0x1234))
+        assertNull(TlTables.idsOf("this.does.not.exist"))
+        assertEquals(emptySet<String>(), TlTables.namesOf(0x1234))
     }
 
     /** what `invokeRaw` reads the takeover refusal off: the bytes name a constructor and nothing else */
     @Test
     fun everyIdResolvesBackToTheNamesThatClaimIt() {
         for (name in listOf("users.getUsers", "message", "auth.exportLoginToken")) {
-            for (id in TlCtorIds.idsOf(name).orEmpty()) {
-                val resolved = TlCtorIds.namesOf(id)
+            for (id in TlTables.idsOf(name).orEmpty()) {
+                val resolved = TlTables.namesOf(id)
                 assertTrue("$name id $id resolved to $resolved", name in resolved)
-                for (other in resolved) assertTrue("$other does not claim $id", id in TlCtorIds.idsOf(other).orEmpty())
+                for (other in resolved) assertTrue("$other does not claim $id", id in TlTables.idsOf(other).orEmpty())
             }
         }
     }
@@ -47,9 +47,9 @@ class TlCtorIdsTest {
      */
     @Test
     fun noSharedIdDisagreesAboutBeingATakeoverMethod() {
-        for (name in TlCtorIds.allNames) {
-            for (id in TlCtorIds.idsOf(name).orEmpty()) {
-                val names = TlCtorIds.namesOf(id)
+        for (name in TlTables.allNames) {
+            for (id in TlTables.idsOf(name).orEmpty()) {
+                val names = TlTables.namesOf(id)
                 val blocked = names.filter { TakeoverMethods.isBlocked(it) }
                 assertTrue("id $id is a takeover method under $blocked but not under $names", blocked.isEmpty() || blocked.size == names.size)
             }
@@ -58,13 +58,13 @@ class TlCtorIdsTest {
 
     @Test
     fun methodNamesAndUpdateNamesAreDisjoint() {
-        assertTrue(TlCtorIds.methodNames.intersect(TlCtorIds.updateNames).isEmpty())
+        assertTrue(TlTables.methodNames.intersect(TlTables.updateNames).isEmpty())
     }
 
     @Test
     fun legacyVariantIdLandsInTheModernSet() {
         // TL_message_old7#5ba66c13 extends TL_message in TLRPC.java - java inheritance only, wire name is `message`
         val legacyId = 0x5ba66c13.toInt()
-        assertTrue(legacyId in TlCtorIds.idsOf("message").orEmpty())
+        assertTrue(legacyId in TlTables.idsOf("message").orEmpty())
     }
 }

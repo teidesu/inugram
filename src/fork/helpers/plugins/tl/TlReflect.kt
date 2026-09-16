@@ -1,7 +1,9 @@
 package desu.inugram.helpers.plugins.tl
 
 import desu.inugram.core.plugins.TlFlags
+import desu.inugram.core.plugins.TlInt53
 import desu.inugram.core.plugins.TlNames
+import desu.inugram.core.plugins.TlTables
 import java.lang.reflect.Field
 import java.lang.reflect.Modifier
 import org.json.JSONObject
@@ -90,6 +92,8 @@ object TlReflect {
         val redactedInTakeover: Boolean,
         /** a draft rides on a `Dialog`, a `ForumTopic`, a `savedDialog` and `updateDraftMessage` as well as on `getDraft`, so this keys on the field's declared type */
         val isDraft: Boolean,
+        /** a long, or a vector of them, that crosses as a js number ([TlInt53]) */
+        val isInt53: Boolean,
     ) {
         val genericType: java.lang.reflect.Type = field.genericType
         val type: Class<*> = field.type
@@ -131,9 +135,16 @@ object TlReflect {
                 sealedInTakeover = TlFilter.decidesRedaction(cls, name),
                 redactedInTakeover = TlFilter.canRedactField(cls, name),
                 isDraft = field.type == TLRPC.DraftMessage::class.java,
+                isInt53 = TlInt53.isInt53(cls, name) && carriesLong(field),
             )
         }
         out
+    }
+
+    private fun carriesLong(field: Field): Boolean {
+        if (field.type == java.lang.Long.TYPE || field.type == java.lang.Long::class.java) return true
+        val generic = field.genericType as? java.lang.reflect.ParameterizedType ?: return false
+        return generic.rawType == ArrayList::class.java && generic.actualTypeArguments[0] == java.lang.Long::class.java
     }
 
     fun fieldInfo(cls: Class<*>, name: String): FieldInfo? = fieldInfos(cls)[name]
@@ -211,12 +222,11 @@ object TlReflect {
 
     /**
      * every table a TL read consults is built on first use, and the first read a plugin makes is
-     * what pays for it (measured on a Pixel 9: 85ms, most of it parsing `tl_flags.txt` out of the
+     * what pays for it (measured on a Pixel 9: 85ms, most of it parsing the TL flag table out of the
      * apk). [PluginManager] calls this off the boot path so no read does.
      */
     fun prewarm() {
-        TlFlags.prewarm()
-        TlNames.prewarm()
+        TlTables.prewarm()
         classesByTlName
     }
 

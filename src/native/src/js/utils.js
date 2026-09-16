@@ -191,7 +191,7 @@
       if (!ENTITIES.has(name) || describePeer(userOrChat) === null) {
         throw invalid(`toInputPeer: expected a user or a chat: ${name || typeof userOrChat}`)
       }
-      // the id keeps whatever form it arrived in, int64s being strings on a snapshot
+      // the id keeps whatever form it arrived in: a number on a snapshot, or a decimal string a plugin wrote
       const id = userOrChat.id
       const hash = userOrChat.access_hash ?? '0'
       if (name === 'user') return { _: 'inputPeerUser', user_id: id, access_hash: hash }

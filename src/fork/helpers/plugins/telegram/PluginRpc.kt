@@ -10,8 +10,8 @@ import desu.inugram.core.plugins.DispatchDeadline
 import desu.inugram.core.plugins.PluginWire
 import desu.inugram.core.plugins.ScopeMatch
 import desu.inugram.core.plugins.TakeoverMethods
-import desu.inugram.core.plugins.TlCtorIds
 import desu.inugram.core.plugins.TlNames
+import desu.inugram.core.plugins.TlTables
 import desu.inugram.helpers.plugins.EngineDispatch
 import desu.inugram.helpers.plugins.Plugin
 import desu.inugram.helpers.plugins.PluginSession
@@ -1252,7 +1252,7 @@ object PluginRpc : SessionResource {
         val constructor = request.constructorId()
             ?: return PluginWire.encodePluginError("invalid-argument", "invokeRaw: a method is at least its 4-byte constructor id")
         // an empty answer is the api working as intended: a constructor no layer this build knows is exactly what a plugin comes here for. Every name claiming the id is asked, since a legacy variant sharing it is named apart from the live constructor
-        for (named in TlCtorIds.namesOf(constructor)) takeoverRefusal(session.permissions, named)?.let { return it }
+        for (named in TlTables.namesOf(constructor)) takeoverRefusal(session.permissions, named)?.let { return it }
         val account = try {
             invokeAccountOrRefusal("invokeRaw", slot, startedOn)
         } catch (e: Exception) {
@@ -1368,7 +1368,7 @@ object PluginRpc : SessionResource {
     private fun constructTlObject(json: JSONObject): TLObject {
         val tlName = json.optString("_", "")
         if (tlName.isEmpty()) PluginWire.refuse("invalid-argument", "a constructed TL object needs a '_' type name")
-        if (TlCtorIds.idsOf(tlName) == null) PluginWire.refuse("unknown-constructor", "unknown TL type '$tlName'")
+        if (TlTables.idsOf(tlName) == null) PluginWire.refuse("unknown-constructor", "unknown TL type '$tlName'")
         return try {
             TlJson.fromJson(json)
         } catch (e: Exception) {

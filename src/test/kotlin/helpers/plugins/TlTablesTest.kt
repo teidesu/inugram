@@ -1,8 +1,9 @@
 package desu.inugram.helpers.plugins
 
-import desu.inugram.core.plugins.TlCtorIds
 import desu.inugram.core.plugins.TlFlags
+import desu.inugram.core.plugins.TlInt53
 import desu.inugram.core.plugins.TlNames
+import desu.inugram.core.plugins.TlTables
 import desu.inugram.helpers.plugins.tl.TlFilter
 import desu.inugram.helpers.plugins.tl.TlJson
 import desu.inugram.helpers.plugins.tl.TlReflect
@@ -15,11 +16,11 @@ import org.telegram.tgnet.TLObject
 import org.telegram.tgnet.TLRPC
 
 /**
- * The three tables `:InuCore` ships (`TlCtorIds`, `TlNames`, `TlFlags`) against the classes they
- * describe. They are generated from stock by `pnpm run generate-tl-typings` and committed, so a
- * rebase that moves a constructor id, renames a class or adds a flag word leaves them describing a
- * tree that is no longer there - and every grant scope, every api filter entry and every optional
- * field read is keyed off them.
+ * The table `:InuCore` ships (`TlTables`, and through it `TlNames`, `TlFlags`, `TlInt53`)
+ * against the classes it describes. It is generated from the worktree by `pnpm run generate-tl`, so
+ * a rebase nobody reran it after, moving a constructor id, renaming a class or adding a flag word,
+ * leaves it describing a tree that is no longer there - and every grant scope, every api filter
+ * entry and every optional field read is keyed off it.
  *
  * Here rather than off-device because the subject is stock's own `org.telegram.tgnet` tree: nothing
  * standing in for it can answer whether the tables still fit.
@@ -73,20 +74,28 @@ class TlTablesTest {
     fun the_tables_describe_the_tree_stock_actually_ships() {
         val declared = HashSet<Int>()
         val brokenFlags = ArrayList<String>()
+        val brokenInt53 = ArrayList<String>()
         for (cls in serializableClasses()) {
             declared.add(cls.getDeclaredField("constructor").also { it.isAccessible = true }.getInt(null))
-            if (brokenFlags.size > 5) continue
-            val fields = publicFieldNames(cls)
-            for (word in TlFlags.wordsOf(cls)) {
-                val name = TlFlags.wordName(word) ?: continue
-                if (name !in fields) brokenFlags.add("${cls.name}.$name")
+            if (brokenFlags.size <= 5) {
+                val fields = publicFieldNames(cls)
+                for (word in TlFlags.wordsOf(cls)) {
+                    val name = TlFlags.wordName(word) ?: continue
+                    if (name !in fields) brokenFlags.add("${cls.name}.$name")
+                }
+            }
+            if (brokenInt53.size <= 5) {
+                for (name in TlInt53.fieldsOf(cls)) {
+                    if (!isLongField(cls, name)) brokenInt53.add("${cls.name}.$name")
+                }
             }
         }
         assertTrue(brokenFlags.isEmpty(), "flag words with no java field behind them: $brokenFlags")
+        assertTrue(brokenInt53.isEmpty(), "int53 entries with no long field behind them: $brokenInt53")
 
-        val names = TlCtorIds.allNames - notInAnyContainer
-        val missing = names.filter { name -> TlCtorIds.idsOf(name).orEmpty().none { it in declared } }
-        assertTrue(missing.isEmpty(), "the tables are stale, re-run `pnpm run generate-tl-typings`: ${missing.take(10)}")
+        val names = TlTables.allNames - notInAnyContainer
+        val missing = names.filter { name -> TlTables.idsOf(name).orEmpty().none { it in declared } }
+        assertTrue(missing.isEmpty(), "the tables are stale, re-run `pnpm run generate-tl`: ${missing.take(10)}")
 
         val failures = names.mapNotNull { name ->
             val built = runCatching { TlJson.fromJson(JSONObject("""{"_":"$name"}""")) }
@@ -125,6 +134,20 @@ class TlTablesTest {
             TlFilter.Policy(takeover = true, drafts = false),
         )
         assertEquals("inputUserSelf", profile.getJSONObject("user_id").getString("_"))
+    }
+
+    private fun isLongField(cls: Class<*>, name: String): Boolean {
+        var current: Class<*>? = cls
+        while (current != null) {
+            val field = current.declaredFields.firstOrNull { it.name == name && !Modifier.isStatic(it.modifiers) }
+            if (field != null) {
+                if (field.type == java.lang.Long.TYPE || field.type == java.lang.Long::class.java) return true
+                val generic = field.genericType as? java.lang.reflect.ParameterizedType ?: return false
+                return generic.rawType == ArrayList::class.java && generic.actualTypeArguments[0] == java.lang.Long::class.java
+            }
+            current = current.superclass
+        }
+        return false
     }
 
     private fun publicFieldNames(cls: Class<*>): Set<String> {

@@ -500,7 +500,7 @@ class PluginReadsAsyncTest {
         assertEquals(setOf("_", "top_message"), projection.keys().asSequence().toSet())
         val peerWire = fieldOf(plugin, element, "peer")
         val userId = plugin.tl().tlGet(handleId(peerWire), "user_id")
-        assertEquals(PluginWire.Value.Str(alice.toString()), PluginWire.decode(userId))
+        assertEquals(PluginWire.Value.IntNum(alice), PluginWire.decode(userId))
     }
 
     @Test
