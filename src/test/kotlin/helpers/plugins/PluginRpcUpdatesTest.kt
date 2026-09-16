@@ -1,7 +1,7 @@
 package desu.inugram.helpers.plugins
 
-import desu.inugram.core.plugins.TlCtorIds
 import desu.inugram.core.plugins.PluginWire
+import desu.inugram.core.plugins.TlTables
 import desu.inugram.helpers.plugins.telegram.PluginUpdates
 import kotlin.test.assertEquals
 import kotlin.test.assertNull
@@ -282,8 +282,7 @@ class PluginRpcUpdatesTest {
         val wire = plugin.js.updates.single().updateWire
         val messageWire = plugin.tl().tlGet(handleId(wire), "message")
         val sender = plugin.tl().tlGet(handleId(messageWire), "from_id")
-        // a TL long crosses as a string, js numbers not reaching that far
-        assertEquals("4242", stringOf(plugin.tl().tlGet(handleId(sender), "user_id")))
+        assertEquals(PluginWire.Value.IntNum(4242), PluginWire.decode(plugin.tl().tlGet(handleId(sender), "user_id")))
         assertEquals(
             "Login code: 12345",
             stringOf(plugin.tl().tlGet(handleId(messageWire), "message")),
@@ -463,7 +462,7 @@ class PluginRpcUpdatesTest {
     fun the_demuxed_events_name_real_update_constructors() {
         for (event in DemuxedEvent.entries) {
             for (type in event.types) {
-                assertTrue(type in TlCtorIds.updateNames, "$type is not an update constructor")
+                assertTrue(type in TlTables.updateNames, "$type is not an update constructor")
             }
         }
     }

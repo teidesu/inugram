@@ -11,7 +11,7 @@ class TakeoverMethodsTest {
     fun everyAccountMethodStillExistsInTheSchema() {
         // regression: a rename in TLRPC.java must not silently empty this blocklist
         for (name in TakeoverMethods.ACCOUNT_METHODS) {
-            assertTrue("$name missing from TlCtorIds.methodNames", name in TlCtorIds.methodNames)
+            assertTrue("$name missing from TlTables.methodNames", name in TlTables.methodNames)
         }
     }
 
@@ -36,7 +36,7 @@ class TakeoverMethodsTest {
     @Test
     fun authExportLoginTokenIsBlockedAndKnown() {
         assertTrue(TakeoverMethods.isBlocked("auth.exportLoginToken"))
-        assertTrue("auth.exportLoginToken" in TlCtorIds.methodNames)
+        assertTrue("auth.exportLoginToken" in TlTables.methodNames)
     }
 
     @Test

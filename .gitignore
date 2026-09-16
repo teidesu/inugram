@@ -3,6 +3,7 @@ worktree/
 .DS_Store
 src/core/build
 src/plugins/android.tl.d.ts
+src/core/src/main/resources/tl_tables.txt
 src/res/assets/adguard_url_tracking.txt
 TODO.md
 CLAUDE.local.md

@@ -49,7 +49,7 @@ object GrantValidator {
                     }
                 }
                 "interceptRpc", "invokeRpc" -> for (scope in grant.scopes) {
-                    if (scope !in TlCtorIds.methodNames) {
+                    if (scope !in TlTables.methodNames) {
                         problems.add("unknown rpc method '$scope' in @grant ${grant.name}")
                     } else if (TakeoverMethods.isBlocked(scope) && !bypassesFilter) {
                         problems.add("'$scope' is a takeover method and cannot be granted")
@@ -58,14 +58,14 @@ object GrantValidator {
                 "onUpdate" -> for (scope in grant.scopes) {
                     if (scope in UNDELIVERABLE_UPDATES && !bypassesFilter) {
                         problems.add("'$scope' is never delivered to plugins and cannot be granted")
-                    } else if (scope !in TlCtorIds.updateNames && scope !in EXTRA_UPDATE_SCOPES) {
+                    } else if (scope !in TlTables.updateNames && scope !in EXTRA_UPDATE_SCOPES) {
                         problems.add("unknown update type '$scope' in @grant onUpdate")
                     }
                 }
                 "interceptUpdate" -> for (scope in grant.scopes) {
                     if (scope in UNDELIVERABLE_UPDATES && !bypassesFilter) {
                         problems.add("'$scope' is never delivered to plugins and cannot be granted")
-                    } else if (scope !in TlCtorIds.updateNames) {
+                    } else if (scope !in TlTables.updateNames) {
                         problems.add("unknown update type '$scope' in @grant interceptUpdate")
                     }
                 }

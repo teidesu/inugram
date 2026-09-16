@@ -175,7 +175,7 @@ equals('and a message with no reply header has neither', [incoming.topicId, inco
 // -- it is a view of raw, never a copy of it --
 
 /** @type {tl.RawMessage} */
-const raw = { _: 'message', id: 1, peer_id: { _: 'peerUser', user_id: '4242' }, date: 1715540640, message: 'original' }
+const raw = { _: 'message', id: 1, peer_id: { _: 'peerUser', user_id: 4242 }, date: 1715540640, message: 'original' }
 const live = new inu.Message(raw)
 const before = live.text
 raw.message = 'rewritten'

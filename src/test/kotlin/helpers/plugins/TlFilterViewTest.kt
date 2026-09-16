@@ -1,8 +1,8 @@
 package desu.inugram.helpers.plugins
 
 import desu.inugram.core.plugins.ApiFilter
-import desu.inugram.core.plugins.TlCtorIds
 import desu.inugram.core.plugins.TlNames
+import desu.inugram.core.plugins.TlTables
 import desu.inugram.core.plugins.PluginWire
 import desu.inugram.helpers.plugins.tl.TlFilter
 import desu.inugram.helpers.plugins.tl.TlHandles
@@ -226,12 +226,12 @@ class TlFilterViewTest {
     fun every_constructor_id_a_hidden_type_carries_is_matched_not_just_the_one_its_class_declares() {
         // `message` stands in for a hidden type with legacy variants, which none of the real ones
         // has: without it this asserts nothing, every hidden type today having a single id
-        val family = TlCtorIds.idsOf("message")!!
+        val family = TlTables.idsOf("message")!!
         assertTrue(family.size > 1, "'message' lost its legacy variants; pick another predicate")
         assertEquals(family, TlFilter.indexByCtorId(setOf("message")).keys)
 
         for (name in ApiFilter.HIDDEN_FIELDS.keys) {
-            val ids = TlCtorIds.idsOf(name) ?: fail("'$name' is not a constructor this build has")
+            val ids = TlTables.idsOf(name) ?: fail("'$name' is not a constructor this build has")
             assertEquals(ids, TlFilter.indexByCtorId(setOf(name)).keys)
         }
     }

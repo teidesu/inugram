@@ -17,7 +17,7 @@ import org.telegram.tgnet.TLRPC
  * a rebase has nothing to do here.
  *
  * Flags are computed in [TLObject.serializeToStream] instead of riding on a `flags` field, because
- * `tl_flags.txt` only covers classes the generator found in stock's tree.
+ * `tl_tables.txt` only covers classes the generator found in stock's tree.
  */
 class TakeoutInitRequest : TLObject() {
     @JvmField var contacts = false

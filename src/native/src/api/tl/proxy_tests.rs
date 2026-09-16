@@ -332,6 +332,69 @@ impl TlHost for FakeTlHost {
   }
 }
 
+/// serves every field through the ordinal path with one canned reply, and refuses to be read by name
+struct OrdinalHost {
+  reply: Vec<u8>,
+}
+
+impl TlHost for OrdinalHost {
+  fn tl_get(&self, _handle: i64, key: &str) -> String {
+    panic!("'{key}' was read by name instead of by ordinal")
+  }
+
+  fn tl_resolve_field(&self, _class_id: i32, _key: &str) -> i32 {
+    0
+  }
+
+  fn tl_read_field(&self, _handle: i64, _class_id: i32, _ordinal: i32) -> i32 {
+    self.reply.len() as i32
+  }
+
+  fn read_buffer(&self) -> &[u8] {
+    &self.reply
+  }
+
+  fn tl_set(&self, _handle: i64, _key: &str, _value_wire: &str) -> Option<String> {
+    None
+  }
+
+  fn tl_set_bytes(&self, _handle: i64, _key: &str, _value: &[u8]) -> Option<String> {
+    None
+  }
+
+  fn tl_has(&self, _handle: i64, _key: &str) -> i32 {
+    1
+  }
+
+  fn tl_own_keys(&self, _handle: i64) -> Option<String> {
+    None
+  }
+
+  fn tl_copy(&self, _handle: i64) -> Option<String> {
+    None
+  }
+
+  fn tl_release(&self, _handle: i64) {}
+}
+
+fn read_ordinal_reply(tag: u8, value: i64) -> String {
+  let mut reply = vec![tag];
+  reply.extend_from_slice(&value.to_le_bytes());
+  let views = TlViews::new(Rc::new(OrdinalHost { reply }));
+  let (_rt, ctx) = make_ctx();
+  ctx.with(|ctx| {
+    let view = views.wire_to_js_value(&ctx, &format!("{}.0", encode_handle(false, true, 1)), ViewLife::Dispatch).unwrap();
+    ctx.globals().set("obj", view).unwrap();
+    ctx.eval("`${typeof obj.field}:${obj.field}`").unwrap()
+  })
+}
+
+#[test]
+fn an_int53_long_reads_as_a_number_and_any_other_long_as_a_string() {
+  assert_eq!(read_ordinal_reply(tag::INT53, 5_000_000_001), "number:5000000001");
+  assert_eq!(read_ordinal_reply(tag::LONG, i64::MIN), "string:-9223372036854775808");
+}
+
 fn make_ctx() -> (Runtime, Context) {
   let rt = Runtime::new().unwrap();
   let ctx = Context::full(&rt).unwrap();

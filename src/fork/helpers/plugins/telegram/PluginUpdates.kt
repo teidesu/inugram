@@ -6,8 +6,8 @@ import desu.inugram.core.plugins.BoundedIdentitySet
 import desu.inugram.core.plugins.DispatchDeadline
 import desu.inugram.core.plugins.PluginWire
 import desu.inugram.core.plugins.ScopeMatch
-import desu.inugram.core.plugins.TlCtorIds
 import desu.inugram.core.plugins.TlNames
+import desu.inugram.core.plugins.TlTables
 import desu.inugram.helpers.plugins.Plugin
 import desu.inugram.helpers.plugins.PluginSession
 import desu.inugram.helpers.plugins.EngineDispatch
@@ -206,7 +206,7 @@ object PluginUpdates : SessionResource {
      */
     private fun registerUpdates(session: PluginSession, callbackId: Int, types: Array<String>, scope: String): String? {
         for (type in types) {
-            if (type !in TlCtorIds.updateNames) {
+            if (type !in TlTables.updateNames) {
                 return PluginWire.encodePluginError("unknown-constructor", "onUpdate: unknown update type '$type'")
             }
         }
@@ -227,7 +227,7 @@ object PluginUpdates : SessionResource {
     /** every `interceptUpdate` scope is a constructor name - there is no demuxed form over it */
     private fun registerInterceptUpdates(session: PluginSession, callbackId: Int, types: Array<String>): String? {
         for (type in types) {
-            if (type !in TlCtorIds.updateNames) {
+            if (type !in TlTables.updateNames) {
                 return PluginWire.encodePluginError("unknown-constructor", "interceptUpdate: unknown update type '$type'")
             }
             if (!session.permissions.allows("interceptUpdate", type, ScopeMatch.EXACT)) {

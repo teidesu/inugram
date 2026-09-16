@@ -56,7 +56,7 @@ async function expectRejects(label, code, fn) {
 const WITH_MEDIA = {
   _: 'message',
   id: 4242,
-  peer_id: { _: 'peerUser', user_id: '4242' },
+  peer_id: { _: 'peerUser', user_id: 4242 },
   date: 1715540640,
   message: '',
   media: {
@@ -68,7 +68,7 @@ const WITH_MEDIA = {
       file_reference: new Uint8Array(),
       date: 1715540640,
       dc_id: 2,
-      size: '11',
+      size: 11,
       mime_type: 'text/plain',
       attributes: [{ _: 'documentAttributeFilename', file_name: 'note.txt' }],
     },
@@ -102,7 +102,7 @@ const WITH_MEDIA = {
   // -- a message with no media at all --
 
   /** @type {tl.RawMessage} */
-  const bare = { _: 'message', id: 1, peer_id: { _: 'peerUser', user_id: '4242' }, date: 1715540640, message: 'hi' }
+  const bare = { _: 'message', id: 1, peer_id: { _: 'peerUser', user_id: 4242 }, date: 1715540640, message: 'hi' }
   check('getMessageFile on a message with no media is null', acc.getMessageFile(bare) === null)
   await expectRejects(
     'and downloading one rejects',

@@ -1,20 +1,21 @@
 import type { JavaClass, JavaField, ParseWarning } from './tl-parser.js'
 import fs from 'node:fs/promises'
 import { basename, join } from 'node:path'
+import { pathToFileURL } from 'node:url'
 import { glob } from 'tinyglobby'
 import { rootDir, worktreeDir } from './config.js'
 import { step, success, warn } from './lib.js'
 import { parseJavaFile } from './tl-parser.js'
 
-// regenerates src/plugins/android.tl.d.ts from stock's tgnet sources. run after a rebase;
-// the output is committed. see docs at the top of the generated file.
+// generates src/plugins/android.tl.d.ts and InuCore's tl_tables.txt from stock's tgnet sources.
+// both are gitignored; see docs at the top of each generated file.
 
 const tgnetDir = join(worktreeDir, 'TMessagesProj/src/main/java/org/telegram/tgnet')
 const schemaDir = join(worktreeDir, 'TMessagesProj_AppTests/tlscheme')
 const outFile = join(rootDir, 'src/plugins/android.tl.d.ts')
-const tableFile = join(rootDir, 'src/core/src/main/kotlin/desu/inugram/core/plugins/TlNamesTable.kt')
-const flagsFile = join(rootDir, 'src/core/src/main/resources/tl_flags.txt')
-const ctorIdsFile = join(rootDir, 'src/core/src/main/resources/tl_ctor_ids.txt')
+const tablesFile = join(rootDir, 'src/core/src/main/resources/tl_tables.txt')
+// vendored from mtcute (packages/core/scripts/tl/data/int53-overrides.json), refreshed on rebase
+const int53OverridesFile = join(rootDir, 'scripts/data/int53-overrides.json')
 
 interface SchemaEntry {
   /** the real wire name, e.g. `account.contentSettings` */
@@ -95,6 +96,8 @@ interface TlClass extends JavaClass {
   schema: SchemaEntry | null
   /** flag-gated field -> `[flag word, bit]`, for serializable classes */
   flags: Map<string, [string, number]>
+  /** long fields crossing as a js number, for serializable classes */
+  int53: Set<string>
   /** `[namespace, identifier]` of the emitted interface/alias */
   ref: [string | null, string]
   parent: TlClass | null
@@ -132,7 +135,7 @@ function buildGraph(raw: JavaClass[], warnings: ParseWarning[]) {
 
   for (const cls of raw) {
     if (LAYER_SUFFIX.test(cls.name)) continue
-    const entry: TlClass = { ...cls, tlName: null, schema: null, flags: new Map(), ref: [null, ''], parent: null, children: [] }
+    const entry: TlClass = { ...cls, tlName: null, schema: null, flags: new Map(), int53: new Set(), ref: [null, ''], parent: null, children: [] }
     let bucket = byContainer.get(cls.container)
     if (!bucket) byContainer.set(cls.container, bucket = new Map())
     const existing = bucket.get(cls.name)
@@ -427,6 +430,81 @@ function assignTlNames(kept: TlClass[], schema: Map<number, SchemaEntry>, namesp
   return overrides
 }
 
+async function loadInt53Overrides(): Promise<Map<string, Set<string>>> {
+  const json = JSON.parse(await fs.readFile(int53OverridesFile, 'utf8'))
+  const out = new Map<string, Set<string>>()
+  for (const section of [json.class, json.method]) {
+    for (const [name, fields] of Object.entries(section ?? {})) {
+      if (Array.isArray(fields)) out.set(name, new Set(fields as string[]))
+    }
+  }
+  return out
+}
+
+/** a legacy constructor is `<base>_<suffix>`, and no live TL name contains an underscore */
+function baseTlName(tlName: string) {
+  const at = tlName.indexOf('_')
+  return at === -1 ? tlName : tlName.slice(0, at)
+}
+
+function isLongType(java: string) {
+  return java === 'long' || java === 'Long' || /^(?:ArrayList|List)<Long>$/.test(java)
+}
+
+/**
+ * the overrides name schema fields, so a field stock doesn't declare (or declares as something other
+ * than a long) matches nothing here and is reported rather than silently dropped
+ */
+function assignInt53(serializable: TlClass[], overrides: Map<string, Set<string>>) {
+  const matched = new Set<string>()
+  for (const cls of serializable) {
+    const base = baseTlName(cls.tlName!)
+    const wanted = overrides.get(base)
+    if (!wanted) continue
+    const visible = inheritedFields(cls)
+    for (const name of wanted) {
+      const entry = visible.get(name)
+      if (!entry || !isLongType(entry.field.type)) continue
+      cls.int53.add(name)
+      matched.add(`${base}.${name}`)
+    }
+  }
+  const unmatched: string[] = []
+  for (const [name, fields] of overrides) {
+    for (const field of fields) {
+      if (!matched.has(`${name}.${field}`)) unmatched.push(`${name}.${field}`)
+    }
+  }
+  return unmatched
+}
+
+type LongMode = 'number' | 'string' | 'mixed'
+
+/**
+ * how a long declared on [owner] crosses: the decision is per constructor, so a declaration every
+ * constructor below it inherits can be a number for some and a string for others
+ */
+function makeLongModeResolver() {
+  const cache = new Map<TlClass, Map<string, LongMode>>()
+  return (owner: TlClass, field: JavaField): LongMode => {
+    if (!isLongType(field.type)) return 'string'
+    const name = field.name
+    let byName = cache.get(owner)
+    if (!byName) cache.set(owner, byName = new Map())
+    const known = byName.get(name)
+    if (known) return known
+    const decisions = new Set<boolean>()
+    const walk = (cls: TlClass) => {
+      if (isSerializable(cls) && inheritedFields(cls).get(name)?.owner === owner) decisions.add(cls.int53.has(name))
+      for (const child of cls.children) walk(child)
+    }
+    walk(owner)
+    const mode: LongMode = decisions.size === 2 ? 'mixed' : decisions.has(true) ? 'number' : 'string'
+    byName.set(name, mode)
+    return mode
+  }
+}
+
 function assignRefs(kept: TlClass[]) {
   const taken = new Set<string>()
   const claim = (cls: TlClass, ns: string | null, id: string) => {
@@ -455,8 +533,6 @@ function assignRefs(kept: TlClass[]) {
 }
 
 const PRIMITIVES: Record<string, string> = {
-  'long': 'string',
-  'Long': 'string',
   'int': 'number',
   'Integer': 'number',
   'short': 'number',
@@ -501,7 +577,8 @@ function typeRef(cls: TlClass) {
  * mirrors TlJson.valueToJson - anything it can't map is dropped from the snapshot, so anything
  * this returns `null` for is dropped from the typings too.
  */
-function mapType(java: string, cls: TlClass, ctx: EmitCtx): string | null {
+function mapType(java: string, cls: TlClass, ctx: EmitCtx, long: LongMode = 'string'): string | null {
+  if (java === 'long' || java === 'Long') return long === 'mixed' ? 'number | string' : long
   const prim = PRIMITIVES[java]
   if (prim) return prim
 
@@ -511,8 +588,8 @@ function mapType(java: string, cls: TlClass, ctx: EmitCtx): string | null {
     const args = splitGenericArgs(argsRaw)
     const rawName = raw.split('.').pop()!
     if ((rawName === 'ArrayList' || rawName === 'List') && args.length === 1) {
-      const inner = mapType(args[0], cls, ctx)
-      return inner && `${inner}[]`
+      const inner = mapType(args[0], cls, ctx, long)
+      return inner && (inner.includes('|') ? `(${inner})[]` : `${inner}[]`)
     }
     if ((rawName === 'HashMap' || rawName === 'Map' || rawName === 'LinkedHashMap') && args.length === 2) {
       if (args[0] !== 'String') return null
@@ -607,8 +684,8 @@ async function readStamp() {
 }
 
 function makeHeader(stamp: { layer: string, appVersion: string }) {
-  return `// GENERATED by \`pnpm run generate-tl-typings\` from worktree/TMessagesProj/src/main/java/org/telegram/tgnet.
-// do not edit by hand - re-run the script after a rebase instead.
+  return `// GENERATED by \`pnpm run generate-tl\` from worktree/TMessagesProj/src/main/java/org/telegram/tgnet.
+// do not edit by hand - \`pnpm run setup\` regenerates it, or run the script after a rebase.
 //
 // @layer ${stamp.layer}
 // @appVersion ${stamp.appVersion}
@@ -624,7 +701,9 @@ function makeHeader(stamp: { layer: string, appVersion: string }) {
  * omits everything the app doesn't use.
  *
  * how java types land in js:
- * - \`long\` -> \`string\`, so int64 ids survive a js number. write them back as strings too.
+ * - \`long\` -> \`number\` where telegram guarantees the value fits in 53 bits (user/chat/channel ids,
+ *   file sizes), \`string\` otherwise, so the rest of int64 survives a js number. a long accepts
+ *   either back; a number past \`Number.MAX_SAFE_INTEGER\` is refused.
  * - \`byte[]\` -> \`Uint8Array\` (a base64 string is also accepted when writing).
  * - \`ArrayList<T>\` -> \`T[]\`; \`HashMap<String, V>\` and \`SparseArray<V>\` -> \`Record<string, V>\`.
  * - fields whose java type has no json mapping (raw arrays, app-internal classes) are absent here
@@ -643,7 +722,8 @@ function makeHeader(stamp: { layer: string, appVersion: string }) {
  */`
 }
 
-async function main() {
+/** resolves whether either output changed */
+export async function generateTl(): Promise<boolean> {
   const warnings: ParseWarning[] = []
   step('parsing tgnet sources')
   const raw = await parseAll(warnings)
@@ -666,6 +746,8 @@ async function main() {
     if (!isSerializable(cls)) continue
     cls.flags = flagTable.get(parseConstructorId(cls.constructorHash!)) ?? new Map()
   }
+  const unmatchedInt53 = assignInt53(kept.filter(isSerializable), await loadInt53Overrides())
+  const longMode = makeLongModeResolver()
   assignRefs(kept)
   const ctx: EmitCtx = { resolve, keptSet }
 
@@ -686,7 +768,7 @@ async function main() {
       if (EXCLUDED_FIELDS.has(field.name)) continue
       // the bridge derives flag words from field presence and never exposes them
       if (flagWords.has(field.name)) continue
-      const ts = mapType(field.type, cls, ctx)
+      const ts = mapType(field.type, cls, ctx, longMode(cls, field))
       if (!ts) {
         dropped.push(`${cls.name}.${field.name}: ${field.type}`)
         continue
@@ -701,7 +783,9 @@ async function main() {
     const shadowed = cls.parent
       ? cls.fields.filter((f) => {
           const inherited = inheritedFields(cls.parent!).get(f.name)
-          return inherited && mapType(inherited.field.type, inherited.owner, ctx) !== mapType(f.type, cls, ctx)
+          return inherited
+            && mapType(inherited.field.type, inherited.owner, ctx, longMode(inherited.owner, inherited.field))
+            !== mapType(f.type, cls, ctx, longMode(cls, f))
         }).map(f => f.name)
       : []
     own.set(cls, { lines, count, shadowed })
@@ -755,12 +839,23 @@ async function main() {
         ? [...cls.schema.optional].filter(([, opt]) => !opt).map(([name]) => name)
         : [...cls.requiredFields]
       ).filter(name => !cls.flags.has(name) && !flagWords.has(name))
+      const exact = (name: string): LongMode => (cls.int53.has(name) ? 'number' : 'string')
       const required: string[] = []
+      const declared = new Set<string>()
       for (const name of names) {
         const entry = fields.get(name)
         if (!entry) continue
-        const ts = mapType(entry.field.type, entry.owner, ctx)
-        if (ts) required.push(`${name}: ${ts}`)
+        const ts = mapType(entry.field.type, entry.owner, ctx, exact(name))
+        if (ts) {
+          required.push(`${name}: ${ts}`)
+          declared.add(name)
+        }
+      }
+      // a base shared by constructors that disagree types the long as either; each one narrows it
+      for (const [name, entry] of fields) {
+        if (declared.has(name) || flagWords.has(name) || longMode(entry.owner, entry.field) !== 'mixed') continue
+        const ts = mapType(entry.field.type, entry.owner, ctx, exact(name))
+        if (ts) required.push(`${name}?: ${ts}`)
       }
       target.lines.push(
         `interface ${id}${baseExtends(cls)} {`,
@@ -815,66 +910,60 @@ async function main() {
     '',
   ].join('\n')
 
-  await fs.writeFile(outFile, out)
+  const typingsChanged = await writeIfChanged(outFile, out)
 
   for (const w of warnings) warn(`${w.file}:${w.line} ${w.message}`)
   for (const d of dropped) warn(`no json mapping, field dropped: ${d}`)
-
-  // `typecheck-plugins` runs this for the gitignored typings alone; the three tables below are
-  // committed, and a check that silently rewrites tracked files hides a rebase nobody has run yet
-  if (process.argv.includes('--typings-only')) return
-
-  await fs.writeFile(tableFile, [
-    '// GENERATED by `pnpm run generate-tl-typings` from TMessagesProj_AppTests/tlscheme.',
-    '// do not edit by hand - re-run the script after a rebase instead.',
-    '',
-    'package desu.inugram.core.plugins',
-    '',
-    '/** every real TL namespace, so a leading `foo_` can be told apart from a class simply named that way */',
-    'internal val TL_NAMESPACES: Set<String> = setOf(',
-    ...[...namespaces].sort().map(ns => `    "${ns}",`),
-    ')',
-    '',
-    '/**',
-    ' * `<container>.<simpleName>` -> wire name, for every class whose java name doesn\'t read as what',
-    ' * the schema calls it: bare-named classes with no prefix to read, the handful filed under a',
-    ' * container that isn\'t their namespace, and the few spelled differently from their predicate.',
-    ' */',
-    'internal val TL_NAME_OVERRIDES: Map<String, String> = mapOf(',
-    ...[...overrides].sort(([a], [b]) => a.localeCompare(b)).map(([k, v]) => `    "${k}" to "${v}",`),
-    ')',
-    '',
-  ].join('\n'))
+  for (const u of unmatchedInt53) warn(`int53 override matches no long field stock declares: ${u}`)
 
   const words = [...flagWords].sort()
   if (words.length > 2) warn(`more than two flag words in use (${words.join(', ')}); the table format assumes at most two`)
-  await fs.writeFile(flagsFile, [
-    '# GENERATED by `pnpm run generate-tl-typings` from each constructor\'s serializeToStream.',
-    '# do not edit by hand - re-run the script after a rebase instead.',
-    '#',
-    '# one line per constructor: `<hex id> <field>=<bit> ...`, a `+` before the bit meaning the',
-    '# second flag word. several fields may share a bit - that is what TL means by it.',
-    `words ${words.join(' ')}`,
-    ...[...flagTable].map(([id, layout]) => `${(id >>> 0).toString(16)} ${
-      [...layout].map(([name, [word, bit]]) => `${name}=${words.indexOf(word) === 0 ? '' : '+'}${bit}`).join(' ')
-    }`),
-    '',
-  ].join('\n'))
 
   const ctorIdRows = buildCtorIdTable(raw, serializable)
-  await fs.writeFile(ctorIdsFile, [
-    '# generated by `pnpm run generate-tl-typings` from worktree/TMessagesProj/src/main/java/org/telegram/tgnet.',
-    '# do not edit by hand - re-run the script after a rebase instead.',
-    '#',
-    '# one line per kept serializable class: `<kind> <name> <hexid> [<hexid> ...]`. kind is m (rpc',
-    '# method, has a responseType), u (descends from TLRPC.Update), or c (anything else). name is the',
-    '# canonical wire name (matches TlNamesTable). hexids are the unsigned lower-case constructor id',
-    '# of the class itself plus every raw descendant (_layerNNN, _oldN, ...) that only java',
-    '# inheritance - not the wire name - ties back to it.',
-    ...ctorIdRows.map(r => `${r.kind} ${r.name} ${r.ids.map(id => (id >>> 0).toString(16)).join(' ')}`),
+  step(`ctor id table: ${ctorIdRows.length} names, ${ctorIdRows.reduce((n, r) => n + r.ids.length, 0)} ids`)
+
+  // keyed by id like the flag table, so a layer variant read out of local storage follows the
+  // constructor it descends from
+  const int53ByName = new Map(serializable.map(cls => [cls.tlName!, cls.int53]))
+  const int53ById = new Map<number, Set<string>>()
+  for (const row of ctorIdRows) {
+    const fields = int53ByName.get(row.name)
+    if (!fields || fields.size === 0) continue
+    for (const id of row.ids) {
+      let set = int53ById.get(id)
+      if (!set) int53ById.set(id, set = new Set())
+      for (const field of fields) set.add(field)
+    }
+  }
+  step(`int53 table: ${int53ById.size} constructors, ${unmatchedInt53.length} overrides unmatched`)
+
+  const rows = new Map<number, string[]>()
+  const tokensOf = (id: number) => {
+    let tokens = rows.get(id)
+    if (!tokens) rows.set(id, tokens = [])
+    return tokens
+  }
+  for (const row of ctorIdRows) {
+    for (const id of row.ids) tokensOf(id).push(`${row.kind}:${row.name}`)
+  }
+  for (const [id, layout] of flagTable) {
+    for (const [name, [word, bit]] of layout) tokensOf(id).push(`f:${name}=${words.indexOf(word) === 0 ? '' : '+'}${bit}`)
+  }
+  for (const [id, fields] of int53ById) {
+    for (const field of [...fields].sort()) tokensOf(id).push(`i:${field}`)
+  }
+  const tablesChanged = await writeIfChanged(tablesFile, [
+    '# GENERATED by `pnpm run generate-tl` from worktree/TMessagesProj/src/main/java/org/telegram/tgnet,',
+    '# TMessagesProj_AppTests/tlscheme and scripts/data/int53-overrides.json. read by TlTables.',
+    '# do not edit by hand - `pnpm run setup` regenerates it, or run the script after a rebase.',
+    `words ${words.join(' ')}`,
+    `ns ${[...namespaces].sort().join(' ')}`,
+    ...[...overrides].sort(([a], [b]) => a.localeCompare(b)).map(([k, v]) => `name ${k} ${v}`),
+    ...[...rows]
+      .sort(([a], [b]) => (a >>> 0) - (b >>> 0))
+      .map(([id, tokens]) => `${(id >>> 0).toString(16)} ${tokens.join(' ')}`),
     '',
   ].join('\n'))
-  step(`ctor id table: ${ctorIdRows.length} names, ${ctorIdRows.reduce((n, r) => n + r.ids.length, 0)} ids`)
   // stock's own layer dumps are an independent statement of the same layout; disagreement is
   // usually stock lagging the schema, but it's worth seeing
   let disagreements = 0
@@ -888,7 +977,18 @@ async function main() {
 
   const unmatched = serializable.filter(c => !c.schema)
   step(`${serializable.length - unmatched.length}/${serializable.length} constructors matched a layer dump; ${overrides.size} need a name override, ${unmatched.length} fall back to the prefix rule`)
-  success(`${serializable.length} constructors, ${kept.length - serializable.length} unions, ${rpcReturns.length} methods`)
+  step(`${serializable.length} constructors, ${kept.length - serializable.length} unions, ${rpcReturns.length} methods`)
+  return typingsChanged || tablesChanged
 }
 
-await main()
+async function writeIfChanged(path: string, content: string) {
+  if (await fs.readFile(path, 'utf8').catch(() => null) === content) return false
+  await fs.writeFile(path, content)
+  return true
+}
+
+// `pnpm run setup` imports this too, but refuses while the stack diverges from `series`: run it by hand after a rebase
+if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
+  await generateTl()
+  success('TL typings and tables generated')
+}

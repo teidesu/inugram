@@ -237,9 +237,14 @@ Rust and Kotlin; do not add a schema/code-generation layer for them.
 
 ### TL generation and performance
 
-- After every rebase, run `pnpm run generate-tl-typings`. It writes ignored
-  `src/plugins/android.tl.d.ts` and committed `TlNamesTable.kt`, `tl_flags.txt`,
-  `tl_ctor_ids.txt`. Never edit these outputs by hand.
+- `pnpm run generate-tl` writes the gitignored `src/plugins/android.tl.d.ts` and
+  `src/core/src/main/resources/tl_tables.txt` (read by `TlTables`). `pnpm run setup`
+  runs it, but refuses while the stack diverges from `series`, so run it yourself
+  after every rebase. Never edit the outputs by hand.
+- A long crosses as a js number only where the table marks it (decided per
+  constructor), otherwise as a decimal string, on every read path. Writes take either;
+  numbers past `MAX_SAFE_INTEGER` are refused. The list is mtcute's, vendored in
+  `scripts/data/int53-overrides.json`; refresh it on rebase, not by hand-editing.
 - Generate names from constructor IDs/layer dumps and flags from stock
   `serializeToStream`, not the published schema. Pass a class to `TlNames`, not
   its name. Preserve distinct legacy names. Typings exclude `_layerNNN` classes;

@@ -189,7 +189,7 @@ done and what to re-check.
 
 ## End of rebase
 
-`stg push -a` exits 0 with no conflict when done. Then run **all four** checks —
+`stg push -a` exits 0 with no conflict when done. Then run **all five** checks —
 a rebase is not finished until they pass.
 
 ### 1. Stack fully applied, no leftovers
@@ -221,7 +221,24 @@ It reports `missing from patches/`, `not in stgit stack` (orphaned files), and
 `content drift`. Any output = the export and the stack disagree; re-export and
 investigate rather than hand-editing `patches/`.
 
-### 4. The app actually builds
+### 4. Regenerate the TL tables
+
+The plugin bridge's TL typings and `tl_tables.txt` are generated (gitignored) from
+stock's tgnet sources, so a new layer leaves them stale. `pnpm run setup` would
+regenerate them, but it refuses while the stack diverges from `series`, so run the
+generator directly. First refresh mtcute's int53 overrides, vendored because
+mtcute's layer drifts from stock's independently:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/mtcute/mtcute/refs/heads/master/packages/core/scripts/tl/data/int53-overrides.json -o scripts/data/int53-overrides.json
+pnpm run generate-tl
+```
+
+Read the `int53 override matches no long field stock declares` warnings: an entry
+stock doesn't have yet is expected, but a field stock *renamed* means ids that
+should be numbers silently stay strings. Log those to `TODO.md`.
+
+### 5. The app actually builds
 
 Compile errors are the main thing a marker-free resolution still gets wrong:
 upstream renames a class, moves a package, or changes a signature, and both the

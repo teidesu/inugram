@@ -16,7 +16,9 @@ import org.telegram.tgnet.TLObject
  * `obj.toJSON()` snapshots. The live get/set path is [TlHandles]'s and does not come through here.
  *
  * Caveats (mirrored in src/plugins/common.d.ts):
- * - `long` fields are exposed as JSON strings to avoid losing int64 precision in JS numbers.
+ * - `long` fields are exposed as JSON strings to avoid losing int64 precision in JS numbers, except
+ *   the ones [TlReflect.FieldInfo.isInt53] marks, which are numbers. A long accepts either back, and
+ *   a number outside the safe integer range is refused: it has already lost precision in JS.
  * - stock annotates TL classes with non-wire `//custom` fields (`Message.dialog_id`, `attachPath`,
  *   `voiceTranscription`, ...); reflection can't tell them apart from wire fields, so they ride
  *   along in snapshots. `params`/`pollMediaAttachPaths` are the two whose types aren't TL-shaped;
@@ -34,26 +36,27 @@ object TlJson {
         val cls = obj.javaClass
         val json = JSONObject()
         json.put("_", TlNames.classNameToTlName(cls))
-        for ((name, field) in TlReflect.publicFields(cls)) {
+        for ((name, info) in TlReflect.fieldInfos(cls)) {
             if (TlFlags.isFlagWord(cls, name)) continue
             if (TlFilter.hidesField(policy, cls, name)) continue
             val gate = TlFlags.gateOf(cls, name)
             if (gate != null && !TlReflect.isBitSet(obj, cls, gate)) continue
-            val raw = field.get(obj) ?: continue
+            val raw = info.field.get(obj) ?: continue
             val value = (if (policy.takeover) TlFilter.filterFieldValue(obj, name, raw) else raw) ?: continue
-            json.put(name, valueToJson(value, policy) ?: continue)
+            json.put(name, valueToJson(value, policy, info.isInt53) ?: continue)
         }
         return json
     }
 
-    internal fun valueToJson(value: Any, policy: TlFilter.Policy): Any? = when (value) {
-        is Long -> value.toString()
+    /** [int53] is the owning field's [TlReflect.FieldInfo.isInt53], which a vector hands its elements */
+    internal fun valueToJson(value: Any, policy: TlFilter.Policy, int53: Boolean = false): Any? = when (value) {
+        is Long -> if (int53) value else value.toString()
         is Int, is Short, is Byte, is Double, is Float, is Boolean, is String -> value
         is ByteArray -> JSONObject().put(BYTES_KEY, Base64.encodeToString(value, Base64.NO_WRAP))
         is TLObject -> toJson(value, policy)
         is ArrayList<*> -> {
             val arr = JSONArray()
-            for (item in value) if (item != null) valueToJson(item, policy)?.let { arr.put(it) }
+            for (item in value) if (item != null) valueToJson(item, policy, int53)?.let { arr.put(it) }
             arr
         }
         is Map<*, *> -> {
@@ -111,7 +114,10 @@ object TlJson {
         return when (type) {
             java.lang.Long.TYPE, java.lang.Long::class.java -> when (jsonValue) {
                 is String -> jsonValue.toLong()
-                is Number -> jsonValue.toLong()
+                is Int -> jsonValue.toLong()
+                is Long -> jsonValue.takeIf { it in -MAX_SAFE_INTEGER..MAX_SAFE_INTEGER } ?: throw unsafeLong(path)
+                is Double -> jsonValue.takeIf { it % 1.0 == 0.0 && Math.abs(it) <= MAX_SAFE_INTEGER }?.toLong() ?: throw unsafeLong(path)
+                is Number -> throw unsafeLong(path)
                 else -> throw IllegalArgumentException("TlJson.fromJson: expected long at '$path'")
             }
             Integer.TYPE, Integer::class.java ->
@@ -192,4 +198,11 @@ object TlJson {
             else -> throw IllegalArgumentException("TlJson.fromJson: unsupported field type $type at '$path'")
         }
     }
+
+    /** `Number.MAX_SAFE_INTEGER`: past it a js number no longer names one integer */
+    private const val MAX_SAFE_INTEGER = 9_007_199_254_740_991L
+
+    private fun unsafeLong(path: String) = IllegalArgumentException(
+        "TlJson.fromJson: a long at '$path' must be a safe integer or a decimal string",
+    )
 }

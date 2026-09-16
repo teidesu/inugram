@@ -15,7 +15,7 @@ import desu.inugram.core.plugins.GrantValidator
 import desu.inugram.core.plugins.PluginInstalls
 import desu.inugram.core.plugins.PluginManifest
 import desu.inugram.core.plugins.PluginManifestParser
-import desu.inugram.core.plugins.TlCtorIds
+import desu.inugram.core.plugins.TlTables
 import desu.inugram.helpers.plugins.PluginManager.fail
 import desu.inugram.helpers.plugins.PluginManager.init
 import desu.inugram.helpers.plugins.PluginManager.onAppInteractive
@@ -399,7 +399,7 @@ object PluginManager {
         if (warmed) return
         warmed = true
         EngineDispatch.scheduler.postRunnable {
-            TlCtorIds.allNames
+            TlTables.allNames
             TlReflect.prewarm()
         }
     }
