@@ -1,5 +1,5 @@
-use std::cell::{Cell, RefCell};
 use crate::runtime::Dispose;
+use std::cell::{Cell, RefCell};
 use std::collections::HashMap;
 use std::rc::Rc;
 
@@ -377,7 +377,10 @@ pub fn install_rpc<'js>(
     send_methods: RefCell::new(Vec::new()),
     regexp_ctor: RefCell::new(Some(Persistent::save(ctx, ctx.globals().get::<_, Object>("RegExp")?))),
     abort_controller: RefCell::new(
-      ctx.globals().get::<_, Option<Constructor>>("AbortController")?.map(|ctor| Persistent::save(ctx, ctor)),
+      ctx
+        .globals()
+        .get::<_, Option<Constructor>>("AbortController")?
+        .map(|ctor| Persistent::save(ctx, ctor)),
     ),
     promise: RefCell::new(Some(capture_promise_tools(ctx)?)),
     dispatches: RefCell::new(HashMap::new()),
@@ -1380,7 +1383,6 @@ impl RpcState {
     });
     pump_jobs(rt, context, state.log.as_ref());
   }
-
 }
 
 impl Dispose for RpcState {

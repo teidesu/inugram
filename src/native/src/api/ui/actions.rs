@@ -1,5 +1,5 @@
-use std::cell::RefCell;
 use crate::runtime::Dispose;
+use std::cell::RefCell;
 use std::rc::Rc;
 
 use rquickjs::object::Accessor;
@@ -627,7 +627,6 @@ impl ActionState {
     });
     pump_jobs(rt, context, state.log.as_ref());
   }
-
 }
 
 impl Dispose for ActionState {

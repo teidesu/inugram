@@ -82,7 +82,7 @@ object PluginUi : SessionResource {
             }
         }
 
-        override fun uiBulletin(text: String, iconSpec: String): String? {
+        override fun uiBulletin(text: String, entitiesJson: String, iconSpec: String): String? {
             val animation = PluginIcons.parseAnimationSpec(iconSpec).takeIf { iconSpec.startsWith('a') }
             val animationName = animation?.value
             val animationId = animationName?.let(PluginIcons::getRawAnimationResourceId) ?: 0
@@ -115,7 +115,7 @@ object PluginUi : SessionResource {
                 }
                 layout.textView.setSingleLine(false)
                 layout.textView.maxLines = 2
-                layout.textView.text = text
+                layout.textView.text = PluginText.formatted(text, entitiesJson, layout.textView.paint.fontMetricsInt)
                 factory.create(layout, if (largeAnimation && text.length < 20) Bulletin.DURATION_SHORT else Bulletin.DURATION_LONG).show()
             }
             return null
@@ -413,8 +413,12 @@ object PluginUi : SessionResource {
             return
         }
         val builder = AlertDialog.Builder(activity)
-        options.optString("title").takeIf { it.isNotEmpty() }?.let { builder.setTitle(it) }
-        options.optString("message").takeIf { it.isNotEmpty() }?.let { builder.setMessage(it) }
+        options.optString("title").takeIf { it.isNotEmpty() }?.let {
+            builder.setTitle(PluginText.formatted(it, options.optJSONArray("titleEntities")))
+        }
+        options.optString("message").takeIf { it.isNotEmpty() }?.let {
+            builder.setMessage(PluginText.formatted(it, options.optJSONArray("messageEntities")))
+        }
         // rust already refused every element but `inu.android.nativeView`, which is a jvm
         // handle id; one the plugin has since released simply leaves the dialog bodiless
         options.optJSONObject("body")?.optLong("handle")?.let { handle ->

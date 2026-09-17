@@ -1,5 +1,5 @@
-use std::cell::Cell;
 use crate::runtime::Dispose;
+use std::cell::Cell;
 use std::rc::Rc;
 
 use rquickjs::{function::This, Ctx, Function, Result as JsResult, Runtime, Value};
@@ -171,7 +171,6 @@ impl LifecycleState {
     self.lifecycle.finish_cleanup();
     true
   }
-
 }
 
 impl Dispose for LifecycleState {

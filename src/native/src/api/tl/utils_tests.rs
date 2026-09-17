@@ -42,7 +42,7 @@ fn the_bundled_utils_test_plugin_passes() {
   let (rt, ctx) = setup();
   let lines =
     crate::testing::harness::run_capturing_console(&rt, &ctx, include_str!("../../../../test/plugins/utils-test.js"));
-  crate::testing::harness::assert_oracle_exact(&lines, "utils test done", 84);
+  crate::testing::harness::assert_oracle_exact(&lines, "utils test done", 92);
 }
 
 #[test]
@@ -323,6 +323,7 @@ fn the_namespace_is_exactly_what_the_contract_lists_and_is_frozen() {
             Object.keys(inu.utils.peers).sort().join(','),
             replace(inu.utils, 'toHex'),
             replace(inu.utils.peers, 'toDialogId'),
+            replace(inu.utils.md, 'unparse'),
             inu.utils.toHex(new Uint8Array([1])),
             inu.utils.peers.toDialogId({ _: 'peerUser', user_id: '3' }),
         ]);
@@ -330,6 +331,6 @@ fn the_namespace_is_exactly_what_the_contract_lists_and_is_frozen() {
   );
   assert_eq!(
     out,
-    r#"["formatDate,formatDuration,formatFileSize,formatNumber,fromBase64,fromHex,peers,toBase64,toHex","fromBotApiId,parseDialogId,toBotApiId,toDialogId,toInputPeer","TypeError","TypeError","01",3]"#,
+    r#"["formatDate,formatDuration,formatFileSize,formatNumber,fromBase64,fromHex,html,md,peers,thtml,toBase64,toHex","fromBotApiId,parseDialogId,toBotApiId,toDialogId,toInputPeer","TypeError","TypeError","TypeError","01",3]"#,
   );
 }

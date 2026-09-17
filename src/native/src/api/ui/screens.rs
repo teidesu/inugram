@@ -1,5 +1,5 @@
-use std::cell::RefCell;
 use crate::runtime::Dispose;
+use std::cell::RefCell;
 use std::rc::Rc;
 
 use rquickjs::{Array, Ctx, Function, Object, Persistent, Result as JsResult, Runtime, Value};
@@ -15,16 +15,16 @@ pub trait ScreenHost {
 }
 
 const EVENT_FACTORY_SRC: &str = r#"(materialize) => (action, screen, previous, stackJson) => {
-    let stack
-    return {
-        action,
-        screen,
-        previous,
-        get stack() {
-            if (stack === undefined) stack = materialize(stackJson)
-            return stack
-        },
-    }
+  let stack
+  return {
+    action,
+    screen,
+    previous,
+    get stack() {
+      if (stack === undefined) stack = materialize(stackJson)
+      return stack
+    },
+  }
 }"#;
 
 pub struct ScreenState {
@@ -194,7 +194,6 @@ impl ScreenState {
     });
     pump_jobs(rt, context, state.log.as_ref());
   }
-
 }
 
 impl Dispose for ScreenState {

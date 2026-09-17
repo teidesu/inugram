@@ -43,7 +43,56 @@ fn bulletin_reaches_host_with_ui_and_native_animation_icons() {
   });
   assert_eq!(
     *host.bulletins.borrow(),
-    vec![("static".to_string(), "rmsg_info".to_string()), ("animated".to_string(), "a0done".to_string())],
+    vec![
+      ("static".to_string(), String::new(), "rmsg_info".to_string()),
+      ("animated".to_string(), String::new(), "a0done".to_string()),
+    ],
+  );
+}
+
+#[test]
+fn bulletin_carries_entities_beside_the_text() {
+  let (_rt, ctx, host, _lifecycle, _state, _logs) = setup(&[]);
+  ctx.with(|ctx| {
+    crate::api::ui::icons::install_icons(
+      &ctx,
+      Rc::new(BulletinIconHost),
+      None,
+      &crate::testing::harness::get_api_globals(&ctx),
+    )
+    .unwrap();
+    ctx
+      .eval::<(), _>(
+        "inu.ui.bulletin({ text: { text: 'hi', entities: [{ _: 'messageEntityBold', offset: 0, length: 2 }] }, \
+         icon: inu.icons.common('info') });",
+      )
+      .unwrap();
+  });
+  assert_eq!(
+    *host.bulletins.borrow(),
+    vec![(
+      "hi".to_string(),
+      r#"[{"_":"messageEntityBold","offset":0,"length":2}]"#.to_string(),
+      "rmsg_info".to_string(),
+    )],
+  );
+}
+
+#[test]
+fn dialog_input_text_crosses_as_text_plus_entities() {
+  let (_rt, ctx, host, _lifecycle, _state, _logs) = setup(&[]);
+  ctx.with(|ctx| {
+    ctx
+      .eval::<(), _>(
+        "inu.ui.dialog({ title: { text: 'T', entities: [{ _: 'messageEntityBold', offset: 0, length: 1 }] }, \
+         message: 'plain', positive: 'OK' });",
+      )
+      .unwrap();
+  });
+  let dialogs = host.dialogs.borrow();
+  assert_eq!(
+    dialogs[0].1,
+    r#"{"title":"T","titleEntities":[{"_":"messageEntityBold","offset":0,"length":1}],"message":"plain","positive":"OK"}"#,
   );
 }
 

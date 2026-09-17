@@ -262,7 +262,9 @@ fn next_without_a_request_forwards_the_one_the_middleware_was_handed() {
   let (rt, ctx, host, state) = setup(&["interceptRpc"]);
   ctx.with(|ctx| {
     ctx
-      .eval::<(), _>("inu.interceptRpc('foo.bar', ({ request }, next) => { request.x = request.x + 1; return next(); });")
+      .eval::<(), _>(
+        "inu.interceptRpc('foo.bar', ({ request }, next) => { request.x = request.x + 1; return next(); });",
+      )
       .unwrap();
   });
 
@@ -414,7 +416,11 @@ fn a_middleware_settling_after_abandon_never_completes() {
   state.abandon_dispatch(&rt, &ctx, 951, "R-1000:INTERCEPTOR_TIMEOUT");
 
   assert!(host.completes.borrow().is_empty(), "an abandoned dispatch must never answer the host");
-  assert!(logs.borrow().is_empty(), "abandoning is the host's decision, not the plugin's fault: {:?}", logs.borrow());
+  assert!(
+    logs.borrow().is_empty(),
+    "abandoning is the host's decision, not the plugin's fault: {:?}",
+    logs.borrow()
+  );
 }
 
 #[test]
@@ -527,13 +533,19 @@ fn abandoning_a_stage_aborts_its_signal_before_rejecting_next() {
 #[test]
 fn a_signal_first_read_after_its_stage_timed_out_is_already_aborted() {
   let (rt, ctx, _host, state) = setup_with_globals(&["interceptRpc"]);
-  eval(&ctx, "inu.interceptRpc('foo.bar', (context) => { globalThis.__context = context; return new Promise(() => {}); });");
+  eval(
+    &ctx,
+    "inu.interceptRpc('foo.bar', (context) => { globalThis.__context = context; return new Promise(() => {}); });",
+  );
 
   state.dispatch(&rt, &ctx, 1, 961, "foo.bar", 0, &wire_json(r#"{"_":"foo.bar"}"#));
   state.abandon_dispatch(&rt, &ctx, 961, "R-1000:INTERCEPTOR_TIMEOUT");
 
   assert_eq!(
-    eval_json(&ctx, "[__context.signal.aborted, __context.signal.reason.code, __context.signal === __context.signal]"),
+    eval_json(
+      &ctx,
+      "[__context.signal.aborted, __context.signal.reason.code, __context.signal === __context.signal]"
+    ),
     r#"[true,"timed-out",true]"#,
   );
 }
@@ -541,7 +553,10 @@ fn a_signal_first_read_after_its_stage_timed_out_is_already_aborted() {
 #[test]
 fn the_signal_of_a_stage_that_completed_never_aborts() {
   let (rt, ctx, host, state) = setup_with_globals(&["interceptRpc"]);
-  eval(&ctx, "inu.interceptRpc('foo.bar', ({ signal }) => { globalThis.__signal = signal; return { _: 'foo.bar' }; });");
+  eval(
+    &ctx,
+    "inu.interceptRpc('foo.bar', ({ signal }) => { globalThis.__signal = signal; return { _: 'foo.bar' }; });",
+  );
 
   state.dispatch(&rt, &ctx, 1, 962, "foo.bar", 0, &wire_json(r#"{"_":"foo.bar"}"#));
   assert_eq!(host.completes.borrow().len(), 1);
@@ -1111,7 +1126,8 @@ fn a_plugin_error_wire_from_the_host_rejects_next_as_a_plugin_error() {
 fn registration_rejected_drops_callback() {
   let (_rt, ctx, _host, state) = setup(&["interceptRpc"]);
   *_host.register_err.borrow_mut() = Some("not granted".to_string());
-  let threw = ctx.with(|ctx| ctx.eval::<(), _>("inu.interceptRpc('foo.bar', ({ request: req }, next) => req);").is_err());
+  let threw =
+    ctx.with(|ctx| ctx.eval::<(), _>("inu.interceptRpc('foo.bar', ({ request: req }, next) => req);").is_err());
   assert!(threw);
   assert!(state.intercept_fns.is_empty());
 }
@@ -1264,7 +1280,9 @@ fn a_spinning_middleware_is_interrupted_and_the_request_is_still_answered() {
   let (rt, ctx, host, state, logs) = setup_logging(&["interceptRpc"]);
   crate::sandbox::limits::install_interrupt_handler(&rt, std::sync::Arc::new(|_: &str| {}));
   ctx.with(|ctx| {
-    ctx.eval::<(), _>("inu.interceptRpc('foo.bar', ({ request: req }, next) => { while (true) {} });").unwrap();
+    ctx
+      .eval::<(), _>("inu.interceptRpc('foo.bar', ({ request: req }, next) => { while (true) {} });")
+      .unwrap();
   });
 
   {
@@ -2349,7 +2367,10 @@ fn a_drop_verdict_reaches_the_host_as_one() {
 fn an_update_view_is_writable_and_the_write_reaches_the_app_s_object() {
   let (rt, ctx, host, state) = setup(&["interceptUpdate(updateNewMessage)"]);
   host.tl_fields.borrow_mut().insert("pts".to_string(), "J9".to_string());
-  eval(&ctx, "inu.interceptUpdate('updateNewMessage', ({ update: u }) => { u.pts = 12; return 'deliver' });");
+  eval(
+    &ctx,
+    "inu.interceptUpdate('updateNewMessage', ({ update: u }) => { u.pts = 12; return 'deliver' });",
+  );
   dispatch_intercept(&rt, &ctx, &state, &host, 5, "updateNewMessage", "HOW77");
   assert_eq!(host.tl_fields.borrow().get("pts").map(String::as_str), Some("J12"));
   assert_eq!(host.verdicts.borrow().as_slice(), [(5, true)]);
@@ -2816,7 +2837,6 @@ mod bundled_oracles {
     fn on_intercept_update_unregister(&self, _callback_id: u32) {}
     fn on_update_verdict(&self, _dispatch_id: i64, _deliver: bool) {}
   }
-
 
   type Disposing = crate::testing::harness::DisposeOnDrop<RpcState>;
   type Fixture = (Runtime, Context, Rc<OracleHost>, Disposing, std::sync::Arc<crate::testing::harness::Logs>);

@@ -23,6 +23,7 @@ import desu.inugram.helpers.plugins.ui.ActionSurface
 import desu.inugram.helpers.plugins.ui.MessageActionSource
 import desu.inugram.helpers.plugins.ui.PluginActions
 import desu.inugram.helpers.plugins.ui.PluginIcons
+import desu.inugram.helpers.plugins.ui.PluginText
 import desu.inugram.helpers.translate.TranslateHelper
 import desu.inugram.ui.showInputDialog
 import java.util.WeakHashMap
@@ -443,30 +444,12 @@ object ChatActionsHelper {
         private val enterView: ChatActivityEnterView,
     ) : PluginActions.EditorSurface {
         override fun replaceDraft(text: String, entitiesJson: String?) {
-            enterView.setFieldText(formatted(text, entitiesJson))
+            enterView.setFieldText(PluginText.formatted(text, entitiesJson))
         }
 
         override fun sendDraft(text: String, entitiesJson: String?) {
-            enterView.setFieldText(formatted(text, entitiesJson))
+            enterView.setFieldText(PluginText.formatted(text, entitiesJson))
             enterView.sendMessage()
-        }
-
-        private fun formatted(text: String, entitiesJson: String?): CharSequence {
-            if (entitiesJson.isNullOrEmpty()) return text
-            val entities = ArrayList<TLRPC.MessageEntity>()
-            val array = try {
-                JSONArray(entitiesJson)
-            } catch (e: Exception) {
-                return text
-            }
-            for (index in 0 until array.length()) {
-                val one = array.optJSONObject(index) ?: continue
-                (runCatching { TlJson.fromJson(one) }.getOrNull() as? TLRPC.MessageEntity)?.let(entities::add)
-            }
-            if (entities.isEmpty()) return text
-            val out = SpannableStringBuilder(text)
-            MessageObject.addEntitiesToText(out, entities, false, false, false, false)
-            return out
         }
     }
 

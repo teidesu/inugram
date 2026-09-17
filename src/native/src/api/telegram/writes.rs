@@ -1,5 +1,5 @@
-use std::cell::Cell;
 use crate::runtime::Dispose;
+use std::cell::Cell;
 use std::fs;
 use std::io::Write;
 use std::path::{Path, PathBuf};
@@ -9,10 +9,10 @@ use rquickjs::{Array, Ctx, Function, Object, Result as JsResult, Runtime, TypedA
 
 use crate::api::error::PluginErrorCode;
 use crate::api::io::blob::{self, BlobHandle, BlobState};
+use crate::api::io::staging::StagedFile;
 use crate::api::telegram::account::AccountState;
 use crate::api::telegram::progress::ProgressReporter;
 use crate::api::tl::proxy::{js_value_to_wire, TlViews, ViewLife};
-use crate::api::io::staging::StagedFile;
 use crate::runtime::{pump_jobs, Parked, PendingTable};
 use crate::sandbox::grants::{GrantHost, MATCH_EXACT};
 
@@ -292,8 +292,9 @@ impl WritesState {
       last_total: Cell::new(0),
       _staged: staged,
     };
-    let promise =
-      self.pending.park(ctx, parked, |request_id| self.host.account_write(slot, request_id, op, arg, &wires))?;
+    let promise = self
+      .pending
+      .park(ctx, parked, |request_id| self.host.account_write(slot, request_id, op, arg, &wires))?;
     Ok(promise.into_value())
   }
 
@@ -465,7 +466,6 @@ impl WritesState {
     });
     pump_jobs(rt, context, state.log.as_ref());
   }
-
 }
 
 impl Dispose for WritesState {

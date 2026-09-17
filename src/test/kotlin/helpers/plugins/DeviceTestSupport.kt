@@ -329,7 +329,7 @@ internal object DeviceMissing : CoreListener, UiListener, PlatformListener, Canv
 
     override fun uiToast(text: String) = no("ui")
 
-    override fun uiBulletin(text: String, iconSpec: String) = no("ui")
+    override fun uiBulletin(text: String, entitiesJson: String, iconSpec: String) = no("ui")
 
     override fun uiModal(op: Int, requestId: Long, optionsJson: String) = no("ui")
 

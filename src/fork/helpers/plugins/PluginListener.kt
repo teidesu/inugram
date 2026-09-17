@@ -79,7 +79,7 @@ interface UiListener {
 
     fun uiToast(text: String)
 
-    fun uiBulletin(text: String, iconSpec: String): String?
+    fun uiBulletin(text: String, entitiesJson: String, iconSpec: String): String?
 
     /**
      * `inu.ui.dialog`/`prompt`/`chooser`/`pickFile`/`saveFile`, which are one member because they are

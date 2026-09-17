@@ -49,6 +49,70 @@ pub fn opt_str<'js>(ctx: &Ctx<'js>, obj: &Object<'js>, what: &str, key: &str) ->
   }
 }
 
+/// `InputText`, as `common.d.ts` declares it: a bare string, or `{ text, entities }`.
+///
+/// The entities cross as the value the plugin handed over rather than as anything parsed here: a
+/// surface that renders them turns them into spans, and one that does not still has the text.
+pub fn read_input_text<'js>(
+  ctx: &Ctx<'js>,
+  value: &Value<'js>,
+  what: &str,
+  key: &str,
+) -> JsResult<(String, Option<Value<'js>>)> {
+  if let Some(text) = value.as_string() {
+    return Ok((text.to_string()?, None));
+  }
+  let Some(obj) = value.as_object() else {
+    return Err(Exception::throw_type(ctx, &format!("{what}: '{key}' must be a string or {{ text, entities }}")));
+  };
+  let text = field(ctx, obj, what, "text")?;
+  let Some(text) = text.as_string() else {
+    return Err(Exception::throw_type(ctx, &format!("{what}: '{key}' must be a string or {{ text, entities }}")));
+  };
+  let entities = field(ctx, obj, what, "entities")?;
+  if entities.is_undefined() || entities.is_null() {
+    return Ok((text.to_string()?, None));
+  }
+  if entities.as_array().is_none() {
+    return Err(Exception::throw_type(ctx, &format!("{what}: '{key}' entities must be an array")));
+  }
+  Ok((text.to_string()?, Some(entities)))
+}
+
+/// The other side of [`read_input_text`]: the two keys a host payload carries, the plain text and
+/// the entities beside it under `<key>Entities`. A surface that renders spans reads both; one that
+/// does not reads the text alone and loses nothing else.
+pub fn write_input_text<'js>(out: &Object<'js>, key: &str, value: (String, Option<Value<'js>>)) -> JsResult<()> {
+  out.set(key, value.0)?;
+  if let Some(entities) = value.1 {
+    out.set(format!("{key}Entities"), entities)?;
+  }
+  Ok(())
+}
+
+pub fn req_text<'js>(
+  ctx: &Ctx<'js>,
+  obj: &Object<'js>,
+  what: &str,
+  key: &str,
+) -> JsResult<(String, Option<Value<'js>>)> {
+  let v = field(ctx, obj, what, key)?;
+  read_input_text(ctx, &v, what, key)
+}
+
+pub fn opt_text<'js>(
+  ctx: &Ctx<'js>,
+  obj: &Object<'js>,
+  what: &str,
+  key: &str,
+) -> JsResult<Option<(String, Option<Value<'js>>)>> {
+  let v = field(ctx, obj, what, key)?;
+  if v.is_undefined() || v.is_null() {
+    return Ok(None);
+  }
+  read_input_text(ctx, &v, what, key).map(Some)
+}
+
 pub fn req_bool<'js>(ctx: &Ctx<'js>, obj: &Object<'js>, what: &str, key: &str) -> JsResult<bool> {
   let v = field(ctx, obj, what, key)?;
   v.as_bool().ok_or_else(|| Exception::throw_type(ctx, &format!("{what}: '{key}' must be a boolean")))

@@ -5,14 +5,14 @@ use rquickjs::{Ctx, Exception, Function, Object, Result as JsResult, Runtime, Va
 
 use crate::api::error::PluginErrorCode;
 use crate::api::platform::jvm::JvmState;
-use crate::api::ui::icons;
 use crate::api::tl::proxy::plain_wire_to_js;
+use crate::api::ui::icons;
 use crate::runtime::{pump_jobs, Parked, PendingTable};
 use crate::utils::arguments::{opt_bool, opt_str, req_str};
 
 pub trait DialogHost {
   fn toast(&self, text: &str);
-  fn bulletin(&self, text: &str, icon_spec: &str) -> Option<String>;
+  fn bulletin(&self, text: &str, entities_json: &str, icon_spec: &str) -> Option<String>;
   fn dialog(&self, request_id: i64, options_json: &str) -> Option<String>;
   fn chooser(&self, request_id: i64, options_json: &str) -> Option<String>;
   fn prompt(&self, request_id: i64, options_json: &str) -> Option<String>;
@@ -39,13 +39,20 @@ impl DialogState {
     let Some(options) = options.as_object() else {
       return Err(Exception::throw_type(ctx, "bulletin: expected an options object"));
     };
-    let text = opt_str(ctx, options, "bulletin", "text")?
+    let text = crate::utils::arguments::opt_text(ctx, options, "bulletin", "text")?
       .ok_or_else(|| Exception::throw_type(ctx, "bulletin: 'text' must be a string"))?;
+    let entities = (|| -> JsResult<String> {
+      let entities = text.1;
+      let Some(entities) = entities else {
+        return Ok(String::new());
+      };
+      Ok(ctx.json_stringify(entities)?.map(|s| s.to_string()).transpose()?.unwrap_or_default())
+    })()?;
     let icon_value: Value =
       options.get("icon").map_err(|_| Exception::throw_type(ctx, "bulletin: cannot read 'icon'"))?;
     let icon = icons::icon_from_value(ctx, icon_value, "bulletin", self.jvm.as_ref())?
       .ok_or_else(|| Exception::throw_type(ctx, "bulletin: 'icon' is required"))?;
-    if let Some(err) = self.host.bulletin(&text, &icon.spec) {
+    if let Some(err) = self.host.bulletin(&text.0, &entities, &icon.spec) {
       return Err(ctx.throw(crate::api::error::host_error_to_js(ctx, &err)?));
     }
     Ok(())
@@ -71,16 +78,34 @@ impl DialogState {
         None => return Err(Exception::throw_type(ctx, "dialog: 'body' is not an inu.ui element")),
       }
     }
+    let out = Object::new(ctx.clone())?;
+    for key in ["title", "message"] {
+      if let Some(value) = crate::utils::arguments::opt_text(ctx, obj, "dialog", key)? {
+        crate::utils::arguments::write_input_text(&out, key, value)?;
+      }
+    }
+    for key in ["positive", "negative", "neutral"] {
+      if let Some(text) = opt_str(ctx, obj, "dialog", key)? {
+        out.set(key, text)?;
+      }
+    }
+    if !body.is_undefined() && !body.is_null() {
+      out.set("body", body)?;
+    }
     let json = ctx
-      .json_stringify(options)?
+      .json_stringify(out.into_value())?
       .map(|s| s.to_string())
       .transpose()?
       .ok_or_else(|| Exception::throw_type(ctx, "dialog: expected an options object"))?;
 
-    Ok(self.pending.park(ctx, Modal::Dialog, |request_id| self.host.dialog(request_id, &json))?.into_value())
+    Ok(
+      self
+        .pending
+        .park(ctx, Modal::Dialog, |request_id| self.host.dialog(request_id, &json))?
+        .into_value(),
+    )
   }
 }
-
 
 fn chooser_index(ctx: &Ctx<'_>, value: &Value<'_>, len: usize) -> JsResult<i32> {
   let index = value
@@ -184,7 +209,12 @@ impl DialogState {
       .map(|s| s.to_string())
       .transpose()?
       .ok_or_else(|| Exception::throw_message(ctx, "prompt: serialization failed"))?;
-    Ok(self.pending.park(ctx, Modal::Prompt, |request_id| self.host.prompt(request_id, &json))?.into_value())
+    Ok(
+      self
+        .pending
+        .park(ctx, Modal::Prompt, |request_id| self.host.prompt(request_id, &json))?
+        .into_value(),
+    )
   }
 }
 
@@ -259,7 +289,6 @@ impl DialogState {
     });
     pump_jobs(rt, context, state.log.as_ref());
   }
-
 }
 
 impl Dispose for DialogState {

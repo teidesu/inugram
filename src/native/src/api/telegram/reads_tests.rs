@@ -1,11 +1,11 @@
 use super::*;
-use std::cell::RefCell;
 use crate::api::error::format_exception;
 use crate::api::error::install_plugin_error;
 use crate::api::telegram::account::tests::TestAccountHost;
 use crate::api::tl::proxy::TlHost;
 use crate::sandbox::grants::TestGrantHost;
 use rquickjs::Context;
+use std::cell::RefCell;
 
 // the kinds `reads.js` sends and Kotlin `PluginReads.KIND_*` receives; only the fake host has a
 // reason to name them on this side, since the engine passes the number straight through
@@ -405,7 +405,15 @@ impl ReadsHost for TestReadsHost {
     None
   }
 
-  fn account_fetch(&self, _account_id: i32, request_id: i64, op: i32, peer: &str, args: &str, cursor: &str) -> Option<String> {
+  fn account_fetch(
+    &self,
+    _account_id: i32,
+    request_id: i64,
+    op: i32,
+    peer: &str,
+    args: &str,
+    cursor: &str,
+  ) -> Option<String> {
     // parked for the same reason a resolve is: answering here would re-enter the context
     // this call is already inside
     let crossed = format!("{peer}|{args}|{cursor}");
@@ -1173,7 +1181,10 @@ fn an_iterator_pages_until_the_list_runs_out() {
   // the fake answers one full page then a short one, so this is both pages and the stop
   assert_eq!(out, r#"["dialog","dialog","dialog","end"]"#);
   assert_eq!(asked.len(), 2, "the second page is the cursor's, and there is no third");
-  assert_eq!(asked[1].1, r#"|{"folderId":0,"limit":2,"fields":null}|1715540640,7,111"#, "it pages with the host's own offsets");
+  assert_eq!(
+    asked[1].1, r#"|{"folderId":0,"limit":2,"fields":null}|1715540640,7,111"#,
+    "it pages with the host's own offsets"
+  );
 }
 
 /// `limit` is a total and cuts the last page short, which is the difference between it and
@@ -1434,7 +1445,7 @@ mod grant_boundary {
       self.crossings.set(self.crossings.get() + 1);
     }
 
-    fn bulletin(&self, _text: &str, _icon_spec: &str) -> Option<String> {
+    fn bulletin(&self, _text: &str, _entities_json: &str, _icon_spec: &str) -> Option<String> {
       self.crossings.set(self.crossings.get() + 1);
       Some("no ui here".to_string())
     }
@@ -1676,10 +1687,16 @@ fn a_chat_folder_id_crosses_and_zero_is_one_of_them() {
   let (rt, ctx, host, state, _accounts) = setup(ALL_GRANTS);
   eval_void(&ctx, "inu.account().getDialogsCached({ chatFolderId: 0 })");
   settle(&rt, &ctx, &state, &host);
-  assert_eq!(host.fetch_log.borrow().last().unwrap().1, r#"|{"archive":0,"chatFolderId":0,"limit":0,"fields":null}|"#);
+  assert_eq!(
+    host.fetch_log.borrow().last().unwrap().1,
+    r#"|{"archive":0,"chatFolderId":0,"limit":0,"fields":null}|"#
+  );
   eval_void(&ctx, "inu.account().getDialogsCached({ chatFolderId: 3, limit: 20 })");
   settle(&rt, &ctx, &state, &host);
-  assert_eq!(host.fetch_log.borrow().last().unwrap().1, r#"|{"archive":0,"chatFolderId":3,"limit":20,"fields":null}|"#);
+  assert_eq!(
+    host.fetch_log.borrow().last().unwrap().1,
+    r#"|{"archive":0,"chatFolderId":3,"limit":20,"fields":null}|"#
+  );
 }
 
 /// Nothing about the wire knows which fields a constructor has: what to do with a name is the

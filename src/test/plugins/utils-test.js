@@ -185,4 +185,30 @@ expectThrow('toInputPeer refuses a Peer, which carries no access_hash', 'invalid
 // @ts-expect-error
 expectThrow('a constructor named "constructor" is not a peer', 'invalid-argument', () => peers.toDialogId({ _: 'constructor' }))
 
+// -- text formats --
+
+/** @type {tl.TypeMessageEntity[]} */
+const BOLD_HI = [{ _: 'messageEntityBold', offset: 0, length: 2 }]
+
+equals('md parses a tagged template', utils.md`**bold**`, {
+  text: 'bold',
+  entities: [{ _: 'messageEntityBold', offset: 0, length: 4 }],
+})
+// an interpolation is never markup: this is what makes a formatted string safe to build from user input
+equals('md writes an interpolated string as text', utils.md`${'**x**'}`.text, '**x**')
+const inner = utils.md`__b__`
+equals('md carries the entities of an interpolated text', utils.md`**a ${inner}**`, {
+  text: 'a b',
+  entities: [
+    { _: 'messageEntityItalic', offset: 2, length: 1 },
+    { _: 'messageEntityBold', offset: 0, length: 3 },
+  ],
+})
+equals('html parses tags', utils.html`<b>hi</b>`.entities, BOLD_HI)
+equals('html collapses whitespace and thtml keeps it', [utils.html`a  b`.text, utils.thtml`a  b`.text], ['a b', 'a  b'])
+equals('md.unparse writes entities back out', utils.md.unparse({ text: 'hi there', entities: BOLD_HI }), '**hi** there')
+equals('html.escape escapes markup', utils.html.escape('<a>'), '&lt;a&gt;')
+// @ts-expect-error
+expectThrow('a format refuses what is not a string', 'invalid-argument', () => utils.md(42))
+
 console.log('utils test done')

@@ -128,9 +128,10 @@ pub fn install_utils_with_host<'js>(
   }
 
   let plugin_error = globals.plugin_error.clone();
+  let text = crate::api::tl::text::install_text(ctx)?;
 
   let factory = crate::utils::prelude::load(ctx, PRELUDE)?;
-  let shared: Object = factory.call((utils.clone(), plugin_error))?;
+  let shared: Object = factory.call((utils.clone(), plugin_error, text))?;
 
   globals.inu.set("utils", utils)?;
   Ok(shared)

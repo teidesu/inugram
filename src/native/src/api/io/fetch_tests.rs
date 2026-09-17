@@ -1,9 +1,9 @@
 use super::*;
-use std::cell::RefCell;
 use crate::api::error::install_plugin_error;
 use crate::api::io::fs::tests::{install_sandbox_globals, TestDir};
 use rquickjs::Context;
 use std::cell::Cell;
+use std::cell::RefCell;
 
 /// Mirrors `PluginPermissions.allows(..., ScopeMatch.DOMAIN)`, which is what really answers
 /// `onCheckGrant` here. The shared `TestGrantHost` compares scopes literally, and a fixture that

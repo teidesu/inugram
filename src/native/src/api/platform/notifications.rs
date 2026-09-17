@@ -1,5 +1,5 @@
-use std::cell::RefCell;
 use crate::runtime::Dispose;
+use std::cell::RefCell;
 use std::rc::Rc;
 
 use rquickjs::function::Args;
@@ -183,7 +183,6 @@ impl NotificationState {
     });
     pump_jobs(rt, context, state.log.as_ref());
   }
-
 }
 
 impl Dispose for NotificationState {

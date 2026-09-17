@@ -1,5 +1,5 @@
-use std::fs;
 use crate::runtime::Dispose;
+use std::fs;
 use std::path::PathBuf;
 use std::rc::Rc;
 
@@ -52,7 +52,12 @@ const RESERVED_HEADERS: [&str; 8] =
 const REDIRECT_MODES: [&str; 3] = ["follow", "manual", "error"];
 
 fn coerce_string<'js>(ctx: &Ctx<'js>, value: Value<'js>) -> JsResult<String> {
-  Ok(value.get::<Coerced<String>>().map_err(|_| Exception::throw_type(ctx, "fetch: expected a string"))?.0)
+  Ok(
+    value
+      .get::<Coerced<String>>()
+      .map_err(|_| Exception::throw_type(ctx, "fetch: expected a string"))?
+      .0,
+  )
 }
 
 fn read_spec<'js>(ctx: &Ctx<'js>, method: Value<'js>, headers: Value<'js>, redirect: Value<'js>) -> JsResult<Spec> {
@@ -98,7 +103,11 @@ fn read_spec<'js>(ctx: &Ctx<'js>, method: Value<'js>, headers: Value<'js>, redir
       }
     }
   }
-  Ok(Spec { method: method.to_ascii_uppercase(), redirect, headers: pairs })
+  Ok(Spec {
+    method: method.to_ascii_uppercase(),
+    redirect,
+    headers: pairs,
+  })
 }
 
 enum BodyError {
@@ -170,13 +179,7 @@ impl FetchState {
     Err(BodyError::InvalidArgument("fetch: the body must be a string, a Uint8Array or a Blob".to_string()))
   }
 
-  fn js_send<'js>(
-    self: &Rc<Self>,
-    ctx: &Ctx<'js>,
-    url: String,
-    spec: Spec,
-    body: Value<'js>,
-  ) -> JsResult<Object<'js>> {
+  fn js_send<'js>(self: &Rc<Self>, ctx: &Ctx<'js>, url: String, spec: Spec, body: Value<'js>) -> JsResult<Object<'js>> {
     let host = match parse_target(&url) {
       Ok(host) => host,
       Err(message) => return PluginErrorCode::InvalidArgument.throw(ctx, &message),
@@ -224,7 +227,12 @@ pub fn install_fetch<'js>(
       "send",
       Function::new(
         ctx.clone(),
-        move |ctx: Ctx<'js>, url: String, method: Value<'js>, headers: Value<'js>, redirect: Value<'js>, body: Value<'js>| {
+        move |ctx: Ctx<'js>,
+              url: String,
+              method: Value<'js>,
+              headers: Value<'js>,
+              redirect: Value<'js>,
+              body: Value<'js>| {
           let spec = read_spec(&ctx, method, headers, redirect)?;
           state.js_send(&ctx, url, spec, body)
         },
@@ -300,7 +308,6 @@ impl FetchState {
     });
     pump_jobs(rt, context, state.log.as_ref());
   }
-
 }
 
 impl Dispose for FetchState {

@@ -905,7 +905,33 @@ declare namespace inu {
     finish(success?: boolean): Promise<boolean>
   }
 
+  /**
+   * A text format, as a tagged template: `` md`**hi**` `` parses what it is given and answers the
+   * text plus the entities it found. Interpolated values are never parsed - a string is written as
+   * text, a number or bigint as its digits, a `TextWithEntities` brings its own entities along, and
+   * anything falsy is dropped. Offsets are utf-16 code units, as telegram counts them.
+   */
+  interface TextFormat {
+    (strings: TemplateStringsArray, ...values: (InputText | string | number | bigint | boolean | null | undefined)[]): TextWithEntities
+    /** parse a string already written in this format, such as one a server handed over */
+    (text: string): TextWithEntities
+    /**
+     * escape text so parsing gives it back unchanged. Rarely needed: an interpolated string is
+     * already written as text. `quote` also escapes `"`, for html that goes inside an attribute.
+     */
+    escape(text: string, quote?: boolean): string
+    /** the other direction: text and its entities, written back out in this format */
+    unparse(input: InputText): string
+  }
+
   namespace utils {
+    /** mtcute's markdown: `**bold**`, `__italic__`, `--underline--`, `~~strike~~`, `||spoiler||`, `` `code` ``, ```` ```pre ````, `[text](url)` and `> quote`. */
+    const md: TextFormat
+    /** telegram's html subset. Whitespace collapses as it does in real html; `<br>` breaks a line. */
+    const html: TextFormat
+    /** {@link html}, but whitespace is kept as written and the template is dedented first. */
+    const thtml: TextFormat
+
     /** convert an array of bytes to base64 */
     function toBase64(bytes: Uint8Array): string
     /** convert base64 to an array of bytes */
@@ -1015,7 +1041,7 @@ declare namespace inu {
     function toast(text: string): void
     /** show a bulletin (aka snackbar) */
     function bulletin(options: {
-      text: string
+      text: InputText
       icon: UIIcon
     }): void
 
@@ -1028,9 +1054,9 @@ declare namespace inu {
      */
     function dialog(options: {
       /** title of the dialog */
-      title?: string
+      title?: InputText
       /** message of the dialog */
-      message?: string
+      message?: InputText
       /** custom body of the dialog */
       body?: UIElement
       /** text of the positive button, `undefined` to hide */
@@ -1137,10 +1163,10 @@ declare namespace inu {
 
     function button(options: {
       id?: string
-      text: string
-      subtitle?: string
+      text: InputText
+      subtitle?: InputText
       icon?: UIIcon
-      value?: string
+      value?: InputText
       danger?: boolean
       onClick: (anchor: UIAnchor) => void
       onSecondaryClick?: (anchor: UIAnchor) => void
@@ -1148,7 +1174,7 @@ declare namespace inu {
 
     function select(options: {
       id?: string
-      text: string
+      text: InputText
       icon?: UIIcon
       items: (string | { text: string, subtitle?: string })[]
       selected: number
@@ -1170,7 +1196,7 @@ declare namespace inu {
       onChange: (value: number, anchor: UIAnchor) => void
     }): UIElement
 
-    function separator(text?: string): UIElement
+    function separator(text?: InputText): UIElement
 
     function settingsPage(options: {
       title: string

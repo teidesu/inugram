@@ -474,6 +474,7 @@ dependencies = [
  "serde_json",
  "sha1",
  "slotmap",
+ "tgtext",
  "url",
  "yuv",
 ]
@@ -1054,6 +1055,10 @@ dependencies = [
  "quote",
  "syn 2.0.119",
 ]
+
+[[package]]
+name = "tgtext"
+version = "0.1.0"
 
 [[package]]
 name = "thiserror"

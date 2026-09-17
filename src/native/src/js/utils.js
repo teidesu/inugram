@@ -1,5 +1,46 @@
-(utils, PluginError) => {
+(utils, PluginError, text) => {
   const invalid = message => new PluginError('invalid-argument', message)
+
+  const toSub = (value) => {
+    if (typeof value === 'boolean' || !value) return null
+    if (typeof value === 'string') return value
+    if (typeof value === 'number') return Number.isFinite(value) ? String(value) : null
+    if (typeof value === 'bigint') return value.toString(10)
+    if (typeof value === 'object' && typeof value.text === 'string') {
+      return { text: value.text, entities: value.entities ?? null }
+    }
+    return null
+  }
+
+  // the two call shapes `common.d.ts` declares: a tagged template, or one string already written in
+  // the format. A template's `strings` is an array, and a plain call's argument is not
+  const makeFormatter = (format) => {
+    const parse = (strings, ...values) => {
+      if (typeof strings === 'string') return text.parse(format, [strings], [])
+      if (!Array.isArray(strings)) throw invalid('expected a string or a template literal')
+      return text.parse(format, [...strings], values.map(toSub))
+    }
+    parse.escape = (value, quote = false) => {
+      if (typeof value !== 'string') throw invalid('escape: expected a string')
+      return text.escape(format, value, quote === true)
+    }
+    parse.unparse = (input) => {
+      if (typeof input === 'string') return text.unparse(format, input, [])
+      if (input === null || typeof input !== 'object' || typeof input.text !== 'string') {
+        throw invalid('unparse: expected a string or { text, entities }')
+      }
+      const entities = input.entities
+      if (entities !== undefined && entities !== null && !Array.isArray(entities)) {
+        throw invalid('unparse: entities must be an array')
+      }
+      return text.unparse(format, input.text, entities ?? [])
+    }
+    return Object.freeze(parse)
+  }
+
+  utils.md = makeFormatter(0)
+  utils.html = makeFormatter(1)
+  utils.thtml = makeFormatter(2)
 
   // a legacy constructor is `<base>_<suffix>` (`message_old7`, `documentAttributeSticker_old2`,
   // `messageMediaDocument_layer197_2`) and no live TL name contains an underscore, so cutting at
