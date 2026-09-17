@@ -88,6 +88,8 @@ When explicitly asked to manage patches, use `stg new`, `stg refresh -p <patch>`
 or `stg float <patch>` then `stg refresh`. `--index` refreshes staged changes only.
 Stock paths inside exported patches omit `worktree/`.
 
+Always run `stg` commands from the `worktree/` directory.
+
 ## Config, database, and settings
 
 ```kotlin

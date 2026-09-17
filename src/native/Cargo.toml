@@ -4,6 +4,9 @@ version = "0.1.0"
 edition = "2021"
 publish = false
 
+[workspace]
+members = ["crates/tgtext"]
+
 [lib]
 crate-type = ["cdylib"]
 
@@ -26,6 +29,7 @@ object = { version = "0.40.0", default-features = false, features = ["read_core"
 # rquickjs bundles quickjs-ng; `bindgen` is required because it ships no prebuilt Android bindings.
 rquickjs = { version = "0.12", default-features = true, features = ["bindgen", "parallel"] }
 slotmap = "1.1.1"
+tgtext = { path = "crates/tgtext" }
 url = "2.5.8"
 # the encoder's rgba to yuv conversion. its default features are x86 simd; `rdm` picks the faster
 # neon kernels at runtime on cores that have the extension.

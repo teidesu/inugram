@@ -1,17 +1,20 @@
-use std::cell::{Cell, RefCell};
 use crate::runtime::Dispose;
+use std::cell::{Cell, RefCell};
 use std::collections::HashMap;
 use std::rc::Rc;
 
 use rquickjs::{Array, Ctx, Exception, Function, Object, Persistent, Result as JsResult, Runtime, Value};
 
-use crate::api::error::host_error_to_js;
 use crate::api::error::format_exception;
+use crate::api::error::host_error_to_js;
 use crate::api::error::PluginErrorCode;
 use crate::api::ui::icons::{opt_icon, Icon, RETAINED_VALUE_TAG};
 use crate::runtime::pump_jobs;
 use crate::sandbox::registry::{make_disposer, noop_disposer, Lifecycle, Registry, RequestIds};
-use crate::utils::arguments::{field, opt_bool, opt_fn, opt_num, opt_str, req_bool, req_fn, req_num, req_str};
+use crate::utils::arguments::{
+  field, opt_bool, opt_fn, opt_num, opt_str, opt_text, read_input_text, req_bool, req_fn, req_num, req_str, req_text,
+  write_input_text,
+};
 
 const MAX_SLIDER_LABELS: usize = 501;
 
@@ -110,6 +113,10 @@ fn set_opt<'js, T: rquickjs::IntoJs<'js>>(out: &Object<'js>, key: &str, value: O
   Ok(())
 }
 
+fn copy_text<'js>(out: &Object<'js>, obj: &Object<'js>, key: &str) -> JsResult<()> {
+  set_opt(out, &format!("{key}Entities"), obj.get::<_, Option<Value>>(&format!("{key}Entities"))?)
+}
+
 fn new_element<'js>(ctx: &Ctx<'js>, ty: &str) -> JsResult<Object<'js>> {
   let obj = Object::new(ctx.clone())?;
   obj.set(ELEMENT_TAG, ty)?;
@@ -143,10 +150,14 @@ fn make_button<'js>(
 ) -> JsResult<Object<'js>> {
   let out = new_element(ctx, "button")?;
   set_opt(&out, "id", opt_str(ctx, &opts, "button", "id")?)?;
-  out.set("text", req_str(ctx, &opts, "button", "text")?)?;
+  write_input_text(&out, "text", req_text(ctx, &opts, "button", "text")?)?;
   set_icon(&out, opt_icon(ctx, &opts, "button", jvm)?)?;
-  set_opt(&out, "subtitle", opt_str(ctx, &opts, "button", "subtitle")?)?;
-  set_opt(&out, "value", opt_str(ctx, &opts, "button", "value")?)?;
+  if let Some(subtitle) = opt_text(ctx, &opts, "button", "subtitle")? {
+    write_input_text(&out, "subtitle", subtitle)?;
+  }
+  if let Some(value) = opt_text(ctx, &opts, "button", "value")? {
+    write_input_text(&out, "value", value)?;
+  }
   out.set("danger", opt_bool(ctx, &opts, "button", "danger")?)?;
   out.set("onClick", req_fn(ctx, &opts, "button", "onClick")?)?;
   set_opt(&out, "onSecondaryClick", opt_fn(ctx, &opts, "button", "onSecondaryClick")?)?;
@@ -160,7 +171,7 @@ fn make_select<'js>(
 ) -> JsResult<Object<'js>> {
   let out = new_element(ctx, "select")?;
   set_opt(&out, "id", opt_str(ctx, &opts, "select", "id")?)?;
-  out.set("text", req_str(ctx, &opts, "select", "text")?)?;
+  write_input_text(&out, "text", req_text(ctx, &opts, "select", "text")?)?;
   set_icon(&out, opt_icon(ctx, &opts, "select", jvm)?)?;
 
   let raw: Value = field(ctx, &opts, "select", "items")?;
@@ -280,9 +291,11 @@ pub fn install_ui<'js>(
   ui.set("slider", Function::new(ctx.clone(), |ctx: Ctx<'js>, opts: Object<'js>| make_slider(&ctx, opts))?)?;
   ui.set(
     "separator",
-    Function::new(ctx.clone(), |ctx: Ctx<'js>, text: rquickjs::function::Opt<rquickjs::Coerced<String>>| {
+    Function::new(ctx.clone(), |ctx: Ctx<'js>, text: rquickjs::function::Opt<Value<'js>>| {
       let out = new_element(&ctx, "separator")?;
-      set_opt(&out, "text", text.0.map(|c| c.0))?;
+      if let Some(value) = text.0.filter(|v| !v.is_undefined() && !v.is_null()) {
+        write_input_text(&out, "text", read_input_text(&ctx, &value, "separator", "text")?)?;
+      }
       Ok::<_, rquickjs::Error>(out)
     })?,
   )?;
@@ -560,6 +573,7 @@ impl UiState {
         }
         "header" | "separator" => {
           set_opt(&out, "text", obj.get::<_, Option<String>>("text")?)?;
+          copy_text(&out, obj, "text")?;
         }
         "check" => {
           set_opt(&out, "id", obj.get::<_, Option<String>>("id")?)?;
@@ -580,6 +594,9 @@ impl UiState {
           }
           set_opt(&out, "subtitle", obj.get::<_, Option<String>>("subtitle")?)?;
           set_opt(&out, "value", obj.get::<_, Option<String>>("value")?)?;
+          for key in ["text", "subtitle", "value"] {
+            copy_text(&out, obj, key)?;
+          }
           out.set("danger", obj.get::<_, bool>("danger")?)?;
           out.set("onClick", alloc_slot(&row, obj.get::<_, Function>("onClick")?))?;
           if let Some(f) = obj.get::<_, Option<Function>>("onSecondaryClick")? {
@@ -593,6 +610,7 @@ impl UiState {
           if let Some(value) = obj.get::<_, Option<Value>>(RETAINED_VALUE_TAG)? {
             retained_icon_values.push(value);
           }
+          copy_text(&out, obj, "text")?;
           out.set("items", obj.get::<_, Array>("items")?)?;
           out.set("selected", obj.get::<_, i32>("selected")?)?;
           out.set("dialog", obj.get::<_, bool>("dialog")?)?;
@@ -725,7 +743,6 @@ impl UiState {
       .insert(menu_id, callbacks.into_iter().map(|f| Persistent::save(ctx, f)).collect());
     Ok(())
   }
-
 }
 
 impl UiState {
@@ -863,7 +880,6 @@ impl UiState {
     });
     pump_jobs(rt, context, state.log.as_ref());
   }
-
 }
 
 impl Dispose for UiState {

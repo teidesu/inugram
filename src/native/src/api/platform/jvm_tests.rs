@@ -162,7 +162,10 @@ fn object_handle(f: &Fixture, name: &str) {
 
 fn thrown_code(ctx: &Ctx<'_>) -> String {
   let thrown = ctx.catch();
-  thrown.as_object().and_then(|o| o.get::<_, Option<String>>("code").ok().flatten()).unwrap_or_else(|| "Error".to_string())
+  thrown
+    .as_object()
+    .and_then(|o| o.get::<_, Option<String>>("code").ok().flatten())
+    .unwrap_or_else(|| "Error".to_string())
 }
 
 /// what a value [code] evaluates to crosses as, or the code of the refusal
@@ -378,9 +381,7 @@ pub(crate) mod testing {
 
   impl OracleJvmHost {
     pub(crate) fn new() -> Rc<Self> {
-      Rc::new(OracleJvmHost {
-        next_id: Cell::new(1),
-      })
+      Rc::new(OracleJvmHost { next_id: Cell::new(1) })
     }
 
     pub(crate) fn as_host(self: &Rc<Self>) -> Rc<dyn JvmHost> {
@@ -392,7 +393,6 @@ pub(crate) mod testing {
       self.next_id.set(id + 1);
       format!("G{kind}{id}")
     }
-
   }
 
   impl JvmHost for OracleJvmHost {

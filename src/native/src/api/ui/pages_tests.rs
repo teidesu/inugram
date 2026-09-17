@@ -120,6 +120,58 @@ fn full_page_render_serializes_every_element() {
 }
 
 #[test]
+fn input_text_renders_entities_beside_the_plain_text() {
+  let (rt, ctx, host, state, _logs) = setup();
+  ctx.with(|ctx| {
+    ctx
+      .eval::<(), _>(
+        r#"
+            const bold = (offset, length) => [{ _: 'messageEntityBold', offset, length }];
+            const page = inu.ui.settingsPage({
+                title: 'Test page',
+                items: () => [
+                    inu.ui.button({ text: { text: 'Do it', entities: bold(0, 2) },
+                        subtitle: { text: 'sub', entities: bold(1, 1) }, value: 'now', onClick: () => {} }),
+                    inu.ui.select({ text: { text: 'Mode', entities: bold(0, 4) }, items: ['a'], selected: 0,
+                        onChange: () => {} }),
+                    inu.ui.separator({ text: 'the end', entities: bold(4, 3) }),
+                ],
+            });
+            globalThis.__disposeSettings = inu.registerSettings(page);
+            "#,
+      )
+      .unwrap();
+  });
+  let page_id = *host.registered.borrow().last().unwrap();
+  let json = state.render(&rt, &ctx, page_id).expect("render failed");
+  assert_eq!(
+    json,
+    r#"{"title":"Test page","items":[{"type":"button","key":"t:button:Do it#1","text":"Do it","subtitle":"sub","value":"now","textEntities":[{"_":"messageEntityBold","offset":0,"length":2}],"subtitleEntities":[{"_":"messageEntityBold","offset":1,"length":1}],"danger":false,"onClick":1},{"type":"select","key":"t:select:Mode#1","text":"Mode","textEntities":[{"_":"messageEntityBold","offset":0,"length":4}],"items":[{"text":"a"}],"selected":0,"dialog":false,"onChange":2},{"type":"separator","key":"t:separator:the end#1","text":"the end","textEntities":[{"_":"messageEntityBold","offset":4,"length":3}]}]}"#,
+  );
+  assert!(!json.contains("valueEntities"), "a plain string carries no entities: {json}");
+}
+
+/// a check row is a plain `TextView` and renders no spans, so its text stays a string rather than
+/// silently dropping the entities of an `InputText`
+#[test]
+fn check_refuses_input_text() {
+  let (_rt, ctx, _host, _state, _logs) = setup();
+  let message: String = ctx.with(|ctx| {
+    ctx
+      .eval(
+        r#"(() => {
+                   try {
+                       inu.ui.check({ text: { text: 'Toggle', entities: [] }, checked: false, onChange: () => {} });
+                       return 'did not throw';
+                   } catch (e) { return e.message; }
+               })()"#,
+      )
+      .unwrap()
+  });
+  assert_eq!(message, "check: 'text' must be a string");
+}
+
+#[test]
 fn events_update_state_and_rerender_uses_fresh_slots() {
   let (rt, ctx, host, state, _logs) = setup();
   let page_id = build_full_page(&ctx, &host);

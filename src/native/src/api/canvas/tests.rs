@@ -81,7 +81,10 @@ fn render_request(op: i32, arg: &str, bytes: Option<&[u8]>) -> String {
     return arg.to_string();
   }
   let table = decode_table(arg);
-  let mut r = Reader { bytes: bytes.expect("a side request carries its fields as bytes"), at: 0 };
+  let mut r = Reader {
+    bytes: bytes.expect("a side request carries its fields as bytes"),
+    at: 0,
+  };
   let text = |r: &mut Reader| table[r.u32() as usize].clone();
   let mut out: Vec<String> = Vec::new();
   match op {

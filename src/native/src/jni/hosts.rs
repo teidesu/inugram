@@ -178,7 +178,15 @@ impl ReadsHost for JniBridge {
     )
   }
 
-  fn account_fetch(&self, account_id: i32, request_id: i64, op: i32, peer: &str, args: &str, cursor: &str) -> Option<String> {
+  fn account_fetch(
+    &self,
+    account_id: i32,
+    request_id: i64,
+    op: i32,
+    peer: &str,
+    args: &str,
+    cursor: &str,
+  ) -> Option<String> {
     self.call_refusal(
       "accountFetch",
       self.on_account_fetch,
@@ -212,8 +220,8 @@ impl DialogHost for JniBridge {
     self.call_void("toast", self.on_ui_toast, &[Arg::Str(text)]);
   }
 
-  fn bulletin(&self, text: &str, icon_spec: &str) -> Option<String> {
-    self.call_refusal("bulletin", self.on_ui_bulletin, &[Arg::Str(text), Arg::Str(icon_spec)])
+  fn bulletin(&self, text: &str, entities_json: &str, icon_spec: &str) -> Option<String> {
+    self.call_refusal("bulletin", self.on_ui_bulletin, &[Arg::Str(text), Arg::Str(entities_json), Arg::Str(icon_spec)])
   }
 
   fn dialog(&self, request_id: i64, options_json: &str) -> Option<String> {
@@ -413,7 +421,13 @@ impl TimerHost for JniBridge {
 }
 
 impl FetchHost for JniBridge {
-  fn send(&self, request_id: i64, url: &str, spec: &crate::api::io::fetch::Spec, body: Option<&[u8]>) -> Option<String> {
+  fn send(
+    &self,
+    request_id: i64,
+    url: &str,
+    spec: &crate::api::io::fetch::Spec,
+    body: Option<&[u8]>,
+  ) -> Option<String> {
     self.call_refusal(
       "fetch",
       self.on_fetch,

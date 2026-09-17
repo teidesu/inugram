@@ -21,7 +21,9 @@ fn outcome_of(rt: &Runtime, ctx: &Context) -> String {
 fn watch<'js>(ctx: &Ctx<'js>, promise: rquickjs::Promise<'js>) {
   ctx.globals().set("p", promise).unwrap();
   ctx
-    .eval::<(), _>("globalThis.out = 'pending'; p.then(v => { out = `ok:${v}` }, e => { out = `err:${e.code ?? e.message}` })")
+    .eval::<(), _>(
+      "globalThis.out = 'pending'; p.then(v => { out = `ok:${v}` }, e => { out = `err:${e.code ?? e.message}` })",
+    )
     .unwrap();
 }
 
@@ -161,7 +163,10 @@ fn dispose_releases_every_outstanding_request() {
   let released = Rc::new(Cell::new(0));
   ctx.with(|ctx| {
     for _ in 0..3 {
-      let probe = Probe { released: released.clone(), ..Probe::default() };
+      let probe = Probe {
+        released: released.clone(),
+        ..Probe::default()
+      };
       table.park(&ctx, probe, |_| None).unwrap();
     }
     table.dispose(&ctx);

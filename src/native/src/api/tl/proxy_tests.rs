@@ -383,7 +383,9 @@ fn read_ordinal_reply(tag: u8, value: i64) -> String {
   let views = TlViews::new(Rc::new(OrdinalHost { reply }));
   let (_rt, ctx) = make_ctx();
   ctx.with(|ctx| {
-    let view = views.wire_to_js_value(&ctx, &format!("{}.0", encode_handle(false, true, 1)), ViewLife::Dispatch).unwrap();
+    let view = views
+      .wire_to_js_value(&ctx, &format!("{}.0", encode_handle(false, true, 1)), ViewLife::Dispatch)
+      .unwrap();
     ctx.globals().set("obj", view).unwrap();
     ctx.eval("`${typeof obj.field}:${obj.field}`").unwrap()
   })
@@ -1924,7 +1926,10 @@ fn console_prints_a_view_as_its_type_and_fields() {
   let message = Rc::new(RefCell::new(object_entry("message", &[("id", "I5"), ("message", "Shi")])));
   add_nested(&message, "peer_id", peer);
   let id = host.mint_shared(message, false);
-  assert_eq!(log_view(&host, false, id), vec!["message { id: 5, message: 'hi', peer_id: peerUser { user_id: 7 } }"]);
+  assert_eq!(
+    log_view(&host, false, id),
+    vec!["message { id: 5, message: 'hi', peer_id: peerUser { user_id: 7 } }"]
+  );
 }
 
 #[test]

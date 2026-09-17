@@ -272,7 +272,7 @@ Run checks relevant to the change; no build for documentation-only edits.
 | --- | --- |
 | Android code | `pnpm run build-debug` |
 | Plugin contract/bridge | `pnpm run typecheck-plugins` |
-| Rust engine | `cd src/native && cargo check` / `cargo test` |
+| Rust engine | `cd src/native && cargo check` / `cargo test --workspace` |
 | JVM core | `cd worktree && ./gradlew :InuCore:test` |
 | Device tests, user-run | `cd worktree && ./gradlew :TMessagesProj:connectedDebugAndroidTest` |
 

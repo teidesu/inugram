@@ -10,11 +10,13 @@ import desu.inugram.helpers.plugins.Plugin
 import desu.inugram.helpers.plugins.PluginSession
 import desu.inugram.helpers.plugins.QuickJs
 import desu.inugram.helpers.plugins.platform.PluginJvm
+import desu.inugram.helpers.plugins.ui.PluginText
 import desu.inugram.helpers.plugins.ui.PluginUi
 import org.json.JSONArray
 import org.json.JSONObject
 import org.telegram.messenger.AndroidUtilities
 import org.telegram.messenger.LocaleController
+import org.telegram.messenger.NotificationCenter
 import org.telegram.messenger.R
 import org.telegram.messenger.Utilities
 import org.telegram.ui.Cells.NotificationsCheckCell
@@ -34,15 +36,15 @@ import org.telegram.ui.Stories.recorder.ButtonWithCounterView
 class PluginSettingsActivity(
     val session: PluginSession,
     val pageId: Long,
-) : SettingsPageActivity() {
+) : SettingsPageActivity(), NotificationCenter.NotificationCenterDelegate {
 
     private class SelectOption(val text: String, val subtitle: String?)
 
     private sealed class Row(val uid: Int, val secondarySlot: Int) {
         class Header(uid: Int, val text: String) : Row(uid, 0)
-        class Check(uid: Int, val text: String, val subtitle: String?, val checked: Boolean, val slot: Int, secondary: Int) : Row(uid, secondary)
-        class Button(uid: Int, val text: String, val subtitle: String?, val value: String?, val icon: String?, val danger: Boolean, val slot: Int, secondary: Int) : Row(uid, secondary)
-        class Select(uid: Int, val text: String, val options: List<SelectOption>, val selected: Int, val icon: String?, val dialog: Boolean, val slot: Int, secondary: Int) : Row(uid, secondary)
+        class Check(uid: Int, val text: CharSequence, val subtitle: CharSequence?, val checked: Boolean, val slot: Int, secondary: Int) : Row(uid, secondary)
+        class Button(uid: Int, val text: CharSequence, val subtitle: CharSequence?, val value: CharSequence?, val icon: String?, val formatting: String?, val danger: Boolean, val slot: Int, secondary: Int) : Row(uid, secondary)
+        class Select(uid: Int, val text: CharSequence, val options: List<SelectOption>, val selected: Int, val icon: String?, val formatting: String?, val dialog: Boolean, val slot: Int, secondary: Int) : Row(uid, secondary)
         class Slider(
             uid: Int, val text: String?, val min: Double, val max: Double, val step: Double,
             val value: Double, val default: Double?, val labels: List<String>?, val slot: Int,
@@ -50,7 +52,7 @@ class PluginSettingsActivity(
             /** identity of everything but the live value - a change means the cached cell is stale */
             fun configKey(): String = "$text|$min|$max|$step|$default|${labels?.joinToString("\u0000")}"
         }
-        class Separator(uid: Int, val text: String?) : Row(uid, 0)
+        class Separator(uid: Int, val text: CharSequence?) : Row(uid, 0)
 
         /** `inu.android.nativeView`: an `inu.jvm` handle id, resolved to a real `View` at bind */
         class Native(uid: Int, val handle: Long) : Row(uid, 0)
@@ -75,8 +77,18 @@ class PluginSettingsActivity(
 
     override fun onFragmentCreate(): Boolean {
         PluginUi.onPageOpened(this)
+        NotificationCenter.getGlobalInstance().addObserver(this, NotificationCenter.emojiLoaded)
         requestRender()
         return super.onFragmentCreate()
+    }
+
+    /**
+     * An emoji draws a grey placeholder and asks for its page, then answers with `emojiLoaded` once
+     * the bitmap is in. No settings cell listens for that, and the rows draw through SimpleTextView
+     * rather than TextView, so neither stock's per-view helper nor `Emoji.invalidateAll` reaches them.
+     */
+    override fun didReceivedNotification(id: Int, account: Int, vararg args: Any?) {
+        if (id == NotificationCenter.emojiLoaded) invalidateVisibleRows()
     }
 
     /**
@@ -93,6 +105,7 @@ class PluginSettingsActivity(
     }
 
     override fun onFragmentDestroy() {
+        NotificationCenter.getGlobalInstance().removeObserver(this, NotificationCenter.emojiLoaded)
         PluginUi.onPageClosed(this)
         super.onFragmentDestroy()
     }
@@ -141,6 +154,21 @@ class PluginSettingsActivity(
             return uid
         }
 
+        fun formatted(o: JSONObject, key: String): CharSequence? = o.optString(key)
+            .takeIf { it.isNotEmpty() }
+            ?.let { PluginText.formatted(it, o.optJSONArray("${key}Entities")) }
+
+        // TextCell rows are single-line SimpleTextViews of a fixed height, so a newline would be
+        // dropped and clamp the row; a space keeps every entity offset where it was
+        fun formattedRow(o: JSONObject, key: String): CharSequence? = o.optString(key)
+            .takeIf { it.isNotEmpty() }
+            ?.let { PluginText.formatted(it.replace('\n', ' '), o.optJSONArray("${key}Entities")) }
+
+        fun joinEntities(o: JSONObject, vararg keys: String): String? = keys
+            .mapNotNull { key -> o.optJSONArray("${key}Entities")?.let { "$key=$it" } }
+            .takeIf { it.isNotEmpty() }
+            ?.joinToString(",")
+
         val rows = (0 until itemsArr.length()).map { i ->
             val o = itemsArr.getJSONObject(i)
             val type = o.getString("type")
@@ -149,14 +177,15 @@ class PluginSettingsActivity(
             val secondary = o.optInt("onSecondaryClick", 0)
             when (type) {
                 "header" -> Row.Header(uid, o.getString("text"))
-                "separator" -> Row.Separator(uid, text)
+                "separator" -> Row.Separator(uid, formatted(o, "text"))
                 "native" -> Row.Native(uid, o.getLong("handle"))
-                "check" -> Row.Check(uid, o.getString("text"), o.optString("subtitle").takeIf { it.isNotEmpty() }, o.getBoolean("checked"), o.getInt("onChange"), secondary)
+                "check" -> Row.Check(uid, formattedRow(o, "text") ?: "", formattedRow(o, "subtitle"), o.getBoolean("checked"), o.getInt("onChange"), secondary)
                 "button" -> Row.Button(
-                    uid, o.getString("text"),
-                    o.optString("subtitle").takeIf { it.isNotEmpty() },
-                    o.optString("value").takeIf { it.isNotEmpty() },
+                    uid, formattedRow(o, "text") ?: "",
+                    formattedRow(o, "subtitle"),
+                    formattedRow(o, "value"),
                     o.optString("icon").takeIf { it.isNotEmpty() },
+                    joinEntities(o, "text", "subtitle", "value"),
                     o.optBoolean("danger"), o.getInt("onClick"), secondary,
                 )
                 "select" -> {
@@ -166,8 +195,9 @@ class PluginSettingsActivity(
                         SelectOption(opt.getString("text"), opt.optString("subtitle").takeIf { it.isNotEmpty() })
                     }
                     Row.Select(
-                        uid, o.getString("text"), options, o.getInt("selected"),
+                        uid, formattedRow(o, "text") ?: "", options, o.getInt("selected"),
                         o.optString("icon").takeIf { it.isNotEmpty() },
+                        joinEntities(o, "text"),
                         o.optBoolean("dialog"), o.getInt("onChange"), secondary,
                     )
                 }
@@ -220,7 +250,7 @@ class PluginSettingsActivity(
                 is Row.Separator -> UItem.asShadow(row.uid, row.text)
                 is Row.Check -> buildCheck(row)
                 is Row.Button -> buildButton(row)
-                is Row.Select -> ButtonCellFactory.of(row.uid, row.text, row.options[row.selected].text, null, ButtonIcon(row.icon, session.engine), false)
+                is Row.Select -> ButtonCellFactory.of(row.uid, row.text, row.options[row.selected].text, null, ButtonIcon(row.icon, session.engine), false, row.formatting)
                 is Row.Slider -> UItem.asCustom(row.uid, sliderCellFor(row))
                 // the view is the plugin's, not ours: a handle it has since released, or one that
                 // never named a View, drops the row rather than failing the whole render - the
@@ -258,7 +288,7 @@ class PluginSettingsActivity(
     }
 
     private fun buildButton(row: Row.Button): UItem =
-        ButtonCellFactory.of(row.uid, row.text, row.value, row.subtitle, ButtonIcon(row.icon, session.engine), row.danger)
+        ButtonCellFactory.of(row.uid, row.text, row.value, row.subtitle, ButtonIcon(row.icon, session.engine), row.danger, row.formatting)
 
     private fun sliderCellFor(row: Row.Slider): SliderCell {
         val configKey = row.configKey()

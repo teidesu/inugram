@@ -1,5 +1,5 @@
-use std::cell::{Cell, RefCell};
 use crate::runtime::Dispose;
+use std::cell::{Cell, RefCell};
 use std::rc::Rc;
 
 use rquickjs::function::Opt;
@@ -235,7 +235,6 @@ impl AccountState {
     });
     pump_jobs(rt, context, self.log.as_ref());
   }
-
 
   fn js_on_accounts_changed<'js>(self: &Rc<Self>, ctx: &Ctx<'js>, cb: Function<'js>) -> JsResult<Function<'js>> {
     if self.lifecycle.is_unloading() {

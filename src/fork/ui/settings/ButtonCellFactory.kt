@@ -3,7 +3,10 @@ package desu.inugram.ui.settings
 import android.content.Context
 import android.graphics.Color
 import android.graphics.drawable.ColorDrawable
+import android.text.Spanned
+import android.text.TextPaint
 import android.text.TextUtils
+import org.telegram.messenger.Emoji
 import android.view.View
 import desu.inugram.helpers.plugins.QuickJs
 import desu.inugram.helpers.plugins.ui.PluginIcons
@@ -28,14 +31,29 @@ class ButtonCellFactory : UItem.UItemFactory<TextCell>() {
             setup(ButtonCellFactory())
         }
 
-        /** [icon] is an `icons.rs` spec, resolved at bind time so it follows theme + icon pack */
-        fun of(id: Int, text: String, value: String?, subtitle: String?, icon: ButtonIcon?, danger: Boolean): UItem =
+        /**
+         * [icon] is an `icons.rs` spec, resolved at bind time so it follows theme + icon pack.
+         *
+         * [formatting] stands in for the spans the texts carry: `TextUtils.equals` compares
+         * characters only and reports two CharSequences equal however differently they are spanned,
+         * so entities that changed under unchanged text would otherwise never reach [contentsEquals].
+         */
+        fun of(
+            id: Int,
+            text: CharSequence,
+            value: CharSequence?,
+            subtitle: CharSequence?,
+            icon: ButtonIcon?,
+            danger: Boolean,
+            formatting: String?,
+        ): UItem =
             UItem.ofFactory(ButtonCellFactory::class.java).apply {
                 this.id = id
                 this.text = text
                 this.textValue = value
                 this.subtext = subtitle
                 this.`object` = icon
+                this.object2 = formatting
                 this.red = danger
             }
     }
@@ -57,6 +75,10 @@ class ButtonCellFactory : UItem.UItemFactory<TextCell>() {
     ) {
         val cell = view as TextCell
         val sameRow = cell.tag == item.id
+        // fix oversized emojis
+        resizeEmoji(item.text, cell.textView.paint)
+        resizeEmoji(item.subtext, cell.subtitleView.paint)
+        resizeEmoji(item.textValue, cell.valueTextView.paint)
         // resolved here rather than in the model: this is the ui thread and this cell's own
         // context, so the drawable follows the current theme and icon pack without the model
         // knowing either existed. the icon setter drops the cell's colour filter, which the
@@ -71,6 +93,11 @@ class ButtonCellFactory : UItem.UItemFactory<TextCell>() {
                 cell.setTextAndValue(item.text, item.textValue, sameRow, divider)
             }
         }
+        // fix transparent links
+        val linkColor = Theme.getColor(Theme.key_windowBackgroundWhiteLinkText)
+        cell.textView.setLinkTextColor(linkColor)
+        cell.subtitleView.setLinkTextColor(linkColor)
+        cell.valueTextView.paint.linkColor = linkColor
         cell.setSubtitle(item.subtext)
         if (item.red) {
             cell.setColors(Theme.key_text_RedBold, Theme.key_text_RedRegular)
@@ -79,6 +106,14 @@ class ButtonCellFactory : UItem.UItemFactory<TextCell>() {
         }
         cell.setEnabled(item.enabled, sameRow)
         cell.tag = item.id
+    }
+
+    private fun resizeEmoji(text: CharSequence?, paint: TextPaint) {
+        if (text !is Spanned) return
+        val metrics = paint.fontMetricsInt
+        for (span in text.getSpans(0, text.length, Emoji.EmojiSpan::class.java)) {
+            span.replaceFontMetrics(metrics)
+        }
     }
 
     override fun equals(a: UItem, b: UItem): Boolean = a.id == b.id
@@ -91,6 +126,7 @@ class ButtonCellFactory : UItem.UItemFactory<TextCell>() {
             TextUtils.equals(a.subtext, b.subtext) &&
             left?.spec == right?.spec &&
             left?.engine === right?.engine &&
+            a.object2 == b.object2 &&
             a.red == b.red
     }
 }

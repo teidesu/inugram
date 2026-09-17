@@ -655,7 +655,6 @@ impl XposedState {
       }
     });
   }
-
 }
 
 impl Dispose for XposedState {

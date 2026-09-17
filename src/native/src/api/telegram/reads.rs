@@ -1,5 +1,5 @@
-use std::cell::{Cell, RefCell};
 use crate::runtime::Dispose;
+use std::cell::{Cell, RefCell};
 use std::collections::VecDeque;
 use std::rc::Rc;
 
@@ -39,7 +39,15 @@ pub trait ReadsHost {
 
   fn resolve_peer(&self, account_id: i32, request_id: i64, spec: &str, kind: i32) -> Option<String>;
 
-  fn account_fetch(&self, account_id: i32, request_id: i64, op: i32, peer: &str, args: &str, cursor: &str) -> Option<String>;
+  fn account_fetch(
+    &self,
+    account_id: i32,
+    request_id: i64,
+    op: i32,
+    peer: &str,
+    args: &str,
+    cursor: &str,
+  ) -> Option<String>;
 }
 
 const SEPARATOR: char = '\n';
@@ -277,9 +285,12 @@ pub fn install_reads<'js>(
     let state = state.clone();
     natives.set(
       "fetch",
-      Function::new(ctx.clone(), move |ctx: Ctx<'js>, slot: i32, op: i32, peer: String, args: String, cursor: String| {
-        state.js_fetch(&ctx, slot, op, &peer, &args, &cursor)
-      })?,
+      Function::new(
+        ctx.clone(),
+        move |ctx: Ctx<'js>, slot: i32, op: i32, peer: String, args: String, cursor: String| {
+          state.js_fetch(&ctx, slot, op, &peer, &args, &cursor)
+        },
+      )?,
     )?;
   }
 
@@ -369,23 +380,21 @@ impl ReadsState {
       }
     }
   }
-
 }
 
 impl ReadsState {
   pub fn settle(self: &Rc<Self>, rt: &Runtime, context: &rquickjs::Context, request_id: i64, result_wire: &str) {
     let state = self;
     context.with(|ctx| {
-      let settled = state.pending.settle(&ctx, request_id, result_wire, false, |ctx, shape, wire| {
-        state.decode_result(ctx, *shape, wire)
-      });
+      let settled = state
+        .pending
+        .settle(&ctx, request_id, result_wire, false, |ctx, shape, wire| state.decode_result(ctx, *shape, wire));
       if let Err(why) = settled {
         (state.log)(&format!("account read({request_id}) settle failed: {why}"));
       }
     });
     pump_jobs(rt, context, state.log.as_ref());
   }
-
 }
 
 impl Dispose for ReadsState {

@@ -165,9 +165,17 @@ fn insert_all_is_measured_as_one_write_and_lands_whole_or_not_at_all() {
   let file = TempPath::default();
   let kv = open(&file.0, &["kv"]);
   let half = format!("'x'.repeat({})", Q / 2);
-  assert_eq!(kv.eval(&format!("inu.kv.insertAll({{ a: {half}, b: {half}, c: {half} }})")), "throws quota-exceeded");
+  assert_eq!(
+    kv.eval(&format!("inu.kv.insertAll({{ a: {half}, b: {half}, c: {half} }})")),
+    "throws quota-exceeded"
+  );
   assert_eq!(kv.eval("inu.kv.keys()"), "[]");
-  for code in ["inu.kv.insertAll({ a: '1', n: 5 })", "inu.kv.insertAll(['1'])", "inu.kv.insertAll('ab')", "inu.kv.insertAll(null)"] {
+  for code in [
+    "inu.kv.insertAll({ a: '1', n: 5 })",
+    "inu.kv.insertAll(['1'])",
+    "inu.kv.insertAll('ab')",
+    "inu.kv.insertAll(null)",
+  ] {
     assert_eq!(kv.eval(code), "throws invalid-argument", "{code}");
   }
   assert_eq!(kv.eval("inu.kv.keys()"), "[]");

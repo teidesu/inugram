@@ -1,5 +1,5 @@
-use std::fs;
 use crate::runtime::Dispose;
+use std::fs;
 use std::path::PathBuf;
 use std::rc::Rc;
 
@@ -10,8 +10,8 @@ use crate::api::error::PluginErrorCode;
 use crate::api::io::blob::{mint_owned_file, BlobState, BUILD_LIMIT_BYTES};
 use crate::api::io::fs::FsState;
 use crate::api::io::staging::{SourceStager, StagedFile, StagedSource};
-use crate::api::ui::{OP_PICK_FILE, OP_SAVE_FILE};
 use crate::api::tl::proxy::plain_wire_to_js;
+use crate::api::ui::{OP_PICK_FILE, OP_SAVE_FILE};
 use crate::runtime::{pump_jobs, Parked, PendingTable};
 use crate::utils::arguments::opt_bool;
 
@@ -142,7 +142,13 @@ impl FilesState {
     state.start(ctx, OP_SAVE_FILE, out, FileRequest::Save { _staged: owned.then(|| StagedFile(path)) })
   }
 
-  fn start<'js>(self: &Rc<Self>, ctx: &Ctx<'js>, op: i32, options: Object<'js>, kind: FileRequest) -> JsResult<Value<'js>> {
+  fn start<'js>(
+    self: &Rc<Self>,
+    ctx: &Ctx<'js>,
+    op: i32,
+    options: Object<'js>,
+    kind: FileRequest,
+  ) -> JsResult<Value<'js>> {
     let state = self;
     let json = ctx
       .json_stringify(options)?
@@ -159,8 +165,9 @@ impl FilesState {
     context.with(|ctx| {
       let settled = state.pending.settle(&ctx, request_id, result_wire, false, |ctx, request, wire| match request {
         FileRequest::Pick { multiple } => {
-          let json =
-            wire.strip_prefix('J').ok_or_else(|| Exception::throw_message(ctx, "pickFile: malformed host answer"))?;
+          let json = wire
+            .strip_prefix('J')
+            .ok_or_else(|| Exception::throw_message(ctx, "pickFile: malformed host answer"))?;
           state.picked(ctx, json, *multiple)
         }
         FileRequest::Save { .. } => plain_wire_to_js(ctx, wire),

@@ -1,5 +1,4 @@
 use super::*;
-use std::cell::RefCell;
 use crate::api::error::format_exception;
 use crate::api::error::install_plugin_error;
 use crate::api::globals::RandomHost;
@@ -8,6 +7,7 @@ use crate::api::telegram::reads::ReadsHost;
 use crate::api::tl::proxy::TlHost;
 use crate::sandbox::grants::TestGrantHost;
 use rquickjs::{Context, Runtime};
+use std::cell::RefCell;
 
 /// one call the fake took but has not answered: `(request id, op, arg, values)`
 type Parked = (i64, i32, String, Vec<String>);
@@ -869,7 +869,8 @@ fn out_of(ctx: &Context) -> String {
 #[test]
 fn retargeting_a_send_writes_the_peer_the_account_resolved_and_never_the_bare_id() {
   let fixture = setup_send(&["interceptSendMessage", "account.read(peers)"]);
-  let next = run_one_send(&fixture, "({ message: m }) => { m.peer = 111; return 'send' }").expect("the send never went out");
+  let next =
+    run_one_send(&fixture, "({ message: m }) => { m.peer = 111; return 'send' }").expect("the send never went out");
   assert!(
     next.contains(r#""peer":{"_":"inputPeerUser","user_id":"111","access_hash":"1110"}"#),
     "the retarget must write the resolved InputPeer, not the dialog id: {next}",
@@ -880,7 +881,8 @@ fn retargeting_a_send_writes_the_peer_the_account_resolved_and_never_the_bare_id
 #[test]
 fn a_topic_retarget_writes_the_reply_that_lands_the_message_in_it() {
   let fixture = setup_send(&["interceptSendMessage", "account.read(peers)"]);
-  let next = run_one_send(&fixture, "({ message: m }) => { m.topicId = 12; return 'send' }").expect("the send never went out");
+  let next =
+    run_one_send(&fixture, "({ message: m }) => { m.topicId = 12; return 'send' }").expect("the send never went out");
   // a post into a topic with no reply of its own addresses the topic's own root message,
   // which is what makes it land in the topic at all
   assert!(
@@ -984,8 +986,10 @@ fn the_typing_actions_match_the_host_s() {
     .split("else ->")
     .next()
     .unwrap();
-  let kt: std::collections::BTreeSet<String> =
-    kt.lines().filter_map(|line| line.trim().strip_prefix('"')?.split('"').next().map(str::to_string)).collect();
+  let kt: std::collections::BTreeSet<String> = kt
+    .lines()
+    .filter_map(|line| line.trim().strip_prefix('"')?.split('"').next().map(str::to_string))
+    .collect();
   assert!(!kt.is_empty());
   assert_eq!(quoted_names(js), kt);
 }

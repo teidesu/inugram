@@ -47,7 +47,13 @@ impl Store {
     let mut entries = BTreeMap::new();
     let whole = bytes.is_empty() || replay(&bytes, &mut entries);
     let used = entries.iter().map(|(key, value)| key.len() + value.len()).sum();
-    let mut store = Store { path: path.to_path_buf(), entries, used, log: None, log_bytes: 0 };
+    let mut store = Store {
+      path: path.to_path_buf(),
+      entries,
+      used,
+      log: None,
+      log_bytes: 0,
+    };
     if !whole {
       store.compact()?;
     } else if !bytes.is_empty() {
@@ -280,8 +286,9 @@ impl KvState {
   fn set_all<'js>(&self, ctx: &Ctx<'js>, pairs: &[(String, String)]) -> JsResult<Value<'js>> {
     match self.open_store(ctx)?.set_all(pairs) {
       Ok(()) => Ok(Value::new_undefined(ctx.clone())),
-      Err(Refusal::Quota(used)) => PluginErrorCode::QuotaExceeded(used as i64, QUOTA_BYTES as i64)
-        .throw(ctx, "kv: 1 MB per-plugin quota exceeded"),
+      Err(Refusal::Quota(used)) => {
+        PluginErrorCode::QuotaExceeded(used as i64, QUOTA_BYTES as i64).throw(ctx, "kv: 1 MB per-plugin quota exceeded")
+      }
       Err(Refusal::Io(e)) => throw_io(ctx, e),
     }
   }
@@ -328,11 +335,9 @@ pub fn install_kv<'js>(
   let s = state.clone();
   kv.set(
     "get",
-    Function::new(ctx.clone(), move |ctx: Ctx<'js>, key: String| {
-      match s.open_store(&ctx)?.entries.get(&key) {
-        Some(value) => value.as_str().into_js(&ctx),
-        None => Ok(Value::new_null(ctx.clone())),
-      }
+    Function::new(ctx.clone(), move |ctx: Ctx<'js>, key: String| match s.open_store(&ctx)?.entries.get(&key) {
+      Some(value) => value.as_str().into_js(&ctx),
+      None => Ok(Value::new_null(ctx.clone())),
     })?,
   )?;
   let s = state.clone();

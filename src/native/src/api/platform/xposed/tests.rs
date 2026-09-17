@@ -123,7 +123,9 @@ fn setup(grants: &[&str]) -> Fixture {
       &inu,
     )
     .unwrap();
-    for (name, wire) in [("stringLength", "GM900"), ("stringIsEmpty", "GM901"), ("fixtureRun", "GM902"), ("runtimeException", "GO903")] {
+    for (name, wire) in
+      [("stringLength", "GM900"), ("stringIsEmpty", "GM901"), ("fixtureRun", "GM902"), ("runtimeException", "GO903")]
+    {
       let handle = jvm.wire_to_value(&ctx, wire).unwrap();
       ctx.globals().set(name, handle).unwrap();
     }
@@ -488,10 +490,7 @@ fn a_hook_with_neither_callback_is_refused_before_anything_is_installed() {
 fn hook_arguments_are_checked_without_a_js_prelude() {
   let fixture = granted();
   for (source, expected) in [
-    (
-      "(() => { const m = stringLength; inu.xposed.hookMethod(m, null) })()",
-      "expected a hook object",
-    ),
+    ("(() => { const m = stringLength; inu.xposed.hookMethod(m, null) })()", "expected a hook object"),
     (
       "(() => { const m = stringLength; inu.xposed.hookMethod(m, { before: 1 }) })()",
       "before must be a function",
@@ -594,7 +593,9 @@ fn routine_hooks_register_native_phases_and_dispose_them() {
 #[test]
 fn mixed_runnable_and_js_phases_are_refused_before_installation() {
   let fixture = granted();
-  let error = fixture.eval_err("const method = fixtureRun; inu.xposed.hookMethod(method, { before: inu.jvm.routine(ops => []), after() {} })");
+  let error = fixture.eval_err(
+    "const method = fixtureRun; inu.xposed.hookMethod(method, { before: inu.jvm.routine(ops => []), after() {} })",
+  );
   assert!(error.contains("cannot mix"));
   assert!(fixture.host.ops().is_empty());
 }
@@ -649,7 +650,8 @@ fn unchanged_after_replies_use_a_verdict_not_the_inbound_value_wire() {
 #[test]
 fn explicit_after_override_is_kept_even_when_its_wire_matches_the_original() {
   let fixture = granted();
-  fixture.eval("const method = stringLength; inu.xposed.hookMethod(method, { after(ctx) { ctx.setReturnValue(42) } });");
+  fixture
+    .eval("const method = stringLength; inu.xposed.hookMethod(method, { after(ctx) { ctx.setReturnValue(42) } });");
   fixture
     .state
     .dispatch_before(&fixture.rt, &fixture.ctx, 1, 100, &Invocation { method: "GM1", this: "N", args: &[] });

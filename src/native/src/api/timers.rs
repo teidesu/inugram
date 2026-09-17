@@ -1,5 +1,5 @@
-use std::cell::{Cell, RefCell};
 use crate::runtime::Dispose;
+use std::cell::{Cell, RefCell};
 use std::rc::Rc;
 use std::sync::OnceLock;
 use std::time::Instant;
@@ -272,7 +272,6 @@ impl TimerState {
     let state = self;
     state.dispose(context);
   }
-
 }
 
 impl Dispose for TimerState {

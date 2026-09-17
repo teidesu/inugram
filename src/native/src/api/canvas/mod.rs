@@ -20,8 +20,8 @@ use crate::api::canvas::geometry::{finite, normalize_round_rect, ArcError, Matri
 use crate::api::error::{wire_error_to_js, PluginErrorCode};
 use crate::api::io::blob::{mint_app_file, BlobState, BUILD_LIMIT_BYTES};
 use crate::api::io::fs::FsState;
-use crate::api::io::staging::{SourceStager, StagedSource};
 use crate::api::io::staging::StagedFile;
+use crate::api::io::staging::{SourceStager, StagedSource};
 use crate::runtime::{pump_jobs, Parked, PendingTable};
 use crate::sandbox::limits::{ExternalCharge, ExternalMemory};
 use crate::sandbox::registry::RequestIds;
@@ -964,9 +964,9 @@ impl Surface {
     if width == self.width.get() && height == self.height.get() {
       self.commands.borrow_mut().clear();
       let answer = ask(&*self.state.host, OP_CREATE, self.id, |args| {
-      args.i32(width);
-      args.i32(height);
-    });
+        args.i32(width);
+        args.i32(height);
+      });
       return throw_host_error(ctx, &answer);
     }
     let bytes = width as usize * height as usize * 4;
@@ -1588,7 +1588,6 @@ impl CanvasState {
     });
     pump_jobs(rt, context, state.log.as_ref());
   }
-
 }
 
 impl Dispose for CanvasState {

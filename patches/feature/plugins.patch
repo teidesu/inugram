@@ -7,9 +7,10 @@ Subject: Add the QuickJS plugin engine (hooks, action rows)
  .../messenger/MessagesController.java         | 122 ++++++++++--------
  .../messenger/SendMessagesHelper.java         |  22 +++-
  .../telegram/tgnet/ConnectionsManager.java    |   8 +-
+ .../java/org/telegram/ui/Cells/TextCell.java  |   2 +-
  .../java/org/telegram/ui/ChatActivity.java    |   8 +-
  .../java/org/telegram/ui/LaunchActivity.java  |   1 +
- 5 files changed, 99 insertions(+), 62 deletions(-)
+ 6 files changed, 100 insertions(+), 63 deletions(-)
 
 diff --git a/TMessagesProj/src/main/java/org/telegram/messenger/MessagesController.java b/TMessagesProj/src/main/java/org/telegram/messenger/MessagesController.java
 index 0000000..0000000 100644
@@ -310,6 +311,19 @@ index 0000000..0000000 100644
          native_bindRequestToGuid(currentAccount, requestToken, guid);
      }
  
+diff --git a/TMessagesProj/src/main/java/org/telegram/ui/Cells/TextCell.java b/TMessagesProj/src/main/java/org/telegram/ui/Cells/TextCell.java
+index 0000000..0000000 100644
+--- a/TMessagesProj/src/main/java/org/telegram/ui/Cells/TextCell.java
++++ b/TMessagesProj/src/main/java/org/telegram/ui/Cells/TextCell.java
+@@ -50,7 +50,7 @@ import org.telegram.ui.Stories.recorder.HintView2;
+ public class TextCell extends FrameLayout {
+ 
+     public final SimpleTextView textView;
+-    private final SimpleTextView subtitleView;
++    public final SimpleTextView subtitleView;
+     public final AnimatedTextView valueTextView;
+     public final SimpleTextView valueSpoilersTextView;
+     public final RLottieImageView imageView;
 diff --git a/TMessagesProj/src/main/java/org/telegram/ui/ChatActivity.java b/TMessagesProj/src/main/java/org/telegram/ui/ChatActivity.java
 index 0000000..0000000 100644
 --- a/TMessagesProj/src/main/java/org/telegram/ui/ChatActivity.java
