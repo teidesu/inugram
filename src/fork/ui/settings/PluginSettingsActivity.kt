@@ -10,7 +10,7 @@ import desu.inugram.helpers.plugins.Plugin
 import desu.inugram.helpers.plugins.PluginSession
 import desu.inugram.helpers.plugins.QuickJs
 import desu.inugram.helpers.plugins.platform.PluginJvm
-import desu.inugram.helpers.plugins.ui.PluginText
+import desu.inugram.helpers.plugins.ui.formatted
 import desu.inugram.helpers.plugins.ui.PluginUi
 import org.json.JSONArray
 import org.json.JSONObject
@@ -154,15 +154,12 @@ class PluginSettingsActivity(
             return uid
         }
 
-        fun formatted(o: JSONObject, key: String): CharSequence? = o.optString(key)
-            .takeIf { it.isNotEmpty() }
-            ?.let { PluginText.formatted(it, o.optJSONArray("${key}Entities")) }
+        fun formatted(o: JSONObject, key: String): CharSequence? = o.formatted(key)
 
         // TextCell rows are single-line SimpleTextViews of a fixed height, so a newline would be
         // dropped and clamp the row; a space keeps every entity offset where it was
-        fun formattedRow(o: JSONObject, key: String): CharSequence? = o.optString(key)
-            .takeIf { it.isNotEmpty() }
-            ?.let { PluginText.formatted(it.replace('\n', ' '), o.optJSONArray("${key}Entities")) }
+        fun formattedRow(o: JSONObject, key: String): CharSequence? =
+            o.formatted(key) { it.replace('\n', ' ') }
 
         fun joinEntities(o: JSONObject, vararg keys: String): String? = keys
             .mapNotNull { key -> o.optJSONArray("${key}Entities")?.let { "$key=$it" } }

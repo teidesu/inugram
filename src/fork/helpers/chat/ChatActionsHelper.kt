@@ -6,6 +6,7 @@ import android.os.Build
 import android.os.Bundle
 import android.text.InputType
 import android.text.SpannableStringBuilder
+import android.text.TextPaint
 import android.view.Gravity
 import android.view.HapticFeedbackConstants
 import android.view.View
@@ -444,12 +445,29 @@ object ChatActionsHelper {
         private val enterView: ChatActivityEnterView,
     ) : PluginActions.EditorSurface {
         override fun replaceDraft(text: String, entitiesJson: String?) {
-            enterView.setFieldText(PluginText.formatted(text, entitiesJson))
+            enterView.setFieldText(fieldTextOf(text, entitiesJson))
         }
 
         override fun sendDraft(text: String, entitiesJson: String?) {
-            enterView.setFieldText(PluginText.formatted(text, entitiesJson))
+            enterView.setFieldText(fieldTextOf(text, entitiesJson))
             enterView.sendMessage()
+        }
+
+        /**
+         * the composer's own entity applier rather than [PluginText]'s: these spans have to survive
+         * the round trip back out of the field when the message is sent, which is only true of the
+         * ones stock puts there itself - a mention, a custom emoji, a date that stays a date.
+         *
+         * The paint fallback is stock's own ([ChatActivityEnterView.setEditingBusinessLink]): the
+         * edit field is created lazily, and a custom emoji cannot size itself without one.
+         */
+        private fun fieldTextOf(text: String, entitiesJson: String?): CharSequence {
+            val paint = enterView.editField?.paint ?: TextPaint().apply { textSize = AndroidUtilities.dp(18f).toFloat() }
+            return ChatActivityEnterView.applyMessageEntities(
+                PluginText.parseEntities(entitiesJson),
+                text,
+                paint.fontMetricsInt,
+            ) ?: text
         }
     }
 
