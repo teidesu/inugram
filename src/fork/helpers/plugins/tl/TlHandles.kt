@@ -180,7 +180,7 @@ class TlHandles(private val policy: TlFilter.Policy) : TlListener {
         slotById(classId)?.ordinals?.get(key) ?: ORDINAL_FALLBACK
 
     private fun writeField(out: ByteBuffer, entry: HandleEntry, target: TLObject, info: TlReflect.FieldInfo): Boolean {
-        if (info.isFlagWord || TlFilter.hidesField(policy, info) || !info.isPresent(target)) {
+        if (!isVisibleField(target, info)) {
             out.put(TAG_NULL)
             return true
         }
@@ -208,11 +208,7 @@ class TlHandles(private val policy: TlFilter.Policy) : TlListener {
         } catch (e: Exception) {
             return false
         }
-        val value = if (policy.takeover && info.redactedInTakeover) {
-            TlFilter.filterFieldValue(target, info.field.name, raw)
-        } else {
-            raw
-        }
+        val value = redactValue(target, info, raw)
         val readOnly = entry.readOnly || (policy.takeover && info.sealedInTakeover)
         when (value) {
             null -> out.put(TAG_NULL)
@@ -317,9 +313,20 @@ class TlHandles(private val policy: TlFilter.Policy) : TlListener {
     /** `in` and `Object.keys` have to agree with reads: no flag words, no cleared-bit fields, nothing [TlFilter] hides */
     private fun isVisibleField(target: TLObject, key: String): Boolean {
         val info = TlReflect.fieldInfo(target.javaClass, key) ?: return false
-        if (info.isFlagWord || TlFilter.hidesField(policy, info)) return false
-        return info.isPresent(target)
+        return isVisibleField(target, info)
     }
+
+    /**
+     * a filtered-out field reads as absent, exactly like a cleared flag bit, never as an error; and
+     * a field whose bit is clear isn't there, whatever the java slot happens to hold - stock parks
+     * placeholders in some of them (`photo = new TL_photoEmpty()`)
+     */
+    private fun isVisibleField(target: TLObject, info: TlReflect.FieldInfo): Boolean =
+        !info.isFlagWord && !TlFilter.hidesField(policy, info) && info.isPresent(target)
+
+    /** login-code redaction, recomputed live on every read path rather than cached */
+    private fun redactValue(target: TLObject, info: TlReflect.FieldInfo, value: Any?): Any? =
+        if (policy.takeover && info.redactedInTakeover) TlFilter.filterFieldValue(target, info.field.name, value) else value
 
     /**
      * what rides along with a handle minted for a plugin's own read. An object that is nothing but
@@ -351,12 +358,7 @@ class TlHandles(private val policy: TlFilter.Policy) : TlListener {
         out.append('{').append(TYPE_ENTRY).append(quotedTypeOf(target.javaClass))
         for (info in infos) {
             if (info.isFlagWord || TlFilter.hidesField(policy, info)) continue
-            val value = if (info.isPresent(target)) info.field.get(target) else null
-            val filtered = if (policy.takeover && info.redactedInTakeover) {
-                TlFilter.filterFieldValue(target, info.field.name, value)
-            } else {
-                value
-            }
+            val filtered = redactValue(target, info, if (info.isPresent(target)) info.field.get(target) else null)
             val start = out.length
             out.append(',').append(info.quotedName).append(':')
             val wrote = when (filtered) {
@@ -401,21 +403,15 @@ class TlHandles(private val policy: TlFilter.Policy) : TlListener {
         if (key == "_") return PluginWire.encodeString(TlNames.classNameToTlName(cls))
         val info = TlReflect.fieldInfo(cls, key)
             ?: return PluginWire.encodeError("no such field '$key' on '${TlNames.classNameToTlName(cls)}'")
-        if (info.isFlagWord) return PluginWire.encodeNull()
-        // a filtered-out field reads as absent, exactly like a cleared flag bit, never as an error
-        if (TlFilter.hidesField(policy, info)) return PluginWire.encodeNull()
-        // a field whose bit is clear isn't there, whatever the java slot happens to hold - stock
-        // parks placeholders in some of them (`photo = new TL_photoEmpty()`)
-        if (!info.isPresent(target)) return PluginWire.encodeNull()
+        if (!isVisibleField(target, info)) return PluginWire.encodeNull()
         val value = try {
             info.field.get(target)
         } catch (e: Exception) {
             return PluginWire.encodeError(e.message ?: "reflection get failed")
         }
-        val filtered = if (policy.takeover && info.redactedInTakeover) TlFilter.filterFieldValue(target, key, value) else value
         return encodeFieldValue(
             entry,
-            filtered,
+            redactValue(target, info, value),
             info.genericType,
             owner = target,
             ownerField = key,
@@ -431,20 +427,19 @@ class TlHandles(private val policy: TlFilter.Policy) : TlListener {
         if (TlFlags.isFlagWord(cls, key)) {
             return invalidSet("'$key' on '${TlNames.classNameToTlName(cls)}' is managed by the bridge - set the optional fields instead")
         }
+        val info = TlReflect.fieldInfo(cls, key)
+            ?: return invalidSet("no such field '$key' on '${TlNames.classNameToTlName(cls)}'")
         // the same refusal a nonexistent field gets: without this the write lands on the app's live object while every read path still reports the field absent
-        if (TlFilter.hidesField(policy, cls, key)) {
+        if (TlFilter.hidesField(policy, info)) {
             return invalidSet("no such field '$key' on '${TlNames.classNameToTlName(cls)}'")
         }
-        if (policy.takeover && TlFilter.decidesRedaction(cls, key)) {
+        if (policy.takeover && info.sealedInTakeover) {
             return PluginWire.encodePluginError("forbidden", "'$key' is sealed while api filtering is on: login code redaction is keyed on it")
         }
-        val field = TlReflect.publicFields(cls)[key]
-            ?: return invalidSet("no such field '$key' on '${TlNames.classNameToTlName(cls)}'")
-        val gated = TlFlags.gateOf(cls, key) != null
-        val resolved = resolveSetValue(source, field.genericType, field.type, key, allowPrimitiveClear = gated)
+        val resolved = resolveSetValue(source, info.genericType, info.type, key, allowPrimitiveClear = info.gate != null)
         if (resolved.isError) return resolved.error
         return try {
-            field.set(target, resolved.value)
+            info.field.set(target, resolved.value)
             // only this field's bit: the object is live, and its untouched fields may hold placeholders a wholesale recompute would flag
             TlReflect.syncFlagBit(target, key)
             null

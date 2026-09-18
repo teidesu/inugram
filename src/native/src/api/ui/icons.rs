@@ -33,11 +33,17 @@ pub trait IconHost {
   fn common_icon(&self, name: &str) -> Option<String>;
 }
 
+/// a name in the shape both a drawable and a sticker-set slug take: word characters, not leading
+/// with a digit, within that api's length
+fn is_bare_name(value: &str, limit: usize) -> bool {
+  !value.is_empty()
+    && value.len() <= limit
+    && !value.as_bytes()[0].is_ascii_digit()
+    && value.bytes().all(|byte| byte.is_ascii_alphanumeric() || byte == b'_')
+}
+
 fn is_resource_name(name: &str) -> bool {
-  !name.is_empty()
-    && name.len() <= MAX_RESOURCE_NAME
-    && !name.as_bytes()[0].is_ascii_digit()
-    && name.bytes().all(|b| b.is_ascii_alphanumeric() || b == b'_')
+  is_bare_name(name, MAX_RESOURCE_NAME)
 }
 
 enum SvgReject {
@@ -76,10 +82,7 @@ fn is_positive_id(value: &str) -> bool {
 }
 
 fn is_sticker_slug(value: &str) -> bool {
-  !value.is_empty()
-    && value.len() <= STICKER_SLUG_LIMIT
-    && !value.as_bytes()[0].is_ascii_digit()
-    && value.bytes().all(|byte| byte.is_ascii_alphanumeric() || byte == b'_')
+  is_bare_name(value, STICKER_SLUG_LIMIT)
 }
 
 fn is_sticker_spec(spec: &str) -> bool {
@@ -123,10 +126,7 @@ fn validate_spec<'js>(ctx: &Ctx<'js>, what: &str, spec: &str) -> JsResult<()> {
   if valid {
     return Ok(());
   }
-  {
-    let message: &str = &format!("{what}: 'icon' is not an icon inu.icons handed out");
-    PluginErrorCode::InvalidArgument.throw(ctx, message)
-  }
+  PluginErrorCode::InvalidArgument.throw(ctx, &format!("{what}: 'icon' is not an icon inu.icons handed out"))
 }
 
 pub fn opt_icon<'js>(
@@ -148,26 +148,19 @@ pub(crate) fn icon_from_value<'js>(
   if value.is_undefined() || value.is_null() {
     return Ok(None);
   }
-  let icon = value
-    .as_object()
-    .ok_or_else(|| Exception::throw_type(ctx, &format!("{what}: 'icon' must come from inu.icons")))?;
-  let spec = icon
-    .get::<_, Option<String>>(ICON_TAG)
-    .ok()
-    .flatten()
-    .ok_or_else(|| Exception::throw_type(ctx, &format!("{what}: 'icon' must come from inu.icons")))?;
+  let not_ours = || Exception::throw_type(ctx, &format!("{what}: 'icon' must come from inu.icons"));
+  let icon = value.as_object().ok_or_else(not_ours)?;
+  let spec = icon.get::<_, Option<String>>(ICON_TAG).ok().flatten().ok_or_else(not_ours)?;
   if let Some(handle) = spec.strip_prefix('j') {
-    let retained_value: Value = icon
-      .get(RETAINED_VALUE_TAG)
-      .map_err(|_| Exception::throw_type(ctx, &format!("{what}: 'icon' must come from inu.icons")))?;
+    let retained_value: Value = icon.get(RETAINED_VALUE_TAG).map_err(|_| not_ours())?;
     let Some(jvm) = jvm else {
-      return Err(Exception::throw_type(ctx, &format!("{what}: 'icon' must come from inu.icons")));
+      return Err(not_ours());
     };
     let Ok(expected) = handle.parse::<i64>() else {
-      return Err(Exception::throw_type(ctx, &format!("{what}: 'icon' must come from inu.icons")));
+      return Err(not_ours());
     };
     if jvm.handle_id(ctx, &retained_value)? != expected {
-      return Err(Exception::throw_type(ctx, &format!("{what}: 'icon' must come from inu.icons")));
+      return Err(not_ours());
     }
     return Ok(Some(Icon {
       spec,
@@ -194,16 +187,10 @@ fn as_str<'js>(ctx: &Ctx<'js>, what: &str, value: &Value<'js>) -> JsResult<Strin
 fn js_common<'js>(ctx: &Ctx<'js>, host: &Rc<dyn IconHost>, name: Value<'js>) -> JsResult<Object<'js>> {
   let name = as_str(ctx, "icons.common", &name)?;
   let Some(resource) = host.common_icon(&name).filter(|r| is_resource_name(r)) else {
-    return {
-      let message: &str = &format!("icons.common: unknown icon '{name}'");
-      PluginErrorCode::InvalidArgument.throw(ctx, message)
-    };
+    return PluginErrorCode::InvalidArgument.throw(ctx, &format!("icons.common: unknown icon '{name}'"));
   };
   if !host.icon_resolves(KIND_RESOURCE, &resource) {
-    return {
-      let message: &str = &format!("icons.common: this app ships no '{resource}' for '{name}'");
-      PluginErrorCode::NotFound.throw(ctx, message)
-    };
+    return PluginErrorCode::NotFound.throw(ctx, &format!("icons.common: this app ships no '{resource}' for '{name}'"));
   }
   new_icon(ctx, resource_spec(&resource))
 }
@@ -211,16 +198,11 @@ fn js_common<'js>(ctx: &Ctx<'js>, host: &Rc<dyn IconHost>, name: Value<'js>) -> 
 fn js_resource_icon<'js>(ctx: &Ctx<'js>, host: &Rc<dyn IconHost>, name: Value<'js>) -> JsResult<Object<'js>> {
   let name = as_str(ctx, "android.resourceIcon", &name)?;
   if !is_resource_name(&name) {
-    return {
-      let message: &str = &format!("android.resourceIcon: '{name}' is not a drawable name");
-      PluginErrorCode::InvalidArgument.throw(ctx, message)
-    };
+    return PluginErrorCode::InvalidArgument
+      .throw(ctx, &format!("android.resourceIcon: '{name}' is not a drawable name"));
   }
   if !host.icon_resolves(KIND_RESOURCE, &name) {
-    return {
-      let message: &str = &format!("android.resourceIcon: no drawable named '{name}'");
-      PluginErrorCode::NotFound.throw(ctx, message)
-    };
+    return PluginErrorCode::NotFound.throw(ctx, &format!("android.resourceIcon: no drawable named '{name}'"));
   }
   new_icon(ctx, resource_spec(&name))
 }
@@ -234,11 +216,11 @@ fn js_svg<'js>(ctx: &Ctx<'js>, host: &Rc<dyn IconHost>, source: Value<'js>) -> J
         .throw(ctx, &format!("icons.svg: {size} bytes of source, the limit is {SVG_LIMIT_BYTES}"));
     }
     Err(SvgReject::NotSvg) => {
-      return PluginErrorCode::InvalidArgument.throw(ctx, "icons.svg: the source carries no <svg> element")
+      return PluginErrorCode::InvalidArgument.throw(ctx, "icons.svg: the source carries no <svg> element");
     }
     Err(SvgReject::Markup) => {
       return PluginErrorCode::InvalidArgument
-        .throw(ctx, "icons.svg: a doctype or other markup declaration is not allowed")
+        .throw(ctx, "icons.svg: a doctype or other markup declaration is not allowed");
     }
   }
   if !host.icon_resolves(KIND_SVG, &source) {
@@ -453,14 +435,7 @@ pub fn install_icons<'js>(
   }
   globals.inu.set("icons", icons)?;
 
-  let android: Object = match globals.inu.get::<_, Object>("android") {
-    Ok(o) => o,
-    Err(_) => {
-      let o = Object::new(ctx.clone())?;
-      globals.inu.set("android", o.clone())?;
-      o
-    }
-  };
+  let android = globals.get_namespace(ctx, "android")?;
   {
     let host = host.clone();
     android.set(
@@ -481,10 +456,7 @@ pub fn install_icons<'js>(
     "drawableIcon",
     Function::new(ctx.clone(), move |ctx: Ctx<'js>, drawable: Value<'js>| match jvm.as_ref() {
       Some(jvm) => js_drawable_icon(&ctx, jvm, drawable),
-      None => {
-        let ctx: &Ctx<'js> = &ctx;
-        PluginErrorCode::NotGranted("unsafe.jvm").throw(ctx, "android.drawableIcon: needs @grant unsafe.jvm")
-      }
+      None => PluginErrorCode::NotGranted("unsafe.jvm").throw(&ctx, "android.drawableIcon: needs @grant unsafe.jvm"),
     })?,
   )?;
 

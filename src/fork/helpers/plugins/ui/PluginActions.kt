@@ -187,8 +187,8 @@ object PluginActions : SessionResource {
 
     fun registeredRows(kind: Int, placements: Int = getDefaultPlacements(kind)): List<RegisteredActionRow> {
         val rows = registeredRows.getOrElse(kind) { emptyList() }
-        return PluginManager.plugins().mapNotNull { it.engine }.flatMap { engine ->
-            rows.filter { it.owner === engine && it.placements and placements != 0 }
+        return PluginManager.plugins().mapNotNull { plugin -> plugin.session?.takeIf { it.canDispatch() } }.flatMap { session ->
+            rows.filter { it.owner === session.engine && it.placements and placements != 0 }
         }
     }
 
@@ -334,7 +334,9 @@ object PluginActions : SessionResource {
         EngineDispatch.scheduler.postRunnable {
             val live = registeredRows.getOrElse(row.key.kind) { emptyList() }
                 .firstOrNull { it.key == row.key } ?: return@postRunnable
-            val session = PluginManager.plugins().mapNotNull { it.session }.firstOrNull { it.engine === live.owner } ?: return@postRunnable
+            val session = PluginManager.plugins()
+                .mapNotNull { plugin -> plugin.session?.takeIf { it.canDispatch() } }
+                .firstOrNull { it.engine === live.owner } ?: return@postRunnable
             val surfaceJson = try {
                 surface.getJson(session.permissions)
             } catch (e: Exception) {

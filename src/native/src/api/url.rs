@@ -5,7 +5,7 @@ use rquickjs::function::{Constructor, Opt, This};
 use rquickjs::{Array, Coerced, Ctx, Exception, Function, JsLifetime, Object, Result as JsResult, Value};
 use url::{form_urlencoded, Host, Url};
 
-use crate::utils::shape::{define_accessor, define_getter, define_method};
+use crate::utils::shape::{define_accessor, define_getter, define_method, get_class_prototype};
 
 const PRELUDE: &[u8] = include_bytes!(concat!(env!("OUT_DIR"), "/url.qbc"));
 
@@ -100,8 +100,7 @@ fn mint<'js>(ctx: &Ctx<'js>, url: Url) -> JsResult<rquickjs::Class<'js, UrlBox>>
 }
 
 pub fn install_url<'js>(ctx: &Ctx<'js>) -> JsResult<()> {
-  let proto = rquickjs::Class::<UrlBox>::prototype(ctx)?
-    .ok_or_else(|| Exception::throw_message(ctx, "URL: the class has no prototype"))?;
+  let proto = get_class_prototype::<UrlBox>(ctx)?;
   install_members(ctx, &proto)?;
 
   let ctor = Constructor::new_class::<UrlBox, _, _>(

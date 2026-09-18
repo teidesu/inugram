@@ -1,5 +1,6 @@
 use jni::objects::{JObjectArray, JString};
 use jni::refs::IntoAuto;
+use jni::sys::jstring;
 use jni::{Env, EnvUnowned, JavaVM};
 
 pub(crate) fn clear_exception(env: &mut Env) -> bool {
@@ -34,13 +35,24 @@ pub(crate) fn jstring_to_string(env: &mut Env, s: &JString) -> String {
   }
 }
 
-pub(crate) fn read_string_array(env: &mut Env, array: &JObjectArray<JString>) -> Vec<String> {
-  let n = match array.len(env) {
-    Ok(length) => length,
+/// what a jni entry answers a string with: the new reference, or null once the vm has refused it
+pub(crate) fn new_jstring_raw(env: &mut Env, text: impl AsRef<str>) -> jstring {
+  env.new_string(text).map(|value| value.into_raw()).unwrap_or(std::ptr::null_mut())
+}
+
+fn array_len_or_clear(env: &mut Env, array: &JObjectArray<JString>) -> Option<usize> {
+  match array.len(env) {
+    Ok(length) => Some(length),
     Err(_) => {
       clear_exception(env);
-      return Vec::new();
+      None
     }
+  }
+}
+
+pub(crate) fn read_string_array(env: &mut Env, array: &JObjectArray<JString>) -> Vec<String> {
+  let Some(n) = array_len_or_clear(env, array) else {
+    return Vec::new();
   };
   let mut out = Vec::with_capacity(n);
   for i in 0..n {
@@ -59,19 +71,11 @@ pub(crate) fn read_header(
   keys: &JObjectArray<JString>,
   values: &JObjectArray<JString>,
 ) -> Vec<(String, String)> {
-  let key_count = match keys.len(env) {
-    Ok(length) => length,
-    Err(_) => {
-      clear_exception(env);
-      return Vec::new();
-    }
+  let Some(key_count) = array_len_or_clear(env, keys) else {
+    return Vec::new();
   };
-  let value_count = match values.len(env) {
-    Ok(length) => length,
-    Err(_) => {
-      clear_exception(env);
-      return Vec::new();
-    }
+  let Some(value_count) = array_len_or_clear(env, values) else {
+    return Vec::new();
   };
   let n = key_count.min(value_count);
   let mut out = Vec::with_capacity(n);

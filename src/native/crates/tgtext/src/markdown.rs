@@ -3,7 +3,7 @@
 
 use std::borrow::Cow;
 
-use crate::{DateFormat, Entity, EntityKind, Sub, TextWithEntities, utf16_len, utf16_map};
+use crate::{utf16_len, utf16_map, DateFormat, Entity, EntityKind, Sub, TextWithEntities};
 
 const TAG_BOLD: &str = "**";
 const TAG_ITALIC: &str = "__";
@@ -666,7 +666,11 @@ fn parse_hex_i64(value: &str) -> i64 {
     result = result.wrapping_mul(16).wrapping_add(digit);
   }
   let result = result as i64;
-  if negative { result.wrapping_neg() } else { result }
+  if negative {
+    result.wrapping_neg()
+  } else {
+    result
+  }
 }
 
 /// Whether the last character of the text is whitespace, for hosts that assemble several parses.

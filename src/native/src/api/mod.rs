@@ -51,6 +51,16 @@ impl<'js> Globals<'js> {
     Ok((*globals).clone())
   }
 
+  /// the `inu.<name>` object several apis add to, created by whichever of them installs first
+  pub(crate) fn get_namespace(&self, ctx: &Ctx<'js>, name: &str) -> JsResult<Object<'js>> {
+    if let Ok(existing) = self.inu.get::<_, Object>(name) {
+      return Ok(existing);
+    }
+    let fresh = Object::new(ctx.clone())?;
+    self.inu.set(name, fresh.clone())?;
+    Ok(fresh)
+  }
+
   pub(crate) fn set_message(&self, message: Constructor<'js>) -> JsResult<()> {
     self.inu.set("Message", message.clone())?;
     *self.message.borrow_mut() = Some(message);

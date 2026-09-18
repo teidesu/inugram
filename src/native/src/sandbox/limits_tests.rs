@@ -2,8 +2,7 @@ use super::*;
 use rquickjs::{Context, Runtime};
 
 fn setup() -> (Runtime, Context, std::sync::Arc<crate::testing::harness::Logs>) {
-  let rt = Runtime::new().unwrap();
-  let ctx = Context::full(&rt).unwrap();
+  let (rt, ctx) = crate::testing::harness::new_engine();
   let logs = crate::testing::harness::Logs::new();
   install_interrupt_handler(&rt, crate::testing::harness::log_sink(&logs));
   (rt, ctx, logs)
@@ -11,12 +10,7 @@ fn setup() -> (Runtime, Context, std::sync::Arc<crate::testing::harness::Logs>) 
 
 /// `Ok` == the script ran to completion, `Err` == it raised (interrupted scripts land here)
 fn eval(ctx: &Context, code: &str) -> Result<(), String> {
-  ctx.with(|ctx| {
-    ctx.eval::<(), _>(code).map_err(|e| match e {
-      rquickjs::Error::Exception => crate::api::error::format_exception(&ctx),
-      other => other.to_string(),
-    })
-  })
+  ctx.with(|ctx| ctx.eval::<(), _>(code).map_err(|e| crate::api::error::describe_js_error(&ctx, e)))
 }
 
 #[test]
@@ -221,8 +215,7 @@ mod memory_tests {
   }
 
   fn setup() -> (Runtime, Context) {
-    let rt = Runtime::new().unwrap();
-    let ctx = Context::full(&rt).unwrap();
+    let (rt, ctx) = crate::testing::harness::new_engine();
     ctx.with(|ctx| crate::api::error::install_plugin_error(&ctx).unwrap());
     (rt, ctx)
   }

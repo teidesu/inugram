@@ -3,10 +3,10 @@ use std::cell::RefCell;
 use std::rc::Rc;
 
 use rquickjs::function::Args;
-use rquickjs::{Ctx, Exception, Function, Object, Persistent, Result as JsResult, Runtime, Value};
+use rquickjs::{Ctx, Exception, Function, Persistent, Result as JsResult, Runtime, Value};
 
 use crate::api::error::format_exception;
-use crate::api::error::{host_error_to_js, PluginErrorCode};
+use crate::api::error::{host_error_to_js, report_callback_error, PluginErrorCode};
 use crate::runtime::pump_jobs;
 use crate::sandbox::grants::{GrantHost, MATCH_EXACT};
 use crate::sandbox::registry::{make_disposer, noop_disposer, Lifecycle, Registry, Token};
@@ -62,14 +62,7 @@ pub fn install_notifications<'js>(
     delegates: Registry::default(),
   });
 
-  let android: Object = match globals.inu.get::<_, Object>("android") {
-    Ok(o) => o,
-    Err(_) => {
-      let o = Object::new(ctx.clone())?;
-      globals.inu.set("android", o.clone())?;
-      o
-    }
-  };
+  let android = globals.get_namespace(ctx, "android")?;
 
   let state2 = state.clone();
   android.set(
@@ -170,15 +163,8 @@ impl NotificationState {
         }
         handler.call_arg(call_args)
       })();
-      match result {
-        Ok(_) => {}
-        Err(rquickjs::Error::Exception) => {
-          (state.log)(&crate::fault(format_args!(
-            "notification handler for '{name}' threw: {}",
-            format_exception(&ctx),
-          )));
-        }
-        Err(e) => (state.log)(&format!("notification handler for '{name}' failed: {e:?}")),
+      if let Err(error) = result {
+        report_callback_error(&state.log, &ctx, &format!("notification handler for '{name}'"), error);
       }
     });
     pump_jobs(rt, context, state.log.as_ref());

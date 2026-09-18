@@ -3,7 +3,7 @@ use std::cell::{Cell, RefCell};
 use std::collections::VecDeque;
 use std::rc::Rc;
 
-use rquickjs::{Array, Ctx, Function, IntoJs, Object, Result as JsResult, Runtime, Value};
+use rquickjs::{Ctx, Function, IntoJs, Object, Result as JsResult, Runtime, Value};
 
 use crate::api::error::{wire_error_to_js, PluginErrorCode};
 use crate::api::telegram::account::AccountState;
@@ -166,7 +166,7 @@ impl ReadsState {
     if let Some(built) = wire_error_to_js(ctx, &wire) {
       return Err(ctx.throw(built?));
     }
-    Ok(self.decode_list(ctx, &wire)?.into_value())
+    Ok(self.views.wire_to_js_list(ctx, &wire, ViewLife::Plugin)?.into_value())
   }
 }
 
@@ -232,10 +232,7 @@ pub fn install_reads<'js>(
     natives.set(
       "getMessages",
       Function::new(ctx.clone(), move |ctx: Ctx<'js>, slot: i32, spec: String, ids: String| {
-        state.read_many(&ctx, OP_MESSAGES, slot, &{
-          let parts: &[&str] = &[&spec, &ids];
-          parts.join("\n")
-        })
+        state.read_many(&ctx, OP_MESSAGES, slot, &format!("{spec}{SEPARATOR}{ids}"))
       })?,
     )?;
   }
@@ -244,10 +241,7 @@ pub fn install_reads<'js>(
     natives.set(
       "inputPeer",
       Function::new(ctx.clone(), move |ctx: Ctx<'js>, slot: i32, spec: String, kind: i32| {
-        state.read_one(&ctx, OP_INPUT_PEER, slot, &{
-          let parts: &[&str] = &[&spec, &kind.to_string()];
-          parts.join("\n")
-        })
+        state.read_one(&ctx, OP_INPUT_PEER, slot, &format!("{spec}{SEPARATOR}{kind}"))
       })?,
     )?;
   }
@@ -274,10 +268,7 @@ pub fn install_reads<'js>(
     natives.set(
       "getDraft",
       Function::new(ctx.clone(), move |ctx: Ctx<'js>, slot: i32, spec: String, topic: String| {
-        state.read_one(&ctx, OP_DRAFT, slot, &{
-          let parts: &[&str] = &[&spec, &topic];
-          parts.join("\n")
-        })
+        state.read_one(&ctx, OP_DRAFT, slot, &format!("{spec}{SEPARATOR}{topic}"))
       })?,
     )?;
   }
@@ -352,24 +343,13 @@ impl ReadsState {
     self.park(ctx, shape, |request_id| self.host.account_fetch(slot, request_id, op, peer, args, &payload))
   }
 
-  fn decode_list<'js>(&self, ctx: &Ctx<'js>, wire: &str) -> JsResult<Array<'js>> {
-    let array = Array::new(ctx.clone())?;
-    if wire.is_empty() {
-      return Ok(array);
-    }
-    for (index, element) in wire.split(SEPARATOR).enumerate() {
-      array.set(index, self.views.wire_to_js_value(ctx, element, ViewLife::Plugin)?)?;
-    }
-    Ok(array)
-  }
-
   fn decode_result<'js>(&self, ctx: &Ctx<'js>, shape: Shape, wire: &str) -> JsResult<Value<'js>> {
     match shape {
       Shape::Value => self.views.wire_to_js_value(ctx, wire, ViewLife::Plugin),
-      Shape::List => Ok(self.decode_list(ctx, wire)?.into_value()),
+      Shape::List => Ok(self.views.wire_to_js_list(ctx, wire, ViewLife::Plugin)?.into_value()),
       Shape::Page(list) => {
         let (payload, elements) = wire.split_once(SEPARATOR).unwrap_or((wire, ""));
-        let array = self.decode_list(ctx, elements)?;
+        let array = self.views.wire_to_js_list(ctx, elements, ViewLife::Plugin)?;
         let next = if payload.is_empty() {
           Value::new_null(ctx.clone())
         } else {

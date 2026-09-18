@@ -5,8 +5,7 @@ use std::rc::Rc;
 use rquickjs::object::Accessor;
 use rquickjs::{Array, Ctx, Exception, Function, Object, Persistent, Result as JsResult, Runtime, Value};
 
-use crate::api::error::format_exception;
-use crate::api::error::PluginErrorCode;
+use crate::api::error::{call_callback, format_exception, PluginErrorCode};
 use crate::api::platform::jvm::JvmState;
 use crate::api::telegram::account::AccountState;
 use crate::api::tl::proxy::json_parse_tl;
@@ -14,7 +13,7 @@ use crate::api::ui::icons::{icon_from_value, Icon};
 use crate::runtime::pump_jobs;
 use crate::sandbox::grants::{GrantHost, MATCH_EXACT};
 use crate::sandbox::registry::{make_disposer, noop_disposer, Lifecycle, Registry, Token};
-use crate::utils::arguments::{field, opt_fn, req_fn, req_str};
+use crate::utils::arguments::{field, opt_fn, req_fn, req_str, stringify_json};
 
 pub const KIND_GLOBAL: i32 = 0;
 pub const KIND_CHAT: i32 = 1;
@@ -85,21 +84,7 @@ struct ActionDef {
 
 impl ActionDef {
   fn release(self, ctx: &Ctx<'_>) {
-    if let Label::Dynamic(p) = self.label {
-      let _ = p.restore(ctx);
-    }
-    if let Some(icon) = self.icon {
-      match icon {
-        ActionIcon::Static { retained, .. } => {
-          if let Some(p) = retained {
-            let _ = p.restore(ctx);
-          }
-        }
-        ActionIcon::Dynamic(p) => {
-          let _ = p.restore(ctx);
-        }
-      }
-    }
+    release_registration(ctx, self.label, self.icon);
     for p in self.retained_icons.into_inner() {
       let _ = p.restore(ctx);
     }
@@ -126,6 +111,11 @@ fn release_label(ctx: &Ctx<'_>, label: Label) {
   if let Label::Dynamic(p) = label {
     let _ = p.restore(ctx);
   }
+}
+
+fn release_registration(ctx: &Ctx<'_>, label: Label, icon: Option<ActionIcon>) {
+  release_label(ctx, label);
+  release_icon(ctx, icon);
 }
 
 pub struct ActionState {
@@ -213,9 +203,7 @@ impl ActionState {
         }),
         Ok(None) => None,
         Err(e) => {
-          if let Label::Dynamic(p) = label {
-            let _ = p.restore(ctx);
-          }
+          release_label(ctx, label);
           return Err(e);
         }
       }
@@ -223,23 +211,20 @@ impl ActionState {
     let visible = match opt_fn(ctx, &opts, what, "visible") {
       Ok(visible) => visible,
       Err(e) => {
-        release_label(ctx, label);
-        release_icon(ctx, icon);
+        release_registration(ctx, label, icon);
         return Err(e);
       }
     };
     let callback = match req_fn(ctx, &opts, what, "callback") {
       Ok(callback) => callback,
       Err(e) => {
-        release_label(ctx, label);
-        release_icon(ctx, icon);
+        release_registration(ctx, label, icon);
         return Err(e);
       }
     };
 
     if state.lifecycle.is_unloading() {
-      release_label(ctx, label);
-      release_icon(ctx, icon);
+      release_registration(ctx, label, icon);
       return noop_disposer(ctx);
     }
 
@@ -261,8 +246,7 @@ impl ActionState {
     if let Some(err) =
       state.host.action_register(kind, token, &id, placements, static_text, static_icon, dynamic_fields)
     {
-      release_label(ctx, label);
-      release_icon(ctx, icon);
+      release_registration(ctx, label, icon);
       return Err(ctx.throw(crate::api::error::host_error_to_js(ctx, &err)?));
     }
     let def = Rc::new(ActionDef {
@@ -421,11 +405,7 @@ impl ActionState {
       return PluginErrorCode::InvalidArgument
         .throw(ctx, &format!("{what}: expected a string or {{ text, entities }}"));
     }
-    let json = ctx
-      .json_stringify(payload.into_value())?
-      .map(|s| s.to_string())
-      .transpose()?
-      .ok_or_else(|| Exception::throw_message(ctx, &format!("{what}: serialization failed")))?;
+    let json = stringify_json(ctx, payload.into_value(), &format!("{what}: serialization failed"))?;
     match self.host.action_editor(op, surface, &json) {
       Some(err) => Err(ctx.throw(crate::api::error::host_error_to_js(ctx, &err)?)),
       None => Ok(()),
@@ -488,11 +468,7 @@ impl ActionState {
         Err(e) => (self.log)(&format!("{} row failed to render: {e:?}", kind_name(kind))),
       }
     }
-    ctx
-      .json_stringify(out.into_value())?
-      .map(|s| s.to_string())
-      .transpose()?
-      .ok_or_else(|| Exception::throw_message(ctx, "render: serialization produced no output"))
+    stringify_json(ctx, out.into_value(), "render: serialization produced no output")
   }
 
   fn render_one<'js>(
@@ -617,13 +593,7 @@ impl ActionState {
       if def.placements & placement == 0 {
         return;
       }
-      match callback.call::<_, Value>((context_obj,)) {
-        Ok(_) => {}
-        Err(rquickjs::Error::Exception) => {
-          (state.log)(&crate::fault(format_args!("{} callback threw: {}", kind_name(kind), format_exception(&ctx))));
-        }
-        Err(e) => (state.log)(&format!("{} callback failed: {e:?}", kind_name(kind))),
-      }
+      call_callback(&ctx, &state.log, &format!("{} callback", kind_name(kind)), &callback, (context_obj,));
     });
     pump_jobs(rt, context, state.log.as_ref());
   }

@@ -135,7 +135,7 @@ object PluginSendMorph {
             }
         } else {
             TLRPC.TL_messageMediaDocument().apply {
-                document = PluginOptimisticSend.documentOf(media.path, media.name, media.mime, media.described)
+                document = PluginOptimisticSend.documentOf(account, media.path, media.name, media.mime, media.described)
                 flags = flags or 1
             }
         }

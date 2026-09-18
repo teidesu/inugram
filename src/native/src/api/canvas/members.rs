@@ -1,10 +1,10 @@
 use crate::{api::error::PluginErrorCode, utils::arguments::array_values};
 
 use super::*;
+use crate::utils::shape::{define_accessor, get_class_prototype};
 
 pub(super) fn install_gradient_members<'js>(ctx: &Ctx<'js>) -> JsResult<()> {
-  let proto = Class::<GradientHandle>::prototype(ctx)?
-    .ok_or_else(|| Exception::throw_message(ctx, "CanvasGradient: the class has no prototype"))?;
+  let proto = get_class_prototype::<GradientHandle>(ctx)?;
   define_method(
     &proto,
     "addColorStop",
@@ -41,8 +41,7 @@ pub(super) fn install_gradient_members<'js>(ctx: &Ctx<'js>) -> JsResult<()> {
 }
 
 pub(super) fn install_pattern_members<'js>(ctx: &Ctx<'js>) -> JsResult<()> {
-  let proto = Class::<PatternHandle>::prototype(ctx)?
-    .ok_or_else(|| Exception::throw_message(ctx, "CanvasPattern: the class has no prototype"))?;
+  let proto = get_class_prototype::<PatternHandle>(ctx)?;
   let f =
     Function::new(ctx.clone(), |this: This<Class<'js, PatternHandle>>, transform: Opt<Value<'js>>| -> JsResult<()> {
       let matrix = matrix_from_init(&transform)?;
@@ -73,8 +72,7 @@ fn matrix_from_init(value: &Opt<Value<'_>>) -> JsResult<Matrix> {
 }
 
 pub(super) fn install_image_members<'js>(ctx: &Ctx<'js>) -> JsResult<()> {
-  let proto = Class::<ImageHandle>::prototype(ctx)?
-    .ok_or_else(|| Exception::throw_message(ctx, "ImageBitmap: the class has no prototype"))?;
+  let proto = get_class_prototype::<ImageHandle>(ctx)?;
   define_getter(&proto, "width", |this: This<Class<'js, ImageHandle>>| this.0.borrow().0.width)?;
   define_getter(&proto, "height", |this: This<Class<'js, ImageHandle>>| this.0.borrow().0.height)?;
   crate::utils::shape::define_disposable(
@@ -89,8 +87,7 @@ pub(super) fn install_image_members<'js>(ctx: &Ctx<'js>) -> JsResult<()> {
 }
 
 pub(super) fn install_context_members<'js>(ctx: &Ctx<'js>) -> JsResult<()> {
-  let proto = Class::<Context2d>::prototype(ctx)?
-    .ok_or_else(|| Exception::throw_message(ctx, "CanvasRenderingContext2D: the class has no prototype"))?;
+  let proto = get_class_prototype::<Context2d>(ctx)?;
 
   install_state_members(ctx, &proto)?;
   install_transform_members(ctx, &proto)?;
@@ -100,6 +97,46 @@ pub(super) fn install_context_members<'js>(ctx: &Ctx<'js>) -> JsResult<()> {
   install_text_members(ctx, &proto)?;
   install_image_draw_members(ctx, &proto)?;
   Ok(())
+}
+
+/// a number the draw state holds, taken only when it is finite and the property accepts it
+fn define_state_number<'js>(
+  proto: &Object<'js>,
+  name: &str,
+  get: fn(&DrawState) -> f64,
+  accepts: fn(f64) -> bool,
+  set: fn(&mut DrawState, f64),
+) -> JsResult<()> {
+  define_accessor(
+    proto,
+    name,
+    move |this: This<Class<'js, Context2d>>| get(&this.0.borrow().state.borrow()),
+    move |this: This<Class<'js, Context2d>>, value: Coerced<f64>| {
+      if value.0.is_finite() && accepts(value.0) {
+        set(&mut this.0.borrow().state.borrow_mut(), value.0);
+      }
+    },
+  )
+}
+
+/// one of a fixed list of css keywords, kept in the draw state as its index
+fn define_state_keyword<'js>(
+  proto: &Object<'js>,
+  name: &str,
+  table: &'static [&'static str],
+  get: fn(&DrawState) -> u8,
+  set: fn(&mut DrawState, u8),
+) -> JsResult<()> {
+  define_accessor(
+    proto,
+    name,
+    move |this: This<Class<'js, Context2d>>| table[get(&this.0.borrow().state.borrow()) as usize].to_string(),
+    move |this: This<Class<'js, Context2d>>, value: Coerced<String>| {
+      if let Some(index) = index_of(table, &value.0) {
+        set(&mut this.0.borrow().state.borrow_mut(), index);
+      }
+    },
+  )
 }
 
 pub(super) fn install_state_members<'js>(ctx: &Ctx<'js>, proto: &Object<'js>) -> JsResult<()> {
@@ -229,25 +266,19 @@ pub(super) fn install_transform_members<'js>(ctx: &Ctx<'js>, proto: &Object<'js>
 }
 
 pub(super) fn install_style_members<'js>(ctx: &Ctx<'js>, proto: &Object<'js>) -> JsResult<()> {
-  define_accessor(
+  define_state_number(
     proto,
     "globalAlpha",
-    |this: This<Class<'js, Context2d>>| this.0.borrow().state.borrow().alpha,
-    |this: This<Class<'js, Context2d>>, value: Coerced<f64>| {
-      if value.0.is_finite() && (0.0..=1.0).contains(&value.0) {
-        this.0.borrow().state.borrow_mut().alpha = value.0;
-      }
-    },
+    |state| state.alpha,
+    |value| (0.0..=1.0).contains(&value),
+    |state, value| state.alpha = value,
   )?;
-  define_accessor(
+  define_state_keyword(
     proto,
     "globalCompositeOperation",
-    |this: This<Class<'js, Context2d>>| COMPOSITE_MODES[this.0.borrow().state.borrow().composite as usize].to_string(),
-    |this: This<Class<'js, Context2d>>, value: Coerced<String>| {
-      if let Some(index) = index_of(&COMPOSITE_MODES, &value.0) {
-        this.0.borrow().state.borrow_mut().composite = index;
-      }
-    },
+    &COMPOSITE_MODES,
+    |state| state.composite,
+    |state, index| state.composite = index,
   )?;
 
   for (name, is_stroke) in [("fillStyle", false), ("strokeStyle", true)] {
@@ -275,65 +306,41 @@ pub(super) fn install_style_members<'js>(ctx: &Ctx<'js>, proto: &Object<'js>) ->
     )?;
   }
 
-  define_accessor(
+  define_state_number(
     proto,
     "lineWidth",
-    |this: This<Class<'js, Context2d>>| this.0.borrow().state.borrow().line_width,
-    |this: This<Class<'js, Context2d>>, value: Coerced<f64>| {
-      if value.0.is_finite() && value.0 > 0.0 {
-        this.0.borrow().state.borrow_mut().line_width = value.0;
-      }
-    },
+    |state| state.line_width,
+    |value| value > 0.0,
+    |state, value| state.line_width = value,
   )?;
-  define_accessor(
+  define_state_number(
     proto,
     "miterLimit",
-    |this: This<Class<'js, Context2d>>| this.0.borrow().state.borrow().miter_limit,
-    |this: This<Class<'js, Context2d>>, value: Coerced<f64>| {
-      if value.0.is_finite() && value.0 > 0.0 {
-        this.0.borrow().state.borrow_mut().miter_limit = value.0;
-      }
-    },
+    |state| state.miter_limit,
+    |value| value > 0.0,
+    |state, value| state.miter_limit = value,
   )?;
-  define_accessor(
+  define_state_number(
     proto,
     "lineDashOffset",
-    |this: This<Class<'js, Context2d>>| this.0.borrow().state.borrow().dash_offset,
-    |this: This<Class<'js, Context2d>>, value: Coerced<f64>| {
-      if value.0.is_finite() {
-        this.0.borrow().state.borrow_mut().dash_offset = value.0;
-      }
-    },
+    |state| state.dash_offset,
+    |_| true,
+    |state, value| state.dash_offset = value,
   )?;
-  define_accessor(
-    proto,
-    "lineCap",
-    |this: This<Class<'js, Context2d>>| LINE_CAPS[this.0.borrow().state.borrow().line_cap as usize].to_string(),
-    |this: This<Class<'js, Context2d>>, value: Coerced<String>| {
-      if let Some(index) = index_of(&LINE_CAPS, &value.0) {
-        this.0.borrow().state.borrow_mut().line_cap = index;
-      }
-    },
-  )?;
-  define_accessor(
+  define_state_keyword(proto, "lineCap", &LINE_CAPS, |state| state.line_cap, |state, index| state.line_cap = index)?;
+  define_state_keyword(
     proto,
     "lineJoin",
-    |this: This<Class<'js, Context2d>>| LINE_JOINS[this.0.borrow().state.borrow().line_join as usize].to_string(),
-    |this: This<Class<'js, Context2d>>, value: Coerced<String>| {
-      if let Some(index) = index_of(&LINE_JOINS, &value.0) {
-        this.0.borrow().state.borrow_mut().line_join = index;
-      }
-    },
+    &LINE_JOINS,
+    |state| state.line_join,
+    |state, index| state.line_join = index,
   )?;
-  define_accessor(
+  define_state_number(
     proto,
     "shadowBlur",
-    |this: This<Class<'js, Context2d>>| this.0.borrow().state.borrow().shadow_blur,
-    |this: This<Class<'js, Context2d>>, value: Coerced<f64>| {
-      if value.0.is_finite() && value.0 >= 0.0 {
-        this.0.borrow().state.borrow_mut().shadow_blur = value.0;
-      }
-    },
+    |state| state.shadow_blur,
+    |value| value >= 0.0,
+    |state, value| state.shadow_blur = value,
   )?;
   define_accessor(
     proto,
@@ -345,33 +352,20 @@ pub(super) fn install_style_members<'js>(ctx: &Ctx<'js>, proto: &Object<'js>) ->
       }
     },
   )?;
-  for (name, vertical) in [("shadowOffsetX", false), ("shadowOffsetY", true)] {
-    define_accessor(
-      proto,
-      name,
-      move |this: This<Class<'js, Context2d>>| {
-        let this = this.0.borrow();
-        let state = this.state.borrow();
-        if vertical {
-          state.shadow_offset.1
-        } else {
-          state.shadow_offset.0
-        }
-      },
-      move |this: This<Class<'js, Context2d>>, value: Coerced<f64>| {
-        if !value.0.is_finite() {
-          return;
-        }
-        let this = this.0.borrow();
-        let mut state = this.state.borrow_mut();
-        if vertical {
-          state.shadow_offset.1 = value.0;
-        } else {
-          state.shadow_offset.0 = value.0;
-        }
-      },
-    )?;
-  }
+  define_state_number(
+    proto,
+    "shadowOffsetX",
+    |state| state.shadow_offset.0,
+    |_| true,
+    |state, value| state.shadow_offset.0 = value,
+  )?;
+  define_state_number(
+    proto,
+    "shadowOffsetY",
+    |state| state.shadow_offset.1,
+    |_| true,
+    |state, value| state.shadow_offset.1 = value,
+  )?;
 
   define_method(
     proto,
@@ -816,27 +810,19 @@ pub(super) fn install_text_members<'js>(ctx: &Ctx<'js>, proto: &Object<'js>) -> 
       }
     },
   )?;
-  define_accessor(
+  define_state_keyword(
     proto,
     "textAlign",
-    |this: This<Class<'js, Context2d>>| TEXT_ALIGNS[this.0.borrow().state.borrow().text_align as usize].to_string(),
-    |this: This<Class<'js, Context2d>>, value: Coerced<String>| {
-      if let Some(index) = index_of(&TEXT_ALIGNS, &value.0) {
-        this.0.borrow().state.borrow_mut().text_align = index;
-      }
-    },
+    &TEXT_ALIGNS,
+    |state| state.text_align,
+    |state, index| state.text_align = index,
   )?;
-  define_accessor(
+  define_state_keyword(
     proto,
     "textBaseline",
-    |this: This<Class<'js, Context2d>>| {
-      TEXT_BASELINES[this.0.borrow().state.borrow().text_baseline as usize].to_string()
-    },
-    |this: This<Class<'js, Context2d>>, value: Coerced<String>| {
-      if let Some(index) = index_of(&TEXT_BASELINES, &value.0) {
-        this.0.borrow().state.borrow_mut().text_baseline = index;
-      }
-    },
+    &TEXT_BASELINES,
+    |state| state.text_baseline,
+    |state, index| state.text_baseline = index,
   )?;
 
   for (name, kind) in [("fillText", PaintKind::Fill), ("strokeText", PaintKind::Stroke)] {
@@ -882,14 +868,7 @@ pub(super) fn install_text_members<'js>(ctx: &Ctx<'js>, proto: &Object<'js>) -> 
           args.u8(align);
           args.text(&text);
         });
-        let json = match answer.strip_prefix('J') {
-          Some(json) => json,
-          None => {
-            throw_host_error(&ctx, &answer)?;
-            return PluginErrorCode::Internal.throw(&ctx, "measureText: the host said nothing");
-          }
-        };
-        ctx.json_parse(json)
+        parse_json_answer(&ctx, &answer, "measureText")
       },
     )?,
   )?;
@@ -923,14 +902,7 @@ pub(super) fn install_text_members<'js>(ctx: &Ctx<'js>, proto: &Object<'js>) -> 
             args.f(v);
           }
         });
-        let json = match answer.strip_prefix('J') {
-          Some(json) => json,
-          None => {
-            throw_host_error(&ctx, &answer)?;
-            return PluginErrorCode::Internal.throw(&ctx, "getAverageColor: the host said nothing");
-          }
-        };
-        ctx.json_parse(json)
+        parse_json_answer(&ctx, &answer, "getAverageColor")
       },
     )?,
   )?;
@@ -1045,8 +1017,7 @@ pub(super) fn install_image_draw_members<'js>(ctx: &Ctx<'js>, proto: &Object<'js
 }
 
 pub(super) fn install_animation_members<'js>(ctx: &Ctx<'js>) -> JsResult<()> {
-  let proto = Class::<AnimationHandle>::prototype(ctx)?
-    .ok_or_else(|| Exception::throw_message(ctx, "AnimatedImage: the class has no prototype"))?;
+  let proto = get_class_prototype::<AnimationHandle>(ctx)?;
   define_getter(&proto, "width", |this: This<Class<'js, AnimationHandle>>| this.0.borrow().0.width)?;
   define_getter(&proto, "height", |this: This<Class<'js, AnimationHandle>>| this.0.borrow().0.height)?;
   define_getter(&proto, "frameCount", |this: This<Class<'js, AnimationHandle>>| this.0.borrow().0.frame_count)?;
@@ -1119,8 +1090,7 @@ pub(super) fn install_animation_members<'js>(ctx: &Ctx<'js>) -> JsResult<()> {
 }
 
 pub(super) fn install_encoder_members<'js>(ctx: &Ctx<'js>) -> JsResult<()> {
-  let proto = Class::<EncoderHandle>::prototype(ctx)?
-    .ok_or_else(|| Exception::throw_message(ctx, "VideoEncoder: the class has no prototype"))?;
+  let proto = get_class_prototype::<EncoderHandle>(ctx)?;
   define_getter(&proto, "width", |this: This<Class<'js, EncoderHandle>>| this.0.borrow().0.width)?;
   define_getter(&proto, "height", |this: This<Class<'js, EncoderHandle>>| this.0.borrow().0.height)?;
 

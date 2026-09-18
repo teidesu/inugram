@@ -252,6 +252,12 @@ impl JniBridge {
     unsafe { std::slice::from_raw_parts(self.read_buffer, self.read_buffer_len) }
   }
 
+  /// a failed jni call leaves its throw pending, and the next call on this thread would abort on it
+  fn describe_failure(env: &mut Env, what: &str, error: impl std::fmt::Display) -> String {
+    clear_exception(env);
+    format!("{what}: {error}")
+  }
+
   fn check_host_thread(&self, what: &str) -> Result<(), String> {
     if CURRENT_THREAD.with(|id| *id) != self.owner_thread && !CALLER_THREAD_HOSTS.contains(&what) {
       let error = format!("{what}: this API requires the plugin queue; unavailable in a caller-thread callback");
@@ -278,10 +284,7 @@ impl JniBridge {
         Arg::Strs(items) => Marshalled::Obj(Self::new_jstring_array(env, what, items)?),
         Arg::Bytes(Some(bytes)) => match env.byte_array_from_slice(bytes) {
           Ok(array) => Marshalled::Obj(JObject::from(array).auto()),
-          Err(e) => {
-            clear_exception(env);
-            return Err(format!("{what}: {e}"));
-          }
+          Err(e) => return Err(Self::describe_failure(env, what, e)),
         },
         Arg::OptStr(None) | Arg::Bytes(None) => Marshalled::Obj(JObject::null().auto()),
       });
@@ -324,6 +327,16 @@ impl JniBridge {
     }
   }
 
+  /// a host whose answer is optional and whose failure is not worth a line of its own
+  pub(crate) fn call_string_opt(&self, what: &str, method: JMethodID, args: &[Arg<'_>]) -> Option<String> {
+    self.call_string(what, method, args).ok().flatten()
+  }
+
+  /// [`Self::call_string_opt`] where the caller has nothing but the empty string to say either way
+  pub(crate) fn call_string_or_empty(&self, what: &str, method: JMethodID, args: &[Arg<'_>]) -> String {
+    self.call_string_opt(what, method, args).unwrap_or_default()
+  }
+
   pub(crate) fn call_refusal(&self, what: &str, method: JMethodID, args: &[Arg<'_>]) -> Option<String> {
     self.call_string(what, method, args).unwrap_or_else(Some)
   }
@@ -340,34 +353,59 @@ impl JniBridge {
     });
   }
 
-  pub(crate) fn call_bool(&self, what: &str, method: JMethodID, args: &[Arg<'_>]) -> bool {
+  /// What [`Self::call_bool`], [`Self::call_int`] and [`Self::call_bytes`] all are: the thread
+  /// check, the marshalling, one call, and `fallback` wherever any of those does not get an answer.
+  /// `report` is for a host whose refusal nothing else would ever surface.
+  fn call_answering<T>(
+    &self,
+    what: &str,
+    method: JMethodID,
+    args: &[Arg<'_>],
+    ret: ReturnType,
+    report: bool,
+    fallback: T,
+    read: impl FnOnce(&mut Env, jni::errors::Result<jni::objects::JValueOwned<'_>>) -> T,
+  ) -> T {
     if self.check_host_thread(what).is_err() {
-      return false;
+      return fallback;
     }
     let answered = with_current_env(|env| {
       let marshalled = match self.marshal(env, what, args) {
-        Ok(m) => m,
+        Ok(marshalled) => marshalled,
         Err(e) => {
-          self.emit_console(LEVEL_ERROR, &e);
-          return false;
+          if report {
+            self.emit_console(LEVEL_ERROR, &e);
+          }
+          return None;
         }
       };
       let jargs = jvalues(&marshalled);
-      let result =
-        unsafe { env.call_method_unchecked(&self.target, method, ReturnType::Primitive(Primitive::Boolean), &jargs) };
+      let result = unsafe { env.call_method_unchecked(&self.target, method, ret, &jargs) };
+      // a pending exception aborts the process at the next jni call, so this is never skipped
       if clear_exception(env) {
-        self.emit_console(LEVEL_ERROR, &format!("{what}: host callback threw"));
-        return false;
+        if report {
+          self.emit_console(LEVEL_ERROR, &format!("{what}: host callback threw"));
+        }
+        return None;
       }
-      result.and_then(|v| v.z()).unwrap_or(false)
+      Some(read(env, result))
     });
     match answered {
-      Some(answer) => answer,
+      Some(Some(answer)) => answer,
+      Some(None) => fallback,
       None => {
-        self.emit_console(LEVEL_ERROR, &format!("{what}: JNI env unavailable"));
-        false
+        if report {
+          self.emit_console(LEVEL_ERROR, &format!("{what}: JNI env unavailable"));
+        }
+        fallback
       }
     }
+  }
+
+  pub(crate) fn call_bool(&self, what: &str, method: JMethodID, args: &[Arg<'_>]) -> bool {
+    self.call_answering(what, method, args, ReturnType::Primitive(Primitive::Boolean), true, false, |_, result| {
+      result.and_then(|v| v.z()).unwrap_or(false)
+    })
   }
 
   /// [`Self::call_int`] for arguments that are already jni values: no [`Self::marshal`], and so
@@ -390,37 +428,13 @@ impl JniBridge {
   }
 
   pub(crate) fn call_int(&self, what: &str, method: JMethodID, args: &[Arg<'_>], fallback: i32) -> i32 {
-    if self.check_host_thread(what).is_err() {
-      return fallback;
-    }
-    with_current_env(|env| {
-      let Ok(marshalled) = self.marshal(env, what, args) else {
-        return fallback;
-      };
-      let jargs = jvalues(&marshalled);
-      let result =
-        unsafe { env.call_method_unchecked(&self.target, method, ReturnType::Primitive(Primitive::Int), &jargs) };
-      if clear_exception(env) {
-        return fallback;
-      }
+    self.call_answering(what, method, args, ReturnType::Primitive(Primitive::Int), false, fallback, |_, result| {
       result.and_then(|v| v.i()).unwrap_or(fallback)
     })
-    .unwrap_or(fallback)
   }
 
   pub(crate) fn call_bytes(&self, what: &str, method: JMethodID, args: &[Arg<'_>], out: &mut [u8]) -> bool {
-    if self.check_host_thread(what).is_err() {
-      return false;
-    }
-    with_current_env(|env| {
-      let Ok(marshalled) = self.marshal(env, what, args) else {
-        return false;
-      };
-      let jargs = jvalues(&marshalled);
-      let result = unsafe { env.call_method_unchecked(&self.target, method, ReturnType::Object, &jargs) };
-      if clear_exception(env) {
-        return false;
-      }
+    self.call_answering(what, method, args, ReturnType::Object, false, false, |env, result| {
       let Ok(array) = result.and_then(|v| v.l()) else {
         return false;
       };
@@ -438,7 +452,6 @@ impl JniBridge {
       out.copy_from_slice(&bytes);
       true
     })
-    .unwrap_or(false)
   }
 
   pub(crate) fn emit_console(&self, level: i32, message: &str) {
@@ -452,22 +465,15 @@ impl JniBridge {
   ) -> Result<Auto<'l, JObject<'l>>, String> {
     let array = match JObjectArray::<JString>::new(env, items.len(), &JString::null()) {
       Ok(a) => a.auto(),
-      Err(e) => {
-        clear_exception(env);
-        return Err(format!("{what}: {e}"));
-      }
+      Err(e) => return Err(Self::describe_failure(env, what, e)),
     };
     for (i, item) in items.iter().enumerate() {
       let item = match env.new_string(item) {
         Ok(item) => item.auto(),
-        Err(e) => {
-          clear_exception(env);
-          return Err(format!("{what}: {e}"));
-        }
+        Err(e) => return Err(Self::describe_failure(env, what, e)),
       };
       if let Err(e) = array.set_element(env, i, &item) {
-        clear_exception(env);
-        return Err(format!("{what}: {e}"));
+        return Err(Self::describe_failure(env, what, e));
       }
     }
     Ok(JObject::from(array.unwrap()).auto())
@@ -476,10 +482,7 @@ impl JniBridge {
   pub(crate) fn new_jstring<'l>(env: &mut Env<'l>, what: &str, s: &str) -> Result<Auto<'l, JObject<'l>>, String> {
     match env.new_string(s) {
       Ok(j) => Ok(JObject::from(j).auto()),
-      Err(e) => {
-        clear_exception(env);
-        Err(format!("{what}: {e}"))
-      }
+      Err(e) => Err(Self::describe_failure(env, what, e)),
     }
   }
 }

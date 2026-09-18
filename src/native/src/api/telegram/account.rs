@@ -5,7 +5,7 @@ use std::rc::Rc;
 use rquickjs::function::Opt;
 use rquickjs::{Array, Ctx, Function, Object, Persistent, Result as JsResult, Runtime, Value};
 
-use crate::api::error::PluginErrorCode;
+use crate::api::error::{call_callback, describe_js_error, PluginErrorCode};
 use crate::runtime::pump_jobs;
 use crate::sandbox::grants::{GrantHost, MATCH_EXACT};
 use crate::sandbox::registry::{make_disposer, noop_disposer, CallbackRegistry, Lifecycle, Registry, Token};
@@ -105,11 +105,7 @@ impl AccountState {
         true
       }
       Err(e) => {
-        let msg = match e {
-          rquickjs::Error::Exception => crate::api::error::format_exception(ctx),
-          other => other.to_string(),
-        };
-        (self.log)(&format!("accounts: unreadable host snapshot: {msg}"));
+        (self.log)(&format!("accounts: unreadable host snapshot: {}", describe_js_error(ctx, e)));
         false
       }
     }
@@ -167,20 +163,11 @@ impl AccountState {
     })
   }
 
-  fn run_teardown(&self, ctx: &Ctx<'_>, teardown: &Function<'_>) {
-    match teardown.call::<_, Value>(()) {
-      Ok(_) => {}
-      Err(rquickjs::Error::Exception) => {
-        (self.log)(&crate::fault(format_args!(
-          "withCurrentAccount teardown threw: {}",
-          crate::api::error::format_exception(ctx),
-        )));
-      }
-      Err(e) => (self.log)(&format!("withCurrentAccount teardown failed: {e:?}")),
-    }
+  fn run_teardown<'js>(&self, ctx: &Ctx<'js>, teardown: &Function<'js>) {
+    call_callback(ctx, &self.log, "withCurrentAccount teardown", teardown, ());
   }
 
-  fn leave_scope(&self, ctx: &Ctx<'_>, scope: &Rc<CurrentScope>) {
+  fn leave_scope<'js>(&self, ctx: &Ctx<'js>, scope: &Rc<CurrentScope>) {
     scope.account.set(None);
     let Some(teardown) = scope.teardown.borrow_mut().take() else {
       return;
@@ -204,24 +191,16 @@ impl AccountState {
       }
     };
     scope.account.set(Some((info.id, info.user_id)));
-    match callback.call::<_, Value>((account,)) {
-      Ok(result) => {
-        let Some(teardown) = result.into_function() else {
-          return;
-        };
-        if self.is_live(scope) {
-          *scope.teardown.borrow_mut() = Some(Persistent::save(ctx, teardown));
-        } else {
-          self.run_teardown(ctx, &teardown);
-        }
-      }
-      Err(rquickjs::Error::Exception) => {
-        (self.log)(&crate::fault(format_args!(
-          "withCurrentAccount callback threw: {}",
-          crate::api::error::format_exception(ctx),
-        )));
-      }
-      Err(e) => (self.log)(&format!("withCurrentAccount callback failed: {e:?}")),
+    let Some(result) = call_callback(ctx, &self.log, "withCurrentAccount callback", &callback, (account,)) else {
+      return;
+    };
+    let Some(teardown) = result.into_function() else {
+      return;
+    };
+    if self.is_live(scope) {
+      *scope.teardown.borrow_mut() = Some(Persistent::save(ctx, teardown));
+    } else {
+      self.run_teardown(ctx, &teardown);
     }
   }
 
@@ -262,16 +241,7 @@ impl AccountState {
         }
       };
       for f in self.changed_fns.snapshot(&ctx) {
-        match f.call::<_, Value>((infos.clone(),)) {
-          Ok(_) => {}
-          Err(rquickjs::Error::Exception) => {
-            (self.log)(&crate::fault(format_args!(
-              "onAccountsChanged callback threw: {}",
-              crate::api::error::format_exception(&ctx),
-            )));
-          }
-          Err(e) => (self.log)(&format!("onAccountsChanged callback failed: {e:?}")),
-        }
+        call_callback(&ctx, &self.log, "onAccountsChanged callback", &f, (infos.clone(),));
       }
       let current = self.current().map(|info| (info.id, info.user_id));
       for scope in self.scopes.values() {

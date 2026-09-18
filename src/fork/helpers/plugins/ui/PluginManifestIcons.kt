@@ -38,10 +38,7 @@ object PluginManifestIcons {
     /** what every plugin surface draws when the manifest names no icon, or names one we can't resolve */
     fun createPlaceholder(context: Context): Drawable? =
         ResourcesCompat.getDrawable(context.resources, R.drawable.inu_tabler_code, null)?.mutate()?.apply {
-            colorFilter = PorterDuffColorFilter(
-                Theme.getColor(Theme.key_windowBackgroundWhiteGrayIcon),
-                PorterDuff.Mode.SRC_IN,
-            )
+            colorFilter = tintOf(Theme.getColor(Theme.key_windowBackgroundWhiteGrayIcon))
         }
 
     /**
@@ -76,7 +73,7 @@ object PluginManifestIcons {
         return common
     }
 
-    private fun tintOf(color: Int) = PorterDuffColorFilter(color, PorterDuff.Mode.SRC_IN)
+    internal fun tintOf(color: Int) = PorterDuffColorFilter(color, PorterDuff.Mode.SRC_IN)
 
     private fun bindCommon(view: BackupImageView, name: String, tint: Int): Boolean {
         val resource = CommonIcons.resolve(name) ?: return false

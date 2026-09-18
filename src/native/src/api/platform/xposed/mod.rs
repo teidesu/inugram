@@ -12,11 +12,11 @@ use rquickjs::{Array, Context, Ctx, Function, Object, Persistent, Result as JsRe
 use crate::api::error::PluginErrorCode;
 use crate::api::platform::jvm::JvmState;
 use crate::sandbox::grants::{GrantHost, MATCH_NAMESPACE};
-use crate::sandbox::registry::{make_disposer, noop_disposer, Lifecycle, Registry};
+use crate::sandbox::registry::{make_disposer, noop_disposer, Lifecycle, Registry, Token};
 use crate::utils::arguments::array_values;
 use rquickjs::function::This;
 
-use crate::api::error::format_exception;
+use crate::api::error::report_callback_error;
 use crate::runtime::pump_jobs;
 
 pub trait XposedHost {
@@ -62,6 +62,15 @@ struct PendingDispatch {
   after: Vec<Persistent<Function<'static>>>,
 }
 
+impl PendingDispatch {
+  fn release(self, ctx: &Ctx<'_>) {
+    let _ = self.context.restore(ctx);
+    for f in self.after {
+      let _ = f.restore(ctx);
+    }
+  }
+}
+
 impl XposedState {
   fn release(&self, ctx: &Ctx<'_>, hook: Hook) {
     if let Some(token) = hook.native_token {
@@ -82,6 +91,14 @@ impl XposedState {
       sites.remove(&hook.site);
       drop(sites);
       self.host.xposed(OP_UNHOOK, hook.site, "", &[]);
+    }
+  }
+
+  fn release_tokens(&self, ctx: &Ctx<'_>, tokens: &[Token]) {
+    for token in tokens {
+      if let Some(hook) = self.hooks.remove(*token) {
+        self.release(ctx, hook);
+      }
     }
   }
 
@@ -117,6 +134,10 @@ impl XposedState {
     }
     Ok(id)
   }
+}
+
+fn or_undefined<'js>(ctx: &Ctx<'js>, value: Opt<Value<'js>>) -> Value<'js> {
+  value.0.unwrap_or_else(|| Value::new_undefined(ctx.clone()))
 }
 
 fn sites_from<'js>(ctx: &Ctx<'js>, value: Value<'js>) -> JsResult<Vec<i64>> {
@@ -199,11 +220,7 @@ impl XposedState {
       tokens.push(token);
       if let Some(native_phases) = &callbacks.native_phases {
         if let Err(error) = self.ask(ctx, OP_NATIVE_ADD, site, &token.to_string(), native_phases) {
-          for token in &tokens {
-            if let Some(hook) = self.hooks.remove(*token) {
-              self.release(ctx, hook);
-            }
-          }
+          self.release_tokens(ctx, &tokens);
           for orphan in sites.iter().skip(tokens.len()).filter(|site| !self.sites.borrow().contains_key(site)) {
             self.host.xposed(OP_UNHOOK, *orphan, "", &[]);
           }
@@ -214,23 +231,13 @@ impl XposedState {
 
     let held = self.hooks.len();
     if held > HOOK_LIMIT {
-      for token in &tokens {
-        if let Some(hook) = self.hooks.remove(*token) {
-          self.release(ctx, hook);
-        }
-      }
+      self.release_tokens(ctx, &tokens);
       return PluginErrorCode::QuotaExceeded(held as i64, HOOK_LIMIT as i64)
         .throw(ctx, &format!("xposed: this plugin may hold at most {HOOK_LIMIT} hooks"));
     }
 
     let state = self.clone();
-    make_disposer(ctx, move |ctx| {
-      for token in &tokens {
-        if let Some(hook) = state.hooks.remove(*token) {
-          state.release(ctx, hook);
-        }
-      }
-    })
+    make_disposer(ctx, move |ctx| state.release_tokens(ctx, &tokens))
   }
 
   fn js_hook<'js>(
@@ -323,14 +330,7 @@ pub fn install_xposed<'js>(
     xposed.set(
       "hookMethod",
       Function::new(ctx.clone(), move |ctx: Ctx<'js>, method: Opt<Value<'js>>, hook: Opt<Value<'js>>| {
-        state.js_hook(
-          &ctx,
-          OP_HOOK,
-          method.0.unwrap_or_else(|| Value::new_undefined(ctx.clone())),
-          "",
-          hook.0.unwrap_or_else(|| Value::new_undefined(ctx.clone())),
-          "hookMethod",
-        )
+        state.js_hook(&ctx, OP_HOOK, or_undefined(&ctx, method), "", or_undefined(&ctx, hook), "hookMethod")
       })?,
     )?;
   }
@@ -351,9 +351,9 @@ pub fn install_xposed<'js>(
           state.js_hook(
             &ctx,
             OP_HOOK_ALL,
-            class.0.unwrap_or_else(|| Value::new_undefined(ctx.clone())),
+            or_undefined(&ctx, class),
             &name,
-            hook.0.unwrap_or_else(|| Value::new_undefined(ctx.clone())),
+            or_undefined(&ctx, hook),
             "hookAllOverloads",
           )
         },
@@ -365,14 +365,7 @@ pub fn install_xposed<'js>(
     xposed.set(
       "hookAllConstructors",
       Function::new(ctx.clone(), move |ctx: Ctx<'js>, class: Opt<Value<'js>>, hook: Opt<Value<'js>>| {
-        state.js_hook(
-          &ctx,
-          OP_HOOK_ALL,
-          class.0.unwrap_or_else(|| Value::new_undefined(ctx.clone())),
-          "",
-          hook.0.unwrap_or_else(|| Value::new_undefined(ctx.clone())),
-          "hookAllConstructors",
-        )
+        state.js_hook(&ctx, OP_HOOK_ALL, or_undefined(&ctx, class), "", or_undefined(&ctx, hook), "hookAllConstructors")
       })?,
     )?;
   }
@@ -383,7 +376,7 @@ pub fn install_xposed<'js>(
       Function::new(
         ctx.clone(),
         move |ctx: Ctx<'js>, method: Opt<Value<'js>>, this: Opt<Value<'js>>, args: Opt<Value<'js>>| {
-          state.js_call_original(&ctx, method.0.unwrap_or_else(|| Value::new_undefined(ctx.clone())), this, args)
+          state.js_call_original(&ctx, or_undefined(&ctx, method), this, args)
         },
       )?,
     )?;
@@ -393,7 +386,7 @@ pub fn install_xposed<'js>(
     xposed.set(
       "allocateInstance",
       Function::new(ctx.clone(), move |ctx: Ctx<'js>, class: Opt<Value<'js>>| {
-        state.js_allocate(&ctx, class.0.unwrap_or_else(|| Value::new_undefined(ctx.clone())))
+        state.js_allocate(&ctx, or_undefined(&ctx, class))
       })?,
     )?;
   }
@@ -448,12 +441,8 @@ impl XposedState {
   }
 
   fn run_callback<'js>(&self, ctx: &Ctx<'js>, callback: &Function<'js>, context: &Object<'js>, phase: &str) {
-    match callback.call::<_, Value>((context.clone(),)) {
-      Ok(_) => {}
-      Err(rquickjs::Error::Exception) => {
-        (self.log)(&crate::fault(format_args!("xposed {phase} hook threw: {}", format_exception(ctx))));
-      }
-      Err(e) => (self.log)(&format!("xposed {phase} hook failed: {e:?}")),
+    if let Err(error) = callback.call::<_, Value>((context.clone(),)) {
+      report_callback_error(&self.log, ctx, &format!("xposed {phase} hook"), error);
     }
   }
 }
@@ -648,12 +637,7 @@ impl XposedState {
     let Some(pending) = state.pending.borrow_mut().remove(&dispatch_id) else {
       return;
     };
-    context.with(|ctx| {
-      let _ = pending.context.restore(&ctx);
-      for f in pending.after {
-        let _ = f.restore(&ctx);
-      }
-    });
+    context.with(|ctx| pending.release(&ctx));
   }
 }
 
@@ -665,10 +649,7 @@ impl Dispose for XposedState {
         state.release(&ctx, hook);
       }
       for (_, pending) in state.pending.borrow_mut().drain() {
-        let _ = pending.context.restore(&ctx);
-        for f in pending.after {
-          let _ = f.restore(&ctx);
-        }
+        pending.release(&ctx);
       }
     });
   }

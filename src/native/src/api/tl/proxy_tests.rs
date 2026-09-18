@@ -1,5 +1,4 @@
 use super::*;
-use base64::Engine;
 use rquickjs::{Context, Runtime};
 use std::cell::RefCell;
 use std::collections::{HashMap, HashSet};
@@ -234,11 +233,7 @@ impl TlHost for FakeTlHost {
   /// never went through `tl_set`'s wire
   fn tl_set_bytes(&self, handle: i64, key: &str, value: &[u8]) -> Option<String> {
     self.counts.byte_sets.borrow_mut().push((key.to_string(), value.to_vec()));
-    self.tl_set(
-      handle,
-      key,
-      &format!("Y{}", base64::Engine::encode(&base64::engine::general_purpose::STANDARD, value)),
-    )
+    self.tl_set(handle, key, &crate::api::tl::proxy::encode_bytes_wire(value))
   }
 
   fn tl_set(&self, handle: i64, key: &str, value_wire: &str) -> Option<String> {
@@ -521,15 +516,11 @@ fn vector_length_indexing_push_and_iteration() {
   });
 }
 
-fn base64_encode(bytes: &[u8]) -> String {
-  base64::engine::general_purpose::STANDARD.encode(bytes)
-}
-
 #[test]
 fn bytes_field_roundtrips_through_uint8array_and_base64() {
   let (_rt, ctx) = make_ctx();
   let host = Rc::new(FakeTlHost::default());
-  let id = host.mint(object_entry("x", &[("data", &format!("Y{}", base64_encode(&[1, 2, 3, 255])))]));
+  let id = host.mint(object_entry("x", &[("data", &crate::api::tl::proxy::encode_bytes_wire(&[1, 2, 3, 255]))]));
   let views = views_of(&host);
 
   ctx.with(|ctx| {
@@ -547,7 +538,7 @@ fn bytes_field_roundtrips_through_uint8array_and_base64() {
   match &*entry_rc.borrow() {
     FakeEntry::Object { fields, .. } => {
       assert!(
-        matches!(fields.get("data"), Some(FakeValue::Wire(w)) if w == &format!("Y{}", base64_encode(&[9, 8, 7])))
+        matches!(fields.get("data"), Some(FakeValue::Wire(w)) if w == &crate::api::tl::proxy::encode_bytes_wire(&[9, 8, 7]))
       );
     }
     _ => panic!("expected object entry"),

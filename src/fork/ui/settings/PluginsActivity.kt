@@ -645,10 +645,7 @@ class PluginRow(context: Context, val compact: Boolean) : LinearLayout(context) 
         super.dispatchDraw(canvas)
         if (!needDivider) return
         // starts where the text column does, past the handle/icon gutter
-        val inset = AndroidUtilities.dp(if (compact) COMPACT_DIVIDER_INSET_DP else ROOMY_DIVIDER_INSET_DP).toFloat()
-        val rtl = LocaleController.isRTL
-        val y = (height - 1).toFloat()
-        canvas.drawLine(if (rtl) 0f else inset, y, if (rtl) width - inset else width.toFloat(), y, Theme.dividerPaint)
+        drawRowDivider(canvas, if (compact) COMPACT_DIVIDER_INSET_DP else ROOMY_DIVIDER_INSET_DP)
     }
 
     fun setOnReorderTouchListener(listener: OnTouchListener) {

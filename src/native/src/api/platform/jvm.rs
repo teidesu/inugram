@@ -10,8 +10,8 @@ use rquickjs::{
   Runtime, TypedArray, Value,
 };
 
-use crate::api::error::format_exception;
-use crate::api::error::{wire_error_to_js, PluginErrorCode};
+use crate::api::error::{format_exception, report_callback_error, wire_error_to_js, PluginErrorCode};
+use crate::api::tl::proxy::encode_bytes_wire;
 use crate::runtime::pump_jobs;
 use crate::sandbox::grants::{GrantHost, MATCH_NAMESPACE};
 use crate::sandbox::registry::{CallbackRegistry, Lifecycle};
@@ -180,7 +180,7 @@ impl JvmState {
           Ok(bytes) => bytes,
           Err(error) => return PluginErrorCode::InvalidArgument.throw(ctx, &format!("defineClass: {error}")),
         };
-        let wire = format!("Y{}", base64::Engine::encode(&base64::engine::general_purpose::STANDARD, bytes));
+        let wire = encode_bytes_wire(&bytes);
         self.ask(ctx, OP_LOAD_CLASS, ticket, "", &[wire])
       })();
       if result.is_err() {
@@ -289,6 +289,19 @@ impl JvmState {
     values.iter().map(|value| read_arg(ctx, value)).collect()
   }
 
+  /// what every member operation starts with: the grant, the handle the name is looked up on, and
+  /// the jni side that does the looking
+  fn member_target<'js>(
+    &self,
+    ctx: &Ctx<'js>,
+    target: &Value<'js>,
+    what: &str,
+  ) -> JsResult<(&Native, Class<'js, JvmRef>)> {
+    self.grants.check_grant(ctx, GRANT, None, MATCH_NAMESPACE)?;
+    let target = self.handle_arg(ctx, target, what)?;
+    Ok((self.native(ctx)?, target))
+  }
+
   pub(crate) fn js_call<'js>(
     &self,
     ctx: &Ctx<'js>,
@@ -296,50 +309,38 @@ impl JvmState {
     name: String,
     args: Rest<Value<'js>>,
   ) -> JsResult<Value<'js>> {
-    self.grants.check_grant(ctx, GRANT, None, MATCH_NAMESPACE)?;
-    let target = self.handle_arg(ctx, &target, "call")?;
-    let native = self.native(ctx)?;
+    let (native, target) = self.member_target(ctx, &target, "call")?;
     let args = self.read_args(ctx, &args.0)?;
     let outcome = native.call(ctx, &target, &name, &args)?;
     self.outcome_to_value(ctx, outcome)
   }
 
   fn js_construct<'js>(&self, ctx: &Ctx<'js>, target: Value<'js>, args: Rest<Value<'js>>) -> JsResult<Value<'js>> {
-    self.grants.check_grant(ctx, GRANT, None, MATCH_NAMESPACE)?;
-    let target = self.handle_arg(ctx, &target, "new")?;
-    let native = self.native(ctx)?;
+    let (native, target) = self.member_target(ctx, &target, "new")?;
     let args = self.read_args(ctx, &args.0)?;
     let outcome = native.construct(ctx, &target, &args)?;
     self.outcome_to_value(ctx, outcome)
   }
 
   fn js_get<'js>(&self, ctx: &Ctx<'js>, target: Value<'js>, name: String) -> JsResult<Value<'js>> {
-    self.grants.check_grant(ctx, GRANT, None, MATCH_NAMESPACE)?;
-    let target = self.handle_arg(ctx, &target, "getField")?;
-    let native = self.native(ctx)?;
+    let (native, target) = self.member_target(ctx, &target, "getField")?;
     let outcome = native.get(ctx, &target, &name)?;
     self.outcome_to_value(ctx, outcome)
   }
 
   fn js_set<'js>(&self, ctx: &Ctx<'js>, target: Value<'js>, name: String, value: Value<'js>) -> JsResult<()> {
-    self.grants.check_grant(ctx, GRANT, None, MATCH_NAMESPACE)?;
-    let target = self.handle_arg(ctx, &target, "setField")?;
-    let native = self.native(ctx)?;
+    let (native, target) = self.member_target(ctx, &target, "setField")?;
     native.set(ctx, &target, &name, &read_arg(ctx, &value)?)
   }
 
   fn js_method<'js>(&self, ctx: &Ctx<'js>, target: Value<'js>, name: String) -> JsResult<Value<'js>> {
-    self.grants.check_grant(ctx, GRANT, None, MATCH_NAMESPACE)?;
-    let target = self.handle_arg(ctx, &target, "getDeclaredMethod")?;
-    let native = self.native(ctx)?;
+    let (native, target) = self.member_target(ctx, &target, "getDeclaredMethod")?;
     let outcome = native.method(ctx, &target, &name)?;
     self.outcome_to_value(ctx, outcome)
   }
 
   fn js_field<'js>(&self, ctx: &Ctx<'js>, target: Value<'js>, name: String) -> JsResult<Value<'js>> {
-    self.grants.check_grant(ctx, GRANT, None, MATCH_NAMESPACE)?;
-    let target = self.handle_arg(ctx, &target, "getDeclaredField")?;
-    let native = self.native(ctx)?;
+    let (native, target) = self.member_target(ctx, &target, "getDeclaredField")?;
     let outcome = native.field(ctx, &target, &name)?;
     self.outcome_to_value(ctx, outcome)
   }
@@ -351,9 +352,7 @@ impl JvmState {
     receiver: Value<'js>,
     args: Rest<Value<'js>>,
   ) -> JsResult<Value<'js>> {
-    self.grants.check_grant(ctx, GRANT, None, MATCH_NAMESPACE)?;
-    let target = self.handle_arg(ctx, &target, "invoke")?;
-    let native = self.native(ctx)?;
+    let (native, target) = self.member_target(ctx, &target, "invoke")?;
     let receiver = read_arg(ctx, &receiver)?;
     let args = self.read_args(ctx, &args.0)?;
     let outcome = native.invoke_pinned(ctx, &target, &receiver, &args)?;
@@ -361,9 +360,7 @@ impl JvmState {
   }
 
   fn js_member_get<'js>(&self, ctx: &Ctx<'js>, target: Value<'js>, receiver: Value<'js>) -> JsResult<Value<'js>> {
-    self.grants.check_grant(ctx, GRANT, None, MATCH_NAMESPACE)?;
-    let target = self.handle_arg(ctx, &target, "get")?;
-    let native = self.native(ctx)?;
+    let (native, target) = self.member_target(ctx, &target, "get")?;
     let receiver = read_arg(ctx, &receiver)?;
     let outcome = native.member_get(ctx, &target, &receiver)?;
     self.outcome_to_value(ctx, outcome)
@@ -376,9 +373,7 @@ impl JvmState {
     receiver: Value<'js>,
     value: Value<'js>,
   ) -> JsResult<()> {
-    self.grants.check_grant(ctx, GRANT, None, MATCH_NAMESPACE)?;
-    let target = self.handle_arg(ctx, &target, "set")?;
-    let native = self.native(ctx)?;
+    let (native, target) = self.member_target(ctx, &target, "set")?;
     let receiver = read_arg(ctx, &receiver)?;
     native.member_set(ctx, &target, &receiver, &read_arg(ctx, &value)?)
   }
@@ -390,7 +385,7 @@ impl JvmState {
       Arg::Int(i) => format!("I{i}"),
       Arg::Double(f) => format!("D{f}"),
       Arg::Str(s) => format!("S{s}"),
-      Arg::Bytes(bytes) => format!("Y{}", base64::Engine::encode(&base64::engine::general_purpose::STANDARD, bytes)),
+      Arg::Bytes(bytes) => encode_bytes_wire(&bytes),
       Arg::Ref(handle) => format!("G{}", handle.borrow().id),
     })
   }
@@ -499,7 +494,7 @@ impl JvmState {
         if !bounded_bytes(bytes, DEX_LIMIT_BYTES) {
           return throw_too_big(ctx, "a dex", bytes.len(), DEX_LIMIT_BYTES);
         }
-        let wire = format!("Y{}", base64::Engine::encode(&base64::engine::general_purpose::STANDARD, bytes));
+        let wire = encode_bytes_wire(&bytes);
         self.ask(ctx, OP_LOAD_DEX, 0, "", &[wire])?;
         return Ok(());
       }
@@ -735,14 +730,7 @@ pub fn install_jvm<'js>(
 
 impl JvmState {
   fn install_android<'js>(self: &Rc<Self>, ctx: &Ctx<'js>, globals: &crate::api::Globals<'js>) -> JsResult<()> {
-    let android: Object = match globals.inu.get::<_, Object>("android") {
-      Ok(o) => o,
-      Err(_) => {
-        let o = Object::new(ctx.clone())?;
-        globals.inu.set("android", o.clone())?;
-        o
-      }
-    };
+    let android = globals.get_namespace(ctx, "android")?;
     let state = self.clone();
     android.set(
       "bundle",
@@ -773,12 +761,8 @@ impl JvmState {
       let Some(callback) = state.callbacks.restore(&ctx, callback_id) else {
         return;
       };
-      match callback.call::<_, Value>(()) {
-        Ok(_) => {}
-        Err(rquickjs::Error::Exception) => {
-          (state.log)(&crate::fault(format_args!("jvm.runnable callback threw: {}", format_exception(&ctx))));
-        }
-        Err(e) => (state.log)(&format!("jvm.runnable callback failed: {e:?}")),
+      if let Err(error) = callback.call::<_, Value>(()) {
+        report_callback_error(&state.log, &ctx, "jvm.runnable callback", error);
       }
     });
     pump_jobs(rt, context, state.log.as_ref());

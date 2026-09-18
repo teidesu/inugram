@@ -5,7 +5,6 @@ import java.io.File
 import java.util.UUID
 import org.telegram.messenger.FileLoader
 import org.telegram.messenger.ImageLoader
-import org.telegram.messenger.Utilities
 
 /**
  * Where rust stages what a plugin hands a send or an upload (rust: `writes.rs`): a subtree of
@@ -32,23 +31,10 @@ object PluginTransfers {
     }
 
     /** drops every previous process's transfers; call once from [PluginManager.init], next to [PluginBlobs.scheduleSweep] */
-    fun scheduleSweep() {
-        Utilities.cacheClearQueue.postRunnable {
-            val children = root()?.listFiles() ?: return@postRunnable
-            for (child in children) {
-                if (child.name == session) continue
-                child.deleteRecursively()
-            }
-        }
-    }
+    fun scheduleSweep() = PluginPaths.sweepStaleSessions(session, ::root)
 
     /** this plugin's staging directory, or "" when stock has no media cache to put it in, which stages beside the spills */
-    fun dirFor(installId: String): String {
-        require(PluginInstalls.isValidId(installId)) { "malformed install id" }
-        val dir = File(root() ?: return "", "$session/$installId")
-        if (!dir.isDirectory && !dir.mkdirs()) return ""
-        return dir.absolutePath
-    }
+    fun dirFor(installId: String): String = PluginPaths.scopedDir(installId, ::dirOf)
 
     /** whether [file] is a transfer rust staged for this plugin, which nothing but the write it came in on reads again */
     fun isStaged(installId: String, file: File): Boolean {
@@ -59,8 +45,7 @@ object PluginTransfers {
     }
 
     /** permanently deletes a plugin's staged transfers; call on the plugin queue after its engine is closed */
-    fun wipe(installId: String) {
-        if (!PluginInstalls.isValidId(installId)) return
-        File(root() ?: return, "$session/$installId").deleteRecursively()
-    }
+    fun wipe(installId: String) = PluginPaths.wipe(installId, ::dirOf)
+
+    private fun dirOf(installId: String): File? = root()?.let { File(it, "$session/$installId") }
 }

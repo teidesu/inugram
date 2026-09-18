@@ -1,5 +1,4 @@
 use super::*;
-use crate::api::error::install_plugin_error;
 use crate::sandbox::grants::TestGrantHost;
 use rquickjs::Context;
 
@@ -31,8 +30,7 @@ type Disposing = crate::testing::harness::DisposeOnDrop<NotificationState>;
 type Fixture = (Runtime, Context, Rc<TestNotificationHost>, Disposing, std::sync::Arc<crate::testing::harness::Logs>);
 
 fn setup(grants: &[&str]) -> Fixture {
-  let rt = Runtime::new().unwrap();
-  let ctx = Context::full(&rt).unwrap();
+  let (rt, ctx) = crate::testing::harness::new_engine();
   let host = Rc::new(TestNotificationHost::default());
   let host_dyn: Rc<dyn NotificationHost> = host.clone();
   let grants = TestGrantHost::new(grants).as_host();
@@ -40,7 +38,6 @@ fn setup(grants: &[&str]) -> Fixture {
   let log = crate::testing::harness::log_sink(&logs);
   let state = ctx.with(|ctx| {
     let inu = crate::testing::harness::get_api_globals(&ctx);
-    install_plugin_error(&ctx).unwrap();
     install_notifications(&ctx, host_dyn, grants, Lifecycle::new(), log.clone(), &inu).unwrap()
   });
   let state = Disposing::new(&ctx, state, |ctx, state| state.dispose(ctx));

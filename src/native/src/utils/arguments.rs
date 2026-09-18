@@ -166,3 +166,24 @@ pub fn opt_fn<'js>(ctx: &Ctx<'js>, obj: &Object<'js>, what: &str, key: &str) -> 
 #[cfg(test)]
 #[path = "arguments_tests.rs"]
 mod tests;
+
+/// a value as the host takes it, refusing what `JSON.stringify` drops entirely
+pub fn stringify_json<'js>(ctx: &Ctx<'js>, value: Value<'js>, message: &str) -> JsResult<String> {
+  ctx
+    .json_stringify(value)?
+    .map(|text| text.to_string())
+    .transpose()?
+    .ok_or_else(|| Exception::throw_message(ctx, message))
+}
+
+/// a selected-item index: an integer inside the list, refusing a fraction and a NaN alike
+pub fn read_index<'js>(ctx: &Ctx<'js>, value: &Value<'js>, what: &str, len: usize) -> JsResult<i32> {
+  let index = value
+    .as_int()
+    .or_else(|| value.as_float().filter(|f| f.fract() == 0.0).map(|f| f as i32))
+    .ok_or_else(|| Exception::throw_type(ctx, &format!("{what}: 'selected' must be an integer index")))?;
+  if index < 0 || index as usize >= len {
+    return Err(Exception::throw_type(ctx, &format!("{what}: 'selected' out of range")));
+  }
+  Ok(index)
+}

@@ -267,21 +267,14 @@ object PluginIcons {
         }
     }
 
-    private fun resourceIdOf(name: String): Int {
-        val context = ApplicationLoader.applicationContext ?: return 0
-        return synchronized(resourceIds) {
-            resourceIds.getOrPut(name) {
-                context.resources.getIdentifier(name, "drawable", context.packageName)
-            }
-        }
-    }
+    private fun resourceIdOf(name: String): Int = identifierOf(resourceIds, name, "drawable")
 
-    fun getRawAnimationResourceId(name: String): Int {
+    fun getRawAnimationResourceId(name: String): Int = identifierOf(rawResourceIds, name, "raw")
+
+    private fun identifierOf(cache: MutableMap<String, Int>, name: String, type: String): Int {
         val context = ApplicationLoader.applicationContext ?: return 0
-        return synchronized(rawResourceIds) {
-            rawResourceIds.getOrPut(name) {
-                context.resources.getIdentifier(name, "raw", context.packageName)
-            }
+        return synchronized(cache) {
+            cache.getOrPut(name) { context.resources.getIdentifier(name, type, context.packageName) }
         }
     }
 

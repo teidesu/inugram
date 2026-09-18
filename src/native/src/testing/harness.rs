@@ -88,21 +88,28 @@ pub(crate) fn get_api_globals<'js>(ctx: &Ctx<'js>) -> crate::api::Globals<'js> {
   crate::api::Globals::get(ctx).unwrap()
 }
 
-pub(crate) fn eval_string(ctx: &Context, code: &str) -> String {
-  ctx.with(|ctx| match ctx.eval::<String, _>(code) {
+pub(crate) fn eval_or_panic<T: for<'js> rquickjs::FromJs<'js>>(ctx: &Context, code: &str) -> T {
+  ctx.with(|ctx| match ctx.eval::<T, _>(code) {
     Ok(value) => value,
     Err(rquickjs::Error::Exception) => panic!("{}", crate::api::error::format_exception(&ctx)),
     Err(e) => panic!("{e:?}"),
   })
 }
 
+pub(crate) fn eval_string(ctx: &Context, code: &str) -> String {
+  eval_or_panic(ctx, code)
+}
+
 /// [`eval_string`] for code evaluated for its effect.
 pub(crate) fn eval_unit(ctx: &Context, code: &str) {
-  ctx.with(|ctx| match ctx.eval::<(), _>(code) {
-    Ok(()) => {}
-    Err(rquickjs::Error::Exception) => panic!("{}", crate::api::error::format_exception(&ctx)),
-    Err(e) => panic!("{e:?}"),
-  });
+  eval_or_panic(ctx, code)
+}
+
+/// the runtime and context every fixture starts from
+pub(crate) fn new_engine() -> (Runtime, Context) {
+  let rt = Runtime::new().unwrap();
+  let ctx = Context::full(&rt).unwrap();
+  (rt, ctx)
 }
 
 /// [`eval_string`] over `JSON.stringify`, for asserting on a shape rather than on a scalar.
@@ -193,11 +200,7 @@ impl<S> Drop for DisposeOnDrop<S> {
 /// here rather than only on a device.
 pub(crate) fn run_capturing_console(rt: &Runtime, ctx: &Context, source: &str) -> Vec<String> {
   let lines = install_capturing_console(ctx);
-  ctx.with(|ctx| match ctx.eval::<(), _>(source) {
-    Ok(()) => {}
-    Err(rquickjs::Error::Exception) => panic!("{}", crate::api::error::format_exception(&ctx)),
-    Err(e) => panic!("{e:?}"),
-  });
+  eval_unit(ctx, source);
   while rt.is_job_pending() {
     rt.execute_pending_job().ok();
   }
@@ -378,15 +381,13 @@ impl Drop for TempPath {
 }
 
 pub(crate) fn setup_apis(grants: &[&str]) -> ApiFixture {
-  let rt = Runtime::new().unwrap();
-  let ctx = Context::full(&rt).unwrap();
+  let (rt, ctx) = new_engine();
   let host = Rc::new(RecordingHost::default());
   let grants = TestGrantHost::new(grants).as_host();
   let logs = Logs::new();
   let log = log_sink(&logs);
   let (lifecycle, dialogs) = ctx.with(|ctx| {
     let inu = get_api_globals(&ctx);
-    crate::api::error::install_plugin_error(&ctx).unwrap();
     let lifecycle =
       crate::api::lifecycle::install_lifecycle(&ctx, grants.clone(), Lifecycle::new(), log.clone(), &inu).unwrap();
     crate::api::io::kv::install_kv(&ctx, host.kv_file.0.clone(), grants.clone(), &inu).unwrap();

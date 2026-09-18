@@ -135,28 +135,39 @@ struct Entry {
 }
 
 impl Entry {
+  fn of_parts(
+    is_file: bool,
+    is_dir: bool,
+    len: u64,
+    modified: Option<std::time::SystemTime>,
+    ctime: i64,
+    ctime_nsec: i64,
+  ) -> Entry {
+    let mtime = system_time_millis(modified);
+    Entry {
+      is_file,
+      is_dir,
+      len,
+      mtime,
+      ctime: unix_ctime_millis(ctime, ctime_nsec).unwrap_or(mtime),
+    }
+  }
+
   fn of_ambient(meta: &fs::Metadata) -> Entry {
     use std::os::unix::fs::MetadataExt;
-    let mtime = system_time_millis(meta.modified().ok());
-    Entry {
-      is_file: meta.is_file(),
-      is_dir: meta.is_dir(),
-      len: meta.len(),
-      mtime,
-      ctime: unix_ctime_millis(meta.ctime(), meta.ctime_nsec()).unwrap_or(mtime),
-    }
+    Entry::of_parts(meta.is_file(), meta.is_dir(), meta.len(), meta.modified().ok(), meta.ctime(), meta.ctime_nsec())
   }
 
   fn of_confined(meta: &cap_std::fs::Metadata) -> Entry {
     use cap_std::fs::MetadataExt;
-    let mtime = system_time_millis(meta.modified().ok().map(|time| time.into_std()));
-    Entry {
-      is_file: meta.is_file(),
-      is_dir: meta.is_dir(),
-      len: meta.len(),
-      mtime,
-      ctime: unix_ctime_millis(meta.ctime(), meta.ctime_nsec()).unwrap_or(mtime),
-    }
+    Entry::of_parts(
+      meta.is_file(),
+      meta.is_dir(),
+      meta.len(),
+      meta.modified().ok().map(|time| time.into_std()),
+      meta.ctime(),
+      meta.ctime_nsec(),
+    )
   }
 }
 
@@ -405,19 +416,13 @@ impl FsState {
       };
       return Ok(Source::Bytes(bytes.to_vec()));
     }
-    if let Some(export) = self.blob_export(value) {
+    if let Some(export) = self.blobs.resolve_export_of(value) {
       return Ok(Source::Blob(export));
     }
     if rquickjs::Class::<crate::api::io::blob::BlobHandle>::from_value(value).is_ok() {
       return Err(Fault::Gone("fs: the blob being written was disposed".to_string()));
     }
     Err(Fault::Invalid("fs: expected a Blob or a Uint8Array".to_string()))
-  }
-
-  fn blob_export(&self, value: &Value<'_>) -> Option<BlobExport> {
-    let wire = self.blobs.export_for_host(value)?;
-    let id = wire.strip_prefix('B')?.split(':').next()?.parse().ok()?;
-    self.blobs.resolve_export(id)
   }
 
   fn op_read<'js>(&self, ctx: &Ctx<'js>, input: &str) -> FsResult<Value<'js>> {
@@ -775,14 +780,7 @@ fn open_storage(root: &Path, unscoped: bool) -> Storage {
 
 impl FsState {
   fn install_android_dirs<'js>(self: &Rc<Self>, ctx: &Ctx<'js>, globals: &crate::api::Globals<'js>) -> JsResult<()> {
-    let android: Object = match globals.inu.get::<_, Object>("android") {
-      Ok(o) => o,
-      Err(_) => {
-        let o = Object::new(ctx.clone())?;
-        globals.inu.set("android", o.clone())?;
-        o
-      }
-    };
+    let android = globals.get_namespace(ctx, "android")?;
 
     for (name, index) in [("getPluginsDir", 0usize), ("getCacheDir", 1)] {
       let state = self.clone();

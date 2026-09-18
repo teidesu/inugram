@@ -1,9 +1,9 @@
 use std::cell::RefCell;
 use std::rc::Rc;
 
-use rquickjs::{Ctx, Function, Persistent, Value};
+use rquickjs::{Ctx, Function, Persistent};
 
-use crate::api::error::format_exception;
+use crate::api::error::call_callback;
 use crate::api::timers::monotonic_now_ms;
 
 pub const PROGRESS_INTERVAL_MS: u64 = 100;
@@ -117,13 +117,7 @@ impl ProgressReporter {
     let Some(callback) = saved.and_then(|p| p.restore(ctx).ok()) else {
       return;
     };
-    match callback.call::<_, Value>((loaded as f64, total as f64)) {
-      Ok(_) => {}
-      Err(rquickjs::Error::Exception) => {
-        (self.log)(&crate::fault(format_args!("onProgress callback threw: {}", format_exception(ctx))));
-      }
-      Err(e) => (self.log)(&format!("onProgress callback failed: {e:?}")),
-    }
+    call_callback(ctx, &self.log, "onProgress callback", &callback, (loaded as f64, total as f64));
   }
 }
 

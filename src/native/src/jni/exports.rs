@@ -2,21 +2,23 @@ use jni::objects::{JByteArray, JClass, JObject, JObjectArray, JString};
 use jni::strings::JNIString;
 use jni::sys::{jboolean, jclass, jint, jlong, jobject, jstring};
 use jni::EnvUnowned;
-use rquickjs::{Coerced, Context, Object, Persistent, Result as JsResult, Runtime, Value};
+use rquickjs::{Coerced, Context, Ctx, Object, Persistent, Result as JsResult, Runtime, Value};
 use std::path::{Path, PathBuf};
 use std::rc::Rc;
 use std::sync::Arc;
 use std::time::Duration;
 
 use super::bridge::JniBridge;
-use super::env::{in_env, jstring_to_string, read_header, read_string_array};
+use super::env::{in_env, jstring_to_string, new_jstring_raw, read_header, read_string_array};
 use super::log::{install_console, make_log};
 use super::{
   engine_jvm_refs, enter_engine, get_engine, insert_engine, remove_engine, stop_engine_callbacks, try_enter_engine,
   CallerEntry, Engine, EntryError,
 };
 use crate::api::canvas::{self, install_canvas, CanvasHost};
-use crate::api::error::{dispose_rejection_tracker, format_exception, install_plugin_error, install_rejection_tracker};
+use crate::api::error::{
+  describe_js_error, dispose_rejection_tracker, install_plugin_error, install_rejection_tracker,
+};
 use crate::api::globals::{install_globals, RandomHost};
 use crate::api::info::{install_inu, InuInfo};
 use crate::api::io::blob::BlobState;
@@ -115,121 +117,90 @@ pub extern "system" fn Java_desu_inugram_helpers_plugins_QuickJs_nativeCreate(
         None
       };
 
-      let lifecycle_state = ctx
-        .with(|ctx| {
-          let globals = Globals::get(&ctx)?;
-          install_lifecycle(&ctx, grants.clone(), lifecycle.clone(), log.clone(), &globals)
-        })
-        .map_err(|e| log(&format!("inu.onUnload failed to install: {e:?}")))
-        .ok()?;
-      let dialogs = ctx
-        .with(|ctx| {
-          let globals = Globals::get(&ctx)?;
-          install_kv(&ctx, kv_path.clone(), grants.clone(), &globals)?;
-          install_clipboard(&ctx, bridge.clone(), grants.clone(), &globals)?;
-          install_open_url(&ctx, bridge.clone(), grants.clone(), &globals)?;
-          install_dialogs(&ctx, bridge.clone(), jvm.clone(), log.clone(), &globals)
-        })
-        .map_err(|e| log(&format!("inu.kv/inu.ui failed to install: {e:?}")))
-        .ok()?;
+      let lifecycle_state = install_part(&ctx, "inu.onUnload", log.as_ref(), |ctx| {
+        let globals = Globals::get(&ctx)?;
+        install_lifecycle(&ctx, grants.clone(), lifecycle.clone(), log.clone(), &globals)
+      })?;
+      let dialogs = install_part(&ctx, "inu.kv/inu.ui", log.as_ref(), |ctx| {
+        let globals = Globals::get(&ctx)?;
+        install_kv(&ctx, kv_path.clone(), grants.clone(), &globals)?;
+        install_clipboard(&ctx, bridge.clone(), grants.clone(), &globals)?;
+        install_open_url(&ctx, bridge.clone(), grants.clone(), &globals)?;
+        install_dialogs(&ctx, bridge.clone(), jvm.clone(), log.clone(), &globals)
+      })?;
       let account_host: Rc<dyn AccountHost> = bridge.clone();
-      let account = ctx
-        .with(|ctx| {
-          let globals = Globals::get(&ctx)?;
-          install_account(&ctx, account_host, grants.clone(), lifecycle.clone(), log.clone(), &globals)
-        })
-        .map_err(|e| log(&format!("inu.account failed to install: {e:?}")))
-        .ok()?;
+      let account = install_part(&ctx, "inu.account", log.as_ref(), |ctx| {
+        let globals = Globals::get(&ctx)?;
+        install_account(&ctx, account_host, grants.clone(), lifecycle.clone(), log.clone(), &globals)
+      })?;
       let ui_host: Rc<dyn UiHost> = bridge.clone();
-      let ui = ctx
-        .with(|ctx| {
-          let globals = Globals::get(&ctx)?;
-          install_ui(&ctx, ui_host, lifecycle.clone(), log.clone(), jvm.clone(), &globals)
-        })
-        .map_err(|e| log(&format!("inu.ui pages failed to install: {e:?}")))
-        .ok()?;
+      let ui = install_part(&ctx, "inu.ui pages", log.as_ref(), |ctx| {
+        let globals = Globals::get(&ctx)?;
+        install_ui(&ctx, ui_host, lifecycle.clone(), log.clone(), jvm.clone(), &globals)
+      })?;
       let icon_host: Rc<dyn IconHost> = bridge.clone();
-      ctx
-        .with(|ctx| {
-          let globals = Globals::get(&ctx)?;
-          install_icons(&ctx, icon_host, jvm.clone(), &globals)
-        })
-        .map_err(|e| log(&format!("inu.icons failed to install: {e:?}")))
-        .ok()?;
+      install_part(&ctx, "inu.icons", log.as_ref(), |ctx| {
+        let globals = Globals::get(&ctx)?;
+        install_icons(&ctx, icon_host, jvm.clone(), &globals)
+      })?;
       let action_host: Rc<dyn ActionHost> = bridge.clone();
-      let actions = ctx
-        .with(|ctx| {
-          let globals = Globals::get(&ctx)?;
-          install_actions(
-            &ctx,
-            action_host,
-            lifecycle.clone(),
-            Some(account.clone()),
-            grants.clone(),
-            jvm.clone(),
-            log.clone(),
-            &globals,
-          )
-        })
-        .map_err(|e| log(&format!("inu.register*Action failed to install: {e:?}")))
-        .ok()?;
+      let actions = install_part(&ctx, "inu.register*Action", log.as_ref(), |ctx| {
+        let globals = Globals::get(&ctx)?;
+        install_actions(
+          &ctx,
+          action_host,
+          lifecycle.clone(),
+          Some(account.clone()),
+          grants.clone(),
+          jvm.clone(),
+          log.clone(),
+          &globals,
+        )
+      })?;
       let screen_host: Rc<dyn ScreenHost> = bridge.clone();
-      let screens = ctx
-        .with(|ctx| {
-          let globals = Globals::get(&ctx)?;
-          install_screens(
-            &ctx,
-            screen_host,
-            grants.clone(),
-            Some(account.clone()),
-            lifecycle.clone(),
-            log.clone(),
-            &globals,
-          )
-        })
-        .map_err(|e| log(&format!("inu.ui navigation failed to install: {e:?}")))
-        .ok()?;
+      let screens = install_part(&ctx, "inu.ui navigation", log.as_ref(), |ctx| {
+        let globals = Globals::get(&ctx)?;
+        install_screens(
+          &ctx,
+          screen_host,
+          grants.clone(),
+          Some(account.clone()),
+          lifecycle.clone(),
+          log.clone(),
+          &globals,
+        )
+      })?;
       let notification_host: Rc<dyn NotificationHost> = bridge.clone();
-      let notifications = ctx
-        .with(|ctx| {
-          let globals = Globals::get(&ctx)?;
-          install_notifications(&ctx, notification_host, grants.clone(), lifecycle.clone(), log.clone(), &globals)
-        })
-        .map_err(|e| log(&format!("inu.android.addNotificationCenterDelegate failed to install: {e:?}")))
-        .ok()?;
+      let notifications = install_part(&ctx, "inu.android.addNotificationCenterDelegate", log.as_ref(), |ctx| {
+        let globals = Globals::get(&ctx)?;
+        install_notifications(&ctx, notification_host, grants.clone(), lifecycle.clone(), log.clone(), &globals)
+      })?;
       let random_host: Rc<dyn RandomHost> = bridge.clone();
       let external = ExternalMemory::new();
-      let blobs = ctx
-        .with(|ctx| install_globals(&ctx, random_host, &spill_dir, external.clone()))
-        .map_err(|e| log(&format!("sandbox globals failed to install: {e:?}")))
-        .ok()?;
+      let blobs = install_part(&ctx, "sandbox globals", log.as_ref(), |ctx| {
+        install_globals(&ctx, random_host, &spill_dir, external.clone())
+      })?;
       let canvas_host: Rc<dyn CanvasHost> = bridge.clone();
-      let canvas = ctx
-        .with(|ctx| {
-          let globals = Globals::get(&ctx)?;
-          install_canvas(&ctx, canvas_host, blobs.clone(), external.clone(), spill_dir.clone(), log.clone(), &globals)
-        })
-        .map_err(|e| log(&format!("inu.canvas failed to install: {e:?}")))
-        .ok()?;
+      let canvas = install_part(&ctx, "inu.canvas", log.as_ref(), |ctx| {
+        let globals = Globals::get(&ctx)?;
+        install_canvas(&ctx, canvas_host, blobs.clone(), external.clone(), spill_dir.clone(), log.clone(), &globals)
+      })?;
       let files_host: Rc<dyn FilesHost> = bridge.clone();
-      let files = ctx
-        .with(|ctx| {
-          let globals = Globals::get(&ctx)?;
-          install_files(
-            &ctx,
-            files_host,
-            blobs.clone(),
-            if transfer_dir.as_os_str().is_empty() { spill_dir.clone() } else { transfer_dir.clone() },
-            log.clone(),
-            &globals,
-          )
-        })
-        .map_err(|e| log(&format!("inu.ui.pickFile failed to install: {e:?}")))
-        .ok()?;
+      let files = install_part(&ctx, "inu.ui.pickFile", log.as_ref(), |ctx| {
+        let globals = Globals::get(&ctx)?;
+        install_files(
+          &ctx,
+          files_host,
+          blobs.clone(),
+          if transfer_dir.as_os_str().is_empty() { spill_dir.clone() } else { transfer_dir.clone() },
+          log.clone(),
+          &globals,
+        )
+      })?;
       let reads_host: Rc<dyn ReadsHost> = bridge.clone();
       let writes_host: Rc<dyn WritesHost> = bridge.clone();
-      let (shared, reads, writes) = ctx
-        .with(|ctx| -> rquickjs::Result<_> {
+      let (shared, reads, writes) =
+        install_part(&ctx, "inu.utils/inu.Message/Account reads+writes", log.as_ref(), |ctx| {
           let globals = Globals::get(&ctx)?;
           let utils_host: Rc<dyn UtilsHost> = bridge.clone();
           let shared = install_utils_with_host(&ctx, utils_host, &globals)?;
@@ -247,22 +218,16 @@ pub extern "system" fn Java_desu_inugram_helpers_plugins_QuickJs_nativeCreate(
           };
           let writes = install_writes(&ctx, deps, &shared, &account, &globals)?;
           Ok((shared_root, reads, writes))
-        })
-        .map_err(|e| log(&format!("inu.utils/inu.Message/Account reads+writes failed to install: {e:?}")))
-        .ok()?;
+        })?;
       let timer_host: Rc<dyn TimerHost> = bridge.clone();
-      let timers = ctx
-        .with(|ctx| install_timers(&ctx, timer_host, lifecycle.clone(), log.clone()))
-        .map_err(|e| log(&format!("timers failed to install: {e:?}")))
-        .ok()?;
+      let timers = install_part(&ctx, "timers", log.as_ref(), |ctx| {
+        install_timers(&ctx, timer_host, lifecycle.clone(), log.clone())
+      })?;
       let fetch_host: Rc<dyn FetchHost> = bridge.clone();
-      let fetch = ctx
-        .with(|ctx| {
-          let globals = Globals::get(&ctx)?;
-          install_fetch(&ctx, fetch_host, grants.clone(), blobs.clone(), log.clone(), &globals)
-        })
-        .map_err(|e| log(&format!("fetch failed to install: {e:?}")))
-        .ok()?;
+      let fetch = install_part(&ctx, "fetch", log.as_ref(), |ctx| {
+        let globals = Globals::get(&ctx)?;
+        install_fetch(&ctx, fetch_host, grants.clone(), blobs.clone(), log.clone(), &globals)
+      })?;
       if install_fs_enabled {
         install_engine_fs(
           &ctx,
@@ -310,6 +275,30 @@ pub extern "system" fn Java_desu_inugram_helpers_plugins_QuickJs_nativeCreate(
   })
 }
 
+/// what a caller-thread hook is given to answer in, engine lease included
+fn hook_budget() -> Duration {
+  Duration::from_millis(xposed::HOOK_BUDGET_MS as u64)
+}
+
+/// every api installs the same way: inside the context, with a failure named and logged
+fn install_part<T>(
+  ctx: &Context,
+  what: &str,
+  log: &dyn Fn(&str),
+  install: impl for<'js> FnOnce(Ctx<'js>) -> JsResult<T>,
+) -> Option<T> {
+  ctx.with(install).map_err(|e| log(&format!("{what} failed to install: {e:?}"))).ok()
+}
+
+/// the ordinary jni entry: the engine's own budget, its lease, and nothing to do without one
+fn with_engine<T>(ptr: jlong, fallback: T, f: impl FnOnce(&Engine) -> T) -> T {
+  let _deadline = arm_entry_deadline();
+  match get_engine(ptr) {
+    Some(engine) => f(&engine),
+    None => fallback,
+  }
+}
+
 fn install_engine_jvm(
   ctx: &Context,
   bridge: &Rc<JniBridge>,
@@ -317,22 +306,19 @@ fn install_engine_jvm(
   lifecycle: &Rc<Lifecycle>,
   log: &(dyn Fn(&str) + Send + Sync),
 ) -> Option<Rc<jvm::JvmState>> {
-  ctx
-    .with(|ctx| {
-      let globals = Globals::get(&ctx)?;
-      let reflect: Rc<dyn jvm::JvmReflectHost> = bridge.clone();
-      install_jvm(
-        &ctx,
-        bridge.clone(),
-        Some(reflect),
-        grants,
-        lifecycle.clone(),
-        make_log(bridge.console.clone()),
-        &globals,
-      )
-    })
-    .map_err(|e| log(&format!("inu.jvm failed to install: {e:?}")))
-    .ok()
+  install_part(ctx, "inu.jvm", log, |ctx| {
+    let globals = Globals::get(&ctx)?;
+    let reflect: Rc<dyn jvm::JvmReflectHost> = bridge.clone();
+    install_jvm(
+      &ctx,
+      bridge.clone(),
+      Some(reflect),
+      grants,
+      lifecycle.clone(),
+      make_log(bridge.console.clone()),
+      &globals,
+    )
+  })
 }
 
 fn install_engine_xposed(
@@ -347,13 +333,10 @@ fn install_engine_xposed(
     log("inu.xposed needs inu.jvm, which is not installed");
     return None;
   };
-  ctx
-    .with(|ctx| {
-      let globals = Globals::get(&ctx)?;
-      install_xposed(&ctx, bridge.clone(), grants, lifecycle.clone(), jvm, make_log(bridge.console.clone()), &globals)
-    })
-    .map_err(|e| log(&format!("inu.xposed failed to install: {e:?}")))
-    .ok()
+  install_part(ctx, "inu.xposed", log, |ctx| {
+    let globals = Globals::get(&ctx)?;
+    install_xposed(&ctx, bridge.clone(), grants, lifecycle.clone(), jvm, make_log(bridge.console.clone()), &globals)
+  })
 }
 
 #[no_mangle]
@@ -372,7 +355,7 @@ pub extern "system" fn Java_desu_inugram_helpers_plugins_QuickJs_nativeXposedBef
     let method_wire = jstring_to_string(env, &method_wire);
     let this_wire = jstring_to_string(env, &this_wire);
     let args = read_string_array(env, &args);
-    let Some(engine) = enter_engine(ptr, Some(Duration::from_millis(xposed::HOOK_BUDGET_MS as u64))) else {
+    let Some(engine) = enter_engine(ptr, Some(hook_budget())) else {
       return std::ptr::null_mut();
     };
     if !engine.is_admitting() {
@@ -417,7 +400,7 @@ pub extern "system" fn Java_desu_inugram_helpers_plugins_QuickJs_nativeXposedAft
   in_env(&mut env, std::ptr::null_mut(), |env| {
     let _deadline = arm(xposed::HOOK_BUDGET_MS as u64);
     let result = jstring_to_string(env, &result);
-    let answer = match enter_engine(ptr, Some(Duration::from_millis(xposed::HOOK_BUDGET_MS as u64))) {
+    let answer = match enter_engine(ptr, Some(hook_budget())) {
       Some(engine) => {
         let _caller = CallerEntry::new();
         match engine.xposed.as_ref() {
@@ -427,7 +410,7 @@ pub extern "system" fn Java_desu_inugram_helpers_plugins_QuickJs_nativeXposedAft
       }
       None => xposed::NOT_DISPATCHED.to_string(),
     };
-    env.new_string(answer).map(|j| j.into_raw()).unwrap_or(std::ptr::null_mut())
+    new_jstring_raw(env, answer)
   })
 }
 
@@ -446,14 +429,11 @@ pub extern "system" fn Java_desu_inugram_helpers_plugins_QuickJs_nativeXposedRel
   ptr: jlong,
   dispatch_id: jlong,
 ) {
-  let _deadline = arm_entry_deadline();
-  let Some(engine) = get_engine(ptr) else {
-    return;
-  };
-  let Some(state) = engine.xposed.as_ref() else {
-    return;
-  };
-  state.release_dispatch(&engine.ctx, dispatch_id);
+  with_engine(ptr, (), |engine| {
+    if let Some(state) = engine.xposed.as_ref() {
+      state.release_dispatch(&engine.ctx, dispatch_id);
+    }
+  });
 }
 
 #[no_mangle]
@@ -529,7 +509,7 @@ pub extern "system" fn Java_desu_inugram_helpers_plugins_QuickJs_nativeJvmCallba
   callback_id: jint,
 ) {
   in_env(&mut env, (), |env| {
-    let engine = match try_enter_engine(ptr, Some(Duration::from_millis(xposed::HOOK_BUDGET_MS as u64))) {
+    let engine = match try_enter_engine(ptr, Some(hook_budget())) {
       Ok(engine) => engine,
       Err(EntryError::Busy | EntryError::Closed) => return,
       Err(EntryError::Reentrant) => {
@@ -565,7 +545,7 @@ pub extern "system" fn Java_desu_inugram_helpers_plugins_QuickJs_nativeJvmMethod
   in_env(&mut env, std::ptr::null_mut(), |env| {
     let self_wire = jstring_to_string(env, &self_wire);
     let args = read_string_array(env, &args);
-    let result = match try_enter_engine(ptr, Some(Duration::from_millis(xposed::HOOK_BUDGET_MS as u64))) {
+    let result = match try_enter_engine(ptr, Some(hook_budget())) {
       Ok(engine) if engine.is_admitting() => {
         let _deadline = arm_entry_deadline();
         let _caller = CallerEntry::new();
@@ -578,7 +558,7 @@ pub extern "system" fn Java_desu_inugram_helpers_plugins_QuickJs_nativeJvmMethod
       Err(EntryError::Busy) => "EdefineClass: engine is busy".to_string(),
       Err(EntryError::Reentrant) => "EdefineClass: plugin engine is re-entered".to_string(),
     };
-    env.new_string(result).map(|value| value.into_raw()).unwrap_or(std::ptr::null_mut())
+    new_jstring_raw(env, result)
   })
 }
 
@@ -682,13 +662,10 @@ fn install_engine_fs(
   } else {
     quota_bytes as u64
   };
-  let state = ctx
-    .with(|ctx| {
-      let globals = Globals::get(&ctx)?;
-      install_fs(&ctx, grants, blobs.clone(), dir, quota, unscoped, android_dirs, &globals)
-    })
-    .map_err(|e| log(&format!("inu.fs failed to install: {e:?}")))
-    .ok()?;
+  let state = install_part(ctx, "inu.fs", log, |ctx| {
+    let globals = Globals::get(&ctx)?;
+    install_fs(&ctx, grants, blobs.clone(), dir, quota, unscoped, android_dirs, &globals)
+  })?;
   canvas.attach_fs(state.clone());
   files.attach_fs(state);
   Some(())
@@ -705,12 +682,10 @@ pub extern "system" fn Java_desu_inugram_helpers_plugins_QuickJs_nativeSettle(
   wire: JString,
 ) {
   in_env(&mut env, (), |env| {
-    let _deadline = arm_entry_deadline();
-    let Some(engine) = get_engine(ptr) else {
-      return;
-    };
-    let wire = jstring_to_string(env, &wire);
-    engine.settle(api, request_id, &wire);
+    with_engine(ptr, (), |engine| {
+      let wire = jstring_to_string(env, &wire);
+      engine.settle(api, request_id, &wire);
+    })
   })
 }
 
@@ -724,14 +699,12 @@ pub extern "system" fn Java_desu_inugram_helpers_plugins_QuickJs_nativeSettleByt
   bytes: JByteArray,
 ) {
   in_env(&mut env, (), |env| {
-    let _deadline = arm_entry_deadline();
-    let Some(engine) = get_engine(ptr) else {
-      return;
-    };
-    let Ok(bytes) = env.convert_byte_array(&bytes) else {
-      return;
-    };
-    engine.settle_bytes(api, request_id, &bytes);
+    with_engine(ptr, (), |engine| {
+      let Ok(bytes) = env.convert_byte_array(&bytes) else {
+        return;
+      };
+      engine.settle_bytes(api, request_id, &bytes);
+    })
   })
 }
 
@@ -741,12 +714,7 @@ pub extern "system" fn Java_desu_inugram_helpers_plugins_QuickJs_nativeRunTimers
   _this: JObject,
   ptr: jlong,
 ) {
-  let _deadline = crate::sandbox::limits::arm_entry_deadline();
-  let Some(engine) = get_engine(ptr) else {
-    return;
-  };
-  let state = &engine.timers;
-  state.run_due(&engine._rt, &engine.ctx);
+  with_engine(ptr, (), |engine| engine.timers.run_due(&engine._rt, &engine.ctx));
 }
 
 #[no_mangle]
@@ -756,13 +724,10 @@ pub extern "system" fn Java_desu_inugram_helpers_plugins_QuickJs_nativeAppVisibi
   ptr: jlong,
   visible: jboolean,
 ) {
-  let _deadline = arm_entry_deadline();
-  let Some(engine) = get_engine(ptr) else {
-    return;
-  };
-
-  engine.timers.set_visible(visible);
-  engine.lifecycle_state.app_visibility_changed(&engine._rt, &engine.ctx, visible);
+  with_engine(ptr, (), |engine| {
+    engine.timers.set_visible(visible);
+    engine.lifecycle_state.app_visibility_changed(&engine._rt, &engine.ctx, visible);
+  });
 }
 
 #[no_mangle]
@@ -773,15 +738,10 @@ pub extern "system" fn Java_desu_inugram_helpers_plugins_QuickJs_nativeUiRender(
   page_id: jlong,
 ) -> jstring {
   in_env(&mut env, std::ptr::null_mut(), |env| {
-    let _deadline = crate::sandbox::limits::arm_entry_deadline();
-    let Some(engine) = get_engine(ptr) else {
-      return std::ptr::null_mut();
-    };
-    let state = &engine.ui;
-    match state.render(&engine._rt, &engine.ctx, page_id) {
-      Some(json) => env.new_string(json).map(|j| j.into_raw()).unwrap_or(std::ptr::null_mut()),
+    with_engine(ptr, std::ptr::null_mut(), |engine| match engine.ui.render(&engine._rt, &engine.ctx, page_id) {
+      Some(json) => new_jstring_raw(env, json),
       None => std::ptr::null_mut(),
-    }
+    })
   })
 }
 
@@ -795,13 +755,10 @@ pub extern "system" fn Java_desu_inugram_helpers_plugins_QuickJs_nativeUiEvent(
   arg_json: JString,
 ) {
   in_env(&mut env, (), |env| {
-    let _deadline = crate::sandbox::limits::arm_entry_deadline();
-    let Some(engine) = get_engine(ptr) else {
-      return;
-    };
-    let state = &engine.ui;
-    let arg_json = jstring_to_string(env, &arg_json);
-    state.dispatch_event(&engine._rt, &engine.ctx, page_id, slot as u32, &arg_json);
+    with_engine(ptr, (), |engine| {
+      let arg_json = jstring_to_string(env, &arg_json);
+      engine.ui.dispatch_event(&engine._rt, &engine.ctx, page_id, slot as u32, &arg_json);
+    })
   })
 }
 
@@ -813,12 +770,7 @@ pub extern "system" fn Java_desu_inugram_helpers_plugins_QuickJs_nativeUiMenuCli
   menu_id: jlong,
   slot: jint,
 ) {
-  let _deadline = crate::sandbox::limits::arm_entry_deadline();
-  let Some(engine) = get_engine(ptr) else {
-    return;
-  };
-  let state = &engine.ui;
-  state.dispatch_menu_click(&engine._rt, &engine.ctx, menu_id, slot);
+  with_engine(ptr, (), |engine| engine.ui.dispatch_menu_click(&engine._rt, &engine.ctx, menu_id, slot));
 }
 
 #[no_mangle]
@@ -828,12 +780,7 @@ pub extern "system" fn Java_desu_inugram_helpers_plugins_QuickJs_nativeUiPageClo
   ptr: jlong,
   page_id: jlong,
 ) {
-  let _deadline = crate::sandbox::limits::arm_entry_deadline();
-  let Some(engine) = get_engine(ptr) else {
-    return;
-  };
-  let state = &engine.ui;
-  state.close_page(&engine._rt, &engine.ctx, page_id);
+  with_engine(ptr, (), |engine| engine.ui.close_page(&engine._rt, &engine.ctx, page_id));
 }
 
 #[no_mangle]
@@ -845,16 +792,13 @@ pub extern "system" fn Java_desu_inugram_helpers_plugins_QuickJs_nativeRenderAct
   surface_json: JString,
 ) -> jstring {
   in_env(&mut env, std::ptr::null_mut(), |env| {
-    let _deadline = crate::sandbox::limits::arm_entry_deadline();
-    let Some(engine) = get_engine(ptr) else {
-      return std::ptr::null_mut();
-    };
-    let state = &engine.actions;
-    let surface_json = jstring_to_string(env, &surface_json);
-    match state.render(&engine._rt, &engine.ctx, kind, &surface_json) {
-      Some(json) => env.new_string(json).map(|j| j.into_raw()).unwrap_or(std::ptr::null_mut()),
-      None => std::ptr::null_mut(),
-    }
+    with_engine(ptr, std::ptr::null_mut(), |engine| {
+      let surface_json = jstring_to_string(env, &surface_json);
+      match engine.actions.render(&engine._rt, &engine.ctx, kind, &surface_json) {
+        Some(json) => new_jstring_raw(env, json),
+        None => std::ptr::null_mut(),
+      }
+    })
   })
 }
 
@@ -868,13 +812,10 @@ pub extern "system" fn Java_desu_inugram_helpers_plugins_QuickJs_nativeDispatchA
   surface_json: JString,
 ) {
   in_env(&mut env, (), |env| {
-    let _deadline = crate::sandbox::limits::arm_entry_deadline();
-    let Some(engine) = get_engine(ptr) else {
-      return;
-    };
-    let state = &engine.actions;
-    let surface_json = jstring_to_string(env, &surface_json);
-    state.dispatch(&engine._rt, &engine.ctx, kind, token as u32, &surface_json);
+    with_engine(ptr, (), |engine| {
+      let surface_json = jstring_to_string(env, &surface_json);
+      engine.actions.dispatch(&engine._rt, &engine.ctx, kind, token as u32, &surface_json);
+    })
   })
 }
 
@@ -887,14 +828,11 @@ pub extern "system" fn Java_desu_inugram_helpers_plugins_QuickJs_nativeDispatchS
   stack_json: JString,
 ) {
   in_env(&mut env, (), |env| {
-    let _deadline = crate::sandbox::limits::arm_entry_deadline();
-    let Some(engine) = get_engine(ptr) else {
-      return;
-    };
-    let state = &engine.screens;
-    let change_json = jstring_to_string(env, &change_json);
-    let stack_json = jstring_to_string(env, &stack_json);
-    state.dispatch_change(&engine._rt, &engine.ctx, &change_json, &stack_json);
+    with_engine(ptr, (), |engine| {
+      let change_json = jstring_to_string(env, &change_json);
+      let stack_json = jstring_to_string(env, &stack_json);
+      engine.screens.dispatch_change(&engine._rt, &engine.ctx, &change_json, &stack_json);
+    })
   })
 }
 
@@ -909,14 +847,13 @@ pub extern "system" fn Java_desu_inugram_helpers_plugins_QuickJs_nativeDispatchN
   args_json: JString,
 ) {
   in_env(&mut env, (), |env| {
-    let _deadline = crate::sandbox::limits::arm_entry_deadline();
-    let Some(engine) = get_engine(ptr) else {
-      return;
-    };
-    let state = &engine.notifications;
-    let name = jstring_to_string(env, &name);
-    let args_json = jstring_to_string(env, &args_json);
-    state.dispatch(&engine._rt, &engine.ctx, callback_id as u32, &name, account, &args_json);
+    with_engine(ptr, (), |engine| {
+      let name = jstring_to_string(env, &name);
+      let args_json = jstring_to_string(env, &args_json);
+      engine
+        .notifications
+        .dispatch(&engine._rt, &engine.ctx, callback_id as u32, &name, account, &args_json);
+    })
   })
 }
 
@@ -926,14 +863,12 @@ pub extern "system" fn Java_desu_inugram_helpers_plugins_QuickJs_nativeNotifyUnl
   _this: JObject,
   ptr: jlong,
 ) {
-  let _deadline = arm_entry_deadline();
-  let Some(engine) = get_engine(ptr) else {
-    return;
-  };
-  engine.lifecycle.begin_unload();
-  engine.account.notify_unload(&engine._rt, &engine.ctx);
-  engine.lifecycle_state.notify_unload(&engine._rt, &engine.ctx);
-  engine.timers.notify_unload(&engine.ctx);
+  with_engine(ptr, (), |engine| {
+    engine.lifecycle.begin_unload();
+    engine.account.notify_unload(&engine._rt, &engine.ctx);
+    engine.lifecycle_state.notify_unload(&engine._rt, &engine.ctx);
+    engine.timers.notify_unload(&engine.ctx);
+  });
 }
 
 #[no_mangle]
@@ -957,12 +892,7 @@ pub extern "system" fn Java_desu_inugram_helpers_plugins_QuickJs_nativeAccountsC
   _this: JObject,
   ptr: jlong,
 ) {
-  let _deadline = crate::sandbox::limits::arm_entry_deadline();
-  let Some(engine) = get_engine(ptr) else {
-    return;
-  };
-  let state = &engine.account;
-  state.accounts_changed(&engine._rt, &engine.ctx);
+  with_engine(ptr, (), |engine| engine.account.accounts_changed(&engine._rt, &engine.ctx));
 }
 
 fn install_engine_rpc(
@@ -977,25 +907,21 @@ fn install_engine_rpc(
 ) -> Option<Rc<crate::api::telegram::rpc::RpcState>> {
   let host: Rc<dyn RpcHost> = bridge.clone();
   let tl = views.clone();
-  ctx
-    .with(|ctx| {
-      let globals = Globals::get(&ctx)?;
-      let shared = shared.clone().restore(&ctx)?;
-      let rpc = crate::api::telegram::rpc::install_rpc(
-        &ctx,
-        host,
-        tl,
-        grants,
-        lifecycle.clone(),
-        Some(account.clone()),
-        shared,
-        make_log(bridge.console.clone()),
-        &globals,
-      )?;
-      Ok::<_, rquickjs::Error>(rpc)
-    })
-    .map_err(|e| log(&format!("inu.interceptRpc/onUpdate failed to install: {e:?}")))
-    .ok()
+  install_part(ctx, "inu.interceptRpc/onUpdate", log, |ctx| {
+    let globals = Globals::get(&ctx)?;
+    let shared = shared.clone().restore(&ctx)?;
+    crate::api::telegram::rpc::install_rpc(
+      &ctx,
+      host,
+      tl,
+      grants,
+      lifecycle.clone(),
+      Some(account.clone()),
+      shared,
+      make_log(bridge.console.clone()),
+      &globals,
+    )
+  })
 }
 
 #[no_mangle]
@@ -1010,14 +936,19 @@ pub extern "system" fn Java_desu_inugram_helpers_plugins_QuickJs_nativeDispatchR
   request_wire: JString,
 ) {
   in_env(&mut env, (), |env| {
-    let _deadline = crate::sandbox::limits::arm_entry_deadline();
-    let Some(engine) = get_engine(ptr) else {
-      return;
-    };
-    let state = &engine.rpc;
-    let method = jstring_to_string(env, &method);
-    let request_wire = jstring_to_string(env, &request_wire);
-    state.dispatch(&engine._rt, &engine.ctx, callback_id as u32, dispatch_id, &method, account_id, &request_wire);
+    with_engine(ptr, (), |engine| {
+      let method = jstring_to_string(env, &method);
+      let request_wire = jstring_to_string(env, &request_wire);
+      engine.rpc.dispatch(
+        &engine._rt,
+        &engine.ctx,
+        callback_id as u32,
+        dispatch_id,
+        &method,
+        account_id,
+        &request_wire,
+      );
+    })
   })
 }
 
@@ -1030,13 +961,10 @@ pub extern "system" fn Java_desu_inugram_helpers_plugins_QuickJs_nativeCompleteN
   result_wire: JString,
 ) {
   in_env(&mut env, (), |env| {
-    let _deadline = crate::sandbox::limits::arm_entry_deadline();
-    let Some(engine) = get_engine(ptr) else {
-      return;
-    };
-    let state = &engine.rpc;
-    let result_wire = jstring_to_string(env, &result_wire);
-    state.complete_next(&engine._rt, &engine.ctx, dispatch_id, &result_wire);
+    with_engine(ptr, (), |engine| {
+      let result_wire = jstring_to_string(env, &result_wire);
+      engine.rpc.complete_next(&engine._rt, &engine.ctx, dispatch_id, &result_wire);
+    })
   })
 }
 
@@ -1049,13 +977,10 @@ pub extern "system" fn Java_desu_inugram_helpers_plugins_QuickJs_nativeAbandonDi
   reason_wire: JString,
 ) {
   in_env(&mut env, (), |env| {
-    let _deadline = crate::sandbox::limits::arm_entry_deadline();
-    let Some(engine) = get_engine(ptr) else {
-      return;
-    };
-    let state = &engine.rpc;
-    let reason_wire = jstring_to_string(env, &reason_wire);
-    state.abandon_dispatch(&engine._rt, &engine.ctx, dispatch_id, &reason_wire);
+    with_engine(ptr, (), |engine| {
+      let reason_wire = jstring_to_string(env, &reason_wire);
+      engine.rpc.abandon_dispatch(&engine._rt, &engine.ctx, dispatch_id, &reason_wire);
+    })
   })
 }
 
@@ -1068,12 +993,7 @@ pub extern "system" fn Java_desu_inugram_helpers_plugins_QuickJs_nativeWriteProg
   loaded: jlong,
   total: jlong,
 ) {
-  let _deadline = crate::sandbox::limits::arm_entry_deadline();
-  let Some(engine) = get_engine(ptr) else {
-    return;
-  };
-  let state = &engine.writes;
-  state.report_progress(&engine._rt, &engine.ctx, request_id, loaded, total);
+  with_engine(ptr, (), |engine| engine.writes.report_progress(&engine._rt, &engine.ctx, request_id, loaded, total));
 }
 
 #[no_mangle]
@@ -1086,14 +1006,11 @@ pub extern "system" fn Java_desu_inugram_helpers_plugins_QuickJs_nativeDispatchU
   update_wire: JString,
 ) {
   in_env(&mut env, (), |env| {
-    let _deadline = crate::sandbox::limits::arm_entry_deadline();
-    let Some(engine) = get_engine(ptr) else {
-      return;
-    };
-    let state = &engine.rpc;
-    let type_name = jstring_to_string(env, &type_name);
-    let update_wire = jstring_to_string(env, &update_wire);
-    state.dispatch_update(&engine._rt, &engine.ctx, &type_name, account_id, &update_wire);
+    with_engine(ptr, (), |engine| {
+      let type_name = jstring_to_string(env, &type_name);
+      let update_wire = jstring_to_string(env, &update_wire);
+      engine.rpc.dispatch_update(&engine._rt, &engine.ctx, &type_name, account_id, &update_wire);
+    })
   })
 }
 
@@ -1109,22 +1026,19 @@ pub extern "system" fn Java_desu_inugram_helpers_plugins_QuickJs_nativeDispatchU
   update_wire: JString,
 ) {
   in_env(&mut env, (), |env| {
-    let _deadline = crate::sandbox::limits::arm_entry_deadline();
-    let Some(engine) = get_engine(ptr) else {
-      return;
-    };
-    let state = &engine.rpc;
-    let type_name = jstring_to_string(env, &type_name);
-    let update_wire = jstring_to_string(env, &update_wire);
-    state.dispatch_update_intercept(
-      &engine._rt,
-      &engine.ctx,
-      callback_id as u32,
-      dispatch_id,
-      &type_name,
-      account_id,
-      &update_wire,
-    );
+    with_engine(ptr, (), |engine| {
+      let type_name = jstring_to_string(env, &type_name);
+      let update_wire = jstring_to_string(env, &update_wire);
+      engine.rpc.dispatch_update_intercept(
+        &engine._rt,
+        &engine.ctx,
+        callback_id as u32,
+        dispatch_id,
+        &type_name,
+        account_id,
+        &update_wire,
+      );
+    })
   })
 }
 
@@ -1137,13 +1051,10 @@ pub extern "system" fn Java_desu_inugram_helpers_plugins_QuickJs_nativeAbandonUp
   reason_wire: JString,
 ) {
   in_env(&mut env, (), |env| {
-    let _deadline = crate::sandbox::limits::arm_entry_deadline();
-    let Some(engine) = get_engine(ptr) else {
-      return;
-    };
-    let state = &engine.rpc;
-    let reason_wire = jstring_to_string(env, &reason_wire);
-    state.abandon_update_dispatch(&engine._rt, &engine.ctx, dispatch_id, &reason_wire);
+    with_engine(ptr, (), |engine| {
+      let reason_wire = jstring_to_string(env, &reason_wire);
+      engine.rpc.abandon_update_dispatch(&engine._rt, &engine.ctx, dispatch_id, &reason_wire);
+    })
   })
 }
 
@@ -1161,22 +1072,20 @@ pub extern "system" fn Java_desu_inugram_helpers_plugins_QuickJs_nativeInstallIn
   header_values: JObjectArray<'local, JString<'local>>,
 ) {
   in_env(&mut env, (), |env| {
-    let _deadline = arm_entry_deadline();
-    let Some(engine) = get_engine(ptr) else {
-      return;
-    };
-    let info = Arc::new(InuInfo {
-      app_version: jstring_to_string(env, &app_version),
-      app_build: jstring_to_string(env, &app_build),
-      api_version,
-      layer,
-      language: jstring_to_string(env, &language),
-      header: read_header(env, &header_keys, &header_values),
-    });
-    let _ = engine.ctx.with(|ctx| {
-      let globals = Globals::get(&ctx)?;
-      install_inu(&ctx, info, &globals)
-    });
+    with_engine(ptr, (), |engine| {
+      let info = Arc::new(InuInfo {
+        app_version: jstring_to_string(env, &app_version),
+        app_build: jstring_to_string(env, &app_build),
+        api_version,
+        layer,
+        language: jstring_to_string(env, &language),
+        header: read_header(env, &header_keys, &header_values),
+      });
+      let _ = engine.ctx.with(|ctx| {
+        let globals = Globals::get(&ctx)?;
+        install_inu(&ctx, info, &globals)
+      });
+    })
   })
 }
 
@@ -1204,15 +1113,14 @@ pub extern "system" fn Java_desu_inugram_helpers_plugins_QuickJs_nativeEvaluate(
           use rquickjs::FromJs;
           Ok(Coerced::<String>::from_js(&ctx, v).map(|c| c.0).unwrap_or_default())
         }
-        Err(rquickjs::Error::Exception) => Err(format_exception(&ctx)),
-        Err(e) => Err(e.to_string()),
+        Err(e) => Err(describe_js_error(&ctx, e)),
       }
     });
 
     engine.pump();
 
     match result {
-      Ok(s) => env.new_string(s).map(|j| j.into_raw()).unwrap_or(std::ptr::null_mut()),
+      Ok(s) => new_jstring_raw(env, s),
       Err(msg) => {
         let _ = env.throw_new(JNIString::from("java/lang/RuntimeException"), JNIString::from(msg));
         std::ptr::null_mut()

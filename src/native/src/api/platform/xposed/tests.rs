@@ -1,4 +1,5 @@
 use super::*;
+use crate::api::error::format_exception;
 use crate::api::platform::jvm::tests::testing::OracleJvmHost;
 use std::cell::{Cell, RefCell};
 
@@ -102,8 +103,7 @@ struct Fixture {
 }
 
 fn setup(grants: &[&str]) -> Fixture {
-  let rt = Runtime::new().unwrap();
-  let ctx = Context::full(&rt).unwrap();
+  let (rt, ctx) = crate::testing::harness::new_engine();
   let grant_host = crate::sandbox::grants::TestGrantHost::new(grants).as_host();
   let lifecycle = Lifecycle::new();
   let logs = crate::testing::harness::Logs::new();
@@ -112,7 +112,6 @@ fn setup(grants: &[&str]) -> Fixture {
 
   let (state, jvm) = ctx.with(|ctx| {
     let inu = crate::testing::harness::get_api_globals(&ctx);
-    crate::api::error::install_plugin_error(&ctx).unwrap();
     let jvm = crate::api::platform::jvm::install_jvm(
       &ctx,
       OracleJvmHost::new().as_host(),

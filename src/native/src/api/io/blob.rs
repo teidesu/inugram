@@ -18,7 +18,7 @@ use rquickjs::{
 use crate::api::error::{make_plugin_error, PluginErrorCode};
 use crate::sandbox::limits::{ExternalCharge, ExternalMemory, EXTERNAL_LIMIT_BYTES, HEAP_LIMIT_BYTES};
 use crate::utils::arguments::{array_values, opt};
-use crate::utils::shape::{define_getter, define_method};
+use crate::utils::shape::{define_getter, define_method, get_class_prototype};
 
 pub const SPILL_THRESHOLD_BYTES: u64 = 2 * 1024 * 1024;
 
@@ -73,10 +73,7 @@ impl BlobState {
     !self.spill_dir.as_os_str().is_empty()
   }
 
-  fn open_spill(self: &Rc<Self>, ctx: &Ctx<'_>) -> Result<SpillFile, BlobFault> {
-    if !self.can_spill() {
-      return Err(BlobFault::Io("this engine has no spill directory".to_string()));
-    }
+  fn reserve_spill_slot(&self, ctx: &Ctx<'_>) -> Result<(), BlobFault> {
     if self.open_spills.get() >= self.limits.spill_files {
       ctx.run_gc();
     }
@@ -90,6 +87,14 @@ impl BlobState {
         ),
       });
     }
+    Ok(())
+  }
+
+  fn open_spill(self: &Rc<Self>, ctx: &Ctx<'_>) -> Result<SpillFile, BlobFault> {
+    if !self.can_spill() {
+      return Err(BlobFault::Io("this engine has no spill directory".to_string()));
+    }
+    self.reserve_spill_slot(ctx)?;
     fs::create_dir_all(&self.spill_dir).map_err(io_fault)?;
     let index = self.next_file.get();
     self.next_file.set(index + 1);
@@ -113,19 +118,7 @@ impl BlobState {
   /// Takes a file the host already wrote as this plugin's spilled content: nothing is copied, the
   /// bytes count against the spill budget like any other, and the file is deleted when the blob is.
   fn adopt_spill(self: &Rc<Self>, ctx: &Ctx<'_>, path: &Path, len: u64) -> Result<SpillFile, BlobFault> {
-    if self.open_spills.get() >= self.limits.spill_files {
-      ctx.run_gc();
-    }
-    if self.open_spills.get() >= self.limits.spill_files {
-      return Err(BlobFault::Quota {
-        usage: self.open_spills.get() as u64 + 1,
-        quota: self.limits.spill_files as u64,
-        message: format!(
-          "this plugin already holds {} blobs too large to keep in memory, which is all the open files it may have; dispose the ones it is done with",
-          self.open_spills.get(),
-        ),
-      });
-    }
+    self.reserve_spill_slot(ctx)?;
     let file = fs::OpenOptions::new().read(true).open(path).map_err(io_fault)?;
     self.open_spills.set(self.open_spills.get() + 1);
     let spill = SpillFile {
@@ -730,23 +723,7 @@ pub fn mint_owned_file<'js>(
     kind: RefCell::new(BackingKind::Spill(spill)),
     len: size,
   });
-  let handle = BlobHandle {
-    backing: RefCell::new(Some(backing)),
-    start: 0,
-    end: size,
-    mime: normalize_mime(mime),
-    owns_backing: true,
-    export_id: Cell::new(None),
-    meta: Some(FileMeta {
-      name: sanitize_name(name),
-      last_modified: mtime_ms as f64,
-    }),
-  };
-  let instance = Class::instance(ctx.clone(), handle)?;
-  if let Some(proto) = file_prototype(ctx)? {
-    instance.as_inner().set_prototype(Some(&proto))?;
-  }
-  Ok(instance.into_value())
+  mint_file(ctx, backing, size, mime, Some(name), mtime_ms)
 }
 
 pub fn mint_app_file<'js>(
@@ -761,6 +738,26 @@ pub fn mint_app_file<'js>(
     kind: RefCell::new(BackingKind::AppFile { path: path.to_path_buf(), mtime_ms }),
     len: size,
   });
+  mint_file(ctx, backing, size, mime, name, mtime_ms)
+}
+
+/// what the host already wrote, as a file whose size it reads off disk itself
+pub fn mint_app_file_at<'js>(ctx: &Ctx<'js>, path: &Path, mime: &str) -> JsResult<Value<'js>> {
+  let (size, mtime) = match fs::metadata(path) {
+    Ok(meta) => (meta.len(), mtime_millis(&meta)),
+    Err(_) => (0, 0),
+  };
+  mint_app_file(ctx, path, size, mime, None, mtime)
+}
+
+fn mint_file<'js>(
+  ctx: &Ctx<'js>,
+  backing: Rc<Backing>,
+  size: u64,
+  mime: &str,
+  name: Option<&str>,
+  mtime_ms: i64,
+) -> JsResult<Value<'js>> {
   let handle = BlobHandle {
     backing: RefCell::new(Some(backing)),
     start: 0,
@@ -823,6 +820,10 @@ impl BlobState {
     Some(format!("B{id}:{}:{}", handle.start, handle.size()))
   }
 
+  pub fn resolve_export_of(&self, value: &Value<'_>) -> Option<BlobExport> {
+    self.resolve_export(export_id_of(&self.export_for_host(value)?)?)
+  }
+
   pub fn resolve_export(&self, id: i64) -> Option<BlobExport> {
     let mut exported = self.exported.borrow_mut();
     let export = exported.get(&id)?;
@@ -836,6 +837,11 @@ impl BlobState {
       end: export.end,
     })
   }
+}
+
+/// the id inside a `B<id>:<start>:<len>` wire [`BlobState::export_for_host`] hands out
+pub(crate) fn export_id_of(wire: &str) -> Option<i64> {
+  wire.strip_prefix('B')?.split(':').next()?.parse().ok()
 }
 
 pub struct BlobExport {
@@ -910,8 +916,7 @@ pub(crate) fn install_with_limits<'js>(
     exported: RefCell::new(HashMap::new()),
   });
 
-  let blob_proto = Class::<BlobHandle>::prototype(ctx)?
-    .ok_or_else(|| Exception::throw_message(ctx, "Blob: the class has no prototype"))?;
+  let blob_proto = get_class_prototype::<BlobHandle>(ctx)?;
   install_blob_members(ctx, &blob_proto)?;
 
   let file_proto = Object::new(ctx.clone())?;

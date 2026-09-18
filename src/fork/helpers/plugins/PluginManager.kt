@@ -210,7 +210,7 @@ object PluginManager {
         PluginStore.persist(plugins)
         notifyChanged()
         if (enabled) {
-            if (isEngineEnabled() && !safeMode) run(plugin)
+            if (mayRun(plugin)) run(plugin)
         } else {
             stop(plugin)
         }
@@ -237,7 +237,7 @@ object PluginManager {
         plugin.source = source
         plugin.manifest = manifest
         notifyChanged()
-        if (plugin.enabled && isEngineEnabled() && !safeMode) run(plugin)
+        if (mayRun(plugin)) run(plugin)
     }
 
     /** the installed plugin [manifest] would replace, or null when it is a plugin of its own */
@@ -274,7 +274,7 @@ object PluginManager {
         PluginStore.persist(plugins)
         republishOrder()
         notifyChanged()
-        if (plugin.enabled && isEngineEnabled() && !safeMode) run(plugin)
+        if (mayRun(plugin)) run(plugin)
         return ImportResult.Installed(plugin, reversible)
     }
 
@@ -315,10 +315,7 @@ object PluginManager {
         stop(plugin) {
             PluginKv.wipe(plugin.id)
             // stop() wiped these already if it was running; this covers the one that never was
-            PluginBlobs.wipe(plugin.id)
-            PluginTransfers.wipe(plugin.id)
-            PluginFetch.wipe(plugin.id)
-            PluginCanvas.wipe(plugin.id)
+            wipeSessionScratch(plugin.id)
             // the one plugin-owned tree meant to outlive its engine, so uninstall is the only thing
             // that ever clears it
             PluginFs.wipe(plugin.id)
@@ -407,7 +404,7 @@ object PluginManager {
     /** plugin queue only */
     private fun start(plugin: Plugin) {
         if (plugin.engine != null) return
-        if (!plugin.enabled || !isEngineEnabled() || safeMode) return
+        if (!mayRun(plugin)) return
         warmTlTables()
         incompatibility(plugin.manifest)?.let {
             fail(plugin, PluginFailure.Site.REFUSED, it)
@@ -471,6 +468,20 @@ object PluginManager {
         }
     }
 
+    /** whether a plugin is allowed to be running right now, which every start path asks in the same terms */
+    private fun mayRun(plugin: Plugin): Boolean = plugin.enabled && isEngineEnabled() && !safeMode
+
+    private fun failUnload(session: PluginSession, e: Throwable) =
+        fail(session, PluginFailure.Site.UNLOAD, e.message ?: e.toString())
+
+    /** exactly the trees an engine owns: the durable ones ([PluginFs], [PluginJvm], [PluginKv]) are uninstall's alone */
+    private fun wipeSessionScratch(installId: String) {
+        PluginBlobs.wipe(installId)
+        PluginTransfers.wipe(installId)
+        PluginFetch.wipe(installId)
+        PluginCanvas.wipe(installId)
+    }
+
     private val CHAIN_OWNERS: List<SessionResource> = listOf(PluginRpc, PluginUpdates)
 
     private val SESSION_RESOURCES: List<SessionResource> = listOf(
@@ -505,10 +516,7 @@ object PluginManager {
         session.tl.releaseAll()
         for (resource in SESSION_RESOURCES) resource.detach(session)
         session.engine.close()
-        PluginBlobs.wipe(session.plugin.id)
-        PluginTransfers.wipe(session.plugin.id)
-        PluginFetch.wipe(session.plugin.id)
-        PluginCanvas.wipe(session.plugin.id)
+        wipeSessionScratch(session.plugin.id)
         beforeClear()
         session.plugin.session = null
         session.settingsPageId = null
@@ -530,7 +538,7 @@ object PluginManager {
                 session.engine.stopCallbacks()
                 session.engine.notifyUnload()
             } catch (e: Throwable) {
-                fail(session, PluginFailure.Site.UNLOAD, e.message ?: e.toString())
+                failUnload(session, e)
                 finish()
                 return@postRunnable
             }
@@ -542,7 +550,7 @@ object PluginManager {
                             return
                         }
                     } catch (e: Throwable) {
-                        fail(session, PluginFailure.Site.UNLOAD, e.message ?: e.toString())
+                        failUnload(session, e)
                     }
                     finish()
                 }

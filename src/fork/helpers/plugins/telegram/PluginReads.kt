@@ -102,7 +102,7 @@ object PluginReads {
     private fun read(session: PluginSession, accountId: Int, op: Int, arg: String): String {
         val handles = session.tl
         val controller = PeerSpecs.controllerFor(accountId)
-            ?: return PluginWire.encodePluginError("not-found", "account read: no account is logged in as #$accountId")
+            ?: return PeerSpecs.noAccountWire("account read", accountId)
         return try {
             when (op) {
                 OP_ME -> mint(handles, UserConfig.getInstance(accountId).getCurrentUser())
@@ -130,6 +130,8 @@ object PluginReads {
                 }
                 else -> PluginWire.encodeError("account read: unknown op $op")
             }
+        } catch (e: PluginRefusal) {
+            e.wire
         } catch (e: Exception) {
             // a LongSparseArray read that raced the app's own writer lands here, and so does a
             // reflection failure inside a mint: neither is a plugin's doing, and neither is worth
@@ -214,7 +216,7 @@ object PluginReads {
     }
 
     /** a channel's messages are numbered per channel; everything else shares one sequence per account */
-    private fun isCommonBox(message: TLRPC.Message): Boolean = (message.peer_id?.channel_id ?: 0L) == 0L
+    private fun isCommonBox(message: TLRPC.Message): Boolean = MessageObject.getChannelId(message) == 0L
 
     /** a fresh `InputPeer`/`InputUser`/`InputChannel` as plain json, never a handle over the whole user or chat behind it */
     private fun inputPeerWire(
@@ -261,7 +263,7 @@ object PluginReads {
         kind: Int,
     ): String? {
         val controller = PeerSpecs.controllerFor(accountId)
-            ?: return PluginWire.encodePluginError("not-found", "resolvePeer: no account is logged in as #$accountId")
+            ?: return PeerSpecs.noAccountWire("resolvePeer", accountId)
         if (spec.isEmpty() || spec[0] != PeerSpecs.SPEC_USERNAME) {
             return PluginWire.encodePluginError(
                 "not-found",
@@ -291,7 +293,7 @@ object PluginReads {
         kind: Int,
         policy: TlFilter.Policy,
     ): String {
-        if (error != null) return PluginWire.encodeRpcError(error.code, error.text ?: "")
+        if (error != null) return encodeRpcErrorWire(error)
         val resolved = response as? TLRPC.TL_contacts_resolvedPeer
             ?: return PluginWire.encodePluginError("not-found", "resolvePeer: nothing resolved for ${PeerSpecs.describeSpec(spec)}")
         // into the app's own caches, so the synchronous half starts answering for this peer too
@@ -317,7 +319,7 @@ object PluginReads {
         cursor: String,
     ): String? {
         val controller = PeerSpecs.controllerFor(accountId)
-            ?: return PluginWire.encodePluginError("not-found", "account fetch: no account is logged in as #$accountId")
+            ?: return PeerSpecs.noAccountWire("account fetch", accountId)
         return try {
             val call = Fetch(session, controller, accountId, requestId, peer, JSONObject(args), cursor)
             when (op) {
@@ -355,7 +357,7 @@ object PluginReads {
         val flags = ConnectionsManager.RequestFlagFailOnServerErrors
         PluginRpc.sendWithoutInterceptors(call.accountId, request, flags) { response, error ->
             answer(call) {
-                if (error != null) PluginWire.encodeRpcError(error.code, error.text ?: "")
+                if (error != null) encodeRpcErrorWire(error)
                 else produce(response)
             }
         }
@@ -396,14 +398,7 @@ object PluginReads {
         val from = Cursor(cursor.split(','))
 
         fun peer(spec: String = this.spec, kind: Int = PeerSpecs.KIND_PEER): TLObject =
-            when (val built = PeerSpecs.buildInputPeer(controller, accountId, spec, kind)) {
-                is PeerSpecs.Built.Missing -> refuse(
-                    "not-found",
-                    "${PeerSpecs.describeSpec(spec)} is not cached; resolve it with resolvePeer() first",
-                )
-                is PeerSpecs.Built.WrongKind -> throw PluginRefusal(PeerSpecs.wrongKind(spec, built.kind))
-                is PeerSpecs.Built.Peer -> built.value
-            }
+            PeerSpecs.requireInputPeer(controller, accountId, spec, kind)
 
         fun cache(users: ArrayList<TLRPC.User>, chats: ArrayList<TLRPC.Chat>) {
             controller.putUsers(users, false)
@@ -439,7 +434,7 @@ object PluginReads {
         val chat = call.controller.getChat(-dialogId) ?: notCached(spec)
         // a basic group has no `InputChannel` and is asked about by its bare id, which is the whole
         // reason this is two rpcs rather than one
-        val request: TLObject = if (chat.broadcast || chat.megagroup) {
+        val request: TLObject = if (ChatObject.isChannel(chat)) {
             TLRPC.TL_channels_getFullChannel().apply {
                 channel = call.peer(kind = PeerSpecs.KIND_CHANNEL) as TLRPC.InputChannel
             }
@@ -638,9 +633,9 @@ object PluginReads {
             val cursor = if (last == null || page !is TLRPC.TL_messages_dialogsSlice || page.dialogs.size < pageLimit) {
                 ""
             } else {
-                val dialogId = peerDialogId(last.peer)
+                val dialogId = DialogObject.getPeerDialogId(last.peer)
                 val date = page.messages.firstOrNull {
-                    it.id == last.top_message && peerDialogId(it.peer_id) == dialogId
+                    it.id == last.top_message && DialogObject.getPeerDialogId(it.peer_id) == dialogId
                 }?.date ?: 0
                 "$date,${last.top_message},$dialogId"
             }
@@ -652,7 +647,7 @@ object PluginReads {
         val spec = call.spec
         val dialogId = PeerSpecs.dialogIdOf(call.controller, call.accountId, spec) ?: notCached(spec)
         val chat = if (dialogId < 0) call.controller.getChat(-dialogId) ?: notCached(spec) else null
-        if (chat == null || !chat.forum) refuse("invalid-argument", "${PeerSpecs.describeSpec(spec)} is not a forum")
+        if (!ChatObject.isForum(chat)) refuse("invalid-argument", "${PeerSpecs.describeSpec(spec)} is not a forum")
         val pageLimit = call.limit
         val request = TL_forum.TL_messages_getForumTopics()
         request.peer = call.peer() as TLRPC.InputPeer
@@ -794,11 +789,4 @@ object PluginReads {
         return out.toString()
     }
 
-    private fun peerDialogId(peer: TLRPC.Peer?): Long = when {
-        peer == null -> 0L
-        peer.user_id != 0L -> peer.user_id
-        peer.chat_id != 0L -> -peer.chat_id
-        peer.channel_id != 0L -> -peer.channel_id
-        else -> 0L
-    }
 }

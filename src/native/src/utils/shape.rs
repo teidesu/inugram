@@ -1,5 +1,6 @@
+use rquickjs::class::JsClass;
 use rquickjs::object::{Accessor, Property};
-use rquickjs::{qjs, Atom, Ctx, Function, Object, Result as JsResult, Value};
+use rquickjs::{qjs, Atom, Class, Ctx, Exception, Function, Object, Result as JsResult, Value};
 
 pub fn define_getter<'js, F, P>(target: &Object<'js>, name: &str, get: F) -> JsResult<()>
 where
@@ -38,4 +39,10 @@ where
   S: rquickjs::function::IntoJsFunc<'js, PS> + 'js,
 {
   target.prop(name, Accessor::new(get, set).enumerable().configurable())
+}
+
+/// the prototype members of a handle class are defined on, named by the class it belongs to
+pub fn get_class_prototype<'js, C: JsClass<'js>>(ctx: &Ctx<'js>) -> JsResult<Object<'js>> {
+  Class::<C>::prototype(ctx)?
+    .ok_or_else(|| Exception::throw_message(ctx, &format!("{}: the class has no prototype", C::NAME)))
 }

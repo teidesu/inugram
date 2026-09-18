@@ -1,5 +1,4 @@
 use super::*;
-use crate::api::error::install_plugin_error;
 use crate::sandbox::grants::TestGrantHost;
 use crate::testing::harness::DisposeOnDrop;
 use std::cell::Cell;
@@ -69,12 +68,10 @@ struct Fixture {
 }
 
 fn setup(grants: &[&str]) -> Fixture {
-  let rt = Runtime::new().unwrap();
-  let ctx = Context::full(&rt).unwrap();
+  let (rt, ctx) = crate::testing::harness::new_engine();
   let host = TestJvmHost::new();
   let state = ctx.with(|ctx| {
     let inu = crate::testing::harness::get_api_globals(&ctx);
-    install_plugin_error(&ctx).unwrap();
     install_jvm(
       &ctx,
       host.as_host(),
@@ -327,12 +324,10 @@ fn a_runnable_made_during_unload_never_fires() {
 
 #[test]
 fn a_throwing_callback_is_the_plugins_fault() {
-  let rt = Runtime::new().unwrap();
-  let ctx = Context::full(&rt).unwrap();
+  let (rt, ctx) = crate::testing::harness::new_engine();
   let logged = crate::testing::harness::Logs::new();
   let state = ctx.with(|ctx| {
     let inu = crate::testing::harness::get_api_globals(&ctx);
-    install_plugin_error(&ctx).unwrap();
     install_jvm(
       &ctx,
       TestJvmHost::new().as_host(),

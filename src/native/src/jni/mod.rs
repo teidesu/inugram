@@ -71,6 +71,11 @@ struct EngineSlot {
 
 static ENGINES: OnceLock<Mutex<SlotMap<EngineKey, EngineSlot>>> = OnceLock::new();
 
+/// the table, once it exists; a poisoned lock is still the table
+fn lock_engines() -> Option<std::sync::MutexGuard<'static, SlotMap<EngineKey, EngineSlot>>> {
+  Some(ENGINES.get()?.lock().unwrap_or_else(|e| e.into_inner()))
+}
+
 pub(crate) fn insert_engine(engine: Engine) -> jlong {
   let jvm_refs = engine.jvm.as_ref().map(|state| state.refs().clone());
   ENGINES
@@ -86,13 +91,7 @@ pub(crate) fn insert_engine(engine: Engine) -> jlong {
 }
 
 pub(crate) fn engine_jvm_refs(handle: jlong) -> Option<Arc<crate::api::platform::jvm::RefTable>> {
-  ENGINES
-    .get()?
-    .lock()
-    .unwrap_or_else(|e| e.into_inner())
-    .get(get_engine_key(handle))?
-    .jvm_refs
-    .clone()
+  lock_engines()?.get(get_engine_key(handle))?.jvm_refs.clone()
 }
 
 fn get_engine(handle: jlong) -> Option<Lease<TransferEngine>> {
@@ -104,17 +103,9 @@ fn enter_engine(handle: jlong, timeout: Option<Duration>) -> Option<Lease<Transf
 }
 
 fn engine_slot(handle: jlong) -> Result<Arc<Serialized<TransferEngine>>, EntryError> {
-  Ok(
-    ENGINES
-      .get()
-      .ok_or(EntryError::Closed)?
-      .lock()
-      .unwrap_or_else(|e| e.into_inner())
-      .get(get_engine_key(handle))
-      .ok_or(EntryError::Closed)?
-      .engine
-      .clone(),
-  )
+  let engines = lock_engines().ok_or(EntryError::Closed)?;
+  let slot = engines.get(get_engine_key(handle)).ok_or(EntryError::Closed)?;
+  Ok(slot.engine.clone())
 }
 
 fn try_enter_engine(handle: jlong, timeout: Option<Duration>) -> Result<Lease<TransferEngine>, EntryError> {
@@ -132,9 +123,9 @@ pub(crate) fn get_engine_key(handle: jlong) -> EngineKey {
 }
 
 pub(crate) fn remove_engine(handle: jlong) -> Option<Engine> {
-  let slot = ENGINES.get()?.lock().unwrap_or_else(|e| e.into_inner()).get(get_engine_key(handle))?.engine.clone();
+  let slot = lock_engines()?.get(get_engine_key(handle))?.engine.clone();
   let engine = slot.close().ok()??;
-  ENGINES.get()?.lock().unwrap_or_else(|e| e.into_inner()).remove(get_engine_key(handle));
+  lock_engines()?.remove(get_engine_key(handle));
   Some(engine.0)
 }
 

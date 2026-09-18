@@ -93,7 +93,7 @@ impl SourceStager {
     let Some(exported) = self.blobs.export_for_host(value) else {
       return PluginErrorCode::HandleExpired.throw(ctx, "this blob has been disposed");
     };
-    let Some(id) = exported.strip_prefix('B').and_then(|v| v.split(':').next()).and_then(|v| v.parse().ok()) else {
+    let Some(id) = crate::api::io::blob::export_id_of(&exported) else {
       return PluginErrorCode::Internal.throw(ctx, "this blob could not be handed over");
     };
     let Some(export) = self.blobs.resolve_export(id) else {

@@ -184,6 +184,18 @@ impl TlViews {
     self.epoch.set(self.epoch.get() + 1);
   }
 
+  /// every element of a `\n`-joined list wire, each read as [`Self::wire_to_js_value`] reads one
+  pub fn wire_to_js_list<'js>(self: &Rc<Self>, ctx: &Ctx<'js>, wire: &str, life: ViewLife) -> JsResult<Array<'js>> {
+    let array = Array::new(ctx.clone())?;
+    if wire.is_empty() {
+      return Ok(array);
+    }
+    for (index, element) in wire.split('\n').enumerate() {
+      array.set(index, self.wire_to_js_value(ctx, element, life)?)?;
+    }
+    Ok(array)
+  }
+
   pub fn wire_to_js_value<'js>(self: &Rc<Self>, ctx: &Ctx<'js>, wire: &str, life: ViewLife) -> JsResult<Value<'js>> {
     if let Some(built) = crate::api::error::wire_error_to_js(ctx, wire) {
       return Err(ctx.throw(built?));
@@ -200,7 +212,7 @@ impl TlViews {
       'H' => {
         let (is_vector, read_only, id, class_id, projection) =
           parse_handle(payload).ok_or_else(|| Exception::throw_message(ctx, "tl wire: bad handle"))?;
-        build_proxy(ctx, self.clone(), is_vector, read_only, life, id, class_id, projection)?.into_js(ctx)
+        build_view(ctx, self.clone(), is_vector, read_only, life, id, class_id, projection)?.into_js(ctx)
       }
       'J' => json_parse_tl(ctx, payload),
       other => throw_tl(ctx, &format!("tl wire: unknown tag '{other}'")),
@@ -490,6 +502,11 @@ pub(crate) fn scalar_wire_to_js<'js>(ctx: &Ctx<'js>, tag: char, payload: &str) -
   })
 }
 
+/// the `Y<base64>` wire a byte string crosses as
+pub fn encode_bytes_wire(bytes: &[u8]) -> String {
+  format!("Y{}", base64::Engine::encode(&STANDARD, bytes))
+}
+
 pub fn js_value_to_wire<'js>(ctx: &Ctx<'js>, value: Value<'js>) -> JsResult<String> {
   if value.is_null() {
     return Ok("N".to_string());
@@ -499,7 +516,7 @@ pub fn js_value_to_wire<'js>(ctx: &Ctx<'js>, value: Value<'js>) -> JsResult<Stri
   }
   if let Ok(typed) = TypedArray::<u8>::from_value(value.clone()) {
     if let Some(bytes) = typed.as_bytes() {
-      return Ok(format!("Y{}", base64::Engine::encode(&STANDARD, bytes)));
+      return Ok(encode_bytes_wire(bytes));
     }
   }
   let json = json_stringify_tl(ctx, value)?;
@@ -521,23 +538,33 @@ fn new_section<'js>(ctx: &Ctx<'js>) -> JsResult<Object<'js>> {
   Object::new_proto(ctx.clone(), None)
 }
 
+fn open_section<'js>(ctx: &Ctx<'js>, section: &RefCell<Option<Object<'js>>>) -> JsResult<Object<'js>> {
+  if let Some(open) = section.borrow().as_ref() {
+    return Ok(open.clone());
+  }
+  let open = new_section(ctx)?;
+  *section.borrow_mut() = Some(open.clone());
+  Ok(open)
+}
+
+fn read_section<'js>(section: &RefCell<Option<Object<'js>>>, key: &str) -> JsResult<Option<Value<'js>>> {
+  let section = section.borrow();
+  let Some(section) = section.as_ref() else {
+    return Ok(None);
+  };
+  if section.contains_key(key)? {
+    return Ok(Some(section.get(key)?));
+  }
+  Ok(None)
+}
+
 impl<'js> HandleBox<'js> {
   fn perm(&self, ctx: &Ctx<'js>) -> JsResult<Object<'js>> {
-    if let Some(perm) = self.perm.borrow().as_ref() {
-      return Ok(perm.clone());
-    }
-    let perm = new_section(ctx)?;
-    *self.perm.borrow_mut() = Some(perm.clone());
-    Ok(perm)
+    open_section(ctx, &self.perm)
   }
 
   fn vol(&self, ctx: &Ctx<'js>) -> JsResult<Object<'js>> {
-    if let Some(vol) = self.vol.borrow().as_ref() {
-      return Ok(vol.clone());
-    }
-    let vol = new_section(ctx)?;
-    *self.vol.borrow_mut() = Some(vol.clone());
-    Ok(vol)
+    open_section(ctx, &self.vol)
   }
 
   /// the names the cache and the wire use for themselves; a TL field is a java identifier and is none of them
@@ -546,25 +573,11 @@ impl<'js> HandleBox<'js> {
   }
 
   fn cached(&self, key: &str) -> JsResult<Option<Value<'js>>> {
-    let vol = self.vol.borrow();
-    let Some(vol) = vol.as_ref() else {
-      return Ok(None);
-    };
-    if vol.contains_key(key)? {
-      return Ok(Some(vol.get(key)?));
-    }
-    Ok(None)
+    read_section(&self.vol, key)
   }
 
   fn cached_perm(&self, key: &str) -> JsResult<Option<Value<'js>>> {
-    let perm = self.perm.borrow();
-    let Some(perm) = perm.as_ref() else {
-      return Ok(None);
-    };
-    if perm.contains_key(key)? {
-      return Ok(Some(perm.get(key)?));
-    }
-    Ok(None)
+    read_section(&self.perm, key)
   }
 
   /// a write anywhere invalidates every value: two views may name the same object
@@ -758,6 +771,13 @@ fn keys_to_array<'js>(ctx: &Ctx<'js>, keys: &str) -> JsResult<Array<'js>> {
   Ok(arr)
 }
 
+fn check_writable<'js>(ctx: &Ctx<'js>, view: &HandleBox<'js>) -> JsResult<()> {
+  if view.read_only {
+    return PluginErrorCode::Forbidden.throw(ctx, READ_ONLY_MESSAGE);
+  }
+  Ok(())
+}
+
 fn box_of<'js>(ctx: &Ctx<'js>, target: &Value<'js>) -> JsResult<Class<'js, HandleBox<'js>>> {
   target
     .as_object()
@@ -812,10 +832,7 @@ fn build_handler<'js>(ctx: &Ctx<'js>) -> JsResult<Object<'js>> {
         if prop.as_symbol().is_some() {
           return throw_tl(&ctx, "tl proxy: cannot set a symbol-keyed property");
         }
-        if view.read_only {
-          let ctx: &Ctx<'js> = &ctx;
-          return PluginErrorCode::Forbidden.throw(ctx, READ_ONLY_MESSAGE);
-        }
+        check_writable(&ctx, &view)?;
         view.assign_property(&ctx, &prop, value)
       },
     )?,
@@ -828,10 +845,7 @@ fn build_handler<'js>(ctx: &Ctx<'js>) -> JsResult<Object<'js>> {
       |ctx: Ctx<'js>, target: Value<'js>, prop: Value<'js>, descriptor: Value<'js>| -> JsResult<bool> {
         let handle = box_of(&ctx, &target)?;
         let view = handle.borrow();
-        if view.read_only {
-          let ctx: &Ctx<'js> = &ctx;
-          return PluginErrorCode::Forbidden.throw(ctx, READ_ONLY_MESSAGE);
-        }
+        check_writable(&ctx, &view)?;
         if prop.as_symbol().is_some() {
           return throw_tl(&ctx, "tl proxy: cannot define a symbol-keyed property");
         }
@@ -865,10 +879,7 @@ fn build_handler<'js>(ctx: &Ctx<'js>) -> JsResult<Object<'js>> {
     Function::new(ctx.clone(), |ctx: Ctx<'js>, target: Value<'js>, prop: Value<'js>| -> JsResult<bool> {
       let handle = box_of(&ctx, &target)?;
       let view = handle.borrow();
-      if view.read_only {
-        let ctx: &Ctx<'js> = &ctx;
-        return PluginErrorCode::Forbidden.throw(ctx, READ_ONLY_MESSAGE);
-      }
+      check_writable(&ctx, &view)?;
       if prop.as_symbol().is_some() {
         return throw_tl(&ctx, "tl proxy: cannot delete a symbol-keyed property");
       }
@@ -917,20 +928,6 @@ fn build_handler<'js>(ctx: &Ctx<'js>) -> JsResult<Object<'js>> {
   )?;
 
   Ok(handler)
-}
-
-#[allow(clippy::too_many_arguments)]
-fn build_proxy<'js>(
-  ctx: &Ctx<'js>,
-  views: Rc<TlViews>,
-  is_vector: bool,
-  read_only: bool,
-  life: ViewLife,
-  handle: i64,
-  class_id: i32,
-  projection: Option<&str>,
-) -> JsResult<Proxy<'js>> {
-  build_view(ctx, views, is_vector, read_only, life, handle, class_id, projection)
 }
 
 #[allow(clippy::too_many_arguments)]

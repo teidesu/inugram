@@ -1,5 +1,6 @@
 package desu.inugram.helpers.plugins.telegram
 
+import desu.inugram.core.plugins.PluginRefusal
 import desu.inugram.core.plugins.PluginWire
 import org.telegram.messenger.DialogObject
 import org.telegram.messenger.MessagesController
@@ -37,7 +38,6 @@ object PeerSpecs {
     const val SPEC_USERNAME = 'U'
 
     fun controllerFor(accountId: Int): MessagesController? {
-        if (accountId < 0 || accountId >= UserConfig.MAX_ACCOUNT_COUNT) return null
         if (!UserConfig.isValidAccount(accountId)) return null
         return MessagesController.getInstance(accountId)
     }
@@ -108,6 +108,21 @@ object PeerSpecs {
             else -> Built.Peer(controller.getInputPeer(id))
         }
     }
+
+    /** the refusal every account surface answers when its slot holds no logged-in account */
+    fun noAccountWire(what: String, accountId: Int): String =
+        PluginWire.encodePluginError("not-found", "$what: no account is logged in as #$accountId")
+
+    /** [buildInputPeer] for a call that has no `null` to answer with: every miss is a refusal, in the terms the plugin wrote the spec in */
+    fun requireInputPeer(controller: MessagesController, accountId: Int, spec: String, kind: Int): TLObject =
+        when (val built = buildInputPeer(controller, accountId, spec, kind)) {
+            is Built.Missing -> PluginWire.refuse(
+                "not-found",
+                "${describeSpec(spec)} is not cached; resolve it with resolvePeer() first",
+            )
+            is Built.WrongKind -> throw PluginRefusal(wrongKind(spec, built.kind))
+            is Built.Peer -> built.value
+        }
 
     fun wrongKind(spec: String, kind: Int): String =
         PluginWire.encodePluginError("invalid-argument", "${describeSpec(spec)} is not ${describeKind(kind)}")

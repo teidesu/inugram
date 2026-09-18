@@ -122,11 +122,7 @@ impl TlHost for TestHost {
     None
   }
   fn tl_set_bytes(&self, handle: i64, key: &str, value: &[u8]) -> Option<String> {
-    self.tl_set(
-      handle,
-      key,
-      &format!("Y{}", base64::Engine::encode(&base64::engine::general_purpose::STANDARD, value)),
-    )
+    self.tl_set(handle, key, &crate::api::tl::proxy::encode_bytes_wire(value))
   }
   fn tl_has(&self, handle: i64, key: &str) -> i32 {
     if handle != TEST_HANDLE {
@@ -185,15 +181,24 @@ fn setup_with_globals(grants: &[&str]) -> (Runtime, Context, Rc<TestHost>, Dispo
 }
 
 fn setup_fixture(grants: &[&str], with_globals: bool) -> LoggingFixture {
+  setup_engine::<TestHost>(grants, with_globals)
+}
+
+/// the engine every suite here runs against, whichever fake stands in for the app: the account api
+/// is installed for every engine, so every dispatch has a handle to hand over, and `installApi`
+/// runs before `installRpc` on a device, which is where the demuxed events find `inu.Message`
+fn setup_engine<H: RpcHost + TlHost + Default + 'static>(
+  grants: &[&str],
+  with_globals: bool,
+) -> (Runtime, Context, Rc<H>, Disposing, std::sync::Arc<crate::testing::harness::Logs>) {
   let rt = Runtime::new().unwrap();
   let ctx = Context::full(&rt).unwrap();
-  let host = Rc::new(TestHost::default());
+  let host = Rc::new(H::default());
   let host_dyn: Rc<dyn RpcHost> = host.clone();
   let tl = TlViews::new(host.clone());
   let grant_host = TestGrantHost::new(grants);
   let logs = crate::testing::harness::Logs::new();
   let log = crate::testing::harness::log_sink(&logs);
-  // the account api is installed for every engine, so every dispatch has a handle to hand over
   let accounts_host: Rc<dyn crate::api::telegram::account::AccountHost> =
     crate::api::telegram::account::tests::TestAccountHost::with(crate::api::telegram::account::tests::TWO_ACCOUNTS);
   let state = ctx.with(|ctx| {
@@ -209,8 +214,6 @@ fn setup_fixture(grants: &[&str], with_globals: bool) -> LoggingFixture {
       )
       .unwrap();
     }
-    // installApi runs before installRpc on a device, and the demuxed events read the
-    // `inu.Message` it leaves behind
     let shared = crate::api::tl::utils::install_utils(&ctx, &inu).unwrap();
     crate::api::tl::message::install_message(&ctx, &shared, &inu).unwrap();
     let accounts = crate::api::telegram::account::install_account(
@@ -231,18 +234,15 @@ fn setup_fixture(grants: &[&str], with_globals: bool) -> LoggingFixture {
 #[test]
 fn middleware_transforms_request_then_passes_through_next_response() {
   let (rt, ctx, host, state) = setup(&["interceptRpc"]);
-  ctx.with(|ctx| {
-    ctx
-      .eval::<(), _>(
-        r#"
+  eval(
+    &ctx,
+    r#"
             inu.interceptRpc('foo.bar', ({ request: req }, next) => {
                 req.x = req.x + 1;
                 return next(req);
             });
             "#,
-      )
-      .unwrap();
-  });
+  );
 
   state.dispatch(&rt, &ctx, 1, 100, "foo.bar", 0, &wire_json(r#"{"_":"foo.bar","x":1}"#));
 
@@ -260,13 +260,10 @@ fn middleware_transforms_request_then_passes_through_next_response() {
 #[test]
 fn next_without_a_request_forwards_the_one_the_middleware_was_handed() {
   let (rt, ctx, host, state) = setup(&["interceptRpc"]);
-  ctx.with(|ctx| {
-    ctx
-      .eval::<(), _>(
-        "inu.interceptRpc('foo.bar', ({ request }, next) => { request.x = request.x + 1; return next(); });",
-      )
-      .unwrap();
-  });
+  eval(
+    &ctx,
+    "inu.interceptRpc('foo.bar', ({ request }, next) => { request.x = request.x + 1; return next(); });",
+  );
 
   state.dispatch(&rt, &ctx, 1, 100, "foo.bar", 0, &wire_json(r#"{"_":"foo.bar","x":1}"#));
 
@@ -276,17 +273,14 @@ fn next_without_a_request_forwards_the_one_the_middleware_was_handed() {
 #[test]
 fn middleware_returns_undefined_without_awaiting_passes_through_next() {
   let (rt, ctx, host, state) = setup(&["interceptRpc"]);
-  ctx.with(|ctx| {
-    ctx
-      .eval::<(), _>(
-        r#"
+  eval(
+    &ctx,
+    r#"
             inu.interceptRpc('foo.bar', ({ request: req }, next) => {
                 next(req);
             });
             "#,
-      )
-      .unwrap();
-  });
+  );
 
   state.dispatch(&rt, &ctx, 1, 500, "foo.bar", 0, &wire_json(r#"{"_":"foo.bar"}"#));
   assert!(host.completes.borrow().is_empty());
@@ -300,17 +294,14 @@ fn middleware_returns_undefined_without_awaiting_passes_through_next() {
 #[test]
 fn short_circuit_without_next() {
   let (rt, ctx, host, state) = setup(&["interceptRpc"]);
-  ctx.with(|ctx| {
-    ctx
-      .eval::<(), _>(
-        r#"
+  eval(
+    &ctx,
+    r#"
             inu.interceptRpc('foo.bar', ({ request: req }, next) => {
                 return { _: 'foo.bar', short: true };
             });
             "#,
-      )
-      .unwrap();
-  });
+  );
 
   state.dispatch(&rt, &ctx, 1, 200, "foo.bar", 0, &wire_json(r#"{"_":"foo.bar"}"#));
 
@@ -323,18 +314,15 @@ fn short_circuit_without_next() {
 #[test]
 fn async_middleware_promise_result() {
   let (rt, ctx, host, state) = setup(&["interceptRpc"]);
-  ctx.with(|ctx| {
-    ctx
-      .eval::<(), _>(
-        r#"
+  eval(
+    &ctx,
+    r#"
             inu.interceptRpc('foo.bar', async ({ request: req }, next) => {
                 await Promise.resolve();
                 return { _: 'foo.bar', async: true };
             });
             "#,
-      )
-      .unwrap();
-  });
+  );
 
   state.dispatch(&rt, &ctx, 1, 300, "foo.bar", 0, &wire_json(r#"{"_":"foo.bar"}"#));
 
@@ -346,18 +334,15 @@ fn async_middleware_promise_result() {
 #[test]
 fn next_called_twice_throws_type_error() {
   let (rt, ctx, host, state) = setup(&["interceptRpc"]);
-  ctx.with(|ctx| {
-    ctx
-      .eval::<(), _>(
-        r#"
+  eval(
+    &ctx,
+    r#"
             inu.interceptRpc('foo.bar', ({ request: req }, next) => {
                 next(req);
                 next(req);
             });
             "#,
-      )
-      .unwrap();
-  });
+  );
 
   state.dispatch(&rt, &ctx, 1, 400, "foo.bar", 0, &wire_json(r#"{"_":"foo.bar"}"#));
 
@@ -371,10 +356,9 @@ fn next_called_twice_throws_type_error() {
 #[test]
 fn abandon_rejects_the_parked_next_with_the_supplied_wire() {
   let (rt, ctx, host, state) = setup(&["interceptRpc"]);
-  ctx.with(|ctx| {
-    ctx
-      .eval::<(), _>(
-        r#"
+  eval(
+    &ctx,
+    r#"
             globalThis.__caught = null;
             inu.interceptRpc('foo.bar', async ({ request: req }, next) => {
                 try { return await next(req); } catch (e) {
@@ -383,9 +367,7 @@ fn abandon_rejects_the_parked_next_with_the_supplied_wire() {
                 }
             });
             "#,
-      )
-      .unwrap();
-  });
+  );
 
   state.dispatch(&rt, &ctx, 1, 950, "foo.bar", 0, &wire_json(r#"{"_":"foo.bar"}"#));
   assert_eq!(host.next_calls.borrow().len(), 1);
@@ -399,18 +381,15 @@ fn abandon_rejects_the_parked_next_with_the_supplied_wire() {
 #[test]
 fn a_middleware_settling_after_abandon_never_completes() {
   let (rt, ctx, host, state, logs) = setup_logging(&["interceptRpc"]);
-  ctx.with(|ctx| {
-    ctx
-      .eval::<(), _>(
-        r#"
+  eval(
+    &ctx,
+    r#"
             inu.interceptRpc('foo.bar', async ({ request: req }, next) => {
                 try { await next(req); } catch (e) {}
                 return { _: 'foo.bar', late: true };
             });
             "#,
-      )
-      .unwrap();
-  });
+  );
 
   state.dispatch(&rt, &ctx, 1, 951, "foo.bar", 0, &wire_json(r#"{"_":"foo.bar"}"#));
   state.abandon_dispatch(&rt, &ctx, 951, "R-1000:INTERCEPTOR_TIMEOUT");
@@ -458,18 +437,15 @@ fn an_update_middleware_rejecting_after_it_was_abandoned_logs_nothing() {
 #[test]
 fn next_after_abandon_throws_timed_out() {
   let (rt, ctx, _host, state) = setup(&["interceptRpc"]);
-  ctx.with(|ctx| {
-    ctx
-      .eval::<(), _>(
-        r#"
+  eval(
+    &ctx,
+    r#"
             inu.interceptRpc('foo.bar', ({ request: req }, next) => {
                 globalThis.__next = next;
                 return new Promise(() => {});
             });
             "#,
-      )
-      .unwrap();
-  });
+  );
 
   state.dispatch(&rt, &ctx, 1, 952, "foo.bar", 0, &wire_json(r#"{"_":"foo.bar"}"#));
   state.abandon_dispatch(&rt, &ctx, 952, "R-1000:INTERCEPTOR_TIMEOUT");
@@ -483,18 +459,15 @@ fn next_after_abandon_throws_timed_out() {
 #[test]
 fn next_after_a_non_timeout_teardown_does_not_blame_the_budget() {
   let (rt, ctx, _host, state) = setup(&["interceptRpc"]);
-  ctx.with(|ctx| {
-    ctx
-      .eval::<(), _>(
-        r#"
+  eval(
+    &ctx,
+    r#"
             inu.interceptRpc('foo.bar', ({ request: req }, next) => {
                 globalThis.__next = next;
                 return new Promise(() => {});
             });
             "#,
-      )
-      .unwrap();
-  });
+  );
 
   state.dispatch(&rt, &ctx, 1, 954, "foo.bar", 0, &wire_json(r#"{"_":"foo.bar"}"#));
   state.abandon_dispatch(&rt, &ctx, 954, "R-1000:INTERCEPTOR_ABANDONED");
@@ -568,18 +541,15 @@ fn the_signal_of_a_stage_that_completed_never_aborts() {
 #[test]
 fn next_after_its_own_settle_throws_invalid_argument() {
   let (rt, ctx, host, state) = setup(&["interceptRpc"]);
-  ctx.with(|ctx| {
-    ctx
-      .eval::<(), _>(
-        r#"
+  eval(
+    &ctx,
+    r#"
             inu.interceptRpc('foo.bar', ({ request: req }, next) => {
                 globalThis.__next = next;
                 return { _: 'foo.bar', short: true };
             });
             "#,
-      )
-      .unwrap();
-  });
+  );
 
   state.dispatch(&rt, &ctx, 1, 953, "foo.bar", 0, &wire_json(r#"{"_":"foo.bar"}"#));
   assert_eq!(host.completes.borrow().len(), 1);
@@ -625,17 +595,14 @@ fn a_torn_off_invoke_rpc_refuses_rather_than_picking_a_slot() {
 #[test]
 fn invoke_rpc_resolves_and_rejects() {
   let (rt, ctx, host, state) = setup(&["invokeRpc"]);
-  ctx.with(|ctx| {
-    ctx
-      .eval::<(), _>(
-        r#"
+  eval(
+    &ctx,
+    r#"
             globalThis.__ok = null;
             globalThis.__err = null;
             inu.invokeRpc({_:'foo.bar'}).then(r => { globalThis.__ok = r; });
             "#,
-      )
-      .unwrap();
-  });
+  );
 
   assert_eq!(host.invoke_calls.borrow().len(), 1);
   let invoke_id = host.invoke_calls.borrow()[0].0;
@@ -658,10 +625,9 @@ fn invoke_rpc_resolves_and_rejects() {
 #[test]
 fn rpc_error_wire_rejects_as_rpc_error_instance_and_rethrow_round_trips() {
   let (rt, ctx, host, state) = setup(&["interceptRpc"]);
-  ctx.with(|ctx| {
-    ctx
-      .eval::<(), _>(
-        r#"
+  eval(
+    &ctx,
+    r#"
             globalThis.__caught = null;
             inu.interceptRpc('foo.bar', async ({ request: req }, next) => {
                 try {
@@ -672,9 +638,7 @@ fn rpc_error_wire_rejects_as_rpc_error_instance_and_rethrow_round_trips() {
                 }
             });
             "#,
-      )
-      .unwrap();
-  });
+  );
 
   state.dispatch(&rt, &ctx, 1, 900, "foo.bar", 0, &wire_json(r#"{"_":"foo.bar"}"#));
   state.complete_next(&rt, &ctx, 900, "R400:PEER_ID_INVALID");
@@ -689,17 +653,14 @@ fn rpc_error_wire_rejects_as_rpc_error_instance_and_rethrow_round_trips() {
 #[test]
 fn thrown_rpc_error_completes_with_r_wire() {
   let (rt, ctx, host, state) = setup(&["interceptRpc"]);
-  ctx.with(|ctx| {
-    ctx
-      .eval::<(), _>(
-        r#"
+  eval(
+    &ctx,
+    r#"
             inu.interceptRpc('foo.bar', ({ request: req }, next) => {
                 throw new inu.RpcError(420, 'FLOOD_WAIT_3');
             });
             "#,
-      )
-      .unwrap();
-  });
+  );
 
   state.dispatch(&rt, &ctx, 1, 901, "foo.bar", 0, &wire_json(r#"{"_":"foo.bar"}"#));
   let completes = host.completes.borrow();
@@ -710,17 +671,14 @@ fn thrown_rpc_error_completes_with_r_wire() {
 #[test]
 fn returned_rpc_error_completes_with_r_wire() {
   let (rt, ctx, host, state) = setup(&["interceptRpc"]);
-  ctx.with(|ctx| {
-    ctx
-      .eval::<(), _>(
-        r#"
+  eval(
+    &ctx,
+    r#"
             inu.interceptRpc('foo.bar', ({ request: req }, next) => {
                 return new inu.RpcError(403, 'FORBIDDEN');
             });
             "#,
-      )
-      .unwrap();
-  });
+  );
 
   state.dispatch(&rt, &ctx, 1, 902, "foo.bar", 0, &wire_json(r#"{"_":"foo.bar"}"#));
   let completes = host.completes.borrow();
@@ -731,18 +689,15 @@ fn returned_rpc_error_completes_with_r_wire() {
 #[test]
 fn invoke_rejection_with_rpc_error_wire_is_an_rpc_error_instance() {
   let (rt, ctx, host, state) = setup(&["invokeRpc"]);
-  ctx.with(|ctx| {
-    ctx
-      .eval::<(), _>(
-        r#"
+  eval(
+    &ctx,
+    r#"
             globalThis.__caught = null;
             inu.invokeRpc({_:'foo.bar'}).catch(e => {
                 globalThis.__caught = { isRpc: e instanceof inu.RpcError, code: e.code, text: e.text };
             });
             "#,
-      )
-      .unwrap();
-  });
+  );
 
   let invoke_id = host.invoke_calls.borrow()[0].0;
   state.settle(&rt, &ctx, invoke_id, "R-503:Timeout");
@@ -753,19 +708,16 @@ fn invoke_rejection_with_rpc_error_wire_is_an_rpc_error_instance() {
 #[test]
 fn replacing_inu_rpc_error_does_not_change_host_errors() {
   let (rt, ctx, host, state) = setup(&["invokeRpc"]);
-  ctx.with(|ctx| {
-    ctx
-      .eval::<(), _>(
-        r#"
+  eval(
+    &ctx,
+    r#"
             globalThis.__realRpcError = inu.RpcError;
             inu.RpcError = class Impostor extends Error {};
             inu.invokeRpc({_:'foo.bar'}).catch(e => {
                 globalThis.__caught = [e instanceof __realRpcError, e instanceof inu.RpcError, e.code, e.text];
             });
             "#,
-      )
-      .unwrap();
-  });
+  );
 
   let invoke_id = host.invoke_calls.borrow()[0].0;
   state.settle(&rt, &ctx, invoke_id, "R400:PEER_ID_INVALID");
@@ -776,10 +728,9 @@ fn replacing_inu_rpc_error_does_not_change_host_errors() {
 #[test]
 fn null_completion_resolves_next_as_null_and_round_trips() {
   let (rt, ctx, host, state) = setup(&["interceptRpc"]);
-  ctx.with(|ctx| {
-    ctx
-      .eval::<(), _>(
-        r#"
+  eval(
+    &ctx,
+    r#"
             globalThis.__got = 'unset';
             inu.interceptRpc('foo.bar', async ({ request: req }, next) => {
                 const r = await next(req);
@@ -787,9 +738,7 @@ fn null_completion_resolves_next_as_null_and_round_trips() {
                 return r;
             });
             "#,
-      )
-      .unwrap();
-  });
+  );
 
   state.dispatch(&rt, &ctx, 1, 903, "foo.bar", 0, &wire_json(r#"{"_":"foo.bar"}"#));
   state.complete_next(&rt, &ctx, 903, "N");
@@ -811,9 +760,7 @@ fn seed_tl_object(host: &Rc<TestHost>, type_name: &str) {
 fn invoke_result_handle_resolves_to_a_writable_plugin_lifetime_view() {
   let (rt, ctx, host, state) = setup(&["invokeRpc"]);
   seed_tl_object(&host, "foo.bar");
-  ctx.with(|ctx| {
-    ctx.eval::<(), _>(r#"inu.invokeRpc({_:'foo.bar'}).then(r => { globalThis.__got = r; });"#).unwrap();
-  });
+  eval(&ctx, r#"inu.invokeRpc({_:'foo.bar'}).then(r => { globalThis.__got = r; });"#);
 
   let invoke_id = host.invoke_calls.borrow()[0].0;
   state.settle(&rt, &ctx, invoke_id, &format!("HOW{TEST_HANDLE}"));
@@ -834,9 +781,7 @@ fn invoke_result_handle_resolves_to_a_writable_plugin_lifetime_view() {
 fn update_payload_handle_resolves_to_a_read_only_view() {
   let (rt, ctx, host, state) = setup(&["onUpdate"]);
   seed_tl_object(&host, "updateFoo");
-  ctx.with(|ctx| {
-    ctx.eval::<(), _>("inu.onUpdate('updateFoo', (u) => { globalThis.__seen = u; });").unwrap();
-  });
+  eval(&ctx, "inu.onUpdate('updateFoo', (u) => { globalThis.__seen = u; });");
 
   state.dispatch_update(&rt, &ctx, "updateFoo", 0, &format!("HOR{TEST_HANDLE}"));
 
@@ -869,17 +814,14 @@ fn an_update_with_no_listeners_still_releases_its_handle() {
 #[test]
 fn on_update_fan_out_survives_throwing_callback() {
   let (rt, ctx, host, state) = setup(&["onUpdate"]);
-  ctx.with(|ctx| {
-    ctx
-      .eval::<(), _>(
-        r#"
+  eval(
+    &ctx,
+    r#"
             globalThis.__seen = null;
             inu.onUpdate('updateFoo', (u) => { throw new Error('boom'); });
             inu.onUpdate('updateFoo', (u) => { globalThis.__seen = u.a; });
             "#,
-      )
-      .unwrap();
-  });
+  );
 
   assert_eq!(host.update_registered.borrow().len(), 2);
   state.dispatch_update(&rt, &ctx, "updateFoo", 0, &wire_json(r#"{"_":"updateFoo","a":42}"#));
@@ -905,13 +847,10 @@ fn intercept_registration_without_a_scoped_grant_throws_not_granted() {
 #[test]
 fn intercept_registration_with_a_scoped_grant_reaches_the_host() {
   let (_rt, ctx, host, _state) = setup(&["interceptRpc(users.getUsers)"]);
-  ctx.with(|ctx| {
-    ctx
-      .eval::<(), _>(
-        "inu.interceptRpc('users.getUsers', () => {}); inu.interceptRpc('users.getUsers', () => {}, { strict: true });",
-      )
-      .unwrap()
-  });
+  eval(
+    &ctx,
+    "inu.interceptRpc('users.getUsers', () => {}); inu.interceptRpc('users.getUsers', () => {}, { strict: true });",
+  );
   assert_eq!(host.registered.borrow()[0].0, vec!["users.getUsers".to_string()]);
   assert!(!host.registered.borrow()[0].3);
   assert!(host.registered.borrow()[1].3);
@@ -1077,18 +1016,15 @@ fn without_the_account_api_a_dispatch_hands_over_undefined() {
 #[test]
 fn invoke_rejection_with_a_plugin_error_wire_carries_usage_and_quota() {
   let (rt, ctx, host, state) = setup(&["invokeRpc"]);
-  ctx.with(|ctx| {
-    ctx
-      .eval::<(), _>(
-        r#"
+  eval(
+    &ctx,
+    r#"
             globalThis.__caught = null;
             inu.invokeRpc({_:'foo.bar'}).catch(e => {
                 globalThis.__caught = [e instanceof inu.PluginError, e.code, e.usage, e.quota, typeof e.usage, e.message];
             });
             "#,
-      )
-      .unwrap();
-  });
+  );
 
   let invoke_id = host.invoke_calls.borrow()[0].0;
   state.settle(&rt, &ctx, invoke_id, "Pquota-exceeded\n\n64\n32\ntoo big");
@@ -1099,10 +1035,9 @@ fn invoke_rejection_with_a_plugin_error_wire_carries_usage_and_quota() {
 #[test]
 fn a_plugin_error_wire_from_the_host_rejects_next_as_a_plugin_error() {
   let (rt, ctx, _host, state) = setup(&["interceptRpc"]);
-  ctx.with(|ctx| {
-    ctx
-      .eval::<(), _>(
-        r#"
+  eval(
+    &ctx,
+    r#"
             globalThis.__caught = null;
             inu.interceptRpc('foo.bar', async ({ request: req }, next) => {
                 try { return await next(req); } catch (e) {
@@ -1111,9 +1046,7 @@ fn a_plugin_error_wire_from_the_host_rejects_next_as_a_plugin_error() {
                 }
             });
             "#,
-      )
-      .unwrap();
-  });
+  );
 
   state.dispatch(&rt, &ctx, 1, 904, "foo.bar", 0, &wire_json(r#"{"_":"foo.bar"}"#));
   state.complete_next(&rt, &ctx, 904, "Pforbidden\n\n\n\nblocked by policy");
@@ -1135,17 +1068,14 @@ fn registration_rejected_drops_callback() {
 #[test]
 fn middleware_error_rejects_next_and_completes_with_error_wire() {
   let (rt, ctx, host, state) = setup(&["interceptRpc"]);
-  ctx.with(|ctx| {
-    ctx
-      .eval::<(), _>(
-        r#"
+  eval(
+    &ctx,
+    r#"
             inu.interceptRpc('foo.bar', ({ request: req }, next) => {
                 return next(req).catch(e => ({ _: 'foo.bar', caught: e.message }));
             });
             "#,
-      )
-      .unwrap();
-  });
+  );
 
   state.dispatch(&rt, &ctx, 1, 600, "foo.bar", 0, &wire_json(r#"{"_":"foo.bar"}"#));
   state.complete_next(&rt, &ctx, 600, "Eboom");
@@ -1158,17 +1088,14 @@ fn middleware_error_rejects_next_and_completes_with_error_wire() {
 #[test]
 fn throwing_interceptor_is_logged_and_completes_with_error() {
   let (rt, ctx, host, state, logs) = setup_logging(&["interceptRpc"]);
-  ctx.with(|ctx| {
-    ctx
-      .eval::<(), _>(
-        r#"
+  eval(
+    &ctx,
+    r#"
             inu.interceptRpc('foo.bar', ({ request: req }, next) => {
                 throw new Error('kaboom');
             });
             "#,
-      )
-      .unwrap();
-  });
+  );
 
   state.dispatch(&rt, &ctx, 1, 700, "foo.bar", 0, &wire_json(r#"{"_":"foo.bar"}"#));
 
@@ -1306,17 +1233,14 @@ fn a_spinning_middleware_is_interrupted_and_the_request_is_still_answered() {
 #[test]
 fn rejecting_interceptor_is_logged_and_completes_with_error() {
   let (rt, ctx, host, state, logs) = setup_logging(&["interceptRpc"]);
-  ctx.with(|ctx| {
-    ctx
-      .eval::<(), _>(
-        r#"
+  eval(
+    &ctx,
+    r#"
             inu.interceptRpc('foo.bar', async ({ request: req }, next) => {
                 throw new Error('async-boom');
             });
             "#,
-      )
-      .unwrap();
-  });
+  );
 
   state.dispatch(&rt, &ctx, 1, 800, "foo.bar", 0, &wire_json(r#"{"_":"foo.bar"}"#));
 
@@ -1342,16 +1266,13 @@ fn rejecting_interceptor_is_logged_and_completes_with_error() {
 fn a_panicking_test_body_still_releases_its_roots() {
   let (rt, ctx, _host, state) = setup(&["interceptRpc", "invokeRpc"]);
   let engine = Rc::clone(&state);
-  ctx.with(|ctx| {
-    ctx
-      .eval::<(), _>(
-        r#"
+  eval(
+    &ctx,
+    r#"
             inu.interceptRpc('foo.bar', ({ request: req }, next) => new Promise(() => {}));
             inu.invokeRpc({ _: 'foo.baz' });
             "#,
-      )
-      .unwrap();
-  });
+  );
   state.dispatch(&rt, &ctx, 1, 970, "foo.bar", 0, &wire_json(r#"{"_":"foo.bar"}"#));
   assert_eq!(engine.intercept_fns.len(), 1);
   assert_eq!(engine.invokes.len(), 1);
@@ -1370,11 +1291,7 @@ fn a_panicking_test_body_still_releases_its_roots() {
 
 #[test]
 fn unhandled_rejection_is_logged() {
-  let rt = Runtime::new().unwrap();
-  let ctx = Context::full(&rt).unwrap();
-  let logs = crate::testing::harness::Logs::new();
-  let log = crate::testing::harness::log_sink(&logs);
-  install_rejection_tracker(&rt, log.clone());
+  let (rt, ctx, logs, log) = setup_rejection_tracker();
 
   ctx.with(|ctx| {
     // an async handler that throws with nothing awaiting/catching it (the async onUpdate case)
@@ -1391,22 +1308,15 @@ fn unhandled_rejection_is_logged() {
 
 #[test]
 fn a_reason_that_raises_while_being_formatted_leaves_nothing_pending() {
-  let rt = Runtime::new().unwrap();
-  let ctx = Context::full(&rt).unwrap();
-  let logs = crate::testing::harness::Logs::new();
-  let log = crate::testing::harness::log_sink(&logs);
-  install_rejection_tracker(&rt, log.clone());
+  let (rt, ctx, logs, log) = setup_rejection_tracker();
 
-  ctx.with(|ctx| {
-    ctx
-      .eval::<(), _>(
-        r#"Promise.reject({
+  eval(
+    &ctx,
+    r#"Promise.reject({
                 toString() { throw new Error('nested'); },
                 get stack() { throw new Error('nested'); },
             });"#,
-      )
-      .unwrap();
-  });
+  );
   pump_jobs(&rt, &ctx, log.as_ref());
 
   assert!(!logs.borrow().is_empty(), "the rejection still has to be reported");
@@ -1424,18 +1334,22 @@ fn a_reason_that_raises_while_being_formatted_leaves_nothing_pending() {
 
 #[test]
 fn handled_rejection_is_not_logged() {
+  let (rt, ctx, logs, log) = setup_rejection_tracker();
+
+  eval(&ctx, r#"Promise.reject(new Error('caught')).catch(() => {});"#);
+  pump_jobs(&rt, &ctx, log.as_ref());
+
+  assert!(logs.borrow().is_empty(), "a caught rejection must not log, got: {:?}", logs.borrow());
+}
+
+/// a bare runtime with the tracker the engine installs for every plugin, and the sink it reports into
+fn setup_rejection_tracker() -> (Runtime, Context, std::sync::Arc<crate::testing::harness::Logs>, crate::Log) {
   let rt = Runtime::new().unwrap();
   let ctx = Context::full(&rt).unwrap();
   let logs = crate::testing::harness::Logs::new();
   let log = crate::testing::harness::log_sink(&logs);
   install_rejection_tracker(&rt, log.clone());
-
-  ctx.with(|ctx| {
-    ctx.eval::<(), _>(r#"Promise.reject(new Error('caught')).catch(() => {});"#).unwrap();
-  });
-  pump_jobs(&rt, &ctx, log.as_ref());
-
-  assert!(logs.borrow().is_empty(), "a caught rejection must not log, got: {:?}", logs.borrow());
+  (rt, ctx, logs, log)
 }
 
 const UPDATE_TYPE: &str = "updateNewMessage";
@@ -1836,11 +1750,7 @@ fn the_bundled_events_test_plugin_passes() {
   const ORACLE: &str = include_str!("../../../../test/plugins/events-test.js");
   let (rt, ctx, _host, state) = setup(&crate::testing::harness::manifest_grants(ORACLE));
   let lines = crate::testing::harness::install_capturing_console(&ctx);
-  ctx.with(|ctx| match ctx.eval::<(), _>(ORACLE) {
-    Ok(()) => {}
-    Err(rquickjs::Error::Exception) => panic!("{}", format_exception(&ctx)),
-    Err(e) => panic!("{e:?}"),
-  });
+  eval(&ctx, ORACLE);
 
   for (type_name, wire) in [
     ("updateNewMessage", NEW_MESSAGE),
@@ -1921,11 +1831,7 @@ fn the_bundled_accounts_test_plugin_passes() {
   let state = Disposing::new(&ctx, state, |ctx, state| state.dispose(ctx));
 
   let lines = crate::testing::harness::install_capturing_console(&ctx);
-  ctx.with(|ctx| match ctx.eval::<(), _>(ORACLE) {
-    Ok(()) => {}
-    Err(rquickjs::Error::Exception) => panic!("{}", format_exception(&ctx)),
-    Err(e) => panic!("{e:?}"),
-  });
+  eval(&ctx, ORACLE);
 
   *accounts_host.json.borrow_mut() = SWITCHED.to_string();
   accounts.accounts_changed(&rt, &ctx);
@@ -2288,11 +2194,7 @@ fn the_bundled_send_intercept_test_plugin_passes() {
   const ORACLE: &str = include_str!("../../../../test/plugins/send-intercept-test.js");
   let (rt, ctx, host, state) = setup(&crate::testing::harness::manifest_grants(ORACLE));
   let lines = crate::testing::harness::install_capturing_console(&ctx);
-  ctx.with(|ctx| match ctx.eval::<(), _>(ORACLE) {
-    Ok(()) => {}
-    Err(rquickjs::Error::Exception) => panic!("{}", format_exception(&ctx)),
-    Err(e) => panic!("{e:?}"),
-  });
+  eval(&ctx, ORACLE);
   for (method, json) in [
     ("messages.sendMessage", SEND_TEXT),
     ("messages.sendMedia", SEND_MEDIA),
@@ -2312,11 +2214,7 @@ fn the_bundled_send_intercept_test_plugin_passes() {
     // the payloads are plain json, so a rust debug string is a valid js string literal
     .map(|(_, wire)| format!("{:?}", wire.trim_start_matches('J')))
     .collect();
-  ctx.with(|ctx| match ctx.eval::<(), _>(format!("__report([{}])", sent.join(","))) {
-    Ok(()) => {}
-    Err(rquickjs::Error::Exception) => panic!("{}", format_exception(&ctx)),
-    Err(e) => panic!("{e:?}"),
-  });
+  eval(&ctx, &format!("__report([{}])", sent.join(",")));
   let lines = lines.borrow();
   crate::testing::harness::assert_oracle_exact(&lines, "send intercept test done", 27);
 }
@@ -2494,11 +2392,7 @@ fn the_bundled_update_intercept_test_plugin_passes() {
   const ORACLE: &str = include_str!("../../../../test/plugins/update-intercept-test.js");
   let (rt, ctx, host, state) = setup(&crate::testing::harness::manifest_grants(ORACLE));
   let lines = crate::testing::harness::install_capturing_console(&ctx);
-  ctx.with(|ctx| match ctx.eval::<(), _>(ORACLE) {
-    Ok(()) => {}
-    Err(rquickjs::Error::Exception) => panic!("{}", format_exception(&ctx)),
-    Err(e) => panic!("{e:?}"),
-  });
+  eval(&ctx, ORACLE);
   for (id, type_name, wire) in [
     (1i64, "updateNewMessage", NEW_MESSAGE),
     (
@@ -2514,11 +2408,7 @@ fn the_bundled_update_intercept_test_plugin_passes() {
   ] {
     dispatch_intercept(&rt, &ctx, &state, &host, id, type_name, wire);
   }
-  ctx.with(|ctx| match ctx.eval::<(), _>(format!("__report({})", serde_verdicts(&host))) {
-    Ok(()) => {}
-    Err(rquickjs::Error::Exception) => panic!("{}", format_exception(&ctx)),
-    Err(e) => panic!("{e:?}"),
-  });
+  eval(&ctx, &format!("__report({})", serde_verdicts(&host)));
   let lines = lines.borrow();
   crate::testing::harness::assert_oracle_exact(&lines, "update intercept test done", 16);
 }
@@ -2538,9 +2428,7 @@ fn serde_verdicts(host: &Rc<TestHost>) -> String {
 #[cfg(test)]
 mod bundled_oracles {
   use super::*;
-  use crate::api::globals::RandomHost;
   use crate::api::tl::proxy::TlHost;
-  use crate::sandbox::grants::TestGrantHost;
   use rquickjs::Context;
   use std::collections::HashSet;
 
@@ -2676,11 +2564,7 @@ mod bundled_oracles {
     }
 
     fn tl_set_bytes(&self, handle: i64, key: &str, value: &[u8]) -> Option<String> {
-      self.tl_set(
-        handle,
-        key,
-        &format!("Y{}", base64::Engine::encode(&base64::engine::general_purpose::STANDARD, value)),
-      )
+      self.tl_set(handle, key, &crate::api::tl::proxy::encode_bytes_wire(value))
     }
 
     fn tl_set(&self, handle: i64, key: &str, value_wire: &str) -> Option<String> {
@@ -2842,53 +2726,7 @@ mod bundled_oracles {
   type Fixture = (Runtime, Context, Rc<OracleHost>, Disposing, std::sync::Arc<crate::testing::harness::Logs>);
 
   fn setup(grants: &[&str], with_globals: bool) -> Fixture {
-    let rt = Runtime::new().unwrap();
-    let ctx = Context::full(&rt).unwrap();
-    let host = Rc::new(OracleHost::default());
-    let host_dyn: Rc<dyn RpcHost> = host.clone();
-    let tl = TlViews::new(host.clone());
-    let grant_host = TestGrantHost::new(grants);
-    let logs = crate::testing::harness::Logs::new();
-    let log = crate::testing::harness::log_sink(&logs);
-    let accounts_host: Rc<dyn crate::api::telegram::account::AccountHost> =
-      crate::api::telegram::account::tests::TestAccountHost::with(crate::api::telegram::account::tests::TWO_ACCOUNTS);
-    let state = ctx.with(|ctx| {
-      let inu = crate::testing::harness::get_api_globals(&ctx);
-      crate::api::error::install_plugin_error(&ctx).unwrap();
-      if with_globals {
-        let random: Rc<dyn RandomHost> = Rc::new(CountingRandom::default());
-        crate::api::globals::install_globals(
-          &ctx,
-          random,
-          std::path::Path::new(""),
-          crate::sandbox::limits::ExternalMemory::new(),
-        )
-        .unwrap();
-      }
-      let shared = crate::api::tl::utils::install_utils(&ctx, &inu).unwrap();
-      crate::api::tl::message::install_message(&ctx, &shared, &inu).unwrap();
-      let accounts = crate::api::telegram::account::install_account(
-        &ctx,
-        accounts_host,
-        grant_host.as_host(),
-        Lifecycle::new(),
-        log.clone(),
-        &inu,
-      )
-      .unwrap();
-      install_rpc(&ctx, host_dyn, tl, grant_host.as_host(), Lifecycle::new(), Some(accounts), shared, log, &inu)
-        .unwrap()
-    });
-    let state = Disposing::new(&ctx, state, |ctx, state| state.dispose(ctx));
-    (rt, ctx, host, state, logs)
-  }
-
-  fn run_oracle(ctx: &Context, source: &str) {
-    ctx.with(|ctx| match ctx.eval::<(), _>(source) {
-      Ok(()) => {}
-      Err(rquickjs::Error::Exception) => panic!("{}", format_exception(&ctx)),
-      Err(e) => panic!("{e:?}"),
-    });
+    super::setup_engine::<OracleHost>(grants, with_globals)
   }
 
   const GLOBALS_ORACLE: &str = include_str!("../../../../test/plugins/globals-test.js");
@@ -2913,7 +2751,7 @@ mod bundled_oracles {
   fn the_bundled_globals_test_plugin_passes() {
     let (rt, ctx, host, state, _logs) = setup(&crate::testing::harness::manifest_grants(GLOBALS_ORACLE), true);
     let lines = crate::testing::harness::install_capturing_console(&ctx);
-    run_oracle(&ctx, GLOBALS_ORACLE);
+    eval(&ctx, GLOBALS_ORACLE);
 
     let (invoke_id, _, _) = host.invokes.borrow()[0].clone();
     let view = host.mint(&config_node(), false);
@@ -2927,7 +2765,7 @@ mod bundled_oracles {
   fn the_bundled_lazy_tl_test_plugin_passes() {
     let (rt, ctx, host, state, _logs) = setup(&crate::testing::harness::manifest_grants(LAZY_TL_ORACLE), false);
     let lines = crate::testing::harness::install_capturing_console(&ctx);
-    run_oracle(&ctx, LAZY_TL_ORACLE);
+    eval(&ctx, LAZY_TL_ORACLE);
 
     // the invoke settles first: the update half's last assertion is that a read-only view is
     // refused as a *writable* view's field value, and it needs one to try it on
@@ -2958,7 +2796,7 @@ mod bundled_oracles {
     }
     *host.chain_method.borrow_mut() = "help.getConfig".to_string();
     let lines = crate::testing::harness::install_capturing_console(&ctx);
-    run_oracle(&ctx, TAKEOVER_ORACLE);
+    eval(&ctx, TAKEOVER_ORACLE);
     pump_jobs(&rt, &ctx, state.log.as_ref());
 
     let callback_id = host.registered.borrow()[0].1;
@@ -2983,7 +2821,7 @@ mod bundled_oracles {
       host.sealed.borrow_mut().insert(field.to_string());
     }
     let lines = crate::testing::harness::install_capturing_console(&ctx);
-    run_oracle(&ctx, API_FILTER_ORACLE);
+    eval(&ctx, API_FILTER_ORACLE);
 
     for (invoke_id, _, method) in host.invokes.borrow().clone() {
       let answer = match method.as_str() {

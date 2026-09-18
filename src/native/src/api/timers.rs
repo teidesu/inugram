@@ -7,8 +7,7 @@ use std::time::Instant;
 use rquickjs::function::Opt;
 use rquickjs::{Coerced, Ctx, Exception, Function, Persistent, Result as JsResult, Runtime, Value};
 
-use crate::api::error::format_exception;
-use crate::api::error::PluginErrorCode;
+use crate::api::error::{call_callback, PluginErrorCode};
 use crate::runtime::pump_jobs;
 use crate::sandbox::registry::{Lifecycle, Registry, Token};
 
@@ -255,13 +254,7 @@ impl TimerState {
         let Some(callback) = saved.and_then(|p| p.restore(&ctx).ok()) else {
           continue;
         };
-        match callback.call::<_, Value>(()) {
-          Ok(_) => {}
-          Err(rquickjs::Error::Exception) => {
-            (state.log)(&crate::fault(format_args!("timer callback threw: {}", format_exception(&ctx))));
-          }
-          Err(e) => (state.log)(&format!("timer callback failed: {e:?}")),
-        }
+        call_callback(&ctx, &state.log, "timer callback", &callback, ());
       }
     });
     state.sync_wake();

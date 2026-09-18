@@ -20,6 +20,9 @@ import org.telegram.ui.Components.RLottieNative
  * `ImageBitmap` of its own. Every call belongs on [queue]: neither decoder may be used from two
  * threads at once, and reading frames in order is a state the sequential path relies on.
  */
+/** the one call shape every video decode here makes: no crop, no rotation, the frame as ffmpeg has it */
+private fun AnimatedFileNative.readInto(bitmap: Bitmap?): Int = getVideoFrame(bitmap, false, 0f, 0f, false)
+
 internal sealed class PluginAnimationDecoder(shared: Executor) {
     val queue: Executor = SerialExecutor(shared)
 
@@ -121,14 +124,14 @@ internal sealed class PluginAnimationDecoder(shared: Executor) {
                 nextIndex = 0
             }
             while (nextIndex < index) {
-                if (video.getVideoFrame(null, false, 0f, 0f, false) == 0) throw NoFrame(index)
+                if (video.readInto(null) == 0) throw NoFrame(index)
                 nextIndex++
             }
-            return read(index) { bitmap -> video.getVideoFrame(bitmap, false, 0f, 0f, false) }
+            return read(index) { bitmap -> video.readInto(bitmap) }
         }
 
         override fun next(): Frame? = try {
-            read(nextIndex) { bitmap -> video.getVideoFrame(bitmap, false, 0f, 0f, false) }
+            read(nextIndex) { bitmap -> video.readInto(bitmap) }
         } catch (e: NoFrame) {
             null
         }
@@ -220,7 +223,7 @@ internal sealed class PluginAnimationDecoder(shared: Executor) {
                 val width = (video.width * scale).toInt().coerceAtLeast(1)
                 val height = (video.height * scale).toInt().coerceAtLeast(1)
                 val bitmap = Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888)
-                if (video.getVideoFrame(bitmap, false, 0f, 0f, false) == 0) {
+                if (video.readInto(bitmap) == 0) {
                     bitmap.recycle()
                     return null
                 }
@@ -230,7 +233,7 @@ internal sealed class PluginAnimationDecoder(shared: Executor) {
                 bitmap.recycle()
                 video.seekToMs(0, false)
                 val full = Bitmap.createBitmap(video.width, video.height, Bitmap.Config.ARGB_8888)
-                if (video.getVideoFrame(full, false, 0f, 0f, false) == 0) {
+                if (video.readInto(full) == 0) {
                     full.recycle()
                     return null
                 }
@@ -248,7 +251,7 @@ internal sealed class PluginAnimationDecoder(shared: Executor) {
         private fun isOpaque(video: AnimatedFileNative): Boolean {
             val probe = Bitmap.createBitmap(1, 1, Bitmap.Config.ARGB_8888)
             try {
-                if (video.getVideoFrame(probe, false, 0f, 0f, false) == 0) return true
+                if (video.readInto(probe) == 0) return true
                 return video.isLastFrameOpaque()
             } finally {
                 probe.recycle()

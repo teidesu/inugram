@@ -1,8 +1,8 @@
 use std::cell::RefCell;
 use std::collections::HashMap;
 
-use rquickjs::function::Constructor;
-use rquickjs::{Coerced, Ctx, Result as JsResult, Runtime, Value};
+use rquickjs::function::{Constructor, IntoArgs};
+use rquickjs::{Coerced, Ctx, Function, Result as JsResult, Runtime, Value};
 
 use crate::api::{telegram::rpc, Globals};
 
@@ -32,6 +32,42 @@ fn describe_value<'js>(ctx: &Ctx<'js>, value: &Value<'js>, fallback: &str) -> St
 
 pub(crate) fn format_exception(ctx: &Ctx<'_>) -> String {
   format_thrown(ctx, &ctx.catch())
+}
+
+/// what a host-installed callback's failure reads as: an exception carries its js message and
+/// stack, anything else is the rquickjs error itself
+pub(crate) fn report_callback_error(log: &crate::Log, ctx: &Ctx<'_>, what: &str, error: rquickjs::Error) {
+  if error.is_exception() {
+    log(&crate::fault(format_args!("{what} threw: {}", format_exception(ctx))));
+  } else {
+    log(&format!("{what} failed: {error:?}"));
+  }
+}
+
+/// Calls a plugin's callback, reporting what it raised the way every api on this surface reports
+/// one: a thrown value is a fault naming the exception, anything else the rquickjs error.
+pub(crate) fn call_callback<'js, A: IntoArgs<'js>>(
+  ctx: &Ctx<'js>,
+  log: &crate::Log,
+  what: &str,
+  callback: &Function<'js>,
+  args: A,
+) -> Option<Value<'js>> {
+  match callback.call::<_, Value>(args) {
+    Ok(value) => Some(value),
+    Err(e) => {
+      report_callback_error(log, ctx, what, e);
+      None
+    }
+  }
+}
+
+/// what an rquickjs error says once a thrown value has been read out of the context
+pub(crate) fn describe_js_error(ctx: &Ctx<'_>, error: rquickjs::Error) -> String {
+  match error {
+    rquickjs::Error::Exception => format_exception(ctx),
+    other => other.to_string(),
+  }
 }
 
 pub(crate) fn error_value_to_string<'js>(ctx: &Ctx<'js>, value: &Value<'js>) -> String {
