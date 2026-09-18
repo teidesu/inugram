@@ -25,10 +25,7 @@ object PluginFs {
     /** where [desu.inugram.helpers.plugins.PluginStore] keeps plugin sources; `inu.android.getPluginsDir` answers this */
     private const val STORE = "inugram_plugins"
 
-    private fun dir(installId: String): File {
-        require(PluginInstalls.isValidId(installId)) { "malformed install id" }
-        return File(ApplicationLoader.applicationContext.filesDir, "$SCOPED_ROOT/scoped_$installId")
-    }
+    private fun dir(installId: String): File = PluginPaths.scopedFile(installId, SCOPED_ROOT, "scoped_$installId")
 
     /** deliberately *not* [SCOPED_ROOT], which holds one private `fs` root per install and no `.js` file at all */
     fun storeDir(): File =
@@ -38,11 +35,7 @@ object PluginFs {
      * this plugin's own durable directory, or "" when it cannot be made - which leaves every
      * `inu.fs` call failing rather than landing somewhere the plugin does not own.
      */
-    fun dirFor(installId: String): String {
-        val dir = dir(installId)
-        if (!dir.isDirectory && !dir.mkdirs()) return ""
-        return dir.absolutePath
-    }
+    fun dirFor(installId: String): String = PluginPaths.ensure(dir(installId))
 
     /**
      * what `inu.android.getPluginsDir`/`getCacheDir`/`getMediaDir` answer, newline separated in the
@@ -76,8 +69,5 @@ object PluginFs {
      * permanently deletes a plugin's storage. Only on **uninstall**, never on stop: this is the one
      * plugin-owned tree that is meant to outlive the engine.
      */
-    fun wipe(installId: String) {
-        if (!PluginInstalls.isValidId(installId)) return
-        dir(installId).deleteRecursively()
-    }
+    fun wipe(installId: String) = PluginPaths.wipe(installId, ::dir)
 }

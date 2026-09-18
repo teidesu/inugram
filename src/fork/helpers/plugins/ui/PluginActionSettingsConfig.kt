@@ -38,9 +38,4 @@ class PluginActionSettingsConfig(key: String) : InuConfig.Item<PluginActionSetti
             put("pluginOrder", JSONArray(value.pluginOrder))
         }.toString())
     }
-
-    private fun JSONArray?.strings(): List<String> {
-        if (this == null) return emptyList()
-        return (0 until length()).map { optString(it) }.filter(String::isNotEmpty)
-    }
 }

@@ -13,7 +13,7 @@ use crate::api::io::staging::{SourceStager, StagedFile, StagedSource};
 use crate::api::tl::proxy::plain_wire_to_js;
 use crate::api::ui::{OP_PICK_FILE, OP_SAVE_FILE};
 use crate::runtime::{pump_jobs, Parked, PendingTable};
-use crate::utils::arguments::opt_bool;
+use crate::utils::arguments::{opt_bool, stringify_json};
 
 /// at most this many types may be named in `accept`, a picker offering more being a picker offering
 /// nothing in particular
@@ -57,14 +57,7 @@ pub fn install_files<'js>(
     pending: PendingTable::default(),
   });
 
-  let ui: Object = match globals.inu.get::<_, Object>("ui") {
-    Ok(o) => o,
-    Err(_) => {
-      let o = Object::new(ctx.clone())?;
-      globals.inu.set("ui", o.clone())?;
-      o
-    }
-  };
+  let ui = globals.get_namespace(ctx, "ui")?;
 
   let owned = state.clone();
   ui.set(
@@ -150,11 +143,7 @@ impl FilesState {
     kind: FileRequest,
   ) -> JsResult<Value<'js>> {
     let state = self;
-    let json = ctx
-      .json_stringify(options)?
-      .map(|s| s.to_string())
-      .transpose()?
-      .ok_or_else(|| Exception::throw_message(ctx, "ui: serialization failed"))?;
+    let json = stringify_json(ctx, options.into_value(), "ui: serialization failed")?;
     Ok(state.pending.park(ctx, kind, |request_id| state.host.ui_files(op, request_id, &json))?.into_value())
   }
 

@@ -11,9 +11,9 @@ import android.util.Size
 import android.util.SizeF
 import android.util.SparseArray
 import dalvik.system.DexClassLoader
-import desu.inugram.core.plugins.PluginInstalls
 import desu.inugram.core.plugins.PluginWire
 import desu.inugram.helpers.plugins.EngineDispatch
+import desu.inugram.helpers.plugins.io.PluginPaths
 import desu.inugram.helpers.plugins.JvmListener
 import desu.inugram.helpers.plugins.Plugin
 import desu.inugram.helpers.plugins.PluginSession
@@ -28,7 +28,6 @@ import java.lang.reflect.Method
 import java.lang.reflect.Modifier
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.atomic.AtomicLong
-import org.telegram.messenger.ApplicationLoader
 import org.telegram.messenger.Utilities
 
 /**
@@ -67,7 +66,10 @@ object PluginJvm : SessionResource {
     /** keep in sync with rust `jvm::DEX_LIMIT_BYTES` and the number `android.jvm.d.ts` states */
     const val DEX_LIMIT_BYTES = 8L * 1024 * 1024
 
-    private const val ENGINE_PACKAGE = "desu.inugram.helpers.plugins"
+    /** the one hop that would put the engine's own objects in a plugin's hands, refused wherever a name crosses */
+    internal const val ENGINE_PACKAGE = "desu.inugram.helpers.plugins."
+
+    internal fun isEnginePackage(name: String): Boolean = name.startsWith(ENGINE_PACKAGE)
 
     private const val ROOT = "inu_plugin_dex"
 
@@ -95,16 +97,10 @@ object PluginJvm : SessionResource {
         (session.engine.listener?.jvm as? Session)?.close()
     }
 
-    fun dexDir(installId: String): File {
-        require(PluginInstalls.isValidId(installId)) { "malformed install id" }
-        return File(ApplicationLoader.applicationContext.filesDir, "$ROOT/$installId")
-    }
+    fun dexDir(installId: String): File = PluginPaths.scopedFile(installId, ROOT)
 
     /** **only on uninstall**: a class cannot be unloaded, so a merely-stopped plugin's code may still be running */
-    fun wipe(installId: String) {
-        if (!PluginInstalls.isValidId(installId)) return
-        dexDir(installId).deleteRecursively()
-    }
+    fun wipe(installId: String) = PluginPaths.wipe(installId, ::dexDir)
 
     /**
      * `inu.xposed` takes a `JavaMethod` at every entry point and hands a hook java values, so it
@@ -128,6 +124,11 @@ object PluginJvm : SessionResource {
     }
 
     internal fun bridgeFor(engine: QuickJs): ValueBridge? = engine.listener?.jvm as? ValueBridge
+
+    private fun checkStringSize(value: String, what: String) {
+        val size = value.toByteArray(Charsets.UTF_8).size
+        if (size > VALUE_LIMIT_BYTES) tooBig(what, size.toLong())
+    }
 
     private fun tooBig(what: String, size: Long): Nothing =
         throw PluginRefusal(
@@ -380,8 +381,7 @@ object PluginJvm : SessionResource {
         }
 
         private fun checkName(name: String) {
-            // the one hop that would put the engine's own objects in a plugin's hands
-            if (name.startsWith("$ENGINE_PACKAGE.")) {
+            if (isEnginePackage(name)) {
                 refuse("forbidden", "jvm: $name is the plugin engine's own bridge and is never reachable")
             }
         }
@@ -439,10 +439,7 @@ object PluginJvm : SessionResource {
             }
             return when (val decoded = PluginWire.decode(wire)) {
                 is PluginWire.Value.Null -> null
-                is PluginWire.Value.Str -> decoded.value.also {
-                    val size = it.toByteArray(Charsets.UTF_8).size
-                    if (size > VALUE_LIMIT_BYTES) tooBig("a string argument", size.toLong())
-                }
+                is PluginWire.Value.Str -> decoded.value.also { checkStringSize(it, "a string argument") }
                 is PluginWire.Value.IntNum -> decoded.value
                 is PluginWire.Value.DoubleNum -> decoded.value
                 is PluginWire.Value.Bool -> decoded.value
@@ -455,10 +452,7 @@ object PluginJvm : SessionResource {
         private fun checkValue(value: Any?) {
             when (value) {
                 null, is Boolean, is Byte, is Short, is Int, is Long, is Float, is Double, is Char -> {}
-                is String -> {
-                    val size = value.toByteArray(Charsets.UTF_8).size
-                    if (size > VALUE_LIMIT_BYTES) tooBig("a string", size.toLong())
-                }
+                is String -> checkStringSize(value, "a string")
                 is ByteArray -> if (value.size > VALUE_LIMIT_BYTES) tooBig("a byte[]", value.size.toLong())
                 // a `Class` is checked as the class it *names*, or every one would be checked as `java.lang.Class`
                 is Class<*> -> checkClass(value)

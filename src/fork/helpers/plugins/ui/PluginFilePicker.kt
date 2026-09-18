@@ -65,9 +65,7 @@ internal object PluginFilePicker : SessionResource {
             return PluginWire.encodePluginError("invalid-argument", "pickFile: ${e.message}")
         }
         val multiple = options.optBoolean("multiple")
-        val types = options.optJSONArray("accept")?.let { array ->
-            List(array.length()) { array.optString(it) }.filter { it.isNotEmpty() }
-        }.orEmpty()
+        val types = options.optJSONArray("accept").strings()
         return launch(session, requestId, "pickFile", {
             Intent(Intent.ACTION_OPEN_DOCUMENT).apply {
                 addCategory(Intent.CATEGORY_OPENABLE)
@@ -125,8 +123,7 @@ internal object PluginFilePicker : SessionResource {
             val observer = object : NotificationCenter.NotificationCenterDelegate {
                 override fun didReceivedNotification(id: Int, account: Int, vararg args: Any?) {
                     if (args.getOrNull(0) != code) return
-                    center.removeObserver(this, NotificationCenter.onActivityResultReceived)
-                    waiting.remove(session) { it === this }
+                    unwatch(session, this)
                     val ok = args.getOrNull(1) == Activity.RESULT_OK
                     val data = args.getOrNull(2) as? Intent
                     Utilities.globalQueue.postRunnable {
@@ -148,13 +145,18 @@ internal object PluginFilePicker : SessionResource {
                 @Suppress("DEPRECATION")
                 activity.startActivityForResult(intent(), code)
             } catch (e: Throwable) {
-                center.removeObserver(observer, NotificationCenter.onActivityResultReceived)
-                waiting.remove(session) { it === observer }
+                unwatch(session, observer)
                 Log.e(TAG, "$name could not be opened", e)
                 settle(session, requestId, name, Picked(PluginWire.encodePluginError("unsupported", "$name: this device has no file picker")))
             }
         }
         return null
+    }
+
+    /** the two halves of a registration always come off together: the centre's and the session's */
+    private fun unwatch(session: PluginSession, observer: NotificationCenter.NotificationCenterDelegate) {
+        NotificationCenter.getGlobalInstance().removeObserver(observer, NotificationCenter.onActivityResultReceived)
+        waiting.remove(session) { it === observer }
     }
 
     private fun settle(session: PluginSession, requestId: Long, name: String, picked: Picked) {

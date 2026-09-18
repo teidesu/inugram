@@ -252,17 +252,7 @@ class PluginInstallSheet(
         content.obfuscation?.let { kind ->
             val banner = obfuscationBanner ?: WarningBanner(context).also { banner ->
                 obfuscationBanner = banner
-                when (kind) {
-                    SourceObfuscation.OBFUSCATED -> {
-                        banner.setTitle(LocaleController.getString(R.string.InuPluginObfuscatedTitle))
-                        banner.setText(LocaleController.getString(R.string.InuPluginObfuscatedInfo))
-                    }
-
-                    SourceObfuscation.MINIFIED -> {
-                        banner.setTitle(LocaleController.getString(R.string.InuPluginMinifiedTitle))
-                        banner.setText(LocaleController.getString(R.string.InuPluginMinifiedInfo))
-                    }
-                }
+                banner.setObfuscation(kind)
             }
             items.add(UItem.asCustomShadow(OBFUSCATION_BANNER, banner))
         }

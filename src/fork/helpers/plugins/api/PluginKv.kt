@@ -1,8 +1,8 @@
 package desu.inugram.helpers.plugins.api
 
 import desu.inugram.core.plugins.PluginInstalls
+import desu.inugram.helpers.plugins.io.PluginPaths
 import java.io.File
-import org.telegram.messenger.ApplicationLoader
 
 /**
  * Where `inu.kv` keeps an install's store (rust: `kv.rs`, which owns the store and its quota).
@@ -12,10 +12,7 @@ import org.telegram.messenger.ApplicationLoader
 object PluginKv {
     private const val ROOT = "inu_kv"
 
-    private fun file(installId: String): File {
-        require(PluginInstalls.isValidId(installId)) { "malformed install id" }
-        return File(ApplicationLoader.applicationContext.filesDir, "$ROOT/$installId")
-    }
+    private fun file(installId: String): File = PluginPaths.scopedFile(installId, ROOT)
 
     fun pathFor(installId: String): String = file(installId).apply { parentFile!!.mkdirs() }.absolutePath
 

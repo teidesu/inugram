@@ -4,13 +4,12 @@ pub(crate) mod geometry;
 use crate::runtime::Dispose;
 use std::cell::{Cell, RefCell};
 use std::collections::HashMap;
-use std::fs;
 use std::path::PathBuf;
 use std::rc::{Rc, Weak};
 
 use rquickjs::class::{JsClass, Readable, Trace, Tracer};
 use rquickjs::function::{Constructor, Opt, Rest, This};
-use rquickjs::object::{Accessor, Property};
+use rquickjs::object::Property;
 use rquickjs::{
   Class, Coerced, Ctx, Exception, FromJs, Function, JsLifetime, Object, Result as JsResult, Runtime, Value,
 };
@@ -18,14 +17,14 @@ use rquickjs::{
 use crate::api::canvas::css::{parse_color, parse_font, Font};
 use crate::api::canvas::geometry::{finite, normalize_round_rect, ArcError, Matrix, Path, Verb};
 use crate::api::error::{wire_error_to_js, PluginErrorCode};
-use crate::api::io::blob::{mint_app_file, BlobState, BUILD_LIMIT_BYTES};
+use crate::api::io::blob::{mint_app_file_at, BlobState, BUILD_LIMIT_BYTES};
 use crate::api::io::fs::FsState;
 use crate::api::io::staging::StagedFile;
 use crate::api::io::staging::{SourceStager, StagedSource};
 use crate::runtime::{pump_jobs, Parked, PendingTable};
 use crate::sandbox::limits::{ExternalCharge, ExternalMemory};
 use crate::sandbox::registry::RequestIds;
-use crate::utils::shape::{define_disposable, define_getter, define_method};
+use crate::utils::shape::{define_accessor, define_disposable, define_getter, define_method, get_class_prototype};
 
 pub const MAX_DIMENSION: i32 = 8192;
 
@@ -961,35 +960,24 @@ fn check_dimensions(ctx: &Ctx<'_>, width: i32, height: i32) -> JsResult<()> {
 impl Surface {
   fn resize(&self, ctx: &Ctx<'_>, width: i32, height: i32) -> JsResult<()> {
     check_dimensions(ctx, width, height)?;
-    if width == self.width.get() && height == self.height.get() {
-      self.commands.borrow_mut().clear();
-      let answer = ask(&*self.state.host, OP_CREATE, self.id, |args| {
-        args.i32(width);
-        args.i32(height);
-      });
-      return throw_host_error(ctx, &answer);
-    }
-    let bytes = width as usize * height as usize * 4;
-    let charge = self.state.external.charge(ctx, bytes)?;
+    let charge = if width == self.width.get() && height == self.height.get() {
+      None
+    } else {
+      Some(self.state.external.charge(ctx, width as usize * height as usize * 4)?)
+    };
     self.commands.borrow_mut().clear();
     let answer = ask(&*self.state.host, OP_CREATE, self.id, |args| {
       args.i32(width);
       args.i32(height);
     });
     throw_host_error(ctx, &answer)?;
-    self.width.set(width);
-    self.height.set(height);
-    *self.charge.borrow_mut() = Some(charge);
+    if let Some(charge) = charge {
+      self.width.set(width);
+      self.height.set(height);
+      *self.charge.borrow_mut() = Some(charge);
+    }
     Ok(())
   }
-}
-
-fn define_accessor<'js, G, GP, S, SP>(target: &Object<'js>, name: &str, get: G, set: S) -> JsResult<()>
-where
-  G: rquickjs::function::IntoJsFunc<'js, GP> + 'js,
-  S: rquickjs::function::IntoJsFunc<'js, SP> + 'js,
-{
-  target.prop(name, Accessor::new(get, set).enumerable().configurable())
 }
 
 const CONTEXT_KEY: &str = "inu.canvas.context";
@@ -1294,8 +1282,7 @@ impl CanvasState {
   }
 
   fn install_canvas_members<'js>(self: &Rc<Self>, ctx: &Ctx<'js>) -> JsResult<()> {
-    let proto = Class::<CanvasHandle>::prototype(ctx)?
-      .ok_or_else(|| Exception::throw_message(ctx, "OffscreenCanvas: the class has no prototype"))?;
+    let proto = get_class_prototype::<CanvasHandle>(ctx)?;
 
     {
       let f = Function::new(ctx.clone(), move |this: This<Class<'js, CanvasHandle>>| {
@@ -1475,20 +1462,7 @@ impl CanvasState {
         let object = parse_answer(ctx, wire)?;
         let path: String = object.get("path")?;
         let mime: String = object.get("type").unwrap_or_default();
-        let path = PathBuf::from(path);
-        let (size, mtime) = match fs::metadata(&path) {
-          Ok(meta) => (
-            meta.len(),
-            meta
-              .modified()
-              .ok()
-              .and_then(|t| t.duration_since(std::time::UNIX_EPOCH).ok())
-              .map(|d| d.as_millis() as i64)
-              .unwrap_or(0),
-          ),
-          Err(_) => (0, 0),
-        };
-        mint_app_file(ctx, &path, size, &mime, None, mtime)
+        mint_app_file_at(ctx, &PathBuf::from(path), &mime)
       }
       PendingKind::Decode(image) => {
         let object = parse_answer(ctx, wire)?;
@@ -1550,6 +1524,17 @@ fn iteration<'js>(ctx: &Ctx<'js>, value: Value<'js>, done: bool) -> JsResult<Obj
   result.set("value", value)?;
   result.set("done", done)?;
   Ok(result)
+}
+
+/// a synchronous op's answer: json, or the error the host put in its place
+fn parse_json_answer<'js>(ctx: &Ctx<'js>, answer: &str, what: &str) -> JsResult<Value<'js>> {
+  match answer.strip_prefix('J') {
+    Some(json) => ctx.json_parse(json),
+    None => {
+      throw_host_error(ctx, answer)?;
+      PluginErrorCode::Internal.throw(ctx, &format!("{what}: the host said nothing"))
+    }
+  }
 }
 
 fn parse_answer<'js>(ctx: &Ctx<'js>, wire: &str) -> JsResult<Object<'js>> {

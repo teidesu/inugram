@@ -1,5 +1,4 @@
 use super::*;
-use crate::api::error::format_exception;
 use crate::api::error::install_plugin_error;
 use crate::api::telegram::account::tests::TestAccountHost;
 use crate::api::tl::proxy::TlHost;
@@ -501,17 +500,7 @@ fn setup(grants: &[&str]) -> Fixture {
 
 const ALL_GRANTS: &[&str] = &["account.read(self,peers,dialogs,messages)"];
 
-use crate::testing::harness::{eval_json, FakeObject};
-
-/// for the reads whose *answer* does not matter: `JSON.stringify` on a view would ask the fake
-/// host for a snapshot it deliberately cannot make
-fn eval_void(ctx: &Context, code: &str) {
-  ctx.with(|ctx| match ctx.eval::<(), _>(code) {
-    Ok(()) => {}
-    Err(rquickjs::Error::Exception) => panic!("{}", format_exception(&ctx)),
-    Err(e) => panic!("{e:?}"),
-  })
-}
+use crate::testing::harness::{eval_json, eval_unit, FakeObject};
 
 /// evaluates `code`, returning the caught error as `[isPluginError, code, grant, message]` json
 use crate::testing::harness::catch_json;
@@ -556,7 +545,7 @@ fn every_getter_gates_on_its_own_account_read_scope() {
 
   // the same calls, granted, do reach it
   let (_rt, ctx, host, _state, _accounts) = setup(ALL_GRANTS);
-  eval_void(&ctx, "inu.account().getMe(); inu.account().getDialog('me');");
+  eval_unit(&ctx, "inu.account().getMe(); inu.account().getDialog('me');");
   assert_eq!(host.reads.borrow().len(), 2);
 }
 
@@ -646,7 +635,7 @@ fn an_input_peer_like_is_normalized_before_it_crosses() {
     "getUser({ _: 'user', id: '999', self: true })",
   ];
   for call in calls {
-    eval_void(&ctx, &format!("inu.account().{call};"));
+    eval_unit(&ctx, &format!("inu.account().{call};"));
   }
   let seen: Vec<String> = host.reads.borrow().iter().map(|(_, _, arg)| arg.clone()).collect();
   assert_eq!(
@@ -742,10 +731,10 @@ fn a_chat_batch_is_one_crossing_and_answers_for_chats_only() {
 #[test]
 fn a_drafts_topic_id_reaches_the_host() {
   let (_rt, ctx, host, _state, _accounts) = setup(ASYNC_GRANTS);
-  eval_void(&ctx, "inu.account().getDraft('me', { topicId: 7 });");
+  eval_unit(&ctx, "inu.account().getDraft('me', { topicId: 7 });");
   assert_eq!(host.reads.borrow().last().unwrap().2, "S\n7");
   // omitted is the host's own default rather than a topic of its own
-  eval_void(&ctx, "inu.account().getDraft('me');");
+  eval_unit(&ctx, "inu.account().getDraft('me');");
   assert_eq!(host.reads.borrow().last().unwrap().2, "S\n0");
   assert_eq!(
     catch_json(&ctx, "inu.account().getDraft('me', { topicId: -1 })"),
@@ -774,7 +763,7 @@ fn a_message_comes_back_wrapped_and_a_miss_stays_null() {
 #[test]
 fn zero_is_a_dialog_id_that_only_the_message_reads_give_a_meaning() {
   let (_rt, ctx, host, _state, _accounts) = setup(ALL_GRANTS);
-  eval_void(&ctx, "inu.account().getMessagesCached(0, 7); inu.account().getMessagesCached(0, [7, 8]);");
+  eval_unit(&ctx, "inu.account().getMessagesCached(0, 7); inu.account().getMessagesCached(0, [7, 8]);");
   {
     let reads = host.reads.borrow();
     assert_eq!(reads[0].2, "D0\n7");
@@ -959,11 +948,7 @@ const ASYNC_GRANTS: &[&str] = &["account.read(self,peers,dialogs,messages,histor
 /// runs `code`, which must leave its results in `__out`, and answers whatever the host parked
 fn run_async(grants: &[&str], code: &str) -> String {
   let (rt, ctx, host, state, _accounts) = setup(grants);
-  ctx.with(|ctx| match ctx.eval::<(), _>(format!("globalThis.__out = []; {code}")) {
-    Ok(()) => {}
-    Err(rquickjs::Error::Exception) => panic!("{}", format_exception(&ctx)),
-    Err(e) => panic!("{e:?}"),
-  });
+  eval_unit(&ctx, &format!("globalThis.__out = []; {code}"));
   settle(&rt, &ctx, &state, &host);
   // the order settlements land in is the order the host answered, which is not the order the
   // calls were made in - a sorted comparison is the only stable one
@@ -1088,7 +1073,7 @@ fn paging_hands_the_host_back_its_own_offsets_and_ends_at_a_short_page() {
 #[test]
 fn a_paged_dialog_read_names_fields_beside_its_cursor() {
   let (rt, ctx, host, state, _accounts) = setup(ASYNC_GRANTS);
-  eval_void(&ctx, "inu.account().getDialogs({ limit: 2, fields: ['top_message'] })");
+  eval_unit(&ctx, "inu.account().getDialogs({ limit: 2, fields: ['top_message'] })");
   settle(&rt, &ctx, &state, &host);
   assert_eq!(host.fetch_log.borrow().last().unwrap().1, r#"|{"folderId":0,"limit":2,"fields":["top_message"]}|"#);
 }
@@ -1159,11 +1144,7 @@ fn everything_an_async_read_hands_over_is_read_only() {
 /// keeping the order the results landed in - which is the whole subject of an iterator
 fn run_ordered(grants: &[&str], code: &str) -> (String, Vec<(i32, String)>) {
   let (rt, ctx, host, state, _accounts) = setup(grants);
-  ctx.with(|ctx| match ctx.eval::<(), _>(format!("globalThis.__out = []; {code}")) {
-    Ok(()) => {}
-    Err(rquickjs::Error::Exception) => panic!("{}", format_exception(&ctx)),
-    Err(e) => panic!("{e:?}"),
-  });
+  eval_unit(&ctx, &format!("globalThis.__out = []; {code}"));
   settle(&rt, &ctx, &state, &host);
   let asked = host.fetch_log.borrow().clone();
   (eval_json(&ctx, "__out"), asked)
@@ -1383,11 +1364,7 @@ fn the_bundled_reads_test_plugin_passes() {
   const ORACLE: &str = include_str!("../../../../test/plugins/reads-test.js");
   let (rt, ctx, host, state, _accounts) = setup(&crate::testing::harness::manifest_grants(ORACLE));
   let lines = crate::testing::harness::install_capturing_console(&ctx);
-  ctx.with(|ctx| match ctx.eval::<(), _>(ORACLE) {
-    Ok(()) => {}
-    Err(rquickjs::Error::Exception) => panic!("{}", format_exception(&ctx)),
-    Err(e) => panic!("{e:?}"),
-  });
+  eval_unit(&ctx, ORACLE);
   settle(&rt, &ctx, &state, &host);
   let lines = lines.borrow().clone();
   // exact rather than a floor: nothing here may SKIP against this fake, so a block that
@@ -1401,11 +1378,7 @@ fn the_bundled_async_reads_test_plugin_passes() {
   const ORACLE: &str = include_str!("../../../../test/plugins/async-reads-test.js");
   let (rt, ctx, host, state, _accounts) = setup(&crate::testing::harness::manifest_grants(ORACLE));
   let lines = crate::testing::harness::install_capturing_console(&ctx);
-  ctx.with(|ctx| match ctx.eval::<(), _>(ORACLE) {
-    Ok(()) => {}
-    Err(rquickjs::Error::Exception) => panic!("{}", format_exception(&ctx)),
-    Err(e) => panic!("{e:?}"),
-  });
+  eval_unit(&ctx, ORACLE);
   settle(&rt, &ctx, &state, &host);
   let lines = lines.borrow().clone();
   // exact rather than a floor: a cursor that stopped being minted would otherwise take the
@@ -1598,11 +1571,7 @@ mod grant_boundary {
     let rpc_state = crate::testing::harness::DisposeOnDrop::new(&ctx, rpc_state, |ctx, state| state.dispose(ctx));
 
     let lines = crate::testing::harness::install_capturing_console(&ctx);
-    ctx.with(|ctx| match ctx.eval::<(), _>(ORACLE) {
-      Ok(()) => {}
-      Err(rquickjs::Error::Exception) => panic!("{}", format_exception(&ctx)),
-      Err(e) => panic!("{e:?}"),
-    });
+    eval_unit(&ctx, ORACLE);
     while rt.is_job_pending() {
       rt.execute_pending_job().ok();
     }
@@ -1624,7 +1593,7 @@ mod grant_boundary {
 #[test]
 fn a_cached_dialog_read_selects_the_main_list_by_default() {
   let (rt, ctx, host, state, _accounts) = setup(ALL_GRANTS);
-  eval_void(&ctx, "inu.account().getDialogsCached()");
+  eval_unit(&ctx, "inu.account().getDialogsCached()");
   settle(&rt, &ctx, &state, &host);
   // archive=exclude, no chat folder, no limit
   assert_eq!(
@@ -1637,7 +1606,7 @@ fn a_cached_dialog_read_selects_the_main_list_by_default() {
 fn an_archive_mode_crosses_as_its_number() {
   for (mode, encoded) in [("exclude", "0"), ("only", "1"), ("keep", "2")] {
     let (rt, ctx, host, state, _accounts) = setup(ALL_GRANTS);
-    eval_void(&ctx, &format!("inu.account().getDialogsCached({{ archive: '{mode}' }})"));
+    eval_unit(&ctx, &format!("inu.account().getDialogsCached({{ archive: '{mode}' }})"));
     settle(&rt, &ctx, &state, &host);
     assert_eq!(
       host.fetch_log.borrow().last().unwrap().1,
@@ -1651,7 +1620,7 @@ fn an_archive_mode_crosses_as_its_number() {
 #[test]
 fn an_unknown_archive_mode_never_reaches_the_host() {
   let (rt, ctx, host, state, _accounts) = setup(ALL_GRANTS);
-  eval_void(
+  eval_unit(
     &ctx,
     r#"globalThis.__out = [];
        for (const mode of ['both', 'Exclude', 0, 'constructor']) {
@@ -1671,7 +1640,7 @@ fn an_unknown_archive_mode_never_reaches_the_host() {
 #[test]
 fn naming_both_archive_and_a_chat_folder_is_refused() {
   let (rt, ctx, host, state, _accounts) = setup(ALL_GRANTS);
-  eval_void(
+  eval_unit(
     &ctx,
     r#"globalThis.__out = [];
        inu.account().getDialogsCached({ archive: 'keep', chatFolderId: 2 }).catch(e => __out.push(e.code))"#,
@@ -1685,13 +1654,13 @@ fn naming_both_archive_and_a_chat_folder_is_refused() {
 #[test]
 fn a_chat_folder_id_crosses_and_zero_is_one_of_them() {
   let (rt, ctx, host, state, _accounts) = setup(ALL_GRANTS);
-  eval_void(&ctx, "inu.account().getDialogsCached({ chatFolderId: 0 })");
+  eval_unit(&ctx, "inu.account().getDialogsCached({ chatFolderId: 0 })");
   settle(&rt, &ctx, &state, &host);
   assert_eq!(
     host.fetch_log.borrow().last().unwrap().1,
     r#"|{"archive":0,"chatFolderId":0,"limit":0,"fields":null}|"#
   );
-  eval_void(&ctx, "inu.account().getDialogsCached({ chatFolderId: 3, limit: 20 })");
+  eval_unit(&ctx, "inu.account().getDialogsCached({ chatFolderId: 3, limit: 20 })");
   settle(&rt, &ctx, &state, &host);
   assert_eq!(
     host.fetch_log.borrow().last().unwrap().1,
@@ -1704,7 +1673,7 @@ fn a_chat_folder_id_crosses_and_zero_is_one_of_them() {
 #[test]
 fn named_fields_cross_as_an_array() {
   let (rt, ctx, host, state, _accounts) = setup(ALL_GRANTS);
-  eval_void(&ctx, "inu.account().getDialogsCached({ fields: ['top_message', 'peer'] })");
+  eval_unit(&ctx, "inu.account().getDialogsCached({ fields: ['top_message', 'peer'] })");
   settle(&rt, &ctx, &state, &host);
   assert_eq!(
     host.fetch_log.borrow().last().unwrap().1,
@@ -1716,7 +1685,7 @@ fn named_fields_cross_as_an_array() {
 #[test]
 fn a_field_name_that_is_not_one_never_reaches_the_host() {
   let (rt, ctx, host, state, _accounts) = setup(ALL_GRANTS);
-  eval_void(
+  eval_unit(
     &ctx,
     r#"globalThis.__out = [];
        for (const fields of [['a,b'], ['a\nb'], [''], [7], 'top_message', [{}]]) {
@@ -1736,7 +1705,7 @@ fn a_field_name_that_is_not_one_never_reaches_the_host() {
 #[test]
 fn an_integer_past_int32_never_reaches_the_host() {
   let (rt, ctx, host, state, _accounts) = setup(ALL_GRANTS);
-  eval_void(
+  eval_unit(
     &ctx,
     r#"globalThis.__out = [];
        const push = e => __out.push(e.code);
@@ -1759,7 +1728,7 @@ fn an_integer_past_int32_never_reaches_the_host() {
 #[test]
 fn a_negative_chat_folder_id_is_refused_rather_than_read_as_absence() {
   let (rt, ctx, host, state, _accounts) = setup(ALL_GRANTS);
-  eval_void(
+  eval_unit(
     &ctx,
     r#"globalThis.__out = [];
        inu.account().getDialogsCached({ chatFolderId: -1 }).catch(e => __out.push(e.code))"#,
@@ -1772,7 +1741,7 @@ fn a_negative_chat_folder_id_is_refused_rather_than_read_as_absence() {
 #[test]
 fn the_cached_reads_gate_on_the_dialogs_scope() {
   let (rt, ctx, host, state, _accounts) = setup(&["account.read(peers)"]);
-  eval_void(
+  eval_unit(
     &ctx,
     r#"globalThis.__out = [];
        const push = e => __out.push([e instanceof inu.PluginError, e.code, e.grant]);
@@ -1792,7 +1761,7 @@ fn the_cached_reads_gate_on_the_dialogs_scope() {
 #[test]
 fn chat_folders_arrive_as_plain_objects() {
   let (rt, ctx, host, state, _accounts) = setup(ALL_GRANTS);
-  eval_void(
+  eval_unit(
     &ctx,
     r#"globalThis.__out = [];
        inu.account().getChatFoldersCached()

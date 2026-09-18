@@ -3,7 +3,6 @@ package desu.inugram.ui.settings
 import android.content.Context
 import android.graphics.PorterDuff
 import android.graphics.PorterDuffColorFilter
-import android.graphics.drawable.GradientDrawable
 import android.view.Gravity
 import android.widget.FrameLayout
 import android.widget.ImageView
@@ -50,16 +49,15 @@ object PluginConsentSheet {
             clipToPadding = false
         }
 
+        val dangerFill = Theme.multAlpha(danger, if (Theme.isCurrentThemeDark()) 0.22f else 0.14f)
+
         val icon = ImageView(context).apply {
             setImageResource(R.drawable.inu_tabler_alert_triangle_filled)
             colorFilter = PorterDuffColorFilter(danger, PorterDuff.Mode.SRC_IN)
             scaleType = ImageView.ScaleType.FIT_CENTER
         }
         val iconCircle = FrameLayout(context).apply {
-            background = GradientDrawable().apply {
-                shape = GradientDrawable.OVAL
-                setColor(Theme.multAlpha(danger, if (Theme.isCurrentThemeDark()) 0.22f else 0.14f))
-            }
+            background = Theme.createCircleDrawable(dp(84f), dangerFill)
             addView(icon, LayoutHelper.createFrame(40, 40, Gravity.CENTER))
         }
         content.addView(iconCircle, LayoutHelper.createLinear(84, 84, Gravity.CENTER_HORIZONTAL, 0f, 0f, 0f, 12f))
@@ -91,7 +89,7 @@ object PluginConsentSheet {
         val pill = TextView(context).apply {
             background = Theme.createRoundRectDrawable(
                 dp(12f),
-                Theme.multAlpha(danger, if (Theme.isCurrentThemeDark()) 0.22f else 0.14f),
+                dangerFill,
             )
             setPadding(dp(16f), dp(12f), dp(16f), dp(12f))
             textSize = 14f

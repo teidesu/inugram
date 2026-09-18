@@ -3,8 +3,7 @@ use crate::api::error::install_plugin_error;
 use rquickjs::{Context, Runtime};
 
 fn setup() -> (Runtime, Context) {
-  let rt = Runtime::new().unwrap();
-  let ctx = Context::full(&rt).unwrap();
+  let (rt, ctx) = crate::testing::harness::new_engine();
   ctx.with(|ctx| install_plugin_error(&ctx).unwrap());
   (rt, ctx)
 }

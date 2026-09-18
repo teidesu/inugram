@@ -9,7 +9,9 @@ import android.widget.ImageView
 import android.widget.LinearLayout
 import android.widget.TextView
 import androidx.core.graphics.ColorUtils
+import desu.inugram.core.plugins.SourceObfuscation
 import org.telegram.messenger.AndroidUtilities
+import org.telegram.messenger.LocaleController
 import org.telegram.messenger.R
 import org.telegram.ui.ActionBar.Theme
 import org.telegram.ui.Components.LayoutHelper
@@ -79,5 +81,19 @@ class WarningBanner(
 
     fun setText(text: CharSequence) {
         message.text = text
+    }
+
+    /** the one wording for a source the detector flagged, wherever a plugin's source is shown */
+    fun setObfuscation(kind: SourceObfuscation) {
+        val (titleRes, infoRes) = OBFUSCATION_STRINGS.getValue(kind)
+        setTitle(LocaleController.getString(titleRes))
+        setText(LocaleController.getString(infoRes))
+    }
+
+    private companion object {
+        val OBFUSCATION_STRINGS = mapOf(
+            SourceObfuscation.OBFUSCATED to (R.string.InuPluginObfuscatedTitle to R.string.InuPluginObfuscatedInfo),
+            SourceObfuscation.MINIFIED to (R.string.InuPluginMinifiedTitle to R.string.InuPluginMinifiedInfo),
+        )
     }
 }

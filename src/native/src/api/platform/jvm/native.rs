@@ -523,6 +523,51 @@ impl Native {
     }
   }
 
+  /// a global reference the table holds from here on, or the refusal every expired mint gets
+  fn mint_ref(&self, ctx: &Ctx<'_>, obj: Global<JObject<'static>>, kind: u8) -> OpResult<i64> {
+    match self.refs.mint(obj, kind) {
+      Some(id) => Ok(id),
+      None => throw(ctx, PluginErrorCode::HandleExpired, "jvm: this plugin's handles have been released"),
+    }
+  }
+
+  /// the class a `getDeclared*` is asked on: the handle must name one, not be an instance of one
+  fn class_target(
+    &self,
+    ctx: &Ctx<'_>,
+    env: &mut Env,
+    known: &WellKnown,
+    target: &Class<'_, JvmRef>,
+  ) -> OpResult<usize> {
+    let entry = self.entry_of(ctx, target)?;
+    if entry.kind != KIND_CLASS {
+      return throw(ctx, PluginErrorCode::InvalidArgument, "jvm: that handle is not a class");
+    }
+    self.class_key_of(ctx, env, known, target, &entry)
+  }
+
+  /// the field a pinned handle stands for, and the receiver it was handed
+  fn pinned_field(
+    &self,
+    ctx: &Ctx<'_>,
+    env: &mut Env,
+    known: &WellKnown,
+    target: &Class<'_, JvmRef>,
+    receiver: &Arg<'_>,
+  ) -> OpResult<(Rc<FieldPlan>, Option<Entry>)> {
+    let entry = self.entry_of(ctx, target)?;
+    if entry.kind != KIND_FIELD {
+      return throw(ctx, PluginErrorCode::InvalidArgument, "jvm: that handle is not a field");
+    }
+    let pinned = self.pinned_of(ctx, env, known, target, &entry)?;
+    let Pinned::Field(plan) = &*pinned else {
+      return throw(ctx, PluginErrorCode::InvalidArgument, "jvm: that handle is not a field");
+    };
+    let plan = plan.clone();
+    let receiver = self.receiver_arg(ctx, env, receiver, Self::field_owner(&plan))?;
+    Ok((plan, receiver))
+  }
+
   fn key_of(&self, env: &mut Env, known: &WellKnown, cls: &JObject) -> OpResult<usize> {
     let hash = unsafe {
       env.call_static_method_unchecked(
@@ -1458,9 +1503,7 @@ impl Native {
       Shape::Object => (KIND_OBJECT, own_key),
     };
     let global = env.new_global_ref(&obj)?;
-    let Some(id) = self.refs.mint(global, kind) else {
-      return throw(ctx, PluginErrorCode::HandleExpired, "jvm: this plugin's handles have been released");
-    };
+    let id = self.mint_ref(ctx, global, kind)?;
     let class_key = if kind == KIND_CLASS || kind == KIND_OBJECT { Some(checked_key) } else { None };
     Ok(Outcome::Handle(HandleSpec { id, kind, class_key, pinned: None }))
   }
@@ -1498,11 +1541,7 @@ impl Native {
     args: &[Arg<'js>],
   ) -> JsResult<Outcome<'js>> {
     self.with_env(ctx, |env, known| {
-      let entry = self.entry_of(ctx, target)?;
-      if entry.kind != KIND_CLASS {
-        return throw(ctx, PluginErrorCode::InvalidArgument, "jvm: that handle is not a class");
-      }
-      let key = self.class_key_of(ctx, env, known, target, &entry)?;
+      let key = self.class_target(ctx, env, known, target)?;
       let plan = self.method_plan(ctx, env, known, key, "", true)?;
       let what = || format!("{} constructor", plan.class_name);
       let candidate = self.pick(ctx, env, known, &plan, what, false, false, args)?;
@@ -1539,11 +1578,7 @@ impl Native {
   /// `getDeclaredMethod`/`getDeclaredConstructor`: one member, minted with its plan attached
   pub(crate) fn method<'js>(&self, ctx: &Ctx<'js>, target: &Class<'js, JvmRef>, name: &str) -> JsResult<Outcome<'js>> {
     self.with_env(ctx, |env, known| {
-      let entry = self.entry_of(ctx, target)?;
-      if entry.kind != KIND_CLASS {
-        return throw(ctx, PluginErrorCode::InvalidArgument, "jvm: that handle is not a class");
-      }
-      let key = self.class_key_of(ctx, env, known, target, &entry)?;
+      let key = self.class_target(ctx, env, known, target)?;
       let (plan, what) = if let Some(descriptor) = name.strip_prefix("<init>") {
         let plan = self.method_plan(ctx, env, known, key, descriptor, true)?;
         let what = format!("{} constructor", plan.class_name);
@@ -1571,9 +1606,7 @@ impl Native {
       }
       let member = env.new_global_ref(candidate.member.as_obj())?;
       let kind = if candidate.is_constructor() { KIND_CONSTRUCTOR } else { KIND_METHOD };
-      let Some(id) = self.refs.mint(member, kind) else {
-        return throw(ctx, PluginErrorCode::HandleExpired, "jvm: this plugin's handles have been released");
-      };
+      let id = self.mint_ref(ctx, member, kind)?;
       Ok(Outcome::Handle(HandleSpec {
         id,
         kind,
@@ -1585,19 +1618,13 @@ impl Native {
 
   pub(crate) fn field<'js>(&self, ctx: &Ctx<'js>, target: &Class<'js, JvmRef>, name: &str) -> JsResult<Outcome<'js>> {
     self.with_env(ctx, |env, known| {
-      let entry = self.entry_of(ctx, target)?;
-      if entry.kind != KIND_CLASS {
-        return throw(ctx, PluginErrorCode::InvalidArgument, "jvm: that handle is not a class");
-      }
-      let key = self.class_key_of(ctx, env, known, target, &entry)?;
+      let key = self.class_target(ctx, env, known, target)?;
       let plan = self.field_plan(ctx, env, known, key, name)?;
       if let Some(wire) = &plan.refusal {
         return throw_wire(ctx, wire);
       }
       let field = env.new_global_ref(plan.field.as_obj())?;
-      let Some(id) = self.refs.mint(field, KIND_FIELD) else {
-        return throw(ctx, PluginErrorCode::HandleExpired, "jvm: this plugin's handles have been released");
-      };
+      let id = self.mint_ref(ctx, field, KIND_FIELD)?;
       Ok(Outcome::Handle(HandleSpec {
         id,
         kind: KIND_FIELD,
@@ -1678,17 +1705,9 @@ impl Native {
     receiver: &Arg<'js>,
   ) -> JsResult<Outcome<'js>> {
     self.with_env(ctx, |env, known| {
-      let entry = self.entry_of(ctx, target)?;
-      if entry.kind != KIND_FIELD {
-        return throw(ctx, PluginErrorCode::InvalidArgument, "jvm: that handle is not a field");
-      }
-      let pinned = self.pinned_of(ctx, env, known, target, &entry)?;
-      let Pinned::Field(plan) = &*pinned else {
-        return throw(ctx, PluginErrorCode::InvalidArgument, "jvm: that handle is not a field");
-      };
-      let receiver = self.receiver_arg(ctx, env, receiver, Self::field_owner(plan))?;
+      let (plan, receiver) = self.pinned_field(ctx, env, known, target, receiver)?;
       let receiver_obj = receiver.as_ref().map(|entry| entry.obj.as_obj());
-      let value = self.get_field(ctx, env, known, plan, receiver_obj)?;
+      let value = self.get_field(ctx, env, known, &plan, receiver_obj)?;
       self.result_to_js(ctx, env, known, value)
     })
   }
@@ -1708,17 +1727,9 @@ impl Native {
     value: &Arg<'js>,
   ) -> JsResult<()> {
     self.with_env(ctx, |env, known| {
-      let entry = self.entry_of(ctx, target)?;
-      if entry.kind != KIND_FIELD {
-        return throw(ctx, PluginErrorCode::InvalidArgument, "jvm: that handle is not a field");
-      }
-      let pinned = self.pinned_of(ctx, env, known, target, &entry)?;
-      let Pinned::Field(plan) = &*pinned else {
-        return throw(ctx, PluginErrorCode::InvalidArgument, "jvm: that handle is not a field");
-      };
-      let receiver = self.receiver_arg(ctx, env, receiver, Self::field_owner(plan))?;
+      let (plan, receiver) = self.pinned_field(ctx, env, known, target, receiver)?;
       let receiver_obj = receiver.as_ref().map(|entry| entry.obj.as_obj());
-      self.set_field(ctx, env, known, plan, receiver_obj, value)
+      self.set_field(ctx, env, known, &plan, receiver_obj, value)
     })
   }
 }

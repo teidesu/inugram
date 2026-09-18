@@ -2,7 +2,7 @@ use std::borrow::Cow;
 use std::fmt::Write as _;
 use std::ops::Range;
 
-use crate::{DateFormat, Entity, EntityKind, Sub, TextWithEntities, parse_iso8601, utf16_len, utf16_map};
+use crate::{parse_iso8601, utf16_len, utf16_map, DateFormat, Entity, EntityKind, Sub, TextWithEntities};
 
 pub fn escape(text: &str, quote: bool) -> String {
   let mut out = String::with_capacity(text.len());

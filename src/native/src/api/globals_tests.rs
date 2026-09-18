@@ -36,8 +36,7 @@ fn setup() -> (Runtime, Context, Rc<TestRandomHost>) {
 }
 
 fn setup_in(spill_dir: &Path) -> (Runtime, Context, Rc<TestRandomHost>) {
-  let rt = Runtime::new().unwrap();
-  let ctx = Context::full(&rt).unwrap();
+  let (rt, ctx) = crate::testing::harness::new_engine();
   let host = Rc::new(TestRandomHost::default());
   let host_dyn: Rc<dyn RandomHost> = host.clone();
   ctx.with(|ctx| install_globals(&ctx, host_dyn, spill_dir, ExternalMemory::new()).unwrap());

@@ -3,18 +3,22 @@ use writer::{create_method, get_word_count, Body, Class, Field, Op};
 const TARGET: &str = "Ldesu/inugram/helpers/plugins/platform/PluginJvmClass$MethodTarget;";
 const OBJECT: &str = "Ljava/lang/Object;";
 const ARRAY: &str = "[Ljava/lang/Object;";
-fn get_box_type(t: &str) -> Option<&'static str> {
+/// a primitive descriptor's box class and the method that unwraps one
+fn get_box_pair(t: &str) -> Option<(&'static str, &'static str)> {
   Some(match t {
-    "I" => "Ljava/lang/Integer;",
-    "J" => "Ljava/lang/Long;",
-    "D" => "Ljava/lang/Double;",
-    "F" => "Ljava/lang/Float;",
-    "Z" => "Ljava/lang/Boolean;",
-    "B" => "Ljava/lang/Byte;",
-    "S" => "Ljava/lang/Short;",
-    "C" => "Ljava/lang/Character;",
+    "I" => ("Ljava/lang/Integer;", "intValue"),
+    "J" => ("Ljava/lang/Long;", "longValue"),
+    "D" => ("Ljava/lang/Double;", "doubleValue"),
+    "F" => ("Ljava/lang/Float;", "floatValue"),
+    "Z" => ("Ljava/lang/Boolean;", "booleanValue"),
+    "B" => ("Ljava/lang/Byte;", "byteValue"),
+    "S" => ("Ljava/lang/Short;", "shortValue"),
+    "C" => ("Ljava/lang/Character;", "charValue"),
     _ => return None,
   })
+}
+fn get_box_type(t: &str) -> Option<&'static str> {
+  get_box_pair(t).map(|(box_type, _)| box_type)
 }
 fn get_move_kind(t: &str) -> u8 {
   if get_word_count(t) == 2 {
@@ -27,19 +31,8 @@ fn get_move_kind(t: &str) -> u8 {
 }
 fn append_cast(ops: &mut Vec<Op>, t: &str) {
   ops.push(Op::Cast(0, get_box_type(t).unwrap_or(t).into()));
-  if let Some(b) = get_box_type(t) {
-    let name = match t {
-      "I" => "intValue",
-      "J" => "longValue",
-      "D" => "doubleValue",
-      "F" => "floatValue",
-      "Z" => "booleanValue",
-      "B" => "byteValue",
-      "S" => "shortValue",
-      "C" => "charValue",
-      _ => unreachable!(),
-    };
-    ops.push(Op::Invoke(0x6e, vec![0], create_method(b, name, t, &[])));
+  if let Some((box_type, unbox)) = get_box_pair(t) {
+    ops.push(Op::Invoke(0x6e, vec![0], create_method(box_type, unbox, t, &[])));
     ops.push(Op::Result(0, if get_word_count(t) == 2 { 0x0b } else { 0x0a }));
   }
 }

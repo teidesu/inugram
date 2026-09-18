@@ -153,11 +153,11 @@ impl TlHost for JniBridge {
   }
 
   fn tl_own_keys(&self, handle: i64) -> Option<String> {
-    self.call_string("tlOwnKeys", self.on_tl_own_keys, &[Arg::Long(handle)]).ok().flatten()
+    self.call_string_opt("tlOwnKeys", self.on_tl_own_keys, &[Arg::Long(handle)])
   }
 
   fn tl_copy(&self, handle: i64) -> Option<String> {
-    self.call_string("tlCopy", self.on_tl_copy, &[Arg::Long(handle)]).ok().flatten()
+    self.call_string_opt("tlCopy", self.on_tl_copy, &[Arg::Long(handle)])
   }
 
   fn tl_release(&self, handle: i64) {
@@ -245,10 +245,7 @@ impl OpenUrlHost for JniBridge {
 
 impl ClipboardHost for JniBridge {
   fn read(&self) -> String {
-    self
-      .call_string("clipboardRead", self.on_clipboard_read, &[])
-      .unwrap_or_default()
-      .unwrap_or_default()
+    self.call_string_or_empty("clipboardRead", self.on_clipboard_read, &[])
   }
 
   fn write(&self, text: &str) {
@@ -258,19 +255,13 @@ impl ClipboardHost for JniBridge {
 
 impl UtilsHost for JniBridge {
   fn format(&self, op: i32, value: i64) -> String {
-    self
-      .call_string("format", self.on_format, &[Arg::Int(op), Arg::Long(value)])
-      .unwrap_or_default()
-      .unwrap_or_default()
+    self.call_string_or_empty("format", self.on_format, &[Arg::Int(op), Arg::Long(value)])
   }
 }
 
 impl ScreenHost for JniBridge {
   fn current_screen(&self) -> String {
-    self
-      .call_string("getCurrentScreen", self.on_ui_current_screen, &[])
-      .unwrap_or_default()
-      .unwrap_or_default()
+    self.call_string_or_empty("getCurrentScreen", self.on_ui_current_screen, &[])
   }
 }
 
@@ -334,7 +325,7 @@ impl IconHost for JniBridge {
   }
 
   fn common_icon(&self, name: &str) -> Option<String> {
-    self.call_string("commonIcon", self.on_common_icon, &[Arg::Str(name)]).ok().flatten()
+    self.call_string_opt("commonIcon", self.on_common_icon, &[Arg::Str(name)])
   }
 }
 

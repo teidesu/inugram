@@ -30,15 +30,15 @@ internal class PluginJvmRoutine(
         val graph = JSONObject(definition)
         val nodes = graph.getJSONArray("nodes")
         require(nodes.length() <= 256) { "routine: at most 256 operations" }
+        fun operandOf(value: JSONArray, index: Int): Operand {
+            require(value.length() == 2) { "routine: malformed operand" }
+            val reference = readIndex(value, 0, 2) == 1
+            return Operand(reference, readIndex(value, 1, if (reference) index else values.size))
+        }
         operations = List(nodes.length()) { index ->
             val node = nodes.getJSONArray(index)
             val kind = node.getString(0)
-            fun operand(at: Int): Operand {
-                val value = node.getJSONArray(at)
-                require(value.length() == 2) { "routine: malformed operand" }
-                val reference = readIndex(value, 0, 2) == 1
-                return Operand(reference, readIndex(value, 1, if (reference) index else values.size))
-            }
+            fun operand(at: Int): Operand = operandOf(node.getJSONArray(at), index)
             when (kind) {
                 "methodThis", "methodArgument", "methodSetResult" -> {
                     val count = if (kind == "methodThis") 0 else 1
@@ -71,12 +71,7 @@ internal class PluginJvmRoutine(
                         else -> {
                             val arguments = node.getJSONArray(3)
                             require(arguments.length() <= 256) { "routine: too many arguments" }
-                            List(arguments.length()) { arg ->
-                                val value = arguments.getJSONArray(arg)
-                                require(value.length() == 2) { "routine: malformed operand" }
-                                val reference = readIndex(value, 0, 2) == 1
-                                Operand(reference, readIndex(value, 1, if (reference) index else values.size))
-                            }
+                            List(arguments.length()) { arg -> operandOf(arguments.getJSONArray(arg), index) }
                         }
                     }
                     Operation(kind, name, listOf(operand(1)) + args)

@@ -49,9 +49,6 @@ object TlFilter {
     // ConcurrentHashMap cannot hold a null value, so "not a hidden type" memoizes as the empty name
     private val hiddenTypeByClass = ConcurrentHashMap<Class<*>, String>()
 
-    fun hidesField(policy: Policy, cls: Class<*>, key: String): Boolean =
-        TlReflect.fieldInfo(cls, key)?.let { hidesField(policy, it) } ?: false
-
     fun hidesField(policy: Policy, info: TlReflect.FieldInfo): Boolean =
         (policy.takeover && info.hiddenInTakeover) || (!policy.drafts && info.isDraft)
 

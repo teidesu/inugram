@@ -232,13 +232,6 @@ object TlReflect {
 
     fun classOf(tlName: String): Class<out TLObject>? = classesByTlName[tlName]
 
-    /** whether an optional field is present at all; a word this does not know about gates nothing */
-    fun isBitSet(obj: TLObject, cls: Class<*>, gate: TlFlags.Gate): Boolean {
-        val name = TlFlags.wordName(gate.word) ?: return true
-        val field = publicFields(cls)[name] ?: return true
-        return (field.getInt(obj) and (1 shl gate.bit)) != 0
-    }
-
     /** for writes onto a live object whose other fields must be left exactly as the app had them */
     fun syncFlagBit(obj: TLObject, fieldName: String) {
         val cls = obj.javaClass

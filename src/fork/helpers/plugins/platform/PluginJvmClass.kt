@@ -11,6 +11,8 @@ import org.json.JSONObject
 
 @Keep
 internal object PluginJvmClass {
+    private val IDENTIFIER = Regex("[A-Za-z_$][A-Za-z0-9_$]*")
+
     private class Invocation(var depth: Int = 0, val deadline: Long = System.nanoTime() + 250_000_000L)
     private val invocation = ThreadLocal<Invocation>()
     class Definition(val type: Class<*>, val targets: List<MethodTarget>) {
@@ -81,7 +83,7 @@ internal object PluginJvmClass {
         require(definition.toByteArray(Charsets.UTF_8).size <= PluginJvm.VALUE_LIMIT_BYTES) { "class definition exceeds 1 MB" }
         val spec = JSONObject(definition)
         val name = spec.getString("name").replace('/', '.')
-        require(name.split('.').all { it.matches(Regex("[A-Za-z_$][A-Za-z0-9_$]*")) } && !name.startsWith("java.") && !name.startsWith("android.") && !name.startsWith("desu.inugram.helpers.plugins.")) { "invalid class name" }
+        require(name.split('.').all { it.matches(IDENTIFIER) } && !name.startsWith("java.") && !name.startsWith("android.") && !PluginJvm.isEnginePackage(name)) { "invalid class name" }
         require(runCatching { resolve(name) }.exceptionOrNull() is ClassNotFoundException) { "class already exists: $name" }
         fun capture(index: Int): Any? {
             require(index in values.indices) { "invalid class capture" }
@@ -129,7 +131,7 @@ internal object PluginJvmClass {
             return Array(array.length()) { getType(array.getString(it)) }
         }
         fun checkName(value: String) {
-            require(value.matches(Regex("[A-Za-z_$][A-Za-z0-9_$]*")) && !value.startsWith("inu$")) { "invalid or reserved member name: $value" }
+            require(value.matches(IDENTIFIER) && !value.startsWith("inu$")) { "invalid or reserved member name: $value" }
         }
         val fieldNames = HashSet<String>()
         val fieldData = Array(fields.length()) {

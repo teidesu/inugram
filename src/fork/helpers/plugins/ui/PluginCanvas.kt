@@ -228,6 +228,19 @@ object PluginCanvas : SessionResource {
         private fun surfaceOf(id: Long): Surface =
             canvases[id] ?: refuse("handle-expired", "canvas: that canvas is gone")
 
+        private fun imageOf(id: Long): Bitmap =
+            images[id] ?: refuse("handle-expired", "canvas: that image was disposed")
+
+        private fun animationOf(id: Long): PluginAnimationDecoder =
+            animations[id] ?: refuse("handle-expired", "canvas: that animation is gone")
+
+        /** a pipeline that already failed refuses here rather than on the queue it failed on */
+        private fun pipelineOf(id: Long): Pipeline {
+            val pipeline = encoders[id] ?: refuse("handle-expired", "canvas: that encoder is gone")
+            pipeline.failure?.let { throw PluginRefusal(it) }
+            return pipeline
+        }
+
         private fun releaseImage(id: Long): String {
             images.remove(id)?.recycle()
             return ""
@@ -340,7 +353,7 @@ object PluginCanvas : SessionResource {
             dst.bottom = dst.top + reader.f()
 
             val bitmap = when (kind) {
-                SOURCE_IMAGE -> images[id] ?: refuse("handle-expired", "canvas: that image was disposed")
+                SOURCE_IMAGE -> imageOf(id)
                 SOURCE_CANVAS -> surfaceOf(id).bitmap
                 else -> refuse("internal", "canvas: unknown image source")
             }
@@ -470,7 +483,7 @@ object PluginCanvas : SessionResource {
 
         private fun patternShader(spec: PaintSpec): Shader {
             val bitmap = when (spec.patternSource) {
-                SOURCE_IMAGE -> images[spec.patternId] ?: refuse("handle-expired", "canvas: that image was disposed")
+                SOURCE_IMAGE -> imageOf(spec.patternId)
                 else -> surfaceOf(spec.patternId).bitmap
             }
             val decal = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
@@ -639,7 +652,7 @@ object PluginCanvas : SessionResource {
             val requestId = reader.i64()
             val mime = reader.text()
             val quality = reader.f()
-            val dir = encodedDir() ?: refuse("internal", "canvas: there is nowhere to write the result")
+            val dir = encodedDir()
             val format = when (mime) {
                 "image/jpeg" -> Bitmap.CompressFormat.JPEG
                 "image/webp" -> webpFormat()
@@ -800,7 +813,7 @@ object PluginCanvas : SessionResource {
             val requestId = reader.i64()
             val imageId = reader.i64()
             val index = reader.i32()
-            val decoder = animations[id] ?: refuse("handle-expired", "canvas: that animation is gone")
+            val decoder = animationOf(id)
             submitFrame(requestId, imageId, decoder) { decoder.frame(index) }
             return ""
         }
@@ -808,7 +821,7 @@ object PluginCanvas : SessionResource {
         private fun animationNext(id: Long, reader: Reader): String {
             val requestId = reader.i64()
             val imageId = reader.i64()
-            val decoder = animations[id] ?: refuse("handle-expired", "canvas: that animation is gone")
+            val decoder = animationOf(id)
             submitFrame(requestId, imageId, decoder) { decoder.next() }
             return ""
         }
@@ -844,7 +857,7 @@ object PluginCanvas : SessionResource {
             val height = reader.i32()
             val fps = reader.i32()
             val bitrate = reader.i64()
-            val dir = encodedDir() ?: refuse("internal", "canvas: there is nowhere to write the result")
+            val dir = encodedDir()
             val output = File(dir, "out-${++nextFile}.mp4")
             submitOwned(
                 requestId,
@@ -863,8 +876,7 @@ object PluginCanvas : SessionResource {
             val kind = reader.u8()
             val sourceId = reader.i64()
             val duration = reader.f().toDouble()
-            val pipeline = encoders[id] ?: refuse("handle-expired", "canvas: that encoder is gone")
-            pipeline.failure?.let { throw PluginRefusal(it) }
+            val pipeline = pipelineOf(id)
             val source = if (kind == SOURCE_CANVAS) {
                 surfaceOf(sourceId).bitmap
             } else {
@@ -904,8 +916,7 @@ object PluginCanvas : SessionResource {
 
         private fun encoderFinish(id: Long, reader: Reader): String {
             val requestId = reader.i64()
-            val pipeline = encoders[id] ?: refuse("handle-expired", "canvas: that encoder is gone")
-            pipeline.failure?.let { throw PluginRefusal(it) }
+            val pipeline = pipelineOf(id)
             submit(requestId, pipeline.encoder.queue) {
                 val file = pipeline.encoder.finish()
                 "J" + JSONObject().put("path", file.absolutePath).put("type", "video/mp4").toString()
@@ -918,11 +929,12 @@ object PluginCanvas : SessionResource {
             return ""
         }
 
-        private fun encodedDir(): File? {
+        private fun encodedDir(): File {
             val root = PluginBlobs.dirFor(session.plugin.id)
-            if (root.isEmpty()) return null
-            val dir = File(root, ENCODED_DIR)
-            if (!dir.isDirectory && !dir.mkdirs()) return null
+            val dir = if (root.isEmpty()) null else File(root, ENCODED_DIR)
+            if (dir == null || (!dir.isDirectory && !dir.mkdirs())) {
+                refuse("internal", "canvas: there is nowhere to write the result")
+            }
             return dir
         }
 

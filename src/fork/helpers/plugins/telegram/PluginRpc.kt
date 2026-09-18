@@ -47,6 +47,8 @@ import org.telegram.tgnet.WriteToSocketDelegate
 import org.telegram.tgnet.tl.TL_update
 import org.telegram.ui.ChatActivity
 
+internal fun encodeRpcErrorWire(error: TLRPC.TL_error): String = PluginWire.encodeRpcError(error.code, error.text ?: "")
+
 /**
  * Wires `inu.interceptRpc`/`inu.invokeRpc` into the stock request pipeline. The arriving update
  * stream is [PluginUpdates]; the two share only [TlHandles] and this file's queue rules.
@@ -397,13 +399,16 @@ object PluginRpc : SessionResource {
         // `count`, not `any`: every message owed a verdict must get one, short-circuiting skips the rest
         messages.count { handleDroppedSend(helper, account, it.messageOwner, scheduled) } > 0
 
+    /** which chat list a local message belongs to, the way stock picks one before it touches storage */
+    private fun chatModeOf(message: TLRPC.Message, scheduled: Boolean): Int = when {
+        scheduled -> ChatActivity.MODE_SCHEDULED
+        MessageObject.isWelcomeMessage(message) -> ChatActivity.MODE_WELCOME_MESSAGES
+        message.quick_reply_shortcut_id != 0 || message.quick_reply_shortcut != null -> ChatActivity.MODE_QUICK_REPLIES
+        else -> ChatActivity.MODE_DEFAULT
+    }
+
     private fun removeDroppedMessage(helper: SendMessagesHelper, account: Int, message: TLRPC.Message, scheduled: Boolean) {
-        val mode = when {
-            scheduled -> ChatActivity.MODE_SCHEDULED
-            MessageObject.isWelcomeMessage(message) -> ChatActivity.MODE_WELCOME_MESSAGES
-            message.quick_reply_shortcut_id != 0 || message.quick_reply_shortcut != null -> ChatActivity.MODE_QUICK_REPLIES
-            else -> ChatActivity.MODE_DEFAULT
-        }
+        val mode = chatModeOf(message, scheduled)
         MessagesController.getInstance(account).deleteMessages(
             arrayListOf(message.id),
             null,
@@ -795,6 +800,15 @@ object PluginRpc : SessionResource {
         return PluginWire.encodePluginError("forbidden", "'$method' is an account-takeover method and is never available to plugins")
     }
 
+    /** what every `invokeRpc`-shaped call is gated on, in order: a takeover method stays refused whatever grant named it */
+    private fun invokeRefusal(session: PluginSession, tlName: String): String? {
+        takeoverRefusal(session.permissions, tlName)?.let { return it }
+        if (!session.permissions.allows("invokeRpc", tlName, ScopeMatch.EXACT)) {
+            return PluginWire.encodeNotGranted("invokeRpc", tlName)
+        }
+        return null
+    }
+
     private fun dispatchChain(
         operation: RpcChain,
         index: Int,
@@ -1126,6 +1140,8 @@ object PluginRpc : SessionResource {
     private fun captionOf(request: TLObject): Pair<String, ArrayList<TLRPC.MessageEntity>>? = when (request) {
         is TLRPC.TL_messages_sendMessage -> request.message to ArrayList(request.entities)
         is TLRPC.TL_messages_sendMedia -> request.message to ArrayList(request.entities)
+        is TLRPC.TL_messages_sendMultiMedia ->
+            request.multi_media.firstOrNull()?.let { it.message to ArrayList(it.entities) }
         else -> null
     }
 
@@ -1150,13 +1166,7 @@ object PluginRpc : SessionResource {
                 message.updateMessageText()
                 message.resetLayout()
                 if (message.type != MessageObject.TYPE_TEXT) message.generateCaption()
-                val mode = when {
-                    message.scheduled -> ChatActivity.MODE_SCHEDULED
-                    MessageObject.isWelcomeMessage(message.messageOwner) -> ChatActivity.MODE_WELCOME_MESSAGES
-                    message.messageOwner.quick_reply_shortcut_id != 0 || message.messageOwner.quick_reply_shortcut != null ->
-                        ChatActivity.MODE_QUICK_REPLIES
-                    else -> ChatActivity.MODE_DEFAULT
-                }
+                val mode = chatModeOf(message.messageOwner, message.scheduled)
                 MessagesStorage.getInstance(optimisticMessages.account).putMessages(
                     arrayListOf(message.messageOwner),
                     false,
@@ -1188,10 +1198,7 @@ object PluginRpc : SessionResource {
             return decodeFailureWire("invokeRpc", e)
         }
         val tlName = TlNames.classNameToTlName(request.javaClass)
-        takeoverRefusal(session.permissions, tlName)?.let { return it }
-        if (!session.permissions.allows("invokeRpc", tlName, ScopeMatch.EXACT)) {
-            return PluginWire.encodeNotGranted("invokeRpc", tlName)
-        }
+        invokeRefusal(session, tlName)?.let { return it }
         // last, so a takeover method stays refused whichever slot it was aimed at. The slot is not the host's to trust: a plugin can call `invokeRpc` through any object carrying an `id`
         val account = try {
             invokeAccountOrRefusal("invokeRpc", slot, startedOn)
@@ -1228,7 +1235,7 @@ object PluginRpc : SessionResource {
     /** the slot a call names, or the refusal wire for one that names no live account */
     private fun invokeAccountOrRefusal(prefix: String, slot: Int, startedOn: Int): Int {
         val account = if (slot == QuickJs.ANY_ACCOUNT) startedOn else slot
-        if (account < 0 || account >= UserConfig.MAX_ACCOUNT_COUNT || !UserConfig.isValidAccount(account)) {
+        if (!UserConfig.isValidAccount(account)) {
             PluginWire.refuse("invalid-argument", "$prefix: no account in slot $account")
         }
         return account
@@ -1261,7 +1268,7 @@ object PluginRpc : SessionResource {
         sendInvoke(session, account, request) { response, error ->
             releaseUnowned(response)
             when {
-                error != null -> settleInvoke(session, invokeId, "invokeRaw") { PluginWire.encodeRpcError(error.code, error.text ?: "") }
+                error != null -> settleInvoke(session, invokeId, "invokeRaw") { encodeRpcErrorWire(error) }
                 response is RawTlResponse -> session.engine.settleBytes(QuickJs.SETTLE_INVOKE, invokeId, response.bytes)
                 else -> settleInvoke(session, invokeId, "invokeRaw") { PluginWire.encodeNull() }
             }
@@ -1302,10 +1309,7 @@ object PluginRpc : SessionResource {
                 RpcListener.OP_TAKEOUT_INVOKE -> {
                     val query = decodeTlObject(session.tl, arg)
                     val queryName = TlNames.classNameToTlName(query.javaClass)
-                    takeoverRefusal(session.permissions, queryName)?.let { return it }
-                    if (!session.permissions.allows("invokeRpc", queryName, ScopeMatch.EXACT)) {
-                        return PluginWire.encodeNotGranted("invokeRpc", queryName)
-                    }
+                    invokeRefusal(session, queryName)?.let { return it }
                     request = TakeoutWrapper(parseTakeoutId(takeoutId), query)
                     encode = { response, error -> encodeInvokeResult(session.tl, response, error) }
                 }
@@ -1341,14 +1345,14 @@ object PluginRpc : SessionResource {
 
     private fun encodeTakeoutId(response: TLObject?, error: TLRPC.TL_error?): String {
         releaseUnowned(response)
-        if (error != null) return PluginWire.encodeRpcError(error.code, error.text ?: "")
+        if (error != null) return encodeRpcErrorWire(error)
         if (response !is TakeoutSession) return PluginWire.encodeNull()
         return PluginWire.encodeLongAsString(response.id)
     }
 
     private fun encodeTakeoutFinished(response: TLObject?, error: TLRPC.TL_error?): String {
         releaseUnowned(response)
-        if (error != null) return PluginWire.encodeRpcError(error.code, error.text ?: "")
+        if (error != null) return encodeRpcErrorWire(error)
         return PluginWire.encodeBool(response is TLRPC.TL_boolTrue)
     }
 
@@ -1396,7 +1400,7 @@ object PluginRpc : SessionResource {
     }
 
     private fun encodeChainResult(tl: TlHandles, response: TLObject?, error: TLRPC.TL_error?, scopeId: Long): String {
-        if (error != null) return PluginWire.encodeRpcError(error.code, error.text ?: "")
+        if (error != null) return encodeRpcErrorWire(error)
         if (response == null) return PluginWire.encodeNull()
         return tl.mintWireForScope(response, scopeId)
     }
@@ -1405,7 +1409,7 @@ object PluginRpc : SessionResource {
         if (error != null) {
             // stock's free was suppressed before we knew it wouldn't be handed over, so nothing else will free it
             releaseUnowned(response)
-            return PluginWire.encodeRpcError(error.code, error.text ?: "")
+            return encodeRpcErrorWire(error)
         }
         if (response == null) return PluginWire.encodeNull()
         return tl.mintWireForPlugin(response, readOnly = false, owned = true)

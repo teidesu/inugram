@@ -65,7 +65,6 @@ object PluginMedia : SessionResource {
      */
     private val live = OwnerRegistry<PluginSession, Transfer>()
 
-    private const val DOWNLOAD_TAG = "InuDownload"
 
     fun messageFile(session: PluginSession, accountId: Int, value: String): String {
         return try {
@@ -91,10 +90,6 @@ object PluginMedia : SessionResource {
         val media = mediaFile(message) ?: refuse("invalid-argument", "this message has no media to download")
         val loader = FileLoader.getInstance(call.accountId)
         val already = findLocalFile(loader, message, media)
-        android.util.Log.d(
-            DOWNLOAD_TAG,
-            "download#${call.requestId} start name=${media.fileName} local=${already?.absolutePath}",
-        )
         if (already != null) {
             // still through [answer], because settling inside the upcall is the same-engine re-entry that aborts the process
             PluginWrites.answer(call) { downloadWire(already, message, toFile) }
@@ -112,10 +107,6 @@ object PluginMedia : SessionResource {
         }
         observe(transfer)
         AndroidUtilities.runOnUIThread {
-            android.util.Log.d(
-                DOWNLOAD_TAG,
-                "download#${call.requestId} loadFile name=${media.fileName}",
-            )
             when (media) {
                 is Downloadable.Doc -> loader.loadFile(media.document, message, FileLoader.PRIORITY_NORMAL, 0)
                 is Downloadable.Image ->
@@ -149,16 +140,14 @@ object PluginMedia : SessionResource {
         return PluginWire.encodeJson(json.toString())
     }
 
-    private fun downloadName(message: TLRPC.Message, file: File): String {
-        val document = (message.media as? TLRPC.TL_messageMediaDocument)?.document
-        val named = document?.attributes?.firstNotNullOfOrNull { (it as? TLRPC.TL_documentAttributeFilename)?.file_name }
-        return named ?: file.name
-    }
+    private fun documentOf(message: TLRPC.Message): TLRPC.Document? =
+        (message.media as? TLRPC.TL_messageMediaDocument)?.document
 
-    private fun mimeOfMessage(message: TLRPC.Message, fileName: String): String {
-        val document = (message.media as? TLRPC.TL_messageMediaDocument)?.document
-        return document?.mime_type?.takeIf { it.isNotEmpty() } ?: mimeOfName(fileName)
-    }
+    private fun downloadName(message: TLRPC.Message, file: File): String =
+        FileLoader.getDocumentFileName(documentOf(message)).takeIf { it.isNotEmpty() } ?: file.name
+
+    private fun mimeOfMessage(message: TLRPC.Message, fileName: String): String =
+        documentOf(message)?.mime_type?.takeIf { it.isNotEmpty() } ?: mimeOfName(fileName)
 
     internal fun uploadFile(call: Call): String? {
         val source = stagedFile(call, call.values.firstOrNull() ?: refuse("invalid-argument", "no file"))
@@ -349,7 +338,7 @@ object PluginMedia : SessionResource {
         asDocument: Boolean,
         described: List<TLRPC.DocumentAttribute>,
     ): TLRPC.InputMedia {
-        if (!asDocument && mime.startsWith("image/") && mime != "image/webp") {
+        if (PluginOptimisticSend.asPhoto(mime, asDocument)) {
             return TLRPC.TL_inputMediaUploadedPhoto().apply { file = input }
         }
         return TLRPC.TL_inputMediaUploadedDocument().apply {
@@ -513,13 +502,6 @@ object PluginMedia : SessionResource {
             val centre = NotificationCenter.getInstance(transfer.call.accountId)
             val observer = NotificationCenter.NotificationCenterDelegate { id, _, args ->
                 if (args.isEmpty() || args[0] != transfer.fileName) return@NotificationCenterDelegate
-                if (id != transfer.progressEvent) {
-                    android.util.Log.d(
-                        DOWNLOAD_TAG,
-                        "transfer#${transfer.call.requestId} event=${if (id == transfer.doneEvent) "done" else "failed"} " +
-                            "name=${transfer.fileName} args=${args.drop(1)}",
-                    )
-                }
                 when (id) {
                     transfer.progressEvent -> report(transfer, longAt(args, 1), longAt(args, 2))
                     transfer.doneEvent -> {
@@ -534,7 +516,6 @@ object PluginMedia : SessionResource {
             }
             transfer.observer = observer
             for (id in transfer.events) centre.addObserver(observer, id)
-            android.util.Log.d(DOWNLOAD_TAG, "transfer#${transfer.call.requestId} observing name=${transfer.fileName}")
         }
     }
 
@@ -575,7 +556,6 @@ object PluginMedia : SessionResource {
     override fun detach(session: PluginSession) {
         val mine = live.take(session)
         if (mine.isEmpty()) return
-        android.util.Log.d(DOWNLOAD_TAG, "detach: dropping ${mine.size} live transfers: ${mine.map { it.fileName }}")
         for (transfer in mine) stopObserving(transfer)
     }
 }

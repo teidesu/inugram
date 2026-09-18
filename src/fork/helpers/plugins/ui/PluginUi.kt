@@ -2,8 +2,6 @@ package desu.inugram.helpers.plugins.ui
 
 import desu.inugram.helpers.plugins.SessionResource
 import android.content.Context
-import android.graphics.PorterDuff
-import android.graphics.PorterDuffColorFilter
 import android.os.Bundle
 import android.text.SpannableString
 import android.text.Spanned
@@ -103,10 +101,8 @@ object PluginUi : SessionResource {
                     (animation.repeatCount == 0 || animation.repeatCount == null)
                 val layout = Bulletin.LottieLayout(context, fragment?.resourceProvider)
                 if (iconSpec.isNotEmpty() && iconSpec[0] in "rset") {
-                    layout.imageView.colorFilter = PorterDuffColorFilter(
-                        Theme.getColor(Theme.key_undo_infoColor, fragment?.resourceProvider),
-                        PorterDuff.Mode.SRC_IN,
-                    )
+                    layout.imageView.colorFilter =
+                        PluginManifestIcons.tintOf(Theme.getColor(Theme.key_undo_infoColor, fragment?.resourceProvider))
                 }
                 if (retainedDrawable != null) {
                     layout.imageView.setImageDrawable(retainedDrawable)
@@ -413,10 +409,10 @@ object PluginUi : SessionResource {
             return
         }
         val builder = AlertDialog.Builder(activity)
-        options.optString("title").takeIf { it.isNotEmpty() }?.let {
+        options.text("title")?.let {
             builder.setTitle(PluginText.formatted(it, options.optJSONArray("titleEntities")))
         }
-        options.optString("message").takeIf { it.isNotEmpty() }?.let {
+        options.text("message")?.let {
             builder.setMessage(PluginText.formatted(it, options.optJSONArray("messageEntities")))
         }
         // rust already refused every element but `inu.android.nativeView`, which is a jvm
@@ -424,15 +420,9 @@ object PluginUi : SessionResource {
         options.optJSONObject("body")?.optLong("handle")?.let { handle ->
             (PluginJvm.objectAt(engine, handle) as? View)?.let { builder.setView(it) }
         }
-        options.optString("positive").takeIf { it.isNotEmpty() }?.let {
-            builder.setPositiveButton(it) { _, _ -> settle("positive") }
-        }
-        options.optString("negative").takeIf { it.isNotEmpty() }?.let {
-            builder.setNegativeButton(it) { _, _ -> settle("negative") }
-        }
-        options.optString("neutral").takeIf { it.isNotEmpty() }?.let {
-            builder.setNeutralButton(it) { _, _ -> settle("neutral") }
-        }
+        options.text("positive")?.let { builder.setPositiveButton(it) { _, _ -> settle("positive") } }
+        options.text("negative")?.let { builder.setNegativeButton(it) { _, _ -> settle("negative") } }
+        options.text("neutral")?.let { builder.setNeutralButton(it) { _, _ -> settle("neutral") } }
         // buttons settle first (their click listeners run before dismissal), so this only
         // catches back-press / outside-tap / activity teardown
         presentModal(LaunchActivity.getSafeLastFragment(), builder.create()) { settle("dismissed") }
@@ -458,8 +448,8 @@ object PluginUi : SessionResource {
         val dialog = showInputDialog(
             fragment,
             title = options.optString("title"),
-            hint = options.optString("hint").takeIf { it.isNotEmpty() },
-            initialText = options.optString("value").takeIf { it.isNotEmpty() },
+            hint = options.text("hint"),
+            initialText = options.text("value"),
             selectAll = options.optBoolean("selectAll"),
         ) { text ->
             settle(text)
@@ -484,7 +474,7 @@ object PluginUi : SessionResource {
     }
 
     private class ChooserSpec(options: JSONObject) {
-        val title: String? = options.optString("title").takeIf { it.isNotEmpty() }
+        val title: String? = options.text("title")
         val items: List<ChooserItem> = parseChooserItems(options.getJSONArray("items"))
         val multiple: Boolean = options.optBoolean("multiple")
         val selected: Set<Int> = options.optJSONArray("selected").let { arr ->
@@ -499,7 +489,7 @@ object PluginUi : SessionResource {
             val o = arr.getJSONObject(i)
             ChooserItem(
                 o.getString("text"),
-                o.optString("subtitle").takeIf { it.isNotEmpty() },
+                o.text("subtitle"),
                 o.optBoolean("danger"),
             )
         }

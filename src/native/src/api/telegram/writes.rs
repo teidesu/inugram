@@ -135,17 +135,6 @@ struct Staged {
 
 impl WritesState {
   fn stage_value<'js>(&self, ctx: &Ctx<'js>, value: &Value<'js>) -> JsResult<Staged> {
-    if let Some(object) = value.as_object() {
-      if let Some(path) = object.get::<_, Option<String>>("path")? {
-        if object.get::<_, Value>("_")?.is_undefined() {
-          self.check_path_grant(ctx, &path)?;
-          return Ok(Staged {
-            wire: file_wire(ctx, &path, "", "")?,
-            path: None,
-          });
-        }
-      }
-    }
     if rquickjs::Class::<BlobHandle>::from_value(value).is_ok() {
       let Some(exported) = self.blobs.export_for_host(value) else {
         return PluginErrorCode::HandleExpired.throw(ctx, "this blob has been disposed");
@@ -162,6 +151,17 @@ impl WritesState {
         wire: file_wire(ctx, &path.to_string_lossy(), "", "")?,
         path: Some(path),
       });
+    }
+    if let Some(object) = value.as_object() {
+      if object.get::<_, Value>("_")?.is_undefined() {
+        if let Some(path) = object.get::<_, Option<String>>("path")? {
+          self.check_path_grant(ctx, &path)?;
+          return Ok(Staged {
+            wire: file_wire(ctx, &path, "", "")?,
+            path: None,
+          });
+        }
+      }
     }
     Ok(Staged {
       wire: js_value_to_wire(ctx, value.clone())?,
@@ -298,21 +298,10 @@ impl WritesState {
     Ok(promise.into_value())
   }
 
-  fn decode_list<'js>(&self, ctx: &Ctx<'js>, wire: &str) -> JsResult<Array<'js>> {
-    let array = Array::new(ctx.clone())?;
-    if wire.is_empty() {
-      return Ok(array);
-    }
-    for (index, element) in wire.split("\n").enumerate() {
-      array.set(index, self.views.wire_to_js_value(ctx, element, ViewLife::Plugin)?)?;
-    }
-    Ok(array)
-  }
-
   fn decode_result<'js>(&self, ctx: &Ctx<'js>, shape: Shape, wire: &str) -> JsResult<Value<'js>> {
     match shape {
       Shape::Value => self.views.wire_to_js_value(ctx, wire, ViewLife::Plugin),
-      Shape::List => Ok(self.decode_list(ctx, wire)?.into_value()),
+      Shape::List => Ok(self.views.wire_to_js_list(ctx, wire, ViewLife::Plugin)?.into_value()),
       Shape::File => {
         let described = self.views.wire_to_js_value(ctx, wire, ViewLife::Plugin)?;
         let Some(object) = described.as_object() else {
@@ -402,20 +391,24 @@ pub(crate) fn install_writes_with_limit<'js>(
 
   let reads = accounts.take_prototype(ctx);
   let ops = Object::new(ctx.clone())?;
-  ops.set("sendMessage", OP_SEND_MESSAGE)?;
-  ops.set("sendMedia", OP_SEND_MEDIA)?;
-  ops.set("sendMultiMedia", OP_SEND_MULTI_MEDIA)?;
-  ops.set("editMessage", OP_EDIT_MESSAGE)?;
-  ops.set("deleteMessages", OP_DELETE_MESSAGES)?;
-  ops.set("forwardMessages", OP_FORWARD_MESSAGES)?;
-  ops.set("setReaction", OP_SET_REACTION)?;
-  ops.set("readHistory", OP_READ_HISTORY)?;
-  ops.set("sendTyping", OP_SEND_TYPING)?;
-  ops.set("setDraft", OP_SET_DRAFT)?;
-  ops.set("downloadMedia", OP_DOWNLOAD_MEDIA)?;
-  ops.set("downloadMediaToFile", OP_DOWNLOAD_MEDIA_TO_FILE)?;
-  ops.set("uploadFile", OP_UPLOAD_FILE)?;
-  ops.set("setSendMedia", OP_SET_SEND_MEDIA)?;
+  for (name, op) in [
+    ("sendMessage", OP_SEND_MESSAGE),
+    ("sendMedia", OP_SEND_MEDIA),
+    ("sendMultiMedia", OP_SEND_MULTI_MEDIA),
+    ("editMessage", OP_EDIT_MESSAGE),
+    ("deleteMessages", OP_DELETE_MESSAGES),
+    ("forwardMessages", OP_FORWARD_MESSAGES),
+    ("setReaction", OP_SET_REACTION),
+    ("readHistory", OP_READ_HISTORY),
+    ("sendTyping", OP_SEND_TYPING),
+    ("setDraft", OP_SET_DRAFT),
+    ("downloadMedia", OP_DOWNLOAD_MEDIA),
+    ("downloadMediaToFile", OP_DOWNLOAD_MEDIA_TO_FILE),
+    ("uploadFile", OP_UPLOAD_FILE),
+    ("setSendMedia", OP_SET_SEND_MEDIA),
+  ] {
+    ops.set(name, op)?;
+  }
 
   let factory = crate::utils::prelude::load(ctx, PRELUDE)?;
   let prototype: Object = factory.call((natives, shared.clone(), message, plugin_error, reads, ops))?;

@@ -243,7 +243,7 @@ object PluginXposed : SessionResource {
 
         private fun checkTarget(member: Member) {
             val declaring = member.declaringClass.name
-            if (declaring.startsWith(ENGINE_PACKAGE)) {
+            if (PluginJvm.isEnginePackage(declaring)) {
                 refuse("forbidden", "xposed: $declaring is the plugin engine's own bridge")
             }
             // lsplant's generated stub boxes its own primitive arguments through these classes
@@ -348,7 +348,6 @@ object PluginXposed : SessionResource {
                 Log.d(TAG, "[${session.manifest.name}] xposed site ${entry.id} bypassed re-entry")
                 return next(args)
             }
-            Log.d(TAG, "[${session.manifest.name}] xposed site ${entry.id} dispatching")
             return if (entry.native) dispatchNativeHooks(entry, receiver, args, next)
             else dispatchOnce(entry, receiver, args, next)
         }
@@ -365,7 +364,7 @@ object PluginXposed : SessionResource {
             fun runPhase(before: Boolean) = runCallbackPhase {
                 val deadline = System.nanoTime() + budgetMs * 1_000_000L
                 for (hook in hooks) {
-                    if (closed || System.nanoTime() >= deadline) break
+                    if (closed || sites[site] !== entry || System.nanoTime() >= deadline) break
                     try {
                         when (val phase = if (before) hook.before else hook.after) {
                             is java.util.function.Consumer<*> -> {
@@ -375,7 +374,7 @@ object PluginXposed : SessionResource {
                             is Runnable -> phase.run()
                         }
                     } catch (e: Throwable) {
-                        Log.d(TAG, "[${session.manifest.name}] native hook at site $site (${entry.target}) failed", e)
+                        Log.w(TAG, "[${session.manifest.name}] native hook at site $site (${entry.target}) failed", e)
                     }
                     if (before && context.answered) break
                 }
@@ -526,8 +525,6 @@ object PluginXposed : SessionResource {
             }
         }
     }
-
-    private const val ENGINE_PACKAGE = "desu.inugram.helpers.plugins."
 
     private val BOX_CLASSES = setOf(
         "java.lang.Boolean",

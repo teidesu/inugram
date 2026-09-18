@@ -82,7 +82,7 @@ object PluginWrites {
         values: Array<String>,
     ): String? {
         val controller = PeerSpecs.controllerFor(accountId)
-            ?: return PluginWire.encodePluginError("not-found", "account write: no account is logged in as #$accountId")
+            ?: return PeerSpecs.noAccountWire("account write", accountId)
         return try {
             val json = JSONObject(arg)
             val call = Call(session, controller, accountId, requestId, json, values)
@@ -160,7 +160,7 @@ object PluginWrites {
                 response.updates = sent
             }
             answer(call, release = { PluginRpc.releaseUnowned(response) }) {
-                if (error != null) PluginWire.encodeRpcError(error.code, error.text ?: "")
+                if (error != null) encodeRpcErrorWire(error)
                 else produce(response)
             }
         }
@@ -178,14 +178,7 @@ object PluginWrites {
         if (named != null && DialogObject.isEncryptedDialog(named)) {
             refuse("forbidden", "secret chats are never reachable from a plugin")
         }
-        return when (val built = PeerSpecs.buildInputPeer(controller, accountId, spec, kind)) {
-            is PeerSpecs.Built.Missing -> refuse(
-                "not-found",
-                "${PeerSpecs.describeSpec(spec)} is not cached; resolve it with resolvePeer() first",
-            )
-            is PeerSpecs.Built.WrongKind -> throw PluginRefusal(PeerSpecs.wrongKind(spec, built.kind))
-            is PeerSpecs.Built.Peer -> built.value
-        }
+        return PeerSpecs.requireInputPeer(controller, accountId, spec, kind)
     }
 
     /** [release] gives back whatever the settle borrowed, and runs on the stale path too: an obligation dropped because the plugin reloaded is still an obligation */
@@ -438,6 +431,7 @@ object PluginWrites {
         randomId: Long,
         text: String,
     ): TLRPC.Message {
+        val dialogId = PeerSpecs.dialogIdOf(call.controller, call.accountId, call.json.optString("peer")) ?: 0L
         val message = TLRPC.TL_message()
         message.id = sent.id
         message.date = sent.date
@@ -448,19 +442,9 @@ object PluginWrites {
         message.out = true
         message.random_id = randomId
         message.from_id = TLRPC.TL_peerUser().apply { user_id = UserConfig.getInstance(call.accountId).getClientUserId() }
-        message.peer_id = peerOfSpec(call)
-        message.dialog_id = PeerSpecs.dialogIdOf(call.controller, call.accountId, call.json.optString("peer")) ?: 0L
+        message.peer_id = call.controller.getPeer(dialogId)
+        message.dialog_id = dialogId
         TlReflect.syncFlags(message)
         return message
-    }
-
-    private fun peerOfSpec(call: Call): TLRPC.Peer {
-        val id = PeerSpecs.dialogIdOf(call.controller, call.accountId, call.json.optString("peer")) ?: 0L
-        return when {
-            id > 0 -> TLRPC.TL_peerUser().apply { user_id = id }
-            call.controller.getChat(-id)?.let { it.broadcast || it.megagroup } == true ->
-                TLRPC.TL_peerChannel().apply { channel_id = -id }
-            else -> TLRPC.TL_peerChat().apply { chat_id = -id }
-        }
     }
 }

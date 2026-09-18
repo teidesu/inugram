@@ -5,8 +5,6 @@ import android.graphics.Canvas
 import android.graphics.Color
 import android.graphics.PorterDuff
 import android.graphics.PorterDuffColorFilter
-import android.graphics.drawable.GradientDrawable
-import android.util.Log
 import android.text.SpannableStringBuilder
 import android.text.Spanned
 import android.text.TextPaint
@@ -37,6 +35,7 @@ import org.telegram.ui.ActionBar.Theme
 import org.telegram.ui.Cells.TextCheckCell
 import org.telegram.ui.Components.BackupImageView
 import org.telegram.ui.Components.ColoredImageSpan
+import org.telegram.ui.Components.IconBackgroundColors
 import org.telegram.ui.Components.LayoutHelper
 import org.telegram.ui.Components.LinkSpanDrawable
 import org.telegram.ui.Components.UItem
@@ -101,16 +100,7 @@ class PluginInfoActivity(private val plugin: Plugin) : SettingsPageActivity() {
 
         detectObfuscation()?.let { kind ->
             val banner = obfuscationBanner ?: WarningBanner(context).also { obfuscationBanner = it }
-            when (kind) {
-                SourceObfuscation.OBFUSCATED -> {
-                    banner.setTitle(LocaleController.getString(R.string.InuPluginObfuscatedTitle))
-                    banner.setText(LocaleController.getString(R.string.InuPluginObfuscatedInfo))
-                }
-                SourceObfuscation.MINIFIED -> {
-                    banner.setTitle(LocaleController.getString(R.string.InuPluginMinifiedTitle))
-                    banner.setText(LocaleController.getString(R.string.InuPluginMinifiedInfo))
-                }
-            }
+            banner.setObfuscation(kind)
             items.add(UItem.asCustomShadow(OBFUSCATION_BANNER, banner))
         }
 
@@ -176,9 +166,9 @@ internal enum class GrantTier {
 
 /** gradient (top, bottom) of the tier's icon badge; the top color doubles as its flat accent */
 internal fun tierColors(tier: GrantTier?): Pair<Int, Int> = when (tier) {
-    GrantTier.DANGEROUS -> 0xFFF45255.toInt() to 0xFFDF3955.toInt()
+    GrantTier.DANGEROUS -> IconBackgroundColors.RED.top to IconBackgroundColors.RED.bottom
     GrantTier.CAUTION -> 0xFFF38B31.toInt() to 0xFFE26314.toInt()
-    GrantTier.NEUTRAL -> 0xFF1CA5ED.toInt() to 0xFF1488E1.toInt()
+    GrantTier.NEUTRAL -> IconBackgroundColors.BLUE.top to IconBackgroundColors.BLUE.bottom
     null -> 0xFFB6BEC8.toInt() to 0xFF98A2AD.toInt()
 }
 
@@ -397,10 +387,7 @@ internal class GrantRowView(context: Context) : LinearLayout(context) {
         super.dispatchDraw(canvas)
         if (!needDivider) return
         // starts where the text column does, past the icon tile
-        val inset = AndroidUtilities.dp(DIVIDER_INSET_DP).toFloat()
-        val rtl = LocaleController.isRTL
-        val y = (height - 1).toFloat()
-        canvas.drawLine(if (rtl) 0f else inset, y, if (rtl) width - inset else width.toFloat(), y, Theme.dividerPaint)
+        drawRowDivider(canvas, DIVIDER_INSET_DP)
     }
 
     /**
@@ -469,10 +456,7 @@ class PluginInfoHeaderView(context: Context) : LinearLayout(context) {
     // one of our own glyphs is a flat silhouette, which at this size is a blob in whatever colour
     // the theme's icons take; it gets an accent tile to sit on instead, like a launcher icon
     private val badgeColor = Theme.getColor(Theme.key_featuredStickers_addButton)
-    private val badge = GradientDrawable().apply {
-        cornerRadius = AndroidUtilities.dp(20f).toFloat()
-        setColor(badgeColor)
-    }
+    private val badge = Theme.createRoundRectDrawable(AndroidUtilities.dp(20f), badgeColor)
     private val glyphTint = Theme.getColor(Theme.key_featuredStickers_buttonText)
     private val iconContainer = FrameLayout(context)
     private val placeholder = PluginManifestIcons.createPlaceholder(context)
@@ -504,11 +488,6 @@ class PluginInfoHeaderView(context: Context) : LinearLayout(context) {
         addView(name, LayoutHelper.createLinear(LayoutHelper.WRAP_CONTENT, LayoutHelper.WRAP_CONTENT, Gravity.CENTER_HORIZONTAL, 20f, 12f, 20f, 0f))
         addView(meta, LayoutHelper.createLinear(LayoutHelper.WRAP_CONTENT, LayoutHelper.WRAP_CONTENT, Gravity.CENTER_HORIZONTAL, 20f, 4f, 20f, 0f))
         addView(failureView, LayoutHelper.createLinear(LayoutHelper.WRAP_CONTENT, LayoutHelper.WRAP_CONTENT, Gravity.CENTER_HORIZONTAL, 20f, 8f, 20f, 0f))
-    }
-
-    override fun onLayout(changed: Boolean, l: Int, t: Int, r: Int, b: Int) {
-        super.onLayout(changed, l, t, r, b)
-        Log.d("InuPluginIcon", "header laid out ${width}x$height, icon ${icon.width}x${icon.height} vis=${icon.visibility}")
     }
 
     /** [previousVersion] is the installed plugin's, when this header is confirming an update over it */

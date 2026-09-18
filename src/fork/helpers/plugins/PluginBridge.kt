@@ -72,16 +72,14 @@ class PluginBridge(
 // unreachable rather than merely unused: without `unsafe.jvm` rust installs neither api, so nothing
 // can call these. They exist so the delegation has a target, and answer the way the nullable slots
 // they replaced used to.
+private fun notInstalled(api: String): String = PluginWire.encodeError("internal: $api listener not installed")
+
 private object MissingJvm : JvmListener {
-    override fun jvm(op: Int, target: Long, name: String, args: Array<String>): String =
-        PluginWire.encodeError("internal: jvm listener not installed")
+    override fun jvm(op: Int, target: Long, name: String, args: Array<String>): String = notInstalled("jvm")
 
-    override fun jvmResolve(target: Any, name: String, mode: Int): Array<Any?> =
-        arrayOf("E", PluginWire.encodeError("internal: jvm listener not installed"))
-
+    override fun jvmResolve(target: Any, name: String, mode: Int): Array<Any?> = arrayOf("E", notInstalled("jvm"))
 }
 
 private object MissingXposed : XposedListener {
-    override fun xposed(op: Int, target: Long, name: String, args: Array<String>): String =
-        PluginWire.encodeError("internal: xposed listener not installed")
+    override fun xposed(op: Int, target: Long, name: String, args: Array<String>): String = notInstalled("xposed")
 }

@@ -307,6 +307,51 @@ mod tempdir {
   }
 }
 
+/// the account api every fixture here installs first, as a device does
+fn install_test_accounts<'js>(
+  ctx: &rquickjs::Ctx<'js>,
+  grants: &Rc<dyn crate::sandbox::grants::GrantHost>,
+  log: &crate::Log,
+  inu: &crate::api::Globals<'js>,
+) -> Rc<crate::api::telegram::account::AccountState> {
+  crate::api::telegram::account::install_account(
+    ctx,
+    TestAccountHost::with(ONE_ACCOUNT),
+    grants.clone(),
+    crate::sandbox::registry::Lifecycle::new(),
+    log.clone(),
+    inu,
+  )
+  .unwrap()
+}
+
+/// `installApi` and the read surface it leaves an `Account` prototype behind, which is what both
+/// the write and the send fixtures are built on top of
+fn install_test_reads<'js>(
+  ctx: &rquickjs::Ctx<'js>,
+  grants: &Rc<dyn crate::sandbox::grants::GrantHost>,
+  views: &Rc<TlViews>,
+  reads_host: Rc<dyn ReadsHost>,
+  accounts: &Rc<crate::api::telegram::account::AccountState>,
+  log: &crate::Log,
+  inu: &crate::api::Globals<'js>,
+) -> (rquickjs::Object<'js>, Rc<crate::api::telegram::reads::ReadsState>) {
+  let shared = crate::api::tl::utils::install_utils(ctx, inu).unwrap();
+  crate::api::tl::message::install_message(ctx, &shared, inu).unwrap();
+  let reads = crate::api::telegram::reads::install_reads(
+    ctx,
+    reads_host,
+    grants.clone(),
+    views.clone(),
+    &shared,
+    accounts,
+    log.clone(),
+    inu,
+  )
+  .unwrap();
+  (shared, reads)
+}
+
 fn setup(grants: &[&str]) -> Fixture {
   setup_with_limit(grants, TRANSFER_LIMIT_BYTES)
 }
@@ -322,35 +367,14 @@ fn setup_with_limit(grants: &[&str], transfer_limit: u64) -> Fixture {
   let (writes, reads, accounts) = ctx.with(|ctx| {
     let inu = crate::testing::harness::get_api_globals(&ctx);
     install_plugin_error(&ctx).unwrap();
-    let accounts = crate::api::telegram::account::install_account(
-      &ctx,
-      TestAccountHost::with(ONE_ACCOUNT),
-      grants.clone(),
-      crate::sandbox::registry::Lifecycle::new(),
-      log.clone(),
-      &inu,
-    )
-    .unwrap();
+    let accounts = install_test_accounts(&ctx, &grants, &log, &inu);
     let random: Rc<dyn RandomHost> = Rc::new(NoRandom);
     let blobs =
       crate::api::globals::install_globals(&ctx, random, dir.path(), crate::sandbox::limits::ExternalMemory::new())
         .unwrap();
-    let shared = crate::api::tl::utils::install_utils(&ctx, &inu).unwrap();
-    crate::api::tl::message::install_message(&ctx, &shared, &inu).unwrap();
     let tl_host: Rc<dyn TlHost> = host.clone();
     let views = TlViews::new(tl_host);
-    let reads_host: Rc<dyn ReadsHost> = empty.clone();
-    let reads = crate::api::telegram::reads::install_reads(
-      &ctx,
-      reads_host,
-      grants.clone(),
-      views.clone(),
-      &shared,
-      &accounts,
-      log.clone(),
-      &inu,
-    )
-    .unwrap();
+    let (shared, reads) = install_test_reads(&ctx, &grants, &views, empty.clone(), &accounts, &log, &inu);
     let deps = WritesDeps {
       host: host.clone(),
       grants,
@@ -803,29 +827,8 @@ fn setup_send(grants: &[&str]) -> SendFixture {
   let (rpc, reads, accounts) = ctx.with(|ctx| {
     let inu = crate::testing::harness::get_api_globals(&ctx);
     install_plugin_error(&ctx).unwrap();
-    let accounts = crate::api::telegram::account::install_account(
-      &ctx,
-      TestAccountHost::with(ONE_ACCOUNT),
-      grants.clone(),
-      crate::sandbox::registry::Lifecycle::new(),
-      log.clone(),
-      &inu,
-    )
-    .unwrap();
-    let shared = crate::api::tl::utils::install_utils(&ctx, &inu).unwrap();
-    crate::api::tl::message::install_message(&ctx, &shared, &inu).unwrap();
-    let reads_host: Rc<dyn ReadsHost> = peers.clone();
-    let reads = crate::api::telegram::reads::install_reads(
-      &ctx,
-      reads_host,
-      grants.clone(),
-      views.clone(),
-      &shared,
-      &accounts,
-      log.clone(),
-      &inu,
-    )
-    .unwrap();
+    let accounts = install_test_accounts(&ctx, &grants, &log, &inu);
+    let (shared, reads) = install_test_reads(&ctx, &grants, &views, peers.clone(), &accounts, &log, &inu);
     let rpc_host_dyn: Rc<dyn crate::api::telegram::rpc::RpcHost> = rpc_host.clone();
     let rpc = crate::api::telegram::rpc::install_rpc(
       &ctx,
@@ -947,11 +950,7 @@ fn what_a_retarget_refuses_outright() {
 fn run_bundled_oracle(source: &str, done: &str, count: usize) {
   let (rt, ctx, host, state, _r, _a, _d) = setup(&crate::testing::harness::manifest_grants(source));
   let lines = crate::testing::harness::install_capturing_console(&ctx);
-  ctx.with(|ctx| match ctx.eval::<(), _>(source) {
-    Ok(()) => {}
-    Err(rquickjs::Error::Exception) => panic!("{}", format_exception(&ctx)),
-    Err(e) => panic!("{e:?}"),
-  });
+  crate::testing::harness::eval_unit(&ctx, source);
   settle(&rt, &ctx, &state, &host);
   let lines = lines.borrow().clone();
   crate::testing::harness::assert_oracle_exact(&lines, done, count);

@@ -17,6 +17,7 @@ import org.telegram.messenger.MessageObject
 import org.telegram.messenger.MessagesController
 import org.telegram.messenger.NotificationCenter
 import org.telegram.messenger.SendMessagesHelper
+import org.telegram.tgnet.ConnectionsManager
 import org.telegram.tgnet.TLObject
 import org.telegram.tgnet.TLRPC
 
@@ -157,7 +158,7 @@ object PluginOptimisticSend : SessionResource {
                 )
             } else {
                 SendMessagesHelper.SendMessageParams.of(
-                    documentOf(path, name, mime, described),
+                    documentOf(call.accountId, path, name, mime, described),
                     null,
                     path.absolutePath,
                     dialogId,
@@ -189,6 +190,7 @@ object PluginOptimisticSend : SessionResource {
 
     /** the same shape the request path uploads: mime and a name, and nothing stock only knows how to read off a gallery pick */
     internal fun documentOf(
+        accountId: Int,
         path: File,
         name: String,
         mime: String,
@@ -197,7 +199,7 @@ object PluginOptimisticSend : SessionResource {
         TLRPC.TL_document().apply {
             dc_id = 0
             id = 0
-            date = (System.currentTimeMillis() / 1000L).toInt()
+            date = ConnectionsManager.getInstance(accountId).getCurrentTime()
             mime_type = mime
             size = path.length()
             file_reference = ByteArray(0)

@@ -4,7 +4,7 @@ use std::rc::Rc;
 
 use rquickjs::{function::This, Ctx, Function, Result as JsResult, Runtime, Value};
 
-use crate::api::error::format_exception;
+use crate::api::error::{call_callback, format_exception, report_callback_error};
 use crate::runtime::pump_jobs;
 use crate::sandbox::grants::{GrantHost, MATCH_EXACT};
 use crate::sandbox::registry::{make_disposer, noop_disposer, CallbackRegistry, Lifecycle};
@@ -83,16 +83,7 @@ impl LifecycleState {
     context.with(|ctx| {
       let mode = if visible { "foreground" } else { "background" };
       for f in state.visibility_fns.snapshot(&ctx) {
-        match f.call::<_, Value>((mode,)) {
-          Ok(_) => {}
-          Err(rquickjs::Error::Exception) => {
-            (state.log)(&crate::fault(format_args!(
-              "onAppVisibilityChange callback threw: {}",
-              format_exception(&ctx),
-            )));
-          }
-          Err(e) => (state.log)(&format!("onAppVisibilityChange callback failed: {e:?}")),
-        }
+        call_callback(&ctx, &state.log, "onAppVisibilityChange callback", &f, (mode,));
       }
     });
     pump_jobs(rt, context, state.log.as_ref());
@@ -149,10 +140,7 @@ impl LifecycleState {
               }
             }
           }
-          Err(rquickjs::Error::Exception) => {
-            (state.log)(&crate::fault(format_args!("onUnload callback threw: {}", format_exception(&ctx))));
-          }
-          Err(e) => (state.log)(&format!("onUnload callback failed: {e:?}")),
+          Err(error) => report_callback_error(&state.log, &ctx, "onUnload callback", error),
         }
       }
     });

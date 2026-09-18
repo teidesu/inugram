@@ -1,5 +1,4 @@
 use crate::runtime::Dispose;
-use std::fs;
 use std::path::PathBuf;
 use std::rc::Rc;
 
@@ -7,7 +6,7 @@ use rquickjs::convert::Coerced;
 use rquickjs::{Ctx, Exception, Function, Object, Result as JsResult, Runtime, TypedArray, Value};
 
 use crate::api::error::PluginErrorCode;
-use crate::api::io::blob::{mint_app_file, BlobState, BUILD_LIMIT_BYTES};
+use crate::api::io::blob::{mint_app_file_at, BlobState, BUILD_LIMIT_BYTES};
 use crate::runtime::{pump_jobs, PendingTable};
 use crate::sandbox::grants::{GrantHost, MATCH_DOMAIN};
 use crate::utils::prelude;
@@ -152,11 +151,7 @@ impl FetchState {
       return Ok(Some(bytes.to_vec()));
     }
     if let Some(wire) = self.blobs.export_for_host(value) {
-      let id = wire
-        .strip_prefix('B')
-        .and_then(|rest| rest.split(':').next())
-        .and_then(|id| id.parse().ok())
-        .unwrap_or(0);
+      let id = crate::api::io::blob::export_id_of(&wire).unwrap_or(0);
       let Some(export) = self.blobs.resolve_export(id) else {
         return Err(BodyError::HandleExpired("fetch: the body blob is gone".to_string()));
       };
@@ -265,20 +260,7 @@ pub fn install_fetch<'js>(
 fn mint_body<'js>(ctx: &Ctx<'js>, body: &Object<'js>) -> JsResult<Value<'js>> {
   let path: String = body.get("path")?;
   let mime: String = body.get("type").unwrap_or_default();
-  let path = PathBuf::from(path);
-  let (size, mtime) = match fs::metadata(&path) {
-    Ok(meta) => (
-      meta.len(),
-      meta
-        .modified()
-        .ok()
-        .and_then(|t| t.duration_since(std::time::UNIX_EPOCH).ok())
-        .map(|d| i64::try_from(d.as_millis()).unwrap_or(i64::MAX))
-        .unwrap_or(0),
-    ),
-    Err(_) => (0, 0),
-  };
-  mint_app_file(ctx, &path, size, &mime, None, mtime)
+  mint_app_file_at(ctx, &PathBuf::from(path), &mime)
 }
 
 impl FetchState {

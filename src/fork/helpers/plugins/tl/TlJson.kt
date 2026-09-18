@@ -37,10 +37,9 @@ object TlJson {
         val json = JSONObject()
         json.put("_", TlNames.classNameToTlName(cls))
         for ((name, info) in TlReflect.fieldInfos(cls)) {
-            if (TlFlags.isFlagWord(cls, name)) continue
-            if (TlFilter.hidesField(policy, cls, name)) continue
-            val gate = TlFlags.gateOf(cls, name)
-            if (gate != null && !TlReflect.isBitSet(obj, cls, gate)) continue
+            if (info.isFlagWord) continue
+            if (TlFilter.hidesField(policy, info)) continue
+            if (!info.isPresent(obj)) continue
             val raw = info.field.get(obj) ?: continue
             val value = (if (policy.takeover) TlFilter.filterFieldValue(obj, name, raw) else raw) ?: continue
             json.put(name, valueToJson(value, policy, info.isInt53) ?: continue)
@@ -118,30 +117,18 @@ object TlJson {
                 is Long -> jsonValue.takeIf { it in -MAX_SAFE_INTEGER..MAX_SAFE_INTEGER } ?: throw unsafeLong(path)
                 is Double -> jsonValue.takeIf { it % 1.0 == 0.0 && Math.abs(it) <= MAX_SAFE_INTEGER }?.toLong() ?: throw unsafeLong(path)
                 is Number -> throw unsafeLong(path)
-                else -> throw IllegalArgumentException("TlJson.fromJson: expected long at '$path'")
+                else -> throw expectedAt("long", path)
             }
-            Integer.TYPE, Integer::class.java ->
-                (jsonValue as? Number)?.toInt()
-                    ?: throw IllegalArgumentException("TlJson.fromJson: expected int at '$path'")
+            Integer.TYPE, Integer::class.java -> numberAt(jsonValue, "int", path).toInt()
             // reflective Field.set on a primitive field requires the exactly-matching boxed width
-            java.lang.Short.TYPE ->
-                (jsonValue as? Number)?.toShort()
-                    ?: throw IllegalArgumentException("TlJson.fromJson: expected int at '$path'")
-            java.lang.Byte.TYPE ->
-                (jsonValue as? Number)?.toByte()
-                    ?: throw IllegalArgumentException("TlJson.fromJson: expected int at '$path'")
-            java.lang.Double.TYPE, java.lang.Double::class.java ->
-                (jsonValue as? Number)?.toDouble()
-                    ?: throw IllegalArgumentException("TlJson.fromJson: expected double at '$path'")
-            java.lang.Float.TYPE, java.lang.Float::class.java ->
-                (jsonValue as? Number)?.toFloat()
-                    ?: throw IllegalArgumentException("TlJson.fromJson: expected float at '$path'")
+            java.lang.Short.TYPE -> numberAt(jsonValue, "int", path).toShort()
+            java.lang.Byte.TYPE -> numberAt(jsonValue, "int", path).toByte()
+            java.lang.Double.TYPE, java.lang.Double::class.java -> numberAt(jsonValue, "double", path).toDouble()
+            java.lang.Float.TYPE, java.lang.Float::class.java -> numberAt(jsonValue, "float", path).toFloat()
             java.lang.Boolean.TYPE, java.lang.Boolean::class.java ->
-                jsonValue as? Boolean
-                    ?: throw IllegalArgumentException("TlJson.fromJson: expected boolean at '$path'")
+                jsonValue as? Boolean ?: throw expectedAt("boolean", path)
             String::class.java ->
-                jsonValue as? String
-                    ?: throw IllegalArgumentException("TlJson.fromJson: expected string at '$path'")
+                jsonValue as? String ?: throw expectedAt("string", path)
             ByteArray::class.java -> when {
                 jsonValue is String -> Base64.decode(jsonValue, Base64.NO_WRAP)
                 jsonValue is JSONObject && jsonValue.has(BYTES_KEY) -> Base64.decode(jsonValue.getString(BYTES_KEY), Base64.NO_WRAP)
@@ -150,8 +137,7 @@ object TlJson {
             is ParameterizedType -> when (type.rawType) {
                 ArrayList::class.java -> {
                     val elementType = type.actualTypeArguments[0]
-                    val arr = jsonValue as? JSONArray
-                        ?: throw IllegalArgumentException("TlJson.fromJson: expected array at '$path'")
+                    val arr = jsonValue as? JSONArray ?: throw expectedAt("array", path)
                     val list = ArrayList<Any>(arr.length())
                     for (i in 0 until arr.length()) {
                         list.add(jsonToValue(elementType, arr.get(i), "$path[$i]"))
@@ -160,8 +146,7 @@ object TlJson {
                 }
                 HashMap::class.java -> {
                     val valueType = type.actualTypeArguments[1]
-                    val obj = jsonValue as? JSONObject
-                        ?: throw IllegalArgumentException("TlJson.fromJson: expected object at '$path'")
+                    val obj = jsonValue as? JSONObject ?: throw expectedAt("object", path)
                     val map = HashMap<String, Any>()
                     val keys = obj.keys()
                     while (keys.hasNext()) {
@@ -172,8 +157,7 @@ object TlJson {
                 }
                 SparseArray::class.java -> {
                     val valueType = type.actualTypeArguments[0]
-                    val obj = jsonValue as? JSONObject
-                        ?: throw IllegalArgumentException("TlJson.fromJson: expected object at '$path'")
+                    val obj = jsonValue as? JSONObject ?: throw expectedAt("object", path)
                     val out = SparseArray<Any>()
                     val keys = obj.keys()
                     while (keys.hasNext()) {
@@ -188,8 +172,7 @@ object TlJson {
             }
             is Class<*> -> {
                 if (TLObject::class.java.isAssignableFrom(type)) {
-                    val obj = jsonValue as? JSONObject
-                        ?: throw IllegalArgumentException("TlJson.fromJson: expected object at '$path'")
+                    val obj = jsonValue as? JSONObject ?: throw expectedAt("object", path)
                     fromJson(obj)
                 } else {
                     throw IllegalArgumentException("TlJson.fromJson: unsupported field type ${type.name} at '$path'")
@@ -198,6 +181,12 @@ object TlJson {
             else -> throw IllegalArgumentException("TlJson.fromJson: unsupported field type $type at '$path'")
         }
     }
+
+    private fun numberAt(jsonValue: Any, what: String, path: String): Number =
+        jsonValue as? Number ?: throw expectedAt(what, path)
+
+    private fun expectedAt(what: String, path: String) =
+        IllegalArgumentException("TlJson.fromJson: expected $what at '$path'")
 
     /** `Number.MAX_SAFE_INTEGER`: past it a js number no longer names one integer */
     private const val MAX_SAFE_INTEGER = 9_007_199_254_740_991L

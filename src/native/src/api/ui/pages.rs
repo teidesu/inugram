@@ -5,15 +5,13 @@ use std::rc::Rc;
 
 use rquickjs::{Array, Ctx, Exception, Function, Object, Persistent, Result as JsResult, Runtime, Value};
 
-use crate::api::error::format_exception;
-use crate::api::error::host_error_to_js;
-use crate::api::error::PluginErrorCode;
+use crate::api::error::{call_callback, format_exception, host_error_to_js, report_callback_error, PluginErrorCode};
 use crate::api::ui::icons::{opt_icon, Icon, RETAINED_VALUE_TAG};
 use crate::runtime::pump_jobs;
 use crate::sandbox::registry::{make_disposer, noop_disposer, Lifecycle, Registry, RequestIds};
 use crate::utils::arguments::{
-  field, opt_bool, opt_fn, opt_num, opt_str, opt_text, read_input_text, req_bool, req_fn, req_num, req_str, req_text,
-  write_input_text,
+  field, opt_bool, opt_fn, opt_num, opt_str, opt_text, read_index, read_input_text, req_bool, req_fn, req_num, req_str,
+  req_text, stringify_json, write_input_text,
 };
 
 const MAX_SLIDER_LABELS: usize = 501;
@@ -196,11 +194,8 @@ fn make_select<'js>(
   let len = items.len();
   out.set("items", items)?;
 
-  let selected = req_num(ctx, &opts, "select", "selected")? as i64;
-  if selected < 0 || selected >= len as i64 {
-    return Err(Exception::throw_type(ctx, "select: 'selected' out of range"));
-  }
-  out.set("selected", selected as i32)?;
+  let selected = read_index(ctx, &field(ctx, &opts, "select", "selected")?, "select", len)?;
+  out.set("selected", selected)?;
   out.set("dialog", opt_bool(ctx, &opts, "select", "dialog")?)?;
   out.set("onChange", req_fn(ctx, &opts, "select", "onChange")?)?;
   set_opt(&out, "onSecondaryClick", opt_fn(ctx, &opts, "select", "onSecondaryClick")?)?;
@@ -256,14 +251,7 @@ pub fn install_ui<'js>(
     settings: Registry::default(),
   });
 
-  let ui: Object = match globals.inu.get::<_, Object>("ui") {
-    Ok(o) => o,
-    Err(_) => {
-      let o = Object::new(ctx.clone())?;
-      globals.inu.set("ui", o.clone())?;
-      o
-    }
-  };
+  let ui = globals.get_namespace(ctx, "ui")?;
 
   ui.set(
     "header",
@@ -350,10 +338,7 @@ pub fn install_ui<'js>(
             }
             out.set("topicId", topic_id as i32)?;
           }
-          let json = ctx
-            .json_stringify(out.into_value())?
-            .ok_or_else(|| Exception::throw_message(&ctx, "openPage: could not serialize the screen"))?
-            .to_string()?;
+          let json = stringify_json(&ctx, out.into_value(), "openPage: could not serialize the screen")?;
           if let Some(err) = state2.host.ui_open_screen(&json) {
             return Err(ctx.throw(host_error_to_js(&ctx, &err)?));
           }
@@ -369,14 +354,7 @@ pub fn install_ui<'js>(
   )?;
 
   let state2 = state.clone();
-  let android: Object = match globals.inu.get::<_, Object>("android") {
-    Ok(o) => o,
-    Err(_) => {
-      let o = Object::new(ctx.clone())?;
-      globals.inu.set("android", o.clone())?;
-      o
-    }
-  };
+  let android = globals.get_namespace(ctx, "android")?;
 
   android.set(
     "nativeView",
@@ -510,6 +488,26 @@ impl UiState {
   }
 }
 
+fn copy_icon<'js>(out: &Object<'js>, obj: &Object<'js>, retained: &mut Vec<Value<'js>>) -> JsResult<()> {
+  set_opt(out, "icon", obj.get::<_, Option<String>>("icon")?)?;
+  if let Some(value) = obj.get::<_, Option<Value>>(RETAINED_VALUE_TAG)? {
+    retained.push(value);
+  }
+  Ok(())
+}
+
+fn copy_secondary_click<'js>(
+  out: &Object<'js>,
+  obj: &Object<'js>,
+  row: &Rc<str>,
+  alloc: &mut dyn FnMut(&Rc<str>, Function<'js>) -> u32,
+) -> JsResult<()> {
+  if let Some(f) = obj.get::<_, Option<Function>>("onSecondaryClick")? {
+    out.set("onSecondaryClick", alloc(row, f))?;
+  }
+  Ok(())
+}
+
 fn alloc_row_key(counts: &mut HashMap<String, u32>, ty: &str, id: Option<&str>, text: Option<&str>) -> Rc<str> {
   let base = match id {
     Some(id) => format!("i:{id}"),
@@ -581,17 +579,12 @@ impl UiState {
           set_opt(&out, "subtitle", obj.get::<_, Option<String>>("subtitle")?)?;
           out.set("checked", obj.get::<_, bool>("checked")?)?;
           out.set("onChange", alloc_slot(&row, obj.get::<_, Function>("onChange")?))?;
-          if let Some(f) = obj.get::<_, Option<Function>>("onSecondaryClick")? {
-            out.set("onSecondaryClick", alloc_slot(&row, f))?;
-          }
+          copy_secondary_click(&out, obj, &row, &mut alloc_slot)?;
         }
         "button" => {
           set_opt(&out, "id", obj.get::<_, Option<String>>("id")?)?;
           out.set("text", obj.get::<_, String>("text")?)?;
-          set_opt(&out, "icon", obj.get::<_, Option<String>>("icon")?)?;
-          if let Some(value) = obj.get::<_, Option<Value>>(RETAINED_VALUE_TAG)? {
-            retained_icon_values.push(value);
-          }
+          copy_icon(&out, obj, &mut retained_icon_values)?;
           set_opt(&out, "subtitle", obj.get::<_, Option<String>>("subtitle")?)?;
           set_opt(&out, "value", obj.get::<_, Option<String>>("value")?)?;
           for key in ["text", "subtitle", "value"] {
@@ -599,25 +592,18 @@ impl UiState {
           }
           out.set("danger", obj.get::<_, bool>("danger")?)?;
           out.set("onClick", alloc_slot(&row, obj.get::<_, Function>("onClick")?))?;
-          if let Some(f) = obj.get::<_, Option<Function>>("onSecondaryClick")? {
-            out.set("onSecondaryClick", alloc_slot(&row, f))?;
-          }
+          copy_secondary_click(&out, obj, &row, &mut alloc_slot)?;
         }
         "select" => {
           set_opt(&out, "id", obj.get::<_, Option<String>>("id")?)?;
           out.set("text", obj.get::<_, String>("text")?)?;
-          set_opt(&out, "icon", obj.get::<_, Option<String>>("icon")?)?;
-          if let Some(value) = obj.get::<_, Option<Value>>(RETAINED_VALUE_TAG)? {
-            retained_icon_values.push(value);
-          }
+          copy_icon(&out, obj, &mut retained_icon_values)?;
           copy_text(&out, obj, "text")?;
           out.set("items", obj.get::<_, Array>("items")?)?;
           out.set("selected", obj.get::<_, i32>("selected")?)?;
           out.set("dialog", obj.get::<_, bool>("dialog")?)?;
           out.set("onChange", alloc_slot(&row, obj.get::<_, Function>("onChange")?))?;
-          if let Some(f) = obj.get::<_, Option<Function>>("onSecondaryClick")? {
-            out.set("onSecondaryClick", alloc_slot(&row, f))?;
-          }
+          copy_secondary_click(&out, obj, &row, &mut alloc_slot)?;
         }
         "slider" => {
           set_opt(&out, "id", obj.get::<_, Option<String>>("id")?)?;
@@ -680,11 +666,7 @@ impl UiState {
       }
     }
 
-    ctx
-      .json_stringify(root)?
-      .map(|s| s.to_string())
-      .transpose()?
-      .ok_or_else(|| Exception::throw_message(ctx, "render: serialization produced no output"))
+    stringify_json(ctx, root.into_value(), "render: serialization produced no output")
   }
 
   fn make_anchor<'js>(self: &Rc<Self>, ctx: &Ctx<'js>, page_id: i64, row: Rc<str>) -> JsResult<Object<'js>> {
@@ -727,11 +709,7 @@ impl UiState {
       callbacks.push(req_fn(ctx, obj, "openMenu item", "onClick")?);
       out.set(i, entry)?;
     }
-    let json = ctx
-      .json_stringify(out)?
-      .map(|s| s.to_string())
-      .transpose()?
-      .ok_or_else(|| Exception::throw_message(ctx, "openMenu: serialization failed"))?;
+    let json = stringify_json(ctx, out.into_value(), "openMenu: serialization failed")?;
 
     let menu_id = state.next_id.alloc();
     if let Some(err) = state.host.ui_open_menu(menu_id, page_id, row, &json) {
@@ -812,12 +790,8 @@ impl UiState {
           }
         }
       };
-      match result {
-        Ok(_) => {}
-        Err(rquickjs::Error::Exception) => {
-          (state.log)(&crate::fault(format_args!("ui callback threw: {}", format_exception(&ctx))));
-        }
-        Err(e) => (state.log)(&format!("ui callback failed: {e:?}")),
+      if let Err(e) = result {
+        report_callback_error(&state.log, &ctx, "ui callback", e);
       }
     });
     pump_jobs(rt, context, state.log.as_ref());
@@ -836,13 +810,7 @@ impl UiState {
           Err(_) => continue,
         };
         if i as i32 == slot {
-          match f.call::<_, Value>(()) {
-            Ok(_) => {}
-            Err(rquickjs::Error::Exception) => {
-              (state.log)(&crate::fault(format_args!("menu item callback threw: {}", format_exception(&ctx))));
-            }
-            Err(e) => (state.log)(&format!("menu item callback failed: {e:?}")),
-          }
+          call_callback(&ctx, &state.log, "menu item callback", &f, ());
         }
       }
     });
@@ -864,13 +832,9 @@ impl UiState {
       };
       if let Some(persistent) = on_close {
         match persistent.restore(&ctx) {
-          Ok(f) => match f.call::<_, Value>(()) {
-            Ok(_) => {}
-            Err(rquickjs::Error::Exception) => {
-              (state.log)(&crate::fault(format_args!("onClose callback threw: {}", format_exception(&ctx))));
-            }
-            Err(e) => (state.log)(&format!("onClose callback failed: {e:?}")),
-          },
+          Ok(f) => {
+            call_callback(&ctx, &state.log, "onClose callback", &f, ());
+          }
           Err(e) => (state.log)(&format!("onClose: failed to restore callback: {e:?}")),
         }
       }

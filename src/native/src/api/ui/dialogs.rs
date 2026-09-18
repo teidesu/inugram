@@ -8,7 +8,7 @@ use crate::api::platform::jvm::JvmState;
 use crate::api::tl::proxy::plain_wire_to_js;
 use crate::api::ui::icons;
 use crate::runtime::{pump_jobs, Parked, PendingTable};
-use crate::utils::arguments::{opt_bool, opt_str, req_str};
+use crate::utils::arguments::{opt_bool, opt_str, read_index, req_str, stringify_json};
 
 pub trait DialogHost {
   fn toast(&self, text: &str);
@@ -107,17 +107,6 @@ impl DialogState {
   }
 }
 
-fn chooser_index(ctx: &Ctx<'_>, value: &Value<'_>, len: usize) -> JsResult<i32> {
-  let index = value
-    .as_int()
-    .or_else(|| value.as_float().filter(|f| f.fract() == 0.0).map(|f| f as i32))
-    .ok_or_else(|| Exception::throw_type(ctx, "chooser: 'selected' must be an integer index"))?;
-  if index < 0 || index as usize >= len {
-    return Err(Exception::throw_type(ctx, "chooser: 'selected' out of range"));
-  }
-  Ok(index)
-}
-
 impl DialogState {
   fn js_ui_chooser<'js>(self: &Rc<Self>, ctx: &Ctx<'js>, opts: Object<'js>) -> JsResult<Value<'js>> {
     let out = Object::new(ctx.clone())?;
@@ -167,7 +156,7 @@ impl DialogState {
           for (i, index) in
             crate::utils::arguments::array_values(ctx, list, "chooser: 'selected'")?.into_iter().enumerate()
           {
-            picked.set(i, chooser_index(ctx, &index, len)?)?;
+            picked.set(i, read_index(ctx, &index, "chooser", len)?)?;
           }
         }
         (true, None) => {
@@ -179,16 +168,12 @@ impl DialogState {
         (false, Some(_)) => {
           return Err(Exception::throw_type(ctx, "chooser: 'selected' must be a single index unless 'multiple' is set"))
         }
-        (false, None) => picked.set(0, chooser_index(ctx, &selected, len)?)?,
+        (false, None) => picked.set(0, read_index(ctx, &selected, "chooser", len)?)?,
       }
     }
     out.set("selected", picked)?;
 
-    let json = ctx
-      .json_stringify(out.into_value())?
-      .map(|s| s.to_string())
-      .transpose()?
-      .ok_or_else(|| Exception::throw_message(ctx, "chooser: serialization failed"))?;
+    let json = stringify_json(ctx, out.into_value(), "chooser: serialization failed")?;
 
     let modal = Modal::Chooser { multiple };
     Ok(self.pending.park(ctx, modal, |request_id| self.host.chooser(request_id, &json))?.into_value())
@@ -204,11 +189,7 @@ impl DialogState {
       out.set("value", value)?;
     }
     out.set("selectAll", opt_bool(ctx, &opts, "prompt", "selectAll")?)?;
-    let json = ctx
-      .json_stringify(out)?
-      .map(|s| s.to_string())
-      .transpose()?
-      .ok_or_else(|| Exception::throw_message(ctx, "prompt: serialization failed"))?;
+    let json = stringify_json(ctx, out.into_value(), "prompt: serialization failed")?;
     Ok(
       self
         .pending

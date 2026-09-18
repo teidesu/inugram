@@ -160,30 +160,30 @@ object PluginDevServer {
         val source = try {
             file.readText()
         } catch (e: Exception) {
-            return fail("${file.name}: ${e.message ?: e}")
+            return failFile(file, "${e.message ?: e}")
         }
         val manifest = PluginManifestParser.parseOrNull(source)
-            ?: return fail("${file.name}: no valid manifest header")
-        PluginManager.incompatibility(manifest)?.let { return fail("${file.name}: $it") }
+            ?: return failFile(file, "no valid manifest header")
+        PluginManager.incompatibility(manifest)?.let { return failFile(file, it) }
 
         val target = PluginManager.findUpdateTarget(manifest)
         if (target != null) {
-            PluginManager.update(target, source, dev = true)?.let { return fail("${file.name}: $it") }
-            return JSONObject()
-                .put("ok", true)
-                .put("action", "updated")
-                .put("file", file.name)
-                .put("plugin", describe(target))
+            PluginManager.update(target, source, dev = true)?.let { return failFile(file, it) }
+            return installed("updated", file, target)
         }
         return when (val result = PluginManager.import(file.name, source, enabled = true, dev = true)) {
-            is PluginManager.ImportResult.Refused -> fail("${file.name}: ${result.reason}")
-            is PluginManager.ImportResult.Installed -> JSONObject()
-                .put("ok", true)
-                .put("action", "installed")
-                .put("file", file.name)
-                .put("plugin", describe(result.plugin))
+            is PluginManager.ImportResult.Refused -> failFile(file, result.reason)
+            is PluginManager.ImportResult.Installed -> installed("installed", file, result.plugin)
         }
     }
+
+    private fun failFile(file: File, reason: String): JSONObject = fail("${file.name}: $reason")
+
+    private fun installed(action: String, file: File, plugin: Plugin): JSONObject = JSONObject()
+        .put("ok", true)
+        .put("action", action)
+        .put("file", file.name)
+        .put("plugin", describe(plugin))
 
     /**
      * uninstalls what the dropped [name] identifies. Resolved through the file's own identity, the

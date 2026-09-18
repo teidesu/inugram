@@ -524,11 +524,7 @@ mod bundled_oracle {
     });
 
     let lines = crate::testing::harness::install_capturing_console(&ctx);
-    ctx.with(|ctx| match ctx.eval::<(), _>(ORACLE) {
-      Ok(()) => {}
-      Err(rquickjs::Error::Exception) => panic!("{}", format_exception(&ctx)),
-      Err(e) => panic!("{e:?}"),
-    });
+    crate::testing::harness::eval_unit(&ctx, ORACLE);
 
     // driven until the oracle says it is done rather than until the wheel is empty: it
     // deliberately leaves a 30 s timer armed, which is the one the unload half is about
@@ -634,11 +630,7 @@ mod bundled_oracle {
     });
 
     let lines = crate::testing::harness::install_capturing_console(&ctx);
-    ctx.with(|ctx| match ctx.eval::<(), _>(VISIBILITY_ORACLE) {
-      Ok(()) => {}
-      Err(rquickjs::Error::Exception) => panic!("{}", format_exception(&ctx)),
-      Err(e) => panic!("{e:?}"),
-    });
+    crate::testing::harness::eval_unit(&ctx, VISIBILITY_ORACLE);
 
     // two full round trips: the oracle disposes after the fourth transition, and each return to
     // the foreground leaves a one-second timer behind that reports the recovered tick rate

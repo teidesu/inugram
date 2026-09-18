@@ -29,7 +29,7 @@ object PluginImportHelper {
         EngineDispatch.scheduler.postRunnable {
             val source = runCatching { file.readText() }.getOrNull()
             if (source == null) {
-                AndroidUtilities.runOnUIThread { showError(fragment, getString(R.string.InuPluginsErrorRead)) }
+                failOnUi(fragment, getString(R.string.InuPluginsErrorRead))
                 return@postRunnable
             }
             present(fragment, displayName, source)
@@ -41,16 +41,21 @@ object PluginImportHelper {
         EngineDispatch.scheduler.postRunnable { present(fragment, fileName, source) }
     }
 
+    /** every bail on the plugin queue reports the same way: the dialog belongs to the ui thread */
+    private fun failOnUi(fragment: BaseFragment, message: String) {
+        AndroidUtilities.runOnUIThread { showError(fragment, message) }
+    }
+
     /** plugin queue only */
     private fun present(fragment: BaseFragment, fileName: String, source: String) {
         val manifest = PluginManifestParser.parseOrNull(source)
         if (manifest == null) {
-            AndroidUtilities.runOnUIThread { showError(fragment, getString(R.string.InuPluginsErrorNoManifest)) }
+            failOnUi(fragment, getString(R.string.InuPluginsErrorNoManifest))
             return
         }
         val incompatibility = PluginManager.incompatibility(manifest)
         if (incompatibility != null) {
-            AndroidUtilities.runOnUIThread { showError(fragment, incompatibility) }
+            failOnUi(fragment, incompatibility)
             return
         }
         val obfuscation = ObfuscationDetector.detect(source)

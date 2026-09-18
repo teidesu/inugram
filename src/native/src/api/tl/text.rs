@@ -219,23 +219,17 @@ fn entity_to_js<'js>(ctx: &Ctx<'js>, entity: &Entity) -> JsResult<Object<'js>> {
     EntityKind::CustomEmoji { document_id } => out.set("document_id", document_id.as_str())?,
     EntityKind::FormattedDate { date, format } => {
       out.set("date", *date as f64)?;
-      if format.relative {
-        out.set("relative", true)?;
-      }
-      if format.day_of_week {
-        out.set("day_of_week", true)?;
-      }
-      if format.short_date {
-        out.set("short_date", true)?;
-      }
-      if format.long_date {
-        out.set("long_date", true)?;
-      }
-      if format.short_time {
-        out.set("short_time", true)?;
-      }
-      if format.long_time {
-        out.set("long_time", true)?;
+      for (name, set) in [
+        ("relative", format.relative),
+        ("day_of_week", format.day_of_week),
+        ("short_date", format.short_date),
+        ("long_date", format.long_date),
+        ("short_time", format.short_time),
+        ("long_time", format.long_time),
+      ] {
+        if set {
+          out.set(name, true)?;
+        }
       }
     }
     _ => {}

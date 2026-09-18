@@ -7,16 +7,17 @@ use rquickjs::function::{Constructor, Opt, This};
 use rquickjs::object::{Accessor, Property};
 use rquickjs::{Ctx, Exception, Function, Object, Persistent, Result as JsResult, Runtime, TypedArray, Value};
 
-use crate::api::error::{self, error_value_to_string, format_thrown, PluginErrorCode};
+use crate::api::error::{
+  self, call_callback, describe_js_error, error_value_to_string, format_thrown, PluginErrorCode,
+};
 use crate::api::telegram::account::{dispatch_account, AccountState};
 use crate::api::tl::proxy::{self, TlViews, ViewLife};
 use crate::runtime::{pump_jobs, PendingSettle, PendingTable};
 use crate::sandbox::grants::{GrantHost, MATCH_EXACT};
 use crate::sandbox::registry::{make_disposer, noop_disposer, CallbackRegistry, Lifecycle, Registry};
+use crate::utils::arguments::stringify_json;
 use crate::utils::prelude;
 use crate::Log;
-
-pub(crate) use crate::api::error::format_exception;
 
 pub trait RpcHost {
   fn on_register(
@@ -725,11 +726,7 @@ fn takeout_options_json<'js>(ctx: &Ctx<'js>, options: Option<Value<'js>>) -> JsR
     out.set(name, flag(name)?)?;
   }
   out.set("fileMaxSize", file_max_size as f64)?;
-  ctx
-    .json_stringify(out)?
-    .map(|s| s.to_string())
-    .transpose()?
-    .ok_or_else(|| Exception::throw_message(ctx, "initTakeoutSession: serialization failed"))
+  stringify_json(ctx, out.into_value(), "initTakeoutSession: serialization failed")
 }
 
 impl RpcState {
@@ -836,6 +833,15 @@ impl RpcState {
     Ok(promise.into_value())
   }
 
+  /// the names a per-type registration takes: the list, each checked against the api's own grant
+  fn read_granted_types<'js>(&self, ctx: &Ctx<'js>, grant: &str, types: Value<'js>) -> JsResult<Vec<String>> {
+    let list = read_name_list(ctx, grant, types, "type")?;
+    for name in &list {
+      self.grants.check_grant(ctx, grant, Some(name), MATCH_EXACT)?;
+    }
+    Ok(list)
+  }
+
   fn js_on_update<'js>(
     self: &Rc<Self>,
     ctx: &Ctx<'js>,
@@ -845,10 +851,7 @@ impl RpcState {
     if self.lifecycle.is_unloading() {
       return noop_disposer(ctx);
     }
-    let list = read_name_list(ctx, "onUpdate", types, "type")?;
-    for name in &list {
-      self.grants.check_grant(ctx, "onUpdate", Some(name), MATCH_EXACT)?;
-    }
+    let list = self.read_granted_types(ctx, "onUpdate", types)?;
     self.register_update_listener(ctx, list, "", cb)
   }
 
@@ -861,30 +864,15 @@ impl RpcState {
     if self.lifecycle.is_unloading() {
       return noop_disposer(ctx);
     }
-    let list = read_name_list(ctx, "interceptUpdate", types, "type")?;
-    for name in &list {
-      self.grants.check_grant(ctx, "interceptUpdate", Some(name), MATCH_EXACT)?;
-    }
-    let callback_id = self.intercept_update_fns.alloc();
-    if let Some(err) = self.host.on_intercept_update_register(callback_id, &list) {
-      return Err(ctx.throw(error::host_error_to_js(ctx, &err)?));
-    }
-    self.intercept_update_fns.insert(
-      callback_id,
-      None,
-      UpdateReg {
-        callback: Persistent::save(ctx, cb),
-        types: list.into(),
-      },
-    );
-
-    let state = self.clone();
-    make_disposer(ctx, move |ctx| {
-      if let Some(reg) = state.intercept_update_fns.remove(callback_id) {
-        let _ = reg.callback.restore(ctx);
-        state.host.on_intercept_update_unregister(callback_id);
-      }
-    })
+    let list = self.read_granted_types(ctx, "interceptUpdate", types)?;
+    self.register_update_reg(
+      ctx,
+      |state| &state.intercept_update_fns,
+      |state, callback_id| state.host.on_intercept_update_unregister(callback_id),
+      list,
+      cb,
+      |state, callback_id, types| state.host.on_intercept_update_register(callback_id, types),
+    )
   }
 
   fn js_on_demuxed<'js>(
@@ -913,24 +901,45 @@ impl RpcState {
     scope: &str,
     listener: Function<'js>,
   ) -> JsResult<Function<'js>> {
-    let callback_id = self.update_fns.alloc();
-    if let Some(err) = self.host.on_update_register(callback_id, &types, scope) {
+    self.register_update_reg(
+      ctx,
+      |state| &state.update_fns,
+      |state, callback_id| state.host.on_update_unregister(callback_id),
+      types,
+      listener,
+      |state, callback_id, types| state.host.on_update_register(callback_id, types, scope),
+    )
+  }
+
+  /// what both update registries hold and how both are torn down; only the registry, the host
+  /// calls, and the refusal that comes back from one differ
+  fn register_update_reg<'js>(
+    self: &Rc<Self>,
+    ctx: &Ctx<'js>,
+    pick: fn(&RpcState) -> &Registry<UpdateReg>,
+    unregister: fn(&RpcState, u32),
+    types: Vec<String>,
+    callback: Function<'js>,
+    register: impl FnOnce(&RpcState, u32, &[String]) -> Option<String>,
+  ) -> JsResult<Function<'js>> {
+    let callback_id = pick(self).alloc();
+    if let Some(err) = register(self, callback_id, &types) {
       return Err(ctx.throw(error::host_error_to_js(ctx, &err)?));
     }
-    self.update_fns.insert(
+    pick(self).insert(
       callback_id,
       None,
       UpdateReg {
-        callback: Persistent::save(ctx, listener),
+        callback: Persistent::save(ctx, callback),
         types: types.into(),
       },
     );
 
     let state = self.clone();
     make_disposer(ctx, move |ctx| {
-      if let Some(reg) = state.update_fns.remove(callback_id) {
+      if let Some(reg) = pick(&state).remove(callback_id) {
         let _ = reg.callback.restore(ctx);
-        state.host.on_update_unregister(callback_id);
+        unregister(&state, callback_id);
       }
     })
   }
@@ -1207,11 +1216,7 @@ impl RpcState {
       let value = match state.tl.wire_to_js_value(&ctx, update_wire, ViewLife::Plugin) {
         Ok(v) => v,
         Err(e) => {
-          let msg = match e {
-            rquickjs::Error::Exception => format_exception(&ctx),
-            other => other.to_string(),
-          };
-          (state.log)(&format!("dispatchUpdate: bad update wire: {msg}"));
+          (state.log)(&format!("dispatchUpdate: bad update wire: {}", describe_js_error(&ctx, e)));
           return;
         }
       };
@@ -1235,15 +1240,7 @@ impl RpcState {
         let Ok(f) = reg.callback.restore(&ctx) else {
           continue;
         };
-        match f.call::<_, Value>((value.clone(), account.clone())) {
-          Ok(_) => {}
-          Err(rquickjs::Error::Exception) => {
-            (state.log)(&crate::fault(format_args!("onUpdate callback threw: {}", format_exception(&ctx))));
-          }
-          Err(e) => {
-            (state.log)(&format!("onUpdate callback failed: {e:?}"));
-          }
-        }
+        call_callback(&ctx, &state.log, "onUpdate callback", &f, (value.clone(), account.clone()));
       }
     });
     pump_jobs(rt, context, state.log.as_ref());
@@ -1265,10 +1262,7 @@ impl RpcState {
       if let Err(e) =
         state.try_dispatch_update_intercept(&ctx, callback_id, dispatch_id, type_name, account_id, update_wire)
       {
-        let msg = match e {
-          rquickjs::Error::Exception => format_exception(&ctx),
-          other => other.to_string(),
-        };
+        let msg = describe_js_error(&ctx, e);
         (state.log)(&format!("interceptUpdate({type_name}) dispatch failed, delivering: {msg}"));
         if let Some(ustate) = state.remove_update_dispatch(dispatch_id) {
           state.settle_update_verdict_after_removal(&ctx, &ustate, dispatch_id);
@@ -1313,10 +1307,7 @@ impl RpcState {
     let state = self;
     context.with(|ctx| {
       if let Err(e) = state.try_dispatch_rpc(&ctx, callback_id, dispatch_id, method, account_id, request_wire) {
-        let msg = match e {
-          rquickjs::Error::Exception => format_exception(&ctx),
-          other => other.to_string(),
-        };
+        let msg = describe_js_error(&ctx, e);
         (state.log)(&format!("interceptRpc({method}) dispatch failed: {msg}"));
         let wire = proxy::encode_error(&msg);
         let dstate = state.dispatches.borrow().get(&dispatch_id).cloned();

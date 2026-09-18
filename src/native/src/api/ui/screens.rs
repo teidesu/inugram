@@ -4,7 +4,7 @@ use std::rc::Rc;
 
 use rquickjs::{Array, Ctx, Function, Object, Persistent, Result as JsResult, Runtime, Value};
 
-use crate::api::error::format_exception;
+use crate::api::error::{call_callback, format_exception};
 use crate::api::telegram::account::{self, AccountState};
 use crate::runtime::pump_jobs;
 use crate::sandbox::grants::{GrantHost, MATCH_EXACT};
@@ -88,14 +88,7 @@ pub fn install_screens<'js>(
     event_factory: RefCell::new(None),
   });
 
-  let ui: Object = match globals.inu.get::<_, Object>("ui") {
-    Ok(o) => o,
-    Err(_) => {
-      let o = Object::new(ctx.clone())?;
-      globals.inu.set("ui", o.clone())?;
-      o
-    }
-  };
+  let ui = globals.get_namespace(ctx, "ui")?;
 
   let state2 = state.clone();
   ui.set(
@@ -183,13 +176,7 @@ impl ScreenState {
         }
       };
       for f in state.changed_fns.snapshot(&ctx) {
-        match f.call::<_, Value>((event.clone(),)) {
-          Ok(_) => {}
-          Err(rquickjs::Error::Exception) => {
-            (state.log)(&crate::fault(format_args!("onScreenChanged callback threw: {}", format_exception(&ctx),)));
-          }
-          Err(e) => (state.log)(&format!("onScreenChanged callback failed: {e:?}")),
-        }
+        call_callback(&ctx, &state.log, "onScreenChanged callback", &f, (event.clone(),));
       }
     });
     pump_jobs(rt, context, state.log.as_ref());
