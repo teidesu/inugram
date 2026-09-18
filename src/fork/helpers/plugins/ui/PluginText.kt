@@ -9,6 +9,7 @@ import org.telegram.messenger.CodeHighlighting
 import org.telegram.messenger.Emoji
 import org.telegram.messenger.MessageObject
 import org.telegram.tgnet.TLRPC
+import org.telegram.ui.Components.FormattedDateSpan
 import org.telegram.ui.Components.TextStyleSpan
 import org.telegram.ui.Components.URLSpanMono
 
@@ -24,35 +25,63 @@ object PluginText {
 
     @JvmStatic
     @JvmOverloads
-    fun formatted(text: String, entitiesJson: String?, fontMetrics: Paint.FontMetricsInt? = null): CharSequence {
-        val array = entitiesJson?.takeIf { it.isNotEmpty() }?.let {
+    fun formatted(text: String, entitiesJson: String?, fontMetrics: Paint.FontMetricsInt? = null): CharSequence =
+        formatted(text, parseArray(entitiesJson), fontMetrics)
+
+    @JvmStatic
+    @JvmOverloads
+    fun formatted(text: String, entities: JSONArray?, fontMetrics: Paint.FontMetricsInt? = null): CharSequence {
+        val parsed = parseEntities(entities)
+        val out = SpannableStringBuilder(text)
+        var result: CharSequence = out
+        if (parsed.isNotEmpty()) {
+            MessageObject.addEntitiesToText(out, parsed, false, false, false, false)
+            markEmptyDates(out, parsed)
+            inheritCodeColor(out)
+            if (fontMetrics != null) result = MessageObject.replaceAnimatedEmoji(out, parsed, fontMetrics)
+            result = FormattedDateSpan.applyFormatedDateEntities(result)
+        }
+        return Emoji.replaceEmoji(result, fontMetrics, false)
+    }
+
+    @JvmStatic
+    fun parseEntities(entitiesJson: String?): ArrayList<TLRPC.MessageEntity> = parseEntities(parseArray(entitiesJson))
+
+    private fun parseArray(entitiesJson: String?): JSONArray? =
+        entitiesJson?.takeIf { it.isNotEmpty() }?.let {
             try {
                 JSONArray(it)
             } catch (e: Exception) {
                 null
             }
         }
-        return formatted(text, array, fontMetrics)
+
+    private fun parseEntities(entities: JSONArray?): ArrayList<TLRPC.MessageEntity> {
+        val parsed = ArrayList<TLRPC.MessageEntity>()
+        if (entities == null) return parsed
+        for (index in 0 until entities.length()) {
+            val one = entities.optJSONObject(index) ?: continue
+            (runCatching { TlJson.fromJson(one) }.getOrNull() as? TLRPC.MessageEntity)?.let(parsed::add)
+        }
+        return parsed
     }
 
-    @JvmStatic
-    @JvmOverloads
-    fun formatted(text: String, entities: JSONArray?, fontMetrics: Paint.FontMetricsInt? = null): CharSequence {
-        val parsed = ArrayList<TLRPC.MessageEntity>()
-        if (entities != null) {
-            for (index in 0 until entities.length()) {
-                val one = entities.optJSONObject(index) ?: continue
-                (runCatching { TlJson.fromJson(one) }.getOrNull() as? TLRPC.MessageEntity)?.let(parsed::add)
-            }
+    /**
+     * `<tg-time unix=...></tg-time>` says "the app writes the date here", and so covers no text for
+     * [MessageObject.addEntitiesToText] to span - it skips `length <= 0`, and the date renders as
+     * nothing. Marking the spot is all that is missing: stock's own substitution pass replaces a
+     * span's range with the date, and an empty range makes that replacement an insertion.
+     *
+     * The mark is `SPAN_INCLUSIVE_EXCLUSIVE` because a `SpannableStringBuilder` drops an empty
+     * `SPAN_EXCLUSIVE_EXCLUSIVE` span outright.
+     */
+    private fun markEmptyDates(out: SpannableStringBuilder, parsed: List<TLRPC.MessageEntity>) {
+        for (one in parsed) {
+            if (one !is TLRPC.TL_messageEntityFormattedDate || one.length != 0) continue
+            if (one.offset < 0 || one.offset > out.length) continue
+            val run = TextStyleSpan.TextStyleRun().also { it.start = one.offset; it.end = one.offset }
+            out.setSpan(FormattedDateSpan("", run, one), one.offset, one.offset, Spanned.SPAN_INCLUSIVE_EXCLUSIVE)
         }
-        val out = SpannableStringBuilder(text)
-        var result: CharSequence = out
-        if (parsed.isNotEmpty()) {
-            MessageObject.addEntitiesToText(out, parsed, false, false, false, false)
-            inheritCodeColor(out)
-            if (fontMetrics != null) result = MessageObject.replaceAnimatedEmoji(out, parsed, fontMetrics)
-        }
-        return Emoji.replaceEmoji(result, fontMetrics, false)
     }
 
     /**

@@ -111,8 +111,11 @@ object PluginUi : SessionResource {
                 }
                 layout.textView.setSingleLine(false)
                 layout.textView.maxLines = 2
-                layout.textView.text = PluginText.formatted(text, entitiesJson, layout.textView.paint.fontMetricsInt)
-                factory.create(layout, if (largeAnimation && text.length < 20) Bulletin.DURATION_SHORT else Bulletin.DURATION_LONG).show()
+                // an entity can carry the whole of what the bulletin says, so how long it stays up
+                // is decided on what it ends up drawing, not on the text the entities are beside
+                val drawn = PluginText.formatted(text, entitiesJson, layout.textView.paint.fontMetricsInt)
+                layout.textView.text = drawn
+                factory.create(layout, if (largeAnimation && drawn.length < 20) Bulletin.DURATION_SHORT else Bulletin.DURATION_LONG).show()
             }
             return null
         }
@@ -409,12 +412,8 @@ object PluginUi : SessionResource {
             return
         }
         val builder = AlertDialog.Builder(activity)
-        options.text("title")?.let {
-            builder.setTitle(PluginText.formatted(it, options.optJSONArray("titleEntities")))
-        }
-        options.text("message")?.let {
-            builder.setMessage(PluginText.formatted(it, options.optJSONArray("messageEntities")))
-        }
+        options.formatted("title")?.let(builder::setTitle)
+        options.formatted("message")?.let(builder::setMessage)
         // rust already refused every element but `inu.android.nativeView`, which is a jvm
         // handle id; one the plugin has since released simply leaves the dialog bodiless
         options.optJSONObject("body")?.optLong("handle")?.let { handle ->
