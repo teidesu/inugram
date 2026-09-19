@@ -3,7 +3,6 @@ package desu.inugram.helpers.plugins
 import desu.inugram.core.plugins.PluginWire
 import desu.inugram.helpers.plugins.telegram.PeerSpecs
 import desu.inugram.helpers.plugins.telegram.PluginReads
-import desu.inugram.helpers.plugins.tl.TlHandles
 import java.util.ArrayList
 import java.util.concurrent.CountDownLatch
 import java.util.concurrent.TimeUnit
@@ -45,6 +44,9 @@ class PluginReadsTest {
     private fun user(id: Long, username: String?) = TLRPC.TL_user().apply {
         this.id = id
         this.username = username
+        // a name, because what the app writes into a service message is the display name, and an
+        // unnamed user leaves it an empty span
+        first_name = username ?: "user$id"
         access_hash = id * 10
     }
 
@@ -64,7 +66,7 @@ class PluginReadsTest {
 
     private fun preview(plugin: Plugin, message: TLRPC.Message, hideSpoilers: Boolean = false): JSONObject {
         val flag = if (hideSpoilers) "1" else "0"
-        val wire = (plugin.tl() as TlHandles).mintWireForPlugin(message, readOnly = true)
+        val wire = plugin.session!!.tl.mintWireForPlugin(message, readOnly = true)
         val answer = read(plugin, PluginReads.OP_MESSAGE_PREVIEW, "$flag\n$wire")
         assertTrue(answer.startsWith("J"), "a preview crosses as text plus entities: $answer")
         return JSONObject(answer.drop(1))
@@ -491,7 +493,9 @@ class PluginReadsTest {
             id = 1
             message = "ab cd"
             peer_id = peerUser(self)
-            media = TLRPC.TL_messageMediaPhoto()
+            // geo, not photo: the label is the preview either way, and a thumbless photo is a
+            // message no server sends
+            media = TLRPC.TL_messageMediaGeo().apply { geo = TLRPC.TL_geoPoint() }
             entities.add(TLRPC.TL_messageEntitySpoiler().apply { offset = 0; length = 5 })
         }.synced()
         val drawn = previewText(plugin, message, hideSpoilers = true)

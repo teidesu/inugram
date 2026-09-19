@@ -542,11 +542,13 @@ class PluginJvmTest {
     @Test
     fun a_tl_value_crosses_to_java_and_back() {
         val plugin = engineWith()
+        // through `isInstance`, not `getClass().getSimpleName()`: a class handle is a function, so
+        // `.call` on one is `Function.prototype.call` and silently constructs instead
         assertEquals(
-            "VTL_messageEntityBold",
+            "Vtrue",
             plugin.outcome(
-                "inu.jvm.fromTl({ _: 'messageEntityBold', offset: 1, length: 2 })" +
-                    ".call('getClass').call('getSimpleName')",
+                "inu.jvm.cls('org.telegram.tgnet.TLRPC\$TL_messageEntityBold')" +
+                    ".isInstance(inu.jvm.fromTl({ _: 'messageEntityBold', offset: 1, length: 2 }))",
             ),
         )
         assertEquals(
