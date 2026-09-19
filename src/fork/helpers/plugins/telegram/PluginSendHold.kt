@@ -1,5 +1,6 @@
 package desu.inugram.helpers.plugins.telegram
 
+import desu.inugram.helpers.plugins.PluginManager
 import org.telegram.messenger.AndroidUtilities
 import org.telegram.messenger.MessageObject
 import org.telegram.messenger.MessagesController
@@ -44,12 +45,8 @@ object PluginSendHold {
      */
     @JvmStatic
     fun draw(account: Int, peer: Long, messages: ArrayList<MessageObject>, mode: Int, scheduleDate: Int) {
-        val show = Runnable {
-            MessagesController.getInstance(account).updateInterfaceWithMessages(peer, messages, mode)
-            if (scheduleDate == 0) {
-                NotificationCenter.getInstance(account).postNotificationName(NotificationCenter.dialogsNeedReload)
-            }
-        }
+        if (!PluginManager.anyRunning) return drawNow(account, peer, messages, mode, scheduleDate)
+        val show = Runnable { drawNow(account, peer, messages, mode, scheduleDate) }
         // a send growing into media is already on screen: what it wants is the change animation
         if (PluginSendMorph.redrawInstead(account, peer, messages, scheduleDate)) return
         val holding = PluginRpc.maySendBeIntercepted(messages.firstOrNull()?.messageOwner?.message)
@@ -65,6 +62,13 @@ object PluginSendHold {
             AndroidUtilities.runOnUIThread(timer, GRACE_MILLIS)
         }
         flush()
+    }
+
+    private fun drawNow(account: Int, peer: Long, messages: ArrayList<MessageObject>, mode: Int, scheduleDate: Int) {
+        MessagesController.getInstance(account).updateInterfaceWithMessages(peer, messages, mode)
+        if (scheduleDate == 0) {
+            NotificationCenter.getInstance(account).postNotificationName(NotificationCenter.dialogsNeedReload)
+        }
     }
 
     /** the chain passed the send through, or there was never one to walk */

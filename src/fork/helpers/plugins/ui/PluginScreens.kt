@@ -44,7 +44,9 @@ object PluginScreens {
         val previous = stack
         stack = next
         val action = ScreenStack.diff(previous, next) ?: return
-        if (PluginManager.plugins().isEmpty()) return
+        // the stack above is kept whatever happens, so a plugin started later reads the real one;
+        // only the dispatch is skipped, and with the engine off that is every navigation
+        if (!PluginManager.anyRunning) return
 
         val change = JSONObject()
             .put("action", action.name.lowercase())

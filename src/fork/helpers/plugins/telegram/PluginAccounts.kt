@@ -34,6 +34,9 @@ object PluginAccounts {
         AndroidUtilities.runOnUIThread {
             lastAccounts = accountsJson()
             val observer = NotificationCenter.NotificationCenterDelegate { _, _, _ ->
+                // a plugin started later reads the live snapshot at install, so there is nothing to
+                // keep up to date while none is running
+                if (!PluginManager.anyRunning) return@NotificationCenterDelegate
                 val current = accountsJson()
                 if (current == lastAccounts) return@NotificationCenterDelegate
                 lastAccounts = current

@@ -109,7 +109,10 @@ private fun snapshotField() =
 @Suppress("UNCHECKED_CAST")
 fun installedPlugins(): List<Plugin> = snapshotField().get(PluginManager) as List<Plugin>
 
-fun setInstalledPlugins(plugins: List<Plugin>) = snapshotField().set(PluginManager, plugins)
+fun setInstalledPlugins(plugins: List<Plugin>) {
+    snapshotField().set(PluginManager, plugins)
+    PluginManager.refreshAnyRunning()
+}
 
 /** the app under test, which is this suite's own package: the bridge reads it through stock */
 fun deviceContext(): android.content.Context =
@@ -193,6 +196,7 @@ fun closeEngine(plugin: Plugin) {
     session.stopDispatching()
     session.engine.close()
     plugin.session = null
+    PluginManager.refreshAnyRunning()
 }
 
 fun closeCanvasEngine(plugin: Plugin) {

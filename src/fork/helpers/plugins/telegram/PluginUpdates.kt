@@ -77,6 +77,9 @@ object PluginUpdates : SessionResource {
     // a ring for the same reason: a parked batch is re-fed but not re-intercepted, so a verdict cleared after the hand-back would be lost and the update applied on the second pass
     private val droppedUpdates = BoundedIdentitySet<TLObject>(DISPATCH_MEMORY)
 
+    /** [isDropped] is asked of every update the app applies, and the set behind it is synchronized */
+    @Volatile private var anyDropped = false
+
     fun listenerFor(session: PluginSession): UpdatesListener =
         object : UpdatesListener {
             private val onHost = EngineDispatch.createHostDispatcher { session.isCurrent() }
@@ -290,6 +293,9 @@ object PluginUpdates : SessionResource {
      */
     @JvmStatic
     fun onUpdates(controller: MessagesController, updates: TLRPC.Updates, account: Int, fromQueue: Boolean): Boolean {
+        // a take-over, a queued batch and a listener all need a running plugin, so with none the
+        // app's update loop pays a volatile read instead of the lookups below
+        if (!PluginManager.anyRunning) return false
         // our own hand-back: observers see exactly what the app is about to apply, which is what makes a dropped update invisible to `onUpdate` too
         if (takenOver.remove(updates)) {
             if (hasUpdateListeners) fanOut(unpackUpdates(updates, account), account)
@@ -504,21 +510,26 @@ object PluginUpdates : SessionResource {
         val short = batch.units.firstOrNull { it.synthesized }
         if (short != null) {
             if (short.update in batch.dropped) {
-                droppedUpdates.add(short.update)
+                dropUpdate(short.update)
                 return asUpdatesBatch(short.update, updates)
             }
             val untouched = short.snapshot != null && rawSnapshotOf(short.update) == short.snapshot
             return if (untouched) updates else asUpdatesBatch(short.update, updates)
         }
         for (unit in batch.units) {
-            if (unit.update in batch.dropped) droppedUpdates.add(unit.update)
+            if (unit.update in batch.dropped) dropUpdate(unit.update)
         }
         return updates
     }
 
+    private fun dropUpdate(update: TLObject) {
+        droppedUpdates.add(update)
+        anyDropped = true
+    }
+
     /** the app's own update loop, asking whether it may apply this one */
     @JvmStatic
-    fun isDropped(update: TLObject?): Boolean = update != null && update in droppedUpdates
+    fun isDropped(update: TLObject?): Boolean = anyDropped && update != null && update in droppedUpdates
 
     /**
      * `users`/`chats` stay empty on purpose. Stock groups by `getUpdatePts`/`getUpdatePtsCount`
@@ -553,6 +564,7 @@ object PluginUpdates : SessionResource {
         account: Int,
         apply: Runnable,
     ): Boolean {
+        if (!PluginManager.anyRunning) return false
         // our own hand-back, as in [onUpdates]: observers see what the app is about to apply
         if (takenOverDifferences.remove(apply)) {
             if (hasUpdateListeners) fanOut(unpackDifference(newMessages, otherUpdates), account)

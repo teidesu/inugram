@@ -101,20 +101,57 @@ object PluginManager {
     private var booted = false
     private var lateLoaded = false
     private var lateInited = false
+    private var loaded = false
+    private var hosting = false
+
+    /**
+     * whether any plugin is actually running. Every hook stock calls into reads this first, so an
+     * engine that is off - the default - costs the app a volatile read and nothing else.
+     */
+    @Volatile
+    var anyRunning = false
+        private set
+
+    /** [snapshot], not [plugins]: the published list is what every reader of the flag sees */
+    fun refreshAnyRunning() {
+        anyRunning = snapshot.any { it.session != null }
+    }
 
     // a set, not a slot: the plugins page and a plugin's info page can be mounted at once, and the
     // fragment being revealed resumes before the one it replaced pauses
     private val changeListeners = CopyOnWriteArrayList<() -> Unit>()
 
     fun init(context: Context) {
+        if (!isEngineEnabled()) return
+        startHosting(context)
+    }
+
+    /**
+     * what the app does for an engine that is on: the signals plugins observe, the sweeps their
+     * files need, and the set itself. Nothing here runs while the engine is off, so a stock install
+     * registers no observer and reads no plugin directory.
+     */
+    private fun startHosting(context: Context) {
+        if (hosting) return
+        hosting = true
         PluginAppVisibility.watch(context)
         PluginAccounts.watch()
         PluginBlobs.scheduleSweep()
         PluginTransfers.scheduleSweep()
+        ensureLoaded()
+        PluginDevServer.sync(context)
+    }
+
+    /**
+     * the installed set, read off disk at most once. The plugins page shows it with the engine off,
+     * which is the one caller that needs it without [startHosting] having run.
+     */
+    fun ensureLoaded() {
+        if (loaded) return
+        loaded = true
         plugins.addAll(PluginStore.load())
         PluginStore.persist(plugins)
         republishOrder()
-        PluginDevServer.sync(context)
     }
 
     fun isEngineEnabled(): Boolean = InuConfig.PLUGINS_ENABLED.value
@@ -192,6 +229,7 @@ object PluginManager {
 
     fun toggleEngine(): Boolean {
         val enabled = InuConfig.PLUGINS_ENABLED.toggle()
+        if (enabled) ApplicationLoader.applicationContext?.let { startHosting(it) }
         if (enabled && !safeMode) {
             for (plugin in plugins) if (plugin.enabled) {
                 plugin.failure = null
@@ -412,6 +450,7 @@ object PluginManager {
         }
         val session = PluginSession(plugin, QuickJs())
         plugin.session = session
+        refreshAnyRunning()
         val budget = LogBudget()
         val timers = TimerThrottle(session)::schedule
         val onHost = EngineDispatch.createHostDispatcher(session::isCurrent)
@@ -520,6 +559,7 @@ object PluginManager {
         beforeClear()
         session.plugin.session = null
         session.settingsPageId = null
+        refreshAnyRunning()
         notifyChanged()
     }
 

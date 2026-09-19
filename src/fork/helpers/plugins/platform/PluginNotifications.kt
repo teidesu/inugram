@@ -76,7 +76,10 @@ object PluginNotifications : SessionResource {
 
     @JvmStatic
     fun areNotificationsSuppressed(account: Int): Boolean =
-        suppressors.any { it.account == ANY_ACCOUNT || it.account == account }
+        anySuppressed && suppressors.any { it.account == ANY_ACCOUNT || it.account == account }
+
+    /** asked before every notification the app posts, and the registry behind it is synchronized */
+    @Volatile private var anySuppressed = false
 
     private fun setSuppressed(session: PluginSession, token: Int, account: Int, on: Boolean) {
         if (on) {
@@ -84,6 +87,7 @@ object PluginNotifications : SessionResource {
         } else {
             suppressors.remove(session) { it.token == token }
         }
+        anySuppressed = suppressors.any { true }
     }
 
     fun listenerFor(session: PluginSession): NotificationListener =
@@ -155,6 +159,7 @@ object PluginNotifications : SessionResource {
     override fun detach(session: PluginSession) {
         for (registration in live.take(session)) removeObserver(registration)
         suppressors.take(session)
+        anySuppressed = suppressors.any { true }
     }
 
     /**

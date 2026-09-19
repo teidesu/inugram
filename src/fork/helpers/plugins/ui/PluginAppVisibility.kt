@@ -78,6 +78,8 @@ object PluginAppVisibility {
             MODE_FOREGROUND -> if (foreground) return else foreground = true
             MODE_BACKGROUND -> if (!foreground) return else foreground = false
         }
+        // [foreground] above is tracked either way, so a plugin started later reads the real state
+        if (!PluginManager.anyRunning) return
         EngineDispatch.scheduler.postRunnable {
             for (plugin in PluginManager.plugins()) plugin.engine?.appVisibilityChanged(mode)
         }
