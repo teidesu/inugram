@@ -101,29 +101,26 @@ open class QuickJs {
 
 
     /**
-     * Runs on the hooked thread, with bounded engine admission. Answers `["A", wire]` to answer the call with `wire`,
-     * or `["P0" | "P1", ...args]` to run the original with those args - `P1` also meaning
-     * [xposedAfter] is owed a call for [dispatchId]. `null` means the phase never ran, so nothing
-     * took the argument wires and whatever the caller minted for them is still the caller's.
+     * Runs on the hooked thread, with bounded engine admission. [invocation] is `[method, this, ...args]`.
+     * Answers `["A", wire]` to answer the call with `wire`, or `["P0" | "P1", ...args]` to run the
+     * original with those args, `=` keeping an argument as it was - `P1` also meaning
+     * [xposedAfter] is owed a call for [dispatchId]. `null` means the phase never ran.
      */
-    open fun xposedBefore(
-        dispatchId: Long,
-        site: Long,
-        methodWire: String,
-        thisWire: String,
-        args: Array<String>,
-    ): Array<String>? = try {
-        ifLiveOr(null) { nativeXposedBefore(it, dispatchId, site, methodWire, thisWire, args) }
-    } finally { scheduleJobs() }
+    open fun xposedBefore(dispatchId: Long, site: Long, invocation: Array<Any?>): Array<String>? =
+        ifLiveOr(null) { nativeXposedBefore(it, dispatchId, site, invocation, invocation.size) }
 
     /**
-     * [resultWire] is what the original answered, `T`-prefixed when it threw; `U` preserves that
-     * outcome. `X`, or `null`, means the after phase never ran, so nothing took [resultWire] and
-     * whatever it minted is still the caller's to release.
+     * `null` preserves the outcome; `X` means the after phase never ran, so the dispatch is still
+     * owed a release. [invocation] is the before phase's, with the result appended: the engine
+     * borrows these references for the call rather than holding them, so the after phase is handed
+     * them again.
      */
-    open fun xposedAfter(dispatchId: Long, resultWire: String): String? = try {
-        ifLiveOr(null) { nativeXposedAfter(it, dispatchId, resultWire) }
-    } finally { scheduleJobs() }
+    open fun xposedAfter(dispatchId: Long, invocation: Array<Any?>, threw: Boolean): String? =
+        ifLiveOr(NOT_DISPATCHED) { nativeXposedAfter(it, dispatchId, invocation, invocation.size, threw) }
+
+    /** [invocation] is `[method, this, ...args, result]`, the result last so one array crosses instead of two. */
+    open fun xposedAfterOnly(site: Long, invocation: Array<Any?>, threw: Boolean): String? =
+        ifLiveOr(NOT_DISPATCHED) { nativeXposedAfterOnly(it, site, invocation, invocation.size, threw) }
 
     /** Shared budget for native phases and Rust engine admission. */
     open fun xposedBudgetMs(): Long = nativeXposedBudgetMs()
@@ -131,14 +128,10 @@ open class QuickJs {
     open fun xposedRelease(dispatchId: Long) = ifLive { nativeXposedRelease(it, dispatchId) }
 
     /** Runs synchronously; native rejects recursive entry and admission past the hook budget. */
-    open fun jvmCallback(callbackId: Int) {
-        try { ifLive { nativeJvmCallback(it, callbackId) } }
-        finally { scheduleJobs() }
-    }
+    open fun jvmCallback(callbackId: Int) = ifLive { nativeJvmCallback(it, callbackId) }
 
-    open fun jvmMethod(callbackId: Int, self: String, args: Array<String>): String = try {
+    open fun jvmMethod(callbackId: Int, self: String, args: Array<String>): String =
         requireLive { nativeJvmMethod(it, callbackId, self, args) }
-    } finally { scheduleJobs() }
 
     /**
      * The reference table behind `inu.jvm` handles is rust's; these reach it from any thread and
@@ -154,7 +147,8 @@ open class QuickJs {
 
     private val jobsScheduled = AtomicBoolean()
 
-    private fun scheduleJobs() {
+    /** native calls this by name */
+    fun scheduleJobs() {
         if (!jobsScheduled.compareAndSet(false, true)) return
         EngineDispatch.scheduler.postRunnable {
             jobsScheduled.set(false)
@@ -290,16 +284,11 @@ open class QuickJs {
         headerKeys: Array<String>,
         headerValues: Array<String>,
     )
-    private external fun nativeXposedBefore(
-        ptr: Long,
-        dispatchId: Long,
-        site: Long,
-        methodWire: String,
-        thisWire: String,
-        args: Array<String>,
-    ): Array<String>?
+    private external fun nativeXposedBefore(ptr: Long, dispatchId: Long, site: Long, invocation: Array<Any?>, count: Int): Array<String>?
 
-    private external fun nativeXposedAfter(ptr: Long, dispatchId: Long, resultWire: String): String?
+    private external fun nativeXposedAfter(ptr: Long, dispatchId: Long, invocation: Array<Any?>, count: Int, threw: Boolean): String?
+
+    private external fun nativeXposedAfterOnly(ptr: Long, site: Long, invocation: Array<Any?>, count: Int, threw: Boolean): String?
 
     private external fun nativeXposedRelease(ptr: Long, dispatchId: Long)
 
@@ -342,6 +331,9 @@ open class QuickJs {
          * `console.*` binds 0..4 only, so plugin JS cannot forge one.
          */
         const val LEVEL_FAULT = 5
+
+        /** keep in sync with rust `xposed::NOT_DISPATCHED`: the after phase never ran */
+        const val NOT_DISPATCHED = "X"
 
         /** [RpcListener.onInvokeRpc]'s slot for the account-less `inu.invokeRpc` (rust: `ANY_ACCOUNT`) */
         const val ANY_ACCOUNT = -1

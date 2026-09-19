@@ -1534,6 +1534,21 @@ impl Native {
     })
   }
 
+  /// SAFETY: `array` is the caller's local reference, kept readable only for its own JNI call by
+  /// the hook context that owns it
+  pub(crate) fn element_to_js<'js>(
+    &self,
+    ctx: &Ctx<'js>,
+    array: jni::sys::jobjectArray,
+    index: usize,
+  ) -> JsResult<Outcome<'js>> {
+    self.with_env(ctx, |env, known| {
+      let array = unsafe { JObjectArray::<JObject>::from_raw(env, array) };
+      let element = array.get_element(env, index)?;
+      self.result_to_js(ctx, env, known, JValueOwned::Object(element))
+    })
+  }
+
   pub(crate) fn construct<'js>(
     &self,
     ctx: &Ctx<'js>,

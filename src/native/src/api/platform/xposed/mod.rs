@@ -1,3 +1,4 @@
+mod context;
 pub(crate) mod elf;
 pub(crate) mod lsplant;
 
@@ -6,18 +7,20 @@ use std::cell::{Cell, RefCell};
 use std::collections::HashMap;
 use std::rc::Rc;
 
+use jni::objects::{JObject, JObjectArray};
+use jni::sys::jobjectArray;
 use rquickjs::function::Opt;
-use rquickjs::{Array, Context, Ctx, Function, Object, Persistent, Result as JsResult, Runtime, Value};
+use rquickjs::{Class, Context, Ctx, Function, Object, Persistent, Result as JsResult, Runtime, Value};
 
 use crate::api::error::PluginErrorCode;
 use crate::api::platform::jvm::JvmState;
 use crate::sandbox::grants::{GrantHost, MATCH_NAMESPACE};
-use crate::sandbox::registry::{make_disposer, noop_disposer, Lifecycle, Registry, Token};
+use crate::sandbox::registry::{make_disposer, noop_disposer, Lifecycle, Token};
 use crate::utils::arguments::array_values;
-use rquickjs::function::This;
 
 use crate::api::error::report_callback_error;
 use crate::runtime::pump_jobs;
+use context::{create_hook_context, install_hook_context, HookContext};
 
 pub trait XposedHost {
   fn xposed(&self, op: i32, target: i64, name: &str, args: &[String]) -> String;
@@ -31,6 +34,7 @@ const OP_ALLOCATE: i32 = 4;
 const OP_DISABLE_PROFILE_SAVER: i32 = 5;
 const OP_NATIVE_ADD: i32 = 6;
 const OP_NATIVE_REMOVE: i32 = 7;
+const OP_JS_BEFORES: i32 = 8;
 
 pub const GRANT: &str = "unsafe.xposed";
 
@@ -38,10 +42,9 @@ pub const HOOK_LIMIT: usize = 512;
 
 pub const HOOK_BUDGET_MS: i64 = 250;
 
-#[derive(Clone)]
 struct Hook {
-  site: i64,
-  native_token: Option<u32>,
+  token: Token,
+  native: bool,
   before: Option<Persistent<Function<'static>>>,
   after: Option<Persistent<Function<'static>>>,
 }
@@ -52,9 +55,17 @@ pub struct XposedState {
   lifecycle: Rc<Lifecycle>,
   jvm: Rc<JvmState>,
   log: crate::Log,
-  hooks: Registry<Hook>,
-  sites: RefCell<HashMap<i64, usize>>,
+  context_proto: RefCell<Option<Persistent<Object<'static>>>>,
+  sites: RefCell<HashMap<i64, SiteHooks>>,
+  held: Cell<usize>,
+  next_token: Cell<Token>,
   pending: RefCell<HashMap<i64, PendingDispatch>>,
+}
+
+#[derive(Default)]
+struct SiteHooks {
+  hooks: Vec<Hook>,
+  befores: usize,
 }
 
 struct PendingDispatch {
@@ -72,47 +83,79 @@ impl PendingDispatch {
 }
 
 impl XposedState {
-  fn release(&self, ctx: &Ctx<'_>, hook: Hook) {
-    if let Some(token) = hook.native_token {
-      self.host.xposed(OP_NATIVE_REMOVE, hook.site, &token.to_string(), &[]);
+  fn take_hook(&self, site: i64, token: Token) -> Option<(Hook, usize, bool)> {
+    let mut sites = self.sites.borrow_mut();
+    let entry = sites.get_mut(&site)?;
+    let index = entry.hooks.iter().position(|hook| hook.token == token)?;
+    let hook = entry.hooks.remove(index);
+    if hook.before.is_some() {
+      entry.befores -= 1;
     }
+    let befores = entry.befores;
+    let emptied = entry.hooks.is_empty();
+    if emptied {
+      sites.remove(&site);
+    }
+    self.held.set(self.held.get() - 1);
+    Some((hook, befores, emptied))
+  }
+
+  fn release(&self, ctx: &Ctx<'_>, site: i64, token: Token) {
+    let Some((hook, befores, emptied)) = self.take_hook(site, token) else {
+      return;
+    };
+    if hook.native {
+      self.host.xposed(OP_NATIVE_REMOVE, site, &token.to_string(), &[]);
+    }
+    let had_before = hook.before.is_some();
     if let Some(before) = hook.before {
       let _ = before.restore(ctx);
     }
     if let Some(after) = hook.after {
       let _ = after.restore(ctx);
     }
-    let mut sites = self.sites.borrow_mut();
-    let Some(count) = sites.get_mut(&hook.site) else {
-      return;
-    };
-    *count -= 1;
-    if *count == 0 {
-      sites.remove(&hook.site);
-      drop(sites);
-      self.host.xposed(OP_UNHOOK, hook.site, "", &[]);
+    if emptied {
+      self.host.xposed(OP_UNHOOK, site, "", &[]);
+    } else if had_before {
+      self.host.xposed(OP_JS_BEFORES, site, &befores.to_string(), &[]);
     }
   }
 
-  fn release_tokens(&self, ctx: &Ctx<'_>, tokens: &[Token]) {
-    for token in tokens {
-      if let Some(hook) = self.hooks.remove(*token) {
-        self.release(ctx, hook);
-      }
+  fn release_tokens(&self, ctx: &Ctx<'_>, tokens: &[(i64, Token)]) {
+    for (site, token) in tokens {
+      self.release(ctx, *site, *token);
+    }
+  }
+
+  fn hook_proto<'js>(&self, ctx: &Ctx<'js>) -> JsResult<Object<'js>> {
+    let held = self.context_proto.borrow().clone();
+    match held {
+      Some(proto) => proto.restore(ctx),
+      None => PluginErrorCode::Internal.throw(ctx, "xposed: the hook context class is not installed"),
     }
   }
 
   fn snapshot<'js>(&self, ctx: &Ctx<'js>, site: i64) -> Vec<Phase<'js>> {
-    self
+    let sites = self.sites.borrow();
+    let Some(entry) = sites.get(&site) else {
+      return Vec::new();
+    };
+    entry
       .hooks
-      .values()
-      .into_iter()
-      .filter(|hook| hook.site == site)
+      .iter()
       .map(|hook| Phase {
-        before: hook.before.and_then(|f| f.restore(ctx).ok()),
-        after: hook.after.and_then(|f| f.restore(ctx).ok()),
+        before: hook.before.clone().and_then(|f| f.restore(ctx).ok()),
+        after: hook.after.clone().and_then(|f| f.restore(ctx).ok()),
       })
       .collect()
+  }
+
+  fn snapshot_afters<'js>(&self, ctx: &Ctx<'js>, site: i64) -> Vec<Function<'js>> {
+    let sites = self.sites.borrow();
+    let Some(entry) = sites.get(&site) else {
+      return Vec::new();
+    };
+    entry.hooks.iter().filter_map(|hook| hook.after.clone()?.restore(ctx).ok()).collect()
   }
 }
 
@@ -205,19 +248,27 @@ impl XposedState {
   ) -> JsResult<Function<'js>> {
     let mut tokens = Vec::with_capacity(sites.len());
     for &site in &sites {
-      let token = self.hooks.alloc();
-      *self.sites.borrow_mut().entry(site).or_insert(0) += 1;
-      self.hooks.insert(
-        token,
-        None,
-        Hook {
-          site,
-          native_token: callbacks.native_phases.as_ref().map(|_| token),
+      let token = self.next_token.get();
+      self.next_token.set(token.wrapping_add(1));
+      let befores = {
+        let mut held = self.sites.borrow_mut();
+        let entry = held.entry(site).or_default();
+        if callbacks.before.is_some() {
+          entry.befores += 1;
+        }
+        entry.hooks.push(Hook {
+          token,
+          native: callbacks.native_phases.is_some(),
           before: callbacks.before.clone().map(|f| Persistent::save(ctx, f)),
           after: callbacks.after.clone().map(|f| Persistent::save(ctx, f)),
-        },
-      );
-      tokens.push(token);
+        });
+        entry.befores
+      };
+      self.held.set(self.held.get() + 1);
+      tokens.push((site, token));
+      if callbacks.native_phases.is_none() {
+        self.host.xposed(OP_JS_BEFORES, site, &befores.to_string(), &[]);
+      }
       if let Some(native_phases) = &callbacks.native_phases {
         if let Err(error) = self.ask(ctx, OP_NATIVE_ADD, site, &token.to_string(), native_phases) {
           self.release_tokens(ctx, &tokens);
@@ -229,7 +280,7 @@ impl XposedState {
       }
     }
 
-    let held = self.hooks.len();
+    let held = self.held.get();
     if held > HOOK_LIMIT {
       self.release_tokens(ctx, &tokens);
       return PluginErrorCode::QuotaExceeded(held as i64, HOOK_LIMIT as i64)
@@ -313,14 +364,17 @@ pub fn install_xposed<'js>(
   log: crate::Log,
   globals: &crate::api::Globals<'js>,
 ) -> JsResult<Rc<XposedState>> {
+  let context_proto = Persistent::save(ctx, install_hook_context(ctx)?);
   let state = Rc::new(XposedState {
     host,
     grants,
     lifecycle,
     jvm,
     log,
-    hooks: Registry::default(),
+    context_proto: RefCell::new(Some(context_proto)),
     sites: RefCell::new(HashMap::new()),
+    held: Cell::new(0),
+    next_token: Cell::new(1),
     pending: RefCell::new(HashMap::new()),
   });
 
@@ -414,134 +468,117 @@ pub fn install_xposed<'js>(
 
 pub(crate) const KEEP_ORIGINAL: &str = "U";
 
-/// the after phase never ran, so nothing here took the result wire: the host still owns whatever
-/// it minted for it. Distinct from [`KEEP_ORIGINAL`], which is a hook's own answer *after* the
-/// wire was read into a handle the engine owns.
+/// the after phase never ran, so no pending dispatch was consumed. Distinct from
+/// [`KEEP_ORIGINAL`], which is a hook's own answer.
 pub(crate) const NOT_DISPATCHED: &str = "X";
 
-enum Verdict {
-  Proceed,
-  Answered(String),
+pub(crate) const KEEP_ARGUMENT: &str = "=";
+
+/// an invocation is `[method, receiver, args..]`
+pub(crate) const FIRST_ARG_INDEX: usize = 2;
+
+/// what a hooked call is answered with. [`Answer::Keep`] crosses as a null string, so the common
+/// case allocates nothing on either side.
+pub enum Answer {
+  Keep,
+  NotDispatched,
+  Wire(String),
 }
 
-impl XposedState {
-  fn read_context<'js>(&self, ctx: &Ctx<'js>, context: &Object<'js>) -> JsResult<Verdict> {
-    let answered: bool = context.get("__answered").unwrap_or(false);
-    if !answered {
-      return Ok(Verdict::Proceed);
-    }
-    let thrown: Option<Value> = context.get("__throwable").ok().flatten();
-    if let Some(thrown) = thrown {
-      if !thrown.is_null() && !thrown.is_undefined() {
-        return Ok(Verdict::Answered(format!("T{}", self.jvm.arg_to_wire(ctx, &thrown)?)));
-      }
-    }
-    let value: Value = context.get("returnValue")?;
-    Ok(Verdict::Answered(self.jvm.arg_to_wire(ctx, &value)?))
-  }
-
-  fn run_callback<'js>(&self, ctx: &Ctx<'js>, callback: &Function<'js>, context: &Object<'js>, phase: &str) {
-    if let Err(error) = callback.call::<_, Value>((context.clone(),)) {
-      report_callback_error(&self.log, ctx, &format!("xposed {phase} hook"), error);
+impl Answer {
+  fn of(wire: String) -> Answer {
+    if wire == KEEP_ORIGINAL {
+      Answer::Keep
+    } else {
+      Answer::Wire(wire)
     }
   }
 }
 
-pub struct Invocation<'a> {
-  pub method: &'a str,
-  pub this: &'a str,
-  pub args: &'a [String],
+pub trait JavaValues {
+  fn read<'js>(&self, ctx: &Ctx<'js>, index: usize) -> JsResult<Value<'js>>;
 }
 
-fn proceed_with(wants_after: bool, args: &[String]) -> Vec<String> {
+/// The caller's own array, borrowed rather than referenced globally: it is valid only inside the
+/// JNI call that was handed it, which is why every read goes through a hook context that expires
+/// when its phase returns.
+pub struct HookedValues {
+  jvm: Rc<JvmState>,
+  array: jobjectArray,
+  pub count: usize,
+}
+
+impl JavaValues for HookedValues {
+  fn read<'js>(&self, ctx: &Ctx<'js>, index: usize) -> JsResult<Value<'js>> {
+    self.jvm.element_to_value(ctx, self.array, index)
+  }
+}
+
+pub struct Invocation {
+  pub values: Rc<dyn JavaValues>,
+  pub args: usize,
+}
+
+#[derive(Clone)]
+pub struct Returned {
+  pub values: Rc<dyn JavaValues>,
+  pub index: usize,
+  pub threw: bool,
+}
+
+enum Published<'a> {
+  Answer(&'a str),
+  Returned(&'a Returned),
+}
+
+fn proceed_with(wants_after: bool, args: Vec<String>) -> Vec<String> {
   let mut out = Vec::with_capacity(args.len() + 1);
   out.push(if wants_after { "P1" } else { "P0" }.to_string());
-  out.extend(args.iter().cloned());
+  out.extend(args);
   out
 }
 
 impl XposedState {
-  fn run_after<'js>(
-    &self,
-    ctx: &Ctx<'js>,
-    afters: &[&Function<'js>],
-    context_object: &Object<'js>,
-    result: &str,
-  ) -> JsResult<String> {
-    if afters.is_empty() {
-      return Ok(KEEP_ORIGINAL.to_string());
-    }
-    self.publish_result(ctx, context_object, result)?;
-    for after in afters {
-      self.run_callback(ctx, after, context_object, "after");
-    }
-    Ok(match self.read_context(ctx, context_object)? {
-      Verdict::Answered(wire) => wire,
-      Verdict::Proceed => KEEP_ORIGINAL.to_string(),
+  /// `count` is the host's own `invocation.length`: asking the vm for it would be one jni call per
+  /// hooked call for a number the caller already has
+  pub fn read_hooked_values(&self, array: &JObjectArray<JObject>, count: usize) -> Rc<HookedValues> {
+    Rc::new(HookedValues {
+      jvm: self.jvm.clone(),
+      array: array.as_raw(),
+      count,
     })
   }
 
-  fn build_context<'js>(&self, ctx: &Ctx<'js>, method: &str, this: &str, args: &[String]) -> JsResult<Object<'js>> {
-    let object = Object::new(ctx.clone())?;
-    object.set("method", self.jvm.wire_to_value(ctx, method)?)?;
-    object.set("thisObject", self.jvm.wire_to_value(ctx, this)?)?;
-    let array = Array::new(ctx.clone())?;
-    for (index, arg) in args.iter().enumerate() {
-      array.set(index, self.jvm.wire_to_value(ctx, arg)?)?;
+  fn run_callback<'js>(
+    &self,
+    ctx: &Ctx<'js>,
+    callback: &Function<'js>,
+    context: &Class<'js, HookContext<'js>>,
+    phase: &str,
+  ) {
+    if let Err(error) = callback.call::<_, Value>((context.clone(),)) {
+      report_callback_error(&self.log, ctx, &format!("xposed {phase} hook"), error);
     }
-    object.set("args", array)?;
-    object.set("returnValue", Value::new_null(ctx.clone()))?;
-    object.set("throwable", Value::new_null(ctx.clone()))?;
-    object.set("__answered", false)?;
-    object.set("__throwable", Value::new_null(ctx.clone()))?;
-
-    {
-      object.set(
-        "setReturnValue",
-        Function::new(ctx.clone(), |this: This<Object<'js>>, value: Value<'js>| -> JsResult<()> {
-          let null = Value::new_null(this.0.ctx().clone());
-          this.0.set("returnValue", value)?;
-          this.0.set("__throwable", null)?;
-          this.0.set("__answered", true)
-        })?,
-      )?;
-    }
-    {
-      object.set(
-        "setThrowable",
-        Function::new(ctx.clone(), |this: This<Object<'js>>, value: Value<'js>| -> JsResult<()> {
-          let null = Value::new_null(this.0.ctx().clone());
-          this.0.set("returnValue", null)?;
-          this.0.set("__throwable", value)?;
-          this.0.set("__answered", true)
-        })?,
-      )?;
-    }
-    Ok(object)
   }
 
-  fn read_args<'js>(&self, ctx: &Ctx<'js>, context: &Object<'js>) -> JsResult<Vec<String>> {
-    let array: Array = context.get("args")?;
-    let mut wires = Vec::new();
-    for value in array_values(ctx, &array, "xposed: 'args'")? {
-      wires.push(self.jvm.arg_to_wire(ctx, &value)?);
+  fn run_after<'js>(
+    &self,
+    ctx: &Ctx<'js>,
+    afters: &[Function<'js>],
+    context: &Class<'js, HookContext<'js>>,
+    published: Published<'_>,
+  ) -> JsResult<Answer> {
+    if afters.is_empty() {
+      return Ok(Answer::Keep);
     }
-    Ok(wires)
-  }
-
-  fn publish_result<'js>(&self, ctx: &Ctx<'js>, context: &Object<'js>, result: &str) -> JsResult<()> {
-    context.set("__answered", false)?;
-    context.set("__throwable", Value::new_null(ctx.clone()))?;
-    match result.strip_prefix('T') {
-      Some(thrown) => {
-        context.set("returnValue", Value::new_null(ctx.clone()))?;
-        context.set("throwable", self.jvm.wire_to_value(ctx, thrown)?)
-      }
-      None => {
-        context.set("throwable", Value::new_null(ctx.clone()))?;
-        context.set("returnValue", self.jvm.wire_to_value(ctx, result)?)
-      }
+    match published {
+      Published::Answer(wire) => context.borrow().publish_answer(ctx, wire)?,
+      Published::Returned(returned) => context.borrow().publish_returned(returned),
     }
+    for after in afters {
+      self.run_callback(ctx, after, context, "after");
+    }
+    Ok(context.borrow().get_answer(ctx)?.map_or(Answer::Keep, Answer::of))
   }
 }
 
@@ -552,84 +589,112 @@ impl XposedState {
     context: &Context,
     dispatch_id: i64,
     site: i64,
-    call: &Invocation<'_>,
+    call: &Invocation,
   ) -> Vec<String> {
     let state = self;
-    let Invocation { method, this, args } = *call;
-    // set the moment the wires are about to be read into handles the engine owns: from there on a
-    // failure may answer anything but "nothing was dispatched", or the host would release them
-    let taken = Cell::new(false);
     let answer = context.with(|ctx| -> JsResult<Vec<String>> {
       let hooks = state.snapshot(&ctx, site);
       if hooks.is_empty() {
-        // nothing here read the argument wires, so the host is told it still owns them
         return Ok(Vec::new());
       }
 
-      taken.set(true);
-      let context_object = state.build_context(&ctx, method, this, args)?;
-
-      let mut verdict = Verdict::Proceed;
-      for hook in &hooks {
-        let Some(before) = &hook.before else { continue };
-        state.run_callback(&ctx, before, &context_object, "before");
-        if let Verdict::Answered(wire) = state.read_context(&ctx, &context_object)? {
-          verdict = Verdict::Answered(wire);
-          break;
-        }
-      }
-
-      let wants_after = hooks.iter().any(|hook| hook.after.is_some());
-      if let Verdict::Answered(wire) = verdict {
-        let afters: Vec<&Function> = hooks.iter().filter_map(|hook| hook.after.as_ref()).collect();
-        let after = state.run_after(&ctx, &afters, &context_object, &wire)?;
-        return Ok(vec!["A".to_string(), if after == KEEP_ORIGINAL { wire } else { after }]);
-      }
-
-      let call_args = state.read_args(&ctx, &context_object)?;
-      if wants_after {
-        let after = hooks
-          .iter()
-          .filter_map(|hook| hook.after.as_ref())
-          .map(|f| Persistent::save(&ctx, f.clone()))
-          .collect();
-        state.pending.borrow_mut().insert(
-          dispatch_id,
-          PendingDispatch {
-            context: Persistent::save(&ctx, context_object),
-            after,
-          },
-        );
-      }
-      Ok(proceed_with(wants_after, &call_args))
+      let hook_context = create_hook_context(&state.jvm, call, state.hook_proto(&ctx)?)?;
+      let answer = state.run_before(&ctx, &hooks, &hook_context, dispatch_id);
+      hook_context.borrow().expire();
+      answer
     });
 
     pump_jobs(rt, context, state.log.as_ref());
-    // a dispatch that never started leaves the wires the host's; one that failed after reading them
-    // proceeds with the arguments it was given, the engine keeping what it took
-    answer.unwrap_or_else(|_| if taken.get() { proceed_with(false, args) } else { Vec::new() })
+    answer.unwrap_or_default()
   }
 
-  pub fn dispatch_after(self: &Rc<Self>, rt: &Runtime, context: &Context, dispatch_id: i64, result: &str) -> String {
+  fn run_before<'js>(
+    &self,
+    ctx: &Ctx<'js>,
+    hooks: &[Phase<'js>],
+    hook_context: &Class<'js, HookContext<'js>>,
+    dispatch_id: i64,
+  ) -> JsResult<Vec<String>> {
     let state = self;
-    // as in `dispatch_before`: once `run_after` has published the result the engine owns whatever
-    // the wire minted, and the host must not be told the phase never ran
-    let taken = Cell::new(false);
-    let answer = context.with(|ctx| -> JsResult<String> {
-      let Some(pending) = state.pending.borrow_mut().remove(&dispatch_id) else {
-        return Ok(NOT_DISPATCHED.to_string());
-      };
-      let context_object = pending.context.restore(&ctx)?;
-      let afters: Vec<Function> = pending.after.into_iter().filter_map(|f| f.restore(&ctx).ok()).collect();
-      // `run_after` answers an empty set without publishing, so nothing would have read the wire
-      if afters.is_empty() {
-        return Ok(NOT_DISPATCHED.to_string());
+    let mut answer = None;
+    for hook in hooks {
+      let Some(before) = &hook.before else { continue };
+      state.run_callback(ctx, before, hook_context, "before");
+      answer = hook_context.borrow().get_answer(ctx)?;
+      if answer.is_some() {
+        break;
       }
-      taken.set(true);
-      state.run_after(&ctx, &afters.iter().collect::<Vec<_>>(), &context_object, result)
+    }
+
+    let afters: Vec<Function> = hooks.iter().filter_map(|hook| hook.after.clone()).collect();
+    let wants_after = !afters.is_empty();
+    if let Some(wire) = answer {
+      let after = state.run_after(ctx, &afters, hook_context, Published::Answer(&wire))?;
+      return Ok(vec!["A".to_string(), if let Answer::Wire(after) = after { after } else { wire }]);
+    }
+
+    let call_args = hook_context.borrow().get_call_args(ctx)?;
+    if wants_after {
+      let after = afters.into_iter().map(|f| Persistent::save(ctx, f)).collect();
+      state.pending.borrow_mut().insert(
+        dispatch_id,
+        PendingDispatch {
+          context: Persistent::save(ctx, hook_context.clone().into_inner()),
+          after,
+        },
+      );
+    }
+    Ok(proceed_with(wants_after, call_args))
+  }
+
+  pub fn dispatch_after(
+    self: &Rc<Self>,
+    rt: &Runtime,
+    context: &Context,
+    dispatch_id: i64,
+    call: &Invocation,
+    returned: &Returned,
+  ) -> Answer {
+    let state = self;
+    let answer = context.with(|ctx| -> JsResult<Answer> {
+      let Some(pending) = state.pending.borrow_mut().remove(&dispatch_id) else {
+        return Ok(Answer::NotDispatched);
+      };
+      let object = pending.context.restore(&ctx)?;
+      let Some(hook_context) = Class::<HookContext>::from_object(&object) else {
+        return PluginErrorCode::Internal.throw(&ctx, "xposed: a pending dispatch lost its context");
+      };
+      let afters: Vec<Function> = pending.after.into_iter().filter_map(|f| f.restore(&ctx).ok()).collect();
+      hook_context.borrow().revive(call);
+      let answer = state.run_after(&ctx, &afters, &hook_context, Published::Returned(returned));
+      hook_context.borrow().expire();
+      answer
     });
     pump_jobs(rt, context, state.log.as_ref());
-    answer.unwrap_or_else(|_| if taken.get() { KEEP_ORIGINAL.to_string() } else { NOT_DISPATCHED.to_string() })
+    answer.unwrap_or(Answer::Keep)
+  }
+
+  pub fn dispatch_after_only(
+    self: &Rc<Self>,
+    rt: &Runtime,
+    context: &Context,
+    site: i64,
+    call: &Invocation,
+    returned: &Returned,
+  ) -> Answer {
+    let state = self;
+    let answer = context.with(|ctx| -> JsResult<Answer> {
+      let afters = state.snapshot_afters(&ctx, site);
+      if afters.is_empty() {
+        return Ok(Answer::NotDispatched);
+      }
+      let hook_context = create_hook_context(&state.jvm, call, state.hook_proto(&ctx)?)?;
+      let answer = state.run_after(&ctx, &afters, &hook_context, Published::Returned(returned));
+      hook_context.borrow().expire();
+      answer
+    });
+    pump_jobs(rt, context, state.log.as_ref());
+    answer.unwrap_or(Answer::Keep)
   }
 
   pub fn release_dispatch(self: &Rc<Self>, context: &Context, dispatch_id: i64) {
@@ -645,11 +710,18 @@ impl Dispose for XposedState {
   fn dispose(&self, context: &rquickjs::Context) {
     let state = self;
     context.with(|ctx| {
-      for hook in state.hooks.take_values() {
-        state.release(&ctx, hook);
-      }
+      let installed: Vec<(i64, Token)> = state
+        .sites
+        .borrow()
+        .iter()
+        .flat_map(|(site, entry)| entry.hooks.iter().map(|hook| (*site, hook.token)))
+        .collect();
+      state.release_tokens(&ctx, &installed);
       for (_, pending) in state.pending.borrow_mut().drain() {
         pending.release(&ctx);
+      }
+      if let Some(proto) = state.context_proto.borrow_mut().take() {
+        let _ = proto.restore(&ctx);
       }
     });
   }

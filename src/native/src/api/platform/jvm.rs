@@ -216,6 +216,16 @@ impl JvmState {
     Ok(Class::instance_proto(handle, proto)?.into_value())
   }
 
+  pub(crate) fn element_to_value<'js>(
+    &self,
+    ctx: &Ctx<'js>,
+    array: jni::sys::jobjectArray,
+    index: usize,
+  ) -> JsResult<Value<'js>> {
+    let outcome = self.native(ctx)?.element_to_js(ctx, array, index)?;
+    self.outcome_to_value(ctx, outcome)
+  }
+
   fn outcome_to_value<'js>(&self, ctx: &Ctx<'js>, outcome: Outcome<'js>) -> JsResult<Value<'js>> {
     match outcome {
       Outcome::Value(value) => Ok(value),

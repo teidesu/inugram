@@ -38,8 +38,8 @@ import org.telegram.messenger.Utilities
 object PluginXposed : SessionResource {
     private const val TAG = "InuPluginXposed"
 
-    /** keep in sync with rust `xposed::NOT_DISPATCHED`: the after phase never ran, so it took nothing */
-    private const val NOT_DISPATCHED = "X"
+    /** keep in sync with rust `xposed::KEEP_ARGUMENT` */
+    private const val KEEP_ARGUMENT = "="
 
     // keep in sync with rust `xposed::OP_*`
     const val OP_HOOK = 0
@@ -50,6 +50,7 @@ object PluginXposed : SessionResource {
     const val OP_DISABLE_PROFILE_SAVER = 5
     const val OP_NATIVE_ADD = 6
     const val OP_NATIVE_REMOVE = 7
+    const val OP_JS_BEFORES = 8
 
     const val GRANT = "unsafe.xposed"
 
@@ -95,10 +96,10 @@ object PluginXposed : SessionResource {
         @Volatile var backup: Method? = null
         @Volatile var registrations: List<Site> = emptyList()
 
-        fun dispatch(receiver: Any?, args: List<Any?>): Any? {
+        fun dispatch(receiver: Any?, args: Array<Any?>): Any? {
             val original = backup ?: synchronized(sharedSites) { checkNotNull(backup) }
             val snapshot = registrations
-            fun next(index: Int, arguments: List<Any?>): Any? {
+            fun next(index: Int, arguments: Array<Any?>): Any? {
                 if (index == snapshot.size) return invokeOriginal(original, receiver, arguments)
                 val site = snapshot[index]
                 return site.session.dispatch(site, receiver, arguments) { next(index + 1, it) }
@@ -107,8 +108,8 @@ object PluginXposed : SessionResource {
         }
     }
 
-    private fun invokeOriginal(backup: Method, receiver: Any?, args: List<Any?>): Any? = try {
-        backup.invoke(receiver, *args.toTypedArray())
+    private fun invokeOriginal(backup: Method, receiver: Any?, args: Array<Any?>): Any? = try {
+        backup.invoke(receiver, *args)
     } catch (e: InvocationTargetException) {
         throw e.targetException
     }
@@ -144,6 +145,10 @@ object PluginXposed : SessionResource {
     private class Site(val session: Session, val id: Long, val shared: SharedSite, val native: Boolean) {
         val target: Member get() = shared.target
         @Volatile var nativeHooks: List<NativeHook> = emptyList()
+        /** -1 until the engine reports: a site whose hooks are still being registered dispatches both phases */
+        @Volatile var jsBefores = -1
+        /** the dispatch path's liveness check, so a hooked call needs no lookup in [Session.sites] */
+        @Volatile var live = true
     }
 
     private class Session(private val session: PluginSession) : XposedListener {
@@ -151,7 +156,8 @@ object PluginXposed : SessionResource {
         private val nextSite = AtomicLong(1)
         private val nextDispatch = AtomicLong(1)
         private val budgetMs = session.engine.xposedBudgetMs()
-        private val dispatching = ThreadLocal<Boolean>()
+        /** one cell per thread rather than a boxed value: a hooked call reads it and writes it twice */
+        private val dispatching = ThreadLocal.withInitial { BooleanArray(1) }
         @Volatile private var closed = false
 
         private val values: PluginJvm.ValueBridge
@@ -182,6 +188,10 @@ object PluginXposed : SessionResource {
                 sites[target]?.let { site ->
                     site.nativeHooks = site.nativeHooks.filterNot { it.token == name }
                 }
+                PluginWire.encodeNull()
+            }
+            OP_JS_BEFORES -> {
+                sites[target]?.jsBefores = name.toInt()
                 PluginWire.encodeNull()
             }
             OP_CALL_ORIGINAL -> callOriginal(values.memberAt(target), args)
@@ -266,7 +276,8 @@ object PluginXposed : SessionResource {
                     val isStatic = java.lang.reflect.Modifier.isStatic(member.modifiers)
                     val hooker = Hooker { args ->
                         // args[0] is the receiver for an instance method; static methods have no placeholder.
-                        entry.dispatch(if (isStatic) null else args.firstOrNull(), if (isStatic) args.toList() else args.drop(1))
+                        if (isStatic) entry.dispatch(null, args)
+                        else entry.dispatch(args[0], args.copyOfRange(1, args.size))
                     }
                     val callback = Hooker::class.java.getDeclaredMethod("callback", Array<Any?>::class.java)
                     val backup = Native.nativeHook(member, hooker, callback) as? Method
@@ -286,6 +297,7 @@ object PluginXposed : SessionResource {
 
         private fun uninstall(site: Long): String {
             val removed = sites.remove(site) ?: return PluginWire.encodeNull()
+            removed.live = false
             val shared = removed.shared
             val declined = synchronized(sharedSites) {
                 shared.registrations = shared.registrations.filterNot { it === removed }
@@ -342,29 +354,33 @@ object PluginXposed : SessionResource {
          * surface as a `RuntimeException` out of app code. A failed layer continues through the
          * remaining plugins instead, eventually reaching the original exactly once.
          */
-        fun dispatch(entry: Site, receiver: Any?, args: List<Any?>, next: (List<Any?>) -> Any?): Any? {
-            if (closed || sites[entry.id] !== entry) return next(args)
-            if (dispatching.get() == true) {
+        fun dispatch(entry: Site, receiver: Any?, args: Array<Any?>, next: (Array<Any?>) -> Any?): Any? {
+            if (closed || !entry.live) return next(args)
+            val guard = dispatching.get()
+            if (guard[0]) {
                 Log.d(TAG, "[${session.manifest.name}] xposed site ${entry.id} bypassed re-entry")
                 return next(args)
             }
-            return if (entry.native) dispatchNativeHooks(entry, receiver, args, next)
-            else dispatchOnce(entry, receiver, args, next)
+            return when {
+                entry.native -> dispatchNativeHooks(entry, guard, receiver, args, next)
+                entry.jsBefores == 0 -> dispatchAfterOnly(entry, guard, receiver, args, next)
+                else -> dispatchOnce(entry, guard, receiver, args, next)
+            }
         }
 
-        private inline fun <T> runCallbackPhase(block: () -> T): T {
-            dispatching.set(true)
-            return try { block() } finally { dispatching.remove() }
+        private inline fun <T> runCallbackPhase(guard: BooleanArray, block: () -> T): T {
+            guard[0] = true
+            return try { block() } finally { guard[0] = false }
         }
 
-        private fun dispatchNativeHooks(entry: Site, receiver: Any?, args: List<Any?>, next: (List<Any?>) -> Any?): Any? {
+        private fun dispatchNativeHooks(entry: Site, guard: BooleanArray, receiver: Any?, args: Array<Any?>, next: (Array<Any?>) -> Any?): Any? {
             val site = entry.id
             val hooks = entry.nativeHooks
             val context = PluginHookContext(entry.target, receiver, args.toMutableList())
-            fun runPhase(before: Boolean) = runCallbackPhase {
+            fun runPhase(before: Boolean) = runCallbackPhase(guard) {
                 val deadline = System.nanoTime() + budgetMs * 1_000_000L
                 for (hook in hooks) {
-                    if (closed || sites[site] !== entry || System.nanoTime() >= deadline) break
+                    if (closed || !entry.live || System.nanoTime() >= deadline) break
                     try {
                         when (val phase = if (before) hook.before else hook.after) {
                             is java.util.function.Consumer<*> -> {
@@ -381,7 +397,7 @@ object PluginXposed : SessionResource {
             }
             return try {
                 runPhase(true)
-                if (!context.answered) context.outcome = runCatching { next(context.arguments) }
+                if (!context.answered) context.outcome = runCatching { next(context.arguments.toTypedArray()) }
                 context.answered = false
                 runPhase(false)
                 context.outcome.getOrThrow()
@@ -390,34 +406,18 @@ object PluginXposed : SessionResource {
             }
         }
 
-        private fun dispatchOnce(entry: Site, receiver: Any?, args: List<Any?>, next: (List<Any?>) -> Any?): Any? {
+        private fun dispatchOnce(entry: Site, guard: BooleanArray, receiver: Any?, args: Array<Any?>, next: (Array<Any?>) -> Any?): Any? {
             val site = entry.id
-            // a wire the engine never took stays minted in the reference table with nothing to drop it, so each one is released on the way out
-            val minted = ArrayList<String>(args.size + 2)
-            val encode = { value: Any? -> values.encode(value).also { minted.add(it) } }
-            val request = try {
-                runCallbackPhase {
-                    Request(encode(entry.target), encode(receiver), args.map(encode).toTypedArray())
-                }
-            } catch (e: Throwable) {
-                Log.e(TAG, "[${session.manifest.name}] xposed site $site (${entry.target}) dispatch failed; continuing", e)
-                PluginJvm.releaseUntaken(session.engine, minted)
-                return next(args)
-            }
-
             val id = nextDispatch.getAndIncrement()
             var owed = false
             try {
                 val before = try {
-                    runCallbackPhase { session.engine.xposedBefore(id, site, request.method, request.receiver, request.args) }
+                    runCallbackPhase(guard) { session.engine.xposedBefore(id, site, invocationOf(entry, receiver, args)) }
                 } catch (error: Throwable) {
                     Log.e(TAG, "[${session.manifest.name}] xposed before failed at ${entry.target}; continuing", error)
                     null
                 }
-                if (before == null) {
-                    PluginJvm.releaseUntaken(session.engine, minted)
-                    return next(args)
-                }
+                if (before == null) return next(args)
                 val wantsAfter = before.firstOrNull() == "P1"
                 owed = wantsAfter
                 if (before.firstOrNull() == "A") {
@@ -431,12 +431,11 @@ object PluginXposed : SessionResource {
                 }
 
                 val callArgs = try {
-                    val wires = before.drop(1)
-                    require(wires.size == args.size) { "xposed: wrong argument count" }
+                    require(before.size - 1 == args.size) { "xposed: wrong argument count" }
                     val parameters = (entry.target as Executable).parameterTypes
-                    wires.mapIndexed { index, wire ->
-                        val original = request.args[index]
-                        if (wire == original || original.startsWith("G") && wire == "G" + original.substring(2)) args[index]
+                    Array<Any?>(args.size) { index ->
+                        val wire = before[index + 1]
+                        if (wire == KEEP_ARGUMENT) args[index]
                         else requireNotNull(PluginJvm.convertArguments(arrayOf(parameters[index]), listOf(values.decode(wire)))) {
                             "xposed: invalid argument $index"
                         }[0]
@@ -445,42 +444,71 @@ object PluginXposed : SessionResource {
                     Log.e(TAG, "[${session.manifest.name}] xposed site $site (${entry.target}): unreadable arguments; calling with the app's", e)
                     args
                 }
-                val outcome = runCatching { next(callArgs) }
-                if (!wantsAfter || closed || sites[site] !== entry) return outcome.getOrThrow()
+                var thrown: Throwable? = null
+                var value: Any? = null
+                try { value = next(callArgs) } catch (e: Throwable) { thrown = e }
+                if (!wantsAfter || closed || !entry.live) return settle(value, thrown)
 
-                // the same hand-off the request wires make: the engine owns what it read, and a
-                // phase that never ran leaves this one minted with nothing to drop it
-                var outcomeWire: String? = null
+                val settled = settledInvocationOf(entry, receiver, args, value, thrown)
                 val after = try {
-                    runCallbackPhase { session.engine.xposedAfter(id, wireOf(outcome).also { outcomeWire = it }) }
+                    runCallbackPhase(guard) { session.engine.xposedAfter(id, settled, thrown != null) }
                 } catch (error: Throwable) {
                     Log.e(TAG, "[${session.manifest.name}] xposed after failed at ${entry.target}; preserving the outcome", error)
-                    null
+                    QuickJs.NOT_DISPATCHED
                 }
-                if (after == null || after == NOT_DISPATCHED) {
-                    PluginJvm.releaseUntaken(session.engine, listOfNotNull(outcomeWire))
-                    return outcome.getOrThrow()
-                }
-                if (after == "U") return outcome.getOrThrow()
-                val answer = answerOf(after, site, "after") ?: return outcome.getOrThrow()
-                val converted = try { convertReturn(entry, answer) } catch (error: Throwable) {
-                    Log.e(TAG, "[${session.manifest.name}] xposed invalid after result at ${entry.target}; preserving the outcome", error)
-                    outcome
-                }
-                return converted.getOrThrow()
+                if (after != QuickJs.NOT_DISPATCHED) owed = false
+                return settleAfter(entry, value, thrown, after)
             } finally {
                 if (owed) release(id)
             }
         }
 
-        private class Request(val method: String, val receiver: String, val args: Array<String>)
+        private fun dispatchAfterOnly(entry: Site, guard: BooleanArray, receiver: Any?, args: Array<Any?>, next: (Array<Any?>) -> Any?): Any? {
+            var thrown: Throwable? = null
+            var value: Any? = null
+            try { value = next(args) } catch (e: Throwable) { thrown = e }
+            if (closed || !entry.live) return settle(value, thrown)
+            val invocation = settledInvocationOf(entry, receiver, args, value, thrown)
+            val after = try {
+                runCallbackPhase(guard) { session.engine.xposedAfterOnly(entry.id, invocation, thrown != null) }
+            } catch (error: Throwable) {
+                Log.e(TAG, "[${session.manifest.name}] xposed after failed at ${entry.target}; preserving the outcome", error)
+                null
+            }
+            return settleAfter(entry, value, thrown, after)
+        }
+
+        private fun settle(value: Any?, thrown: Throwable?): Any? = if (thrown != null) throw thrown else value
+
+        private fun settleAfter(entry: Site, value: Any?, thrown: Throwable?, after: String?): Any? {
+            if (after == null || after == QuickJs.NOT_DISPATCHED) return settle(value, thrown)
+            val answer = answerOf(after, entry.id, "after") ?: return settle(value, thrown)
+            val converted = try { convertReturn(entry, answer) } catch (error: Throwable) {
+                Log.e(TAG, "[${session.manifest.name}] xposed invalid after result at ${entry.target}; preserving the outcome", error)
+                return settle(value, thrown)
+            }
+            return converted.getOrThrow()
+        }
+
+        private fun invocationOf(entry: Site, receiver: Any?, args: Array<Any?>, tail: Int = 0): Array<Any?> {
+            val invocation = arrayOfNulls<Any?>(args.size + 2 + tail)
+            invocation[0] = entry.target
+            invocation[1] = receiver
+            System.arraycopy(args, 0, invocation, 2, args.size)
+            return invocation
+        }
+
+        private fun settledInvocationOf(
+            entry: Site,
+            receiver: Any?,
+            args: Array<Any?>,
+            value: Any?,
+            thrown: Throwable?,
+        ): Array<Any?> = invocationOf(entry, receiver, args, tail = 1).also { it[it.size - 1] = thrown ?: value }
 
         private fun release(id: Long) {
             EngineDispatch.scheduler.postRunnable { session.engine.xposedRelease(id) }
         }
-
-        private fun wireOf(outcome: Result<Any?>): String =
-            outcome.fold({ values.encode(it) }, { "T" + values.encode(it) })
 
         /** a hook answering with a throwable is the plugin's decision and the app's to receive, while a wire this side could not decode is ours and may not surface in app code as one */
         private fun answerOf(wire: String, site: Long, phase: String): Result<Any?>? {

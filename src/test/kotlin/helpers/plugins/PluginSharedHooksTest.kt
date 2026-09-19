@@ -26,7 +26,9 @@ class PluginSharedHooksTest {
     private fun install(plugin: Plugin, target: Member = method): Long {
         val wire = invoke(plugin, PluginXposed.OP_HOOK, getHandle(plugin, target))
         assertTrue(wire.startsWith("S"), wire)
-        return wire.substring(1).toLong()
+        val site = wire.substring(1).toLong()
+        invoke(plugin, PluginXposed.OP_JS_BEFORES, site, "1")
+        return site
     }
 
     @Test fun plugins_share_before_after_and_independent_disposal() {
@@ -37,11 +39,11 @@ class PluginSharedHooksTest {
         first.js.onXposedBefore = { order.add("before first"); arrayOf("P1", "I5", "I2") }
         second.js.onXposedBefore = {
             order.add("before second")
-            assertEquals(listOf("I5", "I2"), it.args.toList())
+            assertEquals(listOf<Any?>(5, 2), it.args)
             arrayOf("P1", "I5", "I7")
         }
-        first.js.onXposedAfter = { order.add("after first"); assertEquals("I20", it.resultWire); "I21" }
-        second.js.onXposedAfter = { order.add("after second"); assertEquals("I12", it.resultWire); "I20" }
+        first.js.onXposedAfter = { order.add("after first"); assertEquals(20, it.result); "I21" }
+        second.js.onXposedAfter = { order.add("after second"); assertEquals(12, it.result); "I20" }
         try {
             val firstSite = install(first)
             install(second)
@@ -68,7 +70,7 @@ class PluginSharedHooksTest {
         val first = createPlugin("js layer")
         val second = createPlugin("routine layer")
         first.js.onXposedBefore = { arrayOf("P1", "I4", "I2") }
-        first.js.onXposedAfter = { assertEquals("I21", it.resultWire); "I22" }
+        first.js.onXposedAfter = { assertEquals(21, it.result); "I22" }
         try {
             install(first)
             val before = second.js.listener!!.jvm(PluginJvm.OP_XPOSED_ROUTINE, 0, """{"nodes":[["hookArgument",[0,0]],["math","+",[1,0],[0,1]],["hookSetArgument",[0,0],[1,1]]],"roots":[2]}""", arrayOf("I0", "I5"))
@@ -203,8 +205,8 @@ class PluginSharedHooksTest {
         val second = createPlugin("recursion second")
         val target = Class.forName("desu.inugram.jvmfixture.JvmFixtureKt")
             .getDeclaredMethod("countHookDepth", Int::class.java)
-        first.js.onXposedBefore = { arrayOf("P1", it.args[0]) }
-        second.js.onXposedBefore = { arrayOf("P1", it.args[0]) }
+        first.js.onXposedBefore = { arrayOf("P1", "=") }
+        second.js.onXposedBefore = { arrayOf("P1", "=") }
         try {
             install(first, target)
             install(second, target)
@@ -223,7 +225,7 @@ class PluginSharedHooksTest {
         val second = createPlugin("invalid inner")
         first.js.onXposedBefore = { arrayOf("P1", "I1", "I2") }
         second.js.onXposedBefore = { arrayOf("P1", "I1", "I2") }
-        first.js.onXposedAfter = { assertEquals("I3", it.resultWire); "I4" }
+        first.js.onXposedAfter = { assertEquals(3, it.result); "I4" }
         second.js.onXposedAfter = { "Snot an int" }
         try {
             install(first)
@@ -245,7 +247,7 @@ class PluginSharedHooksTest {
             install(plugin)
             plugin.js.onXposedBefore = {
                 seen.add(if (it.site == outerSite) "outer" else "inner")
-                arrayOf("P1", *it.args)
+                arrayOf("P1", *Array(it.args.size) { "=" })
             }
             val action = Thread { assertEquals(3, method.invoke(null, 1, 2)) }
             outer.invoke(JvmFixture(), action)

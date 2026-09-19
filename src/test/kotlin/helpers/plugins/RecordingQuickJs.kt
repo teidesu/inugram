@@ -26,8 +26,17 @@ class RecordingQuickJs : QuickJs() {
     class WriteProgress(val requestId: Long, val loaded: Long, val total: Long)
     class Notification(val callbackId: Int, val name: String, val accountId: Int, val args: Array<String>)
     class ActionDispatch(val kind: Int, val token: Int, val surfaceJson: String)
-    class XposedBefore(val dispatchId: Long, val site: Long, val method: String, val receiver: String, val args: Array<String>)
-    class XposedAfter(val dispatchId: Long, val resultWire: String)
+    class XposedBefore(val dispatchId: Long, val site: Long, val invocation: Array<Any?>) {
+        val args: List<Any?> get() = invocation.drop(2)
+    }
+    class XposedAfter(val dispatchId: Long, val invocation: Array<Any?>, val threw: Boolean) {
+        val args: List<Any?> get() = invocation.drop(2).dropLast(1)
+        val result: Any? get() = invocation.last()
+    }
+    class XposedAfterOnly(val site: Long, val invocation: Array<Any?>, val threw: Boolean) {
+        val args: List<Any?> get() = invocation.drop(2).dropLast(1)
+        val result: Any? get() = invocation.last()
+    }
 
     val dispatches = ArrayList<Dispatch>()
     val completions = ArrayList<Completion>()
@@ -47,6 +56,7 @@ class RecordingQuickJs : QuickJs() {
     val actionDispatches = ArrayList<ActionDispatch>()
     val xposedBefores = ArrayList<XposedBefore>()
     val xposedAfters = ArrayList<XposedAfter>()
+    val xposedAfterOnlys = ArrayList<XposedAfterOnly>()
     val xposedReleases = ArrayList<Long>()
 
     /** callback ids java asked to run, in the order the engine would have run them */
@@ -86,6 +96,7 @@ class RecordingQuickJs : QuickJs() {
 
     var onXposedBefore: ((XposedBefore) -> Array<String>?)? = null
     var onXposedAfter: ((XposedAfter) -> String?)? = null
+    var onXposedAfterOnly: ((XposedAfterOnly) -> String?)? = null
     var xposedBudgetMillis = 1_000L
 
     override fun start(listener: PluginBridge, config: Config) {
@@ -131,40 +142,22 @@ class RecordingQuickJs : QuickJs() {
         handles.clear()
     }
 
-    override fun xposedBefore(
-        dispatchId: Long,
-        site: Long,
-        methodWire: String,
-        thisWire: String,
-        args: Array<String>,
-    ): Array<String>? {
-        val dispatch = XposedBefore(dispatchId, site, methodWire, thisWire, args)
+    override fun xposedBefore(dispatchId: Long, site: Long, invocation: Array<Any?>): Array<String>? {
+        val dispatch = XposedBefore(dispatchId, site, invocation)
         xposedBefores.add(dispatch)
-        val answer = onXposedBefore?.invoke(dispatch)
-        if (answer != null) take(methodWire, thisWire, *args)
-        return answer
+        return onXposedBefore?.invoke(dispatch)
     }
 
-    override fun xposedAfter(dispatchId: Long, resultWire: String): String? {
-        val dispatch = XposedAfter(dispatchId, resultWire)
+    override fun xposedAfter(dispatchId: Long, invocation: Array<Any?>, threw: Boolean): String? {
+        val dispatch = XposedAfter(dispatchId, invocation, threw)
         xposedAfters.add(dispatch)
-        val hook = onXposedAfter
-        val answer = if (hook == null) "U" else hook(dispatch)
-        // "X" is rust `xposed::NOT_DISPATCHED`: the phase never ran, so it read nothing
-        if (answer != null && answer != "X") take(resultWire)
-        return answer
+        return onXposedAfter?.invoke(dispatch)
     }
 
-    /**
-     * a phase that answers has read its wires into handles the engine then owns, so the double
-     * drops them here the way a real engine's garbage collector eventually would - without this
-     * nothing models the hand-off `PluginXposed` relies on, and every dispatch would look like a leak
-     */
-    private fun take(vararg wires: String) {
-        for (wire in wires) {
-            val handle = wire.removePrefix("T")
-            if (handle.startsWith("G")) handle.drop(2).toLongOrNull()?.let(::jvmRelease)
-        }
+    override fun xposedAfterOnly(site: Long, invocation: Array<Any?>, threw: Boolean): String? {
+        val dispatch = XposedAfterOnly(site, invocation, threw)
+        xposedAfterOnlys.add(dispatch)
+        return onXposedAfterOnly?.invoke(dispatch)
     }
 
     override fun xposedBudgetMs(): Long = xposedBudgetMillis

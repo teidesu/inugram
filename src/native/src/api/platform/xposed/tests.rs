@@ -3,28 +3,96 @@ use crate::api::error::format_exception;
 use crate::api::platform::jvm::tests::testing::OracleJvmHost;
 use std::cell::{Cell, RefCell};
 
+struct WireValues {
+  jvm: Rc<JvmState>,
+  wires: Vec<String>,
+  reads: Rc<Cell<usize>>,
+}
+
+impl JavaValues for WireValues {
+  fn read<'js>(&self, ctx: &Ctx<'js>, index: usize) -> JsResult<Value<'js>> {
+    self.reads.set(self.reads.get() + 1);
+    self.jvm.wire_to_value(ctx, &self.wires[index])
+  }
+}
+
+fn wire_values(state: &XposedState, wires: Vec<String>, reads: &Rc<Cell<usize>>) -> Rc<dyn JavaValues> {
+  Rc::new(WireValues {
+    jvm: state.jvm.clone(),
+    wires,
+    reads: reads.clone(),
+  })
+}
+
+fn invocation_counting(state: &XposedState, args: &[String], reads: &Rc<Cell<usize>>) -> Invocation {
+  let mut wires = vec!["GM1".to_string(), "N".to_string()];
+  wires.extend(args.iter().cloned());
+  Invocation {
+    values: wire_values(state, wires, reads),
+    args: args.len(),
+  }
+}
+
+fn invocation(state: &XposedState, args: &[String]) -> Invocation {
+  invocation_counting(state, args, &Rc::new(Cell::new(0)))
+}
+
+fn returned_counting(state: &XposedState, wire: &str, reads: &Rc<Cell<usize>>) -> Returned {
+  let threw = wire.starts_with('T');
+  let wire = wire.strip_prefix('T').unwrap_or(wire).to_string();
+  Returned {
+    values: wire_values(state, vec![wire], reads),
+    index: 0,
+    threw,
+  }
+}
+
+fn returned(state: &XposedState, wire: &str) -> Returned {
+  returned_counting(state, wire, &Rc::new(Cell::new(0)))
+}
+
+fn wire_of(answer: Answer) -> String {
+  match answer {
+    Answer::Keep => KEEP_ORIGINAL.to_string(),
+    Answer::NotDispatched => NOT_DISPATCHED.to_string(),
+    Answer::Wire(wire) => wire,
+  }
+}
+
 /// One whole dispatch as a host runs it: the `before` phase on the queue, the original on the
-/// thread that called the hooked method, then the `after` phase. Mirrors
-/// `PluginXposed.Session.dispatch`, which is the only caller of the two halves in the app.
+/// thread that called the hooked method, then the `after` phase - or, for a site the host was told
+/// has no `before`, the original and then one phase with both halves. Mirrors
+/// `PluginXposed.Session.dispatch`, which is the only caller of these in the app.
 #[cfg(test)]
 fn run_dispatch(
   rt: &Runtime,
   context: &Context,
   state: &Rc<XposedState>,
   site: i64,
+  befores: i64,
   args: &[String],
   original: &str,
 ) -> (String, Option<Vec<String>>) {
-  let answer = state.dispatch_before(rt, context, 1, site, &Invocation { method: "GM1", this: "N", args });
+  if befores == 0 {
+    let answer =
+      wire_of(state.dispatch_after_only(rt, context, site, &invocation(state, args), &returned(state, original)));
+    let result = if answer == KEEP_ORIGINAL || answer == NOT_DISPATCHED { original.to_string() } else { answer };
+    return (result, Some(args.to_vec()));
+  }
+  let answer = state.dispatch_before(rt, context, 1, site, &invocation(state, args));
   if answer.is_empty() {
     return (original.to_string(), Some(args.to_vec()));
   }
   if answer[0] == "A" {
     return (answer[1].clone(), None);
   }
-  let called_with = answer[1..].to_vec();
+  let called_with = answer[1..]
+    .iter()
+    .enumerate()
+    .map(|(index, wire)| if wire == KEEP_ARGUMENT { args[index].clone() } else { wire.clone() })
+    .collect();
   let result = if answer[0] == "P1" {
-    let after = state.dispatch_after(rt, context, 1, original);
+    let after = wire_of(state.dispatch_after(rt, context, 1, &invocation(state, args), &returned(state, original)));
     if after == KEEP_ORIGINAL {
       original.to_string()
     } else {
@@ -48,6 +116,7 @@ struct TestXposedHost {
   original: RefCell<String>,
   next_site: Cell<i64>,
   fail_runnable: Cell<bool>,
+  befores: RefCell<HashMap<i64, i64>>,
 }
 
 impl TestXposedHost {
@@ -64,7 +133,12 @@ impl TestXposedHost {
   }
 
   fn ops(&self) -> Vec<i32> {
-    self.calls.borrow().iter().map(|call| call.0).collect()
+    self.calls.borrow().iter().map(|call| call.0).filter(|op| *op != OP_JS_BEFORES).collect()
+  }
+
+  /// -1 where `PluginXposed.Site` starts: the engine has not reported this site yet
+  fn befores(&self, site: i64) -> i64 {
+    self.befores.borrow().get(&site).copied().unwrap_or(-1)
   }
 }
 
@@ -81,6 +155,10 @@ impl XposedHost for TestXposedHost {
         format!("S{site}")
       }
       OP_NATIVE_ADD if self.fail_runnable.get() => "ERunnable rejected".to_string(),
+      OP_JS_BEFORES => {
+        self.befores.borrow_mut().insert(target, name.parse().expect("a count"));
+        "N".to_string()
+      }
       OP_CALL_ORIGINAL => self.original.borrow().clone(),
       _ => "N".to_string(),
     }
@@ -167,7 +245,8 @@ impl Fixture {
   fn dispatch(&self, site: i64, args: &[&str]) -> String {
     let args: Vec<String> = args.iter().map(|a| a.to_string()).collect();
     let original = self.host.original.borrow().clone();
-    let (answer, called_with) = run_dispatch(&self.rt, &self.ctx, &self.state, site, &args, &original);
+    let befores = self.host.befores(site);
+    let (answer, called_with) = run_dispatch(&self.rt, &self.ctx, &self.state, site, befores, &args, &original);
     *self.originals.borrow_mut() = called_with;
     answer
   }
@@ -364,41 +443,25 @@ fn a_site_with_no_hooks_answers_that_nothing_was_dispatched() {
     "const m = stringLength;
          inu.xposed.hookMethod(m, { before() {} })()",
   );
-  let answer = fixture.state.dispatch_before(
-    &fixture.rt,
-    &fixture.ctx,
-    1,
-    100,
-    &Invocation {
-      method: "GM1",
-      this: "N",
-      args: &["GO9".to_string()],
-    },
-  );
+  let answer =
+    fixture
+      .state
+      .dispatch_before(&fixture.rt, &fixture.ctx, 1, 100, &invocation(&fixture.state, &["GO9".to_string()]));
   assert!(answer.is_empty(), "{answer:?}");
 }
 
-/// once the context is built the engine owns whatever the wires minted, so a failure past that
-/// point must not answer "nothing was dispatched": the host would release handles the plugin holds
 #[test]
-fn a_before_that_breaks_the_arguments_still_says_the_engine_took_the_wires() {
+fn a_before_that_breaks_the_arguments_leaves_the_call_as_it_was() {
   let fixture = granted();
   fixture.eval(
     "const m = stringLength;
          inu.xposed.hookMethod(m, { before(ctx) { ctx.args = [{}] } })",
   );
-  let answer = fixture.state.dispatch_before(
-    &fixture.rt,
-    &fixture.ctx,
-    1,
-    100,
-    &Invocation {
-      method: "GM1",
-      this: "N",
-      args: &["GO9".to_string()],
-    },
-  );
-  assert_eq!(answer.first().map(String::as_str), Some("P0"), "{answer:?}");
+  let answer =
+    fixture
+      .state
+      .dispatch_before(&fixture.rt, &fixture.ctx, 1, 100, &invocation(&fixture.state, &["GO9".to_string()]));
+  assert!(answer.is_empty(), "{answer:?}");
 }
 
 #[test]
@@ -610,7 +673,7 @@ fn a_rejected_runnable_registration_cleans_up_every_new_site() {
   );
   assert!(error.contains("Runnable rejected"));
   assert_eq!(fixture.host.ops().iter().filter(|op| **op == OP_UNHOOK).count(), 2);
-  assert_eq!(fixture.state.hooks.len(), 0);
+  assert_eq!(fixture.state.held.get(), 0);
 }
 
 #[test]
@@ -634,15 +697,17 @@ fn unchanged_after_replies_use_a_verdict_not_the_inbound_value_wire() {
   for original in ["GO9", "GC9", "TGO9", "I42", "N"] {
     let fixture = granted();
     fixture.eval("const method = stringLength; inu.xposed.hookMethod(method, { after() {} });");
-    let before = fixture.state.dispatch_before(
-      &fixture.rt,
-      &fixture.ctx,
-      1,
-      100,
-      &Invocation { method: "GM1", this: "N", args: &[] },
-    );
+    let before = fixture.state.dispatch_before(&fixture.rt, &fixture.ctx, 1, 100, &invocation(&fixture.state, &[]));
     assert_eq!(before[0], "P1");
-    assert_eq!(fixture.state.dispatch_after(&fixture.rt, &fixture.ctx, 1, original), KEEP_ORIGINAL);
+    let result = returned(&fixture.state, original);
+    assert_eq!(
+      wire_of(
+        fixture
+          .state
+          .dispatch_after(&fixture.rt, &fixture.ctx, 1, &invocation(&fixture.state, &[]), &result)
+      ),
+      KEEP_ORIGINAL
+    );
     assert!(fixture.state.pending.borrow().is_empty());
   }
 }
@@ -652,10 +717,215 @@ fn explicit_after_override_is_kept_even_when_its_wire_matches_the_original() {
   let fixture = granted();
   fixture
     .eval("const method = stringLength; inu.xposed.hookMethod(method, { after(ctx) { ctx.setReturnValue(42) } });");
-  fixture
-    .state
-    .dispatch_before(&fixture.rt, &fixture.ctx, 1, 100, &Invocation { method: "GM1", this: "N", args: &[] });
-  assert_eq!(fixture.state.dispatch_after(&fixture.rt, &fixture.ctx, 1, "I42"), "I42");
-  // an id nothing is pending for never reads the wire, so the host is told it still owns it
-  assert_eq!(fixture.state.dispatch_after(&fixture.rt, &fixture.ctx, 999, "GO9"), NOT_DISPATCHED);
+  fixture.state.dispatch_before(&fixture.rt, &fixture.ctx, 1, 100, &invocation(&fixture.state, &[]));
+  let result = returned(&fixture.state, "I42");
+  assert_eq!(
+    wire_of(
+      fixture
+        .state
+        .dispatch_after(&fixture.rt, &fixture.ctx, 1, &invocation(&fixture.state, &[]), &result)
+    ),
+    "I42"
+  );
+  let result = returned(&fixture.state, "GO9");
+  assert_eq!(
+    wire_of(
+      fixture
+        .state
+        .dispatch_after(&fixture.rt, &fixture.ctx, 999, &invocation(&fixture.state, &[]), &result)
+    ),
+    NOT_DISPATCHED
+  );
+}
+
+#[test]
+fn the_host_is_told_how_many_befores_a_site_has() {
+  let fixture = granted();
+  *fixture.host.sites.borrow_mut() = vec!["S100".to_string(), "S100".to_string(), "S100".to_string()];
+  fixture.eval(
+    "const m = stringLength;
+         globalThis.a = inu.xposed.hookMethod(m, { before() {} });
+         globalThis.b = inu.xposed.hookMethod(m, { before() {}, after() {} });
+         globalThis.c = inu.xposed.hookMethod(m, { after() {} })",
+  );
+  assert_eq!(fixture.host.befores(100), 2);
+
+  fixture.eval("a()");
+  assert_eq!(fixture.host.befores(100), 1);
+  fixture.eval("c()");
+  assert_eq!(fixture.host.befores(100), 1, "an after-only hook going changed the count");
+  let reports = fixture.host.calls.borrow().iter().filter(|call| call.0 == OP_JS_BEFORES).count();
+  assert_eq!(reports, 4, "every js install reports, and a removal only when the count changed");
+}
+
+#[test]
+fn a_site_without_befores_dispatches_once_and_leaves_nothing_pending() {
+  let fixture = granted();
+  *fixture.host.original.borrow_mut() = "I5".to_string();
+  fixture.eval(
+    "globalThis.saw = null;
+         const m = stringLength;
+         inu.xposed.hookMethod(m, { after(ctx) { saw = ctx.args[0]; ctx.setReturnValue(ctx.returnValue + 1) } })",
+  );
+  assert_eq!(fixture.host.befores(100), 0);
+
+  assert_eq!(fixture.dispatch(100, &["I7"]), "I6");
+  fixture.eval("if (saw !== 7) throw new Error('after saw args ' + saw)");
+  assert!(fixture.state.pending.borrow().is_empty(), "a single phase has nothing to wait for");
+}
+
+#[test]
+fn an_after_only_dispatch_skips_a_before_registered_since_the_host_looked() {
+  let fixture = granted();
+  fixture.eval(
+    "globalThis.ran = false;
+         const m = stringLength;
+         inu.xposed.hookMethod(m, { before() { ran = true } })",
+  );
+  let answer = fixture.state.dispatch_after_only(
+    &fixture.rt,
+    &fixture.ctx,
+    100,
+    &invocation(&fixture.state, &["GO9".to_string()]),
+    &returned(&fixture.state, "I1"),
+  );
+  assert_eq!(wire_of(answer), NOT_DISPATCHED);
+  fixture.eval("if (ran) throw new Error('a before ran after the original')");
+}
+
+#[test]
+fn a_hook_that_reads_nothing_converts_nothing() {
+  let fixture = granted();
+  fixture.eval("const m = stringLength; inu.xposed.hookMethod(m, { after() {} })");
+  let reads = Rc::new(Cell::new(0));
+  let answer = fixture.state.dispatch_after_only(
+    &fixture.rt,
+    &fixture.ctx,
+    100,
+    &invocation_counting(&fixture.state, &["I1".to_string(), "GO9".to_string()], &reads),
+    &returned_counting(&fixture.state, "GO10", &reads),
+  );
+  assert_eq!(wire_of(answer), KEEP_ORIGINAL);
+  assert_eq!(reads.get(), 0);
+}
+
+#[test]
+fn each_value_is_converted_once_however_often_it_is_read() {
+  let fixture = granted();
+  fixture.eval(
+    "const m = stringLength;
+         inu.xposed.hookMethod(m, {
+           after(ctx) {
+             if (ctx.args !== ctx.args) throw new Error('args changed between reads');
+             if (ctx.returnValue !== ctx.returnValue) throw new Error('result changed between reads');
+             ctx.method; ctx.method; ctx.thisObject;
+           },
+         })",
+  );
+  let reads = Rc::new(Cell::new(0));
+  fixture.state.dispatch_after_only(
+    &fixture.rt,
+    &fixture.ctx,
+    100,
+    &invocation_counting(&fixture.state, &["I1".to_string(), "I2".to_string()], &reads),
+    &returned_counting(&fixture.state, "GO10", &reads),
+  );
+  assert!(fixture.logs.borrow().is_empty(), "{:?}", fixture.logs.borrow());
+  assert_eq!(reads.get(), 5, "method, this, two args and the result, once each");
+}
+
+#[test]
+fn arguments_a_before_left_alone_keep_the_originals() {
+  let fixture = granted();
+  fixture.eval(
+    "const m = stringLength;
+         inu.xposed.hookMethod(m, { before(ctx) { ctx.args[1] = ctx.args[1] + 1 } })",
+  );
+  let args = ["GO9".to_string(), "I1".to_string(), "S2".to_string()];
+  let answer = fixture.state.dispatch_before(&fixture.rt, &fixture.ctx, 1, 100, &invocation(&fixture.state, &args));
+  assert_eq!(answer, vec!["P0", KEEP_ARGUMENT, "I2", KEEP_ARGUMENT]);
+}
+
+#[test]
+fn a_before_that_never_reads_the_arguments_keeps_them_all() {
+  let fixture = granted();
+  fixture.eval("const m = stringLength; inu.xposed.hookMethod(m, { before() {} })");
+  let reads = Rc::new(Cell::new(0));
+  let args = ["GO9".to_string(), "I1".to_string()];
+  let answer = fixture.state.dispatch_before(
+    &fixture.rt,
+    &fixture.ctx,
+    1,
+    100,
+    &invocation_counting(&fixture.state, &args, &reads),
+  );
+  assert_eq!(answer, vec!["P0", KEEP_ARGUMENT, KEEP_ARGUMENT]);
+  assert_eq!(reads.get(), 0);
+}
+
+#[test]
+fn replacing_the_arguments_unread_still_replaces_them() {
+  let fixture = granted();
+  fixture.eval(
+    "const m = stringLength;
+         inu.xposed.hookMethod(m, { before(ctx) { ctx.args = [5, 6] } })",
+  );
+  let args = ["I1".to_string(), "I6".to_string()];
+  let answer = fixture.state.dispatch_before(&fixture.rt, &fixture.ctx, 1, 100, &invocation(&fixture.state, &args));
+  assert_eq!(answer, vec!["P0", "I5", KEEP_ARGUMENT]);
+}
+
+#[test]
+fn a_before_can_leave_its_own_state_on_the_context_for_the_after() {
+  let fixture = granted();
+  *fixture.host.original.borrow_mut() = "I5".to_string();
+  fixture.eval(
+    "const m = stringLength;
+         inu.xposed.hookMethod(m, {
+           before(ctx) { ctx.startedWith = ctx.args[0] },
+           after(ctx) { ctx.setReturnValue(ctx.startedWith + ctx.returnValue) },
+         })",
+  );
+  assert_eq!(fixture.dispatch(100, &["I7"]), "I12");
+}
+
+#[test]
+fn a_context_reads_the_call_it_was_given_and_no_later() {
+  let fixture = granted();
+  fixture.eval(
+    "const m = stringLength;
+         inu.xposed.hookMethod(m, { after(ctx) { globalThis.kept = ctx; globalThis.read = ctx.args[0] } })",
+  );
+  fixture.state.dispatch_after_only(
+    &fixture.rt,
+    &fixture.ctx,
+    100,
+    &invocation(&fixture.state, &["I7".to_string()]),
+    &returned(&fixture.state, "I1"),
+  );
+  fixture.eval("if (read !== 7) throw new Error('the hook could not read its own call')");
+  fixture.eval("if (kept.args[0] !== 7) throw new Error('what the hook read went missing')");
+  let error = fixture.eval_err("kept.thisObject");
+  assert!(error.contains("that call has returned"), "{error}");
+  assert!(fixture.eval_err("kept.returnValue").contains("that call has returned"));
+}
+
+#[test]
+fn an_after_phase_reads_the_call_its_before_never_touched() {
+  let fixture = granted();
+  fixture.eval(
+    "const m = stringLength;
+         inu.xposed.hookMethod(m, { before() {}, after(ctx) { globalThis.saw = ctx.args[0] } })",
+  );
+  let args = ["I7".to_string()];
+  let before = fixture.state.dispatch_before(&fixture.rt, &fixture.ctx, 1, 100, &invocation(&fixture.state, &args));
+  assert_eq!(before[0], "P1");
+  fixture.state.dispatch_after(
+    &fixture.rt,
+    &fixture.ctx,
+    1,
+    &invocation(&fixture.state, &args),
+    &returned(&fixture.state, "I1"),
+  );
+  fixture.eval("if (saw !== 7) throw new Error('the after phase saw ' + saw)");
 }

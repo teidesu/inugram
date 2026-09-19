@@ -187,8 +187,14 @@ Rust and Kotlin; do not add a schema/code-generation layer for them.
   Share physical hooks across sessions; remove only the last registration.
   Never hold the hook registry lock while invoking callbacks. Recursion guards
   cover callback phases, not the original method or remaining chain.
-- An Xposed result reports whether the engine took the argument/result wires,
-  including on failure. Untaken wires remain the host's to release.
+- Xposed hook values cross as java objects in one array the host also sizes, minted
+  only when a callback reads one. The engine borrows those references for the phase
+  rather than holding them, so a hook context reads the call it was given and throws
+  `handle-expired` afterwards, and an after phase is handed the invocation again with
+  the result last. A site the host knows has no JS `before` dispatches once, after the
+  original; `=` keeps an argument the hook left alone, with its identity and boxed
+  type, and a null answer keeps the outcome, so a hook that changes nothing allocates
+  nothing on either side.
 
 ### Reads, sends, and RPC chains
 

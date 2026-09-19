@@ -100,10 +100,6 @@ impl<T> Registry<T> {
     self.entries.borrow().iter().map(|e| e.value.clone()).collect()
   }
 
-  pub fn take_values(&self) -> Vec<T> {
-    self.entries.borrow_mut().drain(..).map(|e| e.value).collect()
-  }
-
   pub fn is_empty(&self) -> bool {
     self.entries.borrow().is_empty()
   }

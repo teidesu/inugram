@@ -2784,7 +2784,7 @@ mod bundled_oracles {
     crate::testing::harness::assert_oracle_exact(&lines, "lazy tl test done", 10);
   }
 
-  /// The list itself is the host's (`TakeoverMethods`, pinned by `:InuCore`'s own suite); what
+  /// The list itself is the host's (`GrantCatalog`, pinned by `:InuCore`'s own suite); what
   /// this covers is the half only an engine can: a `P` wire on each of the three channels a
   /// refusal can arrive over - `on_invoke`, `on_register` and the `String?` error channel
   /// `on_next` - reaching plugin code as an `inu.PluginError` with the code the host named.
