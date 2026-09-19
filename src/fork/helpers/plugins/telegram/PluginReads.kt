@@ -33,6 +33,7 @@ import org.telegram.tgnet.TLObject
 import org.telegram.tgnet.TLRPC
 import org.telegram.tgnet.tl.TL_forum
 import org.telegram.ui.Components.TypefaceSpan
+import org.telegram.ui.Components.URLSpanNoUnderlineBold
 
 /**
  * Kotlin side of the `Account` read surface (rust: `reads.rs`). [read] is a lookup in what
@@ -231,11 +232,13 @@ object PluginReads {
         val entities = ArrayList<TLRPC.MessageEntity>()
         MediaDataController.getInstance(accountId).getEntities(copy, true, false)?.let { entities.addAll(it) }
         for (span in preview.getSpans(0, preview.length, TypefaceSpan::class.java)) {
-            if (!span.isBold) continue
-            entities.add(TLRPC.TL_messageEntityBold().apply {
-                offset = preview.getSpanStart(span)
-                length = preview.getSpanEnd(span) - offset
-            })
+            if (span.isBold) entities.add(boldOver(preview, span))
+        }
+        // the span stock writes a name with in a service message, and one `getEntities` has no case
+        // for: it is a `URLSpan` carrying a peer id rather than a link, and bold is all of it a
+        // preview can carry
+        for (span in preview.getSpans(0, preview.length, URLSpanNoUnderlineBold::class.java)) {
+            entities.add(boldOver(preview, span))
         }
         val out = JSONArray()
         for (entity in entities) {
@@ -244,6 +247,12 @@ object PluginReads {
         }
         return out.takeIf { it.length() > 0 }
     }
+
+    private fun boldOver(preview: Spanned, span: Any): TLRPC.MessageEntity =
+        TLRPC.TL_messageEntityBold().apply {
+            offset = preview.getSpanStart(span)
+            length = preview.getSpanEnd(span) - offset
+        }
 
     /**
      * What `NotificationsController.replaceSpoilers` does to its own preview, which is private
