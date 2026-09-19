@@ -5,22 +5,22 @@ Subject: build support stuff for fork-specific code: - added kotlin - bumped min
 
 ---
  .gitmodules                                   |   3 +
- TMessagesProj/build.gradle                    | 120 ++++------
- TMessagesProj/google-services.json            |  76 ++-----
- TMessagesProj/proguard-rules.pro              |  13 ++
+ TMessagesProj/build.gradle                    | 120 +++-------
+ TMessagesProj/google-services.json            |  76 +-----
+ TMessagesProj/proguard-rules.pro              |  13 +
  TMessagesProj/src/main/AndroidManifest.xml    |   7 +
  .../org/telegram/messenger/BuildVars.java     |  12 +-
  .../telegram/tgnet/ConnectionsManager.java    |   2 +-
- .../org/telegram/ui/PaymentFormActivity.java  |  28 ++-
+ .../org/telegram/ui/PaymentFormActivity.java  |  28 +--
  .../org/telegram/ui/SettingsActivity.java     |  24 +-
- TMessagesProj_App/build.gradle                | 213 ++++++++++--------
- TMessagesProj_App/google-services.json        |  76 ++-----
+ TMessagesProj_App/build.gradle                | 224 ++++++++++--------
+ TMessagesProj_App/google-services.json        |  76 +-----
  TMessagesProj_App/jni/CMakeLists.txt          |  10 +
  TMessagesProj_AppTests/build.gradle           |   5 +-
  build.gradle                                  |  14 +-
  gradle.properties                             |   2 +-
  settings.gradle                               |  40 +++-
- 16 files changed, 287 insertions(+), 358 deletions(-)
+ 16 files changed, 298 insertions(+), 358 deletions(-)
  create mode 100644 TMessagesProj_App/jni/CMakeLists.txt
 
 diff --git a/.gitmodules b/.gitmodules
@@ -792,7 +792,7 @@ index 0000000..0000000 100644
      buildFeatures {
          buildConfig = true
      }
-@@ -197,6 +139,85 @@ android {
+@@ -197,6 +139,96 @@ android {
      lintOptions {
          checkReleaseBuilds false
      }
@@ -840,38 +840,49 @@ index 0000000..0000000 100644
 +def cargoExe = cargoFile?.absolutePath ?: 'cargo'
 +def cargoPathDirs = [cargoFile?.parentFile?.absolutePath, "$cargoHome/bin", "$userHome/.cargo/bin"].findAll { it }
 +
-+tasks.register('buildInuNative', Exec) {
-+    workingDir rustModuleDir
-+    environment 'ANDROID_NDK_HOME', android.ndkDirectory.absolutePath
-+    environment 'PATH', (cargoPathDirs + [System.getenv('PATH') ?: '']).join(File.pathSeparator)
-+    def prebuilt = file("${android.ndkDirectory}/toolchains/llvm/prebuilt")
-+    def ndkHost = prebuilt.listFiles()?.find { it.isDirectory() }
-+    def libclangCandidates = [
-+        project.findProperty('libclang.path'),
-+        ndkHost ? new File(ndkHost, 'lib').absolutePath : null,
-+        ndkHost ? new File(ndkHost, 'lib64').absolutePath : null,
-+        '/Library/Developer/CommandLineTools/usr/lib',
-+        '/opt/homebrew/opt/llvm/lib', '/usr/local/opt/llvm/lib',
-+        '/run/current-system/sw/lib', "${System.getProperty('user.home')}/.nix-profile/lib",
-+        '/usr/lib/llvm/lib', '/usr/lib',
-+    ]
-+    def libclangDir = libclangCandidates.findAll { it }.find { dir ->
-+        def d = file(dir)
-+        d.isDirectory() && d.listFiles()?.any { it.name ==~ /libclang\.(dylib|so)(\..*)?/ }
++def inuNativeProfiles = [debug: 'profiling', release: 'release']
++inuNativeProfiles.each { buildType, cargoProfile ->
++    def taskName = "buildInuNative${buildType.capitalize()}"
++    def outputDir = new File(rustJniLibsDir, buildType)
++    tasks.register(taskName, Exec) {
++        workingDir rustModuleDir
++        environment 'ANDROID_NDK_HOME', android.ndkDirectory.absolutePath
++        environment 'PATH', (cargoPathDirs + [System.getenv('PATH') ?: '']).join(File.pathSeparator)
++        def prebuilt = file("${android.ndkDirectory}/toolchains/llvm/prebuilt")
++        def ndkHost = prebuilt.listFiles()?.find { it.isDirectory() }
++        def libclangCandidates = [
++            project.findProperty('libclang.path'),
++            ndkHost ? new File(ndkHost, 'lib').absolutePath : null,
++            ndkHost ? new File(ndkHost, 'lib64').absolutePath : null,
++            '/Library/Developer/CommandLineTools/usr/lib',
++            '/opt/homebrew/opt/llvm/lib', '/usr/local/opt/llvm/lib',
++            '/run/current-system/sw/lib', "${System.getProperty('user.home')}/.nix-profile/lib",
++            '/usr/lib/llvm/lib', '/usr/lib',
++        ]
++        def libclangDir = libclangCandidates.findAll { it }.find { dir ->
++            def d = file(dir)
++            d.isDirectory() && d.listFiles()?.any { it.name ==~ /libclang\.(dylib|so)(\..*)?/ }
++        }
++        if (libclangDir != null) environment 'LIBCLANG_PATH', libclangDir
++        commandLine cargoExe, 'ndk', '-t', 'arm64-v8a', '-o', outputDir.absolutePath, 'build', '--profile', cargoProfile
 +    }
-+    if (libclangDir != null) environment 'LIBCLANG_PATH', libclangDir
-+    commandLine cargoExe, 'ndk', '-t', 'arm64-v8a', '-o', rustJniLibsDir.absolutePath, 'build', '--release'
++
++    android.sourceSets[buildType].jniLibs.srcDirs += outputDir
++    tasks.matching { it.name ==~ /merge${buildType.capitalize()}.*JniLibFolders/ }.configureEach {
++        dependsOn taskName
++    }
 +}
 +
-+android.sourceSets.main.jniLibs.srcDirs += rustJniLibsDir
-+tasks.matching { it.name ==~ /merge.*JniLibFolders/ }.configureEach {
-+    dependsOn 'buildInuNative'
++androidComponents {
++    onVariants(selector().withBuildType('debug')) { variant ->
++        variant.packaging.jniLibs.keepDebugSymbols.add('**/libinu_native.so')
++    }
 +}
 +
 +def inuTestJniLibsDir = file("$buildDir/inuTestJniLibs")
 +tasks.register('prepareInuTestJniLibs', Sync) {
-+    dependsOn 'buildInuNative', 'unpackShadowhook', 'mergeDebugNativeLibs'
-+    from rustJniLibsDir
++    dependsOn 'buildInuNativeDebug', 'unpackShadowhook', 'mergeDebugNativeLibs'
++    from new File(rustJniLibsDir, 'debug')
 +    from shadowhookJniLibsDir
 +    from("$buildDir/intermediates/merged_native_libs/debug/mergeDebugNativeLibs/out/lib") {
 +        include '**/liblsplant.so'
