@@ -3,7 +3,7 @@ package desu.inugram.core.plugins
 /**
  * What the plugin api never materializes, whatever the grants (`common.d.ts`: "account-takeover
  * surfaces are filtered") - login code redaction and the hidden-field table; method refusal is
- * [TakeoverMethods]. `unsafe.disableApiFiltering` bypasses all of it.
+ * [GrantCatalog.isTakeoverMethod]. `unsafe.disableApiFiltering` bypasses all of it.
  */
 object ApiFilter {
     const val SERVICE_USER_ID = 777000L

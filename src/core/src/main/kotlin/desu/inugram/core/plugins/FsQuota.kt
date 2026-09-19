@@ -6,10 +6,8 @@ object FsQuota {
 
     const val UNCAPPED = -1L
 
-    private val SIZE = Regex("""(\d+)(kb|mb|gb)""", RegexOption.IGNORE_CASE)
-
     fun parseSize(scope: String): Long? {
-        val match = SIZE.matchEntire(scope.trim()) ?: return null
+        val match = GrantCatalog.fsSizeMatch(scope) ?: return null
         val amount = match.groupValues[1].toLongOrNull() ?: return null
         val unit = when (match.groupValues[2].lowercase()) {
             "kb" -> 1024L

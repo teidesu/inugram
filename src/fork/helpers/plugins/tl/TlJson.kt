@@ -15,7 +15,7 @@ import org.telegram.tgnet.TLObject
  * plugin-authored `{_: "...", ...}` literal (reused by [TlHandles] for single-field coercion), and
  * `obj.toJSON()` snapshots. The live get/set path is [TlHandles]'s and does not come through here.
  *
- * Caveats (mirrored in src/plugins/common.d.ts):
+ * Caveats (mirrored in sdk/types/common.d.ts):
  * - `long` fields are exposed as JSON strings to avoid losing int64 precision in JS numbers, except
  *   the ones [TlReflect.FieldInfo.isInt53] marks, which are numbers. A long accepts either back, and
  *   a number outside the safe integer range is refused: it has already lost precision in JS.

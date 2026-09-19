@@ -10,12 +10,12 @@
     "module": "ESNext",
     "moduleResolution": "Bundler",
     // plugins are plain scripts in a bare quickjs — @types/node would inject a whole runtime that
-    // isn't there, and its own `console`/`fetch` globals would collide with ours
-    "types": [],
+    // isn't there, and its own `console`/`fetch` globals would collide with ours. this package is
+    // the one global declaration file a plugin gets
+    "types": ["@inugram/plugin-types"],
     "strict": true,
     "noEmit": true,
     // this project is almost entirely .d.ts, and skipLibCheck would mean checking nothing at all
     "skipLibCheck": false
-  },
-  "include": ["."]
+  }
 }

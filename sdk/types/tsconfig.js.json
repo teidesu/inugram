@@ -1,19 +1,18 @@
 {
   "extends": "./tsconfig.json",
   "compilerOptions": {
-    "allowJs": true,
-    "checkJs": true,
     // every plugin is its own engine with its own global object, so two plugins declaring the same
     // top-level `const` is not a redeclaration. without this they share one script scope and the
     // collisions are reported instead of the drift we're here for
     "moduleDetection": "force",
-    // the bundled plugins are plain js and always will be: the contract they check is a `.d.ts`, and
-    // demanding a jsdoc annotation on every helper parameter would trade the check for ceremony.
-    // what stays on is everything that can catch a member the contract doesn't declare
+    "allowJs": true,
+    "checkJs": true,
+    // a plain-js plugin checks the contract it calls, not its own helpers: demanding a jsdoc
+    // annotation on every parameter would trade the check for ceremony. what stays on is
+    // everything that can catch a member the contract doesn't declare
     "noImplicitAny": false,
     "noImplicitThis": false,
     // `catch (e) { e.code }` is the shape common.d.ts tells plugin authors to write
     "useUnknownInCatchVariables": false
-  },
-  "include": ["./*.d.ts", "../test/plugins/*.js"]
+  }
 }

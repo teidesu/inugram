@@ -501,7 +501,7 @@ private fun contractAsset(name: String): String =
     InstrumentationRegistry.getInstrumentation()
         .context.assets.open("plugins/$name").bufferedReader().use { it.readText() }
 
-/** `src/plugins/common.d.ts`, the normative contract */
+/** `sdk/types/common.d.ts`, the normative contract */
 fun contract(): String = contractAsset("common.d.ts")
 
 /** a bundled oracle's own source, a test asset for the same reason the contract is one */

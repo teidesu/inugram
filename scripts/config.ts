@@ -62,7 +62,7 @@ export const forkSyncFiles: ForkSyncFile[] = [
   // the normative contract, as a test asset: a ceiling is pinned to the sentence stating it, and
   // there is no repo to read on a device
   {
-    source: 'src/plugins/*.d.ts',
+    source: 'sdk/types/*.d.ts',
     target: 'TMessagesProj/src/androidTest/assets/plugins',
   },
   // the js oracles, for the suites that run one rather than restating what it asserts. Test assets

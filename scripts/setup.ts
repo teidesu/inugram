@@ -1,6 +1,7 @@
 import fs from 'node:fs/promises'
 import { join } from 'node:path'
 import { ICON_SELECTION, patchesDir, rootDir, worktreeDir } from './config.js'
+import { generateGrants } from './generate-grants.js'
 import { generateTl } from './generate-tl.js'
 import {
   applySubmodulePatches,
@@ -220,6 +221,7 @@ if (noStgit) {
   await linkForkSource(worktreeDir)
   await generateIconDrawables(worktreeDir)
   await generateTl()
+  await generateGrants()
   success('Flat setup complete')
 } else {
   const expectedPatches = seriesEntries.map(patchNameFromSeriesEntry)
@@ -240,5 +242,6 @@ if (noStgit) {
   const linkedAny = await linkForkSource(worktreeDir)
   const generatedAny = await generateIconDrawables(worktreeDir)
   const generatedTl = await generateTl()
-  success(linkedAny || generatedAny || generatedTl || syncedSubmodules || patchedSubmodules ? 'Setup complete' : 'Up to date')
+  const generatedGrants = await generateGrants()
+  success(linkedAny || generatedAny || generatedTl || generatedGrants || syncedSubmodules || patchedSubmodules ? 'Setup complete' : 'Up to date')
 }

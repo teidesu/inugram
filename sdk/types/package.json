@@ -1,0 +1,35 @@
+{
+  "name": "@inugram/plugin-types",
+  "version": "0.0.0",
+  "description": "typings for the Inugram plugin api",
+  "author": "alina sireneva",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/teidesu/inugram.git",
+    "directory": "sdk/types"
+  },
+  "keywords": [
+    "inugram",
+    "telegram",
+    "plugins"
+  ],
+  "exports": {
+    ".": "./index.d.ts",
+    "./grants": "./grants.d.ts",
+    "./grants.json": "./grants.json",
+    "./tl-names.txt": "./tl-names.txt",
+    "./tsconfig.json": "./tsconfig.json",
+    "./tsconfig.js.json": "./tsconfig.js.json",
+    "./package.json": "./package.json"
+  },
+  "types": "./index.d.ts",
+  "files": [
+    "*.d.ts",
+    "README.md",
+    "grants.json",
+    "tl-names.txt",
+    "tsconfig.js.json",
+    "tsconfig.json"
+  ]
+}

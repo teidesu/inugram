@@ -50,7 +50,7 @@ class TlTablesTest {
         for (name in TlTables.allNames) {
             for (id in TlTables.idsOf(name).orEmpty()) {
                 val names = TlTables.namesOf(id)
-                val blocked = names.filter { TakeoverMethods.isBlocked(it) }
+                val blocked = names.filter { GrantCatalog.isTakeoverMethod(it) }
                 assertTrue("id $id is a takeover method under $blocked but not under $names", blocked.isEmpty() || blocked.size == names.size)
             }
         }

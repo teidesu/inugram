@@ -7,9 +7,9 @@ import android.util.Log
 import desu.inugram.core.plugins.BoundedIdentitySet
 import desu.inugram.core.plugins.BoundedLru
 import desu.inugram.core.plugins.DispatchDeadline
+import desu.inugram.core.plugins.GrantCatalog
 import desu.inugram.core.plugins.PluginWire
 import desu.inugram.core.plugins.ScopeMatch
-import desu.inugram.core.plugins.TakeoverMethods
 import desu.inugram.core.plugins.TlNames
 import desu.inugram.core.plugins.TlTables
 import desu.inugram.helpers.plugins.EngineDispatch
@@ -810,7 +810,7 @@ object PluginRpc : SessionResource {
      * so an unscoped `@grant invokeRpc` would otherwise reach `auth.exportLoginToken`.
      */
     private fun takeoverRefusal(permissions: desu.inugram.core.plugins.PluginPermissions, method: String): String? {
-        if (!TakeoverMethods.isBlocked(method)) return null
+        if (!GrantCatalog.isTakeoverMethod(method)) return null
         if (permissions.has("unsafe.disableApiFiltering")) return null
         return PluginWire.encodePluginError("forbidden", "'$method' is an account-takeover method and is never available to plugins")
     }

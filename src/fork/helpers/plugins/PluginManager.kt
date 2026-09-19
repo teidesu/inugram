@@ -11,6 +11,7 @@ import android.os.SystemClock
 import android.util.Log
 import desu.inugram.InuConfig
 import desu.inugram.core.plugins.BootCohort
+import desu.inugram.core.plugins.GrantCatalog
 import desu.inugram.core.plugins.GrantValidator
 import desu.inugram.core.plugins.PluginInstalls
 import desu.inugram.core.plugins.PluginManifest
@@ -75,7 +76,7 @@ object PluginManager {
     const val SAFE_MODE_ACTION = "desu.inugram.action.SAFE_MODE"
     private const val SAFE_MODE_SHORTCUT_ID = "inu_safe_mode"
     private const val TAG = "InuPlugin"
-    const val PLUGIN_API_VERSION = 1
+    const val PLUGIN_API_VERSION = GrantCatalog.PLUGIN_API
     private const val PLATFORM = "android"
 
     private const val LOG_BUDGET = 200

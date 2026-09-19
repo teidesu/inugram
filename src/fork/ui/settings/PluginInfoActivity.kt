@@ -16,6 +16,8 @@ import android.widget.FrameLayout
 import android.widget.ImageView
 import android.widget.LinearLayout
 import android.widget.TextView
+import desu.inugram.core.plugins.GrantCatalog
+import desu.inugram.core.plugins.GrantTier
 import desu.inugram.core.plugins.ObfuscationDetector
 import desu.inugram.core.plugins.PluginManifest
 import desu.inugram.core.plugins.PluginPermissions
@@ -160,13 +162,6 @@ class PluginInfoActivity(private val plugin: Plugin) : SettingsPageActivity() {
     }
 }
 
-/** ordered by severity: [highestGrantTier] takes the max */
-internal enum class GrantTier {
-    NEUTRAL,
-    CAUTION,
-    DANGEROUS,
-}
-
 /** gradient (top, bottom) of the tier's icon badge; the top color doubles as its flat accent */
 internal fun tierColors(tier: GrantTier?): Pair<Int, Int> = when (tier) {
     GrantTier.DANGEROUS -> IconBackgroundColors.RED.top to IconBackgroundColors.RED.bottom
@@ -178,26 +173,12 @@ internal fun tierColors(tier: GrantTier?): Pair<Int, Int> = when (tier) {
 /** worst tier among the grants we recognize, or null when nothing rises above neutral */
 internal fun highestGrantTier(manifest: PluginManifest): GrantTier? =
     mergeGrants(manifest.grants)
-        .filterKeys { KNOWN_GRANTS.containsKey(it) }
-        .map { (name, scopes) -> tierFor(name, scopes) }
+        .filterKeys { GrantCatalog.entryOf(it) != null }
+        .map { (name, scopes) -> GrantCatalog.tierOf(name, scopes) }
         .maxOrNull()
         ?.takeIf { it != GrantTier.NEUTRAL }
 
 private class GrantPresentation(val titleRes: Int, val iconRes: Int)
-
-private val ALWAYS_CAUTION_GRANTS = setOf("account.write", "interceptSendMessage", "clipboard.read", "takeout")
-
-/** scopable grants that read as neutral when narrowed, caution when granted without scopes */
-private val UNBOUNDED_CAUTION_GRANTS = setOf(
-    "fetch", "invokeRpc", "interceptRpc", "onUpdate", "interceptUpdate", "account.read",
-)
-
-private fun tierFor(name: String, scopes: List<String>?): GrantTier = when {
-    name.startsWith("unsafe.") -> GrantTier.DANGEROUS
-    name in ALWAYS_CAUTION_GRANTS -> GrantTier.CAUTION
-    name in UNBOUNDED_CAUTION_GRANTS && scopes == null -> GrantTier.CAUTION
-    else -> GrantTier.NEUTRAL
-}
 
 /**
  * What every permission list shows: worst tier first, so the red rows are the ones a user reads
@@ -206,7 +187,7 @@ private fun tierFor(name: String, scopes: List<String>?): GrantTier = when {
 internal fun sortedGrants(tokens: List<String>): List<Pair<String, List<String>?>> =
     mergeGrants(tokens)
         .map { (name, scopes) -> name to scopes }
-        .sortedByDescending { (name, scopes) -> tierFor(name, scopes) }
+        .sortedByDescending { (name, scopes) -> GrantCatalog.tierOf(name, scopes) }
 
 /**
  * what [asked] wants that [baseline] does not cover: a grant whose name [baseline] lacks, or one
@@ -224,7 +205,7 @@ internal fun findGrantsBeyond(baseline: List<String>, asked: List<String>): List
         if (scopes == null) return@mapNotNull name to null
         val added = scopes.filter { it !in hadScopes }
         if (added.isEmpty()) null else name to added
-    }.sortedByDescending { (name, scopes) -> tierFor(name, scopes) }
+    }.sortedByDescending { (name, scopes) -> GrantCatalog.tierOf(name, scopes) }
 }
 
 /**
@@ -242,7 +223,7 @@ internal fun findGrantsKept(previous: List<String>, current: List<String>): List
         if (scopes == null) return@mapNotNull name to hadScopes
         val kept = scopes.filter { it in hadScopes }
         if (kept.isEmpty()) null else name to kept
-    }.sortedByDescending { (name, scopes) -> tierFor(name, scopes) }
+    }.sortedByDescending { (name, scopes) -> GrantCatalog.tierOf(name, scopes) }
 }
 
 /** merged by grant name in first-appearance order; `null` scopes = unscoped (full access) */
@@ -409,7 +390,7 @@ internal class GrantRowView(context: Context) : LinearLayout(context) {
             invalidate()
         }
         val known = KNOWN_GRANTS[name]
-        val tier = if (known == null) null else tierFor(name, scopes)
+        val tier = if (known == null) null else GrantCatalog.tierOf(name, scopes)
         icon.setImageResource(known?.iconRes ?: R.drawable.msg_help)
         icon.setColorFilter(PorterDuffColorFilter(Color.WHITE, PorterDuff.Mode.SRC_IN))
         val (top, bottom) = tierColors(tier)

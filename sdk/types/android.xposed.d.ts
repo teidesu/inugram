@@ -10,6 +10,11 @@ declare namespace inu {
    * @needs-grant unsafe.jvm
    */
   namespace xposed {
+    /**
+     * A view of the call in progress, not a copy of it: reading a member that the hook has not read
+     * yet throws `handle-expired` once the phase has returned, so a hook that needs a value past an
+     * `await` or a `setTimeout` reads it while it runs. Values already read stay usable.
+     */
     interface MethodHookContext {
       readonly method: JavaMethod
       readonly thisObject: JavaObject | null
