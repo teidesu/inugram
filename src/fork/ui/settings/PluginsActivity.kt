@@ -72,6 +72,9 @@ class PluginsActivity : SettingsPageActivity() {
     }
 
     override fun createView(context: Context): View {
+        // the page lists what is installed whether or not the engine is on, and with it off nothing
+        // has read the store yet
+        PluginManager.ensureLoaded()
         safeModeBanner = null
         devBanner = null
         val view = super.createView(context)

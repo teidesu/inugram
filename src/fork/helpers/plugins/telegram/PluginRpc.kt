@@ -275,6 +275,9 @@ object PluginRpc : SessionResource {
     // every middleware twice, and the nested finalize freeing the response the outer one will walk.
     // counted, because one instance can be leased twice
     private val bypassed = IdentityHashMap<TLObject, Int>()
+
+    /** read on every request stock makes, so the lock behind it is only taken once one can matter */
+    @Volatile private var hasBypass = false
     private val optimisticMessagesByRequest = IdentityHashMap<TLObject, OptimisticMessages>()
 
     @JvmStatic
@@ -283,6 +286,9 @@ object PluginRpc : SessionResource {
 
     @JvmStatic
     fun bindOptimisticMessages(request: TLObject, account: Int, messages: ArrayList<MessageObject>) {
+        // as in [maybeIntercept]: with nothing running there is no lease to claim, no send held and
+        // no chain to bind to, so the name lookup below is not worth doing
+        if (!hasInterceptors && !hasBypass) return
         // a send a plugin asked the composer to draw is still a plugin's own write, so it takes the
         // same lease [sendWithoutInterceptors] takes, released when that send settles
         if (messages.any { PluginOptimisticSend.claimRequest(request, it) }) markBypassed(request)
@@ -374,6 +380,7 @@ object PluginRpc : SessionResource {
         message: TLRPC.Message,
         scheduled: Boolean,
     ): Boolean {
+        if (sendVerdicts.isEmpty()) return false
         val verdict = sendVerdicts.remove(sendKey(account, message.id)) ?: return false
         return when (verdict) {
             is ChainVerdict.Dropped -> {
@@ -387,7 +394,7 @@ object PluginRpc : SessionResource {
     /** the same for an edit, whose unwind is the composer putting the message back as it was */
     @JvmStatic
     fun handleDroppedEdit(account: Int, messageId: Int): Boolean =
-        sendVerdicts.remove(sendKey(account, messageId)) is ChainVerdict.Dropped
+        !sendVerdicts.isEmpty() && sendVerdicts.remove(sendKey(account, messageId)) is ChainVerdict.Dropped
 
     @JvmStatic
     fun handleDroppedSends(
@@ -397,7 +404,8 @@ object PluginRpc : SessionResource {
         scheduled: Boolean,
     ): Boolean =
         // `count`, not `any`: every message owed a verdict must get one, short-circuiting skips the rest
-        messages.count { handleDroppedSend(helper, account, it.messageOwner, scheduled) } > 0
+        !sendVerdicts.isEmpty() &&
+            messages.count { handleDroppedSend(helper, account, it.messageOwner, scheduled) } > 0
 
     /** which chat list a local message belongs to, the way stock picks one before it touches storage */
     private fun chatModeOf(message: TLRPC.Message, scheduled: Boolean): Int = when {
@@ -493,6 +501,9 @@ object PluginRpc : SessionResource {
         requestToken: Int,
         currentAccount: Int,
     ): Boolean {
+        // nothing to intercept and nothing leased: the app's own request path costs two volatile
+        // reads rather than the two locks below
+        if (!hasInterceptors && !hasBypass) return false
         // a leased request is ours however the entry got here, including stock's own re-send
         if (isBypassed(request)) return unintercepted(request)
         if (!hasInterceptors) return unintercepted(request)
@@ -752,7 +763,10 @@ object PluginRpc : SessionResource {
     internal fun releasePluginSend(request: TLObject) = releaseBypass(request)
 
     private fun markBypassed(request: TLObject) {
-        synchronized(bypassed) { bypassed[request] = (bypassed[request] ?: 0) + 1 }
+        synchronized(bypassed) {
+            bypassed[request] = (bypassed[request] ?: 0) + 1
+            hasBypass = true
+        }
     }
 
     private fun isBypassed(request: TLObject): Boolean =
@@ -762,6 +776,7 @@ object PluginRpc : SessionResource {
         synchronized(bypassed) {
             val count = bypassed[request] ?: return
             if (count > 1) bypassed[request] = count - 1 else bypassed.remove(request)
+            hasBypass = bypassed.isNotEmpty()
         }
     }
 
