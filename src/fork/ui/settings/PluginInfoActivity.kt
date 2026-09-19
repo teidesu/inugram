@@ -121,6 +121,7 @@ class PluginInfoActivity(private val plugin: Plugin) : SettingsPageActivity() {
             items.add(UItem.asButton(BUTTON_SETTINGS, R.drawable.msg_settings, LocaleController.getString(R.string.Settings)))
         }
         items.add(UItem.asButton(BUTTON_SOURCE, R.drawable.inu_tabler_code, LocaleController.getString(R.string.InuPluginsViewSource)))
+        items.add(UItem.asButton(BUTTON_SHARE, R.drawable.msg_share, LocaleController.getString(R.string.ShareFile)))
         // a reload only re-reads the file for a plugin that is going to run it
         if (plugin.enabled) {
             items.add(UItem.asButton(BUTTON_RELOAD, R.drawable.msg_reset, LocaleController.getString(R.string.InuPluginsReload)))
@@ -137,6 +138,7 @@ class PluginInfoActivity(private val plugin: Plugin) : SettingsPageActivity() {
             }
             BUTTON_SETTINGS -> PluginUi.openRegisteredSettings(plugin)
             BUTTON_SOURCE -> showDialog(PluginSourceSheet(context, plugin.manifest.name, plugin.source))
+            BUTTON_SHARE -> sharePlugin(this, plugin)
             BUTTON_RELOAD -> PluginManager.reload(plugin)
             BUTTON_REMOVE -> {
                 PluginManager.remove(plugin)
@@ -151,6 +153,7 @@ class PluginInfoActivity(private val plugin: Plugin) : SettingsPageActivity() {
         private val OBFUSCATION_BANNER = InuUtils.generateId()
         private val BUTTON_SETTINGS = InuUtils.generateId()
         private val BUTTON_SOURCE = InuUtils.generateId()
+        private val BUTTON_SHARE = InuUtils.generateId()
         private val BUTTON_RELOAD = InuUtils.generateId()
         private val BUTTON_REMOVE = InuUtils.generateId()
         private const val GRANT_BASE = 20000
@@ -316,6 +319,7 @@ private fun grantSubtitle(name: String, scopes: List<String>?): String? = when (
     )
 
 
+    "notifications.suppress" -> LocaleController.getString(R.string.InuPluginGrantNotificationsSuppressInfo)
     "takeout" -> LocaleController.getString(R.string.InuPluginGrantTakeoutInfo)
     "unsafe.fs" -> LocaleController.getString(R.string.InuPluginGrantUnsafeFsInfo)
     "unsafe.invokeRaw" -> LocaleController.getString(R.string.InuPluginGrantUnsafeInvokeRawInfo)
@@ -335,6 +339,7 @@ private val KNOWN_GRANTS = mapOf(
     "openUrl" to GrantPresentation(R.string.InuPluginGrantOpenUrl, R.drawable.msg_link),
     "onAppVisibilityChange" to GrantPresentation(R.string.InuPluginGrantAppVisibility, R.drawable.menu_hide_gift),
     "clipboard.read" to GrantPresentation(R.string.InuPluginGrantClipboardRead, R.drawable.msg_copy),
+    "notifications.suppress" to GrantPresentation(R.string.InuPluginGrantNotificationsSuppress, R.drawable.msg_mute),
     "fetch" to GrantPresentation(R.string.InuPluginGrantFetch, R.drawable.msg_language),
     "account.read" to GrantPresentation(R.string.InuPluginGrantAccountRead, R.drawable.msg_contacts),
     "account.write" to GrantPresentation(R.string.InuPluginGrantAccountWrite, R.drawable.msg_send),
