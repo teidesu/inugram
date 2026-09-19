@@ -79,7 +79,6 @@ interface UiListener {
 
     fun uiToast(text: String)
 
-    fun uiBulletin(text: String, entitiesJson: String, iconSpec: String): String?
 
     /**
      * `inu.ui.dialog`/`prompt`/`chooser`/`pickFile`/`saveFile`, which are one member because they are
@@ -291,4 +290,10 @@ interface NotificationListener {
     fun register(callbackId: Int, events: Array<String>): String?
 
     fun unregister(callbackId: Int)
+
+    /**
+     * while any token is held, by any plugin, the app posts no notification of its own for
+     * [account] - or for every account at once, when it is [PluginNotifications.ANY_ACCOUNT]
+     */
+    fun suppress(token: Int, account: Int, on: Boolean)
 }

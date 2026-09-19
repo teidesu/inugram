@@ -2,6 +2,7 @@ use jni::objects::{JByteArray, JClass, JObject, JObjectArray, JString};
 use jni::strings::JNIString;
 use jni::sys::{jboolean, jclass, jint, jlong, jobject, jstring};
 use jni::EnvUnowned;
+use rquickjs::context::EvalOptions;
 use rquickjs::{Coerced, Context, Ctx, Object, Persistent, Result as JsResult, Runtime, Value};
 use std::path::{Path, PathBuf};
 use std::rc::Rc;
@@ -25,15 +26,15 @@ use crate::api::io::blob::BlobState;
 use crate::api::io::fetch::{install_fetch, FetchHost};
 use crate::api::io::fs::install_fs;
 use crate::api::io::kv::install_kv;
-use crate::api::lifecycle::install_lifecycle;
+use crate::api::lifecycle::{install_lifecycle, AppMode};
 use crate::api::platform::clipboard::install_clipboard;
 use crate::api::platform::jvm::{self, install_jvm};
 use crate::api::platform::notifications::{install_notifications, NotificationHost};
 use crate::api::platform::open_url::install_open_url;
 use crate::api::platform::xposed::{self, install_xposed};
-use crate::api::telegram::account::{install_account, AccountHost};
+use crate::api::telegram::account::{install_account, AccountHost, AccountState};
 use crate::api::telegram::reads::{install_reads, ReadsHost};
-use crate::api::telegram::rpc::RpcHost;
+use crate::api::telegram::rpc::{RpcHost, RpcState};
 use crate::api::telegram::writes::{install_writes, WritesDeps, WritesHost};
 use crate::api::timers::{install_timers, TimerHost};
 use crate::api::tl::message::install_message;
@@ -107,7 +108,7 @@ pub extern "system" fn Java_desu_inugram_helpers_plugins_QuickJs_nativeCreate(
       let views = TlViews::new(bridge.clone());
 
       let jvm = if install_jvm_enabled {
-        Some(install_engine_jvm(&ctx, &bridge, grants.clone(), &lifecycle, log.as_ref())?)
+        Some(install_engine_jvm(&ctx, &bridge, grants.clone(), &lifecycle, log.as_ref(), views.clone())?)
       } else {
         None
       };
@@ -173,7 +174,15 @@ pub extern "system" fn Java_desu_inugram_helpers_plugins_QuickJs_nativeCreate(
       let notification_host: Rc<dyn NotificationHost> = bridge.clone();
       let notifications = install_part(&ctx, "inu.android.addNotificationCenterDelegate", log.as_ref(), |ctx| {
         let globals = Globals::get(&ctx)?;
-        install_notifications(&ctx, notification_host, grants.clone(), lifecycle.clone(), log.clone(), &globals)
+        install_notifications(
+          &ctx,
+          notification_host,
+          grants.clone(),
+          lifecycle.clone(),
+          log.clone(),
+          jvm.clone(),
+          &globals,
+        )
       })?;
       let random_host: Rc<dyn RandomHost> = bridge.clone();
       let external = ExternalMemory::new();
@@ -243,6 +252,10 @@ pub extern "system" fn Java_desu_inugram_helpers_plugins_QuickJs_nativeCreate(
         )?;
       }
       let rpc = install_engine_rpc(&ctx, &bridge, grants.clone(), &views, &lifecycle, &account, &shared, log.as_ref())?;
+      // last onto the account prototype, since this installs before the reads and writes that build it
+      install_part(&ctx, "Account.suppressNotifications", log.as_ref(), |ctx| {
+        notifications.install_account_suppress(&ctx, &account)
+      });
 
       Some(Engine {
         ctx,
@@ -305,6 +318,7 @@ fn install_engine_jvm(
   grants: Rc<dyn GrantHost>,
   lifecycle: &Rc<Lifecycle>,
   log: &(dyn Fn(&str) + Send + Sync),
+  views: Rc<TlViews>,
 ) -> Option<Rc<jvm::JvmState>> {
   install_part(ctx, "inu.jvm", log, |ctx| {
     let globals = Globals::get(&ctx)?;
@@ -316,6 +330,7 @@ fn install_engine_jvm(
       grants,
       lifecycle.clone(),
       make_log(bridge.console.clone()),
+      Some(views),
       &globals,
     )
   })
@@ -722,11 +737,16 @@ pub extern "system" fn Java_desu_inugram_helpers_plugins_QuickJs_nativeAppVisibi
   _env: EnvUnowned,
   _this: JObject,
   ptr: jlong,
-  visible: jboolean,
+  mode: jint,
 ) {
+  let Some(mode) = AppMode::from_code(mode) else {
+    return;
+  };
   with_engine(ptr, (), |engine| {
-    engine.timers.set_visible(visible);
-    engine.lifecycle_state.app_visibility_changed(&engine._rt, &engine.ctx, visible);
+    if let Some(visible) = mode.visibility() {
+      engine.timers.set_visible(visible);
+    }
+    engine.lifecycle_state.app_visibility_changed(&engine._rt, &engine.ctx, mode);
   });
 }
 
@@ -844,15 +864,13 @@ pub extern "system" fn Java_desu_inugram_helpers_plugins_QuickJs_nativeDispatchN
   callback_id: jint,
   name: JString,
   account: jint,
-  args_json: JString,
+  args: JObjectArray<JString>,
 ) {
   in_env(&mut env, (), |env| {
+    let name = jstring_to_string(env, &name);
+    let args = read_string_array(env, &args);
     with_engine(ptr, (), |engine| {
-      let name = jstring_to_string(env, &name);
-      let args_json = jstring_to_string(env, &args_json);
-      engine
-        .notifications
-        .dispatch(&engine._rt, &engine.ctx, callback_id as u32, &name, account, &args_json);
+      engine.notifications.dispatch(&engine._rt, &engine.ctx, callback_id as u32, &name, account, &args);
     })
   })
 }
@@ -901,10 +919,10 @@ fn install_engine_rpc(
   grants: Rc<dyn GrantHost>,
   views: &Rc<TlViews>,
   lifecycle: &Rc<Lifecycle>,
-  account: &Rc<crate::api::telegram::account::AccountState>,
+  account: &Rc<AccountState>,
   shared: &Persistent<Object<'static>>,
   log: &(dyn Fn(&str) + Send + Sync),
-) -> Option<Rc<crate::api::telegram::rpc::RpcState>> {
+) -> Option<Rc<RpcState>> {
   let host: Rc<dyn RpcHost> = bridge.clone();
   let tl = views.clone();
   install_part(ctx, "inu.interceptRpc/onUpdate", log, |ctx| {
@@ -1106,7 +1124,7 @@ pub extern "system" fn Java_desu_inugram_helpers_plugins_QuickJs_nativeEvaluate(
     let filename = jstring_to_string(env, &filename);
 
     let result: Result<String, String> = engine.ctx.with(|ctx| {
-      let mut options = rquickjs::context::EvalOptions::default();
+      let mut options = EvalOptions::default();
       options.filename = Some(filename);
       match ctx.eval_with_options::<Value, _>(code, options) {
         Ok(v) => {

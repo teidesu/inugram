@@ -720,11 +720,20 @@ declare namespace inu {
       webBrowserSettingsUpdate(): void
     }
 
-    type NotificationArg<T> = T extends number | string | boolean | undefined ? T : null
+    /**
+     * The signatures above name what the *app* passes. A scalar crosses as itself; everything else
+     * - a TL object, a `MessageObject`, a list, an array - crosses as the same {@link JavaObject}
+     * handle `inu.jvm` would answer with, since these events are not TL and there is nothing else
+     * to turn them into. Which is why this needs `unsafe.jvm` as well.
+     */
+    type NotificationArg<T> = T extends number | string | boolean | undefined ? T : JavaObject
 
     type NotificationArgs<T extends unknown[]> = { [K in keyof T]: NotificationArg<T[K]> }
 
-    /** @needs-grant unsafe.notificationCenter */
+    /**
+     * @needs-grant unsafe.notificationCenter
+     * @needs-grant unsafe.jvm
+     */
     function addNotificationCenterDelegate(
       handlers: {
         [key in keyof NotificationCenterEventsMap]?: (

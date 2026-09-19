@@ -1,5 +1,7 @@
 package desu.inugram.helpers.plugins.telegram
 
+import android.text.SpannableStringBuilder
+import android.text.Spanned
 import desu.inugram.core.plugins.PluginRefusal
 import desu.inugram.core.plugins.PluginWire.refuse
 import desu.inugram.core.plugins.PluginWire
@@ -15,6 +17,8 @@ import desu.inugram.helpers.plugins.tl.TlReflect
 import desu.inugram.helpers.security.ParanoiaHelper
 import org.json.JSONArray
 import org.json.JSONObject
+import java.util.concurrent.CountDownLatch
+import java.util.concurrent.atomic.AtomicReference
 import org.telegram.messenger.AndroidUtilities
 import org.telegram.messenger.ChatObject
 import org.telegram.messenger.DialogObject
@@ -28,6 +32,7 @@ import org.telegram.tgnet.ConnectionsManager
 import org.telegram.tgnet.TLObject
 import org.telegram.tgnet.TLRPC
 import org.telegram.tgnet.tl.TL_forum
+import org.telegram.ui.Components.TypefaceSpan
 
 /**
  * Kotlin side of the `Account` read surface (rust: `reads.rs`). [read] is a lookup in what
@@ -66,6 +71,12 @@ object PluginReads {
     const val OP_DIALOGS_CACHED = 16
     const val OP_CHAT_FOLDERS = 17
     const val OP_FETCH_MESSAGES = 18
+    const val OP_DIALOG_MUTED = 19
+    const val OP_TOPIC = 20
+    const val OP_MESSAGE_PREVIEW = 21
+
+    /** stock's own `NotificationsController.spoilerChars`, in its order */
+    private val SPOILER_CHARS = charArrayOf('\u280C', '\u2862', '\u2891', '\u2828', '\u2825', '\u282E', '\u2851')
 
     /** what `archive` selects past exclude (`0`), keep in sync with `reads.js` */
     private const val ARCHIVE_ONLY = 1
@@ -128,6 +139,18 @@ object PluginReads {
                     val (spec, rest) = PeerSpecs.splitOnce(arg)
                     draftWire(controller, accountId, spec, rest.toLongOrNull() ?: 0L, policyOf(session))
                 }
+                OP_DIALOG_MUTED -> {
+                    val (spec, rest) = PeerSpecs.splitOnce(arg)
+                    PluginWire.encodeBool(isMuted(controller, accountId, spec, rest.toLongOrNull() ?: 0L))
+                }
+                OP_TOPIC -> {
+                    val (spec, rest) = PeerSpecs.splitOnce(arg)
+                    mint(handles, findTopic(controller, accountId, spec, rest.toLongOrNull() ?: 0L))
+                }
+                OP_MESSAGE_PREVIEW -> {
+                    val (flag, wire) = PeerSpecs.splitOnce(arg)
+                    previewMessage(handles, accountId, wire, hideSpoilers = flag != "0", policy = policyOf(session))
+                }
                 else -> PluginWire.encodeError("account read: unknown op $op")
             }
         } catch (e: PluginRefusal) {
@@ -138,6 +161,107 @@ object PluginReads {
             // taking the app down over
             PluginWire.encodePluginError("internal", "account read: ${e.message ?: e.toString()}")
         }
+    }
+
+    /**
+     * The line the app itself would show for this message in a dialog row or a notification: a
+     * media label, a service message written out, or the text. Only [MessageObject] knows it, and
+     * only building one computes it; `generateLayout = false` leaves out the text layout, which is
+     * the expensive half and nothing a caller here can see.
+     */
+    private fun previewMessage(
+        handles: TlHandles,
+        accountId: Int,
+        wire: String,
+        hideSpoilers: Boolean,
+        policy: TlFilter.Policy,
+    ): String {
+        val message = handles.objectFromWire(wire, "previewMessage") as? TLRPC.Message
+            ?: refuse("invalid-argument", "previewMessage: expected a message")
+        val preview = MessageObject(accountId, message, false, false).messageText ?: ""
+        val text = preview.toString()
+        val json = JSONObject()
+        // the app writes an ordinary text message's preview as the text itself, unspanned, so the
+        // formatting is the message's own entities rather than anything the preview carries
+        val own = message.message.takeIf { !it.isNullOrEmpty() && it == text }
+        val entities = if (own != null) ownEntities(message, policy) else spanEntities(accountId, preview, policy)
+        if (hideSpoilers && own != null) {
+            val (masked, ranges) = maskSpoilers(message, text)
+            json.put("text", masked)
+            dropMasked(entities, ranges)?.let { json.put("entities", it) }
+        } else {
+            json.put("text", text)
+            entities?.let { json.put("entities", it) }
+        }
+        return PluginWire.encodeJson(json.toString())
+    }
+
+    /** the message's own entities, which are the preview's exactly when the preview is its text */
+    private fun ownEntities(message: TLRPC.Message, policy: TlFilter.Policy): JSONArray? {
+        val entities = message.entities?.takeIf { it.isNotEmpty() } ?: return null
+        val out = JSONArray()
+        for (entity in entities) TlJson.valueToJson(entity, policy)?.let { out.put(it) }
+        return out.takeIf { it.length() > 0 }
+    }
+
+    /** an entity over a masked range would be describing text that is no longer there */
+    private fun dropMasked(entities: JSONArray?, masked: List<IntRange>): JSONArray? {
+        if (entities == null || masked.isEmpty()) return entities
+        val out = JSONArray()
+        for (index in 0 until entities.length()) {
+            val entity = entities.optJSONObject(index) ?: continue
+            val offset = entity.optInt("offset")
+            val length = entity.optInt("length")
+            if (masked.any { offset < it.last + 1 && it.first < offset + length }) continue
+            out.put(entity)
+        }
+        return out.takeIf { it.length() > 0 }
+    }
+
+    /**
+     * A preview that is *not* the message's text - a service message written out - is formatted
+     * with android spans rather than entities, so this reads them back out through stock's own
+     * converter. That one is the composer's, so markdown parsing is off: the text is the app's
+     * output, not something a user typed. [TypefaceSpan] is the one it does not carry, being the
+     * composer's bold marker rather than the one [MessageObject] writes.
+     */
+    private fun spanEntities(accountId: Int, preview: CharSequence, policy: TlFilter.Policy): JSONArray? {
+        if (preview !is Spanned) return null
+        val copy = arrayOf<CharSequence>(SpannableStringBuilder(preview))
+        val entities = ArrayList<TLRPC.MessageEntity>()
+        MediaDataController.getInstance(accountId).getEntities(copy, true, false)?.let { entities.addAll(it) }
+        for (span in preview.getSpans(0, preview.length, TypefaceSpan::class.java)) {
+            if (!span.isBold) continue
+            entities.add(TLRPC.TL_messageEntityBold().apply {
+                offset = preview.getSpanStart(span)
+                length = preview.getSpanEnd(span) - offset
+            })
+        }
+        val out = JSONArray()
+        for (entity in entities) {
+            if (entity.offset < 0 || entity.length <= 0) continue
+            TlJson.valueToJson(entity, policy)?.let { out.put(it) }
+        }
+        return out.takeIf { it.length() > 0 }
+    }
+
+    /**
+     * What `NotificationsController.replaceSpoilers` does to its own preview, which is private
+     * there. Stock only reaches it where the preview *is* the raw text: entity offsets are counted
+     * against that text, so a media label would be mangled by them.
+     */
+    private fun maskSpoilers(message: TLRPC.Message, preview: String): Pair<String, List<IntRange>> {
+        val entities = message.entities
+        if (preview.isEmpty() || message.message != preview || entities == null) return preview to emptyList()
+        val chars = preview.toCharArray()
+        val masked = ArrayList<IntRange>()
+        for (entity in entities) {
+            if (entity !is TLRPC.TL_messageEntitySpoiler) continue
+            if (entity.offset < 0 || entity.offset + entity.length > chars.size) continue
+            for (i in 0 until entity.length) chars[entity.offset + i] = SPOILER_CHARS[i % SPOILER_CHARS.size]
+            masked.add(entity.offset until entity.offset + entity.length)
+        }
+        return String(chars) to masked
     }
 
     /** the plugin asked for this object, so its scalars go with the handle: reading them is what it will do next */
@@ -177,7 +301,40 @@ object PluginReads {
         return controller.dialogs_dict.get(id)
     }
 
-    /** the app keeps whole histories in sqlite and only the chat list's own messages in memory; `getHistory` is the one that goes to disk */
+    /**
+     * Stock's own answer, not the dialog's `notify_settings`: that field is only the per-dialog
+     * override, and whether it means muted depends on the account's default for that kind of peer,
+     * and on the topic when there is one. A dialog the app does not know is not muted.
+     */
+    private fun isMuted(controller: MessagesController, accountId: Int, spec: String, topicId: Long): Boolean {
+        val id = PeerSpecs.dialogIdOf(controller, accountId, spec) ?: return false
+        return controller.isDialogMuted(id, topicId)
+    }
+
+    /**
+     * The topics the app has already loaded for a forum, which is what the app itself draws from;
+     * a topic it has never loaded is a miss rather than a fetch, the way every `*Cached` read here
+     * behaves. [TopicsController.findTopic] takes the bare chat id, never the dialog id.
+     */
+    private fun findTopic(
+        controller: MessagesController,
+        accountId: Int,
+        spec: String,
+        topicId: Long,
+    ): TLRPC.TL_forumTopic? {
+        val id = PeerSpecs.dialogIdOf(controller, accountId, spec) ?: return null
+        if (id >= 0) return null
+        return controller.topicsController.findTopic(-id, topicId)
+    }
+
+    /**
+     * Memory first, then the app's own sqlite, which is where a message a plugin asks for actually
+     * lives: [MessagesController] holds only the chat list's own last message per dialog.
+     *
+     * **The storage read blocks** this turn on `storageQueue`, which is what lets a synchronous
+     * read answer at all rather than only for the handful of messages memory holds. It is the same
+     * reader the asynchronous path uses, so the two agree on what a stored message is.
+     */
     private fun findMessage(
         controller: MessagesController,
         accountId: Int,
@@ -185,8 +342,30 @@ object PluginReads {
         messageId: Int?,
     ): TLRPC.Message? {
         if (messageId == null) return null
-        val dialogId = PeerSpecs.dialogIdOf(controller, accountId, spec) ?: return null
-        return cachedMessage(controller, dialogId.takeIf { it != COMMON_BOX }, messageId)
+        val named = PeerSpecs.dialogIdOf(controller, accountId, spec) ?: return null
+        val dialogId = named.takeIf { it != COMMON_BOX }
+        cachedMessage(controller, dialogId, messageId)?.let { return it }
+        return onStorageQueue(accountId) { readStoredMessages(accountId, dialogId, listOf(messageId)) }[messageId]
+    }
+
+    /**
+     * Runs [read] on the account's storage queue and waits for it. Only ever called from a plugin's
+     * own turn - the plugin queue or a caller thread - never from `storageQueue` itself, which
+     * would be waiting on the thread that has to run it.
+     */
+    private fun <T> onStorageQueue(accountId: Int, read: () -> T): T {
+        val storage = MessagesStorage.getInstance(accountId)
+        val latch = CountDownLatch(1)
+        val answer = AtomicReference<T>()
+        storage.storageQueue.postRunnable {
+            try {
+                answer.set(read())
+            } finally {
+                latch.countDown()
+            }
+        }
+        latch.await()
+        return answer.get()
     }
 
     /**

@@ -119,6 +119,7 @@ fn setup(grants: &[&str]) -> Fixture {
       grant_host.clone(),
       lifecycle.clone(),
       log.clone(),
+      None,
       &inu,
     )
     .unwrap();

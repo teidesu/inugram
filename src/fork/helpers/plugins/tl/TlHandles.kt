@@ -4,6 +4,7 @@ import android.util.Base64
 import android.util.SparseArray
 import desu.inugram.core.plugins.TlFlags
 import desu.inugram.core.plugins.TlNames
+import desu.inugram.core.plugins.PluginRefusal
 import desu.inugram.core.plugins.PluginWire
 import desu.inugram.helpers.plugins.Plugin
 import desu.inugram.helpers.plugins.EngineDispatch
@@ -137,6 +138,29 @@ class TlHandles(private val policy: TlFilter.Policy) : TlListener {
     }
 
     fun resolveTlObject(handle: Long): TLObject? = table[handle]?.target as? TLObject
+
+    /**
+     * A TL value a plugin passed, as the app's own object: a view crosses as the handle it already
+     * is and is resolved back to what it names, and a plain object is built into a new [TLObject]
+     * here, which is the only way a plugin has of making one.
+     */
+    fun objectFromWire(wire: String, what: String): TLObject {
+        if (wire.startsWith("H")) {
+            val digits = wire.drop(1).dropWhile { !it.isDigit() && it != '-' }.takeWhile { it.isDigit() || it == '-' }
+            val id = digits.toLongOrNull()
+                ?: PluginWire.refuse("invalid-argument", "$what: malformed handle")
+            return resolveTlObject(id) ?: PluginWire.refuse("handle-expired", "$what: that TL handle was released")
+        }
+        val json = wire.removePrefix("J").takeIf { wire.startsWith("J") }
+            ?: PluginWire.refuse("invalid-argument", "$what: expected a TL object")
+        return try {
+            TlJson.fromJson(JSONObject(json))
+        } catch (e: PluginRefusal) {
+            throw e
+        } catch (e: Exception) {
+            PluginWire.refuse("invalid-argument", "$what: could not build that object: ${e.message}")
+        }
+    }
 
     /** consuming an app-owned object as a request or field value would alias it into a writable graph, where re-reading the field mints a writable child */
     fun isReadOnly(handle: Long): Boolean = table[handle]?.readOnly ?: false

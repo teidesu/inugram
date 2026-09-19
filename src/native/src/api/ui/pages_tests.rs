@@ -559,6 +559,7 @@ fn a_java_object_reaches_open_page_native_view_and_drawable_icon() {
       grants.as_host(),
       Lifecycle::new(),
       log.clone(),
+      None,
       &inu,
     )
     .unwrap();

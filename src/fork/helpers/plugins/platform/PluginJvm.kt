@@ -29,6 +29,7 @@ import java.lang.reflect.Modifier
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.atomic.AtomicLong
 import org.telegram.messenger.Utilities
+import org.telegram.tgnet.TLObject
 
 /**
  * Kotlin side of `inu.jvm` (rust: `jvm.rs`).
@@ -50,6 +51,8 @@ object PluginJvm : SessionResource {
     const val OP_PREPARE_CLASS = 18
     const val OP_LOAD_CLASS = 20
     const val OP_CANCEL_CLASS = 21
+    const val OP_FROM_TL = 22
+    const val OP_TO_TL = 23
     const val OP_BUNDLE_METHOD = 15
 
     // keep in sync with rust `jvm::native::RESOLVE_*`
@@ -124,6 +127,19 @@ object PluginJvm : SessionResource {
     }
 
     internal fun bridgeFor(engine: QuickJs): ValueBridge? = engine.listener?.jvm as? ValueBridge
+
+    /**
+     * A wire the engine never took stays minted in the reference table with nothing to drop it, so
+     * whoever encoded a batch releases it when the engine did not take it. A scalar minted nothing
+     * and releasing one is a no-op, which is what lets a caller hand back everything it encoded.
+     *
+     * Callers are app code's own frames - a hooked method, a notification observer - so the bridge
+     * already being gone is one more thing that may not surface there.
+     */
+    internal fun releaseUntaken(engine: QuickJs, wires: List<String>) {
+        val bridge = bridgeFor(engine) ?: return
+        for (wire in wires) runCatching { bridge.release(wire) }
+    }
 
     private fun checkStringSize(value: String, what: String) {
         val size = value.toByteArray(Charsets.UTF_8).size
@@ -233,6 +249,12 @@ object PluginJvm : SessionResource {
             OP_CURRENT_FRAGMENT -> encodeValue(screen.currentFragment())
             OP_CURRENT_ACTIVITY -> encodeValue(screen.currentActivity())
             OP_BUNDLE_METHOD -> encodeValue(bundleMethod(at(target)))
+            OP_FROM_TL -> encodeValue(session.tl.objectFromWire(name, "jvm: fromTl"))
+            OP_TO_TL -> {
+                val value = at(target) as? TLObject
+                    ?: refuse("invalid-argument", "jvm: that handle is not a TLObject")
+                session.tl.mintWireForPlugin(value, readOnly = false)
+            }
             else -> PluginWire.encodeError("jvm: unknown op $op")
         }
 

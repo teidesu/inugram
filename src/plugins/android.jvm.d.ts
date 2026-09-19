@@ -26,6 +26,13 @@ declare type JavaClass = OpaqueType<'JVMClass'> & {
   getStaticField: (name: string) => any
   setStaticField: (name: string, value: any) => void
   callStatic: (method: string, ...args: any[]) => any
+
+  /**
+   * `Class.isInstance`. `null` and `undefined` are `false`, as in java. Only a handle names a java
+   * object here, so a scalar is `invalid-argument` rather than a quiet `false`: a js number alone
+   * does not say whether it is an `Integer` or a `Long`.
+   */
+  isInstance: (value: JavaObject | JavaClass | JavaMethod | JavaConstructor | JavaField | null | undefined) => boolean
 }
 
 declare type JvmColdMethod = (self: JavaObject, ...args: any[]) => any
@@ -136,6 +143,26 @@ declare namespace inu {
 
     /** Get a Java class by its FQN */
     function cls(name: string): JavaClass
+
+    /**
+     * The app's own `TLObject` behind a TL value, as a {@link JavaObject} you can call methods on
+     * and pass to app code. A TL view crosses as the object it already names; a plain object is
+     * built into a new one first, which is the only way a plugin has of *making* a `TLObject`.
+     *
+     * The read-only rule the TL surface applies to app-owned values does not survive the crossing:
+     * `unsafe.jvm` reaches every class the app can, and this is one of them.
+     */
+    function fromTl(value: TLObject): JavaObject
+
+    /**
+     * The other direction: a {@link JavaObject} that really is a `TLObject`, read back as a TL
+     * view - the same shape a read would have answered with. Throws `invalid-argument` for a handle
+     * that is not one.
+     *
+     * The view is writable: a plugin holding the java object can set its fields through
+     * {@link set} anyway, so guarding the view would guard nothing.
+     */
+    function toTl(value: JavaObject): TLObject
 
     /** Load a DEX file from a path or Uint8Array */
     function loadDex(path: string | Uint8Array): void

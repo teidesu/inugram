@@ -31,6 +31,9 @@ const OP_TOPICS: i32 = 15;
 const OP_DIALOGS_CACHED: i32 = 16;
 const OP_CHAT_FOLDERS: i32 = 17;
 const OP_FETCH_MESSAGES: i32 = 18;
+const OP_DIALOG_MUTED: i32 = 19;
+const OP_TOPIC: i32 = 20;
+const OP_MESSAGE_PREVIEW: i32 = 21;
 
 const PRELUDE: &[u8] = include_bytes!(concat!(env!("OUT_DIR"), "/reads.qbc"));
 
@@ -57,8 +60,8 @@ const SPEC_SELF: &str = "S";
 fn scope_of(op: i32) -> Option<&'static str> {
   Some(match op {
     OP_ME => "self",
-    OP_DIALOG | OP_DIALOGS | OP_TOPICS | OP_DIALOGS_CACHED | OP_CHAT_FOLDERS => "dialogs",
-    OP_MESSAGE | OP_MESSAGES | OP_FETCH_MESSAGES => "messages",
+    OP_DIALOG | OP_DIALOGS | OP_TOPICS | OP_DIALOGS_CACHED | OP_CHAT_FOLDERS | OP_DIALOG_MUTED | OP_TOPIC => "dialogs",
+    OP_MESSAGE | OP_MESSAGES | OP_FETCH_MESSAGES | OP_MESSAGE_PREVIEW => "messages",
     OP_HISTORY => "history",
     OP_DRAFT => "draft",
     OP_USER | OP_CHAT | OP_PEER | OP_USERS | OP_CHATS | OP_INPUT_PEER | OP_USER_FULL | OP_CHAT_FULL => "peers",
@@ -239,6 +242,37 @@ pub fn install_reads<'js>(
   {
     let state = state.clone();
     natives.set(
+      "isDialogMuted",
+      Function::new(ctx.clone(), move |ctx: Ctx<'js>, slot: i32, spec: String, topic: i64| {
+        state.read_one(&ctx, OP_DIALOG_MUTED, slot, &format!("{spec}{SEPARATOR}{topic}"))
+      })?,
+    )?;
+  }
+  {
+    let state = state.clone();
+    natives.set(
+      "getTopic",
+      Function::new(ctx.clone(), move |ctx: Ctx<'js>, slot: i32, spec: String, topic: i32| {
+        state.read_one(&ctx, OP_TOPIC, slot, &format!("{spec}{SEPARATOR}{topic}"))
+      })?,
+    )?;
+  }
+  {
+    let state = state.clone();
+    natives.set(
+      "previewMessage",
+      Function::new(ctx.clone(), move |ctx: Ctx<'js>, slot: i32, message: Value<'js>, hide_spoilers: bool| {
+        // a message a plugin was handed is already the app's own object, so it goes back as the
+        // handle it is; one the plugin built itself crosses as json and is rebuilt host-side
+        let wire = crate::api::tl::proxy::js_value_to_wire(&ctx, message)?;
+        let flag = i32::from(hide_spoilers);
+        state.read_one(&ctx, OP_MESSAGE_PREVIEW, slot, &format!("{flag}{SEPARATOR}{wire}"))
+      })?,
+    )?;
+  }
+  {
+    let state = state.clone();
+    natives.set(
       "inputPeer",
       Function::new(ctx.clone(), move |ctx: Ctx<'js>, slot: i32, spec: String, kind: i32| {
         state.read_one(&ctx, OP_INPUT_PEER, slot, &format!("{spec}{SEPARATOR}{kind}"))
@@ -250,7 +284,10 @@ pub fn install_reads<'js>(
     natives.set(
       "resolve",
       Function::new(ctx.clone(), move |ctx: Ctx<'js>, slot: i32, spec: String, kind: i32| {
-        state.js_resolve_peer(&ctx, slot, &spec, kind)
+        let this = &state;
+        this.grants.check_grant(&ctx, "account.read", Some("peers"), MATCH_EXACT)?;
+        this.check_self_grant(&ctx, &spec)?;
+        this.park(&ctx, Shape::Value, |request_id| this.host.resolve_peer(slot, request_id, &spec, kind))
       })?,
     )?;
   }
@@ -279,7 +316,20 @@ pub fn install_reads<'js>(
       Function::new(
         ctx.clone(),
         move |ctx: Ctx<'js>, slot: i32, op: i32, peer: String, args: String, cursor: String| {
-          state.js_fetch(&ctx, slot, op, &peer, &args, &cursor)
+          let this = &state;
+          this.check_read_grant(&ctx, op, &peer)?;
+          let shape = shape_of(op);
+          let payload = match shape {
+            Shape::Page(list) if !(&cursor).is_empty() => match this.cursors.payload_of(list, &cursor) {
+              Some(payload) => payload,
+              None => {
+                return PluginErrorCode::InvalidArgument
+                  .throw(&ctx, "this cursor did not come from this list, or is too old to page from")
+              }
+            },
+            _ => String::new(),
+          };
+          this.park(&ctx, shape, |request_id| this.host.account_fetch(slot, request_id, op, &peer, &args, &payload))
         },
       )?,
     )?;
@@ -309,38 +359,8 @@ pub fn install_reads<'js>(
 }
 
 impl ReadsState {
-  fn js_resolve_peer<'js>(&self, ctx: &Ctx<'js>, slot: i32, spec: &str, kind: i32) -> JsResult<Value<'js>> {
-    self.grants.check_grant(ctx, "account.read", Some("peers"), MATCH_EXACT)?;
-    self.check_self_grant(ctx, spec)?;
-    self.park(ctx, Shape::Value, |request_id| self.host.resolve_peer(slot, request_id, spec, kind))
-  }
-
   fn park<'js>(&self, ctx: &Ctx<'js>, shape: Shape, ask: impl FnOnce(i64) -> Option<String>) -> JsResult<Value<'js>> {
     Ok(self.pending.park(ctx, shape, ask)?.into_value())
-  }
-
-  fn js_fetch<'js>(
-    &self,
-    ctx: &Ctx<'js>,
-    slot: i32,
-    op: i32,
-    peer: &str,
-    args: &str,
-    cursor: &str,
-  ) -> JsResult<Value<'js>> {
-    self.check_read_grant(ctx, op, peer)?;
-    let shape = shape_of(op);
-    let payload = match shape {
-      Shape::Page(list) if !cursor.is_empty() => match self.cursors.payload_of(list, cursor) {
-        Some(payload) => payload,
-        None => {
-          return PluginErrorCode::InvalidArgument
-            .throw(ctx, "this cursor did not come from this list, or is too old to page from")
-        }
-      },
-      _ => String::new(),
-    };
-    self.park(ctx, shape, |request_id| self.host.account_fetch(slot, request_id, op, peer, args, &payload))
   }
 
   fn decode_result<'js>(&self, ctx: &Ctx<'js>, shape: Shape, wire: &str) -> JsResult<Value<'js>> {

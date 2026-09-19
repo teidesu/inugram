@@ -4,6 +4,7 @@
 // @version      1.0
 // @description  asserts inu.android.addNotificationCenterDelegate answers what the typings say
 // @grant        unsafe.notificationCenter
+// @grant        unsafe.jvm
 // @plugin-api   1
 // @platform     android
 // ==/InuPlugin==
@@ -68,16 +69,20 @@ pass('a disposer called twice is a no-op')
 const WANTED = 2
 let seen = 0
 
-/** a `long` is a js number here like everywhere else in this api, and nothing else crosses at all */
-function isScalar(value) {
-  return value === null || typeof value === 'number' || typeof value === 'string' || typeof value === 'boolean'
+/**
+ * a `long` is a js number here like everywhere else in this api; anything the app hands over that
+ * is not a scalar arrives as the same `JavaObject` `inu.jvm` would answer with
+ */
+function isScalarOrHandle(value) {
+  if (value === null || typeof value === 'number' || typeof value === 'string' || typeof value === 'boolean') return true
+  return typeof value === 'object' && typeof value.call === 'function' && typeof value.getField === 'function'
 }
 
 function observe(name, args) {
   seen++
   const where = `${name}#${seen} ${JSON.stringify(args)}`
   check('the account slot comes first', typeof args[0] === 'number', where)
-  check('and every argument after it is a scalar or null', args.slice(1).every(isScalar), where)
+  check('and every argument after it is a scalar, null, or a jvm handle', args.slice(1).every(isScalarOrHandle), where)
   check('a disposed delegate hears nothing', heard.length === 0, JSON.stringify(heard))
   if (seen === WANTED) console.log('notifications test done')
 }

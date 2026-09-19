@@ -42,6 +42,40 @@
   utils.html = makeFormatter(1)
   utils.thtml = makeFormatter(2)
 
+  const toTextPart = (value, what) => {
+    if (typeof value === 'string') return { text: value, entities: null }
+    if (value !== null && typeof value === 'object' && typeof value.text === 'string') {
+      const entities = value.entities
+      if (entities !== undefined && entities !== null && !Array.isArray(entities)) {
+        throw invalid(`${what}: entities must be an array`)
+      }
+      return { text: value.text, entities: entities ?? null }
+    }
+    throw invalid(`${what}: expected a string or { text, entities }`)
+  }
+
+  utils.joinTextWithEntities = (parts, delim = '') => {
+    if (!Array.isArray(parts)) throw invalid('joinTextWithEntities: expected an array of texts')
+    const separator = toTextPart(delim, 'joinTextWithEntities')
+    const texts = []
+    const entities = []
+    let offset = 0
+    const push = (part) => {
+      texts.push(part.text)
+      for (const entity of part.entities ?? []) {
+        entities.push({ ...entity, offset: entity.offset + offset })
+      }
+      offset += part.text.length
+    }
+    for (const part of parts) {
+      // mtcute's own rule: the delimiter goes in once something has been written, so a leading
+      // empty part is not separated from what follows it
+      if (offset > 0) push(separator)
+      push(toTextPart(part, 'joinTextWithEntities'))
+    }
+    return { text: texts.join(''), entities }
+  }
+
   // a legacy constructor is `<base>_<suffix>` (`message_old7`, `documentAttributeSticker_old2`,
   // `messageMediaDocument_layer197_2`) and no live TL name contains an underscore, so cutting at
   // the first one is what makes a check written against the modern name see every variant of it
@@ -168,7 +202,7 @@
   // a TL field name is a java identifier, which is also what keeps one clear of the separators the
   // wire joins on. Whether the object *has* the field is the host's business: it carries what it
   // can and leaves the rest to the lazy read, so a name it does not know costs nothing but itself
-  const FIELD_NAME = /^[A-Za-z_]\w{0,63}$/
+  const FIELD_NAME = /^[A-Z_]\w{0,63}$/i
 
   const toFieldNames = (value, what) => {
     if (value === undefined || value === null) return null

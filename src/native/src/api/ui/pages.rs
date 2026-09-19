@@ -121,10 +121,15 @@ fn new_element<'js>(ctx: &Ctx<'js>, ty: &str) -> JsResult<Object<'js>> {
   Ok(obj)
 }
 
-fn make_check<'js>(ctx: &Ctx<'js>, opts: Object<'js>) -> JsResult<Object<'js>> {
+fn make_check<'js>(
+  ctx: &Ctx<'js>,
+  opts: Object<'js>,
+  jvm: Option<&Rc<crate::api::platform::jvm::JvmState>>,
+) -> JsResult<Object<'js>> {
   let out = new_element(ctx, "check")?;
   set_opt(&out, "id", opt_str(ctx, &opts, "check", "id")?)?;
   out.set("text", req_str(ctx, &opts, "check", "text")?)?;
+  set_icon(&out, opt_icon(ctx, &opts, "check", jvm)?)?;
   set_opt(&out, "subtitle", opt_str(ctx, &opts, "check", "subtitle")?)?;
   out.set("checked", req_bool(ctx, &opts, "check", "checked")?)?;
   out.set("onChange", req_fn(ctx, &opts, "check", "onChange")?)?;
@@ -261,7 +266,13 @@ pub fn install_ui<'js>(
       Ok::<_, rquickjs::Error>(out)
     })?,
   )?;
-  ui.set("check", Function::new(ctx.clone(), |ctx: Ctx<'js>, opts: Object<'js>| make_check(&ctx, opts))?)?;
+  {
+    let jvm = state.jvm.clone();
+    ui.set(
+      "check",
+      Function::new(ctx.clone(), move |ctx: Ctx<'js>, opts: Object<'js>| make_check(&ctx, opts, jvm.as_ref()))?,
+    )?;
+  }
   {
     let jvm = state.jvm.clone();
     ui.set(
@@ -576,6 +587,7 @@ impl UiState {
         "check" => {
           set_opt(&out, "id", obj.get::<_, Option<String>>("id")?)?;
           out.set("text", obj.get::<_, String>("text")?)?;
+          copy_icon(&out, obj, &mut retained_icon_values)?;
           set_opt(&out, "subtitle", obj.get::<_, Option<String>>("subtitle")?)?;
           out.set("checked", obj.get::<_, bool>("checked")?)?;
           out.set("onChange", alloc_slot(&row, obj.get::<_, Function>("onChange")?))?;

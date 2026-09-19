@@ -10,7 +10,7 @@ use rquickjs::{Ctx, Exception, Function, Object, Persistent, Result as JsResult,
 use crate::api::error::{
   self, call_callback, describe_js_error, error_value_to_string, format_thrown, PluginErrorCode,
 };
-use crate::api::telegram::account::{dispatch_account, AccountState};
+use crate::api::telegram::account::{account_slot, dispatch_account, AccountState};
 use crate::api::tl::proxy::{self, TlViews, ViewLife};
 use crate::runtime::{pump_jobs, PendingSettle, PendingTable};
 use crate::sandbox::grants::{GrantHost, MATCH_EXACT};
@@ -689,22 +689,6 @@ fn read_method_name<'js>(ctx: &Ctx<'js>, obj: &Value<'js>) -> JsResult<String> {
 }
 
 /// the slot an account handle names, which is the `id` the handle carries and nothing else
-fn account_slot<'js>(ctx: &Ctx<'js>, this: &This<Value<'js>>, what: &str) -> JsResult<i32> {
-  let slot = this
-    .0
-    .as_object()
-    .and_then(|handle| handle.get::<_, Value>("id").ok())
-    .and_then(|id| id.as_number())
-    .filter(|id| id.fract() == 0.0 && *id >= 0.0)
-    .map(|id| id as i32);
-  match slot {
-    Some(slot) => Ok(slot),
-    None => {
-      let message: &str = &format!("{what}: not called on an account handle; use inu.account().{what}(...)");
-      PluginErrorCode::InvalidArgument.throw(ctx, message)
-    }
-  }
-}
 
 fn takeout_options_json<'js>(ctx: &Ctx<'js>, options: Option<Value<'js>>) -> JsResult<String> {
   let Some(options) = options.and_then(|value| value.into_object()) else {

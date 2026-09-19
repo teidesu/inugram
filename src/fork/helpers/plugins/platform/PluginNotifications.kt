@@ -9,8 +9,6 @@ import desu.inugram.helpers.plugins.Plugin
 import desu.inugram.helpers.plugins.PluginSession
 import desu.inugram.helpers.plugins.QuickJs
 import java.lang.reflect.Modifier
-import org.json.JSONArray
-import org.json.JSONObject
 import org.telegram.messenger.AndroidUtilities
 import org.telegram.messenger.NotificationCenter
 import org.telegram.messenger.UserConfig
@@ -18,15 +16,20 @@ import org.telegram.messenger.Utilities
 
 /**
  * `inu.android.addNotificationCenterDelegate` (rust: `notifications.rs`): the app's own internal
- * event bus, behind `unsafe.notificationCenter`.
+ * event bus, behind `unsafe.notificationCenter` and `unsafe.jvm`.
  *
- * **A payload crosses as scalars and nothing else.** The events carry arbitrary java objects, and a
- * class name or a `toString` in their place would be a shape nothing can act on and a lie about
- * what the event carries. They are not TL either, so there is no chokepoint to filter at - which is
- * why the grant sits in the unsafe tier.
+ * **A payload crosses the way any other java value does**, through [PluginJvm.ValueBridge]: a
+ * scalar as itself, anything else as a `JavaObject` handle out of the same table `inu.jvm` and
+ * `inu.xposed` mint into. The events are not TL, so there is no chokepoint to filter at and a
+ * handle reaches exactly as far as `unsafe.jvm` already does - which is why this requires that
+ * grant rather than standing on its own.
  *
  * **The encoding happens inside the observer**, not after the queue hop: the array belongs to stock
- * and observers downstream rewrite it (`didReceiveNewMessages` hands over a mutable message list).
+ * and observers downstream rewrite it (`didReceiveNewMessages` hands over a mutable message list),
+ * so a handle minted after the hop would name whatever that list had become.
+ *
+ * **A payload the engine never takes is released here.** Minting happens before the hop and the hop
+ * can drop the work, so the handles a dropped dispatch left behind are this object's to free.
  *
  * **Every registration is torn down at [detach].** [NotificationCenter] holds its observers
  * strongly and one of these closes over the [QuickJs] it dispatches into, so one left behind keeps
@@ -57,12 +60,40 @@ object PluginNotifications : SessionResource {
 
     private val live = OwnerRegistry<PluginSession, Registration>()
 
+    /** what `inu.notifications.suppress` holds, belonging to no one account; keep in sync with rust */
+    const val ANY_ACCOUNT = -1
+
+    private class Suppression(val token: Int, val account: Int)
+
+    /**
+     * `inu.notifications.suppress` and `Account.suppressNotifications`. A hold per token rather
+     * than a flag, so two plugins asking at once do not cancel each other and a plugin that is
+     * torn down without disposing releases only its own. Read by
+     * [desu.inugram.helpers.NotificationsHelper.shouldSuppressNotifications], which stock consults
+     * before posting, so a suppressed account dismisses rather than posting.
+     */
+    private val suppressors = OwnerRegistry<PluginSession, Suppression>()
+
+    @JvmStatic
+    fun areNotificationsSuppressed(account: Int): Boolean =
+        suppressors.any { it.account == ANY_ACCOUNT || it.account == account }
+
+    private fun setSuppressed(session: PluginSession, token: Int, account: Int, on: Boolean) {
+        if (on) {
+            suppressors.add(session, Suppression(token, account))
+        } else {
+            suppressors.remove(session) { it.token == token }
+        }
+    }
+
     fun listenerFor(session: PluginSession): NotificationListener =
         object : NotificationListener {
             override fun register(callbackId: Int, events: Array<String>): String? =
                 startObserving(session, callbackId, events)
 
             override fun unregister(callbackId: Int) = stopObserving(session, callbackId)
+
+            override fun suppress(token: Int, account: Int, on: Boolean) = setSuppressed(session, token, account, on)
         }
 
     private fun startObserving(session: PluginSession, callbackId: Int, events: Array<String>): String? {
@@ -96,10 +127,12 @@ object PluginNotifications : SessionResource {
 
     private fun deliver(registration: Registration, id: Int, accountId: Int, args: Array<Any?>) {
         val name = namesById[id] ?: return
-        val payload = encodeArgs(args)
-        val engine = registration.session.engine
-        EngineDispatch.onEngine(registration.session) {
-            engine.dispatchNotification(registration.callbackId, name, accountId, payload)
+        val session = registration.session
+        val bridge = PluginJvm.bridgeFor(session.engine) ?: return
+        val wires = encodeArgs(bridge, args)
+        val engine = session.engine
+        EngineDispatch.onEngine(session, onDropped = { PluginJvm.releaseUntaken(engine, wires.asList()) }) {
+            engine.dispatchNotification(registration.callbackId, name, accountId, wires)
         }
     }
 
@@ -121,28 +154,20 @@ object PluginNotifications : SessionResource {
 
     override fun detach(session: PluginSession) {
         for (registration in live.take(session)) removeObserver(registration)
+        suppressors.take(session)
     }
 
-    private fun encodeArgs(args: Array<Any?>): String {
-        val json = JSONArray()
-        for (arg in args) json.put(scalarOf(arg))
-        return json.toString()
-    }
-
-    /** everything that is not a scalar is `null`: see the class doc for why that is a refusal rather than a gap */
-    private fun scalarOf(value: Any?): Any = when (value) {
-        is Boolean -> value
-        is Byte -> value.toInt()
-        is Short -> value.toInt()
-        is Int -> value
-        is Long -> value
-        is Float -> finiteOrNull(value.toDouble())
-        is Double -> finiteOrNull(value)
-        is String -> value
-        is Char -> value.toString()
-        else -> JSONObject.NULL
-    }
-
-    /** org.json refuses to serialize a non-finite double, and a whole payload lost to one is worse */
-    private fun finiteOrNull(value: Double): Any = if (value.isFinite()) value else JSONObject.NULL
+    /**
+     * One wire per argument, minted here on the observer's thread. A value the bridge refuses -
+     * the engine's own bridge package, or one past the value limit - is the one argument lost
+     * rather than the whole event, since a delegate reading `args[3]` must still find it there.
+     */
+    private fun encodeArgs(bridge: PluginJvm.ValueBridge, args: Array<Any?>): Array<String> =
+        Array(args.size) { index ->
+            try {
+                bridge.encode(args[index])
+            } catch (e: Exception) {
+                PluginWire.encodeNull()
+            }
+        }
 }

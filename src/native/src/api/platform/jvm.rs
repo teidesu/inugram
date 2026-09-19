@@ -11,7 +11,7 @@ use rquickjs::{
 };
 
 use crate::api::error::{format_exception, report_callback_error, wire_error_to_js, PluginErrorCode};
-use crate::api::tl::proxy::encode_bytes_wire;
+use crate::api::tl::proxy::{encode_bytes_wire, TlViews, ViewLife};
 use crate::runtime::pump_jobs;
 use crate::sandbox::grants::{GrantHost, MATCH_NAMESPACE};
 use crate::sandbox::registry::{CallbackRegistry, Lifecycle};
@@ -62,6 +62,8 @@ const OP_XPOSED_ROUTINE: i32 = 17;
 const OP_PREPARE_CLASS: i32 = 18;
 const OP_LOAD_CLASS: i32 = 20;
 const OP_CANCEL_CLASS: i32 = 21;
+const OP_FROM_TL: i32 = 22;
+const OP_TO_TL: i32 = 23;
 
 pub const GRANT: &str = "unsafe.jvm";
 
@@ -70,6 +72,7 @@ pub const VALUE_LIMIT_BYTES: usize = 1024 * 1024;
 pub const DEX_LIMIT_BYTES: usize = 8 * 1024 * 1024;
 
 pub struct JvmState {
+  views: Option<Rc<TlViews>>,
   host: Rc<dyn JvmHost>,
   grants: Rc<dyn GrantHost>,
   lifecycle: Rc<Lifecycle>,
@@ -138,62 +141,6 @@ impl JvmState {
       Err(rquickjs::Error::Exception) => format!("E{}", format_exception(ctx)),
       Err(error) => format!("EdefineClass: callback failed: {error}"),
     }
-  }
-
-  fn js_define_class<'js>(&self, ctx: &Ctx<'js>, definition: String, values: Array<'js>) -> JsResult<Value<'js>> {
-    self.grants.check_grant(ctx, GRANT, None, MATCH_NAMESPACE)?;
-    if definition.len() > VALUE_LIMIT_BYTES {
-      return throw_too_big(ctx, "class definition", definition.len(), VALUE_LIMIT_BYTES);
-    }
-    let mut tokens = Vec::new();
-    let result = (|| {
-      let mut wires = Vec::new();
-      let mut bytes = 0usize;
-      for value in array_values(ctx, &values, "defineClass")? {
-        let is_handle = ref_of(&value).is_some();
-        let wire = if let Some(callback) = value.as_function().filter(|_| !is_handle) {
-          let token = self.callbacks.alloc();
-          self.callbacks.register(ctx, token, None, callback.clone());
-          tokens.push(token);
-          format!("I{token}")
-        } else {
-          self.arg_to_wire(ctx, &value)?
-        };
-        bytes = bytes.saturating_add(wire.len());
-        if bytes > VALUE_LIMIT_BYTES {
-          return throw_too_big(ctx, "class captures", bytes, VALUE_LIMIT_BYTES);
-        }
-        wires.push(wire);
-      }
-      let prepared = self.ask(ctx, OP_PREPARE_CLASS, 0, &definition, &wires)?;
-      let json = String::from_js(ctx, prepared)?;
-      let metadata = Object::from_js(ctx, ctx.json_parse(json)?)?;
-      let ticket: String = metadata.get("ticket")?;
-      let ticket = ticket.parse::<i64>().map_err(|_| rquickjs::Error::Unknown)?;
-      let result = (|| {
-        let name: String = metadata.get("name")?;
-        let superclass: String = metadata.get("superclass")?;
-        let interfaces: Vec<String> = metadata.get("interfaces")?;
-        let fields: Vec<Vec<String>> = metadata.get("fields")?;
-        let methods: Vec<Vec<String>> = metadata.get("methods")?;
-        let bytes = match dex::build(&name, &superclass, &interfaces, &fields, &methods) {
-          Ok(bytes) => bytes,
-          Err(error) => return PluginErrorCode::InvalidArgument.throw(ctx, &format!("defineClass: {error}")),
-        };
-        let wire = encode_bytes_wire(&bytes);
-        self.ask(ctx, OP_LOAD_CLASS, ticket, "", &[wire])
-      })();
-      if result.is_err() {
-        self.host.jvm(OP_CANCEL_CLASS, ticket, "", &[]);
-      }
-      result
-    })();
-    if result.is_err() {
-      for token in tokens {
-        self.callbacks.dispose(ctx, token);
-      }
-    }
-    result
   }
 
   pub(crate) fn build_xposed_routine<'js>(&self, ctx: &Ctx<'js>, builder: Value<'js>) -> JsResult<Value<'js>> {
@@ -322,62 +269,6 @@ impl JvmState {
     self.outcome_to_value(ctx, outcome)
   }
 
-  fn js_get<'js>(&self, ctx: &Ctx<'js>, target: Value<'js>, name: String) -> JsResult<Value<'js>> {
-    let (native, target) = self.member_target(ctx, &target, "getField")?;
-    let outcome = native.get(ctx, &target, &name)?;
-    self.outcome_to_value(ctx, outcome)
-  }
-
-  fn js_set<'js>(&self, ctx: &Ctx<'js>, target: Value<'js>, name: String, value: Value<'js>) -> JsResult<()> {
-    let (native, target) = self.member_target(ctx, &target, "setField")?;
-    native.set(ctx, &target, &name, &read_arg(ctx, &value)?)
-  }
-
-  fn js_method<'js>(&self, ctx: &Ctx<'js>, target: Value<'js>, name: String) -> JsResult<Value<'js>> {
-    let (native, target) = self.member_target(ctx, &target, "getDeclaredMethod")?;
-    let outcome = native.method(ctx, &target, &name)?;
-    self.outcome_to_value(ctx, outcome)
-  }
-
-  fn js_field<'js>(&self, ctx: &Ctx<'js>, target: Value<'js>, name: String) -> JsResult<Value<'js>> {
-    let (native, target) = self.member_target(ctx, &target, "getDeclaredField")?;
-    let outcome = native.field(ctx, &target, &name)?;
-    self.outcome_to_value(ctx, outcome)
-  }
-
-  fn js_invoke<'js>(
-    &self,
-    ctx: &Ctx<'js>,
-    target: Value<'js>,
-    receiver: Value<'js>,
-    args: Rest<Value<'js>>,
-  ) -> JsResult<Value<'js>> {
-    let (native, target) = self.member_target(ctx, &target, "invoke")?;
-    let receiver = read_arg(ctx, &receiver)?;
-    let args = self.read_args(ctx, &args.0)?;
-    let outcome = native.invoke_pinned(ctx, &target, &receiver, &args)?;
-    self.outcome_to_value(ctx, outcome)
-  }
-
-  fn js_member_get<'js>(&self, ctx: &Ctx<'js>, target: Value<'js>, receiver: Value<'js>) -> JsResult<Value<'js>> {
-    let (native, target) = self.member_target(ctx, &target, "get")?;
-    let receiver = read_arg(ctx, &receiver)?;
-    let outcome = native.member_get(ctx, &target, &receiver)?;
-    self.outcome_to_value(ctx, outcome)
-  }
-
-  fn js_member_set<'js>(
-    &self,
-    ctx: &Ctx<'js>,
-    target: Value<'js>,
-    receiver: Value<'js>,
-    value: Value<'js>,
-  ) -> JsResult<()> {
-    let (native, target) = self.member_target(ctx, &target, "set")?;
-    let receiver = read_arg(ctx, &receiver)?;
-    native.member_set(ctx, &target, &receiver, &read_arg(ctx, &value)?)
-  }
-
   pub(crate) fn arg_to_wire<'js>(&self, ctx: &Ctx<'js>, value: &Value<'js>) -> JsResult<String> {
     Ok(match read_arg(ctx, value)? {
       Arg::Null => "N".to_string(),
@@ -443,63 +334,9 @@ impl JvmState {
     self.wire_to_value(ctx, &wire)
   }
 
-  fn js_op<'js>(&self, ctx: &Ctx<'js>, op: i32, target: i64, name: String, args: Array<'js>) -> JsResult<Value<'js>> {
-    self.grants.check_grant(ctx, GRANT, None, MATCH_NAMESPACE)?;
-    if op == OP_XPOSED_ROUTINE {
-      self.grants.check_grant(ctx, "unsafe.xposed", None, MATCH_NAMESPACE)?;
-    }
-    if name.len() > VALUE_LIMIT_BYTES {
-      return throw_too_big(ctx, "operation definition", name.len(), VALUE_LIMIT_BYTES);
-    }
-    let mut wires = Vec::new();
-    let mut wire_bytes = 0usize;
-    for arg in array_values(ctx, &args, "jvm")? {
-      let wire = self.arg_to_wire(ctx, &arg)?;
-      wire_bytes = wire_bytes.saturating_add(wire.len());
-      if (op == OP_ROUTINE || op == OP_XPOSED_ROUTINE) && wire_bytes > VALUE_LIMIT_BYTES {
-        return throw_too_big(ctx, "routine captures", wire_bytes, VALUE_LIMIT_BYTES);
-      }
-      wires.push(wire);
-    }
-    self.ask(ctx, op, target, &name, &wires)
-  }
-
   fn js_cls<'js>(&self, ctx: &Ctx<'js>, name: String) -> JsResult<Value<'js>> {
     self.grants.check_grant(ctx, GRANT, None, MATCH_NAMESPACE)?;
     self.ask(ctx, OP_CLASS, 0, &name, &[])
-  }
-
-  fn js_runnable<'js>(&self, ctx: &Ctx<'js>, callback: Function<'js>) -> JsResult<Value<'js>> {
-    self.grants.check_grant(ctx, GRANT, None, MATCH_NAMESPACE)?;
-    let token = self.callbacks.alloc();
-    let handle = self.ask(ctx, OP_RUNNABLE, 0, "", &[format!("I{token}")])?;
-    if !self.lifecycle.is_unloading() || self.lifecycle.is_cleaning_up() {
-      if self.lifecycle.is_cleaning_up() {
-        self.cleanup_callbacks.borrow_mut().insert(token);
-      }
-      self.callbacks.register(ctx, token, None, callback);
-    }
-    Ok(handle)
-  }
-
-  fn js_load_dex<'js>(&self, ctx: &Ctx<'js>, source: Value<'js>) -> JsResult<()> {
-    self.grants.check_grant(ctx, GRANT, None, MATCH_NAMESPACE)?;
-    if let Some(path) = source.as_string() {
-      let path = path.to_string()?;
-      self.ask(ctx, OP_LOAD_DEX, 0, &path, &[])?;
-      return Ok(());
-    }
-    if let Ok(typed) = TypedArray::<u8>::from_value(source.clone()) {
-      if let Some(bytes) = typed.as_bytes() {
-        if !bounded_bytes(bytes, DEX_LIMIT_BYTES) {
-          return throw_too_big(ctx, "a dex", bytes.len(), DEX_LIMIT_BYTES);
-        }
-        let wire = encode_bytes_wire(&bytes);
-        self.ask(ctx, OP_LOAD_DEX, 0, "", &[wire])?;
-        return Ok(());
-      }
-    }
-    PluginErrorCode::InvalidArgument.throw(ctx, "loadDex: expected an absolute path or a Uint8Array")
   }
 
   fn put_bundle_value<'js>(&self, ctx: &Ctx<'js>, bundle: &Value<'js>, key: &str, value: &Value<'js>) -> JsResult<()> {
@@ -558,6 +395,7 @@ impl JvmState {
   }
 }
 
+#[allow(clippy::too_many_arguments)]
 pub fn install_jvm<'js>(
   ctx: &Ctx<'js>,
   host: Rc<dyn JvmHost>,
@@ -565,10 +403,12 @@ pub fn install_jvm<'js>(
   grants: Rc<dyn GrantHost>,
   lifecycle: Rc<Lifecycle>,
   log: crate::Log,
+  views: Option<Rc<TlViews>>,
   globals: &crate::api::Globals<'js>,
 ) -> JsResult<Rc<JvmState>> {
   let refs = RefTable::new();
   let state = Rc::new(JvmState {
+    views,
     host,
     grants,
     lifecycle,
@@ -586,7 +426,60 @@ pub fn install_jvm<'js>(
     natives.set(
       "defineClass",
       Function::new(ctx.clone(), move |ctx: Ctx<'js>, definition: String, values: Array<'js>| {
-        state.js_define_class(&ctx, definition, values)
+        let this = &state;
+        this.grants.check_grant(&ctx, GRANT, None, MATCH_NAMESPACE)?;
+        if definition.len() > VALUE_LIMIT_BYTES {
+          return throw_too_big(&ctx, "class definition", definition.len(), VALUE_LIMIT_BYTES);
+        }
+        let mut tokens = Vec::new();
+        let result = (|| {
+          let mut wires = Vec::new();
+          let mut bytes = 0usize;
+          for value in array_values(&ctx, &values, "defineClass")? {
+            let is_handle = ref_of(&value).is_some();
+            let wire = if let Some(callback) = value.as_function().filter(|_| !is_handle) {
+              let token = this.callbacks.alloc();
+              this.callbacks.register(&ctx, token, None, callback.clone());
+              tokens.push(token);
+              format!("I{token}")
+            } else {
+              this.arg_to_wire(&ctx, &value)?
+            };
+            bytes = bytes.saturating_add(wire.len());
+            if bytes > VALUE_LIMIT_BYTES {
+              return throw_too_big(&ctx, "class captures", bytes, VALUE_LIMIT_BYTES);
+            }
+            wires.push(wire);
+          }
+          let prepared = this.ask(&ctx, OP_PREPARE_CLASS, 0, &definition, &wires)?;
+          let json = String::from_js(&ctx, prepared)?;
+          let metadata = Object::from_js(&ctx, (&ctx).json_parse(json)?)?;
+          let ticket: String = metadata.get("ticket")?;
+          let ticket = ticket.parse::<i64>().map_err(|_| rquickjs::Error::Unknown)?;
+          let result = (|| {
+            let name: String = metadata.get("name")?;
+            let superclass: String = metadata.get("superclass")?;
+            let interfaces: Vec<String> = metadata.get("interfaces")?;
+            let fields: Vec<Vec<String>> = metadata.get("fields")?;
+            let methods: Vec<Vec<String>> = metadata.get("methods")?;
+            let bytes = match dex::build(&name, &superclass, &interfaces, &fields, &methods) {
+              Ok(bytes) => bytes,
+              Err(error) => return PluginErrorCode::InvalidArgument.throw(&ctx, &format!("defineClass: {error}")),
+            };
+            let wire = encode_bytes_wire(&bytes);
+            this.ask(&ctx, OP_LOAD_CLASS, ticket, "", &[wire])
+          })();
+          if result.is_err() {
+            this.host.jvm(OP_CANCEL_CLASS, ticket, "", &[]);
+          }
+          result
+        })();
+        if result.is_err() {
+          for token in tokens {
+            this.callbacks.dispose(&ctx, token);
+          }
+        }
+        result
       })?,
     )?;
   }
@@ -599,7 +492,25 @@ pub fn install_jvm<'js>(
     natives.set(
       "op",
       Function::new(ctx.clone(), move |ctx: Ctx<'js>, op: i32, target: i64, name: String, args: Array<'js>| {
-        state.js_op(&ctx, op, target, name, args)
+        let this = &state;
+        this.grants.check_grant(&ctx, GRANT, None, MATCH_NAMESPACE)?;
+        if op == OP_XPOSED_ROUTINE {
+          this.grants.check_grant(&ctx, "unsafe.xposed", None, MATCH_NAMESPACE)?;
+        }
+        if name.len() > VALUE_LIMIT_BYTES {
+          return throw_too_big(&ctx, "operation definition", name.len(), VALUE_LIMIT_BYTES);
+        }
+        let mut wires = Vec::new();
+        let mut wire_bytes = 0usize;
+        for arg in array_values(&ctx, &args, "jvm")? {
+          let wire = this.arg_to_wire(&ctx, &arg)?;
+          wire_bytes = wire_bytes.saturating_add(wire.len());
+          if (op == OP_ROUTINE || op == OP_XPOSED_ROUTINE) && wire_bytes > VALUE_LIMIT_BYTES {
+            return throw_too_big(&ctx, "routine captures", wire_bytes, VALUE_LIMIT_BYTES);
+          }
+          wires.push(wire);
+        }
+        this.ask(&ctx, op, target, &name, &wires)
       })?,
     )?;
   }
@@ -626,7 +537,10 @@ pub fn install_jvm<'js>(
     natives.set(
       "get",
       Function::new(ctx.clone(), move |ctx: Ctx<'js>, target: Value<'js>, name: String| {
-        state.js_get(&ctx, target, name)
+        let this = &state;
+        let (native, target) = this.member_target(&ctx, &target, "getField")?;
+        let outcome = native.get(&ctx, &target, &name)?;
+        this.outcome_to_value(&ctx, outcome)
       })?,
     )?;
   }
@@ -635,7 +549,9 @@ pub fn install_jvm<'js>(
     natives.set(
       "set",
       Function::new(ctx.clone(), move |ctx: Ctx<'js>, target: Value<'js>, name: String, value: Value<'js>| {
-        state.js_set(&ctx, target, name, value)
+        let this = &state;
+        let (native, target) = this.member_target(&ctx, &target, "setField")?;
+        native.set(&ctx, &target, &name, &read_arg(&ctx, &value)?)
       })?,
     )?;
   }
@@ -644,7 +560,10 @@ pub fn install_jvm<'js>(
     natives.set(
       "method",
       Function::new(ctx.clone(), move |ctx: Ctx<'js>, target: Value<'js>, name: String| {
-        state.js_method(&ctx, target, name)
+        let this = &state;
+        let (native, target) = this.member_target(&ctx, &target, "getDeclaredMethod")?;
+        let outcome = native.method(&ctx, &target, &name)?;
+        this.outcome_to_value(&ctx, outcome)
       })?,
     )?;
   }
@@ -653,7 +572,10 @@ pub fn install_jvm<'js>(
     natives.set(
       "field",
       Function::new(ctx.clone(), move |ctx: Ctx<'js>, target: Value<'js>, name: String| {
-        state.js_field(&ctx, target, name)
+        let this = &state;
+        let (native, target) = this.member_target(&ctx, &target, "getDeclaredField")?;
+        let outcome = native.field(&ctx, &target, &name)?;
+        this.outcome_to_value(&ctx, outcome)
       })?,
     )?;
   }
@@ -664,7 +586,12 @@ pub fn install_jvm<'js>(
       Function::new(
         ctx.clone(),
         move |ctx: Ctx<'js>, target: Value<'js>, receiver: Value<'js>, args: Rest<Value<'js>>| {
-          state.js_invoke(&ctx, target, receiver, args)
+          let this = &state;
+          let (native, target) = this.member_target(&ctx, &target, "invoke")?;
+          let receiver = read_arg(&ctx, &receiver)?;
+          let args = this.read_args(&ctx, &args.0)?;
+          let outcome = native.invoke_pinned(&ctx, &target, &receiver, &args)?;
+          this.outcome_to_value(&ctx, outcome)
         },
       )?,
     )?;
@@ -674,7 +601,11 @@ pub fn install_jvm<'js>(
     natives.set(
       "memberGet",
       Function::new(ctx.clone(), move |ctx: Ctx<'js>, target: Value<'js>, receiver: Value<'js>| {
-        state.js_member_get(&ctx, target, receiver)
+        let this = &state;
+        let (native, target) = this.member_target(&ctx, &target, "get")?;
+        let receiver = read_arg(&ctx, &receiver)?;
+        let outcome = native.member_get(&ctx, &target, &receiver)?;
+        this.outcome_to_value(&ctx, outcome)
       })?,
     )?;
   }
@@ -683,7 +614,29 @@ pub fn install_jvm<'js>(
     natives.set(
       "memberSet",
       Function::new(ctx.clone(), move |ctx: Ctx<'js>, target: Value<'js>, receiver: Value<'js>, value: Value<'js>| {
-        state.js_member_set(&ctx, target, receiver, value)
+        let this = &state;
+        let (native, target) = this.member_target(&ctx, &target, "set")?;
+        let receiver = read_arg(&ctx, &receiver)?;
+        native.member_set(&ctx, &target, &receiver, &read_arg(&ctx, &value)?)
+      })?,
+    )?;
+  }
+  {
+    let state = state.clone();
+    natives.set(
+      "isInstance",
+      Function::new(ctx.clone(), move |ctx: Ctx<'js>, target: Value<'js>, value: Value<'js>| {
+        let this = &state;
+        this.grants.check_grant(&ctx, GRANT, None, MATCH_NAMESPACE)?;
+        let target = this.handle_arg(&ctx, &target, "isInstance")?;
+        match read_arg(&ctx, &value)? {
+          // java's own answer, and one the vm need not be asked for
+          Arg::Null => Ok(false),
+          value @ Arg::Ref(_) => this.native(&ctx)?.is_instance(&ctx, &target, &value),
+          _ => {
+            PluginErrorCode::InvalidArgument.throw(&ctx, "jvm: isInstance needs a java handle or null, not a scalar")
+          }
+        }
       })?,
     )?;
   }
@@ -696,15 +649,81 @@ pub fn install_jvm<'js>(
   {
     let state = state.clone();
     natives.set(
+      "fromTl",
+      Function::new(ctx.clone(), move |ctx: Ctx<'js>, value: Value<'js>| {
+        let this = &state;
+        let ctx: &Ctx<'js> = &ctx;
+        this.grants.check_grant(ctx, GRANT, None, MATCH_NAMESPACE)?;
+        let wire = crate::api::tl::proxy::js_value_to_wire(ctx, value)?;
+        this.ask(ctx, OP_FROM_TL, 0, &wire, &[])
+      })?,
+    )?;
+  }
+  {
+    let state = state.clone();
+    natives.set(
+      "toTl",
+      Function::new(ctx.clone(), move |ctx: Ctx<'js>, value: Value<'js>| {
+        let this = &state;
+        this.grants.check_grant(&ctx, GRANT, None, MATCH_NAMESPACE)?;
+        let handle = this.handle_arg(&ctx, &value, "toTl")?;
+        let Some(views) = this.views.as_ref() else {
+          return PluginErrorCode::Unsupported.throw(&ctx, "jvm: this build has no tl view table");
+        };
+        let id = handle.borrow().id;
+        let wire = this.host.jvm(OP_TO_TL, id, "", &[]);
+        if let Some(built) = wire_error_to_js(&ctx, &wire) {
+          return Err((&ctx).throw(built?));
+        }
+        views.wire_to_js_value(&ctx, &wire, ViewLife::Plugin)
+      })?,
+    )?;
+  }
+  {
+    let state = state.clone();
+    natives.set(
       "runnable",
-      Function::new(ctx.clone(), move |ctx: Ctx<'js>, callback: Function<'js>| state.js_runnable(&ctx, callback))?,
+      Function::new(ctx.clone(), move |ctx: Ctx<'js>, callback: Function<'js>| -> JsResult<Value<'js>> {
+        let this = &state;
+        let ctx: &Ctx<'js> = &ctx;
+        this.grants.check_grant(ctx, GRANT, None, MATCH_NAMESPACE)?;
+        let token = this.callbacks.alloc();
+        let handle = this.ask(ctx, OP_RUNNABLE, 0, "", &[format!("I{token}")])?;
+        if !this.lifecycle.is_unloading() || this.lifecycle.is_cleaning_up() {
+          if this.lifecycle.is_cleaning_up() {
+            this.cleanup_callbacks.borrow_mut().insert(token);
+          }
+          this.callbacks.register(ctx, token, None, callback);
+        }
+        Ok(handle)
+      })?,
     )?;
   }
   {
     let state = state.clone();
     natives.set(
       "loadDex",
-      Function::new(ctx.clone(), move |ctx: Ctx<'js>, source: Value<'js>| state.js_load_dex(&ctx, source))?,
+      Function::new(ctx.clone(), move |ctx: Ctx<'js>, source: Value<'js>| {
+        let this = &state;
+        let ctx: &Ctx<'js> = &ctx;
+        this.grants.check_grant(ctx, GRANT, None, MATCH_NAMESPACE)?;
+        if let Some(path) = source.as_string() {
+          let path = path.to_string()?;
+          this.ask(ctx, OP_LOAD_DEX, 0, &path, &[])?;
+          return Ok(());
+        }
+        if let Ok(typed) = TypedArray::<u8>::from_value(source.clone()) {
+          if let Some(bytes) = typed.as_bytes() {
+            if !bounded_bytes(bytes, DEX_LIMIT_BYTES) {
+              return throw_too_big(ctx, "a dex", bytes.len(), DEX_LIMIT_BYTES);
+            }
+            let wire = encode_bytes_wire(&bytes);
+            this.ask(ctx, OP_LOAD_DEX, 0, "", &[wire])?;
+            return Ok(());
+          }
+        }
+        PluginErrorCode::InvalidArgument.throw(ctx, "loadDex: expected an absolute path or a Uint8Array")
+      })?,
     )?;
   }
 

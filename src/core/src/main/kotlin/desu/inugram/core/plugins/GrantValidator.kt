@@ -12,6 +12,7 @@ object GrantValidator {
         "clipboard.write",
         "openUrl",
         "onAppVisibilityChange",
+        "notifications.suppress",
         "interceptSendMessage",
         "takeout",
         "unsafe.fs",

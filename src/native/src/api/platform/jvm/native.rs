@@ -1698,6 +1698,24 @@ impl Native {
     })
   }
 
+  /// `Class.isInstance`, over the handle the caller already narrowed to one (see `js_is_instance`)
+  pub(crate) fn is_instance<'js>(&self, ctx: &Ctx<'js>, target: &Class<'js, JvmRef>, value: &Arg<'js>) -> JsResult<bool> {
+    self.with_env(ctx, |env, known| {
+      let entry = self.entry_of(ctx, target)?;
+      if entry.kind != KIND_CLASS {
+        return throw(ctx, PluginErrorCode::InvalidArgument, "jvm: isInstance needs a class");
+      }
+      // resolved for its own sake: it is what caches the key and pins the scope check on the class
+      let _ = self.class_key_of(ctx, env, known, target, &entry)?;
+      let Arg::Ref(handle) = value else {
+        return Ok(false);
+      };
+      let subject = self.entry_of(ctx, handle)?;
+      let cls = unsafe { JClass::from_raw(env, entry.obj.as_obj().as_raw()) };
+      Ok(env.is_instance_of(subject.obj.as_obj(), &cls)?)
+    })
+  }
+
   pub(crate) fn member_get<'js>(
     &self,
     ctx: &Ctx<'js>,

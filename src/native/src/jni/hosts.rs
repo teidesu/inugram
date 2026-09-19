@@ -21,7 +21,7 @@ use crate::api::ui::files::FilesHost;
 use crate::api::ui::icons::IconHost;
 use crate::api::ui::pages::UiHost;
 use crate::api::ui::screens::ScreenHost;
-use crate::api::ui::{OP_CHOOSER, OP_DIALOG, OP_PROMPT};
+use crate::api::ui::{OP_BULLETIN, OP_CHOOSER, OP_DIALOG, OP_PROMPT};
 
 use super::bridge::{Arg, JniBridge};
 use super::env::clear_exception;
@@ -220,8 +220,8 @@ impl DialogHost for JniBridge {
     self.call_void("toast", self.on_ui_toast, &[Arg::Str(text)]);
   }
 
-  fn bulletin(&self, text: &str, entities_json: &str, icon_spec: &str) -> Option<String> {
-    self.call_refusal("bulletin", self.on_ui_bulletin, &[Arg::Str(text), Arg::Str(entities_json), Arg::Str(icon_spec)])
+  fn bulletin(&self, request_id: i64, options_json: &str) -> Option<String> {
+    self.ui_modal(OP_BULLETIN, request_id, options_json)
   }
 
   fn dialog(&self, request_id: i64, options_json: &str) -> Option<String> {
@@ -276,6 +276,14 @@ impl NotificationHost for JniBridge {
 
   fn notification_unregister(&self, callback_id: u32) {
     self.call_void("addNotificationCenterDelegate", self.on_notification_unregister, &[Arg::Int(callback_id as i32)]);
+  }
+
+  fn notification_suppress(&self, token: u32, account: i32, on: bool) {
+    self.call_void(
+      "suppressNotifications",
+      self.on_notification_suppress,
+      &[Arg::Int(token as i32), Arg::Int(account), Arg::Bool(on)],
+    );
   }
 }
 

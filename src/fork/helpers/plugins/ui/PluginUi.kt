@@ -9,9 +9,13 @@ import android.text.style.ForegroundColorSpan
 import android.util.Log
 import android.view.View
 import android.widget.LinearLayout
+import android.widget.FrameLayout
+import android.widget.TextView
 import android.widget.Toast
 import desu.inugram.core.plugins.CommonIcons
+import desu.inugram.core.plugins.PluginRefusal
 import desu.inugram.core.plugins.PluginWire
+import desu.inugram.core.plugins.PluginWire.refuse
 import desu.inugram.helpers.plugins.EngineDispatch
 import desu.inugram.helpers.plugins.Plugin
 import desu.inugram.helpers.plugins.PluginSession
@@ -29,9 +33,11 @@ import org.telegram.messenger.ApplicationLoader
 import org.telegram.messenger.DialogObject
 import org.telegram.messenger.LocaleController
 import org.telegram.messenger.MessagesController
+import org.telegram.messenger.NotificationCenter
 import org.telegram.messenger.R
 import org.telegram.messenger.UserConfig
 import org.telegram.messenger.Utilities
+import org.telegram.tgnet.TLObject
 import org.telegram.ui.ActionBar.AlertDialog
 import org.telegram.ui.ActionBar.BaseFragment
 import org.telegram.ui.ActionBar.Theme
@@ -42,6 +48,7 @@ import org.telegram.ui.Components.Bulletin
 import org.telegram.ui.Components.BulletinFactory
 import org.telegram.ui.Components.ItemOptions
 import org.telegram.ui.Components.LayoutHelper
+import org.telegram.ui.Components.RLottieImageView
 import org.telegram.ui.LaunchActivity
 import org.telegram.ui.ProfileActivity
 import org.telegram.ui.SettingsActivity
@@ -57,10 +64,16 @@ import org.telegram.ui.SettingsActivity
 object PluginUi : SessionResource {
     private const val TAG = "InuPluginUi"
 
+    /** stock's `Bulletin.UsersLayout`: a 24dp avatar stepped by 12dp, in a slot sized for three */
+    private const val AVATAR_SIZE_DP = 24
+    private const val AVATAR_STEP_DP = 12
+    private const val AVATAR_SLOT_DP = AVATAR_SIZE_DP + AVATAR_STEP_DP + AVATAR_STEP_DP + 8
+
     // keep in sync with rust `api::ui::OP_*`
     const val OP_DIALOG = 0
     const val OP_PROMPT = 1
     const val OP_CHOOSER = 2
+    const val OP_BULLETIN = 3
     const val OP_PICK_FILE = 3
     const val OP_SAVE_FILE = 4
 
@@ -78,46 +91,6 @@ object PluginUi : SessionResource {
             AndroidUtilities.runOnUIThread {
                 Toast.makeText(ApplicationLoader.applicationContext, text, Toast.LENGTH_SHORT).show()
             }
-        }
-
-        override fun uiBulletin(text: String, entitiesJson: String, iconSpec: String): String? {
-            val animation = PluginIcons.parseAnimationSpec(iconSpec).takeIf { iconSpec.startsWith('a') }
-            val animationName = animation?.value
-            val animationId = animationName?.let(PluginIcons::getRawAnimationResourceId) ?: 0
-            if (animationName != null && animationId == 0) {
-                return PluginWire.encodePluginError("not-found", "bulletin: animation '$animationName' is unavailable")
-            }
-            val retainedDrawable = if (iconSpec.startsWith('j')) {
-                PluginIcons.resolveImmediateDrawable(ApplicationLoader.applicationContext, iconSpec, session.engine)
-                    ?: return PluginWire.encodePluginError("handle-expired", "bulletin: drawable icon is gone")
-            } else {
-                null
-            }
-            AndroidUtilities.runOnUIThread {
-                val fragment = LaunchActivity.getSafeLastFragment()
-                val factory = fragment?.let { BulletinFactory.of(it) } ?: BulletinFactory.global()
-                val context = fragment?.parentActivity ?: ApplicationLoader.applicationContext
-                val largeAnimation = animation != null && !animation.isStatic &&
-                    (animation.repeatCount == 0 || animation.repeatCount == null)
-                val layout = Bulletin.LottieLayout(context, fragment?.resourceProvider)
-                if (iconSpec.isNotEmpty() && iconSpec[0] in "rset") {
-                    layout.imageView.colorFilter =
-                        PluginManifestIcons.tintOf(Theme.getColor(Theme.key_undo_infoColor, fragment?.resourceProvider))
-                }
-                if (retainedDrawable != null) {
-                    layout.imageView.setImageDrawable(retainedDrawable)
-                } else if (!PluginIcons.setIcon(layout.imageView, iconSpec, session.engine, if (largeAnimation) 36f else 24f)) {
-                    return@runOnUIThread
-                }
-                layout.textView.setSingleLine(false)
-                layout.textView.maxLines = 2
-                // an entity can carry the whole of what the bulletin says, so how long it stays up
-                // is decided on what it ends up drawing, not on the text the entities are beside
-                val drawn = PluginText.formatted(text, entitiesJson, layout.textView.paint.fontMetricsInt)
-                layout.textView.text = drawn
-                factory.create(layout, if (largeAnimation && drawn.length < 20) Bulletin.DURATION_SHORT else Bulletin.DURATION_LONG).show()
-            }
-            return null
         }
 
         override fun uiModal(op: Int, requestId: Long, optionsJson: String): String? =
@@ -332,7 +305,183 @@ object PluginUi : SessionResource {
         }
     }
 
+    /**
+     * Read off the plugin queue, before anything is shown, so an icon the engine cannot resolve is
+     * a refusal the plugin is thrown rather than a bulletin that never appears.
+     */
+    private class BulletinSpec(session: PluginSession, options: JSONObject) {
+        val text: String = options.getString("text")
+        val textEntities: String = options.optJSONArray("textEntities")?.toString() ?: ""
+        val subtitle: String? = options.optString("subtitle").takeIf { options.has("subtitle") }
+        val subtitleEntities: String = options.optJSONArray("subtitleEntities")?.toString() ?: ""
+        val iconSpec: String = options.optString("icon")
+        val avatars: List<Long> = options.optJSONArray("avatars")?.let { array ->
+            (0 until array.length()).map { array.getLong(it) }
+        } ?: emptyList()
+        val duration: Int = options.optInt("duration", Bulletin.DURATION_LONG)
+        /** the avatars belong to an account, which is not always the one looking at the screen */
+        val account: Int = options.optInt("account", UserConfig.selectedAccount)
+        val top: Boolean? = if (options.has("top")) options.getBoolean("top") else null
+        val button: String? = if (options.has("button")) options.getString("button") else null
+
+        val animation = PluginIcons.parseAnimationSpec(iconSpec).takeIf { iconSpec.startsWith('a') }
+
+        /** the drawable is resolved here for the same reason the spec is: a gone handle is a refusal */
+        val drawable = if (iconSpec.startsWith('j')) {
+            PluginIcons.resolveImmediateDrawable(ApplicationLoader.applicationContext, iconSpec, session.engine)
+                ?: refuse("handle-expired", "bulletin: drawable icon is gone")
+        } else {
+            null
+        }
+
+        init {
+            val animationName = animation?.value
+            if (animationName != null && PluginIcons.getRawAnimationResourceId(animationName) == 0) {
+                refuse("not-found", "bulletin: animation '$animationName' is unavailable")
+            }
+        }
+
+        val largeAnimation: Boolean
+            get() = animation != null && !animation.isStatic && (animation.repeatCount == 0 || animation.repeatCount == null)
+    }
+
+    /**
+     * One of stock's three bulletin layouts, picked by what the plugin asked for: avatars make it a
+     * `UsersLayout`, a subtitle without them a `TwoLineLottieLayout`, and neither the plain
+     * `LottieLayout` a one-line bulletin has always been.
+     *
+     * The outcome is settled once, by whichever came first: the button, a tap on the body, or the
+     * bulletin going away on its own.
+     */
+    private fun showBulletin(session: PluginSession, spec: BulletinSpec, settle: (String) -> Unit) {
+        val fragment = LaunchActivity.getSafeLastFragment()
+        val factory = fragment?.let { BulletinFactory.of(it) } ?: BulletinFactory.global()
+        val context = fragment?.parentActivity ?: ApplicationLoader.applicationContext
+        val provider = fragment?.resourceProvider
+        val hasSubtitle = !spec.subtitle.isNullOrEmpty()
+
+        val layout: Bulletin.ButtonLayout
+        val title: TextView
+        val subtitle: TextView?
+        if (spec.avatars.isNotEmpty()) {
+            val users = Bulletin.UsersLayout(context, hasSubtitle, provider)
+            fillAvatars(users, spec.account, spec.avatars)
+            layout = users
+            title = users.textView
+            subtitle = users.subtitleView
+        } else if (hasSubtitle) {
+            val two = Bulletin.TwoLineLottieLayout(context, provider)
+            if (!applyIcon(session, spec, two.imageView, provider)) return
+            layout = two
+            title = two.titleTextView
+            subtitle = two.subtitleTextView
+        } else {
+            val one = Bulletin.LottieLayout(context, provider)
+            if (!applyIcon(session, spec, one.imageView, provider)) return
+            one.textView.setSingleLine(false)
+            one.textView.maxLines = 2
+            layout = one
+            title = one.textView
+            subtitle = null
+        }
+
+        // an emoji whose image is still loading draws blank until the view is told to redraw, and
+        // stock arms that on the layouts' titles only - never on a subtitle
+        NotificationCenter.listenEmojiLoading(title)
+        title.text = PluginText.formatted(spec.text, spec.textEntities, title.paint.fontMetricsInt)
+        if (subtitle != null && hasSubtitle) {
+            NotificationCenter.listenEmojiLoading(subtitle)
+            subtitle.text = PluginText.formatted(spec.subtitle!!, spec.subtitleEntities, subtitle.paint.fontMetricsInt)
+        }
+
+        if (spec.button != null) {
+            layout.setButton(
+                Bulletin.UndoButton(context, true, provider)
+                    .setText(spec.button)
+                    .setUndoAction { settle("button") },
+            )
+        }
+        layout.setOnClickListener { settle("clicked") }
+
+        val bulletin = factory.create(layout, spec.duration)
+        // whatever else happened, the bulletin going away is what ends the wait - and a settle
+        // after the first one is dropped, so the button and a tap still win on their own
+        bulletin.setOnHideListener { settle("dismissed") }
+        if (spec.top == null) bulletin.show() else bulletin.show(spec.top)
+    }
+
+    /** `false` when the icon could not be drawn, which leaves the bulletin unshown and the wait to time out on its own */
+    private fun applyIcon(
+        session: PluginSession,
+        spec: BulletinSpec,
+        imageView: RLottieImageView,
+        provider: Theme.ResourcesProvider?,
+    ): Boolean {
+        if (spec.iconSpec.isNotEmpty() && spec.iconSpec[0] in "rset") {
+            imageView.colorFilter = PluginManifestIcons.tintOf(Theme.getColor(Theme.key_undo_infoColor, provider))
+        }
+        if (spec.drawable != null) {
+            imageView.setImageDrawable(spec.drawable)
+            return true
+        }
+        return PluginIcons.setIcon(imageView, spec.iconSpec, session.engine, if (spec.largeAnimation) 36f else 24f)
+    }
+
+    /** stock's own avatar stack: a peer the app does not know is skipped rather than drawn blank */
+    private fun fillAvatars(layout: Bulletin.UsersLayout, account: Int, dialogIds: List<Long>) {
+        val controller = MessagesController.getInstance(account)
+        var count = 0
+        for (dialogId in dialogIds) {
+            val peer: TLObject? =
+                if (dialogId > 0) controller.getUser(dialogId) else controller.getChat(-dialogId)
+            if (peer == null) continue
+            count++
+            layout.avatarsImageView.setCount(count)
+            layout.avatarsImageView.setObject(count - 1, account, peer)
+        }
+        layout.avatarsImageView.commitTransition(false)
+        shrinkAvatarSlot(layout, count)
+    }
+
+    /**
+     * stock reserves the slot for three avatars and starts its text past it, so a stack of one or
+     * two leaves a gap the layout was never meant to show
+     */
+    private fun shrinkAvatarSlot(layout: Bulletin.UsersLayout, count: Int) {
+        val reserved = if (count == 0) 0 else AVATAR_SIZE_DP + AVATAR_STEP_DP * (count - 1) + 8
+        val shrinkBy = AndroidUtilities.dp((AVATAR_SLOT_DP - reserved).toFloat())
+        if (shrinkBy <= 0) return
+        val avatars = layout.avatarsImageView
+        avatars.visibility = if (count == 0) View.GONE else View.VISIBLE
+        avatars.layoutParams = (avatars.layoutParams as FrameLayout.LayoutParams).also {
+            it.width = AndroidUtilities.dp(reserved.toFloat())
+        }
+        // the text sits in a linear layout when there is a subtitle, and in the bulletin itself
+        // when there is not
+        val holder = (layout.textView.parent as? View)?.takeIf { it !== layout } ?: layout.textView
+        holder.layoutParams = (holder.layoutParams as FrameLayout.LayoutParams).also {
+            if (LocaleController.isRTL) it.rightMargin -= shrinkBy else it.leftMargin -= shrinkBy
+        }
+    }
+
     fun modal(session: PluginSession, op: Int, requestId: Long, optionsJson: String): String? = when (op) {
+        OP_BULLETIN -> {
+            val spec = try {
+                BulletinSpec(session, JSONObject(optionsJson))
+            } catch (e: PluginRefusal) {
+                return e.wire
+            } catch (e: Exception) {
+                return PluginWire.encodePluginError("invalid-argument", "bulletin: ${e.message}")
+            }
+            showModal(
+                session,
+                "bulletin",
+                dismissed = "dismissed",
+                resolve = { session.engine.settle(QuickJs.SETTLE_MODAL, requestId, PluginWire.encodeString(it)) },
+                prepare = { spec },
+            ) { prepared, settle -> showBulletin(session, prepared, settle) }
+        }
+
         OP_DIALOG -> showModal(
             session,
             "dialog",

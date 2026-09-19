@@ -140,7 +140,7 @@ class GrantValidatorTest {
 
     @Test
     fun noScopeGrantsRejectAnyScope() {
-        for (name in listOf("kv", "clipboard.read", "openUrl", "takeout", "unsafe.fs", "unsafe.invokeRaw", "unsafe.disableApiFiltering")) {
+        for (name in listOf("kv", "clipboard.read", "openUrl", "takeout", "unsafe.fs", "unsafe.invokeRaw", "unsafe.disableApiFiltering", "notifications.suppress")) {
             assertEquals(listOf("grant '$name' takes no scopes"), GrantValidator.validateGrants(listOf("$name(oops)")))
         }
     }
@@ -149,7 +149,9 @@ class GrantValidatorTest {
     fun noScopeGrantsAreValidWithoutScopes() {
         assertEquals(
             emptyList<String>(),
-            GrantValidator.validateGrants(listOf("kv", "openUrl", "unsafe.jvm", "takeout", "unsafe.invokeRaw")),
+            GrantValidator.validateGrants(
+                listOf("kv", "openUrl", "unsafe.jvm", "takeout", "unsafe.invokeRaw", "notifications.suppress"),
+            ),
         )
     }
 

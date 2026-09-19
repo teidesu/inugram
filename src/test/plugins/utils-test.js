@@ -211,4 +211,12 @@ equals('html.escape escapes markup', utils.html.escape('<a>'), '&lt;a&gt;')
 // @ts-expect-error
 expectThrow('a format refuses what is not a string', 'invalid-argument', () => utils.md(42))
 
+equals('joinTextWithEntities shifts each part into place', utils.joinTextWithEntities([utils.md`**hi**`, 'x'], ', '), {
+  text: 'hi, x',
+  entities: BOLD_HI,
+})
+equals('joinTextWithEntities defaults to no delimiter', utils.joinTextWithEntities(['a', 'b']).text, 'ab')
+// @ts-expect-error
+expectThrow('joinTextWithEntities refuses a part that is not a text', 'invalid-argument', () => utils.joinTextWithEntities([7]))
+
 console.log('utils test done')

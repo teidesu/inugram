@@ -4,7 +4,6 @@ import desu.inugram.helpers.plugins.platform.PluginNotifications
 import kotlin.test.assertEquals
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
-import org.json.JSONArray
 import org.junit.Before
 import org.junit.Test
 import org.telegram.messenger.NotificationCenter
@@ -23,7 +22,7 @@ class PluginNotificationsTest {
     fun setUp() = resetBridge()
 
     private fun granted(vararg extra: String) =
-        startPlugin("notifications", "unsafe.notificationCenter", *extra)
+        startPlugin("notifications", "unsafe.notificationCenter", "unsafe.jvm", *extra)
 
     /** the add takes a ui hop, and a test does not run on the ui thread, so it is really deferred */
     private fun Plugin.observe(vararg events: String, callbackId: Int = 1): String? =
@@ -34,11 +33,6 @@ class PluginNotificationsTest {
 
     private fun post(centre: NotificationCenter, id: Int, vararg args: Any?) =
         onUi { centre.postNotificationName(id, *args) }
-
-    private fun argsOf(notification: RecordingQuickJs.Notification): List<Any?> {
-        val json = JSONArray(notification.argsJson)
-        return (0 until json.length()).map { if (json.isNull(it)) null else json.get(it) }
-    }
 
     @Test
     fun a_name_the_app_does_not_have_refuses_the_whole_registration() {
@@ -73,9 +67,11 @@ class PluginNotificationsTest {
     private val quietCentre get() = NotificationCenter.getInstance(5)
 
     @Test
-    fun only_scalars_cross_and_everything_else_is_null() {
+    fun a_scalar_crosses_as_itself_and_every_other_value_as_a_jvm_handle() {
         val plugin = granted()
         plugin.observe("dialogsNeedReload")
+        val array = arrayOf("payload")
+        val opaque = Any()
         post(
             quietCentre,
             NotificationCenter.dialogsNeedReload,
@@ -86,14 +82,18 @@ class PluginNotificationsTest {
             1.5,
             Double.NaN,
             'c',
-            arrayOf("payload"),
-            Any(),
+            array,
+            opaque,
         )
         drain()
-        assertEquals(
-            """[7,9000000000,"hi",true,1.5,null,"c",null,null]""",
-            plugin.js.notifications.single().argsJson,
-        )
+        val wires = plugin.js.notifications.single().args
+        assertEquals(listOf("I7", "I9000000000", "Shi", "B1", "D1.5", "DNaN", "Sc"), wires.take(7))
+        // and the two java objects name entries in the same table `inu.jvm` reads, rather than the
+        // nulls a scalars-only payload had to put in their place
+        assertEquals("GO", wires[7].take(2))
+        assertEquals("GO", wires[8].take(2))
+        assertEquals(array, plugin.js.jvmObjectAt(wires[7].drop(2).toLong()))
+        assertEquals(opaque, plugin.js.jvmObjectAt(wires[8].drop(2).toLong()))
     }
 
     @Test
@@ -117,7 +117,7 @@ class PluginNotificationsTest {
         post(quietCentre, NotificationCenter.dialogsNeedReload, "first")
         drain()
         onUi { quietCentre.removeObserver(rewriter, NotificationCenter.dialogsNeedReload) }
-        assertEquals(listOf<Any?>("first"), argsOf(plugin.js.notifications.single()))
+        assertEquals(listOf("Sfirst"), plugin.js.notifications.single().args.asList())
     }
 
     @Test
@@ -161,5 +161,19 @@ class PluginNotificationsTest {
         plugin.session = null
         drain()
         assertEquals(0, engine.notifications.size)
+    }
+
+    /** minting happens before the queue hop, so the hop dropping the work is what would leak */
+    @Test
+    fun a_post_the_engine_never_took_releases_the_handles_it_minted() {
+        val plugin = granted()
+        plugin.observe("dialogsNeedReload")
+        val engine = plugin.js
+        val before = engine.liveHandles
+        post(quietCentre, NotificationCenter.dialogsNeedReload, Any(), Any())
+        plugin.session = null
+        drain()
+        assertEquals(0, engine.notifications.size)
+        assertEquals(before, engine.liveHandles, "a dropped dispatch must not leave its handles behind")
     }
 }

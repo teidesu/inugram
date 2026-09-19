@@ -388,6 +388,21 @@ impl ReadsHost for TestReadsHost {
         Some(id) if id == self.self_id.get() => r#"J{"text":"unsent"}"#.to_string(),
         _ => "N".to_string(),
       },
+      // the fake mutes the news channel, and only when no topic is named
+      OP_DIALOG_MUTED => {
+        let muted = self.dialog_id(parts[0]) == Some(-1001) && parts.get(1) == Some(&"0");
+        if muted { "B1" } else { "B0" }.to_string()
+      }
+      // the fake answers with what it was handed, so a test can see the flag and the wire
+      OP_MESSAGE_PREVIEW => {
+        format!(r#"J{{"text":"{}|{}"}}"#, parts[0], parts.get(1).copied().unwrap_or("").replace('"', "'"))
+      }
+      OP_TOPIC => match (self.dialog_id(parts[0]), parts.get(1).copied()) {
+        (Some(-1001), Some("7")) => {
+          self.handles.mint_wire("forumTopic", [("title".to_string(), "Stopic".to_string())])
+        }
+        _ => "N".to_string(),
+      },
       _ => "Einternal: unknown op".to_string(),
     }
   }
@@ -534,6 +549,9 @@ fn every_getter_gates_on_its_own_account_read_scope() {
     ("inu.account().getDialog('me')", "dialogs"),
     ("inu.account().getMessagesCached('me', 7)", "messages"),
     ("inu.account().getMessagesCached('me', [7])", "messages"),
+    ("inu.account().isDialogMuted('me')", "dialogs"),
+    ("inu.account().getTopicCached(-1001, 7)", "dialogs"),
+    ("inu.account().previewMessage({ _: 'message' })", "messages"),
   ] {
     assert_eq!(
       catch_json(&ctx, call),
@@ -547,6 +565,27 @@ fn every_getter_gates_on_its_own_account_read_scope() {
   let (_rt, ctx, host, _state, _accounts) = setup(ALL_GRANTS);
   eval_unit(&ctx, "inu.account().getMe(); inu.account().getDialog('me');");
   assert_eq!(host.reads.borrow().len(), 2);
+}
+
+/// stock owns what "muted" means, so this only pins that the topic reaches it and that the answer
+/// crosses as a plain boolean rather than a handle
+#[test]
+fn is_dialog_muted_answers_a_boolean_and_carries_the_topic() {
+  let (_rt, ctx, host, _state, _accounts) = setup(ALL_GRANTS);
+  assert_eq!(eval_json(&ctx, "inu.account().isDialogMuted(-1001)"), "true");
+  assert_eq!(eval_json(&ctx, "inu.account().isDialogMuted(-1001, { topicId: 7 })"), "false");
+  assert_eq!(eval_json(&ctx, "inu.account().isDialogMuted('me')"), "false");
+  let args: Vec<String> = host.reads.borrow().iter().filter(|(_, op, _)| *op == OP_DIALOG_MUTED).map(|(_, _, arg)| arg.clone()).collect();
+  assert_eq!(args, vec!["D-1001\n0", "D-1001\n7", "S\n0"], "a topic-less read still names one, as 0");
+}
+
+/// a cached read, so a topic the app never loaded is a miss rather than a fetch
+#[test]
+fn get_topic_cached_answers_a_loaded_topic_and_null_otherwise() {
+  let (_rt, ctx, _host, _state, _accounts) = setup(ALL_GRANTS);
+  assert_eq!(eval_json(&ctx, "inu.account().getTopicCached(-1001, 7)._"), r#""forumTopic""#);
+  assert_eq!(eval_json(&ctx, "inu.account().getTopicCached(-1001, 8)"), "null");
+  assert_eq!(eval_json(&ctx, "inu.account().getTopicCached('me', 7)"), "null", "a user dialog has no topics");
 }
 
 #[test]
@@ -1418,7 +1457,7 @@ mod grant_boundary {
       self.crossings.set(self.crossings.get() + 1);
     }
 
-    fn bulletin(&self, _text: &str, _entities_json: &str, _icon_spec: &str) -> Option<String> {
+    fn bulletin(&self, _request_id: i64, _options_json: &str) -> Option<String> {
       self.crossings.set(self.crossings.get() + 1);
       Some("no ui here".to_string())
     }
@@ -1770,4 +1809,24 @@ fn chat_folders_arrive_as_plain_objects() {
   settle(&rt, &ctx, &state, &host);
   assert_eq!(eval_json(&ctx, "__out"), r#"[[0,"All chats",true,[]]]"#);
   assert_eq!(host.fetch_log.borrow().last().unwrap().0, OP_CHAT_FOLDERS);
+}
+
+/// only the app knows its own preview line, so this pins what reaches it: the message as a wire,
+/// and whether spoilers are to be masked
+#[test]
+fn preview_message_sends_the_message_and_masks_spoilers_only_when_asked() {
+  let (_rt, ctx, _host, _state, _accounts) = setup(ALL_GRANTS);
+  assert_eq!(
+    eval_json(&ctx, r#"inu.account().previewMessage({ _: 'message', id: 7 }).text"#),
+    r#""0|J{'_':'message','id':7}""#,
+  );
+  assert_eq!(
+    eval_json(&ctx, r#"inu.account().previewMessage({ _: 'message' }, { hideSpoilers: true }).text"#),
+    r#""1|J{'_':'message'}""#,
+  );
+  // a `Message` is unwrapped to the TL value it holds, so either may be passed
+  assert_eq!(
+    eval_json(&ctx, r#"inu.account().previewMessage(new inu.Message({ _: 'message', id: 9 })).text"#),
+    r#""0|J{'_':'message','id':9}""#,
+  );
 }

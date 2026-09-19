@@ -142,6 +142,25 @@
       return natives.getDialog(slotOf(this, 'getDialog'), toSpec(peer))
     },
 
+    isDialogMuted(peer, options) {
+      const slot = slotOf(this, 'isDialogMuted')
+      const opts = toOptions(options, 'isDialogMuted')
+      const topicId = opts.topicId === undefined ? 0 : toCount(opts.topicId, 'isDialogMuted', 'topicId')
+      return natives.isDialogMuted(slot, toSpec(peer), topicId)
+    },
+
+    previewMessage(message, options) {
+      const slot = slotOf(this, 'previewMessage')
+      const opts = toOptions(options, 'previewMessage')
+      const raw = message === null || typeof message !== 'object' ? message : message.raw ?? message
+      return natives.previewMessage(slot, raw, opts.hideSpoilers === true)
+    },
+
+    getTopicCached(peer, topicId) {
+      const slot = slotOf(this, 'getTopicCached')
+      return natives.getTopic(slot, toSpec(peer), toCount(topicId, 'getTopicCached', 'topicId'))
+    },
+
     getUsers(peers) {
       return natives.getUsers(slotOf(this, 'getUsers'), toSpecList(peers, 'getUsers'))
     },

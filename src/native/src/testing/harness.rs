@@ -287,7 +287,7 @@ pub(crate) fn manifest_header(source: &str) -> Vec<(String, String)> {
 pub(crate) struct RecordingHost {
   pub(crate) kv_file: TempPath,
   pub(crate) toasts: RefCell<Vec<String>>,
-  pub(crate) bulletins: RefCell<Vec<(String, String, String)>>,
+  pub(crate) bulletins: RefCell<Vec<(i64, String)>>,
   pub(crate) dialogs: RefCell<Vec<(i64, String)>>,
   pub(crate) fail_dialog: RefCell<Option<String>>,
   pub(crate) opened: RefCell<Vec<String>>,
@@ -303,11 +303,8 @@ impl DialogHost for RecordingHost {
     self.toasts.borrow_mut().push(text.to_string());
   }
 
-  fn bulletin(&self, text: &str, entities_json: &str, icon_spec: &str) -> Option<String> {
-    self
-      .bulletins
-      .borrow_mut()
-      .push((text.to_string(), entities_json.to_string(), icon_spec.to_string()));
+  fn bulletin(&self, request_id: i64, options_json: &str) -> Option<String> {
+    self.bulletins.borrow_mut().push((request_id, options_json.to_string()));
     None
   }
 
