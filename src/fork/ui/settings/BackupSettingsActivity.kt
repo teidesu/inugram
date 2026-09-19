@@ -10,36 +10,30 @@ import android.graphics.Paint
 import android.text.TextUtils
 import android.util.TypedValue
 import android.view.Gravity
-import android.os.Bundle
 import android.view.View
 import android.widget.FrameLayout
 import android.widget.LinearLayout
 import android.widget.TextView
-import androidx.collection.LongSparseArray
 import desu.inugram.InuConfig
 import desu.inugram.SearchRegistry
 import desu.inugram.helpers.cloud.CloudSettingsHelper
 import desu.inugram.helpers.InuUtils
+import desu.inugram.helpers.SharePicker
 import desu.inugram.helpers.cloud.SettingsBackupHelper
 import org.telegram.messenger.AndroidUtilities
 import org.telegram.messenger.Emoji
-import org.telegram.messenger.DialogObject
 import org.telegram.messenger.LocaleController
 import org.telegram.messenger.R
-import org.telegram.messenger.SendMessagesHelper
 import org.telegram.messenger.UserConfig
 import org.telegram.messenger.UserObject
 import org.telegram.messenger.Utilities
-import org.telegram.tgnet.TLRPC
 import org.telegram.ui.ActionBar.AlertDialog
 import org.telegram.ui.ActionBar.Theme
-import org.telegram.ui.ChatActivity
 import org.telegram.ui.Components.AvatarDrawable
 import org.telegram.ui.Components.BackupImageView
 import org.telegram.ui.Components.BulletinFactory
 import org.telegram.ui.Components.ItemOptions
 import org.telegram.ui.Components.LayoutHelper
-import org.telegram.ui.Components.ShareAlert
 import org.telegram.ui.Components.UItem
 import org.telegram.ui.Components.UniversalAdapter
 import java.io.File
@@ -392,42 +386,7 @@ class BackupSettingsActivity : SettingsPageActivity() {
     }
 
     private fun openSharePicker(file: File) {
-        val ctx = parentActivity ?: return
-        val account = accountInstance
-        val sheet = object : ShareAlert(ctx, null, null, false, null, false) {
-            override fun onSend(
-                dids: LongSparseArray<TLRPC.Dialog>,
-                count: Int,
-                topic: TLRPC.TL_forumTopic?,
-                showToast: Boolean
-            ) {
-                for (i in 0 until dids.size()) {
-                    val did = dids.keyAt(i)
-                    SendMessagesHelper.prepareSendingDocument(
-                        account, file.absolutePath, file.absolutePath, null, null,
-                        "application/json", did,
-                        null, null, null, null, null,
-                        true, 0, null, null, false,
-                    )
-                }
-                if (dids.size() == 1) openChat(dids.keyAt(0))
-            }
-        }
-        showDialog(sheet)
-    }
-
-    private fun openChat(did: Long) {
-        val args = Bundle().apply {
-            putBoolean("scrollToTopOnResume", true)
-            when {
-                DialogObject.isEncryptedDialog(did) -> putInt("enc_id", DialogObject.getEncryptedChatId(did))
-                DialogObject.isUserDialog(did) -> putLong("user_id", did)
-                else -> putLong("chat_id", -did)
-            }
-        }
-        if (messagesController.checkCanOpenChat(args, this)) {
-            presentFragment(ChatActivity(args))
-        }
+        SharePicker.showShareSheet(this, file, "application/json")
     }
 
     private fun launchImport() {

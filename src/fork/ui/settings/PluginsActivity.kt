@@ -276,6 +276,9 @@ class PluginsActivity : SettingsPageActivity() {
             .addIf(plugin.enabled, R.drawable.msg_reset, LocaleController.getString(R.string.InuPluginsReload)) {
                 PluginManager.reload(plugin)
             }
+            .add(R.drawable.msg_share, LocaleController.getString(R.string.ShareFile)) {
+                sharePlugin(this, plugin)
+            }
             .add(R.drawable.msg_delete, LocaleController.getString(R.string.InuPluginsRemove), true) {
                 removePlugin(plugin)
             }

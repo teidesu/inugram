@@ -784,6 +784,7 @@
     <string name="InuPluginGrantClipboardWrite">Write to clipboard</string>
     <string name="InuPluginGrantOpenUrl">Open links</string>
     <string name="InuPluginGrantAppVisibility">Monitor app visibility</string>
+    <string name="InuPluginGrantNotificationsSuppress">Hold back notifications</string>
     <string name="InuPluginGrantClipboardRead">Read clipboard</string>
     <string name="InuPluginGrantFetch">Internet access</string>
     <string name="InuPluginGrantAccountRead">Read account data</string>
@@ -800,6 +801,7 @@
     <string name="InuPluginGrantUnsafeXposed">App code hooks</string>
     <string name="InuPluginGrantUnsafeNotificationCenter">Internal event access</string>
     <string name="InuPluginGrantUnsafeDisableApiFiltering">Disable account protection</string>
+    <string name="InuPluginGrantNotificationsSuppressInfo">Can stop the app posting its own notifications while it is running</string>
     <string name="InuPluginGrantTakeoutInfo">Can export your data without the usual rate limits, after you approve it</string>
     <string name="InuPluginGrantUnsafeFsInfo">Can read and write any file on the device the app can reach</string>
     <string name="InuPluginGrantUnsafeInvokeRawInfo">Can send any API request, bypassing the method filter</string>

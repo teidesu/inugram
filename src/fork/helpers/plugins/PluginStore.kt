@@ -123,6 +123,18 @@ object PluginStore {
         }
     }
 
+    /**
+     * [plugin]'s source written out for sharing, under [into]. Named the way a plugin file is
+     * written and read back: `.inu.js` is what the install flow and the dev server both expect.
+     */
+    fun exportTo(into: File, plugin: Plugin): File {
+        val base = plugin.file.name.removeSuffix(".js").removeSuffix(".inu").ifBlank { "plugin" }
+        val file = File(into, "$base.inu.js")
+        into.mkdirs()
+        file.writeText(plugin.source, Charsets.UTF_8)
+        return file
+    }
+
     /** a free path under [dir] for [suggestedName]; the caller writes the source into it */
     fun fileFor(suggestedName: String): File {
         val safe = suggestedName.replace(Regex("[^A-Za-z0-9._-]"), "_")
