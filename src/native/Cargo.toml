@@ -51,6 +51,10 @@ codegen-units = 1
 panic = "abort"
 strip = true
 
+[profile.profiling]
+inherits = "release"
+strip = false
+
 # the one hot loop: a frame's colour conversion, which size-optimized code runs several times slower
 [profile.release.package.yuv]
 opt-level = 3
