@@ -17,12 +17,13 @@ Subject: md3-style sections redesign
  .../ui/Components/RecyclerListView.java       | 54 ++++++++++++++++---
  .../ui/Components/UniversalAdapter.java       | 15 +++++-
  .../telegram/ui/LiteModeSettingsActivity.java |  7 +++
+ .../java/org/telegram/ui/LogoutActivity.java  |  4 +-
  .../telegram/ui/MessageStatisticActivity.java |  2 +
  .../org/telegram/ui/PeerColorActivity.java    |  9 ++--
  .../org/telegram/ui/ProxyListActivity.java    |  5 --
  .../org/telegram/ui/SettingsActivity.java     | 18 +++++++
  .../org/telegram/ui/StatisticActivity.java    |  1 +
- 18 files changed, 168 insertions(+), 28 deletions(-)
+ 19 files changed, 171 insertions(+), 29 deletions(-)
 
 diff --git a/TMessagesProj/src/main/java/org/telegram/ui/ActionBar/ThemeDescription.java b/TMessagesProj/src/main/java/org/telegram/ui/ActionBar/ThemeDescription.java
 index 0000000..0000000 100644
@@ -566,6 +567,21 @@ index 0000000..0000000 100644
              } else if (viewType == VIEW_TYPE_SWITCH2) {
                  TextCell textCell = (TextCell) holder.itemView;
                  if (item.type == SWITCH_TYPE_SMOOTH_TRANSITIONS) {
+diff --git a/TMessagesProj/src/main/java/org/telegram/ui/LogoutActivity.java b/TMessagesProj/src/main/java/org/telegram/ui/LogoutActivity.java
+index 0000000..0000000 100644
+--- a/TMessagesProj/src/main/java/org/telegram/ui/LogoutActivity.java
++++ b/TMessagesProj/src/main/java/org/telegram/ui/LogoutActivity.java
+@@ -255,7 +255,9 @@ public class LogoutActivity extends BaseFragment {
+             switch (viewType) {
+                 case 0: {
+                     view = new HeaderCell(mContext);
+-                    view.setBackgroundColor(Theme.getColor(Theme.key_windowBackgroundWhite));
++                    if (!desu.inugram.InuConfig.M3_SECTIONS_STYLE.getValue()) {
++                        view.setBackgroundColor(Theme.getColor(Theme.key_windowBackgroundWhite));
++                    }
+                     break;
+                 }
+                 case 1: {
 diff --git a/TMessagesProj/src/main/java/org/telegram/ui/MessageStatisticActivity.java b/TMessagesProj/src/main/java/org/telegram/ui/MessageStatisticActivity.java
 index 0000000..0000000 100644
 --- a/TMessagesProj/src/main/java/org/telegram/ui/MessageStatisticActivity.java
