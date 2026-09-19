@@ -79,6 +79,7 @@ fn setup(grants: &[&str]) -> Fixture {
       TestGrantHost::new(grants).as_host(),
       Lifecycle::new(),
       std::sync::Arc::new(|_: &str| {}),
+      None,
       &inu,
     )
     .unwrap()
@@ -116,6 +117,63 @@ fn a_plugin_holding_no_jvm_grant_is_refused_at_every_entry_point() {
   for code in
     ["inu.jvm.cls('java.util.ArrayList')", "inu.jvm.runnable(() => {})", "inu.jvm.loadDex('/data/local/tmp/x.dex')"]
   {
+    assert!(error_code(&f, code).starts_with("not-granted|unsafe.jvm"), "{code}");
+  }
+  assert!(f.host.calls().is_empty());
+}
+
+/// `null` is java's own answer and needs no vm to give; a scalar is refused before one is asked,
+/// because it names no java object for a class to be asked about. What a real handle answers is
+/// `Class.isInstance` and is pinned on a device
+#[test]
+fn is_instance_answers_null_and_refuses_a_scalar_without_reaching_the_vm() {
+  let f = setup(&["unsafe.jvm"]);
+  let cls = "inu.jvm.cls('org.telegram.tgnet.TLRPC$Chat')";
+  for value in ["null", "undefined"] {
+    assert_eq!(eval(&f, &format!("{cls}.isInstance({value})")), "false", "{value}");
+  }
+  for value in ["7", "'text'", "true", "1.5", "new Uint8Array([1])"] {
+    assert_eq!(error_code(&f, &format!("{cls}.isInstance({value})")), "invalid-argument|", "{value}");
+  }
+}
+
+#[test]
+fn is_instance_needs_the_grant() {
+  let f = setup(&["kv"]);
+  assert!(error_code(&f, "inu.jvm.cls('java.lang.Object')").starts_with("not-granted|unsafe.jvm"));
+}
+
+/// what crosses for each shape: a view goes as the handle it already names, a plain object as its
+/// json, and neither is interpreted on this side
+#[test]
+fn from_tl_sends_a_view_as_its_handle_and_an_object_as_json() {
+  let f = setup(&["unsafe.jvm"]);
+  f.host.answers("GO7");
+  assert_eq!(eval(&f, "typeof inu.jvm.fromTl({ _: 'messageEntityBold', offset: 0, length: 2 })"), r#""object""#);
+  assert_eq!(
+    f.host.calls().last().unwrap(),
+    &format!(r#"{OP_FROM_TL}|0|J{{"_":"messageEntityBold","offset":0,"length":2}}|"#),
+  );
+  for bad in ["inu.jvm.fromTl(null)", "inu.jvm.fromTl(7)", "inu.jvm.fromTl('x')"] {
+    assert_eq!(error_code(&f, bad), "invalid-argument|", "{bad}");
+  }
+}
+
+#[test]
+fn to_tl_takes_a_handle_and_nothing_else() {
+  let f = setup(&["unsafe.jvm"]);
+  for bad in ["inu.jvm.toTl(null)", "inu.jvm.toTl(7)", "inu.jvm.toTl({ _: 'messageEntityBold' })"] {
+    assert_eq!(error_code(&f, bad), "invalid-argument|", "{bad}");
+  }
+  // a real handle gets past that and finds this fixture has no view table, which is the one thing
+  // `toTl` cannot do without
+  assert_eq!(error_code(&f, "inu.jvm.toTl(inu.jvm.cls('java.lang.Object'))"), "unsupported|");
+}
+
+#[test]
+fn from_tl_and_to_tl_need_the_grant() {
+  let f = setup(&["kv"]);
+  for code in ["inu.jvm.fromTl({ _: 'messageEntityBold' })", "inu.jvm.toTl({})"] {
     assert!(error_code(&f, code).starts_with("not-granted|unsafe.jvm"), "{code}");
   }
   assert!(f.host.calls().is_empty());
@@ -335,6 +393,7 @@ fn a_throwing_callback_is_the_plugins_fault() {
       TestGrantHost::new(&["unsafe.jvm"]).as_host(),
       Lifecycle::new(),
       crate::testing::harness::log_sink(&logged),
+      None,
       &inu,
     )
     .unwrap()

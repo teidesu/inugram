@@ -207,7 +207,14 @@ declare interface InterceptRpcOptions {
   strict?: boolean
 }
 
-declare type Disposer = () => void
+/**
+ * Undo whatever handed it back. Calling it twice is a no-op, and everything a plugin still holds
+ * is disposed for it on unload.
+ *
+ * Also a `Disposable`, so it can be held by a `using` declaration or a `DisposableStack` rather
+ * than by hand.
+ */
+declare type Disposer = (() => void) & Disposable
 
 declare type DialogId = number
 
@@ -285,8 +292,20 @@ declare namespace inu {
    */
   function openUrl(url: string): void
 
-  /** @needs-grant onAppVisibilityChange */
-  function onAppVisibilityChange(callback: (mode: 'foreground' | 'background') => void): Disposer
+  /**
+   * Subscribe to app visibility changes.
+   *
+   * Possible events:
+   * - `'foreground'` - the app was moved to the foreground
+   * - `'background'` - the app was backgrounded (e.g. user switched to another app)
+   * - `'paused'` - the main activity was paused by the system (e.g. permission dialogs/file picker/etc)
+   * - `'resumed'` - the main activity was resumed
+   *
+   * @needs-grant onAppVisibilityChange
+   */
+  function onAppVisibilityChange(
+    callback: (mode: 'foreground' | 'resumed' | 'paused' | 'background') => void,
+  ): Disposer
 
   /** 1 MB per-plugin quota. */
   namespace kv {
@@ -403,7 +422,12 @@ declare namespace inu {
   /** @needs-grant account.read(self) */
   function onAccountsChanged(callback: (accounts: AccountInfo[]) => void): Disposer
 
-  function withCurrentAccount(callback: (account: Account) => (() => void) | void): Disposer
+  /**
+   * Run [callback] for whichever account is current, again on every switch. What it returns is torn
+   * down when the account changes and when the plugin unloads, so a callback that registers several
+   * things can hand back a `DisposableStack` rather than a function of its own.
+   */
+  function withCurrentAccount(callback: (account: Account) => (() => void) | Disposable | void): Disposer
 
   function account(id?: number): Account
 
@@ -421,6 +445,15 @@ declare namespace inu {
 
     /** whether this is the currently active account */
     isCurrent(): boolean
+
+    /**
+     * {@link notifications.suppress} for this account alone: the app posts none of its own for it
+     * until the returned {@link Disposer} runs or the plugin is unloaded. Holds stack, and an
+     * app-level hold covers every account whatever this one says.
+     *
+     * @needs-grant notifications.suppress
+     */
+    suppressNotifications(): Disposer
 
     /**
      * get the user this account represents
@@ -454,6 +487,41 @@ declare namespace inu {
      */
     getDialog(peer: InputPeerLike): tl.TypeDialog | null
     /**
+     * whether the app would keep quiet about this dialog - stock's own answer, which folds the
+     * account's default for that kind of peer into the dialog's own override, and the topic's into
+     * both when one is named. A dialog the app does not know is not muted.
+     *
+     * @needs-grant account.read(dialogs)
+     */
+    isDialogMuted(peer: InputPeerLike, options?: { topicId?: number }): boolean
+
+    /**
+     * The one line the app itself would show for this message - in a dialog row, in a notification:
+     * a media label like "📷 Photo", a service message written out in the app's language, or the
+     * text. Only the app knows it, and it is not derivable from the message alone.
+     *
+     * The app formats a preview with spans rather than entities - a service message's names are
+     * bold, its custom emoji are spans - and they are read back out here, so the entities are the
+     * preview's own and have nothing to do with the message's.
+     *
+     * With `hideSpoilers`, spoilers are masked the way the app masks them in its own notification,
+     * and any entity covering a masked range is dropped, that text no longer being there. Masking
+     * only ever touches a preview that *is* the message's own text, since that is what the entity
+     * offsets are counted against; a media label is left alone.
+     *
+     * @needs-grant account.read(messages)
+     */
+    previewMessage(message: Message | tl.TypeMessage, options?: { hideSpoilers?: boolean }): TextWithEntities
+
+    /**
+     * a forum topic the app has already loaded (cached, never a network call, `null` on a miss or
+     * on a peer that is not a forum). {@link getTopics} is the one that fetches.
+     *
+     * @needs-grant account.read(dialogs)
+     */
+    getTopicCached(peer: InputPeerLike, topicId: number): tl.TypeForumTopic | null
+
+    /**
      * get one or more users (cached, this method never does a network call, and returns `null` on miss)
      *
      * @needs-grant account.read(peers)
@@ -466,7 +534,12 @@ declare namespace inu {
     getChats(peers: InputPeerLike[]): (tl.TypeChat | null)[]
 
     /**
-     * get one or more messages, cached. returns `null` on miss
+     * get one or more messages out of what this device already has - the app's memory first, then
+     * its own database - without ever going to the network. `null` on a miss.
+     *
+     * The database read is synchronous and blocks this turn on the app's storage queue, which is
+     * what lets this answer at all rather than only for the handful of messages memory holds.
+     * Reading a whole range is {@link getHistory}'s job, not a loop over this.
      *
      * @needs-grant account.read(messages)
      * @peer the dialog, or `0` for the common message box (dms, legacy groups)
@@ -932,6 +1005,22 @@ declare namespace inu {
     /** {@link html}, but whitespace is kept as written and the template is dedented first. */
     const thtml: TextFormat
 
+    /**
+     * Join texts into one, shifting each part's entities to where that part landed. mtcute's
+     * helper, for building a text out of pieces that each carry their own formatting:
+     *
+     * ```ts
+     * const board = inu.utils.joinTextWithEntities(
+     *   scores.map(entry => md`**${entry.name}**: ${entry.score}`),
+     *   '\n',
+     * )
+     * ```
+     *
+     * The delimiter goes in once something has been written, so a leading empty part is not
+     * separated from what follows it.
+     */
+    function joinTextWithEntities(parts: InputText[], delim?: InputText): TextWithEntities
+
     /** convert an array of bytes to base64 */
     function toBase64(bytes: Uint8Array): string
     /** convert base64 to an array of bytes */
@@ -1037,13 +1126,38 @@ declare namespace inu {
     /** open a stock commonly used page */
     function openPage(screen: PageTarget): void
 
+    /**
+     * Stands in for a bulletin's icon: a stack of peer avatars is drawn where the icon would be.
+     * A peer the app does not know is skipped.
+     */
+    interface BulletinAvatars {
+      type: 'avatars'
+      /** 1 to 3 peers */
+      avatars: DialogId[]
+      /** which account they are looked up in; defaults to the one on screen */
+      account?: number
+    }
+
     /** show a toast */
     function toast(text: string): void
-    /** show a bulletin (aka snackbar) */
+    /**
+     * show a bulletin (aka snackbar)
+     *
+     * Resolves once the bulletin is done with: `'button'` if its button was tapped, `'clicked'` if
+     * its body was, and `'dismissed'` when it simply went away. Nothing has to be awaited - a
+     * plugin that only wants to say something drops the promise.
+     */
     function bulletin(options: {
+      /** the text, or the title when there is a `subtitle` */
       text: InputText
-      icon: UIIcon
-    }): void
+      subtitle?: InputText
+      icon: UIIcon | BulletinAvatars
+      /** `'short'` (1.5s), `'long'` (2.75s, the default), or 500-30000 ms */
+      duration?: 'short' | 'long' | number
+      position?: 'top' | 'bottom'
+      /** label of a trailing button; tapping it resolves with `'button'` */
+      button?: string
+    }): Promise<'clicked' | 'button' | 'dismissed'>
 
     /**
      * show a dialog
@@ -1156,6 +1270,7 @@ declare namespace inu {
       id?: string
       text: string
       subtitle?: string
+      icon?: UIIcon
       checked: boolean
       onChange: (checked: boolean, anchor: UIAnchor) => void
       onSecondaryClick?: (anchor: UIAnchor) => void
@@ -1266,7 +1381,17 @@ declare namespace inu {
     options?: InterceptRpcOptions,
   ): Disposer
 
-  /** @needs-grant onUpdate(new_message) */
+  /**
+   * Every `updateNewMessage`/`updateNewChannelMessage`, for every account.
+   *
+   * This is the update pipeline, not the app's own message handling: a message reaches here as the
+   * app is about to apply it, before it has been attached to its dialog or turned into the object
+   * the ui draws. So the app's view of the chat may not have caught up yet, and a message the app
+   * creates by itself rather than receiving - a local one - raises nothing. Scheduled messages
+   * arrive as their own update type and so are not seen here at all.
+   *
+   * @needs-grant onUpdate(new_message)
+   */
   function onNewMessage(callback: (message: Message, account: Account) => void): Disposer
   /** @needs-grant onUpdate(edit_message) */
   function onMessageEdited(callback: (message: Message, account: Account) => void): Disposer
@@ -1274,6 +1399,21 @@ declare namespace inu {
   function onMessageDeleted(
     callback: (dialogId: DialogId | null, messageIds: number[], account: Account) => void,
   ): Disposer
+
+  namespace notifications {
+    /**
+     * Keep the app from posting notifications of its own, until the returned {@link Disposer} runs
+     * or the plugin is unloaded. A hold rather than a switch: the app stays quiet while any plugin
+     * holds one, so two plugins asking at once cannot cancel each other out.
+     *
+     * Every account at once, and every notification the app raises, not only message ones; see
+     * {@link Account.suppressNotifications} for one account's. A notification already on screen is
+     * dismissed rather than left behind.
+     *
+     * @needs-grant notifications.suppress
+     */
+    function suppress(): Disposer
+  }
 
   /** @needs-grant onUpdate */
   function onUpdate<U extends tl.TypeUpdate['_']>(

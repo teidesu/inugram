@@ -126,6 +126,18 @@ pub fn opt_bool<'js>(ctx: &Ctx<'js>, obj: &Object<'js>, what: &str, key: &str) -
   v.as_bool().ok_or_else(|| Exception::throw_type(ctx, &format!("{what}: '{key}' must be a boolean")))
 }
 
+/// an optional whole number, for a field naming something counted rather than measured
+pub fn opt_int<'js>(ctx: &Ctx<'js>, obj: &Object<'js>, what: &str, key: &str) -> JsResult<Option<i32>> {
+  let v = field(ctx, obj, what, key)?;
+  if v.is_undefined() || v.is_null() {
+    return Ok(None);
+  }
+  v.as_int()
+    .or_else(|| v.as_float().filter(|f| f.fract() == 0.0).map(|f| f as i32))
+    .map(Some)
+    .ok_or_else(|| Exception::throw_type(ctx, &format!("{what}: '{key}' must be a whole number")))
+}
+
 pub fn req_num<'js>(ctx: &Ctx<'js>, obj: &Object<'js>, what: &str, key: &str) -> JsResult<f64> {
   let v = field(ctx, obj, what, key)?;
   if let Some(i) = v.as_int() {

@@ -3,19 +3,29 @@ use std::cell::RefCell;
 use std::rc::Rc;
 
 use rquickjs::function::Args;
-use rquickjs::{Ctx, Exception, Function, Persistent, Result as JsResult, Runtime, Value};
+use rquickjs::{Ctx, Function, Persistent, Result as JsResult, Runtime, Value};
 
 use crate::api::error::format_exception;
 use crate::api::error::{host_error_to_js, report_callback_error, PluginErrorCode};
+use crate::api::platform::jvm::JvmState;
 use crate::runtime::pump_jobs;
-use crate::sandbox::grants::{GrantHost, MATCH_EXACT};
+use crate::sandbox::grants::{GrantHost, MATCH_EXACT, MATCH_NAMESPACE};
 use crate::sandbox::registry::{make_disposer, noop_disposer, Lifecycle, Registry, Token};
 
 pub trait NotificationHost {
   fn notification_register(&self, callback_id: u32, events: &[String]) -> Option<String>;
 
   fn notification_unregister(&self, callback_id: u32);
+
+  /// while at least one token is held, the app posts no notification of its own; `account` is
+  /// [`ANY_ACCOUNT`] for a hold taken over every account at once
+  fn notification_suppress(&self, token: u32, account: i32, on: bool);
 }
+
+const SUPPRESS_GRANT: &str = "notifications.suppress";
+
+/// what an app-level hold names, since it belongs to no one account
+pub const ANY_ACCOUNT: i32 = -1;
 
 struct Delegate {
   handlers: RefCell<Vec<(String, Persistent<Function<'static>>)>>,
@@ -43,7 +53,9 @@ pub struct NotificationState {
   grants: Rc<dyn GrantHost>,
   lifecycle: Rc<Lifecycle>,
   log: crate::Log,
+  jvm: Option<Rc<JvmState>>,
   delegates: Registry<Rc<Delegate>>,
+  suppressors: Registry<i32>,
 }
 
 pub fn install_notifications<'js>(
@@ -52,6 +64,7 @@ pub fn install_notifications<'js>(
   grants: Rc<dyn GrantHost>,
   lifecycle: Rc<Lifecycle>,
   log: crate::Log,
+  jvm: Option<Rc<JvmState>>,
   globals: &crate::api::Globals<'js>,
 ) -> JsResult<Rc<NotificationState>> {
   let state = Rc::new(NotificationState {
@@ -59,7 +72,9 @@ pub fn install_notifications<'js>(
     grants,
     lifecycle,
     log,
+    jvm,
     delegates: Registry::default(),
+    suppressors: Registry::default(),
   });
 
   let android = globals.get_namespace(ctx, "android")?;
@@ -70,15 +85,73 @@ pub fn install_notifications<'js>(
     Function::new(ctx.clone(), move |ctx: Ctx<'js>, handlers: Value<'js>| state2.js_add_delegate(&ctx, handlers))?,
   )?;
 
+  let notifications = globals.get_namespace(ctx, "notifications")?;
+
+  let state3 = state.clone();
+  notifications.set(
+    "suppress",
+    Function::new(ctx.clone(), move |ctx: Ctx<'js>| state3.js_suppress(&ctx, ANY_ACCOUNT))?,
+  )?;
+
   Ok(state)
 }
 
 impl NotificationState {
+  /// A hold rather than a switch: the app stays quiet while any plugin holds one, and a plugin
+  /// that goes away without disposing releases its own, which a plain flag could not do.
+  fn js_suppress<'js>(self: &Rc<Self>, ctx: &Ctx<'js>, account: i32) -> JsResult<Function<'js>> {
+    if self.lifecycle.is_unloading() {
+      return noop_disposer(ctx);
+    }
+    self.grants.check_grant(ctx, SUPPRESS_GRANT, None, MATCH_EXACT)?;
+    let token = self.suppressors.alloc();
+    self.suppressors.insert(token, None, account);
+    self.host.notification_suppress(token, account, true);
+
+    let state = self.clone();
+    make_disposer(ctx, move |_| {
+      let Some(account) = state.suppressors.remove(token) else {
+        return;
+      };
+      state.host.notification_suppress(token, account, false);
+    })
+  }
+
+  /// `Account.suppressNotifications`, layered on the prototype the reads and writes built, the way
+  /// `invokeRpc` is: this installs before either of them exists.
+  pub fn install_account_suppress<'js>(
+    self: &Rc<Self>,
+    ctx: &Ctx<'js>,
+    accounts: &Rc<crate::api::telegram::account::AccountState>,
+  ) -> JsResult<()> {
+    let prototype = rquickjs::Object::new(ctx.clone())?;
+    let state = self.clone();
+    prototype.set(
+      "suppressNotifications",
+      Function::new(ctx.clone(), move |ctx: Ctx<'js>, this: rquickjs::function::This<Value<'js>>| {
+        let slot = crate::api::telegram::account::account_slot(&ctx, &this, "suppressNotifications")?;
+        state.js_suppress(&ctx, slot)
+      })?,
+    )?;
+    if let Some(inner) = accounts.take_prototype(ctx) {
+      prototype.set_prototype(Some(&inner))?;
+    }
+    let object_ctor: rquickjs::Object = ctx.globals().get("Object")?;
+    let freeze: Function = object_ctor.get("freeze")?;
+    freeze.call::<_, Value>((prototype.clone(),))?;
+    accounts.set_prototype(ctx, &prototype);
+    Ok(())
+  }
+
   fn js_add_delegate<'js>(self: &Rc<Self>, ctx: &Ctx<'js>, handlers: Value<'js>) -> JsResult<Function<'js>> {
     if self.lifecycle.is_unloading() {
       return noop_disposer(ctx);
     }
     self.grants.check_grant(ctx, "unsafe.notificationCenter", None, MATCH_EXACT)?;
+    self.grants.check_grant(ctx, crate::api::platform::jvm::GRANT, None, MATCH_NAMESPACE)?;
+    if self.jvm.is_none() {
+      return PluginErrorCode::Unsupported.throw(ctx, "addNotificationCenterDelegate: this build has no jvm bridge");
+    }
 
     let Some(handlers) = handlers.as_object() else {
       return PluginErrorCode::InvalidArgument
@@ -132,7 +205,7 @@ impl NotificationState {
     callback_id: Token,
     name: &str,
     account: i32,
-    args_json: &str,
+    args: &[String],
   ) {
     let state = self;
     if state.lifecycle.is_unloading() {
@@ -145,21 +218,26 @@ impl NotificationState {
       let Some(handler) = delegate.handler(&ctx, name) else {
         return;
       };
-      let args = match ctx.json_parse(args_json) {
-        Ok(args) => args,
+      let Some(jvm) = state.jvm.as_ref() else {
+        return;
+      };
+      // decoded before the handler is entered, so that a wire only the host could have got wrong
+      // is its own bad day rather than a fault charged to a handler that never ran
+      // each entry is one host wire, the same shape `inu.xposed` hands a hook its arguments in:
+      // a scalar as itself, anything else as a handle into the table `inu.jvm` reads
+      let decoded: JsResult<Vec<Value<'_>>> = args.iter().map(|wire| jvm.wire_to_value(&ctx, wire)).collect();
+      let decoded = match decoded {
+        Ok(decoded) => decoded,
         Err(_) => {
           (state.log)(&format!("{name}: bad notification payload: {}", format_exception(&ctx)));
           return;
         }
       };
       let result = (|| -> JsResult<Value<'_>> {
-        let Some(args) = args.as_array() else {
-          return Err(Exception::throw_type(&ctx, "notification arguments must be an array"));
-        };
-        let mut call_args = Args::new(ctx.clone(), args.len() + 1);
+        let mut call_args = Args::new(ctx.clone(), decoded.len() + 1);
         call_args.push_arg(account)?;
-        for value in args.iter::<Value>() {
-          call_args.push_arg(value?)?;
+        for value in decoded {
+          call_args.push_arg(value)?;
         }
         handler.call_arg(call_args)
       })();

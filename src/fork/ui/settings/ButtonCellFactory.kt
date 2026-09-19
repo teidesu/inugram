@@ -25,7 +25,7 @@ class ButtonIcon(val spec: String?, val engine: QuickJs)
  * only, so value/subtitle changes rebind the same holder in place, with the value animating
  * via TextCell's AnimatedTextView.
  */
-class ButtonCellFactory : UItem.UItemFactory<TextCell>() {
+open class ButtonCellFactory : UItem.UItemFactory<TextCell>() {
     companion object {
         init {
             setup(ButtonCellFactory())
@@ -58,13 +58,15 @@ class ButtonCellFactory : UItem.UItemFactory<TextCell>() {
             }
     }
 
+    protected open val needsCheckBox = false
+
     override fun createView(
         context: Context,
         listView: RecyclerListView?,
         currentAccount: Int,
         classGuid: Int,
         resourcesProvider: Theme.ResourcesProvider?,
-    ): TextCell = TextCell(context, resourcesProvider)
+    ): TextCell = TextCell(context, 23, false, needsCheckBox, resourcesProvider)
 
     override fun bindView(
         view: View,
@@ -104,6 +106,10 @@ class ButtonCellFactory : UItem.UItemFactory<TextCell>() {
         } else {
             cell.setColors(Theme.key_windowBackgroundWhiteGrayIcon, Theme.key_windowBackgroundWhiteBlackText)
         }
+        cell.checkBox?.let {
+            it.visibility = View.VISIBLE
+            it.setChecked(item.checked, sameRow)
+        }
         cell.setEnabled(item.enabled, sameRow)
         cell.tag = item.id
     }
@@ -127,6 +133,28 @@ class ButtonCellFactory : UItem.UItemFactory<TextCell>() {
             left?.spec == right?.spec &&
             left?.engine === right?.engine &&
             a.object2 == b.object2 &&
-            a.red == b.red
+            a.red == b.red &&
+            a.checked == b.checked
     }
+}
+
+/** [ButtonCellFactory] with stock's switch on the right, so a check row lines up with a button one */
+class CheckCellFactory : ButtonCellFactory() {
+    companion object {
+        init {
+            setup(CheckCellFactory())
+        }
+
+        fun of(id: Int, text: CharSequence, subtitle: CharSequence?, icon: ButtonIcon?, checked: Boolean, formatting: String?): UItem =
+            UItem.ofFactory(CheckCellFactory::class.java).apply {
+                this.id = id
+                this.text = text
+                this.subtext = subtitle
+                this.`object` = icon
+                this.object2 = formatting
+                this.checked = checked
+            }
+    }
+
+    override val needsCheckBox = true
 }

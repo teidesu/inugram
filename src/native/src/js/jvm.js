@@ -42,6 +42,9 @@
     callStatic(method, ...args) {
       return natives.call(this, named('callStatic', method), ...args)
     },
+    isInstance(value) {
+      return natives.isInstance(this, value)
+    },
   }
 
   const methodMembers = {
@@ -159,6 +162,14 @@
   const jvm = Object.freeze({
     cls(name) {
       return natives.cls(named('cls', name))
+    },
+
+    fromTl(value) {
+      if (value === null || typeof value !== 'object') throw invalid('fromTl: expected a TL object')
+      return natives.fromTl(value)
+    },
+    toTl(handle) {
+      return natives.toTl(handle)
     },
 
     runnable(callback) {

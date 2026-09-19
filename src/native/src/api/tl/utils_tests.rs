@@ -42,7 +42,7 @@ fn the_bundled_utils_test_plugin_passes() {
   let (rt, ctx) = setup();
   let lines =
     crate::testing::harness::run_capturing_console(&rt, &ctx, include_str!("../../../../test/plugins/utils-test.js"));
-  crate::testing::harness::assert_oracle_exact(&lines, "utils test done", 92);
+  crate::testing::harness::assert_oracle_exact(&lines, "utils test done", 95);
 }
 
 #[test]
@@ -331,6 +331,62 @@ fn the_namespace_is_exactly_what_the_contract_lists_and_is_frozen() {
   );
   assert_eq!(
     out,
-    r#"["formatDate,formatDuration,formatFileSize,formatNumber,fromBase64,fromHex,html,md,peers,thtml,toBase64,toHex","fromBotApiId,parseDialogId,toBotApiId,toDialogId,toInputPeer","TypeError","TypeError","TypeError","01",3]"#,
+    r#"["formatDate,formatDuration,formatFileSize,formatNumber,fromBase64,fromHex,html,joinTextWithEntities,md,peers,thtml,toBase64,toHex","fromBotApiId,parseDialogId,toBotApiId,toDialogId,toInputPeer","TypeError","TypeError","TypeError","01",3]"#,
   );
 }
+
+/// mtcute's helper: each part's entities move to where that part landed
+#[test]
+fn join_text_with_entities_shifts_every_part_into_place() {
+  let (_rt, ctx) = setup();
+  let out = eval(
+    &ctx,
+    r#"
+        const bold = (text, offset) => ({ _: 'messageEntityBold', offset, length: text.length });
+        JSON.stringify(inu.utils.joinTextWithEntities(
+            [
+                { text: 'ab', entities: [bold('ab', 0)] },
+                'cd',
+                { text: 'ef', entities: [bold('f', 1)] },
+            ],
+            { text: '--', entities: [bold('--', 0)] },
+        ));
+        "#,
+  );
+  assert_eq!(
+    out,
+    r#"{"text":"ab--cd--ef","entities":[{"_":"messageEntityBold","offset":0,"length":2},{"_":"messageEntityBold","offset":2,"length":2},{"_":"messageEntityBold","offset":6,"length":2},{"_":"messageEntityBold","offset":9,"length":1}]}"#,
+  );
+}
+
+/// the delimiter goes in once something has been written, which is mtcute's own rule
+#[test]
+fn join_text_with_entities_defaults_to_no_delimiter_and_skips_a_leading_empty_part() {
+  let (_rt, ctx) = setup();
+  let out = eval(
+    &ctx,
+    r#"JSON.stringify([
+            inu.utils.joinTextWithEntities(['a', 'b']).text,
+            inu.utils.joinTextWithEntities([], ', ').text,
+            inu.utils.joinTextWithEntities(['', 'a', 'b'], ', ').text,
+            inu.utils.joinTextWithEntities(['a', '', 'b'], ', ').text,
+        ])"#,
+  );
+  assert_eq!(out, r#"["ab","","a, b","a, , b"]"#);
+}
+
+#[test]
+fn join_text_with_entities_refuses_what_is_not_a_text() {
+  let (_rt, ctx) = setup();
+  for call in [
+    "inu.utils.joinTextWithEntities('ab')",
+    "inu.utils.joinTextWithEntities([7])",
+    "inu.utils.joinTextWithEntities([null])",
+    "inu.utils.joinTextWithEntities([{ text: 'a', entities: 7 }])",
+    "inu.utils.joinTextWithEntities(['a'], 7)",
+  ] {
+    assert_eq!(code_of(&ctx, call), "invalid-argument", "{call}");
+  }
+}
+
+

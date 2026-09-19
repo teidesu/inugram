@@ -38,9 +38,17 @@ import org.telegram.ui.LauncherIconController
 
 object InuHooks {
     @JvmStatic
-    fun init(context: Context) {
+    fun preInit(context: Context) {
         CrashReporter.install()
         InuConfig.load(context)
+    }
+
+    /**
+     * Runs once `ApplicationLoader` has armed its main-thread handler: until it does,
+     * [AndroidUtilities.runOnUIThread] drops what it is given instead of posting it.
+     */
+    @JvmStatic
+    fun init(context: Context) {
         FontHelper.init(context)
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
             FontHelper.installGlobal()

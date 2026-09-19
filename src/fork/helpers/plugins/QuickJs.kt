@@ -94,8 +94,8 @@ open class QuickJs {
         check(ptr != 0L) { "QuickJs initialization failed" }
     }
 
-    open fun dispatchNotification(callbackId: Int, name: String, accountId: Int, argsJson: String) =
-        ifLive { nativeDispatchNotification(it, callbackId, name, accountId, argsJson) }
+    open fun dispatchNotification(callbackId: Int, name: String, accountId: Int, args: Array<String>) =
+        ifLive { nativeDispatchNotification(it, callbackId, name, accountId, args) }
 
     fun evaluate(code: String, filename: String = "<plugin>"): String? = requireLive { nativeEvaluate(it, code, filename) }
 
@@ -184,7 +184,7 @@ open class QuickJs {
      * the foreground, so push the current state before evaluating a plugin whenever the app is not
      * in it.
      */
-    fun appVisibilityChanged(visible: Boolean) = requireLive { nativeAppVisibilityChanged(it, visible) }
+    fun appVisibilityChanged(mode: Int) = requireLive { nativeAppVisibilityChanged(it, mode) }
 
     /** call right before [close]; JS throws are logged, never propagated */
     fun notifyUnload() = requireLive { nativeNotifyUnload(it) }
@@ -321,7 +321,7 @@ open class QuickJs {
     private external fun nativeRenderActions(ptr: Long, kind: Int, surfaceJson: String): String?
     private external fun nativeDispatchAction(ptr: Long, kind: Int, token: Int, surfaceJson: String)
     private external fun nativeDispatchScreenChange(ptr: Long, changeJson: String, stackJson: String)
-    private external fun nativeDispatchNotification(ptr: Long, callbackId: Int, name: String, accountId: Int, argsJson: String)
+    private external fun nativeDispatchNotification(ptr: Long, callbackId: Int, name: String, accountId: Int, args: Array<String>)
     private external fun nativeWriteProgress(ptr: Long, requestId: Long, loaded: Long, total: Long)
     private external fun nativeDispatchRpc(ptr: Long, callbackId: Int, dispatchId: Long, method: String, accountId: Int, requestWire: String)
     private external fun nativeCompleteNext(ptr: Long, dispatchId: Long, resultWire: String)
@@ -333,7 +333,7 @@ open class QuickJs {
     private external fun nativeSettle(ptr: Long, api: Int, requestId: Long, wire: String)
     private external fun nativeSettleBytes(ptr: Long, api: Int, requestId: Long, bytes: ByteArray)
     private external fun nativeRunTimers(ptr: Long)
-    private external fun nativeAppVisibilityChanged(ptr: Long, visible: Boolean)
+    private external fun nativeAppVisibilityChanged(ptr: Long, mode: Int)
     private external fun nativeDestroy(ptr: Long)
 
     companion object {

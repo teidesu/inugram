@@ -535,6 +535,74 @@ class PluginJvmTest {
         assertTrue(tableCache().isEmpty(), "a planned call must not rescan the class on the kotlin side")
     }
 
+    /**
+     * The crossing between the two halves of this api: a TL value becomes the app's own `TLObject`,
+     * and one the app handed over reads back as a TL view.
+     */
+    @Test
+    fun a_tl_value_crosses_to_java_and_back() {
+        val plugin = engineWith()
+        assertEquals(
+            "VTL_messageEntityBold",
+            plugin.outcome(
+                "inu.jvm.fromTl({ _: 'messageEntityBold', offset: 1, length: 2 })" +
+                    ".call('getClass').call('getSimpleName')",
+            ),
+        )
+        assertEquals(
+            "V1",
+            plugin.outcome("inu.jvm.fromTl({ _: 'messageEntityBold', offset: 1, length: 2 }).getField('offset')"),
+        )
+        // and back: the java object reads as the view a tl read would have answered with
+        assertEquals(
+            "VmessageEntityBold",
+            plugin.outcome("inu.jvm.toTl(inu.jvm.fromTl({ _: 'messageEntityBold', offset: 1, length: 2 }))._"),
+        )
+        assertEquals(
+            "V2",
+            plugin.outcome("inu.jvm.toTl(inu.jvm.fromTl({ _: 'messageEntityBold', offset: 1, length: 2 })).length"),
+        )
+    }
+
+    @Test
+    fun a_view_read_back_out_of_java_can_be_written_to() {
+        val plugin = engineWith()
+        plugin.js("globalThis.view = inu.jvm.toTl(inu.jvm.fromTl({ _: 'messageEntityBold', offset: 1, length: 2 }))")
+        plugin.js("view.offset = 9")
+        assertEquals("V9", plugin.outcome("view.offset"))
+    }
+
+    @Test
+    fun to_tl_refuses_a_handle_that_is_not_a_tl_object() {
+        val plugin = engineWith()
+        plugin.assertRefused("invalid-argument", "inu.jvm.toTl(o)")
+    }
+
+    /** `Class.isInstance`, which is what lets a plugin tell a `TLRPC.Chat` from a `TLRPC.User` */
+    @Test
+    fun is_instance_answers_the_class_a_handle_really_has() {
+        val plugin = engineWith()
+        plugin.js("globalThis.list = new (inu.jvm.cls('java.util.ArrayList'))()")
+        assertEquals("Vtrue", plugin.outcome("inu.jvm.cls('java.util.ArrayList').isInstance(list)"))
+        // a supertype and an interface answer too, because this is the vm's own check and not a name comparison
+        assertEquals("Vtrue", plugin.outcome("inu.jvm.cls('java.util.List').isInstance(list)"))
+        assertEquals("Vtrue", plugin.outcome("inu.jvm.cls('java.lang.Object').isInstance(list)"))
+        assertEquals("Vfalse", plugin.outcome("inu.jvm.cls('java.util.HashMap').isInstance(list)"))
+        assertEquals("Vfalse", plugin.outcome("inu.jvm.cls('java.util.ArrayList').isInstance(null)"))
+        // a class handle is itself an object, and the class it is an instance of is `java.lang.Class`
+        assertEquals("Vtrue", plugin.outcome("inu.jvm.cls('java.lang.Class').isInstance(F)"))
+    }
+
+    /** only a class handle carries the member at all, so what is left to refuse is the right-hand side */
+    @Test
+    fun is_instance_refuses_a_scalar_rather_than_calling_it_not_an_instance() {
+        val plugin = engineWith()
+        assertEquals("Vundefined", plugin.outcome("typeof F.getDeclaredField('count').isInstance"))
+        for (scalar in listOf("7", "'text'", "true", "1.5")) {
+            plugin.assertRefused("invalid-argument", "inu.jvm.cls('java.lang.Object').isInstance($scalar)")
+        }
+    }
+
     /** a class handle is a function, so that `new` works, and the reference rides on it where nothing js-side can lose it */
     @Test
     fun a_class_handle_is_callable_and_stays_a_handle_through_the_prototype_chain() {

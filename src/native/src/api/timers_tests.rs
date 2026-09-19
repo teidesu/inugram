@@ -601,7 +601,11 @@ mod bundled_oracle {
     visible: bool,
   ) {
     timers.set_visible(visible);
-    api.app_visibility_changed(rt, ctx, visible);
+    api.app_visibility_changed(
+      rt,
+      ctx,
+      if visible { crate::api::lifecycle::AppMode::Foreground } else { crate::api::lifecycle::AppMode::Background },
+    );
   }
 
   /// `inu.onAppVisibilityChange` and the background floor are one feature split across two

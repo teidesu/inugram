@@ -93,3 +93,26 @@ fn the_dispatch_hold_is_a_count_and_not_a_latch() {
   lifecycle.set_blocking_dispatches(0);
   assert!(!lifecycle.has_blocking_dispatches());
 }
+
+/// a plugin can hold a disposer with `using` or a `DisposableStack` instead of by hand, which is
+/// only true while it carries `Symbol.dispose`
+#[test]
+fn a_disposer_is_also_a_disposable() {
+  let rt = rquickjs::Runtime::new().unwrap();
+  let ctx = rquickjs::Context::full(&rt).unwrap();
+  let calls = Rc::new(Cell::new(0));
+  let seen = calls.clone();
+  ctx.with(|ctx| {
+    let disposer = make_disposer(&ctx, move |_| seen.set(seen.get() + 1)).unwrap();
+    ctx.globals().set("d", disposer).unwrap();
+    assert_eq!(
+      ctx.eval::<String, _>("typeof d[Symbol.dispose]").unwrap(),
+      "function",
+      "a disposer must be usable as a Disposable",
+    );
+    ctx.eval::<(), _>("{ using held = d; }").unwrap();
+    assert_eq!(calls.get(), 1, "leaving the block disposes it");
+    ctx.eval::<(), _>("const s = new DisposableStack(); s.use(d); s.dispose();").unwrap();
+    assert_eq!(calls.get(), 2, "a stack disposes what it was given");
+  });
+}

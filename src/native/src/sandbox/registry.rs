@@ -1,7 +1,8 @@
 use std::cell::{Cell, RefCell};
 use std::rc::Rc;
 
-use rquickjs::{Ctx, Function, Persistent, Result as JsResult};
+use rquickjs::function::This;
+use rquickjs::{Ctx, Function, Persistent, Result as JsResult, Value};
 
 pub type Token = u32;
 
@@ -196,11 +197,31 @@ impl Lifecycle {
 }
 
 pub fn noop_disposer<'js>(ctx: &Ctx<'js>) -> JsResult<Function<'js>> {
-  Function::new(ctx.clone(), || {})
+  disposable(ctx, Function::new(ctx.clone(), || {})?)
 }
 
 pub fn make_disposer<'js>(ctx: &Ctx<'js>, dispose: impl Fn(&Ctx<'js>) + 'js) -> JsResult<Function<'js>> {
-  Function::new(ctx.clone(), move |ctx: Ctx<'js>| dispose(&ctx))
+  disposable(ctx, Function::new(ctx.clone(), move |ctx: Ctx<'js>| dispose(&ctx))?)
+}
+
+/// every disposer is also a `Disposable`, so `using` and `DisposableStack` take one as they are
+fn disposable<'js>(ctx: &Ctx<'js>, f: Function<'js>) -> JsResult<Function<'js>> {
+  let symbol: rquickjs::Symbol = ctx.globals().get::<_, rquickjs::Object>("Symbol")?.get("dispose")?;
+  f.set(symbol, f.clone())?;
+  Ok(f)
+}
+
+/// what a callback hands back to be torn down later: a plain function, or any `Disposable`, whose
+/// method has to keep its object as `this` - which is what `bind` is for
+pub fn resolve_disposer<'js>(ctx: &Ctx<'js>, value: Value<'js>) -> Option<Function<'js>> {
+  if let Some(function) = value.as_function() {
+    return Some(function.clone());
+  }
+  let object = value.as_object()?;
+  let symbol: rquickjs::Symbol = ctx.globals().get::<_, rquickjs::Object>("Symbol").ok()?.get("dispose").ok()?;
+  let dispose: Function<'js> = object.get(symbol).ok()?;
+  let bind: Function<'js> = dispose.get("bind").ok()?;
+  bind.call((This(dispose), object.clone())).ok()
 }
 
 #[cfg(test)]

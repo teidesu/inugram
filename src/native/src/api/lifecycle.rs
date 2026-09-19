@@ -9,13 +9,58 @@ use crate::runtime::pump_jobs;
 use crate::sandbox::grants::{GrantHost, MATCH_EXACT};
 use crate::sandbox::registry::{make_disposer, noop_disposer, CallbackRegistry, Lifecycle};
 
+/// What the app's activities did, as `onAppVisibilityChange` reports it. `Foreground`/`Background`
+/// are the coarse pair - an activity started or the last one stopped - and are what decides whether
+/// the app is visible at all. `Resumed`/`Paused` are the finer pair: the activity is still there,
+/// but something is over it or the user is elsewhere in it. A plugin that only tears down and sets
+/// up again wants the coarse pair, which is why it is the one that was here first.
+#[derive(Clone, Copy, PartialEq, Eq)]
+pub enum AppMode {
+  Foreground,
+  Resumed,
+  Paused,
+  Background,
+}
+
+impl AppMode {
+  /// keep in sync with kotlin `PluginAppVisibility.MODE_*`
+  pub fn from_code(code: i32) -> Option<Self> {
+    match code {
+      0 => Some(AppMode::Foreground),
+      1 => Some(AppMode::Resumed),
+      2 => Some(AppMode::Paused),
+      3 => Some(AppMode::Background),
+      _ => None,
+    }
+  }
+
+  fn name(self) -> &'static str {
+    match self {
+      AppMode::Foreground => "foreground",
+      AppMode::Resumed => "resumed",
+      AppMode::Paused => "paused",
+      AppMode::Background => "background",
+    }
+  }
+
+  /// only the coarse pair says anything about whether there is a ui at all
+  pub fn visibility(self) -> Option<bool> {
+    match self {
+      AppMode::Foreground => Some(true),
+      AppMode::Background => Some(false),
+      AppMode::Resumed | AppMode::Paused => None,
+    }
+  }
+}
+
 pub struct LifecycleState {
   grants: Rc<dyn GrantHost>,
   lifecycle: Rc<Lifecycle>,
   pub(crate) log: crate::Log,
   unload_fns: CallbackRegistry,
   visibility_fns: CallbackRegistry,
-  visible: Cell<bool>,
+  /// the last mode published
+  mode: Cell<AppMode>,
   unload_started: Cell<bool>,
   pending_unloads: Rc<Cell<usize>>,
 }
@@ -33,7 +78,7 @@ pub fn install_lifecycle<'js>(
     log,
     unload_fns: CallbackRegistry::default(),
     visibility_fns: CallbackRegistry::default(),
-    visible: Cell::new(true),
+    mode: Cell::new(AppMode::Foreground),
     unload_started: Cell::new(false),
     pending_unloads: Rc::new(Cell::new(0)),
   });
@@ -75,15 +120,15 @@ pub fn install_lifecycle<'js>(
 }
 
 impl LifecycleState {
-  pub fn app_visibility_changed(self: &Rc<Self>, rt: &Runtime, context: &rquickjs::Context, visible: bool) {
+  pub fn app_visibility_changed(self: &Rc<Self>, rt: &Runtime, context: &rquickjs::Context, mode: AppMode) {
     let state = self;
-    if state.lifecycle.is_unloading() || state.visible.replace(visible) == visible {
+    if state.lifecycle.is_unloading() || state.mode.replace(mode) == mode {
       return;
     }
     context.with(|ctx| {
-      let mode = if visible { "foreground" } else { "background" };
+      let name = mode.name();
       for f in state.visibility_fns.snapshot(&ctx) {
-        call_callback(&ctx, &state.log, "onAppVisibilityChange callback", &f, (mode,));
+        call_callback(&ctx, &state.log, "onAppVisibilityChange callback", &f, (name,));
       }
     });
     pump_jobs(rt, context, state.log.as_ref());

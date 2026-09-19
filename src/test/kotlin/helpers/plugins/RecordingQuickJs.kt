@@ -24,7 +24,7 @@ class RecordingQuickJs : QuickJs() {
     class HttpResult(val requestId: Long, val resultWire: String)
     class WriteResult(val requestId: Long, val resultWire: String)
     class WriteProgress(val requestId: Long, val loaded: Long, val total: Long)
-    class Notification(val callbackId: Int, val name: String, val accountId: Int, val argsJson: String)
+    class Notification(val callbackId: Int, val name: String, val accountId: Int, val args: Array<String>)
     class ActionDispatch(val kind: Int, val token: Int, val surfaceJson: String)
     class XposedBefore(val dispatchId: Long, val site: Long, val method: String, val receiver: String, val args: Array<String>)
     class XposedAfter(val dispatchId: Long, val resultWire: String)
@@ -206,8 +206,8 @@ class RecordingQuickJs : QuickJs() {
         writeProgress.add(WriteProgress(requestId, loaded, total))
     }
 
-    override fun dispatchNotification(callbackId: Int, name: String, accountId: Int, argsJson: String) {
-        notifications.add(Notification(callbackId, name, accountId, argsJson))
+    override fun dispatchNotification(callbackId: Int, name: String, accountId: Int, args: Array<String>) {
+        notifications.add(Notification(callbackId, name, accountId, args))
     }
 
     override fun completeNext(dispatchId: Long, resultWire: String) {

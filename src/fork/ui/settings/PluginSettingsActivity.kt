@@ -5,7 +5,6 @@ import desu.inugram.helpers.plugins.EngineDispatch
 import android.content.Context
 import android.util.Log
 import android.view.View
-import desu.inugram.InuConfig
 import desu.inugram.helpers.plugins.Plugin
 import desu.inugram.helpers.plugins.PluginSession
 import desu.inugram.helpers.plugins.QuickJs
@@ -18,8 +17,6 @@ import org.telegram.messenger.AndroidUtilities
 import org.telegram.messenger.LocaleController
 import org.telegram.messenger.NotificationCenter
 import org.telegram.messenger.R
-import org.telegram.messenger.Utilities
-import org.telegram.ui.Cells.NotificationsCheckCell
 import org.telegram.ui.Components.UItem
 import org.telegram.ui.Components.UniversalAdapter
 import org.telegram.ui.Stories.recorder.ButtonWithCounterView
@@ -42,7 +39,7 @@ class PluginSettingsActivity(
 
     private sealed class Row(val uid: Int, val secondarySlot: Int) {
         class Header(uid: Int, val text: String) : Row(uid, 0)
-        class Check(uid: Int, val text: CharSequence, val subtitle: CharSequence?, val checked: Boolean, val slot: Int, secondary: Int) : Row(uid, secondary)
+        class Check(uid: Int, val text: CharSequence, val subtitle: CharSequence?, val icon: String?, val formatting: String?, val checked: Boolean, val slot: Int, secondary: Int) : Row(uid, secondary)
         class Button(uid: Int, val text: CharSequence, val subtitle: CharSequence?, val value: CharSequence?, val icon: String?, val formatting: String?, val danger: Boolean, val slot: Int, secondary: Int) : Row(uid, secondary)
         class Select(uid: Int, val text: CharSequence, val options: List<SelectOption>, val selected: Int, val icon: String?, val formatting: String?, val dialog: Boolean, val slot: Int, secondary: Int) : Row(uid, secondary)
         class Slider(
@@ -176,7 +173,12 @@ class PluginSettingsActivity(
                 "header" -> Row.Header(uid, o.getString("text"))
                 "separator" -> Row.Separator(uid, formatted(o, "text"))
                 "native" -> Row.Native(uid, o.getLong("handle"))
-                "check" -> Row.Check(uid, formattedRow(o, "text") ?: "", formattedRow(o, "subtitle"), o.getBoolean("checked"), o.getInt("onChange"), secondary)
+                "check" -> Row.Check(
+                    uid, formattedRow(o, "text") ?: "", formattedRow(o, "subtitle"),
+                    o.optString("icon").takeIf { it.isNotEmpty() },
+                    joinEntities(o, "text", "subtitle"),
+                    o.getBoolean("checked"), o.getInt("onChange"), secondary,
+                )
                 "button" -> Row.Button(
                     uid, formattedRow(o, "text") ?: "",
                     formattedRow(o, "subtitle"),
@@ -259,30 +261,10 @@ class PluginSettingsActivity(
         sliderCells.keys.retainAll(liveUids)
     }
 
-    private fun buildCheck(row: Row.Check): UItem {
-        if (row.subtitle == null) {
-            return UItem.asCheck(row.uid, row.text).also { it.checked = row.checked }
-        }
-        return UItem.asButtonCheck(row.uid, row.text, row.subtitle).also {
-            it.checked = row.checked
-            it.bind = Utilities.Callback { view ->
-                val cell = view as? NotificationsCheckCell ?: return@Callback
-                // stock bind sets the checkbox hard (and cell.isChecked already reads the new
-                // state by now); mirror TextCheckCell's itemId trick by remembering the last
-                // (row, checked) in the view tag, so a same-row re-render animates the toggle
-                val prev = cell.tag as? Pair<*, *>
-                val sameRow = prev?.first == row.uid
-                val visualChecked = if (sameRow) prev?.second == true else row.checked
-                cell.setTextAndValueAndCheck(
-                    row.text, row.subtitle, visualChecked, 0, true,
-                    !InuConfig.M3_SECTIONS_STYLE.value,
-                )
-                cell.setDrawLine(false)
-                if (sameRow && visualChecked != row.checked) cell.setChecked(row.checked)
-                cell.tag = row.uid to row.checked
-            }
-        }
-    }
+    private fun buildCheck(row: Row.Check): UItem =
+        CheckCellFactory.of(
+            row.uid, row.text, row.subtitle, ButtonIcon(row.icon, session.engine), row.checked, row.formatting,
+        )
 
     private fun buildButton(row: Row.Button): UItem =
         ButtonCellFactory.of(row.uid, row.text, row.value, row.subtitle, ButtonIcon(row.icon, session.engine), row.danger, row.formatting)

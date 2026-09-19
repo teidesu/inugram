@@ -374,6 +374,27 @@ fn a_scope_that_disposes_itself_from_its_own_callback_still_tears_down() {
 }
 
 #[test]
+fn a_scope_can_hand_back_a_disposable_instead_of_a_function() {
+  let (rt, ctx, host, state, _logs) = setup(&["account.read(self)"], TWO_ACCOUNTS);
+  eval(
+    &ctx,
+    r#"
+        globalThis.__log = [];
+        inu.withCurrentAccount((a) => {
+            const stack = new DisposableStack();
+            stack.defer(() => { __log.push(`teardown:${a.id}`); });
+            return stack;
+        });
+        "#,
+  );
+  *host.json.borrow_mut() = SWITCHED.to_string();
+  state.accounts_changed(&rt, &ctx);
+  state.notify_unload(&rt, &ctx);
+  assert_eq!(eval_json(&ctx, "__log"), r#"["teardown:0","teardown:1"]"#);
+  assert!(state.scopes.is_empty());
+}
+
+#[test]
 fn unload_runs_every_teardown_once_more() {
   let (rt, ctx, _host, state, _logs) = setup(&[], TWO_ACCOUNTS);
   eval(

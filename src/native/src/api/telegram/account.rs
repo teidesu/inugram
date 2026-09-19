@@ -8,7 +8,9 @@ use rquickjs::{Array, Ctx, Function, Object, Persistent, Result as JsResult, Run
 use crate::api::error::{call_callback, describe_js_error, PluginErrorCode};
 use crate::runtime::pump_jobs;
 use crate::sandbox::grants::{GrantHost, MATCH_EXACT};
-use crate::sandbox::registry::{make_disposer, noop_disposer, CallbackRegistry, Lifecycle, Registry, Token};
+use crate::sandbox::registry::{
+  make_disposer, noop_disposer, resolve_disposer, CallbackRegistry, Lifecycle, Registry, Token,
+};
 
 #[cfg(test)]
 use crate::api::error;
@@ -194,7 +196,7 @@ impl AccountState {
     let Some(result) = call_callback(ctx, &self.log, "withCurrentAccount callback", &callback, (account,)) else {
       return;
     };
-    let Some(teardown) = result.into_function() else {
+    let Some(teardown) = resolve_disposer(ctx, result) else {
       return;
     };
     if self.is_live(scope) {
@@ -325,6 +327,29 @@ pub fn dispatch_account<'js>(
     is_premium: false,
   });
   state.build_account(ctx, &info)
+}
+
+/// the account a method acts on is the handle it was called through, never anything captured: one
+/// prototype serves every slot
+pub(crate) fn account_slot<'js>(
+  ctx: &Ctx<'js>,
+  this: &rquickjs::function::This<Value<'js>>,
+  what: &str,
+) -> JsResult<i32> {
+  let slot = this
+    .0
+    .as_object()
+    .and_then(|handle| handle.get::<_, Value>("id").ok())
+    .and_then(|id| id.as_number())
+    .filter(|id| id.fract() == 0.0 && *id >= 0.0)
+    .map(|id| id as i32);
+  match slot {
+    Some(slot) => Ok(slot),
+    None => {
+      let message: &str = &format!("{what}: not called on an account handle; use inu.account().{what}(...)");
+      PluginErrorCode::InvalidArgument.throw(ctx, message)
+    }
+  }
 }
 
 pub fn install_account<'js>(

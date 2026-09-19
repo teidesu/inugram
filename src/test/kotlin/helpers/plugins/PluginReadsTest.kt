@@ -3,17 +3,24 @@ package desu.inugram.helpers.plugins
 import desu.inugram.core.plugins.PluginWire
 import desu.inugram.helpers.plugins.telegram.PeerSpecs
 import desu.inugram.helpers.plugins.telegram.PluginReads
+import desu.inugram.helpers.plugins.tl.TlHandles
 import java.util.ArrayList
+import java.util.concurrent.CountDownLatch
+import java.util.concurrent.TimeUnit
+import kotlin.test.assertFalse
 import kotlin.test.assertEquals
 import kotlin.test.assertNotEquals
+import kotlin.test.assertNotNull
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
 import org.json.JSONObject
 import org.junit.Before
 import org.junit.Test
+import org.telegram.SQLite.SQLiteDatabase
 import org.telegram.messenger.MediaDataController
 import org.telegram.messenger.MessageObject
 import org.telegram.messenger.MessagesController
+import org.telegram.messenger.MessagesStorage
 import org.telegram.messenger.UserConfig
 import org.telegram.tgnet.TLRPC
 
@@ -54,6 +61,17 @@ class PluginReadsTest {
 
     private fun read(plugin: Plugin, op: Int, arg: String = "", account: Int = 0): String =
         reads(plugin).accountRead(account, op, arg)
+
+    private fun preview(plugin: Plugin, message: TLRPC.Message, hideSpoilers: Boolean = false): JSONObject {
+        val flag = if (hideSpoilers) "1" else "0"
+        val wire = (plugin.tl() as TlHandles).mintWireForPlugin(message, readOnly = true)
+        val answer = read(plugin, PluginReads.OP_MESSAGE_PREVIEW, "$flag\n$wire")
+        assertTrue(answer.startsWith("J"), "a preview crosses as text plus entities: $answer")
+        return JSONObject(answer.drop(1))
+    }
+
+    private fun previewText(plugin: Plugin, message: TLRPC.Message, hideSpoilers: Boolean = false): String =
+        preview(plugin, message, hideSpoilers).getString("text")
 
     private fun fieldOf(plugin: Plugin, wire: String, key: String): String =
         plugin.tl().tlGet(handleId(wire), key)
@@ -180,7 +198,63 @@ class PluginReadsTest {
         assertEquals("dialog", stringOf(fieldOf(plugin, dialog, "_")))
         val message = read(plugin, PluginReads.OP_MESSAGE, "S\n7")
         assertEquals("hi", stringOf(fieldOf(plugin, message, "message")))
-        assertEquals("N", read(plugin, PluginReads.OP_MESSAGE, "S\n8"), "only what the app has in memory")
+        assertEquals("N", read(plugin, PluginReads.OP_MESSAGE, "S\n8"), "neither memory nor sqlite has it")
+    }
+
+    /**
+     * The half memory cannot answer: a synchronous read blocks on stock's storage queue rather than
+     * reporting a miss for every message that is not a chat list's own last one.
+     */
+    @Test
+    fun a_message_only_sqlite_has_is_read_from_disk_synchronously() {
+        val plugin = granted()
+        val mid = 987655
+        onStorage { database ->
+            val state = database.executeFast(
+                "REPLACE INTO messages_v2 (mid, uid, read_state, send_state, date, data, out, ttl, media, imp, " +
+                    "mention, forwards, thread_reply_id, is_channel, reply_to_message_id, group_id, reply_to_story_id) " +
+                    "VALUES(?, ?, 0, 0, 0, ?, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0)",
+            )
+            state.bindInteger(1, mid)
+            state.bindLong(2, self)
+            state.bindTlObject(
+                3,
+                TLRPC.TL_message().apply { id = mid; message = "from disk"; peer_id = peerUser(self) }.synced(),
+            )
+            state.step()
+            state.dispose()
+        }
+        try {
+            assertEquals(
+                "from disk",
+                stringOf(fieldOf(plugin, read(plugin, PluginReads.OP_MESSAGE, "S\n$mid"), "message")),
+            )
+            // the row is not a channel's, so the common box reaches it with no peer named
+            assertEquals(
+                "from disk",
+                stringOf(fieldOf(plugin, read(plugin, PluginReads.OP_MESSAGE, "D0\n$mid"), "message")),
+            )
+        } finally {
+            onStorage { it.executeFast("DELETE FROM messages_v2 WHERE mid = $mid").stepThis().dispose() }
+        }
+    }
+
+    /** stock's own queue, which the harness does not replace: this really runs against the database */
+    private fun onStorage(block: (SQLiteDatabase) -> Unit) {
+        val storage = MessagesStorage.getInstance(0)
+        val latch = CountDownLatch(1)
+        var failure: Throwable? = null
+        storage.storageQueue.postRunnable {
+            try {
+                block(assertNotNull(storage.getDatabase(), "the test process has no database"))
+            } catch (e: Throwable) {
+                failure = e
+            } finally {
+                latch.countDown()
+            }
+        }
+        assertTrue(latch.await(10, TimeUnit.SECONDS), "the storage queue never ran")
+        failure?.let { throw it }
     }
 
     @Test
@@ -381,6 +455,108 @@ class PluginReadsTest {
         drain()
         assertTrue(stale.readResults.isEmpty())
         assertTrue(plugin.js.readResults.isEmpty())
+    }
+
+    /** the wording is stock's own, so only a device can say what it is */
+    @Test
+    fun a_message_preview_is_the_line_the_app_itself_would_draw() {
+        val plugin = granted()
+        val message = TLRPC.TL_message().apply {
+            id = 1
+            message = "plain text"
+            peer_id = peerUser(self)
+        }.synced()
+        assertEquals("plain text", previewText(plugin, message))
+    }
+
+    /** what `NotificationsController` shows in its own notification, when it is asked for */
+    @Test
+    fun a_preview_masks_a_spoiler_only_when_it_is_told_to() {
+        val plugin = granted()
+        val message = TLRPC.TL_message().apply {
+            id = 1
+            message = "ab cd"
+            peer_id = peerUser(self)
+            entities.add(TLRPC.TL_messageEntitySpoiler().apply { offset = 3; length = 2 })
+        }.synced()
+        assertEquals("ab \u280C\u2862", previewText(plugin, message, hideSpoilers = true))
+        assertEquals("ab cd", previewText(plugin, message))
+    }
+
+    /** the offsets are counted against the message's own text, which a media label is not */
+    @Test
+    fun a_preview_that_is_not_the_message_text_is_left_unmasked() {
+        val plugin = granted()
+        val message = TLRPC.TL_message().apply {
+            id = 1
+            message = "ab cd"
+            peer_id = peerUser(self)
+            media = TLRPC.TL_messageMediaPhoto()
+            entities.add(TLRPC.TL_messageEntitySpoiler().apply { offset = 0; length = 5 })
+        }.synced()
+        val drawn = previewText(plugin, message, hideSpoilers = true)
+        assertFalse(drawn.any { it in '\u2800'..'\u28FF' }, "a media label carries no spoiler of its own: $drawn")
+    }
+
+    /** an ordinary message's preview is its text, unspanned, so the formatting is the message's own */
+    @Test
+    fun a_preview_of_a_text_message_carries_that_message_s_entities() {
+        val plugin = granted()
+        val message = TLRPC.TL_message().apply {
+            id = 1
+            message = "bold text"
+            peer_id = peerUser(self)
+            entities.add(TLRPC.TL_messageEntityBold().apply { offset = 0; length = 4 })
+        }.synced()
+        val drawn = preview(plugin, message)
+        assertEquals("bold text", drawn.getString("text"))
+        val entities = assertNotNull(drawn.optJSONArray("entities"), "the message's own entities are the preview's")
+        assertEquals(1, entities.length())
+        assertEquals("messageEntityBold", entities.getJSONObject(0).getString("_"))
+    }
+
+    /** the masked characters are gone, so an entity still covering them describes nothing */
+    @Test
+    fun masking_a_spoiler_drops_the_entities_over_it() {
+        val plugin = granted()
+        val message = TLRPC.TL_message().apply {
+            id = 1
+            message = "ab cd"
+            peer_id = peerUser(self)
+            entities.add(TLRPC.TL_messageEntityBold().apply { offset = 0; length = 2 })
+            entities.add(TLRPC.TL_messageEntitySpoiler().apply { offset = 3; length = 2 })
+        }.synced()
+        val drawn = preview(plugin, message, hideSpoilers = true)
+        assertEquals("ab \u280C\u2862", drawn.getString("text"))
+        val entities = assertNotNull(drawn.optJSONArray("entities"), "the bold outside the spoiler survives")
+        assertEquals(1, entities.length())
+        assertEquals("messageEntityBold", entities.getJSONObject(0).getString("_"))
+    }
+
+    /** the app writes a service message with spans, which are the only formatting it has there */
+    @Test
+    fun a_preview_carries_the_entities_the_app_spanned_it_with() {
+        val plugin = granted()
+        val message = TLRPC.TL_messageService().apply {
+            id = 1
+            peer_id = peerUser(self)
+            from_id = peerUser(self)
+            action = TLRPC.TL_messageActionChatAddUser().apply { users.add(self) }
+        }.synced()
+        val drawn = preview(plugin, message)
+        assertTrue(drawn.getString("text").isNotEmpty(), "a service message writes itself out")
+        val entities = drawn.optJSONArray("entities")
+        assertNotNull(entities, "the names the app made bold reach the plugin as entities")
+        assertTrue(
+            (0 until entities.length()).any { entities.getJSONObject(it).getString("_") == "messageEntityBold" },
+            "expected a bold name: $entities",
+        )
+    }
+
+    @Test
+    fun a_preview_needs_a_message_and_says_so() {
+        val plugin = granted()
+        assertPluginError("invalid-argument", read(plugin, PluginReads.OP_MESSAGE_PREVIEW, "0\nJ{\"_\":\"user\"}"))
     }
 
     @Test

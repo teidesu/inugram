@@ -1,3 +1,4 @@
+use crate::api::lifecycle::AppMode;
 use crate::testing::harness::setup_apis as setup;
 
 #[test]
@@ -91,7 +92,7 @@ fn a_throwing_lifecycle_callback_faults() {
       .unwrap();
   });
 
-  state.app_visibility_changed(&rt, &ctx, false);
+  state.app_visibility_changed(&rt, &ctx, AppMode::Background);
   state.notify_unload(&rt, &ctx);
 
   let seen: Vec<(i32, String)> = logs
@@ -124,12 +125,42 @@ fn visibility_callbacks_fire_on_transitions_only() {
       .unwrap();
   });
 
-  state.app_visibility_changed(&rt, &ctx, true);
-  state.app_visibility_changed(&rt, &ctx, false);
-  state.app_visibility_changed(&rt, &ctx, false);
-  state.app_visibility_changed(&rt, &ctx, true);
+  state.app_visibility_changed(&rt, &ctx, AppMode::Foreground);
+  state.app_visibility_changed(&rt, &ctx, AppMode::Background);
+  state.app_visibility_changed(&rt, &ctx, AppMode::Background);
+  state.app_visibility_changed(&rt, &ctx, AppMode::Foreground);
   let modes: String = ctx.with(|ctx| ctx.eval("JSON.stringify(globalThis.__modes)").unwrap());
   assert_eq!(modes, r#"["background","foreground"]"#);
+}
+
+/// the finer pair rides the same callback and dedups the same way; a pause and a resume around a
+/// stretch of being backgrounded arrive in the order the activities did them
+#[test]
+fn the_finer_pair_is_delivered_alongside_the_coarse_one() {
+  let (rt, ctx, _host, state, _dialogs, _logs) = setup(&["onAppVisibilityChange"]);
+  ctx.with(|ctx| {
+    ctx
+      .eval::<(), _>(
+        r#"
+            globalThis.__modes = [];
+            inu.onAppVisibilityChange(mode => { __modes.push(mode); });
+            "#,
+      )
+      .unwrap();
+  });
+
+  for mode in [
+    AppMode::Paused,
+    AppMode::Paused,
+    AppMode::Background,
+    AppMode::Foreground,
+    AppMode::Resumed,
+    AppMode::Resumed,
+  ] {
+    state.app_visibility_changed(&rt, &ctx, mode);
+  }
+  let modes: String = ctx.with(|ctx| ctx.eval("JSON.stringify(globalThis.__modes)").unwrap());
+  assert_eq!(modes, r#"["paused","background","foreground","resumed"]"#);
 }
 
 #[test]
@@ -152,7 +183,7 @@ fn visibility_without_the_grant_throws_and_registers_nothing() {
   });
   assert_eq!(caught, r#"[true,"not-granted","onAppVisibilityChange"]"#);
   assert!(state.visibility_fns.is_empty());
-  state.app_visibility_changed(&rt, &ctx, false);
+  state.app_visibility_changed(&rt, &ctx, AppMode::Background);
 }
 
 #[test]
@@ -170,7 +201,7 @@ fn a_throwing_visibility_callback_is_logged_and_the_rest_still_run() {
       .unwrap();
   });
 
-  state.app_visibility_changed(&rt, &ctx, false);
+  state.app_visibility_changed(&rt, &ctx, AppMode::Background);
   let ran: String = ctx.with(|ctx| ctx.eval("JSON.stringify(globalThis.__ran)").unwrap());
   assert_eq!(ran, r#"["second"]"#);
   assert!(
@@ -183,7 +214,7 @@ fn a_throwing_visibility_callback_is_logged_and_the_rest_still_run() {
   );
 
   ctx.with(|ctx| ctx.eval::<(), _>("__d(); __d();").unwrap());
-  state.app_visibility_changed(&rt, &ctx, true);
+  state.app_visibility_changed(&rt, &ctx, AppMode::Foreground);
   let ran: String = ctx.with(|ctx| ctx.eval("JSON.stringify(globalThis.__ran)").unwrap());
   assert_eq!(ran, r#"["second"]"#, "a disposed registration hears nothing more");
 }
@@ -247,7 +278,7 @@ fn visibility_events_do_not_reenter_a_plugin_during_cleanup() {
       .unwrap()
   });
   state.notify_unload(&rt, &ctx);
-  state.app_visibility_changed(&rt, &ctx, false);
+  state.app_visibility_changed(&rt, &ctx, AppMode::Background);
   let calls: i32 = ctx.with(|ctx| ctx.eval("calls").unwrap());
   assert_eq!(calls, 0);
 }

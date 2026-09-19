@@ -321,3 +321,4 @@ feature/minimize-attach-panel.patch
 bugfix/link-scrim-offset.patch
 bugfix/scrim-touch-lock.patch
 feature/plugins.patch
+bugfix/settings-activity-bulletin.patch

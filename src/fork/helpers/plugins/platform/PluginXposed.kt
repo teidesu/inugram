@@ -401,7 +401,7 @@ object PluginXposed : SessionResource {
                 }
             } catch (e: Throwable) {
                 Log.e(TAG, "[${session.manifest.name}] xposed site $site (${entry.target}) dispatch failed; continuing", e)
-                releaseUntaken(minted)
+                PluginJvm.releaseUntaken(session.engine, minted)
                 return next(args)
             }
 
@@ -415,7 +415,7 @@ object PluginXposed : SessionResource {
                     null
                 }
                 if (before == null) {
-                    releaseUntaken(minted)
+                    PluginJvm.releaseUntaken(session.engine, minted)
                     return next(args)
                 }
                 val wantsAfter = before.firstOrNull() == "P1"
@@ -458,7 +458,7 @@ object PluginXposed : SessionResource {
                     null
                 }
                 if (after == null || after == NOT_DISPATCHED) {
-                    releaseUntaken(listOfNotNull(outcomeWire))
+                    PluginJvm.releaseUntaken(session.engine, listOfNotNull(outcomeWire))
                     return outcome.getOrThrow()
                 }
                 if (after == "U") return outcome.getOrThrow()
@@ -471,12 +471,6 @@ object PluginXposed : SessionResource {
             } finally {
                 if (owed) release(id)
             }
-        }
-
-        /** this frame is app code's, so the bridge being gone is one more thing that may not surface here */
-        private fun releaseUntaken(wires: List<String>) {
-            val bridge = PluginJvm.bridgeFor(session.engine) ?: return
-            for (wire in wires) runCatching { bridge.release(wire) }
         }
 
         private class Request(val method: String, val receiver: String, val args: Array<String>)

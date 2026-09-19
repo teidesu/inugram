@@ -190,10 +190,11 @@ Rust and Kotlin; do not add a schema/code-generation layer for them.
 
 ### Reads, sends, and RPC chains
 
-- `getMessagesCached` sees dialog-list last messages, not the open chat's cache.
-  Async reads narrow misses through memory → storage → network and settle once,
-  preserving scalar/list result shape. Peer `0` (`D0`) selects the common message
-  box for reads: exclude channel messages whose IDs can collide.
+- `getMessagesCached` reads memory, then blocks on stock's storage queue running the
+  same sqlite reader the async path uses. Async reads narrow misses through
+  memory → storage → network and settle once, preserving scalar/list result shape.
+  Peer `0` (`D0`) selects the common message box for reads: exclude channel
+  messages whose IDs can collide.
 - Projections must agree with ordinary field reads. Fully scalar objects may be
   projected whole; other objects carry their type only, with children minted lazily.
   Dispatch views cache nothing. Explicit `fields` projections may omit unsupported

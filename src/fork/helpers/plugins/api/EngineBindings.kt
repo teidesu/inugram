@@ -50,7 +50,7 @@ object EngineBindings {
             ),
         )
         // a plugin loaded while the app is hidden would otherwise tick unthrottled until the next transition; no callback can hear this, its own code not having run yet
-        if (!PluginAppVisibility.isForeground) session.engine.appVisibilityChanged(false)
+        if (!PluginAppVisibility.isForeground) session.engine.appVisibilityChanged(PluginAppVisibility.MODE_BACKGROUND)
     }
 
     /** read live rather than off a snapshot, which would be a strong reference to a screen the user has already left. Here rather than in `PluginJvm`, which reaches no `Activity` of its own */

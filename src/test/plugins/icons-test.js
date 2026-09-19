@@ -153,13 +153,19 @@ expectThrow('and a hand-built one is re-checked, not trusted', 'invalid-argument
   icon: { __inuIcon: 'rorg.telegram.messenger:raw/notification' },
   onClick: () => {},
 }))
-check('a switch row still builds, it simply has nowhere to put one', inu.ui.check({
+check('a switch row takes one too', inu.ui.check({
   text: 'x',
   checked: false,
-  // @ts-expect-error check takes no icon
   icon: curated.settings,
   onChange: () => {},
 }) !== undefined)
+expectTypeError('and refuses one it was not handed, the same way every other row does', () => inu.ui.check({
+  text: 'x',
+  checked: false,
+  // @ts-expect-error a resource name is not a UIIcon
+  icon: 'msg_settings',
+  onChange: () => {},
+}))
 
 // -- the gallery, which is the part a person would actually want --
 

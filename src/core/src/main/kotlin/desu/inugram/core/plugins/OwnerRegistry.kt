@@ -29,4 +29,9 @@ class OwnerRegistry<O : Any, T> {
     }
 
     fun count(owner: O): Int = synchronized(byOwner) { byOwner[owner]?.size ?: 0 }
+
+    /** whether any owner holds an item [matches] picks */
+    fun any(matches: (T) -> Boolean): Boolean = synchronized(byOwner) {
+        byOwner.values.any { items -> items.any(matches) }
+    }
 }

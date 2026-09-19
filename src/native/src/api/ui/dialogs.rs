@@ -8,11 +8,11 @@ use crate::api::platform::jvm::JvmState;
 use crate::api::tl::proxy::plain_wire_to_js;
 use crate::api::ui::icons;
 use crate::runtime::{pump_jobs, Parked, PendingTable};
-use crate::utils::arguments::{opt_bool, opt_str, read_index, req_str, stringify_json};
+use crate::utils::arguments::{self, opt_bool, opt_str, read_index, req_str, stringify_json};
 
 pub trait DialogHost {
   fn toast(&self, text: &str);
-  fn bulletin(&self, text: &str, entities_json: &str, icon_spec: &str) -> Option<String>;
+  fn bulletin(&self, request_id: i64, options_json: &str) -> Option<String>;
   fn dialog(&self, request_id: i64, options_json: &str) -> Option<String>;
   fn chooser(&self, request_id: i64, options_json: &str) -> Option<String>;
   fn prompt(&self, request_id: i64, options_json: &str) -> Option<String>;
@@ -23,9 +23,24 @@ enum Modal {
   Dialog,
   Prompt,
   Chooser { multiple: bool },
+  Bulletin,
 }
 
 impl Parked for Modal {}
+
+/// stock's `Bulletin.UsersLayout` draws three avatars and nothing past them
+const AVATAR_LIMIT: usize = 3;
+/// stock's own `Bulletin.DURATION_SHORT`/`DURATION_LONG`
+const DURATION_SHORT_MS: i64 = 1500;
+const DURATION_LONG_MS: i64 = 2750;
+const DURATION_MIN_MS: i64 = 500;
+const DURATION_MAX_MS: i64 = 30_000;
+
+/// `inu.icons` values are opaque tagged objects, so a plain `{ type: 'avatars' }` cannot be one
+fn is_avatars(value: &Value<'_>) -> bool {
+  let Some(object) = value.as_object() else { return false };
+  object.get::<_, Option<String>>("type").ok().flatten().as_deref() == Some("avatars")
+}
 
 pub struct DialogState {
   host: Rc<dyn DialogHost>,
@@ -35,27 +50,108 @@ pub struct DialogState {
 }
 
 impl DialogState {
-  fn js_ui_bulletin<'js>(self: &Rc<Self>, ctx: &Ctx<'js>, options: Value<'js>) -> JsResult<()> {
+  /// A bulletin is parked like the modals are: it has an outcome the plugin may wait for, and
+  /// reusing that machinery is what keeps a tappable bulletin from needing a dispatch of its own.
+  /// Nothing has to be awaited - a plugin that only wants to say something drops the promise.
+  fn js_ui_bulletin<'js>(self: &Rc<Self>, ctx: &Ctx<'js>, options: Value<'js>) -> JsResult<Value<'js>> {
     let Some(options) = options.as_object() else {
       return Err(Exception::throw_type(ctx, "bulletin: expected an options object"));
     };
-    let text = crate::utils::arguments::opt_text(ctx, options, "bulletin", "text")?
+    let out = Object::new(ctx.clone())?;
+    let text = arguments::opt_text(ctx, options, "bulletin", "text")?
       .ok_or_else(|| Exception::throw_type(ctx, "bulletin: 'text' must be a string"))?;
-    let entities = (|| -> JsResult<String> {
-      let entities = text.1;
-      let Some(entities) = entities else {
-        return Ok(String::new());
-      };
-      Ok(ctx.json_stringify(entities)?.map(|s| s.to_string()).transpose()?.unwrap_or_default())
-    })()?;
+    arguments::write_input_text(&out, "text", text)?;
+    if let Some(subtitle) = arguments::opt_text(ctx, options, "bulletin", "subtitle")? {
+      arguments::write_input_text(&out, "subtitle", subtitle)?;
+    }
+
     let icon_value: Value =
       options.get("icon").map_err(|_| Exception::throw_type(ctx, "bulletin: cannot read 'icon'"))?;
-    let icon = icons::icon_from_value(ctx, icon_value, "bulletin", self.jvm.as_ref())?
-      .ok_or_else(|| Exception::throw_type(ctx, "bulletin: 'icon' is required"))?;
-    if let Some(err) = self.host.bulletin(&text.0, &entities, &icon.spec) {
-      return Err(ctx.throw(crate::api::error::host_error_to_js(ctx, &err)?));
+    if icon_value.is_undefined() || icon_value.is_null() {
+      return Err(Exception::throw_type(ctx, "bulletin: 'icon' is required"));
     }
-    Ok(())
+    if is_avatars(&icon_value) {
+      let spec = icon_value.as_object().expect("an avatars icon is an object");
+      let list: Value =
+        spec.get("avatars").map_err(|_| Exception::throw_type(ctx, "bulletin: cannot read 'avatars'"))?;
+      let list = list
+        .as_array()
+        .ok_or_else(|| Exception::throw_type(ctx, "bulletin: 'avatars' must be an array"))?;
+      let ids = arguments::array_values(ctx, list, "bulletin: 'avatars'")?;
+      // stock's own layout draws three and counts the rest; more than that is a silent no-op
+      if ids.len() > AVATAR_LIMIT {
+        return PluginErrorCode::InvalidArgument.throw(ctx, &format!("bulletin: at most {AVATAR_LIMIT} avatars"));
+      }
+      if ids.is_empty() {
+        return Err(Exception::throw_type(ctx, "bulletin: 'avatars' must name at least one peer"));
+      }
+      let out_list = rquickjs::Array::new(ctx.clone())?;
+      for (index, value) in ids.iter().enumerate() {
+        let id = value
+          .as_int()
+          .map(i64::from)
+          .or_else(|| value.as_float().filter(|f| f.fract() == 0.0).map(|f| f as i64))
+          .ok_or_else(|| Exception::throw_type(ctx, "bulletin: 'avatars' takes dialog ids"))?;
+        out_list.set(index, id)?;
+      }
+      out.set("avatars", out_list)?;
+      // the peers are looked up in an account, and the one showing the bulletin is not always the
+      // one the peers belong to - a notification about another account's chat is the whole reason
+      if let Some(account) = arguments::opt_int(ctx, spec, "bulletin", "account")? {
+        out.set("account", account)?;
+      }
+    } else {
+      let icon = icons::icon_from_value(ctx, icon_value, "bulletin", self.jvm.as_ref())?
+        .ok_or_else(|| Exception::throw_type(ctx, "bulletin: 'icon' is required"))?;
+      out.set("icon", icon.spec.clone())?;
+    }
+
+    let duration: Value = options
+      .get("duration")
+      .map_err(|_| Exception::throw_type(ctx, "bulletin: cannot read 'duration'"))?;
+    if !duration.is_undefined() && !duration.is_null() {
+      let millis = if let Some(name) = duration.as_string() {
+        match name.to_string()?.as_str() {
+          "short" => DURATION_SHORT_MS,
+          "long" => DURATION_LONG_MS,
+          other => {
+            return PluginErrorCode::InvalidArgument.throw(ctx, &format!("bulletin: unknown duration '{other}'"))
+          }
+        }
+      } else {
+        let millis = duration
+          .as_int()
+          .map(i64::from)
+          .or_else(|| duration.as_float().map(|f| f as i64))
+          .ok_or_else(|| Exception::throw_type(ctx, "bulletin: 'duration' must be a number or a name"))?;
+        if !(DURATION_MIN_MS..=DURATION_MAX_MS).contains(&millis) {
+          return PluginErrorCode::InvalidArgument
+            .throw(ctx, &format!("bulletin: 'duration' must be between {DURATION_MIN_MS} and {DURATION_MAX_MS} ms"));
+        }
+        millis
+      };
+      out.set("duration", millis)?;
+    }
+
+    if let Some(position) = opt_str(ctx, options, "bulletin", "position")? {
+      match position.as_str() {
+        "top" => out.set("top", true)?,
+        "bottom" => out.set("top", false)?,
+        other => return PluginErrorCode::InvalidArgument.throw(ctx, &format!("bulletin: unknown position '{other}'")),
+      }
+    }
+
+    if let Some(button) = opt_str(ctx, options, "bulletin", "button")? {
+      out.set("button", button)?;
+    }
+
+    let json = stringify_json(ctx, out.into_value(), "bulletin")?;
+    Ok(
+      self
+        .pending
+        .park(ctx, Modal::Bulletin, |request_id| self.host.bulletin(request_id, &json))?
+        .into_value(),
+    )
   }
 
   fn js_ui_dialog<'js>(self: &Rc<Self>, ctx: &Ctx<'js>, options: Value<'js>) -> JsResult<Value<'js>> {
@@ -80,8 +176,8 @@ impl DialogState {
     }
     let out = Object::new(ctx.clone())?;
     for key in ["title", "message"] {
-      if let Some(value) = crate::utils::arguments::opt_text(ctx, obj, "dialog", key)? {
-        crate::utils::arguments::write_input_text(&out, key, value)?;
+      if let Some(value) = arguments::opt_text(ctx, obj, "dialog", key)? {
+        arguments::write_input_text(&out, key, value)?;
       }
     }
     for key in ["positive", "negative", "neutral"] {
@@ -118,7 +214,7 @@ impl DialogState {
 
     let raw: Value = opts.get("items").map_err(|_| Exception::throw_type(ctx, "chooser: cannot read 'items'"))?;
     let source = raw.as_array().ok_or_else(|| Exception::throw_type(ctx, "chooser: 'items' must be an array"))?;
-    let source = crate::utils::arguments::array_values(ctx, source, "chooser: 'items'")?;
+    let source = arguments::array_values(ctx, source, "chooser: 'items'")?;
     if source.is_empty() {
       return Err(Exception::throw_type(ctx, "chooser: 'items' must not be empty"));
     }
@@ -153,9 +249,7 @@ impl DialogState {
     if !selected.is_undefined() && !selected.is_null() {
       match (multiple, selected.as_array()) {
         (true, Some(list)) => {
-          for (i, index) in
-            crate::utils::arguments::array_values(ctx, list, "chooser: 'selected'")?.into_iter().enumerate()
-          {
+          for (i, index) in arguments::array_values(ctx, list, "chooser: 'selected'")?.into_iter().enumerate() {
             picked.set(i, read_index(ctx, &index, "chooser", len)?)?;
           }
         }

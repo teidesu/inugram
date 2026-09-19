@@ -450,6 +450,6 @@ mod bundled_oracle {
     let lines = crate::testing::harness::run_capturing_console(&rt, &ctx, ORACLE);
     drop(ui);
 
-    crate::testing::harness::assert_oracle_exact(&lines, "icons test done", 30);
+    crate::testing::harness::assert_oracle_exact(&lines, "icons test done", 31);
   }
 }

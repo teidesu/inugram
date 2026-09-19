@@ -23,17 +23,25 @@ fn toast_reaches_host_coerced_to_string() {
   assert_eq!(*host.toasts.borrow(), vec!["hello".to_string(), "42".to_string()]);
 }
 
+fn icons(ctx: &rquickjs::Ctx<'_>) {
+  crate::api::ui::icons::install_icons(
+    ctx,
+    Rc::new(BulletinIconHost),
+    None,
+    &crate::testing::harness::get_api_globals(ctx),
+  )
+  .unwrap();
+}
+
+fn bulletin_options(host: &crate::testing::harness::RecordingHost) -> Vec<String> {
+  host.bulletins.borrow().iter().map(|(_, json)| json.clone()).collect()
+}
+
 #[test]
 fn bulletin_reaches_host_with_ui_and_native_animation_icons() {
   let (_rt, ctx, host, _lifecycle, _state, _logs) = setup(&[]);
   ctx.with(|ctx| {
-    crate::api::ui::icons::install_icons(
-      &ctx,
-      Rc::new(BulletinIconHost),
-      None,
-      &crate::testing::harness::get_api_globals(&ctx),
-    )
-    .unwrap();
+    icons(&ctx);
     ctx
       .eval::<(), _>(
         "inu.ui.bulletin({ text: 'static', icon: inu.icons.common('info') }); \
@@ -42,25 +50,69 @@ fn bulletin_reaches_host_with_ui_and_native_animation_icons() {
       .unwrap();
   });
   assert_eq!(
-    *host.bulletins.borrow(),
+    bulletin_options(&host),
+    vec![r#"{"text":"static","icon":"rmsg_info"}"#.to_string(), r#"{"text":"animated","icon":"a0done"}"#.to_string()],
+  );
+}
+
+/// the whole of what a bulletin can be told, in the order it is written out
+#[test]
+fn bulletin_carries_its_subtitle_avatars_duration_position_and_button() {
+  let (_rt, ctx, host, _lifecycle, _state, _logs) = setup(&[]);
+  ctx.with(|ctx| {
+    icons(&ctx);
+    ctx
+      .eval::<(), _>(
+        "inu.ui.bulletin({ text: 'title', subtitle: 'under it', \
+         icon: { type: 'avatars', avatars: [42, -1001], account: 2 }, \
+         duration: 'short', position: 'top', button: 'Open' });",
+      )
+      .unwrap();
+  });
+  assert_eq!(
+    bulletin_options(&host),
     vec![
-      ("static".to_string(), String::new(), "rmsg_info".to_string()),
-      ("animated".to_string(), String::new(), "a0done".to_string()),
+      r#"{"text":"title","subtitle":"under it","avatars":[42,-1001],"account":2,"duration":1500,"top":true,"button":"Open"}"#
+        .to_string(),
     ],
   );
+}
+
+#[test]
+fn a_bulletin_needs_an_icon_and_checks_what_it_is_given() {
+  let (_rt, ctx, host, _lifecycle, _state, _logs) = setup(&[]);
+  ctx.with(|ctx| {
+    icons(&ctx);
+    ctx.eval::<(), _>("globalThis.AVATARS = { type: 'avatars', avatars: [1] }").unwrap();
+    for bad in [
+      "{ text: 'x' }",
+      "{ text: 'x', icon: { type: 'avatars' } }",
+      "{ text: 'x', icon: { type: 'avatars', avatars: [] } }",
+      "{ text: 'x', icon: { type: 'avatars', avatars: [1, 2, 3, 4] } }",
+      "{ text: 'x', icon: { type: 'avatars', avatars: ['me'] } }",
+      "{ text: 'x', icon: { type: 'peer', avatars: [1] } }",
+      "{ text: 'x', icon: AVATARS, duration: 'forever' }",
+      "{ text: 'x', icon: AVATARS, duration: 1 }",
+      "{ text: 'x', icon: AVATARS, duration: 999999 }",
+      "{ text: 'x', icon: AVATARS, position: 'middle' }",
+      "{ text: 'x', icon: AVATARS, button: {} }",
+    ] {
+      let caught = ctx
+        .eval::<String, _>(format!(
+          "(() => {{ try {{ inu.ui.bulletin({bad}); return 'no-throw' }} catch (e) {{ return e.name }} }})()"
+        ))
+        .unwrap();
+      assert_ne!(caught, "no-throw", "{bad}");
+    }
+  });
+  assert!(bulletin_options(&host).is_empty(), "nothing refused may reach the host");
 }
 
 #[test]
 fn bulletin_carries_entities_beside_the_text() {
   let (_rt, ctx, host, _lifecycle, _state, _logs) = setup(&[]);
   ctx.with(|ctx| {
-    crate::api::ui::icons::install_icons(
-      &ctx,
-      Rc::new(BulletinIconHost),
-      None,
-      &crate::testing::harness::get_api_globals(&ctx),
-    )
-    .unwrap();
+    icons(&ctx);
     ctx
       .eval::<(), _>(
         "inu.ui.bulletin({ text: { text: 'hi', entities: [{ _: 'messageEntityBold', offset: 0, length: 2 }] }, \
@@ -69,12 +121,11 @@ fn bulletin_carries_entities_beside_the_text() {
       .unwrap();
   });
   assert_eq!(
-    *host.bulletins.borrow(),
-    vec![(
-      "hi".to_string(),
-      r#"[{"_":"messageEntityBold","offset":0,"length":2}]"#.to_string(),
-      "rmsg_info".to_string(),
-    )],
+    bulletin_options(&host),
+    vec![
+      r#"{"text":"hi","textEntities":[{"_":"messageEntityBold","offset":0,"length":2}],"icon":"rmsg_info"}"#
+        .to_string(),
+    ],
   );
 }
 
