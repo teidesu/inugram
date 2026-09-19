@@ -39,7 +39,7 @@ import org.telegram.tgnet.tl.legacy.TL_legacy_message
  * The flag half writes rather than reads, and belongs with it for the same reason: [TlFlags] says
  * which bit gates a field, this is what finds the word holding it on an actual object.
  *
- * Caveats (mirrored in src/plugins/common.d.ts):
+ * Caveats (mirrored in sdk/types/common.d.ts):
  * - `flags`/`flags2` are never exposed and never accepted: [TlFlags] owns them. a field whose bit is
  *   clear is omitted from reads entirely, and assigning a field recomputes its bit from the value
  *   (`null`/`0`/`""`/empty vector clear it).

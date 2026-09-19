@@ -13,10 +13,14 @@ exports, never the source of truth.
 | `fork/`, `fork-app/` | Main Kotlin code and app-module code |
 | `core/` | JVM-testable code |
 | `native/` | Rust plugin engine |
-| `plugins/` | Plugin API typings |
 | `test/` | Device tests, assets, and shared JS test plugins |
 | `res/`, `profile/` | Resources and ART baseline profile |
 | `vendor/` | Copied third-party code |
+
+`sdk/` is the published half: `sdk/types` is `@inugram/plugin-types` (the api
+typings and the grant catalogue) and `sdk/cli` is `@inugram/cli` (the bundler,
+manifest generator and dev server plugin authors use). Neither is patched into
+the worktree; `sdk/types/*.d.ts` is synced in as a device-test asset only.
 
 Mappings live in `scripts/config.ts` → `forkSyncFiles`. Update `FEATURES.md` when
 adding, removing, or meaningfully changing a feature or patch.
@@ -119,7 +123,7 @@ Always run `stg` commands from the `worktree/` directory.
 
 ## Plugin engine invariants
 
-`src/plugins/common.d.ts` is the contract. Fix code or contract when they disagree.
+`sdk/types/common.d.ts` is the contract. Fix code or contract when they disagree.
 Keep handwritten opcodes, wire formats, and JNI signatures synchronized between
 Rust and Kotlin; do not add a schema/code-generation layer for them.
 
@@ -232,8 +236,9 @@ Rust and Kotlin; do not add a schema/code-generation layer for them.
 
 ### TL generation and performance
 
-- `pnpm run generate-tl` writes the gitignored `src/plugins/android.tl.d.ts` and
-  `src/core/src/main/resources/tl_tables.txt` (read by `TlTables`). `pnpm run setup`
+- `pnpm run generate-tl` writes the gitignored `sdk/types/android.tl.d.ts`,
+  `src/core/src/main/resources/tl_tables.txt` (read by `TlTables`) and
+  `sdk/types/tl-names.txt` (the rpc/update vocabularies the cli ships). `pnpm run setup`
   runs it, but refuses while the stack diverges from `series`, so run it yourself
   after every rebase. Never edit the outputs by hand.
 - A long crosses as a js number only where the table marks it (decided per
@@ -248,6 +253,33 @@ Rust and Kotlin; do not add a schema/code-generation layer for them.
 - Preserve tests comparing projections/ordinal reads with real TL objects.
   Benchmark cold and warmed paths on the same device/session. Cache font lookup
   per font wire and invalidate on font load or roster-generation changes.
+
+### Plugin SDK
+
+`sdk/types/grants.json` is the hand-written grant catalogue and the single source
+of truth for what a manifest may ask for; `sdk/types/grants.d.ts` is its shape,
+shared by the generator and the cli. `pnpm run generate-grants` renders it
+into `GrantCatalog.kt`, which is checked in: `pnpm run setup` and
+`pnpm run build-debug` regenerate it, so drift shows up as a diff rather than as a
+stale build. It also checks that every `title`/`info`/`icon` the catalogue names
+resolves, and that its takeover list still matches `common.d.ts`. Add a grant there, never in
+Kotlin. The permission sheet's `KNOWN_GRANTS` stays hand-written, because android
+resource ids are compile-time ints; `GrantCatalogTest` pins it against the
+catalogue.
+
+`sdk/cli` bundles a plugin with esbuild into one classic script: the engine
+evaluates a plugin as a global script, so the output is an iife, never a module,
+and no source map, because nothing consumes one. Keep the cli's grant check a
+mirror of `GrantValidator`, message for message. `scripts/push-plugin.ts` shares
+the cli's `Device`, so the dev-broadcast protocol has one implementation.
+
+The cli itself is built by `@fuman/build` through `sdk/cli/vite.config.ts`: its
+`exports`/`bin` point at `src/*.ts` and the published `package.json` is generated
+into `dist`, so nothing in the tree carries a release version and the sources are
+what the repo imports. `src/meta.ts` holds the version (a vite `define`, `dev`
+from the sources) and finds `src/templates` beside itself, which the build copies
+into `dist`; the build fails if that module ever lands in a shared chunk.
+`@inugram/plugin-types` has no build: it is `.d.ts` and data, published as it is.
 
 ### Dev server
 
@@ -270,6 +302,7 @@ Run checks relevant to the change; no build for documentation-only edits.
 | Rust engine | `cd src/native && cargo check` / `cargo test` |
 | JVM core | `cd worktree && ./gradlew :InuCore:test` |
 | Device tests, user-run | `cd worktree && ./gradlew :TMessagesProj:connectedDebugAndroidTest` |
+| Plugin SDK | `pnpm run typecheck-sdk` / `pnpm run build-sdk` |
 
 - Rust tests live in adjacent `*_tests.rs`, included with `#[path]`; no inline modules.
 - `build.rs` compiles JS preludes to little-endian bytecode using the exact bundled

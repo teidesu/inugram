@@ -105,7 +105,7 @@ inu.withCurrentAccount((account) => {
 
   void (async () => {
     const history = await account.getHistory('me', { limit: 20, topicId: undefined })
-    console.log(history.map((message) => `#${message.id} ${message.text}`).join('\n'))
+    console.log(history.map(message => `#${message.id} ${message.text}`).join('\n'))
 
     let cursor: inu.Cursor<'dialogs'> | null = null
     let counted = 0
@@ -115,7 +115,7 @@ inu.withCurrentAccount((account) => {
         limit: 100,
         cursor: cursor ?? undefined,
       })
-      counted += page.filter((dialog) => dialog._ === 'dialog' && dialog.unread_count > 0).length
+      counted += page.filter(dialog => dialog._ === 'dialog' && dialog.unread_count > 0).length
       cursor = page.next
     } while (cursor !== null)
     console.log(`${counted} unread`)
@@ -129,7 +129,7 @@ inu.withCurrentAccount((account) => {
     void account.getDialogs({ cursor: 'c1' })
 
     const topics = await account.getTopics('@somewhere')
-    console.log(topics.map((topic) => (topic._ === 'forumTopic' ? topic.title : 'deleted')).join(', '))
+    console.log(topics.map(topic => (topic._ === 'forumTopic' ? topic.title : 'deleted')).join(', '))
 
     const full: tl.TypeUserFull | null = await account.getUserFull('me')
     const chat: tl.TypeChatFull | null = await account.getChatFull('@somewhere')
@@ -150,7 +150,7 @@ inu.withCurrentAccount((account) => {
     await account.setDraft('me', { text: 'unsent', entities: [] }, { replyToMessageId: edited.id })
     await account.setDraft('me', null)
     const forwarded: inu.Message[] = await account.forwardMessages('me', [edited.id], '@somewhere', { dropAuthor: true })
-    await account.deleteMessages('me', forwarded.map((message) => message.id), { revoke: true })
+    await account.deleteMessages('me', forwarded.map(message => message.id), { revoke: true })
 
     const media = await account.getHistory('@somewhere', { limit: 1 })
     const first = media[0]
@@ -168,7 +168,7 @@ inu.withCurrentAccount((account) => {
 
     const uploaded: tl.TypeInputFile = await account.uploadFile(new Uint8Array([1, 2, 3]), {
       fileName: 'three.bin',
-      onProgress: (loaded) => console.log(String(loaded)),
+      onProgress: loaded => console.log(String(loaded)),
     })
     const album: inu.Message[] = await account.sendMultiMedia('me', [
       { file: uploaded, caption: 'one' },
@@ -228,7 +228,6 @@ inu.xposed.hookMethod(
   { before: ctx => ctx.setReturnValue(false) },
 )
 
-
 const FLAG_SECURE = 0x00002000
 
 inu.xposed.hookMethod(inu.jvm.cls('android.view.Window').getDeclaredMethod('setFlags(II)V'), {
@@ -269,7 +268,6 @@ inu.xposed.hookMethod(
   inu.jvm.cls('org.telegram.messenger.FlagSecureReason').getDeclaredMethod('attach'),
   { before: ctx => ctx.setReturnValue(null) },
 )
-
 
 const GradientSpan = inu.jvm.defineClass('my/plugin/GradientSpan', {
   superclass: inu.jvm.cls('android/text/style/CharacterStyle'),

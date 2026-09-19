@@ -9,6 +9,7 @@ import android.widget.ImageView
 import android.widget.LinearLayout
 import android.widget.TextView
 import androidx.core.graphics.ColorUtils
+import desu.inugram.core.plugins.GrantTier
 import desu.inugram.core.plugins.SourceObfuscation
 import org.telegram.messenger.AndroidUtilities
 import org.telegram.messenger.LocaleController
