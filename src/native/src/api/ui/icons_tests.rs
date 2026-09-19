@@ -85,7 +85,7 @@ fn the_curated_table_is_sorted_and_unique() {
 /// `invalid-argument` for a spelling typescript accepted
 #[test]
 fn the_curated_table_is_exactly_what_the_contract_declares() {
-  const CONTRACT: &str = include_str!("../../../../plugins/common.d.ts");
+  const CONTRACT: &str = include_str!("../../../../../sdk/types/common.d.ts");
   let at = CONTRACT.find("function common(").expect("icons.common is not declared");
   let decl = &CONTRACT[at..];
   let end = decl.find("): UIIcon").expect("icons.common has no return type");

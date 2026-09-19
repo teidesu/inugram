@@ -1,7 +1,8 @@
 use jni::objects::{JByteArray, JClass, JObject, JObjectArray, JString};
+use jni::signature::{MethodSignature, RuntimeMethodSignature};
 use jni::strings::JNIString;
 use jni::sys::{jboolean, jclass, jint, jlong, jobject, jstring};
-use jni::EnvUnowned;
+use jni::{Env, EnvUnowned};
 use rquickjs::context::EvalOptions;
 use rquickjs::{Coerced, Context, Ctx, Object, Persistent, Result as JsResult, Runtime, Value};
 use std::path::{Path, PathBuf};
@@ -10,7 +11,7 @@ use std::sync::Arc;
 use std::time::Duration;
 
 use super::bridge::JniBridge;
-use super::env::{in_env, jstring_to_string, new_jstring_raw, read_header, read_string_array};
+use super::env::{clear_exception, in_env, jstring_to_string, new_jstring_raw, read_header, read_string_array};
 use super::log::{install_console, make_log};
 use super::{
   engine_jvm_refs, enter_engine, get_engine, insert_engine, remove_engine, stop_engine_callbacks, try_enter_engine,
@@ -293,6 +294,17 @@ fn hook_budget() -> Duration {
   Duration::from_millis(xposed::HOOK_BUDGET_MS as u64)
 }
 
+fn request_job_pump(env: &mut Env, quickjs: &JObject, engine: &Engine) {
+  if !engine._rt.is_job_pending() {
+    return;
+  }
+  let Ok(signature) = RuntimeMethodSignature::from_str("()V") else {
+    return;
+  };
+  let _ = env.call_method(quickjs, JNIString::from("scheduleJobs"), MethodSignature::from(&signature), &[]);
+  clear_exception(env);
+}
+
 /// every api installs the same way: inside the context, with a failure named and logged
 fn install_part<T>(
   ctx: &Context,
@@ -357,19 +369,15 @@ fn install_engine_xposed(
 #[no_mangle]
 pub extern "system" fn Java_desu_inugram_helpers_plugins_QuickJs_nativeXposedBefore<'local>(
   mut env: EnvUnowned<'local>,
-  _this: JObject<'local>,
+  this: JObject<'local>,
   ptr: jlong,
   dispatch_id: jlong,
   site: jlong,
-  method_wire: JString<'local>,
-  this_wire: JString<'local>,
-  args: JObjectArray<'local, JString<'local>>,
+  values: JObjectArray<'local, JObject<'local>>,
+  count: jint,
 ) -> jobject {
   in_env(&mut env, std::ptr::null_mut(), |env| {
     let _deadline = arm(xposed::HOOK_BUDGET_MS as u64);
-    let method_wire = jstring_to_string(env, &method_wire);
-    let this_wire = jstring_to_string(env, &this_wire);
-    let args = read_string_array(env, &args);
     let Some(engine) = enter_engine(ptr, Some(hook_budget())) else {
       return std::ptr::null_mut();
     };
@@ -378,19 +386,14 @@ pub extern "system" fn Java_desu_inugram_helpers_plugins_QuickJs_nativeXposedBef
     }
     let _caller = CallerEntry::new();
     let answer = match engine.xposed.as_ref() {
-      Some(state) => state.dispatch_before(
-        &engine._rt,
-        &engine.ctx,
-        dispatch_id,
-        site,
-        &xposed::Invocation {
-          method: &method_wire,
-          this: &this_wire,
-          args: &args,
-        },
-      ),
+      Some(state) => {
+        let values = state.read_hooked_values(&values, count.max(0) as usize);
+        let args = values.count.saturating_sub(xposed::FIRST_ARG_INDEX);
+        state.dispatch_before(&engine._rt, &engine.ctx, dispatch_id, site, &xposed::Invocation { values, args })
+      }
       None => Vec::new(),
     };
+    request_job_pump(env, &this, &engine);
     if answer.is_empty() {
       return std::ptr::null_mut();
     }
@@ -398,34 +401,109 @@ pub extern "system" fn Java_desu_inugram_helpers_plugins_QuickJs_nativeXposedBef
       Ok(array) => array.unwrap().into_raw(),
       Err(e) => {
         make_log(engine.bridge.console.clone())(&e);
+        // the host reads a null answer as a phase that never ran, so an answer it never sees must
+        // not leave the after phase it asked for pending
+        if let Some(state) = engine.xposed.as_ref() {
+          state.release_dispatch(&engine.ctx, dispatch_id);
+        }
         std::ptr::null_mut()
       }
     }
   })
 }
 
+fn answer_raw(env: &mut Env, answer: xposed::Answer) -> jstring {
+  match answer {
+    xposed::Answer::Keep => std::ptr::null_mut(),
+    xposed::Answer::NotDispatched => new_jstring_raw(env, xposed::NOT_DISPATCHED),
+    xposed::Answer::Wire(wire) => new_jstring_raw(env, wire),
+  }
+}
+
+/// an after phase is handed `[method, receiver, args.., result]`: one array, so one borrowed
+/// reference per call, the result last
+fn read_settled(
+  state: &Rc<xposed::XposedState>,
+  invocation: &JObjectArray<JObject>,
+  count: jint,
+  threw: jboolean,
+) -> Option<(xposed::Invocation, xposed::Returned)> {
+  let values = state.read_hooked_values(invocation, count.max(0) as usize);
+  let last = values.count.checked_sub(1)?;
+  let args = last.checked_sub(xposed::FIRST_ARG_INDEX)?;
+  let values: Rc<dyn xposed::JavaValues> = values;
+  Some((
+    xposed::Invocation { values: values.clone(), args },
+    xposed::Returned {
+      values,
+      index: last,
+      threw: threw as bool,
+    },
+  ))
+}
+
 #[no_mangle]
 pub extern "system" fn Java_desu_inugram_helpers_plugins_QuickJs_nativeXposedAfter<'local>(
   mut env: EnvUnowned<'local>,
-  _this: JObject<'local>,
+  this: JObject<'local>,
   ptr: jlong,
   dispatch_id: jlong,
-  result: JString<'local>,
+  invocation: JObjectArray<'local, JObject<'local>>,
+  count: jint,
+  threw: jboolean,
 ) -> jstring {
   in_env(&mut env, std::ptr::null_mut(), |env| {
     let _deadline = arm(xposed::HOOK_BUDGET_MS as u64);
-    let result = jstring_to_string(env, &result);
     let answer = match enter_engine(ptr, Some(hook_budget())) {
       Some(engine) => {
         let _caller = CallerEntry::new();
-        match engine.xposed.as_ref() {
-          Some(state) if engine.is_admitting() => state.dispatch_after(&engine._rt, &engine.ctx, dispatch_id, &result),
-          _ => xposed::NOT_DISPATCHED.to_string(),
-        }
+        let answer = match engine.xposed.as_ref() {
+          Some(state) if engine.is_admitting() => match read_settled(state, &invocation, count, threw) {
+            Some((call, returned)) => state.dispatch_after(&engine._rt, &engine.ctx, dispatch_id, &call, &returned),
+            None => {
+              state.release_dispatch(&engine.ctx, dispatch_id);
+              xposed::Answer::NotDispatched
+            }
+          },
+          _ => xposed::Answer::NotDispatched,
+        };
+        request_job_pump(env, &this, &engine);
+        answer
       }
-      None => xposed::NOT_DISPATCHED.to_string(),
+      None => xposed::Answer::NotDispatched,
     };
-    new_jstring_raw(env, answer)
+    answer_raw(env, answer)
+  })
+}
+
+#[no_mangle]
+pub extern "system" fn Java_desu_inugram_helpers_plugins_QuickJs_nativeXposedAfterOnly<'local>(
+  mut env: EnvUnowned<'local>,
+  this: JObject<'local>,
+  ptr: jlong,
+  site: jlong,
+  invocation: JObjectArray<'local, JObject<'local>>,
+  count: jint,
+  threw: jboolean,
+) -> jstring {
+  in_env(&mut env, std::ptr::null_mut(), |env| {
+    let _deadline = arm(xposed::HOOK_BUDGET_MS as u64);
+    let answer = match enter_engine(ptr, Some(hook_budget())) {
+      Some(engine) => {
+        let _caller = CallerEntry::new();
+        let answer = match engine.xposed.as_ref() {
+          Some(state) if engine.is_admitting() => match read_settled(state, &invocation, count, threw) {
+            Some((call, returned)) => state.dispatch_after_only(&engine._rt, &engine.ctx, site, &call, &returned),
+            None => xposed::Answer::NotDispatched,
+          },
+          _ => xposed::Answer::NotDispatched,
+        };
+        request_job_pump(env, &this, &engine);
+        answer
+      }
+      None => xposed::Answer::NotDispatched,
+    };
+    answer_raw(env, answer)
   })
 }
 
@@ -519,7 +597,7 @@ pub extern "system" fn Java_desu_inugram_helpers_plugins_platform_PluginXposed_0
 #[no_mangle]
 pub extern "system" fn Java_desu_inugram_helpers_plugins_QuickJs_nativeJvmCallback(
   mut env: EnvUnowned,
-  _this: JObject,
+  this: JObject,
   ptr: jlong,
   callback_id: jint,
 ) {
@@ -545,13 +623,14 @@ pub extern "system" fn Java_desu_inugram_helpers_plugins_QuickJs_nativeJvmCallba
     if let Some(state) = engine.jvm.as_ref() {
       state.dispatch_callback(&engine._rt, &engine.ctx, callback_id as u32);
     }
+    request_job_pump(env, &this, &engine);
   });
 }
 
 #[no_mangle]
 pub extern "system" fn Java_desu_inugram_helpers_plugins_QuickJs_nativeJvmMethod(
   mut env: EnvUnowned,
-  _this: JObject,
+  this: JObject,
   ptr: jlong,
   callback_id: jint,
   self_wire: JString,
@@ -564,10 +643,12 @@ pub extern "system" fn Java_desu_inugram_helpers_plugins_QuickJs_nativeJvmMethod
       Ok(engine) if engine.is_admitting() => {
         let _deadline = arm_entry_deadline();
         let _caller = CallerEntry::new();
-        engine.ctx.with(|ctx| match engine.jvm.as_ref() {
+        let answer = engine.ctx.with(|ctx| match engine.jvm.as_ref() {
           Some(state) => state.dispatch_method(&ctx, callback_id as u32, &self_wire, &args),
           None => "EdefineClass: JVM bridge has closed".to_string(),
-        })
+        });
+        request_job_pump(env, &this, &engine);
+        answer
       }
       Ok(_) | Err(EntryError::Closed) => "EdefineClass: plugin has unloaded".to_string(),
       Err(EntryError::Busy) => "EdefineClass: engine is busy".to_string(),

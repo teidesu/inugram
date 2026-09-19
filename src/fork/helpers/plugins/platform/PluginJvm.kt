@@ -133,8 +133,8 @@ object PluginJvm : SessionResource {
      * whoever encoded a batch releases it when the engine did not take it. A scalar minted nothing
      * and releasing one is a no-op, which is what lets a caller hand back everything it encoded.
      *
-     * Callers are app code's own frames - a hooked method, a notification observer - so the bridge
-     * already being gone is one more thing that may not surface there.
+     * Callers are app code's own frames, such as a notification observer, so the bridge already
+     * being gone is one more thing that may not surface there.
      */
     internal fun releaseUntaken(engine: QuickJs, wires: List<String>) {
         val bridge = bridgeFor(engine) ?: return

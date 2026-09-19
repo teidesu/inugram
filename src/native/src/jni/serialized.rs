@@ -2,7 +2,7 @@ use std::marker::PhantomData;
 use std::ops::Deref;
 use std::rc::Rc;
 use std::sync::atomic::{AtomicBool, Ordering};
-use std::sync::{Arc, Condvar, Mutex};
+use std::sync::{Arc, Condvar, Mutex, MutexGuard};
 use std::thread::{self, ThreadId};
 use std::time::{Duration, Instant};
 
@@ -17,6 +17,7 @@ struct State<T> {
   value: Option<T>,
   owner: Option<ThreadId>,
   closed: bool,
+  waiting: usize,
 }
 
 pub(super) struct Serialized<T> {
@@ -32,6 +33,7 @@ impl<T> Serialized<T> {
         value: Some(value),
         owner: None,
         closed: false,
+        waiting: 0,
       }),
       changed: Condvar::new(),
       admitting: AtomicBool::new(true),
@@ -70,10 +72,28 @@ impl<T> Serialized<T> {
         if remaining.is_zero() {
           return Err(EntryError::Busy);
         }
-        self.changed.wait_timeout(state, remaining).unwrap_or_else(|e| e.into_inner()).0
+        self.wait(state, Some(remaining))
       } else {
-        self.changed.wait(state).unwrap_or_else(|e| e.into_inner())
+        self.wait(state, None)
       };
+    }
+  }
+
+  /// counted so a release can skip the wake: the lease is taken and dropped on every callback, and
+  /// `notify_all` is a futex syscall whether or not anyone waits
+  fn wait<'a>(&self, mut state: MutexGuard<'a, State<T>>, remaining: Option<Duration>) -> MutexGuard<'a, State<T>> {
+    state.waiting += 1;
+    let mut state = match remaining {
+      Some(remaining) => self.changed.wait_timeout(state, remaining).unwrap_or_else(|e| e.into_inner()).0,
+      None => self.changed.wait(state).unwrap_or_else(|e| e.into_inner()),
+    };
+    state.waiting -= 1;
+    state
+  }
+
+  fn wake(&self, state: &State<T>) {
+    if state.waiting != 0 {
+      self.changed.notify_all();
     }
   }
 
@@ -83,9 +103,9 @@ impl<T> Serialized<T> {
       return Err(EntryError::Reentrant);
     }
     state.closed = true;
-    self.changed.notify_all();
+    self.wake(&state);
     while state.owner.is_some() {
-      state = self.changed.wait(state).unwrap_or_else(|e| e.into_inner());
+      state = self.wait(state, None);
     }
     Ok(state.value.take())
   }
@@ -116,7 +136,7 @@ impl<T> Drop for Lease<T> {
     let mut state = self.slot.state.lock().unwrap_or_else(|e| e.into_inner());
     state.value = self.value.take();
     state.owner = None;
-    self.slot.changed.notify_all();
+    self.slot.wake(&state);
   }
 }
 

@@ -39,12 +39,12 @@ class PluginXposedTest {
             arrayOf("P1", PluginWire.encodeInt(4), PluginWire.encodeInt(6))
         }
         engine.onXposedAfter = {
-            order.add("after:${intOf(it.resultWire)}")
+            order.add("after:${it.result}")
             PluginWire.encodeInt(17)
         }
 
         val method = memberHandle(plugin, JvmFixture::class.java.getDeclaredMethod("sum", Int::class.java, Int::class.java))
-        val site = stringOf(plugin.xposed(PluginXposed.OP_HOOK, method)).toLong()
+        val site = hookWithBefore(plugin, method)
 
         assertTrue(engine.xposedInstalled)
         val sum = JvmFixture::class.java.getDeclaredMethod("sum", Int::class.java, Int::class.java)
@@ -53,7 +53,7 @@ class PluginXposedTest {
         assertEquals(1, engine.xposedBefores.size)
         assertEquals(1, engine.xposedAfters.size)
         drain()
-        assertEquals(listOf(engine.xposedBefores.single().dispatchId), engine.xposedReleases)
+        assertTrue(engine.xposedReleases.isEmpty(), "an after phase that ran took its pending state with it")
 
         plugin.xposed(PluginXposed.OP_UNHOOK, site)
         assertEquals(3, sum.invoke(null, 1, 2))
@@ -71,7 +71,7 @@ class PluginXposedTest {
         engine.onXposedBefore = { null }
 
         val sum = JvmFixture::class.java.getDeclaredMethod("sum", Int::class.java, Int::class.java)
-        plugin.xposed(PluginXposed.OP_HOOK, memberHandle(plugin, sum))
+        hookWithBefore(plugin, memberHandle(plugin, sum))
 
         assertEquals(3, invokeOffQueue { sum.invoke(null, 1, 2) as Int })
         drain()
@@ -81,35 +81,33 @@ class PluginXposedTest {
         PluginXposed.detach(plugin.session!!)
     }
 
-    /**
-     * a wire is a mint into the engine's reference table, and only a phase that read it can drop
-     * it: a refused or absent phase leaves every wire the dispatch minted with nothing to free it
-     */
     @Test
-    fun a_phase_that_never_ran_leaves_no_wire_behind() {
-        val plugin = startPlugin("xposed leaks", jvm, "unsafe.xposed")
+    fun a_hooked_call_mints_nothing_whatever_the_phases_answer() {
+        val plugin = startPlugin("xposed mints", jvm, "unsafe.xposed")
         val engine = plugin.js
         val target = JvmFixture::class.java.getDeclaredMethod("getPayload")
-        plugin.xposed(PluginXposed.OP_HOOK, memberHandle(plugin, target))
+        val site = hookWithBefore(plugin, memberHandle(plugin, target))
         val fixture = JvmFixture()
         fixture.payload = JvmFixture()
+        val settled = engine.liveHandles
+        fun assertCallMintsNothing(what: String) {
+            assertEquals(1, invokeOffQueue { if (target.invoke(fixture) === fixture.payload) 1 else 0 })
+            drain()
+            assertEquals(settled, engine.liveHandles, what)
+        }
         try {
             engine.onXposedBefore = { null }
-            val settled = engine.liveHandles
-            assertEquals(1, invokeOffQueue { if (target.invoke(fixture) === fixture.payload) 1 else 0 })
-            drain()
-            assertEquals(settled, engine.liveHandles, "the before phase refused, so it took nothing")
-
+            assertCallMintsNothing("refused before")
             engine.onXposedBefore = { arrayOf("P1") }
-            engine.onXposedAfter = { null }
-            assertEquals(1, invokeOffQueue { if (target.invoke(fixture) === fixture.payload) 1 else 0 })
-            drain()
-            assertEquals(settled, engine.liveHandles, "the after phase never ran, so it took nothing")
-
-            engine.onXposedAfter = { "X" }
-            assertEquals(1, invokeOffQueue { if (target.invoke(fixture) === fixture.payload) 1 else 0 })
-            drain()
-            assertEquals(settled, engine.liveHandles, "a not-dispatched answer is the same hand-off")
+            for (answer in listOf(null, QuickJs.NOT_DISPATCHED)) {
+                engine.onXposedAfter = { answer }
+                assertCallMintsNothing("after answering $answer")
+            }
+            plugin.xposed(PluginXposed.OP_JS_BEFORES, site, "0")
+            for (answer in listOf(null, QuickJs.NOT_DISPATCHED)) {
+                engine.onXposedAfterOnly = { answer }
+                assertCallMintsNothing("after-only answering $answer")
+            }
         } finally {
             PluginXposed.detach(plugin.session!!)
         }
@@ -120,9 +118,9 @@ class PluginXposedTest {
         val plugin = startPlugin("unchanged after", jvm, "unsafe.xposed")
         val engine = plugin.js
         engine.onXposedBefore = { arrayOf("P1") }
-        engine.onXposedAfter = { "U" }
+        engine.onXposedAfter = { null }
         val target = JvmFixture::class.java.getDeclaredMethod("getPayload")
-        plugin.xposed(PluginXposed.OP_HOOK, memberHandle(plugin, target))
+        hookWithBefore(plugin, memberHandle(plugin, target))
         val fixture = JvmFixture()
         try {
             for (value in listOf(JvmFixture(), 42L, null)) {
@@ -130,10 +128,55 @@ class PluginXposedTest {
                 assertEquals(1, invokeOffQueue { if (target.invoke(fixture) === value) 1 else 0 })
             }
             drain()
-            assertEquals(3, engine.xposedReleases.size)
+            assertTrue(engine.xposedReleases.isEmpty())
             fixture.payload = 42L
             engine.onXposedAfter = { "I42" }
             assertEquals(1, invokeOffQueue { if (target.invoke(fixture) is Int) 1 else 0 })
+        } finally {
+            PluginXposed.detach(plugin.session!!)
+        }
+    }
+
+    @Test
+    fun a_site_the_engine_has_not_reported_on_yet_crosses_before_the_original() {
+        val plugin = startPlugin("xposed unreported site", jvm, "unsafe.xposed")
+        val engine = plugin.js
+        val sum = JvmFixture::class.java.getDeclaredMethod("sum", Int::class.java, Int::class.java)
+        plugin.xposed(PluginXposed.OP_HOOK, memberHandle(plugin, sum))
+        try {
+            assertEquals(3, invokeOffQueue { sum.invoke(null, 1, 2) as Int })
+            assertEquals(1, engine.xposedBefores.size, "a hook still being registered may not have its before skipped")
+            assertTrue(engine.xposedAfterOnlys.isEmpty())
+        } finally {
+            PluginXposed.detach(plugin.session!!)
+        }
+    }
+
+    @Test
+    fun a_site_without_befores_crosses_once_after_the_original_and_owes_no_release() {
+        val plugin = startPlugin("xposed after only", jvm, "unsafe.xposed")
+        val engine = plugin.js
+        engine.onXposedAfterOnly = {
+            assertEquals(listOf<Any?>(1, 2), it.args)
+            PluginWire.encodeInt((it.result as Int) * 10L)
+        }
+        val sum = JvmFixture::class.java.getDeclaredMethod("sum", Int::class.java, Int::class.java)
+        val site = stringOf(plugin.xposed(PluginXposed.OP_HOOK, memberHandle(plugin, sum))).toLong()
+        plugin.xposed(PluginXposed.OP_JS_BEFORES, site, "0")
+        try {
+            assertEquals(30, invokeOffQueue { sum.invoke(null, 1, 2) as Int })
+            drain()
+            assertEquals(1, engine.xposedAfterOnlys.size)
+            assertEquals(site, engine.xposedAfterOnlys.single().site)
+            assertTrue(engine.xposedBefores.isEmpty())
+            assertTrue(engine.xposedAfters.isEmpty())
+            assertTrue(engine.xposedReleases.isEmpty())
+
+            plugin.xposed(PluginXposed.OP_JS_BEFORES, site, "1")
+            engine.onXposedBefore = { arrayOf("P0", "=", "=") }
+            assertEquals(3, invokeOffQueue { sum.invoke(null, 1, 2) as Int })
+            assertEquals(1, engine.xposedBefores.size, "a site that gained a before crosses before the original again")
+            assertEquals(1, engine.xposedAfterOnlys.size)
         } finally {
             PluginXposed.detach(plugin.session!!)
         }
@@ -230,7 +273,11 @@ class PluginXposedTest {
     private fun Plugin.xposed(op: Int, target: Long, name: String = "", vararg args: String): String =
         js.listener!!.xposed(op, target, name, arrayOf(*args))
 
-    private fun intOf(wire: String): Long = (PluginWire.decode(wire) as PluginWire.Value.IntNum).value
+    private fun hookWithBefore(plugin: Plugin, member: Long): Long {
+        val site = stringOf(plugin.xposed(PluginXposed.OP_HOOK, member)).toLong()
+        plugin.xposed(PluginXposed.OP_JS_BEFORES, site, "1")
+        return site
+    }
 
     /** the handle `getDeclaredMethod` would answer with: a member, minted the way any reference is */
     private fun memberHandle(plugin: Plugin, member: java.lang.reflect.Member): Long =
