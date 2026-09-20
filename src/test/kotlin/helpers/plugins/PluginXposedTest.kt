@@ -138,6 +138,30 @@ class PluginXposedTest {
     }
 
     @Test
+    fun a_filter_that_rejects_a_call_keeps_it_out_of_the_engine() {
+        val plugin = startPlugin("xposed filter", jvm, "unsafe.xposed")
+        val engine = plugin.js
+        engine.onXposedBefore = { arrayOf("P0", "=", "=") }
+        val routine = plugin.jvm(
+            PluginJvm.OP_ROUTINE,
+            name = """{"nodes":[["methodArgument",[0,0]],["compare","==",[1,0],[0,1]],["methodSetResult",[1,1]]],"roots":[2]}""",
+            args = arrayOf("I0", "I42"),
+        )
+        val sum = JvmFixture::class.java.getDeclaredMethod("sum", Int::class.java, Int::class.java)
+        val site = hookWithBefore(plugin, memberHandle(plugin, sum))
+        assertEquals("N", plugin.xposed(PluginXposed.OP_JS_FILTER, site, "G" + jvmHandleId(routine)))
+        try {
+            assertEquals(3, invokeOffQueue { sum.invoke(null, 1, 2) as Int })
+            assertTrue(engine.xposedBefores.isEmpty(), "a call the filter rejected never reaches the engine")
+
+            assertEquals(44, invokeOffQueue { sum.invoke(null, 42, 2) as Int })
+            assertEquals(1, engine.xposedBefores.size, "a call the filter accepted dispatches as usual")
+        } finally {
+            PluginXposed.detach(plugin.session!!)
+        }
+    }
+
+    @Test
     fun a_site_the_engine_has_not_reported_on_yet_crosses_before_the_original() {
         val plugin = startPlugin("xposed unreported site", jvm, "unsafe.xposed")
         val engine = plugin.js

@@ -121,6 +121,18 @@ internal class PluginJvmRoutine(
 
     override fun run() { execute(null) }
 
+    /**
+     * The verdict of a hook filter: what the routine set as its result, read for truthiness. A
+     * routine that fails answers yes, because a filter decides what to skip and a broken one may
+     * not silently disable the hook it guards.
+     */
+    fun decide(receiver: Any?, args: Array<Any?>): Boolean = try {
+        getTruthiness(execute(null, receiver, args))
+    } catch (e: Exception) {
+        Log.d("InuPluginRoutine", "routine filter failed", e)
+        true
+    }
+
     internal fun execute(context: PluginHookContext?, methodSelf: Any? = null, methodArgs: Array<Any?>? = null): Any? {
         val values = captured ?: return null
         if (!isLive()) return null

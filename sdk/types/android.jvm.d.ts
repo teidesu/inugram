@@ -75,11 +75,20 @@ declare type JvmRoutineOperand
     | JavaObject | JavaClass | JavaMethod | JavaConstructor | JavaField | JvmRoutineValue
 
 declare interface JvmRoutineOps {
-  /** Only while used as a defineClass body/init. Static methods receive their JavaClass. */
+  /**
+   * Only while used as a defineClass body/init, or as an `inu.xposed` hook filter, where it is the
+   * receiver of the hooked call. Static methods receive their JavaClass.
+   */
   getThisObject(): JvmRoutineValue
-  /** Zero-based method/constructor argument; fails outside a defineClass invocation. */
+  /**
+   * Zero-based method/constructor argument, or the hooked call's argument in a hook filter; fails
+   * outside either.
+   */
   getArgument(index: number | JvmRoutineValue): JvmRoutineValue
-  /** Sets the method result; remaining roots still execute. Ignored for void methods/constructors. */
+  /**
+   * Sets the method result, or the verdict in a hook filter; remaining roots still execute.
+   * Ignored for void methods/constructors.
+   */
   setReturnValue(value: JvmRoutineOperand): JvmRoutineValue
   /**
    * Reads an invocation-local variable; fails if no set has executed for this name.

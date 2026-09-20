@@ -929,3 +929,36 @@ fn an_after_phase_reads_the_call_its_before_never_touched() {
   );
   fixture.eval("if (saw !== 7) throw new Error('the after phase saw ' + saw)");
 }
+
+#[test]
+fn a_filter_reaches_the_host_as_the_routine_the_plugin_built() {
+  let fixture = granted();
+  fixture.eval(
+    "const method = fixtureRun;
+         globalThis.off = inu.xposed.hookMethod(method, { filter: inu.jvm.routine(ops => []), before() {} })",
+  );
+  assert_eq!(fixture.host.ops(), vec![OP_HOOK, OP_JS_FILTER]);
+  let calls = fixture.host.calls.borrow();
+  let filter = calls.iter().find(|call| call.0 == OP_JS_FILTER).expect("a filter report");
+  assert_eq!(filter.1, 100);
+  assert!(filter.2.starts_with('G'), "a filter crosses as the handle it is, not as a wire of its own");
+}
+
+#[test]
+fn a_filter_that_is_not_a_routine_is_refused_before_installation() {
+  let fixture = granted();
+  let error =
+    fixture.eval_err("inu.xposed.hookMethod(fixtureRun, { filter: (ctx) => true, before() {} })");
+  assert!(error.contains("filter must be an inu.jvm.routine"), "{error}");
+  assert!(fixture.host.ops().is_empty(), "a hook refused for its filter never reaches the host");
+}
+
+#[test]
+fn a_native_hook_takes_no_filter() {
+  let fixture = granted();
+  let error = fixture.eval_err(
+    "const routine = inu.jvm.routine(ops => []);
+         inu.xposed.hookMethod(fixtureRun, { filter: routine, before: routine })",
+  );
+  assert!(error.contains("already runs on the hooked thread"), "{error}");
+}

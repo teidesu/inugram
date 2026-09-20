@@ -58,6 +58,18 @@ declare namespace inu {
        */
       before?: ((ctx: MethodHookContext) => void) | JavaObject
       after?: ((ctx: MethodHookContext) => void) | JavaObject
+
+      /**
+       * A predicate the host runs on the hooked thread before anything reaches the engine: a call
+       * it answers falsy skips this hook entirely, before and after both, as if the method were
+       * not hooked. Written as an `inu.jvm.routine` reading the call through `getThisObject()`
+       * and `getArgument(i)` and answering through `setReturnValue`, so a hook that only wants
+       * some calls stops paying for the rest.
+       *
+       * A filter that fails answers yes: it decides what to skip, so a broken one may not silently
+       * disable the hook it guards. Native hooks take no filter, being host-side already.
+       */
+      filter?: JvmRoutineRunnable
     }
 
     /**

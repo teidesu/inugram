@@ -51,6 +51,7 @@ object PluginXposed : SessionResource {
     const val OP_NATIVE_ADD = 6
     const val OP_NATIVE_REMOVE = 7
     const val OP_JS_BEFORES = 8
+    const val OP_JS_FILTER = 9
 
     const val GRANT = "unsafe.xposed"
 
@@ -147,6 +148,7 @@ object PluginXposed : SessionResource {
         @Volatile var nativeHooks: List<NativeHook> = emptyList()
         /** -1 until the engine reports: a site whose hooks are still being registered dispatches both phases */
         @Volatile var jsBefores = -1
+        @Volatile var filter: PluginJvmRoutine? = null
         /** the dispatch path's liveness check, so a hooked call needs no lookup in [Session.sites] */
         @Volatile var live = true
     }
@@ -192,6 +194,12 @@ object PluginXposed : SessionResource {
             }
             OP_JS_BEFORES -> {
                 sites[target]?.jsBefores = name.toInt()
+                PluginWire.encodeNull()
+            }
+            OP_JS_FILTER -> {
+                val site = sites[target] ?: refuse("handle-expired", "xposed: hook site is gone")
+                site.filter = values.decode(name) as? PluginJvmRoutine
+                    ?: refuse("invalid-argument", "xposed: filter must be an inu.jvm.routine")
                 PluginWire.encodeNull()
             }
             OP_CALL_ORIGINAL -> callOriginal(values.memberAt(target), args)
@@ -361,6 +369,8 @@ object PluginXposed : SessionResource {
                 Log.d(TAG, "[${session.manifest.name}] xposed site ${entry.id} bypassed re-entry")
                 return next(args)
             }
+            val filter = entry.filter
+            if (filter != null && !runCallbackPhase(guard) { filter.decide(receiver, args) }) return next(args)
             return when {
                 entry.native -> dispatchNativeHooks(entry, guard, receiver, args, next)
                 entry.jsBefores == 0 -> dispatchAfterOnly(entry, guard, receiver, args, next)

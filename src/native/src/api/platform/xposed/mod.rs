@@ -35,6 +35,7 @@ const OP_DISABLE_PROFILE_SAVER: i32 = 5;
 const OP_NATIVE_ADD: i32 = 6;
 const OP_NATIVE_REMOVE: i32 = 7;
 const OP_JS_BEFORES: i32 = 8;
+const OP_JS_FILTER: i32 = 9;
 
 pub const GRANT: &str = "unsafe.xposed";
 
@@ -197,6 +198,7 @@ struct Callbacks<'js> {
   native_phases: Option<[String; 2]>,
   before: Option<Function<'js>>,
   after: Option<Function<'js>>,
+  filter: Option<String>,
 }
 
 fn callbacks_of<'js>(ctx: &Ctx<'js>, jvm: &JvmState, hook: &Object<'js>, what: &str) -> JsResult<Callbacks<'js>> {
@@ -204,6 +206,7 @@ fn callbacks_of<'js>(ctx: &Ctx<'js>, jvm: &JvmState, hook: &Object<'js>, what: &
     before: None,
     after: None,
     native_phases: None,
+    filter: None,
   };
   let mut wires = ["N".to_string(), "N".to_string()];
   let mut has_native = false;
@@ -235,6 +238,18 @@ fn callbacks_of<'js>(ctx: &Ctx<'js>, jvm: &JvmState, hook: &Object<'js>, what: &
     callbacks.native_phases = Some(wires);
   } else if callbacks.before.is_none() && callbacks.after.is_none() {
     return PluginErrorCode::InvalidArgument.throw(ctx, "xposed: a hook needs a before or an after callback");
+  }
+  let filter: Value = hook.get("filter")?;
+  if !filter.is_undefined() && !filter.is_null() {
+    if has_native {
+      return PluginErrorCode::InvalidArgument
+        .throw(ctx, "xposed: a native hook already runs on the hooked thread, so a filter would only cost it");
+    }
+    let id = jvm.handle_id(ctx, &filter)?;
+    if id < 0 {
+      return PluginErrorCode::InvalidArgument.throw(ctx, &format!("{what}: filter must be an inu.jvm.routine"));
+    }
+    callbacks.filter = Some(format!("G{id}"));
   }
   Ok(callbacks)
 }
@@ -268,6 +283,12 @@ impl XposedState {
       tokens.push((site, token));
       if callbacks.native_phases.is_none() {
         self.host.xposed(OP_JS_BEFORES, site, &befores.to_string(), &[]);
+      }
+      if let Some(filter) = &callbacks.filter {
+        if let Err(error) = self.ask(ctx, OP_JS_FILTER, site, filter, &[]) {
+          self.release_tokens(ctx, &tokens);
+          return Err(error);
+        }
       }
       if let Some(native_phases) = &callbacks.native_phases {
         if let Err(error) = self.ask(ctx, OP_NATIVE_ADD, site, &token.to_string(), native_phases) {

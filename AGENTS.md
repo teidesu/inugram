@@ -194,7 +194,10 @@ Rust and Kotlin; do not add a schema/code-generation layer for them.
   the result last. A site the host knows has no JS `before` dispatches once, after the
   original; `=` keeps an argument the hook left alone, with its identity and boxed
   type, and a null answer keeps the outcome, so a hook that changes nothing allocates
-  nothing on either side.
+  nothing on either side. A JS hook may carry a `filter`: an `inu.jvm.routine` the host
+  runs on the hooked thread, reading the call through the method ops, whose falsy verdict
+  skips that hook's phases without entering the engine. It gates one site, which is one
+  registration; a filter that fails answers yes, and a native hook takes none.
 
 ### Reads, sends, and RPC chains
 
