@@ -901,5 +901,14 @@ object InuConfig {
     val BIOMETRIC_CONFIRM_LOGOUT = BoolItem("biometric_confirm_logout", false)
 
     @JvmField
+    val BIOMETRIC_REQUIRE_CONFIRMATION_PASSCODE = BoolItem("biometric_require_confirmation_passcode", true)
+
+    @JvmField
+    val BIOMETRIC_REQUIRE_CONFIRMATION_BOTS = BoolItem("biometric_require_confirmation_bots", true)
+
+    @JvmField
+    val BIOMETRIC_REQUIRE_CONFIRMATION_ACTIONS = BoolItem("biometric_require_confirmation_actions", false)
+
+    @JvmField
     val BIOMETRIC_ALLOW_DEVICE_CREDENTIAL = BoolItem("biometric_allow_device_credential", false)
 }

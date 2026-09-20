@@ -737,6 +737,14 @@
     <string name="InuDeleteOwnMessagesFloodWait">Rate limited, waiting for %ds…</string>
     <string name="InuBiometricConfirm">Biometric confirmation</string>
     <string name="InuBiometricConfirmTitle">Confirm your identity</string>
+    <string name="InuBiometricExplicitConfirmation">Confirmation after recognition</string>
+    <string name="InuBiometricExplicitConfirmationInfo">When enabled, ask for an extra confirmation after face or iris recognition. Device settings may still require confirmation when disabled.</string>
+    <string name="InuBiometricRequireConfirmationPasscode">When unlocking the app</string>
+    <string name="InuBiometricRequireConfirmationPasscodeInfo">Confirm after biometric recognition to unlock Inugram.</string>
+    <string name="InuBiometricRequireConfirmationBots">In mini apps</string>
+    <string name="InuBiometricRequireConfirmationBotsInfo">Confirm after biometric recognition in bot mini apps.</string>
+    <string name="InuBiometricRequireConfirmationActions">When deleting chats or logging out</string>
+    <string name="InuBiometricRequireConfirmationActionsInfo">Confirm after recognition when biometric protection is enabled for deleting chats, clearing history or logging out.</string>
     <string name="InuBiometricConfirmDeleteChat">Confirm deleting chats</string>
     <string name="InuBiometricConfirmDeleteChatInfo">Ask for biometric confirmation before deleting or clearing a chat.</string>
     <string name="InuBiometricConfirmLogout">Confirm logging out</string>

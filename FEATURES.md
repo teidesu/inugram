@@ -193,6 +193,7 @@ most things are toggleable in `Settings → Inugram`, with sensible opinionated 
   - optionally hide your own stories (ring, profile tabs, archive) while enabled
   - optional launcher long-press shortcut to enter it quickly (hidden while active)
 - biometric confirmation before deleting/clearing a chat or logging out - *inspired by [Cherrygram](https://github.com/arsLan4k1390/Cherrygram)*
+- configurable confirmation after biometric recognition on Android 10+, separately for app unlock, mini apps, and protected chat deletion/history clearing/logout; applies to the next prompt without restarting
 
 ## behavior
 

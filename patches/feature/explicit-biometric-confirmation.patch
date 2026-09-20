@@ -1,0 +1,34 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Uladzislau Hramyka <awayfromgalaxy@gmail.com>
+Date: Sun, 20 Sep 2026 00:55:31 +0300
+Subject: Allow configuring explicit biometric confirmation
+
+---
+ .../src/main/java/org/telegram/ui/Components/PasscodeView.java   | 1 +
+ .../src/main/java/org/telegram/ui/bots/BotBiometry.java          | 1 +
+ 2 files changed, 2 insertions(+)
+
+diff --git a/TMessagesProj/src/main/java/org/telegram/ui/Components/PasscodeView.java b/TMessagesProj/src/main/java/org/telegram/ui/Components/PasscodeView.java
+index 0000000..0000000 100644
+--- a/TMessagesProj/src/main/java/org/telegram/ui/Components/PasscodeView.java
++++ b/TMessagesProj/src/main/java/org/telegram/ui/Components/PasscodeView.java
+@@ -1211,6 +1211,7 @@ public class PasscodeView extends FrameLayout implements NotificationCenter.Noti
+                     final BiometricPrompt.PromptInfo promptInfo = new BiometricPrompt.PromptInfo.Builder()
+                             .setTitle(LocaleController.getString(R.string.UnlockToUse))
+                             .setNegativeButtonText(LocaleController.getString(R.string.UsePIN))
++                            .setConfirmationRequired(desu.inugram.InuConfig.BIOMETRIC_REQUIRE_CONFIRMATION_PASSCODE.getValue())
+                             .setAllowedAuthenticators(BiometricManager.Authenticators.BIOMETRIC_STRONG)
+                             .build();
+                     prompt.authenticate(promptInfo);
+diff --git a/TMessagesProj/src/main/java/org/telegram/ui/bots/BotBiometry.java b/TMessagesProj/src/main/java/org/telegram/ui/bots/BotBiometry.java
+index 0000000..0000000 100644
+--- a/TMessagesProj/src/main/java/org/telegram/ui/bots/BotBiometry.java
++++ b/TMessagesProj/src/main/java/org/telegram/ui/bots/BotBiometry.java
+@@ -269,6 +269,7 @@ public class BotBiometry {
+         final BiometricPrompt.PromptInfo.Builder promptInfoBuilder = new BiometricPrompt.PromptInfo.Builder()
+             .setTitle(UserObject.getUserName(bot))
+             .setNegativeButtonText(LocaleController.getString(R.string.Back))
++            .setConfirmationRequired(desu.inugram.InuConfig.BIOMETRIC_REQUIRE_CONFIRMATION_BOTS.getValue())
+             .setAllowedAuthenticators(BiometricManager.Authenticators.BIOMETRIC_STRONG);
+         if (!TextUtils.isEmpty(text)) {
+             promptInfoBuilder.setDescription(text);

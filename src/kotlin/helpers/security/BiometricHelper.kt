@@ -52,7 +52,7 @@ object BiometricHelper {
         val allowCredential = InuConfig.BIOMETRIC_ALLOW_DEVICE_CREDENTIAL.value
         val builder = BiometricPrompt.PromptInfo.Builder()
             .setTitle(LocaleController.getString(R.string.InuBiometricConfirmTitle))
-            .setConfirmationRequired(false)
+            .setConfirmationRequired(InuConfig.BIOMETRIC_REQUIRE_CONFIRMATION_ACTIONS.value)
             .setDeviceCredentialAllowed(allowCredential)
         if (!allowCredential) {
             builder.setNegativeButtonText(LocaleController.getString(R.string.Cancel))

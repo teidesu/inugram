@@ -729,6 +729,14 @@
     <string name="InuDeleteOwnMessagesFloodWait">Лимит запросов, ожидаем %d с…</string>
     <string name="InuBiometricConfirm">Биометрическое подтверждение</string>
     <string name="InuBiometricConfirmTitle">Подтверди личность</string>
+    <string name="InuBiometricExplicitConfirmation">Подтверждение после распознавания</string>
+    <string name="InuBiometricExplicitConfirmationInfo">Запрашивать дополнительное подтверждение после распознавания лица или радужной оболочки глаза. Настройки устройства могут требовать подтверждение даже при отключённой опции.</string>
+    <string name="InuBiometricRequireConfirmationPasscode">При разблокировке приложения</string>
+    <string name="InuBiometricRequireConfirmationPasscodeInfo">Запрашивать подтверждение после биометрического распознавания для разблокировки Inugram.</string>
+    <string name="InuBiometricRequireConfirmationBots">В мини-приложениях</string>
+    <string name="InuBiometricRequireConfirmationBotsInfo">Запрашивать подтверждение после биометрического распознавания в мини-приложениях ботов.</string>
+    <string name="InuBiometricRequireConfirmationActions">При удалении чатов или выходе из аккаунта</string>
+    <string name="InuBiometricRequireConfirmationActionsInfo">Запрашивать подтверждение после распознавания, если включена биометрическая защита удаления чатов, очистки истории или выхода из аккаунта.</string>
     <string name="InuBiometricConfirmDeleteChat">Подтверждать удаление чатов</string>
     <string name="InuBiometricConfirmDeleteChatInfo">Запрашивать биометрическое подтверждение перед удалением или очисткой чата.</string>
     <string name="InuBiometricConfirmLogout">Подтверждать выход из аккаунта</string>
