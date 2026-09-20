@@ -125,7 +125,7 @@ declare namespace inu {
      * Operations run once per invocation, when needed. Locals reset each time.
      * Use ops.when/and/or for conditions; operation values are not ordinary JS values.
      * Errors are logged and stop execution; completed changes stay applied.
-     * Limits: 256 ops, 512 live routines, 1 MB captures, 250 ms per run (checked between operations).
+     * Limits: 256 ops, 512 live routines, 1 MB captures, 250 ms per run, checked before each java call: every other operation runs at most once, so only a call can outlast it.
      * Unload cancels remaining operations; running Java calls cannot be interrupted.
      */
     function routine(build: (ops: JvmRoutineOps) => JvmRoutineValue[]): JvmRoutineRunnable

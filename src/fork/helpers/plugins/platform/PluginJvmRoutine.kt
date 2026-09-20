@@ -19,11 +19,18 @@ internal class PluginJvmRoutine(
         val operands: List<Operand>,
         val yes: List<Int> = emptyList(),
         val no: List<Int> = emptyList(),
-    )
+    ) {
+        /** the same vocabulary as [kind], resolved once: a hooked call would otherwise compare strings per operation */
+        val code = CODES[kind] ?: CODE_MEMBER
+    }
 
     @Volatile private var captured: List<Any?>? = values
     private val operations: List<Operation>
     private val roots: List<Int>
+
+    /** what a run has to set up for, decided once: a predicate over arguments needs none of it */
+    private val usesAttempt: Boolean
+    private val usesJava: Boolean
 
     init {
         require(definition.toByteArray(Charsets.UTF_8).size <= 1024 * 1024) { "routine: definition exceeds 1 MB" }
@@ -104,6 +111,8 @@ internal class PluginJvmRoutine(
             }
         }
         roots = readIndices(graph.getJSONArray("roots"), operations.size)
+        usesAttempt = operations.any { it.code == CODE_ATTEMPT }
+        usesJava = operations.any { it.code == CODE_MEMBER }
     }
 
     fun close() {
@@ -117,57 +126,61 @@ internal class PluginJvmRoutine(
         if (!isLive()) return null
         var methodResult: Any? = null
         val results = arrayOfNulls<Any?>(operations.size)
-        val locals = HashMap<String, Any?>()
+        var locals: HashMap<String, Any?>? = null
         val evaluated = BooleanArray(operations.size)
-        val failures = arrayOfNulls<Exception>(operations.size)
-        val deadline = System.nanoTime() + 250_000_000L
+        // only an `attempt` can evaluate an operation that already failed; without one the first failure unwinds the run
+        val failures = if (usesAttempt) arrayOfNulls<Exception>(operations.size) else null
+        // the graph is acyclic and each operation runs at most once, so only a java call can outlast the budget
+        val deadline = if (usesJava) System.nanoTime() + 250_000_000L else 0L
         fun evaluate(index: Int): Any? {
             if (!isLive() || captured == null) error("routine: cancelled")
-            check(System.nanoTime() < deadline) { "routine: execution budget exceeded" }
-            failures[index]?.let { throw it }
+            failures?.get(index)?.let { throw it }
             if (evaluated[index]) return results[index]
             val op = operations[index]
             fun readOperand(operand: Operand): Any? = if (operand.reference) evaluate(operand.index) else values[operand.index]
             val result = try {
-                when (op.kind) {
-                    "methodThis" -> {
+                when (op.code) {
+                    CODE_METHOD_THIS -> {
                         check(methodArgs != null) { "routine: no method invocation" }
                         validate(methodSelf)
                     }
-                    "methodArgument" -> {
+                    CODE_METHOD_ARGUMENT -> {
                         val args = checkNotNull(methodArgs) { "routine: no method invocation" }
                         val index = readOperand(op.operands[0])
                         require(index is Number && index.toDouble().isFinite() && index.toDouble() == index.toInt().toDouble() && index.toInt() in args.indices) { "routine: invalid method argument index" }
                         validate(args[index.toInt()])
                     }
-                    "methodSetResult" -> {
+                    CODE_METHOD_SET_RESULT -> {
                         check(methodArgs != null) { "routine: no method invocation" }
                         methodResult = readOperand(op.operands[0])
                         null
                     }
-                    "hookThis" -> validate(requireNotNull(context).getThisObject())
-                    "hookMethod" -> validate(requireNotNull(context).getMethod())
-                    "hookResult" -> validate(requireNotNull(context).getReturnValue())
-                    "hookThrowable" -> validate(requireNotNull(context).getThrowable())
-                    "hookArgument", "hookSetArgument" -> {
+                    CODE_HOOK_THIS -> validate(requireNotNull(context).getThisObject())
+                    CODE_HOOK_METHOD -> validate(requireNotNull(context).getMethod())
+                    CODE_HOOK_RESULT -> validate(requireNotNull(context).getReturnValue())
+                    CODE_HOOK_THROWABLE -> validate(requireNotNull(context).getThrowable())
+                    CODE_HOOK_ARGUMENT, CODE_HOOK_SET_ARGUMENT -> {
                         val index = readOperand(op.operands[0])
                         require(index is Number && index.toDouble().isFinite() && index.toDouble() == index.toInt().toDouble()) { "xposed: expected an integer argument index" }
-                        if (op.kind == "hookArgument") validate(requireNotNull(context).getArgument(index.toInt()))
+                        if (op.code == CODE_HOOK_ARGUMENT) validate(requireNotNull(context).getArgument(index.toInt()))
                         else { requireNotNull(context).setArgument(index.toInt(), readOperand(op.operands[1])); null }
                     }
-                    "hookSetResult" -> { requireNotNull(context).setReturnValue(readOperand(op.operands[0])); null }
-                    "hookSetThrowable" -> {
+                    CODE_HOOK_SET_RESULT -> { requireNotNull(context).setReturnValue(readOperand(op.operands[0])); null }
+                    CODE_HOOK_SET_THROWABLE -> {
                         val throwable = readOperand(op.operands[0])
                         require(throwable is Throwable) { "xposed: expected a Throwable" }
                         requireNotNull(context).setThrowable(throwable)
                         null
                     }
-                    "getLocal" -> {
-                        check(locals.containsKey(op.name)) { "routine: variable '${op.name}' is not initialized" }
-                        locals[op.name]
+                    CODE_GET_LOCAL -> {
+                        val held = locals
+                        check(held != null && held.containsKey(op.name)) { "routine: variable '${op.name}' is not initialized" }
+                        held[op.name]
                     }
-                    "setLocal" -> readOperand(op.operands[0]).also { locals[op.name] = it }
-                    "attempt" -> {
+                    CODE_SET_LOCAL -> readOperand(op.operands[0]).also {
+                        (locals ?: HashMap<String, Any?>().also { fresh -> locals = fresh })[op.name] = it
+                    }
+                    CODE_ATTEMPT -> {
                         try {
                             for (child in op.yes) evaluate(child)
                         } catch (e: Exception) {
@@ -175,22 +188,25 @@ internal class PluginJvmRoutine(
                         }
                         null
                     }
-                    "when" -> {
+                    CODE_WHEN -> {
                         for (child in if (getTruthiness(readOperand(op.operands[0]))) op.yes else op.no) evaluate(child)
                         null
                     }
-                    "compare" -> compareValues(op.name, readOperand(op.operands[0]), readOperand(op.operands[1]))
-                    "and" -> getTruthiness(readOperand(op.operands[0])) && getTruthiness(readOperand(op.operands[1]))
-                    "or" -> getTruthiness(readOperand(op.operands[0])) || getTruthiness(readOperand(op.operands[1]))
-                    "not" -> !getTruthiness(readOperand(op.operands[0]))
-                    "math" -> calculate(op.name, readOperand(op.operands[0]), readOperand(op.operands[1]))
+                    CODE_COMPARE -> compareValues(op.name, readOperand(op.operands[0]), readOperand(op.operands[1]))
+                    CODE_AND -> getTruthiness(readOperand(op.operands[0])) && getTruthiness(readOperand(op.operands[1]))
+                    CODE_OR -> getTruthiness(readOperand(op.operands[0])) || getTruthiness(readOperand(op.operands[1]))
+                    CODE_NOT -> !getTruthiness(readOperand(op.operands[0]))
+                    CODE_MATH -> calculate(op.name, readOperand(op.operands[0]), readOperand(op.operands[1]))
                     else -> {
+                        check(System.nanoTime() < deadline) { "routine: execution budget exceeded" }
                         val target = readOperand(op.operands[0]) ?: error("routine: null receiver")
-                        invoke(op.kind, target, op.name, op.operands.drop(1).map(::readOperand))
+                        val arguments = ArrayList<Any?>(op.operands.size - 1)
+                        for (at in 1 until op.operands.size) arguments.add(readOperand(op.operands[at]))
+                        invoke(op.kind, target, op.name, arguments)
                     }
                 }
             } catch (e: Exception) {
-                failures[index] = e
+                failures?.set(index, e)
                 throw e
             }
             evaluated[index] = true
@@ -288,6 +304,54 @@ internal class PluginJvmRoutine(
                 a % b
             }
         }
+    }
+
+    private companion object {
+        const val CODE_MEMBER = 0
+        const val CODE_METHOD_THIS = 1
+        const val CODE_METHOD_ARGUMENT = 2
+        const val CODE_METHOD_SET_RESULT = 3
+        const val CODE_HOOK_THIS = 4
+        const val CODE_HOOK_METHOD = 5
+        const val CODE_HOOK_RESULT = 6
+        const val CODE_HOOK_THROWABLE = 7
+        const val CODE_HOOK_ARGUMENT = 8
+        const val CODE_HOOK_SET_ARGUMENT = 9
+        const val CODE_HOOK_SET_RESULT = 10
+        const val CODE_HOOK_SET_THROWABLE = 11
+        const val CODE_GET_LOCAL = 12
+        const val CODE_SET_LOCAL = 13
+        const val CODE_ATTEMPT = 14
+        const val CODE_WHEN = 15
+        const val CODE_COMPARE = 16
+        const val CODE_AND = 17
+        const val CODE_OR = 18
+        const val CODE_NOT = 19
+        const val CODE_MATH = 20
+
+        /** `get`, `set` and `call` keep [Operation.kind] instead: it is what reaches the bridge */
+        val CODES = mapOf(
+            "methodThis" to CODE_METHOD_THIS,
+            "methodArgument" to CODE_METHOD_ARGUMENT,
+            "methodSetResult" to CODE_METHOD_SET_RESULT,
+            "hookThis" to CODE_HOOK_THIS,
+            "hookMethod" to CODE_HOOK_METHOD,
+            "hookResult" to CODE_HOOK_RESULT,
+            "hookThrowable" to CODE_HOOK_THROWABLE,
+            "hookArgument" to CODE_HOOK_ARGUMENT,
+            "hookSetArgument" to CODE_HOOK_SET_ARGUMENT,
+            "hookSetResult" to CODE_HOOK_SET_RESULT,
+            "hookSetThrowable" to CODE_HOOK_SET_THROWABLE,
+            "getLocal" to CODE_GET_LOCAL,
+            "setLocal" to CODE_SET_LOCAL,
+            "attempt" to CODE_ATTEMPT,
+            "when" to CODE_WHEN,
+            "compare" to CODE_COMPARE,
+            "and" to CODE_AND,
+            "or" to CODE_OR,
+            "not" to CODE_NOT,
+            "math" to CODE_MATH,
+        )
     }
 
     private fun readIndices(array: JSONArray, limit: Int): List<Int> {
