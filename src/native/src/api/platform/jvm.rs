@@ -666,13 +666,10 @@ pub fn install_jvm<'js>(
         let this = &state;
         this.grants.check_grant(&ctx, GRANT, None, MATCH_NAMESPACE)?;
         let target = this.handle_arg(&ctx, &target, "isInstance")?;
-        match read_arg(&ctx, &value)? {
-          // java's own answer, and one the vm need not be asked for
-          Arg::Null => Ok(false),
-          value @ Arg::Ref(_) => this.native(&ctx)?.is_instance(&ctx, &target, &value),
-          _ => {
-            PluginErrorCode::InvalidArgument.throw(&ctx, "jvm: isInstance needs a java handle or null, not a scalar")
-          }
+        // anything but a java handle names no java object, so like `instanceof` it is simply not one
+        match ref_of(&value) {
+          Some(value) => this.native(&ctx)?.is_instance(&ctx, &target, &Arg::Ref(value)),
+          None => Ok(false),
         }
       })?,
     )?;

@@ -125,19 +125,17 @@ fn a_plugin_holding_no_jvm_grant_is_refused_at_every_entry_point() {
   assert!(f.host.calls().is_empty());
 }
 
-/// `null` is java's own answer and needs no vm to give; a scalar is refused before one is asked,
-/// because it names no java object for a class to be asked about. What a real handle answers is
-/// `Class.isInstance` and is pinned on a device
+/// anything but a java handle names no java object, so the answer is `false` without asking the vm.
+/// What a real handle answers is `Class.isInstance` and is pinned on a device
 #[test]
-fn is_instance_answers_null_and_refuses_a_scalar_without_reaching_the_vm() {
+fn is_instance_answers_false_for_anything_but_a_handle_without_reaching_the_vm() {
   let f = setup(&["unsafe.jvm"]);
-  let cls = "inu.jvm.cls('org.telegram.tgnet.TLRPC$Chat')";
-  for value in ["null", "undefined"] {
-    assert_eq!(eval(&f, &format!("{cls}.isInstance({value})")), "false", "{value}");
+  eval(&f, "globalThis.chat = inu.jvm.cls('org.telegram.tgnet.TLRPC$Chat')");
+  let calls = f.host.calls().len();
+  for value in ["null", "undefined", "7", "'text'", "true", "1.5", "2n ** 70n", "new Uint8Array([1])", "({})", "() => {}"] {
+    assert_eq!(eval(&f, &format!("chat.isInstance({value})")), "false", "{value}");
   }
-  for value in ["7", "'text'", "true", "1.5", "new Uint8Array([1])"] {
-    assert_eq!(error_code(&f, &format!("{cls}.isInstance({value})")), "invalid-argument|", "{value}");
-  }
+  assert_eq!(f.host.calls().len(), calls, "the vm was asked");
 }
 
 #[test]
