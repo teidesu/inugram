@@ -39,6 +39,16 @@ import org.telegram.tgnet.TLObject
  * `java.lang.reflect` can bypass the check.
  */
 object PluginJvm : SessionResource {
+    private object Native {
+        external fun nativeCallNonvirtual(
+            method: Method,
+            descriptor: String,
+            params: Array<Class<*>>,
+            receiver: Any,
+            args: Array<Any?>,
+        ): Any?
+    }
+
     // keep in sync with rust `jvm::OP_*` and `jvm.js`; member access is rust's own, through cached jni ids, and never reaches this side
     const val OP_CLASS = 0
     const val OP_RUNNABLE = 10
@@ -365,7 +375,7 @@ object PluginJvm : SessionResource {
         }
 
         private fun methodsAnswer(cls: Class<*>, candidates: List<MemberInfo>): Array<Any?> {
-            val answer = ArrayList<Any?>(2 + candidates.size * 5)
+            val answer = ArrayList<Any?>(2 + candidates.size * 6)
             answer.add("M")
             answer.add(cls.name)
             for (info in candidates) {
@@ -373,6 +383,7 @@ object PluginJvm : SessionResource {
                 answer.add(info.params)
                 answer.add(info.descriptor)
                 answer.add(Modifier.isStatic(info.member.modifiers))
+                answer.add(Modifier.isAbstract(info.member.modifiers))
                 answer.add(refusalOf(info.member))
             }
             return answer.toTypedArray()
@@ -578,6 +589,9 @@ object PluginJvm : SessionResource {
 
         internal open fun newInstanceOf(target: Any, args: List<Any?>): Any? = bridged { construct(target, args) }
 
+        internal open fun callSuper(target: Any, receiver: Any?, name: String, args: List<Any?>): Any? =
+            bridged { callSuperMethod(target, receiver, name, args) }
+
         internal open fun getElement(target: Any, index: Int): Any? = bridged { readElement(target, index) }
 
         internal open fun setElement(target: Any, index: Int, value: Any?): Any? =
@@ -650,6 +664,28 @@ object PluginJvm : SessionResource {
             return info.method.invoke(self, *convertAll(info.params, args))
         }
 
+        private fun callSuperMethod(target: Any, receiver: Any?, name: String, args: List<Any?>): Any? {
+            val cls = target as? Class<*> ?: refuse("invalid-argument", "routine: callSuper expects a java class")
+            checkClass(cls)
+            if (receiver == null) refuse("invalid-argument", "jvm: callSuper needs a java object to call on")
+            if (!cls.isInstance(receiver)) refuse("invalid-argument", "jvm: that receiver is not an instance of ${cls.name}")
+            val parent = cls.superclass ?: refuse("invalid-argument", "jvm: ${cls.name} has no superclass")
+            val info = resolve(parent, name, args, staticOnly = false)
+            val method = info.method
+            val converted = convertAll(info.params, args)
+            if (Modifier.isStatic(method.modifiers)) {
+                method.isAccessible = true
+                return method.invoke(null, *converted)
+            }
+            if (Modifier.isAbstract(method.modifiers)) {
+                refuse(
+                    "invalid-argument",
+                    "jvm: ${parent.name}.${method.name}${info.descriptor} is abstract, so there is no super implementation to call",
+                )
+            }
+            return Native.nativeCallNonvirtual(method, info.descriptor, info.params, receiver, converted)
+        }
+
         private fun resolve(cls: Class<*>, name: String, args: List<Any?>, staticOnly: Boolean): MemberInfo {
             val descriptor = descriptorIn(name)
             val simple = simpleName(name)
@@ -676,8 +712,10 @@ object PluginJvm : SessionResource {
                 refuse("not-found", "jvm: no $what takes ${args.size} argument(s) of these types")
             }
             if (candidates.size == 1) return candidates[0]
-            val narrowest = candidates.filter { candidate ->
-                candidates.none { other -> other !== candidate && moreSpecific(other, candidate) }
+            val asText = candidates.filter { !convertsTextToChar(it.params, args) }
+            val pool = asText.ifEmpty { candidates }
+            val narrowest = pool.filter { candidate ->
+                pool.none { other -> other !== candidate && moreSpecific(other, candidate) }
             }
             if (narrowest.size != 1) {
                 refuse(
@@ -852,6 +890,17 @@ object PluginJvm : SessionResource {
     }
 
     /** a narrower numeric parameter wins and a more derived reference type beats a less derived one; anything still tied is refused rather than picked */
+    /**
+     * A js string is a `String` before it is anything else, so an overload that takes it as text
+     * wins over one that only fits by reading it as a `char`, the way java's strict phase wins
+     * over its conversions. Keep in step with rust `Native::converts_text_to_char`.
+     */
+    private fun convertsTextToChar(types: Array<Class<*>>, args: List<Any?>): Boolean =
+        types.indices.any {
+            args[it] is String &&
+                (types[it] == Char::class.javaPrimitiveType || types[it] == java.lang.Character::class.java)
+        }
+
     private fun moreSpecific(a: MemberInfo, b: MemberInfo): Boolean {
         val pa = a.params
         val pb = b.params
@@ -988,17 +1037,24 @@ object PluginJvm : SessionResource {
         val table = tableOf(cls)
         table.composedMethods[name]?.let { return it }
         val lineage = lineageOf(cls)
-        val byDescriptor = LinkedHashMap<String, MemberInfo>()
+        // keyed by parameters alone: a covariant override is the same method to a caller, not an overload of
+        // the one it overrides, and a bridge only forwards to the real method it stands beside
+        val byParameters = LinkedHashMap<String, MemberInfo>()
         // the most derived override wins, so the chain is walked downwards-first
-        for (table in lineage.chain) for (info in table.methods[name].orEmpty()) byDescriptor.putIfAbsent(info.descriptor, info)
+        for (table in lineage.chain) for (info in table.methods[name].orEmpty()) {
+            if (info.method.isBridge) continue
+            byParameters.putIfAbsent(parametersOf(info.descriptor), info)
+        }
         // defaults, which are not on the superclass chain; an interface's static and private methods are not inherited
         for (table in lineage.interfaces) for (info in table.methods[name].orEmpty()) {
             val modifiers = info.member.modifiers
-            if (Modifier.isStatic(modifiers) || Modifier.isPrivate(modifiers)) continue
-            byDescriptor.putIfAbsent(info.descriptor, info)
+            if (Modifier.isStatic(modifiers) || Modifier.isPrivate(modifiers) || info.method.isBridge) continue
+            byParameters.putIfAbsent(parametersOf(info.descriptor), info)
         }
-        return byDescriptor.values.toList().also { table.composedMethods[name] = it }
+        return byParameters.values.toList().also { table.composedMethods[name] = it }
     }
+
+    private fun parametersOf(descriptor: String): String = descriptor.substring(0, descriptor.indexOf(')') + 1)
 
     private fun cachedConstructors(cls: Class<*>): List<MemberInfo> = tableOf(cls).constructors
 

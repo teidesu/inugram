@@ -1169,6 +1169,13 @@ class RoutineCompiler {
       const hooked = this.compileHookCall(node, callee)
       if (hooked !== null) return hooked
     }
+    if (this.isCallSuper(callee)) {
+      if (node.arguments.length < 3) {
+        fail(node, '`inu.jvm.callSuper` takes a class, a receiver and a method name')
+      }
+      const [cls, receiver, name, ...args] = this.compileArguments(node.arguments, node)
+      return this.emit('callSuper', cls, receiver, name, args)
+    }
     const target = this.compileChainOperand(callee.object, chain)
     if (callee.optional) {
       if (chain === null) fail(callee, 'an optional member must be part of a chain')
@@ -1176,6 +1183,17 @@ class RoutineCompiler {
     }
     const key = this.compileMemberKey(callee)
     return this.emit('call', target, key, this.compileArguments(node.arguments, node))
+  }
+
+  /** `inu` is the engine's global here, never a capture, unless the routine declares its own */
+  private isCallSuper(callee: MemberExpression): boolean {
+    const isProperty = (node: MemberExpression, name: string) =>
+      !node.computed && !node.optional && node.property.type === 'Identifier' && node.property.name === name
+    if (!isProperty(callee, 'callSuper')) return false
+    const namespace = unwrap(callee.object)
+    if (namespace.type !== 'MemberExpression' || !isProperty(namespace, 'jvm')) return false
+    const root = unwrap(namespace.object)
+    return root.type === 'Identifier' && root.name === 'inu' && this.lookup('inu') === null
   }
 
   private compileHookRead(node: MemberExpression): Operand | null {

@@ -161,6 +161,7 @@ declare namespace inu {
      *   - `/` does integer division if both args are integers
      *   - other math operators work as expected
      * - `===`/`!==` (coerced comparisons are NOT supported)
+     * - {@link inu.jvm.callSuper}, the only `inu` member available
      * - expressions on Java values.
      *
      * Unsupported syntax is a build error with a source location.
@@ -228,7 +229,17 @@ declare namespace inu {
     function defineClass(spec: JvmClassSpec): DefinedClass
     function defineClass(name: string, spec: JvmClassSpec): DefinedClass
 
-    /** Not implemented yet; throws unsupported. Constructor super arguments are supported by defineClass. */
-    function callSuper(self: JavaObject, method: string, ...args: any[]): any
+    /**
+     * Calls `method` the way `super.method(...args)` written inside `cls` would: resolved on
+     * the superclass of `cls`, and running that implementation even if `self` overrides it.
+     * `self` must be an instance of `cls`. Overloads are picked like {@link JavaObject.call}.
+     *
+     * Available inside {@link inu.jvm.routine} and {@link inu.xposed.routine} bodies as well.
+     *
+     * Throws `invalid-argument` if `cls` has no superclass, or the picked method is abstract.
+     *
+     * @example `inu.jvm.callSuper(MySpan, self, 'updateDrawState', paint)`
+     */
+    function callSuper(cls: JavaClass, self: JavaObject, method: string, ...args: any[]): any
   }
 }

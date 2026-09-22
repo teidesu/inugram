@@ -2,7 +2,12 @@ package desu.inugram.helpers.plugins
 
 import desu.inugram.helpers.plugins.platform.PluginJvm
 import desu.inugram.helpers.plugins.platform.PluginJvmRoutine
+import desu.inugram.core.plugins.PluginRefusal
 import desu.inugram.jvmfixture.JvmFixture
+import desu.inugram.jvmfixture.JvmSuperBase
+import desu.inugram.jvmfixture.JvmSuperChild
+import desu.inugram.jvmfixture.JvmSuperConcrete
+import desu.inugram.jvmfixture.JvmSuperGrandchild
 import org.json.JSONArray
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
@@ -322,5 +327,34 @@ class PluginJvmRoutineTest {
         task.run()
         val elapsed = (System.nanoTime() - started) / 1_000_000
         assertTrue(elapsed in 200..5000, "a runaway loop ran for $elapsed ms")
+    }
+
+    @Test fun call_super_runs_the_superclass_member_of_the_class_it_names() {
+        val plugin = startPlugin("call-super", "unsafe.jvm")
+        val host = PluginJvm.bridgeFor(plugin.js) as PluginJvm.Session
+        fun callSuper(cls: Class<*>, receiver: Any, name: String, vararg args: Any?): Any? {
+            val arguments = args.indices.joinToString(",") { "[\"capture\",${it + 2}]" }
+            val base = 2 + args.size
+            val code = """["capture",0],["capture",1]${if (args.isEmpty()) "" else ",$arguments"},""" +
+                """["callSuper",0,1,["$name"],[${(2 until base).joinToString(",")}]],["return",$base]"""
+            val routine = PluginJvmRoutine(program(code), listOf(cls, receiver, *args), host, false)
+            try {
+                return routine.execute(null, null, emptyArray())
+            } finally {
+                routine.close()
+            }
+        }
+        val grandchild = JvmSuperGrandchild()
+        assertEquals("base", callSuper(JvmSuperChild::class.java, grandchild, "describe"))
+        assertEquals("child", callSuper(JvmSuperGrandchild::class.java, grandchild, "describe"))
+        assertEquals("base:x", callSuper(JvmSuperChild::class.java, grandchild, "describe", "x"))
+        assertEquals(10, callSuper(JvmSuperChild::class.java, grandchild, "scale", 5))
+        assertEquals("static on the base", callSuper(JvmSuperChild::class.java, grandchild, "origin"))
+        val thrown = assertFailsWith<IllegalStateException> { callSuper(JvmSuperChild::class.java, grandchild, "explode") }
+        assertEquals("base explodes", thrown.message)
+        assertEquals("child does not", grandchild.explode())
+        assertFailsWith<PluginRefusal> { callSuper(JvmSuperConcrete::class.java, JvmSuperConcrete(), "describe") }
+        assertFailsWith<PluginRefusal> { callSuper(JvmSuperChild::class.java, JvmSuperBase(), "describe") }
+        assertFailsWith<PluginRefusal> { callSuper(Any::class.java, grandchild, "hashCode") }
     }
 }

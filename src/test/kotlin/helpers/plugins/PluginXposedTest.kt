@@ -296,7 +296,7 @@ class PluginXposedTest {
         val plugin = startPlugin("native-hook-order", "unsafe.jvm", "unsafe.xposed")
         val bridge = PluginJvm.bridgeFor(plugin.js)!!
         val order = ArrayList<String>()
-        fun record(label: String) = "G" + jvmHandleId(bridge.encode(Runnable { order.add(label) }))
+        fun record(label: String) = "G" + jvmHandleId(bridge.encode(Thread { order.add(label) }))
         val reflected = JvmFixture::class.java.getDeclaredMethod("sum", Int::class.java, Int::class.java)
         val method = jvmHandleId(bridge.encode(reflected))
         val firstBefore = record("a")

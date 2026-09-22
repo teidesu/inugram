@@ -243,11 +243,8 @@
       return type
     },
 
-    callSuper() {
-      throw new PluginError(
-        'unsupported',
-        'jvm.callSuper is not implemented',
-      )
+    callSuper(cls, self, method, ...args) {
+      return natives.callSuper(cls, self, named('callSuper', method), ...args)
     },
   })
 

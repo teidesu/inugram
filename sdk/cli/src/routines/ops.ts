@@ -114,6 +114,7 @@ export const OPS = {
   get: { fields: ['operand', 'operand'], hook: false },
   set: { fields: ['operand', 'operand', 'operand'], hook: false },
   call: { fields: ['operand', 'operand', 'args'], hook: false },
+  callSuper: { fields: ['operand', 'operand', 'operand', 'args'], hook: false },
   new: { fields: ['operand', 'args'], hook: false },
   array: { fields: ['args'], hook: false },
 

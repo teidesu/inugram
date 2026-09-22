@@ -96,6 +96,14 @@ class JvmFixture : JvmContract {
 
     fun ambiguous(value: CharSequence): String = "charSequence"
 
+    fun letter(value: Char): String = "char"
+
+    fun letter(value: String): String = "string"
+
+    fun boxedLetter(value: Char?): String = "character"
+
+    fun boxedLetter(value: Any?): String = "object"
+
     fun ambiguous(value: Comparable<*>): String = "comparable"
 
     fun boxed(value: Any): String = value.javaClass.name
@@ -146,4 +154,45 @@ class JvmFixture : JvmContract {
             return a + b
         }
     }
+}
+
+/** a hierarchy where every level answers differently, so a test can tell which one `callSuper` reached */
+open class JvmSuperBase {
+    open fun describe(): String = "base"
+
+    open fun describe(suffix: String): String = "base:$suffix"
+
+    open fun scale(value: Int): Int = value * 2
+
+    open fun explode(): String = throw IllegalStateException("base explodes")
+
+    open fun itself(): JvmSuperBase = this
+
+    companion object {
+        @JvmStatic fun origin(): String = "static on the base"
+    }
+}
+
+open class JvmSuperChild : JvmSuperBase() {
+    override fun describe(): String = "child"
+
+    override fun describe(suffix: String): String = "child:$suffix"
+
+    override fun scale(value: Int): Int = value * 3
+
+    override fun explode(): String = "child does not"
+
+    override fun itself(): JvmSuperChild = this
+}
+
+class JvmSuperGrandchild : JvmSuperChild() {
+    override fun describe(): String = "grandchild"
+}
+
+abstract class JvmSuperAbstract {
+    abstract fun describe(): String
+}
+
+class JvmSuperConcrete : JvmSuperAbstract() {
+    override fun describe(): String = "concrete"
 }

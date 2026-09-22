@@ -158,7 +158,7 @@ class PluginJvmTest {
             if (drain() == 0) Thread.sleep(10)
         }
         plugin.js("__jvmDone()")
-        assertOracleExact(lines, "jvm test done", 29)
+        assertOracleExact(lines, "jvm test done", 32)
     }
 
     @Test
@@ -178,7 +178,7 @@ class PluginJvmTest {
     @Test
     fun aRoutineAndADirectCallPickTheSameOverloadForEveryValue() {
         val plugin = engineWith()
-        val methods = listOf("width", "boxed", "echo", "sized")
+        val methods = listOf("width", "boxed", "echo", "sized", "letter", "boxedLetter")
         for (value in listOf("7", "7.0", "1.5", "2 ** 40", "9007199254740993n", "'x'", "true", "null", "new Uint8Array([1, 2])")) {
             val outcome = JSONArray(plugin.js("""
                 (() => {
@@ -286,6 +286,23 @@ class PluginJvmTest {
         plugin.assertRefused("invalid-argument", "o.setField('count', 2 ** 40)")
         assertEquals(3, fixture.count)
         plugin.assertRefused("not-found", "o.call('width', 'text')")
+    }
+
+    @Test
+    fun aOneCharacterStringPrefersTheOverloadThatTakesItAsText() {
+        val plugin = engineWith()
+        assertEquals("Vstring", plugin.outcome("o.call('letter', 'f')"))
+        assertEquals("Vobject", plugin.outcome("o.call('boxedLetter', 'f')"))
+        assertEquals("Vchar", plugin.outcome("o.call('letter(C)Ljava/lang/String;', 'f')"))
+        assertEquals("Vcharacter", plugin.outcome("o.call('boxedLetter', null)"))
+    }
+
+    @Test
+    fun aCovariantOverrideIsOneMethodRatherThanAnOverloadOfItsBridge() {
+        val plugin = engineWith()
+        plugin.js("globalThis.child = new (inu.jvm.cls('desu.inugram.jvmfixture.JvmSuperChild'))()")
+        assertEquals("Vtrue", plugin.outcome("child.call('itself') !== null"))
+        assertEquals("Vchild", plugin.outcome("child.call('describe')"))
     }
 
     @Test

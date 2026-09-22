@@ -114,9 +114,12 @@ fn error_code(f: &Fixture, code: &str) -> String {
 #[test]
 fn a_plugin_holding_no_jvm_grant_is_refused_at_every_entry_point() {
   let f = setup(&["kv"]);
-  for code in
-    ["inu.jvm.cls('java.util.ArrayList')", "inu.jvm.runnable(() => {})", "inu.jvm.loadDex('/data/local/tmp/x.dex')"]
-  {
+  for code in [
+    "inu.jvm.cls('java.util.ArrayList')",
+    "inu.jvm.runnable(() => {})",
+    "inu.jvm.loadDex('/data/local/tmp/x.dex')",
+    "inu.jvm.callSuper({}, {}, 'toString')",
+  ] {
     assert!(error_code(&f, code).starts_with("not-granted|unsafe.jvm"), "{code}");
   }
   assert!(f.host.calls().is_empty());
@@ -319,10 +322,19 @@ fn member_access_without_a_vm_is_refused_rather_than_asked_of_the_host() {
 }
 
 #[test]
-fn call_super_refuses_rather_than_approximates() {
+fn call_super_validates_its_arguments_before_reaching_the_vm() {
   let f = setup(&["unsafe.jvm"]);
-  assert_eq!(error_code(&f, "inu.jvm.callSuper({}, 'toString')"), "unsupported|");
-  assert!(f.host.calls().is_empty());
+  object_handle(&f, "o");
+  let cls = "inu.jvm.cls('java.lang.Object')";
+  for code in [
+    format!("inu.jvm.callSuper({{}}, o, 'toString')"),
+    format!("inu.jvm.callSuper({cls}, o, '')"),
+    format!("inu.jvm.callSuper({cls}, o, 7)"),
+  ] {
+    assert_eq!(error_code(&f, &code), "invalid-argument|", "{code}");
+  }
+  assert_eq!(error_code(&f, &format!("inu.jvm.callSuper({cls}, o, 'toString')")), "unsupported|");
+  assert!(f.host.calls().iter().all(|call| call.starts_with(&format!("{OP_CLASS}|"))));
 }
 
 /// the table is the plugin's only hold on a java reference, and a handle whose js side is gone is
