@@ -43,7 +43,7 @@ fn kind_name(kind: i32) -> &'static str {
     KIND_MESSAGE => "registerMessageAction",
     KIND_PROFILE => "registerProfileAction",
     KIND_EDITOR => "registerMessageEditorAction",
-    _ => "registerAction",
+    _ => "registerGlobalAction",
   }
 }
 
@@ -159,7 +159,7 @@ pub fn install_actions<'js>(
   });
 
   for (name, kind) in [
-    ("registerAction", KIND_GLOBAL),
+    ("registerGlobalAction", KIND_GLOBAL),
     ("registerChatAction", KIND_CHAT),
     ("registerMessageAction", KIND_MESSAGE),
     ("registerProfileAction", KIND_PROFILE),
