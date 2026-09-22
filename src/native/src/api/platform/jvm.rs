@@ -482,7 +482,12 @@ pub fn install_jvm<'js>(
               Err(error) => return PluginErrorCode::InvalidArgument.throw(&ctx, &format!("defineClass: {error}")),
             };
             let wire = encode_bytes_wire(&bytes);
-            this.ask(&ctx, OP_LOAD_CLASS, ticket, "", &[wire])
+            let handle = this.ask(&ctx, OP_LOAD_CLASS, ticket, "", &[wire])?;
+            // the host names a class the plugin did not, so the name goes back with the handle
+            let pair = Array::new(ctx.clone())?;
+            pair.set(0, handle)?;
+            pair.set(1, name)?;
+            Ok(pair.into_value())
           })();
           if result.is_err() {
             this.host.jvm(OP_CANCEL_CLASS, ticket, "", &[]);

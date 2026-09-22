@@ -198,7 +198,7 @@ object PluginJvm : SessionResource {
                     }
                 }
                 val prepared = try {
-                    PluginJvmClass.prepare(name, decodeArgs(args), { type -> Class.forName(type, false, parent).also(::checkClass) }, parent) { callback, self, arguments ->
+                    PluginJvmClass.prepare(name, decodeArgs(args), { type -> Class.forName(type, false, parent).also(::checkClass) }, parent, session.plugin.id) { callback, self, arguments ->
                         check(live && session.isCurrent()) { "defineClass: plugin has unloaded" }
                         val inputs = ArrayList<String>()
                         try {

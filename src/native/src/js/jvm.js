@@ -156,7 +156,12 @@
     },
 
     defineClass(name, spec) {
-      named('defineClass', name)
+      if (spec === undefined && name !== null && typeof name === 'object' && !Array.isArray(name)) {
+        spec = name
+        name = null
+      } else {
+        named('defineClass', name)
+      }
       if (!spec || typeof spec !== 'object' || Array.isArray(spec)) throw invalid('defineClass: expected a class specification')
       for (const key of Object.keys(spec)) {
         if (!['superclass', 'interfaces', 'fields', 'staticFields', 'methods', 'staticMethods', 'constructors'].includes(key)) throw invalid(`defineClass: unknown option ${key}`)
@@ -233,7 +238,9 @@
       }
 
       if (definition.methods.length > 256 || definition.fields.length > 256 || definition.interfaces.length > 64) throw invalid('defineClass: too many members or interfaces')
-      return natives.defineClass(JSON.stringify(definition), values)
+      const [type, fqn] = natives.defineClass(JSON.stringify(definition), values)
+      Object.defineProperty(type, 'name', { value: fqn, configurable: true })
+      return type
     },
 
     callSuper() {

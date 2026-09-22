@@ -6,12 +6,28 @@ import java.lang.reflect.Constructor
 import java.lang.reflect.Method
 import java.lang.reflect.Modifier
 import java.nio.ByteBuffer
+import java.security.SecureRandom
 import org.json.JSONArray
 import org.json.JSONObject
 
 @Keep
 internal object PluginJvmClass {
     private val IDENTIFIER = Regex("[A-Za-z_$][A-Za-z0-9_$]*")
+
+    /**
+     * where a class the plugin did not name lands. Nothing defined here can be cleaned up - a
+     * loaded dex stays loaded - so a name is minted per class rather than reused, and the install
+     * id it sits under keeps two installs of one plugin out of each other's package. A plugin may
+     * still name a class here itself; it just gets no protection from doing so.
+     */
+    const val GENERATED_PACKAGE = "inu.plugins"
+
+    private val names = SecureRandom()
+
+    private fun generateName(installId: String): String {
+        val suffix = ByteArray(8).also(names::nextBytes).joinToString("") { "%02x".format(it) }
+        return "$GENERATED_PACKAGE.i$installId.DefinedClass$suffix"
+    }
 
     private class Invocation(var depth: Int = 0, val deadline: Long = System.nanoTime() + 250_000_000L)
     private val invocation = ThreadLocal<Invocation>()
@@ -78,11 +94,12 @@ internal object PluginJvmClass {
         values: List<Any?>,
         resolve: (String) -> Class<*>,
         parent: ClassLoader,
+        installId: String,
         dispatch: (Int, Any?, Array<Any?>) -> Any?,
     ): Prepared {
         require(definition.toByteArray(Charsets.UTF_8).size <= PluginJvm.VALUE_LIMIT_BYTES) { "class definition exceeds 1 MB" }
         val spec = JSONObject(definition)
-        val name = spec.getString("name").replace('/', '.')
+        val name = if (spec.isNull("name")) generateName(installId) else spec.getString("name").replace('/', '.')
         require(name.split('.').all { it.matches(IDENTIFIER) } && !name.startsWith("java.") && !name.startsWith("android.") && !PluginJvm.isEnginePackage(name)) { "invalid class name" }
         require(runCatching { resolve(name) }.exceptionOrNull() is ClassNotFoundException) { "class already exists: $name" }
         fun capture(index: Int): Any? {
