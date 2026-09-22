@@ -278,14 +278,14 @@ declare namespace inu {
   }
 
   /**
-   * Get the list of logged-in accounts
+   * Get the list of logged-in accounts, in the order the user sees them in the app
    *
    * @needs-grant account.read(self)
    */
   function accounts(): AccountInfo[]
 
   /**
-   * Register on updates for when the account list updates
+   * Register on updates for when the account list updates, including when the user reorders it
    *
    * @needs-grant account.read(self)
    */

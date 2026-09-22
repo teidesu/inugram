@@ -1,5 +1,6 @@
 package desu.inugram.helpers.plugins.telegram
 
+import desu.inugram.helpers.dialogs.AccountOrderHelper
 import desu.inugram.helpers.plugins.EngineDispatch
 
 import desu.inugram.helpers.plugins.AccountListener
@@ -33,17 +34,7 @@ object PluginAccounts {
         watching = true
         AndroidUtilities.runOnUIThread {
             lastAccounts = accountsJson()
-            val observer = NotificationCenter.NotificationCenterDelegate { _, _, _ ->
-                // a plugin started later reads the live snapshot at install, so there is nothing to
-                // keep up to date while none is running
-                if (!PluginManager.anyRunning) return@NotificationCenterDelegate
-                val current = accountsJson()
-                if (current == lastAccounts) return@NotificationCenterDelegate
-                lastAccounts = current
-                EngineDispatch.scheduler.postRunnable {
-                    for (plugin in PluginManager.plugins()) plugin.engine?.notifyAccountsChanged()
-                }
-            }
+            val observer = NotificationCenter.NotificationCenterDelegate { _, _, _ -> notifyIfChanged() }
             NotificationCenter.getGlobalInstance().addObserver(observer, NotificationCenter.activeAccountChanged)
             for (id in 0 until UserConfig.MAX_ACCOUNT_COUNT) {
                 val center = NotificationCenter.getInstance(id)
@@ -53,10 +44,31 @@ object PluginAccounts {
         }
     }
 
+    /** the account order is not a stock notification, so its only writer reports it here */
+    fun onOrderChanged() {
+        AndroidUtilities.runOnUIThread {
+            if (lastAccounts != null) notifyIfChanged()
+        }
+    }
+
+    /** runs on the ui thread, which owns [lastAccounts] */
+    private fun notifyIfChanged() {
+        // a plugin started later reads the live snapshot at install, so there is nothing to
+        // keep up to date while none is running
+        if (!PluginManager.anyRunning) return
+        val current = accountsJson()
+        if (current == lastAccounts) return
+        lastAccounts = current
+        EngineDispatch.scheduler.postRunnable {
+            for (plugin in PluginManager.plugins()) plugin.engine?.notifyAccountsChanged()
+        }
+    }
+
     private fun accountsJson(): String {
+        val ids = (0 until UserConfig.MAX_ACCOUNT_COUNT).filterTo(mutableListOf()) { UserConfig.isValidAccount(it) }
+        AccountOrderHelper.sort(ids)
         val arr = JSONArray()
-        for (id in 0 until UserConfig.MAX_ACCOUNT_COUNT) {
-            if (!UserConfig.isValidAccount(id)) continue
+        for (id in ids) {
             val config = UserConfig.getInstance(id)
             arr.put(
                 JSONObject()
