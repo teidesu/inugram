@@ -1,6 +1,7 @@
 package desu.inugram.helpers.dialogs
 
 import desu.inugram.InuConfig
+import desu.inugram.helpers.plugins.telegram.PluginAccounts
 import org.telegram.messenger.UserConfig
 
 object AccountOrderHelper {
@@ -19,6 +20,7 @@ object AccountOrderHelper {
     @JvmStatic
     fun setOrder(accounts: List<Int>) {
         InuConfig.ACCOUNT_ORDER.value = accounts.joinToString(",")
+        PluginAccounts.onOrderChanged()
     }
 
     /**
