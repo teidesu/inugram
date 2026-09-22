@@ -31,6 +31,12 @@
     return id !== null && id > 0n && (id & ENCRYPTED_DIALOG_BIT) !== 0n
   }
 
+  const isSecretMessage = (raw) => {
+    const name = raw._
+    if (typeof name === 'string' && name.startsWith('message_secret')) return true
+    return isEncryptedDialogId(raw.dialog_id)
+  }
+
   const orNull = value => (value === undefined ? null : value)
 
   const documentOf = (media) => {
@@ -89,14 +95,8 @@
       return toNumber(this.raw.id) ?? 0
     }
 
-    get isSecret() {
-      const name = this.raw._
-      if (typeof name === 'string' && name.startsWith('message_secret')) return true
-      return isEncryptedDialogId(this.raw.dialog_id)
-    }
-
     get dialogId() {
-      if (this.isSecret) return null
+      if (isSecretMessage(this.raw)) return null
       const annotated = toBigInt(this.raw.dialog_id)
       if (annotated !== null && annotated !== 0n) return Number(annotated)
       return peerDialogId(this.raw.peer_id)

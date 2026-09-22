@@ -70,7 +70,6 @@ equals('out defaults to false', incoming.out, false)
 check('groupedId stays an int64 string', incoming.groupedId === '13591443077081936', incoming.groupedId)
 check('viaBotId is a number', incoming.viaBotId === 1234567 && typeof incoming.viaBotId === 'number')
 equals('isService', incoming.isService, false)
-equals('isSecret', incoming.isSecret, false)
 equals('a message with no media has no media type', [incoming.media, incoming.mediaType, incoming.document, incoming.duration], [null, null, null, null])
 equals('textWithEntities without entities', incoming.textWithEntities, { text: 'hi' })
 
@@ -107,13 +106,13 @@ equals(
 // 0x4000000000000000 | 7 - what DialogObject.makeEncryptedDialogId(7) produces
 const ENCRYPTED = '4611686018427387911'
 const secret = message({ _: 'message_secret', peer_id: { _: 'peerUser', user_id: '4242' }, dialog_id: ENCRYPTED })
-equals('a secret message has no DialogId', [secret.isSecret, secret.dialogId], [true, null])
+equals('a secret message has no DialogId', secret.dialogId, null)
 check('and its raw annotation is still readable', secret.raw.dialog_id === ENCRYPTED, secret.raw.dialog_id)
 const secretService = message({ _: 'messageService', peer_id: { _: 'peerUser', user_id: '4242' }, dialog_id: ENCRYPTED })
 equals(
   'a secret service message is secret too, though its constructor does not say so',
-  [secretService.isSecret, secretService.dialogId],
-  [true, null],
+  secretService.dialogId,
+  null,
 )
 
 // -- the sender --
@@ -230,7 +229,7 @@ if (typeof inu.invokeRpc !== 'function') {
           return fail('text reads through the view', `${m.text} != ${raw.message}`)
         }
         if (m.id !== raw.id) return fail('id reads through the view', `${m.id} != ${raw.id}`)
-        if (m.dialogId === null && !m.isSecret) return fail('a saved-messages message has a dialog id', String(m.id))
+        if (m.dialogId === null) return fail('a saved-messages message has a dialog id', String(m.id))
         // saved messages: every message in it is one of ours
         if (m.senderId === null && !m.isService) return fail('a saved-messages message has a sender', String(m.id))
         if (m.mediaType !== null && m.media === null) return fail('a media type without media', m.mediaType)

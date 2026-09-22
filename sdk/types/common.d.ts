@@ -49,6 +49,8 @@ declare type Disposer = (() => void) & Disposable
  * Dialog ID:
  * - a user id as-is (e.g. `123456`)
  * - a chat or channel id, negated (e.g. `-123123`)
+ *
+ * Secret chats have no dialog id, as they are never exposed to the plugins
  */
 declare type DialogId = number
 
@@ -189,8 +191,6 @@ declare namespace inu {
     readonly raw: tl.TypeMessage
     /** Whether the message is a service message */
     get isService(): boolean
-    /** Whether the message is from a secret chat */
-    get isSecret(): boolean
 
     /** Message ID */
     get id(): number

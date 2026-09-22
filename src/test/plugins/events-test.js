@@ -103,7 +103,7 @@ function messageEvent(label, kind) {
     else if (m.raw === null || typeof m.raw !== 'object') detail = 'the wrapper has no raw'
     else if (m.id !== Number(m.raw.id)) detail = `id ${m.id} does not read through raw`
     else if (typeof m.text !== 'string') detail = `text is a ${typeof m.text}`
-    else if (m.dialogId === null && !m.isSecret) detail = 'no dialog id'
+    else if (m.dialogId === null) detail = 'no dialog id'
     else if (typeof account.id !== 'number') detail = 'no account'
     queueMicrotask(() => verifyOnce(label, key, kind, detail))
   }
