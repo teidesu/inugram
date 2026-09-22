@@ -14,7 +14,6 @@
     "push-theme": "tsx scripts/push-theme.ts",
     "build-debug": "tsx scripts/generate-grants.ts && cd worktree && ./gradlew TMessagesProj_App:assembleDebug",
     "run-debug": "cd worktree && ./gradlew TMessagesProj_App:installDebug && adb shell am start desu.inugram.beta/org.telegram.ui.LaunchActivity",
-    "push-plugin": "tsx scripts/push-plugin.ts",
     "check-plugin-syntax": "for f in src/test/plugins/*.js $(find src/native/src -name '*.js'); do node --check \"$f\" || exit 1; done",
     "typecheck-plugins": "pnpm run check-plugin-syntax && tsx scripts/generate-tl.ts && tsx scripts/generate-grants.ts && tsc -p sdk/types/tsconfig.self.json --noEmit && tsc -p src/test/plugins --noEmit",
     "prepare": "husky",

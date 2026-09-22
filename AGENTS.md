@@ -317,8 +317,8 @@ catalogue.
 `sdk/cli` bundles a plugin with esbuild into one classic script: the engine
 evaluates a plugin as a global script, so the output is an iife, never a module,
 and no source map, because nothing consumes one. Keep the cli's grant check a
-mirror of `GrantValidator`, message for message. `scripts/push-plugin.ts` shares
-the cli's `Device`, so the dev-broadcast protocol has one implementation.
+mirror of `GrantValidator`, message for message. `inu dev` is the only client of the
+dev broadcast, so the protocol has one implementation (`sdk/cli/src/utils/device.ts`).
 
 `src/routines` compiles every `inu.*.routine(function () {})` in an `onLoad` hook,
 parsing with `oxc-parser` and replacing the call where it stands. The compiled call
@@ -340,7 +340,7 @@ into `dist`; the build fails if that module ever lands in a shared chunk.
 
 ### Dev server
 
-- `push-plugin.ts` writes to `getExternalFilesDir("plugin-dev")` and sends the
+- `inu dev` writes to `getExternalFilesDir("plugin-dev")` and sends the
   `desu.inugram.plugins.DEV` broadcast. No install review: the receiver must exist
   only after `PLUGINS_DEV_MODE` consent and require sender permission
   `android.permission.DUMP`.

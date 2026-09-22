@@ -16,7 +16,7 @@ export function reportPluginAction(action: string, plugin: DevPlugin) {
   success(`${action} ${color.bold(plugin.name)}${failure}`)
 }
 
-export function reportInstall(install: DevInstall) {
+function reportInstall(install: DevInstall) {
   if (!install.ok) {
     fail(install.error)
     return
