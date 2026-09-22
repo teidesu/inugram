@@ -45,8 +45,8 @@ Use the installed versions as the reference; app and SDK compatibility matters.
 - Update `manifest.grants` with API changes. Request only the required grants and
   scopes; check `@needs-grant` on every API used. Prefer public plugin APIs over
   `unsafe.jvm` or `unsafe.xposed` when they cover the task.
-- Preserve manifest `name` and `author` unless intentionally changing plugin
-  identity: together they determine whether an install updates an existing plugin.
+- Never change manifest `id`: it determines whether an install updates an existing
+  plugin or lands beside it.
 - Initialize from the entry point. Use `inu.onUnload` for cleanup; its async
   handlers share a two-second window. Dispose registrations and release resources
   according to their API contracts; do not retain handles beyond their lifetime.

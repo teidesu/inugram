@@ -145,6 +145,9 @@ Rust and Kotlin; do not add a schema/code-generation layer for them.
   session back-reference; JNI/resource utilities may take the engine alone.
 - Install IDs are minted independently of manifests and survive reload/rename.
   They key storage; uninstall must wipe every per-install store.
+- `PluginManifest.id` is `@id` verbatim, or a slug derived from `@author` and
+  `@name` when there is none. It decides only what an install replaces, never
+  storage. `@inugram/cli` writes the same derivation, so keep the two in step.
 - Boot the grant-selected early cohort in `ApplicationLoader.postInitApplication`,
   bounded by `BootCohort.EARLY_BUDGET_MILLIS`; load the rest at first UI.
   `BootGuard` must survive process death during one plugin start, not a whole pass.

@@ -21,11 +21,11 @@ const FailureSchema = v.object({
   error: v.string(),
 })
 
-/** `PluginDevServer.describe`; `identity` and `failure` are `putOpt`, so absent rather than null */
+/** `PluginDevServer.describe`; `pluginId` and `failure` are `putOpt`, so absent rather than null */
 const DevPluginSchema = v.object({
   id: v.string(),
   name: v.string(),
-  identity: v.optional(v.string()),
+  pluginId: v.optional(v.string()),
   file: v.string(),
   enabled: v.boolean(),
   running: v.boolean(),

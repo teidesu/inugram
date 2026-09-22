@@ -41,6 +41,7 @@ export default defineConfig({
     adblock: {
       entry: 'src/adblock/index.ts',
       manifest: {
+        id: 'com.github.you.adblock',
         name: 'Adblock',
         author: '@you',
         version: '1.0.0',
@@ -62,9 +63,12 @@ a plugin runs alone in its own engine, so there is nothing for them to share at 
 
 ### Manifest fields
 
-`name` is the only one required. `author` matters more than it looks: together with `name` it is
-what decides whether a later file is an *update* of an installed plugin or a new plugin of its own,
-so a plugin without one can never be updated in place.
+`name` is the only one required. `id` is what decides whether a later file is an *update* of an
+installed plugin or a new plugin of its own, compared verbatim and conventionally written as a
+reverse domain name, `com.github.you.my-plugin`. Leave it out and one is derived from `author` and
+`name`, which ties the plugin's identity to both: rename either half and the next build installs
+beside the old plugin instead of over it. With neither an `id` nor an `author` a plugin can never
+be updated in place.
 
 `description` takes a string, or a map of language to string whose `en` entry becomes the untagged
 `@description` and the rest become `@description:xx`.

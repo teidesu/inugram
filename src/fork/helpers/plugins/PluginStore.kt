@@ -13,7 +13,7 @@ import org.json.JSONObject
 
 /**
  * The installed set as it exists on disk: one `.js` file per install, plus the record in
- * `PLUGINS_STATE` carrying its identity, its place in the order and its enabled bit.
+ * `PLUGINS_STATE` carrying its plugin id, its place in the order and its enabled bit.
  *
  * Split from [PluginManager], which owns the *engines*: nothing here starts, stops or talks to one,
  * and the two halves fail differently - a plugin that will not load is this side's problem and one
@@ -78,27 +78,27 @@ object PluginStore {
     fun persist(plugins: List<Plugin>) {
         val arr = JSONArray()
         for (p in plugins) {
-            arr.put(record(p.id, p.file.name, p.enabled, p.manifest.identity, p.dev))
+            arr.put(record(p.id, p.file.name, p.enabled, p.manifest.id, p.dev))
         }
         for (install in unloaded) {
-            arr.put(record(install.id, install.file, install.enabled, install.identity, install.dev))
+            arr.put(record(install.id, install.file, install.enabled, install.pluginId, install.dev))
         }
         InuConfig.PLUGINS_STATE.value = arr.toString()
     }
 
-    private fun record(id: String, file: String, enabled: Boolean, identity: String?, dev: Boolean): JSONObject =
-        JSONObject().put("id", id).put("file", file).put("enabled", enabled).putOpt("identity", identity)
+    private fun record(id: String, file: String, enabled: Boolean, pluginId: String?, dev: Boolean): JSONObject =
+        JSONObject().put("id", id).put("file", file).put("enabled", enabled).putOpt("pluginId", pluginId)
             .apply { if (dev) put("dev", true) }
 
     /**
-     * the record of an install that did not load this boot but whose file claims [identity].
+     * the record of an install that did not load this boot but whose file claims [pluginId].
      *
      * A plugin only lands here when its file stopped parsing, which is exactly when the user goes
      * and re-imports a fixed copy. Nothing lists it, so reusing its id is also the only way its
      * `kv`/`fs` stores are ever reachable again. It stays on the unloaded list until the caller has
      * actually taken it over ([dropUnloaded]), or a failed import would strand the id anyway.
      */
-    fun findUnloaded(identity: String): PluginInstall? = unloaded.firstOrNull { it.identity == identity }
+    fun findUnloaded(pluginId: String): PluginInstall? = unloaded.firstOrNull { it.pluginId == pluginId }
 
     /** hands a record found by [findUnloaded] over to the caller, so [persist] writes it only once */
     fun dropUnloaded(install: PluginInstall) {
@@ -161,7 +161,7 @@ object PluginStore {
                     o.optString("id"),
                     file,
                     o.optBoolean("enabled", true),
-                    o.optString("identity").takeIf { it.isNotEmpty() },
+                    o.optString("pluginId").takeIf { it.isNotEmpty() },
                     o.optBoolean("dev", false),
                 )
             }

@@ -5,12 +5,14 @@ package desu.inugram.core.plugins
  * [grants], [pluginApi], [platform] are parsed already so the engine layer can gate on them without
  * re-parsing.
  *
- * Nothing here keys storage: that is [PluginInstall.id], minted at install time. [identity] is only
+ * Nothing here keys storage: that is [PluginInstall.id], minted at install time. [id] is only
  * what decides whether a second file is an update of an installed plugin or a plugin of its own.
  */
 data class PluginManifest(
     val name: String,
     val author: String?,
+    /** `@id` as written, once it is a single printable token; null leaves [id] to derive one */
+    val declaredId: String?,
     val version: String?,
     val description: String?,
     val localizedDescriptions: Map<String, String>,
@@ -22,18 +24,21 @@ data class PluginManifest(
     val raw: Map<String, List<String>>,
 ) {
     /**
-     * what two files must agree on for one to be an update of the other. Both halves are required:
-     * a plugin with no [author] matches nothing, because [name] alone would let two unrelated
-     * plugins overwrite each other, and a false match costs a user the plugin they had.
+     * what two files must agree on for one to be an update of the other, compared verbatim.
      *
-     * Not storage identity - a plugin that renames itself keeps its stores either way, it just
-     * stops being updatable in place by a file that carries the new name.
+     * A plugin says it with `@id`, canonically a reverse domain name, and then keeps it across
+     * every rename. A plugin that says nothing gets one derived from [author] and [name], which
+     * costs it that: rename either half and the next file is a plugin of its own. Both halves are
+     * required there, because [name] alone would let two unrelated plugins overwrite each other,
+     * and a false match costs a user the plugin they had.
+     *
+     * Not storage identity - a plugin that renames itself keeps its stores either way.
      */
-    val identity: String? by lazy {
-        val normalizedAuthor = normalize(author ?: return@lazy null)
-        val normalizedName = normalize(name)
-        if (normalizedAuthor.isEmpty() || normalizedName.isEmpty()) null
-        else "$normalizedAuthor\u0000$normalizedName"
+    val id: String? by lazy {
+        if (declaredId != null) return@lazy declaredId
+        val authorSlug = slug(author ?: return@lazy null)
+        val nameSlug = slug(name)
+        if (authorSlug.isEmpty() || nameSlug.isEmpty()) null else "$authorSlug.$nameSlug"
     }
 
     fun description(lang: String?): String? {
@@ -47,16 +52,28 @@ data class PluginManifest(
         return description
     }
 
-    private companion object {
-        private val WHITESPACE = Regex("\\s+")
+    companion object {
+        /**
+         * one lowercase run of letters and digits per word, joined by dashes. `@inugram/cli` derives
+         * the `@id` it writes the same way, so a plugin built before it started writing one keeps
+         * matching the plugin built after.
+         */
+        fun slug(value: String): String = buildString {
+            var gap = false
+            for (ch in value.lowercase()) {
+                if (!ch.isLetter() && !ch.isDigit()) {
+                    gap = true
+                    continue
+                }
+                if (gap && isNotEmpty()) append('-')
+                gap = false
+                append(ch)
+            }
+        }
 
-        // control characters are dropped rather than collapsed: they are invisible in the sheet that
-        // confirms an update, so a name carrying one would read as another plugin's and match it
-        fun normalize(value: String): String = value
-            .filterNot { it.isISOControl() && !it.isWhitespace() }
-            .trim()
-            .lowercase()
-            .replace(WHITESPACE, " ")
+        /** an `@id` is compared verbatim, so it may hold nothing that is invisible or ambiguous */
+        fun readDeclaredId(value: String?): String? = value
+            ?.takeIf { it.isNotEmpty() && it.none { ch -> ch.isWhitespace() || ch.isISOControl() } }
     }
 }
 
@@ -135,6 +152,7 @@ object PluginManifestParser {
         return PluginManifest(
             name = name,
             author = raw["author"]?.firstOrNull()?.takeIf { it.isNotBlank() },
+            declaredId = PluginManifest.readDeclaredId(raw["id"]?.firstOrNull()),
             version = raw["version"]?.firstOrNull()?.takeIf { it.isNotBlank() },
             description = raw["description"]?.firstOrNull()?.takeIf { it.isNotBlank() },
             localizedDescriptions = localizedDescriptions,

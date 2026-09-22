@@ -82,19 +82,19 @@ class PluginInstallsTest {
     }
 
     @Test
-    fun reconcileKeepsTheIdentityOfARecordItRemints() {
+    fun reconcileKeepsThePluginIdOfARecordItRemints() {
         val out = PluginInstalls.reconcile(
-            listOf(PluginInstall("nope", "p.js", true, "teidesu\u0000my plugin")),
+            listOf(PluginInstall("nope", "p.js", true, "teidesu.my-plugin")),
             listOf("p.js"),
             seeded(),
         )
-        assertEquals("teidesu\u0000my plugin", out[0].identity)
+        assertEquals("teidesu.my-plugin", out[0].pluginId)
     }
 
     @Test
     fun reconcileKeepsTheDevBitOfARecordItRemints() {
         val out = PluginInstalls.reconcile(
-            listOf(PluginInstall("nope", "p.js", true, "teidesu\u0000my plugin", dev = true)),
+            listOf(PluginInstall("nope", "p.js", true, "teidesu.my-plugin", dev = true)),
             listOf("p.js"),
             seeded(),
         )

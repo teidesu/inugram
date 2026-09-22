@@ -281,15 +281,15 @@ object PluginManager {
 
     /** the installed plugin [manifest] would replace, or null when it is a plugin of its own */
     fun findUpdateTarget(manifest: PluginManifest): Plugin? {
-        val identity = manifest.identity ?: return null
+        val pluginId = manifest.id ?: return null
         // the snapshot, because this is answered off the ui thread that mutates the list
-        return plugins().firstOrNull { it.manifest.identity == identity }
+        return plugins().firstOrNull { it.manifest.id == pluginId }
     }
 
     /**
      * copies raw plugin source into the plugins dir, registers and (if applicable) runs it.
      *
-     * a *new* install with an empty store, unless the source claims the identity of a record that
+     * a *new* install with an empty store, unless the source claims the plugin id of a record that
      * did not load this boot - that one is nothing the user can see or remove, so its id is reused
      * rather than stranded. A plugin that is merely installed and broken is [update]'s, not this.
      */
@@ -297,7 +297,7 @@ object PluginManager {
         val manifest = PluginManifestParser.parseOrNull(source)
             ?: return ImportResult.Refused(getString(R.string.InuPluginsErrorNoManifest))
         badGrants(manifest)?.let { return ImportResult.Refused(it) }
-        val reclaimed = manifest.identity?.let { PluginStore.findUnloaded(it) }
+        val reclaimed = manifest.id?.let { PluginStore.findUnloaded(it) }
         val target = if (reclaimed != null) File(PluginStore.dir, reclaimed.file) else PluginStore.fileFor(suggestedName)
         if (!PluginStore.writeSource(target, source)) {
             return ImportResult.Refused(getString(R.string.InuPluginsErrorWrite))
