@@ -269,7 +269,7 @@ inu.xposed.hookMethod(
   { before: ctx => ctx.setReturnValue(null) },
 )
 
-const GradientSpan = inu.jvm.defineClass('my/plugin/GradientSpan', {
+const GradientSpan = inu.jvm.defineClass({
   superclass: inu.jvm.cls('android/text/style/CharacterStyle'),
 
   fields: {
@@ -293,4 +293,4 @@ const GradientSpan = inu.jvm.defineClass('my/plugin/GradientSpan', {
 })
 
 const span = new GradientSpan([0xFFE40303, 0xFFFF8C00, 0xFFFFED00, 0xFF008026, 0xFF004DFF, 0xFF750787], 240)
-console.log(inu.jvm.callSuper(span, 'toString'))
+console.log(GradientSpan.name, inu.jvm.callSuper(span, 'toString'))

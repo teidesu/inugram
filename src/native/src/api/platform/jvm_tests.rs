@@ -615,6 +615,23 @@ fn define_class_emits_between_preparation_and_loading() {
 }
 
 #[test]
+fn a_class_with_no_name_leaves_the_naming_to_the_host() {
+  let f = setup(&["unsafe.jvm"]);
+  // the host answers with the name it settled on, and the handle carries it back to the plugin
+  assert_eq!(eval(&f, "inu.jvm.defineClass({ methods: { run: () => {} } }).name"), "\"plugin.Prepared\"");
+  let call = f.host.calls().into_iter().find(|call| call.starts_with("18|")).unwrap();
+  assert!(call.contains("\"name\":null"), "{call}");
+}
+
+#[test]
+fn a_named_class_reports_the_name_the_host_settled_on() {
+  let f = setup(&["unsafe.jvm"]);
+  assert_eq!(eval(&f, "inu.jvm.defineClass('plugin.Test', {}).name"), "\"plugin.Prepared\"");
+  let call = f.host.calls().into_iter().find(|call| call.starts_with("18|")).unwrap();
+  assert!(call.contains("\"name\":\"plugin.Test\""), "{call}");
+}
+
+#[test]
 fn emission_and_load_failures_cancel_preparation_and_callbacks() {
   let f = setup(&["unsafe.jvm"]);
   f.host.answers("S{\"ticket\":\"9000\",\"name\":\"plugin.Bad\",\"superclass\":\"invalid\",\"interfaces\":[],\"fields\":[],\"methods\":[]}");

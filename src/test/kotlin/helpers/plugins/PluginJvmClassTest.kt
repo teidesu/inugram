@@ -74,6 +74,19 @@ class PluginJvmClassTest {
         task.run()
     }
 
+    @Test fun an_unnamed_class_is_named_by_the_host_and_never_twice() = runWithEngine("""
+        const spec = {
+            interfaces: [inu.jvm.cls('java.lang.Runnable')],
+            methods: { run: { body: inu.jvm.routine({ v: 1, source: '', captures: [], slots: 0, tries: [], code: [['return']] }) } },
+        };
+        const first = inu.jvm.defineClass(spec);
+        const second = inu.jvm.defineClass(spec);
+        if (!first.name.startsWith('inu.plugins.')) throw Error('host did not name it: ' + first.name);
+        if (first.name === second.name) throw Error('two classes were given one name');
+        new first().call('run');
+        'ok';
+    """)
+
     @Test fun final_superclasses_and_missing_abstract_methods_are_refused() = runWithEngine("""
         for (const parent of ['java.lang.String', 'desu.inugram.jvmfixture.JvmAbstractClassFixture']) {
             let refused = false;

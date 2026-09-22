@@ -35,6 +35,11 @@ declare type JavaClass = OpaqueType<'JVMClass'> & {
   isInstance: (value: JavaObject | JavaClass | JavaMethod | JavaConstructor | JavaField | null | undefined) => boolean
 }
 
+/** what {@link inu.jvm.defineClass} answers with: a class, and the name it ended up with */
+declare type DefinedClass = JavaClass & {
+  readonly name: string
+}
+
 declare type JvmColdMethod = (self: JavaObject, ...args: any[]) => any
 declare type JvmStaticMethod = (self: JavaClass, ...args: any[]) => any
 
@@ -152,8 +157,14 @@ declare namespace inu {
      * 250 ms admission budget and allow at most 64 levels. JS callbacks obey the engine's reentry rule.
      * Limits: 128 classes/engine, 256 fields and 256 methods/class (including constructors/covariant
      * bridges), 64 interfaces, 64 parameters, 1 MB definitions/captures. Duplicate class names fail.
+     *
+     * Prefer the form without a name. A dex that is loaded stays loaded, so a name of your own is
+     * one that can never be defined again: the next reload of the plugin fails on it. Unnamed, the
+     * host mints `inu.plugins.i{installId}.DefinedClass{random}` instead, and {@link DefinedClass.name}
+     * is the name it settled on.
      */
-    function defineClass(name: string, spec: JvmClassSpec): JavaClass
+    function defineClass(spec: JvmClassSpec): DefinedClass
+    function defineClass(name: string, spec: JvmClassSpec): DefinedClass
 
     /** Not implemented yet; throws unsupported. Constructor super arguments are supported by defineClass. */
     function callSuper(self: JavaObject, method: string, ...args: any[]): any
