@@ -4,21 +4,158 @@
   const invalid = message => new PluginError('invalid-argument', message)
 
 
-  // Use a null-prototype header map. `constructor` and `toString` are valid RFC 7230 header names;
-  // inherited properties would be mistaken for existing headers. Assigning `__proto__` to a plain
-  // object would change its prototype instead of adding a header.
-  const headerMap = () => Object.create(null)
+  let listOf
+  let freeze
 
-  // a header that appeared once is a string and one that repeated is an array, which is the whole
-  // reason `HeadersInit` is a plain record rather than the spec's `Headers`
-  const collapse = (raw) => {
-    const out = headerMap()
-    if (raw === undefined || raw === null) return out
-    for (const key of Object.keys(raw)) {
-      const values = raw[key]
-      out[key] = Array.isArray(values) && values.length === 1 ? values[0] : values
+  // names and values are checked natively, so `Headers` and the send path share one set of rules
+  class Headers {
+    #list = []
+    #immutable = false
+
+    static {
+      listOf = headers => headers.#list
+      freeze = (headers) => {
+        headers.#immutable = true
+        return headers
+      }
     }
-    return out
+
+    constructor(init) {
+      if (init === undefined) return
+      if (init === null || (typeof init !== 'object' && typeof init !== 'function')) {
+        throw new TypeError('Headers: init must be an object')
+      }
+      if (#list in init) {
+        for (const [name, value] of init.#list) this.#list.push([name, value])
+        return
+      }
+      if (typeof init[Symbol.iterator] === 'function') {
+        for (const pair of init) {
+          const entry = [...pair]
+          if (entry.length !== 2) throw new TypeError('Headers: each pair must be [name, value]')
+          this.append(entry[0], entry[1])
+        }
+        return
+      }
+      for (const name of Object.keys(init)) {
+        const value = init[name]
+        if (Array.isArray(value)) {
+          for (const one of value) this.append(name, one)
+        } else {
+          this.append(name, value)
+        }
+      }
+    }
+
+    #checkMutable() {
+      if (this.#immutable) throw new TypeError('Headers: these headers are immutable')
+    }
+
+    #getValues(name) {
+      const values = []
+      for (const [key, value] of this.#list) {
+        if (key === name) values.push(value)
+      }
+      return values
+    }
+
+    #getSorted() {
+      const names = []
+      for (const [name] of this.#list) {
+        if (!names.includes(name)) names.push(name)
+      }
+      names.sort()
+      const out = []
+      for (const name of names) {
+        const values = this.#getValues(name)
+        if (name === 'set-cookie') {
+          for (const value of values) out.push([name, value])
+        } else {
+          out.push([name, values.join(', ')])
+        }
+      }
+      return out
+    }
+
+    append(name, value) {
+      const entry = [natives.headerName(name), natives.headerValue(value)]
+      this.#checkMutable()
+      this.#list.push(entry)
+    }
+
+    delete(name) {
+      const key = natives.headerName(name)
+      this.#checkMutable()
+      this.#list = this.#list.filter(([other]) => other !== key)
+    }
+
+    get(name) {
+      const values = this.#getValues(natives.headerName(name))
+      return values.length === 0 ? null : values.join(', ')
+    }
+
+    getSetCookie() {
+      return this.#getValues('set-cookie')
+    }
+
+    has(name) {
+      const key = natives.headerName(name)
+      return this.#list.some(([other]) => other === key)
+    }
+
+    set(name, value) {
+      const key = natives.headerName(name)
+      const normalized = natives.headerValue(value)
+      this.#checkMutable()
+      const index = this.#list.findIndex(([other]) => other === key)
+      if (index === -1) {
+        this.#list.push([key, normalized])
+        return
+      }
+      this.#list[index] = [key, normalized]
+      this.#list = this.#list.filter(([other], at) => at <= index || other !== key)
+    }
+
+    forEach(callback, thisArg) {
+      if (typeof callback !== 'function') throw new TypeError('Headers: forEach needs a function')
+      for (const [name, value] of this.#getSorted()) callback.call(thisArg, value, name, this)
+    }
+
+    entries() {
+      return this.#getSorted().values()
+    }
+
+    keys() {
+      return this.#getSorted().map(([name]) => name).values()
+    }
+
+    values() {
+      return this.#getSorted().map(([, value]) => value).values()
+    }
+
+    [Symbol.iterator]() {
+      return this.entries()
+    }
+  }
+  Object.defineProperty(Headers.prototype, Symbol.toStringTag, { value: 'Headers', configurable: true })
+
+  // the host names each header once, lowercased, with every value it saw
+  const createResponseHeaders = (raw) => {
+    const headers = new Headers()
+    const list = listOf(headers)
+    if (raw !== undefined && raw !== null) {
+      for (const name of Object.keys(raw)) {
+        for (const value of raw[name]) list.push([name, value])
+      }
+    }
+    return freeze(headers)
+  }
+
+  const flattenHeaders = (init) => {
+    const flat = []
+    if (init === undefined || init === null) return flat
+    for (const [name, value] of listOf(new Headers(init))) flat.push(name, value)
+    return flat
   }
 
   const bodies = new WeakMap()
@@ -39,7 +176,7 @@
         statusText: { value: raw.statusText, enumerable: true },
         url: { value: raw.url, enumerable: true },
         ok: { value: raw.status >= 200 && raw.status < 300, enumerable: true },
-        headers: { value: collapse(raw.headers), enumerable: true },
+        headers: { value: createResponseHeaders(raw.headers), enumerable: true },
       })
     }
 
@@ -99,8 +236,8 @@
     }
 
     // method, headers and redirect are checked natively: this prelude shares its realm with the
-    // plugin, which can reassign `RegExp.prototype.test` or `Array.prototype.toJSON` under any check made here
-    const started = natives.send(String(url), init.method, init.headers, init.redirect, body)
+    // plugin, which can reassign `RegExp.prototype.test` or `Array.prototype.push` under any check made here
+    const started = natives.send(String(url), init.method, flattenHeaders(init.headers), init.redirect, body)
 
     return new Promise((resolve, reject) => {
       let settled = false
@@ -150,4 +287,5 @@
 
   // Keep Response private: `dom.d.ts` declares only an interface, not a global constructor.
   Object.defineProperty(globalThis, 'fetch', { value: fetch, writable: true, configurable: true })
+  Object.defineProperty(globalThis, 'Headers', { value: Headers, writable: true, configurable: true })
 }

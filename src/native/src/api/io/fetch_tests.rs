@@ -297,12 +297,44 @@ fn a_plugin_that_patches_its_realm_still_cannot_forge_a_header() {
             return fetch('https://example.com/x', { headers: { 'X-One': ['a\r\nHost: internal.corp'] } })
         })()"#,
   );
+  assert!(out(&f).starts_with("TypeError|"), "{}", out(&f));
+  assert!(f.host.sent.borrow().is_empty());
+}
+
+/// `Headers` keeps its pairs in a private field, but fills it through `Array.prototype.push`: a
+/// plugin that patches that forges the list, and the send path must still refuse it
+#[test]
+fn a_forged_headers_list_is_refused_on_the_send_path() {
+  let f = setup(Some("fetch"));
+  start(
+    &f,
+    r#"(() => {
+            const push = Array.prototype.push
+            Array.prototype.push = function (...items) {
+              if (Array.isArray(items[0]) && items[0][0] === 'x-one') return push.call(this, ['x-one', 'a\r\nHost: internal.corp'])
+              return push.apply(this, items)
+            }
+            return fetch('https://example.com/x', { headers: { 'X-One': 'a' } })
+        })()"#,
+  );
+  assert!(out(&f).starts_with("TypeError|"), "{}", out(&f));
+  start(
+    &f,
+    r#"(() => {
+            const push = Array.prototype.push
+            Array.prototype.push = function (...items) {
+              if (Array.isArray(items[0]) && items[0][0] === 'x-one') return push.call(this, ['host', 'internal.corp'])
+              return push.apply(this, items)
+            }
+            return fetch('https://example.com/x', { headers: { 'X-One': 'a' } })
+        })()"#,
+  );
   assert!(out(&f).starts_with("PluginError|invalid-argument|"), "{}", out(&f));
   assert!(f.host.sent.borrow().is_empty());
 }
 
 #[test]
-fn a_malformed_header_name_value_or_method_never_crosses() {
+fn a_malformed_header_name_or_value_is_a_type_error_and_never_crosses() {
   let f = setup(Some("fetch"));
   for init in [
     r#"{ headers: { 'x y': 'a' } }"#,
@@ -310,14 +342,94 @@ fn a_malformed_header_name_value_or_method_never_crosses() {
     r#"{ headers: { '': 'a' } }"#,
     r#"{ headers: { 'x-one': 'a\u0000b' } }"#,
     r#"{ headers: { 'x-one': 'a\u007fb' } }"#,
-    r#"{ headers: { 'x-one': 7 } }"#,
+    r#"{ headers: { 'x-one': 'ключ' } }"#,
     r#"{ headers: 'x-one: a' }"#,
-    r#"{ method: 'GET /x HTTP/1.1' }"#,
+    r#"{ headers: [['x-one']] }"#,
+    r#"{ headers: [['x-one', 'a', 'b']] }"#,
   ] {
     start(&f, &format!("fetch('https://example.com/x', {init})"));
-    assert!(out(&f).starts_with("PluginError|invalid-argument|"), "{init}: {}", out(&f));
+    assert!(out(&f).starts_with("TypeError|"), "{init}: {}", out(&f));
   }
   assert!(f.host.sent.borrow().is_empty());
+}
+
+#[test]
+fn a_malformed_method_never_crosses() {
+  let f = setup(Some("fetch"));
+  start(&f, "fetch('https://example.com/x', { method: 'GET /x HTTP/1.1' })");
+  assert!(out(&f).starts_with("PluginError|invalid-argument|"), "{}", out(&f));
+  assert!(f.host.sent.borrow().is_empty());
+}
+
+#[test]
+fn headers_may_be_pairs_a_record_or_a_headers_and_values_are_coerced_and_trimmed() {
+  let f = setup(Some("fetch"));
+  start(&f, "fetch('https://example.com/x', { headers: [['X-One', ' a '], ['x-one', 7]] })");
+  start(&f, "fetch('https://example.com/x', { headers: new Headers({ 'X-Two': 'b' }) })");
+  start(&f, "fetch('https://example.com/x', { headers: new Map([['X-Three', 'c']]) })");
+  let sent = f.host.sent.borrow();
+  assert_eq!(sent[0].spec, r#"GET follow ["x-one", "a", "x-one", "7"]"#);
+  assert_eq!(sent[1].spec, r#"GET follow ["x-two", "b"]"#);
+  assert_eq!(sent[2].spec, r#"GET follow ["x-three", "c"]"#);
+}
+
+#[test]
+fn headers_reads_combine_repeats_and_iterate_sorted() {
+  let f = setup(None);
+  let got = eval(
+    &f,
+    r#"(() => {
+            const h = new Headers([['X-B', '1'], ['x-a', '2'], ['X-B', '3'], ['Set-Cookie', 'a=1'], ['set-cookie', 'b=2']])
+            return JSON.stringify([
+              h.get('x-b'), h.get('X-MISSING'), h.has('X-A'), h.getSetCookie(), h.get('set-cookie'),
+              [...h], [...h.keys()], [...h.values()], String(h),
+            ])
+        })()"#,
+  );
+  assert_eq!(
+    got,
+    r#"["1, 3",null,true,["a=1","b=2"],"a=1, b=2",[["set-cookie","a=1"],["set-cookie","b=2"],["x-a","2"],["x-b","1, 3"]],["set-cookie","set-cookie","x-a","x-b"],["a=1","b=2","2","1, 3"],"[object Headers]"]"#,
+  );
+}
+
+#[test]
+fn headers_set_replaces_every_value_in_place_and_delete_drops_them() {
+  let f = setup(None);
+  let got = eval(
+    &f,
+    r#"(() => {
+            const h = new Headers([['x-a', '1'], ['x-b', '2'], ['x-a', '3']])
+            h.set('X-A', '4')
+            const afterSet = [...h]
+            h.append('x-c', '5')
+            h.delete('X-B')
+            const seen = []
+            h.forEach(function (value, name, self) { seen.push([name, value, self === h, this.tag]) }, { tag: 't' })
+            return JSON.stringify([afterSet, seen])
+        })()"#,
+  );
+  assert_eq!(got, r#"[[["x-a","4"],["x-b","2"]],[["x-a","4",true,"t"],["x-c","5",true,"t"]]]"#);
+}
+
+#[test]
+fn headers_refuse_a_bad_name_or_value_and_a_non_headers_receiver() {
+  let f = setup(None);
+  let got = eval(
+    &f,
+    r#"(() => {
+            const h = new Headers()
+            const threw = (fn) => { try { fn(); return 'no' } catch (e) { return e.name } }
+            return JSON.stringify([
+              threw(() => h.append('x y', 'a')),
+              threw(() => h.set('x-a', 'a\nb')),
+              threw(() => h.get('')),
+              threw(() => new Headers(null)),
+              threw(() => new Headers([['x-a']])),
+              threw(() => Headers.prototype.get.call({}, 'x-a')),
+            ])
+        })()"#,
+  );
+  assert_eq!(got, r#"["TypeError","TypeError","TypeError","TypeError","TypeError","TypeError"]"#);
 }
 
 /// names are case-insensitive, so two spellings of one are one header with both values
@@ -379,11 +491,19 @@ fn a_response_carries_the_status_headers_and_body() {
   start(&f, "fetch('https://example.com/x')");
   answer(&f, 1, 200, r#"{"content-type":["text/plain"],"set-cookie":["a=1","b=2"]}"#, "hello body");
   assert_eq!(out(&f), "ok");
-  let got = eval(&f, r#"JSON.stringify([__res.ok, __res.status, __res.statusText, __res.url, __res.headers])"#);
-  assert_eq!(
-    got, r#"[true,200,"OK","https://api.example.com/x",{"content-type":"text/plain","set-cookie":["a=1","b=2"]}]"#,
-    "a header that appeared once is a string, one that repeated is an array",
+  let got = eval(
+    &f,
+    r#"JSON.stringify([__res.ok, __res.status, __res.statusText, __res.url, __res.headers instanceof Headers, [...__res.headers]])"#,
   );
+  assert_eq!(
+    got,
+    r#"[true,200,"OK","https://api.example.com/x",true,[["content-type","text/plain"],["set-cookie","a=1"],["set-cookie","b=2"]]]"#,
+  );
+  let immutable = eval(
+    &f,
+    r#"(() => { try { __res.headers.set('x-a', 'b'); return 'no' } catch (e) { return `${e.name}|${__res.headers.has('x-a')}` } })()"#,
+  );
+  assert_eq!(immutable, "TypeError|false", "response headers are immutable");
   run(&f, "__res.text().then(t => { globalThis.__body = t })");
   assert_eq!(eval(&f, "globalThis.__body"), "hello body");
 }
@@ -620,7 +740,7 @@ mod bundled_oracle {
     state.dispose(&ctx);
     timers.dispose(&ctx);
     let lines = lines.borrow().clone();
-    crate::testing::harness::assert_oracle_exact(&lines, "fetch test done", 35);
+    crate::testing::harness::assert_oracle_exact(&lines, "fetch test done", 37);
   }
 
   /// the one answer the fake ever gives, with a real file behind the body so the oracle's `blob()`

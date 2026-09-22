@@ -229,7 +229,44 @@ declare class File extends Blob {
   readonly lastModified: number
 }
 
-declare type HeadersInit = Record<string, string | string[]>
+/**
+ * Headers to start from: another {@link Headers}, `[name, value]` pairs, or a record.
+ * A record value may be an array, adding one header per item.
+ */
+declare type HeadersInit = Headers | Iterable<readonly [string, string]> | Record<string, string | readonly string[]>
+
+/**
+ * A list of HTTP headers, as in WHATWG fetch.
+ *
+ * Names are case-insensitive and stored lowercased. Values are trimmed.
+ * An invalid name or value throws a `TypeError`.
+ */
+declare class Headers implements Iterable<[string, string]> {
+  constructor(init?: HeadersInit)
+
+  /** Add a value to a header, keeping the ones it already has */
+  append(name: string, value: string): void
+  /** Remove every value of a header */
+  delete(name: string): void
+  /** Values of a header joined with `, `, or `null` if there are none */
+  get(name: string): string | null
+  /** Get all `Set-Cookie` header values */
+  getSetCookie(): string[]
+  /** Whether a header has any value */
+  has(name: string): boolean
+  /** Replace every value of a header with this one */
+  set(name: string, value: string): void
+
+  /**
+   * Iteration is sorted by name, with repeated headers joined with `, `.
+   * `Set-Cookie` values are yielded one by one instead.
+   */
+  forEach(callback: (value: string, name: string, headers: Headers) => void, thisArg?: any): void
+  entries(): IterableIterator<[string, string]>
+  keys(): IterableIterator<string>
+  values(): IterableIterator<string>
+  [Symbol.iterator](): IterableIterator<[string, string]>
+}
 
 /** HTTP response, returned by {@link fetch} */
 declare interface Response {
@@ -242,8 +279,8 @@ declare interface Response {
 
   /** Final URL of the request, after any redirects */
   readonly url: string
-  /** Response headers */
-  readonly headers: Record<string, string | string[]>
+  /** Response headers, immutable */
+  readonly headers: Headers
 
   /** Fetch the response body as a string */
   text(): Promise<string>
@@ -264,6 +301,8 @@ declare interface Response {
  * While being *close* to WHATWG fetch, this is a simplified implementation lacking some of the features.
  *
  * **Limits: 32 MB per request or response, 256 MB of fetched content held per plugin.**
+ *
+ * **Note**: `fetch()` calls currently **bypass** the app proxy, with no way around that.
  *
  * @needs-grant fetch
  */
