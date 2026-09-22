@@ -53,6 +53,8 @@ export interface ResolvedPluginConfig {
   outFile: string
   /** manifest of the plugin */
   manifest: Manifest
+  /** the app's reasons to refuse [manifest], relative to this plugin; empty when it would install */
+  manifestIssues: string[]
   /** Customizes the esbuild configuration for this plugin. */
   esbuild?: (options: BuildOptions) => BuildOptions | void
 }
@@ -87,25 +89,18 @@ function findConfig(cwd: string, explicit?: string): string {
   throw new CliError(`inu.config.ts was not found in ${cwd} - run ${color.blue('inu init')} to start a project`)
 }
 
-function refuse(configFile: string, issues: string[]): never {
+export function refuse(configFile: string, issues: string[]): never {
   throw new CliError(`${configFile} is not a valid config:\n${issues.join('\n')}`)
 }
 
 /**
- * Validates each manifest using the app's rules. This runs after schema validation
+ * Validates a manifest using the app's rules. This runs after schema validation
  * because Valibot cannot receive the grant catalogue during parsing.
  */
-function checkManifests(configFile: string, config: InuCliConfig, vocabulary: Vocabulary) {
-  const schema = createManifestSchema(vocabulary)
-  const issues: string[] = []
-
-  for (const [slug, plugin] of Object.entries(config.plugins)) {
-    const parsed = v.safeParse(schema, plugin.manifest)
-    if (parsed.success) continue
-    for (const issue of parsed.issues) issues.push(describeIssue(issue, `plugins.${slug}.manifest`))
-  }
-
-  if (issues.length > 0) refuse(configFile, issues)
+function checkManifest(schema: ReturnType<typeof createManifestSchema>, manifest: Manifest): string[] {
+  const parsed = v.safeParse(schema, manifest)
+  if (parsed.success) return []
+  return parsed.issues.map(issue => describeIssue(issue, 'manifest').trim())
 }
 
 /**
@@ -141,17 +136,18 @@ export async function loadConfig(cwd: string, explicit?: string): Promise<Resolv
   const root = dirname(configFile)
   const vocabulary = await loadVocabulary(root)
   const config = await importConfig(configFile)
-  checkManifests(configFile, config, vocabulary)
 
   const entries = Object.entries(config.plugins ?? {})
   if (entries.length === 0) throw new CliError(`${configFile} declares no plugins`)
   const outDir = resolve(root, config.outDir ?? 'dist')
+  const schema = createManifestSchema(vocabulary)
 
   const plugins = entries.map(([slug, plugin]): ResolvedPluginConfig => ({
     slug,
     entry: resolve(root, plugin.entry),
     outFile: plugin.outFile ? resolve(root, plugin.outFile) : join(outDir, `${slug}.inu.js`),
     manifest: plugin.manifest,
+    manifestIssues: checkManifest(schema, plugin.manifest),
     esbuild: plugin.esbuild,
   }))
 

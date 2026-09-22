@@ -21,7 +21,7 @@ and validates grants before you install the plugin.
 | --- | --- |
 | `inu init [dir]` | scaffold a project |
 | `inu build [names...]` | bundle every plugin, or the ones named |
-| `inu check [names...]` | validate manifests without building |
+| `inu check [names...]` | validate manifests and routines and typecheck, without building (`--no-typecheck` to skip types) |
 | `inu dev [names...]` | build, push to a connected device and reload on every save |
 | `inu list` | what the device has installed |
 | `inu remove <file>` | uninstall a dev plugin by file name |

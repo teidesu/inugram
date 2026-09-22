@@ -30,10 +30,14 @@
     "test": "vitest run"
   },
   "peerDependencies": {
-    "@inugram/plugin-types": "*"
+    "@inugram/plugin-types": "*",
+    "typescript": ">=5"
   },
   "peerDependenciesMeta": {
     "@inugram/plugin-types": {
+      "optional": true
+    },
+    "typescript": {
       "optional": true
     }
   },

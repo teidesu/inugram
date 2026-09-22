@@ -70,7 +70,6 @@ export const initCmd = defineCommand({
         build: 'inu build',
         check: 'inu check',
         dev: 'inu dev',
-        typecheck: 'tsc --noEmit',
       },
       devDependencies: {
         '@inugram/cli': range,

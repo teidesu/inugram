@@ -21,7 +21,7 @@ export interface BuildOutcome {
   notes: string[]
 }
 
-function optionsFor(
+export function createBuildOptions(
   config: ResolvedCliConfig,
   plugin: ResolvedPluginConfig,
   extra: EsbuildPlugin[],
@@ -57,7 +57,7 @@ export async function buildOnce(
   const warnings = collectManifestWarnings(plugin.manifest, config.vocabulary)
 
   try {
-    const result = await esbuild.build(optionsFor(config, plugin, []))
+    const result = await esbuild.build(createBuildOptions(config, plugin, []))
     return {
       plugin,
       ok: true,
@@ -122,7 +122,7 @@ export async function watchPlugins(options: {
         })
       },
     }
-    const context = await esbuild.context(optionsFor(config, plugin, [notify]))
+    const context = await esbuild.context(createBuildOptions(config, plugin, [notify]))
     await context.watch()
     return context
   }))
