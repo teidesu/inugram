@@ -612,13 +612,13 @@ class PluginJvmTest {
         assertEquals("Vtrue", plugin.outcome("inu.jvm.cls('java.lang.Class').isInstance(F)"))
     }
 
-    /** only a class handle carries the member at all, so what is left to refuse is the right-hand side */
+    /** only a class handle carries the member at all, and like `instanceof` anything but a handle is simply not an instance */
     @Test
-    fun is_instance_refuses_a_scalar_rather_than_calling_it_not_an_instance() {
+    fun is_instance_answers_false_for_anything_but_a_handle() {
         val plugin = engineWith()
         assertEquals("Vundefined", plugin.outcome("typeof F.getDeclaredField('count').isInstance"))
-        for (scalar in listOf("7", "'text'", "true", "1.5")) {
-            plugin.assertRefused("invalid-argument", "inu.jvm.cls('java.lang.Object').isInstance($scalar)")
+        for (value in listOf("7", "'text'", "true", "1.5", "({})")) {
+            assertEquals("Vfalse", plugin.outcome("inu.jvm.cls('java.lang.Object').isInstance($value)"))
         }
     }
 
