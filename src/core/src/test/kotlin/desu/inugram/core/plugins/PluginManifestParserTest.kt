@@ -37,6 +37,16 @@ class PluginManifestParserTest {
         assertEquals("android", m.platform)
     }
 
+    private fun idOf(declared: String): String? = PluginManifestParser.parse(
+        buildString {
+            appendLine("// ==InuPlugin==")
+            appendLine("// @name My Plugin")
+            appendLine("// @author teidesu")
+            appendLine("// @id $declared")
+            appendLine("// ==/InuPlugin==")
+        },
+    ).id
+
     private fun manifestOf(name: String, author: String?): PluginManifest = PluginManifestParser.parse(
         buildString {
             appendLine("// ==InuPlugin==")
@@ -47,30 +57,58 @@ class PluginManifestParserTest {
     )
 
     @Test
-    fun identityIgnoresCaseAndSpacing() {
+    fun derivedIdIgnoresCaseAndSpacing() {
+        assertEquals("teidesu.my-plugin", manifestOf("My Plugin", "teidesu").id)
         assertEquals(
-            manifestOf("My Plugin", "teidesu").identity,
-            manifestOf("my   plugin", "  TEIDESU ").identity,
+            manifestOf("My Plugin", "teidesu").id,
+            manifestOf("my   plugin", "  TEIDESU ").id,
         )
     }
 
     @Test
-    fun identityDistinguishesNameAndAuthor() {
-        assertNotEquals(manifestOf("a", "b").identity, manifestOf("b", "a").identity)
-        assertNotEquals(manifestOf("plugin", "one").identity, manifestOf("plugin", "two").identity)
+    fun derivedIdDistinguishesNameAndAuthor() {
+        assertNotEquals(manifestOf("a", "b").id, manifestOf("b", "a").id)
+        assertNotEquals(manifestOf("plugin", "one").id, manifestOf("plugin", "two").id)
     }
 
+    /** a name nothing can be seen in is a name of its own, so it installs beside what it apes */
     @Test
-    fun identityIgnoresInvisibleCharacters() {
-        assertEquals(
-            manifestOf("plugin", "teidesu").identity,
-            manifestOf("plu\u0000gin", "teide\u0007su").identity,
+    fun derivedIdDoesNotLetAnInvisibleCharacterApeAnotherPlugin() {
+        assertNotEquals(
+            manifestOf("plugin", "teidesu").id,
+            manifestOf("plu\u0000gin", "teide\u0007su").id,
         )
     }
 
     @Test
-    fun identityNeedsAnAuthor() {
-        assertNull(manifestOf("nameless", null).identity)
+    fun derivedIdNeedsAnAuthor() {
+        assertNull(manifestOf("nameless", null).id)
+    }
+
+    @Test
+    fun aDeclaredIdWinsOverTheDerivedOne() {
+        val m = PluginManifestParser.parse(
+            """
+            // ==InuPlugin==
+            // @name   My Plugin
+            // @author teidesu
+            // @id     com.github.teidesu.my-plugin
+            // ==/InuPlugin==
+            """.trimIndent(),
+        )
+        assertEquals("com.github.teidesu.my-plugin", m.id)
+    }
+
+    @Test
+    fun aDeclaredIdIsComparedVerbatim() {
+        assertNotEquals(idOf("Hello.World"), idOf("hello.world"))
+    }
+
+    @Test
+    fun anIdNothingCanBeSeenInFallsBackToTheDerivedOne() {
+        assertEquals("teidesu.my-plugin", idOf("two tokens"))
+        assertEquals("teidesu.my-plugin", idOf("bell\u0007id"))
+        assertEquals("teidesu.my-plugin", idOf(""))
     }
 
     @Test

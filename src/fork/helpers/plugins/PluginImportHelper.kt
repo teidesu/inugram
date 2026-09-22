@@ -36,7 +36,7 @@ object PluginImportHelper {
         }
     }
 
-    /** [fileName] only suggests the name on disk; identity is minted at install */
+    /** [fileName] only suggests the name on disk; the install id is minted at install */
     fun startImport(fragment: BaseFragment, fileName: String, source: String) {
         EngineDispatch.scheduler.postRunnable { present(fragment, fileName, source) }
     }

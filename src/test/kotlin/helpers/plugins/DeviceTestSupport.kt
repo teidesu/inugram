@@ -382,6 +382,7 @@ internal object DeviceMissing : CoreListener, UiListener, PlatformListener, Canv
 fun manifestOf(name: String, grants: List<String>): PluginManifest = PluginManifest(
     name = name,
     author = null,
+    declaredId = null,
     version = null,
     description = null,
     localizedDescriptions = emptyMap(),

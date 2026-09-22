@@ -119,7 +119,7 @@ object PluginDevServer {
     private fun describe(plugin: Plugin): JSONObject = JSONObject()
         .put("id", plugin.id)
         .put("name", plugin.manifest.name)
-        .putOpt("identity", plugin.manifest.identity)
+        .putOpt("pluginId", plugin.manifest.id)
         .put("file", plugin.file.name)
         .put("enabled", plugin.enabled)
         .put("running", plugin.running)
@@ -186,7 +186,7 @@ object PluginDevServer {
         .put("plugin", describe(plugin))
 
     /**
-     * uninstalls what the dropped [name] identifies. Resolved through the file's own identity, the
+     * uninstalls what the dropped [name] identifies. Resolved through the file's own plugin id, the
      * same way an install of it would land - the install's name on disk is [PluginStore]'s to
      * choose and need not be the pushed one, so that is only the fallback.
      */

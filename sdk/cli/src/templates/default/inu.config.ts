@@ -5,6 +5,7 @@ export default defineConfig({
     hello: {
       entry: 'src/hello/index.ts',
       manifest: {
+        id: '__ID__',
         name: 'Hello',
         author: '__AUTHOR__',
         version: '1.0.0',

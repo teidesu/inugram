@@ -6,9 +6,19 @@ export const ManifestSchema = v.object({
   /** shown everywhere the plugin is named; the only required field */
   name: v.pipe(oneLineString, v.minLength(1)),
   /**
-   * together with [name] this is what decides whether a later file is an *update* of an installed
-   * plugin or a plugin of its own. Without it a plugin can never be updated in place.
+   * what decides whether a later file is an *update* of an installed plugin or a plugin of its own,
+   * compared verbatim. Canonically a reverse domain name, `com.github.you.my-plugin`.
+   *
+   * Left out, one is derived from [author] and [name], which ties the plugin's identity to both:
+   * rename either half and the next build installs beside the old plugin instead of over it.
    */
+  id: v.optional(v.pipe(
+    v.string(),
+    // the app compares it verbatim, so it may hold nothing invisible: `PluginManifest.readDeclaredId`
+    // eslint-disable-next-line no-control-regex
+    v.regex(/^[^\s\u0000-\u001F\u007F-\u009F]+$/, 'Must be a single token with nothing invisible in it'),
+  )),
+  /** shown next to the name, and what an absent [id] is derived from together with it */
   author: v.optional(oneLineString),
   version: v.optional(oneLineString),
   /** one string, or a language map whose `en` (or first entry) is the untagged description */
@@ -48,6 +58,25 @@ function directive(key: string, value: string): string {
   return `// ${padded}${value}`.trimEnd()
 }
 
+/**
+ * one lowercase run of letters and digits per word, joined by dashes. `PluginManifest.slug` derives
+ * the id of a plugin that declares none the same way, so a plugin built before the cli started
+ * writing `@id` keeps matching the plugin built after.
+ */
+export function slugify(value: string): string {
+  return value.toLowerCase().replace(/[^\p{L}\p{Nd}]+/gu, '-').replace(/^-|-$/g, '')
+}
+
+/** what the app would derive for a manifest that declares no [Manifest.id], and null where it would too */
+export function resolveManifestId(manifest: Manifest): string | null {
+  if (manifest.id !== undefined) return manifest.id
+  if (manifest.author === undefined) return null
+  const author = slugify(manifest.author)
+  const name = slugify(manifest.name)
+  if (author === '' || name === '') return null
+  return `${author}.${name}`
+}
+
 export function renderManifestHeader(manifest: Manifest, defaultPluginApi: number): string {
   const {
     name,
@@ -64,6 +93,8 @@ export function renderManifestHeader(manifest: Manifest, defaultPluginApi: numbe
     BLOCK_OPEN,
     directive('name', name),
   ]
+  const id = resolveManifestId(manifest)
+  if (id !== null) lines.push(directive('id', id))
   if (author) lines.push(directive('author', author))
   if (version) lines.push(directive('version', version))
 
@@ -71,8 +102,11 @@ export function renderManifestHeader(manifest: Manifest, defaultPluginApi: numbe
     if (typeof description === 'string') {
       lines.push(directive('description', description))
     } else {
-      for (const [lang, text] of Object.entries(description)) {
-        directive(`description:${lang}`, text)
+      const entries = Object.entries(description)
+      const untagged = entries.find(([lang]) => lang === 'en') ?? entries[0]
+      if (untagged !== undefined) lines.push(directive('description', untagged[1]))
+      for (const [lang, text] of entries) {
+        if (lang !== untagged?.[0]) lines.push(directive(`description:${lang}`, text))
       }
     }
   }
@@ -209,8 +243,8 @@ export function createManifestSchema(vocabulary: Vocabulary) {
 export function collectManifestWarnings(manifest: Manifest, vocabulary: Vocabulary): string[] {
   const warnings: string[] = []
 
-  if (manifest.author === undefined) {
-    warnings.push('no author: a plugin without one can never be updated in place, only installed again')
+  if (resolveManifestId(manifest) === null) {
+    warnings.push('no id and no author: a plugin with neither can never be updated in place, only installed again')
   }
   if (manifest.version === undefined) {
     warnings.push('no version: the update sheet has nothing to show the user')

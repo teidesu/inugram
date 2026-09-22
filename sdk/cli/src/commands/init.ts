@@ -7,6 +7,7 @@ import { defineCommand } from '../utils/args.js'
 import { CONFIG_NAMES } from '../utils/config.js'
 import { copyTree } from '../utils/fs.js'
 import { CliError, color, step, success } from '../utils/log.js'
+import { slugify } from '../utils/manifest.js'
 
 const TEMPLATE_DIR = join(templatesDir, 'default')
 
@@ -56,7 +57,9 @@ export const initCmd = defineCommand({
       into: root,
       // crutch for npm that strips .gitignore
       rename: name => name === 'gitignore' ? '.gitignore' : name,
-      substitute: body => body.replace(/__AUTHOR__/g, args.author),
+      substitute: body => body
+        .replace(/__AUTHOR__/g, args.author)
+        .replace(/__ID__/g, `${slugify(args.author) || 'plugin'}.hello`),
     })
 
     const packageJson = {
