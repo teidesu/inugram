@@ -59,9 +59,9 @@ declare type JavaClass = OpaqueType<'JVMClass'> & {
 
   /**
    * Check whether `value` is an instance of this class.
-   * @returns `true` if the value is an instance, `false` for `null` and `undefined`; scalars throw `invalid-argument`.
+   * @returns `true` if the value is an instance
    */
-  isInstance: (value: JavaObject | JavaClass | JavaMethod | JavaConstructor | JavaField | null | undefined) => boolean
+  isInstance: (value: unknown) => boolean
 }
 
 /** The class returned by {@link inu.jvm.defineClass}, including its generated or supplied name. */
