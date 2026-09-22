@@ -2,8 +2,7 @@
 // @name         api test
 // @author       teidesu
 // @version      1.0
-// @description  exercises inu.kv / inu.ui.toast / inu.ui.dialog / inu.onUnload
-// @grant        kv
+// @description  exercises localStorage / inu.ui.toast / inu.ui.dialog / inu.onUnload
 // @plugin-api   1
 // @platform     android
 // ==/InuPlugin==
@@ -32,35 +31,48 @@ function expectThrows(label, body, code) {
   return undefined
 }
 
-check('a key that was never set reads null', inu.kv.get('never-written') === null)
-const runs = Number(inu.kv.get('runs') ?? '0') + 1
-inu.kv.set('runs', String(runs))
-check('a value survives the round trip', inu.kv.get('runs') === String(runs), `run #${runs}`)
+check('a key that was never set reads null', localStorage.getItem('never-written') === null)
+const runs = Number(localStorage.getItem('runs') ?? '0') + 1
+localStorage.setItem('runs', String(runs))
+check('a value survives the round trip', localStorage.getItem('runs') === String(runs), `run #${runs}`)
 
-inu.kv.insertAll({ a: '1', b: '2' })
+localStorage.setItems({ a: '1', b: '2' })
 check(
-  'insertAll writes every entry',
-  ['a', 'b', 'runs'].every((k) => inu.kv.keys().includes(k)),
-  JSON.stringify(inu.kv.keys()),
+  'setItems writes every entry',
+  ['a', 'b', 'runs'].every((k) => Object.keys(localStorage).includes(k)),
+  JSON.stringify(Object.keys(localStorage)),
 )
-check('getAll answers the values that were written', inu.kv.getAll().a === '1' && inu.kv.getAll().b === '2')
-inu.kv.del('a')
-check('del removes exactly one key', !inu.kv.keys().includes('a') && inu.kv.keys().includes('b'))
+check('a stored item reads as a property', localStorage.a === '1' && localStorage['b'] === '2')
+localStorage.removeItem('a')
+check('removeItem removes exactly one key', !('a' in localStorage) && 'b' in localStorage)
 
-// 1 MB per plugin, and the error carries the two numbers so a plugin can say how far over it is
-const full = expectThrows('the kv quota is enforced', () => inu.kv.set('huge', 'x'.repeat(2 * 1024 * 1024)), 'quota-exceeded')
+localStorage.c = 3
+const assigned = localStorage.getItem('c')
+delete localStorage.c
+check('assigning and deleting a property stores and removes an item', assigned === '3' && localStorage.getItem('c') === null)
+
+let full
+try {
+  localStorage.setItem('huge', 'x'.repeat(2 * 1024 * 1024))
+} catch (e) {
+  full = e
+}
+check('the 1 MB quota is enforced', full instanceof DOMException && full.name === 'QuotaExceededError', full && full.name)
+check('nothing was written past the quota', localStorage.getItem('huge') === null)
+
+const keys = Object.keys(localStorage)
 check(
-  'a quota error carries usage and quota',
-  typeof full?.usage === 'number' && typeof full?.quota === 'number' && full.usage > full.quota,
-  full && `${full.usage}/${full.quota}`,
+  'length and key() walk the same keys',
+  localStorage.length === keys.length && keys.every((k, i) => localStorage.key(i) === k),
+  `${localStorage.length} vs ${JSON.stringify(keys)}`,
 )
-check('nothing was written past the quota', !inu.kv.keys().includes('huge'))
 
-check('has answers for a key that is there and one that is not', inu.kv.has('b') && !inu.kv.has('a'))
-const used = inu.kv.usage()
-inu.kv.set('measured', 'xxxxx')
-check('usage grows by what was written', inu.kv.usage() === used + 'measured'.length + 5, `${used} -> ${inu.kv.usage()}`)
-inu.kv.del('measured')
+localStorage.setItem('getItem', 'x')
+check(
+  'an item named like a member leaves the member alone',
+  typeof localStorage.getItem === 'function' && localStorage.getItem('getItem') === 'x',
+)
+localStorage.removeItem('getItem')
 
 inu.ui.toast(`api-test loaded (run #${runs})`)
 

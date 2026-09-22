@@ -15,7 +15,11 @@ mod info_tests {
       layer: 1,
       language: "en".into(),
       // the wire repeats the key once per value, exactly as QuickJs.installInfo flattens it
-      header: vec![("grant".into(), "kv".into()), ("name".into(), "demo".into()), ("grant".into(), "openUrl".into())],
+      header: vec![
+        ("grant".into(), "clipboard.write".into()),
+        ("name".into(), "demo".into()),
+        ("grant".into(), "openUrl".into()),
+      ],
     };
     ctx.with(|ctx| {
       let obj = build_info_object(ctx.clone(), &info).unwrap();
@@ -23,7 +27,7 @@ mod info_tests {
       let is_array: bool = ctx.eval("Array.isArray(__info.header.grant)").unwrap();
       assert!(is_array, "a repeated directive must not collapse to a string");
       let grants: Vec<String> = ctx.eval("__info.header.grant").unwrap();
-      assert_eq!(grants, vec!["kv".to_string(), "openUrl".to_string()]);
+      assert_eq!(grants, vec!["clipboard.write".to_string(), "openUrl".to_string()]);
       let names: Vec<String> = ctx.eval("__info.header.name").unwrap();
       assert_eq!(names, vec!["demo".to_string()], "a single-value directive is still an array");
     });

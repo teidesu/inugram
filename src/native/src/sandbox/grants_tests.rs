@@ -27,8 +27,8 @@ fn check_grant_throws_a_not_granted_error_naming_the_token() {
 
 #[test]
 fn an_unscoped_grant_allows_any_target() {
-  let host = TestGrantHost::new(&["kv", "interceptRpc"]);
-  assert!(host.is_granted("kv", None, MATCH_EXACT));
+  let host = TestGrantHost::new(&["openUrl", "interceptRpc"]);
+  assert!(host.is_granted("openUrl", None, MATCH_EXACT));
   assert!(host.is_granted("interceptRpc", Some("users.getUsers"), MATCH_EXACT));
   assert!(!host.is_granted("invokeRpc", Some("users.getUsers"), MATCH_EXACT));
 }
@@ -64,8 +64,8 @@ fn scope_matching_agrees_with_the_host_s_table() {
 
 #[test]
 fn an_empty_scope_in_a_pair_is_an_unscoped_grant() {
-  let host = CachedGrantHost::from_pairs(&["kv", "", "fetch", "a.com", "fetch", "b.com"]);
-  assert!(host.is_granted("kv", Some("anything"), MATCH_EXACT));
+  let host = CachedGrantHost::from_pairs(&["openUrl", "", "fetch", "a.com", "fetch", "b.com"]);
+  assert!(host.is_granted("openUrl", Some("anything"), MATCH_EXACT));
   assert!(host.is_granted("fetch", Some("x.b.com"), MATCH_DOMAIN));
   assert!(!host.is_granted("fetch", Some("c.com"), MATCH_DOMAIN));
   assert!(host.is_granted("fetch", None, MATCH_EXACT));

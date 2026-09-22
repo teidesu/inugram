@@ -944,17 +944,6 @@ fn register_settings_after_unload_began_is_a_no_op() {
   assert!(state.settings.is_empty());
 }
 
-/// `inu.kv` has a host, a grant and an oracle of its own; the three lines of it this plugin
-/// reads at load are stood in for so the ui half can run with no host but [`TestUiHost`]
-const KV_SHIM: &str = r#"
-    inu.kv = {
-        store: new Map(),
-        get(k) { return inu.kv.store.has(k) ? inu.kv.store.get(k) : null },
-        set(k, v) { inu.kv.store.set(k, String(v)) },
-        clear() { inu.kv.store.clear() },
-    };
-"#;
-
 /// the bundled oracle is the only test the js surface gets on a device, so its load-time half -
 /// everything decidable without a screen - is run here too, with an **exact** count: a member
 /// that vanished reads as a refusal in a suite written out of `expectThrow`, and only the count
@@ -967,18 +956,20 @@ fn the_bundled_ui_test_plugin_passes() {
   let host_dyn: Rc<dyn UiHost> = host.clone();
   let logs = crate::testing::harness::Logs::new();
   let log = crate::testing::harness::log_sink(&logs);
+  let storage_file = crate::testing::harness::TempPath::default();
   // `inu.ui` is one object: the dialogs install it and the pages install into it, as an engine does
   let (dialogs, state) = ctx.with(|ctx| {
     let inu = crate::testing::harness::get_api_globals(&ctx);
     crate::api::error::install_plugin_error(&ctx).unwrap();
+    crate::api::io::local_storage::install_local_storage(&ctx, storage_file.0.clone()).unwrap();
     let modal_host = Rc::new(crate::testing::harness::RecordingHost::default());
     let dialogs = crate::api::ui::dialogs::install_dialogs(&ctx, modal_host, None, log.clone(), &inu).unwrap();
     (dialogs, install_ui(&ctx, host_dyn, Lifecycle::new(), log, None, &inu).unwrap())
   });
   let _state = Disposing::new(&ctx, state, |ctx, state| state.dispose(ctx));
   let _dialogs = crate::testing::harness::DisposeOnDrop::new(&ctx, dialogs, |ctx, state| state.dispose(ctx));
-  let source = format!("{KV_SHIM}\n{}", include_str!("../../../../test/plugins/ui-test.js"),);
-  let lines = crate::testing::harness::run_capturing_console(&rt, &ctx, &source);
+  let lines =
+    crate::testing::harness::run_capturing_console(&rt, &ctx, include_str!("../../../../test/plugins/ui-test.js"));
 
   crate::testing::harness::assert_oracle_exact(&lines, "ui test done", 17);
   assert_eq!(host.registered.borrow().len(), 1, "the plugin must have left one settings page");

@@ -3,7 +3,6 @@
 // @author       teidesu
 // @version      1.0
 // @description  asserts timers fire, clear, are paced in the foreground and do not outlive an unload
-// @grant        kv
 // @plugin-api   1
 // @platform     android
 // ==/InuPlugin==
@@ -32,12 +31,12 @@ function halfDone() {
 
 // the previous run wrote `pending` from its onUnload iff it still held a live timer at that point,
 // and that timer would have written the same number under `leaked` had it run anyway
-const generation = String(Number(inu.kv.get('generation') ?? '0') + 1)
-inu.kv.set('generation', generation)
-const pending = inu.kv.get('pending')
-const leaked = inu.kv.get('leaked')
-inu.kv.del('pending')
-inu.kv.del('leaked')
+const generation = String(Number(localStorage.getItem('generation') ?? '0') + 1)
+localStorage.setItem('generation', generation)
+const pending = localStorage.getItem('pending')
+const leaked = localStorage.getItem('leaked')
+localStorage.removeItem('pending')
+localStorage.removeItem('leaked')
 
 if (pending === null) {
   console.log('no unload evidence yet: reload this plugin to check that its timers died with it')
@@ -53,14 +52,14 @@ let survivor = false
 // long enough that reloading beats it; if it does fire first, this run simply records no evidence
 setTimeout(() => {
   survivor = true
-  inu.kv.set('leaked', generation)
+  localStorage.setItem('leaked', generation)
 }, 30_000)
 
 inu.onUnload(() => {
-  if (!survivor) inu.kv.set('pending', generation)
+  if (!survivor) localStorage.setItem('pending', generation)
   // the wheel refuses new work from the moment unloading starts, so this registers nothing and
   // there is no id to clear
-  const late = setTimeout(() => inu.kv.set('leaked', generation), 0)
+  const late = setTimeout(() => localStorage.setItem('leaked', generation), 0)
   check('setTimeout inside onUnload registers nothing', late === 0, `id=${late}`)
 })
 

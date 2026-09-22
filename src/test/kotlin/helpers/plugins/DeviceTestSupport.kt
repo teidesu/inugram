@@ -73,7 +73,7 @@ private val nextInstallId = java.util.concurrent.atomic.AtomicLong(1)
 
 /**
  * A 32-hex install id nothing else in the process is using. Anything the bridge keys by install id
- * is *real* storage here (`inu.kv`'s prefs file, `inu.fs`'s directory) and outlives the test that
+ * is *real* storage here (`localStorage`'s file, `inu.fs`'s directory) and outlives the test that
  * wrote it, which the JVM harness could not show: its `Context` was a fresh temp dir per test.
  */
 fun freshInstallId(): String = "%032x".format(nextInstallId.getAndIncrement() or (System.nanoTime() shl 16))
@@ -176,7 +176,7 @@ fun canvasEngine(name: String, onLog: (String) -> Unit = {}): Plugin {
  * closed engine in the next test
  */
 /** [startPlugin] on a real engine rather than a recorder, for a test that evaluates plugin code; pair it with [closeEngine] */
-fun startEngine(name: String, vararg grants: String, kvPath: String = "", onLog: (String) -> Unit = {}): Plugin {
+fun startEngine(name: String, vararg grants: String, localStoragePath: String = "", onLog: (String) -> Unit = {}): Plugin {
     val plugin = startPlugin(name, *grants)
     plugin.session = PluginSession(plugin, QuickJs())
     attachBridge(
@@ -185,7 +185,7 @@ fun startEngine(name: String, vararg grants: String, kvPath: String = "", onLog:
             override fun onConsole(level: Int, message: String) = onLog(message)
             override fun onTimerSchedule(delayMs: Long) = Unit
         },
-        kvPath = kvPath,
+        localStoragePath = localStoragePath,
     )
     return plugin
 }
@@ -281,7 +281,7 @@ fun attachBridge(
     // blobs and canvas sources spill to disk; a suite that stages one needs somewhere to put it
     spillDir: String = "",
     transferDir: String = "",
-    kvPath: String = "",
+    localStoragePath: String = "",
 ) {
     val tl = session.tl
     val jvm = PluginJvm.listenerFor(session, testAppScreen)
@@ -314,7 +314,7 @@ fun attachBridge(
             fsUnscoped = false,
             installFs = false,
             androidDirs = "",
-            kvPath = kvPath,
+            localStoragePath = localStoragePath,
             installJvm = bridge.jvm != null,
             installXposed = bridge.xposed != null,
             grants = session.permissions,

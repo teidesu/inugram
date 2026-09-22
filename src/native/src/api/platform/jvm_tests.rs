@@ -113,7 +113,7 @@ fn error_code(f: &Fixture, code: &str) -> String {
 
 #[test]
 fn a_plugin_holding_no_jvm_grant_is_refused_at_every_entry_point() {
-  let f = setup(&["kv"]);
+  let f = setup(&["openUrl"]);
   for code in [
     "inu.jvm.cls('java.util.ArrayList')",
     "inu.jvm.runnable(() => {})",
@@ -142,7 +142,7 @@ fn is_instance_answers_null_and_refuses_a_scalar_without_reaching_the_vm() {
 
 #[test]
 fn is_instance_needs_the_grant() {
-  let f = setup(&["kv"]);
+  let f = setup(&["openUrl"]);
   assert!(error_code(&f, "inu.jvm.cls('java.lang.Object')").starts_with("not-granted|unsafe.jvm"));
 }
 
@@ -175,7 +175,7 @@ fn to_tl_takes_a_handle_and_nothing_else() {
 
 #[test]
 fn from_tl_and_to_tl_need_the_grant() {
-  let f = setup(&["kv"]);
+  let f = setup(&["openUrl"]);
   for code in ["inu.jvm.fromTl({ _: 'messageEntityBold' })", "inu.jvm.toTl({})"] {
     assert!(error_code(&f, code).starts_with("not-granted|unsafe.jvm"), "{code}");
   }

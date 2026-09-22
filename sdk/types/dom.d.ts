@@ -123,6 +123,40 @@ declare interface AbortSignal {
 
 declare function structuredClone<T>(value: T): T
 
+/** Web-like `Storage` interface. Its only instance is {@link localStorage}. */
+declare class Storage {
+  private constructor()
+  /** Number of stored items */
+  readonly length: number
+  /** Key of the `index`-th item, in sorted key order, or `null` past the end */
+  key(index: number): string | null
+  getItem(key: string): string | null
+  setItem(key: string, value: string): void
+  /**
+   * **Inu-specific**
+   *
+   * Store several items in one write: either all of them are stored, or, past the quota, none.
+   */
+  setItems(items: Record<string, string>): void
+  removeItem(key: string): void
+  clear(): void
+  /**
+   * Items are properties too: `localStorage.foo = 'bar'` stores one, and `delete localStorage.foo`
+   * removes it. A property of `Storage.prototype` (e.g. `getItem`, `length`) always reads as itself;
+   * use {@link getItem} to read an item named like one.
+   */
+  [key: string]: any
+}
+
+/**
+ * Persistent storage private to the plugin. It survives restarts, reloads and updates, and is wiped on uninstall.
+ *
+ * **Limits: 1 MB per plugin, counted as UTF-8 bytes**
+ *
+ * @throws `QuotaExceededError` {@link DOMException} when quota is exceeded
+ */
+declare const localStorage: Storage
+
 /**
  * Web-like `Blob` interface, backed by memory or a file.
  *

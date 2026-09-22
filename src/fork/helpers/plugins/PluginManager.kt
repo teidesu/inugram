@@ -25,7 +25,7 @@ import desu.inugram.helpers.plugins.PluginManager.reload
 import desu.inugram.helpers.plugins.PluginManager.start
 import desu.inugram.helpers.plugins.PluginManager.stop
 import desu.inugram.helpers.plugins.api.EngineBindings
-import desu.inugram.helpers.plugins.api.PluginKv
+import desu.inugram.helpers.plugins.api.PluginLocalStorage
 import desu.inugram.helpers.plugins.io.PluginBlobs
 import desu.inugram.helpers.plugins.io.PluginTransfers
 import desu.inugram.helpers.plugins.io.PluginFetch
@@ -315,7 +315,7 @@ object PluginManager {
     }
 
     /**
-     * Replaces installed source while preserving the install ID, `kv`/`fs` stores, order,
+     * Replaces installed source while preserving the install ID, `localStorage`/`fs` stores, order,
      * and enabled state. Returns an error reason, or null after loading the new source.
      *
      * [reload] re-reads and validates the written file, using the same path as ordinary reloads.
@@ -336,7 +336,7 @@ object PluginManager {
     sealed interface ImportResult {
         /**
          * [reversible] is false when this install took over the id of a record that did not load:
-         * [remove] would then wipe `kv`/`fs` that belong to what held the id before, so there is
+         * [remove] would then wipe `localStorage`/`fs` that belong to what held the id before, so there is
          * nothing to offer an undo of - the install is not its own inverse.
          */
         class Installed(val plugin: Plugin, val reversible: Boolean) : ImportResult
@@ -347,7 +347,7 @@ object PluginManager {
         plugin.enabled = false
         // same queue as stop()'s completion, so the wipe is ordered after the engine is gone
         stop(plugin) {
-            PluginKv.wipe(plugin.id)
+            PluginLocalStorage.wipe(plugin.id)
             // stop() wiped these already if it was running; this covers the one that never was
             wipeSessionScratch(plugin.id)
             // the one plugin-owned tree meant to outlive its engine, so uninstall is the only thing
@@ -509,7 +509,7 @@ object PluginManager {
     private fun failUnload(session: PluginSession, e: Throwable) =
         fail(session, PluginFailure.Site.UNLOAD, e.message ?: e.toString())
 
-    /** exactly the trees an engine owns: the durable ones ([PluginFs], [PluginJvm], [PluginKv]) are uninstall's alone */
+    /** exactly the trees an engine owns: the durable ones ([PluginFs], [PluginJvm], [PluginLocalStorage]) are uninstall's alone */
     private fun wipeSessionScratch(installId: String) {
         PluginBlobs.wipe(installId)
         PluginTransfers.wipe(installId)

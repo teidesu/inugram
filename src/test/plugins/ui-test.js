@@ -3,7 +3,6 @@
 // @author       teidesu
 // @version      1.0
 // @description  exercises the settings page: every element, anchored menus, prompt, page lifetime
-// @grant        kv
 // @plugin-api   1
 // @platform     android
 // ==/InuPlugin==
@@ -49,12 +48,12 @@ function expectPluginError(label, code, fn) {
 }
 
 const state = {
-  enabled: inu.kv.get('enabled') === 'true',
+  enabled: localStorage.getItem('enabled') === 'true',
   notify: false,
-  mode: Number(inu.kv.get('mode') ?? '0'),
+  mode: Number(localStorage.getItem('mode') ?? '0'),
   theme: 0,
-  speed: Number(inu.kv.get('speed') ?? '1'),
-  name: inu.kv.get('name'),
+  speed: Number(localStorage.getItem('speed') ?? '1'),
+  name: localStorage.getItem('name'),
   extraSection: false,
   asyncStatus: 'idle',
   clicks: 0,
@@ -83,11 +82,11 @@ const mainPage = inu.ui.settingsPage({
     inu.ui.header('Toggles'),
     inu.ui.check({
       text: 'Persisted toggle',
-      subtitle: 'stored in inu.kv, survives restarts',
+      subtitle: 'stored in localStorage, survives restarts',
       checked: state.enabled,
       onChange: (v) => {
         state.enabled = v
-        inu.kv.set('enabled', String(v))
+        localStorage.setItem('enabled', String(v))
       },
     }),
     inu.ui.check({
@@ -128,7 +127,7 @@ const mainPage = inu.ui.settingsPage({
       selected: state.mode,
       onChange: (i, anchor) => {
         state.mode = i
-        inu.kv.set('mode', String(i))
+        localStorage.setItem('mode', String(i))
         check('select onChange is handed an anchor', typeof anchor?.openMenu === 'function', typeof anchor)
       },
     }),
@@ -158,7 +157,7 @@ const mainPage = inu.ui.settingsPage({
       label: (v) => v + 'x',
       onChange: (v, anchor) => {
         state.speed = v
-        inu.kv.set('speed', String(v))
+        localStorage.setItem('speed', String(v))
         check('slider onChange is handed an anchor', typeof anchor?.openMenu === 'function', typeof anchor)
       },
     }),
@@ -172,7 +171,7 @@ const mainPage = inu.ui.settingsPage({
         const name = await inu.ui.prompt({ title: 'Your name?', hint: 'name', value: state.name ?? '', selectAll: true })
         if (name !== null) {
           state.name = name
-          inu.kv.set('name', name)
+          localStorage.setItem('name', name)
           mainPage.invalidate()
         }
       },
@@ -241,7 +240,7 @@ const mainPage = inu.ui.settingsPage({
             danger: true,
             onClick: (...args) => {
               check('a menu item gets no anchor, so a menu cannot open a menu', args.length === 0, args.length)
-              inu.kv.clear()
+              localStorage.clear()
               state.enabled = false
               state.mode = 0
               state.speed = 1

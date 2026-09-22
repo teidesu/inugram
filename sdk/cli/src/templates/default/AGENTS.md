@@ -53,8 +53,8 @@ Use the installed versions as the reference; app and SDK compatibility matters.
   according to their API contracts; do not retain handles beyond their lifetime.
 - Keep synchronous callbacks short, handle rejected async work, and follow each
   API's queue/thread rules. App UI may be unavailable when a plugin runs.
-- Use `inu.kv` for persistent plugin settings, following `src/shared/storage.ts`.
-  Do not substitute browser storage or Node filesystem APIs.
+- Use `localStorage` for persistent plugin settings, following `src/shared/storage.ts`.
+  It is private to the plugin and needs no grant. Do not use Node filesystem APIs.
 
 ## JVM and Xposed routines
 

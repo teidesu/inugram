@@ -13,7 +13,7 @@ import org.junit.Test
 class FsQuotaTest {
     @Test
     fun `a plain fs grant gets the default cap`() {
-        assertEquals(FsQuota.DEFAULT_BYTES, FsQuota.forGrants(listOf("kv", "fs")))
+        assertEquals(FsQuota.DEFAULT_BYTES, FsQuota.forGrants(listOf("openUrl", "fs")))
     }
 
     @Test
@@ -44,7 +44,7 @@ class FsQuotaTest {
      */
     @Test
     fun `a plugin that asked for nothing carries no cap of its own`() {
-        assertNull(FsQuota.forGrants(listOf("kv", "fetch")))
+        assertNull(FsQuota.forGrants(listOf("openUrl", "fetch")))
         assertNull(FsQuota.forGrants(emptyList()))
     }
 

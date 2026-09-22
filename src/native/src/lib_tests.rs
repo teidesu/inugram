@@ -10,7 +10,7 @@ fn a_fault_reaches_the_host_at_the_level_that_disables_the_plugin() {
 
 #[test]
 fn a_host_diagnostic_stays_an_ordinary_error() {
-  let message = "kv: JNI env unavailable";
+  let message = "fs: JNI env unavailable";
   assert_eq!(classify_log(message), (LEVEL_ERROR, message));
 }
 

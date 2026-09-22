@@ -84,7 +84,7 @@ class PluginJvmTest {
 
     @Test
     fun theApiIsInstalledOnlyForAPluginThatHoldsTheGrant() {
-        val without = startPlugin("plain", "kv")
+        val without = startPlugin("plain", "openUrl")
         assertNull(without.js.listener?.jvm)
         assertFalse(without.js.jvmInstalled)
 
@@ -166,7 +166,7 @@ class PluginJvmTest {
         val plugin = startPlugin("reflective", "unsafe.jvm")
         assertEquals('C', kindOf(plugin.jvm(PluginJvm.OP_CLASS, name = "java.util.ArrayList")))
 
-        for (name in listOf(PluginJvm::class.java.name, QuickJs::class.java.name, "$PLUGIN_PACKAGE.PluginKv")) {
+        for (name in listOf(PluginJvm::class.java.name, QuickJs::class.java.name, "$PLUGIN_PACKAGE.api.PluginLocalStorage")) {
             assertPluginError("forbidden", plugin.jvm(PluginJvm.OP_CLASS, name = name))
         }
     }
