@@ -83,10 +83,11 @@ export type RoutineProgram = v.InferInput<typeof RoutineProgramSchema>
 /**
  * Every op, with the shape of its fields. `operand` reads a register or a literal, `slot` and
  * `capture` are raw indices, `target` is an instruction index, and `args` is a trailing operand
- * list. `hook` ops are refused in method mode.
+ * list. `hook` ops are refused in method mode, `methodOnly` ops in hook mode.
  */
 export const OPS = {
   this: { fields: [], hook: false },
+  owner: { fields: [], hook: false, methodOnly: true },
   arg: { fields: ['operand'], hook: false },
   capture: { fields: ['capture'], hook: false },
 
@@ -153,6 +154,8 @@ export type FieldKind = (typeof OPS)[OpName]['fields'][number]
 export interface OpSpec {
   readonly fields: readonly FieldKind[]
   readonly hook: boolean
+  /** refused in hook mode: the class a defineClass body is bound to */
+  readonly methodOnly?: boolean
 }
 
 /** Looks up a wire instruction name in [OPS]; the name may be unknown. */

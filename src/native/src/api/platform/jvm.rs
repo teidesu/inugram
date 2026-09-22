@@ -131,15 +131,74 @@ impl JvmState {
       if value.is_promise() {
         return PluginErrorCode::InvalidArgument.throw(ctx, "defineClass: method bodies must be synchronous");
       }
-      match ref_of(&value) {
-        Some(handle) => Ok(self.copy_wire(handle.borrow().id)),
-        None => self.arg_to_wire(ctx, &value),
+      match value.as_array() {
+        Some(array) => self.array_to_wire(ctx, array),
+        None => self.body_result_to_wire(ctx, &value),
       }
     })();
     match result {
       Ok(wire) => wire,
       Err(rquickjs::Error::Exception) => format!("E{}", format_exception(ctx)),
       Err(error) => format!("EdefineClass: callback failed: {error}"),
+    }
+  }
+
+  fn body_result_to_wire<'js>(&self, ctx: &Ctx<'js>, value: &Value<'js>) -> JsResult<String> {
+    match ref_of(value) {
+      Some(handle) => Ok(self.copy_wire(handle.borrow().id)),
+      None => self.arg_to_wire(ctx, value),
+    }
+  }
+
+  /// a JS array a body returns crosses as `L` and a JSON list of its items' wires, which the host
+  /// reads as an `Object[]`. Handles copied for items before a failing one are released here, since
+  /// no answer carrying them ever reaches the host
+  fn array_to_wire<'js>(&self, ctx: &Ctx<'js>, array: &Array<'js>) -> JsResult<String> {
+    let mut wires = Vec::with_capacity(array.len());
+    let mut size = 0usize;
+    for item in array_values(ctx, array, "defineClass: an array result")? {
+      let wire = match item.as_array() {
+        Some(_) => PluginErrorCode::InvalidArgument.throw(ctx, "defineClass: an array result cannot nest arrays"),
+        None => self.body_result_to_wire(ctx, &item).and_then(|wire| match wire.strip_prefix('E') {
+          Some(message) => PluginErrorCode::HandleExpired.throw(ctx, message),
+          None => Ok(wire),
+        }),
+      };
+      let wire = match wire {
+        Ok(wire) => wire,
+        Err(error) => {
+          self.release_copied(&wires);
+          return Err(error);
+        }
+      };
+      size = size.saturating_add(wire.len());
+      wires.push(wire);
+      if size > VALUE_LIMIT_BYTES {
+        self.release_copied(&wires);
+        return throw_too_big(ctx, "an array result", size, VALUE_LIMIT_BYTES);
+      }
+    }
+    let json = (|| {
+      let list = Array::new(ctx.clone())?;
+      for (index, wire) in wires.iter().enumerate() {
+        list.set(index, wire.as_str())?;
+      }
+      ctx.json_stringify(list)?.ok_or(rquickjs::Error::Unknown)?.to_string()
+    })();
+    match json {
+      Ok(json) => Ok(format!("L{json}")),
+      Err(error) => {
+        self.release_copied(&wires);
+        Err(error)
+      }
+    }
+  }
+
+  fn release_copied(&self, wires: &[String]) {
+    for wire in wires {
+      if let Some(id) = wire.strip_prefix("GO").and_then(|id| id.parse::<i64>().ok()) {
+        self.refs.release(id);
+      }
     }
   }
 

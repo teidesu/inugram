@@ -356,6 +356,36 @@ describe('the routine compiler', () => {
     })
   })
 
+  describe('inu.jvm.superOf', () => {
+    it('lowers to callSuper on the bound class, in argument order', () => {
+      const program = accepts('function (a) { return inu.jvm.superOf(this).draw(a, 1) }')
+      expect(program.captures).toEqual([])
+      const owner = program.code.findIndex(node => node[0] === 'owner')
+      const call = program.code.find(node => node[0] === 'callSuper')!
+      expect(call[1]).toBe(owner)
+      expect(call[3]).toEqual(['draw'])
+      expect(call[4]).toHaveLength(2)
+    })
+
+    it('takes a computed member', () => {
+      const program = accepts('function (name) { return inu.jvm.superOf(this)[name]() }')
+      expect(program.code.some(node => node[0] === 'callSuper')).toBe(true)
+    })
+
+    it('refuses anything but a call through it on `this`', () => {
+      refuses('function () { return inu.jvm.superOf(this) }')
+      refuses('function () { const s = inu.jvm.superOf(this); return s.draw() }')
+      refuses('function (a) { return inu.jvm.superOf(a).draw() }')
+      refuses('function () { return inu.jvm.superOf().draw() }')
+      refuses('function () { return inu.jvm.superOf(this)?.draw() }')
+      refuses('() => inu.jvm.superOf(this).draw()')
+    })
+
+    it('is refused in a hook routine, which no class is bound to', () => {
+      refuses('ctx => { ctx.setReturnValue(inu.jvm.superOf(ctx.thisObject).size()) }', 'hook')
+    })
+  })
+
   describe('what a capture resolves to in the file around it', () => {
     it('takes a const and an import', () => {
       expect(captureProblems('import { Paint } from \'x\'\nconst size = 1\ninu.jvm.routine(function () { return new Paint(size) })'))

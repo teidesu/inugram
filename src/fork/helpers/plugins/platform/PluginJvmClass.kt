@@ -34,46 +34,68 @@ internal object PluginJvmClass {
         fun close() { targets.forEach { it.close() } }
     }
 
+    private inline fun <T> runBudgeted(block: () -> T): T {
+        val call = invocation.get() ?: Invocation().also(invocation::set)
+        check(call.depth < 64 && System.nanoTime() < call.deadline) { "defineClass: invocation budget exceeded" }
+        call.depth++
+        try {
+            return block()
+        } finally {
+            if (--call.depth == 0) invocation.remove()
+        }
+    }
+
+    private fun convert(value: Any?, type: Class<*>, what: String): Any? {
+        if (type.isInstance(value)) return value
+        return requireNotNull(PluginJvm.convertArguments(arrayOf(type), listOf(value))) {
+            "defineClass: $what does not match ${type.name}"
+        }[0]
+    }
+
+    sealed class SuperSource {
+        class Fixed(val items: List<Pair<Int?, Any?>>) : SuperSource()
+        class Computed(val callback: (Class<*>, Any?, Array<Any?>) -> Any?) : SuperSource()
+    }
+
     @Keep
     class MethodTarget(
         private val returnType: Class<*>,
-        callback: ((Any?, Array<Any?>) -> Any?)?,
+        callback: ((Class<*>, Any?, Array<Any?>) -> Any?)?,
         private val superTypes: Array<Class<*>>,
-        superSources: List<Pair<Int?, Any?>>,
+        superSource: SuperSource?,
     ) {
         @Volatile private var callback = callback
-        @Volatile private var superSources: List<Pair<Int?, Any?>>? = superSources
+        @Volatile private var superSource = superSource
+        @Volatile private var closed = false
         lateinit var owner: Class<*>
 
         fun invoke(self: Any?, args: Array<Any?>): Any? {
-            if (superSources == null && returnType == Void.TYPE) return null
-            check(superSources != null) { "defineClass: plugin has unloaded" }
-            val call = invocation.get() ?: Invocation().also(invocation::set)
-            check(call.depth < 64 && System.nanoTime() < call.deadline) { "defineClass: invocation budget exceeded" }
-            call.depth++
-            try {
-                val result = callback?.invoke(self ?: owner, args)
-                if (returnType == Void.TYPE) return null
-                return requireNotNull(PluginJvm.convertArguments(arrayOf(returnType), listOf(result))) {
-                    "defineClass: result does not match ${returnType.name}"
-                }[0]
-            } finally {
-                if (--call.depth == 0) invocation.remove()
+            if (closed && returnType == Void.TYPE) return null
+            check(!closed) { "defineClass: plugin has unloaded" }
+            return runBudgeted {
+                val result = callback?.invoke(owner, self ?: owner, args)
+                if (returnType == Void.TYPE) null else convert(result, returnType, "result")
             }
         }
 
-        fun getSuperArgument(index: Int, args: Array<Any?>): Any? {
-            val source = checkNotNull(superSources) { "defineClass: plugin has unloaded" }[index]
-            val value = source.first?.let { args[it] } ?: source.second
-            if (superTypes[index].isInstance(value)) return value
-            return requireNotNull(PluginJvm.convertArguments(arrayOf(superTypes[index]), listOf(value))) {
-                "defineClass: super argument does not match ${superTypes[index].name}"
-            }[0]
+        fun getSuperArguments(args: Array<Any?>): Array<Any?> {
+            val source = superSource
+            check(!closed && source != null) { "defineClass: plugin has unloaded" }
+            val values = when (source) {
+                is SuperSource.Fixed -> source.items.map { (index, value) -> if (index != null) args[index] else value }
+                is SuperSource.Computed -> when (val result = runBudgeted { source.callback(owner, null, args) }) {
+                    is Array<*> -> result.toList()
+                    else -> error("defineClass: super must return an array")
+                }
+            }
+            check(values.size == superTypes.size) { "defineClass: super returned ${values.size} arguments, the super constructor takes ${superTypes.size}" }
+            return Array(values.size) { convert(values[it], superTypes[it], "super argument") }
         }
 
         fun close() {
+            closed = true
             callback = null
-            superSources = null
+            superSource = null
         }
     }
 
@@ -84,6 +106,7 @@ internal object PluginJvmClass {
         val isStatic: Boolean,
         val constructor: Constructor<*>?,
         val sources: List<Pair<Int?, Any?>>,
+        val superBody: Any?,
         val body: Any?,
         val resultType: Class<*> = returns,
     )
@@ -146,6 +169,14 @@ internal object PluginJvmClass {
             require(array.length() <= 64) { "at most 64 parameters" }
             return Array(array.length()) { getType(array.getString(it)) }
         }
+        fun readBody(bodySpec: JSONArray): Any {
+            val value = capture(bodySpec.getInt(1))
+            return when (bodySpec.getString(0)) {
+                "js" -> { require(value is Long && value in 1..Int.MAX_VALUE.toLong()) { "invalid JS callback" }; value.toInt() }
+                "routine" -> { require(value is PluginJvmRoutine) { "body must be an inu.jvm.routine" }; value }
+                else -> error("invalid method body")
+            }
+        }
         fun checkName(value: String) {
             require(value.matches(IDENTIFIER) && !value.startsWith("inu$")) { "invalid or reserved member name: $value" }
         }
@@ -192,16 +223,9 @@ internal object PluginJvmClass {
             }
             val signature = methodName + params.joinToString(prefix = "(", postfix = ")") { PluginJvm.descriptorOf(it) }
             require(signatures.add(signature)) { "duplicate method: $signature" }
-            val body = if (method.isNull("body")) null else {
-                val bodySpec = method.getJSONArray("body")
-                val value = capture(bodySpec.getInt(1))
-                when (bodySpec.getString(0)) {
-                    "js" -> { require(value is Long && value in 1..Int.MAX_VALUE.toLong()) { "invalid JS callback" }; value.toInt() }
-                    "routine" -> { require(value is PluginJvmRoutine) { "body must be an inu.jvm.routine" }; value }
-                    else -> error("invalid method body")
-                }
-            }
+            val body = if (method.isNull("body")) null else readBody(method.getJSONArray("body"))
             require(isConstructor || body != null) { "method needs a body" }
+            val superBody = if (!isConstructor || method.isNull("superBody")) null else readBody(method.getJSONArray("superBody"))
             val sources = if (!isConstructor) emptyList() else {
                 val args = method.getJSONArray("super")
                 require(args.length() <= 64) { "at most 64 super arguments" }
@@ -214,9 +238,20 @@ internal object PluginJvmClass {
                     } else null to capture(arg.getInt("value"))
                 }
             }
-            val superConstructor = if (!isConstructor) null else {
-                val options = superclass.declaredConstructors.filter { constructor ->
-                    (Modifier.isPublic(constructor.modifiers) || Modifier.isProtected(constructor.modifiers)) && constructor.parameterCount == sources.size && sources.indices.all { index ->
+            val accessibleSuperConstructors = superclass.declaredConstructors.filter { Modifier.isPublic(it.modifiers) || Modifier.isProtected(it.modifiers) }
+            val superConstructor = if (!isConstructor) null else if (superBody != null) {
+                if (method.isNull("superParams")) {
+                    require(accessibleSuperConstructors.size == 1) { "a super function needs superParams unless the superclass has exactly one constructor" }
+                    accessibleSuperConstructors.single()
+                } else {
+                    val superParams = getParams(method.getJSONArray("superParams"))
+                    requireNotNull(accessibleSuperConstructors.find { it.parameterTypes.contentEquals(superParams) }) {
+                        "the superclass has no accessible constructor taking (${superParams.joinToString { it.name }})"
+                    }
+                }
+            } else {
+                val options = accessibleSuperConstructors.filter { constructor ->
+                    constructor.parameterCount == sources.size && sources.indices.all { index ->
                         val (arg, value) = sources[index]
                         val type = constructor.parameterTypes[index]
                         if (arg == null) PluginJvm.convertArguments(arrayOf(type), listOf(value)) != null
@@ -227,7 +262,7 @@ internal object PluginJvmClass {
                 require(best.size == 1) { "super constructor is missing or ambiguous" }
                 best.single()
             }
-            MethodSpec(methodName, params, returns, isStatic, superConstructor, sources, body)
+            MethodSpec(methodName, params, returns, isStatic, superConstructor, sources, superBody, body)
         }.toMutableList()
         val effectiveInherited = inherited.distinctBy { it.name + PluginJvm.descriptorOf(it.returnType) + it.parameterTypes.joinToString { PluginJvm.descriptorOf(it) } }
         for (method in effectiveInherited.filter { Modifier.isAbstract(it.modifiers) }) {
@@ -236,15 +271,21 @@ internal object PluginJvmClass {
         }
         for (method in methodSpecs.toList().filter { it.constructor == null && !it.isStatic }) {
             val bridgeReturns = inherited.filter { it.name == method.name && it.parameterTypes.contentEquals(method.params) && it.returnType != method.returns && it.returnType.isAssignableFrom(method.returns) }.map { it.returnType }.distinct()
-            for (returns in bridgeReturns) methodSpecs.add(MethodSpec(method.name, method.params, returns, false, null, emptyList(), method.body, method.returns))
+            for (returns in bridgeReturns) methodSpecs.add(MethodSpec(method.name, method.params, returns, false, null, emptyList(), null, method.body, method.returns))
         }
         require(methodSpecs.size <= 256) { "at most 256 methods including covariant bridges" }
+        fun createCallback(body: Any?): ((Class<*>, Any?, Array<Any?>) -> Any?)? = when (body) {
+            is Int -> { _, self, args -> dispatch(body, self, args) }
+            is PluginJvmRoutine -> { owner, self, args -> body.execute(null, self, args, owner) }
+            else -> null
+        }
         val targets = methodSpecs.map { method ->
-            MethodTarget(method.resultType, when (val body = method.body) {
-                is Int -> { self, args -> dispatch(body, self, args) }
-                is PluginJvmRoutine -> { self, args -> body.execute(null, self, args) }
-                else -> null
-            }, method.constructor?.parameterTypes ?: emptyArray(), method.sources)
+            val superSource = when {
+                method.constructor == null -> null
+                method.superBody != null -> SuperSource.Computed(createCallback(method.superBody)!!)
+                else -> SuperSource.Fixed(method.sources)
+            }
+            MethodTarget(method.resultType, createCallback(method.body), method.constructor?.parameterTypes ?: emptyArray(), superSource)
         }
         val methodData = methodSpecs.map { method ->
             val superParams = method.constructor?.parameterTypes ?: emptyArray()

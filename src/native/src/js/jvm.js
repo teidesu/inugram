@@ -203,19 +203,22 @@
         if (spec[key] === undefined) continue
         if (!spec[key] || typeof spec[key] !== 'object' || Array.isArray(spec[key])) throw invalid(`defineClass: invalid ${key}`)
         for (const [method, value] of Object.entries(spec[key])) {
-          const item = typeof value === 'function' ? { body: value } : value
-          if (!item || typeof item !== 'object' || Array.isArray(item)) throw invalid('defineClass: invalid method specification')
-          for (const key of Object.keys(item)) {
-            if (!['params', 'returns', 'body'].includes(key)) throw invalid(`defineClass: unknown method option ${key}`)
+          const items = Array.isArray(value) ? value : [typeof value === 'function' ? { body: value } : value]
+          for (const item of items) {
+            if (!item || typeof item !== 'object' || Array.isArray(item)) throw invalid('defineClass: invalid method specification')
+            for (const key of Object.keys(item)) {
+              if (!['params', 'returns', 'body'].includes(key)) throw invalid(`defineClass: unknown method option ${key}`)
+            }
+            if (Array.isArray(value) && item.params === undefined) throw invalid(`defineClass: overloads of ${method} need explicit params`)
+            definition.methods.push({
+              name: method,
+              params: typeList(item.params),
+              returns: item.returns === undefined ? null : named('defineClass return type', item.returns),
+              body: body(item.body),
+              static: isStatic,
+              constructor: false,
+            })
           }
-          definition.methods.push({
-            name: method,
-            params: typeList(item.params),
-            returns: item.returns === undefined ? null : named('defineClass return type', item.returns),
-            body: body(item.body),
-            static: isStatic,
-            constructor: false,
-          })
         }
       }
 
@@ -224,23 +227,42 @@
       for (const item of constructors) {
         if (!item || typeof item !== 'object' || Array.isArray(item)) throw invalid('defineClass: invalid constructor specification')
         for (const key of Object.keys(item)) {
-          if (!['params', 'super', 'init'].includes(key)) throw invalid(`defineClass: unknown constructor option ${key}`)
+          if (!['params', 'super', 'superParams', 'init'].includes(key)) throw invalid(`defineClass: unknown constructor option ${key}`)
         }
-        const args = item.super === undefined ? [] : item.super
-        if (!Array.isArray(args)) throw invalid('defineClass: super must be an array')
+        const computed = typeof item.super === 'function' || natives.isRef(item.super)
+        if (!computed && item.superParams !== undefined) throw invalid('defineClass: superParams go with a super function')
+        const args = item.super === undefined || computed ? [] : item.super
+        if (!Array.isArray(args)) throw invalid('defineClass: super must be an array, a function or a JVM routine')
         const superArgs = args.map((value) => {
           if (!value || typeof value !== 'object' || Array.isArray(value) || Object.keys(value).length !== 1) throw invalid('defineClass: invalid super argument')
           if (Object.hasOwn(value, 'arg') && Number.isInteger(value.arg) && value.arg >= 0) return { arg: value.arg }
           if (Object.hasOwn(value, 'value') && typeof value.value !== 'function') return { value: capture(value.value) }
           throw invalid('defineClass: expected super arg index or constant value')
         })
-        definition.methods.push({ name: '<init>', params: typeList(item.params) ?? [], returns: 'void', body: item.init === undefined ? null : body(item.init), static: false, constructor: true, super: superArgs })
+        const superFunction = item.super
+        // a constructor's own `this` does not exist yet, so the super function takes the arguments alone
+        const superBody = !computed ? null : body(typeof superFunction === 'function' ? (_, ...params) => superFunction(...params) : superFunction)
+        definition.methods.push({
+          name: '<init>',
+          params: typeList(item.params) ?? [],
+          returns: 'void',
+          body: item.init === undefined ? null : body(item.init),
+          static: false,
+          constructor: true,
+          super: superArgs,
+          superBody,
+          superParams: computed ? typeList(item.superParams) : null,
+        })
       }
 
       if (definition.methods.length > 256 || definition.fields.length > 256 || definition.interfaces.length > 64) throw invalid('defineClass: too many members or interfaces')
       const [type, fqn] = natives.defineClass(JSON.stringify(definition), values)
       Object.defineProperty(type, 'name', { value: fqn, configurable: true })
       return type
+    },
+
+    superOf() {
+      throw invalid('inu.jvm.superOf only works inside an inu.jvm.routine body, as inu.jvm.superOf(this).method(...)')
     },
 
     callSuper(cls, self, method, ...args) {
