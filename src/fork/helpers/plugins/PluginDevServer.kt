@@ -17,7 +17,7 @@ import org.telegram.ui.Components.BulletinFactory
 
 /**
  * Installs or reloads source pushed by `adb` into [DIR] under the app's external files directory,
- * then announced through [ACTION]. Used by `scripts/push-plugin.ts`.
+ * then announced through [ACTION]. Used by `inu dev` (`sdk/cli`).
  *
  * Skips trust and permission review, with no undo. The receiver exists only after the user
  * enables [InuConfig.PLUGINS_DEV_MODE] through its warning sheet. It requires the sender's
