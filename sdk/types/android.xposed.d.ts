@@ -69,8 +69,22 @@ declare namespace inu {
     function routine(body: (ctx: RoutineContext) => void): XposedRoutineRunnable
 
     /**
-     * JS callbacks run on the hooked thread and are skipped if the engine is busy or already
-     * running JS on that thread. Promise continuations run later on the plugin thread.
+     * JS callbacks are best-effort: they run on the hooked thread, but a call may skip them.
+     * Don't rely on a JS hook for anything that must apply to every call.
+     *
+     * A call skips this plugin's JS callbacks when:
+     * - another thread is running this plugin's JS for longer than the phase's 250 ms budget.
+     *   The hooked thread waits for it, and the wait counts against that budget;
+     * - the hooked thread is already running this plugin's JS, e.g. plugin code called a hooked
+     *   method through {@link inu.jvm};
+     * - the call happened inside one of this plugin's hook phases, e.g. a `before` called a method
+     *   this plugin hooks. This applies to routine hooks too.
+     *
+     * `before` and `after` are entered separately, so `after` can be skipped even though `before` ran.
+     * Keep other synchronous plugin work short to make skips rare. A routine hook
+     * ({@link inu.xposed.routine}) or a `filter` does not take the engine, so only the last case skips it.
+     *
+     * Promise continuations run later on the plugin thread.
      * APIs requiring the plugin thread are unavailable in these callbacks.
      *
      * A plugin cannot mix JS and Java (`inu.xposed.routine`) hooks on the same method
