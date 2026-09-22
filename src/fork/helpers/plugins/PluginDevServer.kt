@@ -5,7 +5,6 @@ import android.content.Context
 import android.content.Intent
 import android.content.IntentFilter
 import android.os.Build
-import android.util.Log
 import desu.inugram.InuConfig
 import desu.inugram.core.plugins.PluginManifestParser
 import desu.inugram.helpers.plugins.ui.PluginAppVisibility
@@ -31,7 +30,6 @@ object PluginDevServer {
     const val ACTION = "desu.inugram.plugins.DEV"
     const val DIR = "plugin-dev"
 
-    private const val TAG = "InuPluginDev"
     private const val SENDER_PERMISSION = "android.permission.DUMP"
 
     private val safeName = Regex("[A-Za-z0-9._-]+")
@@ -56,9 +54,9 @@ object PluginDevServer {
                 context.registerReceiver(receiver, filter, SENDER_PERMISSION, null)
             }
             registered = true
-            Log.d(TAG, "listening on $ACTION, drop dir ${dropDir(context)}")
+            PluginLog.HOST.d("dev", "listening on $ACTION, drop dir ${dropDir(context)}")
         } catch (e: Exception) {
-            Log.e(TAG, "could not register", e)
+            PluginLog.HOST.e("dev", "could not register", e)
         }
     }
 
@@ -68,7 +66,7 @@ object PluginDevServer {
         try {
             context.unregisterReceiver(receiver)
         } catch (e: Exception) {
-            Log.e(TAG, "could not unregister", e)
+            PluginLog.HOST.e("dev", "could not unregister", e)
         }
     }
 
@@ -81,10 +79,10 @@ object PluginDevServer {
             val reply = try {
                 handle(context, intent)
             } catch (e: Exception) {
-                Log.e(TAG, "command failed", e)
+                PluginLog.HOST.e("dev", "command failed", e)
                 fail(e.message ?: e.toString())
             }
-            if (isOrderedBroadcast) resultData = reply.toString() else Log.d(TAG, reply.toString())
+            if (isOrderedBroadcast) resultData = reply.toString() else PluginLog.HOST.d("dev", reply.toString())
         }
     }
 

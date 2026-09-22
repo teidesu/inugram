@@ -14,7 +14,7 @@ class PluginPlatformTest {
 
     @Test
     fun formatting_uses_the_stock_localized_formatters() {
-        val platform = PluginPlatform.listenerFor()
+        val platform = PluginPlatform.listenerFor(PluginLog.HOST)
         val unix = 1_715_531_070L
 
         assertEquals(LocaleController.formatDate(unix), platform.format(0, unix))

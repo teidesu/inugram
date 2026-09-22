@@ -1,6 +1,5 @@
 package desu.inugram.helpers.plugins.platform
 
-import android.util.Log
 import org.json.JSONArray
 import desu.inugram.core.plugins.PluginWire.refuse
 import org.json.JSONObject
@@ -348,7 +347,7 @@ internal class PluginJvmRoutine(
     fun decide(receiver: Any?, args: Array<Any?>): Boolean = try {
         getTruthiness(execute(null, receiver, args))
     } catch (e: Throwable) {
-        Log.d(TAG, "routine filter failed", e)
+        host.session.log.d("routine", "filter failed", e)
         true
     }
 
@@ -507,7 +506,7 @@ internal class PluginJvmRoutine(
                     // a defineClass body answers its java caller; a runnable or a hook phase has
                     // nobody to answer, and what it already changed stays changed
                     if (methodArgs != null || e !is Exception) throw e
-                    Log.d(TAG, "routine failed", e)
+                    host.session.log.d("routine", "failed", e)
                     return methodResult
                 }
                 registers[handler] = e
@@ -728,7 +727,6 @@ internal class PluginJvmRoutine(
     }
 
     companion object {
-        private const val TAG = "InuPluginRoutine"
         private const val VALUE_LIMIT = 1024 * 1024
         private const val BUDGET_NANOS = 250_000_000L
 

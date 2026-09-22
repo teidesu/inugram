@@ -5,10 +5,10 @@ import desu.inugram.core.plugins.PluginRefusal
 import desu.inugram.core.plugins.PluginWire.refuse
 import desu.inugram.helpers.plugins.EngineDispatch
 
-import android.util.Log
 import desu.inugram.core.plugins.PluginWire
 import desu.inugram.helpers.plugins.JvmListener
 import desu.inugram.helpers.plugins.Plugin
+import desu.inugram.helpers.plugins.PluginLog
 import desu.inugram.helpers.plugins.PluginSession
 import desu.inugram.helpers.plugins.QuickJs
 import desu.inugram.helpers.plugins.XposedListener
@@ -36,7 +36,6 @@ import org.telegram.messenger.Utilities
  * Shares values through [PluginJvm.ValueBridge] instead of keeping a second handle table.
  */
 object PluginXposed : SessionResource {
-    private const val TAG = "InuPluginXposed"
 
     /** keep in sync with rust `xposed::KEEP_ARGUMENT` */
     private const val KEEP_ARGUMENT = "="
@@ -73,11 +72,11 @@ object PluginXposed : SessionResource {
         System.loadLibrary("lsplant")
         Native.nativeInit()
     }.getOrElse {
-        Log.e(TAG, "load xposed libraries failed", it)
+        PluginLog.HOST.e("xposed", "load xposed libraries failed", it)
         false
     }.also {
         ready = it
-        Log.d(TAG, "native xposed ${if (it) "ready" else "unavailable"}")
+        PluginLog.HOST.d("xposed", "native xposed ${if (it) "ready" else "unavailable"}")
     }
 
     /**
@@ -299,7 +298,7 @@ object PluginXposed : SessionResource {
                 shared.registrations = shared.registrations + site
                 site to shared.registrations.size
             }
-            Log.d(TAG, "[${session.manifest.name}] installed xposed site ${site.id}: $member ($plugins plugins)")
+            session.log.d("xposed", "installed xposed site ${site.id}: $member ($plugins plugins)")
             return site.id
         }
 
@@ -311,7 +310,7 @@ object PluginXposed : SessionResource {
                 shared.registrations = shared.registrations.filterNot { it === removed }
                 if (shared.registrations.isNotEmpty()) return@synchronized false
                 val unhooked = runCatching { Native.nativeUnhook(shared.target) }.getOrElse {
-                    Log.e(TAG, "xposed: failed to unhook ${shared.target}", it)
+                    session.log.e("xposed", "failed to unhook ${shared.target}", it)
                     false
                 }
                 if (unhooked || runCatching { !Native.nativeIsHooked(shared.target) }.getOrDefault(false)) {
@@ -321,8 +320,8 @@ object PluginXposed : SessionResource {
                     true
                 }
             }
-            if (declined) Log.e(TAG, "xposed: lsplant declined to unhook ${shared.target}; its dispatcher stays and calls the original")
-            Log.d(TAG, "[${session.manifest.name}] removed xposed site $site: ${removed.target}")
+            if (declined) session.log.e("xposed", "lsplant declined to unhook ${shared.target}; its dispatcher stays and calls the original")
+            session.log.d("xposed", "removed xposed site $site: ${removed.target}")
             return PluginWire.encodeNull()
         }
 
@@ -366,7 +365,7 @@ object PluginXposed : SessionResource {
             if (closed || !entry.live) return next(args)
             val guard = dispatching.get()
             if (guard[0]) {
-                Log.d(TAG, "[${session.manifest.name}] xposed site ${entry.id} bypassed re-entry")
+                session.log.d("xposed", "site ${entry.id} bypassed re-entry")
                 return next(args)
             }
             val filter = entry.filter
@@ -400,7 +399,7 @@ object PluginXposed : SessionResource {
                             is Runnable -> phase.run()
                         }
                     } catch (e: Throwable) {
-                        Log.w(TAG, "[${session.manifest.name}] native hook at site $site (${entry.target}) failed", e)
+                        session.log.w("xposed", "native hook at site $site (${entry.target}) failed", e)
                     }
                     if (before && context.answered) break
                 }
@@ -424,7 +423,7 @@ object PluginXposed : SessionResource {
                 val before = try {
                     runCallbackPhase(guard) { session.engine.xposedBefore(id, site, invocationOf(entry, receiver, args)) }
                 } catch (error: Throwable) {
-                    Log.e(TAG, "[${session.manifest.name}] xposed before failed at ${entry.target}; continuing", error)
+                    session.log.e("xposed", "before failed at ${entry.target}; continuing", error)
                     null
                 }
                 if (before == null) return next(args)
@@ -434,7 +433,7 @@ object PluginXposed : SessionResource {
                     val answer = answerOf(before.getOrNull(1) ?: PluginWire.encodeNull(), site, "before")
                         ?: return next(args)
                     val converted = try { convertReturn(entry, answer) } catch (error: Throwable) {
-                        Log.e(TAG, "[${session.manifest.name}] xposed invalid before result at ${entry.target}; continuing", error)
+                        session.log.e("xposed", "invalid before result at ${entry.target}; continuing", error)
                         return next(args)
                     }
                     return converted.getOrThrow()
@@ -451,7 +450,7 @@ object PluginXposed : SessionResource {
                         }[0]
                     }
                 } catch (e: Throwable) {
-                    Log.e(TAG, "[${session.manifest.name}] xposed site $site (${entry.target}): unreadable arguments; calling with the app's", e)
+                    session.log.e("xposed", "site $site (${entry.target}): unreadable arguments; calling with the app's", e)
                     args
                 }
                 var thrown: Throwable? = null
@@ -463,7 +462,7 @@ object PluginXposed : SessionResource {
                 val after = try {
                     runCallbackPhase(guard) { session.engine.xposedAfter(id, settled, thrown != null) }
                 } catch (error: Throwable) {
-                    Log.e(TAG, "[${session.manifest.name}] xposed after failed at ${entry.target}; preserving the outcome", error)
+                    session.log.e("xposed", "after failed at ${entry.target}; preserving the outcome", error)
                     QuickJs.NOT_DISPATCHED
                 }
                 if (after != QuickJs.NOT_DISPATCHED) owed = false
@@ -482,7 +481,7 @@ object PluginXposed : SessionResource {
             val after = try {
                 runCallbackPhase(guard) { session.engine.xposedAfterOnly(entry.id, invocation, thrown != null) }
             } catch (error: Throwable) {
-                Log.e(TAG, "[${session.manifest.name}] xposed after failed at ${entry.target}; preserving the outcome", error)
+                session.log.e("xposed", "after failed at ${entry.target}; preserving the outcome", error)
                 null
             }
             return settleAfter(entry, value, thrown, after)
@@ -494,7 +493,7 @@ object PluginXposed : SessionResource {
             if (after == null || after == QuickJs.NOT_DISPATCHED) return settle(value, thrown)
             val answer = answerOf(after, entry.id, "after") ?: return settle(value, thrown)
             val converted = try { convertReturn(entry, answer) } catch (error: Throwable) {
-                Log.e(TAG, "[${session.manifest.name}] xposed invalid after result at ${entry.target}; preserving the outcome", error)
+                session.log.e("xposed", "invalid after result at ${entry.target}; preserving the outcome", error)
                 return settle(value, thrown)
             }
             return converted.getOrThrow()
@@ -533,7 +532,7 @@ object PluginXposed : SessionResource {
                     Result.success(values.decode(wire))
                 }
             } catch (e: Throwable) {
-                Log.e(TAG, "[${session.manifest.name}] xposed: unreadable $phase answer at site $site (${sites[site]?.target}); wire prefix=${wire.take(when { wire.startsWith("TG") -> 3; wire.startsWith("G") || wire.startsWith("T") -> 2; else -> 1 })}, length=${wire.length}", e)
+                session.log.e("xposed", "unreadable $phase answer at site $site (${sites[site]?.target}); wire prefix=${wire.take(when { wire.startsWith("TG") -> 3; wire.startsWith("G") || wire.startsWith("T") -> 2; else -> 1 })}, length=${wire.length}", e)
                 null
             }
         }
@@ -552,7 +551,7 @@ object PluginXposed : SessionResource {
             }
             for (site in open) {
                 runCatching { uninstall(site) }.onFailure {
-                    Log.e(TAG, "[${session.manifest.name}] failed to remove site $site", it)
+                    session.log.e("xposed", "failed to remove site $site", it)
                 }
             }
         }

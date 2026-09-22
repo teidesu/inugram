@@ -105,8 +105,8 @@ extern "C" {
 fn log_init_failure(message: &str) {
   #[cfg(target_os = "android")]
   {
-    let Ok(tag) = CString::new("InuPluginXposed") else { return };
-    let Ok(message) = CString::new(message) else { return };
+    let Ok(tag) = CString::new("InuPluginHost") else { return };
+    let Ok(message) = CString::new(format!("[xposed] {message}")) else { return };
     unsafe { __android_log_write(6, tag.as_ptr(), message.as_ptr()) };
   }
 }

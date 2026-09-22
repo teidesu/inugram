@@ -3,8 +3,8 @@ package desu.inugram.helpers.plugins.platform
 import android.content.ClipboardManager
 import android.content.Context
 import android.content.Intent
-import android.util.Log
 import androidx.core.net.toUri
+import desu.inugram.helpers.plugins.PluginLog
 import desu.inugram.helpers.plugins.PlatformListener
 import org.telegram.messenger.browser.Browser
 import org.telegram.messenger.AndroidUtilities
@@ -13,7 +13,6 @@ import org.telegram.messenger.LocaleController
 import org.telegram.ui.LaunchActivity
 
 object PluginPlatform {
-    private const val TAG = "InuPluginPlatform"
     private const val FORMAT_DATE = 0
     private const val FORMAT_TIME = 1
     private const val FORMAT_DATE_TIME = 2
@@ -23,7 +22,7 @@ object PluginPlatform {
     private const val FORMAT_FILE_SIZE = 6
     private const val FORMAT_DURATION = 7
 
-    fun listenerFor(): PlatformListener = object : PlatformListener {
+    fun listenerFor(log: PluginLog): PlatformListener = object : PlatformListener {
         override fun format(op: Int, value: Long): String = when (op) {
             FORMAT_DATE -> LocaleController.formatDate(value)
             FORMAT_TIME -> LocaleController.getInstance().formatterDay.format(java.util.Date(value * 1000))
@@ -36,9 +35,9 @@ object PluginPlatform {
             else -> error("unknown format op $op")
         }
 
-        override fun openUrl(url: String) = PluginPlatform.openUrl(url)
+        override fun openUrl(url: String) = PluginPlatform.openUrl(url, log)
 
-        override fun clipboardRead(): String = readClipboard()
+        override fun clipboardRead(): String = readClipboard(log)
 
         override fun clipboardWrite(text: String) {
             AndroidUtilities.addToClipboard(text)
@@ -52,7 +51,7 @@ object PluginPlatform {
      *
      * Does nothing without a UI, since Android blocks background activity starts.
      */
-    private fun openUrl(url: String) {
+    private fun openUrl(url: String, log: PluginLog) {
         AndroidUtilities.runOnUIThread {
             val context = LaunchActivity.instance ?: ApplicationLoader.applicationContext ?: return@runOnUIThread
             try {
@@ -70,7 +69,7 @@ object PluginPlatform {
                 intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
                 context.startActivity(intent)
             } catch (e: Exception) {
-                Log.e(TAG, "openUrl failed", e)
+                log.e("platform", "openUrl failed", e)
             }
         }
     }
@@ -81,7 +80,7 @@ object PluginPlatform {
      * Read the clip's text directly. `coerceToText` could dereference a `content://` URI using the
      * app's permissions, exposing providers beyond the copied text. URI-only clips return "".
      */
-    private fun readClipboard(): String = try {
+    private fun readClipboard(log: PluginLog): String = try {
         val manager = ApplicationLoader.applicationContext
             ?.getSystemService(Context.CLIPBOARD_SERVICE) as? ClipboardManager
             ?: return ""
@@ -90,7 +89,7 @@ object PluginPlatform {
             ?.toString()
             .orEmpty()
     } catch (e: Exception) {
-        Log.e(TAG, "clipboard read failed", e)
+        log.e("platform", "clipboard read failed", e)
         ""
     }
 }

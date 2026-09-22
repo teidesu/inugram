@@ -2,7 +2,6 @@ package desu.inugram.helpers.plugins.telegram
 
 import desu.inugram.helpers.plugins.SessionResource
 import desu.inugram.core.plugins.PluginRefusal
-import android.util.Log
 import desu.inugram.core.plugins.PluginWire
 import desu.inugram.helpers.plugins.Plugin
 import desu.inugram.helpers.plugins.PluginSession
@@ -39,7 +38,6 @@ object PluginOptimisticSend : SessionResource {
      */
     private const val TOKEN_KEY = "inu_plugin_send"
 
-    private const val TAG = "InuPluginSend"
 
     private class Pending(val call: Call, val dialogId: Long, val upload: PluginMedia.Upload?) {
         var localId: Int = 0
@@ -271,7 +269,7 @@ object PluginOptimisticSend : SessionResource {
             try {
                 block()
             } catch (e: Throwable) {
-                Log.e(TAG, "an optimistic send could not be drawn", e)
+                entry.call.session.log.e("send", "an optimistic send could not be drawn", e)
                 fail(token, "the send could not be started")?.let(::discardUndrawn)
             }
         }

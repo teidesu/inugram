@@ -1,9 +1,9 @@
 package desu.inugram.helpers.plugins.ui
 
+import desu.inugram.helpers.plugins.PluginLog
 import desu.inugram.helpers.plugins.SessionResource
 import desu.inugram.helpers.plugins.EngineDispatch
 
-import android.util.Log
 import desu.inugram.InuConfig
 import desu.inugram.core.plugins.ActionRegistration
 import desu.inugram.core.plugins.ActionRegistry
@@ -54,7 +54,6 @@ data class RegisteredActionRow(
  * registration, so rows without relevant getters never enter an engine.
  */
 object PluginActions : SessionResource {
-    private const val TAG = "InuPluginActions"
 
     // keep in sync with rust `actions::KIND_*`
     const val KIND_GLOBAL = 0
@@ -127,7 +126,7 @@ object PluginActions : SessionResource {
     ): String? {
         val refusal = registry.register(session.engine, kind, token, id, placements, text, icon, dynamicFields)
         if (refusal != null) {
-            Log.w(TAG, "[${session.manifest.name}] refused an action row: $refusal")
+            session.log.w("actions", "refused an action row: $refusal")
             // a `P` wire, so the cap refusal carries its own code: every other answer this upcall can give is a JNI-level failure, and reporting those as `quota-exceeded` tells a plugin it is at a limit it is nowhere near
             return PluginWire.encodePluginError("quota-exceeded", refusal)
         }
@@ -301,10 +300,10 @@ object PluginActions : SessionResource {
                 val surfaceJson = try {
                     getSurfaceJson(session)
                 } catch (e: Exception) {
-                    Log.e(TAG, "cannot serialize action surface for ${session.manifest.name}", e)
+                    session.log.e("actions", "cannot serialize the action surface", e)
                     continue
                 }
-                val rows = engine.renderActions(kind, surfaceJson)?.let(::parseDynamicRows) ?: continue
+                val rows = engine.renderActions(kind, surfaceJson)?.let { parseDynamicRows(it, session.log) } ?: continue
                 for (row in rows) dynamicRows[engine to row.token] = row
             }
             val rows = registrations.mapNotNull { registration ->
@@ -340,7 +339,7 @@ object PluginActions : SessionResource {
             val surfaceJson = try {
                 surface.getJson(session.permissions)
             } catch (e: Exception) {
-                Log.e(TAG, "cannot serialize action surface for ${session.manifest.name}", e)
+                session.log.e("actions", "cannot serialize the action surface", e)
                 return@postRunnable
             }
             live.owner.dispatchAction(surface.kind, live.token, surfaceJson)
@@ -383,7 +382,7 @@ object PluginActions : SessionResource {
 
     private data class DynamicRow(val token: Int, val text: String?, val icon: String?)
 
-    private fun parseDynamicRows(json: String): List<DynamicRow>? {
+    private fun parseDynamicRows(json: String, log: PluginLog): List<DynamicRow>? {
         return try {
             val array = JSONArray(json)
             (0 until array.length()).map { i ->
@@ -395,7 +394,7 @@ object PluginActions : SessionResource {
                 )
             }
         } catch (e: Exception) {
-            Log.e(TAG, "unreadable render answer", e)
+            log.e("actions", "unreadable render answer", e)
             null
         }
     }

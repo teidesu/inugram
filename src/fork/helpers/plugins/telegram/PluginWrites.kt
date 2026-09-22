@@ -2,7 +2,6 @@ package desu.inugram.helpers.plugins.telegram
 
 import desu.inugram.core.plugins.PluginRefusal
 import desu.inugram.core.plugins.PluginWire.refuse
-import android.util.Log
 import desu.inugram.core.plugins.PluginWire
 import desu.inugram.helpers.plugins.EngineDispatch
 import desu.inugram.helpers.plugins.Plugin
@@ -33,7 +32,6 @@ import org.telegram.tgnet.tl.TL_update
  * Results are read-only because sent messages become app-owned once `processUpdates` applies them.
  */
 object PluginWrites {
-    private const val TAG = "InuPluginWrites"
 
     // keep in sync with rust `writes::OP_*` and `writes.js`
     const val OP_SEND_MESSAGE = 0
@@ -150,7 +148,7 @@ object PluginWrites {
                 try {
                     MessagesController.getInstance(call.accountId).processUpdates(response, false)
                 } catch (e: Throwable) {
-                    Log.e(TAG, "applying what a plugin sent failed", e)
+                    call.session.log.e("writes", "applying what a plugin sent failed", e)
                 }
                 response.updates = sent
             }

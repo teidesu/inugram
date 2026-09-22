@@ -12,8 +12,13 @@ export const RELEASE_APP_ID = 'desu.inugram'
 
 const DROP_DIR_NAME = 'plugin-dev'
 const DEV_ACTION = 'desu.inugram.plugins.DEV'
-/** Log tags used by PluginManager.logConsole and related methods. Logcat filters have no wildcards. */
-const LOG_TAG_PREFIX = 'InuPlugin'
+/** `PluginLog` tags: one channel per plugin, keyed by manifest id (install id without one), and one for the host */
+const PLUGIN_LOG_TAG_PREFIX = 'InuPlugin/'
+export const HOST_LOG_TAG = 'InuPluginHost'
+
+export function getPluginLogTag(key: string): string {
+  return PLUGIN_LOG_TAG_PREFIX + key
+}
 
 /** The error returned by `PluginDevServer.fail` for any command. */
 const FailureSchema = v.object({
@@ -184,7 +189,7 @@ export class Device {
   }
 
   /**
-   * Logcat only supports exact tag filters, so read the whole process and filter here.
+   * Logcat only supports exact tag filters, so read the whole process and let [onLine] filter.
    * Resolve the PID again when the stream ends to handle app restarts.
    */
   async tailLogs(onLine: (level: string, tag: string, message: string) => void, signal: AbortSignal) {
@@ -208,7 +213,6 @@ export class Device {
             const match = /^([VDIWEF])\/([^(]+)\(\s*\d+\):\s?(.*)$/.exec(line)
             if (!match) continue
             const [, level, tag, message] = match
-            if (!tag.trim().startsWith(LOG_TAG_PREFIX)) continue
             onLine(level, tag.trim(), message)
           }
         })
