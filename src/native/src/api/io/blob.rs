@@ -617,7 +617,9 @@ impl Accumulator {
       };
     }
     if let Some(buffer) = ArrayBuffer::from_value(part.clone()) {
-      let Some(bytes) = buffer.as_bytes() else {
+      // SAFETY: no javascript runs while the slice is borrowed; a gc `write` may run frees only what
+      // nothing references, and `buffer` is referenced
+      let Some(bytes) = (unsafe { buffer.as_bytes() }) else {
         return Err(Exception::throw_type(ctx, "Blob: this ArrayBuffer is detached"));
       };
       return match self.write(ctx, bytes) {
@@ -650,7 +652,9 @@ impl Accumulator {
     let (Some(offset), Some(length)) = (offset, length) else {
       return Ok(false);
     };
-    let Some(bytes) = buffer.as_bytes() else {
+    // SAFETY: no javascript runs while the slice is borrowed; a gc `write` may run frees only what
+    // nothing references, and `buffer` is referenced
+    let Some(bytes) = (unsafe { buffer.as_bytes() }) else {
       return Err(Exception::throw_type(ctx, "Blob: this view's buffer is detached"));
     };
     let start = offset.0.max(0.0) as usize;

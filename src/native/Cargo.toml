@@ -27,7 +27,7 @@ leb128 = "0.2.7"
 lzma-rs = "0.3"
 object = { version = "0.40.0", default-features = false, features = ["read_core", "elf", "unaligned"] }
 # rquickjs bundles quickjs-ng; `bindgen` is required because it ships no prebuilt Android bindings.
-rquickjs = { version = "0.12", default-features = true, features = ["bindgen", "parallel"] }
+rquickjs = { version = "0.14", default-features = true, features = ["bindgen", "parallel"] }
 slotmap = "1.1.1"
 tgtext = { path = "crates/tgtext" }
 url = "2.5.8"
@@ -42,7 +42,7 @@ serde_json = "1.0.151"
 # the same quickjs the cdylib links, resolved from the same lockfile, so `build.rs` cannot emit
 # bytecode a different interpreter would read. `bindgen` is not asked for here: rquickjs ships
 # prebuilt bindings for every host anyone builds this on, and only android has none.
-rquickjs = { version = "0.12", features = ["loader"] }
+rquickjs = { version = "0.14", features = ["loader"] }
 
 [profile.release]
 opt-level = "z"

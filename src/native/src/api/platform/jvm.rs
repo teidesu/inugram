@@ -750,7 +750,9 @@ pub fn install_jvm<'js>(
           return Ok(());
         }
         if let Ok(typed) = TypedArray::<u8>::from_value(source.clone()) {
-          if let Some(bytes) = typed.as_bytes() {
+          // SAFETY: no javascript runs while the slice is borrowed; the host is asked only after its
+          // last use
+          if let Some(bytes) = unsafe { typed.as_bytes() } {
             if !bounded_bytes(bytes, DEX_LIMIT_BYTES) {
               return throw_too_big(ctx, "a dex", bytes.len(), DEX_LIMIT_BYTES);
             }

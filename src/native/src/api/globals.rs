@@ -63,13 +63,15 @@ pub fn install_globals<'js>(
 
 fn decode_utf8(ctx: &Ctx<'_>, input: Value<'_>) -> JsResult<String> {
   if let Ok(bytes) = TypedArray::<u8>::from_value(input.clone()) {
-    let Some(bytes) = bytes.as_bytes() else {
+    // SAFETY: no javascript runs while the slice is borrowed
+    let Some(bytes) = (unsafe { bytes.as_bytes() }) else {
       return Err(Exception::throw_type(ctx, "TextDecoder: the array is detached"));
     };
     return Ok(String::from_utf8_lossy(bytes).into_owned());
   }
   if let Some(buffer) = ArrayBuffer::from_value(input) {
-    let Some(bytes) = buffer.as_bytes() else {
+    // SAFETY: no javascript runs while the slice is borrowed
+    let Some(bytes) = (unsafe { buffer.as_bytes() }) else {
       return Err(Exception::throw_type(ctx, "TextDecoder: the buffer is detached"));
     };
     return Ok(String::from_utf8_lossy(bytes).into_owned());
@@ -90,12 +92,12 @@ fn random_fill<'js>(ctx: &Ctx<'js>, host: &dyn RandomHost, array: Value<'js>) ->
   let Some(raw) = typed.as_raw() else {
     return Err(Exception::throw_type(ctx, "getRandomValues: the array is detached"));
   };
-  if raw.len != bytes.len() {
+  if raw.len() != bytes.len() {
     return Err(Exception::throw_type(ctx, "getRandomValues: the array was resized"));
   }
-  // SAFETY: `as_raw` guarantees a live, non-detached typed-array buffer. Its
-  // length was checked against `bytes`, so both ranges are valid and equal.
-  unsafe { std::ptr::copy_nonoverlapping(bytes.as_ptr(), raw.ptr.as_ptr(), raw.len) };
+  // SAFETY: `as_raw` guarantees a live, non-detached typed-array buffer, and no javascript has run
+  // since. Its length was checked against `bytes`, so both ranges are valid and equal.
+  unsafe { std::ptr::copy_nonoverlapping(bytes.as_ptr(), raw.cast::<u8>().as_ptr(), raw.len()) };
   Ok(array)
 }
 

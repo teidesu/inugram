@@ -145,7 +145,8 @@ impl FetchState {
       return Ok(Some(text.into_bytes()));
     }
     if let Ok(typed) = TypedArray::<u8>::from_value(value.clone()) {
-      let Some(bytes) = typed.as_bytes() else {
+      // SAFETY: no javascript runs while the slice is borrowed
+      let Some(bytes) = (unsafe { typed.as_bytes() }) else {
         return Err(BodyError::InvalidArgument("fetch: the body array is detached".to_string()));
       };
       return Ok(Some(bytes.to_vec()));

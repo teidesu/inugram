@@ -736,7 +736,10 @@ impl RpcState {
   /// java `byte[]` and comes back through [`Self::settle_bytes`], never as base64 in a wire string.
   fn js_invoke_raw<'js>(&self, ctx: &Ctx<'js>, slot: i32, bytes: Value<'js>) -> JsResult<Value<'js>> {
     self.grants.check_grant(ctx, RAW_GRANT, None, MATCH_EXACT)?;
-    let Some(method) = TypedArray::<u8>::from_value(bytes).ok().and_then(|array| array.as_bytes().map(<[u8]>::to_vec))
+    // SAFETY: the slice is copied before anything else runs
+    let Some(method) = TypedArray::<u8>::from_value(bytes)
+      .ok()
+      .and_then(|array| unsafe { array.as_bytes() }.map(<[u8]>::to_vec))
     else {
       return PluginErrorCode::InvalidArgument.throw(ctx, "invokeRaw: expected the serialized method as a Uint8Array");
     };

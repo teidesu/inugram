@@ -166,7 +166,8 @@ fn read_bytes<'js>(ctx: &Ctx<'js>, value: &Value<'js>, what: &str) -> JsResult<V
   let Ok(typed) = TypedArray::<u8>::from_value(value.clone()) else {
     return Err(Exception::throw_type(ctx, &format!("{what}: expected a Uint8Array")));
   };
-  let Some(bytes) = typed.as_bytes() else {
+  // SAFETY: no javascript runs while the slice is borrowed
+  let Some(bytes) = (unsafe { typed.as_bytes() }) else {
     return Err(Exception::throw_type(ctx, &format!("{what}: the array is detached")));
   };
   Ok(bytes.to_vec())
