@@ -51,6 +51,6 @@ export default defineConfig({
         await assertTemplatesBesideTheBundle(ctx)
       },
     }),
-    dts({ entryRoot: 'src', exclude: ['vite.config.ts', 'src/templates/**'] }),
+    dts({ entryRoot: 'src', exclude: ['vite.config.ts', 'src/templates/**', 'test/**'] }),
   ],
 })

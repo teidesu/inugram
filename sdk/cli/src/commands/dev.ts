@@ -87,7 +87,7 @@ export const devCmd = defineCommand({
       config,
       plugins,
       onBuilt: (outcome) => {
-        reportOutcome(config, outcome)
+        void reportOutcome(config, outcome)
         if (!outcome.ok) return
         queue.with(() => push(outcome)).catch((error: unknown) => { fail(String(error)) })
       },

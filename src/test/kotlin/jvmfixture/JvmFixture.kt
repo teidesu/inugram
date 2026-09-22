@@ -104,6 +104,9 @@ class JvmFixture : JvmContract {
 
     fun boom(): String = throw IllegalStateException("boom")
 
+    /** what a java callee may throw that is not an `Exception`, which a routine must still unwind */
+    fun detonate(): String = throw AssertionError("detonate")
+
     /** a member crossing back as an ordinary value, which `ctx.method` in `inu.xposed` also is */
     fun ownMethod(): java.lang.reflect.Method = JvmFixture::class.java.getDeclaredMethod("echo", String::class.java)
 

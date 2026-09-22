@@ -86,77 +86,49 @@
     return ctor
   }
 
-  const buildRoutine = (build, hookMode = false) => {
-    if (typeof build !== 'function') throw invalid('routine: expected a synchronous builder')
-    const refs = new WeakMap()
-    const nodes = []
-    const values = []
-    let open = true
-    const ref = (value) => {
-      const index = refs.get(value)
-      if (index === undefined) throw invalid('routine: expected an operation from this builder')
-      return index
+  const MAX_FLAT_CAPTURES = 4096
+
+  /**
+   * A capture crosses as one value wire, so an array capture is flattened into the same list and
+   * the shape it had is sent alongside: `-1` for a plain value, a nested array for an array.
+   */
+  const flattenCapture = (value, flat, what) => {
+    if (Array.isArray(value)) return value.map(item => flattenCapture(item, flat, what))
+    if (flat.length >= MAX_FLAT_CAPTURES) throw invalid('routine: too many captured values')
+    const type = typeof value
+    const scalar = value === null || value === undefined
+      || type === 'boolean' || type === 'number' || type === 'bigint' || type === 'string'
+    if (!scalar && !natives.isRef(value) && !(value instanceof Uint8Array)) {
+      throw invalid(`routine: ${what} must be a scalar, bytes, a java handle, or an array of those`)
     }
-    const operand = (value) => {
-      if (value !== null && (typeof value === 'object' || typeof value === 'function')) {
-        const index = refs.get(value)
-        if (index !== undefined) return [1, index]
-        if (!natives.isRef(value) && !(value instanceof Uint8Array)) throw invalid('routine: invalid or foreign value')
-      }
-      values.push(value)
-      return [0, values.length - 1]
+    flat.push(value)
+    return -1
+  }
+
+  const buildRoutine = (program, captures, hookMode = false) => {
+    if (typeof program === 'function') {
+      throw invalid('routine: a routine body is compiled by @inugram/cli, so build the plugin with it')
     }
-    const node = (kind, args) => {
-      if (!open) throw invalid('routine: builder is closed')
-      if (nodes.length >= 256) throw invalid('routine: at most 256 operations')
-      const token = Object.freeze(Object.create(null))
-      refs.set(token, nodes.length)
-      nodes.push([kind, ...args()])
-      return token
+    if (!program || typeof program !== 'object' || Array.isArray(program)) {
+      throw invalid('routine: expected a compiled routine')
     }
-    const builder = {
-      getThisObject: () => node('methodThis', () => []),
-      getArgument: index => node('methodArgument', () => [operand(index)]),
-      setReturnValue: value => node('methodSetResult', () => [operand(value)]),
-      get: name => node('getLocal', () => [named('get', name)]),
-      set: (name, value) => node('setLocal', () => [named('set', name), operand(value)]),
-      getField: (target, name) => node('get', () => [operand(target), named('getField', name)]),
-      setField: (target, name, value) => node('set', () => [operand(target), named('setField', name), operand(value)]),
-      call: (target, name, ...args) => node('call', () => [operand(target), named('call', name), args.map(operand)]),
-      when: (condition, yes, no = []) => node('when', () => [operand(condition), yes.map(ref), no.map(ref)]),
-      attempt: (body, fallback = []) => node('attempt', () => [body.map(ref), fallback.map(ref)]),
-      compare: (op, left, right) => node('compare', () => {
-        if (!['==', '!=', '<', '<=', '>', '>='].includes(op)) throw invalid('routine: unsupported comparison operator')
-        return [op, operand(left), operand(right)]
-      }),
-      and: (left, right) => node('and', () => [operand(left), operand(right)]),
-      or: (left, right) => node('or', () => [operand(left), operand(right)]),
-      not: value => node('not', () => [operand(value)]),
-      math: (op, left, right) => node('math', () => {
-        if (!['+', '-', '*', '/', '%'].includes(op)) throw invalid('routine: unsupported math operator')
-        return [op, operand(left), operand(right)]
-      }),
+    if (program.v !== 1) throw invalid('routine: unsupported routine version')
+    if (!Array.isArray(program.code)) throw invalid('routine: expected an instruction list')
+    const names = Array.isArray(program.captures) ? program.captures : []
+    const given = captures === undefined ? [] : captures
+    if (!Array.isArray(given)) throw invalid('routine: expected an array of captured values')
+    if (given.length !== names.length) throw invalid('routine: the captured values do not match the routine')
+
+    const flat = []
+    const layout = given.map((value, index) => flattenCapture(value, flat, `capture '${names[index]}'`))
+    const definition = {
+      v: 1,
+      slots: program.slots === undefined ? 0 : program.slots,
+      code: program.code,
+      tries: program.tries === undefined ? [] : program.tries,
+      layout,
     }
-    if (hookMode) {
-      Object.assign(builder, {
-        getThisObject: () => node('hookThis', () => []),
-        getMethod: () => node('hookMethod', () => []),
-        getArgument: index => node('hookArgument', () => [operand(index)]),
-        setArgument: (index, value) => node('hookSetArgument', () => [operand(index), operand(value)]),
-        getReturnValue: () => node('hookResult', () => []),
-        getThrowable: () => node('hookThrowable', () => []),
-        setReturnValue: value => node('hookSetResult', () => [operand(value)]),
-        setThrowable: value => node('hookSetThrowable', () => [operand(value)]),
-      })
-    }
-    Object.freeze(builder)
-    try {
-      const roots = build(builder)
-      if (!Array.isArray(roots)) throw invalid('routine: builder must return an operation array')
-      return natives.op(hookMode ? ops.xposedRoutine : ops.routine, 0, JSON.stringify({ nodes, roots: roots.map(ref) }), values)
-    } finally {
-      open = false
-    }
+    return natives.op(hookMode ? ops.xposedRoutine : ops.routine, 0, JSON.stringify(definition), flat)
   }
 
   const jvm = Object.freeze({
@@ -177,7 +149,7 @@
       return natives.runnable(callback)
     },
 
-    routine: build => buildRoutine(build),
+    routine: (program, captures) => buildRoutine(program, captures),
 
     loadDex(source) {
       natives.loadDex(source)
@@ -276,6 +248,6 @@
     jvm,
     mintClass,
     protos: { object: objectProto, method: methodProto, constructor: constructorProto, field: fieldProto },
-    xposedRoutine: build => buildRoutine(build, true),
+    xposedRoutine: (program, captures) => buildRoutine(program, captures, true),
   }
 }

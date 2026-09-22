@@ -182,6 +182,41 @@ Rust and Kotlin; do not add a schema/code-generation layer for them.
   Keep native conversion rules aligned with `PluginJvm.convert` for routines,
   defined classes, and Xposed answers. `new` matches arguments; use
   `getDeclaredConstructor` to select a specific overload.
+- A routine is bytecode, not a builder: `@inugram/cli` compiles the body, and
+  `PluginJvmRoutine` verifies and runs it. Instruction `i` writes register `i`,
+  operands name registers below `i`, and `loop` is the only backward jump, so a
+  program without one runs each instruction at most once and pays nothing for the
+  clock. Safety is the verifier's, never the compiler's. Keep the instruction
+  vocabulary in `sdk/cli/src/routines/ops.ts` and `PluginJvmRoutine` in step, and
+  keep `private/routines-spec.md` the description of both. Captures cross one wire
+  each, arrays flattened under a `layout` the host rebuilds them from.
+  `sdk/cli/test/verifier.ts` mirrors the host verifier and `routines.test.ts` compiles
+  a battery of bodies against it. `routines-runtime.test.ts` pins compiler-generated
+  `src/test/assets/routines.json`; `PluginJvmRoutineTest` executes those programs on
+  device and checks results and side-effect order. Update that fixture with
+  `pnpm --filter @inugram/cli test --update` after reviewing compiler changes.
+- A receiver and an argument each cost a bridge check, so the compiler reads them
+  where the body first reads them, not in a prologue: a filter that turns a call
+  away never pays for what it does not reach. Input validation can throw: never
+  hoist it across guards, loops, or exception regions. `src/routines/flow.ts` reuses
+  only reads already completed on every incoming path; hook argument reads stay
+  live across writes. It also checks all register reads, because the host cannot:
+  a skipped register reads as `null` rather than being refused, so a lowering bug
+  of that shape is silent. It runs over every program the compiler emits.
+  `src/routines/captures.ts` is the other check the compiler cannot make from one body:
+  what a capture resolves to is in the file around it, so the esbuild hook refuses a
+  global, a function or class declaration, and a binding something assigns again, whose
+  value is taken once and would otherwise run stale. It decides whether a file builds,
+  never what the bytecode is, so `inu verify` does not repeat it.
+  Temporaries for `&&`, `?:` and `?.` are pooled; slots bound what a run allocates,
+  not how many expressions a body may hold. `PluginJvmRoutineBenchTest` measures
+  execution, load and that placement, and `PluginJvmRoutineProfileTest` prices each
+  instruction on its own by compiling one copy and sixty-five, so a change here is
+  measured, not guessed at.
+- The interpreter takes a fast path where the general one would spend thirty type
+  checks to reach the same answer: two `Int`s comparing, two `Int`s in arithmetic,
+  an `Int` index. Each must be provably the answer the general path gives, not a
+  cheaper approximation of it, and the general path stays for everything else.
 - `unsafe.jvm`/`unsafe.xposed` are unscoped. Preserve engine-package guards and
   the primitive-box-class hook refusal. Busy/reentrant Xposed phases bypass.
   Share physical hooks across sessions; remove only the last registration.
@@ -195,7 +230,7 @@ Rust and Kotlin; do not add a schema/code-generation layer for them.
   original; `=` keeps an argument the hook left alone, with its identity and boxed
   type, and a null answer keeps the outcome, so a hook that changes nothing allocates
   nothing on either side. A JS hook may carry a `filter`: an `inu.jvm.routine` the host
-  runs on the hooked thread, reading the call through the method ops, whose falsy verdict
+  runs on the hooked thread, reading the call through its parameters, whose falsy verdict
   skips that hook's phases without entering the engine. It gates one site, which is one
   registration; a filter that fails answers yes, and a native hook takes none.
 
@@ -282,6 +317,16 @@ and no source map, because nothing consumes one. Keep the cli's grant check a
 mirror of `GrantValidator`, message for message. `scripts/push-plugin.ts` shares
 the cli's `Device`, so the dev-broadcast protocol has one implementation.
 
+`src/routines` compiles every `inu.*.routine(function () {})` in an `onLoad` hook,
+parsing with `oxc-parser` and replacing the call where it stands. The compiled call
+records the body's source next to its bytecode, and `inu verify` recompiles that
+source and compares, so the readable half of a published plugin is checkable
+offline. That only holds while the compiler stays a pure function of the AST: no
+clock, no filesystem, no ordering that depends on anything but the parse.
+Source formatting adds a reversible uniform margin; verification dedents it without
+trimming original literal whitespace. Capture names describe the source and errors;
+the verifier checks positional count, not esbuild-renamed JS bindings.
+
 The cli itself is built by `@fuman/build` through `sdk/cli/vite.config.ts`: its
 `exports`/`bin` point at `src/*.ts` and the published `package.json` is generated
 into `dist`, so nothing in the tree carries a release version and the sources are
@@ -312,6 +357,7 @@ Run checks relevant to the change; no build for documentation-only edits.
 | JVM core | `cd worktree && ./gradlew :InuCore:test` |
 | Device tests, user-run | `cd worktree && ./gradlew :TMessagesProj:connectedDebugAndroidTest` |
 | Plugin SDK | `pnpm run typecheck-sdk` / `pnpm run build-sdk` |
+| Routine compiler | `pnpm run test-sdk` |
 
 - Rust tests live in adjacent `*_tests.rs`, included with `#[path]`; no inline modules.
 - `build.rs` compiles JS preludes to little-endian bytecode using the exact bundled

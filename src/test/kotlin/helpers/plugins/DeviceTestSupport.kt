@@ -624,3 +624,25 @@ fun detachPlugin(plugin: Plugin) {
     PluginUpdates.detach(plugin.session!!)
     plugin.session!!.tl.releaseAll()
 }
+
+/**
+ * A routine host that answers every java operation at once. The benchmarks measure the interpreter,
+ * so the bridge behind it has to be a constant, not reflection.
+ */
+internal open class ConstantRoutineHost(session: PluginSession) : PluginJvm.Session(session, testAppScreen) {
+    override fun getMember(target: Any, name: String): Any? = 1
+
+    override fun setMember(target: Any, name: String, value: Any?): Any? = 1
+
+    override fun callMember(target: Any, name: String, args: List<Any?>): Any? = 1
+
+    override fun newInstanceOf(target: Any, args: List<Any?>): Any? = 1
+
+    override fun getElement(target: Any, index: Int): Any? = 1
+
+    override fun setElement(target: Any, index: Int, value: Any?): Any? = 1
+
+    override fun getArrayLength(target: Any): Any? = 1
+
+    override fun iterate(target: Any): Iterator<*> = (target as List<*>).iterator()
+}

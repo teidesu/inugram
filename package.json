@@ -20,7 +20,8 @@
     "prepare": "husky",
     "generate-grants": "tsx scripts/generate-grants.ts",
     "build-sdk": "pnpm --filter @inugram/cli run build",
-    "typecheck-sdk": "tsc -p sdk/cli --noEmit && tsc -p sdk/cli/src/templates/default --noEmit"
+    "typecheck-sdk": "tsc -p sdk/cli --noEmit && tsc -p sdk/cli/src/templates/default --noEmit",
+    "test-sdk": "pnpm --filter @inugram/cli run test"
   },
   "dependencies": {
     "@antfu/eslint-config": "^8.1.0",

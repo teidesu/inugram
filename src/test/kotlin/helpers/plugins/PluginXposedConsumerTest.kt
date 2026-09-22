@@ -33,8 +33,8 @@ class PluginXposedConsumerTest {
 
     @Test fun consumers_edit_arguments_and_replace_the_original_result_without_js() {
         val plugin = startPlugin("consumer", "unsafe.jvm", "unsafe.xposed")
-        val before = createConsumer(plugin, """{"nodes":[["hookArgument",[0,0]],["math","+",[1,0],[0,1]],["hookSetArgument",[0,0],[1,1]]],"roots":[2]}""", "I0", "I9")
-        val after = createConsumer(plugin, """{"nodes":[["hookResult"],["math","+",[1,0],[0,0]],["hookSetResult",[1,1]]],"roots":[2]}""", "I1")
+        val before = createConsumer(plugin, """{"v":1,"slots":0,"tries":[],"code":[["capture",0],["capture",1],["arg",0],["add",2,1],["setArg",0,3]]}""", "I0", "I9")
+        val after = createConsumer(plugin, """{"v":1,"slots":0,"tries":[],"code":[["capture",0],["result"],["add",1,0],["setResult",2]]}""", "I1")
         val method = JvmFixture::class.java.getDeclaredMethod("sum", Int::class.java, Int::class.java)
         install(plugin, method, before, after)
         assertEquals(13, method.invoke(null, 1, 2))
@@ -47,11 +47,11 @@ class PluginXposedConsumerTest {
     @Test fun a_before_consumer_can_return_null_and_an_after_consumer_can_recover_an_exception() {
         val plugin = startPlugin("nullable-consumer", "unsafe.jvm", "unsafe.xposed")
         val fixture = JvmFixture()
-        val nullResult = createConsumer(plugin, """{"nodes":[["hookSetResult",[0,0]]],"roots":[0]}""", "N")
+        val nullResult = createConsumer(plugin, """{"v":1,"slots":0,"tries":[],"code":[["capture",0],["setResult",0]]}""", "N")
         val echo = JvmFixture::class.java.getDeclaredMethod("echo", String::class.java)
         install(plugin, echo, before = nullResult)
         assertEquals(null, echo.invoke(fixture, "text"))
-        val recover = createConsumer(plugin, """{"nodes":[["hookThrowable"],["hookSetResult",[0,0]],["when",[1,0],[1],[]]],"roots":[2]}""", "Srecovered")
+        val recover = createConsumer(plugin, """{"v":1,"slots":0,"tries":[],"code":[["capture",0],["throwable"],["jumpIfFalsy",1,3],["setResult",0]]}""", "Srecovered")
         val boom = JvmFixture::class.java.getDeclaredMethod("boom")
         install(plugin, boom, after = recover)
         assertEquals("recovered", boom.invoke(fixture))
@@ -60,7 +60,7 @@ class PluginXposedConsumerTest {
     /** an argument the bridge will not carry stops the consumer, so the original answers untouched */
     @Test fun argument_reads_the_bridge_refuses_stop_the_consumer() {
         val plugin = startPlugin("consumer", "unsafe.jvm", "unsafe.xposed")
-        val before = createConsumer(plugin, """{"nodes":[["hookArgument",[0,0]],["hookSetResult",[0,1]]],"roots":[0,1]}""", "I0", "Sblocked")
+        val before = createConsumer(plugin, """{"v":1,"slots":0,"tries":[],"code":[["capture",0],["capture",1],["arg",0],["setResult",1]]}""", "I0", "Sblocked")
         val method = JvmFixture::class.java.getDeclaredMethod("boxed", Any::class.java)
         install(plugin, method, before = before)
         val oversized = "x".repeat(PluginJvm.VALUE_LIMIT_BYTES + 1)
@@ -71,8 +71,8 @@ class PluginXposedConsumerTest {
         val plugin = startPlugin("throwing-consumer", "unsafe.jvm", "unsafe.xposed")
         val exception = IllegalStateException("blocked")
         val wire = "G" + PluginJvm.bridgeFor(plugin.js)!!.encode(exception).substring(2)
-        val before = createConsumer(plugin, """{"nodes":[["hookSetThrowable",[0,0]]],"roots":[0]}""", wire)
-        val after = createConsumer(plugin, """{"nodes":[["hookThrowable"],["hookSetResult",[0,0]],["when",[1,0],[1],[]]],"roots":[2]}""", "I7")
+        val before = createConsumer(plugin, """{"v":1,"slots":0,"tries":[],"code":[["capture",0],["setThrowable",0]]}""", wire)
+        val after = createConsumer(plugin, """{"v":1,"slots":0,"tries":[],"code":[["capture",0],["throwable"],["jumpIfFalsy",1,3],["setResult",0]]}""", "I7")
         val method = JvmFixture::class.java.getDeclaredMethod("sum", Int::class.java, Int::class.java)
         install(plugin, method, before, after)
         assertEquals(7, method.invoke(null, 1, 2))

@@ -187,7 +187,7 @@ class PluginJvmTest {
                   const direct = methods.map((m) => describe(() => o.call(m, $value)))
                   const routed = methods.map((m) => describe(() => {
                     o.setField('payload', 'unset')
-                    o.call('runNow', inu.jvm.routine((ops) => [ops.setField(o, 'payload', ops.call(o, m, $value))]))
+                    o.call('runNow', inu.jvm.routine({ v: 1, source: '', captures: ['o', 'm', 'value'], slots: 0, tries: [], code: [['capture', 0], ['capture', 1], ['capture', 2], ['call', 0, 1, [2]], ['set', 0, ['payload'], 3]] }, [o, m, $value]))
                     return o.getField('payload')
                   }))
                   return JSON.stringify([direct, routed])

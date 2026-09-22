@@ -27,24 +27,33 @@ declare namespace inu {
       readonly setThrowable: (throwable: JavaObject) => void
     }
 
-    interface RoutineOps extends JvmRoutineOps {
-      getThisObject(): JvmRoutineValue
-      getMethod(): JvmRoutineValue
-      getArgument(index: number | JvmRoutineValue): JvmRoutineValue
-      setArgument(index: number | JvmRoutineValue, value: JvmRoutineOperand): JvmRoutineValue
-      getReturnValue(): JvmRoutineValue
-      getThrowable(): JvmRoutineValue
-      setReturnValue(value: JvmRoutineOperand): JvmRoutineValue
-      setThrowable(value: JavaObject | JvmRoutineValue): JvmRoutineValue
+    /**
+     * Like `MethodHookContext`, but used inside the routines.
+     *
+     * Every field is `any` because all the values are Java objects, and we do not currently
+     * have a way to meaningfully type them.
+     */
+    interface RoutineContext {
+      readonly args: any[]
+      readonly thisObject: any
+      readonly method: any
+      readonly returnValue: any
+      readonly throwable: any
+      setReturnValue: (value: any) => void
+      setThrowable: (value: any) => void
     }
 
     /**
-     * Build a Java Consumer<PluginHookContext> that runs on the hooked thread without JS callbacks.
-     * Includes JVM routine ops plus access to arguments, results and throwables.
-     * Setting a result/throwable in before skips the original; after hooks still run.
-     * Locals reset per phase. JVM routine limits and grant checks apply.
+     * A Java Consumer<PluginHookContext> that runs on the hooked thread without JS callbacks.
+     * The body is the same compiled subset as `inu.jvm.routine`, reading the call through its
+     * parameter instead of through `this` and its own arguments; `return` takes no value here,
+     * since a hook answers through `setReturnValue`. An arrow works too, and nothing here reads
+     * `this` anyway, so it means what a function expression means.
+     *
+     * Setting a result or a throwable in a before phase skips the original; after hooks still run.
+     * The same limits and grant checks apply.
      */
-    function routine(build: (ops: RoutineOps) => JvmRoutineValue[]): JavaObject
+    function routine(body: (ctx: RoutineContext) => void): JavaObject
 
     /**
      * JS phases run on the hooked thread. Busy/reentrant engine entry bypasses the phase.

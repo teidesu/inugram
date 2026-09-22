@@ -476,9 +476,10 @@ pub fn install_xposed<'js>(
     let state = state.clone();
     xposed.set(
       "routine",
-      Function::new(ctx.clone(), move |ctx: Ctx<'js>, builder: Value<'js>| {
+      Function::new(ctx.clone(), move |ctx: Ctx<'js>, program: Value<'js>, captures: Opt<Value<'js>>| {
         state.grants.check_grant(&ctx, GRANT, None, MATCH_NAMESPACE)?;
-        state.jvm.build_xposed_routine(&ctx, builder)
+        let captures = captures.0.unwrap_or_else(|| Value::new_undefined(ctx.clone()));
+        state.jvm.build_xposed_routine(&ctx, program, captures)
       })?,
     )?;
   }

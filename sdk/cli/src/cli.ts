@@ -6,6 +6,7 @@ import { devCmd } from './commands/dev.js'
 import { initCmd } from './commands/init.js'
 import { listCmd } from './commands/list.js'
 import { removeCmd } from './commands/remove.js'
+import { verifyCmd } from './commands/verify.js'
 import { version } from './meta.js'
 import { defineCommand } from './utils/args.js'
 
@@ -22,6 +23,7 @@ const main = defineCommand({
     dev: devCmd,
     list: listCmd,
     remove: removeCmd,
+    verify: verifyCmd,
   },
 })
 
