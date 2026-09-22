@@ -273,7 +273,7 @@ pub(crate) fn manifest_header(source: &str) -> Vec<(String, String)> {
 /// across them. `fail_*` holds a verbatim error wire to answer with.
 #[derive(Default)]
 pub(crate) struct RecordingHost {
-  pub(crate) kv_file: TempPath,
+  pub(crate) storage_file: TempPath,
   pub(crate) toasts: RefCell<Vec<String>>,
   pub(crate) bulletins: RefCell<Vec<(i64, String)>>,
   pub(crate) dialogs: RefCell<Vec<(i64, String)>>,
@@ -361,7 +361,7 @@ impl Drop for TempPath {
   fn drop(&mut self) {
     let _ = std::fs::remove_file(&self.0);
     let _ = std::fs::remove_dir_all(&self.0);
-    let _ = std::fs::remove_file(crate::api::io::kv::staged_path(&self.0));
+    let _ = std::fs::remove_file(crate::api::io::local_storage::staged_path(&self.0));
   }
 }
 
@@ -375,7 +375,7 @@ pub(crate) fn setup_apis(grants: &[&str]) -> ApiFixture {
     let inu = get_api_globals(&ctx);
     let lifecycle =
       crate::api::lifecycle::install_lifecycle(&ctx, grants.clone(), Lifecycle::new(), log.clone(), &inu).unwrap();
-    crate::api::io::kv::install_kv(&ctx, host.kv_file.0.clone(), grants.clone(), &inu).unwrap();
+    crate::api::io::local_storage::install_local_storage(&ctx, host.storage_file.0.clone()).unwrap();
     crate::api::platform::clipboard::install_clipboard(&ctx, host.clone(), grants.clone(), &inu).unwrap();
     crate::api::platform::open_url::install_open_url(&ctx, host.clone(), grants.clone(), &inu).unwrap();
     let dialogs = crate::api::ui::dialogs::install_dialogs(&ctx, host.clone(), None, log.clone(), &inu).unwrap();

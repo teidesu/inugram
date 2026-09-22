@@ -2,7 +2,7 @@ package desu.inugram.helpers.plugins
 
 import java.util.concurrent.CopyOnWriteArrayList
 import java.util.concurrent.atomic.AtomicReference
-import desu.inugram.helpers.plugins.api.PluginKv
+import desu.inugram.helpers.plugins.api.PluginLocalStorage
 import desu.inugram.helpers.plugins.platform.PluginJvm
 import desu.inugram.helpers.plugins.platform.PluginXposed
 import desu.inugram.jvmfixture.JvmFixture
@@ -96,7 +96,7 @@ class PluginCallerThreadTest {
      * own, or hands it to the dispatcher that posts to globalQueue. Everything else still refuses.
      */
     @Test fun the_calls_a_caller_thread_may_make_answer_on_it() {
-        val plugin = startPlugin("caller-ui", "unsafe.jvm", "kv")
+        val plugin = startPlugin("caller-ui", "unsafe.jvm")
         val engine = QuickJs()
         plugin.session = PluginSession(plugin, engine)
         val logs = CopyOnWriteArrayList<String>()
@@ -114,17 +114,17 @@ class PluginCallerThreadTest {
                     toasts.add("$text@${Thread.currentThread().name}")
                 }
             },
-            kvPath = PluginKv.pathFor(plugin.id),
+            localStoragePath = PluginLocalStorage.pathFor(plugin.id),
         )
         logs.clear()
         try {
-            // `kv` is engine state reached under the caller's lease; `toast` is a void host call
+            // `localStorage` is engine state reached under the caller's lease; `toast` is a void host call
             engine.evaluate("""
                 const fixture = inu.jvm.cls('desu.inugram.jvmfixture.JvmFixture');
                 fixture.setStaticField('task', inu.jvm.runnable(() => {
                     inu.ui.toast('shown');
-                    inu.kv.set('caller', 'written');
-                    fixture.setStaticField('tag', inu.kv.get('caller') ?? 'missing');
+                    localStorage.setItem('caller', 'written');
+                    fixture.setStaticField('tag', localStorage.getItem('caller') ?? 'missing');
                 }));
             """.trimIndent())
             runOnCaller("ui-caller")
@@ -153,7 +153,7 @@ class PluginCallerThreadTest {
             engine.stopCallbacks()
             PluginJvm.detach(plugin.session!!)
             engine.close()
-            PluginKv.wipe(plugin.id)
+            PluginLocalStorage.wipe(plugin.id)
             JvmFixture.task = null
             plugin.session = null
         }

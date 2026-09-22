@@ -11,7 +11,6 @@ export default defineConfig({
         version: '1.0.0',
         description: 'a starting point',
         icon: 'inu://bot',
-        grants: ['kv'],
       },
     },
   },

@@ -26,7 +26,7 @@ use crate::api::info::{install_inu, InuInfo};
 use crate::api::io::blob::BlobState;
 use crate::api::io::fetch::{install_fetch, FetchHost};
 use crate::api::io::fs::install_fs;
-use crate::api::io::kv::install_kv;
+use crate::api::io::local_storage::install_local_storage;
 use crate::api::lifecycle::{install_lifecycle, AppMode};
 use crate::api::platform::clipboard::install_clipboard;
 use crate::api::platform::jvm::{self, install_jvm};
@@ -64,7 +64,7 @@ pub extern "system" fn Java_desu_inugram_helpers_plugins_QuickJs_nativeCreate(
   fs_unscoped: jboolean,
   install_fs: jboolean,
   android_dirs: JString,
-  kv_path: JString,
+  local_storage_path: JString,
   install_jvm: jboolean,
   install_xposed: jboolean,
   grant_tokens: JObjectArray<JString>,
@@ -97,7 +97,7 @@ pub extern "system" fn Java_desu_inugram_helpers_plugins_QuickJs_nativeCreate(
     let transfer_dir = PathBuf::from(jstring_to_string(env, &transfer_dir));
     let fs_dir = PathBuf::from(jstring_to_string(env, &fs_dir));
     let android_dirs = jstring_to_string(env, &android_dirs);
-    let kv_path = PathBuf::from(jstring_to_string(env, &kv_path));
+    let local_storage_path = PathBuf::from(jstring_to_string(env, &local_storage_path));
     let install_fs_enabled = install_fs;
     let install_jvm_enabled = install_jvm;
     let install_xposed_enabled = install_xposed;
@@ -123,9 +123,8 @@ pub extern "system" fn Java_desu_inugram_helpers_plugins_QuickJs_nativeCreate(
         let globals = Globals::get(&ctx)?;
         install_lifecycle(&ctx, grants.clone(), lifecycle.clone(), log.clone(), &globals)
       })?;
-      let dialogs = install_part(&ctx, "inu.kv/inu.ui", log.as_ref(), |ctx| {
+      let dialogs = install_part(&ctx, "inu.ui", log.as_ref(), |ctx| {
         let globals = Globals::get(&ctx)?;
-        install_kv(&ctx, kv_path.clone(), grants.clone(), &globals)?;
         install_clipboard(&ctx, bridge.clone(), grants.clone(), &globals)?;
         install_open_url(&ctx, bridge.clone(), grants.clone(), &globals)?;
         install_dialogs(&ctx, bridge.clone(), jvm.clone(), log.clone(), &globals)
@@ -190,6 +189,7 @@ pub extern "system" fn Java_desu_inugram_helpers_plugins_QuickJs_nativeCreate(
       let blobs = install_part(&ctx, "sandbox globals", log.as_ref(), |ctx| {
         install_globals(&ctx, random_host, &spill_dir, external.clone())
       })?;
+      install_part(&ctx, "localStorage", log.as_ref(), |ctx| install_local_storage(&ctx, local_storage_path.clone()))?;
       let canvas_host: Rc<dyn CanvasHost> = bridge.clone();
       let canvas = install_part(&ctx, "inu.canvas", log.as_ref(), |ctx| {
         let globals = Globals::get(&ctx)?;

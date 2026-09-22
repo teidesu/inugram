@@ -165,31 +165,6 @@ declare namespace inu {
     callback: (mode: 'foreground' | 'resumed' | 'paused' | 'background') => void,
   ): Disposer
 
-  /**
-   * A simple key-value storage, semantically similar to `localStorage`
-   * **Limits: 1 MB per plugin.**
-   */
-  namespace kv {
-    /** @needs-grant kv */
-    function get(key: string): string | null
-    /** @needs-grant kv */
-    function has(key: string): boolean
-    /** @needs-grant kv */
-    function set(key: string, value: string): void
-    /** @needs-grant kv */
-    function del(key: string): void
-    /** @needs-grant kv */
-    function keys(): string[]
-    /** @needs-grant kv */
-    function clear(): void
-    /** @needs-grant kv */
-    function getAll(): Record<string, string>
-    /** @needs-grant kv */
-    function insertAll(values: Record<string, string>): void
-    /** @needs-grant kv */
-    function usage(): number
-  }
-
   /** Access to the system clipboard */
   namespace clipboard {
     /**

@@ -48,15 +48,6 @@ object GrantCatalog {
 
     private val ENTRIES: List<Entry> = listOf(
         Entry(
-            name = "kv",
-            scopes = ScopeKind.NONE,
-            values = emptySet(),
-            extraValues = emptySet(),
-            refusesTakeover = false,
-            tier = GrantTier.NEUTRAL,
-            tierWhenUnscoped = null,
-        ),
-        Entry(
             name = "fs",
             scopes = ScopeKind.FS_SIZE,
             values = emptySet(),

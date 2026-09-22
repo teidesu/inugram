@@ -1449,7 +1449,7 @@ mod grant_boundary {
   use crate::api::ui::dialogs::DialogHost;
   use crate::sandbox::registry::Lifecycle;
 
-  /// answers nothing and records nothing: the plugin under test holds `kv` alone, so every
+  /// answers nothing and records nothing: the plugin under test holds no grant, so every
   /// other member has to be refused before it could reach any of this
   #[derive(Default)]
   struct TestBoundaryHost {
@@ -1565,13 +1565,13 @@ mod grant_boundary {
 
     // the order `nativeInstallApi`/`nativeInstallRpc` install in, which is what makes the
     // `Account` prototype and the demuxed events exist
-    let kv_file = crate::testing::harness::TempPath::default();
+    let storage_file = crate::testing::harness::TempPath::default();
     let (reads_state, accounts, rpc_state) = ctx.with(|ctx| {
       let inu = crate::testing::harness::get_api_globals(&ctx);
       install_plugin_error(&ctx).unwrap();
       crate::api::lifecycle::install_lifecycle(&ctx, grants.clone(), lifecycle.clone(), log.clone(), &inu).unwrap();
       let inu = crate::testing::harness::get_api_globals(&ctx);
-      crate::api::io::kv::install_kv(&ctx, kv_file.0.clone(), grants.clone(), &inu).unwrap();
+      crate::api::io::local_storage::install_local_storage(&ctx, storage_file.0.clone()).unwrap();
       let clipboard_host: Rc<dyn ClipboardHost> = boundary.clone();
       crate::api::platform::clipboard::install_clipboard(&ctx, clipboard_host, grants.clone(), &inu).unwrap();
       let open_url_host: Rc<dyn OpenUrlHost> = boundary.clone();

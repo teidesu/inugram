@@ -779,7 +779,6 @@
     <string name="InuPluginsByAuthor">by %1$s</string>
     <string name="InuPluginsPermissions">Permissions</string>
     <string name="InuPluginsPermissionsNone">This plugin doesn\'t request any permissions</string>
-    <string name="InuPluginGrantKv">Local storage</string>
     <string name="InuPluginGrantFs">File storage</string>
     <string name="InuPluginGrantClipboardWrite">Write to clipboard</string>
     <string name="InuPluginGrantOpenUrl">Open links</string>

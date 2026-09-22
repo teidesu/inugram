@@ -117,7 +117,7 @@ fn arm(ctx: &Context) {
 
 #[test]
 fn the_delegate_is_refused_without_the_grant_and_nothing_reaches_the_host() {
-  let (_rt, ctx, host, _state, _logs, _jvm) = setup(&["kv"]);
+  let (_rt, ctx, host, _state, _logs, _jvm) = setup(&["openUrl"]);
   assert_eq!(
     catch_json(&ctx, "inu.android.addNotificationCenterDelegate({ closeChats: () => {} })"),
     r#"[true,"not-granted","unsafe.notificationCenter","missing grant: unsafe.notificationCenter"]"#,

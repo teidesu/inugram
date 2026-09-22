@@ -4,7 +4,7 @@
 // @version      1.0
 // @description  asserts inu.info() describes the app it runs in and hands back a fresh object
 // @description:ru-RU  проверяет inu.info()
-// @grant        kv
+// @grant        openUrl
 // @grant        onAppVisibilityChange
 // @plugin-api   1
 // @platform     android

@@ -462,7 +462,7 @@ fn a_nonsense_delay_is_taken_as_zero_and_a_huge_one_is_clamped() {
   assert_eq!(clamp_delay(Some(f64::NAN)), 0);
 }
 
-/// Runs the bundled timers oracle with a timer wheel, `inu.kv`, `inu.onUnload`, and a host that
+/// Runs the bundled timers oracle with a timer wheel, `localStorage`, `inu.onUnload`, and a host that
 /// serves wakes. Uses a separate fixture because it needs all three. The clock must be real: the
 /// oracle measures elapsed time with `performance.now()`.
 #[cfg(test)]
@@ -502,7 +502,7 @@ mod bundled_oracle {
     let lifecycle = Lifecycle::new();
     let wakes = Rc::new(WakeHost::default());
     let wakes_dyn: Rc<dyn TimerHost> = wakes.clone();
-    let kv_file = crate::testing::harness::TempPath::default();
+    let storage_file = crate::testing::harness::TempPath::default();
     let grants = TestGrantHost::new(&crate::testing::harness::manifest_grants(ORACLE)).as_host();
     let log: crate::Log = std::sync::Arc::new(|_| {});
 
@@ -511,8 +511,7 @@ mod bundled_oracle {
       crate::api::error::install_plugin_error(&ctx).unwrap();
       let api =
         crate::api::lifecycle::install_lifecycle(&ctx, grants.clone(), lifecycle.clone(), log.clone(), &inu).unwrap();
-      let inu = crate::testing::harness::get_api_globals(&ctx);
-      crate::api::io::kv::install_kv(&ctx, kv_file.0.clone(), grants, &inu).unwrap();
+      crate::api::io::local_storage::install_local_storage(&ctx, storage_file.0.clone()).unwrap();
       let timers = install_timers(&ctx, wakes_dyn, lifecycle.clone(), log.clone()).unwrap();
       (api, timers)
     });
@@ -615,7 +614,6 @@ mod bundled_oracle {
     let lifecycle = Lifecycle::new();
     let wakes = Rc::new(SteppedWakeHost::default());
     let wakes_dyn: Rc<dyn TimerHost> = wakes.clone();
-    let kv_file = crate::testing::harness::TempPath::default();
     let grants = TestGrantHost::new(&crate::testing::harness::manifest_grants(VISIBILITY_ORACLE)).as_host();
     let log: crate::Log = std::sync::Arc::new(|_| {});
 
@@ -624,8 +622,6 @@ mod bundled_oracle {
       crate::api::error::install_plugin_error(&ctx).unwrap();
       let api =
         crate::api::lifecycle::install_lifecycle(&ctx, grants.clone(), lifecycle.clone(), log.clone(), &inu).unwrap();
-      let inu = crate::testing::harness::get_api_globals(&ctx);
-      crate::api::io::kv::install_kv(&ctx, kv_file.0.clone(), grants, &inu).unwrap();
       let timers = install_timers(&ctx, wakes_dyn, lifecycle.clone(), log.clone()).unwrap();
       (api, timers)
     });

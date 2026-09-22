@@ -3,7 +3,6 @@
 // @author       teidesu
 // @version      1.0
 // @description  asserts every ungranted api rejects with a typed inu.PluginError
-// @grant        kv
 // @plugin-api   1
 // @platform     android
 // ==/InuPlugin==
@@ -37,10 +36,10 @@ async function expectDenied(label, expected, fn) {
 }
 
 ;(async () => {
-  inu.kv.set('granted', 'yes')
-  const readBack = inu.kv.get('granted')
-  if (readBack === 'yes') console.log('PASS kv is granted')
-  else console.error(`FAIL kv is granted: read back ${readBack}`)
+  localStorage.setItem('ungranted', 'yes')
+  const readBack = localStorage.getItem('ungranted')
+  if (readBack === 'yes') console.log('PASS localStorage needs no grant')
+  else console.error(`FAIL localStorage needs no grant: read back ${readBack}`)
 
   await expectDenied(
     'interceptRpc',

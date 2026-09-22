@@ -11,7 +11,7 @@ import org.junit.Test
 class PluginPermissionsTest {
     @Test
     fun parsesUnscopedGrant() {
-        assertEquals(Grant("kv", emptyList()), PluginPermissions.parseGrant("kv"))
+        assertEquals(Grant("openUrl", emptyList()), PluginPermissions.parseGrant("openUrl"))
     }
 
     @Test
@@ -49,7 +49,7 @@ class PluginPermissionsTest {
 
     @Test
     fun wellFormedTokensAreNotMalformed() {
-        assertFalse(PluginPermissions.isMalformed("kv"))
+        assertFalse(PluginPermissions.isMalformed("openUrl"))
         assertFalse(PluginPermissions.isMalformed("fetch(a.com,b.com)"))
         assertFalse(PluginPermissions.isMalformed("   "))
     }
@@ -73,11 +73,11 @@ class PluginPermissionsTest {
 
     @Test
     fun hasReflectsAnyGrant() {
-        val p = PluginPermissions.parse(listOf("kv", "fetch(google.com)"))
-        assertTrue(p.has("kv"))
+        val p = PluginPermissions.parse(listOf("openUrl", "fetch(google.com)"))
+        assertTrue(p.has("openUrl"))
         assertTrue(p.has("fetch"))
         assertFalse(p.has("clipboard.read"))
-        assertEquals(setOf("kv", "fetch"), p.grantedApis)
+        assertEquals(setOf("openUrl", "fetch"), p.grantedApis)
     }
 
     @Test
@@ -97,7 +97,7 @@ class PluginPermissionsTest {
 
     @Test
     fun ungrantedApiIsNeverAllowed() {
-        val p = PluginPermissions.parse(listOf("kv"))
+        val p = PluginPermissions.parse(listOf("openUrl"))
         assertFalse(p.allows("interceptRpc", "users.getUsers", ScopeMatch.EXACT))
     }
 
@@ -136,8 +136,8 @@ class PluginPermissionsTest {
 
     @Test
     fun theEngineIsHandedOnePairPerScopeAndAnEmptyScopeForAnUnscopedGrant() {
-        val permissions = PluginPermissions.parse(listOf("kv", "fetch( a.com , b.com )", "fetch(evil.com", "x()"))
-        assertEquals(listOf("kv", "", "fetch", "a.com", "fetch", "b.com"), permissions.toPairs())
+        val permissions = PluginPermissions.parse(listOf("openUrl", "fetch( a.com , b.com )", "fetch(evil.com", "x()"))
+        assertEquals(listOf("openUrl", "", "fetch", "a.com", "fetch", "b.com"), permissions.toPairs())
     }
 
     /** the same table rust's `grants_tests` reads, so the two matchers cannot drift apart silently */

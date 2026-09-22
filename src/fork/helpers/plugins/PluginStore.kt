@@ -17,7 +17,7 @@ import org.json.JSONObject
  * handles file loading and persistence.
  *
  * [PluginInstalls.mintId] creates an install ID independently of the filename or manifest.
- * It keys `kv` and `fs` storage, preserving data across renames and preventing another plugin
+ * It keys `localStorage` and `fs` storage, preserving data across renames and preventing another plugin
  * from claiming it by name. Preserve records when reads fail; discarding them loses access
  * to the user's data.
  */
@@ -35,7 +35,7 @@ object PluginStore {
      */
     fun load(): List<Plugin> {
         // null is "could not list", which is not "there are no plugins": reconciling against an empty
-        // set drops every record, and [persist] would then write that back, losing the ids the kv
+        // set drops every record, and [persist] would then write that back, losing the ids the plugin
         // stores are keyed on. leave the persisted state alone and run no plugins this boot
         val files = dir.listFiles { f -> f.isFile && f.name.endsWith(".js") }
         if (files == null) {
@@ -88,7 +88,7 @@ object PluginStore {
 
     /**
      * Finds a record that failed to load this boot but whose file claims [pluginId].
-     * Re-importing a fixed file must reuse its install ID to recover its `kv`/`fs` storage.
+     * Re-importing a fixed file must reuse its install ID to recover its `localStorage`/`fs` storage.
      * Keep the record unloaded until the caller completes the import and calls [dropUnloaded],
      * so a failed import does not lose it.
      */

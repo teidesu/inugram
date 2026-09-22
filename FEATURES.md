@@ -251,6 +251,7 @@ most things are toggleable in `Settings → Inugram`, with sensible opinionated 
 - Plugin JVM Runnables and Xposed JS hooks execute on the calling thread with serialized engine access; promise jobs stay on the engine queue and hosts manage their own queueing. Busy Runnables skip safely and off-thread canvas cleanup is queued.
 
 - InuPlugin-style js plugins running on a rust engine (rquickjs/quickjs-ng) — exposes `console.*` (arguments printed `util.inspect`-style, TL views as their type and fields), `inu.info()`, and an rpc bridge (`inu.interceptRpc`/`inu.invokeRpc`/`inu.onUpdate`) gated by `@grant` permissions
+- plugins persist settings through a web `localStorage` (1 MB per plugin, no grant, wiped on uninstall): items also read and write as properties, and `setItems()` stores a batch whole or not at all
 - plugin TL construction includes keyboard/button and ephemeral-message types
 - plugins can open telegram takeout (data export) sessions — `account.initTakeoutSession()` answers a session whose calls go out wrapped in `invokeWithTakeout`, lifting the flood limits bulk history reads hit; each wrapped call still needs the same `invokeRpc` permission as an unwrapped one, and the session is closed with `finish()`
 - plugins holding `unsafe.invokeRaw` can send methods this build has no class for as raw bytes (`inu.invokeRaw`), response bytes included; account-takeover methods are still refused by the constructor the payload opens with

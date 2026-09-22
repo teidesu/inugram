@@ -27,7 +27,7 @@ class BootCohortTest {
 
     @Test
     fun `a plugin that only needs a screen does not`() {
-        assertFalse(cohort("kv", "ui", "registerAction", "registerSettings", "clipboard", "openUrl"))
+        assertFalse(cohort("ui", "registerAction", "registerSettings", "clipboard", "openUrl"))
         assertFalse(cohort("fs(64kb)", "fetch(example.com)"))
         assertFalse(cohort("account.read(messages)", "account.write(send)"))
         assertFalse(cohort())
@@ -40,7 +40,7 @@ class BootCohortTest {
 
     @Test
     fun `one headless grant among many is enough`() {
-        assertTrue(cohort("kv", "ui", "onUpdate(updateUserTyping)", "clipboard"))
+        assertTrue(cohort("ui", "onUpdate(updateUserTyping)", "clipboard"))
     }
 
     @Test

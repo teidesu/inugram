@@ -137,13 +137,13 @@ class PluginManifestParserTest {
             """
             // ==InuPlugin==
             // @name g
-            // @grant kv, fetch
-            // @grant kv
+            // @grant openUrl, fetch
+            // @grant openUrl
             // @grant clipboard.read
             // ==/InuPlugin==
             """.trimIndent(),
         )
-        assertEquals(listOf("kv", "fetch", "clipboard.read"), m.grants)
+        assertEquals(listOf("openUrl", "fetch", "clipboard.read"), m.grants)
     }
 
     @Test
@@ -152,13 +152,13 @@ class PluginManifestParserTest {
             """
             // ==InuPlugin==
             // @name g
-            // @grant interceptRpc(users.getUsers,channels.getChannels), kv
+            // @grant interceptRpc(users.getUsers,channels.getChannels), openUrl
             // @grant fetch(google.com,bing.com)
             // ==/InuPlugin==
             """.trimIndent(),
         )
         assertEquals(
-            listOf("interceptRpc(users.getUsers,channels.getChannels)", "kv", "fetch(google.com,bing.com)"),
+            listOf("interceptRpc(users.getUsers,channels.getChannels)", "openUrl", "fetch(google.com,bing.com)"),
             m.grants,
         )
     }

@@ -35,14 +35,6 @@
   },
   "grants": [
     {
-      "name": "kv",
-      "scopes": "none",
-      "tier": "neutral",
-      "title": "InuPluginGrantKv",
-      "icon": "msg_customize",
-      "description": "key-value storage private to the plugin"
-    },
-    {
       "name": "fs",
       "scopes": "fsSize",
       "tier": "neutral",

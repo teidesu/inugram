@@ -37,7 +37,7 @@ object EngineBindings {
                 fsUnscoped = PluginFs.isUnscoped(session.permissions),
                 installFs = quota != null,
                 androidDirs = PluginFs.androidDirs(),
-                kvPath = PluginKv.pathFor(session.plugin.id),
+                localStoragePath = PluginLocalStorage.pathFor(session.plugin.id),
                 installJvm = bridge.jvm != null,
                 installXposed = bridge.xposed != null,
                 grants = session.permissions,

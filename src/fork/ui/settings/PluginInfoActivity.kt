@@ -314,7 +314,6 @@ private fun grantSubtitle(name: String, scopes: List<String>?): String? = when (
 }
 
 private val KNOWN_GRANTS = mapOf(
-    "kv" to GrantPresentation(R.string.InuPluginGrantKv, R.drawable.msg_customize),
     "fs" to GrantPresentation(R.string.InuPluginGrantFs, R.drawable.files_storage),
     "clipboard.write" to GrantPresentation(R.string.InuPluginGrantClipboardWrite, R.drawable.msg_copy),
     "openUrl" to GrantPresentation(R.string.InuPluginGrantOpenUrl, R.drawable.msg_link),

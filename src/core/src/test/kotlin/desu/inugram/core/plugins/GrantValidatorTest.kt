@@ -52,8 +52,8 @@ class GrantValidatorTest {
         // an unclosed paren also swallows every token after it on the line (splitTopLevelCommas
         // never returns to depth 0), so refusing the install is the only way the loss is visible
         assertEquals(
-            listOf("malformed grant 'fetch(a.com, kv'"),
-            GrantValidator.validateGrants(listOf("fetch(a.com, kv")),
+            listOf("malformed grant 'fetch(a.com, openUrl'"),
+            GrantValidator.validateGrants(listOf("fetch(a.com, openUrl")),
         )
     }
 
@@ -140,7 +140,7 @@ class GrantValidatorTest {
 
     @Test
     fun noScopeGrantsRejectAnyScope() {
-        for (name in listOf("kv", "clipboard.read", "openUrl", "takeout", "unsafe.fs", "unsafe.invokeRaw", "unsafe.disableApiFiltering", "notifications.suppress")) {
+        for (name in listOf("clipboard.read", "openUrl", "takeout", "unsafe.fs", "unsafe.invokeRaw", "unsafe.disableApiFiltering", "notifications.suppress")) {
             assertEquals(listOf("grant '$name' takes no scopes"), GrantValidator.validateGrants(listOf("$name(oops)")))
         }
     }
@@ -150,7 +150,7 @@ class GrantValidatorTest {
         assertEquals(
             emptyList<String>(),
             GrantValidator.validateGrants(
-                listOf("kv", "openUrl", "unsafe.jvm", "takeout", "unsafe.invokeRaw", "notifications.suppress"),
+                listOf("openUrl", "unsafe.jvm", "takeout", "unsafe.invokeRaw", "notifications.suppress"),
             ),
         )
     }
@@ -178,7 +178,6 @@ class GrantValidatorTest {
     fun validFullManifestShapedGrantListPasses() {
         val problems = GrantValidator.validateGrants(
             listOf(
-                "kv",
                 "fetch(api.example.com)",
                 "fs(50mb)",
                 "account.read(self,peers)",

@@ -7,9 +7,9 @@ import kotlin.test.assertFailsWith
 class PluginWireTest {
     @Test
     fun `a refusal carries the plugin error wire it was decided with`() {
-        val refusal = assertFailsWith<PluginRefusal> { PluginWire.refuse("not-granted", "missing grant: kv", grant = "kv") }
+        val refusal = assertFailsWith<PluginRefusal> { PluginWire.refuse("not-granted", "missing grant: fs", grant = "fs") }
         assertEquals(
-            PluginWire.Value.PluginErr(code = "not-granted", message = "missing grant: kv", grant = "kv"),
+            PluginWire.Value.PluginErr(code = "not-granted", message = "missing grant: fs", grant = "fs"),
             PluginWire.decode(refusal.wire),
         )
     }
@@ -135,16 +135,16 @@ class PluginWireTest {
     fun `round-trips plugin error with all fields`() {
         val wire = PluginWire.encodePluginError(
             code = "quota-exceeded",
-            message = "kv store is full",
-            grant = "kv",
+            message = "fs is full",
+            grant = "fs",
             usage = 1_048_576L,
             quota = 1_048_576L,
         )
         assertEquals(
             PluginWire.Value.PluginErr(
                 code = "quota-exceeded",
-                message = "kv store is full",
-                grant = "kv",
+                message = "fs is full",
+                grant = "fs",
                 usage = 1_048_576L,
                 quota = 1_048_576L,
             ),
@@ -169,7 +169,7 @@ class PluginWireTest {
 
     @Test
     fun `rejects malformed plugin error payload missing separators`() {
-        assertFailsWith<IllegalArgumentException> { PluginWire.decode("Pnot-granted\nkv\n\n") }
+        assertFailsWith<IllegalArgumentException> { PluginWire.decode("Pnot-granted\nfs\n\n") }
     }
 
     @Test
@@ -189,6 +189,6 @@ class PluginWireTest {
 
     @Test
     fun `an unscoped refusal carries the bare grant name`() {
-        assertEquals("Pnot-granted\nkv\n\n\nmissing grant: kv", PluginWire.encodeNotGranted("kv"))
+        assertEquals("Pnot-granted\nfs\n\n\nmissing grant: fs", PluginWire.encodeNotGranted("fs"))
     }
 }
