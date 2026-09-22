@@ -33,7 +33,7 @@ fn the_bundled_message_test_plugin_passes() {
   crate::testing::harness::assert_oracle_exact_skipping(
     &lines,
     "message test done",
-    63,
+    62,
     &["SKIP the live half: no invokeRpc in this context"],
   );
 }
@@ -47,7 +47,7 @@ fn the_scalar_getters_read_straight_off_raw() {
       r#"
             const m = new inu.Message({INCOMING});
             JSON.stringify([
-                m.id, m.date, m.text, m.out, m.isService, m.isSecret, m.isPinned,
+                m.id, m.date, m.text, m.out, m.isService, m.isPinned,
                 m.editDate, m.views, m.forwards, m.viaBotId, m.groupedId, m.reactions,
                 m.media, m.mediaType, m.document, m.duration, m.topicId,
                 m.replyToMessageId, m.forwardedFrom,
@@ -57,7 +57,7 @@ fn the_scalar_getters_read_straight_off_raw() {
   );
   assert_eq!(
     out,
-    r#"[42,1715540640,"hi",false,false,false,false,null,null,null,null,null,null,null,null,null,null,null,null,null]"#,
+    r#"[42,1715540640,"hi",false,false,false,null,null,null,null,null,null,null,null,null,null,null,null,null]"#,
   );
 }
 
@@ -119,15 +119,13 @@ fn a_secret_chat_message_has_no_dialog_id_at_all() {
         const secret = new inu.Message({ _: 'message_secret', id: 2, peer_id: peer, dialog_id: encrypted });
         const secretService = new inu.Message({ _: 'messageService', id: 3, peer_id: peer, dialog_id: encrypted });
         const offWire = new inu.Message({ _: 'message', id: 4, peer_id: peer, dialog_id: '0' });
+        const legacySecret = new inu.Message({ _: 'message_secret_old', id: 5, peer_id: peer });
         JSON.stringify([
-            ordinary.dialogId, ordinary.isSecret,
-            secret.dialogId, secret.isSecret,
-            secretService.dialogId, secretService.isSecret,
-            offWire.dialogId, offWire.isSecret,
+            ordinary.dialogId, secret.dialogId, secretService.dialogId, offWire.dialogId, legacySecret.dialogId,
         ]);
         "#,
   );
-  assert_eq!(out, "[4242,false,null,true,null,true,4242,false]");
+  assert_eq!(out, "[4242,null,null,4242,null]");
 }
 
 #[test]
@@ -303,12 +301,12 @@ fn legacy_message_constructors_are_still_messages() {
     r#"
         const of = name => {
             const m = new inu.Message({ _: name, id: 1, message: 'hi' });
-            return [m.isService, m.isSecret, m.text];
+            return [m.isService, m.text];
         };
         JSON.stringify([of('message_old7'), of('messageService_old2'), of('message_secret_old'), of('message')]);
         "#,
   );
-  assert_eq!(out, r#"[[false,false,"hi"],[true,false,"hi"],[false,true,"hi"],[false,false,"hi"]]"#,);
+  assert_eq!(out, r#"[[false,"hi"],[true,"hi"],[false,"hi"],[false,"hi"]]"#,);
 }
 
 #[test]
