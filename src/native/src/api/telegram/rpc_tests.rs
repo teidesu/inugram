@@ -1844,7 +1844,7 @@ fn the_bundled_accounts_test_plugin_passes() {
   );
 
   let lines = lines.borrow().clone();
-  crate::testing::harness::assert_oracle_exact(&lines, "accounts test done", 15);
+  crate::testing::harness::assert_oracle_exact(&lines, "accounts test done", 16);
 }
 
 #[test]

@@ -141,27 +141,61 @@ fn a_non_integral_id_is_refused_rather_than_coerced() {
   assert_eq!(eval_json(&ctx, "[inu.account(1.0).id, inu.account(-0).id]"), "[1,0]");
 }
 
+/// `inu.account(id)` is free and names the same user, so listing the slots is free too
 #[test]
-fn accounts_lists_every_slot_but_needs_the_self_grant() {
-  let (_rt, ctx, _host, _state, _logs) = setup(&["account.read(self)"], TWO_ACCOUNTS);
-  assert_eq!(eval_json(&ctx, "inu.accounts()"), TWO_ACCOUNTS);
+fn accounts_lists_every_slot_as_account_handles_without_a_grant() {
+  let (_rt, ctx, _host, _state, _logs) = setup(&[], TWO_ACCOUNTS);
+  assert_eq!(
+    eval_json(&ctx, "inu.accounts().map((a) => [a.id, a.userId, a.isCurrent(), Object.getPrototypeOf(a) === Object.getPrototypeOf(inu.account())])"),
+    "[[0,111,true,true],[1,222,false,true]]",
+  );
+}
+
+#[test]
+fn is_premium_needs_the_self_grant_and_reads_the_latest_list() {
+  let (rt, ctx, host, state, _logs) = setup(&["account.read(self)"], TWO_ACCOUNTS);
+  eval(&ctx, "globalThis.__a = inu.account(1);");
+  assert_eq!(eval_json(&ctx, "[inu.account(0).isPremium(), __a.isPremium()]"), "[false,true]");
+  *host.json.borrow_mut() =
+    r#"[{"id":0,"userId":111,"isCurrent":true,"isPremium":false},{"id":1,"userId":222,"isCurrent":false,"isPremium":false}]"#.to_string();
+  state.accounts_changed(&rt, &ctx);
+  assert_eq!(eval_json(&ctx, "__a.isPremium()"), "false");
 
   let (_rt, denied, _host, _state, _logs) = setup(&[], TWO_ACCOUNTS);
   assert_eq!(
-    catch_json(&denied, "inu.accounts()"),
+    catch_json(&denied, "inu.account(1).isPremium()"),
     r#"[true,"not-granted","account.read(self)","missing grant: account.read(self)"]"#,
   );
 }
 
 #[test]
-fn on_accounts_changed_fires_with_the_new_list_and_its_disposer_stops_it() {
+fn id_and_user_id_cannot_be_reassigned() {
+  let (_rt, ctx, _host, _state, _logs) = setup(&[], TWO_ACCOUNTS);
+  assert_eq!(
+    eval_json(&ctx, "(() => { 'use strict'; const a = inu.account(); try { a.id = 1 } catch {} try { a.userId = 222 } catch {} return [a.id, a.userId] })()"),
+    "[0,111]",
+  );
+}
+
+/// a slot reused by another login is not the account an old handle was minted for
+#[test]
+fn a_handle_for_a_logged_out_account_is_neither_current_nor_premium() {
   let (rt, ctx, host, state, _logs) = setup(&["account.read(self)"], TWO_ACCOUNTS);
+  eval(&ctx, "globalThis.__a = inu.account(1);");
+  *host.json.borrow_mut() = r#"[{"id":1,"userId":999,"isCurrent":true,"isPremium":true}]"#.to_string();
+  state.accounts_changed(&rt, &ctx);
+  assert_eq!(eval_json(&ctx, "[__a.isCurrent(), __a.isPremium(), inu.account(1).isCurrent()]"), "[false,false,true]");
+}
+
+#[test]
+fn on_accounts_changed_fires_with_the_new_list_and_its_disposer_stops_it() {
+  let (rt, ctx, host, state, _logs) = setup(&[], TWO_ACCOUNTS);
   eval(
     &ctx,
     r#"
         globalThis.__seen = [];
         globalThis.__d = inu.onAccountsChanged((accounts) => {
-            __seen.push(accounts.map((a) => `${a.id}:${a.isCurrent}`).join(','));
+            __seen.push(accounts.map((a) => `${a.id}:${a.isCurrent()}`).join(','));
         });
         "#,
   );
@@ -173,16 +207,6 @@ fn on_accounts_changed_fires_with_the_new_list_and_its_disposer_stops_it() {
   eval(&ctx, "__d(); __d();");
   state.accounts_changed(&rt, &ctx);
   assert_eq!(eval_json(&ctx, "__seen"), r#"["0:false,1:true"]"#);
-}
-
-#[test]
-fn on_accounts_changed_without_a_grant_throws_not_granted() {
-  let (_rt, ctx, _host, state, _logs) = setup(&[], TWO_ACCOUNTS);
-  assert_eq!(
-    catch_json(&ctx, "inu.onAccountsChanged(() => {})"),
-    r#"[true,"not-granted","account.read(self)","missing grant: account.read(self)"]"#,
-  );
-  assert!(state.changed_fns.is_empty());
 }
 
 #[test]
