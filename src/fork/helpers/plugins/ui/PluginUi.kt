@@ -6,7 +6,6 @@ import android.os.Bundle
 import android.text.SpannableString
 import android.text.Spanned
 import android.text.style.ForegroundColorSpan
-import android.util.Log
 import android.view.View
 import android.widget.LinearLayout
 import android.widget.FrameLayout
@@ -62,7 +61,6 @@ import org.telegram.ui.SettingsActivity
  * thread and settles back on the plugin queue with the usual engine-identity check.
  */
 object PluginUi : SessionResource {
-    private const val TAG = "InuPluginUi"
 
     /** stock's `Bulletin.UsersLayout`: a 24dp avatar stepped by 12dp, in a slot sized for three */
     private const val AVATAR_SIZE_DP = 24
@@ -547,7 +545,7 @@ object PluginUi : SessionResource {
             try {
                 show(prepared, settle)
             } catch (e: Exception) {
-                Log.e(TAG, "$name failed", e)
+                session.log.e("ui", "$name failed", e)
                 settle(dismissed)
             }
         }
@@ -720,7 +718,7 @@ object PluginUi : SessionResource {
             val session = plugin.session ?: return@postRunnable
             val pageId = session.settingsPageId ?: return@postRunnable
             val err = openPage(session, pageId)
-            if (err != null) Log.e(TAG, "openRegisteredSettings: $err")
+            if (err != null) session.log.e("ui", "openRegisteredSettings: $err")
         }
     }
 }

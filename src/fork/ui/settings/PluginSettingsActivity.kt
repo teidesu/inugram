@@ -3,7 +3,6 @@ package desu.inugram.ui.settings
 import desu.inugram.helpers.plugins.EngineDispatch
 
 import android.content.Context
-import android.util.Log
 import android.view.View
 import desu.inugram.helpers.plugins.Plugin
 import desu.inugram.helpers.plugins.PluginSession
@@ -118,7 +117,7 @@ class PluginSettingsActivity(
         val parsed = try {
             parseModel(json)
         } catch (e: Exception) {
-            Log.e(TAG, "[${session.manifest.name}] bad render payload", e)
+            session.log.e("settings", "bad render payload", e)
             return
         }
         AndroidUtilities.runOnUIThread {
@@ -361,9 +360,5 @@ class PluginSettingsActivity(
         }
         bottomButton = button
         attachStickyButton(rootView, button)
-    }
-
-    companion object {
-        private const val TAG = "InuPluginUi"
     }
 }

@@ -9,6 +9,7 @@ class PluginSession(val plugin: Plugin, val engine: QuickJs) {
     val source = plugin.source
     val permissions = PluginPermissions.parse(manifest.grants)
     val tl = TlHandles(TlFilter.policyFor(permissions))
+    val log = PluginLog.of(manifest, plugin.id)
 
     @Volatile var settingsPageId: Long? = null
 

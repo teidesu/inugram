@@ -1,9 +1,9 @@
 package desu.inugram.helpers.plugins.telegram
 
+import desu.inugram.helpers.plugins.PluginLog
 import desu.inugram.helpers.plugins.SessionResource
 import desu.inugram.core.plugins.PluginRefusal
 import android.os.SystemClock
-import android.util.Log
 import desu.inugram.core.plugins.BoundedIdentitySet
 import desu.inugram.core.plugins.BoundedLru
 import desu.inugram.core.plugins.DispatchDeadline
@@ -191,7 +191,6 @@ object PluginRpc : SessionResource {
 
     private class PassthroughResult(val response: TLObject?, val error: TLRPC.TL_error?, val time: Long)
 
-    private const val TAG = "InuPluginRpc"
     private const val SEND_SCOPE = "interceptSendMessage"
     private val SEND_METHODS = arrayOf("messages.sendMessage", "messages.sendMedia", "messages.sendMultiMedia")
     private const val RAW_GRANT = "unsafe.invokeRaw"
@@ -955,7 +954,7 @@ object PluginRpc : SessionResource {
     private fun expireChain(scopeId: Long) {
         val running = chains[scopeId]?.stages?.reversed()?.firstNotNullOfOrNull { pendingDispatches[it] }
         val budget = collapseChain(scopeId, TIMEOUT_WIRE) ?: return
-        Log.w(TAG, "[${running?.session?.manifest?.name}] '${budget.method}' ran past the chain's ${budget.deadlineMillis}ms budget")
+        (running?.session?.log ?: PluginLog.HOST).w("rpc", "'${budget.method}' ran past the chain's ${budget.deadlineMillis}ms budget")
         val sent = budget.passthrough
         if (sent != null) {
             budget.finalize(sent.response, sent.error, sent.time)
@@ -1057,9 +1056,9 @@ object PluginRpc : SessionResource {
             if (pendingDispatches[dispatchId] !== pending) return@postRunnable
             val detail = cause.message ?: cause.toString()
             val strict = pending.operation.chain[pending.index].strict
-            Log.w(
-                TAG,
-                "[${pending.session.manifest.name}] '${pending.operation.method}' returned an invalid TL response; " +
+            pending.session.log.w(
+                "rpc",
+                "'${pending.operation.method}' returned an invalid TL response; " +
                     (if (strict) "failing the RPC" else "skipping the middleware") + ": $detail",
             )
             if (strict) {

@@ -1,6 +1,5 @@
 package desu.inugram.helpers.plugins
 
-import android.util.Log
 import desu.inugram.InuConfig
 import desu.inugram.core.plugins.PluginInstall
 import desu.inugram.core.plugins.PluginInstalls
@@ -22,7 +21,6 @@ import org.json.JSONObject
  * to the user's data.
  */
 object PluginStore {
-    private const val TAG = "InuPluginStore"
 
     val dir: File by lazy { PluginFs.storeDir() }
 
@@ -39,7 +37,7 @@ object PluginStore {
         // stores are keyed on. leave the persisted state alone and run no plugins this boot
         val files = dir.listFiles { f -> f.isFile && f.name.endsWith(".js") }
         if (files == null) {
-            Log.e(TAG, "could not list $dir; keeping the persisted installs and skipping plugins")
+            PluginLog.HOST.e("store", "could not list $dir; keeping the persisted installs and skipping plugins")
             unloaded = readPersisted()
             return emptyList()
         }
@@ -50,12 +48,12 @@ object PluginStore {
             val source = try {
                 file.readText()
             } catch (e: Exception) {
-                Log.e(TAG, "read failed: ${install.file}", e)
+                PluginLog.HOST.e("store", "read failed: ${install.file}", e)
                 continue
             }
             val manifest = PluginManifestParser.parseOrNull(source)
             if (manifest == null) {
-                Log.w(TAG, "no valid manifest: ${install.file}")
+                PluginLog.HOST.w("store", "no valid manifest: ${install.file}")
                 continue
             }
             loaded.add(
@@ -110,7 +108,7 @@ object PluginStore {
             if (!tmp.renameTo(file)) throw IOException("rename to $file failed")
             true
         } catch (e: Exception) {
-            Log.e(TAG, "write failed: ${file.name}", e)
+            PluginLog.HOST.e("store", "write failed: ${file.name}", e)
             tmp.delete()
             false
         }
@@ -159,7 +157,7 @@ object PluginStore {
                 )
             }
         } catch (e: Exception) {
-            Log.e(TAG, "bad plugins state", e)
+            PluginLog.HOST.e("store", "bad plugins state", e)
             emptyList()
         }
     }

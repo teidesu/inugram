@@ -166,7 +166,7 @@ object PluginJvm : SessionResource {
             )
         )
 
-    internal open class Session(private val session: PluginSession, private val screen: AppScreen) :
+    internal open class Session(val session: PluginSession, private val screen: AppScreen) :
         JvmListener, ValueBridge {
         private val nextTicket = AtomicLong(1)
         private val loaders = ArrayList<ClassLoader>()

@@ -8,7 +8,6 @@ import android.content.pm.ShortcutInfo
 import android.content.pm.ShortcutManager
 import android.graphics.drawable.Icon
 import android.os.SystemClock
-import android.util.Log
 import desu.inugram.InuConfig
 import desu.inugram.core.plugins.BootCohort
 import desu.inugram.core.plugins.GrantCatalog
@@ -75,7 +74,6 @@ import java.util.concurrent.TimeUnit
 object PluginManager {
     const val SAFE_MODE_ACTION = "desu.inugram.action.SAFE_MODE"
     private const val SAFE_MODE_SHORTCUT_ID = "inu_safe_mode"
-    private const val TAG = "InuPlugin"
     const val PLUGIN_API_VERSION = GrantCatalog.PLUGIN_API
     private const val PLATFORM = "android"
 
@@ -206,7 +204,7 @@ object PluginManager {
     /** the guard is armed around each plugin's own code and nothing else; [start] no-ops on a running plugin, so the late pass is the early one's remainder */
     private fun runPass(wanted: (Plugin) -> Boolean) {
         if (!guard.startPass()) {
-            Log.w(TAG, "safe mode (${guard.reason}); skipping plugins")
+            PluginLog.HOST.w("manager", "safe mode (${guard.reason}); skipping plugins")
             return
         }
         for (plugin in plugins()) {
@@ -473,7 +471,7 @@ object PluginManager {
             tl = tl,
             account = PluginAccounts.listenerFor(session),
             ui = PluginUi.listenerFor(session),
-            platform = PluginPlatform.listenerFor(),
+            platform = PluginPlatform.listenerFor(session.log),
             fetch = PluginFetch.listenerFor(session),
             canvas = PluginCanvas.listenerFor(session),
             notifications = PluginNotifications.listenerFor(session),
@@ -608,7 +606,7 @@ object PluginManager {
     }
 
     private fun fail(plugin: Plugin, at: PluginFailure.Site, detail: String) {
-        Log.e(TAG, "[${plugin.manifest.name}] $at: $detail")
+        PluginLog.of(plugin).e("manager", "$at: $detail")
         val failure = PluginFailure(at, detail)
         AndroidUtilities.runOnUIThread {
             plugin.failure = failure
@@ -635,21 +633,16 @@ object PluginManager {
     }
 
     private fun logConsole(session: PluginSession, budget: LogBudget, level: Int, message: String) {
-        val tag = "$TAG/${session.manifest.name}"
         when (budget.charge(SystemClock.uptimeMillis())) {
             LogBudget.Verdict.DROP -> return
             LogBudget.Verdict.LAST -> {
-                Log.w(tag, "spent its log budget ($LOG_BUDGET per ${LOG_WINDOW_MS / 1000}s); muting the rest")
+                session.log.w("console", "spent its log budget ($LOG_BUDGET per ${LOG_WINDOW_MS / 1000}s); muting the rest")
                 return
             }
 
             LogBudget.Verdict.PASS -> Unit
         }
-        when (level) {
-            2 -> Log.w(tag, message)
-            3, QuickJs.LEVEL_FAULT -> Log.e(tag, message)
-            else -> Log.d(tag, message)
-        }
+        session.log.console(level, message)
     }
 
     /** per-engine, so it dies with the engine rather than needing an entry to evict */
@@ -699,7 +692,7 @@ object PluginManager {
                 .build()
             manager.addDynamicShortcuts(listOf(shortcut))
         } catch (e: Exception) {
-            Log.e(TAG, "safe-mode shortcut failed", e)
+            PluginLog.HOST.e("manager", "safe-mode shortcut failed", e)
         }
     }
 }

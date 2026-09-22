@@ -1,7 +1,7 @@
 package desu.inugram.helpers.plugins.telegram
 
+import desu.inugram.helpers.plugins.PluginLog
 import desu.inugram.helpers.plugins.SessionResource
-import android.util.Log
 import desu.inugram.core.plugins.BoundedIdentitySet
 import desu.inugram.core.plugins.DispatchDeadline
 import desu.inugram.core.plugins.PluginWire
@@ -43,7 +43,6 @@ import org.telegram.tgnet.tl.TL_update
  * that expire with the stage. Both use the plugin's [TlHandles].
  */
 object PluginUpdates : SessionResource {
-    private const val TAG = "InuPluginUpdates"
 
     /** a tenth of a send's: the app's whole arriving batch is parked behind this */
     private const val UPDATE_BUDGET_MS = 2_000L
@@ -362,7 +361,7 @@ object PluginUpdates : SessionResource {
     private fun rawSnapshotOf(update: TLObject): String? = try {
         TlJson.toJson(update, RAW_POLICY).toString()
     } catch (e: Exception) {
-        Log.w(TAG, "cannot snapshot ${update.javaClass.simpleName}: $e")
+        PluginLog.HOST.w("updates", "cannot snapshot ${update.javaClass.simpleName}: $e")
         null
     }
 
@@ -429,7 +428,7 @@ object PluginUpdates : SessionResource {
         if (dispatchId != 0L && pendingUpdateDispatches.remove(dispatchId) === batch) {
             stageSession?.engine?.abandonUpdateDispatch(dispatchId, PluginRpc.TIMEOUT_WIRE)
         }
-        Log.w(TAG, "[${stageSession?.manifest?.name}] an update batch ran past the ${UPDATE_BUDGET_MS}ms budget")
+        (stageSession?.log ?: PluginLog.HOST).w("updates", "an update batch ran past the ${UPDATE_BUDGET_MS}ms budget")
         finishBatch(batch)
     }
 
@@ -474,7 +473,7 @@ object PluginUpdates : SessionResource {
                 }
             }
         } catch (e: Throwable) {
-            Log.e(TAG, "handing an update batch back to the app failed", e)
+            PluginLog.HOST.e("updates", "handing an update batch back to the app failed", e)
         } finally {
             advanceUpdateQueue(batch)
         }

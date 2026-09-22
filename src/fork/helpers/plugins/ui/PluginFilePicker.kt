@@ -1,12 +1,12 @@
 package desu.inugram.helpers.plugins.ui
 
 import desu.inugram.core.plugins.OwnerRegistry
+import desu.inugram.helpers.plugins.PluginLog
 import desu.inugram.helpers.plugins.SessionResource
 import android.app.Activity
 import android.content.Intent
 import android.net.Uri
 import android.provider.OpenableColumns
-import android.util.Log
 import desu.inugram.core.plugins.PluginWire
 import desu.inugram.helpers.plugins.EngineDispatch
 import desu.inugram.helpers.plugins.PluginSession
@@ -29,7 +29,6 @@ import org.telegram.ui.LaunchActivity
  * Copies content into plugin storage because the returned `File` can outlive the URI permission.
  */
 internal object PluginFilePicker : SessionResource {
-    private const val TAG = "InuPluginFiles"
 
     /** what the app's cache can reasonably take a copy of, and what a plugin may be handed at once */
     internal const val MAX_PICK_BYTES = 256L * 1024 * 1024
@@ -130,7 +129,7 @@ internal object PluginFilePicker : SessionResource {
                         } else try {
                             answer(data)
                         } catch (e: Throwable) {
-                            Log.e(TAG, "$name failed", e)
+                            session.log.e("files", "$name failed", e)
                             Picked(PluginWire.encodePluginError("internal", "$name: ${e.message ?: e.toString()}"))
                         }
                         settle(session, requestId, name, result)
@@ -144,7 +143,7 @@ internal object PluginFilePicker : SessionResource {
                 activity.startActivityForResult(intent(), code)
             } catch (e: Throwable) {
                 unwatch(session, observer)
-                Log.e(TAG, "$name could not be opened", e)
+                session.log.e("files", "$name could not be opened", e)
                 settle(session, requestId, name, Picked(PluginWire.encodePluginError("unsupported", "$name: this device has no file picker")))
             }
         }
@@ -193,13 +192,13 @@ internal object PluginFilePicker : SessionResource {
             val described = try {
                 describe(uri)
             } catch (e: Throwable) {
-                Log.e(TAG, "could not read what $uri is", e)
+                session.log.e("files", "could not read what $uri is", e)
                 null
             }
             val failure = if (described == null) {
                 PluginWire.encodePluginError("internal", "pickFile: this file could not be read")
             } else {
-                copy(uri, target, described)
+                copy(uri, target, described, session.log)
             }
             if (failure != null) {
                 for (copy in copies) copy.delete()
@@ -219,7 +218,7 @@ internal object PluginFilePicker : SessionResource {
      * Counts bytes while copying because providers, including cloud providers, may omit size.
      * Returns an error wire on failure, null on success.
      */
-    private fun copy(uri: Uri, target: File, described: Described): String? {
+    private fun copy(uri: Uri, target: File, described: Described, log: PluginLog): String? {
         val resolver = ApplicationLoader.applicationContext.contentResolver
         if (described.size > MAX_PICK_BYTES) return tooBig(described.name, described.size)
         var written = 0L
@@ -241,7 +240,7 @@ internal object PluginFilePicker : SessionResource {
                 }
             }
         } catch (e: Throwable) {
-            Log.e(TAG, "could not copy $uri", e)
+            log.e("files", "could not copy $uri", e)
             return PluginWire.encodePluginError("internal", "pickFile: this file could not be read")
         }
         return null

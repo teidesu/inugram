@@ -347,6 +347,11 @@ into `dist`; the build fails if that module ever lands in a shared chunk.
 - Register after store load. Read only plain filenames inside the drop directory,
   never source from broadcast extras. Reply synchronously via ordered-broadcast
   `setResultData`. The `dev` flag describes the latest bytes; ordinary updates clear it.
+- Plugin host code logs through `PluginLog`, never `Log` directly: `session.log` (tag
+  `InuPlugin/<manifest id>`, install id without one) for anything about one plugin, with the
+  subsystem as the `[area]`, and `PluginLog.HOST` only for what belongs to none. `inu dev`
+  shows the pushed plugins' channels and the host's warnings and errors; its tags live in
+  `sdk/cli/src/utils/device.ts`.
 
 ## Checks
 
