@@ -33,6 +33,17 @@ async function expectReject(label, code, promise) {
   return error
 }
 
+async function expectTypeError(label, promise) {
+  let error
+  try {
+    await promise
+  } catch (e) {
+    error = e
+  }
+  if (error === undefined) return fail(label, 'did not reject')
+  check(label, error instanceof TypeError, `${error.name}: ${error.message}`)
+}
+
 // the fake host behind this oracle answers `/refuse` with the address refusal, never answers
 // `/never`, and answers everything else with the same json 200
 const OK = 'https://example.com/thing'
@@ -69,9 +80,8 @@ async function main() {
     'invalid-argument',
     fetch(OK, { headers: { 'Content-Length': '10' } }),
   )
-  await expectReject(
-    'a header value with a line break in it is refused',
-    'invalid-argument',
+  await expectTypeError(
+    'a header value with a line break in it is a TypeError',
     fetch(OK, { headers: { 'X-A': 'a\r\nX-B: b' } }),
   )
   // @ts-expect-error
@@ -94,12 +104,20 @@ async function main() {
   check('a 2xx response is ok', res.ok === true && res.status === 200, `${res.ok}/${res.status}`)
   check('statusText comes through', res.statusText === 'OK', res.statusText)
   check('url is the final one, not the one asked for', res.url === 'https://example.com/final', res.url)
-  check('a header seen once is a string', res.headers['content-type'] === 'application/json', JSON.stringify(res.headers['content-type']))
+  check('headers is a Headers', res.headers instanceof Headers)
+  check('get() is case-insensitive', res.headers.get('Content-Type') === 'application/json', res.headers.get('Content-Type'))
   check(
-    'a header that repeated is an array',
-    Array.isArray(res.headers['set-cookie']) && res.headers['set-cookie'].join(',') === 'a=1,b=2',
-    JSON.stringify(res.headers['set-cookie']),
+    'getSetCookie() keeps each cookie apart',
+    res.headers.getSetCookie().join('|') === 'a=1|b=2',
+    JSON.stringify(res.headers.getSetCookie()),
   )
+  let immutable = false
+  try {
+    res.headers.set('x-a', 'b')
+  } catch (e) {
+    immutable = e instanceof TypeError
+  }
+  check('response headers are immutable', immutable)
 
   const parsed = await res.json()
   check('json() parses the body', parsed.hello === 'world', JSON.stringify(parsed))

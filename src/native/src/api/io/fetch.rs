@@ -59,6 +59,54 @@ fn coerce_string<'js>(ctx: &Ctx<'js>, value: Value<'js>) -> JsResult<String> {
   )
 }
 
+const HTTP_WHITESPACE: [char; 4] = ['\t', '\n', '\r', ' '];
+
+fn normalize_header_name<'js>(ctx: &Ctx<'js>, name: &str) -> JsResult<String> {
+  if !is_token(name) {
+    return Err(Exception::throw_type(ctx, &format!("'{name}' is not a header name")));
+  }
+  Ok(name.to_ascii_lowercase())
+}
+
+/// what `Headers` accepts, per WHATWG: a byte string without NUL or a line break once trimmed
+fn normalize_header_value<'js>(ctx: &Ctx<'js>, value: &str) -> JsResult<String> {
+  let value = value.trim_matches(HTTP_WHITESPACE);
+  if value.chars().any(|c| matches!(c, '\0' | '\r' | '\n') || c > '\u{ff}') {
+    return Err(Exception::throw_type(ctx, &format!("'{value}' is not a header value")));
+  }
+  Ok(value.to_string())
+}
+
+/// `headers` is the flat `name, value` list the prelude built, re-checked here: the prelude shares
+/// the plugin's realm, so its `Headers` may have been handed anything
+fn read_header_pairs<'js>(ctx: &Ctx<'js>, headers: Value<'js>) -> JsResult<Vec<String>> {
+  let Some(array) = headers.as_array() else {
+    return Err(Exception::throw_type(ctx, "fetch: headers must be a flat name/value list"));
+  };
+  let mut pairs = Vec::with_capacity(array.len());
+  for value in array.iter::<Value>() {
+    let Some(text) = value?.as_string().cloned() else {
+      return Err(Exception::throw_type(ctx, "fetch: a header name or value must be a string"));
+    };
+    pairs.push(text.to_string()?);
+  }
+  if pairs.len() % 2 != 0 {
+    return Err(Exception::throw_type(ctx, "fetch: headers must be a flat name/value list"));
+  }
+  for pair in pairs.chunks_exact_mut(2) {
+    let name = normalize_header_name(ctx, &pair[0])?;
+    if RESERVED_HEADERS.contains(&name.as_str()) {
+      return PluginErrorCode::InvalidArgument.throw(ctx, &format!("fetch: the '{name}' header belongs to the transport"));
+    }
+    // a line break in a value is a second header, and a request the plugin did not write
+    if pair[1].chars().any(|c| (c < ' ' && c != '\t') || c == '\u{7f}') {
+      return Err(Exception::throw_type(ctx, &format!("fetch: the '{name}' header has a control character in it")));
+    }
+    pair[0] = name;
+  }
+  Ok(pairs)
+}
+
 fn read_spec<'js>(ctx: &Ctx<'js>, method: Value<'js>, headers: Value<'js>, redirect: Value<'js>) -> JsResult<Spec> {
   let invalid = |message: String| PluginErrorCode::InvalidArgument.throw::<Spec>(ctx, &message);
   let redirect = if redirect.is_undefined() { "follow".to_string() } else { coerce_string(ctx, redirect)? };
@@ -69,43 +117,10 @@ fn read_spec<'js>(ctx: &Ctx<'js>, method: Value<'js>, headers: Value<'js>, redir
   if !is_token(&method) {
     return invalid(format!("fetch: '{method}' is not a method"));
   }
-  let mut pairs = Vec::new();
-  if !headers.is_undefined() && !headers.is_null() {
-    let Some(object) = headers.as_object() else {
-      return invalid("fetch: headers must be an object".to_string());
-    };
-    for key in object.keys::<String>() {
-      let key = key?;
-      if !is_token(&key) {
-        return invalid(format!("fetch: '{key}' is not a header name"));
-      }
-      let name = key.to_ascii_lowercase();
-      if RESERVED_HEADERS.contains(&name.as_str()) {
-        return invalid(format!("fetch: the '{key}' header belongs to the transport"));
-      }
-      let value: Value = object.get(&key)?;
-      let values = match value.as_array() {
-        Some(array) => array.iter::<Value>().collect::<JsResult<Vec<_>>>()?,
-        None => vec![value],
-      };
-      for one in values {
-        let Some(text) = one.as_string() else {
-          return invalid(format!("fetch: the '{key}' header must be a string"));
-        };
-        let text = text.to_string()?;
-        // a line break in a value is a second header, and a request the plugin did not write
-        if text.chars().any(|c| (c < ' ' && c != '\t') || c == '\u{7f}') {
-          return invalid(format!("fetch: the '{key}' header has a control character in it"));
-        }
-        pairs.push(name.clone());
-        pairs.push(text);
-      }
-    }
-  }
   Ok(Spec {
     method: method.to_ascii_uppercase(),
     redirect,
-    headers: pairs,
+    headers: read_header_pairs(ctx, headers)?,
   })
 }
 
@@ -235,6 +250,20 @@ pub fn install_fetch<'js>(
       )?,
     )?;
   }
+  natives.set(
+    "headerName",
+    Function::new(ctx.clone(), |ctx: Ctx<'js>, name: Value<'js>| {
+      let name = coerce_string(&ctx, name)?;
+      normalize_header_name(&ctx, &name)
+    })?,
+  )?;
+  natives.set(
+    "headerValue",
+    Function::new(ctx.clone(), |ctx: Ctx<'js>, value: Value<'js>| {
+      let value = coerce_string(&ctx, value)?;
+      normalize_header_value(&ctx, &value)
+    })?,
+  )?;
   {
     let state = state.clone();
     natives.set(
