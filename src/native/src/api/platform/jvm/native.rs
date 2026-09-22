@@ -532,7 +532,9 @@ pub(crate) fn read_arg<'js>(ctx: &Ctx<'js>, value: &Value<'js>) -> JsResult<Arg<
     return Ok(Arg::Str(s));
   }
   if let Ok(typed) = TypedArray::<u8>::from_value(value.clone()) {
-    if let Some(bytes) = typed.as_bytes() {
+    // SAFETY: no javascript runs while the slice is borrowed; the error past the limit is built after
+    // its last use
+    if let Some(bytes) = unsafe { typed.as_bytes() } {
       if bytes.len() > VALUE_LIMIT_BYTES {
         return too_big(ctx, "a byte[] argument", bytes.len());
       }

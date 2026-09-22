@@ -411,7 +411,8 @@ impl Source {
 impl FsState {
   fn read_source(&self, value: &Value<'_>) -> FsResult<Source> {
     if let Ok(typed) = TypedArray::<u8>::from_value(value.clone()) {
-      let Some(bytes) = typed.as_bytes() else {
+      // SAFETY: no javascript runs while the slice is borrowed
+      let Some(bytes) = (unsafe { typed.as_bytes() }) else {
         return Err(Fault::Invalid("fs: the array is detached".to_string()));
       };
       return Ok(Source::Bytes(bytes.to_vec()));

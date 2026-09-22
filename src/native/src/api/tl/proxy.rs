@@ -405,7 +405,8 @@ pub(crate) fn make_bytes_value<'js>(ctx: &Ctx<'js>, bytes: &[u8]) -> JsResult<Va
   let to_json =
     Function::new(ctx.clone(), |ctx: Ctx<'js>, this: This<TypedArray<'js, u8>>| -> JsResult<Object<'js>> {
       let wrapper = Object::new(ctx.clone())?;
-      let Some(bytes) = this.0.as_bytes() else {
+      // SAFETY: no javascript runs while the slice is borrowed
+      let Some(bytes) = (unsafe { this.0.as_bytes() }) else {
         return Err(Exception::throw_type(&ctx, "these bytes are gone: their buffer was detached"));
       };
       let b64 = base64::Engine::encode(&STANDARD, bytes);
@@ -452,9 +453,11 @@ pub(crate) fn json_stringify_tl<'js>(ctx: &Ctx<'js>, value: Value<'js>) -> JsRes
   let replacer =
     Function::new(ctx.clone(), |ctx: Ctx<'js>, _key: Value<'js>, value: Value<'js>| -> JsResult<Value<'js>> {
       if let Ok(typed) = TypedArray::<u8>::from_value(value.clone()) {
-        if let Some(bytes) = typed.as_bytes() {
+        // SAFETY: no javascript runs while the slice is borrowed
+        if let Some(bytes) = unsafe { typed.as_bytes() } {
+          let b64 = base64::Engine::encode(&STANDARD, bytes);
           let wrapper = Object::new(ctx.clone())?;
-          wrapper.set(BYTES_MARKER_KEY, base64::Engine::encode(&STANDARD, bytes))?;
+          wrapper.set(BYTES_MARKER_KEY, b64)?;
           return wrapper.into_js(&ctx);
         }
       }
@@ -513,7 +516,8 @@ pub fn js_value_to_wire<'js>(ctx: &Ctx<'js>, value: Value<'js>) -> JsResult<Stri
     return Ok(handle_wire);
   }
   if let Ok(typed) = TypedArray::<u8>::from_value(value.clone()) {
-    if let Some(bytes) = typed.as_bytes() {
+    // SAFETY: no javascript runs while the slice is borrowed
+    if let Some(bytes) = unsafe { typed.as_bytes() } {
       return Ok(encode_bytes_wire(bytes));
     }
   }
@@ -704,7 +708,8 @@ impl<'js> HandleBox<'js> {
     let key = property_key_string(ctx, prop)?;
     if let Some(bytes) = TypedArray::<u8>::from_value(value.clone())
       .ok()
-      .and_then(|array| array.as_bytes().map(<[u8]>::to_vec))
+      // SAFETY: the slice is copied before anything else runs
+      .and_then(|array| unsafe { array.as_bytes() }.map(<[u8]>::to_vec))
     {
       let result = self.host().tl_set_bytes(self.handle, &key, &bytes);
       return self.finish_write(ctx, result);

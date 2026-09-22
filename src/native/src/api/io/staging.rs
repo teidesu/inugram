@@ -62,7 +62,9 @@ impl SourceStager {
 
   pub fn stage<'js>(&self, ctx: &Ctx<'js>, value: &Value<'js>) -> JsResult<StagedSource> {
     if let Ok(typed) = TypedArray::<u8>::from_value(value.clone()) {
-      let Some(bytes) = typed.as_bytes() else {
+      // SAFETY: no javascript runs while the slice is borrowed; an error thrown past the limit is
+      // built after its last use
+      let Some(bytes) = (unsafe { typed.as_bytes() }) else {
         return PluginErrorCode::InvalidArgument.throw(ctx, "this Uint8Array is detached");
       };
       self.check_limit(ctx, bytes.len() as u64)?;
