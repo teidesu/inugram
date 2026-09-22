@@ -34,8 +34,8 @@ fn main() {
       let bytecode = module
         .write(WriteOptions {
           endianness: WriteOptionsEndianness::Little,
-          // the source text backs nothing but `Function.prototype.toString` on helpers no
-          // plugin is handed; line numbers are `strip_debug`'s and stay
+          // Source text is only used by `Function.prototype.toString` on private helpers. Keep the
+          // line numbers produced by `strip_debug`.
           strip_source: true,
           ..Default::default()
         })

@@ -22,16 +22,15 @@ impl Drop for StagedFile {
   }
 }
 
-/// a source the host is about to read, and whether this staged it: a file a plugin named is the
-/// plugin's own and stays where it is, while a blob's content was copied out for the host to reach
+/// A path for the host and whether staging created it. Plugin paths stay in place; staged blob
+/// copies are cleaned up by their owner.
 pub struct StagedSource {
   pub path: PathBuf,
   pub owned: bool,
 }
 
-/// Turns the `Blob | Uint8Array | { path }` every api that takes a file takes into a path on disk,
-/// which is the only thing the host side can read: blob content lives in rust, so handing it over
-/// means writing it out first.
+/// Converts `Blob | Uint8Array | { path }` into a filesystem path for the host. Blob content lives
+/// in Rust and must be written out before the host can read it.
 pub struct SourceStager {
   blobs: Rc<BlobState>,
   fs: RefCell<Option<Rc<FsState>>>,

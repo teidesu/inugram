@@ -60,10 +60,9 @@ pub trait TlHost {
   fn tl_release(&self, handle: i64);
 }
 
-/// the proxy's target: everything a trap needs to know about the view, and the view's cache.
-///
-/// One handler object serves every view of a context ([`TlShared`]), so a trap recovers the view
-/// from its target rather than from a closure of its own, and a handle costs this and the proxy.
+/// Stores each view's state and cache on its proxy target. All views in a context share one handler
+/// ([`TlShared`]), which reads state from the target instead of a per-view closure. Each handle
+/// allocates a target and a proxy.
 struct HandleBox<'js> {
   views: Rc<TlViews>,
   handle: i64,
@@ -121,8 +120,8 @@ unsafe impl<'js> JsLifetime<'js> for TlShared<'js> {
   type Changed<'to> = TlShared<'to>;
 }
 
-/// the handler and marker are js values held in runtime userdata, which `UserDataMap::clear` drops
-/// after the context is freed: teardown has to let go of them while the context is still there
+/// Release the handler and marker before freeing the context. They are JS values in runtime
+/// userdata, which `UserDataMap::clear` would otherwise drop too late.
 pub fn dispose_tl_shared(ctx: &Ctx<'_>) {
   drop(ctx.remove_userdata::<TlShared>());
 }
@@ -255,8 +254,8 @@ const TYPE_KEY: &str = "_";
 const TO_JSON_KEY: &str = "toJSON";
 const THEN_KEY: &str = "then";
 
-/// `HOR12` names a handle; `HOR12|{...}` also carries the scalar fields kotlin read while it had
-/// the object in hand, as JSON, so reading them never crosses. `PluginWire.encodeHandle` writes it.
+/// `HOR12` encodes a handle. `HOR12|{...}` also includes scalar fields as JSON for reads without
+/// bridge calls. Kotlin writes this with `PluginWire.encodeHandle`.
 const PROJECTION_SEPARATOR: char = '|';
 
 /// mirrored by `PluginWire.CLASS_SEPARATOR`
@@ -399,9 +398,8 @@ fn base64_decode(s: &str) -> Option<Vec<u8>> {
   base64::Engine::decode(&STANDARD, s).ok()
 }
 
-/// the base64 is built from `this` when `toJSON` is actually called, not up front: an `invokeRaw`
-/// response is whatever the method answered, and eagerly encoding one would cost a full pass and
-/// keep a string 4/3 its size alive for as long as the array
+/// Generate base64 from `this` only when `toJSON` is called. Eagerly encoding an `invokeRaw`
+/// response would scan all bytes and retain a string 4/3 the array's size.
 pub(crate) fn make_bytes_value<'js>(ctx: &Ctx<'js>, bytes: &[u8]) -> JsResult<Value<'js>> {
   let arr = TypedArray::<u8>::new_copy(ctx.clone(), bytes)?;
   let to_json =
@@ -990,8 +988,9 @@ fn vector_length<'js>(ctx: &Ctx<'js>, host: &dyn TlHost, handle: i64) -> JsResul
   }
 }
 
-/// holds the target and not just the id: `for (const x of view.vec)` frees the iterable as soon as
-/// it has the iterator, and a view no parent caches would release its handle before the first `next`
+/// Retain the proxy target, not just its ID. `for (const x of view.vec)` can release the iterable
+/// after obtaining its iterator; without this reference, an uncached view could release its handle
+/// before the first `next`.
 fn make_vector_iterator<'js>(ctx: &Ctx<'js>, target: &Class<'js, HandleBox<'js>>) -> JsResult<Function<'js>> {
   let target = target.clone();
   Function::new(ctx.clone(), move |ctx: Ctx<'js>| -> JsResult<Object<'js>> {

@@ -36,20 +36,18 @@ import org.telegram.ui.Components.TypefaceSpan
 import org.telegram.ui.Components.URLSpanNoUnderlineBold
 
 /**
- * Kotlin side of the `Account` read surface (rust: `reads.rs`). [read] is a lookup in what
- * [MessagesController] already holds; [resolve] and [fetch] may go to the network.
+ * Implements Account reads (Rust: `reads.rs`). [read] uses [MessagesController] caches;
+ * [resolve] and [fetch] may use the network.
  *
- * Called on [EngineDispatch.scheduler] from a JNI upcall, so **an asynchronous op never answers
- * inline**: settling re-enters the engine, which from inside an upcall is a process abort.
- * Everything goes through [answer], which posts.
+ * JNI upcalls run on [EngineDispatch.scheduler]. Async operations must post through [answer]:
+ * settling inline would reenter the engine during an upcall and abort the process.
  *
- * What is handed out is read-only and plugin-lifetime, the objects belonging to the app's own
- * caches. Some members are `internal` because [PluginWrites] is the other half of the same surface.
+ * Returned objects are read-only, plugin-lifetime views of app caches. Some methods are
+ * `internal` for use by [PluginWrites].
  *
- * **The caches are read off the UI thread on purpose.** `dialogs_dict`/`dialogMessage` are
- * `LongSparseArray`s the app mutates from it, and stock reads them off-thread itself. A
- * *synchronous* getter cannot hop, so a lost race answers `null` - already a legal answer, a miss
- * and a nonexistent peer being the same thing.
+ * Synchronous getters read `dialogs_dict` and `dialogMessage` off the UI thread, as stock does,
+ * because they cannot hop queues. These LongSparseArrays are mutated on the UI thread;
+ * a read that loses a race returns `null`, like a cache miss.
  */
 object PluginReads {
     // keep in sync with rust `reads::OP_*`

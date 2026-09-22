@@ -6,11 +6,11 @@ export const ManifestSchema = v.object({
   /** shown everywhere the plugin is named; the only required field */
   name: v.pipe(oneLineString, v.minLength(1)),
   /**
-   * what decides whether a later file is an *update* of an installed plugin or a plugin of its own,
-   * compared verbatim. Canonically a reverse domain name, `com.github.you.my-plugin`.
+   * Identifies updates to an installed plugin. Compared verbatim; conventionally a reverse
+   * domain name such as `com.github.you.my-plugin`.
    *
-   * Left out, one is derived from [author] and [name], which ties the plugin's identity to both:
-   * rename either half and the next build installs beside the old plugin instead of over it.
+   * If omitted, derived from [author] and [name]. Changing either then installs a separate
+   * plugin instead of updating the existing one.
    */
   id: v.optional(v.pipe(
     v.string(),
@@ -18,7 +18,7 @@ export const ManifestSchema = v.object({
     // eslint-disable-next-line no-control-regex
     v.regex(/^[^\s\u0000-\u001F\u007F-\u009F]+$/, 'Must be a single token with nothing invisible in it'),
   )),
-  /** shown next to the name, and what an absent [id] is derived from together with it */
+  /** Shown next to the name; also used with [name] to derive an omitted [id]. */
   author: v.optional(oneLineString),
   version: v.optional(oneLineString),
   /** one string, or a language map whose `en` (or first entry) is the untagged description */
@@ -41,7 +41,7 @@ export const ManifestSchema = v.object({
   /** defaults to the api level of the installed `@inugram/plugin-types` */
   pluginApi: v.optional(v.number()),
   platform: v.optional(oneLineString),
-  /** any further directives, verbatim; `inu.info().header` hands them to the plugin */
+  /** Additional directives, preserved verbatim in `inu.info().header`. */
   extra: v.optional(v.record(
     oneLineString,
     v.union([oneLineString, v.array(oneLineString)]),
@@ -59,15 +59,14 @@ function directive(key: string, value: string): string {
 }
 
 /**
- * one lowercase run of letters and digits per word, joined by dashes. `PluginManifest.slug` derives
- * the id of a plugin that declares none the same way, so a plugin built before the cli started
- * writing `@id` keeps matching the plugin built after.
+ * Lowercase words of letters and digits joined by dashes. Must match `PluginManifest.slug`
+ * so IDs written by the CLI match IDs the app derives for older plugins without `@id`.
  */
 export function slugify(value: string): string {
   return value.toLowerCase().replace(/[^\p{L}\p{Nd}]+/gu, '-').replace(/^-|-$/g, '')
 }
 
-/** what the app would derive for a manifest that declares no [Manifest.id], and null where it would too */
+/** Derives the same ID, or null, as the app when [Manifest.id] is omitted. */
 export function resolveManifestId(manifest: Manifest): string | null {
   if (manifest.id !== undefined) return manifest.id
   if (manifest.author === undefined) return null
@@ -130,7 +129,7 @@ export interface Grant {
   scopes: string[]
 }
 
-/** mirrors `PluginPermissions.parseGrant`: anything it answers null for is not a grant at all */
+/** Matches `PluginPermissions.parseGrant`: null means the token is not a grant. */
 export function parseGrant(token: string): Grant | null {
   const t = token.trim()
   if (t === '') return null
@@ -144,7 +143,7 @@ export function parseGrant(token: string): Grant | null {
   return { name, scopes: inner.split(',').map(s => s.trim()).filter(s => s !== '') }
 }
 
-/** mirrors `PluginPermissions.isMalformed`: a bad scope must not read as an unscoped grant */
+/** Matches `PluginPermissions.isMalformed`: reject bad scopes instead of treating them as unscoped. */
 export function isMalformed(token: string): boolean {
   const t = token.trim()
   if (t === '') return false
@@ -191,7 +190,7 @@ function validateScope(
   }
 }
 
-/** mirrors `GrantValidator.validateGrants`: these are the problems that refuse an install */
+/** Matches `GrantValidator.validateGrants`, including all errors that reject installation. */
 export function validateGrants(tokens: string[], vocabulary: Vocabulary): string[] {
   const problems: string[] = []
   const bypassesFilter = tokens.some(token => parseGrant(token)?.name === 'unsafe.disableApiFiltering')
@@ -218,8 +217,8 @@ export function validateGrants(tokens: string[], vocabulary: Vocabulary): string
 }
 
 /**
- * [ManifestSchema] judged the way the app would judge it: every grant against the catalogue the
- * project installed, and the api level against what that catalogue offers.
+ * Validates [ManifestSchema] against the installed grant catalogue and API level,
+ * using the same rules as the app.
  */
 export function createManifestSchema(vocabulary: Vocabulary) {
   return v.pipe(
@@ -237,8 +236,8 @@ export function createManifestSchema(vocabulary: Vocabulary) {
 }
 
 /**
- * what the app installs anyway, though the plugin will not do what the manifest says. These are not
- * part of [createManifestSchema] because valibot has no issue that does not refuse the input.
+ * Warnings for manifests the app accepts but that may not work as intended.
+ * Separate from [createManifestSchema] because Valibot issues always reject the input.
  */
 export function collectManifestWarnings(manifest: Manifest, vocabulary: Vocabulary): string[] {
   const warnings: string[] = []

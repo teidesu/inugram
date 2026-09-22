@@ -1,14 +1,13 @@
 import { fileURLToPath } from 'node:url'
 
-/** substituted by the vite build; running from the sources there is nothing to substitute */
+/** Replaced by Vite during builds; unset when running from source. */
 declare const __INU_VERSION__: string | undefined
 
-/** what the published package says it is */
+/** The published package version. */
 export const version: string = typeof __INU_VERSION__ === 'string' ? __INU_VERSION__ : 'dev'
 
 /**
- * `templates/` sits beside this module in both layouts: `src/` in the repo, and the build root once
- * published, where the bundle carrying this module lands. `vite.config.ts` fails the build if that
- * stops being true.
+ * `templates/` is beside this module in both `src/` and the published build.
+ * `vite.config.ts` checks that the bundle containing this module stays at the build root.
  */
 export const templatesDir: string = fileURLToPath(new URL('./templates', import.meta.url))

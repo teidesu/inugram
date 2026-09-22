@@ -17,19 +17,15 @@ import org.telegram.messenger.R
 import org.telegram.ui.Components.BulletinFactory
 
 /**
- * The plugin author's push channel: `adb push` a source file into [DIR] under the app's external
- * files dir, then send [ACTION] to install or hot-reload it. Driven by `scripts/push-plugin.ts`.
+ * Installs or reloads source pushed by `adb` into [DIR] under the app's external files directory,
+ * then announced through [ACTION]. Used by `scripts/push-plugin.ts`.
  *
- * **It installs without asking.** No trust sheet, no permission review, no undo - that is the whole
- * point, and why it is off until the warning sheet is accepted. Two things keep it from being a way
- * in for anything else:
+ * Skips trust and permission review, with no undo. The receiver exists only after the user
+ * enables [InuConfig.PLUGINS_DEV_MODE] through its warning sheet. It requires the sender's
+ * `android.permission.DUMP`, held by `adb shell` and unavailable to ordinary installed apps.
  *
- * - the receiver only exists while [InuConfig.PLUGINS_DEV_MODE] is on, and
- * - it demands `android.permission.DUMP` of whoever sends the broadcast. `adb shell` holds it; an
- *   installed app cannot be granted it. So the channel is adb's even while dev mode is on.
- *
- * Source is read from the drop dir and never from an extra, so a broadcast can only ever name a
- * file that something with write access to the app's own external dir has already put there.
+ * Reads source only from the drop directory, never broadcast extras. A broadcast must name
+ * a file already placed there by something with write access.
  */
 object PluginDevServer {
     const val ACTION = "desu.inugram.plugins.DEV"
@@ -137,11 +133,9 @@ object PluginDevServer {
     }
 
     /**
-     * a push is started from a computer, so the phone says what just happened to it: a dev install
-     * passes no sheet and leaves no undo bulletin of its own.
-     *
-     * Skipped while the app is in the background - a bulletin queued now would surface at whatever
-     * unrelated screen the user opens next. Already on the main thread, this being a receiver.
+     * Shows a bulletin for a dev install, which has no review sheet or undo bulletin.
+     * Skip it in the background to avoid showing it on an unrelated screen later.
+     * Already runs on the main thread as part of the receiver.
      */
     private fun announce(installed: List<JSONObject>) {
         if (installed.isEmpty() || !PluginAppVisibility.isForeground) return

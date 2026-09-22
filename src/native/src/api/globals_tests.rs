@@ -92,9 +92,8 @@ use crate::testing::harness::eval_string as eval;
 
 use crate::testing::harness::eval_unit as run;
 
-/// the guard that pins the *engine's* context rather than this fixture's: `Context::base` is
-/// what any narrower constructor looks like from here, and installing into one has to fail
-/// loudly instead of leaving a sandbox missing globals `common.d.ts` promises
+/// Checks the engine requires a full context. Installing into `Context::base` must fail explicitly
+/// instead of omitting globals promised by `common.d.ts`.
 #[test]
 fn installing_into_a_context_without_the_intrinsics_refuses() {
   let rt = Runtime::new().unwrap();
@@ -445,10 +444,8 @@ impl crate::api::tl::proxy::TlHost for OneMessageTl {
   fn tl_release(&self, _handle: i64) {}
 }
 
-/// the decision recorded in `common.d.ts`: a view is a host object, so cloning one throws
-/// instead of quietly walking the whole graph over the bridge. Against a real proxy rather than
-/// an object carrying the marker, because what is being pinned is that the duck-typing and what
-/// `tl_proxy` answers still agree.
+/// Checks that cloning a TL view throws, as required for host objects. Use a real proxy to verify
+/// the clone check matches `tl_proxy` markers without traversing the object graph over the bridge.
 #[test]
 fn structured_clone_throws_on_a_tl_view() {
   use crate::api::tl::proxy::{TlHost, TlViews, ViewLife};
@@ -527,8 +524,8 @@ fn file_mtime_millis(path: &Path) -> i64 {
   modified.duration_since(std::time::UNIX_EPOCH).unwrap().as_millis() as i64
 }
 
-/// media the app downloaded is handed over as a blob over the app's own file, so the engine
-/// must never be what deletes it - not on `dispose()`, not on collection, not on teardown
+/// A blob wrapping app-downloaded media must never delete the app's file: on dispose, garbage
+/// collection, or engine teardown.
 #[test]
 fn an_app_owned_file_outlives_every_blob_over_it() {
   let dir = TestDir::new("app-file-life");
@@ -555,8 +552,7 @@ fn an_app_owned_file_outlives_every_blob_over_it() {
   assert_eq!(std::fs::read(&path).unwrap(), b"0123456789");
 }
 
-/// the other way a spill ends: a build that opened one and then threw partway through. The
-/// bytes already written are nobody's, and nothing will come back for them.
+/// A failed blob build must remove partial spill data; no handle exists to clean it up later.
 #[test]
 fn a_build_that_throws_after_it_started_spilling_leaves_nothing_behind() {
   let dir = TestDir::new("half-written");

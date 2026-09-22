@@ -24,23 +24,16 @@ import org.json.JSONObject
 import org.telegram.messenger.Utilities
 
 /**
- * The transport behind the global `fetch` (rust: `fetch.rs`), and the only place the two egress
- * rules `common.d.ts` states can be enforced. [EgressPolicy] decides them; what is enforced here is
- * that it is asked at all, and asked per hop.
+ * Transport for global `fetch` (Rust: `fetch.rs`). Applies [EgressPolicy] to every hop.
  *
- * **Every redirect hop is screened, not just the url the plugin passed**: `instanceFollowRedirects`
- * is off and [runExchange] walks the chain itself, calling [EgressPolicy.screenHop] on each. A
- * client that follows them for us checks the grant once, which turns any open redirect on an
- * allowed host into a proxy to everything else, and the response then looks like it came from the
- * allowed host.
+ * Automatic redirects are disabled. [runExchange] screens each destination, preventing an
+ * allowed host's open redirect from bypassing grants.
  *
- * The residual rebinding window is between that resolution and the socket's own, which needs a
- * pinned-address socket with `Host`/SNI set by hand to close - documented rather than pretended
- * away.
+ * DNS rebinding remains possible between screening and the socket's resolution. Closing that
+ * gap requires a socket pinned to the checked address with explicit `Host` and SNI.
  *
- * Only a body the plugin is actually handed stays charged against [BODY_BUDGET_BYTES]: a counter
- * nothing decrements is one a remote server drives to the ceiling by answering every request with a
- * 302 and a big body.
+ * Charge [BODY_BUDGET_BYTES] only for bodies returned to the plugin. Redirect bodies must
+ * release their charge, or repeated 302 responses with large bodies could exhaust the budget.
  */
 object PluginFetch : SessionResource {
     /** past this, a chain is a loop somebody else is running. Same number chromium uses. */

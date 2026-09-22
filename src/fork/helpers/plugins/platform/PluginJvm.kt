@@ -32,12 +32,11 @@ import org.telegram.messenger.Utilities
 import org.telegram.tgnet.TLObject
 
 /**
- * Kotlin side of `inu.jvm` (rust: `jvm.rs`).
+ * Kotlin bindings for `inu.jvm` (Rust: `jvm.rs`).
  *
- * The grant carries no scope list: it reaches every class the app can. [ENGINE_PACKAGE] is the one
- * refusal, and it is a rule rather than a boundary - it guards the hop that would hand a plugin the
- * engine's own objects while a reflected call holds an engine lease. `java.lang.reflect` walks
- * around it.
+ * The grant is unscoped. Direct access to [ENGINE_PACKAGE] is rejected to avoid exposing engine
+ * objects while a reflected call holds the engine lease. This is not a sandbox boundary:
+ * `java.lang.reflect` can bypass the check.
  */
 object PluginJvm : SessionResource {
     // keep in sync with rust `jvm::OP_*` and `jvm.js`; member access is rust's own, through cached jni ids, and never reaches this side
@@ -897,31 +896,20 @@ object PluginJvm : SessionResource {
     }
 
     /**
-     * Member resolution, memoized process-wide, one table per declaring class.
+     * Caches member resolution process-wide, one table per declaring class.
      *
-     * `Class.getDeclaredMethods()` and `getMethods()` allocate a fresh array of fresh `Method`
-     * objects on every call - ART interns none of it - so resolving one member of a deep class
-     * walks and allocates thousands. Measured on a device: one `TextView` call cost ~5ms against
-     * ~0.1ms for a constructor on the same class, and a constructor is the one path that never
-     * reaches here. A plugin building android views paid that per call.
+     * ART allocates new arrays and `Method` objects for each `getDeclaredMethods()` and `getMethods()`
+     * call. Resolving a deep class can allocate thousands of objects. On-device measurements showed
+     * ~5 ms for a `TextView` call versus ~0.1 ms for a constructor, which skips this scan.
      *
-     * A table holds only what its class declares; a lookup composes the tables along the superclass
-     * chain and the interfaces, most derived first. So `View`'s table is scanned once and serves
-     * every widget, where a table of the whole inherited set rescanned `View` into each subclass.
-     * Keyed by class, not by (class, member): the scan costs the same whether it answers one name or
-     * every name, and a plugin touches a dozen members of the same view class.
+     * Each table holds only declared members. Lookups combine superclass and interface tables,
+     * most derived first, so all widgets reuse `View`'s table. Cache by class rather than member
+     * because one scan costs the same for one name or all names. Walk interface tables directly;
+     * `getMethods()` would merge and deduplicate public members already covered by the superclass scan.
      *
-     * Interfaces are reached through the tables rather than `getMethods()`, which on a view class is
-     * the single most expensive call here - it merges and dedups the whole public method set, of
-     * which everything but the interface members is already covered by the superclass chain.
-     *
-     * The scan decides nothing about permissions, and overload selection still happens per call
-     * against the candidates, so the answer is shared, including between plugins.
-     *
-     * An LRU rather than a weak map: a `Method` strongly references the class that declared it, so
-     * weak keys would never clear for the entries that matter. The bound is what keeps a plugin's
-     * own `defineClass` types - and the whole member table of every class it ever touched - from
-     * accumulating.
+     * Permission checks and overload selection remain per call, allowing tables to be shared
+     * between plugins. Use a bounded LRU: weak keys would stay alive through their `Method` values,
+     * and an unbounded cache would retain every class a plugin touched or defined.
      */
     private const val CLASS_CACHE_LIMIT = 256
 

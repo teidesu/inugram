@@ -50,22 +50,20 @@ import org.telegram.ui.ChatActivity
 internal fun encodeRpcErrorWire(error: TLRPC.TL_error): String = PluginWire.encodeRpcError(error.code, error.text ?: "")
 
 /**
- * Wires `inu.interceptRpc`/`inu.invokeRpc` into the stock request pipeline. The arriving update
- * stream is [PluginUpdates]; the two share only [TlHandles] and this file's queue rules.
+ * Connects `inu.interceptRpc` and `inu.invokeRpc` to stock requests. [PluginUpdates] owns
+ * incoming updates; the two share [TlHandles] and queue rules.
  *
- * All chain orchestration happens on [EngineDispatch.scheduler], so there is no locking. Stronger than
- * that: an engine is entered **only from a globalQueue runnable, never from inside a JNI upcall** -
- * `Context::with` takes the runtime's `RefCell`, so re-entering the same engine from a callback it
- * is running is a `BorrowMutError` panicking out of an `extern "system"` fn, i.e. a process abort.
- * One plugin reaches that alone by registering twice for a method. Hence [onNext]/[onComplete] post.
+ * Chain operations run on [EngineDispatch.scheduler] without locks. [onNext] and [onComplete]
+ * post work instead of reentering the engine inside a JNI upcall. Reentry would borrow the
+ * runtime's `RefCell` twice and panic across JNI, aborting the process. Even two registrations
+ * for one method can trigger this without the queue hop.
  *
- * The app is always answered from [Utilities.stageQueue], where stock answers it from: the
- * delegate-less `Updates` tail runs `processUpdates`, which mutates pts/seq from that queue with no
- * locking.
+ * Responses return to the app on [Utilities.stageQueue], where stock mutates pts/seq and runs
+ * the delegate-less `Updates` tail through `processUpdates`.
  *
- * The two TL sources here differ in lifetime and mutability: writable and scope-invalidated in bulk
- * for an intercept chain, writable and plugin-lifetime for an `invokeRpc` result (nobody app-side
- * reads it, so `disableFree` moves the free to the table).
+ * Interceptor handles are writable and expire with their scope. `invokeRpc` results are writable
+ * and live with the plugin; the app does not read them, and `disableFree` transfers cleanup
+ * to the handle table.
  */
 object PluginRpc : SessionResource {
     private class Interceptor(
@@ -175,14 +173,13 @@ object PluginRpc : SessionResource {
     }
 
     /**
-     * stock frees a request's `NativeByteBuffer` fields the moment it has serialized them
-     * (`upload.saveFilePart`'s `bytes`, the secret-chat sends), gutting the writable view a stage
-     * parked in `await next()` still holds - so the free is suppressed for the send and done once
-     * the chain retires.
+     * Stock frees request NativeByteBuffers after serialization, including `upload.saveFilePart`
+     * and secret-chat payloads. Suppress that free while stages may retain request views across
+     * `await next()`, then free once the chain retires.
      *
-     * [leased] outlives the first send: on CONNECTION_NOT_INITED stock re-sends this very instance
-     * with a fresh token and without invoking the delegate, so it is dropped only by what proves no
-     * further send can follow - the delegate answering, or a cancel taking it away from native.
+     * [leased] survives retries: CONNECTION_NOT_INITED resends the same object with a new token
+     * without calling the delegate. Release only on response or native cancellation, when no
+     * further send can occur.
      */
     private class SentRequest(val request: TLObject) {
         var leased = true

@@ -23,14 +23,12 @@ pub(crate) struct Entry {
   pub(crate) kind: u8,
 }
 
-/// The java references a plugin holds, keyed by the id its js handles carry.
+/// Owns each plugin's Java references, keyed by JS handle ID.
 ///
-/// Owned here rather than on the kotlin side because a call needs the `jobject` itself, not a
-/// number naming one: with the table beside the caller, an argument is a lookup and a result is a
-/// `NewGlobalRef`, and nothing about a reference crosses as text. Kotlin reaches the same table
-/// through the `nativeJvm*` exports, without the engine lease - the hooked thread encoding an
-/// `inu.xposed` argument holds no lease and must not wait for one - which is why this is a mutex
-/// and not engine state.
+/// Rust keeps the table beside the JNI caller so arguments need only a lookup and results a
+/// `NewGlobalRef`, without string encoding. Kotlin accesses it through `nativeJvm*` without the
+/// engine lease: a hooked thread may need to encode arguments while another thread owns the engine.
+/// A mutex protects the table independently of engine state.
 pub(crate) struct RefTable {
   entries: Mutex<HashMap<i64, Entry>>,
   next: AtomicI64,
@@ -46,8 +44,8 @@ impl RefTable {
     })
   }
 
-  /// inserted under the same lock `close` drains under, so a mint racing the close can never
-  /// land an entry nothing will drop again
+  /// Insert under the same lock used by `close`, so a concurrent mint cannot add an entry after the
+  /// table has been drained.
   pub(crate) fn mint(&self, obj: Global<JObject<'static>>, kind: u8) -> Option<i64> {
     self.insert(Entry { obj: Arc::new(obj), kind })
   }
@@ -83,8 +81,8 @@ impl RefTable {
     self.closed.load(Ordering::Acquire)
   }
 
-  /// every handle expires at once; the references are dropped outside the lock, since a global
-  /// ref's release re-enters the vm
+  /// Expire all handles together, then drop global references outside the lock because releasing
+  /// them enters the VM.
   pub(crate) fn close(&self) {
     let drained = {
       let mut entries = self.entries.lock().unwrap_or_else(|e| e.into_inner());
@@ -100,9 +98,8 @@ impl RefTable {
   }
 }
 
-/// What a js handle *is*: the id of a table entry, read off the object with no js call. The class
-/// cache key and the pinned member are the two answers a handle is asked for repeatedly and never
-/// change, so they live on the handle.
+/// A JS handle stores a table-entry ID read without executing JS. It also caches the class key and
+/// pinned member, which are immutable and frequently read.
 pub(crate) struct JvmRef {
   pub(crate) id: i64,
   refs: Arc<RefTable>,

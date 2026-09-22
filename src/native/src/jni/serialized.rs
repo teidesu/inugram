@@ -79,8 +79,8 @@ impl<T> Serialized<T> {
     }
   }
 
-  /// counted so a release can skip the wake: the lease is taken and dropped on every callback, and
-  /// `notify_all` is a futex syscall whether or not anyone waits
+  /// Tracks waiters so lease release can skip `notify_all` when none exist. Every callback acquires
+  /// and releases the lease; an unnecessary notification would add a futex syscall.
   fn wait<'a>(&self, mut state: MutexGuard<'a, State<T>>, remaining: Option<Duration>) -> MutexGuard<'a, State<T>> {
     state.waiting += 1;
     let mut state = match remaining {

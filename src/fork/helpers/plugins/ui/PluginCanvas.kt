@@ -40,23 +40,19 @@ import org.json.JSONArray
 import org.json.JSONObject
 
 /**
- * The rasterizer behind `inu.canvas` (rust: `canvas/mod.rs`), per `sdk/types/canvas.d.ts`.
+ * Rasterizes `inu.canvas` commands (Rust: `canvas/mod.rs`), per `sdk/types/canvas.d.ts`.
  *
- * **The engine decides, this paints.** Everything with a rule in the spec is settled in rust before
- * a byte crosses; what arrives is a command buffer of move/line/cubic/close, each command carrying
- * its own transform and its own fully-described paint. So there is no state machine between
- * commands. Every draw runs under the command's own transform, in the user space the plugin was
- * drawing in: a stroke's pen, a gradient's coordinates and a pattern's tiling are all defined there.
+ * Rust validates API rules before sending a command buffer. Each move/line/cubic/close command
+ * contains its transform and paint, with no shared drawing state between commands. Strokes,
+ * gradients, and patterns use the command's user-space coordinates.
  *
- * **A composite mode other than `source-over` draws into a `saveLayer`**, being defined against the
- * whole destination rather than the shape. Three things the platform cannot do are refused rather
- * than approximated: the separable blend modes below api 29, a non-concentric radial gradient (no
- * two-point conical shader exists), and a pattern that does not tile in both directions below api
- * 31, where `TileMode.DECAL` arrives and `CLAMP` in its place smears the edge pixel.
+ * Composite modes other than `source-over` use `saveLayer` because they affect the whole
+ * destination. Reject unsupported operations: separable blend modes below API 29,
+ * non-concentric radial gradients (no two-point conical shader), and patterns that do not
+ * repeat in both directions below API 31 (`TileMode.DECAL`; `CLAMP` would smear edge pixels).
  *
- * The listener is a JNI upcall, so it runs on the queue the engine lives on. The three slow ops
- * (encoding a bitmap, decoding one, reading a font file) hop to [work] and come back through
- * [QuickJs.settle] on the plugin queue.
+ * JNI upcalls run on the engine queue. Bitmap encoding, decoding, and font-file reads run
+ * on [work] and settle through [QuickJs.settle] on the plugin queue.
  */
 object PluginCanvas : SessionResource {
     // keep in sync with rust `canvas::OP_*`

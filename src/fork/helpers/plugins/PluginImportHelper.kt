@@ -15,10 +15,9 @@ import org.telegram.ui.Components.BulletinFactory
 import java.io.File
 
 /**
- * The one way a plugin gets installed from outside the plugins page: parses and vets the source,
- * refuses what this app cannot run with a reason the user can read, and otherwise asks first.
- *
- * Parsing and the obfuscation scan both walk the whole file, so both happen off the ui thread.
+ * Installs plugins from outside the plugins page. Parses and validates source, explains
+ * unsupported plugins, and asks for approval before installing.
+ * Parsing and obfuscation scanning run off the UI thread because both read the full file.
  */
 object PluginImportHelper {
     private const val SUFFIX = ".inu.js"

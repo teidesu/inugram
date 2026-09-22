@@ -4,10 +4,9 @@
   const invalid = message => new PluginError('invalid-argument', message)
 
 
-  // null-prototype: `constructor` and `toString` are header names rfc7230 allows, and on a plain
-  // object `name in out` answers for the whole prototype chain - so the first one of those would
-  // read as a repeat and concat `Object.prototype.constructor`. `__proto__` is worse: assigning it
-  // on a plain object sets the prototype instead of adding a header, and the header vanishes
+  // Use a null-prototype header map. `constructor` and `toString` are valid RFC 7230 header names;
+  // inherited properties would be mistaken for existing headers. Assigning `__proto__` to a plain
+  // object would change its prototype instead of adding a header.
   const headerMap = () => Object.create(null)
 
   // a header that appeared once is a string and one that repeated is an array, which is the whole
@@ -107,8 +106,7 @@
       let settled = false
       let timer
 
-      // whichever of the three gets here first owns the outcome; the other two become no-ops, so a
-      // response that arrived just before an abort is not un-settled by it
+      // The first completion wins. Later responses, errors, or aborts do nothing.
       const finish = (run) => {
         if (settled) return false
         settled = true
@@ -140,8 +138,8 @@
     })
   }
 
-  // every failure arrives in the `catch`, including the ones decided before anything is sent: a
-  // missing grant throwing at the call site would make `fetch(...).catch(...)` the wrong shape
+  // Reject all failures asynchronously, including grant checks, so callers can always use
+  // `fetch(...).catch(...)`.
   const fetch = (url, init) => {
     try {
       return send(url, init)
@@ -150,8 +148,6 @@
     }
   }
 
-  // `Response` stays unexported: `common.d.ts` declares it as an interface, so there is no global
-  // constructor to promise, and a plugin that could reach one would be reading surface nothing
-  // agreed to
+  // Keep Response private: `dom.d.ts` declares only an interface, not a global constructor.
   Object.defineProperty(globalThis, 'fetch', { value: fetch, writable: true, configurable: true })
 }

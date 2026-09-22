@@ -12,17 +12,14 @@ private const val MIN_WAKE_GAP_MS = 4L
 private const val NO_WAKE = -1L
 
 /**
- * paces one engine's timer wakes on [EngineDispatch.scheduler]; nothing can ask for a wake before the
- * plugin's own code has run.
+ * Paces one engine's timer wakes on [EngineDispatch.scheduler]. Wakes can only be requested
+ * after plugin code has run.
  *
- * Timers are the only thing a plugin can put on that queue without ever returning to the engine,
- * and the native deadline bounds one entry rather than their rate: `setTimeout(function f() {
- * setTimeout(f, 0) }, 0)` re-arms forever. So a tick is charged for what it cost and the next waits
- * out the difference.
+ * The native deadline limits each entry, not callback frequency. A zero-delay timer can keep
+ * rescheduling itself indefinitely, so each tick delays the next in proportion to its cost.
  *
- * Here rather than in the wheel because it is not a statement about timers: the engine decides when
- * it *wants* waking, this decides when the host can afford it. A delayed wake only ever fires
- * later, never less, so it composes with the background floor by `max`.
+ * The native wheel decides when it wants a wake; the host applies this queue budget.
+ * Throttling delays ticks without dropping them and combines with the background floor using `max`.
  */
 class TimerThrottle(private val session: PluginSession) {
     private val wake = Runnable { tick() }

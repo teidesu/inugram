@@ -5,15 +5,13 @@ import java.util.UUID
 import org.telegram.messenger.ApplicationLoader
 
 /**
- * Where a `Blob` too big to keep in memory spills to (rust: `blob.rs`). The engine owns the bytes;
- * the host owns only where the files live and when the tree dies.
+ * Manages spill-file locations for blobs too large to keep in memory (Rust: `blob.rs`).
+ * The engine owns the bytes; the host owns directories and cleanup.
  *
- * Deliberately the app's *internal* cache dir rather than [org.telegram.messenger.AndroidUtilities.getCacheDir],
- * which resolves to external storage and may be a removable card the user can eject mid-write.
- *
- * A spilled blob never outlives the engine that made it, so a directory from any other process is
- * orphaned by definition: everything is filed under a per-process [session] and [scheduleSweep]
- * takes the rest, which is also what cleans up after a process death mid-write.
+ * Uses internal cache storage because `AndroidUtilities.getCacheDir` may use a removable card
+ * that can disappear mid-write. Directories are grouped by process [session]. Spilled blobs
+ * cannot outlive their engine, so [scheduleSweep] deletes other processes' directories,
+ * including partial writes left by crashes.
  */
 object PluginBlobs {
     private const val ROOT = "inu_plugin_blobs"

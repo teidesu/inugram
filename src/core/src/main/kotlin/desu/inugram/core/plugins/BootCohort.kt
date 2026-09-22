@@ -1,13 +1,11 @@
 package desu.inugram.core.plugins
 
 /**
- * Which plugins must be running before the app applies anything, and so load synchronously in
- * `ApplicationLoader.postInitApplication` rather than at first UI.
+ * Selects plugins to load synchronously in `ApplicationLoader.postInitApplication` before
+ * updates are applied. Other plugins wait for the first UI.
  *
- * The path that forces it is a push wakeup: `PushListenerController` calls `postInitApplication`,
- * posts to `stageQueue`, decrypts and hands a synthesized `TL_updates` to `processUpdates` with no
- * activity ever created. A plugin loaded at first UI is absent for all of it - and since this is
- * on the critical path of every push, the cohort stays as small as the manifest allows.
+ * Push wakeups call this method, decrypt updates on stageQueue, and call `processUpdates`
+ * without creating an activity. Keep the cohort as small as grants allow to limit push latency.
  */
 object BootCohort {
     /**

@@ -26,22 +26,21 @@ import org.telegram.tgnet.TLRPC
 import org.telegram.tgnet.tl.TL_update
 
 /**
- * Wires `inu.onUpdate`/`inu.interceptUpdate` into the app's arriving update stream (rust:
- * `tg/rpc.rs`, whose `update_dispatches` is a table of its own).
+ * Connects `inu.onUpdate` and `inu.interceptUpdate` to incoming updates (Rust: `tg/rpc.rs`,
+ * using its separate `update_dispatches` table).
  *
- * Everything here runs on [EngineDispatch.scheduler] except the hand-back, which is
- * [Utilities.stageQueue] because that is the only queue `processUpdates` may run on: it mutates
- * pts/seq with no locking, and stock's own tail runs it there.
+ * Runs on [EngineDispatch.scheduler], except delivery back to stock on [Utilities.stageQueue].
+ * `processUpdates` mutates pts/seq without locks and must run there.
  *
- * **There are three arrival paths and they are not interchangeable.** [onUpdates] is the live batch,
- * answered by handing a whole `TLRPC.Updates` back; [onDifference] is the catch-up, which walks its
- * own lists and is answered by re-running the runnable that carries it; and the two compressed
- * short forms arrive through [onUpdates] carrying no `TLRPC.Update` at all, so the one a middleware
- * sees is [normalizeShortMessage]'s synthetic. Adding a fourth dispatch site rather than an arrival
- * path would be the bug: the dedup, the takeover filter and the `Disposer` rules all hang off these.
+ * Three arrival forms share deduplication, filtering, and disposer rules:
+ * - [onUpdates] receives a live batch and returns a whole `TLRPC.Updates`.
+ * - [onDifference] walks catch-up lists and resumes their original runnable.
+ * - Compressed short messages arrive through [onUpdates] without a `TLRPC.Update`;
+ *   [normalizeShortMessage] creates the synthetic update middleware sees.
  *
- * A payload reaching a plugin is read-only and plugin-lifetime for `onUpdate`, writable and
- * scope-invalidated for an `interceptUpdate` stage. Both mint into the plugin's own [TlHandles].
+ * Route new arrival paths through these rules instead of adding independent dispatch sites.
+ * `onUpdate` gets read-only plugin-lifetime handles. `interceptUpdate` gets writable handles
+ * that expire with the stage. Both use the plugin's [TlHandles].
  */
 object PluginUpdates : SessionResource {
     private const val TAG = "InuPluginUpdates"

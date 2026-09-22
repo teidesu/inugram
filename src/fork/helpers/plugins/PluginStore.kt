@@ -12,18 +12,14 @@ import org.json.JSONArray
 import org.json.JSONObject
 
 /**
- * The installed set as it exists on disk: one `.js` file per install, plus the record in
- * `PLUGINS_STATE` carrying its plugin id, its place in the order and its enabled bit.
+ * Owns installed files: one `.js` per install, plus its plugin ID, order, and enabled state
+ * in `PLUGINS_STATE`. [PluginManager] owns running engines and runtime failures; this class
+ * handles file loading and persistence.
  *
- * Split from [PluginManager], which owns the *engines*: nothing here starts, stops or talks to one,
- * and the two halves fail differently - a plugin that will not load is this side's problem and one
- * that throws is that side's.
- *
- * **The id is the whole point of the record.** It is minted at install ([PluginInstalls.mintId]) and
- * never derived from the file or the manifest, so a plugin that is renamed keeps its `kv` and `fs`
- * stores while a name-squatter gets an empty one. Losing a record therefore loses the user's data:
- * every failure below keeps the persisted state rather than reconciling against a set it could not
- * read.
+ * [PluginInstalls.mintId] creates an install ID independently of the filename or manifest.
+ * It keys `kv` and `fs` storage, preserving data across renames and preventing another plugin
+ * from claiming it by name. Preserve records when reads fail; discarding them loses access
+ * to the user's data.
  */
 object PluginStore {
     private const val TAG = "InuPluginStore"
@@ -91,12 +87,10 @@ object PluginStore {
             .apply { if (dev) put("dev", true) }
 
     /**
-     * the record of an install that did not load this boot but whose file claims [pluginId].
-     *
-     * A plugin only lands here when its file stopped parsing, which is exactly when the user goes
-     * and re-imports a fixed copy. Nothing lists it, so reusing its id is also the only way its
-     * `kv`/`fs` stores are ever reachable again. It stays on the unloaded list until the caller has
-     * actually taken it over ([dropUnloaded]), or a failed import would strand the id anyway.
+     * Finds a record that failed to load this boot but whose file claims [pluginId].
+     * Re-importing a fixed file must reuse its install ID to recover its `kv`/`fs` storage.
+     * Keep the record unloaded until the caller completes the import and calls [dropUnloaded],
+     * so a failed import does not lose it.
      */
     fun findUnloaded(pluginId: String): PluginInstall? = unloaded.firstOrNull { it.pluginId == pluginId }
 
@@ -106,9 +100,8 @@ object PluginStore {
     }
 
     /**
-     * writes plugin source through a temporary file, because [file] may be an install that works:
-     * a write that dies halfway leaves the user with neither the old plugin nor the new one, and
-     * the bytes on disk are the only copy either has.
+     * Writes source through a temporary file. If [file] is an existing install, a failed write
+     * must preserve its only on-disk copy.
      */
     fun writeSource(file: File, source: String): Boolean {
         val tmp = File(file.parentFile, "${file.name}.tmp")

@@ -15,10 +15,9 @@ internal object PluginJvmClass {
     private val IDENTIFIER = Regex("[A-Za-z_$][A-Za-z0-9_$]*")
 
     /**
-     * where a class the plugin did not name lands. Nothing defined here can be cleaned up - a
-     * loaded dex stays loaded - so a name is minted per class rather than reused, and the install
-     * id it sits under keeps two installs of one plugin out of each other's package. A plugin may
-     * still name a class here itself; it just gets no protection from doing so.
+     * Generates names for unnamed classes. Loaded DEX cannot be unloaded, so every class needs
+     * a fresh name. The install ID separates packages for different installs of the same plugin.
+     * Explicit names in this package are still allowed but receive no collision protection.
      */
     const val GENERATED_PACKAGE = "inu.plugins"
 

@@ -12,13 +12,11 @@ import org.telegram.ui.Components.AnimatedFileNative
 import org.telegram.ui.Components.RLottieNative
 
 /**
- * The frame reader behind `inu.canvas.decodeAnimation`, over whichever of the app's decoders the
- * content asks for: ffmpeg for gif/mp4/webm, tlottie for a `.tgs`, and a plain decode for anything
- * that only has one frame.
+ * Decodes frames for `inu.canvas.decodeAnimation`: ffmpeg for GIF/MP4/WebM, tlottie for TGS,
+ * and an ordinary decode for single-frame images.
  *
- * Frames come back as their own bitmaps, since the engine hands each one to the plugin as an
- * `ImageBitmap` of its own. Every call belongs on [queue]: neither decoder may be used from two
- * threads at once, and reading frames in order is a state the sequential path relies on.
+ * Each frame gets its own bitmap for the plugin's `ImageBitmap`. All operations run on [queue]
+ * because decoders are not thread-safe and sequential reads depend on frame order.
  */
 /** the one call shape every video decode here makes: no crop, no rotation, the frame as ffmpeg has it */
 private fun AnimatedFileNative.readInto(bitmap: Bitmap?): Int = getVideoFrame(bitmap, false, 0f, 0f, false)

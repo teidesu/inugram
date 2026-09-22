@@ -10,8 +10,8 @@ use crate::api::ui::icons::{opt_icon, Icon, RETAINED_VALUE_TAG};
 use crate::runtime::pump_jobs;
 use crate::sandbox::registry::{make_disposer, noop_disposer, Lifecycle, Registry, RequestIds};
 use crate::utils::arguments::{
-  field, opt_bool, opt_fn, opt_num, opt_str, opt_text, read_index, read_input_text, req_bool, req_fn, req_num, req_str,
-  req_text, stringify_json, write_input_text,
+  field, opt_bool, opt_bool_or, opt_fn, opt_num, opt_str, opt_text, read_index, read_input_text, req_bool, req_fn,
+  req_num, req_str, req_text, stringify_json, write_input_text,
 };
 
 const MAX_SLIDER_LABELS: usize = 501;
@@ -184,13 +184,16 @@ fn make_select<'js>(
     return Err(Exception::throw_type(ctx, "select: 'items' must not be empty"));
   }
   let items = Array::new(ctx.clone())?;
+  let mut has_subtitle = false;
   for (i, item) in arr.into_iter().enumerate() {
     let entry = Object::new(ctx.clone())?;
     if let Some(s) = item.as_string() {
       entry.set("text", s.to_string()?)?;
     } else if let Some(obj) = item.as_object() {
       entry.set("text", req_str(ctx, obj, "select item", "text")?)?;
-      set_opt(&entry, "subtitle", opt_str(ctx, obj, "select item", "subtitle")?)?;
+      let subtitle = opt_str(ctx, obj, "select item", "subtitle")?;
+      has_subtitle |= subtitle.is_some();
+      set_opt(&entry, "subtitle", subtitle)?;
     } else {
       return Err(Exception::throw_type(ctx, "select: items must be strings or { text, subtitle? } objects"));
     }
@@ -201,7 +204,7 @@ fn make_select<'js>(
 
   let selected = read_index(ctx, &field(ctx, &opts, "select", "selected")?, "select", len)?;
   out.set("selected", selected)?;
-  out.set("dialog", opt_bool(ctx, &opts, "select", "dialog")?)?;
+  out.set("dialog", opt_bool_or(ctx, &opts, "select", "dialog", has_subtitle)?)?;
   out.set("onChange", req_fn(ctx, &opts, "select", "onChange")?)?;
   set_opt(&out, "onSecondaryClick", opt_fn(ctx, &opts, "select", "onSecondaryClick")?)?;
   Ok(out)

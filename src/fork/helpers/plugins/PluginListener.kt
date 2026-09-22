@@ -1,29 +1,23 @@
 package desu.inugram.helpers.plugins
 
 /**
- * Everything rust can call back into, split by the subsystem that answers it.
+ * Rust callbacks, grouped by subsystem. Rust resolves their method IDs on [PluginBridge]
+ * at `nativeCreate`. Names and signatures are ABI; `jni/tests.rs` checks them against
+ * `JniBridge`'s descriptors.
  *
- * Rust resolves a method id per member off [PluginBridge] at `nativeCreate` and calls it directly,
- * so these names and signatures are the wire: `jni/tests.rs` reads this file and cross-checks every
- * one of them against the descriptors `JniBridge` looks up.
+ * Kept separate from [QuickJs] so tests can read the actual contract without loading its
+ * native library or starting a device engine.
  *
- * They live here rather than inside [QuickJs] because [QuickJs] cannot be compiled anywhere but a
- * device ([QuickJs.start] calls `nativeCreate()`, and its class initializer loads `libinu_native`),
- * while the contract it carries can be - so the cargo test cross-checking rust's method ids reads *these* declarations
- * instead of a hand-kept copy of them.
+ * The two channel formats are distinct:
  *
- * Two channel shapes cross here and they are not interchangeable:
+ * - Value channels (`String`) carry [desu.inugram.core.plugins.PluginWire] values:
+ *   `S`/`N`/`J<json>`, `H<O|V><W|R><id>` for handles, or `E`/`P`/`R` errors.
+ * - Error channels (`String?`) return null on success and a `P`/`R` error wire on failure,
+ *   usually from [desu.inugram.core.plugins.PluginRefusal]. Other strings become `internal`
+ *   errors. Never use `E` here: native cannot distinguish the tag from a message starting with E.
  *
- * - a **value** channel (`String`) always carries a [desu.inugram.core.plugins.PluginWire] value:
- *   `S`/`N`/`J<json>`, `H<O|V><W|R><id>` for a live handle, or `E`/`P`/`R` for an error.
- * - an **error** channel (`String?`) carries nothing but errors, so null means SUCCESS and anything
- *   else is a `P`/`R` wire, usually thrown as [desu.inugram.core.plugins.PluginRefusal] where the
- *   refusal is decided. An `E` wire is forbidden: native cannot tell that tag from a message that
- *   happens to start with `E`. Anything that is not a `P`/`R` wire reaches the plugin as `internal`,
- *   which is what the bridge's own failures are.
- *
- * Calls arrive synchronously on the thread executing JS. Void hosts handle their own queueing;
- * queue-confined hosts returning values are only entered from the engine queue.
+ * Calls are synchronous on the thread running JS. Void hosts handle their own queue handoff;
+ * queue-confined hosts returning values may only run on the engine queue.
  */
 interface PluginListener :
     CoreListener,
@@ -81,9 +75,9 @@ interface UiListener {
 
 
     /**
-     * `inu.ui.dialog`/`prompt`/`chooser`/`pickFile`/`saveFile`, which are one member because they are
-     * one contract: null means shown and settled later through [QuickJs.settle], non-null an
-     * immediate refusal. [op] keeps in sync with rust `api::ui::OP_*`.
+     * Shared entry for `inu.ui.dialog`/`prompt`/`chooser`/`pickFile`/`saveFile`.
+     * Null means accepted and settled later through [QuickJs.settle]; non-null is an immediate
+     * error. Keep [op] in sync with Rust `api::ui::OP_*`.
      */
     fun uiModal(op: Int, requestId: Long, optionsJson: String): String?
 
@@ -259,9 +253,9 @@ interface TlListener {
 }
 
 /**
- * The engine has checked the *first* url against the `fetch` grant, but not the hosts a
- * redirect leads to and not what any of them resolve to - only the host connects, so only it
- * can screen those. See `PluginFetch`.
+ * The engine checks the initial URL against the `fetch` grant. The host must check
+ * redirect destinations and resolved addresses because it opens the connections.
+ * See `PluginFetch`.
  */
 interface FetchListener {
     /** [headers] is `name, value` pairs with lowercased names; rust has checked all of it */
@@ -272,10 +266,9 @@ interface FetchListener {
 }
 
 /**
- * One entry point for the whole api: the engine records drawing into a command buffer and only
- * asks the host for the few things that need real pixels, so a method per op would be nine
- * bindings for nine callers arriving on the same queue. [arg] carries the op's own fields and
- * [bytes] the command buffer.
+ * Shared canvas entry point. The engine buffers drawing commands and calls the host for
+ * operations needing pixels. [arg] holds operation fields; [bytes] holds the command buffer.
+ * All operations use the same queue.
  */
 interface CanvasListener {
     fun canvas(op: Int, id: Long, arg: String, bytes: ByteArray?): String

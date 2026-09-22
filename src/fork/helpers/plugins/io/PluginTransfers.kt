@@ -7,14 +7,13 @@ import org.telegram.messenger.FileLoader
 import org.telegram.messenger.ImageLoader
 
 /**
- * Where rust stages what a plugin hands a send or an upload (rust: `writes.rs`): a subtree of
- * stock's media cache rather than the [PluginBlobs] tree, so the app takes a staged file for its
- * composer with a rename instead of a copy. A rename cannot cross volumes, and stock only moves a
- * sent file to where a download of it lands when it was sent from that cache. A transfer is handed
- * over the moment it is written, so the removable volume that keeps spills off it costs nothing here.
+ * Stores staged send/upload files from Rust `writes.rs` in stock's media cache.
+ * This lets the composer take ownership by rename. Renames require the same volume, and stock
+ * only moves sent files into download locations when they start in this cache.
  *
- * Filed per process like the blob tree: a transfer the app took has already left it, and anything
- * still here belongs to an engine that is gone.
+ * Unlike blob spills, transfers are handed off immediately after writing, so removable storage
+ * is suitable here. Directories are per-process. Files already accepted by the app have moved;
+ * files remaining from older processes can be deleted.
  */
 object PluginTransfers {
     private const val ROOT = "inu_plugin_transfers"

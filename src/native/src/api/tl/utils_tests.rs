@@ -388,5 +388,3 @@ fn join_text_with_entities_refuses_what_is_not_a_text() {
     assert_eq!(code_of(&ctx, call), "invalid-argument", "{call}");
   }
 }
-
-

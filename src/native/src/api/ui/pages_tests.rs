@@ -273,8 +273,8 @@ fn menu_dismissed_without_click_releases_callbacks() {
   assert!(state.menus.borrow().is_empty());
 }
 
-/// the whole reason the anchor is a value: the auto-invalidate that follows every callback has
-/// already reallocated the page's slots by the time an awaited continuation resumes
+/// Anchors must survive callback-triggered rerenders. Auto-invalidation reallocates row slots
+/// before an awaited continuation resumes.
 #[test]
 fn an_anchor_outlives_the_render_that_minted_it() {
   let (rt, ctx, host, state, logs) = setup();
@@ -525,9 +525,8 @@ fn open_screen_validates_and_reaches_host() {
   }
 }
 
-/// the android members that take a real object take it as an `inu.jvm` handle and nothing
-/// else: what crosses is the id, so the grant that let the handle be minted is still the
-/// only thing that decided anything
+/// Android object parameters accept only JVM handles. Passing an existing handle ID preserves the
+/// grant check used when it was minted.
 #[test]
 fn a_java_object_reaches_open_page_native_view_and_drawable_icon() {
   struct IconHost;
@@ -774,6 +773,27 @@ fn a_throwing_page_callback_faults_where_a_stale_host_id_does_not() {
   state.dispatch_menu_click(&rt, &ctx, 4242, 0);
   let entry = logs.borrow().first().cloned().expect("expected a logged diagnostic");
   assert_eq!(crate::classify_log(&entry).0, crate::LEVEL_ERROR, "got: {entry:?}");
+}
+
+#[test]
+fn select_defaults_to_a_dialog_when_an_item_has_a_subtitle() {
+  let (_rt, ctx, _host, _state, _logs) = setup();
+  let dialogs: String = ctx.with(|ctx| {
+    ctx
+      .eval::<String, _>(
+        r#"
+            const select = (items, dialog) => inu.ui.select({ text: 'x', items, selected: 0, dialog, onChange: () => {} }).dialog;
+            JSON.stringify([
+                select(['a', 'b']),
+                select(['a', { text: 'b', subtitle: 'bee' }]),
+                select(['a', { text: 'b', subtitle: 'bee' }], false),
+                select(['a', 'b'], true),
+            ]);
+            "#,
+      )
+      .unwrap()
+  });
+  assert_eq!(dialogs, "[false,true,false,true]");
 }
 
 #[test]

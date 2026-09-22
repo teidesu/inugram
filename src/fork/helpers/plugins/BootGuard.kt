@@ -4,19 +4,14 @@ import androidx.core.content.edit
 import desu.inugram.InuConfig
 
 /**
- * whether plugins may run in this process.
+ * Detects a plugin that hung or crashed during startup. Commit a flag before running each
+ * plugin's code and clear it when the call returns; the next process checks any remaining flag.
  *
- * A persisted flag rather than anything the process can observe about itself: a plugin that wedges
- * or aborts the app leaves nothing behind to read, so the *next* process is what notices - the flag
- * is committed before that plugin's own code runs and dropped again when it came back.
- *
- * Scoped to **one plugin, not the process and not the pass**. Not the process, because android
- * starts this one without a ui all the time (a push, a widget, `BOOT_COMPLETED`) and kills it again,
- * so a guard waiting for an activity would be left armed by every one of those. Not the pass, because
- * the app stops *waiting* for it at [BootCohort.EARLY_BUDGET_MILLIS][
- * desu.inugram.core.plugins.BootCohort.EARLY_BUDGET_MILLIS] while every plugin behind that keeps
- * evaluating, and a flag committed across all of it turns the reap of a process android considers
- * idle into a crash nobody had.
+ * Guard each plugin separately. A process-wide guard would misread normal Android headless
+ * startup and termination (push, widget, `BOOT_COMPLETED`) as a crash. A guard covering the whole
+ * startup pass would also misread termination after [BootCohort.EARLY_BUDGET_MILLIS][
+ * desu.inugram.core.plugins.BootCohort.EARLY_BUDGET_MILLIS], when the app stops waiting but plugins
+ * may still be evaluating.
  */
 class BootGuard {
     enum class Reason { FORCED, CRASHED }
@@ -31,20 +26,16 @@ class BootGuard {
 
     private fun read(key: String): Boolean = InuConfig.prefs.getBoolean(key, false)
 
-    /**
-     * `commit` and never `apply`: the whole mechanism is that this write survives a process that
-     * does not come back, and `apply` reaches disk after it returns.
-     */
+    /** Use `commit`, not `apply`: the flag must reach disk before plugin code can crash the process. */
     private fun write(key: String, value: Boolean) {
         InuConfig.prefs.edit(commit = true) { putBoolean(key, value) }
     }
 
     /**
-     * true == this pass may run plugins. Once safe mode is decided it holds for the whole process:
-     * a later pass (the one that loads what the boot cohort left) must not run either.
+     * Returns true if plugins may run. Once selected, safe mode lasts for the whole process,
+     * including the later startup pass.
      *
-     * Commits nothing on its own. Deciding is reading two flags and clearing them if either is set;
-     * what arms the guard is [guardPlugin], around the only thing it can attribute anything to.
+     * Reads and clears the startup and safe-mode flags. Only [guardPlugin] arms the guard.
      */
     @Synchronized
     fun startPass(): Boolean {

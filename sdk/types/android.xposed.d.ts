@@ -1,37 +1,49 @@
+declare const __xposedRoutineRunnable__: unique symbol
+/** `Consumer<PluginHookContext>` that was compiled from {@link inu.xposed.routine} */
+declare type XposedRoutineRunnable = JavaObject & { readonly [__xposedRoutineRunnable__]: true }
+
 declare namespace inu {
   /**
-   * A hook gets at most **250 ms per phase**; at most 512 hooks live at once.
+   * Xposed-style hooking for app methods
+   * Hooking primitive wrapper classes, such as `java.lang.Integer`, throws `unsupported`.
    *
-   * The eight primitive box classes (`java.lang.Integer` & co.) cannot be hooked: the hook
-   * machinery boxes its own arguments through them, so such a hook would recurse into itself.
-   * Registration fails with `unsupported`.
+   * **Limits: 250 ms per hook phase, 512 live hooks.**
    *
    * @needs-grant unsafe.xposed
    * @needs-grant unsafe.jvm
    */
   namespace xposed {
     /**
-     * A view of the call in progress, not a copy of it: reading a member that the hook has not read
-     * yet throws `handle-expired` once the phase has returned, so a hook that needs a value past an
-     * `await` or a `setTimeout` reads it while it runs. Values already read stay usable.
+     * A live view of the current call.
+     *
+     * Avoid retaining this value outside the hook closure, unread values will throw `handle-expired`.
+     * Read values before `await` or `setTimeout` if you need them later.
      */
     interface MethodHookContext {
+      /** Reference to the method being hooked */
       readonly method: JavaMethod
+      /** `this` of the method */
       readonly thisObject: JavaObject | null
+      /** Arguments passed to the method, can be modified in `before` phase */
       readonly args: any[]
 
+      /** Return value of the method. In `before` phase, value is `null` */
       readonly returnValue: any
+      /** Throwable thrown by the method. In `before` phase, value is `null`. */
       readonly throwable: JavaObject | null
 
+      /** Set a return value. In `before` phase, skips the original implementation */
       readonly setReturnValue: (value: any) => void
+      /** Set a throwable. In `before` phase, skips the original implementation */
       readonly setThrowable: (throwable: JavaObject) => void
+
+      /** Any additional data to pass between the `before` and `after` phases. */
+      extra?: any
     }
 
     /**
-     * Like `MethodHookContext`, but used inside the routines.
-     *
-     * Every field is `any` because all the values are Java objects, and we do not currently
-     * have a way to meaningfully type them.
+     * The hook context used inside routines. Like {@link MethodHookContext}, but inside the compiled routines.
+     * Fields contain Java values, and are not currently properly typed, thus `any`
      */
     interface RoutineContext {
       readonly args: any[]
@@ -44,61 +56,74 @@ declare namespace inu {
     }
 
     /**
-     * A Java Consumer<PluginHookContext> that runs on the hooked thread without JS callbacks.
-     * The body is the same compiled subset as `inu.jvm.routine`, reading the call through its
-     * parameter instead of through `this` and its own arguments; `return` takes no value here,
-     * since a hook answers through `setReturnValue`. An arrow works too, and nothing here reads
-     * `this` anyway, so it means what a function expression means.
+     * Creates a hook that runs on the hooked thread without a JS callback.
      *
-     * Setting a result or a throwable in a before phase skips the original; after hooks still run.
-     * The same limits and grant checks apply.
+     * Uses the same compiled subset as {@link inu.jvm.routine}, with a context parameter.
+     *
+     * Set results through `setReturnValue`; `return` cannot take a value, and `this` is unavailable.
+     * Both arrows and function expressions are supported.
      */
-    function routine(body: (ctx: RoutineContext) => void): JavaObject
+    function routine(body: (ctx: RoutineContext) => void): XposedRoutineRunnable
 
     /**
-     * JS phases run on the hooked thread. Busy/reentrant engine entry bypasses the phase.
-     * Promise jobs stay on globalQueue. Hosts handle void-call queueing; queue-bound reads are unavailable off it.
+     * JS callbacks run on the hooked thread and are skipped if the engine is busy or already
+     * running JS on that thread. Promise continuations run later on the plugin thread.
+     * APIs requiring the plugin thread are unavailable in these callbacks.
+     *
+     * A plugin cannot mix JS and Java (`inu.xposed.routine`) hooks on the same method
      */
-    interface MethodHook {
-      /**
-       * Accepts JS callbacks, Java Runnables or Consumers. Consumers receive the hook context.
-       * JS-backed Runnables execute synchronously; recursive engine entry is refused. Java exceptions are logged; changes stay applied.
-       * A plugin cannot mix JS and Java hooks on the same method.
-       */
-      before?: ((ctx: MethodHookContext) => void) | JavaObject
-      after?: ((ctx: MethodHookContext) => void) | JavaObject
+    type MethodHook = {
+      /** `before` phase of the hook, called before the original implementation */
+      before?: XposedRoutineRunnable
+      /** `after` phase of the hook, called after the original implementation */
+      after?: XposedRoutineRunnable
+    } | {
+      /** `before` phase of the hook, called before the original implementation */
+      before?: ((ctx: MethodHookContext) => void)
+      /** `after` phase of the hook, called after the original implementation */
+      after?: ((ctx: MethodHookContext) => void)
 
       /**
-       * A predicate the host runs on the hooked thread before anything reaches the engine: a call
-       * it answers falsy skips this hook entirely, before and after both, as if the method were
-       * not hooked. Written as an `inu.jvm.routine` reading the call through `getThisObject()`
-       * and `getArgument(i)` and answering through `setReturnValue`, so a hook that only wants
-       * some calls stops paying for the rest.
+       * Runs an {@link inu.jvm.routine} on the hooked thread before entering the JS engine,
+       * returning `false` skips the hook. Useful for complex hooks on hot paths, to avoid
+       * entering JS unnecessarily.
        *
-       * A filter that fails answers yes: it decides what to skip, so a broken one may not silently
-       * disable the hook it guards. Native hooks take no filter, being host-side already.
+       * The call info can be read through:
+       * - `getThisObject()` for `this`
+       * - `getArgument(i)` for i-th parameter (0-indexed)
+       * - `setReturnValue(...)` to set the result
+       *
+       * If the filter fails, the hook runs.
        */
       filter?: JvmRoutineRunnable
     }
 
     /**
-     * Plugins share one physical hook per method. Plugin layers nest in registration order:
-     * arguments flow forward through before phases, results back through after phases.
-     * A before answer skips subsequent plugins/the original. Contexts remain per-plugin.
-     * Reentrant callback dispatch bypasses that plugin; other methods called by the original still run their hooks.
-     * Disposing one plugin's site leaves the others installed; the last disposal unhooks ART.
+     * Hook a Java method with an Xposed-style hook.
+     *
+     * `before` hooks run in registration order, `after` hooks are run in reverse order.
+     *
+     * Setting a result in a before hook skips later plugins and the original method.
+     * Each plugin receives its own context.
+     *
+     * Recursive calls during a callback skip that plugin's hooks. Calls made by the original
+     * method still run hooks normally. Disposing your hook leaves other plugins' hooks active.
      */
     function hookMethod(method: JavaMethod, hook: MethodHook): Disposer
 
+    /** Hook all overloads of a class method by its name */
     function hookAllOverloads(cls: JavaClass, name: string, hook: MethodHook): Disposer
 
+    /** Hook all constructors of a class */
     function hookAllConstructors(cls: JavaClass, hook: MethodHook): Disposer
 
-    /** Bypasses every plugin's hook on this member, including hooks owned by other engines. */
+    /** Calls the original member, bypassing all plugins' hooks. */
     function callOriginalMethod(method: JavaMethod | JavaConstructor, thisObject: JavaObject | null, args: any[]): any
 
+    /** Create an instance of the class without running any constructor, via JNI `AllocObject`. */
     function allocateInstance(cls: JavaClass): JavaObject
 
+    /** Disable Android Profile Saver for the process. */
     function disableProfileSaver(): boolean
   }
 }

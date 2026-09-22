@@ -28,24 +28,19 @@ import org.telegram.tgnet.tl.TL_update
 import org.telegram.tgnet.tl.legacy.TL_legacy_message
 
 /**
- * What a TL class is made of: which classes exist, which of their fields are wire data, and the
- * flag words gating them.
+ * Caches TL classes, exposed fields, and flag metadata.
  *
- * Every TL path in the host reads a field through [publicFields] - the live views in [TlHandles],
- * the snapshots in [TlJson], the draft check in
- * [TlFilter] - so this is the hot one, and the caches are the reason: reflecting a class costs a
- * `declaredFields` walk per level and the answer never changes for the life of the process.
+ * All host TL reads use [publicFields]: [TlHandles] views, [TlJson] snapshots, and [TlFilter]
+ * draft checks. Reflection requires a `declaredFields` walk through the hierarchy, while the
+ * result stays constant for the process. [TlFlags] supplies flag bits; this class locates and
+ * updates their flag words on actual objects.
  *
- * The flag half writes rather than reads, and belongs with it for the same reason: [TlFlags] says
- * which bit gates a field, this is what finds the word holding it on an actual object.
- *
- * Caveats (mirrored in sdk/types/common.d.ts):
- * - `flags`/`flags2` are never exposed and never accepted: [TlFlags] owns them. a field whose bit is
- *   clear is omitted from reads entirely, and assigning a field recomputes its bit from the value
- *   (`null`/`0`/`""`/empty vector clear it).
- * - stock annotates TL classes with non-wire `//custom` fields (`Message.dialog_id`, `attachPath`,
- *   `voiceTranscription`, ...); reflection can't tell them apart from wire fields, so they ride
- *   along.
+ * Rules mirrored in `sdk/types/common.d.ts`:
+ * - `flags`/`flags2` are neither exposed nor accepted. Cleared optional fields are omitted.
+ *   Assignments recompute the field's bit; `null`, `0`, `""`, and empty vectors clear it.
+ * - Stock's `//custom` fields, such as `Message.dialog_id`, `attachPath`, and
+ *   `voiceTranscription`, are also exposed because reflection cannot distinguish them
+ *   from wire fields.
  */
 object TlReflect {
     // fields inherited from TLObject that are runtime bookkeeping, not TL wire data
@@ -150,11 +145,9 @@ object TlReflect {
     fun fieldInfo(cls: Class<*>, name: String): FieldInfo? = fieldInfos(cls)[name]
 
     /**
-     * whether every field this class has is a scalar - `peerUser`, `inputPeerChat`,
-     * `documentAttributeVideo` and the like. Such an object is completely described by its scalars,
-     * so a projection of it is the whole object and a plugin never has to cross for one of its
-     * fields. Anything with a child of its own is not: projecting it would carry a handle whose own
-     * fields still cross, and the object graph has no bottom.
+     * Whether all fields are scalar, as in `peerUser`, `inputPeerChat`, or
+     * `documentAttributeVideo`. These objects can be fully projected without later bridge reads.
+     * Objects containing children cannot: their children need handles and lazy field reads.
      */
     fun isFullyScalar(cls: Class<*>): Boolean = fullyScalarByClass.getOrPut(cls) {
         val infos = fieldInfos(cls).values.filterNot { it.isFlagWord }

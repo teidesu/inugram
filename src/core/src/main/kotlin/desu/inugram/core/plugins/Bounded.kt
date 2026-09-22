@@ -3,16 +3,12 @@ package desu.inugram.core.plugins
 import java.util.IdentityHashMap
 
 /**
- * "have I already seen this exact object", with a ceiling.
+ * A bounded, thread-safe identity set. Stock can retry parked pts/seq batches using the same
+ * TLRPC objects, so entries only need to survive that retry window. TLRPC classes do not
+ * override `hashCode`.
  *
- * Identity rather than equality because no `TLRPC` class overrides `hashCode`, and bounded because
- * the question is only ever asked about an arrival still in flight: stock parks a batch whose
- * pts/seq does not line up and re-feeds it later around the *same* instances, and an entry only has
- * to outlive that window.
- *
- * Synchronized because one of these is read by stock rather than by us: `processUpdateArray` asks
- * whether it may apply an update, and it has callers on threads other than the one that wrote the
- * answer. An uncontended lock costs nothing next to a resize racing a lookup.
+ * Synchronize access because stock's `processUpdateArray` can query the set from threads
+ * other than the writer's.
  */
 class BoundedIdentitySet<T : Any>(private val capacity: Int) {
     private val seen = java.util.Collections.newSetFromMap(IdentityHashMap<T, Boolean>())
@@ -39,11 +35,9 @@ class BoundedIdentitySet<T : Any>(private val capacity: Int) {
 }
 
 /**
- * a bounded map that drops its oldest entry rather than growing, and can take one back out.
- *
- * `LinkedHashMap`'s own eviction hook is the whole implementation, which is the point: a parallel
- * `ArrayDeque` needs a linear scan to remove an entry that was claimed before it aged out, and that
- * scan runs on `globalQueue` once per settled request.
+ * A bounded map that evicts its oldest entry and supports taking entries out.
+ * Uses `LinkedHashMap` eviction instead of a separate deque, avoiding linear removal scans
+ * on globalQueue for settled requests.
  */
 class BoundedLru<K : Any, V : Any>(private val capacity: Int) {
     private val entries = object : LinkedHashMap<K, V>(16, 0.75f, false) {

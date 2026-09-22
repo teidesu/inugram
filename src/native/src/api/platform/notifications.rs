@@ -88,17 +88,15 @@ pub fn install_notifications<'js>(
   let notifications = globals.get_namespace(ctx, "notifications")?;
 
   let state3 = state.clone();
-  notifications.set(
-    "suppress",
-    Function::new(ctx.clone(), move |ctx: Ctx<'js>| state3.js_suppress(&ctx, ANY_ACCOUNT))?,
-  )?;
+  notifications
+    .set("suppress", Function::new(ctx.clone(), move |ctx: Ctx<'js>| state3.js_suppress(&ctx, ANY_ACCOUNT))?)?;
 
   Ok(state)
 }
 
 impl NotificationState {
-  /// A hold rather than a switch: the app stays quiet while any plugin holds one, and a plugin
-  /// that goes away without disposing releases its own, which a plain flag could not do.
+  /// Suppresses notifications while any plugin holds a token. Teardown releases only that plugin's
+  /// tokens, preserving other plugins' holds.
   fn js_suppress<'js>(self: &Rc<Self>, ctx: &Ctx<'js>, account: i32) -> JsResult<Function<'js>> {
     if self.lifecycle.is_unloading() {
       return noop_disposer(ctx);
@@ -221,10 +219,9 @@ impl NotificationState {
       let Some(jvm) = state.jvm.as_ref() else {
         return;
       };
-      // decoded before the handler is entered, so that a wire only the host could have got wrong
-      // is its own bad day rather than a fault charged to a handler that never ran
-      // each entry is one host wire, the same shape `inu.xposed` hands a hook its arguments in:
-      // a scalar as itself, anything else as a handle into the table `inu.jvm` reads
+      // Decode before calling the handler so malformed host wires are reported as host errors. Each
+      // entry uses the Xposed value format: scalars pass through; other values use the JVM handle
+      // table.
       let decoded: JsResult<Vec<Value<'_>>> = args.iter().map(|wire| jvm.wire_to_value(&ctx, wire)).collect();
       let decoded = match decoded {
         Ok(decoded) => decoded,

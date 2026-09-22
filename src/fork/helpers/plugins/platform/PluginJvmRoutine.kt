@@ -330,9 +330,8 @@ internal class PluginJvmRoutine(
     override fun run() { execute(null) }
 
     /**
-     * The verdict of a hook filter: what the routine returned, read for truthiness. A routine that
-     * fails answers yes, because a filter decides what to skip and a broken one may not silently
-     * disable the hook it guards.
+     * Converts the filter's return value to a boolean. Runs the hook if the filter fails,
+     * so an error cannot silently disable it.
      */
     fun decide(receiver: Any?, args: Array<Any?>): Boolean = try {
         getTruthiness(execute(null, receiver, args))

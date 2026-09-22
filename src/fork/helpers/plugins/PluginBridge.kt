@@ -3,19 +3,15 @@ package desu.inugram.helpers.plugins
 import desu.inugram.core.plugins.PluginWire
 
 /**
- * The one object rust calls back into, composed out of the per-subsystem listeners their owners
- * build. Kotlin's `by` writes every forwarder, so adding a member to one of the interfaces in
- * [PluginListener] costs nothing here.
+ * Receives Rust callbacks through subsystem listeners. Kotlin `by` delegation generates
+ * forwarders for the interfaces in [PluginListener].
  *
- * It is also the engine's registry: the parts that carry per-engine state ([canvas], [jvm],
- * [xposed]) are readable back, which is what their owners look up instead of the slots [QuickJs]
- * used to hold. A part is fixed for the life of the bridge - teardown is `close()` on the part
- * itself, never swapping it out, since `PluginManager.teardown` closes the engine on the same
- * runnable and rust cannot call a closed one.
+ * Also provides access to per-engine [canvas], [jvm], and [xposed] state. Each part stays fixed
+ * for the bridge's lifetime and closes itself during teardown. `PluginManager.teardown` closes
+ * the engine in the same runnable, after which Rust cannot call back.
  *
- * Only [jvm] and [xposed] are optional, and only because their api is not installed at all without
- * `unsafe.jvm`. Everything else is required so that a listener added later cannot silently default
- * to nothing in the app while the harness keeps passing.
+ * Only [jvm] and [xposed] are optional because their APIs require `unsafe.jvm` to be installed.
+ * All other listeners are required to catch missing app wiring even if tests supply it.
  */
 class PluginBridge(
     core: CoreListener,
@@ -48,12 +44,10 @@ class PluginBridge(
         ByteArray(count).also { secureRandom.nextBytes(it) }
 
     /**
-     * Where [TlListener.readField] puts a value and rust reads it, at the address it took once from
-     * this buffer. One per engine and reused by every read, which is safe because a TL read only
-     * ever originates from JS and the engine lease admits one thread at a time.
+     * Shared buffer for [TlListener.readField] results. Rust caches its address once per engine.
+     * Reads are serialized by the engine lease, so reusing it across JS calls is safe.
      *
-     * Little-endian to match every other binary the engine carries. A value too big for it is
-     * refused by the writer rather than truncated, and read again through `tlGet`.
+     * Uses little-endian encoding. Values too large for the buffer fall back to `tlGet`.
      */
     private val tlReplies: java.nio.ByteBuffer =
         java.nio.ByteBuffer.allocateDirect(TL_REPLY_BYTES).order(java.nio.ByteOrder.LITTLE_ENDIAN)

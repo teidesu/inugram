@@ -26,9 +26,9 @@ enum Change<'a> {
   Del(&'a str),
 }
 
-/// An append-only log of framed changes, replayed into memory on open. A frame is a length and the
-/// changes it carries, so a write torn by process death loses exactly that frame: replay stops at
-/// the first frame that is not whole, and the next write rewrites the file from what was read.
+/// An append-only log replayed into memory on open. Each frame contains a length and changes. If
+/// process death interrupts a write, replay stops at the first incomplete frame; the next write
+/// rewrites the recovered store.
 struct Store {
   path: PathBuf,
   entries: BTreeMap<String, String>,
@@ -145,8 +145,8 @@ impl Store {
     }
   }
 
-  /// the whole store as one frame, synced before the rename so a crash cannot leave the rename
-  /// pointing at data the filesystem never wrote
+  /// Writes the whole store as one frame and syncs before renaming, so a crash cannot leave the new
+  /// path pointing to unwritten data.
   fn compact(&mut self) -> io::Result<()> {
     self.log = None;
     if self.entries.is_empty() {
@@ -267,7 +267,7 @@ struct KvState {
 }
 
 impl KvState {
-  /// opened on first use: most plugins holding the grant touch it rarely, and a boot pays for none of them
+  /// Opens on first use to avoid startup I/O for plugins that hold the grant but rarely use it.
   fn open_store(&self, ctx: &Ctx<'_>) -> JsResult<RefMut<'_, Store>> {
     self.grants.check_grant(ctx, "kv", None, MATCH_EXACT)?;
     if self.path.as_os_str().is_empty() {
@@ -305,8 +305,8 @@ fn undefined_or_io<'js>(ctx: &Ctx<'js>, done: io::Result<()>) -> JsResult<Value<
   }
 }
 
-/// the pairs of a plain object, all strings, read before the store is borrowed: a getter on it is
-/// plugin code and may itself call `inu.kv`
+/// Reads all string pairs before borrowing the store. Property getters can execute plugin code and
+/// reenter `inu.kv`.
 fn string_pairs<'js>(ctx: &Ctx<'js>, values: &Value<'js>) -> JsResult<Vec<(String, String)>> {
   let object = match values.as_object() {
     Some(object) if !values.is_array() && !values.is_function() => object,

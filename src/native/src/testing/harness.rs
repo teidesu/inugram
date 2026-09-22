@@ -19,11 +19,11 @@ pub(crate) struct FakeObject {
   pub(crate) fields: Vec<(String, String)>,
 }
 
-/// What `TlHandles` is on the host side of the bridge, for a suite whose subject is some *other*
-/// module's use of it: a table of minted objects, answering the `TlHost` upcalls the proxy makes.
+/// Fake TL handle table for testing other modules' bridge calls. Stores minted objects and
+/// implements `TlHost` upcalls.
 ///
-/// `tl_own_keys` answers a comma-joined list because that is what `proxy::keys_to_array` splits on;
-/// a fake that joined on anything else would hand `Object.keys` one key holding the whole list.
+/// `tl_own_keys` joins names with commas, matching `proxy::keys_to_array`; any other separator
+/// would turn the whole list into one key.
 #[derive(Default)]
 pub(crate) struct FakeHandles {
   objects: RefCell<HashMap<i64, FakeObject>>,
@@ -161,13 +161,10 @@ pub(crate) fn log_sink(logs: &Arc<Logs>) -> crate::Log {
   Arc::new(move |msg: &str| logs.borrow_mut().push(msg.to_string()))
 }
 
-/// Runs a module's `dispose` when the test's state binding goes out of scope, on the failing path
-/// too. Skipping disposal leaves quickjs GC roots (`Persistent` has no `Drop`) and `JS_FreeRuntime`
-/// aborts the process over them, which under `cargo test`'s shared process turns one failed
-/// assertion into a suite with no results at all.
+/// Disposes module state when the fixture drops, including after failed assertions. `Persistent`
+/// has no `Drop`; retained GC roots would make `JS_FreeRuntime` abort the entire test process.
 ///
-/// Holds its own `Context` clone, which keeps the `Runtime` alive regardless of the order the
-/// test's own bindings drop in.
+/// Keeps a Context clone so the Runtime stays alive regardless of local drop order.
 pub(crate) struct DisposeOnDrop<S> {
   ctx: Context,
   state: Rc<S>,
@@ -194,10 +191,8 @@ impl<S> Drop for DisposeOnDrop<S> {
   }
 }
 
-/// Runs a bundled oracle plugin the way the host would - a console that captures instead of
-/// reaching logcat, then a drain of whatever it left pending - and hands back what it printed.
-/// A plugin whose surface is pure needs nothing else, which is what makes the oracle a real test
-/// here rather than only on a device.
+/// Runs a bundled oracle with captured console output, then drains pending jobs and returns the
+/// log. Oracles using only engine APIs need no device.
 pub(crate) fn run_capturing_console(rt: &Runtime, ctx: &Context, source: &str) -> Vec<String> {
   let lines = install_capturing_console(ctx);
   eval_unit(ctx, source);
@@ -219,22 +214,18 @@ pub(crate) fn install_capturing_console(ctx: &Context) -> Arc<Logs> {
   lines
 }
 
-/// The one thing a bundled oracle is held to, for every oracle in the crate.
+/// Requires each oracle to reach its final line with exactly the expected assertion count. No FAIL
+/// output alone is insufficient: the plugin may have stopped early. A missing API can also satisfy
+/// `expectThrow`, so an exact count catches cases a lower bound would miss.
 ///
-/// An oracle that stopped halfway prints no `FAIL` either, so reaching its own last line is part of
-/// passing. The count is **exact** and never a floor: in a suite written out of `expectThrow` a
-/// member that vanished reads as a refusal, and only the count tells those apart - so a floor is
-/// cleared by every number it is not equal to, which is the failure the oracle exists to catch.
-/// Nothing may `SKIP` either: every escape hatch in an oracle exists for a device with no peer, no
-/// network or no login, and a harness has all three, so a block that starts skipping here is a
-/// surface that stopped answering.
+/// Reject SKIPs. These harnesses provide the peer, network, and login conditions that device
+/// oracles may lack.
 pub(crate) fn assert_oracle_exact(lines: &[String], done: &str, count: usize) {
   assert_oracle_exact_skipping(lines, done, count, &[]);
 }
 
-/// [`assert_oracle_exact`] for a harness that genuinely cannot answer part of an oracle - no
-/// network, no telegram chat, no forum. The skips are listed rather than tolerated, so one that
-/// appears is still a failure and the ones named here have to keep being the only ones.
+/// Like [`assert_oracle_exact`], but permits an explicit set of skips for unavailable network,
+/// chat, or forum data. Fails on missing or unexpected skips.
 pub(crate) fn assert_oracle_exact_skipping(lines: &[String], done: &str, count: usize, skips: &[&str]) {
   let failures: Vec<&String> = lines.iter().filter(|l| l.starts_with("FAIL")).collect();
   assert!(failures.is_empty(), "{failures:#?}");
@@ -252,10 +243,8 @@ fn header_lines(source: &str) -> impl Iterator<Item = &str> {
   source.lines().take_while(|line| !line.contains("==/InuPlugin=="))
 }
 
-/// The grants a bundled oracle's *own manifest* asks for. Running it under these rather than a list
-/// written in the test is what makes the `@grant` header load-bearing: the device reads that header
-/// and nothing else, so a suite granting a scope the header forgot would pass on a plugin the app
-/// then refuses.
+/// Reads grants from the oracle's own manifest, as the device does. A hard-coded test grant list
+/// could hide a missing permission in the shipped plugin.
 pub(crate) fn manifest_grants(source: &str) -> Vec<&str> {
   header_lines(source)
     .filter_map(|line| line.trim().strip_prefix("// @grant"))
@@ -263,10 +252,9 @@ pub(crate) fn manifest_grants(source: &str) -> Vec<&str> {
     .collect()
 }
 
-/// Every directive of a bundled oracle's own manifest, base key lowercased and repeated once per
-/// value. That is the shape `QuickJs.installInfo` flattens `PluginManifest.raw` into, so a run site
-/// builds `inu.info().header` out of what the device builds it out of rather than out of a literal
-/// written next to the assertion it is checked by.
+/// Reads the oracle's manifest with lowercased base keys and one entry per value, matching
+/// `QuickJs.installInfo` and `PluginManifest.raw`. Build `inu.info().header` from this instead of
+/// test literals.
 pub(crate) fn manifest_header(source: &str) -> Vec<(String, String)> {
   header_lines(source)
     .filter_map(|line| {

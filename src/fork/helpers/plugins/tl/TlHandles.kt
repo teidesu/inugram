@@ -22,23 +22,19 @@ import org.json.JSONTokener
 import org.telegram.tgnet.TLObject
 
 /**
- * Handle table backing the live-proxy TL bridge (rust: `tl/proxy.rs`): JS holds a lazy `Proxy` over
- * a handle id whose traps round-trip through [TlListener], never an eager snapshot of the
- * object graph.
+ * Per-plugin handle table for lazy TL proxies (Rust: `tl/proxy.rs`). Proxy traps call
+ * [TlListener] instead of copying the object graph.
  *
- * **One instance per running plugin.** An id is a bare integer and rust re-emits any JS object
- * carrying the `inu.tl.handle` marker symbol, which a plugin can forge - a shared table would let
- * one plugin read another's objects by guessing an id.
+ * IDs are integers, and plugins can forge the `inu.tl.handle` marker Rust reads. Separate
+ * tables prevent one plugin from guessing handles to another's objects.
  *
- * Reached from the plugin queue and from whichever thread a JVM runnable or an Xposed phase entered
- * on, so [table] is concurrent and the mint/release pair that spans it and [handlesByScope] is
- * serialized by [scopeLock]. Repeated reads of one field mint a fresh handle each time; caching
- * here would need an rquickjs `Persistent`, and a GC root outliving the runtime aborts under
- * `panic = "abort"`.
+ * Accessed from the plugin queue and caller-thread JVM/Xposed callbacks. [table] is concurrent;
+ * [scopeLock] makes mint/release bookkeeping atomic across [table] and [handlesByScope].
+ * Repeated field reads mint fresh handles. Caching here would need rquickjs `Persistent`
+ * roots, which must not outlive the runtime under `panic = "abort"`.
  *
- * Two lifetimes share the table: dispatch-scoped handles, hard-invalidated in bulk by
- * [releaseScope] whether or not JS still references them, and plugin-lifetime ones
- * ([mintForPlugin]) under a scope [releaseScope] is never called with.
+ * [releaseScope] invalidates dispatch handles even if JS still holds them. [mintForPlugin]
+ * uses a separate scope that lasts until plugin teardown.
  */
 class TlHandles(private val policy: TlFilter.Policy) : TlListener {
     private class HandleEntry(
@@ -97,10 +93,9 @@ class TlHandles(private val policy: TlFilter.Policy) : TlListener {
     ): Long = register(HandleEntry(target, elementType, scopeId, readOnly, owned, flagOwner, int53))
 
     /**
-     * the table write and the scope's bookkeeping are one step under [scopeLock], so a
-     * [releaseScope] can never land between them and leave behind a scoped handle its bulk
-     * invalidation cannot reach. A read that *began* before the release can still mint into the
-     * scope after it; that one handle keeps its target until [releaseAll].
+     * Update the table and [handlesByScope] under [scopeLock], so [releaseScope] cannot miss
+     * a newly inserted handle. A read already in progress may still mint after release;
+     * that handle retains its target until [releaseAll].
      */
     private fun register(entry: HandleEntry): Long {
         val handle = nextHandle.getAndIncrement()
@@ -353,17 +348,13 @@ class TlHandles(private val policy: TlFilter.Policy) : TlListener {
         if (policy.takeover && info.redactedInTakeover) TlFilter.filterFieldValue(target, info.field.name, value) else value
 
     /**
-     * what rides along with a handle minted for a plugin's own read. An object that is nothing but
-     * scalars ([TlReflect.isFullyScalar]) is carried whole, because one crossing then settles it for
-     * good; anything else carries its type name alone. Never a child, not even a child's type: a
-     * child is its own handle, and reflecting a parent's fields to find one costs more than the
-     * crossing it would save (measured on a Pixel 9: 7.1us a read against 31us to reflect a
-     * dialog's 22 fields).
+     * Preloads scalar fields for plugin-lifetime handles. Fully scalar objects
+     * ([TlReflect.isFullyScalar]) are included whole; other objects include only their type.
+     * Children are minted lazily. Reflecting a parent's fields costs more than the saved crossing
+     * (Pixel 9: 7.1 µs per read versus 31 µs to reflect a dialog's 22 fields).
      *
-     * [fields] is the caller naming what it will read, which overrides both rules: exactly those
-     * fields are carried, whatever the object is. A name this cannot carry - an object, a vector,
-     * an outsized string, no such field at all - simply writes nothing, and rust reads it the
-     * ordinary way, so a projection is never the reason a field is missing.
+     * Explicit [fields] overrides this selection. Unsupported values, vectors, objects, oversized
+     * strings, and absent fields are omitted from the projection and remain available to lazy reads.
      */
     fun project(handle: Long, fields: List<String>? = null): String {
         val entry = table[handle] ?: return EMPTY_PROJECTION

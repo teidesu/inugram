@@ -1,21 +1,17 @@
 {
   "compilerOptions": {
     "target": "ES2022",
-    // no "dom": the sandbox has no dom, and pulling it in would silently satisfy references to
-    // types that don't exist at runtime. every global the engine provides is declared in common.d.ts
-    //
-    // ESNext.Disposable is what declares `Symbol.dispose` and `Disposable`; quickjs-ng implements
-    // the whole explicit-resource-management proposal, `using` included
-    "lib": ["ES2022", "ESNext.Disposable"],
+    "lib": [
+      "ES2022",
+      "ESNext.Disposable"
+    ],
     "module": "ESNext",
     "moduleResolution": "Bundler",
-    // plugins are plain scripts in a bare quickjs — @types/node would inject a whole runtime that
-    // isn't there, and its own `console`/`fetch` globals would collide with ours. this package is
-    // the one global declaration file a plugin gets
-    "types": ["@inugram/plugin-types"],
+    "types": [
+      "@inugram/plugin-types"
+    ],
     "strict": true,
     "noEmit": true,
-    // this project is almost entirely .d.ts, and skipLibCheck would mean checking nothing at all
     "skipLibCheck": false
   }
 }

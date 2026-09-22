@@ -5,14 +5,11 @@ import kotlin.random.Random
 import kotlin.random.asKotlinRandom
 
 /**
- * [pluginId] is [PluginManifest.id] as of the last time this install's file was read. Kept on
- * the record rather than taken from the live manifest so that an install whose file no longer parses
- * is still matchable: a re-import of a fixed file has to land back on this id, or the plugin's
- * stores are orphaned behind a record nothing lists.
+ * [pluginId] records [PluginManifest.id] from the last successful file read. Keep it even if
+ * the file stops parsing, so importing a fixed copy can recover the install ID and its storage.
  *
- * [dev] means the source now on disk arrived over the dev server rather than through the install
- * flow, so it was never held to a trust or permission sheet. It is a property of the last write,
- * not of the install: installing the same plugin normally clears it.
+ * [dev] describes the latest source write: dev-server installs skip trust and permission review.
+ * A normal installation clears it.
  */
 data class PluginInstall(
     val id: String,

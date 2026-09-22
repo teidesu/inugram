@@ -5,7 +5,7 @@ import pc from 'picocolors'
 
 export { default as color } from 'picocolors'
 
-/** an offset range in a file, as the span esbuild squiggles under */
+/** A source range for esbuild to underline in an error message. */
 export function messageAt(file: string, source: string, text: string, start: number, end: number): PartialMessage {
   const before = source.slice(0, start)
   const lineStart = before.lastIndexOf('\n') + 1
@@ -24,8 +24,8 @@ export function messageAt(file: string, source: string, text: string, start: num
 }
 
 /**
- * esbuild's own renderer: the source line, the column, and a squiggle under the span. It is what
- * builds already print, so a problem the cli found reads the same as one the bundler found.
+ * Uses esbuild's error renderer for the source line, column, and underline,
+ * so CLI errors use the same format as build errors.
  */
 export async function renderMessages(
   messages: (Message | PartialMessage)[],
@@ -55,5 +55,5 @@ export function fail(message: string) {
   console.log(`${pc.red('fail')} ${message}`)
 }
 
-/** what the cli throws for a problem the user can fix: printed without a stack trace */
+/** A user-fixable CLI error, printed without a stack trace. */
 export class CliError extends Error {}

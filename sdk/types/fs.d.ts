@@ -1,20 +1,22 @@
 declare namespace inu {
   /**
-   * Plugin storage is per-install, so it is **capped at 50 MB**. `quota()` returns the cap, in
-   * bytes: 50 MB. Every path is relative to that private directory, and one that leaves it - an
-   * absolute path, a `..` that climbs out, a symlink pointing away - is `not-granted`.
+   * Access to filesystem.
    *
-   * `unsafe.fs` replaces that with the whole device as the app can see it: paths are absolute, the
-   * cap is lifted, and nothing is scoped any more. Android still decides what the app may touch,
-   * and it is not the same for every path. Shared storage (`/sdcard`, `/storage/emulated/0`) is
-   * served through a filtered view unless the app holds all-files access, which it does not: media
-   * the app has permission for and files it wrote itself are visible, everything else is not, and
-   * **directories stay visible either way**, so a {@link fs.readdir} there can come back as
-   * subdirectories alone with the plain files (a `.ttf`, a `.json`) missing even though they are
-   * on disk. Paths outside shared storage - `/system/fonts`, the app's own directories from
-   * {@link android} - are read normally.
+   * By default, paths are scoped to the plugin's private directory.
+   * Absolute paths, `..` traversal, and symlinks that escape it throw `not-granted`.
+   *
+   * For full FS access, use `unsafe.fs` grant (its usage is discouraged, please contact us if you need it for some reason)
+   *
+   * With `unsafe.fs`, paths are absolute and the plugin storage limit does not apply.
+   * Android permissions still apply. In shared storage (`/sdcard`, `/storage/emulated/0`),
+   * only permitted media and files created by the app are visible.
+   * {@link fs.readdir} may list directories while hiding files inside them.
+   * Other paths, such as `/system/fonts` and the app directories from {@link android}, use normal filesystem access.
+   *
+   * **Limits: 50 MB per install (unless widened via a grant); no quota with `unsafe.fs`.**
+   *
+   * @needs-grant fs
    */
-  /** @needs-grant fs */
   namespace fs {
     function read(path: string): Uint8Array
 
@@ -28,10 +30,7 @@ declare namespace inu {
 
     function exists(path: string): boolean
 
-    /**
-     * The name of every entry, files and directories alike, sorted. Names only, so
-     * {@link stat} is what tells a file from a directory.
-     */
+    /** Returns sorted file and directory names. Use {@link stat} to distinguish them. */
     function readdir(path: string): string[]
 
     function stat(path: string): {
@@ -46,8 +45,10 @@ declare namespace inu {
 
     function move(src: string, dest: string): void
 
+    /** Get the storage amount in bytes used by the plugin currently */
     function usage(): number
 
+    /** Get the storage limit in bytes */
     function quota(): number
   }
 }

@@ -14,7 +14,7 @@ import { verifyProgram } from './verifier.js'
 
 type Mode = 'method' | 'hook'
 
-/** what the esbuild hook checks before handing a body over, so the compiler is reached the same way */
+/** Runs the same pre-compile checks as the esbuild hook. */
 function bodyOf(call: RoutineCall): RoutineBody {
   const body = call.body
   if (body?.type !== 'FunctionExpression' && body?.type !== 'ArrowFunctionExpression') {
@@ -31,7 +31,7 @@ function compileBody(text: string, mode: Mode = 'method'): RoutineProgram {
   return compileRoutine(bodyOf(call), wrapped, { mode, file: 'routine.ts' })
 }
 
-/** what the host would do with it, that it is on the wire the schema describes, and that saying it twice says the same thing */
+/** Checks host verification, wire schema, and deterministic compilation. */
 function accepts(text: string, mode: Mode = 'method') {
   const program = compileBody(text, mode)
   verifyProgram(program, mode === 'hook')
@@ -45,7 +45,7 @@ function refuses(text: string, mode: Mode = 'method') {
   expect(() => compileBody(text, mode)).toThrow(RoutineCompileError)
 }
 
-/** the value the emitted program gives a named key, which is always a plain property */
+/** Reads a named plain property from the emitted program. */
 function propertyOf(object: ObjectExpression, name: string): Expression {
   for (const property of object.properties) {
     if (property.type !== 'Property') continue
@@ -55,7 +55,7 @@ function propertyOf(object: ObjectExpression, name: string): Expression {
   throw new Error(`the emitted program has no \`${name}\``)
 }
 
-/** the captures a whole file's routines would be refused for, which the compiler alone cannot see */
+/** Checks captures using the enclosing file, which the compiler alone cannot inspect. */
 function captureProblems(file: string): string[] {
   const parsed = parseFile('plugin.ts', file)
   expect(parsed.errors).toEqual([])

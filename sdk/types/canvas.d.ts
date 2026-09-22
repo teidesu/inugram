@@ -1,4 +1,6 @@
-/** A canvas is at most 8192 pixels on a side; a gradient has at most 256 colour stops. */
+/**
+ * **Limits: 8192 pixels per canvas side, 256 colour stops per gradient.**
+ */
 declare interface CanvasGradient {
   addColorStop(offset: number, color: string): void
 }
@@ -48,11 +50,10 @@ declare type GlobalCompositeOperation
     | 'hue' | 'saturation' | 'color' | 'luminosity'
 
 /**
- * a 2d context for drawing on an offscreen canvas
+ * A 2D context for drawing on an offscreen canvas.
+ * Supports a subset of the web API.
  *
- * the supported api is a strict subset of the web api,
- * if something is not correctly implemented comparet to the browser,
- * it is a plugin engine bug, please report it
+ * Differences in supported behavior are plugin engine bugs; please report them.
  */
 declare interface CanvasRenderingContext2D {
   /** the canvas this context is drawing on */
@@ -182,7 +183,7 @@ declare interface AnimationFrame extends ImageBitmap {
 /**
  * An animated source (tgs/webm/mp4), opened for frame-by-frame reading.
  *
- * **Limits: at most 4 at once per plugin.**
+ * **Limits: 4 open animations per plugin.**
  *
  * It is an async iterable of its frames in order:
  *
@@ -224,11 +225,9 @@ declare interface AnimatedImage extends AsyncIterableIterator<AnimationFrame> {
 }
 
 /**
- * A video encoder, one frame at a time.
+ * Encodes video one frame at a time. Only silent MP4 output is supported.
  *
- * **Limits: at most 2 at once per plugin, at most 3600 frames**.
- *
- * currently the only supported output is a slient mp4.
+ * **Limits: 2 encoders per plugin, 3600 frames per video.**
  */
 declare interface VideoEncoder {
   readonly width: number
@@ -292,10 +291,9 @@ declare namespace inu {
     function loadFont(family: string, source: Blob | Uint8Array | { path: string }): Promise<void>
 
     /**
-     * list of fonts available for use in {@link CanvasRenderingContext2D.font}
-     *
-     * The list is the app's own font roster, so `device` families are in it only while the app is set
-     * to include them; a name outside the list may still resolve, as a device family or as nothing.
+     * Lists fonts available for {@link CanvasRenderingContext2D.font}.
+     * Device fonts appear only when enabled in the app's font settings.
+     * An unlisted name may still resolve to a device font, or may not resolve at all.
      */
     function listFonts(): Promise<FontEntry[]>
   }

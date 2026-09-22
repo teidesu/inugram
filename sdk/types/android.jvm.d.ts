@@ -1,121 +1,185 @@
+/**
+ * Reference to a real Java object
+ */
 declare type JavaObject = OpaqueType<'JVMObject'> & {
+  /** Get a field value by its name */
   getField: (name: string) => any
+  /** Set a field value */
   setField: (name: string, value: any) => void
+  /** Call a member method of the object's class */
   call: (method: string, ...args: any[]) => any
 }
 
+/** Reference to a declared Java method */
 declare type JavaMethod = OpaqueType<'JVMMethod'> & {
+  /** Call the method on a specified object */
   invoke: (obj: JavaObject | null, ...args: any[]) => any
 }
 
+/** Reference to a declared Java constructor */
 declare type JavaConstructor = OpaqueType<'JVMConstructor'> & {
+  /** Call the constructor to create a new instance of the type */
   newInstance: (...args: any[]) => JavaObject
 }
+
+/** Reference to a Java field definition */
 declare type JavaField = OpaqueType<'JVMField'> & {
+  /** Get the field value on a specified object */
   get: (obj: JavaObject | null) => any
+  /** Set the field value on a specified object */
   set: (obj: JavaObject | null, value: any) => void
 }
 
+/** Reference to a Java class definition */
 declare type JavaClass = OpaqueType<'JVMClass'> & {
+  /**
+   * Create a new instance of the class
+   *
+   * A specific constructor is matched by argument count/types, but you can specify the one to use via {@link getDeclaredConstructor}
+   */
   new (...args: any[]): JavaObject
 
+  /** Get a method declaration */
   getDeclaredMethod: (name: string) => JavaMethod
+  /**
+   * Get a specific constructor by its ART descriptor
+   *
+   * @example `cls.getDeclaredConstructor('(Ljava/lang/Object;)V').newInstance(obj)`
+   */
   getDeclaredConstructor: (descriptor: string) => JavaConstructor
+  /** Get a member field declaration */
   getDeclaredField: (name: string) => JavaField
 
+  /** Get a static field value */
   getStaticField: (name: string) => any
+  /** Set a static field value */
   setStaticField: (name: string, value: any) => void
+  /** Invoke a static method of the class */
   callStatic: (method: string, ...args: any[]) => any
 
   /**
-   * `Class.isInstance`. `null` and `undefined` are `false`, as in java. Only a handle names a java
-   * object here, so a scalar is `invalid-argument` rather than a quiet `false`: a js number alone
-   * does not say whether it is an `Integer` or a `Long`.
+   * Check whether `value` is an instance of this class.
+   * @returns `true` if the value is an instance, `false` for `null` and `undefined`; scalars throw `invalid-argument`.
    */
   isInstance: (value: JavaObject | JavaClass | JavaMethod | JavaConstructor | JavaField | null | undefined) => boolean
 }
 
-/** what {@link inu.jvm.defineClass} answers with: a class, and the name it ended up with */
+/** The class returned by {@link inu.jvm.defineClass}, including its generated or supplied name. */
 declare type DefinedClass = JavaClass & {
   readonly name: string
 }
 
-declare type JvmColdMethod = (self: JavaObject, ...args: any[]) => any
-declare type JvmStaticMethod = (self: JavaClass, ...args: any[]) => any
+/** Body of a "cold" (i.e. ran in JS) method */
+declare type JvmMethodImpl = (self: JavaObject, ...args: any[]) => any
+/** Body of a "cold" (i.e. ran in JS) static method */
+declare type JvmStaticMethodImpl = (self: JavaClass, ...args: any[]) => any
 
-declare interface JvmColdMethodSpec {
+/** Definition of a member method for {@link inu.jvm.defineClass} */
+declare interface JvmMethodSpec {
+  /** Params of the method, like you would write them in Java (e.g. `float`, `int[]`) */
   params?: string[]
+  /** Return value of the method, like you would write it in Java (e.g. `float`, `int[]`) */
   returns?: string
-  body: JvmColdMethod | JvmRoutineRunnable
+  /** Body of the method */
+  body: JvmMethodImpl | JvmRoutineRunnable
 }
 
+/** Definition of a static method for {@link inu.jvm.defineClass} */
 declare interface JvmStaticMethodSpec {
+  /** Params of the method, like you would write them in Java (e.g. `float`, `int[]`) */
   params?: string[]
+  /** Return value of the method, like you would write it in Java (e.g. `float`, `int[]`) */
   returns?: string
-  body: JvmStaticMethod | JvmRoutineRunnable
+  body: JvmStaticMethodImpl | JvmRoutineRunnable
 }
 
+/** Definition of a constructor for {@link inu.jvm.defineClass} */
 declare interface JvmConstructorSpec {
+  /** Params of the method, like you would write them in Java (e.g. `float`, `int[]`) */
   params?: string[]
+  /** How `super` should be called */
   super?: ({ arg: number } | { value: any })[]
+  /** Init method for the defined class */
   init?: ((self: JavaObject, ...args: any[]) => void) | JvmRoutineRunnable
 }
 
+/** Definition of a class for {@link inu.jvm.defineClass} */
 declare interface JvmClassSpec {
+  /** Super class of the newly created class */
   superclass?: JavaClass
+  /** Interfaces the class implements */
   interfaces?: JavaClass[]
+  /** Member fields and their types, like you would write them in Java (e.g. `float`, `int[]`) */
   fields?: Record<string, string>
+  /** Static fields and their types, like you would write them in Java (e.g. `float`, `int[]`) */
   staticFields?: Record<string, string>
-  methods?: Record<string, JvmColdMethod | JvmColdMethodSpec>
-  staticMethods?: Record<string, JvmStaticMethod | JvmStaticMethodSpec>
+  /** Member methods for the class, keyed by their name */
+  methods?: Record<string, JvmMethodImpl | JvmMethodSpec>
+  /** Static methods for the class, keyed by their name */
+  staticMethods?: Record<string, JvmStaticMethodImpl | JvmStaticMethodSpec>
+  /** Constructors for the class */
   constructors?: JvmConstructorSpec[]
 }
 
 declare const __jvmRoutineRunnable__: unique symbol
+/** `Runnable` that was compiled from {@link inu.jvm.routine} */
 declare type JvmRoutineRunnable = JavaObject & { readonly [__jvmRoutineRunnable__]: true }
 
 /**
- * A routine body. It is compiled, not run: keep to the subset the compiler accepts. `this` is the
- * receiver, parameters are the arguments, and values are java values, so members are java members
- * (`s.length()`, not `s.length`). An arrow works, but has no `this`, so a body that reads the
- * receiver is a `function` expression.
+ * A body compiled using the supported routine subset.
+ *
+ * `this` is the receiver and parameters are the call arguments.
+ * Values and members are Java values and members (`s.length()`, not `s.length`).
+ *
+ * Use a function expression to access `this`; arrows cannot access it.
  */
 declare type JvmRoutineBody = (this: JavaObject, ...args: any[]) => any
 
 declare namespace inu {
   /**
-   * The grant takes no scope list: it reaches every class the app can, and the engine's own
-   * bridge package is the one thing it never reaches.
+   * Unscoped access to every class available to the app, except the engine's bridge package.
    *
-   * @needs-grant unsafe.jvm. Values are capped at 1048576 bytes in either direction; dex input has at most 8388608 bytes of dex.
+   * **Limits: 1 MB per value in either direction, 8 MB per DEX input.**
+   *
+   * @needs-grant unsafe.jvm
    */
   namespace jvm {
     /**
-     * Java work the host runs later on the caller's thread, without entering the engine. Used as a
-     * `defineClass` body, a `Runnable`, or an `inu.xposed` hook filter.
+     * Runs Java operations on the calling thread, without ever touching JS.
+     * Can be used as a `defineClass` body, a `Runnable`, or an `inu.xposed` hook filter.
      *
-     * The body is compiled by `@inugram/cli`, so it must be a `function` expression written in the
-     * subset the compiler accepts: `const`/`let`, `if`, `while`/`do`/`for`/`for of` with
-     * `break`/`continue`, `switch`, `try`/`catch`/`finally`, `throw`, `return`, and expressions
-     * over java values. `===` and `!==` only, `+` concatenates when either side is text, and
-     * integer `/` truncates. Anything outside the subset is a build error, naming the line.
+     * Function body is compiled by `@inugram/cli`. Supported JS subset:
+     * - `const`/`let` declarations
+     * - `if`
+     * - `while`/`do`/`for`/`for of` with `break`/`continue`
+     * - `switch`
+     * - `try`/`catch`/`finally`
+     * - `throw`
+     * - `return`
+     * - math operators:
+     *   - `+` concatenates if either operand is text
+     *   - `/` does integer division if both args are integers
+     *   - other math operators work as expected
+     * - `===`/`!==` (coerced comparisons are NOT supported)
+     * - expressions on Java values.
      *
-     * Free identifiers are captured by value when the routine is built, arrays included.
+     * Unsupported syntax is a build error with a source location.
      *
-     * Limits: 1024 instructions, 256 slots, 256 captures, 512 live routines, 1 MB captures,
-     * 250 ms per run, checked before each java call and on loop back edges.
-     * Unload cancels a run in progress; a java call already running cannot be interrupted.
+     * Captured values, including arrays, are **snapshots** taken when the routine is created.
+     * Unload cancels running routines, but cannot interrupt a Java call already in progress.
+     *
+     * **Limits: 1024 instructions, 256 slots, 256 captures, 512 live routines, 1 MB of captures, 250 ms per run.**
      */
     function routine(body: JvmRoutineBody): JvmRoutineRunnable
 
     /**
-     * Create a `java.lang.Runnable` wrapping a JS function
+     * Wraps a JS function in a `java.lang.Runnable`, preserving its closure.
+     * Runs synchronously on the calling thread; promise continuations run later on the plugin thread.
      *
-     * Runs synchronously on the calling thread, preserving closures.
-     * Runnables created inside async onUnload cleanup remain callable until cleanup ends.
-     * Recursive JNI entry throws a Java IllegalStateException. Busy (250 ms) or closed engines skip the callback.
-     * JVM/Xposed calls execute on that thread; promise jobs run later on globalQueue.
-     * Do not synchronously wait for another queue that may need this engine.
+     * Recursive entry throws IllegalStateException. Busy or closed engines skip the callback.
+     * Do not wait synchronously for another thread that may call into the same plugin.
+     *
+     * **Limits: 250 ms to acquire the engine.**
      */
     function runnable(callback: () => void): JavaObject
 
@@ -123,45 +187,43 @@ declare namespace inu {
     function cls(name: string): JavaClass
 
     /**
-     * The app's own `TLObject` behind a TL value, as a {@link JavaObject} you can call methods on
-     * and pass to app code. A TL view crosses as the object it already names; a plain object is
-     * built into a new one first, which is the only way a plugin has of *making* a `TLObject`.
-     *
-     * The read-only rule the TL surface applies to app-owned values does not survive the crossing:
-     * `unsafe.jvm` reaches every class the app can, and this is one of them.
+     * Converts a TL value to a {@link JavaObject} for calling methods or passing to app code.
+     * If the object is backed by Java, returns the existing object, otherwise creates a new `TLObject`
      */
     function fromTl(value: TLObject): JavaObject
 
     /**
-     * The other direction: a {@link JavaObject} that really is a `TLObject`, read back as a TL
-     * view - the same shape a read would have answered with. Throws `invalid-argument` for a handle
-     * that is not one.
+     * Returns a writable TL view of a {@link JavaObject}.
      *
-     * The view is writable: a plugin holding the java object can set its fields through
-     * {@link set} anyway, so guarding the view would guard nothing.
+     * Throws `invalid-argument` if the handle is not a `TLObject`.
      */
     function toTl(value: JavaObject): TLObject
 
-    /** Load a DEX file from a path or Uint8Array */
+    /**
+     * Load a DEX file from a path or Uint8Array
+     *
+     * **Note**: avoid using this API when possible. If you need to load a DEX in your plugin,
+     * please talk to us about your use-case
+     */
     function loadDex(path: string | Uint8Array): void
 
     /**
-     * Define a public JVM class.
-     * Superclass defaults to Object; constructors default to one no-arg constructor calling super().
-     * Types accept primitive names, fully qualified class names, [] suffixes, or JVM type descriptors.
-     * Omitted method params/returns are inferred from an unambiguous inherited signature, otherwise ()void.
-     * Fields are public, initially Java's default values. Static bodies receive the JavaClass as self.
-     * Bodies/init accept synchronous JS functions or compiled inu.jvm.routine objects.
-     * JS errors become Java IllegalStateException; void callbacks become no-ops after unload, other
-     * methods fail. Java calls cannot be interrupted; nested defined-method invocations share a
-     * 250 ms admission budget and allow at most 64 levels. JS callbacks obey the engine's reentry rule.
-     * Limits: 128 classes/engine, 256 fields and 256 methods/class (including constructors/covariant
-     * bridges), 64 interfaces, 64 parameters, 1 MB definitions/captures. Duplicate class names fail.
+     * Defines a public JVM class, by default extending Object with a no-arg `super()` constructor.
      *
-     * Prefer the form without a name. A dex that is loaded stays loaded, so a name of your own is
-     * one that can never be defined again: the next reload of the plugin fails on it. Unnamed, the
-     * host mints `inu.plugins.i{installId}.DefinedClass{random}` instead, and {@link DefinedClass.name}
-     * is the name it settled on.
+     * Types accept primitive or fully qualified class names, `[]` arrays, and JVM descriptors.
+     * Omitted params/returns use an unambiguous inherited signature, or `()void`.
+     * Fields are public with Java defaults. Static methods receive the JavaClass as `self`.
+     *
+     * Bodies and initializers accept sync JS functions or {@link inu.jvm.routine} objects.
+     * JS errors become `IllegalStateException`; recursive JS entry is rejected. After unload,
+     * void callbacks do nothing and other methods fail. Java calls cannot be interrupted.
+     *
+     * **Note**: Due to ART limitations, generated classes **cannot** be unloaded.
+     * To work around that, by default classes get a randomly generated name, available in {@link DefinedClass.name}
+     *
+     * If you pass a specific class name, a full app restart will be required for the changes to take effect
+     *
+     * **Limits: 128 classes per engine, 256 fields and 256 methods per class (including constructors and covariant bridges), 64 interfaces, 64 parameters, 1 MB for definitions/captures, 64 nested calls sharing a 250 ms admission budget.**
      */
     function defineClass(spec: JvmClassSpec): DefinedClass
     function defineClass(name: string, spec: JvmClassSpec): DefinedClass

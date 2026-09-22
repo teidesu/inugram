@@ -15,8 +15,7 @@ use crate::api::ui::{OP_PICK_FILE, OP_SAVE_FILE};
 use crate::runtime::{pump_jobs, Parked, PendingTable};
 use crate::utils::arguments::{opt_bool, stringify_json};
 
-/// at most this many types may be named in `accept`, a picker offering more being a picker offering
-/// nothing in particular
+/// Maximum number of MIME types accepted by one picker.
 const MAX_ACCEPT_TYPES: usize = 32;
 
 pub trait FilesHost {
@@ -168,9 +167,9 @@ impl FilesState {
     pump_jobs(rt, context, state.log.as_ref());
   }
 
-  /// One `File` per copy the host made, owning it the way a spilled blob owns its file: the content
-  /// counts against this plugin's spill budget and the copy is deleted when the handle is. Nothing
-  /// else on the device is reachable through it, the picker's permission being the user's one-shot.
+  /// Creates an owning `File` for each host-made copy. Charges it to the plugin's spill budget and
+  /// deletes it when the handle is released. The picker grants one-time access to selected files
+  /// only.
   fn picked<'js>(&self, ctx: &Ctx<'js>, answer: &str, multiple: bool) -> JsResult<Value<'js>> {
     let parsed = ctx.json_parse(answer)?;
     let array = parsed.as_array().ok_or_else(|| Exception::throw_message(ctx, "pickFile: malformed host answer"))?;

@@ -40,15 +40,11 @@ open class QuickJs {
     @Volatile private var ptr: Long = 0
 
     /**
-     * Every native call below picks one of these two, and which one is a claim about the caller.
+     * Use [requireLive] after [PluginSession.isCurrent] has passed: a closed engine then indicates
+     * a caller bug. Use [ifLive] or [ifLiveOr] for callers that can race teardown, including
+     * hooked threads, notification observers, timers, and UI menu rendering.
      *
-     * [requireLive] is for a call whose caller has already passed [PluginSession.isCurrent] - a closed
-     * engine there is a bug in the caller, not a race, and throwing is how it gets found. [ifLive]
-     * and [ifLiveOr] are for the ones reachable with no such gate: a hooked method's own thread, the
-     * notification centre, a timer wake, a menu render on the ui thread. Those may find the engine
-     * closed at any point and answering nothing is the correct outcome.
-     *
-     * Picking the lenient one everywhere would turn a caller that skipped its gate into silence.
+     * Using the lenient forms everywhere would hide missing identity checks.
      */
     private inline fun <T> requireLive(call: (Long) -> T): T {
         val live = ptr
@@ -71,8 +67,8 @@ open class QuickJs {
         protected set
 
     /**
-     * creates the native context and hands rust the object it will call back into. Throws if the
-     * lookup of any upcall fails, which is one wrong descriptor away and takes every plugin with it.
+     * Creates the native context and passes its callback bridge to Rust.
+     * Throws if any upcall descriptor fails to resolve; that wiring error affects all plugins.
      */
     open fun start(listener: PluginBridge, config: Config) {
         check(ptr == 0L) { "QuickJs is already started" }
@@ -161,9 +157,8 @@ open class QuickJs {
 
 
     /**
-     * the one way a request the host took is answered: [api] is one of [SETTLE_FETCH]..[SETTLE_INVOKE],
-     * naming the table [requestId] belongs to, and [wire] is a value wire or an error wire. A request
-     * that is no longer outstanding - aborted, or answered already - drops the settle.
+     * Settles a host request. [api] selects a [SETTLE_FETCH]..[SETTLE_INVOKE] table;
+     * [wire] contains a value or error. Ignores requests already settled or aborted.
      */
     open fun settle(api: Int, requestId: Long, wire: String) = requireLive { nativeSettle(it, api, requestId, wire) }
 

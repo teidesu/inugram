@@ -286,8 +286,8 @@
         const folder = opts.chatFolderId
         const named = folder !== undefined && folder !== null
         if (named && opts.archive !== undefined && opts.archive !== null) {
-          // a folder carries its own "exclude archived" flag, so the default `'exclude'` would
-          // drop what that folder was set up to keep. Refusing beats answering the wrong list
+          // Folders have their own archive flag. Reject an explicit archive option to avoid
+          // filtering out chats the folder includes.
           throw invalid('getDialogsCached: name either archive or chatFolderId, not both')
         }
         return [
@@ -363,9 +363,8 @@
           if (++sent === limit) return
         }
         if (page.length < batch) return
-        // newest-first, so the next page starts below the oldest id this one carried. An offset that
-        // did not move ends it: `offset_id` is exclusive, so a page repeating itself is a server
-        // with nothing left rather than more history, and nothing else here would ever terminate
+        // Pages are newest-first, so continue below the oldest ID. Stop if the offset does not
+        // change: `offset_id` is exclusive, and a repeated page means no more history.
         const oldest = page[page.length - 1].id
         if (typeof oldest !== 'number' || oldest <= 0) return
         if (offsetId !== 0 && oldest >= offsetId) return

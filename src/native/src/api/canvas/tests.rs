@@ -8,9 +8,8 @@ use crate::api::error::install_plugin_error;
 use crate::api::io::fs::tests::TestDir;
 use crate::sandbox::limits::ExternalMemory;
 
-/// mirrors `PluginCanvas.decodeTable`, deliberately over UTF-16 units the way the host reads it:
-/// the point of the length prefix is that no entry can be mistaken for two, and a decoder that
-/// agreed with a broken encoder is what let the separator collision ship
+/// Mirrors `PluginCanvas.decodeTable` using UTF-16 units. Length prefixes must prevent separator
+/// collisions; a fake decoder that shared an encoder bug would hide it.
 fn decode_table(arg: &str) -> Vec<String> {
   let units: Vec<u16> = arg.encode_utf16().collect();
   let mut out = Vec::new();
@@ -1275,11 +1274,9 @@ fn drawing_a_disposed_image_is_handle_expired() {
   assert!(refusal(&f, "x.drawImage(img, 0, 0)").starts_with("handle-expired:"));
 }
 
-/// A `drawImage` records an id the host resolves at replay, so a `dispose()` in between used to
-/// free the bitmap out from under a command already recorded - and one id that resolves to nothing
-/// fails the whole flush, silently discarding every command after it too. `dispose()` flushes
-/// first, which keeps its own promise (the memory is back when it returns) without stranding
-/// anything.
+/// Commands resolve image IDs during replay. Disposing an image before a queued draw used to free
+/// its bitmap and fail the entire flush, dropping later commands too. Disposal must flush first,
+/// then release the memory before returning.
 #[test]
 fn disposing_an_image_flushes_the_buffers_that_named_it_rather_than_stranding_them() {
   let f = setup("dispose-flush");
@@ -1565,10 +1562,9 @@ fn disposal_releases_every_promise_the_engine_still_holds() {
   assert!(f.state.pending.is_empty());
 }
 
-/// Runs `canvas-test.js`, which is the only thing that can tell a member that behaves from one that
-/// *vanished*: this suite is written out of `expectThrows`, and a missing member throws a
-/// `TypeError` that reads as a refusal. It also asks for the real bundled file, so a contract change
-/// that nobody carried into the shipped plugin fails here.
+/// Runs the shipped `canvas-test.js` oracle to catch missing members as well as wrong behavior.
+/// `expectThrows` alone can mistake a missing member's TypeError for an expected error. Loading the
+/// real asset also catches stale test plugins after contract changes.
 mod bundled_oracle {
   use super::*;
 

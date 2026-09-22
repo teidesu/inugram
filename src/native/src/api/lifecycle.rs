@@ -9,11 +9,10 @@ use crate::runtime::pump_jobs;
 use crate::sandbox::grants::{GrantHost, MATCH_EXACT};
 use crate::sandbox::registry::{make_disposer, noop_disposer, CallbackRegistry, Lifecycle};
 
-/// What the app's activities did, as `onAppVisibilityChange` reports it. `Foreground`/`Background`
-/// are the coarse pair - an activity started or the last one stopped - and are what decides whether
-/// the app is visible at all. `Resumed`/`Paused` are the finer pair: the activity is still there,
-/// but something is over it or the user is elsewhere in it. A plugin that only tears down and sets
-/// up again wants the coarse pair, which is why it is the one that was here first.
+/// Events reported by `onAppVisibilityChange`. `Foreground` and `Background` track overall
+/// visibility: an activity starts or the last one stops. `Resumed` and `Paused` track activity
+/// focus, including overlays or navigation within the app. Use the coarse pair for visibility-based
+/// setup and teardown.
 #[derive(Clone, Copy, PartialEq, Eq)]
 pub enum AppMode {
   Foreground,

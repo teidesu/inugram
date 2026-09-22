@@ -57,10 +57,8 @@ impl DateFormat {
   }
 }
 
-/// A message entity, minus its span.
-///
-/// The parsers only ever produce the formatting kinds; the rest exist because unparsing takes the
-/// app's own entity list, where a url or a mention the server found is an ordinary member.
+/// A message entity without its span. Parsers produce formatting kinds; other kinds are needed when
+/// rendering the app's entity list, which can include server-detected URLs and mentions.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum EntityKind {
   Bold,
@@ -145,10 +143,8 @@ pub struct TextWithEntities {
   pub entities: Vec<Entity>,
 }
 
-/// One interpolated value of a tagged template.
-///
-/// Numbers and int64s become [`Sub::Text`] above this crate: what reaches a parser is either literal
-/// text, text that brings its own entities, or a value the template drops.
+/// An interpolated template value: plain text, text with entities, or an omitted value. Numbers and
+/// int64s become [`Sub::Text`] before reaching this crate.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum Sub {
   Skip,
@@ -160,9 +156,9 @@ pub(crate) fn utf16_len(text: &str) -> i64 {
   text.chars().map(|c| c.len_utf16() as i64).sum()
 }
 
-/// The byte offset of every utf-16 index in `text`, plus one past the end. Entity offsets count
-/// utf-16 code units whatever the text is stored as, so slicing by one goes through this. An index
-/// landing inside a surrogate pair maps to the start of its character.
+/// Maps UTF-16 indices to byte offsets in `text`, including one past the end. Entity offsets use
+/// UTF-16, so slicing uses this table. Indices inside a surrogate pair map to the character's first
+/// byte.
 pub(crate) fn utf16_map(text: &str) -> Vec<usize> {
   let mut map = Vec::with_capacity(text.len() + 1);
   for (at, c) in text.char_indices() {

@@ -22,19 +22,15 @@ import org.telegram.tgnet.TLObject
 import org.telegram.tgnet.TLRPC
 
 /**
- * The half of the write api that sends the way the app's own composer does, rather than by building
- * a request: [SendMessagesHelper] mints a local message, draws it, uploads from the staged path and
- * reconciles the id, so a plugin's send has a bubble with its progress for the second or so it takes
- * rather than appearing only once the server answers.
+ * Sends through [SendMessagesHelper], which creates the local message, draws upload progress,
+ * uploads staged media, and replaces the local ID with the server ID.
  *
- * It is not a replacement for [PluginWrites.send] - the request path stays, reached by
- * `optimistic: false` and by anything the composer cannot say. Three things cost a caller the
- * optimistic path: a `sendAs` peer (a local message's sender is the dialog's own default and
- * nothing carries another), a file that is already uploaded, and an album.
+ * [PluginWrites.send] remains the direct-request path for `optimistic: false`, `sendAs`,
+ * already-uploaded files, and albums. The composer uses the dialog's default sender and
+ * cannot represent these cases.
  *
- * The promise resolves with the server's message either way. The composer answers through
- * [NotificationCenter] rather than a delegate, so a send is tracked by a token in the message's
- * `params`, which stock carries through its retries and its own storage.
+ * Both paths resolve with the server message. The composer reports through [NotificationCenter],
+ * so track sends with a token in `Message.params`, which survives retries and storage.
  */
 object PluginOptimisticSend : SessionResource {
     /**

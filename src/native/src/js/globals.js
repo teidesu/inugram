@@ -120,9 +120,8 @@
   define('AbortController', AbortController)
   define('AbortSignal', AbortSignal)
 
-  // the classes themselves come from `blob.rs`; what a native class does not get from quickjs is
-  // the spec's brand, which `Object.prototype.toString` and everything built on it reads. `File`
-  // needs its own, its prototype being a plain object sitting under `Blob.prototype`.
+  // Native Blob classes from `blob.rs` need explicit brands for `Object.prototype.toString`. File
+  // needs its own brand because its prototype is a plain object inheriting from `Blob.prototype`.
   const brand = (ctor, name) => {
     if (ctor === undefined) return
     Object.defineProperty(ctor.prototype, Symbol.toStringTag, { value: name, configurable: true })
@@ -131,10 +130,9 @@
   brand(globalThis.File, 'File')
 
   const handleMarker = Symbol.for('inu.tl.handle')
-  // null-prototype: the lookup is keyed on `error.name`, which a plugin picks - on a plain object
-  // `errorTypes['constructor']` is `Object` (so the clone would be a String object rather than an
-  // Error) and `errorTypes['__proto__']`/`['toString']` are not constructors at all, which throws
-  // a TypeError out of structuredClone
+  // Use a null-prototype table because plugins choose `error.name`. Inherited `constructor` would
+  // clone as a String object; `__proto__` and `toString` are not constructors and would make
+  // structuredClone throw.
   const errorTypes = Object.assign(Object.create(null), {
     Error,
     EvalError,
@@ -144,15 +142,13 @@
     TypeError,
     URIError,
   })
-  // captured here rather than read off globalThis per clone, so replacing the global later cannot
-  // decide what does or doesn't take the blob path
+  // Capture globals once so later replacements cannot change which values use blob cloning.
   const BlobCtor = globalThis.Blob
 
   const uncloneable = what => new DOMException(`${what} could not be cloned`, 'DataCloneError')
 
-  // every clone is recorded before it is returned, not only the ones that can contain themselves:
-  // the web version preserves reference identity, so two fields holding the same object clone to
-  // two fields holding one object, and two views over one buffer keep sharing a buffer
+  // Record every clone to preserve shared references, not just cycles. Repeated references clone to
+  // one object, and views over the same buffer keep sharing a buffer.
   const remember = (seen, value, clone) => {
     seen.set(value, clone)
     return clone

@@ -28,17 +28,15 @@ import org.telegram.tgnet.ConnectionsManager
 import org.telegram.tgnet.TLRPC
 
 /**
- * The media transfers: `getMessageFile`, `downloadMedia`, `downloadMediaToFile`, `uploadFile`, and
- * the upload half of `sendMedia`/`sendMultiMedia`.
+ * Manages `getMessageFile`, `downloadMedia`, `downloadMediaToFile`, `uploadFile`, and uploads
+ * for `sendMedia`/`sendMultiMedia`.
  *
- * **Stock's loader does the transferring** - it knows about datacenter migration, cdn redirects,
- * refreshing a stale file reference and the per-account file-path database - so a plugin's download
- * is the app's download, joins one already running for the same file, and lands where picking it in
- * the ui would have. What this owns is the bookkeeping.
+ * Stock's loader handles transfers, datacenter migration, CDN redirects, file-reference
+ * refreshes, and the per-account path database. Downloads join existing transfers and use
+ * the same locations as app downloads. This class tracks ownership and completion.
  *
- * Progress is reported per chunk and coalesced natively (`progress.rs`), so nothing is throttled
- * here and the numbers a plugin sees are the transfer's own. Anything a send is handed has already
- * become a file: stock's uploader takes a path, and blob content is only readable from rust.
+ * Report progress per chunk; Rust `progress.rs` coalesces it. Upload inputs are already staged
+ * as files because stock takes paths and only Rust can read blob content.
  */
 object PluginMedia : SessionResource {
     /** stock names every file it moves and reports it through the same three events, carrying the name first and the payload second */

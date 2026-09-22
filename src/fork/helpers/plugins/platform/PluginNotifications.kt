@@ -15,25 +15,19 @@ import org.telegram.messenger.UserConfig
 import org.telegram.messenger.Utilities
 
 /**
- * `inu.android.addNotificationCenterDelegate` (rust: `notifications.rs`): the app's own internal
- * event bus, behind `unsafe.notificationCenter` and `unsafe.jvm`.
+ * Connects `inu.android.addNotificationCenterDelegate` to the app's event bus
+ * (Rust: `notifications.rs`). Requires `unsafe.notificationCenter` and `unsafe.jvm`.
  *
- * **A payload crosses the way any other java value does**, through [PluginJvm.ValueBridge]: a
- * scalar as itself, anything else as a `JavaObject` handle out of the same table `inu.jvm` and
- * `inu.xposed` mint into. The events are not TL, so there is no chokepoint to filter at and a
- * handle reaches exactly as far as `unsafe.jvm` already does - which is why this requires that
- * grant rather than standing on its own.
+ * [PluginJvm.ValueBridge] passes scalars directly and other values as `JavaObject` handles
+ * from the shared JVM/Xposed table. These events are not TL and cannot use TL filtering;
+ * the handles provide the same access as `unsafe.jvm`.
  *
- * **The encoding happens inside the observer**, not after the queue hop: the array belongs to stock
- * and observers downstream rewrite it (`didReceiveNewMessages` hands over a mutable message list),
- * so a handle minted after the hop would name whatever that list had become.
+ * Encode inside the observer, before posting: stock owns the argument array and later observers
+ * may change its contents, including mutable message lists. Release handles if the queued
+ * dispatch is dropped before the engine takes them.
  *
- * **A payload the engine never takes is released here.** Minting happens before the hop and the hop
- * can drop the work, so the handles a dropped dispatch left behind are this object's to free.
- *
- * **Every registration is torn down at [detach].** [NotificationCenter] holds its observers
- * strongly and one of these closes over the [QuickJs] it dispatches into, so one left behind keeps
- * an unloaded plugin's engine alive for the life of the process.
+ * [detach] removes every registration. NotificationCenter holds observers strongly, and each
+ * observer retains its engine, so leaving one registered would retain an unloaded engine.
  */
 object PluginNotifications : SessionResource {
     /** read off the class rather than generated: the names are stock's own, so a rebase moves this with them and there is no table to regenerate */

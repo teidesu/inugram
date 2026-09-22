@@ -15,8 +15,8 @@ fn refusal(ctx: &Ctx<'_>, err: rquickjs::Error) -> String {
   ctx.catch().as_object().and_then(|o| o.get::<_, String>("message").ok()).unwrap_or_default()
 }
 
-/// `Array::len()` asserts rather than answers, and the crate aborts on panic, so this is a
-/// process kill before the guard rather than a failed assertion
+/// `Array::len()` panics on invalid input. With panic=abort this would kill the test process, so
+/// the guard must run first.
 #[test]
 fn an_absurd_length_is_refused_rather_than_aborting() {
   with_ctx(|ctx| {

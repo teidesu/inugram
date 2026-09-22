@@ -18,20 +18,15 @@ import org.telegram.ui.LaunchActivity
 import org.telegram.ui.ProfileActivity
 
 /**
- * Kotlin side of `inu.ui.getCurrentScreen`/`onScreenChanged` (rust: `screens.rs`).
+ * Implements `inu.ui.getCurrentScreen` and `onScreenChanged` (Rust: `screens.rs`).
+ * Chains onto the single listener already used by `LaunchActivity`. The listener has no payload,
+ * so [ScreenStack.diff] derives the navigation change.
  *
- * The app's own listener slot is single-slot and already claimed by `LaunchActivity`, so
- * [onFragmentStackChanged] chains onto its lambda rather than taking it; it carries no payload
- * either, so what happened is [ScreenStack.diff]'s to derive.
+ * Reads the fragment stack on the UI thread, publishes an immutable snapshot, and posts events
+ * to [EngineDispatch.scheduler]. [currentScreenWire] reads that snapshot synchronously.
  *
- * It runs on the ui thread, where the fragment stack lives and is the only place it may be read,
- * publishes an immutable snapshot and posts the dispatch to [EngineDispatch.scheduler].
- * [currentScreenWire] answers off that snapshot without hopping, `getCurrentScreen()` being a
- * synchronous getter.
- *
- * A process a push notification woke has never seen a stack change, so the snapshot is empty and
- * the answer is `null`; an activity destroyed and recreated republishes an equal snapshot
- * ([ScreenRef] compares by value), so a configuration change is not a navigation.
+ * Before any activity exists, as on a push wakeup, the snapshot is empty and the result is `null`.
+ * Recreating an activity produces an equal [ScreenRef] snapshot and no navigation event.
  */
 object PluginScreens {
     // ui-thread writes, globalQueue reads, hence @Volatile and an immutable list

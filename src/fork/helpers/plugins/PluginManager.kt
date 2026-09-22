@@ -128,9 +128,8 @@ object PluginManager {
     }
 
     /**
-     * what the app does for an engine that is on: the signals plugins observe, the sweeps their
-     * files need, and the set itself. Nothing here runs while the engine is off, so a stock install
-     * registers no observer and reads no plugin directory.
+     * Starts plugin observers, file cleanup, and store loading when the engine is enabled.
+     * With the engine off, registers no observers and does not read the plugin directory.
      */
     private fun startHosting(context: Context) {
         if (hosting) return
@@ -144,8 +143,8 @@ object PluginManager {
     }
 
     /**
-     * the installed set, read off disk at most once. The plugins page shows it with the engine off,
-     * which is the one caller that needs it without [startHosting] having run.
+     * Loads installed plugins from disk once. The plugins page also needs this with the engine
+     * disabled, before [startHosting] runs.
      */
     fun ensureLoaded() {
         if (loaded) return
@@ -170,14 +169,12 @@ object PluginManager {
     }
 
     /**
-     * runs at the end of `ApplicationLoader.postInitApplication`, stock's own "the app is really
-     * starting" gate and the earliest point the engine can run at all. Every entry point goes
-     * through it, so a process a push woke boots plugins like one the launcher did - that process
-     * hands a decrypted `TL_updates` to `processUpdates` with no activity ever created.
+     * Runs at the end of `ApplicationLoader.postInitApplication`, the earliest safe startup point.
+     * Every app entry point uses it, including push wakeups that deliver decrypted `TL_updates`
+     * to `processUpdates` without creating an activity.
      *
-     * **It blocks**, or `processUpdates` races the registrations. So only [BootCohort] loads here,
-     * the rest waits for [onAppInteractive], and past [BootCohort.EARLY_BUDGET_MILLIS] the app
-     * stops waiting.
+     * Blocks until [BootCohort] loads or [BootCohort.EARLY_BUDGET_MILLIS] expires, so update
+     * processing waits for registrations. Other plugins load in [onAppInteractive].
      */
     fun onAppBoot() {
         if (booted || ApplicationLoader.applicationContext == null) return
@@ -287,11 +284,11 @@ object PluginManager {
     }
 
     /**
-     * copies raw plugin source into the plugins dir, registers and (if applicable) runs it.
+     * Copies plugin source into the plugins directory, registers it, and starts it if enabled.
      *
-     * a *new* install with an empty store, unless the source claims the plugin id of a record that
-     * did not load this boot - that one is nothing the user can see or remove, so its id is reused
-     * rather than stranded. A plugin that is merely installed and broken is [update]'s, not this.
+     * Creates a new install with empty storage, unless the plugin ID matches a record that failed
+     * to load this boot. Reuse that record's install ID to preserve otherwise inaccessible storage.
+     * Use [update] for plugins already present in the installed list, including broken ones.
      */
     fun import(suggestedName: String, source: String, enabled: Boolean = true, dev: Boolean = false): ImportResult {
         val manifest = PluginManifestParser.parseOrNull(source)
@@ -318,12 +315,10 @@ object PluginManager {
     }
 
     /**
-     * replaces an installed plugin's source in place: same install id, so the same `kv` and `fs`
-     * stores, the same place in the chain order and the same enabled bit. Returns why nothing was
-     * written, or null once the plugin is running the new source.
+     * Replaces installed source while preserving the install ID, `kv`/`fs` stores, order,
+     * and enabled state. Returns an error reason, or null after loading the new source.
      *
-     * The vetting is [reload]'s, which re-reads the file this just wrote - deliberately, so an
-     * update goes live through the one path that also has to survive a plugin failing to load.
+     * [reload] re-reads and validates the written file, using the same path as ordinary reloads.
      */
     fun update(plugin: Plugin, source: String, dev: Boolean = false): String? {
         val manifest = PluginManifestParser.parseOrNull(source)
@@ -538,13 +533,11 @@ object PluginManager {
     )
 
     /**
-     * drops every subsystem this engine reached, closes it, and reclaims what it left on disk.
+     * Detaches subsystems, closes the engine, and removes temporary files.
      *
-     * The order is load-bearing twice over and both loads are why this is one function rather than
-     * a sequence written out at each of the two sites that need it: `inu.xposed` reads `inu.jvm`'s
-     * handle table while taking its hooks down, and the three `wipe`s can only run after `close()`,
-     * which is when rust lets go of the descriptors it holds per spill file. [beforeClear] runs
-     * while `plugin.engine` still points at [engine], which is what [fail] reads.
+     * Order matters: Xposed needs the JVM handle table while removing hooks. File cleanup must
+     * wait for `close()`, which releases Rust's spill-file descriptors. [beforeClear] runs while
+     * `plugin.engine` still points to [engine], so [fail] can check its identity.
      */
     private fun teardown(session: PluginSession, beforeClear: () -> Unit = {}) {
         session.engine.stopCallbacks()
@@ -601,18 +594,14 @@ object PluginManager {
     }
 
     /**
-     * the whole failure policy: a plugin whose own code threw records where it threw and is switched
-     * off, and switching it back on is the retry.
+     * Records the failure and disables the plugin. Re-enabling it retries startup.
      *
-     * both hops are load-bearing. a fault arrives from inside a JNI upcall, with the engine's
-     * `RefCell` already borrowed, so nothing here may re-enter it; and [stop] only ever reaches the
-     * engine through [EngineDispatch.scheduler], which is also where every in-flight dispatch of that
-     * plugin runs, so the two can't interleave inside one engine.
+     * Faults arrive during JNI upcalls while the engine's `RefCell` is borrowed, so handling must
+     * be posted to avoid reentry. [stop] uses [EngineDispatch.scheduler], serializing teardown
+     * with the plugin's in-flight dispatches.
      *
-     * The verdict is taken on the queue that owns [Plugin.engine] rather than in the post: a
-     * reload's `onUnload` throwing is reported from the teardown, which is a the plugin queue runnable,
-     * while this settles on the ui thread - so by the time it landed the successor would already be
-     * running and be switched off over an engine that no longer exists.
+     * Check engine identity on the queue that owns [Plugin.engine], before posting to the UI.
+     * Otherwise, an `onUnload` failure during reload could disable the replacement engine.
      */
     private fun fail(session: PluginSession, at: PluginFailure.Site, detail: String) {
         if (session.isCurrent()) fail(session.plugin, at, detail)

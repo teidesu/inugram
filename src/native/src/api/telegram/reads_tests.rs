@@ -398,9 +398,7 @@ impl ReadsHost for TestReadsHost {
         format!(r#"J{{"text":"{}|{}"}}"#, parts[0], parts.get(1).copied().unwrap_or("").replace('"', "'"))
       }
       OP_TOPIC => match (self.dialog_id(parts[0]), parts.get(1).copied()) {
-        (Some(-1001), Some("7")) => {
-          self.handles.mint_wire("forumTopic", [("title".to_string(), "Stopic".to_string())])
-        }
+        (Some(-1001), Some("7")) => self.handles.mint_wire("forumTopic", [("title".to_string(), "Stopic".to_string())]),
         _ => "N".to_string(),
       },
       _ => "Einternal: unknown op".to_string(),
@@ -575,7 +573,13 @@ fn is_dialog_muted_answers_a_boolean_and_carries_the_topic() {
   assert_eq!(eval_json(&ctx, "inu.account().isDialogMuted(-1001)"), "true");
   assert_eq!(eval_json(&ctx, "inu.account().isDialogMuted(-1001, { topicId: 7 })"), "false");
   assert_eq!(eval_json(&ctx, "inu.account().isDialogMuted('me')"), "false");
-  let args: Vec<String> = host.reads.borrow().iter().filter(|(_, op, _)| *op == OP_DIALOG_MUTED).map(|(_, _, arg)| arg.clone()).collect();
+  let args: Vec<String> = host
+    .reads
+    .borrow()
+    .iter()
+    .filter(|(_, op, _)| *op == OP_DIALOG_MUTED)
+    .map(|(_, _, arg)| arg.clone())
+    .collect();
   assert_eq!(args, vec!["D-1001\n0", "D-1001\n7", "S\n0"], "a topic-less read still names one, as 0");
 }
 

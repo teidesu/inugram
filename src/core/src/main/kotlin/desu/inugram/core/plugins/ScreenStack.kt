@@ -1,15 +1,11 @@
 package desu.inugram.core.plugins
 
 /**
- * One entry of the navigation stack, and the *identity* [ScreenStack.diff] runs on.
+ * A navigation-stack entry, compared by value in [ScreenStack.diff]. Activity recreation
+ * creates new fragments for the same screens and must not emit navigation events.
+ * Plain data also avoids retaining destroyed fragments.
  *
- * Value identity rather than the fragment instance's: the stack lives on the activity, so one
- * destroyed and recreated comes back holding different instances describing the same screens, and
- * `common.d.ts` promises a rebuild onto the same screen fires nothing. It also keeps the previous
- * stack as plain data, so nothing here can pin a destroyed fragment alive.
- *
- * [dialogId]/[topicId] are 0 rather than null: a nullable would only let two equal screens
- * compare unequal.
+ * [dialogId] and [topicId] use 0 for absent values, avoiding unequal null/0 representations.
  */
 data class ScreenRef(
     val type: String,
@@ -21,13 +17,13 @@ data class ScreenRef(
 enum class ScreenChangeAction { PUSH, POP, REPLACE }
 
 /**
- * `INavigationLayout.setFragmentStackChangedListener` carries no payload, so this diff is the
- * only thing that knows what happened.
+ * Derives navigation changes because `INavigationLayout.setFragmentStackChangedListener`
+ * provides no payload. An unchanged top emits nothing, including activity rebuilds and
+ * removal of buried fragments.
  *
- * An unchanged top is **nothing at all** - that is the dedup a rebuild and a
- * `removeFragmentFromStack` on something buried both land in. Otherwise: old a prefix of new is
- * a push (empty-to-nonempty included), new a prefix of old is a pop, equal depth is a replace,
- * and anything else takes the label its depth implies, `action` being a closed set.
+ * An old stack that prefixes the new one is a push, including the first screen. A new stack
+ * that prefixes the old one is a pop. Equal depth means replace; other changes use the action
+ * matching their depth change.
  */
 object ScreenStack {
     fun diff(previous: List<ScreenRef>, next: List<ScreenRef>): ScreenChangeAction? {
