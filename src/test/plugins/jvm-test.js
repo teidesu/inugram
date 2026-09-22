@@ -44,7 +44,7 @@ function expectPluginError(label, code, grant, fn) {
 
 // exact, not a floor: most of what follows is a refusal, and a member that stopped existing refuses
 // too - so the surface is asserted positively first and the count is what catches the rest
-const EXPECTED = 28
+const EXPECTED = 31
 const before = ran
 
 check(
@@ -142,8 +142,25 @@ check(
   `${thrown}`,
 )
 
-expectPluginError('callSuper is not implemented', 'unsupported', null, () =>
-  inu.jvm.callSuper(list, 'toString'),
+const Sized = inu.jvm.defineClass({ superclass: ArrayList, methods: { size: () => 42 } })
+const sized = new Sized()
+sized.call('add', 'x')
+check(
+  'callSuper runs the superclass member without dispatching to the js override, which would re-enter',
+  inu.jvm.callSuper(Sized, sized, 'size') === 1,
+)
+const Listish = inu.jvm.defineClass({
+  superclass: inu.jvm.cls('java.util.AbstractList'),
+  methods: { size: () => 0, get: () => null },
+})
+expectPluginError('callSuper refuses an abstract super member', 'invalid-argument', null, () =>
+  inu.jvm.callSuper(Listish, new Listish(), 'size'),
+)
+expectPluginError('callSuper refuses a receiver of another class', 'invalid-argument', null, () =>
+  inu.jvm.callSuper(Sized, list, 'size'),
+)
+expectPluginError('callSuper refuses a class with no superclass', 'invalid-argument', null, () =>
+  inu.jvm.callSuper(inu.jvm.cls('java.lang.Object'), list, 'hashCode'),
 )
 
 // -- callbacks --

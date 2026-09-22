@@ -584,6 +584,31 @@ pub extern "system" fn Java_desu_inugram_helpers_plugins_platform_PluginXposed_0
 }
 
 #[no_mangle]
+pub extern "system" fn Java_desu_inugram_helpers_plugins_platform_PluginJvm_00024Native_nativeCallNonvirtual<'local>(
+  mut env: EnvUnowned<'local>,
+  _this: JObject<'local>,
+  method: JObject<'local>,
+  descriptor: JString<'local>,
+  params: JObjectArray<'local, JObject<'local>>,
+  receiver: JObject<'local>,
+  args: JObjectArray<'local, JObject<'local>>,
+) -> jobject {
+  in_env(&mut env, std::ptr::null_mut(), |env| {
+    let descriptor = jstring_to_string(env, &descriptor);
+    match jvm::native::call_nonvirtual_boxed(env, &method, &descriptor, &params, &receiver, &args) {
+      Ok(value) => value.into_raw(),
+      Err(jni::errors::Error::JavaException) => std::ptr::null_mut(),
+      Err(error) => {
+        clear_exception(env);
+        let _ =
+          env.throw_new(jni::jni_str!("java/lang/IllegalStateException"), JNIString::from(format!("jvm: {error}")));
+        std::ptr::null_mut()
+      }
+    }
+  })
+}
+
+#[no_mangle]
 pub extern "system" fn Java_desu_inugram_helpers_plugins_platform_PluginXposed_00024Native_nativeDisableProfileSaver(
   mut env: EnvUnowned,
   _this: JObject,

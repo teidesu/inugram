@@ -321,6 +321,41 @@ describe('the routine compiler', () => {
     })
   })
 
+  describe('inu.jvm.callSuper', () => {
+    it('lowers to its own instruction, in argument order, without capturing `inu`', () => {
+      const program = accepts('function (a) { return inu.jvm.callSuper(Base, this, \'draw\', a, 1) }')
+      expect(program.captures).toEqual(['Base'])
+      const call = program.code.find(node => node[0] === 'callSuper')!
+      expect(call[3]).toEqual(['draw'])
+      expect(call[4]).toHaveLength(2)
+      expect(program.code.some(node => node[0] === 'call')).toBe(false)
+    })
+
+    it('takes a hook receiver', () => {
+      const program = accepts('ctx => { ctx.setReturnValue(inu.jvm.callSuper(Base, ctx.thisObject, \'size\')) }', 'hook')
+      expect(program.code.some(node => node[0] === 'callSuper')).toBe(true)
+    })
+
+    it('refuses fewer than a class, a receiver and a name', () => {
+      refuses('function () { return inu.jvm.callSuper(Base, this) }')
+    })
+
+    it('is an ordinary call on a routine\'s own `inu`', () => {
+      const program = accepts('function (inu) { return inu.jvm.callSuper(Base, this, \'draw\') }')
+      expect(program.code.some(node => node[0] === 'callSuper')).toBe(false)
+    })
+
+    it('still refuses the rest of the engine namespace', () => {
+      refuses('function () { return inu.jvm.callSuper.call(Base, this, \'draw\') }')
+      refuses('function () { return inu.jvm?.callSuper(Base, this, \'draw\') }')
+    })
+
+    it('passes the capture check, since `inu` is never a capture', () => {
+      expect(captureProblems('const Base = load()\ninu.jvm.routine(function () { return inu.jvm.callSuper(Base, this, \'draw\') })'))
+        .toEqual([])
+    })
+  })
+
   describe('what a capture resolves to in the file around it', () => {
     it('takes a const and an import', () => {
       expect(captureProblems('import { Paint } from \'x\'\nconst size = 1\ninu.jvm.routine(function () { return new Paint(size) })'))

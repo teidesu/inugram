@@ -546,6 +546,23 @@ pub fn install_jvm<'js>(
   {
     let state = state.clone();
     natives.set(
+      "callSuper",
+      Function::new(
+        ctx.clone(),
+        move |ctx: Ctx<'js>, cls: Value<'js>, receiver: Value<'js>, name: String, args: Rest<Value<'js>>| {
+          let this = &state;
+          let (native, cls) = this.member_target(&ctx, &cls, "callSuper")?;
+          let receiver = read_arg(&ctx, &receiver)?;
+          let args = this.read_args(&ctx, &args.0)?;
+          let outcome = native.call_super(&ctx, &cls, &receiver, &name, &args)?;
+          this.outcome_to_value(&ctx, outcome)
+        },
+      )?,
+    )?;
+  }
+  {
+    let state = state.clone();
+    natives.set(
       "construct",
       Function::new(ctx.clone(), move |ctx: Ctx<'js>, target: Value<'js>, args: Rest<Value<'js>>| {
         state.js_construct(&ctx, target, args)

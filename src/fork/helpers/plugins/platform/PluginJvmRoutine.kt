@@ -60,6 +60,7 @@ internal class PluginJvmRoutine(
         GET("get", operands = 2, java = true),
         SET("set", java = true),
         CALL("call", java = true),
+        CALL_SUPER("callSuper", java = true),
         NEW("new", java = true),
         ARRAY("array"),
 
@@ -211,6 +212,13 @@ internal class PluginJvmRoutine(
                     fieldA[at] = operand(1)
                     fieldB[at] = operand(2)
                     argLists[at] = readArguments(node, 3, at, pool, cursors)
+                }
+                Op.CALL_SUPER -> {
+                    require(node.length() == 5) { "routine: malformed '${op.wire}'" }
+                    fieldA[at] = operand(1)
+                    fieldB[at] = operand(2)
+                    fieldC[at] = operand(3)
+                    argLists[at] = readArguments(node, 4, at, pool, cursors)
                 }
                 Op.NEW -> {
                     require(node.length() == 3) { "routine: malformed '${op.wire}'" }
@@ -438,6 +446,12 @@ internal class PluginJvmRoutine(
                         Op.CALL -> host.callMember(
                             targetOf(read(fieldA[pc], registers)),
                             nameOf(read(fieldB[pc], registers)),
+                            readAll(argLists[pc]!!, registers),
+                        )
+                        Op.CALL_SUPER -> host.callSuper(
+                            targetOf(read(fieldA[pc], registers)),
+                            read(fieldB[pc], registers),
+                            nameOf(read(fieldC[pc], registers)),
                             readAll(argLists[pc]!!, registers),
                         )
                         Op.NEW -> host.newInstanceOf(
