@@ -63,14 +63,14 @@ fn add_body(class: &mut Class, name: &str, result: &str, params: &[&str], is_sta
   }
   ops.push(Op::GetStatic(3, field));
   if constructor {
-    ops.push(Op::Move(6, locals, 0x09));
+    ops.extend([
+      Op::Move(6, locals, 0x09),
+      Op::Invoke(0x6e, vec![3, 2], create_method(TARGET, "getSuperArguments", ARRAY, &[ARRAY])),
+      Op::Result(5, 0x0c),
+    ]);
     let mut next = 7;
     for (i, t) in super_params.iter().enumerate() {
-      ops.extend([
-        Op::Const(4, i as i16),
-        Op::Invoke(0x6e, vec![3, 4, 2], create_method(TARGET, "getSuperArgument", OBJECT, &["I", ARRAY])),
-        Op::Result(0, 0x0c),
-      ]);
+      ops.extend([Op::Const(4, i as i16), Op::Aget(0, 5, 4)]);
       append_cast(&mut ops, t);
       ops.push(Op::Move(next, 0, get_move_kind(t)));
       next += get_word_count(t);

@@ -68,6 +68,7 @@ export function verifyProgram(program: RoutineProgram, hookMode: boolean): void 
     const spec = OP_SPECS[op]
     if (spec === undefined) throw new Error(`${at}: unknown instruction ${op}`)
     if (!hookMode && spec.hook) throw new Error(`${at}: ${op} needs hook mode`)
+    if (hookMode && spec.methodOnly) throw new Error(`${at}: ${op} is refused in hook mode`)
 
     const optional = spec.fields.filter(it => it.endsWith('?')).length
     if (fields.length > spec.fields.length || fields.length < spec.fields.length - optional) {

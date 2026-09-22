@@ -22,11 +22,12 @@ public class Probe {
 }
 ```
 
-`defined_class_generated.dex` and `defined_class_forwarding.dex` came from the
-isolated Rust emitter trial. Android SDK dexdump accepted both. The independent
-smali 0.6.2 decoder confirmed their class structure and instructions match the
-LSPlant-generated reference fixtures, normalizing equivalent const/4 and
-const/16 encodings.
+`defined_class_generated.dex` and `defined_class_forwarding.dex` are the Rust
+emitter's output, written by `dex_tests.rs` when `INU_DEX_TEST_OUTPUT` names a
+directory. Android SDK dexdump accepted both. An earlier version was checked with
+the independent smali 0.6.2 decoder against the LSPlant-generated reference
+fixtures; constructors have since changed to fetch every super argument with one
+`getSuperArguments` call.
 
 They cover interfaces, instance/static methods, dispatch fields, primitive
 boxing/unboxing, arrays, wide arguments/results, and constructor range calls.

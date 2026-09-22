@@ -44,9 +44,6 @@ fn emitter_encodes_arrays_wide_values_interfaces_and_super_calls() {
     ],
   )
   .unwrap();
-  assert_eq!(bytes.as_slice(), include_bytes!("../../../../../test/assets/defined_class_generated.dex"));
-  assert_eq!(u32::from_le_bytes(bytes[32..36].try_into().unwrap()) as usize, bytes.len());
-  assert_eq!(u32::from_le_bytes(bytes[96..100].try_into().unwrap()), 1);
   let forwarding = build(
     "inu.test.Forwarding",
     "Linu/test/Parent;",
@@ -55,11 +52,14 @@ fn emitter_encodes_arrays_wide_values_interfaces_and_super_calls() {
     &[strings(&["<init>", "V", "0", "2", "I", "Ljava/lang/String;", "4", "J", "Ljava/lang/String;", "D", "Z"])],
   )
   .unwrap();
-  assert_eq!(forwarding.as_slice(), include_bytes!("../../../../../test/assets/defined_class_forwarding.dex"));
   if let Ok(directory) = std::env::var("INU_DEX_TEST_OUTPUT") {
-    std::fs::write(std::path::Path::new(&directory).join("generated.dex"), bytes).unwrap();
-    std::fs::write(std::path::Path::new(&directory).join("forwarding.dex"), forwarding).unwrap();
+    std::fs::write(std::path::Path::new(&directory).join("generated.dex"), &bytes).unwrap();
+    std::fs::write(std::path::Path::new(&directory).join("forwarding.dex"), &forwarding).unwrap();
   }
+  assert_eq!(bytes.as_slice(), include_bytes!("../../../../../test/assets/defined_class_generated.dex"));
+  assert_eq!(u32::from_le_bytes(bytes[32..36].try_into().unwrap()) as usize, bytes.len());
+  assert_eq!(u32::from_le_bytes(bytes[96..100].try_into().unwrap()), 1);
+  assert_eq!(forwarding.as_slice(), include_bytes!("../../../../../test/assets/defined_class_forwarding.dex"));
 }
 
 #[test]

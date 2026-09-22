@@ -20,6 +20,7 @@ pub(super) enum Op {
   Move(u16, u16, u8),
   NewArray(u16, u16, String),
   Aput(u16, u16, u16),
+  Aget(u16, u16, u16),
   GetStatic(u16, Field),
   Invoke(u8, Vec<u16>, Method),
   InvokeRange(u8, u16, u16, Method),
@@ -267,14 +268,15 @@ pub(super) fn emit_dex(class: &Class) -> Result<Vec<u8>, String> {
           }
           code.extend([0x23 | d << 8 | s << 12, get_u16_index(ti[t])?]);
         }
-        Op::Aput(v, a, i) => {
+        Op::Aput(v, a, i) | Op::Aget(v, a, i) => {
           for r in [v, a, i] {
             check_reg(*r)?;
             if *r > 255 {
-              return Err("aput register exceeds 8 bits".into());
+              return Err("array access register exceeds 8 bits".into());
             }
           }
-          code.extend([0x4d | v << 8, *a | i << 8]);
+          let opcode = if matches!(op, Op::Aput(..)) { 0x4d } else { 0x46 };
+          code.extend([opcode | v << 8, *a | i << 8]);
         }
         Op::GetStatic(r, f) => {
           check_reg(*r)?;

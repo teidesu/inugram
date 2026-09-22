@@ -28,6 +28,7 @@ import java.lang.reflect.Method
 import java.lang.reflect.Modifier
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.atomic.AtomicLong
+import org.json.JSONArray
 import org.telegram.messenger.Utilities
 import org.telegram.tgnet.TLObject
 
@@ -730,9 +731,30 @@ object PluginJvm : SessionResource {
         private fun candidateMethods(cls: Class<*>, name: String): List<MemberInfo> = cachedMethods(cls, name)
 
         private fun readRoutineResult(wire: String): Any? {
+            if (wire.startsWith("L")) return readArrayResult(JSONArray(wire.substring(1)))
             if (!wire.startsWith("G")) return decodeArg(wire)
             val id = wire.substring(2).toLong()
             return try { at(id) } finally { session.engine.jvmRelease(id) }
+        }
+
+        /** every copied handle in the list is this side's to release, including the ones after an item that fails */
+        private fun readArrayResult(wires: JSONArray): Array<Any?> {
+            val result = arrayOfNulls<Any?>(wires.length())
+            var failure: Throwable? = null
+            for (index in 0 until wires.length()) {
+                val wire = wires.getString(index)
+                if (failure != null) {
+                    if (wire.startsWith("G")) session.engine.jvmRelease(wire.substring(2).toLong())
+                    continue
+                }
+                try {
+                    result[index] = readRoutineResult(wire)
+                } catch (e: Throwable) {
+                    failure = e
+                }
+            }
+            failure?.let { throw it }
+            return result
         }
 
         /**

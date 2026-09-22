@@ -29,10 +29,13 @@ internal class PluginJvmRoutine(
         val operands: Int = 0,
         /** refused outside `inu.xposed.routine`, where there is no call to read */
         val hookOnly: Boolean = false,
+        /** refused in `inu.xposed.routine`, which is never a defineClass body */
+        val methodOnly: Boolean = false,
         /** crosses the bridge, so a run checks its budget and its liveness before it */
         val java: Boolean = false,
     ) {
         THIS("this"),
+        OWNER("owner", methodOnly = true),
         ARG("arg", operands = 1),
         CAPTURE("capture"),
 
@@ -135,6 +138,7 @@ internal class PluginJvmRoutine(
             val name = code.getJSONArray(at).getString(0)
             val op = Op.of(name) ?: error("routine: unknown instruction '$name'")
             require(hookMode || !op.hookOnly) { "routine: '$name' needs inu.xposed.routine" }
+            require(!hookMode || !op.methodOnly) { "routine: '$name' is not available in inu.xposed.routine" }
             op
         }
         fieldA = IntArray(count)
@@ -164,7 +168,7 @@ internal class PluginJvmRoutine(
                 node.getInt(field).also { require(it in 0 until limit) { "routine: index out of range" } }
 
             when (op) {
-                Op.THIS, Op.ARG_COUNT, Op.METHOD, Op.RESULT, Op.THROWABLE, Op.CATCH ->
+                Op.THIS, Op.OWNER, Op.ARG_COUNT, Op.METHOD, Op.RESULT, Op.THROWABLE, Op.CATCH ->
                     require(node.length() == 1) { "routine: malformed '${op.wire}'" }
                 Op.CAPTURE -> {
                     require(node.length() == 2) { "routine: malformed '${op.wire}'" }
@@ -348,7 +352,12 @@ internal class PluginJvmRoutine(
         true
     }
 
-    internal fun execute(context: PluginHookContext?, methodSelf: Any? = null, methodArgs: Array<Any?>? = null): Any? {
+    internal fun execute(
+        context: PluginHookContext?,
+        methodSelf: Any? = null,
+        methodArgs: Array<Any?>? = null,
+        owner: Class<*>? = null,
+    ): Any? {
         val captures = captured ?: return null
         if (!host.live) return null
         val count = opcodes.size
@@ -370,6 +379,7 @@ internal class PluginJvmRoutine(
                     }
                     val value: Any? = when (op) {
                         Op.THIS -> if (hookMode) host.checkedOperand(requireNotNull(context).getThisObject()) else host.checkedOperand(methodSelf)
+                        Op.OWNER -> owner ?: throw IllegalStateException("routine: inu.jvm.superOf needs the routine to be a defineClass body")
                         Op.ARG -> {
                             val index = indexOf(read(fieldA[pc], registers))
                             if (hookMode) {

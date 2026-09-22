@@ -74,7 +74,7 @@ declare type JvmMethodImpl = (self: JavaObject, ...args: any[]) => any
 /** Body of a "cold" (i.e. ran in JS) static method */
 declare type JvmStaticMethodImpl = (self: JavaClass, ...args: any[]) => any
 
-/** Definition of a member method for {@link inu.jvm.defineClass} */
+/** Definition of a member method for {@link inu.jvm.defineClass}. An array of these defines overloads, each with explicit `params` */
 declare interface JvmMethodSpec {
   /** Params of the method, like you would write them in Java (e.g. `float`, `int[]`) */
   params?: string[]
@@ -97,8 +97,19 @@ declare interface JvmStaticMethodSpec {
 declare interface JvmConstructorSpec {
   /** Params of the method, like you would write them in Java (e.g. `float`, `int[]`) */
   params?: string[]
-  /** How `super` should be called */
-  super?: ({ arg: number } | { value: any })[]
+  /**
+   * How `super` should be called: a fixed list, each item passing a constructor param through or
+   * a constant, or a function computing the arguments from the constructor's.
+   *
+   * A function runs before the object exists, so it gets the constructor's arguments only and
+   * returns an array. It may be a sync JS function or an {@link inu.jvm.routine}.
+   */
+  super?: ({ arg: number } | { value: any })[] | ((...args: any[]) => any[]) | JvmRoutineRunnable
+  /**
+   * Params of the super constructor a `super` function calls, like you would write them in Java.
+   * Required unless the superclass has exactly one public or protected constructor.
+   */
+  superParams?: string[]
   /** Init method for the defined class */
   init?: ((self: JavaObject, ...args: any[]) => void) | JvmRoutineRunnable
 }
@@ -113,10 +124,10 @@ declare interface JvmClassSpec {
   fields?: Record<string, string>
   /** Static fields and their types, like you would write them in Java (e.g. `float`, `int[]`) */
   staticFields?: Record<string, string>
-  /** Member methods for the class, keyed by their name */
-  methods?: Record<string, JvmMethodImpl | JvmMethodSpec>
-  /** Static methods for the class, keyed by their name */
-  staticMethods?: Record<string, JvmStaticMethodImpl | JvmStaticMethodSpec>
+  /** Member methods for the class, keyed by their name. An array defines overloads */
+  methods?: Record<string, JvmMethodImpl | JvmMethodSpec | JvmMethodSpec[]>
+  /** Static methods for the class, keyed by their name. An array defines overloads */
+  staticMethods?: Record<string, JvmStaticMethodImpl | JvmStaticMethodSpec | JvmStaticMethodSpec[]>
   /** Constructors for the class */
   constructors?: JvmConstructorSpec[]
 }
@@ -161,7 +172,7 @@ declare namespace inu {
      *   - `/` does integer division if both args are integers
      *   - other math operators work as expected
      * - `===`/`!==` (coerced comparisons are NOT supported)
-     * - {@link inu.jvm.callSuper}, the only `inu` member available
+     * - {@link inu.jvm.callSuper} and {@link inu.jvm.superOf}, the only `inu` members available
      * - expressions on Java values.
      *
      * Unsupported syntax is a build error with a source location.
@@ -216,6 +227,7 @@ declare namespace inu {
      * Fields are public with Java defaults. Static methods receive the JavaClass as `self`.
      *
      * Bodies and initializers accept sync JS functions or {@link inu.jvm.routine} objects.
+     * A JS body may return an array of scalars and handles, which Java receives as an `Object[]`.
      * JS errors become `IllegalStateException`; recursive JS entry is rejected. After unload,
      * void callbacks do nothing and other methods fail. Java calls cannot be interrupted.
      *
@@ -241,5 +253,17 @@ declare namespace inu {
      * @example `inu.jvm.callSuper(MySpan, self, 'updateDrawState', paint)`
      */
     function callSuper(cls: JavaClass, self: JavaObject, method: string, ...args: any[]): any
+
+    /**
+     * `super` for a routine used as a {@link inu.jvm.defineClass} body, which cannot capture the
+     * class it is defining: `inu.jvm.superOf(this).method(...args)` is
+     * {@link inu.jvm.callSuper} on the class the routine is bound to.
+     *
+     * Only available in {@link inu.jvm.routine} bodies, and only called through directly.
+     * A routine run outside a defineClass body throws there.
+     *
+     * @example `inu.jvm.routine(function (paint) { inu.jvm.superOf(this).updateDrawState(paint) })`
+     */
+    function superOf(self: JavaObject): any
   }
 }

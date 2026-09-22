@@ -579,10 +579,60 @@ fn define_class_refuses_malformed_specs() {
     "inu.jvm.defineClass('plugin.Test', { methods: { run: { body: 42 } } })",
     "inu.jvm.defineClass('plugin.Test', { constructors: [{ super: [{ arg: -1 }] }] })",
     "inu.jvm.defineClass('plugin.Test', { constructors: [{ super: [{ value: () => 1 }] }] })",
+    "inu.jvm.defineClass('plugin.Test', { constructors: [{ super: 'x' }] })",
+    "inu.jvm.defineClass('plugin.Test', { constructors: [{ super: [], superParams: ['int'] }] })",
+    "inu.jvm.defineClass('plugin.Test', { methods: { run: [{ body: () => {} }] } })",
+    "inu.jvm.defineClass('plugin.Test', { methods: { run: [() => {}] } })",
   ] {
     assert_eq!(error_code(&f, code), "invalid-argument|", "{code}");
   }
   assert!(f.host.calls().is_empty());
+}
+
+#[test]
+fn define_class_serializes_each_overload_as_its_own_method() {
+  let f = setup(&["unsafe.jvm"]);
+  eval(
+    &f,
+    "inu.jvm.defineClass('plugin.Test', { methods: { add: [{ params: ['int'], returns: 'int', body: (self, a) => a + 1 }, { params: ['java.lang.String'], returns: 'java.lang.String', body: (self, a) => a + '!' }] } })",
+  );
+  let call = f.host.calls().into_iter().find(|call| call.starts_with("18|")).unwrap();
+  assert!(call.contains("{\"name\":\"add\",\"params\":[\"int\"]"), "{call}");
+  assert!(call.contains("{\"name\":\"add\",\"params\":[\"java.lang.String\"]"), "{call}");
+  f.ctx.with(|ctx| {
+    assert_eq!(f.state.dispatch_method(&ctx, 1, "N", &["I1".into()]), "I2");
+    assert_eq!(f.state.dispatch_method(&ctx, 2, "N", &["Sa".into()]), "Sa!");
+  });
+}
+
+/// the super function runs before the object exists, so it is handed the constructor's arguments
+/// without a receiver, and its array crosses as one list
+#[test]
+fn define_class_serializes_a_super_function_and_hands_it_the_arguments_alone() {
+  let f = setup(&["unsafe.jvm"]);
+  eval(
+    &f,
+    "inu.jvm.defineClass('plugin.Test', { constructors: [{ params: ['int'], superParams: ['java.lang.String', 'int'], super: (n) => [`item ${n}`, n * 2] }] })",
+  );
+  let call = f.host.calls().into_iter().find(|call| call.starts_with("18|")).unwrap();
+  assert!(call.contains("\"super\":[],\"superBody\":[\"js\",0],\"superParams\":[\"java.lang.String\",\"int\"]"), "{call}");
+  f.ctx.with(|ctx| {
+    assert_eq!(f.state.dispatch_method(&ctx, 1, "N", &["I4".into()]), r#"L["Sitem 4","I8"]"#);
+  });
+}
+
+#[test]
+fn an_array_result_crosses_as_a_list_and_refuses_nesting_and_expired_handles() {
+  let f = setup(&["unsafe.jvm"]);
+  eval(
+    &f,
+    "globalThis.cls = inu.jvm.cls('java.lang.Object'); inu.jvm.defineClass('plugin.Test', { methods: { flat: () => [1, 'a', null, true], nested: () => [1, [1]], expired: () => [1, cls] } })",
+  );
+  f.ctx.with(|ctx| {
+    assert_eq!(f.state.dispatch_method(&ctx, 1, "N", &[]), r#"L["I1","Sa","N","B1"]"#);
+    assert!(f.state.dispatch_method(&ctx, 2, "N", &[]).contains("cannot nest arrays"));
+    assert!(f.state.dispatch_method(&ctx, 3, "N", &[]).contains("released"), "a handle the table no longer has fails the whole list");
+  });
 }
 
 #[test]
