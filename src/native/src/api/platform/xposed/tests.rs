@@ -376,6 +376,57 @@ fn a_before_verdict_does_not_leak_into_the_after_phase() {
 }
 
 #[test]
+fn extra_set_in_before_is_read_in_after_and_starts_unset_each_call() {
+  let fixture = granted();
+  *fixture.host.original.borrow_mut() = "I5".to_string();
+  fixture.eval(
+    "globalThis.saw = [];
+         const m = stringLength;
+         inu.xposed.hookMethod(m, {
+           before(ctx) { saw.push(ctx.extra); ctx.extra = ctx.args[0] },
+           after(ctx) { saw.push(ctx.extra) },
+         })",
+  );
+
+  fixture.dispatch(100, &["I7"]);
+  fixture.dispatch(100, &["I8"]);
+  let saw: String = fixture.ctx.with(|ctx| ctx.eval("JSON.stringify(saw)").unwrap());
+  assert_eq!(saw, "[null,7,null,8]");
+}
+
+#[test]
+fn extra_reaches_after_when_before_answers() {
+  let fixture = granted();
+  fixture.eval(
+    "globalThis.saw = 'unset';
+         const m = stringLength;
+         inu.xposed.hookMethod(m, {
+           before(ctx) { ctx.extra = 'from before'; ctx.setReturnValue(1) },
+           after(ctx) { saw = ctx.extra },
+         })",
+  );
+
+  assert_eq!(fixture.dispatch(100, &[]), "I1");
+  fixture.eval("if (saw !== 'from before') throw new Error('saw ' + saw)");
+}
+
+#[test]
+fn extra_is_shared_by_one_plugins_hooks_on_a_site() {
+  let fixture = granted();
+  *fixture.host.sites.borrow_mut() = vec!["S100".to_string(), "S100".to_string()];
+  fixture.eval(
+    "globalThis.saw = [];
+         const m = stringLength;
+         inu.xposed.hookMethod(m, { before(ctx) { ctx.extra = 'a' }, after(ctx) { saw.push(ctx.extra) } });
+         inu.xposed.hookMethod(m, { before(ctx) { saw.push(ctx.extra); ctx.extra = 'b' } })",
+  );
+
+  fixture.dispatch(100, &[]);
+  let saw: String = fixture.ctx.with(|ctx| ctx.eval("JSON.stringify(saw)").unwrap());
+  assert_eq!(saw, r#"["a","b"]"#);
+}
+
+#[test]
 fn a_thrown_original_reaches_after_as_a_throwable_rather_than_a_return_value() {
   let fixture = granted();
   // what the host answers when the method itself threw: `T` plus the throwable
