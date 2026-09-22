@@ -69,57 +69,13 @@ declare interface JvmClassSpec {
 declare const __jvmRoutineRunnable__: unique symbol
 declare type JvmRoutineRunnable = JavaObject & { readonly [__jvmRoutineRunnable__]: true }
 
-declare type JvmRoutineValue = OpaqueType<'JVMRoutineValue'>
-declare type JvmRoutineOperand
-  = | null | undefined | boolean | number | bigint | string | Uint8Array
-    | JavaObject | JavaClass | JavaMethod | JavaConstructor | JavaField | JvmRoutineValue
-
-declare interface JvmRoutineOps {
-  /**
-   * Only while used as a defineClass body/init, or as an `inu.xposed` hook filter, where it is the
-   * receiver of the hooked call. Static methods receive their JavaClass.
-   */
-  getThisObject(): JvmRoutineValue
-  /**
-   * Zero-based method/constructor argument, or the hooked call's argument in a hook filter; fails
-   * outside either.
-   */
-  getArgument(index: number | JvmRoutineValue): JvmRoutineValue
-  /**
-   * Sets the method result, or the verdict in a hook filter; remaining roots still execute.
-   * Ignored for void methods/constructors.
-   */
-  setReturnValue(value: JvmRoutineOperand): JvmRoutineValue
-  /**
-   * Reads an invocation-local variable; fails if no set has executed for this name.
-   * Each read operation snapshots once.
-   */
-  get(name: string): JvmRoutineValue
-  /** Initializes or updates an invocation-local variable and returns the assigned value. */
-  set(name: string, value: JvmRoutineOperand): JvmRoutineValue
-  getField(target: JavaObject | JavaClass | JvmRoutineValue, name: string): JvmRoutineValue
-  setField(target: JavaObject | JavaClass | JvmRoutineValue, name: string, value: JvmRoutineOperand): JvmRoutineValue
-  call(target: JavaObject | JavaClass | JvmRoutineValue, method: string, ...args: JvmRoutineOperand[]): JvmRoutineValue
-  /** Run fallback if body fails; completed side effects are not rolled back. */
-  attempt(body: JvmRoutineValue[], fallback?: JvmRoutineValue[]): JvmRoutineValue
-  when(condition: JvmRoutineOperand, yes: JvmRoutineValue[], no?: JvmRoutineValue[]): JvmRoutineValue
-  /**
-   * No coercion: primitive numbers compare numerically, strings by value, other Java objects by identity.
-   * null and undefined both become Java null. NaN compares unequal to everything.
-   */
-  compare(op: '==' | '!=', left: JvmRoutineOperand, right: JvmRoutineOperand): JvmRoutineValue
-  /** Ordering requires two numbers or two strings; strings use UTF-16 lexicographic order. */
-  compare(op: '<' | '<=' | '>' | '>=', left: number | bigint | string | JvmRoutineValue, right: number | bigint | string | JvmRoutineValue): JvmRoutineValue
-  /** Short-circuiting boolean results, using when's truthiness. */
-  and(left: JvmRoutineOperand, right: JvmRoutineOperand): JvmRoutineValue
-  or(left: JvmRoutineOperand, right: JvmRoutineOperand): JvmRoutineValue
-  not(value: JvmRoutineOperand): JvmRoutineValue
-  /**
-   * Integral operands use checked signed 64-bit arithmetic (division truncates); fractional operands use double.
-   * Overflow, non-finite operands/results and zero divisors fail.
-   */
-  math(op: '+' | '-' | '*' | '/' | '%', left: number | bigint | JvmRoutineValue, right: number | bigint | JvmRoutineValue): JvmRoutineValue
-}
+/**
+ * A routine body. It is compiled, not run: keep to the subset the compiler accepts. `this` is the
+ * receiver, parameters are the arguments, and values are java values, so members are java members
+ * (`s.length()`, not `s.length`). An arrow works, but has no `this`, so a body that reads the
+ * receiver is a `function` expression.
+ */
+declare type JvmRoutineBody = (this: JavaObject, ...args: any[]) => any
 
 declare namespace inu {
   /**
@@ -130,14 +86,22 @@ declare namespace inu {
    */
   namespace jvm {
     /**
-     * Build now; run Java operations later on the caller's thread, without JS callbacks.
-     * Operations run once per invocation, when needed. Locals reset each time.
-     * Use ops.when/and/or for conditions; operation values are not ordinary JS values.
-     * Errors are logged and stop execution; completed changes stay applied.
-     * Limits: 256 ops, 512 live routines, 1 MB captures, 250 ms per run, checked before each java call: every other operation runs at most once, so only a call can outlast it.
-     * Unload cancels remaining operations; running Java calls cannot be interrupted.
+     * Java work the host runs later on the caller's thread, without entering the engine. Used as a
+     * `defineClass` body, a `Runnable`, or an `inu.xposed` hook filter.
+     *
+     * The body is compiled by `@inugram/cli`, so it must be a `function` expression written in the
+     * subset the compiler accepts: `const`/`let`, `if`, `while`/`do`/`for`/`for of` with
+     * `break`/`continue`, `switch`, `try`/`catch`/`finally`, `throw`, `return`, and expressions
+     * over java values. `===` and `!==` only, `+` concatenates when either side is text, and
+     * integer `/` truncates. Anything outside the subset is a build error, naming the line.
+     *
+     * Free identifiers are captured by value when the routine is built, arrays included.
+     *
+     * Limits: 1024 instructions, 256 slots, 256 captures, 512 live routines, 1 MB captures,
+     * 250 ms per run, checked before each java call and on loop back edges.
+     * Unload cancels a run in progress; a java call already running cannot be interrupted.
      */
-    function routine(build: (ops: JvmRoutineOps) => JvmRoutineValue[]): JvmRoutineRunnable
+    function routine(body: JvmRoutineBody): JvmRoutineRunnable
 
     /**
      * Create a `java.lang.Runnable` wrapping a JS function
@@ -182,7 +146,7 @@ declare namespace inu {
      * Types accept primitive names, fully qualified class names, [] suffixes, or JVM type descriptors.
      * Omitted method params/returns are inferred from an unambiguous inherited signature, otherwise ()void.
      * Fields are public, initially Java's default values. Static bodies receive the JavaClass as self.
-     * Bodies/init accept synchronous JS functions or interpreted inu.jvm.routine objects.
+     * Bodies/init accept synchronous JS functions or compiled inu.jvm.routine objects.
      * JS errors become Java IllegalStateException; void callbacks become no-ops after unload, other
      * methods fail. Java calls cannot be interrupted; nested defined-method invocations share a
      * 250 ms admission budget and allow at most 64 levels. JS callbacks obey the engine's reentry rule.

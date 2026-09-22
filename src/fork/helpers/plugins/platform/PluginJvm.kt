@@ -156,7 +156,7 @@ object PluginJvm : SessionResource {
             )
         )
 
-    private class Session(private val session: PluginSession, private val screen: AppScreen) :
+    internal open class Session(private val session: PluginSession, private val screen: AppScreen) :
         JvmListener, ValueBridge {
         private val nextTicket = AtomicLong(1)
         private val loaders = ArrayList<ClassLoader>()
@@ -166,7 +166,8 @@ object PluginJvm : SessionResource {
         private val pendingClasses = HashMap<Long, PluginJvmClass.Prepared>()
 
         @Volatile
-        private var live = true
+        internal var live = true
+            private set
 
         override fun jvm(op: Int, target: Long, name: String, args: Array<String>): String = try {
             if (!live) expired() else handle(op, target, name, args)
@@ -546,6 +547,104 @@ object PluginJvm : SessionResource {
             return null
         }
 
+        /**
+         * What a routine's java instructions run through. The table is rust's, so encoding a result
+         * here would be a mint and a release across jni per operation.
+         */
+        private inline fun bridged(block: () -> Any?): Any? {
+            val result = try {
+                block()
+            } catch (e: InvocationTargetException) {
+                // reflection wraps whatever the callee threw, and a routine's `catch` binds what it
+                // catches: the wrapper is this side's, not the plugin's
+                throw e.cause ?: e
+            }
+            return checkedOperand(result)
+        }
+
+        private inline fun onMember(target: Any, block: (Class<*>, Any?) -> Any?): Any? = bridged {
+            val cls = target as? Class<*> ?: target.javaClass
+            checkClass(cls)
+            block(cls, target.takeUnless { it is Class<*> })
+        }
+
+        internal open fun getMember(target: Any, name: String): Any? =
+            onMember(target) { cls, receiver -> readField(findField(cls, name), receiver) }
+
+        internal open fun setMember(target: Any, name: String, value: Any?): Any? =
+            onMember(target) { cls, receiver -> writeField(findField(cls, name), receiver, listOf(value)) }
+
+        internal open fun callMember(target: Any, name: String, args: List<Any?>): Any? =
+            onMember(target) { cls, receiver -> callMethod(cls, receiver, name, args) }
+
+        internal open fun newInstanceOf(target: Any, args: List<Any?>): Any? = bridged { construct(target, args) }
+
+        internal open fun getElement(target: Any, index: Int): Any? = bridged { readElement(target, index) }
+
+        internal open fun setElement(target: Any, index: Int, value: Any?): Any? =
+            bridged { writeElement(target, index, value) }
+
+        internal open fun getArrayLength(target: Any): Any? = bridged { arrayLength(target) }
+
+        internal open fun iterate(target: Any): Iterator<*> = try {
+            iteratorOf(target)
+        } catch (e: InvocationTargetException) {
+            throw e.cause ?: e
+        }
+
+        private fun construct(target: Any, args: List<Any?>): Any {
+            val info = when (target) {
+                is Class<*> -> {
+                    checkClass(target)
+                    pick(cachedConstructors(target).filter { matches(it.params, args) }, "${target.name} constructor", args)
+                }
+                is java.lang.reflect.Constructor<*> -> MemberInfo(target).also {
+                    if (!matches(it.params, args)) {
+                        refuse("invalid-argument", "jvm: ${target.declaringClass.name} does not take these arguments")
+                    }
+                }
+                else -> refuse("invalid-argument", "routine: new expects a java class or constructor")
+            }
+            checkMember(info.member)
+            val constructor = info.member as java.lang.reflect.Constructor<*>
+            constructor.isAccessible = true
+            return constructor.newInstance(*convertAll(info.params, args))
+        }
+
+        private fun arrayOperand(target: Any, what: String): Any =
+            target.takeIf { it.javaClass.isArray }?.also { checkClass(it.javaClass) }
+                ?: refuse("invalid-argument", "routine: $what expects a java array")
+
+        private fun arrayLength(target: Any): Int =
+            java.lang.reflect.Array.getLength(arrayOperand(target, "length"))
+
+        private fun readElement(target: Any, index: Int): Any? =
+            java.lang.reflect.Array.get(arrayOperand(target, "indexing"), index)
+
+        private fun writeElement(target: Any, index: Int, value: Any?): Any? {
+            val array = arrayOperand(target, "indexing")
+            val component = array.javaClass.componentType!!
+            val converted = convert(value, component)
+                ?: refuse("invalid-argument", "jvm: cannot assign that to a ${component.name}")
+            java.lang.reflect.Array.set(array, index, converted.value)
+            return null
+        }
+
+        private fun iteratorOf(target: Any): Iterator<*> {
+            checkClass(target.javaClass)
+            if (target.javaClass.isArray) {
+                val length = java.lang.reflect.Array.getLength(target)
+                return object : Iterator<Any?> {
+                    private var at = 0
+                    override fun hasNext(): Boolean = at < length
+                    override fun next(): Any? = java.lang.reflect.Array.get(target, at++)
+                }
+            }
+            val iterable = target as? Iterable<*>
+                ?: refuse("invalid-argument", "routine: for-of expects a java array or an Iterable")
+            return iterable.iterator()
+        }
+
         private fun callMethod(cls: Class<*>, self: Any?, name: String, args: List<Any?>): Any? {
             val info = resolve(cls, name, args, staticOnly = self == null)
             info.method.isAccessible = true
@@ -604,7 +703,7 @@ object PluginJvm : SessionResource {
          * checks and its one conversion happen: a char is one character of text everywhere a
          * plugin can see one, and a routine must not be the place it is not.
          */
-        private fun checkedOperand(value: Any?): Any? {
+        internal fun checkedOperand(value: Any?): Any? {
             checkValue(value)
             return if (value is Char) value.toString() else value
         }
@@ -614,18 +713,7 @@ object PluginJvm : SessionResource {
             if (routinees.size >= 512) refuse("quota-exceeded", "routine: at most 512 live routinees")
             val values = decodeArgs(args).map { if (it is ByteArray) it.copyOf() else it }
             val routine = try {
-                PluginJvmRoutine(definition, values, { live }, hookMode, ::checkedOperand) { kind, target, name, arguments ->
-                    val cls = target as? Class<*> ?: target.javaClass
-                    checkClass(cls)
-                    val receiver = target.takeUnless { it is Class<*> }
-                    // the table is rust's, so encoding a result here would be a mint and a release across jni per operation
-                    val result = when (kind) {
-                        "get" -> readField(findField(cls, name), receiver)
-                        "set" -> writeField(findField(cls, name), receiver, arguments)
-                        else -> callMethod(cls, receiver, name, arguments)
-                    }
-                    checkedOperand(result)
-                }
+                PluginJvmRoutine(definition, values, this, hookMode)
             } catch (e: Exception) {
                 refuse("invalid-argument", "routine: ${e.message}")
             }

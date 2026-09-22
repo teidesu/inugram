@@ -143,7 +143,12 @@ impl JvmState {
     }
   }
 
-  pub(crate) fn build_xposed_routine<'js>(&self, ctx: &Ctx<'js>, builder: Value<'js>) -> JsResult<Value<'js>> {
+  pub(crate) fn build_xposed_routine<'js>(
+    &self,
+    ctx: &Ctx<'js>,
+    program: Value<'js>,
+    captures: Value<'js>,
+  ) -> JsResult<Value<'js>> {
     let factory = self
       .prelude
       .borrow()
@@ -152,7 +157,7 @@ impl JvmState {
       .xposed_routine
       .clone()
       .restore(ctx)?;
-    factory.call((builder,))
+    factory.call((program, captures))
   }
 
   /// member access runs through cached jni ids, and there is no text form of it to fall back to

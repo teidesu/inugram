@@ -460,69 +460,78 @@ pub(crate) mod testing {
   }
 }
 
+/// the smallest thing the cli emits, used where a test only needs *a* routine
+const EMPTY_ROUTINE: &str = "{ v: 1, source: 'function () {}', captures: [], slots: 0, code: [['this']], tries: [] }";
+
 #[test]
-fn routinees_build_one_host_program_without_executing_members() {
+fn a_compiled_routine_crosses_as_one_program_the_host_can_read() {
   let f = setup(&["unsafe.jvm"]);
   object_handle(&f, "obj");
   let before = f.host.calls().len();
-  eval(&f, "inu.jvm.routine(ops => { const x = ops.getField(obj, 'count'); return [ops.setField(obj, 'count', ops.math('+', x, 2))] })");
+  eval(
+    &f,
+    "inu.jvm.routine({ v: 1, source: 'function () {}', captures: ['obj'], slots: 0, \
+       code: [['capture', 0], ['get', 0, ['count']], ['add', 1, [2]], ['set', 0, ['count'], 2]], tries: [] }, [obj])",
+  );
   let calls = f.host.calls();
   assert_eq!(calls.len(), before + 1);
-  assert!(calls.last().unwrap().starts_with("16|0|"));
-  assert!(calls.last().unwrap().contains("\"math\",\"+\""));
+  let call = calls.last().unwrap();
+  assert!(call.starts_with("16|0|"), "{call}");
+  for instruction in ["capture", "get", "add", "set"] {
+    assert!(call.contains(&format!("\"{instruction}\"")), "{call}");
+  }
+  assert!(!call.contains("source"), "the source stays in the bundle, it is not the host's: {call}");
 }
 
 #[test]
-fn routine_tokens_are_scoped_and_builders_close_on_success_and_failure() {
+fn an_array_capture_crosses_flattened_under_the_shape_it_had() {
   let f = setup(&["unsafe.jvm"]);
+  object_handle(&f, "obj");
   eval(
     &f,
-    "inu.jvm.routine(ops => { globalThis.saved = ops; globalThis.token = ops.math('+', 1, 2); return [token] })",
+    "inu.jvm.routine({ v: 1, source: '', captures: ['obj', 'table'], slots: 0, code: [['capture', 1]], tries: [] }, \
+       [obj, [1, ['deep', 2]]])",
   );
+  let call = f.host.calls().into_iter().next_back().unwrap();
+  assert!(call.contains("\"layout\":[-1,[-1,[-1,-1]]]"), "{call}");
+  let wires = call.rsplit('|').next().unwrap();
+  assert_eq!(wires.split(',').count(), 4, "one wire per leaf: {call}");
+}
+
+#[test]
+fn a_routine_handed_a_function_says_where_bodies_are_compiled() {
+  let f = setup(&["unsafe.jvm"]);
+  let error = eval(&f, "inu.jvm.routine(() => {})");
+  assert!(error.contains("@inugram/cli"), "{error}");
+}
+
+#[test]
+fn a_routine_whose_shape_or_captures_do_not_fit_is_refused() {
+  let f = setup(&["unsafe.jvm"]);
   for code in [
-    "saved.math('+', 1, 2)",
-    "inu.jvm.routine(ops => [token])",
-    "inu.jvm.routine(ops => [ops.math('+', token, 2)])",
-    "inu.jvm.routine(ops => [ops.math('?', 1, 2)])",
-    "inu.jvm.routine(ops => Promise.resolve([]))",
+    "inu.jvm.routine(42)",
+    "inu.jvm.routine({ v: 2, captures: [], code: [] })",
+    "inu.jvm.routine({ v: 1, captures: [], code: 'nope' })",
+    "inu.jvm.routine({ v: 1, captures: ['a'], code: [] }, [])",
+    "inu.jvm.routine({ v: 1, captures: [], code: [] }, 7)",
+    "inu.jvm.routine({ v: 1, captures: ['a'], code: [] }, [() => {}])",
   ] {
     assert!(eval(&f, code).contains("routine:"), "{code}");
   }
-  eval(&f, "try { inu.jvm.routine(ops => { globalThis.failed = ops; throw Error('stop') }) } catch {} ");
-  assert!(eval(&f, "failed.math('+', 1, 2)").contains("closed"));
 }
 
 #[test]
-fn routine_comparisons_and_logic_build_symbolic_nodes() {
+fn method_routines_cross_their_receiver_argument_and_result_instructions() {
   let f = setup(&["unsafe.jvm"]);
-  eval(&f, "inu.jvm.routine(ops => [ops.and(ops.compare('>', 3, 2), ops.or(false, ops.not(null)))])");
+  eval(
+    &f,
+    "inu.jvm.routine({ v: 1, source: '', captures: [], slots: 0, \
+       code: [['this'], ['arg', [0]], ['add', 1, [2]], ['return', 2]], tries: [] })",
+  );
   let calls = f.host.calls();
   assert_eq!(calls.len(), 1);
-  for kind in ["compare", "and", "or", "not"] {
-    assert!(calls[0].contains(&format!("\"{kind}\"")));
-  }
-  assert!(eval(&f, "inu.jvm.routine(ops => [ops.compare('===', 1, 1)])").contains("unsupported comparison"));
-  eval(&f, "inu.jvm.routine(ops => { globalThis.foreign = ops.not(false); return [] })");
-  assert!(eval(&f, "inu.jvm.routine(ops => [ops.and(true, foreign)])").contains("foreign"));
-}
-
-#[test]
-fn routine_locals_use_names_and_closed_builders_are_refused() {
-  let f = setup(&["unsafe.jvm"]);
-  eval(&f, "inu.jvm.routine(ops => { globalThis.localOps = ops; return [ops.set('count', 1), ops.set('count', ops.math('+', ops.get('count'), 2))] })");
-  let calls = f.host.calls();
-  assert_eq!(calls.len(), 1);
-  for kind in ["getLocal", "setLocal"] {
-    assert!(calls[0].contains(&format!("\"{kind}\"")));
-  }
-  for code in [
-    "localOps.get('count')",
-    "localOps.set('count', 2)",
-    "inu.jvm.routine(ops => [ops.get('')])",
-    "inu.jvm.routine(ops => [ops.set(3, 2)])",
-  ] {
-    let error = eval(&f, code);
-    assert!(error.contains("routine:") || error.contains("expected a name"), "{code}");
+  for instruction in ["this", "arg", "return"] {
+    assert!(calls[0].contains(&format!("\"{instruction}\"")), "{}", calls[0]);
   }
 }
 
@@ -578,23 +587,15 @@ fn define_class_refuses_promise_results_and_transports_exceptions() {
 }
 
 #[test]
-fn method_routines_build_interpreted_receiver_argument_and_result_operations() {
+fn define_class_keeps_callable_java_classes_as_handles_and_routines_as_handles() {
   let f = setup(&["unsafe.jvm"]);
   eval(
     &f,
-    "inu.jvm.routine(ops => [ops.getThisObject(), ops.setReturnValue(ops.math('+', ops.getArgument(0), 2))])",
+    &format!(
+      "const base = inu.jvm.cls('java.lang.Object'); const body = inu.jvm.routine({EMPTY_ROUTINE}); \
+       inu.jvm.defineClass('plugin.Test', {{ superclass: base, methods: {{ run: {{ body }} }} }})"
+    ),
   );
-  let calls = f.host.calls();
-  assert_eq!(calls.len(), 1);
-  assert!(calls[0].contains("methodThis"));
-  assert!(calls[0].contains("methodArgument"));
-  assert!(calls[0].contains("methodSetResult"));
-}
-
-#[test]
-fn define_class_keeps_callable_java_classes_as_handles_and_routines_as_handles() {
-  let f = setup(&["unsafe.jvm"]);
-  eval(&f, "const base = inu.jvm.cls('java.lang.Object'); const body = inu.jvm.routine(ops => []); inu.jvm.defineClass('plugin.Test', { superclass: base, methods: { run: { body } } })");
   let call = f.host.calls().into_iter().find(|call| call.starts_with("18|")).unwrap();
   assert!(call.ends_with("|G1,G2"), "{call}");
   assert!(f.state.callbacks.is_empty());

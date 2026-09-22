@@ -33,9 +33,9 @@ class PluginJvmClassTest {
     @Test fun fields_constructors_methods_and_static_methods_execute_routines() = runWithEngine("""
         const type = inu.jvm.defineClass('inu.test.DefinedMethods', {
             fields: { count: 'int' }, staticFields: { tag: 'java.lang.String' },
-            constructors: [{ params: ['int'], init: inu.jvm.routine(ops => [ops.setField(ops.getThisObject(), 'count', ops.getArgument(0))]) }],
-            methods: { add: { params: ['int'], returns: 'int', body: inu.jvm.routine(ops => [ops.setReturnValue(ops.math('+', ops.getField(ops.getThisObject(), 'count'), ops.getArgument(0)))]) } },
-            staticMethods: { getTag: { returns: 'java.lang.String', body: inu.jvm.routine(ops => [ops.setReturnValue(ops.getField(ops.getThisObject(), 'tag'))]) } },
+            constructors: [{ params: ['int'], init: inu.jvm.routine({ v: 1, source: '', captures: [], slots: 0, tries: [], code: [['this'], ['arg', [0]], ['set', 0, ['count'], 1]] }) }],
+            methods: { add: { params: ['int'], returns: 'int', body: inu.jvm.routine({ v: 1, source: '', captures: [], slots: 0, tries: [], code: [['this'], ['get', 0, ['count']], ['arg', [0]], ['add', 1, 2], ['return', 3]] }) } },
+            staticMethods: { getTag: { returns: 'java.lang.String', body: inu.jvm.routine({ v: 1, source: '', captures: [], slots: 0, tries: [], code: [['this'], ['get', 0, ['tag']], ['return', 1]] }) } },
         });
         const instance = new type(40);
         if (instance.getField('count') !== 40 || instance.call('add', 2) !== 42) throw Error('instance dispatch');
@@ -49,7 +49,7 @@ class PluginJvmClassTest {
         const type = inu.jvm.defineClass('inu.test.DefinedSubclass', {
             superclass: base,
             constructors: [{ params: ['int'], super: [{ arg: 0 }, { value: 'base' }] }],
-            methods: { getText: { params: [], returns: 'java.lang.String', body: inu.jvm.routine(ops => [ops.setReturnValue('port')]) } },
+            methods: { getText: { params: [], returns: 'java.lang.String', body: inu.jvm.routine({ v: 1, source: '', captures: [], slots: 0, tries: [], code: [['return', ['port']]] }) } },
         });
         const instance = new type(42);
         if (instance.call('getNumber') !== 42 || instance.call('getLabel') !== 'base') throw Error('super arguments');
@@ -60,7 +60,7 @@ class PluginJvmClassTest {
     @Test fun interfaces_and_void_callbacks_survive_plugin_unload() = runWithEngine("""
         const type = inu.jvm.defineClass('inu.test.DefinedRunnable', {
             interfaces: [inu.jvm.cls('java.lang.Runnable')],
-            methods: { run: { body: inu.jvm.routine(ops => []) } },
+            methods: { run: { body: inu.jvm.routine({ v: 1, source: '', captures: [], slots: 0, tries: [], code: [['return']] }) } },
         });
         const instance = new type();
         instance.call('run');

@@ -207,6 +207,11 @@ fn setup(grants: &[&str]) -> Fixture {
       let handle = jvm.wire_to_value(&ctx, wire).unwrap();
       ctx.globals().set(name, handle).unwrap();
     }
+    ctx
+      .eval::<Value, _>(
+        "globalThis.EMPTY_ROUTINE = { v: 1, source: 'function () {}', captures: [], slots: 0, code: [['this']], tries: [] }",
+      )
+      .unwrap();
     let state =
       install_xposed(&ctx, host.as_host(), grant_host.clone(), lifecycle.clone(), jvm.clone(), log.clone(), &inu)
         .unwrap();
@@ -643,7 +648,7 @@ fn call_original_defaults_omitted_receiver_and_arguments() {
 #[test]
 fn routine_hooks_register_native_phases_and_dispose_them() {
   let fixture = granted();
-  fixture.eval("const method = fixtureRun; const routine = inu.jvm.routine(ops => []); globalThis.off = inu.xposed.hookMethod(method, { before: routine, after: routine })");
+  fixture.eval("const method = fixtureRun; const routine = inu.jvm.routine(EMPTY_ROUTINE); globalThis.off = inu.xposed.hookMethod(method, { before: routine, after: routine })");
   assert_eq!(fixture.host.ops(), vec![OP_HOOK, OP_NATIVE_ADD]);
   let calls = fixture.host.calls.borrow();
   assert_eq!(calls[0].3.len(), 2);
@@ -657,7 +662,7 @@ fn routine_hooks_register_native_phases_and_dispose_them() {
 fn mixed_runnable_and_js_phases_are_refused_before_installation() {
   let fixture = granted();
   let error = fixture.eval_err(
-    "const method = fixtureRun; inu.xposed.hookMethod(method, { before: inu.jvm.routine(ops => []), after() {} })",
+    "const method = fixtureRun; inu.xposed.hookMethod(method, { before: inu.jvm.routine(EMPTY_ROUTINE), after() {} })",
   );
   assert!(error.contains("cannot mix"));
   assert!(fixture.host.ops().is_empty());
@@ -669,7 +674,7 @@ fn a_rejected_runnable_registration_cleans_up_every_new_site() {
   fixture.host.sites.borrow_mut().push("S100,101".to_string());
   fixture.host.fail_runnable.set(true);
   let error = fixture.eval_err(
-    "inu.xposed.hookAllOverloads(inu.jvm.cls('test.Fixture'), 'run', { before: inu.jvm.routine(ops => []) })",
+    "inu.xposed.hookAllOverloads(inu.jvm.cls('test.Fixture'), 'run', { before: inu.jvm.routine(EMPTY_ROUTINE) })",
   );
   assert!(error.contains("Runnable rejected"));
   assert_eq!(fixture.host.ops().iter().filter(|op| **op == OP_UNHOOK).count(), 2);
@@ -677,19 +682,22 @@ fn a_rejected_runnable_registration_cleans_up_every_new_site() {
 }
 
 #[test]
-fn xposed_routinees_compile_context_operations_to_a_consumer() {
+fn xposed_routinees_cross_their_context_instructions_to_a_consumer() {
   let fixture = granted();
-  fixture.eval("const method = fixtureRun; const consumer = inu.xposed.routine(ops => [ops.setArgument(0, ops.getArgument(1)), ops.setReturnValue(ops.getReturnValue())]); globalThis.disposeConsumer = inu.xposed.hookMethod(method, { before: consumer })");
+  fixture.eval(
+    "const consumer = inu.xposed.routine({ v: 1, source: '', captures: [], slots: 0, code: \
+       [['arg', [1]], ['setArg', [0], 0], ['result'], ['setResult', 2]], tries: [] }); \
+     globalThis.disposeConsumer = inu.xposed.hookMethod(fixtureRun, { before: consumer })",
+  );
   assert_eq!(fixture.host.ops(), vec![OP_HOOK, OP_NATIVE_ADD]);
   fixture.eval("disposeConsumer()");
   assert!(fixture.host.ops().contains(&OP_NATIVE_REMOVE));
 }
 
 #[test]
-fn xposed_routine_requires_its_grant_and_context_ops_are_not_generic_ops() {
+fn xposed_routine_requires_its_grant() {
   let fixture = setup(&["unsafe.jvm"]);
-  assert!(fixture.eval_err("inu.xposed.routine(ops => [])").contains("unsafe.xposed"));
-  assert!(fixture.eval_err("inu.jvm.routine(ops => [ops.setThrowable(null)])").contains("not a function"));
+  assert!(fixture.eval_err("inu.xposed.routine(EMPTY_ROUTINE)").contains("unsafe.xposed"));
 }
 
 #[test]
@@ -935,7 +943,7 @@ fn a_filter_reaches_the_host_as_the_routine_the_plugin_built() {
   let fixture = granted();
   fixture.eval(
     "const method = fixtureRun;
-         globalThis.off = inu.xposed.hookMethod(method, { filter: inu.jvm.routine(ops => []), before() {} })",
+         globalThis.off = inu.xposed.hookMethod(method, { filter: inu.jvm.routine(EMPTY_ROUTINE), before() {} })",
   );
   assert_eq!(fixture.host.ops(), vec![OP_HOOK, OP_JS_FILTER]);
   let calls = fixture.host.calls.borrow();
@@ -957,7 +965,7 @@ fn a_filter_that_is_not_a_routine_is_refused_before_installation() {
 fn a_native_hook_takes_no_filter() {
   let fixture = granted();
   let error = fixture.eval_err(
-    "const routine = inu.jvm.routine(ops => []);
+    "const routine = inu.jvm.routine(EMPTY_ROUTINE);
          inu.xposed.hookMethod(fixtureRun, { filter: routine, before: routine })",
   );
   assert!(error.contains("already runs on the hooked thread"), "{error}");

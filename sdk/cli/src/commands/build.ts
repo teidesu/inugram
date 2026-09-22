@@ -1,10 +1,12 @@
 import type { BuildOptions, Plugin as EsbuildPlugin, Message } from 'esbuild'
 import type { ResolvedCliConfig, ResolvedPluginConfig } from '../utils/config.js'
 import { relative } from 'node:path'
+import process from 'node:process'
 import * as esbuild from 'esbuild'
+import { compileRoutines } from '../routines/plugin.js'
 import { configArgs, defineCommand } from '../utils/args.js'
 import { readFileSize } from '../utils/fs.js'
-import { color, fail, step, warn } from '../utils/log.js'
+import { color, fail, renderMessages, step, warn } from '../utils/log.js'
 import { collectManifestWarnings, renderManifestHeader } from '../utils/manifest.js'
 import { untilInterrupted } from '../utils/process.js'
 import { loadProject } from '../utils/project.js'
@@ -13,14 +15,10 @@ export interface BuildOutcome {
   plugin: ResolvedPluginConfig
   ok: boolean
   bytes: number
-  problems: string[]
-  warnings: string[]
-}
-
-function describe(message: Message): string {
-  const at = message.location
-  const where = at ? `${at.file}:${at.line}:${at.column}: ` : ''
-  return `${where}${message.text}`
+  problems: Message[]
+  warnings: Message[]
+  /** what is wrong with the manifest, which is not in any source file to point at */
+  notes: string[]
 }
 
 function optionsFor(
@@ -44,7 +42,7 @@ function optionsFor(
       js: renderManifestHeader(plugin.manifest, config.vocabulary.catalog.pluginApi),
     },
     logLevel: 'silent',
-    plugins: extra,
+    plugins: [compileRoutines(), ...extra],
   }
 
   options = plugin.esbuild?.(options) ?? options
@@ -65,24 +63,28 @@ export async function buildOnce(
       ok: true,
       bytes: await readFileSize(plugin.outFile),
       problems: [],
-      warnings: [...warnings, ...result.warnings.map(describe)],
+      warnings: result.warnings,
+      notes: warnings,
     }
   } catch (error) {
-    const messages = (error as { errors?: Message[] }).errors
+    const messages = (error as { errors?: Message[] }).errors ?? []
     return {
       plugin,
       ok: false,
       bytes: 0,
-      problems: messages?.length ? messages.map(describe) : [String(error)],
-      warnings,
+      problems: messages,
+      warnings: [],
+      notes: messages.length === 0 ? [...warnings, String(error)] : warnings,
     }
   }
 }
 
-export function reportOutcome(config: ResolvedCliConfig, outcome: BuildOutcome) {
+export async function reportOutcome(config: ResolvedCliConfig, outcome: BuildOutcome) {
   const name = color.bold(outcome.plugin.slug)
-  for (const problem of outcome.problems) fail(`${name} ${problem}`)
-  for (const message of outcome.warnings) warn(`${name} ${message}`)
+  if (outcome.problems.length > 0) fail(`${name} did not build`)
+  for (const frame of await renderMessages(outcome.problems, 'error')) process.stdout.write(frame)
+  for (const frame of await renderMessages(outcome.warnings, 'warning')) process.stdout.write(frame)
+  for (const note of outcome.notes) warn(`${name} ${note}`)
   if (!outcome.ok) return
   const where = relative(config.root, outcome.plugin.outFile)
   console.log(`${color.green('ok')} ${name} ${color.gray(`${where} (${(outcome.bytes / 1024).toFixed(1)} kb)`)}`)
@@ -113,8 +115,9 @@ export async function watchPlugins(options: {
             plugin,
             ok: result.errors.length === 0,
             bytes: result.errors.length === 0 ? await readFileSize(plugin.outFile) : 0,
-            problems: result.errors.map(describe),
-            warnings: [...warnings, ...result.warnings.map(describe)],
+            problems: result.errors,
+            warnings: result.warnings,
+            notes: warnings,
           })
         })
       },
@@ -157,7 +160,7 @@ export const buildCmd = defineCommand({
       const watcher = await watchPlugins({
         config,
         plugins,
-        onBuilt: outcome => reportOutcome(config, outcome),
+        onBuilt: (outcome) => { void reportOutcome(config, outcome) },
       })
       step(`watching ${plugins.map(plugin => plugin.slug).join(', ')} (ctrl-c to stop)`)
       await untilInterrupted()
@@ -166,7 +169,7 @@ export const buildCmd = defineCommand({
     }
 
     const outcomes = await Promise.all(plugins.map(plugin => buildOnce(config, plugin)))
-    for (const outcome of outcomes) reportOutcome(config, outcome)
+    for (const outcome of outcomes) await reportOutcome(config, outcome)
     if (outcomes.some(outcome => !outcome.ok)) process.exitCode = 1
   },
 })

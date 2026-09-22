@@ -1,6 +1,11 @@
 Test assets for the on-device plugin suite. `src/test/kotlin` is synced into a *kotlin* source
 root, so anything that is not source lives here instead.
 
+`routines.json` is compiler output pinned by `sdk/cli/test/routines-runtime.test.ts`.
+`PluginJvmRoutineTest` executes it through the actual Kotlin interpreter and checks
+return values and side-effect order. After reviewing compiler changes, regenerate
+with `pnpm --filter @inugram/cli test --update`; do not hand-edit the bytecode.
+
 `probe.dex` is a dex the platform loader accepts, so `inu.jvm.loadDex` is checked by loading a class
 out of it rather than against a recorded path. One class, built once and committed:
 

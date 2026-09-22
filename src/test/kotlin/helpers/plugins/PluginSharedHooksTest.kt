@@ -73,8 +73,8 @@ class PluginSharedHooksTest {
         first.js.onXposedAfter = { assertEquals(21, it.result); "I22" }
         try {
             install(first)
-            val before = second.js.listener!!.jvm(PluginJvm.OP_XPOSED_ROUTINE, 0, """{"nodes":[["hookArgument",[0,0]],["math","+",[1,0],[0,1]],["hookSetArgument",[0,0],[1,1]]],"roots":[2]}""", arrayOf("I0", "I5"))
-            val after = second.js.listener!!.jvm(PluginJvm.OP_XPOSED_ROUTINE, 0, """{"nodes":[["hookResult"],["math","+",[1,0],[0,0]],["hookSetResult",[1,1]]],"roots":[2]}""", arrayOf("I10"))
+            val before = second.js.listener!!.jvm(PluginJvm.OP_XPOSED_ROUTINE, 0, """{"v":1,"slots":0,"tries":[],"code":[["capture",0],["capture",1],["arg",0],["add",2,1],["setArg",0,3]]}""", arrayOf("I0", "I5"))
+            val after = second.js.listener!!.jvm(PluginJvm.OP_XPOSED_ROUTINE, 0, """{"v":1,"slots":0,"tries":[],"code":[["capture",0],["result"],["add",1,0],["setResult",2]]}""", arrayOf("I10"))
             assertTrue(before.startsWith("GO"), before)
             assertTrue(after.startsWith("GO"), after)
             val phases = arrayOf("G" + before.substring(2), "G" + after.substring(2))

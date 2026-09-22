@@ -144,7 +144,7 @@ class PluginXposedTest {
         engine.onXposedBefore = { arrayOf("P0", "=", "=") }
         val routine = plugin.jvm(
             PluginJvm.OP_ROUTINE,
-            name = """{"nodes":[["methodArgument",[0,0]],["compare","==",[1,0],[0,1]],["methodSetResult",[1,1]]],"roots":[2]}""",
+            name = """{"v":1,"slots":0,"tries":[],"code":[["capture",0],["capture",1],["arg",0],["eq",2,1],["return",3]]}""",
             args = arrayOf("I0", "I42"),
         )
         val sum = JvmFixture::class.java.getDeclaredMethod("sum", Int::class.java, Int::class.java)
@@ -234,9 +234,9 @@ class PluginXposedTest {
         val bridge = PluginJvm.bridgeFor(plugin.js)!!
         val target = "G" + bridge.encode(fixture).substring(2)
         val thread = "G" + bridge.encode(Thread::class.java).substring(2)
-        val before = plugin.jvm(PluginJvm.OP_ROUTINE, name = """{"nodes":[["call",[0,1],"currentThread",[]],["set",[0,0],"payload",[1,0]],["set",[0,0],"count",[0,2]]],"roots":[1,2]}""", args = arrayOf(target, thread, "I7"))
-        val after = plugin.jvm(PluginJvm.OP_ROUTINE, name = """{"nodes":[["set",[0,0],"count",[0,1]]],"roots":[0]}""", args = arrayOf(target, "I9"))
-        val increment = plugin.jvm(PluginJvm.OP_ROUTINE, name = """{"nodes":[["get",[0,0],"count"],["math","+",[1,0],[0,1]],["set",[0,0],"count",[1,1]]],"roots":[2]}""", args = arrayOf(target, "I1"))
+        val before = plugin.jvm(PluginJvm.OP_ROUTINE, name = """{"v":1,"slots":0,"tries":[],"code":[["capture",0],["capture",1],["capture",2],["call",1,["currentThread"],[]],["set",0,["payload"],3],["set",0,["count"],2]]}""", args = arrayOf(target, thread, "I7"))
+        val after = plugin.jvm(PluginJvm.OP_ROUTINE, name = """{"v":1,"slots":0,"tries":[],"code":[["capture",0],["capture",1],["set",0,["count"],1]]}""", args = arrayOf(target, "I9"))
+        val increment = plugin.jvm(PluginJvm.OP_ROUTINE, name = """{"v":1,"slots":0,"tries":[],"code":[["capture",0],["capture",1],["get",0,["count"]],["add",2,1],["set",0,["count"],3]]}""", args = arrayOf(target, "I1"))
         val beforeWire = "G" + jvmHandleId(before)
         val afterWire = "G" + jvmHandleId(after)
         val incrementWire = "G" + jvmHandleId(increment)

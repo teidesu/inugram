@@ -1,8 +1,11 @@
 package desu.inugram.helpers.plugins
 
 import desu.inugram.helpers.plugins.platform.PluginJvm
+import desu.inugram.helpers.plugins.platform.PluginJvmRoutine
 import desu.inugram.jvmfixture.JvmFixture
+import org.json.JSONArray
 import kotlin.test.assertEquals
+import kotlin.test.assertFailsWith
 import kotlin.test.assertTrue
 import org.junit.Before
 import org.junit.Test
@@ -10,19 +13,55 @@ import org.junit.Test
 class PluginJvmRoutineTest {
     @Before fun setUp() = resetBridge()
 
+    @Test fun compiler_output_preserves_control_flow_and_input_failures() {
+        val plugin = startPlugin("compiled-routines", "unsafe.jvm")
+        val host = PluginJvm.bridgeFor(plugin.js) as PluginJvm.Session
+        val cases = JSONArray(testAsset("routines.json").toString(Charsets.UTF_8))
+        val oversized = "x".repeat(PluginJvm.VALUE_LIMIT_BYTES + 1)
+        for (at in 0 until cases.length()) {
+            val case = cases.getJSONObject(at)
+            val name = case.getString("name")
+            val trace = StringBuilder()
+            val args = arrayOf<Any?>(trace, if (case.optBoolean("oversizedArgument")) oversized else 3)
+            val receiver = if (case.optBoolean("oversizedReceiver")) oversized else Any()
+            val routine = PluginJvmRoutine(case.getJSONObject("program").toString(), emptyList(), host, false)
+            try {
+                val result = routine.execute(null, receiver, args)
+                assertTrue(result is Number, "$name: $result")
+                assertEquals(case.getLong("expected"), result.toLong(), name)
+                assertEquals(case.getString("trace"), trace.toString(), name)
+            } finally {
+                routine.close()
+            }
+        }
+    }
+
+    private fun program(code: String, slots: Int = 0, tries: String = "[]", layout: String? = null): String {
+        val shape = if (layout == null) "" else ""","layout":$layout"""
+        return """{"v":1,"slots":$slots,"tries":$tries,"code":[$code]$shape}"""
+    }
+
+    private fun buildRoutine(plugin: Plugin, definition: String, vararg args: String): String =
+        plugin.js.listener!!.jvm(PluginJvm.OP_ROUTINE, 0, definition, arrayOf(*args))
+
     private fun createRoutine(plugin: Plugin, definition: String, vararg args: String): Runnable {
-        val wire = plugin.js.listener!!.jvm(PluginJvm.OP_ROUTINE, 0, definition, arrayOf(*args))
+        val wire = buildRoutine(plugin, definition, *args)
         assertTrue(wire.startsWith("GO"), wire)
         return PluginJvm.bridgeFor(plugin.js)!!.decode("G" + wire.substring(2)) as Runnable
     }
 
+    private fun handleOf(plugin: Plugin, value: Any): String =
+        "G" + PluginJvm.bridgeFor(plugin.js)!!.encode(value).substring(2)
+
     @Test fun routine_runs_java_on_the_calling_thread() {
         val plugin = startPlugin("routine", "unsafe.jvm")
         val fixture = JvmFixture()
-        val bridge = PluginJvm.bridgeFor(plugin.js)!!
-        val target = "G" + bridge.encode(fixture).substring(2)
-        val threadClass = "G" + bridge.encode(Thread::class.java).substring(2)
-        val task = createRoutine(plugin, """{"nodes":[["call",[0,1],"currentThread",[]],["set",[0,0],"payload",[1,0]]],"roots":[1]}""", target, threadClass)
+        val task = createRoutine(
+            plugin,
+            program("""["capture",0],["capture",1],["call",1,["currentThread"],[]],["set",0,["payload"],2]"""),
+            handleOf(plugin, fixture),
+            handleOf(plugin, Thread::class.java),
+        )
         val thread = Thread(task)
         thread.start()
         thread.join(5000)
@@ -30,11 +69,17 @@ class PluginJvmRoutineTest {
         assertEquals(thread, fixture.payload)
     }
 
-    @Test fun branches_are_lazy_and_results_are_recomputed_per_run() {
+    @Test fun a_skipped_branch_runs_nothing_and_a_run_starts_from_scratch() {
         val plugin = startPlugin("routine", "unsafe.jvm")
         val fixture = JvmFixture()
-        val target = "G" + PluginJvm.bridgeFor(plugin.js)!!.encode(fixture).substring(2)
-        val task = createRoutine(plugin, """{"nodes":[["get",[0,0],"count"],["math","+",[1,0],[0,1]],["set",[0,0],"count",[1,1]],["call",[0,0],"boom",[]],["when",[0,2],[2],[3]]],"roots":[4,2]}""", target, "I2", "B1")
+        val task = createRoutine(
+            plugin,
+            program(
+                """["capture",0],["jumpIfFalsy",[false],4],["call",0,["boom"],[]],["jump",4],
+                   ["get",0,["count"]],["add",4,[2]],["set",0,["count"],5]""",
+            ),
+            handleOf(plugin, fixture),
+        )
         task.run()
         assertEquals(5, fixture.count)
         task.run()
@@ -48,108 +93,234 @@ class PluginJvmRoutineTest {
     @Test fun a_refused_result_stops_the_routine_before_writes() {
         val plugin = startPlugin("routine", "unsafe.jvm")
         val fixture = JvmFixture().apply { label = "x".repeat(PluginJvm.VALUE_LIMIT_BYTES + 1) }
-        val target = "G" + PluginJvm.bridgeFor(plugin.js)!!.encode(fixture).substring(2)
-        val task = createRoutine(plugin, """{"nodes":[["get",[0,0],"label"],["set",[0,0],"count",[0,1]]],"roots":[0,1]}""", target, "I99")
-        task.run()
+        createRoutine(
+            plugin,
+            program("""["capture",0],["get",0,["label"]],["set",0,["count"],[99]]"""),
+            handleOf(plugin, fixture),
+        ).run()
         assertEquals(3, fixture.count)
     }
 
-    @Test fun attempt_runs_fallback_after_a_java_exception() {
+    @Test fun catch_takes_over_after_a_java_exception_and_binds_what_was_thrown() {
         val plugin = startPlugin("routine", "unsafe.jvm")
         val fixture = JvmFixture()
-        val target = "G" + PluginJvm.bridgeFor(plugin.js)!!.encode(fixture).substring(2)
-        val task = createRoutine(plugin, """{"nodes":[["call",[0,0],"boom",[]],["set",[0,0],"count",[0,1]],["attempt",[0],[1]]],"roots":[2]}""", target, "I99")
-        task.run()
+        createRoutine(
+            plugin,
+            program(
+                """["capture",0],["call",0,["boom"],[]],["jump",5],["catch"],["set",0,["payload"],3],
+                   ["set",0,["count"],[99]]""",
+                tries = "[[1,3,3]]",
+            ),
+            handleOf(plugin, fixture),
+        ).run()
         assertEquals(99, fixture.count)
+        assertTrue(fixture.payload is Throwable, "the catch register holds what was thrown")
     }
 
-    @Test fun malformed_graphs_are_refused_before_any_operation_runs() {
+    @Test fun catch_takes_over_after_a_java_error_too() {
+        val plugin = startPlugin("routine", "unsafe.jvm")
+        val fixture = JvmFixture()
+        createRoutine(
+            plugin,
+            program(
+                """["capture",0],["call",0,["detonate"],[]],["jump",5],["catch"],["set",0,["payload"],3],
+                   ["set",0,["count"],[99]]""",
+                tries = "[[1,3,3]]",
+            ),
+            handleOf(plugin, fixture),
+        ).run()
+        assertEquals(99, fixture.count)
+        assertTrue(fixture.payload is AssertionError, "the catch register holds what was thrown")
+    }
+
+    @Test fun an_error_nothing_catches_is_not_swallowed() {
+        val plugin = startPlugin("routine", "unsafe.jvm")
+        val fixture = JvmFixture()
+        val routine = createRoutine(
+            plugin,
+            program("""["capture",0],["call",0,["detonate"],[]]"""),
+            handleOf(plugin, fixture),
+        )
+        assertFailsWith<AssertionError> { routine.run() }
+    }
+
+    @Test fun malformed_programs_are_refused_before_anything_runs() {
         val plugin = startPlugin("routine", "unsafe.jvm")
         for (definition in listOf(
-            """{"nodes":[["math","+",[1,0],[0,0]]],"roots":[0]}""",
-            """{"nodes":[],"roots":[0]}""",
-            """{"nodes":[["math","unknown",[0,0],[0,0]]],"roots":[0]}""",
+            """{"v":2,"code":[["this"]]}""",
+            """{"v":1,"code":[["nope"]]}""",
+            program("""["add",0,[1]]"""),
+            program("""["not",[false]],["jump",0]"""),
+            program("""["setResult",[1]]"""),
+            program("""["getSlot",0]"""),
+            program("""["capture",7]"""),
+            program("""["not",[false]],["not",[false]]""", tries = "[[0,1,1]]"),
         )) {
-            val wire = plugin.js.listener!!.jvm(PluginJvm.OP_ROUTINE, 0, definition, arrayOf("I1"))
-            assertTrue(wire.startsWith("Pinvalid-argument"), wire)
+            val wire = buildRoutine(plugin, definition, "I1")
+            assertTrue(wire.startsWith("Pinvalid-argument"), "$definition -> $wire")
         }
     }
 
     @Test fun comparisons_preserve_large_integers_and_do_not_coerce_types() {
         val plugin = startPlugin("comparisons", "unsafe.jvm")
         val fixture = JvmFixture()
-        val target = "G" + PluginJvm.bridgeFor(plugin.js)!!.encode(fixture).substring(2)
+        val target = handleOf(plugin, fixture)
         for ((op, left, right, expected) in listOf(
-            listOf("==", "I9007199254740993", "I9007199254740992", false),
-            listOf(">", "I9007199254740993", "D9007199254740992", true),
-            listOf("<", "I9223372036854775807", "D9223372036854775808", true),
-            listOf("==", "D-0.0", "I0", true),
-            listOf("==", "I1", "S1", false),
-            listOf("!=", "B1", "I1", true),
-            listOf("==", "N", "N", true),
-            listOf("<=", "Sa", "Sb", true),
-            listOf(">=", "Sb", "Sb", true),
+            listOf("eq", "I9007199254740993", "I9007199254740992", false),
+            listOf("gt", "I9007199254740993", "D9007199254740992", true),
+            listOf("lt", "I9223372036854775807", "D9223372036854775808", true),
+            listOf("eq", "D-0.0", "I0", true),
+            listOf("eq", "I1", "S1", false),
+            listOf("ne", "B1", "I1", true),
+            listOf("eq", "N", "N", true),
+            listOf("le", "Sa", "Sb", true),
+            listOf("ge", "Sb", "Sb", true),
         )) {
             fixture.flag = !(expected as Boolean)
-            createRoutine(plugin, """{"nodes":[["compare","$op",[0,1],[0,2]],["set",[0,0],"flag",[1,0]]],"roots":[1]}""", target, left as String, right as String).run()
+            createRoutine(
+                plugin,
+                program("""["capture",0],["capture",1],["capture",2],["$op",1,2],["set",0,["flag"],3]"""),
+                target,
+                left as String,
+                right as String,
+            ).run()
             assertEquals(expected, fixture.flag, "$left $op $right")
         }
-        createRoutine(plugin, """{"nodes":[["compare","==",[0,0],[0,0]],["set",[0,0],"flag",[1,0]]],"roots":[1]}""", target).run()
-        assertTrue(fixture.flag)
     }
 
-    @Test fun boolean_operations_short_circuit_and_return_booleans() {
+    @Test fun conditional_jumps_skip_the_side_that_must_not_run() {
         val plugin = startPlugin("booleans", "unsafe.jvm")
         val fixture = JvmFixture()
-        val target = "G" + PluginJvm.bridgeFor(plugin.js)!!.encode(fixture).substring(2)
-        for ((op, left, expected) in listOf(Triple("and", "I0", false), Triple("or", "Syes", true))) {
+        val target = handleOf(plugin, fixture)
+        for ((jump, operand, expected) in listOf(
+            Triple("jumpIfFalsy", "I0", false),
+            Triple("jumpIfTruthy", "Syes", true),
+        )) {
             fixture.flag = !expected
-            createRoutine(plugin, """{"nodes":[["call",[0,0],"boom",[]],["$op",[0,1],[1,0]],["set",[0,0],"flag",[1,1]]],"roots":[2]}""", target, left).run()
-            assertEquals(expected, fixture.flag)
+            createRoutine(
+                plugin,
+                program(
+                    """["capture",0],["capture",1],["$jump",1,4],["call",0,["boom"],[]],
+                       ["set",0,["flag"],[$expected]]""",
+                ),
+                target,
+                operand,
+            ).run()
+            assertEquals(expected, fixture.flag, jump)
         }
-        createRoutine(plugin, """{"nodes":[["not",[0,1]],["set",[0,0],"flag",[1,0]]],"roots":[1]}""", target, "N").run()
+        createRoutine(plugin, program("""["capture",0],["not",[null]],["set",0,["flag"],1]"""), target).run()
         assertTrue(fixture.flag)
-        createRoutine(plugin, """{"nodes":[["compare","<",[0,1],[0,2]],["set",[0,0],"count",[0,3]]],"roots":[0,1]}""", target, "S1", "I1", "I99").run()
-        assertEquals(3, fixture.count)
     }
 
-    @Test fun locals_reset_each_run_and_distinct_reads_observe_assignments() {
-        val plugin = startPlugin("locals", "unsafe.jvm")
+    @Test fun slots_hold_values_across_instructions_and_reset_each_run() {
+        val plugin = startPlugin("slots", "unsafe.jvm")
         val fixture = JvmFixture()
-        val target = "G" + PluginJvm.bridgeFor(plugin.js)!!.encode(fixture).substring(2)
-        val task = createRoutine(plugin, """{"nodes":[["setLocal","x",[0,1]],["getLocal","x"],["math","+",[1,1],[0,2]],["setLocal","x",[1,2]],["getLocal","x"],["math","*",[1,4],[0,2]],["setLocal","x",[1,5]],["getLocal","x"],["set",[0,0],"count",[1,7]],["set",[0,0],"payload",[1,1]]],"roots":[0,3,6,8,9]}""", target, "I1", "I2")
+        val task = createRoutine(
+            plugin,
+            program(
+                """["capture",0],["setSlot",0,[1]],["getSlot",0],["add",2,[2]],["setSlot",0,3],
+                   ["getSlot",0],["mul",5,[2]],["setSlot",0,6],["getSlot",0],["set",0,["count"],8]""",
+                slots = 1,
+            ),
+            handleOf(plugin, fixture),
+        )
         repeat(2) {
             task.run()
             assertEquals(6, fixture.count)
-            assertEquals(1, fixture.payload)
         }
-    }
-
-    @Test fun skipped_set_does_not_initialize_a_local_and_null_is_a_valid_value() {
-        val plugin = startPlugin("locals", "unsafe.jvm")
-        val fixture = JvmFixture()
-        val target = "G" + PluginJvm.bridgeFor(plugin.js)!!.encode(fixture).substring(2)
-        createRoutine(plugin, """{"nodes":[["setLocal","x",[0,1]],["when",[0,2],[0],[]],["getLocal","x"],["set",[0,0],"count",[0,1]]],"roots":[1,2,3]}""", target, "I99", "B0").run()
-        assertEquals(3, fixture.count)
-        createRoutine(plugin, """{"nodes":[["setLocal","x",[0,1]],["getLocal","x"],["set",[0,0],"payload",[1,1]],["set",[0,0],"count",[0,2]]],"roots":[0,2,3]}""", target, "N", "I99").run()
-        assertEquals(null, fixture.payload)
-        assertEquals(99, fixture.count)
-    }
-
-    @Test fun empty_local_names_are_refused() {
-        val plugin = startPlugin("bad-locals", "unsafe.jvm")
-        val wire = plugin.js.listener!!.jvm(PluginJvm.OP_ROUTINE, 0, """{"nodes":[["getLocal",""]],"roots":[0]}""", emptyArray())
-        assertTrue(wire.startsWith("Pinvalid-argument"), wire)
     }
 
     @Test fun arithmetic_failure_stops_later_writes() {
         val plugin = startPlugin("routine", "unsafe.jvm")
         val fixture = JvmFixture()
-        val target = "G" + PluginJvm.bridgeFor(plugin.js)!!.encode(fixture).substring(2)
+        val target = handleOf(plugin, fixture)
         for (operands in listOf(arrayOf("I1", "I0"), arrayOf("I-9223372036854775808", "I-1"))) {
-            val task = createRoutine(plugin, """{"nodes":[["math","/",[0,1],[0,2]],["set",[0,0],"count",[0,3]]],"roots":[0,1]}""", target, *operands, "I99")
-            task.run()
+            createRoutine(
+                plugin,
+                program("""["capture",0],["capture",1],["capture",2],["div",1,2],["set",0,["count"],[99]]"""),
+                target,
+                *operands,
+            ).run()
             assertEquals(3, fixture.count)
         }
+    }
+
+    @Test fun a_for_of_loop_walks_a_java_iterable() {
+        val plugin = startPlugin("loops", "unsafe.jvm")
+        val fixture = JvmFixture().apply { payload = listOf(1, 2, 3) }
+        createRoutine(
+            plugin,
+            program(
+                """["capture",0],["get",0,["payload"]],["iterate",1],["setSlot",0,[0]],
+                   ["advance",2,9],["getSlot",0],["add",5,4],["setSlot",0,6],["loop",4],
+                   ["getSlot",0],["set",0,["count"],9]""",
+                slots = 1,
+            ),
+            handleOf(plugin, fixture),
+        ).run()
+        assertEquals(6, fixture.count)
+    }
+
+    @Test fun new_builds_an_instance_and_instanceof_answers_for_it() {
+        val plugin = startPlugin("new", "unsafe.jvm")
+        val fixture = JvmFixture()
+        createRoutine(
+            plugin,
+            program(
+                """["capture",0],["capture",1],["new",1,[[42]]],["get",2,["madeBy"]],["set",0,["label"],3],
+                   ["instanceOf",2,1],["set",0,["flag"],5]""",
+            ),
+            handleOf(plugin, fixture),
+            handleOf(plugin, JvmFixture::class.java),
+        ).run()
+        assertEquals("int", fixture.label)
+        assertTrue(fixture.flag)
+    }
+
+    @Test fun text_concatenates_and_bitwise_follows_java_promotion() {
+        val plugin = startPlugin("operators", "unsafe.jvm")
+        val fixture = JvmFixture()
+        createRoutine(
+            plugin,
+            program(
+                """["capture",0],["get",0,["label"]],["add",1,["!"]],["set",0,["label"],2],
+                   ["bitOr",[5],[2]],["shl",[1],[3]],["add",4,5],["set",0,["count"],6]""",
+            ),
+            handleOf(plugin, fixture),
+        ).run()
+        assertEquals("inugram!", fixture.label)
+        assertEquals(15, fixture.count)
+    }
+
+    @Test fun an_array_capture_arrives_as_one_object_array() {
+        val plugin = startPlugin("captures", "unsafe.jvm")
+        val fixture = JvmFixture()
+        createRoutine(
+            plugin,
+            program(
+                """["capture",0],["capture",1],["get",1,[1]],["get",1,["length"]],["add",2,3],
+                   ["set",0,["count"],4]""",
+                layout = "[-1,[-1,-1,-1]]",
+            ),
+            handleOf(plugin, fixture),
+            "I10",
+            "I20",
+            "I30",
+        ).run()
+        assertEquals(23, fixture.count)
+    }
+
+    @Test fun a_body_that_does_nothing_builds_and_runs() {
+        val plugin = startPlugin("empty", "unsafe.jvm")
+        createRoutine(plugin, program("")).run()
+    }
+
+    @Test fun a_loop_that_never_ends_stops_at_the_budget() {
+        val plugin = startPlugin("budget", "unsafe.jvm")
+        val task = createRoutine(plugin, program("""["not",[false]],["loop",1]"""))
+        val started = System.nanoTime()
+        task.run()
+        val elapsed = (System.nanoTime() - started) / 1_000_000
+        assertTrue(elapsed in 200..5000, "a runaway loop ran for $elapsed ms")
     }
 }
